@@ -173,3 +173,22 @@
     transform: none;
   }
 }
+
+/* Depth-stack route change: the old page's ghost sinks behind the rising sheet. */
+.ma-route-ghost {
+  position: fixed;
+  z-index: 1;
+  overflow: hidden;
+  contain: strict;
+  pointer-events: none;
+  will-change: transform, filter, opacity;
+}
+
+.ma-route-sheet {
+  position: relative;
+  z-index: 2;
+  min-height: 100dvh;
+  border-radius: 22px 22px 0 0;
+  background-color: var(--color-background);
+  will-change: transform, opacity;
+}

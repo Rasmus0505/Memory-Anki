@@ -1,13 +1,14 @@
 import { Link } from 'react-router-dom'
 import type { ExamOverview, ExamPalaceRow } from '@/shared/api/contracts'
 import { formatDaysLeft, formatPercent } from '../../model/examFormat'
+import { RollingNumber } from '@/shared/components/ui/rolling-number'
 import { ExamStarBadge } from '../ExamStarBadge'
 
 function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="flex flex-col gap-0.5 rounded-2xl bg-card p-4 shadow-sm ring-1 ring-border/60">
+    <div className="ma-lit flex flex-col gap-0.5 rounded-2xl bg-card p-4 shadow-sm ring-1 ring-border/60">
       <span className="text-xs text-muted-foreground">{label}</span>
-      <span className="text-2xl font-semibold tabular-nums tracking-tight">{value}</span>
+      <RollingNumber value={value} className="text-2xl font-semibold tabular-nums tracking-tight" />
       {hint ? <span className="text-xs text-muted-foreground">{hint}</span> : null}
     </div>
   )
@@ -16,7 +17,7 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
 export function ExamHeadline({ overview }: { overview: ExamOverview }) {
   const { totals, days_left: daysLeft, settings } = overview
   return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div className="ma-stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
       <Stat
         label={settings.exam_name || '考试倒计时'}
         value={daysLeft == null ? '—' : daysLeft >= 0 ? `${daysLeft} 天` : '已结束'}
@@ -50,11 +51,11 @@ export function ExamStarDistribution({ overview }: { overview: ExamOverview }) {
           <ExamStarBadge stars={row.stars} className="w-12 shrink-0" />
           <div className="relative h-3 flex-1 overflow-hidden rounded-full bg-muted" aria-hidden="true">
             <div
-              className="absolute inset-y-0 left-0 rounded-full bg-primary/25"
+              className="ma-bar-grow absolute inset-y-0 left-0 rounded-full bg-primary/25"
               style={{ width: `${(row.unit_count / maxUnits) * 100}%` }}
             />
             <div
-              className="absolute inset-y-0 left-0 rounded-full bg-success"
+              className="ma-bar-grow absolute inset-y-0 left-0 rounded-full bg-success [animation-delay:120ms]"
               style={{ width: `${(row.unit_count / maxUnits) * row.mastery_ratio * 100}%` }}
             />
           </div>

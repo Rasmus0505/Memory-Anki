@@ -33,7 +33,11 @@ import { useRunningTaskCountBySection, type BackgroundTaskSection } from '@/shar
 import { BackgroundTaskBar } from '@/shared/background-tasks/BackgroundTaskBar'
 import { cn } from '@/shared/lib/utils'
 import { GlobalCommandPalette } from '@/app/shell/GlobalCommandPalette'
-import { useRouteEnterAnimation } from '@/app/shell/useRouteEnterAnimation'
+import { useRouteDepthTransition } from '@/app/shell/useRouteDepthTransition'
+import { useAmbientTone } from '@/app/shell/useAmbientTone'
+import { AmbientLayer } from '@/shared/ambient/AmbientLayer'
+import { installUiSounds, playUiSound } from '@/shared/feedback/uiSounds'
+import { installPointerLight } from '@/shared/ambient/pointerLight'
 import { GlobalBackButton, isImmersiveFeedPath, isMindMapHostPath } from '@/app/shell/GlobalBackButton'
 import { navSections, type NavSectionDefinition, type NavSectionKey } from '@/app/shell/navSections'
 import {
@@ -384,9 +388,23 @@ function ShellFrame({ children }: PropsWithChildren) {
   const [runtimeInfo, setRuntimeInfo] = useState<RuntimeInfo | null>(null)
   const [logDrawerOpen, setLogDrawerOpen] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
 
   useClientPreferenceBootstrap()
-  useRouteEnterAnimation(contentRef, pathname, !immersiveFeed && !mindMapHost)
+  const immersiveRef = useRef(immersiveFeed)
+  immersiveRef.current = immersiveFeed
+  useEffect(() => installUiSounds(() => immersiveRef.current), [])
+  useEffect(() => installPointerLight(), [])
+  useRouteDepthTransition({
+    rootRef,
+    contentRef,
+    pathname,
+    enabled: !immersiveFeed && !mindMapHost,
+    onTransition: () => {
+      if (!immersiveRef.current) playUiSound('paper')
+    },
+  })
+  const ambientTone = useAmbientTone(!immersiveFeed)
 
   useEffect(() => {
     let cancelled = false
@@ -408,7 +426,8 @@ function ShellFrame({ children }: PropsWithChildren) {
 
   return (
     <ShellProvider value={{ sidebarCollapsed, setSidebarCollapsed }}>
-      <div className={cn(mindMapHost ? 'flex h-dvh flex-col bg-background' : 'min-h-screen bg-background')}>
+      <div ref={rootRef} className={cn('isolate', mindMapHost ? 'flex h-dvh flex-col bg-background' : 'min-h-screen bg-background')}>
+        {!immersiveFeed ? <AmbientLayer tone={ambientTone} motes={!mindMapHost} /> : null}
         <aside
           className={cn(
             'memory-anki-warm-panel fixed z-20 hidden flex-col overflow-hidden border-border/80 bg-card transition-all duration-300 lg:flex',

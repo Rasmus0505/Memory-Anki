@@ -1,0 +1,171 @@
+/*
+ * Global tactile layer: pointer sheen, card tilt, spring controls, list stagger.
+ * Lives in `components` so page utilities can still override any of it.
+ */
+@property --lit {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 0;
+}
+
+@layer components {
+  /* Warm lamp sheen that follows the pointer across a paper surface (no rim). */
+  .ma-lit {
+    background-image: radial-gradient(
+      420px circle at var(--lx, 50%) var(--ly, 0%),
+      hsl(40 100% 78% / calc(var(--lit) * 0.16)),
+      transparent 62%
+    );
+    transition: --lit 420ms var(--ease-out-expo);
+  }
+
+  .ma-lit[data-lit] {
+    --lit: 1;
+  }
+
+  .ma-lit[data-pressed] {
+    --lit: 1.7;
+    transition-duration: 90ms;
+  }
+
+  .dark .ma-lit {
+    background-image: radial-gradient(
+      420px circle at var(--lx, 50%) var(--ly, 0%),
+      hsl(36 90% 62% / calc(var(--lit) * 0.1)),
+      transparent 62%
+    );
+  }
+
+  /* Cards lean away under the pointer, springing flat on leave. */
+  .ma-tilt {
+    transform: perspective(900px) rotateX(calc(var(--ty, 0) * -2.6deg)) rotateY(calc(var(--tx, 0) * 3.4deg));
+    transition:
+      transform 520ms var(--ease-spring-soft),
+      translate 420ms var(--ease-spring),
+      scale 260ms var(--ease-spring),
+      box-shadow 320ms var(--ease-out-expo),
+      --lit 420ms var(--ease-out-expo);
+    will-change: transform;
+  }
+
+  .ma-tilt[data-lit] {
+    transition-duration: 140ms, 420ms, 260ms, 320ms, 420ms;
+    box-shadow: 0 18px 40px -18px hsl(24 60% 22% / 0.32), 0 2px 6px hsl(24 50% 20% / 0.08);
+  }
+
+  .ma-tilt[data-pressed] {
+    scale: 0.985;
+  }
+
+  /* Switch: the thumb springs across and squashes while held. */
+  .ma-switch {
+    transition: background-color 240ms ease, box-shadow 320ms var(--ease-out-expo);
+  }
+
+  .ma-switch[data-state='checked'] {
+    box-shadow: inset 0 1px 2px hsl(24 70% 20% / 0.25), 0 0 0 3px hsl(28 90% 55% / 0.12);
+  }
+
+  .ma-switch-thumb {
+    transition:
+      translate 420ms var(--ease-spring),
+      scale 160ms var(--ease-spring),
+      box-shadow 240ms ease;
+    box-shadow: 0 1px 2px hsl(24 50% 15% / 0.3), inset 0 -1px 0 hsl(24 40% 30% / 0.12);
+  }
+
+  .ma-switch:active:not(:disabled) .ma-switch-thumb {
+    scale: 1.2 0.9;
+  }
+
+  /* Tabs and checkboxes settle with a small spring when they become active. */
+  .ma-tab-trigger[data-state='active'] {
+    animation: ma-control-settle 380ms var(--ease-spring) both;
+  }
+
+  button[role='checkbox'][data-state='checked'] {
+    animation: ma-control-settle 340ms var(--ease-spring) both;
+  }
+
+  /* First-paint stagger for grids and lists; resident routes never replay it. */
+  .ma-stagger > * {
+    animation: ma-stagger-in 560ms var(--ease-spring-soft) both;
+  }
+
+  .ma-stagger > :nth-child(2) { animation-delay: 40ms; }
+  .ma-stagger > :nth-child(3) { animation-delay: 80ms; }
+  .ma-stagger > :nth-child(4) { animation-delay: 120ms; }
+  .ma-stagger > :nth-child(5) { animation-delay: 160ms; }
+  .ma-stagger > :nth-child(6) { animation-delay: 200ms; }
+  .ma-stagger > :nth-child(7) { animation-delay: 240ms; }
+  .ma-stagger > :nth-child(8) { animation-delay: 280ms; }
+  .ma-stagger > :nth-child(9) { animation-delay: 320ms; }
+  .ma-stagger > :nth-child(10) { animation-delay: 360ms; }
+  .ma-stagger > :nth-child(n + 11) { animation-delay: 400ms; }
+}
+
+@layer components {
+  /* Progress bars grow from their start edge with a slight spring overshoot. */
+  .ma-bar-grow {
+    transform-origin: left center;
+    animation: ma-bar-grow 900ms var(--ease-spring-soft) both;
+  }
+}
+
+@layer components {
+  .ma-progress-fill {
+    position: relative;
+    transition: transform 760ms var(--ease-spring-soft);
+  }
+
+  .ma-progress-fill::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(100deg, transparent 30%, hsl(44 100% 90% / 0.55) 50%, transparent 70%);
+    background-size: 220% 100%;
+    animation: ma-progress-sheen 2.8s ease-in-out infinite;
+  }
+}
+
+@keyframes ma-progress-sheen {
+  from { background-position: 160% 0; }
+  to { background-position: -60% 0; }
+}
+
+@keyframes ma-bar-grow {
+  from { scale: 0 1; }
+}
+
+@keyframes ma-control-settle {
+  0% { scale: 0.94; }
+  60% { scale: 1.03; }
+  100% { scale: 1; }
+}
+
+@keyframes ma-stagger-in {
+  from {
+    opacity: 0;
+    translate: 0 14px;
+    scale: 0.985;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ma-tilt {
+    transform: none;
+    transition: none;
+  }
+  .ma-stagger > *,
+  .ma-bar-grow,
+  .ma-tab-trigger[data-state='active'],
+  button[role='checkbox'][data-state='checked'] {
+    animation: none;
+  }
+  .ma-switch-thumb {
+    transition-duration: 1ms;
+  }
+  .ma-progress-fill::after {
+    animation: none;
+  }
+}

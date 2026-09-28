@@ -456,7 +456,7 @@ export default function PalaceShelfPage() {
         )
       ) : items.length > 0 ? (
         <div
-          className={cn('grid gap-5', getShelfGridClass(viewSettings.layoutMode))}
+          className={cn('ma-stagger grid gap-5', getShelfGridClass(viewSettings.layoutMode))}
           data-testid="shelf-grid"
           data-layout-mode={viewSettings.layoutMode}
           data-density-mode={viewSettings.densityMode}
@@ -477,7 +477,7 @@ export default function PalaceShelfPage() {
                 className="text-left"
                 data-testid="subject-book-card"
               >
-                <Card className="group relative h-full overflow-hidden border-border/70 bg-card/90 transition-all hover:-translate-y-1.5 hover:shadow-xl">
+                <Card className="ma-tilt group relative h-full overflow-hidden border-border/70 bg-card/90 hover:-translate-y-1.5">
                   {/* Book spine + cover wash */}
                   <div
                     className="absolute inset-y-0 left-0 w-4 rounded-l-xl opacity-95 shadow-inner"

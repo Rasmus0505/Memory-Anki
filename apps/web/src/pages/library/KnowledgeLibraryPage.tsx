@@ -356,7 +356,7 @@ export default function Knowledge() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
+            <div className="ma-stagger space-y-2">
               {subjects.map((subject) => (
                 <button
                   key={subject.id}
@@ -463,7 +463,7 @@ export default function Knowledge() {
                       </div>
                     </div>
                     {selectedPalaces.length > 0 ? (
-                      <div className="space-y-2">
+                      <div className="ma-stagger space-y-2">
                         {selectedPalaces.map((palace) => (
                           <Link
                             key={palace.id}

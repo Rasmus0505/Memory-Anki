@@ -7,6 +7,7 @@ import {
   type TimeRecordSourceSummary,
 } from '@/modules/session/public'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
+import { RollingNumber } from '@/shared/components/ui/rolling-number'
 import { cn } from '@/shared/lib/utils'
 
 interface DashboardStatCardsProps {
@@ -44,11 +45,11 @@ export function DashboardStatCards({
         <CardTitle className="text-base">学习时长</CardTitle>
         <Timer className="size-4 text-muted-foreground" />
       </CardHeader>
-      <CardContent className="grid grid-cols-2 gap-1.5 p-4 pt-1">
+      <CardContent className="ma-stagger grid grid-cols-2 gap-1.5 p-4 pt-1">
         {stats.map((stat) => (
           <div key={stat.label} className="min-w-0 rounded-xl bg-muted/50 px-2.5 py-1.5">
             <div className="truncate text-[11px] text-muted-foreground">{stat.label}</div>
-            <div className="truncate text-lg font-semibold tabular-nums">{stat.value}</div>
+            <RollingNumber value={stat.value} className="block truncate text-lg font-semibold tabular-nums" />
             {stat.hint ? <div className="truncate text-[11px] text-muted-foreground">{stat.hint}</div> : null}
           </div>
         ))}
