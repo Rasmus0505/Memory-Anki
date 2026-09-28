@@ -187,15 +187,6 @@ export function resolveDwellFragment(path: string): DwellFragment {
       englishCourseId,
     }
   }
-  if (routePath === '/english/reading' || routePath.startsWith('/english/reading/')) {
-    return {
-      ...base,
-      scene: 'english_reading',
-      kind: 'english_reading',
-      title: '英语阅读',
-      sourceKind: 'english_reading',
-    }
-  }
   if (routePath === '/english/patterns') {
     return { ...base, scene: 'english_patterns', kind: 'english', title: '英语句型', sourceKind: 'english' }
   }

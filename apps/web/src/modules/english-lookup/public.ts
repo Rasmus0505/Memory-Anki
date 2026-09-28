@@ -5,6 +5,7 @@
 export { useEnglishLookup, type EnglishLookupController } from './useEnglishLookup'
 export { EnglishLookupPanel } from './EnglishLookupPanel'
 export { LookupAnchor } from './LookupAnchor'
+export { LookupTokenText } from './LookupTokenText'
 export { getLookupAudioManager, LookupAudioManager } from './audioManager'
 export {
   normalizeLookupQuery,

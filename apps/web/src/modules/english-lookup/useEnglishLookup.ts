@@ -22,12 +22,14 @@ import {
 } from './normalize'
 import {
   readLookupCardPreferences,
+  readLookupPanelSize,
   writeLookupCardPreferences,
+  writeLookupPanelSize,
 } from './preferences'
+import { flushWindowLayoutRemotePersist } from '@/shared/preferences/windowLayoutMemory'
 import {
   clampPanelLeft,
   clampPanelTop,
-  fittedPanelWidth,
   positionAnchorNearSelection,
   positionNearPoint,
   positionNearRect,
@@ -100,6 +102,7 @@ export function useEnglishLookup({ isActive }: UseEnglishLookupOptions) {
     originWidth: number
     originHeight: number
   } | null>(null)
+  const resizedSizeRef = useRef<{ width: number; height: number } | null>(null)
   const panelSnapshotRef = useRef(panel)
   panelSnapshotRef.current = panel
 
@@ -154,13 +157,17 @@ export function useEnglishLookup({ isActive }: UseEnglishLookupOptions) {
     }
 
     const onResize = () => {
+      if (resizeRef.current) return
       setPanel((current) => {
         if (!current.open) return current
-        const width = Math.min(current.width, Math.max(LOOKUP_PANEL_MIN_WIDTH, window.innerWidth - 16))
-        const fittedWidth = Math.min(width, Math.max(240, window.innerWidth - 16))
+        const remembered = readLookupPanelSize({ width: current.width, height: current.maxHeight })
+        const fittedWidth = Math.min(
+          Math.max(remembered.width, LOOKUP_PANEL_MIN_WIDTH),
+          Math.max(LOOKUP_PANEL_MIN_WIDTH, window.innerWidth - 16),
+        )
         const top = clampPanelTop(current.top)
         const maxHeight = Math.min(
-          Math.max(current.maxHeight, LOOKUP_PANEL_MIN_HEIGHT),
+          Math.max(remembered.height, LOOKUP_PANEL_MIN_HEIGHT),
           Math.max(LOOKUP_PANEL_MIN_HEIGHT, window.innerHeight - 16),
         )
         return {
@@ -231,6 +238,10 @@ export function useEnglishLookup({ isActive }: UseEnglishLookupOptions) {
       queryIdRef.current = queryId
 
       const pinned = current.pinned
+      const rememberedPanelSize = readLookupPanelSize({
+        width: current.width || LOOKUP_PANEL_WIDTH,
+        height: position.maxHeight,
+      })
       const resolvedPosition =
         pinned && current.open
           ? {
@@ -248,7 +259,14 @@ export function useEnglishLookup({ isActive }: UseEnglishLookupOptions) {
         pinned,
         dragging: false,
         ...resolvedPosition,
-        width: Math.min(current.width || LOOKUP_PANEL_WIDTH, fittedPanelWidth()),
+        maxHeight: Math.min(
+          Math.max(rememberedPanelSize.height, LOOKUP_PANEL_MIN_HEIGHT),
+          Math.max(LOOKUP_PANEL_MIN_HEIGHT, window.innerHeight - 16),
+        ),
+        width: Math.min(
+          Math.max(rememberedPanelSize.width, LOOKUP_PANEL_MIN_WIDTH),
+          Math.max(LOOKUP_PANEL_MIN_WIDTH, window.innerWidth - 16),
+        ),
         query,
         queryId,
         searchInput: query,
@@ -557,6 +575,7 @@ export function useEnglishLookup({ isActive }: UseEnglishLookupOptions) {
       height = Math.min(height, window.innerHeight - 16)
       left = clampPanelLeft(left, width)
       top = Math.min(clampPanelTop(top), window.innerHeight - height - 8)
+      resizedSizeRef.current = { width, height }
 
       setPanel((current) =>
         current.open ? { ...current, left, top, width, maxHeight: height } : current,
@@ -566,6 +585,12 @@ export function useEnglishLookup({ isActive }: UseEnglishLookupOptions) {
       if (resizeRef.current?.pointerId !== event.pointerId) return
       resizeRef.current = null
       document.body.style.userSelect = ''
+      const resized = resizedSizeRef.current
+      resizedSizeRef.current = null
+      if (resized) {
+        writeLookupPanelSize(resized.width, resized.height)
+        flushWindowLayoutRemotePersist()
+      }
     }
     window.addEventListener('pointermove', onMove)
     window.addEventListener('pointerup', onUp)

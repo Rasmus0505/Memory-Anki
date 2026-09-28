@@ -109,12 +109,14 @@ export function EnglishLookupPanel({
           >
             <Volume2 className="h-4 w-4" />
           </IconBtn>
-          <IconBtn
-            title="收藏"
-            onClick={() => onFavorite?.(panel.query, summary)}
-          >
-            <Star className="h-4 w-4" />
-          </IconBtn>
+          {onFavorite ? (
+            <IconBtn
+              title="收藏"
+              onClick={() => onFavorite(panel.query, summary)}
+            >
+              <Star className="h-4 w-4" />
+            </IconBtn>
+          ) : null}
           <IconBtn
             title="上一个"
             disabled={!lookup.canHistoryBack}

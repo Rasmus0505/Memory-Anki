@@ -5,6 +5,7 @@ import {
   buildInitialRevealState,
   buildReviewTree,
   flattenNodes,
+  planTargetRevealAdvances,
 } from './review-flow-tree'
 
 function buildTwoChildTree() {
@@ -135,5 +136,37 @@ describe('review-flow-tree reveal configuration', () => {
 
     expect(fromParent).toMatchObject({ a: 'revealed', b: 'revealed' })
     expect(directClick).toMatchObject({ a: 'revealed', b: 'revealed' })
+  })
+})
+
+describe('planTargetRevealAdvances', () => {
+  it('names the cards one target step makes visible, then plans the next step from that map', () => {
+    const sourceDoc: MindMapDoc = {
+      root: {
+        data: { text: 'Root', uid: 'root' },
+        children: [
+          {
+            data: { text: 'A', uid: 'a' },
+            children: [{ data: { text: 'A child', uid: 'a-child' }, children: [] }],
+          },
+        ],
+      },
+    }
+    const root = buildReviewTree(sourceDoc, 'Root')
+    const nodeMap = flattenNodes(root)
+    const initial = buildInitialRevealState(root, { root: 'revealed' })
+    const first = planTargetRevealAdvances(root, 'root', nodeMap, initial)
+    expect(first.recognized).toBe(true)
+    expect(first.changedIds).toEqual(['a'])
+    expect(first.nextRevealMap.a).toBe('placeholder')
+    expect(first.nextRevealMap['a-child'] ?? 'hidden').toBe('hidden')
+
+    const second = planTargetRevealAdvances(root, 'root', nodeMap, first.nextRevealMap)
+    expect(second.changedIds).toEqual(['a'])
+    expect(second.nextRevealMap.a).toBe('revealed')
+
+    const third = planTargetRevealAdvances(root, 'root', nodeMap, second.nextRevealMap)
+    expect(third.changedIds).toEqual(['a-child'])
+    expect(third.nextRevealMap['a-child']).not.toBe('hidden')
   })
 })

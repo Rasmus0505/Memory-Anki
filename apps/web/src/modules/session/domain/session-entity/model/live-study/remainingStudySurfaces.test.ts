@@ -25,12 +25,6 @@ import {
   englishCourseSameInteraction,
   resolveEnglishCourseProgressAfterLoad,
 } from '@/modules/english/ui/english/model/englishCourseLiveView'
-import {
-  applyEnglishReadingLiveView,
-  decodeEnglishReadingLiveView,
-  englishReadingSameInteraction,
-  shouldClearEnglishReadingSelection,
-} from '@/modules/english-reading/ui/english-reading/model/englishReadingLiveView'
 
 describe('remaining live-study surfaces', () => {
   it('follows quiz, palace view, english course, and english reading but not settings or editor', () => {
@@ -177,25 +171,7 @@ describe('remaining live-study surfaces', () => {
     })
   })
 
-  it('applies english reading current article and selected targets', () => {
-    const remote = decodeEnglishReadingLiveView({
-      articleId: 9,
-      selectedIds: [1, 4],
-      targetId: 4,
-      quote: 'nevertheless',
-    })
-    expect(remote).not.toBeNull()
-    const applied = applyEnglishReadingLiveView(
-      { articleId: null, selectedIds: [], targetId: null, quote: null },
-      remote!,
-    )
-    expect(applied.articleId).toBe(9)
-    expect(applied.selectedIds).toEqual([1, 4])
-    expect(applied.targetId).toBe(4)
-    expect(applied.quote).toBe('nevertheless')
-    expect(englishReadingSameInteraction(remote!, applied)).toBe(true)
-    expect(shouldClearEnglishReadingSelection(9, remote)).toBe(false)
-    expect(shouldClearEnglishReadingSelection(9, null)).toBe(true)
+  it('holds live-study publish while a follower apply is still pending', () => {
     expect(shouldPublishLiveStudyView({
       isActive: false,
       publishWhen: true,

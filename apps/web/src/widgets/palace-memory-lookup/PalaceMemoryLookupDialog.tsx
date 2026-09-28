@@ -30,9 +30,9 @@ import type {
 function ignoreLookupEditorChange(_nextState: MindMapEditorState) {}
 import {
   calculateResizedMemoryLookupLayout,
-  clampMemoryLookupLayoutToViewport,
   MEMORY_LOOKUP_DRAG_CLICK_THRESHOLD_PX,
   MEMORY_LOOKUP_RESIZE_HANDLE_STYLES,
+  readMemoryLookupChrome,
   readMemoryLookupLayout,
   saveMemoryLookupLayout,
   type MemoryLookupLayout,
@@ -49,6 +49,9 @@ import {
   DialogTitle,
 } from '@/shared/components/ui/dialog'
 import { Input } from '@/shared/components/ui/input'
+import { CLIENT_PREFERENCES_UPDATED_EVENT } from '@/shared/preferences/clientPreferences'
+import { onAppEvent } from '@/shared/events/appEvents'
+import { flushWindowLayoutRemotePersist } from '@/shared/preferences/windowLayoutMemory'
 import { cn } from '@/shared/lib/utils'
 import { MindMapSplitLayout } from '@/shared/components/layout/MindMapSplitLayout'
 import {
@@ -107,10 +110,14 @@ export function PalaceMemoryLookupDialog({
   const [previewLoading, setPreviewLoading] = useState(false)
   const [previewError, setPreviewError] = useState('')
   const [layout, setLayout] = useState<MemoryLookupLayout>(() => readMemoryLookupLayout())
-  const [pinned, setPinned] = useState(false)
+  const [pinned, setPinned] = useState(() => readMemoryLookupChrome().pinned)
   const [previewMode, setPreviewMode] = useState<MemoryLookupPreviewMode>('view')
   const [rootFocusNonce, setRootFocusNonce] = useState(0)
-  const [listCollapsed, setListCollapsed] = useState(false)
+  const [listCollapsed, setListCollapsed] = useState(() => readMemoryLookupChrome().listCollapsed)
+  const pinnedRef = useRef(pinned)
+  const listCollapsedRef = useRef(listCollapsed)
+  pinnedRef.current = pinned
+  listCollapsedRef.current = listCollapsed
   const dragStateRef = useRef<{
     startX: number
     startY: number
@@ -234,27 +241,49 @@ export function PalaceMemoryLookupDialog({
   }, [currentPalaceId, followCurrentPalace, open])
 
   const persistLayout = useCallback(
-    (nextLayout: MemoryLookupLayout | ((current: MemoryLookupLayout) => MemoryLookupLayout)) => {
+    (
+      nextLayout: MemoryLookupLayout | ((current: MemoryLookupLayout) => MemoryLookupLayout),
+      remember: { position?: boolean; size?: boolean } = {},
+    ) => {
       setLayout((current) => {
         const resolved = typeof nextLayout === 'function' ? nextLayout(current) : nextLayout
-        return saveMemoryLookupLayout(resolved)
+        return saveMemoryLookupLayout(resolved, {
+          rememberPosition: remember.position === true,
+          rememberSize: remember.size === true,
+          pinned: pinnedRef.current,
+          listCollapsed: listCollapsedRef.current,
+        })
       })
     },
     [],
   )
 
+  const applyRememberedLayout = useCallback(() => {
+    setLayout(readMemoryLookupLayout())
+    const chrome = readMemoryLookupChrome()
+    setPinned(chrome.pinned)
+    setListCollapsed(chrome.listCollapsed)
+  }, [])
+
   useEffect(() => {
     if (!open) return
-    persistLayout((current) => current)
-  }, [open, persistLayout])
+    applyRememberedLayout()
+  }, [applyRememberedLayout, open])
 
   useEffect(() => {
     const handleResize = () => {
-      persistLayout((current) => clampMemoryLookupLayoutToViewport(current))
+      if (dragStateRef.current || resizeStateRef.current) return
+      setLayout(readMemoryLookupLayout())
     }
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
-  }, [persistLayout])
+  }, [])
+
+  useEffect(() => onAppEvent(CLIENT_PREFERENCES_UPDATED_EVENT, (detail) => {
+    if (!detail || !Object.prototype.hasOwnProperty.call(detail, 'window_layouts')) return
+    if (dragStateRef.current || resizeStateRef.current) return
+    applyRememberedLayout()
+  }), [applyRememberedLayout])
 
   useEffect(() => {
     if (!open) return
@@ -392,7 +421,7 @@ export function PalaceMemoryLookupDialog({
           ...current,
           x: dragState.originX + deltaX,
           y: dragState.originY + deltaY,
-        }))
+        }), { position: true })
       }
 
       if (resizeStateRef.current) {
@@ -406,7 +435,7 @@ export function PalaceMemoryLookupDialog({
         persistLayout((current) => ({
           ...current,
           ...nextLayout,
-        }))
+        }), { position: true, size: true })
       }
     },
     [persistLayout],
@@ -415,6 +444,7 @@ export function PalaceMemoryLookupDialog({
   const stopPointerInteraction = useCallback(() => {
     dragStateRef.current = null
     resizeStateRef.current = null
+    flushWindowLayoutRemotePersist()
   }, [])
 
   useEffect(() => {
@@ -437,10 +467,35 @@ export function PalaceMemoryLookupDialog({
 
   const collapse = () => {
     persistLayout((current) => ({ ...current, collapsed: true }))
+    flushWindowLayoutRemotePersist()
   }
 
   const expand = () => {
     persistLayout((current) => ({ ...current, collapsed: false }))
+    flushWindowLayoutRemotePersist()
+  }
+
+  const togglePinned = () => {
+    setPinned((current) => {
+      const next = !current
+      pinnedRef.current = next
+      saveMemoryLookupLayout(layout, {
+        pinned: next,
+        listCollapsed: listCollapsedRef.current,
+      })
+      flushWindowLayoutRemotePersist()
+      return next
+    })
+  }
+
+  const rememberListCollapsed = (next: boolean) => {
+    listCollapsedRef.current = next
+    setListCollapsed(next)
+    saveMemoryLookupLayout(layout, {
+      pinned: pinnedRef.current,
+      listCollapsed: next,
+    })
+    flushWindowLayoutRemotePersist()
   }
 
   const previewHeading = selectedPalace ? getPalaceTitle(selectedPalace) : previewTitle || '宫殿脑图'
@@ -786,7 +841,7 @@ export function PalaceMemoryLookupDialog({
                 aria-label={pinned ? '取消置顶记忆宫殿查看' : '置顶记忆宫殿查看'}
                 title={pinned ? '取消置顶' : '置顶'}
                 onPointerDown={(event) => event.stopPropagation()}
-                onClick={() => setPinned((current) => !current)}
+                onClick={togglePinned}
               >
                 {pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />}
               </Button>
@@ -818,7 +873,7 @@ export function PalaceMemoryLookupDialog({
 
           <MindMapSplitLayout
             collapsed={listCollapsed}
-            onCollapsedChange={setListCollapsed}
+            onCollapsedChange={rememberListCollapsed}
             collapseLabel="收起宫殿列表"
             expandLabel="展开宫殿列表"
             sideClassName="w-[min(260px,85vw)]"

@@ -5,6 +5,7 @@ import type { MindMapSelection } from '@/modules/content/public'
 import {
   advanceBulkRevealState,
   advanceRevealStateForNodeClick,
+  planTargetRevealAdvances,
   checkpointNodesRevealed,
   buildInitialRevealState,
   buildSelectionNodeId,
@@ -55,21 +56,6 @@ type RevealAction =
   | { type: 'advance'; nodeId: string }
   | { type: 'hide'; nodeId: string }
   | { type: 'bulk'; nodeId: string; scope: BulkRevealScope }
-
-function findRevealPath(root: ReturnType<typeof buildReviewTree>, targetId: string): string[] {
-  if (!root) return []
-  const path: string[] = []
-
-  const visit = (node: typeof root): boolean => {
-    path.push(node.id)
-    if (node.id === targetId) return true
-    if (node.children.some(visit)) return true
-    path.pop()
-    return false
-  }
-
-  return visit(root) ? path : []
-}
 
 export function useRevealSession({
   title,
@@ -336,50 +322,26 @@ export function useRevealSession({
    * Programmatic target activation has no visible ancestor to click first. When
    * the target is initially hidden, replay only the prerequisite branch clicks
    * needed to make it visible, then use the same advance action as a left click.
+   * `baseMap` lets a burst of Enters plan from unflushed earlier steps.
    */
-  const handleTargetNodeClick = React.useCallback((nodes: MindMapSelection[]) => {
+  const applyTargetRevealFrom = React.useCallback((
+    baseMap: Record<string, RevealState>,
+    nodes: MindMapSelection[],
+  ) => {
     const targetId = buildSelectionNodeId(nodes[0] ?? null)
-    if (!targetId) return
-    const path = findRevealPath(root, targetId)
-    if (path.length === 0) return
+    if (!targetId) return null
+    const plan = planTargetRevealAdvances(root, targetId, nodeMap, baseMap, revealOptions)
+    if (!plan.recognized) return null
     clearLockedBulkTarget()
-
-    let nextRevealMap = revealMapRef.current
-    const advance = (nodeId: string) => {
-      const next = advanceRevealStateForNodeClick(
-        nodeId,
-        nodeMap,
-        nextRevealMap,
-        revealOptions,
-        root,
-      )
-      if (next === nextRevealMap) return false
-      nextRevealMap = next
+    for (const nodeId of plan.advanceNodeIds) {
       enqueueRevealAction({ type: 'advance', nodeId })
-      return true
     }
-
-    const revealPathTarget = (pathIndex: number): boolean => {
-      const nodeId = path[pathIndex]
-      const state = nextRevealMap[nodeId] ?? 'hidden'
-      if (state === 'revealed') return true
-      if (pathIndex === 0) return advance(nodeId)
-      if (!revealPathTarget(pathIndex - 1)) return false
-      if ((nextRevealMap[nodeId] ?? 'hidden') === 'hidden') {
-        advance(path[pathIndex - 1])
-      }
-      if ((nextRevealMap[nodeId] ?? 'hidden') === 'placeholder') {
-        advance(nodeId)
-      }
-      return (nextRevealMap[nodeId] ?? 'hidden') === 'revealed'
-    }
-
-    if ((nextRevealMap[targetId] ?? 'hidden') === 'revealed') {
-      advance(targetId)
-      return
-    }
-    revealPathTarget(path.length - 1)
+    return plan
   }, [clearLockedBulkTarget, enqueueRevealAction, nodeMap, revealOptions, root])
+
+  const handleTargetNodeClick = React.useCallback((nodes: MindMapSelection[]) => {
+    applyTargetRevealFrom(revealMapRef.current, nodes)
+  }, [applyTargetRevealFrom])
 
   const handleNodeContextMenu = React.useCallback((nodes: MindMapSelection[]) => {
     const nodeId = buildSelectionNodeId(nodes[0] ?? null)
@@ -526,6 +488,7 @@ export function useRevealSession({
     revealedNonRootCount,
     handleNodeClick,
     handleTargetNodeClick,
+    applyTargetRevealFrom,
     handleNodeContextMenu,
     handleNodeHover,
     handleBulkReveal,

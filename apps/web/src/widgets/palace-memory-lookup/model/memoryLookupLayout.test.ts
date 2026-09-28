@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { readPalaceLookupMemory, resetWindowLayoutMemoryForTest } from '@/shared/preferences/windowLayoutMemory'
 import {
   calculateResizedMemoryLookupLayout,
   MEMORY_LOOKUP_CAPSULE_HEIGHT,
@@ -6,9 +7,17 @@ import {
   MEMORY_LOOKUP_VISIBLE_EDGE,
   MEMORY_LOOKUP_MIN_HEIGHT,
   MEMORY_LOOKUP_MIN_WIDTH,
+  readMemoryLookupChrome,
+  readMemoryLookupLayout,
   resolveMemoryLookupLayout,
   sanitizeMemoryLookupLayout,
+  saveMemoryLookupLayout,
 } from './memoryLookupLayout'
+
+function setViewport(width: number, height: number) {
+  Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: width })
+  Object.defineProperty(window, 'innerHeight', { configurable: true, writable: true, value: height })
+}
 
 describe('memoryLookupLayout', () => {
   it('sanitizes invalid stored layout with fallback dimensions', () => {
@@ -138,5 +147,70 @@ describe('memoryLookupLayout', () => {
       width: 560,
       height: 368,
     })
+  })
+})
+
+describe('memory lookup window ratio memory', () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+    resetWindowLayoutMemoryForTest()
+    setViewport(1200, 800)
+  })
+
+  afterEach(() => {
+    window.localStorage.clear()
+    resetWindowLayoutMemoryForTest()
+    setViewport(1024, 768)
+  })
+
+  it('restores a manual size after the viewport shrinks and grows again', () => {
+    saveMemoryLookupLayout(
+      { x: 48, y: 36, width: 900, height: 600, collapsed: false },
+      { rememberPosition: true, rememberSize: true },
+    )
+
+    expect(readPalaceLookupMemory()).toMatchObject({ widthRatio: 0.75, heightRatio: 0.75 })
+
+    setViewport(420, 320)
+    const shrunk = readMemoryLookupLayout()
+    expect(shrunk.width).toBeLessThan(900)
+    expect(shrunk.height).toBeLessThan(600)
+    expect(readPalaceLookupMemory()).toMatchObject({ widthRatio: 0.75, heightRatio: 0.75 })
+
+    setViewport(1200, 800)
+    expect(readMemoryLookupLayout()).toMatchObject({ width: 900, height: 600, x: 48, y: 36 })
+  })
+
+  it('keeps the size ratio when a clamped layout is saved for position only', () => {
+    saveMemoryLookupLayout(
+      { x: 48, y: 36, width: 900, height: 600, collapsed: false },
+      { rememberPosition: true, rememberSize: true },
+    )
+    setViewport(420, 320)
+    saveMemoryLookupLayout(readMemoryLookupLayout(), { rememberPosition: true, rememberSize: false })
+
+    expect(readPalaceLookupMemory()).toMatchObject({ widthRatio: 0.75, heightRatio: 0.75 })
+    setViewport(1200, 800)
+    expect(readMemoryLookupLayout()).toMatchObject({ width: 900, height: 600 })
+  })
+
+  it('remembers pin and list collapse without replacing the size ratio', () => {
+    saveMemoryLookupLayout(
+      { x: 48, y: 36, width: 900, height: 600, collapsed: false },
+      { rememberPosition: true, rememberSize: true },
+    )
+    saveMemoryLookupLayout(
+      { x: 12, y: 12, width: 400, height: 300, collapsed: true },
+      { rememberPosition: false, rememberSize: false, pinned: true, listCollapsed: true },
+    )
+
+    expect(readPalaceLookupMemory()).toMatchObject({
+      widthRatio: 0.75,
+      heightRatio: 0.75,
+      collapsed: true,
+      pinned: true,
+      listCollapsed: true,
+    })
+    expect(readMemoryLookupChrome()).toEqual({ pinned: true, listCollapsed: true })
   })
 })

@@ -309,14 +309,6 @@ function deriveRecordSessionKey(source: Record<string, unknown>, id: string) {
   const palaceId = readPayloadField<number | null>(source, 'palace_id', 'palaceId')
   const englishCourseId = readPayloadField<number | null>(source, 'english_course_id', 'englishCourseId')
   if (sourceKind === 'english' && englishCourseId != null) return `english:${englishCourseId}`
-  if (sourceKind === 'english_reading') {
-    const materialId = readPayloadField<number | null>(
-      source,
-      'english_reading_material_id',
-      'englishReadingMaterialId',
-    )
-    if (materialId != null) return `english-reading:${materialId}`
-  }
   if (palaceId != null) return `palace:${palaceId}`
   return `record:${id}`
 }

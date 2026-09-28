@@ -1,4 +1,12 @@
 import type { CSSProperties } from 'react'
+import {
+  currentViewportSize,
+  pixelsFromRatio,
+  readPalaceLookupMemory,
+  viewportRatio,
+  writePalaceLookupMemory,
+  type PalaceLookupWindowMemory,
+} from '@/shared/preferences/windowLayoutMemory'
 
 export interface MemoryLookupLayout {
   x: number
@@ -188,24 +196,72 @@ export function resolveMemoryLookupLayout(
   )
 }
 
-export function readMemoryLookupLayout() {
-  try {
-    const raw = window.localStorage.getItem(MEMORY_LOOKUP_LAYOUT_STORAGE_KEY)
-    if (!raw) return resolveMemoryLookupLayout(null)
-    return resolveMemoryLookupLayout(JSON.parse(raw))
-  } catch {
-    return resolveMemoryLookupLayout(null)
+export interface MemoryLookupChrome {
+  pinned: boolean
+  listCollapsed: boolean
+}
+
+export interface MemoryLookupCommitOptions {
+  /** User dragged the window. Viewport resizes must not set this. */
+  rememberPosition?: boolean
+  /** User resized the window. A temporary viewport clamp must not set this. */
+  rememberSize?: boolean
+  pinned?: boolean
+  listCollapsed?: boolean
+}
+
+function memoryToLayout(memory: PalaceLookupWindowMemory, viewport = currentViewportSize()): MemoryLookupLayout {
+  return {
+    x: pixelsFromRatio(memory.xRatio, viewport.width),
+    y: pixelsFromRatio(memory.yRatio, viewport.height),
+    width: pixelsFromRatio(memory.widthRatio, viewport.width),
+    height: pixelsFromRatio(memory.heightRatio, viewport.height),
+    collapsed: memory.collapsed,
   }
 }
 
-export function saveMemoryLookupLayout(layout: MemoryLookupLayout) {
-  const sanitized = resolveMemoryLookupLayout(layout)
-  try {
-    window.localStorage.setItem(MEMORY_LOOKUP_LAYOUT_STORAGE_KEY, JSON.stringify(sanitized))
-  } catch {
-    // Ignore storage errors.
+export function readMemoryLookupChrome(): MemoryLookupChrome {
+  const memory = readPalaceLookupMemory()
+  return {
+    pinned: memory?.pinned ?? false,
+    listCollapsed: memory?.listCollapsed ?? false,
   }
-  return sanitized
+}
+
+export function readMemoryLookupLayout() {
+  const memory = readPalaceLookupMemory()
+  if (!memory) return resolveMemoryLookupLayout(null)
+  return resolveMemoryLookupLayout(memoryToLayout(memory))
+}
+
+export function saveMemoryLookupLayout(
+  layout: MemoryLookupLayout,
+  options: MemoryLookupCommitOptions = {},
+) {
+  const display = resolveMemoryLookupLayout(layout)
+  const viewport = currentViewportSize()
+  const previous = readPalaceLookupMemory()
+  const rememberPosition = options.rememberPosition === true
+  const rememberSize = options.rememberSize === true
+  const seeded = !previous
+  writePalaceLookupMemory({
+    xRatio: rememberPosition || seeded
+      ? viewportRatio(display.x, viewport.width, -1.5, 1.5)
+      : previous.xRatio,
+    yRatio: rememberPosition || seeded
+      ? viewportRatio(display.y, viewport.height, -1.5, 1.5)
+      : previous.yRatio,
+    widthRatio: rememberSize || seeded
+      ? viewportRatio(display.width, viewport.width, 0.05, 1.5)
+      : previous.widthRatio,
+    heightRatio: rememberSize || seeded
+      ? viewportRatio(display.height, viewport.height, 0.05, 1.5)
+      : previous.heightRatio,
+    collapsed: display.collapsed,
+    pinned: options.pinned ?? previous?.pinned ?? false,
+    listCollapsed: options.listCollapsed ?? previous?.listCollapsed ?? false,
+  })
+  return display
 }
 
 export function calculateResizedMemoryLookupLayout(

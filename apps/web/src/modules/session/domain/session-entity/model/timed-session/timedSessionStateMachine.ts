@@ -1011,7 +1011,11 @@ function installBrowserListeners() {
 
 export function useTimedSession(options: TimedSessionOptions) {
   const sessionKey = stableSessionKey(options)
-  const store = React.useMemo(() => getStore(sessionKey, options), [options, sessionKey])
+  // Store identity is the session key. Depending on the options object recreates
+  // the lookup every render; after an idle detach that misses the map and loops.
+  const optionsRef = React.useRef(options)
+  optionsRef.current = options
+  const store = React.useMemo(() => getStore(sessionKey, optionsRef.current), [sessionKey])
   const attachmentIdRef = React.useRef<string>(createStableRecordId())
   const [, forceRender] = React.useState(0)
   const attachmentRef = React.useRef<TimerAttachment>({

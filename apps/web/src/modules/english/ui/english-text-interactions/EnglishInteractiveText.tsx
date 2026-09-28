@@ -1,10 +1,8 @@
-import { useCallback, type MouseEvent as ReactMouseEvent } from 'react'
+import type { MouseEvent as ReactMouseEvent } from 'react'
 import {
   EnglishLookupPanel,
   useEnglishLookup,
 } from '@/modules/english-lookup/public'
-import { createEnglishReadingVocabularyNoteApi } from '@/modules/english-reading/public'
-import { toast } from '@/shared/feedback/toast'
 import { cn } from '@/shared/lib/utils'
 
 const WORD_SPLIT = /(\b[A-Za-z][A-Za-z'-]*\b)/g
@@ -23,19 +21,6 @@ export function EnglishInteractiveText({
   enableInteraction?: boolean
 }) {
   const lookup = useEnglishLookup({ isActive: enableInteraction })
-
-  const handleFavorite = useCallback(async (query: string, summary: string) => {
-    try {
-      await createEnglishReadingVocabularyNoteApi({
-        word: query,
-        definitionZh: summary || undefined,
-        note: '',
-      })
-      toast.success('已收藏生词')
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '收藏失败')
-    }
-  }, [])
 
   if (!enableInteraction) {
     return <span className={className}>{text}</span>
@@ -67,7 +52,7 @@ export function EnglishInteractiveText({
           return <span key={`t-${index}`}>{part}</span>
         })}
       </span>
-      <EnglishLookupPanel lookup={lookup} onFavorite={handleFavorite} />
+      <EnglishLookupPanel lookup={lookup} />
     </>
   )
 }

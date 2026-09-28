@@ -464,6 +464,109 @@ export function advanceBulkRevealState(
   return revealMap
 }
 
+function findRevealPath(root: ReviewMindMapNode | null, targetId: string): string[] {
+  if (!root || !targetId) return []
+  const path: string[] = []
+  const visit = (node: ReviewMindMapNode): boolean => {
+    path.push(node.id)
+    if (node.id === targetId) return true
+    if (node.children.some(visit)) return true
+    path.pop()
+    return false
+  }
+  return visit(root) ? path : []
+}
+
+function collectNewlyVisibleRevealIds(
+  before: Record<string, RevealState>,
+  after: Record<string, RevealState>,
+): string[] {
+  const ids = new Set([...Object.keys(before), ...Object.keys(after)])
+  const changed: string[] = []
+  for (const id of ids) {
+    const previous = before[id] ?? 'hidden'
+    const next = after[id] ?? 'hidden'
+    if (previous !== next && next !== 'hidden') changed.push(id)
+  }
+  return changed
+}
+
+export interface TargetRevealPlan {
+  /** False when the target is not in the review tree. */
+  recognized: boolean
+  nextRevealMap: Record<string, RevealState>
+  /** Advance actions to enqueue, in the same order a target click would flush. */
+  advanceNodeIds: string[]
+  /** Cards this step made visible or more revealed. */
+  changedIds: string[]
+}
+
+/**
+ * Simulate one programmatic target click without mutating the live reveal map.
+ * Used so a later Enter can plan from unflushed earlier Enters.
+ */
+export function planTargetRevealAdvances(
+  root: ReviewMindMapNode | null,
+  targetId: string,
+  nodeMap: Map<string, ReviewMindMapNode>,
+  revealMap: Record<string, RevealState>,
+  options: RevealFlowOptions = {},
+): TargetRevealPlan {
+  const unchanged: TargetRevealPlan = {
+    recognized: false,
+    nextRevealMap: revealMap,
+    advanceNodeIds: [],
+    changedIds: [],
+  }
+  if (!targetId || !root) return unchanged
+  const path = findRevealPath(root, targetId)
+  if (path.length === 0) return unchanged
+
+  let nextRevealMap = revealMap
+  const advanceNodeIds: string[] = []
+  const advance = (nodeId: string) => {
+    const next = advanceRevealStateForNodeClick(
+      nodeId,
+      nodeMap,
+      nextRevealMap,
+      options,
+      root,
+    )
+    if (next === nextRevealMap) return false
+    nextRevealMap = next
+    advanceNodeIds.push(nodeId)
+    return true
+  }
+
+  const revealPathTarget = (pathIndex: number): boolean => {
+    const nodeId = path[pathIndex]
+    const state = nextRevealMap[nodeId] ?? 'hidden'
+    if (state === 'revealed') return true
+    if (pathIndex === 0) return advance(nodeId)
+    if (!revealPathTarget(pathIndex - 1)) return false
+    if ((nextRevealMap[nodeId] ?? 'hidden') === 'hidden') {
+      advance(path[pathIndex - 1])
+    }
+    if ((nextRevealMap[nodeId] ?? 'hidden') === 'placeholder') {
+      advance(nodeId)
+    }
+    return (nextRevealMap[nodeId] ?? 'hidden') === 'revealed'
+  }
+
+  if ((nextRevealMap[targetId] ?? 'hidden') === 'revealed') {
+    advance(targetId)
+  } else {
+    revealPathTarget(path.length - 1)
+  }
+
+  return {
+    recognized: true,
+    nextRevealMap,
+    advanceNodeIds,
+    changedIds: collectNewlyVisibleRevealIds(revealMap, nextRevealMap),
+  }
+}
+
 export function advanceRevealStateForNodeClick(
   nodeId: string,
   nodeMap: Map<string, ReviewMindMapNode>,

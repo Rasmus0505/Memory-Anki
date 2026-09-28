@@ -1,21 +1,17 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  BookmarkPlus,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
   CircleHelp,
-  LoaderCircle,
   PartyPopper,
   Settings2,
   Sparkles,
   Volume2,
 } from 'lucide-react'
-import { collectEnglishPatternSentenceApi } from '@/modules/english/domain/english-entity/api'
 import type { EnglishCourseDetail, EnglishSentenceCheckResponse } from '@/shared/api/contracts'
-import { toast } from '@/shared/feedback/toast'
 import { LoadingState } from '@/shared/components/state-placeholders'
 import { Button } from '@/shared/components/ui/button'
 import {
@@ -38,12 +34,11 @@ import {
 import type { EnglishPracticeSettings } from '@/modules/settings/public'
 import { shouldKeepEnglishPracticeControlFocus } from '@/modules/english/ui/english/englishTypingHelpers'
 import { EnglishFocusChrome, EnglishZoneNav } from '@/modules/english/ui/english-shell'
-import { ReadingLookupText } from '@/modules/english-reading/public'
 import {
   EnglishLookupPanel,
+  LookupTokenText,
   useEnglishLookup,
 } from '@/modules/english-lookup/public'
-import { createEnglishReadingVocabularyNoteApi } from '@/modules/english-reading/public'
 import type { useEnglishWordTyping } from '@/modules/english/ui/english/useEnglishWordTyping'
 import { useRouteResidency } from '@/shared/routing/RouteResidency'
 import { cn } from '@/shared/lib/utils'
@@ -97,7 +92,6 @@ function preferCollapsedVideo() {
 }
 
 export function EnglishCoursePageView(props: EnglishCoursePageViewProps) {
-  const [collectingPattern, setCollectingPattern] = useState(false)
   const [sourceTextOpen, setSourceTextOpen] = useState(false)
   const {
     courseId,
@@ -147,29 +141,6 @@ export function EnglishCoursePageView(props: EnglishCoursePageViewProps) {
     media.addEventListener?.('change', sync)
     return () => media.removeEventListener?.('change', sync)
   }, [])
-
-  const handleCollectToPattern = async () => {
-    if (!activeSentence?.textEn?.trim()) {
-      toast.error('当前句没有可收藏的英文内容。')
-      return
-    }
-    setCollectingPattern(true)
-    try {
-      const result = await collectEnglishPatternSentenceApi({
-        patternTitle: course?.title ? `${course.title} · 听力摘句` : '听力摘句',
-        textEn: activeSentence.textEn,
-        textZh: activeSentence.textZh || '',
-        source: 'from_listening',
-        sourceCourseId: courseId,
-        sourceSentenceId: activeSentence.id,
-      })
-      toast.success(`已加入句模「${result.pattern.title}」`)
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '加入句模失败。')
-    } finally {
-      setCollectingPattern(false)
-    }
-  }
 
   if (!Number.isFinite(courseId)) {
     return (
@@ -405,23 +376,6 @@ export function EnglishCoursePageView(props: EnglishCoursePageViewProps) {
                       >
                         {sourceTextOpen ? '收起原文' : '点词原文'}
                       </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="h-8 rounded-xl px-2.5 text-xs"
-                        disabled={!activeSentence?.textEn || collectingPattern}
-                        onClick={() => void handleCollectToPattern()}
-                        data-testid="english-collect-pattern"
-                        data-english-control-focus="true"
-                      >
-                        {collectingPattern ? (
-                          <LoaderCircle className="size-3.5 animate-spin" />
-                        ) : (
-                          <BookmarkPlus className="size-3.5" />
-                        )}
-                        加入句模
-                      </Button>
                     </div>
                   </div>
 
@@ -430,7 +384,7 @@ export function EnglishCoursePageView(props: EnglishCoursePageViewProps) {
                       data-testid="english-course-source-text"
                       className="mt-1.5 shrink-0 rounded-2xl border border-info/20 bg-info/5 px-3 py-2 text-sm leading-5 text-foreground"
                     >
-                      <ReadingLookupText
+                      <LookupTokenText
                         text={activeSentence.textEn}
                         onLookupWord={lookup.handleTokenClick}
                       />
@@ -585,21 +539,7 @@ export function EnglishCoursePageView(props: EnglishCoursePageViewProps) {
         onSave={handleSavePracticeSettings}
       />
 
-      <EnglishLookupPanel
-        lookup={lookup}
-        onFavorite={async (query, summary) => {
-          try {
-            await createEnglishReadingVocabularyNoteApi({
-              word: query,
-              definitionZh: summary || undefined,
-              note: '',
-            })
-            toast.success('已收藏生词')
-          } catch (error) {
-            toast.error(error instanceof Error ? error.message : '收藏失败')
-          }
-        }}
-      />
+      <EnglishLookupPanel lookup={lookup} />
     </div>
   )
 }

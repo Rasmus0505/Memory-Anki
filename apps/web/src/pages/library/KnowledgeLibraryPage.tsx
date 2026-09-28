@@ -23,8 +23,6 @@ import { useProgrammaticEditorStateGuard } from '@/shared/hooks/useProgrammaticE
 import { useMindMapExperience } from '@/modules/content/public'
 import { applyProgrammaticEditorState } from '@/shared/lib/applyProgrammaticEditorState'
 import { cn } from '@/shared/lib/utils'
-import { KnowledgeChapterQuizDialog } from '@/modules/content/public'
-import { KnowledgeMindMapImportDrawer } from '@/pages/library/KnowledgeMindMapImportDrawer'
 import { useMindMapImport } from '@/modules/produce/public'
 import {
   createSubjectApi,
@@ -40,15 +38,6 @@ import {
   type SubjectSummary,
   updateSubjectApi,
 } from '@/modules/content/public'
-import {
-  batchCreateChapterQuizQuestionsApi,
-  previewChapterQuizGenerationFromOutlineApi,
-} from '@/modules/quiz/public'
-import type {
-  PalaceQuizGenerationPreview,
-  PalaceQuizQuestionDraft,
-  PalaceQuizQuestionType,
-} from '@/shared/api/contracts'
 import { readMindMapEditorState } from '@/modules/content/public'
 import { APP_EVENT_NAMES, onAppEvent } from '@/shared/events/appEvents'
 import { detectClientSource } from '@/shared/lib/clientSource'
@@ -81,24 +70,11 @@ export default function Knowledge() {
   const [mindMapNativeFullscreen, setMindMapNativeFullscreen] = useState(false)
   const [mindMapUiCleared, setMindMapUiCleared] = useState(false)
   const [sidePanelCollapsed, setSidePanelCollapsed] = useState(false)
-  const [chapterQuizDialogOpen, setChapterQuizDialogOpen] = useState(false)
-  const [chapterQuizQuestionTypes, setChapterQuizQuestionTypes] = useState<PalaceQuizQuestionType[]>([
-    'multiple_choice',
-    'short_answer',
-  ])
-  const [chapterQuizQuestionCount, setChapterQuizQuestionCount] = useState(5)
-  const [chapterQuizExtraPrompt, setChapterQuizExtraPrompt] = useState('')
-  const [chapterQuizClassify, setChapterQuizClassify] = useState(false)
-  const [chapterQuizPreview, setChapterQuizPreview] = useState<PalaceQuizGenerationPreview | null>(null)
-  const [chapterQuizLoading, setChapterQuizLoading] = useState(false)
-  const [chapterQuizSaving, setChapterQuizSaving] = useState(false)
 
   const selectedNodeUid =
     selectedNodes?.[0]?.uid ||
     (selectedNodes?.[0]?.rawData?.uid as string | undefined) ||
     (selectedNodes?.[0]?.rawData?.data as Record<string, unknown> | undefined)?.uid as string | undefined
-
-  const selectedNodeLabel = selectedNodes?.[0]?.text ?? ''
 
   const selectedNode = selectedNodes[0] ?? null
   const selectedChapterId = selectedNode?.memoryAnkiNodeType === 'chapter' ? selectedNode.memoryAnkiId : null
@@ -244,32 +220,6 @@ export default function Knowledge() {
   }, [selectedChapterId])
 
   const selectedPalaces = useMemo(() => chapterDetail?.palaces ?? [], [chapterDetail])
-  const selectedChildChapters = useMemo(() => chapterDetail?.chapter.children ?? [], [chapterDetail])
-  const canClassifyChapterQuiz = selectedChildChapters.length > 0
-
-  const buildChapterQuizPayloads = useCallback((preview: PalaceQuizGenerationPreview): PalaceQuizQuestionDraft[] => {
-    const grouped = preview.grouped_questions
-    if (grouped && 'child_chapter_groups' in grouped) {
-      const assigned = grouped.child_chapter_groups.flatMap((group) =>
-        group.questions.map((question) => ({
-          ...question,
-          source_chapter_id: preview.chapter_id ?? selectedChapterId ?? null,
-          classified_chapter_id: group.classified_chapter_id,
-        })),
-      )
-      const unassigned = grouped.unassigned_questions.map((question) => ({
-        ...question,
-        source_chapter_id: preview.chapter_id ?? selectedChapterId ?? null,
-        classified_chapter_id: null,
-      }))
-      return [...assigned, ...unassigned]
-    }
-    return (preview.questions || []).map((question) => ({
-      ...question,
-      source_chapter_id: preview.chapter_id ?? selectedChapterId ?? null,
-      classified_chapter_id: null,
-      }))
-  }, [selectedChapterId])
 
   const refreshSubjects = async (nextSelectedId?: number | null) => {
     const items = await getSubjectsApi()
@@ -342,50 +292,6 @@ export default function Knowledge() {
         return
       }
       toast.error(error instanceof Error ? error.message : '删除章节失败')
-    }
-  }
-
-  const handleToggleChapterQuizType = (questionType: PalaceQuizQuestionType) => {
-    setChapterQuizQuestionTypes((current) => {
-      if (current.includes(questionType)) {
-        return current.length === 1 ? current : current.filter((item) => item !== questionType)
-      }
-      return [...current, questionType]
-    })
-  }
-
-  const handleGenerateChapterQuiz = async () => {
-    if (!selectedChapterId) return
-    setChapterQuizLoading(true)
-    try {
-      const preview = await previewChapterQuizGenerationFromOutlineApi(selectedChapterId, {
-        question_types: chapterQuizQuestionTypes,
-        question_count: chapterQuizQuestionCount,
-        extra_prompt: chapterQuizExtraPrompt,
-        classify_by_child_chapter: chapterQuizClassify && canClassifyChapterQuiz,
-      })
-      setChapterQuizPreview(preview)
-      toast.success(`已生成 ${preview.questions.length} 道章节题预览`)
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '章节题生成失败')
-    } finally {
-      setChapterQuizLoading(false)
-    }
-  }
-
-  const handleSaveChapterQuiz = async () => {
-    if (!selectedChapterId || !chapterQuizPreview) return
-    setChapterQuizSaving(true)
-    try {
-      const payloads = buildChapterQuizPayloads(chapterQuizPreview)
-      const response = await batchCreateChapterQuizQuestionsApi(selectedChapterId, payloads)
-      toast.success(`已保存 ${response.items.length} 道章节题`)
-      setChapterQuizDialogOpen(false)
-      setChapterQuizPreview(null)
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '章节题保存失败')
-    } finally {
-      setChapterQuizSaving(false)
     }
   }
 
@@ -632,7 +538,6 @@ export default function Knowledge() {
                   } : null}
                   fitAction={{ label: '适应视图', onClick: () => mindMapFrameRef.current?.fitView() }}
                   moreActions={[
-                    { label: '导入资料', onClick: () => mindMapImport.setImportOpen(true) },
                     { label: `结构检查（${mindMapExperience.structureIssues.length}）`, onClick: () => {
                       const issue = mindMapExperience.structureIssues[0]
                       if (!issue) return toast.success('未发现结构问题')
@@ -695,28 +600,6 @@ export default function Knowledge() {
           </CardContent>
         </Card>
       </MindMapSplitLayout>
-
-      <KnowledgeMindMapImportDrawer mindMapImport={mindMapImport} targetNodeLabel={selectedNodeLabel} />
-
-      <KnowledgeChapterQuizDialog
-        open={chapterQuizDialogOpen}
-        onOpenChange={setChapterQuizDialogOpen}
-        questionTypes={chapterQuizQuestionTypes}
-        onToggleQuestionType={handleToggleChapterQuizType}
-        questionCount={chapterQuizQuestionCount}
-        onQuestionCountChange={setChapterQuizQuestionCount}
-        classify={chapterQuizClassify}
-        onClassifyChange={setChapterQuizClassify}
-        canClassify={canClassifyChapterQuiz}
-        childChapterCount={selectedChildChapters.length}
-        extraPrompt={chapterQuizExtraPrompt}
-        onExtraPromptChange={setChapterQuizExtraPrompt}
-        preview={chapterQuizPreview}
-        loading={chapterQuizLoading}
-        saving={chapterQuizSaving}
-        onGenerate={handleGenerateChapterQuiz}
-        onSave={handleSaveChapterQuiz}
-      />
     </div>
   )
 }

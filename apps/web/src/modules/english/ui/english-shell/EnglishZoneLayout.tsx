@@ -1,16 +1,13 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  BookOpenText,
   Captions,
   Languages,
-  MessagesSquare,
-  NotebookPen,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/shared/lib/utils'
 
-export type EnglishHubZone = 'hub' | 'listening' | 'reading' | 'patterns' | 'vocab'
+export type EnglishHubZone = 'hub' | 'listening'
 
 const ZONE_LINKS: Array<{
   id: EnglishHubZone
@@ -20,12 +17,9 @@ const ZONE_LINKS: Array<{
   primary?: boolean
 }> = [
   { id: 'listening', label: '听力', to: '/english/listening', icon: Captions, primary: true },
-  { id: 'reading', label: '阅读', to: '/english/reading', icon: BookOpenText, primary: true },
-  { id: 'patterns', label: '句模', to: '/english/patterns', icon: MessagesSquare },
-  { id: 'vocab', label: '生词', to: '/english/vocab', icon: NotebookPen },
 ]
 
-/** Sticky zone switcher shared by listening / reading / patterns / vocab (and course chrome). */
+/** Sticky zone switcher for the listening workspace and course chrome. */
 export function EnglishZoneNav({
   zone = 'hub',
   sticky = true,
@@ -76,7 +70,7 @@ export function EnglishZoneLayout({
   children,
   headerAside,
   title = '英语学习',
-  description = '听力与阅读两大区；句模与生词在全局库中复用。',
+  description = '上传视频生成逐句听写课程。',
   showZoneNav = true,
 }: {
   zone?: EnglishHubZone

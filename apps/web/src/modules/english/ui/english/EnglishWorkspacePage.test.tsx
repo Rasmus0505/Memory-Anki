@@ -149,7 +149,7 @@ describe('EnglishWorkspacePage', () => {
 
     expect(await screen.findByTestId('english-zone-nav')).toBeTruthy()
     expect(screen.getByTestId('english-zone-listening')).toBeTruthy()
-    expect(screen.getByTestId('english-zone-reading')).toBeTruthy()
+    expect(screen.queryByTestId('english-zone-reading')).toBeNull()
     expect(screen.getByTestId('listening-course-history')).toBeTruthy()
   })
 
