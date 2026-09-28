@@ -13,14 +13,18 @@ let pendingFlush = null
 let allowMainWindowClose = false
 let desktopReadyWritten = false
 let mainWindowLoaded = false
-let timerWindowLoaded = false
 let overlayDesiredVisible = false
+// A hidden transparent window still composites on Windows and flashes over the
+// study window whenever the timer page repaints. Keep it off-screen until the
+// user actually wants the overlay, and destroy it when they hide it.
+const TIMER_OFFSCREEN = { x: -32000, y: -32000 }
+let timerWindowBounds = { x: 80, y: 80, width: 320, height: 196 }
 
 const FLUSH_TIMEOUT_MS = 1800
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
 
 function writeDesktopReady() {
-  if (desktopReadyWritten || !READY_FILE || !mainWindowLoaded || !timerWindowLoaded) return
+  if (desktopReadyWritten || !READY_FILE || !mainWindowLoaded) return
   fs.mkdirSync(path.dirname(READY_FILE), { recursive: true })
   fs.writeFileSync(READY_FILE, JSON.stringify({ readyAt: new Date().toISOString(), pid: process.pid }))
   desktopReadyWritten = true
@@ -156,22 +160,62 @@ function createMainWindow() {
   })
 }
 
+function rememberTimerWindowBounds() {
+  if (!timerWindow || timerWindow.isDestroyed()) return
+  const bounds = timerWindow.getBounds()
+  if (bounds.x <= -16000 || bounds.y <= -16000) return
+  if (bounds.width <= 0 || bounds.height <= 0) return
+  timerWindowBounds = bounds
+}
+
+function destroyTimerWindow() {
+  if (!timerWindow || timerWindow.isDestroyed()) {
+    timerWindow = null
+    return
+  }
+  rememberTimerWindowBounds()
+  const closing = timerWindow
+  timerWindow = null
+  try {
+    closing.setAlwaysOnTop(false)
+    const bounds = closing.getBounds()
+    closing.setBounds({ x: TIMER_OFFSCREEN.x, y: TIMER_OFFSCREEN.y, width: bounds.width, height: bounds.height })
+    closing.hide()
+  } catch {
+    // The surface is going away either way.
+  }
+  setImmediate(() => {
+    if (!closing.isDestroyed()) closing.destroy()
+  })
+}
+
+function presentTimerWindow(created) {
+  if (!overlayDesiredVisible || !created || created.isDestroyed() || timerWindow !== created) return
+  created.setBounds(timerWindowBounds)
+  created.setAlwaysOnTop(true, 'screen-saver')
+  created.showInactive()
+  created.moveTop()
+}
+
 function createTimerWindow() {
-  timerWindow = new BrowserWindow({
-    width: 320,
-    height: 196,
+  if (timerWindow && !timerWindow.isDestroyed()) return timerWindow
+  const created = new BrowserWindow({
+    width: timerWindowBounds.width,
+    height: timerWindowBounds.height,
     minWidth: 280,
     minHeight: 56,
-    x: 80,
-    y: 80,
+    x: TIMER_OFFSCREEN.x,
+    y: TIMER_OFFSCREEN.y,
     frame: false,
     resizable: true,
     skipTaskbar: true,
-    alwaysOnTop: true,
+    alwaysOnTop: false,
     show: false,
     title: 'Memory Anki Timer',
     backgroundColor: '#00000000',
     transparent: true,
+    hasShadow: false,
+    thickFrame: false,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -179,23 +223,26 @@ function createTimerWindow() {
       preload: path.join(__dirname, 'preload.cjs'),
     },
   })
+  timerWindow = created
 
-  timerWindow.setAlwaysOnTop(true, 'screen-saver')
-  timerWindow.loadURL(OVERLAY_URL)
-  timerWindow.webContents.on('did-finish-load', () => {
-    timerWindowLoaded = true
-    writeDesktopReady()
+  created.loadURL(OVERLAY_URL)
+  created.webContents.on('did-finish-load', () => {
+    if (created.isDestroyed()) return
     if (lastTimerSnapshot) {
-      timerWindow?.webContents.send('memory-anki-timer-snapshot', lastTimerSnapshot)
+      created.webContents.send('memory-anki-timer-snapshot', lastTimerSnapshot)
     }
-    if (overlayDesiredVisible) {
-      timerWindow?.show()
-      timerWindow?.moveTop()
-    }
+    presentTimerWindow(created)
   })
-  timerWindow.on('closed', () => {
-    timerWindow = null
+  created.on('move', () => {
+    if (timerWindow === created) rememberTimerWindowBounds()
   })
+  created.on('resize', () => {
+    if (timerWindow === created) rememberTimerWindowBounds()
+  })
+  created.on('closed', () => {
+    if (timerWindow === created) timerWindow = null
+  })
+  return created
 }
 
 function ensureMainWindow() {
@@ -206,19 +253,25 @@ function ensureMainWindow() {
 }
 
 function ensureTimerWindow() {
-  if (!timerWindow) createTimerWindow()
+  if (!overlayDesiredVisible) return
+  if (!timerWindow || timerWindow.isDestroyed()) {
+    createTimerWindow()
+    return
+  }
+  presentTimerWindow(timerWindow)
 }
 
 function setTimerOverlayVisible(visible) {
   overlayDesiredVisible = Boolean(visible)
-  if (!timerWindow) createTimerWindow()
-  if (!timerWindow || timerWindow.isDestroyed()) return
-  if (overlayDesiredVisible) {
-    timerWindow.show()
-    timerWindow.moveTop()
+  if (!overlayDesiredVisible) {
+    destroyTimerWindow()
     return
   }
-  timerWindow.hide()
+  if (!timerWindow || timerWindow.isDestroyed()) {
+    createTimerWindow()
+    return
+  }
+  presentTimerWindow(timerWindow)
 }
 
 function toggleTimerWindow() {
@@ -231,22 +284,21 @@ if (hasSingleInstanceLock) app.whenReady().then(async () => {
   await session.defaultSession.clearCache()
   await session.defaultSession.clearStorageData({ storages: ['serviceworkers', 'cachestorage'] })
   createMainWindow()
-  createTimerWindow()
   globalShortcut.register('CommandOrControl+Shift+M', toggleTimerWindow)
 })
 
 ipcMain.on('memory-anki-timer-collapse', (_event, collapsed) => {
-  if (!timerWindow) return
-  if (collapsed) {
-    timerWindow.setSize(280, 64)
-    return
-  }
-  timerWindow.setSize(320, 196)
+  const width = collapsed ? 280 : 320
+  const height = collapsed ? 64 : 196
+  timerWindowBounds = { ...timerWindowBounds, width, height }
+  if (!timerWindow || timerWindow.isDestroyed()) return
+  timerWindow.setSize(width, height)
 })
 
 ipcMain.on('memory-anki-timer-snapshot', (_event, snapshot) => {
   lastTimerSnapshot = snapshot
-  timerWindow?.webContents.send('memory-anki-timer-snapshot', snapshot)
+  if (!timerWindow || timerWindow.isDestroyed()) return
+  timerWindow.webContents.send('memory-anki-timer-snapshot', snapshot)
 })
 
 ipcMain.on('memory-anki-timer-command', (_event, command) => {
@@ -262,8 +314,11 @@ ipcMain.on('memory-anki-timer-command', (_event, command) => {
   }
   if (command?.type === 'collapse') {
     const collapsed = Boolean(command.collapsed)
-    if (timerWindow) {
-      timerWindow.setSize(collapsed ? 280 : 320, collapsed ? 64 : 196)
+    const width = collapsed ? 280 : 320
+    const height = collapsed ? 64 : 196
+    timerWindowBounds = { ...timerWindowBounds, width, height }
+    if (timerWindow && !timerWindow.isDestroyed()) {
+      timerWindow.setSize(width, height)
     }
     return
   }
