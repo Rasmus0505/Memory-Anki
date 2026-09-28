@@ -519,3 +519,55 @@ def test_queue_study_window_is_a_prefix_of_the_full_order(session_factory, make_
     assert full_payload["round_meta"]["tail_pending"] is False
     assert [card["palace_id"] for card in full_payload["cards"]] == [first_id, second_id]
     assert full_payload["cards"][0]["id"] == window_payload["cards"][0]["id"]
+
+
+def _due_palace(session, title: str, stars: int) -> int:
+    palace = Palace(
+        title=title,
+        exam_stars=stars,
+        exam_stars_source="manual",
+        editor_doc=json.dumps(
+            {
+                "root": {
+                    "data": {"uid": f"{title}-root", "text": title, "permanentSplitMark": True},
+                    "children": [{"data": {"uid": f"{title}-branch", "text": "branch"}, "children": []}],
+                }
+            }
+        ),
+    )
+    session.add(palace)
+    session.commit()
+    reconcile_palace_units(session, palace.id)
+    session.commit()
+    return palace.id
+
+
+def test_exam_priority_serves_high_star_palaces_first_and_tags_stars(session_factory, make_client):
+    session = session_factory()
+    low = _due_palace(session, "low", 1)
+    high = _due_palace(session, "high", 3)
+    session.close()
+    freestyle_router.session_dep = session_dep
+    client = make_client(freestyle_router)
+
+    def build(order: str) -> list[dict]:
+        response = client.post(
+            "/api/v1/freestyle/queue/build",
+            json={
+                "operation_id": f"op-{order}",
+                "config": {
+                    "training_mode": "memory_palace",
+                    "streams": {
+                        "memory_palace": {"specific_palace_ids": [low, high], "palace_order": order}
+                    },
+                },
+            },
+        )
+        assert response.status_code == 200, response.text
+        return response.json()["cards"]
+
+    exam_cards = build("exam_priority")
+    assert exam_cards, "expected due cards"
+    assert exam_cards[0]["palace_id"] == high
+    assert {card["palace_id"]: card["exam_stars"] for card in exam_cards} == {low: 1, high: 3}
+    assert build("finish_palace_then_next")[0]["palace_id"] == low

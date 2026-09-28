@@ -13,7 +13,19 @@ import json
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from .feed_config import QUIZ_SCOPE_CROSS, QUIZ_SCOPE_SINGLE, QUIZ_SCOPES
+from .feed_config import (
+    DEFAULT_OVERLAY_QUESTION_KINDS,
+    OVERLAY_KIND_SUBJECTIVE,
+    OVERLAY_NESTING_PALACE_THEN_TYPE,
+    OVERLAY_NESTING_TYPE_THEN_PALACE,
+    OVERLAY_TYPE_ORDER_INTERLEAVE,
+    OVERLAY_TYPE_ORDER_OBJECTIVE_FIRST,
+    OVERLAY_TYPE_ORDER_SUBJECTIVE_FIRST,
+    QUIZ_SCOPE_CROSS,
+    QUIZ_SCOPE_SINGLE,
+    QUIZ_SCOPES,
+)
+from .quiz_stream import deterministic_shuffle, order_quiz_stream_by_scope
 
 OverlayQuiz = dict[str, Any]
 
@@ -38,29 +50,136 @@ def empty_overlay_quiz() -> OverlayQuiz:
         "limit_reached": False,
         "candidate_count": 0,
         "question_palace_ids": {},
+        "kind_counts": empty_kind_counts(),
         "parked": empty_parked_overlay(),
+        "excluded_ids": [],
     }
+
+
+def overlay_question_kind(question_type: str | None) -> str:
+    return (
+        OVERLAY_KIND_SUBJECTIVE
+        if str(question_type or "").strip() == "short_answer"
+        else "objective"
+    )
+
+
+def empty_kind_counts() -> dict[str, int]:
+    return {"objective": 0, "subjective": 0}
 
 
 def overlay_quiz_scope_signature(
     palace_ids: Sequence[int],
     quiz_scope: str,
-    question_type: str,
+    question_type: str = "all",
     mastery_buckets: Sequence[str] = (),
     weak_priority: bool = False,
     overlay_question_range: str = "all",
+    overlay_question_kinds: Sequence[str] = (),
+    overlay_type_order: str = OVERLAY_TYPE_ORDER_INTERLEAVE,
+    overlay_type_palace_nesting: str = OVERLAY_NESTING_PALACE_THEN_TYPE,
 ) -> str:
-    # Mastery buckets, weak priority, and due/all range no longer change membership.
-    del mastery_buckets, weak_priority, overlay_question_range
+    # Feed question_type, mastery buckets, weak priority, and due/all range
+    # no longer change overlay membership. Overlay kinds and type order do.
+    del question_type, mastery_buckets, weak_priority, overlay_question_range
+    kinds = [kind for kind in DEFAULT_OVERLAY_QUESTION_KINDS if kind in set(overlay_question_kinds)]
+    if not kinds:
+        kinds = list(DEFAULT_OVERLAY_QUESTION_KINDS)
+    type_order = str(overlay_type_order or OVERLAY_TYPE_ORDER_INTERLEAVE)
+    if type_order not in {
+        OVERLAY_TYPE_ORDER_INTERLEAVE,
+        OVERLAY_TYPE_ORDER_OBJECTIVE_FIRST,
+        OVERLAY_TYPE_ORDER_SUBJECTIVE_FIRST,
+    }:
+        type_order = OVERLAY_TYPE_ORDER_INTERLEAVE
+    nesting = str(overlay_type_palace_nesting or OVERLAY_NESTING_PALACE_THEN_TYPE)
+    if nesting not in {OVERLAY_NESTING_PALACE_THEN_TYPE, OVERLAY_NESTING_TYPE_THEN_PALACE}:
+        nesting = OVERLAY_NESTING_PALACE_THEN_TYPE
     return json.dumps(
         {
             "palace_ids": sorted({int(item) for item in palace_ids if int(item) > 0}),
             "quiz_scope": str(quiz_scope or QUIZ_SCOPE_CROSS),
-            "question_type": str(question_type or "all"),
+            "overlay_question_kinds": kinds,
+            "overlay_type_order": type_order,
+            "overlay_type_palace_nesting": nesting,
         },
         ensure_ascii=False,
         separators=(",", ":"),
     )
+
+
+def order_overlay_questions(
+    cards: Sequence[Mapping[str, Any]],
+    palace_ids: Sequence[int],
+    *,
+    quiz_scope: str,
+    type_order: str,
+    nesting: str,
+    seed: int,
+) -> list[dict[str, Any]]:
+    """Order overlay cards by palace draw and 客观/主观 mix or sequential rules."""
+    items = [dict(card) for card in cards]
+    by_palace: dict[int, list[dict[str, Any]]] = {int(palace_id): [] for palace_id in palace_ids}
+    for card in items:
+        palace_id = int(card.get("palace_id") or 0)
+        if palace_id not in by_palace:
+            by_palace[palace_id] = []
+        by_palace[palace_id].append(card)
+    sequential = type_order in {
+        OVERLAY_TYPE_ORDER_OBJECTIVE_FIRST,
+        OVERLAY_TYPE_ORDER_SUBJECTIVE_FIRST,
+    }
+    present_kinds = {str(card.get("kind") or "objective") for card in items}
+    if not sequential or len(present_kinds) < 2:
+        return order_quiz_stream_by_scope(
+            by_palace,
+            palace_ids,
+            quiz_scope=quiz_scope,
+            seed=seed,
+        )
+    first_kind = (
+        "subjective"
+        if type_order == OVERLAY_TYPE_ORDER_SUBJECTIVE_FIRST
+        else "objective"
+    )
+    second_kind = "objective" if first_kind == "subjective" else "subjective"
+    kind_order = (first_kind, second_kind)
+    if quiz_scope == QUIZ_SCOPE_SINGLE and nesting == OVERLAY_NESTING_PALACE_THEN_TYPE:
+        result: list[dict[str, Any]] = []
+        for palace_id in palace_ids:
+            for kind in kind_order:
+                palace_cards = [
+                    card
+                    for card in by_palace.get(palace_id, ())
+                    if str(card.get("kind") or "objective") == kind
+                ]
+                result.extend(
+                    deterministic_shuffle(
+                        palace_cards,
+                        seed=seed,
+                        salt=f"palace:{palace_id}:{kind}",
+                    )
+                )
+        return result
+    result = []
+    for kind in kind_order:
+        kind_by_palace = {
+            palace_id: [
+                card
+                for card in by_palace.get(palace_id, ())
+                if str(card.get("kind") or "objective") == kind
+            ]
+            for palace_id in palace_ids
+        }
+        result.extend(
+            order_quiz_stream_by_scope(
+                kind_by_palace,
+                palace_ids,
+                quiz_scope=quiz_scope,
+                seed=seed,
+            )
+        )
+    return result
 
 
 def normalize_overlay_quiz(raw: Mapping[str, Any] | None) -> OverlayQuiz:
@@ -68,7 +187,11 @@ def normalize_overlay_quiz(raw: Mapping[str, Any] | None) -> OverlayQuiz:
     quiz_scope = str(data.get("quiz_scope") or QUIZ_SCOPE_CROSS)
     if quiz_scope not in QUIZ_SCOPES:
         quiz_scope = QUIZ_SCOPE_CROSS
-    question_ids = _unique_positive_ids(data.get("question_ids"))
+    excluded_ids = _unique_positive_ids(data.get("excluded_ids"))
+    excluded = set(excluded_ids)
+    question_ids = [
+        item for item in _unique_positive_ids(data.get("question_ids")) if item not in excluded
+    ]
     completed_ids = [
         item for item in _unique_positive_ids(data.get("completed_ids")) if item in set(question_ids)
     ]
@@ -96,7 +219,9 @@ def normalize_overlay_quiz(raw: Mapping[str, Any] | None) -> OverlayQuiz:
         "limit_reached": bool(data.get("limit_reached")),
         "candidate_count": max(0, _as_int(data.get("candidate_count"), 0)),
         "question_palace_ids": palace_ids,
+        "kind_counts": _normalize_kind_counts(data.get("kind_counts")),
         "parked": parked,
+        "excluded_ids": excluded_ids,
     }
 
 
@@ -110,17 +235,27 @@ def merge_overlay_quiz(
     limit_reached: bool,
     candidate_count: int,
     question_palace_ids: Mapping[str, Any] | None = None,
+    kind_counts: Mapping[str, Any] | None = None,
 ) -> OverlayQuiz:
     previous = normalize_overlay_quiz(existing)
-    ordered = _unique_positive_ids(question_ids)
+    excluded = set(previous["excluded_ids"])
+    ordered = [item for item in _unique_positive_ids(question_ids) if item not in excluded]
     incoming_palace_ids = _normalize_palace_ids(question_palace_ids)
     palace_ids = {**previous["question_palace_ids"], **incoming_palace_ids}
-    same_session = (
+    counts = (
+        _normalize_kind_counts(kind_counts)
+        if kind_counts is not None
+        else previous["kind_counts"]
+    )
+    same_scope = (
         previous["scope_signature"] == str(scope_signature or "")
         and previous["quiz_scope"] == (quiz_scope if quiz_scope in QUIZ_SCOPES else QUIZ_SCOPE_CROSS)
         and int(previous["seed"]) == max(0, int(seed))
-        and previous["question_ids"] == ordered
     )
+    # Membership is the session identity. A pack that only shuffles the same
+    # questions, or drops ids already recorded in excluded_ids, keeps the
+    # learner's current order instead of pulling completed items to the front.
+    same_session = same_scope and set(previous["question_ids"]) == set(ordered)
     if same_session:
         return normalize_overlay_quiz(
             {
@@ -128,6 +263,8 @@ def merge_overlay_quiz(
                 "limit_reached": bool(limit_reached),
                 "candidate_count": max(0, int(candidate_count)),
                 "question_palace_ids": palace_ids,
+                "kind_counts": counts,
+                "excluded_ids": previous["excluded_ids"],
             }
         )
 
@@ -176,6 +313,8 @@ def merge_overlay_quiz(
             "limit_reached": bool(limit_reached),
             "candidate_count": max(0, int(candidate_count)),
             "question_palace_ids": palace_ids,
+            "kind_counts": counts,
+            "excluded_ids": previous["excluded_ids"],
             "parked": {
                 "question_ids": parked_ids,
                 "completed_ids": parked_completed,
@@ -284,6 +423,14 @@ def drop_overlay_for_palaces(
     )
 
 
+def _normalize_kind_counts(raw: Any) -> dict[str, int]:
+    source = raw if isinstance(raw, Mapping) else {}
+    return {
+        "objective": max(0, _as_int(source.get("objective"), 0)),
+        "subjective": max(0, _as_int(source.get("subjective"), 0)),
+    }
+
+
 def _normalize_parked(raw: Any, *, visible_ids: Sequence[int]) -> dict[str, Any]:
     data = raw if isinstance(raw, Mapping) else {}
     visible = set(visible_ids)
@@ -348,10 +495,13 @@ __all__ = [
     "QUIZ_SCOPE_SINGLE",
     "apply_overlay_progress",
     "drop_overlay_for_palaces",
+    "empty_kind_counts",
     "empty_overlay_quiz",
     "empty_parked_overlay",
     "inherit_overlay_completed",
     "merge_overlay_quiz",
     "normalize_overlay_quiz",
+    "order_overlay_questions",
+    "overlay_question_kind",
     "overlay_quiz_scope_signature",
 ]

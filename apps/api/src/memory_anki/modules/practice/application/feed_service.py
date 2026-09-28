@@ -13,7 +13,6 @@ from memory_anki.infrastructure.db._tables.palaces import (
 )
 from memory_anki.modules.content.public.queries import resolve_palace_title
 from memory_anki.modules.english.api import get_recent_unfinished_course_payload
-from memory_anki.modules.english_reading.api import list_recent_materials
 from memory_anki.modules.memory.public.queries import project_palace_review_summaries
 
 from .card_context import palace_context
@@ -33,13 +32,11 @@ FREESTYLE_RANGES = {
 
 CONTENT_TYPE_REVIEW = "review"
 CONTENT_TYPE_ENGLISH = "english"
-CONTENT_TYPE_ENGLISH_READING = "english_reading"
 
 FEED_CONTENT_TYPE_WEIGHTS = {
     CONTENT_TYPE_REVIEW: 50,
     CONTENT_TYPE_QUIZ_QUESTION: 40,
     CONTENT_TYPE_ENGLISH: 20,
-    CONTENT_TYPE_ENGLISH_READING: 10,
 }
 
 QUIZ_DUE_PRIORITY = 96
@@ -49,14 +46,12 @@ FREESTYLE_CONTENT_TYPES = {
     CONTENT_TYPE_QUIZ_QUESTION,
     CONTENT_TYPE_REVIEW,
     CONTENT_TYPE_ENGLISH,
-    CONTENT_TYPE_ENGLISH_READING,
 }
 
 DEFAULT_FREESTYLE_CONTENT_TYPES = {
     CONTENT_TYPE_QUIZ_QUESTION,
     CONTENT_TYPE_REVIEW,
     CONTENT_TYPE_ENGLISH,
-    CONTENT_TYPE_ENGLISH_READING,
 }
 
 
@@ -252,32 +247,6 @@ def _build_english_card_from_course(session: Session, range_filter: str) -> list
     ]
 
 
-def _build_english_reading_cards(session: Session, range_filter: str) -> list[dict[str, Any]]:
-    if range_filter != FREESTYLE_RANGE_ALL:
-        return []
-    materials = list_recent_materials(session, limit=6)
-    cards: list[dict[str, Any]] = []
-    for material in materials:
-        if material.get("latestVersionId") is None:
-            continue
-        cards.append(
-            _action_card(
-                card_id=f"english_reading:{material.get('id')}",
-                content_type=CONTENT_TYPE_ENGLISH_READING,
-                action_kind="english_reading",
-                title=f"继续英语阅读：{material.get('title') or '未命名材料'}",
-                subtitle=f"{int(material.get('wordCount') or 0)} 词",
-                href=f"/english-reading?material={material.get('id')}",
-                priority=48,
-                reason="最近生成的阅读材料",
-                extra={"material": material},
-            )
-        )
-        if len(cards) >= 3:
-            break
-    return cards
-
-
 def _card_palace_id(card: dict[str, Any]) -> int | None:
     context = card.get("palace_context")
     if not isinstance(context, dict):
@@ -433,8 +402,6 @@ def build_freestyle_feed(
         )
     if CONTENT_TYPE_ENGLISH in content_types:
         cards.extend(_build_english_card_from_course(session, range_filter))
-    if CONTENT_TYPE_ENGLISH_READING in content_types:
-        cards.extend(_build_english_reading_cards(session, range_filter))
 
     cards = _dedupe_and_sort_feed_cards(cards, due_ids=due_ids)
 

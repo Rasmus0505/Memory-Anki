@@ -19,6 +19,8 @@ DUE_POLICY_ALL_WEIGHTED = "all_content_due_weighted"
 
 PALACE_ORDER_SEQUENTIAL = "finish_palace_then_next"
 PALACE_ORDER_INTERLEAVE = "interleave_palaces"
+# Serve palaces by star weight x forgetting degree x subject share, one palace at a time.
+PALACE_ORDER_EXAM_PRIORITY = "exam_priority"
 
 MIX_MODE_MINDMAP_ONLY = "mindmap_only"
 MIX_MODE_QUIZ_ONLY = "quiz_only"
@@ -36,6 +38,15 @@ QUIZ_SCOPE_SINGLE = "single_palace_random"
 
 OVERLAY_QUESTION_RANGE_DUE = "due"
 OVERLAY_QUESTION_RANGE_ALL = "all"
+
+OVERLAY_KIND_OBJECTIVE = "objective"
+OVERLAY_KIND_SUBJECTIVE = "subjective"
+DEFAULT_OVERLAY_QUESTION_KINDS = [OVERLAY_KIND_OBJECTIVE, OVERLAY_KIND_SUBJECTIVE]
+OVERLAY_TYPE_ORDER_INTERLEAVE = "interleave"
+OVERLAY_TYPE_ORDER_OBJECTIVE_FIRST = "objective_then_subjective"
+OVERLAY_TYPE_ORDER_SUBJECTIVE_FIRST = "subjective_then_objective"
+OVERLAY_NESTING_PALACE_THEN_TYPE = "palace_then_type"
+OVERLAY_NESTING_TYPE_THEN_PALACE = "type_then_palace"
 
 QUIZ_MASTERY_UNSEEN = "unseen"
 QUIZ_MASTERY_WEAK = "weak"
@@ -72,6 +83,7 @@ BOUND_QUIZ_PLACEMENTS = {
 PALACE_ORDERS = {
     PALACE_ORDER_SEQUENTIAL,
     PALACE_ORDER_INTERLEAVE,
+    PALACE_ORDER_EXAM_PRIORITY,
 }
 
 QUESTION_TYPES = {
@@ -100,6 +112,22 @@ QUIZ_SCOPES = {
 OVERLAY_QUESTION_RANGES = {
     OVERLAY_QUESTION_RANGE_DUE,
     OVERLAY_QUESTION_RANGE_ALL,
+}
+
+OVERLAY_QUESTION_KINDS = {
+    OVERLAY_KIND_OBJECTIVE,
+    OVERLAY_KIND_SUBJECTIVE,
+}
+
+OVERLAY_TYPE_ORDERS = {
+    OVERLAY_TYPE_ORDER_INTERLEAVE,
+    OVERLAY_TYPE_ORDER_OBJECTIVE_FIRST,
+    OVERLAY_TYPE_ORDER_SUBJECTIVE_FIRST,
+}
+
+OVERLAY_TYPE_PALACE_NESTINGS = {
+    OVERLAY_NESTING_PALACE_THEN_TYPE,
+    OVERLAY_NESTING_TYPE_THEN_PALACE,
 }
 
 SUBJECT_SCOPES = {"all", "english", "non_english"}
@@ -224,6 +252,32 @@ def _as_overlay_question_range(value: Any) -> str:
     if key in OVERLAY_QUESTION_RANGES:
         return key
     return OVERLAY_QUESTION_RANGE_ALL
+
+
+def _as_overlay_question_kinds(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return list(DEFAULT_OVERLAY_QUESTION_KINDS)
+    seen: set[str] = set()
+    for item in value:
+        key = str(item or "").strip()
+        if key not in OVERLAY_QUESTION_KINDS or key in seen:
+            continue
+        seen.add(key)
+    if not seen:
+        return list(DEFAULT_OVERLAY_QUESTION_KINDS)
+    return [kind for kind in DEFAULT_OVERLAY_QUESTION_KINDS if kind in seen]
+
+
+def _as_overlay_type_order(value: Any) -> str:
+    key = str(value or "").strip()
+    return key if key in OVERLAY_TYPE_ORDERS else OVERLAY_TYPE_ORDER_INTERLEAVE
+
+
+def _as_overlay_type_palace_nesting(value: Any) -> str:
+    key = str(value or "").strip()
+    if key in OVERLAY_TYPE_PALACE_NESTINGS:
+        return key
+    return OVERLAY_NESTING_PALACE_THEN_TYPE
 
 
 def _as_subject_scope(value: Any) -> str:
@@ -569,6 +623,11 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
         "question_type": quiz["question_type"],
         "weak_quiz_priority": quiz["weak_priority"],
         "overlay_quiz_setup_done": _as_bool(data.get("overlay_quiz_setup_done"), False),
+        "overlay_question_kinds": _as_overlay_question_kinds(data.get("overlay_question_kinds")),
+        "overlay_type_order": _as_overlay_type_order(data.get("overlay_type_order")),
+        "overlay_type_palace_nesting": _as_overlay_type_palace_nesting(
+            data.get("overlay_type_palace_nesting")
+        ),
     }
 
 
@@ -613,6 +672,7 @@ __all__ = [
     "DEFAULT_MINDMAP_WEIGHT",
     "DEFAULT_MIX_RATIO_MINDMAP",
     "DEFAULT_MIX_RATIO_QUIZ",
+    "DEFAULT_OVERLAY_QUESTION_KINDS",
     "DEFAULT_QUEUE_LENGTH",
     "DEFAULT_QUIZ_MASTERY_BUCKETS",
     "DEFAULT_QUIZ_WEIGHT",

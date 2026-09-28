@@ -17,6 +17,7 @@ from memory_anki.modules.practice.domain.overlay_quiz import (
     inherit_overlay_completed,
     merge_overlay_quiz,
     normalize_overlay_quiz,
+    order_overlay_questions,
     overlay_quiz_scope_signature,
 )
 from memory_anki.modules.practice.domain.round_plan import (
@@ -115,12 +116,75 @@ def test_apply_overlay_progress_clamps_to_membership() -> None:
     assert "99" not in next_overlay["states"]
 
 
+def test_excluded_overlay_questions_stay_out_of_the_rebuilt_pack() -> None:
+    existing = normalize_overlay_quiz(
+        {
+            "question_ids": [10, 11, 12],
+            "completed_ids": [11],
+            "states": {"11": {"resolved": True, "shortAnswerSubmitted": True}},
+            "excluded_ids": [11],
+            "scope_signature": "pack",
+            "quiz_scope": "cross_palace_random",
+            "seed": 1,
+        }
+    )
+    assert existing["question_ids"] == [10, 12]
+    assert existing["completed_ids"] == []
+    assert "11" not in existing["states"]
+    merged = merge_overlay_quiz(
+        existing,
+        question_ids=[10, 11, 12],
+        quiz_scope="cross_palace_random",
+        seed=1,
+        scope_signature="pack",
+        limit_reached=False,
+        candidate_count=3,
+    )
+    assert merged["question_ids"] == [10, 12]
+    assert 11 not in merged["completed_ids"]
+    assert merged["excluded_ids"] == [11]
+
+
+def test_same_scope_keeps_learner_order_when_the_pack_is_only_shuffled() -> None:
+    existing = normalize_overlay_quiz(
+        {
+            "scope_signature": "pack",
+            "quiz_scope": "cross_palace_random",
+            "seed": 17,
+            "question_ids": [1, 2, 3, 4],
+            "current_index": 2,
+            "completed_ids": [1, 3],
+            "states": {"1": {"resolved": True}, "3": {"resolved": True}},
+        }
+    )
+    merged = merge_overlay_quiz(
+        existing,
+        question_ids=[4, 3, 2, 1],
+        quiz_scope="cross_palace_random",
+        seed=17,
+        scope_signature="pack",
+        limit_reached=False,
+        candidate_count=4,
+    )
+    assert merged["question_ids"] == [1, 2, 3, 4]
+    assert merged["current_index"] == 2
+    assert merged["completed_ids"] == [1, 3]
+
+
 def test_scope_signature_is_stable() -> None:
     left = overlay_quiz_scope_signature([2, 1], "cross_palace_random", "all", ["weak", "unseen"], True)
     right = overlay_quiz_scope_signature([1, 2], "cross_palace_random", "all", ["unseen", "weak"], True, "due")
     assert left == right
     assert "mastery_buckets" not in left
     assert "overlay_question_range" not in left
+    assert "overlay_question_kinds" in left
+    changed = overlay_quiz_scope_signature(
+        [1, 2],
+        "cross_palace_random",
+        overlay_question_kinds=["subjective"],
+        overlay_type_order="subjective_then_objective",
+    )
+    assert changed != left
 
 
 def test_merge_parks_out_of_scope_progress_and_restores_it() -> None:
@@ -223,6 +287,81 @@ def test_review_palace_ids_follow_scheduled_mindmap_cards() -> None:
     )
     assert review_palace_ids(plan) == [39, 42]
     assert review_palace_ids(plan_from_cards([])) == []
+
+
+def test_order_overlay_questions_nests_palace_or_type() -> None:
+    cards = [
+        {"id": 1, "palace_id": 10, "kind": "objective"},
+        {"id": 2, "palace_id": 10, "kind": "subjective"},
+        {"id": 3, "palace_id": 20, "kind": "objective"},
+        {"id": 4, "palace_id": 20, "kind": "subjective"},
+    ]
+    palace_first = [
+        item["id"]
+        for item in order_overlay_questions(
+            cards,
+            [10, 20],
+            quiz_scope="single_palace_random",
+            type_order="objective_then_subjective",
+            nesting="palace_then_type",
+            seed=17,
+        )
+    ]
+    assert palace_first.index(1) < palace_first.index(2) < palace_first.index(3)
+    assert palace_first.index(2) < palace_first.index(4)
+    type_first = [
+        item["id"]
+        for item in order_overlay_questions(
+            cards,
+            [10, 20],
+            quiz_scope="single_palace_random",
+            type_order="subjective_then_objective",
+            nesting="type_then_palace",
+            seed=17,
+        )
+    ]
+    assert type_first.index(2) < type_first.index(4) < type_first.index(1)
+    assert type_first.index(4) < type_first.index(3)
+    mixed = [
+        item["id"]
+        for item in order_overlay_questions(
+            cards,
+            [10, 20],
+            quiz_scope="cross_palace_random",
+            type_order="objective_then_subjective",
+            nesting="palace_then_type",
+            seed=17,
+        )
+    ]
+    assert max(mixed.index(1), mixed.index(3)) < min(mixed.index(2), mixed.index(4))
+
+
+def test_overlay_pack_counts_kinds_and_filters_without_feed_question_type(db_session) -> None:
+    palace = Palace(title="题型宫殿")
+    db_session.add(palace)
+    db_session.flush()
+    db_session.add_all(
+        [
+            PalaceQuizQuestion(palace_id=palace.id, stem="选择", question_type="multiple_choice"),
+            PalaceQuizQuestion(palace_id=palace.id, stem="判断", question_type="true_false"),
+            PalaceQuizQuestion(palace_id=palace.id, stem="简答", question_type="short_answer"),
+        ]
+    )
+    db_session.commit()
+    pack = build_overlay_question_pack(
+        db_session,
+        {
+            "question_type": "multiple_choice",
+            "overlay_question_kinds": ["subjective"],
+            "overlay_type_order": "interleave",
+            "streams": {"quiz": {"question_type": "multiple_choice", "quiz_scope": "cross_palace_random"}},
+        },
+        palace_ids=[palace.id],
+    )
+    assert pack["kind_counts"] == {"objective": 2, "subjective": 1}
+    assert len(pack["question_ids"]) == 1
+    assert pack["question_palace_ids"]
+    assert set(pack["question_palace_ids"].values()) == {palace.id}
 
 
 def test_overlay_pack_ignores_subject_palaces_outside_the_round(db_session) -> None:

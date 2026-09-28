@@ -10,13 +10,18 @@ from memory_anki.modules.content.public.queries import (
     list_active_palace_ids_by_subject_ids,
     list_active_palace_ids_by_subject_scope,
 )
+from memory_anki.modules.exam.api import palace_priority_scores, resolve_stars_for_palaces
 from memory_anki.modules.memory.public.queries import list_trusted_due_units_for_queue
 from memory_anki.modules.quiz.public.queries import (
     list_node_bindings_for_palaces,
     list_published_questions_for_palaces,
 )
 
-from ..domain.feed_config import sanitize_feed_config
+from ..domain.feed_config import (
+    PALACE_ORDER_EXAM_PRIORITY,
+    PALACE_ORDER_SEQUENTIAL,
+    sanitize_feed_config,
+)
 from ..domain.leftover_due import leftover_due_by_palace, merge_leftover_due
 from ..domain.queue_builder import (
     QuizCandidate,
@@ -155,31 +160,51 @@ def build_freestyle_queue(
                     "title": str(question.get("palace_title") or f"宫殿 {palace_id}"),
                 }
 
-    nodes_by_palace: dict[int, dict[str, Any]] = {}
-
     def subset(mapping: dict[int, Any], ids: list[int]) -> dict[int, Any]:
         allowed = set(ids) if ids else set(mapping)
         return {key: value for key, value in mapping.items() if key in allowed}
+
+    def raw_palace_order(stream_name: str) -> str:
+        raw = stream_configs.get(stream_name) if isinstance(stream_configs, dict) else {}
+        raw = raw if isinstance(raw, dict) else {}
+        return str(raw.get("palace_order") or PALACE_ORDER_SEQUENTIAL)
+
+    exam_ordered_streams = {
+        name for name in active_streams
+        if name in {"memory_palace", "english"} and raw_palace_order(name) == PALACE_ORDER_EXAM_PRIORITY
+    }
+    priority_scores = (
+        palace_priority_scores(session, list(palace_meta) or None) if exam_ordered_streams else {}
+    )
+
+    def stream_palace_meta(stream_name: str, ids: list[int]) -> dict[int, Any]:
+        meta = subset(palace_meta, ids)
+        if stream_name not in exam_ordered_streams:
+            return meta
+        ordered = sorted(meta, key=lambda pid: (-priority_scores.get(pid, 0.0), pid))
+        return {pid: meta[pid] for pid in ordered}
 
     def stream_config(stream_name: str) -> dict[str, Any]:
         raw = stream_configs.get(stream_name) if isinstance(stream_configs, dict) else {}
         raw = raw if isinstance(raw, dict) else {}
         ids = stream_ids.get(stream_name, [])
         if stream_name in {"memory_palace", "english"}:
+            order = raw_palace_order(stream_name)
             return {
                 **config,
-                "content": {"mindmap_branch": True, "anki_card": False, "quiz_question": False},
+                "content": {"mindmap_branch": True, "quiz_question": False},
                 "mix_mode": "mindmap_only",
                 "specific_palace_ids": ids,
                 "subject_scope": stream_subjects.get(stream_name, "all"),
-                "palace_order": raw.get("palace_order") or "finish_palace_then_next",
+                # Exam order is pre-applied to palace_meta; the builder then walks it sequentially.
+                "palace_order": PALACE_ORDER_SEQUENTIAL if order == PALACE_ORDER_EXAM_PRIORITY else order,
                 "due_policy": "due_only",
                 "unit_order": raw.get("unit_order") or "structured",
                 "queue_length": 100,
             }
         return {
             **config,
-            "content": {"mindmap_branch": False, "anki_card": False, "quiz_question": True},
+            "content": {"mindmap_branch": False, "quiz_question": True},
             "mix_mode": "quiz_only",
             "specific_palace_ids": ids,
             "subject_scope": stream_subjects.get(stream_name, "all"),
@@ -196,7 +221,7 @@ def build_freestyle_queue(
         scoped_ids = stream_ids.get(stream_name) or list(palace_meta.keys())
         result = assemble_queue(
             config=stream_config(stream_name),
-            palace_meta=subset(palace_meta, scoped_ids),
+            palace_meta=stream_palace_meta(stream_name, scoped_ids),
             units_by_palace=subset(units_by_palace, scoped_ids) if stream_name in {"memory_palace", "english"} else {},
             due_by_palace=subset(due_by_palace, scoped_ids) if stream_name in {"memory_palace", "english"} else {},
             mastery_by_palace=subset(mastery_by_palace, scoped_ids) if stream_name in {"memory_palace", "english"} else {},
@@ -205,7 +230,6 @@ def build_freestyle_queue(
             completed_ids=completed_ids or [],
             hidden_ids=hidden_ids or [],
             operation_id=f"{op_id}:{stream_name}",
-            nodes_by_palace=subset(nodes_by_palace, scoped_ids) if stream_name in {"memory_palace", "english"} else {},
         )
         stream_results[stream_name] = result
         stream_cards[stream_name] = result.cards
@@ -238,6 +262,12 @@ def build_freestyle_queue(
     if study_window and not quiz_only:
         limited = take_study_window(full_limited)
         tail_pending = len(limited) < len(full_limited)
+    card_palace_ids = sorted({int(card.get("palace_id") or 0) for card in limited} - {0})
+    stars_by_palace = resolve_stars_for_palaces(session, card_palace_ids) if card_palace_ids else {}
+    limited = [
+        {**card, "exam_stars": stars_by_palace.get(int(card.get("palace_id") or 0), 1)}
+        for card in limited
+    ]
     phase_stats = {
         "candidate_count": len(remaining),
         "scheduled_count": len(limited),

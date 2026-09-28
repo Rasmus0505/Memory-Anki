@@ -6,7 +6,6 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from .anki_cards import collect_anki_cards, resolve_effective_role
 from .feed_config import (
     BOUND_QUIZ_FOLLOW_UNIT,
     BOUND_QUIZ_INTO_MIX,
@@ -286,7 +285,7 @@ def merge_streams_by_mix_mode(
 
 
 def _is_map_side_card(card: Mapping[str, Any]) -> bool:
-    return str(card.get("type") or "") in {"mindmap_branch", "anki_card"}
+    return str(card.get("type") or "") == "mindmap_branch"
 
 
 def _is_quiz_side_card(card: Mapping[str, Any]) -> bool:
@@ -299,26 +298,15 @@ def mindmap_card_payload(
     palace_title: str,
     due_uids: set[str],
     phase: str,
-    presentation: str = "palace",
-    anki_front_uid: str | None = None,
-    anki_back_uids: list[str] | None = None,
 ) -> dict[str, Any] | None:
-    """Build a due review-unit card or an independent Anki presentation card."""
     due_in_unit = [uid for uid in unit.node_uids if uid in due_uids]
     if not due_in_unit:
         return None
-    is_anki = presentation == "anki"
-    card_type = "anki_card" if is_anki else "mindmap_branch"
-    card_id = (
-        f"anki_card:{unit.palace_id}:{anki_front_uid or unit.anchor_uid}"
-        if is_anki
-        else unit_key(unit)
-    )
-    payload: dict[str, Any] = {
-        "id": card_id,
-        "type": card_type,
-        "content_type": card_type,
-        "presentation": "anki" if is_anki else "palace",
+    return {
+        "id": unit_key(unit),
+        "type": "mindmap_branch",
+        "content_type": "mindmap_branch",
+        "presentation": "palace",
         "palace_id": unit.palace_id,
         "palace_title": palace_title,
         "anchor_uid": unit.anchor_uid,
@@ -331,14 +319,9 @@ def mindmap_card_payload(
             "title": palace_title,
             "resolved_title": palace_title,
         },
+        "unit_id": unit.unit_id,
+        "unit_revision": unit.revision,
     }
-    if is_anki:
-        payload["anki_front_uid"] = anki_front_uid or unit.anchor_uid
-        payload["anki_back_uids"] = list(anki_back_uids or [])
-    else:
-        payload["unit_id"] = unit.unit_id
-        payload["unit_revision"] = unit.revision
-    return payload
 
 
 def quiz_card_payload(
@@ -409,7 +392,6 @@ def assemble_queue(
     completed_ids: Iterable[str] = (),
     hidden_ids: Iterable[str] = (),
     operation_id: str = "",
-    nodes_by_palace: Mapping[int, Mapping[str, Mapping[str, Any]]] | None = None,
 ) -> QueueBuildResult:
     completed = {str(item) for item in completed_ids if item}
     hidden = {str(item) for item in hidden_ids if item}
@@ -425,11 +407,9 @@ def assemble_queue(
     unit_order = str(config.get("unit_order") or memory_stream.get("unit_order") or "structured")
     queue_length = int(config.get("queue_length") or 20)
     mindmap_enabled = bool((config.get("content") or {}).get("mindmap_branch", True))
-    anki_enabled = bool((config.get("content") or {}).get("anki_card", True))
     quiz_enabled = bool((config.get("content") or {}).get("quiz_question", True))
     weights = config.get("weights") or {}
     mindmap_weight = int(weights.get("mindmap_branch", 2))
-    anki_weight = int(weights.get("anki_card", 2))
     quiz_weight = int(weights.get("quiz_question", 1))
     mix_mode = str(config.get("mix_mode") or MIX_MODE_RATIO)
     raw_mix_ratio = config.get("mix_ratio") or {}
@@ -437,7 +417,7 @@ def assemble_queue(
         raw_mix_ratio = {}
     mix_ratio_mindmap = int(
         raw_mix_ratio.get("mindmap")
-        or max(1, max(0, mindmap_weight) + max(0, anki_weight))
+        or max(1, mindmap_weight)
         or 2
     )
     mix_ratio_quiz = int(raw_mix_ratio.get("quiz") or max(1, quiz_weight) or 1)
@@ -453,20 +433,18 @@ def assemble_queue(
     if quiz_scope not in {QUIZ_SCOPE_CROSS, QUIZ_SCOPE_SINGLE}:
         quiz_scope = QUIZ_SCOPE_CROSS
     # Combine mindmap streams for interleave against quiz (legacy fallback).
-    map_stream_weight = max(mindmap_weight, 0) + max(anki_weight, 0)
+    map_stream_weight = max(mindmap_weight, 0)
     if map_stream_weight <= 0:
         map_stream_weight = mix_ratio_mindmap
     if quiz_weight <= 0:
         quiz_weight = mix_ratio_quiz
     weak_priority = bool(config.get("weak_quiz_priority", True))
-    nodes_by_palace = nodes_by_palace or {}
 
     # mix_mode can force-disable a stream even if content toggles are on.
     if mix_mode == MIX_MODE_MINDMAP_ONLY:
         quiz_enabled = False
     elif mix_mode == MIX_MODE_QUIZ_ONLY:
         mindmap_enabled = False
-        anki_enabled = False
 
     palace_ids = list(palace_meta.keys())
     if palace_order == PALACE_ORDER_INTERLEAVE:
@@ -517,67 +495,19 @@ def assemble_queue(
     def unit_cards(
         units: Sequence[ReviewUnitCandidate], phase: str
     ) -> list[dict[str, Any]]:
-        if not mindmap_enabled and not anki_enabled:
+        if not mindmap_enabled:
             return []
         cards: list[dict[str, Any]] = []
         for unit in units:
             title = str((palace_meta.get(unit.palace_id) or {}).get("title") or "")
-            due_uids = due_by_palace.get(unit.palace_id, set())
-            palace_nodes = nodes_by_palace.get(unit.palace_id) or {}
-            if mindmap_enabled:
-                payload = mindmap_card_payload(
-                    unit,
-                    palace_title=title,
-                    due_uids=due_uids,
-                    phase=phase,
-                    presentation="palace",
-                )
-                if payload is not None:
-                    cards.append(payload)
-
-            memo: dict[str, str] = {}
-            due_fronts = [
-                uid
-                for uid in unit.node_uids
-                if uid in due_uids
-                and resolve_effective_role(str(uid), palace_nodes, memo) == "front"
-            ]
-            # Anki cards are independent practice prompts. They supplement the
-            # review-unit card and never carry unit identity or replace scoring.
-            if anki_enabled and due_fronts and palace_nodes:
-                anki_defs = {
-                    str(item["front_uid"]): item
-                    for item in collect_anki_cards(palace_nodes)
-                }
-                for front_uid in due_fronts:
-                    definition = anki_defs.get(str(front_uid)) or {
-                        "front_uid": front_uid,
-                        "back_uids": [],
-                    }
-                    back_uids = [str(uid) for uid in list(definition.get("back_uids") or [])]
-                    ratable = [str(front_uid), *back_uids]
-                    due_for_card = [uid for uid in ratable if uid in due_uids]
-                    if not due_for_card:
-                        due_for_card = [str(front_uid)]
-                    scoped = ReviewUnitCandidate(
-                        palace_id=unit.palace_id,
-                        anchor_uid=str(front_uid),
-                        context_path=unit.context_path,
-                        node_uids=tuple(ratable),
-                        unit_id=unit.unit_id,
-                        revision=unit.revision,
-                    )
-                    payload = mindmap_card_payload(
-                        scoped,
-                        palace_title=title,
-                        due_uids=set(due_for_card),
-                        phase=phase,
-                        presentation="anki",
-                        anki_front_uid=str(front_uid),
-                        anki_back_uids=back_uids,
-                    )
-                    if payload is not None:
-                        cards.append(payload)
+            payload = mindmap_card_payload(
+                unit,
+                palace_title=title,
+                due_uids=due_by_palace.get(unit.palace_id, set()),
+                phase=phase,
+            )
+            if payload is not None:
+                cards.append(payload)
         return cards
 
     def quiz_cards(items: Sequence[QuizCandidate], phase: str) -> list[dict[str, Any]]:
@@ -593,7 +523,7 @@ def assemble_queue(
         units: Sequence[ReviewUnitCandidate],
         phase: str,
     ) -> list[dict[str, Any]]:
-        """Palace-side cards only (mindmap / anki)."""
+        """Palace-side mind-map cards only."""
         stream: list[dict[str, Any]] = []
         for unit in units:
             stream.extend(unit_cards([unit], phase))
@@ -701,7 +631,7 @@ def assemble_queue(
         )
         if not bound_after:
             return mixed
-        # Re-attach bound quizzes immediately after their anchor map/anki card.
+        # Re-attach bound quizzes immediately after their anchor map card.
         final: list[dict[str, Any]] = []
         for card in mixed:
             final.append(card)

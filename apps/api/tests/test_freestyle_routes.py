@@ -3,10 +3,6 @@ import unittest
 from unittest.mock import patch
 
 from memory_anki.infrastructure.db._tables.english import EnglishCourse, EnglishCourseProgress
-from memory_anki.infrastructure.db._tables.english_reading import (
-    EnglishReadingMaterial,
-    EnglishReadingVersion,
-)
 from memory_anki.infrastructure.db._tables.knowledge import Chapter, Subject
 from memory_anki.infrastructure.db._tables.misc import ExternalAiCallLog
 from memory_anki.infrastructure.db._tables.palaces import (
@@ -115,25 +111,6 @@ class FreestyleRouteTests(RouterTestCase):
             )
         )
 
-        material = EnglishReadingMaterial(
-            title="Reading Material",
-            source_type="paste",
-            original_filename="",
-            original_text="hello world",
-            cleaned_text="hello world",
-            word_count=2,
-        )
-        session.add(material)
-        session.flush()
-        session.add(
-            EnglishReadingVersion(
-                material_id=material.id,
-                render_blocks_json="[]",
-                span_annotations_json="[]",
-                sentence_annotations_json="[]",
-                summary_json="{}",
-            )
-        )
         session.commit()
         reconcile_palace_units(session, palace.id)
         session.commit()
@@ -150,7 +127,6 @@ class FreestyleRouteTests(RouterTestCase):
         self.assertIn("quiz_question", content_types)
         self.assertIn("review", content_types)
         self.assertIn("english", content_types)
-        self.assertIn("english_reading", content_types)
         stems = [
             card["question"]["stem"]
             for card in payload["cards"]
@@ -280,7 +256,7 @@ class FreestyleRouteTests(RouterTestCase):
         payload = response.json()
         self.assertEqual(
             set(payload["counts"].keys()),
-            {"quiz_question", "review", "english", "english_reading"},
+            {"quiz_question", "review", "english"},
         )
         self.assertEqual([card["content_type"] for card in payload["cards"]], ["quiz_question"])
         self.assertEqual(payload["cards"][0]["question"]["stem"], "细胞宫殿题")

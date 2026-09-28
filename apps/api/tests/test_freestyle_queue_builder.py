@@ -41,7 +41,6 @@ def _assemble(
     due_uids: set[str],
     quizzes: list[QuizCandidate] | None = None,
     config: dict | None = None,
-    nodes: dict | None = None,
     completed_ids: list[str] | None = None,
 ):
     return assemble_queue(
@@ -64,7 +63,6 @@ def _assemble(
         mastery_by_palace={1: 0.0},
         recent_practice_rank={},
         quizzes=quizzes or [],
-        nodes_by_palace={1: nodes or {}},
         completed_ids=completed_ids or [],
     )
 
@@ -166,45 +164,9 @@ def test_queue_keeps_every_due_palace_without_a_leftover_cut():
         mastery_by_palace={1: 0.0, 2: 0.0},
         recent_practice_rank={},
         quizzes=[],
-        nodes_by_palace={1: {}, 2: {}},
     )
     assert len(result.cards) == 6
     assert result.phase_stats["palace_leftover_due"] == {}
-
-
-def test_anki_cards_are_not_emitted_by_the_new_freestyle_queue():
-    unit = _unit("front", ("front", "back"), unit_id="review-1", revision=4)
-    result = _assemble(
-        units=[unit],
-        due_uids={"front", "back"},
-        config={
-            "content": {
-                "mindmap_branch": True,
-                "anki_card": True,
-                "quiz_question": False,
-            },
-            "mix_mode": "mindmap_only",
-            "due_policy": "due_only",
-            "queue_length": 20,
-        },
-        nodes={
-            "front": {
-                "uid": "front",
-                "parent_uid": "root",
-                "children": ["back"],
-                "anki_role": "front",
-            },
-            "back": {
-                "uid": "back",
-                "parent_uid": "front",
-                "children": [],
-            },
-        },
-    )
-
-    assert [card["type"] for card in result.cards] == ["mindmap_branch"]
-    assert result.cards[0]["id"] == "review_unit:review-1:r4"
-    assert result.cards[0]["unit_id"] == "review-1"
 
 
 def test_three_stream_ratio_merge_is_stable_and_deduplicates_card_ids():
@@ -482,7 +444,6 @@ def test_single_palace_quiz_scope_keeps_palace_blocks():
         mastery_by_palace={1: 0.0, 2: 0.0},
         recent_practice_rank={},
         quizzes=quizzes,
-        nodes_by_palace={1: {}, 2: {}},
     )
     ids = [card["id"] for card in result.cards]
     # All palace-1 quizzes appear contiguously before palace-2 (order within palace may shuffle).
@@ -523,7 +484,6 @@ def test_interleave_round_robins_palaces_instead_of_finishing_one():
         mastery_by_palace={1: 0.0, 2: 0.0},
         recent_practice_rank={},
         quizzes=[],
-        nodes_by_palace={1: {}, 2: {}},
     )
     interleaved = assemble_queue(
         config=sanitize_feed_config(
@@ -548,7 +508,6 @@ def test_interleave_round_robins_palaces_instead_of_finishing_one():
         mastery_by_palace={1: 0.0, 2: 0.0},
         recent_practice_rank={},
         quizzes=[],
-        nodes_by_palace={1: {}, 2: {}},
     )
     sequential_palaces = [card["palace_id"] for card in sequential.cards]
     interleaved_palaces = [card["palace_id"] for card in interleaved.cards]
@@ -564,7 +523,6 @@ def test_random_unit_order_is_stable_for_a_seed_and_differs_from_structured():
         "mastery_by_palace": {1: 0.0},
         "recent_practice_rank": {},
         "quizzes": [],
-        "nodes_by_palace": {1: {}},
     }
 
     def _ids(unit_order: str, seed: int) -> list[str]:
