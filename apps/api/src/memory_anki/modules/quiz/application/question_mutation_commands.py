@@ -5,9 +5,6 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from memory_anki.modules.quiz.application.ocr_sources import (
-    upsert_palace_ocr_sources,
-)
 from memory_anki.modules.quiz.application.questions.commands import (
     batch_create_chapter_questions,
     batch_create_questions,
@@ -47,11 +44,6 @@ def batch_create_palace_questions_command(
         question_payloads if isinstance(question_payloads, list) else [],
         commit=False,
     )
-    ocr_sources = payload.get("ocr_sources")
-    if isinstance(ocr_sources, list) and ocr_sources:
-        upsert_palace_ocr_sources(
-            session, palace_id=palace_id, payloads=ocr_sources, commit=False
-        )
     response = {"items": items}
     _commit_response(response, uow=uow, before_commit=before_commit)
     return response
@@ -73,15 +65,6 @@ def batch_create_chapter_questions_command(
         save_mode=str(payload.get("save_mode") or "append"),
         commit=False,
     )
-    palace_id = payload.get("palace_id")
-    ocr_sources = payload.get("ocr_sources")
-    if palace_id and isinstance(ocr_sources, list) and ocr_sources:
-        upsert_palace_ocr_sources(
-            session,
-            palace_id=int(palace_id),
-            payloads=ocr_sources,
-            commit=False,
-        )
     response = {"items": items}
     _commit_response(response, uow=uow, before_commit=before_commit)
     return response

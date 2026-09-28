@@ -1,7 +1,3 @@
-from .ocr_sources import (
-    list_palace_ocr_sources,
-    upsert_palace_ocr_sources,
-)
 from .question_schema import (
     build_question_dedup_key,
     find_duplicate_question,
@@ -83,7 +79,6 @@ __all__ = [
     "json_load",
     "list_aggregated_questions",
     "list_chapter_questions",
-    "list_palace_ocr_sources",
     "list_questions",
     "list_root_question_rows",
     "list_root_questions",
@@ -101,5 +96,4 @@ __all__ = [
     "serialize_question",
     "set_question_marked",
     "update_question",
-    "upsert_palace_ocr_sources",
 ]

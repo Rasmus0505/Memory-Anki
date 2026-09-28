@@ -82,6 +82,9 @@ CLIENT_PREFERENCE_GROUPS = {
     "mark_color_labels",
     "flip_card_reveal_config",
     "quiz_answer_mode",
+    "quiz_font_scale",
+    "quiz_shortcuts",
+    "window_layouts",
 }
 
 CLIENT_PREFERENCE_KEY_PREFIX = "client_preferences."

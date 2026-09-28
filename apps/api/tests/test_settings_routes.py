@@ -131,6 +131,53 @@ class TestClientPreferences:
             "quiz_answer_mode"
         ] == {"mcqMode": "subjective"}
 
+    def test_quiz_font_scale_roundtrip(self, client):
+        response = client.put(
+            "/api/v1/profile/client-preferences",
+            json={"quiz_font_scale": {"percent": 130}},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["items"]["quiz_font_scale"] == {"percent": 130}
+        assert client.get("/api/v1/profile/client-preferences").json()["items"][
+            "quiz_font_scale"
+        ] == {"percent": 130}
+
+    def test_quiz_shortcuts_roundtrip(self, client):
+        response = client.put(
+            "/api/v1/profile/client-preferences",
+            json={"quiz_shortcuts": {"toggle_mark": {"code": "ArrowUp", "key": "arrowup"}}},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["items"]["quiz_shortcuts"]["toggle_mark"]["code"] == "ArrowUp"
+        assert client.get("/api/v1/profile/client-preferences").json()["items"][
+            "quiz_shortcuts"
+        ]["toggle_mark"]["key"] == "arrowup"
+
+    def test_window_layouts_roundtrip(self, client):
+        payload = {
+            "palaceMemoryLookup": {
+                "xRatio": 0.1,
+                "yRatio": 0.2,
+                "widthRatio": 0.75,
+                "heightRatio": 0.6,
+                "collapsed": False,
+                "pinned": True,
+                "listCollapsed": False,
+            }
+        }
+        response = client.put(
+            "/api/v1/profile/client-preferences",
+            json={"window_layouts": payload},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["items"]["window_layouts"] == payload
+        assert client.get("/api/v1/profile/client-preferences").json()["items"][
+            "window_layouts"
+        ] == payload
+
     def test_study_goals_roundtrip(self, client):
         response = client.put(
             "/api/v1/profile/client-preferences",

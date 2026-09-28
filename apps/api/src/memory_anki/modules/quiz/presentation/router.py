@@ -1,19 +1,10 @@
 from __future__ import annotations
 
-import json
-
-from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
-from memory_anki.core.concurrency_limits import concurrency_slot
 from memory_anki.infrastructure.db.deps import session_dep
 from memory_anki.modules.backups.api import maybe_create_rolling_backup
-from memory_anki.modules.quiz.application.ai_dependencies import (
-    PalaceQuizAiDependencies,
-)
-from memory_anki.modules.quiz.application.ai_service import (
-    PalaceQuizAiError,
-)
 from memory_anki.modules.quiz.application.learning_loop import (
     build_mastery_profile,
     record_attempt_event,
@@ -25,7 +16,6 @@ from memory_anki.modules.quiz.application.node_binding import (
     list_palace_node_bindings,
     list_question_node_bindings,
     mutate_quiz_node_bindings,
-    preview_quiz_node_binding,
     search_mindmap_nodes,
 )
 from memory_anki.modules.quiz.application.question_mutation_commands import (
@@ -45,7 +35,6 @@ from memory_anki.modules.quiz.application.service import (
     delete_question,
     list_aggregated_questions,
     list_chapter_questions,
-    list_palace_ocr_sources,
     list_questions,
     list_trash_questions,
     permanent_delete_question,
@@ -58,11 +47,7 @@ from memory_anki.modules.quiz.application.service import (
 from memory_anki.modules.quiz.application.wrong_questions_service import (
     get_wrong_questions,
 )
-from memory_anki.modules.settings.api import SettingsAiRuntimeProvider, SettingsPromptCatalog
-from memory_anki.platform.application import (
-    AiRuntimeOptions,
-    mutation_identity_from_headers,
-)
+from memory_anki.platform.application import mutation_identity_from_headers
 from memory_anki.platform.persistence import (
     SqlAlchemyMutationResponseStore,
     SqlAlchemyUnitOfWork,
@@ -71,38 +56,12 @@ from memory_anki.platform.persistence import (
 router = APIRouter(tags=["palace_quiz"])
 
 
-def _quiz_sse(event: str, payload: dict) -> str:
-    return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
-
-
 def _raise_http_error(error: Exception) -> None:
     if isinstance(error, PalaceQuizNotFoundError):
         raise HTTPException(status_code=404, detail=str(error)) from error
-    if isinstance(error, PalaceQuizValidationError | PalaceQuizAiError):
+    if isinstance(error, PalaceQuizValidationError):
         raise HTTPException(status_code=400, detail=str(error)) from error
     raise error
-
-
-def _ai_dependencies(session: Session) -> PalaceQuizAiDependencies:
-    return PalaceQuizAiDependencies(
-        runtime=SettingsAiRuntimeProvider(session),
-        prompts=SettingsPromptCatalog(session),
-    )
-
-
-def _normalize_ai_runtime_options_by_scenario(
-    ai_dependencies: PalaceQuizAiDependencies,
-    value: object,
-) -> dict[str, AiRuntimeOptions] | None:
-    if not isinstance(value, dict):
-        return None
-    normalized: dict[str, AiRuntimeOptions] = {}
-    for raw_key, raw_options in value.items():
-        scenario_key = str(raw_key or "").strip()
-        if not scenario_key:
-            continue
-        normalized[scenario_key] = ai_dependencies.runtime.normalize_options(raw_options)
-    return normalized or None
 
 
 @router.get("/palaces/{palace_id}/quiz-questions")
@@ -174,14 +133,6 @@ def api_list_aggregated_palace_quiz_questions(
             "limit": limit,
             "offset": offset,
         }
-    except Exception as exc:  # pragma: no cover - centralized HTTP mapping
-        _raise_http_error(exc)
-
-
-@router.get("/palaces/{palace_id}/quiz-ocr-sources")
-def api_list_palace_quiz_ocr_sources(palace_id: int, s: Session = Depends(session_dep)):
-    try:
-        return {"items": list_palace_ocr_sources(s, palace_id)}
     except Exception as exc:  # pragma: no cover - centralized HTTP mapping
         _raise_http_error(exc)
 
@@ -460,94 +411,6 @@ def api_record_choice_attempt(
         _raise_http_error(exc)
 
 
-@router.post("/palace-quiz-questions/{question_id}/short-answer-feedback")
-def api_short_answer_feedback(
-    question_id: int,
-    data: dict,
-    s: Session = Depends(session_dep),
-):
-    del question_id, data, s
-    raise HTTPException(status_code=403, detail="AI 出题、讲解、纠错和自由提问已禁用")
-
-
-@router.post("/palace-quiz-questions/{question_id}/explain")
-def api_explain_question(
-    question_id: int,
-    data: dict,
-    s: Session = Depends(session_dep),
-):
-    del question_id, data, s
-    raise HTTPException(status_code=403, detail="AI 出题、讲解、纠错和自由提问已禁用")
-
-
-@router.post("/palaces/{palace_id}/quiz-generation/recover-from-log")
-def api_recover_palace_quiz_preview_from_log(
-    palace_id: int,
-    data: dict,
-    s: Session = Depends(session_dep),
-):
-    del palace_id, data, s
-    raise HTTPException(status_code=403, detail="AI 出题、讲解、纠错和自由提问已禁用")
-
-
-@router.post("/palaces/{palace_id}/quiz-generation/images")
-async def api_generate_palace_quiz_from_images(
-    palace_id: int,
-    files: list[UploadFile] = File(...),
-    extra_prompt: str = Form(default=""),
-    classify_by_mini_palace: str = Form(default="false"),
-    selected_chapter_id: str = Form(default=""),
-    ai_options: str = Form(default=""),
-    s: Session = Depends(session_dep),
-):
-    del palace_id, files, extra_prompt, classify_by_mini_palace, selected_chapter_id, ai_options, s
-    raise HTTPException(status_code=403, detail="AI 出题、讲解、纠错和自由提问已禁用")
-
-
-@router.post("/palaces/{palace_id}/quiz-generation/text-files")
-async def api_generate_palace_quiz_from_text_files(
-    palace_id: int,
-    files: list[UploadFile] = File(...),
-    extra_prompt: str = Form(default=""),
-    classify_by_mini_palace: str = Form(default="false"),
-    selected_chapter_id: str = Form(default=""),
-    ai_options: str = Form(default=""),
-    s: Session = Depends(session_dep),
-):
-    del palace_id, files, extra_prompt, classify_by_mini_palace, selected_chapter_id, ai_options, s
-    raise HTTPException(status_code=403, detail="AI 出题、讲解、纠错和自由提问已禁用")
-
-
-@router.post("/palaces/{palace_id}/quiz-generation/review-mindmap")
-def api_generate_palace_quiz_from_review_mindmap(
-    palace_id: int,
-    data: dict,
-    s: Session = Depends(session_dep),
-):
-    del palace_id, data, s
-    raise HTTPException(status_code=403, detail="AI 出题、讲解、纠错和自由提问已禁用")
-
-
-@router.post("/chapters/{chapter_id}/quiz-generation/outline")
-def api_generate_chapter_quiz_from_outline(
-    chapter_id: int,
-    data: dict,
-    s: Session = Depends(session_dep),
-):
-    del chapter_id, data, s
-    raise HTTPException(status_code=403, detail="AI 出题、讲解、纠错和自由提问已禁用")
-
-
-@router.post("/palaces/{palace_id}/quiz-classification/segments")
-def api_classify_existing_quiz_questions_to_mini_palaces(
-    palace_id: int,
-    data: dict | None = None,
-    s: Session = Depends(session_dep),
-):
-    del palace_id, data, s
-    raise HTTPException(status_code=403, detail="AI 出题、讲解、纠错和自由提问已禁用")
-
-
 @router.get("/palaces/{palace_id}/quiz-node-bindings")
 def api_list_palace_quiz_node_bindings(
     palace_id: int,
@@ -601,31 +464,6 @@ def api_auto_bind_palace_quiz_node_bindings(
             fill_unbound_only=bool(payload.get("fill_unbound_only", True)),
             max_nodes_per_question=int(payload.get("max_nodes_per_question") or 3),
         )
-    except Exception as exc:  # pragma: no cover - centralized HTTP mapping
-        _raise_http_error(exc)
-
-
-@router.post("/palaces/{palace_id}/quiz-node-bindings/preview")
-def api_preview_palace_quiz_node_bindings(
-    palace_id: int,
-    data: dict | None = None,
-    s: Session = Depends(session_dep),
-):
-    payload = data or {}
-    merge_mode = str(payload.get("merge_mode") or "replace_all").strip()
-    if merge_mode not in {"replace_all", "fill_unbound"}:
-        raise HTTPException(status_code=400, detail="merge_mode 仅支持 replace_all 或 fill_unbound。")
-    try:
-        with concurrency_slot("ai_generation", rate_limited=True):
-            return preview_quiz_node_binding(
-                s,
-                ai_dependencies=_ai_dependencies(s),
-                palace_id=palace_id,
-                merge_mode=merge_mode,  # type: ignore[arg-type]
-                batch_size=int(payload.get("batch_size") or 30),
-                ai_options=_ai_dependencies(s).runtime.normalize_options(payload.get("ai_options")),
-                operation_id=str(payload.get("operation_id") or "") or None,
-            )
     except Exception as exc:  # pragma: no cover - centralized HTTP mapping
         _raise_http_error(exc)
 

@@ -24,21 +24,12 @@ def _node_text(raw: dict[str, Any]) -> str:
     return str(data.get("text") or "").strip()
 
 
-def _node_anki_fields(raw: dict[str, Any]) -> dict[str, Any]:
+def _node_split_mark_fields(raw: dict[str, Any]) -> dict[str, Any]:
     value = raw.get("data")
     data: dict[str, Any] = value if isinstance(value, dict) else {}
-    role = data.get("ankiRole")
-    safe_role = role if role in {"front", "back", "none"} else None
-    front_uid = str(data.get("ankiFrontUid") or "").strip() or None
-    fields: dict[str, Any] = {}
-    if safe_role is not None:
-        fields["anki_role"] = safe_role
-    if front_uid:
-        fields["anki_front_uid"] = front_uid
-    # Permanent freestyle split anchor (palace edit mark mode).
     if data.get("permanentSplitMark") is True or data.get("permanent_split_mark") is True:
-        fields["permanent_split_mark"] = True
-    return fields
+        return {"permanent_split_mark": True}
+    return {}
 
 
 def _node_content_fingerprint(raw: dict[str, Any]) -> str:
@@ -79,7 +70,7 @@ def build_tree_from_editor_doc(editor_doc: Any) -> tuple[str | None, dict[str, d
             "children": children,
             "text": _node_text(raw),
             "content_fingerprint": _node_content_fingerprint(raw),
-            **_node_anki_fields(raw),
+            **_node_split_mark_fields(raw),
         }
         return uid
 

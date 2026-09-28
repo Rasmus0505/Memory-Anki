@@ -14,6 +14,7 @@ from memory_anki.modules.quiz.application.node_binding import (
     extract_payload_node_uids,
 )
 
+from ..question_contracts import PalaceQuizNotFoundError
 from .dedup import find_duplicate_question
 from .dedup_keys import build_question_dedup_key, question_to_dedup_payload
 from .queries import (
@@ -311,7 +312,15 @@ def _normalize_batch_delete_ids(question_ids: list[int]) -> list[int]:
 
 
 def delete_question(session: Session, question_id: int) -> None:
-    question = get_question_or_raise(session, question_id)
+    question = (
+        session.query(PalaceQuizQuestion)
+        .filter(PalaceQuizQuestion.id == question_id)
+        .first()
+    )
+    if question is None:
+        raise PalaceQuizNotFoundError("题目不存在。")
+    if question.deleted_at is not None:
+        return
     commit_deleted_questions(session, [question])
 
 

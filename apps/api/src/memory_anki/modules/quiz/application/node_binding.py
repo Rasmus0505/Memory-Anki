@@ -1,4 +1,4 @@
-"""Bind palace quiz questions to mind-map node UIDs via AI analysis."""
+"""Bind palace quiz questions to mind-map node UIDs."""
 
 from __future__ import annotations
 
@@ -19,20 +19,31 @@ from memory_anki.modules.mindmap_document.api import (
     collect_node_descendants,
 )
 
-from .generation.shared import node_children, node_text
 from .question_contracts import PalaceQuizValidationError
 from .questions.queries import get_palace_or_raise, get_question_or_raise
 
-DEFAULT_BATCH_SIZE = 30
 # 超出上限的节点会被静默丢弃、永远绑不上题；现存宫殿最大 219 节点，留足余量。
 MAX_NODES_FOR_PROMPT = 800
 MAX_BINDINGS_PER_QUESTION = 8
 MergeMode = Literal["replace_all", "fill_unbound"]
 
-PROMPT_KEY = "ai_prompt_palace_quiz_node_binding"
-SCENARIO_KEY = "quiz_node_binding"
 DEFAULT_ROOT_BINDING_REASON = "default-root-binding"
 DEFAULT_ROOT_BINDING_SOURCE = "manual"
+
+
+def node_text(node: Any) -> str:
+    if not isinstance(node, dict):
+        return ""
+    raw_data = node.get("data")
+    data: dict[str, Any] = raw_data if isinstance(raw_data, dict) else {}
+    return str(data.get("text") or node.get("text") or "").strip()
+
+
+def node_children(node: Any) -> list[Any]:
+    if not isinstance(node, dict):
+        return []
+    children = node.get("children")
+    return children if isinstance(children, list) else []
 
 
 def _coerce_int(value: object) -> int | None:
@@ -604,11 +615,6 @@ def mutate_quiz_node_bindings(
     }
 
 
-from .node_binding_ai import (  # noqa: E402
-    _merge_preview_bindings,
-    _parse_binding_response,
-    preview_quiz_node_binding,
-)
 from .node_binding_ops import (  # noqa: E402
     auto_bind_palace_questions_by_text,
     search_mindmap_nodes,
@@ -617,8 +623,6 @@ from .node_binding_ops import (  # noqa: E402
 __all__ = [
     "DEFAULT_ROOT_BINDING_REASON",
     "DEFAULT_ROOT_BINDING_SOURCE",
-    "PROMPT_KEY",
-    "SCENARIO_KEY",
     "apply_quiz_node_binding_preview",
     "auto_bind_palace_questions_by_text",
     "compact_mindmap_with_uids",
@@ -627,10 +631,7 @@ __all__ = [
     "list_palace_node_bindings",
     "list_question_node_bindings",
     "mutate_quiz_node_bindings",
-    "preview_quiz_node_binding",
     "resolve_palace_root_node_uid",
     "search_mindmap_nodes",
-    "_merge_preview_bindings",
-    "_parse_binding_response",
 ]
 

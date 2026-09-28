@@ -4,15 +4,7 @@ import unittest
 from unittest.mock import patch
 
 from memory_anki.infrastructure.db._tables.misc import Config, ExternalAiCallLog
-from memory_anki.modules.produce.application.mindmap_ai_split.config_loader import (
-    resolve_config as resolve_ai_split_config,
-)
-from memory_anki.modules.produce.application.mindmap_ai_split.contracts import MindMapAiSplitError
-from memory_anki.modules.settings.api import SettingsAiRuntimeProvider
 from memory_anki.modules.settings.application.ai_model_registry import resolve_scenario_runtime
-from memory_anki.modules.settings.application.ai_model_registry_catalog import (
-    PROVIDER_API_KEY_CONFIG_KEYS,
-)
 from memory_anki.modules.settings.presentation import router as settings_router
 from support import RouterTestCase
 
@@ -485,28 +477,6 @@ class SettingsAiRouteTests(RouterTestCase):
         self.assertEqual(payload["prompt_text"], "系统提示词")
         self.assertEqual(payload["response_text"], "{\"ok\":true}")
         self.assertEqual(payload["job_id"], "job-1")
-
-
-    def test_ai_split_legacy_empty_key_blocks_provider_and_environment_fallbacks(self):
-        with self.SessionLocal() as session:
-            runtime_provider = SettingsAiRuntimeProvider(session)
-            initial_runtime = runtime_provider.resolve("ai_split")
-            session.add_all(
-                [
-                    Config(
-                        key=PROVIDER_API_KEY_CONFIG_KEYS[initial_runtime.provider],
-                        value="provider-secret",
-                    ),
-                    Config(key="mindmap_ai_split_api_key", value=""),
-                ]
-            )
-            session.commit()
-            with self.assertRaises(MindMapAiSplitError):
-                resolve_ai_split_config(
-                    session,
-                    ai_runtime=runtime_provider,
-                    legacy_defaults={"api_key": "environment-secret"},
-                )
 
 
 if __name__ == "__main__":

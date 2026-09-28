@@ -31,28 +31,22 @@ from memory_anki.core.runtime_activity import (
     stop_runtime_activity_heartbeat,
 )
 from memory_anki.infrastructure.db._tables._base import get_session as _get_session
-from memory_anki.modules.ai_learning.presentation import router as ai_learning_router
 from memory_anki.modules.backups.application.backup_lifecycle import (
     create_shutdown_backup,
     start_periodic_backup_loop,
     stop_periodic_backup_loop,
 )
 from memory_anki.modules.backups.presentation import router as backups_router
-from memory_anki.modules.batch_generation.presentation import router as batch_generation_router
 from memory_anki.modules.content.presentation import router as palace_router
 from memory_anki.modules.dashboard.presentation import router as dashboard_router
 from memory_anki.modules.english.presentation import router as english_router
 from memory_anki.modules.english_lookup.presentation import router as english_lookup_router
-from memory_anki.modules.english_reading.presentation import router as english_reading_router
+from memory_anki.modules.exam.presentation import router as exam_router
 from memory_anki.modules.knowledge.presentation import router as knowledge_router
 from memory_anki.modules.memory.presentation import router as review_router
-from memory_anki.modules.pdf_library import router as pdf_library_router
 from memory_anki.modules.practice.presentation import router as freestyle_router
 from memory_anki.modules.produce.presentation import import_router
 from memory_anki.modules.quiz.presentation import router as palace_quiz_router
-from memory_anki.modules.quiz.presentation import (
-    workspace_router as palace_quiz_workspace_router,
-)
 from memory_anki.modules.search.presentation import router as search_router
 from memory_anki.modules.session.presentation import router as sessions_router
 from memory_anki.modules.settings.presentation import router as settings_router
@@ -172,22 +166,18 @@ ensure_runtime_dirs()
 app.mount("/api/attachments", StaticFiles(directory=str(ATTACHMENTS_DIR)), name="attachments")
 
 app.include_router(palace_router.router, prefix="/api/v1")
-app.include_router(ai_learning_router.router, prefix="/api/v1")
 app.include_router(backups_router.router, prefix="/api/v1")
-app.include_router(batch_generation_router, prefix="/api/v1")
 app.include_router(palace_quiz_router.router, prefix="/api/v1")
-app.include_router(palace_quiz_workspace_router.router, prefix="/api/v1")
 app.include_router(review_router.router, prefix="/api/v1")
 app.include_router(sessions_router.router, prefix="/api/v1")
 app.include_router(settings_router.router, prefix="/api/v1")
 app.include_router(import_router.router, prefix="/api/v1")
-app.include_router(pdf_library_router, prefix="/api/v1")
 app.include_router(knowledge_router.router, prefix="/api/v1")
 app.include_router(english_router.router, prefix="/api/v1")
 app.include_router(english_lookup_router, prefix="/api/v1")
-app.include_router(english_reading_router.router, prefix="/api/v1")
 app.include_router(freestyle_router.router, prefix="/api/v1")
 app.include_router(dashboard_router.router, prefix="/api/v1")
+app.include_router(exam_router.router, prefix="/api/v1")
 app.include_router(search_router.router, prefix="/api/v1")
 
 if WEB_DIST_DIR and WEB_DIST_DIR.exists():

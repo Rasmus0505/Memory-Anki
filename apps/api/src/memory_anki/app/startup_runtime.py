@@ -20,9 +20,6 @@ from memory_anki.modules.backups.application.backup_lifecycle import (
 from memory_anki.modules.english.application.startup import (
     prepare_english_runtime,
 )
-from memory_anki.modules.english_reading.application.startup import (
-    prepare_english_reading,
-)
 from memory_anki.modules.settings.application.ai_model_registry import (
     ensure_ai_model_catalog_seed,
 )
@@ -67,7 +64,6 @@ def run_prepare_runtime() -> StartupState:
     session = get_session()
     try:
         prepare_english_runtime(session)
-        prepare_english_reading(session)
         ensure_ai_model_catalog_seed(session)
         _seed_default_config_rows(session)
         session.commit()

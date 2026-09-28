@@ -12,19 +12,10 @@ from memory_anki.modules.content.application.editor_state_service import (
 from memory_anki.modules.content.application.title_sync_service import set_palace_chapter_links
 from memory_anki.modules.knowledge.application.editor_state_service import save_subject_editor_state
 from memory_anki.modules.mindmap_document.api import EditorStateConflictError, normalize_editor_doc
-from memory_anki.modules.produce.application.mindmap_ai_split.primitives import plain_text
 from support import RouterTestCase
 
 
 class EditorStateServiceTests(unittest.TestCase):
-    def test_plain_text_preserves_block_line_breaks_without_truncation(self):
-        value = "<div>第一行</div><div>第二行</div><div>第三行</div>"
-
-        result = plain_text(value, fallback="新节点")
-
-        self.assertEqual(result, "第一行\n第二行\n第三行")
-        self.assertGreater(len(result), 8)
-
     def test_normalize_editor_doc_adds_stable_root_and_business_node_uids(self):
         doc = {
             "root": {
