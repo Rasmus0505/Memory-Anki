@@ -4,6 +4,7 @@ import type { ExamOverview, ExamPalaceRow } from '@/shared/api/contracts'
 import { getExamOverviewApi } from '../api/examApi'
 import { formatDaysLeft, formatPercent } from '../model/examFormat'
 import { ExamStarBadge } from './ExamStarBadge'
+import { FX_ANCHORS } from '@/shared/fx'
 
 export interface LitPalace {
   palace: ExamPalaceRow
@@ -48,7 +49,7 @@ export function ExamRoundSummary({ baseline, roundKey }: { baseline: ExamOvervie
   const weak = current.weak.slice(0, 4)
 
   return (
-    <div data-testid="freestyle-round-exam-summary" className="mt-4 flex flex-col gap-3 rounded-2xl border border-stage-line bg-stage-raised/70 p-4 text-left text-sm">
+    <div data-testid="freestyle-round-exam-summary" data-fx-anchor={FX_ANCHORS.roundSummary} className="mt-4 flex flex-col gap-3 rounded-2xl border border-stage-line bg-stage-raised/70 p-4 text-left text-sm">
       <div className="flex items-center justify-between gap-3">
         <span className="text-[11px] font-semibold tracking-[0.14em] text-stage-glow">离考试目标</span>
         <span className="text-xs text-stage-muted">{formatDaysLeft(current.days_left)}</span>

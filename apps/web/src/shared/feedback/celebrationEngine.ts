@@ -1,15 +1,6 @@
-import type confetti from 'canvas-confetti'
-
-type ConfettiApi = typeof confetti
-type ConfettiLauncher = ReturnType<ConfettiApi['create']>
-
-// canvas-confetti 惰性加载：庆祝动画非关键路径，不进入首屏静态依赖图。
-let confettiApiPromise: Promise<ConfettiApi> | null = null
-
-function loadConfettiApi() {
-  confettiApiPromise ??= import('canvas-confetti').then((module) => module.default)
-  return confettiApiPromise
-}
+import { spawnParticle, prefersReducedParticleMotion } from '@/shared/fx/particles/particleEngine'
+import type { Hsl, ParticleShape } from '@/shared/fx/particles/particleModel'
+import { pal } from '@/shared/fx/skins'
 
 export type CelebrationPreset =
   | 'random_direction'
@@ -26,22 +17,18 @@ export type CelebrationScenario =
   | 'timer'
   | 'quiz'
 
-type CelebrationShape = 'square' | 'circle' | 'star'
+type BurstShape = 'square' | 'circle' | 'star'
 
-interface CelebrationBurstOptions {
+/** canvas-confetti style burst description, rendered by the fx particle engine. */
+export interface CelebrationBurst {
   angle?: number
-  colors?: string[]
+  colors?: readonly Hsl[]
   decay?: number
-  drift?: number
-  flat?: boolean
   gravity?: number
-  origin?: {
-    x?: number
-    y?: number
-  }
+  origin?: { x?: number; y?: number }
   particleCount: number
   scalar?: number
-  shapes?: CelebrationShape[]
+  shapes?: BurstShape[]
   spread: number
   startVelocity: number
   ticks?: number
@@ -63,15 +50,14 @@ interface CelebrationPresetDebugConfig {
 }
 
 interface CelebrationPresetDefinition extends CelebrationPresetDebugConfig {
-  tick: (launch: ConfettiLauncher, progress: CelebrationProgress) => void
+  tick: (emit: (burst: CelebrationBurst) => void, progress: CelebrationProgress) => void
 }
-
-const GLOBAL_CONFETTI_CANVAS_ID = 'memory-anki-global-confetti-canvas'
-const GLOBAL_CONFETTI_Z_INDEX = '2147483647'
 
 const PREVIEW_AMOUNT = 1.15
 const DEFAULT_SCENARIO: CelebrationScenario = 'review'
 const DEFAULT_AMOUNT = 1
+/** One confetti particle ≈ this many fx particles; the fx ones are richer (spin, flip, glow). */
+const DENSITY = 0.42
 const SCENARIO_DURATION_MULTIPLIER: Record<CelebrationScenario, number> = {
   preview: 0.85,
   review: 0.82,
@@ -81,67 +67,68 @@ const SCENARIO_DURATION_MULTIPLIER: Record<CelebrationScenario, number> = {
   quiz: 0.76,
 }
 
-let sharedCanvas: HTMLCanvasElement | null = null
-let sharedLauncher: ConfettiLauncher | null = null
 let activeRunId = 0
 const scheduledTimeouts = new Set<number>()
 const scheduledIntervals = new Set<number>()
+let burstSink: ((burst: CelebrationBurst) => void) | null = null
 
-function randomInRange(min: number, max: number) {
-  return min + Math.random() * (max - min)
+const range = (min: number, max: number) => min + Math.random() * (max - min)
+const clamp = (value: number, minimum: number, maximum: number) => Math.max(minimum, Math.min(maximum, value))
+function pick<T>(items: readonly T[]): T {
+  return items[Math.floor(Math.random() * items.length)]
 }
 
-function clamp(value: number, minimum: number, maximum: number) {
-  return Math.max(minimum, Math.min(maximum, value))
+// Warm only: the old flag/sky palettes read as a different product.
+const warmConfetti = () => [pal.gold, pal.amber, pal.coral, pal.rating[3], pal.cream, pal.paperGold]
+const goldStars = () => [pal.gold, pal.amber, pal.cream, [48, 100, 86] as Hsl]
+const roseStars = () => [pal.coral, [340, 70, 72] as Hsl, pal.amber, pal.cream]
+const cinnabar = () => [[4, 78, 52] as Hsl, pal.cream, pal.gold]
+
+function shapeFor(shapes: BurstShape[] | undefined): ParticleShape {
+  const shape = shapes ? pick(shapes) : Math.random() < 0.7 ? 'square' : 'circle'
+  if (shape === 'star') return 'star'
+  return shape === 'circle' ? 'dot' : 'flake'
 }
 
-function scheduleTimeout(callback: () => void, delayMs: number) {
-  const id = window.setTimeout(() => {
-    scheduledTimeouts.delete(id)
-    callback()
-  }, delayMs)
-  scheduledTimeouts.add(id)
-  return id
-}
-
-function scheduleInterval(callback: () => void, delayMs: number) {
-  const id = window.setInterval(callback, delayMs)
-  scheduledIntervals.add(id)
-  return id
-}
-
-function clearScheduledWork() {
-  for (const id of scheduledTimeouts) {
-    window.clearTimeout(id)
+function renderBurst(burst: CelebrationBurst) {
+  if (typeof window === 'undefined') return
+  const width = window.innerWidth
+  const height = window.innerHeight
+  const x = (burst.origin?.x ?? 0.5) * width
+  const y = (burst.origin?.y ?? 0.7) * height
+  const count = Math.max(1, Math.round(burst.particleCount * DENSITY))
+  const colors = burst.colors ?? warmConfetti()
+  const center = ((burst.angle ?? 90) * Math.PI) / 180
+  const spread = (burst.spread * Math.PI) / 180
+  const scalar = burst.scalar ?? 1
+  const drag = 1 - (1 - (burst.decay ?? 0.92)) * 0.55
+  const life = ((burst.ticks ?? 120) / 60) * 1.15
+  for (let i = 0; i < count; i += 1) {
+    const angle = center + (Math.random() - 0.5) * spread
+    const speed = burst.startVelocity * range(0.45, 1) * 0.36
+    const shape = shapeFor(burst.shapes)
+    spawnParticle({
+      x,
+      y,
+      vx: Math.cos(angle) * speed,
+      vy: -Math.sin(angle) * speed,
+      gravity: 0.2 * (burst.gravity ?? 1),
+      drag,
+      sway: shape === 'flake' ? 4 : 0,
+      shape,
+      additive: pal.luminous && shape !== 'flake',
+      size: scalar * (shape === 'star' ? range(3.5, 6) : range(2.4, 4.4)),
+      color: pick(colors),
+      spin: range(-0.22, 0.22),
+      flipSpeed: shape === 'flake' ? range(0.12, 0.32) : 0,
+      life: range(life * 0.7, life),
+    })
   }
-  scheduledTimeouts.clear()
-
-  for (const id of scheduledIntervals) {
-    window.clearInterval(id)
-  }
-  scheduledIntervals.clear()
 }
 
-function emitBurst(launch: ConfettiLauncher, options: CelebrationBurstOptions) {
-  void launch({
-    angle: options.angle,
-    colors: options.colors,
-    decay: options.decay ?? 0.92,
-    disableForReducedMotion: true,
-    drift: options.drift ?? 0,
-    flat: options.flat,
-    gravity: options.gravity ?? 1,
-    origin: {
-      x: options.origin?.x ?? 0.5,
-      y: options.origin?.y ?? 0.7,
-    },
-    particleCount: Math.max(1, Math.round(options.particleCount)),
-    scalar: options.scalar ?? 1,
-    shapes: options.shapes,
-    spread: options.spread,
-    startVelocity: options.startVelocity,
-    ticks: options.ticks ?? 120,
-  })
+function emit(burst: CelebrationBurst) {
+  if (burstSink) burstSink(burst)
+  else renderBurst(burst)
 }
 
 const PRESET_DEFINITIONS: Record<CelebrationPreset, CelebrationPresetDefinition> = {
@@ -150,27 +137,16 @@ const PRESET_DEFINITIONS: Record<CelebrationPreset, CelebrationPresetDefinition>
     speed: 4,
     minDurationMs: 420,
     maxDurationMs: 980,
-    scenarioDurationMultiplier: {
-      preview: 0.7,
-      review: 0.82,
-      quiz: 0.76,
-      milestone: 0.92,
-      completion: 1,
-      timer: 1.05,
-    },
-    tick(launch, progress) {
-      const phaseSpread = 36 + progress.phase * 20
-      emitBurst(launch, {
+    scenarioDurationMultiplier: { preview: 0.7, review: 0.82, quiz: 0.76, milestone: 0.92, completion: 1, timer: 1.05 },
+    tick(fire, progress) {
+      fire({
         particleCount: 10 + progress.intensity * 12,
-        spread: phaseSpread,
+        spread: 36 + progress.phase * 20,
         startVelocity: 18 + progress.intensity * 10,
         scalar: 0.72 + progress.intensity * 0.16,
         ticks: 80 + progress.phase * 20,
-        angle: randomInRange(40, 140),
-        origin: {
-          x: randomInRange(0.08, 0.92),
-          y: randomInRange(0.14, 0.86),
-        },
+        angle: range(40, 140),
+        origin: { x: range(0.08, 0.92), y: range(0.14, 0.86) },
       })
     },
   },
@@ -179,37 +155,14 @@ const PRESET_DEFINITIONS: Record<CelebrationPreset, CelebrationPresetDefinition>
     speed: 7,
     minDurationMs: 760,
     maxDurationMs: 1650,
-    scenarioDurationMultiplier: {
-      preview: 0.82,
-      review: 0.88,
-      quiz: 0.78,
-      milestone: 1,
-      completion: 1.05,
-      timer: 1.12,
-    },
-    tick(launch, progress) {
-      const originY = randomInRange(-0.18, 0.28)
-      const phaseBoost = 1 + progress.phase * 0.22
-      emitBurst(launch, {
-        particleCount: (58 + progress.intensity * 78) * phaseBoost,
-        spread: 360,
-        ticks: 58 + progress.phase * 8,
-        startVelocity: 28 + progress.intensity * 12,
-        origin: {
-          x: randomInRange(0.1, 0.3),
-          y: originY,
-        },
-      })
-      emitBurst(launch, {
-        particleCount: (58 + progress.intensity * 78) * phaseBoost,
-        spread: 360,
-        ticks: 58 + progress.phase * 8,
-        startVelocity: 28 + progress.intensity * 12,
-        origin: {
-          x: randomInRange(0.7, 0.9),
-          y: originY,
-        },
-      })
+    scenarioDurationMultiplier: { preview: 0.82, review: 0.88, quiz: 0.78, milestone: 1, completion: 1.05, timer: 1.12 },
+    tick(fire, progress) {
+      const y = range(0.08, 0.34)
+      const count = (58 + progress.intensity * 78) * (1 + progress.phase * 0.22)
+      const ticks = 58 + progress.phase * 8
+      const startVelocity = 28 + progress.intensity * 12
+      fire({ particleCount: count, spread: 360, ticks, startVelocity, origin: { x: range(0.1, 0.3), y } })
+      fire({ particleCount: count, spread: 360, ticks, startVelocity, origin: { x: range(0.7, 0.9), y } })
     },
   },
   realistic_look: {
@@ -217,51 +170,15 @@ const PRESET_DEFINITIONS: Record<CelebrationPreset, CelebrationPresetDefinition>
     speed: 6,
     minDurationMs: 640,
     maxDurationMs: 1420,
-    scenarioDurationMultiplier: {
-      preview: 0.78,
-      review: 0.86,
-      quiz: 0.78,
-      milestone: 0.96,
-      completion: 1.02,
-      timer: 1.08,
-    },
-    tick(launch, progress) {
-      const baseCount = 200 * (0.82 + progress.intensity * 0.52)
-      const originY = 0.68 + randomInRange(-0.02, 0.03)
-      emitBurst(launch, {
-        spread: 26,
-        startVelocity: 52 + progress.phase * 4,
-        origin: { y: originY },
-        particleCount: baseCount * 0.25,
-      })
-      emitBurst(launch, {
-        spread: 60,
-        startVelocity: 36 + progress.phase * 2,
-        origin: { y: originY },
-        particleCount: baseCount * 0.2,
-      })
-      emitBurst(launch, {
-        spread: 100,
-        startVelocity: 32 + progress.phase * 2,
-        decay: 0.91,
-        scalar: 0.8,
-        origin: { y: originY },
-        particleCount: baseCount * 0.35,
-      })
-      emitBurst(launch, {
-        spread: 120,
-        startVelocity: 25 + progress.phase * 2,
-        decay: 0.92,
-        scalar: 1.2,
-        origin: { y: originY },
-        particleCount: baseCount * 0.1,
-      })
-      emitBurst(launch, {
-        spread: 120,
-        startVelocity: 45 + progress.phase * 3,
-        origin: { y: originY },
-        particleCount: baseCount * 0.1,
-      })
+    scenarioDurationMultiplier: { preview: 0.78, review: 0.86, quiz: 0.78, milestone: 0.96, completion: 1.02, timer: 1.08 },
+    tick(fire, progress) {
+      const base = 200 * (0.82 + progress.intensity * 0.52)
+      const origin = { y: 0.68 + range(-0.02, 0.03) }
+      fire({ spread: 26, startVelocity: 52 + progress.phase * 4, origin, particleCount: base * 0.25 })
+      fire({ spread: 60, startVelocity: 36 + progress.phase * 2, origin, particleCount: base * 0.2 })
+      fire({ spread: 100, startVelocity: 32 + progress.phase * 2, decay: 0.91, scalar: 0.8, origin, particleCount: base * 0.35 })
+      fire({ spread: 120, startVelocity: 25 + progress.phase * 2, decay: 0.92, scalar: 1.2, origin, particleCount: base * 0.1 })
+      fire({ spread: 120, startVelocity: 45 + progress.phase * 3, origin, particleCount: base * 0.1 })
     },
   },
   stars: {
@@ -269,51 +186,22 @@ const PRESET_DEFINITIONS: Record<CelebrationPreset, CelebrationPresetDefinition>
     speed: 5,
     minDurationMs: 720,
     maxDurationMs: 1500,
-    scenarioDurationMultiplier: {
-      preview: 0.82,
-      review: 0.88,
-      quiz: 0.8,
-      milestone: 0.98,
-      completion: 1.04,
-      timer: 1.08,
-    },
-    tick(launch, progress) {
+    scenarioDurationMultiplier: { preview: 0.82, review: 0.88, quiz: 0.8, milestone: 0.98, completion: 1.04, timer: 1.08 },
+    tick(fire, progress) {
       const spread = 44 + progress.phase * 16
-      const velocity = 26 + progress.intensity * 10
-      emitBurst(launch, {
+      const startVelocity = 26 + progress.intensity * 10
+      const common = {
         particleCount: 18 + progress.intensity * 18,
         spread,
-        startVelocity: velocity,
+        startVelocity,
         ticks: 120 + progress.phase * 12,
         scalar: 0.96 + progress.intensity * 0.16,
-        shapes: ['star'],
-        colors: ['#f59e0b', '#fcd34d', '#fde68a', '#fff7ed'],
-        angle: 48,
-        origin: { x: 0.06, y: 0.84 },
-      })
-      emitBurst(launch, {
-        particleCount: 18 + progress.intensity * 18,
-        spread,
-        startVelocity: velocity,
-        ticks: 120 + progress.phase * 12,
-        scalar: 0.96 + progress.intensity * 0.16,
-        shapes: ['star'],
-        colors: ['#38bdf8', '#7dd3fc', '#bfdbfe', '#eff6ff'],
-        angle: 132,
-        origin: { x: 0.94, y: 0.84 },
-      })
+        shapes: ['star'] as BurstShape[],
+      }
+      fire({ ...common, colors: goldStars(), angle: 48, origin: { x: 0.06, y: 0.84 } })
+      fire({ ...common, colors: roseStars(), angle: 132, origin: { x: 0.94, y: 0.84 } })
       if (progress.phase >= 2) {
-        emitBurst(launch, {
-          particleCount: 22 + progress.intensity * 24,
-          spread: 56 + progress.phase * 10,
-          startVelocity: velocity + 2,
-          ticks: 132 + progress.phase * 12,
-          scalar: 1 + progress.intensity * 0.16,
-          shapes: ['star'],
-          colors: ['#f472b6', '#f9a8d4', '#c084fc', '#f5f3ff'],
-          angle: 270,
-          origin: { x: 0.5, y: 0.04 },
-        })
+        fire({ ...common, particleCount: 22 + progress.intensity * 24, spread: 56 + progress.phase * 10, startVelocity: startVelocity + 2, colors: goldStars(), angle: 270, origin: { x: 0.5, y: 0.04 } })
       }
     },
   },
@@ -322,167 +210,70 @@ const PRESET_DEFINITIONS: Record<CelebrationPreset, CelebrationPresetDefinition>
     speed: 8,
     minDurationMs: 980,
     maxDurationMs: 2200,
-    scenarioDurationMultiplier: {
-      preview: 0.88,
-      review: 0.94,
-      quiz: 0.82,
-      milestone: 1,
-      completion: 1.1,
-      timer: 1.18,
-    },
-    tick(launch, progress) {
-      const phaseBoost = 1 + progress.phase * 0.28
-      const sideParticleCount = (16 + progress.intensity * 14) * phaseBoost
-      emitBurst(launch, {
-        particleCount: sideParticleCount,
-        angle: 60,
-        spread: 55 + progress.phase * 4,
-        origin: { x: 0, y: 0.78 + randomInRange(-0.04, 0.04) },
-        colors: ['#bb0000', '#ffffff'],
-        startVelocity: 26 + progress.phase * 3,
-        ticks: 120 + progress.phase * 10,
-      })
-      emitBurst(launch, {
-        particleCount: sideParticleCount,
-        angle: 120,
-        spread: 55 + progress.phase * 4,
-        origin: { x: 1, y: 0.78 + randomInRange(-0.04, 0.04) },
-        colors: ['#bb0000', '#ffffff'],
-        startVelocity: 26 + progress.phase * 3,
-        ticks: 120 + progress.phase * 10,
-      })
+    scenarioDurationMultiplier: { preview: 0.88, review: 0.94, quiz: 0.82, milestone: 1, completion: 1.1, timer: 1.18 },
+    tick(fire, progress) {
+      const boost = 1 + progress.phase * 0.28
+      const side = (16 + progress.intensity * 14) * boost
+      const ticks = 120 + progress.phase * 10
+      const startVelocity = 26 + progress.phase * 3
+      fire({ particleCount: side, angle: 60, spread: 55 + progress.phase * 4, origin: { x: 0, y: 0.78 + range(-0.04, 0.04) }, colors: cinnabar(), startVelocity, ticks })
+      fire({ particleCount: side, angle: 120, spread: 55 + progress.phase * 4, origin: { x: 1, y: 0.78 + range(-0.04, 0.04) }, colors: cinnabar(), startVelocity, ticks })
       if (progress.phase >= 2) {
-        emitBurst(launch, {
-          particleCount: (28 + progress.intensity * 36) * phaseBoost,
+        fire({
+          particleCount: (28 + progress.intensity * 36) * boost,
           spread: 360,
           startVelocity: 30 + progress.phase * 4,
           ticks: 64 + progress.phase * 10,
           scalar: 1 + progress.intensity * 0.12,
-          origin: {
-            x: progress.elapsedRatio < 0.7 ? randomInRange(0.12, 0.3) : randomInRange(0.7, 0.88),
-            y: randomInRange(-0.18, 0.18),
-          },
-          colors: ['#2563eb', '#ffffff', '#dc2626'],
+          origin: { x: progress.elapsedRatio < 0.7 ? range(0.12, 0.3) : range(0.7, 0.88), y: range(0.06, 0.24) },
+          colors: warmConfetti(),
         })
       }
       if (progress.phase >= 3) {
-        emitBurst(launch, {
-          particleCount: 20 + progress.intensity * 24,
-          spread: 360,
-          gravity: 0,
-          decay: 0.94,
-          startVelocity: 28 + progress.intensity * 8,
-          colors: ['#ffe400', '#ffbd00', '#e89400', '#ffca6c', '#fdffb8'],
-          scalar: 1.12,
-          shapes: ['star'],
-          ticks: 58,
-        })
+        fire({ particleCount: 20 + progress.intensity * 24, spread: 360, gravity: 0, decay: 0.94, startVelocity: 28 + progress.intensity * 8, colors: goldStars(), scalar: 1.12, shapes: ['star'], ticks: 58 })
       }
     },
   },
 }
 
-function resolveDurationMs(
-  preset: CelebrationPresetDefinition,
-  amount: number,
-  scenario: CelebrationScenario,
-  durationMs?: number,
-) {
-  if (typeof durationMs === 'number' && Number.isFinite(durationMs) && durationMs > 0) {
-    return Math.round(durationMs)
-  }
-  const normalizedAmount = clamp(amount, 0, 3)
+function resolveDurationMs(preset: CelebrationPresetDefinition, amount: number, scenario: CelebrationScenario, durationMs?: number) {
+  if (typeof durationMs === 'number' && Number.isFinite(durationMs) && durationMs > 0) return Math.round(durationMs)
   const span = preset.maxDurationMs - preset.minDurationMs
-  const amountRatio = normalizedAmount / 3
-  const scenarioMultiplier =
-    preset.scenarioDurationMultiplier[scenario] ??
-    SCENARIO_DURATION_MULTIPLIER[scenario] ??
-    1
-  return Math.round((preset.minDurationMs + span * amountRatio) * scenarioMultiplier)
+  const multiplier = preset.scenarioDurationMultiplier[scenario] ?? SCENARIO_DURATION_MULTIPLIER[scenario] ?? 1
+  return Math.round((preset.minDurationMs + span * (clamp(amount, 0, 3) / 3)) * multiplier)
 }
 
-async function ensureLauncher(): Promise<ConfettiLauncher | null> {
-  if (typeof window === 'undefined' || typeof document === 'undefined') return null
-  if (sharedCanvas && sharedLauncher && document.body.contains(sharedCanvas)) {
-    return sharedLauncher
-  }
-
-  const existingCanvas = document.getElementById(GLOBAL_CONFETTI_CANVAS_ID)
-  const canvas =
-    existingCanvas instanceof HTMLCanvasElement
-      ? existingCanvas
-      : document.createElement('canvas')
-
-  canvas.id = GLOBAL_CONFETTI_CANVAS_ID
-  canvas.setAttribute('aria-hidden', 'true')
-  canvas.style.position = 'fixed'
-  canvas.style.inset = '0'
-  canvas.style.width = '100%'
-  canvas.style.height = '100%'
-  canvas.style.pointerEvents = 'none'
-  canvas.style.zIndex = GLOBAL_CONFETTI_Z_INDEX
-
-  if (!canvas.parentElement) {
-    document.body.append(canvas)
-  }
-
-  sharedCanvas = canvas
-  const confettiApi = await loadConfettiApi()
-  sharedLauncher = confettiApi.create(canvas, {
-    resize: true,
-    useWorker: true,
-  })
-  return sharedLauncher
+function clearScheduledWork() {
+  scheduledTimeouts.forEach((id) => window.clearTimeout(id))
+  scheduledTimeouts.clear()
+  scheduledIntervals.forEach((id) => window.clearInterval(id))
+  scheduledIntervals.clear()
 }
 
-function canEmitConfetti(reducedMotion: boolean) {
-  if (reducedMotion || typeof window === 'undefined' || typeof HTMLCanvasElement === 'undefined') {
-    return false
-  }
-  if (typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent)) {
-    return false
-  }
-  try {
-    const probe = document.createElement('canvas')
-    return typeof probe.getContext === 'function' && probe.getContext('2d') != null
-  } catch {
-    return false
-  }
-}
-
-function runPreset(
-  launch: ConfettiLauncher,
-  preset: CelebrationPresetDefinition,
-  amount: number,
-  durationMs: number,
-) {
+function runPreset(preset: CelebrationPresetDefinition, amount: number, durationMs: number) {
   activeRunId += 1
   clearScheduledWork()
   const runId = activeRunId
   const startedAt = Date.now()
-  const tickIntervalMs = Math.max(60, Math.round(1000 / Math.min(preset.speed, 1000)))
-
   const shoot = () => {
     if (runId !== activeRunId) return
-    const elapsedMs = Date.now() - startedAt
-    const elapsedRatio = clamp(elapsedMs / durationMs, 0, 1)
-    const intensity = clamp(amount * (0.72 + elapsedRatio * 0.9), 0.2, 3.2)
-    const phase = Math.min(3, Math.floor(elapsedRatio * 4))
-    preset.tick(launch, {
+    const elapsedRatio = clamp((Date.now() - startedAt) / durationMs, 0, 1)
+    preset.tick(emit, {
       amount,
       elapsedRatio,
-      intensity,
-      phase,
+      intensity: clamp(amount * (0.72 + elapsedRatio * 0.9), 0.2, 3.2),
+      phase: Math.min(3, Math.floor(elapsedRatio * 4)),
     })
   }
-
   shoot()
-  const intervalId = scheduleInterval(shoot, tickIntervalMs)
-  scheduleTimeout(() => {
-    if (runId !== activeRunId) return
+  const intervalId = window.setInterval(shoot, Math.max(60, Math.round(1000 / preset.speed)))
+  scheduledIntervals.add(intervalId)
+  const timeoutId = window.setTimeout(() => {
+    scheduledTimeouts.delete(timeoutId)
     window.clearInterval(intervalId)
     scheduledIntervals.delete(intervalId)
   }, durationMs)
+  scheduledTimeouts.add(timeoutId)
 }
 
 export function getCelebrationPresetDebugConfig(preset: CelebrationPreset): CelebrationPresetDebugConfig {
@@ -502,39 +293,20 @@ export function launchCelebrationPreset(args: {
   amount?: number
   durationMs?: number
   scenario?: CelebrationScenario
-}): Promise<void> {
-  const {
-    preset,
-    reducedMotion,
-    amount = DEFAULT_AMOUNT,
-    durationMs,
-    scenario = DEFAULT_SCENARIO,
-  } = args
-  if (!canEmitConfetti(reducedMotion)) return Promise.resolve()
+}) {
+  const { preset, reducedMotion, amount = DEFAULT_AMOUNT, durationMs, scenario = DEFAULT_SCENARIO } = args
+  if (reducedMotion || typeof window === 'undefined' || (!burstSink && prefersReducedParticleMotion())) return
+  const definition = PRESET_DEFINITIONS[preset]
+  const normalized = clamp(scenario === 'preview' ? Math.max(amount, PREVIEW_AMOUNT) : amount, 0, 3)
+  runPreset(definition, normalized, resolveDurationMs(definition, normalized, scenario, durationMs))
+}
 
-  return (async () => {
-    try {
-      const launch = await ensureLauncher()
-      if (!launch) return
-
-      const definition = PRESET_DEFINITIONS[preset]
-      const normalizedAmount = clamp(
-        scenario === 'preview' ? Math.max(amount, PREVIEW_AMOUNT) : amount,
-        0,
-        3,
-      )
-      const resolvedDuration = resolveDurationMs(definition, normalizedAmount, scenario, durationMs)
-      runPreset(launch, definition, normalizedAmount, resolvedDuration)
-    } catch {
-      // 庆祝动画非关键路径：confetti chunk 加载失败时静默跳过。
-    }
-  })()
+/** Tests capture bursts instead of rendering them. */
+export function __setCelebrationBurstSinkForTests(sink: ((burst: CelebrationBurst) => void) | null) {
+  burstSink = sink
 }
 
 export function __resetCelebrationEngineForTests() {
   activeRunId += 1
   clearScheduledWork()
-  sharedCanvas?.remove()
-  sharedCanvas = null
-  sharedLauncher = null
 }

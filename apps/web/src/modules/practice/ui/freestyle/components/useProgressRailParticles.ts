@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FreestyleProgressSummary } from '@/modules/practice/ui/freestyle/model/freestyleProgressSegments'
-import { emitInkDrop, emitRailSparks, rectCenter } from '@/shared/feedback/particles'
-import { crossedQuarter, elementPoint, flashElement, freestyleMotionOn } from './freestyleParticleScenes'
+import { FX_ANCHORS, cue, elementCenter, findAnchor, rectCenter } from '@/shared/fx'
+import { crossedQuarter, freestyleMotionOn } from './freestyleParticleScenes'
 
 const QUARTER_MIN_SEGMENTS = 8
 const QUARTER_TAG_MS = 1600
@@ -10,7 +10,7 @@ const RETRY_BATCH_LIMIT = 3
 const MAX_SPARK_SEGMENTS = 12
 
 function railElement() {
-  return document.querySelector('[data-testid="freestyle-progress-rail"]')
+  return findAnchor(FX_ANCHORS.progressRail)
 }
 
 /**
@@ -40,12 +40,12 @@ export function useProgressRailParticles(segments: FreestyleProgressSummary['seg
     const ids = idsKey ? idsKey.split('\u0000') : []
     const seen = seenIdsRef.current
     seenIdsRef.current = new Set(ids)
-    if (!seen || seen.size === 0 || !freestyleMotionOn()) return
+    if (!seen || seen.size === 0) return
     const fresh = ids.filter((id) => !seen.has(id))
     if (!fresh.length || fresh.length > RETRY_BATCH_LIMIT) return
     later(() => fresh.forEach((id) => {
       const slot = railElement()?.querySelector(`[data-rail-slot="${CSS.escape(id)}"]`)
-      if (slot) emitInkDrop(() => elementPoint(slot))
+      if (slot) cue('retry.drop', { target: () => elementCenter(slot) })
     }), RETRY_DROP_DELAY_MS)
   }, [idsKey, later])
 
@@ -60,10 +60,10 @@ export function useProgressRailParticles(segments: FreestyleProgressSummary['seg
     const crossed = crossedQuarter(previous, ratio)
     const rail = railElement()
     if (!crossed || !rail || !freestyleMotionOn()) return
-    flashElement(rail, 1.8)
     const lit = Array.from(rail.querySelectorAll('[data-testid="freestyle-progress-segment"][data-tone="done"]'))
     const stride = Math.max(1, Math.ceil(lit.length / MAX_SPARK_SEGMENTS))
-    emitRailSparks(lit.filter((_, index) => index % stride === 0).map((segment) => rectCenter(segment.getBoundingClientRect())))
+    const sparks = lit.filter((_, index) => index % stride === 0).map((segment) => rectCenter(segment.getBoundingClientRect()))
+    cue('progress.quarter', { rail, sparks })
     setQuarterTag((current) => ({ label: crossed.label, nonce: (current?.nonce ?? 0) + 1 }))
     later(() => setQuarterTag(null), QUARTER_TAG_MS)
   }, [doneCount, later, total])

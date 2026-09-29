@@ -3,12 +3,14 @@ from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceQuizQues
 from memory_anki.modules.practice.application.overlay_quiz_service import (
     build_overlay_question_pack,
 )
-from memory_anki.modules.practice.application.round_state_service import (
-    apply_round_rating,
+from memory_anki.modules.practice.application.round_overlay_service import (
     drop_overlay_quiz_for_palaces,
     ensure_overlay_quiz,
-    get_or_create_active_round,
     progress_overlay_quiz,
+)
+from memory_anki.modules.practice.application.round_state_service import (
+    apply_round_rating,
+    get_or_create_active_round,
     start_new_round,
 )
 from memory_anki.modules.practice.domain.overlay_quiz import (
@@ -462,7 +464,7 @@ def test_start_new_round_clears_overlay_progress(db_session, monkeypatch) -> Non
     }
     packs = {"current": all_pack}
     monkeypatch.setattr(
-        "memory_anki.modules.practice.application.round_state_service.build_overlay_question_pack",
+        "memory_anki.modules.practice.application.round_overlay_service.build_overlay_question_pack",
         lambda session, config, **_kwargs: packs["current"],
     )
 
@@ -558,7 +560,7 @@ def test_inherit_overlay_completed_copies_states() -> None:
 
 def test_rating_last_unit_keeps_overlay_until_explicit_drop(db_session, monkeypatch) -> None:
     monkeypatch.setattr(
-        "memory_anki.modules.practice.application.round_state_service.build_overlay_question_pack",
+        "memory_anki.modules.practice.application.round_overlay_service.build_overlay_question_pack",
         lambda session, config, **_kwargs: {
             "question_ids": [101, 201],
             "quiz_scope": "cross_palace_random",

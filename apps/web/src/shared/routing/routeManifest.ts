@@ -56,6 +56,7 @@ export const EXACT_ROUTES: ExactRouteEntry[] = [
   { path: '/', nav: 'review', history: 'dashboard' },
   { path: '/dashboard', nav: 'review', history: 'dashboard', historyKey: 'dashboard' },
   { path: '/exam', nav: 'review', history: 'dashboard', historyKey: 'exam:war-room', commandLabel: '考试作战室' },
+  { path: '/growth', nav: 'review', history: 'dashboard', historyKey: 'growth', commandLabel: '成长 · 星图与印章' },
   { path: '/freestyle', nav: 'freestyle', history: 'freestyle', historyKey: 'freestyle' },
   { path: '/freestyle-2', nav: 'freestyleSecondary', history: 'freestyleSecondary', historyKey: 'freestyle-secondary', commandLabel: '随心 2' },
   { path: '/palaces', nav: 'palaces', history: 'palaces', historyKey: 'palace:shelf' },
@@ -69,6 +70,7 @@ export const EXACT_ROUTES: ExactRouteEntry[] = [
   { path: '/profile/feedback', nav: null, history: 'profile', historyKey: 'profile:feedback' },
   { path: '/profile/ai', nav: null, history: 'profile', historyKey: 'profile:ai' },
   { path: '/profile/backups', nav: null, history: 'profile', historyKey: 'profile:backups' },
+  { path: '/lab/fx', nav: null, history: 'profile', historyKey: 'lab:fx', commandLabel: 'FX 实验室' },
   { path: '/timer-overlay', nav: null, history: 'other' },
 ]
 

@@ -347,6 +347,8 @@ export interface ClientPreferences {
   quiz_shortcuts?: Record<string, unknown> | null
   /** Floating-window size and position as viewport ratios, shared across devices. */
   window_layouts?: Record<string, unknown> | null
+  /** Growth wardrobe picks and which ceremonies were already shown; shared across devices. */
+  growth_state?: Record<string, unknown> | null
 }
 export interface ClientPreferencesResponse {
   items: ClientPreferences

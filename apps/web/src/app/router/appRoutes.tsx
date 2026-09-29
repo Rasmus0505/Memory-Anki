@@ -17,6 +17,7 @@ export const preloadFreestylePage = () => import('@/pages/today/ImmersiveFreesty
 export const preloadFreestyleSecondaryPage = () => import('@/pages/today/ImmersiveFreestyleSecondaryPage')
 export const preloadKnowledgePage = () => import('@/pages/library/KnowledgeLibraryPage')
 export const preloadExamPage = () => import('@/pages/exam/ExamWarRoomPage')
+export const preloadGrowthPage = () => import('@/pages/growth/GrowthPage')
 export const preloadEnglishWorkspacePage = () => import('@/pages/library/EnglishLibraryPage')
 export const preloadEnglishCoursePage = () => import('@/pages/library/EnglishCoursePage')
 export const preloadPalaceEditPage = () => import('@/pages/create/PalaceEditorPage')
@@ -36,6 +37,8 @@ const PalaceShelfPage = lazyWithRetry(preloadPalaceShelfPage)
 const FreestylePage = lazyWithRetry(preloadFreestylePage)
 const FreestyleSecondaryPage = lazyWithRetry(preloadFreestyleSecondaryPage)
 const ExamPage = lazyWithRetry(preloadExamPage)
+const GrowthPage = lazyWithRetry(preloadGrowthPage)
+const FxLabPage = lazyWithRetry(() => import('@/pages/settings/FxLabPage'))
 const EnglishWorkspacePage = lazyWithRetry(preloadEnglishWorkspacePage)
 const EnglishCoursePage = lazyWithRetry(preloadEnglishCoursePage)
 
@@ -84,6 +87,8 @@ export function AppRoutes({ location }: { location?: Location }) {
           <Route path="/" element={<StartupRedirect />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/exam" element={<ExamPage />} />
+          <Route path="/growth" element={<GrowthPage />} />
+          <Route path="/lab/fx" element={<FxLabPage />} />
           <Route path="/freestyle" element={<FreestylePage />} />
           <Route path="/freestyle-2" element={<FreestyleSecondaryPage />} />
           {/* Retired 今日工作台: keep bookmarks on the insight hub, not /freestyle. */}

@@ -200,7 +200,10 @@ def test_batch_create_append_dedupe_and_text_overlap_binding():
 
             edges = (
                 session.query(PalaceQuizQuestionNodeBinding)
-                .filter(PalaceQuizQuestionNodeBinding.palace_id == palace_id)
+                .filter(
+                    PalaceQuizQuestionNodeBinding.palace_id == palace_id,
+                    PalaceQuizQuestionNodeBinding.run_id == "dongqing1200-test",
+                )
                 .all()
             )
             assert len(edges) == 2

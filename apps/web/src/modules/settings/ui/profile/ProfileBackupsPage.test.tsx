@@ -48,7 +48,7 @@ describe('ProfileBackupsPage', () => {
   it('labels rolling and rescue backups and allows database restore', async () => {
     mockApis()
     render(<MemoryRouter><ProfileBackupsPage /></MemoryRouter>)
-    expect(await screen.findByText('轻量自动备份')).toBeTruthy()
+    expect(await screen.findByText(/^数据库备份 · /)).toBeTruthy()
     expect(screen.getByText('事故快照')).toBeTruthy()
     expect(screen.getAllByRole('button', { name: '整库恢复' })).toHaveLength(2)
   })

@@ -733,7 +733,7 @@ def check_removed_shared_api_modules(errors: list[str]) -> None:
             errors.append(f"{relative}: {message}")
 
 
-VISUAL_LAYER_DIRS = ("shared/ambient", "shared/feedback/particles")
+VISUAL_LAYER_DIRS = ("shared/ambient", "shared/fx")
 
 
 def check_visual_layer_purity(errors: list[str]) -> None:
@@ -753,6 +753,55 @@ def check_visual_layer_purity(errors: list[str]) -> None:
                         f"{relative}: visual layer must not import {specifier}; "
                         "feed data from app/shell instead"
                     )
+
+
+FX_PRIVATE_PREFIXES = ("@/shared/fx/particles", "@/shared/fx/core", "@/shared/fx/recipes")
+
+
+def check_fx_director_boundary(errors: list[str]) -> None:
+    """Feedback goes through `cue()`: callers import `@/shared/fx`, never its engine or canvas-confetti."""
+    for path in iter_files(WEB_SRC, (".ts", ".tsx")):
+        relative = path.relative_to(WEB_SRC).as_posix()
+        if relative.startswith("shared/fx/") or is_frontend_test_file(relative):
+            continue
+        content = path.read_text(encoding="utf-8")
+        for specifier in iter_frontend_import_specifiers(content):
+            if specifier == "canvas-confetti":
+                errors.append(f"{relative}: canvas-confetti is retired; cue a celebration through @/shared/fx")
+            elif specifier.startswith(FX_PRIVATE_PREFIXES) and relative != "shared/feedback/celebrationEngine.ts":
+                errors.append(
+                    f"{relative}: import `{specifier}` bypasses the fx director; "
+                    "use cue()/anchors from @/shared/fx"
+                )
+
+
+def check_e2e_hermetic(errors: list[str]) -> None:
+    """E2E must never reach the live 8012 service: specs use the api fixture, preview proxy is gated."""
+    e2e_dir = WEB_ROOT / "e2e"
+    if e2e_dir.exists():
+        for path in sorted(e2e_dir.glob("*.spec.ts")):
+            content = path.read_text(encoding="utf-8", errors="ignore")
+            if "from '@playwright/test'" in content or 'from "@playwright/test"' in content:
+                errors.append(
+                    f"{path.relative_to(REPO_ROOT).as_posix()}: import test/expect from './fixtures' "
+                    "so unmocked /api calls cannot reach the live service."
+                )
+    vite_config = WEB_ROOT / "vite.config.ts"
+    if vite_config.exists():
+        source = vite_config.read_text(encoding="utf-8", errors="ignore")
+        if "127.0.0.1:8012" in source and source.count("MEMORY_ANKI_E2E") < 2:
+            errors.append(
+                f"{vite_config.relative_to(REPO_ROOT).as_posix()}: server and preview /api proxies "
+                "must be disabled when MEMORY_ANKI_E2E=1."
+            )
+    playwright_config = WEB_ROOT / "playwright.config.ts"
+    if playwright_config.exists():
+        source = playwright_config.read_text(encoding="utf-8", errors="ignore")
+        if "MEMORY_ANKI_E2E" not in source or "reuseExistingServer: false" not in source:
+            errors.append(
+                f"{playwright_config.relative_to(REPO_ROOT).as_posix()}: webServer must set "
+                "MEMORY_ANKI_E2E=1 and never reuse an existing (proxying) preview."
+            )
 
 
 def is_frontend_test_file(relative: str) -> bool:
@@ -2050,8 +2099,11 @@ def check_freestyle_scope_quiz_overlay(errors: list[str]) -> None:
                     "overlay quiz must park out-of-scope progress and drop only after user confirm."
                 )
     round_service = API_SRC / "modules" / "practice" / "application" / "round_state_service.py"
+    round_overlay = API_SRC / "modules" / "practice" / "application" / "round_overlay_service.py"
     if round_service.exists():
         service_source = round_service.read_text(encoding="utf-8", errors="ignore")
+        if round_overlay.exists():
+            service_source += "\n" + round_overlay.read_text(encoding="utf-8", errors="ignore")
         if "empty_overlay_quiz" not in service_source:
             errors.append(
                 f"{round_service.relative_to(REPO_ROOT).as_posix()}: "
@@ -5127,6 +5179,8 @@ def main() -> int:
     check_shared_local_storage_facade(errors)
     check_removed_shared_api_modules(errors)
     check_visual_layer_purity(errors)
+    check_fx_director_boundary(errors)
+    check_e2e_hermetic(errors)
     check_frontend_generated_api_boundary(errors)
     check_frontend_public_api_surfaces(errors)
     check_retired_placeholder_modules(errors)

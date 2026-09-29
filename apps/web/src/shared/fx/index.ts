@@ -1,0 +1,18 @@
+// Side-effect imports register every recipe before the first cue fires.
+import './recipes/learning'
+import './recipes/map'
+import './recipes/meta'
+import './recipes/rare'
+
+export { cue, listCues, onCue, replayCue, type FxCueMap, type FxCueName, type FxCueOptions } from './core/director'
+export { retireOwner, pendingPlaybackCount, type FxPlayback } from './core/owner'
+export { resolveFxGate, type FxGate, type FxScene } from './core/policy'
+export { FX_ANCHORS, PROGRESS_TARGET, anchorTarget, elementCenter, findAnchor, fxAnchor, type FxAnchorName } from './core/anchors'
+export { bumpElement, chargeElement, flashElement } from './core/domFlourish'
+export { FX_SKINS, FX_SKIN_IDS, activeFxSkin, isFxSkinId, setFxSkin, type FxSkin, type FxSkinId } from './skins'
+export { RARE_LABEL, RARE_SHOWS, type RareShow } from './rarity'
+export { useFxOwner } from './useFxOwner'
+export { clearParticles, liveParticleCount, particlesAllowed, rectCenter, type ParticleRating, type Point } from './particles'
+export { particleRendererKind } from './particles/particleEngine'
+export { createGlowLayer, type GlowLayer, type GlowPoint } from './glowLayer'
+export type { GradeCommitCue } from './recipes/learning'

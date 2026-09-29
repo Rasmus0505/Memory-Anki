@@ -35,6 +35,7 @@ import { cn } from '@/shared/lib/utils'
 import { GlobalCommandPalette } from '@/app/shell/GlobalCommandPalette'
 import { useRouteDepthTransition } from '@/app/shell/useRouteDepthTransition'
 import { useAmbientTone } from '@/app/shell/useAmbientTone'
+import { useGrowthCosmetics } from '@/modules/progression/public'
 import { AmbientLayer } from '@/shared/ambient/AmbientLayer'
 import { installUiSounds, playUiSound } from '@/shared/feedback/uiSounds'
 import { installPointerLight } from '@/shared/ambient/pointerLight'
@@ -405,6 +406,8 @@ function ShellFrame({ children }: PropsWithChildren) {
     },
   })
   const ambientTone = useAmbientTone(!immersiveFeed)
+  // Saved wardrobe picks apply app-wide; the wardrobe only offers unlocked ones.
+  useGrowthCosmetics(null)
 
   useEffect(() => {
     let cancelled = false

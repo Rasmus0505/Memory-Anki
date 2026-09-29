@@ -85,6 +85,7 @@ CLIENT_PREFERENCE_GROUPS = {
     "quiz_font_scale",
     "quiz_shortcuts",
     "window_layouts",
+    "growth_state",
 }
 
 CLIENT_PREFERENCE_KEY_PREFIX = "client_preferences."

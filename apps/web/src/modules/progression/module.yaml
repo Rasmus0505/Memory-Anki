@@ -1,0 +1,25 @@
+{
+  "name": "progression",
+  "owns": [
+    "growth view: level, XP breakdown, quests, stamp book, knowledge starmap, wardrobe",
+    "ceremony bookkeeping (growth_state client preference)"
+  ],
+  "forbids": [
+    "private cross-module imports",
+    "computing XP or quests on the client (the backend projection is the only source)",
+    "any penalty, streak loss or decaying XP"
+  ],
+  "publicEntry": "src/modules/progression/public.ts",
+  "workflows": [],
+  "ports": [],
+  "events": [],
+  "dependencies": [],
+  "invariants": [
+    "a ceremony plays at most once per stamp/level across devices: growth_state is written before cues fire",
+    "level-up and big stamp ceremonies play only at round end; mid-round shows corner stamps only"
+  ],
+  "requiredTests": [
+    "ceremony.test.ts",
+    "starmapLayout.test.ts"
+  ]
+}

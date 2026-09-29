@@ -1,27 +1,11 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import type { UnitRating } from '@/modules/practice/public'
 import type { FlowRatingReaction } from '@/modules/practice/ui/freestyle/model/freestyleFlowFeedback'
 import {
   readFreestyleCombo,
   useFreestyleRatingPulse,
 } from '@/modules/practice/ui/freestyle/model/freestyleComboStore'
-import {
-  emitCollectors,
-  emitComboMilestone,
-  emitKeycapShockwave,
-  emitRatingBurst,
-  rectCenter,
-} from '@/shared/feedback/particles'
-import {
-  chargeSegment,
-  flashVignette,
-  freestyleMotionOn,
-  milestoneEffectsOn,
-  playLandingChime,
-  progressTargetPoint,
-  stampOn,
-  viewingSegment,
-} from './freestyleParticleScenes'
+import { cue, useFxOwner } from '@/shared/fx'
 
 // Web Animations API instead of `motion`: this wraps every card on the startup route.
 // Every gesture returns to rest: rating never advances the card, so it must not leave.
@@ -82,36 +66,20 @@ function canAnimate(element: Element | null): element is HTMLElement {
   return !!element && typeof (element as HTMLElement).animate === 'function'
 }
 
-/**
- * Burst and shockwave from the pressed keycap; collectors (comet-led for strong
- * grades) home onto the rail, charge the landing segment and chime on arrival.
- * Read before the card gesture moves the button.
- */
-function playRatingParticles(scope: HTMLElement, rating: UnitRating) {
-  if (!freestyleMotionOn()) return
+/** Read before the card gesture moves the button: the burst leaves from the keycap top. */
+function cueGradeCommit(scope: HTMLElement, rating: UnitRating, owner: string | undefined) {
   const button = scope.querySelector(`[data-testid="freestyle-rating-button-${rating}"]`)
   const rect = button?.getBoundingClientRect()
   if (!rect || rect.width === 0) return
-  const origin = { x: rect.left + rect.width / 2, y: rect.top + 4 }
   const { combo, milestoneIndex } = readFreestyleCombo()
-  emitRatingBurst(origin, rating, combo)
-  emitKeycapShockwave(origin, rating)
-  const segment = viewingSegment()
-  emitCollectors({
-    origin,
-    rating,
+  cue('grade.commit', {
+    origin: { x: rect.left + rect.width / 2, y: rect.top + 4 },
+    scope,
+    grade: rating,
     combo,
-    target: progressTargetPoint,
-    onFirstArrive: () => {
-      chargeSegment(segment, rating >= 3 ? combo : 0)
-      playLandingChime(combo)
-    },
-  })
-  if (milestoneIndex != null && milestoneEffectsOn()) {
-    emitComboMilestone(rectCenter(scope.getBoundingClientRect()), combo)
-    stampOn(scope, `连击 ×${combo}`)
-    flashVignette()
-  }
+    milestone: milestoneIndex != null,
+    allowRare: true,
+  }, { owner })
 }
 
 function Flash({ reaction, tone }: { reaction: FlowRatingReaction; tone: string }) {
@@ -149,13 +117,15 @@ export function FreestyleRatingReaction({ active, children }: { active: boolean;
   const seenNonceRef = useRef(pulse?.nonce ?? 0)
   const scopeRef = useRef<HTMLDivElement>(null)
   const [shown, setShown] = useState<ActiveReaction | null>(null)
+  // Leaving the card retires every pending step (milestone stamp, rare show) cued from it.
+  const owner = useFxOwner(`grade:${useId()}:${active ? 'on' : 'off'}`)
 
   useEffect(() => {
     if (!pulse || pulse.nonce === seenNonceRef.current) return
     seenNonceRef.current = pulse.nonce
     const scope = scopeRef.current
     if (!active || !scope) return
-    playRatingParticles(scope, pulse.rating)
+    cueGradeCommit(scope, pulse.rating, owner)
     const { frames, duration } = REACTION_KEYFRAMES[pulse.reaction]
     const animation = canAnimate(scope) ? scope.animate(frames, { duration, easing: REACTION_EASING }) : null
     setShown({ nonce: pulse.nonce, rating: pulse.rating, reaction: pulse.reaction })
@@ -164,7 +134,7 @@ export function FreestyleRatingReaction({ active, children }: { active: boolean;
       window.clearTimeout(timer)
       animation?.cancel()
     }
-  }, [active, pulse])
+  }, [active, owner, pulse])
 
   const tone = shown ? FLASH_TONE[shown.rating] : undefined
 

@@ -83,7 +83,7 @@ def normalize_learning_time(raw: Mapping[str, Any] | None) -> dict[str, Any]:
     }
 
 
-def _copy(time: Mapping[str, Any]) -> dict[str, Any]:
+def _copy(time: Mapping[str, Any] | None) -> dict[str, Any]:
     return normalize_learning_time(time)
 
 

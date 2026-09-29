@@ -134,6 +134,47 @@
   100% { background-position: -60% 0; }
 }
 
+/* Quiet mid-round stamp: top-right corner, never over the card being read. */
+.freestyle-fx-stamp.freestyle-fx-stamp-corner {
+  position: fixed;
+  left: auto;
+  right: max(1rem, env(safe-area-inset-right, 0px));
+  top: calc(env(safe-area-inset-top, 0px) + 4.25rem);
+  z-index: 2147483645;
+  font-size: 1rem;
+  border-width: 2px;
+  animation: fx-corner-stamp 2.6s cubic-bezier(0.2, 1.6, 0.4, 1) forwards;
+}
+
+@keyframes fx-corner-stamp {
+  0% { opacity: 0; transform: scale(2) rotate(-12deg); }
+  12% { opacity: 1; transform: scale(0.94) rotate(-6deg); }
+  18% { transform: scale(1) rotate(-6deg); }
+  85% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-8px) scale(1) rotate(-6deg); }
+}
+
+.fx-float-text {
+  position: fixed;
+  z-index: 2147483645;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  color: hsl(40 96% 64%);
+  font-size: 1.375rem;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  text-shadow: 0 0 14px hsl(32 96% 55% / 0.75), 0 2px 0 hsl(28 60% 30% / 0.35);
+  animation: fx-float-text 1.4s cubic-bezier(0.2, 1, 0.3, 1) forwards;
+}
+
+@keyframes fx-float-text {
+  0% { opacity: 0; transform: translate(-50%, -30%) scale(0.7); }
+  18% { opacity: 1; transform: translate(-50%, -60%) scale(1.08); }
+  70% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -140%) scale(1); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .freestyle-fx-stamp,
   .freestyle-fx-vignette,
@@ -144,7 +185,8 @@
   }
   .freestyle-fx-stamp,
   .freestyle-fx-vignette,
-  .freestyle-quarter-tag {
+  .freestyle-quarter-tag,
+  .fx-float-text {
     display: none;
   }
 }

@@ -19,15 +19,7 @@ import {
 import type { FreestyleQuizCard } from '@/shared/api/contracts'
 import { Badge } from '@/shared/components/ui/badge'
 import { cn } from '@/shared/lib/utils'
-import { emitCorrectBurst, emitFlight, emitInkSink, rectCenter } from '@/shared/feedback/particles'
-import {
-  chargeSegment,
-  freestyleMotionOn,
-  playLandingChime,
-  progressTargetPoint,
-  stampOn,
-  viewingSegment,
-} from './freestyleParticleScenes'
+import { cue } from '@/shared/fx'
 
 export function FreestyleQuizCardView({
   card,
@@ -73,19 +65,8 @@ export function FreestyleQuizCardView({
     resolvedSeenRef.current = { questionId: card.question.id, resolved: isResolved }
     const justResolved = previous?.questionId === card.question.id && !previous.resolved && isResolved
     const paper = paperRef.current
-    if (!justResolved || !active || !paper || !freestyleMotionOn()) return
-    const center = rectCenter(paper.getBoundingClientRect())
-    if (!isCorrect) {
-      emitInkSink(center)
-      return
-    }
-    emitCorrectBurst(center)
-    stampOn(paper, '✓ 答对', 'paper')
-    const segment = viewingSegment()
-    emitFlight({ origin: center, target: progressTargetPoint, count: 7, comet: true, fountain: 6, onFirstArrive: () => {
-      chargeSegment(segment, 3)
-      playLandingChime(3)
-    } })
+    if (!justResolved || !active || !paper) return
+    cue(isCorrect ? 'answer.correct' : 'answer.wrong', { paper })
   }, [active, card.question.id, isCorrect, isResolved])
 
   useEffect(() => {

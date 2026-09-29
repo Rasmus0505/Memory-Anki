@@ -3656,6 +3656,78 @@ def test_visual_layer_accepts_shared_only_imports(tmp_path: Path, monkeypatch) -
     assert errors == []
 
 
+def _write_web_file(tmp_path: Path, relative: str, content: str) -> Path:
+    web_src = tmp_path / "apps" / "web" / "src"
+    target = web_src / relative
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(content, encoding="utf-8")
+    return web_src
+
+
+def test_fx_director_boundary_accepts_cue_facade(tmp_path: Path, monkeypatch) -> None:
+    web_src = _write_web_file(tmp_path, "modules/practice/ui/A.tsx", "import { cue } from '@/shared/fx'\n")
+    _write_web_file(tmp_path, "shared/fx/recipes/x.ts", "import { emitFlight } from '../particles'\n")
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_fx_director_boundary(errors)
+
+    assert errors == []
+
+
+def test_fx_director_boundary_rejects_engine_and_confetti(tmp_path: Path, monkeypatch) -> None:
+    web_src = _write_web_file(tmp_path, "modules/practice/ui/A.tsx", "import { emitFlight } from '@/shared/fx/particles'\n")
+    _write_web_file(tmp_path, "widgets/B.tsx", "import confetti from 'canvas-confetti'\n")
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_fx_director_boundary(errors)
+
+    assert any("bypasses the fx director" in error for error in errors)
+    assert any("canvas-confetti is retired" in error for error in errors)
+
+
+def _write_e2e_project(tmp_path: Path, spec_import: str, *, gated: bool = True) -> Path:
+    web_root = tmp_path / "apps" / "web"
+    write_file(web_root / "e2e" / "a.spec.ts", f"import {{ expect, test }} from {spec_import}\n")
+    gate = "process.env.MEMORY_ANKI_E2E === '1' ? {} : " if gated else ""
+    write_file(
+        web_root / "vite.config.ts",
+        f"server: {{ proxy: {gate}{{ '/api': 'http://127.0.0.1:8012' }} }}\n"
+        f"preview: {{ proxy: {gate}{{ '/api': 'http://127.0.0.1:8012' }} }}\n",
+    )
+    write_file(
+        web_root / "playwright.config.ts",
+        "webServer: { reuseExistingServer: false, env: { MEMORY_ANKI_E2E: '1' } }\n",
+    )
+    return web_root
+
+
+def test_e2e_hermetic_accepts_fixture_imports_and_gated_proxy(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_ROOT", _write_e2e_project(tmp_path, "'./fixtures'"))
+
+    errors: list[str] = []
+    check_architecture.check_e2e_hermetic(errors)
+
+    assert errors == []
+
+
+def test_e2e_hermetic_rejects_raw_playwright_and_live_proxy(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(
+        check_architecture,
+        "WEB_ROOT",
+        _write_e2e_project(tmp_path, "'@playwright/test'", gated=False),
+    )
+
+    errors: list[str] = []
+    check_architecture.check_e2e_hermetic(errors)
+
+    assert any("import test/expect from './fixtures'" in error for error in errors)
+    assert any("must be disabled when MEMORY_ANKI_E2E=1" in error for error in errors)
+
+
 def test_visual_layer_rejects_business_module_imports(tmp_path: Path, monkeypatch) -> None:
     web_src = _write_visual_layer(
         tmp_path, "import { getDashboardApi } from '@/modules/dashboard/public'\n"

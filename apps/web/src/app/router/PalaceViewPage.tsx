@@ -49,7 +49,10 @@ export default function PalaceView() {
   const [mindMapFullscreen, setMindMapFullscreen] = useState(false)
   const [mindMapNativeFullscreen, setMindMapNativeFullscreen] = useState(false)
   const [mindMapUiCleared, setMindMapUiCleared] = useState(false)
-  const [sidePanelCollapsed, setSidePanelCollapsed] = useState(false)
+  // Below md the panel overlays the map, so phones open on the map itself.
+  const [sidePanelCollapsed, setSidePanelCollapsed] = useState(
+    () => typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 767px)').matches,
+  )
   const [shouldMountMindMap, setShouldMountMindMap] = useState(false)
   const [hostReadyTimedOut, setHostReadyTimedOut] = useState(false)
 

@@ -1,117 +1,62 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   __resetCelebrationEngineForTests,
+  __setCelebrationBurstSinkForTests,
   getCelebrationPresetDebugConfig,
   launchCelebrationPreset,
+  type CelebrationBurst,
 } from '@/shared/feedback/celebrationEngine'
 
-const { create, fire } = vi.hoisted(() => {
-  const fireMock = vi.fn()
-  const createMock = vi.fn(() => fireMock)
-  return {
-    create: createMock,
-    fire: fireMock,
-  }
-})
-
-vi.mock('canvas-confetti', () => {
-  const confetti = Object.assign(vi.fn(), { create })
-  return {
-    default: confetti,
-  }
-})
-
 describe('celebrationEngine', () => {
+  const bursts: CelebrationBurst[] = []
+
   beforeEach(() => {
     vi.useFakeTimers()
-    fire.mockReset()
-    create.mockReset()
-    create.mockReturnValue(fire)
+    bursts.length = 0
     __resetCelebrationEngineForTests()
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({} as CanvasRenderingContext2D)
-    Object.defineProperty(window.navigator, 'userAgent', {
-      configurable: true,
-      value: 'Mozilla/5.0',
-    })
+    __setCelebrationBurstSinkForTests((burst) => bursts.push(burst))
   })
 
   afterEach(() => {
+    __setCelebrationBurstSinkForTests(null)
     vi.useRealTimers()
   })
 
-  it('mounts a single global canvas at the highest layer', async () => {
-    await launchCelebrationPreset({
-      preset: 'fireworks',
-      reducedMotion: false,
-    })
-
-    const canvas = document.getElementById('memory-anki-global-confetti-canvas')
-    expect(canvas).toBeTruthy()
-    expect(canvas).toBeInstanceOf(HTMLCanvasElement)
-    expect((canvas as HTMLCanvasElement).style.position).toBe('fixed')
-    expect((canvas as HTMLCanvasElement).style.pointerEvents).toBe('none')
-    expect((canvas as HTMLCanvasElement).style.zIndex).toBe('2147483647')
-    expect(create).toHaveBeenCalledTimes(1)
-
-    await launchCelebrationPreset({
-      preset: 'stars',
-      reducedMotion: false,
-    })
-    expect(create).toHaveBeenCalledTimes(1)
-  })
-
-  it('fires continuously instead of a single static burst', async () => {
-    await launchCelebrationPreset({
-      preset: 'fireworks',
-      reducedMotion: false,
-      amount: 1.5,
-      scenario: 'milestone',
-    })
-
-    expect(fire).toHaveBeenCalledTimes(2)
-
+  it('fires continuously instead of a single static burst', () => {
+    launchCelebrationPreset({ preset: 'fireworks', reducedMotion: false, amount: 1.5, scenario: 'milestone' })
+    expect(bursts).toHaveLength(2)
     vi.advanceTimersByTime(320)
-    expect(fire.mock.calls.length).toBeGreaterThan(2)
+    expect(bursts.length).toBeGreaterThan(2)
   })
 
-  it('scales stronger presets above lighter ones', async () => {
-    await launchCelebrationPreset({
-      preset: 'random_direction',
-      reducedMotion: false,
-      amount: 0.55,
-      durationMs: 600,
-      scenario: 'review',
-    })
+  it('stays silent under reduced motion', () => {
+    launchCelebrationPreset({ preset: 'stars', reducedMotion: true })
+    vi.advanceTimersByTime(1000)
+    expect(bursts).toHaveLength(0)
+  })
+
+  it('a new launch cancels the previous run', () => {
+    launchCelebrationPreset({ preset: 'fireworks', reducedMotion: false, durationMs: 2000 })
+    launchCelebrationPreset({ preset: 'random_direction', reducedMotion: false, durationMs: 200 })
+    bursts.length = 0
+    vi.advanceTimersByTime(2000)
+    expect(bursts.every((burst) => burst.spread !== 360)).toBe(true)
+  })
+
+  it('scales stronger presets above lighter ones', () => {
+    const total = () => bursts.reduce((sum, burst) => sum + burst.particleCount, 0)
+    launchCelebrationPreset({ preset: 'random_direction', reducedMotion: false, amount: 0.55, durationMs: 600, scenario: 'review' })
     vi.advanceTimersByTime(600)
-    const lightCallCount = fire.mock.calls.length
-    const lightParticleTotal = fire.mock.calls.reduce(
-      (sum, [options]) => sum + Number((options as { particleCount?: number }).particleCount ?? 0),
-      0,
-    )
-
-    fire.mockClear()
-
-    await launchCelebrationPreset({
-      preset: 'school_pride',
-      reducedMotion: false,
-      amount: 2.2,
-      durationMs: 1500,
-      scenario: 'timer',
-    })
+    const light = { calls: bursts.length, particles: total() }
+    bursts.length = 0
+    launchCelebrationPreset({ preset: 'school_pride', reducedMotion: false, amount: 2.2, durationMs: 1500, scenario: 'timer' })
     vi.advanceTimersByTime(1500)
-    const strongCallCount = fire.mock.calls.length
-    const strongParticleTotal = fire.mock.calls.reduce(
-      (sum, [options]) => sum + Number((options as { particleCount?: number }).particleCount ?? 0),
-      0,
-    )
-
-    expect(strongCallCount).toBeGreaterThan(lightCallCount)
-    expect(strongParticleTotal).toBeGreaterThan(lightParticleTotal)
+    expect(bursts.length).toBeGreaterThan(light.calls)
+    expect(total()).toBeGreaterThan(light.particles)
   })
 
   it('exposes preset debug config for assertions instead of burst snapshots', () => {
     const config = getCelebrationPresetDebugConfig('school_pride')
-
     expect(config.name).toBe('school_pride')
     expect(config.speed).toBeGreaterThan(getCelebrationPresetDebugConfig('random_direction').speed)
     expect(config.maxDurationMs).toBeGreaterThan(config.minDurationMs)

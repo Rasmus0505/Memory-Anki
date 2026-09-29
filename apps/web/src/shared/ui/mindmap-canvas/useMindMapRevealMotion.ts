@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, type RefObject } from 'react'
 import type { Edge, Node } from '@xyflow/react'
-import { emitFoldTrail, emitGoldDustSettle, emitGoldRain, rectCenter } from '@/shared/feedback/particles'
+import { cue, rectCenter } from '@/shared/fx'
 
 const FLIP_ID = 'mindmap-reveal-flip'
 const FLIP_MS = 560
@@ -170,7 +170,7 @@ function dealCard(card: HTMLElement, delay: number) {
 function landCard(card: HTMLElement, delay: number, burst: boolean) {
   window.setTimeout(() => {
     if (!card.isConnected) return
-    if (burst) emitGoldDustSettle(card.getBoundingClientRect())
+    if (burst) cue('map.land', { rect: card.getBoundingClientRect() })
     card.dispatchEvent(new CustomEvent(MINDMAP_CARD_LANDED_EVENT, { bubbles: true }))
   }, delay)
 }
@@ -230,7 +230,7 @@ function foldNode(root: HTMLElement, id: string, into: string) {
     ],
     { duration: FOLD_MS, easing: 'cubic-bezier(0.6, 0, 0.8, 0.4)', fill: 'forwards' },
   ).finished.catch(() => undefined).then(() => ghost.remove())
-  emitFoldTrail(rect, () => (parentCard.isConnected ? rectCenter(parentCard.getBoundingClientRect()) : null), () => bumpCard(parentCard))
+  cue('map.fold', { rect, target: () => (parentCard.isConnected ? rectCenter(parentCard.getBoundingClientRect()) : null), onFirstArrive: () => bumpCard(parentCard) })
 }
 
 function inkEdge(path: SVGPathElement, delay: number) {
@@ -351,7 +351,7 @@ export function useMindMapRevealMotion(
       window.setTimeout(() => {
         if (!root.isConnected) return
         const rootCard = branchRoot ? root.querySelector(cardSelector(branchRoot)) : null
-        emitGoldRain(root.getBoundingClientRect(), 0, rootCard ? rectCenter(rootCard.getBoundingClientRect()) : undefined)
+        cue('map.branch', { rect: root.getBoundingClientRect(), root: rootCard ? rectCenter(rootCard.getBoundingClientRect()) : undefined })
       }, landMs)
     }
   }, [container, edges, nodes])

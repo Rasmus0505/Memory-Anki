@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { palaceClearanceCopy, type PalaceClearance } from '@/modules/practice/ui/freestyle/model/freestylePalaceClearance'
-import { emitLeafSpray } from '@/shared/feedback/particles'
+import { cue } from '@/shared/fx'
 import { freestyleMotionOn } from './freestyleParticleScenes'
 
 export function FreestylePalaceClearedBanner({
@@ -22,7 +22,7 @@ export function FreestylePalaceClearedBanner({
       )
     }
     const timer = window.setTimeout(() => {
-      if (button.isConnected) emitLeafSpray(button.getBoundingClientRect())
+      if (button.isConnected) cue('area.clear', { rect: button.getBoundingClientRect() })
     }, 180)
     return () => window.clearTimeout(timer)
   }, [clearance])

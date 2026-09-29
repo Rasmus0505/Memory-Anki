@@ -185,10 +185,11 @@ export function PalaceMemoryLookupDialog({
   const editSource = loadedPalaceId === selectedPalaceId ? previewState : null
   const editDocument = useMemoryLookupEditDocument(selectedPalaceId, editSource)
   const browsingEditorState = editDocument.editorState ?? previewState
+  const flushEditDocument = editDocument.flush
   useEffect(() => {
     if (open && previewMode === 'edit') return
-    void editDocument.flush()
-  }, [editDocument.flush, open, previewMode])
+    void flushEditDocument()
+  }, [flushEditDocument, open, previewMode])
   const revealSession = useRevealSession({
     title: selectedPalace ? getPalaceTitle(selectedPalace) : previewTitle || '宫殿脑图',
     editorState: browsingEditorState,

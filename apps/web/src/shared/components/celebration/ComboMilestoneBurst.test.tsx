@@ -3,10 +3,6 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ComboMilestoneBurst } from '@/shared/components/celebration/ComboMilestoneBurst'
 
-vi.mock('canvas-confetti', () => ({
-  default: vi.fn(),
-}))
-
 describe('ComboMilestoneBurst', () => {
   afterEach(() => {
     vi.useRealTimers()

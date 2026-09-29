@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { Link } from 'react-router-dom'
 import { Check, RotateCcw, Save, Sparkles, Volume2 } from 'lucide-react'
 import { ProfileLayout } from '@/modules/settings/ui/profile/ProfileLayout'
 import { emitReviewConfetti } from '@/shared/components/celebration'
@@ -233,6 +234,17 @@ export default function ProfileFeedbackPage() {
       description="统一管理学习声音、动态效果与桌面提醒。计时阶段和轮次细节请在“计时与休息”中设置。"
     >
       <div className="space-y-6">
+        <Link
+          to="/lab/fx"
+          data-testid="profile-feedback-fx-lab"
+          className="flex items-center justify-between rounded-2xl border border-primary/25 bg-primary/5 px-4 py-3 text-sm hover:bg-primary/10"
+        >
+          <span>
+            <span className="font-bold">FX 实验室</span>
+            <span className="ml-2 text-muted-foreground">逐个回放全部反馈、切换皮肤、强制稀有演出</span>
+          </span>
+          <span aria-hidden>→</span>
+        </Link>
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">反馈模式</CardTitle>

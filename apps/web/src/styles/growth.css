@@ -1,0 +1,130 @@
+/* ---------- growth page ---------- */
+
+/* Warm night sky: plum-brown to ember, never a cold blue. */
+.growth-starmap {
+  background:
+    radial-gradient(120% 90% at 30% 20%, hsl(20 40% 16% / 0.9), transparent 60%),
+    radial-gradient(90% 80% at 80% 90%, hsl(330 30% 14% / 0.85), transparent 65%),
+    linear-gradient(160deg, hsl(24 32% 9%), hsl(290 22% 8%));
+  cursor: grab;
+}
+.growth-starmap:active { cursor: grabbing; }
+
+.growth-paper {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 1px 0 hsl(40 60% 98% / 0.5) inset, 0 10px 30px -18px hsl(24 40% 20% / 0.35);
+}
+
+.growth-level-seal {
+  color: hsl(40 96% 92%);
+  background: linear-gradient(145deg, hsl(34 88% 52%), hsl(22 80% 42%));
+  box-shadow: 0 2px 0 hsl(22 70% 30%), 0 8px 18px -8px hsl(28 90% 40% / 0.7);
+  display: flex;
+  flex-direction: column;
+}
+
+.growth-xp-bar { background: var(--color-muted); }
+.growth-xp-fill {
+  background: linear-gradient(90deg, hsl(34 92% 54%), hsl(44 100% 64%), hsl(34 92% 54%)) 0 0 / 200% 100%;
+  animation: growth-xp-sheen 3.2s linear infinite;
+}
+@keyframes growth-xp-sheen { to { background-position: -200% 0; } }
+
+.growth-source-seg[data-source='rating'] { background: hsl(36 90% 56%); }
+.growth-source-seg[data-source='conquer'] { background: hsl(8 76% 60%); }
+.growth-source-seg[data-source='first_learn'] { background: hsl(104 44% 50%); }
+.growth-source-seg[data-source='quiz'] { background: hsl(330 55% 60%); }
+.growth-source-seg[data-source='time'] { background: hsl(46 80% 58%); }
+.growth-source-seg[data-source='quest'] { background: hsl(20 70% 50%); }
+
+.growth-quest {
+  background: var(--color-muted);
+  overflow: hidden;
+}
+.growth-quest-fill { background: linear-gradient(90deg, hsl(34 92% 54%), hsl(44 100% 62%)); }
+.growth-quest[data-done='true'] .growth-quest-fill { background: hsl(104 44% 50%); }
+.growth-quest-stamp {
+  position: absolute;
+  right: 0.75rem;
+  top: 50%;
+  translate: 0 -50%;
+  rotate: -10deg;
+  padding: 0 0.4rem;
+  border: 2px solid hsl(4 70% 48%);
+  border-radius: 0.4rem;
+  color: hsl(4 70% 48%);
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  opacity: 0.8;
+}
+
+.growth-stamp { background: var(--color-muted); }
+.growth-stamp-seal {
+  color: var(--color-muted-foreground);
+  border: 1.5px dashed var(--color-border);
+  opacity: 0.6;
+}
+.growth-stamp[data-unlocked='true'] .growth-stamp-seal {
+  border-style: solid;
+  opacity: 1;
+  color: hsl(40 90% 96%);
+  rotate: -6deg;
+}
+.growth-stamp[data-unlocked='true'][data-tier='paper'] .growth-stamp-seal { background: hsl(4 64% 50%); border-color: hsl(4 64% 40%); }
+.growth-stamp[data-unlocked='true'][data-tier='silver'] .growth-stamp-seal { background: linear-gradient(145deg, hsl(30 10% 70%), hsl(30 8% 48%)); border-color: hsl(30 8% 40%); }
+.growth-stamp[data-unlocked='true'][data-tier='gold'] .growth-stamp-seal { background: linear-gradient(145deg, hsl(42 96% 60%), hsl(32 84% 42%)); border-color: hsl(30 80% 34%); }
+
+.growth-wardrobe-tile {
+  background: var(--color-muted);
+  border: 1.5px solid transparent;
+}
+.growth-wardrobe-tile:not(:disabled):hover { border-color: var(--color-border); }
+.growth-wardrobe-active { border-color: var(--color-primary); background: var(--color-primary-soft); }
+.growth-wardrobe-swatch { background: var(--color-paper-card); border: 1px solid var(--color-paper-line); }
+[data-kind='skin'][data-item='ink'] .growth-wardrobe-swatch { background: radial-gradient(circle at 30% 40%, hsl(40 96% 62%) 0 3px, transparent 4px), radial-gradient(circle at 70% 60%, hsl(24 38% 20%) 0 3px, transparent 4px), hsl(40 50% 92%); }
+[data-kind='skin'][data-item='foil'] .growth-wardrobe-swatch { background: linear-gradient(110deg, hsl(34 80% 42%), hsl(46 100% 80%), hsl(38 92% 56%)); }
+[data-kind='skin'][data-item='galaxy'] .growth-wardrobe-swatch { background: radial-gradient(circle at 25% 35%, hsl(42 100% 80%) 0 2px, transparent 3px), radial-gradient(circle at 70% 60%, hsl(330 80% 80%) 0 2px, transparent 3px), linear-gradient(135deg, hsl(290 30% 16%), hsl(330 40% 22%)); }
+[data-kind='bookmark'][data-item='foil'] .growth-wardrobe-swatch { background: linear-gradient(110deg, hsl(34 80% 42%), hsl(46 100% 86%), hsl(32 80% 40%)); }
+[data-kind='bookmark'][data-item='cinnabar'] .growth-wardrobe-swatch { background: linear-gradient(110deg, hsl(4 70% 36%), hsl(8 80% 56%), hsl(4 70% 36%)); }
+[data-kind='bookmark'][data-item='bamboo'] .growth-wardrobe-swatch { background: linear-gradient(110deg, hsl(120 30% 30%), hsl(96 40% 56%), hsl(120 30% 30%)); }
+[data-kind='bookmark'][data-item='starlight'] .growth-wardrobe-swatch { background: radial-gradient(circle at 50% 50%, hsl(48 100% 90%) 0 3px, transparent 4px), linear-gradient(110deg, hsl(290 30% 30%), hsl(42 90% 66%), hsl(290 30% 30%)); }
+
+/* ---------- earned card materials (opt-in; 宣纸 keeps the reference look) ---------- */
+
+:root[data-card-material='kraft'] { --color-paper-card: hsl(34 48% 88%); --color-paper-line: hsl(30 30% 74%); }
+:root[data-card-material='wax'] { --color-paper-card: hsl(44 70% 95%); }
+:root[data-card-material='goldfleck'] { --color-paper-card: hsl(42 80% 96%); }
+
+[data-kind='material'][data-item='kraft'] .growth-wardrobe-swatch { background: hsl(34 48% 82%); }
+[data-kind='material'][data-item='wax'] .growth-wardrobe-swatch { background: linear-gradient(120deg, hsl(44 70% 95%), hsl(44 60% 99%) 40%, hsl(44 70% 93%)); }
+[data-kind='material'][data-item='goldfleck'] .growth-wardrobe-swatch,
+:root[data-card-material='goldfleck'] .bg-paper-card {
+  background-image:
+    radial-gradient(circle at 12% 30%, hsl(42 90% 60% / 0.55) 0 1px, transparent 1.6px),
+    radial-gradient(circle at 64% 18%, hsl(42 90% 60% / 0.45) 0 1.2px, transparent 2px),
+    radial-gradient(circle at 82% 72%, hsl(42 90% 60% / 0.5) 0 0.8px, transparent 1.4px),
+    radial-gradient(circle at 36% 84%, hsl(42 90% 60% / 0.4) 0 1px, transparent 1.6px);
+  background-size: 140px 120px;
+}
+:root[data-card-material='wax'] .bg-paper-card {
+  background-image: linear-gradient(120deg, transparent 30%, hsl(0 0% 100% / 0.45) 45%, transparent 60%);
+}
+
+/* ---------- earned key-card bookmarks ---------- */
+
+:root[data-card-bookmark='cinnabar'] [data-exam-stars='3']::after {
+  background: linear-gradient(110deg, hsl(4 70% 34%) 0%, hsl(6 80% 50%) 35%, hsl(12 90% 70%) 48%, hsl(6 80% 50%) 60%, hsl(4 70% 32%) 100%) 0 0 / 260% 100%;
+}
+:root[data-card-bookmark='bamboo'] [data-exam-stars='3']::after {
+  background: linear-gradient(110deg, hsl(120 34% 26%) 0%, hsl(100 40% 44%) 35%, hsl(90 50% 70%) 48%, hsl(100 40% 44%) 60%, hsl(120 34% 24%) 100%) 0 0 / 260% 100%;
+}
+:root[data-card-bookmark='starlight'] [data-exam-stars='3']::after {
+  background: linear-gradient(110deg, hsl(290 30% 28%) 0%, hsl(330 60% 60%) 35%, hsl(46 100% 86%) 48%, hsl(330 60% 60%) 60%, hsl(290 30% 26%) 100%) 0 0 / 260% 100%;
+  filter: drop-shadow(0 0 4px hsl(46 100% 70% / 0.7));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .growth-xp-fill { animation: none; }
+}

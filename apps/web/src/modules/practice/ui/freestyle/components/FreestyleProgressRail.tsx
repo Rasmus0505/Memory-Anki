@@ -21,6 +21,7 @@ import type {
   FreestyleScrollChannel,
   FreestyleScrollFrame,
 } from '@/modules/practice/ui/freestyle/model/freestyleScrollChannel'
+import { FX_ANCHORS } from '@/shared/fx'
 
 /** Circle text is this card's retry attempt in the current round, not its place in the rail. */
 function retryAttemptGlyph(segment: FreestyleProgressSegment): string {
@@ -316,7 +317,7 @@ function ProgressRailItem({
           )}
         >
           <span
-            data-testid="freestyle-progress-segment"
+            data-testid="freestyle-progress-segment" data-fx-anchor={viewing ? FX_ANCHORS.progressViewing : undefined}
             data-tone={segment.tone}
             data-viewing={viewing ? 'true' : 'false'}
             data-palace-id={palaceId}
@@ -680,7 +681,7 @@ export function FreestyleProgressRail({
           loops Radix DropdownMenuTrigger refs under Vite. */}
       <div
         ref={railRef}
-        data-testid="freestyle-progress-rail"
+        data-testid="freestyle-progress-rail" data-fx-anchor={FX_ANCHORS.progressRail}
         data-compact={compact ? 'true' : 'false'}
         role="img"
         aria-label={railLabel}

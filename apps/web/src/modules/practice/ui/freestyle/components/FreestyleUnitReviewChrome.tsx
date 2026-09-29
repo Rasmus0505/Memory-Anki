@@ -3,6 +3,7 @@ import { flipProgressToneClass, type flipProgressTone } from '../model/flipProgr
 import type { FreestyleReviewUnitCard } from '@/shared/api/contracts'
 import { cn } from '@/shared/lib/utils'
 import { FreestyleUnitMapSkeleton } from './FreestyleUnitMapSkeleton'
+import { FX_ANCHORS } from '@/shared/fx'
 
 type FlipTone = NonNullable<ReturnType<typeof flipProgressTone>>
 
@@ -56,6 +57,7 @@ export function FreestyleUnitReviewIdentityRow({
             aria-label={flipTitle}
             title={flipTitle}
             data-testid="flip-progress-badge"
+            data-fx-anchor={FX_ANCHORS.flipBadge}
             data-tone={flipTone}
             className={cn(
               'inline-flex h-5 shrink-0 items-center rounded-full border px-1.5 font-mono text-[10px] font-semibold tabular-nums tracking-tight transition-colors duration-300 sm:h-6 sm:px-2 sm:text-[11px]',

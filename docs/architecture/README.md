@@ -8,11 +8,11 @@ This directory is the current architectural source of truth. Product and runtime
 ## System Shape
 
 ```text
-apps/web: app -> pages/widgets -> modules (14, domain/application/ui/api + public.ts) -> shared/platform/pwa
+apps/web: app -> pages/widgets -> modules (15, domain/application/ui/api + public.ts) -> shared/platform/pwa
 apps/api: presentation -> application/use cases -> domain + ports <- infrastructure
 ```
 
-Frontend runtime modules (`apps/web/src/modules/*`): `backup content dashboard exam english english-lookup memory mindmap practice produce quiz search session settings`. The legacy `features/` and `entities/` layers have been fully migrated into `modules/*` (entity packages live under `modules/<name>/domain/*-entity`). Layer direction is enforced by ESLint (`eslint-plugin-boundaries` with the TypeScript resolver); module `public.ts` discipline is enforced by `tools/check_architecture.py`.
+Frontend runtime modules (`apps/web/src/modules/*`): `backup content dashboard exam english english-lookup memory mindmap practice produce progression quiz search session settings`. The legacy `features/` and `entities/` layers have been fully migrated into `modules/*` (entity packages live under `modules/<name>/domain/*-entity`). Layer direction is enforced by ESLint (`eslint-plugin-boundaries` with the TypeScript resolver); module `public.ts` discipline is enforced by `tools/check_architecture.py`.
 
 The repository is a local-first Windows product used on two devices. SQLite, files, backups, PWA, and desktop clients share one local backend. Cross-device behavior must be deterministic because runtime data is synchronized outside Git.
 
@@ -29,7 +29,8 @@ The repository is a local-first Windows product used on two devices. SQLite, fil
 | Background jobs | `shared/background-tasks` | target shared job lease/handler infrastructure |
 | Client preferences | `modules/settings/domain/preferences-entity` | settings/profile preference endpoint |
 | Route metadata (nav/history/fallback) | `shared/routing/routeManifest.ts` (single source) | — |
-| Particle rendering | `shared/feedback/particles` (`particleModel` physics; WebGL2 renderer with bloom, Canvas2D fallback on missing/lost context; effect API unchanged for callers) | — |
+| Feedback runtime (cues, recipes, particles, skins, rare shows) | `shared/fx` — see [fx-director.md](./fx-director.md). Callers use `cue()` from `@/shared/fx` only; WebGL2 + bloom with Canvas2D fallback | — |
+| Growth meta (XP, levels, quests, stamps, starmap, wardrobe) | `modules/progression` — see [progression.md](./progression.md) | `modules/progression` (read-only projection) |
 | Ambient room layer (tint, grain, dust motes, pointer light) | `shared/ambient` (pure, data-free); `app/shell/useAmbientTone` feeds it dashboard/exam data | — |
 | Interface sounds | `shared/feedback/uiSounds` (delegated listener, gated by `uiSoundEnabled` + `soundEnabled`; silent inside `.freestyle-stage`) | — |
 
@@ -85,6 +86,7 @@ Frontend lint is a zero-warning contract. The `apps/web` lint script runs ESLint
 
 - Fast iteration: `python tools/quality_gate.py`
 - Full handoff: `python tools/quality_gate.py --full` (backend tests, frontend tests/build, and Playwright smoke)
+- Playwright is hermetic: specs import `test`/`expect` from `apps/web/e2e/fixtures.ts` (every `/api` call answers 503 unless the spec routes it), service workers are blocked, and `MEMORY_ANKI_E2E=1` removes the vite `/api` proxy so e2e can never write to the live 8012 service. `check_e2e_hermetic` enforces this.
 - Windows launcher smoke after runtime/startup-sensitive changes: `python tools/quality_gate.py --launchers` (really runs `start-all.bat --smoke-test` and `start-all.bat --desktop`, verifies API/Electron readiness, then restores the shared PWA service)
 - Mind-map architecture details: `docs/architecture/mindmap.md`
 - AI runtime boundary: `docs/architecture/ai-runtime.md`
@@ -95,6 +97,8 @@ Frontend lint is a zero-warning contract. The `apps/web` lint script runs ESLint
 - Read-model purity: `docs/architecture/read-models.md`
 - Dashboard composition boundary: `docs/architecture/dashboard-read-model.md`
 - Exam stars, countdown and forgetting estimate: `docs/architecture/exam-context.md`
+- Feedback director (cue → recipe): `docs/architecture/fx-director.md`
+- Growth meta layer: `docs/architecture/progression.md`
 - Palace Quiz boundary: `docs/architecture/palace-quiz-boundary.md`
 - Consumer context boundaries: `docs/architecture/consumer-contexts.md`
 - Freestyle immersive feed: `docs/architecture/freestyle-immersive-feed.md`

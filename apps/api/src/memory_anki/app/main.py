@@ -46,6 +46,7 @@ from memory_anki.modules.knowledge.presentation import router as knowledge_route
 from memory_anki.modules.memory.presentation import router as review_router
 from memory_anki.modules.practice.presentation import router as freestyle_router
 from memory_anki.modules.produce.presentation import import_router
+from memory_anki.modules.progression.presentation import router as progression_router
 from memory_anki.modules.quiz.presentation import router as palace_quiz_router
 from memory_anki.modules.search.presentation import router as search_router
 from memory_anki.modules.session.presentation import router as sessions_router
@@ -178,6 +179,7 @@ app.include_router(english_lookup_router, prefix="/api/v1")
 app.include_router(freestyle_router.router, prefix="/api/v1")
 app.include_router(dashboard_router.router, prefix="/api/v1")
 app.include_router(exam_router.router, prefix="/api/v1")
+app.include_router(progression_router.router, prefix="/api/v1")
 app.include_router(search_router.router, prefix="/api/v1")
 
 if WEB_DIST_DIR and WEB_DIST_DIR.exists():

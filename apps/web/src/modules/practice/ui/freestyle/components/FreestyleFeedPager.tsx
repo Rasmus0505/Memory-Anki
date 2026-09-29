@@ -1,4 +1,5 @@
 import { Check, ChevronDown, ChevronUp } from 'lucide-react'
+import { FX_ANCHORS } from '@/shared/fx'
 
 const pagerButtonClass =
   'ma-pressable inline-flex size-11 items-center justify-center rounded-xl text-stage-ink hover:bg-stage-line hover:text-stage-glow active:bg-stage-line-strong disabled:pointer-events-none disabled:opacity-35 sm:size-10'
@@ -26,6 +27,7 @@ export function FreestyleFeedPager({
     <div className="pointer-events-none absolute right-3 top-1/2 z-30 -translate-y-1/2">
       <div
         data-testid="freestyle-feed-pager"
+        data-fx-anchor={FX_ANCHORS.feedPager}
         className="freestyle-stage-glass pointer-events-auto flex flex-col gap-1 rounded-2xl border border-stage-line-strong p-1.5"
       >
         <button

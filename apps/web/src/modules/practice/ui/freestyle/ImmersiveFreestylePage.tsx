@@ -50,7 +50,7 @@ import {
 } from '@/modules/practice/ui/freestyle/components/FreestyleHudChrome'
 import { FreestyleRatingReaction } from '@/modules/practice/ui/freestyle/components/FreestyleRatingReaction'
 import { FreestyleKeyCardMotes } from '@/modules/practice/ui/freestyle/components/FreestyleKeyCardMotes'
-import { pageTurnDust } from '@/modules/practice/ui/freestyle/components/freestyleParticleScenes'
+import { cue } from '@/shared/fx'
 import { useImmersiveQueue } from '@/modules/practice/ui/freestyle/hooks/useImmersiveQueue'
 import { usePrefersReducedMotion } from '@/modules/practice/ui/freestyle/hooks/usePrefersReducedMotion'
 import { useFreestyleQuizFlow } from '@/modules/practice/ui/freestyle/hooks/useFreestyleQuizFlow'
@@ -95,6 +95,7 @@ import { toast } from '@/shared/feedback/toast'
 import { shouldAutoStartOnPageEnter, useTimedSession } from '@/shared/hooks/useTimedSession'
 import { cn } from '@/shared/lib/utils'
 import { ExamCountdownChip, ExamRoundSummary, ExamStarBadge, useExamOverview } from '@/modules/exam/public'
+import { GrowthHudChip, GrowthRoundSettlement } from '@/modules/progression/public'
 import { useRouteResidency } from '@/shared/routing/RouteResidency'
 
 const FREESTYLE_STALE_TOAST_ID = 'freestyle-stale-card'
@@ -255,7 +256,7 @@ export default function ImmersiveFreestylePage({
   const { signalPageTurn } = useFreestyleFlowFeedback()
   const signalPageTurnWithDust = useCallback((direction: 'forward' | 'backward') => {
     signalPageTurn(direction)
-    pageTurnDust()
+    cue('page.turn', {})
   }, [signalPageTurn])
   const currentCard = cards[currentIndex] ?? null
   const roundComplete = isFreestyleRoundComplete(
@@ -768,11 +769,10 @@ export default function ImmersiveFreestylePage({
           onOpenChange={setHistoryOpen}
         />
 
-        {examOverview?.settings.exam_date ? (
-          <div className="pointer-events-none absolute inset-x-0 top-[calc(env(safe-area-inset-top,0px)+1.85rem)] z-30 flex justify-center px-[5.75rem] sm:px-36">
-            <ExamCountdownChip overview={examOverview} className="pointer-events-auto max-w-full" />
-          </div>
-        ) : null}
+        <div className="pointer-events-none absolute inset-x-0 top-[calc(env(safe-area-inset-top,0px)+1.85rem)] z-30 flex justify-center gap-1.5 px-[5.75rem] sm:px-36">
+          {examOverview?.settings.exam_date ? <ExamCountdownChip overview={examOverview} className="pointer-events-auto max-w-full" /> : null}
+          <GrowthHudChip className="pointer-events-auto shrink-0" />
+        </div>
         <FreestyleProgressRail
           summary={progressSummary}
           scrollChannel={scrollChannel}
@@ -1002,10 +1002,10 @@ export default function ImmersiveFreestylePage({
                 }}
                 onCancelSettlement={navigatePrevious}
                 examSummary={
-                  <ExamRoundSummary
-                    baseline={examBaselineRef.current?.overview ?? null}
-                    roundKey={queueState.roundId}
-                  />
+                  <>
+                    <ExamRoundSummary baseline={examBaselineRef.current?.overview ?? null} roundKey={queueState.roundId} />
+                    <GrowthRoundSettlement roundKey={queueState.roundId} />
+                  </>
                 }
               />
               </div>

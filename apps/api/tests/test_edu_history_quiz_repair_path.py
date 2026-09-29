@@ -50,10 +50,11 @@ class EduHistoryQuizRepairPathTests(RouterTestCase):
     )
 
     def seed(self, session: Session) -> None:
-        palace_a = Palace(title="第二节 蔡元培的教育思想与实践", description="")
-        palace_b = Palace(title="第一节东方文明古国的教育", description="")
-        palace_c = Palace(title="第二节法国近代教育", description="")
-        palace_d = Palace(title="第二节古希腊的教育阶段", description="")
+        root_doc = json.dumps({"root": {"data": {"uid": "root", "text": "宫殿根"}, "children": []}})
+        palace_a = Palace(title="第二节 蔡元培的教育思想与实践", description="", editor_doc=root_doc)
+        palace_b = Palace(title="第一节东方文明古国的教育", description="", editor_doc=root_doc)
+        palace_c = Palace(title="第二节法国近代教育", description="", editor_doc=root_doc)
+        palace_d = Palace(title="第二节古希腊的教育阶段", description="", editor_doc=root_doc)
         session.add_all([palace_a, palace_b, palace_c, palace_d])
         session.flush()
         self.palace_a_id = palace_a.id

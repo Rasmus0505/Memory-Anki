@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './fixtures'
 
 test('loads the app shell and primary navigation', async ({ page }) => {
   await page.goto('/dashboard')

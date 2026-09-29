@@ -312,11 +312,24 @@ export default defineConfig({
   },
   server: {
     hmr: false,
-    proxy: {
-      '/api': {
-        target: 'http://127.0.0.1:8012',
-        changeOrigin: true,
-      },
-    },
+    // E2E must never reach the live service on 8012 (real Syncthing data).
+    proxy: process.env.MEMORY_ANKI_E2E === '1'
+      ? {}
+      : {
+          '/api': {
+            target: 'http://127.0.0.1:8012',
+            changeOrigin: true,
+          },
+        },
+  },
+  preview: {
+    proxy: process.env.MEMORY_ANKI_E2E === '1'
+      ? {}
+      : {
+          '/api': {
+            target: 'http://127.0.0.1:8012',
+            changeOrigin: true,
+          },
+        },
   },
 })
