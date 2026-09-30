@@ -1,3 +1,5 @@
+import { themeAmbient, type MoteKind } from '@/shared/theme/themePacks'
+
 export interface Mote {
   x: number
   y: number
@@ -6,6 +8,26 @@ export interface Mote {
   radius: number
   depth: number
   phase: number
+}
+
+/** Per-pack behaviour: drift (negative rises), glow radius, pulse speed and depth of the pulse. */
+interface MoteStyle {
+  drift: number
+  glow: number
+  pulseSpeed: number
+  pulseFloor: number
+  alphaLight: number
+  alphaDark: number
+}
+
+export const MOTE_STYLES: Record<MoteKind, MoteStyle> = {
+  dust: { drift: -0.05, glow: 3, pulseSpeed: 0.8, pulseFloor: 0.35, alphaLight: 0.32, alphaDark: 0.5 },
+  // Gold leaf flecks settle downward, slowly, like foil shaken off a screen.
+  gild: { drift: 0.045, glow: 2.4, pulseSpeed: 1.4, pulseFloor: 0.25, alphaLight: 0.4, alphaDark: 0.6 },
+  // Stars barely move and twinkle sharply.
+  star: { drift: -0.012, glow: 2.2, pulseSpeed: 2.6, pulseFloor: 0.08, alphaLight: 0.36, alphaDark: 0.72 },
+  // Fireflies wander, then light up and fade on a slow breath.
+  firefly: { drift: -0.02, glow: 5.2, pulseSpeed: 0.55, pulseFloor: 0.02, alphaLight: 0.42, alphaDark: 0.78 },
 }
 
 const REPEL_RADIUS = 110
@@ -26,7 +48,15 @@ export function createMote(width: number, height: number, random: () => number =
 }
 
 /** Advances one mote by `frames` 60fps frames; pure so drift and repel are testable. */
-export function stepMote(mote: Mote, frames: number, time: number, width: number, height: number, pointer: { x: number; y: number } | null) {
+export function stepMote(
+  mote: Mote,
+  frames: number,
+  time: number,
+  width: number,
+  height: number,
+  pointer: { x: number; y: number } | null,
+  drift = MOTE_STYLES.dust.drift,
+) {
   mote.vx += Math.sin(time * 0.35 + mote.phase) * 0.0018 * frames
   if (pointer) {
     const dx = mote.x - pointer.x
@@ -45,7 +75,7 @@ export function stepMote(mote: Mote, frames: number, time: number, width: number
   }
   // Ease back towards the lazy upward drift once the pointer has passed.
   mote.vx *= Math.pow(0.992, frames)
-  mote.vy += (-0.05 * mote.depth - mote.vy) * 0.01 * frames
+  mote.vy += (drift * mote.depth - mote.vy) * 0.01 * frames
   mote.x += mote.vx * frames
   mote.y += mote.vy * frames
   const margin = 12
@@ -55,8 +85,12 @@ export function stepMote(mote: Mote, frames: number, time: number, width: number
   if (mote.x > width + margin) mote.x = -margin
 }
 
-export function moteAlpha(mote: Mote, time: number) {
-  return (0.35 + 0.65 * (0.5 + 0.5 * Math.sin(time * 0.8 + mote.phase * 3))) * mote.depth
+export function moteAlpha(mote: Mote, time: number, kind: MoteKind = 'dust') {
+  const style = MOTE_STYLES[kind]
+  const wave = 0.5 + 0.5 * Math.sin(time * style.pulseSpeed + mote.phase * 3)
+  // Fireflies spend most of the breath dark: square the wave so the glow is a short flare.
+  const shaped = kind === 'firefly' ? wave ** 3 : wave
+  return (style.pulseFloor + (1 - style.pulseFloor) * shaped) * mote.depth
 }
 
 export interface DustMotesController {
@@ -101,12 +135,15 @@ export function createDustMotes(canvas: HTMLCanvasElement, count: number): DustM
     last = now
     const time = now / 1000
     const dark = document.documentElement.classList.contains('dark')
-    const [h, s, l] = dark ? [40, 90, 72] : [32, 78, 52]
+    const ambient = themeAmbient()
+    const style = MOTE_STYLES[ambient.mote]
+    const [h, s, l] = dark ? ambient.moteDark : ambient.moteLight
     ctx.clearRect(0, 0, width, height)
     for (const mote of motes) {
-      stepMote(mote, frames, time, width, height, pointer)
-      const alpha = moteAlpha(mote, time) * (dark ? 0.5 : 0.32)
-      const r = mote.radius * 3
+      stepMote(mote, frames, time, width, height, pointer, style.drift)
+      const alpha = moteAlpha(mote, time, ambient.mote) * (dark ? style.alphaDark : style.alphaLight)
+      if (alpha < 0.004) continue
+      const r = mote.radius * style.glow
       const gradient = ctx.createRadialGradient(mote.x, mote.y, 0, mote.x, mote.y, r)
       gradient.addColorStop(0, `hsla(${h},${s}%,${l + 14}%,${alpha})`)
       gradient.addColorStop(0.35, `hsla(${h},${s}%,${l}%,${alpha * 0.55})`)

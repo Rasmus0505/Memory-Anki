@@ -1,3 +1,5 @@
+import { initializeThemePack, themeColorFor } from './themePacks'
+
 export type ThemePreference = 'light' | 'dark' | 'system'
 
 export const THEME_STORAGE_KEY = 'memory-anki-theme'
@@ -29,7 +31,7 @@ export function resolveTheme(preference: ThemePreference): 'light' | 'dark' {
 function updateThemeColorMeta(theme: 'light' | 'dark') {
   const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
   if (meta) {
-    meta.content = theme === 'dark' ? DARK_THEME_COLOR : LIGHT_THEME_COLOR
+    meta.content = themeColorFor(theme)
   }
 }
 
@@ -54,6 +56,7 @@ export function setThemePreference(preference: ThemePreference) {
 export function initializeTheme() {
   if (typeof window === 'undefined') return
   applyThemePreference(getStoredThemePreference())
+  initializeThemePack()
   const media = window.matchMedia('(prefers-color-scheme: dark)')
   media.addEventListener('change', () => {
     if (getStoredThemePreference() === 'system') {
