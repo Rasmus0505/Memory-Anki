@@ -775,6 +775,42 @@ def check_fx_director_boundary(errors: list[str]) -> None:
                 )
 
 
+def check_theme_pack_registry(errors: list[str]) -> None:
+    """Every pack manifest is registered in THEME_PACKS; shared/theme stays free of the fx runtime."""
+    theme_dir = WEB_SRC / "shared" / "theme"
+    registry = theme_dir / "themePacks.ts"
+    packs_dir = theme_dir / "packs"
+    if not registry.exists() or not packs_dir.exists():
+        return
+    registry_source = registry.read_text(encoding="utf-8", errors="ignore")
+    for path in sorted(packs_dir.glob("*.ts")):
+        if path.name == "types.ts" or path.name.endswith(".test.ts"):
+            continue
+        if f"./packs/{path.stem}'" not in registry_source:
+            errors.append(
+                f"{path.relative_to(REPO_ROOT).as_posix()}: theme pack must be imported and listed in "
+                "shared/theme/themePacks.ts THEME_PACKS."
+            )
+    for path in iter_files(theme_dir, (".ts", ".tsx")):
+        content = path.read_text(encoding="utf-8", errors="ignore")
+        for specifier in iter_frontend_import_specifiers(content):
+            if specifier.startswith("@/shared/fx"):
+                errors.append(
+                    f"{path.relative_to(REPO_ROOT).as_posix()}: shared/theme must not import `{specifier}`; "
+                    "the app shell binds a pack's fx skin (useGrowthCosmetics)."
+                )
+    fx_dir = WEB_SRC / "shared" / "fx"
+    if fx_dir.exists():
+        for path in iter_files(fx_dir, (".ts", ".tsx")):
+            content = path.read_text(encoding="utf-8", errors="ignore")
+            for specifier in iter_frontend_import_specifiers(content):
+                if specifier.startswith("@/shared/theme"):
+                    errors.append(
+                        f"{path.relative_to(REPO_ROOT).as_posix()}: shared/fx must not import `{specifier}`; "
+                        "pack timbre is applied by the audio channel."
+                    )
+
+
 def check_e2e_hermetic(errors: list[str]) -> None:
     """E2E must never reach the live 8012 service: specs use the api fixture, preview proxy is gated."""
     e2e_dir = WEB_ROOT / "e2e"
@@ -5181,6 +5217,7 @@ def main() -> int:
     check_visual_layer_purity(errors)
     check_fx_director_boundary(errors)
     check_e2e_hermetic(errors)
+    check_theme_pack_registry(errors)
     check_frontend_generated_api_boundary(errors)
     check_frontend_public_api_surfaces(errors)
     check_retired_placeholder_modules(errors)

@@ -18,8 +18,9 @@ caller ──cue('grade.commit', payload, { owner })──▶ director ──▶
 | `core/policy.ts` | `resolveFxGate(scene)` — the only place that turns feedback settings + `prefers-reduced-motion` into motion/sound/haptic switches. Scenes: `review`, `milestone`, `completion`, `ambient`. |
 | `core/owner.ts` | Owner-scoped playback. Every delayed step belongs to an owner (card encounter, round, page); `retireOwner` cancels all pending steps and teardown. `useFxOwner(id)` binds an owner to a component identity. |
 | `core/anchors.ts` | Named landing spots via `data-fx-anchor` (`fxAnchor(FX_ANCHORS.xpBar)`), re-resolved every frame for homing particles. Effect code never uses test ids. |
-| `recipes/*` | `learning` (grade, flip relay, unit done, undo, remove, retry, quarters, quiz, page turn, motes, round complete), `map` (mind-map land/fold/branch), `meta` (XP, level, stamp, quest), `rare` (koi, phoenix, fireflies, lotus). |
-| `skins.ts` | Particle palettes (`ink` default, `foil`, `galaxy`). Recipes read the live `pal` at emit time; `setFxSkin` swaps it in place. Warm hues only. |
+| `recipes/*` | `learning` (grade, flip relay, unit done, undo, remove, retry, quarters, quiz, page turn, motes, round complete), `map` (mind-map land/fold/branch), `meta` (XP, level, stamp, quest, theme pack unboxing), `rare` (koi, phoenix, fireflies, lotus). |
+| `skins.ts` | Particle palettes (`ink` default, `foil`, `galaxy`, `firefly`). Recipes read the live `pal` at emit time; `setFxSkin` swaps it in place. Warm hues only. The active theme pack picks the palette (see `theme-packs.md`). |
+| `conductor.ts` | Variety inside one cue. `grade.commit` rotates `paper` / `ink` / `leaf` / `mote` and never repeats the same look back to back. The grade itself has no expanding ring. |
 | `rarity.ts` | Pure rare-show roll: ~1/45 per eligible rating, ramp from 55, guaranteed at 80, never after 忘记, never the same show twice in a row. Counter is per device. |
 | `glowLayer.ts` | Retained-mode glow canvas (same renderer, non-aging points) used by the starmap. |
 
@@ -30,6 +31,7 @@ caller ──cue('grade.commit', payload, { owner })──▶ director ──▶
 3. Callers do not read feedback settings for cues; the recipe's `scene` decides. Recipes that escalate (combo milestone inside `grade.commit`) ask `stage.gateOf('milestone')`.
 4. Visual layer purity still holds: `shared/fx` never imports `modules/`, `pages/`, `widgets/` or `app/`.
 5. The FX Lab (`/lab/fx`, linked from 设置 › 反馈中心) replays every cue with a `sample` payload on all channels (`force`), switches skins and forces rare shows. Cues without a sample need a real scene and are shown disabled.
+6. A show never owns the keyboard. Mid-round cues stay at the card edge. `round.complete` is the ceremony, and a pointer, a key, or the round card's 跳过 calls `retireOwner('round:' + roundKey)` so the remaining steps drop. `shared/fx` does not import the theme registry; pack timbre is applied by the audio channel.
 
 ## Adding an effect
 

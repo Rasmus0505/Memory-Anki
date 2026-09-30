@@ -3728,6 +3728,49 @@ def test_e2e_hermetic_rejects_raw_playwright_and_live_proxy(tmp_path: Path, monk
     assert any("must be disabled when MEMORY_ANKI_E2E=1" in error for error in errors)
 
 
+def test_theme_pack_registry_accepts_registered_packs(tmp_path: Path, monkeypatch) -> None:
+    web_src = _write_web_file(tmp_path, "shared/theme/packs/types.ts", "export type X = 1\n")
+    _write_web_file(tmp_path, "shared/theme/packs/study.ts", "export const STUDY_PACK = {}\n")
+    _write_web_file(tmp_path, "shared/theme/themePacks.ts", "import { STUDY_PACK } from './packs/study'\n")
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+
+    errors: list[str] = []
+    check_architecture.check_theme_pack_registry(errors)
+
+    assert errors == []
+
+
+def test_theme_pack_registry_rejects_orphan_pack_and_fx_import(tmp_path: Path, monkeypatch) -> None:
+    web_src = _write_web_file(tmp_path, "shared/theme/packs/orphan.ts", "export const ORPHAN = {}\n")
+    _write_web_file(
+        tmp_path,
+        "shared/theme/themePacks.ts",
+        "import { setFxSkin } from '@/shared/fx'\n",
+    )
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+
+    errors: list[str] = []
+    check_architecture.check_theme_pack_registry(errors)
+
+    assert any("must be imported and listed" in error for error in errors)
+    assert any("shared/theme must not import" in error for error in errors)
+
+
+def test_theme_pack_registry_rejects_fx_importing_theme(tmp_path: Path, monkeypatch) -> None:
+    web_src = _write_web_file(tmp_path, "shared/theme/packs/study.ts", "export const STUDY_PACK = {}\n")
+    _write_web_file(tmp_path, "shared/theme/themePacks.ts", "import { STUDY_PACK } from './packs/study'\n")
+    _write_web_file(tmp_path, "shared/fx/recipes/learning.ts", "import { activeThemePack } from '@/shared/theme/themePacks'\n")
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+
+    errors: list[str] = []
+    check_architecture.check_theme_pack_registry(errors)
+
+    assert any("shared/fx must not import" in error for error in errors)
+
+
 def test_visual_layer_rejects_business_module_imports(tmp_path: Path, monkeypatch) -> None:
     web_src = _write_visual_layer(
         tmp_path, "import { getDashboardApi } from '@/modules/dashboard/public'\n"

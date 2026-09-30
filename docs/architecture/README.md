@@ -82,6 +82,11 @@ Frontend lint is a zero-warning contract. The `apps/web` lint script runs ESLint
 5. **Control performance:** one policy load per review query, paginated catalog projections, batched ORM loads, single-pass mind-map projection/layout.
 6. **Retire compatibility:** remove legacy facades and architecture exceptions only after callers migrate and regression tests exist.
 
+## Sensory runtime
+
+- `fx-director.md` — cue → recipe feedback runtime (particles, sound, haptics, DOM).
+- `theme-packs.md` — whole-world theme packs (tokens, paper, motes, timbre, rhythm) and their growth unlocks.
+
 ## Validation
 
 - Fast iteration: `python tools/quality_gate.py`

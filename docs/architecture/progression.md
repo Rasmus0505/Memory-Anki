@@ -19,11 +19,12 @@ Backend context `progression` and frontend module `modules/progression` turn rec
 | Piece | Role |
 |---|---|
 | `domain/ceremony.ts` | `planCeremony(state, overview, 'settle' \| 'live')`. First load baselines silently. `settle` (round end) plays XP → level-up → up to 3 stamp ceremonies; `live` (mid-round) only corner stamps for new stamps and finished quests. |
-| `domain/growthState.ts` + `model/growthStateStore.ts` | `growth_state` client preference (backend whitelist): wardrobe picks, `seenLevel/seenXp`, `celebrated`, `toasted`. Written **before** cues fire, so the other device never replays a ceremony. |
-| `domain/cosmetics.ts` | Unlock table: skins (纸墨 Lv1 / 金箔 Lv5 / 星河 Lv12), card materials, key-card bookmarks; level- or stamp-gated. A locked saved pick falls back to the first item. |
+| `domain/growthState.ts` + `model/growthStateStore.ts` | `growth_state` client preference (backend whitelist): worn `pack`, `unboxed`, `seenLevel/seenXp`, `celebrated`, `toasted` (legacy `skin` migrates). Written **before** cues fire, so the other device never replays a ceremony. |
+| `domain/cosmetics.ts` | Theme pack unlock ladder (manifests live in `shared/theme/packs`): 纸墨书房 Lv1 / 金箔宫殿 Lv5 / 星河夜航 Lv12 / 森林萤火 stamp `days_30`. A locked saved pack falls back to 纸墨书房; `packsAwaitingUnbox` feeds the round-end unboxing. |
 | `domain/starmapLayout.ts` | Deterministic 暖夜星座 layout from ids: subjects on a ring, chapters on a golden-angle spiral, palaces orbiting. Brightness = mastery, size = stars, twinkle = due. |
 | `ui/starmap/*` | Three layers: constellation lines (2D), glow (WebGL via `shared/fx/glowLayer`), labels (2D). Drag, wheel/pinch zoom, keyboard pan/zoom, click → info card → `/freestyle?palaceId=`. Selection uses cream ticks, never a gold ring. |
 | `ui/GrowthHudChip.tsx` | Freestyle top bar: level ring + daily quest count; refetches on `review-state:changed` (debounced) and runs live toasts. |
 | `ui/GrowthRoundSettlement.tsx` | Round-end block beside the exam summary; sequences cues after the meteor shower. |
 | `ui/GrowthView.tsx` | `/growth` (洞察 section): one screen, starmap + stamp book / wardrobe; phone uses sub-tabs. |
-| `model/useGrowthCosmetics.ts` | Applies the skin to `shared/fx` and `data-card-material` / `data-card-bookmark` on `<html>` (called from `app/shell`). Defaults (宣纸, 金箔书签) keep the reference freestyle look. |
+| `model/useGrowthCosmetics.ts` | Wears the saved pack app-wide: `applyThemePack` (tokens, paper, motes, rhythm, card dress) + `setFxSkin` (called from `app/shell`). |
+| `ui/Wardrobe.tsx` | One tile per theme pack, drawn in that pack's own preview colors; wearing one previews its particles. |
