@@ -1,0 +1,192 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - strong [ref=e3]: Memory Anki / 交互工作台
+    - generic [ref=e4]:
+      - generic [ref=e5]: 离线演示 · 非项目实测
+      - button "复制评估" [ref=e6] [cursor=pointer]
+  - main [ref=e7]:
+    - generic [ref=e8]:
+      - generic [ref=e9]:
+        - heading "翻卡 · 三种节奏" [level=2] [ref=e10]
+        - generic [ref=e11]: 待机
+      - generic [ref=e12]:
+        - article [ref=e13]:
+          - button "基础参照翻卡" [ref=e15] [cursor=pointer]:
+            - generic [ref=e16]:
+              - generic [ref=e17]: 回忆 · MEMORY
+              - strong [ref=e18]: 为什么需要间隔重复？
+              - generic [ref=e19]: 点击翻卡
+            - generic [ref=e20]:
+              - generic [ref=e21]: 答案 · RECALL
+              - strong [ref=e22]: 在遗忘前主动提取记忆。
+              - generic [ref=e23]: 建立关联，而不只是重复
+          - generic [ref=e24]:
+            - strong [ref=e25]: 基础参照 · 400ms
+            - paragraph [ref=e26]: 匀速 · 无抬升 · 强度 1/3
+            - paragraph [ref=e27]: 高频复习 · 干扰低，空间反馈弱
+        - article [ref=e28]:
+          - button "自然克制翻卡" [ref=e30] [cursor=pointer]:
+            - generic [ref=e31]:
+              - generic [ref=e32]: 回忆 · MEMORY
+              - strong [ref=e33]: 为什么需要间隔重复？
+              - generic [ref=e34]: 点击翻卡
+            - generic [ref=e35]:
+              - generic [ref=e36]: 答案 · RECALL
+              - strong [ref=e37]: 在遗忘前主动提取记忆。
+              - generic [ref=e38]: 建立关联，而不只是重复
+          - generic [ref=e39]:
+            - strong [ref=e40]: 自然克制 · 760ms
+            - paragraph [ref=e41]: 压缩 → 抬升 → 柔和落定 · 强度 2/3
+            - paragraph [ref=e42]: 日常随心学习 · 阅读稳定，反馈适中
+        - article [ref=e43]:
+          - button "游戏化夸张翻卡" [ref=e45] [cursor=pointer]:
+            - generic [ref=e46]:
+              - generic [ref=e47]: 回忆 · MEMORY
+              - strong [ref=e48]: 为什么需要间隔重复？
+              - generic [ref=e49]: 点击翻卡
+            - generic [ref=e50]:
+              - generic [ref=e51]: 答案 · RECALL
+              - strong [ref=e52]: 在遗忘前主动提取记忆。
+              - generic [ref=e53]: 建立关联，而不只是重复
+          - generic [ref=e54]:
+            - strong [ref=e55]: 游戏化夸张 · 1200ms
+            - paragraph [ref=e56]: 蓄力 → 大幅翻转 → 回弹 · 强度 3/3
+            - paragraph [ref=e57]: 连击与里程碑 · 奖励感强，连续刷卡可能分心
+      - generic [ref=e58]:
+        - generic [ref=e59]:
+          - button "同步播放" [ref=e60] [cursor=pointer]
+          - button "同步翻回" [ref=e61] [cursor=pointer]
+          - button "暂停" [ref=e62] [cursor=pointer]
+          - button "继续" [ref=e63] [cursor=pointer]
+          - button "重置" [ref=e64] [cursor=pointer]
+          - button "−1 帧" [ref=e65] [cursor=pointer]
+          - button "+1 帧" [ref=e66] [cursor=pointer]
+          - generic [ref=e67]:
+            - text: 速度
+            - combobox "速度" [ref=e68] [cursor=pointer]:
+              - option "0.25×"
+              - option "0.5×"
+              - option "1×" [selected]
+              - option "1.5×"
+              - option "2×"
+          - status [ref=e69]: 0 ms
+        - slider "翻卡时间轴" [ref=e70]: "0"
+        - generic [ref=e71]:
+          - generic [ref=e72]: 悬停
+          - generic [ref=e73]: 按下压缩
+          - generic [ref=e74]: 抬升
+          - generic [ref=e75]: 中段翻转
+          - generic [ref=e76]: 答案出现
+          - generic [ref=e77]: 扫光
+          - generic [ref=e78]: 回弹
+          - generic [ref=e79]: 落定
+    - generic [ref=e80]:
+      - generic [ref=e81]:
+        - generic [ref=e82]:
+          - heading "随心学习" [level=2] [ref=e83]
+          - generic [ref=e84]: 0 XP · 0 连击
+        - progressbar [ref=e85]
+        - generic [ref=e86]:
+          - generic [ref=e87]: 第 1 轮 · 1 / 4
+          - generic [ref=e88]: 待回忆
+        - button "翻转学习卡" [ref=e90] [cursor=pointer]:
+          - generic [ref=e91]:
+            - generic [ref=e92]: 回忆 · MEMORY
+            - strong [ref=e93]: 为什么需要间隔重复？
+            - generic [ref=e94]: 点击翻卡
+          - generic [ref=e95]:
+            - generic [ref=e96]: 答案 · RECALL
+            - strong [ref=e97]: 在遗忘前主动提取记忆。
+            - generic [ref=e98]: 建立关联，而不只是重复
+        - generic [ref=e99]:
+          - button "重来 +2" [disabled] [ref=e100]
+          - button "困难 +5" [disabled] [ref=e101]
+          - button "记得 +10" [disabled] [ref=e102]
+          - button "轻松 +15" [disabled] [ref=e103]
+        - generic [ref=e104]:
+          - button "跳过" [ref=e105] [cursor=pointer]
+          - button "下一张" [disabled] [ref=e106]
+          - generic [ref=e107]: 先翻卡，再评级
+        - generic [ref=e108]:
+          - generic [ref=e109]:
+            - combobox "加载速度" [ref=e110] [cursor=pointer]:
+              - option "快速 · 180ms" [selected]
+              - option "中等 · 900ms"
+              - option "较慢 · 2400ms"
+            - button "加载下一张" [ref=e111] [cursor=pointer]
+            - button "取消" [ref=e112] [cursor=pointer]
+            - button "后台预热" [ref=e113] [cursor=pointer]
+          - text: 当前卡片保持可操作
+      - generic [ref=e115]:
+        - generic [ref=e116]:
+          - heading "知识关系" [level=2] [ref=e117]
+          - generic [ref=e118]: 0 / 5 已完成
+        - generic [ref=e119]:
+          - button "收束分支" [ref=e120] [cursor=pointer]
+          - button "局部定位" [ref=e121] [cursor=pointer]
+          - button "整体定位" [ref=e122] [cursor=pointer]
+          - button "完成节点" [ref=e123] [cursor=pointer]
+        - img "记忆知识关系图" [ref=e125]:
+          - generic [ref=e126]:
+            - button "记忆系统" [ref=e129] [cursor=pointer]
+            - button "主动回忆" [ref=e132] [cursor=pointer]
+            - button "间隔重复" [ref=e135] [cursor=pointer]
+            - button "知识关联" [ref=e138] [cursor=pointer]
+            - button "自我评估" [ref=e141] [cursor=pointer]
+        - generic [ref=e144]: 记忆系统 · 关联路径已高亮
+    - generic [ref=e145]:
+      - generic [ref=e146]:
+        - heading "基础参照 / 增强反馈" [level=2] [ref=e147]
+        - generic [ref=e148]: 两侧分别点击 · 非现有界面复刻
+      - generic [ref=e149]:
+        - generic: 基础参照
+        - generic: 自然克制 + 奖励归拢
+        - button "基础参照翻卡" [ref=e151] [cursor=pointer]:
+          - generic [ref=e152]:
+            - generic [ref=e153]: 回忆 · MEMORY
+            - strong [ref=e154]: 主动回忆的关键？
+            - generic [ref=e155]: 点击翻卡
+          - generic [ref=e156]:
+            - generic [ref=e157]: 答案 · RECALL
+            - strong [ref=e158]: 先提取，再核对答案。
+            - generic [ref=e159]: 建立关联，而不只是重复
+        - button "增强反馈翻卡" [ref=e161] [cursor=pointer]:
+          - generic [ref=e162]:
+            - generic [ref=e163]: 回忆 · MEMORY
+            - strong [ref=e164]: 主动回忆的关键？
+            - generic [ref=e165]: 点击翻卡
+          - generic [ref=e166]:
+            - generic [ref=e167]: 答案 · RECALL
+            - strong [ref=e168]: 先提取，再核对答案。
+            - generic [ref=e169]: 建立关联，而不只是重复
+      - slider "比较分割线" [ref=e170]: "50"
+    - generic [ref=e171]:
+      - generic [ref=e172]:
+        - text: 主题
+        - combobox "主题" [ref=e173] [cursor=pointer]:
+          - option "暖纸灯" [selected]
+          - option "金色余烬"
+          - option "深色星尘 / 夜间"
+      - generic [ref=e174]:
+        - text: 粒子
+        - combobox "粒子" [ref=e175] [cursor=pointer]:
+          - option "关闭"
+          - option "轻量"
+          - option "完整" [selected]
+      - generic [ref=e176]:
+        - text: 奖励范围
+        - combobox "奖励范围" [ref=e177] [cursor=pointer]:
+          - option "普通 + 连击 + 里程碑" [selected]
+          - option "仅连击与里程碑"
+      - generic [ref=e178]:
+        - text: 优先场景
+        - combobox "优先场景" [ref=e179] [cursor=pointer]:
+          - option "随心学习" [selected]
+          - option "思维导图"
+          - option "评级结算"
+      - generic [ref=e180]:
+        - checkbox "离线音效" [ref=e181]
+        - text: 离线音效
+      - generic [ref=e182]: 偏好已保存
+    - status [ref=e183]
+    - generic [ref=e184]: 演示数据不会写入 Memory Anki。减少动态效果偏好自动启用轻量模式；后台自动暂停。
