@@ -62,6 +62,13 @@ export const REGISTERED_STORAGE_KEYS = defineStorageRegistry([
     purpose: 'Theme preference selected before client preferences are loaded.',
   },
   {
+    id: 'theme.pack',
+    key: 'memory-anki-theme-pack',
+    area: 'localStorage',
+    owner: 'shared/theme',
+    purpose: 'Last applied theme pack, so boot paints the right world before growth_state syncs.',
+  },
+  {
     id: 'api.token',
     key: 'memory_anki_api_token',
     area: 'localStorage',
