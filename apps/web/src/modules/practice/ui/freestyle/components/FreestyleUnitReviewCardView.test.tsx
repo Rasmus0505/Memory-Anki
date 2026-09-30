@@ -1767,25 +1767,104 @@ describe('FreestyleUnitReviewCardView', () => {
           resolveRate = () => resolve(ratingResult(session, rating, operationId))
         }),
     )
-    renderCard(card)
+    const { onBranchComplete } = renderCard(card)
 
     await screen.findByTestId('flip-card-mind-map-panel')
     fireEvent.click(screen.getByRole('button', { name: /记得：1天后复习/ }))
 
-    // The bar used to stay silent until the POST landed, so a slow network read
-    // as a dropped tap.
-    const pressed = await screen.findByTestId('freestyle-rating-pending-3')
-    expect(pressed).toBeTruthy()
-    expect(screen.getByTestId('freestyle-rating-button-3').getAttribute('aria-pressed')).toBe('false')
-    expect(screen.getByTestId('freestyle-rating-effect-line').textContent).toContain('正在记录记得')
+    const button = screen.getByTestId('freestyle-rating-button-3')
+    expect(button.getAttribute('aria-pressed')).toBe('true')
+    expect(button.hasAttribute('disabled')).toBe(false)
+    expect(screen.queryByTestId('freestyle-rating-pending-3')).toBeNull()
+    expect(screen.getByTestId('freestyle-rating-effect-line').textContent).toContain('已选记得')
+    expect(onBranchComplete).toHaveBeenCalledWith(card.id, {
+      restudy: false,
+      rating: 3,
+      retryAfterCards: 0,
+    })
 
     await act(async () => {
       resolveRate?.(null)
     })
-    await waitFor(() => {
-      expect(screen.queryByTestId('freestyle-rating-pending-3')).toBeNull()
-    })
     expect(screen.getByText('已选记得 · 1天后复习 · 7月28日')).toBeTruthy()
+    expect(button.hasAttribute('disabled')).toBe(false)
+  })
+
+  it('keeps a second grade shown and posts it after the first reply', async () => {
+    const card = buildCard('unit-queued-rate')
+    const session = buildSession(card.unit_id!)
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(session)
+    const pending: Array<() => void> = []
+    apiMocks.rateReviewUnitApi.mockImplementation(
+      (_sessionId, _unit, _encounterId, rating, operationId) =>
+        new Promise((resolve) => {
+          pending.push(() => resolve(ratingResult(session, rating, operationId)))
+        }),
+    )
+    renderCard(card)
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    fireEvent.click(screen.getByTestId('freestyle-rating-button-3'))
+    expect(screen.getByTestId('freestyle-rating-button-3').getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(screen.getByTestId('freestyle-rating-button-4'))
+    expect(screen.getByTestId('freestyle-rating-button-4').getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByTestId('freestyle-rating-button-4').hasAttribute('disabled')).toBe(false)
+    expect(apiMocks.rateReviewUnitApi).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      pending.shift()?.()
+    })
+    await waitFor(() => expect(apiMocks.rateReviewUnitApi).toHaveBeenCalledTimes(2))
+    await act(async () => {
+      pending.shift()?.()
+    })
+    expect(screen.getByText('已选轻松 · 3天后复习 · 7月30日')).toBeTruthy()
+  })
+
+  it('rolls the card back when the rate post fails', async () => {
+    const card = buildCard('unit-rate-rollback')
+    const session = buildSession(card.unit_id!)
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(session)
+    apiMocks.rateReviewUnitApi.mockRejectedValue(new Error('network down'))
+    const { onBranchComplete, onSaveFailed } = renderCard(card)
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    fireEvent.click(screen.getByTestId('freestyle-rating-button-3'))
+    expect(onBranchComplete).toHaveBeenCalledWith(card.id, expect.objectContaining({ rating: 3 }))
+
+    await waitFor(() => expect(onSaveFailed).toHaveBeenCalled())
+    expect(onBranchComplete).toHaveBeenLastCalledWith(card.id, { cleared: true })
+    expect(screen.queryByText(/已选记得/)).toBeNull()
+    expect(screen.getByRole('alert').textContent).toContain('network down')
+  })
+
+  it('does not close the encounter until the in-flight rate resolves', async () => {
+    const card = buildCard('unit-rate-hold-close')
+    const session = buildSession(card.unit_id!)
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(session)
+    let resolveRate: ((value: unknown) => void) | null = null
+    apiMocks.rateReviewUnitApi.mockImplementation(
+      (_sessionId, _unit, _encounterId, rating, operationId) =>
+        new Promise((resolve) => {
+          resolveRate = () => resolve(ratingResult(session, rating, operationId))
+        }),
+    )
+    const view = renderCard(card)
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    fireEvent.click(screen.getByTestId('freestyle-rating-button-2'))
+    view.rerenderCard({ active: false })
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(apiMocks.closeUnitReviewEncounterApi).not.toHaveBeenCalled()
+    expect(apiMocks.cancelUnratedUnitReviewEncounterApi).not.toHaveBeenCalled()
+
+    await act(async () => {
+      resolveRate?.(null)
+    })
+    await waitFor(() => expect(apiMocks.closeUnitReviewEncounterApi).toHaveBeenCalledTimes(1))
+    expect(apiMocks.cancelUnratedUnitReviewEncounterApi).not.toHaveBeenCalled()
   })
 
   /**

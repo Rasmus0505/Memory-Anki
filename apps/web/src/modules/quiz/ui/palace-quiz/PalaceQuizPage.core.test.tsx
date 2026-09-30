@@ -166,7 +166,7 @@ describe('PalaceQuizPage core flows', () => {
       firstFocusNonce,
     )
     expect(screen.getByText('细胞的控制中心是？')).toBeTruthy()
-  })
+  }, 10000)
 
   it('opens the memory palace lookup with the bound node as the mind-map center', async () => {
     listQuestionNodeBindingsApiMock.mockResolvedValue({

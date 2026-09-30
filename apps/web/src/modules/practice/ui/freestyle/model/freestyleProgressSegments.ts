@@ -1,16 +1,20 @@
 import {
   cardPalaceId,
-  isOccurrenceScored,
   isRetryOccurrence,
-  isShadowOfQueueRemoval,
-  planCardStatus,
   reviewUnitIdFromCardId,
   sourceCardId,
+  type FreestyleUnitEncounterState,
+} from '@/modules/practice/domain/queueState'
+import {
+  isOccurrenceScored,
+  isShadowOfQueueRemoval,
+} from '@/modules/practice/domain/unitProgressState'
+import {
+  planCardStatus,
   type FreestyleRoundPlanCard,
   type FreestyleRoundPlanCardStatus,
   type FreestyleRoundPlanState,
-  type FreestyleUnitEncounterState,
-} from '@/modules/practice/public'
+} from '@/modules/practice/domain/roundPlan'
 import type { FreestyleCard } from '@/shared/api/contracts'
 import { FREESTYLE_REVIEW_HINT_ID, isReviewHintCard } from '@/shared/api/contracts'
 

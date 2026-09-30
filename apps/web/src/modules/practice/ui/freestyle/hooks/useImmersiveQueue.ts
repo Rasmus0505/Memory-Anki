@@ -1150,6 +1150,11 @@ export function useImmersiveQueue(
         applyCurrentIndex(settledIndex)
       }
       if (options?.cleared) {
+        // The optimistic pass already started a silent rebuild that captured this
+        // card as completed. Retire that response before it can write the ledger
+        // back over this undo; the uncomplete call below rebuilds afterwards.
+        operationIdRef.current = createOperationId()
+        queueBuildControllerRef.current?.abort()
         pendingRestudyByIdRef.current.delete(cardId)
         syncPendingRestudyIds()
         let plan = queueStateRef.current.roundPlan

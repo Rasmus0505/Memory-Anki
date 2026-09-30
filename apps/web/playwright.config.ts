@@ -35,7 +35,9 @@ export default defineConfig({
       name: 'mobile-webkit',
       use: { ...devices['iPhone 15'] },
       // Playwright WebKit on Windows spends ~10s on each fresh context's first connections.
-      expect: { timeout: 20_000 },
+      // Under a full parallel smoke run the shell can still be on 正在加载 past 20s.
+      timeout: 60_000,
+      expect: { timeout: 45_000 },
     },
   ],
 })

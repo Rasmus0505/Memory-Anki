@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { cue, useFxOwner } from '@/shared/fx'
+import { cue, retireOwner, useFxOwner } from '@/shared/fx'
 
 function easeOutCubic(t: number) {
   return 1 - (1 - t) ** 3
@@ -28,16 +28,36 @@ export function useCountUp(target: number, { durationMs = 900, delayMs = 0, disa
   return value
 }
 
-/** Fires the round-complete cue once per round; the recipe honors the completion scene. */
+export function skipRoundCelebration(roundKey: string) {
+  retireOwner(`round:${roundKey}`)
+}
+
+/** Fires the round-complete cue once per round; any later pointer or key skips the rest. */
 export function useRoundCompleteCelebration(roundKey: string, reducedMotion: boolean) {
   const firedFor = useRef<string | null>(null)
+  const skippedRef = useRef(false)
   const owner = useFxOwner(`round:${roundKey}`)
+
+  useEffect(() => {
+    skippedRef.current = false
+    const skip = () => {
+      skippedRef.current = true
+      skipRoundCelebration(roundKey)
+    }
+    window.addEventListener('pointerdown', skip, true)
+    window.addEventListener('keydown', skip, true)
+    return () => {
+      window.removeEventListener('pointerdown', skip, true)
+      window.removeEventListener('keydown', skip, true)
+    }
+  }, [roundKey])
 
   useEffect(() => {
     if (firedFor.current === roundKey) return
     // Deferred so a StrictMode effect replay still celebrates exactly once.
     const timer = window.setTimeout(() => {
       firedFor.current = roundKey
+      if (skippedRef.current) return
       cue('round.complete', { quiet: reducedMotion }, { owner })
     }, 0)
     return () => window.clearTimeout(timer)

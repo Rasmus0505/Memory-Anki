@@ -1,3 +1,4 @@
+import { themeMotion } from '@/shared/theme/themePacks'
 import {
   useCallback,
   useEffect,
@@ -206,6 +207,7 @@ export function useFreestyleFeedNavigation({
         node.scrollTop = targetTop - Math.sign(targetTop - node.scrollTop) * pageHeight
       }
       cancelScrollAnimationRef.current = animateScrollTop(node, targetTop, {
+        durationMs: themeMotion().pageTurnMs,
         onFinish: (completed) => {
           cancelScrollAnimationRef.current = null
           if (completed) {

@@ -5,6 +5,7 @@ import { settlementQuizClearCopy } from '@/modules/practice/ui/freestyle/model/o
 import { formatTimer } from '@/modules/practice/ui/freestyle/model/freestyle-cards'
 import { usePrefersReducedMotion } from '@/modules/practice/ui/freestyle/hooks/usePrefersReducedMotion'
 import {
+  skipRoundCelebration,
   useCountUp,
   useRoundCompleteCelebration,
 } from '@/modules/practice/ui/freestyle/components/freestyleRoundCelebration'
@@ -141,7 +142,17 @@ export function FreestyleRoundCompleteCard({
       <div className="fs-complete-panel relative overflow-hidden rounded-[1.75rem] border border-stage-line-strong bg-stage-raised/95 p-5 text-stage-ink shadow-[0_24px_80px_-16px_rgb(0_0_0/0.7)] sm:p-7">
         <Rise index={0} className="text-center">
           <PassRing ratio={passRatio} reducedMotion={reducedMotion} />
-          <div className="mt-3 text-xs font-semibold tracking-[0.18em] text-stage-glow">今日到期已清</div>
+          <div className="mt-3 flex items-center justify-center gap-3">
+            <div className="text-xs font-semibold tracking-[0.18em] text-stage-glow">今日到期已清</div>
+            <button
+              type="button"
+              data-testid="freestyle-round-skip-show"
+              className="text-[11px] font-medium text-stage-muted underline-offset-2 hover:underline"
+              onClick={() => skipRoundCelebration(roundKey)}
+            >
+              跳过
+            </button>
+          </div>
           <h2 className="mt-1.5 text-2xl font-semibold leading-tight sm:text-3xl">
             <span className="tabular-nums">{ratedShown}</span> 张已评分
           </h2>

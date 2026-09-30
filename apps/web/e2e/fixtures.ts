@@ -22,3 +22,4 @@ export const test = base.extend<{ hermeticApi: void }>({
 })
 
 export { expect } from '@playwright/test'
+export type { Page, Route } from '@playwright/test'
