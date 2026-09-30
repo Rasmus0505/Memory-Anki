@@ -1,0 +1,1776 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Memory Anki · 视觉升级交互实验室 · 左右分屏对比</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;700;900&family=JetBrains+Mono:wght@500;600;700&display=swap">
+<style>
+:root {
+  --bg: hsl(38 46% 95%);
+  --surface: hsl(42 60% 98%);
+  --surface-panel: hsl(40 50% 96%);
+  --ink: hsl(24 28% 14%);
+  --ink-secondary: hsl(25 16% 40%);
+  --line: hsl(34 28% 85%);
+  --line-strong: hsl(30 30% 75%);
+  
+  --primary: hsl(32 86% 48%);
+  --primary-glow: hsl(36 96% 56%);
+  --primary-soft: hsl(35 80% 91%);
+  --primary-ink: hsl(25 80% 32%);
+
+  --again: hsl(12 70% 54%);
+  --again-soft: hsl(12 80% 94%);
+  --hard: hsl(35 90% 52%);
+  --hard-soft: hsl(36 90% 93%);
+  --good: hsl(135 48% 46%);
+  --good-soft: hsl(135 60% 92%);
+  --easy: hsl(196 68% 46%);
+  --easy-soft: hsl(196 80% 92%);
+
+  --gold: hsl(42 98% 58%);
+  --gold-glow: hsl(40 100% 64%);
+  --amber: hsl(30 92% 52%);
+  --jade: hsl(145 60% 48%);
+
+  --stage-dark: hsl(24 16% 9%);
+  --stage-raised: hsl(24 14% 14%);
+  --stage-line: hsl(34 20% 25%);
+  --stage-ink: hsl(38 30% 94%);
+  --stage-muted: hsl(32 14% 65%);
+
+  --serif: "Noto Serif SC", "Songti SC", "Source Han Serif SC", SimSun, serif;
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+  --shadow-sm: 0 2px 8px -2px rgba(40,25,15,0.08);
+  --shadow-md: 0 12px 28px -12px rgba(35,20,10,0.18), 0 2px 4px rgba(35,20,10,0.04);
+  --shadow-lg: 0 24px 48px -16px rgba(30,15,5,0.25), 0 4px 8px rgba(30,15,5,0.06);
+}
+
+:root[data-theme="dark"] {
+  --bg: hsl(24 14% 7%);
+  --surface: hsl(24 14% 11%);
+  --surface-panel: hsl(24 14% 13%);
+  --ink: hsl(38 28% 92%);
+  --ink-secondary: hsl(32 14% 65%);
+  --line: hsl(28 14% 20%);
+  --line-strong: hsl(28 18% 30%);
+  --primary-soft: hsl(30 40% 16%);
+  --primary-ink: hsl(36 96% 70%);
+  --shadow-sm: 0 2px 8px rgba(0,0,0,0.4);
+  --shadow-md: 0 12px 28px -10px rgba(0,0,0,0.6);
+  --shadow-lg: 0 24px 50px -16px rgba(0,0,0,0.8);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.6;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+}
+
+/* 顶部导航与主操作控制条 */
+header.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: color-mix(in oklab, var(--surface) 88%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--line);
+  padding: 12px 24px;
+}
+.header-row {
+  max-width: 1400px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.brand-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.badge-version {
+  font: 700 11px var(--mono);
+  letter-spacing: 0.08em;
+  background: var(--primary-soft);
+  color: var(--primary-ink);
+  padding: 3px 8px;
+  border-radius: 99px;
+  border: 1px solid color-mix(in oklab, var(--primary) 30%, transparent);
+}
+.title-text {
+  font: 900 20px/1.2 var(--serif);
+  letter-spacing: 0.02em;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.subtitle-text {
+  font-size: 13px;
+  color: var(--ink-secondary);
+}
+
+.controls-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.tool-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  background: var(--surface-panel);
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.15s ease;
+}
+.tool-pill:hover {
+  border-color: var(--line-strong);
+  transform: translateY(-1px);
+}
+.tool-pill.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: hsl(24 50% 10%);
+  box-shadow: 0 2px 8px -2px var(--primary);
+}
+.tool-btn {
+  font: 600 13px var(--sans);
+  padding: 6px 14px;
+  border-radius: 99px;
+  border: 1px solid var(--line);
+  background: var(--surface-panel);
+  color: var(--ink);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.tool-btn:hover {
+  background: var(--line);
+}
+.tool-btn.primary {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+.tool-btn.primary:hover {
+  background: var(--primary-glow);
+}
+
+/* 主内容区：双联分屏对比 */
+main.comparator-grid {
+  flex: 1;
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 24px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 28px;
+}
+@media (max-width: 992px) {
+  main.comparator-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 对比分区卡片 */
+.column-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: 24px;
+  padding: 24px;
+  box-shadow: var(--shadow-md);
+  position: relative;
+  isolation: isolate;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+.column-pane.is-upgraded {
+  border-color: color-mix(in oklab, var(--primary) 45%, var(--line));
+  box-shadow: 0 16px 40px -16px color-mix(in oklab, var(--primary) 20%, transparent), var(--shadow-md);
+}
+
+.pane-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px dashed var(--line);
+  padding-bottom: 16px;
+}
+.pane-title-group h2 {
+  font: 900 22px/1.3 var(--serif);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tag-badge {
+  font: 700 11px var(--mono);
+  padding: 2px 8px;
+  border-radius: 6px;
+  text-transform: uppercase;
+}
+.tag-badge.original {
+  background: hsl(0 0% 88%);
+  color: hsl(0 0% 30%);
+}
+:root[data-theme="dark"] .tag-badge.original {
+  background: hsl(0 0% 25%);
+  color: hsl(0 0% 80%);
+}
+.tag-badge.upgraded {
+  background: linear-gradient(135deg, hsl(38 96% 56%), hsl(28 90% 48%));
+  color: #fff;
+  box-shadow: 0 2px 6px -1px hsl(32 90% 50% / 0.5);
+}
+.pane-desc {
+  font-size: 13px;
+  color: var(--ink-secondary);
+  margin-top: 4px;
+}
+
+/* 升级方案选择器 */
+.variant-selector {
+  display: flex;
+  gap: 8px;
+  background: var(--surface-panel);
+  border: 1px solid var(--line);
+  padding: 4px;
+  border-radius: 99px;
+}
+.variant-pill {
+  font: 600 12px var(--sans);
+  padding: 4px 12px;
+  border-radius: 99px;
+  border: none;
+  background: transparent;
+  color: var(--ink-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.variant-pill.active {
+  background: var(--surface);
+  color: var(--primary-ink);
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+}
+
+/* 仿真交互舞台（Stage） */
+.stage-container {
+  background: radial-gradient(120% 90% at 50% 0%, hsl(28 26% 14%), var(--stage-dark) 75%);
+  border: 1px solid var(--stage-line);
+  border-radius: 20px;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: inset 0 1px 0 hsl(35 30% 90% / 0.08), 0 20px 40px -20px #000;
+  color: var(--stage-ink);
+}
+
+/* 舞台顶部 HUD 状态栏 */
+.stage-hud {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font: 500 12px var(--mono);
+}
+.hud-progress-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.hud-meta-row {
+  display: flex;
+  justify-content: space-between;
+  color: var(--stage-muted);
+  font-size: 11px;
+}
+.round-rail {
+  position: relative;
+  height: 8px;
+  border-radius: 99px;
+  background: hsl(30 20% 100% / 0.08);
+  overflow: visible;
+}
+.round-rail-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 35%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, hsl(32 86% 50%), hsl(42 96% 62%));
+  transition: width 0.35s cubic-bezier(0.2, 1.25, 0.4, 1);
+  box-shadow: 0 0 12px -2px hsl(36 96% 60% / 0.6);
+}
+.round-rail.land-impact .round-rail-fill {
+  animation: railPulse 0.4s ease-out;
+}
+@keyframes railPulse {
+  0% { filter: brightness(1); }
+  35% { filter: brightness(2) saturate(1.4); box-shadow: 0 0 24px 4px hsl(42 100% 70% / 0.9); }
+  100% { filter: brightness(1); }
+}
+
+.hud-combo-badge {
+  padding: 4px 12px;
+  border-radius: 99px;
+  background: hsl(30 20% 100% / 0.06);
+  border: 1px solid hsl(30 20% 100% / 0.1);
+  color: var(--stage-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  transition: all 0.2s ease;
+}
+.hud-combo-badge.hot {
+  background: linear-gradient(135deg, hsl(30 90% 50% / 0.25), hsl(42 96% 60% / 0.35));
+  border-color: hsl(40 96% 60% / 0.6);
+  color: hsl(40 96% 75%);
+  box-shadow: 0 0 16px -2px hsl(36 96% 56% / 0.5);
+}
+.hud-combo-badge.overdrive {
+  background: linear-gradient(135deg, hsl(12 86% 52% / 0.35), hsl(38 96% 60% / 0.45));
+  border-color: hsl(38 100% 70% / 0.9);
+  color: hsl(44 100% 86%);
+  box-shadow: 0 0 24px 2px hsl(32 96% 56% / 0.7);
+  animation: overdriveAura 1.4s infinite alternate;
+}
+@keyframes overdriveAura {
+  0% { transform: scale(1); filter: drop-shadow(0 0 4px hsl(38 96% 60% / 0.6)); }
+  100% { transform: scale(1.05); filter: drop-shadow(0 0 12px hsl(44 100% 64% / 0.9)); }
+}
+
+/* 核心卡片仿真 (Card Surface) */
+.card-scene-wrapper {
+  perspective: 1200px;
+  min-height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.interactive-card {
+  width: 100%;
+  max-width: 480px;
+  min-height: 180px;
+  border-radius: 18px;
+  position: relative;
+  transform-style: preserve-3d;
+  cursor: pointer;
+  transition: transform 0.6s cubic-bezier(0.34, 1.4, 0.64, 1), box-shadow 0.3s;
+}
+.interactive-card:hover {
+  box-shadow: 0 16px 36px -12px rgba(0,0,0,0.7);
+}
+
+/* 原版翻卡（生硬旋转） */
+.original-card.is-flipped {
+  transform: rotateY(180deg);
+}
+
+/* 升级版翻卡（带前置蓄力与微弹动量） */
+.upgraded-card.is-flipped {
+  animation: cardFlip3DOvershoot 0.65s cubic-bezier(0.25, 1.35, 0.45, 1) forwards;
+}
+.upgraded-card.is-unflipped {
+  animation: cardFlip3DBack 0.55s cubic-bezier(0.25, 1.25, 0.45, 1) forwards;
+}
+@keyframes cardFlip3DOvershoot {
+  0% { transform: scale(1) rotateY(0deg); }
+  22% { transform: scale(0.96) rotateY(-18deg) rotateZ(-1deg); }
+  72% { transform: scale(1.03) rotateY(188deg) rotateZ(1deg); }
+  100% { transform: scale(1) rotateY(180deg) rotateZ(0deg); }
+}
+@keyframes cardFlip3DBack {
+  0% { transform: scale(1) rotateY(180deg); }
+  22% { transform: scale(0.96) rotateY(195deg); }
+  75% { transform: scale(1.02) rotateY(-6deg); }
+  100% { transform: scale(1) rotateY(0deg); }
+}
+
+/* 卡片正反面 */
+.card-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  border-radius: 18px;
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border: 1px solid var(--stage-line);
+  background: var(--stage-raised);
+  box-shadow: 0 20px 40px -20px rgba(0,0,0,0.8);
+}
+.card-face.front {
+  background: linear-gradient(145deg, hsl(24 14% 16%), hsl(24 14% 11%));
+}
+.card-face.back {
+  transform: rotateY(180deg);
+  background: linear-gradient(145deg, hsl(24 16% 17%), hsl(24 14% 12%));
+  border-color: color-mix(in oklab, var(--primary) 30%, var(--stage-line));
+}
+
+/* 升级版专属：光芒流转卡缘与纸纹洒金 */
+.upgraded-card.gold-ribbon::after {
+  content: "";
+  position: absolute;
+  right: 20px;
+  top: -2px;
+  width: 18px;
+  height: 36px;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 78%, 0 100%);
+  background: linear-gradient(135deg, hsl(38 90% 48%), hsl(46 100% 76%), hsl(40 96% 56%));
+  box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+  z-index: 10;
+}
+.upgraded-card.overdrive-aura {
+  box-shadow: 0 0 0 2px hsl(40 96% 60% / 0.6), 0 0 32px 4px hsl(32 96% 52% / 0.4);
+}
+
+.card-category-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--stage-muted);
+}
+.card-prompt {
+  font: 700 18px/1.45 var(--serif);
+  color: var(--stage-ink);
+  letter-spacing: 0.02em;
+  margin: 12px 0;
+}
+.card-answer-wrap {
+  font-size: 14px;
+  line-height: 1.6;
+  color: hsl(38 40% 90%);
+}
+.card-answer-wrap .ans-highlight {
+  color: hsl(42 100% 72%);
+  font-weight: 700;
+}
+.card-action-hint {
+  font: 600 11px var(--mono);
+  color: var(--stage-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.card-action-hint span.key-badge {
+  border: 1px solid hsl(30 20% 100% / 0.2);
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: hsl(30 20% 100% / 0.05);
+}
+
+/* 升级版专属：字面扫金动效 (Text Shimmer) */
+.shimmer-text {
+  background: linear-gradient(100deg, #fff 25%, hsl(42 100% 68%) 50%, #fff 75%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmerSweep 1.6s ease-out infinite;
+}
+@keyframes shimmerSweep {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* 评分操作区 (Rating Keycaps) */
+.rating-bar-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+.keycap-btn {
+  appearance: none;
+  border: none;
+  cursor: pointer;
+  border-radius: 14px;
+  padding: 10px 4px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  position: relative;
+  user-select: none;
+  outline: none;
+  font-family: var(--sans);
+  transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.15s ease;
+}
+.keycap-btn .key-label {
+  font-weight: 700;
+  font-size: 14px;
+  color: hsl(24 40% 10%);
+}
+.keycap-btn .key-sub {
+  font: 600 10px var(--mono);
+  opacity: 0.65;
+  color: hsl(24 40% 10%);
+}
+
+/* 原版普通按钮配色与按压 */
+.original-keys .keycap-btn[data-tone="again"] { background: var(--again); box-shadow: 0 4px 0 hsl(12 70% 32%); }
+.original-keys .keycap-btn[data-tone="hard"] { background: var(--hard); box-shadow: 0 4px 0 hsl(35 90% 32%); }
+.original-keys .keycap-btn[data-tone="good"] { background: var(--good); box-shadow: 0 4px 0 hsl(135 48% 28%); }
+.original-keys .keycap-btn[data-tone="easy"] { background: var(--easy); box-shadow: 0 4px 0 hsl(196 68% 28%); }
+.original-keys .keycap-btn:active, .original-keys .keycap-btn.is-pressed {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.5);
+}
+
+/* 升级版：高透水晶机械感按键 + 聚光 + 触发动态下陷 */
+.upgraded-keys .keycap-btn {
+  box-shadow: 0 6px 0 var(--btn-shadow), 0 10px 20px -6px rgba(0,0,0,0.7);
+}
+.upgraded-keys .keycap-btn[data-tone="again"] {
+  --btn-shadow: hsl(12 70% 30%);
+  background: linear-gradient(180deg, hsl(12 78% 62%), hsl(12 70% 50%));
+}
+.upgraded-keys .keycap-btn[data-tone="hard"] {
+  --btn-shadow: hsl(35 88% 30%);
+  background: linear-gradient(180deg, hsl(36 94% 60%), hsl(35 88% 48%));
+}
+.upgraded-keys .keycap-btn[data-tone="good"] {
+  --btn-shadow: hsl(135 50% 26%);
+  background: linear-gradient(180deg, hsl(136 55% 54%), hsl(135 48% 42%));
+}
+.upgraded-keys .keycap-btn[data-tone="easy"] {
+  --btn-shadow: hsl(196 68% 26%);
+  background: linear-gradient(180deg, hsl(198 78% 58%), hsl(196 68% 44%));
+}
+.upgraded-keys .keycap-btn:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+  box-shadow: 0 7px 0 var(--btn-shadow), 0 12px 24px -6px rgba(0,0,0,0.8);
+}
+.upgraded-keys .keycap-btn:active, .upgraded-keys .keycap-btn.is-pressed {
+  transform: translateY(5px) scale(0.98);
+  box-shadow: 0 1px 0 var(--btn-shadow), 0 4px 8px -2px rgba(0,0,0,0.6);
+}
+
+/* 连击跳字特效 (Combo Pop) */
+.combo-popup {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  font: 900 28px var(--serif);
+  color: hsl(42 100% 70%);
+  text-shadow: 0 0 20px hsl(36 96% 56% / 0.8), 0 2px 8px #000;
+  pointer-events: none;
+  white-space: nowrap;
+  animation: comboPopAnim 1.1s cubic-bezier(0.2, 1.4, 0.4, 1) forwards;
+  z-index: 50;
+}
+@keyframes comboPopAnim {
+  0% { opacity: 0; transform: translate(-50%, 12px) scale(0.6); }
+  25% { opacity: 1; transform: translate(-50%, -4px) scale(1.2); }
+  70% { opacity: 1; transform: translate(-50%, -12px) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -28px) scale(0.9); }
+}
+
+/* 细节特性对比说明栏 */
+.features-comparison-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+.feat-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--surface-panel);
+  border: 1px solid var(--line);
+}
+.feat-item .icon {
+  font-size: 15px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.feat-item b {
+  color: var(--ink);
+  font-weight: 700;
+}
+.feat-item p {
+  color: var(--ink-secondary);
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+/* 全屏独立粒子画布（高帧率与独立图层） */
+canvas.fx-layer {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 999;
+}
+
+/* 底部选择与导出确认栏 */
+footer.decision-tray {
+  position: sticky;
+  bottom: 0;
+  z-index: 100;
+  background: color-mix(in oklab, var(--surface) 88%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-top: 1px solid var(--line);
+  padding: 14px 24px calc(14px + env(safe-area-inset-bottom, 0px));
+}
+.tray-content {
+  max-width: 1400px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.tray-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+.pill-choice {
+  font: 600 12px var(--sans);
+  background: var(--primary-soft);
+  color: var(--primary-ink);
+  padding: 3px 10px;
+  border-radius: 99px;
+  border: 1px solid color-mix(in oklab, var(--primary) 25%, transparent);
+}
+.perf-badge {
+  font: 600 11px var(--mono);
+  color: var(--ink-secondary);
+}
+
+/* 交互提示气泡 (Toast) */
+.toast-bubble {
+  position: fixed;
+  bottom: 84px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--ink);
+  color: var(--bg);
+  padding: 10px 20px;
+  border-radius: 99px;
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.25s cubic-bezier(0.2, 1, 0.3, 1);
+  z-index: 1000;
+  box-shadow: 0 10px 24px rgba(0,0,0,0.3);
+}
+.toast-bubble.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* 轮次庆典模态框 */
+.celebrate-modal {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle at center, rgba(30,18,10,0.86), rgba(15,8,4,0.96));
+  z-index: 950;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+.celebrate-modal.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+.celebrate-card {
+  width: min(440px, calc(100vw - 32px));
+  background: var(--stage-raised);
+  border: 1.5px solid color-mix(in oklab, var(--gold) 40%, var(--stage-line));
+  border-radius: 28px;
+  padding: 32px 28px;
+  color: var(--stage-ink);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  box-shadow: 0 30px 80px -20px #000, 0 0 50px -10px hsl(36 96% 56% / 0.3);
+  transform: scale(0.9);
+  transition: transform 0.5s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+.celebrate-modal.active .celebrate-card {
+  transform: scale(1);
+}
+.celebrate-card h3 {
+  font: 900 32px/1.2 var(--serif);
+  color: hsl(42 100% 72%);
+  text-shadow: 0 0 20px hsl(36 96% 56% / 0.7);
+}
+.celebrate-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  background: hsl(30 20% 100% / 0.04);
+  border-radius: 16px;
+  padding: 14px;
+}
+.celebrate-stats .num {
+  font: 700 22px var(--mono);
+  color: #fff;
+}
+.celebrate-stats .desc {
+  font-size: 11px;
+  color: var(--stage-muted);
+}
+.celebrate-close-btn {
+  appearance: none;
+  border: none;
+  background: linear-gradient(135deg, var(--gold), var(--primary));
+  color: hsl(24 50% 10%);
+  font: 700 14px var(--sans);
+  padding: 12px 24px;
+  border-radius: 99px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px hsl(36 96% 50% / 0.5);
+  transition: transform 0.15s ease;
+}
+.celebrate-close-btn:hover {
+  transform: scale(1.03);
+}
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <div class="header-row">
+    <div class="brand-group">
+      <span class="badge-version">v3.0 GAMEPLAY PREVIEW</span>
+      <h1 class="title-text">
+        Memory Anki · 交互与粒子升级实验室
+      </h1>
+      <span class="subtitle-text">双联分屏对比：翻卡惯性 · 游戏化击打 · 磁吸收集 · 连击心流</span>
+    </div>
+    
+    <div class="controls-toolbar">
+      <label class="tool-pill active" id="btnSyncTrigger" title="按1-4键或点卡片时，左右双联同时触发动作">
+        <input type="checkbox" id="syncCheck" checked style="display:none">
+        <span>🔗 同步对比操作</span>
+      </label>
+      <button class="tool-btn" id="btnTriggerMilestone" type="button" title="直接激发 5 连击里程碑">⚡ 连击里程碑</button>
+      <button class="tool-btn" id="btnTriggerRound" type="button" title="直接激发整轮完成大庆典">🏆 轮次庆典</button>
+      <button class="tool-btn" id="btnToggleSound" type="button" title="开启/关闭 Web Audio 纯律和弦敲击音">🔊 金石击鸣音: 开</button>
+      <button class="tool-btn" id="btnToggleTheme" type="button" title="深色/浅色纸纹主题切换">🌗 切换深浅</button>
+    </div>
+  </div>
+</header>
+
+<main class="comparator-grid">
+  <!-- 左侧：更改前 · 原版效果 -->
+  <section class="column-pane" id="paneOriginal">
+    <div class="pane-header">
+      <div class="pane-title-group">
+        <h2>
+          <span>更改前 · 现状基准</span>
+          <span class="tag-badge original">Original</span>
+        </h2>
+        <p class="pane-desc">现行交互：常规线性 3D 翻转，基础扁平键帽下压，短促微粒原地散开，无磁吸感。</p>
+      </div>
+    </div>
+
+    <!-- 原版模拟舞台 -->
+    <div class="stage-container" id="stageOriginal">
+      <div class="stage-hud">
+        <div class="hud-progress-wrap">
+          <div class="hud-meta-row">
+            <span>当前轮次进度</span>
+            <span id="origProgressText">7 / 20 卡</span>
+          </div>
+          <div class="round-rail" id="origRail">
+            <div class="round-rail-fill" id="origRailFill" style="width: 35%;"></div>
+          </div>
+        </div>
+        <div class="hud-combo-badge" id="origComboBadge">
+          <span>连击 0</span>
+        </div>
+      </div>
+
+      <div class="card-scene-wrapper">
+        <div class="interactive-card original-card" id="cardOriginal" title="点击翻转卡片">
+          <!-- 正面 -->
+          <div class="card-face front">
+            <div class="card-category-row">
+              <span>马原 · 认识论与实践观</span>
+              <span>★★★</span>
+            </div>
+            <div class="card-prompt">
+              辩证唯物主义中，实践对认识具有怎样的决定作用？
+            </div>
+            <div class="card-action-hint">
+              <span>点击或按空格翻看答案</span>
+            </div>
+          </div>
+          <!-- 反面 -->
+          <div class="card-face back">
+            <div class="card-category-row">
+              <span>答案与要点</span>
+              <span>核心考点</span>
+            </div>
+            <div class="card-answer-wrap">
+              1. 实践是认识的<span class="ans-highlight">来源</span><br>
+              2. 实践是认识发展的<span class="ans-highlight">动力</span><br>
+              3. 实践是检验真理的<span class="ans-highlight">唯一标准</span><br>
+              4. 实践是认识的目的
+            </div>
+            <div class="card-action-hint">
+              <span>按 1–4 键评定记忆熟练度</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 评分按键区 -->
+      <div class="rating-bar-grid original-keys" id="keysOriginal">
+        <button class="keycap-btn" data-tone="again" data-score="1" type="button">
+          <span class="key-label">忘记</span>
+          <span class="key-sub">1 · 重来</span>
+        </button>
+        <button class="keycap-btn" data-tone="hard" data-score="2" type="button">
+          <span class="key-label">困难</span>
+          <span class="key-sub">2 · 1天</span>
+        </button>
+        <button class="keycap-btn" data-tone="good" data-score="3" type="button">
+          <span class="key-label">记得</span>
+          <span class="key-sub">3 · 3天</span>
+        </button>
+        <button class="keycap-btn" data-tone="easy" data-score="4" type="button">
+          <span class="key-label">轻松</span>
+          <span class="key-sub">4 · 7天</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 特性清单 -->
+    <div class="features-comparison-list">
+      <div class="feat-item">
+        <span class="icon">⚪</span>
+        <div>
+          <b>线性 3D 翻面</b>
+          <p>简单的 RotateY 翻转，没有物理蓄力与过冲回弹，显得较为生硬平面。</p>
+        </div>
+      </div>
+      <div class="feat-item">
+        <span class="icon">⚪</span>
+        <div>
+          <b>基础键帽微移</b>
+          <p>按钮单层阴影位移 3px，缺乏机械与水晶质感的触底反馈。</p>
+        </div>
+      </div>
+      <div class="feat-item">
+        <span class="icon">⚪</span>
+        <div>
+          <b>就地散开无吸收</b>
+          <p>粒子在按键上方简单淡出消失，与顶部进度条没有动量与能量传递联系。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 右侧：更改后 · 视觉与游戏化升级版 -->
+  <section class="column-pane is-upgraded" id="paneUpgraded">
+    <div class="pane-header">
+      <div class="pane-title-group">
+        <h2>
+          <span>更改后 · 视觉升级版</span>
+          <span class="tag-badge upgraded">Upgraded ✨</span>
+        </h2>
+        <p class="pane-desc">多巴胺引擎：惯性蓄力过冲 · 机械触感键帽 · 金砂贝塞尔磁吸入轨 · 连击心流燃火。</p>
+      </div>
+
+      <!-- 方案切换 -->
+      <div class="variant-selector" id="variantSelector">
+        <button class="variant-pill active" data-variant="A" type="button" title="纸墨金粉 + 弧线磁吸 + 金尘荡落">方案 A: 纸墨金辉</button>
+        <button class="variant-pill" data-variant="B" type="button" title="星火燎原 + 连击光环 + 强力爆发">方案 B: 燃火连击</button>
+        <button class="variant-pill" data-variant="C" type="button" title="字光扫金 + 金石震空 + 纯粹雅致">方案 C: 墨玉扫金</button>
+      </div>
+    </div>
+
+    <!-- 升级版模拟舞台 -->
+    <div class="stage-container" id="stageUpgraded">
+      <div class="stage-hud">
+        <div class="hud-progress-wrap">
+          <div class="hud-meta-row">
+            <span style="color: hsl(40 96% 75%); font-weight: 600;">⚡ 能量收集轨 · 本轮进度</span>
+            <span id="upgProgressText" style="color: #fff; font-weight:700;">7 / 20 卡 (+EXP)</span>
+          </div>
+          <div class="round-rail" id="upgRail">
+            <div class="round-rail-fill" id="upgRailFill" style="width: 35%;"></div>
+          </div>
+        </div>
+        <div class="hud-combo-badge" id="upgComboBadge">
+          <span id="upgComboText">连击 0</span>
+        </div>
+      </div>
+
+      <div class="card-scene-wrapper">
+        <div class="interactive-card upgraded-card gold-ribbon" id="cardUpgraded" title="点击体验蓄力翻转与惯性过冲">
+          <!-- 正面 -->
+          <div class="card-face front">
+            <div class="card-category-row">
+              <span style="color: hsl(38 90% 70%);">马原 · 认识论与实践观</span>
+              <span style="color: var(--gold); letter-spacing: 2px;">★★★</span>
+            </div>
+            <div class="card-prompt">
+              辩证唯物主义中，实践对认识具有怎样的决定作用？
+            </div>
+            <div class="card-action-hint">
+              <span>点击或按空格 · 感受果冻微弹与风痕翻转</span>
+            </div>
+          </div>
+          <!-- 反面 -->
+          <div class="card-face back">
+            <div class="card-category-row">
+              <span style="color: hsl(42 96% 75%); font-weight: 600;">✦ 精要解析与真理烙印</span>
+              <span style="color: var(--gold); font-size:12px;">已点亮知识点</span>
+            </div>
+            <div class="card-answer-wrap">
+              1. 实践是认识的<span class="ans-highlight shimmer-text">唯一来源</span><br>
+              2. 实践是认识发展的<span class="ans-highlight shimmer-text">根本动力</span><br>
+              3. 实践是检验真理的<span class="ans-highlight shimmer-text">唯一标准</span><br>
+              4. 实践是认识的<span class="ans-highlight shimmer-text">终极目的与归宿</span>
+            </div>
+            <div class="card-action-hint">
+              <span>按 1–4 击打评分 · 释放金辉引力粒子</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 升级版评分按键区 -->
+      <div class="rating-bar-grid upgraded-keys" id="keysUpgraded">
+        <button class="keycap-btn" data-tone="again" data-score="1" type="button" title="深灰水墨柔和沉降散开，绝不红屏惩罚">
+          <span class="key-label">忘记</span>
+          <span class="key-sub">1 · 水墨沉烟</span>
+        </button>
+        <button class="keycap-btn" data-tone="hard" data-score="2" type="button" title="琥珀碎金微溅，短促蓄力">
+          <span class="key-label">困难</span>
+          <span class="key-sub">2 · 琥珀微芒</span>
+        </button>
+        <button class="keycap-btn" data-tone="good" data-score="3" type="button" title="翡翠金玉之声，灵动粒子弧线飞入收集轨">
+          <span class="key-label">记得</span>
+          <span class="key-sub">3 · 飞星入轨</span>
+        </button>
+        <button class="keycap-btn" data-tone="easy" data-score="4" type="button" title="金石交鸣大爆发，金芒拖尾与冲击波能量浪潮">
+          <span class="key-label">轻松</span>
+          <span class="key-sub">4 · 璀璨千钧</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 升级版特性清单 -->
+    <div class="features-comparison-list">
+      <div class="feat-item" style="border-color: color-mix(in oklab, var(--primary) 30%, var(--line));">
+        <span class="icon">✨</span>
+        <div>
+          <b>3D 惯性蓄力与抛掷微弹 (Overshoot Dynamics)</b>
+          <p>翻面前微倾蓄力，越过中线时纸风吹拂，落定时产生 8% 的阻尼微弹并震落金尘。</p>
+        </div>
+      </div>
+      <div class="feat-item" style="border-color: color-mix(in oklab, var(--primary) 30%, var(--line));">
+        <span class="icon">⚡</span>
+        <div>
+          <b>能量粒子二次贝塞尔弧线磁吸 (Magnetic Gravity Arc)</b>
+          <p>按键爆发的金色光粒受引力场牵引，以优雅弧线高速汇入进度槽，并在槽口触发光浪膨胀。</p>
+        </div>
+      </div>
+      <div class="feat-item" style="border-color: color-mix(in oklab, var(--primary) 30%, var(--line));">
+        <span class="icon">🔥</span>
+        <div>
+          <b>连击三阶心流 (3-Tier Dopamine State)</b>
+          <p>5连击开启金芒环绕；10连击激活【超频心流】，卡片金箔呼吸，音调连续上行，学习成就感翻倍！</p>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- 全局粒子画板 -->
+<canvas class="fx-layer" id="fxCanvas"></canvas>
+
+<!-- 底部控制与选择导出栏 -->
+<footer class="decision-tray">
+  <div class="tray-content">
+    <div class="tray-summary">
+      <span style="font-weight: 700; color: var(--ink);">当前所选配置偏好：</span>
+      <span class="pill-choice" id="choiceVariantBadge">方案 A: 纸墨金辉</span>
+      <span class="pill-choice" id="choiceSoundBadge">金石击鸣音</span>
+      <span class="perf-badge" id="perfCounter">渲染引擎: 60 FPS · 活跃粒子 0</span>
+    </div>
+    <div style="display: flex; gap: 10px;">
+      <button class="tool-btn primary" id="btnCopyConfig" type="button">📋 复制我的选择并反馈</button>
+    </div>
+  </div>
+</footer>
+
+<!-- 庆典弹窗 -->
+<div class="celebrate-modal" id="celebrateModal">
+  <div class="celebrate-card">
+    <div style="font-size: 40px;">🏮</div>
+    <h3>记忆宫殿 · 本轮大成</h3>
+    <p style="color: var(--stage-muted); font-size: 14px;">心流专注力爆表！你已成功点亮本章节 6 处关键知识图谱</p>
+    <div class="celebrate-stats">
+      <div>
+        <div class="num">20</div>
+        <div class="desc">复习卡片</div>
+      </div>
+      <div>
+        <div class="num" style="color: hsl(42 100% 72%);">100%</div>
+        <div class="desc">记忆熟练度</div>
+      </div>
+      <div>
+        <div class="num" style="color: hsl(140 70% 64%);">+12</div>
+        <div class="desc">连击最高纪录</div>
+      </div>
+    </div>
+    <button class="celebrate-close-btn" id="btnCloseCelebrate" type="button">继续下一组知识宫殿</button>
+  </div>
+</div>
+
+<div class="toast-bubble" id="toastBubble">已复制配置</div>
+
+<script>
+/* ==========================================================================
+   Web Audio API 音效合成引擎 (无需外链，纯数学公式合成清脆金石/玉石之音)
+   ========================================================================== */
+let audioCtx = null;
+let soundEnabled = true;
+
+function initAudio() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+}
+
+// 模拟玉石/金钟/编钟敲击声
+function playChime(freq = 880, decay = 0.4, type = 'sine', volume = 0.15) {
+  if (!soundEnabled) return;
+  try {
+    initAudio();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const now = audioCtx.currentTime;
+    
+    // 主音
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, now);
+    
+    // 泛音 (金属/玉石质感)
+    const oscHarmonic = audioCtx.createOscillator();
+    const gainHarmonic = audioCtx.createGain();
+    oscHarmonic.type = 'triangle';
+    oscHarmonic.frequency.setValueAtTime(freq * 2.76, now); // 非整倍数泛音创造真实磬石音
+
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(volume, now + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + decay);
+
+    gainHarmonic.gain.setValueAtTime(0, now);
+    gainHarmonic.gain.linearRampToValueAtTime(volume * 0.4, now + 0.005);
+    gainHarmonic.gain.exponentialRampToValueAtTime(0.0001, now + decay * 0.5);
+
+    osc.connect(gain).connect(audioCtx.destination);
+    oscHarmonic.connect(gainHarmonic).connect(audioCtx.destination);
+
+    osc.start(now);
+    oscHarmonic.start(now);
+    osc.stop(now + decay + 0.05);
+    oscHarmonic.stop(now + decay + 0.05);
+  } catch (e) {
+    console.warn('Audio not allowed yet', e);
+  }
+}
+
+// 评分专用音律
+function playRatingSound(score, combo = 0) {
+  if (!soundEnabled) return;
+  const baseFreqs = [220, 440, 659.25, 880]; // E3, A4, E5, A5
+  const comboOffset = Math.min(combo, 12) * 20; // 连击音阶爬升
+  const freq = baseFreqs[score - 1] + comboOffset;
+
+  if (score === 1) {
+    // 忘记：沉稳水滴/水墨散开声
+    playChime(196, 0.5, 'sine', 0.1);
+  } else if (score === 2) {
+    // 困难：短促琥珀声
+    playChime(freq, 0.25, 'triangle', 0.12);
+  } else if (score === 3) {
+    // 记得：清脆玉石
+    playChime(freq, 0.45, 'sine', 0.16);
+  } else if (score === 4) {
+    // 轻松：金石交鸣双音
+    playChime(freq, 0.55, 'sine', 0.2);
+    setTimeout(() => playChime(freq * 1.5, 0.6, 'sine', 0.14), 60);
+  }
+}
+
+// 连击里程碑和弦琶音
+function playMilestoneSound() {
+  if (!soundEnabled) return;
+  const notes = [523.25, 659.25, 783.99, 1046.5]; // C - E - G - C 和谐大三和弦
+  notes.forEach((n, i) => {
+    setTimeout(() => playChime(n, 0.7, 'sine', 0.18), i * 75);
+  });
+}
+
+/* ==========================================================================
+   高性能物理粒子系统 (Canvas 2D + 磁吸力场 + 贝塞尔流光 + 预渲染贴图)
+   ========================================================================== */
+const canvas = document.getElementById('fxCanvas');
+const ctx = canvas.getContext('2d');
+let W = 0, H = 0;
+
+function resizeCanvas() {
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+const particles = [];
+const MAX_PARTICLES = 1600;
+let isAnimating = false;
+
+// 预渲染高光圆形贴图以降低绘制损耗
+const spriteCache = new Map();
+function getGlowSprite(r, g, b) {
+  const key = `${r},${g},${b}`;
+  if (spriteCache.has(key)) return spriteCache.get(key);
+  const size = 64;
+  const off = document.createElement('canvas');
+  off.width = size;
+  off.height = size;
+  const octx = off.getContext('2d');
+  const grad = octx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
+  grad.addColorStop(0, `rgba(${r},${g},${b}, 1)`);
+  grad.addColorStop(0.25, `rgba(${r},${g},${b}, 0.6)`);
+  grad.addColorStop(1, `rgba(${r},${g},${b}, 0)`);
+  octx.fillStyle = grad;
+  octx.fillRect(0, 0, size, size);
+  spriteCache.set(key, off);
+  return off;
+}
+
+function spawnParticle(config) {
+  if (particles.length >= MAX_PARTICLES) return;
+  const p = {
+    x: config.x || 0,
+    y: config.y || 0,
+    vx: config.vx || 0,
+    vy: config.vy || 0,
+    size: config.size || 3,
+    color: config.color || [240, 180, 50],
+    alpha: config.alpha ?? 1,
+    life: 0,
+    maxLife: config.maxLife || 1.0,
+    drag: config.drag ?? 0.96,
+    gravity: config.gravity ?? 0.05,
+    type: config.type || 'glow', // 'glow', 'paper', 'spark', 'shockwave'
+    trail: config.trail ? [] : null,
+    target: config.target || null, // 磁吸目标 {x, y, onReach}
+    blend: config.blend || 'lighter',
+    rotation: Math.random() * Math.PI * 2,
+    vRot: (Math.random() - 0.5) * 0.1
+  };
+  particles.push(p);
+  ensureLoop();
+}
+
+function ensureLoop() {
+  if (!isAnimating) {
+    isAnimating = true;
+    requestAnimationFrame(renderLoop);
+  }
+}
+
+let lastTime = performance.now();
+let fpsCounter = 0;
+let lastFpsUpdate = performance.now();
+const perfEl = document.getElementById('perfCounter');
+
+function renderLoop(now) {
+  const dt = Math.min((now - lastTime) / 1000, 0.04);
+  lastTime = now;
+
+  // FPS 计数
+  fpsCounter++;
+  if (now - lastFpsUpdate >= 500) {
+    const fps = Math.round((fpsCounter * 1000) / (now - lastFpsUpdate));
+    perfEl.textContent = `渲染引擎: ${fps} FPS · 活跃粒子 ${particles.length}`;
+    fpsCounter = 0;
+    lastFpsUpdate = now;
+  }
+
+  ctx.clearRect(0, 0, W, H);
+
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.life += dt;
+    const progress = p.life / p.maxLife;
+
+    if (progress >= 1) {
+      if (p.target && p.target.onReach) p.target.onReach();
+      particles.splice(i, 1);
+      continue;
+    }
+
+    // 磁吸向心力逻辑 (二次贝塞尔/加速度牵引)
+    if (p.target) {
+      const dx = p.target.x - p.x;
+      const dy = p.target.y - p.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < 15) {
+        if (p.target.onReach) p.target.onReach();
+        particles.splice(i, 1);
+        continue;
+      }
+      const pull = Math.min(2400, (p.life * 4500));
+      p.vx += (dx / dist) * pull * dt * 0.05;
+      p.vy += (dy / dist) * pull * dt * 0.05;
+    } else {
+      p.vy += p.gravity * 60 * dt;
+    }
+
+    p.vx *= Math.pow(p.drag, dt * 60);
+    p.vy *= Math.pow(p.drag, dt * 60);
+    p.x += p.vx * 60 * dt;
+    p.y += p.vy * 60 * dt;
+    p.rotation += p.vRot;
+
+    // 记录拖尾
+    if (p.trail) {
+      p.trail.push({ x: p.x, y: p.y });
+      if (p.trail.length > 8) p.trail.shift();
+    }
+
+    // 绘制粒子
+    const fade = 1 - progress;
+    const [r, g, b] = p.color;
+    ctx.save();
+    ctx.globalCompositeOperation = p.blend;
+    ctx.globalAlpha = p.alpha * fade;
+
+    if (p.trail && p.trail.length > 2) {
+      ctx.beginPath();
+      ctx.moveTo(p.trail[0].x, p.trail[0].y);
+      for (let j = 1; j < p.trail.length; j++) {
+        ctx.lineTo(p.trail[j].x, p.trail[j].y);
+      }
+      ctx.strokeStyle = `rgba(${r},${g},${b}, ${fade * 0.6})`;
+      ctx.lineWidth = p.size * 0.8;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+    }
+
+    if (p.type === 'glow') {
+      const sprite = getGlowSprite(r, g, b);
+      const drawSize = p.size * 5;
+      ctx.drawImage(sprite, p.x - drawSize/2, p.y - drawSize/2, drawSize, drawSize);
+    } else if (p.type === 'shockwave') {
+      const currentR = p.size + (p.maxRadius - p.size) * (1 - Math.pow(1 - progress, 3));
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, currentR, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(${r},${g},${b}, ${fade * 0.7})`;
+      ctx.lineWidth = Math.max(1, 4 * fade);
+      ctx.stroke();
+    } else if (p.type === 'paper') {
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rotation);
+      ctx.fillStyle = `rgba(${r},${g},${b}, ${fade})`;
+      ctx.fillRect(-p.size, -p.size * 0.6, p.size * 2, p.size * 1.2);
+    } else {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${r},${g},${b}, ${fade})`;
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
+  if (particles.length > 0) {
+    requestAnimationFrame(renderLoop);
+  } else {
+    isAnimating = false;
+  }
+}
+
+/* ==========================================================================
+   业务动作与粒子发生器触发
+   ========================================================================== */
+function getCenter(el) {
+  const rect = el.getBoundingClientRect();
+  return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+}
+
+// 1. 原版简单散落发生器
+function triggerOriginalBurst(originEl) {
+  const pt = getCenter(originEl);
+  for (let i = 0; i < 18; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 1.5 + Math.random() * 3.5;
+    spawnParticle({
+      x: pt.x,
+      y: pt.y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 1,
+      size: 2 + Math.random() * 2,
+      color: [200, 160, 80],
+      maxLife: 0.5 + Math.random() * 0.3,
+      gravity: 0.08,
+      drag: 0.95,
+      type: 'dot',
+      blend: 'source-over'
+    });
+  }
+}
+
+// 2. 升级版：高质感金玉粒子 + 磁吸流光入轨
+function triggerUpgradedBurst(originEl, score, combo, targetRailEl) {
+  const pt = getCenter(originEl);
+  const targetPt = getCenter(targetRailEl);
+  const currentVariant = document.querySelector('.variant-pill.active').dataset.variant;
+
+  // 冲击波涟漪
+  spawnParticle({
+    x: pt.x,
+    y: pt.y,
+    size: 6,
+    maxRadius: score === 4 ? 75 : 45,
+    color: score === 1 ? [120, 120, 130] : [255, 210, 90],
+    maxLife: 0.45,
+    type: 'shockwave',
+    blend: 'lighter'
+  });
+
+  // 按评分决定发散基调
+  if (score === 1) {
+    // 忘记：水墨微沉
+    for (let i = 0; i < 22; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 0.5 + Math.random() * 1.8;
+      spawnParticle({
+        x: pt.x + (Math.random() - 0.5) * 20,
+        y: pt.y + (Math.random() - 0.5) * 10,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed + 0.6,
+        size: 3 + Math.random() * 4,
+        color: [70, 70, 75],
+        maxLife: 0.8 + Math.random() * 0.4,
+        gravity: 0.02,
+        drag: 0.94,
+        type: 'paper',
+        blend: 'source-over'
+      });
+    }
+    return;
+  }
+
+  // 记得与轻松：磁吸粒子群
+  const count = score === 4 ? 36 : 22;
+  const mainColor = score === 4 ? [255, 225, 110] : [120, 220, 150];
+
+  for (let i = 0; i < count; i++) {
+    const angle = (Math.PI * 1.1) + Math.random() * Math.PI * 0.8; // 向上弧线抛射
+    const speed = 3.5 + Math.random() * 6.5;
+    const isAttracted = Math.random() < 0.65; // 部分吸入轨道，部分自然下落荡漾
+
+    spawnParticle({
+      x: pt.x + (Math.random() - 0.5) * 20,
+      y: pt.y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      size: 2.5 + Math.random() * 3,
+      color: Math.random() < 0.8 ? [255, 215, 80] : mainColor,
+      maxLife: isAttracted ? 0.75 : 0.9,
+      gravity: 0.06,
+      drag: 0.97,
+      type: currentVariant === 'A' ? 'paper' : 'glow',
+      trail: isAttracted,
+      target: isAttracted ? {
+        x: targetPt.x + (Math.random() - 0.5) * 30,
+        y: targetPt.y,
+        onReach: () => {
+          // 落点冲击波
+          targetRailEl.classList.remove('land-impact');
+          void targetRailEl.offsetWidth; // 触发 reflow
+          targetRailEl.classList.add('land-impact');
+        }
+      } : null,
+      blend: 'lighter'
+    });
+  }
+}
+
+// 翻卡时的落地金尘 / 纸尘微扬
+function triggerCardLandedDust(cardEl) {
+  const rect = cardEl.getBoundingClientRect();
+  const bottomY = rect.bottom;
+  for (let i = 0; i < 28; i++) {
+    const side = Math.random() < 0.5 ? -1 : 1;
+    spawnParticle({
+      x: rect.left + rect.width / 2 + (Math.random() - 0.5) * (rect.width * 0.7),
+      y: bottomY - 4,
+      vx: side * (1.2 + Math.random() * 3.5),
+      vy: -Math.random() * 1.8,
+      size: 1.5 + Math.random() * 2.5,
+      color: [240, 195, 80],
+      maxLife: 0.6 + Math.random() * 0.4,
+      gravity: 0.04,
+      drag: 0.94,
+      type: 'glow',
+      blend: 'lighter'
+    });
+  }
+}
+
+/* ==========================================================================
+   页面交互与双联同步绑定
+   ========================================================================== */
+const cardOrig = document.getElementById('cardOriginal');
+const cardUpg = document.getElementById('cardUpgraded');
+const syncCheck = document.getElementById('syncCheck');
+const btnSyncTrigger = document.getElementById('btnSyncTrigger');
+
+let isFlippedOrig = false;
+let isFlippedUpg = false;
+
+function toggleFlipOrig(force) {
+  isFlippedOrig = force !== undefined ? force : !isFlippedOrig;
+  cardOrig.classList.toggle('is-flipped', isFlippedOrig);
+}
+
+function toggleFlipUpg(force) {
+  isFlippedUpg = force !== undefined ? force : !isFlippedUpg;
+  if (isFlippedUpg) {
+    cardUpg.classList.remove('is-unflipped');
+    cardUpg.classList.add('is-flipped');
+    setTimeout(() => {
+      triggerCardLandedDust(cardUpg);
+      playChime(587.33, 0.35, 'triangle', 0.12); // D5 翻卡灵动音
+    }, 280);
+  } else {
+    cardUpg.classList.remove('is-flipped');
+    cardUpg.classList.add('is-unflipped');
+  }
+}
+
+cardOrig.addEventListener('click', () => {
+  toggleFlipOrig();
+  if (syncCheck.checked) toggleFlipUpg(isFlippedOrig);
+});
+
+cardUpg.addEventListener('click', () => {
+  toggleFlipUpg();
+  if (syncCheck.checked) toggleFlipOrig(isFlippedUpg);
+});
+
+// 同步切换开关
+btnSyncTrigger.addEventListener('click', (e) => {
+  if (e.target.tagName !== 'INPUT') {
+    syncCheck.checked = !syncCheck.checked;
+  }
+  btnSyncTrigger.classList.toggle('active', syncCheck.checked);
+  showToast(syncCheck.checked ? '已开启左右双联同步对比' : '已切换为独立操作模式');
+});
+
+// 状态追踪
+let origScoreCount = 7;
+let upgScoreCount = 7;
+let origCombo = 0;
+let upgCombo = 0;
+
+const origRailFill = document.getElementById('origRailFill');
+const upgRailFill = document.getElementById('upgRailFill');
+const origProgressText = document.getElementById('origProgressText');
+const upgProgressText = document.getElementById('upgProgressText');
+const origComboBadge = document.getElementById('origComboBadge');
+const upgComboBadge = document.getElementById('upgComboBadge');
+const upgComboText = document.getElementById('upgComboText');
+
+function handleRating(score, isOriginal, btnElement) {
+  playRatingSound(score, isOriginal ? 0 : upgCombo);
+
+  if (isOriginal) {
+    // 原始版逻辑
+    btnElement.classList.add('is-pressed');
+    setTimeout(() => btnElement.classList.remove('is-pressed'), 120);
+    triggerOriginalBurst(btnElement);
+
+    origScoreCount = Math.min(20, origScoreCount + 1);
+    origRailFill.style.width = `${(origScoreCount / 20) * 100}%`;
+    origProgressText.textContent = `${origScoreCount} / 20 卡`;
+
+    origCombo = score >= 3 ? origCombo + 1 : 0;
+    origComboBadge.textContent = `连击 ${origCombo}`;
+    origComboBadge.classList.toggle('hot', origCombo >= 3);
+  } else {
+    // 升级版逻辑
+    btnElement.classList.add('is-pressed');
+    setTimeout(() => btnElement.classList.remove('is-pressed'), 140);
+    triggerUpgradedBurst(btnElement, score, upgCombo, document.getElementById('upgRail'));
+
+    upgScoreCount = Math.min(20, upgScoreCount + 1);
+    upgRailFill.style.width = `${(upgScoreCount / 20) * 100}%`;
+    upgProgressText.textContent = `${upgScoreCount} / 20 卡 (+EXP)`;
+
+    upgCombo = score >= 3 ? upgCombo + 1 : 0;
+    upgComboText.textContent = `连击 ${upgCombo} 🔥`;
+
+    // 升级版连击三阶心流判定
+    upgComboBadge.className = 'hud-combo-badge';
+    cardUpg.classList.remove('overdrive-aura');
+
+    if (upgCombo >= 10) {
+      upgComboBadge.classList.add('overdrive');
+      cardUpg.classList.add('overdrive-aura');
+      spawnComboPop(cardUpg, `🔥 超频心流 ×${upgCombo}`);
+      playChime(1046.5, 0.5, 'sine', 0.2); // 高亢和弦
+    } else if (upgCombo >= 5) {
+      upgComboBadge.classList.add('hot');
+      spawnComboPop(cardUpg, `连击 ×${upgCombo}`);
+      if (upgCombo === 5) playMilestoneSound();
+    }
+
+    if (upgScoreCount >= 20) {
+      setTimeout(showCelebration, 600);
+    }
+  }
+}
+
+function spawnComboPop(container, text) {
+  const pop = document.createElement('div');
+  pop.className = 'combo-popup';
+  pop.textContent = text;
+  container.appendChild(pop);
+  setTimeout(() => pop.remove(), 1100);
+}
+
+// 绑定按键
+document.querySelectorAll('#keysOriginal .keycap-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const score = parseInt(btn.dataset.score, 10);
+    handleRating(score, true, btn);
+    if (syncCheck.checked) {
+      const targetBtn = document.querySelector(`#keysUpgraded .keycap-btn[data-score="${score}"]`);
+      if (targetBtn) handleRating(score, false, targetBtn);
+    }
+  });
+});
+
+document.querySelectorAll('#keysUpgraded .keycap-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const score = parseInt(btn.dataset.score, 10);
+    handleRating(score, false, btn);
+    if (syncCheck.checked) {
+      const targetBtn = document.querySelector(`#keysOriginal .keycap-btn[data-score="${score}"]`);
+      if (targetBtn) handleRating(score, true, targetBtn);
+    }
+  });
+});
+
+// 全局键盘快捷键 1-4 与空格
+window.addEventListener('keydown', (e) => {
+  if (['1', '2', '3', '4'].includes(e.key)) {
+    const score = parseInt(e.key, 10);
+    if (syncCheck.checked) {
+      const origBtn = document.querySelector(`#keysOriginal .keycap-btn[data-score="${score}"]`);
+      const upgBtn = document.querySelector(`#keysUpgraded .keycap-btn[data-score="${score}"]`);
+      if (origBtn) handleRating(score, true, origBtn);
+      if (upgBtn) handleRating(score, false, upgBtn);
+    } else {
+      const upgBtn = document.querySelector(`#keysUpgraded .keycap-btn[data-score="${score}"]`);
+      if (upgBtn) handleRating(score, false, upgBtn);
+    }
+  } else if (e.code === 'Space') {
+    e.preventDefault();
+    if (syncCheck.checked) {
+      toggleFlipOrig();
+      toggleFlipUpg();
+    } else {
+      toggleFlipUpg();
+    }
+  } else if (e.key === 'Escape') {
+    closeCelebration();
+  }
+});
+
+// 方案 A/B/C 切换
+const variantSelector = document.getElementById('variantSelector');
+const choiceVariantBadge = document.getElementById('choiceVariantBadge');
+const variantNames = {
+  A: '方案 A: 纸墨金辉',
+  B: '方案 B: 燃火连击',
+  C: '方案 C: 墨玉扫金'
+};
+
+variantSelector.addEventListener('click', (e) => {
+  if (e.target.classList.contains('variant-pill')) {
+    document.querySelectorAll('.variant-pill').forEach(p => p.classList.remove('active'));
+    e.target.classList.add('active');
+    const v = e.target.dataset.variant;
+    choiceVariantBadge.textContent = variantNames[v];
+    showToast(`已切换为：${variantNames[v]}`);
+    
+    // 切换方案特效微调
+    if (v === 'C') {
+      cardUpg.classList.remove('gold-ribbon');
+    } else {
+      cardUpg.classList.add('gold-ribbon');
+    }
+  }
+});
+
+// 庆典弹窗逻辑
+const celebrateModal = document.getElementById('celebrateModal');
+function showCelebration() {
+  celebrateModal.classList.add('active');
+  playMilestoneSound();
+  // 喷涌全屏金雨
+  const center = { x: W / 2, y: H / 2 };
+  for (let i = 0; i < 90; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 4 + Math.random() * 10;
+    spawnParticle({
+      x: center.x,
+      y: center.y - 40,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 3,
+      size: 3 + Math.random() * 4,
+      color: [255, 215, 80],
+      maxLife: 1.5 + Math.random() * 0.8,
+      gravity: 0.12,
+      drag: 0.96,
+      type: 'paper',
+      blend: 'lighter'
+    });
+  }
+}
+function closeCelebration() {
+  celebrateModal.classList.remove('active');
+}
+document.getElementById('btnCloseCelebrate').addEventListener('click', closeCelebration);
+document.getElementById('btnTriggerRound').addEventListener('click', showCelebration);
+document.getElementById('btnTriggerMilestone').addEventListener('click', () => {
+  upgCombo = 5;
+  upgComboBadge.className = 'hud-combo-badge hot';
+  upgComboText.textContent = `连击 5 🔥`;
+  spawnComboPop(cardUpg, `⚡ 连击里程碑达成！`);
+  playMilestoneSound();
+  const c = getCenter(cardUpg);
+  for (let i = 0; i < 40; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 3 + Math.random() * 6;
+    spawnParticle({
+      x: c.x,
+      y: c.y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      size: 2.5 + Math.random() * 3,
+      color: [255, 220, 90],
+      maxLife: 0.9,
+      gravity: 0.05,
+      type: 'glow',
+      blend: 'lighter'
+    });
+  }
+});
+
+// 音效开关
+const btnToggleSound = document.getElementById('btnToggleSound');
+const choiceSoundBadge = document.getElementById('choiceSoundBadge');
+btnToggleSound.addEventListener('click', () => {
+  soundEnabled = !soundEnabled;
+  btnToggleSound.textContent = soundEnabled ? '🔊 金石击鸣音: 开' : '🔇 金石击鸣音: 关';
+  choiceSoundBadge.textContent = soundEnabled ? '金石击鸣音' : '静音模式';
+  showToast(soundEnabled ? '已开启纯律金石音效' : '已静音');
+});
+
+// 主题切换
+const btnToggleTheme = document.getElementById('btnToggleTheme');
+btnToggleTheme.addEventListener('click', () => {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  document.documentElement.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  showToast(isDark ? '已切换至暖纸明亮模式' : '已切换至深色宫殿夜间模式');
+});
+
+// 复制配置按钮
+const toastBubble = document.getElementById('toastBubble');
+function showToast(msg) {
+  toastBubble.textContent = msg;
+  toastBubble.classList.add('show');
+  clearTimeout(toastBubble._timer);
+  toastBubble._timer = setTimeout(() => toastBubble.classList.remove('show'), 2000);
+}
+
+document.getElementById('btnCopyConfig').addEventListener('click', () => {
+  const activeVariant = document.querySelector('.variant-pill.active').dataset.variant;
+  const configText = `【Memory Anki 视觉升级配置选项】\n` +
+    `- 美学风格：新东方国风/纸墨金粉 + 游戏化打击感\n` +
+    `- 对比模式：左右双联分屏对比\n` +
+    `- 所选升级方案：${variantNames[activeVariant]}\n` +
+    `- 音效反馈：${soundEnabled ? '开启金石交鸣纯律音階' : '静音'}\n` +
+    `- 连击心流：开启三阶心流（超频燃火状态）\n` +
+    `- 磁吸粒子：开启二次贝塞尔能量入轨`;
+  
+  navigator.clipboard.writeText(configText).then(() => {
+    showToast('✨ 配置选项已成功复制到剪贴板！可以直接发送给我');
+  }).catch(() => {
+    showToast('复制成功：已生成配置选项');
+  });
+});
+</script>
+</body>
+</html>
