@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { FX_ANCHORS, fxAnchor, resolveFxGate } from '@/shared/fx'
+import type { ThemePack } from '@/shared/theme/themePacks'
+import { updateGrowthState, useGrowthState } from '../model/growthStateStore'
 import { useGrowthSettlement } from '../model/useGrowthCeremony'
 import { useProgressionOverview } from '../model/useProgressionOverview'
 
@@ -24,6 +26,26 @@ function useAnimatedFill(from: number, to: number, levelUp: boolean) {
     return () => timers.forEach((id) => window.clearTimeout(id))
   }, [from, levelUp, motion, to])
   return width
+}
+
+function UnboxedPack({ pack }: { pack: ThemePack }) {
+  const worn = useGrowthState().pack === pack.id
+  return (
+    <div data-testid="growth-unboxed-pack" className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-stage-line-strong bg-stage/60 px-3 py-2">
+      <div className="min-w-0">
+        <div className="text-xs font-bold text-stage-glow">新世界 · {pack.label}</div>
+        <div className="truncate text-[11px] text-stage-muted">{pack.tagline}</div>
+      </div>
+      <button
+        type="button"
+        disabled={worn}
+        onClick={() => updateGrowthState({ pack: pack.id })}
+        className="ma-pressable shrink-0 rounded-full bg-stage-glow px-3 py-1 text-xs font-bold text-stage disabled:opacity-60"
+      >
+        {worn ? '已换上' : '换上'}
+      </button>
+    </div>
+  )
 }
 
 /** Round-end growth block: XP settles into the bar, level-ups and stamps get their ceremony. */
@@ -59,10 +81,8 @@ export function GrowthRoundSettlement({ roundKey }: { roundKey: string }) {
         {view.stamps.map((stamp) => (
           <span key={stamp.id} className="font-semibold text-stage-glow">印 · {stamp.title}</span>
         ))}
-        {view.unlockedCosmetics.map((item) => (
-          <span key={item.id} className="font-semibold text-stage-glow">解锁 · {item.label}</span>
-        ))}
       </div>
+      {view.unboxPack ? <UnboxedPack pack={view.unboxPack} /> : null}
       <Link to="/growth" className="mt-2 inline-block text-xs text-stage-glow hover:underline">
         看星图与印章册 →
       </Link>

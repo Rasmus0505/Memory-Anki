@@ -82,24 +82,75 @@
 }
 .growth-wardrobe-tile:not(:disabled):hover { border-color: var(--color-border); }
 .growth-wardrobe-active { border-color: var(--color-primary); background: var(--color-primary-soft); }
-.growth-wardrobe-swatch { background: var(--color-paper-card); border: 1px solid var(--color-paper-line); }
-[data-kind='skin'][data-item='ink'] .growth-wardrobe-swatch { background: radial-gradient(circle at 30% 40%, hsl(40 96% 62%) 0 3px, transparent 4px), radial-gradient(circle at 70% 60%, hsl(24 38% 20%) 0 3px, transparent 4px), hsl(40 50% 92%); }
-[data-kind='skin'][data-item='foil'] .growth-wardrobe-swatch { background: linear-gradient(110deg, hsl(34 80% 42%), hsl(46 100% 80%), hsl(38 92% 56%)); }
-[data-kind='skin'][data-item='galaxy'] .growth-wardrobe-swatch { background: radial-gradient(circle at 25% 35%, hsl(42 100% 80%) 0 2px, transparent 3px), radial-gradient(circle at 70% 60%, hsl(330 80% 80%) 0 2px, transparent 3px), linear-gradient(135deg, hsl(290 30% 16%), hsl(330 40% 22%)); }
-[data-kind='bookmark'][data-item='foil'] .growth-wardrobe-swatch { background: linear-gradient(110deg, hsl(34 80% 42%), hsl(46 100% 86%), hsl(32 80% 40%)); }
-[data-kind='bookmark'][data-item='cinnabar'] .growth-wardrobe-swatch { background: linear-gradient(110deg, hsl(4 70% 36%), hsl(8 80% 56%), hsl(4 70% 36%)); }
-[data-kind='bookmark'][data-item='bamboo'] .growth-wardrobe-swatch { background: linear-gradient(110deg, hsl(120 30% 30%), hsl(96 40% 56%), hsl(120 30% 30%)); }
-[data-kind='bookmark'][data-item='starlight'] .growth-wardrobe-swatch { background: radial-gradient(circle at 50% 50%, hsl(48 100% 90%) 0 3px, transparent 4px), linear-gradient(110deg, hsl(290 30% 30%), hsl(42 90% 66%), hsl(290 30% 30%)); }
 
-/* ---------- earned card materials (opt-in; 宣纸 keeps the reference look) ---------- */
+/* ---------- theme pack wardrobe scenes (colors come from each pack's preview) ---------- */
 
-:root[data-card-material='kraft'] { --color-paper-card: hsl(34 48% 88%); --color-paper-line: hsl(30 30% 74%); }
-:root[data-card-material='wax'] { --color-paper-card: hsl(44 70% 95%); }
-:root[data-card-material='goldfleck'] { --color-paper-card: hsl(42 80% 96%); }
+.growth-pack-scene {
+  position: relative;
+  display: block;
+  height: 4.25rem;
+  overflow: hidden;
+  border-radius: 0.8rem;
+  background:
+    radial-gradient(70% 90% at 80% 0%, color-mix(in oklab, var(--pack-glow) 30%, transparent), transparent 70%),
+    var(--pack-ground);
+}
+.growth-pack-scene__card {
+  position: absolute;
+  left: 14%;
+  top: 22%;
+  width: 46%;
+  height: 62%;
+  border-radius: 0.5rem;
+  background: var(--pack-card);
+  box-shadow: 0 10px 18px -8px rgb(0 0 0 / 0.5);
+  transform: rotate(-4deg);
+  transition: transform 420ms var(--ease-spring-soft);
+}
+.growth-wardrobe-tile:not(:disabled):hover .growth-pack-scene__card { transform: rotate(-1deg) translateY(-2px); }
+.growth-pack-scene__line {
+  position: absolute;
+  left: 12%;
+  right: 16%;
+  top: 26%;
+  height: 3px;
+  border-radius: 2px;
+  background: color-mix(in oklab, var(--pack-ink) 70%, transparent);
+}
+.growth-pack-scene__line--short { top: 46%; right: 42%; opacity: 0.6; }
+.growth-pack-scene__key {
+  position: absolute;
+  left: 12%;
+  bottom: 14%;
+  width: 34%;
+  height: 16%;
+  border-radius: 999px;
+  background: var(--pack-accent);
+}
+.growth-pack-scene__motes {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 72% 30%, var(--pack-glow) 0 1.6px, transparent 2.6px),
+    radial-gradient(circle at 86% 62%, var(--pack-glow) 0 1.2px, transparent 2.2px),
+    radial-gradient(circle at 64% 78%, var(--pack-glow) 0 1px, transparent 2px),
+    radial-gradient(circle at 92% 18%, var(--pack-glow) 0 0.9px, transparent 1.8px);
+  animation: growth-pack-motes 3.6s ease-in-out infinite alternate;
+}
+.growth-pack-scene[data-mote='firefly'] .growth-pack-scene__motes { filter: blur(0.4px) drop-shadow(0 0 3px var(--pack-glow)); }
+.growth-pack-scene[data-mote='gild'] .growth-pack-scene__motes { animation-name: growth-pack-gild; }
+@keyframes growth-pack-motes { from { opacity: 0.45; transform: translateY(1px); } to { opacity: 1; transform: translateY(-2px); } }
+@keyframes growth-pack-gild { from { opacity: 0.6; transform: translateY(-2px); } to { opacity: 1; transform: translateY(3px); } }
 
-[data-kind='material'][data-item='kraft'] .growth-wardrobe-swatch { background: hsl(34 48% 82%); }
-[data-kind='material'][data-item='wax'] .growth-wardrobe-swatch { background: linear-gradient(120deg, hsl(44 70% 95%), hsl(44 60% 99%) 40%, hsl(44 70% 93%)); }
-[data-kind='material'][data-item='goldfleck'] .growth-wardrobe-swatch,
+/* ---------- pack card textures (paper colors come from the pack tokens) ---------- */
+
+:root[data-card-material='kraft'] .bg-paper-card {
+  background-image:
+    repeating-linear-gradient(97deg, hsl(30 30% 40% / 0.035) 0 1px, transparent 1px 7px),
+    repeating-linear-gradient(8deg, hsl(30 30% 40% / 0.025) 0 1px, transparent 1px 11px);
+}
+
+
 :root[data-card-material='goldfleck'] .bg-paper-card {
   background-image:
     radial-gradient(circle at 12% 30%, hsl(42 90% 60% / 0.55) 0 1px, transparent 1.6px),
@@ -127,4 +178,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .growth-xp-fill { animation: none; }
+  .growth-pack-scene__motes { animation: none; }
+  .growth-pack-scene__card { transition: none; }
 }

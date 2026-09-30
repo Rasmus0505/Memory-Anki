@@ -1,12 +1,14 @@
+import { DEFAULT_THEME_PACK, coerceThemePackId, type ThemePackId } from '@/shared/theme/themePacks'
+
 /**
  * Per-learner growth bookkeeping, synced through client preferences:
- * wardrobe picks, plus which ceremonies already played so none ever repeats
- * on the other device.
+ * the worn theme pack, plus which ceremonies already played so none ever
+ * repeats on the other device.
  */
 export interface GrowthState {
-  skin: string
-  material: string
-  bookmark: string
+  pack: ThemePackId
+  /** Packs whose unboxing ceremony has played (the default pack counts as opened). */
+  unboxed: ThemePackId[]
   /** Level and XP the learner last *saw* settled; null until the first baseline. */
   seenLevel: number | null
   seenXp: number | null
@@ -17,9 +19,8 @@ export interface GrowthState {
 }
 
 export const DEFAULT_GROWTH_STATE: GrowthState = {
-  skin: 'ink',
-  material: 'rice',
-  bookmark: 'foil',
+  pack: DEFAULT_THEME_PACK,
+  unboxed: [DEFAULT_THEME_PACK],
   seenLevel: null,
   seenXp: null,
   celebrated: [],
@@ -39,9 +40,9 @@ export function sanitizeGrowthState(value: unknown): GrowthState {
   if (!value || typeof value !== 'object') return { ...DEFAULT_GROWTH_STATE }
   const record = value as Record<string, unknown>
   return {
-    skin: typeof record.skin === 'string' ? record.skin : DEFAULT_GROWTH_STATE.skin,
-    material: typeof record.material === 'string' ? record.material : DEFAULT_GROWTH_STATE.material,
-    bookmark: typeof record.bookmark === 'string' ? record.bookmark : DEFAULT_GROWTH_STATE.bookmark,
+    // Pre-pack states saved a particle skin; it maps onto the world it grew into.
+    pack: coerceThemePackId(record.pack ?? record.skin),
+    unboxed: unboxedList(record.unboxed),
     seenLevel: nullableNumber(record.seenLevel),
     seenXp: nullableNumber(record.seenXp),
     celebrated: stringList(record.celebrated),
@@ -49,12 +50,18 @@ export function sanitizeGrowthState(value: unknown): GrowthState {
   }
 }
 
+function unboxedList(value: unknown): ThemePackId[] {
+  const ids = stringList(value).map((id) => coerceThemePackId(id))
+  return Array.from(new Set([DEFAULT_THEME_PACK, ...ids]))
+}
+
 export function isGrowthState(value: unknown): value is GrowthState {
   if (!value || typeof value !== 'object') return false
   const record = value as Record<string, unknown>
-  return typeof record.skin === 'string'
-    && typeof record.material === 'string'
-    && typeof record.bookmark === 'string'
+  // Pre-pack states (`skin`, no `unboxed`) stay valid so sanitize can migrate them
+  // instead of the store dropping seen levels and stamps back to a fresh baseline.
+  const packShape = typeof record.pack === 'string' || typeof record.skin === 'string'
+  return packShape
     && Array.isArray(record.celebrated)
     && Array.isArray(record.toasted)
 }

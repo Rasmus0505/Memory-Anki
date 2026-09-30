@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import type { ProgressionOverview, ProgressionStamp } from '@/shared/api/contracts'
 import { MAX_STAMP_CEREMONIES, planCeremony, questToastKey } from './ceremony'
 import { DEFAULT_GROWTH_STATE, sanitizeGrowthState } from './growthState'
-import { BOOKMARKS, MATERIALS, SKINS, isUnlocked, newlyUnlocked, resolvePick } from './cosmetics'
+import { THEME_PACKS } from '@/shared/theme/themePacks'
+import { isGrowthState } from './growthState'
+import { isUnlocked, packsAwaitingUnbox, resolvePack } from './cosmetics'
 
 function stamp(id: string, unlocked: boolean): ProgressionStamp {
   return { id, title: id, description: '', group: 'g', tier: 'paper', progress: 1, target: 1, unlocked_on: unlocked ? '2026-10-05' : null }
@@ -65,25 +67,31 @@ describe('planCeremony', () => {
   })
 })
 
-describe('growth state + cosmetics', () => {
+describe('growth state + theme packs', () => {
   it('sanitizes junk into defaults', () => {
     expect(sanitizeGrowthState(null)).toEqual(DEFAULT_GROWTH_STATE)
-    expect(sanitizeGrowthState({ skin: 3, celebrated: ['a', 1] })).toMatchObject({ skin: 'ink', celebrated: ['a'] })
+    expect(sanitizeGrowthState({ pack: 3, celebrated: ['a', 1] })).toMatchObject({ pack: 'study', celebrated: ['a'] })
   })
 
-  it('first item of every shelf is always unlocked', () => {
-    const none = { level: 1, stamps: new Set<string>() }
-    for (const shelf of [SKINS, MATERIALS, BOOKMARKS]) expect(isUnlocked(shelf[0].unlock, none)).toBe(true)
+  it('migrates a pre-pack wardrobe without dropping ceremony history', () => {
+    const legacy = { skin: 'galaxy', material: 'wax', bookmark: 'foil', seenLevel: 18, seenXp: 9000, celebrated: ['days_7'], toasted: ['days_7'] }
+    expect(isGrowthState(legacy)).toBe(true)
+    expect(sanitizeGrowthState(legacy)).toMatchObject({ pack: 'voyage', unboxed: ['study'], seenLevel: 18, celebrated: ['days_7'] })
   })
 
-  it('falls back when a saved pick is locked', () => {
-    expect(resolvePick(SKINS, 'galaxy', { level: 3, stamps: new Set() })).toBe('ink')
-    expect(resolvePick(SKINS, 'galaxy', { level: 12, stamps: new Set() })).toBe('galaxy')
-    expect(resolvePick(BOOKMARKS, 'bamboo', { level: 1, stamps: new Set(['perfect_1']) })).toBe('bamboo')
+  it('first pack of the ladder is always unlocked', () => {
+    expect(isUnlocked(THEME_PACKS[0].unlock, { level: 1, stamps: new Set() })).toBe(true)
   })
 
-  it('reports what a level-up just unlocked', () => {
-    const ids = newlyUnlocked({ level: 4, stamps: new Set() }, { level: 5, stamps: new Set() }).map((item) => item.id)
-    expect(ids).toEqual(['foil'])
+  it('falls back to the default world when a saved pack is locked', () => {
+    expect(resolvePack('voyage', { level: 3, stamps: new Set() })).toBe('study')
+    expect(resolvePack('voyage', { level: 12, stamps: new Set() })).toBe('voyage')
+    expect(resolvePack('forest', { level: 1, stamps: new Set(['days_30']) })).toBe('forest')
+  })
+
+  it('lists unlocked packs that still await their unboxing, in ladder order', () => {
+    const context = { level: 13, stamps: new Set<string>() }
+    expect(packsAwaitingUnbox(context, ['study']).map((pack) => pack.id)).toEqual(['palace', 'voyage'])
+    expect(packsAwaitingUnbox(context, ['study', 'palace', 'voyage'])).toEqual([])
   })
 })

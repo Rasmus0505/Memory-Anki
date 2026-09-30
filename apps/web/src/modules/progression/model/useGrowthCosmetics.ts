@@ -1,7 +1,8 @@
 import { useEffect, useMemo } from 'react'
 import type { ProgressionOverview } from '@/shared/api/contracts'
 import { isFxSkinId, setFxSkin } from '@/shared/fx'
-import { BOOKMARKS, MATERIALS, SKINS, resolvePick, type UnlockContext } from '../domain/cosmetics'
+import { applyThemePack, themePackById } from '@/shared/theme/themePacks'
+import { resolvePack, type UnlockContext } from '../domain/cosmetics'
 import { useGrowthState } from './growthStateStore'
 
 export function unlockContextOf(overview: ProgressionOverview | null): UnlockContext {
@@ -12,32 +13,19 @@ export function unlockContextOf(overview: ProgressionOverview | null): UnlockCon
 }
 
 /**
- * Applies the wardrobe globally: the particle skin to the fx engine, card material
- * and bookmark as root data attributes that CSS reads. Until progression loads,
- * saved picks are trusted so the look does not flicker at startup.
+ * Wears the saved theme pack app-wide: tokens, paper, motes and rhythm through
+ * `shared/theme`, the particle palette through `shared/fx`. Until progression
+ * loads the saved pick is trusted, so the world never flickers at startup.
  */
 export function useGrowthCosmetics(overview: ProgressionOverview | null) {
   const state = useGrowthState()
   const context = useMemo(() => unlockContextOf(overview), [overview])
-  const trusted = overview == null
-
-  const skin = trusted ? state.skin : resolvePick(SKINS, state.skin, context)
-  const material = trusted ? state.material : resolvePick(MATERIALS, state.material, context)
-  const bookmark = trusted ? state.bookmark : resolvePick(BOOKMARKS, state.bookmark, context)
+  const pack = overview == null ? state.pack : resolvePack(state.pack, context)
 
   useEffect(() => {
-    setFxSkin(isFxSkinId(skin) ? skin : 'ink')
-  }, [skin])
+    const applied = applyThemePack(pack)
+    setFxSkin(isFxSkinId(applied.fxSkin) ? applied.fxSkin : 'ink')
+  }, [pack])
 
-  useEffect(() => {
-    const root = document.documentElement
-    root.dataset.cardMaterial = material
-    root.dataset.cardBookmark = bookmark
-    return () => {
-      delete root.dataset.cardMaterial
-      delete root.dataset.cardBookmark
-    }
-  }, [bookmark, material])
-
-  return { skin, material, bookmark, context }
+  return { pack: themePackById(pack), context }
 }

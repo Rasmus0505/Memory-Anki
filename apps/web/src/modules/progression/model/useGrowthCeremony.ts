@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ProgressionOverview } from '@/shared/api/contracts'
-import { cue, useFxOwner } from '@/shared/fx'
+import { cue, isFxSkinId, useFxOwner } from '@/shared/fx'
 import { planCeremony, type CeremonyPlan } from '../domain/ceremony'
-import { newlyUnlocked, type Cosmetic } from '../domain/cosmetics'
+import type { ThemePack } from '@/shared/theme/themePacks'
+import { packsAwaitingUnbox } from '../domain/cosmetics'
 import { readGrowthState, writeGrowthState } from './growthStateStore'
 import { unlockContextOf } from './useGrowthCosmetics'
 
@@ -23,7 +24,8 @@ export function useLiveGrowthToasts(overview: ProgressionOverview | null) {
 }
 
 export interface SettlementView extends CeremonyPlan {
-  unlockedCosmetics: Cosmetic<string>[]
+  /** At most one new world per round gets its unboxing; the rest wait for later rounds. */
+  unboxPack: ThemePack | null
 }
 
 /** Timing after the round meteor shower (≈2.3s) so the two never talk over each other. */
@@ -47,14 +49,10 @@ export function useGrowthSettlement(overview: ProgressionOverview | null, roundK
     settledFor.current = roundKey
     const before = readGrowthState()
     const plan = planCeremony(before, overview, 'settle')
-    writeGrowthState(plan.next)
-    const unlockedCosmetics = plan.baseline
-      ? []
-      : newlyUnlocked(
-          { level: plan.levelFrom, stamps: new Set(before.celebrated) },
-          unlockContextOf(overview),
-        )
-    setView({ ...plan, unlockedCosmetics })
+    const unboxPack = plan.baseline ? null : packsAwaitingUnbox(unlockContextOf(overview), before.unboxed)[0] ?? null
+    const next = unboxPack ? { ...plan.next, unboxed: [...plan.next.unboxed, unboxPack.id] } : plan.next
+    writeGrowthState(next)
+    setView({ ...plan, next, unboxPack })
   }, [overview, roundKey])
 
   useEffect(() => {
@@ -67,6 +65,12 @@ export function useGrowthSettlement(overview: ProgressionOverview | null, roundK
     view.stamps.forEach((stamp, index) => {
       later(STAMP_CUE_MS + index * STAMP_GAP_MS, () => cue('stamp.unlock', { title: stamp.title, ceremony: true }, { owner }))
     })
+    const pack = view.unboxPack
+    if (pack) {
+      later(STAMP_CUE_MS + view.stamps.length * STAMP_GAP_MS + 300, () => {
+        cue('pack.unbox', { label: pack.label, skin: isFxSkinId(pack.fxSkin) ? pack.fxSkin : 'ink' }, { owner })
+      })
+    }
     return () => timers.forEach((id) => window.clearTimeout(id))
   }, [owner, view])
 
