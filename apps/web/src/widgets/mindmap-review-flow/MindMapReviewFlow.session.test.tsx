@@ -46,7 +46,8 @@ describe("MindMapReviewFlow session", () => {
     expect(timer.complete).not.toHaveBeenCalled();
 
     resolveComplete();
-    await waitFor(() => expect(timer.complete).toHaveBeenCalledTimes(1));
+    // finalize waits out the 820ms completion ceremony before timer.complete.
+    await waitFor(() => expect(timer.complete).toHaveBeenCalledTimes(1), { timeout: 8000 });
     expect(onComplete).toHaveBeenCalledTimes(1);
   });
 

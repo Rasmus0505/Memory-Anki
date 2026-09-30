@@ -1,9 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, type RefObject } from 'react'
 import type { Edge, Node } from '@xyflow/react'
 import { cue, rectCenter } from '@/shared/fx'
+import { themeMotion } from '@/shared/theme/themePacks'
 
 const FLIP_ID = 'mindmap-reveal-flip'
-const FLIP_MS = 560
+/** The live theme pack sets the flip's length and landing overshoot. */
+const flipMs = () => themeMotion().flipMs
 /** Edge-on moment: the paper back is swapped for the answer face here. */
 const FLIP_TURN = 0.42
 const STEP_MS = 45
@@ -108,6 +110,8 @@ function clearFx(card: HTMLElement) {
 }
 
 function flipCard(card: HTMLElement, delay: number, burst: boolean) {
+  const FLIP_MS = flipMs()
+  const overshoot = themeMotion().flipOvershootDeg
   clearFx(card)
   const cover = fxElement('mindmap-flip-cover', card)
   cover.innerHTML = '<span class="mindmap-node-concealed">待回忆</span>'
@@ -119,8 +123,8 @@ function flipCard(card: HTMLElement, delay: number, burst: boolean) {
       { transform: `${PERSPECTIVE} rotateX(-90deg) scale(1.07)`, offset: FLIP_TURN },
       // Same edge-on pose from the other side: the jump is invisible and the rotation reads as continuous.
       { transform: `${PERSPECTIVE} rotateX(90deg) scale(1.07)`, offset: FLIP_TURN + 0.0001, easing: 'cubic-bezier(0.15, 0.7, 0.3, 1)' },
-      { transform: `${PERSPECTIVE} rotateX(-13deg) scale(1.035)`, offset: 0.74, easing: 'cubic-bezier(0.4, 0, 0.3, 1)' },
-      { transform: `${PERSPECTIVE} rotateX(4deg) scale(1)`, offset: 0.88 },
+      { transform: `${PERSPECTIVE} rotateX(${-overshoot}deg) scale(1.035)`, offset: 0.74, easing: 'cubic-bezier(0.4, 0, 0.3, 1)' },
+      { transform: `${PERSPECTIVE} rotateX(${(overshoot / 3).toFixed(1)}deg) scale(1)`, offset: 0.88 },
       { transform: `${PERSPECTIVE} rotateX(0deg) scale(1)` },
     ],
     { duration: FLIP_MS, delay, fill: 'backwards', id: FLIP_ID },
@@ -132,7 +136,8 @@ function flipCard(card: HTMLElement, delay: number, burst: boolean) {
       { boxShadow: resting },
       { boxShadow: '0 3px 6px -2px rgb(120 60 10 / 0.2)', offset: FLIP_TURN },
       {
-        boxShadow: '0 20px 36px -12px rgb(150 70 10 / 0.5), 0 0 0 2px rgb(232 135 42 / 0.55), 0 0 26px rgb(232 135 42 / 0.35)',
+        // Lift only: no gold outline or halo ring on landing.
+        boxShadow: '0 22px 38px -12px rgb(90 50 20 / 0.42)',
         offset: 0.74,
       },
       { boxShadow: resting },
@@ -346,12 +351,10 @@ export function useMindMapRevealMotion(
     })
     runWhenMounted(root, jobs, activeWaits.current)
     if (flips.length >= GOLD_RAIN_MIN_FLIPS) {
-      const landMs = Math.round((flips.length - 1) * step) + INK_LEAD_MS + FLIP_MS * 0.74
-      const branchRoot = parents.current.get(flips[0])
+      const landMs = Math.round((flips.length - 1) * step) + INK_LEAD_MS + flipMs() * 0.74
       window.setTimeout(() => {
         if (!root.isConnected) return
-        const rootCard = branchRoot ? root.querySelector(cardSelector(branchRoot)) : null
-        cue('map.branch', { rect: root.getBoundingClientRect(), root: rootCard ? rectCenter(rootCard.getBoundingClientRect()) : undefined })
+        cue('map.branch', { rect: root.getBoundingClientRect() })
       }, landMs)
     }
   }, [container, edges, nodes])
