@@ -8,6 +8,7 @@ export {
   emitCorrectBurst,
   emitFlight,
   emitFoldTrail,
+  emitGradeVariant,
   emitGoldDustSettle,
   emitGoldRain,
   emitInkDrop,

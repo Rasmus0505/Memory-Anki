@@ -1,6 +1,6 @@
 import type { Hsl, ParticleShape } from './particles/particleModel'
 
-export type FxSkinId = 'ink' | 'foil' | 'galaxy'
+export type FxSkinId = 'ink' | 'foil' | 'galaxy' | 'firefly'
 
 export interface FxPalette {
   gold: Hsl
@@ -78,10 +78,28 @@ const GALAXY: FxPalette = {
   luminous: true,
 }
 
+/** Amber-green fireflies over moss: glowing specks, soft leaf greens. */
+const FIREFLY: FxPalette = {
+  ...INK,
+  gold: [58, 96, 64],
+  amber: [44, 94, 58],
+  paper: [70, 50, 86],
+  cream: [56, 80, 80],
+  paperGold: [48, 90, 42],
+  green: [120, 44, 44],
+  leaf: [96, 50, 50],
+  ink: [140, 30, 18],
+  coral: [18, 80, 62],
+  rating: { 1: [14, 78, 62], 2: [44, 94, 58], 3: [100, 50, 52], 4: [168, 46, 48] },
+  sparkShape: 'dot',
+  luminous: true,
+}
+
 export const FX_SKINS: Record<FxSkinId, FxSkin> = {
   ink: { id: 'ink', label: '纸墨', blurb: '纸屑、墨点与金粉，默认手感', palette: INK },
   foil: { id: 'foil', label: '金箔', blurb: '碎金箔片与星芒，每一下都亮', palette: FOIL },
   galaxy: { id: 'galaxy', label: '星河', blurb: '暖夜星尘，紫玫与金色发光', palette: GALAXY },
+  firefly: { id: 'firefly', label: '萤火', blurb: '琥珀绿的萤火，一明一灭', palette: FIREFLY },
 }
 
 export const FX_SKIN_IDS = Object.keys(FX_SKINS) as FxSkinId[]

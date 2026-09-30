@@ -63,6 +63,70 @@ export function emitRatingBurst(origin: Point, rating: ParticleRating, combo: nu
   else paperBurst(origin, RATING_BURST_COUNT, tone)
 }
 
+export type GradeVariant = 'paper' | 'ink' | 'leaf' | 'mote'
+
+/** One grade, four looks. No expanding ring — the press itself is the accent. */
+export function emitGradeVariant(origin: Point, rating: ParticleRating, combo: number, variant: GradeVariant) {
+  if (!particlesAllowed()) return
+  const tone = pal.rating[rating]
+  if (variant === 'paper') {
+    emitRatingBurst(origin, rating, combo)
+    return
+  }
+  if (variant === 'ink') {
+    for (let i = 0; i < 10; i += 1) {
+      spawnParticle({
+        x: origin.x + range(-10, 10),
+        y: origin.y - range(4, 18),
+        vy: range(0.4, 1.6),
+        gravity: 0.12,
+        drag: 0.96,
+        size: range(1.4, 2.6),
+        color: [tone[0], 28, 42],
+        alpha: 0.85,
+        life: range(0.45, 0.8),
+      })
+    }
+    return
+  }
+  if (variant === 'leaf') {
+    for (let i = 0; i < 14; i += 1) {
+      const side = i % 2 ? 1 : -1
+      spawnParticle({
+        x: origin.x,
+        y: origin.y,
+        vx: side * range(1.2, 4.2),
+        vy: range(-3.2, -0.6),
+        gravity: 0.1,
+        drag: 0.95,
+        sway: 4,
+        shape: 'flake',
+        size: range(2, 3.6),
+        color: i % 3 ? pal.leaf : tone,
+        spin: range(-0.2, 0.2),
+        flipSpeed: 0.18,
+        life: range(0.7, 1.1),
+      })
+    }
+    return
+  }
+  for (let i = 0; i < 12; i += 1) {
+    spawnParticle({
+      x: origin.x + range(-14, 14),
+      y: origin.y + range(-4, 8),
+      vx: range(-0.3, 0.3),
+      vy: range(-1.4, -0.3),
+      drag: 0.98,
+      shape: 'glow',
+      additive: true,
+      size: range(1, 2.2),
+      color: Math.random() < 0.5 ? tone : pal.gold,
+      twinkle: true,
+      life: range(0.8, 1.4),
+    })
+  }
+}
+
 export interface FlightOptions {
   origin: Point
   /** Re-read every frame, so a moving target is fine. */
@@ -134,10 +198,9 @@ export function emitCollectors(args: {
   })
 }
 
-/** Shockwave ring, a short light pillar and a slower second wave of gold dust. */
-export function emitKeycapShockwave(origin: Point, rating: ParticleRating) {
+/** A short light pillar and a slower second wave of gold dust. No expanding ring. */
+export function emitKeycapShockwave(origin: Point, _rating: ParticleRating) {
   if (!particlesAllowed()) return
-  spawnParticle({ ...origin, shape: 'ring', additive: true, ring: { from: 6, to: 56 }, size: 4, color: pal.rating[rating], life: 0.5 })
   for (let i = 0; i < 10; i += 1) {
     spawnParticle({ x: origin.x + range(-6, 6), y: origin.y, vy: range(-7, -3.5), drag: 0.93, shape: 'glow', additive: true, size: range(1, 1.8), color: pal.gold, life: range(0.5, 0.8), delay: i * 0.02 })
   }
@@ -178,15 +241,12 @@ export function emitGoldDustSettle(rect: DOMRect, delaySeconds = 0) {
   }
 }
 
-/** A whole branch landed: gold and star rain over the map, and a ring from its root. */
-export function emitGoldRain(rect: DOMRect, delaySeconds = 0, rootCenter?: Point) {
+/** A whole branch landed: gold and star rain over the map. */
+export function emitGoldRain(rect: DOMRect, delaySeconds = 0) {
   if (!particlesAllowed() || rect.width === 0) return
   const count = Math.round(Math.min(110, 50 + rect.width / 16))
   for (let i = 0; i < count; i += 1) {
     spawnParticle({ x: range(rect.left, rect.right), y: rect.top - range(0, 40), vx: range(-0.4, 0.4), vy: range(1, 2.6), gravity: 0.04, drag: 0.98, shape: Math.random() < 0.35 ? 'star' : 'dot', spin: 0.1, size: range(1, 4), color: pal.paperGold, twinkle: true, life: range(1.2, 1.8), delay: delaySeconds + range(0, 0.5) })
-  }
-  if (rootCenter) {
-    spawnParticle({ ...rootCenter, shape: 'ring', ring: { from: 16, to: Math.min(640, rect.width * 0.8) }, size: 5, color: [36, 90, 50], life: 1, delay: delaySeconds })
   }
 }
 

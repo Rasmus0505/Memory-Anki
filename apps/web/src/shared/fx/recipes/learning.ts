@@ -7,19 +7,19 @@ import {
   emitComboMilestone,
   emitCorrectBurst,
   emitFlight,
+  emitGradeVariant,
   emitInkDrop,
   emitInkSink,
-  emitKeycapShockwave,
   emitLeafSpray,
   emitMeteorShower,
   emitPageDust,
   emitPaperPeel,
   emitRailSparks,
-  emitRatingBurst,
   type ParticleRating,
 } from '../particles'
 import type { Point } from '../particles/particleModel'
 import { FX_ANCHORS, PROGRESS_TARGET, anchorTarget, elementCenter, findAnchor } from '../core/anchors'
+import { nextGradeVariant } from '../conductor'
 import { cue, defineCue, type FxStage } from '../core/director'
 import { bumpElement, chargeElement, flashElement, flashVignette, peelGhost, stampOn } from '../core/domFlourish'
 import { readRarityState, rollRare, writeRarityState } from '../rarity'
@@ -125,8 +125,7 @@ defineCue('grade.commit', {
       writeRarityState(next)
       if (show) stage.playback.at(milestone ? 1200 : 650, () => cue('rare.show', { show, origin }, { owner: stage.playback.owner }))
     }
-    emitRatingBurst(origin, grade, combo)
-    emitKeycapShockwave(origin, grade)
+    emitGradeVariant(origin, grade, combo, nextGradeVariant(grade, combo))
     const segment = progressSegment()
     emitCollectors({
       origin,

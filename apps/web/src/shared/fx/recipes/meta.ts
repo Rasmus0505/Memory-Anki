@@ -6,7 +6,7 @@ import type { Point } from '../particles/particleModel'
 import { FX_ANCHORS, anchorTarget, elementCenter, findAnchor } from '../core/anchors'
 import { cue, defineCue } from '../core/director'
 import { bumpElement, chargeElement, stampOn } from '../core/domFlourish'
-import { pal } from '../skins'
+import { FX_SKINS, pal, type FxSkinId } from '../skins'
 import { pickRareShow } from '../rarity'
 
 export interface XpGainCue {
@@ -29,6 +29,12 @@ export interface QuestDoneCue {
   title: string
 }
 
+export interface PackUnboxCue {
+  label: string
+  /** Particle palette of the new world, so the reveal already speaks its colors. */
+  skin: FxSkinId
+}
+
 declare module '../core/director' {
   interface FxCueMap {
     'xp.gain': XpGainCue
@@ -36,6 +42,7 @@ declare module '../core/director' {
     'stamp.unlock': StampUnlockCue
     'quest.done': QuestDoneCue
     'level.tick': { element: Element }
+    'pack.unbox': PackUnboxCue
   }
 }
 
@@ -119,6 +126,43 @@ defineCue('stamp.unlock', {
     const rect = node.getBoundingClientRect()
     const at = rect.width ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 } : center()
     stage.playback.at(260, () => emitComboMilestone(at, 10))
+  },
+})
+
+defineCue('pack.unbox', {
+  scene: 'completion',
+  label: '新主题开箱',
+  group: '成长',
+  sample: () => ({ label: '星河夜航', skin: 'galaxy' }),
+  play({ label, skin }, stage) {
+    const colors = FX_SKINS[skin]?.palette ?? pal
+    const hues = [colors.gold, colors.amber, colors.leaf, colors.cream]
+    if (stage.gate.haptic) triggerHaptic('celebrate')
+    if (stage.gate.sound) playWebAudioComboMilestone({ milestoneStep: 2, volume: stage.gate.volume })
+    if (!stage.gate.motion) return
+    const w = window.innerWidth
+    const h = window.innerHeight
+    // A curtain of the new world's light rises from the floor, twisting into a spiral.
+    for (let i = 0; i < 64; i += 1) {
+      const lane = (i / 64) * w
+      const twist = Math.sin(i * 0.9) * 2.2
+      spawnParticle({
+        x: lane,
+        y: h + 12,
+        vx: twist,
+        vy: -6 - Math.random() * 7,
+        drag: 0.965,
+        gravity: -0.02,
+        shape: colors.sparkShape === 'star' && i % 3 === 0 ? 'star' : 'glow',
+        additive: true,
+        size: 1 + Math.random() * 1.8,
+        color: hues[i % hues.length],
+        trail: 6,
+        life: 1.3,
+        delay: (i % 16) * 0.035,
+      })
+    }
+    stage.playback.at(620, () => stampOn(document.body, `新世界 · ${label}`, 'screen', stage.playback))
   },
 })
 

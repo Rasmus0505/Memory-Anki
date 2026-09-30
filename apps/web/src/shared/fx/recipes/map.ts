@@ -14,7 +14,6 @@ export interface MapFoldCue {
 
 export interface MapBranchCue {
   rect: DOMRect
-  root?: Point
 }
 
 declare module '../core/director' {
@@ -52,7 +51,7 @@ defineCue('map.branch', {
   label: '整枝揭示（金雨）',
   group: '导图',
   sample: () => ({ rect: new DOMRect(0, 0, window.innerWidth, window.innerHeight * 0.7) }),
-  play({ rect, root }, stage) {
-    if (stage.gate.motion) emitGoldRain(rect, 0, root)
+  play({ rect }, stage) {
+    if (stage.gate.motion) emitGoldRain(rect)
   },
 })

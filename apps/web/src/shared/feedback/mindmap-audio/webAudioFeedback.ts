@@ -1,5 +1,6 @@
 import { REVIEW_FEEDBACK_EFFECTIVE_VOLUME_MAX } from '@/shared/feedback/reviewFeedbackSettings'
 import type { MindMapFeedbackEvent, MindMapFeedbackOrigin } from '@/shared/feedback/feedbackEvents'
+import { colorTone } from './packTimbre'
 import {
   getComboMilestoneTone,
   getLandingChimeTone,
@@ -147,7 +148,7 @@ function playToneSequence(tones: ToneSpec[], volume: number) {
   }
 
   for (const tone of tones) {
-    scheduleTonePlayback(context, tone, volume)
+    scheduleTonePlayback(context, colorTone(tone), volume)
   }
 }
 

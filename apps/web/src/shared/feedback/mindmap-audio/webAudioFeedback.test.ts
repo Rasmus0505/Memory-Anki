@@ -151,11 +151,12 @@ describe('webAudioFeedback iOS Safari unlock', () => {
 
     expect(MockAudioContext.instances).toHaveLength(1)
     expect(MockAudioContext.oscillators).toHaveLength(4)
+    // The live theme pack recolors every tone. Study (paper-wood) is triangle.
     expect(MockAudioContext.oscillators.map((oscillator) => oscillator.type)).toEqual([
       'triangle',
-      'sine',
       'triangle',
-      'sine',
+      'triangle',
+      'triangle',
     ])
   })
 })
