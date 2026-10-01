@@ -351,17 +351,18 @@ function progressIds(
   roundPlan: FreestyleRoundPlanState | null,
 ): string[] {
   if (!roundPlan) return cards.map((card) => String(card.id || '')).filter(Boolean)
+  const compressed = new Set((roundPlan.compressedIds ?? []).map((id) => String(id || '').trim()).filter(Boolean))
   const seen = new Set<string>()
   const ids: string[] = []
   for (const raw of roundPlan.orderIds) {
     const id = String(raw || '').trim()
-    if (!id || seen.has(id)) continue
+    if (!id || seen.has(id) || compressed.has(id)) continue
     seen.add(id)
     ids.push(id)
   }
   for (const card of cards) {
     const id = String(card.id || '').trim()
-    if (!id || seen.has(id)) continue
+    if (!id || seen.has(id) || compressed.has(id)) continue
     seen.add(id)
     ids.push(id)
   }

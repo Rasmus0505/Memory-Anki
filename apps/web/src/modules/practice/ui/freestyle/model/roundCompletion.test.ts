@@ -11,6 +11,7 @@ import {
   isFreestyleCompleteSlot,
   isFreestyleRoundComplete,
   resolveFreestyleCompleteSeek,
+  resolveFreestyleOpenFeedIndex,
 } from './roundCompletion'
 import {
   createRetryOccurrence,
@@ -309,6 +310,22 @@ describe('isFreestyleRoundComplete', () => {
     expect(isFreestyleRoundComplete([], {})).toBe(false)
   })
 
+  it('opens settlement after compressing the last passed cards out of an empty feed', () => {
+    const plan = {
+      roundId: 'round-1',
+      configSignature: '',
+      createdAt: 1,
+      candidateCount: 2,
+      scheduledCount: 0,
+      queueLimit: 50,
+      limitReached: false,
+      orderIds: [] as string[],
+      cardsById: {},
+      compressedIds: ['one', 'two'],
+    }
+    expect(isFreestyleRoundComplete([], {}, [], plan)).toBe(true)
+  })
+
   it('is incomplete while a card holds an open unrated encounter', () => {
     const cards = [card('one')]
 
@@ -578,6 +595,35 @@ describe('findEarliestCompleteSeekIndex', () => {
         three: encounter({ selectedRating: 3, passed: true }),
       },
     )).toBe(1)
+  })
+})
+
+describe('resolveFreestyleOpenFeedIndex', () => {
+  it('opens on the earliest unscored card, not the first card', () => {
+    expect(resolveFreestyleOpenFeedIndex(
+      [card('one'), card('two'), card('three')],
+      {
+        one: encounter({ selectedRating: 3, passed: true }),
+        two: encounter({ selectedRating: 2, passed: false }),
+      },
+    )).toBe(2)
+  })
+
+  it('opens the settlement slot when every card is scored', () => {
+    expect(resolveFreestyleOpenFeedIndex(
+      [card('one'), card('two')],
+      {
+        one: encounter({ selectedRating: 4, passed: true }),
+        two: encounter({ selectedRating: 1, passed: false }),
+      },
+    )).toBe(2)
+  })
+
+  it('stays on the first card when that card is still unscored', () => {
+    expect(resolveFreestyleOpenFeedIndex(
+      [card('one'), card('two')],
+      { two: encounter({ selectedRating: 3, passed: true }) },
+    )).toBe(0)
   })
 })
 

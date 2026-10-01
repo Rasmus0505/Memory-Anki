@@ -264,6 +264,28 @@ describe('mindMapCanvasDisplay', () => {
     expect(displayNodes.find((node) => node.id === 'c')?.data.dropHighlight).toBe(true)
   })
 
+  it('snaps idle card positions onto whole pixels so text stays crisp', () => {
+    const displayNodes = buildDisplayNodes({
+      nodes: [makeNode('a', 10.4, 22.6)],
+      previewNodes: [],
+      previewState: null,
+      sourceId: null,
+      isDraggingNode: false,
+      selectedNodeId: null,
+      editingNodeId: null,
+      editingDraft: null,
+      onStartEdit: vi.fn(),
+      onCancelEdit: vi.fn(),
+      onAddChild: vi.fn(),
+      onAddSibling: vi.fn(),
+      onDelete: vi.fn(),
+      onFinishEdit: vi.fn(),
+      onMeasure: vi.fn(),
+      readonly: true,
+    })
+    expect(displayNodes[0]?.position).toEqual({ x: 10, y: 23 })
+  })
+
   it('reuses unchanged edge objects and only replaces selected edge styling', () => {
     const edges = [makeEdge('a->b'), makeEdge('a->c')]
     const first = buildDisplayEdges(edges, null)

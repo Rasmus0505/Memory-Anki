@@ -70,6 +70,8 @@ export function useFreestyleFeedNavigation({
   becameActiveAt,
   loading,
   queueFrozen,
+  startupVisualIndex,
+  onStartupVisualApplied,
   onPageTurn,
 }: {
   cards: ImmersiveQueue['cards']
@@ -85,6 +87,9 @@ export function useFreestyleFeedNavigation({
   becameActiveAt: unknown
   loading: boolean
   queueFrozen: boolean
+  /** Closing settlement slot to show once after a cold open. Null for a card target. */
+  startupVisualIndex: number | null
+  onStartupVisualApplied: () => void
   /** Fires once per page actually landed on (finger, wheel, keyboard or button). */
   onPageTurn?: (direction: 'forward' | 'backward') => void
 }) {
@@ -478,14 +483,39 @@ export function useFreestyleFeedNavigation({
   }, [])
 
   /**
-   * Route residency hides inactive pages with `display: none`, which often resets
-   * scrollTop to 0. Remounts also start the scroller at the top even when
-   * `currentIndex` was restored from queue state. Re-align only for route /
-   * load / index identity — never on silent rebuild card-id churn, and never
-   * while the user is scrolling (that used to fight snap and look like
-   * auto page-turn after settle rebuilds).
+   * Cold open can land on the closing settlement slot, which is not a queue
+   * index. Scroll there once, then let the realign effect own the viewport.
    */
   useLayoutEffect(() => {
+    if (startupVisualIndex == null) return
+    if (!isActive || loading || queueFrozen || cards.length === 0) return
+    const node = scrollRef.current
+    if (!node?.clientHeight) return
+    const target = roundComplete && startupVisualIndex >= cards.length
+      ? cards.length
+      : Math.max(0, Math.min(startupVisualIndex, Math.max(0, cards.length - 1)))
+    scrollToIndex(target, 'auto')
+    visualIndexRef.current = target
+    setVisualIndex(target)
+    onStartupVisualApplied()
+  }, [
+    cards.length,
+    isActive,
+    loading,
+    onStartupVisualApplied,
+    queueFrozen,
+    roundComplete,
+    scrollToIndex,
+    startupVisualIndex,
+  ])
+
+  /**
+   * Route residency hides inactive pages with `display: none`, which resets
+   * scrollTop to 0. Remounts also start at the top. Re-align for route, load,
+   * and index identity — never while the user is scrolling.
+   */
+  useLayoutEffect(() => {
+    if (startupVisualIndex != null) return
     if (!isActive || loading || cards.length === 0) return
     if (queueFrozen) return
     if (userScrollingRef.current || programmaticScrollRef.current) return
@@ -515,6 +545,7 @@ export function useFreestyleFeedNavigation({
     queueFrozen,
     roundComplete,
     scrollToIndex,
+    startupVisualIndex,
     // cards.length only gates the early return; silent rebuilds must not re-scroll.
     cards.length,
   ])

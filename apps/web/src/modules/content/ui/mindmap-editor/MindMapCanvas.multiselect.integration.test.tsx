@@ -12,7 +12,7 @@ const reactFlowMockState = vi.hoisted(() => ({
   zoomOut: vi.fn(),
   setViewport: vi.fn(),
   getViewport: vi.fn(),
-  viewport: { x: 4, y: 18, zoom: 0.99 },
+  viewport: { x: 4, y: 18, zoom: 1 },
   reactFlowProps: null as Record<string, unknown> | null,
   nodes: [] as Array<{ id: string; data?: Record<string, unknown>; position?: { x: number; y: number } }>,
 }))
@@ -146,7 +146,7 @@ describe('MindMapCanvas multi-select context menu', () => {
     reactFlowMockState.nextProviderId = 1
     reactFlowMockState.fitView.mockClear()
     reactFlowMockState.setCenter.mockClear()
-    reactFlowMockState.viewport = { x: 4, y: 18, zoom: 0.99 }
+    reactFlowMockState.viewport = { x: 4, y: 18, zoom: 1 }
     reactFlowMockState.getViewport.mockImplementation(() => ({ ...reactFlowMockState.viewport }))
     reactFlowMockState.reactFlowProps = null
     reactFlowMockState.nodes = []

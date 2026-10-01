@@ -29,6 +29,7 @@ from memory_anki.modules.practice.domain.peer_progress import (
     apply_peer_restore,
     progress_identity,
 )
+from memory_anki.modules.practice.domain.round_compress import compress_completed
 from memory_anki.modules.practice.domain.round_plan import (
     apply_rating,
     assert_rating_identity,
@@ -63,6 +64,7 @@ _ACTIONS = {
     "uncomplete",
     "exclude",
     "restore",
+    "compress_completed",
     "bind_cards",
     "set_encounter",
 }
@@ -535,6 +537,8 @@ def apply_round_action(
     elif name == "restore":
         restore_identity = _progress_identity_in_plan(plan, target_id)
         plan = restore_card(plan, target_id)
+    elif name == "compress_completed":
+        plan = compress_completed(plan)
     elif name == "bind_cards":
         plan = append_today_cards(plan, cards, today=_local_today())
         plan = _seed_from_peer(

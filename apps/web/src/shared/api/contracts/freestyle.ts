@@ -386,6 +386,7 @@ export interface FreestyleRoundPlanPayload {
   current_index: number
   completed_ids: string[]
   excluded_ids: string[]
+  compressed_ids?: string[]
   today?: string
   occurrences: FreestyleRoundOccurrence[]
   encounters: Record<string, {
@@ -487,6 +488,7 @@ export interface FreestyleRoundActionRequest {
     | 'uncomplete'
     | 'exclude'
     | 'restore'
+    | 'compress_completed'
     | 'bind_cards'
     | 'set_encounter'
   card_id?: string

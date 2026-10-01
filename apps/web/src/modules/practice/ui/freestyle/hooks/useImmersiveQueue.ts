@@ -23,6 +23,8 @@ import {
   clearMutedPalaces,
   createRoundPlan,
   createOperationId,
+  compressRoundPlanCards,
+  compressibleRoundPlanIds,
   excludeRoundPlanCards,
   mergeRetainedHiddenIds,
   filterMutedPalaces,
@@ -75,6 +77,7 @@ import {
   type FreestyleSkipState,
   type FreestyleUnitEncounterState,
 } from '@/modules/practice/public'
+import { resolveFreestyleOpenFeedIndex } from '@/modules/practice/ui/freestyle/model/roundCompletion'
 import {
   clearQuizSessionProgress,
   clearQuizSessionProgressForPalaces,
@@ -180,6 +183,12 @@ function cardsWithoutHidden(cards: FreestyleCard[], hiddenIds: readonly string[]
   if (!hiddenIds.length) return cards
   const hidden = new Set(hiddenIds.map((id) => String(id)))
   return cards.filter((card) => !hidden.has(String(card.id)))
+}
+
+function cardsWithoutCompressed(cards: FreestyleCard[], compressedIds: readonly string[] | undefined) {
+  if (!compressedIds?.length) return cards
+  const compressed = new Set(compressedIds.map((id) => String(id)))
+  return cards.filter((card) => !compressed.has(String(card.id)))
 }
 
 async function buildQueueWithTimeout(
@@ -338,6 +347,12 @@ export function useImmersiveQueue(
   const pendingReleaseIdsRef = useRef(new Set<string>())
   const [planVersion, setPlanVersion] = useState(0)
   const [queueFrozen, setQueueFrozen] = useState(false)
+  /**
+   * One-shot visual index for cold open. A card target is applied through
+   * `currentIndex`; this is only the closing settlement slot (`cards.length`).
+   */
+  const [startupVisualIndex, setStartupVisualIndex] = useState<number | null>(null)
+  const clearStartupVisualIndex = useCallback(() => setStartupVisualIndex(null), [])
   // Adopt React state only when the ref still points at the previous render.
   // persistQueueState / setCards update the ref first; a render that still
   // holds the older snapshot must not roll a confirmed 移除队列 back.
@@ -505,6 +520,7 @@ export function useImmersiveQueue(
         preferCardId?: string | null
         reason?: string
         studyWindow?: boolean
+        openAtEarliestUnrated?: boolean
       },
     ) => Promise<void>) | null
   >(null)
@@ -520,6 +536,11 @@ export function useImmersiveQueue(
         silent?: boolean
         /** Prefer keeping this card under the viewport after rebuild. */
         preferCardId?: string | null
+        /**
+         * Cold open only. Land on the same card the right-side 完成 button
+         * would open, instead of a stale cursor or card 0.
+         */
+        openAtEarliestUnrated?: boolean
         /** Included in a user-copyable error report. */
         reason?: string
         /**
@@ -533,6 +554,8 @@ export function useImmersiveQueue(
          * when a stale snapshot has already dropped the plan mark.
          */
         forceExcludedIds?: readonly string[]
+        /** Ids just compressed out of the working set. */
+        forceCompressedIds?: readonly string[]
         /** Force replan_remaining on the current round (重建本轮). */
         replan?: boolean
         /**
@@ -792,6 +815,7 @@ export function useImmersiveQueue(
             meta: incomingMeta,
             serverPlan: round.plan,
             forceExcludedIds: options?.forceExcludedIds,
+            forceCompressedIds: options?.forceCompressedIds,
           })
           persistQueueState({
             ...queueStateRef.current,
@@ -810,14 +834,29 @@ export function useImmersiveQueue(
         }
         // Plan hydration is done — only now the presented feed may carry the
         // yellow boundary hint (kept out of every server round-plan write).
-        nextCards = cardsWithoutHidden(
-          insertReviewHintCards(nextCards),
-          queueStateRef.current.hiddenIds,
+        nextCards = cardsWithoutCompressed(
+          cardsWithoutHidden(
+            insertReviewHintCards(nextCards),
+            queueStateRef.current.hiddenIds,
+          ),
+          queueStateRef.current.roundPlan?.compressedIds,
         )
         // Stay on the card the user is viewing (or the just-settled unit). Manual
         // swipe / 下一题 is the only way to advance — no restudy auto-jump.
-        // Cold start prefers the local draft cursor when it still exists in-feed.
-        const preferCardId = resolveResumePreferCardId({
+        // Cold start prefers the local draft cursor when it still exists in-feed,
+        // unless this rebuild is the open itself: then match the 完成 button.
+        const openFeedIndex = options?.openAtEarliestUnrated && nextCards.length > 0
+          ? resolveFreestyleOpenFeedIndex(
+            nextCards,
+            queueStateRef.current.unitEncountersByCardId,
+            queueStateRef.current.completedIds,
+            queueStateRef.current.roundPlan,
+          )
+          : null
+        const openCardId = openFeedIndex != null && openFeedIndex < nextCards.length
+          ? (nextCards[openFeedIndex]?.id ?? null)
+          : null
+        const preferCardId = openCardId ?? resolveResumePreferCardId({
           preferCardId: options?.preferCardId,
           silent,
           draftCardId: draftResumeCardId ?? queueStateRef.current.currentCardId,
@@ -835,13 +874,20 @@ export function useImmersiveQueue(
         const resolved = resolveRebuildIndex({
           nextCards,
           preferCardId,
-          userCardId: silent
-            ? liveUserCardId
-            : (preferCardId ?? serverCurrentId ?? liveUserCardId),
+          userCardId: openCardId
+            ?? (silent
+              ? liveUserCardId
+              : (preferCardId ?? serverCurrentId ?? liveUserCardId)),
           fallbackIndex: currentIndexRef.current,
           previousCards,
         })
         applyCurrentIndex(resolved, nextCards)
+        if (openCardId) commitRoundCursor(openCardId)
+        if (openFeedIndex != null && openFeedIndex >= nextCards.length) {
+          setStartupVisualIndex(openFeedIndex)
+        } else if (options?.openAtEarliestUnrated) {
+          setStartupVisualIndex(null)
+        }
         setQueueFrozen(false)
         tailPending = Boolean(response.round_meta?.tail_pending) && options?.studyWindow === true
         tailPreferId = nextCards[resolved]?.id ?? queueStateRef.current.currentCardId
@@ -888,7 +934,7 @@ export function useImmersiveQueue(
         })
       }
     },
-    [applyCurrentIndex, notifyPeerRound, persistQueueState, slot, syncPendingRestudyIds],
+    [applyCurrentIndex, commitRoundCursor, notifyPeerRound, persistQueueState, slot, syncPendingRestudyIds],
   )
   buildQueueRef.current = buildQueue
 
@@ -1884,6 +1930,63 @@ export function useImmersiveQueue(
     })
   }, [buildQueue, notifyPeerRound, persistQueueState])
 
+  const compressCompletedPlanCards = useCallback(() => {
+    const current = queueStateRef.current
+    const ids = compressibleRoundPlanIds(current.roundPlan, {
+      completedIds: current.completedIds,
+      encounters: current.unitEncountersByCardId,
+    })
+    if (!ids.length) return
+    const nextPlan = compressRoundPlanCards(current.roundPlan, ids)
+    persistQueueState({ ...current, roundPlan: nextPlan })
+    const viewingId = cardsRef.current[currentIndexRef.current]?.id ?? null
+    const filtered = cardsWithoutCompressed(cardsRef.current, ids)
+    cardsRef.current = filtered
+    setCards(filtered)
+    const landedId = viewingId && !ids.includes(viewingId)
+      ? viewingId
+      : filtered[Math.min(currentIndexRef.current, Math.max(0, filtered.length - 1))]?.id
+    const landedIndex = landedId ? filtered.findIndex((card) => card.id === landedId) : -1
+    applyCurrentIndex(landedIndex >= 0 ? landedIndex : 0, filtered)
+    const roundId = current.roundId
+    void (async () => {
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const round = await applyFreestyleRoundActionApi(roundId, {
+          operation_id: createOperationId(),
+          expected_version: serverPlanVersionRef.current,
+          action: 'compress_completed',
+        })
+        if (queueStateRef.current.roundId !== roundId) return
+        const version = serverPlanVersion(round)
+        if (version > 0) {
+          serverPlanVersionRef.current = version
+          setPlanVersion(version)
+        }
+        if (!round.conflict) {
+          const echoed = Array.isArray(round.plan?.compressed_ids)
+            ? round.plan.compressed_ids.map(String)
+            : ids
+          persistQueueState({
+            ...queueStateRef.current,
+            roundPlan: compressRoundPlanCards(queueStateRef.current.roundPlan, echoed),
+          })
+          break
+        }
+      }
+    })().catch(() => {
+      // Local compress remains the offline draft.
+    })
+    void buildQueue(configRef.current, {
+      preserveCompleted: true,
+      hiddenIds: queueStateRef.current.hiddenIds,
+      completedIds: queueStateRef.current.completedIds,
+      silent: true,
+      preferCardId: filtered[landedIndex >= 0 ? landedIndex : 0]?.id ?? null,
+      reason: 'plan_compress_completed',
+      forceCompressedIds: ids,
+    })
+  }, [applyCurrentIndex, buildQueue, persistQueueState])
+
   const goToIndex = useCallback(
     (index: number, options?: { reorderRestudy?: boolean }) => {
       const previous = cardsRef.current
@@ -2078,7 +2181,10 @@ export function useImmersiveQueue(
         },
         serverPlan: round.plan,
       })
-      const nextCards = cardsWithoutHidden(insertReviewHintCards(plannedCards), retained.hiddenIds)
+      const nextCards = cardsWithoutCompressed(
+        cardsWithoutHidden(insertReviewHintCards(plannedCards), retained.hiddenIds),
+        retained.plan?.compressedIds,
+      )
       persistQueueState({
         ...queueStateRef.current,
         roundId: adoptedRoundId,
@@ -2094,14 +2200,19 @@ export function useImmersiveQueue(
       const handled = new Set([...retained.completedIds, ...retained.hiddenIds])
       if (feedWasEmpty && nextCards.length > 0) {
         setLoading(false)
-        const prefer = String(
-          queueStateRef.current.currentCardId
-          || round.plan.current_card_id
-          || round.current_card_id
-          || '',
-        ).trim()
-        const restored = prefer ? nextCards.findIndex((card) => card.id === prefer) : -1
-        if (restored >= 0) applyCurrentIndex(restored, nextCards)
+        const openFeedIndex = resolveFreestyleOpenFeedIndex(
+          nextCards,
+          retained.encounters,
+          retained.completedIds,
+          retained.plan,
+        )
+        if (openFeedIndex < nextCards.length) {
+          applyCurrentIndex(openFeedIndex, nextCards)
+          commitRoundCursor(nextCards[openFeedIndex]?.id)
+          setStartupVisualIndex(null)
+        } else {
+          setStartupVisualIndex(openFeedIndex)
+        }
       } else if (advanceIfCompleted && currentId && handled.has(currentId)) {
         const nextId = nextUnfinishedCardId(round.plan, nextCards)
         const idx = nextId ? nextCards.findIndex((card) => card.id === nextId) : -1
@@ -2110,7 +2221,7 @@ export function useImmersiveQueue(
     } catch {
       // Offline: keep the local draft.
     }
-  }, [applyCurrentIndex, persistQueueState, slot])
+  }, [applyCurrentIndex, commitRoundCursor, persistQueueState, slot])
 
   useEffect(() => {
     let cancelled = false
@@ -2138,6 +2249,7 @@ export function useImmersiveQueue(
           reason,
           silent: painted,
           preferCardId: painted ? queueStateRef.current.currentCardId : null,
+          openAtEarliestUnrated: true,
           studyWindow: !painted && !roundId,
         })
       })()
@@ -2217,11 +2329,14 @@ export function useImmersiveQueue(
     reorderPlan,
     excludePlanCards,
     restorePlanCards,
+    compressCompletedPlanCards,
     buildQueue,
     pendingRestudyCardIds,
     planVersion,
     adoptRoundVersion,
     clearConfiguredOverlayQuiz,
     queueFrozen,
+    startupVisualIndex,
+    clearStartupVisualIndex,
   }
 }

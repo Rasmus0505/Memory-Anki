@@ -34,6 +34,7 @@ function renderSheet(overrides: Partial<Parameters<typeof FreestyleRoundSheet>[0
     onJump: vi.fn(),
     onExclude: vi.fn(),
     onRestore: vi.fn(),
+    onCompressCompleted: vi.fn(),
     onReorder: vi.fn(),
     onOpenConfig: vi.fn(),
   }
@@ -309,5 +310,26 @@ describe('FreestyleRoundSheet', () => {
     expect(row.getAttribute('data-retry')).toBe('done')
     expect(row.getAttribute('data-fill')).toBe('completed')
     expect(row.textContent).toContain('当前 · 已过')
+  })
+
+  it('disables 结算已完成单元 until a card has passed', () => {
+    renderSheet()
+    expect((screen.getByRole('button', { name: '结算已完成单元' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('settles passed cards from the toolbar without a selection', () => {
+    const cards = [card('one'), card('two')]
+    const { onCompressCompleted } = renderSheet({
+      cards,
+      queueState: {
+        ...DEFAULT_QUEUE_STATE,
+        roundId: 'round-1',
+        currentCardId: 'two',
+        completedIds: ['one'],
+      },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '结算已完成 1' }))
+    expect(onCompressCompleted).toHaveBeenCalledTimes(1)
   })
 })

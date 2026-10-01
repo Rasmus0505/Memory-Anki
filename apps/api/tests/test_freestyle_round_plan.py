@@ -7,6 +7,10 @@ from memory_anki.modules.practice.domain.peer_progress import (
     apply_peer_restore,
     progress_identity,
 )
+from memory_anki.modules.practice.domain.round_compress import (
+    compress_completed,
+    compressible_ids,
+)
 from memory_anki.modules.practice.domain.round_plan import (
     apply_rating,
     complete_card,
@@ -912,3 +916,69 @@ def test_append_after_drop_does_not_resurrect_ghost_and_keeps_leftover():
     assert "leftover" in ids
     assert "today" in ids
     assert appended["presented_ids"][:2] == ["leftover", "today"]
+
+
+def test_compress_completed_drops_passed_cards_and_keeps_unfinished():
+    plan = plan_from_cards(
+        [
+            _card("done", unit_id="unit-done"),
+            _card("todo", unit_id="unit-todo"),
+        ]
+    )
+    plan = _rate(plan, "done", 3, "enc-pass")
+    assert compressible_ids(plan) == ["done"]
+    compressed = compress_completed(plan)
+    assert compressed["compressed_ids"] == ["done"]
+    assert compressed["presented_ids"] == ["todo"]
+    assert compressed["completed_ids"] == ["done"]
+    assert compressed["current_card_id"] == "todo"
+    assert "done" in [item["card_id"] for item in compressed["original_cards"]]
+    again = compress_completed(compressed)
+    assert again["compressed_ids"] == ["done"]
+    assert again["presented_ids"] == ["todo"]
+
+
+def test_compress_completed_skips_weak_rated_source_with_live_retry():
+    plan = leave_card(
+        _rate(
+            plan_from_cards(
+                [_card("weak", unit_id="unit-weak"), _card("todo", unit_id="unit-todo")]
+            ),
+            "weak",
+            1,
+            "enc-fail",
+        ),
+        "weak",
+    )
+    assert compressible_ids(plan) == []
+    kept = compress_completed(plan)
+    assert kept["compressed_ids"] == []
+    assert "weak" in kept["presented_ids"]
+    retry_id = kept["occurrences"][0]["occurrence_id"]
+    assert retry_id in kept["presented_ids"]
+
+
+def test_compress_completed_does_not_return_on_append_today():
+    plan = _rate(
+        plan_from_cards(
+            [_card("done", unit_id="unit-done"), _card("todo", unit_id="unit-todo")],
+            today="2026-09-22",
+        ),
+        "done",
+        3,
+        "enc-pass",
+    )
+    plan = compress_completed(plan)
+    appended = append_today_cards(
+        plan,
+        [
+            _card("done", unit_id="unit-done"),
+            _card("todo", unit_id="unit-todo"),
+            _card("fresh", unit_id="unit-fresh"),
+        ],
+        today="2026-09-22",
+    )
+    assert "done" not in appended["presented_ids"]
+    assert "done" in appended["compressed_ids"]
+    assert "todo" in appended["presented_ids"]
+    assert "fresh" in appended["presented_ids"]

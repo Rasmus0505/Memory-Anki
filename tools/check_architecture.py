@@ -3012,6 +3012,31 @@ def check_freestyle_round_sheet_views(errors: list[str]) -> None:
             f"{doc.relative_to(REPO_ROOT).as_posix()}: "
             "本轮安排 must document palace and progress-rail views."
         )
+    if "结算已完成单元" not in source:
+        errors.append(
+            f"{sheet.relative_to(REPO_ROOT).as_posix()}: "
+            "本轮安排 toolbar must expose 结算已完成单元."
+        )
+    domain = API_SRC / "modules" / "practice" / "domain" / "round_plan.py"
+    compress = API_SRC / "modules" / "practice" / "domain" / "round_compress.py"
+    domain_source = domain.read_text(encoding="utf-8", errors="ignore") if domain.exists() else ""
+    compress_source = compress.read_text(encoding="utf-8", errors="ignore") if compress.exists() else ""
+    if "compressed_ids" not in domain_source:
+        errors.append(
+            f"{domain.relative_to(REPO_ROOT).as_posix()}: "
+            "must persist compressed_ids on the round plan."
+        )
+    if "compress_completed" not in compress_source or "compressed_ids" not in compress_source:
+        target = compress if compress.exists() else domain
+        errors.append(
+            f"{target.relative_to(REPO_ROOT).as_posix()}: "
+            "must define compress_completed for 结算已完成单元."
+        )
+    if "结算已完成单元" not in doc_source or "compressed_ids" not in doc_source:
+        errors.append(
+            f"{doc.relative_to(REPO_ROOT).as_posix()}: "
+            "must document 结算已完成单元 compressing passed cards off the rail."
+        )
 
 
 def check_freestyle_queue_removal_rail(errors: list[str]) -> None:

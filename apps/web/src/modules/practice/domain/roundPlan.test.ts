@@ -15,6 +15,7 @@ import {
   excludeRoundPlanCards,
   updateRoundPlanCard,
 } from './roundPlan'
+import { compressRoundPlanCards, compressibleRoundPlanIds } from './roundPlanCompress'
 import {
   cardPalaceId,
   createRetryOccurrence,
@@ -439,5 +440,45 @@ describe('round plan reducer', () => {
     expect(next?.cardsById[liveId]?.status).toBe('excluded')
     expect(next?.cardsById[oldId]?.status).toBe('excluded')
     expect(next?.cardsById.b).toMatchObject({ status: 'completed', lastRating: 3 })
+  })
+
+  it('compresses passed cards out of the working set and does not revive them', () => {
+    const cards = [card('a', 1), card('b', 1)]
+    const first = applyCompletedIdsToRoundPlan(createRoundPlan('round-1', cards, config), ['a'])
+    expect(compressibleRoundPlanIds(first, { completedIds: ['a'] })).toEqual(['a'])
+    const next = compressRoundPlanCards(first, ['a'])
+    expect(next?.orderIds).toEqual(['b'])
+    expect(next?.cardsById.a).toBeUndefined()
+    expect(next?.compressedIds).toEqual(['a'])
+    expect(next?.scheduledCount).toBe(1)
+    const revived = createRoundPlan('round-1', cards, config, undefined, next)
+    expect(revived.orderIds).toEqual(['b'])
+    expect(revived.cardsById.a).toBeUndefined()
+    expect(revived.compressedIds).toEqual(['a'])
+  })
+
+  it('does not compress a weak-rated source that still has a live retry', () => {
+    const cards = [card('a', 1), card('b', 1)]
+    const retry = createRetryOccurrence(cards[0], 'round-1', 1, 3)
+    const withRetry = createRoundPlan('round-1', [...cards, retry], config)
+    const stamped = updateRoundPlanCard(
+      updateRoundPlanCard(withRetry, 'a', { status: 'retry', lastRating: 1 }),
+      retry.id,
+      { status: 'retry', occurrenceKind: 'retry', sourceCardId: 'a' },
+    )
+    expect(compressibleRoundPlanIds(stamped, {
+      completedIds: [],
+      encounters: {
+        a: {
+          encounterId: 'enc-a',
+          unitRevision: 1,
+          status: 'closed',
+          sessionId: null,
+          selectedRating: 1,
+          passed: false,
+          retryAfterCards: 3,
+        },
+      },
+    })).toEqual([])
   })
 })

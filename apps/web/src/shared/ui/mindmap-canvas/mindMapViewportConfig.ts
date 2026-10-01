@@ -1,5 +1,8 @@
-/** Shared mind-map viewport zoom floors/ceilings (manual pan + fitView). */
-export const MINDMAP_DEFAULT_ZOOM = 0.99
+/**
+ * Shared mind-map viewport zoom floors/ceilings (manual pan + fitView).
+ * Default is exactly 1: scale(0.99) rasterizes glyphs and looks soft on Windows.
+ */
+export const MINDMAP_DEFAULT_ZOOM = 1
 export const MINDMAP_DEFAULT_VIEWPORT_X = 4
 export const MINDMAP_DEFAULT_VIEWPORT_Y = 18
 export const MINDMAP_MANUAL_MIN_ZOOM = 0.12

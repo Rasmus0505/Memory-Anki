@@ -38,6 +38,7 @@ export interface FreestyleRoundPlanState {
   orderIds: string[]
   cardsById: Record<string, FreestyleRoundPlanCard>
   today?: string
+  compressedIds?: string[]
 }
 
 export interface FreestyleRoundMeta {
@@ -113,10 +114,12 @@ export function sanitizeRoundPlan(value: unknown): FreestyleRoundPlanState | nul
   const roundId = asString(raw.roundId)
   if (!roundId) return null
   const cardsById = asCards(raw.cardsById)
+  const compressedIds = asStringList(raw.compressedIds)
+  const compressed = new Set(compressedIds)
   // Stale is a transient recovery marker, not a review outcome. Old persisted
   // markers must not make the next fresh queue look empty or require manual work.
   Object.keys(cardsById).forEach((id) => {
-    if (cardsById[id].status === 'stale') delete cardsById[id]
+    if (cardsById[id].status === 'stale' || compressed.has(id)) delete cardsById[id]
   })
   return collapseRetryPlanEntries({
     roundId,
@@ -129,6 +132,7 @@ export function sanitizeRoundPlan(value: unknown): FreestyleRoundPlanState | nul
     orderIds: asStringList(raw.orderIds).filter((id) => Boolean(cardsById[id])),
     cardsById,
     today: asString(raw.today) || undefined,
+    compressedIds,
   })
 }
 
@@ -246,10 +250,11 @@ export function createRoundPlan(
   // Never inherit another round's completed/retry ledger into this plan — that
   // left phantom 待重练 rows in 本轮安排 and blocked locate/settlement.
   const prior = previous?.roundId === roundId ? previous : null
+  const compressed = new Set(prior?.compressedIds ?? [])
   const nextById: Record<string, FreestyleRoundPlanCard> = {}
   cards.forEach((card) => {
     const id = String(card.id || '').trim()
-    if (!id) return
+    if (!id || compressed.has(id)) return
     const existing = prior?.cardsById[id]
     if (existing && existing.status !== 'stale') {
       const retryGap = bookedRetryAfterCards(card)
@@ -286,6 +291,7 @@ export function createRoundPlan(
       .map((item) => item.sourceCardId || item.cardId),
   )
   Object.entries(prior?.cardsById ?? {}).forEach(([id, item]) => {
+    if (compressed.has(id)) return
     if (item.status === 'excluded' || item.status === 'completed' || item.status === 'retry') {
       if (item.occurrenceKind === 'retry') {
         // retry:{roundId}:... from another round must not haunt 本轮安排.
@@ -351,6 +357,7 @@ export function createRoundPlan(
     orderIds,
     cardsById: nextById,
     today: prior?.today,
+    compressedIds: compressed.size ? [...compressed] : prior?.compressedIds,
   })
 }
 

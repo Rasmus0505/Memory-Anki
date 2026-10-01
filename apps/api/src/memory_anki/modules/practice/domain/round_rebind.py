@@ -139,8 +139,9 @@ def append_today_cards(
         stamp_new=True,
     )
     incoming_ids = [item["card_id"] for item in incoming]
+    compressed = set(next_plan["compressed_ids"])
     for card_id in incoming_ids:
-        if card_id not in next_plan["presented_ids"]:
+        if card_id not in next_plan["presented_ids"] and card_id not in compressed:
             next_plan["presented_ids"].append(card_id)
     known = _known_presented_ids(next_plan)
     next_plan["presented_ids"] = [item for item in next_plan["presented_ids"] if item in known]
@@ -178,12 +179,13 @@ def replan_remaining(
     source_ids = {item["card_id"] for item in next_plan["original_cards"]}
     excluded = set(next_plan["excluded_ids"])
     completed = set(next_plan["completed_ids"])
+    compressed = set(next_plan["compressed_ids"])
     retry_sources = live_retry_sources(next_plan)
     prefix: list[str] = []
     seen: set[str] = set()
     for card_id in previous_presented:
         source_id = _source_id_of(next_plan, card_id)
-        if not source_id or source_id in seen or source_id in excluded:
+        if not source_id or source_id in seen or source_id in excluded or source_id in compressed:
             continue
         if source_id not in source_ids:
             continue
@@ -193,7 +195,7 @@ def replan_remaining(
     incoming_ids = [item["card_id"] for item in incoming]
     suffix: list[str] = []
     for card_id in incoming_ids:
-        if card_id in seen or card_id in excluded or card_id in completed:
+        if card_id in seen or card_id in excluded or card_id in completed or card_id in compressed:
             continue
         suffix.append(card_id)
         seen.add(card_id)
@@ -285,6 +287,7 @@ def _merge_incoming(
     plan["presented_ids"] = _rewrite_ids(plan["presented_ids"], mapping)
     plan["completed_ids"] = _rewrite_ids(plan["completed_ids"], mapping)
     plan["excluded_ids"] = _rewrite_ids(plan["excluded_ids"], mapping)
+    plan["compressed_ids"] = _rewrite_ids(plan["compressed_ids"], mapping)
     current = _text(plan.get("current_card_id"))
     if current and current in mapping:
         plan["current_card_id"] = mapping[current]

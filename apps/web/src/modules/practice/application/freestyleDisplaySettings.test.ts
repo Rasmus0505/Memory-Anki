@@ -21,14 +21,14 @@ describe('freestyle display settings', () => {
       flip_mode: 'free',
       auto_advance: false,
       rating_scope: 'unit',
-      mindmap_zoom: 0.99,
+      mindmap_zoom: 1,
     })
     expect(sanitizeFreestyleDisplaySettings({ rating_mode: true, flip_mode: 'focused' })).toEqual({
       rating_mode: true,
       flip_mode: 'focused',
       auto_advance: false,
       rating_scope: 'unit',
-      mindmap_zoom: 0.99,
+      mindmap_zoom: 1,
     })
   })
 
@@ -50,7 +50,7 @@ describe('freestyle display settings', () => {
       flip_mode: 'free',
       auto_advance: true,
       rating_scope: 'unit',
-      mindmap_zoom: 0.99,
+      mindmap_zoom: 1,
     })
   })
 
@@ -68,9 +68,13 @@ describe('freestyle display settings', () => {
   })
 
   it('falls back to the default zoom for absent or non-finite values', () => {
-    expect(sanitizeFreestyleDisplaySettings({}).mindmap_zoom).toBe(0.99)
-    expect(sanitizeFreestyleDisplaySettings({ mindmap_zoom: '0.8' }).mindmap_zoom).toBe(0.99)
-    expect(sanitizeFreestyleDisplaySettings({ mindmap_zoom: Number.NaN }).mindmap_zoom).toBe(0.99)
-    expect(sanitizeFreestyleDisplaySettings({ mindmap_zoom: Infinity }).mindmap_zoom).toBe(0.99)
+    expect(sanitizeFreestyleDisplaySettings({}).mindmap_zoom).toBe(1)
+    expect(sanitizeFreestyleDisplaySettings({ mindmap_zoom: '0.8' }).mindmap_zoom).toBe(1)
+    expect(sanitizeFreestyleDisplaySettings({ mindmap_zoom: Number.NaN }).mindmap_zoom).toBe(1)
+    expect(sanitizeFreestyleDisplaySettings({ mindmap_zoom: Infinity }).mindmap_zoom).toBe(1)
+  })
+
+  it('promotes the legacy 0.99 default to 1 so node text stays crisp', () => {
+    expect(sanitizeFreestyleDisplaySettings({ mindmap_zoom: 0.99 }).mindmap_zoom).toBe(1)
   })
 })

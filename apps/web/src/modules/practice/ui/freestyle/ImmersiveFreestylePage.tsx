@@ -220,12 +220,15 @@ export default function ImmersiveFreestylePage({
     reorderPlan,
     excludePlanCards,
     restorePlanCards,
+    compressCompletedPlanCards,
     buildQueue,
     pendingRestudyCardIds,
     planVersion,
     adoptRoundVersion,
     clearConfiguredOverlayQuiz,
     queueFrozen,
+    startupVisualIndex,
+    clearStartupVisualIndex,
   } = useImmersiveQueue(entryPalaceId, slot)
 
   const saveFreestyleConfig = useCallback((
@@ -297,6 +300,8 @@ export default function ImmersiveFreestylePage({
     becameActiveAt,
     loading,
     queueFrozen,
+    startupVisualIndex,
+    onStartupVisualApplied: clearStartupVisualIndex,
     onPageTurn: isActive ? signalPageTurnWithDust : undefined,
   })
   const {
@@ -701,6 +706,7 @@ export default function ImmersiveFreestylePage({
           }}
           onExclude={excludePlanCards}
           onRestore={restorePlanCards}
+          onCompressCompleted={compressCompletedPlanCards}
           onReorder={reorderPlan}
           onOpenConfig={() => {
             setPlanOpen(false)
@@ -969,7 +975,7 @@ export default function ImmersiveFreestylePage({
                 toast.success('已复制诊断信息')
               }}
             />
-          ) : (
+          ) : roundComplete ? null : (
             <FreestyleEmptyState
               mode="free"
               onSwitchMode={() => undefined}

@@ -145,6 +145,10 @@ export {
   type FreestyleRoundPlanCardStatus,
   type FreestyleRoundPlanState,
 } from './domain/roundPlan'
+export {
+  compressRoundPlanCards,
+  compressibleRoundPlanIds,
+} from './domain/roundPlanCompress'
 export { default as ImmersiveFreestylePage } from './ui/freestyle/ImmersiveFreestylePage'
 export * from './ui/review/api'
 export * from './ui/review/components/PracticeCompletionDialog'

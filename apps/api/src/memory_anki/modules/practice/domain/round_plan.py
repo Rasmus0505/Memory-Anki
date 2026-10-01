@@ -38,6 +38,7 @@ def empty_plan() -> Plan:
         "current_index": 0,
         "completed_ids": [],
         "excluded_ids": [],
+        "compressed_ids": [],
         "occurrences": [],
         "encounters": {},
         "today": "",
@@ -163,6 +164,7 @@ def normalize_plan(plan: Mapping[str, Any] | None) -> Plan:
         "current_index": max(0, _int(raw.get("current_index"))),
         "completed_ids": _unique(raw.get("completed_ids") or []),
         "excluded_ids": _unique(raw.get("excluded_ids") or []),
+        "compressed_ids": _unique(raw.get("compressed_ids") or []),
         "occurrences": occurrences,
         "encounters": encounters,
         "today": _day(raw.get("today")),
@@ -174,7 +176,7 @@ def normalize_plan(plan: Mapping[str, Any] | None) -> Plan:
         ),
     }
     _collapse_retries(normalized)
-    _sync_index(normalized)
+    _strip_compressed(normalized)
     return normalized
 
 
@@ -749,7 +751,7 @@ def _segment_end(plan: Plan, presented: Sequence[str], anchor: int, cohort: str)
 
 
 def _is_unfinished(plan: Plan, card_id: str) -> bool:
-    if not card_id or card_id in plan["completed_ids"] or card_id in plan["excluded_ids"]:
+    if not card_id or card_id in plan["completed_ids"] or card_id in plan["excluded_ids"] or card_id in plan["compressed_ids"]:
         return False
     occ = _find_occurrence(plan, card_id)
     if occ is not None:
@@ -776,6 +778,15 @@ def _set_encounter(plan: Plan, card_id: str, encounter_id: str, revision: int, r
         "status": "passed" if rating in PASS_RATINGS else "failed",
         "unit_revision": _int(revision),
     }
+
+
+def _strip_compressed(plan: Plan) -> None:
+    compressed = set(plan.get("compressed_ids") or [])
+    plan["presented_ids"] = [item for item in plan["presented_ids"] if item not in compressed]
+    current = _text(plan.get("current_card_id"))
+    if current and current not in plan["presented_ids"]:
+        plan["current_card_id"] = next((card_id for card_id in plan["presented_ids"] if _is_unfinished(plan, card_id)), None)
+    _sync_index(plan)
 
 
 def _sync_index(plan: Plan) -> None:

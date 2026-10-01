@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
 import {
+  Archive,
   Check,
   ChevronDown,
   ChevronRight,
@@ -9,6 +10,7 @@ import {
   X,
 } from 'lucide-react'
 import {
+  compressibleRoundPlanIds,
   planCardStatus,
   type FreestyleRoundPlanCard,
   type FreestyleRoundPlanCardStatus,
@@ -274,6 +276,7 @@ export function FreestyleRoundSheet({
   onJump,
   onExclude,
   onRestore,
+  onCompressCompleted,
   onReorder,
   onOpenConfig,
 }: {
@@ -286,6 +289,7 @@ export function FreestyleRoundSheet({
   onJump: (cardId: string) => void
   onExclude: (cardIds: string[]) => void
   onRestore: (cardIds: string[]) => void
+  onCompressCompleted: () => void
   onReorder: (orderIds: string[]) => void
   onOpenConfig: () => void
   loading?: boolean
@@ -349,6 +353,13 @@ export function FreestyleRoundSheet({
     queueState.unitEncountersByCardId,
     roundPlan,
   ])
+  const compressibleIds = useMemo(
+    () => compressibleRoundPlanIds(roundPlan, {
+      completedIds: queueState.completedIds,
+      encounters: queueState.unitEncountersByCardId,
+    }),
+    [queueState.completedIds, queueState.unitEncountersByCardId, roundPlan],
+  )
   const progressSummary = useMemo(
     () => buildFreestyleProgressSummary(
       cards,
@@ -523,6 +534,16 @@ export function FreestyleRoundSheet({
             onClick={() => onRestore(selectedIds)}
           >
             <Undo2 className="size-3.5" />恢复选中
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={!compressibleIds.length}
+            onClick={onCompressCompleted}
+          >
+            <Archive className="size-3.5" />
+            {compressibleIds.length ? `结算已完成 ${compressibleIds.length}` : '结算已完成单元'}
           </Button>
           <Button
             type="button"

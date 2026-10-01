@@ -184,9 +184,9 @@ body {
     var(--color-background);
   background-attachment: fixed;
   color: var(--color-foreground);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: auto;
+  -moz-osx-font-smoothing: auto;
+  text-rendering: auto;
   font-feature-settings: "tnum" 0, "cv11" 1;
 }
 

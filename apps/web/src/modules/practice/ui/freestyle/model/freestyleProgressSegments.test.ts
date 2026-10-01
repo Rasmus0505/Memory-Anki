@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_FREESTYLE_FEED_CONFIG } from '@/modules/practice/domain/feedConfig'
-import { applyCompletedIdsToRoundPlan, createRoundPlan, stampRestudyPlan, updateRoundPlanCard } from '@/modules/practice/domain/roundPlan'
+import {
+  applyCompletedIdsToRoundPlan,
+  createRoundPlan,
+  stampRestudyPlan,
+  updateRoundPlanCard,
+} from '@/modules/practice/domain/roundPlan'
+import { compressRoundPlanCards } from '@/modules/practice/domain/roundPlanCompress'
 import { createRetryOccurrence, insertRetryOccurrenceAfterGap } from '@/modules/practice/domain/queueState'
 import type { FreestyleCard } from '@/shared/api/contracts'
 import {
@@ -102,6 +108,19 @@ describe('buildFreestyleProgressSummary', () => {
     expect(summary.positionBase).toBe(3)
     expect(summary.retryInserted).toBe(0)
     expect(summary.passedCount).toBe(1)
+  })
+
+  it('drops compressed passed cards from the rail instead of keeping a solid tick', () => {
+    const cards = [card('one'), card('two'), card('three')]
+    const scored = applyCompletedIdsToRoundPlan(plan(cards), ['one'])
+    const compressed = compressRoundPlanCards(scored, ['one'])
+    const remaining = cards.filter((item) => item.id !== 'one')
+    const summary = buildFreestyleProgressSummary(remaining, compressed, ['one'], [], 'two')
+
+    expect(summary.segments.map((segment) => segment.cardId)).toEqual(['two', 'three'])
+    expect(summary.total).toBe(2)
+    expect(summary.scheduledBase).toBe(2)
+    expect(progressHudText(summary)).toBe('1/2')
   })
 
   it('marks a source card waiting for retry without turning it into a retry node', () => {

@@ -3544,21 +3544,33 @@ def test_freestyle_round_sheet_views_reject_palace_only(
 
     assert any("progress-rail order" in error for error in errors)
     assert any("palace and progress-rail views" in error for error in errors)
+    assert any("结算已完成单元" in error for error in errors)
 
 
 def test_freestyle_round_sheet_views_accept_header_toggle(
     tmp_path: Path, monkeypatch
 ) -> None:
     web_src = tmp_path / "apps" / "web" / "src"
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
     monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
     write_file(
         web_src / "modules" / "practice" / "ui" / "freestyle" / "components" / "FreestyleRoundSheet.tsx",
-        "按宫殿\n按进度\nbuildFreestyleProgressSummary\n",
+        "按宫殿\n按进度\nbuildFreestyleProgressSummary\n结算已完成单元\n",
     )
     write_file(
         tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
-        "A header toggle switches 「按宫殿」 and 「按进度」.\n",
+        "A header toggle switches 「按宫殿」 and 「按进度」.\n"
+        "结算已完成单元 compresses passed cards off compressed_ids.\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "domain" / "round_plan.py",
+        "compressed_ids = []\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "domain" / "round_compress.py",
+        "def compress_completed():\n    plan['compressed_ids'] = []\n",
     )
 
     errors: list[str] = []

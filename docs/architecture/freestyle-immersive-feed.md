@@ -49,8 +49,9 @@ committed `current_card_id` (via `set_cursor` on settle) instead of jumping back
 the first card or minting a fresh queue.
 A palace/subject scope change rebinds the same `round_id`: overlapping identities keep
 completed / excluded / retry marks; only unstarted work outside the new scope is dropped.
-Refresh must not mint a new `round_id` or drop completed cards from the HUD/feed. Completed source
-cards stay in presented order so swipe-back / 上一张 can reopen them. Re-scoring a completed
+Refresh must not mint a new `round_id` or drop completed cards from the HUD/feed, except cards
+the learner explicitly compressed with 「结算已完成单元」. Completed source
+cards stay in presented order so swipe-back / 上一张 can reopen them until that compress. Re-scoring a completed
 unit in the same round amends from that round's original baseline; it does not stack SRS.
 A rating write that arrives after the glance session was abandoned, completed, or cancelled
 reopens that unit in the same round and applies the latest rating; it must not return
@@ -134,7 +135,14 @@ save error) likewise dismiss on whole-chip click. Audio uses `all_clear_ready` o
 scene, locally — never `dispatchGlobalFeedback`.
 
 The top HUD opens a bottom “本轮安排” sheet. A header toggle switches 「按宫殿」 (group stable plan entries by palace) and 「按进度」 (the same entries in progress-rail segment order, still split into the leftover and today blocks). Both views support
-jump, drag (desktop) or up/down (touch), batch exclude/restore, and reset-round. Configuration is a
+jump, drag (desktop) or up/down (touch), batch exclude/restore, and reset-round. The toolbar
+「结算已完成单元」 (`compress_completed`) drops passed cards (记得/轻松, no live 重练) from
+the swipe feed, 本轮安排, and the HUD rail so the denominator shrinks. Weak-rated sources
+and unfinished retries stay. This is not 排除: excluded ticks remain on the rail; compressed
+ids (`compressed_ids`) do not. Unfinished work stays in this round. Ratings stay committed;
+swipe-back cannot reopen a compressed card in this round. A silent rebuild / `append_today_cards`
+must not put compressed identities back. Overlay 做题 is not asked here. If that compress
+empties the feed, the closing settlement slot stays reachable. Configuration is a
 separate dialog. 「保存配置并重排」 asks whether to keep overlapping finished/excluded/retry
 progress. 保留 continues this round and only reorders unstarted work. 不保留 starts a new round. The HUD line is `当前位置/队列总长` (`position/total`): the denominator is the progress
 rail, including retry insertions and a confirmed 移除队列. That removal stays on the rail as a

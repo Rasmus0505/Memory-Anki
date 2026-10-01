@@ -25,6 +25,14 @@
   -webkit-touch-callout: none;
 }
 
+.memory-anki-mindmap-viewport .react-flow__node,
+.mindmap-node-text,
+.mindmap-node-type {
+  -webkit-font-smoothing: auto;
+  -moz-osx-font-smoothing: auto;
+  text-rendering: auto;
+}
+
 .mindmap-node-text {
   position: relative;
   overflow-wrap: break-word;
@@ -38,7 +46,7 @@
   text-wrap: pretty;
   text-autospace: normal;
   line-break: strict;
-  letter-spacing: 0.005em;
+  letter-spacing: 0;
 }
 
 /* English words: underline + inset glow only — zero width change, zero re-wrap. */

@@ -49,14 +49,13 @@ export function applyServerCohorts(
     }
   }
   const today = String(server.today || '').trim()
+  const compressedIds = (server.compressed_ids || []).map((id) => String(id || '').trim()).filter(Boolean)
+  compressedIds.forEach((id) => { delete cardsById[id] })
   const presented = (server.presented_ids || []).filter((id) => Boolean(cardsById[id]))
   const extra = plan.orderIds.filter((id) => !presented.includes(id) && Boolean(cardsById[id]))
-  return {
-    ...plan,
-    cardsById,
-    today: today || plan.today,
-    orderIds: presented.length ? [...presented, ...extra] : plan.orderIds,
-  }
+  const orderIds = presented.length ? [...presented, ...extra] : plan.orderIds.filter((id) => !compressedIds.includes(id))
+  const nextCompressed = compressedIds.length ? [...new Set([...(plan.compressedIds ?? []), ...compressedIds])] : plan.compressedIds
+  return { ...plan, cardsById, today: today || plan.today, orderIds, compressedIds: nextCompressed }
 }
 
 export function planCardCohort(
@@ -125,6 +124,7 @@ export function cardsForServerPlan(
   const excludedIds = new Set(
     (plan.excluded_ids || []).map((id) => String(id || '').trim()).filter(Boolean),
   )
+  const skippedIds = new Set([...excludedIds, ...(plan.compressed_ids || []).map((id) => String(id || '').trim()).filter(Boolean)])
   const excludedUnits = new Set<string>()
   for (const id of excludedIds) {
     const fromId = reviewUnitIdFromCardId(id)
@@ -151,7 +151,7 @@ export function cardsForServerPlan(
   }
 
   for (const id of plan.presented_ids) {
-    if (excludedIds.has(String(id || '').trim())) continue
+    if (skippedIds.has(String(id || '').trim())) continue
     const existing = byId.get(id)
     if (existing) {
       push(existing)
@@ -215,7 +215,7 @@ export function cardsForServerPlan(
     occurrenceStatusBySource.set(source, status)
   }
   for (const card of cards) {
-    if (removedSource(card)) continue
+    if (skippedIds.has(String(card.id || '').trim()) || removedSource(card)) continue
     if (!isRetryOccurrence(card)) {
       push(card)
       continue
@@ -292,7 +292,7 @@ export function nextUnfinishedPlanCardId(
 ): string | null {
   if (!plan) return null
   const completed = new Set((plan.completed_ids || []).map(String))
-  const excluded = new Set((plan.excluded_ids || []).map(String))
+  const excluded = new Set([...(plan.excluded_ids || []), ...(plan.compressed_ids || [])].map(String))
   const occurrences = plan.occurrences || []
   const isUnfinished = (cardId: string) => {
     if (!cardId || completed.has(cardId) || excluded.has(cardId)) return false

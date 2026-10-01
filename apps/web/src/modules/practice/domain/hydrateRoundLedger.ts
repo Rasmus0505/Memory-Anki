@@ -10,6 +10,7 @@ import {
   type FreestyleRoundPlanCard,
   type FreestyleRoundPlanState,
 } from './roundPlan'
+import { compressRoundPlanCards } from './roundPlanCompress'
 import type { FreestyleUnitEncounterState } from './queueState'
 import {
   applyServerCohorts,
@@ -167,6 +168,8 @@ export function commitHydratedRoundLedger(input: {
   serverPlan: FreestyleRoundPlanPayload | null | undefined
   /** Ids the learner just confirmed 移除队列. Survive a wiped or stale ledger. */
   forceExcludedIds?: readonly string[]
+  /** Ids just compressed out of the working set. Survive a silent rebuild. */
+  forceCompressedIds?: readonly string[]
 }): HydratedRoundLedger {
   const serverPlan = input.serverPlan
   const serverCompleted = Array.isArray(serverPlan?.completed_ids)
@@ -215,12 +218,24 @@ export function commitHydratedRoundLedger(input: {
       ? createRoundPlan(input.adoptedRoundId, input.cards, input.config, input.meta, null)
       : null)
   const forced = excludeRoundPlanCards(planForForce, forceExcludedIds, input.cards) ?? planForForce
+  const serverCompressed = Array.isArray(serverPlan?.compressed_ids)
+    ? serverPlan.compressed_ids.map(String)
+    : []
+  const forceCompressedIds = (input.forceCompressedIds ?? [])
+    .map((id) => String(id || '').trim())
+    .filter(Boolean)
+  const compressedIds = [...new Set([
+    ...(forced?.compressedIds ?? []),
+    ...serverCompressed,
+    ...forceCompressedIds,
+  ])]
+  const compressed = compressRoundPlanCards(forced, compressedIds) ?? forced
   return {
     ...retained,
-    plan: forced,
+    plan: compressed,
     hiddenIds: mergeRetainedHiddenIds(
       input.localHiddenIds,
-      forced,
+      compressed,
       serverExcluded,
       releasedIds,
     ),

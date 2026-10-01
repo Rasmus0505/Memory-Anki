@@ -126,8 +126,12 @@ export function buildDisplayNodes({
     // Live drag positions must win: setPreviewState re-renders can race ahead of
     // useNodesState and would otherwise feed React Flow a stale origin (snap-back).
     const livePosition = liveDragPositions?.get(node.id)
-    const position =
+    const rawPosition =
       livePosition ?? (isSource || !previewNode ? node.position : previewNode.position)
+    // Idle cards sit on whole pixels. Fractional translate() blurs the text.
+    const position = livePosition
+      ? rawPosition
+      : { x: Math.round(rawPosition.x), y: Math.round(rawPosition.y) }
     const zIndex = isSource ? 100 : activeDrop ? 50 : 1
     const isSelected = !textSelectionModeActive && selectedIds.has(node.id)
     const isEditing = node.id === editingNodeId

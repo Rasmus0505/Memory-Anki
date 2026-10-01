@@ -22,16 +22,19 @@ export interface FreestyleDisplaySettings {
   auto_advance: boolean
   /** Section vs whole-palace due rating. Defaults to the current unit only. */
   rating_scope: FreestyleRatingScope
-  /** Shared manual mind-map zoom for all freestyle palaces. */
+  /** Shared manual mind-map zoom for all freestyle palaces. Exactly 1 stays crisp. */
   mindmap_zoom: number
 }
+
+/** Previous default. scale(0.99) blurs node text; reads of that value become 1. */
+const LEGACY_SOFT_MINDMAP_ZOOM = 0.99
 
 export const DEFAULT_FREESTYLE_DISPLAY_SETTINGS: FreestyleDisplaySettings = {
   rating_mode: true,
   flip_mode: 'free',
   auto_advance: false,
   rating_scope: 'unit',
-  mindmap_zoom: 0.99,
+  mindmap_zoom: 1,
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -46,6 +49,7 @@ function sanitizeMindmapZoom(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return DEFAULT_FREESTYLE_DISPLAY_SETTINGS.mindmap_zoom
   }
+  if (Math.abs(value - LEGACY_SOFT_MINDMAP_ZOOM) < 0.0001) return 1
   return Math.min(FREESTYLE_MINDMAP_MAX_ZOOM, Math.max(FREESTYLE_MINDMAP_MIN_ZOOM, value))
 }
 

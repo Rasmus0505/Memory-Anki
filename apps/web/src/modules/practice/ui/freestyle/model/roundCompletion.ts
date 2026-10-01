@@ -373,7 +373,10 @@ export function isFreestyleRoundComplete(
   completedIds: Iterable<string> = [],
   roundPlan: FreestyleRoundPlanState | null = null,
 ): boolean {
-  if (cards.length === 0) return false
+  if (cards.length === 0) {
+    // Mid-round compress can empty the feed after every remaining card passed.
+    return Boolean(roundPlan?.compressedIds?.length)
+  }
   return findEarliestUnratedIndex(cards, completedIds, encountersByCardId, roundPlan) == null
 }
 
@@ -509,6 +512,22 @@ export function findEarliestCompleteSeekIndex(
   roundPlan: FreestyleRoundPlanState | null = null,
 ): number | null {
   return findEarliestUnratedIndex(cards, completedIds, encountersByCardId, roundPlan)
+}
+
+/**
+ * Cold open of a round: the same place the right-side 完成 button would jump.
+ * An open round lands on the earliest unscored card. A fully scored round
+ * lands on the closing settlement slot (`cards.length`), which is not a queue card.
+ */
+export function resolveFreestyleOpenFeedIndex(
+  cards: ReadonlyArray<FreestyleCard>,
+  encountersByCardId: Record<string, FreestyleUnitEncounterState>,
+  completedIds: Iterable<string> = [],
+  roundPlan: FreestyleRoundPlanState | null = null,
+): number {
+  if (cards.length === 0) return 0
+  const seek = findEarliestUnratedIndex(cards, completedIds, encountersByCardId, roundPlan)
+  return seek == null ? cards.length : seek
 }
 
 /**

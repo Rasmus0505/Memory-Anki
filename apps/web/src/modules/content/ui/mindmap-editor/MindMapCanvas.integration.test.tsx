@@ -15,7 +15,7 @@ const reactFlowMockState = vi.hoisted(() => ({
   zoomOut: vi.fn(),
   setViewport: vi.fn(),
   getViewport: vi.fn(),
-  viewport: { x: 4, y: 18, zoom: 0.99 },
+  viewport: { x: 4, y: 18, zoom: 1 },
   reactFlowProps: null as Record<string, unknown> | null,
   nodes: [] as Array<{ id: string; data?: Record<string, unknown>; position?: { x: number; y: number } }>,
 }))
@@ -231,7 +231,7 @@ describe('MindMapCanvas recovery', () => {
       reactFlowMockState.viewport = { ...viewport }
       return Promise.resolve(true)
     })
-    reactFlowMockState.viewport = { x: 4, y: 18, zoom: 0.99 }
+    reactFlowMockState.viewport = { x: 4, y: 18, zoom: 1 }
     reactFlowMockState.reactFlowProps = null
     reactFlowMockState.nodes = []
     widthSpy = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(800)
@@ -773,7 +773,7 @@ describe('MindMapCanvas recovery', () => {
 
     await waitFor(() =>
       expect(reactFlowMockState.setViewport).toHaveBeenCalledWith(
-        { x: 4, y: 18, zoom: 0.99 },
+        { x: 4, y: 18, zoom: 1 },
         { duration: 0 },
       ),
     )
@@ -884,7 +884,7 @@ describe('MindMapCanvas recovery', () => {
     )
     // Manual 刷新脑图 intentionally resets the camera so off-screen maps after
     // edit↔review document switches become visible again (not a preserve-viewport path).
-    expect(reactFlowMockState.reactFlowProps?.viewport).toEqual({ x: 4, y: 18, zoom: 0.99 })
+    expect(reactFlowMockState.reactFlowProps?.viewport).toEqual({ x: 4, y: 18, zoom: 1 })
   })
 
   it('keeps the default guided mobile viewport stable across content changes', async () => {

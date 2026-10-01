@@ -83,7 +83,7 @@ function renderViewport(overrides?: Partial<React.ComponentProps<typeof MindMapC
     onEdgeClick: vi.fn(),
     onEdgeDoubleClick: vi.fn(),
     onPaneClick: vi.fn(),
-    viewport: { x: 4, y: 18, zoom: 0.99 },
+    viewport: { x: 4, y: 18, zoom: 1 },
     onViewportChange: vi.fn(),
     ...overrides,
   }
@@ -101,7 +101,7 @@ describe('MindMapCanvasViewport', () => {
     expect(screen.getByTestId('react-flow').dataset.deleteKeyCode).toBe('null')
     expect(screen.getByTestId('react-flow').dataset.autoPanOnNodeDrag).toBe('false')
     expect(screen.getByTestId('react-flow').dataset.autoPanOnConnect).toBe('false')
-    expect(screen.getByTestId('react-flow').dataset.viewport).toBe('4,18,0.99')
+    expect(screen.getByTestId('react-flow').dataset.viewport).toBe('4,18,1')
   })
 
   it('hides decorative layers while dragging', () => {
