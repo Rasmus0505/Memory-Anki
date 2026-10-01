@@ -18,6 +18,40 @@ describe('reviewFeedbackSettings', () => {
   it('returns defaults when storage is empty', () => {
     expect(readReviewFeedbackSettings()).toEqual(DEFAULT_REVIEW_FEEDBACK_SETTINGS)
     expect(DEFAULT_REVIEW_FEEDBACK_SETTINGS.schemaVersion).toBe(4)
+    expect(DEFAULT_REVIEW_FEEDBACK_SETTINGS.gameplayFx.style).toBe('cyber')
+    expect(DEFAULT_REVIEW_FEEDBACK_SETTINGS.gameplayFx.flipMotion).toBe('flip-3d-gloss')
+    expect(DEFAULT_REVIEW_FEEDBACK_SETTINGS.gameplayFx.particleStyle).toBe('magnetic-arc')
+    expect(DEFAULT_REVIEW_FEEDBACK_SETTINGS.gameplayFx.screenShakeIntensity).toBe(100)
+    expect(DEFAULT_REVIEW_FEEDBACK_SETTINGS.gameplayFx.particleDensity).toBe(100)
+    expect(DEFAULT_REVIEW_FEEDBACK_SETTINGS.gameplayFx.springOvershootRatio).toBe(100)
+    expect(DEFAULT_REVIEW_FEEDBACK_SETTINGS.gameplayFx.magneticArcEnabled).toBe(true)
+    expect(DEFAULT_REVIEW_FEEDBACK_SETTINGS.gameplayFx.feverComboEnabled).toBe(true)
+    expect(DEFAULT_REVIEW_FEEDBACK_SETTINGS.gameplayFx.chimeSynthesizerEnabled).toBe(true)
+  })
+
+  it('sanitizes gameplay feedback fx settings within bounds', () => {
+    const customized = sanitizeReviewFeedbackSettings({
+      gameplayFx: {
+        style: 'cyber',
+        flipMotion: 'flip-jelly',
+        particleStyle: 'candy-confetti',
+        screenShakeIntensity: 250,
+        particleDensity: 20,
+        springOvershootRatio: -10,
+        magneticArcEnabled: false,
+        feverComboEnabled: false,
+        chimeSynthesizerEnabled: false,
+      },
+    })
+    expect(customized.gameplayFx.style).toBe('cyber')
+    expect(customized.gameplayFx.flipMotion).toBe('flip-jelly')
+    expect(customized.gameplayFx.particleStyle).toBe('candy-confetti')
+    expect(customized.gameplayFx.screenShakeIntensity).toBe(200)
+    expect(customized.gameplayFx.particleDensity).toBe(30)
+    expect(customized.gameplayFx.springOvershootRatio).toBe(0)
+    expect(customized.gameplayFx.magneticArcEnabled).toBe(false)
+    expect(customized.gameplayFx.feverComboEnabled).toBe(false)
+    expect(customized.gameplayFx.chimeSynthesizerEnabled).toBe(false)
   })
 
   it('migrates legacy intensity into the preset model', () => {

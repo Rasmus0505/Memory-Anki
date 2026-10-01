@@ -1,4 +1,4 @@
-﻿import {
+import {
   getClientPreferenceCacheStatus,
   hasLoadedClientPreferences,
   saveClientPreference,
@@ -108,6 +108,46 @@ export interface ReviewFeedbackScenesSettings {
   timerRound: ReviewFeedbackSceneSettings
 }
 
+export type GameplayThemeStyle = 'cyber' | 'gilded' | 'juice' | 'gold' | 'flame' | 'jade'
+export type GameplayFlipMotion = 'flip-3d-gloss' | 'flip-jelly' | 'flip-speedy'
+export type GameplayParticleStyle = 'magnetic-arc' | 'candy-confetti' | 'radial-sparks' | 'floating-gold'
+
+/**
+ * 游戏化打击感、震屏、能量引力磁吸与粒子引擎配置
+ */
+export interface GameplayFeedbackFxSettings {
+  /** 视觉美学风格主题 */
+  style: GameplayThemeStyle
+  /** 翻卡物理质感与动效 */
+  flipMotion: GameplayFlipMotion
+  /** 粒子喷涌与光效轨迹风格 */
+  particleStyle: GameplayParticleStyle
+  /** 屏幕微震强度 (0 ~ 200) */
+  screenShakeIntensity: number
+  /** 粒子喷涌浓度百分比 (30 ~ 300) */
+  particleDensity: number
+  /** 翻卡物理微弹与过冲回弹系数 (0 ~ 100) */
+  springOvershootRatio: number
+  /** 是否开启二次贝塞尔引力磁吸能量入轨 */
+  magneticArcEnabled: boolean
+  /** 是否开启三阶狂热连击 (Fever Combo) */
+  feverComboEnabled: boolean
+  /** 是否开启东方金石编钟纯律敲击音階 */
+  chimeSynthesizerEnabled: boolean
+}
+
+export const DEFAULT_GAMEPLAY_FEEDBACK_FX: GameplayFeedbackFxSettings = {
+  style: 'cyber',
+  flipMotion: 'flip-3d-gloss',
+  particleStyle: 'magnetic-arc',
+  screenShakeIntensity: 100,
+  particleDensity: 100,
+  springOvershootRatio: 100,
+  magneticArcEnabled: true,
+  feverComboEnabled: true,
+  chimeSynthesizerEnabled: true,
+}
+
 /**
  * Every way the app responds to you: sound, animation, celebration.
  *
@@ -133,6 +173,7 @@ export interface ReviewFeedbackSettings {
   completionEffectsEnabled: FeedbackChannelOverride
   scenes: ReviewFeedbackScenesSettings
   celebration: ReviewCelebrationSettings
+  gameplayFx: GameplayFeedbackFxSettings
 }
 
 export const REVIEW_FEEDBACK_SETTINGS_STORAGE_KEY = 'memory-anki-review-feedback-settings-v2'
@@ -252,6 +293,7 @@ export const DEFAULT_REVIEW_FEEDBACK_SETTINGS: ReviewFeedbackSettings = {
     },
   },
   celebration: undefined as never,
+  gameplayFx: DEFAULT_GAMEPLAY_FEEDBACK_FX,
 }
 
 DEFAULT_REVIEW_FEEDBACK_SETTINGS.celebration = buildLegacyCelebrationFromScenes(
@@ -401,6 +443,60 @@ export function timerCelebrationEventToScene(
   }
 }
 
+function sanitizeGameplayFxSettings(value: unknown): GameplayFeedbackFxSettings {
+  const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
+  const style: GameplayThemeStyle =
+    raw.style === 'cyber' || raw.style === 'gilded' || raw.style === 'juice' || raw.style === 'flame' || raw.style === 'jade' || raw.style === 'gold'
+      ? (raw.style as GameplayThemeStyle)
+      : DEFAULT_GAMEPLAY_FEEDBACK_FX.style
+
+  const flipMotion: GameplayFlipMotion =
+    raw.flipMotion === 'flip-3d-gloss' || raw.flipMotion === 'flip-jelly' || raw.flipMotion === 'flip-speedy'
+      ? raw.flipMotion
+      : DEFAULT_GAMEPLAY_FEEDBACK_FX.flipMotion
+
+  const particleStyle: GameplayParticleStyle =
+    raw.particleStyle === 'magnetic-arc' || raw.particleStyle === 'candy-confetti' || raw.particleStyle === 'radial-sparks' || raw.particleStyle === 'floating-gold'
+      ? raw.particleStyle
+      : DEFAULT_GAMEPLAY_FEEDBACK_FX.particleStyle
+
+  return {
+    style,
+    flipMotion,
+    particleStyle,
+    screenShakeIntensity: sanitizeInteger(
+      raw.screenShakeIntensity,
+      DEFAULT_GAMEPLAY_FEEDBACK_FX.screenShakeIntensity,
+      0,
+      200,
+    ),
+    particleDensity: sanitizeInteger(
+      raw.particleDensity,
+      DEFAULT_GAMEPLAY_FEEDBACK_FX.particleDensity,
+      30,
+      300,
+    ),
+    springOvershootRatio: sanitizeInteger(
+      raw.springOvershootRatio,
+      DEFAULT_GAMEPLAY_FEEDBACK_FX.springOvershootRatio,
+      0,
+      100,
+    ),
+    magneticArcEnabled: sanitizeBoolean(
+      raw.magneticArcEnabled,
+      DEFAULT_GAMEPLAY_FEEDBACK_FX.magneticArcEnabled,
+    ),
+    feverComboEnabled: sanitizeBoolean(
+      raw.feverComboEnabled,
+      DEFAULT_GAMEPLAY_FEEDBACK_FX.feverComboEnabled,
+    ),
+    chimeSynthesizerEnabled: sanitizeBoolean(
+      raw.chimeSynthesizerEnabled,
+      DEFAULT_GAMEPLAY_FEEDBACK_FX.chimeSynthesizerEnabled,
+    ),
+  }
+}
+
 export function sanitizeReviewFeedbackSettings(value: unknown): ReviewFeedbackSettings {
   const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
   const preset: FeedbackPreset =
@@ -455,6 +551,7 @@ export function sanitizeReviewFeedbackSettings(value: unknown): ReviewFeedbackSe
     completionEffectsEnabled: sanitizeChannelOverride(raw.completionEffectsEnabled),
     scenes,
     celebration: buildLegacyCelebrationFromScenes(scenes),
+    gameplayFx: sanitizeGameplayFxSettings(raw.gameplayFx),
   }
 }
 

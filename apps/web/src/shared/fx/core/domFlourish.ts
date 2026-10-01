@@ -61,6 +61,24 @@ export function flashVignette(playback?: FxPlayback) {
   mountTransient(document.body, 'freestyle-fx-vignette', 950, playback)
 }
 
+/** Micro screen shake for intense tactile impact on ratings. */
+export function shakeScreen(intensity = 1.0) {
+  if (intensity <= 0) return
+  const host = document.getElementById('root') || document.body
+  if (!host || typeof host.animate !== 'function') return
+  const s = intensity * 4.5
+  host.animate(
+    [
+      { transform: 'translate(0, 0)' },
+      { transform: `translate(${-s * 0.8}px, ${s * 0.6}px) rotate(${-s * 0.08}deg)`, offset: 0.2 },
+      { transform: `translate(${s * 0.7}px, ${-s * 0.5}px) rotate(${s * 0.06}deg)`, offset: 0.5 },
+      { transform: `translate(${-s * 0.3}px, ${s * 0.2}px)`, offset: 0.8 },
+      { transform: 'translate(0, 0)' },
+    ],
+    { duration: 140, easing: 'ease-out' },
+  )
+}
+
 /** A paper ghost of `card` tears off to the right; the real card leaves at once. */
 export function peelGhost(rect: DOMRect) {
   const ghost = document.createElement('div')

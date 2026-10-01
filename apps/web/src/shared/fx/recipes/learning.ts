@@ -21,7 +21,7 @@ import type { Point } from '../particles/particleModel'
 import { FX_ANCHORS, PROGRESS_TARGET, anchorTarget, elementCenter, findAnchor } from '../core/anchors'
 import { nextGradeVariant } from '../conductor'
 import { cue, defineCue, type FxStage } from '../core/director'
-import { bumpElement, chargeElement, flashElement, flashVignette, peelGhost, stampOn } from '../core/domFlourish'
+import { bumpElement, chargeElement, flashElement, flashVignette, peelGhost, shakeScreen, stampOn } from '../core/domFlourish'
 import { readRarityState, rollRare, writeRarityState } from '../rarity'
 
 export interface GradeCommitCue {
@@ -124,6 +124,11 @@ defineCue('grade.commit', {
       const { show, next } = rollRare(readRarityState(), grade >= 2)
       writeRarityState(next)
       if (show) stage.playback.at(milestone ? 1200 : 650, () => cue('rare.show', { show, origin }, { owner: stage.playback.owner }))
+    }
+    const gameplay = stage.gate.gameplayFx
+    const shakeLevel = (gameplay?.screenShakeIntensity ?? 100) / 100
+    if (shakeLevel > 0) {
+      shakeScreen(grade === 4 ? shakeLevel * 1.4 : grade === 1 ? shakeLevel * 0.4 : shakeLevel * 0.9)
     }
     emitGradeVariant(origin, grade, combo, nextGradeVariant(grade, combo))
     const segment = progressSegment()

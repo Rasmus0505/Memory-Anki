@@ -14,6 +14,7 @@ export interface FxGate {
   sound: boolean
   haptic: boolean
   volume: number
+  gameplayFx?: import('@/shared/feedback/reviewFeedbackSettings').GameplayFeedbackFxSettings
 }
 
 const CLOSED: FxGate = { motion: false, sound: false, haptic: false, volume: 0 }
@@ -41,6 +42,7 @@ export function resolveFxGate(scene: FxScene): FxGate {
       sound: settings.soundEnabled && channels.learningSounds && review.enabled && review.soundEnabled,
       haptic,
       volume: volumeFor('review'),
+      gameplayFx: settings.gameplayFx,
     }
   }
   if (scene === 'milestone') {

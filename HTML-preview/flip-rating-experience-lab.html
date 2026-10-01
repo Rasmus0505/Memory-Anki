@@ -1,0 +1,2670 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Memory Anki · 翻卡与评分交互体验决策沙盒 (Flip & Rating Experience Lab)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800;900&family=JetBrains+Mono:wght@400;600;700;800&family=Noto+Serif+SC:wght@600;700;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ==========================================================================
+   1. 设计令牌与主题变量系统 (Design Tokens & Color Spaces)
+   ========================================================================== */
+:root {
+  --bg-deep: #08090d;
+  --bg-surface: #111319;
+  --bg-elevated: #181b24;
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-medium: rgba(255, 255, 255, 0.16);
+  --text-primary: #f3f4f8;
+  --text-secondary: #9aa1b5;
+  --text-tertiary: #5d6375;
+
+  /* 经典评级功能色 */
+  --c-again: #f43f5e;
+  --c-again-rgb: 244, 63, 94;
+  --c-hard: #f59e0b;
+  --c-hard-rgb: 245, 158, 11;
+  --c-good: #10b981;
+  --c-good-rgb: 16, 185, 129;
+  --c-easy: #06b6d4;
+  --c-easy-rgb: 6, 182, 212;
+
+  --accent-gold: #f59e0b;
+  --accent-cyan: #06b6d4;
+  --accent-purple: #8b5cf6;
+
+  --font-sans: "Plus Jakarta Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-serif: "Noto Serif SC", "Source Han Serif SC", SimSun, serif;
+  --font-mono: "JetBrains Mono", monospace;
+  --font-display: "Cinzel", "Noto Serif SC", serif;
+  
+  --radius-card: 20px;
+  --radius-btn: 12px;
+  --shake-power: 1.0;
+  --particle-density: 1.0;
+}
+
+/* 风格一：基准对照（原版经典极简） */
+.style-baseline {
+  --card-bg: #1e212b;
+  --card-border: #2d3345;
+  --card-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+  --btn-again-bg: #2b1f24;
+  --btn-again-border: #f43f5e;
+  --btn-hard-bg: #2b271d;
+  --btn-hard-border: #f59e0b;
+  --btn-good-bg: #1c2b25;
+  --btn-good-border: #10b981;
+  --btn-easy-bg: #192a30;
+  --btn-easy-border: #06b6d4;
+  --accent-highlight: #94a3b8;
+  --theme-vibe: "标准极简（原版基准）";
+}
+
+/* 风格二：赛博脉冲 (Cyber Pulse - 极客电竞高能光晕) */
+.style-cyber {
+  --card-bg: linear-gradient(145deg, rgba(17, 24, 39, 0.95), rgba(9, 12, 20, 0.95));
+  --card-border: rgba(6, 182, 212, 0.35);
+  --card-shadow: 0 20px 50px -10px rgba(6, 182, 212, 0.25), inset 0 0 20px rgba(6, 182, 212, 0.08);
+  --btn-again-bg: linear-gradient(135deg, rgba(244, 63, 94, 0.2), rgba(159, 18, 57, 0.35));
+  --btn-again-border: #f43f5e;
+  --btn-hard-bg: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(180, 83, 9, 0.35));
+  --btn-hard-border: #f59e0b;
+  --btn-good-bg: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(4, 120, 87, 0.35));
+  --btn-good-border: #10b981;
+  --btn-easy-bg: linear-gradient(135deg, rgba(6, 182, 212, 0.2), rgba(14, 116, 144, 0.35));
+  --btn-easy-border: #06b6d4;
+  --accent-highlight: #00f0ff;
+  --theme-vibe: "方案 A · 赛博脉冲 (电竞高能)";
+}
+
+/* 风格三：纸墨金石 (Gilded Ink - 东方典雅金辉微光) */
+.style-gilded {
+  --card-bg: radial-gradient(circle at 50% 20%, #201a15, #14110e);
+  --card-border: rgba(245, 158, 11, 0.4);
+  --card-shadow: 0 25px 50px -12px rgba(245, 158, 11, 0.2), inset 0 1px 0 rgba(255, 235, 180, 0.25);
+  --btn-again-bg: rgba(244, 63, 94, 0.15);
+  --btn-again-border: #e11d48;
+  --btn-hard-bg: rgba(245, 158, 11, 0.15);
+  --btn-hard-border: #d97706;
+  --btn-good-bg: rgba(16, 185, 129, 0.15);
+  --btn-good-border: #059669;
+  --btn-easy-bg: rgba(234, 179, 8, 0.2);
+  --btn-easy-border: #facc15;
+  --accent-highlight: #ffd05b;
+  --theme-vibe: "方案 B · 纸墨金石 (东方沉浸)";
+}
+
+/* 风格四：潮玩果冻 (Tactile Juice - 糖果玻璃高弹力爽感) */
+.style-juice {
+  --card-bg: linear-gradient(135deg, rgba(30, 35, 55, 0.85), rgba(18, 20, 32, 0.9));
+  --card-border: rgba(255, 255, 255, 0.25);
+  --card-shadow: 0 25px 60px -10px rgba(139, 92, 246, 0.3), inset 0 2px 4px rgba(255, 255, 255, 0.3);
+  --btn-again-bg: linear-gradient(180deg, #fb7185, #e11d48);
+  --btn-again-border: #ffe4e6;
+  --btn-hard-bg: linear-gradient(180deg, #fbbf24, #d97706);
+  --btn-hard-border: #fef3c7;
+  --btn-good-bg: linear-gradient(180deg, #34d399, #059669);
+  --btn-good-border: #d1fae5;
+  --btn-easy-bg: linear-gradient(180deg, #38bdf8, #0284c7);
+  --btn-easy-border: #e0f2fe;
+  --accent-highlight: #f472b6;
+  --theme-vibe: "方案 C · 潮玩果冻 (Juicy弹性爽感)";
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+  user-select: none;
+}
+
+/* 震屏包装层 */
+#appViewport {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  transition: transform 0.05s ease-out;
+  transform-origin: center center;
+}
+
+/* 顶部导航与全局状态 */
+header.app-nav {
+  position: sticky;
+  top: 0;
+  z-index: 80;
+  background: rgba(8, 9, 13, 0.82);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 12px 24px;
+}
+.nav-content {
+  max-width: 1560px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.brand-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.brand-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #06b6d4, #8b5cf6, #f59e0b);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  box-shadow: 0 0 16px rgba(139, 92, 246, 0.5);
+  animation: floatGem 4s ease-in-out infinite alternate;
+}
+@keyframes floatGem {
+  0% { transform: translateY(0px) rotate(0deg); }
+  100% { transform: translateY(-3px) rotate(4deg); }
+}
+.brand-title h1 {
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  background: linear-gradient(90deg, #ffffff, #c7d2fe, #f59e0b);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.brand-title p {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-tertiary);
+}
+
+.top-pills {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.pill-badge {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-subtle);
+  padding: 5px 12px;
+  border-radius: 99px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pill-badge.active {
+  border-color: rgba(245, 158, 11, 0.4);
+  background: rgba(245, 158, 11, 0.1);
+  color: #fbbf24;
+}
+
+/* 快捷操作按钮 */
+.btn-nav-action {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-medium);
+  color: var(--text-primary);
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+.btn-nav-action:hover {
+  background: var(--bg-elevated);
+  border-color: var(--text-primary);
+  transform: translateY(-1px);
+}
+.btn-nav-action.accent {
+  background: linear-gradient(135deg, #0284c7, #8b5cf6);
+  border: none;
+  box-shadow: 0 2px 12px rgba(14, 165, 233, 0.4);
+}
+
+/* ==========================================================================
+   2. 主舞台布局系统 (Arena Stage Layout)
+   ========================================================================== */
+main.stage-container {
+  flex: 1;
+  max-width: 1560px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 20px 24px 100px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* 模式切换总控栏 (View Mode Selector) */
+.view-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  padding: 10px 16px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.view-mode-tabs {
+  display: flex;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 4px;
+  border-radius: 10px;
+  gap: 4px;
+}
+.view-mode-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  padding: 6px 14px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.view-mode-btn.active {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+/* 核心对决网格 (Arena Grid) */
+.arena-grid {
+  display: grid;
+  gap: 24px;
+  width: 100%;
+}
+/* 双屏对比模式 (Dual Compare) */
+.arena-grid.mode-dual {
+  grid-template-columns: 1fr 1fr;
+}
+/* 单屏专注试衣间 (Single Focus) */
+.arena-grid.mode-single {
+  grid-template-columns: minmax(0, 780px);
+  justify-content: center;
+}
+/* 四屏矩阵对比 (Matrix 4) */
+.arena-grid.mode-matrix {
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+}
+
+@media (max-width: 1080px) {
+  .arena-grid.mode-dual {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 卡片单元格视口 (Style Column / Card Podium) */
+.card-podium {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 24px;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  position: relative;
+  overflow: visible;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.card-podium:hover {
+  border-color: var(--border-medium);
+}
+.card-podium.highlighted {
+  border-color: rgba(245, 158, 11, 0.4);
+  box-shadow: 0 0 35px -5px rgba(245, 158, 11, 0.15);
+}
+
+/* 展台顶部状态 */
+.podium-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px dashed var(--border-subtle);
+}
+.podium-title-group {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.podium-title {
+  font-size: 15px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.podium-tag {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  padding: 2px 7px;
+  border-radius: 5px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.podium-tag.base {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-tertiary);
+}
+.podium-tag.cyber {
+  background: rgba(6, 182, 212, 0.15);
+  color: #38bdf8;
+  border: 1px solid rgba(6, 182, 212, 0.3);
+}
+.podium-tag.gilded {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+.podium-tag.juice {
+  background: rgba(244, 114, 182, 0.15);
+  color: #f472b6;
+  border: 1px solid rgba(244, 114, 182, 0.3);
+}
+
+/* 进度能量条 (Energy Progress Rail) */
+.energy-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.energy-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+}
+.energy-track {
+  height: 8px;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 99px;
+  border: 1px solid var(--border-subtle);
+  position: relative;
+  overflow: hidden;
+}
+.energy-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 45%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, #d97706, #fbbf24);
+  transition: width 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.5);
+}
+.energy-fill.pulse {
+  animation: energyImpact 0.4s ease-out;
+}
+@keyframes energyImpact {
+  0% { filter: brightness(1); }
+  50% { filter: brightness(2.5); box-shadow: 0 0 20px 4px #ffd05b; }
+  100% { filter: brightness(1); }
+}
+
+/* 连击狂热指示标 (Combo Fever Strip) */
+.combo-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--border-subtle);
+}
+.combo-badge {
+  font-size: 12px;
+  font-family: var(--font-mono);
+  font-weight: 800;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.25s;
+}
+.combo-badge.hot {
+  color: #fbbf24;
+  text-shadow: 0 0 10px rgba(245, 158, 11, 0.6);
+  transform: scale(1.05);
+}
+.combo-badge.fever {
+  color: #f43f5e;
+  text-shadow: 0 0 14px rgba(244, 63, 94, 0.8);
+  animation: feverWiggle 0.6s infinite alternate;
+}
+@keyframes feverWiggle {
+  0% { transform: scale(1.06) rotate(-1deg); }
+  100% { transform: scale(1.12) rotate(1deg); }
+}
+.combo-state-text {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+}
+
+/* ==========================================================================
+   3. 核心 3D 翻卡舞台 (Card 3D Stage & Flip Physics)
+   ========================================================================== */
+.card-scene {
+  perspective: 1200px;
+  width: 100%;
+  min-height: 290px;
+  display: flex;
+  position: relative;
+  cursor: pointer;
+}
+
+.card-flipper {
+  width: 100%;
+  position: relative;
+  transform-style: preserve-3d;
+  transition: transform 0.55s cubic-bezier(0.2, 0.8, 0.2, 1);
+  border-radius: var(--radius-card);
+}
+
+/* 翻转激活态基础 */
+.card-scene.is-flipped .card-flipper {
+  transform: rotateY(180deg);
+}
+
+/* ==========================================================================
+   翻卡手感系统 (Flip Motions) - 5 种高阶物理变体
+   ========================================================================== */
+
+/* 1. 180°立轴带镜面光泽 (flip-3d-gloss) - 经典立体翻转 + 斜向高光掠过 */
+[data-flip-mode="flip-3d-gloss"] .card-flipper {
+  transition: transform 0.62s cubic-bezier(0.25, 1, 0.5, 1) !important;
+}
+[data-flip-mode="flip-3d-gloss"] .card-scene.is-flipped .card-flipper {
+  transform: rotateY(180deg) scale(1.02);
+}
+[data-flip-mode="flip-3d-gloss"] .card-scene.is-flipped .card-sheen {
+  animation: glossPass 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+@keyframes glossPass {
+  0% { transform: translateX(-120%) skewX(-20deg); opacity: 0; }
+  35% { opacity: 0.85; }
+  100% { transform: translateX(140%) skewX(-20deg); opacity: 0; }
+}
+
+/* 2. 果冻弹性微挤压 (flip-jelly) - Squash & Stretch 物理弹性阻尼过冲 */
+[data-flip-mode="flip-jelly"] .card-scene.is-flipped .card-flipper {
+  animation: jellyCardFlip 0.75s cubic-bezier(0.175, 0.885, 0.32, 1.35) forwards !important;
+}
+[data-flip-mode="flip-jelly"] .card-scene:not(.is-flipped) .card-flipper {
+  animation: jellyCardBack 0.55s cubic-bezier(0.175, 0.885, 0.32, 1.25) forwards !important;
+}
+@keyframes jellyCardFlip {
+  0% { transform: rotateY(0deg) scale(1, 1); }
+  35% { transform: rotateY(70deg) scale(1.15, 0.85); }
+  65% { transform: rotateY(195deg) scale(0.92, 1.08); }
+  85% { transform: rotateY(175deg) scale(1.04, 0.98); }
+  100% { transform: rotateY(180deg) scale(1, 1); }
+}
+@keyframes jellyCardBack {
+  0% { transform: rotateY(180deg) scale(1, 1); }
+  40% { transform: rotateY(100deg) scale(1.1, 0.9); }
+  75% { transform: rotateY(-10deg) scale(0.95, 1.05); }
+  100% { transform: rotateY(0deg) scale(1, 1); }
+}
+
+/* 3. 悬浮浮空升维翻转 (flip-levitate) - 先向上悬浮升起，再翻面降落，犹如念力凌空 */
+[data-flip-mode="flip-levitate"] .card-scene.is-flipped .card-flipper {
+  animation: levitateFlip 0.7s cubic-bezier(0.2, 0.9, 0.3, 1) forwards !important;
+}
+[data-flip-mode="flip-levitate"] .card-scene:not(.is-flipped) .card-flipper {
+  animation: levitateBack 0.55s cubic-bezier(0.2, 0.9, 0.3, 1) forwards !important;
+}
+@keyframes levitateFlip {
+  0% { transform: translateY(0) rotateY(0deg) scale(1); box-shadow: var(--card-shadow); }
+  45% { transform: translateY(-32px) rotateY(90deg) scale(1.06); box-shadow: 0 40px 80px rgba(0,240,255,0.3); }
+  100% { transform: translateY(0) rotateY(180deg) scale(1); box-shadow: var(--card-shadow); }
+}
+@keyframes levitateBack {
+  0% { transform: translateY(0) rotateY(180deg) scale(1); }
+  45% { transform: translateY(-24px) rotateY(90deg) scale(1.05); }
+  100% { transform: translateY(0) rotateY(0deg) scale(1); }
+}
+
+/* 4. 水平斜角折扇翻转 (flip-diagonal-tilt) - 沿 45 度对角斜轴翻滚，极客硬核视角 */
+[data-flip-mode="flip-diagonal-tilt"] .card-scene.is-flipped .card-flipper {
+  animation: diagonalFlip 0.65s cubic-bezier(0.22, 1, 0.36, 1) forwards !important;
+}
+[data-flip-mode="flip-diagonal-tilt"] .card-scene:not(.is-flipped) .card-flipper {
+  animation: diagonalBack 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards !important;
+}
+@keyframes diagonalFlip {
+  0% { transform: rotate3d(0, 0, 0, 0deg); }
+  50% { transform: rotate3d(1, 1, 0, 90deg) scale(0.92); }
+  100% { transform: rotate3d(0, 1, 0, 180deg) scale(1); }
+}
+@keyframes diagonalBack {
+  0% { transform: rotate3d(0, 1, 0, 180deg); }
+  50% { transform: rotate3d(1, 1, 0, 90deg) scale(0.92); }
+  100% { transform: rotate3d(0, 0, 0, 0deg); }
+}
+
+/* 5. 极速瞬切淡入 (flip-speedy) - 120ms 极简极速瞬切，无3D，硬核防晕 */
+[data-flip-mode="flip-speedy"] .card-scene .card-flipper {
+  transition: transform 0.12s ease-out !important;
+}
+[data-flip-mode="flip-speedy"] .card-scene.is-flipped .card-flipper {
+  transform: rotateY(180deg) !important;
+}
+[data-flip-mode="flip-speedy"] .card-face {
+  transition: opacity 0.12s ease-out !important;
+}
+
+/* ==========================================================================
+   收卡离场动效 (Card Settle & Dismissal Motions) - 5 种高级出场
+   ========================================================================== */
+
+/* 收卡 1: 吸入能量轨 (absorb-rail) - 电竞吸能塌缩，沿二次贝塞尔弧线飞入顶部进度条 */
+[data-dismiss-mode="absorb-rail"] .card-scene.is-dismissing {
+  animation: dismissAbsorbRail 0.46s cubic-bezier(0.2, 0.8, 0.2, 1) forwards !important;
+}
+@keyframes dismissAbsorbRail {
+  0% { transform: translate3d(0,0,0) scale(1); filter: brightness(1); opacity: 1; }
+  35% { transform: translate3d(0, -35px, 0) scale(0.94); filter: brightness(1.7); opacity: 0.95; }
+  100% { transform: translate3d(0, -160px, 0) scale(0.25); filter: brightness(3) drop-shadow(0 0 30px #00f0ff); opacity: 0; }
+}
+
+/* 收卡 2: 弧线飞向右侧 (fly-right) - 爽快实体卡牌甩飞，带倾角抛物线飞出 */
+[data-dismiss-mode="fly-right"] .card-scene.is-dismissing {
+  animation: dismissFlyRight 0.48s cubic-bezier(0.35, 0, 0.2, 1) forwards !important;
+}
+@keyframes dismissFlyRight {
+  0% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); opacity: 1; }
+  40% { transform: translate3d(140px, -25px, 0) rotate(9deg) scale(0.95); opacity: 0.85; }
+  100% { transform: translate3d(450px, 60px, 0) rotate(22deg) scale(0.8); opacity: 0; }
+}
+
+/* 收卡 3: 碎散为光子尘埃 (disintegrate) - 赛博光解消散，卡片裂解为发光微粒渐隐 */
+[data-dismiss-mode="disintegrate"] .card-scene.is-dismissing {
+  animation: dismissDisintegrate 0.45s ease-out forwards !important;
+}
+@keyframes dismissDisintegrate {
+  0% { transform: scale(1); filter: blur(0px) brightness(1); opacity: 1; }
+  50% { transform: scale(1.04); filter: blur(3px) brightness(2); opacity: 0.8; }
+  100% { transform: scale(1.12); filter: blur(14px) brightness(3); opacity: 0; }
+}
+
+/* 收卡 4: 瞬时滑叠入底 (stack-deck) - 实体机械推入底托，稳如磐石 */
+[data-dismiss-mode="stack-deck"] .card-scene.is-dismissing {
+  animation: dismissStackDeck 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+}
+@keyframes dismissStackDeck {
+  0% { transform: translate3d(0, 0, 0) scale(1); opacity: 1; }
+  50% { transform: translate3d(0, 30px, 0) scale(0.97); opacity: 0.7; }
+  100% { transform: translate3d(0, 75px, 0) scale(0.9); opacity: 0; }
+}
+
+/* 收卡 5: 弹簧下潜回弹切牌 (spring-submerge) - 卡片被拍入桌面产生微颤，下一张顺滑浮出 */
+[data-dismiss-mode="spring-submerge"] .card-scene.is-dismissing {
+  animation: dismissSpringSubmerge 0.42s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards !important;
+}
+@keyframes dismissSpringSubmerge {
+  0% { transform: scale(1); opacity: 1; }
+  40% { transform: scale(0.88) translateY(15px); opacity: 0.6; }
+  100% { transform: scale(0.7) translateY(40px); opacity: 0; }
+}
+
+/* 新卡切入入场动效 (Card Arrive / Enter) - 物理微弹稳稳落地 */
+.card-scene.is-arriving {
+  animation: cardArriveSpring 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.25) forwards !important;
+}
+@keyframes cardArriveSpring {
+  0% { transform: translate3d(0, 45px, 0) scale(0.91); opacity: 0; }
+  75% { transform: translate3d(0, -5px, 0) scale(1.015); opacity: 1; }
+  100% { transform: translate3d(0, 0, 0) scale(1); opacity: 1; }
+}
+
+.card-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  border-radius: var(--radius-card);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  box-shadow: var(--card-shadow);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
+}
+
+/* 正面 */
+.card-face.face-front {
+  transform: rotateY(0deg);
+  z-index: 2;
+}
+
+/* 反面 */
+.card-face.face-back {
+  transform: rotateY(180deg);
+  z-index: 1;
+}
+
+/* 动态光泽扫光层 (Specular Sheen Effect) */
+.card-sheen {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 20%, rgba(255, 255, 255, 0.15) 45%, transparent 60%);
+  transform: translateX(-120%);
+  pointer-events: none;
+  transition: transform 0.6s ease;
+}
+.card-scene:hover .card-sheen {
+  transform: translateX(120%);
+}
+
+/* 卡片内容排版 */
+.card-badge-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-tertiary);
+}
+.card-tag {
+  background: rgba(255, 255, 255, 0.06);
+  padding: 3px 8px;
+  border-radius: 6px;
+  color: var(--accent-highlight);
+  font-weight: 600;
+}
+.card-content-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 14px 0;
+}
+.card-question {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.5;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+}
+.card-hint {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.card-answer {
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.6;
+  color: var(--accent-highlight);
+  font-family: var(--font-sans);
+}
+.card-explanation {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.card-foot-prompt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 10px;
+}
+.kbd-pill {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--border-medium);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+/* ==========================================================================
+   4. 四档评分按钮组与手感体系 (Rating Bar & Tactile Handfeel)
+   ========================================================================== */
+.rating-bar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  position: relative;
+}
+
+.rating-btn {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-btn);
+  padding: 12px 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
+  outline: none;
+}
+
+.rating-btn:hover {
+  transform: translateY(-2px);
+}
+.rating-btn:active {
+  transform: translateY(2px) scale(0.96);
+}
+
+/* 基准样式 */
+.style-baseline .rating-btn.btn-1 { border-color: var(--btn-again-border); }
+.style-baseline .rating-btn.btn-2 { border-color: var(--btn-hard-border); }
+.style-baseline .rating-btn.btn-3 { border-color: var(--btn-good-border); }
+.style-baseline .rating-btn.btn-4 { border-color: var(--btn-easy-border); }
+
+/* 赛博脉冲按钮高能态 */
+.style-cyber .rating-btn {
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+  border-width: 1.5px;
+}
+.style-cyber .rating-btn.btn-1 {
+  background: var(--btn-again-bg);
+  border-color: var(--c-again);
+  box-shadow: 0 0 15px rgba(var(--c-again-rgb), 0.25);
+}
+.style-cyber .rating-btn.btn-2 {
+  background: var(--btn-hard-bg);
+  border-color: var(--c-hard);
+  box-shadow: 0 0 15px rgba(var(--c-hard-rgb), 0.25);
+}
+.style-cyber .rating-btn.btn-3 {
+  background: var(--btn-good-bg);
+  border-color: var(--c-good);
+  box-shadow: 0 0 15px rgba(var(--c-good-rgb), 0.25);
+}
+.style-cyber .rating-btn.btn-4 {
+  background: var(--btn-easy-bg);
+  border-color: var(--c-easy);
+  box-shadow: 0 0 15px rgba(var(--c-easy-rgb), 0.25);
+}
+
+/* 纸墨金石按钮典雅态 */
+.style-gilded .rating-btn {
+  border-radius: 8px;
+  background: rgba(20, 17, 14, 0.8);
+  border-width: 1px;
+}
+.style-gilded .rating-btn.btn-1 { border-color: #f43f5e; }
+.style-gilded .rating-btn.btn-2 { border-color: #f59e0b; }
+.style-gilded .rating-btn.btn-3 { border-color: #10b981; }
+.style-gilded .rating-btn.btn-4 { border-color: #fbbf24; }
+
+/* 潮玩果冻按钮质感态 */
+.style-juice .rating-btn {
+  border-radius: 16px;
+  border-width: 2px;
+  color: #fff;
+  font-weight: 700;
+  box-shadow: 0 6px 0 rgba(0,0,0,0.35), 0 8px 16px rgba(0,0,0,0.25);
+}
+.style-juice .rating-btn:active {
+  transform: translateY(4px);
+  box-shadow: 0 2px 0 rgba(0,0,0,0.35), 0 4px 8px rgba(0,0,0,0.25);
+}
+.style-juice .rating-btn.btn-1 { background: var(--btn-again-bg); border-color: var(--btn-again-border); }
+.style-juice .rating-btn.btn-2 { background: var(--btn-hard-bg); border-color: var(--btn-hard-border); }
+.style-juice .rating-btn.btn-3 { background: var(--btn-good-bg); border-color: var(--btn-good-border); }
+.style-juice .rating-btn.btn-4 { background: var(--btn-easy-bg); border-color: var(--btn-easy-border); }
+
+/* 按钮内部文本 */
+.btn-key-badge {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--text-secondary);
+}
+.btn-label {
+  font-size: 13px;
+  font-weight: 700;
+}
+.btn-sub {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+}
+
+/* 按钮打击波纹/光晕 */
+.rating-btn .touch-ripple {
+  position: absolute;
+  border-radius: 50%;
+  transform: scale(0);
+  animation: rippleSpread 0.5s ease-out;
+  pointer-events: none;
+  background: rgba(255, 255, 255, 0.4);
+}
+@keyframes rippleSpread {
+  0% { transform: scale(0); opacity: 0.8; }
+  100% { transform: scale(3.5); opacity: 0; }
+}
+
+/* ==========================================================================
+   5. 悬浮打击暴击飘字系统 (Floating Combat Text / Score Popups)
+   ========================================================================== */
+.crit-popup {
+  position: absolute;
+  pointer-events: none;
+  z-index: 100;
+  font-family: var(--font-mono);
+  font-weight: 800;
+  font-size: 20px;
+  transform: translate(-50%, -50%);
+  animation: critFlyUp 0.8s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;
+  text-shadow: 0 0 15px rgba(0, 0, 0, 0.8);
+  white-space: nowrap;
+}
+@keyframes critFlyUp {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 0px) scale(0.6);
+  }
+  30% {
+    opacity: 1;
+    transform: translate(-50%, -24px) scale(1.2);
+  }
+  75% {
+    opacity: 1;
+    transform: translate(-50%, -48px) scale(1.0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -64px) scale(0.85);
+  }
+}
+
+/* ==========================================================================
+   6. 物理粒子系统 Canvas (Full-Coverage Canvas)
+   ========================================================================== */
+#particleStage {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 999;
+}
+
+/* ==========================================================================
+   7. 终局结算全屏庆典幕帘 (Round Settlement Celebration Modal)
+   ========================================================================== */
+.celebrate-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(5, 6, 10, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+  padding: 24px;
+}
+.celebrate-modal.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+.celebrate-card {
+  background: linear-gradient(145deg, #181c28, #10121a);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  border-radius: 28px;
+  padding: 36px 40px;
+  max-width: 540px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 30px 80px -15px rgba(245, 158, 11, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transform: translateY(30px) scale(0.92);
+  transition: transform 0.4s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+}
+.celebrate-modal.active .celebrate-card {
+  transform: translateY(0) scale(1);
+}
+.celebrate-crown {
+  font-size: 56px;
+  margin-bottom: 12px;
+  display: inline-block;
+  animation: crownBounce 1.2s ease-in-out infinite alternate;
+}
+@keyframes crownBounce {
+  0% { transform: translateY(0px) scale(1); }
+  100% { transform: translateY(-8px) scale(1.1); }
+}
+.celebrate-title {
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  background: linear-gradient(90deg, #ffd05b, #f59e0b, #ef4444);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  margin-bottom: 8px;
+}
+.celebrate-sub {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: 24px;
+}
+.stat-pill-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 28px;
+}
+.stat-box {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 12px 8px;
+}
+.stat-num {
+  font-size: 22px;
+  font-family: var(--font-mono);
+  font-weight: 800;
+  color: #fbbf24;
+}
+.stat-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
+.celebrate-btn-row {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+/* ==========================================================================
+   8. 决策汇总与参数控制侧栏 / 底栏 (Decision Dock & Matrix)
+   ========================================================================== */
+.decision-panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.panel-section-title {
+  font-size: 16px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 12px;
+}
+.decision-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+.decision-box {
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.box-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  display: flex;
+  justify-content: space-between;
+}
+.choice-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.choice-tag {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  padding: 5px 10px;
+  border-radius: 7px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.18s;
+}
+.choice-tag:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+}
+.choice-tag.selected {
+  background: rgba(6, 182, 212, 0.18);
+  border-color: #06b6d4;
+  color: #38bdf8;
+  font-weight: 600;
+}
+.choice-tag.selected-gold {
+  background: rgba(245, 158, 11, 0.18);
+  border-color: #f59e0b;
+  color: #fbbf24;
+  font-weight: 600;
+}
+
+/* 滑块微调控件 */
+.slider-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+}
+.slider-row input[type="range"] {
+  flex: 1;
+  appearance: none;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.15);
+  outline: none;
+}
+.slider-row input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fbbf24;
+  cursor: pointer;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
+}
+
+/* 底部固定决策条 */
+footer.bottom-dock {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 90;
+  background: rgba(10, 12, 18, 0.92);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border-top: 1px solid var(--border-medium);
+  padding: 12px 28px;
+}
+.dock-wrap {
+  max-width: 1560px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.dock-summary {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 13px;
+}
+.summary-chip {
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #fbbf24;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+}
+.btn-copy-config {
+  background: linear-gradient(135deg, #f59e0b, #ec4899);
+  color: #ffffff;
+  border: none;
+  padding: 10px 22px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 16px rgba(245, 158, 11, 0.4);
+  transition: all 0.2s;
+}
+.btn-copy-config:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(245, 158, 11, 0.6);
+}
+.btn-copy-config:active {
+  transform: translateY(1px);
+}
+
+/* Toast 提示 */
+.toast-msg {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: rgba(17, 24, 39, 0.95);
+  border: 1px solid rgba(6, 182, 212, 0.4);
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 99px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+  z-index: 10000;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.toast-msg.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+</style>
+</head>
+<body data-flip-mode="flip-3d-gloss" data-dismiss-mode="absorb-rail">
+
+<div id="appViewport">
+  <!-- 顶部导航条 -->
+  <header class="app-nav">
+    <div class="nav-content">
+      <div class="brand-group">
+        <div class="brand-icon">⚡</div>
+        <div class="brand-title">
+          <h1>Memory Anki · 翻卡与评分体验决策沙盒</h1>
+          <p>NEXT-GEN HAPTIC & VISUAL FIDELITY LAB · V5.0</p>
+        </div>
+      </div>
+
+      <div class="top-pills">
+        <div class="pill-badge">
+          <span>快捷操作:</span>
+          <span style="color:#38bdf8;">[Space] 翻卡</span>
+          <span style="color:#fbbf24;">[1-4] 评分</span>
+        </div>
+        <button class="btn-nav-action" id="btnToggleSound">
+          <span id="soundIcon">🔊</span>
+          <span id="soundLabel">合成音效: 开启</span>
+        </button>
+        <button class="btn-nav-action accent" id="btnSimulateSettlement">
+          <span>🏆 模拟回合结算全屏庆典</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 主演武场与对比视口 -->
+  <main class="stage-container">
+    <!-- 视口模式切换 -->
+    <div class="view-bar">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <span style="font-size:13px; font-weight:700; color:var(--text-secondary);">对照模式：</span>
+        <div class="view-mode-tabs" id="viewModeTabs">
+          <button class="view-mode-btn active" data-mode="dual">⚖️ 新旧双屏同屏对比</button>
+          <button class="view-mode-btn" data-mode="single">🎯 方案单屏沉浸微操</button>
+          <button class="view-mode-btn" data-mode="matrix">🎛️ 四套方案全景横评</button>
+        </div>
+      </div>
+
+      <div style="display:flex; align-items:center; gap:12px;">
+        <span style="font-size:12px; color:var(--text-tertiary);">同步翻卡/评分:</span>
+        <label style="position:relative; display:inline-block; width:36px; height:20px;">
+          <input type="checkbox" id="syncActionToggle" checked style="opacity:0; width:0; height:0;">
+          <span style="position:absolute; cursor:pointer; inset:0; background:#374151; border-radius:20px; transition:0.3s;" id="syncToggleTrack"></span>
+          <span style="position:absolute; content:''; height:14px; width:14px; left:3px; bottom:3px; background:white; border-radius:50%; transition:0.3s;" id="syncToggleKnob"></span>
+        </label>
+      </div>
+    </div>
+
+    <!-- 舞台网格容器 -->
+    <div class="arena-grid mode-dual" id="arenaGrid">
+      
+      <!-- 视口 0: 原版极简基准 (Baseline Control) -->
+      <section class="card-podium style-baseline" id="podium-baseline" data-theme="baseline">
+        <div class="podium-header">
+          <div class="podium-title-group">
+            <span class="podium-title">原版基准方案</span>
+            <span class="podium-tag base">Control</span>
+          </div>
+          <span style="font-size:11px; color:var(--text-tertiary);">纯功能性 · 极轻动效</span>
+        </div>
+
+        <!-- 进度条 -->
+        <div class="energy-rail">
+          <div class="energy-meta">
+            <span>复习进度</span>
+            <span class="progress-text">Card 3 / 10</span>
+          </div>
+          <div class="energy-track">
+            <div class="energy-fill" style="width: 30%;"></div>
+          </div>
+        </div>
+
+        <!-- 连击信息 (基准无或极简) -->
+        <div class="combo-strip">
+          <div class="combo-badge">连击: <span class="combo-val">0</span></div>
+          <div class="combo-state-text">无连击加成机制</div>
+        </div>
+
+        <!-- 卡片 3D 舞台 -->
+        <div class="card-scene" onclick="onCardSceneClick('baseline')">
+          <div class="card-flipper">
+            <!-- 正面 -->
+            <div class="card-face face-front">
+              <div class="card-badge-row">
+                <span class="card-tag">认知心理学 · 记忆宫殿</span>
+                <span>ID: #1042</span>
+              </div>
+              <div class="card-content-wrap">
+                <div class="card-question">什么是「双重编码理论 (Dual-Coding Theory)」的核心机制？</div>
+                <div class="card-hint">💡 提示：关于言语系统与非言语表征的协同记忆机制</div>
+              </div>
+              <div class="card-foot-prompt">
+                <span>点击卡片或按 <span class="kbd-pill">Space</span> 查看背面</span>
+                <span>翻转率: 100%</span>
+              </div>
+            </div>
+            <!-- 反面 -->
+            <div class="card-face face-back">
+              <div class="card-badge-row">
+                <span class="card-tag">标准解答</span>
+                <span>评分后进入下一题</span>
+              </div>
+              <div class="card-content-wrap">
+                <div class="card-answer">人脑同时利用「言语语言系统」与「非言语视觉表征」双通道并行加工信息，双通道建立联合投射，可将提取率提高 200% 以上。</div>
+                <div class="card-explanation">在 Memory Anki 中，将概念文字与宫殿视觉桩位铆定，即是对双重编码理论的工程落地。</div>
+              </div>
+              <div class="card-foot-prompt">
+                <span>请按评分键 <span class="kbd-pill">1</span> <span class="kbd-pill">2</span> <span class="kbd-pill">3</span> <span class="kbd-pill">4</span></span>
+                <span>间隔：1 天 ~ 12 天</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 评分按钮组 -->
+        <div class="rating-bar">
+          <button class="rating-btn btn-1" onclick="onRatingClick('baseline', 1, this)">
+            <span class="btn-key-badge">1</span>
+            <span class="btn-label" style="color:var(--c-again);">忘记</span>
+            <span class="btn-sub">&lt; 10分</span>
+          </button>
+          <button class="rating-btn btn-2" onclick="onRatingClick('baseline', 2, this)">
+            <span class="btn-key-badge">2</span>
+            <span class="btn-label" style="color:var(--c-hard);">困难</span>
+            <span class="btn-sub">1 天</span>
+          </button>
+          <button class="rating-btn btn-3" onclick="onRatingClick('baseline', 3, this)">
+            <span class="btn-key-badge">3</span>
+            <span class="btn-label" style="color:var(--c-good);">记得</span>
+            <span class="btn-sub">3 天</span>
+          </button>
+          <button class="rating-btn btn-4" onclick="onRatingClick('baseline', 4, this)">
+            <span class="btn-key-badge">4</span>
+            <span class="btn-label" style="color:var(--c-easy);">轻松</span>
+            <span class="btn-sub">7 天</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- 视口 1: 升级方案 A - 赛博脉冲 (Cyber Pulse) -->
+      <section class="card-podium style-cyber highlighted" id="podium-cyber" data-theme="cyber">
+        <div class="podium-header">
+          <div class="podium-title-group">
+            <span class="podium-title">方案 A · 赛博脉冲</span>
+            <span class="podium-tag cyber">CYBER PULSE</span>
+          </div>
+          <span style="font-size:11px; color:#38bdf8;">高频霓虹光晕 · 极客打击感</span>
+        </div>
+
+        <!-- 能量轨道 (带光粒子吸附) -->
+        <div class="energy-rail">
+          <div class="energy-meta">
+            <span style="color:#38bdf8;">⚡ 神经元连接深度 (SYNC RATE)</span>
+            <span class="progress-text" style="color:#00f0ff; font-weight:700;">Card 3 / 10 · 30%</span>
+          </div>
+          <div class="energy-track" id="track-cyber">
+            <div class="energy-fill" style="width: 30%; background: linear-gradient(90deg, #0284c7, #00f0ff);"></div>
+          </div>
+        </div>
+
+        <!-- 连击狂热指示标 -->
+        <div class="combo-strip">
+          <div class="combo-badge hot" id="combo-badge-cyber">
+            <span>🔥 STREAK:</span>
+            <span class="combo-val" style="font-size:15px;">3</span>
+            <span style="font-size:10px; color:#38bdf8;">[x1.5 BOOST]</span>
+          </div>
+          <div class="combo-state-text" style="color:#38bdf8;">✦ 高频共振激活</div>
+        </div>
+
+        <!-- 卡片 3D 舞台 -->
+        <div class="card-scene" onclick="onCardSceneClick('cyber')">
+          <div class="card-flipper">
+            <!-- 正面 -->
+            <div class="card-face face-front">
+              <div class="card-sheen"></div>
+              <div class="card-badge-row">
+                <span class="card-tag">NEURO-PLASTICITY · 认知突触</span>
+                <span style="color:#00f0ff;">SYS_ID: #1042</span>
+              </div>
+              <div class="card-content-wrap">
+                <div class="card-question">什么是「双重编码理论 (Dual-Coding Theory)」的核心机制？</div>
+                <div class="card-hint">⚡ 视觉皮层与言语中枢协同放电</div>
+              </div>
+              <div class="card-foot-prompt">
+                <span>按 <span class="kbd-pill" style="border-color:#00f0ff; color:#00f0ff;">Space</span> 破译答案矩阵</span>
+                <span style="color:#38bdf8;">HIT SENSITIVITY: HIGH</span>
+              </div>
+            </div>
+            <!-- 反面 -->
+            <div class="card-face face-back">
+              <div class="card-sheen"></div>
+              <div class="card-badge-row">
+                <span class="card-tag" style="background:rgba(6,182,212,0.2); color:#00f0ff;">SYNAPSE LOCKED</span>
+                <span>评分即刻蓄能</span>
+              </div>
+              <div class="card-content-wrap">
+                <div class="card-answer" style="color:#00f0ff;">人脑同时利用「言语语言系统」与「非言语视觉表征」双通道并行加工信息，双通道建立联合投射，可将提取率提高 200% 以上。</div>
+                <div class="card-explanation">在 Memory Anki 中，将概念文字与宫殿视觉桩位铆定，即是对双重编码理论的工程落地。</div>
+              </div>
+              <div class="card-foot-prompt">
+                <span>评分键 <span class="kbd-pill">1</span> <span class="kbd-pill">2</span> <span class="kbd-pill">3</span> <span class="kbd-pill">4</span> · 即刻能量喷涌</span>
+                <span style="color:#00f0ff;">COMBO READY</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 评分按钮组 -->
+        <div class="rating-bar">
+          <button class="rating-btn btn-1" onclick="onRatingClick('cyber', 1, this)">
+            <span class="btn-key-badge">1</span>
+            <span class="btn-label" style="color:var(--c-again);">忘记</span>
+            <span class="btn-sub">&lt; 10分</span>
+          </button>
+          <button class="rating-btn btn-2" onclick="onRatingClick('cyber', 2, this)">
+            <span class="btn-key-badge">2</span>
+            <span class="btn-label" style="color:var(--c-hard);">困难</span>
+            <span class="btn-sub">1 天</span>
+          </button>
+          <button class="rating-btn btn-3" onclick="onRatingClick('cyber', 3, this)">
+            <span class="btn-key-badge">3</span>
+            <span class="btn-label" style="color:var(--c-good);">记得</span>
+            <span class="btn-sub">3 天</span>
+          </button>
+          <button class="rating-btn btn-4" onclick="onRatingClick('cyber', 4, this)">
+            <span class="btn-key-badge">4</span>
+            <span class="btn-label" style="color:var(--c-easy);">轻松</span>
+            <span class="btn-sub">7 天</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- 视口 2: 升级方案 B - 纸墨金石 (Gilded Ink) -->
+      <section class="card-podium style-gilded" id="podium-gilded" data-theme="gilded" style="display:none;">
+        <div class="podium-header">
+          <div class="podium-title-group">
+            <span class="podium-title">方案 B · 纸墨金石</span>
+            <span class="podium-tag gilded">GILDED INK</span>
+          </div>
+          <span style="font-size:11px; color:#fbbf24;">东方典雅金辉 · 钟磬金石沉浸</span>
+        </div>
+
+        <!-- 能量金轨 -->
+        <div class="energy-rail">
+          <div class="energy-meta">
+            <span style="color:#ffd05b;">🏮 殿宇构建底蕴</span>
+            <span class="progress-text" style="color:#ffd05b; font-weight:700;">第 3 桩 / 共 10 桩</span>
+          </div>
+          <div class="energy-track">
+            <div class="energy-fill" style="width: 30%; background: linear-gradient(90deg, #b45309, #f59e0b, #ffd05b);"></div>
+          </div>
+        </div>
+
+        <!-- 连击信息 -->
+        <div class="combo-strip">
+          <div class="combo-badge hot" id="combo-badge-gilded">
+            <span>🪷 连璧生辉:</span>
+            <span class="combo-val" style="color:#ffd05b;">3</span>
+            <span style="font-size:10px; color:#d97706;">[神思澄明]</span>
+          </div>
+          <div class="combo-state-text" style="color:#d97706;">✦ 灵光长明</div>
+        </div>
+
+        <!-- 卡片 3D 舞台 -->
+        <div class="card-scene" onclick="onCardSceneClick('gilded')">
+          <div class="card-flipper">
+            <!-- 正面 -->
+            <div class="card-face face-front">
+              <div class="card-sheen"></div>
+              <div class="card-badge-row">
+                <span class="card-tag">格物致知 · 桩位明鉴</span>
+                <span style="color:#ffd05b;">天字·第十卷</span>
+              </div>
+              <div class="card-content-wrap">
+                <div class="card-question" style="font-family:var(--font-serif); font-weight:800;">什么是「双重编码理论 (Dual-Coding Theory)」的核心机制？</div>
+                <div class="card-hint" style="color:#fbbf24;">📜 墨痕映照：言语与意象相得益彰</div>
+              </div>
+              <div class="card-foot-prompt">
+                <span>轻击或按 <span class="kbd-pill" style="border-color:#f59e0b; color:#fbbf24;">Space</span> 揭示底蕴</span>
+                <span style="color:#ffd05b;">沉金内敛</span>
+              </div>
+            </div>
+            <!-- 反面 -->
+            <div class="card-face face-back">
+              <div class="card-sheen"></div>
+              <div class="card-badge-row">
+                <span class="card-tag" style="background:rgba(245,158,11,0.2); color:#ffd05b;">妙契同理</span>
+                <span>评定入藏</span>
+              </div>
+              <div class="card-content-wrap">
+                <div class="card-answer" style="font-family:var(--font-serif); color:#ffd05b;">人脑同时利用「言语语言系统」与「非言语视觉表征」双通道并行加工信息，双通道建立联合投射，可将提取率提高 200% 以上。</div>
+                <div class="card-explanation">在 Memory Anki 中，将概念文字与宫殿视觉桩位铆定，即是对双重编码理论的工程落地。</div>
+              </div>
+              <div class="card-foot-prompt">
+                <span>按键 <span class="kbd-pill">1</span> <span class="kbd-pill">2</span> <span class="kbd-pill">3</span> <span class="kbd-pill">4</span> 金石共鸣</span>
+                <span style="color:#ffd05b;">长久稳固</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 评分按钮组 -->
+        <div class="rating-bar">
+          <button class="rating-btn btn-1" onclick="onRatingClick('gilded', 1, this)">
+            <span class="btn-key-badge">1</span>
+            <span class="btn-label" style="color:var(--c-again);">重温</span>
+            <span class="btn-sub">&lt; 10分</span>
+          </button>
+          <button class="rating-btn btn-2" onclick="onRatingClick('gilded', 2, this)">
+            <span class="btn-key-badge">2</span>
+            <span class="btn-label" style="color:var(--c-hard);">艰涩</span>
+            <span class="btn-sub">1 天</span>
+          </button>
+          <button class="rating-btn btn-3" onclick="onRatingClick('gilded', 3, this)">
+            <span class="btn-key-badge">3</span>
+            <span class="btn-label" style="color:var(--c-good);">通晓</span>
+            <span class="btn-sub">3 天</span>
+          </button>
+          <button class="rating-btn btn-4" onclick="onRatingClick('gilded', 4, this)">
+            <span class="btn-key-badge">4</span>
+            <span class="btn-label" style="color:#ffd05b;">颖悟</span>
+            <span class="btn-sub">7 天</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- 视口 3: 升级方案 C - 潮玩果冻 (Tactile Juice) -->
+      <section class="card-podium style-juice" id="podium-juice" data-theme="juice" style="display:none;">
+        <div class="podium-header">
+          <div class="podium-title-group">
+            <span class="podium-title">方案 C · 潮玩果冻</span>
+            <span class="podium-tag juice">TACTILE JUICE</span>
+          </div>
+          <span style="font-size:11px; color:#f472b6;">糖果玻璃拟态 · 超弹力爽感</span>
+        </div>
+
+        <!-- 能量果冻轨 -->
+        <div class="energy-rail">
+          <div class="energy-meta">
+            <span style="color:#f472b6;">🍬 能量爆米花池</span>
+            <span class="progress-text" style="color:#f472b6; font-weight:800;">3 / 10 · BOOSTING!</span>
+          </div>
+          <div class="energy-track">
+            <div class="energy-fill" style="width: 30%; background: linear-gradient(90deg, #ec4899, #8b5cf6, #38bdf8);"></div>
+          </div>
+        </div>
+
+        <!-- 连击信息 -->
+        <div class="combo-strip">
+          <div class="combo-badge fever" id="combo-badge-juice">
+            <span>🎉 COMBO:</span>
+            <span class="combo-val" style="font-size:16px;">3</span>
+            <span style="font-size:10px; color:#f472b6;">SUPER!</span>
+          </div>
+          <div class="combo-state-text" style="color:#f472b6;">✦ 弹性十足</div>
+        </div>
+
+        <!-- 卡片 3D 舞台 -->
+        <div class="card-scene" onclick="onCardSceneClick('juice')">
+          <div class="card-flipper">
+            <!-- 正面 -->
+            <div class="card-face face-front">
+              <div class="card-sheen"></div>
+              <div class="card-badge-row">
+                <span class="card-tag">SUPER-CARD · 果冻卡包</span>
+                <span style="color:#f472b6;">Lv.99</span>
+              </div>
+              <div class="card-content-wrap">
+                <div class="card-question">什么是「双重编码理论 (Dual-Coding Theory)」的核心机制？</div>
+                <div class="card-hint">✨ 敲一敲翻面，弹力满满</div>
+              </div>
+              <div class="card-foot-prompt">
+                <span>拍空格 <span class="kbd-pill" style="border-color:#f472b6; color:#f472b6;">Space</span> 弹起它</span>
+                <span style="color:#f472b6;">JUICY BOUNCE</span>
+              </div>
+            </div>
+            <!-- 反面 -->
+            <div class="card-face face-back">
+              <div class="card-sheen"></div>
+              <div class="card-badge-row">
+                <span class="card-tag" style="background:rgba(244,114,182,0.25); color:#f472b6;">ANSWER UNLOCKED</span>
+                <span>爽快评分</span>
+              </div>
+              <div class="card-content-wrap">
+                <div class="card-answer" style="color:#f472b6;">人脑同时利用「言语语言系统」与「非言语视觉表征」双通道并行加工信息，双通道建立联合投射，可将提取率提高 200% 以上。</div>
+                <div class="card-explanation">在 Memory Anki 中，将概念文字与宫殿视觉桩位铆定，即是对双重编码理论的工程落地。</div>
+              </div>
+              <div class="card-foot-prompt">
+                <span>按键 <span class="kbd-pill">1</span> <span class="kbd-pill">2</span> <span class="kbd-pill">3</span> <span class="kbd-pill">4</span> 爆出糖果彩屑</span>
+                <span style="color:#f472b6;">FEEL THE BEAT</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 评分按钮组 -->
+        <div class="rating-bar">
+          <button class="rating-btn btn-1" onclick="onRatingClick('juice', 1, this)">
+            <span class="btn-key-badge">1</span>
+            <span class="btn-label">忘记</span>
+            <span class="btn-sub">&lt; 10分</span>
+          </button>
+          <button class="rating-btn btn-2" onclick="onRatingClick('juice', 2, this)">
+            <span class="btn-key-badge">2</span>
+            <span class="btn-label">困难</span>
+            <span class="btn-sub">1 天</span>
+          </button>
+          <button class="rating-btn btn-3" onclick="onRatingClick('juice', 3, this)">
+            <span class="btn-key-badge">3</span>
+            <span class="btn-label">记得</span>
+            <span class="btn-sub">3 天</span>
+          </button>
+          <button class="rating-btn btn-4" onclick="onRatingClick('juice', 4, this)">
+            <span class="btn-key-badge">4</span>
+            <span class="btn-label">轻松</span>
+            <span class="btn-sub">7 天</span>
+          </button>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- 决策矩阵与微调看板 (Interactive Decision Matrix) -->
+    <div class="decision-panel">
+      <div class="panel-section-title">
+        <span>🛠️ 交互体验与动效决策矩阵 (Live Configuration Sandbox)</span>
+        <span style="font-size:12px; font-weight:normal; color:var(--text-tertiary);">（实时勾选即时生效，可一键复制结构化决策给开发者）</span>
+      </div>
+
+      <div class="decision-grid">
+        <!-- 维度 1: 视觉主题风格 -->
+        <div class="decision-box">
+          <div class="box-label">
+            <span>1. 视觉风格主轴</span>
+            <span style="color:#fbbf24;" id="labelStyleChoice">赛博脉冲 (推荐)</span>
+          </div>
+          <div class="choice-tags" id="groupStyle">
+            <button class="choice-tag" data-value="baseline">基准原版</button>
+            <button class="choice-tag selected" data-value="cyber">方案 A 赛博脉冲</button>
+            <button class="choice-tag" data-value="gilded">方案 B 纸墨金石</button>
+            <button class="choice-tag" data-value="juice">方案 C 潮玩果冻</button>
+          </div>
+        </div>
+
+        <!-- 维度 2: 翻卡 3D 物理质感 (5 种手感) -->
+        <div class="decision-box">
+          <div class="box-label">
+            <span>2. 翻卡 3D 物理手感</span>
+            <span style="color:#fbbf24;" id="labelFlipChoice">180°立轴带镜面光泽</span>
+          </div>
+          <div class="choice-tags" id="groupFlip">
+            <button class="choice-tag selected" data-value="flip-3d-gloss">180°立轴镜面光泽</button>
+            <button class="choice-tag" data-value="flip-jelly">果冻弹性微挤压</button>
+            <button class="choice-tag" data-value="flip-levitate">悬浮浮空升维翻转</button>
+            <button class="choice-tag" data-value="flip-diagonal-tilt">水平斜角折扇翻滚</button>
+            <button class="choice-tag" data-value="flip-speedy">极速瞬切淡入 (防晕)</button>
+          </div>
+        </div>
+
+        <!-- 维度 2.5: 收卡/切题离场质感 (5 种出场) -->
+        <div class="decision-box">
+          <div class="box-label">
+            <span>2.5 收卡离场与切题手感</span>
+            <span style="color:#fbbf24;" id="labelDismissChoice">吸入能量轨 (Vortex Absorb)</span>
+          </div>
+          <div class="choice-tags" id="groupDismiss">
+            <button class="choice-tag selected" data-value="absorb-rail">吸入能量轨 (Vortex)</button>
+            <button class="choice-tag" data-value="fly-right">弧线甩飞右侧 (Fly Right)</button>
+            <button class="choice-tag" data-value="disintegrate">碎散为光子尘埃 (Disintegrate)</button>
+            <button class="choice-tag" data-value="stack-deck">瞬时滑叠入底 (Stack Deck)</button>
+            <button class="choice-tag" data-value="spring-submerge">弹簧下潜切牌 (Submerge)</button>
+          </div>
+        </div>
+
+        <!-- 维度 3: 评分打击感与震颤 -->
+        <div class="decision-box">
+          <div class="box-label">
+            <span>3. 评分打击反馈与微震</span>
+            <span style="color:#fbbf24;" id="labelShakeChoice">电竞级震颤 (适中)</span>
+          </div>
+          <div class="choice-tags" id="groupShakeLevel">
+            <button class="choice-tag" data-value="none">关闭微震 (0%)</button>
+            <button class="choice-tag selected" data-value="balanced">适中电竞震感 (100%)</button>
+            <button class="choice-tag" data-value="heavy">强力暴击冲击 (180%)</button>
+          </div>
+          <div class="slider-row">
+            <span>强度微调:</span>
+            <input type="range" id="shakeSlider" min="0" max="200" value="100">
+            <span id="shakeSliderVal" style="font-family:var(--font-mono); color:#fbbf24;">100%</span>
+          </div>
+        </div>
+
+        <!-- 维度 4: 粒子系统形态 -->
+        <div class="decision-box">
+          <div class="box-label">
+            <span>4. 粒子喷涌与光效轨迹</span>
+            <span style="color:#fbbf24;" id="labelParticleChoice">引力光子流吸入进度条</span>
+          </div>
+          <div class="choice-tags" id="groupParticle">
+            <button class="choice-tag selected" data-value="magnetic-arc">引力光子流吸入进度条</button>
+            <button class="choice-tag" data-value="radial-sparks">高能辐射星芒火花</button>
+            <button class="choice-tag" data-value="floating-gold">轻灵漂浮金辉尘埃</button>
+            <button class="choice-tag" data-value="candy-confetti">潮玩糖果几何彩纸</button>
+          </div>
+          <div class="slider-row">
+            <span>粒子密度:</span>
+            <input type="range" id="densitySlider" min="20" max="250" value="100">
+            <span id="densitySliderVal" style="font-family:var(--font-mono); color:#fbbf24;">100%</span>
+          </div>
+        </div>
+
+        <!-- 维度 5: 连击与浮动暴击字 -->
+        <div class="decision-box">
+          <div class="box-label">
+            <span>5. 连击奖励与暴击飘字</span>
+            <span style="color:#fbbf24;" id="labelComboChoice">阶梯狂热连击 + 动态暴击飘字</span>
+          </div>
+          <div class="choice-tags" id="groupCombo">
+            <button class="choice-tag selected" data-value="full-fever">阶梯狂热连击 + 暴击字</button>
+            <button class="choice-tag" data-value="subtle-chip">仅右上角徽章计数</button>
+            <button class="choice-tag" data-value="minimal">极简纯净 (关闭浮字)</button>
+          </div>
+        </div>
+
+        <!-- 维度 6: 音效引擎风格 -->
+        <div class="decision-box">
+          <div class="box-label">
+            <span>6. 拟声音效风格 (Web Audio)</span>
+            <span style="color:#fbbf24;" id="labelAudioChoice">东方金石钟磬纯律</span>
+          </div>
+          <div class="choice-tags" id="groupAudio">
+            <button class="choice-tag selected" data-value="chime-gilded">东方金石编钟纯律</button>
+            <button class="choice-tag" data-value="sci-fi-pulse">极客晶振电子脉冲</button>
+            <button class="choice-tag" data-value="arcade-bubble">潮玩高弹力泡泡音</button>
+            <button class="choice-tag" data-value="mute">静音纯视觉</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- 底部固定决策条与导出回传 -->
+  <footer class="bottom-dock">
+    <div class="dock-wrap">
+      <div class="dock-summary">
+        <span style="color:var(--text-secondary);">当前决策组合：</span>
+        <span class="summary-chip" id="summaryBadge">方案 A 赛博脉冲 · 180°立轴光泽 · 引力光子流 · 金石编钟音</span>
+        <span style="font-size:11px; color:var(--text-tertiary);" id="fpsReadout">60 FPS · 0 活跃粒子</span>
+      </div>
+
+      <div style="display:flex; align-items:center; gap:12px;">
+        <button class="btn-copy-config" id="btnCopyConfig">
+          <span>📋 一键复制我的决策方案 (Copy Decision)</span>
+        </button>
+      </div>
+    </div>
+  </footer>
+</div>
+
+<!-- 粒子物理 Canvas 涂层 -->
+<canvas id="particleStage"></canvas>
+
+<!-- 模拟终局结算弹窗 -->
+<div class="celebrate-modal" id="celebrateModal">
+  <div class="celebrate-card">
+    <div class="celebrate-crown">👑</div>
+    <h2 class="celebrate-title">回合贯通 · 知识宫殿大成</h2>
+    <p class="celebrate-sub">10 张卡片全数完成高效复习！连击突破 8 次，神经突触连接深度达成 98% 稳固度。</p>
+    
+    <div class="stat-pill-row">
+      <div class="stat-box">
+        <div class="stat-num">100%</div>
+        <div class="stat-label">记得 / 轻松率</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num" style="color:#00f0ff;">1.8s</div>
+        <div class="stat-label">平均提取耗时</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num" style="color:#f43f5e;">8 🔥</div>
+        <div class="stat-label">最高连续连击</div>
+      </div>
+    </div>
+
+    <div class="celebrate-btn-row">
+      <button class="btn-nav-action accent" style="padding:10px 24px; font-size:14px;" id="btnCloseCelebrate">
+        返回沙盒继续体验
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast 提示框 -->
+<div class="toast-msg" id="toastMsg">已复制决策方案</div>
+
+<script>
+/* ==========================================================================
+   Web Audio API: 零依赖拟声合成器 (Zero-Dependency Procedural Synthesizer)
+   ========================================================================== */
+let audioCtx = null;
+let soundEnabled = true;
+
+function initAudio() {
+  if (!audioCtx) {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (AudioContextClass) {
+      audioCtx = new AudioContextClass();
+    }
+  }
+  if (audioCtx && audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
+}
+
+// 播放翻卡物理空气摩擦声
+function playFlipSound() {
+  if (!soundEnabled) return;
+  initAudio();
+  if (!audioCtx) return;
+
+  const style = currentDecision.audioStyle;
+  if (style === 'mute') return;
+
+  const now = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+
+  if (style === 'sci-fi-pulse') {
+    // 电子伺服脉冲滑动
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(320, now);
+    osc.frequency.exponentialRampToValueAtTime(780, now + 0.08);
+    gain.gain.setValueAtTime(0.08, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+  } else if (style === 'arcade-bubble') {
+    // 弹性泡泡音
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(240, now);
+    osc.frequency.exponentialRampToValueAtTime(600, now + 0.1);
+    gain.gain.setValueAtTime(0.12, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+  } else {
+    // 金石/纸墨轻灵沙沙感
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(440, now);
+    osc.frequency.exponentialRampToValueAtTime(220, now + 0.1);
+    gain.gain.setValueAtTime(0.06, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+  }
+
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start(now);
+  osc.stop(now + 0.16);
+}
+
+// 播放四档评分拟声音效（根据按键 1-4 频率层层攀升）
+function playRatingSound(score) {
+  if (!soundEnabled) return;
+  initAudio();
+  if (!audioCtx) return;
+
+  const style = currentDecision.audioStyle;
+  if (style === 'mute') return;
+
+  const now = audioCtx.currentTime;
+
+  if (score === 1) {
+    // 忘记：低沉沉稳（不刺耳，提供温和的信息提示而非挫败感）
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(180, now);
+    osc.frequency.exponentialRampToValueAtTime(110, now + 0.22);
+    gain.gain.setValueAtTime(0.15, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(now);
+    osc.stop(now + 0.26);
+    return;
+  }
+
+  // 困难 (2), 记得 (3), 轻松 (4) 的音阶
+  let baseFreq = 440;
+  if (score === 2) baseFreq = 330; // E4
+  if (score === 3) baseFreq = 523.25; // C5
+  if (score === 4) baseFreq = 659.25; // E5
+
+  if (style === 'sci-fi-pulse') {
+    // 赛博激光清脆鸣响
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(baseFreq, now);
+    osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.5, now + 0.18);
+    gain.gain.setValueAtTime(0.08, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(now);
+    osc.stop(now + 0.22);
+  } else if (style === 'arcade-bubble') {
+    // 潮玩糖果多音和弦
+    const chords = [baseFreq, baseFreq * 1.25, baseFreq * 1.5];
+    chords.forEach((freq, idx) => {
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(freq, now + idx * 0.03);
+      g.gain.setValueAtTime(0.09, now + idx * 0.03);
+      g.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.03 + 0.25);
+      o.connect(g);
+      g.connect(audioCtx.destination);
+      o.start(now + idx * 0.03);
+      o.stop(now + idx * 0.03 + 0.26);
+    });
+  } else {
+    // 东方金石编钟（基频 + 泛音余韵长鸣）
+    const harmonics = [1, 2.76, 5.4];
+    harmonics.forEach((mult, i) => {
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(baseFreq * mult, now);
+      const amp = (0.16 / (i + 1));
+      g.gain.setValueAtTime(amp, now);
+      g.gain.exponentialRampToValueAtTime(0.001, now + (0.4 + (4 - i) * 0.15));
+      o.connect(g);
+      g.connect(audioCtx.destination);
+      o.start(now);
+      o.stop(now + 0.85);
+    });
+  }
+}
+
+// 终局结算华彩音效
+function playFanfareSound() {
+  if (!soundEnabled) return;
+  initAudio();
+  if (!audioCtx) return;
+  const now = audioCtx.currentTime;
+  const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+  notes.forEach((freq, i) => {
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(freq, now + i * 0.09);
+    g.gain.setValueAtTime(0.14, now + i * 0.09);
+    g.gain.exponentialRampToValueAtTime(0.001, now + i * 0.09 + 0.6);
+    o.connect(g);
+    g.connect(audioCtx.destination);
+    o.start(now + i * 0.09);
+    o.stop(now + i * 0.09 + 0.65);
+  });
+}
+
+/* ==========================================================================
+   2. 粒子物理仿真引擎 (Particle Physics Canvas Engine)
+   ========================================================================== */
+const canvas = document.getElementById('particleStage');
+const ctx = canvas.getContext('2d');
+let W = canvas.width = window.innerWidth;
+let H = canvas.height = window.innerHeight;
+
+window.addEventListener('resize', () => {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+});
+
+const particles = [];
+const fpsReadout = document.getElementById('fpsReadout');
+let lastTime = performance.now();
+let frameCount = 0;
+let currentFps = 60;
+
+class Particle {
+  constructor(opt) {
+    this.x = opt.x;
+    this.y = opt.y;
+    this.vx = opt.vx || (Math.random() - 0.5) * 6;
+    this.vy = opt.vy || (Math.random() - 0.5) * 6;
+    this.size = opt.size || Math.random() * 3 + 2;
+    this.baseSize = this.size;
+    this.color = opt.color || [255, 255, 255];
+    this.alpha = 1;
+    this.maxLife = opt.life || 1.0;
+    this.life = this.maxLife;
+    this.gravity = opt.gravity !== undefined ? opt.gravity : 0.15;
+    this.drag = opt.drag || 0.96;
+    this.type = opt.type || 'spark'; // spark, magnetic, confetti, gold
+    this.target = opt.target || null; // magnetic 吸附目标 {x, y}
+    this.rotation = Math.random() * Math.PI * 2;
+    this.rotSpeed = (Math.random() - 0.5) * 0.2;
+    this.blend = opt.blend || 'lighter';
+  }
+
+  update(dt) {
+    this.life -= dt;
+    if (this.life <= 0) return false;
+
+    // 吸附到能量轨道逻辑
+    if (this.type === 'magnetic' && this.target) {
+      const dx = this.target.x - this.x;
+      const dy = this.target.y - this.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > 15) {
+        const force = 1800 / (dist + 50);
+        this.vx += (dx / dist) * force * dt;
+        this.vy += (dy / dist) * force * dt;
+      } else {
+        // 到达目标，绽放小爆点
+        return false;
+      }
+    } else {
+      this.vy += this.gravity;
+    }
+
+    this.vx *= this.drag;
+    this.vy *= this.drag;
+    this.x += this.vx;
+    this.y += this.vy;
+    this.rotation += this.rotSpeed;
+
+    this.alpha = Math.max(0, this.life / this.maxLife);
+    return true;
+  }
+
+  draw(context) {
+    context.save();
+    context.globalCompositeOperation = this.blend;
+    context.globalAlpha = this.alpha;
+    context.translate(this.x, this.y);
+    context.rotate(this.rotation);
+
+    const [r, g, b] = this.color;
+
+    if (this.type === 'confetti') {
+      // 潮玩几何彩纸
+      context.fillStyle = `rgb(${r},${g},${b})`;
+      context.fillRect(-this.size, -this.size * 0.6, this.size * 2, this.size * 1.2);
+    } else if (this.type === 'gold') {
+      // 纸墨金辉菱形光斑
+      context.fillStyle = `rgb(${r},${g},${b})`;
+      context.beginPath();
+      context.moveTo(0, -this.size * 1.5);
+      context.lineTo(this.size, 0);
+      context.moveTo(0, this.size * 1.5);
+      context.lineTo(-this.size, 0);
+      context.closePath();
+      context.fill();
+    } else {
+      // 辐射发光微粒
+      const grad = context.createRadialGradient(0, 0, 0, 0, 0, this.size * 2);
+      grad.addColorStop(0, `rgba(${r},${g},${b}, 1)`);
+      grad.addColorStop(0.5, `rgba(${r},${g},${b}, 0.5)`);
+      grad.addColorStop(1, `rgba(${r},${g},${b}, 0)`);
+      context.fillStyle = grad;
+      context.beginPath();
+      context.arc(0, 0, this.size * 2, 0, Math.PI * 2);
+      context.fill();
+    }
+
+    context.restore();
+  }
+}
+
+function renderParticles(now) {
+  const dt = Math.min((now - lastTime) / 1000, 0.1);
+  lastTime = now;
+  frameCount++;
+
+  if (frameCount % 30 === 0) {
+    currentFps = Math.round(1 / dt);
+    fpsReadout.textContent = `${currentFps} FPS · ${particles.length} 活跃粒子`;
+  }
+
+  ctx.clearRect(0, 0, W, H);
+
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    if (!p.update(dt)) {
+      particles.splice(i, 1);
+    } else {
+      p.draw(ctx);
+    }
+  }
+
+  requestAnimationFrame(renderParticles);
+}
+requestAnimationFrame(renderParticles);
+
+/* ==========================================================================
+   3. 粒子发射与打击爆发调度 (Burst Dispatcher)
+   ========================================================================== */
+function burstParticles(x, y, score, targetElement = null) {
+  const densityMultiplier = currentDecision.particleDensity;
+  const particleStyle = currentDecision.particleStyle;
+
+  let baseCount = 20;
+  if (score === 1) baseCount = 8;
+  if (score === 2) baseCount = 18;
+  if (score === 3) baseCount = 35;
+  if (score === 4) baseCount = 55;
+
+  const total = Math.round(baseCount * densityMultiplier);
+
+  // 颜色映射
+  let color = [16, 185, 129]; // good (green)
+  if (score === 1) color = [244, 63, 94]; // again (red)
+  if (score === 2) color = [245, 158, 11]; // hard (amber)
+  if (score === 4) color = [6, 182, 212]; // easy (cyan)
+
+  let targetPos = null;
+  if (targetElement) {
+    const rect = targetElement.getBoundingClientRect();
+    targetPos = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  }
+
+  for (let i = 0; i < total; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = (Math.random() * 8 + 3) * (score >= 3 ? 1.3 : 0.8);
+    let type = 'spark';
+    let blend = 'lighter';
+
+    if (particleStyle === 'magnetic-arc' && targetPos) {
+      type = 'magnetic';
+    } else if (particleStyle === 'candy-confetti') {
+      type = 'confetti';
+      blend = 'source-over';
+    } else if (particleStyle === 'floating-gold') {
+      type = 'gold';
+      color = [255, 215, 80];
+    }
+
+    particles.push(new Particle({
+      x: x + (Math.random() - 0.5) * 20,
+      y: y + (Math.random() - 0.5) * 10,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - (score >= 3 ? 3 : 1),
+      size: (Math.random() * 3 + 2) * (score === 4 ? 1.4 : 1.0),
+      color: [...color],
+      life: (Math.random() * 0.6 + 0.6),
+      gravity: type === 'magnetic' ? 0 : 0.18,
+      drag: type === 'magnetic' ? 0.98 : 0.95,
+      type: type,
+      target: targetPos,
+      blend: blend
+    }));
+  }
+}
+
+/* ==========================================================================
+   4. 物理震屏与暴击飘字 (Screen Shake & Floating Score Numbers)
+   ========================================================================== */
+const viewport = document.getElementById('appViewport');
+
+function triggerScreenShake(score) {
+  const userRatio = currentDecision.shakePower;
+  if (userRatio <= 0) return;
+
+  let baseAmp = 3.0;
+  if (score === 1) baseAmp = 1.5;
+  if (score === 2) baseAmp = 2.5;
+  if (score === 3) baseAmp = 4.5;
+  if (score === 4) baseAmp = 7.0;
+
+  const amp = baseAmp * userRatio;
+  const rx = (Math.random() - 0.5) * amp * 2;
+  const ry = (Math.random() - 0.5) * amp * 2;
+  const rot = (Math.random() - 0.5) * (amp * 0.12);
+
+  viewport.style.transform = `translate(${rx}px, ${ry}px) rotate(${rot}deg)`;
+  setTimeout(() => {
+    viewport.style.transform = 'translate(0px, 0px) rotate(0deg)';
+  }, 65);
+}
+
+function spawnCritPopup(anchorElem, text, color = '#fbbf24') {
+  if (currentDecision.comboStyle === 'minimal') return;
+
+  const rect = anchorElem.getBoundingClientRect();
+  const popup = document.createElement('div');
+  popup.className = 'crit-popup';
+  popup.textContent = text;
+  popup.style.color = color;
+  popup.style.left = `${rect.left + rect.width / 2}px`;
+  popup.style.top = `${rect.top + rect.height * 0.3}px`;
+
+  document.body.appendChild(popup);
+  setTimeout(() => {
+    if (popup.parentNode) popup.parentNode.removeChild(popup);
+  }, 850);
+}
+
+/* ==========================================================================
+   5. 真实链路卡池与交互状态 (Deck Simulator & User Loop)
+   ========================================================================== */
+const mockCards = [
+  {
+    q: "什么是「双重编码理论 (Dual-Coding Theory)」的核心机制？",
+    h: "💡 提示：关于言语系统与非言语表征的协同记忆机制",
+    a: "人脑同时利用「言语语言系统」与「非言语视觉表征」双通道并行加工信息，双通道建立联合投射，可将提取率提高 200% 以上。",
+    e: "在 Memory Anki 中，将概念文字与宫殿视觉桩位铆定，即是对双重编码理论的工程落地。"
+  },
+  {
+    q: "艾宾浩斯遗忘曲线中，首次复习的最佳时间窗口是？",
+    h: "💡 提示：遗忘速率在最初阶段最为陡峭",
+    a: "记忆完成后的 20 分钟至 1 小时内（遗忘率已达 42%~56%），在此窗口进行首次轻度提取，能以最低成本重塑遗忘衰减斜率。",
+    e: "算法引擎自动在 12 小时内插入首次 Glance 回顾，防止新桩位产生记忆雪崩。"
+  },
+  {
+    q: "何谓「测试效应 (Testing Effect / Retrieval Practice)」？",
+    h: "💡 提示：相比反复阅读，主动提取对长期记忆有何本质差异？",
+    a: "从大脑神经回路中主动提取信息（哪怕提取失败），能比被动重读激活更广泛的联想路径，极大强化突触长期增益 (LTP)。",
+    e: "翻卡前必须进行至少 1-2 秒的强制盲想自测，这是翻卡机制的心理学基石。"
+  },
+  {
+    q: "记忆宫殿的「五号位/十号位门槛锚定法」意图解决什么问题？",
+    h: "💡 提示：空间移动时的路径迷失与坐标漂移",
+    a: "在宫殿每逢 5 的倍数桩位（如转角、大门、正殿）放置具有强烈视觉冲击的标志性地标，作为防止路径定位漂移的安全校准锚点。",
+    e: "里程碑节点结算时触发的烟花庆典，即是认知层面的心理防漂移锚点。"
+  }
+];
+
+let currentCardIdx = 0;
+let userCombo = 3;
+let syncEnabled = true;
+
+// 卡片翻面点击
+function onCardSceneClick(podiumKey) {
+  const scene = document.querySelector(`#podium-${podiumKey} .card-scene`);
+  if (!scene) return;
+
+  const isFlipped = scene.classList.toggle('is-flipped');
+  playFlipSound();
+
+  // 若开启同步翻卡
+  if (syncEnabled) {
+    document.querySelectorAll('.card-scene').forEach(sc => {
+      if (sc !== scene) {
+        if (isFlipped) sc.classList.add('is-flipped');
+        else sc.classList.remove('is-flipped');
+      }
+    });
+  }
+}
+
+// 评分点击
+function onRatingClick(podiumKey, score, btnElem) {
+  // 按钮涟漪动画
+  if (btnElem) {
+    const ripple = document.createElement('span');
+    ripple.className = 'touch-ripple';
+    const rect = btnElem.getBoundingClientRect();
+    ripple.style.width = ripple.style.height = `${Math.max(rect.width, rect.height)}px`;
+    ripple.style.left = `${rect.width / 2 - Math.max(rect.width, rect.height)/2}px`;
+    ripple.style.top = `${rect.height / 2 - Math.max(rect.width, rect.height)/2}px`;
+    btnElem.appendChild(ripple);
+    setTimeout(() => ripple.remove(), 500);
+  }
+
+  // 1. 声音
+  playRatingSound(score);
+
+  // 2. 震屏
+  triggerScreenShake(score);
+
+  // 3. 粒子发射 (从按钮位置射向能量轨道)
+  const rect = btnElem.getBoundingClientRect();
+  const trackElem = document.querySelector(`#podium-${podiumKey} .energy-track`) || document.querySelector('.energy-track');
+  burstParticles(rect.left + rect.width / 2, rect.top + rect.height / 2, score, trackElem);
+
+  // 4. 连击增减与暴击飘字
+  const cardScene = document.querySelector(`#podium-${podiumKey} .card-scene`);
+  if (score >= 3) {
+    userCombo++;
+    const critTexts = ['PERFECT! +300', 'STREAK! 🔥', 'COMBO x' + userCombo, 'EXCELLENT! ⚡'];
+    const text = critTexts[Math.min(userCombo - 1, critTexts.length - 1)];
+    const critColor = score === 4 ? '#00f0ff' : '#fbbf24';
+    spawnCritPopup(cardScene, text, critColor);
+  } else {
+    userCombo = Math.max(0, userCombo - 1);
+    if (score === 1) {
+      spawnCritPopup(cardScene, 'KEEP GOING! 强化记忆', '#f43f5e');
+    }
+  }
+
+  // 更新所有展示中的连击数字与进度条
+  updatePodiumStats(score, trackElem);
+
+  // 自动过渡到下一张题目（模拟真实刷题节奏：450ms 优雅切题）
+  setTimeout(() => {
+    advanceToNextCard();
+  }, 480);
+}
+
+function updatePodiumStats(score, trackElem) {
+  // 能量条脉冲
+  if (trackElem) {
+    const fill = trackElem.querySelector('.energy-fill');
+    if (fill) {
+      fill.classList.remove('pulse');
+      void fill.offsetWidth; // trigger reflow
+      fill.classList.add('pulse');
+      const curW = parseInt(fill.style.width || '30', 10);
+      const nextW = Math.min(100, curW + (score >= 3 ? 15 : 5));
+      fill.style.width = `${nextW}%`;
+    }
+  }
+
+  // 连击指示标更新
+  document.querySelectorAll('.combo-val').forEach(el => {
+    el.textContent = userCombo;
+  });
+  document.querySelectorAll('.combo-badge').forEach(badge => {
+    if (userCombo >= 5) {
+      badge.className = 'combo-badge fever';
+    } else if (userCombo >= 2) {
+      badge.className = 'combo-badge hot';
+    } else {
+      badge.className = 'combo-badge';
+    }
+  });
+}
+
+function advanceToNextCard() {
+  // 1. 触发收卡离场动效 (is-dismissing)
+  document.querySelectorAll('.card-scene').forEach(sc => {
+    sc.classList.add('is-dismissing');
+  });
+
+  setTimeout(() => {
+    currentCardIdx = (currentCardIdx + 1) % mockCards.length;
+    const card = mockCards[currentCardIdx];
+
+    // 清理离场状态并重置为正面
+    document.querySelectorAll('.card-scene').forEach(sc => {
+      sc.classList.remove('is-dismissing', 'is-flipped');
+      sc.classList.add('is-arriving');
+      setTimeout(() => sc.classList.remove('is-arriving'), 500);
+    });
+
+    // 填充新卡内容
+    document.querySelectorAll('.card-question').forEach(el => el.textContent = card.q);
+    document.querySelectorAll('.card-hint').forEach(el => el.textContent = card.h);
+    document.querySelectorAll('.card-answer').forEach(el => el.textContent = card.a);
+    document.querySelectorAll('.card-explanation').forEach(el => el.textContent = card.e);
+    document.querySelectorAll('.progress-text').forEach(el => {
+      el.textContent = `Card ${currentCardIdx + 1} / ${mockCards.length}`;
+    });
+  }, 420);
+}
+
+/* ==========================================================================
+   6. 键盘快捷键监听 (Space / 1 / 2 / 3 / 4)
+   ========================================================================== */
+window.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT') return;
+
+  if (e.code === 'Space') {
+    e.preventDefault();
+    // 找出当前激活/可见的卡片翻转
+    const visiblePodium = document.querySelector('.card-podium:not([style*="display: none"])');
+    if (visiblePodium) {
+      const key = visiblePodium.getAttribute('data-theme');
+      onCardSceneClick(key);
+    }
+  } else if (['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Numpad1', 'Numpad2', 'Numpad3', 'Numpad4'].includes(e.code)) {
+    e.preventDefault();
+    const score = parseInt(e.key, 10);
+    if (score >= 1 && score <= 4) {
+      const visiblePodium = document.querySelector('.card-podium:not([style*="display: none"])');
+      if (visiblePodium) {
+        const key = visiblePodium.getAttribute('data-theme');
+        const btn = visiblePodium.querySelector(`.rating-btn.btn-${score}`);
+        if (btn) onRatingClick(key, score, btn);
+      }
+    }
+  } else if (e.key === 'Escape') {
+    closeCelebration();
+  }
+});
+
+/* ==========================================================================
+   7. 决策状态中心与选择回传 (Decision State Matrix & Export)
+   ========================================================================== */
+const currentDecision = {
+  style: 'cyber',
+  styleName: '方案 A · 赛博脉冲 (电竞高能光晕)',
+  flip3D: 'flip-3d-gloss',
+  flip3DName: '180°立轴带镜面光泽',
+  dismissMode: 'absorb-rail',
+  dismissModeName: '吸入能量轨 (Vortex Absorb)',
+  shakeLevel: 'balanced',
+  shakePower: 1.0,
+  particleStyle: 'magnetic-arc',
+  particleStyleName: '引力光子流吸入进度条',
+  particleDensity: 1.0,
+  comboStyle: 'full-fever',
+  comboStyleName: '阶梯狂热连击 + 动态暴击飘字',
+  audioStyle: 'chime-gilded',
+  audioStyleName: '东方金石编钟纯律'
+};
+
+function updateSummaryReadout() {
+  const badge = document.getElementById('summaryBadge');
+  badge.textContent = `${currentDecision.styleName.split(' ')[1]} · ${currentDecision.flip3DName} · ${currentDecision.particleStyleName} · ${currentDecision.audioStyleName}`;
+}
+
+// 绑定标签切换
+function setupChoiceGroup(groupId, labelId, propertyKey, nameKey, callback) {
+  const group = document.getElementById(groupId);
+  if (!group) return;
+  group.addEventListener('click', (e) => {
+    const target = e.target.closest('.choice-tag');
+    if (!target) return;
+    group.querySelectorAll('.choice-tag').forEach(t => t.classList.remove('selected', 'selected-gold'));
+    target.classList.add('selected');
+
+    const val = target.getAttribute('data-value');
+    const label = target.textContent;
+    currentDecision[propertyKey] = val;
+    if (nameKey) currentDecision[nameKey] = label;
+
+    const labelElem = document.getElementById(labelId);
+    if (labelElem) labelElem.textContent = label;
+
+    if (callback) callback(val, label);
+    updateSummaryReadout();
+  });
+}
+
+// 1. 风格切换
+setupChoiceGroup('groupStyle', 'labelStyleChoice', 'style', 'styleName', (val) => {
+  switchPodiumView(val);
+});
+
+// 2. 翻转动效
+setupChoiceGroup('groupFlip', 'labelFlipChoice', 'flip3D', 'flip3DName', (val) => {
+  document.body.setAttribute('data-flip-mode', val);
+  showToast(`已切换翻卡手感：${currentDecision.flip3DName}`);
+  // 自动触发一次翻转让用户直观感受手感
+  const scene = document.querySelector('.card-podium:not([style*="display: none"]) .card-scene');
+  if (scene) {
+    scene.classList.toggle('is-flipped');
+    playFlipSound();
+  }
+});
+
+// 2.5 收卡离场动效
+setupChoiceGroup('groupDismiss', 'labelDismissChoice', 'dismissMode', 'dismissModeName', (val) => {
+  document.body.setAttribute('data-dismiss-mode', val);
+  showToast(`已切换收卡手感：${currentDecision.dismissModeName}`);
+  advanceToNextCard();
+});
+
+// 3. 微震等级
+setupChoiceGroup('groupShakeLevel', 'labelShakeChoice', 'shakeLevel', null, (val) => {
+  if (val === 'none') currentDecision.shakePower = 0;
+  if (val === 'balanced') currentDecision.shakePower = 1.0;
+  if (val === 'heavy') currentDecision.shakePower = 1.8;
+  document.getElementById('shakeSlider').value = Math.round(currentDecision.shakePower * 100);
+  document.getElementById('shakeSliderVal').textContent = `${Math.round(currentDecision.shakePower * 100)}%`;
+  triggerScreenShake(4);
+});
+
+// 4. 粒子风格
+setupChoiceGroup('groupParticle', 'labelParticleChoice', 'particleStyle', 'particleStyleName', (val) => {
+  showToast(`已应用粒子流：${currentDecision.particleStyleName}`);
+  burstParticles(W / 2, H / 2, 4);
+});
+
+// 5. 连击机制
+setupChoiceGroup('groupCombo', 'labelComboChoice', 'comboStyle', 'comboStyleName', (val) => {
+  showToast(`连击显示：${currentDecision.comboStyleName}`);
+});
+
+// 6. 音效引擎
+setupChoiceGroup('groupAudio', 'labelAudioChoice', 'audioStyle', 'audioStyleName', (val) => {
+  initAudio();
+  playRatingSound(4);
+});
+
+// 滑块事件
+document.getElementById('shakeSlider').addEventListener('input', (e) => {
+  const val = parseInt(e.target.value, 10);
+  currentDecision.shakePower = val / 100;
+  document.getElementById('shakeSliderVal').textContent = `${val}%`;
+  document.getElementById('labelShakeChoice').textContent = `自定义微震 (${val}%)`;
+});
+
+document.getElementById('densitySlider').addEventListener('input', (e) => {
+  const val = parseInt(e.target.value, 10);
+  currentDecision.particleDensity = val / 100;
+  document.getElementById('densitySliderVal').textContent = `${val}%`;
+  document.getElementById('labelParticleChoice').textContent = `粒子密度 (${val}%)`;
+});
+
+// 对照模式切换 (Dual / Single / Matrix)
+const arenaGrid = document.getElementById('arenaGrid');
+document.getElementById('viewModeTabs').addEventListener('click', (e) => {
+  const btn = e.target.closest('.view-mode-btn');
+  if (!btn) return;
+  document.querySelectorAll('.view-mode-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+
+  const mode = btn.getAttribute('data-mode');
+  arenaGrid.className = `arena-grid mode-${mode}`;
+
+  if (mode === 'dual') {
+    // 基准 + 选中方案
+    document.getElementById('podium-baseline').style.display = 'flex';
+    document.getElementById('podium-cyber').style.display = currentDecision.style === 'cyber' ? 'flex' : 'none';
+    document.getElementById('podium-gilded').style.display = currentDecision.style === 'gilded' ? 'flex' : 'none';
+    document.getElementById('podium-juice').style.display = currentDecision.style === 'juice' ? 'flex' : 'none';
+  } else if (mode === 'single') {
+    // 仅选中方案
+    document.getElementById('podium-baseline').style.display = 'none';
+    document.getElementById('podium-cyber').style.display = currentDecision.style === 'cyber' ? 'flex' : 'none';
+    document.getElementById('podium-gilded').style.display = currentDecision.style === 'gilded' ? 'flex' : 'none';
+    document.getElementById('podium-juice').style.display = currentDecision.style === 'juice' ? 'flex' : 'none';
+  } else if (mode === 'matrix') {
+    // 全开
+    document.getElementById('podium-baseline').style.display = 'flex';
+    document.getElementById('podium-cyber').style.display = 'flex';
+    document.getElementById('podium-gilded').style.display = 'flex';
+    document.getElementById('podium-juice').style.display = 'flex';
+  }
+});
+
+function switchPodiumView(styleKey) {
+  const mode = document.querySelector('.view-mode-btn.active').getAttribute('data-mode');
+  if (mode === 'matrix') return; // 矩阵模式全显
+
+  if (styleKey === 'baseline') {
+    document.getElementById('podium-baseline').style.display = 'flex';
+    document.getElementById('podium-cyber').style.display = 'none';
+    document.getElementById('podium-gilded').style.display = 'none';
+    document.getElementById('podium-juice').style.display = 'none';
+    return;
+  }
+
+  if (mode === 'dual') {
+    document.getElementById('podium-baseline').style.display = 'flex';
+  } else {
+    document.getElementById('podium-baseline').style.display = 'none';
+  }
+
+  document.getElementById('podium-cyber').style.display = styleKey === 'cyber' ? 'flex' : 'none';
+  document.getElementById('podium-gilded').style.display = styleKey === 'gilded' ? 'flex' : 'none';
+  document.getElementById('podium-juice').style.display = styleKey === 'juice' ? 'flex' : 'none';
+}
+
+// 同步翻卡开关
+const syncActionToggle = document.getElementById('syncActionToggle');
+const syncToggleTrack = document.getElementById('syncToggleTrack');
+const syncToggleKnob = document.getElementById('syncToggleKnob');
+syncActionToggle.addEventListener('change', () => {
+  syncEnabled = syncActionToggle.checked;
+  syncToggleTrack.style.background = syncEnabled ? '#0284c7' : '#374151';
+  syncToggleKnob.style.transform = syncEnabled ? 'translateX(16px)' : 'translateX(0px)';
+  showToast(syncEnabled ? '已开启同屏多方案同步测试' : '已进入单卡独立测试');
+});
+// 默认打开同步
+syncToggleTrack.style.background = '#0284c7';
+syncToggleKnob.style.transform = 'translateX(16px)';
+
+// 音效全局开关
+const btnToggleSound = document.getElementById('btnToggleSound');
+btnToggleSound.addEventListener('click', () => {
+  soundEnabled = !soundEnabled;
+  document.getElementById('soundIcon').textContent = soundEnabled ? '🔊' : '🔇';
+  document.getElementById('soundLabel').textContent = soundEnabled ? '合成音效: 开启' : '合成音效: 静音';
+  showToast(soundEnabled ? '已启用 Web Audio 拟声音效' : '已静音');
+  if (soundEnabled) {
+    initAudio();
+    playRatingSound(3);
+  }
+});
+
+// 结算弹窗
+const celebrateModal = document.getElementById('celebrateModal');
+function showCelebration() {
+  celebrateModal.classList.add('active');
+  playFanfareSound();
+
+  // 盛大烟花粒子雨
+  for (let i = 0; i < 90; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = Math.random() * 12 + 4;
+    particles.push(new Particle({
+      x: W / 2,
+      y: H / 2 - 40,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 4,
+      size: Math.random() * 4 + 2,
+      color: [255, 208, 91],
+      life: Math.random() * 1.5 + 1.0,
+      gravity: 0.12,
+      drag: 0.96,
+      type: 'gold',
+      blend: 'lighter'
+    }));
+  }
+}
+function closeCelebration() {
+  celebrateModal.classList.remove('active');
+}
+document.getElementById('btnSimulateSettlement').addEventListener('click', showCelebration);
+document.getElementById('btnCloseCelebrate').addEventListener('click', closeCelebration);
+
+// Toast
+const toastMsg = document.getElementById('toastMsg');
+function showToast(text) {
+  toastMsg.textContent = text;
+  toastMsg.classList.add('show');
+  clearTimeout(toastMsg._t);
+  toastMsg._t = setTimeout(() => toastMsg.classList.remove('show'), 2200);
+}
+
+// 一键复制决策配置
+document.getElementById('btnCopyConfig').addEventListener('click', () => {
+  const formattedSummary = `【Memory Anki 翻卡与评分交互体验决策方案】
+--------------------------------------------------
+1. 视觉风格主轴：${currentDecision.styleName} (${currentDecision.style})
+2. 翻卡物理动效：${currentDecision.flip3DName} (${currentDecision.flip3D})
+2.5 收卡离场手感：${currentDecision.dismissModeName} (${currentDecision.dismissMode})
+3. 打击微震强度：${Math.round(currentDecision.shakePower * 100)}% (${currentDecision.shakeLevel})
+4. 粒子喷涌轨迹：${currentDecision.particleStyleName} (${currentDecision.particleStyle})，密度 ${Math.round(currentDecision.particleDensity * 100)}%
+5. 连击与浮字：${currentDecision.comboStyleName} (${currentDecision.comboStyle})
+6. 拟声音效配置：${currentDecision.audioStyleName} (${currentDecision.audioStyle})
+--------------------------------------------------
+请基于以上决策参数，在项目中落地正式的前端组件与动效系统升级！`;
+
+  navigator.clipboard.writeText(formattedSummary).then(() => {
+    showToast('✨ 决策配置已复制到剪贴板！可直接粘贴发送');
+  }).catch(() => {
+    showToast('复制成功！');
+  });
+});
+</script>
+</body>
+</html>

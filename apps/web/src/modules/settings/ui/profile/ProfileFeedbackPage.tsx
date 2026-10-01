@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Link } from 'react-router-dom'
-import { Check, RotateCcw, Save, Sparkles, Volume2 } from 'lucide-react'
+import { Check, RotateCcw, Save, Sparkles, Volume2, Zap } from 'lucide-react'
 import { ProfileLayout } from '@/modules/settings/ui/profile/ProfileLayout'
 import { emitReviewConfetti } from '@/shared/components/celebration'
 import { useMindMapFeedbackAudio } from '@/shared/feedback/mindmap-audio/useMindMapFeedback'
@@ -276,6 +276,126 @@ export default function ProfileFeedbackPage() {
                   </button>
                 )
               })}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Zap className="size-4 text-amber-500" />
+              游戏化打击感与粒子引擎 (Next-Gen Fx)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-xs text-muted-foreground">
+              为翻卡与评分赋予物理弹性过冲、屏幕视口微震与二次贝塞尔引力磁吸能量流。
+            </p>
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="rounded-xl border border-border/70 p-4">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-sm font-semibold">屏幕微震强度</span>
+                  <span className="text-xs font-mono text-muted-foreground">{draftSettings.gameplayFx.screenShakeIntensity}%</span>
+                </div>
+                <Input
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value={draftSettings.gameplayFx.screenShakeIntensity}
+                  onChange={(e) =>
+                    updateDraft((cur) => ({
+                      ...cur,
+                      gameplayFx: { ...cur.gameplayFx, screenShakeIntensity: Number(e.target.value) },
+                    }))
+                  }
+                />
+                <p className="mt-2 text-xs text-muted-foreground">
+                  击打评分时触发的轻微视口镜头震荡，带来爽快的机械触底感。
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-border/70 p-4">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-sm font-semibold">粒子喷涌浓度</span>
+                  <span className="text-xs font-mono text-muted-foreground">{draftSettings.gameplayFx.particleDensity}%</span>
+                </div>
+                <Input
+                  type="range"
+                  min="30"
+                  max="200"
+                  step="10"
+                  value={draftSettings.gameplayFx.particleDensity}
+                  onChange={(e) =>
+                    updateDraft((cur) => ({
+                      ...cur,
+                      gameplayFx: { ...cur.gameplayFx, particleDensity: Number(e.target.value) },
+                    }))
+                  }
+                />
+                <p className="mt-2 text-xs text-muted-foreground">
+                  评分时爆发的引力金色光粒与微星数量，最高可达 200% 满负荷喷涌。
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-border/70 p-4">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-sm font-semibold">物理微弹回弹比</span>
+                  <span className="text-xs font-mono text-muted-foreground">{draftSettings.gameplayFx.springOvershootRatio}%</span>
+                </div>
+                <Input
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value={draftSettings.gameplayFx.springOvershootRatio}
+                  onChange={(e) =>
+                    updateDraft((cur) => ({
+                      ...cur,
+                      gameplayFx: { ...cur.gameplayFx, springOvershootRatio: Number(e.target.value) },
+                    }))
+                  }
+                />
+                <p className="mt-2 text-xs text-muted-foreground">
+                  卡片翻转落定时产生的阻尼惯性微弹与桌面落地金尘圈。
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-3 pt-2">
+              <SettingRow
+                title="引力磁吸能量入轨"
+                description="粒子沿二次贝塞尔弧线飞入顶部进度槽并激起脉冲。"
+                checked={draftSettings.gameplayFx.magneticArcEnabled}
+                onCheckedChange={(val) =>
+                  updateDraft((cur) => ({
+                    ...cur,
+                    gameplayFx: { ...cur.gameplayFx, magneticArcEnabled: val },
+                  }))
+                }
+              />
+              <SettingRow
+                title="三阶狂热连击 (Fever)"
+                description="5连击开启点金心流，10连击激活超频光环与暴击跳字。"
+                checked={draftSettings.gameplayFx.feverComboEnabled}
+                onCheckedChange={(val) =>
+                  updateDraft((cur) => ({
+                    ...cur,
+                    gameplayFx: { ...cur.gameplayFx, feverComboEnabled: val },
+                  }))
+                }
+              />
+              <SettingRow
+                title="金石编钟纯律音階"
+                description="数学振荡器合成东方编钟与磬石纯律，音高随连击递增。"
+                checked={draftSettings.gameplayFx.chimeSynthesizerEnabled}
+                onCheckedChange={(val) =>
+                  updateDraft((cur) => ({
+                    ...cur,
+                    gameplayFx: { ...cur.gameplayFx, chimeSynthesizerEnabled: val },
+                  }))
+                }
+              />
             </div>
           </CardContent>
         </Card>
