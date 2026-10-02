@@ -1,8 +1,9 @@
-import { playFlipCrack, playFlipFold, playWebAudioFireworkAccent, playWebAudioLandingChime } from '@/shared/feedback/mindmap-audio/webAudioFeedback'
+import { playWebAudioFireworkAccent, playWebAudioLandingChime } from '@/shared/feedback/mindmap-audio/webAudioFeedback'
 import { triggerHaptic } from '@/shared/feedback/haptics'
 import {
   emitAmbientMote,
   emitBadgeBurst,
+  emitCollectors,
   emitComboMilestone,
   emitCorrectBurst,
   emitFlight,
@@ -16,12 +17,11 @@ import {
   emitRailSparks,
   type ParticleRating,
 } from '../particles'
-import { pal } from '../skins'
 import type { Point } from '../particles/particleModel'
 import { FX_ANCHORS, PROGRESS_TARGET, anchorTarget, elementCenter, findAnchor } from '../core/anchors'
 import { nextGradeVariant } from '../conductor'
 import { cue, defineCue, type FxStage } from '../core/director'
-import { absorbElement, bumpElement, chargeElement, flashElement, flashVignette, hitStop, peelGhost, pulseHalo, shakeScreen, stampOn } from '../core/domFlourish'
+import { bumpElement, chargeElement, flashElement, flashVignette, peelGhost, shakeScreen, stampOn } from '../core/domFlourish'
 import { readRarityState, rollRare, writeRarityState } from '../rarity'
 
 export interface GradeCommitCue {
@@ -127,48 +127,22 @@ defineCue('grade.commit', {
     }
     const gameplay = stage.gate.gameplayFx
     const shakeLevel = (gameplay?.screenShakeIntensity ?? 100) / 100
-    const segment = progressSegment()
-    // 忘记 sinks and does not pay the rail. 困难 is a dull catch. 记得 is the clean daily crack.
-    // 轻松 and combo milestones are the only rating freezes.
-    if (grade === 1) {
-      emitInkSink(origin)
-      if (shakeLevel > 0) shakeScreen(shakeLevel * 0.25)
-    } else if (grade === 2) {
-      emitGradeVariant(origin, grade, combo, nextGradeVariant(grade, combo))
-      emitFlight({
-        origin,
-        target: progressTarget,
-        count: 3,
-        color: [pal.rating[2][0], 38, 58],
-        comet: false,
-        fountain: 0,
-        onFirstArrive: () => {
-          absorbElement(segment, 'dull')
-          chargeElement(segment, 0.2)
-          chime(stage, 0)
-        },
-      })
-    } else {
-      if (grade === 4) hitStop(60)
-      if (shakeLevel > 0) shakeScreen(grade === 4 ? shakeLevel * 1.2 : shakeLevel * 0.45)
-      emitGradeVariant(origin, grade, combo, nextGradeVariant(grade, combo))
-      emitFlight({
-        origin,
-        target: progressTarget,
-        count: grade === 4 ? 10 : 6,
-        color: pal.gold,
-        glow: grade === 4,
-        comet: true,
-        fountain: grade === 4 ? 8 : 3,
-        onFirstArrive: () => {
-          absorbElement(segment, grade === 4 ? 'jackpot' : 'clean')
-          chargeElement(segment, grade === 4 ? 1 : 0.55)
-          chime(stage, combo)
-        },
-      })
+    if (shakeLevel > 0) {
+      shakeScreen(grade === 4 ? shakeLevel * 1.4 : grade === 1 ? shakeLevel * 0.4 : shakeLevel * 0.9)
     }
+    emitGradeVariant(origin, grade, combo, nextGradeVariant(grade, combo))
+    const segment = progressSegment()
+    emitCollectors({
+      origin,
+      rating: grade,
+      combo,
+      target: progressTarget,
+      onFirstArrive: () => {
+        chargeElement(segment, grade >= 3 ? Math.min(1, combo / 8) : 0)
+        chime(stage, combo)
+      },
+    })
     if (milestone && stage.gateOf('milestone').motion) {
-      hitStop(60)
       const rect = scope.getBoundingClientRect()
       emitComboMilestone({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }, combo)
       stampOn(scope, `连击 ×${combo}`, 'stage', stage.playback)
@@ -189,21 +163,36 @@ defineCue('flip.land', {
   },
 })
 
+const UNIT_DONE_COMET_DELAY_MS = 520
+
 defineCue('unit.complete', {
   scene: 'review',
-  label: '单元翻完（根卡脉冲，不入进度条）',
+  label: '单元翻完 → 彗星入轨',
   group: '学习 · 翻卡',
   play({ scope, combo }, stage) {
     if (!stage.gate.motion) return
     const badge = findAnchor(FX_ANCHORS.flipBadge, scope)
     const from = elementCenter(badge)
-    if (badge && from) {
-      bumpElement(badge, 1.2)
-      emitBadgeBurst(from)
-    }
-    pulseHalo(scope.querySelector('.mindmap-node-card--root'), true)
-    hitStop(60)
-    if (stage.gate.sound) chime(stage, combo + 2)
+    if (!badge || !from) return
+    bumpElement(badge, 1.35)
+    emitBadgeBurst(from)
+    const segment = progressSegment()
+    stage.playback.at(UNIT_DONE_COMET_DELAY_MS, () => {
+      const origin = elementCenter(badge)
+      if (!origin) return
+      emitFlight({
+        origin,
+        target: progressTarget,
+        count: 12,
+        glow: true,
+        comet: true,
+        fountain: 10,
+        onFirstArrive: () => {
+          chargeElement(segment, Math.min(1, Math.max(4, combo) / 8))
+          chime(stage, combo + 2)
+        },
+      })
+    })
   },
 })
 
@@ -216,9 +205,8 @@ defineCue('grade.undo', {
     const segment = progressSegment()
     const origin = elementCenter(segment)
     if (!origin) return
-    flashElement(segment, 0.35)
-    absorbElement(segment, 'dull')
-    emitFlight({ origin, target: () => elementCenter(button), count: 4, comet: false, fountain: 0, onFirstArrive: () => bumpElement(button, 1.04) })
+    flashElement(segment, 0.45)
+    emitFlight({ origin, target: () => elementCenter(button), count: 6, onFirstArrive: () => bumpElement(button) })
   },
 })
 
@@ -249,9 +237,7 @@ defineCue('progress.quarter', {
   group: '学习 · 进度',
   play({ rail, sparks }, stage) {
     if (!stage.gate.motion) return
-    hitStop(60)
     flashElement(rail, 1.8)
-    absorbElement(rail, 'clean')
     emitRailSparks(sparks)
   },
 })
@@ -300,17 +286,7 @@ defineCue('page.turn', {
   group: '学习 · 翻页',
   sample: () => ({}),
   play(_payload, stage) {
-    const motion = stage.gate.motion
-    const jelly = typeof document !== 'undefined' && Boolean(document.querySelector('[data-jelly-flip="true"]'))
-    // Jelly scenes borrow the flip rhythm for page turns. The caller keeps its own
-    // page-turn voice, so this only adds the lab's crack→fold shape, with no
-    // charges, no counter and no reward.
-    if (stage.gate.sound && jelly) {
-      const volume = stage.gate.volume
-      playFlipCrack(volume)
-      stage.playback.at(150, () => playFlipFold(volume))
-    }
-    if (!motion) return
+    if (!stage.gate.motion) return
     const pager = findAnchor(FX_ANCHORS.feedPager)
     const rect = pager?.getBoundingClientRect() ?? sampleSurface().rect
     if (rect.width === 0) return

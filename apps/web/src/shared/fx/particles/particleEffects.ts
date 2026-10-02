@@ -141,53 +141,6 @@ export interface FlightOptions {
   onFirstArrive?: () => void
 }
 
-/**
- * One jelly crystal: kick away from the parent, hang, then snap home.
- * Sparks ride the launch. `onArrive` fires once.
- */
-export function emitEnergyOrb(
-  origin: Point,
-  target: () => Point | null,
-  onArrive?: () => void,
-) {
-  if (!particlesAllowed()) return false
-  const first = target()
-  const away = first && first.x !== origin.x ? Math.sign(origin.x - first.x) : -1
-  const launched = spawnParticle({
-    ...origin,
-    vx: away * range(8, 13),
-    vy: -range(11, 17),
-    gravity: 0.42,
-    drag: 0.992,
-    size: 9,
-    shape: 'glow',
-    additive: true,
-    color: [4, 86, 62],
-    trail: 22,
-    life: 2.2,
-    homeAfter: 0.3,
-    homeSpeed: 34,
-    home: target,
-    onArrive,
-  })
-  for (let i = 0; i < 12; i += 1) {
-    spawnParticle({
-      x: origin.x,
-      y: origin.y,
-      vx: away * range(1, 11),
-      vy: range(-12, 2),
-      gravity: 0.16,
-      drag: 0.94,
-      size: range(1.4, 3.2),
-      shape: 'glow',
-      additive: true,
-      color: i % 2 ? [4, 90, 62] : [142, 72, 52],
-      life: range(0.28, 0.62),
-    })
-  }
-  return launched
-}
-
 /** Particles burst out, then home onto `target`; `onFirstArrive` fires once. */
 export function emitFlight(options: FlightOptions) {
   if (!particlesAllowed()) return false

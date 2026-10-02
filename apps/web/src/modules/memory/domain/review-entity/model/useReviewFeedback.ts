@@ -1,5 +1,4 @@
 import * as React from 'react'
-import { cue } from '@/shared/fx'
 import {
   createInitialReviewRewardSnapshot,
   deriveReviewFeedbackTransition,
@@ -398,10 +397,6 @@ export function useReviewFeedback({
           volume: getSceneEffectiveVolume(settings, 'completion'),
           confettiPreset: settings.scenes.completion.confettiPreset,
         })
-        const scope = document.querySelector('.memory-anki-mindmap-viewport')
-        if (scope instanceof HTMLElement) {
-          cue('unit.complete', { scope, combo: newCombo })
-        }
         }
       }
     }

@@ -247,7 +247,7 @@ apps/web/src/
 
 - API helper、contracts、generated types
 - 通用组件
-- mind-map host（含只读果冻翻卡舞台 `shared/ui/mindmap-canvas/JellyMindmapStage`）
+- mind-map host
 - feedback/toast/audio（合成音数据源与播放器）
 - fx 反馈导演（`shared/fx`）
 - theme 主题包与 ambient 氛围层
@@ -273,8 +273,6 @@ apps/web/src/
 - 宫殿、知识、复习模块：各自组合能力，不向通用画布增加业务条件。
 
 后端对应 `mindmap_document`、宫殿/知识各自的 `editor_*` 用例，以及独立的 `mindmap_learning`。不要重新使用旧 `modules/mindmap/application/editor_state_*` 路径。
-
-果冻翻卡舞台（只读揭示层）的布局契约、充能模型与 `map.*` 反馈线索见 `docs/architecture/jelly-mindmap-stage.md`。
 
 ### 5.6 感官运行时入口
 
@@ -506,6 +504,4 @@ AI 相关功能分布较广：
 - 2026-07-10：Electron 日常入口改为复用 PWA 的 `127.0.0.1:8012` 共享服务；桌面与 PWA 启动通过跨进程锁协调，`5173` 仅保留给显式前端开发。
 - 2026-07-10：本机指纹驱动的智能增量更新已合并到 `start-all.bat`，不再保留独立 `update.bat` 或分开的桌面/PWA 启动入口；Desktop/PWA 共用单实例后台托盘。
 - 2026-10：反馈统一为 `shared/fx` 导演运行时（`cue()` → 配方 → 粒子/声音/触觉/DOM，owner 作用域取消、锚点注册、皮肤、稀有演出、`/lab/fx` 实验室）；移除 canvas-confetti。新增 `progression` 成长层（后端只读投影 + `/growth` 星图与印章册 + 随心 HUD/结算）。
-- 2026-10：新增只读果冻翻卡舞台 `shared/ui/mindmap-canvas/JellyMindmapStage`（固定左到右坐标系与卡宽、`preserve-3d` 双面内翻、`parentCharge.ts` 纯函数充能、`map.*` 反馈线索），与 React Flow 编辑态并存互不替代。
-- 2026-10：主题包 `shared/theme` 与合成音色打通（`packTimbre` 按主题调制所有程序化音）；音频通道补齐 `AudioContext` iOS 手势解锁、静音分区与场景音量门。
-- 2026-10：新增三份架构文档：`docs/architecture/jelly-mindmap-stage.md`、`audio-soundscape.md`、`e2e-testing-guide.md`；`AGENTS.md` 增补「动效/音频统一走 `cue()`」与「E2E 封闭性」两条硬规则。
+- 2026-10-03：撤回随心模式 juiciness 前端（果冻翻卡舞台 `JellyMindmapStage`、`parentCharge`、配套动效/粒子改造）。`apps/web` 回到 `44ce4bb9`。不要把果冻舞台当作当前架构补回。

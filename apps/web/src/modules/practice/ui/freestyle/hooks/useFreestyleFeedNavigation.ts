@@ -31,7 +31,7 @@ import {
   shouldSwallowFreestyleFeedPageKey,
 } from '@/modules/practice/ui/freestyle/model/freestyleKeyboard'
 import type { FreestyleCard } from '@/shared/api/contracts'
-import { animateScrollTop, easeOutBack, easeOutQuart } from '@/modules/practice/ui/freestyle/model/freestyleAnimatedScroll'
+import { animateScrollTop } from '@/modules/practice/ui/freestyle/model/freestyleAnimatedScroll'
 import {
   createFreestyleScrollChannel,
   scrollFrameFromPosition,
@@ -156,8 +156,6 @@ export function useFreestyleFeedNavigation({
   /** Identity of the last page the learner landed on: card id, or `slot:N` for the closing slot. */
   const settledKeyRef = useRef<string | null>(null)
   const cancelScrollAnimationRef = useRef<(() => void) | null>(null)
-  /** Gap under this is a flick: shorter flight, no overshoot. */
-  const lastAnimatedTurnAtRef = useRef(0)
   const { edgeHint, nudgeEdge } = useFreestyleEdgeRubberBand(scrollRef, `${loading}:${cards.length}`)
 
   const slotKey = useCallback((index: number) => cardIdsRef.current[index] ?? `slot:${index}`, [])
@@ -213,12 +211,8 @@ export function useFreestyleFeedNavigation({
       if (distance > pageHeight * 2.5) {
         node.scrollTop = targetTop - Math.sign(targetTop - node.scrollTop) * pageHeight
       }
-      const now = Date.now()
-      const flick = now - lastAnimatedTurnAtRef.current < 420
-      lastAnimatedTurnAtRef.current = now
       cancelScrollAnimationRef.current = animateScrollTop(node, targetTop, {
-        durationMs: Math.round(themeMotion().pageTurnMs * (flick ? 0.55 : 1)),
-        easing: flick ? easeOutQuart : easeOutBack,
+        durationMs: themeMotion().pageTurnMs,
         onFinish: (completed) => {
           cancelScrollAnimationRef.current = null
           if (completed) {

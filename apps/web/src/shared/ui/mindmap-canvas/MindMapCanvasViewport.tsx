@@ -18,7 +18,6 @@ import { useMindMapRevealMotion } from './useMindMapRevealMotion'
 import {
   MINDMAP_MANUAL_MAX_ZOOM,
   MINDMAP_MANUAL_MIN_ZOOM,
-  crispMindMapViewport,
 } from './mindMapViewportConfig'
 import { usePaneModeGestures } from './usePaneModeGestures'
 import { useAxisLockedPan } from './useAxisLockedPan'
@@ -114,7 +113,6 @@ export function MindMapCanvasViewport({
   const simplifiedDecorations = isDraggingNode || mobileGuided || largeGraph
   // Virtualize node DOM once the visible set is non-trivial.
   const onlyRenderVisible = nodes.length >= 48 || largeGraph
-  const crispViewport = crispMindMapViewport(viewport)
 
   return (
     <div
@@ -149,7 +147,7 @@ export function MindMapCanvasViewport({
         onMoveStart={onMoveStart}
         onMove={onMove}
         onMoveEnd={onMoveEnd}
-        viewport={crispViewport}
+        viewport={viewport}
         onViewportChange={onViewportChange}
         nodesDraggable={!readonly}
         nodesConnectable={false}

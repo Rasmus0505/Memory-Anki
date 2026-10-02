@@ -851,7 +851,7 @@ export default function ImmersiveFreestylePage({
                   style={{ '--fs-ambient': cardAmbientHsl(card) } as CSSProperties}
                 >
                   {/* Depth stack layer (styles/freestyle-stage.css): scroll-driven rise-in and
-                      recede. A live mind map opts out — that filter blurs node text. */}
+                      recede. Keeps the 6px progress rail band on the dark shell for PWA. */}
                   <div className="fs-depth flex min-h-0 flex-1 flex-col pt-[calc(env(safe-area-inset-top,0px)+4.75rem)]">
                   <FreestyleRatingReaction
                     active={isActive && index === currentIndex && index === visualIndex && !viewingCompleteSlot}

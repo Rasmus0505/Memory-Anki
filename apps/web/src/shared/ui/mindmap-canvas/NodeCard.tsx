@@ -789,18 +789,6 @@ function MindMapNodeCard({ data, id }: NodeProps) {
         position={Position.Right}
         className="!h-2 !w-2 !border-0 !bg-transparent !opacity-0"
       />
-      {visual.charge && visual.charge.total > 0 ? (
-        <div className="mindmap-charge" data-mastered={visual.charge.mastered ? 'true' : 'false'} aria-hidden="true">
-          <span className="mindmap-charge-track">
-            <span
-              className="mindmap-charge-fill"
-              style={{ width: `${Math.round((visual.charge.done / visual.charge.total) * 100)}%` }}
-            />
-          </span>
-          <span className="mindmap-charge-count">{visual.charge.done}/{visual.charge.total}</span>
-          {visual.charge.mastered ? <span className="mindmap-charge-stamp">满</span> : null}
-        </div>
-      ) : null}
     </div>
   )
 }

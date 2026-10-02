@@ -30,17 +30,6 @@
   }
 }
 
-/*
- * Desktop too, once a mind map is on the card. The rating dock floats over the
- * canvas; backdrop-filter recaptures that canvas on every flip frame.
- */
-.freestyle-stage:has(.memory-anki-mindmap-viewport) .freestyle-stage-glass,
-.freestyle-stage:has(.memory-anki-mindmap-viewport) .freestyle-rating-dock {
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-  background: hsl(24 16% 9% / 0.96);
-}
-
 /* ---------- Rating dock ---------- */
 
 .freestyle-rating-dock {
@@ -333,15 +322,7 @@
   }
 }
 
-/*
- * Transform-free mind-map ancestor. The scroll-depth animation stays active for
- * the whole snap (view timeline + fill: both) and its exit keyframe is
- * filter: blur(). Chrome keeps that card in a filtered layer, so node text is
- * resampled and every flip recaptures a full-screen buffer. Fullscreen already
- * needed the same chain; the inline map does too, or glyphs stay soft and the
- * frame rate drops while flipping.
- */
-.fs-depth:has(.memory-anki-mindmap-viewport),
+/* A fixed-position fullscreen map inside the card needs a transform-free ancestor chain. */
 .fs-depth:has(.memory-anki-mindmap-native-fullscreen),
 .fs-depth:has(.memory-anki-mindmap-native-fullscreen)::after,
 .fs-depth:has(.memory-anki-mindmap-native-fullscreen)::before {

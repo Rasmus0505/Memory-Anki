@@ -30,18 +30,6 @@ export function normalizeMindMapManualZoom(value: unknown): number | undefined {
   return Math.min(MINDMAP_MANUAL_MAX_ZOOM, Math.max(MINDMAP_MANUAL_MIN_ZOOM, value))
 }
 
-/**
- * At zoom 1, fractional viewport translates rasterize glyphs on Windows.
- * Other zooms are an intentional scale and cannot be made pixel-crisp here.
- */
-export function crispMindMapViewport<T extends { x: number; y: number; zoom: number }>(viewport: T): T {
-  if (!Number.isFinite(viewport.zoom) || Math.abs(viewport.zoom - 1) > 0.0001) return viewport
-  const x = Math.round(viewport.x)
-  const y = Math.round(viewport.y)
-  if (x === viewport.x && y === viewport.y && viewport.zoom === 1) return viewport
-  return { ...viewport, x, y, zoom: 1 }
-}
-
 export function isPristineMindMapViewport(
   viewport: { x: number; y: number; zoom: number },
   preferredZoom?: number,

@@ -34,8 +34,6 @@ export interface ParticleSpec {
   delay?: number
   /** Seconds of free flight before steering towards `home`. */
   homeAfter?: number
-  /** Pixels per frame once homing. Omit to use the gentle default steer. */
-  homeSpeed?: number
   home?: () => Point | null
   onArrive?: () => void
 }
@@ -74,7 +72,6 @@ export function createParticle(spec: ParticleSpec, random: () => number = Math.r
     shed: spec.shed ?? 0,
     delay: spec.delay ?? 0,
     homeAfter: spec.homeAfter ?? 0,
-    homeSpeed: spec.homeSpeed ?? 0,
     ring: spec.ring ?? null,
     home: spec.home ?? null,
     onArrive: spec.onArrive ?? null,
@@ -113,9 +110,7 @@ export function stepParticle(p: Particle, frames: number, seconds: number) {
     const distance = Math.hypot(dx, dy) || 1
     // Ramp in the pull so the burst reads first and the flight second.
     const pull = Math.min(1, (p.age - p.homeAfter) * 3)
-    const speed = p.homeSpeed > 0
-      ? p.homeSpeed
-      : HOME_MIN_SPEED + pull * (HOME_MAX_SPEED - HOME_MIN_SPEED)
+    const speed = HOME_MIN_SPEED + pull * (HOME_MAX_SPEED - HOME_MIN_SPEED)
     const steer = Math.min(1, HOME_STEER * frames * pull)
     p.vx += ((dx / distance) * speed - p.vx) * steer
     p.vy += ((dy / distance) * speed - p.vy) * steer

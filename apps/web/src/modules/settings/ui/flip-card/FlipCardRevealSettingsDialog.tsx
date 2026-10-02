@@ -4,7 +4,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/shared/components/ui/toggle-grou
 import { Button } from '@/shared/components/ui/button'
 import { Switch } from '@/shared/components/ui/switch'
 import { cn } from '@/shared/lib/utils'
-import type { FlipCameraNudge, FlipCardEditScope, FlipCardRevealConfig, RevealGranularity, RevealStage } from '@/shared/preferences/flipCardRevealConfig'
+import type { FlipCardEditScope, FlipCardRevealConfig, RevealGranularity, RevealStage } from '@/shared/preferences/flipCardRevealConfig'
 import type { FreestyleFlipMode } from '@/modules/practice/public'
 
 export interface FlipCardRevealSettingsDialogProps {
@@ -93,7 +93,7 @@ export function FlipCardRevealSettingsDialog({
       >
         <DialogHeader>
           <DialogTitle>翻卡设置</DialogTitle>
-          <DialogDescription>点击揭示、镜头是否轻贴、双击空白画布进入编辑，以及评分后是否翻页。</DialogDescription>
+          <DialogDescription>点击揭示、双击空白画布进入编辑，以及评分后是否翻页。</DialogDescription>
         </DialogHeader>
 
         <DialogBody className="space-y-4">
@@ -136,17 +136,6 @@ export function FlipCardRevealSettingsDialog({
                 />
               </SettingRow>
             ) : null}
-            <SettingRow label="翻卡运镜" hint="轻贴只平移到点击的卡，不缩放，避免字发虚">
-              <BinaryToggle<FlipCameraNudge>
-                value={value.cameraNudge === 'pan' ? 'pan' : 'still'}
-                onChange={(cameraNudge) => onChange({ ...value, cameraNudge })}
-                ariaLabel="翻卡运镜"
-                options={[
-                  { value: 'still', label: '不动' },
-                  { value: 'pan', label: '轻贴' },
-                ]}
-              />
-            </SettingRow>
             <SettingRow label="进入编辑" hint="双击空白画布时的编辑范围">
               <BinaryToggle<FlipCardEditScope>
                 value={value.editScope === 'palace' ? 'palace' : 'unit'}

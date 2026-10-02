@@ -4,7 +4,6 @@ export {
   emitAmbientMote,
   emitBadgeBurst,
   emitCollectors,
-  emitEnergyOrb,
   emitComboMilestone,
   emitCorrectBurst,
   emitFlight,

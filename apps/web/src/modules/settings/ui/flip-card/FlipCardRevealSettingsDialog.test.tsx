@@ -25,22 +25,4 @@ describe('FlipCardRevealSettingsDialog', () => {
       editScope: 'palace',
     })
   })
-
-  it('stores a pan-only camera nudge without changing the default', () => {
-    const onChange = vi.fn()
-    render(
-      <FlipCardRevealSettingsDialog
-        open
-        onOpenChange={vi.fn()}
-        value={DEFAULT_FLIP_CARD_REVEAL_CONFIG}
-        onChange={onChange}
-      />,
-    )
-    expect(screen.getByRole('radio', { name: '不动' }).getAttribute('data-state')).toBe('on')
-    fireEvent.click(screen.getByRole('radio', { name: '轻贴' }))
-    expect(onChange).toHaveBeenCalledWith({
-      ...DEFAULT_FLIP_CARD_REVEAL_CONFIG,
-      cameraNudge: 'pan',
-    })
-  })
 })

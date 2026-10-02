@@ -20,7 +20,6 @@ import type { ContextMenuAction } from './NodeContextMenu'
 import type { GraphData } from './adapter'
 import { MindMapCanvasToolbar } from './MindMapCanvasToolbar'
 import { MindMapCanvasViewport } from './MindMapCanvasViewport'
-import { JellyMindmapStage, type JellyMindmapStageHandle } from './JellyMindmapStage'
 import {
   MINDMAP_DEFAULT_VIEWPORT_X,
   MINDMAP_DEFAULT_VIEWPORT_Y,
@@ -145,8 +144,6 @@ export interface MindMapCanvasProps {
   textSelectionModeActive?: boolean
   mobileViewPolicy?: MindMapMobileViewPolicy
   nodeClickViewportPolicy?: MindMapNodeClickViewportPolicy
-  /** Flip-click camera. `pan` translates only; zoom stays so glyphs do not soften. */
-  flipCameraNudge?: 'still' | 'pan'
   contentChangeViewportPolicy?: MindMapContentChangeViewportPolicy
   /**
    * Host-owned manual zoom preference. The canvas keeps each mounted map's
@@ -160,12 +157,6 @@ export interface MindMapCanvasProps {
    * When it changes, the canvas re-centers the previous viewport-center card.
    */
   sceneTransitionKey?: string | null
-  /** Render the independent HTML-style jelly stage instead of React Flow. */
-  jellyStage?: boolean
-  /** Off-screen freestyle neighbours skip per-node DOM until they slide near. */
-  jellyPaintNodes?: boolean
-  /** Background previews stay flat and silent; only the active card plays the flip. */
-  jellyLive?: boolean
   viewCommand?: MindMapCanvasViewCommand | null
   recoveryKey?: string | number | null
   className?: string
@@ -290,14 +281,6 @@ function MindMapCanvasInner({
     onHostRefresh,
     hostRefreshEpoch,
   })
-  const jellyStageRef = useRef<JellyMindmapStageHandle | null>(null)
-  useEffect(() => {
-    if (!props.jellyStage || !props.viewCommand) return
-    if (props.viewCommand.type === 'fit') jellyStageRef.current?.fitView()
-    if (props.viewCommand.type === 'center' || props.viewCommand.type === 'reveal') {
-      jellyStageRef.current?.focusNode(props.viewCommand.nodeId ?? props.viewCommand.nodeIds?.[0] ?? null)
-    }
-  }, [props.jellyStage, props.viewCommand])
   const expectedNodeCount = props.graphData.nodes.length
   const [canvasReadyTimedOut, setCanvasReadyTimedOut] = useState(false)
   const blankCanvasDetected =
@@ -394,11 +377,8 @@ function MindMapCanvasInner({
           leadingContent={props.toolbarContent}
           centerContent={props.toolbarCenterContent}
           onRefreshHost={onHostRefresh}
-          onFitWholeTree={() => {
-             if (props.jellyStage) jellyStageRef.current?.fitView()
-             else state.runFitView(240)
-           }}
-          onFitSelectionBranch={props.jellyStage ? () => jellyStageRef.current?.fitView() : state.fitSelectionBranch}
+          onFitWholeTree={() => state.runFitView(240)}
+          onFitSelectionBranch={state.fitSelectionBranch}
           onExpandSelectionSubtree={
             props.practiceModeActive ? undefined : state.expandSelectionSubtree
           }
@@ -414,24 +394,6 @@ function MindMapCanvasInner({
       <div ref={state.canvasRef} className="min-h-0 flex-1" data-testid="mindmap-canvas-viewport-host">
         {state.isCanvasReady ? (
           <div className="relative h-full">
-            {props.jellyStage ? (
-              <JellyMindmapStage
-                ref={jellyStageRef}
-                graphData={props.graphData}
-                selectedNodeId={props.selectedNodeId}
-                selectedNodeIds={props.selectedNodeIds}
-                readonly={Boolean(props.readonly)}
-                cameraNudge={props.flipCameraNudge}
-                paintNodes={props.jellyPaintNodes}
-                live={props.jellyLive}
-                onNodeSelect={props.onNodeSelect}
-                onNodeActivate={props.onNodeActivate}
-                onNodeContextAction={props.onNodeContextAction}
-                onNodeHover={props.onNodeHover}
-                onPaneDoubleClick={props.onPaneDoubleClick}
-                onPaneLongPress={props.onPaneLongPress}
-              />
-            ) : (
             <MindMapCanvasViewport
               width={state.canvasSize.width}
               height={state.canvasSize.height}
@@ -466,8 +428,7 @@ function MindMapCanvasInner({
               yieldOneFingerPan={state.yieldOneFingerPan}
               preserveViewport={state.preserveViewport}
             />
-            )}
-            {!props.jellyStage && canvasIssue ? (
+            {canvasIssue ? (
               <MindMapCanvasRecoveryPanel
                 title={canvasIssue.title}
                 description={canvasIssue.description}

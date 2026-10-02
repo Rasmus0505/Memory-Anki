@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { animateScrollTop, easeOutBack, easeOutQuart } from './freestyleAnimatedScroll'
+import { animateScrollTop, easeOutQuart } from './freestyleAnimatedScroll'
 import { createFreestyleScrollChannel, scrollFrameFromPosition } from './freestyleScrollChannel'
 import { rubberBand } from '../hooks/useFreestyleEdgeRubberBand'
 import { pageTurnAttenuation } from '../hooks/useFreestyleFlowFeedback'
@@ -46,12 +46,6 @@ describe('freestyle page turn model', () => {
     expect(easeOutQuart(0)).toBe(0)
     expect(easeOutQuart(1)).toBe(1)
     expect(easeOutQuart(0.25)).toBeGreaterThan(0.6)
-  })
-
-  it('lets a deliberate page slide past the snap and settle back', () => {
-    expect(easeOutBack(0)).toBeCloseTo(0)
-    expect(easeOutBack(1)).toBeCloseTo(1)
-    expect(easeOutBack(0.7)).toBeGreaterThan(1)
   })
 
   it('thins page-turn sound during a fast flick-through', () => {

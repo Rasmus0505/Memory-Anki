@@ -30,9 +30,6 @@ interface UseMindMapMenusAndEdgesInput {
   mobileGuidedActive: boolean
   contextActionOnly: boolean
   nodeClickViewportPolicy: MindMapNodeClickViewportPolicy
-  /** Host flip setting. Edit / English / text modes pass `still`. */
-  flipCameraNudge?: 'still' | 'pan'
-  panNodeIntoCenter?: (nodeId: string | null | undefined, duration?: number) => void
   centerNodeInCanvas: (nodeId: string | null | undefined, duration?: number) => void
   readonly?: boolean
   /** Current multi-select set; used to preserve selection on right-click. */
@@ -56,8 +53,6 @@ export function useMindMapMenusAndEdges({
   mobileGuidedActive,
   contextActionOnly,
   nodeClickViewportPolicy,
-  flipCameraNudge = 'still',
-  panNodeIntoCenter,
   centerNodeInCanvas,
   readonly = false,
   selectedNodeIds = [],
@@ -145,8 +140,6 @@ export function useMindMapMenusAndEdges({
       }
       if (mobileGuidedActive && nodeClickViewportPolicy === 'guided-center' && !additive) {
         centerNodeInCanvas(node.id)
-      } else if (flipCameraNudge === 'pan' && readonly && !additive) {
-        panNodeIntoCenter?.(node.id)
       }
       dispatchGlobalFeedback('node_select', {
         point: { x: event.clientX, y: event.clientY },
@@ -156,10 +149,8 @@ export function useMindMapMenusAndEdges({
     },
     [
       centerNodeInCanvas,
-      flipCameraNudge,
       mobileGuidedActive,
       nodeClickViewportPolicy,
-      panNodeIntoCenter,
       onNodeActivate,
       onNodeSelect,
       readonly,

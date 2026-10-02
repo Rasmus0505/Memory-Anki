@@ -21,7 +21,7 @@ The repository is a local-first Windows product used on two devices. SQLite, fil
 | Capability | Frontend owner | Backend owner |
 |---|---|---|
 | Mind-map document rules | `modules/content/domain/mindmap-document-entity` | `modules/mindmap_document` |
-| Generic mind-map rendering | `shared/ui/mindmap-canvas` (canvas itself lazy-loads `@xyflow`); the read-only jelly flip stage lives in the same folder — see [jelly-mindmap-stage.md](./jelly-mindmap-stage.md) | — |
+| Generic mind-map rendering | `shared/ui/mindmap-canvas` (canvas itself lazy-loads `@xyflow`) | — |
 | Mind-map editing runtime | `modules/content/ui/mindmap-editor` | aggregate-specific editor services |
 | Palace aggregate | `modules/content` (`domain/palace-entity`, palace-catalog/palace-edit UI) | `modules/content` |
 | Review scheduling/execution | `modules/memory` + `modules/practice/ui/review` | `modules/memory` |
@@ -95,7 +95,6 @@ Frontend lint is a zero-warning contract. The `apps/web` lint script runs ESLint
 - Playwright is hermetic: specs import `test`/`expect` from `apps/web/e2e/fixtures.ts` (every `/api` call answers 503 unless the spec routes it), service workers are blocked, and `MEMORY_ANKI_E2E=1` removes the vite `/api` proxy so e2e can never write to the live 8012 service. `check_e2e_hermetic` enforces this.
 - Windows launcher smoke after runtime/startup-sensitive changes: `python tools/quality_gate.py --launchers` (really runs `start-all.bat --smoke-test` and `start-all.bat --desktop`, verifies API/Electron readiness, then restores the shared PWA service)
 - Mind-map architecture details: `docs/architecture/mindmap.md`
-- Jelly flip-card stage (read-only reveal layer, layout contract, parent charge): `docs/architecture/jelly-mindmap-stage.md`
 - Hermetic Playwright E2E rules (503 API fallback, blocked SW, no preview proxy): `docs/architecture/e2e-testing-guide.md`
 - AI runtime boundary: `docs/architecture/ai-runtime.md`
 - AI run workspace lifecycle: `docs/architecture/ai-run-workspace.md`

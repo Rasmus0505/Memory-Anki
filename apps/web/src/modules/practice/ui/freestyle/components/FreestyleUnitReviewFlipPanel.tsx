@@ -53,7 +53,6 @@ export function FreestyleUnitReviewFlipPanel({
   unit,
   editorState,
   active = true,
-  paintStage = true,
   fullscreen,
   onToggleFullscreen,
   freestyleFlipMode = 'free',
@@ -76,8 +75,6 @@ export function FreestyleUnitReviewFlipPanel({
   unit: ReviewUnitDto
   editorState: MindMapEditorState
   active?: boolean
-  /** Neighbours more than one card away keep the shell without a node per card. */
-  paintStage?: boolean
   fullscreen: boolean
   onToggleFullscreen: (active?: boolean) => void
   freestyleFlipMode?: FreestyleFlipMode
@@ -690,8 +687,6 @@ export function FreestyleUnitReviewFlipPanel({
         preserveViewOnSync
         initialViewPolicy="preserve"
         sceneTransitionFallbackNodeId={unit.anchor_uid || null}
-        jellyLive={active}
-        jellyPaintNodes={paintStage}
         className="min-h-0 flex-1"
         surfaceClassName="h-full min-h-0"
       />

@@ -26,13 +26,11 @@ describe('flipCardRevealSettings', () => {
       granularity: 'single',
       stage: 'direct',
       editScope: 'unit',
-      cameraNudge: 'still',
     })
-    expect(sanitizeFlipCardRevealConfig({ editScope: 'palace', cameraNudge: 'pan' })).toEqual({
+    expect(sanitizeFlipCardRevealConfig({ editScope: 'palace' })).toEqual({
       granularity: 'level',
       stage: 'two-step',
       editScope: 'palace',
-      cameraNudge: 'pan',
     })
   })
 
@@ -45,13 +43,11 @@ describe('flipCardRevealSettings', () => {
       granularity: 'single',
       stage: 'direct',
       editScope: 'palace',
-      cameraNudge: 'still',
     })
     expect(readFlipCardRevealSettings()).toEqual({
       granularity: 'single',
       stage: 'direct',
       editScope: 'palace',
-      cameraNudge: 'still',
     })
     expect(window.localStorage.getItem(FLIP_CARD_REVEAL_SETTINGS_STORAGE_KEY)).toBeNull()
     expect(resetFlipCardRevealSettings()).toEqual(DEFAULT_FLIP_CARD_REVEAL_CONFIG)
@@ -72,7 +68,6 @@ describe('flipCardRevealSettings', () => {
       granularity: 'single',
       stage: 'direct',
       editScope: 'unit',
-      cameraNudge: 'still',
     })
   })
 })

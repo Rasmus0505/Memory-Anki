@@ -1,38 +1,19 @@
 import { useEffect, useLayoutEffect, useRef, type RefObject } from 'react'
 import type { Edge, Node } from '@xyflow/react'
-import { cue, rectCenter, shockwaveElement, squashElement, type Point } from '@/shared/fx'
-import { planChargeBurst } from './parentCharge'
+import { cue, rectCenter } from '@/shared/fx'
+import { themeMotion } from '@/shared/theme/themePacks'
 
 const FLIP_ID = 'mindmap-reveal-flip'
-/** Jelly yaw. Short enough that the edge-on blur is a flash, then the face is identity. */
-const FLIP_MS = 420
-/** Edge-on moment: the seal is swapped for the answer face here. */
+/** The live theme pack sets the flip's length and landing overshoot. */
+const flipMs = () => themeMotion().flipMs
+/** Edge-on moment: the paper back is swapped for the answer face here. */
 const FLIP_TURN = 0.42
 const STEP_MS = 45
 const MAX_SPREAD_MS = 540
 const MAX_CARDS_PER_BATCH = 40
 const MAX_BURSTS_PER_BATCH = 6
-/** Halo only — scaling the readable face rasterizes the glyphs. */
-function pulseCardHalo(card: HTMLElement, strong = false) {
-  if (typeof card.animate !== 'function') return
-  const spread = strong ? 10 : 6
-  card.animate(
-    [
-      { boxShadow: '0 0 0 0 transparent' },
-      { boxShadow: `0 0 0 ${spread}px hsl(32 90% 56% / 0.34)`, offset: 0.4 },
-      { boxShadow: '0 0 0 0 transparent' },
-    ],
-    { duration: strong ? 460 : 280, easing: 'cubic-bezier(0.2, 1.4, 0.4, 1)' },
-  )
-}
-
-function cardCenter(root: HTMLElement, id: string): Point | null {
-  const card = root.querySelector(cardSelector(id))
-  if (!(card instanceof HTMLElement)) return null
-  const rect = card.getBoundingClientRect()
-  if (rect.width === 0 && rect.height === 0) return null
-  return rectCenter(rect)
-}
+/** A reveal this wide is a whole branch landing: finish it with gold rain over the map. */
+const GOLD_RAIN_MIN_FLIPS = 2
 /** Bubbled from a card when its flip lands, so hosts can relay particles to their own HUD. */
 export const MINDMAP_CARD_LANDED_EVENT = 'memory-anki:mindmap-card-landed'
 const FOLD_MS = 420
@@ -129,18 +110,22 @@ function clearFx(card: HTMLElement) {
 }
 
 function flipCard(card: HTMLElement, delay: number, burst: boolean) {
+  const FLIP_MS = flipMs()
+  const overshoot = themeMotion().flipOvershootDeg
   clearFx(card)
   const cover = fxElement('mindmap-flip-cover', card)
-  cover.innerHTML = '<span class="mindmap-jelly-seal">点击翻开</span>'
+  cover.innerHTML = '<span class="mindmap-node-concealed">待回忆</span>'
   const sheen = fxElement('mindmap-flip-sheen', card)
 
   card.animate(
     [
-      { transform: `${PERSPECTIVE} rotateY(0deg)`, easing: 'cubic-bezier(0.45, 0.05, 0.85, 0.35)' },
-      { transform: `${PERSPECTIVE} rotateY(-90deg)`, offset: FLIP_TURN },
-      { transform: `${PERSPECTIVE} rotateY(90deg)`, offset: FLIP_TURN + 0.0001, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' },
-      { transform: `${PERSPECTIVE} rotateY(-8deg)`, offset: 0.78 },
-      { transform: 'none' },
+      { transform: `${PERSPECTIVE} rotateX(0deg) scale(1)`, easing: 'cubic-bezier(0.55, 0, 0.85, 0.35)' },
+      { transform: `${PERSPECTIVE} rotateX(-90deg) scale(1.07)`, offset: FLIP_TURN },
+      // Same edge-on pose from the other side: the jump is invisible and the rotation reads as continuous.
+      { transform: `${PERSPECTIVE} rotateX(90deg) scale(1.07)`, offset: FLIP_TURN + 0.0001, easing: 'cubic-bezier(0.15, 0.7, 0.3, 1)' },
+      { transform: `${PERSPECTIVE} rotateX(${-overshoot}deg) scale(1.035)`, offset: 0.74, easing: 'cubic-bezier(0.4, 0, 0.3, 1)' },
+      { transform: `${PERSPECTIVE} rotateX(${(overshoot / 3).toFixed(1)}deg) scale(1)`, offset: 0.88 },
+      { transform: `${PERSPECTIVE} rotateX(0deg) scale(1)` },
     ],
     { duration: FLIP_MS, delay, fill: 'backwards', id: FLIP_ID },
   )
@@ -157,7 +142,7 @@ function flipCard(card: HTMLElement, delay: number, burst: boolean) {
       },
       { boxShadow: resting },
     ],
-    { duration: FLIP_MS, delay, id: FLIP_ID, easing: 'ease-out' },
+    { duration: FLIP_MS + 260, delay, id: FLIP_ID, easing: 'ease-out' },
   )
   removeWhenDone(cover.animate(
     [{ opacity: 1 }, { opacity: 1, offset: FLIP_TURN }, { opacity: 0, offset: FLIP_TURN + 0.0001 }, { opacity: 0 }],
@@ -175,40 +160,14 @@ function flipCard(card: HTMLElement, delay: number, burst: boolean) {
   landCard(card, delay + FLIP_MS * 0.7, burst)
 }
 
-function paintJellyEdges(
-  root: HTMLElement,
-  phases: ReadonlyMap<string, RevealPhase>,
-  parentOf: ReadonlyMap<string, string>,
-  edges: readonly Edge[],
-) {
-  const children = new Map<string, string[]>()
-  for (const [childId, parentId] of parentOf) {
-    const phase = phases.get(childId)
-    if (phase !== 'hidden' && phase !== 'revealed') continue
-    const list = children.get(parentId) ?? []
-    list.push(childId)
-    children.set(parentId, list)
-  }
-  const mastered = new Set<string>()
-  for (const [parentId, kids] of children) {
-    if (kids.length > 0 && kids.every((id) => phases.get(id) === 'revealed')) mastered.add(parentId)
-  }
-  for (const edge of edges) {
-    const el = root.querySelector(`.react-flow__edge[data-id="${escapeId(edge.id)}"]`)
-    if (!(el instanceof Element)) continue
-    const live = phases.get(edge.target) === 'revealed'
-    el.classList.toggle('mindmap-edge-live', live && !mastered.has(edge.source))
-    el.classList.toggle('mindmap-edge-mastered', live && mastered.has(edge.source))
-  }
-}
-
 function dealCard(card: HTMLElement, delay: number) {
   card.animate(
     [
-      { opacity: 0, transformOrigin: '0% 50%', transform: 'perspective(700px) rotateY(-28deg) translateX(-8px)' },
-      { opacity: 1, transformOrigin: '0% 50%', transform: 'perspective(700px) rotateY(0deg) translateX(0)' },
+      { opacity: 0, transformOrigin: '0% 50%', transform: 'perspective(700px) rotateY(-68deg) translateX(-14px) scale(0.9)' },
+      { opacity: 1, transformOrigin: '0% 50%', transform: 'perspective(700px) rotateY(9deg) translateX(0) scale(1.02)', offset: 0.68 },
+      { opacity: 1, transformOrigin: '0% 50%', transform: 'perspective(700px) rotateY(0deg) translateX(0) scale(1)' },
     ],
-    { duration: 260, delay, easing: 'cubic-bezier(0.22, 1, 0.36, 1)', fill: 'backwards', id: FLIP_ID },
+    { duration: 420, delay, easing: 'cubic-bezier(0.22, 1, 0.36, 1)', fill: 'backwards', id: FLIP_ID },
   )
 }
 
@@ -349,8 +308,6 @@ export function useMindMapRevealMotion(
     phases.current = new Map(nodes.map((node) => [node.id, readRevealPhase(node)]))
     parents.current = new Map(edges.map((edge) => [edge.target, edge.source]))
     const root = container.current
-    const jelly = Boolean(root?.closest('[data-jelly-flip="true"]'))
-    if (root && jelly) paintJellyEdges(root, phases.current, parents.current, edges)
     if (!root || prefersReducedMotion() || typeof root.animate !== 'function') return
     const folds = planFoldBack(previous, previousParents, nodes)
     if (folds.length > 0 && folds.length <= MAX_FOLDS_PER_BATCH) {
@@ -362,76 +319,43 @@ export function useMindMapRevealMotion(
     const incomingEdge = new Map(edges.map((edge) => [edge.target, edge.id]))
     const jobs: MountJob[] = []
     const flips = plan.flips.slice(0, MAX_CARDS_PER_BATCH)
-    const batch = flips.length > 1
-    const step = batch ? Math.min(STEP_MS, MAX_SPREAD_MS / (flips.length - 1)) : 0
-    const burstByOrigin = new Map(planChargeBurst({
-      flips,
-      parentOf: parents.current,
-      phaseOf: phases.current,
-    }).bursts.map((item) => [item.originId, item]))
+    const step = flips.length > 1 ? Math.min(STEP_MS, MAX_SPREAD_MS / (flips.length - 1)) : 0
     flips.forEach((id, index) => {
       const slot = Math.round(index * step)
       const edgeId = incomingEdge.get(id)
-      if (edgeId && !jelly) {
+      if (edgeId) {
         jobs.push({
           selector: edgeSelector(edgeId),
           run: (path, elapsed) => inkEdge(path as SVGPathElement, Math.max(0, slot - elapsed)),
         })
       }
-      const lead = edgeId && !jelly ? INK_LEAD_MS : 0
-      const charge = burstByOrigin.get(id)
+      const lead = edgeId ? INK_LEAD_MS : 0
       jobs.push({
         selector: cardSelector(id),
-        run: (card, elapsed) => {
-          const element = card as HTMLElement
-          if (!jelly) {
-            flipCard(element, Math.max(0, slot + lead - elapsed), !batch && index < MAX_BURSTS_PER_BATCH)
-            if (!batch) pulseCardHalo(element)
-          }
-          if (!charge) return
-          const origin = rectCenter(element.getBoundingClientRect())
-          cue('map.settle', {
-            weight: batch ? 'batch' : 'single',
-            freeze: charge.mastered,
-            charges: [{
-              origin,
-              target: () => {
-                const live = container.current
-                return live ? cardCenter(live, charge.parentId) : null
-              },
-              label: charge.label,
-              mastered: charge.mastered,
-              onArrive: () => {
-                const live = container.current
-                const parent = live?.querySelector(cardSelector(charge.parentId))
-                if (parent instanceof HTMLElement) {
-                  squashElement(parent)
-                  shockwaveElement(parent)
-                }
-              },
-            }],
-          })
-        },
+        run: (card, elapsed) => flipCard(card as HTMLElement, Math.max(0, slot + lead - elapsed), index < MAX_BURSTS_PER_BATCH),
       })
     })
     plan.deals.slice(0, MAX_CARDS_PER_BATCH).forEach((id, index) => {
-      const slot = Math.min(index * 28, 240)
+      const slot = Math.min(index * 32, 320)
+      const edgeId = incomingEdge.get(id)
+      if (edgeId) {
+        jobs.push({
+          selector: edgeSelector(edgeId),
+          run: (path, elapsed) => inkEdge(path as SVGPathElement, Math.max(0, slot - elapsed)),
+        })
+      }
       jobs.push({
         selector: cardSelector(id),
-        run: (card, elapsed) => {
-          const element = card as HTMLElement
-          const delay = Math.max(0, slot - elapsed)
-          if (jelly) {
-            element.animate(
-              [{ opacity: 0 }, { opacity: 1 }],
-              { duration: 220, delay, easing: 'ease-out', fill: 'backwards' },
-            )
-            return
-          }
-          dealCard(element, delay)
-        },
+        run: (card, elapsed) => dealCard(card as HTMLElement, Math.max(0, slot - elapsed)),
       })
     })
     runWhenMounted(root, jobs, activeWaits.current)
+    if (flips.length >= GOLD_RAIN_MIN_FLIPS) {
+      const landMs = Math.round((flips.length - 1) * step) + INK_LEAD_MS + flipMs() * 0.74
+      window.setTimeout(() => {
+        if (!root.isConnected) return
+        cue('map.branch', { rect: root.getBoundingClientRect() })
+      }, landMs)
+    }
   }, [container, edges, nodes])
 }
