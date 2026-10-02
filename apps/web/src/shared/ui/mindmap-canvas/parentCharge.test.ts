@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { planChargeBurst, planParentCharges } from './parentCharge'
+import { planChargeBurst, planParentCharges, planRevealTransitions } from './parentCharge'
 
 describe('planParentCharges', () => {
   it('counts only direct flip-session children and ignores edit-mode nodes', () => {
@@ -25,7 +25,7 @@ describe('planParentCharges', () => {
 })
 
 describe('planChargeBurst', () => {
-  it('merges a batch into one orb per parent and freezes once when any parent fills', () => {
+  it('sends one orb per cracked card and freezes once when any parent fills', () => {
     const plan = planChargeBurst({
       flips: ['a1', 'a2', 'b1'],
       parentOf: new Map([
@@ -43,6 +43,7 @@ describe('planChargeBurst', () => {
     })
     expect(plan.bursts).toEqual([
       { parentId: 'a', originId: 'a1', done: 2, total: 2, label: '2/2', mastered: true },
+      { parentId: 'a', originId: 'a2', done: 2, total: 2, label: '2/2', mastered: true },
       { parentId: 'b', originId: 'b1', done: 1, total: 2, label: '1/2', mastered: false },
     ])
     expect(plan.freeze).toBe(true)
@@ -56,5 +57,75 @@ describe('planChargeBurst', () => {
     })
     expect(plan.freeze).toBe(false)
     expect(plan.bursts[0]?.label).toBe('1/2')
+  })
+})
+
+describe('planRevealTransitions', () => {
+  const input = (over: Partial<Parameters<typeof planRevealTransitions>[0]> = {}) => ({
+    revealed: new Set<string>(),
+    handled: new Set<string>(),
+    previous: new Set<string>(),
+    hydrated: true,
+    sameGraph: true,
+    staggerMs: 45,
+    ...over,
+  })
+
+  it('hydrates an already-revealed document silently on first mount', () => {
+    // Opening a palace where 3 cards were already flipped must not replay rewards.
+    const plan = planRevealTransitions(input({
+      revealed: new Set(['a', 'b', 'c']),
+      hydrated: false,
+    }))
+    expect(plan.newlyRevealed).toEqual([])
+    expect(plan.folded).toEqual([])
+    expect(plan.delayMsById.size).toBe(0)
+    expect(plan.handled).toEqual(new Set(['a', 'b', 'c']))
+    expect(plan.previous).toEqual(new Set(['a', 'b', 'c']))
+  })
+
+  it('re-hydrates silently when the host switches to a different graph', () => {
+    const plan = planRevealTransitions(input({
+      revealed: new Set(['x', 'y']),
+      handled: new Set(['a']),
+      previous: new Set(['a']),
+      hydrated: true,
+      sameGraph: false,
+    }))
+    expect(plan.newlyRevealed).toEqual([])
+    expect(plan.folded).toEqual([])
+  })
+
+  it('staggers simultaneous reveals by the batch cadence', () => {
+    const plan = planRevealTransitions(input({
+      revealed: new Set(['a', 'b', 'c']),
+      handled: new Set(['a']),
+      previous: new Set(['a']),
+    }))
+    expect(plan.newlyRevealed).toEqual(['b', 'c'])
+    expect(plan.delayMsById.get('b')).toBe(0)
+    expect(plan.delayMsById.get('c')).toBe(45)
+  })
+
+  it('reports folds and drops them from the handled set', () => {
+    const plan = planRevealTransitions(input({
+      revealed: new Set(['a']),
+      handled: new Set(['a', 'b']),
+      previous: new Set(['a', 'b']),
+    }))
+    expect(plan.folded).toEqual(['b'])
+    expect(plan.newlyRevealed).toEqual([])
+    expect(plan.handled.has('b')).toBe(false)
+    expect(plan.previous).toEqual(new Set(['a']))
+  })
+
+  it('re-reveals a folded card with a fresh delay slot', () => {
+    const plan = planRevealTransitions(input({
+      revealed: new Set(['a', 'b']),
+      handled: new Set(['a']),
+      previous: new Set(['a']),
+    }))
+    expect(plan.newlyRevealed).toEqual(['b'])
+    expect(plan.delayMsById.get('b')).toBe(0)
   })
 })

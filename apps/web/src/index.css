@@ -1,4 +1,4 @@
-﻿@import "tailwindcss";
+@import "tailwindcss";
 @import "./styles/foundation.css";
 @import "./styles/shell-motion.css";
 @import "./styles/feedback.css";
@@ -7,6 +7,7 @@
 @import "./styles/motion-surfaces.css";
 @import "./styles/freestyle-stage.css";
 @import "./styles/mindmap-scene.css";
+@import "./styles/jelly-mindmap-stage.css";
 @import "./styles/exam.css";
 @import "./styles/particle-fx.css";
 @import "./styles/dashboard.css";

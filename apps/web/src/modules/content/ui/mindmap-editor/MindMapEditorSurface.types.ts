@@ -68,6 +68,8 @@ export interface MindMapEditorSurfaceProps {
   nodeClickViewportPolicy?: MindMapNodeClickViewportPolicy
   /** Flip-click camera from 翻卡设置. Pan keeps zoom. */
   flipCameraNudge?: 'still' | 'pan'
+  /** Use the independent HTML-style jelly stage in readonly flip scenes. */
+  jellyStage?: boolean
   contentChangeViewportPolicy?: MindMapContentChangeViewportPolicy
   /** Optional host-owned zoom preference; pan remains local to each canvas instance. */
   preferredZoom?: number

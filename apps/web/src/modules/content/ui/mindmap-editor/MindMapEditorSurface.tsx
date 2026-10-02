@@ -75,6 +75,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   mobileViewPolicy = 'auto',
   nodeClickViewportPolicy,
   flipCameraNudge = 'still',
+  jellyStage = false,
   contentChangeViewportPolicy,
   preferredZoom, onUserZoomChange,
   className,
@@ -669,6 +670,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
         mobileViewPolicy={mobileViewPolicy}
         nodeClickViewportPolicy={resolvedNodeClickViewportPolicy}
         flipCameraNudge={flipCameraNudge}
+         jellyStage={jellyStage}
         contentChangeViewportPolicy={resolvedContentChangeViewportPolicy}
         preferredZoom={preferredZoom} onUserZoomChange={onUserZoomChange}
         sceneTransitionKey={resolvedSceneTransitionKey} viewCommand={viewCommand} recoveryKey={canvasRecoveryKey}

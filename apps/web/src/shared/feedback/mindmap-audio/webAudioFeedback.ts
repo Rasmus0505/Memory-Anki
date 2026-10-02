@@ -162,6 +162,15 @@ export function playWebAudioFeedbackEvent(args: {
   const { event, surprise = false, origin, audioScope, volume = 1 } = args
   const feedbackVolume = clampFeedbackVolume(volume)
   if (feedbackVolume <= 0) return
+  if (event === 'card_reveal' && typeof document !== 'undefined') {
+    // JellyMindmapStage owns the crack cue through map.land. The legacy
+    // React Flow fallback still receives the exact crack here, but never both.
+    if (document.querySelector('[data-jelly-stage="true"]')) return
+    if (document.querySelector('[data-jelly-flip="true"]')) {
+      playFlipCrack(feedbackVolume)
+      return
+    }
+  }
   const tones = getToneSpec(event, surprise).map((tone) =>
     tuneToneSpec(event, tone, origin, audioScope),
   )
@@ -258,6 +267,99 @@ export function playWebAudioLandingChime(args: { combo: number; volume?: number 
   const feedbackVolume = clampFeedbackVolume(args.volume ?? 1)
   if (feedbackVolume <= 0) return
   playToneSequence(getLandingChimeTone(args.combo), feedbackVolume)
+}
+
+const LAB_VOLUME_REF = 1.15
+
+function jellyMaster(volume: number) {
+  return 0.85 * (Math.max(0, volume) / LAB_VOLUME_REF)
+}
+
+/**
+ * Exact jelly envelopes from the lab. Straight to the destination: the paper
+ * compressor and theme pitch-shift are what made the flip sound like a different instrument.
+ */
+function playJellyVoice(args: {
+  volume: number
+  type: OscillatorType
+  from: number
+  to?: number
+  freqSeconds?: number
+  gainRatio: number
+  gainSeconds: number
+  chord?: number[]
+}) {
+  const context = getSharedAudioContext()
+  const master = jellyMaster(args.volume)
+  if (!context || master <= 0) return
+  if (context.state === 'suspended') void context.resume().catch(() => undefined)
+  const t = context.currentTime
+  const gain = context.createGain()
+  gain.connect(context.destination)
+  gain.gain.setValueAtTime(master * args.gainRatio, t)
+  gain.gain.exponentialRampToValueAtTime(0.001, t + args.gainSeconds)
+  for (const freq of args.chord ?? [args.from]) {
+    const osc = context.createOscillator()
+    osc.type = args.type
+    osc.frequency.setValueAtTime(freq, t)
+    if (args.to && args.freqSeconds && !args.chord) {
+      osc.frequency.exponentialRampToValueAtTime(args.to, t + args.freqSeconds)
+    }
+    osc.connect(gain)
+    osc.start(t)
+    osc.stop(t + args.gainSeconds)
+  }
+}
+
+/** Jelly bubble pop. Sine 450→1100, peak master×0.7, 120ms. */
+export function playFlipCrack(volume: number) {
+  playJellyVoice({
+    volume,
+    type: 'sine',
+    from: 450,
+    to: 1100,
+    freqSeconds: 0.08,
+    gainRatio: 0.7,
+    gainSeconds: 0.12,
+  })
+}
+
+/** Jelly propulsion. Sine 360→920, peak master×0.65, 250ms. */
+export function playFlipShoot(volume: number) {
+  playJellyVoice({
+    volume,
+    type: 'sine',
+    from: 360,
+    to: 920,
+    freqSeconds: 0.2,
+    gainRatio: 0.65,
+    gainSeconds: 0.25,
+  })
+}
+
+/** Jelly marimba chord. One shared envelope, peak master×0.8, 350ms. */
+export function playFlipImpact(volume: number) {
+  playJellyVoice({
+    volume,
+    type: 'sine',
+    from: 523.25,
+    gainRatio: 0.8,
+    gainSeconds: 0.35,
+    chord: [523.25, 659.25, 783.99, 1046.5],
+  })
+}
+
+/** Jelly fold. Sine 800→320, peak master×0.5, 140ms. */
+export function playFlipFold(volume: number) {
+  playJellyVoice({
+    volume,
+    type: 'sine',
+    from: 800,
+    to: 320,
+    freqSeconds: 0.1,
+    gainRatio: 0.5,
+    gainSeconds: 0.14,
+  })
 }
 
 export function __resetWebAudioContextForTests() {

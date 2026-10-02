@@ -214,6 +214,16 @@ export function buildDisplayNodes({
       const previousCharge = readNodeCharge(previous)
       nextData.metadata = withCharge(node, chargeEqual(previousCharge, charge) && previousCharge ? previousCharge : charge)
     }
+    const animateFlip = (previousDisplayNodes?.length ?? 0) > 0
+      && readChargePhase(node) === 'revealed'
+      && (!previous || readChargePhase(previous) !== 'revealed')
+    if (animateFlip) {
+      const metadata = {
+        ...((nextData.metadata as Record<string, unknown> | undefined) ?? (node.data as { metadata?: Record<string, unknown> }).metadata ?? {}),
+      }
+      const visual = { ...((metadata.visual as Record<string, unknown> | undefined) ?? {}), animateFlip: true }
+      nextData.metadata = { ...metadata, visual }
+    }
     const dragHandle = canDrag ? '.mindmap-node-drag-surface' : undefined
     const selectable = textSelectionModeActive ? false : node.selectable
 

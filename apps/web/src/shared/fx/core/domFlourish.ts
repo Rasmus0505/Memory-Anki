@@ -91,6 +91,32 @@ export function absorbElement(element: Element | null | undefined, kind: 'dull' 
   )
 }
 
+/** Expanding ring at the card's center. Does not transform the glyphs. */
+export function shockwaveElement(element: Element | null | undefined) {
+  if (!canAnimate(element)) return
+  const ring = document.createElement('span')
+  ring.className = 'mindmap-shockwave'
+  ring.setAttribute('aria-hidden', 'true')
+  element.appendChild(ring)
+  ring.addEventListener('animationend', () => ring.remove(), { once: true })
+  window.setTimeout(() => ring.remove(), 700)
+}
+
+/** Jelly parent catch. Ends at identity so the title is sharp again. */
+export function squashElement(element: Element | null | undefined) {
+  if (!canAnimate(element)) return
+  element.animate(
+    [
+      { transform: 'scale(1, 1)' },
+      { transform: 'scale(1.22, 0.84)', offset: 0.25 },
+      { transform: 'scale(0.92, 1.12)', offset: 0.55 },
+      { transform: 'scale(1.04, 0.98)', offset: 0.8 },
+      { transform: 'none' },
+    ],
+    { duration: 380, easing: 'cubic-bezier(0.175, 0.885, 0.32, 1.4)' },
+  )
+}
+
 /** Halo only. Never scales the card, so revealed text stays crisp. */
 export function pulseHalo(element: Element | null | undefined, strong = false) {
   if (!canAnimate(element)) return

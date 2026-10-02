@@ -1,4 +1,4 @@
-import { playWebAudioFireworkAccent, playWebAudioLandingChime } from '@/shared/feedback/mindmap-audio/webAudioFeedback'
+import { playFlipCrack, playFlipFold, playWebAudioFireworkAccent, playWebAudioLandingChime } from '@/shared/feedback/mindmap-audio/webAudioFeedback'
 import { triggerHaptic } from '@/shared/feedback/haptics'
 import {
   emitAmbientMote,
@@ -300,7 +300,17 @@ defineCue('page.turn', {
   group: '学习 · 翻页',
   sample: () => ({}),
   play(_payload, stage) {
-    if (!stage.gate.motion) return
+    const motion = stage.gate.motion
+    const jelly = typeof document !== 'undefined' && Boolean(document.querySelector('[data-jelly-flip="true"]'))
+    // Jelly scenes borrow the flip rhythm for page turns. The caller keeps its own
+    // page-turn voice, so this only adds the lab's crack→fold shape, with no
+    // charges, no counter and no reward.
+    if (stage.gate.sound && jelly) {
+      const volume = stage.gate.volume
+      playFlipCrack(volume)
+      stage.playback.at(150, () => playFlipFold(volume))
+    }
+    if (!motion) return
     const pager = findAnchor(FX_ANCHORS.feedPager)
     const rect = pager?.getBoundingClientRect() ?? sampleSurface().rect
     if (rect.width === 0) return

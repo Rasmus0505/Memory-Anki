@@ -39,6 +39,11 @@ export interface MindMapNodeVisual {
     total: number
     mastered: boolean
   } | null
+  /**
+   * This projection just cracked the card. The flipper starts on the blank face
+   * and turns; already-open cards omit it so the first paint stays flat.
+   */
+  animateFlip?: boolean
 }
 
 export type MindMapCountBadgeTone =

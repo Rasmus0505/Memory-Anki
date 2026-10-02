@@ -55,15 +55,14 @@ export function planParentCharges(nodes: readonly ChargeNode[]): Map<string, Par
 }
 
 /**
- * One orb per parent touched by this crack batch. Mastered means every direct
- * flip-session child is revealed and this batch cracked at least one of them.
+ * One orb per cracked card, flying to its direct parent. Mastered means every
+ * direct flip-session child is revealed.
  */
 export function planChargeBurst(input: {
   flips: readonly string[]
   parentOf: ReadonlyMap<string, string>
   phaseOf: ReadonlyMap<string, ChargePhase>
-}): ChargeBurstPlan {
-  const children = new Map<string, string[]>()
+}): ChargeBurstPlan {  const children = new Map<string, string[]>()
   for (const [childId, parentId] of input.parentOf) {
     const phase = input.phaseOf.get(childId)
     if (phase !== 'hidden' && phase !== 'revealed') continue
@@ -72,15 +71,10 @@ export function planChargeBurst(input: {
     children.set(parentId, list)
   }
 
-  const originByParent = new Map<string, string>()
-  for (const id of input.flips) {
-    const parentId = input.parentOf.get(id)
-    if (!parentId || originByParent.has(parentId)) continue
-    originByParent.set(parentId, id)
-  }
-
   const bursts: ChargeBurst[] = []
-  for (const [parentId, originId] of originByParent) {
+  for (const originId of input.flips) {
+    const parentId = input.parentOf.get(originId)
+    if (!parentId) continue
     const kids = children.get(parentId) ?? []
     if (kids.length === 0) continue
     const done = kids.filter((id) => input.phaseOf.get(id) === 'revealed').length
@@ -95,4 +89,59 @@ export function planChargeBurst(input: {
     })
   }
   return { bursts, freeze: bursts.some((burst) => burst.mastered) }
+}
+
+export interface RevealTransition {
+  /** Cards that just became revealed in this commit, in document order. */
+  newlyRevealed: string[]
+  /** Cards that just lost their revealed flag (folded back). */
+  folded: string[]
+  /**
+   * Per newly-revealed card, the batch stagger slot to apply. Simultaneous
+   * reveals keep the lab's 45 ms cadence instead of firing as one wall of sound.
+   */
+  delayMsById: Map<string, number>
+  /** The handled/marker set to persist for the next commit. */
+  handled: Set<string>
+  /** The revealed set to persist for the next commit. */
+  previous: Set<string>
+}
+
+/**
+ * Decide which reveal/fold feedback a commit owes.
+ *
+ * The first commit for a document — mount, or a switch to another graph — is a
+ * **silent hydration**: existing progress is only recorded, never replayed.
+ * Otherwise opening an already-flipped palace would re-run the whole crack,
+ * orb and reward sequence for cards the learner saw long ago.
+ */
+export function planRevealTransitions(input: {
+  revealed: ReadonlySet<string>
+  handled: ReadonlySet<string>
+  previous: ReadonlySet<string>
+  hydrated: boolean
+  sameGraph: boolean
+  staggerMs: number
+}): RevealTransition {
+  const { revealed, handled, previous, hydrated, sameGraph, staggerMs } = input
+  if (!hydrated || !sameGraph) {
+    return {
+      newlyRevealed: [],
+      folded: [],
+      delayMsById: new Map(),
+      handled: new Set(revealed),
+      previous: new Set(revealed),
+    }
+  }
+  const folded = [...previous].filter((id) => !revealed.has(id))
+  const newlyRevealed = [...revealed].filter((id) => !handled.has(id))
+  const delayMsById = new Map<string, number>()
+  newlyRevealed.forEach((id, index) => delayMsById.set(id, index * staggerMs))
+  return {
+    newlyRevealed,
+    folded,
+    delayMsById,
+    handled: new Set([...handled, ...newlyRevealed].filter((id) => revealed.has(id))),
+    previous: new Set(revealed),
+  }
 }

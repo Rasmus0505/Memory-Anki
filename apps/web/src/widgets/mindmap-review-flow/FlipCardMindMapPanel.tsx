@@ -451,6 +451,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   return (
     <div
       className={cn('flex h-full min-h-0 flex-col', fullscreen && 'flex h-full flex-col', className)}
+      data-jelly-flip={!isEditMode && !englishModeActive && !textModeActive ? 'true' : 'false'}
       data-english-mode={englishModeActive ? 'true' : 'false'}
       data-text-mode={!isEditMode && textModeActive ? 'true' : 'false'}
     >
@@ -590,7 +591,8 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
               ? 'pan'
               : 'still'
         }
-        preferredZoom={preferredZoom}
+        jellyStage={!isEditMode && !englishModeActive && !textModeActive}
+         preferredZoom={preferredZoom}
         onUserZoomChange={onUserZoomChange}
         reviewFxSignal={reviewFxSignal}
         feedbackFxSignal={feedbackFxSignal}
