@@ -1,0 +1,24 @@
+{
+  "name": "@local/dsh-claude-grok",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Joint mode: Grok reads and edits code; Claude only designs and reviews.",
+  "icon": "./icon.svg",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "index.js",
+    "locale/*.json",
+    "icon.svg",
+    "cordis.patch.yml"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

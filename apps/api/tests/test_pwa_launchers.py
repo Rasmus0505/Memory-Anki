@@ -307,6 +307,7 @@ def test_desktop_runtime_installs_lockfile_dependencies_when_electron_package_is
         patch.object(pwa_server, "WEB_DIR", web_dir),
         patch.object(pwa_server, "LOGS_DIR", logs_dir),
         patch.object(pwa_server, "_desktop_runtime_ready", side_effect=[False, True]),
+        patch.object(pwa_server, "_ensure_electron_launch_integrity", return_value=True),
         patch.object(pwa_server.dev_server, "_resolve_npm", return_value="npm.cmd"),
         patch.object(pwa_server.dev_server, "hidden_process_kwargs", return_value={}),
         patch.object(pwa_server.subprocess, "run", return_value=completed) as run,
@@ -332,6 +333,7 @@ def test_desktop_runtime_rebuilds_installed_electron_package(tmp_path):
         patch.object(pwa_server, "WEB_DIR", web_dir),
         patch.object(pwa_server, "LOGS_DIR", logs_dir),
         patch.object(pwa_server, "_desktop_runtime_ready", side_effect=[False, True]),
+        patch.object(pwa_server, "_ensure_electron_launch_integrity", return_value=True),
         patch.object(pwa_server.dev_server, "_resolve_npm", return_value="npm.cmd"),
         patch.object(pwa_server.dev_server, "hidden_process_kwargs", return_value={}),
         patch.object(pwa_server.subprocess, "run", return_value=completed) as run,
@@ -344,6 +346,69 @@ def test_desktop_runtime_rebuilds_installed_electron_package(tmp_path):
         "electron",
         "--foreground-scripts",
     ]
+
+
+def test_desktop_runtime_restores_low_integrity_without_reinstall():
+    with (
+        patch.object(pwa_server, "_desktop_runtime_ready", return_value=True),
+        patch.object(pwa_server, "_ensure_electron_launch_integrity", return_value=True) as repair,
+        patch.object(pwa_server.subprocess, "run") as run,
+    ):
+        assert pwa_server._ensure_desktop_runtime() is True
+
+    repair.assert_called_once_with()
+    run.assert_not_called()
+
+
+def test_low_integrity_electron_is_raised_to_medium(tmp_path):
+    web_dir = tmp_path / "web"
+    executable = web_dir / "node_modules" / "electron" / "dist" / "electron.exe"
+    executable.parent.mkdir(parents=True)
+    executable.write_bytes(b"")
+    state = {"repaired": False}
+    completed = SimpleNamespace(returncode=0, stdout="processed file", stderr="")
+
+    def fake_run(command, **kwargs):
+        state["repaired"] = True
+        return completed
+
+    with (
+        patch.object(pwa_server, "WEB_DIR", web_dir),
+        patch.object(pwa_server.os, "name", "nt"),
+        patch.object(
+            pwa_server,
+            "_file_integrity_rid",
+            side_effect=lambda _path: 0x2000 if state["repaired"] else 0x1000,
+        ),
+        patch.object(pwa_server, "_icacls_executable", return_value=r"C:\Windows\System32\icacls.exe"),
+        patch.object(pwa_server.dev_server, "hidden_console_kwargs", return_value={}),
+        patch.object(pwa_server.subprocess, "run", side_effect=fake_run) as run,
+    ):
+        assert pwa_server._ensure_electron_launch_integrity() is True
+
+    assert run.call_args.args[0] == [
+        r"C:\Windows\System32\icacls.exe",
+        str(executable.parent),
+        "/setintegritylevel",
+        "(OI)(CI)M",
+        "/T",
+    ]
+
+
+def test_medium_integrity_electron_is_left_unchanged(tmp_path):
+    web_dir = tmp_path / "web"
+    executable = web_dir / "node_modules" / "electron" / "dist" / "electron.exe"
+    executable.parent.mkdir(parents=True)
+    executable.write_bytes(b"")
+    with (
+        patch.object(pwa_server, "WEB_DIR", web_dir),
+        patch.object(pwa_server.os, "name", "nt"),
+        patch.object(pwa_server, "_file_integrity_rid", return_value=0x2000),
+        patch.object(pwa_server.subprocess, "run") as run,
+    ):
+        assert pwa_server._ensure_electron_launch_integrity() is True
+
+    run.assert_not_called()
 
 
 def test_prepare_repairs_missing_desktop_runtime():
@@ -443,6 +508,10 @@ def test_desktop_launch_rechecks_and_repairs_electron_runtime():
 
     assert "pwa_server._ensure_desktop_runtime()" in desktop_timer
     assert "Electron runtime repair failed" in desktop_timer
+    assert 'env.pop("ELECTRON_RUN_AS_NODE", None)' in desktop_timer
+    assert "pwa_server._electron_executable()" in desktop_timer
+    assert '"desktop:timer"' not in desktop_timer
+    assert "_ensure_electron_launch_integrity()" in (TOOLS_DIR / "pwa_server.py").read_text(encoding="utf-8")
 
 
 def test_all_batch_entrypoints_use_diagnostic_runner():

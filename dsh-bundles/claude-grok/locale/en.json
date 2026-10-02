@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Joint mode",
+    "description": "Grok reads and edits code. Claude only designs and reviews."
+  }
+}

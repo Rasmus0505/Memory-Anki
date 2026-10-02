@@ -69,23 +69,31 @@ def main() -> int:
     log(f"Shared service ready after {time.perf_counter() - started_at:.2f}s")
     ensure_shared_tray()
 
-    npm = dev_server._resolve_npm()
     if not pwa_server._ensure_desktop_runtime():
         log("Electron runtime repair failed")
         return 1
     ready_path = dev_server.LOGS_DIR / f"desktop-ready-{uuid.uuid4().hex}.json"
     env = os.environ.copy()
+    # Parent Node shims set this so their own node can run inside Electron.
+    # If it reaches the desktop process, require('electron') is empty and the
+    # window never opens.
+    env.pop("ELECTRON_RUN_AS_NODE", None)
     env["MEMORY_ANKI_DESKTOP_URL"] = FRONTEND_URL
     env["MEMORY_ANKI_TIMER_OVERLAY_URL"] = f"{FRONTEND_URL.rstrip('/')}/timer-overlay"
     env["MEMORY_ANKI_DESKTOP_READY_FILE"] = str(ready_path)
     print("[i] Launching Memory Anki desktop + timer overlay ...")
     log_file = log_path.open("a", encoding="utf-8")
     try:
+        # Launch electron.exe directly. `npm run desktop:timer` goes through the
+        # ambient `node` shim, which can force Electron into Node mode.
         # Use console-hide flags only. DETACHED + SW_HIDE (hidden_process_kwargs)
         # can make the Electron BrowserWindow start with WS_VISIBLE cleared, so
         # the launcher reports "ready" while the main window never appears.
         process = subprocess.Popen(
-            [npm, "run", "desktop:timer"],
+            [
+                str(pwa_server._electron_executable()),
+                str(REPO_ROOT / "apps" / "desktop-timer" / "main.cjs"),
+            ],
             cwd=str(WEB_DIR),
             env=env,
             stdout=log_file,

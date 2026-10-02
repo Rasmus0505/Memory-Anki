@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ctypes
 import os
 import hashlib
 import json
@@ -380,15 +381,139 @@ def _validate_web_release() -> bool:
     return True
 
 
+# Windows integrity RIDs. Chromium's browser process must start at Medium or
+# above; a Low/Untrusted image hits a breakpoint (exit 0x80000003) before the
+# window exists. The repo can inherit a Low label from sandbox or sync tools.
+_INTEGRITY_MEDIUM_RID = 0x2000
+
+
+def _electron_executable() -> Path:
+    return WEB_DIR / "node_modules" / "electron" / "dist" / "electron.exe"
+
+
 def _desktop_runtime_ready() -> bool:
     if os.name != "nt":
         return True
-    return (WEB_DIR / "node_modules" / "electron" / "dist" / "electron.exe").is_file()
+    return _electron_executable().is_file()
+
+
+def _icacls_executable() -> str:
+    system_root = os.environ.get("SystemRoot", r"C:\Windows")
+    return str(Path(system_root) / "System32" / "icacls.exe")
+
+
+def _file_integrity_rid(path: Path) -> int | None:
+    """Return the Windows mandatory-label RID, or None when unset or unreadable."""
+    if os.name != "nt" or not path.exists():
+        return None
+    advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    advapi32.GetNamedSecurityInfoW.argtypes = [
+        ctypes.c_wchar_p,
+        ctypes.c_int,
+        ctypes.c_uint32,
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        ctypes.POINTER(ctypes.c_void_p),
+        ctypes.POINTER(ctypes.c_void_p),
+    ]
+    advapi32.GetNamedSecurityInfoW.restype = ctypes.c_uint32
+    advapi32.GetAce.argtypes = [ctypes.c_void_p, ctypes.c_uint32, ctypes.POINTER(ctypes.c_void_p)]
+    advapi32.GetAce.restype = ctypes.c_int
+    advapi32.GetSidSubAuthority.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+    advapi32.GetSidSubAuthority.restype = ctypes.POINTER(ctypes.c_uint32)
+    kernel32.LocalFree.argtypes = [ctypes.c_void_p]
+    kernel32.LocalFree.restype = ctypes.c_void_p
+
+    sacl = ctypes.c_void_p()
+    security_descriptor = ctypes.c_void_p()
+    status = advapi32.GetNamedSecurityInfoW(
+        str(path),
+        1,  # SE_FILE_OBJECT
+        0x10,  # LABEL_SECURITY_INFORMATION
+        None,
+        None,
+        None,
+        ctypes.byref(sacl),
+        ctypes.byref(security_descriptor),
+    )
+    if status != 0:
+        return None
+    try:
+        if not sacl.value:
+            return None
+        ace = ctypes.c_void_p()
+        if not advapi32.GetAce(sacl, 0, ctypes.byref(ace)) or not ace.value:
+            return None
+        # SYSTEM_MANDATORY_LABEL_ACE: ACE_HEADER (4) + ACCESS_MASK (4) + SID.
+        sid = ctypes.c_void_p(ace.value + 8)
+        return int(advapi32.GetSidSubAuthority(sid, 0).contents.value)
+    finally:
+        if security_descriptor.value:
+            kernel32.LocalFree(security_descriptor)
+
+
+def _integrity_blocks_desktop(path: Path) -> bool:
+    rid = _file_integrity_rid(path)
+    return rid is not None and rid < _INTEGRITY_MEDIUM_RID
+
+
+def _ensure_electron_launch_integrity() -> bool:
+    """Raise a Low/Untrusted Electron runtime to Medium so the desktop can open.
+
+    The repo can inherit a Low label from sandbox or sync tools. Chromium then
+    exits with STATUS_BREAKPOINT (0x80000003): the browser process dies immediately
+    if electron.exe is Low, and the sandboxed renderer dies if the dist DLLs are Low.
+    """
+    if os.name != "nt":
+        return True
+    executable = _electron_executable()
+    runtime_dir = executable.parent
+    if not executable.is_file():
+        return False
+    if not _integrity_blocks_desktop(executable) and not _integrity_blocks_desktop(runtime_dir):
+        return True
+    print(
+        "[i] Electron runtime is below Medium integrity, so the desktop cannot open "
+        "(exit 0x80000003). Restoring Medium integrity."
+    )
+    result = subprocess.run(
+        [
+            _icacls_executable(),
+            str(runtime_dir),
+            "/setintegritylevel",
+            "(OI)(CI)M",
+            "/T",
+        ],
+        cwd=str(REPO_ROOT),
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+        **dev_server.hidden_console_kwargs(),
+    )
+    if (
+        result.returncode != 0
+        or _integrity_blocks_desktop(executable)
+        or _integrity_blocks_desktop(runtime_dir)
+    ):
+        detail = (result.stdout or result.stderr or "").strip()
+        print(f"[!] Could not restore Electron integrity. Desktop cannot open. {detail}")
+        return False
+    print("[ok] Electron integrity restored")
+    return True
 
 
 def _ensure_desktop_runtime() -> bool:
-    if _desktop_runtime_ready():
-        return True
+    if not _desktop_runtime_ready():
+        return _install_desktop_runtime() and _ensure_electron_launch_integrity()
+    return _ensure_electron_launch_integrity()
+
+
+def _install_desktop_runtime() -> bool:
     try:
         npm = dev_server._resolve_npm()
     except Exception as exc:
