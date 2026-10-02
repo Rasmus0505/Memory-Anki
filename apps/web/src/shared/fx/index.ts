@@ -8,7 +8,7 @@ export { cue, listCues, onCue, replayCue, type FxCueMap, type FxCueName, type Fx
 export { retireOwner, pendingPlaybackCount, type FxPlayback } from './core/owner'
 export { resolveFxGate, type FxGate, type FxScene } from './core/policy'
 export { FX_ANCHORS, PROGRESS_TARGET, anchorTarget, elementCenter, findAnchor, fxAnchor, type FxAnchorName } from './core/anchors'
-export { bumpElement, chargeElement, flashElement } from './core/domFlourish'
+export { bumpElement, chargeElement, flashElement, shockwaveElement, squashElement } from './core/domFlourish'
 export { FX_SKINS, FX_SKIN_IDS, activeFxSkin, isFxSkinId, setFxSkin, type FxSkin, type FxSkinId } from './skins'
 export { RARE_LABEL, RARE_SHOWS, type RareShow } from './rarity'
 export { useFxOwner } from './useFxOwner'

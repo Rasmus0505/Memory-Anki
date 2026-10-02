@@ -1,0 +1,2597 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Memory Anki - 思维导图翻卡与经验流转 Handfeel 实验室</title>
+  <style>
+    /* ========================================================
+       1. 全局重置与基础规范
+       ======================================================== */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    :root {
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+      --font-display: 'Impact', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+      --spring-bouncy: cubic-bezier(0.34, 1.56, 0.64, 1);
+      --spring-smooth: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    /* ========================================================
+       2. 三大世界观主题变量定义 (Theme Tokens)
+       ======================================================== */
+
+    /* [THEME 1: 多巴胺果冻 / 潮玩微质感 (Toy Jelly)] */
+    body[data-theme="jelly"] {
+      --bg-color: #0b101d;
+      --grid-dot: rgba(255, 107, 107, 0.12);
+      --grid-line: rgba(78, 205, 196, 0.05);
+
+      --accent-main: #ff4757;
+      --accent-energy: #2ed573;
+      --accent-spark: #ffa502;
+      --accent-glow: rgba(255, 71, 87, 0.45);
+
+      --root-bg: linear-gradient(135deg, #ff4757 0%, #ff6b81 100%);
+      --root-border: rgba(255, 255, 255, 0.7);
+      --root-shadow: 0 16px 40px rgba(255, 71, 87, 0.5), inset 0 2px 6px rgba(255, 255, 255, 0.6);
+
+      --parent-bg: rgba(26, 35, 60, 0.85);
+      --parent-border: rgba(255, 255, 255, 0.22);
+      --parent-shadow: 0 12px 35px rgba(0, 0, 0, 0.4), inset 0 1px 3px rgba(255, 255, 255, 0.25);
+      --parent-text: #ffffff;
+
+      --leaf-front-bg: linear-gradient(135deg, rgba(32, 45, 76, 0.85), rgba(20, 28, 48, 0.9));
+      --leaf-front-border: rgba(255, 255, 255, 0.25);
+      --leaf-seal-gradient: linear-gradient(135deg, #ff9ff3, #feca57);
+      --leaf-back-bg: #151d30;
+      --leaf-back-border: #2ed573;
+      --leaf-text: #ffffff;
+
+      --branch-base: rgba(255, 255, 255, 0.16);
+      --branch-glow-color: #48dbfb;
+      --branch-fluid-color: #ff4757;
+
+      --dock-bg: rgba(18, 24, 40, 0.88);
+      --dock-border: rgba(255, 255, 255, 0.14);
+
+      --card-radius: 18px;
+    }
+
+    /* [THEME 2: 玄金墨韵 / 气脉宣纸 (Neo-Ink & Gold)] */
+    body[data-theme="ink"] {
+      --bg-color: #0c0d10;
+      --grid-dot: rgba(212, 175, 55, 0.1);
+      --grid-line: rgba(180, 160, 120, 0.04);
+
+      --accent-main: #d4af37;
+      --accent-energy: #00d2d3;
+      --accent-spark: #ffd32a;
+      --accent-glow: rgba(212, 175, 55, 0.45);
+
+      --root-bg: linear-gradient(135deg, #222019 0%, #121212 100%);
+      --root-border: #d4af37;
+      --root-shadow: 0 16px 45px rgba(0, 0, 0, 0.85), 0 0 30px rgba(212, 175, 55, 0.35);
+
+      --parent-bg: rgba(26, 26, 30, 0.9);
+      --parent-border: #4a4538;
+      --parent-shadow: 0 12px 35px rgba(0, 0, 0, 0.7), inset 0 0 15px rgba(212, 175, 55, 0.1);
+      --parent-text: #e6dfcc;
+
+      --leaf-front-bg: linear-gradient(135deg, #1b1c20, #141517);
+      --leaf-front-border: #3d3b35;
+      --leaf-seal-gradient: linear-gradient(135deg, #d4af37, #aa820a);
+      --leaf-back-bg: #121316;
+      --leaf-back-border: #d4af37;
+      --leaf-text: #f0ece1;
+
+      --branch-base: rgba(120, 110, 90, 0.25);
+      --branch-glow-color: #d4af37;
+      --branch-fluid-color: #ffd32a;
+
+      --dock-bg: rgba(22, 22, 26, 0.92);
+      --dock-border: #3d3b35;
+
+      --card-radius: 10px;
+    }
+
+    /* [THEME 3: 深海荧光 / 活体菌丝突触 (Bioluminescent Abyss)] */
+    body[data-theme="abyss"] {
+      --bg-color: #03080e;
+      --grid-dot: rgba(0, 242, 254, 0.12);
+      --grid-line: rgba(79, 172, 254, 0.04);
+
+      --accent-main: #00f2fe;
+      --accent-energy: #38ef7d;
+      --accent-spark: #a18cd1;
+      --accent-glow: rgba(0, 242, 254, 0.5);
+
+      --root-bg: linear-gradient(135deg, #09203f 0%, #001222 100%);
+      --root-border: #00f2fe;
+      --root-shadow: 0 16px 45px rgba(0, 242, 254, 0.35), inset 0 0 20px rgba(0, 242, 254, 0.25);
+
+      --parent-bg: rgba(6, 26, 44, 0.85);
+      --parent-border: rgba(0, 242, 254, 0.35);
+      --parent-shadow: 0 12px 35px rgba(0, 0, 0, 0.75), inset 0 0 12px rgba(0, 242, 254, 0.18);
+      --parent-text: #e0f7fa;
+
+      --leaf-front-bg: linear-gradient(135deg, rgba(8, 38, 62, 0.85), rgba(3, 18, 32, 0.9));
+      --leaf-front-border: rgba(0, 242, 254, 0.4);
+      --leaf-seal-gradient: linear-gradient(135deg, #00f2fe, #4facfe);
+      --leaf-back-bg: #041423;
+      --leaf-back-border: #38ef7d;
+      --leaf-text: #b2ebf2;
+
+      --branch-base: rgba(0, 242, 254, 0.18);
+      --branch-glow-color: #00f2fe;
+      --branch-fluid-color: #38ef7d;
+
+      --dock-bg: rgba(5, 20, 36, 0.92);
+      --dock-border: rgba(0, 242, 254, 0.25);
+
+      --card-radius: 16px;
+    }
+
+    /* ========================================================
+       3. 页面视口与严谨平正的运镜摄像机 (Camera Rig)
+       ======================================================== */
+    html, body {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background-color: var(--bg-color);
+      font-family: var(--font-sans);
+      color: #ffffff;
+      position: relative;
+      transition: background-color 0.5s ease;
+    }
+
+    /* 背景网格 */
+    .bg-grid {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background-image: 
+        radial-gradient(var(--grid-dot) 1.5px, transparent 1.5px),
+        linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+        linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+      background-size: 32px 32px, 96px 96px, 96px 96px;
+      background-position: center center;
+      z-index: 1;
+    }
+
+    /* 聚光灯暗角 */
+    .spotlight-vignette {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: radial-gradient(circle at center, transparent 40%, rgba(0, 0, 0, 0.8) 100%);
+      opacity: 0.25;
+      transition: opacity 0.5s ease;
+      z-index: 2;
+    }
+    body.is-focused .spotlight-vignette {
+      opacity: 0.75;
+    }
+
+    /* 视口外框 */
+    #viewport {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      cursor: grab;
+      z-index: 5;
+    }
+    #viewport:active {
+      cursor: grabbing;
+    }
+
+    /* 摄像机变换世界容器 (纯 2D 平移缩放，彻底消除倾斜畸变) */
+    #world {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 2000px;
+      height: 1200px;
+      transform-origin: 0 0;
+      will-change: transform;
+      pointer-events: auto;
+    }
+
+    /* SVG 连线层 */
+    #branch-svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 6;
+      overflow: visible;
+    }
+    .branch-path {
+      fill: none;
+      stroke: var(--branch-base);
+      stroke-width: 3.5px;
+      stroke-linecap: round;
+      transition: stroke 0.4s ease, stroke-width 0.3s ease;
+    }
+    .branch-glow {
+      fill: none;
+      stroke: transparent;
+      stroke-width: 9px;
+      stroke-linecap: round;
+      opacity: 0;
+      transition: stroke 0.4s ease, opacity 0.4s ease;
+    }
+    .branch-active .branch-path {
+      stroke: var(--branch-glow-color);
+      stroke-width: 5.5px;
+      filter: drop-shadow(0 0 10px var(--branch-glow-color));
+    }
+    .branch-active .branch-glow {
+      stroke: var(--branch-glow-color);
+      opacity: 0.6;
+    }
+    .branch-mastered .branch-path {
+      stroke: var(--accent-spark) !important;
+      stroke-width: 6.5px;
+      filter: drop-shadow(0 0 15px var(--accent-spark));
+      animation: pulseMasteredBranch 1.8s infinite alternate ease-in-out;
+    }
+    @keyframes pulseMasteredBranch {
+      0% { opacity: 0.85; stroke-width: 5.5px; }
+      100% { opacity: 1; stroke-width: 8px; }
+    }
+
+    /* 能量传导光斑 (SVG Pulse) */
+    .fluid-pulse {
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #ffffff;
+      box-shadow: 0 0 18px var(--accent-spark), 0 0 32px #ffffff;
+      pointer-events: none;
+      z-index: 15;
+      transform: translate(-50%, -50%);
+    }
+
+    /* ========================================================
+       4. 知识树节点层 (Hierarchy Nodes)
+       ======================================================== */
+    .nodes-layer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    .tree-node {
+      position: absolute;
+      pointer-events: auto;
+      will-change: transform, opacity, filter;
+      transition: opacity 0.4s ease, filter 0.4s ease;
+    }
+    body.is-focused .tree-node:not(.node-focused):not(.node-ancestor) {
+      opacity: 0.35;
+      filter: blur(1px) grayscale(40%);
+    }
+
+    /* --- [Root 总根节点] --- */
+    .node-root {
+      width: 250px;
+      min-height: 115px;
+      background: var(--root-bg);
+      border: 2px solid var(--root-border);
+      border-radius: 22px;
+      box-shadow: var(--root-shadow);
+      padding: 22px 24px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      cursor: pointer;
+      backdrop-filter: blur(15px);
+      transition: transform 0.3s var(--spring-bouncy);
+    }
+    .node-root:hover {
+      transform: scale(1.04);
+    }
+    .root-tag {
+      font-size: 11px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      font-weight: 800;
+      opacity: 0.9;
+      margin-bottom: 6px;
+      color: rgba(255, 255, 255, 0.9);
+    }
+    .root-title {
+      font-size: 19px;
+      font-weight: 800;
+      line-height: 1.35;
+      letter-spacing: -0.4px;
+      color: #ffffff;
+      text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+    }
+
+    /* --- [Parent 父章节节点] --- */
+    .node-parent {
+      width: 260px;
+      background: var(--parent-bg);
+      border: 1.8px solid var(--parent-border);
+      border-radius: var(--card-radius);
+      box-shadow: var(--parent-shadow);
+      padding: 18px 20px;
+      backdrop-filter: blur(15px);
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      transform-origin: center center;
+      transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    }
+    .node-parent:hover {
+      border-color: var(--accent-main);
+    }
+    /* 父节点受击形变 (Squash & Stretch) 关键类 */
+    .node-parent.is-squashing {
+      animation: parentSquash 0.38s cubic-bezier(0.175, 0.885, 0.32, 1.4) forwards;
+    }
+    @keyframes parentSquash {
+      0% { transform: scale(1, 1); }
+      25% { transform: scale(1.26, 0.8); }
+      55% { transform: scale(0.9, 1.15); }
+      80% { transform: scale(1.05, 0.97); }
+      100% { transform: scale(1, 1); }
+    }
+
+    .parent-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .parent-badge {
+      font-size: 10px;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.12);
+      color: var(--accent-spark);
+      letter-spacing: 0.5px;
+    }
+    .parent-progress-text {
+      font-size: 12px;
+      font-family: var(--font-mono);
+      font-weight: 700;
+      opacity: 0.9;
+      color: var(--parent-text);
+    }
+    .parent-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--parent-text);
+      line-height: 1.4;
+    }
+
+    /* 父节点能量条 */
+    .parent-energy-meter {
+      position: relative;
+      width: 100%;
+      height: 8px;
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 99px;
+      overflow: hidden;
+      margin-top: 4px;
+    }
+    .parent-energy-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent-main), var(--accent-energy));
+      border-radius: 99px;
+      transition: width 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+      box-shadow: 0 0 10px var(--accent-energy);
+    }
+
+    /* 通关大师印章 (MASTERED Stamp) */
+    .stamp-mastered {
+      position: absolute;
+      top: -15px;
+      right: -15px;
+      padding: 5px 12px;
+      background: linear-gradient(135deg, #ffd700, #ff9900);
+      color: #000000;
+      font-family: var(--font-display);
+      font-size: 13px;
+      font-weight: 900;
+      letter-spacing: 1.5px;
+      border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(255, 215, 0, 0.6), 0 0 0 2px #ffffff;
+      transform: scale(0) rotate(-10deg);
+      pointer-events: none;
+      z-index: 20;
+    }
+    .node-parent.is-mastered .stamp-mastered {
+      animation: stampDrop 0.55s cubic-bezier(0.175, 0.885, 0.32, 1.4) forwards;
+    }
+    @keyframes stampDrop {
+      0% { transform: scale(3) rotate(20deg); opacity: 0; filter: blur(4px); }
+      60% { transform: scale(0.9) rotate(-12deg); opacity: 1; filter: blur(0); }
+      80% { transform: scale(1.1) rotate(-8deg); }
+      100% { transform: scale(1) rotate(-10deg); opacity: 1; }
+    }
+
+    /* --- [Leaf 考核卡片节点] --- */
+    .node-leaf {
+      width: 270px;
+      height: 120px;
+      cursor: pointer;
+      perspective: 1000px;
+    }
+
+    /* 3D 翻转骨架 */
+    .card-flipper {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      transform-style: preserve-3d;
+      transition: transform 0.55s cubic-bezier(0.34, 1.56, 0.64, 1);
+      border-radius: var(--card-radius);
+    }
+    .node-leaf.is-flipped .card-flipper {
+      transform: rotateY(180deg);
+    }
+
+    .card-face {
+      position: absolute;
+      inset: 0;
+      border-radius: var(--card-radius);
+      padding: 16px 18px;
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      backdrop-filter: blur(14px);
+    }
+
+    /* 正面（翻前普通空白/静默占位态，纯净微质感，无任何多余题目与装饰） */
+    .card-front {
+      background: var(--leaf-front-bg);
+      border: 1.8px dashed var(--leaf-front-border);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+      overflow: hidden;
+      cursor: pointer;
+    }
+    .card-front:hover {
+      border-style: solid;
+      border-color: var(--accent-spark);
+      background: rgba(255, 255, 255, 0.04);
+    }
+    .card-blank-hint {
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.35);
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: color 0.2s ease;
+    }
+    .card-front:hover .card-blank-hint {
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    /* 背面（翻后普通纯净文字呈现态） */
+    .card-back {
+      background: var(--leaf-back-bg);
+      border: 2px solid var(--leaf-back-border);
+      box-shadow: 0 12px 35px rgba(0, 0, 0, 0.5), 0 0 20px var(--leaf-back-border);
+      transform: rotateY(180deg);
+      justify-content: space-between;
+      align-items: stretch;
+      padding: 16px 18px;
+    }
+    .card-back-text {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--leaf-text);
+      line-height: 1.5;
+      text-align: left;
+    }
+    .card-back-footer {
+      font-size: 11px;
+      color: #2ed573;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-weight: 700;
+      opacity: 0.85;
+      margin-top: 6px;
+    }
+
+    /* 聚焦高亮外框 */
+    .node-leaf.node-focused .card-face {
+      outline: 2.5px solid var(--accent-spark);
+      outline-offset: 3px;
+    }
+
+    /* ========================================================
+       5. 粒子特效画布与受击跳字 (Canvas & Floating FX)
+       ======================================================== */
+    #fx-canvas {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 40;
+    }
+
+    /* 冲击波光环 */
+    .shockwave-ring {
+      position: absolute;
+      border-radius: 50%;
+      border: 3px solid var(--accent-spark);
+      box-shadow: 0 0 25px var(--accent-spark);
+      pointer-events: none;
+      z-index: 35;
+      transform: translate(-50%, -50%) scale(0.2);
+      opacity: 1;
+      animation: expandShockwave 0.6s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
+    }
+    @keyframes expandShockwave {
+      0% { transform: translate(-50%, -50%) scale(0.1); opacity: 1; border-width: 5px; }
+      100% { transform: translate(-50%, -50%) scale(3.5); opacity: 0; border-width: 1px; }
+    }
+
+    /* RPG 暴击受击数值飘字 */
+    .floating-exp-text {
+      position: absolute;
+      font-family: var(--font-display);
+      font-size: 26px;
+      font-weight: 900;
+      color: var(--accent-spark);
+      text-shadow: 0 3px 12px rgba(0, 0, 0, 0.8), 0 0 20px var(--accent-spark);
+      pointer-events: none;
+      z-index: 50;
+      transform: translate(-50%, -50%) scale(0.5);
+      animation: floatDamage 0.85s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    }
+    .floating-exp-text.is-crit {
+      font-size: 34px;
+      color: #ff3838;
+      text-shadow: 0 4px 15px rgba(0, 0, 0, 0.9), 0 0 30px #ff3838;
+    }
+    @keyframes floatDamage {
+      0% { transform: translate(-50%, 0) scale(0.6) rotate(-6deg); opacity: 0; }
+      20% { transform: translate(-50%, -25px) scale(1.25) rotate(3deg); opacity: 1; }
+      60% { transform: translate(-50%, -55px) scale(1.02) rotate(0deg); opacity: 1; }
+      100% { transform: translate(-50%, -85px) scale(0.9) rotate(0deg); opacity: 0; }
+    }
+
+    /* 力量停顿 (Hit-Stop 屏幕震颤) */
+    body.is-hitstopping {
+      animation: screenHitStop 0.15s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+    }
+    @keyframes screenHitStop {
+      10%, 90% { transform: translate3d(-2px, 2px, 0); }
+      20%, 80% { transform: translate3d(3px, -2px, 0); }
+      30%, 50%, 70% { transform: translate3d(-3px, 3px, 0); }
+      40%, 60% { transform: translate3d(2px, -2px, 0); }
+    }
+
+    /* ========================================================
+       6. 顶部控制栏与世界观热切换 (Top Navigation)
+       ======================================================== */
+    .top-dock {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 16px;
+      background: rgba(18, 18, 24, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 99px;
+      backdrop-filter: blur(20px);
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+    }
+    .app-brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding-right: 12px;
+      border-right: 1px solid rgba(255, 255, 255, 0.15);
+    }
+    .app-logo {
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      background: linear-gradient(135deg, #ff4757, #ffa502);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 13px;
+      color: #ffffff;
+    }
+    .app-title {
+      font-size: 13px;
+      font-weight: 800;
+      color: #ffffff;
+    }
+
+    .style-switcher {
+      display: flex;
+      gap: 6px;
+      background: rgba(0, 0, 0, 0.35);
+      padding: 4px;
+      border-radius: 99px;
+    }
+    .btn-style {
+      padding: 6px 14px;
+      border-radius: 99px;
+      border: none;
+      background: transparent;
+      color: rgba(255, 255, 255, 0.65);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.25s ease;
+    }
+    .btn-style.active {
+      background: rgba(255, 255, 255, 0.16);
+      color: #ffffff;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    }
+    .btn-style:hover:not(.active) {
+      color: #ffffff;
+    }
+
+    .top-action-btn {
+      padding: 6px 14px;
+      border-radius: 99px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      background: rgba(255, 255, 255, 0.08);
+      color: #ffffff;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+    .top-action-btn:hover {
+      background: rgba(255, 255, 255, 0.18);
+      transform: translateY(-1px);
+    }
+
+    /* 顶部导图整体复习进度条 */
+    .top-mindmap-progress {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 10px;
+      background: rgba(0, 0, 0, 0.35);
+      border-radius: 99px;
+    }
+    .progress-track {
+      width: 70px;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #ff4757, #2ed573);
+      border-radius: 99px;
+      transition: width 0.3s ease;
+    }
+    .progress-text {
+      font-size: 11px;
+      font-family: var(--font-mono);
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.8);
+    }
+
+    /* ========================================================
+       7. 底部【整个思维导图总评】面板 (Freestyle Mindmap Rating Dock)
+          —— 还原 Memory Anki 随心复习模式的单元/整图打分机制
+       ======================================================== */
+    .bottom-dock {
+      position: absolute;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .freestyle-mindmap-dock {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px 12px;
+      background: var(--dock-bg);
+      border: 1px solid var(--dock-border);
+      border-radius: 20px;
+      backdrop-filter: blur(25px);
+      box-shadow: 0 16px 50px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.05);
+    }
+
+    .dock-title-bar {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.6);
+      padding: 0 4px;
+    }
+    .dock-title-bar strong {
+      color: #ffffff;
+      font-weight: 700;
+    }
+
+    /* 四档评分按钮 */
+    .rating-row {
+      display: flex;
+      gap: 10px;
+    }
+    .rate-btn {
+      width: 96px;
+      height: 52px;
+      border-radius: 14px;
+      border: 1.5px solid transparent;
+      background: rgba(255, 255, 255, 0.05);
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s var(--spring-bouncy);
+    }
+    .rate-btn:hover {
+      transform: translateY(-3px) scale(1.03);
+    }
+    .rate-btn:active {
+      transform: translateY(1px) scale(0.97);
+    }
+    .rate-key {
+      font-size: 10px;
+      font-family: var(--font-mono);
+      font-weight: 800;
+      opacity: 0.6;
+    }
+    .rate-name {
+      font-size: 13px;
+      font-weight: 800;
+      color: #ffffff;
+    }
+    .rate-desc {
+      font-size: 10px;
+      opacity: 0.5;
+    }
+
+    /* 还原 Memory Anki 经典四色 */
+    .rate-btn[data-score="1"] { border-color: rgba(239, 68, 68, 0.35); }
+    .rate-btn[data-score="1"]:hover { background: #ef4444; border-color: #ef4444; }
+    .rate-btn[data-score="2"] { border-color: rgba(249, 115, 22, 0.35); }
+    .rate-btn[data-score="2"]:hover { background: #f97316; border-color: #f97316; }
+    .rate-btn[data-score="3"] { border-color: rgba(59, 130, 246, 0.35); }
+    .rate-btn[data-score="3"]:hover { background: #3b82f6; border-color: #3b82f6; }
+    .rate-btn[data-score="4"] { border-color: rgba(16, 185, 129, 0.35); }
+    .rate-btn[data-score="4"]:hover { background: #10b981; border-color: #10b981; }
+
+    .bottom-shortcuts {
+      display: flex;
+      gap: 16px;
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.5);
+      background: rgba(0, 0, 0, 0.4);
+      padding: 4px 12px;
+      border-radius: 99px;
+      backdrop-filter: blur(10px);
+    }
+    .shortcut-k {
+      color: #ffffff;
+      font-family: var(--font-mono);
+      font-weight: 700;
+      background: rgba(255, 255, 255, 0.15);
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+
+    /* ========================================================
+       8. 实时调校抽屉与 JSON 导出 (Decision Drawer)
+       ======================================================== */
+    .drawer {
+      position: absolute;
+      top: 0;
+      right: -360px;
+      width: 350px;
+      height: 100vh;
+      background: rgba(18, 18, 24, 0.95);
+      border-left: 1px solid rgba(255, 255, 255, 0.12);
+      backdrop-filter: blur(25px);
+      z-index: 150;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      box-shadow: -15px 0 45px rgba(0, 0, 0, 0.6);
+      transition: right 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .drawer.open {
+      right: 0;
+    }
+    .drawer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    }
+    .drawer-title {
+      font-size: 16px;
+      font-weight: 800;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn-close-drawer {
+      background: none;
+      border: none;
+      color: rgba(255, 255, 255, 0.5);
+      font-size: 20px;
+      cursor: pointer;
+    }
+    .btn-close-drawer:hover { color: #ffffff; }
+
+    .drawer-content {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      padding-right: 4px;
+    }
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .control-label {
+      font-size: 12px;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.8);
+      display: flex;
+      justify-content: space-between;
+    }
+    .control-val {
+      font-family: var(--font-mono);
+      color: var(--accent-spark);
+    }
+    .control-slider {
+      width: 100%;
+      accent-color: var(--accent-main);
+      height: 5px;
+      cursor: pointer;
+    }
+    .control-desc {
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.45);
+      line-height: 1.35;
+    }
+
+    .drawer-footer {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.12);
+    }
+    .btn-export-json {
+      width: 100%;
+      height: 44px;
+      background: linear-gradient(135deg, #ff4757, #ffa502);
+      border: none;
+      border-radius: 12px;
+      color: #ffffff;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 8px 24px rgba(255, 71, 87, 0.4);
+      transition: all 0.2s ease;
+    }
+    .btn-export-json:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 30px rgba(255, 71, 87, 0.6);
+    }
+    .btn-reset-params {
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: rgba(255, 255, 255, 0.6);
+      height: 36px;
+      border-radius: 8px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .btn-reset-params:hover {
+      color: #ffffff;
+      border-color: rgba(255, 255, 255, 0.3);
+    }
+
+    /* 结算全屏大事件浮层 */
+    .rating-celebration-modal {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(12px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 250;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.4s ease;
+    }
+    .rating-celebration-modal.show {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .celebration-box {
+      width: 440px;
+      padding: 32px;
+      border-radius: 24px;
+      background: rgba(24, 24, 32, 0.95);
+      border: 1.5px solid rgba(255, 255, 255, 0.15);
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7);
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      transform: scale(0.9);
+      transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    .rating-celebration-modal.show .celebration-box {
+      transform: scale(1);
+    }
+    .celebration-badge {
+      font-size: 12px;
+      font-weight: 800;
+      padding: 4px 12px;
+      border-radius: 99px;
+      background: rgba(255, 215, 0, 0.2);
+      color: #ffd700;
+      border: 1px solid #ffd700;
+      letter-spacing: 1px;
+    }
+    .celebration-title {
+      font-size: 24px;
+      font-weight: 800;
+      color: #ffffff;
+    }
+    .celebration-score-chip {
+      font-size: 16px;
+      font-weight: 800;
+      padding: 6px 16px;
+      border-radius: 10px;
+      margin-top: 4px;
+    }
+    .celebration-exp {
+      font-family: var(--font-display);
+      font-size: 40px;
+      color: #ffd700;
+      text-shadow: 0 0 25px rgba(255, 215, 0, 0.6);
+    }
+    .btn-close-modal {
+      width: 100%;
+      height: 42px;
+      border-radius: 12px;
+      border: none;
+      background: #ffffff;
+      color: #000000;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+      margin-top: 8px;
+      transition: all 0.2s ease;
+    }
+    .btn-close-modal:hover {
+      background: #ffd700;
+      transform: translateY(-2px);
+    }
+
+    /* 提示 Toast */
+    .toast-pill {
+      position: absolute;
+      top: 80px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-20px);
+      background: #10b981;
+      color: #ffffff;
+      padding: 8px 18px;
+      border-radius: 99px;
+      font-size: 12px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 10px 30px rgba(16, 185, 129, 0.5);
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      z-index: 200;
+    }
+    .toast-pill.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+<body data-theme="jelly">
+
+  <!-- 背景纹理与暗角 -->
+  <div class="bg-grid"></div>
+  <div class="spotlight-vignette"></div>
+
+  <!-- 电影级平正运镜视口 -->
+  <div id="viewport">
+    <div id="world">
+      <!-- SVG 贝塞尔曲线连线层 -->
+      <svg id="branch-svg"></svg>
+      <!-- 知识树节点 DOM 容器 -->
+      <div id="nodes-container" class="nodes-layer"></div>
+    </div>
+  </div>
+
+  <!-- 特效粒子 Canvas -->
+  <canvas id="fx-canvas"></canvas>
+
+  <!-- 顶部控制栏 -->
+  <header class="top-dock">
+    <div class="app-brand">
+      <div class="app-logo">M</div>
+      <div class="app-title">Memory Anki</div>
+    </div>
+
+    <!-- 导图总进度 -->
+    <div class="top-mindmap-progress">
+      <span style="font-size: 11px; opacity: 0.7;">导图掌握</span>
+      <div class="progress-track">
+        <div id="top-progress-bar" class="progress-bar"></div>
+      </div>
+      <span id="top-progress-text" class="progress-text">0/9</span>
+    </div>
+
+    <div class="style-switcher">
+      <button class="btn-style active" data-style="jelly" title="多巴胺果冻·爆裂水滴·马林巴琴">
+        <span>🍬 多巴胺果冻</span>
+      </button>
+      <button class="btn-style" data-style="ink" title="玄金墨韵·气脉逆流·青铜梵钟">
+        <span>📜 玄金墨韵</span>
+      </button>
+      <button class="btn-style" data-style="abyss" title="深海突触·电鳗脉冲·808次声波">
+        <span>🌌 深海突触</span>
+      </button>
+    </div>
+
+    <!-- 镜头推进开关快捷切换 -->
+    <button id="btn-toggle-cam-zoom" class="top-action-btn" title="点击切换是否开启点击卡片时的镜头切近推进">
+      <span id="cam-zoom-status-icon">🔍</span>
+      <span id="cam-zoom-status-text">镜头推进: 开</span>
+    </button>
+
+    <button id="btn-toggle-drawer" class="top-action-btn">
+      <span>⚙️ 调校手感</span>
+    </button>
+  </header>
+
+  <!-- 底部【整张思维导图总评】面板 —— 还原 Memory Anki 随心复习模式的单元打分机制 -->
+  <footer class="bottom-dock">
+    <div class="freestyle-mindmap-dock">
+      <div class="dock-title-bar">
+        <span>当前复习单元：<strong>神经科学与认知记忆架构</strong></span>
+        <span>整图评价 (1~4) 结算总经验</span>
+      </div>
+
+      <div class="rating-row">
+        <button class="rate-btn" data-score="1" title="忘记 (重新调度)">
+          <span class="rate-key">1</span>
+          <span class="rate-name">忘记</span>
+          <span class="rate-desc">重来</span>
+        </button>
+        <button class="rate-btn" data-score="2" title="困难 (缩短间隔)">
+          <span class="rate-key">2</span>
+          <span class="rate-name">困难</span>
+          <span class="rate-desc">吃力</span>
+        </button>
+        <button class="rate-btn" data-score="3" title="记得 (标准推进)">
+          <span class="rate-key">3</span>
+          <span class="rate-name">记得</span>
+          <span class="rate-desc">良好</span>
+        </button>
+        <button class="rate-btn" data-score="4" title="轻松 (大幅跃迁)">
+          <span class="rate-key">4</span>
+          <span class="rate-name">轻松 ✨</span>
+          <span class="rate-desc">秒杀</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="bottom-shortcuts">
+      <span><span class="shortcut-k">Click</span> 点击追踪视野 + 释放经验</span>
+      <span><span class="shortcut-k">Right-Click 父卡片</span> 收起该章子卡片</span>
+      <span><span class="shortcut-k">Right-Click 子卡片</span> 收起单卡</span>
+      <span><span class="shortcut-k">↑ ↓ ← →</span> 穿梭</span>
+      <span><span class="shortcut-k">1~4</span> 导图总评</span>
+    </div>
+  </footer>
+
+  <!-- 调校抽屉 (Decision Drawer) -->
+  <aside id="drawer" class="drawer">
+    <div class="drawer-header">
+      <div class="drawer-title">
+        <span>🎛️ 动力学手感调优室</span>
+      </div>
+      <button id="btn-close-drawer" class="btn-close-drawer">✕</button>
+    </div>
+
+    <div class="drawer-content">
+      <div class="control-group">
+        <label class="control-label">
+          <span>镜头推进功能开关 (Enable Zoom Track)</span>
+          <span id="val-zoom-enable" class="control-val">开启</span>
+        </label>
+        <input id="slider-zoom-enable" class="control-slider" type="range" min="0" max="1" step="1" value="1">
+        <span class="control-desc">关闭后点击节点镜头仅平移对准，保持原有全景比例，不产生拉近推进感。</span>
+      </div>
+
+      <div class="control-group">
+        <label class="control-label">
+          <span>镜头推进幅度 (Zoom Scale)</span>
+          <span id="val-zoom" class="control-val">1.18x</span>
+        </label>
+        <input id="slider-zoom" class="control-slider" type="range" min="1.0" max="1.45" step="0.02" value="1.18">
+        <span class="control-desc">点击聚焦考点时，摄像机切近的正交平移缩放幅度。</span>
+      </div>
+
+      <div class="control-group">
+        <label class="control-label">
+          <span>经验球火山喷射力度 (Propulsion Force)</span>
+          <span id="val-force" class="control-val">1.20</span>
+        </label>
+        <input id="slider-force" class="control-slider" type="range" min="0.6" max="2.0" step="0.05" value="1.20">
+        <span class="control-desc">卡片翻开时，晶球从卡片脱壳喷向高空的冲量与后座反冲。</span>
+      </div>
+
+      <div class="control-group">
+        <label class="control-label">
+          <span>父节点受击形变 (Squash Factor)</span>
+          <span id="val-squash" class="control-val">1.26</span>
+        </label>
+        <input id="slider-squash" class="control-slider" type="range" min="1.05" max="1.5" step="0.02" value="1.26">
+        <span class="control-desc">经验球砸入父节点瞬间，果冻挤压拉伸反馈的剧烈程度。</span>
+      </div>
+
+      <div class="control-group">
+        <label class="control-label">
+          <span>Web Audio 音效音量 (Synth Volume)</span>
+          <span id="val-volume" class="control-val">0.85</span>
+        </label>
+        <input id="slider-volume" class="control-slider" type="range" min="0" max="1" step="0.05" value="0.85">
+        <span class="control-desc">原生实时合成声效（马林巴、青铜钟、次声波）的总体增益。</span>
+      </div>
+
+      <div class="control-group">
+        <label class="control-label">
+          <span>手机触感震动反馈 (Haptics)</span>
+          <span id="val-haptics" class="control-val">开启</span>
+        </label>
+        <input id="slider-haptics" class="control-slider" type="range" min="0" max="1" step="1" value="1">
+        <span class="control-desc">移动设备端物理马达的段落微震开关。</span>
+      </div>
+    </div>
+
+    <div class="drawer-footer">
+      <button id="btn-export-json" class="btn-export-json">
+        <span>📋 一键复制我的偏好配置</span>
+      </button>
+      <button id="btn-reset-params" class="btn-reset-params">恢复大师默认参数</button>
+    </div>
+  </aside>
+
+  <!-- 整张导图复习结算弹窗 -->
+  <div id="celebration-modal" class="rating-celebration-modal">
+    <div class="celebration-box">
+      <span class="celebration-badge">PALACE REVIEW SETTLED</span>
+      <div class="celebration-title">思维导图单元复习达成！</div>
+      <div id="modal-score-chip" class="celebration-score-chip">评价：轻松 (4)</div>
+      <div id="modal-exp" class="celebration-exp">+1,200 EXP</div>
+      <div style="font-size: 13px; color: rgba(255,255,255,0.7); line-height: 1.5;">
+        考点记忆网络已牢固写入长期记忆宫殿，下次复习间隔已按遗忘动力学自动顺延。
+      </div>
+      <button id="btn-close-modal" class="btn-close-modal">继续下一组训练</button>
+    </div>
+  </div>
+
+  <!-- Toast 提示 -->
+  <div id="toast" class="toast-pill">
+    <span>✓ 已成功复制 Handfeel 物理配置 JSON 到剪贴板！</span>
+  </div>
+
+  <!-- ========================================================
+       9. 核心系统逻辑脚本 (Pure Vanilla Architecture)
+       ======================================================== -->
+  <script>
+    /**
+     * Memory Anki - Mindmap Flip & Energy Lab
+     * 1. 严格平正无畸变的 2D 摄像机数学模型 (Ortho Camera Transform)
+     * 2. 节点翻开 = 经验条充能（无需对节点打分，翻开即喷射经验球）
+     * 3. 底部打分 = 对整张思维导图/复习单元的总评结算（1~4）
+     * 4. 纯原生 Web Audio 动态声效合成
+     */
+
+    // --- [1. Web Audio 原生声效引擎] ---
+    class SoundEngine {
+      constructor() {
+        this.ctx = null;
+        this.masterVolume = 0.85;
+      }
+
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          this.ctx = new AudioContext();
+        }
+        if (this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+
+      // 翻卡破壳音
+      playCrack(theme) {
+        this.init();
+        const t = this.ctx.currentTime;
+        const gain = this.ctx.createGain();
+        gain.connect(this.ctx.destination);
+        gain.gain.setValueAtTime(this.masterVolume * 0.7, t);
+
+        if (theme === 'jelly') {
+          // 清脆水泡爆破 (Pop)
+          const osc = this.ctx.createOscillator();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(450, t);
+          osc.frequency.exponentialRampToValueAtTime(1100, t + 0.08);
+          gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+          osc.connect(gain);
+          osc.start(t);
+          osc.stop(t + 0.12);
+        } else if (theme === 'ink') {
+          // 古琴挑弦破空
+          const osc = this.ctx.createOscillator();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(280, t);
+          osc.frequency.exponentialRampToValueAtTime(840, t + 0.12);
+          gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+          osc.connect(gain);
+          osc.start(t);
+          osc.stop(t + 0.18);
+        } else {
+          // 深海电鳗放电
+          const osc = this.ctx.createOscillator();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(160, t);
+          osc.frequency.exponentialRampToValueAtTime(900, t + 0.06);
+          gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+          osc.connect(gain);
+          osc.start(t);
+          osc.stop(t + 0.15);
+        }
+      }
+
+      // 闭锁收卡音
+      playFold(theme) {
+        this.init();
+        const t = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        gain.connect(this.ctx.destination);
+        gain.gain.setValueAtTime(this.masterVolume * 0.5, t);
+
+        if (theme === 'jelly') {
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(800, t);
+          osc.frequency.exponentialRampToValueAtTime(320, t + 0.1);
+        } else if (theme === 'ink') {
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(420, t);
+          osc.frequency.exponentialRampToValueAtTime(180, t + 0.08);
+        } else {
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(600, t);
+          osc.frequency.exponentialRampToValueAtTime(120, t + 0.14);
+        }
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+        osc.connect(gain);
+        osc.start(t);
+        osc.stop(t + 0.14);
+      }
+
+      // 经验球脱壳喷射音 (Propulsion)
+      playShoot(theme) {
+        this.init();
+        const t = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        gain.connect(this.ctx.destination);
+        gain.gain.setValueAtTime(this.masterVolume * 0.65, t);
+
+        if (theme === 'jelly') {
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(360, t);
+          osc.frequency.exponentialRampToValueAtTime(920, t + 0.2);
+        } else if (theme === 'ink') {
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(240, t);
+          osc.frequency.exponentialRampToValueAtTime(740, t + 0.22);
+        } else {
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(200, t);
+          osc.frequency.exponentialRampToValueAtTime(980, t + 0.2);
+        }
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.25);
+        osc.connect(gain);
+        osc.start(t);
+        osc.stop(t + 0.25);
+      }
+
+      // 父节点受击撞击音 (Impact)
+      playImpact(theme) {
+        this.init();
+        const t = this.ctx.currentTime;
+        const gain = this.ctx.createGain();
+        gain.connect(this.ctx.destination);
+        gain.gain.setValueAtTime(this.masterVolume * 0.8, t);
+
+        if (theme === 'jelly') {
+          // 马林巴高八度和弦
+          [523.25, 659.25, 783.99, 1046.5].forEach(freq => {
+            const osc = this.ctx.createOscillator();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, t);
+            osc.connect(gain);
+            osc.start(t);
+            osc.stop(t + 0.35);
+          });
+          gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+        } else if (theme === 'ink') {
+          // 青铜古钟长音
+          const osc = this.ctx.createOscillator();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(146.83, t);
+          gain.gain.exponentialRampToValueAtTime(0.001, t + 1.2);
+          osc.connect(gain);
+          osc.start(t);
+          osc.stop(t + 1.2);
+        } else {
+          // 深海 808 次声波低音
+          const osc = this.ctx.createOscillator();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(70, t);
+          osc.frequency.exponentialRampToValueAtTime(32, t + 0.45);
+          gain.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+          osc.connect(gain);
+          osc.start(t);
+          osc.stop(t + 0.6);
+        }
+      }
+
+      // 分支升格音
+      playAscension(theme) {
+        this.init();
+        const t = this.ctx.currentTime;
+        const notes = [440, 554.37, 659.25, 880, 1108.73, 1318.5];
+        notes.forEach((freq, idx) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          gain.connect(this.ctx.destination);
+          osc.type = theme === 'ink' ? 'triangle' : 'sine';
+          osc.frequency.setValueAtTime(freq, t + idx * 0.08);
+          gain.gain.setValueAtTime(0, t + idx * 0.08);
+          gain.gain.linearRampToValueAtTime(this.masterVolume * 0.6, t + idx * 0.08 + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.001, t + idx * 0.08 + 0.7);
+          osc.connect(gain);
+          osc.start(t + idx * 0.08);
+          osc.stop(t + idx * 0.08 + 0.75);
+        });
+      }
+
+      // 整图大结算通关音 (Palace Mastery Chime)
+      playCelebration() {
+        this.init();
+        const t = this.ctx.currentTime;
+        const chord = [261.63, 329.63, 392.00, 523.25, 659.25, 783.99, 1046.50];
+        chord.forEach((freq, i) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          gain.connect(this.ctx.destination);
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, t + i * 0.06);
+          gain.gain.setValueAtTime(this.masterVolume * 0.5, t + i * 0.06);
+          gain.gain.exponentialRampToValueAtTime(0.001, t + i * 0.06 + 1.4);
+          osc.connect(gain);
+          osc.start(t + i * 0.06);
+          osc.stop(t + i * 0.06 + 1.5);
+        });
+      }
+    }
+
+    // --- [2. 知识树数据模型] ---
+    const KNOWLEDGE_TREE = {
+      root: {
+        id: 'node-root',
+        title: '神经科学与认知记忆架构',
+        tag: 'MEMORY PALACE CORE',
+        x: 140,
+        y: 530
+      },
+      parents: [
+        {
+          id: 'p-1',
+          title: '海马体与突触长时程增强 (LTP)',
+          badge: 'CHAPTER 01',
+          x: 580,
+          y: 200,
+          children: [
+            {
+              id: 'c-1-1',
+              text: 'AMPA受体介导快速去极化，NMDA受体解除镁阻滞并内流钙离子'
+            },
+            {
+              id: 'c-1-2',
+              text: 'CaMKII 激酶激活诱发突触后致密区结构扩大与受体上板'
+            },
+            {
+              id: 'c-1-3',
+              text: '突触标签机制 (Synaptic Tagging) 捕获长时程可塑性蛋白'
+            }
+          ]
+        },
+        {
+          id: 'p-2',
+          title: '前额叶皮层工作记忆网络',
+          badge: 'CHAPTER 02',
+          x: 580,
+          y: 530,
+          children: [
+            {
+              id: 'c-2-1',
+              text: '语音回路、视觉空间画板、情景缓冲区与中央执行系统'
+            },
+            {
+              id: 'c-2-2',
+              text: '背外侧前额叶皮层 (dlPFC) 产生持续性神经元放电表征'
+            },
+            {
+              id: 'c-2-3',
+              text: '多巴胺 D1 受体在工作记忆调节中呈现经典倒“U”形曲线'
+            }
+          ]
+        },
+        {
+          id: 'p-3',
+          title: '遗忘曲线与间隔提取动力学',
+          badge: 'CHAPTER 03',
+          x: 580,
+          y: 860,
+          children: [
+            {
+              id: 'c-3-1',
+              text: '学习后最初 20 分钟至 24 小时呈对数级快速衰减'
+            },
+            {
+              id: 'c-3-2',
+              text: '主动检索增强神经通路连接与多元线索绑定，延缓遗忘'
+            },
+            {
+              id: 'c-3-3',
+              text: 'SM-2 算法基于简易度因子 (EF) 与连续成功重复次数动态调度'
+            }
+          ]
+        }
+      ]
+    };
+
+    // --- [3. 实验室主控制器] ---
+    class MindmapEnergyLab {
+      constructor() {
+        this.theme = 'jelly';
+        this.sound = new SoundEngine();
+
+        this.config = {
+          zoomEnabled: true,
+          zoomScale: 1.18,
+          propulsionForce: 1.20,
+          squashFactor: 1.26,
+          volume: 0.85,
+          hapticsEnabled: true
+        };
+
+        // 严谨纯平正的 2D 摄像机：(x, y) 表示视口平移像素，scale 表示缩放
+        this.cam = {
+          x: 0,
+          y: 0,
+          scale: 0.88,
+          targetX: 0,
+          targetY: 0,
+          targetScale: 0.88
+        };
+
+        this.focusedNodeId = null;
+        this.nodeElements = new Map();
+        this.parentProgress = new Map();
+        this.flippedLeafIds = new Set();
+
+        this.canvas = document.getElementById('fx-canvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.particles = [];
+        this.energyOrbs = [];
+
+        this.initCanvasSize();
+        this.renderGraph();
+        this.bindEvents();
+        this.startLoop();
+
+        // 默认居中俯瞰全图
+        setTimeout(() => {
+          this.centerFullGraph();
+        }, 150);
+      }
+
+      initCanvasSize() {
+        const dpr = window.devicePixelRatio || 1;
+        this.canvas.width = window.innerWidth * dpr;
+        this.canvas.height = window.innerHeight * dpr;
+        this.ctx.scale(dpr, dpr);
+        window.addEventListener('resize', () => {
+          this.canvas.width = window.innerWidth * dpr;
+          this.canvas.height = window.innerHeight * dpr;
+          this.ctx.scale(dpr, dpr);
+          this.updateBranchPaths();
+        });
+      }
+
+      // 构建知识树 DOM 与连接线
+      renderGraph() {
+        const container = document.getElementById('nodes-container');
+        container.innerHTML = '';
+
+        // 1. Root
+        const rootData = KNOWLEDGE_TREE.root;
+        const rootEl = document.createElement('div');
+        rootEl.className = 'tree-node node-root';
+        rootEl.id = rootData.id;
+        rootEl.style.left = `${rootData.x}px`;
+        rootEl.style.top = `${rootData.y}px`;
+        rootEl.innerHTML = `
+          <div class="root-tag">${rootData.tag}</div>
+          <div class="root-title">${rootData.title}</div>
+        `;
+        rootEl.addEventListener('click', (e) => this.focusAtScreenPoint(e.clientX, e.clientY, rootData.id));
+        // 右键 Root 节点：收起整张导图所有子卡片
+        rootEl.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          this.foldAllNodes();
+        });
+        container.appendChild(rootEl);
+        this.nodeElements.set(rootData.id, { el: rootEl, data: rootData, type: 'root', w: 250, h: 115 });
+
+        // 2. Parents & Leaves
+        KNOWLEDGE_TREE.parents.forEach((parentData) => {
+          this.parentProgress.set(parentData.id, 0);
+
+          const parentEl = document.createElement('div');
+          parentEl.className = 'tree-node node-parent';
+          parentEl.id = parentData.id;
+          parentEl.style.left = `${parentData.x}px`;
+          parentEl.style.top = `${parentData.y}px`;
+          parentEl.innerHTML = `
+            <div class="stamp-mastered">MASTERED</div>
+            <div class="parent-header">
+              <span class="parent-badge">${parentData.badge}</span>
+              <span class="parent-progress-text" id="prog-${parentData.id}">0 / ${parentData.children.length}</span>
+            </div>
+            <div class="parent-title">${parentData.title}</div>
+            <div class="parent-energy-meter">
+              <div class="parent-energy-fill" id="fill-${parentData.id}"></div>
+            </div>
+          `;
+          parentEl.addEventListener('click', (e) => this.focusAtScreenPoint(e.clientX, e.clientY, parentData.id));
+          // 右键父级卡片：收起该父级下的所有子考点卡片
+          parentEl.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            this.foldParentSubtree(parentData.id);
+          });
+          container.appendChild(parentEl);
+          this.nodeElements.set(parentData.id, { el: parentEl, data: parentData, type: 'parent', w: 260, h: 120 });
+
+          // 叶子考点挂载
+          const leafX = parentData.x + 360;
+          const leafSpacing = 160;
+          const startY = parentData.y - ((parentData.children.length - 1) * leafSpacing) / 2;
+
+          parentData.children.forEach((childData, cIdx) => {
+            const childY = startY + cIdx * leafSpacing;
+            childData.x = leafX;
+            childData.y = childY;
+            childData.parentId = parentData.id;
+
+            const leafEl = document.createElement('div');
+            leafEl.className = 'tree-node node-leaf';
+            leafEl.id = childData.id;
+            leafEl.style.left = `${leafX}px`;
+            leafEl.style.top = `${childY}px`;
+            leafEl.innerHTML = `
+              <div class="card-flipper">
+                <!-- 正面：翻前普通空白占位 -->
+                <div class="card-face card-front">
+                  <div class="card-blank-hint">
+                    <span>🔲 点击翻开</span>
+                  </div>
+                </div>
+
+                <!-- 背面：翻后纯净文字呈现 -->
+                <div class="card-face card-back">
+                  <div class="card-back-text">${childData.text}</div>
+                  <div class="card-back-footer">
+                    <span>⚡ +100 EXP</span>
+                    <span style="opacity: 0.5;">右键收回</span>
+                  </div>
+                </div>
+              </div>
+            `;
+
+            // 点击考点：精准追踪鼠标点击位置平移对齐，并翻开卡片注入经验
+            leafEl.addEventListener('click', (e) => {
+              this.focusAtScreenPoint(e.clientX, e.clientY, childData.id);
+              if (!leafEl.classList.contains('is-flipped')) {
+                this.revealLeafNode(childData.id);
+              }
+            });
+
+            // 右键收起单个考点卡片
+            leafEl.addEventListener('contextmenu', (e) => {
+              e.preventDefault();
+              this.foldLeafNode(childData.id);
+            });
+
+            container.appendChild(leafEl);
+            this.nodeElements.set(childData.id, { el: leafEl, data: childData, type: 'leaf', w: 270, h: 140 });
+          });
+        });
+
+        this.updateBranchPaths();
+      }
+
+      // 更新 SVG 曲线连线
+      updateBranchPaths() {
+        const svg = document.getElementById('branch-svg');
+        svg.innerHTML = '';
+
+        const rootInfo = this.nodeElements.get('node-root');
+        KNOWLEDGE_TREE.parents.forEach(p => {
+          const pInfo = this.nodeElements.get(p.id);
+          const startX = rootInfo.data.x + rootInfo.w;
+          const startY = rootInfo.data.y + rootInfo.h / 2;
+          const endX = pInfo.data.x;
+          const endY = pInfo.data.y + pInfo.h / 2;
+
+          const pathD = this.calcBezier(startX, startY, endX, endY);
+          const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+          g.id = `branch-root-${p.id}`;
+          g.innerHTML = `
+            <path class="branch-glow" d="${pathD}"></path>
+            <path class="branch-path" d="${pathD}"></path>
+          `;
+          svg.appendChild(g);
+
+          p.children.forEach(c => {
+            const cInfo = this.nodeElements.get(c.id);
+            const cStart = { x: pInfo.data.x + pInfo.w, y: pInfo.data.y + pInfo.h / 2 };
+            const cEnd = { x: cInfo.data.x, y: cInfo.data.y + cInfo.h / 2 };
+            const cPathD = this.calcBezier(cStart.x, cStart.y, cEnd.x, cEnd.y);
+
+            const cg = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            cg.id = `branch-${p.id}-${c.id}`;
+            cg.innerHTML = `
+              <path class="branch-glow" d="${cPathD}"></path>
+              <path class="branch-path" d="${cPathD}"></path>
+            `;
+            svg.appendChild(cg);
+          });
+        });
+      }
+
+      calcBezier(x1, y1, x2, y2) {
+        const dx = (x2 - x1) * 0.55;
+        return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
+      }
+
+      // --- [正交严谨的摄像机平移缩放 (No Tilting, Perfectly Squared)] ---
+      // 追踪屏幕点击坐标 (clientX, clientY)，让点击的点平滑平移至视口中心 (winW / 2, winH / 2)
+      focusAtScreenPoint(clientX, clientY, nodeId) {
+        const nodeInfo = this.nodeElements.get(nodeId);
+        if (!nodeInfo) return;
+
+        this.focusedNodeId = nodeId;
+        document.body.classList.add('is-focused');
+
+        document.querySelectorAll('.tree-node').forEach(el => {
+          el.classList.remove('node-focused', 'node-ancestor');
+        });
+        nodeInfo.el.classList.add('node-focused');
+
+        if (nodeInfo.type === 'leaf') {
+          const parentEl = this.nodeElements.get(nodeInfo.data.parentId)?.el;
+          if (parentEl) parentEl.classList.add('node-ancestor');
+        }
+
+        // 如果用户关闭了镜头推进功能，则镜头完全锁定不动，不平移也不缩放！
+        if (!this.config.zoomEnabled) {
+          this.triggerVibration(12);
+          return;
+        }
+
+        const winW = window.innerWidth;
+        const winH = window.innerHeight;
+        const scale = this.config.zoomScale;
+
+        // 根据当前屏幕点击点 (clientX, clientY) 反推在世界坐标系下的位置
+        // 公式：clientX = worldX * currentScale + currentX  =>  worldX = (clientX - currentX) / currentScale
+        const worldClickX = (clientX - this.cam.x) / this.cam.scale;
+        const worldClickY = (clientY - this.cam.y) / this.cam.scale;
+
+        // 视口平移目标：让该世界点击点严格对准屏幕中心 (winW / 2, winH / 2)
+        this.cam.targetScale = scale;
+        this.cam.targetX = winW / 2 - worldClickX * scale;
+        this.cam.targetY = winH / 2 - worldClickY * scale;
+
+        this.triggerVibration(12);
+      }
+
+      focusNode(nodeId) {
+        const nodeInfo = this.nodeElements.get(nodeId);
+        if (!nodeInfo) return;
+
+        this.focusedNodeId = nodeId;
+        document.body.classList.add('is-focused');
+
+        document.querySelectorAll('.tree-node').forEach(el => {
+          el.classList.remove('node-focused', 'node-ancestor');
+        });
+        nodeInfo.el.classList.add('node-focused');
+
+        if (nodeInfo.type === 'leaf') {
+          const parentEl = this.nodeElements.get(nodeInfo.data.parentId)?.el;
+          if (parentEl) parentEl.classList.add('node-ancestor');
+        }
+
+        // 如果关闭了镜头推进功能，同样保持绝对静止，不挪动
+        if (!this.config.zoomEnabled) {
+          this.triggerVibration(12);
+          return;
+        }
+
+        // 计算节点中心点并居中
+        const winW = window.innerWidth;
+        const winH = window.innerHeight;
+        const scale = this.config.zoomScale;
+
+        const nodeCenterX = nodeInfo.data.x + nodeInfo.w / 2;
+        const nodeCenterY = nodeInfo.data.y + nodeInfo.h / 2;
+
+        this.cam.targetScale = scale;
+        this.cam.targetX = winW / 2 - nodeCenterX * scale;
+        this.cam.targetY = winH / 2 - nodeCenterY * scale;
+
+        this.triggerVibration(12);
+      }
+
+      // 居中俯瞰整张知识树全景
+      centerFullGraph() {
+        const winW = window.innerWidth;
+        const winH = window.innerHeight;
+        const scale = Math.min(winW / 1450, winH / 1150, 0.9);
+
+        // 知识树中心点大概在 x: 650, y: 580
+        const centerX = 650;
+        const centerY = 580;
+
+        this.cam.targetScale = scale;
+        this.cam.targetX = winW / 2 - centerX * scale;
+        this.cam.targetY = winH / 2 - centerY * scale;
+
+        document.body.classList.remove('is-focused');
+        document.querySelectorAll('.tree-node').forEach(el => el.classList.remove('node-focused', 'node-ancestor'));
+      }
+
+      // 运镜适度后拉俯瞰能量球飞行轨迹（仅当允许镜头推进/运镜时后拉）
+      cameraZoomForFlight() {
+        if (!this.config.zoomEnabled) return;
+        const winW = window.innerWidth;
+        const winH = window.innerHeight;
+        const scale = 0.95;
+        this.cam.targetScale = scale;
+        this.cam.targetX = winW / 2 - 650 * scale;
+        this.cam.targetY = winH / 2 - 580 * scale;
+      }
+
+      // --- [核心：节点翻开即释放经验（无需评分）] ---
+      revealLeafNode(nodeId) {
+        const nodeInfo = this.nodeElements.get(nodeId);
+        if (!nodeInfo || nodeInfo.type !== 'leaf') return;
+        const el = nodeInfo.el;
+
+        if (el.classList.contains('is-flipped')) return;
+        el.classList.add('is-flipped');
+
+        // 音效与震动
+        this.sound.playCrack(this.theme);
+        this.triggerVibration(this.theme === 'ink' ? [20, 35, 15] : 18);
+
+        // 15ms Hit-Stop 力量停顿
+        document.body.classList.add('is-hitstopping');
+        setTimeout(() => {
+          document.body.classList.remove('is-hitstopping');
+        }, 150);
+
+        // 连线光效瞬间炸裂激活传导
+        const branchGroup = document.getElementById(`branch-${nodeInfo.data.parentId}-${nodeId}`);
+        if (branchGroup) {
+          branchGroup.classList.add('branch-active');
+          this.spawnConductionFluid(nodeInfo.data.parentId, nodeId);
+        }
+
+        // 喷射经验晶球！
+        this.propelEnergyOrb(nodeId);
+
+        // 记录翻开状态
+        this.flippedLeafIds.add(nodeId);
+        this.updateTopProgress();
+      }
+
+      // 收回闭锁单个考点卡片
+      foldLeafNode(nodeId) {
+        const nodeInfo = this.nodeElements.get(nodeId);
+        if (!nodeInfo || nodeInfo.type !== 'leaf') return;
+        const el = nodeInfo.el;
+
+        if (!el.classList.contains('is-flipped')) return;
+        el.classList.remove('is-flipped');
+
+        this.flippedLeafIds.delete(nodeId);
+        this.updateTopProgress();
+
+        this.sound.playFold(this.theme);
+        this.triggerVibration(10);
+      }
+
+      // 右键父级卡片：批量收起该父级下的所有子考点卡片
+      foldParentSubtree(parentId) {
+        const parentData = KNOWLEDGE_TREE.parents.find(p => p.id === parentId);
+        if (!parentData) return;
+
+        let foldedCount = 0;
+
+        // 1. 遍历内存模型中的所有子节点
+        parentData.children.forEach(c => {
+          this.flippedLeafIds.delete(c.id);
+          const leafInfo = this.nodeElements.get(c.id);
+          if (leafInfo && leafInfo.el) {
+            leafInfo.el.classList.remove('is-flipped');
+            foldedCount++;
+          }
+        });
+
+        // 2. 双重防御：直接在 DOM 容器中查找所有匹配属于该 parent 的叶子节点，确保 100% 全部收回
+        const allLeafEls = document.querySelectorAll('.node-leaf');
+        allLeafEls.forEach(el => {
+          const info = this.nodeElements.get(el.id);
+          if (info && info.data && info.data.parentId === parentId) {
+            el.classList.remove('is-flipped');
+            this.flippedLeafIds.delete(el.id);
+          }
+        });
+
+        // 3. 熄灭该分支的所有连线
+        parentData.children.forEach(c => {
+          const branch = document.getElementById(`branch-${parentId}-${c.id}`);
+          if (branch) branch.classList.remove('branch-active', 'branch-mastered');
+        });
+        const rootBranch = document.getElementById(`branch-root-${parentId}`);
+        if (rootBranch) rootBranch.classList.remove('branch-mastered');
+
+        // 4. 重置父节点的进度数据与 DOM 状态
+        this.parentProgress.set(parentId, 0);
+        const fillEl = document.getElementById(`fill-${parentId}`);
+        const progText = document.getElementById(`prog-${parentId}`);
+        const parentInfo = this.nodeElements.get(parentId);
+        if (fillEl) fillEl.style.width = '0%';
+        if (progText) progText.textContent = `0 / ${parentData.children.length}`;
+        if (parentInfo && parentInfo.el) {
+          parentInfo.el.classList.remove('is-mastered');
+        }
+
+        this.updateTopProgress();
+        this.sound.playFold(this.theme);
+        this.triggerVibration([20, 20]);
+
+        // 飘字提示
+        if (parentInfo) {
+          this.spawnFloatingExpText(parentInfo.data.x + parentInfo.w / 2, parentInfo.data.y + 10, '已收起全部子节点', false);
+        }
+      }
+
+      // 收起整张导图的所有考点卡片
+      foldAllNodes() {
+        KNOWLEDGE_TREE.parents.forEach(p => {
+          this.foldParentSubtree(p.id);
+        });
+      }
+
+      // 连线液体高速传导光斑
+      spawnConductionFluid(parentId, childId) {
+        const pNode = this.nodeElements.get(parentId).data;
+        const cNode = this.nodeElements.get(childId).data;
+        const pInfo = this.nodeElements.get(parentId);
+        const cInfo = this.nodeElements.get(childId);
+
+        const start = { x: cNode.x, y: cNode.y + cInfo.h / 2 };
+        const end = { x: pNode.x + pInfo.w, y: pNode.y + pInfo.h / 2 };
+
+        const pulseEl = document.createElement('div');
+        pulseEl.className = 'fluid-pulse';
+        document.getElementById('world').appendChild(pulseEl);
+
+        let progress = 0;
+        const speed = 0.055;
+        const animate = () => {
+          progress += speed;
+          if (progress >= 1) {
+            pulseEl.remove();
+            return;
+          }
+          const dx = (end.x - start.x) * 0.55;
+          const p0 = start;
+          const p1 = { x: start.x - dx, y: start.y };
+          const p2 = { x: end.x + dx, y: end.y };
+          const p3 = end;
+
+          const t = progress;
+          const cx = Math.pow(1-t, 3)*p0.x + 3*Math.pow(1-t, 2)*t*p1.x + 3*(1-t)*Math.pow(t, 2)*p2.x + Math.pow(t, 3)*p3.x;
+          const cy = Math.pow(1-t, 3)*p0.y + 3*Math.pow(1-t, 2)*t*p1.y + 3*(1-t)*Math.pow(t, 2)*p2.y + Math.pow(t, 3)*p3.y;
+
+          pulseEl.style.left = `${cx}px`;
+          pulseEl.style.top = `${cy}px`;
+          requestAnimationFrame(animate);
+        };
+        requestAnimationFrame(animate);
+      }
+
+      // 经验球脱壳喷射与磁吸
+      propelEnergyOrb(childId) {
+        const childInfo = this.nodeElements.get(childId);
+        const parentId = childInfo.data.parentId;
+        const parentInfo = this.nodeElements.get(parentId);
+
+        // 镜头后拉以展现完整抛物线轨迹
+        this.cameraZoomForFlight();
+
+        // 卡片受力反冲
+        childInfo.el.style.transform = 'scale(0.94) translateY(4px)';
+        setTimeout(() => {
+          childInfo.el.style.transform = '';
+        }, 160);
+
+        this.sound.playShoot(this.theme);
+
+        const startX = childInfo.data.x + childInfo.w / 2;
+        const startY = childInfo.data.y + childInfo.h / 2;
+        const targetX = parentInfo.data.x + parentInfo.w / 2;
+        const targetY = parentInfo.data.y + parentInfo.h / 2;
+
+        const orb = {
+          startX,
+          startY,
+          targetX,
+          targetY,
+          x: startX,
+          y: startY,
+          parentId,
+          stage: 'propel', // propel -> hover -> attract
+          stageTimer: 0,
+          vx: -(Math.random() * 3 + 7) * this.config.propulsionForce,
+          vy: -(Math.random() * 7 + 10) * this.config.propulsionForce,
+          ribbon: [],
+          color: this.theme === 'ink' ? '#ffd32a' : (this.theme === 'abyss' ? '#00f2fe' : '#ff4757')
+        };
+        this.energyOrbs.push(orb);
+
+        // 喷射尾随火花
+        for (let i = 0; i < 14; i++) {
+          this.particles.push({
+            x: startX,
+            y: startY,
+            vx: (Math.random() - 0.7) * 14,
+            vy: (Math.random() - 0.7) * 14,
+            alpha: 1,
+            size: Math.random() * 4 + 3,
+            color: orb.color,
+            life: Math.random() * 25 + 18
+          });
+        }
+      }
+
+      // 父节点受击吸收与涨经验条
+      triggerParentImpact(parentId) {
+        const parentInfo = this.nodeElements.get(parentId);
+        if (!parentInfo) return;
+        const parentEl = parentInfo.el;
+
+        this.sound.playImpact(this.theme);
+        this.triggerVibration([25, 40]);
+
+        // 果冻受击形变顿挫 (Squash & Stretch)
+        parentEl.classList.remove('is-squashing');
+        void parentEl.offsetWidth;
+        parentEl.classList.add('is-squashing');
+
+        // 炸开冲击波
+        this.spawnShockwave(parentInfo.data.x + parentInfo.w / 2, parentInfo.data.y + parentInfo.h / 2);
+
+        // RPG 数值跳字 +100 EXP
+        this.spawnFloatingExpText(parentInfo.data.x + parentInfo.w / 2, parentInfo.data.y + 10, '+100 EXP!', false);
+
+        // 充能环进度提升
+        const currentCount = (this.parentProgress.get(parentId) || 0) + 1;
+        this.parentProgress.set(parentId, currentCount);
+
+        const totalChildren = parentInfo.data.children.length;
+        const percent = Math.min(100, Math.round((currentCount / totalChildren) * 100));
+
+        const fillEl = document.getElementById(`fill-${parentId}`);
+        const progText = document.getElementById(`prog-${parentId}`);
+        if (fillEl) fillEl.style.width = `${percent}%`;
+        if (progText) progText.textContent = `${currentCount} / ${totalChildren}`;
+
+        // 分支通关升格
+        if (currentCount >= totalChildren && !parentEl.classList.contains('is-mastered')) {
+          this.triggerBranchAscension(parentId);
+        }
+      }
+
+      spawnShockwave(x, y) {
+        const ring = document.createElement('div');
+        ring.className = 'shockwave-ring';
+        ring.style.left = `${x}px`;
+        ring.style.top = `${y}px`;
+        ring.style.width = '140px';
+        ring.style.height = '140px';
+        document.getElementById('world').appendChild(ring);
+        setTimeout(() => ring.remove(), 650);
+      }
+
+      spawnFloatingExpText(x, y, text, isCrit) {
+        const el = document.createElement('div');
+        el.className = `floating-exp-text ${isCrit ? 'is-crit' : ''}`;
+        el.textContent = text;
+        el.style.left = `${x}px`;
+        el.style.top = `${y}px`;
+        document.getElementById('world').appendChild(el);
+        setTimeout(() => el.remove(), 900);
+      }
+
+      // 分支升格通关大事件
+      triggerBranchAscension(parentId) {
+        const parentInfo = this.nodeElements.get(parentId);
+        if (!parentInfo) return;
+        const parentEl = parentInfo.el;
+
+        parentEl.classList.add('is-mastered');
+        this.sound.playAscension(this.theme);
+        this.triggerVibration([40, 60, 40, 80, 50]);
+
+        // 通电点亮整根分支连线
+        parentInfo.data.children.forEach(c => {
+          const branch = document.getElementById(`branch-${parentId}-${c.id}`);
+          if (branch) branch.classList.add('branch-mastered');
+        });
+        const rootBranch = document.getElementById(`branch-root-${parentId}`);
+        if (rootBranch) rootBranch.classList.add('branch-mastered');
+
+        // 金色升格粒子潮
+        for (let i = 0; i < 70; i++) {
+          this.particles.push({
+            x: parentInfo.data.x + parentInfo.w / 2,
+            y: parentInfo.data.y + parentInfo.h / 2,
+            vx: (Math.random() - 0.5) * 24,
+            vy: (Math.random() - 0.5) * 24,
+            alpha: 1,
+            size: Math.random() * 7 + 4,
+            color: '#ffd700',
+            life: Math.random() * 50 + 30
+          });
+        }
+      }
+
+      // 更新顶部整图掌握进度
+      updateTopProgress() {
+        const total = 9;
+        const done = this.flippedLeafIds.size;
+        const pct = Math.round((done / total) * 100);
+        document.getElementById('top-progress-bar').style.width = `${pct}%`;
+        document.getElementById('top-progress-text').textContent = `${done}/${total}`;
+      }
+
+      // --- [核心：整张思维导图总评结算 (Freestyle Mindmap Rating)] ---
+      rateWholeMindmap(score) {
+        this.centerFullGraph();
+        this.sound.playCelebration();
+        this.triggerVibration([50, 70, 50, 100, 80]);
+
+        const ratingLabels = {
+          1: { text: '忘记 (1)', color: '#ef4444', exp: 300 },
+          2: { text: '困难 (2)', color: '#f97316', exp: 600 },
+          3: { text: '记得 (3)', color: '#3b82f6', exp: 950 },
+          4: { text: '轻松 秒杀 (4)', color: '#10b981', exp: 1200 }
+        };
+        const rating = ratingLabels[score];
+
+        // 弹窗展示总结算
+        const modal = document.getElementById('celebration-modal');
+        const chip = document.getElementById('modal-score-chip');
+        const expEl = document.getElementById('modal-exp');
+
+        chip.textContent = `导图总评：${rating.text}`;
+        chip.style.background = `${rating.color}22`;
+        chip.style.color = rating.color;
+        chip.style.border = `1.5px solid ${rating.color}`;
+        expEl.textContent = `+${rating.exp} TOTAL EXP`;
+        modal.classList.add('show');
+
+        // 从 Root 与所有 Parent 爆发全图级庆典烟花
+        const burstOrigins = [
+          this.nodeElements.get('node-root'),
+          ...KNOWLEDGE_TREE.parents.map(p => this.nodeElements.get(p.id))
+        ];
+
+        burstOrigins.forEach(node => {
+          for (let i = 0; i < 40; i++) {
+            this.particles.push({
+              x: node.data.x + node.w / 2,
+              y: node.data.y + node.h / 2,
+              vx: (Math.random() - 0.5) * 30,
+              vy: (Math.random() - 0.5) * 30,
+              alpha: 1,
+              size: Math.random() * 8 + 4,
+              color: rating.color,
+              life: Math.random() * 60 + 40
+            });
+          }
+        });
+      }
+
+      triggerVibration(pattern) {
+        if (!this.config.hapticsEnabled || !navigator.vibrate) return;
+        try {
+          navigator.vibrate(pattern);
+        } catch (e) {}
+      }
+
+      // --- [4. 物理主循环 (Physics & Particles)] ---
+      startLoop() {
+        const loop = () => {
+          this.updatePhysics();
+          this.drawParticles();
+          requestAnimationFrame(loop);
+        };
+        requestAnimationFrame(loop);
+      }
+
+      updatePhysics() {
+        // 严格平正的摄像机平滑插值 (Ortho Lerp)
+        this.cam.x += (this.cam.targetX - this.cam.x) * 0.12;
+        this.cam.y += (this.cam.targetY - this.cam.y) * 0.12;
+        this.cam.scale += (this.cam.targetScale - this.cam.scale) * 0.12;
+
+        const world = document.getElementById('world');
+        world.style.transform = `translate3d(${this.cam.x}px, ${this.cam.y}px, 0) scale(${this.cam.scale})`;
+
+        // 经验球三阶段物理飞行动力学
+        for (let i = this.energyOrbs.length - 1; i >= 0; i--) {
+          const orb = this.energyOrbs[i];
+          orb.ribbon.unshift({ x: orb.x, y: orb.y });
+          if (orb.ribbon.length > 18) orb.ribbon.pop();
+
+          if (orb.stage === 'propel') {
+            orb.x += orb.vx;
+            orb.y += orb.vy;
+            orb.vy += 0.65;
+            orb.stageTimer++;
+            if (orb.stageTimer > 12) {
+              orb.stage = 'hover';
+              orb.stageTimer = 0;
+            }
+          } else if (orb.stage === 'hover') {
+            orb.stageTimer++;
+            orb.x += orb.vx * 0.12;
+            orb.y += orb.vy * 0.12;
+            if (orb.stageTimer > 6) {
+              orb.stage = 'attract';
+            }
+          } else if (orb.stage === 'attract') {
+            const dx = orb.targetX - orb.x;
+            const dy = orb.targetY - orb.y;
+            const dist = Math.hypot(dx, dy);
+
+            if (dist < 32) {
+              this.triggerParentImpact(orb.parentId);
+              this.energyOrbs.splice(i, 1);
+              continue;
+            } else {
+              const speed = Math.min(46, (850 / (dist + 30)) * 6 + 18);
+              orb.x += (dx / dist) * speed;
+              orb.y += (dy / dist) * speed;
+            }
+          }
+        }
+
+        // 粒子生命周期
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+          const p = this.particles[i];
+          p.x += p.vx;
+          p.y += p.vy;
+          p.vx *= 0.94;
+          p.vy *= 0.94;
+          p.life--;
+          p.alpha = Math.max(0, p.life / 35);
+          if (p.life <= 0) {
+            this.particles.splice(i, 1);
+          }
+        }
+      }
+
+      drawParticles() {
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // 世界坐标映射到屏幕坐标 (严格平正投影：screen = world * scale + camOffset)
+        const toScreen = (wx, wy) => {
+          return {
+            x: wx * this.cam.scale + this.cam.x,
+            y: wy * this.cam.scale + this.cam.y
+          };
+        };
+
+        // 绘制经验球粒子条带 (Particle Ribbon)
+        this.energyOrbs.forEach(orb => {
+          if (orb.ribbon.length > 2) {
+            this.ctx.beginPath();
+            const s0 = toScreen(orb.ribbon[0].x, orb.ribbon[0].y);
+            this.ctx.moveTo(s0.x, s0.y);
+            for (let j = 1; j < orb.ribbon.length; j++) {
+              const sp = toScreen(orb.ribbon[j].x, orb.ribbon[j].y);
+              this.ctx.lineTo(sp.x, sp.y);
+            }
+            this.ctx.strokeStyle = orb.color;
+            this.ctx.lineWidth = 6 * this.cam.scale;
+            this.ctx.lineCap = 'round';
+            this.ctx.shadowColor = orb.color;
+            this.ctx.shadowBlur = 18;
+            this.ctx.stroke();
+            this.ctx.shadowBlur = 0;
+          }
+
+          // 核心晶球
+          const sc = toScreen(orb.x, orb.y);
+          const r = 12 * this.cam.scale;
+          this.ctx.beginPath();
+          this.ctx.arc(sc.x, sc.y, r, 0, Math.PI * 2);
+          this.ctx.fillStyle = '#ffffff';
+          this.ctx.shadowColor = orb.color;
+          this.ctx.shadowBlur = 24;
+          this.ctx.fill();
+
+          this.ctx.beginPath();
+          this.ctx.arc(sc.x, sc.y, r * 1.45, 0, Math.PI * 2);
+          this.ctx.strokeStyle = orb.color;
+          this.ctx.lineWidth = 2.5;
+          this.ctx.stroke();
+          this.ctx.shadowBlur = 0;
+        });
+
+        // 绘制火花
+        this.particles.forEach(p => {
+          const sp = toScreen(p.x, p.y);
+          this.ctx.beginPath();
+          this.ctx.arc(sp.x, sp.y, Math.max(1, p.size * this.cam.scale), 0, Math.PI * 2);
+          this.ctx.fillStyle = p.color;
+          this.ctx.globalAlpha = p.alpha;
+          this.ctx.shadowColor = p.color;
+          this.ctx.shadowBlur = 8;
+          this.ctx.fill();
+          this.ctx.globalAlpha = 1;
+          this.ctx.shadowBlur = 0;
+        });
+      }
+
+      // --- [5. 事件绑定与快捷键驱动] ---
+      bindEvents() {
+        // 世界观风格切换
+        document.querySelectorAll('.btn-style').forEach(btn => {
+          btn.addEventListener('click', () => {
+            document.querySelectorAll('.btn-style').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            this.theme = btn.dataset.style;
+            document.body.setAttribute('data-theme', this.theme);
+            this.sound.playCrack(this.theme);
+            this.triggerVibration([20, 20]);
+          });
+        });
+
+        // 抽屉开关
+        const drawer = document.getElementById('drawer');
+        document.getElementById('btn-toggle-drawer').addEventListener('click', () => {
+          drawer.classList.toggle('open');
+        });
+        document.getElementById('btn-close-drawer').addEventListener('click', () => {
+          drawer.classList.remove('open');
+        });
+
+        // 顶部快速开关镜头推进
+        const btnToggleCamZoom = document.getElementById('btn-toggle-cam-zoom');
+        const zoomIcon = document.getElementById('cam-zoom-status-icon');
+        const zoomText = document.getElementById('cam-zoom-status-text');
+        const sliderZoomEnable = document.getElementById('slider-zoom-enable');
+        const valZoomEnable = document.getElementById('val-zoom-enable');
+
+        const updateZoomToggleUI = (enabled) => {
+          this.config.zoomEnabled = enabled;
+          zoomIcon.textContent = enabled ? '🔍' : '🔒';
+          zoomText.textContent = `镜头推进: ${enabled ? '开' : '关'}`;
+          btnToggleCamZoom.style.background = enabled ? 'rgba(255, 255, 255, 0.18)' : 'rgba(255, 255, 255, 0.05)';
+          if (sliderZoomEnable) sliderZoomEnable.value = enabled ? 1 : 0;
+          if (valZoomEnable) valZoomEnable.textContent = enabled ? '开启' : '关闭';
+        };
+
+        btnToggleCamZoom.addEventListener('click', () => {
+          updateZoomToggleUI(!this.config.zoomEnabled);
+          this.triggerVibration(15);
+        });
+
+        if (sliderZoomEnable) {
+          sliderZoomEnable.addEventListener('input', (e) => {
+            updateZoomToggleUI(parseInt(e.target.value, 10) === 1);
+          });
+        }
+
+        // 滑块参数实时调整
+        const bindSlider = (id, valId, key, formatFn) => {
+          const slider = document.getElementById(id);
+          const valEl = document.getElementById(valId);
+          slider.addEventListener('input', (e) => {
+            const v = parseFloat(e.target.value);
+            this.config[key] = key === 'hapticsEnabled' ? v === 1 : v;
+            valEl.textContent = formatFn ? formatFn(v) : v;
+            if (key === 'volume') this.sound.masterVolume = v;
+          });
+        };
+        bindSlider('slider-zoom', 'val-zoom', 'zoomScale', v => `${v.toFixed(2)}x`);
+        bindSlider('slider-force', 'val-force', 'propulsionForce', v => v.toFixed(2));
+        bindSlider('slider-squash', 'val-squash', 'squashFactor', v => v.toFixed(2));
+        bindSlider('slider-volume', 'val-volume', 'volume', v => v.toFixed(2));
+        bindSlider('slider-haptics', 'val-haptics', 'hapticsEnabled', v => v === 1 ? '开启' : '关闭');
+
+        // 恢复大师默认参数
+        document.getElementById('btn-reset-params').addEventListener('click', () => {
+          this.config = {
+            zoomEnabled: true,
+            zoomScale: 1.18,
+            propulsionForce: 1.20,
+            squashFactor: 1.26,
+            volume: 0.85,
+            hapticsEnabled: true
+          };
+          updateZoomToggleUI(true);
+          document.getElementById('slider-zoom').value = 1.18;
+          document.getElementById('val-zoom').textContent = '1.18x';
+          document.getElementById('slider-force').value = 1.20;
+          document.getElementById('val-force').textContent = '1.20';
+          document.getElementById('slider-squash').value = 1.26;
+          document.getElementById('val-squash').textContent = '1.26';
+          document.getElementById('slider-volume').value = 0.85;
+          document.getElementById('val-volume').textContent = '0.85';
+          document.getElementById('slider-haptics').value = 1;
+          document.getElementById('val-haptics').textContent = '开启';
+        });
+
+        // 导出配置 JSON
+        document.getElementById('btn-export-json').addEventListener('click', () => {
+          const exportPayload = {
+            product: 'Memory Anki',
+            module: 'Mindmap Flip & Energy Lab',
+            concept: 'Node Flip is Energy Meter, Rating is for Whole Mindmap',
+            theme: this.theme,
+            dynamics: {
+              zoomScale: this.config.zoomScale,
+              propulsionForce: this.config.propulsionForce,
+              squashFactor: this.config.squashFactor,
+              volume: this.config.volume,
+              hapticsEnabled: this.config.hapticsEnabled
+            },
+            timingTokens: {
+              hitStopMs: 15,
+              propelDurationMs: 200,
+              hoverWaitMs: 100,
+              squashRecoveryMs: 380
+            },
+            exportedAt: new Date().toISOString()
+          };
+
+          const jsonText = JSON.stringify(exportPayload, null, 2);
+          navigator.clipboard.writeText(jsonText).then(() => {
+            const toast = document.getElementById('toast');
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 2600);
+          });
+        });
+
+        // 底部整个思维导图总评打分
+        document.querySelectorAll('.rate-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const score = parseInt(btn.dataset.score, 10);
+            this.rateWholeMindmap(score);
+          });
+        });
+
+        // 关闭总评结算弹窗
+        document.getElementById('btn-close-modal').addEventListener('click', () => {
+          document.getElementById('celebration-modal').classList.remove('show');
+        });
+
+        // 全局键盘快捷键
+        window.addEventListener('keydown', (e) => {
+          if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
+          const key = e.key.toLowerCase();
+
+          // 1~4: 对整张导图总评打分结算
+          if (['1', '2', '3', '4'].includes(key)) {
+            e.preventDefault();
+            this.rateWholeMindmap(parseInt(key, 10));
+            return;
+          }
+
+          // Space / F: 翻开当前选中的卡片
+          if (e.code === 'Space' || key === 'f') {
+            e.preventDefault();
+            if (this.focusedNodeId) {
+              this.revealLeafNode(this.focusedNodeId);
+            }
+            return;
+          }
+
+          // Tab / R: 闭锁收回
+          if (key === 'tab' || key === 'r') {
+            e.preventDefault();
+            if (this.focusedNodeId) {
+              this.foldLeafNode(this.focusedNodeId);
+            }
+            return;
+          }
+
+          // 方向键穿梭
+          if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
+            e.preventDefault();
+            this.navigateFocus(key);
+          }
+        });
+
+        // 画布平正拖拽平移
+        let isDragging = false;
+        let startClientX, startClientY;
+        let startCamX, startCamY;
+        const viewport = document.getElementById('viewport');
+
+        viewport.addEventListener('mousedown', (e) => {
+          if (e.target.closest('.tree-node')) return;
+          isDragging = true;
+          startClientX = e.clientX;
+          startClientY = e.clientY;
+          startCamX = this.cam.targetX;
+          startCamY = this.cam.targetY;
+        });
+
+        window.addEventListener('mousemove', (e) => {
+          if (!isDragging) return;
+          this.cam.targetX = startCamX + (e.clientX - startClientX);
+          this.cam.targetY = startCamY + (e.clientY - startClientY);
+        });
+
+        window.addEventListener('mouseup', () => {
+          isDragging = false;
+        });
+
+        // 滚轮缩放画布
+        viewport.addEventListener('wheel', (e) => {
+          e.preventDefault();
+          const delta = e.deltaY > 0 ? -0.06 : 0.06;
+          this.cam.targetScale = Math.max(0.5, Math.min(1.5, this.cam.targetScale + delta));
+        }, { passive: false });
+      }
+
+      // 方向键节点间平滑穿梭
+      navigateFocus(direction) {
+        const allLeafIds = [];
+        KNOWLEDGE_TREE.parents.forEach(p => {
+          p.children.forEach(c => allLeafIds.push(c.id));
+        });
+
+        const currentIndex = allLeafIds.indexOf(this.focusedNodeId);
+        if (currentIndex === -1) {
+          this.focusNode(allLeafIds[0]);
+          return;
+        }
+
+        let nextIndex = currentIndex;
+        if (direction === 'arrowdown') {
+          nextIndex = (currentIndex + 1) % allLeafIds.length;
+        } else if (direction === 'arrowup') {
+          nextIndex = (currentIndex - 1 + allLeafIds.length) % allLeafIds.length;
+        } else if (direction === 'arrowleft') {
+          nextIndex = Math.max(0, currentIndex - 3);
+        } else if (direction === 'arrowright') {
+          nextIndex = Math.min(allLeafIds.length - 1, currentIndex + 3);
+        }
+
+        this.focusNode(allLeafIds[nextIndex]);
+      }
+    }
+
+    // 启动实验室
+    window.addEventListener('DOMContentLoaded', () => {
+      window.mindmapLab = new MindmapEnergyLab();
+    });
+  </script>
+</body>
+</html>

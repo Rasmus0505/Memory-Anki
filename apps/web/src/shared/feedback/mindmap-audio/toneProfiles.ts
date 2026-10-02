@@ -272,8 +272,8 @@ const TONE_PROFILES: Record<MindMapFeedbackEvent, ToneSpec[]> = {
     { frequency: 740, durationMs: 104, gain: 0.028, type: 'sine', offsetMs: 66, pan: 0.16 },
   ],
   card_reveal: [
-    { frequency: 540, durationMs: 104, gain: 0.044, type: 'triangle', offsetMs: 0, pan: -0.12 },
-    { frequency: 810, durationMs: 82, gain: 0.024, type: 'sine', offsetMs: 72, pan: 0.12 },
+    { frequency: 640, endFrequency: 920, durationMs: 64, gain: 0.05, type: 'triangle', offsetMs: 0, pan: -0.08 },
+    { frequency: 1040, durationMs: 42, gain: 0.018, type: 'sine', offsetMs: 36, pan: 0.1 },
   ],
   branch_clear: [
     { frequency: 392, durationMs: 132, gain: 0.044, type: 'triangle', offsetMs: 0, pan: -0.24 },

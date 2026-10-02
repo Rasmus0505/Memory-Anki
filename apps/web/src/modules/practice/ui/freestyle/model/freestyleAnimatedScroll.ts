@@ -5,6 +5,13 @@ export function easeOutQuart(progress: number) {
   return 1 - (1 - progress) ** 4
 }
 
+/** Deliberate page turn: slides a little past the snap, then settles back. */
+export function easeOutBack(progress: number, overshoot = 1.08) {
+  const c1 = overshoot
+  const c3 = c1 + 1
+  return 1 + c3 * (progress - 1) ** 3 + c1 * (progress - 1) ** 2
+}
+
 const INTERRUPT_EVENTS = ['wheel', 'touchstart', 'pointerdown'] as const
 
 /**
@@ -16,7 +23,15 @@ const INTERRUPT_EVENTS = ['wheel', 'touchstart', 'pointerdown'] as const
 export function animateScrollTop(
   node: HTMLElement,
   targetTop: number,
-  { durationMs = FEED_PAGE_SCROLL_MS, onFinish }: { durationMs?: number; onFinish: (completed: boolean) => void },
+  {
+    durationMs = FEED_PAGE_SCROLL_MS,
+    easing = easeOutQuart,
+    onFinish,
+  }: {
+    durationMs?: number
+    easing?: (progress: number) => number
+    onFinish: (completed: boolean) => void
+  },
 ): () => void {
   const startTop = node.scrollTop
   const distance = targetTop - startTop
@@ -41,7 +56,7 @@ export function animateScrollTop(
   const step = (now: number) => {
     if (startedAt == null) startedAt = now
     const progress = Math.min(1, (now - startedAt) / durationMs)
-    node.scrollTop = startTop + distance * easeOutQuart(progress)
+    node.scrollTop = startTop + distance * easing(progress)
     if (progress < 1) frame = requestAnimationFrame(step)
     else finish(true)
   }

@@ -104,6 +104,12 @@ describe('MindMapCanvasViewport', () => {
     expect(screen.getByTestId('react-flow').dataset.viewport).toBe('4,18,1')
   })
 
+  it('snaps a resting zoom-1 camera onto whole pixels', () => {
+    renderViewport({ viewport: { x: 4.4, y: 17.6, zoom: 1 } })
+
+    expect(screen.getByTestId('react-flow').dataset.viewport).toBe('4,18,1')
+  })
+
   it('hides decorative layers while dragging', () => {
     renderViewport({ isDraggingNode: true })
 

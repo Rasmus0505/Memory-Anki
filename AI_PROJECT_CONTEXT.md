@@ -22,10 +22,12 @@ Memory Anki 是一个自用的本地学习产品，核心是“记忆宫殿 + �
 | 思维导图导入 `produce` | 手动 JSON、Markdown、整库导入导出；“文字转脑图”走 JSON 路径 |
 | 知识体系 `knowledge` | 学科、章节树、知识导入、章节与宫殿/题目联动 |
 | 英语学习 `english` / `english_lookup` | 听力课程与看视频敲字幕；查词翻译。阅读、CEFR、句型、词汇页已删除 |
-| 随心模式 `freestyle` | 面向当天训练的沉浸刷卡流；默认入口 `/freestyle` |
+| 随心模式 `freestyle` | 面向当天训练的沉浸刷卡流；默认入口 `/freestyle`；另有可从 HUD 切换进入的 `/freestyle-2` |
 | 学习会话 `session` | 宫殿练习、分段、迷你宫殿、复习等会话进度 |
 | 仪表盘 `dashboard` | 今日复习、近期状态、时长统计 |
 | 成长 `progression` | 经验/等级、每日委托、印章册、知识星图、反馈皮肤衣柜（只读投影，`/growth`） |
+| 反馈导演 `shared/fx` | 统一动效运行时：`cue()` → 配方 → 粒子/声音/触觉/DOM，owner 作用域取消，`/lab/fx` 实验室 |
+| 主题包 `shared/theme` | 整世界主题（色板、卡面材质、环境浮尘、粒子皮肤、合成音色、节奏），随成长解锁 |
 | PWA `pwa` | 通过 Tailscale 访问完整桌面端前端，默认进入 `/freestyle` |
 | 设置 `settings` | AI 模型注册、场景模型、提示词、复习参数、客户端偏好 |
 | 备份 `backups` | 启动/关闭/周期备份、宫殿版本、数据库恢复 |
@@ -231,7 +233,7 @@ apps/web/src/
 
 前端业务能力统一放在 `apps/web/src/modules/*`，当前模块包括：
 
-`backup`、`content`、`dashboard`、`english`、`english-lookup`、`exam`、`memory`、`mindmap`、`practice`、`produce`、`quiz`、`search`、`session`、`settings`。
+`backup`、`content`、`dashboard`、`english`、`english-lookup`、`exam`、`memory`、`mindmap`、`practice`、`produce`、`progression`、`quiz`、`search`、`session`、`settings`。
 
 模块内部按 `domain`、`application`、`ui`、`api` 组织；模块之间通过 `public.ts`、共享端口或页面/组件组合通信。
 
@@ -245,8 +247,10 @@ apps/web/src/
 
 - API helper、contracts、generated types
 - 通用组件
-- mind-map host
-- feedback/toast/audio
+- mind-map host（含只读果冻翻卡舞台 `shared/ui/mindmap-canvas/JellyMindmapStage`）
+- feedback/toast/audio（合成音数据源与播放器）
+- fx 反馈导演（`shared/fx`）
+- theme 主题包与 ambient 氛围层
 - keyboard
 - persistence
 - preferences
@@ -270,13 +274,26 @@ apps/web/src/
 
 后端对应 `mindmap_document`、宫殿/知识各自的 `editor_*` 用例，以及独立的 `mindmap_learning`。不要重新使用旧 `modules/mindmap/application/editor_state_*` 路径。
 
-### 5.6 统一质量入口
+果冻翻卡舞台（只读揭示层）的布局契约、充能模型与 `map.*` 反馈线索见 `docs/architecture/jelly-mindmap-stage.md`。
+
+### 5.6 感官运行时入口
+
+动效、声音与触感有统一门面，业务代码只声明「发生了什么」，不自行实现：
+
+- `shared/fx`：`cue()` / 配方 / owner 取消 / 皮肤 / 稀有演出。详见 `docs/architecture/fx-director.md`。
+- `shared/feedback/mindmap-audio`：程序化合成音数据源、`AudioContext` 生命周期、静音分区与场景音量门。详见 `docs/architecture/audio-soundscape.md`。
+- `shared/theme`：主题包（色板、材质、粒子皮肤、音色、节奏）。详见 `docs/architecture/theme-packs.md`。
+- 硬规则：业务组件不得直接实例化 WebGL / WebAudio / 粒子 / DOM 动效；带延迟的步骤必须挂在 cue 的 `FxPlayback` owner 上。
+
+### 5.7 统一质量入口
 
 本地开发、AI 修改与 CI 使用同一组门禁：
 
 - 快速检查：`python tools/quality_gate.py`
 - 完整交付：`python tools/quality_gate.py --full`
+- 启动器冒烟（改动运行时启动、打包、迁移、依赖、前端构建产物或启动脚本后）：`python tools/quality_gate.py --launchers`
 - 当前架构地图与迁移顺序：`docs/architecture/README.md`
+
 ## 6. 架构边界和修改原则
 
 修改代码前先确认三类 owner：
@@ -301,6 +318,8 @@ apps/web/src/
 - `app/router` 只做路由装配。
 - 页面逻辑优先放在 feature 内部 hook/model。
 - API contract 变化要同步 `shared/api/contracts`、生成类型和调用方测试。
+- 动效/声音/触感一律经 `@/shared/fx` 的 `cue()`；带延迟的步骤挂在 `FxPlayback` owner 上，不裸用 `setTimeout`。
+- E2E 必须封闭：`apps/web/e2e/*.spec.ts` 从 `./fixtures` 导入 `test`/`expect`，不得指向真实 `8012` 服务。详见 `docs/architecture/e2e-testing-guide.md`。
 
 架构规则来源：
 
@@ -487,3 +506,6 @@ AI 相关功能分布较广：
 - 2026-07-10：Electron 日常入口改为复用 PWA 的 `127.0.0.1:8012` 共享服务；桌面与 PWA 启动通过跨进程锁协调，`5173` 仅保留给显式前端开发。
 - 2026-07-10：本机指纹驱动的智能增量更新已合并到 `start-all.bat`，不再保留独立 `update.bat` 或分开的桌面/PWA 启动入口；Desktop/PWA 共用单实例后台托盘。
 - 2026-10：反馈统一为 `shared/fx` 导演运行时（`cue()` → 配方 → 粒子/声音/触觉/DOM，owner 作用域取消、锚点注册、皮肤、稀有演出、`/lab/fx` 实验室）；移除 canvas-confetti。新增 `progression` 成长层（后端只读投影 + `/growth` 星图与印章册 + 随心 HUD/结算）。
+- 2026-10：新增只读果冻翻卡舞台 `shared/ui/mindmap-canvas/JellyMindmapStage`（固定左到右坐标系与卡宽、`preserve-3d` 双面内翻、`parentCharge.ts` 纯函数充能、`map.*` 反馈线索），与 React Flow 编辑态并存互不替代。
+- 2026-10：主题包 `shared/theme` 与合成音色打通（`packTimbre` 按主题调制所有程序化音）；音频通道补齐 `AudioContext` iOS 手势解锁、静音分区与场景音量门。
+- 2026-10：新增三份架构文档：`docs/architecture/jelly-mindmap-stage.md`、`audio-soundscape.md`、`e2e-testing-guide.md`；`AGENTS.md` 增补「动效/音频统一走 `cue()`」与「E2E 封闭性」两条硬规则。

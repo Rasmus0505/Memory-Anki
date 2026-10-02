@@ -14,7 +14,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc -b --noEmit",
-    "desktop:timer": "electron ../desktop-timer/main.cjs"
+    "desktop:timer": "electron --disable-gpu --disable-gpu-sandbox ../desktop-timer/main.cjs"
   },
   "dependencies": {
     "@fontsource-variable/noto-sans-sc": "5.3.0",

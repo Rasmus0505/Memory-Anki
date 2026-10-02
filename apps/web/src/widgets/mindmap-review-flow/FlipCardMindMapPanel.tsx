@@ -105,6 +105,10 @@ export interface FlipCardMindMapPanelProps extends FlipCardSurfaceExtensions {
    */
   chromeDensity?: 'default' | 'compact'
   onToggleFullscreen: (active?: boolean) => void
+  /** Freestyle neighbour: keep the shell, skip the per-node jelly tree. */
+  jellyPaintNodes?: boolean
+  /** Freestyle neighbour: resting faces only, no flip theatre. */
+  jellyLive?: boolean
   onToggleMode?: () => void
   /** Defaults: enter edit "编辑", leave edit "复习". Freestyle uses "返回随心". */
   modeToggleLabels?: {
@@ -171,6 +175,8 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   hidePresentationOverflowActions = false,
   chromeDensity = 'default',
   onToggleFullscreen,
+  jellyPaintNodes = true,
+  jellyLive = true,
   onToggleMode,
   modeToggleLabels,
   textActionLabel,
@@ -451,6 +457,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   return (
     <div
       className={cn('flex h-full min-h-0 flex-col', fullscreen && 'flex h-full flex-col', className)}
+      data-jelly-flip={!isEditMode && !englishModeActive && !textModeActive ? 'true' : 'false'}
       data-english-mode={englishModeActive ? 'true' : 'false'}
       data-text-mode={!isEditMode && textModeActive ? 'true' : 'false'}
     >
@@ -583,7 +590,17 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
         sceneTransitionFallbackNodeId={sceneTransitionFallbackNodeId}
         mobileViewPolicy={isEditMode ? 'map' : (mobileViewPolicy ?? 'auto')}
         nodeClickViewportPolicy={isEditMode ? 'guided-center' : 'preserve'}
-        preferredZoom={preferredZoom}
+        flipCameraNudge={
+          isEditMode || englishModeActive || textModeActive
+            ? 'still'
+            : revealSettingsControl?.settings.cameraNudge === 'pan'
+              ? 'pan'
+              : 'still'
+        }
+        jellyStage={!isEditMode && !englishModeActive && !textModeActive}
+        jellyPaintNodes={jellyPaintNodes}
+        jellyLive={jellyLive && !isEditMode}
+         preferredZoom={preferredZoom}
         onUserZoomChange={onUserZoomChange}
         reviewFxSignal={reviewFxSignal}
         feedbackFxSignal={feedbackFxSignal}

@@ -1,10 +1,46 @@
-const { app, BrowserWindow, globalShortcut, ipcMain, shell, session } = require('electron')
+const electron = require('electron')
+const { app, BrowserWindow, globalShortcut, ipcMain, shell, session } = typeof electron === 'object' ? electron : {}
 const fs = require('node:fs')
 const path = require('node:path')
+
+if (!app) {
+  throw new Error('Memory Anki desktop must run under Electron, not Node.js.')
+}
 
 const APP_URL = process.env.MEMORY_ANKI_DESKTOP_URL || 'http://127.0.0.1:8012/'
 const OVERLAY_URL = process.env.MEMORY_ANKI_TIMER_OVERLAY_URL || `${APP_URL.replace(/\/$/, '')}/timer-overlay`
 const READY_FILE = process.env.MEMORY_ANKI_DESKTOP_READY_FILE || ''
+
+// Electron 39 on some Windows GPU stacks aborts before ready-to-show with
+// STATUS_BREAKPOINT (0x80000003 / unsigned 2147483651). Software rendering
+// is enough for this local study window and avoids that crash.
+if (process.platform === 'win32') {
+  app.disableHardwareAcceleration()
+  app.commandLine.appendSwitch('disable-gpu')
+  app.commandLine.appendSwitch('disable-gpu-sandbox')
+}
+
+function resolveDesktopUserData() {
+  const candidates = []
+  if (process.env.LOCALAPPDATA) {
+    candidates.push(path.join(process.env.LOCALAPPDATA, 'MemoryAnki', 'desktop'))
+  }
+  candidates.push(path.join(__dirname, '..', '..', 'logs', 'electron-user-data'))
+  candidates.push(path.join(require('node:os').tmpdir(), 'memory-anki-desktop'))
+  for (const dir of candidates) {
+    try {
+      fs.mkdirSync(dir, { recursive: true })
+      fs.writeFileSync(path.join(dir, '.writable'), '')
+      return dir
+    } catch {
+      // Controlled-folder or ACL blocks some AppData paths on this machine.
+    }
+  }
+  return candidates[candidates.length - 1]
+}
+
+const desktopUserData = resolveDesktopUserData()
+app.setPath('userData', desktopUserData)
 
 let mainWindow = null
 let timerWindow = null

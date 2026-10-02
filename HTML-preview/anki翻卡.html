@@ -1,0 +1,2506 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Memory Anki · 思维导图与随心模式街机化决策沙盒 (Arcade & MindMap Lab)</title>
+  <style>
+    /* ==========================================================================
+       1. 全局设计系统与主题变量 (Design System & 3 Themes)
+       ========================================================================== */
+    :root {
+      --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+      --font-mono: "JetBrains Mono", "SF Mono", Consolas, monospace;
+      
+      --theme-transition: background 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+                          color 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+                          border-color 0.4s ease;
+      
+      --spring-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+      --spring-smooth: cubic-bezier(0.16, 1, 0.3, 1);
+      --spring-snappy: cubic-bezier(0.2, 0.9, 0.3, 1.2);
+    }
+
+    /* 风格 A: 暗黑肉鸽 / 街机高能 (Balatro / Hades 风格) */
+    body[data-theme="arcade"] {
+      --bg-gradient: radial-gradient(circle at 50% 20%, #1e122d 0%, #0d0915 55%, #050408 100%);
+      --hud-bg: rgba(22, 17, 34, 0.85);
+      --hud-border: rgba(255, 185, 35, 0.3);
+      --text-main: #f9f5ff;
+      --text-sub: #a89bb8;
+      --card-bg: linear-gradient(145deg, #1d162b 0%, #110c1c 100%);
+      --card-border: rgba(255, 198, 41, 0.35);
+      --card-inner-border: rgba(255, 255, 255, 0.08);
+      --card-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.85), 0 0 35px rgba(255, 120, 20, 0.18);
+      --accent-gold: #ffbe26;
+      --accent-flame: #ff4d2e;
+      --accent-neon: #9d4edd;
+      --tag-bg: rgba(255, 190, 38, 0.12);
+      --tag-color: #ffd166;
+      --panel-bg: rgba(20, 16, 30, 0.82);
+      
+      /* 评分按钮 1~4 色系 */
+      --btn-bg-1: #2a1b24; --btn-border-1: #6a253b; --btn-color-1: #f87171;
+      --btn-bg-2: #2d251a; --btn-border-2: #7c4f1c; --btn-color-2: #fbbf24;
+      --btn-bg-3: #162933; --btn-border-3: #1a6575; --btn-color-3: #38bdf8;
+      --btn-bg-4: #2b1d3d; --btn-border-4: #8a3ecf; --btn-color-4: #c084fc;
+      --fever-glow: 0 0 35px rgba(255, 77, 46, 0.65);
+    }
+
+    /* 风格 B: 多巴胺果冻 / 潮玩微质感 (Duolingo / Brawl Stars 风格) */
+    body[data-theme="dopamine"] {
+      --bg-gradient: radial-gradient(circle at 50% 20%, #eefaf0 0%, #d8f1dc 50%, #bee5c4 100%);
+      --hud-bg: rgba(255, 255, 255, 0.92);
+      --hud-border: #9dd893;
+      --text-main: #1d3c22;
+      --text-sub: #547859;
+      --card-bg: #ffffff;
+      --card-border: #e0f0df;
+      --card-inner-border: rgba(0, 0, 0, 0.05);
+      --card-shadow: 0 18px 0 #b3d9b0, 0 32px 50px rgba(78, 143, 85, 0.22);
+      --accent-gold: #ffc400;
+      --accent-flame: #ff5252;
+      --accent-neon: #58cc02;
+      --tag-bg: #e8f9d8;
+      --tag-color: #428e07;
+      --panel-bg: rgba(255, 255, 255, 0.9);
+      
+      --btn-bg-1: #ff4b4b; --btn-border-1: #d32f2f; --btn-color-1: #ffffff;
+      --btn-bg-2: #ff9600; --btn-border-2: #d67400; --btn-color-2: #ffffff;
+      --btn-bg-3: #1cb0f6; --btn-border-3: #1480b3; --btn-color-3: #ffffff;
+      --btn-bg-4: #58cc02; --btn-border-4: #46a302; --btn-color-4: #ffffff;
+      --fever-glow: 0 0 30px rgba(255, 196, 0, 0.85);
+    }
+
+    /* 风格 C: 极简数码 / 轻奢流光 (Linear / Stripe 风格) */
+    body[data-theme="minimal"] {
+      --bg-gradient: radial-gradient(circle at 50% 20%, #151821 0%, #0c0d12 60%, #08080c 100%);
+      --hud-bg: rgba(18, 20, 29, 0.8);
+      --hud-border: rgba(255, 255, 255, 0.09);
+      --text-main: #f0f2f7;
+      --text-sub: #787f95;
+      --card-bg: rgba(20, 24, 35, 0.8);
+      --card-border: rgba(255, 255, 255, 0.12);
+      --card-inner-border: rgba(255, 255, 255, 0.04);
+      --card-shadow: 0 30px 70px rgba(0, 0, 0, 0.65), 0 0 1px rgba(255, 255, 255, 0.3);
+      --accent-gold: #70b8ff;
+      --accent-flame: #f43f5e;
+      --accent-neon: #a855f7;
+      --tag-bg: rgba(255, 255, 255, 0.06);
+      --tag-color: #cbd5e1;
+      --panel-bg: rgba(18, 21, 31, 0.8);
+      
+      --btn-bg-1: rgba(239, 68, 68, 0.1); --btn-border-1: rgba(239, 68, 68, 0.28); --btn-color-1: #f87171;
+      --btn-bg-2: rgba(245, 158, 11, 0.1); --btn-border-2: rgba(245, 158, 11, 0.28); --btn-color-2: #fbbf24;
+      --btn-bg-3: rgba(56, 189, 248, 0.1); --btn-border-3: rgba(56, 189, 248, 0.28); --btn-color-3: #38bdf8;
+      --btn-bg-4: rgba(168, 85, 247, 0.1); --btn-border-4: rgba(168, 85, 247, 0.28); --btn-color-4: #c084fc;
+      --fever-glow: 0 0 35px rgba(99, 102, 241, 0.5);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      font-family: var(--font-family);
+      background: var(--bg-gradient);
+      color: var(--text-main);
+      transition: var(--theme-transition);
+      overflow-x: hidden;
+      overflow-y: auto;
+      scroll-behavior: smooth;
+    }
+
+    #viewport-root {
+      position: relative;
+      width: 100%;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      overflow: hidden;
+      transform-origin: center center;
+      will-change: transform;
+    }
+
+    #fx-canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    #trail-canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 6;
+    }
+
+    .floating-layer {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 90;
+      overflow: hidden;
+    }
+
+    .floating-popup {
+      position: absolute;
+      font-family: var(--font-mono);
+      font-weight: 900;
+      pointer-events: none;
+      animation: popup-bounce 0.85s var(--spring-bounce) forwards;
+      text-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+      white-space: nowrap;
+    }
+
+    @keyframes popup-bounce {
+      0% { opacity: 0; transform: translate(-50%, -50%) scale(0.3) rotate(-8deg); }
+      22% { opacity: 1; transform: translate(-50%, -70px) scale(1.35) rotate(3deg); }
+      70% { opacity: 1; transform: translate(-50%, -120px) scale(1) rotate(0deg); }
+      100% { opacity: 0; transform: translate(-50%, -165px) scale(0.8) rotate(4deg); }
+    }
+
+    .popup-forgot { color: #f87171; font-size: 26px; }
+    .popup-hard { color: #fbbf24; font-size: 26px; }
+    .popup-good { color: #38bdf8; font-size: 30px; }
+    .popup-crit {
+      color: #ffbe26;
+      font-size: 38px;
+      text-shadow: 0 0 20px rgba(255, 190, 38, 0.9), 0 0 45px #ff4d2e;
+    }
+    .popup-revenge {
+      color: #f43f5e;
+      font-size: 36px;
+      text-shadow: 0 0 25px rgba(244, 63, 94, 0.9), 0 0 40px #fff;
+    }
+
+    .top-navbar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      width: 100%;
+      max-width: 1180px;
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      backdrop-filter: blur(18px);
+      background: var(--hud-bg);
+      border-bottom: 1px solid var(--hud-border);
+      border-radius: 0 0 20px 20px;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+    }
+
+    .brand-wrap {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .app-logo {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent-gold), var(--accent-flame));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+    }
+
+    .brand-titles {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .brand-h1 {
+      font-size: 15px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      letter-spacing: -0.2px;
+    }
+
+    .app-ver {
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: var(--tag-bg);
+      color: var(--tag-color);
+      font-family: var(--font-mono);
+      font-weight: 700;
+    }
+
+    .brand-sub {
+      font-size: 11px;
+      color: var(--text-sub);
+    }
+
+    .view-switcher-tabs {
+      display: flex;
+      background: rgba(0, 0, 0, 0.25);
+      padding: 4px;
+      border-radius: 30px;
+      border: 1px solid var(--hud-border);
+      gap: 4px;
+    }
+
+    .view-tab-btn {
+      border: none;
+      background: transparent;
+      color: var(--text-sub);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.25s var(--spring-smooth);
+    }
+
+    .view-tab-btn.active {
+      background: var(--accent-gold);
+      color: #000;
+      box-shadow: 0 3px 12px rgba(255, 190, 38, 0.45);
+    }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .theme-capsule-picker {
+      display: flex;
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--hud-border);
+      padding: 3px;
+      border-radius: 24px;
+    }
+
+    .theme-btn {
+      border: none;
+      background: transparent;
+      color: var(--text-sub);
+      padding: 4px 10px;
+      border-radius: 18px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .theme-btn.active {
+      background: var(--card-bg);
+      color: var(--text-main);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    .btn-sandbox-trigger {
+      border: 1px solid var(--hud-border);
+      background: var(--hud-bg);
+      color: var(--text-main);
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: transform 0.15s ease;
+    }
+
+    .btn-sandbox-trigger:hover {
+      transform: translateY(-2px);
+    }
+
+    .hud-metrics-bar {
+      width: 100%;
+      max-width: 1180px;
+      padding: 14px 24px 0;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 16px;
+      align-items: center;
+      z-index: 20;
+    }
+
+    .xp-vault-card {
+      background: var(--hud-bg);
+      border: 1px solid var(--hud-border);
+      border-radius: 16px;
+      padding: 10px 18px;
+      backdrop-filter: blur(14px);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      position: relative;
+    }
+
+    .xp-vault-meta {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .xp-target-socket {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--accent-gold);
+      font-family: var(--font-mono);
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 10px;
+      background: rgba(0, 0, 0, 0.35);
+      border-radius: 20px;
+      overflow: hidden;
+      position: relative;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    body[data-theme="dopamine"] .progress-track {
+      background: #e2edd9;
+      height: 12px;
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: 30%;
+      border-radius: 20px;
+      background: linear-gradient(90deg, #ff9f1c, #ffe169, #ff5e3a);
+      transition: width 0.4s var(--spring-bounce);
+      position: relative;
+    }
+
+    .progress-fill::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.65), transparent);
+      animation: progress-shimmer 2s infinite linear;
+    }
+
+    @keyframes progress-shimmer {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+
+    .streak-container {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 16px;
+      border-radius: 14px;
+      background: var(--hud-bg);
+      border: 1px solid var(--hud-border);
+      backdrop-filter: blur(14px);
+      position: relative;
+    }
+
+    .streak-counter {
+      font-family: var(--font-mono);
+      font-size: 26px;
+      font-weight: 900;
+      color: var(--accent-gold);
+      line-height: 1;
+      transition: transform 0.2s var(--spring-bounce);
+    }
+
+    .streak-badge-box {
+      display: flex;
+      flex-direction: column;
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      color: var(--text-sub);
+    }
+
+    .fever-active .streak-container {
+      background: linear-gradient(135deg, rgba(255, 77, 46, 0.35), rgba(255, 190, 38, 0.35));
+      border-color: var(--accent-flame);
+      box-shadow: var(--fever-glow);
+      animation: pulse-fever 0.8s infinite alternate;
+    }
+
+    .fever-active .streak-counter {
+      color: #fff;
+      text-shadow: 0 0 12px var(--accent-flame), 0 0 24px #ffbe26;
+    }
+
+    @keyframes pulse-fever {
+      0% { transform: scale(1); }
+      100% { transform: scale(1.08); }
+    }
+
+    .main-workspace {
+      width: 100%;
+      max-width: 1180px;
+      padding: 16px 24px 60px;
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+      z-index: 10;
+      position: relative;
+    }
+
+    .mode-section {
+      width: 100%;
+      background: var(--panel-bg);
+      border: 1px solid var(--hud-border);
+      border-radius: 26px;
+      padding: 24px;
+      backdrop-filter: blur(20px);
+      box-shadow: 0 15px 40px rgba(0, 0, 0, 0.35);
+      position: relative;
+    }
+
+    .section-badge-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--card-inner-border);
+    }
+
+    .section-badge-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .mode-pill {
+      font-size: 11px;
+      font-weight: 900;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: var(--accent-gold);
+      color: #000;
+      font-family: var(--font-mono);
+    }
+
+    .section-title {
+      font-size: 17px;
+      font-weight: 800;
+    }
+
+    .section-desc {
+      font-size: 12px;
+      color: var(--text-sub);
+    }
+
+    .mindmap-scene-box {
+      width: 100%;
+      height: 480px;
+      background: rgba(10, 8, 16, 0.65);
+      border: 1px solid var(--card-inner-border);
+      border-radius: 20px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    #mindmap-svg-layer {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    #mindmap-dom-layer {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 3;
+    }
+
+    .electric-wire {
+      fill: none;
+      stroke: rgba(255, 255, 255, 0.16);
+      stroke-width: 2.5px;
+      transition: stroke 0.4s ease, stroke-width 0.3s ease;
+    }
+
+    .electric-wire.surging {
+      stroke: var(--accent-gold);
+      stroke-width: 4px;
+      stroke-dasharray: 8 4;
+      animation: surge-flow 0.5s linear infinite;
+      filter: drop-shadow(0 0 8px var(--accent-gold));
+    }
+
+    @keyframes surge-flow {
+      0% { stroke-dashoffset: 24; }
+      100% { stroke-dashoffset: 0; }
+    }
+
+    .mm-node {
+      position: absolute;
+      min-width: 135px;
+      max-width: 210px;
+      border-radius: 14px;
+      padding: 10px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+      cursor: pointer;
+      transition: transform 0.25s var(--spring-bounce), box-shadow 0.25s ease, opacity 0.3s ease, filter 0.3s ease;
+      will-change: transform;
+    }
+
+    .mm-node:hover {
+      transform: scale(1.05) translateY(-2px);
+    }
+
+    .mm-node.spotlight-dim {
+      opacity: 0.4;
+      filter: grayscale(0.5) blur(0.5px);
+    }
+
+    .mm-node.in-fog {
+      background: rgba(25, 20, 35, 0.85);
+      border: 2px dashed rgba(255, 190, 38, 0.6);
+      animation: rune-pulse 2s infinite alternate ease-in-out;
+    }
+
+    @keyframes rune-pulse {
+      0% { box-shadow: 0 0 10px rgba(255, 190, 38, 0.2); border-color: rgba(255, 190, 38, 0.4); }
+      100% { box-shadow: 0 0 25px rgba(255, 190, 38, 0.6); border-color: #ffbe26; }
+    }
+
+    .rune-mask-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 900;
+      color: var(--accent-gold);
+    }
+
+    .mm-node.revealed {
+      background: var(--card-bg);
+      border: 1.5px solid var(--accent-gold);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 15px rgba(255, 190, 38, 0.2);
+    }
+
+    .mm-node-title {
+      font-size: 13px;
+      font-weight: 800;
+      line-height: 1.35;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .mm-node-detail {
+      font-size: 10px;
+      color: var(--text-sub);
+      line-height: 1.35;
+    }
+
+    .freestyle-stage-container {
+      width: 100%;
+      height: 440px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      perspective: 1200px;
+      position: relative;
+      margin-bottom: 24px;
+    }
+
+    .freestyle-card-box {
+      width: 100%;
+      max-width: 440px;
+      height: 100%;
+      position: relative;
+      transform-style: preserve-3d;
+      will-change: transform;
+      cursor: pointer;
+    }
+
+    .freestyle-card-box.nemesis-card {
+      filter: drop-shadow(0 0 25px rgba(244, 63, 94, 0.7));
+    }
+    .freestyle-card-box.nemesis-card::before {
+      content: '⚔️ 宿敌卡 · 曾破防重铸';
+      position: absolute;
+      top: -14px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #f43f5e;
+      color: #fff;
+      font-size: 10px;
+      font-weight: 900;
+      padding: 3px 10px;
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(244, 63, 94, 0.6);
+      z-index: 10;
+      letter-spacing: 0.5px;
+    }
+
+    .card-flipper {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      transform-style: preserve-3d;
+      transition: transform 0.6s var(--spring-bounce);
+      border-radius: 24px;
+    }
+
+    .freestyle-card-box.flipped .card-flipper {
+      transform: rotateY(180deg);
+    }
+
+    .card-face {
+      position: absolute;
+      inset: 0;
+      backface-visibility: hidden;
+      border-radius: 24px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      box-shadow: var(--card-shadow);
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      overflow: hidden;
+    }
+
+    .card-face.back {
+      transform: rotateY(180deg);
+      border-color: rgba(168, 85, 247, 0.5);
+    }
+
+    body[data-theme="minimal"] .card-face::before {
+      content: '';
+      position: absolute;
+      inset: -2px;
+      border-radius: 26px;
+      padding: 2px;
+      background: conic-gradient(from 0deg, transparent 65%, #38bdf8 82%, #a855f7 95%, transparent 100%);
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      animation: border-beam 4s linear infinite;
+      pointer-events: none;
+    }
+
+    @keyframes border-beam {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .card-sheen {
+      position: absolute;
+      inset: 0;
+      border-radius: 24px;
+      pointer-events: none;
+      background: radial-gradient(circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(255, 255, 255, 0.16) 0%, transparent 65%);
+      mix-blend-mode: overlay;
+    }
+
+    .card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: relative;
+      z-index: 2;
+    }
+
+    .palace-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      border-radius: 20px;
+      background: var(--tag-bg);
+      color: var(--tag-color);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .card-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      position: relative;
+      z-index: 2;
+      padding: 12px 0;
+    }
+
+    .card-cue-label {
+      font-size: 11px;
+      color: var(--text-sub);
+      margin-bottom: 6px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+    }
+
+    .card-main-title {
+      font-size: 21px;
+      font-weight: 800;
+      line-height: 1.35;
+      margin-bottom: 12px;
+    }
+
+    .card-mnemonic-box {
+      font-size: 12px;
+      line-height: 1.45;
+      padding: 8px 14px;
+      border-radius: 12px;
+      background: rgba(0, 0, 0, 0.16);
+      border: 1px dashed rgba(255, 255, 255, 0.16);
+      color: var(--text-sub);
+    }
+
+    .card-foot-prompt {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-size: 11px;
+      color: var(--text-sub);
+      position: relative;
+      z-index: 2;
+      padding-top: 10px;
+      border-top: 1px solid var(--card-inner-border);
+    }
+
+    .kbd-chip {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      padding: 2px 7px;
+      border-radius: 6px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .stamp-overlay {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%) rotate(-15deg) scale(0.6);
+      padding: 8px 20px;
+      border-radius: 12px;
+      border: 4px solid;
+      font-size: 22px;
+      font-weight: 900;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 15;
+      transition: opacity 0.15s ease;
+    }
+    .stamp-left { left: 24px; color: #ff4b4b; border-color: #ff4b4b; background: rgba(255, 75, 75, 0.15); }
+    .stamp-right { right: 24px; transform: translateY(-50%) rotate(15deg) scale(0.6); color: #58cc02; border-color: #58cc02; background: rgba(88, 204, 2, 0.15); }
+
+    .freestyle-keypad {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      width: 100%;
+    }
+
+    .strike-btn {
+      position: relative;
+      border: none;
+      border-radius: 16px;
+      padding: 14px 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      cursor: pointer;
+      overflow: hidden;
+      touch-action: manipulation;
+      transition: transform 0.12s var(--spring-bounce), box-shadow 0.15s ease;
+      will-change: transform;
+    }
+
+    .strike-btn:active {
+      transform: scale(0.92) translateY(3px);
+    }
+
+    body[data-theme="arcade"] .strike-btn {
+      background: linear-gradient(180deg, var(--btn-bg), rgba(15, 12, 22, 0.9));
+      border: 1px solid var(--btn-border);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+      color: var(--btn-color);
+    }
+
+    body[data-theme="dopamine"] .strike-btn {
+      background: var(--btn-bg);
+      color: #ffffff;
+      box-shadow: 0 6px 0 var(--btn-border), 0 12px 18px rgba(0, 0, 0, 0.12);
+      border-radius: 18px;
+    }
+    body[data-theme="dopamine"] .strike-btn:active {
+      transform: translateY(6px);
+      box-shadow: 0 0 0 var(--btn-border);
+    }
+
+    body[data-theme="minimal"] .strike-btn {
+      background: var(--btn-bg);
+      border: 1px solid var(--btn-border);
+      color: var(--btn-color);
+      backdrop-filter: blur(12px);
+    }
+
+    .btn-rate-1 { --btn-bg: var(--btn-bg-1); --btn-border: var(--btn-border-1); --btn-color: var(--btn-color-1); }
+    .btn-rate-2 { --btn-bg: var(--btn-bg-2); --btn-border: var(--btn-border-2); --btn-color: var(--btn-color-2); }
+    .btn-rate-3 { --btn-bg: var(--btn-bg-3); --btn-border: var(--btn-border-3); --btn-color: var(--btn-color-3); }
+    .btn-rate-4 { --btn-bg: var(--btn-bg-4); --btn-border: var(--btn-border-4); --btn-color: var(--btn-color-4); }
+
+    .btn-hotkey {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 800;
+      opacity: 0.8;
+      border-radius: 4px;
+      padding: 1px 5px;
+      background: rgba(0, 0, 0, 0.2);
+    }
+
+    .btn-label { font-size: 14px; font-weight: 900; }
+    .btn-sub { font-size: 10px; opacity: 0.8; font-weight: 600; }
+
+    .fever-active .btn-rate-4 {
+      animation: flame-pulse 0.9s infinite alternate;
+    }
+
+    @keyframes flame-pulse {
+      0% { box-shadow: 0 0 15px rgba(255, 77, 46, 0.7); }
+      100% { box-shadow: 0 0 35px rgba(255, 190, 38, 0.9), 0 0 15px #f43f5e; }
+    }
+
+    .drawer-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.65);
+      backdrop-filter: blur(8px);
+      z-index: 80;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+
+    .drawer-overlay.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .drawer-panel {
+      position: fixed;
+      right: 0;
+      top: 0;
+      bottom: 0;
+      width: 100%;
+      max-width: 440px;
+      background: var(--card-bg);
+      border-left: 1px solid var(--card-border);
+      box-shadow: -15px 0 50px rgba(0, 0, 0, 0.5);
+      z-index: 85;
+      transform: translateX(100%);
+      transition: transform 0.35s var(--spring-smooth);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+
+    .drawer-overlay.open .drawer-panel {
+      transform: translateX(0);
+    }
+
+    .drawer-header {
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--card-inner-border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .drawer-content {
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      flex: 1;
+    }
+
+    .param-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .param-label-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .param-val {
+      font-family: var(--font-mono);
+      color: var(--accent-gold);
+    }
+
+    .param-slider {
+      width: 100%;
+      accent-color: var(--accent-gold);
+      height: 6px;
+      cursor: pointer;
+    }
+
+    .param-desc {
+      font-size: 11px;
+      color: var(--text-sub);
+      line-height: 1.4;
+    }
+
+    .toggle-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .toggle-switch {
+      position: relative;
+      display: inline-block;
+      width: 48px;
+      height: 26px;
+    }
+
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      inset: 0;
+      background-color: rgba(255, 255, 255, 0.2);
+      border-radius: 34px;
+      transition: 0.3s;
+    }
+    .toggle-slider:before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 4px;
+      bottom: 4px;
+      background-color: white;
+      border-radius: 50%;
+      transition: 0.3s var(--spring-bounce);
+    }
+    input:checked + .toggle-slider { background-color: var(--accent-gold); }
+    input:checked + .toggle-slider:before { transform: translateX(22px); }
+
+    .btn-export {
+      width: 100%;
+      padding: 14px;
+      border-radius: 14px;
+      border: none;
+      background: linear-gradient(135deg, var(--accent-gold), var(--accent-flame));
+      color: #000;
+      font-size: 14px;
+      font-weight: 900;
+      cursor: pointer;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .warp-tunnel-overlay {
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(circle at 50% 50%, #4c1d95 0%, #000 80%);
+      z-index: 100;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.5s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .warp-tunnel-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .slot-machine-modal {
+      background: var(--card-bg);
+      border: 3px solid var(--accent-gold);
+      border-radius: 28px;
+      padding: 36px 32px;
+      width: 90%;
+      max-width: 440px;
+      text-align: center;
+      box-shadow: 0 0 80px rgba(255, 190, 38, 0.5);
+      transform: scale(0.8);
+      transition: transform 0.5s var(--spring-bounce);
+    }
+
+    .warp-tunnel-overlay.active .slot-machine-modal {
+      transform: scale(1);
+    }
+
+    .slot-stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin: 20px 0;
+    }
+
+    .slot-cell {
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--card-inner-border);
+      border-radius: 14px;
+      padding: 12px;
+    }
+
+    .slot-number {
+      font-family: var(--font-mono);
+      font-size: 28px;
+      font-weight: 900;
+      color: var(--accent-gold);
+    }
+
+    .slot-label {
+      font-size: 11px;
+      color: var(--text-sub);
+    }
+
+    .toast-msg {
+      position: fixed;
+      top: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-100px);
+      background: #10b981;
+      color: #fff;
+      padding: 12px 24px;
+      border-radius: 30px;
+      font-size: 13px;
+      font-weight: 800;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+      z-index: 120;
+      transition: transform 0.4s var(--spring-bounce), opacity 0.3s ease;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .toast-msg.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+  </style>
+</head>
+<body data-theme="arcade">
+
+  <div id="viewport-root">
+    
+    <!-- 全屏 Canvas 特效层 (粒子爆发 + XP 磁吸光轨) -->
+    <canvas id="fx-canvas"></canvas>
+    <canvas id="trail-canvas"></canvas>
+
+    <!-- 浮字动画层 -->
+    <div class="floating-layer" id="floating-layer"></div>
+
+    <!-- 顶部导航栏 -->
+    <nav class="top-navbar">
+      <div class="brand-wrap">
+        <div class="app-logo">⚡</div>
+        <div class="brand-titles">
+          <div class="brand-h1">
+            Memory Anki <span class="app-ver">Arcade Lab v3.0</span>
+          </div>
+          <div class="brand-sub">思维导图脑图结构 × 随心模式街机化决策沙盒</div>
+        </div>
+      </div>
+
+      <!-- 视角一键切换 (支持 Tab 键) -->
+      <div class="view-switcher-tabs">
+        <button class="view-tab-btn active" id="tab-btn-freestyle" onclick="switchView('freestyle')">
+          🎮 随心刷题 (Freestyle)
+        </button>
+        <button class="view-tab-btn" id="tab-btn-mindmap" onclick="switchView('mindmap')">
+          🧠 思维导图破雾 (Mindmap)
+        </button>
+      </div>
+
+      <!-- 主题与看板开关 -->
+      <div class="nav-actions">
+        <div class="theme-capsule-picker">
+          <button class="theme-btn active" data-style="arcade">🔥 街机</button>
+          <button class="theme-btn" data-style="dopamine">🍬 潮玩</button>
+          <button class="theme-btn" data-style="minimal">✨ 极简</button>
+        </div>
+        <button class="btn-sandbox-trigger" id="btn-open-drawer">
+          <span>⚙️ 调校沙盒</span>
+        </button>
+      </div>
+    </nav>
+
+    <!-- 顶部 HUD 经验吸附能量槽与连击指示器 -->
+    <header class="hud-metrics-bar">
+      <div class="xp-vault-card" id="xp-vault-target">
+        <div class="xp-vault-meta">
+          <span>STAGE ENERGY VAULT</span>
+          <div class="xp-target-socket">
+            <span>⚡</span>
+            <span id="hud-xp-text">EXP 120 / 500 · LV.3</span>
+          </div>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" id="hud-progress-fill" style="width: 24%;"></div>
+        </div>
+      </div>
+
+      <div class="streak-container" id="streak-wrapper">
+        <span class="streak-counter" id="streak-count">0</span>
+        <div class="streak-badge-box">
+          <span>COMBO</span>
+          <span id="fever-text" style="color:var(--accent-flame);display:none;font-weight:900;">🔥 FEVER 2X!</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- 主展示区 -->
+    <main class="main-workspace">
+
+      <!-- ======================================================================
+           场景一：随心模式（Freestyle）七阶打击与加特林换弹舞台
+           ====================================================================== -->
+      <section class="mode-section" id="section-freestyle">
+        <div class="section-badge-bar">
+          <div class="section-badge-left">
+            <span class="mode-pill">FREESTYLE</span>
+            <div>
+              <div class="section-title">随心模式七阶打击流与加特林换弹 (The 7-Beat Strike)</div>
+              <div class="section-desc">Hit-Stop 瞬间定格 · 宿敌暗红荆棘复仇 · 五声音阶和弦连击 · 经验磁吸入槽</div>
+            </div>
+          </div>
+          <div style="font-family:var(--font-mono);font-size:12px;color:var(--accent-gold);" id="freestyle-counter-text">
+            CARD 1 / 10 · 🏛️ 罗马万神殿
+          </div>
+        </div>
+
+        <!-- 3D 悬浮视差卡片舞台 -->
+        <div class="freestyle-stage-container">
+          <div class="freestyle-card-box" id="freestyle-card">
+            <!-- 手机拖拽印章 -->
+            <div class="stamp-overlay stamp-left" id="stamp-left">重练 AGAIN</div>
+            <div class="stamp-overlay stamp-right" id="stamp-right">熟练 EASY</div>
+
+            <div class="card-flipper">
+              <!-- 正面 (记忆线索 / 问题) -->
+              <div class="card-face front">
+                <div class="card-sheen" id="card-sheen-front"></div>
+                <div class="card-head">
+                  <span class="palace-badge" id="card-palace-badge">🏛️ 万神殿 · 传输层长廊 #01</span>
+                  <span style="font-family:var(--font-mono);font-size:11px;color:var(--text-sub);" id="card-step-index">1 / 10</span>
+                </div>
+                <div class="card-body">
+                  <div class="card-cue-label">RETRIEVAL ENCOUNTER</div>
+                  <h2 class="card-main-title" id="card-front-title">计算机网络 · TCP 三次握手</h2>
+                  <div class="card-mnemonic-box" id="card-front-hint">
+                    💡 宫殿视像线索：玄关前两位守卫互相挥舞旗帜与签收包裹
+                  </div>
+                </div>
+                <div class="card-foot-prompt">
+                  <span class="kbd-chip">Space 空格</span>
+                  <span>或点击卡片翻转揭晓</span>
+                </div>
+              </div>
+
+              <!-- 反面 (记忆提取答案) -->
+              <div class="card-face back">
+                <div class="card-sheen" id="card-sheen-back"></div>
+                <div class="card-head">
+                  <span class="palace-badge" style="color:#c084fc;">🗝️ 记忆提取密钥</span>
+                  <span style="font-family:var(--font-mono);font-size:11px;color:#c084fc;">VERIFIED</span>
+                </div>
+                <div class="card-body">
+                  <div class="card-cue-label">CORE MECHANISM</div>
+                  <h2 class="card-main-title" id="card-back-title" style="font-size:19px;">
+                    ① SYN(x) → ② SYN+ACK(y, x+1) → ③ ACK(y+1)
+                  </h2>
+                  <div class="card-mnemonic-box" id="card-back-detail">
+                    🎯 核心检验：双方同时确认己方与对方的「收、发」双向信道完全正常
+                  </div>
+                </div>
+                <div class="card-foot-prompt">
+                  <span class="kbd-chip">1~4 快捷键</span>
+                  <span>评定分值，触发物理换弹与磁吸光轨</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 七阶评分打击键位 -->
+        <div class="freestyle-keypad">
+          <button class="strike-btn btn-rate-1" data-rating="1">
+            <span class="btn-hotkey">[1]</span>
+            <span class="btn-label">破防重铸</span>
+            <span class="btn-sub">标为宿敌卡</span>
+          </button>
+          <button class="strike-btn btn-rate-2" data-rating="2">
+            <span class="btn-hotkey">[2]</span>
+            <span class="btn-label">险胜格挡</span>
+            <span class="btn-sub">拼刀火花</span>
+          </button>
+          <button class="strike-btn btn-rate-3" data-rating="3">
+            <span class="btn-hotkey">[3]</span>
+            <span class="btn-label">清脆命中</span>
+            <span class="btn-sub">和弦硬币</span>
+          </button>
+          <button class="strike-btn btn-rate-4" data-rating="4">
+            <span class="btn-hotkey">[4]</span>
+            <span class="btn-label">天霸暴击</span>
+            <span class="btn-sub">CRITICAL!</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- ======================================================================
+           场景二：思维导图多层级破雾翻卡 (Mindmap Node Reveal & Cascade)
+           ====================================================================== -->
+      <section class="mode-section" id="section-mindmap">
+        <div class="section-badge-bar">
+          <div class="section-badge-left">
+            <span class="mode-pill" style="background:#38bdf8;">MINDMAP</span>
+            <div>
+              <div class="section-title">思维导图脑图结构破雾翻卡 (Crystalline Crack & Cascade)</div>
+              <div class="section-desc">半透明探索迷雾 · 边缘呼吸光晕 · 聚光灯衰减 · 玻璃破碎晶体爆散 · 级联高压通电</div>
+            </div>
+          </div>
+          <div style="font-size:12px;color:var(--text-sub);">
+            [Space / 点击] 破雾翻开 · [S] 收起分支
+          </div>
+        </div>
+
+        <!-- 导图画布 -->
+        <div class="mindmap-scene-box" id="mindmap-scene">
+          <svg id="mindmap-svg-layer"></svg>
+          <div id="mindmap-dom-layer"></div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- 调校决策侧边抽屉 (Decision Sandbox Drawer) -->
+  <div class="drawer-overlay" id="drawer-overlay">
+    <div class="drawer-panel">
+      <div class="drawer-header">
+        <h3 style="font-size:16px;font-weight:800;display:flex;align-items:center;gap:8px;">
+          <span>🎛️ 动效与手感决策看板</span>
+        </h3>
+        <button style="border:none;background:rgba(255,255,255,0.1);color:#fff;width:30px;height:30px;border-radius:50%;cursor:pointer;" id="btn-close-drawer">✕</button>
+      </div>
+
+      <div class="drawer-content">
+        <div class="param-group">
+          <div class="param-label-row">
+            <span>判定定格 (Hit-Stop)</span>
+            <span class="param-val" id="val-hitstop">20 ms</span>
+          </div>
+          <input type="range" class="param-slider" id="slider-hitstop" min="0" max="60" step="5" value="20">
+          <div class="param-desc">评分瞬间画面微停滞时间，制造实体物理打击重量感。</div>
+        </div>
+
+        <div class="param-group">
+          <div class="param-label-row">
+            <span>屏幕震动幅度 (Screen Shake)</span>
+            <span class="param-val" id="val-shake">100 %</span>
+          </div>
+          <input type="range" class="param-slider" id="slider-shake" min="0" max="250" step="10" value="100">
+          <div class="param-desc">1分破防重铸或4分暴击时的视口摇晃强烈程度。</div>
+        </div>
+
+        <div class="param-group">
+          <div class="param-label-row">
+            <span>粒子爆发密度 (Particle Density)</span>
+            <span class="param-val" id="val-particles">80 颗</span>
+          </div>
+          <input type="range" class="param-slider" id="slider-particles" min="20" max="180" step="10" value="80">
+          <div class="param-desc">刀剑火花、晶体碎片爆散与暴击礼炮发射数量。</div>
+        </div>
+
+        <div class="param-group">
+          <div class="param-label-row">
+            <span>加特林换弹速度 (Reload Delay)</span>
+            <span class="param-val" id="val-reload">240 ms</span>
+          </div>
+          <input type="range" class="param-slider" id="slider-reload" min="120" max="450" step="20" value="240">
+          <div class="param-desc">评分飞出到下一张卡机械上膛就位的延迟时间。</div>
+        </div>
+
+        <div class="toggle-row">
+          <div>
+            <div style="font-size:13px;font-weight:700;">手机触觉震动 (Web Haptics)</div>
+            <div class="param-desc">阶梯震动：破防[40,60,40]、命中12ms、暴击齿轮震。</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggle-haptic" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="toggle-row">
+          <div>
+            <div style="font-size:13px;font-weight:700;">五声音阶升调 (Pitch Escalation)</div>
+            <div class="param-desc">连击时硬币碰撞合成音逐级升高 (C4 ➔ C5)。</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggle-pitch" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="toggle-row">
+          <div>
+            <div style="font-size:13px;font-weight:700;">经验磁吸光轨 (Magnetic Trail)</div>
+            <div class="param-desc">经验值化作光轨磁吸飞入顶部能量槽。</div>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggle-trail" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <button class="btn-export" id="btn-export-decision" style="margin-top:12px;">
+          <span>📋 一键复制我的动效与手感配置 (JSON)</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 宫殿跃迁折跃光束与老虎机滚动结算 (Palace Warp Tunnel & Slot Machine) -->
+  <div class="warp-tunnel-overlay" id="warp-tunnel">
+    <div class="slot-machine-modal">
+      <div style="font-size:42px;margin-bottom:8px;">🌌</div>
+      <h2 style="font-size:26px;color:var(--accent-gold);margin-bottom:4px;font-weight:900;">PALACE CLEAR!</h2>
+      <p style="font-size:12px;color:var(--text-sub);margin-bottom:16px;">空间折跃完成 · 记忆宫殿已牢固入库</p>
+
+      <div class="slot-stats-grid">
+        <div class="slot-cell">
+          <div class="slot-number" id="slot-card-count">0</div>
+          <div class="slot-label">提取卡片总数</div>
+        </div>
+        <div class="slot-cell">
+          <div class="slot-number" id="slot-max-combo">0</div>
+          <div class="slot-label">最高狂暴连击</div>
+        </div>
+        <div class="slot-cell">
+          <div class="slot-number" id="slot-crit-rate">0%</div>
+          <div class="slot-label">天霸暴击率</div>
+        </div>
+        <div class="slot-cell">
+          <div class="slot-number" id="slot-total-xp">+0</div>
+          <div class="slot-label">获得总经验</div>
+        </div>
+      </div>
+
+      <button class="btn-export" style="background:var(--accent-gold);color:#000;" onclick="restartPalaceRound()">
+        开启下一座记忆宫殿折跃 (Space)
+      </button>
+    </div>
+  </div>
+
+  <div class="toast-msg" id="toast-msg">✅ 动效手感配置已复制至剪贴板，可直接粘贴！</div>
+
+  <!-- ==========================================================================
+       脚本核心实现：声音引擎 + 粒子 + 磁吸光轨 + 导图破雾 + 随心换弹
+       ========================================================================== -->
+  <script>
+    /* --------------------------------------------------------------------------
+       1. 沙盒配置状态
+       -------------------------------------------------------------------------- */
+    const CONFIG = {
+      theme: 'arcade',
+      hitStopMs: 20,
+      shakeIntensity: 1.0,
+      particleDensity: 80,
+      reloadMs: 240,
+      hapticsEnabled: true,
+      pitchEscalation: true,
+      trailEnabled: true
+    };
+
+    /* --------------------------------------------------------------------------
+       2. Web Audio API 纯代码程序化声音引擎
+       -------------------------------------------------------------------------- */
+    class ArcadeSoundLab {
+      constructor() {
+        this.ctx = null;
+        // 五声音阶和弦梯队: C4 (261.6), D4 (293.7), E4 (329.6), G4 (392.0), A4 (440.0), C5 (523.3), E5 (659.3)
+        this.scale = [261.63, 293.66, 329.63, 392.00, 440.00, 523.25, 659.25, 783.99];
+      }
+
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          this.ctx = new AudioContext();
+        }
+        if (this.ctx.state === 'suspended') this.ctx.resume();
+      }
+
+      getMaster(level = 1.0) {
+        this.init();
+        const gain = this.ctx.createGain();
+        gain.gain.value = 0.7 * level;
+        gain.connect(this.ctx.destination);
+        return gain;
+      }
+
+      // 翻卡机械风切/卡扣声
+      playFlip() {
+        this.init();
+        const now = this.ctx.currentTime;
+        const master = this.getMaster(0.6);
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(320, now);
+        osc.frequency.exponentialRampToValueAtTime(110, now + 0.08);
+        gain.gain.setValueAtTime(0.5, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+        osc.connect(gain); gain.connect(master);
+        osc.start(now); osc.stop(now + 0.09);
+      }
+
+      // 导图破雾：玻璃碎裂质感 (Crystalline Crack)
+      playCrystalCrack() {
+        this.init();
+        const now = this.ctx.currentTime;
+        const master = this.getMaster(0.8);
+
+        // 高频白噪声碎片
+        const bufferSize = this.ctx.sampleRate * 0.15;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.2));
+        }
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'highpass';
+        filter.frequency.setValueAtTime(1800, now);
+        noise.connect(filter); filter.connect(master);
+        noise.start(now);
+
+        // 双晶体高音
+        [1046.5, 1567.9].forEach((freq, idx) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, now + idx * 0.03);
+          gain.gain.setValueAtTime(0.4, now + idx * 0.03);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.03 + 0.18);
+          osc.connect(gain); gain.connect(master);
+          osc.start(now + idx * 0.03); osc.stop(now + idx * 0.03 + 0.19);
+        });
+      }
+
+      // 导图高压电流级联通电
+      playElectricSurge() {
+        this.init();
+        const now = this.ctx.currentTime;
+        const master = this.getMaster(0.7);
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(180, now);
+        osc.frequency.exponentialRampToValueAtTime(880, now + 0.18);
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.setValueAtTime(1200, now);
+        gain.gain.setValueAtTime(0.5, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+        osc.connect(filter); filter.connect(gain); gain.connect(master);
+        osc.start(now); osc.stop(now + 0.21);
+      }
+
+      // 1分：破防重铸 (沉重低音爆鸣)
+      playForgot() {
+        this.init();
+        const now = this.ctx.currentTime;
+        const master = this.getMaster(1.0);
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(150, now);
+        osc.frequency.exponentialRampToValueAtTime(35, now + 0.3);
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(320, now);
+        filter.frequency.exponentialRampToValueAtTime(50, now + 0.28);
+        gain.gain.setValueAtTime(0.9, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+        osc.connect(filter); filter.connect(gain); gain.connect(master);
+        osc.start(now); osc.stop(now + 0.31);
+      }
+
+      // 2分：险胜格挡 (刀剑拼刀火花刮擦音)
+      playParry() {
+        this.init();
+        const now = this.ctx.currentTime;
+        const master = this.getMaster(0.8);
+        // 金属碰擦
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(880, now);
+        osc.frequency.exponentialRampToValueAtTime(220, now + 0.12);
+        gain.gain.setValueAtTime(0.7, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+        osc.connect(gain); gain.connect(master);
+        osc.start(now); osc.stop(now + 0.13);
+      }
+
+      // 3分：清脆命中 (硬币碰撞音 + 五声音阶升调)
+      playHit(combo = 0) {
+        this.init();
+        const now = this.ctx.currentTime;
+        const master = this.getMaster(0.75);
+        const step = CONFIG.pitchEscalation ? (combo % this.scale.length) : 2;
+        const baseFreq = this.scale[step];
+
+        [baseFreq, baseFreq * 1.5].forEach((freq, idx) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, now + idx * 0.035);
+          gain.gain.setValueAtTime(0.6, now + idx * 0.035);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.035 + 0.32);
+          osc.connect(gain); gain.connect(master);
+          osc.start(now + idx * 0.035); osc.stop(now + idx * 0.035 + 0.33);
+        });
+      }
+
+      // 4分：天霸暴击 (四和弦琶音 + 重低音冲击波)
+      playCritical(combo = 0) {
+        this.init();
+        const now = this.ctx.currentTime;
+        const master = this.getMaster(0.9);
+        const step = CONFIG.pitchEscalation ? (combo % (this.scale.length - 2)) : 0;
+        const chord = [this.scale[step], this.scale[step + 1], this.scale[step + 2], this.scale[step + 2] * 1.5];
+
+        chord.forEach((freq, idx) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = (CONFIG.theme === 'dopamine') ? 'triangle' : 'sine';
+          osc.frequency.setValueAtTime(freq, now + idx * 0.03);
+          gain.gain.setValueAtTime(0.7, now + idx * 0.03);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.03 + 0.45);
+          osc.connect(gain); gain.connect(master);
+          osc.start(now + idx * 0.03); osc.stop(now + idx * 0.03 + 0.46);
+        });
+
+        // 底部重低音冲击波
+        const sub = this.ctx.createOscillator();
+        const subGain = this.ctx.createGain();
+        sub.type = 'sine';
+        sub.frequency.setValueAtTime(120, now);
+        sub.frequency.exponentialRampToValueAtTime(36, now + 0.22);
+        subGain.gain.setValueAtTime(0.8, now);
+        subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+        sub.connect(subGain); subGain.connect(master);
+        sub.start(now); sub.stop(now + 0.23);
+      }
+
+      // 加特林子弹机械上膛卡扣声 (Mechanical Clack)
+      playMechanicalClack() {
+        this.init();
+        const now = this.ctx.currentTime;
+        const master = this.getMaster(0.7);
+        // 双短击卡扣
+        [380, 240].forEach((freq, i) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(freq, now + i * 0.04);
+          gain.gain.setValueAtTime(0.6, now + i * 0.04);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.04 + 0.035);
+          osc.connect(gain); gain.connect(master);
+          osc.start(now + i * 0.04); osc.stop(now + i * 0.04 + 0.04);
+        });
+      }
+
+      // 宿敌复仇成功拔除心魔 (Revenge)
+      playRevengeStab() {
+        this.init();
+        const now = this.ctx.currentTime;
+        const master = this.getMaster(0.85);
+        [440, 659.2, 880].forEach((freq, idx) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(freq, now + idx * 0.03);
+          gain.gain.setValueAtTime(0.5, now + idx * 0.03);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.03 + 0.35);
+          osc.connect(gain); gain.connect(master);
+          osc.start(now + idx * 0.03); osc.stop(now + idx * 0.03 + 0.36);
+        });
+      }
+
+      // 空间折跃通关大典 (Palace Warp Victory)
+      playWarpClear() {
+        this.init();
+        const notes = [261.6, 329.6, 392.0, 523.2, 659.2, 783.9, 1046.5];
+        notes.forEach((freq, i) => {
+          setTimeout(() => {
+            const now = this.ctx.currentTime;
+            const master = this.getMaster(0.75);
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(freq, now);
+            gain.gain.setValueAtTime(0.6, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+            osc.connect(gain); gain.connect(master);
+            osc.start(now); osc.stop(now + 0.42);
+          }, i * 65);
+        });
+      }
+    }
+
+    const sound = new ArcadeSoundLab();
+
+    /* --------------------------------------------------------------------------
+       3. 手机端触觉微震 (Web Haptics)
+       -------------------------------------------------------------------------- */
+    function triggerHaptic(type) {
+      if (!CONFIG.hapticsEnabled || !navigator.vibrate) return;
+      try {
+        switch (type) {
+          case 'forgot': navigator.vibrate([40, 60, 40]); break; // 沉重顿挫
+          case 'parry': navigator.vibrate(25); break;            // 单次阻尼
+          case 'hit': navigator.vibrate(12); break;              // 短促脆震
+          case 'crit': navigator.vibrate([10, 30, 20, 30, 30]); break; // 棘轮升序
+          case 'revenge': navigator.vibrate([30, 40, 80]); break;
+          case 'clack': navigator.vibrate(8); break;
+        }
+      } catch (e) {}
+    }
+
+    /* --------------------------------------------------------------------------
+       4. 屏幕微震 (Screen Shake) 与定格打击 (Hit-Stop)
+       -------------------------------------------------------------------------- */
+    const viewportRoot = document.getElementById('viewport-root');
+    let shakeTimer = null;
+
+    function applyScreenShake(intensity = 1.0) {
+      if (CONFIG.shakeIntensity <= 0) return;
+      const actual = intensity * CONFIG.shakeIntensity;
+      const start = performance.now();
+      const duration = 220;
+
+      if (shakeTimer) cancelAnimationFrame(shakeTimer);
+
+      function step(now) {
+        const elapsed = now - start;
+        if (elapsed < duration) {
+          const progress = 1 - (elapsed / duration);
+          const maxOffset = 9 * actual * progress;
+          const rx = (Math.random() - 0.5) * maxOffset;
+          const ry = (Math.random() - 0.5) * maxOffset;
+          viewportRoot.style.transform = `translate(${rx}px, ${ry}px)`;
+          shakeTimer = requestAnimationFrame(step);
+        } else {
+          viewportRoot.style.transform = '';
+          shakeTimer = null;
+        }
+      }
+      shakeTimer = requestAnimationFrame(step);
+    }
+
+    function applyHitStop(callback) {
+      const ms = CONFIG.hitStopMs;
+      if (ms <= 0) { callback(); return; }
+      document.body.style.filter = 'contrast(1.18) brightness(1.12)';
+      setTimeout(() => {
+        document.body.style.filter = '';
+        callback();
+      }, ms);
+    }
+
+    /* --------------------------------------------------------------------------
+       5. Canvas 2D 粒子系统与磁吸能量光轨 (Particles & Magnetic Trails)
+       -------------------------------------------------------------------------- */
+    const fxCanvas = document.getElementById('fx-canvas');
+    const fxCtx = fxCanvas.getContext('2d');
+    const trailCanvas = document.getElementById('trail-canvas');
+    const trailCtx = trailCanvas.getContext('2d');
+
+    let particles = [];
+    let energyTrails = [];
+
+    function resizeCanvases() {
+      fxCanvas.width = window.innerWidth;
+      fxCanvas.height = window.innerHeight;
+      trailCanvas.width = window.innerWidth;
+      trailCanvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resizeCanvases);
+    resizeCanvases();
+
+    class SparkParticle {
+      constructor(x, y, color, speed, size, life, angle, gravity = 0.28) {
+        this.x = x; this.y = y; this.color = color; this.size = size;
+        this.initialLife = life; this.life = life; this.gravity = gravity;
+        this.vx = Math.cos(angle) * speed;
+        this.vy = Math.sin(angle) * speed;
+      }
+      update() {
+        this.vx *= 0.94; this.vy *= 0.94; this.vy += this.gravity;
+        this.x += this.vx; this.y += this.vy; this.life--;
+      }
+      draw(c) {
+        c.save();
+        c.globalAlpha = Math.max(0, this.life / this.initialLife);
+        c.fillStyle = this.color;
+        c.beginPath();
+        c.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        c.fill();
+        c.restore();
+      }
+    }
+
+    // 磁吸经验光轨粒子
+    class EnergyOrb {
+      constructor(startX, startY, targetX, targetY, color = '#ffbe26') {
+        this.x = startX; this.y = startY;
+        this.targetX = targetX; this.targetY = targetY;
+        this.color = color;
+        this.t = 0;
+        this.speed = 0.035 + Math.random() * 0.02;
+        // 二次贝塞尔曲线控制点（形成优美弧线）
+        const midX = (startX + targetX) / 2 + (Math.random() - 0.5) * 200;
+        const midY = Math.min(startY, targetY) - (60 + Math.random() * 120);
+        this.cpX = midX; this.cpY = midY;
+        this.history = [];
+        this.isDone = false;
+      }
+      update() {
+        this.history.push({ x: this.x, y: this.y });
+        if (this.history.length > 7) this.history.shift();
+
+        this.t += this.speed;
+        if (this.t >= 1) {
+          this.t = 1;
+          this.isDone = true;
+          // 到达顶部经验槽，触发 HUD 冲击微震
+          pulseXpVault();
+        } else {
+          // 二次贝塞尔公式 B(t) = (1-t)^2 P0 + 2(1-t)t P1 + t^2 P2
+          const it = 1 - this.t;
+          this.x = it * it * this.x + 2 * it * this.t * this.cpX + this.t * this.t * this.targetX;
+          this.y = it * it * this.y + 2 * it * this.t * this.cpY + this.t * this.t * this.targetY;
+        }
+      }
+      draw(c) {
+        c.save();
+        // 拖尾光轨
+        for (let i = 0; i < this.history.length; i++) {
+          const pt = this.history[i];
+          c.fillStyle = this.color;
+          c.globalAlpha = (i / this.history.length) * 0.6;
+          c.beginPath();
+          c.arc(pt.x, pt.y, 3.5, 0, Math.PI * 2);
+          c.fill();
+        }
+        // 头部高能光点
+        c.fillStyle = '#ffffff';
+        c.globalAlpha = 1;
+        c.beginPath();
+        c.arc(this.x, this.y, 5, 0, Math.PI * 2);
+        c.fill();
+        c.restore();
+      }
+    }
+
+    function spawnHitParticles(x, y, rating) {
+      const base = CONFIG.particleDensity;
+      let colors = [];
+      let speed = [4, 12];
+
+      if (rating === 1) { colors = ['#64748b', '#475569', '#f87171']; speed = [2, 7]; }
+      else if (rating === 2) { colors = ['#f59e0b', '#d97706', '#fbbf24', '#ffffff']; speed = [6, 14]; } // 拼刀火花
+      else if (rating === 3) { colors = ['#38bdf8', '#0284c7', '#ffd166', '#ffffff']; speed = [6, 15]; }
+      else if (rating === 4) { colors = ['#ffbe26', '#ff4d2e', '#c084fc', '#ffd166', '#ffffff']; speed = [8, 22]; }
+
+      for (let i = 0; i < base; i++) {
+        const c = colors[Math.floor(Math.random() * colors.length)];
+        const angle = Math.random() * Math.PI * 2;
+        const spd = speed[0] + Math.random() * (speed[1] - speed[0]);
+        particles.push(new SparkParticle(x, y, c, spd, 2.5 + Math.random() * 3, 38, angle));
+      }
+    }
+
+    function spawnMagneticEnergyTrails(startX, startY, count = 3) {
+      if (!CONFIG.trailEnabled) return;
+      const vault = document.getElementById('xp-vault-target').getBoundingClientRect();
+      const targetX = vault.left + vault.width * 0.6;
+      const targetY = vault.top + vault.height / 2;
+
+      for (let i = 0; i < count; i++) {
+        setTimeout(() => {
+          energyTrails.push(new EnergyOrb(startX, startY, targetX, targetY));
+        }, i * 60);
+      }
+    }
+
+    function pulseXpVault() {
+      const el = document.getElementById('xp-vault-target');
+      el.style.transform = 'scale(1.05)';
+      el.style.borderColor = 'var(--accent-gold)';
+      setTimeout(() => {
+        el.style.transform = 'scale(1)';
+        el.style.borderColor = '';
+      }, 140);
+    }
+
+    function renderAnimationLoop() {
+      fxCtx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
+      trailCtx.clearRect(0, 0, trailCanvas.width, trailCanvas.height);
+
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.update();
+        p.draw(fxCtx);
+        if (p.life <= 0) particles.splice(i, 1);
+      }
+
+      for (let i = energyTrails.length - 1; i >= 0; i--) {
+        const t = energyTrails[i];
+        t.update();
+        t.draw(trailCtx);
+        if (t.isDone) energyTrails.splice(i, 1);
+      }
+
+      requestAnimationFrame(renderAnimationLoop);
+    }
+    requestAnimationFrame(renderAnimationLoop);
+
+    function spawnFloatingPopup(text, type, x, y) {
+      const popup = document.createElement('div');
+      popup.className = `floating-popup popup-${type}`;
+      popup.style.left = `${x}px`;
+      popup.style.top = `${y}px`;
+      popup.innerHTML = text;
+      document.getElementById('floating-layer').appendChild(popup);
+      setTimeout(() => popup.remove(), 850);
+    }
+
+    /* --------------------------------------------------------------------------
+       6. 场景一：思维导图多层级破雾翻卡 (Mindmap Reveal & Cascade Surge)
+       -------------------------------------------------------------------------- */
+    const MINDMAP_GRAPH = {
+      id: "root",
+      title: "🏛️ 传输层协议总览",
+      detail: "万神殿 · 门廊中枢",
+      x: 40, y: 210,
+      state: "revealed",
+      children: [
+        {
+          id: "m_syn",
+          title: "① SYN 同步握手",
+          detail: "seq=x, SYN=1 请求建立连接",
+          x: 230, y: 110,
+          state: "fog",
+          children: [
+            { id: "m_syn_ack", title: "② SYN+ACK 响应", detail: "seq=y, ack=x+1 确认并同步", x: 440, y: 70, state: "fog" },
+            { id: "m_ack", title: "③ ACK 最终就位", detail: "ack=y+1 双向信道全部畅通", x: 440, y: 150, state: "fog" }
+          ]
+        },
+        {
+          id: "m_wave",
+          title: "四次挥手独立断开",
+          detail: "全双工信道独立释放机制",
+          x: 230, y: 310,
+          state: "fog",
+          children: [
+            { id: "m_fin1", title: "① 主动方 FIN", detail: "主动关闭发送信道", x: 440, y: 270, state: "fog" },
+            { id: "m_2msl", title: "④ 2MSL 等待计时", detail: "防旧报文迷乱，保对端收妥", x: 440, y: 350, state: "fog" }
+          ]
+        }
+      ]
+    };
+
+    let activeMindmapNodeId = "m_syn";
+    const mindmapSvgLayer = document.getElementById('mindmap-svg-layer');
+    const mindmapDomLayer = document.getElementById('mindmap-dom-layer');
+
+    function renderMindmap() {
+      mindmapDomLayer.innerHTML = '';
+      let svgWires = '';
+
+      function traverse(node, parent = null) {
+        // 绘制高压通电连线
+        if (parent) {
+          const startX = parent.x + 135;
+          const startY = parent.y + 24;
+          const endX = node.x;
+          const endY = node.y + 24;
+          const midX = (startX + endX) / 2;
+          const d = `M ${startX} ${startY} C ${midX} ${startY}, ${midX} ${endY}, ${endX} ${endY}`;
+          const isSurging = node.state === 'revealed';
+          svgWires += `<path id="wire-${node.id}" d="${d}" class="electric-wire ${isSurging ? 'surging' : ''}" />`;
+        }
+
+        // 节点 DOM
+        const el = document.createElement('div');
+        const isFog = node.state === 'fog';
+        const isCurrent = node.id === activeMindmapNodeId;
+        const isDim = !isCurrent && node.level !== 'root';
+
+        el.className = `mm-node ${isFog ? 'in-fog' : 'revealed'} ${isDim ? 'spotlight-dim' : ''}`;
+        el.style.left = `${node.x}px`;
+        el.style.top = `${node.y}px`;
+        el.id = `node-${node.id}`;
+
+        if (isFog) {
+          el.innerHTML = `
+            <div class="rune-mask-label">🌫️ 探索迷雾 (待回忆)</div>
+            <div class="mm-node-title" style="color:var(--accent-gold);">${node.title}</div>
+            <div class="mm-node-detail">点击或 Space 晶体破碎翻开</div>
+          `;
+        } else {
+          el.innerHTML = `
+            <div class="mm-node-title">
+              <span>${node.title}</span>
+              <span style="font-size:10px;color:#10b981;">✓</span>
+            </div>
+            <div class="mm-node-detail">${node.detail}</div>
+          `;
+        }
+
+        el.addEventListener('click', () => {
+          focusAndRevealMindmapNode(node, el);
+        });
+
+        mindmapDomLayer.appendChild(el);
+
+        if (node.children) {
+          node.children.forEach(c => traverse(c, node));
+        }
+      }
+
+      traverse(MINDMAP_GRAPH);
+      mindmapSvgLayer.innerHTML = svgWires;
+    }
+
+    function focusAndRevealMindmapNode(node, el) {
+      activeMindmapNodeId = node.id;
+      const rect = el.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+
+      if (node.state === 'fog') {
+        // 破雾瞬间：玻璃碎片音效 + 物理微粒 + 级联电流通电
+        node.state = 'revealed';
+        sound.playCrystalCrack();
+        sound.playElectricSurge();
+        triggerHaptic('hit');
+        applyScreenShake(0.8);
+        spawnHitParticles(cx, cy, 3);
+        spawnFloatingPopup('💥 CRYSTALLINE CRACK! 破雾揭晓', 'good', cx, cy);
+
+        // 连通其子节点
+        if (node.children) {
+          node.children.forEach((c, i) => {
+            setTimeout(() => {
+              const wire = document.getElementById(`wire-${c.id}`);
+              if (wire) wire.classList.add('surging');
+            }, i * 120);
+          });
+        }
+      } else {
+        sound.playFlip();
+      }
+
+      renderMindmap();
+    }
+
+    renderMindmap();
+
+    /* --------------------------------------------------------------------------
+       7. 场景二：随心模式（Freestyle）七阶打击与加特林换弹
+       -------------------------------------------------------------------------- */
+    const FREESTYLE_DECK = [
+      {
+        palace: "🏛️ 罗马万神殿 · 传输层长廊 #01",
+        front: "计算机网络 · TCP 三次握手",
+        hint: "💡 宫殿视像线索：玄关前两位守卫互相挥舞旗帜与签收包裹",
+        back: "① SYN(x) → ② SYN+ACK(y, x+1) → ③ ACK(y+1)",
+        detail: "🎯 核心检验：双方同时确认己方与对方的「收、发」双向信道完全正常",
+        isNemesis: false
+      },
+      {
+        palace: "🏛️ 罗马万神殿 · 穹顶圆孔 #02",
+        front: "认知心理学 · 艾宾浩斯遗忘曲线",
+        hint: "💡 宫殿视像线索：穹顶中央漏下的光柱在 20 分钟后迅速衰减至一半",
+        back: "20分钟忘42% · 1小时忘56% · 1天忘74%",
+        detail: "🎯 间隔重复法则：在遗忘斜率最陡峭的时间点精准触发提取",
+        isNemesis: false
+      },
+      {
+        palace: "🏛️ 罗马万神殿 · 祭坛壁龛 #03",
+        front: "神经生物学 · 长时程增强 (LTP)",
+        hint: "💡 宫殿视像线索：壁龛内两条铜导线持续放电熔铸成坚固金桥",
+        back: "NMDA 受体激活 → 钙离子内流 → AMPA 受体高密度表达",
+        detail: "🎯 突触可塑性：突触前后神经元同步高频兴奋",
+        isNemesis: false
+      },
+      {
+        palace: "🏛️ 罗马万神殿 · 侧翼长廊 #04",
+        front: "分布式系统 · CAP 定理",
+        hint: "💡 宫殿视像线索：长廊三道大门无论如何只能同时推开两道",
+        back: "Consistency 一致性 · Availability 可用性 · Partition tolerance 分区容忍性",
+        detail: "🎯 工程权衡：网络分区发生时，必须在 CP 与 AP 之间二选一",
+        isNemesis: false
+      },
+      {
+        palace: "🏛️ 罗马万神殿 · 凯旋之门 #05",
+        front: "认知科学 · 刻意练习三要素",
+        hint: "💡 宫殿视像线索：凯旋门前刻着导师手持秒表与精准镜子的浮雕",
+        back: "明确目标 (Target) · 极度专注 (Focus) · 即时反馈 (Immediate Feedback)",
+        detail: "🎯 离开舒适区：在学习区内通过高质量纠偏循环重塑心智模型",
+        isNemesis: false
+      }
+    ];
+
+    let currentCardIdx = 0;
+    let isFlipped = false;
+    let comboStreak = 0;
+    let maxCombo = 0;
+    let critCount = 0;
+    let currentXp = 120;
+    const cardEl = document.getElementById('freestyle-card');
+
+    // 翻卡
+    cardEl.addEventListener('click', (e) => {
+      if (Math.abs(touchDragX) > 10) return;
+      flipFreestyleCard();
+    });
+
+    function flipFreestyleCard() {
+      isFlipped = !isFlipped;
+      sound.playFlip();
+      cardEl.classList.toggle('flipped', isFlipped);
+      triggerHaptic('clack');
+    }
+
+    // 3D 鼠标悬停视差
+    cardEl.addEventListener('mousemove', (e) => {
+      const rect = cardEl.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const rx = -((y - rect.height / 2) / (rect.height / 2)) * 14;
+      const ry = ((x - rect.width / 2) / (rect.width / 2)) * 14;
+      cardEl.style.transform = `rotateX(${rx}deg) rotateY(${ry}deg)`;
+      const pctX = (x / rect.width) * 100;
+      const pctY = (y / rect.height) * 100;
+      document.getElementById('card-sheen-front').style.setProperty('--mouse-x', `${pctX}%`);
+      document.getElementById('card-sheen-front').style.setProperty('--mouse-y', `${pctY}%`);
+      document.getElementById('card-sheen-back').style.setProperty('--mouse-x', `${pctX}%`);
+      document.getElementById('card-sheen-back').style.setProperty('--mouse-y', `${pctY}%`);
+    });
+
+    cardEl.addEventListener('mouseleave', () => {
+      cardEl.style.transform = 'rotateX(0deg) rotateY(0deg)';
+    });
+
+    // 手机触摸手势
+    let touchStartX = 0, touchDragX = 0, isTouching = false;
+    cardEl.addEventListener('touchstart', (e) => {
+      if (e.touches.length !== 1) return;
+      isTouching = true;
+      touchStartX = e.touches[0].clientX;
+      touchDragX = 0;
+      cardEl.style.transition = 'none';
+    }, { passive: true });
+
+    window.addEventListener('touchmove', (e) => {
+      if (!isTouching) return;
+      touchDragX = e.touches[0].clientX - touchStartX;
+      cardEl.style.transform = `translate(${touchDragX}px, 0) rotate(${touchDragX * 0.08}deg)`;
+      if (touchDragX < -30) {
+        document.getElementById('stamp-left').style.opacity = Math.min(1, Math.abs(touchDragX) / 100);
+        document.getElementById('stamp-right').style.opacity = 0;
+      } else if (touchDragX > 30) {
+        document.getElementById('stamp-right').style.opacity = Math.min(1, touchDragX / 100);
+        document.getElementById('stamp-left').style.opacity = 0;
+      }
+    }, { passive: true });
+
+    window.addEventListener('touchend', () => {
+      if (!isTouching) return;
+      isTouching = false;
+      cardEl.style.transition = 'transform 0.4s var(--spring-bounce)';
+      document.getElementById('stamp-left').style.opacity = 0;
+      document.getElementById('stamp-right').style.opacity = 0;
+
+      if (touchDragX < -110) {
+        handleStrikeRating(1);
+      } else if (touchDragX > 110) {
+        handleStrikeRating(4);
+      } else {
+        cardEl.style.transform = 'translate(0, 0) rotate(0deg)';
+      }
+      touchDragX = 0;
+    });
+
+    // 绑定 1~4 评分按键
+    document.querySelectorAll('.freestyle-keypad .strike-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const rating = parseInt(btn.getAttribute('data-rating'), 10);
+        handleStrikeRating(rating);
+      });
+    });
+
+    // 七阶打击闭环处理
+    function handleStrikeRating(rating) {
+      const rect = cardEl.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const curCard = FREESTYLE_DECK[currentCardIdx];
+
+      applyHitStop(() => {
+        let earnedXp = 0;
+        let isRevenge = false;
+
+        if (rating === 1) {
+          // 破防重铸：低音爆鸣 + 灰色蒸汽震荡 + 标记宿敌卡
+          comboStreak = 0;
+          earnedXp = 10;
+          curCard.isNemesis = true; // 成为宿敌卡
+          sound.playForgot();
+          triggerHaptic('forgot');
+          applyScreenShake(1.3);
+          spawnHitParticles(cx, cy, 1);
+          spawnFloatingPopup('+10 EXP (破防重铸)', 'forgot', cx, cy);
+        } else if (rating === 2) {
+          // 险胜格挡：刀剑火花 + 刮擦音 + 屏幕阻尼
+          earnedXp = 25;
+          sound.playParry();
+          triggerHaptic('parry');
+          applyScreenShake(0.5);
+          spawnHitParticles(cx, cy, 2);
+          spawnFloatingPopup('+25 EXP (险胜格挡)', 'hard', cx, cy);
+        } else if (rating === 3) {
+          // 清脆命中：硬币和弦 + 五声音阶升调
+          comboStreak++;
+          earnedXp = 50 + comboStreak * 5;
+          sound.playHit(comboStreak);
+          triggerHaptic('hit');
+          applyScreenShake(0.6);
+          spawnHitParticles(cx, cy, 3);
+          spawnFloatingPopup(`+${earnedXp} EXP`, 'good', cx, cy);
+          if (curCard.isNemesis) isRevenge = true;
+        } else if (rating === 4) {
+          // 天霸暴击：CRITICAL! 浮字 + 粒子礼炮 + 升序棘轮齿轮震
+          comboStreak++;
+          critCount++;
+          earnedXp = 85 + comboStreak * 10;
+          sound.playCritical(comboStreak);
+          triggerHaptic('crit');
+          applyScreenShake(1.7);
+          spawnHitParticles(cx, cy, 4);
+          spawnFloatingPopup(`🔥 CRITICAL! +${earnedXp} EXP`, 'crit', cx, cy);
+          if (curCard.isNemesis) isRevenge = true;
+        }
+
+        // 拔除心魔复仇特效
+        if (isRevenge) {
+          curCard.isNemesis = false;
+          sound.playRevengeStab();
+          triggerHaptic('revenge');
+          spawnFloatingPopup('⚔️ REVENGE! 拔除心魔', 'revenge', cx, cy - 60);
+        }
+
+        if (comboStreak > maxCombo) maxCombo = comboStreak;
+
+        // FEVER 狂暴状态 (>= 5连)
+        const isFever = comboStreak >= 5;
+        document.body.classList.toggle('fever-active', isFever);
+        document.getElementById('fever-text').style.display = isFever ? 'block' : 'none';
+
+        // 连击计数跳动
+        const streakEl = document.getElementById('streak-count');
+        streakEl.innerText = comboStreak;
+        streakEl.style.transform = 'scale(1.4)';
+        setTimeout(() => streakEl.style.transform = 'scale(1)', 160);
+
+        // 磁吸能量光轨吸入顶部
+        currentXp += earnedXp;
+        spawnMagneticEnergyTrails(cx, cy, rating === 4 ? 6 : 3);
+        document.getElementById('hud-xp-text').innerText = `EXP ${currentXp} / 500 · LV.${Math.floor(currentXp/100)+1}`;
+        const pct = Math.min(100, (currentCardIdx + 1) * 20);
+        document.getElementById('hud-progress-fill').style.width = `${pct}%`;
+
+        // 加特林换弹物理飞出与新卡弹入
+        gatlingReloadTransition(rating);
+      });
+    }
+
+    // 机械加特林换弹动画
+    function gatlingReloadTransition(rating) {
+      cardEl.style.transition = 'transform 0.28s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.22s ease';
+      const flyX = rating === 1 ? -120 : (rating === 4 ? 120 : 0);
+      const flyY = rating === 4 ? -80 : 100;
+      cardEl.style.transform = `translate(${flyX}vw, ${flyY}px) rotate(${flyX * 0.2}deg)`;
+      cardEl.style.opacity = '0';
+
+      setTimeout(() => {
+        currentCardIdx++;
+        if (currentCardIdx >= FREESTYLE_DECK.length) {
+          // 刷满一轮触发：空间折跃通关 (Palace Clear)
+          triggerPalaceWarpClear();
+        } else {
+          loadFreestyleCard(currentCardIdx);
+          sound.playMechanicalClack();
+          triggerHaptic('clack');
+
+          // 子弹上膛般从上方猛烈弹回屏幕中央
+          cardEl.style.transition = 'none';
+          cardEl.style.transform = 'translateY(-70px) scale(0.92)';
+          cardEl.style.opacity = '0';
+
+          requestAnimationFrame(() => {
+            cardEl.style.transition = 'transform 0.42s var(--spring-bounce), opacity 0.3s ease';
+            cardEl.style.transform = 'translateY(0) scale(1)';
+            cardEl.style.opacity = '1';
+          });
+        }
+      }, CONFIG.reloadMs);
+    }
+
+    function loadFreestyleCard(idx) {
+      const card = FREESTYLE_DECK[idx];
+      isFlipped = false;
+      cardEl.classList.remove('flipped');
+      cardEl.classList.toggle('nemesis-card', Boolean(card.isNemesis));
+
+      document.getElementById('card-palace-badge').innerText = card.palace;
+      document.getElementById('card-step-index').innerText = `${idx + 1} / ${FREESTYLE_DECK.length}`;
+      document.getElementById('freestyle-counter-text').innerText = `CARD ${idx + 1} / ${FREESTYLE_DECK.length} · 🏛️ 罗马万神殿`;
+      document.getElementById('card-front-title').innerText = card.front;
+      document.getElementById('card-front-hint').innerText = card.hint;
+      document.getElementById('card-back-title').innerText = card.back;
+      document.getElementById('card-back-detail').innerText = card.detail;
+    }
+
+    loadFreestyleCard(0);
+
+    /* --------------------------------------------------------------------------
+       8. 宫殿跃迁折跃光束与老虎机高速滚动结算 (Palace Warp Tunnel)
+       -------------------------------------------------------------------------- */
+    const warpOverlay = document.getElementById('warp-tunnel');
+
+    function triggerPalaceWarpClear() {
+      sound.playWarpClear();
+      applyScreenShake(1.6);
+      warpOverlay.classList.add('active');
+
+      // 全屏彩带礼炮
+      for (let i = 0; i < 120; i++) {
+        const x = window.innerWidth * 0.2 + Math.random() * window.innerWidth * 0.6;
+        particles.push(new SparkParticle(x, window.innerHeight * 0.6, ['#ffbe26', '#38bdf8', '#ff4d2e', '#58cc02'][Math.floor(Math.random() * 4)], 8 + Math.random() * 14, 4, 100, -Math.PI / 2 + (Math.random() - 0.5) * 1.5, 0.35));
+      }
+
+      // 老虎机式滚动数字结算
+      animateSlotNumber('slot-card-count', FREESTYLE_DECK.length, 600);
+      animateSlotNumber('slot-max-combo', maxCombo, 800);
+      animateSlotNumber('slot-crit-rate', Math.round((critCount / FREESTYLE_DECK.length) * 100), 1000, '%');
+      animateSlotNumber('slot-total-xp', currentXp, 1200, '+');
+    }
+
+    function animateSlotNumber(id, finalVal, duration, prefix = '') {
+      const el = document.getElementById(id);
+      const start = performance.now();
+      function roll(now) {
+        const p = Math.min(1, (now - start) / duration);
+        const current = Math.floor(p * finalVal);
+        el.innerText = `${prefix}${current}`;
+        if (p < 1) requestAnimationFrame(roll);
+        else el.innerText = `${prefix}${finalVal}`;
+      }
+      requestAnimationFrame(roll);
+    }
+
+    function restartPalaceRound() {
+      warpOverlay.classList.remove('active');
+      currentCardIdx = 0;
+      comboStreak = 0;
+      critCount = 0;
+      document.getElementById('streak-count').innerText = '0';
+      document.body.classList.remove('fever-active');
+      loadFreestyleCard(0);
+      cardEl.style.transition = 'transform 0.4s var(--spring-bounce)';
+      cardEl.style.transform = 'translate(0, 0) scale(1)';
+      cardEl.style.opacity = '1';
+    }
+
+    /* --------------------------------------------------------------------------
+       9. 视角平滑切换 (Tab 键联动) 与键盘监听
+       -------------------------------------------------------------------------- */
+    function switchView(mode) {
+      document.getElementById('tab-btn-freestyle').classList.toggle('active', mode === 'freestyle');
+      document.getElementById('tab-btn-mindmap').classList.toggle('active', mode === 'mindmap');
+      const targetEl = mode === 'freestyle' ? document.getElementById('section-freestyle') : document.getElementById('section-mindmap');
+      targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
+
+      // Tab 键切换视角
+      if (e.code === 'Tab') {
+        e.preventDefault();
+        const inFreestyle = document.getElementById('tab-btn-freestyle').classList.contains('active');
+        switchView(inFreestyle ? 'mindmap' : 'freestyle');
+        return;
+      }
+
+      // Space 键：智能翻卡或破雾
+      if (e.code === 'Space') {
+        e.preventDefault();
+        if (warpOverlay.classList.contains('active')) {
+          restartPalaceRound();
+        } else {
+          const mindmapRect = document.getElementById('section-mindmap').getBoundingClientRect();
+          if (mindmapRect.top < window.innerHeight * 0.5) {
+            // 导图模式破雾
+            const targetNode = MINDMAP_GRAPH.children[0];
+            const nodeEl = document.getElementById(`node-${targetNode.id}`);
+            if (nodeEl) focusAndRevealMindmapNode(targetNode, nodeEl);
+          } else {
+            flipFreestyleCard();
+          }
+        }
+      } else if (['Digit1', 'Numpad1', 'KeyA'].includes(e.code)) {
+        handleStrikeRating(1);
+      } else if (['Digit2', 'Numpad2', 'KeyS'].includes(e.code)) {
+        handleStrikeRating(2);
+      } else if (['Digit3', 'Numpad3', 'KeyD'].includes(e.code)) {
+        handleStrikeRating(3);
+      } else if (['Digit4', 'Numpad4', 'KeyF'].includes(e.code)) {
+        handleStrikeRating(4);
+      } else if (e.code === 'Escape') {
+        drawerOverlay.classList.remove('open');
+      }
+    });
+
+    /* --------------------------------------------------------------------------
+       10. 风格切换与决策参数导出
+       -------------------------------------------------------------------------- */
+    document.querySelectorAll('.theme-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const theme = btn.getAttribute('data-style');
+        document.body.setAttribute('data-theme', theme);
+        CONFIG.theme = theme;
+        sound.playFlip();
+      });
+    });
+
+    const drawerOverlay = document.getElementById('drawer-overlay');
+    document.getElementById('btn-open-drawer').addEventListener('click', () => drawerOverlay.classList.add('open'));
+    document.getElementById('btn-close-drawer').addEventListener('click', () => drawerOverlay.classList.remove('open'));
+    drawerOverlay.addEventListener('click', (e) => { if (e.target === drawerOverlay) drawerOverlay.classList.remove('open'); });
+
+    // 滑块与开关绑定
+    document.getElementById('slider-hitstop').addEventListener('input', (e) => {
+      CONFIG.hitStopMs = parseInt(e.target.value, 10);
+      document.getElementById('val-hitstop').innerText = `${CONFIG.hitStopMs} ms`;
+    });
+    document.getElementById('slider-shake').addEventListener('input', (e) => {
+      const v = parseInt(e.target.value, 10);
+      CONFIG.shakeIntensity = v / 100;
+      document.getElementById('val-shake').innerText = `${v} %`;
+    });
+    document.getElementById('slider-particles').addEventListener('input', (e) => {
+      CONFIG.particleDensity = parseInt(e.target.value, 10);
+      document.getElementById('val-particles').innerText = `${CONFIG.particleDensity} 颗`;
+    });
+    document.getElementById('slider-reload').addEventListener('input', (e) => {
+      CONFIG.reloadMs = parseInt(e.target.value, 10);
+      document.getElementById('val-reload').innerText = `${CONFIG.reloadMs} ms`;
+    });
+    document.getElementById('toggle-haptic').addEventListener('change', (e) => CONFIG.hapticsEnabled = e.target.checked);
+    document.getElementById('toggle-pitch').addEventListener('change', (e) => CONFIG.pitchEscalation = e.target.checked);
+    document.getElementById('toggle-trail').addEventListener('change', (e) => CONFIG.trailEnabled = e.target.checked);
+
+    // 一键导出标准 JSON 配置
+    document.getElementById('btn-export-decision').addEventListener('click', () => {
+      const configJson = {
+        app: "Memory Anki Arcade Lab",
+        version: "3.0",
+        exportTimestamp: new Date().toISOString(),
+        gameplayFeedbackFx: {
+          style: CONFIG.theme === 'arcade' ? 'Balatro/Hades (Dark Roguelike)' :
+                 CONFIG.theme === 'dopamine' ? 'Duolingo/Brawl Stars (Jelly Toy)' : 'Linear/Stripe (Minimal Beam)',
+          hitStopMs: CONFIG.hitStopMs,
+          screenShakeIntensity: CONFIG.shakeIntensity,
+          particleDensity: CONFIG.particleDensity,
+          gatlingReloadMs: CONFIG.reloadMs,
+          hapticsEnabled: CONFIG.hapticsEnabled,
+          pitchEscalationScale: "C4-D4-E4-G4-C5 Pentatonic",
+          magneticArcTrailEnabled: CONFIG.trailEnabled,
+          nemesisComebackEnabled: true
+        }
+      };
+
+      const copyText = JSON.stringify(configJson, null, 2);
+      navigator.clipboard.writeText(copyText).then(() => {
+        const toast = document.getElementById('toast-msg');
+        toast.classList.add('show');
+        sound.playHit(5);
+        setTimeout(() => toast.classList.remove('show'), 2400);
+      });
+    });
+  </script>
+</body>
+</html>

@@ -1,7 +1,32 @@
 import type { Edge, Node } from '@xyflow/react'
+import { chargeEqual, planParentCharges, type ChargePhase, type ParentCharge } from './parentCharge'
 import type { MouseEvent } from 'react'
 import type { NodeSize, PreviewState } from './layout'
 import type { SelectionToolbarAction, SelectionToolbarPreferPosition } from './selectionToolbar'
+
+function readChargePhase(node: Node): ChargePhase {
+  const visual = (node.data as { metadata?: { visual?: { concealText?: boolean; revealed?: boolean } } }).metadata?.visual
+  if (visual?.concealText) return 'hidden'
+  if (visual?.revealed) return 'revealed'
+  return 'other'
+}
+
+function readParentId(node: Node) {
+  const parentId = (node.data as { parentId?: string | null }).parentId
+  return typeof parentId === 'string' && parentId.length > 0 ? parentId : null
+}
+
+function readNodeCharge(node: Node | undefined): ParentCharge | null {
+  const charge = (node?.data as { metadata?: { visual?: { charge?: ParentCharge } } } | undefined)?.metadata?.visual?.charge
+  return charge && typeof charge.done === 'number' ? charge : null
+}
+
+function withCharge(node: Node, charge: ParentCharge) {
+  const data = node.data as { metadata?: Record<string, unknown> }
+  const metadata = { ...(data.metadata ?? {}) }
+  const visual = { ...((metadata.visual as Record<string, unknown> | undefined) ?? {}), charge }
+  return { ...metadata, visual }
+}
 
 interface BuildDisplayNodesInput {
   nodes: Node[]
@@ -107,6 +132,11 @@ export function buildDisplayNodes({
         ? [selectedNodeId]
         : [],
   )
+  const charges = planParentCharges(nodes.map((node) => ({
+    id: node.id,
+    parentId: readParentId(node),
+    phase: readChargePhase(node),
+  })))
 
   return nodes.map((node) => {
     const preview = previewState && previewState.targetId === node.id ? previewState : null
@@ -142,7 +172,7 @@ export function buildDisplayNodes({
       !textSelectionModeActive && node.id === selectedNodeId
         ? buildSelectionToolbarActions?.(node.id) ?? []
         : []
-    const nextData = {
+    const nextData: Record<string, unknown> = {
       ...(node.data as Record<string, unknown>),
       selected: isSelected,
       editing: isEditing,
@@ -178,7 +208,22 @@ export function buildDisplayNodes({
       onEnglishWordClick: englishInteractionActive ? onEnglishWordClick : undefined,
       textSelectionModeActive,
     }
+    const charge = charges.get(node.id) ?? null
     const previous = previousNodesById.get(node.id)
+    if (charge) {
+      const previousCharge = readNodeCharge(previous)
+      nextData.metadata = withCharge(node, chargeEqual(previousCharge, charge) && previousCharge ? previousCharge : charge)
+    }
+    const animateFlip = (previousDisplayNodes?.length ?? 0) > 0
+      && readChargePhase(node) === 'revealed'
+      && (!previous || readChargePhase(previous) !== 'revealed')
+    if (animateFlip) {
+      const metadata = {
+        ...((nextData.metadata as Record<string, unknown> | undefined) ?? (node.data as { metadata?: Record<string, unknown> }).metadata ?? {}),
+      }
+      const visual = { ...((metadata.visual as Record<string, unknown> | undefined) ?? {}), animateFlip: true }
+      nextData.metadata = { ...metadata, visual }
+    }
     const dragHandle = canDrag ? '.mindmap-node-drag-surface' : undefined
     const selectable = textSelectionModeActive ? false : node.selectable
 

@@ -345,7 +345,6 @@
     0 6px 16px -8px hsl(24 50% 26% / 0.16);
   transition:
     box-shadow var(--duration-base) var(--ease-out-expo),
-    transform var(--duration-base) var(--ease-spring-soft),
     background-color var(--duration-fast) ease,
     border-color var(--duration-fast) ease,
     opacity var(--duration-fast) ease;
@@ -371,8 +370,16 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
+  .mindmap-node-shell:hover > .mindmap-node-card--concealed {
+    box-shadow:
+      0 0 0 3px hsl(32 90% 58% / 0.16),
+      0 10px 22px -14px hsl(28 70% 36% / 0.28);
+  }
+  .mindmap-node-shell:hover > .mindmap-node-card--concealed::after {
+    animation: mindmap-seal-breath 1.6s ease-in-out infinite;
+  }
   .mindmap-node-shell:hover > .mindmap-node-card:not(.mindmap-node-card--selected):not(.mindmap-node-card--editing) {
-    transform: translateY(-1px);
+    /* Shadow only. translateY(-1px) puts the glyphs on a fractional layer. */
     box-shadow:
       0 1px 0 hsl(43 100% 100% / 0.9) inset,
       var(--shadow-lift);
@@ -380,8 +387,10 @@
 }
 
 .mindmap-node-shell:active > .mindmap-node-card:not(.mindmap-node-card--editing) {
-  transform: scale(0.985);
-  transition-duration: var(--duration-instant);
+  /* No scale on press: a sub-1 scale rasterizes the text on the card being flipped. */
+  box-shadow:
+    0 1px 0 hsl(43 100% 100% / 0.7) inset,
+    0 1px 2px hsl(24 40% 22% / 0.1);
 }
 
 /*
@@ -432,6 +441,60 @@
 @keyframes mindmap-concealed-sheen {
   from { background-position: 120% 0; }
   to { background-position: -120% 0; }
+}
+
+@keyframes mindmap-seal-breath {
+  0%, 100% { border-color: hsl(28 70% 48% / 0.38); }
+  50% { border-color: hsl(32 92% 46% / 0.9); }
+}
+
+/* Charge sits under the card, outside the glyph box. Width overshoots like jelly. */
+.mindmap-charge {
+  position: relative;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 8px 0;
+  pointer-events: none;
+}
+.mindmap-charge-track {
+  position: relative;
+  flex: 1;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: hsl(32 40% 86% / 0.9);
+}
+.mindmap-charge-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, hsl(8 82% 58%), hsl(42 96% 56%));
+  transition: width 0.42s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.mindmap-charge-count {
+  flex: none;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: hsl(24 40% 32% / 0.82);
+}
+.mindmap-charge-stamp {
+  flex: none;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: hsl(42 96% 56%);
+  color: hsl(24 40% 16%);
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 14px;
+  animation: mindmap-charge-stamp 0.45s cubic-bezier(0.2, 1.6, 0.4, 1) both;
+}
+@keyframes mindmap-charge-stamp {
+  from { opacity: 0; scale: 1.4; }
+  to { opacity: 1; scale: 1; }
 }
 
 /* —— 待回忆：暖琥珀纸背（斜纹 + 内虚线框），翻牌时同一张纸翻走 —— */
@@ -521,15 +584,15 @@
   scale: 1.12;
 }
 
-/* Layout reflow spring: enabled only after the first layout settles, off while dragging. */
-.memory-anki-mindmap-viewport[data-motion-settled='true'][data-dragging='false'][data-large-graph='false']
-  .react-flow__node:not(.dragging) {
-  transition: transform 360ms var(--ease-spring-soft);
-}
-
+/*
+ * Do not transition transform on .react-flow__node. React Flow positions nodes
+ * with transform; a spring there interpolates fractional translates and
+ * overshoots, so revealed text stays soft and every card repaints on flip.
+ * Morphing edge geometry (`d`) is the same main-thread cost.
+ */
 .memory-anki-mindmap-viewport[data-motion-settled='true'][data-dragging='false'][data-large-graph='false']
   .react-flow__edge-path {
-  transition: d 360ms var(--ease-spring-soft), stroke 200ms ease;
+  transition: stroke 200ms ease;
 }
 
 .react-flow__edge.selected .react-flow__edge-path,
@@ -543,6 +606,9 @@
   .mindmap-reading-word,
   [data-text-mode='true'] .mindmap-node-text::before,
   .mindmap-node-concealed,
+  .mindmap-node-shell:hover > .mindmap-node-card--concealed::after,
+  .mindmap-charge-stamp,
+  .mindmap-charge-fill,
   .mindmap-node-longpress-ring,
   .mindmap-pop-in,
   .react-flow__node-toolbar > * {

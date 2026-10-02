@@ -2769,6 +2769,40 @@ def check_freestyle_canvas_pan(errors: list[str]) -> None:
             )
 
 
+def check_freestyle_map_text_compositor(errors: list[str]) -> None:
+    """A live mind map must not sit under scroll-depth blur or a node-transform spring."""
+    stage = WEB_SRC / "styles" / "freestyle-stage.css"
+    scene = WEB_SRC / "styles" / "mindmap-scene.css"
+    doc = REPO_ROOT / "docs" / "architecture" / "freestyle-immersive-feed.md"
+    if not stage.exists() or not scene.exists():
+        errors.append("freestyle/mindmap stage CSS is required for map text compositing.")
+        return
+    stage_source = stage.read_text(encoding="utf-8", errors="ignore")
+    scene_source = scene.read_text(encoding="utf-8", errors="ignore")
+    if ".fs-depth:has(.memory-anki-mindmap-viewport)" not in stage_source:
+        errors.append(
+            f"{stage.relative_to(REPO_ROOT).as_posix()}: live mind maps need a "
+            "transform-free mind-map ancestor (no scroll-depth animation)."
+        )
+    if "filter: none !important" not in stage_source:
+        errors.append(
+            f"{stage.relative_to(REPO_ROOT).as_posix()}: mind-map depth layer must clear filter."
+        )
+    if ".freestyle-stage:has(.memory-anki-mindmap-viewport) .freestyle-rating-dock" not in stage_source:
+        errors.append(
+            f"{stage.relative_to(REPO_ROOT).as_posix()}: backdrop blur must stay off over a live mind map."
+        )
+    if "transition: transform 360ms" in scene_source or "scale(0.985)" in scene_source:
+        errors.append(
+            f"{scene.relative_to(REPO_ROOT).as_posix()}: do not spring or scale node transforms; "
+            "fractional transforms rasterize flipped text."
+        )
+    if doc.exists() and "transform-free mind-map ancestor" not in doc.read_text(encoding="utf-8", errors="ignore"):
+        errors.append(
+            f"{doc.relative_to(REPO_ROOT).as_posix()}: document the transform-free mind-map ancestor."
+        )
+
+
 def check_freestyle_unit_progress_kernel(errors: list[str]) -> None:
     """Scored/passed must come from unitProgressState, not call-site assembly."""
     kernel = WEB_SRC / "modules" / "practice" / "domain" / "unitProgressState.ts"
@@ -5288,6 +5322,7 @@ def main() -> int:
     check_freestyle_return_save_ux(errors)
     check_freestyle_inline_edit_scope(errors)
     check_freestyle_canvas_pan(errors)
+    check_freestyle_map_text_compositor(errors)
     check_enter_reveal_viewport_follow(errors)
     check_freestyle_retry_starts_unrated(errors)
     check_freestyle_unit_progress_kernel(errors)
