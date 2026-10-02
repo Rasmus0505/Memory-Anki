@@ -1,0 +1,1284 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Memory Anki · 思维导图 Game Feel 预览</title>
+<style>
+/* ═══ TOKEN SYSTEM ═══ */
+:root {
+  --n0:  oklch(13% 0.008 250);
+  --n1:  oklch(17% 0.010 250);
+  --n2:  oklch(22% 0.012 250);
+  --n3:  oklch(30% 0.014 250);
+  --n4:  oklch(42% 0.012 250);
+  --n5:  oklch(56% 0.010 250);
+  --n6:  oklch(68% 0.008 250);
+  --n7:  oklch(82% 0.006 250);
+  --n8:  oklch(91% 0.004 250);
+  --n9:  oklch(97% 0.003 250);
+
+  --gold:     oklch(78% 0.18 72);
+  --gold-dim: oklch(62% 0.14 68);
+  --gold-glow:oklch(85% 0.22 76);
+
+  --grade1: oklch(60% 0.22 22);
+  --grade2: oklch(68% 0.18 55);
+  --grade3: oklch(70% 0.19 155);
+  --grade4: oklch(70% 0.21 230);
+
+  --ink:   oklch(58% 0.14 240);
+
+  --surface: var(--n1);
+  --raised:  var(--n2);
+  --border:  var(--n3);
+  --muted:   var(--n5);
+  --body:    var(--n8);
+  --head:    var(--n9);
+
+  --r-node: 12px;
+  --r-btn:  16px;
+  --r-card: 24px;
+
+  --spring: cubic-bezier(0.18, 1.6, 0.4, 1);
+  --spring-soft: cubic-bezier(0.25, 1.3, 0.4, 1);
+  --ease-out: cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { height: 100%; }
+
+body {
+  background: var(--n0);
+  color: var(--body);
+  font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ═══ CANVAS ═══ */
+#fx-canvas {
+  position: fixed; inset: 0;
+  pointer-events: none;
+  z-index: 200;
+}
+
+/* ═══ VIGNETTE ═══ */
+.vignette {
+  position: fixed; inset: 0;
+  background: radial-gradient(ellipse at center, transparent 35%, var(--gold-glow) 110%);
+  pointer-events: none; z-index: 190; opacity: 0;
+  animation: vig-in 0.6s var(--ease-out) forwards;
+}
+@keyframes vig-in { 0%{opacity:0} 20%{opacity:0.18} 100%{opacity:0} }
+
+/* ═══ LAYOUT ═══ */
+.page {
+  display: flex; flex-direction: column; align-items: center;
+  min-height: 100dvh; padding: 16px 16px 100px; gap: 12px;
+}
+
+/* ═══ TOP BAR ═══ */
+.topbar {
+  width: min(560px, 100%);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 0 4px;
+}
+.topbar-left { font-size: 12px; color: var(--muted); }
+.sound-pill {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--raised); border: 1px solid var(--border);
+  border-radius: 99px; padding: 4px 10px 4px 8px;
+  font-size: 11px; color: var(--muted); cursor: pointer;
+}
+.sound-pill input { accent-color: var(--gold); cursor: pointer; }
+
+/* ═══ PROGRESS RAIL ═══ */
+.rail-wrap {
+  width: min(560px, 100%);
+  position: sticky; top: 0; z-index: 10;
+  background: linear-gradient(to bottom, var(--n0) 75%, transparent);
+  padding-bottom: 12px;
+}
+.rail-track {
+  height: 5px; background: var(--n2);
+  border-radius: 99px; position: relative;
+}
+.rail-fill {
+  height: 100%; background: linear-gradient(90deg, var(--gold-dim), var(--gold-glow));
+  border-radius: 99px; width: 0%;
+  transition: width 0.55s var(--spring-soft);
+  position: relative;
+}
+.rail-fill::after {
+  content: ''; position: absolute;
+  right: -3px; top: -3px; width: 11px; height: 11px;
+  background: var(--gold-glow); border-radius: 50%;
+  box-shadow: 0 0 8px 4px var(--gold-glow);
+  opacity: 0; transition: opacity 0.3s;
+}
+.rail-fill.lit::after { opacity: 1; }
+.rail-meta {
+  display: flex; justify-content: space-between;
+  font-size: 11px; color: var(--muted); margin-top: 5px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ═══ CARD CHROME ═══ */
+.card {
+  width: min(560px, 100%);
+  background: var(--raised);
+  border: 1.5px solid var(--border);
+  border-radius: var(--r-card);
+  box-shadow: 0 2px 0 var(--border), 0 8px 40px oklch(0% 0 0 / 0.5);
+  overflow: hidden;
+}
+.card-header {
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+}
+.palace-tag {
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--gold-dim);
+}
+.card-title {
+  font-size: 17px; font-weight: 700;
+  color: var(--head); line-height: 1.4; margin-top: 4px;
+}
+.reveal-counter {
+  flex-shrink: 0;
+  background: var(--n3); border: 1px solid var(--border);
+  border-radius: 99px; padding: 4px 10px;
+  font-size: 11px; font-weight: 700; color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  transition: background 0.3s, color 0.3s;
+  white-space: nowrap;
+}
+.reveal-counter.complete {
+  background: oklch(70% 0.19 155 / 0.15);
+  color: var(--grade3);
+  border-color: oklch(70% 0.19 155 / 0.3);
+}
+
+/* ═══ MINDMAP AREA ═══ */
+.map-area {
+  padding: 16px 16px 20px;
+  min-height: 200px;
+}
+
+/* Root node */
+.map-root {
+  display: flex; justify-content: center;
+  margin-bottom: 18px;
+}
+.node-root {
+  background: oklch(78% 0.18 72 / 0.12);
+  border: 1.5px solid oklch(78% 0.18 72 / 0.5);
+  color: var(--gold);
+  font-size: 14px; font-weight: 800;
+  padding: 9px 20px; border-radius: var(--r-node);
+  letter-spacing: 0.02em;
+}
+
+/* Branch rows */
+.branch-row {
+  display: flex; gap: 8px; flex-wrap: wrap;
+  justify-content: center; margin-bottom: 8px;
+}
+.branch-label {
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 0.07em; text-transform: uppercase;
+  color: var(--muted); width: 100%;
+  text-align: center; margin-bottom: 4px;
+}
+
+/* ═══ NODE ═══ */
+.node {
+  position: relative;
+  padding: 8px 14px;
+  border-radius: var(--r-node);
+  border: 1.5px solid;
+  font-size: 13px; font-weight: 600;
+  cursor: pointer;
+  transition:
+    transform 0.18s var(--spring-soft),
+    box-shadow 0.18s,
+    filter 0.18s,
+    background 0.2s,
+    border-color 0.2s;
+  overflow: hidden;
+  display: flex; align-items: center; gap: 7px;
+  line-height: 1.35;
+}
+
+/* hidden state */
+.node[data-state="hidden"] {
+  background: var(--n2);
+  border-color: var(--n3);
+  color: transparent;
+  text-shadow: none;
+}
+.node[data-state="hidden"]::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--n3) 0, var(--n3) 70%, transparent 70%, transparent 100%
+  );
+  background-size: 8px 100%;
+  opacity: 0.5;
+  border-radius: inherit;
+}
+
+/* hover on hidden — anticipation */
+.node[data-state="hidden"]:hover {
+  transform: scale(1.06);
+  border-color: var(--gold-dim);
+  box-shadow: 0 0 0 3px oklch(78% 0.18 72 / 0.15), 0 4px 16px oklch(0% 0 0 / 0.3);
+  filter: brightness(1.3);
+}
+.node[data-state="hidden"]:hover::after {
+  content: '点击揭示';
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; color: var(--gold-dim);
+  letter-spacing: 0.05em;
+}
+.node[data-state="hidden"]:active {
+  transform: scale(0.93);
+}
+
+/* visible state (half-revealed, not done yet) */
+.node[data-state="visible"] {
+  background: var(--n2);
+  border-color: var(--n4);
+  color: var(--muted);
+  cursor: pointer;
+}
+.node[data-state="visible"]:hover {
+  transform: scale(1.04);
+  border-color: var(--gold-dim);
+  filter: brightness(1.1);
+}
+
+/* revealed state */
+.node[data-state="revealed"] {
+  cursor: default;
+}
+.node[data-state="revealed"]:hover {
+  transform: scale(1.01);
+}
+
+/* depth-coloured revealed nodes */
+.node[data-depth="1"][data-state="revealed"] {
+  background: oklch(68% 0.17 55 / 0.10);
+  border-color: oklch(68% 0.17 55 / 0.45);
+  color: oklch(78% 0.17 55);
+}
+.node[data-depth="2"][data-state="revealed"] {
+  background: oklch(70% 0.19 155 / 0.10);
+  border-color: oklch(70% 0.19 155 / 0.45);
+  color: oklch(80% 0.18 155);
+}
+.node[data-depth="3"][data-state="revealed"] {
+  background: oklch(70% 0.21 230 / 0.10);
+  border-color: oklch(70% 0.21 230 / 0.45);
+  color: oklch(80% 0.20 230);
+}
+.node[data-depth="4"][data-state="revealed"] {
+  background: oklch(62% 0.20 280 / 0.10);
+  border-color: oklch(62% 0.20 280 / 0.45);
+  color: oklch(75% 0.18 280);
+}
+
+/* ─ node text concealment overlay ─ */
+.node-text { position: relative; z-index: 1; }
+
+/* ─ node flash overlay ─ */
+.node-flash {
+  position: absolute; inset: 0; border-radius: inherit;
+  pointer-events: none; opacity: 0; z-index: 2;
+}
+
+/* ─ spring pop keyframes ─ */
+@keyframes node-pop {
+  0%   { transform: scale(0.82); opacity: 0; }
+  45%  { transform: scale(1.18); opacity: 1; }
+  65%  { transform: scale(0.95); }
+  80%  { transform: scale(1.06); }
+  100% { transform: scale(1);    opacity: 1; }
+}
+.node.popping {
+  animation: node-pop 0.42s var(--ease-out) forwards;
+}
+
+/* ═══ HINT BANNER ═══ */
+.hint-banner {
+  margin: 0 16px 16px;
+  padding: 9px 14px;
+  background: oklch(78% 0.18 72 / 0.07);
+  border: 1px solid oklch(78% 0.18 72 / 0.22);
+  border-radius: 10px;
+  font-size: 12px; color: var(--muted); line-height: 1.6;
+}
+.hint-banner strong { color: var(--gold-dim); }
+
+/* ═══ RATING BAR ═══ */
+.rating-bar {
+  display: none;
+  flex-direction: column; gap: 10px;
+  padding: 16px 16px 14px;
+  border-top: 1px solid var(--border);
+  animation: bar-rise 0.5s var(--spring) forwards;
+}
+.rating-bar.visible { display: flex; }
+@keyframes bar-rise {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: none; }
+}
+.rating-label {
+  font-size: 11px; font-weight: 700;
+  letter-spacing: 0.07em; text-transform: uppercase;
+  color: var(--muted); text-align: center;
+}
+.rating-row {
+  display: flex; gap: 8px;
+}
+
+/* ─ grade button ─ */
+.grade-btn {
+  flex: 1; height: 58px;
+  border-radius: var(--r-btn);
+  border: 1.5px solid;
+  background: transparent;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 2px;
+  cursor: pointer;
+  position: relative; overflow: hidden;
+  font-size: 13px; font-weight: 700;
+  transition: transform 0.16s var(--spring-soft), filter 0.16s, box-shadow 0.16s;
+}
+.grade-btn::before {
+  content: ''; position: absolute; inset: 0;
+  background: currentColor; opacity: 0.08; border-radius: inherit;
+}
+.grade-btn .g-emoji { font-size: 17px; line-height: 1; }
+.grade-btn .g-label { font-size: 10px; letter-spacing: 0.04em; opacity: 0.8; }
+
+.grade-btn:hover {
+  transform: scale(1.07) translateY(-2px);
+  filter: brightness(1.15);
+  box-shadow: 0 0 22px currentColor;
+}
+.grade-btn:active { transform: scale(0.91) translateY(2px); }
+
+@keyframes btn-fire {
+  0%   { transform: scale(1); }
+  18%  { transform: scale(0.87) translateY(3px); }
+  50%  { transform: scale(1.16) translateY(-3px); }
+  75%  { transform: scale(0.98); }
+  100% { transform: scale(1); }
+}
+.grade-btn.fired { animation: btn-fire 0.45s var(--spring); }
+
+.grade-btn[data-g="1"] { color: var(--grade1); border-color: oklch(60% 0.22 22 / 0.35); }
+.grade-btn[data-g="2"] { color: var(--grade2); border-color: oklch(68% 0.18 55 / 0.35); }
+.grade-btn[data-g="3"] { color: var(--grade3); border-color: oklch(70% 0.19 155 / 0.35); }
+.grade-btn[data-g="4"] { color: var(--grade4); border-color: oklch(70% 0.21 230 / 0.35); }
+
+/* ═══ HUD BELOW CARD ═══ */
+.hud-row {
+  width: min(560px, 100%);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.combo-chip {
+  padding: 4px 12px; border-radius: 99px;
+  background: var(--raised); border: 1px solid var(--border);
+  font-size: 11px; font-weight: 700; color: var(--muted);
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+.combo-chip.hot {
+  background: oklch(78% 0.18 72 / 0.12);
+  border-color: oklch(78% 0.18 72 / 0.4);
+  color: var(--gold);
+}
+@keyframes combo-pop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.5); }
+  100% { transform: scale(1); }
+}
+.combo-chip.pop { animation: combo-pop 0.35s var(--spring); }
+
+.shortcut-hint {
+  font-size: 11px; color: var(--muted);
+}
+kbd {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--n2); border: 1px solid var(--n4);
+  border-radius: 5px; padding: 1px 6px;
+  font-family: inherit; font-size: 10px; font-weight: 700;
+  color: var(--n6);
+}
+
+/* ═══ FLOATING ELEMENTS ═══ */
+.stamp {
+  position: fixed; pointer-events: none; z-index: 210;
+  transform: translate(-50%, -50%);
+  font-size: 20px; font-weight: 900;
+  text-shadow: 0 2px 12px oklch(0% 0 0 / 0.6);
+  animation: stamp-anim 1.4s var(--spring) forwards;
+}
+@keyframes stamp-anim {
+  0%   { opacity: 0; transform: translate(-50%,-50%) scale(0) rotate(-6deg); }
+  18%  { opacity: 1; transform: translate(-50%,-50%) scale(1.3) rotate(2deg); }
+  35%  { transform: translate(-50%,-50%) scale(0.92) rotate(-0.5deg); }
+  50%  { transform: translate(-50%,-50%) scale(1.05) rotate(0); }
+  70%  { opacity: 1; transform: translate(-50%,-60%) scale(1) rotate(0); }
+  100% { opacity: 0; transform: translate(-50%,-85%) scale(0.85) rotate(0); }
+}
+
+.xp-pop {
+  position: fixed; pointer-events: none; z-index: 210;
+  transform: translate(-50%, -50%);
+  font-size: 13px; font-weight: 800; color: var(--gold-glow);
+  text-shadow: 0 0 10px var(--gold), 0 2px 6px oklch(0% 0 0 / 0.5);
+  animation: xp-anim 1.4s var(--ease-out) forwards;
+}
+@keyframes xp-anim {
+  0%   { opacity: 0; transform: translate(-50%,-50%) scale(0.6); }
+  15%  { opacity: 1; transform: translate(-50%,-50%) scale(1.2); }
+  30%  { transform: translate(-50%,-55%) scale(1); }
+  70%  { opacity: 0.9; transform: translate(-50%,-85%) scale(0.95); }
+  100% { opacity: 0; transform: translate(-50%,-115%) scale(0.85); }
+}
+
+/* ═══ SETTLEMENT ═══ */
+.settlement {
+  display: none; flex-direction: column; align-items: center; gap: 18px;
+  width: min(560px, 100%);
+  background: var(--raised); border: 1.5px solid var(--border);
+  border-radius: var(--r-card);
+  box-shadow: 0 2px 0 var(--border), 0 12px 50px oklch(0% 0 0 / 0.55);
+  padding: 36px 28px 32px;
+  animation: settle-in 0.6s var(--spring);
+}
+.settlement.on { display: flex; }
+@keyframes settle-in {
+  from { opacity: 0; transform: translateY(28px) scale(0.94); }
+  to   { opacity: 1; transform: none; }
+}
+.settle-title {
+  font-size: 28px; font-weight: 900; color: var(--head); text-align: center;
+}
+.settle-sub { font-size: 13px; color: var(--muted); text-align: center; }
+.settle-row { display: flex; gap: 14px; }
+.stat {
+  background: var(--n2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 14px 22px;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+}
+.stat-v { font-size: 28px; font-weight: 900; font-variant-numeric: tabular-nums; color: var(--head); }
+.stat-l { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; color: var(--muted); }
+.restart-btn {
+  width: 100%; height: 52px; border-radius: var(--r-btn);
+  background: var(--gold); border: none; color: var(--n0);
+  font-size: 15px; font-weight: 800; cursor: pointer;
+  box-shadow: 0 2px 0 var(--gold-dim), 0 6px 24px oklch(78% 0.18 72 / 0.4);
+  transition: transform 0.15s var(--spring-soft), filter 0.15s;
+}
+.restart-btn:hover { transform: scale(1.03) translateY(-1px); filter: brightness(1.08); }
+.restart-btn:active { transform: scale(0.96) translateY(1px); }
+
+.reset-link {
+  font-size: 11px; color: var(--muted); text-decoration: underline;
+  cursor: pointer; margin-top: 4px;
+}
+.reset-link:hover { color: var(--body); }
+
+/* ═══ SCREEN SHAKE ═══ */
+@keyframes screen-shake {
+  0%   { transform: none; }
+  15%  { transform: translate(-3px, 2px) rotate(-0.25deg); }
+  35%  { transform: translate(3px, -2px) rotate(0.2deg); }
+  55%  { transform: translate(-1.5px, 1px); }
+  75%  { transform: translate(1px, -0.5px); }
+  100% { transform: none; }
+}
+.shaking { animation: screen-shake 160ms var(--ease-out); }
+</style>
+</head>
+<body>
+
+<canvas id="fx-canvas"></canvas>
+<div id="root">
+<div class="page" id="main-page">
+
+  <!-- Top bar -->
+  <div class="topbar" style="width:min(560px,100%);">
+    <span class="topbar-left">思维导图 Game Feel 预览</span>
+    <label class="sound-pill">
+      <input type="checkbox" id="sound-on" checked> 🔊 音效
+    </label>
+  </div>
+
+  <!-- Progress rail -->
+  <div class="rail-wrap">
+    <div class="rail-track" id="rail-track" data-fx-anchor="progressBar">
+      <div class="rail-fill" id="rail-fill"></div>
+    </div>
+    <div class="rail-meta">
+      <span id="rail-left">0 / 10 节点</span>
+      <span id="rail-right">0 XP</span>
+    </div>
+  </div>
+
+  <!-- Card -->
+  <div class="card" id="card" style="display:none;">
+    <div class="card-header">
+      <div>
+        <div class="palace-tag" id="card-palace">记忆宫殿 · 间隔重复学习法</div>
+        <div class="card-title" id="card-title">间隔重复的核心知识体系</div>
+      </div>
+      <div class="reveal-counter" id="reveal-counter">0 / 10</div>
+    </div>
+
+    <!-- Mind map -->
+    <div class="map-area" id="map-area">
+      <div class="map-root">
+        <div class="node-root">🧠 间隔重复</div>
+      </div>
+
+      <!-- Branch 1: 核心原理 -->
+      <div class="branch-row">
+        <div class="branch-label">核心原理</div>
+        <div class="node" data-state="hidden" data-depth="1" data-uid="n1"
+          onclick="revealNode(this)" tabindex="0">
+          <span class="node-text">遗忘曲线</span>
+          <div class="node-flash"></div>
+        </div>
+        <div class="node" data-state="hidden" data-depth="1" data-uid="n2"
+          onclick="revealNode(this)" tabindex="0">
+          <span class="node-text">记忆提取强化</span>
+          <div class="node-flash"></div>
+        </div>
+        <div class="node" data-state="hidden" data-depth="1" data-uid="n3"
+          onclick="revealNode(this)" tabindex="0">
+          <span class="node-text">临界点复习</span>
+          <div class="node-flash"></div>
+        </div>
+      </div>
+
+      <!-- Branch 2: 复习策略 -->
+      <div class="branch-row">
+        <div class="branch-label">复习策略</div>
+        <div class="node" data-state="hidden" data-depth="2" data-uid="n4"
+          onclick="revealNode(this)" tabindex="0">
+          <span class="node-text">主动回忆</span>
+          <div class="node-flash"></div>
+        </div>
+        <div class="node" data-state="hidden" data-depth="2" data-uid="n5"
+          onclick="revealNode(this)" tabindex="0">
+          <span class="node-text">错题重点复习</span>
+          <div class="node-flash"></div>
+        </div>
+        <div class="node" data-state="hidden" data-depth="2" data-uid="n6"
+          onclick="revealNode(this)" tabindex="0">
+          <span class="node-text">交错练习</span>
+          <div class="node-flash"></div>
+        </div>
+      </div>
+
+      <!-- Branch 3: 实现机制 -->
+      <div class="branch-row">
+        <div class="branch-label">算法实现</div>
+        <div class="node" data-state="hidden" data-depth="3" data-uid="n7"
+          onclick="revealNode(this)" tabindex="0">
+          <span class="node-text">SM-2 算法</span>
+          <div class="node-flash"></div>
+        </div>
+        <div class="node" data-state="hidden" data-depth="3" data-uid="n8"
+          onclick="revealNode(this)" tabindex="0">
+          <span class="node-text">难度系数 (EF)</span>
+          <div class="node-flash"></div>
+        </div>
+        <div class="node" data-state="hidden" data-depth="3" data-uid="n9"
+          onclick="revealNode(this)" tabindex="0">
+          <span class="node-text">间隔倍增</span>
+          <div class="node-flash"></div>
+        </div>
+      </div>
+
+      <!-- Branch 4: 效果 -->
+      <div class="branch-row">
+        <div class="branch-label">学习效果</div>
+        <div class="node" data-state="hidden" data-depth="4" data-uid="n10"
+          onclick="revealNode(this)" tabindex="0">
+          <span class="node-text">长期记忆留存</span>
+          <div class="node-flash"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Hint banner (shown while nodes remain hidden) -->
+    <div class="hint-banner" id="hint-banner">
+      <strong>点击节点逐步揭示</strong>内容，全部翻开后即可对整棵思维导图评分
+    </div>
+
+    <!-- Rating bar (appears after all revealed) -->
+    <div class="rating-bar" id="rating-bar">
+      <div class="rating-label">对整棵思维导图评分</div>
+      <div class="rating-row">
+        <button class="grade-btn" data-g="1" onclick="submitGrade(1,this)">
+          <span class="g-emoji">😰</span><span class="g-label">忘记</span>
+        </button>
+        <button class="grade-btn" data-g="2" onclick="submitGrade(2,this)">
+          <span class="g-emoji">🤔</span><span class="g-label">困难</span>
+        </button>
+        <button class="grade-btn" data-g="3" onclick="submitGrade(3,this)">
+          <span class="g-emoji">😊</span><span class="g-label">记得</span>
+        </button>
+        <button class="grade-btn" data-g="4" onclick="submitGrade(4,this)">
+          <span class="g-emoji">⚡</span><span class="g-label">轻松</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- HUD -->
+  <div class="hud-row" id="hud-row" style="display:none;">
+    <div class="combo-chip" id="combo-chip">连击 ×0</div>
+    <div class="shortcut-hint">
+      <kbd>Space</kbd> 批量翻开 &nbsp; <kbd>1</kbd>–<kbd>4</kbd> 评分
+    </div>
+  </div>
+
+  <!-- Settlement -->
+  <div class="settlement" id="settlement">
+    <div style="font-size:52px;">🏆</div>
+    <div class="settle-title">本单元完成！</div>
+    <div class="settle-sub" id="settle-sub">全 10 节点 · 评分: — · 获得 — XP</div>
+    <div class="settle-row">
+      <div class="stat"><div class="stat-v" id="st-nodes">10</div><div class="stat-l">节点</div></div>
+      <div class="stat"><div class="stat-v" id="st-xp">0</div><div class="stat-l">XP</div></div>
+      <div class="stat"><div class="stat-v" id="st-combo">0</div><div class="stat-l">峰值连击</div></div>
+    </div>
+    <button class="restart-btn" onclick="restart()">↺ 再来一次</button>
+  </div>
+
+  <span class="reset-link" onclick="restart()">重置演示</span>
+
+</div>
+</div>
+
+<script>
+// ════════════════════════════════════
+//  AUDIO SYNTHESIZER
+// ════════════════════════════════════
+let AC = null
+const sfxOn = () => document.getElementById('sound-on').checked
+
+function getAC() {
+  if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)()
+  if (AC.state === 'suspended') AC.resume()
+  return AC
+}
+
+function tone({ freq=440, type='sine', gain=0.2, atk=0.004, dcy=0.08, sus=0.12, rel=0.3, when=0, detune=0 }) {
+  if (!sfxOn()) return
+  const c = getAC(), t = c.currentTime + when
+  const o = c.createOscillator(), g = c.createGain(), cp = c.createDynamicsCompressor()
+  o.type = type; o.frequency.value = freq; o.detune.value = detune
+  g.gain.setValueAtTime(0, t)
+  g.gain.linearRampToValueAtTime(gain, t + atk)
+  g.gain.linearRampToValueAtTime(gain * sus, t + atk + dcy)
+  g.gain.linearRampToValueAtTime(0, t + atk + dcy + rel)
+  o.connect(g); g.connect(cp); cp.connect(c.destination)
+  o.start(t); o.stop(t + atk + dcy + rel + 0.02)
+}
+
+function noise({ gain=0.15, freq=600, q=1.2, dur=0.18, when=0 }) {
+  if (!sfxOn()) return
+  const c = getAC(), t = c.currentTime + when
+  const buf = c.createBuffer(1, Math.floor(c.sampleRate * dur), c.sampleRate)
+  const d = buf.getChannelData(0)
+  for (let i=0; i<d.length; i++) d[i] = (Math.random()*2-1) * (1 - i/d.length)
+  const src = c.createBufferSource(); src.buffer = buf
+  const filt = c.createBiquadFilter(); filt.type = 'bandpass'
+  filt.frequency.setValueAtTime(freq, t); filt.frequency.exponentialRampToValueAtTime(freq*2.5, t + dur*0.6)
+  filt.Q.value = q
+  const env = c.createGain()
+  env.gain.setValueAtTime(gain, t); env.gain.exponentialRampToValueAtTime(0.001, t + dur)
+  src.connect(filt); filt.connect(env); env.connect(c.destination)
+  src.start(t)
+}
+
+// Node reveal: soft whoosh + thud
+function playReveal(index) {
+  // pitch rises slightly with each reveal
+  const base = 320 + index * 22
+  noise({ gain: 0.12, freq: base, dur: 0.12 })
+  tone({ freq: 200 + index * 18, type: 'sine', gain: 0.14, atk: 0.002, dcy: 0.04, sus: 0, rel: 0.06, when: 0.08 })
+}
+
+// Node reveal with combo flavor
+function playRevealCombo(combo) {
+  const base = 380 + combo * 30
+  noise({ gain: 0.15, freq: base, dur: 0.10 })
+  tone({ freq: base * 0.8, type: 'triangle', gain: 0.16, atk: 0.003, dcy: 0.05, sus: 0.1, rel: 0.15, when: 0.06 })
+}
+
+// Final node reveal burst
+function playLastReveal() {
+  ;[440, 554, 659, 880].forEach((f, i) =>
+    tone({ freq: f, type: 'triangle', gain: 0.2, atk: 0.005, dcy: 0.08, sus: 0.2, rel: 0.5, when: i * 0.06 })
+  )
+  tone({ freq: 110, type: 'sine', gain: 0.3, atk: 0.005, dcy: 0.12, sus: 0.05, rel: 0.25 })
+}
+
+// Grade sound
+function playGrade(g) {
+  const freqMap = {
+    1: [[180, 'sawtooth', 0.18, 0.2, 0]],
+    2: [[330, 'triangle', 0.16, 0.35, 0]],
+    3: [[523, 'triangle', 0.16, 0.4, 0], [659, 'triangle', 0.14, 0.4, 0.015], [783, 'triangle', 0.12, 0.4, 0.03]],
+    4: [[523, 'triangle', 0.18, 0.6, 0], [659, 'triangle', 0.16, 0.6, 0.012], [783, 'triangle', 0.14, 0.6, 0.024], [1046, 'triangle', 0.12, 0.6, 0.036]],
+  }
+  if (!sfxOn()) return
+  freqMap[g].forEach(([f, tp, gn, rel, whn]) =>
+    tone({ freq: f, type: tp, gain: gn, atk: 0.005, dcy: 0.08, sus: 0.2, rel, when: whn })
+  )
+}
+
+function playRoundComplete() {
+  ;[523, 659, 783, 1046, 1318].forEach((f, i) =>
+    tone({ freq: f, type: 'triangle', gain: 0.22, atk: 0.01, dcy: 0.1, sus: 0.25, rel: 0.8, when: i * 0.1 })
+  )
+  tone({ freq: 80, type: 'sine', gain: 0.35, atk: 0.005, dcy: 0.2, sus: 0.05, rel: 0.4 })
+}
+
+
+// ════════════════════════════════════
+//  CANVAS PARTICLE ENGINE
+// ════════════════════════════════════
+const CVS = document.getElementById('fx-canvas')
+const C2 = CVS.getContext('2d')
+let PARTS = []
+let RAF = null
+
+function resizeCvs() { CVS.width = innerWidth; CVS.height = innerHeight }
+resizeCvs(); addEventListener('resize', resizeCvs)
+
+function sp(p) {
+  PARTS.push({
+    x:p.x, y:p.y, vx:p.vx||0, vy:p.vy||0,
+    grav:p.grav??0.1, drag:p.drag??0.96,
+    size:p.size??3, color:p.color||'#fff',
+    age:0, life:p.life??1,
+    shape:p.shape||'dot', spin:p.spin||0, angle:Math.random()*Math.PI*2,
+    glow:!!p.glow, trail:p.trail?[]:null, trailLen:p.trail||0,
+    target:p.target||null, arrived:false, onArrive:p.onArrive||null,
+  })
+}
+
+function ptick() {
+  C2.clearRect(0, 0, CVS.width, CVS.height)
+  const dead = []
+  for (let i=0; i<PARTS.length; i++) {
+    const p = PARTS[i]
+    p.age += 1/60
+    const t = Math.min(1, p.age / p.life)
+
+    if (p.target && !p.arrived) {
+      const tx = typeof p.target === 'function' ? p.target().x : p.target.x
+      const ty = typeof p.target === 'function' ? p.target().y : p.target.y
+      const dx = tx - p.x, dy = ty - p.y
+      const dist = Math.hypot(dx, dy)
+      if (dist < 10) {
+        p.arrived = true
+        p.onArrive?.()
+      } else {
+        const spd = Math.min(15, dist * 0.13 + 3)
+        p.vx += (dx/dist * spd - p.vx) * 0.2
+        p.vy += (dy/dist * spd - p.vy) * 0.2
+      }
+    }
+
+    if (p.trail) {
+      p.trail.unshift({x:p.x, y:p.y})
+      if (p.trail.length > p.trailLen) p.trail.pop()
+    }
+
+    p.x += p.vx; p.y += p.vy
+    p.vy += p.grav; p.vx *= p.drag; p.vy *= p.drag
+    p.angle += p.spin
+
+    const alpha = t > 0.72 ? Math.max(0, 1 - (t - 0.72) / 0.28) : 1
+    if (t >= 1) { dead.push(i); continue }
+
+    C2.save()
+    C2.globalAlpha = alpha
+    if (p.glow) { C2.shadowColor = p.color; C2.shadowBlur = p.size * 4 }
+
+    if (p.trail?.length > 1) {
+      for (let j=0; j<p.trail.length-1; j++) {
+        C2.globalAlpha = alpha * (1 - j/p.trail.length) * 0.45
+        C2.strokeStyle = p.color
+        C2.lineWidth = Math.max(0.5, p.size * (1 - j/p.trail.length) * 0.55)
+        C2.beginPath()
+        C2.moveTo(p.trail[j].x, p.trail[j].y)
+        C2.lineTo(p.trail[j+1].x, p.trail[j+1].y)
+        C2.stroke()
+      }
+      C2.globalAlpha = alpha
+    }
+
+    C2.translate(p.x, p.y); C2.rotate(p.angle)
+    C2.fillStyle = p.color
+
+    if (p.shape === 'dot' || p.shape === 'glow') {
+      C2.beginPath(); C2.arc(0,0,p.size,0,Math.PI*2); C2.fill()
+    } else if (p.shape === 'star') {
+      C2.beginPath()
+      for (let k=0; k<10; k++) {
+        const a = k*Math.PI/5 - Math.PI/2
+        const r = k%2===0 ? p.size : p.size*0.42
+        k===0 ? C2.moveTo(Math.cos(a)*r, Math.sin(a)*r) : C2.lineTo(Math.cos(a)*r, Math.sin(a)*r)
+      }
+      C2.closePath(); C2.fill()
+    } else if (p.shape === 'flake') {
+      C2.fillRect(-p.size*0.35, -p.size, p.size*0.7, p.size*2)
+    }
+    C2.restore()
+  }
+  for (let i=dead.length-1; i>=0; i--) PARTS.splice(dead[i], 1)
+  RAF = PARTS.length ? requestAnimationFrame(ptick) : null
+}
+function startFx() { if (!RAF) RAF = requestAnimationFrame(ptick) }
+
+// Depth → color
+const DEPTH_COLORS = ['#d4a44a', '#c8883a', '#5cb885', '#56a0e8', '#9978e0']
+
+function emitNodeBurst(rect, depth) {
+  const cx = rect.left + rect.width/2, cy = rect.top + rect.height/2
+  const col = DEPTH_COLORS[depth] || DEPTH_COLORS[0]
+  for (let i=0; i<20; i++) {
+    const a = Math.random() * Math.PI * 2
+    const spd = 2 + Math.random() * 5
+    sp({
+      x: cx + (Math.random()-0.5)*rect.width*0.4,
+      y: cy + (Math.random()-0.5)*rect.height*0.4,
+      vx: Math.cos(a)*spd, vy: Math.sin(a)*spd - 0.5,
+      grav: 0.1, drag: 0.95,
+      size: 2 + Math.random()*3,
+      color: Math.random() < 0.6 ? col : '#f0d090',
+      glow: true, trail: Math.random()<0.4 ? 4 : 0,
+      shape: Math.random() < 0.5 ? 'dot' : (Math.random() < 0.5 ? 'star' : 'flake'),
+      spin: (Math.random()-0.5)*0.3,
+      life: 0.7 + Math.random()*0.5,
+    })
+  }
+  startFx()
+}
+
+function emitGoldDust(rect) {
+  // Small gold sparkle around the node
+  const cx = rect.left + rect.width/2, cy = rect.top + rect.height/2
+  for (let i=0; i<8; i++) {
+    const a = -Math.PI + Math.random()*Math.PI
+    sp({
+      x: cx + (Math.random()-0.5)*rect.width*0.8,
+      y: cy + (Math.random()-0.5)*rect.height*0.5,
+      vx: Math.cos(a)*1.5, vy: Math.sin(a)*1.5 - 1,
+      grav: 0.04, drag: 0.97,
+      size: 1.2 + Math.random()*1.8, color: '#f0d090',
+      glow: true, shape: 'star', spin: 0.1,
+      life: 0.8 + Math.random()*0.4,
+    })
+  }
+  startFx()
+}
+
+function emitLastRevealBurst() {
+  const cx = innerWidth/2, cy = innerHeight/2
+  for (let i=0; i<45; i++) {
+    const a = Math.random() * Math.PI*2
+    const spd = 4 + Math.random()*10
+    sp({
+      x:cx, y:cy,
+      vx: Math.cos(a)*spd, vy: Math.sin(a)*spd - 2,
+      grav: 0.12, drag: 0.94,
+      size: 2 + Math.random()*4, glow: true, trail: Math.random()<0.5?6:0,
+      color: ['#f0d090','#78cfa4','#7abff5','#d4a44a'][Math.floor(Math.random()*4)],
+      shape: ['dot','star','flake'][Math.floor(Math.random()*3)],
+      spin: (Math.random()-0.5)*0.4, life: 1 + Math.random()*0.8,
+    })
+  }
+  startFx()
+}
+
+function emitFlight(from, targetFn, count, col, onFirst) {
+  let fired = false
+  for (let i=0; i<count; i++) {
+    setTimeout(() => {
+      sp({
+        x: from.x+(Math.random()-0.5)*12, y: from.y+(Math.random()-0.5)*12,
+        vx: (Math.random()-0.5)*4, vy: (Math.random()-0.5)*4-2,
+        grav:0, drag:0.98, size:2+Math.random()*2,
+        color: col, glow:true, trail:5, shape:'dot', life:2.0,
+        target: targetFn,
+        onArrive: () => { if (!fired) { fired=true; onFirst?.() } }
+      })
+      startFx()
+    }, i*30)
+  }
+}
+
+function emitMeteors() {
+  for (let i=0; i<30; i++) {
+    setTimeout(() => {
+      sp({
+        x: Math.random()*innerWidth, y: -20,
+        vx: (Math.random()-0.5)*2, vy: 8+Math.random()*8,
+        grav:0.12, drag:0.99, size:1.5+Math.random()*3,
+        color: Math.random()<0.6 ? '#f0d090' : '#fff',
+        glow:true, trail:9, shape:'dot', life:1.4+Math.random()*0.6,
+      })
+      startFx()
+    }, i*60)
+  }
+}
+
+function emitRailSparks() {
+  const el = document.getElementById('rail-track')
+  if (!el) return
+  const r = el.getBoundingClientRect()
+  const cx = r.left + r.width * state.progress, cy = r.top + r.height/2
+  for (let i=0; i<10; i++) {
+    sp({
+      x:cx, y:cy,
+      vx:(Math.random()-0.5)*6, vy:(Math.random()-0.5)*6-2,
+      grav:0.07, drag:0.93,
+      size:1.3+Math.random()*2.2, color:'#f0d090',
+      glow:true, shape:'star', spin:0.2, life:0.5+Math.random()*0.4,
+    })
+  }
+  startFx()
+}
+
+
+// ════════════════════════════════════
+//  DOM FLOURISHES
+// ════════════════════════════════════
+function bump(el, peak=1.16) {
+  el?.animate?.([{scale:'1'},{scale:String(peak)},{scale:'1'}],
+    {duration:320, easing:'cubic-bezier(0.18,1.6,0.4,1)'})
+}
+function flash(el, peak=2.0) {
+  el?.animate?.([{filter:'brightness(1)'},{filter:`brightness(${peak}) saturate(1.4)`,offset:0.3},{filter:'brightness(1)'}],
+    {duration:380, easing:'ease-out'})
+}
+function shakeScreen() {
+  const r = document.getElementById('root')
+  r.classList.remove('shaking'); void r.offsetWidth; r.classList.add('shaking')
+  r.addEventListener('animationend', () => r.classList.remove('shaking'), {once:true})
+}
+function vignette() {
+  const v = document.createElement('div'); v.className = 'vignette'
+  v.setAttribute('aria-hidden','true'); document.body.appendChild(v)
+  setTimeout(() => v.remove(), 650)
+}
+function stamp(text, x, y, color='#f0d090') {
+  const s = document.createElement('div'); s.className = 'stamp'
+  s.textContent = text; s.style.left=x+'px'; s.style.top=y+'px'; s.style.color=color
+  document.body.appendChild(s); setTimeout(() => s.remove(), 1450)
+}
+function xpPop(n, x, y) {
+  const e = document.createElement('div'); e.className = 'xp-pop'
+  e.textContent = `+${n} XP`; e.style.left=x+'px'; e.style.top=y+'px'
+  document.body.appendChild(e); setTimeout(() => e.remove(), 1500)
+}
+
+// Flash the inner overlay of a node element
+function flashNodeOverlay(nodeEl, depth) {
+  const overlay = nodeEl.querySelector('.node-flash')
+  if (!overlay) return
+  const col = DEPTH_COLORS[depth] || DEPTH_COLORS[0]
+  overlay.style.background = `radial-gradient(ellipse at center, ${col} 0%, transparent 75%)`
+  overlay.animate([{opacity:0},{opacity:0.55,offset:0.25},{opacity:0}],
+    {duration:450, easing:'ease-out'})
+}
+
+
+// ════════════════════════════════════
+//  GAME STATE
+// ════════════════════════════════════
+const TOTAL_NODES = 10
+const XP_MAP = {1:30, 2:60, 3:100, 4:150}
+
+let state = {
+  revealed: 0,
+  combo: 0,
+  maxCombo: 0,
+  totalXP: 0,
+  progress: 0,
+  rated: false,
+  revealSeq: 0, // monotonic reveal index for pitch ramp
+}
+
+// ════════════════════════════════════
+//  REVEAL NODE
+// ════════════════════════════════════
+function revealNode(el) {
+  const s = el.dataset.state
+  if (s === 'revealed') return
+
+  const depth = parseInt(el.dataset.depth || '1', 10) - 1
+  const rect = el.getBoundingClientRect()
+
+  if (s === 'hidden') {
+    // ─ Transition to visible first (shows content dimly) ─
+    el.dataset.state = 'visible'
+    // Spring pop animation
+    el.classList.remove('popping'); void el.offsetWidth; el.classList.add('popping')
+    el.addEventListener('animationend', () => el.classList.remove('popping'), {once:true})
+
+    // Mild burst + gold dust on first reveal
+    emitGoldDust(rect)
+    playReveal(state.revealSeq)
+    state.revealSeq++
+
+    // Flash node overlay
+    setTimeout(() => flashNodeOverlay(el, depth), 60)
+    return
+  }
+
+  // ─ visible → revealed ─
+  el.dataset.state = 'revealed'
+  el.onclick = null
+
+  // Full spring pop
+  el.classList.remove('popping'); void el.offsetWidth; el.classList.add('popping')
+  el.addEventListener('animationend', () => el.classList.remove('popping'), {once:true})
+
+  state.revealed++
+  state.combo++
+  state.maxCombo = Math.max(state.maxCombo, state.combo)
+
+  // Visual & audio
+  const isLast = state.revealed >= TOTAL_NODES
+  const rect2 = el.getBoundingClientRect()
+
+  if (isLast) {
+    // ─ LAST NODE: climax ─
+    flashNodeOverlay(el, depth)
+    emitNodeBurst(rect2, depth)
+    emitLastRevealBurst()
+    vignette()
+    shakeScreen()
+    playLastReveal()
+
+    setTimeout(() => stamp('✨ 全部揭示！', innerWidth/2, innerHeight/2 - 60, '#f0d090'), 200)
+    setTimeout(() => showRatingBar(), 800)
+  } else {
+    flashNodeOverlay(el, depth)
+    emitNodeBurst(rect2, depth)
+    playRevealCombo(state.combo)
+
+    // Combo milestone every 3
+    if (state.combo > 0 && state.combo % 3 === 0) {
+      setTimeout(() => {
+        vignette()
+        stamp(`连击 ×${state.combo} 🔥`, innerWidth/2, innerHeight*0.35, '#f0d090')
+      }, 150)
+    }
+  }
+
+  updateRail()
+  updateComboChip()
+}
+
+function showRatingBar() {
+  document.getElementById('hint-banner').style.display = 'none'
+  const bar = document.getElementById('rating-bar')
+  bar.classList.add('visible')
+  const counter = document.getElementById('reveal-counter')
+  counter.textContent = `${TOTAL_NODES} / ${TOTAL_NODES}`
+  counter.classList.add('complete')
+  bump(bar, 1.03)
+}
+
+// ════════════════════════════════════
+//  SUBMIT GRADE
+// ════════════════════════════════════
+const GRADE_COLORS = {'1':'#e05555','2':'#d4844a','3':'#4caf82','4':'#5588e8'}
+
+function submitGrade(g, btn) {
+  if (state.rated) return
+  state.rated = true
+
+  btn.classList.remove('fired'); void btn.offsetWidth; btn.classList.add('fired')
+
+  const xp = XP_MAP[g]
+  state.totalXP += xp
+  state.progress = 1.0
+
+  if (g >= 3) shakeScreen()
+  if (g === 4) vignette()
+
+  const rect = btn.getBoundingClientRect()
+  const origin = { x: rect.left + rect.width/2, y: rect.top + rect.height/2 }
+  const col = GRADE_COLORS[String(g)]
+
+  // Grade stamp
+  const gradeLabels = {1:'😰 忘记', 2:'🤔 困难', 3:'✓ 记得！', 4:'⚡ 轻松！'}
+  stamp(gradeLabels[g], origin.x, origin.y - 40, col)
+  playGrade(g)
+
+  // Particles fly to progress bar
+  const ptTarget = () => {
+    const el = document.getElementById('rail-fill')
+    if (!el) return {x: innerWidth/2, y: 60}
+    const r = el.getBoundingClientRect()
+    return {x: r.right, y: r.top + r.height/2}
+  }
+
+  setTimeout(() => {
+    emitFlight(origin, ptTarget, 12, col, () => {
+      // On arrival: charge rail
+      flash(document.getElementById('rail-fill'), 1.7)
+      bump(document.getElementById('rail-track'), 1.04)
+      emitRailSparks()
+      updateRail()
+      xpPop(xp, ptTarget().x - 24, ptTarget().y - 16)
+
+      // Settlement
+      setTimeout(() => {
+        emitMeteors()
+        playRoundComplete()
+        setTimeout(() => stamp('🏆 单元完成！', innerWidth/2, innerHeight*0.3, '#f0d090'), 400)
+        setTimeout(() => showSettlement(g, xp), 900)
+      }, 300)
+    })
+    startFx()
+  }, 100)
+}
+
+function updateRail() {
+  const pct = (state.revealed / TOTAL_NODES) * 100
+  state.progress = state.revealed / TOTAL_NODES
+  const fill = document.getElementById('rail-fill')
+  fill.style.width = pct + '%'
+  if (pct > 0) fill.classList.add('lit')
+  document.getElementById('rail-left').textContent = `${state.revealed} / ${TOTAL_NODES} 节点`
+  document.getElementById('rail-right').textContent = `${state.totalXP} XP`
+  document.getElementById('reveal-counter').textContent = `${state.revealed} / ${TOTAL_NODES}`
+}
+
+function updateComboChip() {
+  const chip = document.getElementById('combo-chip')
+  chip.textContent = `连击 ×${state.combo}`
+  if (state.combo >= 2) {
+    chip.classList.add('hot')
+    chip.classList.remove('pop'); void chip.offsetWidth; chip.classList.add('pop')
+  } else {
+    chip.classList.remove('hot')
+  }
+}
+
+function showSettlement(g, xp) {
+  document.getElementById('card').style.display = 'none'
+  document.getElementById('hud-row').style.display = 'none'
+
+  const settle = document.getElementById('settlement')
+  settle.classList.add('on')
+
+  document.getElementById('settle-sub').textContent =
+    `全 ${TOTAL_NODES} 节点 · 评分: ${'忘记/困难/记得/轻松'.split('/')[g-1]} · 获得 ${xp} XP`
+  document.getElementById('st-xp').textContent = state.totalXP
+  document.getElementById('st-combo').textContent = state.maxCombo
+
+  // Particle flight to settlement
+  setTimeout(() => {
+    const sr = settle.getBoundingClientRect()
+    const target = {x: sr.left + sr.width/2, y: sr.top + 60}
+    emitFlight({x: innerWidth/2, y: innerHeight*0.4}, () => target, 16, '#f0d090',
+      () => flash(settle, 1.3))
+    startFx()
+  }, 400)
+}
+
+// ════════════════════════════════════
+//  SPACE BAR — BULK REVEAL
+// ════════════════════════════════════
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' && !state.rated) {
+    e.preventDefault()
+    // Reveal first hidden node found
+    const hidden = document.querySelector('.node[data-state="hidden"]')
+    if (hidden) { hidden.click(); return }
+    // Then first visible
+    const visible = document.querySelector('.node[data-state="visible"]')
+    if (visible) visible.click()
+  }
+  // 1-4 grade shortcuts
+  if (['Digit1','Digit2','Digit3','Digit4'].includes(e.code) && !state.rated) {
+    if (document.getElementById('rating-bar').classList.contains('visible')) {
+      const g = parseInt(e.code.slice(-1))
+      const btn = document.querySelector(`.grade-btn[data-g="${g}"]`)
+      if (btn) submitGrade(g, btn)
+    }
+  }
+})
+
+// ════════════════════════════════════
+//  RESTART
+// ════════════════════════════════════
+function restart() {
+  state = { revealed:0, combo:0, maxCombo:0, totalXP:0, progress:0, rated:false, revealSeq:0 }
+  PARTS.length = 0
+
+  // Reset all nodes
+  document.querySelectorAll('.node').forEach(n => {
+    n.dataset.state = 'hidden'
+    n.onclick = function() { revealNode(this) }
+    n.classList.remove('popping')
+  })
+
+  // Reset rail
+  const fill = document.getElementById('rail-fill')
+  fill.style.width = '0%'; fill.classList.remove('lit')
+  document.getElementById('rail-left').textContent = `0 / ${TOTAL_NODES} 节点`
+  document.getElementById('rail-right').textContent = '0 XP'
+
+  // Reset counter
+  const counter = document.getElementById('reveal-counter')
+  counter.textContent = `0 / ${TOTAL_NODES}`
+  counter.classList.remove('complete')
+
+  // Reset combo
+  const chip = document.getElementById('combo-chip')
+  chip.textContent = '连击 ×0'; chip.classList.remove('hot','pop')
+
+  // Show card, hide settlement
+  document.getElementById('card').style.display = ''
+  document.getElementById('hud-row').style.display = ''
+  document.getElementById('rating-bar').classList.remove('visible')
+  document.getElementById('hint-banner').style.display = ''
+  document.getElementById('settlement').classList.remove('on')
+}
+
+// ════════════════════════════════════
+//  INIT
+// ════════════════════════════════════
+document.getElementById('card').style.display = ''
+document.getElementById('hud-row').style.display = ''
+
+// Unlock audio
+document.addEventListener('pointerdown', () => getAC(), {once:true})
+</script>
+</body>
+</html>
