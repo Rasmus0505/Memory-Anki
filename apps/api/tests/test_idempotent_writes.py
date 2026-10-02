@@ -88,15 +88,6 @@ def test_create_palace_replay_returns_cached_response_without_duplicate_row(
         assert session.query(Palace).count() == 1
 
 
-@pytest.mark.skip(reason="trigger_review_for_palace removed with legacy schedules")
-def test_create_palace_rolls_back_when_initial_review_creation_fails(
-    make_client,
-    session_factory,
-    monkeypatch,
-):
-    del make_client, session_factory, monkeypatch
-
-
 def test_create_segment_rolls_back_when_idempotency_record_fails(
     make_client,
     session_factory,
@@ -136,15 +127,6 @@ def _seed_palace_template(session_factory, name: str = "Atomic Template") -> int
         session.add(template)
         session.commit()
         return template.id
-
-
-@pytest.mark.skip(reason="trigger_review_for_palace removed with legacy schedules")
-def test_template_instantiation_rolls_back_when_review_creation_fails(
-    make_client,
-    session_factory,
-    monkeypatch,
-):
-    del make_client, session_factory, monkeypatch
 
 
 def test_template_instantiation_replay_does_not_duplicate_palace(

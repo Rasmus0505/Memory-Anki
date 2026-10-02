@@ -176,21 +176,6 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
             finally:
                 connection.close()
 
-    @unittest.skip('legacy ReviewSchedule dashboard path removed')
-    def test_dashboard_review_unit_counts_preserve_next_pending_schedule_semantics(self):
-        return
-
-
-    @unittest.skip('legacy ReviewSchedule dashboard path removed')
-    def test_dashboard_review_unit_counts_keeps_constant_query_count(self):
-        return
-
-
-    @unittest.skip('legacy ReviewSchedule dashboard path removed')
-    def test_dashboard_payload_keeps_query_budget_with_many_due_palaces(self):
-        return
-
-
     def test_weekly_report_uses_sql_aggregate_for_unit_review_sessions(self):
         week_start, _week_end = current_week_bounds()
         week_start = week_start - timedelta(days=7)

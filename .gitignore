@@ -33,6 +33,10 @@ __pycache__/
 /apps/api/.ruff_cache/
 /apps/api/.pytest_cache/
 /apps/api/.import_linter_cache/
+# pytest temp basetemp leftovers (any depth, any run tag) — never commit
+**/.pytest-temp/
+**/.pytest_cache/
+**/MemoryAnkiPytestTemp*/
 
 # ===== Runtime / local data =====
 /runtime-data/

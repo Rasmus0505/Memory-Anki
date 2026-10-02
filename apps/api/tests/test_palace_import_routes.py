@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
 from memory_anki.infrastructure.db._tables.palaces import Palace, Peg
 from memory_anki.modules.produce.presentation import import_router
 from memory_anki.platform.application import MUTATION_ID_HEADER
@@ -17,15 +15,6 @@ def _json_import_file(items: list[dict]) -> dict:
             "application/json",
         )
     }
-
-
-@pytest.mark.skip(reason="legacy review-schedule init removed; import no longer triggers schedules")
-def test_json_import_rolls_back_entire_batch_when_review_initialization_fails(
-    make_client,
-    session_factory,
-    monkeypatch,
-):
-    del make_client, session_factory, monkeypatch
 
 
 def test_json_import_replay_does_not_duplicate_batch(
