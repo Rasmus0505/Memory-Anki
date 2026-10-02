@@ -10,6 +10,8 @@
   color: #fff;
   cursor: grab;
   touch-action: none;
+  content-visibility: auto;
+  contain-intrinsic-size: 100% 640px;
 }
 .jelly-mindmap-stage:active { cursor: grabbing; }
 .jelly-stage-grid {
@@ -43,11 +45,11 @@
 }
 .jelly-stage-link-line { stroke: rgba(255,255,255,.16); stroke-width: 3.5; transition: stroke .4s ease, stroke-width .3s ease; }
 .jelly-stage-link-glow { stroke: transparent; stroke-width: 9; opacity: 0; transition: stroke .4s ease, opacity .4s ease; }
-.jelly-stage-link.is-live .jelly-stage-link-line { stroke: #48dbfb; stroke-width: 5.5; filter: drop-shadow(0 0 10px #48dbfb); }
+.jelly-stage-link.is-live .jelly-stage-link-line { stroke: #48dbfb; stroke-width: 5.5; }
 .jelly-stage-link.is-live .jelly-stage-link-glow { stroke: #48dbfb; opacity: .55; }
-.jelly-stage-link.is-mastered .jelly-stage-link-line { stroke: #ffa502; stroke-width: 6.5; filter: drop-shadow(0 0 15px #ffa502); }
+.jelly-stage-link.is-mastered .jelly-stage-link-line { stroke: #ffa502; stroke-width: 6.5; }
 .jelly-stage-link.is-mastered .jelly-stage-link-glow { stroke: #ffa502; opacity: .45; }
-.jelly-stage-link-dot { fill: #fff; filter: drop-shadow(0 0 8px #ffa502); opacity: 0; transition: opacity .2s ease; }
+.jelly-stage-link-dot { fill: #fff; opacity: 0; transition: opacity .2s ease; }
 .jelly-stage-link.is-live .jelly-stage-link-dot,
 .jelly-stage-link.is-mastered .jelly-stage-link-dot { opacity: 1; }
 .jelly-stage-node {
@@ -56,7 +58,6 @@
   z-index: 3;
   box-sizing: border-box;
   overflow: visible;
-  transition: filter .25s ease, opacity .25s ease;
 }
 .jelly-stage-node.is-muted { opacity: .42; filter: grayscale(.35); }
 .jelly-stage-node.is-selected::after {
@@ -97,10 +98,12 @@
 .jelly-stage-parent-head { display: flex; justify-content: space-between; gap: 10px; align-items: center; color: #ffa502; font: 800 10px ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .5px; }
 .jelly-stage-meter { position: relative; width: 100%; height: 8px; overflow: hidden; border-radius: 99px; background: rgba(255,255,255,.12); }
 .jelly-stage-meter span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg,#ff4757,#2ed573); box-shadow: 0 0 10px #2ed573; transition: width .45s cubic-bezier(.34,1.56,.64,1); }
-.jelly-stage-node.is-leaf { perspective: 1000px; }
-.jelly-stage-flipper { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform .55s cubic-bezier(.34,1.56,.64,1) var(--jelly-flip-delay); }
+.jelly-stage-node.is-leaf:has(.is-turning) { perspective: 1000px; }
+.jelly-stage-flipper { position: relative; width: 100%; height: 100%; transform-style: flat; }
+.jelly-stage-flipper.is-turning { transform-style: preserve-3d; transition: transform .55s cubic-bezier(.34,1.56,.64,1) var(--jelly-flip-delay); }
 .jelly-stage-flipper[data-flipped='true'] { transform: rotateY(180deg); }
 .jelly-stage-face { position: absolute; inset: 0; display: flex; flex-direction: column; backface-visibility: hidden; -webkit-backface-visibility: hidden; border-radius: 18px; padding: 16px 18px; overflow: hidden; }
+.jelly-stage-face.is-flat { position: relative; inset: auto; width: 100%; height: 100%; transform: none; backface-visibility: visible; -webkit-backface-visibility: visible; }
 .jelly-stage-front { align-items: center; justify-content: center; cursor: pointer; background: linear-gradient(135deg,rgba(32,45,76,.95),rgba(20,28,48,.96)); border: 1.8px dashed rgba(255,255,255,.25); box-shadow: 0 8px 20px rgba(0,0,0,.25); color: rgba(255,255,255,.35); font-size: 13px; font-weight: 600; }
 .jelly-stage-node:hover .jelly-stage-front { border-style: solid; border-color: #ffa502; color: rgba(255,255,255,.7); }
 .jelly-stage-back { justify-content: space-between; align-items: stretch; background: #151d30; border: 2px solid #2ed573; box-shadow: 0 12px 35px rgba(0,0,0,.5), 0 0 20px rgba(46,213,115,.32); transform: rotateY(180deg); color: #fff; }
@@ -110,4 +113,6 @@
 .jelly-stage-root-stamp { top: -13px; right: -18px; transform: rotate(-10deg) scale(.9); }
 @keyframes jelly-stage-stamp { 0% { transform: scale(2.4) rotate(18deg); opacity: 0; } 60% { transform: scale(.92) rotate(-12deg); opacity: 1; } 100% { transform: scale(1) rotate(-10deg); opacity: 1; } }
 .jelly-stage-hint { position: absolute; left: 50%; top: -34px; z-index: 8; transform: translateX(-50%); padding: 4px 10px; border-radius: 999px; background: rgba(18,24,40,.92); color: rgba(255,255,255,.9); font-size: 11px; font-weight: 700; white-space: nowrap; pointer-events: none; box-shadow: 0 8px 18px rgba(0,0,0,.35); }
+.jelly-stage-hint-hover { opacity: 0; }
+.jelly-stage-node:hover .jelly-stage-hint-hover { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .jelly-stage-flipper, .jelly-stage-stamp, .jelly-stage-meter span { transition: none; animation: none; } }

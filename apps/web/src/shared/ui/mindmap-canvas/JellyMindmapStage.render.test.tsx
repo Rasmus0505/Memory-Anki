@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { fireEvent, render } from '@testing-library/react'
+import { fireEvent, render, waitFor } from '@testing-library/react'
 import { JellyMindmapStage } from './JellyMindmapStage'
 import type { GraphData } from './adapter'
 
@@ -30,28 +30,44 @@ function nodeByUid(container: HTMLElement, uid: string) {
 }
 
 describe('JellyMindmapStage rendering contract', () => {
-  it('renders only leaf cards as flippers, keeping root and parent static', () => {
+  it('keeps resting leaves flat so a palace does not sit on hundreds of 3D layers', () => {
     const { container } = render(
       <JellyMindmapStage graphData={graph()} selectedNodeId={null} readonly />,
     )
-    // Leaves own the 3D flipper; the root and parent never do.
-    expect(nodeByUid(container, 'leaf-0')!.querySelector('.jelly-stage-flipper')).toBeTruthy()
-    expect(nodeByUid(container, 'leaf-1')!.querySelector('.jelly-stage-flipper')).toBeTruthy()
+    expect(nodeByUid(container, 'leaf-0')!.querySelector('.jelly-stage-front.is-flat')).toBeTruthy()
+    expect(nodeByUid(container, 'leaf-0')!.querySelector('.jelly-stage-flipper')).toBeNull()
     expect(nodeByUid(container, 'root')!.querySelector('.jelly-stage-flipper')).toBeNull()
     expect(nodeByUid(container, 'parent')!.querySelector('.jelly-stage-flipper')).toBeNull()
   })
 
-  it('gives each leaf two real faces and flips the revealed one', () => {
-    const { container } = render(
+  it('mounts a two-face flipper only while a leaf is turning, then a revealed card rests flat', async () => {
+    const view = render(
+      <JellyMindmapStage graphData={graph()} selectedNodeId={null} readonly />,
+    )
+    view.rerender(
       <JellyMindmapStage graphData={graph({ leafRevealed: [true, false] })} selectedNodeId={null} readonly />,
     )
-    const flipper = nodeByUid(container, 'leaf-0')!.querySelector('.jelly-stage-flipper')!
-    expect(flipper.getAttribute('data-flipped')).toBe('true')
-    // A true double-sided card: both front and back faces exist in one flipper.
-    expect(flipper.querySelectorAll('.jelly-stage-face')).toHaveLength(2)
-    expect(flipper.querySelector('.jelly-stage-back')!.textContent).toContain('答案 0')
+    await waitFor(() => {
+      const flipper = nodeByUid(view.container, 'leaf-0')!.querySelector('.jelly-stage-flipper.is-turning')
+      expect(flipper).toBeTruthy()
+      expect(flipper!.getAttribute('data-flipped')).toBe('true')
+      expect(flipper!.querySelectorAll('.jelly-stage-face')).toHaveLength(2)
+    })
+    expect(nodeByUid(view.container, 'leaf-1')!.querySelector('.jelly-stage-front.is-flat')).toBeTruthy()
 
-    expect(nodeByUid(container, 'leaf-1')!.querySelector('.jelly-stage-flipper')!.getAttribute('data-flipped')).toBe('false')
+    const resting = render(
+      <JellyMindmapStage graphData={graph({ leafRevealed: [true, false] })} selectedNodeId={null} readonly />,
+    )
+    expect(nodeByUid(resting.container, 'leaf-0')!.querySelector('.jelly-stage-back.is-flat')!.textContent).toContain('答案 0')
+    expect(nodeByUid(resting.container, 'leaf-0')!.querySelector('.jelly-stage-flipper')).toBeNull()
+  })
+
+  it('does not build a node per card for an off-screen neighbour', () => {
+    const { container } = render(
+      <JellyMindmapStage graphData={graph()} selectedNodeId={null} readonly paintNodes={false} />,
+    )
+    expect(container.querySelector('[data-jelly-paint="false"]')).toBeTruthy()
+    expect(container.querySelector('[data-jelly-node]')).toBeNull()
   })
 
   it('pins the leaf shell to the exact 270px layout width', () => {

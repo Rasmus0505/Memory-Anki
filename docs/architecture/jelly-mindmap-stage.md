@@ -19,7 +19,7 @@ React Flow 的节点是真实 DOM 内容，翻面时必须重新测量文字、�
 |---|---|---|
 | 主要职责 | 编辑态、拖拽、选择、文字选择/英语交互、通用节点外观 | 只读翻卡场景与揭示动画 |
 | 文字测量 | 浏览器按内容实时测量 | 布局阶段一次性计算并冻结（固定卡宽） |
-| 翻面实现 | 无内建翻面 | 固定外壳 + `preserve-3d` 双面内翻板 |
+| 翻面实现 | 无内建翻面 | 静止平面单面；翻开瞬间才挂 `preserve-3d` 双面内翻板 |
 | 连线 | React Flow 边组件 | SVG 三次 Bézier |
 | 回退关系 | 非果冻场景与编辑态的**唯一**入口 | 编辑、文字选择、非果冻场景一律回退 React Flow |
 
@@ -48,10 +48,13 @@ React Flow 的节点是真实 DOM 内容，翻面时必须重新测量文字、�
 | `JELLY_FLIP_DURATION_MS` | 550 | 单卡果冻翻面时长，缓动 `cubic-bezier(0.34, 1.56, 0.64, 1)`（带过冲） |
 | `JELLY_BATCH_STAGGER_MS` | 45 | 批量翻面的相邻卡启动间隔（节奏契约，`map.settle` 沿用同一节拍） |
 
-- **叶卡**：在 `styles/jelly-mindmap-stage.css` 中，`.jelly-stage-node.is-leaf` 提供 `perspective: 1000px`，
-  `.jelly-stage-flipper` 使用 `transform-style: preserve-3d` 与同一个 `cubic-bezier(.34,1.56,.64,1)` 过渡，
-  由 `data-flipped='true'` 触发 `rotateY(180deg)`；两个面 `.jelly-stage-face` 均为 `backface-visibility: hidden`，
-  背面自带 `rotateY(180deg)`。翻面只做 3D 内翻，不触发重新测量。
+- **叶卡**：静止时只画当前这一面（`.jelly-stage-face.is-flat`），不保留 `preserve-3d` 图层。
+  同一次揭示里新翻开的叶卡才挂 `.jelly-stage-flipper.is-turning`：此时叶子提供 `perspective: 1000px`，
+  翻板使用 `transform-style: preserve-3d` 与 `cubic-bezier(.34,1.56,.64,1)`，
+  由 `data-flipped='true'` 触发 `rotateY(180deg)`；两个面 `backface-visibility: hidden`，背面自带 `rotateY(180deg)`。
+  过渡结束后翻板卸掉，叶卡回到平面。已经揭示的进度在挂载时直接画背面，不补播 3D。
+  文本高度按内容缓存，翻面不重新测量。拖动/滚轮只写世界层 `transform`，不重渲染整棵树。
+  离屏随心邻居传 `paintNodes={false}`，不为一张看不见的卡创建节点 DOM。连线不用 `drop-shadow`。
 - **根卡 / 父卡**：保持静态，仅承受充能、回弹（`squashElement`）和 shockwave（`shockwaveElement`）。
 - 舞台、SVG 边、卡片与反馈共用同一份布局矩形和屏幕坐标，避免动画与视觉位置各算一套。
 

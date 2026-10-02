@@ -70,6 +70,10 @@ export interface MindMapEditorSurfaceProps {
   flipCameraNudge?: 'still' | 'pan'
   /** Use the independent HTML-style jelly stage in readonly flip scenes. */
   jellyStage?: boolean
+  /** When false, the jelly stage keeps its box but does not mount a card per node. */
+  jellyPaintNodes?: boolean
+  /** When false, reveals paint the resting face without 3D theatre or sound. */
+  jellyLive?: boolean
   contentChangeViewportPolicy?: MindMapContentChangeViewportPolicy
   /** Optional host-owned zoom preference; pan remains local to each canvas instance. */
   preferredZoom?: number

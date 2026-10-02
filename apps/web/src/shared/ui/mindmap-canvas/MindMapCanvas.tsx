@@ -162,6 +162,10 @@ export interface MindMapCanvasProps {
   sceneTransitionKey?: string | null
   /** Render the independent HTML-style jelly stage instead of React Flow. */
   jellyStage?: boolean
+  /** Off-screen freestyle neighbours skip per-node DOM until they slide near. */
+  jellyPaintNodes?: boolean
+  /** Background previews stay flat and silent; only the active card plays the flip. */
+  jellyLive?: boolean
   viewCommand?: MindMapCanvasViewCommand | null
   recoveryKey?: string | number | null
   className?: string
@@ -418,6 +422,8 @@ function MindMapCanvasInner({
                 selectedNodeIds={props.selectedNodeIds}
                 readonly={Boolean(props.readonly)}
                 cameraNudge={props.flipCameraNudge}
+                paintNodes={props.jellyPaintNodes}
+                live={props.jellyLive}
                 onNodeSelect={props.onNodeSelect}
                 onNodeActivate={props.onNodeActivate}
                 onNodeContextAction={props.onNodeContextAction}

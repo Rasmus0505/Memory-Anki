@@ -35,6 +35,13 @@ export interface JellyMindmapStageProps {
   className?: string
   /** HTML-lab compatible camera default. The setting can opt into pan. */
   cameraNudge?: 'still' | 'pan'
+  /**
+   * False for off-screen freestyle neighbours. The stage stays mounted so the
+   * camera can warm up, but it does not build a card per node.
+   */
+  paintNodes?: boolean
+  /** False skips flip theatre and sounds. Resting faces stay flat either way. */
+  live?: boolean
   /** Visual children are supplied by the graph projection; generic stage stays business-free. */
   renderCard?: (node: MindMapNode, args: { isRoot: boolean; isParent: boolean; isLeaf: boolean }) => ReactNode
 }
@@ -60,6 +67,17 @@ const CARD_GAP_X = 170
 const SIBLING_GAP_Y = 24
 const STAGE_PADDING = 90
 const CARD_FONT = '600 14px -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif'
+const TEXT_HEIGHT_CACHE_LIMIT = 4000
+
+let measureCanvas: HTMLCanvasElement | null = null
+let measureContext: CanvasRenderingContext2D | null = null
+const textHeightCache = new Map<string, number>()
+
+function rememberTextHeight(key: string, value: number) {
+  if (textHeightCache.size >= TEXT_HEIGHT_CACHE_LIMIT) textHeightCache.clear()
+  textHeightCache.set(key, value)
+  return value
+}
 
 function visualOf(node: MindMapNode): MindMapNodeVisual {
   return (node.metadata.visual ?? {}) as MindMapNodeVisual
@@ -122,10 +140,16 @@ function measureTextHeight(text: string, width: number, font: string, minHeight:
     const lines = text.split(/\r?\n/).reduce((count, paragraph) => count + Math.max(1, Math.ceil(paragraph.length / perLine)), 0)
     return Math.max(minHeight, 24 + lines * 24)
   }
-  if (typeof document === 'undefined' || (typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent))) return fallback()
-  const canvas = document.createElement('canvas')
-  const context = canvas.getContext('2d')
-  if (!context) return fallback()
+  const cacheKey = `${width}\u0000${font}\u0000${minHeight}\u0000${text}`
+  const cached = textHeightCache.get(cacheKey)
+  if (cached != null) return cached
+  if (typeof document === 'undefined' || (typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent))) {
+    return rememberTextHeight(cacheKey, fallback())
+  }
+  if (!measureCanvas) measureCanvas = document.createElement('canvas')
+  measureContext ??= measureCanvas.getContext('2d')
+  const context = measureContext
+  if (!context) return rememberTextHeight(cacheKey, fallback())
   context.font = font
   const lines = text.split(/\r?\n/).reduce((count, paragraph) => {
     let lineWidth = 0
@@ -141,7 +165,7 @@ function measureTextHeight(text: string, width: number, font: string, minHeight:
     }
     return count + paragraphLines
   }, 0)
-  return Math.max(minHeight, 24 + lines * 24)
+  return rememberTextHeight(cacheKey, Math.max(minHeight, 24 + lines * 24))
 }
 
 function cardWidth(node: StageNode) {
@@ -244,26 +268,35 @@ export const JellyMindmapStage = forwardRef<JellyMindmapStageHandle, JellyMindma
   readonly = true,
   className,
   cameraNudge = 'still',
+  paintNodes = true,
+  live = true,
   renderCard,
 }, ref) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const worldRef = useRef<HTMLDivElement | null>(null)
   const fxInstanceId = useId()
   const fxOwner = useFxOwner(`mindmap-jelly-stage:${fxInstanceId}`)
-  const [scale, setScale] = useState(1)
-  const [pan, setPan] = useState({ x: 0, y: 0 })
-  const [hoveredId, setHoveredId] = useState<string | null>(null)
+  const cameraRef = useRef({ x: 0, y: 0, scale: 1 })
+  const [cameraEpoch, setCameraEpoch] = useState(0)
+  const [turningIds, setTurningIds] = useState<ReadonlySet<string>>(() => new Set())
   const [prompt, setPrompt] = useState<{ nodeId: string; text: string } | null>(null)
   const promptTimerRef = useRef<number | null>(null)
+  const turningTimerRef = useRef(0)
   const longPressTimerRef = useRef<number | null>(null)
   const handledRevealIdsRef = useRef<Set<string>>(new Set())
   const previousRevealedRef = useRef<Set<string>>(new Set())
   const previousMasteredRef = useRef<Set<string>>(new Set())
   const hydratedGraphRef = useRef(false)
   const graphIdentityRef = useRef<string | null>(null)
-  const nodes = useMemo(() => buildStageNodes(graphData), [graphData])
+  const nodes = useMemo(
+    () => (paintNodes ? buildStageNodes(graphData) : new Map<string, StageNode>()),
+    [graphData, paintNodes],
+  )
   const rootId = useMemo(() => [...nodes.values()].find((node) => node.parentId == null)?.id ?? null, [nodes])
-  const layout = useMemo(() => computeLayout(nodes, rootId), [nodes, rootId])
+  const layout = useMemo(
+    () => (paintNodes ? computeLayout(nodes, rootId) : { rects: new Map<string, StageRect>(), width: 0, height: 0 }),
+    [nodes, paintNodes, rootId],
+  )
   // A different document/scene is a fresh silent hydration, not a reveal burst.
   const graphIdentity = useMemo(
     () => `${rootId ?? ''}|${nodes.size}|${[...nodes.keys()].slice(0, 4).join(',')}`,
@@ -319,6 +352,15 @@ export const JellyMindmapStage = forwardRef<JellyMindmapStageHandle, JellyMindma
     return map
   }, [nodes])
 
+  const applyCamera = useCallback((next: { x: number; y: number; scale: number }, commit = false) => {
+    cameraRef.current = next
+    const world = worldRef.current
+    if (world) {
+      world.style.transform = `translate3d(${next.x}px, ${next.y}px, 0) scale(${next.scale})`
+    }
+    if (commit) setCameraEpoch((version) => version + 1)
+  }, [])
+
   const fitView = useCallback(() => {
     const host = hostRef.current
     if (!host || layout.width <= 0 || layout.height <= 0) return
@@ -326,12 +368,12 @@ export const JellyMindmapStage = forwardRef<JellyMindmapStageHandle, JellyMindma
       (host.clientWidth - 24) / layout.width,
       (host.clientHeight - 24) / layout.height,
     )))
-    setScale(nextScale)
-    setPan({
+    applyCamera({
+      scale: nextScale,
       x: Math.round((host.clientWidth - layout.width * nextScale) / 2),
       y: Math.round((host.clientHeight - layout.height * nextScale) / 2),
-    })
-  }, [layout.height, layout.width])
+    }, true)
+  }, [applyCamera, layout.height, layout.width])
 
   useImperativeHandle(ref, () => ({
     fitView,
@@ -340,14 +382,15 @@ export const JellyMindmapStage = forwardRef<JellyMindmapStageHandle, JellyMindma
       const rect = layout.rects.get(nodeUid)
       const host = hostRef.current
       if (!rect || !host) return
+      const scale = cameraRef.current.scale
       const nextScale = cameraNudge === 'pan' ? Math.min(1.08, Math.max(scale, 0.86)) : scale
-      setScale(nextScale)
-      setPan({
+      applyCamera({
+        scale: nextScale,
         x: Math.round(host.clientWidth / 2 - (rect.x + rect.width / 2) * nextScale),
         y: Math.round(host.clientHeight / 2 - (rect.y + rect.height / 2) * nextScale),
-      })
+      }, true)
     },
-  }), [cameraNudge, fitView, layout.rects, scale])
+  }), [applyCamera, cameraNudge, fitView, layout.rects])
 
   useLayoutEffect(() => {
     fitView()
@@ -361,8 +404,6 @@ export const JellyMindmapStage = forwardRef<JellyMindmapStageHandle, JellyMindma
 
   useEffect(() => {
     if (typeof window === 'undefined' || nodes.size === 0) return
-    const readNodeElement = (id: string) => Array.from(hostRef.current?.querySelectorAll<HTMLElement>('[data-jelly-node]') ?? [])
-      .find((element) => element.dataset.jellyNode === id) ?? null
     // Existing progress is painted silently on mount and on document switch.
     // Only later reveal/fold transitions on the same document emit feedback.
     const transitions = planRevealTransitions({
@@ -374,7 +415,7 @@ export const JellyMindmapStage = forwardRef<JellyMindmapStageHandle, JellyMindma
       staggerMs: JELLY_BATCH_STAGGER_MS,
     })
     handledRevealIdsRef.current = transitions.handled
-    if (transitions.newlyRevealed.length === 0 && transitions.folded.length === 0) {
+    if (!live || (transitions.newlyRevealed.length === 0 && transitions.folded.length === 0)) {
       previousRevealedRef.current = transitions.previous
       previousMasteredRef.current = new Set([...progress.entries()].filter(([, value]) => value.mastered).map(([id]) => id))
       hydratedGraphRef.current = true
@@ -384,6 +425,12 @@ export const JellyMindmapStage = forwardRef<JellyMindmapStageHandle, JellyMindma
     hydratedGraphRef.current = true
     graphIdentityRef.current = graphIdentity
     const { newlyRevealed, folded: foldedIds, delayMsById } = transitions
+    const nodesById = new Map<string, HTMLElement>()
+    hostRef.current?.querySelectorAll<HTMLElement>('[data-jelly-node]').forEach((element) => {
+      const id = element.dataset.jellyNode
+      if (id) nodesById.set(id, element)
+    })
+    const readNodeElement = (id: string) => nodesById.get(id) ?? null
     foldedIds.forEach((id) => {
       const foldedNode = nodes.get(id)
       if (!foldedNode || foldedNode.children.length > 0 || foldedNode.parentId == null) return
@@ -419,7 +466,7 @@ export const JellyMindmapStage = forwardRef<JellyMindmapStageHandle, JellyMindma
         return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
       }
       return [{
-        origin: pointFor(leafRect, hostRef.current, pan, scale),
+        origin: pointFor(leafRect, hostRef.current, cameraRef.current, cameraRef.current.scale),
         delayMs: delayMsById.get(id) ?? 0,
         target,
         label: `${parentProgress?.done ?? 1}/${parentProgress?.total ?? parentNode?.children.length ?? 1}`,
@@ -441,7 +488,7 @@ export const JellyMindmapStage = forwardRef<JellyMindmapStageHandle, JellyMindma
       if (!parentRect || !parentElement || !rootElement || !hostRef.current) continue
       const rootProgress = rootId ? progress.get(rootId) : undefined
       charges.push({
-        origin: pointFor(parentRect, hostRef.current, pan, scale),
+        origin: pointFor(parentRect, hostRef.current, cameraRef.current, cameraRef.current.scale),
         delayMs: JELLY_FLIP_DURATION_MS,
         target: () => {
           if (!rootElement.isConnected) return null
@@ -463,14 +510,27 @@ export const JellyMindmapStage = forwardRef<JellyMindmapStageHandle, JellyMindma
         freeze: charges.some((charge) => charge.mastered),
       }, { owner: fxOwner })
     }
+    const turningLeaves = newlyRevealed.filter((id) => {
+      const leaf = nodes.get(id)
+      return Boolean(leaf && leaf.children.length === 0 && leaf.parentId != null)
+    })
+    if (turningLeaves.length > 0) {
+      setTurningIds(new Set(turningLeaves))
+      const maxDelay = Math.max(0, ...turningLeaves.map((id) => delayMsById.get(id) ?? 0))
+      window.clearTimeout(turningTimerRef.current)
+      turningTimerRef.current = window.setTimeout(
+        () => setTurningIds(new Set()),
+        maxDelay + JELLY_FLIP_DURATION_MS + 80,
+      )
+    }
     previousRevealedRef.current = new Set(revealedIds)
     previousMasteredRef.current = new Set([...progress.entries()].filter(([, value]) => value.mastered).map(([id]) => id))
-  }, [flipDelayById, fxOwner, graphIdentity, layout.rects, nodes, pan, parentOf, progress, revealedIds, rootId, scale])
+  }, [fxOwner, graphIdentity, layout.rects, live, nodes, parentOf, progress, revealedIds, rootId])
 
   const handlePointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if ((event.target as HTMLElement).closest('[data-jelly-node]')) return
     const start = { x: event.clientX, y: event.clientY }
-    const origin = pan
+    const origin = cameraRef.current
     let moved = false
     if (onPaneLongPress) {
       if (longPressTimerRef.current != null) window.clearTimeout(longPressTimerRef.current)
@@ -486,7 +546,11 @@ export const JellyMindmapStage = forwardRef<JellyMindmapStageHandle, JellyMindma
           longPressTimerRef.current = null
         }
       }
-      setPan({ x: origin.x + next.clientX - start.x, y: origin.y + next.clientY - start.y })
+      applyCamera({
+        x: origin.x + next.clientX - start.x,
+        y: origin.y + next.clientY - start.y,
+        scale: origin.scale,
+      })
     }
     const end = () => {
       if (longPressTimerRef.current != null) {
@@ -500,24 +564,25 @@ export const JellyMindmapStage = forwardRef<JellyMindmapStageHandle, JellyMindma
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', end, { once: true })
     window.addEventListener('pointercancel', end, { once: true })
-  }, [onPaneLongPress, pan])
+  }, [applyCamera, onPaneLongPress])
 
   const handleWheel = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
     if (!event.ctrlKey && Math.abs(event.deltaY) < 2) return
     event.preventDefault()
     const host = hostRef.current
     if (!host) return
+    const camera = cameraRef.current
     const ratio = event.deltaY > 0 ? 0.92 : 1.08
-    const nextScale = Math.min(1.6, Math.max(0.35, scale * ratio))
+    const nextScale = Math.min(1.6, Math.max(0.35, camera.scale * ratio))
     const bounds = host.getBoundingClientRect()
     const pointerX = event.clientX - bounds.left
     const pointerY = event.clientY - bounds.top
-    setPan({
-      x: pointerX - (pointerX - pan.x) * (nextScale / scale),
-      y: pointerY - (pointerY - pan.y) * (nextScale / scale),
+    applyCamera({
+      scale: nextScale,
+      x: pointerX - (pointerX - camera.x) * (nextScale / camera.scale),
+      y: pointerY - (pointerY - camera.y) * (nextScale / camera.scale),
     })
-    setScale(nextScale)
-  }, [pan, scale])
+  }, [applyCamera])
 
   const showPrompt = useCallback((nodeId: string, text: string) => {
     if (promptTimerRef.current != null) window.clearTimeout(promptTimerRef.current)
@@ -528,6 +593,7 @@ export const JellyMindmapStage = forwardRef<JellyMindmapStageHandle, JellyMindma
   useEffect(() => () => {
     if (promptTimerRef.current != null) window.clearTimeout(promptTimerRef.current)
     if (longPressTimerRef.current != null) window.clearTimeout(longPressTimerRef.current)
+    window.clearTimeout(turningTimerRef.current)
   }, [])
 
   const handleNodeClick = (event: MouseEvent, node: StageNode) => {
@@ -558,12 +624,20 @@ export const JellyMindmapStage = forwardRef<JellyMindmapStageHandle, JellyMindma
       role="application"
       aria-label="果冻翻卡导图"
       data-jelly-stage="true"
+      data-jelly-live={live ? 'true' : 'false'}
+      data-jelly-paint={paintNodes ? 'true' : 'false'}
     >
       <div className="jelly-stage-grid" aria-hidden="true" />
+      {paintNodes ? (
       <div
         ref={worldRef}
         className="jelly-stage-world"
-        style={{ transform: `translate3d(${pan.x}px, ${pan.y}px, 0) scale(${scale})`, width: layout.width, height: layout.height }}
+        style={{
+          transform: `translate3d(${cameraRef.current.x}px, ${cameraRef.current.y}px, 0) scale(${cameraRef.current.scale})`,
+          width: layout.width,
+          height: layout.height,
+        }}
+        data-camera-epoch={cameraEpoch}
       >
         <svg className="jelly-stage-links" width={layout.width} height={layout.height} aria-hidden="true">
           {graphData.edges.filter((edge) => edge.type === 'parent-child').map((edge) => {
@@ -572,12 +646,13 @@ export const JellyMindmapStage = forwardRef<JellyMindmapStageHandle, JellyMindma
             if (!sourceRect || !targetRect) return null
             const target = nodes.get(edge.target)
             const parent = nodes.get(edge.source)
-            const live = Boolean(target?.visual.revealed)
+            const linkLive = Boolean(target?.visual.revealed)
             const mastered = Boolean(progress.get(edge.source)?.mastered)
+            const path = jellyBezierPath(sourceRect, targetRect)
             return (
-              <g key={edge.id} className={['jelly-stage-link', live ? 'is-live' : '', mastered ? 'is-mastered' : ''].filter(Boolean).join(' ')}>
-                <path className="jelly-stage-link-glow" d={jellyBezierPath(sourceRect, targetRect)} />
-                <path className="jelly-stage-link-line" d={jellyBezierPath(sourceRect, targetRect)} />
+              <g key={edge.id} className={['jelly-stage-link', linkLive ? 'is-live' : '', mastered ? 'is-mastered' : ''].filter(Boolean).join(' ')}>
+                <path className="jelly-stage-link-glow" d={path} />
+                <path className="jelly-stage-link-line" d={path} />
                 {parent && target ? <circle className="jelly-stage-link-dot" cx={sourceRect.x + sourceRect.width} cy={sourceRect.y + sourceRect.height / 2} r="4" /> : null}
               </g>
             )
@@ -613,14 +688,8 @@ export const JellyMindmapStage = forwardRef<JellyMindmapStageHandle, JellyMindma
               style={cardStyle}
               onClick={(event) => handleNodeClick(event, node)}
               onContextMenu={(event) => handleNodeContextMenu(event, node)}
-              onPointerEnter={() => {
-                setHoveredId(node.id)
-                onNodeHover?.(node.id)
-              }}
-              onPointerLeave={() => {
-                setHoveredId(null)
-                onNodeHover?.(null)
-              }}
+              onPointerEnter={() => onNodeHover?.(node.id)}
+              onPointerLeave={() => onNodeHover?.(null)}
             >
               {custom ?? (
                 <>
@@ -632,15 +701,23 @@ export const JellyMindmapStage = forwardRef<JellyMindmapStageHandle, JellyMindma
                       <div className="jelly-stage-meter"><span style={{ width: `${charge ? Math.round((charge.done / Math.max(1, charge.total)) * 100) : 0}%` }} /></div>
                     </>
                   ) : isLeaf ? (
-                    <div className="jelly-stage-flipper" data-flipped={node.visual.revealed ? 'true' : 'false'}>
-                      <div className="jelly-stage-face jelly-stage-front"><span>🔲 点击翻开</span></div>
-                      <div className="jelly-stage-face jelly-stage-back"><span>{node.text}</span><small>右键收回</small></div>
-                    </div>
+                    turningIds.has(node.id) ? (
+                      <div className="jelly-stage-flipper is-turning" data-flipped={node.visual.revealed ? 'true' : 'false'}>
+                        <div className="jelly-stage-face jelly-stage-front"><span>🔲 点击翻开</span></div>
+                        <div className="jelly-stage-face jelly-stage-back"><span>{node.text}</span><small>右键收回</small></div>
+                      </div>
+                    ) : node.visual.revealed ? (
+                      <div className="jelly-stage-face jelly-stage-back is-flat"><span>{node.text}</span><small>右键收回</small></div>
+                    ) : (
+                      <div className="jelly-stage-face jelly-stage-front is-flat"><span>🔲 点击翻开</span></div>
+                    )
                   ) : null}
                   {isRoot ? <div className="jelly-stage-title">{node.text}</div> : null}
                   {(isParent || isRoot) && charge?.mastered ? <div className={['jelly-stage-stamp', isRoot ? 'jelly-stage-root-stamp' : ''].filter(Boolean).join(' ')}>MASTERED</div> : null}
-                  {(isLeaf || isParent) && (hoveredId === node.id || prompt?.nodeId === node.id) ? (
-                    <div className="jelly-stage-hint">{prompt?.nodeId === node.id ? prompt.text : isLeaf ? node.visual.revealed ? '右键收回' : '点击翻开' : '右键收起子节点'}</div>
+                  {(isLeaf || isParent) && prompt?.nodeId === node.id ? (
+                    <div className="jelly-stage-hint">{prompt.text}</div>
+                  ) : (isLeaf || isParent) ? (
+                    <div className="jelly-stage-hint jelly-stage-hint-hover">{isLeaf ? node.visual.revealed ? '右键收回' : '点击翻开' : '右键收起子节点'}</div>
                   ) : null}
                 </>
               )}
@@ -648,6 +725,7 @@ export const JellyMindmapStage = forwardRef<JellyMindmapStageHandle, JellyMindma
           )
         })}
       </div>
+      ) : null}
     </div>
   )
 })

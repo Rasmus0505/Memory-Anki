@@ -1106,6 +1106,7 @@ export function FreestyleUnitReviewCardView({
             unit={flipSource.unit}
             editorState={flipSource.editorState}
             active={active && flipSource.live}
+            paintStage={active || nearViewport}
             fullscreen={fullscreen}
             onToggleFullscreen={onToggleFullscreen}
             freestyleFlipMode={freestyleFlipMode}
