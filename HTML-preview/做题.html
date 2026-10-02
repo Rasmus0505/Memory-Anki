@@ -1,0 +1,1631 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Memory Anki · 刷题街机化与打击感高保真实验室 (Quiz Arcade Lab)</title>
+  <style>
+    /* ==========================================================================
+       1. 全局设计系统与三大旗舰主题 (Design System & 3 Themes)
+       ========================================================================== */
+    :root {
+      --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+      --font-mono: "JetBrains Mono", "SF Mono", Consolas, monospace;
+      --spring-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+      --spring-smooth: cubic-bezier(0.16, 1, 0.3, 1);
+      --spring-snappy: cubic-bezier(0.2, 0.9, 0.3, 1.2);
+    }
+
+    /* 风格 A: 暗黑肉鸽 / 街机高能 (Balatro / Hades 风格) */
+    body[data-theme="arcade"] {
+      --bg-gradient: radial-gradient(circle at 50% 20%, #1c132b 0%, #0d0915 55%, #050408 100%);
+      --hud-bg: rgba(22, 17, 34, 0.88);
+      --hud-border: rgba(255, 185, 35, 0.28);
+      --text-main: #f9f5ff;
+      --text-sub: #a89bb8;
+      --card-bg: linear-gradient(145deg, #1d162b 0%, #110c1c 100%);
+      --card-border: rgba(255, 198, 41, 0.35);
+      --card-inner-border: rgba(255, 255, 255, 0.08);
+      --card-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.85), 0 0 35px rgba(255, 120, 20, 0.15);
+      --accent-gold: #ffbe26;
+      --accent-flame: #ff4d2e;
+      --accent-neon: #9d4edd;
+      --tag-bg: rgba(255, 190, 38, 0.12);
+      --tag-color: #ffd166;
+      --opt-bg: rgba(255, 255, 255, 0.04);
+      --opt-hover-bg: rgba(255, 190, 38, 0.08);
+      --opt-border: rgba(255, 255, 255, 0.12);
+      --success-main: #10b981;
+      --success-glow: rgba(16, 185, 129, 0.4);
+      --danger-main: #ef4444;
+      --danger-glow: rgba(239, 68, 68, 0.4);
+    }
+
+    /* 风格 B: 多巴胺果冻 / 潮玩微质感 (Duolingo / Brawl Stars 风格) */
+    body[data-theme="dopamine"] {
+      --bg-gradient: radial-gradient(circle at 50% 20%, #eefaf0 0%, #d8f1dc 50%, #bee5c4 100%);
+      --hud-bg: rgba(255, 255, 255, 0.94);
+      --hud-border: #9dd893;
+      --text-main: #1d3c22;
+      --text-sub: #547859;
+      --card-bg: #ffffff;
+      --card-border: #e0f0df;
+      --card-inner-border: rgba(0, 0, 0, 0.05);
+      --card-shadow: 0 16px 0 #b3d9b0, 0 32px 50px rgba(78, 143, 85, 0.22);
+      --accent-gold: #ffc400;
+      --accent-flame: #ff5252;
+      --accent-neon: #58cc02;
+      --tag-bg: #e8f9d8;
+      --tag-color: #428e07;
+      --opt-bg: #f8faf8;
+      --opt-hover-bg: #edf7eb;
+      --opt-border: #d4ebd2;
+      --success-main: #58cc02;
+      --success-glow: rgba(88, 204, 2, 0.4);
+      --danger-main: #ff4b4b;
+      --danger-glow: rgba(255, 75, 75, 0.4);
+    }
+
+    /* 风格 C: 极简数码 / 轻奢流光 (Linear / Stripe 风格) */
+    body[data-theme="minimal"] {
+      --bg-gradient: radial-gradient(circle at 50% 20%, #151821 0%, #0c0d12 60%, #08080c 100%);
+      --hud-bg: rgba(18, 20, 29, 0.85);
+      --hud-border: rgba(255, 255, 255, 0.09);
+      --text-main: #f0f2f7;
+      --text-sub: #787f95;
+      --card-bg: rgba(20, 24, 35, 0.88);
+      --card-border: rgba(255, 255, 255, 0.12);
+      --card-inner-border: rgba(255, 255, 255, 0.04);
+      --card-shadow: 0 30px 70px rgba(0, 0, 0, 0.65), 0 0 1px rgba(255, 255, 255, 0.3);
+      --accent-gold: #70b8ff;
+      --accent-flame: #f43f5e;
+      --accent-neon: #a855f7;
+      --tag-bg: rgba(255, 255, 255, 0.06);
+      --tag-color: #cbd5e1;
+      --opt-bg: rgba(255, 255, 255, 0.03);
+      --opt-hover-bg: rgba(112, 184, 255, 0.08);
+      --opt-border: rgba(255, 255, 255, 0.08);
+      --success-main: #38bdf8;
+      --success-glow: rgba(56, 189, 248, 0.4);
+      --danger-main: #f43f5e;
+      --danger-glow: rgba(244, 63, 94, 0.4);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      font-family: var(--font-family);
+      background: var(--bg-gradient);
+      color: var(--text-main);
+      overflow-x: hidden;
+      overflow-y: auto;
+      scroll-behavior: smooth;
+      transition: background 0.4s var(--spring-smooth), color 0.4s ease;
+    }
+
+    #viewport-root {
+      position: relative;
+      width: 100%;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      overflow: hidden;
+    }
+
+    /* ========== 2D Canvas & FX Layers ========== */
+    #fx-canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    /* 浮动战斗伤害/奖励文字 (Floating Combat Text) */
+    .floating-layer {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 90;
+      overflow: hidden;
+    }
+
+    .floating-popup {
+      position: absolute;
+      font-family: var(--font-mono);
+      font-weight: 900;
+      pointer-events: none;
+      animation: popup-bounce 0.85s var(--spring-bounce) forwards;
+      text-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+      white-space: nowrap;
+    }
+
+    @keyframes popup-bounce {
+      0% { opacity: 0; transform: translate(-50%, -50%) scale(0.3) rotate(-6deg); }
+      22% { opacity: 1; transform: translate(-50%, -70px) scale(1.3) rotate(3deg); }
+      70% { opacity: 1; transform: translate(-50%, -115px) scale(1) rotate(0deg); }
+      100% { opacity: 0; transform: translate(-50%, -155px) scale(0.85) rotate(4deg); }
+    }
+
+    /* ========== 顶栏 HUD (Top Navbar) ========== */
+    .top-navbar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      width: 100%;
+      max-width: 1180px;
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      backdrop-filter: blur(18px);
+      background: var(--hud-bg);
+      border-bottom: 1px solid var(--hud-border);
+      border-radius: 0 0 20px 20px;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+    }
+
+    .brand-wrap {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .app-logo {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent-gold), var(--accent-flame));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+    }
+
+    .brand-titles {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .brand-h1 {
+      font-size: 15px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      letter-spacing: -0.2px;
+    }
+
+    .app-ver {
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background: var(--tag-bg);
+      color: var(--tag-color);
+      font-family: var(--font-mono);
+      font-weight: 700;
+    }
+
+    .brand-sub {
+      font-size: 11px;
+      color: var(--text-sub);
+    }
+
+    /* 跨模态挂载导图宫殿节点 Badge */
+    .palace-target-card {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 14px;
+      border-radius: 14px;
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--hud-border);
+      cursor: pointer;
+      transition: all 0.25s var(--spring-smooth);
+    }
+    .palace-target-card:hover {
+      border-color: var(--accent-gold);
+      transform: translateY(-2px);
+    }
+    .palace-target-card.shock {
+      animation: nodeShock 0.4s var(--spring-bounce);
+    }
+    @keyframes nodeShock {
+      0% { transform: scale(1); }
+      30% { transform: scale(1.18); filter: brightness(1.4); }
+      70% { transform: scale(0.95); }
+      100% { transform: scale(1); }
+    }
+    .palace-node-icon {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: var(--tag-bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      color: var(--tag-color);
+      position: relative;
+    }
+    .palace-node-ring {
+      position: absolute;
+      inset: -2px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      border-top-color: var(--accent-gold);
+      animation: spin 3s linear infinite;
+    }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+    .palace-node-info {
+      display: flex;
+      flex-direction: column;
+    }
+    .palace-node-title {
+      font-size: 10px;
+      color: var(--text-sub);
+    }
+    .palace-node-name {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .theme-capsule-picker {
+      display: flex;
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--hud-border);
+      padding: 3px;
+      border-radius: 24px;
+    }
+
+    .theme-btn {
+      border: none;
+      background: transparent;
+      color: var(--text-sub);
+      padding: 4px 10px;
+      border-radius: 18px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .theme-btn.active {
+      background: var(--card-bg);
+      color: var(--text-main);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    .btn-sandbox-trigger {
+      border: 1px solid var(--hud-border);
+      background: var(--hud-bg);
+      color: var(--text-main);
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: transform 0.15s ease;
+    }
+    .btn-sandbox-trigger:hover {
+      transform: translateY(-2px);
+    }
+
+    /* ========== 连击与金币 HUD 仪表盘 ========== */
+    .hud-metrics-bar {
+      width: 100%;
+      max-width: 800px;
+      padding: 16px 24px 0;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 16px;
+      align-items: center;
+      z-index: 20;
+    }
+
+    .xp-vault-card {
+      background: var(--hud-bg);
+      border: 1px solid var(--hud-border);
+      border-radius: 16px;
+      padding: 10px 18px;
+      backdrop-filter: blur(14px);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .vault-row-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .vault-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--text-sub);
+    }
+
+    .vault-digits {
+      font-family: var(--font-mono);
+      font-size: 15px;
+      color: var(--accent-gold);
+    }
+
+    .vault-progress-track {
+      width: 100%;
+      height: 8px;
+      border-radius: 10px;
+      background: rgba(0, 0, 0, 0.25);
+      border: 1px solid var(--hud-border);
+      overflow: hidden;
+    }
+
+    .vault-progress-fill {
+      height: 100%;
+      width: 35%;
+      border-radius: 10px;
+      background: linear-gradient(90deg, var(--accent-gold), var(--accent-flame));
+      transition: width 0.4s var(--spring-bounce);
+    }
+
+    .combo-fever-badge {
+      background: var(--hud-bg);
+      border: 1px solid var(--hud-border);
+      border-radius: 16px;
+      padding: 10px 18px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      backdrop-filter: blur(14px);
+      transition: transform 0.2s var(--spring-bounce);
+    }
+    .combo-fever-badge.bump {
+      transform: scale(1.15);
+    }
+    .combo-icon {
+      font-size: 22px;
+      filter: drop-shadow(0 0 8px var(--accent-flame));
+    }
+    .combo-num {
+      font-family: var(--font-mono);
+      font-size: 18px;
+      font-weight: 900;
+      color: var(--accent-gold);
+    }
+
+    /* ========== 主视口做题卡片 (Stage Container) ========== */
+    .stage-container {
+      width: 100%;
+      max-width: 800px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+      z-index: 20;
+    }
+
+    .quiz-card {
+      width: 100%;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 24px;
+      padding: 32px 36px;
+      box-shadow: var(--card-shadow);
+      position: relative;
+      backdrop-filter: blur(18px);
+      transform-style: preserve-3d;
+      transition: box-shadow 0.3s ease, border-color 0.3s ease;
+    }
+
+    /* 现代极简微光外边框 (Border Beam) */
+    body[data-theme="minimal"] .quiz-card::before {
+      content: '';
+      position: absolute;
+      inset: -2px;
+      border-radius: 26px;
+      padding: 2px;
+      background: conic-gradient(from 0deg, transparent 65%, #38bdf8 82%, #a855f7 95%, transparent 100%);
+      -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+      -webkit-mask-composite: xor;
+      mask-composite: exclude;
+      animation: border-beam 4s linear infinite;
+      pointer-events: none;
+    }
+    @keyframes border-beam {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    /* 宿敌复仇标记 (Nemesis Badge) */
+    .nemesis-tag {
+      position: absolute;
+      top: -12px;
+      left: 36px;
+      background: linear-gradient(135deg, #ef4444, #991b1b);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 4px 12px;
+      border-radius: 10px;
+      letter-spacing: 0.5px;
+      box-shadow: 0 4px 14px rgba(239, 68, 68, 0.4);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* 切题物理过场 (Smooth Spring Slide Transitions) */
+    .quiz-card.slide-out-left {
+      animation: cardSlideOutLeft 0.24s cubic-bezier(0.4, 0, 1, 1) forwards;
+    }
+    .quiz-card.slide-in-right {
+      animation: cardSlideInRight 0.34s var(--spring-bounce) forwards;
+    }
+    .quiz-card.slide-out-right {
+      animation: cardSlideOutRight 0.24s cubic-bezier(0.4, 0, 1, 1) forwards;
+    }
+    .quiz-card.slide-in-left {
+      animation: cardSlideInLeft 0.34s var(--spring-bounce) forwards;
+    }
+
+    @keyframes cardSlideOutLeft {
+      0% { transform: translateX(0) scale(1) rotate(0deg); opacity: 1; }
+      100% { transform: translateX(-110%) scale(0.9) rotate(-4deg); opacity: 0; }
+    }
+    @keyframes cardSlideInRight {
+      0% { transform: translateX(100%) scale(0.9) rotate(4deg); opacity: 0; }
+      80% { transform: translateX(-6px) scale(1.02) rotate(-1deg); opacity: 1; }
+      100% { transform: translateX(0) scale(1) rotate(0deg); opacity: 1; }
+    }
+    @keyframes cardSlideOutRight {
+      0% { transform: translateX(0) scale(1) rotate(0deg); opacity: 1; }
+      100% { transform: translateX(110%) scale(0.9) rotate(4deg); opacity: 0; }
+    }
+    @keyframes cardSlideInLeft {
+      0% { transform: translateX(-100%) scale(0.9) rotate(-4deg); opacity: 0; }
+      80% { transform: translateX(6px) scale(1.02) rotate(1deg); opacity: 1; }
+      100% { transform: translateX(0) scale(1) rotate(0deg); opacity: 1; }
+    }
+
+    /* 题目卡片头部 */
+    .quiz-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 22px;
+    }
+
+    .q-type-badge {
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--tag-color);
+      background: var(--tag-bg);
+      padding: 4px 12px;
+      border-radius: 10px;
+      letter-spacing: 0.5px;
+    }
+
+    .q-progress-digits {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-sub);
+    }
+
+    /* 题干 (Stem) */
+    .quiz-stem {
+      font-size: 20px;
+      font-weight: 700;
+      line-height: 1.55;
+      margin-bottom: 28px;
+      color: var(--text-main);
+    }
+
+    /* ========== 选项按钮栅格 (Option List) ========== */
+    .options-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      width: 100%;
+    }
+
+    .option-btn {
+      width: 100%;
+      text-align: left;
+      background: var(--opt-bg);
+      border: 1.5px solid var(--opt-border);
+      border-radius: 16px;
+      padding: 16px 20px;
+      color: var(--text-main);
+      font-size: 15px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      position: relative;
+      overflow: hidden;
+      outline: none;
+      transition: all 0.2s var(--spring-bounce);
+    }
+
+    /* 多巴胺果冻风格的物理厚度感 */
+    body[data-theme="dopamine"] .option-btn {
+      box-shadow: 0 4px 0 #b3d9b0;
+    }
+    body[data-theme="dopamine"] .option-btn:active:not(:disabled) {
+      transform: translateY(3px);
+      box-shadow: 0 1px 0 #b3d9b0;
+    }
+
+    .option-btn:hover:not(:disabled) {
+      background: var(--opt-hover-bg);
+      border-color: var(--accent-gold);
+      transform: translateY(-2px);
+    }
+    .option-btn:active:not(:disabled) {
+      transform: translateY(1px) scale(0.99);
+    }
+
+    .opt-key {
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      font-family: var(--font-mono);
+      font-weight: 800;
+      color: var(--text-sub);
+      flex-shrink: 0;
+      transition: all 0.2s ease;
+    }
+    .option-btn:hover:not(:disabled) .opt-key {
+      background: var(--accent-gold);
+      color: #000;
+    }
+
+    /* 答对与答错状态 (Correct & Wrong) */
+    .option-btn.state-correct {
+      background: rgba(16, 185, 129, 0.14) !important;
+      border-color: var(--success-main) !important;
+      box-shadow: 0 0 25px var(--success-glow) !important;
+      transform: scale(1.02);
+    }
+    .option-btn.state-correct .opt-key {
+      background: var(--success-main) !important;
+      color: #000 !important;
+    }
+
+    .option-btn.state-wrong {
+      background: rgba(239, 68, 68, 0.14) !important;
+      border-color: var(--danger-main) !important;
+      box-shadow: 0 0 25px var(--danger-glow) !important;
+      animation: optionShake 0.4s var(--spring-snappy) forwards;
+    }
+    .option-btn.state-wrong .opt-key {
+      background: var(--danger-main) !important;
+      color: #fff !important;
+    }
+
+    @keyframes optionShake {
+      0%, 100% { transform: translateX(0); }
+      20% { transform: translateX(-8px); }
+      40% { transform: translateX(8px); }
+      60% { transform: translateX(-4px); }
+      80% { transform: translateX(4px); }
+    }
+
+    /* ========== 主观题输入区域 (Subjective Area) ========== */
+    .subjective-area {
+      display: none;
+      flex-direction: column;
+      gap: 16px;
+      width: 100%;
+    }
+
+    .subjective-input-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .subjective-textarea {
+      width: 100%;
+      height: 120px;
+      background: rgba(0, 0, 0, 0.25);
+      border: 1.5px solid var(--opt-border);
+      border-radius: 16px;
+      padding: 16px 18px;
+      color: var(--text-main);
+      font-size: 15px;
+      font-family: inherit;
+      line-height: 1.6;
+      resize: none;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+    .subjective-textarea:focus {
+      border-color: var(--accent-gold);
+      box-shadow: 0 0 20px rgba(255, 190, 38, 0.25);
+      background: rgba(0, 0, 0, 0.35);
+    }
+
+    .subjective-submit-btn {
+      align-self: flex-end;
+      background: linear-gradient(135deg, var(--accent-gold), var(--accent-flame));
+      color: #000;
+      border: none;
+      border-radius: 14px;
+      padding: 12px 26px;
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 16px rgba(255, 120, 20, 0.3);
+      transition: all 0.2s var(--spring-bounce);
+    }
+    .subjective-submit-btn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      filter: brightness(1.1);
+    }
+    .subjective-submit-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .subjective-compare-box {
+      display: none;
+      flex-direction: column;
+      gap: 14px;
+      margin-top: 10px;
+      animation: fadeIn 0.3s ease forwards;
+    }
+
+    .compare-card {
+      padding: 16px 20px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--opt-border);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    .compare-label {
+      font-size: 11px;
+      font-weight: 800;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .compare-card.my-card {
+      border-left: 4px solid #38bdf8;
+    }
+    .compare-card.my-card .compare-label { color: #38bdf8; }
+    .compare-card.ref-card {
+      border-left: 4px solid var(--success-main);
+      background: rgba(16, 185, 129, 0.05);
+    }
+    .compare-card.ref-card .compare-label { color: var(--success-main); }
+
+    /* ========== 解析抽屉 (Explanation Panel) ========== */
+    .explanation-panel {
+      display: none;
+      margin-top: 24px;
+      padding: 18px 22px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.03);
+      border-left: 4px solid var(--accent-gold);
+      border-top: 1px solid var(--card-inner-border);
+      border-right: 1px solid var(--card-inner-border);
+      border-bottom: 1px solid var(--card-inner-border);
+      font-size: 14px;
+      line-height: 1.65;
+      color: var(--text-sub);
+    }
+    .explanation-panel.show {
+      display: block;
+      animation: fadeIn 0.35s ease forwards;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ========== 底部控制导航条 (Footer Controls) ========== */
+    .quiz-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 28px;
+      padding-top: 20px;
+      border-top: 1px solid var(--card-inner-border);
+      width: 100%;
+    }
+
+    .nav-btn {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--opt-border);
+      color: var(--text-main);
+      padding: 10px 18px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s var(--spring-bounce);
+    }
+    .nav-btn:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.1);
+      transform: translateY(-2px);
+    }
+    .nav-btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
+    .kbd-tip {
+      font-size: 12px;
+      color: var(--text-sub);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .kbd-chip {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      padding: 2px 7px;
+      border-radius: 6px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    /* ========== 决策与偏好调校抽屉 (Drawer) ========== */
+    .settings-drawer {
+      position: fixed;
+      bottom: 0;
+      right: 0;
+      width: 380px;
+      max-width: 90vw;
+      background: var(--hud-bg);
+      border-left: 1px solid var(--hud-border);
+      border-top: 1px solid var(--hud-border);
+      border-top-left-radius: 24px;
+      backdrop-filter: blur(24px);
+      padding: 28px;
+      box-shadow: -10px 0 40px rgba(0, 0, 0, 0.6);
+      transform: translateY(110%);
+      transition: transform 0.35s var(--spring-smooth);
+      z-index: 100;
+    }
+    .settings-drawer.open {
+      transform: translateY(0);
+    }
+    .drawer-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+    .drawer-title {
+      font-size: 16px;
+      font-weight: 800;
+    }
+    .drawer-close {
+      background: none;
+      border: none;
+      color: var(--text-sub);
+      font-size: 20px;
+      cursor: pointer;
+    }
+
+    .slider-row {
+      margin-bottom: 20px;
+    }
+    .slider-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--text-sub);
+      margin-bottom: 8px;
+      font-weight: 600;
+    }
+    .slider-input {
+      width: 100%;
+      height: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+      appearance: none;
+      outline: none;
+    }
+    .slider-input::-webkit-slider-thumb {
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent-gold);
+      cursor: pointer;
+    }
+
+    .copy-pref-btn {
+      width: 100%;
+      margin-top: 20px;
+      padding: 14px;
+      border-radius: 14px;
+      border: none;
+      background: linear-gradient(135deg, var(--accent-gold), var(--accent-flame));
+      color: #000;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 4px 20px rgba(255, 120, 20, 0.35);
+      transition: all 0.2s ease;
+    }
+    .copy-pref-btn:hover {
+      filter: brightness(1.1);
+      transform: translateY(-2px);
+    }
+  </style>
+</head>
+<body data-theme="arcade">
+
+  <div id="viewport-root">
+    <!-- 2D Canvas Layer (Particles & Energy Laser Arcs) -->
+    <canvas id="fx-canvas"></canvas>
+
+    <!-- Floating Popups Layer -->
+    <div class="floating-layer" id="floating-layer"></div>
+
+    <!-- Top Navbar -->
+    <header class="top-navbar">
+      <div class="brand-wrap">
+        <div class="app-logo">⚡</div>
+        <div class="brand-titles">
+          <div class="brand-h1">
+            <span>做题街机实验室</span>
+            <span class="app-ver">PRO</span>
+          </div>
+          <span class="brand-sub">高保真质感与跨模态闭环</span>
+        </div>
+      </div>
+
+      <!-- Bound Mindmap Palace Node Target (Cross-Modal Link) -->
+      <div class="palace-target-card" id="palace-target" title="当前题挂载的记忆宫殿导图节点">
+        <div class="palace-node-icon">
+          <span>🧠</span>
+          <div class="palace-node-ring"></div>
+        </div>
+        <div class="palace-node-info">
+          <span class="palace-node-title">挂载导图节点</span>
+          <span class="palace-node-name" id="target-node-name">外国教育史 · 雅典制</span>
+        </div>
+      </div>
+
+      <!-- Theme Switcher Pills & Settings -->
+      <div class="nav-actions">
+        <div class="theme-capsule-picker">
+          <button class="theme-btn active" data-t="arcade">暗黑肉鸽</button>
+          <button class="theme-btn" data-t="dopamine">多巴胺果冻</button>
+          <button class="theme-btn" data-t="minimal">极简轻奢</button>
+        </div>
+        <button class="btn-sandbox-trigger" id="drawer-toggle">
+          <span>⚙️ 调优</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Metrics Bar (XP & Combo) -->
+    <div class="hud-metrics-bar">
+      <div class="xp-vault-card">
+        <div class="vault-row-top">
+          <span class="vault-label">💎 记忆库能量池 (EXP)</span>
+          <span class="vault-digits" id="xp-digits">1,280 EXP</span>
+        </div>
+        <div class="vault-progress-track">
+          <div class="vault-progress-fill" id="xp-fill"></div>
+        </div>
+      </div>
+
+      <div class="combo-fever-badge" id="combo-badge">
+        <span class="combo-icon">🔥</span>
+        <div>
+          <div style="font-size: 10px; color: var(--text-sub); font-weight: 700;">连击奖励</div>
+          <div class="combo-num" id="combo-text">0 COMBO</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Viewport Quiz Stage -->
+    <main class="stage-container">
+      <div class="quiz-card" id="quiz-card">
+        <!-- Nemesis Tag -->
+        <div class="nemesis-tag" id="nemesis-tag" style="display: none;">
+          <span>⚠️</span> 宿敌遭遇 · 曾破防错题 (击破获双倍经验)
+        </div>
+
+        <!-- Head -->
+        <div class="quiz-head">
+          <span class="q-type-badge" id="q-type-badge">单项选择题</span>
+          <span class="q-progress-digits" id="q-progress-digits">1 / 3 题</span>
+        </div>
+
+        <!-- Stem -->
+        <div class="quiz-stem" id="quiz-stem">
+          古希腊雅典教育与斯巴达教育的最本质区别在于？
+        </div>
+
+        <!-- Options Block (Choices & Boolean) -->
+        <div class="options-grid" id="options-grid"></div>
+
+        <!-- Subjective Recall Area -->
+        <div class="subjective-area" id="subjective-area">
+          <div class="subjective-input-wrap">
+            <textarea class="subjective-textarea" id="subjective-input" placeholder="请在此输入你的回忆作答... (按 Ctrl+Enter 快速提交)"></textarea>
+            <button class="subjective-submit-btn" id="subjective-submit">
+              <span>🚀 提交作答</span>
+            </button>
+          </div>
+
+          <!-- Comparison Display after submission -->
+          <div class="subjective-compare-box" id="subjective-compare-box">
+            <div class="compare-card my-card">
+              <div class="compare-label">
+                <span>📝 我的作答</span>
+              </div>
+              <div id="my-answer-text"></div>
+            </div>
+            <div class="compare-card ref-card">
+              <div class="compare-label">
+                <span>💡 标准参考要点</span>
+              </div>
+              <div id="ref-answer-text"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Explanation Drawer -->
+        <div class="explanation-panel" id="explanation-panel">
+          <strong style="color: var(--accent-gold);">解析：</strong>
+          <span id="explanation-text">斯巴达教育以军事训练和服从国家为核心，而雅典教育重视儿童身心和谐发展，倡导德智体美兼备的自由公民教育。</span>
+        </div>
+
+        <!-- Footer Navigation -->
+        <div class="quiz-footer">
+          <button class="nav-btn" id="prev-btn" disabled>
+            <span>←</span> 上一题
+          </button>
+          <div class="kbd-tip">
+            <span>快捷盲打：</span>
+            <span class="kbd-chip">A/B/C/D</span>
+            <span class="kbd-chip">← / →</span>
+          </div>
+          <button class="nav-btn" id="next-btn">
+            下一题 <span>→</span>
+          </button>
+        </div>
+      </div>
+    </main>
+
+    <!-- Settings Drawer -->
+    <div class="settings-drawer" id="settings-drawer">
+      <div class="drawer-header">
+        <span class="drawer-title">做题手感参数调优</span>
+        <button class="drawer-close" id="drawer-close">✕</button>
+      </div>
+
+      <div class="slider-row">
+        <div class="slider-label">
+          <span>粒子爆发量</span>
+          <span id="val-particles">70</span>
+        </div>
+        <input type="range" class="slider-input" id="slider-particles" min="20" max="160" value="70">
+      </div>
+
+      <div class="slider-row">
+        <div class="slider-label">
+          <span>打击定格感 (Hit-Stop)</span>
+          <span id="val-hitstop">20ms</span>
+        </div>
+        <input type="range" class="slider-input" id="slider-hitstop" min="0" max="50" value="20">
+      </div>
+
+      <div class="slider-row">
+        <div class="slider-label">
+          <span>音效总音量</span>
+          <span id="val-volume">75%</span>
+        </div>
+        <input type="range" class="slider-input" id="slider-volume" min="0" max="100" value="75">
+      </div>
+
+      <button class="copy-pref-btn" id="copy-btn">
+        <span>📋 复制当前最佳手感配置</span>
+      </button>
+    </div>
+  </div>
+
+  <script>
+    // ========== 1. 题目数据 ==========
+    const MOCK_QUESTIONS = [
+      {
+        id: 1,
+        type: 'choice',
+        typeLabel: '单项选择题',
+        stem: '古希腊雅典教育与斯巴达教育的最本质区别在于？',
+        options: [
+          '强调军事体育与绝对服从',
+          '追求身心和谐与德智体美全面发展',
+          '完全由国家统领所有私学',
+          '严禁贵族阶层接受文法与修辞教育'
+        ],
+        answer: 1,
+        isNemesis: true, // 曾错题（宿敌标记）
+        boundNode: '外国教育史 · 雅典制',
+        explanation: '斯巴达教育以军事训练和服从国家为核心，而雅典教育重视儿童身心和谐发展，倡导德智体美兼备的自由公民教育。'
+      },
+      {
+        id: 2,
+        type: 'boolean',
+        typeLabel: '极速判断题',
+        stem: '卢梭在《爱弥儿》中主张的自然主义教育思想，核心是要让儿童顺应天性、遵循自然发展的法则。',
+        options: ['正确 (True)', '错误 (False)'],
+        answer: 0,
+        isNemesis: false,
+        boundNode: '近代启蒙教育 · 卢梭',
+        explanation: '判断正确。卢梭强调“归于自然”，认为教育应当顺应受教育者的自然本性，反对旧体制对儿童天性的压抑。'
+      },
+      {
+        id: 3,
+        type: 'subjective',
+        typeLabel: '主观简答题',
+        stem: '请简述赫尔巴特提出的“形式教学四阶段论”包含哪四个阶段？',
+        options: [],
+        answer: '明了（Clear）、联想（Association）、系统（System）、方法（Method）。后由其弟子齐勒等发展为五段教学法。',
+        isNemesis: false,
+        boundNode: '教育学理论 · 赫尔巴特',
+        explanation: '赫尔巴特基于统觉理论，把教学过程细分为明了、联想、系统、方法四阶段，奠定了传统教学论的基本框架。'
+      }
+    ];
+
+    let currentIndex = 0;
+    let comboCount = 0;
+    let totalXp = 1280;
+    let currentTheme = 'arcade';
+    let hitStopMs = 20;
+    let particleCount = 70;
+    let masterVolume = 0.75;
+
+    // ========== 2. Web Audio API 自适应和弦合成器 ==========
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    let audioCtx = null;
+
+    function ensureAudio() {
+      if (!audioCtx) audioCtx = new AudioCtx();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    }
+
+    function playSound(type) {
+      if (masterVolume <= 0) return;
+      try {
+        ensureAudio();
+        const now = audioCtx.currentTime;
+        const vol = masterVolume * 0.35;
+
+        if (type === 'hit') {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.type = currentTheme === 'dopamine' ? 'sine' : 'triangle';
+          osc.frequency.setValueAtTime(400, now);
+          osc.frequency.exponentialRampToValueAtTime(180, now + 0.05);
+          gain.gain.setValueAtTime(vol * 0.5, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+          osc.start(now);
+          osc.stop(now + 0.05);
+        } else if (type === 'correct') {
+          // 极度清脆的阶梯大三度琶音（扫弦）
+          const chordTiers = [
+            [523.25, 659.25, 783.99],          // C5 和弦
+            [587.33, 739.99, 880.00],          // D5 和弦
+            [659.25, 830.61, 987.77],          // E5 和弦
+            [783.99, 987.77, 1174.66],         // G5 和弦
+            [1046.50, 1318.51, 1567.98, 2093]  // 高阶天籁和弦
+          ];
+          const freqs = chordTiers[Math.min(comboCount, chordTiers.length - 1)];
+          freqs.forEach((f, i) => {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.type = currentTheme === 'dopamine' ? 'sine' : (currentTheme === 'arcade' ? 'triangle' : 'sine');
+            osc.frequency.setValueAtTime(f, now + i * 0.04);
+            gain.gain.setValueAtTime(0, now + i * 0.04);
+            gain.gain.linearRampToValueAtTime(vol * 0.4, now + i * 0.04 + 0.015);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.04 + 0.3);
+            osc.start(now + i * 0.04);
+            osc.stop(now + i * 0.04 + 0.3);
+          });
+        } else if (type === 'wrong') {
+          // 沉重低音爆裂
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(150, now);
+          osc.frequency.linearRampToValueAtTime(60, now + 0.22);
+          gain.gain.setValueAtTime(vol * 0.7, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+          osc.start(now);
+          osc.stop(now + 0.22);
+        } else if (type === 'revenge') {
+          // 宿敌击破胜利冲锋号
+          [440, 554.37, 659.25, 880].forEach((f, i) => {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(f, now + i * 0.06);
+            gain.gain.setValueAtTime(vol * 0.5, now + i * 0.06);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.06 + 0.35);
+            osc.start(now + i * 0.06);
+            osc.stop(now + i * 0.06 + 0.35);
+          });
+        }
+      } catch (e) {}
+    }
+
+    // ========== 3. 2D 粒子系统与能量光弧 ==========
+    const canvas = document.getElementById('fx-canvas');
+    const ctx = canvas.getContext('2d');
+    let particles = [];
+    let laserArcs = [];
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    class Particle {
+      constructor(x, y, color) {
+        this.x = x;
+        this.y = y;
+        this.color = color;
+        const angle = Math.random() * Math.PI * 2;
+        const speed = Math.random() * 7 + 2;
+        this.vx = Math.cos(angle) * speed;
+        this.vy = Math.sin(angle) * speed;
+        this.size = Math.random() * 4 + 2;
+        this.life = 1;
+        this.decay = Math.random() * 0.025 + 0.015;
+      }
+      update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.vy += 0.12;
+        this.vx *= 0.96;
+        this.life -= this.decay;
+      }
+      draw(c) {
+        c.save();
+        c.globalAlpha = Math.max(this.life, 0);
+        c.fillStyle = this.color;
+        c.shadowColor = this.color;
+        c.shadowBlur = 6;
+        c.beginPath();
+        c.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        c.fill();
+        c.restore();
+      }
+    }
+
+    class LaserArc {
+      constructor(sx, sy, tx, ty, color) {
+        this.sx = sx;
+        this.sy = sy;
+        this.tx = tx;
+        this.ty = ty;
+        this.color = color;
+        this.progress = 0;
+        this.trail = [];
+      }
+      update() {
+        this.progress += 0.055;
+        const t = this.progress;
+        const cpX = (this.sx + this.tx) / 2 + 50;
+        const cpY = Math.min(this.sy, this.ty) - 80;
+        const x = (1 - t) * (1 - t) * this.sx + 2 * (1 - t) * t * cpX + t * t * this.tx;
+        const y = (1 - t) * (1 - t) * this.sy + 2 * (1 - t) * t * cpY + t * t * this.ty;
+        this.trail.push({ x, y });
+        if (this.trail.length > 7) this.trail.shift();
+      }
+      draw(c) {
+        c.save();
+        c.strokeStyle = this.color;
+        c.lineWidth = 3.5;
+        c.shadowColor = this.color;
+        c.shadowBlur = 10;
+        c.beginPath();
+        for (let i = 0; i < this.trail.length; i++) {
+          const pt = this.trail[i];
+          if (i === 0) c.moveTo(pt.x, pt.y);
+          else c.lineTo(pt.x, pt.y);
+        }
+        c.stroke();
+        c.restore();
+      }
+    }
+
+    function spawnBurst(x, y, color, count = particleCount) {
+      if (particles.length > 150) particles.splice(0, 50);
+      for (let i = 0; i < count; i++) {
+        particles.push(new Particle(x, y, color));
+      }
+    }
+
+    function spawnLaserArc(sx, sy, targetEl, color) {
+      const rect = targetEl.getBoundingClientRect();
+      const tx = rect.left + rect.width / 2;
+      const ty = rect.top + rect.height / 2;
+      laserArcs.push(new LaserArc(sx, sy, tx, ty, color));
+    }
+
+    function loopFx() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (let i = particles.length - 1; i >= 0; i--) {
+        particles[i].update();
+        particles[i].draw(ctx);
+        if (particles[i].life <= 0) particles.splice(i, 1);
+      }
+      for (let i = laserArcs.length - 1; i >= 0; i--) {
+        laserArcs[i].update();
+        laserArcs[i].draw(ctx);
+        if (laserArcs[i].progress >= 1) {
+          const targetEl = document.getElementById('palace-target');
+          targetEl.classList.remove('shock');
+          void targetEl.offsetWidth;
+          targetEl.classList.add('shock');
+          spawnBurst(laserArcs[i].tx, laserArcs[i].ty, laserArcs[i].color, 25);
+          laserArcs.splice(i, 1);
+        }
+      }
+      requestAnimationFrame(loopFx);
+    }
+    loopFx();
+
+    // 悬浮跳动文字
+    const floatingLayer = document.getElementById('floating-layer');
+    function showFloatingPopup(x, y, text, color) {
+      const el = document.createElement('div');
+      el.className = 'floating-popup';
+      el.innerText = text;
+      el.style.left = `${x}px`;
+      el.style.top = `${y}px`;
+      el.style.color = color;
+      floatingLayer.appendChild(el);
+      setTimeout(() => el.remove(), 850);
+    }
+
+    // ========== 4. DOM 与题目渲染 ==========
+    const qStem = document.getElementById('quiz-stem');
+    const qTypeBadge = document.getElementById('q-type-badge');
+    const qProgressDigits = document.getElementById('q-progress-digits');
+    const nemesisTag = document.getElementById('nemesis-tag');
+    const optionsGrid = document.getElementById('options-grid');
+    const subjectiveArea = document.getElementById('subjective-area');
+    const subjectiveInput = document.getElementById('subjective-input');
+    const subjectiveSubmit = document.getElementById('subjective-submit');
+    const subjectiveCompareBox = document.getElementById('subjective-compare-box');
+    const myAnswerText = document.getElementById('my-answer-text');
+    const refAnswerText = document.getElementById('ref-answer-text');
+    const explanationPanel = document.getElementById('explanation-panel');
+    const explanationText = document.getElementById('explanation-text');
+    const targetNodeName = document.getElementById('target-node-name');
+    const prevBtn = document.getElementById('prev-btn');
+    const nextBtn = document.getElementById('next-btn');
+    const comboBadge = document.getElementById('combo-badge');
+    const comboText = document.getElementById('combo-text');
+    const xpDigits = document.getElementById('xp-digits');
+    const xpFill = document.getElementById('xp-fill');
+    const quizCard = document.getElementById('quiz-card');
+
+    function updateCombo(hit) {
+      if (hit) {
+        comboCount++;
+        comboBadge.classList.add('bump');
+        setTimeout(() => comboBadge.classList.remove('bump'), 200);
+      } else {
+        comboCount = 0;
+      }
+      comboText.innerText = `${comboCount} COMBO`;
+    }
+
+    function addXp(amount) {
+      totalXp += amount;
+      xpDigits.innerText = `${totalXp.toLocaleString()} EXP`;
+      xpFill.style.width = `${Math.min((totalXp % 2000) / 20, 100)}%`;
+    }
+
+    function renderQuestion(idx, direction = 'none') {
+      const applyData = () => {
+        const q = MOCK_QUESTIONS[idx];
+        qTypeBadge.innerText = q.typeLabel;
+        qProgressDigits.innerText = `${idx + 1} / ${MOCK_QUESTIONS.length} 题`;
+        qStem.innerText = q.stem;
+        targetNodeName.innerText = q.boundNode;
+        explanationText.innerText = q.explanation;
+        explanationPanel.classList.remove('show');
+
+        if (q.isNemesis) {
+          nemesisTag.style.display = 'flex';
+          quizCard.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+        } else {
+          nemesisTag.style.display = 'none';
+          quizCard.style.borderColor = '';
+        }
+
+        if (q.type === 'choice' || q.type === 'boolean') {
+          optionsGrid.style.display = 'flex';
+          subjectiveArea.style.display = 'none';
+          optionsGrid.innerHTML = '';
+          const letters = ['A', 'B', 'C', 'D'];
+          q.options.forEach((opt, oIdx) => {
+            const btn = document.createElement('button');
+            btn.className = 'option-btn';
+            btn.dataset.idx = oIdx;
+            btn.innerHTML = `
+              <span class="opt-key">${q.type === 'boolean' ? (oIdx === 0 ? '√' : '×') : letters[oIdx]}</span>
+              <span class="opt-text">${opt}</span>
+            `;
+            btn.addEventListener('click', (e) => handleOptionClick(btn, oIdx, q, e));
+            optionsGrid.appendChild(btn);
+          });
+        } else {
+          optionsGrid.style.display = 'none';
+          subjectiveArea.style.display = 'flex';
+          subjectiveInput.value = '';
+          subjectiveInput.disabled = false;
+          subjectiveSubmit.disabled = false;
+          subjectiveCompareBox.style.display = 'none';
+          refAnswerText.innerText = q.answer;
+        }
+
+        prevBtn.disabled = idx === 0;
+        nextBtn.disabled = idx === MOCK_QUESTIONS.length - 1;
+      };
+
+      if (direction === 'next') {
+        quizCard.classList.remove('slide-in-right', 'slide-in-left', 'slide-out-left', 'slide-out-right');
+        quizCard.classList.add('slide-out-left');
+        playSound('hit');
+        setTimeout(() => {
+          applyData();
+          quizCard.classList.remove('slide-out-left');
+          quizCard.classList.add('slide-in-right');
+          setTimeout(() => quizCard.classList.remove('slide-in-right'), 350);
+        }, 180);
+      } else if (direction === 'prev') {
+        quizCard.classList.remove('slide-in-right', 'slide-in-left', 'slide-out-left', 'slide-out-right');
+        quizCard.classList.add('slide-out-right');
+        playSound('hit');
+        setTimeout(() => {
+          applyData();
+          quizCard.classList.remove('slide-out-right');
+          quizCard.classList.add('slide-in-left');
+          setTimeout(() => quizCard.classList.remove('slide-in-left'), 350);
+        }, 180);
+      } else {
+        applyData();
+      }
+    }
+
+    // 选项点击逻辑
+    function handleOptionClick(btn, selectedIdx, question, event) {
+      if (btn.disabled) return;
+      optionsGrid.querySelectorAll('.option-btn').forEach(b => b.disabled = true);
+
+      const isCorrect = selectedIdx === question.answer;
+      const rect = btn.getBoundingClientRect();
+      const clickX = event.clientX || (rect.left + rect.width / 2);
+      const clickY = event.clientY || (rect.top + rect.height / 2);
+
+      if (isCorrect) {
+        btn.classList.add('state-correct');
+        const color = getComputedStyle(document.body).getPropertyValue('--success-main').trim() || '#10b981';
+        spawnBurst(clickX, clickY, color);
+
+        if (question.isNemesis) {
+          showFloatingPopup(clickX, clickY, '⚔️ 宿敌斩杀! +200 EXP', '#ffbe26');
+          playSound('revenge');
+          addXp(200);
+        } else {
+          showFloatingPopup(clickX, clickY, 'PERFECT! +100 EXP', color);
+          playSound('correct');
+          addXp(100);
+        }
+
+        updateCombo(true);
+        spawnLaserArc(clickX, clickY, document.getElementById('palace-target'), color);
+      } else {
+        btn.classList.add('state-wrong');
+        const dangerColor = getComputedStyle(document.body).getPropertyValue('--danger-main').trim() || '#ef4444';
+        spawnBurst(clickX, clickY, dangerColor, 35);
+        showFloatingPopup(clickX, clickY, 'BROKEN & RE-LEARN', dangerColor);
+        playSound('wrong');
+        updateCombo(false);
+
+        const correctBtn = optionsGrid.querySelector(`[data-idx="${question.answer}"]`);
+        if (correctBtn) correctBtn.classList.add('state-correct');
+      }
+
+      explanationPanel.classList.add('show');
+    }
+
+    // 主观题提交逻辑
+    function handleSubjectiveSubmit() {
+      const text = subjectiveInput.value.trim();
+      if (!text) {
+        subjectiveInput.focus();
+        return;
+      }
+      subjectiveInput.disabled = true;
+      subjectiveSubmit.disabled = true;
+      myAnswerText.innerText = text;
+      subjectiveCompareBox.style.display = 'flex';
+
+      const rect = subjectiveSubmit.getBoundingClientRect();
+      const clickX = rect.left + rect.width / 2;
+      const clickY = rect.top + rect.height / 2;
+      const color = getComputedStyle(document.body).getPropertyValue('--accent-gold').trim() || '#ffbe26';
+
+      spawnBurst(clickX, clickY, color, 45);
+      showFloatingPopup(clickX, clickY, 'RECALL SUBMITTED +80 EXP', color);
+      playSound('correct');
+      addXp(80);
+      updateCombo(true);
+      spawnLaserArc(clickX, clickY, document.getElementById('palace-target'), color);
+      explanationPanel.classList.add('show');
+    }
+
+    subjectiveSubmit.addEventListener('click', handleSubjectiveSubmit);
+    subjectiveInput.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        handleSubjectiveSubmit();
+      }
+    });
+
+    // 导航
+    prevBtn.addEventListener('click', () => {
+      if (currentIndex > 0) {
+        currentIndex--;
+        renderQuestion(currentIndex, 'prev');
+      }
+    });
+
+    nextBtn.addEventListener('click', () => {
+      if (currentIndex < MOCK_QUESTIONS.length - 1) {
+        currentIndex++;
+        renderQuestion(currentIndex, 'next');
+      }
+    });
+
+    // 键盘全局盲打
+    window.addEventListener('keydown', (e) => {
+      const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+      if (activeTag === 'textarea' || activeTag === 'input') return;
+
+      const key = e.key.toUpperCase();
+      const currentQ = MOCK_QUESTIONS[currentIndex];
+
+      if (e.key === 'ArrowLeft' || (key === 'A' && optionsGrid.style.display === 'none')) {
+        if (currentIndex > 0) { currentIndex--; renderQuestion(currentIndex, 'prev'); }
+      } else if (e.key === 'ArrowRight' || (key === 'D' && optionsGrid.style.display === 'none')) {
+        if (currentIndex < MOCK_QUESTIONS.length - 1) { currentIndex++; renderQuestion(currentIndex, 'next'); }
+      } else if (['A', 'B', 'C', 'D', '1', '2', '3', '4'].includes(key)) {
+        if (currentQ.type === 'choice') {
+          const keyMap = { 'A': 0, 'B': 1, 'C': 2, 'D': 3, '1': 0, '2': 1, '3': 2, '4': 3 };
+          const btn = optionsGrid.querySelector(`[data-idx="${keyMap[key]}"]`);
+          if (btn) btn.click();
+        } else if (currentQ.type === 'boolean') {
+          const keyMap = { 'A': 0, 'B': 1, '1': 0, '2': 1, 'T': 0, 'F': 1 };
+          const btn = optionsGrid.querySelector(`[data-idx="${keyMap[key]}"]`);
+          if (btn) btn.click();
+        }
+      }
+    });
+
+    // 主题切换
+    document.querySelectorAll('.theme-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentTheme = btn.dataset.t;
+        document.body.dataset.theme = currentTheme;
+        playSound('hit');
+      });
+    });
+
+    // 调优抽屉
+    const drawer = document.getElementById('settings-drawer');
+    const toggleBtn = document.getElementById('drawer-toggle');
+    const closeBtn = document.getElementById('drawer-close');
+
+    toggleBtn.addEventListener('click', () => drawer.classList.add('open'));
+    closeBtn.addEventListener('click', () => drawer.classList.remove('open'));
+
+    document.getElementById('slider-particles').addEventListener('input', (e) => {
+      particleCount = parseInt(e.target.value);
+      document.getElementById('val-particles').innerText = particleCount;
+    });
+    document.getElementById('slider-hitstop').addEventListener('input', (e) => {
+      hitStopMs = parseInt(e.target.value);
+      document.getElementById('val-hitstop').innerText = `${hitStopMs}ms`;
+    });
+    document.getElementById('slider-volume').addEventListener('input', (e) => {
+      masterVolume = parseInt(e.target.value) / 100;
+      document.getElementById('val-volume').innerText = `${e.target.value}%`;
+    });
+
+    document.getElementById('copy-btn').addEventListener('click', () => {
+      const config = {
+        theme: currentTheme,
+        particleCount: particleCount,
+        hitStopMs: hitStopMs,
+        masterVolume: masterVolume,
+        features: ['arcadeAudioArpeggio', 'laserArcToPalace', 'nemesisRevenge']
+      };
+      navigator.clipboard.writeText(JSON.stringify(config, null, 2)).then(() => {
+        alert('🎉 配置已复制到剪贴板！');
+      });
+    });
+
+    // 初始化
+    renderQuestion(currentIndex);
+  </script>
+</body>
+</html>

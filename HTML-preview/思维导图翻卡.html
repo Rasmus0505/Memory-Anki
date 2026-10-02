@@ -434,7 +434,7 @@
     /* --- [Leaf 考核卡片节点] --- */
     .node-leaf {
       width: 270px;
-      height: 140px;
+      height: 120px;
       cursor: pointer;
       perspective: 1000px;
     }
@@ -461,127 +461,54 @@
       -webkit-backface-visibility: hidden;
       display: flex;
       flex-direction: column;
-      justify-content: space-between;
+      justify-content: center;
+      align-items: center;
       backdrop-filter: blur(14px);
     }
 
-    /* 正面（待回忆封印态） */
+    /* 正面（翻前普通空白/静默占位态，纯净微质感，无任何多余题目与装饰） */
     .card-front {
       background: var(--leaf-front-bg);
-      border: 1.8px solid var(--leaf-front-border);
-      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+      border: 1.8px dashed var(--leaf-front-border);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
       overflow: hidden;
+      cursor: pointer;
     }
-    .seal-membrane {
-      position: absolute;
-      inset: 0;
-      background: radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.22) 0%, transparent 65%);
-      pointer-events: none;
+    .card-front:hover {
+      border-style: solid;
+      border-color: var(--accent-spark);
+      background: rgba(255, 255, 255, 0.04);
     }
-    .seal-shimmer {
-      position: absolute;
-      top: -50%;
-      left: -50%;
-      width: 200%;
-      height: 200%;
-      background: linear-gradient(
-        45deg,
-        transparent 40%,
-        rgba(255, 255, 255, 0.12) 50%,
-        transparent 60%
-      );
-      transform: rotate(25deg);
-      animation: shimmerMove 4.5s infinite linear;
-      pointer-events: none;
-    }
-    @keyframes shimmerMove {
-      0% { transform: translateY(-50%) rotate(25deg); }
-      100% { transform: translateY(50%) rotate(25deg); }
-    }
-
-    .card-front-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      position: relative;
-      z-index: 2;
-    }
-    .seal-badge {
-      font-size: 10px;
-      font-weight: 800;
-      padding: 2px 8px;
-      border-radius: 4px;
-      background: var(--leaf-seal-gradient);
-      color: #000000;
+    .card-blank-hint {
+      font-size: 13px;
+      color: rgba(255, 255, 255, 0.35);
+      font-weight: 600;
       letter-spacing: 0.5px;
-    }
-    .front-hotkey-hint {
-      font-size: 11px;
-      font-family: var(--font-mono);
-      color: rgba(255, 255, 255, 0.65);
-      border: 1px solid rgba(255, 255, 255, 0.25);
-      padding: 1px 6px;
-      border-radius: 4px;
-    }
-    .card-front-prompt {
-      font-size: 14px;
-      font-weight: 700;
-      color: #ffffff;
-      line-height: 1.45;
-      position: relative;
-      z-index: 2;
-      display: -webkit-box;
-      -webkit-line-clamp: 3;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-    }
-    .front-footer {
-      font-size: 11px;
-      color: rgba(255, 255, 255, 0.5);
       display: flex;
       align-items: center;
       gap: 6px;
-      position: relative;
-      z-index: 2;
+      transition: color 0.2s ease;
+    }
+    .card-front:hover .card-blank-hint {
+      color: rgba(255, 255, 255, 0.7);
     }
 
-    /* 背面（答案揭晓与经验充能态 - 翻开即释放经验！） */
+    /* 背面（翻后普通纯净文字呈现态） */
     .card-back {
       background: var(--leaf-back-bg);
       border: 2px solid var(--leaf-back-border);
       box-shadow: 0 12px 35px rgba(0, 0, 0, 0.5), 0 0 20px var(--leaf-back-border);
       transform: rotateY(180deg);
-    }
-    .card-back-header {
-      display: flex;
       justify-content: space-between;
-      align-items: center;
+      align-items: stretch;
+      padding: 16px 18px;
     }
-    .mastery-pill {
-      font-size: 10px;
-      font-weight: 800;
-      padding: 2px 7px;
-      border-radius: 4px;
-      background: rgba(46, 213, 115, 0.25);
-      color: #2ed573;
-      border: 1px solid #2ed573;
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
-    .fold-hint {
-      font-size: 11px;
-      font-family: var(--font-mono);
-      color: rgba(255, 255, 255, 0.5);
-    }
-    .card-back-answer {
-      font-size: 13.5px;
+    .card-back-text {
+      font-size: 14px;
       font-weight: 600;
       color: var(--leaf-text);
-      line-height: 1.45;
-      background: rgba(0, 0, 0, 0.3);
-      padding: 8px 10px;
-      border-radius: 8px;
+      line-height: 1.5;
+      text-align: left;
     }
     .card-back-footer {
       font-size: 11px;
@@ -590,6 +517,8 @@
       align-items: center;
       justify-content: space-between;
       font-weight: 700;
+      opacity: 0.85;
+      margin-top: 6px;
     }
 
     /* 聚焦高亮外框 */
@@ -1178,6 +1107,12 @@
       </button>
     </div>
 
+    <!-- 镜头推进开关快捷切换 -->
+    <button id="btn-toggle-cam-zoom" class="top-action-btn" title="点击切换是否开启点击卡片时的镜头切近推进">
+      <span id="cam-zoom-status-icon">🔍</span>
+      <span id="cam-zoom-status-text">镜头推进: 开</span>
+    </button>
+
     <button id="btn-toggle-drawer" class="top-action-btn">
       <span>⚙️ 调校手感</span>
     </button>
@@ -1234,6 +1169,15 @@
     </div>
 
     <div class="drawer-content">
+      <div class="control-group">
+        <label class="control-label">
+          <span>镜头推进功能开关 (Enable Zoom Track)</span>
+          <span id="val-zoom-enable" class="control-val">开启</span>
+        </label>
+        <input id="slider-zoom-enable" class="control-slider" type="range" min="0" max="1" step="1" value="1">
+        <span class="control-desc">关闭后点击节点镜头仅平移对准，保持原有全景比例，不产生拉近推进感。</span>
+      </div>
+
       <div class="control-group">
         <label class="control-label">
           <span>镜头推进幅度 (Zoom Scale)</span>
@@ -1533,18 +1477,15 @@
           children: [
             {
               id: 'c-1-1',
-              q: 'LTP (长时程增强) 诱导的核心谷氨酸受体是哪两个？',
-              a: 'AMPA受体（快速去极化）与 NMDA受体（镁离子解阻滞并内流钙离子）。'
+              text: 'AMPA受体介导快速去极化，NMDA受体解除镁阻滞并内流钙离子'
             },
             {
               id: 'c-1-2',
-              q: '钙离子跨膜进入突触后膜后激活了哪种关键蛋白激酶？',
-              a: 'CaMKII（钙/钙调素依赖性蛋白激酶II），诱发突触结构重塑。'
+              text: 'CaMKII 激酶激活诱发突触后致密区结构扩大与受体上板'
             },
             {
               id: 'c-1-3',
-              q: '突触标签与捕获假说 (Synaptic Tagging) 解释了什么现象？',
-              a: '弱刺激诱导的暂时突触标签可捕获强刺激产出的可塑性相关蛋白。'
+              text: '突触标签机制 (Synaptic Tagging) 捕获长时程可塑性蛋白'
             }
           ]
         },
@@ -1557,18 +1498,15 @@
           children: [
             {
               id: 'c-2-1',
-              q: '巴德利 (Baddeley) 工作记忆模型包含哪四大子系统？',
-              a: '语音回路、视觉空间画板、情景缓冲区、中央执行系统。'
+              text: '语音回路、视觉空间画板、情景缓冲区与中央执行系统'
             },
             {
               id: 'c-2-2',
-              q: '背外侧前额叶皮层 (dlPFC) 在延迟回忆任务中的电生理特征？',
-              a: '持续性神经元放电活动 (Persistent Neural Firing)，维持心智表征。'
+              text: '背外侧前额叶皮层 (dlPFC) 产生持续性神经元放电表征'
             },
             {
               id: 'c-2-3',
-              q: '多巴胺 D1 受体在工作记忆调控中呈现何种曲线关系？',
-              a: '经典的倒“U”形曲线（过高或过低均损害工作记忆精准度）。'
+              text: '多巴胺 D1 受体在工作记忆调节中呈现经典倒“U”形曲线'
             }
           ]
         },
@@ -1581,18 +1519,15 @@
           children: [
             {
               id: 'c-3-1',
-              q: '艾宾浩斯遗忘曲线中记忆消退速度最剧烈的阶段是？',
-              a: '学习结束后的最初 20 分钟至 24 小时内，呈对数级快速衰减。'
+              text: '学习后最初 20 分钟至 24 小时呈对数级快速衰减'
             },
             {
               id: 'c-3-2',
-              q: '测试效应 (Testing Effect) 相比单纯重复阅读的核心优势？',
-              a: '主动检索增强神经通路连接与多元线索绑定，延缓遗忘速度 300% 以上。'
+              text: '主动检索增强神经通路连接与多元线索绑定，延缓遗忘'
             },
             {
               id: 'c-3-3',
-              q: 'SM-2 间隔重复算法主要基于哪两个核心参数调整复习间隔？',
-              a: '简易度因子 (Easiness Factor) 与 记忆连续成功重复次数 (Repetitions)。'
+              text: 'SM-2 算法基于简易度因子 (EF) 与连续成功重复次数动态调度'
             }
           ]
         }
@@ -1606,6 +1541,7 @@
         this.sound = new SoundEngine();
 
         this.config = {
+          zoomEnabled: true,
           zoomScale: 1.18,
           propulsionForce: 1.20,
           squashFactor: 1.26,
@@ -1729,30 +1665,19 @@
             leafEl.style.top = `${childY}px`;
             leafEl.innerHTML = `
               <div class="card-flipper">
-                <!-- 正面封印状态 -->
+                <!-- 正面：翻前普通空白占位 -->
                 <div class="card-face card-front">
-                  <div class="seal-membrane"></div>
-                  <div class="seal-shimmer"></div>
-                  <div class="card-front-header">
-                    <span class="seal-badge">待提取</span>
-                    <span class="front-hotkey-hint">Click 翻开</span>
-                  </div>
-                  <div class="card-front-prompt">${childData.q}</div>
-                  <div class="front-footer">
-                    <span>⚡ 翻开直接注入经验</span>
+                  <div class="card-blank-hint">
+                    <span>🔲 点击翻开</span>
                   </div>
                 </div>
 
-                <!-- 背面揭晓答案状态 -->
+                <!-- 背面：翻后纯净文字呈现 -->
                 <div class="card-face card-back">
-                  <div class="card-back-header">
-                    <span class="mastery-pill">✓ 考点已唤醒</span>
-                    <span class="fold-hint">Tab 闭锁</span>
-                  </div>
-                  <div class="card-back-answer">${childData.a}</div>
+                  <div class="card-back-text">${childData.text}</div>
                   <div class="card-back-footer">
-                    <span>+100 EXP 能量已注入</span>
-                    <span style="opacity: 0.6;">右键收回</span>
+                    <span>⚡ +100 EXP</span>
+                    <span style="opacity: 0.5;">右键收回</span>
                   </div>
                 </div>
               </div>
@@ -1843,6 +1768,12 @@
           if (parentEl) parentEl.classList.add('node-ancestor');
         }
 
+        // 如果用户关闭了镜头推进功能，则镜头完全锁定不动，不平移也不缩放！
+        if (!this.config.zoomEnabled) {
+          this.triggerVibration(12);
+          return;
+        }
+
         const winW = window.innerWidth;
         const winH = window.innerHeight;
         const scale = this.config.zoomScale;
@@ -1852,7 +1783,7 @@
         const worldClickX = (clientX - this.cam.x) / this.cam.scale;
         const worldClickY = (clientY - this.cam.y) / this.cam.scale;
 
-        // 视口平移目标：让该世界点击点在缩放到 targetScale 之后严格对准屏幕中心 (winW / 2, winH / 2)
+        // 视口平移目标：让该世界点击点严格对准屏幕中心 (winW / 2, winH / 2)
         this.cam.targetScale = scale;
         this.cam.targetX = winW / 2 - worldClickX * scale;
         this.cam.targetY = winH / 2 - worldClickY * scale;
@@ -1875,6 +1806,12 @@
         if (nodeInfo.type === 'leaf') {
           const parentEl = this.nodeElements.get(nodeInfo.data.parentId)?.el;
           if (parentEl) parentEl.classList.add('node-ancestor');
+        }
+
+        // 如果关闭了镜头推进功能，同样保持绝对静止，不挪动
+        if (!this.config.zoomEnabled) {
+          this.triggerVibration(12);
+          return;
         }
 
         // 计算节点中心点并居中
@@ -1910,8 +1847,9 @@
         document.querySelectorAll('.tree-node').forEach(el => el.classList.remove('node-focused', 'node-ancestor'));
       }
 
-      // 运镜适度后拉俯瞰能量球飞行轨迹
+      // 运镜适度后拉俯瞰能量球飞行轨迹（仅当允许镜头推进/运镜时后拉）
       cameraZoomForFlight() {
+        if (!this.config.zoomEnabled) return;
         const winW = window.innerWidth;
         const winH = window.innerHeight;
         const scale = 0.95;
@@ -1976,29 +1914,45 @@
         if (!parentData) return;
 
         let foldedCount = 0;
+
+        // 1. 遍历内存模型中的所有子节点
         parentData.children.forEach(c => {
+          this.flippedLeafIds.delete(c.id);
           const leafInfo = this.nodeElements.get(c.id);
-          if (leafInfo && leafInfo.el.classList.contains('is-flipped')) {
+          if (leafInfo && leafInfo.el) {
             leafInfo.el.classList.remove('is-flipped');
-            this.flippedLeafIds.delete(c.id);
             foldedCount++;
           }
         });
 
-        // 连线熄灭
+        // 2. 双重防御：直接在 DOM 容器中查找所有匹配属于该 parent 的叶子节点，确保 100% 全部收回
+        const allLeafEls = document.querySelectorAll('.node-leaf');
+        allLeafEls.forEach(el => {
+          const info = this.nodeElements.get(el.id);
+          if (info && info.data && info.data.parentId === parentId) {
+            el.classList.remove('is-flipped');
+            this.flippedLeafIds.delete(el.id);
+          }
+        });
+
+        // 3. 熄灭该分支的所有连线
         parentData.children.forEach(c => {
           const branch = document.getElementById(`branch-${parentId}-${c.id}`);
           if (branch) branch.classList.remove('branch-active', 'branch-mastered');
         });
+        const rootBranch = document.getElementById(`branch-root-${parentId}`);
+        if (rootBranch) rootBranch.classList.remove('branch-mastered');
 
-        // 充能条与通关印章重置
+        // 4. 重置父节点的进度数据与 DOM 状态
         this.parentProgress.set(parentId, 0);
         const fillEl = document.getElementById(`fill-${parentId}`);
         const progText = document.getElementById(`prog-${parentId}`);
         const parentInfo = this.nodeElements.get(parentId);
         if (fillEl) fillEl.style.width = '0%';
         if (progText) progText.textContent = `0 / ${parentData.children.length}`;
-        if (parentInfo) parentInfo.el.classList.remove('is-mastered');
+        if (parentInfo && parentInfo.el) {
+          parentInfo.el.classList.remove('is-mastered');
+        }
 
         this.updateTopProgress();
         this.sound.playFold(this.theme);
@@ -2006,7 +1960,7 @@
 
         // 飘字提示
         if (parentInfo) {
-          this.spawnFloatingExpText(parentInfo.data.x + parentInfo.w / 2, parentInfo.data.y + 10, '已收起子考点', false);
+          this.spawnFloatingExpText(parentInfo.data.x + parentInfo.w / 2, parentInfo.data.y + 10, '已收起全部子节点', false);
         }
       }
 
@@ -2425,6 +2379,33 @@
           drawer.classList.remove('open');
         });
 
+        // 顶部快速开关镜头推进
+        const btnToggleCamZoom = document.getElementById('btn-toggle-cam-zoom');
+        const zoomIcon = document.getElementById('cam-zoom-status-icon');
+        const zoomText = document.getElementById('cam-zoom-status-text');
+        const sliderZoomEnable = document.getElementById('slider-zoom-enable');
+        const valZoomEnable = document.getElementById('val-zoom-enable');
+
+        const updateZoomToggleUI = (enabled) => {
+          this.config.zoomEnabled = enabled;
+          zoomIcon.textContent = enabled ? '🔍' : '🔒';
+          zoomText.textContent = `镜头推进: ${enabled ? '开' : '关'}`;
+          btnToggleCamZoom.style.background = enabled ? 'rgba(255, 255, 255, 0.18)' : 'rgba(255, 255, 255, 0.05)';
+          if (sliderZoomEnable) sliderZoomEnable.value = enabled ? 1 : 0;
+          if (valZoomEnable) valZoomEnable.textContent = enabled ? '开启' : '关闭';
+        };
+
+        btnToggleCamZoom.addEventListener('click', () => {
+          updateZoomToggleUI(!this.config.zoomEnabled);
+          this.triggerVibration(15);
+        });
+
+        if (sliderZoomEnable) {
+          sliderZoomEnable.addEventListener('input', (e) => {
+            updateZoomToggleUI(parseInt(e.target.value, 10) === 1);
+          });
+        }
+
         // 滑块参数实时调整
         const bindSlider = (id, valId, key, formatFn) => {
           const slider = document.getElementById(id);
@@ -2445,12 +2426,14 @@
         // 恢复大师默认参数
         document.getElementById('btn-reset-params').addEventListener('click', () => {
           this.config = {
+            zoomEnabled: true,
             zoomScale: 1.18,
             propulsionForce: 1.20,
             squashFactor: 1.26,
             volume: 0.85,
             hapticsEnabled: true
           };
+          updateZoomToggleUI(true);
           document.getElementById('slider-zoom').value = 1.18;
           document.getElementById('val-zoom').textContent = '1.18x';
           document.getElementById('slider-force').value = 1.20;

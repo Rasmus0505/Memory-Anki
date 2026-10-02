@@ -1,4 +1,4 @@
-﻿# Memory Anki Architecture
+# Memory Anki Architecture
 
 > Current ownership map. Historical target notes remain in [TARGET_VERTICAL_SLICE.md](./TARGET_VERTICAL_SLICE.md). Frontend `features/` and `entities/` have been migrated into `modules/*`; backend public imports go through each context's declared `public` / `api` entry.
 
@@ -21,7 +21,7 @@ The repository is a local-first Windows product used on two devices. SQLite, fil
 | Capability | Frontend owner | Backend owner |
 |---|---|---|
 | Mind-map document rules | `modules/content/domain/mindmap-document-entity` | `modules/mindmap_document` |
-| Generic mind-map rendering | `shared/ui/mindmap-canvas` (canvas itself lazy-loads `@xyflow`) | — |
+| Generic mind-map rendering | `shared/ui/mindmap-canvas` (canvas itself lazy-loads `@xyflow`); the read-only jelly flip stage lives in the same folder — see [jelly-mindmap-stage.md](./jelly-mindmap-stage.md) | — |
 | Mind-map editing runtime | `modules/content/ui/mindmap-editor` | aggregate-specific editor services |
 | Palace aggregate | `modules/content` (`domain/palace-entity`, palace-catalog/palace-edit UI) | `modules/content` |
 | Review scheduling/execution | `modules/memory` + `modules/practice/ui/review` | `modules/memory` |
@@ -32,7 +32,7 @@ The repository is a local-first Windows product used on two devices. SQLite, fil
 | Feedback runtime (cues, recipes, particles, skins, rare shows) | `shared/fx` — see [fx-director.md](./fx-director.md). Callers use `cue()` from `@/shared/fx` only; WebGL2 + bloom with Canvas2D fallback | — |
 | Growth meta (XP, levels, quests, stamps, starmap, wardrobe) | `modules/progression` — see [progression.md](./progression.md) | `modules/progression` (read-only projection) |
 | Ambient room layer (tint, grain, dust motes, pointer light) | `shared/ambient` (pure, data-free); `app/shell/useAmbientTone` feeds it dashboard/exam data | — |
-| Interface sounds | `shared/feedback/uiSounds` (delegated listener, gated by `uiSoundEnabled` + `soundEnabled`; silent inside `.freestyle-stage`) | — |
+| Interface sounds | `shared/feedback/uiSounds` (delegated listener, gated by `uiSoundEnabled` + `soundEnabled`; silent inside `.freestyle-stage`); synth voices in `shared/feedback/mindmap-audio` — see [audio-soundscape.md](./audio-soundscape.md) | — |
 
 ## Hard Invariants
 
@@ -86,6 +86,7 @@ Frontend lint is a zero-warning contract. The `apps/web` lint script runs ESLint
 
 - `fx-director.md` — cue → recipe feedback runtime (particles, sound, haptics, DOM).
 - `theme-packs.md` — whole-world theme packs (tokens, paper, motes, timbre, rhythm) and their growth unlocks.
+- `audio-soundscape.md` — procedural synth voices, theme timbre, `AudioContext` lifecycle/iOS unlock, mute scopes, per-scene volume gates.
 
 ## Validation
 
@@ -94,6 +95,8 @@ Frontend lint is a zero-warning contract. The `apps/web` lint script runs ESLint
 - Playwright is hermetic: specs import `test`/`expect` from `apps/web/e2e/fixtures.ts` (every `/api` call answers 503 unless the spec routes it), service workers are blocked, and `MEMORY_ANKI_E2E=1` removes the vite `/api` proxy so e2e can never write to the live 8012 service. `check_e2e_hermetic` enforces this.
 - Windows launcher smoke after runtime/startup-sensitive changes: `python tools/quality_gate.py --launchers` (really runs `start-all.bat --smoke-test` and `start-all.bat --desktop`, verifies API/Electron readiness, then restores the shared PWA service)
 - Mind-map architecture details: `docs/architecture/mindmap.md`
+- Jelly flip-card stage (read-only reveal layer, layout contract, parent charge): `docs/architecture/jelly-mindmap-stage.md`
+- Hermetic Playwright E2E rules (503 API fallback, blocked SW, no preview proxy): `docs/architecture/e2e-testing-guide.md`
 - AI runtime boundary: `docs/architecture/ai-runtime.md`
 - AI run workspace lifecycle: `docs/architecture/ai-run-workspace.md`
 - Prompt catalog boundary: `docs/architecture/prompt-catalog.md`

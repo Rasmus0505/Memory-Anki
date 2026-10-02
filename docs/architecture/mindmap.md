@@ -27,6 +27,17 @@
 - Enter reveal follow：随心复习按 Enter 翻出的卡若被画面裁切，画布只做最小平移，把这一步里裁切最多的那张完整推进视野并留边距，保持当前缩放，约 200ms，连按打断上一次动画跟上最新一步。鼠标点卡、Shift 收回和 A/S 批量翻卡不挪视野。
 - **不做** MiniMap、搜索跳转、大纲双栏（宿主可另组）。
 
+## 果冻翻卡展示策略
+
+完整契约见 [jelly-mindmap-stage.md](./jelly-mindmap-stage.md)。要点：
+
+- `shared/ui/mindmap-canvas/JellyMindmapStage` 是只读翻卡场景的独立展示层：它从通用 `GraphData` 接收节点/边和 visual reveal 投影，使用固定的 root → parent → leaf 左到右坐标系、270px 叶卡宽度、同级最高卡高和 SVG 三次 Bézier 连线。
+- React Flow 继续拥有编辑态、文字选择/英语交互和非果冻回退场景；果冻舞台不复用 React Flow 的节点 DOM，且两者不得同时对同一动作发声。
+- 舞台、SVG 边、卡片和 `map.land`/`map.settle` 反馈共用同一份布局矩形和屏幕坐标。舞台只投影 `MASTERED`、充能进度、临时提示和视觉 `+100 EXP`，不修改真实 XP 或文档。
+- 叶卡采用固定外壳 + `preserve-3d` 双面内翻板，`JELLY_FLIP_DURATION_MS` 550ms `cubic-bezier(0.34, 1.56, 0.64, 1)`，批量翻面间隔 `JELLY_BATCH_STAGGER_MS` 45ms；根/父卡保持静态，仅承受充能、回弹和 shockwave。
+- 父节点充能由纯函数 `shared/ui/mindmap-canvas/parentCharge.ts` 计算（只统计直接子节点，`mastered = done === total`），延迟步骤必须挂在 cue 的 `FxPlayback` owner 上，owner 退役即取消。
+
+
 ## 展示策略
 
 - `MindMapPresentationMachine` 明确区分 `nativeFullscreen` 与 `viewportFullscreen`，原生 Fullscreen API 被拒绝时只能进入 viewport 模式，不得继续上报为系统全屏。
