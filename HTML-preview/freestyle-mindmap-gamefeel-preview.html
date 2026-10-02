@@ -1,0 +1,1525 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>随心模式思维导图 · Game Feel / Juiciness 体验原型</title>
+  <style>
+    :root {
+      --bg-color: #0b101e;
+      --card-bg-front: #162038;
+      --card-bg-cover: #1c2a4c;
+      --accent-color: #ff4757;
+      --accent-glow: rgba(255, 71, 87, 0.45);
+      --energy-cyan: #00f2fe;
+      --energy-gold: #ffa502;
+      --success-green: #2ed573;
+      --spring-easing: cubic-bezier(0.34, 1.56, 0.64, 1);
+      --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    body {
+      background: var(--bg-color);
+      color: #fff;
+      font-family: var(--font-family);
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* 顶部控制与指示栏 */
+    header {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 60px;
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 100;
+      background: linear-gradient(180deg, rgba(11, 16, 30, 0.92) 0%, rgba(11, 16, 30, 0) 100%);
+      pointer-events: none;
+    }
+
+    .title-group {
+      pointer-events: auto;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .title-group h1 {
+      font-size: 17px;
+      font-weight: 800;
+      background: linear-gradient(135deg, #fff, #94a3b8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: 0.5px;
+    }
+
+    .badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 12px;
+      background: rgba(255, 71, 87, 0.15);
+      color: #ff6b81;
+      border: 1px solid rgba(255, 71, 87, 0.3);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .controls-group {
+      pointer-events: auto;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .btn-toggle {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #fff;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s var(--spring-easing);
+    }
+
+    .btn-toggle:hover {
+      background: rgba(255, 255, 255, 0.16);
+      transform: scale(1.05);
+    }
+    .btn-toggle:active {
+      transform: scale(0.95);
+    }
+
+    /* 操作提示条 */
+    .instruction-bar {
+      position: absolute;
+      top: 60px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 90;
+      background: rgba(22, 32, 56, 0.75);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 6px 18px;
+      border-radius: 30px;
+      font-size: 12px;
+      color: #94a3b8;
+      display: flex;
+      gap: 20px;
+      pointer-events: none;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    }
+
+    .instruction-bar span b {
+      color: #38bdf8;
+    }
+
+    /* 导图舞台容器与网格 */
+    #stage-container {
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      position: relative;
+      overflow: hidden;
+      cursor: grab;
+    }
+
+    #stage-container:active {
+      cursor: grabbing;
+    }
+
+    .grid-bg {
+      position: absolute;
+      inset: -200%;
+      pointer-events: none;
+      background-image: 
+        radial-gradient(rgba(255, 107, 107, 0.16) 1.5px, transparent 1.5px),
+        linear-gradient(90deg, rgba(78, 205, 196, 0.04) 1px, transparent 1px),
+        linear-gradient(rgba(78, 205, 196, 0.04) 1px, transparent 1px);
+      background-size: 32px 32px, 96px 96px, 96px 96px;
+      background-position: center;
+      transform-origin: center;
+    }
+
+    /* 导图物理世界 */
+    #world {
+      position: absolute;
+      left: 0;
+      top: 0;
+      transform-origin: 0 0;
+      will-change: transform;
+    }
+
+    /* SVG 连线层 */
+    #svg-links {
+      position: absolute;
+      inset: 0;
+      overflow: visible;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .link-path {
+      fill: none;
+      stroke: rgba(255, 255, 255, 0.16);
+      stroke-width: 3.5px;
+      stroke-linecap: round;
+      transition: stroke 0.4s ease, stroke-width 0.3s ease;
+    }
+
+    .link-path.live {
+      stroke: var(--energy-cyan);
+      stroke-width: 5px;
+      filter: drop-shadow(0 0 6px var(--energy-cyan));
+    }
+
+    .link-path.completed {
+      stroke: var(--energy-gold);
+      stroke-width: 5px;
+      filter: drop-shadow(0 0 8px var(--energy-gold));
+    }
+
+    /* 卡片通用容器 */
+    .mind-card {
+      position: absolute;
+      box-sizing: border-box;
+      z-index: 2;
+      cursor: pointer;
+      will-change: transform, opacity;
+      transform-origin: center center;
+    }
+
+    /* 果冻回弹基类 */
+    .jelly-element {
+      transition: transform 0.45s var(--spring-easing), box-shadow 0.3s ease;
+    }
+
+    /* 悬停预备反馈 */
+    .mind-card:hover .card-body {
+      transform: translateY(-2px) scale(1.02);
+      filter: brightness(1.1);
+    }
+
+    .card-body {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      border-radius: 18px;
+      transition: transform 0.4s var(--spring-easing), border-color 0.3s ease, box-shadow 0.3s ease;
+      transform-style: preserve-3d;
+      perspective: 1200px;
+    }
+
+    /* 根卡样式 */
+    .card-root .card-body {
+      background: linear-gradient(135deg, #ff4757, #ff6b81);
+      border: 2px solid rgba(255, 255, 255, 0.7);
+      box-shadow: 0 16px 40px rgba(255, 71, 87, 0.45), inset 0 2px 6px rgba(255, 255, 255, 0.6);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 18px 22px;
+      text-align: center;
+      border-radius: 22px;
+    }
+
+    .card-root .tag {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 1.5px;
+      opacity: 0.9;
+      color: rgba(255, 255, 255, 0.9);
+      margin-bottom: 6px;
+    }
+
+    .card-root .text {
+      font-size: 18px;
+      font-weight: 800;
+      line-height: 1.35;
+      text-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+    }
+
+    .card-root .sub-hint {
+      margin-top: 8px;
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.8);
+      font-weight: 600;
+    }
+
+    /* 中间父卡样式 */
+    .card-parent .card-body {
+      background: rgba(22, 32, 58, 0.94);
+      backdrop-filter: blur(10px);
+      border: 1.8px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 12px 35px rgba(0, 0, 0, 0.4), inset 0 1px 3px rgba(255, 255, 255, 0.2);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 16px 20px;
+      gap: 10px;
+    }
+
+    .parent-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--energy-gold);
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 6px;
+      border-radius: 99px;
+      background: rgba(255, 255, 255, 0.12);
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #ff4757, var(--success-green));
+      border-radius: inherit;
+      box-shadow: 0 0 10px var(--success-green);
+      transition: width 0.45s var(--spring-easing);
+    }
+
+    /* 3D 翻面外壳（叶卡与待回忆卡） */
+    .card-flipper {
+      position: absolute;
+      inset: 0;
+      transform-style: preserve-3d;
+      transition: transform 0.55s var(--spring-easing);
+      border-radius: 18px;
+    }
+
+    .card-flipper.is-flipped {
+      transform: rotateY(180deg);
+    }
+
+    .card-face {
+      position: absolute;
+      inset: 0;
+      border-radius: 18px;
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
+      display: flex;
+      align-items: center;
+      padding: 16px 18px;
+      box-sizing: border-box;
+    }
+
+    /* 待回忆封面（正面） */
+    .card-face-cover {
+      background: linear-gradient(135deg, #1b2640, #223258);
+      border: 1.8px solid rgba(0, 242, 254, 0.35);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35), inset 0 1px 2px rgba(255, 255, 255, 0.15);
+      justify-content: center;
+      gap: 8px;
+      color: #94a3b8;
+    }
+
+    .card-face-cover .cover-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #38bdf8;
+      letter-spacing: 0.5px;
+    }
+
+    .pulse-ring {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #38bdf8;
+      box-shadow: 0 0 10px #38bdf8;
+      animation: pulse 1.8s infinite;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(0.9); opacity: 0.7; }
+      50% { transform: scale(1.3); opacity: 1; filter: drop-shadow(0 0 6px #38bdf8); }
+      100% { transform: scale(0.9); opacity: 0.7; }
+    }
+
+    /* 原文背面（翻开后） */
+    .card-face-content {
+      background: rgba(26, 36, 62, 0.96);
+      border: 1.8px solid rgba(255, 255, 255, 0.25);
+      box-shadow: 0 12px 35px rgba(0, 0, 0, 0.4), inset 0 1px 3px rgba(255, 255, 255, 0.25);
+      transform: rotateY(180deg);
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.45;
+      justify-content: flex-start;
+      word-break: break-word;
+    }
+
+    .card-face-content.is-mastered {
+      border-color: rgba(46, 213, 115, 0.5);
+      box-shadow: 0 12px 35px rgba(46, 213, 115, 0.15), inset 0 1px 3px rgba(46, 213, 115, 0.3);
+    }
+
+    /* 冲击波特效（Shockwave） */
+    .shockwave-ring {
+      position: absolute;
+      border-radius: 50%;
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      border: 2.5px solid var(--accent-color);
+      animation: shockwave 0.65s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
+      z-index: 50;
+    }
+
+    @keyframes shockwave {
+      0% { width: 0; height: 0; opacity: 1; border-width: 4px; }
+      100% { width: 320px; height: 320px; opacity: 0; border-width: 1px; }
+    }
+
+    /* 能量飞行光球（Energy Orbs） */
+    .energy-orb {
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: radial-gradient(circle, #fff 20%, var(--energy-cyan) 80%);
+      box-shadow: 0 0 14px 4px var(--energy-cyan);
+      pointer-events: none;
+      z-index: 60;
+      transform: translate(-50%, -50%);
+      will-change: transform, opacity;
+    }
+
+    /* 浮动飘字（Floating Text: +100 EXP） */
+    .float-text {
+      position: absolute;
+      pointer-events: none;
+      z-index: 70;
+      font-size: 15px;
+      font-weight: 900;
+      color: var(--energy-gold);
+      text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8), 0 0 12px var(--energy-gold);
+      animation: floatUp 0.85s cubic-bezier(0.2, 0.9, 0.3, 1) forwards;
+      transform: translate(-50%, -50%);
+    }
+
+    @keyframes floatUp {
+      0% { opacity: 0; transform: translate(-50%, 0) scale(0.6); }
+      20% { opacity: 1; transform: translate(-50%, -15px) scale(1.2); }
+      100% { opacity: 0; transform: translate(-50%, -50px) scale(0.9); }
+    }
+
+    /* 底部评分栏（整张导图打一次分） */
+    #rating-dock {
+      position: absolute;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 14px;
+      padding: 10px 16px;
+      background: rgba(18, 26, 46, 0.85);
+      backdrop-filter: blur(20px);
+      border: 1.5px solid rgba(255, 255, 255, 0.15);
+      border-radius: 28px;
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6), inset 0 1px 2px rgba(255, 255, 255, 0.15);
+      z-index: 100;
+      transition: transform 0.4s var(--spring-easing), opacity 0.3s ease;
+    }
+
+    .rating-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 3px;
+      padding: 10px 22px;
+      border-radius: 18px;
+      border: none;
+      background: rgba(255, 255, 255, 0.05);
+      cursor: pointer;
+      color: #fff;
+      font-family: inherit;
+      transition: all 0.25s var(--spring-easing);
+      outline: none;
+    }
+
+    .rating-btn:hover {
+      transform: translateY(-4px) scale(1.06);
+    }
+    .rating-btn:active {
+      transform: translateY(2px) scale(0.94);
+    }
+
+    .rating-btn .label {
+      font-size: 15px;
+      font-weight: 800;
+    }
+    .rating-btn .sub {
+      font-size: 11px;
+      opacity: 0.65;
+      font-weight: 600;
+    }
+
+    .rating-again:hover { background: rgba(255, 71, 87, 0.25); box-shadow: 0 6px 20px rgba(255, 71, 87, 0.4); }
+    .rating-hard:hover { background: rgba(255, 165, 2, 0.25); box-shadow: 0 6px 20px rgba(255, 165, 2, 0.4); }
+    .rating-good:hover { background: rgba(46, 213, 115, 0.25); box-shadow: 0 6px 20px rgba(46, 213, 115, 0.4); }
+    .rating-easy:hover { background: rgba(0, 242, 254, 0.25); box-shadow: 0 6px 20px rgba(0, 242, 254, 0.4); }
+
+    /* 大事件：全图完成高潮结算覆盖层 */
+    #celebration-overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 120;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 0.5s ease;
+    }
+
+    #celebration-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+      background: radial-gradient(circle, rgba(11, 16, 30, 0.6) 0%, rgba(11, 16, 30, 0.9) 100%);
+    }
+
+    .celebration-box {
+      background: rgba(26, 36, 62, 0.95);
+      backdrop-filter: blur(24px);
+      border: 2px solid var(--energy-gold);
+      border-radius: 28px;
+      padding: 36px 48px;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7), 0 0 40px rgba(255, 165, 2, 0.3);
+      transform: scale(0.7);
+      transition: transform 0.6s var(--spring-easing);
+    }
+
+    #celebration-overlay.active .celebration-box {
+      transform: scale(1);
+    }
+
+    .celebration-title {
+      font-size: 28px;
+      font-weight: 900;
+      color: #fff;
+      margin-bottom: 8px;
+      background: linear-gradient(135deg, #fff, var(--energy-gold));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .celebration-desc {
+      font-size: 15px;
+      color: #94a3b8;
+      margin-bottom: 24px;
+    }
+
+    .btn-restart {
+      background: linear-gradient(135deg, #ff4757, #ff6b81);
+      border: none;
+      color: #fff;
+      font-size: 15px;
+      font-weight: 800;
+      padding: 12px 28px;
+      border-radius: 24px;
+      cursor: pointer;
+      box-shadow: 0 8px 24px rgba(255, 71, 87, 0.5);
+      transition: all 0.25s var(--spring-easing);
+    }
+
+    .btn-restart:hover {
+      transform: scale(1.08);
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="title-group">
+      <h1>随心模式思维导图 · Game Feel 实验室</h1>
+      <span class="badge">Juiciness v2.0</span>
+    </div>
+    <div class="controls-group">
+      <button class="btn-toggle" id="btn-sound-toggle">
+        <span id="sound-icon">🔊</span>
+        <span id="sound-label">音效: 开启</span>
+      </button>
+      <button class="btn-toggle" id="btn-reset">
+        <span>🔄</span> 重置导图
+      </button>
+    </div>
+  </header>
+
+  <div class="instruction-bar">
+    <span><b>左键点击卡片</b>：待回忆卡翻开 / 已翻开卡推进下一层</span>
+    <span><b>右键点击卡片</b>：将全部后代收回当前卡</span>
+    <span><b>按住拖动画布</b>：自由平移浏览</span>
+  </div>
+
+  <div id="stage-container">
+    <div class="grid-bg"></div>
+    <div id="world">
+      <svg id="svg-links"></svg>
+      <div id="cards-container"></div>
+    </div>
+  </div>
+
+  <!-- 导图整体单次记忆评分 -->
+  <div id="rating-dock">
+    <button class="rating-btn rating-again" onclick="handleRate('Again')">
+      <span class="label">忘记</span>
+      <span class="sub">重来</span>
+    </button>
+    <button class="rating-btn rating-hard" onclick="handleRate('Hard')">
+      <span class="label">困难</span>
+      <span class="sub">较慢</span>
+    </button>
+    <button class="rating-btn rating-good" onclick="handleRate('Good')">
+      <span class="label">记得</span>
+      <span class="sub">顺利</span>
+    </button>
+    <button class="rating-btn rating-easy" onclick="handleRate('Easy')">
+      <span class="label">轻松</span>
+      <span class="sub">秒答</span>
+    </button>
+  </div>
+
+  <!-- 大事件：导图完成结算高潮弹窗 -->
+  <div id="celebration-overlay">
+    <div class="celebration-box">
+      <div class="celebration-title">🎉 思维导图全层通关！</div>
+      <div class="celebration-desc" id="celebration-score-text">全部分支知识点已全部解锁回忆完毕</div>
+      <button class="btn-restart" onclick="resetGraph()">重新演练</button>
+    </div>
+  </div>
+
+  <script>
+    /* ==========================================================================
+       1. Web Audio API 动态合成音效引擎 (无外部依赖，零延迟物理打击声)
+       ========================================================================== */
+    class SoundEngine {
+      constructor() {
+        this.ctx = null;
+        this.enabled = true;
+      }
+
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          this.ctx = new AudioContext();
+        }
+        if (this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+
+      // 卡牌发牌抽牌声 (轻盈滑出 + 空气感)
+      playDeal(pitchOffset = 0) {
+        if (!this.enabled) return;
+        this.init();
+        const t = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = 'triangle';
+        const startFreq = 260 + pitchOffset;
+        osc.frequency.setValueAtTime(startFreq, t);
+        osc.frequency.exponentialRampToValueAtTime(startFreq * 1.8, t + 0.12);
+
+        gain.gain.setValueAtTime(0.2, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc.start(t);
+        osc.stop(t + 0.15);
+      }
+
+      // 卡牌翻面声 (清脆咔哒 + 柔和果冻回弹)
+      playFlip() {
+        if (!this.enabled) return;
+        this.init();
+        const t = this.ctx.currentTime;
+
+        // 咔哒冲击点
+        const clickOsc = this.ctx.createOscillator();
+        const clickGain = this.ctx.createGain();
+        clickOsc.type = 'square';
+        clickOsc.frequency.setValueAtTime(800, t);
+        clickOsc.frequency.exponentialRampToValueAtTime(120, t + 0.05);
+        clickGain.gain.setValueAtTime(0.25, t);
+        clickGain.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+        clickOsc.connect(clickGain);
+        clickGain.connect(this.ctx.destination);
+        clickOsc.start(t);
+        clickOsc.stop(t + 0.06);
+
+        // 果冻共鸣音
+        const jellyOsc = this.ctx.createOscillator();
+        const jellyGain = this.ctx.createGain();
+        jellyOsc.type = 'sine';
+        jellyOsc.frequency.setValueAtTime(320, t);
+        jellyOsc.frequency.exponentialRampToValueAtTime(480, t + 0.08);
+        jellyOsc.frequency.exponentialRampToValueAtTime(280, t + 0.22);
+        jellyGain.gain.setValueAtTime(0.3, t);
+        jellyGain.gain.exponentialRampToValueAtTime(0.001, t + 0.24);
+        jellyOsc.connect(jellyGain);
+        jellyGain.connect(this.ctx.destination);
+        jellyOsc.start(t);
+        jellyOsc.stop(t + 0.25);
+      }
+
+      // 卡牌收起缩回声 (反向拉伸吸入音)
+      playFold() {
+        if (!this.enabled) return;
+        this.init();
+        const t = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(540, t);
+        osc.frequency.exponentialRampToValueAtTime(200, t + 0.18);
+
+        gain.gain.setValueAtTime(0.28, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc.start(t);
+        osc.stop(t + 0.21);
+      }
+
+      // 能量球飞行吸收音 (水滴清脆上升)
+      playEnergyAbsorb() {
+        if (!this.enabled) return;
+        this.init();
+        const t = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(520, t);
+        osc.frequency.exponentialRampToValueAtTime(1040, t + 0.14);
+
+        gain.gain.setValueAtTime(0.2, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc.start(t);
+        osc.stop(t + 0.16);
+      }
+
+      // 父节点充能完毕/章节通关结算大事件
+      playVictory() {
+        if (!this.enabled) return;
+        this.init();
+        const notes = [392, 523.25, 659.25, 783.99, 1046.5]; // G4, C5, E5, G5, C6
+        notes.forEach((freq, idx) => {
+          const t = this.ctx.currentTime + idx * 0.08;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(freq, t);
+
+          gain.gain.setValueAtTime(0.25, t);
+          gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+
+          osc.start(t);
+          osc.stop(t + 0.38);
+        });
+      }
+
+      // 评分按键反馈
+      playRate(type) {
+        if (!this.enabled) return;
+        this.init();
+        const t = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+
+        const freqs = {
+          'Again': 220,
+          'Hard': 330,
+          'Good': 520,
+          'Easy': 780
+        };
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freqs[type] || 440, t);
+        osc.frequency.exponentialRampToValueAtTime((freqs[type] || 440) * 1.25, t + 0.15);
+
+        gain.gain.setValueAtTime(0.3, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+
+        osc.start(t);
+        osc.stop(t + 0.22);
+      }
+    }
+
+    const sound = new SoundEngine();
+
+    /* ==========================================================================
+       2. 知识导图真实数据树结构 (突触传递与神经递质)
+       ========================================================================== */
+    const MINDMAP_DATA = {
+      id: "root",
+      text: "突触传递与神经调节",
+      subText: "神经生物学与突触生理机制",
+      isRoot: true,
+      children: [
+        {
+          id: "node_structure",
+          text: "突触结构组成",
+          children: [
+            { id: "leaf_pre", text: "突触前膜：富含突触小泡与电压门控钙通道" },
+            { id: "leaf_cleft", text: "突触间隙：宽约20nm，充满含水细胞外液" },
+            { id: "leaf_post", text: "突触后膜：分布高密度特异性神经递质受体" }
+          ]
+        },
+        {
+          id: "node_process",
+          text: "电-化学-电传递过程",
+          children: [
+            { id: "leaf_ca", text: "动作电位到达突触前膜，激活Ca²⁺内流" },
+            { id: "leaf_exo", text: "Ca²⁺触发突触小泡胞吐，囊泡与前膜融合释放递质" },
+            { id: "leaf_diffuse", text: "递质经突触间隙快速扩散并结合后膜受体" },
+            { id: "leaf_epsp", text: "激活离子通道引起膜电位变化(产生EPSP或IPSP)" }
+          ]
+        },
+        {
+          id: "node_transmitters",
+          text: "神经递质常见分类",
+          children: [
+            { id: "leaf_ach", text: "乙酰胆碱(ACh)：支配骨骼肌收缩与副交感神经节后纤维" },
+            { id: "leaf_mono", text: "单胺类：多巴胺、去甲肾上腺素及5-羟色胺(调控情绪动机)" },
+            { id: "leaf_amino", text: "氨基酸类：谷氨酸(中枢主要兴奋)与GABA(中枢主要抑制)" }
+          ]
+        }
+      ]
+    };
+
+    /* ==========================================================================
+       3. 导图状态与布局算法
+       状态流：
+       - unrevealed (未出现：不在画布上)
+       - hidden (待回忆：出现并显示封面「待回忆」)
+       - revealed (已翻开：原位翻开显示正文)
+       ========================================================================== */
+    const nodeStateMap = new Map(); // id -> { state, depth, parentId, childrenIds, element, x, y, width, height }
+    let allNodesList = [];
+
+    // 扁平化数据并建立拓扑关系
+    function traverseInit(node, parentId = null, depth = 0) {
+      const info = {
+        id: node.id,
+        text: node.text,
+        subText: node.subText || "",
+        isRoot: depth === 0,
+        isParent: !!(node.children && node.children.length > 0 && depth > 0),
+        isLeaf: !node.children || node.children.length === 0,
+        depth: depth,
+        parentId: parentId,
+        childrenIds: node.children ? node.children.map(c => c.id) : [],
+        // 初始状态：根卡直接为 revealed，其余均为 unrevealed
+        state: depth === 0 ? 'revealed' : 'unrevealed',
+        x: 0,
+        y: 0,
+        width: depth === 0 ? 250 : (node.children && node.children.length > 0 ? 255 : 270),
+        height: depth === 0 ? 115 : (node.children && node.children.length > 0 ? 90 : 85),
+      };
+      nodeStateMap.set(node.id, info);
+      allNodesList.push(info);
+
+      if (node.children) {
+        node.children.forEach(child => traverseInit(child, node.id, depth + 1));
+      }
+    }
+
+    // 计算树形导图绝对坐标 (左到右层级排列，避免重叠)
+    function computeLayout() {
+      const CARD_GAP_X = 175;
+      const SIBLING_GAP_Y = 26;
+      const START_X = 90;
+
+      // 递归计算子树总高度
+      function calculateSubtreeHeight(nodeId) {
+        const node = nodeStateMap.get(nodeId);
+        if (!node.childrenIds || node.childrenIds.length === 0) {
+          return node.height;
+        }
+        let total = 0;
+        node.childrenIds.forEach((cId, idx) => {
+          total += calculateSubtreeHeight(cId);
+          if (idx > 0) total += SIBLING_GAP_Y;
+        });
+        return Math.max(node.height, total);
+      }
+
+      // 递归设置坐标
+      function layoutNode(nodeId, x, startY) {
+        const node = nodeStateMap.get(nodeId);
+        node.x = x;
+
+        if (!node.childrenIds || node.childrenIds.length === 0) {
+          node.y = startY;
+          return node.height;
+        }
+
+        const subtreeH = calculateSubtreeHeight(nodeId);
+        node.y = startY + (subtreeH - node.height) / 2;
+
+        let curY = startY;
+        node.childrenIds.forEach(cId => {
+          const chH = calculateSubtreeHeight(cId);
+          layoutNode(cId, x + node.width + CARD_GAP_X, curY);
+          curY += chH + SIBLING_GAP_Y;
+        });
+
+        return subtreeH;
+      }
+
+      const rootNode = nodeStateMap.get("root");
+      const totalH = calculateSubtreeHeight("root");
+      const centerY = Math.max(100, (window.innerHeight - totalH) / 2 - 40);
+      layoutNode("root", START_X, centerY);
+    }
+
+    /* ==========================================================================
+       4. DOM 渲染与连线更新
+       ========================================================================== */
+    const worldEl = document.getElementById('world');
+    const cardsContainer = document.getElementById('cards-container');
+    const svgLinks = document.getElementById('svg-links');
+
+    function renderStage() {
+      // 1. 渲染 SVG 连线
+      renderLinks();
+
+      // 2. 渲染节点
+      allNodesList.forEach(node => {
+        let el = document.getElementById(`card-${node.id}`);
+
+        // 若处于 unrevealed 状态，确保不在画布中显示
+        if (node.state === 'unrevealed') {
+          if (el) {
+            el.remove();
+          }
+          return;
+        }
+
+        // 若已经在画布上，只需更新翻转状态与进度
+        if (el) {
+          updateCardDOMState(node, el);
+          return;
+        }
+
+        // 创建新卡片 DOM
+        el = createCardDOM(node);
+        cardsContainer.appendChild(el);
+        updateCardDOMState(node, el);
+      });
+    }
+
+    function createCardDOM(node) {
+      const el = document.createElement('div');
+      el.id = `card-${node.id}`;
+      el.className = `mind-card jelly-element ${node.isRoot ? 'card-root' : (node.isParent ? 'card-parent' : 'card-leaf')}`;
+      el.style.width = `${node.width}px`;
+      el.style.height = `${node.height}px`;
+      el.style.left = `${node.x}px`;
+      el.style.top = `${node.y}px`;
+
+      // 注册点击事件 (左键逐层推进/翻开，右键收卡)
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        handleCardLeftClick(node.id);
+      });
+
+      el.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        handleCardRightClick(node.id);
+      });
+
+      if (node.isRoot) {
+        el.innerHTML = `
+          <div class="card-body">
+            <span class="tag">MINDMAP ROOT</span>
+            <div class="text">${node.text}</div>
+            <div class="sub-hint">${node.subText}</div>
+          </div>
+        `;
+      } else if (node.isParent) {
+        el.innerHTML = `
+          <div class="card-body">
+            <div class="card-flipper" id="flipper-${node.id}">
+              <div class="card-face card-face-cover">
+                <div class="cover-badge">
+                  <div class="pulse-ring"></div>
+                  <span>待回忆</span>
+                </div>
+              </div>
+              <div class="card-face card-face-content">
+                <div style="width: 100%;">
+                  <div class="parent-header">
+                    <span>${node.text}</span>
+                    <span id="charge-text-${node.id}">0/${node.childrenIds.length}</span>
+                  </div>
+                  <div class="progress-track" style="margin-top: 8px;">
+                    <div class="progress-fill" id="charge-bar-${node.id}"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      } else {
+        // 叶子卡
+        el.innerHTML = `
+          <div class="card-body">
+            <div class="card-flipper" id="flipper-${node.id}">
+              <div class="card-face card-face-cover">
+                <div class="cover-badge">
+                  <div class="pulse-ring"></div>
+                  <span>待回忆</span>
+                </div>
+              </div>
+              <div class="card-face card-face-content">
+                ${node.text}
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      return el;
+    }
+
+    function updateCardDOMState(node, el) {
+      if (node.isRoot) return;
+
+      const flipper = el.querySelector(`#flipper-${node.id}`);
+      if (!flipper) return;
+
+      if (node.state === 'revealed') {
+        flipper.classList.add('is-flipped');
+      } else {
+        flipper.classList.remove('is-flipped');
+      }
+
+      // 如果是父卡，更新充能计数与进度条
+      if (node.isParent) {
+        const total = node.childrenIds.length;
+        let revealedCount = 0;
+        node.childrenIds.forEach(cId => {
+          if (nodeStateMap.get(cId).state === 'revealed') revealedCount++;
+        });
+
+        const bar = el.querySelector(`#charge-bar-${node.id}`);
+        const text = el.querySelector(`#charge-text-${node.id}`);
+        if (bar && text) {
+          const pct = Math.round((revealedCount / total) * 100);
+          bar.style.width = `${pct}%`;
+          text.innerText = `${revealedCount}/${total}`;
+          if (revealedCount === total) {
+            text.style.color = 'var(--success-green)';
+          }
+        }
+      }
+    }
+
+    function renderLinks() {
+      svgLinks.innerHTML = '';
+      allNodesList.forEach(node => {
+        if (!node.childrenIds) return;
+        node.childrenIds.forEach(childId => {
+          const childNode = nodeStateMap.get(childId);
+          // 只有当父卡出现且子卡已经出现（非 unrevealed）时才绘制连线
+          if (node.state !== 'unrevealed' && childNode.state !== 'unrevealed') {
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            
+            // 贝塞尔曲线连接：父卡右中点 -> 子卡左中点
+            const startX = node.x + node.width;
+            const startY = node.y + node.height / 2;
+            const endX = childNode.x;
+            const endY = childNode.y + childNode.height / 2;
+            const dx = endX - startX;
+            const cp1X = startX + dx * 0.45;
+            const cp2X = endX - dx * 0.45;
+
+            const d = `M ${startX} ${startY} C ${cp1X} ${startY}, ${cp2X} ${endY}, ${endX} ${endY}`;
+            path.setAttribute('d', d);
+
+            let statusClass = 'link-path';
+            if (childNode.state === 'revealed') {
+              statusClass += ' live';
+            }
+            path.setAttribute('class', statusClass);
+            path.id = `link-${node.id}-${childNode.id}`;
+            svgLinks.appendChild(path);
+          }
+        });
+      });
+    }
+
+    /* ==========================================================================
+       5. Game Feel 动效基础库 (Jelly, Squash, Shockwave, Orbs)
+       ========================================================================== */
+    // 果冻弹性冲击 (Squash & Stretch)
+    function applySquash(el, scaleX = 1.12, scaleY = 0.88, durationMs = 380) {
+      if (!el) return;
+      el.style.transition = `transform ${durationMs * 0.4}ms cubic-bezier(0.25, 1, 0.5, 1)`;
+      el.style.transform = `scale(${scaleX}, ${scaleY})`;
+      setTimeout(() => {
+        el.style.transition = `transform ${durationMs * 0.6}ms cubic-bezier(0.34, 1.56, 0.64, 1)`;
+        el.style.transform = 'scale(1, 1)';
+      }, durationMs * 0.4);
+    }
+
+    // 冲击波爆发扩散
+    function triggerShockwave(x, y, color = 'var(--accent-color)') {
+      const wave = document.createElement('div');
+      wave.className = 'shockwave-ring';
+      wave.style.left = `${x}px`;
+      wave.style.top = `${y}px`;
+      wave.style.borderColor = color;
+      worldEl.appendChild(wave);
+      setTimeout(() => wave.remove(), 700);
+    }
+
+    // 飘字奖励 (+100 EXP / PERFECT)
+    function showFloatingText(x, y, text) {
+      const ft = document.createElement('div');
+      ft.className = 'float-text';
+      ft.style.left = `${x}px`;
+      ft.style.top = `${y}px`;
+      ft.innerText = text;
+      worldEl.appendChild(ft);
+      setTimeout(() => ft.remove(), 900);
+    }
+
+    // 能量粒子向父卡飞行传导并吸收
+    function spawnEnergyOrb(fromX, fromY, toX, toY, onArrive) {
+      const orb = document.createElement('div');
+      orb.className = 'energy-orb';
+      orb.style.left = `${fromX}px`;
+      orb.style.top = `${fromY}px`;
+      worldEl.appendChild(orb);
+
+      // 飞行贝塞尔轨迹
+      const duration = 480;
+      const startTime = performance.now();
+      const controlX = (fromX + toX) / 2 + (Math.random() - 0.5) * 80;
+      const controlY = Math.min(fromY, toY) - 50 + (Math.random() - 0.5) * 40;
+
+      function animateOrb(time) {
+        const elapsed = time - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const ease = progress * (2 - progress); // easeOut
+
+        // 二次贝塞尔曲线公式
+        const x = (1 - ease) * (1 - ease) * fromX + 2 * (1 - ease) * ease * controlX + ease * ease * toX;
+        const y = (1 - ease) * (1 - ease) * fromY + 2 * (1 - ease) * ease * controlY + ease * ease * toY;
+
+        orb.style.left = `${x}px`;
+        orb.style.top = `${y}px`;
+
+        if (progress < 1) {
+          requestAnimationFrame(animateOrb);
+        } else {
+          orb.remove();
+          if (onArrive) onArrive();
+        }
+      }
+
+      requestAnimationFrame(animateOrb);
+    }
+
+    /* ==========================================================================
+       6. 核心业务与翻卡交互规则 (严密对齐规范)
+       - 左键规则：
+         1. 点「待回忆」：只翻开这一张的正文。
+         2. 点「已翻开」：推进它下面第一个未完成的层。
+            - 还有未出现子卡：同一层兄弟一起发出来，变成「待回忆」（从父卡边缘抽出发牌感）。
+            - 这一层都是「待回忆」：这一层一起翻开正文。
+       - 右键规则：
+         1. 把该卡全部后代收回，缩回该卡内，连线消失。
+         2. 叶子卡无后代，不操作。
+       ========================================================================== */
+    function handleCardLeftClick(nodeId) {
+      const node = nodeStateMap.get(nodeId);
+      if (!node) return;
+
+      const el = document.getElementById(`card-${node.id}`);
+
+      // 1. 点「待回忆」卡片：只将本卡翻开正文
+      if (node.state === 'hidden') {
+        // 反馈链：敲击 -> 判定定格 -> 翻转爆发 -> 能量传导 -> 父卡吸收
+        applySquash(el, 0.94, 1.08, 300);
+        sound.playFlip();
+
+        node.state = 'revealed';
+        updateCardDOMState(node, el);
+        renderLinks();
+
+        // 翻开爆发特效
+        const centerX = node.x + node.width / 2;
+        const centerY = node.y + node.height / 2;
+        triggerShockwave(centerX, centerY, 'rgba(0, 242, 254, 0.6)');
+
+        // 若有父卡，发射能量球回流充能
+        if (node.parentId) {
+          const parentNode = nodeStateMap.get(node.parentId);
+          const parentEl = document.getElementById(`card-${parentNode.id}`);
+          const pCenterX = parentNode.x + parentNode.width / 2;
+          const pCenterY = parentNode.y + parentNode.height / 2;
+
+          spawnEnergyOrb(centerX, centerY, pCenterX, pCenterY, () => {
+            sound.playEnergyAbsorb();
+            applySquash(parentEl, 1.08, 0.92, 280);
+            updateCardDOMState(parentNode, parentEl);
+
+            // 检查该分支是否全部完成
+            checkParentCompletion(parentNode);
+          });
+        }
+
+        checkWholeMindmapFinished();
+        return;
+      }
+
+      // 2. 点「已翻开」的卡片：推进它下面第一个未完成的层
+      if (node.state === 'revealed') {
+        if (!node.childrenIds || node.childrenIds.length === 0) {
+          // 叶子节点已翻开，轻击果冻回弹提示
+          applySquash(el, 1.06, 0.94, 260);
+          sound.playDeal(40);
+          return;
+        }
+
+        // 寻找下一层待推进的状态
+        advanceChildrenLayer(node);
+      }
+    }
+
+    function advanceChildrenLayer(parentNode) {
+      const parentEl = document.getElementById(`card-${parentNode.id}`);
+      applySquash(parentEl, 1.08, 0.92, 320);
+
+      const children = parentNode.childrenIds.map(id => nodeStateMap.get(id));
+
+      // 检查是否有尚未出现的子节点
+      const hasUnrevealed = children.some(c => c.state === 'unrevealed');
+
+      if (hasUnrevealed) {
+        // 第一步：从父卡边缘抽出发牌，兄弟卡一起发出来，状态变为「待回忆」
+        children.forEach((child, index) => {
+          if (child.state === 'unrevealed') {
+            child.state = 'hidden';
+
+            // 动画错峰间隔 (Jelly Batch Stagger 45ms)
+            setTimeout(() => {
+              // 创建 DOM
+              const childEl = createCardDOM(child);
+              
+              // 初始抽牌位置：紧贴父卡右侧边缘
+              childEl.style.transform = `translate(${parentNode.x - child.x + parentNode.width / 2}px, ${parentNode.y - child.y}px) scale(0.3)`;
+              childEl.style.opacity = '0';
+              cardsContainer.appendChild(childEl);
+
+              sound.playDeal(index * 30);
+
+              // 飞向目标点
+              requestAnimationFrame(() => {
+                childEl.style.transition = `transform 0.5s var(--spring-easing), opacity 0.35s ease`;
+                childEl.style.transform = 'translate(0, 0) scale(1)';
+                childEl.style.opacity = '1';
+                renderLinks();
+              });
+            }, index * 45);
+          }
+        });
+        return;
+      }
+
+      // 检查是否全都是「待回忆」
+      const allHidden = children.every(c => c.state === 'hidden');
+      const hasHidden = children.some(c => c.state === 'hidden');
+
+      if (hasHidden) {
+        // 第二步：整层一起翻开正文
+        children.forEach((child, index) => {
+          if (child.state === 'hidden') {
+            setTimeout(() => {
+              child.state = 'revealed';
+              const childEl = document.getElementById(`card-${child.id}`);
+              if (childEl) {
+                applySquash(childEl, 0.94, 1.08, 300);
+                sound.playFlip();
+                updateCardDOMState(child, childEl);
+                renderLinks();
+
+                // 爆发与能量回流
+                const cX = child.x + child.width / 2;
+                const cY = child.y + child.height / 2;
+                triggerShockwave(cX, cY, 'rgba(0, 242, 254, 0.5)');
+
+                const pX = parentNode.x + parentNode.width / 2;
+                const pY = parentNode.y + parentNode.height / 2;
+                spawnEnergyOrb(cX, cY, pX, pY, () => {
+                  sound.playEnergyAbsorb();
+                  applySquash(parentEl, 1.05, 0.95, 240);
+                  updateCardDOMState(parentNode, parentEl);
+                  checkParentCompletion(parentNode);
+                });
+              }
+            }, index * 60);
+          }
+        });
+
+        setTimeout(() => {
+          checkWholeMindmapFinished();
+        }, children.length * 60 + 400);
+        return;
+      }
+
+      // 若所有直接子节点已经都是 revealed，则向下递归推进孙子层
+      let advancedAny = false;
+      for (const child of children) {
+        if (child.isParent && child.childrenIds.length > 0) {
+          const grandChildren = child.childrenIds.map(id => nodeStateMap.get(id));
+          if (grandChildren.some(gc => gc.state !== 'revealed')) {
+            advanceChildrenLayer(child);
+            advancedAny = true;
+            break; // 每次推进一个未完成的分支
+          }
+        }
+      }
+
+      if (!advancedAny) {
+        applySquash(parentEl, 1.05, 0.95, 250);
+      }
+    }
+
+    // 右键收卡操作 (把后代收回本卡内)
+    function handleCardRightClick(nodeId) {
+      const node = nodeStateMap.get(nodeId);
+      if (!node) return;
+
+      // 叶子没有后代，右键不收回自己
+      if (!node.childrenIds || node.childrenIds.length === 0) {
+        return;
+      }
+
+      const parentEl = document.getElementById(`card-${node.id}`);
+      applySquash(parentEl, 0.92, 1.1, 350);
+      sound.playFold();
+
+      // 递归获取所有后代节点
+      const descendants = [];
+      function gather(currId) {
+        const curr = nodeStateMap.get(currId);
+        if (curr && curr.childrenIds) {
+          curr.childrenIds.forEach(cId => {
+            descendants.push(nodeStateMap.get(cId));
+            gather(cId);
+          });
+        }
+      }
+      gather(node.id);
+
+      // 缩回动效
+      descendants.forEach(d => {
+        if (d.state !== 'unrevealed') {
+          const dEl = document.getElementById(`card-${d.id}`);
+          if (dEl) {
+            dEl.style.transition = 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s ease';
+            dEl.style.transform = `translate(${node.x - d.x}px, ${node.y - d.y}px) scale(0.2)`;
+            dEl.style.opacity = '0';
+
+            setTimeout(() => {
+              dEl.remove();
+            }, 380);
+          }
+          // 状态重置回 unrevealed
+          d.state = 'unrevealed';
+        }
+      });
+
+      setTimeout(() => {
+        updateCardDOMState(node, parentEl);
+        renderLinks();
+      }, 400);
+    }
+
+    // 分支充能全满判定 (中事件反馈)
+    function checkParentCompletion(parentNode) {
+      const allDone = parentNode.childrenIds.every(id => nodeStateMap.get(id).state === 'revealed');
+      if (allDone) {
+        const pEl = document.getElementById(`card-${parentNode.id}`);
+        if (pEl) {
+          applySquash(pEl, 1.15, 0.85, 450);
+          showFloatingText(parentNode.x + parentNode.width / 2, parentNode.y, "+100 EXP");
+          triggerShockwave(parentNode.x + parentNode.width / 2, parentNode.y + parentNode.height / 2, 'var(--energy-gold)');
+        }
+      }
+    }
+
+    // 导图整体完成判定 (大事件高潮)
+    function checkWholeMindmapFinished() {
+      const allRevealed = allNodesList.every(n => n.state === 'revealed');
+      if (allRevealed) {
+        setTimeout(() => {
+          sound.playVictory();
+          const overlay = document.getElementById('celebration-overlay');
+          overlay.classList.add('active');
+        }, 600);
+      }
+    }
+
+    /* ==========================================================================
+       7. 导图评分与结算 (四档记忆评分)
+       ========================================================================== */
+    function handleRate(grade) {
+      sound.playRate(grade);
+      
+      const gradeText = {
+        'Again': '忘记 · 已记录复习队列',
+        'Hard': '困难 · 下次记忆强化',
+        'Good': '记得 · 节奏良好',
+        'Easy': '轻松 · 完美掌握'
+      }[grade];
+
+      // 视觉奖励飘字
+      const rootNode = nodeStateMap.get("root");
+      showFloatingText(rootNode.x + rootNode.width / 2, rootNode.y - 20, `${gradeText}`);
+      const rootEl = document.getElementById(`card-${rootNode.id}`);
+      applySquash(rootEl, 1.12, 0.88, 380);
+
+      // 短暂高亮对应评分按钮
+      const overlay = document.getElementById('celebration-overlay');
+      if (overlay.classList.contains('active')) {
+        document.getElementById('celebration-score-text').innerText = `导图评分已完成：${gradeText}`;
+      }
+    }
+
+    function resetGraph() {
+      document.getElementById('celebration-overlay').classList.remove('active');
+      allNodesList.forEach(node => {
+        node.state = node.isRoot ? 'revealed' : 'unrevealed';
+      });
+      cardsContainer.innerHTML = '';
+      renderStage();
+    }
+
+    /* ==========================================================================
+       8. 舞台画布平移拖动与视口交互
+       ========================================================================== */
+    let isDragging = false;
+    let startX = 0, startY = 0;
+    let panX = 0, panY = 0;
+
+    const stageContainer = document.getElementById('stage-container');
+
+    stageContainer.addEventListener('mousedown', (e) => {
+      // 仅在空白处拖动
+      if (e.target.closest('.mind-card')) return;
+      isDragging = true;
+      startX = e.clientX - panX;
+      startY = e.clientY - panY;
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      panX = e.clientX - startX;
+      panY = e.clientY - startY;
+      worldEl.style.transform = `translate(${panX}px, ${panY}px)`;
+    });
+
+    window.addEventListener('mouseup', () => {
+      isDragging = false;
+    });
+
+    // 快捷控制绑定
+    document.getElementById('btn-reset').addEventListener('click', resetGraph);
+
+    const soundToggleBtn = document.getElementById('btn-sound-toggle');
+    const soundIcon = document.getElementById('sound-icon');
+    const soundLabel = document.getElementById('sound-label');
+
+    soundToggleBtn.addEventListener('click', () => {
+      sound.enabled = !sound.enabled;
+      if (sound.enabled) {
+        soundIcon.innerText = '🔊';
+        soundLabel.innerText = '音效: 开启';
+      } else {
+        soundIcon.innerText = '🔇';
+        soundLabel.innerText = '音效: 关闭';
+      }
+    });
+
+    /* ==========================================================================
+       9. 页面初始化启动
+       ========================================================================== */
+    window.addEventListener('DOMContentLoaded', () => {
+      traverseInit(MINDMAP_DATA);
+      computeLayout();
+      renderStage();
+    });
+
+    window.addEventListener('resize', () => {
+      computeLayout();
+      // 更新所有已在舞台中的卡片位置
+      allNodesList.forEach(node => {
+        const el = document.getElementById(`card-${node.id}`);
+        if (el) {
+          el.style.left = `${node.x}px`;
+          el.style.top = `${node.y}px`;
+        }
+      });
+      renderLinks();
+    });
+  </script>
+</body>
+</html>

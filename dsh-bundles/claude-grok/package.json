@@ -1,9 +1,9 @@
 {
   "name": "@local/dsh-claude-grok",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "private": true,
   "type": "module",
-  "description": "Joint mode: Grok reads and edits code; Claude only designs and reviews.",
+  "description": "Joint mode: the selected model reads, designs, and edits. Review is fixed to Claude Sonnet medium.",
   "icon": "./icon.svg",
   "exports": {
     ".": "./index.js",

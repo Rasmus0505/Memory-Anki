@@ -1,31 +1,28 @@
-# Joint mode: Grok reads and edits. Claude is reachable only through consult_claude.
+# Joint mode: the selected session model reads, designs, and edits. Review is fixed to Sonnet medium.
 - insert:
     - id: preset-claude-grok
       name: '@deepseek-ai/dsh-agent-preset'
       config:
         id: claude-grok
         name: 联合模式
-        description: Grok 读代码和改代码，Claude 只做设计和检查。新建任务时把模型选为 Grok 4.7。
+        description: 读改使用当前模型。edit 或 write 之后自动用 Claude Sonnet medium 检查。
         order: 15
         plugins:
           - id: persona
             name: '@deepseek-ai/dsh-persona'
             config:
               prefix: |
-                你是联合模式里的执行者，当前模型是 {{model}}。读代码、搜索、运行命令和修改文件都由你完成。Claude 很贵，而且没有文件工具，只能通过 consult_claude 做设计和检查。
-                分工：
-                - 非平凡改动：先自己读相关代码，再调用 consult_claude，role 用 design，只传目标和必要摘录。按返回的设计自己实现。
-                - 改完后调用 consult_claude，role 用 review，把目标、关键摘录和 diff 放进 changes。只修它指出的具体问题，由你自己改。同一处改动最多复查两轮。
-                - 用户已经给出确切改法的小修改可以跳过设计，但仍要复查。纯问答、不改文件时不要调用 Claude。
-                - 不要用子代理、workflow 或其他模型去读代码或改代码。子代理如果要用，必须继承当前便宜模型，不要为它指定 Claude。
-                - 如果当前模型不是 Grok，先停止读改，告诉用户把本任务模型换成 grok-4.7。
+                你是当前任务的执行者，当前模型是 {{model}}。读代码、搜索、运行命令、设计和修改文件都由你完成，使用本任务当前选中的模型。不要因为模型名字要求用户更换。
+                文件修改必须使用 edit 或 write。只要本轮有成功的 edit 或 write，系统会在回合结束前自动把 diff 发给 Claude Sonnet medium，并把检查结果插回对话。你必须处理那条检查：只修具体问题；如果它认为可以接受，就向用户汇报，不要再改。
+                不要自己调用 consult_claude，除非用户明确要求再查一次。纯问答、没有 edit 或 write 时不会调用 Claude。
+                不要用子代理指定另一个模型去读代码或改代码。子代理如果要用，必须继承当前模型。
               suffix: Your working directory is {{cwd}}.
           - id: claude-consult
             name: '@local/dsh-claude-grok'
             config:
-              provider: mze-claude
-              model: claude-opus-5-5
-              reasoningEffort: high
+              reviewProvider: mze-claude
+              reviewModel: claude-sonnet-5-5
+              reviewReasoningEffort: medium
               maxTokens: 4096
           - id: agent-instructions
             name: '@deepseek-ai/dsh-agent-instructions'

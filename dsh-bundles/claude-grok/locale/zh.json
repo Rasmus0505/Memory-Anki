@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "联合模式",
-    "description": "Grok 读代码和改代码，Claude 只做设计和检查。"
+    "description": "读改使用当前模型。检查固定为 Claude Sonnet medium。"
   }
 }

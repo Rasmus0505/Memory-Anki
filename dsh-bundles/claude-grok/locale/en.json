@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Joint mode",
-    "description": "Grok reads and edits code. Claude only designs and reviews."
+    "description": "The selected model reads, designs, and edits. Review is fixed to Claude Sonnet medium."
   }
 }
