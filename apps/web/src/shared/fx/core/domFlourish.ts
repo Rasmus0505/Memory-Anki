@@ -61,6 +61,50 @@ export function flashVignette(playback?: FxPlayback) {
   mountTransient(document.body, 'freestyle-fx-vignette', 950, playback)
 }
 
+/**
+ * One judgment freeze. A second call inside the window is ignored so a parent
+ * stamp and a unit clear in the same moment do not stack.
+ */
+let hitStopUntil = 0
+export function hitStop(ms = 60) {
+  if (ms <= 0 || typeof document === 'undefined' || typeof document.getAnimations !== 'function') return
+  const now = performance.now()
+  if (now < hitStopUntil) return
+  hitStopUntil = now + ms
+  const paused = document.getAnimations().filter((animation) => animation.playState === 'running')
+  paused.forEach((animation) => animation.pause())
+  window.setTimeout(() => {
+    paused.forEach((animation) => {
+      if (animation.playState === 'paused') animation.play()
+    })
+  }, ms)
+}
+
+/** Rail catch. Scales the bar, not the card glyphs. */
+export function absorbElement(element: Element | null | undefined, kind: 'dull' | 'clean' | 'jackpot') {
+  if (!canAnimate(element)) return
+  const peak = kind === 'jackpot' ? '1 1.18' : kind === 'clean' ? '1 1.08' : '1 1.03'
+  const settle = kind === 'dull' ? '1 1' : '1 0.98'
+  element.animate(
+    [{ scale: '1 1' }, { scale: peak, offset: 0.42 }, { scale: settle, offset: 0.72 }, { scale: '1 1' }],
+    { duration: kind === 'dull' ? 220 : 380, easing: 'cubic-bezier(0.2, 1.4, 0.4, 1)' },
+  )
+}
+
+/** Halo only. Never scales the card, so revealed text stays crisp. */
+export function pulseHalo(element: Element | null | undefined, strong = false) {
+  if (!canAnimate(element)) return
+  const spread = strong ? 10 : 6
+  element.animate(
+    [
+      { boxShadow: '0 0 0 0 transparent' },
+      { boxShadow: `0 0 0 ${spread}px hsl(32 90% 56% / 0.34)`, offset: 0.4 },
+      { boxShadow: '0 0 0 0 transparent' },
+    ],
+    { duration: strong ? 460 : 320, easing: 'cubic-bezier(0.2, 1.4, 0.4, 1)' },
+  )
+}
+
 /** Micro screen shake for intense tactile impact on ratings. */
 export function shakeScreen(intensity = 1.0) {
   if (intensity <= 0) return

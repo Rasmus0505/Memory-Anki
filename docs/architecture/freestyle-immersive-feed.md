@@ -120,7 +120,11 @@ committed cursor and does not insert retries. Finger/wheel paging
 commits `active` only after scroll settle so a mid-gesture index change cannot close one
 encounter and open another. The review map stays pannable (`mobileViewPolicy` defaults to
 `auto`); one-finger drag on the canvas pans the tree and is not yielded to the snap
-scroller. The right pager is the same three buttons on PWA and desktop: 上一张, 下一张,
+scroller. Live review maps need a transform-free mind-map ancestor: the snap-depth
+animation must not run on a card that contains `.memory-anki-mindmap-viewport`, and
+backdrop blur over that canvas stays off, so flip frames are not recaptured through
+`filter: blur()`. Node positions are not CSS-transitioned. The right pager is the
+same three buttons on PWA and desktop: 上一张, 下一张,
 and 完成. 上一张 / 下一张 always page cards, including while the rating
 scope is 宫殿; they must not disable themselves when the round has only one
 palace. There is no palace-skip control.

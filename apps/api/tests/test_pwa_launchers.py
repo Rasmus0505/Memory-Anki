@@ -520,6 +520,19 @@ def test_manual_batch_start_keeps_launcher_console_visible():
     assert "-WindowStyle Hidden" not in launcher
 
 
+def test_windows_electron_disables_gpu_before_ready():
+    electron_main = (ROOT / "apps" / "desktop-timer" / "main.cjs").read_text(encoding="utf-8")
+    gpu_guard = electron_main.split("const READY_FILE", 1)[1].split("let mainWindow", 1)[0]
+
+    assert "must run under Electron" in electron_main
+    assert "disableHardwareAcceleration()" in gpu_guard
+    assert "disable-gpu" in gpu_guard
+    assert "setPath('userData'" in electron_main
+    assert "electron-user-data" in electron_main
+    assert electron_main.index("setPath('userData'") < electron_main.index("requestSingleInstanceLock()")
+    assert gpu_guard.index("disableHardwareAcceleration()") < electron_main.index("app.whenReady()")
+
+
 def test_hidden_desktop_timer_overlay_is_not_kept_on_screen():
     electron_main = (ROOT / "apps" / "desktop-timer" / "main.cjs").read_text(encoding="utf-8")
     ready = electron_main.split("function writeDesktopReady()", 1)[1].split("\n}\n", 1)[0]
@@ -537,6 +550,9 @@ def test_desktop_launcher_detaches_after_electron_ready_signal():
     electron_main = (ROOT / "apps" / "desktop-timer" / "main.cjs").read_text(encoding="utf-8")
 
     assert 'env["MEMORY_ANKI_DESKTOP_READY_FILE"]' in desktop_timer
+    assert "electron.exe" in desktop_timer
+    assert "--disable-gpu" in desktop_timer
+    assert '"main.cjs"' in desktop_timer
     assert "process = subprocess.Popen(" in desktop_timer
     assert "ready_path.is_file()" in desktop_timer
     assert "ready signal after process exit" in desktop_timer

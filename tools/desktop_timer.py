@@ -69,12 +69,16 @@ def main() -> int:
     log(f"Shared service ready after {time.perf_counter() - started_at:.2f}s")
     ensure_shared_tray()
 
-    npm = dev_server._resolve_npm()
     if not pwa_server._ensure_desktop_runtime():
         log("Electron runtime repair failed")
         return 1
+    electron_exe = WEB_DIR / "node_modules" / "electron" / "dist" / "electron.exe"
+    if not electron_exe.is_file():
+        log(f"Electron binary missing: {electron_exe}")
+        return 1
     ready_path = dev_server.LOGS_DIR / f"desktop-ready-{uuid.uuid4().hex}.json"
     env = os.environ.copy()
+    env.pop("ELECTRON_RUN_AS_NODE", None)
     env["MEMORY_ANKI_DESKTOP_URL"] = FRONTEND_URL
     env["MEMORY_ANKI_TIMER_OVERLAY_URL"] = f"{FRONTEND_URL.rstrip('/')}/timer-overlay"
     env["MEMORY_ANKI_DESKTOP_READY_FILE"] = str(ready_path)
@@ -84,9 +88,16 @@ def main() -> int:
         # Use console-hide flags only. DETACHED + SW_HIDE (hidden_process_kwargs)
         # can make the Electron BrowserWindow start with WS_VISIBLE cleared, so
         # the launcher reports "ready" while the main window never appears.
+        # Launch electron.exe directly so npm cannot run the script as Node.
         process = subprocess.Popen(
-            [npm, "run", "desktop:timer"],
-            cwd=str(WEB_DIR),
+            [
+                str(electron_exe),
+                "--disable-gpu",
+                "--disable-gpu-sandbox",
+                "--no-sandbox",
+                "main.cjs",
+            ],
+            cwd=str(REPO_ROOT / "apps" / "desktop-timer"),
             env=env,
             stdout=log_file,
             stderr=subprocess.STDOUT,
@@ -111,8 +122,12 @@ def main() -> int:
                         " (ready signal after process exit)"
                     )
                     return 0
-                log(f"Desktop exited before ready with code {return_code}")
-                return int(return_code or 1)
+                signed_code = return_code if return_code <= 0x7FFFFFFF else return_code - (1 << 32)
+                log(
+                    "Desktop exited before ready with code "
+                    f"{return_code} (signed {signed_code})"
+                )
+                return int(signed_code or 1)
             time.sleep(0.2)
         log("Desktop readiness timed out")
         dev_server.kill_process_tree(process.pid)

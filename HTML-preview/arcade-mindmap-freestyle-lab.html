@@ -1,0 +1,2166 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Memory Anki - 随心模式与导图街机手感决策沙盒 (High-Fidelity Prototype Lab)</title>
+  <style>
+    /* ========================================================
+       CSS RESET & DESIGN TOKENS (BASED ON REAL MEMORY ANKI)
+       ======================================================== */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    :root {
+      /* Typography */
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      --font-mono: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+      --font-display: 'Impact', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+      /* App Chrome (Dark Espresso Sidebar & Frame from screenshot) */
+      --sidebar-bg: #1c1613;
+      --sidebar-border: #2e241f;
+      --sidebar-active: #d97706;
+      --sidebar-active-bg: rgba(217, 119, 6, 0.16);
+      --sidebar-text: #b5a498;
+      --sidebar-text-bright: #f5eee6;
+
+      /* Top Chrome */
+      --topbar-bg: #1e1814;
+      --topbar-border: #2c221c;
+
+      /* Canvas Stage (Default: Memory Anki Warm Paper) */
+      --canvas-bg: #fbf9f5;
+      --canvas-grid: rgba(0, 0, 0, 0.035);
+      --node-bg: #ffffff;
+      --node-border: #22c55e;
+      --node-text: #1f2937;
+      --node-shadow: 0 4px 18px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04);
+      --branch-stroke: #10b981;
+      --branch-glow: rgba(160, 185, 129, 0.4);
+
+      /* Bottom Dock (Authentic Dark Translucent Glass) */
+      --dock-bg: rgba(24, 18, 15, 0.94);
+      --dock-border: #3d2e24;
+      --dock-shadow: 0 12px 40px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.05);
+
+      /* Grade Colors (Authentic Memory Anki Palettes) */
+      --grade-1-bg: #2a1616;
+      --grade-1-border: #e11d48;
+      --grade-1-dot: #f43f5e;
+      --grade-2-bg: #2b2014;
+      --grade-2-border: #d97706;
+      --grade-2-dot: #f59e0b;
+      --grade-3-bg: #16261a;
+      --grade-3-border: #16a34a;
+      --grade-3-dot: #22c55e;
+      --grade-4-bg: #14252a;
+      --grade-4-border: #0891b2;
+      --grade-4-dot: #06b6d4;
+
+      /* Spring Ease */
+      --spring-snap: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      --spring-jelly: cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    /* THEME OVERRIDES FOR ARCADE TASTE */
+    /* Theme A: Dark Roguelike / Hades */
+    body[data-theme="dark"] {
+      --canvas-bg: #120e17;
+      --canvas-grid: rgba(255, 255, 255, 0.03);
+      --node-bg: #1b1524;
+      --node-border: #8b5cf6;
+      --node-text: #f3e8ff;
+      --node-shadow: 0 8px 30px rgba(0, 0, 0, 0.7), 0 0 20px rgba(139, 92, 246, 0.2);
+      --branch-stroke: #a855f7;
+      --branch-glow: rgba(168, 85, 247, 0.6);
+      --dock-bg: rgba(18, 12, 26, 0.95);
+      --dock-border: #4c1d95;
+    }
+
+    /* Theme B: Dopamine Jelly */
+    body[data-theme="jelly"] {
+      --canvas-bg: #fff5f8;
+      --canvas-grid: rgba(255, 105, 180, 0.06);
+      --node-bg: #ffffff;
+      --node-border: #ff6b8b;
+      --node-text: #2d3436;
+      --node-shadow: 0 10px 25px rgba(255, 107, 139, 0.2);
+      --branch-stroke: #ff6b8b;
+      --branch-glow: rgba(255, 107, 139, 0.5);
+    }
+
+    /* Theme C: Paper Minimal (Screenshot True) */
+    body[data-theme="paper"] {
+      /* Uses default tokens */
+    }
+
+    html, body {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      font-family: var(--font-sans);
+      background: #000;
+      color: #fff;
+    }
+
+    /* ========================================================
+       APPLICATION WINDOW CHROME
+       ======================================================== */
+    #desktop-window {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: #140f0c;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Particle Overlay Canvas */
+    #fx-canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 999;
+    }
+
+    /* Screen Flash Overlay */
+    #flash-overlay {
+      position: absolute;
+      inset: 0;
+      background: #ffffff;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 1000;
+    }
+
+    /* Top Window Bar */
+    .window-title-bar {
+      height: 34px;
+      background: #181310;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 12px;
+      font-size: 0.75rem;
+      color: #8c7d73;
+      border-bottom: 1px solid #231b16;
+      flex-shrink: 0;
+      user-select: none;
+    }
+    .window-title-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .window-menu-items {
+      display: flex;
+      gap: 12px;
+      color: #ab9b90;
+    }
+    .window-title-right {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .win-btn {
+      cursor: pointer;
+      color: #7b6d64;
+      font-size: 0.85rem;
+    }
+    .win-btn:hover { color: #fff; }
+
+    /* Main App Body (Sidebar + Content Workspace) */
+    .app-workspace {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* ========================================================
+       LEFT SIDEBAR (MEMORY ANKI TRUE REPLICA)
+       ======================================================== */
+    .sidebar {
+      width: 200px;
+      background: var(--sidebar-bg);
+      border-right: 1px solid var(--sidebar-border);
+      display: flex;
+      flex-direction: column;
+      padding: 14px 10px;
+      flex-shrink: 0;
+      z-index: 20;
+    }
+
+    .user-profile-card {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      margin-bottom: 18px;
+    }
+    .user-avatar-badge {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      background: #e67e22;
+      color: #fff;
+      font-weight: 800;
+      font-size: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 8px rgba(230, 126, 34, 0.4);
+    }
+    .user-profile-meta {
+      display: flex;
+      flex-direction: column;
+    }
+    .user-name {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--sidebar-text-bright);
+    }
+    .user-sub {
+      font-size: 0.68rem;
+      color: #8f7d71;
+    }
+    .dev-chip {
+      display: inline-block;
+      font-family: var(--font-mono);
+      font-size: 0.6rem;
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      border-radius: 4px;
+      padding: 1px 5px;
+      margin-top: 3px;
+      align-self: flex-start;
+    }
+
+    /* Navigation Menu */
+    .nav-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      flex: 1;
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      border-radius: 10px;
+      color: var(--sidebar-text);
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .nav-item:hover {
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--sidebar-text-bright);
+    }
+    .nav-item.active {
+      background: var(--sidebar-active-bg);
+      color: #fbbf24;
+      border: 1px solid rgba(251, 191, 36, 0.25);
+      box-shadow: 0 0 15px rgba(251, 191, 36, 0.12);
+    }
+    .nav-item-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .nav-item-icon {
+      font-size: 1.05rem;
+    }
+    .nav-chevron {
+      font-size: 0.75rem;
+      opacity: 0.6;
+    }
+
+    /* Sidebar Footer */
+    .sidebar-footer {
+      border-top: 1px solid var(--sidebar-border);
+      padding-top: 12px;
+    }
+
+    /* ========================================================
+       CENTER STAGE & TOP PROGRESS RAIL
+       ======================================================== */
+    .main-viewport {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+      background: var(--canvas-bg);
+    }
+
+    /* TOP DUAL-TIER HEADER BAR */
+    .top-action-bar {
+      background: var(--topbar-bg);
+      border-bottom: 1px solid var(--topbar-border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      z-index: 30;
+    }
+
+    /* Tier 1: Authentic Memory Anki Progress Rail */
+    .progress-rail-container {
+      padding: 8px 18px 4px 18px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .rail-history-nav {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #a89a8f;
+    }
+    .rail-btn-icon {
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.75rem;
+      color: #b5a59a;
+      transition: background 0.15s;
+    }
+    .rail-btn-icon:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
+    }
+
+    /* The Segmented Multi-colored Tick Track */
+    .freestyle-ticks-track {
+      flex: 1;
+      height: 18px;
+      display: flex;
+      align-items: center;
+      position: relative;
+      padding: 0 4px;
+      gap: 3px;
+    }
+    .tick-segment {
+      flex: 1;
+      height: 5px;
+      border-radius: 2px;
+      background: #3a2c22;
+      transition: all 0.25s ease;
+      position: relative;
+    }
+    .tick-segment.done-orange { background: #ea580c; }
+    .tick-segment.done-green { background: #22c55e; }
+    .tick-segment.done-blue { background: #06b6d4; }
+    .tick-segment.done-dark { background: #451a03; }
+
+    /* Active Playhead Bubble (The exact `(2)` badge from screenshot) */
+    .playhead-bubble {
+      position: absolute;
+      left: 12%;
+      top: -5px;
+      background: #d97706;
+      color: #fff;
+      border-radius: 999px;
+      padding: 1px 7px;
+      font-size: 0.68rem;
+      font-weight: 800;
+      font-family: var(--font-mono);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      border: 1.5px solid #fbbf24;
+      box-shadow: 0 0 14px rgba(245, 158, 11, 0.7);
+      animation: playheadBreath 1.6s infinite alternate ease-in-out;
+      cursor: pointer;
+      z-index: 10;
+      transform-origin: center;
+    }
+    @keyframes playheadBreath {
+      0% { transform: scale(0.96); box-shadow: 0 0 8px rgba(245, 158, 11, 0.5); }
+      100% { transform: scale(1.12); box-shadow: 0 0 20px rgba(245, 158, 11, 0.95); }
+    }
+    .playhead-bubble.pump {
+      animation: playheadPump 0.4s ease-out;
+    }
+    @keyframes playheadPump {
+      0% { transform: scale(1); }
+      40% { transform: scale(1.5) rotate(5deg); filter: brightness(1.8); }
+      100% { transform: scale(1); filter: brightness(1); }
+    }
+
+    /* Small Rating Stamps on the rail (1 1 1 1, 2, 4) */
+    .rail-stamp-group {
+      position: absolute;
+      display: flex;
+      gap: 3px;
+      top: -3px;
+    }
+    .rail-mini-badge {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      font-size: 0.55rem;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+    }
+    .badge-orange { background: #ea580c; }
+    .badge-green { background: #16a34a; }
+
+    /* Top Tags & Status */
+    .top-meta-tags {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.72rem;
+      font-family: var(--font-mono);
+    }
+    .tag-bubble-orange {
+      background: #7c2d12;
+      color: #fdba74;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-weight: 700;
+    }
+    .tag-bubble-neutral {
+      color: #a89a8f;
+    }
+    .tag-bubble-commission {
+      background: #1c1917;
+      border: 1px solid #44352a;
+      color: #f59e0b;
+      padding: 2px 8px;
+      border-radius: 999px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    /* Tier 2: Breadcrumb & Mindmap Auxiliary Toolbar */
+    .toolbar-sub-row {
+      padding: 4px 18px 8px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .breadcrumb-title-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #1f2937;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+    .breadcrumb-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #ea580c;
+    }
+    .breadcrumb-badge {
+      background: #dcfce7;
+      color: #16a34a;
+      font-size: 0.68rem;
+      font-family: var(--font-mono);
+      padding: 1px 6px;
+      border-radius: 999px;
+      font-weight: 700;
+    }
+
+    /* Canvas Tool Icons (copy, text, redo, zoom, palette) */
+    .canvas-tools-dock {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: #241c17;
+      padding: 3px 8px;
+      border-radius: 8px;
+      border: 1px solid #332720;
+    }
+    .canvas-tool-btn {
+      color: #9c8b7f;
+      cursor: pointer;
+      font-size: 0.8rem;
+      padding: 3px 6px;
+      border-radius: 4px;
+      transition: all 0.15s;
+    }
+    .canvas-tool-btn:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.08);
+    }
+    .palette-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    /* Style Pill Switcher & Drawer Trigger */
+    .top-right-tools {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .theme-quick-select {
+      display: flex;
+      background: #140f0c;
+      padding: 2px;
+      border-radius: 999px;
+      border: 1px solid #3a2b22;
+    }
+    .theme-quick-btn {
+      background: transparent;
+      border: none;
+      color: #8c7d73;
+      font-size: 0.72rem;
+      padding: 3px 10px;
+      border-radius: 999px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+    .theme-quick-btn.active {
+      background: #d97706;
+      color: #fff;
+    }
+
+    /* ========================================================
+       MIND MAP WORKSPACE CANVAS (SVG TREE + NODES)
+       ======================================================== */
+    .mindmap-canvas-container {
+      flex: 1;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      background-image: 
+        radial-gradient(circle, var(--canvas-grid) 1px, transparent 1px);
+      background-size: 24px 24px;
+      perspective: 1000px;
+    }
+
+    .mindmap-board {
+      position: relative;
+      width: 1100px;
+      height: 520px;
+      transform-style: preserve-3d;
+      transition: transform 0.12s ease-out;
+    }
+
+    /* SVG Connecting Curves */
+    .mindmap-svg-layer {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 5;
+    }
+    .branch-line {
+      fill: none;
+      stroke: var(--branch-stroke);
+      stroke-width: 4px;
+      stroke-linecap: round;
+      transition: stroke 0.3s, stroke-width 0.3s;
+    }
+    .branch-line.active {
+      stroke-width: 6px;
+      filter: drop-shadow(0 0 10px var(--branch-glow));
+    }
+    .branch-pulse-flow {
+      fill: none;
+      stroke: #ffffff;
+      stroke-width: 5px;
+      stroke-dasharray: 20 60;
+      stroke-dashoffset: 600;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .branch-pulse-flow.flowing {
+      opacity: 1;
+      animation: electricPulse 1s linear infinite;
+    }
+    @keyframes electricPulse {
+      from { stroke-dashoffset: 160; }
+      to { stroke-dashoffset: 0; }
+    }
+
+    /* Node Components */
+    .node-box {
+      position: absolute;
+      background: var(--node-bg);
+      color: var(--node-text);
+      box-shadow: var(--node-shadow);
+      border-radius: 18px;
+      padding: 16px 22px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      z-index: 10;
+      transform-style: preserve-3d;
+      transition: transform 0.25s var(--spring-snap), border-color 0.25s, box-shadow 0.25s, opacity 0.25s;
+    }
+    .node-box:hover {
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12), 0 0 20px var(--branch-glow);
+    }
+    .node-box.dimmed {
+      opacity: 0.35;
+      filter: grayscale(0.4) blur(0.8px);
+    }
+
+    /* 1. Root Subject Node (Exact match: "Using AI to Free Up Attention") */
+    #node-root-subject {
+      left: 30px;
+      top: 215px;
+      width: 250px;
+      height: 70px;
+      border: 3px solid #f59e0b;
+      box-shadow: 0 4px 20px rgba(245, 158, 11, 0.25), var(--node-shadow);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .root-title-text {
+      font-size: 1.15rem;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+      color: #111827;
+      text-align: center;
+    }
+    body[data-theme="dark"] .root-title-text { color: #fef08a; }
+
+    /* 2. Intermediate Question Node ("How do you use AI on a long commute?") */
+    #node-question {
+      left: 330px;
+      top: 205px;
+      width: 290px;
+      height: 90px;
+      border: 2px solid #22c55e;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 12px 18px;
+      text-align: center;
+    }
+    .question-title-text {
+      font-size: 1rem;
+      font-weight: 600;
+      line-height: 1.4;
+      color: #374151;
+    }
+    body[data-theme="dark"] .question-title-text { color: #e5e7eb; }
+
+    /* 3. Branch Target Answer Nodes (Upper & Lower Answers) */
+    .answer-card {
+      left: 670px;
+      width: 360px;
+      min-height: 125px;
+      border: 2px solid #22c55e;
+      border-radius: 16px;
+      padding: 16px 20px;
+      font-size: 0.95rem;
+      line-height: 1.6;
+      color: #1f2937;
+      overflow: hidden;
+      position: absolute;
+    }
+    body[data-theme="dark"] .answer-card { color: #f3f4f6; }
+
+    #node-answer-1 { top: 90px; }
+    #node-answer-2 { top: 280px; }
+
+    .answer-card strong {
+      color: #047857;
+      background: rgba(16, 185, 129, 0.12);
+      padding: 1px 4px;
+      border-radius: 4px;
+    }
+    body[data-theme="dark"] .answer-card strong {
+      color: #34d399;
+      background: rgba(52, 211, 153, 0.16);
+    }
+
+    /* Mist / Frost Seal on Target Answer Card */
+    .answer-seal-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(255, 255, 255, 0.88);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      z-index: 25;
+      transition: opacity 0.3s ease, transform 0.35s var(--spring-snap);
+    }
+    body[data-theme="dark"] .answer-seal-overlay {
+      background: rgba(18, 12, 26, 0.92);
+    }
+    .seal-rune-icon {
+      font-size: 1.6rem;
+      animation: sealFloat 1.8s infinite alternate ease-in-out;
+    }
+    @keyframes sealFloat {
+      0% { transform: translateY(-2px) scale(0.96); }
+      100% { transform: translateY(2px) scale(1.05); }
+    }
+    .seal-tag-instruction {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      font-weight: 700;
+      background: rgba(0, 0, 0, 0.75);
+      color: #fff;
+      padding: 3px 10px;
+      border-radius: 999px;
+    }
+
+    /* Unsealed revealed state */
+    .answer-card.unsealed .answer-seal-overlay {
+      opacity: 0;
+      pointer-events: none;
+      transform: scale(1.1) rotate(2deg);
+    }
+
+    /* Nemesis Revenge Chain Overlay */
+    .nemesis-chain-wrap {
+      position: absolute;
+      inset: 0;
+      border: 3px solid #e11d48;
+      background: radial-gradient(circle, rgba(225, 29, 72, 0.15) 0%, rgba(40, 0, 10, 0.7) 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 20;
+      pointer-events: none;
+      opacity: 0;
+      transform: scale(1.04);
+      transition: all 0.3s ease;
+    }
+    .nemesis-chain-wrap.active {
+      opacity: 1;
+      transform: scale(1);
+      box-shadow: inset 0 0 25px #e11d48, 0 0 20px #e11d48;
+    }
+    .nemesis-chain-badge {
+      background: #e11d48;
+      color: #fff;
+      font-family: var(--font-display);
+      font-size: 0.85rem;
+      letter-spacing: 0.08em;
+      padding: 4px 12px;
+      border-radius: 4px;
+      box-shadow: 0 0 12px #e11d48;
+      animation: nemesisPulse 0.8s infinite alternate;
+    }
+    @keyframes nemesisPulse {
+      from { transform: scale(0.96); opacity: 0.85; }
+      to { transform: scale(1.06); opacity: 1; }
+    }
+
+    /* Floating Right Edge Navigation Capsule */
+    .canvas-right-dock {
+      position: absolute;
+      right: 22px;
+      top: 50%;
+      transform: translateY(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      z-index: 40;
+    }
+    .yd-dict-badge {
+      width: 32px;
+      height: 32px;
+      background: #e11d48;
+      color: #fff;
+      font-weight: 800;
+      font-size: 0.82rem;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 12px rgba(225, 29, 72, 0.35);
+      cursor: pointer;
+    }
+    .vertical-nav-pill {
+      background: rgba(28, 22, 19, 0.88);
+      backdrop-filter: blur(10px);
+      border: 1px solid #3d2e24;
+      border-radius: 999px;
+      padding: 10px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      align-items: center;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    }
+    .nav-pill-arrow {
+      color: #8c7d73;
+      cursor: pointer;
+      font-size: 0.95rem;
+      transition: color 0.15s, transform 0.1s;
+    }
+    .nav-pill-arrow:hover { color: #fff; transform: scale(1.15); }
+
+    /* ========================================================
+       BOTTOM TACTICAL RATING DOCK (EXACT MEMORY ANKI CAPSULE)
+       ======================================================== */
+    .bottom-dock-wrapper {
+      padding: 14px 28px 20px 28px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: linear-gradient(180deg, transparent 0%, rgba(18, 14, 11, 0.65) 100%);
+      z-index: 50;
+      position: relative;
+    }
+
+    .rating-capsule-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--dock-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1.5px solid var(--dock-border);
+      border-radius: 999px;
+      padding: 8px 14px;
+      box-shadow: var(--dock-shadow);
+      max-width: 960px;
+      width: 100%;
+    }
+
+    /* Action: 移除本队列 */
+    .btn-remove-queue {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid #3d2e24;
+      border-radius: 999px;
+      padding: 8px 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: #9c8b7f;
+      transition: all 0.15s ease;
+      min-width: 110px;
+    }
+    .btn-remove-queue:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: #e5e7eb;
+      border-color: #554133;
+    }
+    .btn-remove-title {
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+    .btn-remove-sub {
+      font-size: 0.65rem;
+      opacity: 0.7;
+    }
+
+    /* The 4 Tactical Grade Buttons */
+    .btn-grade-pill {
+      flex: 1;
+      height: 48px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.08s ease, box-shadow 0.15s ease, filter 0.15s ease;
+    }
+    .btn-grade-pill:active {
+      transform: translateY(2px) scale(0.98);
+    }
+
+    /* Pill Tones */
+    .pill-grade-1 {
+      background: var(--grade-1-bg);
+      border-color: var(--grade-1-border);
+    }
+    .pill-grade-1:hover {
+      box-shadow: 0 0 16px rgba(225, 29, 72, 0.5);
+    }
+
+    .pill-grade-2 {
+      background: var(--grade-2-bg);
+      border-color: var(--grade-2-border);
+    }
+    .pill-grade-2:hover {
+      box-shadow: 0 0 16px rgba(217, 119, 6, 0.5);
+    }
+
+    .pill-grade-3 {
+      background: var(--grade-3-bg);
+      border-color: var(--grade-3-border);
+    }
+    .pill-grade-3:hover {
+      box-shadow: 0 0 16px rgba(34, 197, 94, 0.5);
+    }
+
+    .pill-grade-4 {
+      background: var(--grade-4-bg);
+      border-color: var(--grade-4-border);
+    }
+    .pill-grade-4:hover {
+      box-shadow: 0 0 16px rgba(6, 182, 212, 0.5);
+    }
+
+    /* Button Internal Elements */
+    .btn-grade-left {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .btn-key-num {
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      font-weight: 800;
+      color: #9c8b7f;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 4px;
+      padding: 1px 4px;
+      background: rgba(0, 0, 0, 0.3);
+    }
+    .btn-status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+    }
+    .dot-1 { background: var(--grade-1-dot); }
+    .dot-2 { background: var(--grade-2-dot); }
+    .dot-3 { background: var(--grade-3-dot); }
+    .dot-4 { background: var(--grade-4-dot); }
+
+    .btn-grade-name {
+      font-size: 0.86rem;
+      font-weight: 700;
+      color: #f3f4f6;
+    }
+
+    .btn-grade-schedule {
+      font-size: 0.72rem;
+      color: #a89a8f;
+      font-family: var(--font-mono);
+    }
+
+    /* FEVER Aura on Bottom Dock */
+    body.fever-active .rating-capsule-bar {
+      border-color: #f59e0b;
+      box-shadow: 0 0 35px rgba(245, 158, 11, 0.4), var(--dock-shadow);
+      animation: feverDockGlow 1s infinite alternate;
+    }
+    @keyframes feverDockGlow {
+      0% { filter: drop-shadow(0 0 5px rgba(245, 158, 11, 0.5)); }
+      100% { filter: drop-shadow(0 0 15px rgba(239, 68, 68, 0.8)); }
+    }
+
+    /* ========================================================
+       BANNER, EXP FLYERS & SETTINGS DRAWER
+       ======================================================== */
+    .banner-float-notice {
+      position: absolute;
+      top: 28%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0.6);
+      font-family: var(--font-display);
+      font-size: 3.2rem;
+      letter-spacing: 0.04em;
+      pointer-events: none;
+      z-index: 150;
+      opacity: 0;
+      text-shadow: 0 0 25px rgba(245, 158, 11, 0.9);
+      transition: all 0.3s var(--spring-snap);
+    }
+    .banner-float-notice.pop {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1.1);
+      animation: bannerFly 0.8s ease-out forwards;
+    }
+    @keyframes bannerFly {
+      0% { opacity: 0; transform: translate(-50%, -30%) scale(0.6); }
+      30% { opacity: 1; transform: translate(-50%, -50%) scale(1.2); }
+      75% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+      100% { opacity: 0; transform: translate(-50%, -70%) scale(0.9); }
+    }
+
+    /* Revolver Next Card Motion */
+    .card-revolver-fly-out {
+      animation: revolverOut 0.32s ease-in forwards !important;
+    }
+    @keyframes revolverOut {
+      0% { transform: translate3d(0, 0, 0) rotate(0deg); opacity: 1; }
+      100% { transform: translate3d(140%, -30%, 0) rotate(18deg) scale(0.9); opacity: 0; }
+    }
+    .card-revolver-fly-in {
+      animation: revolverIn 0.42s var(--spring-snap) forwards !important;
+    }
+    @keyframes revolverIn {
+      0% { transform: translate3d(-100%, 20px, 0) rotate(-12deg) scale(0.9); opacity: 0; }
+      75% { transform: translate3d(3%, -2px, 0) rotate(1deg) scale(1.02); opacity: 1; }
+      100% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); opacity: 1; }
+    }
+
+    /* Landing Thump */
+    .landing-thump {
+      animation: thumpAction 0.15s ease-out;
+    }
+    @keyframes thumpAction {
+      0% { transform: translateY(0); }
+      50% { transform: translateY(3px); }
+      100% { transform: translateY(0); }
+    }
+
+    /* Drawer Styles */
+    .drawer-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.65);
+      backdrop-filter: blur(5px);
+      z-index: 200;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.3s ease;
+    }
+    .drawer-backdrop.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .drawer-modal {
+      position: absolute;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 390px;
+      max-width: 90vw;
+      background: #181310;
+      border-left: 2px solid #3d2e24;
+      padding: 24px;
+      z-index: 210;
+      transform: translateX(100%);
+      transition: transform 0.35s var(--spring-snap);
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      box-shadow: -15px 0 40px rgba(0, 0, 0, 0.7);
+    }
+    .drawer-backdrop.open .drawer-modal {
+      transform: translateX(0);
+    }
+    .drawer-title-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #2e241f;
+      padding-bottom: 12px;
+    }
+    .drawer-title-text {
+      font-size: 1.15rem;
+      font-weight: 800;
+      color: #fbbf24;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .config-field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .config-field-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.82rem;
+      color: #d1c4b8;
+      font-weight: 600;
+    }
+    .config-field-val {
+      font-family: var(--font-mono);
+      color: #fbbf24;
+    }
+    .config-slider {
+      width: 100%;
+      height: 6px;
+      border-radius: 3px;
+      background: #332720;
+      outline: none;
+      accent-color: #fbbf24;
+    }
+    .btn-export-json {
+      margin-top: auto;
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      border: none;
+      color: #000;
+      font-weight: 800;
+      font-size: 0.95rem;
+      padding: 13px;
+      border-radius: 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 4px 18px rgba(245, 158, 11, 0.4);
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .btn-export-json:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 24px rgba(245, 158, 11, 0.6);
+    }
+  </style>
+</head>
+<body data-theme="paper">
+  <div id="desktop-window">
+    <canvas id="fx-canvas"></canvas>
+    <div id="flash-overlay"></div>
+
+    <!-- WINDOW TITLE BAR (EXACT DESKTOP SHELL) -->
+    <header class="window-title-bar">
+      <div class="window-title-left">
+        <span style="color:#d97706; font-weight:800;">🎯 记忆宫殿复习系统</span>
+        <div class="window-menu-items">
+          <span>File</span>
+          <span>Edit</span>
+          <span>View</span>
+          <span>Window</span>
+          <span>Help</span>
+        </div>
+      </div>
+      <div class="window-title-right">
+        <span class="win-btn">─</span>
+        <span class="win-btn">▢</span>
+        <span class="win-btn">✕</span>
+      </div>
+    </header>
+
+    <!-- APP WORKSPACE -->
+    <div class="app-workspace">
+      <!-- LEFT SIDEBAR -->
+      <aside class="sidebar">
+        <div class="user-profile-card">
+          <div class="user-avatar-badge">记</div>
+          <div class="user-profile-meta">
+            <span class="user-name">Memory Anki</span>
+            <span class="user-sub">沉浸知识工作室</span>
+            <span class="dev-chip">Dev 44ce4bb9</span>
+          </div>
+        </div>
+
+        <nav class="nav-list">
+          <div class="nav-item active">
+            <div class="nav-item-left">
+              <span class="nav-item-icon">⚡</span>
+              <span>随心</span>
+            </div>
+            <span class="nav-chevron">›</span>
+          </div>
+
+          <div class="nav-item">
+            <div class="nav-item-left">
+              <span class="nav-item-icon">📖</span>
+              <span>知识</span>
+            </div>
+          </div>
+
+          <div class="nav-item">
+            <div class="nav-item-left">
+              <span class="nav-item-icon">🔤</span>
+              <span>英语</span>
+            </div>
+          </div>
+
+          <div class="nav-item">
+            <div class="nav-item-left">
+              <span class="nav-item-icon">➕</span>
+              <span>创建</span>
+            </div>
+          </div>
+
+          <div class="nav-item">
+            <div class="nav-item-left">
+              <span class="nav-item-icon">📊</span>
+              <span>洞察</span>
+            </div>
+          </div>
+        </nav>
+
+        <div class="sidebar-footer">
+          <div class="nav-item" onclick="openDrawer()">
+            <div class="nav-item-left">
+              <span class="nav-item-icon">⚙️</span>
+              <span>设置 / 手感调校</span>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- MAIN VIEWPORT -->
+      <main class="main-viewport" id="viewport-stage">
+        <!-- TOP DUAL-TIER HEADER BAR -->
+        <div class="top-action-bar">
+          <!-- Tier 1: Authentic Memory Anki Progress Rail -->
+          <div class="progress-rail-container">
+            <div class="rail-history-nav">
+              <span class="rail-btn-icon" onclick="prevCard()">◀</span>
+              <span class="rail-btn-icon" onclick="nextCard()">▶</span>
+              <span class="rail-btn-icon">📋</span>
+              <span class="rail-btn-icon">📖</span>
+            </div>
+
+            <!-- Segmented Multi-colored Progress Track -->
+            <div class="freestyle-ticks-track" id="ticks-track">
+              <!-- Playhead Floating Bubble -->
+              <div class="playhead-bubble" id="rail-playhead" title="当前考核播放头">
+                <span>(2)</span>
+              </div>
+
+              <!-- Static/Dynamic Segment Ticks matching the image -->
+              <div class="tick-segment done-orange" style="flex:2;"></div>
+              <div class="tick-segment done-orange" style="flex:1;"></div>
+              <div class="tick-segment done-dark" style="flex:3;"></div>
+              <div class="tick-segment done-green" style="flex:2;"></div>
+              <div class="tick-segment done-blue" style="flex:2;"></div>
+              <div class="tick-segment done-orange" style="flex:4;"></div>
+              <div class="tick-segment done-dark" style="flex:5;"></div>
+              <div class="tick-segment done-green" style="flex:3;"></div>
+            </div>
+
+            <div class="top-meta-tags">
+              <span class="tag-bubble-orange">随心 2</span>
+              <span class="tag-bubble-neutral" id="progress-card-num">6 / 53</span>
+              <span class="tag-bubble-commission">🎯 委托 0/3</span>
+            </div>
+
+            <div class="top-right-tools">
+              <!-- Theme Quick Selector -->
+              <div class="theme-quick-select">
+                <button class="theme-quick-btn active" onclick="setAppTheme('paper')">原版纸质</button>
+                <button class="theme-quick-btn" onclick="setAppTheme('dark')">街机黑金</button>
+                <button class="theme-quick-btn" onclick="setAppTheme('jelly')">果冻潮玩</button>
+              </div>
+              <span class="rail-btn-icon" onclick="openDrawer()" title="打开调校">⚙️</span>
+            </div>
+          </div>
+
+          <!-- Tier 2: Breadcrumb & Mindmap Auxiliary Toolbar -->
+          <div class="toolbar-sub-row">
+            <div class="breadcrumb-title-pill">
+              <span class="breadcrumb-dot"></span>
+              <span id="breadcrumb-title">How do you use AI on a long commute?</span>
+              <span class="breadcrumb-badge">3/3</span>
+            </div>
+
+            <div class="canvas-tools-dock">
+              <span class="canvas-tool-btn">📋</span>
+              <span class="canvas-tool-btn">文/A</span>
+              <span class="canvas-tool-btn" style="font-weight:700;">文字</span>
+              <span class="canvas-tool-btn">···</span>
+              <span class="canvas-tool-btn">🔄</span>
+              <span class="canvas-tool-btn">⛶</span>
+              <span class="canvas-tool-btn">↶</span>
+              <span class="canvas-tool-btn">↷</span>
+              <span style="display:inline-flex; gap:3px; margin-left:4px;">
+                <i class="palette-dot" style="background:#a855f7;"></i>
+                <i class="palette-dot" style="background:#f59e0b;"></i>
+                <i class="palette-dot" style="background:#06b6d4;"></i>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- MIND MAP INTERACTIVE STAGE -->
+        <div class="mindmap-canvas-container" id="mindmap-container" oncontextmenu="event.preventDefault(); sealAnswers();">
+          <!-- Floating Combo / Revenge Banner -->
+          <div class="banner-float-notice" id="banner-notice">CRITICAL!!</div>
+
+          <!-- The Mindmap Board -->
+          <div class="mindmap-board" id="mindmap-board">
+            <!-- SVG Curves -->
+            <svg class="mindmap-svg-layer" viewBox="0 0 1100 520">
+              <!-- Root -> Question -->
+              <path id="path-root-q" class="branch-line" d="M 280 250 C 305 250, 305 250, 330 250" />
+              <path id="flow-root-q" class="branch-pulse-flow" d="M 280 250 C 305 250, 305 250, 330 250" />
+
+              <!-- Question -> Answer 1 (Upper Branch) -->
+              <path id="path-q-a1" class="branch-line" d="M 620 250 C 645 250, 645 152, 670 152" />
+              <path id="flow-q-a1" class="branch-pulse-flow" d="M 620 250 C 645 250, 645 152, 670 152" />
+
+              <!-- Question -> Answer 2 (Lower Branch) -->
+              <path id="path-q-a2" class="branch-line" d="M 620 250 C 645 250, 645 342, 670 342" />
+              <path id="flow-q-a2" class="branch-pulse-flow" d="M 620 250 C 645 250, 645 342, 670 342" />
+            </svg>
+
+            <!-- Node 1: Root Subject -->
+            <div class="node-box" id="node-root-subject" oncontextmenu="event.preventDefault(); event.stopPropagation(); sealAnswers();">
+              <div class="root-title-text" id="root-title-text">Using AI to Free Up Attention</div>
+            </div>
+
+            <!-- Node 2: Intermediate Question -->
+            <div class="node-box" id="node-question" oncontextmenu="event.preventDefault(); event.stopPropagation(); sealAnswers();">
+              <div class="question-title-text" id="question-text">How do you use AI on a long commute?</div>
+            </div>
+
+            <!-- Node 3: Target Answer 1 (Upper) -->
+            <div class="node-box answer-card" id="node-answer-1" onclick="handleCardClick(event)" oncontextmenu="handleCardRightClick(event)">
+              <!-- Nemesis Chain Overlay -->
+              <div class="nemesis-chain-wrap" id="nemesis-chain-1">
+                <span class="nemesis-chain-badge">⚠ 宿敌遭遇 · 拔除心魔</span>
+              </div>
+
+              <!-- Fog Seal Overlay -->
+              <div class="answer-seal-overlay">
+                <span class="seal-rune-icon">🔮</span>
+                <span class="seal-tag-instruction">SPACE / 左键 破壳解封</span>
+              </div>
+
+              <div class="answer-inner-content" id="answer-content-1">
+                On a safe hands-free drive, I use AI to <strong>reflect on the way to school</strong>, mainly because a thought partner frees me to <strong>turn a crowded mind into a short list</strong>.
+              </div>
+            </div>
+
+            <!-- Node 4: Target Answer 2 (Lower) -->
+            <div class="node-box answer-card" id="node-answer-2" onclick="handleCardClick(event)" oncontextmenu="handleCardRightClick(event)">
+              <!-- Nemesis Chain Overlay -->
+              <div class="nemesis-chain-wrap" id="nemesis-chain-2">
+                <span class="nemesis-chain-badge">⚠ 宿敌遭遇 · 拔除心魔</span>
+              </div>
+
+              <!-- Fog Seal Overlay -->
+              <div class="answer-seal-overlay">
+                <span class="seal-rune-icon">🔮</span>
+                <span class="seal-tag-instruction">SPACE / 左键 破壳解封</span>
+              </div>
+
+              <div class="answer-inner-content" id="answer-content-2">
+                On a safe hands-free drive, I use AI to <strong>review the day on the way home</strong>, mainly because a thought partner frees me to <strong>leave with one clear next step</strong>.
+              </div>
+            </div>
+          </div>
+
+          <!-- FLOATING RIGHT DOCK (YOUDAO + VERTICAL NAV) -->
+          <div class="canvas-right-dock">
+            <div class="yd-dict-badge" title="有道词典 / 划词联动">yd</div>
+            <div class="vertical-nav-pill">
+              <span class="nav-pill-arrow" onclick="prevCard()" title="上一个考点">▲</span>
+              <span class="nav-pill-arrow" onclick="nextCard()" title="下一个考点">▼</span>
+              <span class="nav-pill-arrow" onclick="toggleUnseal()" style="color:#22c55e;" title="翻开/收起">✓</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- BOTTOM TACTICAL RATING BAR -->
+        <footer class="bottom-dock-wrapper">
+          <div class="rating-capsule-bar">
+            <!-- 移除本队列 -->
+            <button class="btn-remove-queue" onclick="handleRemoveQueue()">
+              <span class="btn-remove-title">移除本队列</span>
+              <span class="btn-remove-sub">不改进度</span>
+            </button>
+
+            <!-- 1 忘记 -->
+            <button class="btn-grade-pill pill-grade-1" onclick="submitGrade(1)">
+              <div class="btn-grade-left">
+                <span class="btn-key-num">1</span>
+                <span class="btn-status-dot dot-1"></span>
+                <span class="btn-grade-name">忘记</span>
+              </div>
+              <span class="btn-grade-schedule">3张后</span>
+            </button>
+
+            <!-- 2 困难 -->
+            <button class="btn-grade-pill pill-grade-2" onclick="submitGrade(2)">
+              <div class="btn-grade-left">
+                <span class="btn-key-num">2</span>
+                <span class="btn-status-dot dot-2"></span>
+                <span class="btn-grade-name">困难</span>
+              </div>
+              <span class="btn-grade-schedule">3张后</span>
+            </button>
+
+            <!-- 3 记得 -->
+            <button class="btn-grade-pill pill-grade-3" onclick="submitGrade(3)">
+              <div class="btn-grade-left">
+                <span class="btn-key-num">3</span>
+                <span class="btn-status-dot dot-3"></span>
+                <span class="btn-grade-name">记得</span>
+              </div>
+              <span class="btn-grade-schedule">1天后</span>
+            </button>
+
+            <!-- 4 轻松 -->
+            <button class="btn-grade-pill pill-grade-4" onclick="submitGrade(4)">
+              <div class="btn-grade-left">
+                <span class="btn-key-num">4</span>
+                <span class="btn-status-dot dot-4"></span>
+                <span class="btn-grade-name">轻松</span>
+              </div>
+              <span class="btn-grade-schedule">3天后</span>
+            </button>
+          </div>
+        </footer>
+      </main>
+    </div>
+  </div>
+
+  <!-- SETTINGS DRAWER -->
+  <div class="drawer-backdrop" id="drawer-backdrop" onclick="closeDrawer(event)">
+    <div class="drawer-modal" onclick="event.stopPropagation()">
+      <div class="drawer-title-row">
+        <h2 class="drawer-title-text">⚙️ 街机手感调校看板</h2>
+        <span class="win-btn" onclick="closeDrawer()" style="font-size:1.2rem;">✕</span>
+      </div>
+
+      <div class="config-field">
+        <div class="config-field-label">
+          <span>特效粒子量 (Particle Density)</span>
+          <span class="config-field-val" id="lbl-particles">1.0x</span>
+        </div>
+        <input type="range" class="config-slider" min="0.2" max="2.5" step="0.1" value="1.0" oninput="updateConfig('particles', this.value)">
+      </div>
+
+      <div class="config-field">
+        <div class="config-field-label">
+          <span>定格冻结时长 (Hit-Stop ms)</span>
+          <span class="config-field-val" id="lbl-hitstop">25 ms</span>
+        </div>
+        <input type="range" class="config-slider" min="0" max="80" step="5" value="25" oninput="updateConfig('hitstop', this.value)">
+      </div>
+
+      <div class="config-field">
+        <div class="config-field-label">
+          <span>Web Audio 纯合成音量</span>
+          <span class="config-field-val" id="lbl-volume">80%</span>
+        </div>
+        <input type="range" class="config-slider" min="0" max="1" step="0.05" value="0.8" oninput="updateConfig('volume', this.value)">
+      </div>
+
+      <div class="config-field">
+        <div class="config-field-label">
+          <span>触觉震动反馈 (Web Haptics)</span>
+          <span class="config-field-val" id="lbl-haptics">开启</span>
+        </div>
+        <input type="range" class="config-slider" min="0" max="1" step="1" value="1" oninput="updateConfig('haptics', this.value)">
+      </div>
+
+      <div class="config-field">
+        <div class="config-field-label">
+          <span>3D 视差倾斜角度</span>
+          <span class="config-field-val" id="lbl-parallax">12°</span>
+        </div>
+        <input type="range" class="config-slider" min="0" max="25" step="1" value="12" oninput="updateConfig('parallax', this.value)">
+      </div>
+
+      <button class="btn-export-json" onclick="exportPreferences()">
+        <span>📋 一键复制我的偏好配置</span>
+      </button>
+    </div>
+  </div>
+
+  <script>
+    /* ========================================================
+       APPLICATION STATE & REAL MEMORY ANKI SAMPLE DATA
+       ======================================================== */
+    const studyCards = [
+      {
+        id: 1,
+        root: "Using AI to Free Up Attention",
+        question: "How do you use AI on a long commute?",
+        answer1: "On a safe hands-free drive, I use AI to <strong>reflect on the way to school</strong>, mainly because a thought partner frees me to <strong>turn a crowded mind into a short list</strong>.",
+        answer2: "On a safe hands-free drive, I use AI to <strong>review the day on the way home</strong>, mainly because a thought partner frees me to <strong>leave with one clear next step</strong>.",
+        isNemesis: false
+      },
+      {
+        id: 2,
+        root: "心血管病理生理学",
+        question: "RAAS 激活的代偿终末标志物与病理演进是什么？",
+        answer1: "持续激活导致<strong>水钠潴留与醛固酮高表达</strong>，诱发全心胶原合成剧增及心肌间质弥漫性纤维化。",
+        answer2: "失代偿阶段促使<strong>心室收缩与舒张顺应性阶梯式崩塌</strong>，心肌重构转为难逆性心室扩大。",
+        isNemesis: true // Default flagged as Nemesis to test Revenge!
+      },
+      {
+        id: 3,
+        root: "药理学受体动力学",
+        question: "竞争性拮抗剂对激动剂受体量效曲线的影响机制？",
+        answer1: "使得量效曲线呈现<strong>平行右移</strong>，表明达到同一生物学效应需要显著增加激动剂的分子浓度。",
+        answer2: "由于拮抗剂与激动剂争夺相同位点，受体最大效应 <strong>Emax 保持守恒不变</strong>，KD 相应增加。",
+        isNemesis: false
+      }
+    ];
+
+    let currentCardIndex = 0;
+    let isRevealed = false;
+    let streakCount = 3;
+    let feverActive = false;
+
+    // Adjustable tuning parameters
+    const appConfig = {
+      theme: 'paper', // 'paper', 'dark', 'jelly'
+      particles: 1.0,
+      hitstop: 25,
+      volume: 0.8,
+      haptics: 1,
+      parallax: 12
+    };
+
+    /* ========================================================
+       WEB AUDIO REAL-TIME PHYSICAL SYNTHESIZER
+       ======================================================== */
+    let audioContext = null;
+    function getAudioCtx() {
+      if (!audioContext) {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+      return audioContext;
+    }
+
+    function playArcadeAudio(action) {
+      if (appConfig.volume <= 0.01) return;
+      const ctx = getAudioCtx();
+      const now = ctx.currentTime;
+      const master = ctx.createGain();
+      master.gain.setValueAtTime(appConfig.volume, now);
+      master.connect(ctx.destination);
+
+      if (action === 'unseal') {
+        // High voltage electric zip + crystal pop
+        playToneSweep(ctx, master, 520, 120, 0.22, 'sawtooth');
+        playNoise(ctx, master, 0.18, 900, 3000);
+      } else if (action === 'seal') {
+        // Vault mechanical hatch lock
+        playToneSweep(ctx, master, 180, 50, 0.15, 'triangle');
+      } else if (action === 1) {
+        // 1 忘记: 808 sub-bass drop + steam dissipation
+        playSubBass(ctx, master, 140, 28, 0.55);
+        playNoise(ctx, master, 0.35, 200, 800);
+      } else if (action === 2) {
+        // 2 困难: Metallic blade parry & spark
+        playClang(ctx, master, 880, 0.22);
+      } else if (action === 3) {
+        // 3 记得: Clean coin ding with pitch stepped up by streak
+        const basePitch = 680 + Math.min(streakCount * 50, 650);
+        playCoin(ctx, master, basePitch, 0.35);
+      } else if (action === 4) {
+        // 4 轻松: Supernova explosion + ascending brass chord
+        playSubBass(ctx, master, 160, 20, 0.7);
+        playNoise(ctx, master, 0.4, 400, 3500);
+        playCoin(ctx, master, 1200, 0.5);
+      } else if (action === 'revenge') {
+        // REVENGE! 拔除心魔 4-note ascending triumph chord
+        [523.25, 659.25, 783.99, 1046.50].forEach((freq, i) => {
+          setTimeout(() => playCoin(ctx, master, freq, 0.35), i * 55);
+        });
+      }
+    }
+
+    function playToneSweep(ctx, dest, start, end, dur, type='sine') {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(start, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(Math.max(end, 10), ctx.currentTime + dur);
+      gain.gain.setValueAtTime(0.5, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+      osc.connect(gain);
+      gain.connect(dest);
+      osc.start();
+      osc.stop(ctx.currentTime + dur);
+    }
+
+    function playSubBass(ctx, dest, start, end, dur) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(start, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(end, ctx.currentTime + dur);
+      gain.gain.setValueAtTime(0.85, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+      osc.connect(gain);
+      gain.connect(dest);
+      osc.start();
+      osc.stop(ctx.currentTime + dur);
+    }
+
+    function playCoin(ctx, dest, freq, dur) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, ctx.currentTime);
+      osc.frequency.setValueAtTime(freq * 1.5, ctx.currentTime + 0.035);
+      gain.gain.setValueAtTime(0.6, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+      osc.connect(gain);
+      gain.connect(dest);
+      osc.start();
+      osc.stop(ctx.currentTime + dur);
+    }
+
+    function playClang(ctx, dest, freq, dur) {
+      [freq, freq * 1.34, freq * 1.82].forEach((f, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(f, ctx.currentTime);
+        gain.gain.setValueAtTime(0.3 / (i + 1), ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+        osc.connect(gain);
+        gain.connect(dest);
+        osc.start();
+        osc.stop(ctx.currentTime + dur);
+      });
+    }
+
+    function playNoise(ctx, dest, dur, hp, lp) {
+      const bufferSize = ctx.sampleRate * dur;
+      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+      const noise = ctx.createBufferSource();
+      noise.buffer = buffer;
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.value = (hp + lp) / 2;
+      filter.Q.value = 1.0;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.35, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(dest);
+      noise.start();
+    }
+
+    /* ========================================================
+       STEPPED WEB HAPTICS ENGINE
+       ======================================================== */
+    function triggerVibration(type) {
+      if (!appConfig.haptics || !navigator.vibrate) return;
+      try {
+        if (type === 1) navigator.vibrate([70, 35, 90]);
+        else if (type === 2) navigator.vibrate([45]);
+        else if (type === 3) navigator.vibrate([22]);
+        else if (type === 4) navigator.vibrate([15, 20, 25, 20, 35, 15, 50]);
+        else if (type === 'unseal') navigator.vibrate([30]);
+        else if (type === 'seal') navigator.vibrate([18, 15, 18]);
+      } catch (e) {}
+    }
+
+    /* ========================================================
+       PARTICLES & HOMING ORB PHYSICS ENGINE
+       ======================================================== */
+    const canvas = document.getElementById('fx-canvas');
+    const ctx2d = canvas.getContext('2d');
+    let particles = [];
+    let homingOrbs = [];
+
+    function handleResize() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', handleResize);
+    handleResize();
+
+    class Particle {
+      constructor(x, y, color, speed, size, life) {
+        this.x = x;
+        this.y = y;
+        this.color = color;
+        this.size = size;
+        this.maxLife = life;
+        this.life = life;
+        const rad = Math.random() * Math.PI * 2;
+        const spd = (Math.random() * 0.7 + 0.3) * speed;
+        this.vx = Math.cos(rad) * spd;
+        this.vy = Math.sin(rad) * spd;
+        this.gravity = 0.12;
+        this.friction = 0.95;
+      }
+      update() {
+        this.vx *= this.friction;
+        this.vy *= this.friction;
+        this.vy += this.gravity;
+        this.x += this.vx;
+        this.y += this.vy;
+        this.life--;
+      }
+      draw(c) {
+        c.save();
+        c.globalAlpha = Math.max(0, this.life / this.maxLife);
+        c.fillStyle = this.color;
+        c.beginPath();
+        c.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        c.fill();
+        c.restore();
+      }
+    }
+
+    class HomingOrb {
+      constructor(startX, startY, targetX, targetY, color, onArrive) {
+        this.x = startX;
+        this.y = startY;
+        this.targetX = targetX;
+        this.targetY = targetY;
+        this.color = color;
+        this.onArrive = onArrive;
+        this.progress = 0;
+        this.cpX = (startX + targetX) / 2 + (Math.random() - 0.5) * 220;
+        this.cpY = Math.min(startY, targetY) - 80 - Math.random() * 120;
+        this.speed = 0.038 + Math.random() * 0.015;
+      }
+      update() {
+        this.progress += this.speed;
+        if (this.progress >= 1) {
+          this.progress = 1;
+          this.onArrive();
+        } else {
+          const t = this.progress;
+          this.x = (1 - t) * (1 - t) * this.x + 2 * (1 - t) * t * this.cpX + t * t * this.targetX;
+          this.y = (1 - t) * (1 - t) * this.y + 2 * (1 - t) * t * this.cpY + t * t * this.targetY;
+        }
+      }
+      draw(c) {
+        c.save();
+        c.fillStyle = this.color;
+        c.shadowColor = this.color;
+        c.shadowBlur = 12;
+        c.beginPath();
+        c.arc(this.x, this.y, 5, 0, Math.PI * 2);
+        c.fill();
+        c.restore();
+      }
+    }
+
+    function spawnParticleBurst(x, y, count, colors, speed=8) {
+      const total = Math.floor(count * appConfig.particles);
+      for (let i = 0; i < total; i++) {
+        const c = colors[Math.floor(Math.random() * colors.length)];
+        particles.push(new Particle(x, y, c, speed, Math.random() * 3.5 + 2, 35 + Math.random() * 25));
+      }
+    }
+
+    function launchHomingXP(startX, startY) {
+      const targetEl = document.getElementById('rail-playhead');
+      const rect = targetEl.getBoundingClientRect();
+      const targetX = rect.left + rect.width / 2;
+      const targetY = rect.top + rect.height / 2;
+
+      for (let i = 0; i < 6; i++) {
+        setTimeout(() => {
+          homingOrbs.push(new HomingOrb(startX, startY, targetX, targetY, '#f59e0b', () => {
+            targetEl.classList.remove('pump');
+            void targetEl.offsetWidth;
+            targetEl.classList.add('pump');
+          }));
+        }, i * 40);
+      }
+    }
+
+    function runParticleEngine() {
+      ctx2d.clearRect(0, 0, canvas.width, canvas.height);
+      for (let i = particles.length - 1; i >= 0; i--) {
+        particles[i].update();
+        particles[i].draw(ctx2d);
+        if (particles[i].life <= 0) particles.splice(i, 1);
+      }
+      for (let i = homingOrbs.length - 1; i >= 0; i--) {
+        homingOrbs[i].update();
+        homingOrbs[i].draw(ctx2d);
+        if (homingOrbs[i].progress >= 1) homingOrbs.splice(i, 1);
+      }
+      requestAnimationFrame(runParticleEngine);
+    }
+    requestAnimationFrame(runParticleEngine);
+
+    /* ========================================================
+       CORE ACTIONS: UNSEAL, SEAL & GRADE SUBMISSION
+       ======================================================== */
+    const ansCard1 = document.getElementById('node-answer-1');
+    const ansCard2 = document.getElementById('node-answer-2');
+    const rootSub = document.getElementById('node-root-subject');
+    const flowQ1 = document.getElementById('flow-q-a1');
+    const flowQ2 = document.getElementById('flow-q-a2');
+    const pathQ1 = document.getElementById('path-q-a1');
+    const pathQ2 = document.getElementById('path-q-a2');
+
+    function toggleUnseal() {
+      if (isRevealed) sealAnswers();
+      else unsealAnswers();
+    }
+
+    function unsealAnswers() {
+      if (isRevealed) return;
+      isRevealed = true;
+      ansCard1.classList.add('unsealed');
+      ansCard2.classList.add('unsealed');
+
+      // Light up electric branch currents
+      flowQ1.classList.add('flowing');
+      flowQ2.classList.add('flowing');
+      pathQ1.classList.add('active');
+      pathQ2.classList.add('active');
+
+      // Dim root node (spotlight on answers)
+      rootSub.classList.add('dimmed');
+
+      // Burst spark on answers
+      const r1 = ansCard1.getBoundingClientRect();
+      const r2 = ansCard2.getBoundingClientRect();
+      spawnParticleBurst(r1.left + r1.width / 2, r1.top + r1.height / 2, 28, ['#22c55e', '#ffffff', '#10b981'], 7);
+      spawnParticleBurst(r2.left + r2.width / 2, r2.top + r2.height / 2, 28, ['#22c55e', '#ffffff', '#10b981'], 7);
+
+      playArcadeAudio('unseal');
+      triggerVibration('unseal');
+    }
+
+    function sealAnswers() {
+      if (!isRevealed) return;
+      isRevealed = false;
+      ansCard1.classList.remove('unsealed');
+      ansCard2.classList.remove('unsealed');
+
+      // Turn off electric branch currents
+      flowQ1.classList.remove('flowing');
+      flowQ2.classList.remove('flowing');
+      pathQ1.classList.remove('active');
+      pathQ2.classList.remove('active');
+
+      rootSub.classList.remove('dimmed');
+
+      playArcadeAudio('seal');
+      triggerVibration('seal');
+    }
+
+    function handleCardClick(e) {
+      if (!isRevealed) unsealAnswers();
+    }
+
+    // RIGHT-CLICK DIRECTLY ROBUSTLY SEALS THE CARDS
+    function handleCardRightClick(e) {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      sealAnswers();
+    }
+
+    // Screen Shake & Hit-stop
+    function triggerShake(intensity=6) {
+      const ws = document.getElementById('viewport-stage');
+      const rx = (Math.random() - 0.5) * intensity * 2;
+      const ry = (Math.random() - 0.5) * intensity * 2;
+      ws.style.transform = `translate(${rx}px, ${ry}px)`;
+      setTimeout(() => { ws.style.transform = ''; }, 70);
+    }
+
+    function triggerHitStop(durMs, cb) {
+      if (durMs <= 0) { cb && cb(); return; }
+      const ws = document.getElementById('viewport-stage');
+      ws.style.filter = 'brightness(1.4) contrast(1.2)';
+      setTimeout(() => {
+        ws.style.filter = '';
+        cb && cb();
+      }, durMs);
+    }
+
+    function triggerFlash(opacity=0.6) {
+      const f = document.getElementById('flash-overlay');
+      f.style.opacity = opacity;
+      f.style.transition = 'none';
+      setTimeout(() => {
+        f.style.transition = 'opacity 0.25s ease-out';
+        f.style.opacity = '0';
+      }, 30);
+    }
+
+    function showBanner(text, color='#fbbf24') {
+      const b = document.getElementById('banner-notice');
+      b.textContent = text;
+      b.style.color = color;
+      b.classList.remove('pop');
+      void b.offsetWidth;
+      b.classList.add('pop');
+    }
+
+    // 4 Grades commit
+    function submitGrade(grade) {
+      const r = ansCard1.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const currentCard = studyCards[currentCardIndex];
+
+      playArcadeAudio(grade);
+      triggerVibration(grade);
+
+      if (grade === 1) {
+        // BREAK & RECAST (忘记): Lock Nemesis chain
+        streakCount = 0;
+        updateStreak();
+        triggerShake(10);
+        spawnParticleBurst(cx, cy, 32, ['#e11d48', '#4c0519', '#888888'], 6);
+        currentCard.isNemesis = true;
+        document.getElementById('nemesis-chain-1').classList.add('active');
+        document.getElementById('nemesis-chain-2').classList.add('active');
+        showBanner("RECAST 忘记 · 宿敌锁定", "#e11d48");
+        setTimeout(() => nextCard(true), 600);
+      } else if (grade === 2) {
+        // PARRY (困难): Metal sparks
+        triggerShake(4);
+        spawnParticleBurst(cx, cy, 25, ['#f59e0b', '#ffffff', '#d97706'], 8);
+        setTimeout(() => nextCard(true), 500);
+      } else if (grade === 3) {
+        // HIT (记得): Streak + 1, homing XP
+        streakCount++;
+        updateStreak();
+        spawnParticleBurst(cx, cy, 32, ['#22c55e', '#10b981', '#ffffff'], 8);
+
+        if (currentCard.isNemesis) {
+          // Nemesis Revenge triggered!
+          currentCard.isNemesis = false;
+          playArcadeAudio('revenge');
+          showBanner("⚡ REVENGE! 拔除心魔 +200 EXP", "#22c55e");
+          launchHomingXP(cx, cy);
+        } else {
+          launchHomingXP(cx, cy);
+        }
+        setTimeout(() => nextCard(true), 550);
+      } else if (grade === 4) {
+        // CRITICAL (轻松): Hit-stop 25ms + Supernova burst
+        triggerHitStop(appConfig.hitstop, () => {
+          triggerFlash(0.65);
+          triggerShake(14);
+          streakCount += 2;
+          updateStreak();
+          spawnParticleBurst(cx, cy, 55, ['#06b6d4', '#ffffff', '#22c55e', '#f59e0b'], 12);
+
+          if (currentCard.isNemesis) {
+            currentCard.isNemesis = false;
+            playArcadeAudio('revenge');
+            showBanner("🔥 CRITICAL REVENGE! +300 EXP", "#fbbf24");
+          } else {
+            showBanner("CRITICAL!! 轻松秒杀", "#06b6d4");
+          }
+          launchHomingXP(cx, cy);
+          setTimeout(() => nextCard(true), 650);
+        });
+      }
+    }
+
+    function handleRemoveQueue() {
+      playArcadeAudio('seal');
+      showBanner("已从本轮队列移除", "#a89a8f");
+      nextCard(true);
+    }
+
+    function updateStreak() {
+      if (streakCount >= 5 && !feverActive) {
+        feverActive = true;
+        document.body.classList.add('fever-active');
+        showBanner("🔥 FEVER 暴走连击状态!! 🔥", "#f59e0b");
+      } else if (streakCount < 5 && feverActive) {
+        feverActive = false;
+        document.body.classList.remove('fever-active');
+      }
+    }
+
+    /* ========================================================
+       REVOLVER RE-FEED & CARD RENDERING
+       ======================================================== */
+    function renderCard(idx) {
+      const c = studyCards[idx];
+      document.getElementById('root-title-text').textContent = c.root;
+      document.getElementById('question-text').textContent = c.question;
+      document.getElementById('breadcrumb-title').textContent = c.question;
+      document.getElementById('answer-content-1').innerHTML = c.answer1;
+      document.getElementById('answer-content-2').innerHTML = c.answer2;
+      document.getElementById('progress-card-num').textContent = `${(idx * 7 + 6)} / 53`;
+
+      // Nemesis state
+      const n1 = document.getElementById('nemesis-chain-1');
+      const n2 = document.getElementById('nemesis-chain-2');
+      if (c.isNemesis) {
+        n1.classList.add('active');
+        n2.classList.add('active');
+      } else {
+        n1.classList.remove('active');
+        n2.classList.remove('active');
+      }
+
+      sealAnswers();
+    }
+
+    function nextCard(fly=true) {
+      const board = document.getElementById('mindmap-board');
+      if (fly) {
+        board.classList.add('card-revolver-fly-out');
+        setTimeout(() => {
+          board.classList.remove('card-revolver-fly-out');
+          currentCardIndex = (currentCardIndex + 1) % studyCards.length;
+          renderCard(currentCardIndex);
+          board.classList.add('card-revolver-fly-in');
+          setTimeout(() => {
+            board.classList.remove('card-revolver-fly-in');
+            board.classList.add('landing-thump');
+            setTimeout(() => board.classList.remove('landing-thump'), 150);
+          }, 420);
+        }, 300);
+      } else {
+        currentCardIndex = (currentCardIndex + 1) % studyCards.length;
+        renderCard(currentCardIndex);
+      }
+    }
+
+    function prevCard() {
+      const board = document.getElementById('mindmap-board');
+      board.classList.add('card-revolver-fly-out');
+      setTimeout(() => {
+        board.classList.remove('card-revolver-fly-out');
+        currentCardIndex = (currentCardIndex - 1 + studyCards.length) % studyCards.length;
+        renderCard(currentCardIndex);
+        board.classList.add('card-revolver-fly-in');
+        setTimeout(() => {
+          board.classList.remove('card-revolver-fly-in');
+          board.classList.add('landing-thump');
+          setTimeout(() => board.classList.remove('landing-thump'), 150);
+        }, 420);
+      }, 300);
+    }
+
+    /* ========================================================
+       PARALLAX TILT & KEYBOARD SHORTCUTS
+       ======================================================== */
+    const container = document.getElementById('mindmap-container');
+    const board = document.getElementById('mindmap-board');
+
+    // Right-click anywhere on the mindmap container closes/seals cards immediately
+    container.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      sealAnswers();
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (appConfig.parallax <= 0) return;
+      const xPct = (e.clientX / window.innerWidth) - 0.5;
+      const yPct = (e.clientY / window.innerHeight) - 0.5;
+      const rotY = xPct * appConfig.parallax;
+      const rotX = -yPct * appConfig.parallax;
+      board.style.transform = `rotateX(${rotX}deg) rotateY(${rotY}deg)`;
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (document.getElementById('drawer-backdrop').classList.contains('open')) return;
+      const code = e.code;
+      const key = e.key;
+
+      if (code === 'Space' || code === 'KeyF' || code === 'Enter') {
+        e.preventDefault();
+        unsealAnswers();
+      } else if (code === 'Tab' || code === 'KeyR' || (e.shiftKey && code === 'Space') || code === 'Escape') {
+        e.preventDefault();
+        sealAnswers();
+      } else if (key === '1' || code === 'Numpad1') {
+        submitGrade(1);
+      } else if (key === '2' || code === 'Numpad2') {
+        submitGrade(2);
+      } else if (key === '3' || code === 'Numpad3') {
+        submitGrade(3);
+      } else if (key === '4' || code === 'Numpad4') {
+        submitGrade(4);
+      } else if (code === 'ArrowRight' || code === 'KeyD') {
+        nextCard();
+      } else if (code === 'ArrowLeft' || code === 'KeyA') {
+        prevCard();
+      }
+    });
+
+    /* ========================================================
+       THEME & SETTINGS EXPORT
+       ======================================================== */
+    function setAppTheme(t) {
+      appConfig.theme = t;
+      document.body.setAttribute('data-theme', t);
+      document.querySelectorAll('.theme-quick-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('onclick').includes(t));
+      });
+      playArcadeAudio('unseal');
+    }
+
+    function openDrawer() {
+      document.getElementById('drawer-backdrop').classList.add('open');
+    }
+    function closeDrawer(e) {
+      document.getElementById('drawer-backdrop').classList.remove('open');
+    }
+
+    function updateConfig(k, v) {
+      appConfig[k] = parseFloat(v);
+      if (k === 'particles') document.getElementById('lbl-particles').textContent = `${v}x`;
+      else if (k === 'hitstop') document.getElementById('lbl-hitstop').textContent = `${v} ms`;
+      else if (k === 'volume') document.getElementById('lbl-volume').textContent = `${Math.round(v * 100)}%`;
+      else if (k === 'haptics') document.getElementById('lbl-haptics').textContent = v == 1 ? '开启' : '关闭';
+      else if (k === 'parallax') document.getElementById('lbl-parallax').textContent = `${v}°`;
+    }
+
+    function exportPreferences() {
+      const cfg = {
+        themePack: appConfig.theme,
+        arcadeParams: {
+          particleDensityMultiplier: appConfig.particles,
+          hitStopDurationMs: appConfig.hitstop,
+          webAudioVolume: appConfig.volume,
+          hapticsEnabled: appConfig.haptics === 1,
+          parallaxMaxAngleDeg: appConfig.parallax
+        },
+        timestamp: new Date().toISOString()
+      };
+      const text = "```json\n" + JSON.stringify(cfg, null, 2) + "\n```";
+      navigator.clipboard.writeText(text).then(() => {
+        showBanner("✓ 偏好配置已复制到剪贴板", "#22c55e");
+        closeDrawer();
+      }).catch(() => {
+        prompt("请手动复制偏好配置：", JSON.stringify(cfg));
+      });
+    }
+
+    // Initial load
+    renderCard(0);
+  </script>
+</body>
+</html>

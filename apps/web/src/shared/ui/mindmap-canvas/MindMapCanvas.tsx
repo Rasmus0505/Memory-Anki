@@ -144,6 +144,8 @@ export interface MindMapCanvasProps {
   textSelectionModeActive?: boolean
   mobileViewPolicy?: MindMapMobileViewPolicy
   nodeClickViewportPolicy?: MindMapNodeClickViewportPolicy
+  /** Flip-click camera. `pan` translates only; zoom stays so glyphs do not soften. */
+  flipCameraNudge?: 'still' | 'pan'
   contentChangeViewportPolicy?: MindMapContentChangeViewportPolicy
   /**
    * Host-owned manual zoom preference. The canvas keeps each mounted map's

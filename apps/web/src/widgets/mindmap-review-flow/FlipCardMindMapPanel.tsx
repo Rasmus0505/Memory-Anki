@@ -583,6 +583,13 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
         sceneTransitionFallbackNodeId={sceneTransitionFallbackNodeId}
         mobileViewPolicy={isEditMode ? 'map' : (mobileViewPolicy ?? 'auto')}
         nodeClickViewportPolicy={isEditMode ? 'guided-center' : 'preserve'}
+        flipCameraNudge={
+          isEditMode || englishModeActive || textModeActive
+            ? 'still'
+            : revealSettingsControl?.settings.cameraNudge === 'pan'
+              ? 'pan'
+              : 'still'
+        }
         preferredZoom={preferredZoom}
         onUserZoomChange={onUserZoomChange}
         reviewFxSignal={reviewFxSignal}

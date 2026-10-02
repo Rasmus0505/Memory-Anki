@@ -66,6 +66,8 @@ export interface MindMapEditorSurfaceProps {
   sceneTransitionFallbackNodeId?: string | null
   mobileViewPolicy?: MindMapMobileViewPolicy
   nodeClickViewportPolicy?: MindMapNodeClickViewportPolicy
+  /** Flip-click camera from 翻卡设置. Pan keeps zoom. */
+  flipCameraNudge?: 'still' | 'pan'
   contentChangeViewportPolicy?: MindMapContentChangeViewportPolicy
   /** Optional host-owned zoom preference; pan remains local to each canvas instance. */
   preferredZoom?: number

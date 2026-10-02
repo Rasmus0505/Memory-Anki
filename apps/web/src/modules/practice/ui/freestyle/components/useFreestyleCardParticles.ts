@@ -1,16 +1,12 @@
 import { useCallback, useEffect, useRef, type RefObject } from 'react'
 import type { UnitRating } from '@/modules/practice/public'
 import { readFreestyleCombo } from '@/modules/practice/ui/freestyle/model/freestyleComboStore'
-import { cue, elementCenter, useFxOwner } from '@/shared/fx'
-import { MINDMAP_CARD_LANDED_EVENT } from '@/shared/ui/mindmap-canvas/useMindMapRevealMotion'
-
-/** Bulk reveals land dozens of cards at once; relay at most one flight per window. */
-const LAND_RELAY_GAP_MS = 60
+import { cue, useFxOwner } from '@/shared/fx'
 
 /**
- * Two-stage flip relay for one unit card, owned by that card's identity:
- * every landed flip sends gold dust into the card's own x/y flip badge; the flip
- * that completes the unit sends one comet from the badge into the round rail.
+ * Unit-complete ceremony for one card encounter. Individual cracks fly to their
+ * parent on the map; this cue only fires when the unit's own count fills, and
+ * it must never send that energy into the rating rail.
  */
 export function useFreestyleCardParticles(args: {
   sectionRef: RefObject<HTMLElement | null>
@@ -24,22 +20,6 @@ export function useFreestyleCardParticles(args: {
   const owner = useFxOwner(active ? `card:${progressKey}` : null)
   const ownerRef = useRef(owner)
   ownerRef.current = owner
-
-  useEffect(() => {
-    const section = sectionRef.current
-    if (!section) return
-    let lastRelayAt = 0
-    const onLanded = (event: Event) => {
-      if (!ownerRef.current) return
-      const now = performance.now()
-      if (now - lastRelayAt < LAND_RELAY_GAP_MS) return
-      lastRelayAt = now
-      const origin = elementCenter(event.target instanceof Element ? event.target : null)
-      if (origin) cue('flip.land', { origin, scope: section }, { owner: ownerRef.current })
-    }
-    section.addEventListener(MINDMAP_CARD_LANDED_EVENT, onLanded)
-    return () => section.removeEventListener(MINDMAP_CARD_LANDED_EVENT, onLanded)
-  }, [sectionRef])
 
   const lastProgressRef = useRef<{ key: string; revealed: number } | null>(null)
   useEffect(() => {

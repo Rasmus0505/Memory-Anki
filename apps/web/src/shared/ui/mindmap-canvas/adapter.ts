@@ -30,6 +30,15 @@ export interface MindMapNodeVisual {
   countBadge?: MindMapCountBadge | null
   /** Ordered corner badges. Later items sit closer to the bottom-right corner. */
   countBadges?: MindMapCountBadge[] | null
+  /**
+   * Direct-child flip charge. Presentation only: done/total of cards in this
+   * projection. Hosts do not write it; the canvas derives it from reveal flags.
+   */
+  charge?: {
+    done: number
+    total: number
+    mastered: boolean
+  } | null
 }
 
 export type MindMapCountBadgeTone =

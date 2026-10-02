@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, type RefObject } from 'react'
 import type { Edge, Node } from '@xyflow/react'
-import { cue, rectCenter } from '@/shared/fx'
+import { cue, rectCenter, type Point } from '@/shared/fx'
 import { themeMotion } from '@/shared/theme/themePacks'
+import { planChargeBurst } from './parentCharge'
 
 const FLIP_ID = 'mindmap-reveal-flip'
 /** The live theme pack sets the flip's length and landing overshoot. */
@@ -12,8 +13,27 @@ const STEP_MS = 45
 const MAX_SPREAD_MS = 540
 const MAX_CARDS_PER_BATCH = 40
 const MAX_BURSTS_PER_BATCH = 6
-/** A reveal this wide is a whole branch landing: finish it with gold rain over the map. */
-const GOLD_RAIN_MIN_FLIPS = 2
+/** Halo only — scaling the readable face rasterizes the glyphs. */
+function pulseCardHalo(card: HTMLElement, strong = false) {
+  if (typeof card.animate !== 'function') return
+  const spread = strong ? 10 : 6
+  card.animate(
+    [
+      { boxShadow: '0 0 0 0 transparent' },
+      { boxShadow: `0 0 0 ${spread}px hsl(32 90% 56% / 0.34)`, offset: 0.4 },
+      { boxShadow: '0 0 0 0 transparent' },
+    ],
+    { duration: strong ? 460 : 280, easing: 'cubic-bezier(0.2, 1.4, 0.4, 1)' },
+  )
+}
+
+function cardCenter(root: HTMLElement, id: string): Point | null {
+  const card = root.querySelector(cardSelector(id))
+  if (!(card instanceof HTMLElement)) return null
+  const rect = card.getBoundingClientRect()
+  if (rect.width === 0 && rect.height === 0) return null
+  return rectCenter(rect)
+}
 /** Bubbled from a card when its flip lands, so hosts can relay particles to their own HUD. */
 export const MINDMAP_CARD_LANDED_EVENT = 'memory-anki:mindmap-card-landed'
 const FOLD_MS = 420
@@ -163,11 +183,10 @@ function flipCard(card: HTMLElement, delay: number, burst: boolean) {
 function dealCard(card: HTMLElement, delay: number) {
   card.animate(
     [
-      { opacity: 0, transformOrigin: '0% 50%', transform: 'perspective(700px) rotateY(-68deg) translateX(-14px) scale(0.9)' },
-      { opacity: 1, transformOrigin: '0% 50%', transform: 'perspective(700px) rotateY(9deg) translateX(0) scale(1.02)', offset: 0.68 },
-      { opacity: 1, transformOrigin: '0% 50%', transform: 'perspective(700px) rotateY(0deg) translateX(0) scale(1)' },
+      { opacity: 0, transformOrigin: '0% 50%', transform: 'perspective(700px) rotateY(-28deg) translateX(-8px)' },
+      { opacity: 1, transformOrigin: '0% 50%', transform: 'perspective(700px) rotateY(0deg) translateX(0)' },
     ],
-    { duration: 420, delay, easing: 'cubic-bezier(0.22, 1, 0.36, 1)', fill: 'backwards', id: FLIP_ID },
+    { duration: 260, delay, easing: 'cubic-bezier(0.22, 1, 0.36, 1)', fill: 'backwards', id: FLIP_ID },
   )
 }
 
@@ -319,7 +338,8 @@ export function useMindMapRevealMotion(
     const incomingEdge = new Map(edges.map((edge) => [edge.target, edge.id]))
     const jobs: MountJob[] = []
     const flips = plan.flips.slice(0, MAX_CARDS_PER_BATCH)
-    const step = flips.length > 1 ? Math.min(STEP_MS, MAX_SPREAD_MS / (flips.length - 1)) : 0
+    const batch = flips.length > 1
+    const step = batch ? Math.min(STEP_MS, MAX_SPREAD_MS / (flips.length - 1)) : 0
     flips.forEach((id, index) => {
       const slot = Math.round(index * step)
       const edgeId = incomingEdge.get(id)
@@ -332,30 +352,46 @@ export function useMindMapRevealMotion(
       const lead = edgeId ? INK_LEAD_MS : 0
       jobs.push({
         selector: cardSelector(id),
-        run: (card, elapsed) => flipCard(card as HTMLElement, Math.max(0, slot + lead - elapsed), index < MAX_BURSTS_PER_BATCH),
+        run: (card, elapsed) => {
+          const element = card as HTMLElement
+          flipCard(element, Math.max(0, slot + lead - elapsed), !batch && index < MAX_BURSTS_PER_BATCH)
+          if (!batch) pulseCardHalo(element)
+        },
       })
     })
     plan.deals.slice(0, MAX_CARDS_PER_BATCH).forEach((id, index) => {
-      const slot = Math.min(index * 32, 320)
-      const edgeId = incomingEdge.get(id)
-      if (edgeId) {
-        jobs.push({
-          selector: edgeSelector(edgeId),
-          run: (path, elapsed) => inkEdge(path as SVGPathElement, Math.max(0, slot - elapsed)),
-        })
-      }
+      const slot = Math.min(index * 28, 240)
       jobs.push({
         selector: cardSelector(id),
         run: (card, elapsed) => dealCard(card as HTMLElement, Math.max(0, slot - elapsed)),
       })
     })
     runWhenMounted(root, jobs, activeWaits.current)
-    if (flips.length >= GOLD_RAIN_MIN_FLIPS) {
-      const landMs = Math.round((flips.length - 1) * step) + INK_LEAD_MS + flipMs() * 0.74
-      window.setTimeout(() => {
-        if (!root.isConnected) return
-        cue('map.branch', { rect: root.getBoundingClientRect() })
-      }, landMs)
-    }
+    const burst = planChargeBurst({
+      flips,
+      parentOf: parents.current,
+      phaseOf: phases.current,
+    })
+    if (burst.bursts.length === 0) return
+    const charges = burst.bursts.flatMap((item) => {
+      const origin = cardCenter(root, item.originId)
+      if (!origin) return []
+      return [{
+        origin,
+        target: () => {
+          const live = container.current
+          return live ? cardCenter(live, item.parentId) : null
+        },
+        label: item.label,
+        mastered: item.mastered,
+        onArrive: () => {
+          const live = container.current
+          const parent = live?.querySelector(cardSelector(item.parentId))
+          if (parent instanceof HTMLElement) pulseCardHalo(parent, item.mastered)
+        },
+      }]
+    })
+    if (charges.length === 0) return
+    cue('map.settle', { weight: batch ? 'batch' : 'single', charges, freeze: burst.freeze })
   }, [container, edges, nodes])
 }

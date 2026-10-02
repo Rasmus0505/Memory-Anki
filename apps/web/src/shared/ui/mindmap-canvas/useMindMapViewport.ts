@@ -47,6 +47,7 @@ import {
   MINDMAP_FOCUS_FIT_PADDING,
   MINDMAP_MOBILE_GUIDED_BRANCH_FIT_PADDING,
   MINDMAP_MOBILE_GUIDED_FIT_PADDING,
+  crispMindMapViewport,
   isPristineMindMapViewport,
   normalizeMindMapManualZoom,
   MINDMAP_MOBILE_FIT_MAX_ZOOM,
@@ -481,6 +482,33 @@ export function useMindMapViewport({
     },
     [isCanvasReady, measuredNodeSizesRef, mobileGuidedActive, nodes, runExplicitViewportChange, setCenter],
   )
+
+  /** Translate the clicked card toward center. Zoom is never changed. */
+  const panNodeIntoCenter = useCallback((nodeId: string | null | undefined, duration = 280) => {
+    if (!isCanvasReady || !nodeId) return
+    const target = nodes.find((node) => node.id === nodeId)
+    if (!target) return
+    const viewport = getViewport()
+    const size = getResolvedNodeSize(target, undefined, measuredNodeSizesRef.current)
+    const next = crispMindMapViewport({
+      x: canvasSize.width / 2 - (target.position.x + size.width / 2) * viewport.zoom,
+      y: canvasSize.height / 2 - (target.position.y + size.height / 2) * viewport.zoom,
+      zoom: viewport.zoom,
+    })
+    cameraCommandEpochRef.current += 1
+    runExplicitViewportChange(() => {
+      void setViewport(next, { duration })
+    }, duration)
+  }, [
+    canvasSize.height,
+    canvasSize.width,
+    getViewport,
+    isCanvasReady,
+    measuredNodeSizesRef,
+    nodes,
+    runExplicitViewportChange,
+    setViewport,
+  ])
 
   const revealNodesIntoView = useCallback((nodeIds: readonly string[]) => {
     if (!isCanvasReady || nodeIds.length === 0) return
@@ -1050,6 +1078,7 @@ export function useMindMapViewport({
     runFitView,
     fitNodesInView,
     centerNodeInCanvas,
+    panNodeIntoCenter,
     checkOverlap,
     handleNodeMeasure,
     flushPendingMeasuredNodeSizes,
