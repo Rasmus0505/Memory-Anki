@@ -244,8 +244,7 @@ def kill_process_tree(pid: int) -> None:
 
 
 def kill_memory_anki_desktop_processes() -> None:
-    """Stop desktop launcher and Electron processes started from this repo."""
-    repo_marker = str(REPO_ROOT).lower()
+    """Stop Memory Anki desktop processes from this checkout or a sibling worktree."""
     current_pid = os.getpid()
     matches: set[int] = set()
     ps_script = (
@@ -278,7 +277,7 @@ def kill_memory_anki_desktop_processes() -> None:
             or "desktop-timer/main.cjs" in lower
             or "run desktop:timer" in lower
         )
-        if not is_desktop_process or repo_marker not in lower:
+        if not is_desktop_process:
             continue
         try:
             pid = int(pid_text.strip())

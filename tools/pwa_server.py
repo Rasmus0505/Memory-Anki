@@ -191,6 +191,7 @@ def _process_command_line(pid: int) -> str:
 
 
 def _is_memory_anki_service_process(pid: int) -> bool:
+    """Any Memory Anki checkout, including a sibling worktree, may own the shared port."""
     try:
         recorded_pid = int(PWA_PID_FILE.read_text(encoding="utf-8").strip())
     except Exception:
@@ -198,10 +199,22 @@ def _is_memory_anki_service_process(pid: int) -> bool:
     if os.name != "nt":
         return recorded_pid == pid
     command_line = _process_command_line(pid)
-    repo_marker = str(REPO_ROOT).lower()
-    return PWA_PROCESS_MARKER.lower() in command_line or (
-        "memory_anki.app.main:app" in command_line and repo_marker in command_line
-    )
+    return PWA_PROCESS_MARKER.lower() in command_line or "memory_anki.app.main:app" in command_line
+
+
+def _service_belongs_to_this_checkout(pid: int) -> bool:
+    """Reuse only a service started from this checkout. Another worktree must be replaced."""
+    if not _is_memory_anki_service_process(pid):
+        return False
+    if os.name != "nt":
+        return True
+    if str(REPO_ROOT).lower() in _process_command_line(pid):
+        return True
+    try:
+        recorded_pid = int(PWA_PID_FILE.read_text(encoding="utf-8").strip())
+    except Exception:
+        recorded_pid = 0
+    return recorded_pid == pid
 
 
 def _mark_service_stop_reason(reason: str) -> None:
@@ -272,13 +285,36 @@ def service_lock(timeout_seconds: float = 180.0):
         lock_file.close()
 
 
+def _running_service_uses_configured_home() -> bool:
+    """A healthy process on the shared port can still be pointed at the wrong database."""
+    payload = dev_server.http_get_json(
+        f"http://{dev_server.BACKEND_HOST}:{dev_server.BACKEND_PORT}/api/v1/runtime-info",
+        timeout=1.5,
+    )
+    if not isinstance(payload, dict):
+        return False
+    running_home = str(payload.get("app_home") or "").strip()
+    if not running_home:
+        return False
+    try:
+        from memory_anki.core.local_config import load_local_runtime_config
+
+        configured_home = load_local_runtime_config(write_device_id=False).local_app_home
+    except Exception:
+        return False
+    try:
+        return Path(running_home).resolve() == Path(configured_home).resolve()
+    except OSError:
+        return Path(running_home) == Path(configured_home)
+
+
 def _shared_service_healthy() -> bool:
     pids = dev_server.list_listening_pids(dev_server.BACKEND_PORT)
     if not pids:
         return False
-    if any(not _is_memory_anki_service_process(pid) for pid in pids):
+    if any(not _service_belongs_to_this_checkout(pid) for pid in pids):
         return False
-    return _pwa_is_ready() and _database_at_alembic_head()
+    return _pwa_is_ready() and _running_service_uses_configured_home() and _database_at_alembic_head()
 
 
 def _stop_service_unlocked() -> bool:
@@ -895,9 +931,21 @@ def start(
                 f"process(es): {unsafe}. Stop that program before starting Memory Anki."
             )
             return 1
+        other_checkout = [pid for pid in pids if not _service_belongs_to_this_checkout(pid)]
+        if other_checkout:
+            print(
+                f"[i] Shared service belongs to another Memory Anki checkout {other_checkout}; "
+                f"switching to {REPO_ROOT}."
+            )
+            dev_server.kill_memory_anki_desktop_processes()
 
+        wrong_database = bool(pids) and not other_checkout and not _running_service_uses_configured_home()
+        if wrong_database:
+            print("[i] Running service is using a different database; restarting with local-config.")
         can_reuse_service = (
             bool(pids)
+            and not other_checkout
+            and not wrong_database
             and _pwa_is_ready()
             and not build
             and _database_at_alembic_head()

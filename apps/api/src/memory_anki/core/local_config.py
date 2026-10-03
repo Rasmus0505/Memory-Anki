@@ -14,6 +14,7 @@ from memory_anki.core.runtime_paths import default_app_home
 REPO_ROOT = Path(__file__).resolve().parents[5]
 LOCAL_CONFIG_DIR = REPO_ROOT / "local-config"
 LOCAL_CONFIG_PATH = LOCAL_CONFIG_DIR / "memory-anki.local.json"
+LOCAL_CONFIG_FILE_NAME = "memory-anki.local.json"
 PLACEHOLDER_DEVICE_ID = "auto-generated-on-first-run"
 _WINDOWS_ENV_PATTERN = re.compile(r"%([^%]+)%")
 # vol:Label/relative/path — resolve removable/USB roots by volume label so drive
@@ -132,6 +133,46 @@ def save_local_app_home(app_home: str | Path, *, config_path: Path | None = None
     return load_local_runtime_config(config_path=resolved_path)
 
 
+def _main_worktree_root(repo_root: Path) -> Path | None:
+    """Return the primary checkout. A linked worktree's .git file points at it."""
+    git_path = repo_root / ".git"
+    if git_path.is_dir():
+        return repo_root
+    if not git_path.is_file():
+        return None
+    try:
+        text = git_path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    marker = "gitdir:"
+    if not text.lower().startswith(marker):
+        return None
+    gitdir = Path(text[len(marker) :].strip())
+    if gitdir.parent.name == "worktrees" and gitdir.parent.parent.name == ".git":
+        return gitdir.parent.parent.parent
+    return None
+
+
+def resolve_local_config_path(*, repo_root: Path, config_path: Path | None = None) -> Path:
+    """Use this checkout's local-config, or the main checkout's when this one has none."""
+    if config_path is not None:
+        return config_path
+    own = repo_root / "local-config" / LOCAL_CONFIG_FILE_NAME
+    if own.exists():
+        return own
+    main_root = _main_worktree_root(repo_root)
+    if main_root is None:
+        return own
+    try:
+        same_checkout = main_root.resolve() == repo_root.resolve()
+    except OSError:
+        same_checkout = main_root == repo_root
+    if same_checkout:
+        return own
+    inherited = main_root / "local-config" / LOCAL_CONFIG_FILE_NAME
+    return inherited if inherited.exists() else own
+
+
 def load_local_runtime_config(
     *,
     config_path: Path | None = None,
@@ -139,7 +180,7 @@ def load_local_runtime_config(
     write_device_id: bool = True,
 ) -> LocalRuntimeConfig:
     resolved_repo = repo_root or REPO_ROOT
-    resolved_path = config_path or LOCAL_CONFIG_PATH
+    resolved_path = resolve_local_config_path(repo_root=resolved_repo, config_path=config_path)
     config_exists = resolved_path.exists()
     payload = _read_json(resolved_path) if config_exists else {}
 
@@ -176,6 +217,7 @@ def load_local_runtime_config(
 
 __all__ = [
     "LOCAL_CONFIG_PATH",
+    "resolve_local_config_path",
     "LocalRuntimeConfig",
     "PLACEHOLDER_DEVICE_ID",
     "default_app_home",

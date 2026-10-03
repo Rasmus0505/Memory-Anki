@@ -7,7 +7,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from memory_anki.core.local_config import PLACEHOLDER_DEVICE_ID, load_local_runtime_config
+from memory_anki.core.local_config import (
+    PLACEHOLDER_DEVICE_ID,
+    load_local_runtime_config,
+    resolve_local_config_path,
+)
 
 
 class LocalConfigTests(unittest.TestCase):
@@ -25,6 +29,44 @@ class LocalConfigTests(unittest.TestCase):
         self.assertFalse(config.config_exists)
         self.assertEqual(config.local_app_home, default_home)
         self.assertFalse(hasattr(config, "sync_enabled"))
+
+    def test_worktree_without_local_config_inherits_main_checkout(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            main = root / "Memory Anki"
+            worktree = root / "grok-4.7-juiceness"
+            gitdir = main / ".git" / "worktrees" / "grok-4.7-juiceness"
+            gitdir.mkdir(parents=True)
+            (worktree / ".git").parent.mkdir(parents=True)
+            (worktree / ".git").write_text(f"gitdir: {gitdir}\n", encoding="utf-8")
+            config_path = main / "local-config" / "memory-anki.local.json"
+            config_path.parent.mkdir(parents=True)
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "device_id": "desktop-id",
+                        "device_name": "Desktop",
+                        "local_app_home": "vol:MemoryAnki/memory anki data",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            usb = root / "usb"
+            usb.mkdir()
+
+            with (
+                patch(
+                    "memory_anki.core.local_config._windows_volume_root_by_label",
+                    return_value=usb,
+                ),
+                patch.dict(os.environ, {"LOCALAPPDATA": str(root / "LocalAppData")}, clear=False),
+            ):
+                resolved = resolve_local_config_path(repo_root=worktree)
+                config = load_local_runtime_config(repo_root=worktree, write_device_id=False)
+
+        self.assertEqual(resolved, config_path)
+        self.assertEqual(config.local_app_home, usb / "memory anki data")
+        self.assertTrue(config.config_exists)
 
     def test_config_expands_paths_and_generates_device_id(self):
         with tempfile.TemporaryDirectory() as temp_dir:

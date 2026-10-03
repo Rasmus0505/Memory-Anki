@@ -53,6 +53,8 @@ def test_start_reuses_healthy_shared_service():
         patch.object(pwa_server, "service_lock", return_value=nullcontext()),
         patch.object(pwa_server.dev_server, "list_listening_pids", return_value=[42]),
         patch.object(pwa_server, "_is_memory_anki_service_process", return_value=True),
+        patch.object(pwa_server, "_service_belongs_to_this_checkout", return_value=True),
+        patch.object(pwa_server, "_running_service_uses_configured_home", return_value=True),
         patch.object(pwa_server, "_pwa_is_ready", return_value=True),
         patch.object(pwa_server, "_database_at_alembic_head", return_value=True),
         patch.object(pwa_server, "_start_backend") as start_backend,
@@ -71,6 +73,8 @@ def test_start_restarts_healthy_service_when_database_is_behind_head():
         patch.object(pwa_server, "service_lock", return_value=nullcontext()),
         patch.object(pwa_server.dev_server, "list_listening_pids", return_value=[42]),
         patch.object(pwa_server, "_is_memory_anki_service_process", return_value=True),
+        patch.object(pwa_server, "_service_belongs_to_this_checkout", return_value=True),
+        patch.object(pwa_server, "_running_service_uses_configured_home", return_value=True),
         patch.object(pwa_server, "_pwa_is_ready", return_value=True),
         patch.object(pwa_server, "_database_at_alembic_head", return_value=False),
         patch.object(
@@ -179,6 +183,43 @@ def test_stale_pid_file_does_not_trust_unrelated_windows_process(tmp_path):
         patch.object(pwa_server, "_process_command_line", return_value="unrelated.exe"),
     ):
         assert pwa_server._is_memory_anki_service_process(99) is False
+        assert pwa_server._service_belongs_to_this_checkout(99) is False
+
+
+def test_other_memory_anki_checkout_can_be_replaced(tmp_path):
+    pid_file = tmp_path / "pwa-server.pid"
+    pid_file.write_text("1", encoding="utf-8")
+    other = r"d:\baidusyncdisk\grok-4.7-juiceness\apps\api\src"
+    command = f"python -m uvicorn --app-dir {other} memory_anki.app.main:app --port 8012"
+    with (
+        patch.object(pwa_server, "PWA_PID_FILE", pid_file),
+        patch.object(pwa_server.os, "name", "nt"),
+        patch.object(pwa_server, "_process_command_line", return_value=command),
+    ):
+        assert pwa_server._is_memory_anki_service_process(22408) is True
+        assert pwa_server._service_belongs_to_this_checkout(22408) is False
+
+
+def test_start_switches_away_from_another_memory_anki_checkout():
+    process = SimpleNamespace(pid=1234, poll=lambda: None)
+    with (
+        patch.object(pwa_server, "service_lock", return_value=nullcontext()),
+        patch.object(pwa_server.dev_server, "list_listening_pids", return_value=[22408]),
+        patch.object(pwa_server, "_is_memory_anki_service_process", return_value=True),
+        patch.object(pwa_server, "_service_belongs_to_this_checkout", return_value=False),
+        patch.object(pwa_server, "_stop_service_unlocked", return_value=True) as stop_service,
+        patch.object(pwa_server, "_pwa_is_ready", return_value=True),
+        patch.object(pwa_server, "_database_at_alembic_head", return_value=True),
+        patch.object(pwa_server, "_pwa_dist_ready", return_value=True),
+        patch.object(pwa_server, "_prepare_runtime", return_value=True),
+        patch.object(pwa_server, "_start_backend", return_value=process),
+        patch.object(pwa_server, "_wait_for_pwa", return_value=True),
+        patch.object(pwa_server.dev_server, "kill_memory_anki_desktop_processes") as kill_desktop,
+    ):
+        assert pwa_server.start(supervise=False) == 0
+
+    stop_service.assert_called_once_with()
+    kill_desktop.assert_called_once_with()
 
 
 def test_desktop_restart_starts_shared_service():
