@@ -129,21 +129,8 @@ function flipCard(card: HTMLElement, delay: number, burst: boolean) {
     ],
     { duration: FLIP_MS, delay, fill: 'backwards', id: FLIP_ID },
   )
-  const base = getComputedStyle(card).boxShadow
-  const resting = base && base !== 'none' ? base : '0 0 0 0 transparent'
-  card.animate(
-    [
-      { boxShadow: resting },
-      { boxShadow: '0 3px 6px -2px rgb(120 60 10 / 0.2)', offset: FLIP_TURN },
-      {
-        // Lift only: no gold outline or halo ring on landing.
-        boxShadow: '0 22px 38px -12px rgb(90 50 20 / 0.42)',
-        offset: 0.74,
-      },
-      { boxShadow: resting },
-    ],
-    { duration: FLIP_MS + 260, delay, id: FLIP_ID, easing: 'ease-out' },
-  )
+  // Rotate and scale only. Animating box-shadow paints the card every frame,
+  // and reading getComputedStyle here forces layout on the flip that should start now.
   removeWhenDone(cover.animate(
     [{ opacity: 1 }, { opacity: 1, offset: FLIP_TURN }, { opacity: 0, offset: FLIP_TURN + 0.0001 }, { opacity: 0 }],
     { duration: FLIP_MS, delay, fill: 'both' },

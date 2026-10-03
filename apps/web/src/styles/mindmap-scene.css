@@ -343,8 +343,8 @@
     0 1px 0 hsl(43 100% 100% / 0.9) inset,
     0 1px 2px hsl(24 40% 22% / 0.07),
     0 6px 16px -8px hsl(24 50% 26% / 0.16);
+  /* Shadow snaps. Interpolating box-shadow repaints the card on every hover and flip. */
   transition:
-    box-shadow var(--duration-base) var(--ease-out-expo),
     transform var(--duration-base) var(--ease-spring-soft),
     background-color var(--duration-fast) ease,
     border-color var(--duration-fast) ease,
@@ -426,6 +426,12 @@
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+  /* Static frost. An infinite background-position sweep repaints every concealed
+     node on every mounted palace; shimmer only the card under the pointer. */
+  background-position: 40% 0;
+}
+.mindmap-node-shell:hover .mindmap-node-concealed,
+.mindmap-node-card--selected .mindmap-node-concealed {
   animation: mindmap-concealed-sheen 2.8s var(--ease-in-out-soft) infinite;
 }
 
