@@ -124,6 +124,7 @@ export {
   passedOccurrenceIds,
   scoredOccurrenceIds,
   unscoredOccurrenceIds,
+  unscoredOccurrenceIndices,
   type UnitProgressInput,
 } from './domain/unitProgressState'
 export {

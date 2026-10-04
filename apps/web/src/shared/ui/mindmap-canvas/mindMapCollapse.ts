@@ -310,6 +310,88 @@ export function collectBranchNodeIds(
   return ids
 }
 
+export type CollapseModeKey = 'p' | 'r' | 'x' | 'e'
+
+export interface CollapseTransitionInput {
+  previousCollapsed: ReadonlySet<string>
+  previousSignature: string
+  nodes: readonly MindMapNode[]
+  knownNodeIds: ReadonlySet<string>
+  practiceModeActive?: boolean
+  forceExpanded?: boolean
+  revealCollapsedNodeIds?: ReadonlySet<string> | null
+}
+
+export interface CollapseTransitionResult {
+  signature: string
+  /** `null` means the tree identity did not change; keep the current folds. */
+  collapsed: Set<string> | null
+  knownNodeIds: Set<string>
+}
+
+/**
+ * Flip-derived folds are an entry seed, not a live binding.
+ * Re-applying them on every document edit would snap branches shut when the
+ * learner edits or deletes a card — the ordinary editor never does that.
+ */
+export function collapseModeKey(options: {
+  practiceModeActive?: boolean
+  forceExpanded?: boolean
+  revealCollapsedNodeIds?: ReadonlySet<string> | null
+}): CollapseModeKey {
+  if (options.practiceModeActive) return 'p'
+  if (options.revealCollapsedNodeIds) return 'r'
+  if (options.forceExpanded) return 'x'
+  return 'e'
+}
+
+export function collapseNodeSignature(nodes: readonly MindMapNode[]): string {
+  return nodes.map((node) => node.id).join(',')
+}
+
+export function resolveCollapseTransition(
+  input: CollapseTransitionInput,
+): CollapseTransitionResult {
+  const modeKey = collapseModeKey(input)
+  const currentIds = input.nodes.map((node) => node.id)
+  const signature = `${modeKey}:${collapseNodeSignature(input.nodes)}`
+  const knownNodeIds = new Set(currentIds)
+  if (!input.previousSignature) {
+    const collapsed = input.revealCollapsedNodeIds && modeKey === 'r'
+      ? new Set(input.revealCollapsedNodeIds)
+      : reconcileCollapsedNodeIds(new Set(), input.nodes, {
+          practiceModeActive: input.practiceModeActive,
+          forceExpanded: input.forceExpanded,
+          forceDefault: true,
+        })
+    return { signature, collapsed, knownNodeIds }
+  }
+  if (input.previousSignature === signature) {
+    return { signature, collapsed: null, knownNodeIds: new Set(input.knownNodeIds) }
+  }
+  const previousMode = input.previousSignature.charAt(0)
+  const modeChanged = previousMode !== modeKey
+  if (modeChanged && modeKey === 'r' && input.revealCollapsedNodeIds) {
+    return {
+      signature,
+      collapsed: new Set(input.revealCollapsedNodeIds),
+      knownNodeIds,
+    }
+  }
+  return {
+    signature,
+    collapsed: reconcileCollapsedNodeIds(input.previousCollapsed, input.nodes, {
+      practiceModeActive: input.practiceModeActive,
+      // Unit-scope edit passes forceExpanded together with the flip seed.
+      // Honoring it after entry would wipe the seed on the next card edit.
+      forceExpanded: modeKey === 'r' ? false : input.forceExpanded,
+      forceDefault: modeChanged,
+      knownNodeIds: input.knownNodeIds,
+    }),
+    knownNodeIds,
+  }
+}
+
 /**
  * Expand `rootId` and every descendant: remove them from the collapsed set.
  * Other collapsed branches stay collapsed.

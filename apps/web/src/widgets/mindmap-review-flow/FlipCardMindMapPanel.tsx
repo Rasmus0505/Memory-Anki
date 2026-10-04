@@ -148,8 +148,9 @@ export interface FlipCardMindMapPanelProps extends FlipCardSurfaceExtensions {
   /** Freestyle inline edit: do not auto-collapse the scoped branch. */
   forceExpanded?: boolean
   /**
-   * Edit-mode fold seed from flip progress. Takes precedence over `forceExpanded`
-   * so entering edit shows only the branches already flipped out.
+   * Edit-mode fold seed from flip progress. Applied only when entering edit,
+   * and it wins over `forceExpanded` for that entry. Later card edits keep
+   * the canvas folds; they do not re-apply this set.
    */
   revealCollapsedNodeIds?: ReadonlySet<string> | null
 }

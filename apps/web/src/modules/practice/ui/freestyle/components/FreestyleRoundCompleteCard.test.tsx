@@ -44,4 +44,25 @@ describe('FreestyleRoundCompleteCard', () => {
     expect(onCancelSettlement).not.toHaveBeenCalled()
     expect(screen.getByText('今日到期已清')).toBeTruthy()
   })
+
+  it('lets a partial settlement grow so 取消结算 stays in the document', () => {
+    const onCancelSettlement = vi.fn()
+    render(
+      <FreestyleRoundCompleteCard
+        variant="partial"
+        completion={completion}
+        roundKey="round-9:partial"
+        quizPalaceCount={0}
+        onClearQuizProgress={vi.fn(async () => undefined)}
+        onCancelSettlement={onCancelSettlement}
+        onConfirmPartial={vi.fn()}
+      />,
+    )
+
+    const card = screen.getByTestId('freestyle-partial-settlement-card')
+    expect(card.className).toContain('h-auto')
+    expect(card.className).not.toContain('h-full')
+    fireEvent.click(screen.getByTestId('freestyle-round-cancel-settlement'))
+    expect(onCancelSettlement).toHaveBeenCalledOnce()
+  })
 })

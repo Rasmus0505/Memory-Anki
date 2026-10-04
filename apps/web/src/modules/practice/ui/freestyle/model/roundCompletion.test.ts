@@ -6,6 +6,7 @@ import {
   foldPartialSettlementsIntoCompletion,
   clampFreestyleFeedIndex,
   findEarliestCompleteSeekIndex,
+  findUnscoredCompleteSeekIndices,
   findEarliestUnhandledIndex,
   freestyleCanPageNext,
   freestyleFeedSlotCount,
@@ -621,6 +622,27 @@ describe('findEarliestCompleteSeekIndex', () => {
       },
     )).toBe(1)
   })
+
+  it('does not seek a card removed from this queue', () => {
+    const removed = card('review_unit:u1:r1', { unit_id: 'u1' })
+    const roundPlan = {
+      cardsById: {
+        [removed.id]: { status: 'excluded', cardId: removed.id, lastRating: null },
+      },
+    } as Parameters<typeof findEarliestCompleteSeekIndex>[3]
+    expect(findUnscoredCompleteSeekIndices(
+      [removed, card('two'), card('three')],
+      {},
+      [],
+      roundPlan,
+    )).toEqual([1, 2])
+    expect(findEarliestCompleteSeekIndex(
+      [removed, card('two')],
+      {},
+      [],
+      roundPlan,
+    )).toBe(1)
+  })
 })
 
 describe('resolveFreestyleOpenFeedIndex', () => {
@@ -680,13 +702,41 @@ describe('resolveFreestyleCompleteSeek', () => {
     })).toBe(1)
   })
 
-  it('does nothing when already on the earliest unfinished unit', () => {
+  it('does nothing when already on the only unfinished unit', () => {
     expect(resolveFreestyleCompleteSeek({
       roundComplete: false,
       cardCount: 4,
       earliestUnhandledIndex: 1,
       visualIndex: 1,
+      unscoredIndices: [1],
     })).toBeNull()
+  })
+
+  it('from an unscored card, seeks the next unscored card and then wraps', () => {
+    expect(resolveFreestyleCompleteSeek({
+      roundComplete: false,
+      cardCount: 4,
+      earliestUnhandledIndex: 1,
+      visualIndex: 1,
+      unscoredIndices: [1, 3],
+    })).toBe(3)
+    expect(resolveFreestyleCompleteSeek({
+      roundComplete: false,
+      cardCount: 4,
+      earliestUnhandledIndex: 1,
+      visualIndex: 3,
+      unscoredIndices: [1, 3],
+    })).toBe(1)
+  })
+
+  it('skips a removed card and walks the remaining unscored cards', () => {
+    expect(resolveFreestyleCompleteSeek({
+      roundComplete: false,
+      cardCount: 4,
+      earliestUnhandledIndex: 1,
+      visualIndex: 0,
+      unscoredIndices: [1, 2],
+    })).toBe(1)
   })
 
   it('opens settlement after the last unscored card is rated, even on a weak score', () => {

@@ -7,6 +7,7 @@ import {
   occurrenceScore,
   scoredOccurrenceIds,
   unscoredOccurrenceIds,
+  unscoredOccurrenceIndices,
 } from './unitProgressState'
 import type { FreestyleCard } from '@/shared/api/contracts'
 import type { FreestyleRoundPlanState } from './roundPlan'
@@ -189,6 +190,35 @@ describe('yellow boundary hint is never outstanding work', () => {
     }
     expect(findEarliestUnscoredIndex(input)).toBeNull()
     expect(unscoredOccurrenceIds(input)).toEqual([])
+  })
+
+  it('does not seek a card removed from this queue, even while it is still in the feed', () => {
+    const removed = 'review_unit:u1:r1'
+    const input = {
+      cards: [card(removed), card('b'), card('c')],
+      completedIds: [],
+      encounters: {},
+      roundPlan: plan({
+        [removed]: { status: 'excluded' },
+        b: { lastRating: null },
+        c: { lastRating: null },
+      }),
+    }
+    expect(unscoredOccurrenceIds(input)).toEqual(['b', 'c'])
+    expect(unscoredOccurrenceIndices(input)).toEqual([1, 2])
+    expect(findEarliestUnscoredIndex(input)).toBe(1)
+  })
+
+  it('does not seek a card that is only listed as hidden', () => {
+    const input = {
+      cards: [card('a'), card('b')],
+      completedIds: [],
+      encounters: {},
+      roundPlan: null,
+      hiddenIds: ['a'],
+    }
+    expect(unscoredOccurrenceIndices(input)).toEqual([1])
+    expect(findEarliestUnscoredIndex(input)).toBe(1)
   })
 
   it('does not seek a new revision of a unit already removed from the queue', () => {

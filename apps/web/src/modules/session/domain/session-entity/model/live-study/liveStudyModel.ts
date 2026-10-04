@@ -133,7 +133,22 @@ export function shouldFollowLiveRoute(input: {
   ) {
     return false
   }
+  // Opening 知识 / a quiz / an English page must stick. Those routes are
+  // followable so a controller can mirror palace A → palace B, but a remote
+  // freestyle workspace must not yank the user back off the section they opened.
+  // `/` still catches up into freestyle.
+  if (
+    isFreestyleWorkspacePath(remotePathname) &&
+    !isFreestyleWorkspacePath(localPathname) &&
+    localPathname !== '/'
+  ) {
+    return false
+  }
   return input.localPath !== input.route
+}
+
+function isFreestyleWorkspacePath(pathname: string) {
+  return isPrimaryFreestylePath(pathname) || isSecondaryFreestylePath(pathname)
 }
 
 function readString(value: unknown) {

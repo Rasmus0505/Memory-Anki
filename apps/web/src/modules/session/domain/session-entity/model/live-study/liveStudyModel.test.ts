@@ -109,6 +109,49 @@ describe('liveStudyModel', () => {
     ).toBe(true)
   })
 
+  it('does not yank a local palace, quiz, or english page back to a freestyle workspace', () => {
+    expect(
+      shouldFollowLiveRoute({
+        localPath: '/palaces/41',
+        isController: false,
+        surface: 'freestyle',
+        route: '/freestyle',
+      }),
+    ).toBe(false)
+    expect(
+      shouldFollowLiveRoute({
+        localPath: '/palaces/41',
+        isController: false,
+        surface: 'freestyle',
+        route: '/freestyle-2',
+      }),
+    ).toBe(false)
+    expect(
+      shouldFollowLiveRoute({
+        localPath: '/palaces/7/quiz',
+        isController: false,
+        surface: 'freestyle',
+        route: '/freestyle?palaceId=3',
+      }),
+    ).toBe(false)
+    expect(
+      shouldFollowLiveRoute({
+        localPath: '/english/listening/courses/3',
+        isController: false,
+        surface: 'freestyle',
+        route: '/freestyle',
+      }),
+    ).toBe(false)
+    expect(
+      shouldFollowLiveRoute({
+        localPath: '/',
+        isController: false,
+        surface: 'freestyle',
+        route: '/freestyle',
+      }),
+    ).toBe(true)
+  })
+
   it('interpolates running timer seconds from snapshot age', () => {
     const snapshot = timer({
       status: 'running',

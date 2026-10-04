@@ -3061,6 +3061,16 @@ def check_freestyle_round_sheet_views(errors: list[str]) -> None:
             f"{page.relative_to(REPO_ROOT).as_posix()}: "
             "随心 feed must show the 小结算 page before compressing."
         )
+    if "freestyle-partial-settlement-exit" not in page_source or "退出" not in page_source:
+        errors.append(
+            f"{page.relative_to(REPO_ROOT).as_posix()}: "
+            "小结算 must keep a visible 退出. The overlay covers the pager, so PWA cannot leave without it."
+        )
+    if "h-auto justify-start" not in card_source:
+        errors.append(
+            f"{card.relative_to(REPO_ROOT).as_posix()}: "
+            "小结算 must grow with its content so a short PWA viewport can scroll to 确认结算."
+        )
 
 
 def check_freestyle_queue_removal_rail(errors: list[str]) -> None:

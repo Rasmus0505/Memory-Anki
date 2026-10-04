@@ -428,8 +428,9 @@ export function findEarliestUnratedIndex(
   completedIds: Iterable<string>,
   encounters: Record<string, FreestyleUnitEncounterState> = {},
   roundPlan: FreestyleRoundPlanState | null = null,
+  hiddenIds: Iterable<string> = [],
 ): number | null {
-  return findEarliestUnscoredIndex({ cards, completedIds, encounters, roundPlan })
+  return findEarliestUnscoredIndex({ cards, completedIds, encounters, roundPlan, hiddenIds })
 }
 
 /**

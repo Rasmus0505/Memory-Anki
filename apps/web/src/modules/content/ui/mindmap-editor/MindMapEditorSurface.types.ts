@@ -40,8 +40,9 @@ export interface MindMapEditorSurfaceProps {
   /** Expand all branches without locking editing. */
   forceExpanded?: boolean
   /**
-   * Edit-mode fold seed derived from flip progress. When set it wins over
-   * `forceExpanded`, so editing shows the branches the learner already flipped out.
+   * Edit-mode fold seed derived from flip progress. Applied only on entry,
+   * where it wins over `forceExpanded`. Card edits after that use the ordinary
+   * editor fold reconcile and must not re-apply this set.
    */
   revealCollapsedNodeIds?: ReadonlySet<string> | null
   /** Keep palace-root → branch spine + subtree in the canvas; persist still uses the full doc. */

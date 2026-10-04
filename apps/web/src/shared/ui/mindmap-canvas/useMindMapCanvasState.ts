@@ -24,6 +24,7 @@ import { buildDisplayEdges, buildDisplayNodes } from './mindMapCanvasDisplay'
 import {
   expandAncestorsForNode,
   reconcileCollapsedNodeIds,
+  resolveCollapseTransition,
   toggleCollapsedNodeId,
   expandSubtreeCollapsedIds,
 } from './mindMapCollapse'
@@ -51,30 +52,6 @@ type UseMindMapCanvasStateProps = MindMapCanvasProps & {
   hostRefreshEpoch?: number
   controlledViewport: Viewport
   onControlledViewportChange: (viewport: Viewport) => void
-}
-
-type CollapseSeedOptions = {
-  practiceModeActive?: boolean
-  forceExpanded?: boolean
-  revealCollapsedNodeIds?: ReadonlySet<string> | null
-}
-
-/**
- * Edit-mode fold seed. A host that hands in flip-derived folds wins over
- * `forceExpanded`, because "show the whole branch" and "show what was already
- * flipped out" cannot both hold once the learner has only opened part of it.
- */
-function seedCollapsedNodeIds(
-  previous: ReadonlySet<string>,
-  nodes: readonly MindMapNode[],
-  options: CollapseSeedOptions,
-): Set<string> {
-  if (options.revealCollapsedNodeIds) return new Set(options.revealCollapsedNodeIds)
-  return reconcileCollapsedNodeIds(previous, nodes, {
-    practiceModeActive: options.practiceModeActive,
-    forceExpanded: options.forceExpanded,
-    forceDefault: true,
-  })
 }
 
 /** True when layout output is visually identical — used to skip no-op React Flow writes. */function isSameMindMapLayout(current: Node[], next: Node[]): boolean {
@@ -262,12 +239,18 @@ export function useMindMapCanvasState(
     return allowAddChildUidSet.has(nodeId)
   }, [allowAddChildUidSet, lockedStructureUidSet])
   const [collapsedNodeIds, setCollapsedNodeIds] = useState<Set<string>>(() =>
-    seedCollapsedNodeIds(new Set(), graphData.nodes, {
+    resolveCollapseTransition({
+      previousCollapsed: new Set(),
+      previousSignature: '',
+      nodes: graphData.nodes,
+      knownNodeIds: new Set(),
       practiceModeActive,
       forceExpanded,
       revealCollapsedNodeIds,
-    }),
+    }).collapsed ?? new Set(),
   )
+  const collapsedNodeIdsRef = useRef(collapsedNodeIds)
+  collapsedNodeIdsRef.current = collapsedNodeIds
   const collapsedSignatureRef = useRef('')
   /** Node ids from the last reconciled tree; used to seed only brand-new deep parents. */
   const knownCollapseNodeIdsRef = useRef<Set<string>>(new Set(graphData.nodes.map((n) => n.id)))
@@ -368,49 +351,23 @@ export function useMindMapCanvasState(
 
   // Reconcile collapse when the node-id set or practice mode changes.
   // Practice/review keep fully expanded so flip reveal is not fighting folds.
-  // Editing keeps user folds for surviving parents; only brand-new deep parents
-  // auto-fold on large maps. Mode switches re-seed defaults.
+  // Flip-derived folds seed only on edit entry. Later card edits use the same
+  // reconcile path as the ordinary editor, so a text edit or delete cannot
+  // snap an open branch shut.
   useEffect(() => {
-    const modeKey = practiceModeActive
-      ? 'p'
-      : revealCollapsedNodeIds
-        ? 'r'
-        : forceExpanded ? 'x' : 'e'
-    const currentIds = graphData.nodes.map((node) => node.id)
-    const idSignature = currentIds.join(',')
-    const signature = `${modeKey}:${idSignature}`
-    const previousSignature = collapsedSignatureRef.current
-    collapsedSignatureRef.current = signature
-    const knownNodeIds = knownCollapseNodeIdsRef.current
-    if (!previousSignature) {
-      setCollapsedNodeIds(
-        seedCollapsedNodeIds(new Set(), graphData.nodes, {
-          practiceModeActive,
-          forceExpanded,
-          revealCollapsedNodeIds,
-        }),
-      )
-      knownCollapseNodeIdsRef.current = new Set(currentIds)
-      return
-    }
-    const previousMode = previousSignature.charAt(0)
-    const modeChanged = previousMode !== modeKey.charAt(0)
-    // Flip-derived folds are host state, not a user gesture: they must re-apply
-    // while edit stays open, even though the mode key did not change.
-    if (revealCollapsedNodeIds) {
-      setCollapsedNodeIds(new Set(revealCollapsedNodeIds))
-      knownCollapseNodeIdsRef.current = new Set(currentIds)
-      return
-    }
-    setCollapsedNodeIds((previous) =>
-      reconcileCollapsedNodeIds(previous, graphData.nodes, {
-        practiceModeActive,
-        forceExpanded,
-        forceDefault: modeChanged,
-        knownNodeIds,
-      }),
-    )
-    knownCollapseNodeIdsRef.current = new Set(currentIds)
+    const transition = resolveCollapseTransition({
+      previousCollapsed: collapsedNodeIdsRef.current,
+      previousSignature: collapsedSignatureRef.current,
+      nodes: graphData.nodes,
+      knownNodeIds: knownCollapseNodeIdsRef.current,
+      practiceModeActive,
+      forceExpanded,
+      revealCollapsedNodeIds,
+    })
+    collapsedSignatureRef.current = transition.signature
+    knownCollapseNodeIdsRef.current = transition.knownNodeIds
+    if (!transition.collapsed) return
+    setCollapsedNodeIds(transition.collapsed)
   }, [forceExpanded, graphData.nodes, practiceModeActive, revealCollapsedNodeIds])
 
   // Expand ancestors when host selects a node that would otherwise be hidden.

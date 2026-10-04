@@ -272,6 +272,7 @@ export default function ImmersiveFreestylePage({
     queueState.unitEncountersByCardId,
     queueState.completedIds,
     roundPlan,
+    queueState.hiddenIds,
   )
   const {
     scrollRef,
@@ -1052,9 +1053,19 @@ export default function ImmersiveFreestylePage({
         {partialSettlement ? (
           <div
             data-testid="freestyle-partial-settlement"
-            className="absolute inset-0 z-[70] flex bg-stage/95 px-3 py-4 backdrop-blur-sm"
+            className="absolute inset-0 z-[70] flex flex-col bg-stage/95 backdrop-blur-sm"
           >
-            <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 overflow-y-auto pt-[calc(env(safe-area-inset-top,0px)+3.5rem)]">
+            <div className="flex shrink-0 items-center justify-end px-3 pt-[max(0.75rem,env(safe-area-inset-top,0px))]">
+              <button
+                type="button"
+                data-testid="freestyle-partial-settlement-exit"
+                className="ma-pressable rounded-full border border-stage-line-strong bg-stage-raised/90 px-4 py-2 text-sm font-medium text-stage-ink shadow-lg"
+                onClick={() => setPartialSettlement(null)}
+              >
+                退出
+              </button>
+            </div>
+            <div className="mx-auto min-h-0 w-full max-w-2xl flex-1 overflow-y-auto overscroll-contain px-3 pb-[max(1rem,env(safe-area-inset-bottom,0px))]">
               <FreestyleRoundCompleteCard
                 variant="partial"
                 completion={{

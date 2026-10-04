@@ -2,6 +2,7 @@ import {
   cardPalaceId,
   cardUnitId,
   findEarliestUnratedIndex,
+  unscoredOccurrenceIndices,
   freestyleLearningTotals,
   isRetryOccurrence,
   reviewUnitIdFromCardId,
@@ -373,12 +374,19 @@ export function isFreestyleRoundComplete(
   encountersByCardId: Record<string, FreestyleUnitEncounterState>,
   completedIds: Iterable<string> = [],
   roundPlan: FreestyleRoundPlanState | null = null,
+  hiddenIds: Iterable<string> = [],
 ): boolean {
   if (cards.length === 0) {
     // Mid-round compress can empty the feed after every remaining card passed.
     return Boolean(roundPlan?.compressedIds?.length)
   }
-  return findEarliestUnratedIndex(cards, completedIds, encountersByCardId, roundPlan) == null
+  return findEarliestUnratedIndex(
+    cards,
+    completedIds,
+    encountersByCardId,
+    roundPlan,
+    hiddenIds,
+  ) == null
 }
 
 function isPassedOccurrence(
@@ -511,8 +519,32 @@ export function findEarliestCompleteSeekIndex(
   encountersByCardId: Record<string, FreestyleUnitEncounterState>,
   completedIds: Iterable<string> = [],
   roundPlan: FreestyleRoundPlanState | null = null,
+  hiddenIds: Iterable<string> = [],
 ): number | null {
-  return findEarliestUnratedIndex(cards, completedIds, encountersByCardId, roundPlan)
+  return findEarliestUnratedIndex(
+    cards,
+    completedIds,
+    encountersByCardId,
+    roundPlan,
+    hiddenIds,
+  )
+}
+
+/** Queue-order indexes 完成 can still land on. 移除本队列 is not in this list. */
+export function findUnscoredCompleteSeekIndices(
+  cards: ReadonlyArray<FreestyleCard>,
+  encountersByCardId: Record<string, FreestyleUnitEncounterState>,
+  completedIds: Iterable<string> = [],
+  roundPlan: FreestyleRoundPlanState | null = null,
+  hiddenIds: Iterable<string> = [],
+): number[] {
+  return unscoredOccurrenceIndices({
+    cards,
+    completedIds,
+    encounters: encountersByCardId,
+    roundPlan,
+    hiddenIds,
+  })
 }
 
 /**
@@ -533,24 +565,41 @@ export function resolveFreestyleOpenFeedIndex(
 
 /**
  * Right-side 完成: open the settlement slot once every presented card is
- * scored, otherwise seek the earliest unrated unit. Null means the viewport
- * is already on that target (or the feed is empty). A weak score is scored,
- * so it must not leave the button disabled with nowhere to go.
+ * scored. While the round is open, the first click seeks the earliest
+ * unscored card (谁最早看谁). Another click while already on an unscored
+ * card seeks the next one, then wraps. Null means there is nowhere else
+ * to go (only one unscored card and the viewport is already on it, already
+ * on the settlement slot, or the feed is empty). A weak score is scored.
+ * 移除本队列 is not an unscored target.
  */
 export function resolveFreestyleCompleteSeek(options: {
   roundComplete: boolean
   cardCount: number
   earliestUnhandledIndex: number | null
   visualIndex: number
+  /** Queue-order unscored indexes. Omit to seek only the earliest. */
+  unscoredIndices?: readonly number[]
 }): number | null {
-  const { roundComplete, cardCount, earliestUnhandledIndex, visualIndex } = options
+  const {
+    roundComplete,
+    cardCount,
+    earliestUnhandledIndex,
+    visualIndex,
+    unscoredIndices,
+  } = options
   if (cardCount <= 0) return null
   if (roundComplete) {
     const settlementIndex = cardCount
     return visualIndex === settlementIndex ? null : settlementIndex
   }
-  if (earliestUnhandledIndex == null) return null
-  return earliestUnhandledIndex === visualIndex ? null : earliestUnhandledIndex
+  const pending = (unscoredIndices ?? (
+    earliestUnhandledIndex == null ? [] : [earliestUnhandledIndex]
+  )).filter((index) => index >= 0 && index < cardCount)
+  if (pending.length === 0) return null
+  const at = pending.indexOf(visualIndex)
+  if (at < 0) return pending[0]
+  if (pending.length === 1) return null
+  return pending[(at + 1) % pending.length]
 }
 
 /**

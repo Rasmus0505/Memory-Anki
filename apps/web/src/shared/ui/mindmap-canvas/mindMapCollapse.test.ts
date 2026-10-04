@@ -10,6 +10,7 @@ import {
   expandAncestorsForNode,
   expandSubtreeCollapsedIds,
   reconcileCollapsedNodeIds,
+  resolveCollapseTransition,
   toggleCollapsedNodeId,
 } from './mindMapCollapse'
 
@@ -240,6 +241,87 @@ describe('mindMapCollapse', () => {
     const hidden = collectHiddenNodeIds(nodes, collapsed)
     expect(hidden.has('l2a')).toBe(false) // direct child visible
     expect(hidden.has('l3a')).toBe(true)  // grandchild still hidden
+  })
+})
+
+describe('resolveCollapseTransition', () => {
+  it('seeds flip folds on edit entry and ignores a tighter seed after a text edit', () => {
+    const nodes = sampleTree()
+    const entered = resolveCollapseTransition({
+      previousCollapsed: new Set(),
+      previousSignature: `p:${nodes.map((item) => item.id).join(',')}`,
+      nodes,
+      knownNodeIds: new Set(nodes.map((item) => item.id)),
+      forceExpanded: true,
+      revealCollapsedNodeIds: new Set(['l1b']),
+    })
+    expect(entered.collapsed).toEqual(new Set(['l1b']))
+
+    const edited = resolveCollapseTransition({
+      previousCollapsed: new Set(),
+      previousSignature: entered.signature,
+      nodes,
+      knownNodeIds: entered.knownNodeIds,
+      forceExpanded: true,
+      revealCollapsedNodeIds: new Set(['l1a', 'l1b']),
+    })
+    expect(edited.collapsed).toBeNull()
+    expect(edited.signature).toBe(entered.signature)
+  })
+
+  it('keeps the current folds when a card is deleted instead of re-applying the flip seed', () => {
+    const nodes = sampleTree()
+    const entered = resolveCollapseTransition({
+      previousCollapsed: new Set(['l1b']),
+      previousSignature: 'p:root,l1a,l1b,l2a,l3a,l2b',
+      nodes,
+      knownNodeIds: new Set(nodes.map((item) => item.id)),
+      forceExpanded: true,
+      revealCollapsedNodeIds: new Set(['l1b']),
+    })
+    const remaining = nodes.filter((item) => item.id !== 'l3a')
+    const afterDelete = resolveCollapseTransition({
+      previousCollapsed: new Set(),
+      previousSignature: entered.signature,
+      nodes: remaining,
+      knownNodeIds: entered.knownNodeIds,
+      forceExpanded: true,
+      revealCollapsedNodeIds: new Set(['l1a', 'l1b']),
+    })
+    expect(afterDelete.collapsed?.has('l1a')).toBe(false)
+    expect(afterDelete.collapsed?.has('l1b')).toBe(false)
+
+    const stillFolded = resolveCollapseTransition({
+      previousCollapsed: new Set(['l1b']),
+      previousSignature: entered.signature,
+      nodes: remaining,
+      knownNodeIds: entered.knownNodeIds,
+      forceExpanded: true,
+      revealCollapsedNodeIds: new Set(),
+    })
+    expect(stillFolded.collapsed?.has('l1b')).toBe(true)
+  })
+
+  it('re-seeds only when edit is entered again', () => {
+    const nodes = sampleTree()
+    const review = resolveCollapseTransition({
+      previousCollapsed: new Set(['l1a']),
+      previousSignature: 'r:root,l1a,l1b,l2a,l3a,l2b',
+      nodes,
+      knownNodeIds: new Set(nodes.map((item) => item.id)),
+      practiceModeActive: true,
+    })
+    expect(review.collapsed?.size).toBe(0)
+
+    const reentered = resolveCollapseTransition({
+      previousCollapsed: review.collapsed ?? new Set(),
+      previousSignature: review.signature,
+      nodes,
+      knownNodeIds: review.knownNodeIds,
+      forceExpanded: true,
+      revealCollapsedNodeIds: new Set(['l1a']),
+    })
+    expect(reentered.collapsed).toEqual(new Set(['l1a']))
   })
 })
 

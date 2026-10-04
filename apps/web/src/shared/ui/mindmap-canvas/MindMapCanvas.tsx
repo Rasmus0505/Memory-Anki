@@ -125,8 +125,8 @@ export interface MindMapCanvasProps {
   /** Expand all branches without locking editing. */
   forceExpanded?: boolean
   /**
-   * Edit-mode fold seed derived from flip progress: branches the learner has not
-   * flipped out stay folded instead of opening the whole tree.
+   * Edit-mode fold seed derived from flip progress. Used when entering edit so
+   * unflipped branches stay folded. It is not re-applied while edit stays open.
    */
   revealCollapsedNodeIds?: ReadonlySet<string> | null
   /** Spine / unit-root ids that cannot be deleted, given siblings, or dragged out. */

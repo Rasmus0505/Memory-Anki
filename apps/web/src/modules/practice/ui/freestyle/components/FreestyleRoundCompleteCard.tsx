@@ -154,7 +154,12 @@ export function FreestyleRoundCompleteCard({
   return (
     <div
       data-testid={partial ? 'freestyle-partial-settlement-card' : 'freestyle-round-complete'}
-      className="mx-auto flex h-full w-full max-w-2xl flex-col justify-center px-1 py-4"
+      className={cn(
+        'mx-auto flex w-full max-w-2xl flex-col px-1 py-4',
+        // 小结算 is an overlay on a short PWA viewport. h-full + justify-center
+        // centers overflow outside the scrollport, so 取消结算 / 确认结算 cannot be reached.
+        partial ? 'h-auto justify-start pb-[max(1rem,env(safe-area-inset-bottom,0px))]' : 'h-full justify-center',
+      )}
     >
       <div className="fs-complete-panel relative overflow-hidden rounded-[1.75rem] border border-stage-line-strong bg-stage-raised/95 p-5 text-stage-ink shadow-[0_24px_80px_-16px_rgb(0_0_0/0.7)] sm:p-7">
         <Rise index={0} className="text-center">

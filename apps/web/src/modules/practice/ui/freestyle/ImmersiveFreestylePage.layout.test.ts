@@ -27,11 +27,17 @@ describe('ImmersiveFreestylePage layout', () => {
     expect(source).toContain('viewingCompleteSlot')
   })
 
-  it('uses the right-side 完成 button to settle or seek the earliest unrated unit', () => {
-    expect(source).toContain('findEarliestCompleteSeekIndex')
+  it('uses the right-side 完成 button to settle or walk unscored units', () => {
+    expect(source).toContain('findUnscoredCompleteSeekIndices')
     expect(source).toContain('resolveFreestyleCompleteSeek')
     expect(source).toContain('onComplete={handleCompleteRound}')
     expect(source).toContain('viewingCardId')
+  })
+
+  it('keeps a visible 退出 on 小结算 because the overlay covers the pager', () => {
+    expect(source).toContain('data-testid="freestyle-partial-settlement-exit"')
+    expect(source).toContain('退出')
+    expect(source).toContain('setPartialSettlement(null)')
   })
 
   it('cancels settlement by leaving the slot so later dwell still counts', () => {

@@ -3575,11 +3575,11 @@ def test_freestyle_round_sheet_views_accept_header_toggle(
     )
     write_file(
         web_src / "modules" / "practice" / "ui" / "freestyle" / "components" / "FreestyleRoundCompleteCard.tsx",
-        "小结算\n确认结算\n",
+        "小结算\n确认结算\nh-auto justify-start\n",
     )
     write_file(
         web_src / "modules" / "practice" / "ui" / "freestyle" / "ImmersiveFreestylePage.tsx",
-        "freestyle-partial-settlement\n",
+        "freestyle-partial-settlement\nfreestyle-partial-settlement-exit\n退出\n",
     )
 
     errors: list[str] = []

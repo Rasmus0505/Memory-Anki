@@ -19,7 +19,7 @@ import {
 import type { useImmersiveQueue } from '@/modules/practice/ui/freestyle/hooks/useImmersiveQueue'
 import {
   clampFreestyleFeedIndex,
-  findEarliestCompleteSeekIndex,
+  findUnscoredCompleteSeekIndices,
   freestyleFeedSlotCount,
   isFreestyleCompleteSlot,
   resolveFreestyleCompleteSeek,
@@ -658,28 +658,39 @@ export function useFreestyleFeedNavigation({
   )
 
   const viewingCardId = viewingCompleteSlot ? null : (cards[visualIndex]?.id ?? null)
-  const earliestUnhandledIndex = useMemo(
-    () => findEarliestCompleteSeekIndex(
+  const unscoredIndices = useMemo(
+    () => findUnscoredCompleteSeekIndices(
       cards,
       queueState.unitEncountersByCardId,
       queueState.completedIds,
       roundPlan,
+      queueState.hiddenIds,
     ),
-    [cards, queueState.completedIds, queueState.unitEncountersByCardId, roundPlan],
+    [
+      cards,
+      queueState.completedIds,
+      queueState.hiddenIds,
+      queueState.unitEncountersByCardId,
+      roundPlan,
+    ],
   )
   const completeSeekIndex = useMemo(
     () => resolveFreestyleCompleteSeek({
       roundComplete,
       cardCount: cards.length,
-      earliestUnhandledIndex,
+      earliestUnhandledIndex: unscoredIndices[0] ?? null,
       visualIndex,
+      unscoredIndices,
     }),
-    [cards.length, earliestUnhandledIndex, roundComplete, visualIndex],
+    [cards.length, roundComplete, unscoredIndices, visualIndex],
   )
   const canCompleteRound = completeSeekIndex != null
+  const onUnscoredCard = unscoredIndices.includes(visualIndex)
   const completeTitle = roundComplete
     ? '进入本轮结算'
-    : '定位到最早还没评分的单元'
+    : onUnscoredCard && unscoredIndices.length > 1
+      ? '定位到下一张还没评分的单元'
+      : '定位到最早还没评分的单元'
   const handleCompleteRound = useCallback(() => {
     if (completeSeekIndex == null) return
     navigateToIndex(completeSeekIndex, { skipHistory: true })

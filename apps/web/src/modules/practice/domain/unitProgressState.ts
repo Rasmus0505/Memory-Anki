@@ -14,6 +14,8 @@ export type UnitProgressInput = {
   completedIds: Iterable<string>
   encounters: Record<string, FreestyleUnitEncounterState>
   roundPlan: FreestyleRoundPlanState | null
+  /** Still in the feed, but already 移除本队列. Not outstanding work. */
+  hiddenIds?: Iterable<string>
 }
 
 function asRating(value: unknown): 1 | 2 | 3 | 4 | null {
@@ -126,35 +128,52 @@ function isUnscoredRemovalShadow(card: FreestyleCard, input: UnitProgressInput):
   return isShadowOfQueueRemoval(card.id, input.roundPlan, cardUnitKey(card))
 }
 
+function hiddenIdSet(ids: Iterable<string> | undefined): Set<string> {
+  return new Set(Array.from(ids ?? [], (item) => idOf(item)).filter(Boolean))
+}
+
+/** Still needs a this-round score. 移除本队列, its rebound, and the yellow hint do not. */
+function isOutstandingUnscored(
+  card: FreestyleCard,
+  input: UnitProgressInput,
+  hidden: Set<string>,
+): boolean {
+  const id = idOf(card.id)
+  if (!id || hidden.has(id)) return false
+  if (isReviewHintId(id)) return false
+  if (input.roundPlan?.cardsById[id]?.status === 'excluded') return false
+  if (isUnscoredRemovalShadow(card, input)) return false
+  return !isOccurrenceScored(id, input)
+}
+
 /** Ids of cards that still need a score this round (excluded stay out). */
 export function unscoredOccurrenceIds(input: UnitProgressInput): string[] {
+  const hidden = hiddenIdSet(input.hiddenIds)
   const ids: string[] = []
   for (const card of input.cards) {
     const id = idOf(card.id)
-    if (!id) continue
-    // The yellow boundary hint is never scored; it is not outstanding work.
-    if (isReviewHintId(id)) continue
-    if (input.roundPlan?.cardsById[id]?.status === 'excluded') continue
-    if (isUnscoredRemovalShadow(card, input)) continue
-    if (!isOccurrenceScored(id, input)) ids.push(id)
+    if (id && isOutstandingUnscored(card, input, hidden)) ids.push(id)
   }
   return ids
+}
+
+/** Queue indexes of cards that still need a score. Same exclusions as the id list. */
+export function unscoredOccurrenceIndices(input: UnitProgressInput): number[] {
+  const hidden = hiddenIdSet(input.hiddenIds)
+  const indices: number[] = []
+  input.cards.forEach((card, index) => {
+    if (isOutstandingUnscored(card, input, hidden)) indices.push(index)
+  })
+  return indices
 }
 
 /**
  * 完成 while the round is open: queue-order first unscored card.
  * "谁最早看谁" — one rule, no family / unhandled multi-level priority.
+ * A card removed from this queue is not a target, even if it is still in the feed.
  */
 export function findEarliestUnscoredIndex(input: UnitProgressInput): number | null {
-  const index = input.cards.findIndex((card) => {
-    const id = idOf(card.id)
-    if (!id) return false
-    if (isReviewHintId(id)) return false
-    if (input.roundPlan?.cardsById[id]?.status === 'excluded') return false
-    if (isUnscoredRemovalShadow(card, input)) return false
-    return !isOccurrenceScored(id, input)
-  })
-  return index >= 0 ? index : null
+  return unscoredOccurrenceIndices(input)[0] ?? null
 }
 
 /**
