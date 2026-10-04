@@ -1,4 +1,5 @@
 import { request } from '@/shared/api/http'
+import { shareInFlightRequest } from '@/shared/api/inFlightRequest'
 import { APP_EVENT_NAMES, emitAppEvent } from '@/shared/events/appEvents'
 import { detectClientSource } from '@/shared/lib/clientSource'
 
@@ -281,8 +282,16 @@ export async function getPalaceLadderProgressApi(
   const searchParams = new URLSearchParams()
   searchParams.set('range', options?.range ?? 'all')
   if (options?.unitId) searchParams.set('unit_id', options.unitId)
-  const response = await request<{ item: PalaceLadderProgressDto }>(
-    `/review/palaces/${palaceId}/ladder-progress?${searchParams.toString()}`,
+  const query = searchParams.toString()
+  // Several cards and panels mount this widget for the same palace+range during a
+  // feed open; sharing the identical request keeps each duplicate from holding a
+  // pooled database connection at the same time.
+  const response = await shareInFlightRequest(
+    `palace:${palaceId}:ladder-progress:${query}`,
+    () =>
+      request<{ item: PalaceLadderProgressDto }>(
+        `/review/palaces/${palaceId}/ladder-progress?${query}`,
+      ),
   )
   return response.item
 }
@@ -342,6 +351,14 @@ export async function undoContentScheduleBatchApi(
   return response.item
 }
 
+/**
+ * Half-open links (phone sleep + Tailscale reconnect) never reject a fetch, so
+ * an uncapped session-start POST would hang until loadSessionWithTimeout()'s 30s
+ * guard and surface the generic "加载单元超时" message. Cap the transport wait so
+ * the card fails fast into its own retry path.
+ */
+export const SESSION_START_TIMEOUT_MS = 15_000
+
 export async function startFreestyleUnitReviewSessionApi(
   unit: Pick<ReviewUnitDto, 'id' | 'revision'>,
   roundId: string,
@@ -357,6 +374,10 @@ export async function startFreestyleUnitReviewSessionApi(
       clientSource: detectClientSource(),
       allow_not_due: Boolean(options?.allowNotDue),
     }),
+    // The UI retries this itself, so it is deliberately not queued as a
+    // mutation: a stale replay would reopen an encounter the user moved past.
+    timeoutMs: SESSION_START_TIMEOUT_MS,
+    persistence: false,
   })
   return response.item
 }

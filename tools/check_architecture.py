@@ -736,6 +736,43 @@ def check_removed_shared_api_modules(errors: list[str]) -> None:
 VISUAL_LAYER_DIRS = ("shared/ambient", "shared/fx")
 
 
+DB_ENGINE_RELATIVE = "apps/api/src/memory_anki/infrastructure/db/_tables/_base.py"
+# The pool checkout timeout is the innermost limit in the timeout stack and must
+# stay below every client transport budget. SQLAlchemy's 30s default outlives all
+# of them, so a saturated pool parks requests past the point where the browser has
+# already given up (2026-10-05: 23 requests returned 500 at ~30s while the user
+# saw a 15s timeout, and one write succeeded 34s later on a client that had gone).
+DB_POOL_TIMEOUT_MAX_SECONDS = 10
+
+
+def check_db_pool_budget(errors: list[str], *, engine_path: Path | None = None) -> None:
+    """Keep the pool checkout timeout explicit and inside all client budgets."""
+    if engine_path is None:
+        engine_path = REPO_ROOT / DB_ENGINE_RELATIVE
+    if not engine_path.exists():
+        errors.append(f"{DB_ENGINE_RELATIVE}: database engine module is missing")
+        return
+    content = engine_path.read_text(encoding="utf-8")
+    if "pool_timeout=" not in content:
+        errors.append(
+            f"{DB_ENGINE_RELATIVE}: engine must set pool_timeout explicitly; the "
+            "SQLAlchemy 30s default is slower than every client request budget"
+        )
+        return
+    match = re.search(r"DB_POOL_TIMEOUT_SECONDS\s*=\s*(\d+)", content)
+    if match is None:
+        errors.append(
+            f"{DB_ENGINE_RELATIVE}: define DB_POOL_TIMEOUT_SECONDS as an integer literal"
+        )
+        return
+    timeout = int(match.group(1))
+    if timeout <= 0 or timeout > DB_POOL_TIMEOUT_MAX_SECONDS:
+        errors.append(
+            f"{DB_ENGINE_RELATIVE}: DB_POOL_TIMEOUT_SECONDS is {timeout}s; must be "
+            f"0 < t <= {DB_POOL_TIMEOUT_MAX_SECONDS}s so pool exhaustion fails before "
+            "the client gives up"
+        )
+
 def check_visual_layer_purity(errors: list[str]) -> None:
     """Ambient and particle layers render whatever they are handed; data wiring stays in app/shell."""
     for relative_dir in VISUAL_LAYER_DIRS:
@@ -5272,6 +5309,7 @@ def main() -> int:
     check_file_sizes(errors)
     check_router_residency(errors)
     check_shared_local_storage_facade(errors)
+    check_db_pool_budget(errors)
     check_removed_shared_api_modules(errors)
     check_visual_layer_purity(errors)
     check_fx_director_boundary(errors)

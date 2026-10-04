@@ -1,4 +1,5 @@
 import { request } from '@/shared/api/http'
+import { invalidateSharedRequest } from '@/shared/api/inFlightRequest'
 import type {
   PalaceQuizOcrSource,
   PalaceQuizOcrSourceDraft,
@@ -285,6 +286,11 @@ export function listPalaceQuizNodeBindingsApi(palaceId: number) {
   )
 }
 
+/** Shared-cache key for `listPalaceQuizNodeBindingsApi`. Keep the two in sync. */
+export function palaceQuizNodeBindingsCacheKey(palaceId: number) {
+  return `palace:${palaceId}:quiz-node-bindings`
+}
+
 export function listQuestionNodeBindingsApi(questionId: number) {
   return request<{ question_id: number; items: QuizNodeBindingEdge[]; item_count: number }>(
     `/palace-quiz-questions/${questionId}/node-bindings`,
@@ -315,6 +321,7 @@ export function autoBindPalaceQuizNodeBindingsApi(
   palaceId: number,
   data?: { fill_unbound_only?: boolean; max_nodes_per_question?: number },
 ) {
+  invalidateSharedRequest(palaceQuizNodeBindingsCacheKey(palaceId))
   return request<{
     palace_id: number
     created_count: number
@@ -352,6 +359,7 @@ export function mutatePalaceQuizNodeBindingsApi(
     }>
   },
 ) {
+  invalidateSharedRequest(palaceQuizNodeBindingsCacheKey(palaceId))
   return request<{
     palace_id: number
     created_count: number

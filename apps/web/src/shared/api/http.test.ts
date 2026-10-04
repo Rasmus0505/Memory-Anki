@@ -226,6 +226,46 @@ describe('shared api http token headers', () => {
     }
   })
 
+  it('blames backend saturation for a mobile timeout instead of a half-open link', async () => {
+    vi.useFakeTimers()
+    try {
+      // 手机端（非本机）超时。连接是通的——请求已经到达服务端，只是服务端没处理完。
+      // 2026-10-05 的事故里，服务端因为连接池耗尽把请求挂了 34s，而提示却让用户去
+      // 反复开关 Tailscale。文案必须先指向服务端忙/重启，链路问题只作为最后的兜底。
+      vi.stubGlobal('navigator', {
+        onLine: true,
+        userAgent:
+          'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6.1 Mobile/15E148 Safari/604.1',
+      })
+      // jsdom 的 window.location.href 是 localhost，会被判成「本机运行时」。
+      // 手机实际访问的是 Tailscale 域名，这里显式模拟成非本机 URL。
+      vi.stubGlobal('location', {
+        href: 'https://laptop-20260422kj.tail92e457.ts.net/freestyle-2',
+      })
+      const fetchMock = vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason))
+      }))
+      vi.stubGlobal('fetch', fetchMock)
+
+      const pending = request('/review/units/abc/sessions', {
+        method: 'POST',
+        body: JSON.stringify({ round_id: 'r1' }),
+        timeoutMs: 15_000,
+        persistence: false,
+      }).catch((error: unknown) => error)
+      await vi.advanceTimersByTimeAsync(20_000)
+      const error = String(await pending)
+
+      expect(error).toMatch(/请求超过 15 秒未响应/)
+      expect(error).toMatch(/服务端.*没有处理完/)
+      expect(error).toMatch(/后端.*忙|正在重启/)
+      // 主因判定不该再是 Tailscale，但仍然保留作为最后一步的排查动作。
+      expect(error).not.toMatch(/通常是 Tailscale 链路半开/)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('times out when a GET receives headers but its JSON body never finishes', async () => {
     vi.useFakeTimers()
     try {
@@ -267,5 +307,33 @@ describe('shared api http token headers', () => {
     await request('/palaces/subjects', { method: 'POST', body: '{}' })
 
     expect(readFirstFetchInit(fetchMock).signal).toBeUndefined()
+  })
+
+  it('bounds a write only when the caller opts in with timeoutMs', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.stubGlobal('navigator', { onLine: true, userAgent: 'Electron/39.8.10' })
+      const fetchMock = vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason))
+      }))
+      vi.stubGlobal('fetch', fetchMock)
+
+      const pending = request('/review/units/unit-1/sessions', {
+        method: 'POST',
+        body: JSON.stringify({ encounter_id: 'encounter-1' }),
+        timeoutMs: 15_000,
+        persistence: false,
+      }).catch((error: unknown) => error)
+
+      await vi.advanceTimersByTimeAsync(15_000)
+      const error = await pending
+
+      expect(String(error)).toMatch(/请求超过 15 秒未响应/)
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      expect(readFirstFetchInit(fetchMock).signal).toBeInstanceOf(AbortSignal)
+      expect(mutationQueueMocks.enqueueMutation).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

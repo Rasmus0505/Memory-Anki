@@ -12,7 +12,14 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.pool import StaticPool
 
 from memory_anki.infrastructure.db import maintenance as db_maintenance
-from memory_anki.infrastructure.db._tables._base import _configure_sqlite_pragmas
+from memory_anki.infrastructure.db._tables._base import (
+    DB_MAX_OVERFLOW,
+    DB_POOL_SIZE,
+    DB_POOL_TIMEOUT_SECONDS,
+    SQLITE_LOCK_WAIT_SECONDS,
+    _configure_sqlite_pragmas,
+    engine,
+)
 from memory_anki.infrastructure.db._tables.knowledge import Chapter, Subject
 from memory_anki.infrastructure.db._tables.misc import StudySession
 from memory_anki.infrastructure.db._tables.palaces import (
@@ -155,6 +162,30 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
         with self.SessionLocal() as session:
             self.assertEqual(restore_all_archived_palaces(session), 1)
 
+    def test_engine_pool_checkout_timeout_is_innermost_budget(self):
+        """Pool exhaustion must fail faster than every client transport budget.
+
+        Regression guard for the 2026-10-05 incident: the pool had no explicit
+        ``pool_timeout``, so it inherited SQLAlchemy's 30s default — slower than
+        the 15s session-start POST and the 20s GET budget. A saturated pool then
+        parked requests past the point where the browser had already given up,
+        producing a burst of ``in 30xxx ms`` 500s plus silent client/server
+        divergence on writes that eventually succeeded server-side.
+        """
+        pool = engine.pool
+        self.assertEqual(pool.size(), DB_POOL_SIZE)
+        self.assertEqual(pool._max_overflow, DB_MAX_OVERFLOW)
+        self.assertEqual(pool._timeout, DB_POOL_TIMEOUT_SECONDS)
+
+        # Innermost first: checkout < SQLite lock wait < 15s session start < 20s read.
+        self.assertGreater(DB_POOL_TIMEOUT_SECONDS, 0)
+        self.assertLess(DB_POOL_TIMEOUT_SECONDS, SQLITE_LOCK_WAIT_SECONDS)
+        self.assertLess(DB_POOL_TIMEOUT_SECONDS, 15)
+        # Never fall back to SQLAlchemy's 30s default, which outlives the clients.
+        self.assertLess(DB_POOL_TIMEOUT_SECONDS, 30)
+        # Headroom for a feed's concurrent read fan-out without queuing.
+        self.assertGreaterEqual(DB_POOL_SIZE + DB_MAX_OVERFLOW, 20)
+
     def test_sqlite_pragmas_are_configured_for_file_database_connections(self):
         import sqlite3
 
@@ -166,7 +197,13 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
                 cursor = connection.cursor()
                 try:
                     self.assertEqual(cursor.execute("PRAGMA foreign_keys").fetchone()[0], 1)
-                    self.assertEqual(cursor.execute("PRAGMA busy_timeout").fetchone()[0], 30000)
+                    # Must stay below the web client's transport budgets so a real
+                    # lock error surfaces instead of the generic client timeout.
+                    self.assertEqual(
+                        cursor.execute("PRAGMA busy_timeout").fetchone()[0],
+                        SQLITE_LOCK_WAIT_SECONDS * 1000,
+                    )
+                    self.assertLessEqual(SQLITE_LOCK_WAIT_SECONDS, 20)
                     self.assertEqual(cursor.execute("PRAGMA journal_mode").fetchone()[0].lower(), "wal")
                     self.assertEqual(cursor.execute("PRAGMA cache_size").fetchone()[0], -64000)
                     self.assertEqual(cursor.execute("PRAGMA temp_store").fetchone()[0], 2)

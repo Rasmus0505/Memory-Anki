@@ -354,6 +354,43 @@ describe('Dialog', () => {
     expect(dialog.style.left).toBe('476px')
   })
 
+  it('centers from layout height so the entrance zoom does not push the panel down', () => {
+    setViewport(1200, 900)
+    const heightDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight')
+    const widthDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetWidth')
+    // The open animation (zoom-in-95) reports a shrunken box; layout metrics must win.
+    const rectSpy = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
+      x: 0, y: 0, top: 0, left: 0, right: 480, bottom: 285, width: 480, height: 285,
+      toJSON: () => ({}),
+    } as DOMRect)
+    Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, get: () => 300 })
+    Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, get: () => 480 })
+
+    try {
+      render(
+        <Dialog open onOpenChange={vi.fn()}>
+          <DialogContent floatingId="vertical-center-test">
+            <DialogHeader>
+              <div>
+                <DialogTitle>vertical dialog</DialogTitle>
+                <DialogDescription>description</DialogDescription>
+              </div>
+            </DialogHeader>
+            dialog body
+          </DialogContent>
+        </Dialog>,
+      )
+
+      const dialog = screen.getByRole('dialog')
+      // (900 - 300) / 2, not the (900 - 285) / 2 the zoomed rect would produce.
+      expect(dialog.style.top).toBe('300px')
+    } finally {
+      rectSpy.mockRestore()
+      if (heightDescriptor) Object.defineProperty(HTMLElement.prototype, 'offsetHeight', heightDescriptor)
+      if (widthDescriptor) Object.defineProperty(HTMLElement.prototype, 'offsetWidth', widthDescriptor)
+    }
+  })
+
   it('disables floating controls on small coarse pointer viewports', () => {
     Object.defineProperty(window, 'innerWidth', {
       configurable: true,

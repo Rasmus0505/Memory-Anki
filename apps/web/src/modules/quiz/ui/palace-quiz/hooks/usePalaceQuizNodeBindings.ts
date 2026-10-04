@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { listPalaceQuizNodeBindingsApi } from '@/modules/quiz/domain/quiz-entity/api'
+import { listPalaceQuizNodeBindingsApi, palaceQuizNodeBindingsCacheKey } from '@/modules/quiz/domain/quiz-entity/api'
+import { shareInFlightRequest } from '@/shared/api/inFlightRequest'
 import { subscribeQuizQuestionMarked } from '@/modules/quiz/domain/quiz-entity/model/quizQuestionMarkSync'
 import {
   markQuizSessionCompleted,
@@ -58,7 +59,14 @@ export function usePalaceQuizNodeBindings({
     }
     setLoading(true)
     try {
-      const response = await listPalaceQuizNodeBindingsApi(palaceId)
+      // A freestyle card mounts two independent consumers of this hook, and the
+      // feed mounts one more per preloaded card. Without sharing they each open
+      // their own connection for identical data, which is enough fan-out to
+      // starve the SQLite pool on a burst-opened feed.
+      const response = await shareInFlightRequest(
+        palaceQuizNodeBindingsCacheKey(palaceId),
+        () => listPalaceQuizNodeBindingsApi(palaceId),
+      )
       setBindings(response.items)
     } catch {
       setBindings([])

@@ -1,4 +1,4 @@
-import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Brain,
@@ -44,27 +44,51 @@ type OverflowAction = MindMapToolbarAction & {
  * Plain overflow menu. Radix DropdownMenu's Popper anchor setState loops inside
  * the mind-map host and the canvas error boundary then unmounts 文字转脑图.
  */
+const OVERFLOW_MENU_MIN_WIDTH = 192
+const OVERFLOW_MENU_MARGIN = 8
+
 function MindMapOverflowMenu({ actions }: { actions: OverflowAction[] }) {
   const menu = useDropdownMenuActionCoordinator()
   const [anchor, setAnchor] = useState<HTMLButtonElement | null>(null)
-  const [box, setBox] = useState<{ top: number; right: number } | null>(null)
+  const [box, setBox] = useState<{ top: number; left: number } | null>(null)
+  const menuRef = useRef<HTMLDivElement | null>(null)
 
   const menuOpen = menu.open
   const setMenuOpen = menu.setOpen
 
+  const place = useCallback(() => {
+    if (!anchor) return
+    const rect = anchor.getBoundingClientRect()
+    const viewportWidth = window.innerWidth
+    const measured = menuRef.current?.offsetWidth ?? 0
+    const menuWidth = Math.min(
+      measured > 0 ? measured : OVERFLOW_MENU_MIN_WIDTH,
+      Math.max(OVERFLOW_MENU_MIN_WIDTH, viewportWidth - OVERFLOW_MENU_MARGIN * 2),
+    )
+    // Prefer right-aligning the panel to the trigger (the usual overflow-menu
+    // feel), but clamp inside the viewport so a trigger near the left edge can
+    // never push the panel off-screen.
+    const maxLeft = Math.max(OVERFLOW_MENU_MARGIN, viewportWidth - OVERFLOW_MENU_MARGIN - menuWidth)
+    const left = Math.round(
+      Math.min(Math.max(rect.right - menuWidth, OVERFLOW_MENU_MARGIN), maxLeft),
+    )
+    const top = Math.round(rect.bottom + 4)
+    setBox((current) => (
+      current && current.top === top && current.left === left ? current : { top, left }
+    ))
+  }, [anchor])
+
   useEffect(() => {
     if (!menuOpen || !anchor) return
-    const place = () => {
-      const rect = anchor.getBoundingClientRect()
-      const next = { top: rect.bottom + 4, right: Math.max(8, window.innerWidth - rect.right) }
-      setBox((current) => (
-        current && current.top === next.top && current.right === next.right ? current : next
-      ))
-    }
     place()
+    // Re-measure once the panel is mounted so long labels still stay in view.
+    const frame = window.requestAnimationFrame(place)
     window.addEventListener('resize', place)
-    return () => window.removeEventListener('resize', place)
-  }, [anchor, menuOpen])
+    return () => {
+      window.cancelAnimationFrame(frame)
+      window.removeEventListener('resize', place)
+    }
+  }, [anchor, menuOpen, place])
 
   useEffect(() => {
     if (!menuOpen) return
@@ -108,10 +132,17 @@ function MindMapOverflowMenu({ actions }: { actions: OverflowAction[] }) {
       </button>
       {host && box ? createPortal(
         <div
+          ref={menuRef}
           role="menu"
           data-mindmap-overflow-menu
-          className="z-[250] min-w-48 rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
-          style={{ position: 'fixed', top: box.top, right: box.right }}
+          className="z-[250] min-w-48 overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+          style={{
+            position: 'fixed',
+            top: box.top,
+            left: box.left,
+            maxWidth: `calc(100vw - ${OVERFLOW_MENU_MARGIN * 2}px)`,
+            maxHeight: `calc(100vh - ${box.top + OVERFLOW_MENU_MARGIN}px)`,
+          }}
         >
           {actions.map((action, index) => (
             <div key={`${action.label}-${index}`}>

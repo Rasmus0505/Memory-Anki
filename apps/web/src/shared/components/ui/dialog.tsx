@@ -174,6 +174,8 @@ const DialogContent = forwardRef<
   )
   const [derivedCapsuleLabel, setDerivedCapsuleLabel] = useState(capsuleLabel ?? '弹窗')
   const contentRef = useRef<HTMLDivElement | null>(null)
+  // Once the user drags/resizes the panel, stop auto-centering it for this open.
+  const autoCenterLockedRef = useRef(false)
   const interactionRef = useRef<
     | {
         type: 'drag'
@@ -217,10 +219,14 @@ const DialogContent = forwardRef<
   // Each open: re-center using the real box so max-w-* dialogs are not left-biased.
   useLayoutEffect(() => {
     if (!open || !floatingEnabled) return
+    autoCenterLockedRef.current = false
     const node = contentRef.current
-    const rect = node?.getBoundingClientRect()
-    const measuredWidth = rect ? Math.round(rect.width) : 0
-    const measuredHeight = rect ? Math.round(rect.height) : 0
+    // Layout metrics (offsetWidth/offsetHeight) ignore the open/close zoom
+    // transform. getBoundingClientRect() reports the shrunken entrance frame
+    // (zoom-in-95 => scale(0.95)), which under-measures the panel and pushes a
+    // centered dialog below the true vertical center and past the bottom edge.
+    const measuredWidth = node ? Math.round(node.offsetWidth) : 0
+    const measuredHeight = node ? Math.round(node.offsetHeight) : 0
     setFloatingLayout((current) => {
       const remembered = hasRememberedFloatingSize(storageKey)
         ? readStoredFloatingLayout(storageKey, inferredDefaultWidth)
@@ -239,6 +245,47 @@ const DialogContent = forwardRef<
       return next
     })
   }, [expandOnOpen, floatingEnabled, inferredDefaultWidth, open, storageKey])
+
+  // The panel is often taller than its first layout frame (async content, web
+  // fonts, images, expanded sections). Keep re-centering on content resize until
+  // the user drags/resizes it, so a centered dialog never settles below center
+  // or past the bottom edge as it grows.
+  useEffect(() => {
+    if (!open || !floatingEnabled || floatingLayout.collapsed) return
+    const node = contentRef.current
+    if (!node || typeof ResizeObserver === 'undefined') return
+    // The opening frame was already measured (and centered) by the layout effect;
+    // skip this attach callback so restoring a capsule does not jump the panel.
+    let priming = true
+    const observer = new ResizeObserver(() => {
+      if (priming) {
+        priming = false
+        return
+      }
+      if (autoCenterLockedRef.current || interactionRef.current) return
+      const width = Math.round(node.offsetWidth)
+      const height = Math.round(node.offsetHeight)
+      if (!(width > 0) || !(height > 0)) return
+      setFloatingLayout((current) => {
+        const next = createCenteredFloatingLayout({
+          width: width >= FLOATING_DIALOG_MIN_WIDTH ? width : current.width,
+          height: current.height,
+          measuredHeight: height,
+          collapsed: current.collapsed,
+          pinned: current.pinned,
+        })
+        if (
+          next.x === current.x && next.y === current.y
+          && next.width === current.width && next.height === current.height
+        ) {
+          return current
+        }
+        return next
+      })
+    })
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [floatingEnabled, floatingLayout.collapsed, open])
 
   useEffect(() => {
     if (!open || !floatingEnabled || !expandOnOpen) return
@@ -336,6 +383,7 @@ const DialogContent = forwardRef<
       ) {
         return
       }
+      autoCenterLockedRef.current = true
       interactionRef.current = {
         type: 'drag',
         startX: event.clientX,
@@ -352,6 +400,7 @@ const DialogContent = forwardRef<
     (direction: ResizeDirection, event: ReactPointerEvent<HTMLButtonElement>) => {
       const rect = contentRef.current?.getBoundingClientRect()
       if (!rect) return
+      autoCenterLockedRef.current = true
       interactionRef.current = {
         type: 'resize',
         direction,

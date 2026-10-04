@@ -3802,3 +3802,50 @@ def test_visual_layer_rejects_business_module_imports(tmp_path: Path, monkeypatc
     check_architecture.check_visual_layer_purity(errors)
 
     assert any("visual layer must not import @/modules/dashboard/public" in error for error in errors)
+
+
+def _write_db_engine(tmp_path: Path, content: str) -> Path:
+    path = tmp_path / "engine.py"
+    path.write_text(content, encoding="utf-8")
+    return path
+
+
+def test_db_pool_budget_requires_explicit_pool_timeout(tmp_path: Path) -> None:
+    # SQLAlchemy's 30s default outlives every client budget, so leaving
+    # pool_timeout unset lets pool exhaustion hang requests past the point the
+    # browser has already given up.
+    path = _write_db_engine(
+        tmp_path,
+        "engine = create_engine(DATABASE_URL, pool_size=10, max_overflow=20)\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_db_pool_budget(errors, engine_path=path)
+
+    assert any("must set pool_timeout explicitly" in error for error in errors)
+
+
+def test_db_pool_budget_rejects_timeout_above_client_budget(tmp_path: Path) -> None:
+    path = _write_db_engine(
+        tmp_path,
+        "DB_POOL_TIMEOUT_SECONDS = 30\n"
+        "engine = create_engine(DATABASE_URL, pool_timeout=DB_POOL_TIMEOUT_SECONDS)\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_db_pool_budget(errors, engine_path=path)
+
+    assert any("DB_POOL_TIMEOUT_SECONDS is 30s" in error for error in errors)
+
+
+def test_db_pool_budget_accepts_innermost_timeout(tmp_path: Path) -> None:
+    path = _write_db_engine(
+        tmp_path,
+        "DB_POOL_TIMEOUT_SECONDS = 5\n"
+        "engine = create_engine(DATABASE_URL, pool_timeout=DB_POOL_TIMEOUT_SECONDS)\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_db_pool_budget(errors, engine_path=path)
+
+    assert errors == []

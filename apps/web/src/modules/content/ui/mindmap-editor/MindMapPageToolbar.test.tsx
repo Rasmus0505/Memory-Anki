@@ -265,6 +265,31 @@ describe('MindMapPageToolbar', () => {
     expect(onToggleUiCleared).toHaveBeenCalledTimes(1)
   })
 
+  it('keeps the overflow menu inside the viewport when the trigger sits near the left edge', async () => {
+    // A trigger near the left edge used to right-align the panel to the button,
+    // pushing the panel (and its labels) off the left side of the screen.
+    const rectSpy = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
+      x: 8, y: 40, top: 40, left: 8, right: 80, bottom: 76, width: 72, height: 36,
+      toJSON: () => ({}),
+    } as DOMRect)
+
+    try {
+      render(<MindMapPageToolbar moreActions={[{ label: '进入编辑', onClick: vi.fn() }]} />)
+      fireEvent.click(screen.getByRole('button', { name: '更多脑图操作' }))
+
+      const menu = await screen.findByRole('menu')
+      const left = Number.parseFloat(menu.style.left)
+
+      expect(Number.isFinite(left)).toBe(true)
+      expect(left).toBeGreaterThanOrEqual(8)
+      // Anchored from the left edge (not `right`), so it can never spill off-screen.
+      expect(menu.style.right).toBe('')
+      expect(screen.getByRole('menuitem', { name: '进入编辑' })).toBeTruthy()
+    } finally {
+      rectSpy.mockRestore()
+    }
+  })
+
   it('does not put 录制 in the overflow menu', async () => {
     render(
       <MindMapPageToolbar

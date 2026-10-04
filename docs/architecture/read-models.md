@@ -37,3 +37,21 @@ Every route that creates a Palace must establish the same atomic minimum invaria
 ## Batch Palace imports
 
 JSON and Markdown imports are application-owned batch transactions. The import service returns the exact created Palace entities instead of forcing presentation to rediscover them using descending IDs. All Palace rows, nested Peg trees, initial Review schedules, and the mutation-id response commit together. Failure while initializing any imported Palace rolls back the entire batch.
+
+## Connection pool budget
+
+The SQLite engine in `infrastructure/db/_tables/_base.py` sizes the pool and caps how long a request may wait for a connection. These caps nest inside the client transport budgets, and the *innermost* limit must always fire first:
+
+| Layer | Setting | Budget |
+| --- | --- | --- |
+| Pool checkout | `DB_POOL_TIMEOUT_SECONDS` | 5s |
+| SQLite write lock | `SQLITE_LOCK_WAIT_SECONDS` | 10s |
+| Session-start POST | `SESSION_START_TIMEOUT_MS` | 15s |
+| Read request | `GET_REQUEST_TIMEOUT_MS` | 20s |
+| App-level session load | `SESSION_LOAD_TIMEOUT_MS` | 30s |
+
+`pool_timeout` must be set explicitly. SQLAlchemy defaults it to 30s, which is slower than every client budget above: a saturated pool then parks requests past the point where the browser gave up, so a burst of `in 30xxx ms` 500s arrives *after* the user already saw a timeout, and any write that eventually succeeds has already diverged from the client. Failing checkout fast turns pool exhaustion into an actionable, retryable error instead.
+
+Pool capacity (`DB_POOL_SIZE` + `DB_MAX_OVERFLOW`) is a reader-concurrency budget. SQLite serialises writes itself via `busy_timeout` + WAL, so the pool does not need to throttle writers; it needs enough slots that a feed open — which fans out into review queue, several palace projections, ladder progress, quiz-node bindings, dashboard, and a session-start POST per card — does not starve unrelated requests.
+
+Client-side, identical concurrent reads are collapsed through `shared/api/inFlightRequest.ts` so a page that mounts two consumers of the same endpoint (for example a freestyle card mounting both `useFreestyleUnitReviewNodeQuiz` and `useFreestyleTextToMindMap`) issues one request instead of two. Callers that mutate the resource must call `invalidateSharedRequest`; the entry is dropped as soon as the request settles, so this never serves stale data.

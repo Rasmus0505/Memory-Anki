@@ -10,6 +10,12 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from memory_anki.core.request_context import set_request_id
 
+# Requests slower than this are escalated to WARNING so that the "加载单元超时"
+# class of bug leaves a duration behind in logs/pwa-api.log. Long-lived SSE
+# responses are excluded because their duration measures the stream lifetime,
+# not handler latency.
+SLOW_REQUEST_THRESHOLD_MS = 3_000
+
 
 class RequestLoggingMiddleware:
     """Request logging without BaseHTTPMiddleware, so live SSE is not buffered."""
@@ -42,14 +48,18 @@ class RequestLoggingMiddleware:
             await self.app(scope, receive, send_wrapper)
         finally:
             duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
-            self.logger.info(
-                "request handled",
-                extra={
-                    "request_id": request_id,
-                    "method": request.method,
-                    "path": request.url.path,
-                    "status_code": status_code,
-                    "duration_ms": duration_ms,
-                },
-            )
+            path = request.url.path
+            extra = {
+                "request_id": request_id,
+                "method": request.method,
+                "path": path,
+                "status_code": status_code,
+                "duration_ms": duration_ms,
+            }
+            message = "%s %s -> %s in %sms"
+            args = (request.method, path, status_code, duration_ms)
+            if duration_ms >= SLOW_REQUEST_THRESHOLD_MS and not path.endswith("/stream"):
+                self.logger.warning("%s %s -> %s in %sms [slow]", *args, extra=extra)
+            else:
+                self.logger.info(message, *args, extra=extra)
             set_request_id(None)

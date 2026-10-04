@@ -61,7 +61,12 @@ round. If the previous study session is still `active` with a passed item and no
 encounter, start finishes that session and opens a new one. It must not return
 `passed review unit cannot start another encounter`. Freestyle unit load failures that
 cannot be healed do not toast English API text; the card offers 重试 / 跳过这张 / 重建本轮 /
-只看不评.
+只看不评. A card's `POST /review/units/{id}/sessions` carries a 15s transport timeout
+(`SESSION_START_TIMEOUT_MS`) and is deliberately kept out of the mutation queue
+(`persistence: false`) because the UI re-issues it. That budget, the 20s read budget on
+`GET /review/session/{id}`, `loadSessionWithTimeout`'s 30s guard, and the server's 10s SQLite
+`busy_timeout` are ordered on purpose: a half-open Tailscale link must fail fast, and a real
+`database is locked` must reach the card before the generic 「加载单元超时」 message can.
 A later due-list rebuild with the same construction knobs (`append_today_cards`) keeps every
 original card, including unstarted leftover work that dropped off today's due set, and appends
 newly seen identities with `entered_on` equal to the local calendar day so retry copies cannot
@@ -175,7 +180,10 @@ The viewing playhead is independent of that fill: the card on screen grows talle
 it is rated, and cancelling a rating un-lights the fill without dropping the playhead. The
 right-side pager has 完成, not 定位. When every presented card is scored it opens the
 closing settlement slot; otherwise it seeks the queue-order first **unscored** unit
-(谁最早看谁). Scored means this occurrence has a this-round score (忘记/困难/记得/轻松
+(谁最早看谁). Pressing 完成 again while the viewport is already on an unscored unit walks
+to the **next** unscored unit in queue order and wraps at the end, so a single 完成 button
+cycles through every blank unit instead of sticking on the first. Scored means this
+occurrence has a this-round score (忘记/困难/记得/轻松
 alike — the rail fills solid). A weak score still opens settlement once nothing
 unscored remains — 完成 must not disable in that state. A scored 重练 is never the target; leave_card bumps
 `retry_attempt` and clears that occurrence's score so the next blank attempt is seekable.

@@ -61,6 +61,9 @@ def run_prepare_runtime() -> StartupState:
     shared_state: dict[str, Any] = {}
     ensure_legacy_repo_data_migrated()
     init_db()
+    # Alembic's fileConfig reconfigures the root logger while applying
+    # migrations, so re-apply ours afterwards (see core.logging).
+    configure_logging()
     session = get_session()
     try:
         prepare_english_runtime(session)
@@ -96,6 +99,9 @@ def initialize_service_runtime(app: FastAPI, *, mode: str | None = None) -> Star
     shared_state: dict[str, Any] = {}
     ensure_legacy_repo_data_migrated()
     init_db()
+    # Alembic's fileConfig reconfigures the root logger while applying
+    # migrations, so re-apply ours afterwards (see core.logging).
+    configure_logging()
     runtime_info = build_runtime_info(shared_state)
     if startup_mode == STARTUP_MODE_SERVE:
         started_state = record_runtime_start(
