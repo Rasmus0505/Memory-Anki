@@ -3037,6 +3037,30 @@ def check_freestyle_round_sheet_views(errors: list[str]) -> None:
             f"{doc.relative_to(REPO_ROOT).as_posix()}: "
             "must document 结算已完成单元 compressing passed cards off the rail."
         )
+    if "小结算" not in doc_source or "partial_settlements" not in doc_source:
+        errors.append(
+            f"{doc.relative_to(REPO_ROOT).as_posix()}: "
+            "must document 小结算 pages persisted as partial_settlements for 大结算."
+        )
+    if "partial_settlements" not in domain_source or "partial_settlements" not in compress_source:
+        errors.append(
+            f"{compress.relative_to(REPO_ROOT).as_posix()}: "
+            "compress_completed must persist partial_settlements for 小结算."
+        )
+    card = WEB_SRC / "modules" / "practice" / "ui" / "freestyle" / "components" / "FreestyleRoundCompleteCard.tsx"
+    page = WEB_SRC / "modules" / "practice" / "ui" / "freestyle" / "ImmersiveFreestylePage.tsx"
+    card_source = card.read_text(encoding="utf-8", errors="ignore") if card.exists() else ""
+    page_source = page.read_text(encoding="utf-8", errors="ignore") if page.exists() else ""
+    if "确认结算" not in card_source or "小结算" not in card_source:
+        errors.append(
+            f"{card.relative_to(REPO_ROOT).as_posix()}: "
+            "结算已完成 must open a 小结算 page with 确认结算."
+        )
+    if "freestyle-partial-settlement" not in page_source:
+        errors.append(
+            f"{page.relative_to(REPO_ROOT).as_posix()}: "
+            "随心 feed must show the 小结算 page before compressing."
+        )
 
 
 def check_freestyle_queue_removal_rail(errors: list[str]) -> None:

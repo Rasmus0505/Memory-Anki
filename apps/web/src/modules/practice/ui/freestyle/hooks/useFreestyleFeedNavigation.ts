@@ -108,6 +108,8 @@ export function useFreestyleFeedNavigation({
   /** True while the user is actively dragging/wheeling the feed. */
   const userScrollingRef = useRef(false)
   const scrollIdleTimerRef = useRef<number | null>(null)
+  /** Touch/pen pointers currently down. A settle during the drag announces the wrong card. */
+  const touchPointersRef = useRef(0)
   const pageHeightRef = useRef(0)
   const [visualIndex, setVisualIndex] = useState(0)
   const visualIndexRef = useRef(0)
@@ -458,21 +460,57 @@ export function useFreestyleFeedNavigation({
     }
   }, [loading, cards.length])
 
+  const settleWhileTouchingRef = useRef<() => void>(() => {})
+  const scheduleScrollSettle = useCallback(() => {
+    if (scrollIdleTimerRef.current != null) {
+      window.clearTimeout(scrollIdleTimerRef.current)
+    }
+    // One trailing settle for both `scroll` and `scrollend`. iOS can fire
+    // `scrollend` before snap finishes; flushing there announces the wrong card
+    // and the real landing is then swallowed by the page-turn rate limit.
+    scrollIdleTimerRef.current = window.setTimeout(() => {
+      scrollIdleTimerRef.current = null
+      if (touchPointersRef.current > 0) {
+        settleWhileTouchingRef.current()
+        return
+      }
+      flushScrollSettled()
+    }, 90)
+  }, [flushScrollSettled])
+  settleWhileTouchingRef.current = scheduleScrollSettle
+
   useEffect(() => {
     const node = scrollRef.current
     if (!node) return
-    const onScrollEnd = () => {
-      if (scrollIdleTimerRef.current != null) {
-        window.clearTimeout(scrollIdleTimerRef.current)
-        scrollIdleTimerRef.current = null
-      }
-      flushScrollSettled()
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.pointerType !== 'touch' && event.pointerType !== 'pen') return
+      touchPointersRef.current += 1
     }
-    node.addEventListener('scrollend', onScrollEnd)
+    const onPointerUp = (event: PointerEvent) => {
+      if (event.pointerType !== 'touch' && event.pointerType !== 'pen') return
+      if (touchPointersRef.current === 0) return
+      touchPointersRef.current -= 1
+      scheduleScrollSettle()
+    }
+    const onBlur = () => {
+      if (touchPointersRef.current === 0) return
+      touchPointersRef.current = 0
+      scheduleScrollSettle()
+    }
+    node.addEventListener('scrollend', scheduleScrollSettle)
+    node.addEventListener('pointerdown', onPointerDown)
+    window.addEventListener('pointerup', onPointerUp, true)
+    window.addEventListener('pointercancel', onPointerUp, true)
+    window.addEventListener('blur', onBlur)
     return () => {
-      node.removeEventListener('scrollend', onScrollEnd)
+      touchPointersRef.current = 0
+      node.removeEventListener('scrollend', scheduleScrollSettle)
+      node.removeEventListener('pointerdown', onPointerDown)
+      window.removeEventListener('pointerup', onPointerUp, true)
+      window.removeEventListener('pointercancel', onPointerUp, true)
+      window.removeEventListener('blur', onBlur)
     }
-  }, [flushScrollSettled, cards.length, loading])
+  }, [scheduleScrollSettle, cards.length, loading])
 
   useEffect(() => {
     return () => {
@@ -587,16 +625,9 @@ export function useFreestyleFeedNavigation({
         visualIndexRef.current = nextIndex
         setVisualIndex(nextIndex)
       }
-      if (scrollIdleTimerRef.current != null) {
-        window.clearTimeout(scrollIdleTimerRef.current)
-      }
-      // Fallback when `scrollend` is unavailable (older WebViews).
-      scrollIdleTimerRef.current = window.setTimeout(() => {
-        scrollIdleTimerRef.current = null
-        flushScrollSettled()
-      }, 120)
+      scheduleScrollSettle()
     },
-    [cards.length, flushScrollSettled, roundComplete, scrollChannel],
+    [cards.length, roundComplete, scheduleScrollSettle, scrollChannel],
   )
 
   const handleKeyDown = useCallback(

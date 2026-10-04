@@ -1,6 +1,10 @@
 import type { FreestyleCard, FreestyleFeedConfig } from '@/shared/api/contracts'
 import { queueConstructionSignature } from './feedConfig'
 import { bookedRetryAfterCards, cardPalaceId, cardUnitId, reviewUnitIdFromCardId } from './queueState'
+import {
+  parsePartialSettlements,
+  type FreestylePartialSettlementSnapshot,
+} from './partialSettlement'
 
 export type FreestyleRoundPlanCardStatus =
   | 'pending'
@@ -39,6 +43,8 @@ export interface FreestyleRoundPlanState {
   cardsById: Record<string, FreestyleRoundPlanCard>
   today?: string
   compressedIds?: string[]
+  /** Confirmed 小结算 pages. Survive compress so the closing 大结算 can show them. */
+  partialSettlements?: FreestylePartialSettlementSnapshot[]
 }
 
 export interface FreestyleRoundMeta {
@@ -133,6 +139,7 @@ export function sanitizeRoundPlan(value: unknown): FreestyleRoundPlanState | nul
     cardsById,
     today: asString(raw.today) || undefined,
     compressedIds,
+    partialSettlements: parsePartialSettlements(raw.partialSettlements),
   })
 }
 
@@ -358,6 +365,7 @@ export function createRoundPlan(
     cardsById: nextById,
     today: prior?.today,
     compressedIds: compressed.size ? [...compressed] : prior?.compressedIds,
+    partialSettlements: prior?.partialSettlements,
   })
 }
 

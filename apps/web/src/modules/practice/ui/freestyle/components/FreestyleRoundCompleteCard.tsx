@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { ChevronDown, RotateCcw, Sparkles, Trophy } from 'lucide-react'
+import type { FreestylePartialSettlementSnapshot } from '@/modules/practice/domain/partialSettlement'
 import type { FreestyleRoundCompletion } from '@/modules/practice/ui/freestyle/model/roundCompletion'
 import { settlementQuizClearCopy } from '@/modules/practice/ui/freestyle/model/overlayQuizClearance'
 import { formatTimer } from '@/modules/practice/ui/freestyle/model/freestyle-cards'
@@ -28,14 +29,22 @@ function Rise({ index, className, children }: { index: number; className?: strin
   )
 }
 
-function PassRing({ ratio, reducedMotion }: { ratio: number; reducedMotion: boolean }) {
+function PassRing({
+  ratio,
+  reducedMotion,
+  gradientId,
+}: {
+  ratio: number
+  reducedMotion: boolean
+  gradientId: string
+}) {
   const offset = RING_CIRCUMFERENCE * (1 - Math.max(0, Math.min(1, ratio)))
   return (
     <div className="relative mx-auto size-28 sm:size-32" aria-hidden>
       <div className="fs-halo absolute inset-[-18%] rounded-full" />
       <svg viewBox="0 0 100 100" className="relative size-full -rotate-90">
         <defs>
-          <linearGradient id="fs-ring-gradient" x1="0" y1="0" x2="1" y2="1">
+          <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
             <stop offset="0%" stopColor="var(--color-stage-glow)" />
             <stop offset="100%" stopColor="var(--color-rate-good)" />
           </linearGradient>
@@ -47,7 +56,7 @@ function PassRing({ ratio, reducedMotion }: { ratio: number; reducedMotion: bool
           cy="50"
           r={RING_RADIUS}
           fill="none"
-          stroke="url(#fs-ring-gradient)"
+          stroke={`url(#${gradientId})`}
           strokeWidth="7"
           strokeLinecap="round"
           strokeDasharray={RING_CIRCUMFERENCE}
@@ -101,16 +110,23 @@ export function FreestyleRoundCompleteCard({
   onAnotherRound,
   onCancelSettlement,
   examSummary,
+  variant = 'round',
+  partialSettlements = [],
+  onConfirmPartial,
 }: {
   completion: FreestyleRoundCompletion
   roundKey: string
   quizPalaceCount: number
   onClearQuizProgress: () => Promise<void>
-  onAnotherRound: () => void
+  onAnotherRound?: () => void
   /** Leave this slot. Later card dwell and 做题 stay on this round's learning clock. */
   onCancelSettlement: () => void
   /** Exam progress block (lit knowledge points, weak spots, goal delta). */
   examSummary?: ReactNode
+  /** 小结算 confirms a finished batch. 大结算 is the closing round page. */
+  variant?: 'round' | 'partial'
+  partialSettlements?: readonly FreestylePartialSettlementSnapshot[]
+  onConfirmPartial?: () => void
 }) {
   const reducedMotion = usePrefersReducedMotion()
   const subjects = useMemo(() => completion.bySubject ?? [], [completion.bySubject])
@@ -121,6 +137,7 @@ export function FreestyleRoundCompleteCard({
     setQuizClearError('')
   }, [roundKey])
   useRoundCompleteCelebration(roundKey, reducedMotion)
+  const partial = variant === 'partial'
   const ratedShown = useCountUp(completion.ratedCount, { durationMs: 1100, delayMs: 180, disabled: reducedMotion })
   const passRatio = completion.ratedCount > 0 ? completion.passedCount / completion.ratedCount : 1
   const firstKey = subjects[0]
@@ -136,14 +153,20 @@ export function FreestyleRoundCompleteCard({
 
   return (
     <div
-      data-testid="freestyle-round-complete"
+      data-testid={partial ? 'freestyle-partial-settlement-card' : 'freestyle-round-complete'}
       className="mx-auto flex h-full w-full max-w-2xl flex-col justify-center px-1 py-4"
     >
       <div className="fs-complete-panel relative overflow-hidden rounded-[1.75rem] border border-stage-line-strong bg-stage-raised/95 p-5 text-stage-ink shadow-[0_24px_80px_-16px_rgb(0_0_0/0.7)] sm:p-7">
         <Rise index={0} className="text-center">
-          <PassRing ratio={passRatio} reducedMotion={reducedMotion} />
+          <PassRing
+            ratio={passRatio}
+            reducedMotion={reducedMotion}
+            gradientId={partial ? 'fs-ring-gradient-partial' : 'fs-ring-gradient'}
+          />
           <div className="mt-3 flex items-center justify-center gap-3">
-            <div className="text-xs font-semibold tracking-[0.18em] text-stage-glow">今日到期已清</div>
+            <div className="text-xs font-semibold tracking-[0.18em] text-stage-glow">
+              {partial ? '小结算' : '今日到期已清'}
+            </div>
             <button
               type="button"
               data-testid="freestyle-round-skip-show"
@@ -191,7 +214,41 @@ export function FreestyleRoundCompleteCard({
           </div>
         </Rise>
 
-        {examSummary ? <Rise index={7}>{examSummary}</Rise> : null}
+        {!partial && examSummary ? <Rise index={7}>{examSummary}</Rise> : null}
+
+        {!partial && partialSettlements.length ? (
+          <Rise index={7}>
+            <div
+              data-testid="freestyle-round-partial-settlements"
+              className="mt-4 rounded-2xl border border-stage-line bg-stage/40 px-4 py-3"
+            >
+              <div className="text-sm font-medium text-stage-ink">小结算</div>
+              <p className="mt-1 text-xs leading-5 text-stage-muted">这些已完成单元已提前结算，数字已计入上方。</p>
+              <ul className="mt-3 space-y-3">
+                {partialSettlements.map((item, index) => (
+                  <li key={item.id} className="rounded-xl border border-stage-line bg-stage-raised/50 px-3 py-2">
+                    <div className="flex items-baseline justify-between gap-3 text-sm">
+                      <span className="font-medium">第 {index + 1} 次 · {item.cardCount} 张</span>
+                      <span className="tabular-nums text-stage-muted">{formatTimer(item.totalEffectiveSeconds)}</span>
+                    </div>
+                    <div className="mt-1 text-xs leading-5 text-stage-muted">
+                      已评分 {item.ratedCount} · 已通过 {item.passedCount}
+                      {item.retryCount ? ` · 重练 ${item.retryCount}` : ''}
+                      {item.quizCount ? ` · 题目 ${item.quizCount}` : ''}
+                    </div>
+                    {item.bySubject.length ? (
+                      <div className="mt-1 text-xs leading-5 text-stage-muted">
+                        {item.bySubject.map((subject) => (
+                          `${subject.subjectName} ${subject.cardCount} 张`
+                        )).join(' · ')}
+                      </div>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </Rise>
+        ) : null}
 
         {subjects.length > 0 ? (
           <Rise index={7}>
@@ -251,7 +308,7 @@ export function FreestyleRoundCompleteCard({
           </Rise>
         ) : null}
 
-        {quizPalaceCount > 0 ? (
+        {!partial && quizPalaceCount > 0 ? (
           <Rise index={8}>
             <div
               data-testid="freestyle-round-quiz-clear"
@@ -317,15 +374,26 @@ export function FreestyleRoundCompleteCard({
           >
             取消结算
           </button>
-          <button
-            type="button"
-            data-testid="freestyle-round-another"
-            className="ma-pressable fs-cta-shine relative mt-2 flex w-full items-center justify-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-r from-primary to-primary-strong px-4 py-3 text-sm font-semibold text-primary-foreground shadow-glow hover:brightness-110"
-            onClick={onAnotherRound}
-          >
-            <RotateCcw className="size-4" />
-            再来一轮
-          </button>
+          {partial ? (
+            <button
+              type="button"
+              data-testid="freestyle-partial-settlement-confirm"
+              className="ma-pressable fs-cta-shine relative mt-2 flex w-full items-center justify-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-r from-primary to-primary-strong px-4 py-3 text-sm font-semibold text-primary-foreground shadow-glow hover:brightness-110"
+              onClick={onConfirmPartial}
+            >
+              确认结算
+            </button>
+          ) : (
+            <button
+              type="button"
+              data-testid="freestyle-round-another"
+              className="ma-pressable fs-cta-shine relative mt-2 flex w-full items-center justify-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-r from-primary to-primary-strong px-4 py-3 text-sm font-semibold text-primary-foreground shadow-glow hover:brightness-110"
+              onClick={onAnotherRound}
+            >
+              <RotateCcw className="size-4" />
+              再来一轮
+            </button>
+          )}
         </Rise>
       </div>
     </div>

@@ -10,6 +10,11 @@ import {
 } from '@/modules/practice/ui/freestyle/api'
 import { coalesceHydrationLedger, commitHydratedRoundLedger } from '@/modules/practice/domain/hydrateRoundLedger'
 import {
+  mergePartialSettlementLists,
+  toServerPartialSettlement,
+  type FreestylePartialSettlementSnapshot,
+} from '@/modules/practice/domain/partialSettlement'
+import {
   cardsForServerPlan,
   nextUnfinishedCardId,
   planCardCohort,
@@ -1930,14 +1935,22 @@ export function useImmersiveQueue(
     })
   }, [buildQueue, notifyPeerRound, persistQueueState])
 
-  const compressCompletedPlanCards = useCallback(() => {
+  const compressCompletedPlanCards = useCallback((snapshot?: FreestylePartialSettlementSnapshot) => {
     const current = queueStateRef.current
-    const ids = compressibleRoundPlanIds(current.roundPlan, {
-      completedIds: current.completedIds,
-      encounters: current.unitEncountersByCardId,
-    })
-    if (!ids.length) return
-    const nextPlan = compressRoundPlanCards(current.roundPlan, ids)
+    const ids = snapshot?.cardIds?.length
+      ? snapshot.cardIds
+      : compressibleRoundPlanIds(current.roundPlan, {
+        completedIds: current.completedIds,
+        encounters: current.unitEncountersByCardId,
+      })
+    if (!ids.length || !current.roundPlan) return
+    const stamped = snapshot
+      ? {
+          ...current.roundPlan,
+          partialSettlements: [...(current.roundPlan.partialSettlements ?? []), snapshot],
+        }
+      : current.roundPlan
+    const nextPlan = compressRoundPlanCards(stamped, ids)
     persistQueueState({ ...current, roundPlan: nextPlan })
     const viewingId = cardsRef.current[currentIndexRef.current]?.id ?? null
     const filtered = cardsWithoutCompressed(cardsRef.current, ids)
@@ -1955,6 +1968,7 @@ export function useImmersiveQueue(
           operation_id: createOperationId(),
           expected_version: serverPlanVersionRef.current,
           action: 'compress_completed',
+          partial_settlement: snapshot ? toServerPartialSettlement(snapshot) : undefined,
         })
         if (queueStateRef.current.roundId !== roundId) return
         const version = serverPlanVersion(round)
@@ -1966,9 +1980,18 @@ export function useImmersiveQueue(
           const echoed = Array.isArray(round.plan?.compressed_ids)
             ? round.plan.compressed_ids.map(String)
             : ids
+          const echoedPlan = compressRoundPlanCards(queueStateRef.current.roundPlan, echoed)
           persistQueueState({
             ...queueStateRef.current,
-            roundPlan: compressRoundPlanCards(queueStateRef.current.roundPlan, echoed),
+            roundPlan: echoedPlan
+              ? {
+                  ...echoedPlan,
+                  partialSettlements: mergePartialSettlementLists(
+                    echoedPlan.partialSettlements,
+                    round.plan?.partial_settlements,
+                  ),
+                }
+              : echoedPlan,
           })
           break
         }

@@ -1,4 +1,4 @@
-import { getSharedAudioContext } from '@/shared/feedback/mindmap-audio/webAudioFeedback'
+import { runWithSharedAudioContext, sharedAudioStartTime } from '@/shared/feedback/mindmap-audio/webAudioFeedback'
 
 export type UiSound = 'wood' | 'wood-soft' | 'toggle-on' | 'toggle-off' | 'paper' | 'swish' | 'chime' | 'thud'
 
@@ -70,44 +70,44 @@ function wood(context: AudioContext, start: number, pitch: number, peak: number)
 
 export function synthUiSound(sound: UiSound, volume: number) {
   if (volume <= 0) return
-  const context = getSharedAudioContext()
-  if (!context || typeof context.createBufferSource !== 'function') return
-  if (context.state === 'suspended') void context.resume().catch(() => undefined)
-  const now = context.currentTime + 0.004
-  const v = Math.min(1.6, volume)
-  const jitter = 1 + (Math.random() - 0.5) * 0.06
-  switch (sound) {
-    case 'wood':
-      wood(context, now, 520 * jitter, 0.16 * v)
-      break
-    case 'wood-soft':
-      wood(context, now, 680 * jitter, 0.09 * v)
-      break
-    case 'toggle-on':
-      wood(context, now, 620, 0.12 * v)
-      wood(context, now + 0.045, 930, 0.1 * v)
-      break
-    case 'toggle-off':
-      wood(context, now, 780, 0.1 * v)
-      wood(context, now + 0.045, 520, 0.1 * v)
-      break
-    case 'paper':
-      noiseBurst(context, now, { type: 'bandpass', from: 1800 * jitter, to: 4200, q: 0.9, peak: 0.12 * v, attack: 0.03, decay: 0.16 })
-      noiseBurst(context, now + 0.05, { type: 'highpass', from: 3800, q: 0.5, peak: 0.05 * v, attack: 0.02, decay: 0.09 })
-      break
-    case 'swish':
-      noiseBurst(context, now, { type: 'bandpass', from: 700, to: 2600, q: 1.4, peak: 0.08 * v, attack: 0.06, decay: 0.18 })
-      break
-    case 'thud':
-      tone(context, now, 150, 0.14 * v, 0.12, 'sine')
-      noiseBurst(context, now, { type: 'lowpass', from: 900, q: 0.7, peak: 0.1 * v, attack: 0.003, decay: 0.06 })
-      break
-    case 'chime':
-      // Short wind-chime: two bell partials, the second slightly late.
-      tone(context, now, 1318.5, 0.07 * v, 0.9)
-      tone(context, now, 1318.5 * 2.4, 0.018 * v, 0.5)
-      tone(context, now + 0.07, 1760, 0.055 * v, 1.1)
-      tone(context, now + 0.07, 1760 * 2.4, 0.014 * v, 0.6)
-      break
-  }
+  runWithSharedAudioContext((context) => {
+    if (typeof context.createBufferSource !== 'function') return
+    const now = sharedAudioStartTime(context)
+    const v = Math.min(1.6, volume)
+    const jitter = 1 + (Math.random() - 0.5) * 0.06
+    switch (sound) {
+      case 'wood':
+        wood(context, now, 520 * jitter, 0.16 * v)
+        break
+      case 'wood-soft':
+        wood(context, now, 680 * jitter, 0.09 * v)
+        break
+      case 'toggle-on':
+        wood(context, now, 620, 0.12 * v)
+        wood(context, now + 0.045, 930, 0.1 * v)
+        break
+      case 'toggle-off':
+        wood(context, now, 780, 0.1 * v)
+        wood(context, now + 0.045, 520, 0.1 * v)
+        break
+      case 'paper':
+        noiseBurst(context, now, { type: 'bandpass', from: 1800 * jitter, to: 4200, q: 0.9, peak: 0.12 * v, attack: 0.03, decay: 0.16 })
+        noiseBurst(context, now + 0.05, { type: 'highpass', from: 3800, q: 0.5, peak: 0.05 * v, attack: 0.02, decay: 0.09 })
+        break
+      case 'swish':
+        noiseBurst(context, now, { type: 'bandpass', from: 700, to: 2600, q: 1.4, peak: 0.08 * v, attack: 0.06, decay: 0.18 })
+        break
+      case 'thud':
+        tone(context, now, 150, 0.14 * v, 0.12, 'sine')
+        noiseBurst(context, now, { type: 'lowpass', from: 900, q: 0.7, peak: 0.1 * v, attack: 0.003, decay: 0.06 })
+        break
+      case 'chime':
+        // Short wind-chime: two bell partials, the second slightly late.
+        tone(context, now, 1318.5, 0.07 * v, 0.9)
+        tone(context, now, 1318.5 * 2.4, 0.018 * v, 0.5)
+        tone(context, now + 0.07, 1760, 0.055 * v, 1.1)
+        tone(context, now + 0.07, 1760 * 2.4, 0.014 * v, 0.6)
+        break
+    }
+  })
 }

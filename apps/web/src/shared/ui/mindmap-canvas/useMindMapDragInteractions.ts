@@ -188,9 +188,10 @@ export function useMindMapDragInteractions({
     const primaryOrigin = primaryOriginRef.current
     const sourceIds = dragSourceIdsRef.current
     const next = new Map<string, { x: number; y: number }>()
+    const snap = (value: number) => Math.round(value)
     next.set(primaryNode.id, {
-      x: primaryNode.position.x,
-      y: primaryNode.position.y,
+      x: snap(primaryNode.position.x),
+      y: snap(primaryNode.position.y),
     })
 
     if (primaryOrigin && sourceIds.length > 1) {
@@ -203,8 +204,8 @@ export function useMindMapDragInteractions({
         const origin = originPositionsRef.current.get(sourceId)
         if (!origin) continue
         next.set(sourceId, {
-          x: origin.x + delta.x,
-          y: origin.y + delta.y,
+          x: snap(origin.x + delta.x),
+          y: snap(origin.y + delta.y),
         })
       }
     }
@@ -224,14 +225,17 @@ export function useMindMapDragInteractions({
         )
         return
       }
-      setNodes((current) =>
-        current.map((item) => {
+      setNodes((current) => {
+        let changed = false
+        const next = current.map((item) => {
           const position = live.get(item.id)
           if (!position) return item
           if (item.position.x === position.x && item.position.y === position.y) return item
+          changed = true
           return { ...item, position }
-        }),
-      )
+        })
+        return changed ? next : current
+      })
     },
     [setNodes],
   )
@@ -299,8 +303,9 @@ export function useMindMapDragInteractions({
   const handleNodeDrag = useCallback(
     (_event: unknown, node: Node) => {
       if (readonly) return
+      // Pointer events can fire many times per frame. Positions stay in the ref
+      // until the frame flush so each move is one render, not one per event.
       writeLiveDragPositions(node)
-      syncDragPositionsIntoNodes(node)
       pendingDragRef.current = { event: _event, node }
       if (dragFrameRef.current !== null) return
 

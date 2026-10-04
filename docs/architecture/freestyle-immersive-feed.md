@@ -136,12 +136,12 @@ scene, locally — never `dispatchGlobalFeedback`.
 
 The top HUD opens a bottom “本轮安排” sheet. A header toggle switches 「按宫殿」 (group stable plan entries by palace) and 「按进度」 (the same entries in progress-rail segment order, still split into the leftover and today blocks). Both views support
 jump, drag (desktop) or up/down (touch), batch exclude/restore, and reset-round. The toolbar
-「结算已完成单元」 (`compress_completed`) drops passed cards (记得/轻松, no live 重练) from
-the swipe feed, 本轮安排, and the HUD rail so the denominator shrinks. Weak-rated sources
+「结算已完成单元」 opens a 小结算 page first. Confirming it (`compress_completed`) drops passed cards (记得/轻松, no live 重练) from
+the swipe feed, 本轮安排, and the HUD rail so the denominator shrinks, and stores that page as `partial_settlements` on the round plan. Cancelling leaves the cards in the feed. Weak-rated sources
 and unfinished retries stay. This is not 排除: excluded ticks remain on the rail; compressed
 ids (`compressed_ids`) do not. Unfinished work stays in this round. Ratings stay committed;
 swipe-back cannot reopen a compressed card in this round. A silent rebuild / `append_today_cards`
-must not put compressed identities back. Overlay 做题 is not asked here. If that compress
+must not put compressed identities back, and must keep `partial_settlements`. Overlay 做题 is not asked on 小结算. The closing 大结算 includes each confirmed 小结算 (counts and subject lines) because those cards have left the feed; round clock time is not added twice. If that compress
 empties the feed, the closing settlement slot stays reachable. Configuration is a
 separate dialog. 「保存配置并重排」 asks whether to keep overlapping finished/excluded/retry
 progress. 保留 continues this round and only reorders unstarted work. 不保留 starts a new round. The HUD line is `当前位置/队列总长` (`position/total`): the denominator is the progress

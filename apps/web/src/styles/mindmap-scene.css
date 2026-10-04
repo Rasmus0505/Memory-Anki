@@ -343,9 +343,11 @@
     0 1px 0 hsl(43 100% 100% / 0.9) inset,
     0 1px 2px hsl(24 40% 22% / 0.07),
     0 6px 16px -8px hsl(24 50% 26% / 0.16);
-  /* Shadow snaps. Interpolating box-shadow repaints the card on every hover and flip. */
+  position: relative;
+  top: 0;
+  /* `top` springs the card. A transform would rasterize the glyphs. */
   transition:
-    transform var(--duration-base) var(--ease-spring-soft),
+    top 180ms var(--ease-spring-soft),
     background-color var(--duration-fast) ease,
     border-color var(--duration-fast) ease,
     opacity var(--duration-fast) ease;
@@ -372,7 +374,7 @@
 
 @media (hover: hover) and (pointer: fine) {
   .mindmap-node-shell:hover > .mindmap-node-card:not(.mindmap-node-card--selected):not(.mindmap-node-card--editing) {
-    transform: translateY(-1px);
+    top: -1px;
     box-shadow:
       0 1px 0 hsl(43 100% 100% / 0.9) inset,
       var(--shadow-lift);
@@ -380,8 +382,9 @@
 }
 
 .mindmap-node-shell:active > .mindmap-node-card:not(.mindmap-node-card--editing) {
-  transform: scale(0.985);
-  transition-duration: var(--duration-instant);
+  box-shadow:
+    0 1px 0 hsl(43 100% 100% / 0.9) inset,
+    0 1px 2px hsl(24 40% 22% / 0.16);
 }
 
 /*
@@ -477,7 +480,16 @@
   border-radius: inherit;
   font-size: 12px;
   pointer-events: none;
-  backface-visibility: hidden;
+  transform-origin: center center;
+}
+
+.mindmap-land-ring {
+  position: absolute;
+  inset: -1px;
+  z-index: 4;
+  border-radius: inherit;
+  border: 2px solid color-mix(in oklab, var(--color-primary) 55%, transparent);
+  pointer-events: none;
 }
 
 .mindmap-flip-sheen {
@@ -515,22 +527,16 @@
   from { opacity: 0; transform: translateY(4px) scale(0.92); }
 }
 
-/* Tailwind positions this with the `translate` property, so animate `scale` independently. */
 .mindmap-collapse-toggle {
   transition:
-    scale var(--duration-fast) var(--ease-spring),
     border-color var(--duration-fast) ease,
     color var(--duration-fast) ease;
 }
 
-.mindmap-collapse-toggle:hover {
-  scale: 1.12;
-}
-
-/* Layout reflow spring: enabled only after the first layout settles, off while dragging. */
+/* Layout spring on left/top. The node transform is cleared so this does not rasterize text. */
 .memory-anki-mindmap-viewport[data-motion-settled='true'][data-dragging='false'][data-large-graph='false']
   .react-flow__node:not(.dragging) {
-  transition: transform 360ms var(--ease-spring-soft);
+  transition: left 360ms var(--ease-spring-soft), top 360ms var(--ease-spring-soft);
 }
 
 .memory-anki-mindmap-viewport[data-motion-settled='true'][data-dragging='false'][data-large-graph='false']
@@ -567,9 +573,6 @@
   .mindmap-node-shell:hover > .mindmap-node-card,
   .mindmap-node-shell:active > .mindmap-node-card {
     transform: none !important;
-  }
-  .mindmap-collapse-toggle:hover {
-    scale: none;
   }
 }
 

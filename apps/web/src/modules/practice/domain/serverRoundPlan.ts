@@ -18,6 +18,7 @@ import {
   sourceCardId,
   type FreestyleUnitEncounterState,
 } from './queueState'
+import { mergePartialSettlementLists } from './partialSettlement'
 
 export function retryOccurrenceId(roundId: string, sourceId: string, attempt: number) {
   return `retry:${roundId}:${sourceId}:${attempt}`
@@ -55,7 +56,14 @@ export function applyServerCohorts(
   const extra = plan.orderIds.filter((id) => !presented.includes(id) && Boolean(cardsById[id]))
   const orderIds = presented.length ? [...presented, ...extra] : plan.orderIds.filter((id) => !compressedIds.includes(id))
   const nextCompressed = compressedIds.length ? [...new Set([...(plan.compressedIds ?? []), ...compressedIds])] : plan.compressedIds
-  return { ...plan, cardsById, today: today || plan.today, orderIds, compressedIds: nextCompressed }
+  return {
+    ...plan,
+    cardsById,
+    today: today || plan.today,
+    orderIds,
+    compressedIds: nextCompressed,
+    partialSettlements: mergePartialSettlementLists(plan.partialSettlements, server.partial_settlements),
+  }
 }
 
 export function planCardCohort(

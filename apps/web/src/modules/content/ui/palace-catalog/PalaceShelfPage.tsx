@@ -477,7 +477,7 @@ export default function PalaceShelfPage() {
                 className="text-left"
                 data-testid="subject-book-card"
               >
-                <Card className="ma-tilt group relative h-full overflow-hidden border-border/70 bg-card/90 hover:-translate-y-1.5">
+                <Card className="group relative h-full overflow-hidden border-border/70 bg-card/90 hover:shadow-lg">
                   {/* Book spine + cover wash */}
                   <div
                     className="absolute inset-y-0 left-0 w-4 rounded-l-xl opacity-95 shadow-inner"

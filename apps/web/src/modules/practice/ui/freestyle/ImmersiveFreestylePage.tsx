@@ -25,9 +25,13 @@ import {
 } from '@/modules/practice/ui/freestyle/model/freestyleUnitPreviewCache'
 import {
   buildFreestyleRoundCompletion,
+  buildPartialSettlementSnapshot,
+  foldPartialSettlementsIntoCompletion,
   freestyleCanPageNext,
   isFreestyleRoundComplete,
 } from '@/modules/practice/ui/freestyle/model/roundCompletion'
+import type { FreestylePartialSettlementSnapshot } from '@/modules/practice/domain/partialSettlement'
+import { compressibleRoundPlanIds, createOperationId } from '@/modules/practice/public'
 import { FreestyleHistoryDialog } from '@/modules/practice/ui/freestyle/components/FreestyleHistoryDialog'
 import { FreestyleRoundConfigDialog } from '@/modules/practice/ui/freestyle/components/FreestyleRoundConfigDialog'
 import type { FreestyleConfigSaveChoice } from '@/modules/practice/ui/freestyle/model/overlapProgressChoice'
@@ -179,6 +183,7 @@ export default function ImmersiveFreestylePage({
   const acknowledgedCardIdsRef = useRef<Set<string>>(new Set())
   const autoAdvanceTimerRef = useRef<number | null>(null)
   const [planOpen, setPlanOpen] = useState(false)
+  const [partialSettlement, setPartialSettlement] = useState<FreestylePartialSettlementSnapshot | null>(null)
   const [configOpen, setConfigOpen] = useState(false)
   /** Settlement 「再来一轮」 opens config in nextRound mode; HUD uses replan. */
   const [configIntent, setConfigIntent] = useState<'replan' | 'nextRound'>('replan')
@@ -612,7 +617,8 @@ export default function ImmersiveFreestylePage({
   }
 
   const roundCompletion = useMemo(
-    () => buildFreestyleRoundCompletion(
+    () => foldPartialSettlementsIntoCompletion(
+      buildFreestyleRoundCompletion(
       cards,
       queueState.unitEncountersByCardId,
       roundMeta.candidate_count,
@@ -634,6 +640,9 @@ export default function ImmersiveFreestylePage({
           ...answeredQuestionIds,
         ]).size,
       },
+    ),
+      roundPlan?.partialSettlements,
+      cards.map((card) => card.id),
     ),
     [
       answeredQuestionIds,
@@ -706,7 +715,28 @@ export default function ImmersiveFreestylePage({
           }}
           onExclude={excludePlanCards}
           onRestore={restorePlanCards}
-          onCompressCompleted={compressCompletedPlanCards}
+          onCompressCompleted={() => {
+            const ids = compressibleRoundPlanIds(roundPlan, {
+              completedIds: queueState.completedIds,
+              encounters: queueState.unitEncountersByCardId,
+            })
+            if (!ids.length) return
+            const snapshot = buildPartialSettlementSnapshot({
+              id: createOperationId(),
+              cardIds: ids,
+              cards,
+              encountersByCardId: queueState.unitEncountersByCardId,
+              completedIds: queueState.completedIds,
+              roundPlan,
+              subjectByPalaceId,
+              quizCount: ids.filter((id) => {
+                const card = cards.find((item) => item.id === id)
+                return Boolean(card && isQuizCard(card) && answeredQuestionIds.has(card.question.id))
+              }).length,
+            })
+            setPlanOpen(false)
+            if (snapshot) setPartialSettlement(snapshot)
+          }}
           onReorder={reorderPlan}
           onOpenConfig={() => {
             setPlanOpen(false)
@@ -1007,6 +1037,7 @@ export default function ImmersiveFreestylePage({
                   setConfigOpen(true)
                 }}
                 onCancelSettlement={navigatePrevious}
+                partialSettlements={roundPlan?.partialSettlements}
                 examSummary={
                   <>
                     <ExamRoundSummary baseline={examBaselineRef.current?.overview ?? null} roundKey={queueState.roundId} />
@@ -1018,6 +1049,38 @@ export default function ImmersiveFreestylePage({
             </div>
           ) : null}
         </div>
+        {partialSettlement ? (
+          <div
+            data-testid="freestyle-partial-settlement"
+            className="absolute inset-0 z-[70] flex bg-stage/95 px-3 py-4 backdrop-blur-sm"
+          >
+            <div className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 overflow-y-auto pt-[calc(env(safe-area-inset-top,0px)+3.5rem)]">
+              <FreestyleRoundCompleteCard
+                variant="partial"
+                completion={{
+                  ratedCount: partialSettlement.ratedCount,
+                  passedCount: partialSettlement.passedCount,
+                  retriedCount: partialSettlement.retryCount,
+                  retryCount: partialSettlement.retryCount,
+                  remainingCandidates: 0,
+                  quizCount: partialSettlement.quizCount,
+                  totalEffectiveSeconds: partialSettlement.totalEffectiveSeconds,
+                  quizSeconds: partialSettlement.quizSeconds,
+                  bySubject: partialSettlement.bySubject,
+                }}
+                roundKey={`${queueState.roundId}:${partialSettlement.id}`}
+                quizPalaceCount={0}
+                onClearQuizProgress={async () => undefined}
+                onCancelSettlement={() => setPartialSettlement(null)}
+                onConfirmPartial={() => {
+                  const snapshot = partialSettlement
+                  setPartialSettlement(null)
+                  compressCompletedPlanCards(snapshot)
+                }}
+              />
+            </div>
+          </div>
+        ) : null}
         {edgeHint ? (
           <div key={edgeHint.nonce} role="status" data-edge={edgeHint.edge} className="fs-edge-hint">
             {edgeHint.edge === 'top'

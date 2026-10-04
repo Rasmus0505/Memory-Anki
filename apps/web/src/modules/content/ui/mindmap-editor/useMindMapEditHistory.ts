@@ -22,6 +22,20 @@ function fingerprint(editorDoc: EditorDoc) {
   return JSON.stringify(editorDoc ?? null)
 }
 
+/** Docs are immutable snapshots. Re-rendering with the same reference must not stringify the palace again. */
+const fingerprintCache = new WeakMap<object, string>()
+
+function cachedFingerprint(editorDoc: EditorDoc) {
+  if (editorDoc && typeof editorDoc === 'object') {
+    const cached = fingerprintCache.get(editorDoc)
+    if (cached !== undefined) return cached
+    const value = fingerprint(editorDoc)
+    fingerprintCache.set(editorDoc, value)
+    return value
+  }
+  return fingerprint(editorDoc)
+}
+
 export function pushMindMapHistory(
   history: HistoryState,
   current: EditorDoc,
@@ -67,7 +81,7 @@ export function useMindMapEditHistory(
   const localEchoUntilMsRef = useRef(0)
   const onApplyRef = useRef(onApply)
   onApplyRef.current = onApply
-  const incomingFingerprint = fingerprint(incomingEditorDoc)
+  const incomingFingerprint = cachedFingerprint(incomingEditorDoc)
   const [availability, setAvailability] = useState({ canUndo: false, canRedo: false })
 
   const syncAvailability = useCallback((history: HistoryState) => {

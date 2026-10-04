@@ -3562,15 +3562,24 @@ def test_freestyle_round_sheet_views_accept_header_toggle(
     write_file(
         tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
         "A header toggle switches 「按宫殿」 and 「按进度」.\n"
-        "结算已完成单元 compresses passed cards off compressed_ids.\n",
+        "结算已完成单元 compresses passed cards off compressed_ids.\n"
+        "小结算 pages are persisted as partial_settlements for 大结算.\n",
     )
     write_file(
         api_src / "modules" / "practice" / "domain" / "round_plan.py",
-        "compressed_ids = []\n",
+        "compressed_ids = []\npartial_settlements = []\n",
     )
     write_file(
         api_src / "modules" / "practice" / "domain" / "round_compress.py",
-        "def compress_completed():\n    plan['compressed_ids'] = []\n",
+        "def compress_completed():\n    plan['compressed_ids'] = []\n    plan['partial_settlements'] = []\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "components" / "FreestyleRoundCompleteCard.tsx",
+        "小结算\n确认结算\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "ImmersiveFreestylePage.tsx",
+        "freestyle-partial-settlement\n",
     )
 
     errors: list[str] = []

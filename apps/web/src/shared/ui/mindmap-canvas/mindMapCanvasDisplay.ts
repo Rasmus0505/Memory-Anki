@@ -192,6 +192,9 @@ export function buildDisplayNodes({
       previous.selectable === selectable &&
       previous.position.x === position.x &&
       previous.position.y === position.y &&
+      previous.style?.transform === 'none' &&
+      previous.style.left === position.x &&
+      previous.style.top === position.y &&
       previous.zIndex === zIndex &&
       shallowEqualNodeData(previous.data as Record<string, unknown>, nextData)
     ) {
@@ -201,6 +204,14 @@ export function buildDisplayNodes({
     return {
       ...node,
       position,
+      // React Flow places nodes with translate(), which rasterizes the glyphs.
+      // left/top keep the same spot and can spring without a transform layer.
+      style: {
+        ...node.style,
+        transform: 'none',
+        left: position.x,
+        top: position.y,
+      },
       zIndex,
       draggable: canDrag,
       dragHandle,

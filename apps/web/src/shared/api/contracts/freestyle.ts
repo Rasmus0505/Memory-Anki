@@ -387,6 +387,8 @@ export interface FreestyleRoundPlanPayload {
   completed_ids: string[]
   excluded_ids: string[]
   compressed_ids?: string[]
+  /** Confirmed 小结算 pages. The closing 大结算 reads these after cards leave the feed. */
+  partial_settlements?: unknown[]
   today?: string
   occurrences: FreestyleRoundOccurrence[]
   encounters: Record<string, {
@@ -495,6 +497,8 @@ export interface FreestyleRoundActionRequest {
   occurrence_id?: string
   encounter_id?: string
   cards?: FreestyleCard[]
+  /** Snapshot shown on the 小结算 page. Persisted with compress_completed. */
+  partial_settlement?: Record<string, unknown>
 }
 
 export interface FreestyleOverlayQuizEnsureRequest {

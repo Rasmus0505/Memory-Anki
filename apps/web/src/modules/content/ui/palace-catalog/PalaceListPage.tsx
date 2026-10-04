@@ -13,10 +13,11 @@ import {
   PalaceListToolbar,
 } from '@/modules/content/ui/palace-catalog/components/palace-list/PalaceListToolbar'
 import {
-  DEFAULT_PALACE_LIST_VIEW_SETTINGS,
-  PALACE_LIST_VIEW_SETTINGS_KEY,
+  PALACE_SHELF_VIEW_SETTINGS_KEY,
+  DEFAULT_PALACE_SHELF_VIEW_SETTINGS,
   type PalaceListViewSettings,
-  isPalaceListViewSettings,
+  type PalaceShelfViewSettings,
+  isPalaceShelfViewSettings,
 } from '@/modules/settings/public'
 import type {
   PalaceGroupedItem,
@@ -53,11 +54,36 @@ export default function PalaceList() {
   const selectedSubjectId = searchParams.get('subjectId')
   const showUncategorizedOnly = searchParams.get('uncategorized') === 'true'
   const [collapsedChapters, setCollapsedChapters] = useState<Set<number>>(new Set())
-  const [viewSettings, setViewSettings] = useLocalStorageState<PalaceListViewSettings>(
-    PALACE_LIST_VIEW_SETTINGS_KEY,
-    DEFAULT_PALACE_LIST_VIEW_SETTINGS,
-    isPalaceListViewSettings,
-    'palace_list_view_settings',
+  // 书内宫殿卡片和书架「章节目录」共用同一份布局/密度，避免进书后换成另一套前端。
+  const [shelfViewSettings, setShelfViewSettings] = useLocalStorageState<PalaceShelfViewSettings>(
+    PALACE_SHELF_VIEW_SETTINGS_KEY,
+    DEFAULT_PALACE_SHELF_VIEW_SETTINGS,
+    isPalaceShelfViewSettings,
+    'palace_shelf_view_settings',
+  )
+  const viewSettings = useMemo<PalaceListViewSettings>(
+    () => ({
+      layoutMode: shelfViewSettings.expandedLayoutMode,
+      densityMode: shelfViewSettings.densityMode,
+    }),
+    [shelfViewSettings.densityMode, shelfViewSettings.expandedLayoutMode],
+  )
+  const setViewSettings = useCallback(
+    (updater: PalaceListViewSettings | ((current: PalaceListViewSettings) => PalaceListViewSettings)) => {
+      setShelfViewSettings((current) => {
+        const listCurrent: PalaceListViewSettings = {
+          layoutMode: current.expandedLayoutMode,
+          densityMode: current.densityMode,
+        }
+        const next = typeof updater === 'function' ? updater(listCurrent) : updater
+        return {
+          ...current,
+          expandedLayoutMode: next.layoutMode,
+          densityMode: next.densityMode,
+        }
+      })
+    },
+    [setShelfViewSettings],
   )
   const catalogScope = useMemo(
     () => ({ selectedSubjectId, showUncategorizedOnly }),

@@ -538,7 +538,9 @@ def apply_round_action(
         restore_identity = _progress_identity_in_plan(plan, target_id)
         plan = restore_card(plan, target_id)
     elif name == "compress_completed":
-        plan = compress_completed(plan)
+        raw_settlement = fields.get("partial_settlement")
+        settlement = raw_settlement if isinstance(raw_settlement, dict) else None
+        plan = compress_completed(plan, settlement)
     elif name == "bind_cards":
         plan = append_today_cards(plan, cards, today=_local_today())
         plan = _seed_from_peer(

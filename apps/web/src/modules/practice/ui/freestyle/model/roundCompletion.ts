@@ -10,6 +10,7 @@ import {
   type FreestyleRoundPlanState,
   type FreestyleUnitEncounterState,
 } from '@/modules/practice/public'
+import type { FreestylePartialSettlementSnapshot } from '@/modules/practice/domain/partialSettlement'
 import type { FreestyleCard } from '@/shared/api/contracts'
 import { isReviewHintId } from '@/shared/api/contracts'
 
@@ -593,4 +594,69 @@ export function freestyleCanPageNext(
   if (isFreestyleCompleteSlot(visualIndex, cardCount, roundComplete)) return false
   if (visualIndex < freestyleFeedSlotCount(cardCount, roundComplete) - 1) return true
   return hasPendingRestudyOnCurrent
+}
+
+export function buildPartialSettlementSnapshot(input: {
+  id: string
+  cardIds: readonly string[]
+  cards: FreestyleCard[]
+  encountersByCardId: Record<string, FreestyleUnitEncounterState>
+  completedIds?: Iterable<string>
+  roundPlan?: FreestyleRoundPlanState | null
+  subjectByPalaceId?: ReadonlyMap<number, { id: number; name: string }>
+  quizCount?: number
+}): FreestylePartialSettlementSnapshot | null {
+  const cardIds = [...new Set(input.cardIds.map((id) => String(id || '').trim()).filter(Boolean))]
+  const id = input.id.trim()
+  if (!id || !cardIds.length) return null
+  const selected = new Set(cardIds)
+  const batch = input.cards.filter((card) => selected.has(card.id))
+  const completion = buildFreestyleRoundCompletion(
+    batch,
+    input.encountersByCardId,
+    batch.length,
+    {
+      completedIds: input.completedIds,
+      roundPlan: input.roundPlan,
+      subjectByPalaceId: input.subjectByPalaceId,
+      quizCount: input.quizCount,
+    },
+  )
+  return {
+    id,
+    cardIds,
+    cardCount: cardIds.length,
+    ratedCount: completion.ratedCount,
+    passedCount: completion.passedCount,
+    retryCount: completion.retryCount,
+    quizCount: completion.quizCount,
+    totalEffectiveSeconds: completion.totalEffectiveSeconds,
+    quizSeconds: completion.quizSeconds ?? 0,
+    bySubject: completion.bySubject,
+  }
+}
+
+/**
+ * Headline counts on 大结算 must include cards that already left the feed.
+ * Round clock and answered-quiz set stay as-is so time and 做题 are not added twice.
+ * A snapshot whose cards are still in the feed is listed, not folded.
+ */
+export function foldPartialSettlementsIntoCompletion(
+  completion: FreestyleRoundCompletion,
+  snapshots: readonly FreestylePartialSettlementSnapshot[] | undefined,
+  liveCardIds: Iterable<string> = [],
+): FreestyleRoundCompletion {
+  const live = new Set(Array.from(liveCardIds, (id) => String(id || '').trim()))
+  const settled = (snapshots ?? []).filter((item) => item.cardIds.every((id) => !live.has(id)))
+  if (!settled.length) return completion
+  const ratedCount = completion.ratedCount + settled.reduce((sum, item) => sum + item.ratedCount, 0)
+  const passedCount = completion.passedCount + settled.reduce((sum, item) => sum + item.passedCount, 0)
+  const retryCount = completion.retryCount + settled.reduce((sum, item) => sum + item.retryCount, 0)
+  return {
+    ...completion,
+    ratedCount,
+    passedCount,
+    retriedCount: completion.retriedCount + settled.reduce((sum, item) => sum + item.retryCount, 0),
+    retryCount,
+  }
 }

@@ -583,6 +583,16 @@ function resolveOverlaps(
     : resolvedNodes
 }
 
+/** Whole CSS pixels. A fractional translate() rasterizes the card glyphs. */
+function snapNodePositions(nodes: Node[]): Node[] {
+  return nodes.map((node) => {
+    const x = Math.round(node.position.x)
+    const y = Math.round(node.position.y)
+    if (x === node.position.x && y === node.position.y) return node
+    return { ...node, position: { x, y } }
+  })
+}
+
 export function applyMindMapLayout(
   graphData: GraphData,
   measuredSizes?: NodeSizeMap,
@@ -619,7 +629,7 @@ export function applyMindMapLayout(
   const rawNodes = graphData.nodes
     .map((graphNode) => positions.get(graphNode.id))
     .filter((node): node is Node => Boolean(node))
-  const nodes = resolveOverlaps(rawNodes, measuredSizes)
+  const nodes = snapNodePositions(resolveOverlaps(rawNodes, measuredSizes))
 
   const edges = graphData.edges
     .filter((edge) => positions.has(edge.source) && positions.has(edge.target))

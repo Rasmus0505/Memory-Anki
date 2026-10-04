@@ -30,6 +30,71 @@ OCCURRENCE_CANCELLED = "cancelled"
 
 Plan = dict[str, Any]
 
+
+def _partial_settlements(raw: Any) -> list[dict[str, Any]]:
+    """Keep confirmed 小结算 snapshots. Compressed cards leave the feed; the 大结算 still needs them."""
+    if not isinstance(raw, Sequence) or isinstance(raw, (str, bytes)):
+        return []
+    result: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in raw:
+        if not isinstance(item, Mapping) or len(result) >= 40:
+            continue
+        settlement_id = _text(item.get("id"))
+        card_ids = _unique(item.get("card_ids") or [])
+        if not settlement_id or not card_ids or settlement_id in seen:
+            continue
+        seen.add(settlement_id)
+        subjects: list[dict[str, Any]] = []
+        raw_subjects = item.get("by_subject")
+        if isinstance(raw_subjects, Sequence) and not isinstance(raw_subjects, (str, bytes)):
+            for subject in list(raw_subjects)[:40]:
+                if not isinstance(subject, Mapping):
+                    continue
+                palaces: list[dict[str, Any]] = []
+                raw_palaces = subject.get("palaces")
+                if isinstance(raw_palaces, Sequence) and not isinstance(raw_palaces, (str, bytes)):
+                    for palace in list(raw_palaces)[:40]:
+                        if not isinstance(palace, Mapping):
+                            continue
+                        palace_id = _palace_id(palace.get("palace_id")) or 0
+                        palaces.append(
+                            {
+                                "palace_id": palace_id,
+                                "palace_title": _text(palace.get("palace_title"))[:80] or (
+                                    f"宫殿 {palace_id}" if palace_id else "未分类"
+                                ),
+                                "card_count": max(0, _int(palace.get("card_count"))),
+                                "effective_seconds": max(0, _int(palace.get("effective_seconds"))),
+                            }
+                        )
+                subjects.append(
+                    {
+                        "subject_id": _palace_id(subject.get("subject_id")),
+                        "subject_name": _text(subject.get("subject_name"))[:80] or "未分类",
+                        "palace_count": max(0, _int(subject.get("palace_count"))) or len(palaces),
+                        "card_count": max(0, _int(subject.get("card_count"))),
+                        "effective_seconds": max(0, _int(subject.get("effective_seconds"))),
+                        "palaces": palaces,
+                    }
+                )
+        result.append(
+            {
+                "id": settlement_id[:80],
+                "card_ids": card_ids,
+                "card_count": max(len(card_ids), _int(item.get("card_count"))),
+                "rated_count": max(0, _int(item.get("rated_count"))),
+                "passed_count": max(0, _int(item.get("passed_count"))),
+                "retry_count": max(0, _int(item.get("retry_count"))),
+                "quiz_count": max(0, _int(item.get("quiz_count"))),
+                "total_effective_seconds": max(0, _int(item.get("total_effective_seconds"))),
+                "quiz_seconds": max(0, _int(item.get("quiz_seconds"))),
+                "by_subject": subjects,
+            }
+        )
+    return result
+
+
 def empty_plan() -> Plan:
     return {
         "original_cards": [],
@@ -39,6 +104,7 @@ def empty_plan() -> Plan:
         "completed_ids": [],
         "excluded_ids": [],
         "compressed_ids": [],
+        "partial_settlements": [],
         "occurrences": [],
         "encounters": {},
         "today": "",
@@ -165,6 +231,7 @@ def normalize_plan(plan: Mapping[str, Any] | None) -> Plan:
         "completed_ids": _unique(raw.get("completed_ids") or []),
         "excluded_ids": _unique(raw.get("excluded_ids") or []),
         "compressed_ids": _unique(raw.get("compressed_ids") or []),
+        "partial_settlements": _partial_settlements(raw.get("partial_settlements")),
         "occurrences": occurrences,
         "encounters": encounters,
         "today": _day(raw.get("today")),

@@ -113,28 +113,32 @@ function flipCard(card: HTMLElement, delay: number, burst: boolean) {
   const FLIP_MS = flipMs()
   const overshoot = themeMotion().flipOvershootDeg
   clearFx(card)
+  // The paper face turns. The glyphs stay on the card and only fade, so a
+  // rotate/scale never rasterizes them.
   const cover = fxElement('mindmap-flip-cover', card)
-  cover.innerHTML = '<span class="mindmap-node-concealed">待回忆</span>'
-  const sheen = fxElement('mindmap-flip-sheen', card)
+  const sheen = fxElement('mindmap-flip-sheen', cover)
 
-  card.animate(
-    [
-      { transform: `${PERSPECTIVE} rotateX(0deg) scale(1)`, easing: 'cubic-bezier(0.55, 0, 0.85, 0.35)' },
-      { transform: `${PERSPECTIVE} rotateX(-90deg) scale(1.07)`, offset: FLIP_TURN },
-      // Same edge-on pose from the other side: the jump is invisible and the rotation reads as continuous.
-      { transform: `${PERSPECTIVE} rotateX(90deg) scale(1.07)`, offset: FLIP_TURN + 0.0001, easing: 'cubic-bezier(0.15, 0.7, 0.3, 1)' },
-      { transform: `${PERSPECTIVE} rotateX(${-overshoot}deg) scale(1.035)`, offset: 0.74, easing: 'cubic-bezier(0.4, 0, 0.3, 1)' },
-      { transform: `${PERSPECTIVE} rotateX(${(overshoot / 3).toFixed(1)}deg) scale(1)`, offset: 0.88 },
-      { transform: `${PERSPECTIVE} rotateX(0deg) scale(1)` },
-    ],
-    { duration: FLIP_MS, delay, fill: 'backwards', id: FLIP_ID },
-  )
-  // Rotate and scale only. Animating box-shadow paints the card every frame,
-  // and reading getComputedStyle here forces layout on the flip that should start now.
   removeWhenDone(cover.animate(
-    [{ opacity: 1 }, { opacity: 1, offset: FLIP_TURN }, { opacity: 0, offset: FLIP_TURN + 0.0001 }, { opacity: 0 }],
+    [
+      { transform: `${PERSPECTIVE} rotateX(0deg) scale(1)`, opacity: 1, easing: 'cubic-bezier(0.55, 0, 0.85, 0.35)' },
+      { transform: `${PERSPECTIVE} rotateX(-90deg) scale(1.06)`, opacity: 1, offset: FLIP_TURN },
+      { transform: `${PERSPECTIVE} rotateX(90deg) scale(1.06)`, opacity: 1, offset: FLIP_TURN + 0.0001, easing: 'cubic-bezier(0.15, 0.7, 0.3, 1)' },
+      { transform: `${PERSPECTIVE} rotateX(${-overshoot}deg) scale(1.03)`, opacity: 0.45, offset: 0.74 },
+      { transform: 'none', opacity: 0 },
+    ],
     { duration: FLIP_MS, delay, fill: 'both' },
   ), cover)
+  card.querySelectorAll<HTMLElement>('.mindmap-node-text, .mindmap-node-concealed').forEach((text) => {
+    text.animate(
+      [
+        { opacity: 1 },
+        { opacity: 0, offset: FLIP_TURN },
+        { opacity: 0, offset: FLIP_TURN + 0.0001 },
+        { opacity: 1 },
+      ],
+      { duration: FLIP_MS, delay, fill: 'backwards' },
+    )
+  })
   removeWhenDone(sheen.animate(
     [
       { opacity: 0, backgroundPosition: '140% 0' },
@@ -150,9 +154,9 @@ function flipCard(card: HTMLElement, delay: number, burst: boolean) {
 function dealCard(card: HTMLElement, delay: number) {
   card.animate(
     [
-      { opacity: 0, transformOrigin: '0% 50%', transform: 'perspective(700px) rotateY(-68deg) translateX(-14px) scale(0.9)' },
-      { opacity: 1, transformOrigin: '0% 50%', transform: 'perspective(700px) rotateY(9deg) translateX(0) scale(1.02)', offset: 0.68 },
-      { opacity: 1, transformOrigin: '0% 50%', transform: 'perspective(700px) rotateY(0deg) translateX(0) scale(1)' },
+      { opacity: 0, marginLeft: '-14px' },
+      { opacity: 1, marginLeft: '4px', offset: 0.7 },
+      { opacity: 1, marginLeft: '0px' },
     ],
     { duration: 420, delay, easing: 'cubic-bezier(0.22, 1, 0.36, 1)', fill: 'backwards', id: FLIP_ID },
   )
@@ -169,13 +173,20 @@ function landCard(card: HTMLElement, delay: number, burst: boolean) {
 
 function bumpCard(card: Element | null) {
   if (!card || typeof (card as HTMLElement).animate !== 'function') return
-  // Standalone scale composes with the flip/positioning transforms instead of replacing them.
-  ;(card as HTMLElement).animate([{ scale: '1' }, { scale: '1.1' }, { scale: '1' }], { duration: 380, easing: 'cubic-bezier(0.2, 1.5, 0.4, 1)' })
+  const ring = fxElement('mindmap-land-ring', card as HTMLElement)
+  removeWhenDone(ring.animate(
+    [
+      { opacity: 0.85, transform: 'scale(0.98)' },
+      { opacity: 0, transform: 'scale(1.06)' },
+    ],
+    { duration: 380, easing: 'ease-out', fill: 'both' },
+  ), ring)
 }
 
 /**
  * Hidden children fold back into the card that hid them: a ghost of each leaving
- * node shrinks onto its surviving ancestor while ink and gold are drawn in after it.
+ * node fades out while ink and gold are drawn in after it. The ghost is not
+ * scaled — that transform is what softens the copied glyphs.
  * Runs in the same commit the nodes leave, while React Flow still has their DOM.
  */
 export function planFoldBack(
@@ -202,24 +213,13 @@ function foldNode(root: HTMLElement, id: string, into: string) {
   const parentCard = root.querySelector<HTMLElement>(cardSelector(into))
   if (!node || !parentCard || !node.parentElement || node.offsetWidth === 0) return
   const rect = node.getBoundingClientRect()
-  const zoom = rect.width / node.offsetWidth || 1
-  const from = rectCenter(rect)
-  const to = rectCenter(parentCard.getBoundingClientRect())
   const ghost = node.cloneNode(true) as HTMLElement
   ghost.removeAttribute('data-id')
   ghost.setAttribute('aria-hidden', 'true')
   ghost.style.pointerEvents = 'none'
-  const inner = document.createElement('div')
-  while (ghost.firstChild) inner.appendChild(ghost.firstChild)
-  ghost.appendChild(inner)
   node.parentElement.appendChild(ghost)
-  const dx = (to.x - from.x) / zoom
-  const dy = (to.y - from.y) / zoom
-  inner.animate(
-    [
-      { transform: 'none', opacity: 1 },
-      { transform: `translate(${dx}px, ${dy}px) scale(0.2)`, opacity: 0 },
-    ],
+  ghost.animate(
+    [{ opacity: 1 }, { opacity: 0 }],
     { duration: FOLD_MS, easing: 'cubic-bezier(0.6, 0, 0.8, 0.4)', fill: 'forwards' },
   ).finished.catch(() => undefined).then(() => ghost.remove())
   cue('map.fold', { rect, target: () => (parentCard.isConnected ? rectCenter(parentCard.getBoundingClientRect()) : null), onFirstArrive: () => bumpCard(parentCard) })

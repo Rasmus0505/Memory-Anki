@@ -61,9 +61,9 @@ export function useMindMapEnterMotion(
         // Dealt from the parent side: the card swings open on its left hinge.
         card?.animate?.(
           [
-            { opacity: 0, transformOrigin: '0% 50%', transform: 'perspective(700px) rotateY(-68deg) translateX(-14px) scale(0.9)' },
-            { opacity: 1, transformOrigin: '0% 50%', transform: 'perspective(700px) rotateY(9deg) translateX(0) scale(1.02)', offset: 0.68 },
-            { opacity: 1, transformOrigin: '0% 50%', transform: 'perspective(700px) rotateY(0deg) translateX(0) scale(1)' },
+            { opacity: 0, marginLeft: '-14px' },
+            { opacity: 1, marginLeft: '4px', offset: 0.7 },
+            { opacity: 1, marginLeft: '0px' },
           ],
           { duration: 420, delay: Math.min(index * 32, 320), easing: 'cubic-bezier(0.22, 1, 0.36, 1)', fill: 'backwards' },
         )

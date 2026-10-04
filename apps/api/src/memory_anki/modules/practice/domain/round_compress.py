@@ -37,9 +37,18 @@ def compressible_ids(plan: Mapping[str, Any] | None) -> list[str]:
     return ids
 
 
-def compress_completed(plan: Mapping[str, Any]) -> Plan:
-    """Drop passed cards from the working set. Ratings stay; the rail shrinks."""
+def compress_completed(
+    plan: Mapping[str, Any],
+    settlement: Mapping[str, Any] | None = None,
+) -> Plan:
+    """Drop passed cards from the working set and keep the 小结算 snapshot for 大结算."""
     next_plan = normalize_plan(plan)
+    if settlement:
+        next_plan["partial_settlements"] = [
+            *next_plan.get("partial_settlements", []),
+            dict(settlement),
+        ]
+        next_plan = normalize_plan(next_plan)
     ids = compressible_ids(next_plan)
     if not ids:
         return next_plan

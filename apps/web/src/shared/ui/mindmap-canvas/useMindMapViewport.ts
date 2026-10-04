@@ -84,6 +84,15 @@ interface UseMindMapViewportInput {
   setNodeSizeVersion: (updater: (version: number) => number) => void
 }
 
+/** At 1:1 zoom, a fractional viewport translate rasterizes every card. Other zooms are a scale. */
+function snapRestingViewport(viewport: Viewport): Viewport {
+  if (Math.abs(viewport.zoom - 1) > 0.0001) return viewport
+  const x = Math.round(viewport.x)
+  const y = Math.round(viewport.y)
+  if (x === viewport.x && y === viewport.y) return viewport
+  return { ...viewport, x, y }
+}
+
 export function useMindMapViewport({
   canvasRef,
   controlledViewport,
@@ -340,11 +349,15 @@ export function useMindMapViewport({
     }
     const userGestureCompleted = manualViewportGestureRef.current
     const gestureStartZoom = userGestureStartZoomRef.current
+    const resting = snapRestingViewport(viewport)
+    if (resting !== viewport) {
+      void setViewport(resting, { duration: 0 })
+    }
     if (manualViewportGestureRef.current) {
-      preservedViewportRef.current = viewport
-      commitControlledViewport(viewport)
+      preservedViewportRef.current = resting
+      commitControlledViewport(resting)
     } else if (preserveViewport) {
-      restorePreservedViewport(viewport)
+      restorePreservedViewport(resting)
     }
     manualViewportGestureRef.current = false
     userGestureStartZoomRef.current = null
@@ -354,7 +367,7 @@ export function useMindMapViewport({
     ) {
       notifyUserZoomChange(viewport.zoom)
     }
-  }, [commitControlledViewport, notifyUserZoomChange, preserveViewport, restorePreservedViewport])
+  }, [commitControlledViewport, notifyUserZoomChange, preserveViewport, restorePreservedViewport, setViewport])
 
   const runExplicitViewportChange = useCallback(
     (change: () => void, duration: number, onSettled?: (viewport: Viewport) => void) => {
@@ -364,7 +377,11 @@ export function useMindMapViewport({
       }
       change()
       explicitViewportTimeoutRef.current = window.setTimeout(() => {
-        const viewport = getViewport()
+        const current = getViewport()
+        const viewport = snapRestingViewport(current)
+        if (viewport !== current) {
+          void setViewport(viewport, { duration: 0 })
+        }
         preservedViewportRef.current = viewport
         commitControlledViewport(viewport)
         onSettled?.(viewport)
@@ -372,7 +389,7 @@ export function useMindMapViewport({
         explicitViewportTimeoutRef.current = null
       }, duration + 40)
     },
-    [commitControlledViewport, getViewport],
+    [commitControlledViewport, getViewport, setViewport],
   )
   const childrenByParent = useMemo(() => {
     const next = new Map<string, string[]>()
@@ -786,8 +803,7 @@ export function useMindMapViewport({
           width,
           height,
         }
-        const graphParentId = graphNodes.find((item) => item.id === node.id)?.parentId
-        const isRoot = graphParentId == null
+        const isRoot = (parentById.get(node.id) ?? null) == null
         const mode = resolveStructureDropMode(probeX, probeY, rect, {
           isRoot,
           nearThresholdPx: DROP_NEAR_THRESHOLD_PX,
@@ -836,8 +852,7 @@ export function useMindMapViewport({
           const previousNode = nodesById.get(previous.targetId)
           if (previousNode) {
             const { width, height } = getResolvedNodeSize(previousNode, undefined, measuredSizes)
-            const isRoot =
-              graphNodes.find((item) => item.id === previous.targetId)?.parentId == null
+            const isRoot = (parentById.get(previous.targetId) ?? null) == null
             if (
               isWithinStructureDropLeaveZone(
                 probeX,
@@ -874,7 +889,7 @@ export function useMindMapViewport({
       lastPreviewStateRef.current = nextPreview
       return nextPreview
     },
-    [childrenByParent, graphNodes, measuredNodeSizesRef, nodes, nodesById, screenToFlowPosition],
+    [childrenByParent, measuredNodeSizesRef, nodes, nodesById, parentById, screenToFlowPosition],
   )
 
   const flushPendingMeasuredNodeSizes = useCallback(() => {

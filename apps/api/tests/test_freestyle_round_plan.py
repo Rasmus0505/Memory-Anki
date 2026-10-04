@@ -982,3 +982,40 @@ def test_compress_completed_does_not_return_on_append_today():
     assert "done" in appended["compressed_ids"]
     assert "todo" in appended["presented_ids"]
     assert "fresh" in appended["presented_ids"]
+
+
+def test_compress_completed_keeps_partial_settlement_for_the_closing_page():
+    plan = _rate(
+        plan_from_cards([_card("done", unit_id="unit-done"), _card("todo", unit_id="unit-todo")]),
+        "done",
+        3,
+        "enc-pass",
+    )
+    compressed = compress_completed(
+        plan,
+        {
+            "id": "settle-1",
+            "card_ids": ["done"],
+            "card_count": 1,
+            "rated_count": 1,
+            "passed_count": 1,
+            "retry_count": 0,
+            "quiz_count": 0,
+            "total_effective_seconds": 12,
+            "quiz_seconds": 0,
+            "by_subject": [
+                {
+                    "subject_name": "教育学",
+                    "card_count": 1,
+                    "palaces": [{"palace_id": 1, "palace_title": "卢梭", "card_count": 1}],
+                }
+            ],
+        },
+    )
+    assert compressed["compressed_ids"] == ["done"]
+    assert compressed["partial_settlements"][0]["id"] == "settle-1"
+    assert compressed["partial_settlements"][0]["by_subject"][0]["subject_name"] == "教育学"
+    again = compress_completed(compressed, compressed["partial_settlements"][0])
+    assert len(again["partial_settlements"]) == 1
+    kept = append_today_cards(compressed, [_card("fresh", unit_id="unit-fresh")], today="2026-09-22")
+    assert kept["partial_settlements"][0]["card_ids"] == ["done"]

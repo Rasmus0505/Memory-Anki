@@ -378,14 +378,15 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
     [commitEditingDraft, getCurrentEditorDoc, onNodeActive, replaceInteraction],
   )
 
-  const updateEditingDraft = useCallback(
-    (nodeId: string, draftText: string) => {
-      const current = interactionRef.current
-      if (current.mode !== 'editing' || current.nodeId !== nodeId) return
-      replaceInteraction({ ...current, draftText })
-    },
-    [replaceInteraction],
-  )
+  const updateEditingDraft = useCallback((nodeId: string, draftText: string) => {
+    const current = interactionRef.current
+    if (current.mode !== 'editing' || current.nodeId !== nodeId) return
+    if (current.draftText === draftText) return
+    // Keystrokes stay on the ref. Lifting each one into React state rebuilt the
+    // editor surface and the canvas, and fingerprinted the whole palace doc.
+    // NodeCard owns the live editor; commitEditingDraft reads this ref.
+    interactionRef.current = { ...current, draftText }
+  }, [])
 
   const selectNode = useCallback(
     (nodeId: string | null, options?: { additive?: boolean }) => {

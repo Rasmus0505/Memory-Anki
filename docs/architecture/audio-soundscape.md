@@ -75,10 +75,16 @@ interface ToneSpec {
 `webAudioFeedback.ts` 维护**进程内单例** `sharedAudioContext`：
 
 - 构造器解析兼容 `window.AudioContext ?? window.webkitAudioContext`；无可用构造器时返回 `null`（静默失败，不抛错）。
-- **iOS Safari / PWA 只允许在用户手势调用栈内 `resume()`**：模块在 `touchstart` / `pointerdown` / `click`
-  上以 `{ passive: true, capture: true }` 注册解锁监听，首次手势即创建并恢复上下文。
-- 从后台返回时 Web Audio 可能再次挂起：`visibilitychange` 回到 `visible` 时重新 `resume()`。
-- 所有 `resume()` 失败均被吞掉（`.catch(() => undefined)`），音频问题**绝不阻断交互**。
+- **iOS Safari / PWA 只允许在用户手势调用栈内 `resume()`**，`interrupted` 与 `suspended` 一样不能出声。
+  模块在 `touchstart` / `pointerdown` 上以 `{ passive: true, capture: true }` 提前尝试恢复（保持 passive，避免拖住随心滚动），
+  并在 `touchend` / `pointerup` / `click` 上以 `{ passive: false, capture: true }` 再恢复一次。结束手势才稳定落在用户激活栈内。
+  同一次手势会播放一段 1 采样静音 buffer，把输出真正接到硬件；只调用 `resume()` 时 WebKit 可能报成功但仍无声。
+- 上下文还没进入 `running` 时**不排振荡器**。排进挂起或中断的时间线会在部分 WebKit 上整段丢失，或等恢复后补播成另一套音色。
+  只保留最近一次、且不超过 450ms 的声音，等 `resume()` 或 `statechange` 进入 `running` 再播放。
+- 从后台返回时 Web Audio 可能再次挂起或中断：`visibilitychange` 回到 `visible` 时重新 `resume()`。
+  这次调用不在手势栈内，经常失败；下一次触摸结束会再试。
+- 所有 `resume()` 失败均被吞掉，音频问题**绝不阻断交互**。
+- 短音统一提前约 30ms 排程，包络时间严格递增。避免攻击段被当前时钟裁掉，或某一声部因非法 ramp 被丢掉，听起来像换了一个音效。
 - 音量经 `clampFeedbackVolume` 钳制到 `[0, REVIEW_FEEDBACK_EFFECTIVE_VOLUME_MAX]`；非有限值回落 `1`。
 
 ## 静音分区与音量优先级

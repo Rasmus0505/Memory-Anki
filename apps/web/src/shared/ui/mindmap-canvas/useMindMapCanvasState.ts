@@ -713,14 +713,56 @@ export function useMindMapCanvasState(
     applyGraphLayout({ resetDrag: true })
   }, [applyGraphLayout])
 
+  const editingNodeIdRef = useRef(editingNodeId)
+  editingNodeIdRef.current = editingNodeId
+  const editingLayoutTimerRef = useRef<number | null>(null)
+
   useEffect(() => {
     if (nodeSizeVersion === 0) return
     if (isDraggingNodeRef.current) {
       pendingLayoutSyncRef.current = true
       return
     }
+    // A growing card measures on each line wrap. Relayouting the whole tree on
+    // that signal hitches typing; wait for a short pause, and flush on edit end.
+    if (editingNodeIdRef.current) {
+      editingLayoutTimerRef.current = window.setTimeout(() => {
+        editingLayoutTimerRef.current = null
+        if (isDraggingNodeRef.current) {
+          pendingLayoutSyncRef.current = true
+          return
+        }
+        applyGraphLayout()
+      }, 140)
+      return () => {
+        if (editingLayoutTimerRef.current != null) {
+          window.clearTimeout(editingLayoutTimerRef.current)
+          editingLayoutTimerRef.current = null
+        }
+      }
+    }
     applyGraphLayout()
   }, [applyGraphLayout, nodeSizeVersion])
+
+  useEffect(() => {
+    if (editingNodeId) return
+    if (editingLayoutTimerRef.current == null) return
+    window.clearTimeout(editingLayoutTimerRef.current)
+    editingLayoutTimerRef.current = null
+    if (isDraggingNodeRef.current) {
+      pendingLayoutSyncRef.current = true
+      return
+    }
+    applyGraphLayout()
+  }, [applyGraphLayout, editingNodeId])
+
+  useEffect(() => {
+    return () => {
+      if (editingLayoutTimerRef.current != null) {
+        window.clearTimeout(editingLayoutTimerRef.current)
+      }
+    }
+  }, [])
 
   // After a structure drag ends, flush any graph/measure layout deferred above.
   useEffect(() => {

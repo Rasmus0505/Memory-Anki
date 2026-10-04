@@ -587,11 +587,63 @@ def _install_desktop_runtime() -> bool:
     return True
 
 
+def _frontend_dependencies_ready() -> bool:
+    """Verify the build toolchain really resolves, not just that folders exist.
+
+    A directory left behind by Syncthing can exist while being empty, so probing
+    for `node_modules/.bin/tsc` is not enough — check the real entry points.
+    """
+    probes = [
+        WEB_DIR / "node_modules" / ".bin" / "tsc.CMD",
+        WEB_DIR / "node_modules" / ".bin" / "vite.CMD",
+        WEB_DIR / "node_modules" / "typescript" / "bin" / "tsc",
+        WEB_DIR / "node_modules" / "vite" / "package.json",
+    ]
+    return all(path.exists() for path in probes)
+
+
+def _ensure_frontend_dependencies() -> bool:
+    """Repair a missing/emptied node_modules tree before building.
+
+    Syncthing and interrupted installs can leave package directories present but
+    empty, so `tsc`/`vite` shims vanish and the build dies with a confusing
+    "'tsc' is not recognized" error. A build must never run on a broken tree.
+    """
+    try:
+        npm = dev_server._resolve_npm()
+    except Exception as exc:
+        print(f"[!] Unable to find npm: {exc}")
+        return False
+    if _frontend_dependencies_ready():
+        return True
+    LOGS_DIR.mkdir(parents=True, exist_ok=True)
+    log_path = LOGS_DIR / "frontend-install.log"
+    _append_log_separator(log_path, "Frontend dependency repair")
+    print(f"[!] Frontend dependencies are incomplete; restoring them, log: {log_path}")
+    with log_path.open("ab") as log_file:
+        result = subprocess.run(
+            [npm, "ci", "--include=dev", "--foreground-scripts"],
+            cwd=str(WEB_DIR),
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL,
+            check=False,
+            **dev_server.hidden_console_kwargs(),
+        )
+    if result.returncode != 0 or not _frontend_dependencies_ready():
+        print(f"[!] Frontend dependency repair failed. See {log_path}")
+        return False
+    print("[ok] Frontend dependencies restored")
+    return True
+
+
 def _run_frontend_build() -> bool:
     try:
         npm = dev_server._resolve_npm()
     except Exception as exc:
         print(f"[!] Unable to find npm: {exc}")
+        return False
+    if not _ensure_frontend_dependencies():
         return False
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
     log_path = LOGS_DIR / "pwa-build.log"

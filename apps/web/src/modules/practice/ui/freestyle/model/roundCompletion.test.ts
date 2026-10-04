@@ -3,6 +3,7 @@ import type { FreestyleUnitEncounterState } from '@/modules/practice/public'
 import type { FreestyleCard } from '@/shared/api/contracts'
 import {
   buildFreestyleRoundCompletion,
+  foldPartialSettlementsIntoCompletion,
   clampFreestyleFeedIndex,
   findEarliestCompleteSeekIndex,
   findEarliestUnhandledIndex,
@@ -237,6 +238,30 @@ describe('buildFreestyleRoundCompletion', () => {
         ],
       },
     ])
+  })
+
+  it('folds a confirmed 小结算 into 大结算 counts without adding its seconds again', () => {
+    const cards = [card('still', { palace_id: 11, palace_title: '还在' })]
+    const completion = buildFreestyleRoundCompletion(cards, { still: encounter() }, 1)
+    const folded = foldPartialSettlementsIntoCompletion(
+      completion,
+      [{
+        id: 'settle-1',
+        cardIds: ['gone'],
+        cardCount: 1,
+        ratedCount: 1,
+        passedCount: 1,
+        retryCount: 0,
+        quizCount: 0,
+        totalEffectiveSeconds: 40,
+        quizSeconds: 0,
+        bySubject: [],
+      }],
+      ['still'],
+    )
+    expect(folded.ratedCount).toBe(completion.ratedCount + 1)
+    expect(folded.passedCount).toBe(completion.passedCount + 1)
+    expect(folded.totalEffectiveSeconds).toBe(completion.totalEffectiveSeconds)
   })
 
   it('uses the round clock for the headline and palace rows, and does not add encounter seconds again', () => {

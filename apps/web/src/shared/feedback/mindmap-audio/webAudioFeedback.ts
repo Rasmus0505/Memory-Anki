@@ -11,39 +11,124 @@ import {
 
 let sharedAudioContext: AudioContext | null = null
 
+/** A sound queued before the context is running is dropped after this. */
+const PENDING_SOUND_MAX_AGE_MS = 450
+/** Keep short tones off a currentTime that WebKit has already consumed. */
+const AUDIO_SCHEDULE_LEAD_S = 0.03
+
+type PendingSound = {
+  at: number
+  play: (context: AudioContext) => void
+}
+
+let pendingSound: PendingSound | null = null
+let stateListenerContext: AudioContext | null = null
+
 function resolveAudioContextConstructor() {
   if (typeof window === 'undefined') return null
   return window.AudioContext ?? (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext ?? null
 }
 
-function unlockAudioContextForIosSafariGesture() {
-  let context = sharedAudioContext
-  if (!context) {
-    const AudioContextCtor = resolveAudioContextConstructor()
-    if (AudioContextCtor) {
-      context = new AudioContextCtor()
-      sharedAudioContext = context
+function isAudible(context: AudioContext) {
+  return context.state === 'running'
+}
+
+function flushPendingSound(context: AudioContext) {
+  const pending = pendingSound
+  if (!pending || !isAudible(context)) return
+  pendingSound = null
+  if (Date.now() - pending.at > PENDING_SOUND_MAX_AGE_MS) return
+  try {
+    pending.play(context)
+  } catch {
+    // Audio must never break the interaction that triggered it.
+  }
+}
+
+function attachStateListener(context: AudioContext) {
+  if (stateListenerContext === context || typeof context.addEventListener !== 'function') return
+  stateListenerContext = context
+  context.addEventListener('statechange', () => {
+    flushPendingSound(context)
+  })
+}
+
+function armResume(context: AudioContext) {
+  attachStateListener(context)
+  if (isAudible(context)) {
+    flushPendingSound(context)
+    return
+  }
+  // Call every time. An earlier resume() promise must not swallow the gesture
+  // that iOS will actually honor, including recovery from `interrupted`.
+  try {
+    void Promise.resolve(context.resume()).then(
+      () => {
+        flushPendingSound(context)
+      },
+      () => undefined,
+    )
+  } catch {
+    // Audio must never break the interaction that triggered it.
+  }
+}
+
+function primeSilentBuffer(context: AudioContext) {
+  if (typeof context.createBuffer !== 'function' || typeof context.createBufferSource !== 'function') return
+  try {
+    const sampleRate = context.sampleRate > 0 ? context.sampleRate : 22050
+    const buffer = context.createBuffer(1, 1, sampleRate)
+    const source = context.createBufferSource()
+    source.buffer = buffer
+    const gainFactory = (context as AudioContext & { createGain?: () => GainNode }).createGain
+    if (typeof gainFactory === 'function') {
+      const gain = gainFactory.call(context)
+      gain.gain.value = 0
+      source.connect(gain)
+      gain.connect(context.destination)
+    } else {
+      source.connect(context.destination)
     }
+    source.start(0)
+  } catch {
+    // Unlock priming is best-effort.
   }
-  if (context && context.state !== 'running') {
-    void context.resume().catch(() => undefined)
-  }
+}
+
+function unlockAudioContextForIosSafariGesture() {
+  const context = getSharedAudioContext()
+  if (!context) return
+  // A one-sample silent buffer started inside the gesture is what actually
+  // connects WebKit's output. resume() alone can report success and stay mute.
+  primeSilentBuffer(context)
+  armResume(context)
 }
 
 if (typeof document !== 'undefined') {
   // iOS Safari PWA only allows AudioContext.resume() from a user gesture stack.
-  const unlockEvents = ['touchstart', 'pointerdown', 'click'] as const
-  for (const eventName of unlockEvents) {
+  // touchstart/pointerdown stay passive so they do not delay feed scrolling.
+  const passiveUnlockEvents = ['touchstart', 'pointerdown'] as const
+  for (const eventName of passiveUnlockEvents) {
     document.addEventListener(eventName, unlockAudioContextForIosSafariGesture, {
       passive: true,
       capture: true,
     })
   }
+  // The gesture-end events can be non-passive: they are the reliable user-activation
+  // point, and they are not what the browser waits on before scrolling.
+  const gestureUnlockEvents = ['touchend', 'pointerup', 'click'] as const
+  for (const eventName of gestureUnlockEvents) {
+    document.addEventListener(eventName, unlockAudioContextForIosSafariGesture, {
+      passive: false,
+      capture: true,
+    })
+  }
 
   document.addEventListener('visibilitychange', () => {
-    // Returning from background can suspend Web Audio again in iOS Safari.
-    if (document.visibilityState === 'visible' && sharedAudioContext) {
-      void sharedAudioContext.resume().catch(() => undefined)
+    // Returning from background suspends or interrupts Web Audio on iOS Safari.
+    // This call is outside a gesture, so it often fails; the next touchend retries.
+    if (document.visibilityState === 'visible' && sharedAudioContext && !isAudible(sharedAudioContext)) {
+      armResume(sharedAudioContext)
     }
   })
 }
@@ -51,10 +136,47 @@ if (typeof document !== 'undefined') {
 export function getSharedAudioContext() {
   const AudioContextCtor = resolveAudioContextConstructor()
   if (!AudioContextCtor) return null
+  if (sharedAudioContext && sharedAudioContext.state === 'closed') {
+    sharedAudioContext = null
+    stateListenerContext = null
+    pendingSound = null
+  }
   if (!sharedAudioContext) {
     sharedAudioContext = new AudioContextCtor()
   }
   return sharedAudioContext
+}
+
+/** Schedule slightly ahead of currentTime so WebKit does not clip the attack. */
+export function sharedAudioStartTime(context: AudioContext, offsetMs = 0) {
+  const latency = typeof context.baseLatency === 'number' && Number.isFinite(context.baseLatency)
+    ? Math.min(0.05, Math.max(0, context.baseLatency))
+    : 0
+  return context.currentTime + Math.max(AUDIO_SCHEDULE_LEAD_S, latency) + Math.max(0, offsetMs) / 1000
+}
+
+/**
+ * Play only once the shared context is actually running.
+ * Scheduling into a suspended or interrupted context drops the sound on some
+ * WebKit builds, or plays it later with a different clock — the "missing" and
+ * "wrong timbre" failures on mobile.
+ */
+export function runWithSharedAudioContext(play: (context: AudioContext) => void) {
+  const context = getSharedAudioContext()
+  if (!context) return
+  if (isAudible(context)) {
+    try {
+      play(context)
+    } catch {
+      // Audio must never break the interaction that triggered it.
+    }
+    return
+  }
+  // Keep only the newest sound. Replaying a backlog when audio finally
+  // unlocks sounds like a different effect than the one the user just did.
+  pendingSound = { at: Date.now(), play }
+  armResume(context)
+  if (isAudible(context)) flushPendingSound(context)
 }
 
 function clampFeedbackVolume(value: number) {
@@ -99,57 +221,62 @@ export function tuneToneSpec(
 }
 
 function scheduleTonePlayback(context: AudioContext, tone: ToneSpec, volume: number) {
-  const oscillator = context.createOscillator()
-  const gainNode = context.createGain()
-  const startAt = context.currentTime + tone.offsetMs / 1000
-  const attackSeconds = Math.max(0.002, (tone.attackMs ?? 4) / 1000)
-  const durationSeconds = Math.max(0.018, tone.durationMs / 1000)
-  const releaseSeconds = Math.min(0.08, Math.max(0.012, durationSeconds * 0.32))
-  const endAt = startAt + durationSeconds
-  const stopAt = endAt + releaseSeconds + 0.02
+  try {
+    const oscillator = context.createOscillator()
+    const gainNode = context.createGain()
+    const startAt = sharedAudioStartTime(context, tone.offsetMs)
+    const attackSeconds = Math.max(0.002, (tone.attackMs ?? 4) / 1000)
+    const durationSeconds = Math.max(attackSeconds + 0.012, Math.max(0.018, tone.durationMs / 1000))
+    const releaseSeconds = Math.min(0.08, Math.max(0.012, durationSeconds * 0.32))
+    const endAt = startAt + durationSeconds
+    const attackAt = startAt + attackSeconds
+    const bodyAt = attackAt + Math.max(0.001, durationSeconds * 0.45 - attackSeconds)
+    const releaseAt = Math.max(endAt + releaseSeconds, bodyAt + 0.001)
+    const stopAt = releaseAt + 0.02
 
-  oscillator.type = tone.type
-  oscillator.frequency.setValueAtTime(tone.frequency, startAt)
-  if (typeof tone.endFrequency === 'number' && Number.isFinite(tone.endFrequency)) {
-    oscillator.frequency.linearRampToValueAtTime(tone.endFrequency, endAt)
+    oscillator.type = tone.type
+    oscillator.frequency.setValueAtTime(tone.frequency, startAt)
+    if (typeof tone.endFrequency === 'number' && Number.isFinite(tone.endFrequency)) {
+      oscillator.frequency.linearRampToValueAtTime(tone.endFrequency, endAt)
+    }
+
+    const peakGain = Math.max(0, tone.gain * volume)
+    gainNode.gain.setValueAtTime(0.0001, startAt)
+    gainNode.gain.linearRampToValueAtTime(peakGain, attackAt)
+    gainNode.gain.exponentialRampToValueAtTime(Math.max(0.0001, peakGain * 0.85), bodyAt)
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, releaseAt)
+
+    const stereoFactory = (context as AudioContext & { createStereoPanner?: () => StereoPannerNode }).createStereoPanner
+    let panner: StereoPannerNode | null = null
+    if (typeof stereoFactory === 'function') {
+      panner = stereoFactory.call(context)
+      panner.pan.setValueAtTime(tone.pan ?? 0, startAt)
+      oscillator.connect(gainNode)
+      gainNode.connect(panner)
+      panner.connect(context.destination)
+    } else {
+      oscillator.connect(gainNode)
+      gainNode.connect(context.destination)
+    }
+
+    oscillator.onended = () => {
+      try { oscillator.disconnect() } catch { /* already disconnected */ }
+      try { gainNode.disconnect() } catch { /* already disconnected */ }
+      try { panner?.disconnect() } catch { /* already disconnected */ }
+    }
+    oscillator.start(startAt)
+    oscillator.stop(stopAt)
+  } catch {
+    // One failed node must not abort the rest of a chord.
   }
-
-  const peakGain = Math.max(0, tone.gain * volume)
-  gainNode.gain.setValueAtTime(0.0001, startAt)
-  gainNode.gain.linearRampToValueAtTime(peakGain, startAt + attackSeconds)
-  gainNode.gain.exponentialRampToValueAtTime(
-    Math.max(0.0001, peakGain * 0.85),
-    startAt + Math.max(attackSeconds, durationSeconds * 0.45),
-  )
-  gainNode.gain.exponentialRampToValueAtTime(0.0001, endAt + releaseSeconds)
-
-  const stereoFactory = (context as AudioContext & { createStereoPanner?: () => StereoPannerNode }).createStereoPanner
-  if (typeof stereoFactory === 'function') {
-    const panner = stereoFactory.call(context)
-    panner.pan.setValueAtTime(tone.pan ?? 0, startAt)
-    oscillator.connect(gainNode)
-    gainNode.connect(panner)
-    panner.connect(context.destination)
-  } else {
-    oscillator.connect(gainNode)
-    gainNode.connect(context.destination)
-  }
-
-  oscillator.start(startAt)
-  oscillator.stop(stopAt)
 }
 
 function playToneSequence(tones: ToneSpec[], volume: number) {
-  const context = getSharedAudioContext()
-  if (!context) return
-
-  if (context.state === 'suspended') {
-    void context.resume().catch(() => undefined)
-  }
-
-  for (const tone of tones) {
-    scheduleTonePlayback(context, colorTone(tone), volume)
-  }
+  runWithSharedAudioContext((context) => {
+    for (const tone of tones) {
+      scheduleTonePlayback(context, colorTone(tone), volume)
+    }
+  })
 }
 
 export function playWebAudioFeedbackEvent(args: {
@@ -193,9 +320,10 @@ const noiseBuffers = new WeakMap<AudioContext, AudioBuffer>()
 
 function getNoiseBuffer(context: AudioContext) {
   const cached = noiseBuffers.get(context)
-  if (cached) return cached
-  const length = Math.floor(context.sampleRate * 0.25)
-  const buffer = context.createBuffer(1, length, context.sampleRate)
+  if (cached && cached.sampleRate === context.sampleRate) return cached
+  const sampleRate = context.sampleRate > 0 ? context.sampleRate : 22050
+  const length = Math.floor(sampleRate * 0.25)
+  const buffer = context.createBuffer(1, length, sampleRate)
   const data = buffer.getChannelData(0)
   for (let index = 0; index < length; index += 1) data[index] = Math.random() * 2 - 1
   noiseBuffers.set(context, buffer)
@@ -206,51 +334,68 @@ function scheduleNoiseSwipe(
   context: AudioContext,
   args: { startAt: number; durationS: number; fromHz: number; toHz: number; q: number; gain: number },
 ) {
-  const source = context.createBufferSource()
-  source.buffer = getNoiseBuffer(context)
-  source.playbackRate.value = 0.9 + Math.random() * 0.2
-  const band = context.createBiquadFilter()
-  band.type = 'bandpass'
-  band.Q.value = args.q
-  band.frequency.setValueAtTime(args.fromHz, args.startAt)
-  band.frequency.exponentialRampToValueAtTime(args.toHz, args.startAt + args.durationS)
-  const envelope = context.createGain()
-  envelope.gain.setValueAtTime(0.0001, args.startAt)
-  envelope.gain.linearRampToValueAtTime(args.gain, args.startAt + Math.min(0.012, args.durationS * 0.2))
-  envelope.gain.exponentialRampToValueAtTime(0.0001, args.startAt + args.durationS)
-  source.connect(band)
-  band.connect(envelope)
-  envelope.connect(context.destination)
-  source.start(args.startAt, Math.random() * 0.1)
-  source.stop(args.startAt + args.durationS + 0.02)
+  try {
+    const source = context.createBufferSource()
+    source.buffer = getNoiseBuffer(context)
+    // Wide playback-rate jitter pushed the swipe in and out of phone speakers.
+    source.playbackRate.value = 0.98 + Math.random() * 0.04
+    const band = context.createBiquadFilter()
+    band.type = 'bandpass'
+    band.Q.value = args.q
+    const fromHz = Math.max(40, args.fromHz)
+    const toHz = Math.max(40, args.toHz)
+    const attackAt = args.startAt + Math.min(0.012, Math.max(0.004, args.durationS * 0.2))
+    const releaseAt = Math.max(args.startAt + args.durationS, attackAt + 0.008)
+    band.frequency.setValueAtTime(fromHz, args.startAt)
+    band.frequency.exponentialRampToValueAtTime(toHz, releaseAt)
+    const envelope = context.createGain()
+    envelope.gain.setValueAtTime(0.0001, args.startAt)
+    envelope.gain.linearRampToValueAtTime(Math.max(0.0001, args.gain), attackAt)
+    envelope.gain.exponentialRampToValueAtTime(0.0001, releaseAt)
+    source.connect(band)
+    band.connect(envelope)
+    envelope.connect(context.destination)
+    source.onended = () => {
+      try { source.disconnect() } catch { /* already disconnected */ }
+      try { band.disconnect() } catch { /* already disconnected */ }
+      try { envelope.disconnect() } catch { /* already disconnected */ }
+    }
+    source.start(args.startAt, Math.random() * 0.04)
+    source.stop(releaseAt + 0.02)
+  } catch {
+    // A failed swipe must not surface as a broken page turn.
+  }
 }
 
 /** Soft paper swipe for feed page turns; synthesized, no assets. */
 export function playWebAudioPageTurn(args: { volume?: number; direction?: 'forward' | 'backward' }) {
   const feedbackVolume = clampFeedbackVolume(args.volume ?? 1)
   if (feedbackVolume <= 0) return
-  const context = getSharedAudioContext()
-  if (!context || typeof context.createBufferSource !== 'function') return
-  if (context.state === 'suspended') void context.resume().catch(() => undefined)
-  const now = context.currentTime + 0.004
-  const jitter = 0.92 + Math.random() * 0.16
-  const [fromHz, toHz] = args.direction === 'backward' ? [1400, 3600] : [3800, 1300]
-  scheduleNoiseSwipe(context, {
-    startAt: now,
-    durationS: 0.11 * jitter,
-    fromHz: fromHz * jitter,
-    toHz: toHz * jitter,
-    q: 0.9,
-    gain: 0.05 * feedbackVolume,
-  })
-  // Edge flick: a very short high tick at the end of the swipe.
-  scheduleNoiseSwipe(context, {
-    startAt: now + 0.075 * jitter,
-    durationS: 0.03,
-    fromHz: 6200,
-    toHz: 4800,
-    q: 2.4,
-    gain: 0.022 * feedbackVolume,
+  runWithSharedAudioContext((context) => {
+    if (typeof context.createBufferSource !== 'function') return
+    const now = sharedAudioStartTime(context)
+    // Phone speakers drop a wide random pitch, so each swipe sounded different
+    // or vanished. Keep a little movement without leaving the audible band.
+    const jitter = 0.985 + Math.random() * 0.03
+    const [fromHz, toHz] = args.direction === 'backward' ? [1400, 2800] : [2800, 1100]
+    scheduleNoiseSwipe(context, {
+      startAt: now,
+      durationS: 0.11 * jitter,
+      fromHz: fromHz * jitter,
+      toHz: toHz * jitter,
+      q: 0.9,
+      gain: 0.05 * feedbackVolume,
+    })
+    // Edge flick stays inside a phone speaker's band. 6 kHz was often silent,
+    // which made some swipes sound like a different effect than others.
+    scheduleNoiseSwipe(context, {
+      startAt: now + 0.075 * jitter,
+      durationS: 0.03,
+      fromHz: 3400,
+      toHz: 2200,
+      q: 2.4,
+      gain: 0.022 * feedbackVolume,
+    })
   })
 }
 
@@ -262,4 +407,6 @@ export function playWebAudioLandingChime(args: { combo: number; volume?: number 
 
 export function __resetWebAudioContextForTests() {
   sharedAudioContext = null
+  pendingSound = null
+  stateListenerContext = null
 }

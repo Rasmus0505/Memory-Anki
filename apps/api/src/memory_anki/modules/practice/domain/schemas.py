@@ -68,6 +68,7 @@ class FreestyleRoundActionRequest(BaseModel):
     occurrence_id: str = ""
     encounter_id: str = ""
     cards: list[dict[str, Any]] = Field(default_factory=list)
+    partial_settlement: dict[str, Any] | None = None
 
 
 class FreestyleOverlayQuizEnsureRequest(BaseModel):

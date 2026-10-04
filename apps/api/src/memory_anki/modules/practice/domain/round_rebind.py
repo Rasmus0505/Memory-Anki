@@ -288,6 +288,14 @@ def _merge_incoming(
     plan["completed_ids"] = _rewrite_ids(plan["completed_ids"], mapping)
     plan["excluded_ids"] = _rewrite_ids(plan["excluded_ids"], mapping)
     plan["compressed_ids"] = _rewrite_ids(plan["compressed_ids"], mapping)
+    plan["partial_settlements"] = [
+        {
+            **item,
+            "card_ids": _rewrite_ids(item.get("card_ids") or [], mapping),
+        }
+        for item in plan.get("partial_settlements") or []
+        if isinstance(item, Mapping)
+    ]
     current = _text(plan.get("current_card_id"))
     if current and current in mapping:
         plan["current_card_id"] = mapping[current]
