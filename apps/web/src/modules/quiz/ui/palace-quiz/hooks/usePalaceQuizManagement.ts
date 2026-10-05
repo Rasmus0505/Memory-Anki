@@ -1,5 +1,6 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { toast } from '@/shared/feedback/toast'
+import { playEditLayeredPops } from '@/shared/feedback/mindmap-audio/webAudioFeedback'
 import { appConfirm } from '@/shared/components/ui/native-dialog'
 import type { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import type { PalaceQuizQuestion } from '@/shared/api/contracts'
@@ -119,12 +120,16 @@ export function usePalaceQuizManagement({
       tone: 'danger',
     })) return
     registerQuizActivity('manage_delete_question')
-    emitQuizFeedback('quiz_manage_delete', { label: '删除题目', audioScope: 'local' })
+    // No sound yet: the confirm dialog above can still be cancelled, and the
+    // delete tone used to ring on a cancelled confirmation.
     setManageDeletingId(questionId)
     try {
       await deletePalaceQuizQuestionApi(questionId)
+      // Object layer then result layer: one pop for the question that left, then
+      // the toast chime. Previously this rang twice here (before and after the
+      // request) on top of the toast.
+      playEditLayeredPops({ role: 'remove' })
       toast.success('题目已从题库删除。')
-      emitQuizFeedback('quiz_manage_delete', { label: '已删除', audioScope: 'local' })
       await refreshQuestions()
       setSelectedQuestionIds((current) => current.filter((item) => item !== questionId))
       removeQuestionStates([questionId])
@@ -169,12 +174,11 @@ export function usePalaceQuizManagement({
       tone: 'danger',
     })) return
     registerQuizActivity('manage_batch_delete_questions')
-    emitQuizFeedback('quiz_manage_batch_delete', { label: '批量删除', audioScope: 'global' })
     setManageBulkDeleting(true)
     try {
       await batchDeletePalaceQuizQuestionsApi(selectedQuestionIds)
+      playEditLayeredPops({ role: 'remove', count: selectedQuestionIds.length })
       toast.success(`已从题库删除 ${selectedQuestionIds.length} 道题目。`)
-      emitQuizFeedback('quiz_manage_batch_delete', { label: '批量删除完成', audioScope: 'global' })
       const deletedIds = [...selectedQuestionIds]
       await refreshQuestions()
       setSelectedQuestionIds([])

@@ -9,6 +9,7 @@ import {
   type PreviewState,
 } from './layout'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
+import { playEditLayeredPops } from '@/shared/feedback/mindmap-audio/webAudioFeedback'
 import { recordSessionRecorderUiAction } from '@/shared/debug/session-recorder'
 
 interface UseMindMapDragInteractionsInput {
@@ -382,7 +383,6 @@ export function useMindMapDragInteractions({
       if (activePreview && activePreview.sourceId === node.id) {
         const blocked = collectBlockedDescendants(graphData, sourceIds)
         if (!blocked.has(activePreview.targetId)) {
-          // Audio: only drag_start for the gesture (no second drop sound).
           appliedDrop = applyDrop(sourceIds, activePreview.targetId, activePreview.mode)
         }
       }
@@ -406,6 +406,16 @@ export function useMindMapDragInteractions({
       primaryOriginRef.current = null
       commitPreviewState(null)
       resetPreviewFeedback()
+      if (readonly) return
+      // Gesture sound, layered: `drag_start` fired when the drag began, this is the
+      // landing. A drop that actually re-parented the cards lands with one pop per
+      // moved card; a drop that snapped back is a soft denial instead, so an
+      // invalid target never sounds like success.
+      if (appliedDrop) {
+        playEditLayeredPops({ role: 'land', count: sourceIds.length })
+      } else {
+        playEditLayeredPops({ role: 'deny' })
+      }
     },
     [
       applyDrop,

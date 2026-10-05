@@ -1,6 +1,7 @@
 import { useCallback, useState, type MouseEvent } from 'react'
 import { type EdgeMouseHandler, type Node } from '@xyflow/react'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
+import { playEditLayeredPops } from '@/shared/feedback/mindmap-audio/webAudioFeedback'
 import type { MindMapNodeClickViewportPolicy } from './MindMapCanvas'
 import { recordSessionRecorderUiAction, truncateRecorderText } from '@/shared/debug/session-recorder'
 
@@ -175,10 +176,8 @@ export function useMindMapMenusAndEdges({
     (edgeId: string, sourceId: string, targetId: string) => {
       setEdgeMenu(null)
       setSelectedEdgeId(null)
-      dispatchGlobalFeedback('node_delete', {
-        origin: 'edge',
-        label: 'EDGE',
-      })
+      // An unlink is not a card delete: one soft low pop, no subtree-count noise.
+      playEditLayeredPops({ role: 'unlink' })
       onEdgeDelete?.(edgeId, sourceId, targetId)
     },
     [onEdgeDelete],
@@ -224,11 +223,8 @@ export function useMindMapMenusAndEdges({
     (event, edge) => {
       event.preventDefault()
       event.stopPropagation()
-      dispatchGlobalFeedback('node_delete', {
-        point: { x: event.clientX, y: event.clientY },
-        origin: 'edge',
-        label: 'EDGE',
-      })
+      // Sound lives in handleEdgeDelete — dispatching here as well made a
+      // double-click delete ring twice.
       handleEdgeDelete(edge.id, edge.source, edge.target)
     },
     [handleEdgeDelete],

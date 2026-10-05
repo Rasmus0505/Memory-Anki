@@ -244,12 +244,9 @@ export function buildNodeActions({
     ...(!multiTarget && !isRoot && onDeleteNodeOnly ? [{
       label: '单独删除（保留子级）',
       icon: Trash2,
+      // No sound here: deleting asks for confirmation first, so a tone on click
+      // fires even when the user cancels. The success path sounds it instead.
       onClick: () => {
-        dispatchGlobalFeedback('node_delete', {
-          point: { x: ctxMenu.x, y: ctxMenu.y },
-          origin: 'node',
-          label: 'NODE_ONLY',
-        })
         onDeleteNodeOnly(nodeId)
       },
       variant: 'danger' as const,
@@ -259,11 +256,6 @@ export function buildNodeActions({
       label: `单独删除选中（${deletableTargets.length} 张，保留子级）`,
       icon: Trash2,
       onClick: () => {
-        dispatchGlobalFeedback('node_delete', {
-          point: { x: ctxMenu.x, y: ctxMenu.y },
-          origin: 'node',
-          label: 'NODES_ONLY',
-        })
         onDeleteNodesOnly(deletableTargets)
       },
       variant: 'danger' as const,
@@ -277,10 +269,6 @@ export function buildNodeActions({
           : '删除整条分支 (Delete)',
       icon: Trash2,
       onClick: () => {
-        dispatchGlobalFeedback('node_delete', {
-          point: { x: ctxMenu.x, y: ctxMenu.y },
-          origin: 'node',
-        })
         if (deletableTargets.length > 1 && onDeleteNodes) {
           onDeleteNodes(deletableTargets)
           return
