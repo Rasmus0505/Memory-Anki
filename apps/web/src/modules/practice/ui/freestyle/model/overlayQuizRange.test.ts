@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { DEFAULT_FREESTYLE_FEED_CONFIG, sanitizeFreestyleFeedConfig } from '@/modules/practice/domain/feedConfig'
 import type { FreestyleRoundPlanState } from '@/modules/practice/domain/roundPlan'
 import { overlayQuizRangeLabel, overlayReviewPalaceIds } from './overlayQuizRange'
 
@@ -44,6 +45,19 @@ describe('overlayQuizRange', () => {
       },
     }
     expect(overlayReviewPalaceIds(plan)).toEqual([10])
+    const narrowed = sanitizeFreestyleFeedConfig({
+      ...DEFAULT_FREESTYLE_FEED_CONFIG,
+      streams: {
+        ...DEFAULT_FREESTYLE_FEED_CONFIG.streams,
+        memory_palace: {
+          ...DEFAULT_FREESTYLE_FEED_CONFIG.streams.memory_palace,
+          specific_palace_ids: [20],
+        },
+      },
+    })
+    expect(overlayReviewPalaceIds(plan, narrowed)).toEqual([])
+    narrowed.streams.memory_palace.specific_palace_ids = [10, 20]
+    expect(overlayReviewPalaceIds(plan, narrowed)).toEqual([10])
     expect(overlayQuizRangeLabel(1)).toBe('本轮纳入复习的 1 个宫殿')
     expect(overlayQuizRangeLabel(0)).toBe('本轮还没有纳入复习的宫殿')
   })

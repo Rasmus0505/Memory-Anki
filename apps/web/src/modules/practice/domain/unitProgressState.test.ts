@@ -83,12 +83,24 @@ describe('occurrenceScore', () => {
       completedIds: ['a'],
       encounters: { a: enc(null) },
       roundPlan: plan({ a: { lastRating: 2 } }),
-    })).toBe(3)
+    })).toBe(2)
     expect(isOccurrenceScored('a', {
       completedIds: [],
       encounters: { a: enc(null) },
       roundPlan: plan({ a: { lastRating: 2 } }),
     })).toBe(true)
+  })
+
+  it('keeps shared completion handled without manufacturing a rating', () => {
+    const input = {
+      completedIds: ['a'],
+      encounters: {},
+      roundPlan: plan({ a: {}, b: {} }),
+    }
+    expect(occurrenceScore('a', input)).toBeNull()
+    expect(isOccurrenceScored('a', input)).toBe(true)
+    expect(isOccurrencePassed('a', input)).toBe(true)
+    expect(findEarliestUnscoredIndex({ ...input, cards: [card('a'), card('b')] })).toBe(1)
   })
 
   it('does not inherit the source score onto a 重练 occurrence', () => {
@@ -104,6 +116,17 @@ describe('occurrenceScore', () => {
       encounters: { a: enc(2) },
       roundPlan: plan({ a: { lastRating: 2 }, [retryId]: { lastRating: null } }),
     })).toBe(false)
+  })
+
+  it('treats a queue removal as scored without calling it a pass', () => {
+    const input = {
+      completedIds: [],
+      encounters: {},
+      roundPlan: plan({ a: { status: 'excluded' } }),
+    }
+    expect(isOccurrenceScored('a', input)).toBe(true)
+    expect(isOccurrencePassed('a', input)).toBe(false)
+    expect(occurrenceScore('a', input)).toBeNull()
   })
 
   it('treats weak and pass alike for scored (进度条实心)', () => {

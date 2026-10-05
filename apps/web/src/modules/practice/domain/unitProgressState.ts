@@ -39,13 +39,6 @@ export function occurrenceScore(
   if (!id) return null
   const live = asRating(input.encounters[id]?.selectedRating)
   if (live != null) return live
-  const completed = new Set(
-    Array.from(input.completedIds, (item) => idOf(item)).filter(Boolean),
-  )
-  if (completed.has(id)) {
-    // Quiz ack / compacted pass: treat as a this-round pass without a number.
-    return 3
-  }
   return asRating(input.roundPlan?.cardsById[id]?.lastRating)
 }
 
@@ -53,6 +46,11 @@ export function isOccurrenceScored(
   cardId: string,
   input: Pick<UnitProgressInput, 'completedIds' | 'encounters' | 'roundPlan'>,
 ): boolean {
+  const id = idOf(cardId)
+  // 移除本队列 is handled, not a 1-4 pass. Callers that need a grade still use occurrenceScore.
+  if (id && input.roundPlan?.cardsById[id]?.status === 'excluded') return true
+  // Shared completion / quiz acknowledgement is handled without inventing a grade.
+  if (id && new Set(Array.from(input.completedIds, idOf)).has(id)) return true
   return occurrenceScore(cardId, input) != null
 }
 
@@ -60,8 +58,10 @@ export function isOccurrencePassed(
   cardId: string,
   input: Pick<UnitProgressInput, 'completedIds' | 'encounters' | 'roundPlan'>,
 ): boolean {
+  const id = idOf(cardId)
   const rating = occurrenceScore(cardId, input)
-  return rating != null && rating >= 3
+  if (rating != null) return rating >= 3
+  return Boolean(id && new Set(Array.from(input.completedIds, idOf)).has(id))
 }
 
 /** Ids of cards that already have a this-round score (weak and pass alike). */

@@ -516,10 +516,12 @@ function planCardFromLive(
 }
 
 /**
- * Confirm 移除队列 on these ids. A live id missing from the plan is inserted
- * excluded (updateRoundPlanCard would no-op). A pending source sibling of the
- * same unit is excluded too, so a newer revision cannot sit on the rail as
- * unscored. Completed and retry rows keep their own score.
+ * Confirm 移除队列 on these ids. This round stops arranging them, the same as
+ * 记得/轻松, without a 1–4 rating. A live id missing from the plan is inserted
+ * excluded. An id that is no longer in the feed still gets a ledger tick, so
+ * the rail stays filled after the card is hidden. Unscored siblings of the
+ * same unit, including a retry that has not been graded, are excluded too.
+ * A row that already has its own score stays.
  */
 export function excludeRoundPlanCards(
   plan: FreestyleRoundPlanState | null,
@@ -547,8 +549,23 @@ export function excludeRoundPlanCards(
       return
     }
     const live = liveById.get(id)
-    if (!live) return
-    const entry = planCardFromLive(live, 'excluded', now)
+    const entry = live
+      ? planCardFromLive(live, 'excluded', now)
+      : {
+          cardId: id,
+          sourceCardId: id,
+          occurrenceKind: 'source' as const,
+          retryAttempt: 0,
+          palaceId: null,
+          palaceTitle: '',
+          label: id,
+          kind: 'mindmap_branch',
+          status: 'excluded' as const,
+          lastRating: null,
+          retryAfterCards: 0,
+          attemptCount: 0,
+          updatedAt: now,
+        }
     const orderIds = next.orderIds.includes(id) ? next.orderIds : [...next.orderIds, id]
     next = {
       ...next,
@@ -559,8 +576,8 @@ export function excludeRoundPlanCards(
   ids.forEach(stamp)
 
   for (const entry of Object.values(next.cardsById)) {
-    if (entry.occurrenceKind === 'retry') continue
-    if (entry.status === 'completed' || entry.status === 'retry' || entry.status === 'excluded') continue
+    if (entry.status === 'completed' || entry.status === 'excluded') continue
+    if (entry.lastRating != null) continue
     const unit = reviewUnitIdFromCardId(entry.cardId) || reviewUnitIdFromCardId(entry.sourceCardId)
     if (!unit || !unitIds.has(unit)) continue
     next = updateRoundPlanCard(next, entry.cardId, { status: 'excluded' }, now)

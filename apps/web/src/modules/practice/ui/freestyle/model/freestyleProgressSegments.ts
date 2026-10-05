@@ -639,7 +639,7 @@ export function buildFreestyleProgressSummary(
 
   const unfinishedPalaces = new Set(
     segments
-      .filter((segment) => segment.palaceId != null && (segment.tone !== 'done' || segment.removed))
+      .filter((segment) => segment.palaceId != null && segment.tone !== 'done')
       .map((segment) => segment.palaceId as number),
   )
   for (const segment of segments) {
@@ -659,7 +659,7 @@ export function buildFreestyleProgressSummary(
     segments,
     position: currentIndex >= 0 ? currentIndex + 1 : 0,
     total: segments.length,
-    doneCount: segments.filter((segment) => segment.tone === 'done' && !segment.removed).length,
+    doneCount: segments.filter((segment) => segment.tone === 'done').length,
     retryCount: segments.filter((segment) => segment.tone === 'retry').length,
     scheduledBase: baseItems.length,
     positionBase: baseIndex >= 0 ? baseIndex + 1 : 0,

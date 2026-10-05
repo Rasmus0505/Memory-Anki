@@ -442,6 +442,14 @@ describe('round plan reducer', () => {
     expect(next?.cardsById.b).toMatchObject({ status: 'completed', lastRating: 3 })
   })
 
+  it('keeps a done tick when the removed card is already gone from the feed', () => {
+    const first = createRoundPlan('round-1', [card('b', 1)], config)
+    const next = excludeRoundPlanCards(first, ['a'], [])
+    expect(next?.orderIds).toContain('a')
+    expect(next?.cardsById.a).toMatchObject({ status: 'excluded', lastRating: null })
+    expect(next?.cardsById.b?.status).not.toBe('excluded')
+  })
+
   it('compresses passed cards out of the working set and does not revive them', () => {
     const cards = [card('a', 1), card('b', 1)]
     const first = applyCompletedIdsToRoundPlan(createRoundPlan('round-1', cards, config), ['a'])

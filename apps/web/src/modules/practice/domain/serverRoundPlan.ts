@@ -521,14 +521,13 @@ export function mergeServerPlanIntoLocalEncounters(
     writeGap(cardId, {
       encounterId: String(enc.encounter_id || '').trim() || undefined,
       unitRevision: Number(enc.unit_revision) || undefined,
-      selectedRating: status === 'passed' ? 3 : 1,
+      // A pass/fail summary is not a user's 1–4 rating.
       passed: status === 'passed',
     })
   }
 
   for (const cardId of plan.completed_ids || []) {
     writeGap(String(cardId || ''), {
-      selectedRating: 3,
       passed: true,
     })
   }
@@ -568,16 +567,8 @@ export function applyServerRatingsToRoundPlan(
       ratings.set(sourceId, rating)
     }
   }
-  for (const [cardId, enc] of Object.entries(server.encounters || {})) {
-    if (ratings.has(cardId)) continue
-    const status = String(enc?.status || '').trim()
-    if (status === 'passed') ratings.set(cardId, 3)
-    if (status === 'failed') ratings.set(cardId, 1)
-  }
-  for (const cardId of server.completed_ids || []) {
-    const id = String(cardId || '').trim()
-    if (id && !ratings.has(id)) ratings.set(id, 3)
-  }
+  // completed_ids and encounter pass/fail statuses carry completion, not a
+  // concrete rating. In particular peer-workspace completion must not light 记得.
   for (const [cardId, rating] of ratings) {
     const current = next.cardsById[cardId]
     if (!current || current.lastRating != null) continue

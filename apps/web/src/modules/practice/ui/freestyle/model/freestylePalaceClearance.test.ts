@@ -133,7 +133,7 @@ describe('isPalaceRoundCleared', () => {
     })).toBe(true)
   })
 
-  it('does not treat excluded unrated units as a finished palace', () => {
+  it('treats an excluded unit as handled so a scored palace can finish', () => {
     const cards = [unit('a', 1, '卢梭'), unit('b', 1, '卢梭')]
     const plan = updateRoundPlanCard(
       createRoundPlan('r', cards, DEFAULT_FREESTYLE_FEED_CONFIG),
@@ -146,6 +146,14 @@ describe('isPalaceRoundCleared', () => {
       plan,
       encountersByCardId: { a: { selectedRating: 3 } as never },
       completedIds: ['a'],
+      hiddenIds: ['b'],
+    })).toBe(true)
+    expect(isPalaceRoundCleared({
+      cards: [cards[0]],
+      palaceId: 1,
+      plan,
+      encountersByCardId: {},
+      completedIds: [],
       hiddenIds: ['b'],
     })).toBe(false)
   })

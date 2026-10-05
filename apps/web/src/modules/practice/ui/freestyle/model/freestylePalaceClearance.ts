@@ -87,7 +87,8 @@ export function isPalaceRoundCleared(input: {
   for (const entry of Object.values(planCards)) {
     if (entry.palaceId !== palaceId) continue
     if (entry.kind !== 'mindmap_branch') continue
-    if (entry.status === 'excluded' || hidden.has(entry.cardId) || hidden.has(entry.sourceCardId)) {
+    if (entry.status === 'excluded') continue
+    if (hidden.has(entry.cardId) || hidden.has(entry.sourceCardId)) {
       if (entry.status !== 'completed' && !completed.has(entry.cardId) && !completed.has(entry.sourceCardId)) {
         return false
       }

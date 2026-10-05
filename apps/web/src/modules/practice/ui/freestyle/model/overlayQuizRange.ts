@@ -1,7 +1,10 @@
-import type { FreestyleQuizScope } from '@/shared/api/contracts'
+import type { FreestyleFeedConfig, FreestyleQuizScope } from '@/shared/api/contracts'
 import type { FreestyleRoundPlanState } from '@/modules/practice/domain/roundPlan'
 
-export function overlayReviewPalaceIds(plan: FreestyleRoundPlanState | null | undefined): number[] {
+export function overlayReviewPalaceIds(
+  plan: FreestyleRoundPlanState | null | undefined,
+  config?: FreestyleFeedConfig,
+): number[] {
   if (!plan) return []
   const ids: number[] = []
   const seen = new Set<number>()
@@ -10,6 +13,12 @@ export function overlayReviewPalaceIds(plan: FreestyleRoundPlanState | null | un
     if (card.kind !== 'mindmap_branch') continue
     const palaceId = card.palaceId
     if (!palaceId || palaceId <= 0 || seen.has(palaceId)) continue
+    const scope = config?.streams.memory_palace
+    // Retained completed/retry sources do not widen an explicit picker subset.
+    // Subject-only scopes are resolved authoritatively by the backend catalog.
+    if (scope?.specific_palace_ids.length
+      && (scope.subject_scope === 'all' || scope.subject_ids.length > 0)
+      && !scope.specific_palace_ids.includes(palaceId)) continue
     seen.add(palaceId)
     ids.push(palaceId)
   }

@@ -264,7 +264,7 @@ describe('server round plan hydrate', () => {
       },
     }
     const merged = mergeServerPlanIntoLocalEncounters({}, plan, 'round-1')
-    expect(merged.a).toMatchObject({ selectedRating: 3, passed: true, status: 'closed' })
+    expect(merged.a).toMatchObject({ selectedRating: null, passed: true, status: 'closed' })
     expect(merged.b).toMatchObject({ selectedRating: 2, passed: false, status: 'closed' })
     expect(merged['retry:round-1:b-unit:1']).toBeUndefined()
     // Local draft wins when it already has a rating.
@@ -290,8 +290,26 @@ describe('server round plan hydrate', () => {
       }),
       plan,
     )
-    expect(hud.cardsById.a.lastRating).toBe(3)
+    expect(hud.cardsById.a.lastRating).toBeNull()
     expect(hud.cardsById.b.lastRating).toBe(2)
+  })
+
+  it('does not invent a rating for peer completion with no local encounter', () => {
+    const server: FreestyleRoundPlanPayload = {
+      original_cards: [],
+      presented_ids: ['a', 'b'],
+      current_card_id: 'a',
+      current_index: 0,
+      completed_ids: ['a'],
+      excluded_ids: [],
+      occurrences: [],
+      encounters: {},
+    }
+    const merged = mergeServerPlanIntoLocalEncounters({}, server, 'round-secondary')
+    expect(merged.a).toMatchObject({ selectedRating: null, passed: true, status: 'closed' })
+    const local = createRoundPlan('round-secondary', [branch('a'), branch('b')], DEFAULT_FREESTYLE_FEED_CONFIG)
+    expect(applyServerRatingsToRoundPlan(local, server).cardsById.a.lastRating).toBeNull()
+    expect(nextUnfinishedPlanCardId(server)).toBe('b')
   })
 
   it('does not prefill a retry card with the parent scheduling rating', () => {
@@ -358,8 +376,8 @@ describe('server round plan hydrate', () => {
     const owned = applyServerRatingsToRoundPlan(local, ratedPlan)
     expect(owned.cardsById[retry.id].lastRating).toBe(3)
     // Occurrence-local: a scored 重练 glance must not stamp the source id.
-    // Source keeps only its own encounter result (failed → 1), never the retry's 3.
-    expect(owned.cardsById.b.lastRating).toBe(1)
+    // A source fail summary has no concrete score; never borrow the retry's 3.
+    expect(owned.cardsById.b.lastRating).toBeNull()
     const merged = mergeServerPlanIntoLocalEncounters({}, ratedPlan, 'round-1')
     expect(merged[retry.id]?.selectedRating).toBe(3)
     expect(merged.b?.selectedRating ?? null).not.toBe(3)

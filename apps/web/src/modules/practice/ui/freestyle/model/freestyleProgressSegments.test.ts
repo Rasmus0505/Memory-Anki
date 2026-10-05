@@ -7,6 +7,8 @@ import {
   updateRoundPlanCard,
 } from '@/modules/practice/domain/roundPlan'
 import { compressRoundPlanCards } from '@/modules/practice/domain/roundPlanCompress'
+import { applyServerRatingsToRoundPlan, mergeServerPlanIntoLocalEncounters } from '@/modules/practice/domain/serverRoundPlan'
+import type { FreestyleRoundPlanPayload } from '@/shared/api/contracts'
 import { createRetryOccurrence, insertRetryOccurrenceAfterGap } from '@/modules/practice/domain/queueState'
 import type { FreestyleCard } from '@/shared/api/contracts'
 import {
@@ -88,6 +90,30 @@ describe('palaceAccent', () => {
 })
 
 describe('buildFreestyleProgressSummary', () => {
+  it('fills inherited completion without displaying a made-up rating or filling its retry', () => {
+    const source = card('one')
+    const retry = createRetryOccurrence(source, 'round-1', 1, 3)
+    const cards = [source, retry, card('two')]
+    const server: FreestyleRoundPlanPayload = {
+      original_cards: [],
+      presented_ids: cards.map((item) => item.id),
+      current_card_id: retry.id,
+      current_index: 1,
+      completed_ids: [source.id],
+      excluded_ids: [],
+      occurrences: [],
+      encounters: {},
+    }
+    const hydrated = applyServerRatingsToRoundPlan(plan(cards), server)
+    const encounters = mergeServerPlanIntoLocalEncounters({}, server, 'round-1')
+    const summary = buildFreestyleProgressSummary(cards, hydrated, server.completed_ids, [], retry.id, encounters)
+    expect(encounters[source.id].selectedRating).toBeNull()
+    expect(hydrated.cardsById[source.id].lastRating).toBeNull()
+    expect(summary.segments.map((segment) => segment.tone)).toEqual(['done', 'pending', 'pending'])
+    expect(summary.doneCount).toBe(1)
+    expect(summary.segments[1].viewing).toBe(true)
+  })
+
   it('tones each card from its plan status', () => {
     const cards = [card('one'), card('two'), card('three')]
     // `retry` comes from the plan entry's own status (written on a weak rating),
@@ -231,9 +257,21 @@ describe('buildFreestyleProgressSummary', () => {
     expect(palaceAccentToneClass(removed?.palaceId ?? null, 'done')).not.toMatch(/\/\d+/)
     expect(progressSegmentHoverLabel(removed!, removedIndex, summary.total)).toContain('已移出队列')
     expect(summary.passedCount).toBe(0)
+    expect(summary.doneCount).toBe(1)
     expect(summary.scheduledBase).toBe(3)
     expect(summary.total).toBe(4)
     expect(summary.position).toBe(3)
+    expect(summary.segments.every((segment) => segment.palaceDone === false)).toBe(true)
+  })
+
+  it('counts a lone queue removal as done and finishes its palace', () => {
+    const cards = [card('gone')]
+    const roundPlan = updateRoundPlanCard(plan(cards), 'gone', { status: 'excluded' })
+    const summary = buildFreestyleProgressSummary([], roundPlan, [], ['gone'], null)
+
+    expect(summary.doneCount).toBe(1)
+    expect(summary.passedCount).toBe(0)
+    expect(summary.segments[0]).toMatchObject({ tone: 'done', removed: true, palaceDone: true })
   })
 
   it('keeps a removed card solid while it is the viewing playhead', () => {
