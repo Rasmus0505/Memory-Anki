@@ -27,6 +27,11 @@ describe('ImmersiveFreestylePage layout', () => {
     expect(source).toContain('viewingCompleteSlot')
   })
 
+  it('gives the closing settlement its own scrollport on short viewports', () => {
+    expect(source).toContain('data-testid="freestyle-round-complete-scroll"')
+    expect(source).toContain('min-h-0 flex-1 overflow-y-auto overscroll-contain')
+  })
+
   it('uses the right-side 完成 button to settle or walk unscored units', () => {
     expect(source).toContain('findUnscoredCompleteSeekIndices')
     expect(source).toContain('resolveFreestyleCompleteSeek')

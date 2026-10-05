@@ -15,6 +15,7 @@ import {
 } from './FreestyleUnitReviewCardView'
 import { writeFlipCardRevealSettings } from '@/modules/settings/public'
 import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
+import { resetFreestyleSessionLaneForTests } from '@/modules/practice/ui/freestyle/model/freestyleSessionLane'
 
 const apiMocks = vi.hoisted(() => ({
   closeUnitReviewEncounterApi: vi.fn(),
@@ -33,6 +34,8 @@ const persistMocks = vi.hoisted(() => ({
 
 const previewCacheMocks = vi.hoisted(() => ({
   useUnitPreview: vi.fn(() => null),
+  useSharedPalacePreview: vi.fn(() => null),
+  rememberUnitPreview: vi.fn(),
 }))
 
 const quizBindingMocks = vi.hoisted(() => ({
@@ -68,6 +71,8 @@ vi.mock('@/modules/practice/ui/freestyle/api', () => ({
 
 vi.mock('@/modules/practice/ui/freestyle/model/freestyleUnitPreviewCache', () => ({
   useUnitPreview: previewCacheMocks.useUnitPreview,
+  useSharedPalacePreview: previewCacheMocks.useSharedPalacePreview,
+  rememberUnitPreview: previewCacheMocks.rememberUnitPreview,
 }))
 
 vi.mock('@/modules/practice/ui/review/components/PalaceReviewUnitsPanel', () => ({
@@ -395,8 +400,12 @@ describe('FreestyleUnitReviewCardView', () => {
     })
     window.cancelAnimationFrame = vi.fn()
     Object.values(apiMocks).forEach((mock) => mock.mockReset())
+    resetFreestyleSessionLaneForTests()
     previewCacheMocks.useUnitPreview.mockReset()
     previewCacheMocks.useUnitPreview.mockReturnValue(null)
+    previewCacheMocks.useSharedPalacePreview.mockReset()
+    previewCacheMocks.useSharedPalacePreview.mockReturnValue(null)
+    previewCacheMocks.rememberUnitPreview.mockReset()
     quizBindingMocks.getOpenQuestionIds.mockClear()
     quizBindingMocks.getInitialQuestionIndex.mockClear()
     quizBindingMocks.markQuestionCompleted.mockClear()
@@ -471,6 +480,19 @@ describe('FreestyleUnitReviewCardView', () => {
   afterEach(() => {
     window.requestAnimationFrame = originalRequestAnimationFrame
     window.cancelAnimationFrame = originalCancelAnimationFrame
+  })
+
+  it('does not open or cancel a session when the card is only flashed', async () => {
+    const card = buildCard('unit-flash')
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!))
+    const view = renderCard(card)
+    view.rerenderCard({ active: false })
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 250))
+    })
+    expect(apiMocks.startFreestyleUnitReviewSessionApi).not.toHaveBeenCalled()
+    expect(apiMocks.cancelUnratedUnitReviewEncounterApi).not.toHaveBeenCalled()
+    expect(view.onEnsureEncounter).not.toHaveBeenCalled()
   })
 
   it('uses the full palace and the current unit as the only rating scope', async () => {

@@ -245,14 +245,14 @@ describe('移除本队列', () => {
     const forgot = screen.getByTestId('freestyle-rating-button-1')
     expect(remove.compareDocumentPosition(forgot) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(remove.textContent).toContain('移除本队列')
-    expect(remove.textContent).toContain('不改进度')
+    expect(remove.textContent).toContain('本轮结束')
 
     fireEvent.click(remove)
     expect(onRemoveFromQueue).not.toHaveBeenCalled()
     expect(onRate).not.toHaveBeenCalled()
     expect(remove.getAttribute('aria-pressed')).toBe('true')
     expect(screen.getByTestId('freestyle-rating-effect-line').textContent).toContain('再点确认移除')
-    expect(screen.getByTestId('freestyle-rating-effect-line').textContent).toContain('不改复习进度')
+    expect(screen.getByTestId('freestyle-rating-effect-line').textContent).toContain('本轮不再安排')
   })
 
   it('removes only on the second press and leaves the schedule ratings untouched', () => {
@@ -285,7 +285,7 @@ describe('移除本队列', () => {
     fireEvent.click(screen.getByTestId('freestyle-rating-button-3'))
     expect(onRemoveFromQueue).not.toHaveBeenCalled()
     expect(onRate).toHaveBeenCalledWith(3)
-    expect(screen.queryByText('再点确认移除 · 不改复习进度')).toBeNull()
+    expect(screen.queryByText('再点确认移除 · 本轮不再安排')).toBeNull()
   })
 
   it('stays available before the review session loads', () => {

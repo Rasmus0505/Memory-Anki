@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
+import type { UnitRating } from '@/modules/practice/public'
 import {
   Archive,
   Check,
@@ -97,6 +98,7 @@ function RoundPlanRow({
   onMove,
   onDragOverId,
   onDraggingId,
+  onRate,
 }: {
   entry: FreestyleRoundPlanCard
   liveCard: FreestyleCard | undefined
@@ -114,8 +116,12 @@ function RoundPlanRow({
   onMove: (sourceId: string, targetId: string) => void
   onDragOverId: (id: string | null) => void
   onDraggingId: (id: string | null) => void
+  onRate: (cardId: string, rating: UnitRating) => void
 }) {
-  const label = rowLabel(entry)
+  const pathLabel = liveCard?.type === 'mindmap_branch'
+    ? liveCard.context_path.map((item) => item.text.trim()).filter(Boolean).join('-')
+    : ''
+  const label = pathLabel || rowLabel(entry)
   const canDrag = status !== 'completed' && status !== 'excluded'
   const retryDone = entry.occurrenceKind === 'retry' && status === 'completed'
   const retryPending = entry.occurrenceKind === 'retry' && status !== 'completed' && status !== 'excluded'
@@ -255,6 +261,27 @@ function RoundPlanRow({
             来源 {entry.sourceCardId} · {entry.retryAfterCards}张后
           </span>
         ) : null}
+        {liveCard?.type === 'mindmap_branch' && status !== 'excluded' ? (
+          <div className="flex shrink-0 items-center gap-1" role="group" aria-label={`给${label}评分`}>
+            {[1, 2, 3, 4].map((rating) => (
+              <button
+                key={rating}
+                type="button"
+                className={cn(
+                  'inline-flex size-7 items-center justify-center rounded-md border text-[11px] font-semibold transition-colors',
+                  entry.lastRating === rating
+                    ? 'border-primary bg-primary text-primary-foreground'
+                    : 'border-border/70 text-muted-foreground hover:border-primary/60 hover:text-primary',
+                )}
+                aria-label={`${label}评分${rating}`}
+                aria-pressed={entry.lastRating === rating}
+                onClick={() => onRate(entry.cardId, rating as UnitRating)}
+              >
+                {rating}
+              </button>
+            ))}
+          </div>
+        ) : null}
         {status === 'completed' ? <Check className="size-4 shrink-0 text-rate-good" /> : null}
       </div>
     </div>
@@ -279,6 +306,7 @@ export function FreestyleRoundSheet({
   onCompressCompleted,
   onReorder,
   onOpenConfig,
+  onRateCard,
 }: {
   open: boolean
   cards: FreestyleCard[]
@@ -292,6 +320,7 @@ export function FreestyleRoundSheet({
   onCompressCompleted: () => void
   onReorder: (orderIds: string[]) => void
   onOpenConfig: () => void
+  onRateCard?: (cardId: string, rating: UnitRating) => void
   loading?: boolean
 }) {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
@@ -437,6 +466,10 @@ export function FreestyleRoundSheet({
     ))
   }
   const orderIds = roundPlan?.orderIds ?? []
+  const onRate = useCallback((cardId: string, rating: UnitRating) => {
+    onRateCard?.(cardId, rating)
+  }, [onRateCard])
+
   const renderPlanRow = (
     entry: FreestyleRoundPlanCard,
     neighborIds: string[],
@@ -465,6 +498,7 @@ export function FreestyleRoundSheet({
         onMove={moveRow}
         onDragOverId={setDragOverId}
         onDraggingId={setDraggingId}
+        onRate={onRate}
       />
     )
   }

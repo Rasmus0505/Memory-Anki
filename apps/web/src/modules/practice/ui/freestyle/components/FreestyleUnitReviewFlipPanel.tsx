@@ -587,6 +587,7 @@ export function FreestyleUnitReviewFlipPanel({
   } = useFreestyleUnitReviewNodeQuiz({
     palaceId: session.palace_id,
     editorDoc: (isEditMode ? editEditorState : editorState).editor_doc,
+    enabled: active,
   })
   const textToMindMap = useFreestyleTextToMindMap({
     palaceId: session.palace_id, card, sessionTitle: session.title || '', isEditMode,

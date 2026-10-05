@@ -7,14 +7,17 @@ import { toast } from '@/shared/feedback/toast'
 export function useFreestyleUnitReviewNodeQuiz({
   palaceId,
   editorDoc,
+  enabled = true,
 }: {
   palaceId: number
   editorDoc: MindMapEditorState['editor_doc']
+  /** Neighbor cards are preview-only; do not load their quiz bindings. */
+  enabled?: boolean
 }) {
   const quizNodeBindings = usePalaceQuizNodeBindings({
     palaceId,
     editorDoc,
-    enabled: Boolean(palaceId),
+    enabled: Boolean(palaceId) && enabled,
   })
   const [nodeQuizOpen, setNodeQuizOpen] = useState(false)
   const [nodeQuizNodeUid, setNodeQuizNodeUid] = useState<string | null>(null)

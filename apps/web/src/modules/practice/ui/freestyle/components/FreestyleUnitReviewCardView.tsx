@@ -45,7 +45,15 @@ import {
   UNDO_VISIBLE_MS,
   updateSessionUnit,
 } from '@/modules/practice/ui/freestyle/model/freestyleUnitReviewSession'
-import { useUnitPreview } from '@/modules/practice/ui/freestyle/model/freestyleUnitPreviewCache'
+import {
+  rememberUnitPreview,
+  useSharedPalacePreview,
+  useUnitPreview,
+} from '@/modules/practice/ui/freestyle/model/freestyleUnitPreviewCache'
+import {
+  enqueueFreestyleSessionTask,
+  FREESTYLE_SESSION_OPEN_DELAY_MS,
+} from '@/modules/practice/ui/freestyle/model/freestyleSessionLane'
 import { cn } from '@/shared/lib/utils'
 import { useForegroundEncounterClock } from '@/modules/practice/ui/review/hooks/useForegroundEncounterClock'
 import { useFreestyleFlowFeedback } from '@/modules/practice/ui/freestyle/hooks/useFreestyleFlowFeedback'
@@ -65,6 +73,16 @@ export {
   retryPositionLabel,
 } from '@/modules/practice/ui/freestyle/model/ratingEffectLabels'
 
+
+async function abandonUnshownSession(value: UnitReviewSessionDto, unitId: string | null | undefined) {
+  const encounter = value.units.find((item) => item.id === unitId)?.encounter
+  if (!encounter || encounter.status !== 'open' || encounter.selected_rating != null) return
+  try {
+    await cancelUnratedUnitReviewEncounterApi(value.id, unitId ?? '', encounter.id)
+  } catch {
+    // The next card's start also releases a competing unrated glance.
+  }
+}
 
 export function FreestyleUnitReviewCardView({
   card,
@@ -210,6 +228,11 @@ export function FreestyleUnitReviewCardView({
   // (pending→open, rating amend) do not re-enter start and race an in-flight rate.
   const openedForKeyRef = useRef<string | null>(null)
   const loadOperationRef = useRef<string | null>(null)
+  const loadGenerationRef = useRef(0)
+  const ensureEncounterRef = useRef(onEnsureEncounter)
+  const revisionAdoptedRef = useRef(onRevisionAdopted)
+  ensureEncounterRef.current = onEnsureEncounter
+  revisionAdoptedRef.current = onRevisionAdopted
   const cardRef = useRef(card)
   cardRef.current = card
 
@@ -268,7 +291,11 @@ export function FreestyleUnitReviewCardView({
       : null
   // Read-only preview: the real map is drawn while the card slides in; the encounter
   // still opens only on activation. Limited to the active card and its neighbours.
-  const preview = useUnitPreview(active || nearViewport ? card.unit_id : null, effectiveRevision)
+  const exactPreview = useUnitPreview(active || nearViewport ? card.unit_id : null, effectiveRevision)
+  const sharedPreview = useSharedPalacePreview(
+    exactPreview || !(active || nearViewport) ? null : card,
+  )
+  const preview = exactPreview ?? sharedPreview
   const previewUnit = preview?.units.find((item) => item.id === card.unit_id) ?? null
   const previewEditorState = useMemo(() => (preview ? buildEditorState(preview) : null), [preview])
   const flipSource = editorState && session && unit && unit.encounter
@@ -453,11 +480,13 @@ export function FreestyleUnitReviewCardView({
     if (!active) return
     if (recapOnly) return
     if (!liveCard.unit_id || effectiveRevision == null || !cardUnitKey) {
-      onStaleDrop(liveCard.id)
+      rateBridgeRef.current.onStaleDrop(liveCard.id)
       return
     }
-    const identity = onEnsureEncounter(liveCard.id, effectiveRevision, !readOnly)
-    if (readOnly && identity.status !== 'closed') return
+    // Skip checks use the encounter already on the card. Creating one persists
+    // queue state, so a card that is only flashed must not do it yet.
+    const identity = encounter ?? null
+    if (readOnly && identity?.status !== 'closed') return
     const liveEncounter = unitRef.current?.encounter
     // Same live glance already loaded: skip. Do NOT key off parent `encounter` updates
     // (pending→open / rating amend) or start races cancel/rate mid-score.
@@ -468,15 +497,15 @@ export function FreestyleUnitReviewCardView({
       && liveEncounter
       && liveEncounter.status === 'open'
       && (
-        liveEncounter.id === identity.encounterId
-        || identity.status === 'open'
+        liveEncounter.id === identity?.encounterId
+        || identity?.status === 'open'
       ),
     )
     const sameClosedView = Boolean(
       openedForKeyRef.current === cardUnitKey
       && sessionRef.current
       && liveEncounter
-      && identity.status === 'closed'
+      && identity?.status === 'closed'
       && liveEncounter.id === identity.encounterId,
     )
     // Just-rated open glance: a parent encounter flap (source after_state, silent
@@ -487,68 +516,87 @@ export function FreestyleUnitReviewCardView({
       && liveEncounter
       && liveEncounter.status === 'open'
       && liveEncounter.selected_rating != null
-      && identity.status !== 'pending'
+      && identity?.status !== 'pending'
     )
     if (sameOpenGlance || sameClosedView || sameRatedOpenGlance) {
       return
     }
-    const requestIdentity = `${cardUnitKey}:${identity.encounterId}:${loadAttempt}:${operationId()}`
+    const requestIdentity = `${cardUnitKey}:${identity?.encounterId ?? ''}:${loadAttempt}:${operationId()}`
+    const generation = ++loadGenerationRef.current
     loadOperationRef.current = requestIdentity
-    let mounted = true
-    setLoadError(null)
-    setActionError(null)
     const sessionCard =
       effectiveRevision !== liveCard.unit_revision
         ? { ...liveCard, unit_revision: effectiveRevision }
         : liveCard
-    void loadSessionWithTimeout(sessionCard, identity, roundId).then((value) => {
-      if (!mounted || loadOperationRef.current !== requestIdentity) return
-      const nextUnit = value.units.find((item) => item.id === liveCard.unit_id)
-      const decision = decideLoadedUnitSession({
-        cardUnitId: liveCard.unit_id,
-        cardRevision: effectiveRevision,
-        unit: nextUnit,
-        identityStatus: identity.status,
+    // A card that is only passed through must not open or cancel a session.
+    // Rating still waits on the encounter, which the bar already disables.
+    const delay = loadAttempt > 0 ? 0 : FREESTYLE_SESSION_OPEN_DELAY_MS
+    const timer = window.setTimeout(() => {
+      void enqueueFreestyleSessionTask(async () => {
+        if (loadGenerationRef.current !== generation || !activeRef.current) return
+        const liveIdentity = ensureEncounterRef.current(liveCard.id, effectiveRevision, !readOnly)
+        if (readOnly && liveIdentity.status !== 'closed') return
+        setLoadError(null)
+        setActionError(null)
+        try {
+          const value = await loadSessionWithTimeout(sessionCard, liveIdentity, roundId)
+          const left = loadGenerationRef.current !== generation || !activeRef.current || !mountedRef.current
+          if (left) {
+            if (!activeRef.current || !mountedRef.current) {
+              await abandonUnshownSession(value, liveCard.unit_id)
+            }
+            return
+          }
+          const nextUnit = value.units.find((item) => item.id === liveCard.unit_id)
+          const decision = decideLoadedUnitSession({
+            cardUnitId: liveCard.unit_id,
+            cardRevision: effectiveRevision,
+            unit: nextUnit,
+            identityStatus: liveIdentity.status,
+          })
+          if (decision.action === 'drop' || !nextUnit?.encounter) {
+            rateBridgeRef.current.onStaleDrop(liveCard.id)
+            return
+          }
+          if (liveCard.unit_id) rememberUnitPreview(liveCard.unit_id, nextUnit.revision, value)
+          if (decision.action === 'adopt') {
+            setAdoptedRevision(nextUnit.revision)
+            if (liveCard.unit_id) revisionAdoptedRef.current?.(liveCard.id, liveCard.unit_id, nextUnit.revision)
+          }
+          openedForKeyRef.current = `${liveCard.id}:${liveCard.unit_id}:${nextUnit.revision}:${roundId}`
+          setSession(value)
+          setLoadError(null)
+          setStaleRecovery(false)
+          setLastOperationId(nextUnit.encounter.effective_operation_id)
+          rateBridgeRef.current.onEncounterChange(
+            liveCard.id,
+            encounterState(value.id, nextUnit.revision, nextUnit.encounter),
+          )
+        } catch (error) {
+          if (loadGenerationRef.current !== generation || !activeRef.current || !mountedRef.current) return
+          if (isStaleUnitError(error)) {
+            setStaleRecovery(true)
+            rateBridgeRef.current.onStaleDrop(liveCard.id)
+            return
+          }
+          const copy = freestyleUnitLoadFailureCopy(error)
+          const message = formatUnitDiagnostic({
+            error,
+            card: liveCard,
+            roundId,
+            operationId: requestIdentity,
+            stage: '加载复习会话',
+          })
+          setLoadError(message)
+          setLoadErrorTitle(copy.title)
+          setLoadErrorHint(copy.hint)
+          setActionError(null)
+        }
       })
-      if (decision.action === 'drop' || !nextUnit?.encounter) {
-        onStaleDrop(liveCard.id)
-        return
-      }
-      if (decision.action === 'adopt') {
-        setAdoptedRevision(nextUnit.revision)
-        if (liveCard.unit_id) onRevisionAdopted?.(liveCard.id, liveCard.unit_id, nextUnit.revision)
-      }
-      openedForKeyRef.current = `${liveCard.id}:${liveCard.unit_id}:${nextUnit.revision}:${roundId}`
-      setSession(value)
-      setLoadError(null)
-      setStaleRecovery(false)
-      setLastOperationId(nextUnit.encounter.effective_operation_id)
-      onEncounterChange(
-        liveCard.id,
-        encounterState(value.id, nextUnit.revision, nextUnit.encounter),
-      )
-    }).catch((error) => {
-      if (!mounted || loadOperationRef.current !== requestIdentity) return
-      if (isStaleUnitError(error)) {
-        setStaleRecovery(true)
-        onStaleDrop(liveCard.id)
-        return
-      }
-      const copy = freestyleUnitLoadFailureCopy(error)
-      const message = formatUnitDiagnostic({
-        error,
-        card: liveCard,
-        roundId,
-        operationId: requestIdentity,
-        stage: '加载复习会话',
-      })
-      setLoadError(message)
-      setLoadErrorTitle(copy.title)
-      setLoadErrorHint(copy.hint)
-      setActionError(null)
-    })
+    }, delay)
     return () => {
-      mounted = false
+      window.clearTimeout(timer)
+      if (loadGenerationRef.current === generation) loadGenerationRef.current += 1
     }
   }, [
     active,
@@ -564,11 +612,7 @@ export function FreestyleUnitReviewCardView({
     // parent patch cannot re-enter start/cancel.
     encounter?.encounterId,
     encounter?.status,
-    onEncounterChange,
-    onEnsureEncounter,
-    onStaleDrop,
     recapOnly,
-    onRevisionAdopted,
     readOnly,
     roundId,
     loadAttempt,
@@ -582,15 +626,15 @@ export function FreestyleUnitReviewCardView({
     }
     if (!wasActiveRef.current) return
     wasActiveRef.current = false
-    void closeCurrentEncounter()
-  }, [active, closeCurrentEncounter])
+    void enqueueFreestyleSessionTask(() => closeCurrentEncounterRef.current())
+  }, [active])
 
   useEffect(() => {
     mountedRef.current = true
     return () => {
       mountedRef.current = false
       mailboxRef.current = { ...emptyMailbox(), latest: mailboxRef.current.latest + 1 }
-      void closeCurrentEncounterRef.current()
+      void enqueueFreestyleSessionTask(() => closeCurrentEncounterRef.current())
     }
   }, [])
 
@@ -606,7 +650,7 @@ export function FreestyleUnitReviewCardView({
   function releaseEncounter() {
     rateHoldRef.current = Math.max(0, rateHoldRef.current - 1)
     if (rateHoldRef.current === 0 && !busyRef.current && !activeRef.current) {
-      void closeCurrentEncounter()
+      void enqueueFreestyleSessionTask(() => closeCurrentEncounterRef.current())
     }
   }
 
@@ -1036,7 +1080,7 @@ export function FreestyleUnitReviewCardView({
       busyRef.current = false
       if (mountedRef.current) setBusy(false)
       if (rateHoldRef.current === 0 && !activeRef.current) {
-        void closeCurrentEncounter()
+        void enqueueFreestyleSessionTask(() => closeCurrentEncounterRef.current())
       }
     }
   }

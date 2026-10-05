@@ -155,13 +155,22 @@ export function FreestyleRoundCompleteCard({
     <div
       data-testid={partial ? 'freestyle-partial-settlement-card' : 'freestyle-round-complete'}
       className={cn(
-        'mx-auto flex w-full max-w-2xl flex-col px-1 py-4',
-        // 小结算 is an overlay on a short PWA viewport. h-full + justify-center
-        // centers overflow outside the scrollport, so 取消结算 / 确认结算 cannot be reached.
-        partial ? 'h-auto justify-start pb-[max(1rem,env(safe-area-inset-bottom,0px))]' : 'h-full justify-center',
+        'mx-auto flex w-full max-w-2xl shrink-0 flex-col px-1 py-4',
+        // Both settlement variants can be taller than a phone viewport. Keep the
+        // card at its content height so its owner scrollport can reach the actions;
+        // h-full + justify-center would center overflow outside that scrollport.
+        'h-auto justify-start pb-[max(1rem,env(safe-area-inset-bottom,0px))]',
       )}
     >
       <div className="fs-complete-panel relative overflow-hidden rounded-[1.75rem] border border-stage-line-strong bg-stage-raised/95 p-5 text-stage-ink shadow-[0_24px_80px_-16px_rgb(0_0_0/0.7)] sm:p-7">
+        <button
+          type="button"
+          data-testid="freestyle-round-cancel-settlement"
+          className="ma-pressable mb-4 flex w-full items-center justify-center rounded-2xl border border-stage-line-strong px-4 py-3 text-sm font-medium text-stage-ink hover:bg-stage-ink/8"
+          onClick={onCancelSettlement}
+        >
+          {partial ? '取消结算' : '返回上一张'}
+        </button>
         <Rise index={0} className="text-center">
           <PassRing
             ratio={passRatio}
@@ -170,7 +179,7 @@ export function FreestyleRoundCompleteCard({
           />
           <div className="mt-3 flex items-center justify-center gap-3">
             <div className="text-xs font-semibold tracking-[0.18em] text-stage-glow">
-              {partial ? '小结算' : '今日到期已清'}
+              {partial ? '小结算' : '本轮总结'}
             </div>
             <button
               type="button"
@@ -190,20 +199,23 @@ export function FreestyleRoundCompleteCard({
           <StatTile value={completion.passedCount} label="已通过" toneClass="text-rate-good" index={0} reducedMotion={reducedMotion} />
           <StatTile
             value={completion.retryCount}
-            label={completion.retryCount > 0 ? '本轮重练过' : '重练'}
+            label="经历过重练"
             toneClass="text-rate-hard"
             index={1}
             reducedMotion={reducedMotion}
           />
-          <StatTile value={completion.quizCount} label="题目" toneClass="text-stage-ink" index={2} reducedMotion={reducedMotion} />
+          <StatTile value={completion.quizCount} label="做题卡片" toneClass="text-stage-ink" index={2} reducedMotion={reducedMotion} />
         </div>
+        <p className="mt-2 text-center text-[11px] leading-5 text-stage-muted">
+          已评分含通过与重练；“经历过重练”表示本轮曾需重练，不代表仍有待办。
+        </p>
 
         <Rise index={6}>
           <div
             data-testid="freestyle-round-complete-total-time"
             className="mt-4 rounded-2xl border border-rate-good/25 bg-rate-good/10 px-4 py-3 text-center"
           >
-            <div className="text-[11px] font-medium tracking-wide text-rate-good/85">本次随心</div>
+            <div className="text-[11px] font-medium tracking-wide text-rate-good/85">本轮专注时长</div>
             <div className="mt-0.5 text-2xl font-semibold tabular-nums text-stage-ink sm:text-3xl">
               {formatTimer(completion.totalEffectiveSeconds ?? 0)}
             </div>
@@ -223,12 +235,10 @@ export function FreestyleRoundCompleteCard({
 
         {!partial && partialSettlements.length ? (
           <Rise index={7}>
-            <div
-              data-testid="freestyle-round-partial-settlements"
-              className="mt-4 rounded-2xl border border-stage-line bg-stage/40 px-4 py-3"
-            >
-              <div className="text-sm font-medium text-stage-ink">小结算</div>
-              <p className="mt-1 text-xs leading-5 text-stage-muted">这些已完成单元已提前结算，数字已计入上方。</p>
+            <details className="mt-4 rounded-2xl border border-stage-line bg-stage/40 px-4 py-3">
+              <summary className="cursor-pointer text-sm font-medium text-stage-ink">提前结算记录（已计入上方总数）</summary>
+                <div data-testid="freestyle-round-partial-settlements" className="mt-3 space-y-3">
+                <p className="text-xs leading-5 text-stage-muted">提前完成的单元已包含在本轮总数中，不要重复相加。</p>
               <ul className="mt-3 space-y-3">
                 {partialSettlements.map((item, index) => (
                   <li key={item.id} className="rounded-xl border border-stage-line bg-stage-raised/50 px-3 py-2">
@@ -250,17 +260,20 @@ export function FreestyleRoundCompleteCard({
                     ) : null}
                   </li>
                 ))}
-              </ul>
-            </div>
+                </ul>
+              </div>
+            </details>
           </Rise>
         ) : null}
 
         {subjects.length > 0 ? (
           <Rise index={7}>
-            <div
-              data-testid="freestyle-round-complete-subjects"
-              className="mt-4 max-h-[min(40dvh,18rem)] space-y-2 overflow-y-auto pr-0.5"
-            >
+            <details className="mt-4 rounded-2xl border border-stage-line bg-stage/40 px-4 py-3">
+              <summary className="cursor-pointer text-sm font-medium text-stage-ink">按学科查看明细（{subjects.length}）</summary>
+              <div
+                data-testid="freestyle-round-complete-subjects"
+                className="mt-3 max-h-[min(40dvh,18rem)] space-y-2 overflow-y-auto pr-0.5"
+              >
               {subjects.map((subject) => {
                 const key = subjectKey(subject.subjectId, subject.subjectName)
                 const open = openKey === key
@@ -309,7 +322,8 @@ export function FreestyleRoundCompleteCard({
                   </div>
                 )
               })}
-            </div>
+              </div>
+            </details>
           </Rise>
         ) : null}
 
@@ -371,14 +385,6 @@ export function FreestyleRoundCompleteCard({
         ) : null}
 
         <Rise index={9}>
-          <button
-            type="button"
-            data-testid="freestyle-round-cancel-settlement"
-            className="ma-pressable mt-5 flex w-full items-center justify-center rounded-2xl border border-stage-line-strong px-4 py-3 text-sm font-medium text-stage-ink hover:bg-stage-ink/8"
-            onClick={onCancelSettlement}
-          >
-            取消结算
-          </button>
           {partial ? (
             <button
               type="button"
@@ -396,9 +402,19 @@ export function FreestyleRoundCompleteCard({
               onClick={onAnotherRound}
             >
               <RotateCcw className="size-4" />
-              再来一轮
+              配置下一轮
             </button>
           )}
+          {!partial ? (
+            <>
+              <p className="mt-2 text-center text-xs leading-5 text-stage-muted">
+                将打开本轮配置；确认后才会开始新一轮。已完成单元的复习安排不会因本按钮重置。
+              </p>
+              <p className="mt-1 text-center text-[11px] leading-5 text-stage-muted">
+                跨设备继续时，系统会合并本轮已完成进度；遇到版本更新的复习单元会按最新内容重新确认。
+              </p>
+            </>
+          ) : null}
         </Rise>
       </div>
     </div>

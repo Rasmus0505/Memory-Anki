@@ -1,6 +1,12 @@
 # Freestyle Immersive Feed
 
 Freestyle is a consumer of public learning projections. It does not own palace review scheduling.
+Toolbar 做题 intersects the round's scheduled review palaces with the current memory-palace
+stream scope. Completed cards and live retries retained after a picker change do not add
+removed palaces to the question pool. Subject catalog lookups only narrow that scheduled
+set; they never add unscheduled palaces. Out-of-scope answer progress stays parked and
+returns if the palace is selected again. An overlay ensure version conflict must be retried
+before loading question ids, since its snapshot may precede the just-saved picker scope.
 `FreestyleFeedConfig` is the single queue configuration owner for the immersive page; the
 older `FreestyleConfig` settings path is compatibility-only and must not drive queue builds.
 
@@ -103,8 +109,13 @@ The frontend reducer applies optimistic patches and hydrates from the server. Re
 completed, excluded, retry, and stale entries visible in the plan; a card that returns after a
 stale rebuild is rebound by stable `unit_id` to the latest `unit_revision` while ratings and
 retry counts stay. If the current card is missing or already completed, the next unfinished
-server-plan card becomes current. Exclude/restore and drag operations affect only this round,
-never the underlying review schedule. `palace_order` only controls **queue construction**
+server-plan card becomes current. Drag still does not write the review schedule.
+A confirmed 移除本队列 ends this round's arrangement the same way 记得 or 轻松 does:
+the progress rail fills, the palace can clear, and the unit is not unfinished. It does
+not write a 1–4 rating and does not change stage, interval, or due date. A later round
+can arrange the unit again while it is still due. Restore puts the card back in this round.
+
+`palace_order` only controls **queue construction**
 (finish one palace’s cards before listing the next, or interleave). 上一张 / 下一张 / finger
 paging never auto-rate and never block crossing a palace boundary; unrated units stay unfinished
 so the learner can skip ahead and come back. Retry work still cannot mark a palace “cleared”.

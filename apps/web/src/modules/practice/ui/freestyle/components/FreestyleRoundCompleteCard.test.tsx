@@ -37,12 +37,23 @@ describe('FreestyleRoundCompleteCard', () => {
       />,
     )
 
+    const card = screen.getByTestId('freestyle-round-complete')
+    expect(card.className).toContain('h-auto')
+    expect(card.className).toContain('shrink-0')
     fireEvent.click(screen.getByTestId('freestyle-round-skip-show'))
 
     expect(fxMocks.retireOwner).toHaveBeenCalledWith('round:round-9')
     expect(onAnotherRound).not.toHaveBeenCalled()
     expect(onCancelSettlement).not.toHaveBeenCalled()
-    expect(screen.getByText('今日到期已清')).toBeTruthy()
+    expect(screen.getByText('本轮总结')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '配置下一轮' })).toBeTruthy()
+    expect(screen.getByText(/已完成单元的复习安排不会因本按钮重置/)).toBeTruthy()
+
+    const cancel = screen.getByRole('button', { name: '返回上一张' })
+    expect(cancel.parentElement?.firstElementChild).toBe(cancel)
+    expect(cancel.closest('.fs-rise')).toBeNull()
+    fireEvent.click(cancel)
+    expect(onCancelSettlement).toHaveBeenCalledOnce()
   })
 
   it('lets a partial settlement grow so 取消结算 stays in the document', () => {
@@ -61,6 +72,7 @@ describe('FreestyleRoundCompleteCard', () => {
 
     const card = screen.getByTestId('freestyle-partial-settlement-card')
     expect(card.className).toContain('h-auto')
+    expect(card.className).toContain('shrink-0')
     expect(card.className).not.toContain('h-full')
     fireEvent.click(screen.getByTestId('freestyle-round-cancel-settlement'))
     expect(onCancelSettlement).toHaveBeenCalledOnce()

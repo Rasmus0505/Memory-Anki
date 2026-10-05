@@ -597,10 +597,30 @@ export function useFreestyleFeedNavigation({
     return () => window.removeEventListener('pageshow', handlePageShow)
   }, [isActive, loading, scrollToIndex])
 
-  const mounted = useMemo(
-    () => visibleMountIndices(visualIndex, cards.length),
-    [cards.length, visualIndex],
-  )
+  // A fling must not mount a fresh ±2 canvas window on every index. The card
+  // under the finger stays mounted; the neighbors catch up once motion pauses.
+  const [mountCenter, setMountCenter] = useState(visualIndex)
+  const mountBurstRef = useRef(false)
+  useEffect(() => {
+    if (!mountBurstRef.current) {
+      mountBurstRef.current = true
+      setMountCenter(visualIndex)
+      const arm = window.setTimeout(() => {
+        mountBurstRef.current = false
+      }, 120)
+      return () => window.clearTimeout(arm)
+    }
+    const timer = window.setTimeout(() => {
+      mountBurstRef.current = false
+      setMountCenter(visualIndex)
+    }, 90)
+    return () => window.clearTimeout(timer)
+  }, [visualIndex])
+  const mounted = useMemo(() => {
+    const indices = visibleMountIndices(mountCenter, cards.length)
+    if (visualIndex >= 0 && visualIndex < cards.length) indices.add(visualIndex)
+    return indices
+  }, [cards.length, mountCenter, visualIndex])
 
   const handleScroll = useCallback(
     (event: UIEvent<HTMLDivElement>) => {

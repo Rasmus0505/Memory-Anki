@@ -21,7 +21,8 @@ import { useFreestyleFlowFeedback } from '@/modules/practice/ui/freestyle/hooks/
 import { preloadMindMapCanvas } from '@/shared/ui/mindmap-canvas'
 import {
   hydrateUnitPreviews,
-  prefetchRoundPreviews,
+  requestRoundPreview,
+  stopRoundPreview,
 } from '@/modules/practice/ui/freestyle/model/freestyleUnitPreviewCache'
 import {
   buildFreestyleRoundCompletion,
@@ -230,6 +231,7 @@ export default function ImmersiveFreestylePage({
     pendingRestudyCardIds,
     planVersion,
     adoptRoundVersion,
+    hydrateLiveRound,
     clearConfiguredOverlayQuiz,
     queueFrozen,
     startupVisualIndex,
@@ -360,18 +362,22 @@ export default function ImmersiveFreestylePage({
     void hydrateUnitPreviews()
   }, [])
 
-  // Current and adjacent read-only preload, so a unit switch paints immediately
-  // without competing with the active card's session request.
+  // Preload follows the card the feed is moving toward. Fast flips retarget the
+  // same pump instead of aborting a fetch that is about to become useful.
+  const previewIndexRef = useRef<number | null>(null)
+  const previewDirectionRef = useRef<-1 | 0 | 1>(0)
   useEffect(() => {
-    if (!isActive || loading || cards.length === 0) return
-    const controller = new AbortController()
-    const timer = window.setTimeout(() => {
-      void prefetchRoundPreviews(cards, visualIndex, { signal: controller.signal })
-    }, 350)
-    return () => {
-      window.clearTimeout(timer)
-      controller.abort()
+    if (!isActive || loading || cards.length === 0) {
+      stopRoundPreview()
+      return
     }
+    const previous = previewIndexRef.current
+    const direction: -1 | 0 | 1 = previous == null || visualIndex === previous
+      ? previewDirectionRef.current
+      : visualIndex > previous ? 1 : -1
+    previewIndexRef.current = visualIndex
+    if (previous != null && visualIndex !== previous) previewDirectionRef.current = direction
+    requestRoundPreview(cards, visualIndex, previous == null ? 0 : direction)
   }, [cards, isActive, loading, visualIndex])
 
   // Every unit card mounts a map; fetch the canvas chunk before the first one needs it.
@@ -449,6 +455,8 @@ export default function ImmersiveFreestylePage({
     currentIndex,
     currentCard,
     roundComplete,
+    visualIndex,
+    viewingCompleteSlot,
     planVersion,
     queueState,
     navigateToIndex,
@@ -457,6 +465,7 @@ export default function ImmersiveFreestylePage({
     adoptRoundVersion,
     updateUnitEncounter,
     completeCardBatch,
+    hydrateLiveRound,
   })
 
   useEffect(() => {
@@ -739,6 +748,15 @@ export default function ImmersiveFreestylePage({
             if (snapshot) setPartialSettlement(snapshot)
           }}
           onReorder={reorderPlan}
+          onRateCard={(cardId, rating) => {
+            const index = cards.findIndex((card) => card.id === cardId)
+            if (index < 0) return
+            setPlanOpen(false)
+            navigateToIndex(index)
+            window.setTimeout(() => {
+              window.dispatchEvent(new CustomEvent('freestyle:rate-active-card', { detail: { cardId, rating } }))
+            }, 0)
+          }}
           onOpenConfig={() => {
             setPlanOpen(false)
             setConfigIntent('replan')
@@ -763,8 +781,8 @@ export default function ImmersiveFreestylePage({
           planVersion={planVersion}
           storedConfig={readFreestyleFeedConfig(slot)}
           setupDone={Boolean(readFreestyleFeedConfig(slot).overlay_quiz_setup_done)}
-          rangeLabel={overlayQuizRangeLabel(overlayReviewPalaceIds(roundPlan).length)}
-          palaceCount={overlayReviewPalaceIds(roundPlan).length}
+          rangeLabel={overlayQuizRangeLabel(overlayReviewPalaceIds(roundPlan, config).length)}
+          palaceCount={overlayReviewPalaceIds(roundPlan, config).length}
           onConfirmSetup={({
             quizScope,
             overlayQuestionRange,
@@ -1027,11 +1045,14 @@ export default function ImmersiveFreestylePage({
           {/* Closing slot, appended rather than replacing the feed so 回看 still works. */}
           {(!loading || cards.length > 0) && !error && roundComplete ? (
             <div className="fs-page relative box-border flex h-full min-h-0 shrink-0 flex-col snap-start snap-always p-0">
-              <div className="fs-depth flex min-h-0 flex-1 flex-col pt-[calc(env(safe-area-inset-top,0px)+4.75rem)]">
+              <div
+                data-testid="freestyle-round-complete-scroll"
+                className="fs-depth min-h-0 flex-1 overflow-y-auto overscroll-contain pt-[calc(env(safe-area-inset-top,0px)+4.75rem)]"
+              >
               <FreestyleRoundCompleteCard
                 completion={roundCompletion}
                 roundKey={queueState.roundId}
-                quizPalaceCount={overlayReviewPalaceIds(roundPlan).length}
+                quizPalaceCount={overlayReviewPalaceIds(roundPlan, config).length}
                 onClearQuizProgress={clearConfiguredOverlayQuiz}
                 onAnotherRound={() => {
                   setConfigIntent('nextRound')

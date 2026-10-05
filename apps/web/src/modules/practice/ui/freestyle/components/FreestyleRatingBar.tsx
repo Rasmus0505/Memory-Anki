@@ -190,7 +190,7 @@ export function FreestyleRatingBar({
             data-testid="freestyle-rating-effect-line"
             className="mb-1.5 flex items-center gap-1.5 rounded-lg bg-stage-line px-2.5 py-1 text-[11px] font-medium text-stage-ink sm:text-xs"
           >
-            <span className="min-w-0 truncate">再点确认移除 · 不改复习进度</span>
+            <span className="min-w-0 truncate">再点确认移除 · 本轮不再安排</span>
           </div>
         ) : selectedEffect ? (
           <div
@@ -269,10 +269,10 @@ export function FreestyleRatingBar({
               aria-pressed={removeArmed}
               aria-label={
                 removeArmed
-                  ? '移除本队列：不改复习进度。再点确认移除'
-                  : '移除本队列：不改复习进度'
+                  ? '移除本队列：本轮不再安排复习，不改复习进度。再点确认移除'
+                  : '移除本队列：本轮不再安排复习，不改复习进度'
               }
-              title={removeArmed ? '再点确认移除，不改复习进度' : '从本轮队列移除，不改复习进度'}
+              title={removeArmed ? '再点确认，本轮不再安排，不改复习进度' : '本轮不再安排这张卡，不改复习进度'}
               data-tone="neutral"
               data-selected={removeArmed ? 'true' : undefined}
               className={cn(
@@ -283,7 +283,7 @@ export function FreestyleRatingBar({
             >
               <span className="max-w-full text-[10px] font-semibold leading-tight sm:text-xs">移除本队列</span>
               <span className="max-w-full truncate text-[10px] font-normal leading-none opacity-75 sm:text-[11px]">
-                {removeArmed ? '再点确认' : '不改进度'}
+                {removeArmed ? '再点确认' : '本轮结束'}
               </span>
             </button>
           ) : null}
