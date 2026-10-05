@@ -248,12 +248,13 @@
           "identity",
           "sessionKeyRegistry",
           "timing",
-          "foregroundIntervals",
-          "visiblePageDwell",
+          "clickActivityIntervals",
+          "fiveMinuteIdleRollback",
           "continuousBlock",
           "pause",
           "complete",
-          "singleTerminalWrite",
+          "immutableLedgerRevisions",
+          "crossDeviceIntervalUnion",
           "versionedWrite",
           "idempotentSave"
         ]

@@ -3258,6 +3258,22 @@ def test_freestyle_scope_quiz_overlay_requires_parked_progress_and_carry(
     assert any("not the subject union" in error for error in errors)
 
 
+def test_overlay_subject_lookup_may_only_narrow_the_scheduled_round(tmp_path: Path, monkeypatch) -> None:
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", tmp_path / "apps" / "web" / "src")
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    write_file(
+        api_src / "modules" / "practice" / "application" / "overlay_quiz_service.py",
+        "allowed_ids = list_active_palace_ids_by_subject_ids(session, subject_ids)\n"
+        "resolved_palace_ids = [item for item in resolved_palace_ids if item in allowed_ids]\n"
+        "order_overlay_questions()\noverlay_question_kind()\n",
+    )
+    errors: list[str] = []
+    check_architecture.check_freestyle_scope_quiz_overlay(errors)
+    assert not any("must not expand a subject" in error for error in errors)
+
+
 def test_freestyle_overlay_clear_is_settlement_not_per_palace(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -3391,7 +3407,7 @@ def test_freestyle_scope_quiz_overlay_requires_inline_english_and_no_zoom_chrome
     assert any("immediately left of 文字" in error for error in errors)
 
 
-def test_timed_session_architecture_requires_dwell_and_segment_markers(
+def test_timed_session_architecture_requires_click_and_ledger_markers(
     tmp_path: Path, monkeypatch
 ) -> None:
     monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
@@ -3403,7 +3419,7 @@ def test_timed_session_architecture_requires_dwell_and_segment_markers(
     )
     write_file(
         tmp_path / "docs" / "architecture" / "timed-session.md",
-        "session_key client_revision operation_id foreground duration_edited\n",
+        "pointerdown 300000 5 分钟 interval_id device_id tombstone UTC dwell\n",
     )
     write_file(
         tmp_path / "docs" / "architecture" / "context-map.yaml",
@@ -3430,10 +3446,10 @@ def test_timed_session_architecture_requires_dwell_and_segment_markers(
     )
     errors: list[str] = []
     check_architecture.check_timed_session_architecture(errors)
-    assert any("sceneSegments" in error for error in errors)
-    assert any("15 分钟" in error for error in errors)
-    assert any("dwell" in error for error in errors)
-    assert any("visiblePageDwell" in error for error in errors)
+    assert not any("timer architecture must document" in error for error in errors)
+    assert any("clickActivityIntervals" in error for error in errors)
+    assert any("fiveMinuteIdleRollback" in error for error in errors)
+    assert any("crossDeviceIntervalUnion" in error for error in errors)
     assert any("continuousBlock" in error for error in errors)
 
 
@@ -3847,5 +3863,16 @@ def test_db_pool_budget_accepts_innermost_timeout(tmp_path: Path) -> None:
 
     errors: list[str] = []
     check_architecture.check_db_pool_budget(errors, engine_path=path)
+
+    assert errors == []
+
+
+def test_tool_personal_paths_allows_windows_system_fallback(tmp_path: Path, monkeypatch) -> None:
+    tools_root = tmp_path / "tools"
+    write_file(tools_root / "system_tool.py", 'DEFAULT = "C:" + "\\\\Windows"\n')
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+
+    errors: list[str] = []
+    check_architecture.check_tool_personal_paths(errors)
 
     assert errors == []

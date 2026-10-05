@@ -91,6 +91,11 @@ _DEBUG_FALLBACK.json
 # ===== Git worktrees (local isolated workspaces) =====
 /.worktrees/
 
+# ===== Local audit scratch =====
+# One-off recognition/audit scripts and their generated outputs stay available locally
+# but are not part of the maintained tools surface or repository quality checks.
+/tools/_local/
+
 # ===== Misc =====
 # NOTE: do not blanket-ignore *.png — it would swallow docs/assets; ignore by path instead.
 **/nul

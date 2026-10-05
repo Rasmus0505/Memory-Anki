@@ -136,6 +136,7 @@ Frontend AI scenario/model selection and per-run overrides are owned by `modules
 - Sink the `shared/hooks/timedSession*` family + `SessionTimerBar` into `modules/session` (currently listed as explicit `shared→modules` ESLint boundary exceptions).
 - Resolve the `modules→widgets` boundary exceptions (practice/quiz importing `mindmap-review-flow` / `palace-memory-lookup` APIs) by sinking those APIs behind module publics.
 - Split the three oversized `shared/ui/mindmap-canvas` files (`layout.ts`, `NodeCard.tsx`, `useMindMapCanvasState.ts`).
+- Split `shared/components/ui/dialog.tsx` (782 lines) and the freestyle model test harnesses `freestyleProgressSegments.test.ts` (778 lines) and `roundCompletion.test.ts` (805 lines); they are registered as temporary quality-gate exceptions until extracted.
 - Optional: rename nav-section keys `'knowledge'`→`'create'`, `'review'`→`'insights'` (needs pageHistoryStore key migration).
 
 
