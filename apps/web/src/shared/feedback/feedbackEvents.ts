@@ -1,4 +1,4 @@
-﻿export type MindMapReviewFxType =
+export type MindMapReviewFxType =
   | 'category_expand'
   | 'next_level_expand'
   | 'card_reveal'
@@ -62,6 +62,10 @@ export type FeedbackEvent =
   | 'save_error'
   | 'import_apply'
   | 'segment_action'
+  | 'grade_forget'
+  | 'grade_hard'
+  | 'grade_good'
+  | 'grade_easy'
 
 export type FeedbackLevel = 'micro' | 'action' | 'milestone'
 export type FeedbackOrigin = 'keyboard' | 'pointer' | 'node' | 'edge' | 'toolbar' | 'review' | 'system'

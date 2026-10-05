@@ -59,8 +59,8 @@ export function GlobalFeedbackProvider({ children }: React.PropsWithChildren) {
   )
 
   const emitDescriptor = React.useCallback(
-    (descriptor: FeedbackDescriptor, point: { x: number; y: number }) => {
-      if (settings.soundEnabled) {
+    (descriptor: FeedbackDescriptor, point: { x: number; y: number }, silentAudio = false) => {
+      if (settings.soundEnabled && !silentAudio) {
         playEvent(descriptor.audioEvent, {
           origin: descriptor.origin,
           audioScope: descriptor.audioScope,
@@ -99,6 +99,7 @@ export function GlobalFeedbackProvider({ children }: React.PropsWithChildren) {
         x: window.innerWidth / 2,
         y: Math.max(86, Math.round(window.innerHeight * 0.2)),
       },
+      detail.silentAudio === true,
     )
   })
 

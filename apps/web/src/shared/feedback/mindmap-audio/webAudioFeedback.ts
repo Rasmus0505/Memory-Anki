@@ -1,5 +1,10 @@
-import { REVIEW_FEEDBACK_EFFECTIVE_VOLUME_MAX } from '@/shared/feedback/reviewFeedbackSettings'
+import {
+  REVIEW_FEEDBACK_EFFECTIVE_VOLUME_MAX,
+  getReviewFeedbackEffectiveVolume,
+  readReviewFeedbackSettings,
+} from '@/shared/feedback/reviewFeedbackSettings'
 import type { MindMapFeedbackEvent, MindMapFeedbackOrigin } from '@/shared/feedback/feedbackEvents'
+import { buildLayeredPops, type PopRole } from './layeredPops'
 import { colorTone } from './packTimbre'
 import {
   getComboMilestoneTone,
@@ -190,6 +195,8 @@ export function tuneToneSpec(
   origin?: MindMapFeedbackOrigin,
   audioScope?: 'local' | 'global',
 ): ToneSpec {
+  // Glass cues already encode their semantic gain and decay in the shared voice.
+  if (tone.envelope === 'glass') return tone
   const isMicro = event === 'pointer_click' || event === 'pointer_down' || event === 'key_press'
   let durationMs = tone.durationMs
   let gain = tone.gain * (isMicro ? 0.72 : 1)
@@ -231,8 +238,11 @@ function scheduleTonePlayback(context: AudioContext, tone: ToneSpec, volume: num
     const endAt = startAt + durationSeconds
     const attackAt = startAt + attackSeconds
     const bodyAt = attackAt + Math.max(0.001, durationSeconds * 0.45 - attackSeconds)
-    const releaseAt = Math.max(endAt + releaseSeconds, bodyAt + 0.001)
-    const stopAt = releaseAt + 0.02
+    const isGlass = tone.envelope === 'glass'
+    const releaseAt = isGlass
+      ? attackAt + Math.max(0.018, tone.durationMs / 1000)
+      : Math.max(endAt + releaseSeconds, bodyAt + 0.001)
+    const stopAt = releaseAt + (isGlass ? 0.025 : 0.02)
 
     oscillator.type = tone.type
     oscillator.frequency.setValueAtTime(tone.frequency, startAt)
@@ -242,8 +252,12 @@ function scheduleTonePlayback(context: AudioContext, tone: ToneSpec, volume: num
 
     const peakGain = Math.max(0, tone.gain * volume)
     gainNode.gain.setValueAtTime(0.0001, startAt)
-    gainNode.gain.linearRampToValueAtTime(peakGain, attackAt)
-    gainNode.gain.exponentialRampToValueAtTime(Math.max(0.0001, peakGain * 0.85), bodyAt)
+    if (isGlass) {
+      gainNode.gain.exponentialRampToValueAtTime(Math.max(0.0002, peakGain), attackAt)
+    } else {
+      gainNode.gain.linearRampToValueAtTime(peakGain, attackAt)
+      gainNode.gain.exponentialRampToValueAtTime(Math.max(0.0001, peakGain * 0.85), bodyAt)
+    }
     gainNode.gain.exponentialRampToValueAtTime(0.0001, releaseAt)
 
     const stereoFactory = (context as AudioContext & { createStereoPanner?: () => StereoPannerNode }).createStereoPanner
@@ -403,6 +417,44 @@ export function playWebAudioLandingChime(args: { combo: number; volume?: number 
   const feedbackVolume = clampFeedbackVolume(args.volume ?? 1)
   if (feedbackVolume <= 0) return
   playToneSequence(getLandingChimeTone(args.combo), feedbackVolume)
+}
+
+/**
+ * Layered short bells: one action, N objects, N countable pops.
+ *
+ * Review scenes reach this through the `audio.pops` cue so the scene gate
+ * (learningSounds / review.enabled / review.soundEnabled) still decides.
+ */
+export function playWebAudioLayeredPops(args: {
+  role: PopRole
+  count?: number
+  grade?: 1 | 2 | 3 | 4
+  step?: number
+  volume?: number
+}) {
+  const { role, count, grade, step, volume = 1 } = args
+  const feedbackVolume = clampFeedbackVolume(volume)
+  if (feedbackVolume <= 0) return
+  const tones = buildLayeredPops({ role, count, grade, step })
+  if (tones.length === 0) return
+  playToneSequence(tones, feedbackVolume)
+}
+
+/**
+ * Edit-mode actions (card delete / lift / unlink) sit outside the learning
+ * scenes. They follow the same switch the edit-side `dispatchGlobalFeedback`
+ * always followed — the master sound switch only — so turning off learning
+ * sounds does not silence editing.
+ */
+export function playEditLayeredPops(args: {
+  role: PopRole
+  count?: number
+  grade?: 1 | 2 | 3 | 4
+  step?: number
+}) {
+  const settings = readReviewFeedbackSettings()
+  if (!settings.soundEnabled) return
+  playWebAudioLayeredPops({ ...args, volume: getReviewFeedbackEffectiveVolume(settings) })
 }
 
 export function __resetWebAudioContextForTests() {

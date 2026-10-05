@@ -1,4 +1,5 @@
 import type { MindMapFeedbackEvent } from '@/shared/feedback/feedbackEvents'
+import { buildGlassBell, buildLayeredPops } from './layeredPops'
 
 /**
  * 单个合成音的参数。
@@ -12,6 +13,8 @@ export interface ToneSpec {
   endFrequency?: number
   pan?: number
   attackMs?: number
+  /** Fixed audition timbre: immediate exponential decay, independent of visual theme. */
+  envelope?: 'glass'
 }
 
 /**
@@ -114,13 +117,13 @@ const TONE_PROFILES: Record<MindMapFeedbackEvent, ToneSpec[]> = {
     { frequency: 698, durationMs: 94, gain: 0.014, type: 'triangle', offsetMs: 88, pan: 0.1 },
   ],
   quiz_manage_delete: [
-    { frequency: 300, endFrequency: 190, durationMs: 84, gain: 0.028, type: 'sawtooth', offsetMs: 0, pan: 0.1 },
-    { frequency: 170, durationMs: 96, gain: 0.02, type: 'triangle', offsetMs: 50, pan: -0.1 },
+    { frequency: 494, durationMs: 104, gain: 0.028, type: 'sine', offsetMs: 0, pan: 0.1, attackMs: 2 },
+    { frequency: 1186, durationMs: 62, gain: 0.006, type: 'sine', offsetMs: 0, pan: 0.06, attackMs: 2 },
   ],
   quiz_manage_batch_delete: [
-    { frequency: 280, endFrequency: 180, durationMs: 120, gain: 0.034, type: 'sawtooth', offsetMs: 0, pan: -0.2 },
-    { frequency: 180, durationMs: 132, gain: 0.026, type: 'triangle', offsetMs: 72, pan: 0 },
-    { frequency: 120, durationMs: 150, gain: 0.02, type: 'triangle', offsetMs: 144, pan: 0.2 },
+    { frequency: 494, durationMs: 104, gain: 0.028, type: 'sine', offsetMs: 0, pan: -0.16, attackMs: 2 },
+    { frequency: 440, durationMs: 104, gain: 0.024, type: 'sine', offsetMs: 62, pan: 0, attackMs: 2 },
+    { frequency: 392, durationMs: 112, gain: 0.02, type: 'sine', offsetMs: 124, pan: 0.16, attackMs: 2 },
   ],
   quiz_generate_start: [
     { frequency: 392, durationMs: 56, gain: 0.022, type: 'triangle', offsetMs: 0, pan: -0.12 },
@@ -154,12 +157,12 @@ const TONE_PROFILES: Record<MindMapFeedbackEvent, ToneSpec[]> = {
     { frequency: 360, endFrequency: 250, durationMs: 54, gain: 0.018, type: 'triangle', offsetMs: 0, pan: 0.04 },
   ],
   quiz_error_ai_failed: [
-    { frequency: 280, endFrequency: 170, durationMs: 96, gain: 0.03, type: 'sawtooth', offsetMs: 0, pan: 0.14 },
-    { frequency: 150, durationMs: 112, gain: 0.022, type: 'triangle', offsetMs: 60, pan: -0.14 },
+    { frequency: 262, durationMs: 128, gain: 0.03, type: 'sine', offsetMs: 0, pan: 0.14, attackMs: 2 },
+    { frequency: 131, durationMs: 148, gain: 0.017, type: 'sine', offsetMs: 34, pan: -0.14, attackMs: 2 },
   ],
   quiz_error_persist_failed: [
-    { frequency: 260, endFrequency: 160, durationMs: 108, gain: 0.032, type: 'sawtooth', offsetMs: 0, pan: 0.16 },
-    { frequency: 140, durationMs: 124, gain: 0.024, type: 'triangle', offsetMs: 68, pan: -0.16 },
+    { frequency: 233, durationMs: 140, gain: 0.031, type: 'sine', offsetMs: 0, pan: 0.16, attackMs: 2 },
+    { frequency: 116, durationMs: 162, gain: 0.018, type: 'sine', offsetMs: 40, pan: -0.16, attackMs: 2 },
   ],
   quiz_error_stat_failed: [
     { frequency: 330, endFrequency: 220, durationMs: 66, gain: 0.02, type: 'triangle', offsetMs: 0, pan: 0.04 },
@@ -204,42 +207,41 @@ const TONE_PROFILES: Record<MindMapFeedbackEvent, ToneSpec[]> = {
     { frequency: 280, durationMs: 76, gain: 0.018, type: 'sine', offsetMs: 28, pan: -0.12 },
   ],
   text_commit: [
-    { frequency: 390, durationMs: 46, gain: 0.017, type: 'triangle', offsetMs: 0, pan: -0.08 },
-    { frequency: 520, durationMs: 56, gain: 0.013, type: 'sine', offsetMs: 34, pan: 0.08 },
+    { frequency: 494, durationMs: 116, gain: 0.026, type: 'sine', offsetMs: 0, pan: -0.06, attackMs: 2 },
+    { frequency: 1186, durationMs: 74, gain: 0.006, type: 'sine', offsetMs: 0, pan: -0.04, attackMs: 2 },
   ],
   node_select: [
-    { frequency: 340, endFrequency: 390, durationMs: 30, gain: 0.011, type: 'sine', offsetMs: 0, pan: -0.05 },
+    { frequency: 660, durationMs: 92, gain: 0.018, type: 'sine', offsetMs: 0, pan: -0.05, attackMs: 2 },
   ],
   node_edit_start: [
-    { frequency: 300, endFrequency: 390, durationMs: 54, gain: 0.018, type: 'triangle', offsetMs: 0, pan: -0.14 },
-    { frequency: 560, durationMs: 64, gain: 0.011, type: 'sine', offsetMs: 34, pan: 0.14 },
+    { frequency: 740, durationMs: 104, gain: 0.022, type: 'sine', offsetMs: 0, pan: -0.1, attackMs: 2 },
+    { frequency: 1776, durationMs: 66, gain: 0.005, type: 'sine', offsetMs: 0, pan: -0.06, attackMs: 2 },
   ],
   node_create: [
-    { frequency: 360, endFrequency: 480, durationMs: 62, gain: 0.02, type: 'triangle', offsetMs: 0, pan: -0.12 },
-    { frequency: 640, durationMs: 72, gain: 0.014, type: 'sine', offsetMs: 48, pan: 0.12 },
+    { frequency: 880, durationMs: 120, gain: 0.026, type: 'sine', offsetMs: 0, pan: -0.1, attackMs: 2 },
+    { frequency: 2112, durationMs: 78, gain: 0.006, type: 'sine', offsetMs: 0, pan: -0.06, attackMs: 2 },
   ],
   node_delete: [
-    { frequency: 320, endFrequency: 190, durationMs: 96, gain: 0.032, type: 'sawtooth', offsetMs: 0, pan: 0.18 },
-    { frequency: 160, durationMs: 118, gain: 0.026, type: 'triangle', offsetMs: 72, pan: -0.14 },
+    { frequency: 587, durationMs: 120, gain: 0.03, type: 'sine', offsetMs: 0, pan: 0.14, attackMs: 2 },
+    { frequency: 1409, durationMs: 76, gain: 0.007, type: 'sine', offsetMs: 0, pan: 0.08, attackMs: 2 },
   ],
   node_move: [
-    { frequency: 280, endFrequency: 420, durationMs: 116, gain: 0.026, type: 'triangle', offsetMs: 0, pan: -0.26 },
-    { frequency: 420, endFrequency: 520, durationMs: 92, gain: 0.018, type: 'sine', offsetMs: 74, pan: 0.26 },
+    { frequency: 659, durationMs: 112, gain: 0.024, type: 'sine', offsetMs: 0, pan: -0.2, attackMs: 2 },
+    { frequency: 1582, durationMs: 72, gain: 0.006, type: 'sine', offsetMs: 0, pan: 0.2, attackMs: 2 },
   ],
   drag_start: [
-    { frequency: 220, endFrequency: 360, durationMs: 96, gain: 0.024, type: 'triangle', offsetMs: 0, pan: -0.3 },
+    { frequency: 523, durationMs: 108, gain: 0.02, type: 'sine', offsetMs: 0, pan: -0.24, attackMs: 2 },
   ],
   drag_drop: [
-    { frequency: 300, endFrequency: 390, durationMs: 50, gain: 0.018, type: 'triangle', offsetMs: 0, pan: 0.1 },
-    { frequency: 500, durationMs: 58, gain: 0.012, type: 'sine', offsetMs: 36, pan: -0.1 },
+    { frequency: 523, durationMs: 116, gain: 0.022, type: 'sine', offsetMs: 0, pan: 0.1, attackMs: 2 },
   ],
   context_menu: [
     { frequency: 196, durationMs: 82, gain: 0.026, type: 'triangle', offsetMs: 0, pan: -0.2 },
     { frequency: 247, durationMs: 58, gain: 0.018, type: 'sine', offsetMs: 52, pan: 0.2 },
   ],
   toolbar_action: [
-    { frequency: 370, durationMs: 50, gain: 0.026, type: 'triangle', offsetMs: 0, pan: -0.08 },
-    { frequency: 555, durationMs: 62, gain: 0.022, type: 'sine', offsetMs: 38, pan: 0.08 },
+    { frequency: 880, durationMs: 108, gain: 0.024, type: 'sine', offsetMs: 0, pan: -0.06, attackMs: 2 },
+    { frequency: 2112, durationMs: 72, gain: 0.006, type: 'sine', offsetMs: 0, pan: -0.04, attackMs: 2 },
   ],
   mode_switch: [
     { frequency: 262, endFrequency: 392, durationMs: 126, gain: 0.028, type: 'triangle', offsetMs: 0, pan: -0.22 },
@@ -250,8 +252,8 @@ const TONE_PROFILES: Record<MindMapFeedbackEvent, ToneSpec[]> = {
     { frequency: 520, durationMs: 56, gain: 0.013, type: 'sine', offsetMs: 34, pan: 0.08 },
   ],
   save_error: [
-    { frequency: 320, endFrequency: 190, durationMs: 96, gain: 0.032, type: 'sawtooth', offsetMs: 0, pan: 0.18 },
-    { frequency: 160, durationMs: 118, gain: 0.026, type: 'triangle', offsetMs: 72, pan: -0.14 },
+    { frequency: 233, durationMs: 140, gain: 0.031, type: 'sine', offsetMs: 0, pan: 0.16, attackMs: 2 },
+    { frequency: 116, durationMs: 162, gain: 0.018, type: 'sine', offsetMs: 40, pan: -0.16, attackMs: 2 },
   ],
   import_apply: [
     { frequency: 294, endFrequency: 392, durationMs: 110, gain: 0.032, type: 'triangle', offsetMs: 0, pan: -0.24 },
@@ -272,8 +274,11 @@ const TONE_PROFILES: Record<MindMapFeedbackEvent, ToneSpec[]> = {
     { frequency: 740, durationMs: 104, gain: 0.028, type: 'sine', offsetMs: 66, pan: 0.16 },
   ],
   card_reveal: [
-    { frequency: 540, durationMs: 104, gain: 0.044, type: 'triangle', offsetMs: 0, pan: -0.12 },
-    { frequency: 810, durationMs: 82, gain: 0.024, type: 'sine', offsetMs: 72, pan: 0.12 },
+    // Fallback only: the reveal cascade sounds each card individually
+    // (`audio.pops`), and the review/edit relays are muted for this event. This
+    // single short bell is what plays if a legacy path ever fires it directly.
+    { frequency: 1046, durationMs: 112, gain: 0.03, type: 'sine', offsetMs: 0, pan: 0, attackMs: 2 },
+    { frequency: 2510, durationMs: 74, gain: 0.0066, type: 'sine', offsetMs: 0, pan: 0, attackMs: 2 },
   ],
   branch_clear: [
     { frequency: 392, durationMs: 132, gain: 0.044, type: 'triangle', offsetMs: 0, pan: -0.24 },
@@ -294,7 +299,73 @@ const TONE_PROFILES: Record<MindMapFeedbackEvent, ToneSpec[]> = {
   session_reset: [
     { frequency: 330, endFrequency: 220, durationMs: 90, gain: 0.026, type: 'triangle', offsetMs: 0, pan: 0 },
   ],
+  /**
+   * 评分四档各一记短铃。以前四档借用编辑事件（node_select / text_commit /
+   * field_commit / segment_action），耳朵学不到"评分音阶"；现在每档一个固定音高：
+   * 忘记最低（G4）→ 简单最高（F5），一记就听完，衰减 120~150ms。
+   * 忘记刻意不用下行滑音或 thud：间隔重复里诚实点"忘记"是正确的动作，不是失误。
+   */
+  grade_forget: [
+    { frequency: 392, durationMs: 120, gain: 0.03, type: 'sine', offsetMs: 0, pan: -0.08, attackMs: 2 },
+    { frequency: 941, durationMs: 78, gain: 0.007, type: 'sine', offsetMs: 0, pan: -0.05, attackMs: 2 },
+  ],
+  grade_hard: [
+    { frequency: 494, durationMs: 128, gain: 0.03, type: 'sine', offsetMs: 0, pan: -0.04, attackMs: 2 },
+    { frequency: 1186, durationMs: 84, gain: 0.007, type: 'sine', offsetMs: 0, pan: -0.02, attackMs: 2 },
+  ],
+  grade_good: [
+    { frequency: 587, durationMs: 138, gain: 0.03, type: 'sine', offsetMs: 0, pan: 0.04, attackMs: 2 },
+    { frequency: 1409, durationMs: 90, gain: 0.007, type: 'sine', offsetMs: 0, pan: 0.02, attackMs: 2 },
+  ],
+  grade_easy: [
+    { frequency: 698, durationMs: 150, gain: 0.031, type: 'sine', offsetMs: 0, pan: 0.08, attackMs: 2 },
+    { frequency: 1675, durationMs: 98, gain: 0.008, type: 'sine', offsetMs: 0, pan: 0.05, attackMs: 2 },
+  ],
 }
+
+// The chosen A audition is fixed across themes. Small actions use its quiet pickup;
+// object and result events use the same bell rather than the old synthetic slides.
+const glassAction = () => buildGlassBell(1318.5 * 0.67, 0.24, 0, 0.27)
+const glassResult = () => [
+  ...buildGlassBell(1318.5, 0.65, 0, 1.7),
+  ...buildGlassBell(1760, 0.53, 120, 1.9),
+]
+const GLASS_PROFILES: Partial<Record<MindMapFeedbackEvent, ToneSpec[]>> = {}
+const actionEvents: MindMapFeedbackEvent[] = [
+  'quiz_nav_open_practice', 'quiz_nav_question_prev', 'quiz_nav_question_next',
+  'quiz_nav_scope_change', 'quiz_nav_view_switch', 'quiz_nav_tab_switch',
+  'quiz_answer_select', 'quiz_answer_submit', 'quiz_answer_reset',
+  'quiz_manage_create_start', 'quiz_manage_edit_start', 'quiz_generate_start',
+  'quiz_generate_attach_source', 'quiz_generate_cancel', 'shortcut_trigger',
+  'navigation', 'field_focus', 'field_commit', 'toggle_on', 'toggle_off',
+  'text_commit', 'node_select', 'node_edit_start', 'node_move', 'drag_start',
+  'context_menu', 'toolbar_action', 'mode_switch', 'segment_action',
+]
+for (const event of actionEvents) GLASS_PROFILES[event] = glassAction()
+const resultEvents: MindMapFeedbackEvent[] = [
+  'quiz_result_correct', 'quiz_result_ai_feedback_ready', 'quiz_manage_save',
+  'quiz_generate_preview_ready', 'quiz_generate_save', 'quiz_generate_classify_complete',
+  'save_success', 'import_apply', 'branch_clear', 'all_clear_ready', 'session_complete',
+]
+for (const event of resultEvents) GLASS_PROFILES[event] = glassResult()
+const denyEvents: MindMapFeedbackEvent[] = [
+  'quiz_result_incorrect', 'quiz_error_missing_input', 'quiz_error_ai_failed',
+  'quiz_error_persist_failed', 'quiz_error_stat_failed', 'save_error', 'session_reset',
+]
+for (const event of denyEvents) GLASS_PROFILES[event] = buildLayeredPops({ role: 'deny' })
+GLASS_PROFILES.card_reveal = buildLayeredPops({ role: 'reveal' })
+GLASS_PROFILES.quiz_result_reveal = buildLayeredPops({ role: 'reveal' })
+GLASS_PROFILES.node_create = buildLayeredPops({ role: 'deal' })
+GLASS_PROFILES.node_delete = buildLayeredPops({ role: 'remove' })
+GLASS_PROFILES.quiz_manage_delete = buildLayeredPops({ role: 'remove' })
+GLASS_PROFILES.quiz_manage_batch_delete = buildLayeredPops({ role: 'remove' })
+GLASS_PROFILES.drag_drop = buildLayeredPops({ role: 'land' })
+GLASS_PROFILES.category_expand = buildLayeredPops({ role: 'deal' })
+GLASS_PROFILES.next_level_expand = buildLayeredPops({ role: 'deal' })
+GLASS_PROFILES.grade_forget = buildLayeredPops({ role: 'grade', grade: 1 })
+GLASS_PROFILES.grade_hard = buildLayeredPops({ role: 'grade', grade: 2 })
+GLASS_PROFILES.grade_good = buildLayeredPops({ role: 'grade', grade: 3 })
+GLASS_PROFILES.grade_easy = buildLayeredPops({ role: 'grade', grade: 4 })
 
 /**
  * 连击里程碑达成时的升调叠加音。
@@ -306,8 +377,8 @@ const COMBO_MILESTONE_PITCHES = [523, 659, 784, 1047]
 export function getComboMilestoneTone(milestoneStep: number): ToneSpec[] {
   const freq = COMBO_MILESTONE_PITCHES[Math.min(milestoneStep, COMBO_MILESTONE_PITCHES.length - 1)] ?? 523
   return [
-    { frequency: freq, endFrequency: freq * 1.5, durationMs: 180, gain: 0.038, type: 'sine', offsetMs: 0, pan: 0 },
-    { frequency: freq * 2, durationMs: 140, gain: 0.014, type: 'triangle', offsetMs: 60, pan: 0.18 },
+    ...buildGlassBell(1318.5 * (freq / 523), 0.65, 0, 1.7),
+    ...buildGlassBell(1760 * (freq / 523), 0.53, 120, 1.9),
   ]
 }
 
@@ -317,9 +388,9 @@ export function getComboMilestoneTone(milestoneStep: number): ToneSpec[] {
  */
 export function getToneSpec(event: MindMapFeedbackEvent, surprise = false): ToneSpec[] {
   if (event === 'card_reveal' && surprise) {
-    return CARD_REVEAL_SURPRISE_TONES
+    return buildGlassBell(1760)
   }
-  return TONE_PROFILES[event]
+  return GLASS_PROFILES[event] ?? TONE_PROFILES[event]
 }
 
 /**
@@ -371,8 +442,5 @@ const LANDING_MAX_STEPS = 12
 export function getLandingChimeTone(combo: number): ToneSpec[] {
   const steps = Math.max(0, Math.min(LANDING_MAX_STEPS, Math.round(combo)))
   const base = LANDING_BASE_HZ * 2 ** (steps / 12)
-  return [
-    { frequency: base, durationMs: 120, gain: 0.022, type: 'sine', offsetMs: 0, pan: 0.1, attackMs: 4 },
-    { frequency: base * 1.5, durationMs: 160, gain: 0.012, type: 'triangle', offsetMs: 45, pan: 0.2, attackMs: 4 },
-  ]
+  return buildGlassBell(1318.5 * (base / LANDING_BASE_HZ), 0.45, 0, 0.8)
 }

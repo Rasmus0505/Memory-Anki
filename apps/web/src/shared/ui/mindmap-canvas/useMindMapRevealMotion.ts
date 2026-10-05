@@ -295,12 +295,24 @@ export function useMindMapRevealMotion(
     phases.current = new Map(nodes.map((node) => [node.id, readRevealPhase(node)]))
     parents.current = new Map(edges.map((edge) => [edge.target, edge.source]))
     const root = container.current
-    if (!root || prefersReducedMotion() || typeof root.animate !== 'function') return
+    if (!root) return
+    // Sound is planned before the motion bail-out: with reduced motion (or no
+    // Web Animations) the cascade still has to be audible, otherwise flipping is
+    // silent for exactly the users who cannot see the stagger.
     const folds = planFoldBack(previous, previousParents, nodes)
-    if (folds.length > 0 && folds.length <= MAX_FOLDS_PER_BATCH) {
+    const willFold = folds.length > 0 && folds.length <= MAX_FOLDS_PER_BATCH
+    const plan = planRevealMotion(previous, nodes)
+    if (willFold) cue('audio.pops', { role: 'fold', count: folds.length })
+    if (plan.flips.length > 0) {
+      cue('audio.pops', { role: 'reveal', count: Math.min(plan.flips.length, MAX_CARDS_PER_BATCH) })
+    }
+    if (plan.deals.length > 0) {
+      cue('audio.pops', { role: 'deal', count: Math.min(plan.deals.length, MAX_CARDS_PER_BATCH) })
+    }
+    if (prefersReducedMotion() || typeof root.animate !== 'function') return
+    if (willFold) {
       folds.forEach(({ id, into }) => foldNode(root, id, into))
     }
-    const plan = planRevealMotion(previous, nodes)
     if (plan.flips.length === 0 && plan.deals.length === 0) return
 
     const incomingEdge = new Map(edges.map((edge) => [edge.target, edge.id]))

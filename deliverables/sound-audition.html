@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Memory Anki · 声音试音室</title>
+<style>
+:root{--ink:#233143;--muted:#74808c;--line:#e5e8e8;--bg:#f4f5f1;--accent:#416958;--paper:#fff;--radius:20px}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,"Segoe UI","Microsoft YaHei",sans-serif}button,input{font:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible{outline:3px solid #8bbc9e;outline-offset:3px}main{max-width:1180px;margin:auto;padding:46px 32px 70px}.eyebrow{letter-spacing:3px;font-size:11px;font-weight:700;color:var(--accent)}h1{font-size:38px;letter-spacing:-1.5px;margin:14px 0 12px}p{line-height:1.8}.intro{color:var(--muted);max-width:750px;margin:0}.topline{display:flex;justify-content:space-between;align-items:start;gap:20px}.reference{background:#e7ece5;border:1px solid #d4dfd4;border-radius:14px;padding:15px 20px;white-space:nowrap;color:#345644;font-weight:600}.reference small{display:block;font-size:11px;font-weight:400;margin-top:6px}.toolbar{display:flex;gap:24px;align-items:center;flex-wrap:wrap;margin:30px 0 24px;padding:17px 22px;background:var(--paper);border:1px solid var(--line);border-radius:14px;font-size:13px}.volume{display:flex;align-items:center;gap:12px}input[type=range]{accent-color:var(--accent);width:140px}input[type=checkbox]{accent-color:var(--accent)}.layers{display:flex;gap:17px;flex-wrap:wrap}.layers label{display:flex;gap:6px;align-items:center}.stop{margin-left:auto;border:1px solid var(--line);background:#fff;border-radius:8px;padding:8px 15px;color:#626e77}.presets{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}.preset{border:1px solid var(--line);border-radius:var(--radius);padding:24px 20px;background:#fff;position:relative;text-align:left;color:var(--ink);transition:transform .15s,border-color .15s}.preset:hover{transform:translateY(-3px)}.preset.selected{border:2px solid var(--accent);padding:23px 19px;box-shadow:0 6px 22px #4169580d}.letter{font-size:11px;font-weight:700;letter-spacing:2px;color:var(--muted)}.glyph{display:flex;width:52px;height:52px;border-radius:16px;align-items:center;justify-content:center;font-size:25px;margin:20px 0 17px;background:var(--tint)}.preset h2{font-size:20px;margin:0 0 10px}.preset p{font-size:12px;margin:0;min-height:66px;color:var(--muted)}.badge{display:inline-block;margin-top:18px;font-size:11px;padding:5px 8px;border-radius:6px;background:#f3f5f2;color:#63796a}.selected .badge{background:#e8f0e9;color:var(--accent)}.workbench{display:grid;grid-template-columns:1fr 340px;gap:24px;margin-top:28px;background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:28px}.section-caption{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:2px}.workbench h2{font-size:23px;margin:8px 0 7px}.hint{color:var(--muted);font-size:12px;margin:0 0 22px}.scenes{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.scene{border:1px solid var(--line);border-radius:12px;background:#fafbf9;padding:15px;text-align:left;color:var(--ink)}.scene:hover,.scene.active{background:#edf3ed;border-color:#9ebba6}.scene span{font-size:14px;display:block;font-weight:600}.scene small{display:block;color:var(--muted);font-size:10px;margin-top:7px}.preview{background:#f1f4ef;border-radius:14px;padding:23px;display:flex;flex-direction:column;justify-content:center;min-height:250px}.preview-title{font-size:12px;color:#607165;margin-bottom:18px}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.card{height:69px;background:#fff;border:1px solid #dbe4d9;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#a2afa0;font-size:11px;transition:background .12s,transform .12s}.card.hit{background:#d9ead7;color:#3f6846;transform:translateY(-5px)}.visual-note{font-size:11px;color:var(--muted);margin-top:20px;line-height:1.7;min-height:38px}.compare{display:flex;gap:9px;flex-wrap:wrap;margin-top:20px}.compare button,.secondary{border:1px solid var(--line);border-radius:8px;background:#fff;color:#54665d;padding:10px 14px;font-size:12px}.compare button:hover,.secondary:hover{background:#f0f4ef}.bottom{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-top:23px;padding-top:23px;border-top:1px solid var(--line)}.primary{background:var(--accent);border:0;color:#fff;border-radius:10px;padding:12px 20px;font-size:13px}.choice{font-size:12px;color:var(--muted);flex:1}.status{font-size:12px;color:var(--accent);min-height:22px;margin:16px 0 0}.footer{font-size:11px;color:var(--muted);margin-top:20px;line-height:1.9}.legend{display:flex;gap:20px;flex-wrap:wrap;margin-top:15px;font-size:11px;color:var(--muted)}.legend b{font-weight:500;color:#506657}.pill{padding:2px 6px;border-radius:4px;background:#edf2ec;margin-right:4px}@media(max-width:900px){.presets{grid-template-columns:repeat(2,1fr)}.workbench{grid-template-columns:1fr}.preview{min-height:180px}.topline{flex-direction:column}.reference{white-space:normal}}@media(max-width:520px){main{padding:25px 16px 45px}h1{font-size:30px}.toolbar{gap:15px;padding:15px}.presets{gap:9px}.preset{padding:18px 14px}.preset.selected{padding:17px 13px}.preset h2{font-size:18px}.workbench{padding:19px}.scenes{grid-template-columns:repeat(2,1fr)}.stop{margin-left:0}.layers{gap:10px}.reference{width:100%}}
+</style>
+</head>
+<body>
+<main>
+<div class="topline"><div><div class="eyebrow">MEMORY ANKI / SOUND ATELIER</div><h1>声音，交给耳朵来选。</h1><p class="intro">四套新的音效方向。先选一种音色，再用相同场景比较。每次试听都会停止上一段，方便听清细节。</p></div><button class="reference" id="reference">▷ 原版删除成功风铃<small>来自应用的合成参数 · 对照样本</small></button></div>
+<div class="toolbar"><label class="volume">试听音量 <input id="volume" type="range" min="0" max="100" value="80" aria-label="试听音量"><output id="volumeValue">80%</output></label><div class="layers"><label><input id="action" type="checkbox" checked>动作层</label><label><input id="objects" type="checkbox" checked>卡片层</label><label><input id="result" type="checkbox" checked>结果层</label></div><button id="stop" class="stop">■ 停止</button></div>
+<div class="presets" role="group" aria-label="选择音效方案">
+<button class="preset selected" data-preset="glass" aria-pressed="true" style="--tint:#e9f1f4"><span class="letter">OPTION A</span><span class="glyph" aria-hidden="true">♧</span><h2>清透玻璃</h2><p>最接近原风铃。清亮的敲击与自然消散的余音，保留一点空气感。</p><span class="badge">清亮 · 风铃感</span></button>
+<button class="preset" data-preset="porcelain" aria-pressed="false" style="--tint:#f1eae1"><span class="letter">OPTION B</span><span class="glyph" aria-hidden="true">◡</span><h2>温润瓷铃</h2><p>圆润的中高频，柔和的尾音。连续操作时更安静，减少尖锐感。</p><span class="badge">柔和 · 低存在感</span></button>
+<button class="preset" data-preset="wood" aria-pressed="false" style="--tint:#e9eddf"><span class="letter">OPTION C</span><span class="glyph" aria-hidden="true">≋</span><h2>轻木琴</h2><p>短而干净的敲击，尾音收得快。四张连翻像四颗小木珠依次落下。</p><span class="badge">干净 · 节奏清楚</span></button>
+<button class="preset" data-preset="drop" aria-pressed="false" style="--tint:#eae8f4"><span class="letter">OPTION D</span><span class="glyph" aria-hidden="true">◌</span><h2>水滴弹跳</h2><p>柔软的圆点与轻微弹性。音高变化很短，适合喜欢轻巧反馈的人。</p><span class="badge">圆润 · 轻巧</span></button>
+</div>
+<section class="workbench"><div><div class="section-caption">AUDITION / 同场景对比</div><h2 id="currentName">A · 清透玻璃</h2><p class="hint">点击场景试听；切换方案后，用下方「重听」比较同一段。</p><div class="scenes">
+<button class="scene active" data-scene="single"><span>▷ 翻开 1 张</span><small>轻触 → 卡片翻开</small></button>
+<button class="scene" data-scene="four"><span>▷ 翻开 4 张</span><small>一次动作 → 四次弹跳</small></button>
+<button class="scene" data-scene="twelve"><span>▷ 翻开 12 张</span><small>可数的开头 → 轻尾巴</small></button>
+<button class="scene" data-scene="fold"><span>▷ 收起 4 张</span><small>四张回收 → 安静收束</small></button>
+<button class="scene" data-scene="delete"><span>▷ 删除 4 张</span><small>卡片消失 → 原版成功风铃</small></button>
+<button class="scene" data-scene="grades"><span>▷ 四档评分</span><small>忘记 / 困难 / 良好 / 简单</small></button>
+<button class="scene" data-scene="move"><span>▷ 拖拽落定</span><small>拿起 → 两张卡落定</small></button>
+<button class="scene" data-scene="complete"><span>▷ 完成一轮</span><small>最后一张 → 完成提示</small></button>
+<button class="scene" data-scene="denied"><span>▷ 无效操作</span><small>轻轻提醒一次</small></button>
+</div><div class="compare"><button id="replay">↻ 重听当前场景</button><button id="ab">A → B → C → D 连续对比</button></div><div class="legend"><span><b class="pill">动作</b>轻触的起手</span><span><b class="pill">卡片</b>每张一个音</span><span><b class="pill">结果</b>单独收束</span></div></div><div class="preview"><div class="preview-title" id="visualTitle">翻开 1 张 · 等待试听</div><div class="cards" id="cards"></div><div class="visual-note" id="visualNote">先听单张，再听四张。留意高频是否刺耳、四个落点是否能听清。</div></div></section>
+<div class="bottom"><button class="primary" id="favorite">选这套：A · 清透玻璃</button><span class="choice" id="choice">还没决定。可以分别试听三层后再选。</span><button class="secondary" id="export">下载选择记录</button><button class="secondary" id="wav">下载当前试听 WAV</button></div><p class="status" id="status" role="status" aria-live="polite">点击任意试听按钮开始。页面不会自动播放。</p><p class="footer">独立试听页 · 不会改变应用设置 · 无网络请求或外部音频素材<br>删除场景的结果层统一使用原版成功风铃，方便比较卡片层。其余场景使用各方案自己的收束声。选择记录可下载，或直接告诉我「选 A/B/C/D」以及想调整的部分。</p>
+</main>
+<script>
+'use strict';
+const presets={
+ glass:{label:'A · 清透玻璃',pitch:1318.5,decay:.38,peak:.076,attack:.004,ratios:[[1,1,1],[2.4,.15,.52]],gap:.082,tail:.038},
+ porcelain:{label:'B · 温润瓷铃',pitch:880,decay:.29,peak:.040,attack:.008,ratios:[[1,1,1],[2,.095,.60],[3,.025,.35]],gap:.085,tail:.040},
+ wood:{label:'C · 轻木琴',pitch:784,decay:.17,peak:.045,attack:.003,ratios:[[1,1,1],[3,.14,.38],[4,.035,.25]],gap:.090,tail:.041},
+ drop:{label:'D · 水滴弹跳',pitch:1046.5,decay:.21,peak:.044,attack:.007,ratios:[[1,1,1],[2,.055,.45]],gap:.085,tail:.038}
+};
+const sceneNames={single:'翻开 1 张',four:'翻开 4 张',twelve:'翻开 12 张',fold:'收起 4 张',delete:'删除 4 张',grades:'四档评分',move:'拖拽落定',complete:'完成一轮',denied:'无效操作'};
+let selected='glass',scene='single',favorite=null,context=null,master=null,sources=new Set(),timers=new Set(),generation=0;
+const $=id=>document.getElementById(id);
+for(let i=0;i<12;i++){const e=document.createElement('div');e.className='card';e.textContent=String(i+1).padStart(2,'0');$('cards').appendChild(e);}
+function layers(){return{action:$('action').checked,objects:$('objects').checked,result:$('result').checked};}
+function after(ms,fn){const t=setTimeout(()=>{timers.delete(t);fn();},ms);timers.add(t);}
+function stop(){generation++;for(const t of timers)clearTimeout(t);timers.clear();for(const s of sources){try{s.stop();}catch{}}sources.clear();document.querySelectorAll('.card').forEach(e=>e.classList.remove('hit'));}
+async function audio(){const Constructor=window.AudioContext||window.webkitAudioContext;if(!Constructor)throw new Error('当前浏览器不支持 Web Audio，请用 Chrome、Edge 或 Safari 打开。');if(!context){context=new Constructor();master=context.createGain();master.gain.value=Number($('volume').value)/100;master.connect(context.destination);}await context.resume();return context;}
+// Every voice uses a brief attack followed immediately by exponential decay.
+// There is no sustained body, waveform-pack override, random tuning, or stereo sweep.
+function tone(ctx,dest,t,f,peak,decay,attack=.004,end=null){
+ const osc=ctx.createOscillator(),gain=ctx.createGain();osc.type='sine';osc.frequency.setValueAtTime(f,t);if(end)osc.frequency.exponentialRampToValueAtTime(end,t+.045);
+ gain.gain.setValueAtTime(.0001,t);gain.gain.exponentialRampToValueAtTime(Math.max(.0002,peak),t+attack);gain.gain.exponentialRampToValueAtTime(.0001,t+attack+decay);
+ osc.connect(gain);gain.connect(dest);osc.onended=()=>{sources.delete(osc);osc.disconnect();gain.disconnect();};if(ctx===context)sources.add(osc);osc.start(t);osc.stop(t+attack+decay+.025);
+}
+function note(ctx,dest,p,t,f,scale=1,short=1){for(const [ratio,gain,tail] of p.ratios){const end=p===presets.drop&&ratio===1?f*.97:null;tone(ctx,dest,t,f*ratio,p.peak*gain*scale,p.decay*tail*short,p.attack,end);}}
+function reference(ctx,dest,t,scale=1){tone(ctx,dest,t,1318.5,.07*scale,.9);tone(ctx,dest,t,1318.5*2.4,.018*scale,.5);tone(ctx,dest,t+.07,1760,.055*scale,1.1);tone(ctx,dest,t+.07,1760*2.4,.014*scale,.6);}
+function plan(id,key,enabled){
+ const p=presets[id],events=[],visual=[];let end=0;
+ const add=(kind,t,f,scale=1,short=1,index=null)=>{events.push({kind,t,f,scale,short});end=Math.max(end,t+(kind==='reference'?1.2:p.decay*short+.04));if(index!==null)visual.push({t,index});};
+ const action=(t=0)=>{if(enabled.action)add('note',t,p.pitch*.67,.24,.27);};
+ const pops=(count,start=.065,down=false)=>{let t=start;for(let i=0;i<count;i++){if(i)t+=i<5?p.gap:p.tail;const scale=i<5?1-i*.08:Math.max(.18,.57-(i-5)*.055);const semitones=[0,0,2,0,4][i%5]*(down?-1:1);if(enabled.objects)add('note',t,p.pitch*Math.pow(2,semitones/12)*(down?.90:1),scale,i<5?1:.65,i);else visual.push({t,index:i});}return t+p.decay*.7;};
+ const result=(t)=>{if(enabled.result){add('note',t,p.pitch,.65,1.7);add('note',t+.12,p.pitch*4/3,.53,1.9);}};
+ if(key==='reference'){add('reference',0,0);return{events,visual,duration:end};}
+ switch(key){
+ case 'single':action();pops(1);break;
+ case 'four':action();pops(4);break;
+ case 'twelve':action();pops(12);break;
+ case 'fold':action();pops(4,.065,true);break;
+ case 'delete':action();{const done=pops(4,.065,true);if(enabled.result)add('reference',done+.18,0,.75);}break;
+ case 'grades':{const pitches=[1,9/8,5/4,4/3],labels=['忘记','困难','良好','简单'];for(let i=0;i<4;i++){const t=i*.68;if(enabled.action)add('note',t,p.pitch*pitches[i],.82,1.10,i);visual.push({t,index:i,label:labels[i]});}end=Math.max(end,2.6);}break;
+ case 'move':action();pops(2,.35);break;
+ case 'complete':action();{const done=pops(1);result(done+.24);}break;
+ case 'denied':if(enabled.result)add('note',0,p.pitch*.5,.52,.7,0);break;
+ }
+ return{events,visual,duration:Math.max(end,.6)};
+}
+function schedule(ctx,dest,id,data,start){const p=presets[id];for(const e of data.events){if(e.kind==='reference')reference(ctx,dest,start+e.t,e.scale);else note(ctx,dest,p,start+e.t,e.f,e.scale,e.short);}}
+function visualize(data,offset=0){for(const e of data.visual){after((offset+e.t)*1000,()=>{const card=$('cards').children[e.index%12];card.classList.add('hit');if(e.label)$('visualTitle').textContent='评分 · '+e.label;after(240,()=>card.classList.remove('hit'));});}}
+async function play(id=selected,key=scene){stop();const token=generation;try{const ctx=await audio();if(token!==generation)return;const data=plan(id,key,layers());schedule(ctx,master,id,data,ctx.currentTime+.03);visualize(data,.03);$('visualTitle').textContent=key==='reference'?'原版删除成功风铃':sceneNames[key];$('status').textContent=key==='reference'?'正在播放原版风铃对照样本。':'正在试听 '+presets[id].label+' · '+sceneNames[key];if(!data.events.length)$('status').textContent='当前场景对应的声音层已关闭。打开声音层后重听。';after((data.duration+.05)*1000,()=>{$('status').textContent='试听结束。可切换方案后重听，或单独比较三层。';});}catch(error){$('status').textContent=error.message;}}
+function select(id){selected=id;document.querySelectorAll('.preset').forEach(e=>{const active=e.dataset.preset===id;e.classList.toggle('selected',active);e.setAttribute('aria-pressed',String(active));});$('currentName').textContent=presets[id].label;$('favorite').textContent='选这套：'+presets[id].label;}
+document.querySelectorAll('.preset').forEach(e=>e.addEventListener('click',()=>{stop();select(e.dataset.preset);$('status').textContent='已切换到 '+presets[selected].label+'。点击场景或「重听」试听。';}));
+document.querySelectorAll('.scene').forEach(e=>e.addEventListener('click',()=>{scene=e.dataset.scene;document.querySelectorAll('.scene').forEach(b=>b.classList.toggle('active',b===e));play();}));
+$('reference').onclick=()=>play(selected,'reference');$('replay').onclick=()=>play();$('stop').onclick=()=>{stop();$('status').textContent='已停止。';};
+$('volume').oninput=()=>{$('volumeValue').textContent=$('volume').value+'%';if(master)master.gain.setTargetAtTime(Number($('volume').value)/100,context.currentTime,.015);};
+$('ab').onclick=async()=>{stop();const token=generation;try{const ctx=await audio();if(token!==generation)return;let offset=.05;const enabled=layers();for(const id of Object.keys(presets)){const data=plan(id,scene,enabled),time=offset;schedule(ctx,master,id,data,ctx.currentTime+time);visualize(data,time);after(time*1000,()=>{select(id);$('visualTitle').textContent=sceneNames[scene];$('status').textContent='连续对比 · '+presets[id].label+' · '+sceneNames[scene];});offset+=data.duration+.55;}after(offset*1000,()=>{$('status').textContent='四套对比结束。选中喜欢的方案后可以再听一次。';});}catch(error){$('status').textContent=error.message;}};
+function showChoice(){$('choice').textContent=favorite?'你的选择：'+presets[favorite].label+'（已记录在本页）':'还没决定。可以分别试听三层后再选。';}
+try{const saved=localStorage.getItem('memory-anki-sound-choice');if(saved&&presets[saved])favorite=saved;}catch{}showChoice();
+$('favorite').onclick=()=>{favorite=selected;try{localStorage.setItem('memory-anki-sound-choice',favorite);}catch{}showChoice();$('status').textContent='已记录选择。可以下载选择记录，或直接告诉我「选 '+presets[favorite].label+'」。应用音效尚未修改。';};
+function download(blob,name){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),5000);}
+$('export').onclick=()=>{if(!favorite){$('status').textContent='请先点击「选这套」记录喜欢的方案。';return;}download(new Blob([JSON.stringify({version:1,selected:favorite,label:presets[favorite].label,voice:presets[favorite],layers:layers(),scene,previewVolume:Number($('volume').value)/100,createdAt:new Date().toISOString()},null,2)],{type:'application/json'}),'memory-anki-sound-choice.json');};
+$('wav').onclick=async()=>{try{const Constructor=window.OfflineAudioContext||window.webkitOfflineAudioContext;if(!Constructor)throw new Error('当前浏览器不支持 WAV 导出，请用 Chrome 或 Edge 打开。');const id=selected,key=scene,data=plan(id,key,layers());if(!data.events.length)throw new Error('当前场景对应的声音层已关闭。');const rate=44100,offline=new Constructor(1,Math.ceil((data.duration+.15)*rate),rate),out=offline.createGain();out.gain.value=Number($('volume').value)/100;out.connect(offline.destination);schedule(offline,out,id,data,.03);$('status').textContent='正在生成当前场景的 WAV…';const buffer=await offline.startRendering(),samples=buffer.getChannelData(0),bytes=new ArrayBuffer(44+samples.length*2),view=new DataView(bytes);const text=(offset,str)=>{for(let i=0;i<str.length;i++)view.setUint8(offset+i,str.charCodeAt(i));};text(0,'RIFF');view.setUint32(4,36+samples.length*2,true);text(8,'WAVE');text(12,'fmt ');view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,1,true);view.setUint32(24,rate,true);view.setUint32(28,rate*2,true);view.setUint16(32,2,true);view.setUint16(34,16,true);text(36,'data');view.setUint32(40,samples.length*2,true);for(let i=0;i<samples.length;i++)view.setInt16(44+i*2,Math.max(-1,Math.min(1,samples[i]))*32767,true);download(new Blob([bytes],{type:'audio/wav'}),'anki-'+id+'-'+key+'.wav');$('status').textContent='已生成 WAV：'+presets[id].label+' · '+sceneNames[key];}catch(error){$('status').textContent=error.message;}};
+window.addEventListener('pagehide',()=>{stop();if(context)context.close();});
+</script>
+</body>
+</html>

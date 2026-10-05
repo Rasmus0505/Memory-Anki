@@ -68,6 +68,10 @@ const FEEDBACK_AUDIO_PRIORITY: Partial<Record<MindMapFeedbackEvent, number>> = {
   field_focus: 16,
   pointer_down: 12,
   hover_pulse: 4,
+  grade_forget: 46,
+  grade_hard: 48,
+  grade_good: 50,
+  grade_easy: 52,
 }
 
 const LOW_PRIORITY_FEEDBACK_EVENTS = new Set<MindMapFeedbackEvent>([
@@ -141,7 +145,11 @@ function isMindMapFeedbackEvent(value: unknown): value is MindMapFeedbackEvent {
     value === 'save_success' ||
     value === 'save_error' ||
     value === 'import_apply' ||
-    value === 'segment_action'
+    value === 'segment_action' ||
+    value === 'grade_forget' ||
+    value === 'grade_hard' ||
+    value === 'grade_good' ||
+    value === 'grade_easy'
   )
 }
 

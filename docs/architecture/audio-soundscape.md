@@ -19,6 +19,7 @@
 | 事件桥接 | `shared/feedback/mindmap-audio/useMindMapFeedback.ts` | 把编辑器/画布事件接到播放器 |
 | 界面音 | `shared/feedback/uiSounds.ts` + `uiSoundSynth.ts` | 全局委托监听，按钮/开关/标签页的通用音 |
 | 反馈导演 | `shared/fx`（`recipes/*`） | 业务只发 `cue()`，由 recipe 决定声音 + 粒子 + DOM + 触感 |
+| 分层弹跳 | `shared/feedback/mindmap-audio/layeredPops.ts` | 一次动作 = 一记，`count` 张对象 = 连弹几声 |
 
 硬规则：**业务代码不直接调用 `playXxx()` 或裸建 `AudioContext`**。
 业务声明「发生了什么」（`cue('grade.commit', …)`），由 recipe 决定听感；皮肤、稀有演出与 FX Lab
@@ -38,8 +39,27 @@ interface ToneSpec {
   endFrequency?: number   // 滑音终点频率
   pan?: number            // -1..1 立体声位置
   attackMs?: number
+  envelope?: 'glass'     // 固定试听音色：4ms 起音后立即指数衰减，不受主题着色影响
 }
 ```
+
+### 清透玻璃（当前选定音色）
+
+用户从独立试听页（`deliverables/sound-audition.html`）中选定 **A · 清透玻璃**，`getToneSpec` 因此优先返回
+`GLASS_PROFILES`，它由 `layeredPops.ts` 的 `buildGlassBell()` 构造：
+
+| 参数 | 值 |
+|---|---|
+| 基频 | `1318.5Hz`（与删除成功 toast 风铃同族） |
+| 泛音 | `2.4×` 基频，增益比 `.15`，衰减 ×`.52` |
+| 主音 | 峰值增益 `.076`、衰减 `380ms`、起音 `4ms` |
+| 连弹间距 | 前 5 记 `82ms`；第 6 记起收成 `38ms` 轻尾巴 |
+| 连弹音高 | 等程音阶模式 `[0, 0, 2, 0, 4]` 半音 |
+| 连弹增益 | 前 5 记 `1 - i×.08`；之后 `max(.18, .57 - (i-5)×.055)` |
+| 评分四档 | 忘记 `1×` / 困难 `9/8` / 良好 `5/4` / 简单 `4/3`，增益 `.82`、时长 ×`1.10` |
+
+`envelope: 'glass'` 的音**绕过主题着色与 `tuneToneSpec`**：用户选中的是确定的听感，主题包不应改写它。
+其余（烟花重音、连击里程碑尾音等）仍走旧的主题着色通道。
 
 `TONE_PROFILES` 是 `Record<MindMapFeedbackEvent, ToneSpec[]>`，因此**新增事件时 TypeScript 会强制要求补配**，
 不会静默回落。语义维度（用于"听声辨事"）如下：
@@ -69,6 +89,25 @@ interface ToneSpec {
 
 `colorTone(tone, timbre = activePackTimbre())` 是唯一着色入口；`attackMs` 最小 `2ms`、`durationMs` 最小 `18ms`，
 避免调制后出现爆音或零时长。业务代码**不得按主题包 id 分支**（见 [theme-packs.md](./theme-packs.md)）。
+`envelope: 'glass'` 的音在 `colorTone` 与 `tuneToneSpec` 中**原样返回**：用户选定的听感不随主题漂移。
+
+## 分层弹跳（`layeredPops.ts`）
+
+一次动作 = 一记 `role`；这次动作带动了几个对象 = `count`。**一次 `playToneSequence` 调用排完全部连弹**，
+不能一张卡发一次 `cue()`——挂起上下文只保留最近一次声音（见上节），N 次调用会丢掉 N-1 记。
+
+| 角色 | 用途 |
+|---|---|
+| `reveal` / `deal` | 翻卡 / 发牌（上行） |
+| `fold` / `remove` / `unlink` | 折叠 / 删除 / 断边（下行 `.9` 倍音高） |
+| `lift` | 单独删除、子级上移：按**被带动子级数**弹，不是被删那张 |
+| `land` / `select` | 拖拽落定 / 选中 |
+| `deny` | 无效操作：半频、`.52` 增益、`.7` 时长、无明亮泛音 |
+| `close` | 单元完成：`4/3` 音高、`.65` 增益、`1.7` 时长 |
+| `grade` | 评分四档，见上表 |
+
+硬约束：张数上限 `40`（超出只留尾部轻响）；单张翻卡**不再**额外加引子，否则听起来是 N+1 张；
+`count` 为非有限值或 `<= 0` 时返回空数组而不是发声。
 
 ## AudioContext 生命周期与 iOS 限制
 

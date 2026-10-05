@@ -1,4 +1,4 @@
-import { playWebAudioFireworkAccent, playWebAudioLandingChime } from '@/shared/feedback/mindmap-audio/webAudioFeedback'
+import { playWebAudioFireworkAccent, playWebAudioLandingChime, playWebAudioLayeredPops } from '@/shared/feedback/mindmap-audio/webAudioFeedback'
 import { triggerHaptic } from '@/shared/feedback/haptics'
 import {
   emitAmbientMote,
@@ -63,6 +63,8 @@ export interface RetryDropCue {
 export interface ProgressQuarterCue {
   rail: Element
   sparks: Point[]
+  /** 1 for 25%, 2 for 50%, 3 for 75% — the sound climbs with it. */
+  step?: number
 }
 
 export interface AnswerCue {
@@ -170,6 +172,9 @@ defineCue('unit.complete', {
   label: '单元翻完 → 彗星入轨',
   group: '学习 · 翻卡',
   play({ scope, combo }, stage) {
+    // Closing bell for the unit, right on the last card's own pop: the high ring
+    // is what tells the ear "that was the last one".
+    if (stage.gate.sound) playWebAudioLayeredPops({ role: 'close', volume: stage.gate.volume })
     if (!stage.gate.motion) return
     const badge = findAnchor(FX_ANCHORS.flipBadge, scope)
     const from = elementCenter(badge)
@@ -201,6 +206,9 @@ defineCue('grade.undo', {
   label: '撤销评分（粒子倒飞）',
   group: '学习 · 评分',
   play({ button }, stage) {
+    // Undo is the rating's inverse: one soft downward pop, heard even when the
+    // card's motion is off, so the user knows the grade was taken back.
+    if (stage.gate.sound) playWebAudioLayeredPops({ role: 'deny', volume: stage.gate.volume * 0.7 })
     if (!stage.gate.motion) return
     const segment = progressSegment()
     const origin = elementCenter(segment)
@@ -216,6 +224,7 @@ defineCue('card.remove', {
   group: '学习 · 队列',
   sample: () => ({ rect: sampleSurface().rect }),
   play({ rect }, stage) {
+    if (stage.gate.sound) playWebAudioLayeredPops({ role: 'remove', volume: stage.gate.volume })
     if (!stage.gate.motion || rect.width === 0) return
     peelGhost(rect)
     emitPaperPeel(rect)
@@ -227,6 +236,7 @@ defineCue('retry.drop', {
   label: '重试插队（墨滴）',
   group: '学习 · 队列',
   play({ target }, stage) {
+    if (stage.gate.sound) playWebAudioLayeredPops({ role: 'land', volume: stage.gate.volume })
     if (stage.gate.motion) emitInkDrop(target)
   },
 })
@@ -235,7 +245,16 @@ defineCue('progress.quarter', {
   scene: 'review',
   label: '进度 25/50/75%',
   group: '学习 · 进度',
-  play({ rail, sparks }, stage) {
+  play({ rail, sparks, step }, stage) {
+    // The step (1/2/3 for 25/50/75%) rides the payload so the three marks sound
+    // like a rising ladder instead of three identical dings.
+    if (stage.gate.sound) {
+      playWebAudioLayeredPops({
+        role: 'land',
+        count: Math.max(1, Math.min(3, step ?? 1)),
+        volume: stage.gate.volume,
+      })
+    }
     if (!stage.gate.motion) return
     flashElement(rail, 1.8)
     emitRailSparks(sparks)
@@ -265,6 +284,9 @@ defineCue('answer.wrong', {
   label: '答错（只沉一点墨）',
   group: '学习 · 做题',
   play({ paper }, stage) {
+    // Soft low pop, not a buzzer: the quiz already shows 回答错误 in red, and the
+    // tone is for the ear to notice the result, not to be punished by it.
+    if (stage.gate.sound) playWebAudioLayeredPops({ role: 'deny', volume: stage.gate.volume })
     const center = elementCenter(paper)
     if (stage.gate.motion && center) emitInkSink(center)
   },

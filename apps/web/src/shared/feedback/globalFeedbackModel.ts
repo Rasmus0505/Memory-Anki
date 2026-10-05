@@ -22,6 +22,12 @@ export interface GlobalFeedbackRequestDetail {
   origin?: MindMapFeedbackOrigin
   audioScope?: 'local' | 'global'
   screenPulse?: FeedbackDescriptor['screenPulse'] | null
+  /**
+   * Show the burst but play nothing. For relays that re-broadcast an event whose
+   * sound is already owned by a more precise source (e.g. the reveal cascade
+   * playing one pop per flipped card).
+   */
+  silentAudio?: boolean
 }
 
 export const GLOBAL_FEEDBACK_REQUEST_EVENT = 'memory-anki-global-feedback-request'

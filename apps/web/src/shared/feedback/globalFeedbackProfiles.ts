@@ -405,6 +405,46 @@ const MIND_MAP_FEEDBACK_PROFILES: Record<MindMapFeedbackEvent, MindMapFeedbackPr
     size: 78,
     label: 'SEG',
   },
+  /**
+   * 评分档位：视觉只做牌面边缘的一圈微光（micro），音量走 review 场景。
+   * 评分的主反馈是卡面手势 + 进度条接住粒子，屏幕上再放一圈就会抢戏。
+   */
+  grade_forget: {
+    visualKind: 'focus',
+    level: 'micro',
+    origin: 'review',
+    audioScope: 'local',
+    hue: 12,
+    size: 52,
+    label: '1',
+  },
+  grade_hard: {
+    visualKind: 'focus',
+    level: 'micro',
+    origin: 'review',
+    audioScope: 'local',
+    hue: 38,
+    size: 56,
+    label: '2',
+  },
+  grade_good: {
+    visualKind: 'focus',
+    level: 'micro',
+    origin: 'review',
+    audioScope: 'local',
+    hue: 158,
+    size: 60,
+    label: '3',
+  },
+  grade_easy: {
+    visualKind: 'focus',
+    level: 'micro',
+    origin: 'review',
+    audioScope: 'local',
+    hue: 196,
+    size: 64,
+    label: '4',
+  },
   category_expand: {
     visualKind: 'create',
     level: 'action',

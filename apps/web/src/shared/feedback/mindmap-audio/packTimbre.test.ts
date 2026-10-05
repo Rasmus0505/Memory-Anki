@@ -27,6 +27,13 @@ describe('packTimbre', () => {
     expect(PACK_TIMBRE_VOICES['marimba-water'].pitch).toBeLessThan(PACK_TIMBRE_VOICES['paper-wood'].pitch)
   })
 
+  it('preserves the selected glass voice in every theme pack', () => {
+    const glass: ToneSpec = { ...tone, envelope: 'glass' }
+    for (const timbre of Object.keys(PACK_TIMBRE_VOICES) as Array<keyof typeof PACK_TIMBRE_VOICES>) {
+      expect(colorTone(glass, timbre)).toBe(glass)
+    }
+  })
+
   it('recolors a tone without inventing a new event', () => {
     const wood = colorTone(tone, 'paper-wood')
     const bell = colorTone(tone, 'bell-lacquer')

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getLandingChimeTone } from './toneProfiles'
+import { getComboMilestoneTone, getLandingChimeTone } from './toneProfiles'
 
 describe('getLandingChimeTone', () => {
   it('rises a semitone per combo step and caps after an octave', () => {
@@ -10,6 +10,7 @@ describe('getLandingChimeTone', () => {
   })
 
   it('stays quieter than the combo milestone tone', () => {
-    for (const tone of getLandingChimeTone(5)) expect(tone.gain).toBeLessThan(0.03)
+    expect(getLandingChimeTone(5)[0].gain).toBeLessThan(getComboMilestoneTone(0)[0].gain)
+    expect(getLandingChimeTone(5).every((tone) => tone.envelope === 'glass')).toBe(true)
   })
 })

@@ -26,6 +26,8 @@ export function activePackTimbre(): PackTimbre {
 }
 
 export function colorTone(tone: ToneSpec, timbre: PackTimbre = activePackTimbre()): ToneSpec {
+  // Preserve the audition voice across themes, including its decay and loudness.
+  if (tone.envelope === 'glass') return tone
   const voice = PACK_TIMBRE_VOICES[timbre]
   const attackMs = Math.max(2, Math.round((tone.attackMs ?? 4) * voice.attack))
   return {
