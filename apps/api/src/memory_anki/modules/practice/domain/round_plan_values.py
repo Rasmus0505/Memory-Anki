@@ -13,8 +13,22 @@ def _day(value: Any) -> str:
     return ""
 
 
+def _review_unit_id(card_id: Any) -> str:
+    """Unit encoded in `review_unit:{unit_id}:r{revision}` when the snapshot omitted unit_id."""
+    text = _text(card_id)
+    prefix = "review_unit:"
+    if not text.startswith(prefix):
+        return ""
+    rest = text[len(prefix):]
+    marker = rest.rfind(":r")
+    if marker <= 0:
+        return rest
+    revision = rest[marker + 2:]
+    return rest[:marker] if revision.isdigit() else rest
+
+
 def _match_key(card: Mapping[str, Any]) -> str:
-    unit_id = _text(card.get("unit_id"))
+    unit_id = _text(card.get("unit_id")) or _review_unit_id(card.get("card_id") or card.get("id"))
     if unit_id:
         return f"unit:{unit_id}"
     return f"card:{_text(card.get('card_id') or card.get('id'))}"

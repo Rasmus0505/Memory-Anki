@@ -26,6 +26,7 @@ from memory_anki.modules.practice.domain.round_plan import (
 )
 from memory_anki.modules.practice.domain.round_rebind import (
     append_today_cards,
+    drop_undue_unstarted,
     drop_vanished_unstarted,
     rebind_plan_cards,
     replan_remaining,
@@ -918,6 +919,46 @@ def test_drop_vanished_unstarted_keeps_retry_source_and_drops_the_other():
     assert dropped["occurrences"][0]["source_card_id"] == "weak"
     assert dropped["occurrences"][0]["occurrence_id"] in dropped["presented_ids"]
     assert "other" not in dropped["presented_ids"]
+
+
+def test_drop_undue_unstarted_keeps_due_quiz_completed_and_open():
+    cards = [
+        _card("future", unit_id="future-unit"),
+        _card("due", unit_id="due-unit"),
+        _card("quiz", kind="quiz_question"),
+        _card("done", unit_id="also-future"),
+        _card("open-card", unit_id="open-unit"),
+    ]
+    plan = complete_card(plan_from_cards(cards), "done")
+    plan["encounters"] = {
+        "open-card": {"encounter_id": "enc-open", "status": "open", "unit_revision": 1},
+    }
+    plan["current_card_id"] = "future"
+    dropped = drop_undue_unstarted(plan, {"due-unit"})
+    assert [item["card_id"] for item in dropped["original_cards"]] == [
+        "due",
+        "quiz",
+        "done",
+        "open-card",
+    ]
+    assert "future" not in dropped["presented_ids"]
+    assert dropped["completed_ids"] == ["done"]
+    assert dropped["current_card_id"] == "due"
+    assert plan_is_fully_handled(dropped) is False
+
+
+def test_drop_undue_unstarted_finishes_a_round_of_only_future_cards():
+    cards = [
+        _card("later-a", unit_id="a"),
+        _card("later-b", unit_id="b"),
+        _card("passed", unit_id="c"),
+    ]
+    plan = complete_card(plan_from_cards(cards), "passed")
+    plan["current_card_id"] = "later-a"
+    dropped = drop_undue_unstarted(plan, set())
+    assert [item["card_id"] for item in dropped["original_cards"]] == ["passed"]
+    assert dropped["presented_ids"] == ["passed"]
+    assert plan_is_fully_handled(dropped) is True
 
 
 def test_append_after_drop_does_not_resurrect_ghost_and_keeps_leftover():

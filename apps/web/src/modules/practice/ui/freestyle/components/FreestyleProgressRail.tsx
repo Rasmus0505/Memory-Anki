@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { type MouseEvent, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   freestyleProgressRailFits,
   palaceAccentToneClass,
@@ -22,6 +22,13 @@ import type {
   FreestyleScrollFrame,
 } from '@/modules/practice/ui/freestyle/model/freestyleScrollChannel'
 import { FX_ANCHORS } from '@/shared/fx'
+import {
+  cardIdAtRailPointer,
+  clearedPalaceRanges,
+  measureRailSlots,
+  railSlot,
+  type SlotRect,
+} from '@/modules/practice/ui/freestyle/components/freestyleProgressRailGeometry'
 
 /** Circle text is this card's retry attempt in the current round, not its place in the rail. */
 function retryAttemptGlyph(segment: FreestyleProgressSegment): string {
@@ -54,24 +61,6 @@ const INSERT_BATCH_LIMIT = 3
 const FOLLOW_BASE_WIDTH = 100
 /** A follow-driven arrival suppresses the comet only if the playhead catches up this fast. */
 const FOLLOW_ARRIVAL_WINDOW_MS = 700
-
-interface SlotRect {
-  node: HTMLElement
-  left: number
-  right: number
-}
-
-function measureRailSlots(rail: HTMLElement): Map<string, SlotRect> {
-  const railLeft = rail.getBoundingClientRect().left
-  const map = new Map<string, SlotRect>()
-  for (const node of railSlots(rail)) {
-    const id = node.dataset.railSlot
-    if (!id) continue
-    const rect = node.getBoundingClientRect()
-    map.set(id, { node, left: rect.left - railLeft, right: rect.right - railLeft })
-  }
-  return map
-}
 
 function prefersReducedMotion(): boolean {
   return typeof window !== 'undefined'
@@ -245,7 +234,7 @@ function ProgressRailItem({
         <TooltipTrigger asChild>
           <span
             {...slotData}
-            className={cn('flex shrink-0 items-center justify-center', gapClass, slotOpenClass)}
+            className={cn('flex h-full shrink-0 items-end justify-center', gapClass, slotOpenClass)}
           >
             <span
               data-testid="freestyle-progress-retry-node"
@@ -357,63 +346,26 @@ interface RailSheen {
   width: number
 }
 
-function railSlots(rail: HTMLElement): HTMLElement[] {
-  return Array.from(rail.querySelectorAll<HTMLElement>('[data-rail-slot]'))
-}
-
-/** Card ids can contain `:` and other selector syntax, so match on the dataset instead. */
-function railSlot(rail: HTMLElement, cardId: string): HTMLElement | null {
-  return railSlots(rail).find((node) => node.dataset.railSlot === cardId) ?? null
-}
-
-/** One x-range per contiguous run of a just-cleared palace, relative to the rail. */
-function clearedPalaceRanges(
-  rail: HTMLElement,
-  cleared: ReadonlySet<string>,
-): Array<{ left: number; width: number }> {
-  const railLeft = rail.getBoundingClientRect().left
-  const ranges: Array<{ left: number; width: number }> = []
-  let runPalace: string | null = null
-  let runLeft = 0
-  let runRight = 0
-  const flush = () => {
-    if (runPalace != null) ranges.push({ left: runLeft, width: Math.max(4, runRight - runLeft) })
-    runPalace = null
-  }
-  for (const node of railSlots(rail)) {
-    const palace = node.dataset.railPalace ?? ''
-    if (!palace || !cleared.has(palace)) {
-      flush()
-      continue
-    }
-    const rect = node.getBoundingClientRect()
-    if (runPalace !== palace) {
-      flush()
-      runPalace = palace
-      runLeft = rect.left - railLeft
-    }
-    runRight = rect.right - railLeft
-  }
-  flush()
-  return ranges
-}
-
 export function FreestyleProgressRail({
   summary,
   onOpenPlan,
+  onJump,
   overflow,
   workspaceSwitcher,
   scrollChannel,
 }: {
   summary: FreestyleProgressSummary
   onOpenPlan: () => void
+  /** Jump the feed to this tick. Absent callers keep the whole-rail plan opener. */
+  onJump?: (cardId: string) => void
   /** Overflow menu trigger + content, owned by the page. */
   overflow?: ReactNode
   workspaceSwitcher?: ReactNode
   /** Continuous feed position; the glider tracks the finger while it moves. */
   scrollChannel?: FreestyleScrollChannel
 }) {
-  const railLabel = progressRailLabel(summary)
+  const canJump = Boolean(onJump) && summary.total > 0 && summary.segments.length > 0
+  const railLabel = progressRailLabel(summary, canJump)
   const hudText = progressHudText(summary)
   const railRef = useRef<HTMLDivElement>(null)
   const gliderRef = useRef<HTMLSpanElement>(null)
@@ -683,7 +635,7 @@ export function FreestyleProgressRail({
         ref={railRef}
         data-testid="freestyle-progress-rail" data-fx-anchor={FX_ANCHORS.progressRail}
         data-compact={compact ? 'true' : 'false'}
-        role="img"
+        role={canJump ? 'group' : 'img'}
         aria-label={railLabel}
         className={cn(
           'pointer-events-auto relative flex h-7 w-full min-w-0 cursor-pointer items-end overflow-hidden bg-stage/60 px-0 pb-1 pt-[max(0px,env(safe-area-inset-top,0px))]',
@@ -691,7 +643,18 @@ export function FreestyleProgressRail({
           roundGlow && 'progress-round-glow',
         )}
         style={roundGlow ? { animationDelay: `${PALACE_LEAD_MS}ms` } : undefined}
-        onClick={onOpenPlan}
+        onClick={(event: MouseEvent<HTMLDivElement>) => {
+          if (!onJump || !railRef.current) {
+            onOpenPlan()
+            return
+          }
+          const cardId = cardIdAtRailPointer(railRef.current, event)
+          if (!cardId) {
+            onOpenPlan()
+            return
+          }
+          onJump(cardId)
+        }}
       >
         {segments.length === 0 ? (
           <span className="ma-skeleton h-1.5 w-full rounded-[1px] [--color-muted:hsl(34_30%_80%/0.18)]" aria-hidden />
@@ -732,7 +695,7 @@ export function FreestyleProgressRail({
               type="button"
               data-testid="freestyle-progress-hud"
               className="pointer-events-auto truncate rounded-full px-2 py-1 text-left text-[11px] font-medium tabular-nums text-stage-ink/88 transition-colors hover:text-stage-glow"
-              aria-hidden
+              aria-label={`${hudText}，打开本轮安排`}
               onClick={onOpenPlan}
             >
               {hudText}

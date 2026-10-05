@@ -38,4 +38,16 @@ describe('planFoldBack', () => {
     const previous = new Map<string, RevealPhase>([['root', 'revealed'], ['a', 'revealed']])
     expect(planFoldBack(previous, parents, [node('other-root')])).toEqual([])
   })
+
+  it('stops when a removed branch cycles instead of walking forever', () => {
+    const cycled = new Map([
+      ['a', 'b'],
+      ['b', 'a'],
+    ])
+    const previous = new Map<string, RevealPhase>([
+      ['a', 'revealed'],
+      ['b', 'revealed'],
+    ])
+    expect(planFoldBack(previous, cycled, [node('root')])).toEqual([])
+  })
 })

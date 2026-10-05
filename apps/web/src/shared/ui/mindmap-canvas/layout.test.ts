@@ -3,6 +3,7 @@ import {
   applyMindMapLayout,
   buildPreviewGraph,
   getNodeSize,
+  isDescendant,
   isWithinStructureDropLeaveZone,
   NODE_SAFE_GAP,
   resolveStructureDropMode,
@@ -472,6 +473,28 @@ describe('resolveStructureDropMode', () => {
     expect(
       isWithinStructureDropLeaveZone(160, 80, rect, 'inside', { leaveExtraPx: 24 }),
     ).toBe(false)
+  })
+})
+
+describe('mind map parent cycles', () => {
+  it('stops an ancestor walk that loops', () => {
+    const nodes: GraphData['nodes'] = [
+      { id: 'a', type: 'peg', label: '甲', originalId: 1, parentId: 'b', metadata: {} },
+      { id: 'b', type: 'peg', label: '乙', originalId: 2, parentId: 'a', metadata: {} },
+    ]
+    expect(isDescendant(nodes, 'missing', 'a')).toBe(false)
+  })
+
+  it('lays out a duplicated id that points back at itself', () => {
+    const graphData: GraphData = {
+      nodes: [
+        { id: 'root', type: 'peg', label: '根', originalId: 1, parentId: null, metadata: {} },
+        { id: 'a', type: 'peg', label: '甲', originalId: 2, parentId: 'root', metadata: {} },
+        { id: 'a', type: 'peg', label: '甲', originalId: 3, parentId: 'a', metadata: {} },
+      ],
+      edges: [],
+    }
+    expect(applyMindMapLayout(graphData).nodes.map((node) => node.id)).toContain('root')
   })
 })
 

@@ -173,13 +173,17 @@ export function useRevealSession({
   const syncedRevealKey = JSON.stringify(syncedRevealMap ?? null)
   React.useEffect(() => {
     if (syncedRevealMap == null) return
-    if (JSON.stringify(revealMapRef.current) === syncedRevealKey) return
+    // Apply the tree-normalized map, not the raw cache/live echo. A raw map
+    // with extra or reordered keys used to setState, publish, and come back
+    // forever — and a late full restore then animated every card at once.
+    const normalized = buildInitialRevealState(root, syncedRevealMap, revealOptions)
+    if (JSON.stringify(revealMapRef.current) === JSON.stringify(normalized)) return
     const currentRevealed = countRevealedInMap(revealMapRef.current)
-    const incomingRevealed = countRevealedInMap(syncedRevealMap)
+    const incomingRevealed = countRevealedInMap(normalized)
     if (currentRevealed > 0 && incomingRevealed < currentRevealed) return
-    revealMapRef.current = syncedRevealMap
-    setRevealMap(syncedRevealMap)
-  }, [syncedRevealKey, syncedRevealMap])
+    revealMapRef.current = normalized
+    setRevealMap(normalized)
+  }, [revealOptions, root, syncedRevealKey, syncedRevealMap])
 
   React.useEffect(() => {
     hoveredNodeIdRef.current = hoveredNodeId

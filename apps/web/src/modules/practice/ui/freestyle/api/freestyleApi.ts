@@ -134,6 +134,18 @@ export function getOrCreateFreestyleRoundApi(
   })
 }
 
+/** Read the workspace's current round. Does not create, replan, or append cards. */
+export function getActiveFreestyleRoundApi(
+  workspace: string,
+  options?: Pick<RequestInit, 'signal'>,
+) {
+  const params = new URLSearchParams({ workspace })
+  return request<FreestyleRoundStatePayload>(`/freestyle/rounds/active?${params.toString()}`, {
+    ...options,
+    persistence: false,
+  })
+}
+
 export function getFreestyleRoundApi(roundId: string, options?: Pick<RequestInit, 'signal'>) {
   return request<FreestyleRoundStatePayload>(`/freestyle/rounds/${encodeURIComponent(roundId)}`, {
     ...options,

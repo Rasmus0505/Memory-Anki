@@ -277,8 +277,11 @@ export function expandAncestorsForNode(
   if (!byId.has(nodeId)) return new Set(collapsedNodeIds)
 
   const next = new Set(collapsedNodeIds)
+  const seen = new Set<string>()
   let current = byId.get(nodeId) ?? null
   while (current?.parentId) {
+    if (seen.has(current.id)) break
+    seen.add(current.id)
     next.delete(current.parentId)
     current = byId.get(current.parentId) ?? null
   }

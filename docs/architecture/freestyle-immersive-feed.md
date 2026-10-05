@@ -28,7 +28,12 @@ across workspaces for the same identity. Cursors stay independent. A fully handl
 freezes on `get_or_create` so the closing settlement slot stays reachable; leftover due
 work advances only when the learner explicitly starts the next round via config confirm
 (`「再来一轮」` → `/rounds/start`). Page refresh, app restart, and HUD queue refresh must
-never mint a new `round_id`.
+never mint a new `round_id`. The overflow action 「同步进度」 reads
+`GET /freestyle/rounds/active` and replaces the local ledger with that workspace
+round. It drops local-only scores so a phone draft cannot keep ratings the
+computer's round does not have, and it does not mint a `round_id`, append cards,
+or call `/rounds/start`. Stale recovery and the feed-error retry still keep the
+frozen round and must not drop server-known completions.
 
 ## Round Plan State
 
@@ -150,7 +155,7 @@ count per palace. The banner is not a snap page; the whole chip dismisses on tap
 save error) likewise dismiss on whole-chip click. Audio uses `all_clear_ready` on the review
 scene, locally — never `dispatchGlobalFeedback`.
 
-The top HUD opens a bottom “本轮安排” sheet. A header toggle switches 「按宫殿」 (group stable plan entries by palace) and 「按进度」 (the same entries in progress-rail segment order, still split into the leftover and today blocks). Both views support
+Clicking a progress-rail tick jumps the feed to that card when it is still live (`navigateToIndex` on the matching card id). A tick whose card has left the feed, the HUD count, and an empty rail still open the bottom “本轮安排” sheet. A header toggle switches 「按宫殿」 (group stable plan entries by palace) and 「按进度」 (the same entries in progress-rail segment order, still split into the leftover and today blocks). Both views support
 jump, drag (desktop) or up/down (touch), batch exclude/restore, and reset-round. The toolbar
 「结算已完成单元」 opens a 小结算 page first. That overlay covers the feed pager, so it keeps a visible 「退出」 that cancels without compressing, and the page scrolls so 「取消结算」 and 「确认结算」 stay reachable on a short PWA viewport. Confirming it (`compress_completed`) drops passed cards (记得/轻松, no live 重练) from
 the swipe feed, 本轮安排, and the HUD rail so the denominator shrinks, and stores that page as `partial_settlements` on the round plan. Cancelling leaves the cards in the feed. Weak-rated sources

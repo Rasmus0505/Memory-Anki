@@ -4,6 +4,7 @@ import {
   applyFreestyleRoundActionApi,
   buildFreestyleQueueApi,
   dropFreestyleOverlayQuizPalacesApi,
+  getActiveFreestyleRoundApi,
   getFreestyleRoundApi,
   getOrCreateFreestyleRoundApi,
   startFreestyleRoundApi,
@@ -56,6 +57,8 @@ import {
   removeRetryOccurrencesForSource,
   restoreExplicitlySelectedCards,
   sourceCardId,
+  cardUnitId,
+  reviewUnitIdFromCardId,
   emitFreestylePeerRound,
   FREESTYLE_PEER_ROUND_EVENT,
   FREESTYLE_SECONDARY_FEED_CONFIG_UPDATED_EVENT,
@@ -83,6 +86,7 @@ import {
   type FreestyleSkipState,
   type FreestyleUnitEncounterState,
 } from '@/modules/practice/public'
+import { isOccurrenceScored } from '@/modules/practice/domain/unitProgressState'
 import { resolveFreestyleOpenFeedIndex } from '@/modules/practice/ui/freestyle/model/roundCompletion'
 import {
   clearQuizSessionProgress,
@@ -92,6 +96,7 @@ import {
 import type {
   FreestyleCard,
   FreestyleFeedConfig,
+  FreestyleQueueBuildResponse,
   FreestyleRoundStatePayload,
 } from '@/shared/api/contracts'
 import { isReviewHintId } from '@/shared/api/contracts'
@@ -188,7 +193,14 @@ function waitForQueueBuildRetry(signal: AbortSignal) {
 function cardsWithoutHidden(cards: FreestyleCard[], hiddenIds: readonly string[]) {
   if (!hiddenIds.length) return cards
   const hidden = new Set(hiddenIds.map((id) => String(id)))
-  return cards.filter((card) => !hidden.has(String(card.id)))
+  const hiddenUnits = new Set(
+    hiddenIds.map((id) => reviewUnitIdFromCardId(id)).filter(Boolean),
+  )
+  return cards.filter((card) => {
+    if (hidden.has(String(card.id))) return false
+    const unit = cardUnitId(card) || reviewUnitIdFromCardId(card.id) || reviewUnitIdFromCardId(sourceCardId(card))
+    return !(unit && hiddenUnits.has(unit))
+  })
 }
 
 function cardsWithoutCompressed(cards: FreestyleCard[], compressedIds: readonly string[] | undefined) {
@@ -284,6 +296,35 @@ function insertPendingRetryCopy(
   )
 }
 
+type DesktopProgressSyncResult =
+  | { status: 'synced'; remaining: number }
+  | { status: 'empty' }
+  | { status: 'stale' }
+  | { status: 'busy' }
+
+function isMissingActiveRound(error: unknown): boolean {
+  return Boolean(
+    error
+    && typeof error === 'object'
+    && (error as { status?: number }).status === 404,
+  )
+}
+
+function unscoredFeedCount(
+  cards: FreestyleCard[],
+  ledger: {
+    completedIds: readonly string[]
+    encounters: FreestyleSkipState['unitEncountersByCardId']
+    plan: FreestyleRoundPlanState | null
+  },
+): number {
+  return cards.filter((card) => !isOccurrenceScored(card.id, {
+    completedIds: ledger.completedIds,
+    encounters: ledger.encounters,
+    roundPlan: ledger.plan,
+  })).length
+}
+
 function asLeftoverDue(raw: unknown): Record<string, number> {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
   const result: Record<string, number> = {}
@@ -339,6 +380,7 @@ export function useImmersiveQueue(
   const queueBuildControllerRef = useRef<AbortController | null>(null)
   const localQueueMutationRef = useRef(0)
   const liveHydrationRef = useRef<LiveHydrationEntry | null>(null)
+  const desktopSyncRef = useRef(false)
   const mountedRef = useRef(true)
   const cardsRef = useRef<FreestyleCard[]>([])
   const queueStateRef = useRef(queueState)
@@ -821,7 +863,8 @@ export function useImmersiveQueue(
           if (operationIdRef.current !== operationId) return
           // Mint a new round_id only after the learner confirms config
           // (settlement 「再来一轮」 → startNextRound → forceStart). Refresh,
-          // restart, HUD 刷新队列, and leftover due must keep the frozen round.
+          // restart, stale recovery, and leftover due must keep the frozen round.
+          // HUD 「同步进度」 adopts the workspace round without minting.
           if (options?.forceStart) {
             round = await startFreestyleRoundApi({
               operation_id: createOperationId(),
@@ -1123,11 +1166,177 @@ export function useImmersiveQueue(
     [entryPalaceId, rebuildKeepingProgress, resetStaleRecovery, scopeEntryConfig, slot, syncPendingRestudyIds],
   )
 
+  /** Stale recovery and feed-error retry. Keeps the frozen round and local scores. */
   const refreshQueue = useCallback(() => {
     staleCardKeysRef.current.clear()
     resetStaleRecovery()
     void buildQueue(config, { preserveCompleted: true, reason: 'manual_refresh' })
   }, [buildQueue, config, resetStaleRecovery])
+
+  /**
+   * HUD 「同步进度」. Read the computer's workspace round and drop local-only
+   * scores. Does not mint a round_id, append cards, or call /rounds/start.
+   */
+  const syncDesktopProgress = useCallback(async (): Promise<DesktopProgressSyncResult> => {
+    if (desktopSyncRef.current) return { status: 'busy' }
+    desktopSyncRef.current = true
+    queueBuildControllerRef.current?.abort()
+    liveHydrationRef.current?.controller.abort()
+    liveHydrationRef.current = null
+    const operationId = createOperationId()
+    operationIdRef.current = operationId
+    const capturedMutation = localQueueMutationRef.current
+    const capturedSlot = slot
+    const controller = new AbortController()
+    queueBuildControllerRef.current = controller
+    setLoading(true)
+    setError('')
+    try {
+      let round: FreestyleRoundStatePayload
+      try {
+        round = await getActiveFreestyleRoundApi(capturedSlot, { signal: controller.signal })
+      } catch (error) {
+        if (controller.signal.aborted || (error instanceof Error && error.name === 'AbortError')) {
+          return { status: 'stale' }
+        }
+        if (isMissingActiveRound(error)) return { status: 'empty' }
+        throw error
+      }
+      if (
+        !mountedRef.current
+        || controller.signal.aborted
+        || operationIdRef.current !== operationId
+        || slotRef.current !== capturedSlot
+        || localQueueMutationRef.current !== capturedMutation
+      ) {
+        return { status: 'stale' }
+      }
+      const remotePlan = round.plan
+      const adoptedRoundId = String(round.round_id || '').trim()
+      if (!remotePlan || !adoptedRoundId) return { status: 'empty' }
+
+      let responseCards: FreestyleCard[] = []
+      let rawMeta: FreestyleQueueBuildResponse['round_meta'] | undefined
+      try {
+        const response = await buildQueueWithTimeout({
+          operation_id: createOperationId(),
+          round_id: adoptedRoundId,
+          config: configRef.current,
+          completed_ids: [],
+          hidden_ids: [],
+          study_window: false,
+        }, controller.signal)
+        responseCards = response.cards || []
+        rawMeta = response.round_meta
+        if (response.phase_stats) setPhaseStats(response.phase_stats)
+      } catch (error) {
+        if (controller.signal.aborted || (error instanceof Error && error.name === 'AbortError')) {
+          return { status: 'stale' }
+        }
+        responseCards = []
+      }
+      if (
+        !mountedRef.current
+        || operationIdRef.current !== operationId
+        || slotRef.current !== capturedSlot
+        || localQueueMutationRef.current !== capturedMutation
+      ) {
+        return { status: 'stale' }
+      }
+
+      const merged: FreestyleCard[] = []
+      const seen = new Set<string>()
+      for (const card of [...responseCards, ...stripReviewHintCards(cardsRef.current)]) {
+        if (seen.has(card.id)) continue
+        seen.add(card.id)
+        merged.push(card)
+      }
+      const plannedCards = cardsForServerPlan(merged, remotePlan, adoptedRoundId)
+      const remoteVersion = serverPlanVersion(round)
+      const retained = commitHydratedRoundLedger({
+        localPlan: null,
+        localCompletedIds: [],
+        localHiddenIds: [],
+        localEncounters: {},
+        adoptedRoundId,
+        cards: plannedCards,
+        config: configRef.current,
+        meta: {
+          candidate_count: Number(rawMeta?.candidate_count) || plannedCards.length,
+          scheduled_count: plannedCards.length,
+          queue_limit: Number(rawMeta?.queue_limit) || configRef.current.queue_length,
+          limit_reached: Boolean(rawMeta?.limit_reached),
+          palace_leftover_due: asLeftoverDue(rawMeta?.palace_leftover_due),
+        },
+        serverPlan: remotePlan,
+        adoptServerLedger: true,
+      })
+      const nextCards = cardsWithoutCompressed(
+        cardsWithoutHidden(insertReviewHintCards(plannedCards), retained.hiddenIds),
+        retained.plan?.compressedIds,
+      )
+      const landingId = nextUnfinishedCardId(remotePlan, nextCards)
+      const remaining = nextCards.length > 0
+        ? unscoredFeedCount(nextCards, {
+          completedIds: retained.completedIds,
+          encounters: retained.encounters,
+          plan: retained.plan,
+        })
+        : Math.max(
+          0,
+          (remotePlan.presented_ids?.length ?? 0) - retained.completedIds.length,
+        )
+      if (
+        !mountedRef.current
+        || operationIdRef.current !== operationId
+        || slotRef.current !== capturedSlot
+        || localQueueMutationRef.current !== capturedMutation
+      ) {
+        return { status: 'stale' }
+      }
+      serverPlanVersionRef.current = remoteVersion
+      setPlanVersion(remoteVersion)
+      persistQueueState({
+        ...queueStateRef.current,
+        roundId: adoptedRoundId,
+        currentCardId: landingId,
+        completedIds: retained.completedIds,
+        hiddenIds: retained.hiddenIds,
+        unitEncountersByCardId: retained.encounters,
+        roundPlan: retained.plan,
+      })
+      cardsRef.current = nextCards
+      setCards(nextCards)
+      if (rawMeta) {
+        setRoundMeta({
+          candidate_count: Number(rawMeta.candidate_count) || nextCards.length,
+          scheduled_count: nextCards.length,
+          queue_limit: Number(rawMeta.queue_limit) || configRef.current.queue_length,
+          limit_reached: Boolean(rawMeta.limit_reached),
+          palace_leftover_due: asLeftoverDue(rawMeta.palace_leftover_due),
+        })
+      }
+      if (landingId) {
+        const index = nextCards.findIndex((card) => card.id === landingId)
+        applyCurrentIndex(index >= 0 ? index : 0, nextCards)
+        setStartupVisualIndex(null)
+      } else if (nextCards.length > 0) {
+        applyCurrentIndex(nextCards.length - 1, nextCards)
+        setStartupVisualIndex(nextCards.length)
+      } else {
+        applyCurrentIndex(0, nextCards)
+        setStartupVisualIndex(null)
+      }
+      notifyPeerRound()
+      return { status: 'synced', remaining }
+    } finally {
+      desktopSyncRef.current = false
+      if (queueBuildControllerRef.current === controller) {
+        queueBuildControllerRef.current = null
+      }
+      if (operationIdRef.current === operationId) setLoading(false)
+    }
+  }, [applyCurrentIndex, notifyPeerRound, persistQueueState, slot])
 
   /**
    * Settlement 「再来一轮」: persist config, clear local progress (keep mute),
@@ -2575,6 +2784,7 @@ export function useImmersiveQueue(
     roundMeta,
     roundPlan: queueState.roundPlan,
     refreshQueue,
+    syncDesktopProgress,
     startNextRound,
     reshuffleQueue: reshuffleQueueWithRestudyClear,
     completeCard,

@@ -250,4 +250,50 @@ describe('commitHydratedRoundLedger', () => {
       roundPlan: result.plan,
     })).toBe(visible.findIndex((card) => card.id === 'b'))
   })
+
+  it('drops local-only scores when adopting the server ledger', () => {
+    let localPlan = createRoundPlan(
+      'round-1',
+      [branch('a'), branch('b'), branch('c')],
+      DEFAULT_FREESTYLE_FEED_CONFIG,
+    )
+    localPlan = updateRoundPlanCard(localPlan, 'a', { status: 'completed', lastRating: 4 })
+    localPlan = updateRoundPlanCard(localPlan, 'b', { status: 'completed', lastRating: 3 })
+    const cards = [branch('a'), branch('b'), branch('c'), branch('removed')]
+    const result = commitHydratedRoundLedger({
+      localPlan,
+      localCompletedIds: ['a', 'b'],
+      localHiddenIds: ['local-only'],
+      localEncounters: { a: encounter('a', 4), b: encounter('b', 3) },
+      adoptedRoundId: 'round-1',
+      cards,
+      config: DEFAULT_FREESTYLE_FEED_CONFIG,
+      meta: { candidate_count: 4, scheduled_count: 4, queue_limit: 20, limit_reached: false },
+      serverPlan: serverPlan({
+        presented_ids: ['a', 'b', 'c', 'removed'],
+        current_card_id: 'b',
+        completed_ids: ['a'],
+        excluded_ids: ['removed'],
+        occurrences: [{
+          occurrence_id: 'occ-a',
+          source_card_id: 'a',
+          source_unit_id: 'a-unit',
+          retry_attempt: 0,
+          rating: 2,
+          insert_target_index: 0,
+          status: 'completed',
+          encounter_id: 'enc-a',
+        }],
+      }),
+      adoptServerLedger: true,
+    })
+    expect(result.plan?.cardsById.a).toMatchObject({ status: 'completed', lastRating: 2 })
+    expect(result.completedIds).toEqual(['a'])
+    expect(result.encounters.a?.selectedRating).toBe(2)
+    expect(result.plan?.cardsById.b).toMatchObject({ status: 'pending', lastRating: null })
+    expect(result.encounters.b?.selectedRating ?? null).toBeNull()
+    expect(result.completedIds).not.toContain('b')
+    expect(result.hiddenIds).toContain('removed')
+    expect(result.hiddenIds).not.toContain('local-only')
+  })
 })

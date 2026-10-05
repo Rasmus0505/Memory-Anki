@@ -272,7 +272,10 @@ export function isDescendant(
 ): boolean {
   let current = nodes.find((node) => node.id === targetId)
 
+  const seen = new Set<string>()
   while (current?.parentId) {
+    if (seen.has(current.id)) return false
+    seen.add(current.id)
     if (current.parentId === sourceId) return true
     current = nodes.find((node) => node.id === current?.parentId)
   }
@@ -290,11 +293,24 @@ function buildLayoutForest(graphData: GraphData): LayoutTreeNode[] {
     byParent.set(key, current)
   }
 
+  const seen = new Set<string>()
   const buildNode = (
     node: MindMapNode,
     depth: number,
     inheritedColor: string,
   ): LayoutTreeNode => {
+    // Duplicate ids can put one node on two parent lists. Walking that again
+    // is a stack overflow, and a phone reload of the same graph dies the same way.
+    if (seen.has(node.id)) {
+      return {
+        node,
+        depth,
+        layoutRole: 'leaf',
+        branchColor: inheritedColor,
+        children: [],
+      }
+    }
+    seen.add(node.id)
     const rawChildren = byParent.get(node.id) ?? []
     const layoutRole: LayoutRole =
       depth === 0 ? 'root' : rawChildren.length > 0 ? 'branch' : 'leaf'

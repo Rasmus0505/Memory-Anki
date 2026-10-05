@@ -122,6 +122,8 @@ export function FreestyleUnitReviewCardView({
   onRoundSync,
   onOpenScopeQuiz,
   lastRating = null,
+  requestedRating = null,
+  onRequestedRatingHandled,
 }: {
   card: FreestyleReviewUnitCard
   active: boolean
@@ -135,6 +137,9 @@ export function FreestyleUnitReviewCardView({
   encounter?: FreestyleUnitEncounterState
   /** This-round last rating, shown while the amend glance is still empty. */
   lastRating?: number | null
+  /** Sheet asked this active card to rate once its encounter is open. */
+  requestedRating?: UnitRating | null
+  onRequestedRatingHandled?: () => void
   retryAfterCards: number
   /** Why 「下一组」 is blocked, shown inline instead of a toast. */
   blockedHint?: string | null
@@ -990,6 +995,20 @@ export function FreestyleUnitReviewCardView({
     paintOptimistic(rating, currentEncounter.id)
     if (decision.sendNow) void dispatchRating(decision.ticket)
   }
+
+  const rateFromSheetRef = useRef(rate)
+  rateFromSheetRef.current = rate
+  const handledSheetRating = useRef('')
+  useEffect(() => {
+    if (!active || requestedRating == null) return
+    const openEncounter = unit?.encounter
+    if (!session || !unit || openEncounter?.status !== 'open' || busy) return
+    const key = `${card.id}:${openEncounter.id}:${requestedRating}`
+    if (handledSheetRating.current === key) return
+    handledSheetRating.current = key
+    onRequestedRatingHandled?.()
+    void rateFromSheetRef.current(requestedRating)
+  }, [active, busy, card.id, onRequestedRatingHandled, requestedRating, session, unit])
 
   async function undoRating(options?: { clearAll?: boolean }) {
     if (readOnly) {

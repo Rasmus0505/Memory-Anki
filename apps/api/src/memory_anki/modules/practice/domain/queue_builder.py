@@ -360,11 +360,17 @@ def filter_completed(
     hidden_ids: set[str],
 ) -> list[dict[str, Any]]:
     # Same-round rebuilds must not reinsert a newer revision of a unit that
-    # already has a parent rating. A new round passes empty completed_ids.
+    # already has a parent rating or was removed from this queue. A new round
+    # passes empty completed_ids and hidden_ids.
     completed_units = {
         review_unit_id_from_card_id(item) for item in completed_ids
     }
     completed_units.discard("")
+    hidden_units = {
+        review_unit_id_from_card_id(item) for item in hidden_ids
+    }
+    hidden_units.discard("")
+    blocked_units = completed_units | hidden_units
     result: list[dict[str, Any]] = []
     for card in cards:
         card_id = str(card.get("id") or "")
@@ -372,9 +378,9 @@ def filter_completed(
             continue
         unit_id = str(card.get("unit_id") or "")
         card_unit = review_unit_id_from_card_id(card_id)
-        if unit_id and unit_id in completed_units:
+        if unit_id and unit_id in blocked_units:
             continue
-        if card_unit and card_unit in completed_units:
+        if card_unit and card_unit in blocked_units:
             continue
         result.append(card)
     return result

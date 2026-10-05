@@ -174,3 +174,29 @@ def test_start_new_round_only_resets_current_workspace_and_seeds_overlap(make_cl
     assert leftover["status"] == "active"
     assert leftover["round_id"] == "round-a"
     assert leftover["current_card_id"] == "b"
+
+
+def test_get_active_round_follows_workspace(make_client):
+    client = _client(make_client)
+    primary = _create(
+        client,
+        operation_id="op-read-primary",
+        cards=_unit_cards(("a", "unit-a")),
+        round_id="round-read-primary",
+        workspace="primary",
+    )
+    secondary = _create(
+        client,
+        operation_id="op-read-secondary",
+        cards=_unit_cards(("x", "unit-x")),
+        round_id="round-read-secondary",
+        workspace="secondary",
+    )
+    primary_read = client.get("/api/v1/freestyle/rounds/active", params={"workspace": "primary"})
+    secondary_read = client.get("/api/v1/freestyle/rounds/active", params={"workspace": "secondary"})
+    assert primary_read.status_code == 200, primary_read.text
+    assert secondary_read.status_code == 200, secondary_read.text
+    assert primary_read.json()["round_id"] == primary["round_id"]
+    assert secondary_read.json()["round_id"] == secondary["round_id"]
+    assert primary_read.json()["version"] == primary["version"]
+    assert secondary_read.json()["version"] == secondary["version"]

@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
 from memory_anki.modules.mindmap_document.api import ancestor_path
+
+_TAG = re.compile(r"<[^>]+>")
 
 
 @dataclass(frozen=True)
@@ -24,6 +27,28 @@ class ReviewUnitCandidate:
         return len(self.node_uids)
 
 
+def _plain_node_text(value: object) -> str:
+    text = _TAG.sub("", str(value or ""))
+    return text.replace("&nbsp;", " ").strip()
+
+
+def context_path_including_anchor(
+    nodes: Mapping[str, Mapping[str, Any]],
+    anchor_uid: str,
+) -> tuple[dict[str, str], ...]:
+    """Root-to-anchor path, including the marked node itself.
+
+    ``ancestor_path`` stops at the parent, so a mark directly under the root
+    would otherwise display as only the root name.
+    """
+    anchor = str(anchor_uid or "")
+    if not anchor or anchor not in nodes:
+        return ()
+    path = [dict(item) for item in ancestor_path(nodes, anchor)]
+    path.append({"uid": anchor, "text": _plain_node_text(nodes[anchor].get("text"))})
+    return tuple(path)
+
+
 def candidate_from_projection(
     *,
     palace_id: int,
@@ -34,7 +59,7 @@ def candidate_from_projection(
     return ReviewUnitCandidate(
         palace_id=palace_id,
         anchor_uid=anchor_uid,
-        context_path=tuple(ancestor_path(nodes, anchor_uid)),
+        context_path=context_path_including_anchor(nodes, anchor_uid),
         node_uids=tuple(str(uid) for uid in projection.get("node_uids") or []),
         unit_id=str(projection["id"]),
         revision=int(projection["revision"]),
@@ -42,4 +67,8 @@ def candidate_from_projection(
     )
 
 
-__all__ = ["ReviewUnitCandidate", "candidate_from_projection"]
+__all__ = [
+    "ReviewUnitCandidate",
+    "candidate_from_projection",
+    "context_path_including_anchor",
+]

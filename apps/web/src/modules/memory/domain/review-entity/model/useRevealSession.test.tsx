@@ -693,6 +693,27 @@ describe('useRevealSession', () => {
     expect(result.current.revealMap.b).toBe('revealed')
   })
 
+  it('does not adopt a synced echo that reveals nothing new', () => {
+    const { result, rerender } = renderHook(
+      ({ synced }: { synced: Record<string, 'revealed' | 'hidden'> | null }) =>
+        useRevealSession({ title: '宫殿', editorState, syncedRevealMap: synced }),
+      { initialProps: { synced: { root: 'revealed' as const, a: 'revealed' as const, b: 'hidden' as const } } },
+    )
+    const applied = result.current.revealMap
+    expect(applied.a).toBe('revealed')
+    expect(applied).not.toHaveProperty('stray')
+
+    rerender({
+      synced: {
+        b: 'hidden',
+        a: 'revealed',
+        root: 'revealed',
+        stray: 'revealed',
+      },
+    })
+    expect(result.current.revealMap).toBe(applied)
+  })
+
   it('keeps flip progress when only layout/fingerprint fields change', () => {
     const { result, rerender } = renderHook(
       ({ state }: { state: MindMapEditorState }) =>

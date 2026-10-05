@@ -16,6 +16,7 @@ from .round_plan import (
     _known_presented_ids,
     _match_key,
     _repair_current,
+    _review_unit_id,
     _rewrite_ids,
     _source_id_of,
     _text,
@@ -119,6 +120,64 @@ def drop_vanished_unstarted(
     return next_plan
 
 
+def drop_undue_unstarted(
+    plan: Mapping[str, Any],
+    due_unit_ids: set[str],
+) -> Plan:
+    """Drop unstarted cards the opener will refuse as not due.
+
+    A frozen round used to keep active units whose ``due_date`` is still in the
+    future, but opening them returns "review unit is not due". Skip then lands
+    on the next one and a rebuild puts the same cards back. Quiz cards,
+    completed cards, excluded cards, live retry sources, and cards that already
+    have an encounter stay. A dropped current card moves to the next unfinished
+    card. Callers pass units that are due today; anything else with a unit id
+    is treated as not openable.
+    """
+    next_plan = normalize_plan(plan)
+    due = {_text(item) for item in due_unit_ids if _text(item)}
+    completed = set(next_plan["completed_ids"])
+    excluded = set(next_plan["excluded_ids"])
+    retry_sources = live_retry_sources(next_plan)
+    open_cards = {_text(key) for key in next_plan["encounters"] if _text(key)}
+    kept: list[dict[str, Any]] = []
+    dropped: set[str] = set()
+    for item in next_plan["original_cards"]:
+        unit_id = _text(item.get("unit_id")) or _review_unit_id(item.get("card_id"))
+        card_id = item["card_id"]
+        undue = bool(unit_id) and unit_id not in due
+        protected = (
+            not unit_id
+            or card_id in completed
+            or card_id in excluded
+            or card_id in retry_sources
+            or card_id in open_cards
+        )
+        if undue and not protected:
+            dropped.add(card_id)
+            continue
+        kept.append(item)
+    if not dropped:
+        return next_plan
+    next_plan["original_cards"] = kept
+    next_plan["occurrences"] = [
+        occ
+        for occ in next_plan["occurrences"]
+        if _text(occ.get("source_card_id")) not in dropped
+    ]
+    next_plan["encounters"] = {
+        key: value
+        for key, value in next_plan["encounters"].items()
+        if key not in dropped
+    }
+    known = _known_presented_ids(next_plan)
+    next_plan["presented_ids"] = [
+        item for item in next_plan["presented_ids"] if item in known
+    ]
+    _repair_current(next_plan)
+    return next_plan
+
+
 def append_today_cards(
     plan: Mapping[str, Any],
     cards: Sequence[Mapping[str, Any]],
@@ -139,9 +198,21 @@ def append_today_cards(
         stamp_new=True,
     )
     incoming_ids = [item["card_id"] for item in incoming]
+    incoming_units = {
+        item["card_id"]: _text(item.get("unit_id")) or _review_unit_id(item.get("card_id"))
+        for item in incoming
+    }
     compressed = set(next_plan["compressed_ids"])
+    excluded = set(next_plan["excluded_ids"])
+    excluded_units = _blocked_unit_ids(next_plan, excluded)
     for card_id in incoming_ids:
-        if card_id not in next_plan["presented_ids"] and card_id not in compressed:
+        if card_id in compressed or card_id in excluded:
+            continue
+        unit = incoming_units.get(card_id) or ""
+        # A newer revision of a unit already removed from this queue stays out.
+        if unit and unit in excluded_units:
+            continue
+        if card_id not in next_plan["presented_ids"]:
             next_plan["presented_ids"].append(card_id)
     known = _known_presented_ids(next_plan)
     next_plan["presented_ids"] = [item for item in next_plan["presented_ids"] if item in known]
@@ -193,9 +264,17 @@ def replan_remaining(
             prefix.append(source_id)
             seen.add(source_id)
     incoming_ids = [item["card_id"] for item in incoming]
+    incoming_units = {
+        item["card_id"]: _text(item.get("unit_id")) or _review_unit_id(item.get("card_id"))
+        for item in incoming
+    }
+    excluded_units = _blocked_unit_ids(next_plan, excluded)
     suffix: list[str] = []
     for card_id in incoming_ids:
         if card_id in seen or card_id in excluded or card_id in completed or card_id in compressed:
+            continue
+        unit = incoming_units.get(card_id) or ""
+        if unit and unit in excluded_units:
             continue
         suffix.append(card_id)
         seen.add(card_id)
@@ -228,6 +307,22 @@ def replan_remaining(
     next_plan["presented_ids"] = [item for item in next_plan["presented_ids"] if item in known]
     _repair_current(next_plan)
     return next_plan
+
+
+def _blocked_unit_ids(plan: Mapping[str, Any], blocked_ids: set[str]) -> set[str]:
+    """Units already removed or finished, including ids that only live on the card id."""
+    units: set[str] = set()
+    for card_id in blocked_ids:
+        unit = _review_unit_id(card_id)
+        if unit:
+            units.add(unit)
+    for item in plan.get("original_cards") or []:
+        if not isinstance(item, Mapping) or item.get("card_id") not in blocked_ids:
+            continue
+        unit = _text(item.get("unit_id")) or _review_unit_id(item.get("card_id"))
+        if unit:
+            units.add(unit)
+    return units
 
 
 def _merge_incoming(

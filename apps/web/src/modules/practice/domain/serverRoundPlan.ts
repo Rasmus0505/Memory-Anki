@@ -146,8 +146,9 @@ export function cardsForServerPlan(
   }
   const removedSource = (card: FreestyleCard) => {
     if (excludedIds.has(String(card.id || '').trim())) return true
-    if (isRetryOccurrence(card)) return false
-    const unit = cardUnitId(card) || reviewUnitIdFromCardId(card.id)
+    const unit = cardUnitId(card)
+      || reviewUnitIdFromCardId(card.id)
+      || reviewUnitIdFromCardId(sourceCardId(card))
     return Boolean(unit && excludedUnits.has(unit))
   }
 
@@ -166,7 +167,7 @@ export function cardsForServerPlan(
     if (skippedIds.has(String(id || '').trim())) continue
     const existing = byId.get(id)
     if (existing) {
-      push(existing)
+      if (!removedSource(existing)) push(existing)
       continue
     }
     const original = originalById.get(id)
@@ -177,7 +178,7 @@ export function cardsForServerPlan(
     }
     const reconstructed = cardFromOriginalSnapshot(original)
     if (reconstructed) {
-      push(reconstructed)
+      if (!removedSource(reconstructed)) push(reconstructed)
       continue
     }
     const occurrence = (plan.occurrences || []).find((item) => item.occurrence_id === id)

@@ -550,7 +550,15 @@ export function hideCards(state: FreestyleSkipState, cardIds: Iterable<string>):
 export function restoreCards(state: FreestyleSkipState, cardIds: Iterable<string>): FreestyleSkipState {
   const ids = new Set(Array.from(cardIds, (id) => String(id || '').trim()).filter(Boolean))
   if (!ids.size) return state
-  return { ...state, hiddenIds: state.hiddenIds.filter((id) => !ids.has(id)) }
+  const units = new Set([...ids].map((id) => reviewUnitIdFromCardId(id)).filter(Boolean))
+  return {
+    ...state,
+    hiddenIds: state.hiddenIds.filter((id) => {
+      if (ids.has(id)) return false
+      const unit = reviewUnitIdFromCardId(id)
+      return !(unit && units.has(unit))
+    }),
+  }
 }
 
 export function setUnitEncounterState(

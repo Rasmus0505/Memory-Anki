@@ -33,13 +33,13 @@ export function FreestyleHudOverflow({
   summaryLabel,
   slot,
   onOpenPlan,
-  onRefresh,
+  onSyncProgress,
   onOpenHistory,
 }: {
   summaryLabel: string
   slot: FreestyleWorkspaceId
   onOpenPlan: () => void
-  onRefresh: () => void
+  onSyncProgress: () => void
   onOpenHistory: () => void
 }) {
   return (
@@ -64,9 +64,9 @@ export function FreestyleHudOverflow({
             {summaryLabel}
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={() => onRefresh()}>
+          <DropdownMenuItem onSelect={() => onSyncProgress()}>
             <RefreshCw className="mr-2 size-4" />
-            刷新队列
+            同步进度
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => onOpenHistory()}>
             <History className="mr-2 size-4" />

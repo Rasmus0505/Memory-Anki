@@ -284,6 +284,76 @@ describe('FreestyleProgressRail', () => {
     expect(onOpenPlan).toHaveBeenCalledTimes(1)
   })
 
+  it('jumps to the clicked tick instead of opening the plan', () => {
+    const onJump = vi.fn()
+    const { onOpenPlan } = renderRail({ onJump })
+
+    fireEvent.click(screen.getByLabelText('4/4 · 《four》 · 待练'))
+    expect(onJump).toHaveBeenCalledTimes(1)
+    expect(onJump).toHaveBeenCalledWith('four')
+    expect(onOpenPlan).not.toHaveBeenCalled()
+  })
+
+  it('jumps to a retry occurrence from its tick', () => {
+    const onJump = vi.fn()
+    renderRail({
+      onJump,
+      summary: summary({
+        segments: [
+          { cardId: 'one', tone: 'done', palaceId: 1, palaceDone: false, kind: 'source', sourceLabel: 'one' },
+          {
+            cardId: 'retry:round-1:one:2',
+            tone: 'retry',
+            palaceId: 1,
+            palaceDone: false,
+            kind: 'retry',
+            retryAttempt: 2,
+            sourceCardId: 'one',
+            sourceLabel: 'one',
+          },
+        ],
+        position: 2,
+        total: 2,
+      }),
+    })
+
+    fireEvent.click(screen.getByTestId('freestyle-progress-retry-node'))
+    expect(onJump).toHaveBeenCalledWith('retry:round-1:one:2')
+  })
+
+  it('still opens the plan from the HUD count when ticks can jump', () => {
+    const onJump = vi.fn()
+    const { onOpenPlan } = renderRail({ onJump })
+
+    fireEvent.click(screen.getByTestId('freestyle-progress-hud'))
+    expect(onOpenPlan).toHaveBeenCalledTimes(1)
+    expect(onJump).not.toHaveBeenCalled()
+    expect(screen.getByTestId('freestyle-progress-rail').getAttribute('aria-label'))
+      .toBe('本轮进度 3/4。点击分段跳转到对应卡片')
+  })
+
+  it('opens the plan from an empty rail even when jump is wired', () => {
+    const onJump = vi.fn()
+    const { onOpenPlan } = renderRail({
+      onJump,
+      summary: summary({
+        segments: [],
+        position: 0,
+        total: 0,
+        doneCount: 0,
+        retryCount: 0,
+        scheduledBase: 0,
+        positionBase: 0,
+        retryInserted: 0,
+        passedCount: 0,
+      }),
+    })
+
+    fireEvent.click(screen.getByTestId('freestyle-progress-rail'))
+    expect(onOpenPlan).toHaveBeenCalledTimes(1)
+    expect(onJump).not.toHaveBeenCalled()
+  })
+
   it('renders an empty rail without segments for an empty round', () => {
     renderRail({
       summary: summary({
