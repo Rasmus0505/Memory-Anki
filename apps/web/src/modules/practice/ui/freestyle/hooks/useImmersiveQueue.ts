@@ -15,6 +15,7 @@ import {
   type FreestylePartialSettlementSnapshot,
 } from '@/modules/practice/domain/partialSettlement'
 import {
+  applyServerCohorts,
   cardsForServerPlan,
   nextUnfinishedCardId,
   planCardCohort,
@@ -1671,6 +1672,21 @@ export function useImmersiveQueue(
       const liveId = resolveLeaveConfirmViewportId({
         leavingCardId: leftId,
         liveCardId: cardsRef.current[currentIndexRef.current]?.id ?? null,
+      })
+      // Publish the same confirmed order to the HUD plan as to the swipe feed.
+      // Updating cards alone leaves phantom in-between ticks in the plan-first rail.
+      persistQueueState({
+        ...queueStateRef.current,
+        roundPlan: applyServerCohorts(
+          createRoundPlan(
+            roundId,
+            stripReviewHintCards(confirmed),
+            configRef.current,
+            undefined,
+            queueStateRef.current.roundPlan,
+          ),
+          round.plan,
+        ),
       })
       if (confirmed !== cardsRef.current) {
         cardsRef.current = confirmed

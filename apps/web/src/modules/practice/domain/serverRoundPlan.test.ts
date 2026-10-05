@@ -3,6 +3,7 @@ import type { FreestyleReviewUnitCard, FreestyleRoundPlanPayload } from '@/share
 
 import { createRetryOccurrence } from './queueState'
 import {
+  applyServerCohorts,
   applyServerRatingsToRoundPlan,
   cardsForServerPlan,
   mergeServerPlanIntoLocalEncounters,
@@ -522,6 +523,35 @@ describe('server round plan hydrate', () => {
     }
     const hydrated = cardsForServerPlan([source, localRetry], plan, 'round-1')
     expect(hydrated.map((card) => card.id)).toEqual(['review_unit:u1:r1', 'retry:local-open'])
+  })
+
+  it('keeps the progress plan in feed order when a confirmed retry retains its local id', () => {
+    const source = branch('a')
+    const retry = createRetryOccurrence(source, 'round-1', 1, 3, 'retry:local-open')
+    const cards = [source, branch('b'), branch('c'), retry]
+    const local = createRoundPlan('round-1', cards, DEFAULT_FREESTYLE_FEED_CONFIG)
+    const server: FreestyleRoundPlanPayload = {
+      original_cards: [],
+      presented_ids: ['a', 'b', 'retry:round-1:a-unit:1', 'c'],
+      current_card_id: 'b',
+      current_index: 1,
+      completed_ids: [],
+      excluded_ids: [],
+      occurrences: [{
+        occurrence_id: 'retry:round-1:a-unit:1',
+        source_card_id: 'a',
+        source_unit_id: 'a-unit',
+        retry_attempt: 1,
+        rating: 2,
+        insert_target_index: 2,
+        status: 'inserted',
+        encounter_id: '',
+      }],
+      encounters: {},
+    }
+    const feed = cardsForServerPlan(cards, server, 'round-1')
+    expect(applyServerCohorts(local, server).orderIds).toEqual(feed.map((card) => card.id))
+    expect(applyServerCohorts(local, server).orderIds).toEqual(['a', 'b', retry.id, 'c'])
   })
 })
 

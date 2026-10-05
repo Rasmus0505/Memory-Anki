@@ -23,7 +23,6 @@ import { mergePartialSettlementLists } from './partialSettlement'
 export function retryOccurrenceId(roundId: string, sourceId: string, attempt: number) {
   return `retry:${roundId}:${sourceId}:${attempt}`
 }
-
 /** Stamp leftover/today cohorts from the server plan onto the HUD round plan. */
 export function applyServerCohorts(
   plan: FreestyleRoundPlanState,
@@ -52,7 +51,12 @@ export function applyServerCohorts(
   const today = String(server.today || '').trim()
   const compressedIds = (server.compressed_ids || []).map((id) => String(id || '').trim()).filter(Boolean)
   compressedIds.forEach((id) => { delete cardsById[id] })
-  const presented = (server.presented_ids || []).filter((id) => Boolean(cardsById[id]))
+  // Keep optimistic retry ids in the same server slot without remounting the card.
+  const retryAliases = new Map((server.occurrences || []).map((occ) => [occ.occurrence_id,
+    Object.values(cardsById).find((item) => item.occurrenceKind === 'retry' && item.sourceCardId === occ.source_card_id
+      && item.retryAttempt === occ.retry_attempt)?.cardId]))
+  const presented = (server.presented_ids || []).map((id) => cardsById[id] ? id : retryAliases.get(id) || id)
+    .filter((id) => Boolean(cardsById[id]))
   const extra = plan.orderIds.filter((id) => !presented.includes(id) && Boolean(cardsById[id]))
   const orderIds = presented.length ? [...presented, ...extra] : plan.orderIds.filter((id) => !compressedIds.includes(id))
   const nextCompressed = compressedIds.length ? [...new Set([...(plan.compressedIds ?? []), ...compressedIds])] : plan.compressedIds
