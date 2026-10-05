@@ -16,6 +16,14 @@ export interface FreestyleLiveRating {
   settled: FreestyleLiveRatingSettle[]
 }
 
+export interface FreestyleLiveViewport {
+  currentCardId: string | null
+  visualIndex: number
+  viewingCompleteSlot: boolean
+  roundId: string
+  planVersion: number
+}
+
 export interface FreestyleLiveView {
   palaceId: number | null
   currentCardId: string | null
@@ -25,6 +33,10 @@ export interface FreestyleLiveView {
   revealMap: Record<string, string> | null
   roundComplete: boolean
   rating: FreestyleLiveRating | null
+  visualIndex: number
+  viewingCompleteSlot: boolean
+  roundId: string
+  planVersion: number
 }
 
 export function encodeFreestyleLiveView(view: FreestyleLiveView): FreestyleLiveView {
@@ -52,6 +64,14 @@ export function decodeFreestyleLiveView(raw: unknown): FreestyleLiveView | null 
     currentCardId,
     currentIndex,
     queueCardIds,
+    visualIndex: typeof record.visualIndex === 'number' && Number.isFinite(record.visualIndex)
+      ? record.visualIndex
+      : currentIndex,
+    viewingCompleteSlot: record.viewingCompleteSlot === true,
+    roundId: typeof record.roundId === 'string' ? record.roundId : '',
+    planVersion: typeof record.planVersion === 'number' && Number.isFinite(record.planVersion)
+      ? record.planVersion
+      : 0,
     questionState: questionRaw && typeof questionRaw.questionId === 'number'
       ? {
           questionId: questionRaw.questionId,

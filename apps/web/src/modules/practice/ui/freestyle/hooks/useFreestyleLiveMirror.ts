@@ -15,6 +15,7 @@ import {
   serializeFreestyleLiveView,
   type FreestyleLiveRating,
   type FreestyleLiveView,
+  type FreestyleLiveViewport,
 } from '@/modules/practice/ui/freestyle/model/freestyleLiveView'
 
 export function useFreestyleLiveMirror({
@@ -22,13 +23,18 @@ export function useFreestyleLiveMirror({
   palaceId,
   currentCardId,
   currentIndex,
+  visualIndex,
+  viewingCompleteSlot,
+  roundId,
+  planVersion,
   queueCardIds,
   roundComplete,
   questionId,
   questionState,
   revealMap,
   rating,
-  seekCardId,
+  applyViewport,
+  requestRoundSync,
   applyQuestionState,
   applyRevealMap,
   applyRating,
@@ -38,13 +44,18 @@ export function useFreestyleLiveMirror({
   palaceId: number | null
   currentCardId: string | null
   currentIndex: number
+  visualIndex: number
+  viewingCompleteSlot: boolean
+  roundId: string
+  planVersion: number
   queueCardIds: string[]
   roundComplete: boolean
   questionId: number | null
   questionState: QuizRuntimeState | undefined
   revealMap: Record<string, string> | null
   rating: FreestyleLiveRating | null
-  seekCardId: (cardId: string) => void
+  applyViewport: (viewport: FreestyleLiveViewport) => boolean
+  requestRoundSync?: (view: FreestyleLiveView) => void
   applyQuestionState: (questionId: number, state: QuizRuntimeState) => void
   applyRevealMap: (revealMap: Record<string, string> | null) => void
   applyRating: (rating: FreestyleLiveRating) => void
@@ -55,9 +66,14 @@ export function useFreestyleLiveMirror({
   const lastSentRef = useRef('')
   const lastAppliedRevisionRef = useRef(-1)
   const pendingApplyRef = useRef(false)
+  const pendingRemoteRevisionRef = useRef<number | null>(null)
+  const appliedRemoteRatingRevisionRef = useRef<number | null>(null)
+  const appliedRemoteDetailsRevisionRef = useRef<number | null>(null)
+  const syncRequestedRevisionRef = useRef<number | null>(null)
   useEffect(() => {
-    if (!presence || presence.isController) return
+    if (!presence || !isActive) return
     if (presence.projection.surface !== 'freestyle') return
+    if (presence.projection.route !== route) return
     const decoded = decodeFreestyleLiveView(presence.projection.view)
     if (!decoded) return
     const viewJson = serializeFreestyleLiveView(decoded)
@@ -67,6 +83,25 @@ export function useFreestyleLiveMirror({
       viewJson,
       lastAppliedViewJson: lastSentRef.current,
     })
+    const remoteRevision = presence.projection.revision
+    const applyRemoteRating = () => {
+      if (appliedRemoteRatingRevisionRef.current === remoteRevision) return
+      if (decoded.rating && isWeakerLiveRating(rating, decoded.rating)) {
+        applyRating(decoded.rating)
+      }
+      appliedRemoteRatingRevisionRef.current = remoteRevision
+    }
+    const applyRemoteDetails = () => {
+      if (appliedRemoteDetailsRevisionRef.current === remoteRevision) return
+      if (decoded.questionState) {
+        applyQuestionState(decoded.questionState.questionId, decoded.questionState.state)
+      }
+      if (decoded.revealMap && !isWeakerRevealMap(decoded.revealMap, revealMap)) {
+        applyRevealMap(decoded.revealMap)
+      }
+      applyRemoteRating()
+      appliedRemoteDetailsRevisionRef.current = remoteRevision
+    }
     const followAction = resolveFreestyleLiveFollowAction({
       applyDecision,
       remoteCardId: decoded.currentCardId,
@@ -75,33 +110,62 @@ export function useFreestyleLiveMirror({
     })
     if (followAction === 'skip') return
     if (followAction === 'wait-queue') {
+      if (!decoded.roundId || decoded.roundId === roundId) applyRemoteRating()
+      pendingRemoteRevisionRef.current = presence.projection.revision
       skipUntilCardIdRef.current = decoded.currentCardId
-      return
-    }
-    if (followAction === 'seek' && decoded.currentCardId) {
-      skipUntilCardIdRef.current = decoded.currentCardId
-      seekCardId(decoded.currentCardId)
+      if (requestRoundSync && syncRequestedRevisionRef.current !== presence.projection.revision) {
+        syncRequestedRevisionRef.current = presence.projection.revision
+        requestRoundSync(decoded)
+      }
       return
     }
     if (followAction === 'abandon') {
+      if (decoded.roundId && decoded.roundId !== roundId) {
+        pendingRemoteRevisionRef.current = presence.projection.revision
+        skipUntilCardIdRef.current = decoded.currentCardId
+        if (requestRoundSync && syncRequestedRevisionRef.current !== presence.projection.revision) {
+          syncRequestedRevisionRef.current = presence.projection.revision
+          requestRoundSync(decoded)
+        }
+        return
+      }
+      pendingRemoteRevisionRef.current = null
       lastAppliedRevisionRef.current = presence.projection.revision
       skipUntilCardIdRef.current = null
       return
     }
+    if (followAction === 'consume-revision') {
+      lastAppliedRevisionRef.current = presence.projection.revision
+      return
+    }
+    if (!applyViewport({
+      currentCardId: decoded.currentCardId,
+      visualIndex: decoded.visualIndex,
+      viewingCompleteSlot: decoded.viewingCompleteSlot,
+      roundId: decoded.roundId,
+      planVersion: decoded.planVersion,
+    })) {
+      if (!decoded.roundId || decoded.roundId === roundId) applyRemoteRating()
+      pendingRemoteRevisionRef.current = presence.projection.revision
+      skipUntilCardIdRef.current = decoded.currentCardId
+      return
+    }
+    pendingRemoteRevisionRef.current = null
     lastAppliedRevisionRef.current = presence.projection.revision
-    if (followAction === 'consume-revision') return
     lastSentRef.current = viewJson
-    pendingApplyRef.current = true
+    const viewportChanged = decoded.currentCardId !== currentCardId
+      || decoded.visualIndex !== visualIndex
+      || decoded.viewingCompleteSlot !== viewingCompleteSlot
+      || decoded.roundId !== roundId
+      || decoded.planVersion !== planVersion
+    const detailsChanged = Boolean(
+      decoded.questionState
+      || (decoded.revealMap && !isWeakerRevealMap(decoded.revealMap, revealMap))
+      || (decoded.rating && isWeakerLiveRating(rating, decoded.rating)),
+    )
+    pendingApplyRef.current = viewportChanged || detailsChanged
     skipUntilCardIdRef.current = decoded.currentCardId
-    if (decoded.questionState) {
-      applyQuestionState(decoded.questionState.questionId, decoded.questionState.state)
-    }
-    if (decoded.revealMap && !isWeakerRevealMap(decoded.revealMap, revealMap)) {
-      applyRevealMap(decoded.revealMap)
-    }
-    if (decoded.rating && !isWeakerLiveRating(decoded.rating, rating)) {
-      applyRating(decoded.rating)
-    }
+    applyRemoteDetails()
   }, [
     applyQuestionState,
     applyRating,
@@ -110,18 +174,28 @@ export function useFreestyleLiveMirror({
     presence,
     queueCardIds,
     rating,
+    planVersion,
+    visualIndex,
+    viewingCompleteSlot,
     revealMap,
-    seekCardId,
+    applyViewport,
+    isActive,
+    route,
+    roundId,
+    requestRoundSync,
   ])
 
   useEffect(() => {
     if (!presence) return
+    if (pendingRemoteRevisionRef.current === presence.projection.revision) return
     if (skipUntilCardIdRef.current && currentCardId !== skipUntilCardIdRef.current) return
     skipUntilCardIdRef.current = null
     const view: FreestyleLiveView = {
       palaceId,
       currentCardId,
       currentIndex,
+      visualIndex,
+      viewingCompleteSlot,
       queueCardIds,
       questionState: questionId != null && questionState
         ? { questionId, state: questionState }
@@ -129,6 +203,8 @@ export function useFreestyleLiveMirror({
       revealMap,
       roundComplete,
       rating,
+      roundId,
+      planVersion,
     }
     const serialized = serializeFreestyleLiveView(view)
     const isFollower = isPassiveLiveStudyFollower({
@@ -144,6 +220,10 @@ export function useFreestyleLiveMirror({
       previous
       && previous.currentCardId === view.currentCardId
       && previous.roundComplete === view.roundComplete
+      && previous.visualIndex === view.visualIndex
+      && previous.viewingCompleteSlot === view.viewingCompleteSlot
+      && previous.roundId === view.roundId
+      && previous.planVersion === view.planVersion
       && JSON.stringify(previous.questionState) === JSON.stringify(view.questionState)
       && JSON.stringify(previous.revealMap) === JSON.stringify(view.revealMap)
       && JSON.stringify(previous.rating) === JSON.stringify(view.rating),
@@ -190,5 +270,9 @@ export function useFreestyleLiveMirror({
     revealMap,
     roundComplete,
     route,
+    visualIndex,
+    viewingCompleteSlot,
+    roundId,
+    planVersion,
   ])
 }

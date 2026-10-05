@@ -2,7 +2,7 @@ import { useCallback, useMemo, useRef, useState } from 'react'
 import type { useImmersiveQueue } from '@/modules/practice/ui/freestyle/hooks/useImmersiveQueue'
 import type { useFreestyleQuizFlow } from '@/modules/practice/ui/freestyle/hooks/useFreestyleQuizFlow'
 import { useFreestyleLiveMirror } from '@/modules/practice/ui/freestyle/hooks/useFreestyleLiveMirror'
-import type { FreestyleLiveRating } from '@/modules/practice/ui/freestyle/model/freestyleLiveView'
+import type { FreestyleLiveRating, FreestyleLiveView } from '@/modules/practice/ui/freestyle/model/freestyleLiveView'
 import {
   readFreestyleRevealMap,
   writeFreestyleRevealMap,
@@ -22,6 +22,8 @@ export function useFreestyleLiveSync({
   currentIndex,
   currentCard,
   roundComplete,
+  visualIndex,
+  viewingCompleteSlot,
   planVersion,
   queueState,
   navigateToIndex,
@@ -30,6 +32,7 @@ export function useFreestyleLiveSync({
   adoptRoundVersion,
   updateUnitEncounter,
   completeCardBatch,
+  hydrateLiveRound,
 }: {
   fullPath: string
   entryPalaceId: number | null
@@ -38,6 +41,8 @@ export function useFreestyleLiveSync({
   currentIndex: number
   currentCard: ImmersiveQueue['cards'][number] | null
   roundComplete: boolean
+  visualIndex: number
+  viewingCompleteSlot: boolean
   planVersion: number
   queueState: ImmersiveQueue['queueState']
   navigateToIndex: (index: number, options?: { reorderRestudy?: boolean }) => void
@@ -46,6 +51,7 @@ export function useFreestyleLiveSync({
   adoptRoundVersion: ImmersiveQueue['adoptRoundVersion']
   updateUnitEncounter: ImmersiveQueue['updateUnitEncounter']
   completeCardBatch: ImmersiveQueue['completeCardBatch']
+  hydrateLiveRound: ImmersiveQueue['hydrateLiveRound']
 }) {
   const [liveRevealMap, setLiveRevealMap] = useState<Record<string, string> | null>(null)
   const seededRevealCardIdRef = useRef<string | null>(null)
@@ -59,10 +65,38 @@ export function useFreestyleLiveSync({
     setLiveRevealMap(revealCacheKey ? readFreestyleRevealMap(revealCacheKey) : null)
   }
 
-  const seekLiveCardId = useCallback((cardId: string) => {
-    const index = cards.findIndex((card) => card.id === cardId)
-    if (index >= 0) navigateToIndex(index, { reorderRestudy: false })
-  }, [cards, navigateToIndex])
+  const applyLiveViewport = useCallback((viewport: {
+    currentCardId: string | null
+    visualIndex: number
+    viewingCompleteSlot: boolean
+    roundId: string
+    planVersion: number
+  }) => {
+    const localRound = queueStateRef.current
+    if (viewport.roundId && viewport.roundId !== localRound.roundId) return false
+    if (viewport.planVersion > 0 && planVersion > 0 && viewport.planVersion > planVersion) return false
+    if (viewport.viewingCompleteSlot) {
+      if (!roundComplete) return false
+      navigateToIndex(cards.length, { reorderRestudy: false })
+      return true
+    }
+    if (viewport.currentCardId) {
+      const index = cards.findIndex((card) => card.id === viewport.currentCardId)
+      if (index >= 0) {
+        navigateToIndex(index, { reorderRestudy: false })
+        return true
+      }
+      return false
+    }
+    if (Number.isFinite(viewport.visualIndex)) {
+      const index = Math.max(0, Math.min(cards.length - 1, Math.trunc(viewport.visualIndex)))
+      if (cards[index]) {
+        navigateToIndex(index, { reorderRestudy: false })
+        return true
+      }
+    }
+    return false
+  }, [cards, navigateToIndex, planVersion, roundComplete])
   const applyLiveQuestionState = useCallback((questionId: number, state: QuizRuntimeState) => {
     updateQuestionState(questionId, (current) => (
       JSON.stringify(current) === JSON.stringify(state) ? current : state
@@ -132,20 +166,33 @@ export function useFreestyleLiveSync({
     }
   }, [adoptRoundVersion, completeCardBatch, updateUnitEncounter])
   const queueCardIds = useMemo(() => cards.map((card) => card.id), [cards])
+  const requestRoundSync = useCallback((view: FreestyleLiveView) => {
+    if (!view.roundId) return
+    void hydrateLiveRound({
+      roundId: view.roundId,
+      planVersion: view.planVersion,
+      queueCardIds: view.queueCardIds,
+    })
+  }, [hydrateLiveRound])
   useFreestyleLiveMirror({
     route: fullPath,
     palaceId: entryPalaceId,
     currentCardId: currentCard?.id ?? null,
     currentIndex,
+    visualIndex,
+    viewingCompleteSlot,
     queueCardIds,
     roundComplete,
+    roundId: queueState.roundId,
+    planVersion,
     questionId: currentCard && isQuizCard(currentCard) ? currentCard.question.id : null,
     questionState: currentCard && isQuizCard(currentCard)
       ? progress.questionStates[currentCard.question.id]
       : undefined,
     revealMap: liveRevealMap,
     rating: liveRating,
-    seekCardId: seekLiveCardId,
+    applyViewport: applyLiveViewport,
+    requestRoundSync,
     applyQuestionState: applyLiveQuestionState,
     applyRevealMap: applyLiveRevealMap,
     applyRating: applyLiveRating,

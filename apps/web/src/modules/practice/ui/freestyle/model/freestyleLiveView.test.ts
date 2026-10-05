@@ -1,7 +1,72 @@
 import { describe, expect, it } from 'vitest'
-import { decodeFreestyleLiveView, isWeakerLiveRating } from './freestyleLiveView'
+import { decodeFreestyleLiveView, isWeakerLiveRating, serializeFreestyleLiveView } from './freestyleLiveView'
 
 describe('decodeFreestyleLiveView', () => {
+  it('defaults the new viewport fields for a legacy payload', () => {
+    const view = decodeFreestyleLiveView({
+      palaceId: 7,
+      currentCardId: 'card-2',
+      currentIndex: 1,
+      queueCardIds: ['card-1', 'card-2'],
+      roundComplete: true,
+    })
+    expect(view).toMatchObject({
+      currentCardId: 'card-2',
+      currentIndex: 1,
+      visualIndex: 1,
+      viewingCompleteSlot: false,
+      roundComplete: true,
+      roundId: '',
+      planVersion: 0,
+    })
+  })
+
+  it.each([
+    { visualIndex: 2, viewingCompleteSlot: true },
+    { visualIndex: 1, viewingCompleteSlot: false },
+  ])('preserves the explicit viewport independently of currentIndex: $viewingCompleteSlot', (viewport) => {
+    const view = decodeFreestyleLiveView({
+      palaceId: 7,
+      currentCardId: 'card-2',
+      currentIndex: 0,
+      queueCardIds: ['card-1', 'card-2'],
+      ...viewport,
+      roundId: 'round-9',
+      planVersion: 12,
+    })
+    expect(view).toMatchObject({
+      currentCardId: 'card-2',
+      currentIndex: 0,
+      ...viewport,
+      roundId: 'round-9',
+      planVersion: 12,
+    })
+    expect(decodeFreestyleLiveView(JSON.parse(serializeFreestyleLiveView(view!)))).toEqual(view)
+  })
+
+  it('falls back safely when viewport fields have invalid types or non-finite numbers', () => {
+    expect(decodeFreestyleLiveView({
+      currentIndex: 3,
+      visualIndex: Number.NaN,
+      viewingCompleteSlot: 'true',
+      roundId: 9,
+      planVersion: Number.POSITIVE_INFINITY,
+    })).toMatchObject({
+      currentIndex: 3,
+      visualIndex: 3,
+      viewingCompleteSlot: false,
+      roundId: '',
+      planVersion: 0,
+    })
+    expect(decodeFreestyleLiveView({})).toMatchObject({
+      currentIndex: 0,
+      visualIndex: 0,
+      viewingCompleteSlot: false,
+      roundId: '',
+      planVersion: 0,
+    })
+  })
+
   it('reads the mirrored freestyle surface fields', () => {
     const view = decodeFreestyleLiveView({
       palaceId: 7,

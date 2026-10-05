@@ -232,6 +232,18 @@ type PendingRestudy = {
   rating?: number
 }
 
+export type HydrateLiveRoundInput = {
+  roundId: string
+  planVersion: number
+  queueCardIds: string[]
+}
+
+type LiveHydrationEntry = {
+  key: string
+  controller: AbortController
+  promise: Promise<void>
+}
+
 function insertPendingRetryCopy(
   cards: FreestyleCard[],
   sourceId: string,
@@ -298,6 +310,8 @@ export function useImmersiveQueue(
   workspace: FreestyleWorkspaceId = FREESTYLE_WORKSPACE_PRIMARY,
 ) {
   const slot = normalizeFreestyleWorkspaceId(workspace)
+  const slotRef = useRef(slot)
+  slotRef.current = slot
   const location = useLocation()
   const unlockedEntryPalaceIdRef = useRef<number | null>(null)
   const scopeEntryConfig = useCallback(
@@ -322,6 +336,9 @@ export function useImmersiveQueue(
   })
   const operationIdRef = useRef<string>('')
   const queueBuildControllerRef = useRef<AbortController | null>(null)
+  const localQueueMutationRef = useRef(0)
+  const liveHydrationRef = useRef<LiveHydrationEntry | null>(null)
+  const mountedRef = useRef(true)
   const cardsRef = useRef<FreestyleCard[]>([])
   const queueStateRef = useRef(queueState)
   const configRef = useRef(config)
@@ -348,6 +365,8 @@ export function useImmersiveQueue(
   const [staleCircuitOpen, setStaleCircuitOpen] = useState(false)
   const [staleRecoveryCardId, setStaleRecoveryCardId] = useState<string | null>(null)
   const serverPlanVersionRef = useRef(0)
+  const cursorCommitTimerRef = useRef<number | null>(null)
+  const pendingCursorRef = useRef<string | null>(null)
   /** Restores in flight. A stale server exclude list must not hide these again. */
   const pendingReleaseIdsRef = useRef(new Set<string>())
   const [planVersion, setPlanVersion] = useState(0)
@@ -380,7 +399,10 @@ export function useImmersiveQueue(
 
   useEffect(() => {
     return () => {
+      mountedRef.current = false
       queueBuildControllerRef.current?.abort()
+      liveHydrationRef.current?.controller.abort()
+      liveHydrationRef.current = null
       if (staleRebuildTimerRef.current != null) {
         window.clearTimeout(staleRebuildTimerRef.current)
         staleRebuildTimerRef.current = null
@@ -403,6 +425,7 @@ export function useImmersiveQueue(
   }, [syncStaleCircuit])
 
   const persistQueueState = useCallback((next: FreestyleSkipState) => {
+    localQueueMutationRef.current += 1
     const sanitized = saveQueueState(next, slot)
     queueStateRef.current = sanitized
     setQueueState(sanitized)
@@ -427,14 +450,9 @@ export function useImmersiveQueue(
     [persistQueueState],
   )
 
-  /** Commit the viewport card to the server round cursor so F5 can restore it. */
-  const commitRoundCursor = useCallback((cardId: string | null | undefined) => {
-    const target = cardId ? String(cardId).trim() : ''
-    if (!target) return
-    // The yellow hint lives only in the presented feed — never a server cursor.
-    if (isReviewHintId(target)) return
+  const sendRoundCursor = useCallback((target: string) => {
     const roundId = queueStateRef.current.roundId
-    if (!roundId) return
+    if (!roundId || isReviewHintId(target)) return
     void applyFreestyleRoundActionApi(roundId, {
       operation_id: createOperationId(),
       expected_version: serverPlanVersionRef.current,
@@ -448,6 +466,41 @@ export function useImmersiveQueue(
       // Local draft cursor remains; next successful settle retries.
     })
   }, [])
+
+  /** Commit the viewport card to the server round cursor so F5 can restore it. */
+  const commitRoundCursor = useCallback((cardId: string | null | undefined) => {
+    const target = cardId ? String(cardId).trim() : ''
+    if (!target) return
+    // The yellow hint lives only in the presented feed — never a server cursor.
+    if (isReviewHintId(target)) return
+    pendingCursorRef.current = target
+    if (cursorCommitTimerRef.current != null) {
+      window.clearTimeout(cursorCommitTimerRef.current)
+    }
+    // Rapid paging used to POST a cursor for every card. The last one wins.
+    cursorCommitTimerRef.current = window.setTimeout(() => {
+      cursorCommitTimerRef.current = null
+      const pending = pendingCursorRef.current
+      pendingCursorRef.current = null
+      if (pending) sendRoundCursor(pending)
+    }, 200)
+  }, [sendRoundCursor])
+
+  useEffect(() => {
+    const flush = () => {
+      if (cursorCommitTimerRef.current == null) return
+      window.clearTimeout(cursorCommitTimerRef.current)
+      cursorCommitTimerRef.current = null
+      const pending = pendingCursorRef.current
+      pendingCursorRef.current = null
+      if (pending) sendRoundCursor(pending)
+    }
+    window.addEventListener('pagehide', flush)
+    return () => {
+      window.removeEventListener('pagehide', flush)
+      flush()
+    }
+  }, [sendRoundCursor])
 
   const ensureUnitEncounter = useCallback(
     (cardId: string, unitRevision: number, allowRenew: boolean) => {
@@ -1837,7 +1890,7 @@ export function useImmersiveQueue(
     const roundId = nextState.roundId
     void (async () => {
       let echoedExcluded: string[] | null = null
-      for (const cardId of ids) {
+      for (const cardId of excludedIds) {
         for (let attempt = 0; attempt < 3; attempt += 1) {
           const round = await applyFreestyleRoundActionApi(roundId, {
             operation_id: createOperationId(),
@@ -2246,6 +2299,177 @@ export function useImmersiveQueue(
     }
   }, [applyCurrentIndex, commitRoundCursor, persistQueueState, slot])
 
+  /**
+   * Hydrate a peer's round without touching the active-round or action APIs.
+   * The queue build endpoint is a read-only projection; the server round plan
+   * remains the only source of completion/exclusion truth.
+   */
+  const hydrateLiveRound = useCallback((input: HydrateLiveRoundInput): Promise<void> => {
+    const roundId = String(input.roundId || '').trim()
+    const planVersion = Number(input.planVersion)
+    const queueCardIds = [...new Set(
+      (Array.isArray(input.queueCardIds) ? input.queueCardIds : [])
+        .map((id) => String(id || '').trim())
+        .filter(Boolean),
+    )]
+    if (!roundId) return Promise.resolve()
+    const key = `${roundId}:${Number.isFinite(planVersion) ? planVersion : 0}:${queueCardIds.join(',')}`
+    const existing = liveHydrationRef.current
+    if (existing?.key === key) return existing.promise
+    existing?.controller.abort()
+    const controller = new AbortController()
+    const capturedMutation = localQueueMutationRef.current
+    const capturedOperation = operationIdRef.current
+    const capturedRoundId = queueStateRef.current.roundId
+    const capturedLedger = {
+      plan: queueStateRef.current.roundPlan,
+      completedIds: [...queueStateRef.current.completedIds],
+      hiddenIds: [...queueStateRef.current.hiddenIds],
+      encounters: queueStateRef.current.unitEncountersByCardId,
+    }
+    const promise = (async () => {
+      const round = await getFreestyleRoundApi(roundId, { signal: controller.signal })
+      if (!mountedRef.current || controller.signal.aborted || slotRef.current !== slot) return
+      const remoteVersion = serverPlanVersion(round)
+      const localRoundId = queueStateRef.current.roundId
+      // A delayed lower-version snapshot must never roll back the local plan.
+      if (
+        planVersion > 0
+        && remoteVersion > 0
+        && remoteVersion < planVersion
+      ) return
+      if (
+        localRoundId === roundId
+        && serverPlanVersionRef.current > 0
+        && remoteVersion > 0
+        && remoteVersion < serverPlanVersionRef.current
+      ) return
+      const remoteConfig = sanitizeFreestyleFeedConfig(round.config)
+      const response = await buildQueueWithTimeout({
+        operation_id: createOperationId(),
+        round_id: roundId,
+        config: remoteConfig,
+        // Build the complete read-only projection. The round plan below applies
+        // completed/excluded ids; passing them here would hide quiz payloads that
+        // are needed when the peer's local queue is missing those cards.
+        completed_ids: [],
+        hidden_ids: [],
+        study_window: false,
+      }, controller.signal)
+      if (!mountedRef.current || controller.signal.aborted || slotRef.current !== slot) return
+      if (
+        localQueueMutationRef.current !== capturedMutation
+        || operationIdRef.current !== capturedOperation
+        || (capturedRoundId && queueStateRef.current.roundId !== capturedRoundId)
+      ) return
+
+      const responseCards = response.cards || []
+      const localCards = stripReviewHintCards(cardsRef.current)
+      const cardsById = new Map<string, FreestyleCard>()
+      for (const card of responseCards) cardsById.set(card.id, card)
+      // A retry occurrence or a quiz card may already be fully materialized only
+      // in the local feed. Reuse it when the peer advertises that identity.
+      for (const card of localCards) {
+        if (!cardsById.has(card.id)) cardsById.set(card.id, card)
+      }
+      const rebuiltInput = queueCardIds.length > 0
+        ? queueCardIds.flatMap((id) => {
+            const card = cardsById.get(id)
+            return card ? [card] : []
+          })
+        : [...cardsById.values()]
+      const adoptedRoundId = round.round_id || roundId
+      const plannedCards = cardsForServerPlan(rebuiltInput, round.plan, adoptedRoundId)
+        .filter((card) => queueCardIds.length === 0 || queueCardIds.includes(card.id))
+      if (
+        localQueueMutationRef.current !== capturedMutation
+        || operationIdRef.current !== capturedOperation
+        || !mountedRef.current
+        || slotRef.current !== slot
+      ) return
+
+      const releasedIds = [...pendingReleaseIdsRef.current]
+      const localLedger = coalesceHydrationLedger(
+        capturedLedger,
+        {
+          plan: queueStateRef.current.roundPlan,
+          completedIds: queueStateRef.current.completedIds,
+          hiddenIds: queueStateRef.current.hiddenIds,
+          encounters: queueStateRef.current.unitEncountersByCardId,
+        },
+        releasedIds,
+      )
+      const rawMeta = response.round_meta
+      const retained = commitHydratedRoundLedger({
+        localPlan: localLedger.plan,
+        localCompletedIds: localLedger.completedIds,
+        localHiddenIds: localLedger.hiddenIds,
+        localEncounters: localLedger.encounters,
+        releasedIds,
+        adoptedRoundId,
+        cards: plannedCards,
+        config: remoteConfig,
+        meta: {
+          candidate_count: Number(rawMeta?.candidate_count) || plannedCards.length,
+          scheduled_count: plannedCards.length,
+          queue_limit: Number(rawMeta?.queue_limit) || remoteConfig.queue_length,
+          limit_reached: Boolean(rawMeta?.limit_reached),
+          palace_leftover_due: asLeftoverDue(rawMeta?.palace_leftover_due),
+        },
+        serverPlan: round.plan,
+      })
+      const nextCards = cardsWithoutCompressed(
+        cardsWithoutHidden(insertReviewHintCards(plannedCards), retained.hiddenIds),
+        retained.plan?.compressedIds,
+      )
+      const previousCardId = cardsRef.current[currentIndexRef.current]?.id
+      const remoteCardId = String(round.current_card_id || '').trim()
+      const nextCurrentId = nextCards.some((card) => card.id === remoteCardId)
+        ? remoteCardId
+        : nextCards.some((card) => card.id === previousCardId)
+          ? previousCardId
+          : nextCards[0]?.id ?? null
+      const nextIndex = nextCurrentId
+        ? nextCards.findIndex((card) => card.id === nextCurrentId)
+        : 0
+      configRef.current = remoteConfig
+      setConfig(remoteConfig)
+      serverPlanVersionRef.current = remoteVersion
+      setPlanVersion(remoteVersion)
+      persistQueueState({
+        ...queueStateRef.current,
+        roundId: adoptedRoundId,
+        currentCardId: nextCurrentId,
+        completedIds: retained.completedIds,
+        hiddenIds: retained.hiddenIds,
+        unitEncountersByCardId: retained.encounters,
+        roundPlan: retained.plan,
+      })
+      cardsRef.current = nextCards
+      setCards(nextCards)
+      setPhaseStats(response.phase_stats || {})
+      setRoundMeta({
+        candidate_count: Number(rawMeta?.candidate_count) || nextCards.length,
+        scheduled_count: nextCards.length,
+        queue_limit: Number(rawMeta?.queue_limit) || remoteConfig.queue_length,
+        limit_reached: Boolean(rawMeta?.limit_reached),
+        palace_leftover_due: asLeftoverDue(rawMeta?.palace_leftover_due),
+      })
+      applyCurrentIndex(nextIndex >= 0 ? nextIndex : 0, nextCards)
+      setLoading(false)
+      setQueueFrozen(false)
+    })().catch((error) => {
+      if (controller.signal.aborted || (error instanceof Error && error.name === 'AbortError')) return
+      // A peer hydrate is best-effort; the next live revision retries it.
+    })
+    const entry = { key, controller, promise }
+    liveHydrationRef.current = entry
+    void promise.finally(() => {
+      if (liveHydrationRef.current === entry) liveHydrationRef.current = null
+    })
+    return promise
+  }, [applyCurrentIndex, persistQueueState, slot])
+
   useEffect(() => {
     let cancelled = false
     let didLoad = false
@@ -2357,6 +2581,7 @@ export function useImmersiveQueue(
     pendingRestudyCardIds,
     planVersion,
     adoptRoundVersion,
+    hydrateLiveRound,
     clearConfiguredOverlayQuiz,
     queueFrozen,
     startupVisualIndex,
