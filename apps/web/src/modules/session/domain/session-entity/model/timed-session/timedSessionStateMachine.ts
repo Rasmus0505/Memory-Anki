@@ -15,7 +15,6 @@ import {
   dwellKindToSessionKind,
   dwellSessionKeyForRecord,
   formatDwellRecordTitle,
-  isDwellExcludedPath,
   isDwellSessionKey,
   pickDominantFragmentKind,
   segmentKindFromScene,
@@ -50,9 +49,9 @@ import {
 import { persistTimedSessionRecord } from './timedSessionRecordBuilder'
 import { useStableTimedSessionController } from './useStableTimedSessionController'
 import {
-  isLiveForegroundClockSuppressed,
   subscribeLiveForegroundClock,
 } from './liveClockOwnership'
+import { appendClickInterval, CLICK_IDLE_LIMIT_MS, confirmedClickIntervals, rollbackClickIntervals, transitionClickTimer } from './clickTimerPolicy'
 
 interface TimerStoreSnapshot {
   sessionId: string
@@ -108,12 +107,17 @@ interface TimerStore {
   clientRevision: number
   lastCheckpointAtMs: number | null
   lastCheckpointSignature: string | null
+  lastClickAtMs: number | null
+  activityIntervals: { startedAt: string; endedAt: string }[]
 }
 
 const stores = new Map<string, TimerStore>()
 let browserListenersInstalled = false
-// Match the encounter clock: one thawed callback must not backfill a hang.
+let lastInputEventAtMs = -Infinity
+let lastPointerInputAtMs = -Infinity
+let lastTouchInputAtMs = -Infinity
 const MAX_FOREGROUND_GAP_MS = 5_000
+const COMPAT_MOUSE_SUPPRESSION_MS = 750
 
 function stableSessionKey(options: TimedSessionOptions) {
   const sessionKey = options.sessionKey.trim()
@@ -141,16 +145,42 @@ function currentEffectiveMs(store: TimerStore, currentMs = Date.now()) {
   if (store.runningSinceMs == null) return store.effectiveMs
   const elapsed = currentMs - store.runningSinceMs
   if (elapsed <= 0) return store.effectiveMs
-  // Commit each observed slice. A thawed callback can arrive many seconds
-  // late; drop that one gap, but keep the seconds earlier ticks already
-  // stored. Measuring from the original start instead would wipe a real
-  // foreground run the moment it passed five seconds.
-  if (elapsed > MAX_FOREGROUND_GAP_MS) {
+  // Click-driven sessions settle exactly through the five-minute deadline.
+  // Legacy explicit-start callers without a click retain the foreground-gap
+  // safeguard for API compatibility.
+  const clickDeadline = store.lastClickAtMs == null
+    ? null
+    : store.lastClickAtMs + CLICK_IDLE_LIMIT_MS
+  if (clickDeadline == null) {
+    if (elapsed > MAX_FOREGROUND_GAP_MS) {
+      store.runningSinceMs = currentMs
+      return store.effectiveMs
+    }
+    store.effectiveMs += elapsed
     store.runningSinceMs = currentMs
     return store.effectiveMs
   }
-  store.effectiveMs += elapsed
-  store.runningSinceMs = currentMs
+  const cappedNow = Math.min(currentMs, clickDeadline)
+  const slice = Math.max(0, cappedNow - store.runningSinceMs)
+  if (slice > 0) {
+    store.effectiveMs += slice
+    store.activityIntervals = appendClickInterval(store.activityIntervals, store.runningSinceMs, cappedNow)
+  }
+  store.runningSinceMs = cappedNow
+  if (currentMs > clickDeadline) {
+    store.runningSinceMs = null
+    store.effectiveMs = Math.max(0, store.effectiveMs - CLICK_IDLE_LIMIT_MS)
+    store.activityIntervals = rollbackClickIntervals(store.activityIntervals, CLICK_IDLE_LIMIT_MS)
+    pushEvent(store, 'pause', { reason: 'click_idle_timeout', rollback_seconds: 300 })
+    store.snapshot = {
+      ...store.snapshot,
+      status: 'paused',
+      pauseReason: 'click_idle_timeout',
+      glowState: 'paused',
+      pauseCount: store.snapshot.pauseCount + 1,
+    }
+    stopTicker(store)
+  }
   return store.effectiveMs
 }
 
@@ -194,6 +224,8 @@ function persistSnapshot(store: TimerStore, options?: { suspended?: boolean }) {
     focusRound: { ...DEFAULT_TIMED_SESSION_FOCUS_ROUND },
     lastActivityAtMs: hiddenAtMs,
     autoPauseDeadlineAtMs: null,
+    lastClickAtMs: store.lastClickAtMs,
+    activityIntervals: [...store.activityIntervals],
   }, {
     suspended: options?.suspended ?? store.snapshot.pauseReason === 'document_hidden',
     suspendedAt: hiddenAtMs == null ? null : new Date(hiddenAtMs).toISOString(),
@@ -204,8 +236,6 @@ function persistSnapshot(store: TimerStore, options?: { suspended?: boolean }) {
 }
 
 function canRunForegroundClock() {
-  if (isLiveForegroundClockSuppressed()) return false
-  if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return false
   return true
 }
 
@@ -238,14 +268,15 @@ function startTicker(store: TimerStore) {
       notify(store)
       return
     }
-    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
-      pauseStore(store, 'document_hidden', { source: 'visibilitychange' })
-      return
-    }
+    const previousStatus = store.snapshot.status
+    const previousPauseReason = store.snapshot.pauseReason
     const secondsChanged = updateEffectiveSnapshot(store)
-    if (secondsChanged) {
-      // SessionStorage remains the crash-safe local snapshot, refreshed once
-      // per displayed second.
+    if (
+      secondsChanged ||
+      store.snapshot.status !== previousStatus ||
+      store.snapshot.pauseReason !== previousPauseReason
+    ) {
+      // Persist state transitions even when rollback leaves displayed seconds unchanged.
       persistSnapshot(store)
       notify(store)
     }
@@ -281,7 +312,6 @@ function closeActiveSegment(store: TimerStore, endedAt = nowIso()) {
 }
 
 function openSegment(store: TimerStore, attachment?: TimerAttachment) {
-  if (attachment && attachmentIsExcluded(attachment)) return
   const scene = attachment?.scene ?? store.scene
   if (store.activeSegment?.scene === scene && store.activeSegment.routePath === (attachment?.routePath ?? store.activeSegment.routePath)) {
     store.activeSegment = {
@@ -348,23 +378,6 @@ function pauseStore(store: TimerStore, reason: Exclude<TimedSessionPauseReason, 
   persistSnapshot(store)
   notify(store)
   maybeWriteDwellCheckpoint(store, { force: true })
-}
-
-function attachmentIsExcluded(attachment: TimerAttachment) {
-  return Boolean(attachment.routePath && isDwellExcludedPath(attachment.routePath))
-}
-
-function holdExcludedRoute(store: TimerStore, meta?: TimedSessionMeta) {
-  if (store.snapshot.status === 'running') {
-    pauseStore(store, 'excluded_route', { source: 'excluded_route', ...(meta ?? {}) })
-    return
-  }
-  if (store.activeSegment) {
-    closeActiveSegment(store)
-    persistSnapshot(store)
-    notify(store)
-    maybeWriteDwellCheckpoint(store, { force: true })
-  }
 }
 
 function startStore(store: TimerStore, meta?: TimedSessionMeta) {
@@ -463,6 +476,7 @@ function buildRecord(store: TimerStore, method: SessionCompletionMethod, endedAt
     activityTag: dominantKind,
     events: [...store.events],
     sceneSegments: [...store.sceneSegments],
+    activityIntervals: confirmedClickIntervals(store.activityIntervals, store.lastClickAtMs),
   } satisfies TimeSessionRecord
 }
 
@@ -499,6 +513,7 @@ function buildCheckpointRecord(store: TimerStore) {
     activityTag: dominantKind,
     events: [...store.events],
     sceneSegments: collectSegments(store, endedAt),
+    activityIntervals: confirmedClickIntervals(store.activityIntervals, store.lastClickAtMs),
   } satisfies TimeSessionRecord
 }
 
@@ -599,6 +614,8 @@ function resetStore(store: TimerStore) {
   store.clientRevision = 0
   store.lastCheckpointAtMs = null
   store.lastCheckpointSignature = null
+  store.lastClickAtMs = null
+  store.activityIntervals = []
   store.snapshot = {
     ...store.snapshot,
     effectiveSeconds: 0,
@@ -625,15 +642,10 @@ function scheduleFinalizeIfUnused(store: TimerStore) {
 }
 
 function syncAttachment(store: TimerStore, id: string, attachment: TimerAttachment) {
-  const next = attachmentIsExcluded(attachment)
-    ? { ...attachment, active: false }
-    : attachment
+  const next = attachment
   const previous = store.attachments.get(id)
   store.attachments.set(id, next)
-  if (attachmentIsExcluded(next)) {
-    holdExcludedRoute(store)
-    return
-  }
+
   if (!previous) return
   if (previous.active !== next.active) {
     setSceneActiveStore(store, id, next.active)
@@ -652,15 +664,9 @@ function attachStore(store: TimerStore, id: string, attachment: TimerAttachment)
     window.clearTimeout(store.finalizeTimer)
     store.finalizeTimer = null
   }
-  const next = attachmentIsExcluded(attachment)
-    ? { ...attachment, active: false }
-    : attachment
+  const next = attachment
   store.attachments.set(id, next)
-  if (attachmentIsExcluded(next)) {
-    holdExcludedRoute(store)
-    notify(store)
-    return
-  }
+
   if (store.snapshot.status === 'running') {
     if (store.runningSinceMs == null && canRunForegroundClock()) {
       store.runningSinceMs = Date.now()
@@ -779,13 +785,24 @@ function hydrateStore(store: TimerStore) {
   store.recordId = snapshot.recordId ?? createStableRecordId()
   store.startedAtMs = new Date(snapshot.startedAt).getTime()
   store.effectiveMs = seconds * 1000
+  store.lastClickAtMs = snapshot.lastClickAtMs ?? null
+  store.activityIntervals = [...(snapshot.activityIntervals ?? [])]
+  if (store.lastClickAtMs != null && snapshot.activityIntervals !== undefined) {
+    // Explicit click intervals include an empty confirmed history; legacy
+    // snapshots without this field retain their persisted effectiveSeconds.
+    store.activityIntervals = confirmedClickIntervals(store.activityIntervals, store.lastClickAtMs)
+    store.effectiveMs = store.activityIntervals.reduce(
+      (total, interval) => total + Math.max(0, Date.parse(interval.endedAt) - Date.parse(interval.startedAt)),
+      0,
+    )
+  }
   store.events = [...snapshot.events]
   store.sceneSegments = [...snapshot.sceneSegments]
   store.activeSegment = snapshot.activeSceneSegment
   store.hiddenAtMs = snapshot.lastActivityAtMs
   store.snapshot = {
     ...store.snapshot,
-    effectiveSeconds: seconds,
+    effectiveSeconds: Math.floor(store.effectiveMs / 1000),
     pauseCount: snapshot.pauseCount,
     status: 'paused',
     pauseReason: snapshot.suspended ? 'document_hidden' : 'restored',
@@ -836,6 +853,8 @@ function createStore(key: string, options: TimedSessionOptions): TimerStore {
     clientRevision: 0,
     lastCheckpointAtMs: null,
     lastCheckpointSignature: null,
+    lastClickAtMs: null,
+    activityIntervals: [],
   }
   hydrateStore(store)
   return store
@@ -850,36 +869,12 @@ function getStore(key: string, options: TimedSessionOptions) {
   return store
 }
 
-function systemResume(store: TimerStore, source: string) {
-  if (store.snapshot.status !== 'paused') return
-  if (store.snapshot.pauseReason !== 'document_hidden' && store.snapshot.pauseReason !== 'window_blur') return
-  if (!Array.from(store.attachments.values()).some((item) => item.active)) return
-  if (!canRunForegroundClock()) return
-  resumeStore(store, { source })
-}
-
 function syncStoresToLiveClockGate() {
-  const suppressed = isLiveForegroundClockSuppressed()
+  // A remote clock is a projection; each device records its own click intervals.
   for (const store of stores.values()) {
-    if (suppressed) {
-      if (store.runningSinceMs == null) continue
-      settleRunning(store)
-      stopTicker(store)
-      persistSnapshot(store)
-      notify(store)
-      continue
-    }
-    if (
-      store.snapshot.status === 'running' &&
-      store.runningSinceMs == null &&
-      canRunForegroundClock() &&
-      activeAttachments(store).length > 0
-    ) {
-      store.runningSinceMs = Date.now()
-      if (store.tickTimer == null) startTicker(store)
-      persistSnapshot(store)
-      notify(store)
-    }
+    updateEffectiveSnapshot(store)
+    persistSnapshot(store)
+    notify(store)
   }
 }
 
@@ -941,7 +936,10 @@ function markStoresHidden() {
     if (store.snapshot.status === 'idle' || store.snapshot.status === 'completed') continue
     store.hiddenAtMs = hiddenAtMs
     if (store.snapshot.status === 'running') {
-      pauseStore(store, 'document_hidden', { source: 'visibilitychange' })
+      // Visibility alone does not pause the click-driven clock; the ticker
+      // settles at the five-minute click deadline.
+      updateEffectiveSnapshot(store, hiddenAtMs)
+      persistSnapshot(store)
     } else {
       persistSnapshot(store, { suspended: true })
     }
@@ -959,14 +957,111 @@ function resolveStoresVisible() {
       void completeStore(store, 'left_page', { source: 'resume_expired' })
       continue
     }
-    systemResume(store, 'document_visible')
-    reviveForegroundClock(store)
+    // Returning visibility observes the clock but never resumes a paused one.
+    updateEffectiveSnapshot(store, nowMs)
+    persistSnapshot(store)
+    notify(store)
+  }
+}
+
+function handleUserInputActivity(event: Event) {
+  const now = Date.now()
+  if (event.type === 'pointerdown') {
+    lastPointerInputAtMs = now
+  } else if (event.type === 'touchstart') {
+    if (now - lastPointerInputAtMs < 100) return
+    lastTouchInputAtMs = now
+  } else if (event.type === 'mousedown') {
+    if (now - lastPointerInputAtMs < 100 || now - lastTouchInputAtMs < COMPAT_MOUSE_SUPPRESSION_MS) return
+  }
+  if (now - lastInputEventAtMs < 10) return
+  lastInputEventAtMs = now
+  for (const store of stores.values()) {
+    if (!activeAttachments(store).some((item) => item.active)) continue
+    if (store.snapshot.status === 'idle') {
+      startStore(store, { source: 'input_activity' })
+      store.lastClickAtMs = now
+      continue
+    }
+    if (store.snapshot.status === 'completed') {
+      // A real click after a dwell expiry starts a fresh record for the same
+      // target, while preserving the completed record already uploaded.
+      store.recordId = null
+      store.startedAtMs = null
+      store.runningSinceMs = null
+      store.effectiveMs = 0
+      store.events = []
+      store.sceneSegments = []
+      store.activeSegment = null
+      store.finalRecord = null
+      store.finalPersist = null
+      store.lastClickAtMs = null
+      store.activityIntervals = []
+      store.snapshot = {
+        ...store.snapshot,
+        status: 'idle',
+        startedAt: null,
+        effectiveSeconds: 0,
+        pauseCount: 0,
+        pauseReason: null,
+        glowState: 'idle',
+      }
+      startStore(store, { source: 'input_activity' })
+      store.lastClickAtMs = now
+      continue
+    }
+    if (store.snapshot.status === 'paused') {
+      resumeStore(store, { source: 'input_activity' })
+      store.lastClickAtMs = now
+      continue
+    }
+    if (store.lastClickAtMs == null) {
+      settleRunning(store, now)
+      store.runningSinceMs = now
+      store.lastClickAtMs = now
+      continue
+    }
+    const runningSinceMs = store.runningSinceMs ?? now
+    const cappedNow = Math.min(now, store.lastClickAtMs + CLICK_IDLE_LIMIT_MS)
+    const accruedMs = Math.max(0, cappedNow - runningSinceMs)
+    store.activityIntervals = appendClickInterval(store.activityIntervals, runningSinceMs, cappedNow)
+    const transition = transitionClickTimer({
+      status: 'running',
+      effectiveMs: store.effectiveMs + accruedMs,
+      lastClickAtMs: store.lastClickAtMs,
+      currentMs: now,
+    })
+    store.effectiveMs = transition.effectiveMs
+    store.runningSinceMs = now
+    store.lastClickAtMs = transition.lastClickAtMs
+    store.snapshot = {
+      ...store.snapshot,
+      status: 'running',
+      pauseReason: null,
+      glowState: 'running',
+    }
+    if (transition.timedOut) {
+      store.activityIntervals = rollbackClickIntervals(store.activityIntervals, CLICK_IDLE_LIMIT_MS)
+      store.snapshot = { ...store.snapshot, pauseCount: store.snapshot.pauseCount + 1 }
+      pushEvent(store, 'pause', { reason: 'click_idle_timeout', rollback_seconds: 300 })
+    }
+    if (store.tickTimer == null) startTicker(store)
+    updateEffectiveSnapshot(store, now)
+    persistSnapshot(store)
+    notify(store)
   }
 }
 
 function installBrowserListeners() {
   if (browserListenersInstalled || typeof window === 'undefined') return
   browserListenersInstalled = true
+  if (typeof window.PointerEvent === 'function') {
+    document.addEventListener('pointerdown', handleUserInputActivity, true)
+  } else {
+    document.addEventListener('pointerdown', handleUserInputActivity, true)
+    document.addEventListener('mousedown', handleUserInputActivity, true)
+    document.addEventListener('touchstart', handleUserInputActivity, true)
+  }
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
       markStoresHidden()
@@ -1109,6 +1204,7 @@ export function useTimedSession(options: TimedSessionOptions) {
 }
 
 export function resetTimedSessionStoresForTests() {
+  lastInputEventAtMs = -Infinity
   for (const store of stores.values()) {
     stopTicker(store)
     if (store.finalizeTimer != null && typeof window !== 'undefined') {

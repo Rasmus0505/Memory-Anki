@@ -10,6 +10,13 @@ export {
   resetTimedSessionStoresForTests,
   useTimedSession,
 } from './domain/session-entity/model/timed-session/timedSessionStateMachine'
+export {
+  CLICK_IDLE_LIMIT_MS,
+  transitionClickTimer,
+  type ClickTimerStatus,
+  type ClickTimerTransition,
+  type ClickTimerTransitionInput,
+} from './domain/session-entity/model/timed-session/clickTimerPolicy'
 export { AppDwellSession } from './ui/dwell/AppDwellSession'
 export {
   DWELL_CHECKPOINT_INTERVAL_MS,

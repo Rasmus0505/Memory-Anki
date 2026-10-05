@@ -27,6 +27,7 @@ export type TimedSessionPauseReason =
   | 'restored'
   | 'scene_inactive'
   | 'excluded_route'
+  | 'click_idle_timeout'
 export type PersistedSessionStatus = Extract<SessionStatus, 'running' | 'paused'>
 
 export interface TimedSessionFocusRoundState {
@@ -141,6 +142,8 @@ export interface PersistedTimedSessionSnapshotV2 {
   focusRound?: TimedSessionFocusRoundState
   lastActivityAtMs?: number | null
   autoPauseDeadlineAtMs?: number | null
+  lastClickAtMs?: number | null
+  activityIntervals?: { startedAt: string; endedAt: string }[]
 }
 
 export interface LegacyPersistedTimedSessionSnapshot {
@@ -184,6 +187,8 @@ export interface RestorableTimedSessionSnapshot {
   focusRound: TimedSessionFocusRoundState
   lastActivityAtMs: number | null
   autoPauseDeadlineAtMs: number | null
+  lastClickAtMs?: number | null
+  activityIntervals?: { startedAt: string; endedAt: string }[]
 }
 
 export interface ResolvedTimedSessionAutomation {
@@ -321,6 +326,15 @@ export function normalizeSnapshot(
     autoPauseDeadlineAtMs: typeof raw.autoPauseDeadlineAtMs === 'number' && Number.isFinite(raw.autoPauseDeadlineAtMs)
       ? raw.autoPauseDeadlineAtMs
       : null,
+    lastClickAtMs: typeof raw.lastClickAtMs === 'number' && Number.isFinite(raw.lastClickAtMs)
+      ? raw.lastClickAtMs
+      : null,
+    activityIntervals: Array.isArray(raw.activityIntervals) ? raw.activityIntervals.filter((value): value is { startedAt: string; endedAt: string } => {
+      if (!value || typeof value !== 'object') return false
+      const interval = value as Record<string, unknown>
+      return typeof interval.startedAt === 'string' && typeof interval.endedAt === 'string'
+        && Number.isFinite(Date.parse(interval.startedAt)) && Date.parse(interval.endedAt) > Date.parse(interval.startedAt)
+    }) : undefined,
   }
 }
 

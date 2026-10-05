@@ -96,6 +96,8 @@ export interface TimeSessionRecord {
   deletedReason?: 'manual' | null
   events: SessionEventRecord[]
   sceneSegments?: SessionSceneSegment[]
+  /** Actual UTC activity intervals; pauses are never backfilled. */
+  activityIntervals?: { startedAt: string; endedAt: string }[]
 }
 
 export interface DailyTrendPoint {

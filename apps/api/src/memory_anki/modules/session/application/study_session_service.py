@@ -8,7 +8,7 @@ from uuid import uuid4
 from sqlalchemy import func
 from sqlalchemy.orm import Query, Session
 
-from memory_anki.core.time import utc_now_naive
+from memory_anki.core.time import to_api_datetime, utc_now_naive
 from memory_anki.infrastructure.db._tables.misc import StudySession
 
 from .serialization import (
@@ -320,7 +320,7 @@ def create_study_session(
         pause_count=max(0, int(payload.get("pause_count") or 0)),
         completion_method=completion_method,
         progress_json=_json_dumps(payload.get("progress") or {}, "{}"),
-        events_json=_json_dumps(payload.get("events") or [{"type": "start", "at": started_at.isoformat()}], "[]"),
+        events_json=_json_dumps(payload.get("events") or [{"type": "start", "at": to_api_datetime(started_at)}], "[]"),
         summary_json=_json_dumps(summary_payload, "{}"),
         created_at=now,
         updated_at=now,
@@ -555,7 +555,7 @@ def complete_study_session(
         row.last_operation_id = operation_id
     event = {
         "type": row.completion_method or "complete",
-        "at": ended_at.isoformat(),
+        "at": to_api_datetime(ended_at),
         "meta": {"effective_seconds": row.effective_seconds},
     }
     current_events: list[Any] = _json_loads(row.events_json, [])

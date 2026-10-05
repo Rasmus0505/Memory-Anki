@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import sqlalchemy as sa
 from alembic import op
@@ -28,6 +29,9 @@ branch_labels = None
 depends_on = None
 
 MIGRATION_FLAG = "local_wall_to_utc_v1"
+# Historical timer payloads were produced by the desktop running in China.
+# Never infer this from the machine executing Alembic.
+HISTORICAL_CLIENT_TZ = ZoneInfo("Asia/Shanghai")
 
 
 def _table_exists(table_name: str) -> bool:
@@ -40,24 +44,33 @@ def _table_exists(table_name: str) -> bool:
 
 
 def _parse_datetime(value: Any) -> datetime | None:
+    """Parse while preserving whether the source carried an explicit offset.
+
+    A naive value is historical client wall time; an aware value is already an
+    absolute instant and must never be interpreted in the migration host TZ.
+    """
     if value in (None, ""):
         return None
     if isinstance(value, datetime):
-        return value.replace(tzinfo=None) if value.tzinfo is None else value.astimezone(UTC).replace(tzinfo=None)
+        return value
     try:
-        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
     except ValueError:
         return None
-    if parsed.tzinfo is None:
-        return parsed
-    return parsed.astimezone(UTC).replace(tzinfo=None)
 
 
 def _local_wall_to_utc_naive(value: datetime) -> datetime:
-    """Interpret naive datetime as host local wall clock → UTC-naive."""
+    """Interpret a naive value as host local wall clock → UTC-naive."""
     if value.tzinfo is not None:
-        return value.astimezone(UTC).replace(tzinfo=None)
-    # astimezone() on naive values assumes local timezone.
+        raise ValueError("_local_wall_to_utc_naive requires a naive datetime")
+    # Use the historical producer timezone, not Alembic host local timezone.
+    return value.replace(tzinfo=HISTORICAL_CLIENT_TZ).astimezone(UTC).replace(tzinfo=None)
+
+
+def _to_utc_naive(value: datetime) -> datetime:
+    """Normalize an explicit instant without applying the host TZ twice."""
+    if value.tzinfo is None:
+        return _local_wall_to_utc_naive(value)
     return value.astimezone(UTC).replace(tzinfo=None)
 
 
@@ -116,7 +129,7 @@ def _convert_event_timestamps(events: list[Any]) -> list[Any]:
                 continue
             parsed = _parse_datetime(payload.get(key))
             if parsed is not None:
-                payload[key] = _local_wall_to_utc_naive(parsed).isoformat()
+                payload[key] = _to_utc_naive(parsed).isoformat()
         next_events.append(payload)
     return next_events
 
@@ -149,12 +162,10 @@ def upgrade() -> None:
 
         started = _parse_datetime(row["started_at"])
         ended = _parse_datetime(row["ended_at"])
-        deleted = _parse_datetime(row["deleted_at"])
-        # created_at/updated_at from utc_now_naive are already UTC — leave them.
+        # created_at/updated_at/deleted_at are server-owned UTC — leave them.
 
-        next_started = _local_wall_to_utc_naive(started) if started is not None else None
-        next_ended = _local_wall_to_utc_naive(ended) if ended is not None else None
-        next_deleted = _local_wall_to_utc_naive(deleted) if deleted is not None else None
+        next_started = _to_utc_naive(started) if started is not None else None
+        next_ended = _to_utc_naive(ended) if ended is not None else None
         next_events = _convert_event_timestamps(events)
         next_summary = {**summary, MIGRATION_FLAG: True}
 
@@ -174,7 +185,7 @@ def upgrade() -> None:
                 "id": row["id"],
                 "started_at": next_started.isoformat(sep=" ") if next_started else None,
                 "ended_at": next_ended.isoformat(sep=" ") if next_ended else None,
-                "deleted_at": next_deleted.isoformat(sep=" ") if next_deleted else None,
+                "deleted_at": row["deleted_at"],
                 "events_json": json.dumps(next_events, ensure_ascii=False),
                 "summary_json": json.dumps(next_summary, ensure_ascii=False),
             },

@@ -57,21 +57,8 @@ export function AppDwellSession() {
   })
 
   React.useEffect(() => {
-    const visible = typeof document === 'undefined' || document.visibilityState !== 'hidden'
-    if (!fragment.countable) {
-      timer.pause({ reason: 'excluded_route', source: 'excluded_route' })
-      timer.setSceneActive(false, { source: 'excluded_route' })
-      return
-    }
-    timer.setSceneActive(true, { source: 'countable_route' })
-    if (!visible) return
-    if (timer.status === 'idle') {
-      timer.start({ source: 'dwell_autostart' })
-      return
-    }
-    if (timer.status === 'paused' && timer.pauseReason !== 'manual') {
-      timer.resume({ source: 'countable_route' })
-    }
+    // All application routes accept clicks; route changes never start/resume time.
+    timer.setSceneActive(true, { source: 'route_activity' })
   }, [fragment.countable, fragment.routePath, timer])
 
   return null

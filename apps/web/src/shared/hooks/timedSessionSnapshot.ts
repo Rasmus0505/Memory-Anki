@@ -34,6 +34,8 @@ interface TimedSessionSnapshotSource {
   focusRound: TimedSessionFocusRoundState
   lastActivityAtMs: number | null
   autoPauseDeadlineAtMs: number | null
+  lastClickAtMs?: number | null
+  activityIntervals?: { startedAt: string; endedAt: string }[]
 }
 
 interface SnapshotPersistenceOptions {
@@ -77,6 +79,8 @@ export function buildPersistedTimedSessionSnapshot(
     focusRound: { ...source.focusRound },
     lastActivityAtMs: source.lastActivityAtMs,
     autoPauseDeadlineAtMs: source.autoPauseDeadlineAtMs,
+    lastClickAtMs: source.lastClickAtMs ?? null,
+    activityIntervals: source.activityIntervals ?? [],
   }
 }
 
@@ -102,6 +106,8 @@ export function buildRestorableTimedSessionSnapshot(
     focusRound: { ...source.focusRound },
     lastActivityAtMs: source.lastActivityAtMs,
     autoPauseDeadlineAtMs: source.autoPauseDeadlineAtMs,
+    lastClickAtMs: source.lastClickAtMs ?? null,
+    activityIntervals: source.activityIntervals ?? [],
   }
 }
 

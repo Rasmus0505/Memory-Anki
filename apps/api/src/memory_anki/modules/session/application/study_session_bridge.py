@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from memory_anki.core.time import utc_now_naive
+from memory_anki.core.time import to_api_datetime, utc_now_naive
 from memory_anki.infrastructure.db._tables.misc import StudySession
 from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitEncounter
 
@@ -152,8 +152,8 @@ def create_completed_study_session_from_time_payload(
             "palace_segment_id": palace_segment_id,
             "english_course_id": english_course_id,
             "title": payload.get("title") or "",
-            "started_at": started_at.isoformat(),
-            "ended_at": ended_at.isoformat() if status == "completed" else None,
+            "started_at": to_api_datetime(started_at),
+            "ended_at": to_api_datetime(ended_at) if status == "completed" else None,
             "effective_seconds": effective_seconds,
             "pause_count": max(0, int(payload.get("pauseCount", payload.get("pause_count", 0)) or 0)),
             "completion_method": completion_method,
@@ -231,12 +231,12 @@ def create_review_study_session(
             "palace_segment_id": palace_segment_id,
             "mini_palace_id": mini_palace_id,
             "title": title,
-            "started_at": started_at.isoformat(),
-            "ended_at": resolved_ended_at.isoformat(),
+            "started_at": to_api_datetime(started_at),
+            "ended_at": to_api_datetime(resolved_ended_at),
             "effective_seconds": effective_seconds,
             "completion_method": completion_method,
             "events": [
-                {"type": "review_submit", "at": resolved_ended_at.isoformat(), "meta": summary or {}}
+                {"type": "review_submit", "at": to_api_datetime(resolved_ended_at), "meta": summary or {}}
             ],
             "summary": summary or {},
         },

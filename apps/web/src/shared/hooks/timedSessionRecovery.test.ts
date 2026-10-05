@@ -1,0 +1,43 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { TimeSessionRecord } from '@/modules/session/public'
+
+const mocks = vi.hoisted(() => ({
+  enqueue: vi.fn().mockResolvedValue(undefined),
+  pending: vi.fn(), remove: vi.fn(), serialize: vi.fn(),
+}))
+vi.mock('@/shared/api/http', () => ({ API_BASE: '/api/v1' }))
+vi.mock('@/shared/api/apiToken', () => ({ getApiToken: () => 'test-token' }))
+vi.mock('@/shared/persistence/mutationQueue', () => ({ enqueueMutation: mocks.enqueue }))
+vi.mock('@/modules/session/public', () => ({
+  buildTimeRecordRecoveryMutationId: (id: string) => `recovery:${id}`,
+  removePendingTimeRecordRecovery: mocks.remove,
+  serializeStudySessionRecordPayload: mocks.serialize,
+  upsertPendingTimeRecordRecovery: mocks.pending,
+}))
+import { fireAndQueueTimeRecordOnUnload } from './timedSessionRecovery'
+
+const record: TimeSessionRecord = {
+  id: 'session-a', kind: 'custom', palaceId: null, title: '学习',
+  startedAt: '2026-01-01T10:00:00.000Z', endedAt: '2026-01-01T10:05:00.000Z',
+  effectiveSeconds: 300, pauseCount: 0, completionMethod: 'saved', durationEdited: false,
+  clientSource: 'desktop', events: [],
+  activityIntervals: [{ startedAt: '2026-01-01T10:00:00.000Z', endedAt: '2026-01-01T10:01:00.000Z' }],
+}
+
+describe('confirmed timer unload recovery', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }))
+  })
+  it('queues and sends only confirmed intervals through the ledger endpoint', async () => {
+    await fireAndQueueTimeRecordOnUnload(record)
+    const queued = mocks.enqueue.mock.calls[0][0]
+    expect(queued.url).toBe('/api/v1/study-sessions/time-ledger')
+    const payload = JSON.parse(queued.body)
+    expect(payload.intervals).toHaveLength(1)
+    expect(payload.intervals[0].ended_at).toBe('2026-01-01T10:01:00.000Z')
+    expect(payload.intervals[0].session_id).toBe('session-a')
+    expect(fetch).toHaveBeenCalledWith(queued.url, expect.objectContaining({ body: queued.body, keepalive: true }))
+    expect(mocks.serialize).not.toHaveBeenCalled()
+  })
+})

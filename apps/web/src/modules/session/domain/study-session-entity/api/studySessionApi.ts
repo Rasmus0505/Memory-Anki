@@ -116,6 +116,7 @@ export interface StudySessionRecordPayload {
   activityTagLabel?: string | null
   events?: unknown[]
   sceneSegments?: unknown[]
+  activityIntervals?: { startedAt: string; endedAt: string }[]
   deletedAt?: string | null
   deletedReason?: string | null
 }
@@ -356,6 +357,52 @@ function normalizeStudySessionPayload(
     defaultOperationId: payload.operation_id ?? createOperationId(operationPrefix),
   })
   return normalized as StudySessionPayload
+}
+
+export interface TimeLedgerIntervalPayload {
+  interval_id: string
+  session_id: string
+  started_at: string
+  ended_at: string
+  kind: string
+  title?: string
+  client_source?: string
+  metadata?: Record<string, unknown>
+}
+
+export function uploadTimeLedgerApi(intervals: TimeLedgerIntervalPayload[]) {
+  return request<{ revision_id: string; device_id: string; interval_count: number }>('/study-sessions/time-ledger', {
+    method: 'POST',
+    body: JSON.stringify({ intervals }),
+    persistence: {
+      resourceKey: 'study-session:time-ledger',
+      description: 'Upload confirmed timer intervals',
+      replayMode: 'auto',
+    },
+  })
+}
+
+export function patchTimeLedgerApi(id: string, payload: Partial<StudySessionPayload>) {
+  return request<{ item: StudySessionItem }>(`/study-sessions/time-ledger/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+    persistence: {
+      resourceKey: `study-session:time-ledger:${id}:patch`,
+      description: 'Correct timer interval',
+      replayMode: 'auto',
+    },
+  })
+}
+
+export function deleteTimeLedgerApi(id: string) {
+  return request<{ ok: boolean }>(`/study-sessions/time-ledger/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    persistence: {
+      resourceKey: `study-session:time-ledger:${id}:delete`,
+      description: 'Delete timer interval',
+      replayMode: 'auto',
+    },
+  })
 }
 
 export function createStudySessionApi(payload: StudySessionPayload) {

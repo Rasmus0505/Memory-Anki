@@ -12,6 +12,7 @@ import type { TimeSessionRecord } from '@/modules/session/public'
 const JSON_CONTENT_TYPE = 'application/json'
 const MUTATION_ID_HEADER = 'X-Memory-Anki-Mutation-ID'
 const STUDY_SESSION_RECOVERY_URL = `${API_BASE}/study-sessions/from-time-record`
+const TIME_LEDGER_URL = `${API_BASE}/study-sessions/time-ledger`
 
 export interface TimedSessionUnloadPersistenceResult {
   mutationId: string
@@ -20,6 +21,22 @@ export interface TimedSessionUnloadPersistenceResult {
 
 function buildTimeRecordRequestBody(record: TimeSessionRecord) {
   return JSON.stringify(serializeStudySessionRecordPayload(record))
+}
+
+function buildLedgerRequestBody(record: TimeSessionRecord) {
+  const intervals = (record.activityIntervals ?? []).filter((item) =>
+    Date.parse(item.endedAt) > Date.parse(item.startedAt),
+  ).map((item) => ({
+    interval_id: `${record.id}:${item.startedAt}:${item.endedAt}`,
+    session_id: record.id,
+    started_at: item.startedAt,
+    ended_at: item.endedAt,
+    kind: record.activityTag ?? record.kind,
+    title: record.title,
+    client_source: record.clientSource ?? 'unknown',
+    metadata: { session_key: record.sessionKey },
+  }))
+  return JSON.stringify({ intervals })
 }
 
 function buildTimeRecordRequestHeaders(mutationId: string, apiToken = getApiToken()) {
@@ -34,6 +51,7 @@ function queueTimeRecordRecovery(
   record: TimeSessionRecord,
   mutationId: string,
   body: string,
+  url = STUDY_SESSION_RECOVERY_URL,
 ) {
   upsertPendingTimeRecordRecovery(record, { mutationId, status: 'pending' })
   return enqueueMutation({
@@ -43,7 +61,7 @@ function queueTimeRecordRecovery(
     // queued again before the first item replays. Keep one body per record.
     coalesceKey: `time-record:${record.id}`,
     description: `恢复学习时长：${record.title || record.kind}`,
-    url: STUDY_SESSION_RECOVERY_URL,
+    url,
     method: 'POST',
     headers: buildTimeRecordRequestHeaders(mutationId),
     bodyKind: 'json',
@@ -52,24 +70,24 @@ function queueTimeRecordRecovery(
   })
 }
 
-function trySendBeacon(body: string) {
+function trySendBeacon(body: string, url = STUDY_SESSION_RECOVERY_URL) {
   if (typeof navigator === 'undefined' || typeof navigator.sendBeacon !== 'function') {
     return false
   }
   try {
     const payload = new Blob([body], { type: JSON_CONTENT_TYPE })
-    return navigator.sendBeacon(STUDY_SESSION_RECOVERY_URL, payload)
+    return navigator.sendBeacon(url, payload)
   } catch {
     return false
   }
 }
 
-function tryKeepaliveFetch(recordId: string, body: string, mutationId: string) {
+function tryKeepaliveFetch(recordId: string, body: string, mutationId: string, url = STUDY_SESSION_RECOVERY_URL) {
   if (typeof fetch === 'undefined') {
     return false
   }
   try {
-    void fetch(STUDY_SESSION_RECOVERY_URL, {
+    void fetch(url, {
       method: 'POST',
       body,
       keepalive: true,
@@ -93,16 +111,19 @@ export async function fireAndQueueTimeRecordOnUnload(
   record: TimeSessionRecord,
 ): Promise<TimedSessionUnloadPersistenceResult> {
   const mutationId = buildTimeRecordRecoveryMutationId(record.id)
-  const body = buildTimeRecordRequestBody(record)
-  const queuePromise = queueTimeRecordRecovery(record, mutationId, body)
+  const body = record.activityIntervals !== undefined
+    ? buildLedgerRequestBody(record)
+    : buildTimeRecordRequestBody(record)
+  const recoveryUrl = record.activityIntervals !== undefined ? TIME_LEDGER_URL : STUDY_SESSION_RECOVERY_URL
+  const queuePromise = queueTimeRecordRecovery(record, mutationId, body, recoveryUrl)
   const apiToken = getApiToken()
 
-  if (!apiToken && trySendBeacon(body)) {
+  if (!apiToken && trySendBeacon(body, recoveryUrl)) {
     await queuePromise
     return { mutationId, transport: 'beacon' }
   }
 
-  if (tryKeepaliveFetch(record.id, body, mutationId)) {
+  if (tryKeepaliveFetch(record.id, body, mutationId, recoveryUrl)) {
     await queuePromise
     return { mutationId, transport: 'keepalive' }
   }

@@ -7,6 +7,9 @@ import type {
 import {
   bulkDeleteStudySessionsApi,
   createStudySessionFromTimeRecordApi,
+  uploadTimeLedgerApi,
+  patchTimeLedgerApi,
+  deleteTimeLedgerApi,
   deleteStudySessionApi,
   getStudySessionAnalyticsApi,
   getTimeRecordReadModelApi,
@@ -142,7 +145,29 @@ export async function createStudySessionRecord(record: Omit<TimeSessionRecord, '
   return result.item ? studySessionToTimeRecord(result.item) : null
 }
 
+export function buildTimeLedgerUpload(record: TimeSessionRecord) {
+  return (record.activityIntervals ?? []).filter((interval) =>
+    Date.parse(interval.endedAt) > Date.parse(interval.startedAt),
+  ).map((interval) => ({
+    interval_id: `${record.id}:${interval.startedAt}:${interval.endedAt}`,
+    session_id: record.id,
+    started_at: interval.startedAt,
+    ended_at: interval.endedAt,
+    kind: record.activityTag ?? record.kind,
+    title: record.title,
+    client_source: record.clientSource ?? 'unknown',
+    metadata: { session_key: record.sessionKey, completion_method: record.completionMethod },
+  }))
+}
+
 export async function persistStudySessionRecord(record: TimeSessionRecord) {
+  if (record.activityIntervals !== undefined) {
+    const intervals = buildTimeLedgerUpload(record)
+    for (let offset = 0; offset < intervals.length; offset += 500) {
+      await uploadTimeLedgerApi(intervals.slice(offset, offset + 500))
+    }
+    return record
+  }
   const result = await createStudySessionFromTimeRecordApi(
     serializeStudySessionRecordPayload(record),
   )
@@ -150,17 +175,30 @@ export async function persistStudySessionRecord(record: TimeSessionRecord) {
 }
 
 export async function updateStudySessionRecord(id: string, updater: Partial<TimeSessionRecord>) {
-  const result = await patchStudySessionApi(id, timeRecordPatchToStudySessionPatch(updater))
+  const patch = timeRecordPatchToStudySessionPatch(updater)
+  if (id.startsWith('ledger:')) {
+    const result = await patchTimeLedgerApi(id.slice('ledger:'.length), patch)
+    return result.item ? studySessionToTimeRecord(result.item) : null
+  }
+  const result = await patchStudySessionApi(id, patch)
   return result.item ? studySessionToTimeRecord(result.item) : null
 }
 
 export async function deleteStudySessionRecord(id: string) {
-  await deleteStudySessionApi(id)
+  if (id.startsWith('ledger:')) {
+    await deleteTimeLedgerApi(id.slice('ledger:'.length))
+  } else {
+    await deleteStudySessionApi(id)
+  }
   return { ok: true }
 }
 
 export async function bulkDeleteStudySessionRecords(ids: string[]) {
-  return bulkDeleteStudySessionsApi(ids)
+  const ledgerIds = ids.filter((id) => id.startsWith('ledger:'))
+  const sessionIds = ids.filter((id) => !id.startsWith('ledger:'))
+  await Promise.all(ledgerIds.map((id) => deleteTimeLedgerApi(id.slice('ledger:'.length))))
+  if (sessionIds.length > 0) return bulkDeleteStudySessionsApi(sessionIds)
+  return { ok: true }
 }
 
 function studySessionToTimeRecord(item: StudySessionItem): TimeSessionRecord {

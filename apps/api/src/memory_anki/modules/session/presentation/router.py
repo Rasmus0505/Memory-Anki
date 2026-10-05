@@ -5,6 +5,13 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.deps import session_dep
+from memory_anki.infrastructure.time_ledger_store import (
+    append_revision,
+    delete_intervals,
+    ledger_item,
+    patch_interval,
+    read_intervals,
+)
 from memory_anki.modules.session.application.live_study_room import (
     apply_live_study_command,
     stream_live_study_events,
@@ -43,6 +50,7 @@ from memory_anki.modules.session.domain.schemas import (
     StudySessionEventsAppend,
     StudySessionPatch,
 )
+from memory_anki.modules.session.domain.time_ledger import TimeLedgerUpload
 from memory_anki.platform.application import mutation_identity_from_headers
 from memory_anki.platform.persistence import (
     SqlAlchemyMutationResponseStore,
@@ -101,6 +109,39 @@ def api_list_active_study_sessions(session: Session = Depends(session_dep)):
 @router.get("/study-sessions/stats")
 def api_study_session_stats(session: Session = Depends(session_dep)):
     return build_study_session_stats(session)
+
+
+@router.post('/study-sessions/time-ledger')
+def api_upload_time_ledger(data: TimeLedgerUpload):
+    try:
+        return append_revision(data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get('/study-sessions/time-ledger')
+def api_get_time_ledger():
+    items = [ledger_item(row) for row in read_intervals()]
+    return {"items": items, "total": len(items)}
+
+
+@router.patch('/study-sessions/time-ledger/{interval_id}')
+def api_patch_time_ledger(interval_id: str, data: StudySessionPatch):
+    try:
+        item = patch_interval(interval_id, _payload(data))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if item is None:
+        _raise_not_found()
+    return {"item": item}
+
+
+@router.delete('/study-sessions/time-ledger/{interval_id}')
+def api_delete_time_ledger(interval_id: str):
+    deleted = delete_intervals([interval_id])
+    if not deleted:
+        _raise_not_found()
+    return {"ok": True}
 
 
 @router.get('/study-sessions/time-record-analytics')
@@ -362,8 +403,12 @@ def api_bulk_delete_study_sessions(
     data: StudySessionBulkDelete,
     session: Session = Depends(session_dep),
 ):
-    deleted = bulk_delete_study_sessions(session, [str(item) for item in data.ids])
-    return {"ok": True, "deleted": deleted}
+    ids = [str(item) for item in data.ids]
+    ledger_ids = [item.removeprefix("ledger:") for item in ids if item.startswith("ledger:")]
+    deleted_ledger = delete_intervals(ledger_ids) if ledger_ids else 0
+    sqlite_ids = [item for item in ids if not item.startswith("ledger:")]
+    deleted = bulk_delete_study_sessions(session, sqlite_ids) if sqlite_ids else 0
+    return {"ok": True, "deleted": deleted + deleted_ledger}
 
 
 @router.post("/study-sessions/from-time-record")

@@ -11,6 +11,7 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from memory_anki.core.time import local_calendar_day_start_as_utc_naive
 from memory_anki.infrastructure.db._tables.misc import StudySession
+from memory_anki.infrastructure.time_ledger_store import read_intervals
 
 from .serialization import study_session_json
 from .time_bounds import date_range_bounds, month_bounds, today_bounds
@@ -347,6 +348,80 @@ def _to_local_date(value: datetime) -> date:
     return aware.astimezone().date()
 
 
+def _filtered_ledger_rows(
+    *,
+    start: datetime | None,
+    end: datetime | None,
+    keyword: str | None,
+    kind: str | None,
+) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    groups: dict[tuple[str, str], dict[str, Any]] = {}
+    for candidate in read_intervals():
+        group = (str(candidate["session_id"]), str(candidate["started_at"]))
+        previous = groups.get(group)
+        if previous is None or (str(candidate["ended_at"]), str(candidate["interval_id"])) > (str(previous["ended_at"]), str(previous["interval_id"])):
+            groups[group] = candidate
+    for row in groups.values():
+        try:
+            started = datetime.fromisoformat(str(row["started_at"]).replace("Z", "+00:00"))
+            ended = datetime.fromisoformat(str(row["ended_at"]).replace("Z", "+00:00"))
+            started = started.astimezone(UTC) if started.tzinfo else started.replace(tzinfo=UTC)
+            ended = ended.astimezone(UTC) if ended.tzinfo else ended.replace(tzinfo=UTC)
+        except (KeyError, TypeError, ValueError):
+            continue
+        if start is not None and ended.replace(tzinfo=None) < start:
+            continue
+        if end is not None and started.replace(tzinfo=None) >= end:
+            continue
+        row_kind = str(row.get("kind") or "custom")
+        if kind and row_kind != kind:
+            continue
+        needle = str(keyword or "").strip().casefold()
+        if needle and needle not in str(row.get("title") or "").casefold():
+            continue
+        item = dict(row)
+        item["started_at"] = started.isoformat()
+        item["ended_at"] = ended.isoformat()
+        item["effective_seconds"] = max(0, int(row.get("effective_seconds") or (ended - started).total_seconds()))
+        raw_metadata = item.get("metadata")
+        metadata: dict[str, Any] = raw_metadata if isinstance(raw_metadata, dict) else {}
+        item["summary"] = {
+            "client_source": item.get("client_source", "unknown"),
+            "device_id": item.get("device_id"),
+            "session_id": item.get("session_id"),
+            **metadata,
+        }
+        rows.append(item)
+    # Assign overlapping seconds once, deterministically to the earliest interval.
+    # Different devices/pages can observe the same human wall time.
+    covered: list[tuple[datetime, datetime]] = []
+    rows.sort(key=lambda row: (str(row["started_at"]), str(row["interval_id"])))
+    for row in rows:
+        left = datetime.fromisoformat(row["started_at"])
+        right = datetime.fromisoformat(row["ended_at"])
+        if start is not None:
+            left = max(left, start.replace(tzinfo=UTC))
+        if end is not None:
+            right = min(right, end.replace(tzinfo=UTC))
+        fragments = [(left, right)] if right > left else []
+        for a, b in covered:
+            next_fragments = []
+            for x, y in fragments:
+                if b <= x or a >= y:
+                    next_fragments.append((x, y))
+                else:
+                    if x < a:
+                        next_fragments.append((x, a))
+                    if b < y:
+                        next_fragments.append((b, y))
+            fragments = next_fragments
+        row["effective_seconds"] = int(sum((b - a).total_seconds() for a, b in fragments))
+        row["_fragments"] = fragments
+        covered.extend(fragments)
+    return rows
+
+
 def build_time_record_read_model(
     session: Session,
     *,
@@ -378,11 +453,25 @@ def build_time_record_read_model(
         keyword=keyword,
         kind=kind,
     )
+    all_ledger_rows = read_intervals(include_deleted=True)
+    represented_ids = {str(row.get("session_id") or "") for row in all_ledger_rows}
+    if represented_ids:
+        base = base.filter(StudySession.id.notin_(represented_ids))
     aggregate_rows = base.with_entities(
+        StudySession.id,
         StudySession.scene,
         StudySession.effective_seconds,
         StudySession.summary_json,
     ).all()
+    ledger_rows = _filtered_ledger_rows(
+        start=resolved.start,
+        end=resolved.end,
+        keyword=keyword,
+        kind=kind,
+    )
+    # The file ledger is authoritative for intervals. Suppress legacy SQLite rows
+    # only when their session id is represented by a ledger interval; never hide a
+    # ledger row because an old canonical SQLite row happens to exist.
     source_totals = {"desktop": 0, "pwa": 0, "unknown": 0}
     kind_totals: dict[str, dict[str, Any]] = {
         kind_key: {
@@ -395,7 +484,7 @@ def build_time_record_read_model(
         for kind_key in TIME_RECORD_BUILTIN_KINDS
     }
     total_seconds = 0
-    for scene, effective_seconds, summary_json in aggregate_rows:
+    for _record_id, scene, effective_seconds, summary_json in aggregate_rows:
         seconds = max(0, int(effective_seconds or 0))
         total_seconds += seconds
         source_totals[_client_source(summary_json)] += seconds
@@ -419,6 +508,19 @@ def build_time_record_read_model(
             if kind_key not in seen_kinds:
                 item["sessions"] += 1
                 seen_kinds.add(kind_key)
+    for row in ledger_rows:
+        seconds = max(0, int(row.get("effective_seconds") or 0))
+        total_seconds += seconds
+        source = str(row.get("client_source") or "unknown").lower()
+        source_totals[source if source in source_totals else "unknown"] += seconds
+        row_kind = str(row.get("kind") or "custom")
+        kind_item = kind_totals.setdefault(
+            row_kind,
+            {"kind": row_kind, "label": row_kind, "seconds": 0, "sessions": 0, "is_builtin": row_kind in TIME_RECORD_BUILTIN_KINDS},
+        )
+        kind_item["seconds"] += seconds
+        kind_item["sessions"] += 1
+
     breakdown = sorted(
         kind_totals.values(),
         key=lambda item: (
@@ -446,6 +548,21 @@ def build_time_record_read_model(
         for day_key, seconds, records in trend_rows
         if day_key is not None
     }
+    for row in ledger_rows:
+        fragments = row.get("_fragments") or []
+        if not fragments:
+            continue
+        for fragment_start, fragment_end in fragments:
+            cursor = fragment_start
+            while cursor < fragment_end:
+                next_day = (cursor.date() + timedelta(days=1))
+                boundary = datetime.combine(next_day, datetime.min.time(), tzinfo=UTC)
+                piece_end = min(fragment_end, boundary)
+                day_key = cursor.date().isoformat()
+                values = daily.setdefault(day_key, {"seconds": 0, "records": 0})
+                values["seconds"] += max(0, int((piece_end - cursor).total_seconds()))
+                values["records"] += 1
+                cursor = piece_end
     first_day = resolved.start_date
     last_day = resolved.end_date
     if resolved.mode == "all":
@@ -481,22 +598,30 @@ def build_time_record_read_model(
     order = sort_column.asc() if sort_order == "asc" else sort_column.desc()
     safe_limit = max(1, min(int(limit), 500))
     safe_offset = max(0, int(offset))
-    item_rows = (
-        base.order_by(order, StudySession.id.asc())
-        .offset(safe_offset)
-        .limit(safe_limit)
-        .all()
-    )
+    # Merge SQLite and ledger rows before pagination so total/order/page boundaries
+    # describe one combined read model.
+    item_rows = base.order_by(order, StudySession.id.asc()).all()
+    ledger_items = [
+        {**{key: value for key, value in row.items() if key != "_fragments"}, "id": "ledger:" + row["interval_id"], "status": "completed", "scene": row.get("kind", "custom"), "title": row.get("title", "")}
+        for row in ledger_rows
+    ]
+    merged_items = [study_session_json(row) for row in item_rows] + ledger_items
+    if sort_by == "effective_seconds":
+        merged_items.sort(key=lambda row: int(row.get("effective_seconds") or 0), reverse=sort_order == "desc")
+    elif sort_by == "title":
+        merged_items.sort(key=lambda row: str(row.get("title") or "").lower(), reverse=sort_order == "desc")
+    else:
+        merged_items.sort(key=lambda row: str(row.get("started_at") or ""), reverse=sort_order == "desc")
     summary = {
-        "record_count": len(aggregate_rows),
+        "record_count": len(aggregate_rows) + len(ledger_rows),
         "total_effective_seconds": total_seconds,
         "desktop_effective_seconds": source_totals["desktop"],
         "pwa_effective_seconds": source_totals["pwa"],
         "unknown_effective_seconds": source_totals["unknown"],
     }
     return {
-        "items": [study_session_json(row) for row in item_rows],
-        "total": len(aggregate_rows),
+        "items": merged_items[safe_offset : safe_offset + safe_limit],
+        "total": len(aggregate_rows) + len(ledger_rows),
         "limit": safe_limit,
         "offset": safe_offset,
         "range": resolved.payload(),
