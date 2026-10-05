@@ -51,12 +51,17 @@ export interface FlowRatingSignal extends FlowFeedbackSignal {
 /**
  * One voice per grade, rising with confidence. 忘记/困难 deliberately avoid
  * `quiz_result_incorrect`: in spaced repetition an honest 忘记 is a correct move.
+ *
+ * These used to borrow edit-mode events (`node_select` / `text_commit` /
+ * `field_commit` / `segment_action`), so the learner heard "a node was selected"
+ * instead of "you graded this 3" — and rating 4 fired the same ceremony chord as
+ * a bulk segment action. Each grade now has its own bell (see toneProfiles).
  */
 const FLOW_RATING_SIGNALS: Record<UnitRating, FlowRatingSignal> = {
-  1: { audioEvent: 'node_select', breath: 'note', reaction: 'sink', haptic: 'soft-fail', keepsCombo: false },
-  2: { audioEvent: 'text_commit', breath: 'note', reaction: 'wobble', haptic: 'select', keepsCombo: true },
-  3: { audioEvent: 'field_commit', breath: 'affirm', reaction: 'lift', haptic: 'success', keepsCombo: true },
-  4: { audioEvent: 'segment_action', breath: 'affirm', reaction: 'fling', haptic: 'success', keepsCombo: true },
+  1: { audioEvent: 'grade_forget', breath: 'note', reaction: 'sink', haptic: 'soft-fail', keepsCombo: false },
+  2: { audioEvent: 'grade_hard', breath: 'note', reaction: 'wobble', haptic: 'select', keepsCombo: true },
+  3: { audioEvent: 'grade_good', breath: 'affirm', reaction: 'lift', haptic: 'success', keepsCombo: true },
+  4: { audioEvent: 'grade_easy', breath: 'affirm', reaction: 'fling', haptic: 'success', keepsCombo: true },
 }
 
 export function flowRatingSignal(rating: UnitRating, passed: boolean): FlowRatingSignal {

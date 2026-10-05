@@ -48,36 +48,21 @@ describe('useFreestyleFlowFeedback', () => {
     vi.useRealTimers()
   })
 
-  it('answers a reveal, which used to be entirely silent in freestyle', () => {
+  /**
+   * Reveals are sounded by the canvas cascade (`audio.pops`, one pop per flipped
+   * card), so this hook must NOT play a tone as well — otherwise a 4-card flip
+   * would be heard once here and four more times from the cascade.
+   */
+  it('leaves reveal audio to the cascade and only taps haptically', () => {
     const { captured } = mount()
     act(() => captured.current!.signalReveal())
-    expect(played.map((item) => item.event)).toEqual(['card_reveal'])
+    expect(played).toEqual([])
   })
 
-  it('rate-limits reveal audio so fast flipping stays information, not texture', () => {
-    const { captured } = mount()
-    act(() => {
-      captured.current!.signalReveal()
-      captured.current!.signalReveal()
-      captured.current!.signalReveal()
-    })
-    expect(played).toHaveLength(1)
-  })
-
-  it('lets a deliberate second flip through once the gap has passed', () => {
-    const { captured } = mount()
-    act(() => captured.current!.signalReveal())
-    act(() => {
-      vi.advanceTimersByTime(120)
-      captured.current!.signalReveal()
-    })
-    expect(played).toHaveLength(2)
-  })
-
-  it('confirms a passing rate with a commit tone and an affirm breath', () => {
+  it('confirms a passing rate with its own grade tone and an affirm breath', () => {
     const { captured } = mount()
     act(() => captured.current!.signalRating(3, true))
-    expect(played.map((item) => item.event)).toEqual(['field_commit'])
+    expect(played.map((item) => item.event)).toEqual(['grade_good'])
     expect(captured.current!.breath?.kind).toBe('affirm')
   })
 
@@ -91,7 +76,7 @@ describe('useFreestyleFlowFeedback', () => {
   it('never answers a weak rate with a miss sound', () => {
     const { captured } = mount()
     act(() => captured.current!.signalRating(1, false))
-    expect(played.map((item) => item.event)).toEqual(['node_select'])
+    expect(played.map((item) => item.event)).toEqual(['grade_forget'])
     expect(played.map((item) => item.event)).not.toContain('quiz_result_incorrect')
     expect(captured.current!.breath?.kind).toBe('note')
   })
@@ -123,7 +108,6 @@ describe('useFreestyleFlowFeedback', () => {
     settings = applyFeedbackPreset(DEFAULT_REVIEW_FEEDBACK_SETTINGS, 'focus')
     const { captured } = mount()
     act(() => {
-      captured.current!.signalReveal()
       captured.current!.signalRating(3, true)
     })
     expect(played).toEqual([])
@@ -133,7 +117,6 @@ describe('useFreestyleFlowFeedback', () => {
     settings = { ...DEFAULT_REVIEW_FEEDBACK_SETTINGS, soundEnabled: false }
     const { captured } = mount()
     act(() => {
-      captured.current!.signalReveal()
       captured.current!.signalRating(3, true)
     })
     expect(played).toEqual([])
@@ -143,7 +126,7 @@ describe('useFreestyleFlowFeedback', () => {
     settings = { ...DEFAULT_REVIEW_FEEDBACK_SETTINGS, animationEnabled: false }
     const { captured } = mount()
     act(() => captured.current!.signalRating(3, true))
-    expect(played.map((item) => item.event)).toEqual(['field_commit'])
+    expect(played.map((item) => item.event)).toEqual(['grade_good'])
     expect(captured.current!.breath).toBeNull()
   })
 })

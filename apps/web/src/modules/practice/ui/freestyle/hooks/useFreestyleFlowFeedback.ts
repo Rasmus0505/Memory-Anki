@@ -3,7 +3,6 @@ import type { UnitRating } from '@/modules/practice/public'
 import {
   FLOW_BREATH_MS,
   FLOW_PALACE_CLEARED_SIGNAL,
-  FLOW_REVEAL_SIGNAL,
   flowRatingSignal,
   type FlowBreath,
   type FlowFeedbackSignal,
@@ -25,13 +24,12 @@ import {
 } from '@/shared/feedback/reviewFeedbackSettings'
 
 /**
- * Immediate confirmation for the two freestyle actions that had none.
+ * Reveals are counted, not sounded, here.
  *
- * Reveals arrive as fast as the learner can click, so the tone is rate-limited: past
- * a certain speed a per-node sound stops being information and becomes texture. The
- * limit is deliberately short — it must never swallow a deliberate single flip.
+ * The flip cascade already emits one layered pop per card through
+ * `useMindMapRevealMotion`, so a tone from this hook would double it. What
+ * remains is the haptic, which still fires per deliberate flip.
  */
-const REVEAL_AUDIO_MIN_GAP_MS = 90
 const PAGE_TURN_AUDIO_MIN_GAP_MS = 110
 const PAGE_TURN_HAPTIC_MIN_GAP_MS = 140
 const PAGE_TURN_FULL_VOLUME_GAP_MS = 420
@@ -55,7 +53,6 @@ export function useFreestyleFlowFeedback() {
   )
   const breathNonceRef = useRef(0)
   const breathTimerRef = useRef<number | null>(null)
-  const lastRevealAudioAtRef = useRef(0)
   const lastPageTurnAtRef = useRef(0)
 
   useEffect(() => {
@@ -65,24 +62,12 @@ export function useFreestyleFlowFeedback() {
   }, [])
 
   /**
-   * Reveal tone rides the `review` scene, the same one formal review uses for its
-   * per-reveal sound, so the 专注/平衡/激励 preset and the learning-sounds switch
-   * already govern it. `focus` turns learning sounds off; that stays true here.
+   * Kept as a named action so call sites stay expressive, but it no longer plays a
+   * tone: the reveal cascade owns that sound now (one pop per flipped card).
    */
   const signalReveal = useCallback(() => {
-    if (!settings.soundEnabled) return
-    if (!resolveFeedbackChannels(settings).learningSounds) return
-    if (!settings.scenes.review.enabled || !settings.scenes.review.soundEnabled) return
-    const now = Date.now()
-    if (now - lastRevealAudioAtRef.current < REVEAL_AUDIO_MIN_GAP_MS) return
-    lastRevealAudioAtRef.current = now
     triggerHaptic('tap')
-    playEvent(FLOW_REVEAL_SIGNAL.audioEvent, {
-      origin: 'review',
-      audioScope: 'local',
-      volume: getSceneEffectiveVolume(settings, 'review'),
-    })
-  }, [playEvent, settings])
+  }, [])
 
   /**
    * A rate is a deliberate, low-frequency act, so it is never rate-limited and it is

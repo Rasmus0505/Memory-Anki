@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FreestyleProgressSummary } from '@/modules/practice/ui/freestyle/model/freestyleProgressSegments'
 import { FX_ANCHORS, cue, elementCenter, findAnchor, rectCenter } from '@/shared/fx'
-import { crossedQuarter, freestyleMotionOn } from './freestyleParticleScenes'
+import { PROGRESS_QUARTERS, crossedQuarter, freestyleMotionOn } from './freestyleParticleScenes'
 
 const QUARTER_MIN_SEGMENTS = 8
 const QUARTER_TAG_MS = 1600
@@ -59,11 +59,18 @@ export function useProgressRailParticles(segments: FreestyleProgressSummary['seg
     if (previous == null) return
     const crossed = crossedQuarter(previous, ratio)
     const rail = railElement()
-    if (!crossed || !rail || !freestyleMotionOn()) return
+    if (!crossed || !freestyleMotionOn()) return
+    const step = PROGRESS_QUARTERS.indexOf(crossed.mark) + 1
+    if (!rail) {
+      // No rail to draw into (or the rail has not mounted yet) — still chime, so
+      // the 25/50/75% ladder is audible with the flourish skipped.
+      cue('progress.quarter', { rail: document.body, sparks: [], step })
+      return
+    }
     const lit = Array.from(rail.querySelectorAll('[data-testid="freestyle-progress-segment"][data-tone="done"]'))
     const stride = Math.max(1, Math.ceil(lit.length / MAX_SPARK_SEGMENTS))
     const sparks = lit.filter((_, index) => index % stride === 0).map((segment) => rectCenter(segment.getBoundingClientRect()))
-    cue('progress.quarter', { rail, sparks })
+    cue('progress.quarter', { rail, sparks, step })
     setQuarterTag((current) => ({ label: crossed.label, nonce: (current?.nonce ?? 0) + 1 }))
     later(() => setQuarterTag(null), QUARTER_TAG_MS)
   }, [doneCount, later, total])

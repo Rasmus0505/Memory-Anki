@@ -14,8 +14,15 @@ describe('freestyleFlowFeedback', () => {
 
   it('gives every grade its own voice, rising with confidence', () => {
     const events = ([1, 2, 3, 4] as const).map((rating) => flowRatingSignal(rating, rating >= 3).audioEvent)
-    expect(events).toEqual(['node_select', 'text_commit', 'field_commit', 'segment_action'])
+    expect(events).toEqual(['grade_forget', 'grade_hard', 'grade_good', 'grade_easy'])
     expect(new Set(events).size).toBe(4)
+  })
+
+  it('never reuses an edit-mode event for a grade, so the ear can learn the scale', () => {
+    const editEvents = ['node_select', 'text_commit', 'field_commit', 'segment_action']
+    for (const rating of [1, 2, 3, 4] as const) {
+      expect(editEvents).not.toContain(flowRatingSignal(rating, rating >= 3).audioEvent)
+    }
   })
 
   it('never uses a miss sound for a weak rate, so failure anxiety is not manufactured', () => {
@@ -57,7 +64,7 @@ describe('freestyleFlowFeedback', () => {
 
   it('marks a palace chapter with a different tone than a single rate', () => {
     expect(FLOW_PALACE_CLEARED_SIGNAL.audioEvent).toBe('all_clear_ready')
-    expect(FLOW_PALACE_CLEARED_SIGNAL.audioEvent).not.toBe('field_commit')
+    expect(FLOW_PALACE_CLEARED_SIGNAL.audioEvent).not.toBe('grade_good')
     expect(FLOW_PALACE_CLEARED_SIGNAL.breath).toBe('affirm')
   })
 })
