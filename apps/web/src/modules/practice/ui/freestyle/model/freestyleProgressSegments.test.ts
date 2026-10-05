@@ -681,6 +681,7 @@ describe('progressRailLabel', () => {
     const summary = buildFreestyleProgressSummary(cards, withRetry, ['one'], [], 'three')
 
     expect(progressRailLabel(summary)).toBe('本轮进度 3/3。点击查看本轮安排')
+    expect(progressRailLabel(summary, true)).toBe('本轮进度 3/3。点击分段跳转到对应卡片')
     expect(progressHudText(summary)).toBe('3/3')
   })
 

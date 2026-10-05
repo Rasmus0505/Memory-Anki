@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { UnitRating } from '@/modules/practice/public'
 import {
   Archive,
@@ -36,6 +36,12 @@ import {
   SheetTitle,
 } from '@/shared/components/ui/sheet'
 import type { FreestyleSkipState } from '@/modules/practice/domain/queueState'
+import { markedNodePathLabel } from '@/modules/practice/ui/freestyle/model/markedNodePathLabel'
+import {
+  prefetchUnitPreview,
+  readPalaceEditorDoc,
+  usePalaceDocumentVersion,
+} from '@/modules/practice/ui/freestyle/model/freestyleUnitPreviewCache'
 import { cn } from '@/shared/lib/utils'
 
 const STATUS_LABELS: Record<FreestyleRoundPlanCardStatus, string> = {
@@ -64,6 +70,23 @@ function rowLabel(entry: FreestyleRoundPlanCard) {
   return entry.occurrenceKind === 'retry'
     ? `重练第 ${Math.max(1, entry.retryAttempt)} 次 · ${entry.label || entry.cardId}`
     : entry.label || entry.cardId
+}
+
+function pathLabelFor(card: FreestyleCard | undefined) {
+  if (!card || card.type !== 'mindmap_branch') return ''
+  const fromDocument = markedNodePathLabel(readPalaceEditorDoc(card.palace_id), card.anchor_uid)
+  if (fromDocument) return fromDocument
+  const fromPayload = card.context_path.map((item) => item.text.trim()).filter(Boolean)
+  if (fromPayload.length > 1) return fromPayload.join('-')
+  return ''
+}
+
+function displayLabel(entry: FreestyleRoundPlanCard, card: FreestyleCard | undefined) {
+  const path = pathLabelFor(card)
+  if (!path) return rowLabel(entry)
+  return entry.occurrenceKind === 'retry'
+    ? `重练第 ${Math.max(1, entry.retryAttempt)} 次 · ${path}`
+    : path
 }
 
 function retryRowStatusLabel(isCurrent: boolean, done: boolean, status: FreestyleRoundPlanCardStatus) {
@@ -99,6 +122,7 @@ function RoundPlanRow({
   onDragOverId,
   onDraggingId,
   onRate,
+  onRemove,
 }: {
   entry: FreestyleRoundPlanCard
   liveCard: FreestyleCard | undefined
@@ -117,11 +141,9 @@ function RoundPlanRow({
   onDragOverId: (id: string | null) => void
   onDraggingId: (id: string | null) => void
   onRate: (cardId: string, rating: UnitRating) => void
+  onRemove?: (cardId: string) => void
 }) {
-  const pathLabel = liveCard?.type === 'mindmap_branch'
-    ? liveCard.context_path.map((item) => item.text.trim()).filter(Boolean).join('-')
-    : ''
-  const label = pathLabel || rowLabel(entry)
+  const label = displayLabel(entry, liveCard)
   const canDrag = status !== 'completed' && status !== 'excluded'
   const retryDone = entry.occurrenceKind === 'retry' && status === 'completed'
   const retryPending = entry.occurrenceKind === 'retry' && status !== 'completed' && status !== 'excluded'
@@ -234,7 +256,7 @@ function RoundPlanRow({
         ) : null}
         <button
           type="button"
-          className="min-w-0 flex-1 truncate text-left hover:text-primary disabled:cursor-not-allowed"
+          className="min-w-0 flex-1 text-left leading-snug hover:text-primary disabled:cursor-not-allowed"
           disabled={!liveCard}
           title={label}
           onClick={() => liveCard && onJump(entry.cardId)}
@@ -263,6 +285,16 @@ function RoundPlanRow({
         ) : null}
         {liveCard?.type === 'mindmap_branch' && status !== 'excluded' ? (
           <div className="flex shrink-0 items-center gap-1" role="group" aria-label={`给${label}评分`}>
+            {onRemove ? (
+              <button
+                type="button"
+                className="inline-flex h-7 items-center rounded-md border border-border/70 px-1.5 text-[11px] font-semibold text-muted-foreground hover:border-primary/60 hover:text-primary"
+                aria-label={`${label}移除本队列`}
+                onClick={() => onRemove(entry.cardId)}
+              >
+                移除
+              </button>
+            ) : null}
             {[1, 2, 3, 4].map((rating) => (
               <button
                 key={rating}
@@ -289,7 +321,7 @@ function RoundPlanRow({
 }
 
 /**
- * In-round pace: open from the progress rail, glance, jump or reorder, close.
+ * In-round pace: open from the HUD count (or an off-feed tick), glance, jump or reorder, close.
  * Configuration lives behind 「调整配置」 because it is a between-rounds decision —
  * the two used to share one 76rem dialog, which on a phone became one long scroll.
  */
@@ -307,6 +339,7 @@ export function FreestyleRoundSheet({
   onReorder,
   onOpenConfig,
   onRateCard,
+  onRemoveCard,
 }: {
   open: boolean
   cards: FreestyleCard[]
@@ -321,6 +354,7 @@ export function FreestyleRoundSheet({
   onReorder: (orderIds: string[]) => void
   onOpenConfig: () => void
   onRateCard?: (cardId: string, rating: UnitRating) => void
+  onRemoveCard?: (cardId: string) => void
   loading?: boolean
 }) {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
@@ -328,6 +362,19 @@ export function FreestyleRoundSheet({
   const [dragOverId, setDragOverId] = useState<string | null>(null)
   const [collapsedPalaces, setCollapsedPalaces] = useState<Set<number>>(new Set())
   const [viewMode, setViewMode] = useState<RoundPlanView>('palace')
+  usePalaceDocumentVersion()
+  const requestedPalaces = useRef(new Set<number>())
+  useEffect(() => {
+    if (!open) return
+    for (const card of cards) {
+      if (card.type !== 'mindmap_branch') continue
+      if (readPalaceEditorDoc(card.palace_id)) continue
+      if (requestedPalaces.current.has(card.palace_id)) continue
+      if (!card.unit_id || card.unit_revision == null) continue
+      requestedPalaces.current.add(card.palace_id)
+      void prefetchUnitPreview(card.unit_id, card.unit_revision)
+    }
+  }, [open, cards])
 
   const liveById = useMemo(() => new Map(cards.map((card) => [card.id, card])), [cards])
   const rows = useMemo(() => {
@@ -499,6 +546,7 @@ export function FreestyleRoundSheet({
         onDragOverId={setDragOverId}
         onDraggingId={setDraggingId}
         onRate={onRate}
+        onRemove={onRemoveCard}
       />
     )
   }

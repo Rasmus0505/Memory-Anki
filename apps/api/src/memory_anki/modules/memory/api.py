@@ -4,6 +4,7 @@ from .application.unit_ladder_progress import get_palace_ladder_progress
 from .application.unit_review_preview import get_unit_review_preview
 from .application.unit_review_projection import (
     list_active_review_unit_ids,
+    list_due_review_unit_ids,
     warm_unit_projection_cache,
 )
 from .application.unit_review_queue_read import list_trusted_due_units_for_queue
@@ -59,6 +60,7 @@ __all__ = [
     "get_unit_review_completion",
     "get_unit_review_session",
     "list_active_review_unit_ids",
+    "list_due_review_unit_ids",
     "list_due_units",
     "list_trusted_due_units_for_queue",
     "normalize_rating",

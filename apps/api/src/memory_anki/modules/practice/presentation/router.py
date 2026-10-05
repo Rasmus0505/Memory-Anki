@@ -30,6 +30,7 @@ from memory_anki.modules.practice.application.round_state_service import (
     get_or_create_active_round,
     get_round,
     rate_freestyle_round_unit,
+    read_workspace_active_round,
     start_new_round,
 )
 from memory_anki.modules.practice.domain.schemas import (
@@ -105,6 +106,18 @@ def api_freestyle_round_active(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/freestyle/rounds/active")
+def api_freestyle_round_active_read(
+    workspace: str = Query("primary"),
+    session: Session = Depends(session_dep),
+):
+    """Read-only workspace round for 同步进度. Does not create or append."""
+    payload = read_workspace_active_round(session, workspace=workspace)
+    if payload is None:
+        raise HTTPException(status_code=404, detail="freestyle round not found")
+    return payload
 
 
 @router.post("/freestyle/rounds/start")

@@ -58,6 +58,17 @@ export function useUnitPreview(unitId: string | null | undefined, revision: numb
   return readUnitPreview(unitId, revision)
 }
 
+/** Palace document already paid for by any unit preview of that palace. */
+export function readPalaceEditorDoc(palaceId: number | null | undefined) {
+  if (palaceId == null) return null
+  return palaceDocs.get(palaceId)?.editor_doc ?? null
+}
+
+/** Re-renders when a palace document lands in the preview cache. */
+export function usePalaceDocumentVersion() {
+  return useSyncExternalStore(subscribe, () => version, () => version)
+}
+
 /**
  * Another unit of a palace whose document is already in memory. Lets the next
  * card paint before its own preview request returns.

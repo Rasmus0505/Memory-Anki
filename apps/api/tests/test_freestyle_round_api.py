@@ -605,3 +605,26 @@ def test_exclude_leaves_the_review_schedule_unchanged(session_factory, make_clie
     assert stored.stage_index == 3
     assert stored.has_passed is True
     check.close()
+
+
+def test_get_active_round_reads_without_creating_or_appending(make_client):
+    client = _client(make_client)
+    missing = client.get("/api/v1/freestyle/rounds/active")
+    assert missing.status_code == 404
+
+    created = _create(
+        client,
+        operation_id="op-sync-read",
+        cards=_cards("a", "b"),
+        round_id="round-sync-read",
+    )
+    fetched = client.get("/api/v1/freestyle/rounds/active", params={"workspace": "primary"})
+    assert fetched.status_code == 200, fetched.text
+    body = fetched.json()
+    assert body["round_id"] == created["round_id"]
+    assert body["plan"]["presented_ids"] == ["a", "b"]
+    again = client.get("/api/v1/freestyle/rounds/active")
+    assert again.status_code == 200, again.text
+    assert again.json()["version"] == body["version"]
+    assert again.json()["plan"]["presented_ids"] == ["a", "b"]
+    assert again.json()["plan"]["original_cards"] == body["plan"]["original_cards"]

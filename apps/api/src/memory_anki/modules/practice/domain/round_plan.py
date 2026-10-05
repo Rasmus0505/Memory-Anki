@@ -21,6 +21,7 @@ from .round_plan_values import (  # noqa: F401 - re-exported for sibling rules
     _match_key,
     _original_card,
     _palace_id,
+    _review_unit_id,
     _rewrite_ids,
     _text,
     _unique,

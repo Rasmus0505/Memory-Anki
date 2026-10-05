@@ -13,6 +13,7 @@ from memory_anki.core.time import to_api_datetime, utc_now_naive
 from memory_anki.infrastructure.db._tables.misc import FreestyleRoundState
 from memory_anki.modules.memory.api import (
     list_active_review_unit_ids,
+    list_due_review_unit_ids,
     rate_palace_due_units,
     rate_review_unit,
 )
@@ -47,6 +48,7 @@ from memory_anki.modules.practice.domain.round_plan import (
 )
 from memory_anki.modules.practice.domain.round_rebind import (
     append_today_cards,
+    drop_undue_unstarted,
     drop_vanished_unstarted,
     replan_remaining,
 )
@@ -366,12 +368,36 @@ def get_active_round(
     return _payload(row) if row is not None else None
 
 
-def _without_vanished_units(session: Session, plan: dict[str, Any]) -> dict[str, Any]:
+def read_workspace_active_round(
+    session: Session,
+    *,
+    workspace: str = "primary",
+) -> dict[str, Any] | None:
+    """Read the workspace's current round. Never creates, replans, or appends cards."""
+    slot = normalize_workspace(workspace)
+    row = _latest_active_for_workspace(session, slot)
+    return _payload(row) if row is not None else None
+
+
+def _plan_unit_ids(plan: dict[str, Any]) -> list[str]:
     cards = [item for item in plan.get("original_cards") or [] if isinstance(item, dict)]
-    unit_ids = [_text(item.get("unit_id")) for item in cards if _text(item.get("unit_id"))]
+    return [_text(item.get("unit_id")) for item in cards if _text(item.get("unit_id"))]
+
+
+def _without_vanished_units(session: Session, plan: dict[str, Any]) -> dict[str, Any]:
+    unit_ids = _plan_unit_ids(plan)
     if not unit_ids:
         return plan
     return drop_vanished_unstarted(plan, list_active_review_unit_ids(session, unit_ids))
+
+
+def _without_undue_units(session: Session, plan: dict[str, Any]) -> dict[str, Any]:
+    """Drop unstarted cards the opener refuses because they are not due today."""
+    unit_ids = _plan_unit_ids(plan)
+    if not unit_ids:
+        return plan
+    due_ids = list_due_review_unit_ids(session, unit_ids, today=date.today())
+    return drop_undue_unstarted(plan, due_ids)
 
 
 def get_or_create_active_round(
@@ -404,7 +430,7 @@ def get_or_create_active_round(
         scope_changed = _text(row.scope_key) != key[:256]
         persist_config = reorder or scope_changed or replan
         before_ids = [item["card_id"] for item in _plan_of(row).get("original_cards") or []]
-        next_plan = _without_vanished_units(session, _plan_of(row))
+        next_plan = _without_undue_units(session, _without_vanished_units(session, _plan_of(row)))
         dropped = [item["card_id"] for item in next_plan.get("original_cards") or []] != before_ids
         today = _local_today()
         # Fully handled rounds freeze on get_or_create: silent post-complete

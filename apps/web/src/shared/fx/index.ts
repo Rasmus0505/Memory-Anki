@@ -5,7 +5,7 @@ import './recipes/meta'
 import './recipes/rare'
 
 export { cue, listCues, onCue, replayCue, type FxCueMap, type FxCueName, type FxCueOptions } from './core/director'
-export { retireOwner, pendingPlaybackCount, type FxPlayback } from './core/owner'
+export { openPlayback, retireOwner, pendingPlaybackCount, type FxPlayback } from './core/owner'
 export { resolveFxGate, type FxGate, type FxScene } from './core/policy'
 export { FX_ANCHORS, PROGRESS_TARGET, anchorTarget, elementCenter, findAnchor, fxAnchor, type FxAnchorName } from './core/anchors'
 export { bumpElement, chargeElement, flashElement } from './core/domFlourish'

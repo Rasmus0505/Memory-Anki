@@ -170,11 +170,21 @@ export function commitHydratedRoundLedger(input: {
   forceExcludedIds?: readonly string[]
   /** Ids just compressed out of the working set. Survive a silent rebuild. */
   forceCompressedIds?: readonly string[]
+  /**
+   * Replace the local ledger with the server plan. 同步进度 uses this so a
+   * phone draft cannot keep scores the computer's round does not have.
+   */
+  adoptServerLedger?: boolean
 }): HydratedRoundLedger {
+  const adopt = input.adoptServerLedger === true
+  const localPlan = adopt ? null : input.localPlan
+  const localCompletedIds = adopt ? [] : input.localCompletedIds
+  const localHiddenIds = adopt ? [] : input.localHiddenIds
+  const localEncounters = adopt ? {} : input.localEncounters
   const serverPlan = input.serverPlan
   const serverCompleted = Array.isArray(serverPlan?.completed_ids)
     ? serverPlan.completed_ids.map(String)
-    : [...input.localCompletedIds]
+    : (adopt ? [] : [...input.localCompletedIds])
   const serverExcluded = Array.isArray(serverPlan?.excluded_ids)
     ? serverPlan.excluded_ids.map(String)
     : []
@@ -187,7 +197,7 @@ export function commitHydratedRoundLedger(input: {
             input.cards,
             input.config,
             input.meta,
-            input.localPlan,
+            localPlan,
           ),
           serverCompleted,
         ),
@@ -198,13 +208,13 @@ export function commitHydratedRoundLedger(input: {
     serverPlan,
   )
   const retained = retainLocalRoundLedger({
-    localPlan: input.localPlan,
-    localCompletedIds: input.localCompletedIds,
-    localEncounters: input.localEncounters,
+    localPlan,
+    localCompletedIds,
+    localEncounters,
     hydratedPlan,
     hydratedCompletedIds: serverCompleted,
     hydratedEncounters: mergeServerPlanIntoLocalEncounters(
-      input.localEncounters,
+      localEncounters,
       serverPlan,
       input.adoptedRoundId,
     ),
@@ -234,7 +244,7 @@ export function commitHydratedRoundLedger(input: {
     ...retained,
     plan: compressed,
     hiddenIds: mergeRetainedHiddenIds(
-      input.localHiddenIds,
+      localHiddenIds,
       compressed,
       serverExcluded,
       releasedIds,

@@ -3129,6 +3129,44 @@ def check_freestyle_round_sheet_views(errors: list[str]) -> None:
         )
 
 
+def check_freestyle_progress_rail_jump(errors: list[str]) -> None:
+    """Clicking a progress-rail tick jumps to that live card; the count still opens 本轮安排."""
+    rail = (
+        WEB_SRC
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "components"
+        / "FreestyleProgressRail.tsx"
+    )
+    page = WEB_SRC / "modules" / "practice" / "ui" / "freestyle" / "ImmersiveFreestylePage.tsx"
+    doc = REPO_ROOT / "docs" / "architecture" / "freestyle-immersive-feed.md"
+    rail_source = rail.read_text(encoding="utf-8", errors="ignore") if rail.exists() else ""
+    if "onJump" not in rail_source or "data-rail-slot" not in rail_source:
+        errors.append(
+            f"{rail.relative_to(REPO_ROOT).as_posix()}: "
+            "progress rail must jump from the clicked tick (onJump + data-rail-slot)."
+        )
+    page_source = page.read_text(encoding="utf-8", errors="ignore") if page.exists() else ""
+    if "jumpFromProgressRail" not in page_source or "onJump={jumpFromProgressRail}" not in page_source:
+        errors.append(
+            f"{page.relative_to(REPO_ROOT).as_posix()}: "
+            "immersive page must jump the feed when a progress tick is clicked."
+        )
+    if "navigateToIndex" not in page_source:
+        errors.append(
+            f"{page.relative_to(REPO_ROOT).as_posix()}: "
+            "a live progress-rail tick must call navigateToIndex."
+        )
+    doc_source = doc.read_text(encoding="utf-8", errors="ignore") if doc.exists() else ""
+    if "Clicking a progress-rail tick jumps" not in doc_source:
+        errors.append(
+            f"{doc.relative_to(REPO_ROOT).as_posix()}: "
+            "must document that clicking a progress-rail tick jumps the feed."
+        )
+
+
 def check_freestyle_queue_removal_rail(errors: list[str]) -> None:
     """A confirmed 移除队列 stays a solid rail tick and survives a conflicting cursor write."""
     segments = (
@@ -5392,6 +5430,7 @@ def main() -> int:
     check_freestyle_passed_unit_reopen(errors)
     check_freestyle_rating_last_write_wins(errors)
     check_freestyle_round_sheet_views(errors)
+    check_freestyle_progress_rail_jump(errors)
     check_freestyle_viewing_playhead(errors)
     check_freestyle_queue_removal_rail(errors)
     check_freestyle_complete_slot_reachable(errors)

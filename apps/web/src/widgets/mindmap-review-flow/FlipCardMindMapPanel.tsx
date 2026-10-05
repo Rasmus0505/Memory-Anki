@@ -344,7 +344,10 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
       let current = unitScopeModel.byUid.get(uid)
       if (!current) continue
       keepFullOpacity.add(current.uid)
+      const seen = new Set<string>([current.uid])
       while (current?.parentUid) {
+        if (seen.has(current.parentUid)) break
+        seen.add(current.parentUid)
         keepFullOpacity.add(current.parentUid)
         current = unitScopeModel.byUid.get(current.parentUid)
       }

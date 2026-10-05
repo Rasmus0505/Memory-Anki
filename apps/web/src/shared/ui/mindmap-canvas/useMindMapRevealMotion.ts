@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, type RefObject } from 'react'
 import type { Edge, Node } from '@xyflow/react'
-import { cue, rectCenter } from '@/shared/fx'
+import { cue, openPlayback, rectCenter, type FxPlayback } from '@/shared/fx'
 import { themeMotion } from '@/shared/theme/themePacks'
 
 const FLIP_ID = 'mindmap-reveal-flip'
@@ -10,7 +10,6 @@ const flipMs = () => themeMotion().flipMs
 const FLIP_TURN = 0.42
 const STEP_MS = 45
 const MAX_SPREAD_MS = 540
-const MAX_CARDS_PER_BATCH = 40
 const MAX_BURSTS_PER_BATCH = 6
 /** A reveal this wide is a whole branch landing: finish it with gold rain over the map. */
 const GOLD_RAIN_MIN_FLIPS = 2
@@ -76,6 +75,35 @@ export function planRevealMotion(
   return { flips: flips.sort(order).map((node) => node.id), deals: deals.sort(order).map((node) => node.id) }
 }
 
+/**
+ * iOS webviews are killed — and reload into the same death — when one commit
+ * turns over a restored palace. A tap or a small branch stays under the cap.
+ */
+export const MAX_ANIMATED_FLIPS = 8
+export const MAX_ANIMATED_DEALS = 12
+const GESTURE_WINDOW_MS = 800
+
+export function shouldPlayRevealMotion(
+  plan: RevealMotionPlan,
+  options?: { userGesture?: boolean },
+): boolean {
+  if (plan.flips.length > MAX_ANIMATED_FLIPS || plan.deals.length > MAX_ANIMATED_DEALS) return false
+  if (options?.userGesture === true) return true
+  // A reload or a live echo has no fresh tap. One card is safe; a palace is not.
+  return plan.flips.length <= 1 && plan.deals.length <= 1
+}
+
+let lastGestureAt = 0
+
+function noteRevealGesture() {
+  lastGestureAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
+}
+
+function recentRevealGesture() {
+  const now = typeof performance !== 'undefined' ? performance.now() : Date.now()
+  return now - lastGestureAt < GESTURE_WINDOW_MS
+}
+
 function prefersReducedMotion() {
   return typeof window !== 'undefined'
     && typeof window.matchMedia === 'function'
@@ -109,7 +137,7 @@ function clearFx(card: HTMLElement) {
   card.querySelectorAll('[data-mm-flip-fx]').forEach((element) => element.remove())
 }
 
-function flipCard(card: HTMLElement, delay: number, burst: boolean) {
+function flipCard(card: HTMLElement, delay: number, burst: boolean, playback: FxPlayback) {
   const FLIP_MS = flipMs()
   const overshoot = themeMotion().flipOvershootDeg
   clearFx(card)
@@ -148,7 +176,7 @@ function flipCard(card: HTMLElement, delay: number, burst: boolean) {
     ],
     { duration: FLIP_MS + 180, delay, fill: 'both', easing: 'ease-out' },
   ), sheen)
-  landCard(card, delay + FLIP_MS * 0.7, burst)
+  landCard(card, delay + FLIP_MS * 0.7, burst, playback)
 }
 
 function dealCard(card: HTMLElement, delay: number) {
@@ -163,12 +191,21 @@ function dealCard(card: HTMLElement, delay: number) {
 }
 
 /** Gold dust settles as the card lands; its rect is read then, since the camera may be following. */
-function landCard(card: HTMLElement, delay: number, burst: boolean) {
-  window.setTimeout(() => {
-    if (!card.isConnected) return
+function landCard(card: HTMLElement, delay: number, burst: boolean, playback: FxPlayback) {
+  playback.at(delay, () => {
+    if (!card.isConnected || !playback.alive()) return
     if (burst) cue('map.land', { rect: card.getBoundingClientRect() })
     card.dispatchEvent(new CustomEvent(MINDMAP_CARD_LANDED_EVENT, { bubbles: true }))
-  }, delay)
+  })
+}
+
+function retireRevealLayers(root: HTMLElement) {
+  root.querySelectorAll('[data-mm-flip-fx]').forEach((element) => element.remove())
+  root.querySelectorAll<HTMLElement>(
+    '.mindmap-node-card, .mindmap-node-text, .mindmap-node-concealed, .react-flow__edge-path',
+  ).forEach((element) => {
+    element.getAnimations?.().forEach((animation) => animation.cancel())
+  })
 }
 
 function bumpCard(card: Element | null) {
@@ -200,7 +237,15 @@ export function planFoldBack(
   for (const [id, phase] of previous) {
     if (present.has(id) || phase === 'other') continue
     let parent = previousParents.get(id)
-    while (parent && !present.has(parent)) parent = previousParents.get(parent)
+    const walked = new Set<string>()
+    while (parent && !present.has(parent)) {
+      if (walked.has(parent)) {
+        parent = undefined
+        break
+      }
+      walked.add(parent)
+      parent = previousParents.get(parent)
+    }
     if (parent) folds.push({ id, into: parent })
   }
   return folds
@@ -245,7 +290,12 @@ interface MountJob {
 }
 
 /** Runs each job as soon as its element exists (MutationObserver fires before paint). */
-function runWhenMounted(root: HTMLElement, jobs: MountJob[], active: Set<() => void>) {
+function runWhenMounted(
+  root: HTMLElement,
+  jobs: MountJob[],
+  active: Set<() => void>,
+  playback: FxPlayback,
+) {
   const started = performance.now()
   const pending = new Set(jobs)
   const sweep = () => {
@@ -269,6 +319,7 @@ function runWhenMounted(root: HTMLElement, jobs: MountJob[], active: Set<() => v
   }
   observer.observe(root, { childList: true, subtree: true })
   active.add(stop)
+  playback.onCancel(stop)
 }
 
 /**
@@ -283,10 +334,21 @@ export function useMindMapRevealMotion(
   const phases = useRef<Map<string, RevealPhase> | null>(null)
   const parents = useRef<Map<string, string>>(new Map())
   const activeWaits = useRef(new Set<() => void>())
+  const batchRef = useRef<FxPlayback | null>(null)
 
   useEffect(() => {
+    const mark = () => noteRevealGesture()
+    window.addEventListener('pointerdown', mark, true)
+    window.addEventListener('keydown', mark, true)
     const waits = activeWaits.current
-    return () => waits.forEach((stop) => stop())
+    return () => {
+      window.removeEventListener('pointerdown', mark, true)
+      window.removeEventListener('keydown', mark, true)
+      waits.forEach((stop) => stop())
+      waits.clear()
+      batchRef.current?.cancel()
+      batchRef.current = null
+    }
   }, [])
 
   useLayoutEffect(() => {
@@ -302,22 +364,32 @@ export function useMindMapRevealMotion(
     const folds = planFoldBack(previous, previousParents, nodes)
     const willFold = folds.length > 0 && folds.length <= MAX_FOLDS_PER_BATCH
     const plan = planRevealMotion(previous, nodes)
+    const play = shouldPlayRevealMotion(plan, { userGesture: recentRevealGesture() })
     if (willFold) cue('audio.pops', { role: 'fold', count: folds.length })
-    if (plan.flips.length > 0) {
-      cue('audio.pops', { role: 'reveal', count: Math.min(plan.flips.length, MAX_CARDS_PER_BATCH) })
+    if (play && plan.flips.length > 0) {
+      cue('audio.pops', { role: 'reveal', count: Math.min(plan.flips.length, MAX_ANIMATED_FLIPS) })
     }
-    if (plan.deals.length > 0) {
-      cue('audio.pops', { role: 'deal', count: Math.min(plan.deals.length, MAX_CARDS_PER_BATCH) })
+    if (play && plan.deals.length > 0) {
+      cue('audio.pops', { role: 'deal', count: Math.min(plan.deals.length, MAX_ANIMATED_DEALS) })
     }
     if (prefersReducedMotion() || typeof root.animate !== 'function') return
     if (willFold) {
       folds.forEach(({ id, into }) => foldNode(root, id, into))
     }
-    if (plan.flips.length === 0 && plan.deals.length === 0) return
+    if (!play || (plan.flips.length === 0 && plan.deals.length === 0)) return
+
+    // A new tap retires the previous batch. An unrelated React Flow render
+    // (empty plan) must not, or the flip the learner just started never lands.
+    batchRef.current?.cancel()
+    activeWaits.current.forEach((stop) => stop())
+    activeWaits.current.clear()
+    retireRevealLayers(root)
+    const playback = openPlayback('mindmap-reveal')
+    batchRef.current = playback
 
     const incomingEdge = new Map(edges.map((edge) => [edge.target, edge.id]))
     const jobs: MountJob[] = []
-    const flips = plan.flips.slice(0, MAX_CARDS_PER_BATCH)
+    const flips = plan.flips.slice(0, MAX_ANIMATED_FLIPS)
     const step = flips.length > 1 ? Math.min(STEP_MS, MAX_SPREAD_MS / (flips.length - 1)) : 0
     flips.forEach((id, index) => {
       const slot = Math.round(index * step)
@@ -331,10 +403,15 @@ export function useMindMapRevealMotion(
       const lead = edgeId ? INK_LEAD_MS : 0
       jobs.push({
         selector: cardSelector(id),
-        run: (card, elapsed) => flipCard(card as HTMLElement, Math.max(0, slot + lead - elapsed), index < MAX_BURSTS_PER_BATCH),
+        run: (card, elapsed) => flipCard(
+          card as HTMLElement,
+          Math.max(0, slot + lead - elapsed),
+          index < MAX_BURSTS_PER_BATCH,
+          playback,
+        ),
       })
     })
-    plan.deals.slice(0, MAX_CARDS_PER_BATCH).forEach((id, index) => {
+    plan.deals.slice(0, MAX_ANIMATED_DEALS).forEach((id, index) => {
       const slot = Math.min(index * 32, 320)
       const edgeId = incomingEdge.get(id)
       if (edgeId) {
@@ -348,13 +425,13 @@ export function useMindMapRevealMotion(
         run: (card, elapsed) => dealCard(card as HTMLElement, Math.max(0, slot - elapsed)),
       })
     })
-    runWhenMounted(root, jobs, activeWaits.current)
+    runWhenMounted(root, jobs, activeWaits.current, playback)
     if (flips.length >= GOLD_RAIN_MIN_FLIPS) {
       const landMs = Math.round((flips.length - 1) * step) + INK_LEAD_MS + flipMs() * 0.74
-      window.setTimeout(() => {
-        if (!root.isConnected) return
+      playback.at(landMs, () => {
+        if (!root.isConnected || !playback.alive()) return
         cue('map.branch', { rect: root.getBoundingClientRect() })
-      }, landMs)
+      })
     }
   }, [container, edges, nodes])
 }

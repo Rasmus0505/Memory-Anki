@@ -11,7 +11,10 @@ from memory_anki.modules.content.public.queries import (
     list_active_palace_ids_by_subject_scope,
 )
 from memory_anki.modules.exam.api import palace_priority_scores, resolve_stars_for_palaces
-from memory_anki.modules.memory.public.queries import list_trusted_due_units_for_queue
+from memory_anki.modules.memory.public.queries import (
+    list_trusted_due_units_for_queue,
+    resolve_unit_definitions,
+)
 from memory_anki.modules.quiz.public.queries import (
     list_node_bindings_for_palaces,
     list_published_questions_for_palaces,
@@ -28,7 +31,7 @@ from ..domain.queue_builder import (
     assemble_queue,
     merge_content_streams,
 )
-from ..domain.review_units import ReviewUnitCandidate
+from ..domain.review_units import ReviewUnitCandidate, context_path_including_anchor
 from ..domain.study_window import take_study_window
 
 
@@ -85,8 +88,9 @@ def build_freestyle_queue(
     all_selected_ids = sorted({item for values in stream_ids.values() for item in values})
     # Empty id list means every active palace (subject scope "all" with no
     # explicit palaces). A non-empty list is the in-scope subset. Due cards
-    # come from active ReviewUnitState rows — no editor_doc parse, no bulk
-    # reconcile. Opening a unit reconciles that palace.
+    # come from active ReviewUnitState rows — no bulk reconcile. Opening a
+    # unit still reconciles that palace. Row titles need the marked-node path,
+    # so each due palace is projected once through the document cache.
     due_rows = list_trusted_due_units_for_queue(
         session,
         all_selected_ids or None,
@@ -97,6 +101,18 @@ def build_freestyle_queue(
     due_by_palace: dict[int, set[str]] = {}
     mastery_by_palace: dict[int, float] = {}
     recent_practice_rank: dict[int, int] = {}
+    nodes_by_palace: dict[int, dict[str, Any]] = {}
+
+    def nodes_for(palace_id: int) -> dict[str, Any]:
+        if palace_id not in nodes_by_palace:
+            try:
+                tree, _definitions = resolve_unit_definitions(session, palace_id)
+                nodes = tree.get("nodes") if isinstance(tree, dict) else None
+                nodes_by_palace[palace_id] = nodes if isinstance(nodes, dict) else {}
+            except ValueError:
+                nodes_by_palace[palace_id] = {}
+        return nodes_by_palace[palace_id]
+
     for row in due_rows:
         palace_id = int(row["palace_id"])
         title = str(row.get("title") or "")
@@ -108,11 +124,14 @@ def build_freestyle_queue(
         )
         if not node_uids and anchor:
             node_uids = (anchor,)
+        path = context_path_including_anchor(nodes_for(palace_id), anchor)
+        if not path:
+            path = ({"uid": anchor or str(row["id"]), "text": title},)
         units_by_palace.setdefault(palace_id, []).append(
             ReviewUnitCandidate(
                 palace_id=palace_id,
                 anchor_uid=anchor,
-                context_path=({"uid": anchor or str(row["id"]), "text": title},),
+                context_path=path,
                 node_uids=node_uids,
                 unit_id=str(row["id"]),
                 revision=int(row.get("revision") or 1),

@@ -26,7 +26,7 @@ LIVE_STUDY_SURFACES = frozenset(
         "english_reading",
     }
 )
-LIVE_STUDY_COMMAND_TYPES = frozenset({"publish", "hello", "take_control", "heartbeat"})
+LIVE_STUDY_COMMAND_TYPES = frozenset({"publish", "hello", "take_control", "heartbeat", "reload_desktop"})
 CONTROLLER_DISCONNECT_GRACE_SECONDS = 5.0
 CONTROLLER_LEASE_SECONDS = 8.0
 SUBSCRIBER_QUEUE_SIZE = 8
@@ -52,6 +52,7 @@ def _empty_projection() -> dict[str, Any]:
         "surface": "idle",
         "view": None,
         "timer": None,
+        "desktop_reload_nonce": 0,
         "updated_at": iso_utc_now(),
     }
 
@@ -289,6 +290,21 @@ def apply_live_study_command(payload: dict[str, Any]) -> dict[str, Any]:
             return dict(cached)
 
         if command_type == "hello":
+            response = {
+                "accepted": True,
+                "duplicate": False,
+                "projection": _copy_projection(),
+            }
+            _remember_operation(operation_id, response)
+            return dict(response)
+
+        if command_type == "reload_desktop":
+            # Phone asks the desktop window to reload. This stays in process
+            # memory so a stuck SQLite lock cannot block the request itself.
+            _projection["desktop_reload_nonce"] = int(_projection.get("desktop_reload_nonce") or 0) + 1
+            _projection["revision"] = int(_projection.get("revision") or 0) + 1
+            _projection["updated_at"] = iso_utc_now()
+            _emit_locked("update", client_id)
             response = {
                 "accepted": True,
                 "duplicate": False,

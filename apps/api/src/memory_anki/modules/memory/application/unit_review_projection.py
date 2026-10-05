@@ -777,6 +777,38 @@ def list_active_review_unit_ids(session: Session, unit_ids: list[str]) -> set[st
     return found
 
 
+def list_due_review_unit_ids(
+    session: Session,
+    unit_ids: list[str],
+    *,
+    today: date | None = None,
+) -> set[str]:
+    """Active ids among ``unit_ids`` whose ``due_date`` is today or earlier.
+
+    Matches the freestyle opener: a unit with ``due_date > today`` cannot be
+    opened, so it is not due. Does not parse ``editor_doc``.
+    """
+    ids = [str(item).strip() for item in unit_ids if str(item).strip()]
+    if not ids:
+        return set()
+    on = today or date.today()
+    found: set[str] = set()
+    chunk = 400
+    for start in range(0, len(ids), chunk):
+        part = ids[start : start + chunk]
+        rows = (
+            session.query(ReviewUnitState.id)
+            .filter(
+                ReviewUnitState.active.is_(True),
+                ReviewUnitState.id.in_(part),
+                ReviewUnitState.due_date <= on,
+            )
+            .all()
+        )
+        found.update(str(row[0]) for row in rows)
+    return found
+
+
 __all__ = [
     "UnitDefinition",
     "clear_unit_projection_cache",
@@ -785,6 +817,7 @@ __all__ = [
     "get_palace_unit_projection",
     "json_load_list",
     "list_active_review_unit_ids",
+    "list_due_review_unit_ids",
     "list_due_units",
     "reconcile_palace_units",
     "resolve_unit_definitions",

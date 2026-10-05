@@ -325,6 +325,7 @@ function findNextPendingLevel(
     ? node.children.filter((child) => allowedNodeIds.has(child.id))
     : [...node.children]
 
+  const seen = new Set<string>([node.id])
   while (frontier.length > 0) {
     const pending = frontier.filter((child) => {
       if (allowedNodeIds && !allowedNodeIds.has(child.id)) return false
@@ -332,9 +333,16 @@ function findNextPendingLevel(
       return state === 'hidden' || state === 'placeholder'
     })
     if (pending.length > 0) return pending
-    frontier = frontier
-      .flatMap((child) => child.children)
-      .filter((child) => !allowedNodeIds || allowedNodeIds.has(child.id))
+    const next: ReviewMindMapNode[] = []
+    for (const child of frontier) {
+      for (const grandchild of child.children) {
+        if (seen.has(grandchild.id)) continue
+        if (allowedNodeIds && !allowedNodeIds.has(grandchild.id)) continue
+        seen.add(grandchild.id)
+        next.push(grandchild)
+      }
+    }
+    frontier = next
   }
 
   return []
@@ -366,8 +374,11 @@ export function collectBulkRevealTargets(
     return [...node.children]
   }
   const targets: ReviewMindMapNode[] = []
+  const seen = new Set<string>([node.id])
   const walk = (current: ReviewMindMapNode) => {
     for (const child of current.children) {
+      if (seen.has(child.id)) continue
+      seen.add(child.id)
       targets.push(child)
       walk(child)
     }

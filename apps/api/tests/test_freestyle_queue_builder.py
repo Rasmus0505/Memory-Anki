@@ -14,7 +14,10 @@ from memory_anki.modules.practice.domain.queue_builder import (
     merge_content_streams,
     unit_key,
 )
-from memory_anki.modules.practice.domain.review_units import ReviewUnitCandidate
+from memory_anki.modules.practice.domain.review_units import (
+    ReviewUnitCandidate,
+    context_path_including_anchor,
+)
 
 
 def _unit(
@@ -584,3 +587,15 @@ def test_sanitize_repairs_mindmap_only_toggles():
     )
     assert config["content"]["mindmap_branch"] is True
     assert config["content"]["quiz_question"] is False
+
+
+def test_context_path_includes_the_marked_node():
+    nodes = {
+        "root": {"uid": "root", "parent_uid": None, "text": "古希腊的教育阶段"},
+        "mark": {"uid": "mark", "parent_uid": "root", "text": "古典时期"},
+    }
+    assert context_path_including_anchor(nodes, "mark") == (
+        {"uid": "root", "text": "古希腊的教育阶段"},
+        {"uid": "mark", "text": "古典时期"},
+    )
+    assert context_path_including_anchor(nodes, "missing") == ()

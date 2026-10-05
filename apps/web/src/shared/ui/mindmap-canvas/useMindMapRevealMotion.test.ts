@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Node } from '@xyflow/react'
-import { planRevealMotion, readRevealPhase, type RevealPhase } from './useMindMapRevealMotion'
+import { planRevealMotion, readRevealPhase, shouldPlayRevealMotion, type RevealPhase } from './useMindMapRevealMotion'
 
 function node(id: string, phase: RevealPhase, depth = 1, y = 0): Node {
   const visual = phase === 'hidden' ? { concealText: true } : phase === 'revealed' ? { revealed: true } : {}
@@ -60,5 +60,19 @@ describe('planRevealMotion', () => {
   it('does not animate cards that stay revealed', () => {
     const same = [node('root', 'revealed', 0), node('a', 'revealed')]
     expect(planRevealMotion(phases(same), same)).toEqual({ flips: [], deals: [] })
+  })
+})
+
+describe('shouldPlayRevealMotion', () => {
+  it('plays a tap and a small branch', () => {
+    expect(shouldPlayRevealMotion({ flips: ['a'], deals: [] })).toBe(true)
+    expect(shouldPlayRevealMotion({ flips: ['a', 'b', 'c'], deals: [] }, { userGesture: true })).toBe(true)
+  })
+
+  it('does not replay a restored palace, with or without a fresh tap', () => {
+    const restored = { flips: Array.from({ length: 9 }, (_, index) => `n${index}`), deals: [] }
+    expect(shouldPlayRevealMotion(restored)).toBe(false)
+    expect(shouldPlayRevealMotion(restored, { userGesture: true })).toBe(false)
+    expect(shouldPlayRevealMotion({ flips: ['a', 'b'], deals: [] })).toBe(false)
   })
 })

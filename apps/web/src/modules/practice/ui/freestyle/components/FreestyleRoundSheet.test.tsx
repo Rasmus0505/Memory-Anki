@@ -3,7 +3,18 @@ import { describe, expect, it, vi } from 'vitest'
 import type { FreestyleCard, FreestyleFeedConfig } from '@/shared/api/contracts'
 import { DEFAULT_QUEUE_STATE } from '@/modules/practice/domain/queueState'
 import { createRoundPlan } from '@/modules/practice/domain/roundPlan'
+import { rememberUnitPreview } from '../model/freestyleUnitPreviewCache'
 import { FreestyleRoundSheet } from './FreestyleRoundSheet'
+
+vi.mock('../model/freestyleUnitPreviewCache', async () => {
+  const actual = await vi.importActual<typeof import('../model/freestyleUnitPreviewCache')>(
+    '../model/freestyleUnitPreviewCache',
+  )
+  return {
+    ...actual,
+    prefetchUnitPreview: vi.fn(() => Promise.resolve()),
+  }
+})
 
 const config = {
   content: { mindmap_branch: true, anki_card: true, quiz_question: true },
@@ -331,5 +342,74 @@ describe('FreestyleRoundSheet', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '结算已完成 1' }))
     expect(onCompressCompleted).toHaveBeenCalledTimes(1)
+  })
+
+  it('titles a row from the palace root through the marked node', () => {
+    const marked = card('classical')
+    if (marked.type !== 'mindmap_branch') throw new Error('expected a mind map card')
+    marked.palace_id = 77
+    marked.anchor_uid = 'mark'
+    marked.context_path = [{ uid: 'root', text: '第四节 赫尔巴特的教育思想' }]
+    rememberUnitPreview('classical-unit', 1, {
+      id: 'preview:classical-unit',
+      palace_id: 77,
+      title: '第四节 赫尔巴特的教育思想',
+      status: 'preview',
+      palace: {
+        id: 77,
+        title: '第四节 赫尔巴特的教育思想',
+        editor_doc: {
+          root: {
+            data: { uid: 'root', text: '古希腊的教育阶段' },
+            children: [{ data: { uid: 'mark', text: '古典时期' }, children: [] }],
+          },
+        },
+      },
+      units: [{
+        id: 'classical-unit',
+        palace_id: 77,
+        anchor_uid: 'mark',
+        unit_kind: 'marked',
+        title: '第四节 赫尔巴特的教育思想',
+        node_uids: ['mark'],
+        revision: 1,
+        stage_index: 0,
+        interval_days: 0,
+        has_passed: false,
+        due_date: '',
+        due: true,
+        session_status: 'pending',
+        retry_count: 0,
+        hard_count: 0,
+        again_count: 0,
+        final_rating: null,
+        encounter: null,
+      }],
+      pending_unit_count: 1,
+      completed_unit_count: 0,
+    })
+    const cards = [marked]
+    renderSheet({
+      cards,
+      currentIndex: 0,
+      queueState: { ...DEFAULT_QUEUE_STATE, roundId: 'round-1', currentCardId: marked.id },
+      roundPlan: createRoundPlan('round-1', cards, config, {
+        candidate_count: 1,
+        scheduled_count: 1,
+        queue_limit: 50,
+        limit_reached: false,
+      }),
+    })
+    expect(screen.getByRole('button', { name: '古希腊的教育阶段-古典时期' })).toBeTruthy()
+  })
+
+  it('rates from the row and can remove the card from this round', () => {
+    const onRateCard = vi.fn()
+    const onRemoveCard = vi.fn()
+    renderSheet({ onRateCard, onRemoveCard })
+    fireEvent.click(screen.getByRole('button', { name: 'one评分3' }))
+    fireEvent.click(screen.getByRole('button', { name: 'one移除本队列' }))
+    expect(onRateCard).toHaveBeenCalledWith('one', 3)
+    expect(onRemoveCard).toHaveBeenCalledWith('one')
   })
 })

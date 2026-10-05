@@ -194,6 +194,7 @@ export default function ImmersiveFreestylePage({
   const { promptForAiOptions } = useAiRunConfigDialog()
   const [yesterdayHintDismissed, setYesterdayHintDismissed] = useState(false)
   const [inlineEditing, setInlineEditing] = useState(false)
+  const [sheetRatingRequest, setSheetRatingRequest] = useState<{ cardId: string; rating: UnitRating } | null>(null)
   const { flipMode, mindmapZoom, updateFlipMode, updateMindmapZoom } = useFreestyleDisplayPrefs()
   const { freestyleFullscreen, toggleFreestyleFullscreen } = useFreestyleFullscreen()
   const subjectByPalaceId = useFreestyleSubjectMap()
@@ -211,6 +212,7 @@ export default function ImmersiveFreestylePage({
     loading,
     error,
     refreshQueue,
+    syncDesktopProgress,
     startNextRound,
     reshuffleQueue,
     completeCard,
@@ -678,7 +680,31 @@ export default function ImmersiveFreestylePage({
     ? `本轮 0 张 · 候选 ${roundMeta.candidate_count} · 上限 ${roundMeta.queue_limit}`
     : `导图 ${mindmapCount} · 题 ${quizCount}${resolvedQuiz > 0 ? ` · 已答 ${resolvedQuiz}` : ''} · 候选 ${roundMeta.candidate_count}`
   const openPlan = useCallback(() => setPlanOpen(true), [])
+  const jumpFromProgressRail = useCallback((cardId: string) => {
+    const index = cards.findIndex((card) => card.id === cardId)
+    if (index < 0) {
+      setPlanOpen(true)
+      return
+    }
+    navigateToIndex(index)
+  }, [cards, navigateToIndex])
   const openHistory = useCallback(() => setHistoryOpen(true), [])
+  const syncComputerProgress = useCallback(() => {
+    void syncDesktopProgress().then((result) => {
+      if (result.status === 'busy' || result.status === 'stale') return
+      if (result.status === 'empty') {
+        toast.info('电脑还没有这一轮进度')
+        return
+      }
+      toast.success(
+        result.remaining > 0
+          ? `已同步电脑进度，还有 ${result.remaining} 张未评分`
+          : '已同步电脑进度，这一轮已经评完',
+      )
+    }).catch(() => {
+      toast.error('同步失败，请确认手机连的是这台电脑')
+    })
+  }, [syncDesktopProgress])
   const openScopeQuiz = useCallback(() => setScopeQuizOpen(true), [])
   const removeCardFromQueue = useCallback(
     (cardId: string) => excludePlanCards([cardId]),
@@ -692,10 +718,10 @@ export default function ImmersiveFreestylePage({
       summaryLabel={overflowSummary}
       slot={slot}
       onOpenPlan={openPlan}
-      onRefresh={refreshQueue}
+      onSyncProgress={syncComputerProgress}
       onOpenHistory={openHistory}
     />
-  ), [openHistory, openPlan, overflowSummary, refreshQueue, slot])
+  ), [openHistory, openPlan, overflowSummary, slot, syncComputerProgress])
 
   return (
     <TooltipProvider>
@@ -751,12 +777,10 @@ export default function ImmersiveFreestylePage({
           onRateCard={(cardId, rating) => {
             const index = cards.findIndex((card) => card.id === cardId)
             if (index < 0) return
-            setPlanOpen(false)
-            navigateToIndex(index)
-            window.setTimeout(() => {
-              window.dispatchEvent(new CustomEvent('freestyle:rate-active-card', { detail: { cardId, rating } }))
-            }, 0)
+            setSheetRatingRequest({ cardId, rating })
+            if (index !== currentIndex) navigateToIndex(index)
           }}
+          onRemoveCard={removeCardFromQueue}
           onOpenConfig={() => {
             setPlanOpen(false)
             setConfigIntent('replan')
@@ -833,6 +857,7 @@ export default function ImmersiveFreestylePage({
           scrollChannel={scrollChannel}
           workspaceSwitcher={<FreestyleWorkspaceSwitcher slot={slot} />}
           onOpenPlan={openPlan}
+          onJump={jumpFromProgressRail}
           overflow={progressRailOverflow}
         />
         <FreestyleRailParticles segments={progressSummary.segments} />
@@ -930,6 +955,10 @@ export default function ImmersiveFreestylePage({
                               planVersion={planVersion}
                               encounter={queueState.unitEncountersByCardId[card.id]}
                               lastRating={roundPlan?.cardsById[card.id]?.lastRating ?? null}
+                              requestedRating={sheetRatingRequest?.cardId === card.id ? sheetRatingRequest.rating : null}
+                              onRequestedRatingHandled={() => setSheetRatingRequest((current) => (
+                                current?.cardId === card.id ? null : current
+                              ))}
                               retryAfterCards={RESTUDY_MAX_INTERVENING}
                               fullscreen={freestyleFullscreen && index === currentIndex}
                               onToggleFullscreen={toggleFreestyleFullscreen}
