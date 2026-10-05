@@ -272,6 +272,19 @@ def test_fail_after_pass_removes_source_from_completed():
     assert pending[0]["rating"] == 1
 
 
+def test_passing_source_cancels_unanswered_retry_occurrence():
+    cards = [_card("a", unit_id="unit-a"), _card("b"), _card("c"), _card("d"), _card("e")]
+    plan = leave_card(_rate(plan_from_cards(cards), "a", 2, "enc-hard"), "a")
+    inserted = _inserted(plan, "a")
+
+    plan = _rate(plan, "a", 3, "enc-corrected")
+
+    occurrence = next(item for item in plan["occurrences"] if item["occurrence_id"] == inserted["occurrence_id"])
+    assert occurrence["status"] == "cancelled"
+    assert inserted["occurrence_id"] not in plan["presented_ids"]
+    assert inserted["occurrence_id"] not in plan["completed_ids"]
+
+
 def test_pass_settles_source_and_unfinished_occurrences():
     plan = plan_from_cards(
         [_card("a", unit_id="unit-a"), _card("b"), _card("c"), _card("d"), _card("e")]
@@ -705,6 +718,19 @@ def test_peer_progress_completes_overlapping_unit_without_moving_cursor():
     assert "review_unit:unit-a:r1" in synced["completed_ids"]
     assert synced["current_card_id"] == "review_unit:unit-a:r1"
     assert "review_unit:unit-c:r1" not in synced["completed_ids"]
+
+
+def test_exclude_cancels_unfinished_retries_without_writing_a_pass():
+    cards = [_card("a", unit_id="unit-a"), _card("b"), _card("c"), _card("d")]
+    failed = leave_card(_rate(plan_from_cards(cards), "a", 1, "enc-a"), "a")
+    retry = _inserted(failed, "a")
+    excluded = exclude_card(failed, "a")
+    stored = next(item for item in excluded["occurrences"] if item["occurrence_id"] == retry["occurrence_id"])
+    assert "a" in excluded["excluded_ids"]
+    assert "a" not in excluded["completed_ids"]
+    assert stored["status"] == "cancelled"
+    assert retry["occurrence_id"] not in excluded["presented_ids"]
+    assert excluded["current_card_id"] != retry["occurrence_id"]
 
 
 def test_peer_progress_excludes_and_copies_retry():

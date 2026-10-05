@@ -561,3 +561,47 @@ def test_vanished_drop_that_finishes_the_round_does_not_append(session_factory, 
     fetched = client.get("/api/v1/freestyle/rounds/round-freeze-drop")
     assert fetched.status_code == 200, fetched.text
     assert fetched.json()["plan"]["original_cards"] == []
+
+
+def test_exclude_leaves_the_review_schedule_unchanged(session_factory, make_client):
+    session = session_factory()
+    palace = Palace(title="Remove from queue", editor_doc="{}", archived=False)
+    session.add(palace)
+    session.flush()
+    unit = _review_state(palace.id, "removed-unit")
+    unit.stage_index = 3
+    unit.has_passed = True
+    unit.due_date = date.today()
+    session.add(unit)
+    session.commit()
+    palace_id = palace.id
+    session.close()
+
+    client = _client(make_client)
+    card_id = "review_unit:removed-unit:r1"
+    created = _create(
+        client,
+        operation_id="op-remove-create",
+        cards=[_unit_card(card_id, "removed-unit", palace_id)],
+        scope_key="scope-remove",
+        round_id="round-remove",
+    )
+    excluded = client.post(
+        f"/api/v1/freestyle/rounds/{created['round_id']}/actions",
+        json={
+            "operation_id": "op-remove",
+            "expected_version": created["version"],
+            "action": "exclude",
+            "card_id": card_id,
+        },
+    )
+    assert excluded.status_code == 200, excluded.text
+    assert card_id in excluded.json()["plan"]["excluded_ids"]
+
+    check = session_factory()
+    stored = check.get(ReviewUnitState, "removed-unit")
+    assert stored is not None
+    assert stored.due_date == date.today()
+    assert stored.stage_index == 3
+    assert stored.has_passed is True
+    check.close()

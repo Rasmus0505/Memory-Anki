@@ -25,6 +25,7 @@ from memory_anki.modules.practice.domain.overlay_quiz import (
 from memory_anki.modules.practice.domain.round_plan import (
     apply_rating,
     cleared_review_palace_ids,
+    exclude_card,
     normalize_plan,
     plan_from_cards,
     review_palace_ids,
@@ -420,6 +421,18 @@ def test_cleared_review_palace_ids_requires_all_units_rated() -> None:
     assert cleared_review_palace_ids(after_one) == set()
     after_both = apply_rating(after_one, card_id="b", rating=4, encounter_id="e2")
     assert cleared_review_palace_ids(after_both) == {10}
+
+
+def test_excluded_unit_counts_as_handled_for_palace_clear() -> None:
+    plan = plan_from_cards(
+        [
+            {"id": "a", "type": "mindmap_branch", "palace_id": 10, "unit_id": "u1"},
+            {"id": "b", "type": "mindmap_branch", "palace_id": 10, "unit_id": "u2"},
+        ]
+    )
+    rated = apply_rating(plan, card_id="a", rating=3, encounter_id="e1")
+    excluded = exclude_card(rated, "b")
+    assert cleared_review_palace_ids(excluded) == {10}
 
 
 def test_failed_rating_does_not_clear_palace() -> None:

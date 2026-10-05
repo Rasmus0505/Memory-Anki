@@ -208,16 +208,20 @@ def _release_competing_freestyle_unit_sessions(
         )
         .all()
     )
+    if not rows:
+        return 0
+    units_by_study: dict[str, set[str]] = {}
+    for study_id, unit_id in (
+        session.query(ReviewSessionUnit.study_session_id, ReviewSessionUnit.unit_id)
+        .filter(ReviewSessionUnit.study_session_id.in_([study.id for study in rows]))
+        .all()
+    ):
+        units_by_study.setdefault(study_id, set()).add(unit_id)
     released = 0
     for study in rows:
         if keep_study_id is not None and study.id == keep_study_id:
             continue
-        unit_ids = {
-            unit_id
-            for (unit_id,) in session.query(ReviewSessionUnit.unit_id)
-            .filter(ReviewSessionUnit.study_session_id == study.id)
-            .all()
-        }
+        unit_ids = units_by_study.get(study.id, set())
         if keep_unit_id is not None and keep_unit_id in unit_ids and len(unit_ids) == 1:
             continue
         _delete_open_unrated_encounters(session, study.id)
@@ -242,8 +246,12 @@ def start_unit_review_session(
     unit_ids: list[str] | None = None,
     client_source: str | None = None,
     allow_not_due: bool = False,
+    projection: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    projection = get_palace_unit_projection(session, palace_id)
+    # Freestyle start already projected this palace to adopt the live revision.
+    # Parsing the document again held the write lock for a second full walk.
+    if projection is None:
+        projection = get_palace_unit_projection(session, palace_id)
     if projection["mark_required"]:
         raise ValueError("permanent marks are required before review")
     definitions = {item["id"]: item for item in projection["units"]}
@@ -667,7 +675,7 @@ def start_freestyle_unit_review_session(
     # Queue projection may reconcile a stale editor document inside its request
     # and return the new revision before that request is committed. Re-project
     # here so the queue card and the session start observe the same unit state.
-    get_palace_unit_projection(session, state.palace_id)
+    projection = get_palace_unit_projection(session, state.palace_id)
     session.refresh(state)
     if not state.active:
         raise ValueError("review unit not found")
@@ -753,6 +761,7 @@ def start_freestyle_unit_review_session(
             unit_ids=[state.id],
             client_source=client_source,
             allow_not_due=not_due_ok,
+            projection=projection,
         )
         study = session.get(StudySession, str(created["id"]))
         if study is None:

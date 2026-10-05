@@ -533,6 +533,7 @@ def apply_round_action(
     elif name == "uncomplete":
         plan = uncomplete_card(plan, target_id)
     elif name == "exclude":
+        # This round only. Same arrangement as 记得/轻松, without a rating or a schedule write.
         plan = exclude_card(plan, target_id)
     elif name == "restore":
         restore_identity = _progress_identity_in_plan(plan, target_id)

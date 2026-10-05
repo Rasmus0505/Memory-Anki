@@ -6,6 +6,10 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from memory_anki.modules.content.public.queries import (
+    list_active_palace_ids_by_subject_ids,
+    list_active_palace_ids_by_subject_scope,
+)
 from memory_anki.modules.quiz.public.queries import list_published_questions_for_palaces
 
 from ..domain.feed_config import sanitize_feed_config
@@ -51,6 +55,22 @@ def build_overlay_question_pack(
     raw_quiz = streams.get("quiz")
     quiz_stream: dict[str, Any] = raw_quiz if isinstance(raw_quiz, dict) else {}
     resolved_palace_ids = _positive_ids(palace_ids)
+    # Completed cards and live retries survive a replan. They are history, not
+    # permission to keep drawing questions from a palace removed in the picker.
+    raw_memory = streams.get("memory_palace")
+    memory_stream = raw_memory if isinstance(raw_memory, dict) else {}
+    specific_ids = _positive_ids(memory_stream.get("specific_palace_ids"))
+    subject_ids = _positive_ids(memory_stream.get("subject_ids"))
+    subject_scope = str(memory_stream.get("subject_scope") or "all")
+    allowed_ids: set[int] | None = None
+    if subject_ids:
+        allowed_ids = set(specific_ids or list_active_palace_ids_by_subject_ids(session, subject_ids))
+    elif subject_scope != "all":
+        allowed_ids = set(list_active_palace_ids_by_subject_scope(session, subject_scope)) | set(specific_ids)
+    elif specific_ids:
+        allowed_ids = set(specific_ids)
+    if allowed_ids is not None:
+        resolved_palace_ids = [item for item in resolved_palace_ids if item in allowed_ids]
     # Overlay membership is independent of the feed's single question_type filter.
     questions = list_published_questions_for_palaces(
         session,
