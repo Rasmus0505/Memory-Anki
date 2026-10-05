@@ -14,6 +14,11 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Session
 
 from memory_anki.core.config import DATABASE_URL, ensure_runtime_dirs
+from memory_anki.infrastructure.db.diagnostics import (
+    finish_connection_timer,
+    install_query_diagnostics,
+    start_connection_timer,
+)
 from memory_anki.infrastructure.db.migrations import run_migrations
 
 # How long a writer waits for a contended SQLite lock before raising
@@ -58,6 +63,7 @@ engine = create_engine(
 
 @event.listens_for(engine, "do_connect")
 def _ensure_dirs_before_connect(_dialect, _conn_rec, _cargs, _cparams) -> None:
+    start_connection_timer(_conn_rec)
     ensure_runtime_dirs()
 
 
@@ -77,6 +83,10 @@ def _configure_sqlite_pragmas(dbapi_connection, _connection_record) -> None:
         cursor.execute("PRAGMA mmap_size=268435456")
     finally:
         cursor.close()
+        finish_connection_timer(_connection_record)
+
+
+install_query_diagnostics(engine)
 
 
 class Base(DeclarativeBase):

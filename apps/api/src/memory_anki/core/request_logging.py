@@ -9,6 +9,7 @@ from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from memory_anki.core.request_context import set_request_id
+from memory_anki.core.request_timing import RequestTiming, request_timing
 
 # Requests slower than this are escalated to WARNING so that the "加载单元超时"
 # class of bug leaves a duration behind in logs/pwa-api.log. Long-lived SSE
@@ -33,6 +34,8 @@ class RequestLoggingMiddleware:
         set_request_id(request_id)
         request.state.request_id = request_id
         started_at = time.perf_counter()
+        timing = RequestTiming(started_at)
+        timing_token = request_timing.set(timing)
         status_code = 500
 
         async def send_wrapper(message: Message) -> None:
@@ -47,19 +50,34 @@ class RequestLoggingMiddleware:
         try:
             await self.app(scope, receive, send_wrapper)
         finally:
-            duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
-            path = request.url.path
-            extra = {
-                "request_id": request_id,
-                "method": request.method,
-                "path": path,
-                "status_code": status_code,
-                "duration_ms": duration_ms,
-            }
-            message = "%s %s -> %s in %sms"
-            args = (request.method, path, status_code, duration_ms)
-            if duration_ms >= SLOW_REQUEST_THRESHOLD_MS and not path.endswith("/stream"):
-                self.logger.warning("%s %s -> %s in %sms [slow]", *args, extra=extra)
-            else:
-                self.logger.info(message, *args, extra=extra)
-            set_request_id(None)
+            try:
+                duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
+                path = request.url.path
+                extra = {
+                    "request_id": request_id,
+                    "method": request.method,
+                    "path": path,
+                    "status_code": status_code,
+                    "duration_ms": duration_ms,
+                }
+                message = "%s %s -> %s in %sms"
+                args = (request.method, path, status_code, duration_ms)
+                if duration_ms >= SLOW_REQUEST_THRESHOLD_MS and not path.endswith("/stream"):
+                    fields = timing.log_fields()
+                    extra.update(fields)
+                    self.logger.warning(
+                        "%s %s -> %s in %sms [slow] worker_started_ms=%s "
+                        "sql_count=%s sql_total_ms=%s sql_max_ms=%s connect_total_ms=%s",
+                        *args,
+                        fields["worker_started_ms"],
+                        fields["sql_count"],
+                        fields["sql_total_ms"],
+                        fields["sql_max_ms"],
+                        fields["connect_total_ms"],
+                        extra=extra,
+                    )
+                else:
+                    self.logger.info(message, *args, extra=extra)
+            finally:
+                request_timing.reset(timing_token)
+                set_request_id(None)

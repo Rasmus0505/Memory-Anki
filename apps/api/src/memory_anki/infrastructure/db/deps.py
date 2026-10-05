@@ -6,10 +6,14 @@ Tests may override FastAPI dependencies or replace this module's
 """
 from __future__ import annotations
 
+from memory_anki.core.request_timing import request_timing
 from memory_anki.infrastructure.db._tables import get_session
 
 
 def session_dep():
+    timing = request_timing.get()
+    if timing is not None:
+        timing.mark_worker_started()
     session = get_session()
     try:
         yield session

@@ -434,8 +434,9 @@ def _desktop_runtime_ready() -> bool:
 
 
 def _icacls_executable() -> str:
-    system_root = os.environ.get("SystemRoot", r"C:\Windows")
-    return str(Path(system_root) / "System32" / "icacls.exe")
+    # Resolve the system tool through PATH so the launcher remains portable
+    # across Windows installations and test environments.
+    return shutil.which("icacls.exe") or shutil.which("icacls") or "icacls.exe"
 
 
 def _file_integrity_rid(path: Path) -> int | None:
