@@ -30,6 +30,7 @@ import {
   hasRememberedFloatingSize,
   inferWidthFromClassName,
   readStoredFloatingLayout,
+  shouldDeferDialogToCenteredLayout,
   writeStoredFloatingLayout,
   type FloatingDialogLayout,
   type FloatingDialogRemember,
@@ -152,7 +153,23 @@ const DialogContent = forwardRef<
     return () => window.clearTimeout(id)
   }, [])
   const resolvedLayout = layout ?? (modal ? 'centered' : 'unstyled')
-  const floatingEnabled = (floating ?? resolvedLayout === 'centered') && !isCoarsePointerViewport()
+  // Only an *explicit* width request can disqualify a dialog from floating; the
+  // 820px fallback is a default, not a demand, and a plain dialog must keep
+  // floating on narrow viewports (where 820 exceeds the clamp but nothing else
+  // goes wrong).
+  const explicitRequestedWidth = defaultWidth ?? inferWidthFromClassName(className)
+  const inferredDefaultWidth = explicitRequestedWidth ?? FLOATING_DIALOG_LEGACY_DEFAULT_WIDTH
+  // The floating panel is placed at absolute pixels, so it cannot express a
+  // viewport-relative width. A dialog asking for `w-[min(92vw,1440px)]` or
+  // `max-w-[min(94vw,1220px)]` is wider than any fixed floating box: clamping it
+  // to the floating cap left real panels narrower than their own content, and the
+  // remembered pixel position then stranded them off-center. Those dialogs keep
+  // the centered layout, which honors the class and is always centered.
+  const deferredToCentered = floating !== false
+    && shouldDeferDialogToCenteredLayout({ className, requestedWidth: explicitRequestedWidth })
+  const floatingEnabled = (floating ?? resolvedLayout === 'centered')
+    && !deferredToCentered
+    && !isCoarsePointerViewport()
   const stableFloatingId = useMemo(
     () => floatingId ?? `dialog:${capsuleLabel ?? String(props['aria-label'] ?? className ?? 'default')}`,
     [capsuleLabel, className, floatingId, props],
@@ -165,15 +182,14 @@ const DialogContent = forwardRef<
       ? { ...props, 'aria-describedby': undefined }
       : props
   const fallbackTitle = accessibleTitle ?? capsuleLabel ?? String(props['aria-label'] ?? '弹窗')
-  const inferredDefaultWidth = defaultWidth
-    ?? inferWidthFromClassName(className)
-    ?? FLOATING_DIALOG_LEGACY_DEFAULT_WIDTH
   const storageKey = `${FLOATING_DIALOG_STORAGE_PREFIX}${stableFloatingId}`
   const [floatingLayout, setFloatingLayout] = useState<FloatingDialogLayout>(() =>
     readStoredFloatingLayout(storageKey, inferredDefaultWidth),
   )
   const [derivedCapsuleLabel, setDerivedCapsuleLabel] = useState(capsuleLabel ?? '弹窗')
   const contentRef = useRef<HTMLDivElement | null>(null)
+  // Guards the mount-time measurement in `mergedRef` so it runs once per open.
+  const mountMeasuredRef = useRef(false)
   // Once the user drags/resizes the panel, stop auto-centering it for this open.
   const autoCenterLockedRef = useRef(false)
   const interactionRef = useRef<
@@ -220,6 +236,11 @@ const DialogContent = forwardRef<
   useLayoutEffect(() => {
     if (!open || !floatingEnabled) return
     autoCenterLockedRef.current = false
+    // Radix renders the panel through a portal that is not in the DOM yet when this
+    // layout effect runs, so `contentRef.current` is null on the first pass and the
+    // real box cannot be measured here. The ref callback (`mergedRef`) re-runs the
+    // centering pass the moment the node mounts, which is what actually measures
+    // the panel; this pass still handles re-opens where the node is already live.
     const node = contentRef.current
     // Layout metrics (offsetWidth/offsetHeight) ignore the open/close zoom
     // transform. getBoundingClientRect() reports the shrunken entrance frame
@@ -254,14 +275,12 @@ const DialogContent = forwardRef<
     if (!open || !floatingEnabled || floatingLayout.collapsed) return
     const node = contentRef.current
     if (!node || typeof ResizeObserver === 'undefined') return
-    // The opening frame was already measured (and centered) by the layout effect;
-    // skip this attach callback so restoring a capsule does not jump the panel.
-    let priming = true
+    // The layout effect above runs before the portal has mounted the panel, so it
+    // cannot measure the real box and centers against the 400px auto-height. This
+    // first observer callback is the first frame where a real measurement exists,
+    // so apply it rather than skipping it: otherwise a tall dialog stays centered
+    // as if it were 400px high, sitting below true center.
     const observer = new ResizeObserver(() => {
-      if (priming) {
-        priming = false
-        return
-      }
       if (autoCenterLockedRef.current || interactionRef.current) return
       const width = Math.round(node.offsetWidth)
       const height = Math.round(node.offsetHeight)
@@ -417,9 +436,49 @@ const DialogContent = forwardRef<
     [floatingLayout.x, floatingLayout.y],
   )
 
+  // Latest centering inputs for the mount-time measurement in `mergedRef`. Keeping
+  // them in a ref lets the callback stay identity-stable, which matters because the
+  // ref re-fires whenever it changes and would otherwise loop against setState.
+  const mountCenterInputsRef = useRef({ floatingEnabled, open, inferredDefaultWidth, storageKey })
+  mountCenterInputsRef.current = { floatingEnabled, open, inferredDefaultWidth, storageKey }
+
   const mergedRef = useCallback(
     (node: HTMLDivElement | null) => {
       contentRef.current = node
+      const {
+        floatingEnabled: enabled,
+        open: isOpen,
+        inferredDefaultWidth: defaultWidth,
+        storageKey: key,
+      } = mountCenterInputsRef.current
+      if (node && isOpen && enabled && !autoCenterLockedRef.current && !mountMeasuredRef.current) {
+        // First frame where the portal is actually mounted, so this is the earliest
+        // point at which the real box can be measured. Without it the panel would
+        // keep the auto-height centering (as if it were 400px tall) and sit below
+        // true center. offsetHeight/offsetWidth ignore the open zoom transform,
+        // which getBoundingClientRect() would report shrunken.
+        const width = Math.round(node.offsetWidth)
+        const height = Math.round(node.offsetHeight)
+        if (height > 0) {
+          mountMeasuredRef.current = true
+          setFloatingLayout((current) => {
+            const remembered = hasRememberedFloatingSize(key)
+              ? readStoredFloatingLayout(key, defaultWidth)
+              : null
+            const next = createCenteredFloatingLayout({
+              width: remembered
+                ? remembered.width
+                : (width >= FLOATING_DIALOG_MIN_WIDTH ? width : current.width),
+              height: remembered ? remembered.height : current.height,
+              measuredHeight: height,
+              collapsed: current.collapsed,
+              pinned: current.pinned,
+            })
+            writeStoredFloatingLayout(key, next, { size: !remembered, position: true })
+            return next
+          })
+        }
+      }
       if (typeof ref === 'function') ref(node)
       else if (ref) ref.current = node
     },
@@ -492,6 +551,7 @@ const DialogContent = forwardRef<
   const content = (
     <DialogPrimitive.Content
       ref={mergedRef}
+      data-dialog-content-panel="true"
       {...contentProps}
       onPointerDownOutside={(event) => {
         if (!dismissOnInteractOutside) event.preventDefault()

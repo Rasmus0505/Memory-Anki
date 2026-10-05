@@ -354,6 +354,56 @@ describe('Dialog', () => {
     expect(dialog.style.left).toBe('476px')
   })
 
+  it('keeps a viewport-relative dialog centered instead of stranding it at a remembered position', () => {
+    setViewport(1825, 982)
+
+    // Seed a remembered off-center position the way a real user drag would: a wide
+    // panel clamped to the floating cap leaves this pixel position far from center
+    // on the next open. (Uses mindmap-import's class as a wide-panel stand-in — the
+    // real 随心配置 panel is covered by the deferral-rule tests in
+    // dialogFloatingLayout.test.ts.)
+    window.localStorage.setItem(
+      'memory-anki-floating-dialog:mindmap-import',
+      JSON.stringify({ x: 40, y: 620, width: 1600, height: 600, collapsed: false, pinned: false }),
+    )
+
+    render(
+      <Dialog open onOpenChange={vi.fn()}>
+        <DialogContent
+          floatingId="mindmap-import"
+          className="h-[min(92vh,980px)] max-w-[min(92vw,1440px)] rounded-lg border bg-card/98 p-0 shadow-floating"
+        >
+          <DialogHeader>
+            <div>
+              <DialogTitle>wide dialog</DialogTitle>
+              <DialogDescription>description</DialogDescription>
+            </div>
+          </DialogHeader>
+          dialog body
+        </DialogContent>
+      </Dialog>,
+    )
+
+    const dialog = screen.getByRole('dialog')
+    // Falls back to the centered layout: no absolute placement at all, so the
+    // remembered x/y cannot strand it off-center.
+    expect(dialog.style.left).toBe('')
+    expect(dialog.style.top).toBe('')
+    expect(dialog.className).not.toContain('shadow-popover')
+    // ...and no inline width either, so the class's declared width wins instead of
+    // being clamped down to the floating panel's cap.
+    expect(dialog.style.width).toBe('')
+    expect(dialog.className).toContain('max-w-[min(92vw,1440px)]')
+
+    const centerWrapper = document.querySelector('[data-floating-dialog-root]')?.parentElement
+      ?? Array.from(document.querySelectorAll('div')).find(
+        (element) =>
+          element.className.includes('items-center') && element.className.includes('justify-center'),
+      )
+    expect(centerWrapper?.className).toContain('items-center')
+    expect(centerWrapper?.className).toContain('justify-center')
+  })
+
   it('centers from layout height so the entrance zoom does not push the panel down', () => {
     setViewport(1200, 900)
     const heightDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetHeight')

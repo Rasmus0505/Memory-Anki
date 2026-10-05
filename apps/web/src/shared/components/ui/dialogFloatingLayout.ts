@@ -28,6 +28,11 @@ export const FLOATING_DIALOG_VIEWPORT_PADDING = 16
 export const FLOATING_DIALOG_LEGACY_DEFAULT_WIDTH = 820
 const FLOATING_DIALOG_AUTO_HEIGHT_FALLBACK = 400
 
+/** The widest box the floating panel can ever express: the viewport minus both gutters. */
+export function floatingDialogMaxWidth(viewportWidth: number) {
+  return Math.max(FLOATING_DIALOG_MIN_WIDTH, viewportWidth - FLOATING_DIALOG_VIEWPORT_PADDING * 2)
+}
+
 const TAILWIND_MAX_WIDTHS: Array<[string, number]> = [
   ['max-w-7xl', 1280],
   ['max-w-6xl', 1152],
@@ -49,6 +54,55 @@ export function inferWidthFromClassName(className?: string): number | null {
     if (tokens.has(token)) return width
   }
   return null
+}
+
+/**
+ * `w-[min(92vw,1440px)]` / `max-w-[94vw]` / `w-[min(68rem,calc(100vw-2rem))]` — a width the
+ * floating panel cannot honor, because it is placed at absolute pixels with a
+ * viewport-minus-padding cap.
+ */
+function hasViewportRelativeWidthToken(className: string) {
+  const tokens = className.split(/\s+/)
+  return tokens.some((token) => {
+    if (token === 'max-w-none') return false
+    if (!/^(w|max-w|min-w)-\[/.test(token)) return false
+    // Only width-bearing relative units count; a `min-h-[...]`-style token can
+    // never reach here, and `calc(100% - 2rem)` still resolves against the
+    // floating box, so it is left to the clamp.
+    return /vw|dvw|calc\(|100%/.test(token)
+  })
+}
+
+/**
+ * Whether a dialog must fall back to the centered layout instead of the floating
+ * panel.
+ *
+ * `requestedWidth` is an *explicit* request only (`defaultWidth` prop or a
+ * recognized `max-w-*` token) — pass `null` when the dialog simply inherited the
+ * 820px default, because the floating panel handles that case by clamping, and
+ * deferring would strand ordinary dialogs on narrow viewports.
+ *
+ * Clamping only ever reaches `viewport - 32px`, so the realistic trigger is not an
+ * absurd number — it is a panel that asks for nearly the whole viewport. At
+ * 1825px wide, `w-[min(68rem,…)]` is "only" 1088px (under the 1793px cap) and
+ * still floated correctly; but `max-w-[min(92vw,1180px)]` resolves near the cap,
+ * and `min(92vw,1440px)` overshoots it outright. The panel then renders narrower
+ * than its own content, and worse, it is placed at the remembered pixel position,
+ * which strands it off-center. The centered layout honors the class exactly and
+ * is centered by construction.
+ *
+ * Only an explicit `floating` prop overrides this.
+ */
+export function shouldDeferDialogToCenteredLayout({
+  className,
+  requestedWidth,
+}: {
+  className?: string
+  requestedWidth?: number | null
+}): boolean {
+  if (className && hasViewportRelativeWidthToken(className)) return true
+  if (requestedWidth == null) return false
+  return requestedWidth > floatingDialogMaxWidth(getViewportSize().width)
 }
 
 function getViewportSize() {
@@ -105,7 +159,7 @@ function clampLayoutWithMeasure(
   measuredHeight?: number,
 ): FloatingDialogLayout {
   const viewport = getViewportSize()
-  const maxWidth = Math.max(FLOATING_DIALOG_MIN_WIDTH, viewport.width - FLOATING_DIALOG_VIEWPORT_PADDING * 2)
+  const maxWidth = floatingDialogMaxWidth(viewport.width)
   const maxHeight = Math.max(FLOATING_DIALOG_MIN_HEIGHT, viewport.height - FLOATING_DIALOG_VIEWPORT_PADDING * 2)
   const width = Math.min(Math.max(layout.width, FLOATING_DIALOG_MIN_WIDTH), maxWidth)
   const height = layout.height == null ? null : Math.min(Math.max(layout.height, FLOATING_DIALOG_MIN_HEIGHT), maxHeight)
@@ -129,7 +183,7 @@ export function createCenteredFloatingLayout(
   const viewport = getViewportSize()
   const width = Math.min(
     partial?.width ?? FLOATING_DIALOG_LEGACY_DEFAULT_WIDTH,
-    Math.max(FLOATING_DIALOG_MIN_WIDTH, viewport.width - FLOATING_DIALOG_VIEWPORT_PADDING * 2),
+    floatingDialogMaxWidth(viewport.width),
   )
   const height = partial?.height ?? null
   const measuredHeight = partial?.measuredHeight
