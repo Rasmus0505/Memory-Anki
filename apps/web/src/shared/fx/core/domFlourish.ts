@@ -41,12 +41,17 @@ function mountTransient(host: HTMLElement, className: string, lifeMs: number, pl
   node.setAttribute('aria-hidden', 'true')
   if (text) node.textContent = text
   host.appendChild(node)
-  const remove = () => node.remove()
-  const id = window.setTimeout(remove, lifeMs)
-  playback?.onCancel(() => {
+  let removed = false
+  let unsubscribe = () => undefined
+  const remove = () => {
+    if (removed) return
+    removed = true
     window.clearTimeout(id)
-    remove()
-  })
+    unsubscribe()
+    node.remove()
+  }
+  const id = window.setTimeout(remove, lifeMs)
+  unsubscribe = playback?.onCancel(remove) ?? unsubscribe
   return node
 }
 

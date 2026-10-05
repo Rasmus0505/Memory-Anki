@@ -180,11 +180,9 @@ export function accumulateFreestyleLearningTimeApi(
     {
       method: 'POST',
       body: JSON.stringify(payload),
-      persistence: {
-        resourceKey: `freestyle-learning-time:${payload.operation_id}`,
-        description: '保存随心学习时间',
-        replayMode: 'auto',
-      },
+      // The clock owns the durable outbox and acknowledgement. A second HTTP
+      // replay queue would submit an already acknowledged interval again.
+      persistence: false,
     },
   )
 }

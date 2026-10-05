@@ -26,7 +26,7 @@ from memory_anki.modules.backups.application.storage_backup import (
 
 logger = logging.getLogger(__name__)
 
-# 自动/手动/关机均走轻量 rolling（仅数据库）。全量媒体拷贝不再作为产品路径。
+# 自动/手动/关机均走轻量 rolling；rescue 在替换前包含 ledger 与附件，full 包含所有 managed media。
 AUTO_ROLLING_BACKUP_INTERVAL = timedelta(hours=4)
 ROLLING_EDIT_BACKUP_INTERVAL = timedelta(minutes=30)
 
@@ -46,10 +46,10 @@ def timestamp_slug(now: datetime | None = None) -> str:
 
 
 def create_rescue_snapshot(reason: str) -> Path:
-    """救援快照只拷数据库 + 迁移状态，不复制 PDF/视频等大媒体。"""
+    """替换前保护数据库、time-ledger、附件和迁移状态。"""
     with _BACKUP_LOCK:
         folder = RESCUE_BACKUPS_DIR / f"{timestamp_slug()}-{reason}"
-        write_storage_backup(folder, reason=reason, full=False)
+        write_storage_backup(folder, reason=reason, full=False, scope="rescue")
         prune_old_backups(RESCUE_BACKUPS_DIR, MAX_RESCUE_BACKUPS)
         return folder
 
@@ -71,7 +71,7 @@ def create_full_backup(reason: str) -> Path:
 
 
 def create_rolling_backup(reason: str) -> Path:
-    """轻量备份：只复制数据库 + 迁移状态，不含大媒体目录。"""
+    """轻量备份：数据库和迁移状态；不含 time-ledger 与附件。"""
     with _BACKUP_LOCK:
         folder = ROLLING_BACKUPS_DIR / f"{timestamp_slug()}-{reason}"
         write_storage_backup(folder, reason=reason, full=False)
@@ -150,7 +150,7 @@ def maybe_create_interval_backup(reason: str, minimum_interval: timedelta) -> Pa
 
 
 def maybe_create_rolling_backup(reason: str = "rolling-edit") -> Path | None:
-    """编辑触发的滚动备份，走轻量分支（仅 DB + migration-state）。"""
+    """编辑触发的滚动备份，只含数据库和迁移状态。"""
     latest = _latest_backup_in(ROLLING_BACKUPS_DIR)
     if latest and _backup_age(latest) < ROLLING_EDIT_BACKUP_INTERVAL:
         return None

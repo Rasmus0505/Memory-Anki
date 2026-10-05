@@ -598,6 +598,8 @@ export function FreestyleUnitReviewCardView({
       window.clearTimeout(timer)
       if (loadGenerationRef.current === generation) loadGenerationRef.current += 1
     }
+    // Identity fields only. The full encounter/card object is intentionally omitted.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     active,
     // Identity only. A silent rebuild replaces the card object; using it here

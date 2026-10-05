@@ -37,7 +37,6 @@ import {
   setLastUsedMarkColor,
 } from '@/shared/preferences/markColorLabels'
 import type { MindMapCanvasProps } from './MindMapCanvas'
-import type { MindMapNode } from './adapter'
 
 export interface MarkColorFlyoutState {
   x: number

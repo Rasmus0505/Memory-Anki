@@ -186,6 +186,34 @@ def test_operation_id_is_idempotent(make_client):
     assert second.json()["current_card_id"] == "c"
 
 
+def test_operation_receipt_survives_a_later_action(make_client):
+    client = _client(make_client)
+    created = _create(client, operation_id="op-create", cards=_cards("a", "b", "c"))
+    round_id = created["round_id"]
+    first_body = {
+        "operation_id": "op-cursor-b",
+        "expected_version": created["version"],
+        "action": "set_cursor",
+        "card_id": "b",
+    }
+    first = client.post(f"/api/v1/freestyle/rounds/{round_id}/actions", json=first_body)
+    assert first.status_code == 200, first.text
+    second = client.post(
+        f"/api/v1/freestyle/rounds/{round_id}/actions",
+        json={
+            "operation_id": "op-cursor-c",
+            "expected_version": first.json()["version"],
+            "action": "set_cursor",
+            "card_id": "c",
+        },
+    )
+    assert second.status_code == 200, second.text
+    replay = client.post(f"/api/v1/freestyle/rounds/{round_id}/actions", json=first_body)
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["duplicate"] is True
+    assert replay.json()["current_card_id"] == "c"
+
+
 def test_start_new_round_completes_previous(make_client):
     client = _client(make_client)
     first = _create(client, operation_id="op-first", cards=_cards("a", "b"), round_id="round-old")

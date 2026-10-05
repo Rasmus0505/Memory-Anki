@@ -36,7 +36,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.stdout.reconfigure(encoding="utf-8")
 
-from dump_palace_for_binding import connect, walk_nodes  # noqa: E402
+from dump_palace_for_binding import connect, resolve_app_home, walk_nodes  # noqa: E402
+from memory_anki.core.runtime_storage_lock import storage_write_lock  # noqa: E402
 
 DEFAULT_RUN_ID = "hand-bind-manual"
 ALLOWED_SOURCES = {"manual", "vision", "import"}
@@ -165,26 +166,33 @@ def main() -> None:
         print("!! 校验失败，未写入：")
         for line in errors:
             print("  -", line)
+        con.close()
         raise SystemExit(1)
+    con.close()
 
     # Scope the wipe to the explicit question set, wherever their edges point.
     placeholders = ",".join("?" for _ in active_qids)
-    try:
-        removed = con.execute(
-            f"delete from palace_quiz_question_node_bindings "
-            f"where question_id in ({placeholders})",
-            tuple(sorted(active_qids)),
-        ).rowcount
-        con.executemany(
-            """insert into palace_quiz_question_node_bindings
-               (palace_id, question_id, node_uid, confidence, reason, source, run_id, created_at, updated_at)
-               values (?,?,?,?,?,?,?,?,?)""",
-            rows,
-        )
-        con.commit()
-    except Exception:
-        con.rollback()
-        raise
+    with storage_write_lock(resolve_app_home()):
+        con = connect(write=True)
+        try:
+            con.execute("BEGIN IMMEDIATE")
+            removed = con.execute(
+                f"delete from palace_quiz_question_node_bindings "
+                f"where question_id in ({placeholders})",
+                tuple(sorted(active_qids)),
+            ).rowcount
+            con.executemany(
+                """insert into palace_quiz_question_node_bindings
+                   (palace_id, question_id, node_uid, confidence, reason, source, run_id, created_at, updated_at)
+                   values (?,?,?,?,?,?,?,?,?)""",
+                rows,
+            )
+            con.commit()
+        except Exception:
+            con.rollback()
+            raise
+        finally:
+            con.close()
     cross = sum(1 for r in rows if r[0] != palace_id)
     print(
         f"宫殿 {palace_id}《{palace['manual_title'] or palace['title']}》："

@@ -1237,6 +1237,7 @@ def rate_review_unit(
     operation_id: str,
     rating: int | str,
     round_id: str | None = None,
+    commit: bool = True,
 ) -> dict[str, Any]:
     op_id = str(operation_id or "").strip()
     if not op_id:
@@ -1270,7 +1271,8 @@ def rate_review_unit(
         rating=normalize_rating(rating),
         baseline_from=original,
     )
-    session.commit()
+    if commit:
+        session.commit()
     return after
 
 
@@ -1284,6 +1286,7 @@ def rate_palace_due_units(
     current: dict[str, Any] | None,
     exclude_unit_ids: list[str] | None = None,
     include_unit_ids: list[str] | None = None,
+    commit: bool = True,
 ) -> dict[str, Any]:
     """Rate the open current card, plus mature still-due siblings.
 
@@ -1448,7 +1451,8 @@ def rate_palace_due_units(
         if sibling_op is not None:
             operations.append(sibling_op)
 
-    session.commit()
+    if commit:
+        session.commit()
     return _batch_result_from_operations(
         session, operations, palace_id=int(palace_id), batch_id=batch_id
     )

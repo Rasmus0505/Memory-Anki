@@ -52,7 +52,7 @@
 | 文档规范化、旧格式兼容、序列化、指纹 | `modules/mindmap_document/api.py` |
 | 宫殿导图读写、危险删除、版本、Peg 同步 | `modules/content/application/editor_*` |
 | 知识导图读写、Chapter 同步 | `modules/knowledge/application/editor_*` |
-| 回忆事件、掌握度、人工标签 | `modules/mindmap_learning` |
+| 回忆事件、掌握度、人工标签 | 独立 `mindmap_learning` 模块已退役；掌握度在 `modules/quiz`，复习事实在 `modules/memory` |
 
 其他模块只能通过 `memory_anki.modules.mindmap_document.api` 使用纯文档能力，不得导入其内部文件。
 

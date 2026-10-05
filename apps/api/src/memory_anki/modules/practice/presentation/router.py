@@ -149,6 +149,7 @@ def api_freestyle_learning_time(
             round_id=round_id,
             operation_id=data.operation_id,
             expected_version=data.expected_version,
+            intervals=[item.model_dump() for item in data.intervals],
             adds=[item.model_dump() for item in data.adds],
         )
     except ValueError as exc:

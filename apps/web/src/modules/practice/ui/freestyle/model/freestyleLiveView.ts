@@ -131,14 +131,43 @@ export function decodeFreestyleLiveRating(raw: unknown): FreestyleLiveRating | n
   }
 }
 
+/** True when the remote rating is newer and should replace the local one.
+
+Equal versions with a different payload are an unresolved race. They do not
+replace either side, so two devices cannot flap the same score.
+*/
 export function isWeakerLiveRating(
   local: FreestyleLiveRating | null | undefined,
   remote: FreestyleLiveRating | null | undefined,
 ) {
   if (!remote?.selectedRating) return false
   if (!local?.selectedRating) return true
-  if (remote.settled.length > 0 && local.settled.length === 0) return true
-  return false
+  if (remote.planVersion !== local.planVersion) return remote.planVersion > local.planVersion
+  return remote.settled.length > local.settled.length
+}
+
+/**
+ * True only when the remote rating is definitely newer. Equal-version payload
+ * differences are an unresolved last-writer race, so they must not suppress a
+ * local publish forever.
+ */
+export function isStrictlyWeakerLiveRating(
+  local: FreestyleLiveRating | null | undefined,
+  remote: FreestyleLiveRating | null | undefined,
+) {
+  if (!remote?.selectedRating) return false
+  if (!local?.selectedRating) return true
+  return remote.planVersion > local.planVersion
+}
+
+/** A rating can only be adopted after every settled card exists in the queue. */
+export function isApplicableLiveRating(
+  rating: FreestyleLiveRating,
+  queueCardIds: string[],
+) {
+  const available = new Set(queueCardIds)
+  if (rating.currentCardId && !available.has(rating.currentCardId)) return false
+  return rating.settled.every((settle) => available.has(settle.cardId))
 }
 
 export function serializeFreestyleLiveView(view: FreestyleLiveView) {

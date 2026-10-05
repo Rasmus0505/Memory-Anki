@@ -2200,8 +2200,9 @@ export function useImmersiveQueue(
     round_id?: string
     plan?: FreestyleRoundStatePayload['plan']
   } | null | undefined) => {
+    if (round?.round_id && round.round_id !== queueStateRef.current.roundId) return
     const version = serverPlanVersion(round)
-    if (version > 0) {
+    if (version > serverPlanVersionRef.current) {
       serverPlanVersionRef.current = version
       setPlanVersion(version)
     }

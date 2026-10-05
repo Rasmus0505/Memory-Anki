@@ -38,9 +38,9 @@ export function resolveFxGate(scene: FxScene): FxGate {
   if (scene === 'review') {
     const review = settings.scenes.review
     return {
-      motion: baseMotion,
+      motion: baseMotion && review.enabled && review.animationEnabled,
       sound: settings.soundEnabled && channels.learningSounds && review.enabled && review.soundEnabled,
-      haptic,
+      haptic: haptic && review.enabled,
       volume: volumeFor('review'),
       gameplayFx: settings.gameplayFx,
     }

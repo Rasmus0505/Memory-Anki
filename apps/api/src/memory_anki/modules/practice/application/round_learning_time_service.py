@@ -19,6 +19,7 @@ from memory_anki.modules.practice.application.round_state_service import (
 )
 from memory_anki.modules.practice.domain.learning_time import (
     apply_learning_adds,
+    apply_learning_intervals,
     attribute_unassigned_unit_seconds,
     fold_freestyle_segment,
     normalize_learning_time,
@@ -48,9 +49,10 @@ def accumulate_round_learning_time(
     round_id: str,
     operation_id: str,
     expected_version: int,
+    intervals: list[dict[str, Any]] | None = None,
     adds: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Add live unit / quiz / lookup seconds. Duplicate operation ids do not add twice."""
+    """Record interval facts, or legacy scalar adds. Duplicate operations do not add twice."""
     row, early = _begin_round_write(
         session,
         round_id=round_id,
@@ -60,7 +62,12 @@ def accumulate_round_learning_time(
     if early is not None or row is None:
         return early or {}
     plan = _plan_of(row)
-    plan["learning_time"] = apply_learning_adds(plan.get("learning_time"), adds or [])
+    learning = plan.get("learning_time")
+    if intervals:
+        learning = apply_learning_intervals(learning, intervals)
+    if adds:
+        learning = apply_learning_adds(learning, adds)
+    plan["learning_time"] = learning
     return _commit_plan(session, row, plan, _require_operation_id(operation_id))
 
 

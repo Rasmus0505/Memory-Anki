@@ -11,7 +11,9 @@ export interface FxPlayback {
   /** Runs `fn` after `ms` unless the playback died first. */
   at(ms: number, fn: () => void): void
   /** Registers teardown (DOM ghosts, intervals) for cancellation. */
-  onCancel(fn: () => void): void
+  onCancel(fn: () => void): () => void
+  /** Releases an idle playback after its synchronous setup is complete. */
+  finish(): void
   cancel(): void
 }
 
@@ -21,6 +23,23 @@ interface OwnerRecord {
 }
 
 const owners = new Map<string, OwnerRecord>()
+// Skip persists for this mounted ceremony, including data arriving after the gesture.
+const skippedOwners = new Set<string>()
+
+export const roundFxOwner = (roundKey: string) => `round:${roundKey}`
+
+export function skipOwner(owner: string) {
+  skippedOwners.add(owner)
+  retireOwner(owner)
+}
+
+export function resumeOwner(owner: string) {
+  skippedOwners.delete(owner)
+}
+
+export function isOwnerSkipped(owner: string) {
+  return skippedOwners.has(owner)
+}
 
 class Playback implements FxPlayback {
   readonly owner: string
@@ -28,7 +47,7 @@ class Playback implements FxPlayback {
   private readonly generation: number
   private dead = false
   private readonly timers = new Set<number>()
-  private readonly cleanups: Array<() => void> = []
+  private readonly cleanups = new Set<() => void>()
 
   constructor(owner: string, record: OwnerRecord, generation: number) {
     this.owner = owner
@@ -55,8 +74,20 @@ class Playback implements FxPlayback {
   }
 
   onCancel(fn: () => void) {
-    if (this.dead) fn()
-    else this.cleanups.push(fn)
+    if (this.dead) {
+      fn()
+      return () => undefined
+    }
+    this.cleanups.add(fn)
+    return () => {
+      this.cleanups.delete(fn)
+      this.settle()
+    }
+  }
+
+  /** Releases an idle playback and unregisters all cancellation closures. */
+  finish() {
+    this.settle()
   }
 
   cancel() {
@@ -64,13 +95,19 @@ class Playback implements FxPlayback {
     this.dead = true
     this.timers.forEach((id) => window.clearTimeout(id))
     this.timers.clear()
-    this.cleanups.splice(0).forEach((fn) => fn())
+    const cleanups = Array.from(this.cleanups)
+    this.cleanups.clear()
+    cleanups.forEach((fn) => fn())
     this.record.playbacks.delete(this)
   }
 
   /** Drops the playback from its owner once nothing is pending. */
   settle() {
-    if (this.timers.size === 0 && this.cleanups.length === 0) this.record.playbacks.delete(this)
+    if (this.timers.size === 0 && this.cleanups.size === 0) {
+      this.dead = true
+      this.record.playbacks.delete(this)
+      if (this.record.playbacks.size === 0 && owners.get(this.owner) === this.record) owners.delete(this.owner)
+    }
   }
 }
 
@@ -89,6 +126,7 @@ export function openPlayback(owner: string = GLOBAL_OWNER): FxPlayback {
   const record = recordFor(owner)
   const playback = new Playback(owner, record, record.generation)
   record.playbacks.add(playback)
+  if (skippedOwners.has(owner)) playback.cancel()
   return playback
 }
 

@@ -369,7 +369,7 @@ BUILTIN_SCENES: dict[str, PromptSceneSeed] = {
         scene_key="batch_palace_generation",
         prompt_key="ai_prompt_batch_palace_generation",
         block_keys=("content.fidelity", "boundary.document_chapter", "boundary.noise_filter", "quality.source_grounding"),
-        scene_instruction=PROMPT_DEFINITIONS["ai_prompt_batch_palace_generation"].default_template,
+        scene_instruction="已退役的批量宫殿草稿提示词；活动目录不再发布此场景。",
         recommended_block_keys=("content.fidelity", "boundary.document_chapter"),
         label="批量生成宫殿草稿",
         description="将本节教材转换为可编辑的记忆宫殿草稿。",
@@ -379,7 +379,7 @@ BUILTIN_SCENES: dict[str, PromptSceneSeed] = {
         scene_key="batch_quiz_generation",
         prompt_key="ai_prompt_batch_quiz_generation",
         block_keys=("quality.source_grounding",),
-        scene_instruction=PROMPT_DEFINITIONS["ai_prompt_batch_quiz_generation"].default_template,
+        scene_instruction="已退役的批量题目草稿提示词；活动目录不再发布此场景。",
         recommended_block_keys=("quality.source_grounding",),
         label="批量生成题目草稿",
         description="基于教材与题库证据生成可审阅题目草稿。",
@@ -388,10 +388,19 @@ BUILTIN_SCENES: dict[str, PromptSceneSeed] = {
 }
 
 
+_ACTIVE_BUILTIN_SCENE_KEYS = {
+    "peg_association_suggestions",
+    "translation_course_batch",
+    "asr_course_transcription",
+}
+
+
 for _prompt_key, _scene_key in PROMPT_SCENE_BINDINGS.items():
     if _scene_key in BUILTIN_SCENES:
         continue
-    _definition = PROMPT_DEFINITIONS[_prompt_key]
+    _definition = PROMPT_DEFINITIONS.get(_prompt_key)
+    if _definition is None:
+        continue
     _blocks = ("quality.source_grounding",) if "quiz" in _scene_key else ()
     _category = SCENE_CATEGORY_BY_KEY.get(_scene_key, "其他")
     if "quiz" in _scene_key:
@@ -407,6 +416,19 @@ for _prompt_key, _scene_key in PROMPT_SCENE_BINDINGS.items():
         label=_definition.label,
         description=_definition.description,
         category=_category,
+    )
+
+for _retired_scene_key in [key for key in BUILTIN_SCENES if key not in _ACTIVE_BUILTIN_SCENE_KEYS]:
+    del BUILTIN_SCENES[_retired_scene_key]
+if "asr_course_transcription" not in BUILTIN_SCENES:
+    BUILTIN_SCENES["asr_course_transcription"] = PromptSceneSeed(
+        scene_key="asr_course_transcription",
+        prompt_key="ai_prompt_asr_course_transcription",
+        block_keys=(),
+        scene_instruction="英语课程音频转写使用 ASR 模型，不额外拼接文本提示词。",
+        label="英语课程音频转写",
+        description="把课程音视频转成带时间轴的英文句子。",
+        category="英语",
     )
 
 

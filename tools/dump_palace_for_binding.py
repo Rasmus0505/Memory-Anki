@@ -10,6 +10,7 @@ import json
 import os
 import sqlite3
 import sys
+from contextlib import closing
 from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
@@ -45,8 +46,9 @@ from memory_anki.core.runtime_paths import resolve_existing_database_file  # noq
 DB = resolve_existing_database_file(resolve_app_home())
 
 
-def connect() -> sqlite3.Connection:
-    con = sqlite3.connect(str(DB))
+def connect(*, write: bool = False) -> sqlite3.Connection:
+    mode = "rw" if write else "ro"
+    con = sqlite3.connect(DB.resolve().as_uri() + f"?mode={mode}", uri=True)
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA foreign_keys=ON")
     con.execute("PRAGMA busy_timeout=10000")

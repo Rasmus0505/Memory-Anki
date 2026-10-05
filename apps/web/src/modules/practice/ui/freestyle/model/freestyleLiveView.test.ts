@@ -107,6 +107,20 @@ describe('decodeFreestyleLiveView', () => {
     expect(isWeakerLiveRating(remote, null)).toBe(false)
   })
 
+  it('does not flap equal-version ratings with different payloads', () => {
+    const local = {
+      planVersion: 4,
+      currentCardId: 'card-1',
+      selectedRating: 2,
+      passed: false,
+      settled: [{ cardId: 'card-1', rating: 2, passed: false, restudy: true, retryAfterCards: 3 }],
+    }
+    const remote = { ...local, selectedRating: 3 }
+    expect(isWeakerLiveRating(local, remote)).toBe(false)
+    expect(isWeakerLiveRating(remote, local)).toBe(false)
+    expect(isWeakerLiveRating(local, { ...remote, planVersion: 5 })).toBe(true)
+  })
+
   it('returns null for non-objects', () => {
     expect(decodeFreestyleLiveView(null)).toBeNull()
     expect(decodeFreestyleLiveView('freestyle')).toBeNull()

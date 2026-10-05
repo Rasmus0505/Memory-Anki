@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import shutil
+import sqlite3
 import sys
 from collections import defaultdict
 from dataclasses import dataclass
@@ -23,7 +23,7 @@ from memory_anki.core.runtime_paths import (  # noqa: E402
 )
 
 DEFAULT_RUNTIME_HOME = default_app_home()
-if resolve_existing_database_file(DEFAULT_RUNTIME_HOME).exists():
+if not os.environ.get(APP_HOME_ENV, "").strip() and resolve_existing_database_file(DEFAULT_RUNTIME_HOME).exists():
     os.environ[APP_HOME_ENV] = str(DEFAULT_RUNTIME_HOME)
 
 from memory_anki.core.config import DB_PATH  # noqa: E402
@@ -162,7 +162,15 @@ def _backup_database() -> Path:
     backup_data_dir = backup_dir / "data"
     backup_data_dir.mkdir(parents=True, exist_ok=True)
     backup_path = backup_data_dir / DB_PATH.name
-    shutil.copy2(DB_PATH, backup_path)
+    source = sqlite3.connect(DB_PATH.resolve().as_uri() + "?mode=ro", uri=True)
+    try:
+        target = sqlite3.connect(backup_path)
+        try:
+            source.backup(target)
+        finally:
+            target.close()
+    finally:
+        source.close()
     return backup_path
 
 

@@ -35,11 +35,18 @@
       "backup": true
     },
     {
+      "key": "time_ledger",
+      "relative_path": "学习数据/time-ledger",
+      "kind": "directory",
+      "required": true,
+      "backup": true
+    },
+    {
       "key": "attachments",
       "relative_path": "学科附件",
       "kind": "directory",
       "required": true,
-      "backup": false
+      "backup": true
     },
     {
       "key": "import_jobs",

@@ -1,10 +1,13 @@
 """Pure domain tests for round-scoped freestyle learning time."""
 
+from datetime import UTC, datetime, timedelta
+
 from memory_anki.modules.practice.domain.learning_time import (
     MAX_ADD_SECONDS,
     MAX_SEGMENT_SECONDS,
     add_learning_seconds,
     apply_learning_adds,
+    apply_learning_intervals,
     attribute_unassigned_unit_seconds,
     empty_learning_time,
     fold_freestyle_segment,
@@ -283,3 +286,36 @@ def test_normalize_plan_keeps_learning_time() -> None:
             "11": {"unit_seconds": 0, "quiz_seconds": 3, "lookup_seconds": 0},
         },
     }
+
+
+def _interval(interval_id: str, start: datetime, seconds: int) -> dict:
+    return {
+        "interval_id": interval_id,
+        "session_id": "round-1",
+        "started_at": start.astimezone(UTC).isoformat(),
+        "ended_at": (start + timedelta(seconds=seconds)).astimezone(UTC).isoformat(),
+        "bucket": "unit",
+        "client_source": "desktop",
+    }
+
+
+def test_learning_intervals_replay_and_overlap_count_once() -> None:
+    start = datetime.now(UTC) - timedelta(minutes=10)
+    first = _interval("a", start, 100)
+    once = apply_learning_intervals(None, [first])
+    replay = apply_learning_intervals(once, [first])
+    shared = apply_learning_intervals(once, [_interval("b", start, 150)])
+
+    assert once["unit_seconds"] == 100
+    assert replay["unit_seconds"] == 100
+    assert shared["unit_seconds"] == 150
+    assert {item["interval_id"] for item in shared["intervals"]} == {"a", "b"}
+    assert "intervals" not in normalize_learning_time({"unit_seconds": 1})
+
+
+def test_learning_intervals_reject_future_and_naive_timestamps() -> None:
+    start = datetime.now(UTC) + timedelta(hours=1)
+    future = _interval("future", start, 60)
+    naive = dict(future, interval_id="naive", started_at="2026-01-01T00:00:00", ended_at="2026-01-01T00:01:00")
+
+    assert apply_learning_intervals(None, [future, naive])["unit_seconds"] == 0

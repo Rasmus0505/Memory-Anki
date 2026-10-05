@@ -102,6 +102,8 @@ class FreestyleRoundState(Base):
     scope_key: Mapped[str] = mapped_column(String(256), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    __mapper_args__ = {"version_id_col": version, "version_id_generator": False}
+
     config_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     plan_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     current_card_id: Mapped[str | None] = mapped_column(String(256), nullable=True)
@@ -112,6 +114,24 @@ class FreestyleRoundState(Base):
         default=utc_now_naive,
         onupdate=utc_now_naive,
     )
+
+
+class FreestyleRoundOperationReceipt(Base):
+    """Durable operation identity for a round write.
+
+    ``last_operation_id`` only remembers the latest write, so a retried rating
+    or learning batch could apply again after another operation landed. The
+    receipt keeps every accepted operation id.
+    """
+
+    __tablename__ = "freestyle_round_operation_receipts"
+    __table_args__ = (
+        Index("ix_freestyle_round_operation_receipts_round", "round_id"),
+    )
+
+    operation_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    round_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
 
 
 class MindMapImportJob(Base):

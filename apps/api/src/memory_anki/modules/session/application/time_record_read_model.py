@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta, timezone
 from typing import Any, Literal
 
 from sqlalchemy import String, and_, cast, func, or_
@@ -348,6 +348,27 @@ def _to_local_date(value: datetime) -> date:
     return aware.astimezone().date()
 
 
+def split_interval_local_days(
+    start: datetime,
+    end: datetime,
+    tz: timezone | None = None,
+) -> list[tuple[str, int]]:
+    """Split one interval on local midnights, not UTC midnights."""
+    zone = tz or datetime.now().astimezone().tzinfo or UTC
+    cursor = start.astimezone(zone) if start.tzinfo else start.replace(tzinfo=UTC).astimezone(zone)
+    end_local = end.astimezone(zone) if end.tzinfo else end.replace(tzinfo=UTC).astimezone(zone)
+    pieces: list[tuple[str, int]] = []
+    while cursor < end_local:
+        next_day = cursor.date() + timedelta(days=1)
+        boundary = datetime.combine(next_day, datetime.min.time(), tzinfo=zone)
+        piece_end = min(end_local, boundary)
+        seconds = max(0, int((piece_end - cursor).total_seconds()))
+        if seconds:
+            pieces.append((cursor.date().isoformat(), seconds))
+        cursor = piece_end
+    return pieces
+
+
 def _filtered_ledger_rows(
     *,
     start: datetime | None,
@@ -553,16 +574,10 @@ def build_time_record_read_model(
         if not fragments:
             continue
         for fragment_start, fragment_end in fragments:
-            cursor = fragment_start
-            while cursor < fragment_end:
-                next_day = (cursor.date() + timedelta(days=1))
-                boundary = datetime.combine(next_day, datetime.min.time(), tzinfo=UTC)
-                piece_end = min(fragment_end, boundary)
-                day_key = cursor.date().isoformat()
+            for day_key, seconds in split_interval_local_days(fragment_start, fragment_end):
                 values = daily.setdefault(day_key, {"seconds": 0, "records": 0})
-                values["seconds"] += max(0, int((piece_end - cursor).total_seconds()))
+                values["seconds"] += seconds
                 values["records"] += 1
-                cursor = piece_end
     first_day = resolved.start_date
     last_day = resolved.end_date
     if resolved.mode == "all":

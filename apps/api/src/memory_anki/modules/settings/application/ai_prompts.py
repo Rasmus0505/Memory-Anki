@@ -8,27 +8,8 @@ from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables.misc import Config
 from memory_anki.modules.settings.application.ai_prompt_templates import (
-    AI_LEARNING_WORKBENCH_PROMPT,
-    BATCH_PALACE_GENERATION_PROMPT,
-    BATCH_QUIZ_GENERATION_PROMPT,
-    ENGLISH_READING_GENERATE_PROMPT,
     ENGLISH_TRANSLATION_BATCH_PROMPT,
-    ENGLISH_TRANSLATION_SINGLE_PROMPT,
-    IMPORT_DOCUMENT_MINDMAP_PROMPT,
-    IMPORT_IMAGE_MINDMAP_PROMPT,
-    IMPORT_IMAGE_TEXT_PROMPT,
-    IMPORT_OCR_MINDMAP_FORMAT_PROMPT,
-    MINDMAP_AI_SPLIT_SYSTEM_PROMPT,
-    PALACE_QUIZ_CLASSIFY_EXISTING_TO_MINI_PALACE_PROMPT,
-    PALACE_QUIZ_GENERATE_PROMPT,
-    PALACE_QUIZ_GROUP_BY_MINI_PALACE_PROMPT,
-    PALACE_QUIZ_NODE_BINDING_PROMPT,
-    PALACE_QUIZ_SHORT_ANSWER_FEEDBACK_PROMPT,
-    PALACE_QUIZ_SOURCE_PAIR_TRANSCRIPTION_PROMPT,
     PEG_ASSOCIATION_PROMPT,
-    build_palace_quiz_generation_user_text,
-    build_palace_quiz_review_mindmap_prompt,
-    build_palace_quiz_text_formatting_prompt,
 )
 
 PLACEHOLDER_PATTERN = re.compile(r"\{\{\s*([a-zA-Z0-9_]+)\s*\}\}")
@@ -55,167 +36,15 @@ def _placeholder(name: str, description: str) -> PromptPlaceholder:
     return PromptPlaceholder(name=name, description=description)
 
 
-_DEFAULT_PALACE_QUIZ_GENERATE_TEMPLATE = PALACE_QUIZ_GENERATE_PROMPT
-
-_DEFAULT_PALACE_QUIZ_SHORT_ANSWER_FEEDBACK_TEMPLATE = PALACE_QUIZ_SHORT_ANSWER_FEEDBACK_PROMPT
-
-_DEFAULT_PALACE_QUIZ_CLASSIFY_EXISTING_TO_MINI_PALACE_TEMPLATE = (
-    PALACE_QUIZ_CLASSIFY_EXISTING_TO_MINI_PALACE_PROMPT
-)
-
-_DEFAULT_PALACE_QUIZ_GROUP_BY_MINI_PALACE_TEMPLATE = PALACE_QUIZ_GROUP_BY_MINI_PALACE_PROMPT
-_DEFAULT_PALACE_QUIZ_NODE_BINDING_TEMPLATE = PALACE_QUIZ_NODE_BINDING_PROMPT
-
 PROMPT_DEFINITIONS: dict[str, PromptTemplateDefinition] = {
-    "ai_prompt_import_image_mindmap": PromptTemplateDefinition(
-        key="ai_prompt_import_image_mindmap",
-        label="图片转脑图",
-        description="运行时为「识别全文 → 整理 JSON」。",
-        default_template=IMPORT_IMAGE_MINDMAP_PROMPT,
-        source_location="apps/api/src/memory_anki/modules/produce/application/mindmap_import/prompts.py",
-    ),
-    "ai_prompt_import_image_text": PromptTemplateDefinition(
-        key="ai_prompt_import_image_text",
-        label="图片转文字",
-        description="阶段 A：识别上传页全部文字。",
-        default_template=IMPORT_IMAGE_TEXT_PROMPT,
-        source_location="apps/api/src/memory_anki/modules/produce/application/mindmap_import/prompts.py",
-    ),
-    "ai_prompt_import_document_mindmap": PromptTemplateDefinition(
-        key="ai_prompt_import_document_mindmap",
-        label="教材转脑图",
-        description="主路径先识别全文，再整理为脑图 JSON。",
-        default_template=IMPORT_DOCUMENT_MINDMAP_PROMPT,
-        source_location="apps/api/src/memory_anki/modules/produce/application/mindmap_import/runtime.py",
-    ),
-    "ai_prompt_import_ocr_mindmap_format": PromptTemplateDefinition(
-        key="ai_prompt_import_ocr_mindmap_format",
-        label="识别原文整理脑图",
-        description="阶段 B：按范围删除多余内容并输出脑图 JSON。",
-        default_template=IMPORT_OCR_MINDMAP_FORMAT_PROMPT,
-        source_location="apps/api/src/memory_anki/modules/produce/application/mindmap_import/runtime.py",
-        available_placeholders=(
-            _placeholder("target_title", "当前宫殿的目标章节标题；占位标题时为空。"),
-            _placeholder("ocr_text", "带页码标记的已识别全文。"),
-        ),
-        required_placeholders=("target_title", "ocr_text"),
-    ),
-    "ai_prompt_mindmap_ai_split_system": PromptTemplateDefinition(
-        key="ai_prompt_mindmap_ai_split_system",
-        label="AI 分卡系统提示词",
-        description="脑图 AI 分卡（原位替换叶节点）的系统提示词；默认由场景组合块编译，此完整模板仅用于兼容旧路径。",
-        default_template=MINDMAP_AI_SPLIT_SYSTEM_PROMPT,
-        source_location="apps/api/src/memory_anki/modules/produce/application/mindmap_ai_split/contracts.py",
-    ),
-    "ai_prompt_peg_association": PromptTemplateDefinition(
+    'ai_prompt_peg_association': PromptTemplateDefinition(
         key="ai_prompt_peg_association",
         label="记忆桩联想建议",
         description="根据记忆桩和知识点生成可挂载的联想建议。",
         default_template=PEG_ASSOCIATION_PROMPT,
         source_location="apps/api/src/memory_anki/modules/content/application/peg_association_service.py",
     ),
-    "ai_prompt_ai_learning_workbench": PromptTemplateDefinition(
-        key="ai_prompt_ai_learning_workbench",
-        label="复习 AI 学习工作台",
-        description="复习中的提问、讲解、出题和纠错共用提示词。",
-        default_template=AI_LEARNING_WORKBENCH_PROMPT,
-        source_location="apps/api/src/memory_anki/modules/ai_learning/application/service.py",
-        available_placeholders=(
-            _placeholder("task_instruction", "当前学习任务的专用要求。"),
-        ),
-        required_placeholders=("task_instruction",),
-    ),
-    "ai_prompt_batch_palace_generation": PromptTemplateDefinition(
-        key="ai_prompt_batch_palace_generation",
-        label="整本教材批量生成宫殿",
-        description="整本教材工作区按章节生成宫殿草稿。",
-        default_template=BATCH_PALACE_GENERATION_PROMPT,
-        source_location="apps/api/src/memory_anki/modules/batch_generation/application/workspace_service.py",
-    ),
-    "ai_prompt_batch_quiz_generation": PromptTemplateDefinition(
-        key="ai_prompt_batch_quiz_generation",
-        label="整本教材批量生成题目",
-        description="整本教材工作区按章节生成题目草稿。",
-        default_template=BATCH_QUIZ_GENERATION_PROMPT,
-        source_location="apps/api/src/memory_anki/modules/batch_generation/application/workspace_service.py",
-    ),
-    "ai_prompt_palace_quiz_generate": PromptTemplateDefinition(
-        key="ai_prompt_palace_quiz_generate",
-        label="宫殿做题生成",
-        description="基于 PDF 页面或图片资料生成宫殿配套习题时使用的系统提示词。",
-        default_template=_DEFAULT_PALACE_QUIZ_GENERATE_TEMPLATE,
-        source_location="apps/api/src/memory_anki/modules/settings/application/ai_prompts.py",
-    ),
-    "ai_prompt_palace_quiz_classify_existing_to_mini_palace": PromptTemplateDefinition(
-        key="ai_prompt_palace_quiz_classify_existing_to_mini_palace",
-        label="宫殿题库归类到学习组",
-        description="把现有大宫殿题目按学习组语义归类时使用的系统提示词。",
-        default_template=_DEFAULT_PALACE_QUIZ_CLASSIFY_EXISTING_TO_MINI_PALACE_TEMPLATE,
-        source_location="apps/api/src/memory_anki/modules/settings/application/ai_prompts.py",
-    ),
-    "ai_prompt_palace_quiz_group_by_mini_palace": PromptTemplateDefinition(
-        key="ai_prompt_palace_quiz_group_by_mini_palace",
-        label="生成题目按学习组分组",
-        description="把视觉模型刚生成的题目草稿按学习组语义分组时使用的系统提示词。",
-        default_template=_DEFAULT_PALACE_QUIZ_GROUP_BY_MINI_PALACE_TEMPLATE,
-        source_location="apps/api/src/memory_anki/modules/settings/application/ai_prompts.py",
-    ),
-    "ai_prompt_palace_quiz_node_binding": PromptTemplateDefinition(
-        key="ai_prompt_palace_quiz_node_binding",
-        label="题库结合（题目绑定知识点）",
-        description="把宫殿题库题目绑定到思维导图知识点卡片时使用的系统提示词。",
-        default_template=_DEFAULT_PALACE_QUIZ_NODE_BINDING_TEMPLATE,
-        source_location="apps/api/src/memory_anki/modules/settings/application/ai_prompts.py",
-    ),
-    "ai_prompt_palace_quiz_short_answer_feedback": PromptTemplateDefinition(
-        key="ai_prompt_palace_quiz_short_answer_feedback",
-        label="宫殿简答题点评",
-        description="为宫殿简答题的学生作答生成 AI 点评时使用的系统提示词。",
-        default_template=_DEFAULT_PALACE_QUIZ_SHORT_ANSWER_FEEDBACK_TEMPLATE,
-        source_location="apps/api/src/memory_anki/modules/settings/application/ai_prompts.py",
-    ),
-    "ai_prompt_palace_quiz_source_pair_transcription": PromptTemplateDefinition(
-        key="ai_prompt_palace_quiz_source_pair_transcription",
-        label="宫殿做题题目答案配对",
-        description="区分题目来源与答案来源时使用的严格抄录系统提示词。",
-        default_template=PALACE_QUIZ_SOURCE_PAIR_TRANSCRIPTION_PROMPT,
-    ),
-    "ai_prompt_palace_quiz_generation_user_text": PromptTemplateDefinition(
-        key="ai_prompt_palace_quiz_generation_user_text",
-        label="宫殿做题生成用户指令",
-        description="普通资料生成题目时的用户消息模板。",
-        default_template=build_palace_quiz_generation_user_text(
-            source_label="{{source_label}}",
-            is_source_pair_transcription=False,
-        ),
-        available_placeholders=(_placeholder("source_label", "当前资料来源标签。"),),
-        required_placeholders=("source_label",),
-    ),
-    "ai_prompt_palace_quiz_source_pair_user_text": PromptTemplateDefinition(
-        key="ai_prompt_palace_quiz_source_pair_user_text",
-        label="宫殿做题配对用户指令",
-        description="题目来源与答案来源配对时的用户消息模板。",
-        default_template=build_palace_quiz_generation_user_text(
-            source_label="{{source_label}}",
-            is_source_pair_transcription=True,
-        ),
-        available_placeholders=(_placeholder("source_label", "当前资料来源标签。"),),
-        required_placeholders=("source_label",),
-    ),
-    "ai_prompt_palace_quiz_text_formatting": PromptTemplateDefinition(
-        key="ai_prompt_palace_quiz_text_formatting",
-        label="宫殿题库文本整理",
-        description="将文本、Markdown 或半结构数据整理为题库 JSON。",
-        default_template=build_palace_quiz_text_formatting_prompt("{{extra_prompt}}"),
-        available_placeholders=(_placeholder("extra_prompt", "用户补充要求。"),),
-    ),
-    "ai_prompt_palace_quiz_review_mindmap": PromptTemplateDefinition(
-        key="ai_prompt_palace_quiz_review_mindmap",
-        label="复习脑图出题",
-        description="根据复习脑图和关联宫殿摘要生成题目。",
-        default_template=build_palace_quiz_review_mindmap_prompt(),
-    ),
-    "ai_prompt_english_translation_batch": PromptTemplateDefinition(
+    'ai_prompt_english_translation_batch': PromptTemplateDefinition(
         key="ai_prompt_english_translation_batch",
         label="英语课程批量翻译",
         description="英语课程生成时按稳定句子编号批量翻译。",
@@ -223,85 +52,11 @@ PROMPT_DEFINITIONS: dict[str, PromptTemplateDefinition] = {
         available_placeholders=(_placeholder("source_text", "带稳定编号的英文句子。"),),
         required_placeholders=("source_text",),
     ),
-    "ai_prompt_english_translation_single": PromptTemplateDefinition(
-        key="ai_prompt_english_translation_single",
-        label="英语课程单句翻译",
-        description="批量翻译结果不匹配时的单句降级翻译。",
-        default_template=ENGLISH_TRANSLATION_SINGLE_PROMPT,
-        available_placeholders=(_placeholder("source_text", "待翻译的单句英文。"),),
-        required_placeholders=("source_text",),
-    ),
-    "ai_prompt_english_reading_generate": PromptTemplateDefinition(
-        key="ai_prompt_english_reading_generate",
-        label="英语阅读单次生成",
-        description="一次性完成未识别词形补全与句子 i+1 改写。运行时会在末尾追加输入数据 JSON。",
-        default_template=ENGLISH_READING_GENERATE_PROMPT,
-        source_location="apps/api/src/memory_anki/modules/english_reading/application/service.py",
-    ),
-    "ai_prompt_english_reading_word_explain": PromptTemplateDefinition(
-        key="ai_prompt_english_reading_word_explain",
-        label="英语阅读词语英文解释",
-        description="按用户 CEFR 解释词语在上下文中的含义和常见用法（可中英，默认直出）。",
-        default_template="""Return one JSON object only. Every string value must be plain English at CEFR {{cefr}} or easier. Never use Chinese characters.
-
-Target word: {{target}}
-Context: {{context}}
-
-Required shape:
-{"meaningHere":"one short English gloss for this context","otherCommonUses":[{"partOfSpeech":"noun|verb|adjective|adverb","meaning":"English meaning","example":"short English example"}]}
-
-Rules:
-1. Use exact camelCase keys: meaningHere, otherCommonUses, partOfSpeech, meaning, example.
-2. otherCommonUses may be an empty array.
-3. Do not wrap the object in markdown or another field such as data/result.
-4. Do not include Chinese, bilingual notes, or pinyin.""",
-        available_placeholders=(
-            _placeholder("cefr", "用户手动选择的 CEFR。"),
-            _placeholder("target", "目标词语。"),
-            _placeholder("context", "目标所在上下文。"),
-        ),
-        required_placeholders=("cefr", "target", "context"),
-    ),
-    "ai_prompt_english_reading_sentence_explain": PromptTemplateDefinition(
-        key="ai_prompt_english_reading_sentence_explain",
-        label="英语阅读句子英文讲解",
-        description="按用户 CEFR 解释句意和句法关系（可中英，默认直出）。",
-        default_template="""Return one JSON object only. Every string value must be plain English at CEFR {{cefr}} or easier. Never use Chinese characters.
-
-Sentence: {{target}}
-Context: {{context}}
-
-Required shape:
-{"englishExplanation":"simple English paraphrase","howItWorks":[{"part":"phrase from the sentence","role":"subject|verb|object|modifier","explanation":"how this part works in English"}]}
-
-Rules:
-1. Use exact camelCase keys: englishExplanation, howItWorks, part, role, explanation.
-2. howItWorks may be an empty array.
-3. Do not wrap the object in markdown or another field such as data/result.
-4. Do not include Chinese, bilingual notes, or pinyin.""",
-        available_placeholders=(
-            _placeholder("cefr", "用户手动选择的 CEFR。"),
-            _placeholder("target", "目标句子。"),
-            _placeholder("context", "目标所在上下文。"),
-        ),
-        required_placeholders=("cefr", "target", "context"),
-    ),
-    "ai_prompt_english_reading_target_article": PromptTemplateDefinition(
-        key="ai_prompt_english_reading_target_article",
-        label="英语阅读定向文章",
-        description="围绕所选词句生成可理解输入文章和覆盖报告（默认不因含中文拒绝）。",
-        default_template="""Return JSON only and use English only. Write a natural {{genre}} article of about {{word_count}} words at CEFR {{cefr}}. Topic: {{topic}}. Syntax density: {{syntax_density}}. Word targets should appear naturally about {{word_repetitions}} times. Sentence targets must become about {{sentence_variants}} different structural variants, not copied sentences. Targets: {{targets_json}}. Return {\"title\": \"...\", \"content\": \"...\", \"coverage\": {\"targets\": [{\"id\": 1, \"uses\": 3, \"note\": \"...\"}]}}.""",
-        available_placeholders=(
-            _placeholder("cefr", "用户手动选择的 CEFR。"),
-            _placeholder("word_count", "目标篇幅。"),
-            _placeholder("genre", "文章文体。"),
-            _placeholder("topic", "主题要求。"),
-            _placeholder("syntax_density", "句法密度。"),
-            _placeholder("word_repetitions", "词汇复现次数。"),
-            _placeholder("sentence_variants", "句式变体次数。"),
-            _placeholder("targets_json", "目标列表 JSON。"),
-        ),
-        required_placeholders=("cefr", "word_count", "genre", "topic", "syntax_density", "word_repetitions", "sentence_variants", "targets_json"),
+    'ai_prompt_asr_course_transcription': PromptTemplateDefinition(
+        key="ai_prompt_asr_course_transcription",
+        label="英语课程音频转写",
+        description="课程音视频转写由 ASR 模型完成，此键只保留场景登记。",
+        default_template="英语课程音频转写使用 ASR 模型，不额外拼接文本提示词。",
     ),
 }
 

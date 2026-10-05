@@ -10,7 +10,10 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from memory_anki.core.time import to_api_datetime, utc_now_naive
-from memory_anki.infrastructure.db._tables.misc import FreestyleRoundState
+from memory_anki.infrastructure.db._tables.misc import (
+    FreestyleRoundOperationReceipt,
+    FreestyleRoundState,
+)
 from memory_anki.modules.memory.api import (
     list_active_review_unit_ids,
     rate_palace_due_units,
@@ -394,7 +397,7 @@ def get_or_create_active_round(
     if row is None:
         row = _latest_active_for_workspace(session, slot)
     if row is not None:
-        if op_id and row.last_operation_id == op_id:
+        if op_id and _operation_seen(session, row, op_id):
             return _payload(row, duplicate=True)
         next_config = sanitize_feed_config(config or {})
         previous_config = _json_load_object(row.config_json)
@@ -412,7 +415,7 @@ def get_or_create_active_round(
         # the closing settlement slot disappears. /rounds/start advances.
         if plan_is_fully_handled(next_plan) and not persist_config:
             if _apply_plan(row, next_plan, operation_id=op_id):
-                session.commit()
+                _commit_operation(session, row, op_id)
             return _payload(row)
         if persist_config:
             next_plan = replan_remaining(next_plan, cards, today=today)
@@ -441,7 +444,7 @@ def get_or_create_active_round(
                 scope_key=key if scope_changed else None,
             )
             if changed:
-                session.commit()
+                _commit_operation(session, row, op_id)
         return _payload(row)
     overlay = empty_overlay_quiz()
     row = _create_row(
@@ -454,7 +457,7 @@ def get_or_create_active_round(
         workspace=slot,
         overlay_quiz=overlay,
     )
-    session.commit()
+    _commit_operation(session, row, op_id)
     return _payload(row)
 
 
@@ -474,7 +477,7 @@ def start_new_round(
         raise ValueError("scope_key is required")
     slot = normalize_workspace(workspace)
     active = _active_row(session, key, slot)
-    if active is not None and active.last_operation_id == op_id:
+    if active is not None and _operation_seen(session, active, op_id):
         return _payload(active, duplicate=True)
     overlay = empty_overlay_quiz()
     _complete_active(session, workspace=slot)
@@ -488,7 +491,7 @@ def start_new_round(
         workspace=slot,
         overlay_quiz=overlay,
     )
-    session.commit()
+    _commit_operation(session, row, op_id)
     return _payload(row)
 
 
@@ -505,7 +508,7 @@ def apply_round_action(
     row = _row_by_id(session, round_id)
     if row is None:
         raise ValueError("freestyle round not found")
-    if op_id and row.last_operation_id == op_id:
+    if op_id and _operation_seen(session, row, op_id):
         return _payload(row, duplicate=True)
     if int(expected_version or 0) > 0 and int(row.version or 0) != int(expected_version):
         return _payload(row, conflict=True)
@@ -556,11 +559,9 @@ def apply_round_action(
     changed = _apply_plan(row, plan, operation_id=op_id)
     if name in {"leave_card", "complete", "uncomplete", "exclude", "restore", "bind_cards"}:
         _sync_peer_progress(session, row, op_id, restore_identity=restore_identity)
-    if changed:
-        session.commit()
-    else:
+    if not changed:
         row.last_operation_id = op_id
-        session.commit()
+    _commit_operation(session, row, op_id)
     return _payload(row)
 
 
@@ -581,7 +582,7 @@ def apply_round_rating(
     row = _row_by_id(session, round_id)
     if row is None:
         raise ValueError("freestyle round not found")
-    if op_id and row.last_operation_id == op_id:
+    if op_id and _operation_seen(session, row, op_id):
         return _payload(row, duplicate=True)
     if int(expected_version or 0) > 0 and int(row.version or 0) != int(expected_version):
         return _payload(row, conflict=True)
@@ -599,11 +600,9 @@ def apply_round_rating(
     )
     changed = _apply_plan(row, plan, operation_id=op_id)
     _sync_peer_progress(session, row, op_id)
-    if changed:
-        session.commit()
-    else:
+    if not changed:
         row.last_operation_id = op_id
-        session.commit()
+    _commit_operation(session, row, op_id)
     return _payload(row)
 
 
@@ -626,6 +625,8 @@ def rate_freestyle_round_unit(
     row = _row_by_id(session, round_id)
     if row is None:
         raise ValueError("freestyle round not found")
+    if _operation_seen(session, row, op_id):
+        return {"item": None, "round": _payload(row, duplicate=True)}
     # Ratings last-write-wins: a stale expected_version still applies so PWA
     # and desktop cannot 409 each other after one side already scored.
     # Wrong card / occurrence / encounter / unit never last-writes.
@@ -657,6 +658,7 @@ def rate_freestyle_round_unit(
             current=current,
             exclude_unit_ids=[str(value) for value in batch.get("exclude_unit_ids") or []],
             include_unit_ids=[str(value) for value in batch.get("include_unit_ids") or []],
+            commit=False,
         )
     elif _text(unit_id) and _text(study_session_id):
         item = rate_review_unit(
@@ -668,9 +670,10 @@ def rate_freestyle_round_unit(
             operation_id=op_id,
             rating=rating,
             round_id=row.round_id,
+            commit=False,
         )
 
-    if row.last_operation_id == op_id:
+    if _operation_seen(session, row, op_id):
         return {"item": item, "round": _payload(row, duplicate=True)}
 
     payload = apply_round_rating(
@@ -688,6 +691,38 @@ def rate_freestyle_round_unit(
     return {"item": item, "round": payload}
 
 
+def _remember_operation(session: Session, row: FreestyleRoundState, operation_id: str) -> None:
+    op_id = str(operation_id or "").strip()
+    if not op_id:
+        return
+    existing = session.get(FreestyleRoundOperationReceipt, op_id)
+    if existing is None:
+        session.add(
+            FreestyleRoundOperationReceipt(
+                operation_id=op_id,
+                round_id=row.round_id,
+                created_at=utc_now_naive(),
+            )
+        )
+    elif existing.round_id != row.round_id:
+        raise ValueError("operation_id belongs to another round")
+
+
+def _operation_seen(session: Session, row: FreestyleRoundState, operation_id: str) -> bool:
+    op_id = str(operation_id or "").strip()
+    if not op_id:
+        return False
+    if row.last_operation_id == op_id:
+        return True
+    existing = session.get(FreestyleRoundOperationReceipt, op_id)
+    return existing is not None and existing.round_id == row.round_id
+
+
+def _commit_operation(session: Session, row: FreestyleRoundState, operation_id: str) -> None:
+    _remember_operation(session, row, operation_id)
+    session.commit()
+
+
 def _commit_plan(
     session: Session,
     row: FreestyleRoundState,
@@ -695,11 +730,9 @@ def _commit_plan(
     operation_id: str,
 ) -> dict[str, Any]:
     changed = _apply_plan(row, plan, operation_id=operation_id)
-    if changed:
-        session.commit()
-    else:
+    if not changed:
         row.last_operation_id = operation_id
-        session.commit()
+    _commit_operation(session, row, operation_id)
     return _payload(row)
 
 
@@ -715,7 +748,7 @@ def _begin_round_write(
     row = _row_by_id(session, round_id)
     if row is None:
         raise ValueError("freestyle round not found")
-    if op_id and row.last_operation_id == op_id:
+    if op_id and _operation_seen(session, row, op_id):
         return None, _payload(row, duplicate=True)
     if int(expected_version or 0) > 0 and int(row.version or 0) != int(expected_version):
         return None, _payload(row, conflict=True)

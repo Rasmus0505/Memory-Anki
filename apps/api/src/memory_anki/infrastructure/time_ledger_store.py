@@ -10,11 +10,24 @@ from typing import Any
 from uuid import uuid4
 
 from memory_anki.core.local_config import load_local_runtime_config
+from memory_anki.core.runtime_paths import resolve_app_home
 from memory_anki.modules.session.domain.time_ledger import TimeLedgerInterval, TimeLedgerUpload
 
 
+def _default_ledger_home() -> Path:
+    """Follow MEMORY_ANKI_HOME when set so tests never read the live ledger.
+
+    An unset home still uses local-config, which is where a manually placed
+    data directory lives when the process was not launched with the env var.
+    """
+    resolution = resolve_app_home()
+    if resolution.source == "env":
+        return resolution.app_home
+    return load_local_runtime_config().local_app_home
+
+
 def ledger_root(app_home: Path | None = None) -> Path:
-    return Path(app_home or load_local_runtime_config().local_app_home) / "学习数据" / "time-ledger"
+    return Path(app_home or _default_ledger_home()) / "学习数据" / "time-ledger"
 
 
 def _atomic_json_write(path: Path, payload: dict[str, Any]) -> None:
@@ -46,7 +59,7 @@ def _append(items: list[dict[str, Any]], tombstones: list[str], *, app_home: Pat
     payload = {"schema_version": 1, "revision_id": revision, "device_id": device,
                "created_at": datetime.now(UTC).isoformat(), "intervals": items, "tombstones": tombstones,
                "group_operations": group_operations or []}
-    home = app_home or (config.local_app_home if config else None)
+    home = app_home if app_home is not None else _default_ledger_home()
     _atomic_json_write(ledger_root(home) / "devices" / device / "revisions" / f"{revision}.json", payload)
     return {"revision_id": revision, "device_id": device, "interval_count": len(items)}
 

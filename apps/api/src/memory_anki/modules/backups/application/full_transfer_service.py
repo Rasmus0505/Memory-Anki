@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 import shutil
+import tempfile
 import zipfile
 from datetime import date, datetime
 from pathlib import Path
@@ -14,14 +15,16 @@ from sqlalchemy import Date, DateTime, Table, text
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.orm import Session
 
-from memory_anki.core.config import ATTACHMENTS_DIR
+from memory_anki.core.config import APP_HOME, ATTACHMENTS_DIR
+from memory_anki.core.runtime_storage_lock import storage_write_lock
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables import Base, engine
 
-ARCHIVE_FORMAT_VERSION = 1
+ARCHIVE_FORMAT_VERSION = 2
 DATA_JSON_NAME = "data.json"
 MANIFEST_JSON_NAME = "manifest.json"
 ATTACHMENTS_PREFIX = "attachments/"
+LEDGER_PREFIX = "time-ledger/"
 
 
 class FullTransferError(ValueError):
@@ -51,33 +54,28 @@ def _dump_all_tables(session: Session) -> dict[str, list[dict[str, Any]]]:
 
 
 def build_full_archive(session: Session) -> tuple[bytes, str]:
-    """Return zip bytes and a suggested download filename."""
-    data = _dump_all_tables(session)
-    manifest = {
-        "format_version": ARCHIVE_FORMAT_VERSION,
-        "alembic_revision": _current_alembic_revision(session),
-        "created_at": utc_now_naive().isoformat(timespec="seconds"),
-        "table_counts": {name: len(rows) for name, rows in data.items()},
-    }
-    buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr(
-            MANIFEST_JSON_NAME,
-            json.dumps(manifest, ensure_ascii=False, indent=2),
-        )
-        archive.writestr(
-            DATA_JSON_NAME,
-            json.dumps(data, ensure_ascii=False, default=_json_default),
-        )
-        attachments_root = Path(ATTACHMENTS_DIR)
-        if attachments_root.exists():
-            for file_path in attachments_root.rglob("*"):
-                if not file_path.is_file():
+    """Return a consistent DB + time-ledger + attachments archive."""
+    with storage_write_lock(APP_HOME):
+        data = _dump_all_tables(session)
+        manifest = {
+            "format_version": ARCHIVE_FORMAT_VERSION,
+            "alembic_revision": _current_alembic_revision(session),
+            "created_at": utc_now_naive().isoformat(timespec="seconds"),
+            "table_counts": {name: len(rows) for name, rows in data.items()},
+            "contents": ["database", "time-ledger", "attachments"],
+        }
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr(MANIFEST_JSON_NAME, json.dumps(manifest, ensure_ascii=False, indent=2))
+            archive.writestr(DATA_JSON_NAME, json.dumps(data, ensure_ascii=False, default=_json_default))
+            for root, prefix in ((Path(ATTACHMENTS_DIR), ATTACHMENTS_PREFIX), (APP_HOME / "学习数据" / "time-ledger", LEDGER_PREFIX)):
+                if not root.exists():
                     continue
-                relative = file_path.relative_to(attachments_root).as_posix()
-                archive.write(file_path, ATTACHMENTS_PREFIX + relative)
-    filename = f"memory-anki-full-{date.today().strftime('%Y%m%d')}.zip"
-    return buffer.getvalue(), filename
+                for file_path in root.rglob("*"):
+                    if file_path.is_file():
+                        archive.write(file_path, prefix + file_path.relative_to(root).as_posix())
+        filename = f"memory-anki-full-{date.today().strftime('%Y%m%d')}.zip"
+        return buffer.getvalue(), filename
 
 
 def inspect_archive(zip_bytes: bytes, session: Session) -> dict[str, Any]:
@@ -89,7 +87,8 @@ def inspect_archive(zip_bytes: bytes, session: Session) -> dict[str, Any]:
         manifest = _read_json_member(archive, MANIFEST_JSON_NAME)
         if not isinstance(manifest, dict):
             raise FullTransferError("manifest.json 格式不正确。")
-        if int(manifest.get("format_version") or 0) != ARCHIVE_FORMAT_VERSION:
+        version = int(manifest.get("format_version") or 0)
+        if version not in {1, ARCHIVE_FORMAT_VERSION}:
             raise FullTransferError("导出包格式版本不兼容。")
         _read_data_json(archive)
         current_revision = _current_alembic_revision(session)
@@ -118,14 +117,60 @@ def import_full_archive(zip_bytes: bytes, session: Session) -> dict[str, Any]:
     bind = session.get_bind() or engine
     session.close()
 
-    with _open_archive(zip_bytes) as archive:
+    with storage_write_lock(APP_HOME), _open_archive(zip_bytes) as archive:
         data = _read_data_json(archive)
-        imported_counts = _replace_tables(bind, data)
-        restored_attachments = _replace_attachments(archive)
-
+        # Files are staged before the database transaction and originals remain
+        # available until the DB commit has succeeded.
+        roots = [(Path(ATTACHMENTS_DIR), ATTACHMENTS_PREFIX),
+                 (APP_HOME / "学习数据" / "time-ledger", LEDGER_PREFIX)]
+        with tempfile.TemporaryDirectory(prefix="full-import-") as temporary:
+            temp = Path(temporary)
+            counts = []
+            for index, (_, prefix) in enumerate(roots):
+                target = temp / str(index)
+                target.mkdir()
+                count = 0
+                for name in archive.namelist():
+                    if not name.startswith(prefix) or name.endswith("/"):
+                        continue
+                    relative = name[len(prefix):].replace("\\", "/")
+                    path = (target / relative).resolve()
+                    if target.resolve() not in path.parents:
+                        continue
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_bytes(archive.read(name))
+                    count += 1
+                counts.append(count)
+            swaps: list[tuple[Path, Path | None]] = []
+            try:
+                for index, (destination, _) in enumerate(roots):
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    staged = destination.with_name(f".{destination.name}.import-stage")
+                    old = destination.with_name(f".{destination.name}.import-old")
+                    if staged.exists() or old.exists():
+                        raise FullTransferError("存在未完成的导入暂存目录，请先处理。")
+                    shutil.copytree(temp / str(index), staged)
+                    had_original = destination.exists()
+                    if had_original:
+                        destination.replace(old)
+                    swaps.append((destination, old if had_original else None))
+                    staged.replace(destination)
+                imported_counts = _replace_tables(bind, data)
+            except Exception:
+                for restored, previous in reversed(swaps):
+                    if restored.exists():
+                        shutil.rmtree(restored)
+                    if previous is not None and previous.exists():
+                        previous.replace(restored)
+                raise
+            for _, previous in swaps:
+                if previous is not None:
+                    shutil.rmtree(previous, ignore_errors=True)
     return {
         "table_counts": imported_counts,
-        "restored_attachments": restored_attachments,
+        "restored_attachments": counts[0],
+        "restored_ledger_files": counts[1],
+        "legacy_ledger_reset": int(preview["manifest"].get("format_version") or 0) == 1,
     }
 
 
@@ -203,22 +248,4 @@ def _coerce_row_types(table: Table, row: dict[str, Any]) -> dict[str, Any]:
     return cleaned
 
 
-def _replace_attachments(archive: zipfile.ZipFile) -> int:
-    attachments_root = Path(ATTACHMENTS_DIR)
-    root_resolved = attachments_root.resolve()
-    if attachments_root.exists():
-        shutil.rmtree(attachments_root)
-    attachments_root.mkdir(parents=True, exist_ok=True)
 
-    restored_attachments = 0
-    for name in archive.namelist():
-        if not name.startswith(ATTACHMENTS_PREFIX) or name.endswith("/"):
-            continue
-        relative = name[len(ATTACHMENTS_PREFIX) :]
-        target = (attachments_root / relative).resolve()
-        if root_resolved not in target.parents and target != root_resolved:
-            continue
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(archive.read(name))
-        restored_attachments += 1
-    return restored_attachments

@@ -46,8 +46,7 @@
       "mindmap": {
         "status": "retired",
         "replacedBy": [
-          "mindmap_document",
-          "mindmap_learning"
+          "mindmap_document"
         ]
       },
       "mindmap_document": {
@@ -55,7 +54,10 @@
         "publicEntry": "memory_anki.modules.mindmap_document.api"
       },
       "mindmap_learning": {
-        "status": "migrated"
+        "status": "retired",
+        "replacedBy": [
+          "mindmap_document"
+        ]
       },
       "practice": {
         "status": "migrated",
@@ -150,7 +152,6 @@
       "memory": [
         "content",
         "mindmap_document",
-        "mindmap_learning",
         "session"
       ],
       "practice": [
@@ -182,8 +183,7 @@
         "backups",
         "memory"
       ],
-      "mindmap_document": [],
-      "mindmap_learning": []
+      "mindmap_document": []
     },
     "unitOfWorkManagedUseCases": [
       "modules/knowledge/application/chapter_service.py",

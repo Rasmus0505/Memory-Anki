@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ProgressionOverview } from '@/shared/api/contracts'
-import { cue, isFxSkinId, useFxOwner } from '@/shared/fx'
+import { cue, isFxSkinId, openPlayback, roundFxOwner, useFxOwner } from '@/shared/fx'
 import { planCeremony, type CeremonyPlan } from '../domain/ceremony'
 import type { ThemePack } from '@/shared/theme/themePacks'
 import { packsAwaitingUnbox } from '../domain/cosmetics'
@@ -14,12 +14,14 @@ export function useLiveGrowthToasts(overview: ProgressionOverview | null) {
     const plan = planCeremony(readGrowthState(), overview, 'live')
     writeGrowthState(plan.next)
     if (plan.baseline) return
+    const playback = openPlayback('growth:live')
     plan.stamps.forEach((stamp, index) => {
-      window.setTimeout(() => cue('stamp.unlock', { title: stamp.title, ceremony: false }), index * 900)
+      playback.at(index * 900, () => cue('stamp.unlock', { title: stamp.title, ceremony: false }, { owner: playback.owner }))
     })
     plan.quests.forEach((quest, index) => {
-      window.setTimeout(() => cue('quest.done', { title: quest.title }), (plan.stamps.length + index) * 900)
+      playback.at((plan.stamps.length + index) * 900, () => cue('quest.done', { title: quest.title }, { owner: playback.owner }))
     })
+    return () => playback.cancel()
   }, [overview])
 }
 
@@ -42,7 +44,7 @@ const STAMP_GAP_MS = 1100
 export function useGrowthSettlement(overview: ProgressionOverview | null, roundKey: string) {
   const [view, setView] = useState<SettlementView | null>(null)
   const settledFor = useRef<string | null>(null)
-  const owner = useFxOwner(`growth:${roundKey}`)
+  const owner = useFxOwner(roundFxOwner(roundKey))
 
   useEffect(() => {
     if (!overview || settledFor.current === roundKey) return
@@ -57,21 +59,21 @@ export function useGrowthSettlement(overview: ProgressionOverview | null, roundK
 
   useEffect(() => {
     if (!view || view.baseline) return
-    const timers: number[] = []
-    const later = (ms: number, fn: () => void) => timers.push(window.setTimeout(fn, ms))
+    const playback = openPlayback(owner)
+    const later = (ms: number, fn: () => void) => playback.at(ms, fn)
     const gained = view.xpTo - view.xpFrom
-    if (gained > 0) later(XP_CUE_MS, () => cue('xp.gain', { amount: gained }, { owner }))
-    if (view.levelTo > view.levelFrom) later(LEVEL_CUE_MS, () => cue('level.up', { level: view.levelTo }, { owner }))
+    if (gained > 0) later(XP_CUE_MS, () => cue('xp.gain', { amount: gained }, { owner: playback.owner }))
+    if (view.levelTo > view.levelFrom) later(LEVEL_CUE_MS, () => cue('level.up', { level: view.levelTo }, { owner: playback.owner }))
     view.stamps.forEach((stamp, index) => {
-      later(STAMP_CUE_MS + index * STAMP_GAP_MS, () => cue('stamp.unlock', { title: stamp.title, ceremony: true }, { owner }))
+      later(STAMP_CUE_MS + index * STAMP_GAP_MS, () => cue('stamp.unlock', { title: stamp.title, ceremony: true }, { owner: playback.owner }))
     })
     const pack = view.unboxPack
     if (pack) {
       later(STAMP_CUE_MS + view.stamps.length * STAMP_GAP_MS + 300, () => {
-        cue('pack.unbox', { label: pack.label, skin: isFxSkinId(pack.fxSkin) ? pack.fxSkin : 'ink' }, { owner })
+        cue('pack.unbox', { label: pack.label, skin: isFxSkinId(pack.fxSkin) ? pack.fxSkin : 'ink' }, { owner: playback.owner })
       })
     }
-    return () => timers.forEach((id) => window.clearTimeout(id))
+    return () => playback.cancel()
   }, [owner, view])
 
   return view

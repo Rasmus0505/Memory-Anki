@@ -11,6 +11,7 @@ import {
 import type { QuizRuntimeState } from '@/modules/quiz/public'
 import {
   decodeFreestyleLiveView,
+  isApplicableLiveRating,
   isWeakerLiveRating,
   serializeFreestyleLiveView,
   type FreestyleLiveRating,
@@ -86,9 +87,12 @@ export function useFreestyleLiveMirror({
     const remoteRevision = presence.projection.revision
     const applyRemoteRating = () => {
       if (appliedRemoteRatingRevisionRef.current === remoteRevision) return
-      if (decoded.rating && isWeakerLiveRating(rating, decoded.rating)) {
-        applyRating(decoded.rating)
+      if (!decoded.rating || !isWeakerLiveRating(rating, decoded.rating)) {
+        appliedRemoteRatingRevisionRef.current = remoteRevision
+        return
       }
+      if (!isApplicableLiveRating(decoded.rating, queueCardIds)) return
+      applyRating(decoded.rating)
       appliedRemoteRatingRevisionRef.current = remoteRevision
     }
     const applyRemoteDetails = () => {

@@ -9,6 +9,7 @@ unfinished round keeps yesterday after a restart or a device switch.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 BUCKETS = ("unit", "quiz", "lookup")
@@ -74,13 +75,17 @@ def normalize_learning_time(raw: Mapping[str, Any] | None) -> dict[str, Any]:
             bucket = _palace_bucket(value)
             if bucket["unit_seconds"] or bucket["quiz_seconds"] or bucket["lookup_seconds"]:
                 palaces[str(palace_id)] = bucket
-    return {
+    result = {
         "unit_seconds": _nonneg(source.get("unit_seconds")),
         "quiz_seconds": _nonneg(source.get("quiz_seconds")),
         "lookup_seconds": _nonneg(source.get("lookup_seconds")),
         "backfilled": bool(source.get("backfilled")),
         "by_palace": palaces,
     }
+    intervals = _normalize_stored_intervals(source.get("intervals"))
+    if intervals:
+        result["intervals"] = intervals
+    return result
 
 
 def _copy(time: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -253,3 +258,150 @@ def single_palace_weight(plan: Mapping[str, Any] | None) -> dict[int, int]:
     if len(ids) == 1:
         return {ids[0]: 1}
     return {}
+
+
+MAX_INTERVALS = 500
+_FUTURE_SKEW = timedelta(seconds=5)
+
+
+def _parse_aware(value: Any) -> datetime | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed.astimezone(UTC)
+
+
+def _public_interval(raw: Mapping[str, Any]) -> dict[str, Any]:
+    fact = {
+        "interval_id": str(raw.get("interval_id") or "")[:160],
+        "session_id": str(raw.get("session_id") or "")[:160],
+        "started_at": str(raw.get("started_at") or ""),
+        "ended_at": str(raw.get("ended_at") or ""),
+        "bucket": raw.get("bucket"),
+    }
+    palace_id = _palace_id(raw.get("palace_id"))
+    if palace_id is not None:
+        fact["palace_id"] = palace_id
+    source = str(raw.get("client_source") or "unknown")
+    fact["client_source"] = source if source in {"desktop", "pwa", "unknown"} else "unknown"
+    return fact
+
+
+def _normalize_stored_intervals(raw: Any) -> list[dict[str, Any]]:
+    if not isinstance(raw, Sequence) or isinstance(raw, str | bytes):
+        return []
+    kept: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in raw:
+        fact = normalize_learning_interval(item, allow_future=True)
+        if fact is None or fact["interval_id"] in seen:
+            continue
+        seen.add(fact["interval_id"])
+        kept.append(_public_interval(fact))
+        if len(kept) >= MAX_INTERVALS:
+            break
+    return kept
+
+
+def normalize_learning_interval(raw: Any, *, allow_future: bool = False) -> dict[str, Any] | None:
+    if not isinstance(raw, Mapping):
+        return None
+    interval_id = str(raw.get("interval_id") or "").strip()
+    if not interval_id or len(interval_id) > 160:
+        return None
+    started = _parse_aware(raw.get("started_at"))
+    ended = _parse_aware(raw.get("ended_at"))
+    if started is None or ended is None or ended <= started:
+        return None
+    if not allow_future and ended > datetime.now(UTC) + _FUTURE_SKEW:
+        return None
+    seconds = int((ended - started).total_seconds())
+    if seconds <= 0 or seconds > MAX_SEGMENT_SECONDS:
+        return None
+    bucket = _bucket(raw.get("bucket"))
+    if bucket is None:
+        return None
+    fact = _public_interval({**raw, "interval_id": interval_id, "bucket": bucket})
+    fact["started_at"] = started.isoformat()
+    fact["ended_at"] = ended.isoformat()
+    return fact
+
+
+def _merge_spans(spans: Sequence[tuple[datetime, datetime]]) -> list[tuple[datetime, datetime]]:
+    ordered = sorted((start, end) for start, end in spans if end > start)
+    merged: list[list[datetime]] = []
+    for start, end in ordered:
+        if not merged or start > merged[-1][1]:
+            merged.append([start, end])
+        else:
+            merged[-1][1] = max(merged[-1][1], end)
+    return [(start, end) for start, end in merged]
+
+
+def _uncovered_seconds(
+    start: datetime,
+    end: datetime,
+    spans: Sequence[tuple[datetime, datetime]],
+) -> int:
+    covered = 0
+    for span_start, span_end in _merge_spans(spans):
+        overlap_start = max(start, span_start)
+        overlap_end = min(end, span_end)
+        if overlap_end > overlap_start:
+            covered += int((overlap_end - overlap_start).total_seconds())
+    return max(0, int((end - start).total_seconds()) - covered)
+
+
+def apply_learning_intervals(
+    time: Mapping[str, Any] | None,
+    intervals: Sequence[Mapping[str, Any]] | None,
+) -> dict[str, Any]:
+    """Add only the wall time that no stored interval already covers.
+
+    Replaying an interval id is a no-op. Overlapping intervals from two devices
+    count once, assigned to whichever fact arrived first.
+    """
+    current = _copy(time)
+    stored = list(current.get("intervals") or [])
+    known = {str(item.get("interval_id")) for item in stored}
+    spans: list[tuple[datetime, datetime]] = []
+    for item in stored:
+        started = _parse_aware(item.get("started_at"))
+        ended = _parse_aware(item.get("ended_at"))
+        if started is not None and ended is not None:
+            spans.append((started, ended))
+    accepted: list[dict[str, Any]] = []
+    for raw in list(intervals or [])[:MAX_INTERVALS]:
+        fact = normalize_learning_interval(raw)
+        if fact is None or fact["interval_id"] in known:
+            continue
+        if len(stored) + len(accepted) >= MAX_INTERVALS:
+            break
+        known.add(fact["interval_id"])
+        started = _parse_aware(fact["started_at"])
+        ended = _parse_aware(fact["ended_at"])
+        if started is None or ended is None:
+            continue
+        seconds = _uncovered_seconds(started, ended, spans)
+        spans.append((started, ended))
+        accepted.append(fact)
+        if seconds <= 0:
+            continue
+        current = add_learning_seconds(
+            current,
+            bucket=str(fact["bucket"]),
+            seconds=seconds,
+            palace_id=_palace_id(fact.get("palace_id")),
+            cap=MAX_SEGMENT_SECONDS,
+        )
+    if accepted:
+        current["intervals"] = stored + accepted
+    return current

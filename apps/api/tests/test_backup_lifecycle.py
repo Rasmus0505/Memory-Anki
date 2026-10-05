@@ -1,12 +1,37 @@
 """backups lifecycle tests isolated to tmp_path."""
 import json
 import os
+import sqlite3
 from datetime import timedelta
 
 import pytest
 
 from memory_anki.modules.backups.application import backup_lifecycle, storage_backup
 from memory_anki.modules.backups.presentation import router as backups_router
+
+_DB_MARKER = "backup-marker"
+
+
+def _write_marker_db(path, marker: str) -> None:
+    if path.exists():
+        path.unlink()
+    connection = sqlite3.connect(path)
+    try:
+        connection.execute("CREATE TABLE marker(value TEXT NOT NULL)")
+        connection.execute("INSERT INTO marker(value) VALUES (?)", (marker,))
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def _read_marker(path) -> str:
+    connection = sqlite3.connect(path)
+    try:
+        row = connection.execute("SELECT value FROM marker").fetchone()
+    finally:
+        connection.close()
+    assert row is not None
+    return row[0]
 
 
 @pytest.fixture()
@@ -21,7 +46,7 @@ def backup_env(tmp_path, monkeypatch):
     db_path = app_home / STORAGE_ROOT_LEARNING / "memory_palace.db"
     for folder in (full_dir, rolling_dir, rescue_dir, db_path.parent):
         folder.mkdir(parents=True, exist_ok=True)
-    db_path.write_bytes(b"fake-sqlite-content")
+    _write_marker_db(db_path, _DB_MARKER)
 
     monkeypatch.setattr(storage_backup, "APP_HOME", app_home)
     monkeypatch.setattr(storage_backup, "BACKUPS_DIR", backups)
@@ -58,7 +83,7 @@ def test_create_full_backup_writes_manifest_and_db(backup_env):
 
     assert folder.parent == backup_env["full"]
     assert (folder / "manifest.json").exists()
-    assert (folder / "学习数据" / "memory_palace.db").read_bytes() == b"fake-sqlite-content"
+    assert _read_marker(folder / "学习数据" / "memory_palace.db") == _DB_MARKER
     manifest = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
     assert manifest.get("full") is True
     assert manifest.get("scope") == "full"
@@ -71,15 +96,22 @@ def test_create_rolling_backup_uses_rolling_dir_and_light_scope(backup_env):
     manifest = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
     assert manifest.get("full") is False
     assert manifest.get("scope") == "rolling"
-    assert (folder / "学习数据" / "memory_palace.db").exists()
+    included = {item["key"] for item in manifest["included_items"]}
+    assert {"database", "migration_state"} <= included
+    assert "time_ledger" not in included
+    assert "attachments" not in included
+    assert _read_marker(folder / "学习数据" / "memory_palace.db") == _DB_MARKER
 
 
-def test_create_rescue_snapshot_is_light(backup_env):
+def test_create_rescue_snapshot_includes_ledger_and_attachments(backup_env):
     folder = backup_lifecycle.create_rescue_snapshot("before-test")
 
     assert folder.parent == backup_env["rescue"]
     manifest = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
     assert manifest.get("full") is False
+    assert manifest.get("scope") == "rescue"
+    included = {item["key"] for item in manifest["included_items"]}
+    assert {"database", "time_ledger", "attachments", "migration_state"} <= included
 
 
 def test_list_backups_reads_created_folder(backup_env):
@@ -133,7 +165,7 @@ def test_restore_database_backup_returns_rescue_and_restores(backup_env, monkeyp
     rescue = backup_lifecycle.restore_database_backup(str(folder))
 
     assert rescue.parent == backup_env["rescue"]
-    assert backup_env["db"].read_bytes() == b"fake-sqlite-content"
+    assert _read_marker(backup_env["db"]) == _DB_MARKER
 
 
 def test_restore_missing_backup_raises(backup_env):

@@ -97,11 +97,24 @@ class FreestyleLearningTimeAdd(BaseModel):
     palace_id: int | None = None
 
 
+class FreestyleLearningInterval(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    interval_id: str
+    session_id: str
+    started_at: str
+    ended_at: str
+    bucket: str
+    palace_id: int | None = None
+    client_source: str = "unknown"
+
+
 class FreestyleLearningTimeRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     operation_id: str
     expected_version: int
+    intervals: list[FreestyleLearningInterval] = Field(default_factory=list)
     adds: list[FreestyleLearningTimeAdd] = Field(default_factory=list)
 
 

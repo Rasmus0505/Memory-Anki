@@ -14,6 +14,7 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Session
 
 from memory_anki.core.config import DATABASE_URL, ensure_runtime_dirs
+from memory_anki.core.runtime_storage_lock import storage_write_lock
 from memory_anki.infrastructure.db.diagnostics import (
     finish_connection_timer,
     install_query_diagnostics,
@@ -87,6 +88,36 @@ def _configure_sqlite_pragmas(dbapi_connection, _connection_record) -> None:
 
 
 install_query_diagnostics(engine)
+
+
+def _release_storage_lock(session: Session) -> None:
+    lock = session.info.pop("_storage_write_lock", None)
+    if lock is not None:
+        lock.__exit__(None, None, None)
+
+
+@event.listens_for(Session, "before_flush")
+def _acquire_storage_lock(session: Session, _flush_context, _instances) -> None:
+    """Hold the shared runtime lock across the SQL write, including commit.
+
+    Ledger and backup writers take the same lock. Acquiring it before flush and
+    releasing it only when the outermost transaction ends keeps a backup from
+    copying a half-committed round/SRS update.
+    """
+    if session.info.get("_storage_write_lock") is not None:
+        return
+    if not (session.new or session.dirty or session.deleted):
+        return
+    lock = storage_write_lock()
+    lock.__enter__()
+    session.info["_storage_write_lock"] = lock
+
+
+@event.listens_for(Session, "after_transaction_end")
+def _release_storage_lock_after_transaction(session: Session, transaction) -> None:
+    if getattr(transaction, "parent", None) is not None:
+        return
+    _release_storage_lock(session)
 
 
 class Base(DeclarativeBase):

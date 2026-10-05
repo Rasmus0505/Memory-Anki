@@ -1,4 +1,4 @@
-import { openPlayback, type FxPlayback } from './owner'
+import { isOwnerSkipped, openPlayback, type FxPlayback } from './owner'
 import { resolveFxGate, type FxGate, type FxScene } from './policy'
 
 /**
@@ -54,13 +54,15 @@ const FORCED: FxGate = { motion: true, sound: true, haptic: true, volume: 1 }
 
 export function cue<N extends FxCueName>(name: N, payload: FxCueMap[N], options: FxCueOptions = {}): FxPlayback | null {
   const recipe = recipes.get(name) as FxRecipe<FxCueMap[N]> | undefined
-  if (!recipe || typeof window === 'undefined') return null
+  if (!recipe || typeof window === 'undefined' || (options.owner && isOwnerSkipped(options.owner))) return null
   const gate = options.force ? FORCED : resolveFxGate(recipe.scene)
   listeners.forEach((listener) => listener(name, payload))
   if (!gate.motion && !gate.sound && !gate.haptic) return null
   const playback = openPlayback(options.owner)
   const forced = options.force === true
   recipe.play(payload, { gate, playback, forced, gateOf: (scene) => (forced ? FORCED : resolveFxGate(scene)) })
+  // Recipes that only perform synchronous work should not leave an idle owner entry.
+  playback.finish()
   return playback
 }
 

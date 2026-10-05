@@ -82,27 +82,31 @@ class SettingsAiRouteTests(RouterTestCase):
         self.assertIn("content.fidelity", block_keys)
         self.assertIn("output.mindmap_json", block_keys)
         fidelity = next(item for item in blocks_response.json()["items"] if item["key"] == "content.fidelity")
-        self.assertIn("mindmap_ocr_formatter", fidelity["applicable_scene_keys"])
+        self.assertNotIn("mindmap_ocr_formatter", fidelity["applicable_scene_keys"])
         self.assertNotIn("ai_split", fidelity["applicable_scene_keys"])
-        split_fidelity = next(
-            item for item in blocks_response.json()["items"] if item["key"] == "content.split_source_fidelity"
+        semantic = next(
+            item for item in blocks_response.json()["items"] if item["key"] == "content.semantic_preservation"
         )
-        self.assertIn("ai_split", split_fidelity["applicable_scene_keys"])
-        self.assertNotIn("mindmap_ocr_formatter", split_fidelity["applicable_scene_keys"])
+        self.assertIn("peg_association_suggestions", semantic["applicable_scene_keys"])
 
         scenes = self.client.get("/api/v1/settings/ai-prompt-scenes").json()["items"]
-        format_scene = next(item for item in scenes if item["scene_key"] == "mindmap_ocr_formatter")
-        self.assertGreaterEqual(len(format_scene["block_keys"]), 4)
-        self.assertTrue(set(format_scene["recommended_block_keys"]).issubset(set(format_scene["block_keys"])))
-        self.assertNotIn("is_compatibility", format_scene)
-        self.assertFalse(any(item["scene_key"] in {"ai_split_parallel", "ai_split_hierarchy"} for item in scenes))
+        scene_keys = {item["scene_key"] for item in scenes}
+        self.assertEqual(
+            scene_keys,
+            {"peg_association_suggestions", "translation_course_batch", "asr_course_transcription"},
+        )
+        peg_scene = next(item for item in scenes if item["scene_key"] == "peg_association_suggestions")
+        self.assertIn("role.strict_json", peg_scene["block_keys"])
+        self.assertTrue(set(peg_scene["recommended_block_keys"]).issubset(set(peg_scene["block_keys"])))
+        self.assertNotIn("is_compatibility", peg_scene)
+        self.assertFalse(any(item["scene_key"] in {"ai_split", "mindmap_ocr_formatter"} for item in scenes))
 
         preview = self.client.post(
             "/api/v1/settings/ai-prompt-compose/preview",
             json={
-                "scene_key": "mindmap_ocr_formatter",
+                "scene_key": "peg_association_suggestions",
                 "selection": {
-                    "block_keys": ["quality.json_integrity", "content.fidelity"],
+                    "block_keys": ["quality.source_grounding", "content.semantic_preservation"],
                     "scene_instruction": "场景规则",
                     "run_instruction": "本次只处理第 64-68 页",
                 },
@@ -110,36 +114,35 @@ class SettingsAiRouteTests(RouterTestCase):
         )
         self.assertEqual(preview.status_code, 200)
         payload = preview.json()
-        self.assertLess(payload["text"].index("严格保留"), payload["text"].index("输出前检查"))
+        self.assertLess(payload["text"].index("必须保持原意"), payload["text"].index("输出前逐项检查"))
         self.assertTrue(payload["text"].endswith("本次运行追加要求：\n本次只处理第 64-68 页"))
-        self.assertTrue(any("boundary.document_chapter" in item for item in payload["warnings"]))
 
     def test_empty_scene_default_is_repaired_to_catalog_blocks(self):
         # Saving an empty modular combination is not sticky: seed repair restores
         # catalog defaults before the response returns.
         repaired = self.client.put(
-            "/api/v1/settings/ai-prompt-scenes/mindmap_ocr_formatter/default",
+            "/api/v1/settings/ai-prompt-scenes/peg_association_suggestions/default",
             json={"block_keys": [], "scene_instruction": "空组合错误态"},
         )
         self.assertEqual(repaired.status_code, 200)
         scene = repaired.json()
         self.assertIn("role.strict_json", scene["block_keys"])
-        self.assertIn("output.mindmap_json", scene["block_keys"])
-        self.assertGreaterEqual(len(scene["block_keys"]), 4)
+        self.assertIn("quality.source_grounding", scene["block_keys"])
+        self.assertGreaterEqual(len(scene["block_keys"]), 3)
 
         listed = self.client.get("/api/v1/settings/ai-prompt-scenes").json()["items"]
-        listed_scene = next(item for item in listed if item["scene_key"] == "mindmap_ocr_formatter")
+        listed_scene = next(item for item in listed if item["scene_key"] == "peg_association_suggestions")
         self.assertEqual(listed_scene["block_keys"], scene["block_keys"])
 
     def test_scene_default_activates_immediately_and_can_roll_back(self):
         before = self.client.get("/api/v1/settings/ai-prompt-scenes").json()["items"]
-        scene = next(item for item in before if item["scene_key"] == "mindmap_ocr_formatter")
+        scene = next(item for item in before if item["scene_key"] == "peg_association_suggestions")
         original_version = scene["active_version_id"]
 
         saved = self.client.put(
-            "/api/v1/settings/ai-prompt-scenes/mindmap_ocr_formatter/default",
+            "/api/v1/settings/ai-prompt-scenes/peg_association_suggestions/default",
             json={
-                "block_keys": ["content.fidelity", "output.mindmap_json"],
+                "block_keys": ["content.semantic_preservation", "quality.source_grounding"],
                 "scene_instruction": "新的场景默认要求",
             },
         )
@@ -148,27 +151,27 @@ class SettingsAiRouteTests(RouterTestCase):
         self.assertIn("新的场景默认要求", saved.json()["compiled_prompt"])
 
         versions = self.client.get(
-            "/api/v1/settings/ai-prompt-scenes/mindmap_ocr_formatter/versions"
+            "/api/v1/settings/ai-prompt-scenes/peg_association_suggestions/versions"
         ).json()["items"]
         self.assertEqual(len(versions), 2)
         restored = self.client.post(
-            f"/api/v1/settings/ai-prompt-scenes/mindmap_ocr_formatter/versions/{original_version}/activate"
+            f"/api/v1/settings/ai-prompt-scenes/peg_association_suggestions/versions/{original_version}/activate"
         )
         self.assertEqual(restored.status_code, 200)
         self.assertEqual(restored.json()["active_version_id"], original_version)
 
     def test_shared_block_update_requires_affected_scene_acknowledgement(self):
         blocks = self.client.get("/api/v1/settings/ai-prompt-blocks").json()["items"]
-        block = next(item for item in blocks if item["key"] == "content.fidelity")
-        self.assertIn("mindmap_ocr_formatter", block["affected_scene_keys"])
+        block = next(item for item in blocks if item["key"] == "content.semantic_preservation")
+        self.assertIn("peg_association_suggestions", block["affected_scene_keys"])
 
         rejected = self.client.put(
-            "/api/v1/settings/ai-prompt-blocks/content.fidelity",
+            "/api/v1/settings/ai-prompt-blocks/content.semantic_preservation",
             json={"template": "更新后的忠实规则"},
         )
         self.assertEqual(rejected.status_code, 400)
         accepted = self.client.put(
-            "/api/v1/settings/ai-prompt-blocks/content.fidelity",
+            "/api/v1/settings/ai-prompt-blocks/content.semantic_preservation",
             json={
                 "template": "更新后的忠实规则",
                 "acknowledged_scene_keys": block["affected_scene_keys"],
@@ -194,8 +197,8 @@ class SettingsAiRouteTests(RouterTestCase):
                     request_json=json.dumps(
                         {
                             "resolved_ai": {
-                                "scene_key": "ai_split",
-                                "scene_label": "AI 分卡",
+                                "scene_key": "peg_association_suggestions",
+                                "scene_label": "记忆桩联想建议",
                                 "model_key": "qwen3.5-flash",
                                 "model_label": "qwen3.5-flash（无视觉）",
                                 "provider": "qwen",
@@ -232,10 +235,10 @@ class SettingsAiRouteTests(RouterTestCase):
         self.assertIn("model_count", qwen_provider)
         self.assertIn("api_key_source", qwen_provider)
 
-        ai_split_scene = next(item for item in payload["scenes"] if item["key"] == "ai_split")
-        self.assertEqual(ai_split_scene["last_status"], "success")
-        self.assertEqual(ai_split_scene["resolved_provider"], "qwen")
-        self.assertEqual(ai_split_scene["resolved_model_label"], "qwen3.5-flash（无视觉）")
+        peg_scene = next(item for item in payload["scenes"] if item["key"] == "peg_association_suggestions")
+        self.assertEqual(peg_scene["last_status"], "success")
+        self.assertEqual(peg_scene["resolved_provider"], "qwen")
+        self.assertEqual(peg_scene["resolved_model_label"], "qwen3.5-flash（无视觉）")
 
         summary = payload["summary"]
         self.assertIn("recent_success_call_count", summary)
@@ -259,15 +262,15 @@ class SettingsAiRouteTests(RouterTestCase):
         self.assertTrue(llm_category["has_shared_config"])
         self.assertEqual(llm_category["shared_model"], "qwen3.5-flash")
 
-        ai_split_scene = next(item for item in payload["scenes"] if item["key"] == "ai_split")
-        self.assertTrue(ai_split_scene["inherits_category_default"])
-        self.assertEqual(ai_split_scene["effective_model"], "qwen3.5-flash")
+        peg_scene = next(item for item in payload["scenes"] if item["key"] == "peg_association_suggestions")
+        self.assertTrue(peg_scene["inherits_category_default"])
+        self.assertEqual(peg_scene["effective_model"], "qwen3.5-flash")
 
         second_response = self.client.put(
             "/api/v1/settings/ai-models",
             json={
                 "scene_updates": {
-                    "ai_split": {
+                    "peg_association_suggestions": {
                         "default_model": "glm-4.7-flash",
                         "default_thinking_enabled": True,
                     }
@@ -276,13 +279,13 @@ class SettingsAiRouteTests(RouterTestCase):
         )
         self.assertEqual(second_response.status_code, 200)
         payload = second_response.json()
-        ai_split_scene = next(item for item in payload["scenes"] if item["key"] == "ai_split")
-        self.assertFalse(ai_split_scene["inherits_category_default"])
-        self.assertEqual(ai_split_scene["effective_model"], "glm-4.7-flash")
-        self.assertTrue(ai_split_scene["effective_thinking_enabled"])
+        peg_scene = next(item for item in payload["scenes"] if item["key"] == "peg_association_suggestions")
+        self.assertFalse(peg_scene["inherits_category_default"])
+        self.assertEqual(peg_scene["effective_model"], "glm-4.7-flash")
+        self.assertTrue(peg_scene["effective_thinking_enabled"])
 
         with self.SessionLocal() as session:
-            runtime = resolve_scenario_runtime(session, "ai_split")
+            runtime = resolve_scenario_runtime(session, "peg_association_suggestions")
             self.assertEqual(runtime.model_key, "glm-4.7-flash")
             self.assertEqual(runtime.provider, "zhipu")
 
@@ -296,7 +299,7 @@ class SettingsAiRouteTests(RouterTestCase):
                 ]
             )
             session.commit()
-            runtime = resolve_scenario_runtime(session, "ai_split")
+            runtime = resolve_scenario_runtime(session, "peg_association_suggestions")
 
         self.assertEqual(runtime.provider, "qwen")
         self.assertEqual(runtime.api_key, "dashscope-test-key")
@@ -307,7 +310,7 @@ class SettingsAiRouteTests(RouterTestCase):
             "/api/v1/settings/ai-models",
             json={
                 "scene_updates": {
-                    "ai_split": {
+                    "peg_association_suggestions": {
                         "default_model": "glm-4.7-flash",
                         "default_thinking_enabled": True,
                     }
@@ -319,7 +322,7 @@ class SettingsAiRouteTests(RouterTestCase):
         impact_payload = impact_response.json()
         self.assertFalse(impact_payload["can_delete"])
         self.assertGreaterEqual(impact_payload["usage_count"], 1)
-        self.assertIn("AI 分卡", impact_payload["bound_scene_labels"])
+        self.assertIn("记忆桩联想建议", impact_payload["bound_scene_labels"])
 
         delete_response = self.client.delete("/api/v1/settings/ai-models/models/glm-4.7-flash")
         self.assertEqual(delete_response.status_code, 400)
@@ -395,7 +398,7 @@ class SettingsAiRouteTests(RouterTestCase):
             self.assertEqual(provider["api_key_source"], "db")
 
             with self.SessionLocal() as session:
-                runtime = resolve_scenario_runtime(session, "ai_split")
+                runtime = resolve_scenario_runtime(session, "peg_association_suggestions")
             self.assertEqual(runtime.api_key, "")
 
     def test_clear_all_api_keys_clears_provider_and_legacy_keys(self):

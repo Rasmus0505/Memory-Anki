@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 from memory_anki.core.runtime_paths import REPO_ROOT, get_app_home
 
@@ -23,6 +23,17 @@ class ManagedStorageItem:
 
     def absolute_path(self, app_home: Path | None = None) -> Path:
         return (app_home or resolve_app_home()) / self.relative_path
+
+
+def validate_relative_storage_path(value: str) -> str:
+    """Reject absolute, drive-qualified, or escaping managed paths."""
+    raw = str(value or "").replace("\\", "/")
+    path = PurePosixPath(raw)
+    if not raw or path.is_absolute() or PureWindowsPath(raw).drive or ":" in raw:
+        raise ValueError(f"storage path must be relative: {value!r}")
+    if any(part in {"", ".", ".."} for part in raw.split("/")):
+        raise ValueError(f"storage path escapes app home: {value!r}")
+    return path.as_posix()
 
 
 @dataclass(frozen=True, slots=True)

@@ -418,10 +418,22 @@ export interface FreestyleLearningTimeAdd {
   palace_id?: number | null
 }
 
+export interface FreestyleLearningInterval {
+  interval_id: string
+  session_id: string
+  started_at: string
+  ended_at: string
+  bucket: 'unit' | 'quiz' | 'lookup'
+  palace_id?: number | null
+  client_source: 'desktop' | 'pwa' | 'unknown'
+}
+
 export interface FreestyleLearningTimeRequest {
   operation_id: string
   expected_version: number
-  adds: FreestyleLearningTimeAdd[]
+  intervals?: FreestyleLearningInterval[]
+  /** Historical clients without actual interval boundaries. */
+  adds?: FreestyleLearningTimeAdd[]
 }
 
 export interface FreestyleLearningTimeBackfillRequest {
