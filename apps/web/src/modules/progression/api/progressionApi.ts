@@ -13,9 +13,18 @@ function isOverview(value: unknown): value is ProgressionOverview {
   )
 }
 
-export async function getProgressionOverviewApi(): Promise<ProgressionOverview> {
-  const payload = await request<unknown>('/progression/overview')
-  // A service-worker fallback or proxy page must surface as an error, not a half-shaped HUD.
-  if (!isOverview(payload)) throw new Error('成长数据格式不完整。')
-  return payload
+// HUD, settlement and visibility refreshes can ask for the same projection
+// together. Share only the pending read; the next refresh still reads fresh data.
+let pendingOverview: Promise<ProgressionOverview> | null = null
+
+export function getProgressionOverviewApi(): Promise<ProgressionOverview> {
+  if (pendingOverview) return pendingOverview
+  pendingOverview = request<unknown>('/progression/overview')
+    .then((payload) => {
+      // A service-worker fallback or proxy page must surface as an error, not a half-shaped HUD.
+      if (!isOverview(payload)) throw new Error('成长数据格式不完整。')
+      return payload
+    })
+    .finally(() => { pendingOverview = null })
+  return pendingOverview
 }

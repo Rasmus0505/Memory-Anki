@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { listPalaceQuizNodeBindingsApi, palaceQuizNodeBindingsCacheKey } from '@/modules/quiz/domain/quiz-entity/api'
 import { shareInFlightRequest } from '@/shared/api/inFlightRequest'
 import { subscribeQuizQuestionMarked } from '@/modules/quiz/domain/quiz-entity/model/quizQuestionMarkSync'
@@ -41,6 +41,7 @@ export function usePalaceQuizNodeBindings({
   const [questionStates, setQuestionStates] = useState<Record<number, QuizRuntimeState>>(
     () => readQuizSessionStates(),
   )
+  const refreshGenerationRef = useRef(0)
 
   useEffect(() => {
     const listener = () => {
@@ -53,8 +54,10 @@ export function usePalaceQuizNodeBindings({
   }, [])
 
   const refresh = useCallback(async () => {
+    const generation = ++refreshGenerationRef.current
     if (!palaceId || !enabled) {
       setBindings([])
+      setLoading(false)
       return
     }
     setLoading(true)
@@ -67,17 +70,30 @@ export function usePalaceQuizNodeBindings({
         palaceQuizNodeBindingsCacheKey(palaceId),
         () => listPalaceQuizNodeBindingsApi(palaceId),
       )
-      setBindings(response.items)
+      if (generation === refreshGenerationRef.current) setBindings(response.items)
     } catch {
-      setBindings([])
+      if (generation === refreshGenerationRef.current) setBindings([])
     } finally {
-      setLoading(false)
+      if (generation === refreshGenerationRef.current) setLoading(false)
     }
   }, [enabled, palaceId])
 
   useEffect(() => {
-    void refresh()
-  }, [refresh])
+    if (!enabled || !palaceId) {
+      refreshGenerationRef.current += 1
+      setBindings([])
+      setLoading(false)
+      return
+    }
+    // Do not spend a database connection on a card that was only active during
+    // a fast page turn. The active card remains responsive because the delay is
+    // shorter than the feed transition, while rapid paging coalesces naturally.
+    const timer = window.setTimeout(() => { void refresh() }, 120)
+    return () => {
+      window.clearTimeout(timer)
+      refreshGenerationRef.current += 1
+    }
+  }, [enabled, palaceId, refresh])
 
   useEffect(() => {
     return subscribeQuizQuestionMarked((questionId, marked) => {

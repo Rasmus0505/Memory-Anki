@@ -50,6 +50,50 @@ function survivingNodes(
 }
 
 /**
+ * The node a binding should fall back to when its own node is deleted: the
+ * nearest ancestor that is not itself going away, per removed uid. Falls back to
+ * the document root, then to the first surviving node, for a node whose whole
+ * ancestor chain is being deleted.
+ */
+function nearestSurvivingAncestorByRemovedUid(
+  editorDoc: MindMapDocumentInput,
+  removedNodeUids: readonly string[],
+  candidates: ReadonlyArray<{ uid: string }>,
+): Map<string, string> {
+  const removed = new Set(removedNodeUids)
+  const surviving = new Set(candidates.map((node) => node.uid))
+  const doc = normalizeMindMapDocument(editorDoc)
+  const rootUid = getMindMapNodeUid(doc.root as MindMapDocNode, 'root')
+  const fallbackUid = surviving.has(rootUid) ? rootUid : (candidates[0]?.uid ?? '')
+
+  const parentByUid = new Map<string, string>()
+  const walk = (node: MindMapDocNode, parentUid: string | null, indexPath: number[]) => {
+    const uid = getMindMapNodeUid(node, indexPath.join('-') || 'root')
+    if (uid && parentUid) parentByUid.set(uid, parentUid)
+    const children = Array.isArray(node.children) ? node.children : []
+    children.forEach((child, index) => walk(child, uid, [...indexPath, index]))
+  }
+  walk(doc.root as MindMapDocNode, null, [])
+
+  const byRemovedUid = new Map<string, string>()
+  for (const removedUid of removed) {
+    let cursor = parentByUid.get(removedUid)
+    let target = fallbackUid
+    const seen = new Set<string>([removedUid])
+    while (cursor && !seen.has(cursor)) {
+      if (surviving.has(cursor)) {
+        target = cursor
+        break
+      }
+      seen.add(cursor)
+      cursor = parentByUid.get(cursor)
+    }
+    byRemovedUid.set(removedUid, target)
+  }
+  return byRemovedUid
+}
+
+/**
  * Shown when deleting cards that still carry quiz bindings. Lists the questions so
  * the user can judge, then either moves each one to a surviving card or drops the
  * binding. Nothing is written until the user picks 确认删除.
@@ -76,9 +120,12 @@ export function QuizNodeDeleteGuardDialog({
     () => (request ? survivingNodes(editorDoc, request.removedNodeUids) : []),
     [editorDoc, request],
   )
-  const defaultTargetUid = useMemo(
-    () => candidates.find((node) => node.depth === 0)?.uid ?? candidates[0]?.uid ?? '',
-    [candidates],
+  const defaultTargetByRemovedUid = useMemo(
+    () =>
+      request
+        ? nearestSurvivingAncestorByRemovedUid(editorDoc, request.removedNodeUids, candidates)
+        : new Map<string, string>(),
+    [candidates, editorDoc, request],
   )
 
   useEffect(() => {
@@ -89,10 +136,11 @@ export function QuizNodeDeleteGuardDialog({
     }
     const next: Record<string, string> = {}
     for (const edge of request.affectedEdges) {
-      next[`${edge.question_id}:${edge.node_uid}`] = defaultTargetUid
+      next[`${edge.question_id}:${edge.node_uid}`] =
+        defaultTargetByRemovedUid.get(edge.node_uid) ?? ''
     }
     setTargetByEdge(next)
-  }, [request, defaultTargetUid])
+  }, [request, defaultTargetByRemovedUid])
 
   const edges = useMemo(() => request?.affectedEdges ?? [], [request])
   const questionCount = useMemo(
@@ -147,7 +195,7 @@ export function QuizNodeDeleteGuardDialog({
           <DialogTitle>这些卡片上还挂着题目</DialogTitle>
           <DialogDescription>
             即将删除的卡片绑定了 {questionCount} 道题（共 {edges.length} 条绑定）。
-            默认转到根节点；可改选其他卡片，或选「解除绑定（不转移）」。
+            默认转到最近的上层卡片；可改选其他卡片，或选「解除绑定（不转移）」。
           </DialogDescription>
         </DialogHeader>
 

@@ -187,11 +187,16 @@ export function FreestyleScopeQuizDialog({
     setLoading(true)
     setLoadError('')
     try {
-      const round = await ensureFreestyleOverlayQuizApi(roundId, {
+      const request = (expectedVersion: number) => ensureFreestyleOverlayQuizApi(roundId, {
         operation_id: createOperationId(),
-        expected_version: planVersionRef.current,
+        expected_version: expectedVersion,
         config: storedConfigRef.current,
       })
+      let round = await request(planVersionRef.current)
+      // A just-saved picker can still be replanning the round. A conflict is
+      // only a snapshot: ensure the new scope before loading its question ids.
+      if (round.conflict) round = await request(round.plan_version ?? round.version)
+      if (round.conflict) throw new Error('本轮安排正在更新，请重试做题。')
       const next = adoptRound(round)
       if (next) await loadQuestions(next)
     } catch (error) {

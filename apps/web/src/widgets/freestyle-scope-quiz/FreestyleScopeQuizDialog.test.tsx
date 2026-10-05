@@ -102,6 +102,31 @@ describe('FreestyleScopeQuizDialog', () => {
     } as never)
   })
 
+  it('retries a picker replan conflict before loading questions from the new scope', async () => {
+    ensureFreestyleOverlayQuizApiMock.mockResolvedValueOnce({
+      round_id: 'round-1',
+      plan_version: 7,
+      conflict: true,
+      plan: { overlay_quiz: { question_ids: [99] } },
+    } as never)
+    render(
+      <FreestyleScopeQuizDialog
+        open
+        onOpenChange={vi.fn()}
+        roundId="round-1"
+        planVersion={1}
+        storedConfig={DEFAULT_FREESTYLE_FEED_CONFIG}
+        setupDone
+        rangeLabel="本轮纳入复习的 1 个宫殿"
+        onConfirmSetup={vi.fn()}
+        onRoundSync={vi.fn()}
+      />,
+    )
+    await waitFor(() => expect(ensureFreestyleOverlayQuizApiMock).toHaveBeenCalledTimes(2))
+    expect(ensureFreestyleOverlayQuizApiMock.mock.calls[1][1].expected_version).toBe(7)
+    expect(getPalaceQuizQuestionsByIdsApiMock).not.toHaveBeenCalled()
+  })
+
   it('asks for palace order before the first session', async () => {
     const onConfirmSetup = vi.fn()
     render(

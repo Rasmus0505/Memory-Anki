@@ -22,6 +22,23 @@ const editorDoc = {
   },
 }
 
+/** child-a / child-b live under section-a, which itself survives. */
+const nestedEditorDoc = {
+  root: {
+    data: { uid: 'root', text: '根节点' },
+    children: [
+      {
+        data: { uid: 'section-a', text: '章节A' },
+        children: [
+          { data: { uid: 'child-a', text: '子A' }, children: [] },
+          { data: { uid: 'child-b', text: '子B' }, children: [] },
+        ],
+      },
+      { data: { uid: 'section-b', text: '章节B' }, children: [] },
+    ],
+  },
+}
+
 const edges: QuizNodeBindingEdge[] = [
   { question_id: 11, node_uid: 'child-a', node_text: '子A', palace_id: 1 },
   { question_id: 12, node_uid: 'child-b', node_text: '子B', palace_id: 1 },
@@ -32,13 +49,19 @@ const questionById = new Map<number, PalaceQuizQuestion>([
   [12, { id: 12, stem: '题12' } as PalaceQuizQuestion],
 ])
 
-function renderDialog() {
+function renderDialog(overrides?: {
+  removedNodeUids?: readonly string[]
+  doc?: typeof editorDoc
+}) {
   const onResolve = vi.fn()
   render(
     <QuizNodeDeleteGuardDialog
-      request={{ removedNodeUids: ['child-a', 'child-b'], affectedEdges: edges }}
+      request={{
+        removedNodeUids: overrides?.removedNodeUids ?? ['child-a', 'child-b'],
+        affectedEdges: edges,
+      }}
       palaceId={1}
-      editorDoc={editorDoc}
+      editorDoc={overrides?.doc ?? editorDoc}
       questionById={questionById}
       onResolve={onResolve}
     />,
@@ -51,13 +74,13 @@ describe('QuizNodeDeleteGuardDialog', () => {
     vi.mocked(mutatePalaceQuizNodeBindingsApi).mockReset().mockResolvedValue({} as never)
   })
 
-  it('defaults every binding to the root node and confirms a full rebind', async () => {
-    const { onResolve } = renderDialog()
+  it('defaults each binding to its nearest surviving ancestor and confirms a full rebind', async () => {
+    const { onResolve } = renderDialog({ doc: nestedEditorDoc })
 
     const selects = screen.getAllByRole('combobox') as HTMLSelectElement[]
     expect(selects).toHaveLength(2)
-    expect(selects.map((select) => select.value)).toEqual(['root', 'root'])
-    expect(screen.getByText(/默认转到根节点/)).toBeTruthy()
+    expect(selects.map((select) => select.value)).toEqual(['section-a', 'section-a'])
+    expect(screen.getByText(/默认转到最近的上层卡片/)).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: '确认删除' }))
 
@@ -70,20 +93,37 @@ describe('QuizNodeDeleteGuardDialog', () => {
         { question_id: 12, node_uid: 'child-b', target_palace_id: 1 },
       ],
       add: [
-        { question_id: 11, node_uid: 'root', target_palace_id: 1, reason: '删除卡片时转移绑定' },
-        { question_id: 12, node_uid: 'root', target_palace_id: 1, reason: '删除卡片时转移绑定' },
+        { question_id: 11, node_uid: 'section-a', target_palace_id: 1, reason: '删除卡片时转移绑定' },
+        { question_id: 12, node_uid: 'section-a', target_palace_id: 1, reason: '删除卡片时转移绑定' },
       ],
     })
     expect(onResolve).toHaveBeenCalledWith(true)
   })
 
-  it('omits an unbound row from add when the empty option is chosen', async () => {
+  it('falls back to the root when the whole ancestor chain is deleted', async () => {
+    renderDialog({
+      doc: nestedEditorDoc,
+      removedNodeUids: ['section-a', 'child-a', 'child-b'],
+    })
+
+    const selects = screen.getAllByRole('combobox') as HTMLSelectElement[]
+    expect(selects.map((select) => select.value)).toEqual(['root', 'root'])
+  })
+
+  it('defaults to the root when the deleted nodes are direct children of it', async () => {
     renderDialog()
+
+    const selects = screen.getAllByRole('combobox') as HTMLSelectElement[]
+    expect(selects.map((select) => select.value)).toEqual(['root', 'root'])
+  })
+
+  it('omits an unbound row from add when the empty option is chosen', async () => {
+    renderDialog({ doc: nestedEditorDoc })
 
     const selects = screen.getAllByRole('combobox') as HTMLSelectElement[]
     fireEvent.change(selects[0], { target: { value: '' } })
     expect(selects[0].value).toBe('')
-    expect(selects[1].value).toBe('root')
+    expect(selects[1].value).toBe('section-a')
 
     fireEvent.click(screen.getByRole('button', { name: '确认删除' }))
 
@@ -94,9 +134,9 @@ describe('QuizNodeDeleteGuardDialog', () => {
       1,
       expect.objectContaining({
         add: [
-          { question_id: 12, node_uid: 'root', target_palace_id: 1, reason: '删除卡片时转移绑定' },
+          { question_id: 12, node_uid: 'section-a', target_palace_id: 1, reason: '删除卡片时转移绑定' },
         ],
       }),
     )
   })
-})
+})
