@@ -238,9 +238,12 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
 
   useEffect(() => {
     if (!reviewFxSignal) return
+    // Visual only: the reveal cascade already sounds these (one layered pop per
+    // card). Letting the relay play them too would double every flip here.
     dispatchGlobalFeedback(reviewFxSignal.type, {
       origin: 'review',
       label: reviewFxSignal.nodeUid ?? undefined,
+      silentAudio: true,
     })
   }, [reviewFxSignal])
 

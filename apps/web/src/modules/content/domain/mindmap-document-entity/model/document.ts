@@ -1,4 +1,4 @@
-﻿import { highlightEntireNodeText } from '@/shared/lib/mindmapRichText'
+import { highlightEntireNodeText } from '@/shared/lib/mindmapRichText'
 
 export interface MindMapNodeData {
   text?: string
@@ -354,6 +354,12 @@ export function countMindMapSubtree(document: MindMapDocumentInput, nodeUid: str
   const found = findNode(normalizeMindMapDocument(document).root, nodeUid)
   const count = (node: MindMapNode): number => 1 + (node.children ?? []).reduce((total, child) => total + count(child), 0)
   return found ? count(found.node) : 0
+}
+
+/** Direct children only — how many cards step up when the node is peeled off. */
+export function countMindMapChildren(document: MindMapDocumentInput, nodeUid: string) {
+  const found = findNode(normalizeMindMapDocument(document).root, nodeUid)
+  return found ? (found.node.children ?? []).length : 0
 }
 
 export type MindMapRelocateMode = 'inside' | 'before' | 'after'

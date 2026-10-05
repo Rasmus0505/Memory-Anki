@@ -359,6 +359,11 @@ export function useReviewFeedback({
     }
 
     for (const event of transition.events) {
+      // card_reveal is sounded by the reveal cascade itself (one layered pop per
+      // flipped card, via `audio.pops` in useMindMapRevealMotion). Playing the
+      // per-event tone here as well makes a 4-card flip sound once and then four
+      // more times, which reads as five separate events.
+      if (event === 'card_reveal') continue
       const sceneKey = reviewEventToSceneKey(event)
       if (!shouldPlaySceneAudio(settings, sceneKey)) continue
       audio.playEvent(event, {

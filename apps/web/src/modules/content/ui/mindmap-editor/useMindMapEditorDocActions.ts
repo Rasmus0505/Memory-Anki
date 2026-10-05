@@ -8,12 +8,14 @@ import {
   type MindMapExtractPlacement,
 } from '@/modules/content/domain/mindmap-document-entity'
 import { toast } from '@/shared/feedback/toast'
+import { playEditLayeredPops } from '@/shared/feedback/mindmap-audio/webAudioFeedback'
 import {
   addEditorDocChildWithResult,
   addEditorDocSiblingWithResult,
   buildSelectionFromDoc,
   canMoveEditorDocNode,
   collectEditorDocSubtreeUids,
+  countEditorDocChildren,
   countEditorDocSubtree,
   deleteEditorDocNode,
   deleteEditorDocNodeOnly,
@@ -134,6 +136,10 @@ export function useMindMapEditorDocActions(deps: {
       if (!commitEditorDoc(nextEditorDoc)) return
       replaceInteraction({ mode: 'idle' })
       onNodeActive?.([])
+      // Object layer: one pop per card that actually goes away, then the result
+      // layer (toast chime). Both are after the confirm resolves, so cancelling
+      // the dialog stays silent.
+      playEditLayeredPops({ role: 'remove', count: removedCount })
       toast.success(
         removedCount > 1 ? `已删除整条分支（${removedCount} 张卡片）` : '已删除卡片',
         { action: { label: '撤销', onClick: undoEditorDoc } },
@@ -166,6 +172,7 @@ export function useMindMapEditorDocActions(deps: {
       if (!commitEditorDoc(nextEditorDoc)) return
       replaceInteraction({ mode: 'idle' })
       onNodeActive?.([])
+      playEditLayeredPops({ role: 'remove', count: removedCount })
       toast.success(`已删除 ${unique.length} 处选中（共 ${removedCount} 张卡片）`, {
         action: { label: '撤销', onClick: undoEditorDoc },
       })
@@ -259,10 +266,15 @@ export function useMindMapEditorDocActions(deps: {
       if (!canMutateMindMapBranchStructure(branchScope, nodeId)) return
       // Children are promoted, so only this one card's uid goes away.
       if (confirmDeleteNodes && !(await confirmDeleteNodes([nodeId]))) return
-      const nextEditorDoc = deleteEditorDocNodeOnly(getCurrentEditorDoc(), nodeId)
+      const currentEditorDoc = getCurrentEditorDoc()
+      const promotedCount = countEditorDocChildren(currentEditorDoc, nodeId)
+      const nextEditorDoc = deleteEditorDocNodeOnly(currentEditorDoc, nodeId)
       if (!commitEditorDoc(nextEditorDoc)) return
       replaceInteraction({ mode: 'idle' })
       onNodeActive?.([])
+      // 'lift', not 'remove': the card is peeled off and its children step up, so
+      // the pop count is the children who moved, not the one card that left.
+      playEditLayeredPops({ role: 'lift', count: Math.max(promotedCount, 1) })
       toast.success('已单独删除卡片，子级已提升', {
         action: { label: '撤销', onClick: undoEditorDoc },
       })
@@ -279,10 +291,16 @@ export function useMindMapEditorDocActions(deps: {
         return
       }
       if (confirmDeleteNodes && !(await confirmDeleteNodes(unique))) return
-      const nextEditorDoc = deleteEditorDocNodesOnly(getCurrentEditorDoc(), unique)
+      const currentEditorDoc = getCurrentEditorDoc()
+      const promotedCount = unique.reduce(
+        (total, nodeId) => total + countEditorDocChildren(currentEditorDoc, nodeId),
+        0,
+      )
+      const nextEditorDoc = deleteEditorDocNodesOnly(currentEditorDoc, unique)
       if (!commitEditorDoc(nextEditorDoc)) return
       replaceInteraction({ mode: 'idle' })
       onNodeActive?.([])
+      playEditLayeredPops({ role: 'lift', count: Math.max(promotedCount, 1) })
       toast.success(`已单独删除 ${unique.length} 张卡片，子级已提升`, {
         action: { label: '撤销', onClick: undoEditorDoc },
       })

@@ -13,6 +13,7 @@ import {
   canMoveMindMapNode,
   collectMindMapBranchScope,
   collectMindMapSubtreeUids,
+  countMindMapChildren,
   countMindMapSubtree,
   deleteMindMapNode,
   deleteMindMapNodeOnly,
@@ -194,6 +195,7 @@ export const deleteEditorDocNode = deleteMindMapNode
 export const deleteEditorDocNodeOnly = deleteMindMapNodeOnly
 export const deleteEditorDocNodesOnly = deleteMindMapNodesOnly
 export const countEditorDocSubtree = countMindMapSubtree
+export const countEditorDocChildren = countMindMapChildren
 export const collectEditorDocSubtreeUids = collectMindMapSubtreeUids
 export const reparentEditorDocNode = reparentMindMapNode
 export const reorderEditorDocNode = reorderMindMapNode
