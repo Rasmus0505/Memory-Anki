@@ -141,11 +141,16 @@ export function editorDocToGraph(
         layoutRole: depth === 0 ? 'root' : depth >= 2 ? 'leaf' : 'branch',
         branchColor,
         // Deliberately not carrying `rawNode` here. It embedded the original
-        // document node *with its whole subtree*, which cost two ways on every
-        // flip: `isSameMindMapLayout` stringified it per node (O(N x subtree)),
-        // and `shallowEqualNodeData` compares data by reference while the doc is
-        // deep-cloned per flip, so the field was a guaranteed mismatch that
-        // defeated every downstream identity reuse. Nothing ever read it.
+        // document node *with its whole subtree*, so `isSameMindMapLayout`
+        // stringified O(N x subtree) text on every layout pass, and the field had
+        // no reader anywhere. Removing it fixes that serialization cost only.
+        //
+        // It does NOT by itself restore card identity reuse: an earlier note
+        // claimed it did, and measurement disproved that (0/200 cards reused on a
+        // re-projection). The remaining churn comes from `metadata` and `visual`
+        // being rebuilt as fresh objects — `shallowEqualNodeData` compares by
+        // reference. See `reuseUnchangedMetadata` in the canvas layout for where
+        // that is actually addressed.
         markColor: markFill,
         visual: buildNodeVisual({
           revealState,

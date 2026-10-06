@@ -153,12 +153,29 @@ Frontend AI scenario/model selection and per-run overrides are owned by `modules
 
 ## Registered follow-up refactors (not yet done)
 
-- Split `pages/create/PalaceEditorPage.tsx` (823 lines, over the 750 gate) and sink into `modules/content`.
+Each entry must still be over its gate. `tools/check_architecture.py` runs
+`check_oversized_baseline_is_current`, so a follow-up that is finished (or whose file
+was deleted) fails the gate until its `BASELINE_OVERSIZED_FILES` entry is removed —
+the list cannot silently keep exempting a path that no longer needs it.
+
 - Sink the `shared/hooks/timedSession*` family + `SessionTimerBar` into `modules/session` (currently listed as explicit `shared→modules` ESLint boundary exceptions).
 - Resolve the `modules→widgets` boundary exceptions (practice/quiz importing `mindmap-review-flow` / `palace-memory-lookup` APIs) by sinking those APIs behind module publics.
 - Split the three oversized `shared/ui/mindmap-canvas` files (`layout.ts`, `NodeCard.tsx`, `useMindMapCanvasState.ts`).
-- Split `shared/components/ui/dialog.tsx` (782 lines) and the freestyle model test harnesses `freestyleProgressSegments.test.ts` (778 lines) and `roundCompletion.test.ts` (805 lines); they are registered as temporary quality-gate exceptions until extracted.
+- Split `shared/components/ui/dialog.tsx` and the freestyle model test harnesses `freestyleProgressSegments.test.ts` / `roundCompletion.test.ts`; registered as temporary quality-gate exceptions until extracted.
 - Optional: rename nav-section keys `'knowledge'`→`'create'`, `'review'`→`'insights'` (needs pageHistoryStore key migration).
+
+Completed and therefore no longer listed: `PalaceEditorPage.tsx` (689 lines),
+`PalaceMindMapWorkspace.tsx` (728), the `GlobalTimerProvider*` /
+`TimerAutomationDialog` / `useTimedSession*` session hosts, and
+`PalaceQuizGenerationPanel.tsx` (deleted).
+
+## Hand-written code that is deliberately kept
+
+`docs/architecture/domain-rules-not-replaced.md` records where an off-the-shelf
+library was evaluated and rejected, with the measured or code-level reason. Read it
+before "modernizing" `memory/application/unit_scheduler.py`, `core/time.py`,
+`quiz/application/manual_text_quiz_parser.py`, or the LLM client's retry handling —
+each carries a product rule that the obvious library does not express.
 
 
 ## Runtime-owned workflows
