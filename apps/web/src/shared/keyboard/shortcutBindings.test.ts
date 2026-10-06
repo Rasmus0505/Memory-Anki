@@ -80,6 +80,18 @@ describe('shortcutBindings', () => {
     const escaped = captureShortcutFromKeyboardEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape' }))
     expect(escaped.value).toBeNull()
     expect(escaped.error).toContain('Esc')
+
+    const backspace = captureShortcutFromKeyboardEvent(
+      new KeyboardEvent('keydown', { key: 'Backspace', code: 'Backspace' }),
+    )
+    expect(backspace.value).toBeNull()
+    const quizBackspace = captureShortcutFromKeyboardEvent(
+      new KeyboardEvent('keydown', { key: 'Backspace', code: 'Backspace' }),
+      {},
+      { allowBareDeleteKeys: true },
+    )
+    expect(quizBackspace.error).toBe('')
+    expect(quizBackspace.value?.code).toBe('Backspace')
   })
 
   it('captures valid shortcuts and matches modifier state precisely', () => {

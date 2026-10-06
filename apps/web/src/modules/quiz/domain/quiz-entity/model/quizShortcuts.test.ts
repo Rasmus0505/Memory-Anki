@@ -13,6 +13,8 @@ function context(overrides: Partial<QuizShortcutContext> = {}): QuizShortcutCont
     optionCount: 4,
     choiceShortcutsActive: true,
     attemptClosed: false,
+    answerRevealed: false,
+    hasNextQuestion: true,
     repeat: false,
     editable: false,
     recording: false,
@@ -73,6 +75,49 @@ describe('quizShortcuts', () => {
       keydown('Enter', 'Enter'),
       DEFAULT_QUIZ_SHORTCUTS,
       context({ enterOnUnrelatedControl: true }),
+    )).toBeNull()
+  })
+
+  it('opens delete from Backspace and keeps that binding in the saved map', () => {
+    expect(DEFAULT_QUIZ_SHORTCUTS.delete_question?.code).toBe('Backspace')
+    expect(sanitizeQuizShortcutMap(DEFAULT_QUIZ_SHORTCUTS).delete_question?.code).toBe('Backspace')
+    expect(resolveQuizShortcutAction(
+      keydown('Backspace', 'Backspace'),
+      DEFAULT_QUIZ_SHORTCUTS,
+      context({ choiceShortcutsActive: false, optionCount: 0 }),
+    )).toEqual({ id: 'delete_question', run: true })
+    expect(resolveQuizShortcutAction(
+      keydown('Backspace', 'Backspace', { repeat: true }),
+      DEFAULT_QUIZ_SHORTCUTS,
+      context({ repeat: true }),
+    )).toEqual({ id: 'delete_question', run: false })
+    expect(resolveQuizShortcutAction(
+      keydown('Backspace', 'Backspace'),
+      DEFAULT_QUIZ_SHORTCUTS,
+      context({ editable: true }),
+    )).toBeNull()
+  })
+
+  it('turns Enter into the next question only after the answer is visible', () => {
+    expect(resolveQuizShortcutAction(
+      keydown('Enter', 'Enter'),
+      DEFAULT_QUIZ_SHORTCUTS,
+      context({
+        answerRevealed: true,
+        choiceShortcutsActive: false,
+        attemptClosed: true,
+        optionCount: 0,
+      }),
+    )).toEqual({ id: 'next_question', run: true })
+    expect(resolveQuizShortcutAction(
+      keydown('Enter', 'Enter', { repeat: true }),
+      DEFAULT_QUIZ_SHORTCUTS,
+      context({ answerRevealed: true, repeat: true }),
+    )).toEqual({ id: 'next_question', run: false })
+    expect(resolveQuizShortcutAction(
+      keydown('Enter', 'Enter'),
+      DEFAULT_QUIZ_SHORTCUTS,
+      context({ answerRevealed: true, hasNextQuestion: false }),
     )).toBeNull()
   })
 

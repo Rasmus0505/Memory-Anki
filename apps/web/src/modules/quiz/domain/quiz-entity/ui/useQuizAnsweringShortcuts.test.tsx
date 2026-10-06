@@ -6,11 +6,19 @@ import { useQuizAnsweringShortcuts } from './useQuizAnsweringShortcuts'
 function Harness({
   onToggleMark,
   onSelectOption,
+  onNextQuestion = () => {},
+  onDeleteQuestion,
   choiceShortcutsActive = true,
+  answerRevealed = false,
+  hasNextQuestion = true,
 }: {
   onToggleMark: () => void
   onSelectOption: (index: number) => void
+  onNextQuestion?: () => void
+  onDeleteQuestion?: () => void
   choiceShortcutsActive?: boolean
+  answerRevealed?: boolean
+  hasNextQuestion?: boolean
 }) {
   const interactionRootRef = useRef<HTMLDivElement | null>(null)
   useQuizAnsweringShortcuts({
@@ -19,13 +27,16 @@ function Harness({
     optionCount: 4,
     choiceShortcutsActive,
     attemptClosed: false,
+    answerRevealed,
+    hasNextQuestion,
     keyboardOptionIndex: 0,
     setKeyboardOptionIndex: () => {},
     interactionRootRef,
     onPreviousQuestion: () => {},
-    onNextQuestion: () => {},
+    onNextQuestion,
     onSelectOption,
     onToggleMark,
+    onDeleteQuestion,
   })
   return <div ref={interactionRootRef} data-quiz-shortcut-surface="" tabIndex={-1} />
 }
@@ -61,6 +72,48 @@ describe('useQuizAnsweringShortcuts', () => {
 
     expect(seenByFeed).not.toHaveBeenCalled()
     window.removeEventListener('keydown', seenByFeed)
+  })
+
+  it('advances on Enter after the answer is visible, including a disabled field', () => {
+    const onNextQuestion = vi.fn()
+    render(
+      <div>
+        <Harness answerRevealed onNextQuestion={onNextQuestion} onToggleMark={() => {}} onSelectOption={() => {}} />
+        <textarea aria-label="答案" disabled defaultValue="已写" />
+      </div>,
+    )
+    fireEvent.keyDown(document.querySelector('textarea') as HTMLTextAreaElement, { key: 'Enter', code: 'Enter' })
+    expect(onNextQuestion).toHaveBeenCalledTimes(1)
+  })
+
+  it('opens delete from Backspace unless the learner is still typing', () => {
+    const onDeleteQuestion = vi.fn()
+    const { rerender } = render(
+      <Harness onDeleteQuestion={onDeleteQuestion} onToggleMark={() => {}} onSelectOption={() => {}} />,
+    )
+    fireEvent.keyDown(window, { key: 'Backspace', code: 'Backspace' })
+    expect(onDeleteQuestion).toHaveBeenCalledTimes(1)
+
+    rerender(
+      <div>
+        <Harness onDeleteQuestion={onDeleteQuestion} onToggleMark={() => {}} onSelectOption={() => {}} />
+        <textarea aria-label="草稿" defaultValue="还在写" />
+      </div>,
+    )
+    fireEvent.keyDown(document.querySelector('textarea') as HTMLTextAreaElement, { key: 'Backspace', code: 'Backspace' })
+    expect(onDeleteQuestion).toHaveBeenCalledTimes(1)
+  })
+
+  it('yields Enter while a confirmation dialog is open', () => {
+    const onNextQuestion = vi.fn()
+    render(
+      <div>
+        <Harness answerRevealed onNextQuestion={onNextQuestion} onToggleMark={() => {}} onSelectOption={() => {}} />
+        <div data-confirm-dialog="open" />
+      </div>,
+    )
+    fireEvent.keyDown(window, { key: 'Enter', code: 'Enter' })
+    expect(onNextQuestion).not.toHaveBeenCalled()
   })
 
   it('does not answer while typing', () => {

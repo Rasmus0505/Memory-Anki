@@ -52,6 +52,8 @@ const SHORTCUT_KEY_LABELS: Record<string, string> = {
   end: 'End',
   pageup: 'PageUp',
   pagedown: 'PageDown',
+  backspace: 'Backspace',
+  delete: 'Delete',
 }
 
 const DEFAULT_CAPTURE_MESSAGES: Required<ShortcutCaptureMessages> = {
@@ -101,6 +103,8 @@ function inferShortcutCodeFromKey(key: string) {
   if (normalizedKey === 'end') return 'End'
   if (normalizedKey === 'pageup') return 'PageUp'
   if (normalizedKey === 'pagedown') return 'PageDown'
+  if (normalizedKey === 'backspace') return 'Backspace'
+  if (normalizedKey === 'delete') return 'Delete'
   if (isFunctionShortcutKey(normalizedKey)) return normalizedKey.toUpperCase()
   if (/^[a-z]$/.test(normalizedKey)) return `Key${normalizedKey.toUpperCase()}`
   if (/^\d$/.test(normalizedKey)) return `Digit${normalizedKey}`
@@ -142,6 +146,11 @@ export interface ShortcutAllowOptions {
   allowBareLetters?: boolean
   /** Bare digits (1–9) are quiz option keys. Default false so typing scenes stay protected. */
   allowBareDigits?: boolean
+  /**
+   * Bare Backspace/Delete. Quiz delete uses this; typing scenes and other
+   * learning shortcuts must leave it off so Backspace keeps deleting text.
+   */
+  allowBareDeleteKeys?: boolean
 }
 
 export function isShortcutBindingAllowed(
@@ -152,7 +161,14 @@ export function isShortcutBindingAllowed(
   if (!binding) return false
   const key = normalizeShortcutKeyValue(binding.key)
   const hasModifier = Boolean(binding.shift || binding.ctrl || binding.alt || binding.meta)
-  if (!key || MODIFIER_ONLY_KEYS.has(key) || RESERVED_SHORTCUT_KEYS.has(key)) return false
+  if (!key || MODIFIER_ONLY_KEYS.has(key)) return false
+  if (RESERVED_SHORTCUT_KEYS.has(key)) {
+    return Boolean(
+      options.allowBareDeleteKeys
+      && !hasModifier
+      && (key === 'backspace' || key === 'delete'),
+    )
+  }
   // Bare single letters (A–Z) are allowed for flip-card and similar non-typing scenes.
   if (!hasModifier && isBareLetterShortcutKey(key)) return options.allowBareLetters !== false
   if (!hasModifier && isBareDigitShortcutKey(key)) return options.allowBareDigits === true
@@ -233,11 +249,18 @@ export function captureShortcutFromKeyboardEvent(
   if (RESERVED_SHORTCUT_KEYS.has(key)) {
     if (key === 'escape') return { value: null, error: resolvedMessages.escapeReserved }
     if (key === 'tab') return { value: null, error: resolvedMessages.tabReserved }
-    return {
-      value: null,
-      error: resolvedMessages.reservedKey(
-        getShortcutLabel({ code, key, shift: false, ctrl: false, alt: false, meta: false }),
-      ),
+    const bareDeleteAllowed = Boolean(
+      options.allowBareDeleteKeys
+      && !hasModifier
+      && (key === 'backspace' || key === 'delete'),
+    )
+    if (!bareDeleteAllowed) {
+      return {
+        value: null,
+        error: resolvedMessages.reservedKey(
+          getShortcutLabel({ code, key, shift: false, ctrl: false, alt: false, meta: false }),
+        ),
+      }
     }
   }
   const bareLetterAllowed = options.allowBareLetters !== false

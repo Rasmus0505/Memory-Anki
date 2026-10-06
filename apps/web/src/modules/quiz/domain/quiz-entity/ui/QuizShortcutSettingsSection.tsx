@@ -81,7 +81,7 @@ export function QuizShortcutSettingsSection() {
       <div>
         <p className="text-sm font-medium">快捷键</p>
         <p className="mt-1 text-xs text-muted-foreground">
-          随心做题和关联题目共用，改完即保存。方向上键按一次切换标记，再按一次取消。输入框里不会触发，也不会翻动底下的卡片。
+          随心做题和关联题目共用，改完即保存。方向上键按一次切换标记，再按一次取消。答案出来后，提交键（默认 Enter）切到下一题。Backspace 打开删除确认。输入框里不会触发，也不会翻动底下的卡片。
         </p>
       </div>
       {QUIZ_SHORTCUT_GROUPS.map((group) => (

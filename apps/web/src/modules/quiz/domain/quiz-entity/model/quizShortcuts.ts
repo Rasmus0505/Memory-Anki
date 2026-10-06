@@ -16,6 +16,7 @@ export { getShortcutLabel, getShortcutSignature, isShortcutPressed }
 export type QuizShortcutActionId =
   | 'previous_question'
   | 'next_question'
+  | 'delete_question'
   | 'previous_option'
   | 'next_option'
   | 'submit_choice'
@@ -29,7 +30,7 @@ export type QuizShortcutActionId =
   | 'select_option_c'
   | 'select_option_d'
 
-export type QuizShortcutGroupId = 'navigate' | 'option' | 'mark'
+export type QuizShortcutGroupId = 'navigate' | 'question' | 'option' | 'mark'
 
 export interface QuizShortcutActionDefinition {
   id: QuizShortcutActionId
@@ -45,6 +46,7 @@ export type QuizShortcutMap = Record<QuizShortcutActionId, ShortcutBinding | nul
 
 export const QUIZ_SHORTCUT_GROUPS: Array<{ id: QuizShortcutGroupId; label: string }> = [
   { id: 'navigate', label: '切题' },
+  { id: 'question', label: '题目' },
   { id: 'option', label: '选项' },
   { id: 'mark', label: '标记' },
 ]
@@ -52,6 +54,7 @@ export const QUIZ_SHORTCUT_GROUPS: Array<{ id: QuizShortcutGroupId; label: strin
 const QUIZ_SHORTCUT_ALLOW: ShortcutAllowOptions = {
   allowBareLetters: true,
   allowBareDigits: true,
+  allowBareDeleteKeys: true,
 }
 
 function bare(code: string, key: string): ShortcutBinding {
@@ -72,6 +75,13 @@ export const QUIZ_SHORTCUT_ACTIONS: QuizShortcutActionDefinition[] = [
     label: '下一题',
     description: '切到当前列表的下一题。',
     defaultBinding: bare('ArrowRight', 'arrowright'),
+  },
+  {
+    id: 'delete_question',
+    group: 'question',
+    label: '删除本题',
+    description: '打开删除确认，不会直接删除。输入框里仍然是退格。',
+    defaultBinding: bare('Backspace', 'backspace'),
   },
   {
     id: 'toggle_mark',
@@ -98,7 +108,7 @@ export const QUIZ_SHORTCUT_ACTIONS: QuizShortcutActionDefinition[] = [
     id: 'submit_choice',
     group: 'option',
     label: '提交当前选项',
-    description: '提交当前高亮的选项。焦点在其他按钮上时不触发。',
+    description: '提交当前高亮的选项。答案出来后，同一按键切到下一题。未作答时，焦点在其他按钮上不触发。',
     defaultBinding: bare('Enter', 'enter'),
   },
   {
@@ -256,6 +266,10 @@ export interface QuizShortcutContext {
   optionCount: number
   choiceShortcutsActive: boolean
   attemptClosed: boolean
+  /** Reference answer or choice result is already on screen. */
+  answerRevealed: boolean
+  /** False on the last question, so Enter can still activate 完成. */
+  hasNextQuestion: boolean
   repeat: boolean
   editable: boolean
   recording: boolean
@@ -278,13 +292,20 @@ export function resolveQuizShortcutAction(
   const matched = QUIZ_SHORTCUT_ACTIONS.find((action) => isShortcutPressed(event, shortcuts[action.id]))
   if (!matched) return null
 
-  if (matched.id === 'toggle_mark') {
+  if (matched.id === 'toggle_mark' || matched.id === 'delete_question') {
     return { id: matched.id, run: !context.repeat }
   }
 
   if (matched.id === 'previous_question' || matched.id === 'next_question') {
     if (context.questionCount <= 1) return null
     return { id: matched.id, run: true }
+  }
+
+  // After the answer is visible, the submit key turns the page instead of
+  // submitting again. On the last question it stays free so 完成 can take Enter.
+  if (matched.id === 'submit_choice' && context.answerRevealed) {
+    if (!context.hasNextQuestion) return null
+    return { id: 'next_question', run: !context.repeat }
   }
 
   if (!context.choiceShortcutsActive || context.attemptClosed || context.optionCount <= 0) return null

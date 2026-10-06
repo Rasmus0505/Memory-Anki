@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import { Button } from '@/shared/components/ui/button'
+import { useConfirmEnter } from '@/shared/components/ui/confirm-dialog'
 import {
   Dialog,
   DialogBody,
@@ -135,43 +136,30 @@ export function appPrompt(
   })
 }
 
-export function NativeDialogProvider() {
-  const [request, setRequest] = useState<NativeDialogRequest | null>(activeRequest)
-  const [promptValue, setPromptValue] = useState('')
-
-  useEffect(() => {
-    listeners.add(setRequest)
-    return () => {
-      listeners.delete(setRequest)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (request?.type === 'prompt') setPromptValue(request.defaultValue)
-  }, [request])
-
-  if (!request) return null
-
-  const close = () => {
-    if (request.type === 'alert') request.resolve()
-    if (request.type === 'confirm') request.resolve(false)
-    if (request.type === 'prompt') request.resolve(null)
-    completeCurrentRequest()
-  }
-
-  const confirm = () => {
-    if (request.type === 'alert') request.resolve()
-    if (request.type === 'confirm') request.resolve(true)
-    if (request.type === 'prompt') request.resolve(promptValue)
-    completeCurrentRequest()
-  }
+function NativeDialogFrame({
+  request,
+  promptValue,
+  onPromptValueChange,
+  onConfirm,
+  onClose,
+}: {
+  request: NativeDialogRequest
+  promptValue: string
+  onPromptValueChange: (value: string) => void
+  onConfirm: () => void
+  onClose: () => void
+}) {
+  const panelRef = useRef<HTMLDivElement>(null)
+  useConfirmEnter(true, panelRef, onConfirm, { allowTextInput: request.type === 'prompt' })
 
   return (
-    <Dialog open={Boolean(request)} onOpenChange={(open) => !open && close()}>
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent
+        ref={panelRef}
         className="max-w-md"
         floatingId={`native-${request.type}`}
         capsuleLabel={request.title}
+        data-confirm-dialog="open"
       >
         <DialogHeader>
           <div className="flex items-start gap-3">
@@ -191,28 +179,79 @@ export function NativeDialogProvider() {
             <Input
               autoFocus
               value={promptValue}
-              onChange={(event) => setPromptValue(event.target.value)}
+              onChange={(event) => onPromptValueChange(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === 'Enter') confirm()
+                if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+                  event.preventDefault()
+                  onConfirm()
+                }
               }}
             />
           </DialogBody>
         ) : null}
         <DialogFooter>
           {request.type === 'alert' ? null : (
-            <Button type="button" variant="outline" onClick={close}>
+            <Button type="button" variant="outline" onClick={onClose}>
               {request.cancelText}
             </Button>
           )}
           <Button
             type="button"
             variant={request.type === 'confirm' && request.tone === 'danger' ? 'destructive' : 'default'}
-            onClick={confirm}
+            onClick={onConfirm}
           >
             {request.type === 'alert' ? '知道了' : request.confirmText}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+export function NativeDialogProvider() {
+  const [request, setRequest] = useState<NativeDialogRequest | null>(activeRequest)
+  const [promptValue, setPromptValue] = useState('')
+  const settledRef = useRef(false)
+
+  useEffect(() => {
+    listeners.add(setRequest)
+    return () => {
+      listeners.delete(setRequest)
+    }
+  }, [])
+
+  useEffect(() => {
+    settledRef.current = false
+    if (request?.type === 'prompt') setPromptValue(request.defaultValue)
+  }, [request])
+
+  if (!request) return null
+
+  const close = () => {
+    if (settledRef.current) return
+    settledRef.current = true
+    if (request.type === 'alert') request.resolve()
+    if (request.type === 'confirm') request.resolve(false)
+    if (request.type === 'prompt') request.resolve(null)
+    completeCurrentRequest()
+  }
+
+  const confirm = () => {
+    if (settledRef.current) return
+    settledRef.current = true
+    if (request.type === 'alert') request.resolve()
+    if (request.type === 'confirm') request.resolve(true)
+    if (request.type === 'prompt') request.resolve(promptValue)
+    completeCurrentRequest()
+  }
+
+  return (
+    <NativeDialogFrame
+      request={request}
+      promptValue={promptValue}
+      onPromptValueChange={setPromptValue}
+      onConfirm={confirm}
+      onClose={close}
+    />
   )
 }

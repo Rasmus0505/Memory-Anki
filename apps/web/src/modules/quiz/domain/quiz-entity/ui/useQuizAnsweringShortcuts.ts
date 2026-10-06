@@ -7,10 +7,17 @@ import {
 import { sanitizeQuizShortcutMap } from '@/modules/quiz/domain/quiz-entity/model/quizShortcuts'
 
 function isEditableTarget(target: EventTarget | null) {
-  return (
-    target instanceof HTMLElement
-    && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
-  )
+  if (!(target instanceof HTMLElement)) return false
+  if (target.isContentEditable) return true
+  if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) {
+    return !target.disabled && !target.readOnly
+  }
+  if (target instanceof HTMLSelectElement) return !target.disabled
+  return false
+}
+
+function isConfirmDialogOpen() {
+  return Boolean(document.querySelector('[data-confirm-dialog="open"]'))
 }
 
 function focusedOptionIndex(target: EventTarget | null) {
@@ -35,6 +42,8 @@ export function useQuizAnsweringShortcuts({
   optionCount,
   choiceShortcutsActive,
   attemptClosed,
+  answerRevealed,
+  hasNextQuestion,
   keyboardOptionIndex,
   setKeyboardOptionIndex,
   interactionRootRef,
@@ -42,12 +51,15 @@ export function useQuizAnsweringShortcuts({
   onNextQuestion,
   onSelectOption,
   onToggleMark,
+  onDeleteQuestion,
 }: {
   enabled: boolean
   questionCount: number
   optionCount: number
   choiceShortcutsActive: boolean
   attemptClosed: boolean
+  answerRevealed: boolean
+  hasNextQuestion: boolean
   keyboardOptionIndex: number
   setKeyboardOptionIndex: (index: number) => void
   interactionRootRef: RefObject<HTMLElement | null>
@@ -55,6 +67,7 @@ export function useQuizAnsweringShortcuts({
   onNextQuestion: () => void
   onSelectOption: (optionIndex: number) => void
   onToggleMark: () => void
+  onDeleteQuestion?: () => void
 }) {
   const [shortcuts, setShortcuts] = useState(readQuizShortcuts)
   const shortcutsRef = useRef(shortcuts)
@@ -64,6 +77,8 @@ export function useQuizAnsweringShortcuts({
     optionCount,
     choiceShortcutsActive,
     attemptClosed,
+    answerRevealed,
+    hasNextQuestion,
     keyboardOptionIndex,
     setKeyboardOptionIndex,
     interactionRootRef,
@@ -71,12 +86,15 @@ export function useQuizAnsweringShortcuts({
     onNextQuestion,
     onSelectOption,
     onToggleMark,
+    onDeleteQuestion,
   })
   latestRef.current = {
     questionCount,
     optionCount,
     choiceShortcutsActive,
     attemptClosed,
+    answerRevealed,
+    hasNextQuestion,
     keyboardOptionIndex,
     setKeyboardOptionIndex,
     interactionRootRef,
@@ -84,6 +102,7 @@ export function useQuizAnsweringShortcuts({
     onNextQuestion,
     onSelectOption,
     onToggleMark,
+    onDeleteQuestion,
   }
 
   useEffect(() => {
@@ -100,6 +119,9 @@ export function useQuizAnsweringShortcuts({
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target
       if (target instanceof HTMLElement && target.closest('[data-quiz-shortcut-settings]')) return
+      // Confirmation dialogs own Enter. Yield the whole key so this capture
+      // listener cannot swallow it before the dialog's own listener runs.
+      if (isConfirmDialogOpen()) return
       const current = latestRef.current
       const editable = isEditableTarget(target)
       const recording = isQuizShortcutRecording()
@@ -108,6 +130,8 @@ export function useQuizAnsweringShortcuts({
         optionCount: current.optionCount,
         choiceShortcutsActive: current.choiceShortcutsActive,
         attemptClosed: current.attemptClosed,
+        answerRevealed: current.answerRevealed,
+        hasNextQuestion: current.hasNextQuestion,
         repeat: event.repeat,
         editable,
         recording,
@@ -135,6 +159,10 @@ export function useQuizAnsweringShortcuts({
       }
       if (match.id === 'toggle_mark') {
         current.onToggleMark()
+        return
+      }
+      if (match.id === 'delete_question') {
+        current.onDeleteQuestion?.()
         return
       }
       if (match.id === 'previous_option' || match.id === 'next_option') {
