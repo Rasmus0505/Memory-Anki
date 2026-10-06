@@ -187,3 +187,71 @@ describe('editorDocToGraph scopeBranchUid', () => {
     ])
   })
 })
+
+describe('editorDocToGraph node payload shape', () => {
+  const doc: MindMapDoc = {
+    root: {
+      data: { text: 'Root', uid: 'root' },
+      children: [
+        {
+          data: { text: 'Branch', uid: 'branch' },
+          children: [{ data: { text: 'Leaf', uid: 'leaf' }, children: [] }],
+        },
+      ],
+    },
+  }
+
+  /**
+   * Projected metadata must stay flat.
+   *
+   * `rawNode` used to embed the original document node with its whole subtree.
+   * Two per-flip costs followed from that: the layout comparator stringified each
+   * node's data (so the payload was O(N x subtree) JSON text), and because a
+   * pristine doc node is a fresh object after every deep clone, it forced a
+   * mismatch in the reference-based `shallowEqualNodeData` — which defeated every
+   * downstream identity reuse and re-rendered all cards on each reveal.
+   */
+  it('does not embed the source document node in node metadata', () => {
+    const graph = editorDocToGraph(doc)
+
+    for (const node of graph.nodes) {
+      expect(node.metadata).not.toHaveProperty('rawNode')
+    }
+  })
+
+  it('keeps the projected metadata serializable without a nested subtree', () => {
+    const graph = editorDocToGraph(doc)
+    const branch = graph.nodes.find((node) => node.id === 'branch')
+    const serialized = JSON.stringify(branch?.metadata ?? {})
+
+    // The subtree's own text must not appear inside a different node's payload.
+    expect(serialized).not.toContain('Leaf')
+  })
+
+  it('produces identical metadata for the same node across separate projections', () => {
+    // A flip re-projects the document from a freshly cloned tree. Equivalent
+    // input must serialize equal, so the layout comparator can recognise a no-op
+    // instead of writing new node objects for every node on every flip.
+    const first = editorDocToGraph(doc)
+    const second = editorDocToGraph(doc)
+    const metadataOf = (graph: typeof first, id: string) =>
+      JSON.stringify(graph.nodes.find((node) => node.id === id)?.metadata ?? {})
+
+    for (const id of ['root', 'branch', 'leaf']) {
+      expect(metadataOf(first, id)).toBe(metadataOf(second, id))
+    }
+  })
+
+  it('still lets a reveal change a node, so revealed cards do repaint', () => {
+    // Guard against "fixing" the flip cost by freezing data: the reveal state is
+    // real visual information and must keep flowing into the projection.
+    const hidden = editorDocToGraph(doc, { revealMap: {} })
+    const revealed = editorDocToGraph(doc, {
+      revealMap: { root: 'revealed', branch: 'revealed', leaf: 'revealed' },
+    })
+    const visualOf = (graph: typeof hidden, id: string) =>
+      JSON.stringify(graph.nodes.find((node) => node.id === id)?.metadata?.visual ?? {})
+
+    expect(visualOf(hidden, 'leaf')).not.toBe(visualOf(revealed, 'leaf'))
+  })
+})

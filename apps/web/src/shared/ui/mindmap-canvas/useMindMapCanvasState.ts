@@ -312,15 +312,18 @@ export function useMindMapCanvasState(
   const [nodeSizeVersion, setNodeSizeVersion] = useState(0)
   const frameRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLDivElement>(null)
-  const layouted = useMemo(
-    () => {
-      void nodeSizeVersion
-      return applyMindMapLayout(graphData, measuredNodeSizesRef.current, collapsedNodeIds)
-    },
-    [collapsedNodeIds, graphData, nodeSizeVersion],
+  // The initial node/edge state is laid out once here. There is deliberately no
+  // memo for it: the result is only read as `useNodesState`'s initial value, so a
+  // memo keyed on `graphData` recomputed a whole-tree layout on every flip and
+  // then discarded it. The live path is `applyGraphLayout` below, which reuses
+  // the current arrays when the layout is unchanged.
+  const initialLayout = useMemo(
+    () => applyMindMapLayout(graphData, measuredNodeSizesRef.current, collapsedNodeIds),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- initial value only.
+    [],
   )
-  const [nodes, setNodes, onNodesChange] = useNodesState(layouted.nodes)
-  const [edges, setEdges, onEdgesChange] = useEdgesState(layouted.edges)
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialLayout.nodes)
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialLayout.edges)
 
   const viewport = useMindMapViewport({
     canvasRef,

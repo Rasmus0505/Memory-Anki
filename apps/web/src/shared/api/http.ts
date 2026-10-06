@@ -344,8 +344,26 @@ async function enqueueFailedRequest(input: {
     conflictMessage: conflict ? input.message : undefined,
     lastResponseStatus: input.status,
   }
-  const queued = await enqueueMutation(mutation)
-  if (queued.replayMode === 'auto' && queued.status === 'pending') {
+  const queued = await enqueueMutation(mutation).catch((error: unknown) => {
+    // The request has already failed; a storage failure must not mask that
+    // original, user-actionable error. It must not pass silently either: an
+    // unqueueable write means there is nothing left to retry, so it is logged
+    // where the app logs are read.
+    logAppError({
+      feature: 'API 请求',
+      stage: 'mutation_queue_write_failed',
+      error,
+      requestSummary: `${input.method} ${input.url}`,
+      meta: {
+        method: input.method,
+        url: input.url,
+        replayMode: input.persistence.replayMode ?? 'manual',
+        resourceKey: input.persistence.resourceKey,
+      },
+    })
+    return null
+  })
+  if (queued && queued.replayMode === 'auto' && queued.status === 'pending') {
     void replayQueuedMutations()
   }
   return queued

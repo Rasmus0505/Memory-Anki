@@ -8,6 +8,7 @@ import {
   upsertPendingTimeRecordRecovery,
 } from '@/modules/session/public'
 import type { TimeSessionRecord } from '@/modules/session/public'
+import { attributionToMetadata } from '@/modules/session/public'
 
 const JSON_CONTENT_TYPE = 'application/json'
 const MUTATION_ID_HEADER = 'X-Memory-Anki-Mutation-ID'
@@ -34,7 +35,12 @@ function buildLedgerRequestBody(record: TimeSessionRecord) {
     kind: record.activityTag ?? record.kind,
     title: record.title,
     client_source: record.clientSource ?? 'unknown',
-    metadata: { session_key: record.sessionKey },
+    // The unload path must carry the same attribution as the normal one; a
+    // closed tab used to be exactly where subject/chapter was dropped.
+    metadata: {
+      ...attributionToMetadata(record.attribution),
+      session_key: record.sessionKey,
+    },
   }))
   return JSON.stringify({ intervals })
 }
@@ -115,7 +121,15 @@ export async function fireAndQueueTimeRecordOnUnload(
     ? buildLedgerRequestBody(record)
     : buildTimeRecordRequestBody(record)
   const recoveryUrl = record.activityIntervals !== undefined ? TIME_LEDGER_URL : STUDY_SESSION_RECOVERY_URL
-  const queuePromise = queueTimeRecordRecovery(record, mutationId, body, recoveryUrl)
+  const queuePromise = queueTimeRecordRecovery(record, mutationId, body, recoveryUrl).catch((error: unknown) => {
+    // Runs on pagehide with no caller able to await it, so this must not surface
+    // as an unhandled rejection. Nothing is lost by swallowing it here: the
+    // localStorage recovery marker written by queueTimeRecordRecovery is the
+    // durable record, and usePendingTimeRecordRecoveryAutoSync replays it
+    // independently of the IndexedDB queue.
+    console.error('[timed-session] failed to queue unload recovery', error)
+    return null
+  })
   const apiToken = getApiToken()
 
   if (!apiToken && trySendBeacon(body, recoveryUrl)) {

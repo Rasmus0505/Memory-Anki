@@ -102,11 +102,28 @@ function openDb() {
         store.createIndex('coalesceKey', 'coalesceKey', { unique: false })
       }
     }
-    request.onsuccess = () => resolve(request.result)
+    request.onsuccess = () => {
+      const db = request.result
+      // Another tab upgrading the schema must not be blocked by this connection.
+      db.onversionchange = () => db.close()
+      resolve(db)
+    }
     request.onerror = () => reject(request.error ?? new Error('Failed to open mutation queue'))
+    request.onblocked = () => reject(new Error('Mutation queue upgrade is blocked by another tab'))
   }).catch(() => null)
 }
 
+/**
+ * Run one IndexedDB action and settle on the *transaction*, not the request.
+ *
+ * A queued mutation is only durable once the transaction commits. Resolving on
+ * `request.onsuccess` reported success for writes that were later aborted, so an
+ * offline mind-map save could be acknowledged and then silently lost.
+ *
+ * Returns `null` only when IndexedDB is genuinely unavailable (SSR, private mode)
+ * so callers can fall back to the in-memory store. A transaction that fails or
+ * aborts rejects instead: storage failure must never masquerade as a saved write.
+ */
 async function withStore<T>(
   mode: IDBTransactionMode,
   action: (store: IDBObjectStore) => IDBRequest<T>,
@@ -114,24 +131,35 @@ async function withStore<T>(
   const db = await openDb()
   if (!db) return null
   return new Promise<T>((resolve, reject) => {
-    const transaction = db.transaction(STORE_NAME, mode)
+    let transaction: IDBTransaction
+    try {
+      transaction = db.transaction(STORE_NAME, mode)
+    } catch (error) {
+      db.close()
+      reject(error)
+      return
+    }
     const store = transaction.objectStore(STORE_NAME)
     const request = action(store)
-    request.onsuccess = () => resolve(request.result)
     request.onerror = () => reject(request.error ?? new Error('Mutation queue request failed'))
-    transaction.oncomplete = () => db.close()
+    transaction.oncomplete = () => {
+      db.close()
+      resolve(request.result)
+    }
+    transaction.onabort = () => {
+      db.close()
+      reject(transaction.error ?? new Error('Mutation queue transaction aborted'))
+    }
     transaction.onerror = () => {
       db.close()
       reject(transaction.error ?? new Error('Mutation queue transaction failed'))
     }
-  }).catch(() => {
-    db.close()
-    return null
   })
 }
 
 async function putMutation(item: PersistedMutation) {
   const result = await withStore('readwrite', (store) => store.put(item))
+  // null means IndexedDB is unavailable, not that the write failed.
   if (result === null) {
     memoryStore.set(item.id, item)
   }
@@ -145,7 +173,11 @@ async function deleteMutationFromStore(id: string) {
 }
 
 export async function readQueuedMutations() {
+  // Reads degrade gracefully: a failed read must not crash the UI or the replay
+  // loop. Writes are the opposite (see withStore) because a write that reports
+  // success without committing loses the user's work.
   const result = await withStore<PersistedMutation[]>('readonly', (store) => store.getAll())
+    .catch(() => null)
   const items = result ?? Array.from(memoryStore.values())
   return items.sort((left, right) => Date.parse(left.createdAt) - Date.parse(right.createdAt))
 }
@@ -298,7 +330,14 @@ async function replayOneMutation(item: PersistedMutation, force = false) {
     })
     const bodyText = await response.text().catch(() => '')
     if (response.ok) {
-      await deleteMutationFromStore(current.id)
+      // The server has already applied this mutation. A storage failure while
+      // removing the entry must not fall through to the failure branch below,
+      // which would mark applied work as failed. Leaving the entry queued only
+      // costs one redundant replay, and replays carry the original mutation id,
+      // so the server deduplicates them.
+      await deleteMutationFromStore(current.id).catch((error: unknown) => {
+        console.error('[mutation-queue] replay succeeded but entry was not removed', current.id, error)
+      })
       return
     }
     const errorMessage = bodyText || `HTTP ${response.status}`
@@ -336,7 +375,14 @@ export async function replayQueuedMutations(options: { forceIds?: string[] } = {
     const forceIds = new Set(options.forceIds ?? [])
     const items = await readQueuedMutations()
     for (const item of items) {
-      await replayOneMutation(item, forceIds.has(item.id))
+      // Storage failures are isolated per item: one unwritable entry must not
+      // abort the rest of the replay or become an unhandled rejection, because
+      // every caller invokes this as a background `void` sync.
+      try {
+        await replayOneMutation(item, forceIds.has(item.id))
+      } catch (error) {
+        console.error('[mutation-queue] replay failed for entry', item.id, error)
+      }
     }
   })().finally(() => {
     replayInFlight = null
@@ -351,10 +397,17 @@ export async function discardQueuedMutation(id: string) {
 export async function discardQueuedMutationsByCoalesceKey(coalesceKey: string | null | undefined) {
   if (!coalesceKey) return
   const items = await readQueuedMutations()
+  // Best-effort cleanup: this runs *after* a successful save, so a storage
+  // failure here must not reject. Callers treat a rejection as a failed request,
+  // which would report a save that actually succeeded as a network error. The
+  // worst case of a leftover entry is a redundant replay, and replays carry the
+  // original mutation id, so the server deduplicates them.
   await Promise.all(
     items
       .filter((item) => item.coalesceKey === coalesceKey && item.status !== 'syncing')
-      .map((item) => deleteMutationFromStore(item.id)),
+      .map((item) => deleteMutationFromStore(item.id).catch((error: unknown) => {
+        console.error('[mutation-queue] failed to discard superseded entry', item.id, error)
+      })),
   )
 }
 

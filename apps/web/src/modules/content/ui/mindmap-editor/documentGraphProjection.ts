@@ -140,7 +140,12 @@ export function editorDocToGraph(
         uid,
         layoutRole: depth === 0 ? 'root' : depth >= 2 ? 'leaf' : 'branch',
         branchColor,
-        rawNode: node,
+        // Deliberately not carrying `rawNode` here. It embedded the original
+        // document node *with its whole subtree*, which cost two ways on every
+        // flip: `isSameMindMapLayout` stringified it per node (O(N x subtree)),
+        // and `shallowEqualNodeData` compares data by reference while the doc is
+        // deep-cloned per flip, so the field was a guaranteed mismatch that
+        // defeated every downstream identity reuse. Nothing ever read it.
         markColor: markFill,
         visual: buildNodeVisual({
           revealState,

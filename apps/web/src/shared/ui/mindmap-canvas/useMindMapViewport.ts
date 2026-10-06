@@ -53,6 +53,7 @@ import {
   MINDMAP_MOBILE_FIT_MIN_ZOOM,
   MINDMAP_REVEAL_INTO_VIEW_DURATION_MS,
   MINDMAP_REVEAL_INTO_VIEW_PADDING_PX,
+  MINDMAP_WHEEL_PAN_OWED_GRACE_MS,
 } from './mindMapViewportConfig'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 
@@ -127,6 +128,20 @@ export function useMindMapViewport({
   const manualViewportGestureRef = useRef(false)
   /** Wheel capture time. React Flow reports the panned camera before move-start. */
   const wheelPanUntilRef = useRef(0)
+  /**
+   * Deadline for an owed wheel commit.
+   *
+   * React Flow does not reliably bracket a wheel pan with moveStart/moveEnd, so
+   * its camera report can arrive after the short `wheelPanUntilRef` window has
+   * closed. Classifying on that window alone dropped real pans: the controlled
+   * viewport kept the pre-wheel camera, so the next re-render (editing a card)
+   * snapped the map back under the pointer.
+   *
+   * This is a deadline rather than a flag so a wheel that React Flow never
+   * reports cannot leave the state stuck open — after it lapses, unattributed
+   * drift is dropped again and the preserve guarantee is restored.
+   */
+  const wheelPanOwedUntilRef = useRef(0)
   /** Bumps on each wheel so an in-flight restore cannot write the old camera back. */
   const viewportEpochRef = useRef(0)
   const wheelEndTimerRef = useRef<number | null>(null)
@@ -303,7 +318,11 @@ export function useMindMapViewport({
       commitControlledViewport(viewport)
       return
     }
-    const wheelPan = performance.now() < wheelPanUntilRef.current
+    // A wheel is unambiguous user intent, but React Flow does not always bracket
+    // a wheel pan with moveStart/moveEnd, so the camera report can arrive after
+    // the bridge window has closed. The owed deadline keeps that report attached
+    // to its own gesture instead of discarding it as drift.
+    const wheelPan = performance.now() < Math.max(wheelPanUntilRef.current, wheelPanOwedUntilRef.current)
     if (!preserveViewport || manualViewportGestureRef.current || wheelPan) {
       if (wheelPan && restoreViewportFrameRef.current !== null) {
         cancelAnimationFrame(restoreViewportFrameRef.current)
@@ -763,7 +782,12 @@ export function useMindMapViewport({
     const element = canvasRef.current
     if (!element) return
     const armWheelPan = () => {
-      wheelPanUntilRef.current = performance.now() + 280
+      const now = performance.now()
+      wheelPanUntilRef.current = now + 280
+      // React Flow may report this notch's camera after the bridge window closes
+      // (its move events are debounced). Allow a longer grace so the report is
+      // still recognised as this user gesture rather than dropped as drift.
+      wheelPanOwedUntilRef.current = now + MINDMAP_WHEEL_PAN_OWED_GRACE_MS
       viewportEpochRef.current += 1
       manualViewportGestureRef.current = true
       explicitViewportChangeRef.current = false

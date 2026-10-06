@@ -22,6 +22,17 @@ export const MINDMAP_REVEAL_INTO_VIEW_PADDING_PX = 32
 export const MINDMAP_REVEAL_INTO_VIEW_DURATION_MS = 200
 
 /**
+ * How long a wheel notch stays the current user gesture.
+ *
+ * React Flow reports a wheel pan in its own `onViewportChange`, and it does not
+ * reliably bracket the pan with moveStart/moveEnd, so the report can land after
+ * the gesture window. Anything still inside this deadline is treated as that
+ * user's pan; past it, unattributed camera drift is dropped again so `preserve`
+ * mode keeps its guarantee.
+ */
+export const MINDMAP_WHEEL_PAN_OWED_GRACE_MS = 1_000
+
+/**
  * Normalizes host-owned manual zoom preferences before they reach React Flow.
  * `undefined` represents an absent or unsafe preference, not the canvas default.
  */
