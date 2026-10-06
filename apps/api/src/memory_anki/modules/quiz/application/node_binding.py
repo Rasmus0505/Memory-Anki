@@ -31,6 +31,26 @@ DEFAULT_ROOT_BINDING_REASON = "default-root-binding"
 DEFAULT_ROOT_BINDING_SOURCE = "manual"
 
 
+def same_palace_binding_palace_id(
+    question: PalaceQuizQuestion,
+    requested_palace_id: int | None,
+) -> int | None:
+    """Return the only palace a question may bind into, or None when it cannot.
+
+    A question belongs to exactly one palace; its chapter is decided by the
+    source material, never by the binder. Cross-palace edges are not a
+    supported shape, so a request naming a different target palace is rejected
+    instead of silently rewritten.
+    """
+    owner_palace_id = getattr(question, "palace_id", None)
+    if owner_palace_id is None:
+        return None
+    owner = int(owner_palace_id)
+    if requested_palace_id is None:
+        return owner
+    return owner if int(requested_palace_id) == owner else None
+
+
 def node_text(node: Any) -> str:
     if not isinstance(node, dict):
         return ""
@@ -217,11 +237,6 @@ def _serialize_binding(
 ) -> dict[str, object]:
     owner_palace_id = int(question.palace_id) if question and question.palace_id is not None else None
     target_palace_id = int(row.palace_id) if row.palace_id is not None else None
-    is_cross = (
-        owner_palace_id is not None
-        and target_palace_id is not None
-        and owner_palace_id != target_palace_id
-    )
     return {
         "id": row.id,
         "palace_id": target_palace_id,
@@ -232,7 +247,6 @@ def _serialize_binding(
         "marked": bool(question.marked) if question is not None else False,
         "question_owner_palace_id": owner_palace_id,
         "question_owner_palace_title": owner_title or "",
-        "is_cross_palace": is_cross,
         "node_uid": row.node_uid,
         "node_text": node_text_label or "",
         "confidence": row.confidence,
@@ -367,8 +381,9 @@ def apply_quiz_node_binding_preview(
     run_id = (operation_id or str(uuid.uuid4())).strip() or str(uuid.uuid4())
     source_rows = accepted_edges if accepted_edges is not None else bindings
 
-    # AI apply writes edges for questions owned by this palace onto this palace's mindmap
-    # (target palace_id == path palace). Cross-palace edges use mutate / question-side pick.
+    # A question belongs to exactly one palace (the one named by its source
+    # chapter). Only questions owned by this palace may be written onto this
+    # palace's mindmap; there is no cross-palace edge shape.
     question_ids = {
         int(item["question_id"])
         for item in source_rows
@@ -486,11 +501,11 @@ def mutate_quiz_node_bindings(
     add: list[dict[str, Any]] | None = None,
     remove: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Manually add/remove edges whose default target palace is ``palace_id``.
+    """Manually add/remove edges for questions owned by ``palace_id``.
 
-    Adds may bind any active question (including foreign-owner) onto a node in
-    the target palace. Each add item may override ``target_palace_id`` / ``palace_id``
-    for cross-palace authoring from the question side.
+    A question binds into the palace that owns it, so every add item is written
+    against the question's own palace. Items naming a different
+    ``target_palace_id`` / ``palace_id`` are skipped rather than honored.
     """
     get_palace_or_raise(session, palace_id)
 
@@ -503,10 +518,6 @@ def mutate_quiz_node_bindings(
         try:
             question_id = int(item["question_id"])
             node_uid = str(item.get("node_uid") or "").strip()
-            raw_target = item.get("target_palace_id")
-            if raw_target is None:
-                raw_target = item.get("palace_id")
-            target_palace_id = int(raw_target) if raw_target is not None else int(palace_id)
         except (TypeError, ValueError, KeyError):
             continue
         if not node_uid:
@@ -514,7 +525,7 @@ def mutate_quiz_node_bindings(
         deleted = (
             session.query(PalaceQuizQuestionNodeBinding)
             .filter(
-                PalaceQuizQuestionNodeBinding.palace_id == target_palace_id,
+                PalaceQuizQuestionNodeBinding.palace_id == palace_id,
                 PalaceQuizQuestionNodeBinding.question_id == question_id,
                 PalaceQuizQuestionNodeBinding.node_uid == node_uid,
             )
@@ -527,18 +538,18 @@ def mutate_quiz_node_bindings(
         for item in add_rows
         if isinstance(item, dict) and item.get("question_id") is not None
     }
+    owner_palace_by_question: dict[int, int] = {}
     if question_ids:
-        active_ids = {
-            int(row.id)
-            for row in session.query(PalaceQuizQuestion.id)
+        for row in (
+            session.query(PalaceQuizQuestion.id, PalaceQuizQuestion.palace_id)
             .filter(
                 PalaceQuizQuestion.deleted_at.is_(None),
                 PalaceQuizQuestion.id.in_(question_ids),
             )
             .all()
-        }
-    else:
-        active_ids = set()
+        ):
+            if row.palace_id is not None:
+                owner_palace_by_question[int(row.id)] = int(row.palace_id)
 
     known_uids_by_palace: dict[int, set[str]] = {}
 
@@ -563,10 +574,19 @@ def mutate_quiz_node_bindings(
             raw_target = item.get("target_palace_id")
             if raw_target is None:
                 raw_target = item.get("palace_id")
-            target_palace_id = int(raw_target) if raw_target is not None else int(palace_id)
+            requested_palace_id = int(raw_target) if raw_target is not None else None
         except (TypeError, ValueError, KeyError):
             continue
-        if question_id not in active_ids or not node_uid:
+        if not node_uid:
+            continue
+        owner_palace_id = owner_palace_by_question.get(question_id)
+        if owner_palace_id is None:
+            continue
+        target_palace_id = same_palace_binding_palace_id(
+            PalaceQuizQuestion(id=question_id, palace_id=owner_palace_id),
+            requested_palace_id,
+        )
+        if target_palace_id != palace_id:
             continue
         known_uids = _known_uids(target_palace_id)
         if known_uids and node_uid not in known_uids:

@@ -80,10 +80,10 @@ def test_compact_mindmap_with_uids_walks_tree() -> None:
     assert nodes[1]["depth"] == 1
 
 
-def test_cross_palace_mutate_unique_identity_and_reverse_list(db_session) -> None:
+def test_cross_palace_mutate_is_rejected_and_owner_palace_binds(db_session) -> None:
     palace_a = _add_palace(db_session, title="宫殿A", nodes=[("node-a", "突触传递")])
     palace_b = _add_palace(db_session, title="宫殿B", nodes=[("node-b", "受体分型"), ("shared-uid", "同uid本宫")])
-    # Same node_uid string on A as on B — unique key must include target palace.
+    # Same node_uid string on A as on B must not collide across palaces.
     palace_a.editor_doc = json.dumps(
         _mindmap_doc(("shared-uid", "同uid他宫"), ("node-a", "突触传递")),
         ensure_ascii=False,
@@ -92,7 +92,7 @@ def test_cross_palace_mutate_unique_identity_and_reverse_list(db_session) -> Non
     question = _add_question(db_session, palace_id=int(palace_a.id), stem="关于受体分型的题目")
     db_session.commit()
 
-    # Bind owner-A question onto B's node (cross-palace edge).
+    # A question belongs to palace A, so binding it into B is refused outright.
     result = mutate_quiz_node_bindings(
         db_session,
         palace_id=int(palace_b.id),
@@ -105,9 +105,10 @@ def test_cross_palace_mutate_unique_identity_and_reverse_list(db_session) -> Non
         ],
         remove=[],
     )
-    assert result["created_count"] == 1
+    assert result["created_count"] == 0
+    assert list_palace_node_bindings(db_session, int(palace_b.id)) == []
 
-    # Same uid on different palaces must not collide.
+    # The same question binds normally inside its own palace.
     result2 = mutate_quiz_node_bindings(
         db_session,
         palace_id=int(palace_a.id),
@@ -122,43 +123,48 @@ def test_cross_palace_mutate_unique_identity_and_reverse_list(db_session) -> Non
     )
     assert result2["created_count"] == 1
 
-    reverse_b = list_palace_node_bindings(db_session, int(palace_b.id))
-    assert len(reverse_b) == 1
-    edge = reverse_b[0]
+    owned = list_palace_node_bindings(db_session, int(palace_a.id))
+    assert len(owned) == 1
+    edge = owned[0]
     assert edge["question_id"] == int(question.id)
-    assert edge["palace_id"] == int(palace_b.id)
-    assert edge["target_palace_id"] == int(palace_b.id)
+    assert edge["palace_id"] == int(palace_a.id)
+    assert edge["target_palace_id"] == int(palace_a.id)
     assert edge["question_owner_palace_id"] == int(palace_a.id)
-    assert edge["is_cross_palace"] is True
-    assert edge["node_uid"] == "node-b"
+    assert edge["node_uid"] == "shared-uid"
     assert edge["question_type"] == "multiple_choice"
     assert edge["marked"] is False
 
     per_question = list_question_node_bindings(db_session, int(question.id))
-    assert {item["node_uid"] for item in per_question} == {"node-b", "shared-uid"}
-    assert any(item["target_palace_id"] == int(palace_b.id) for item in per_question)
+    assert {item["node_uid"] for item in per_question} == {"shared-uid"}
+    assert all(item["palace_id"] == int(palace_a.id) for item in per_question)
 
-    # Unique identity includes target palace: two rows with same question+uid different palace.
+    # No cross-palace edge shape survives anywhere.
     rows = (
         db_session.query(PalaceQuizQuestionNodeBinding)
         .filter(PalaceQuizQuestionNodeBinding.question_id == int(question.id))
         .all()
     )
-    assert len(rows) == 2
-    assert {(int(r.palace_id), str(r.node_uid)) for r in rows} == {
-        (int(palace_b.id), "node-b"),
-        (int(palace_a.id), "shared-uid"),
-    }
+    assert {(int(r.palace_id), str(r.node_uid)) for r in rows} == {(int(palace_a.id), "shared-uid")}
 
-    # Remove cross edge via target palace mutate.
+    # Removing from the foreign palace is a no-op: the edge never existed there.
     removed = mutate_quiz_node_bindings(
         db_session,
         palace_id=int(palace_b.id),
         add=[],
         remove=[{"question_id": int(question.id), "node_uid": "node-b"}],
     )
-    assert removed["removed_count"] == 1
+    assert removed["removed_count"] == 0
     assert list_palace_node_bindings(db_session, int(palace_b.id)) == []
+
+    # The owning palace can remove its own edge.
+    removed_local = mutate_quiz_node_bindings(
+        db_session,
+        palace_id=int(palace_a.id),
+        add=[],
+        remove=[{"question_id": int(question.id), "node_uid": "shared-uid"}],
+    )
+    assert removed_local["removed_count"] == 1
+    assert list_palace_node_bindings(db_session, int(palace_a.id)) == []
 
 
 def test_auto_bind_text_overlap_writes_edges(db_session) -> None:
@@ -184,7 +190,9 @@ def test_auto_bind_text_overlap_writes_edges(db_session) -> None:
 def test_search_mindmap_nodes_finds_text(db_session) -> None:
     palace = _add_palace(db_session, title="搜", nodes=[("n1", "兴奋性突触后电位")])
     db_session.commit()
-    hits = search_mindmap_nodes(db_session, query="突触后", limit=10)
+    # Search is palace-scoped: without a palace_id there is no valid target.
+    assert search_mindmap_nodes(db_session, query="突触后", limit=10) == []
+    hits = search_mindmap_nodes(db_session, query="突触后", palace_id=int(palace.id), limit=10)
     assert any(hit["node_uid"] == "n1" and hit["palace_id"] == int(palace.id) for hit in hits)
 
 

@@ -29,18 +29,25 @@ def search_mindmap_nodes(
     palace_id: int | None = None,
     limit: int = 30,
 ) -> list[dict[str, object]]:
-    """Search node text across one palace or all active palaces."""
+    """Search node text inside one palace.
+
+    A question may only bind into its own palace, so a search without a palace
+    scope has no valid use and returns nothing instead of leaking nodes from
+    other palaces.
+    """
     text = (query or "").strip()
-    if not text:
+    if not text or palace_id is None:
         return []
     limit = max(1, min(int(limit), 80))
-    palace_query = session.query(Palace).filter(
-        Palace.deleted_at.is_(None),
-        Palace.archived.is_(False),
+    palaces = (
+        session.query(Palace)
+        .filter(
+            Palace.id == palace_id,
+            Palace.deleted_at.is_(None),
+            Palace.archived.is_(False),
+        )
+        .all()
     )
-    if palace_id is not None:
-        palace_query = palace_query.filter(Palace.id == palace_id)
-    palaces = palace_query.order_by(Palace.updated_at.desc(), Palace.id.desc()).limit(200).all()
     needle = text.lower()
     hits: list[dict[str, object]] = []
     for palace in palaces:

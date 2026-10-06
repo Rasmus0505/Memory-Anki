@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { LoaderCircle } from 'lucide-react'
 import {
   getMindMapNodeUid,
@@ -12,6 +12,7 @@ import type {
   QuizNodeBindingEdge,
 } from '@/shared/api/contracts'
 import { Button } from '@/shared/components/ui/button'
+import { useConfirmEnter } from '@/shared/components/ui/confirm-dialog'
 import {
   Dialog,
   DialogContent,
@@ -148,12 +149,12 @@ export function QuizNodeDeleteGuardDialog({
     [edges],
   )
 
+  const panelRef = useRef<HTMLDivElement>(null)
   const handleConfirm = async () => {
-    if (!request || !palaceId) return
+    if (!request || !palaceId || saving) return
     const remove = edges.map((edge) => ({
       question_id: edge.question_id,
       node_uid: edge.node_uid,
-      target_palace_id: edge.target_palace_id ?? edge.palace_id ?? palaceId,
     }))
     const add = edges
       .map((edge) => {
@@ -162,7 +163,6 @@ export function QuizNodeDeleteGuardDialog({
         return {
           question_id: edge.question_id,
           node_uid: target,
-          target_palace_id: palaceId,
           reason: '删除卡片时转移绑定',
         }
       })
@@ -182,6 +182,9 @@ export function QuizNodeDeleteGuardDialog({
       setSaving(false)
     }
   }
+  useConfirmEnter(Boolean(request) && !saving, panelRef, () => {
+    void handleConfirm()
+  })
 
   return (
     <Dialog
@@ -190,7 +193,11 @@ export function QuizNodeDeleteGuardDialog({
         if (!next && !saving) onResolve(false)
       }}
     >
-      <DialogContent className="max-w-2xl">
+      <DialogContent
+        ref={panelRef}
+        className="max-w-2xl"
+        data-confirm-dialog={request && !saving ? 'open' : undefined}
+      >
         <DialogHeader>
           <DialogTitle>这些卡片上还挂着题目</DialogTitle>
           <DialogDescription>

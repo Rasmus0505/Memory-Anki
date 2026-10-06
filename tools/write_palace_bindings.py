@@ -8,8 +8,7 @@ Input JSON:
      "source": "manual",
      "bindings": [
        {"question_id": 401, "node_uids": ["uid-a"], "reason": "考查X"},
-       {"question_id": 402, "node_uids": ["uid-b"], "reason": "知识点在第三节",
-        "target_palace_id": 18}
+       {"question_id": 402, "node_uids": ["uid-b"], "reason": "考查Y"}
      ],
      "unbound": [403]}
 
@@ -18,11 +17,12 @@ To intentionally replace every active question in a palace, omit question_ids
 and set replace_scope to palace. This explicit opt-in prevents a chapter plan
 from deleting bindings belonging to other chapters in the same palace.
 
-`target_palace_id` defaults to `palace_id`; set it to bind a question onto a
-node that lives in a different palace's mindmap.
+A question binds only into the palace that owns it, so every node uid must
+exist in that same palace's mindmap. There is no cross-palace target: a
+`target_palace_id` naming a different palace is rejected.
 
-Validates that each question belongs to the palace and each uid exists in the
-target palace's mindmap, and refuses to write anything if validation fails.
+Validates that each question belongs to the palace and each uid exists in that
+palace's mindmap, and refuses to write anything if validation fails.
 
     MEMORY_ANKI_HOME="F:\\memory anki data" python tools/write_palace_bindings.py plan.json
 """
@@ -115,9 +115,15 @@ def main() -> None:
         if qid not in active_qids:
             errors.append(f"Q{qid} 不属于宫殿 {palace_id}（或已删除）")
             continue
-        target_id = int(item.get("target_palace_id") or palace_id)
+        requested_target = item.get("target_palace_id")
+        if requested_target is not None and int(requested_target) != palace_id:
+            errors.append(
+                f"Q{qid} 指定了跨宫目标 {requested_target}；题目只能绑到自己所属的宫殿 {palace_id}"
+            )
+            continue
+        target_id = palace_id
         if not known_uids(target_id):
-            errors.append(f"Q{qid} 的目标宫殿 {target_id} 不存在或导图为空")
+            errors.append(f"Q{qid} 的宫殿 {target_id} 不存在或导图为空")
             continue
         uids = [str(u).strip() for u in item.get("node_uids") or [] if str(u).strip()]
         if not uids:

@@ -133,7 +133,6 @@ describe('quizNodeBindingAggregation', () => {
         node_uid: 'child-a',
         palace_id: 2,
         question_owner_palace_id: 99,
-        is_cross_palace: true,
       },
       { question_id: 11, node_uid: 'child-b', palace_id: 2, question_owner_palace_id: 2 },
     ])

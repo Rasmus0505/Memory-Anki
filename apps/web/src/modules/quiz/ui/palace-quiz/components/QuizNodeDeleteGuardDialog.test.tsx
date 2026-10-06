@@ -89,12 +89,12 @@ describe('QuizNodeDeleteGuardDialog', () => {
     })
     expect(mutatePalaceQuizNodeBindingsApi).toHaveBeenCalledWith(1, {
       remove: [
-        { question_id: 11, node_uid: 'child-a', target_palace_id: 1 },
-        { question_id: 12, node_uid: 'child-b', target_palace_id: 1 },
+        { question_id: 11, node_uid: 'child-a' },
+        { question_id: 12, node_uid: 'child-b' },
       ],
       add: [
-        { question_id: 11, node_uid: 'section-a', target_palace_id: 1, reason: '删除卡片时转移绑定' },
-        { question_id: 12, node_uid: 'section-a', target_palace_id: 1, reason: '删除卡片时转移绑定' },
+        { question_id: 11, node_uid: 'section-a', reason: '删除卡片时转移绑定' },
+        { question_id: 12, node_uid: 'section-a', reason: '删除卡片时转移绑定' },
       ],
     })
     expect(onResolve).toHaveBeenCalledWith(true)
@@ -134,7 +134,7 @@ describe('QuizNodeDeleteGuardDialog', () => {
       1,
       expect.objectContaining({
         add: [
-          { question_id: 12, node_uid: 'section-a', target_palace_id: 1, reason: '删除卡片时转移绑定' },
+          { question_id: 12, node_uid: 'section-a', reason: '删除卡片时转移绑定' },
         ],
       }),
     )
