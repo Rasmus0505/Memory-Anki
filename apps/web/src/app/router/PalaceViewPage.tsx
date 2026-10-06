@@ -14,6 +14,7 @@ import {
 import { Badge } from '@/shared/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { useMindMapDocumentSession } from '@/shared/hooks/useMindMapDocumentSession'
+import { MindMapDocumentConflictDialog } from '@/shared/components/mindmap-document-conflict'
 import { cn } from '@/shared/lib/utils'
 import { readMindMapEditorState } from '@/modules/content/public'
 import { detectClientSource } from '@/shared/lib/clientSource'
@@ -56,7 +57,7 @@ export default function PalaceView() {
   const [shouldMountMindMap, setShouldMountMindMap] = useState(false)
   const [hostReadyTimedOut, setHostReadyTimedOut] = useState(false)
 
-  const { meta, editorState, isLoading, error } = useMindMapDocumentSession({
+  const { meta, editorState, isLoading, error, pendingConflict, resolveConflict } = useMindMapDocumentSession({
     entityId: palaceId,
     adapter: {
       load: getPalaceEditorApi,
@@ -178,6 +179,7 @@ export default function PalaceView() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
+      <MindMapDocumentConflictDialog pendingConflict={pendingConflict} resolveConflict={resolveConflict} />
       {!mindMapFullscreen ? (
         <PageIntro
           compact
@@ -302,8 +304,9 @@ export default function PalaceView() {
                 <MindMapEditorSurface
                   ref={mindMapFrameRef}
                   key={`readonly-${palace.id}`}
+                  viewMemoryScope={`palace:${palace.id}`}
                   editorState={displayedEditorState || editorState}
-                  readonly={practice.editorMode !== 'recall'}
+                  readonly={Boolean(pendingConflict) || practice.editorMode !== 'recall'}
                   presentationStrategy={isPwaClient ? 'viewport-only' : 'native-preferred'}
                   mobileViewPolicy="map"
                   immersiveModeActive={mindMapFullscreen}

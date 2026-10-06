@@ -1,6 +1,7 @@
 import {
   BookOpen,
   Brain,
+  ChartNoAxesCombined,
   FolderTree,
   Languages,
   LayoutDashboard,
@@ -20,6 +21,7 @@ import {
   preloadPalaceShelfPage,
   preloadPalaceEditPage,
   preloadPracticeRoutes,
+  preloadProgressPage,
 } from '@/app/router/appRoutes'
 import { prefetchDashboardApi } from '@/modules/dashboard/public'
 // 路径归属规则统一由 routeManifest 派生（新增路由请在 manifest 登记）。
@@ -89,6 +91,17 @@ export const navSections: NavSectionDefinition[] = [
     matches: createNavSectionMatcher('knowledge'),
     warmup: () => {
       void preloadPalaceEditPage()
+    },
+  },
+  {
+    key: 'progress',
+    to: '/progress',
+    label: '进度',
+    icon: ChartNoAxesCombined,
+    rememberLastVisited: true,
+    matches: createNavSectionMatcher('progress'),
+    warmup: () => {
+      void preloadProgressPage()
     },
   },
   {

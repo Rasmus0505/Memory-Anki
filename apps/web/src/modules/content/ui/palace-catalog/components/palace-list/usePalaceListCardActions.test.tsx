@@ -23,7 +23,7 @@ function palace(reviewStatus: PalaceGroupedItem['review_status'], id = 101) {
 }
 
 describe('usePalaceListCardActions review entry', () => {
-  it('enters freestyle with the current palace and does not create a formal session', () => {
+  it('opens a single-palace review and does not enter the freestyle page', () => {
     const navigate = vi.fn()
     const { result } = renderHook(() =>
       usePalaceListCardActions({
@@ -36,7 +36,24 @@ describe('usePalaceListCardActions review entry', () => {
       result.current.onPalaceReview(palace('due'))
     })
 
-    expect(navigate).toHaveBeenCalledWith('/freestyle?palaceId=101')
+    expect(navigate).toHaveBeenCalledWith('/palaces/101/review')
+  })
+
+  it('keeps the subject book on the review return path', () => {
+    const navigate = vi.fn()
+    const { result } = renderHook(() =>
+      usePalaceListCardActions({
+        fetchData: vi.fn(),
+        navigate,
+        subjectId: '5',
+      }),
+    )
+
+    act(() => {
+      result.current.onPalaceReview(palace('due', 23))
+    })
+
+    expect(navigate).toHaveBeenCalledWith('/palaces/23/review?subjectId=5')
   })
 
   it('keeps permanent-mark entry separate from review', () => {

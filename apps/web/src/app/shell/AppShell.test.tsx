@@ -233,7 +233,8 @@ describe('AppShell', () => {
 
     const mobileNav = screen.getByRole('navigation', { name: '移动端主导航' })
     expect(mobileNav.className).toContain('lg:hidden')
-    expect(mobileNav.querySelectorAll('a')).toHaveLength(5)
+    expect(mobileNav.querySelectorAll('a')).toHaveLength(6)
+    expect(mobileNav.querySelector('a[href="/progress"]')).toBeTruthy()
     expect(mobileNav.querySelector('a[href="/palaces"]')?.className).toContain('bg-primary')
     expect(mobileNav.querySelector('a[href="/freestyle"]')).toBeTruthy()
     expect(mobileNav.querySelector('a[href="/freestyle-2"]')).toBeNull()

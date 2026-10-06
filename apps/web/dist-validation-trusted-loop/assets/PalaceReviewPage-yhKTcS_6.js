@@ -1,0 +1,1 @@
+import{i as e,u as t}from"./react-vendor-rBAFV3VG.js";import{N as n}from"./radix-vendor-DzOvyo-0.js";import{t as r}from"./public-Ds9Ah_Di.js";var i=n();function a(){let n=Number(t().id);return!Number.isSafeInteger(n)||n<=0?(0,i.jsx)(e,{to:`/palaces`,replace:!0}):(0,i.jsx)(r,{lockedPalaceId:n})}export{a as default};

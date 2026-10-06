@@ -11,6 +11,10 @@ describe('sectionRouteHierarchy', () => {
     expect(resolveSectionHierarchicalParent('/palaces/42?subjectId=3')).toBe(
       '/palaces/list?subjectId=3',
     )
+    expect(resolveSectionHierarchicalParent('/palaces/23/review?subjectId=5')).toBe(
+      '/palaces/list?subjectId=5',
+    )
+    expect(resolveSectionHierarchicalParent('/palaces/23/review')).toBe('/palaces')
     expect(resolveSectionHierarchicalParent('/knowledge?subjectId=1')).toBe('/palaces')
     expect(getSectionHierarchyChain('/palaces/list?subjectId=3')).toEqual([
       '/palaces',

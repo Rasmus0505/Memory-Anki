@@ -300,7 +300,7 @@ def apply_live_study_command(payload: dict[str, Any]) -> dict[str, Any]:
 
         if command_type == "reload_desktop":
             # Phone asks the desktop window to reload. This stays in process
-            # memory so a stuck SQLite lock cannot block the request itself.
+            # memory so persistence locks cannot block the request itself.
             _projection["desktop_reload_nonce"] = int(_projection.get("desktop_reload_nonce") or 0) + 1
             _projection["revision"] = int(_projection.get("revision") or 0) + 1
             _projection["updated_at"] = iso_utc_now()

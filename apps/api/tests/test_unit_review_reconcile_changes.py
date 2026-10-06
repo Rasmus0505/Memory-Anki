@@ -404,6 +404,31 @@ def test_adjust_unit_schedule_updates_fields_without_content_hash(db_session):
     assert result["after"]["stage_index"] == 5
 
 
+def test_direct_schedule_adjustment_leaves_http_replay_to_adapter(db_session):
+    unit = _seed(db_session, stage_index=1)
+    adjust_unit_schedule(
+        db_session,
+        unit_id=unit.id,
+        operation_id="manual-op-replay",
+        stage_index=5,
+    )
+    db_session.commit()
+    revision = db_session.get(ReviewUnitState, unit.id).revision
+
+    replay = adjust_unit_schedule(
+        db_session,
+        unit_id=unit.id,
+        operation_id="manual-op-replay",
+        stage_index=0,
+    )
+
+    assert replay["after"]["stage_index"] == 0
+    persisted = db_session.get(ReviewUnitState, unit.id)
+    assert persisted is not None
+    assert persisted.stage_index == 0
+    assert persisted.revision == revision + 1
+
+
 def test_adjust_unit_schedule_clamps_stage_and_requires_operation_id(db_session):
     unit = _seed(db_session, stage_index=1)
     result = adjust_unit_schedule(
@@ -460,6 +485,44 @@ def test_adjust_and_undo_schedule_http_endpoints(session_factory, make_client):
     assert body["unit"]["has_passed"] is False
     assert body["operation_id"] == "http-adjust-1"
 
+    replay = client.patch(
+        f"/api/v1/review/units/{unit_id}/schedule",
+        headers={"X-Memory-Anki-Mutation-ID": "http-adjust-replay"},
+        json={
+            "operation_id": "http-adjust-replay",
+            "stage_index": 6,
+        },
+    )
+    assert replay.status_code == 200
+    replay_again = client.patch(
+        f"/api/v1/review/units/{unit_id}/schedule",
+        headers={"X-Memory-Anki-Mutation-ID": "http-adjust-replay"},
+        json={
+            "operation_id": "http-adjust-replay",
+            "stage_index": 0,
+        },
+    )
+    assert replay_again.status_code == 200
+    assert replay_again.json() == replay.json()
+    wrong_unit = client.patch(
+        "/api/v1/review/units/another-unit/schedule",
+        headers={"X-Memory-Anki-Mutation-ID": "http-adjust-replay"},
+        json={"operation_id": "http-adjust-replay", "stage_index": 0},
+    )
+    assert wrong_unit.status_code == 400
+
+    body_replay = client.patch(
+        f"/api/v1/review/units/{unit_id}/schedule",
+        json={"operation_id": "http-adjust-1", "stage_index": 0},
+    )
+    assert body_replay.status_code == 200
+    assert body_replay.json() == adjusted.json()
+
+    with session_factory() as session:
+        unit = session.get(ReviewUnitState, unit_id)
+        assert unit is not None
+        assert unit.stage_index == 6
+
     with session_factory() as session:
         palace = session.get(Palace, palace_id)
         assert palace is not None
@@ -483,8 +546,8 @@ def test_adjust_and_undo_schedule_http_endpoints(session_factory, make_client):
     with session_factory() as session:
         unit = session.get(ReviewUnitState, unit_id)
         assert unit is not None
-        # Undo restores pre-demotion schedule (post-adjust: stage 1 / today / False).
-        assert unit.stage_index == 1
+        # Undo restores the schedule present immediately before reconciliation.
+        assert unit.stage_index == 6
         assert unit.due_date.isoformat() == date.today().isoformat()
         assert unit.has_passed is False
         assert before_stage == 4

@@ -24,6 +24,7 @@ export type NavSectionKey =
   | 'english'
   | 'knowledge'
   | 'review'
+  | 'progress'
 
 export interface ExactRouteEntry {
   path: string
@@ -55,6 +56,7 @@ export interface PrefixRule {
 export const EXACT_ROUTES: ExactRouteEntry[] = [
   { path: '/', nav: 'review', history: 'dashboard' },
   { path: '/dashboard', nav: 'review', history: 'dashboard', historyKey: 'dashboard' },
+  { path: '/progress', nav: 'progress', history: 'progress', historyKey: 'progress' },
   { path: '/exam', nav: 'review', history: 'dashboard', historyKey: 'exam:war-room', commandLabel: '考试作战室' },
   { path: '/growth', nav: 'review', history: 'dashboard', historyKey: 'growth', commandLabel: '成长 · 星图与印章' },
   { path: '/freestyle', nav: 'freestyle', history: 'freestyle', historyKey: 'freestyle' },
@@ -86,6 +88,12 @@ export const DYNAMIC_ROUTES: DynamicRouteEntry[] = [
     nav: 'knowledge',
     history: 'palaces',
     historyKey: (match) => `palace:edit:${match[1]}`,
+  },
+  {
+    pattern: /^\/palaces\/(\d+)\/review$/,
+    nav: 'palaces',
+    history: 'palaces',
+    historyKey: (match) => `palace:review:${match[1]}`,
   },
   {
     pattern: /^\/palaces\/(\d+)\/quiz$/,
@@ -123,6 +131,7 @@ export const DYNAMIC_PREFIX_FALLBACKS: Array<{
 
 /** 顶层前缀规则（顺序即匹配优先级）。 */
 export const PREFIX_RULES: PrefixRule[] = [
+  { prefix: '/progress/', nav: 'progress', history: 'progress', fallbackTarget: '/progress' },
   { prefix: '/knowledge/', nav: 'palaces', history: 'knowledge', fallbackTarget: '/knowledge' },
   { prefix: '/freestyle/', nav: null, history: 'other', fallbackTarget: '/freestyle' },
   { prefix: '/profile/', nav: null, history: 'profile', fallbackTarget: '/profile' },
@@ -139,6 +148,7 @@ export const NAV_SECTION_ROOTS: Record<NavSectionKey, string> = {
   english: '/english/listening',
   knowledge: '/palaces/new',
   review: '/dashboard',
+  progress: '/progress',
 }
 
 /** 命令面板"页面"组的可发现页面清单（manifest 驱动）。 */

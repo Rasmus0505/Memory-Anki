@@ -1,6 +1,6 @@
-# 学习画面镜像（PWA / 电脑端）
+# 学习进度 presence（PWA / 电脑端）
 
-手机 PWA 和 Electron 共用本机 FastAPI。跨 origin（Tailscale HTTPS vs `127.0.0.1`）不能用 `BroadcastChannel` 或 Electron IPC。当前学习画面活在进程内的 session live room 里，两端订阅同一份投影。
+手机 PWA 和 Electron 共用本机 FastAPI。跨 origin（Tailscale HTTPS vs `127.0.0.1`）不能用 `BroadcastChannel` 或 Electron IPC。当前学习状态活在进程内的 session live room 里，两端订阅同一份投影；设备保留各自的路由、当前卡片和翻卡/reveal UI，只共享学习进度。
 
 ## 房间
 
@@ -23,15 +23,15 @@
 - 正式写入仍用 `session_key` + `client_revision` + `operation_id`。
 - Live 投影仍是进程内存，不写数据库，经 SSE 推送。桌面浮窗仍走 `desktopTimerBridge`，不是第三套钟。
 
-## 跟随
+## 设备本地视图
 
-`surface !== idle` 且本机已在 `/freestyle` 或 `/freestyle-2`（或 `/`）时，跟随同槽 `route`。不跨 `/freestyle` 与 `/freestyle-2` 槽位。设置/编辑页不强制跳转。本机已打开宫殿、测验或英语页时，不因远端仍停在随心工作区而拉回；控制器改去另一座宫殿或测验时仍跟随。
+设备不跟随远端 `route`，也不套用远端当前卡片、完成槽位、题目答案或 reveal map。每端保留自己的学习路线和视图状态；live room 仅作为跨设备学习进度、评分和必要轮次计划刷新的传输层。
 
 第一期表面是 `freestyle`。宫殿测验、导图复习、英语为后续表面。
 
 ## 永久功能
 
-PWA / 电脑端学习画面镜像是永久功能。后续功能改动不得删除 live room、SSE、跟随/发布钩子，也不得把投影写入 SQLite。架构门禁 `check_live_study_presence` 锁住接线。
+PWA / 电脑端学习进度共享与 presence 是永久功能。设备本地视图取代强制画面镜像；后续功能改动不得删除 live room、SSE、进度接收/发布钩子，也不得把投影写入 SQLite。架构门禁 `check_live_study_presence` 锁住接线。
 
 随心模式双击切换编辑/学习必须保留翻卡进度。空的或更弱的初始 reveal map 不得覆盖已有缓存或 live 投影。
 
@@ -41,7 +41,7 @@ PWA / 电脑端学习画面镜像是永久功能。后续功能改动不得删�
 
 `GET /session/live/stream` 必须走纯 ASGI 中间件，不得经 `BaseHTTPMiddleware` 把事件流缓冲到结束。
 
-跟随端在本地队列还没有远端 `currentCardId` 时不得把 revision 标成已应用；`queueCardIds` 出现该卡后重试 seek。默认或更弱的 revealMap 不得覆盖远端。无控制器但远端已是 `freestyle` 时，本地未操作前仍按跟随处理。
+设备端不因远端 `currentCardId` seek，也不因远端 revealMap 或题目状态改变本地 UI。若远端 `roundId` 不同，客户端可请求轮次计划刷新；刷新完成后仍由本地路线和当前卡片决定显示内容。默认或更弱的 revealMap 不得覆盖远端发布的数据。
 
 ## 评分镜像
 

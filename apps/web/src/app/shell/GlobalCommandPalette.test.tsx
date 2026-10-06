@@ -25,6 +25,7 @@ vi.mock('@/app/router/appRoutes', () => ({
   preloadKnowledgePage: vi.fn(),
   preloadProfilePage: vi.fn(),
   preloadDashboardPage: vi.fn(),
+  preloadProgressPage: vi.fn(),
   preloadPalaceListPage: vi.fn(),
   preloadPalaceShelfPage: vi.fn(),
 }))
@@ -90,7 +91,7 @@ describe('GlobalCommandPalette', () => {
     expect(screen.getByText('新建宫殿')).toBeTruthy()
     expect(screen.getByText('搜索宫殿')).toBeTruthy()
 
-    for (const label of ['随心', '知识', '英语', '创建', '洞察']) {
+    for (const label of ['随心', '知识', '英语', '创建', '进度', '洞察']) {
       expect(screen.getAllByText(label).length).toBeGreaterThan(0)
     }
 
@@ -99,6 +100,18 @@ describe('GlobalCommandPalette', () => {
     expect(screen.queryByText('Review')).toBeNull()
     expect(screen.queryByText('Palaces')).toBeNull()
     expect(screen.queryByText('Dashboard')).toBeNull()
+  })
+
+  it('offers one progress entry and navigates to its independent page', async () => {
+    renderPalette()
+    openPalette()
+
+    const progress = await screen.findAllByText('进度')
+    expect(progress).toHaveLength(1)
+    fireEvent.click(progress[0])
+    await waitFor(() => {
+      expect(screen.getByTestId('location').textContent).toBe('/progress')
+    })
   })
 
   it('shows recent visits and filters out the current route', async () => {

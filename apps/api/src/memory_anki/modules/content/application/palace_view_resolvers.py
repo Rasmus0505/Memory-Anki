@@ -12,7 +12,7 @@ from memory_anki.modules.content.application.palace_chapter_binding import (
     get_palace_explicit_chapter_ids,
 )
 from memory_anki.modules.content.application.palace_review_rollups import (
-    count_palace_review_units,
+    catalog_palace_due_counts,
 )
 
 
@@ -217,8 +217,9 @@ def build_grouped_palace_list(
 def build_subject_shelf_summary(session: Session, palaces: list[Palace]) -> dict[str, Any]:
     subject_buckets: dict[int, dict[str, Any]] = {}
     now = datetime.now(UTC)
+    due_counts = catalog_palace_due_counts(session, palaces, now=now)
     for palace in palaces:
-        unit_counts = count_palace_review_units(session, palace, now=now)
+        unit_counts = due_counts[palace.id]
         for subject in _owned_subjects(palace):
             subject_key = subject.id if subject is not None else 0
             bucket = subject_buckets.setdefault(

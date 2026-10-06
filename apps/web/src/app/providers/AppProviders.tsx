@@ -1,7 +1,7 @@
 import { type PropsWithChildren, useEffect } from 'react'
 import { BrowserRouter } from 'react-router-dom'
 import { QueryClientProvider } from '@tanstack/react-query'
-import { Toaster } from 'sonner'
+import { toast, Toaster } from 'sonner'
 import { QuizLauncherProvider } from '@/widgets/quiz-launcher'
 import { GlobalErrorBoundary } from '@/app/providers/GlobalErrorBoundary'
 import { createAppQueryClient } from '@/shared/api/queryClient'
@@ -14,12 +14,42 @@ import { RouteProgressBar } from '@/shared/components/route-progress/RouteProgre
 import { NativeDialogProvider } from '@/shared/components/ui/native-dialog'
 import { PageHistoryCoordinator } from '@/shared/page-history/PageHistoryCoordinator'
 import { PalaceCatalogQueryInvalidationBridge } from '@/modules/content/public'
+import { startQuizPracticeProgressSync } from '@/modules/quiz/public'
 
 const queryClient = createAppQueryClient()
 
 export function AppProviders({ children }: PropsWithChildren) {
   useMutationQueueAutoSync()
   usePendingTimeRecordRecoveryAutoSync()
+
+  useEffect(() => {
+    const id = 'quiz-progress-sync'
+    let warning: number | null = null
+    const stop = startQuizPracticeProgressSync((status) => {
+      if (status === 'synced') {
+        if (warning != null) window.clearTimeout(warning)
+        warning = null
+        toast.dismiss(id)
+      } else if (status === 'pending' || status === 'unavailable') {
+        if (warning != null) return
+        warning = window.setTimeout(() => {
+          warning = null
+          toast.warning(status === 'pending'
+            ? '做题进度尚未同步，换设备前请确认同步完成。'
+            : '暂时无法核对其他设备的做题进度。', {
+            id,
+            duration: Infinity,
+            className: 'pointer-events-none',
+          })
+        }, 1_500)
+      }
+    })
+    return () => {
+      stop()
+      if (warning != null) window.clearTimeout(warning)
+      toast.dismiss(id)
+    }
+  }, [])
 
   useEffect(() => {
     cleanupExpiredAppLogs()

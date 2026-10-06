@@ -116,39 +116,15 @@ export function isFollowableStudyPath(pathname: string) {
   return STUDY_FOLLOW_PATTERNS.some((pattern) => pattern.test(pathname))
 }
 
-export function shouldFollowLiveRoute(input: {
+export function shouldFollowLiveRoute(_input: {
   localPath: string
   isController: boolean
   surface: LiveStudySurface
   route: string
 }) {
-  if (input.isController) return false
-  if (input.surface === 'idle' || !input.route) return false
-  const localPathname = pathnameOf(input.localPath)
-  const remotePathname = pathnameOf(input.route)
-  if (!isFollowableStudyPath(localPathname) || !isFollowableStudyPath(remotePathname)) return false
-  if (
-    (isPrimaryFreestylePath(localPathname) && isSecondaryFreestylePath(remotePathname)) ||
-    (isSecondaryFreestylePath(localPathname) && isPrimaryFreestylePath(remotePathname))
-  ) {
-    return false
-  }
-  // Opening 知识 / a quiz / an English page must stick. Those routes are
-  // followable so a controller can mirror palace A → palace B, but a remote
-  // freestyle workspace must not yank the user back off the section they opened.
-  // `/` still catches up into freestyle.
-  if (
-    isFreestyleWorkspacePath(remotePathname) &&
-    !isFreestyleWorkspacePath(localPathname) &&
-    localPathname !== '/'
-  ) {
-    return false
-  }
-  return input.localPath !== input.route
-}
-
-function isFreestyleWorkspacePath(pathname: string) {
-  return isPrimaryFreestylePath(pathname) || isSecondaryFreestylePath(pathname)
+  // Route ownership is device-local. Live presence shares learning progress,
+  // not navigation: each client keeps its own workspace and current card.
+  return false
 }
 
 function readString(value: unknown) {

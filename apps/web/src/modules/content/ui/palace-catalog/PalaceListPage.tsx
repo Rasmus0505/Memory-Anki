@@ -149,6 +149,7 @@ export default function PalaceList() {
   const cardActions = usePalaceListCardActions({
     fetchData,
     navigate,
+    subjectId: selectedSubjectId,
   })
 
   const renderPalaceCard = useCallback(

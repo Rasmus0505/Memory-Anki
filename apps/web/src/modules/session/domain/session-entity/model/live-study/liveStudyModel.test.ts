@@ -58,7 +58,18 @@ describe('liveStudyModel', () => {
     ).toBe(false)
   })
 
-  it('follows study routes from settings-idle pages only when already on a study path', () => {
+  it('keeps route ownership local on every device', () => {
+    for (const input of [
+      { localPath: '/settings', isController: false, surface: 'freestyle' as const, route: '/freestyle' },
+      { localPath: '/freestyle', isController: false, surface: 'freestyle' as const, route: '/freestyle?palaceId=3' },
+      { localPath: '/', isController: false, surface: 'freestyle' as const, route: '/freestyle' },
+      { localPath: '/freestyle-2', isController: true, surface: 'freestyle' as const, route: '/freestyle' },
+    ]) {
+      expect(shouldFollowLiveRoute(input)).toBe(false)
+    }
+  })
+
+  it('retains study-path classification for local UI composition', () => {
     expect(isFollowableStudyPath('/settings')).toBe(false)
     expect(isFollowableStudyPath('/freestyle')).toBe(true)
     expect(isFollowableStudyPath('/freestyle-2')).toBe(true)
@@ -79,7 +90,7 @@ describe('liveStudyModel', () => {
         surface: 'freestyle',
         route: '/freestyle?palaceId=3',
       }),
-    ).toBe(true)
+    ).toBe(false)
   })
 
   it('does not yank the user across freestyle workspace slots', () => {
@@ -106,7 +117,7 @@ describe('liveStudyModel', () => {
         surface: 'freestyle',
         route: '/freestyle-2?palaceId=1',
       }),
-    ).toBe(true)
+    ).toBe(false)
   })
 
   it('does not yank a local palace, quiz, or english page back to a freestyle workspace', () => {
@@ -149,7 +160,7 @@ describe('liveStudyModel', () => {
         surface: 'freestyle',
         route: '/freestyle',
       }),
-    ).toBe(true)
+    ).toBe(false)
   })
 
   it('interpolates running timer seconds from snapshot age', () => {

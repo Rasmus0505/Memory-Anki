@@ -6,6 +6,7 @@ import KnowledgePage from '@/pages/library/KnowledgeLibraryPage'
 import * as knowledgeApi from '@/modules/content/public'
 import { APP_EVENT_NAMES, emitAppEvent } from '@/shared/events/appEvents'
 
+const conflictHost = vi.hoisted(() => ({ pendingConflict: null as import('@/shared/persistence/mindmapEditorDraftStore').MindMapEditorConflict | null, resolveConflict: vi.fn() }))
 const knowledgeReloadMock = vi.hoisted(() => vi.fn())
 const knowledgeReplaceEditorStateMock = vi.hoisted(() => vi.fn())
 const knowledgeMindMapMockState = vi.hoisted(() => ({
@@ -38,6 +39,8 @@ vi.mock('@/shared/hooks/useMindMapDocumentSession', () => ({
     error: null,
     reload: knowledgeReloadMock,
     flushSave: vi.fn(),
+    pendingConflict: conflictHost.pendingConflict,
+    resolveConflict: conflictHost.resolveConflict,
   }),
 }))
 
@@ -166,6 +169,8 @@ function renderKnowledgePage(initialEntry = '/knowledge') {
 describe('KnowledgePage mind map host refresh behavior', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+    conflictHost.pendingConflict = null
+    conflictHost.resolveConflict.mockReset().mockResolvedValue(true)
     knowledgeReloadMock.mockReset()
     knowledgeReplaceEditorStateMock.mockReset()
     knowledgeMindMapMockState.nextMountId = 1
@@ -226,6 +231,16 @@ describe('KnowledgePage mind map host refresh behavior', () => {
       palaces: [],
     } as never)
     vi.spyOn(knowledgeApi, 'deleteChapterApi').mockResolvedValue({ ok: true })
+  })
+
+  it('surfaces the session conflict and sends an explicit owner-bound resolution', async () => {
+    const snapshot = { editor_doc: { root: { data: { uid: 'root', text: '冲突标题' } } }, editor_config: {}, editor_local_config: {}, lang: 'zh' }
+    conflictHost.pendingConflict = { ownerId: 7, operationId: 21, localSnapshot: snapshot, remoteSnapshot: snapshot,
+      baseEditorFingerprint: 'old', remoteEditorFingerprint: 'new', reason: 'save-conflict' }
+    renderKnowledgePage()
+    expect(await screen.findByRole('dialog', { name: '文档版本冲突' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '选用远端版本' }))
+    await waitFor(() => expect(conflictHost.resolveConflict).toHaveBeenCalledWith({ ownerId: 7, operationId: 21, choice: 'remote' }))
   })
 
   it('collapses the subject column so the mind map can fill the remaining row', async () => {

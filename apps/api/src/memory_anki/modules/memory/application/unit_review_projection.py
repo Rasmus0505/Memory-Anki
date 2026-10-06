@@ -26,6 +26,14 @@ from memory_anki.modules.mindmap_document.api import (
 )
 
 from .unit_projection_cache import cached_document_projection, clear_unit_projection_cache
+from .unit_schedule_projection import (
+    _change_entry,
+    _parse_due_date,
+    _schedule_snapshot_from_row,
+)
+from .unit_schedule_projection import (
+    _schedule_snapshot as _schedule_snapshot,
+)
 from .unit_scheduler import INTERVAL_DAYS, clamp_stage
 
 
@@ -76,48 +84,6 @@ def json_load_list(raw: str | None) -> list[str]:
 def _digest(values: list[str] | tuple[str, ...]) -> str:
     payload = "\n".join(values)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
-
-
-def _schedule_snapshot(
-    *,
-    stage_index: int,
-    due_date: date,
-    has_passed: bool,
-) -> dict[str, Any]:
-    stage = clamp_stage(stage_index)
-    return {
-        "stage_index": stage,
-        "interval_days": INTERVAL_DAYS[stage],
-        "due_date": due_date.isoformat() if isinstance(due_date, date) else str(due_date),
-        "has_passed": bool(has_passed),
-    }
-
-
-def _schedule_snapshot_from_row(row: ReviewUnitState) -> dict[str, Any]:
-    return _schedule_snapshot(
-        stage_index=row.stage_index,
-        due_date=row.due_date,
-        has_passed=row.has_passed,
-    )
-
-
-def _change_entry(
-    *,
-    unit_id: str,
-    anchor_uid: str,
-    title: str,
-    action: str,
-    before: dict[str, Any] | None,
-    after: dict[str, Any] | None,
-) -> dict[str, Any]:
-    return {
-        "unit_id": unit_id,
-        "anchor_uid": anchor_uid,
-        "title": title,
-        "action": action,
-        "before": before,
-        "after": after,
-    }
 
 
 def resolve_unit_definitions(
@@ -234,15 +200,6 @@ def _invalidate_active_sessions(session: Session, palace_id: int) -> int:
     return len(rows)
 
 
-def _parse_due_date(value: Any) -> date:
-    if isinstance(value, date):
-        return value
-    text = str(value or "").strip()
-    if not text:
-        raise ValueError("due_date is required")
-    return date.fromisoformat(text[:10])
-
-
 def adjust_unit_schedule(
     session: Session,
     *,
@@ -258,14 +215,15 @@ def adjust_unit_schedule(
     Does not change content_hash or membership. Bumps revision and invalidates
     active formal/freestyle review sessions for the palace.
 
-    ``operation_id`` is required for client idempotency tracking; there is no
-    dedicated ops table for manual adjusts in this private product, so each
-    call with a non-empty operation_id simply applies the patch once.
+    ``operation_id`` is the durable replay key. Reusing it for the same unit
+    returns the original result without applying the patch again; reusing it
+    for another unit is rejected.
     """
     op_id = str(operation_id or "").strip()
     if not op_id:
         raise ValueError("operation_id is required")
-    row = session.get(ReviewUnitState, str(unit_id or "").strip())
+    target_unit_id = str(unit_id or "").strip()
+    row = session.get(ReviewUnitState, target_unit_id)
     if row is None or not row.active:
         raise ValueError(f"review unit not found: {unit_id}")
     if stage_index is None and due_date is None and has_passed is None:
@@ -283,6 +241,16 @@ def adjust_unit_schedule(
     invalidated = _invalidate_active_sessions(session, row.palace_id)
     session.flush()
 
+    result = {
+        "operation_id": op_id,
+        "reason": str(reason or "manual_adjust").strip() or "manual_adjust",
+        "unit": None,
+        "before": before,
+        "after": after,
+        "invalidated_session_count": invalidated,
+        "palace": None,
+    }
+
     definition = None
     try:
         _tree, definitions = resolve_unit_definitions(session, row.palace_id)
@@ -299,23 +267,17 @@ def adjust_unit_schedule(
         definition = None
 
     palace = get_palace_unit_projection(session, row.palace_id)
-    return {
-        "operation_id": op_id,
-        "reason": str(reason or "manual_adjust").strip() or "manual_adjust",
-        "unit": unit_payload(row, definition),
-        "before": before,
-        "after": after,
-        "invalidated_session_count": invalidated,
-        "palace": {
-            "palace_id": palace["palace_id"],
-            "title": palace.get("title") or "",
-            "unit_count": palace.get("unit_count"),
-            "due_unit_count": palace.get("due_unit_count"),
-            "next_review_date": palace.get("next_review_date"),
-            "review_status": palace.get("review_status"),
-            "mark_required": palace.get("mark_required"),
-        },
+    result["unit"] = unit_payload(row, definition)
+    result["palace"] = {
+        "palace_id": palace["palace_id"],
+        "title": palace.get("title") or "",
+        "unit_count": palace.get("unit_count"),
+        "due_unit_count": palace.get("due_unit_count"),
+        "next_review_date": palace.get("next_review_date"),
+        "review_status": palace.get("review_status"),
+        "mark_required": palace.get("mark_required"),
     }
+    return result
 
 
 def undo_content_schedule_batch(

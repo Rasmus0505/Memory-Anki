@@ -18,10 +18,12 @@ export const preloadFreestyleSecondaryPage = () => import('@/pages/today/Immersi
 export const preloadKnowledgePage = () => import('@/pages/library/KnowledgeLibraryPage')
 export const preloadExamPage = () => import('@/pages/exam/ExamWarRoomPage')
 export const preloadGrowthPage = () => import('@/pages/growth/GrowthPage')
+export const preloadProgressPage = () => import('@/pages/progress/ProgressPage')
 export const preloadEnglishWorkspacePage = () => import('@/pages/library/EnglishLibraryPage')
 export const preloadEnglishCoursePage = () => import('@/pages/library/EnglishCoursePage')
 export const preloadPalaceEditPage = () => import('@/pages/create/PalaceEditorPage')
 export const preloadPalaceQuizPage = () => import('@/pages/create/QuizWorkspacePage')
+export const preloadPalaceReviewPage = () => import('@/pages/library/PalaceReviewPage')
 export const preloadProfilePage = () => import('@/pages/settings/SettingsOverviewPage')
 
 export function preloadPracticeRoutes() {
@@ -38,6 +40,7 @@ const FreestylePage = lazyWithRetry(preloadFreestylePage)
 const FreestyleSecondaryPage = lazyWithRetry(preloadFreestyleSecondaryPage)
 const ExamPage = lazyWithRetry(preloadExamPage)
 const GrowthPage = lazyWithRetry(preloadGrowthPage)
+const ProgressPage = lazyWithRetry(preloadProgressPage)
 const FxLabPage = lazyWithRetry(() => import('@/pages/settings/FxLabPage'))
 const EnglishWorkspacePage = lazyWithRetry(preloadEnglishWorkspacePage)
 const EnglishCoursePage = lazyWithRetry(preloadEnglishCoursePage)
@@ -45,6 +48,7 @@ const EnglishCoursePage = lazyWithRetry(preloadEnglishCoursePage)
 const PalaceEditPage = lazyWithRetry(preloadPalaceEditPage)
 const PalaceViewPage = lazyWithRetry(preloadPalaceViewPage)
 const PalaceQuizPage = lazyWithRetry(preloadPalaceQuizPage)
+const PalaceReviewPage = lazyWithRetry(preloadPalaceReviewPage)
 const ProfilePage = lazyWithRetry(preloadProfilePage)
 const ProfileFeedbackPage = lazyWithRetry(() => import('@/pages/settings/FeedbackSettingsPage'))
 const ProfileTimerPage = lazyWithRetry(() => import('@/pages/settings/TimerSettingsPage'))
@@ -86,6 +90,7 @@ export function AppRoutes({ location }: { location?: Location }) {
         <Routes location={location}>
           <Route path="/" element={<StartupRedirect />} />
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/progress" element={<ProgressPage />} />
           <Route path="/exam" element={<ExamPage />} />
           <Route path="/growth" element={<GrowthPage />} />
           <Route path="/lab/fx" element={<FxLabPage />} />
@@ -102,6 +107,7 @@ export function AppRoutes({ location }: { location?: Location }) {
           {/* 保留：若删除此行，/palaces/quiz 会被下面的 /palaces/:id 捕获并落到 NaN 坏页。 */}
           <Route path="/palaces/quiz" element={<Navigate to="/palaces" replace />} />
           <Route path="/palaces/:id" element={<PalaceViewPage />} />
+          <Route path="/palaces/:id/review" element={<PalaceReviewPage />} />
           <Route path="/palaces/:id/quiz" element={<PalaceQuizPage />} />
           <Route path="/palaces/:id/edit" element={<PalaceEditPage />} />
           <Route path="/knowledge" element={<KnowledgePage />} />

@@ -24,6 +24,7 @@ export function useLiveStudySurfaceMirror<TView>({
   route: string
   view: TView
   decode: (raw: unknown) => TView | null
+  /** @deprecated Remote view application is disabled; retained for API compatibility. */
   apply: (decoded: TView) => boolean | void
   sameInteraction?: (previous: TView, next: TView) => boolean
   publishWhen?: boolean
@@ -53,10 +54,11 @@ export function useLiveStudySurfaceMirror<TView>({
       lastAppliedRevisionRef.current = presence.projection.revision
       return
     }
-    if (apply(decoded) === false) return
+    // The live room carries progress and presence, but each device owns its
+    // route, card position, answers, and reveal UI. Consume the revision so it
+    // cannot echo back; do not apply the remote view to local UI.
     lastAppliedRevisionRef.current = presence.projection.revision
     lastSentRef.current = viewJson
-    pendingApplyRef.current = true
   }, [apply, decode, presence, surface])
 
   useEffect(() => {

@@ -27,12 +27,13 @@ import {
 } from '@/modules/english/ui/english/model/englishCourseLiveView'
 
 describe('remaining live-study surfaces', () => {
-  it('follows quiz, palace view, english course, and english reading but not settings or editor', () => {
+  it('classifies remaining live-study surfaces while keeping routes device-local', () => {
     expect(isFollowableStudyPath('/palaces/7/quiz')).toBe(true)
     expect(isFollowableStudyPath('/palaces/7')).toBe(true)
     expect(isFollowableStudyPath('/english/listening/courses/3')).toBe(true)
     expect(isFollowableStudyPath('/english/reading/materials/9')).toBe(true)
     expect(isFollowableStudyPath('/palaces/7/edit')).toBe(false)
+    expect(isFollowableStudyPath('/palaces/23/review')).toBe(false)
     expect(isFollowableStudyPath('/profile')).toBe(false)
     expect(isFollowableStudyPath('/profile/timer')).toBe(false)
     expect(liveStudySurfaceFromPath('/palaces/7/quiz')).toBe('palace_quiz')
@@ -47,7 +48,7 @@ describe('remaining live-study surfaces', () => {
         surface: 'palace_quiz',
         route: '/palaces/7/quiz',
       }),
-    ).toBe(true)
+    ).toBe(false)
     expect(
       shouldFollowLiveRoute({
         localPath: '/palaces/4',
@@ -55,7 +56,7 @@ describe('remaining live-study surfaces', () => {
         surface: 'mindmap_review',
         route: '/palaces/7',
       }),
-    ).toBe(true)
+    ).toBe(false)
     expect(
       shouldFollowLiveRoute({
         localPath: '/profile',

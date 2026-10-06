@@ -530,6 +530,8 @@ def build_time_record_read_model(
                 item["sessions"] += 1
                 seen_kinds.add(kind_key)
     for row in ledger_rows:
+        # Use the same deterministic, earliest-interval-wins fragments as the
+        # daily trend so overlapping ledger observations cannot inflate totals.
         seconds = max(0, int(row.get("effective_seconds") or 0))
         total_seconds += seconds
         source = str(row.get("client_source") or "unknown").lower()
@@ -540,7 +542,8 @@ def build_time_record_read_model(
             {"kind": row_kind, "label": row_kind, "seconds": 0, "sessions": 0, "is_builtin": row_kind in TIME_RECORD_BUILTIN_KINDS},
         )
         kind_item["seconds"] += seconds
-        kind_item["sessions"] += 1
+        if seconds > 0:
+            kind_item["sessions"] += 1
 
     breakdown = sorted(
         kind_totals.values(),

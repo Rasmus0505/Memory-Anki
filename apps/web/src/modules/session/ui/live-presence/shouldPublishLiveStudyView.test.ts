@@ -149,7 +149,7 @@ describe('live follow retry and passive follower', () => {
     })).toBe('abandon')
   })
 
-  it('follows a remote freestyle surface even when nobody is controller', () => {
+  it('keeps passive follower classification for progress publishing', () => {
     expect(isPassiveLiveStudyFollower({
       isController: false,
       controllerClientId: null,

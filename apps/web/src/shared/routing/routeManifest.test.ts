@@ -63,6 +63,8 @@ describe('routeManifest 行为快照（与统一前的四处实现对拍）', ()
   it.each([
     ['/', 'review', 'dashboard', 'route:/'],
     ['/dashboard', 'review', 'dashboard', 'dashboard'],
+    ['/progress', 'progress', 'progress', 'progress'],
+    ['/growth', 'review', 'dashboard', 'growth'],
     ['/freestyle', 'freestyle', 'freestyle', 'freestyle'],
     ['/freestyle-2', 'freestyleSecondary', 'freestyleSecondary', 'freestyle-secondary'],
     ['/palaces', 'palaces', 'palaces', 'palace:shelf'],
@@ -75,6 +77,7 @@ describe('routeManifest 行为快照（与统一前的四处实现对拍）', ()
     ['/english/listening', 'english', 'english', 'english:listening'],
     ['/palaces/42', 'palaces', 'palaces', 'palace:view:42'],
     ['/palaces/42/edit', 'knowledge', 'palaces', 'palace:edit:42'],
+    ['/palaces/42/review', 'palaces', 'palaces', 'palace:review:42'],
     ['/palaces/42/quiz', 'knowledge', 'palaces', 'palace:quiz:42'],
     ['/english/listening/courses/3', 'english', 'english', 'english:course:3'],
     ['/profile', null, 'profile', 'profile:overview'],
@@ -87,6 +90,13 @@ describe('routeManifest 行为快照（与统一前的四处实现对拍）', ()
     expect(resolveNavSection(pathname)).toBe(nav)
     expect(resolveHistorySection(pathname)).toBe(history)
     expect(resolveHistoryKey(pathname)).toBe(key)
+  })
+
+  it('preserves progress deep links and falls back to progress for unknown descendants', () => {
+    expect(resolveRouteFallbackTarget('/progress')).toBe('/progress')
+    expect(resolveRouteFallbackTarget('/progress/')).toBe('/progress')
+    expect(resolveRouteFallbackTarget('/progress/unknown')).toBe('/progress')
+    expect(resolveRouteFallbackTarget('/progress-other')).toBe('/freestyle')
   })
 
   it('registered:false 的动态条目不参与回退保留', () => {

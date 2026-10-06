@@ -9,11 +9,20 @@ import { deletePalaceApi } from '@/modules/content/domain/palace-entity/api'
 interface UsePalaceListCardActionsOptions {
   fetchData: () => Promise<PalaceGroupedListResponse>
   navigate: (to: string) => void
+  subjectId?: string | null
+}
+
+export function palaceReviewPath(palaceId: number, subjectId?: string | null) {
+  if (subjectId && /^\d+$/.test(subjectId)) {
+    return `/palaces/${palaceId}/review?subjectId=${subjectId}`
+  }
+  return `/palaces/${palaceId}/review`
 }
 
 export function usePalaceListCardActions({
   fetchData,
   navigate,
+  subjectId = null,
 }: UsePalaceListCardActionsOptions) {
   const handleDelete = async (id: number, title: string) => {
     const confirmed = await appConfirm(
@@ -40,7 +49,7 @@ export function usePalaceListCardActions({
       return
     }
     if (palace.review_status !== 'due') return
-    navigate(`/freestyle?palaceId=${palace.id}`)
+    navigate(palaceReviewPath(palace.id, subjectId))
   }
 
   return {

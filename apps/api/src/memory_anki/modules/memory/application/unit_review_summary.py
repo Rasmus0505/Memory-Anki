@@ -19,9 +19,7 @@ from .unit_review_projection import (
     UnitDefinition,
     _active_unit_key,
     _states_in_topology_order,
-    _unit_hashes_lag,
     get_palace_unit_projection,
-    reconcile_palace_units,
     resolve_unit_definitions,
     unit_payload,
 )
@@ -83,6 +81,51 @@ def get_palace_review_summary(
     }
 
 
+def read_palace_due_signals(
+    session: Session,
+    palace_ids: Iterable[int],
+) -> dict[int, dict[str, Any]]:
+    """Stored due signals for catalog reads.
+
+    Uses persisted ``ReviewUnitState`` rows only. It does not parse editor
+    documents or reconcile, so a bookshelf GET stays readable while an editor
+    save holds the runtime storage lock.
+    """
+    ordered_ids = list(dict.fromkeys(int(item) for item in palace_ids))
+    if not ordered_ids:
+        return {}
+    # A catalog GET must not flush unrelated dirty state into the storage lock.
+    with session.no_autoflush:
+        rows = (
+            session.query(ReviewUnitState.palace_id, ReviewUnitState.due_date)
+            .filter(
+                ReviewUnitState.active.is_(True),
+                ReviewUnitState.palace_id.in_(ordered_ids),
+            )
+            .all()
+        )
+    today = date.today()
+    has_due: dict[int, bool] = {}
+    next_due: dict[int, date] = {}
+    due_counts: dict[int, int] = {}
+    for palace_id, due_date in rows:
+        if due_date <= today:
+            has_due[palace_id] = True
+            due_counts[palace_id] = due_counts.get(palace_id, 0) + 1
+        current = next_due.get(palace_id)
+        if current is None or due_date < current:
+            next_due[palace_id] = due_date
+    result: dict[int, dict[str, Any]] = {}
+    for palace_id in ordered_ids:
+        next_day = next_due.get(palace_id)
+        result[palace_id] = {
+            "has_due_review": bool(has_due.get(palace_id)),
+            "next_review_at": _due_datetime(next_day.isoformat()) if next_day else None,
+            "due_unit_count": due_counts.get(palace_id, 0),
+        }
+    return result
+
+
 def project_palace_review_summaries(
     session: Session,
     palaces: Iterable[Any],
@@ -90,8 +133,9 @@ def project_palace_review_summaries(
 ) -> dict[int, dict[str, Any]]:
     """Batch projection of palace review summaries.
 
-    Loads active ReviewUnitStates in one query, resolves definitions per palace,
-    reconciles only lagging palaces, then builds projections.
+    Loads active ReviewUnitStates in one query and resolves definitions per
+    palace. Lagging hashes are left for an explicit reconcile command; catalog
+    and feed reads must not write.
     """
     palace_list = list(palaces)
     if not palace_list:
@@ -144,24 +188,6 @@ def project_palace_review_summaries(
 
         states_for_p = state_by_palace.get(pid, [])
         defs = definitions_by_palace.get(pid, [])
-        if _unit_hashes_lag(states_for_p, defs):
-            reconcile_palace_units(session, pid)
-            # Re-read after reconcile; do not reuse the pre-reconcile cache.
-            states_for_p = (
-                session.query(ReviewUnitState)
-                .filter(
-                    ReviewUnitState.active.is_(True),
-                    ReviewUnitState.palace_id == pid,
-                )
-                .all()
-            )
-            try:
-                _, defs = resolve_unit_definitions(session, pid)
-            except ValueError:
-                defs = []
-            state_by_palace[pid] = states_for_p
-            definitions_by_palace[pid] = defs
-
         result[pid] = _build_projection(states_for_p, defs, pid, palace)
     return result
 
@@ -247,4 +273,5 @@ __all__ = [
     "get_review_queue_summary",
     "get_unit_review_weekly_stats",
     "project_palace_review_summaries",
+    "read_palace_due_signals",
 ]

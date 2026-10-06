@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables.palaces import Palace
-from memory_anki.modules.memory.api import get_palace_review_summary
+from memory_anki.modules.memory.api import read_palace_due_signals
 
 
 def _review_datetime_is_later_today(dt: Any, now: datetime) -> bool:
@@ -25,16 +25,30 @@ def _review_datetime_is_later_today(dt: Any, now: datetime) -> bool:
     return dt.date() == now.date()
 
 
-def _palace_due_rollup(
+def _due_flags_from_signal(signal: dict[str, Any], now: datetime) -> dict[str, int]:
+    due_now_count = 1 if bool(signal.get("has_due_review")) else 0
+    due_later_today_count = 0
+    if due_now_count == 0 and _review_datetime_is_later_today(signal.get("next_review_at"), now):
+        due_later_today_count = 1
+    return {
+        "due_now_count": due_now_count,
+        "due_later_today_count": due_later_today_count,
+    }
+
+
+def catalog_palace_due_counts(
     session: Session,
-    palace: Palace,
+    palaces: list[Palace],
     *,
     now: datetime | None = None,
-) -> dict[str, Any] | None:
-    try:
-        return get_palace_review_summary(session, palace.id, now=now)
-    except ValueError:
-        return None
+) -> dict[int, dict[str, int]]:
+    """One read-only query for the subject shelf. Never reconciles review units."""
+    current = now or datetime.now(UTC)
+    signals = read_palace_due_signals(session, [palace.id for palace in palaces])
+    return {
+        palace.id: _due_flags_from_signal(signals.get(palace.id, {}), current)
+        for palace in palaces
+    }
 
 
 def count_palace_review_units(
@@ -43,23 +57,7 @@ def count_palace_review_units(
     *,
     now: datetime | None = None,
 ) -> dict[str, int]:
-    current = now or datetime.now(UTC)
-    projection = _palace_due_rollup(session, palace, now=current)
-    if projection is None:
-        return {
-            "due_now_count": 0,
-            "due_later_today_count": 0,
-        }
-    due_now_count = 1 if bool(projection.get("has_due_review")) else 0
-    due_later_today_count = 0
-    if due_now_count == 0 and _review_datetime_is_later_today(
-        projection.get("next_review_at"), current
-    ):
-        due_later_today_count = 1
-    return {
-        "due_now_count": due_now_count,
-        "due_later_today_count": due_later_today_count,
-    }
+    return catalog_palace_due_counts(session, [palace], now=now)[palace.id]
 
 
 def palace_has_due_review(
@@ -68,10 +66,9 @@ def palace_has_due_review(
     *,
     now: datetime | None = None,
 ) -> bool:
-    projection = _palace_due_rollup(session, palace, now=now)
-    if projection is None:
-        return False
-    return bool(projection.get("has_due_review"))
+    del now
+    signal = read_palace_due_signals(session, [palace.id]).get(palace.id, {})
+    return bool(signal.get("has_due_review"))
 
 
 def palace_has_due_later_today(
@@ -81,16 +78,15 @@ def palace_has_due_later_today(
     now: datetime | None = None,
 ) -> bool:
     current = now or datetime.now(UTC)
-    projection = _palace_due_rollup(session, palace, now=current)
-    if projection is None:
-        return False
-    if projection.get("has_due_review"):
-        return False
-    return _review_datetime_is_later_today(projection.get("next_review_at"), current)
+    return _due_flags_from_signal(
+        read_palace_due_signals(session, [palace.id]).get(palace.id, {}),
+        current,
+    )["due_later_today_count"] > 0
 
 
 __all__ = [
     "_review_datetime_is_later_today",
+    "catalog_palace_due_counts",
     "count_palace_review_units",
     "palace_has_due_later_today",
     "palace_has_due_review",

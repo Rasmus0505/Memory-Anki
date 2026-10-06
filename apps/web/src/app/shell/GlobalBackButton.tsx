@@ -15,12 +15,17 @@ type GlobalBackButtonProps = {
 }
 
 /** Immersive feed owns its own top chrome; floating back/forward would cover the card. */
+export function isPalaceReviewPath(pathname: string) {
+  return /^\/palaces\/\d+\/review$/.test(pathname)
+}
+
 export function isImmersiveFeedPath(pathname: string) {
   return (
     pathname === '/freestyle' ||
     pathname.startsWith('/freestyle/') ||
     pathname === '/freestyle-2' ||
-    pathname.startsWith('/freestyle-2/')
+    pathname.startsWith('/freestyle-2/') ||
+    isPalaceReviewPath(pathname)
   )
 }
 

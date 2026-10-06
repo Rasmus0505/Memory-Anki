@@ -19,6 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
 import { useMindMapDocumentSession } from '@/shared/hooks/useMindMapDocumentSession'
+import { MindMapDocumentConflictDialog } from '@/shared/components/mindmap-document-conflict'
 import { useProgrammaticEditorStateGuard } from '@/shared/hooks/useProgrammaticEditorStateGuard'
 import { useMindMapExperience } from '@/modules/content/public'
 import { applyProgrammaticEditorState } from '@/shared/lib/applyProgrammaticEditorState'
@@ -91,6 +92,8 @@ export default function Knowledge() {
     error,
     reload,
     flushSave,
+    pendingConflict,
+    resolveConflict,
   } = useMindMapDocumentSession({
     entityId: selectedSubjectId,
     adapter: {
@@ -116,6 +119,7 @@ export default function Knowledge() {
   )
   const applyImportedSubjectEditorState = useCallback(
     async (nextState: MindMapEditorState, context?: ImportApplyContext) => {
+      if (pendingConflict) throw new Error('请先解决文档版本冲突，再导入内容。')
       if (!selectedSubjectId) {
         throw new Error('当前还没有选中学科，暂时无法应用导入结果。')
       }
@@ -147,7 +151,7 @@ export default function Knowledge() {
         reload,
       })
     },
-    [adoptExternalState, editorState, flushSave, programmaticGuard, reload, replaceEditorState, selectedSubjectId, setMeta],
+    [adoptExternalState, editorState, flushSave, pendingConflict, programmaticGuard, reload, replaceEditorState, selectedSubjectId, setMeta],
   )
   const mindMapImport = useMindMapImport({
     entityKey: importEntityKey,
@@ -325,6 +329,7 @@ export default function Knowledge() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
+      <MindMapDocumentConflictDialog pendingConflict={pendingConflict} resolveConflict={resolveConflict} />
       {!mindMapFullscreen ? (
         <PageIntro
           compact
@@ -569,7 +574,7 @@ export default function Knowledge() {
                   sceneChrome={mindMapExperience.task === 'learn' ? 'default' : 'edit'}
                   presentationStrategy={isPwaClient ? 'viewport-only' : 'native-preferred'}
                   mobileViewPolicy="map"
-                  readonly={mindMapExperience.task === 'learn'}
+                  readonly={Boolean(pendingConflict) || mindMapExperience.task === 'learn'}
                   highlightedNodeUids={mindMapExperience.highlightedNodeUids}
                   immersiveModeActive={mindMapFullscreen}
                   viewMemoryScope={

@@ -13,9 +13,9 @@ practice         -> consumes reviews.api unit projections and the shared rating 
 ```
 
 The review scheduling and encounter API remains owned by `memory` and is consumed by
-freestyle cards. The frontend has one review workspace only: `apps/web/src/modules/practice/ui/freestyle`.
-The palace shelf enters it with `/freestyle?palaceId=<id>`, which locks the current round to that
-palace even if 随心 still has a broader saved selection. Content and mix settings stay. The retired standalone `/review` page,
+freestyle cards. The frontend review UI lives in `apps/web/src/modules/practice/ui/freestyle`.
+The palace shelf opens `/palaces/<id>/review`, which reuses that UI for one palace and keeps a
+separate round from `/freestyle` and `/freestyle-2`. Content and mix settings stay. The retired standalone `/review` page,
 session page, completion page, and feedback-preview route must not return.
 
 Reviews must not import Practice. Practice must not create a second schedule, copy unit progress, or reinterpret permanent marks. Editing must not block on schedule arrangement.

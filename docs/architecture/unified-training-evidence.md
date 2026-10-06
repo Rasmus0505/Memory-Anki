@@ -12,7 +12,15 @@ There is no node recall evidence, inferred node rating, subtree rating inheritan
 
 ## Quiz Evidence
 
-Quiz attempts remain question-owned evidence with correctness, answer payload, source, and stable question identity. Node bindings classify a question against palace content but never turn a quiz attempt into a palace unit rating.
+Quiz attempts remain question-owned evidence with correctness, answer payload, source, and stable question identity. Node bindings classify a question against palace content but never turn a quiz attempt into a palace unit rating. Mind-map toolbar practice, node-bound badges, the freestyle overlay, and freestyle quiz cards share that question identity: a score written from one entry is the same progress the others read. The entry must not keep a private answer ledger. Refresh does not clear 已做. It is cleared only when the learner manually clears it, or the settlement page chooses to clear it.
+
+## Trusted Progress Delivery
+
+Question progress synchronization acknowledges only server-confirmed snapshots. Startup hydration must not mark unsent local answers as synchronized. Changes made during an in-flight save are drained after that request, and visible clients refresh shared progress on focus, reconnect, and a bounded polling interval. Different answer batches are not globally coalesced in the mutation queue.
+
+Clear commands retain their original timestamp and scope. A delayed clear cannot delete a newer answer; clear tombstones remove both completed and unfinished local states. Local action timestamps are monotonically ordered, including a clear followed by an answer within one millisecond. Failed saves retain the local copy and expose an unsynchronized warning rather than claiming successful delivery.
+
+Time investment, learning activity, and mastery evidence are separate facts. A question answer does not automatically rate a review unit, editing does not demonstrate recall, and unknown evidence must not be presented as a verified zero or as poor effort. User-facing reports contain facts without motivational judgments.
 
 ## Independent English Evidence
 

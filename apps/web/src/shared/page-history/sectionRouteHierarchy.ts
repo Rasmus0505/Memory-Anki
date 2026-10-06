@@ -1,5 +1,5 @@
 /**
- * Explicit in-section page hierarchy for the six primary nav sections.
+ * Explicit in-section page hierarchy for the primary nav sections.
  *
  * Left-top 后退/前进 is section-scoped (not global browser history). When the
  * visit stack is thin (refresh / deep link), we still walk these parents so
@@ -18,7 +18,8 @@
  *  知识 palaces
  *    /palaces                          ← 学科书架（封面）
  *      ├─ /palaces/list[?subjectId]    ← 某一本书内的宫殿列表
- *      │    └─ /palaces/:id            ← 单宫殿查看
+ *      │    ├─ /palaces/:id            ← 单宫殿查看
+      │    └─ /palaces/:id/review ← 单宫殿复习（复用随心前端，不是随心页）
  *      └─ /knowledge[?subjectId]       ← 知识树编辑
  *
  *  英语 english
@@ -29,6 +30,9 @@
  *    /palaces/new
  *      └─ /palaces/:id/edit
  *           └─ /palaces/:id/quiz
+ *
+ *  进度 progress
+ *    /progress
  *
  *  洞察 review
  *    /dashboard
@@ -47,6 +51,7 @@ const SECTION_LABELS: Record<NavigationSectionKey, string> = {
   english: '英语',
   knowledge: '创建',
   review: '洞察',
+  progress: '进度',
 }
 
 export function getNavigationSectionLabel(section: NavigationSectionKey): string {
@@ -102,6 +107,15 @@ export function resolveSectionHierarchicalParent(fullPath: string): string | nul
   // ── 知识（学科书架） ──────────────────────────────────
   if (section === 'palaces') {
     if (pathname === '/palaces/list') return root
+    if (/^\/palaces\/\d+\/review$/.test(pathname)) {
+      const subjectId = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search).get(
+        'subjectId',
+      )
+      if (subjectId && /^\d+$/.test(subjectId)) {
+        return `/palaces/list?subjectId=${subjectId}`
+      }
+      return '/palaces'
+    }
     if (/^\/palaces\/\d+$/.test(pathname)) {
       // Prefer returning into the subject book when we know the binding.
       const subjectId = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search).get(
@@ -131,6 +145,9 @@ export function resolveSectionHierarchicalParent(fullPath: string): string | nul
     if (pathname === '/palaces/new') return null
     return root
   }
+
+  // ── 进度 ──────────────────────────────────────────────
+  if (section === 'progress') return root
 
   // ── 洞察 ──────────────────────────────────────────────
   if (section === 'review') {
@@ -193,7 +210,9 @@ export function describeNavigationPath(fullPath: string): string {
   if (pathname === '/palaces/new') return '创建入口'
   if (/^\/palaces\/\d+\/edit$/.test(pathname)) return '宫殿编辑'
   if (/^\/palaces\/\d+\/quiz$/.test(pathname)) return '宫殿测验'
+  if (/^\/palaces\/\d+\/review$/.test(pathname)) return '宫殿复习'
   if (/^\/palaces\/\d+$/.test(pathname)) return '宫殿详情'
+  if (pathname === '/progress') return '进度'
   if (pathname === '/dashboard' || pathname === '/') return '洞察首页'
   return pathname
 }

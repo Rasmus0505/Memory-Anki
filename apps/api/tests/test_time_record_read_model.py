@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from memory_anki.core.time import local_calendar_day_start_as_utc_naive
 from memory_anki.infrastructure.db._tables.misc import StudySession
@@ -386,6 +386,46 @@ def test_time_records_endpoint_accepts_yesterday_range(session_factory, make_cli
     payload = response.json()
     assert payload["range"]["mode"] == "yesterday"
     assert payload["summary"]["total_effective_seconds"] == 1_200
+
+
+def test_ledger_overlap_uses_union_for_aggregates_and_trend(db_session, monkeypatch):
+    from memory_anki.modules.session.application import time_record_read_model as read_model
+
+    start = datetime(2026, 7, 3, 9, 0, tzinfo=UTC)
+    monkeypatch.setattr(
+        read_model,
+        "read_intervals",
+        lambda include_deleted=False: [
+            {
+                "interval_id": "device-a:1",
+                "session_id": "a",
+                "started_at": start.isoformat(),
+                "ended_at": (start + timedelta(seconds=90)).isoformat(),
+                "kind": "practice",
+                "title": "first",
+                "client_source": "desktop",
+                "metadata": {},
+            },
+            {
+                "interval_id": "device-b:1",
+                "session_id": "b",
+                "started_at": (start + timedelta(seconds=30)).isoformat(),
+                "ended_at": (start + timedelta(seconds=120)).isoformat(),
+                "kind": "practice",
+                "title": "second",
+                "client_source": "pwa",
+                "metadata": {},
+            },
+        ],
+    )
+
+    payload = build_time_record_read_model(db_session, range_mode="all", reference_date=date(2026, 7, 3))
+
+    assert payload["summary"]["total_effective_seconds"] == 120
+    assert payload["summary"]["desktop_effective_seconds"] == 90
+    assert payload["summary"]["pwa_effective_seconds"] == 30
+    assert sum(item["seconds"] for item in payload["trend"]) == 120
+    assert {item["seconds"] for item in payload["kind_breakdown"] if item["kind"] == "practice"} == {120}
 
 
 def test_read_model_includes_only_the_newest_active_dwell_checkpoint(db_session):
