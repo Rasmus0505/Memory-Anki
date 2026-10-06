@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { BookOpen, Check, ChevronLeft, ChevronRight, LoaderCircle, RotateCcw, Settings2, Trash2 } from 'lucide-react'
 import { createOperationId } from '@/modules/practice/application/feedPersistence'
-import {
-  ensureFreestyleOverlayQuizApi,
-  progressFreestyleOverlayQuizApi,
-} from '@/modules/practice/ui/freestyle/api'
+import { ensureFreestyleOverlayQuizApi } from '@/modules/practice/ui/freestyle/api'
 import { overlayQuizScopeLabel } from '@/modules/practice/ui/freestyle/model/overlayQuizRange'
 import { OverlayQuizSetupPanel, type OverlayQuizSetupChoice } from './OverlayQuizSetupPanel'
+import { useOverlayProgressPersistence } from './useOverlayProgressPersistence'
 import {
   getPalaceQuizQuestionsByIdsApi,
   listQuestionNodeBindingsApi,
@@ -71,8 +69,6 @@ import {
 } from '@/widgets/palace-memory-lookup'
 import { QuizProgressClearDialog, type QuizProgressClearChoice } from '@/widgets/quiz-progress-clear/QuizProgressClearDialog'
 
-const PROGRESS_DEBOUNCE_MS = 320
-
 export function FreestyleScopeQuizDialog({
   open,
   onOpenChange,
@@ -115,12 +111,10 @@ export function FreestyleScopeQuizDialog({
   const answerScrollRef = useRef<HTMLDivElement | null>(null)
   const removedQuestionIdsRef = useRef(new Set<number>())
   const planVersionRef = useRef(planVersion)
-  const persistTimerRef = useRef<number | null>(null)
   const storedConfigRef = useRef(storedConfig)
   const indexRef = useRef(0)
   const questionStatesRef = useRef<Record<number, QuizRuntimeState>>({})
   const roundIdRef = useRef(roundId)
-  const dirtyProgressRef = useRef(false)
   const dwellPalaceId = questions[index]?.palace_id ?? null
   useDwellFragmentOverride(open, {
     scene: 'quiz',
@@ -228,90 +222,17 @@ export function FreestyleScopeQuizDialog({
     void ensureSession()
   }, [configOpen, ensureSession, open, setupDone])
 
-  const writeProgressNow = useCallback(async (
-    nextIndex: number,
-    nextStates: Record<number, QuizRuntimeState>,
-    { retryOnConflict = true }: { retryOnConflict?: boolean } = {},
-  ) => {
-    const activeRoundId = roundIdRef.current
-    if (!activeRoundId || !dirtyProgressRef.current) return
-    const completedIds = Object.entries(nextStates)
-      .filter(([, state]) => state.resolved)
-      .map(([id]) => Number(id))
-      .filter((id) => Number.isInteger(id) && id > 0)
-    const states: Record<string, Record<string, unknown>> = {}
-    for (const [id, state] of Object.entries(nextStates)) {
-      states[id] = { ...state }
-    }
-    const postProgress = async (allowRetry: boolean) => {
-      const round = await progressFreestyleOverlayQuizApi(activeRoundId, {
-        operation_id: createOperationId(),
-        expected_version: planVersionRef.current,
-        current_index: nextIndex,
-        completed_ids: completedIds,
-        states,
-      })
-      dirtyProgressRef.current = false
-      onRoundSync(round)
-      if (typeof round.plan_version === 'number' && round.plan_version > 0) {
-        planVersionRef.current = round.plan_version
-      } else if (typeof round.version === 'number' && round.version > 0) {
-        planVersionRef.current = round.version
-      }
-      const next = overlayFromRound(round)
-      if (next) setOverlay(next)
-      if (round.conflict && allowRetry) {
-        dirtyProgressRef.current = true
-        await postProgress(false)
-      }
-    }
-    try {
-      await postProgress(retryOnConflict)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '保存做题进度失败。'
-      if (message.includes('题目不存在')) return
-      toast.error(message)
-    }
-  }, [onRoundSync])
-
-  const flushProgressNow = useCallback(() => {
-    if (persistTimerRef.current != null) {
-      window.clearTimeout(persistTimerRef.current)
-      persistTimerRef.current = null
-    }
-    if (!dirtyProgressRef.current) return
-    void writeProgressNow(indexRef.current, questionStatesRef.current)
-  }, [writeProgressNow])
-
-  const persistProgress = useCallback((
-    nextIndex: number,
-    nextStates: Record<number, QuizRuntimeState>,
-  ) => {
-    if (!roundIdRef.current) return
-    dirtyProgressRef.current = true
-    indexRef.current = nextIndex
-    questionStatesRef.current = nextStates
-    if (persistTimerRef.current != null) window.clearTimeout(persistTimerRef.current)
-    persistTimerRef.current = window.setTimeout(() => {
-      persistTimerRef.current = null
-      void writeProgressNow(nextIndex, nextStates)
-    }, PROGRESS_DEBOUNCE_MS)
-  }, [writeProgressNow])
-
-  useEffect(() => {
-    if (!open) return
-    const onPageHide = () => flushProgressNow()
-    const onVisibility = () => {
-      if (document.visibilityState === 'hidden') flushProgressNow()
-    }
-    window.addEventListener('pagehide', onPageHide)
-    document.addEventListener('visibilitychange', onVisibility)
-    return () => {
-      flushProgressNow()
-      window.removeEventListener('pagehide', onPageHide)
-      document.removeEventListener('visibilitychange', onVisibility)
-    }
-  }, [flushProgressNow, open])
+  // Debounce, conflict retry and the pagehide/visibility flush live in the hook;
+  // the dialog keeps owning what the current index and question states are.
+  const { persistProgress } = useOverlayProgressPersistence({
+    roundIdRef,
+    planVersionRef,
+    indexRef,
+    questionStatesRef,
+    open,
+    onRoundSync,
+    setOverlay,
+  })
 
   const current = questions[index] ?? null
   useLayoutEffect(() => {
