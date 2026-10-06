@@ -457,6 +457,57 @@ function measureTree(
   return bounds
 }
 
+/**
+ * `metadata` is the object `layoutTreeNodes` writes into `data`, and the host
+ * projection (`documentGraphProjection`) nests freshly-built objects inside it:
+ * `visual` is rebuilt per node per projection, with `statusChips` / `countBadges`
+ * arrays of freshly-built chip objects. `shallowEqualNodeData` in
+ * `buildDisplayNodes` compares `data` fields by *reference*, so that guaranteed
+ * mismatch defeated the display-node reuse guard for every card: a single flip
+ * rebuilt the whole palace, not just the revealed card.
+ *
+ * Returning the previous object when its contents are equal restores reuse. It is
+ * a pure identity optimization — any genuinely different value yields a fresh
+ * object, so no card can go stale. Values are compared by a bounded structural
+ * walk that only descends into plain objects and arrays, which is exactly what
+ * these view models are; anything else falls back to reference equality.
+ */
+function reuseUnchangedMetadata(
+  next: Record<string, unknown>,
+  nodeId: string,
+): Record<string, unknown> {
+  const previous = lastMetadataByNodeId.get(nodeId)
+  if (previous && isDeeplyEqualPlain(previous, next)) return previous
+  lastMetadataByNodeId.set(nodeId, next)
+  return next
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  if (value === null || typeof value !== 'object') return false
+  const prototype = Object.getPrototypeOf(value) as unknown
+  return prototype === Object.prototype || prototype === null
+}
+
+/**
+ * Value equality for the plain-object/array view models carried in `metadata`.
+ * Bounded by their known small shape; anything non-plain (functions, DOM nodes)
+ * falls back to reference equality, which is the safe answer.
+ */
+function isDeeplyEqualPlain(a: unknown, b: unknown): boolean {
+  if (a === b) return true
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false
+    return a.every((item, index) => isDeeplyEqualPlain(item, b[index]))
+  }
+  if (!isPlainObject(a) || !isPlainObject(b)) return false
+  const aKeys = Object.keys(a)
+  if (aKeys.length !== Object.keys(b).length) return false
+  for (const key of aKeys) {
+    if (!isDeeplyEqualPlain(a[key], b[key])) return false
+  }
+  return true
+}
+
 function layoutTreeNodes(
   node: LayoutTreeNode,
   x: number,
@@ -486,6 +537,16 @@ function layoutTreeNodes(
     }
   }
 
+  const nextMetadata = {
+    ...node.node.metadata,
+    depth: node.depth,
+    branchColor: node.branchColor,
+    layoutRole: node.layoutRole,
+    childCount,
+    collapsed: isCollapsed,
+    collapsedDescendantCount: isCollapsed ? collapsedDescendantCount : 0,
+  }
+
   positions.set(node.node.id, {
     id: node.node.id,
     type: 'mindmapNode',
@@ -496,15 +557,7 @@ function layoutTreeNodes(
     draggable: false,
     data: {
       ...node.node,
-      metadata: {
-        ...node.node.metadata,
-        depth: node.depth,
-        branchColor: node.branchColor,
-        layoutRole: node.layoutRole,
-        childCount,
-        collapsed: isCollapsed,
-        collapsedDescendantCount: isCollapsed ? collapsedDescendantCount : 0,
-      },
+      metadata: reuseUnchangedMetadata(nextMetadata, node.node.id),
     },
   })
 
@@ -688,6 +741,21 @@ function resolveOverlaps(
     : resolvedNodes
 }
 
+/**
+ * Last `metadata` object this module produced, per node id.
+ *
+ * Scope note: this is module-level on purpose. The reuse guard in
+ * `buildDisplayNodes` compares against the *previous display nodes*, which were
+ * built from an earlier `applyMindMapLayout` call — a per-call cache would be
+ * empty every time and restore exactly the identity churn this fixes. It only
+ * ever *returns* a previously-produced object whose every value compares equal
+ * (`isDeeplyEqualPlain`), so a stale entry can never surface a changed value: any
+ * mismatch falls through to the fresh object.
+ *
+ * Bounded by node count: one entry per live node id.
+ */
+const lastMetadataByNodeId = new Map<string, Record<string, unknown>>()
+
 /** Whole CSS pixels. A fractional translate() rasterizes the card glyphs. */
 function snapNodePositions(nodes: Node[]): Node[] {
   return nodes.map((node) => {
@@ -730,6 +798,15 @@ export function applyMindMapLayout(
     )
     currentTop += rootBounds[index].subtreeHeight + ROOT_STACK_GAP
   })
+
+  // Drop entries for nodes no longer in this graph so the cache cannot grow
+  // across palace switches. Only ids still present can be reused next pass.
+  if (lastMetadataByNodeId.size > graphData.nodes.length) {
+    const liveIds = new Set(graphData.nodes.map((node) => node.id))
+    for (const id of lastMetadataByNodeId.keys()) {
+      if (!liveIds.has(id)) lastMetadataByNodeId.delete(id)
+    }
+  }
 
   const rawNodes = graphData.nodes
     .map((graphNode) => positions.get(graphNode.id))

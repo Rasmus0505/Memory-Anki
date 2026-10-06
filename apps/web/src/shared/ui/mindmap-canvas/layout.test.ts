@@ -487,6 +487,136 @@ describe('mind map layout sizing', () => {
   })
 })
 
+/**
+ * `buildDisplayNodes` reuses a previous display node only when every `data` field is
+ * reference-equal (`shallowEqualNodeData`). `metadata` is the one nested object this
+ * module writes, so rebuilding it each pass silently made every card in the palace
+ * re-render on a single flip. These pin both directions: identity must be preserved
+ * when nothing changed, and dropped the moment anything did.
+ */
+describe('layout metadata identity', () => {
+  it('reuses the metadata object when a node is re-laid-out unchanged', () => {
+    const graphData = buildLargeGraphData(200)
+
+    const first = applyMindMapLayout(graphData)
+    const second = applyMindMapLayout(graphData)
+
+    const firstMetadataById = new Map(
+      first.nodes.map((node) => [node.id, (node.data as { metadata: unknown }).metadata]),
+    )
+    for (const node of second.nodes) {
+      expect((node.data as { metadata: unknown }).metadata)
+        .toBe(firstMetadataById.get(node.id))
+    }
+  })
+
+  it('replaces metadata identity when any field in it changes', () => {
+    const graphData = buildLargeGraphData(20)
+    const first = applyMindMapLayout(graphData)
+
+    // `node-0` is the root; collapse a child branch so most of the tree survives.
+    const collapsed = new Set(['node-1'])
+    const second = applyMindMapLayout(graphData, undefined, collapsed)
+
+    const firstCollapsed = first.nodes.find((node) => node.id === 'node-1')!
+    const secondCollapsed = second.nodes.find((node) => node.id === 'node-1')!
+    const beforeMetadata = (firstCollapsed.data as { metadata: Record<string, unknown> }).metadata
+    const afterMetadata = (secondCollapsed.data as { metadata: Record<string, unknown> }).metadata
+    expect(afterMetadata).not.toBe(beforeMetadata)
+    expect(afterMetadata.collapsed).toBe(true)
+    expect(afterMetadata.collapsedDescendantCount).toBeGreaterThan(0)
+
+    // Every node still present outside the collapsed branch keeps its identity.
+    const survivingIds = new Set(second.nodes.map((node) => node.id))
+    const untouched = first.nodes.filter(
+      (node) => survivingIds.has(node.id) && node.id !== 'node-1',
+    )
+    expect(untouched.length).toBeGreaterThan(0)
+    for (const before of untouched) {
+      const after = second.nodes.find((node) => node.id === before.id)!
+      expect((after.data as { metadata: unknown }).metadata)
+        .toBe((before.data as { metadata: unknown }).metadata)
+    }
+  })
+
+  it('replaces metadata identity when a nested visual changes (reveal)', () => {
+    const graphData = buildLargeGraphData(10)
+    const first = applyMindMapLayout(graphData)
+
+    const revealed: GraphData = {
+      ...graphData,
+      nodes: graphData.nodes.map((node) =>
+        node.id === 'node-4'
+          ? {
+              ...node,
+              metadata: {
+                ...node.metadata,
+                visual: { revealState: 'revealed' as const, muted: false },
+              },
+            }
+          : node,
+      ),
+    }
+    const second = applyMindMapLayout(revealed)
+
+    const before = first.nodes.find((node) => node.id === 'node-4')!
+    const after = second.nodes.find((node) => node.id === 'node-4')!
+    expect((after.data as { metadata: unknown }).metadata)
+      .not.toBe((before.data as { metadata: unknown }).metadata)
+    expect(
+      ((after.data as { metadata: { visual: { revealState: string } } }).metadata).visual.revealState,
+    ).toBe('revealed')
+  })
+
+  it('keeps identity when nested visual objects are rebuilt with equal contents', () => {
+    // documentGraphProjection rebuilds `visual` (and its chip arrays) per node per
+    // projection. Equal contents must not count as a change, or every card in the
+    // palace re-renders on a single flip.
+    const base = buildLargeGraphData(10)
+    const withVisual = (state: string): GraphData => ({
+      ...base,
+      nodes: base.nodes.map((node) => ({
+        ...node,
+        metadata: {
+          ...node.metadata,
+          visual: {
+            revealed: state === 'revealed',
+            muted: false,
+            statusChips: [{ text: '题', tone: 'info' as const, style: 'outline' as const }],
+            countBadges: [{ text: '3', tone: 'neutral' as const }],
+          },
+        },
+      })),
+    })
+
+    const first = applyMindMapLayout(withVisual('hidden'))
+    const second = applyMindMapLayout(withVisual('hidden'))
+
+    for (const node of second.nodes) {
+      const before = first.nodes.find((candidate) => candidate.id === node.id)!
+      expect((node.data as { metadata: unknown }).metadata)
+        .toBe((before.data as { metadata: unknown }).metadata)
+    }
+  })
+
+  it('never mutates a reused metadata object across passes', () => {
+    // Reuse shares one object between layout passes, so a consumer that wrote into
+    // it would leak state between renders. Verified by snapshotting the first pass:
+    // a later pass with different input must not have edited the earlier object.
+    const graphData = buildLargeGraphData(10)
+    const first = applyMindMapLayout(graphData)
+    const snapshot = JSON.parse(JSON.stringify(
+      first.nodes.map((node) => (node.data as { metadata: unknown }).metadata),
+    )) as unknown[]
+
+    applyMindMapLayout(graphData, undefined, new Set(['node-1']))
+
+    expect(
+      first.nodes.map((node) => (node.data as { metadata: unknown }).metadata),
+    ).toEqual(snapshot)
+  })
+})
+
 describe('resolveStructureDropMode', () => {
   const rect = { x: 100, y: 200, width: 120, height: 40 }
 

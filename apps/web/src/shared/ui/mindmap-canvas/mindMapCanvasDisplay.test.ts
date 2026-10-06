@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Edge, Node } from '@xyflow/react'
 import { buildDisplayEdges, buildDisplayNodes } from './mindMapCanvasDisplay'
+import { applyMindMapLayout } from './layout'
+import type { GraphData } from './adapter'
 
 function makeNode(id: string, x = 0, y = 0): Node {
   return {
@@ -335,5 +337,99 @@ describe('mindMapCanvasDisplay', () => {
     const [selected] = buildDisplayEdges([edge], edge.id)
 
     expect(selected.style?.strokeWidth).toBe(7)
+  })
+})
+
+/**
+ * End-to-end guard for the layout → display identity contract.
+ *
+ * `isSameMindMapLayout` short-circuits only when a whole layout is unchanged; a flip
+ * always changes at least one node, so it pushes a brand-new node array. Every other
+ * card must still be reused, or one flip re-renders the whole palace.
+ */
+describe('layout → display node reuse on a flip', () => {
+  // Handlers must be stable across passes: buildDisplayNodes puts them in `data`
+  // and the reuse guard compares `data` fields by reference.
+  const handlers = {
+    onStartEdit: vi.fn(),
+    onCancelEdit: vi.fn(),
+    onAddChild: vi.fn(),
+    onAddSibling: vi.fn(),
+    onDelete: vi.fn(),
+    onFinishEdit: vi.fn(),
+    onMeasure: vi.fn(),
+  }
+
+  function displayFor(graphData: GraphData, previousDisplayNodes?: Node[]) {
+    return buildDisplayNodes({
+      nodes: applyMindMapLayout(graphData).nodes,
+      previewNodes: [],
+      previewState: null,
+      previousDisplayNodes,
+      sourceId: null,
+      isDraggingNode: false,
+      selectedNodeId: null,
+      editingNodeId: null,
+      editingDraft: null,
+      readonly: false,
+      ...handlers,
+    })
+  }
+
+  const revealGraph = (revealedId: string | null): GraphData => ({
+    nodes: [
+      {
+        id: 'root', type: 'peg', label: 'root', originalId: 0, parentId: null,
+        metadata: { visual: { revealed: true, muted: false } },
+      },
+      // Mirrors documentGraphProjection: a fresh `visual` object per node per
+      // projection, so only an identity-preserving layout can keep reuse working.
+      ...[0, 1, 2, 3, 4, 5, 6, 7].map((index) => ({
+        id: `n${index}`,
+        type: 'peg' as const,
+        label: `n${index}`,
+        originalId: index + 1,
+        parentId: 'root',
+        metadata: {
+          visual: { revealed: revealedId === `n${index}`, muted: false },
+        },
+      })),
+    ],
+    edges: [0, 1, 2, 3, 4, 5, 6, 7].map((index) => ({
+      id: `root->n${index}`,
+      source: 'root',
+      target: `n${index}`,
+      type: 'parent-child',
+    })),
+  })
+
+  it('reuses untouched cards when one card flips, and rebuilds only that card', () => {
+    const first = displayFor(revealGraph(null))
+    const second = displayFor(revealGraph('n0'), first)
+    const firstById = new Map(first.map((node) => [node.id, node]))
+
+    expect(second).toHaveLength(first.length)
+    const rebuiltIds = second
+      .filter((node) => node !== firstById.get(node.id))
+      .map((node) => node.id)
+    // Only the flipped card is rebuilt; every other card keeps object identity.
+    expect(rebuiltIds).toEqual(['n0'])
+
+    const flipped = second.find((node) => node.id === 'n0')!
+    expect((flipped.data as { metadata: { visual: { revealed: boolean } } }).metadata.visual.revealed)
+      .toBe(true)
+  })
+
+  it('still rebuilds a card when its visual state genuinely changes', () => {
+    const first = displayFor(revealGraph(null))
+    const second = displayFor(revealGraph('n0'), first)
+
+    const before = first.find((node) => node.id === 'n0')!
+    const after = second.find((node) => node.id === 'n0')!
+    expect(after).not.toBe(before)
+    expect((after.data as { metadata: { visual: { revealed: boolean } } }).metadata.visual.revealed)
+      .toBe(true)
+    expect((before.data as { metadata: { visual: { revealed: boolean } } }).metadata.visual.revealed)
+      .toBe(false)
   })
 })
