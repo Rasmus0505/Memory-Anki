@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  discardQueuedMutationsByCoalesceKey,
   enqueueMutation,
+  markQueuedMutationManual,
+  readQueuedMutation,
   readQueuedMutations,
+  readQueuedMutationsByCoalesceKey,
   resetMutationQueueForTest,
 } from './mutationQueue'
 
@@ -37,6 +41,14 @@ type FakeTransaction = {
 type Fake = {
   transactions: FakeTransaction[]
   lastPut: unknown
+  /** Rows the fake store returns; set per test to exercise indexed reads. */
+  rows: Array<{ id: string; coalesceKey?: string | null; status?: string; updatedAt?: string; createdAt?: string }>
+  /** Names passed to `store.index(...)`, so a test can prove which index was used. */
+  indexNames: string[]
+  /** Keys passed to `store.get(...)`. */
+  getKeys: unknown[]
+  /** How many times the whole store was scanned with `getAll()`. */
+  getAllCalls: number
 }
 
 /**
@@ -50,7 +62,14 @@ type Fake = {
  */
 function stubIndexedDb(options: { manualCommit?: boolean } = {}): Fake {
   const transactions: FakeTransaction[] = []
-  const fake: Fake = { transactions, lastPut: undefined }
+  const fake: Fake = {
+    transactions,
+    lastPut: undefined,
+    rows: [],
+    indexNames: [],
+    getKeys: [],
+    getAllCalls: 0,
+  }
 
   /** The store's requests resolve on a microtask, mirroring real IndexedDB. */
   const settleRequest = (result: unknown, transaction: FakeTransaction, manual: boolean) => {
@@ -110,7 +129,20 @@ function stubIndexedDb(options: { manualCommit?: boolean } = {}): Fake {
           return settleRequest(record, transaction, manual)
         },
         delete: () => settleRequest(undefined, transaction, manual),
-        getAll: () => settleRequest([], transaction, manual),
+        getAll: () => {
+          fake.getAllCalls += 1
+          return settleRequest([], transaction, manual)
+        },
+        get: (key: unknown) => {
+          fake.getKeys.push(key)
+          return settleRequest(fake.rows.find((row) => row.id === key), transaction, manual)
+        },
+        index: (name: string) => {
+          fake.indexNames.push(name)
+          return {
+            getAll: () => settleRequest(fake.rows, transaction, manual),
+          }
+        },
       }
 
       return Object.assign(transaction, { objectStore: () => store })
@@ -234,5 +266,108 @@ describe('mutationQueue durability', () => {
     })
 
     await expect(readQueuedMutations()).resolves.toEqual([])
+  })
+})
+
+/**
+ * The queue used to scan the whole store on every enqueue (coalescing), every
+ * single-id helper and every coalesceKey cleanup. Those paths now use the
+ * `coalesceKey` index and the primary key instead. `readQueuedMutations()` itself
+ * is intentionally unchanged: the replay loop, the summary and the test reset
+ * genuinely need every row, and for a single-user local queue that read is cheap.
+ */
+describe('mutationQueue indexed reads', () => {
+  afterEach(async () => {
+    vi.unstubAllGlobals()
+    await resetMutationQueueForTest()
+  })
+
+  it('coalesces by the coalesceKey index instead of scanning the whole queue', async () => {
+    const fake = stubIndexedDb()
+    fake.rows = [
+      {
+        id: 'existing',
+        coalesceKey: 'palace:1:editor',
+        status: 'pending',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]
+
+    const queued = await enqueueMutation({
+      ...newMutation(),
+      coalesceKey: 'palace:1:editor',
+    })
+
+    expect(fake.indexNames).toContain('coalesceKey')
+    // The coalesced entry keeps the original identity so the server deduplicates.
+    expect(queued.id).toBe('existing')
+    expect(queued.createdAt).toBe('2026-01-01T00:00:00.000Z')
+    expect(fake.getAllCalls).toBe(0)
+  })
+
+  it('reads one entry by primary key rather than scanning the queue', async () => {
+    const fake = stubIndexedDb()
+    fake.rows = [
+      {
+        id: 'target',
+        coalesceKey: null,
+        status: 'conflict',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]
+
+    await markQueuedMutationManual('target', '停止自动同步')
+
+    expect(fake.getKeys).toContain('target')
+    expect(fake.getAllCalls).toBe(0)
+  })
+
+  it('discards superseded entries through the coalesceKey index', async () => {
+    const fake = stubIndexedDb()
+    fake.rows = [
+      {
+        id: 'superseded',
+        coalesceKey: 'palace:1:editor',
+        status: 'pending',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]
+
+    await discardQueuedMutationsByCoalesceKey('palace:1:editor')
+
+    expect(fake.indexNames).toContain('coalesceKey')
+    expect(fake.getAllCalls).toBe(0)
+  })
+
+  it('never mistakes a syncing entry for a coalesce base', async () => {
+    const fake = stubIndexedDb()
+    fake.rows = [
+      {
+        id: 'in-flight',
+        coalesceKey: 'palace:1:editor',
+        status: 'syncing',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]
+
+    const queued = await enqueueMutation({
+      ...newMutation(),
+      coalesceKey: 'palace:1:editor',
+    })
+
+    // The in-flight entry's body was already sent; the new save must stand alone.
+    expect(queued.id).not.toBe('in-flight')
+  })
+
+  it('still degrades to the memory fallback when IndexedDB is unavailable', async () => {
+    // The new indexed readers must not become the only path that works.
+    vi.stubGlobal('indexedDB', undefined)
+
+    await expect(readQueuedMutationsByCoalesceKey('palace:1:editor')).resolves.toEqual([])
+    await expect(readQueuedMutation('missing')).resolves.toBeNull()
   })
 })

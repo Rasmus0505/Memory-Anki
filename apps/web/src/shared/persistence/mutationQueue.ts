@@ -1,5 +1,6 @@
 import { isConflictResponse } from '@/shared/api/conflict'
 import { getApiToken } from '@/shared/api/apiToken'
+import { createIdbHandle } from '@/shared/persistence/indexedDb'
 
 export type MutationQueueStatus = 'pending' | 'syncing' | 'failed' | 'conflict' | 'manual'
 
@@ -83,78 +84,30 @@ function generateId() {
   return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
 }
 
-function canUseIndexedDb() {
-  return typeof indexedDB !== 'undefined'
-}
-
-function openDb() {
-  if (!canUseIndexedDb()) {
-    return Promise.resolve<IDBDatabase | null>(null)
-  }
-  return new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION)
-    request.onupgradeneeded = () => {
-      const db = request.result
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' })
-        store.createIndex('status', 'status', { unique: false })
-        store.createIndex('resourceKey', 'resourceKey', { unique: false })
-        store.createIndex('coalesceKey', 'coalesceKey', { unique: false })
-      }
-    }
-    request.onsuccess = () => {
-      const db = request.result
-      // Another tab upgrading the schema must not be blocked by this connection.
-      db.onversionchange = () => db.close()
-      resolve(db)
-    }
-    request.onerror = () => reject(request.error ?? new Error('Failed to open mutation queue'))
-    request.onblocked = () => reject(new Error('Mutation queue upgrade is blocked by another tab'))
-  }).catch(() => null)
-}
-
 /**
- * Run one IndexedDB action and settle on the *transaction*, not the request.
+ * IndexedDB access for the queue.
  *
- * A queued mutation is only durable once the transaction commits. Resolving on
- * `request.onsuccess` reported success for writes that were later aborted, so an
- * offline mind-map save could be acknowledged and then silently lost.
- *
- * Returns `null` only when IndexedDB is genuinely unavailable (SSR, private mode)
- * so callers can fall back to the in-memory store. A transaction that fails or
- * aborts rejects instead: storage failure must never masquerade as a saved write.
+ * The durability rule — a write settles on `transaction.oncomplete`, not
+ * `request.onsuccess` — lives in the shared handle so it cannot drift again.
+ * `null` means IndexedDB is unavailable (fall back to `memoryStore`); a failed
+ * or aborted transaction rejects, because storage failure must never masquerade
+ * as a saved queued mutation.
  */
-async function withStore<T>(
-  mode: IDBTransactionMode,
-  action: (store: IDBObjectStore) => IDBRequest<T>,
-) {
-  const db = await openDb()
-  if (!db) return null
-  return new Promise<T>((resolve, reject) => {
-    let transaction: IDBTransaction
-    try {
-      transaction = db.transaction(STORE_NAME, mode)
-    } catch (error) {
-      db.close()
-      reject(error)
-      return
-    }
-    const store = transaction.objectStore(STORE_NAME)
-    const request = action(store)
-    request.onerror = () => reject(request.error ?? new Error('Mutation queue request failed'))
-    transaction.oncomplete = () => {
-      db.close()
-      resolve(request.result)
-    }
-    transaction.onabort = () => {
-      db.close()
-      reject(transaction.error ?? new Error('Mutation queue transaction aborted'))
-    }
-    transaction.onerror = () => {
-      db.close()
-      reject(transaction.error ?? new Error('Mutation queue transaction failed'))
-    }
-  })
+const idb = createIdbHandle({
+  db: DB_NAME,
+  version: DB_VERSION,
+  store: STORE_NAME,
+  upgrade: (db) => {
+    if (db.objectStoreNames.contains(STORE_NAME)) return
+    const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' })
+    store.createIndex('status', 'status', { unique: false })
+    store.createIndex('resourceKey', 'resourceKey', { unique: false })
+    store.createIndex('coalesceKey', 'coalesceKey', { unique: false })
+  },
+})
+
+function withStore<T>(mode: IDBTransactionMode, action: (store: IDBObjectStore) => IDBRequest<T>) {
+  return idb.run(mode, action)
 }
 
 async function putMutation(item: PersistedMutation) {
@@ -172,6 +125,20 @@ async function deleteMutationFromStore(id: string) {
   }
 }
 
+/**
+ * Read the whole queue.
+ *
+ * The queue is bounded in practice: it holds only writes that have not reached
+ * the server, and the durability contract keeps it small (successful replays
+ * remove their entry, and replays carry the original mutation id so the server
+ * deduplicates). On a single-user local app an unbounded `getAll()` is therefore
+ * the right primitive for the callers that genuinely need every row — the replay
+ * loop, the summary projection, and the test reset helper.
+ *
+ * Callers that need one row, or the rows under one coalesceKey, should use the
+ * indexed readers below instead: those avoid materializing the whole queue on a
+ * path that runs on every enqueue.
+ */
 export async function readQueuedMutations() {
   // Reads degrade gracefully: a failed read must not crash the UI or the replay
   // loop. Writes are the opposite (see withStore) because a write that reports
@@ -180,6 +147,40 @@ export async function readQueuedMutations() {
     .catch(() => null)
   const items = result ?? Array.from(memoryStore.values())
   return items.sort((left, right) => Date.parse(left.createdAt) - Date.parse(right.createdAt))
+}
+
+/**
+ * Read the entries sharing one coalesceKey, newest first.
+ *
+ * `coalesceKey` is an index on the store, so this reads only the few rows a save
+ * is allowed to supersede instead of the whole queue on every enqueue. Entries
+ * in `syncing` are excluded: the in-flight entry's body has already been sent and
+ * must not be reused as the base for a superseding save.
+ */
+export async function readQueuedMutationsByCoalesceKey(coalesceKey: string) {
+  const result = await idb
+    .run<PersistedMutation[]>('readonly', (store) => {
+      const index = store.index('coalesceKey')
+      // `IDBKeyRange` is a global the stub/SSR environments may not provide; an
+      // index lookup without a range still reads far less than the whole queue.
+      return typeof IDBKeyRange === 'undefined'
+        ? index.getAll(coalesceKey)
+        : index.getAll(IDBKeyRange.only(coalesceKey))
+    })
+    .catch(() => null)
+  const items =
+    result ?? Array.from(memoryStore.values()).filter((item) => item.coalesceKey === coalesceKey)
+  return items
+    .filter((item) => item.status !== 'syncing')
+    .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))
+}
+
+/** Read one entry by its primary key, without touching the rest of the queue. */
+export async function readQueuedMutation(id: string) {
+  const result = await idb
+    .run<PersistedMutation | undefined>('readonly', (store) => store.get(id))
+    .catch(() => null)
+  return result ?? memoryStore.get(id) ?? null
 }
 
 export function buildMutationSummary(items: PersistedMutation[]): MutationQueueSummary {
@@ -258,10 +259,7 @@ export async function enqueueMutation(input: EnqueueMutationInput) {
   }
 
   if (nextItem.coalesceKey) {
-    const current = await readQueuedMutations()
-    const existing = current
-      .filter((item) => item.coalesceKey === nextItem.coalesceKey && item.status !== 'syncing')
-      .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))[0]
+    const existing = (await readQueuedMutationsByCoalesceKey(nextItem.coalesceKey))[0]
     if (existing) {
       nextItem.id = existing.id
       nextItem.mutationId = existing.mutationId
@@ -396,23 +394,21 @@ export async function discardQueuedMutation(id: string) {
 
 export async function discardQueuedMutationsByCoalesceKey(coalesceKey: string | null | undefined) {
   if (!coalesceKey) return
-  const items = await readQueuedMutations()
+  const items = await readQueuedMutationsByCoalesceKey(coalesceKey)
   // Best-effort cleanup: this runs *after* a successful save, so a storage
   // failure here must not reject. Callers treat a rejection as a failed request,
   // which would report a save that actually succeeded as a network error. The
   // worst case of a leftover entry is a redundant replay, and replays carry the
   // original mutation id, so the server deduplicates them.
   await Promise.all(
-    items
-      .filter((item) => item.coalesceKey === coalesceKey && item.status !== 'syncing')
-      .map((item) => deleteMutationFromStore(item.id).catch((error: unknown) => {
-        console.error('[mutation-queue] failed to discard superseded entry', item.id, error)
-      })),
+    items.map((item) => deleteMutationFromStore(item.id).catch((error: unknown) => {
+      console.error('[mutation-queue] failed to discard superseded entry', item.id, error)
+    })),
   )
 }
 
 export async function markQueuedMutationManual(id: string, message?: string) {
-  const item = (await readQueuedMutations()).find((candidate) => candidate.id === id)
+  const item = await readQueuedMutation(id)
   if (!item) return null
   return updateMutation(item, {
     status: 'manual',
@@ -422,7 +418,7 @@ export async function markQueuedMutationManual(id: string, message?: string) {
 }
 
 export async function confirmQueuedMutationOverwrite(id: string) {
-  const item = (await readQueuedMutations()).find((candidate) => candidate.id === id)
+  const item = await readQueuedMutation(id)
   if (!item || item.bodyKind !== 'json' || !item.body) return null
   let body: Record<string, unknown>
   try {
