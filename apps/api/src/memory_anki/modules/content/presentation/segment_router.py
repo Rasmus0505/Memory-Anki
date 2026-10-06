@@ -15,7 +15,7 @@ from memory_anki.modules.content.application.segment_service import (
     update_palace_segment,
 )
 from memory_anki.modules.content.presentation.errors import raise_not_found
-from memory_anki.platform.application import mutation_identity_from_headers
+from memory_anki.platform.application import open_mutation_replay
 from memory_anki.platform.persistence import (
     SqlAlchemyMutationResponseStore,
     SqlAlchemyUnitOfWork,
@@ -46,9 +46,8 @@ def api_create_segment(
     request: Request,
     s: Session = Depends(session_dep),
 ):
-    mutation_identity = mutation_identity_from_headers(request.headers)
-    mutation_store = SqlAlchemyMutationResponseStore(s)
-    existing_response = mutation_store.get(mutation_identity)
+    mutation = open_mutation_replay(SqlAlchemyMutationResponseStore(s), request.headers)
+    existing_response = mutation.existing()
     if existing_response is not None:
         return existing_response
     palace = get_palace(s, palace_id)
@@ -58,7 +57,7 @@ def api_create_segment(
 
     def prepare_atomic_response(segment) -> None:
         response.update({"item": segment_summary_json(s, segment)})
-        mutation_store.save(mutation_identity, response)
+        mutation.save(response)
 
     create_palace_segment(
         s,

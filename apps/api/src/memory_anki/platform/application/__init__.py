@@ -9,6 +9,7 @@ from .ai_runtime import (
     persist_ai_runtime,
     serialize_resolved_ai_runtime,
 )
+from .mutation_replay import MutationReplay, open_mutation_replay
 from .mutations import (
     MUTATION_ID_HEADER,
     MutationIdentity,
@@ -25,7 +26,9 @@ __all__ = [
     "AiRuntimeProvider",
     "MUTATION_ID_HEADER",
     "MutationIdentity",
+    "MutationReplay",
     "MutationResponseStore",
+    "open_mutation_replay",
     "PersistedAiRuntime",
     "PromptCatalog",
     "PromptRunSelection",

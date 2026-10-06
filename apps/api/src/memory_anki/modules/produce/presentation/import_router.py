@@ -16,7 +16,7 @@ from memory_anki.modules.content.api import (
     import_json,
     import_markdown,
 )
-from memory_anki.platform.application import mutation_identity_from_headers
+from memory_anki.platform.application import open_mutation_replay
 from memory_anki.platform.persistence import (
     SqlAlchemyMutationResponseStore,
     SqlAlchemyUnitOfWork,
@@ -80,9 +80,8 @@ async def api_import(
     format: str = "json",
     s: Session = Depends(session_dep),
 ):
-    mutation_identity = mutation_identity_from_headers(request.headers)
-    mutation_store = SqlAlchemyMutationResponseStore(s)
-    existing_response = mutation_store.get(mutation_identity)
+    mutation = open_mutation_replay(SqlAlchemyMutationResponseStore(s), request.headers)
+    existing_response = mutation.existing()
     if existing_response is not None:
         return existing_response
     content = (await file.read()).decode("utf-8")
@@ -90,7 +89,7 @@ async def api_import(
 
     def prepare_atomic_side_effects(palaces) -> None:
         response.update({"ok": True, "count": len(palaces)})
-        mutation_store.save(mutation_identity, response)
+        mutation.save(response)
 
     try:
         importer = import_json if format == "json" else import_markdown

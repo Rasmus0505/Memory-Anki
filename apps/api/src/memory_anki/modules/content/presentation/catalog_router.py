@@ -30,7 +30,7 @@ from memory_anki.modules.content.application.title_sync_service import (
 )
 from memory_anki.modules.content.presentation.response_models import PalaceListResponse
 from memory_anki.modules.quiz.public.queries import project_palace_quiz_count_badges
-from memory_anki.platform.application import mutation_identity_from_headers
+from memory_anki.platform.application import open_mutation_replay
 from memory_anki.platform.persistence import (
     SqlAlchemyMutationResponseStore,
     SqlAlchemyUnitOfWork,
@@ -218,16 +218,15 @@ def api_instantiate_palace_template(
     request: Request,
     s: Session = Depends(session_dep),
 ):
-    mutation_identity = mutation_identity_from_headers(request.headers)
-    mutation_store = SqlAlchemyMutationResponseStore(s)
-    existing_response = mutation_store.get(mutation_identity)
+    mutation = open_mutation_replay(SqlAlchemyMutationResponseStore(s), request.headers)
+    existing_response = mutation.existing()
     if existing_response is not None:
         return existing_response
     response: dict = {}
 
     def prepare_atomic_side_effects(palace) -> None:
         response.update(palace_json(palace, s))
-        mutation_store.save(mutation_identity, response)
+        mutation.save(response)
 
     try:
         instantiate_template(

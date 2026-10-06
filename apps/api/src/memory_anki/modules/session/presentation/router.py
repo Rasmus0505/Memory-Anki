@@ -51,7 +51,7 @@ from memory_anki.modules.session.domain.schemas import (
     StudySessionPatch,
 )
 from memory_anki.modules.session.domain.time_ledger import TimeLedgerUpload
-from memory_anki.platform.application import mutation_identity_from_headers
+from memory_anki.platform.application import open_mutation_replay
 from memory_anki.platform.persistence import (
     SqlAlchemyMutationResponseStore,
     SqlAlchemyUnitOfWork,
@@ -83,19 +83,16 @@ def api_create_study_session(
     request: Request,
     session: Session = Depends(session_dep),
 ):
-    mutation_identity = mutation_identity_from_headers(request.headers)
-    mutation_store = SqlAlchemyMutationResponseStore(session)
-    existing_response = mutation_store.get(mutation_identity)
+    mutation = open_mutation_replay(SqlAlchemyMutationResponseStore(session), request.headers)
+    existing_response = mutation.existing()
     if existing_response is not None:
         return existing_response
     try:
         return create_study_session_command(
             session,
-            _payload_with_mutation_operation(_payload(data), mutation_identity),
+            _payload_with_mutation_operation(_payload(data), mutation.identity),
             uow=SqlAlchemyUnitOfWork(session),
-            before_commit=lambda response: mutation_store.save(
-                mutation_identity, response
-            ),
+            before_commit=mutation.save,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -318,9 +315,8 @@ def api_append_study_session_events(
     request: Request,
     session: Session = Depends(session_dep),
 ):
-    mutation_identity = mutation_identity_from_headers(request.headers)
-    mutation_store = SqlAlchemyMutationResponseStore(session)
-    existing_response = mutation_store.get(mutation_identity)
+    mutation = open_mutation_replay(SqlAlchemyMutationResponseStore(session), request.headers)
+    existing_response = mutation.existing()
     if existing_response is not None:
         return existing_response
     events = data.events
@@ -329,7 +325,7 @@ def api_append_study_session_events(
         study_session_id,
         events if isinstance(events, list) else [],
         uow=SqlAlchemyUnitOfWork(session),
-        before_commit=lambda payload: mutation_store.save(mutation_identity, payload),
+        before_commit=mutation.save,
     )
     if response is None:
         _raise_not_found()
@@ -343,18 +339,17 @@ def api_complete_study_session(
     request: Request,
     session: Session = Depends(session_dep),
 ):
-    mutation_identity = mutation_identity_from_headers(request.headers)
-    mutation_store = SqlAlchemyMutationResponseStore(session)
-    existing_response = mutation_store.get(mutation_identity)
+    mutation = open_mutation_replay(SqlAlchemyMutationResponseStore(session), request.headers)
+    existing_response = mutation.existing()
     if existing_response is not None:
         return existing_response
     try:
         response = complete_study_session_command(
             session,
             study_session_id,
-            _payload_with_mutation_operation(_payload(data), mutation_identity),
+            _payload_with_mutation_operation(_payload(data), mutation.identity),
             uow=SqlAlchemyUnitOfWork(session),
-            before_commit=lambda payload: mutation_store.save(mutation_identity, payload),
+            before_commit=mutation.save,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -370,18 +365,17 @@ def api_abandon_study_session(
     request: Request,
     session: Session = Depends(session_dep),
 ):
-    mutation_identity = mutation_identity_from_headers(request.headers)
-    mutation_store = SqlAlchemyMutationResponseStore(session)
-    existing_response = mutation_store.get(mutation_identity)
+    mutation = open_mutation_replay(SqlAlchemyMutationResponseStore(session), request.headers)
+    existing_response = mutation.existing()
     if existing_response is not None:
         return existing_response
     try:
         response = abandon_study_session_command(
             session,
             study_session_id,
-            _payload_with_mutation_operation(_payload(data), mutation_identity),
+            _payload_with_mutation_operation(_payload(data), mutation.identity),
             uow=SqlAlchemyUnitOfWork(session),
-            before_commit=lambda payload: mutation_store.save(mutation_identity, payload),
+            before_commit=mutation.save,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -419,19 +413,16 @@ def api_create_study_session_from_time_record(
 ):
     # Keep this as a free-form dict: legacy timer recovery sends mixed camelCase
     # and snake_case keys that the service normalizes directly.
-    mutation_identity = mutation_identity_from_headers(request.headers)
-    mutation_store = SqlAlchemyMutationResponseStore(session)
-    existing_response = mutation_store.get(mutation_identity)
+    mutation = open_mutation_replay(SqlAlchemyMutationResponseStore(session), request.headers)
+    existing_response = mutation.existing()
     if existing_response is not None:
         return existing_response
     try:
         return create_study_session_from_time_record_command(
             session,
-            _payload_with_mutation_operation(data, mutation_identity),
+            _payload_with_mutation_operation(data, mutation.identity),
             uow=SqlAlchemyUnitOfWork(session),
-            before_commit=lambda response: mutation_store.save(
-                mutation_identity, response
-            ),
+            before_commit=mutation.save,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

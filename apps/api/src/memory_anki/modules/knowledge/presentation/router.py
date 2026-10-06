@@ -18,7 +18,7 @@ from memory_anki.modules.knowledge.domain.schemas import (
     SubjectCreate,
     SubjectUpdate,
 )
-from memory_anki.platform.application import mutation_identity_from_headers
+from memory_anki.platform.application import open_mutation_replay
 from memory_anki.platform.persistence import (
     SqlAlchemyMutationResponseStore,
     SqlAlchemyUnitOfWork,
@@ -54,9 +54,8 @@ def list_subjects(
 
 @router.post("/subjects")
 def create_subject(data: SubjectCreate, request: Request, s: Session = Depends(session_dep)):
-    mutation_identity = mutation_identity_from_headers(request.headers)
-    mutation_store = SqlAlchemyMutationResponseStore(s)
-    existing_response = mutation_store.get(mutation_identity)
+    mutation = open_mutation_replay(SqlAlchemyMutationResponseStore(s), request.headers)
+    existing_response = mutation.existing()
     if existing_response is not None:
         return existing_response
     payload = data.model_dump(exclude_unset=True, exclude_none=False)
@@ -66,9 +65,7 @@ def create_subject(data: SubjectCreate, request: Request, s: Session = Depends(s
         color=payload.get("color", "#6366f1"),
         sort_order=payload.get("sort_order", 0),
         uow=SqlAlchemyUnitOfWork(s),
-        before_commit=lambda response: mutation_store.save(
-            mutation_identity, response
-        ),
+        before_commit=mutation.save,
     )
 
 
@@ -188,9 +185,8 @@ def create_chapter(
     request: Request,
     s: Session = Depends(session_dep),
 ):
-    mutation_identity = mutation_identity_from_headers(request.headers)
-    mutation_store = SqlAlchemyMutationResponseStore(s)
-    existing_response = mutation_store.get(mutation_identity)
+    mutation = open_mutation_replay(SqlAlchemyMutationResponseStore(s), request.headers)
+    existing_response = mutation.existing()
     if existing_response is not None:
         return existing_response
     uow = SqlAlchemyUnitOfWork(s)
@@ -200,9 +196,7 @@ def create_chapter(
             subject_id,
             data,
             uow=uow,
-            before_commit=lambda result: mutation_store.save(
-                mutation_identity, result
-            ),
+            before_commit=mutation.save,
         )
     except Exception:
         uow.rollback()

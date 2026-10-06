@@ -3916,6 +3916,74 @@ def check_backend_presentation_orm_usage(errors: list[str]) -> None:
                 break
 
 
+def check_mutation_replay_helper_boundary(errors: list[str]) -> None:
+    """The shared mutation-replay handle must stay framework-free and uncommitted.
+
+    Nine routers used to repeat the same identity/store/get/return preamble. It now
+    lives in `platform.application.MutationReplay`. Two properties make that helper
+    safe to share, and neither is enforced by the import-linter contracts:
+
+    1. It must not import a framework or an infrastructure adapter. Presentation
+       constructs `SqlAlchemyMutationResponseStore` and passes it in, which is what
+       keeps the adapter swap-able and keeps existing router-level monkeypatching of
+       that symbol working.
+    2. It must not commit. Routers differ in transaction ownership (some commit
+       themselves, some rely on a use case's `UnitOfWork`), so a helper that
+       committed would silently change when work becomes durable.
+    """
+    helper = API_SRC / "platform" / "application" / "mutation_replay.py"
+    if not helper.exists():
+        errors.append(
+            "apps/api/src/memory_anki/platform/application/mutation_replay.py: "
+            "the shared mutation-replay helper is missing; routers would drift back "
+            "to duplicated idempotency boilerplate."
+        )
+        return
+    content = helper.read_text(encoding="utf-8", errors="ignore")
+    for forbidden, message in (
+        ("fastapi", "must not import FastAPI; presentation owns the HTTP layer"),
+        ("sqlalchemy", "must not import SQLAlchemy; presentation constructs the adapter"),
+        ("memory_anki.infrastructure", "must not import infrastructure adapters"),
+        ("memory_anki.platform.persistence", "must accept the store through its protocol"),
+    ):
+        if forbidden in content:
+            errors.append(
+                f"{helper.relative_to(REPO_ROOT).as_posix()}: {message} (`{forbidden}`)."
+            )
+    for pattern in (".commit(", ".rollback(", "session.commit", "session.rollback"):
+        if pattern in content:
+            errors.append(
+                f"{helper.relative_to(REPO_ROOT).as_posix()}: the replay helper must not "
+                f"own transactions (`{pattern}`); callers keep their own commit boundary."
+            )
+
+
+def check_mutation_replay_adoption(errors: list[str]) -> None:
+    """Routers that do idempotent replay lookups must use the shared helper.
+
+    `memory/presentation/router.py` is exempt: `patch_unit_schedule` derives its
+    identity from either the header or the request body and must verify that a
+    replayed payload belongs to the unit in the path, so its lookup is genuinely
+    different rather than duplicated boilerplate.
+    """
+    exempt = {
+        "apps/api/src/memory_anki/modules/memory/presentation/router.py",
+    }
+    for path in iter_files(API_SRC / "modules", (".py",)):
+        if "presentation" not in path.parts:
+            continue
+        relative = path.relative_to(REPO_ROOT).as_posix()
+        if relative in exempt:
+            continue
+        content = path.read_text(encoding="utf-8", errors="ignore")
+        if "mutation_identity_from_headers" not in content:
+            continue
+        errors.append(
+            f"{relative}: use platform `open_mutation_replay` instead of repeating the "
+            "mutation-identity / response-store lookup inline."
+        )
+
+
 def check_tool_personal_paths(errors: list[str]) -> None:
     for path in iter_files(REPO_ROOT / "tools", (".py", ".ps1", ".bat", ".cmd")):
         relative = path.relative_to(REPO_ROOT).as_posix()
@@ -5742,6 +5810,8 @@ def main() -> int:
     check_exam_context_boundaries(errors)
     check_backend_module_boundaries(errors)
     check_backend_presentation_orm_usage(errors)
+    check_mutation_replay_helper_boundary(errors)
+    check_mutation_replay_adoption(errors)
     check_tool_personal_paths(errors)
     check_article_reading_cursor_boundary(errors)
 

@@ -37,7 +37,7 @@ from memory_anki.modules.content.presentation.response_models import (
     PalaceSummaryResponse,
 )
 from memory_anki.modules.settings.api import SettingsAiRuntimeProvider, SettingsPromptCatalog
-from memory_anki.platform.application import mutation_identity_from_headers
+from memory_anki.platform.application import open_mutation_replay
 from memory_anki.platform.persistence import (
     SqlAlchemyMutationResponseStore,
     SqlAlchemyUnitOfWork,
@@ -97,13 +97,12 @@ def api_create(
     request: Request,
     s: Session = Depends(session_dep),
 ):
-    mutation_identity = mutation_identity_from_headers(request.headers)
-    mutation_store = SqlAlchemyMutationResponseStore(s)
-    existing_response = mutation_store.get(mutation_identity)
+    mutation = open_mutation_replay(SqlAlchemyMutationResponseStore(s), request.headers)
+    existing_response = mutation.existing()
     if existing_response is not None:
         return existing_response
     def prepare_atomic_side_effects(palace) -> None:
-        mutation_store.save(mutation_identity, palace_json(palace, s))
+        mutation.save(palace_json(palace, s))
 
     palace = create_palace(
         s,

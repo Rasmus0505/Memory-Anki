@@ -52,7 +52,7 @@ from memory_anki.modules.quiz.application.service import (
 from memory_anki.modules.quiz.application.wrong_questions_service import (
     get_wrong_questions,
 )
-from memory_anki.platform.application import mutation_identity_from_headers
+from memory_anki.platform.application import open_mutation_replay
 from memory_anki.platform.persistence import (
     SqlAlchemyMutationResponseStore,
     SqlAlchemyUnitOfWork,
@@ -168,9 +168,8 @@ def api_create_palace_quiz_question(
     request: Request,
     s: Session = Depends(session_dep),
 ):
-    mutation_identity = mutation_identity_from_headers(request.headers)
-    mutation_store = SqlAlchemyMutationResponseStore(s)
-    existing_response = mutation_store.get(mutation_identity)
+    mutation = open_mutation_replay(SqlAlchemyMutationResponseStore(s), request.headers)
+    existing_response = mutation.existing()
     if existing_response is not None:
         return existing_response
     try:
@@ -179,7 +178,7 @@ def api_create_palace_quiz_question(
             palace_id,
             data,
             uow=SqlAlchemyUnitOfWork(s),
-            before_commit=lambda payload: mutation_store.save(mutation_identity, payload),
+            before_commit=mutation.save,
         )
         maybe_create_rolling_backup("rolling-create-palace-quiz-question")
         return response
@@ -194,9 +193,8 @@ def api_batch_create_palace_quiz_questions(
     request: Request,
     s: Session = Depends(session_dep),
 ):
-    mutation_identity = mutation_identity_from_headers(request.headers)
-    mutation_store = SqlAlchemyMutationResponseStore(s)
-    existing_response = mutation_store.get(mutation_identity)
+    mutation = open_mutation_replay(SqlAlchemyMutationResponseStore(s), request.headers)
+    existing_response = mutation.existing()
     if existing_response is not None:
         return existing_response
     try:
@@ -205,7 +203,7 @@ def api_batch_create_palace_quiz_questions(
             palace_id,
             data,
             uow=SqlAlchemyUnitOfWork(s),
-            before_commit=lambda payload: mutation_store.save(mutation_identity, payload),
+            before_commit=mutation.save,
         )
         maybe_create_rolling_backup("rolling-batch-create-palace-quiz-questions")
         return response
@@ -220,9 +218,8 @@ def api_batch_create_chapter_quiz_questions(
     request: Request,
     s: Session = Depends(session_dep),
 ):
-    mutation_identity = mutation_identity_from_headers(request.headers)
-    mutation_store = SqlAlchemyMutationResponseStore(s)
-    existing_response = mutation_store.get(mutation_identity)
+    mutation = open_mutation_replay(SqlAlchemyMutationResponseStore(s), request.headers)
+    existing_response = mutation.existing()
     if existing_response is not None:
         return existing_response
     try:
@@ -231,7 +228,7 @@ def api_batch_create_chapter_quiz_questions(
             chapter_id,
             data,
             uow=SqlAlchemyUnitOfWork(s),
-            before_commit=lambda payload: mutation_store.save(mutation_identity, payload),
+            before_commit=mutation.save,
         )
         maybe_create_rolling_backup("rolling-batch-create-chapter-quiz-questions")
         return response
@@ -425,9 +422,8 @@ def api_record_choice_attempt(
     request: Request,
     s: Session = Depends(session_dep),
 ):
-    mutation_identity = mutation_identity_from_headers(request.headers)
-    mutation_store = SqlAlchemyMutationResponseStore(s)
-    existing_response = mutation_store.get(mutation_identity)
+    mutation = open_mutation_replay(SqlAlchemyMutationResponseStore(s), request.headers)
+    existing_response = mutation.existing()
     if existing_response is not None:
         return existing_response
     try:
@@ -436,7 +432,7 @@ def api_record_choice_attempt(
             question_id,
             str(data.get("selected_option_id") or ""),
             uow=SqlAlchemyUnitOfWork(s),
-            before_commit=lambda response: mutation_store.save(mutation_identity, response),
+            before_commit=mutation.save,
         )
     except Exception as exc:  # pragma: no cover - centralized HTTP mapping
         _raise_http_error(exc)

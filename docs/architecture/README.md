@@ -122,6 +122,23 @@ Frontend lint is a zero-warning contract. The `apps/web` lint script runs ESLint
 
 Request mutation IDs are represented by the framework-free `platform.application.MutationIdentity` contract. Presentation extracts an identity from request headers and uses the platform SQLAlchemy response-store adapter. Palace no longer imports the retired Persistence context; mutation responses participate in the use case's existing `UnitOfWork` transaction.
 
+`platform.application.MutationReplay` (via `open_mutation_replay`) is the shared
+replay-lookup handle for that boundary. It derives the identity from the request
+headers, binds it to a caller-constructed `MutationResponseStore`, and exposes
+`existing()` / `save(payload)`. It performs replay lookup and storage only: no
+commits (each caller keeps its own transaction ownership, because routers differ
+in when they commit and in whether a use case owns the transaction) and no
+response shaping (a replay returns the payload exactly as persisted). It is
+framework-free — it depends on the `MutationResponseStore` protocol, not on
+SQLAlchemy or FastAPI — so presentation constructs the adapter while the helper
+stays free of infrastructure imports.
+
+Callers override `MutationReplay.identity` when a request may also carry an
+operation id in the body, and validate a replayed payload themselves when it must
+belong to a specific entity. `memory/presentation/router.py` (`patch_unit_schedule`)
+does both, so it keeps its own lookup rather than using the handle's stored payload
+unchecked.
+
 ## Study session mutation commands
 
 The five idempotent Study Session HTTP writes are composed by `sessions.application.study_session_commands`. Each command asks legacy persistence primitives to flush without committing, stores the mutation response through the platform adapter, and commits once through `UnitOfWork`. Sessions therefore has no dependency on the retired Persistence context.
