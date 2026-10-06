@@ -80,6 +80,73 @@ def build_chat_completions_url(base_url: str) -> str:
     return f"{base_url.rstrip('/')}/chat/completions"
 
 
+def _open_chat_completion(
+    *,
+    config: OpenAICompatibleChatConfig,
+    payload: dict[str, Any],
+    accept_sse: bool = False,
+) -> Any:
+    """POST the payload once. Raises the client's own error types.
+
+    Extracted so the streaming and non-streaming paths share one definition of
+    "which status codes retry": they previously carried two copies of this call and
+    its two error translations, which is the kind of pair that drifts apart.
+    """
+    request_url = build_chat_completions_url(config.base_url)
+    request = urllib.request.Request(
+        request_url,
+        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        headers=_build_headers(config.api_key, accept_sse=accept_sse),
+        method="POST",
+    )
+    try:
+        return urllib.request.urlopen(request, timeout=config.timeout_seconds)
+    except urllib.error.HTTPError as exc:
+        raise _build_http_error(exc, request_url) from exc
+    except (urllib.error.URLError, TimeoutError) as exc:
+        raise _build_network_error(exc, request_url) from exc
+
+
+def _run_with_retries(
+    *,
+    config: OpenAICompatibleChatConfig,
+    payload: dict[str, Any],
+    accept_sse: bool = False,
+) -> Generator[Any, None, None]:
+    """Yield the first successful attempt's open response, sleeping between failures.
+
+    A generator so the streaming caller can keep its response open across the
+    yielded frames (`yield from`) while the non-streaming caller just takes the
+    first one. Each attempt is yielded at most once, so nothing is retried after
+    its body has started being consumed — which is what makes
+    "retry before the stream starts, never after" hold for both callers.
+
+    Retryable failures are the transport errors and the retryable HTTP statuses;
+    anything else (auth, 4xx contract errors) propagates immediately.
+    """
+    max_retries = max(0, config.max_retries)
+    for attempt in range(max_retries + 1):
+        retry_after_seconds: float | None = None
+        try:
+            yield _open_chat_completion(
+                config=config, payload=payload, accept_sse=accept_sse
+            )
+            return
+        except OpenAICompatibleHttpError as error:
+            if attempt >= max_retries or not _should_retry_http_status(error.status_code):
+                raise
+            retry_after_seconds = error.retry_after_seconds
+        except OpenAICompatibleError:
+            if attempt >= max_retries:
+                raise
+        _sleep_before_retry(
+            attempt,
+            config.retry_backoff_seconds,
+            retry_after_seconds=retry_after_seconds,
+        )
+    raise AssertionError("unreachable retry loop state")
+
+
 def extract_message_content_text(content: Any) -> str:
     if isinstance(content, list):
         text_parts: list[str] = []
@@ -305,36 +372,10 @@ def call_chat_completion_text(
         extra_payload=extra_payload,
         stream=False,
     )
-    request_url = build_chat_completions_url(config.base_url)
-    error: OpenAICompatibleError
-    for attempt in range(max(0, config.max_retries) + 1):
-        request = urllib.request.Request(
-            request_url,
-            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-            headers=_build_headers(config.api_key),
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(request, timeout=config.timeout_seconds) as response:
-                response_body = response.read().decode("utf-8", errors="ignore")
-            return extract_chat_completion_text_from_body(response_body)
-        except urllib.error.HTTPError as exc:
-            error = _build_http_error(exc, request_url)
-            if not _should_retry_http_status(exc.code) or attempt >= max(0, config.max_retries):
-                raise error from exc
-        except (urllib.error.URLError, TimeoutError) as exc:
-            error = _build_network_error(exc, request_url)
-            if attempt >= max(0, config.max_retries):
-                raise error from exc
-        _sleep_before_retry(
-            attempt,
-            config.retry_backoff_seconds,
-            retry_after_seconds=(
-                error.retry_after_seconds
-                if isinstance(error, OpenAICompatibleHttpError)
-                else None
-            ),
-        )
+    for response in _run_with_retries(config=config, payload=payload):
+        with response:
+            response_body = response.read().decode("utf-8", errors="ignore")
+        return extract_chat_completion_text_from_body(response_body)
     raise AssertionError("unreachable retry loop state")
 
 
@@ -353,39 +394,11 @@ def stream_chat_completion_text(
         extra_payload=extra_payload,
         stream=True,
     )
-    request_url = build_chat_completions_url(config.base_url)
-    error: OpenAICompatibleError
-    for attempt in range(max(0, config.max_retries) + 1):
-        request = urllib.request.Request(
-            request_url,
-            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-            headers=_build_headers(config.api_key, accept_sse=True),
-            method="POST",
-        )
+    for response in _run_with_retries(config=config, payload=payload, accept_sse=True):
         try:
-            response = urllib.request.urlopen(request, timeout=config.timeout_seconds)
-        except urllib.error.HTTPError as exc:
-            error = _build_http_error(exc, request_url)
-            if not _should_retry_http_status(exc.code) or attempt >= max(0, config.max_retries):
-                raise error from exc
-        except (urllib.error.URLError, TimeoutError) as exc:
-            error = _build_network_error(exc, request_url)
-            if attempt >= max(0, config.max_retries):
-                raise error from exc
-        else:
-            try:
-                return (yield from parse_chat_completion_stream(response, metadata=stream_metadata))
-            finally:
-                response.close()
-        _sleep_before_retry(
-            attempt,
-            config.retry_backoff_seconds,
-            retry_after_seconds=(
-                error.retry_after_seconds
-                if isinstance(error, OpenAICompatibleHttpError)
-                else None
-            ),
-        )
+            return (yield from parse_chat_completion_stream(response, metadata=stream_metadata))
+        finally:
+            response.close()
     raise AssertionError("unreachable retry loop state")
 
 
