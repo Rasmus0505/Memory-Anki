@@ -256,6 +256,11 @@ const nodeSelector = (id: string) => `.react-flow__node[data-id="${escapeId(id)}
 function foldNode(root: HTMLElement, id: string, into: string) {
   const node = root.querySelector<HTMLElement>(nodeSelector(id))
   const parentCard = root.querySelector<HTMLElement>(cardSelector(into))
+  // `offsetWidth` and `getBoundingClientRect()` both read layout, and nothing
+  // mutates the DOM between them, so the second read does not force a second
+  // reflow. Collapsing them would not save a reflow — only a property access —
+  // while changing the guard's meaning (`offsetWidth` ignores transforms and
+  // rounds to whole pixels). Kept as-is deliberately.
   if (!node || !parentCard || !node.parentElement || node.offsetWidth === 0) return
   const rect = node.getBoundingClientRect()
   const ghost = node.cloneNode(true) as HTMLElement
