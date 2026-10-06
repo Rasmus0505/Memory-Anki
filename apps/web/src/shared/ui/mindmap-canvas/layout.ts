@@ -753,6 +753,13 @@ function resolveOverlaps(
  * mismatch falls through to the fresh object.
  *
  * Bounded by node count: one entry per live node id.
+ *
+ * Known limitation: the key is `node.id`, which is the document uid and falls back
+ * to the node's index path when `data.uid` is absent. Two canvases mounted at once
+ * (adjacent freestyle cards) can therefore share a key. That only lets one canvas
+ * adopt the other's object when every value already compares equal, and since no
+ * code writes into `metadata` the object cannot carry canvas-specific state, so the
+ * result stays correct; the worst case is that reuse degrades to a rebuild.
  */
 const lastMetadataByNodeId = new Map<string, Record<string, unknown>>()
 
