@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BookOpen, Check, ChevronLeft, ChevronRight, Keyboard, LoaderCircle, Trash2 } from 'lucide-react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { BookOpen, Check, ChevronLeft, ChevronRight, Keyboard, LoaderCircle, RotateCcw, Trash2 } from 'lucide-react'
 import { useAiRunConfigDialog } from '@/modules/settings/public'
 import {
   deletePalaceQuizQuestionApi,
@@ -13,6 +13,8 @@ import {
   isQuizChoiceAttemptClosed,
   isQuizChoiceShortcutActive,
   QuizAttemptStatsBadge,
+  QUIZ_ANSWERING_DIALOG_CLASS,
+  QUIZ_ANSWERING_SCROLL_CLASS,
   QuizQuestionIndexPager,
   QuizFontScaleBody,
   QuizFontScaleHint,
@@ -24,6 +26,12 @@ import {
   useQuizAnsweringShortcuts,
   useQuizAttemptOrchestration,
   useQuizDialogFontScale,
+  clearQuizSessionProgress,
+  clearQuizSessionProgressForPalaces,
+  readQuizSessionState,
+  removeQuizSessionQuestions,
+  subscribeQuizSessionProgress,
+  writeQuizSessionState,
   type QuizRuntimeState,
 } from '@/modules/quiz/public'
 import { ownerPalaceLabel } from '@/modules/quiz/ui/palace-quiz/model/quizNodeBindingAggregation'
@@ -48,6 +56,7 @@ import {
   PalaceMemoryLookupDialog,
   collectMemoryLookupFocusNodeUids,
 } from '@/widgets/palace-memory-lookup'
+import { QuizProgressClearDialog, type QuizProgressClearChoice } from '@/widgets/quiz-progress-clear/QuizProgressClearDialog'
 
 function isAlreadyDeletedQuizQuestionError(error: unknown) {
   const message = error instanceof Error ? error.message : ''
@@ -101,7 +110,9 @@ export function NodeBoundQuizDialog({
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [palaceLookupOpen, setPalaceLookupOpen] = useState(false)
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
+  const [clearProgressOpen, setClearProgressOpen] = useState(false)
   const questionInteractionRef = useRef<HTMLDivElement | null>(null)
+  const answerScrollRef = useRef<HTMLDivElement | null>(null)
   useDwellFragmentOverride(open, {
     scene: 'quiz',
     kind: 'quiz',
@@ -210,8 +221,11 @@ export function NodeBoundQuizDialog({
         // Keep prior session answers so prev/next can review 答题情况.
         const restored: Record<number, QuizRuntimeState> = {}
         for (const question of ordered) {
-          const existing = initialQuestionStates?.[question.id]
-          if (existing) restored[question.id] = existing
+          const shared = readQuizSessionState(question.id)
+          const seeded = shared.resolved || shared.selectedOptionId || shared.rating
+            ? shared
+            : initialQuestionStates?.[question.id]
+          if (seeded) restored[question.id] = seeded
         }
         setQuestionStates(restored)
       })
@@ -232,6 +246,10 @@ export function NodeBoundQuizDialog({
   }, [open, palaceId, questionIdsKey, nodeUid])
 
   const current = questions[index] ?? null
+  useLayoutEffect(() => {
+    const node = answerScrollRef.current
+    if (node) node.scrollTop = 0
+  }, [current?.id])
 
   useEffect(() => {
     setKeyboardOptionIndex(0)
@@ -244,16 +262,35 @@ export function NodeBoundQuizDialog({
     [onQuestionCompleted],
   )
 
+  useEffect(() => {
+    return subscribeQuizSessionProgress(() => {
+      setQuestionStates((current) => {
+        let changed = false
+        const next = { ...current }
+        for (const question of questionsRef.current) {
+          const incoming = readQuizSessionState(question.id)
+          if (!incoming.resolved && !incoming.selectedOptionId && !incoming.rating) continue
+          if (JSON.stringify(next[question.id]) === JSON.stringify(incoming)) continue
+          next[question.id] = incoming
+          changed = true
+        }
+        return changed ? next : current
+      })
+    })
+  }, [])
+
   const updateLocalState = useCallback(
     (questionId: number, updater: (current: QuizRuntimeState) => QuizRuntimeState) => {
+      let nextState: QuizRuntimeState | null = null
       setQuestionStates((current) => {
-        const prev = current[questionId] ?? {}
-        const next = updater(prev)
-        onQuestionStateChange?.(questionId, next)
-        return { ...current, [questionId]: next }
+        const prev = current[questionId] ?? readQuizSessionState(questionId)
+        nextState = updater(prev)
+        onQuestionStateChange?.(questionId, nextState)
+        return { ...current, [questionId]: nextState }
       })
+      if (nextState) writeQuizSessionState(questionId, nextState, palaceId)
     },
-    [onQuestionStateChange],
+    [onQuestionStateChange, palaceId],
   )
 
   const adapter = useMemo(
@@ -307,6 +344,49 @@ export function NodeBoundQuizDialog({
 
   const currentState = current ? questionStates[current.id] ?? {} : {}
   const answeredCount = questions.filter((item) => questionStates[item.id]?.resolved).length
+
+  const dropLocalAnswers = useCallback((ids: readonly number[]) => {
+    const dropped = new Set(ids)
+    setQuestionStates((prev) => {
+      let changed = false
+      const next = { ...prev }
+      for (const id of dropped) {
+        if (next[id] == null) continue
+        delete next[id]
+        changed = true
+      }
+      return changed ? next : prev
+    })
+  }, [])
+
+  const handleClearChoice = useCallback((choice: QuizProgressClearChoice) => {
+    const loaded = questionsRef.current
+    if (choice.scope === 'question') {
+      const question = loaded[index]
+      if (!question) return
+      removeQuizSessionQuestions([question.id])
+      dropLocalAnswers([question.id])
+      toast.success('已清除当前题的做题进度。')
+      return
+    }
+    if (choice.scope === 'palace') {
+      const targetPalaceId = choice.palaceId
+      if (!targetPalaceId) return
+      // Answers opened from this palace are stored against it, even when a
+      // question itself belongs to another palace.
+      clearQuizSessionProgressForPalaces([targetPalaceId])
+      const ids = loaded
+        .filter((item) => item.palace_id === targetPalaceId || palaceId === targetPalaceId)
+        .map((item) => item.id)
+      if (ids.length > 0) removeQuizSessionQuestions(ids)
+      dropLocalAnswers(ids)
+      toast.success('已清除所选宫殿的做题进度。')
+      return
+    }
+    clearQuizSessionProgress()
+    setQuestionStates({})
+    toast.success('已清除全部题目的做题进度。')
+  }, [dropLocalAnswers, index, palaceId])
 
   const handleChoiceResolve = useCallback(
     (optionId: string, isCorrect: boolean) => {
@@ -374,6 +454,8 @@ export function NodeBoundQuizDialog({
     optionCount: current?.options.length ?? 0,
     choiceShortcutsActive: current != null && isQuizChoiceShortcutActive(current.question_type, answerMode),
     attemptClosed: isQuizChoiceAttemptClosed({ selectedOptionId: currentState.selectedOptionId }),
+    answerRevealed: Boolean(currentState.resolved),
+    hasNextQuestion: index < questions.length - 1,
     keyboardOptionIndex,
     setKeyboardOptionIndex,
     interactionRootRef: questionInteractionRef,
@@ -396,6 +478,7 @@ export function NodeBoundQuizDialog({
       if (!current) return
       void handleToggleMark(!current.marked)
     },
+    onDeleteQuestion: () => setDeleteConfirmOpen(true),
   })
 
   const headerDetail = loading
@@ -428,7 +511,7 @@ export function NodeBoundQuizDialog({
           dismissOnInteractOutside={false}
           // max-w-none: `max-w-xl` beat the floating window's own width, so dragging
           // the right edge past 36rem did nothing. Phone/centered fallback keeps a cap.
-          className="max-h-[min(92vh,100dvh-1rem)] w-[min(46rem,calc(100vw-1rem))] max-w-none p-0"
+          className={QUIZ_ANSWERING_DIALOG_CLASS}
           data-keyboard-shortcuts-suspended="true"
           data-testid="node-bound-quiz-dialog"
         >
@@ -449,19 +532,32 @@ export function NodeBoundQuizDialog({
                 </Button>
                 <DialogTitle className="text-base">关联题目</DialogTitle>
               </div>
-              {palaceId != null ? (
+              <div className="flex shrink-0 items-center gap-2">
+                {palaceId != null ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    aria-label="查看宫殿"
+                    title="查看宫殿和思维导图"
+                    onClick={() => setPalaceLookupOpen(true)}
+                  >
+                    <BookOpen className="size-4" />
+                    查看宫殿
+                  </Button>
+                ) : null}
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
-                  aria-label="查看宫殿"
-                  title="查看宫殿和思维导图"
-                  onClick={() => setPalaceLookupOpen(true)}
+                  aria-label="清除进度"
+                  title="清除当前题、指定宫殿或全部题的已答记录"
+                  onClick={() => setClearProgressOpen(true)}
                 >
-                  <BookOpen className="size-4" />
-                  查看宫殿
+                  <RotateCcw className="size-4" />
+                  清除进度
                 </Button>
-              ) : null}
+              </div>
             </div>
             {headerDetail ? (
               <DialogDescription className="text-xs leading-relaxed text-muted-foreground">
@@ -472,7 +568,25 @@ export function NodeBoundQuizDialog({
 
           {/* min-h-0 + flex-1: the old fixed 70vh left dead space inside a resized
               floating window and double-clipped against the panel's own max-height. */}
-          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-3">
+          <div className="flex min-h-0 flex-1 flex-col">
+            {!shortcutsOpen && current ? (
+              <QuizQuestionIndexPager
+                pinned
+                count={questions.length}
+                currentIndex={index}
+                getItemState={(itemIndex) => {
+                  const question = questions[itemIndex]
+                  const itemState = questionStates[question?.id]
+                  return {
+                    done: Boolean(itemState?.resolved),
+                    correct: itemState?.correct,
+                    marked: Boolean(question?.marked),
+                  }
+                }}
+                onSelect={setIndex}
+              />
+            ) : null}
+            <div ref={answerScrollRef} className={QUIZ_ANSWERING_SCROLL_CLASS}>
             {shortcutsOpen ? (
               <QuizShortcutSettingsSection />
             ) : loading ? (
@@ -488,20 +602,6 @@ export function NodeBoundQuizDialog({
               <div className="py-12 text-center text-sm text-muted-foreground">暂无题目</div>
             ) : (
               <>
-                <QuizQuestionIndexPager
-                  count={questions.length}
-                  currentIndex={index}
-                  getItemState={(itemIndex) => {
-                    const question = questions[itemIndex]
-                    const itemState = questionStates[question?.id]
-                    return {
-                      done: Boolean(itemState?.resolved),
-                      correct: itemState?.correct,
-                      marked: Boolean(question?.marked),
-                    }
-                  }}
-                  onSelect={setIndex}
-                />
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-center gap-1.5">
                     <QuizAttemptStatsBadge
@@ -553,6 +653,7 @@ export function NodeBoundQuizDialog({
                 </QuizFontScaleBody>
               </>
             )}
+            </div>
           </div>
 
           {/*
@@ -570,6 +671,9 @@ export function NodeBoundQuizDialog({
                     : '待作答'}
               </span>
               <div className="flex shrink-0 items-center gap-2">
+                {currentState.resolved && index < questions.length - 1 ? (
+                  <span className="shrink-0 text-xs text-muted-foreground">Enter 下一题</span>
+                ) : null}
                 {questions.length > 1 ? (
                   <>
                     <Button
@@ -622,6 +726,13 @@ export function NodeBoundQuizDialog({
         tone="danger"
         confirmText="移入回收站"
         onConfirm={() => void handleDeleteCurrent()}
+      />
+      <QuizProgressClearDialog
+        open={clearProgressOpen}
+        onOpenChange={setClearProgressOpen}
+        questionReady={current != null}
+        defaultPalaceId={palaceId}
+        onConfirm={handleClearChoice}
       />
       <PalaceMemoryLookupDialog
         open={palaceLookupOpen}

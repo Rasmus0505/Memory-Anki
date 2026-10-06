@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_FREESTYLE_FEED_CONFIG } from '@/modules/practice/domain/feedConfig'
+import { clearQuizSessionProgress, readQuizSessionState } from '@/modules/quiz/public'
 import {
   ensureFreestyleOverlayQuizApi,
   progressFreestyleOverlayQuizApi,
@@ -32,6 +33,14 @@ vi.mock('@/modules/quiz/domain/quiz-entity/api', () => ({
 
 vi.mock('@/modules/settings/public', () => ({
   useAiRunConfigDialog: () => ({ promptForAiOptions: vi.fn(), aiRunConfigDialog: null }),
+}))
+
+vi.mock('@/modules/content/public', () => ({
+  getPalacesGroupedApi: vi.fn(async () => ({
+    groups: [],
+    ungrouped: [{ id: 7, title: '第一节', resolved_title: '第一节新教育运动' }],
+    subjects: [],
+  })),
 }))
 
 vi.mock('@/modules/quiz/public', async (importOriginal) => {
@@ -79,6 +88,7 @@ const deletePalaceQuizQuestionApiMock = vi.mocked(deletePalaceQuizQuestionApi)
 
 describe('FreestyleScopeQuizDialog', () => {
   beforeEach(() => {
+    clearQuizSessionProgress()
     vi.clearAllMocks()
     progressFreestyleOverlayQuizApiMock.mockResolvedValue({} as never)
     deletePalaceQuizQuestionApiMock.mockResolvedValue({ ok: true })
@@ -472,6 +482,103 @@ describe('FreestyleScopeQuizDialog', () => {
 
     expect(await screen.findByText(/第 3 \/ 3 题/)).toBeTruthy()
     expect(screen.getByText(/已答 2 \/ 3/)).toBeTruthy()
+  })
+
+  it('puts 清除进度 to the right of 查看宫殿 and clears overlay answers', async () => {
+    ensureFreestyleOverlayQuizApiMock.mockResolvedValue({
+      round_id: 'round-1',
+      plan_version: 4,
+      version: 4,
+      plan: {
+        overlay_quiz: {
+          question_ids: [11, 12, 13],
+          current_index: 0,
+          completed_ids: [11, 12],
+          states: {
+            11: { resolved: true, correct: true, selectedOptionId: 'A' },
+            12: { resolved: true, correct: false, selectedOptionId: 'B' },
+          },
+          quiz_scope: 'cross_palace_random',
+          seed: 1,
+          scope_signature: 'sig',
+          limit_reached: false,
+          candidate_count: 3,
+          question_palace_ids: { 11: 7, 12: 7, 13: 7 },
+        },
+      },
+    } as never)
+    getPalaceQuizQuestionsByIdsApiMock.mockResolvedValue({
+      items: [11, 12, 13].map((id) => ({
+        id,
+        palace_id: 7,
+        sort_order: id,
+        correct_count: 3,
+        incorrect_count: 1,
+        attempt_count: 4,
+        question_type: 'multiple_choice',
+        stem: `第 ${id} 题干`,
+        options: [{ id: 'A', text: 'A' }, { id: 'B', text: 'B' }],
+        answer_payload: { correct_option_id: 'A' },
+        analysis: '',
+        source_meta: {},
+        created_at: null,
+        updated_at: null,
+      })),
+      item_count: 3,
+    } as never)
+
+    render(
+      <FreestyleScopeQuizDialog
+        open
+        onOpenChange={vi.fn()}
+        roundId="round-1"
+        planVersion={1}
+        storedConfig={DEFAULT_FREESTYLE_FEED_CONFIG}
+        setupDone
+        rangeLabel="当前配置下的全部宫殿"
+        onConfirmSetup={vi.fn()}
+        onRoundSync={vi.fn()}
+      />,
+    )
+
+    expect(await screen.findByText(/已答 2 \/ 3/)).toBeTruthy()
+    const lookup = screen.getByRole('button', { name: '查看宫殿' })
+    const clear = screen.getByRole('button', { name: '清除进度' })
+    expect(lookup.compareDocumentPosition(clear) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+    fireEvent.click(clear)
+    fireEvent.click(screen.getByRole('radio', { name: '当前题' }))
+    fireEvent.click(screen.getByRole('button', { name: '清除' }))
+
+    expect(screen.getByText(/已答 1 \/ 3/)).toBeTruthy()
+    expect(readQuizSessionState(11)).toEqual({})
+    expect(readQuizSessionState(12).resolved).toBe(true)
+    await waitFor(() => {
+      expect(progressFreestyleOverlayQuizApiMock).toHaveBeenCalledWith(
+        'round-1',
+        expect.objectContaining({
+          completed_ids: [12],
+          states: { 12: expect.objectContaining({ resolved: true }) },
+        }),
+      )
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '清除进度' }))
+    fireEvent.click(screen.getByRole('radio', { name: '全部题' }))
+    fireEvent.click(screen.getByRole('button', { name: '清除' }))
+
+    expect(screen.getByText(/已答 0 \/ 3/)).toBeTruthy()
+    expect(readQuizSessionState(12)).toEqual({})
+    await waitFor(() => {
+      expect(progressFreestyleOverlayQuizApiMock).toHaveBeenCalledWith(
+        'round-1',
+        expect.objectContaining({
+          completed_ids: [],
+          states: {},
+        }),
+      )
+    })
+    expect(screen.getByText('3/4')).toBeTruthy()
   })
 
   it('deletes the current question and re-ensures the overlay to drop the dead id', async () => {

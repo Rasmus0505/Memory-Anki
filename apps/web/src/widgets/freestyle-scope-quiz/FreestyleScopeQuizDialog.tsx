@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { BookOpen, Check, ChevronLeft, ChevronRight, LoaderCircle, Settings2, Trash2 } from 'lucide-react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { BookOpen, Check, ChevronLeft, ChevronRight, LoaderCircle, RotateCcw, Settings2, Trash2 } from 'lucide-react'
 import { createOperationId } from '@/modules/practice/application/feedPersistence'
 import {
   ensureFreestyleOverlayQuizApi,
@@ -17,6 +17,8 @@ import {
   isQuizChoiceAttemptClosed,
   isQuizChoiceShortcutActive,
   QuizAttemptStatsBadge,
+  QUIZ_ANSWERING_DIALOG_CLASS,
+  QUIZ_ANSWERING_SCROLL_CLASS,
   QuizQuestionIndexPager,
   QuizFontScaleBody,
   QuizFontScaleHint,
@@ -27,6 +29,11 @@ import {
   useQuizAnsweringShortcuts,
   useQuizAttemptOrchestration,
   useQuizDialogFontScale,
+  clearQuizSessionProgress,
+  clearQuizSessionProgressForPalaces,
+  readQuizSessionState,
+  removeQuizSessionQuestions,
+  subscribeQuizSessionProgress,
   writeQuizSessionState,
   type QuizRuntimeState,
 } from '@/modules/quiz/public'
@@ -62,6 +69,7 @@ import {
   pickMemoryLookupBinding,
   resolveMemoryLookupPalaceId,
 } from '@/widgets/palace-memory-lookup'
+import { QuizProgressClearDialog, type QuizProgressClearChoice } from '@/widgets/quiz-progress-clear/QuizProgressClearDialog'
 
 const PROGRESS_DEBOUNCE_MS = 320
 
@@ -100,9 +108,11 @@ export function FreestyleScopeQuizDialog({
   const [questionStates, setQuestionStates] = useState<Record<number, QuizRuntimeState>>({})
   const [keyboardOptionIndex, setKeyboardOptionIndex] = useState(0)
   const [palaceLookupOpen, setPalaceLookupOpen] = useState(false)
+  const [clearProgressOpen, setClearProgressOpen] = useState(false)
   const [lookupFocusNodeUids, setLookupFocusNodeUids] = useState<string[]>([])
   const [lookupPalaceIdOverride, setLookupPalaceIdOverride] = useState<number | null>(null)
   const questionInteractionRef = useRef<HTMLDivElement | null>(null)
+  const answerScrollRef = useRef<HTMLDivElement | null>(null)
   const removedQuestionIdsRef = useRef(new Set<number>())
   const planVersionRef = useRef(planVersion)
   const persistTimerRef = useRef<number | null>(null)
@@ -304,8 +314,47 @@ export function FreestyleScopeQuizDialog({
   }, [flushProgressNow, open])
 
   const current = questions[index] ?? null
+  useLayoutEffect(() => {
+    const node = answerScrollRef.current
+    if (node) node.scrollTop = 0
+  }, [current?.id])
   const currentState = current ? questionStates[current.id] ?? {} : {}
   const answeredCount = questions.filter((item) => questionStates[item.id]?.resolved).length
+
+  const handleClearChoice = useCallback((choice: QuizProgressClearChoice) => {
+    const palaceOf = (question: PalaceQuizQuestion) => {
+      const mapped = overlay?.question_palace_ids?.[String(question.id)]
+      return typeof mapped === 'number' && mapped > 0 ? mapped : question.palace_id ?? null
+    }
+    const publish = (nextStates: Record<number, QuizRuntimeState>) => {
+      setQuestionStates(nextStates)
+      persistProgress(index, nextStates)
+    }
+    if (choice.scope === 'question') {
+      if (!current) return
+      removeQuizSessionQuestions([current.id])
+      const nextStates = { ...questionStates }
+      delete nextStates[current.id]
+      publish(nextStates)
+      toast.success('已清除当前题的做题进度。')
+      return
+    }
+    if (choice.scope === 'palace') {
+      const targetPalaceId = choice.palaceId
+      if (!targetPalaceId) return
+      clearQuizSessionProgressForPalaces([targetPalaceId])
+      const ids = questions.filter((item) => palaceOf(item) === targetPalaceId).map((item) => item.id)
+      if (ids.length > 0) removeQuizSessionQuestions(ids)
+      const nextStates = { ...questionStates }
+      for (const id of ids) delete nextStates[id]
+      publish(nextStates)
+      toast.success('已清除所选宫殿的做题进度。')
+      return
+    }
+    clearQuizSessionProgress()
+    publish({})
+    toast.success('已清除全部题目的做题进度。')
+  }, [current, index, overlay, persistProgress, questionStates, questions])
   const questionPalaceId = current?.palace_id ?? null
   const lookupPalaceId = lookupPalaceIdOverride ?? questionPalaceId
 
@@ -336,6 +385,24 @@ export function FreestyleScopeQuizDialog({
       cancelled = true
     }
   }, [current, palaceLookupOpen])
+
+  useEffect(() => {
+    if (!open) return
+    return subscribeQuizSessionProgress(() => {
+      setQuestionStates((current) => {
+        let changed = false
+        const next = { ...current }
+        for (const question of questions) {
+          const incoming = readQuizSessionState(question.id)
+          if (!incoming.resolved && !incoming.selectedOptionId && !incoming.rating) continue
+          if (JSON.stringify(next[question.id]) === JSON.stringify(incoming)) continue
+          next[question.id] = incoming
+          changed = true
+        }
+        return changed ? next : current
+      })
+    })
+  }, [open, questions])
 
   const updateLocalState = useCallback(
     (questionId: number, updater: (current: QuizRuntimeState) => QuizRuntimeState) => {
@@ -441,6 +508,8 @@ export function FreestyleScopeQuizDialog({
     optionCount: current?.options.length ?? 0,
     choiceShortcutsActive: current != null && isQuizChoiceShortcutActive(current.question_type, answerMode),
     attemptClosed: isQuizChoiceAttemptClosed({ selectedOptionId: currentState.selectedOptionId }),
+    answerRevealed: Boolean(currentState.resolved),
+    hasNextQuestion: index < questions.length - 1,
     keyboardOptionIndex,
     setKeyboardOptionIndex,
     interactionRootRef: questionInteractionRef,
@@ -463,6 +532,7 @@ export function FreestyleScopeQuizDialog({
       if (!current) return
       void handleToggleMark(!current.marked)
     },
+    onDeleteQuestion: openDeleteConfirm,
   })
 
   const showConfig = !setupDone || configOpen
@@ -490,7 +560,7 @@ export function FreestyleScopeQuizDialog({
           showCloseButton
           expandOnOpen
           dismissOnInteractOutside={false}
-          className="max-h-[min(92vh,100dvh-1rem)] w-[min(46rem,calc(100vw-1rem))] max-w-none p-0"
+          className={QUIZ_ANSWERING_DIALOG_CLASS}
           data-keyboard-shortcuts-suspended="true"
           data-testid="freestyle-scope-quiz-dialog"
         >
@@ -513,18 +583,33 @@ export function FreestyleScopeQuizDialog({
                 ) : null}
                 <DialogTitle className="text-base">做题</DialogTitle>
               </div>
-              {!showConfig && lookupPalaceId != null ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  aria-label="查看宫殿"
-                  title="查看宫殿和思维导图"
-                  onClick={() => setPalaceLookupOpen(true)}
-                >
-                  <BookOpen className="size-4" />
-                  查看宫殿
-                </Button>
+              {!showConfig ? (
+                <div className="flex shrink-0 items-center gap-2">
+                  {lookupPalaceId != null ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      aria-label="查看宫殿"
+                      title="查看宫殿和思维导图"
+                      onClick={() => setPalaceLookupOpen(true)}
+                    >
+                      <BookOpen className="size-4" />
+                      查看宫殿
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    aria-label="清除进度"
+                    title="清除当前题、指定宫殿或全部题的已答记录"
+                    onClick={() => setClearProgressOpen(true)}
+                  >
+                    <RotateCcw className="size-4" />
+                    清除进度
+                  </Button>
+                </div>
               ) : null}
             </div>
             {headerDetail ? (
@@ -534,7 +619,25 @@ export function FreestyleScopeQuizDialog({
             ) : null}
           </DialogHeader>
 
-          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-3">
+          <div className="flex min-h-0 flex-1 flex-col">
+            {!showConfig && current ? (
+              <QuizQuestionIndexPager
+                pinned
+                count={questions.length}
+                currentIndex={index}
+                getItemState={(itemIndex) => {
+                  const question = questions[itemIndex]
+                  const itemState = questionStates[question?.id]
+                  return {
+                    done: Boolean(itemState?.resolved),
+                    correct: itemState?.correct,
+                    marked: Boolean(question?.marked),
+                  }
+                }}
+                onSelect={goToIndex}
+              />
+            ) : null}
+            <div ref={answerScrollRef} className={QUIZ_ANSWERING_SCROLL_CLASS}>
             {showConfig ? (
               <OverlayQuizSetupPanel
                 roundId={roundId}
@@ -567,20 +670,6 @@ export function FreestyleScopeQuizDialog({
                     已达本轮上限 {questions.length} 题（候选 {overlay.candidate_count}）。
                   </p>
                 ) : null}
-                <QuizQuestionIndexPager
-                  count={questions.length}
-                  currentIndex={index}
-                  getItemState={(itemIndex) => {
-                    const question = questions[itemIndex]
-                    const itemState = questionStates[question?.id]
-                    return {
-                      done: Boolean(itemState?.resolved),
-                      correct: itemState?.correct,
-                      marked: Boolean(question?.marked),
-                    }
-                  }}
-                  onSelect={goToIndex}
-                />
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-center gap-1.5">
                     <QuizAttemptStatsBadge
@@ -629,6 +718,7 @@ export function FreestyleScopeQuizDialog({
                 </QuizFontScaleBody>
               </>
             )}
+            </div>
           </div>
 
           {!showConfig && current ? (
@@ -641,6 +731,9 @@ export function FreestyleScopeQuizDialog({
                     : '待作答'}
               </span>
               <div className="flex shrink-0 items-center gap-2">
+                {currentState.resolved && index < questions.length - 1 ? (
+                  <span className="shrink-0 text-xs text-muted-foreground">Enter 下一题</span>
+                ) : null}
                 {questions.length > 1 ? (
                   <>
                     <Button
@@ -679,6 +772,13 @@ export function FreestyleScopeQuizDialog({
         </DialogContent>
       </Dialog>
       {trashConfirmDialog}
+      <QuizProgressClearDialog
+        open={clearProgressOpen}
+        onOpenChange={setClearProgressOpen}
+        questionReady={current != null}
+        defaultPalaceId={lookupPalaceId}
+        onConfirm={handleClearChoice}
+      />
       <PalaceMemoryLookupDialog
         open={palaceLookupOpen}
         onOpenChange={setPalaceLookupOpen}

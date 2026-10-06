@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { saveQuizAnswerMode } from '@/modules/quiz/public'
+import { clearQuizSessionProgress, readQuizSessionState, saveQuizAnswerMode, writeQuizSessionState } from '@/modules/quiz/public'
 import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
 import { NodeBoundQuizDialog } from '@/widgets/node-bound-quiz'
 
@@ -33,6 +33,18 @@ vi.mock('@/shared/feedback/toast', () => ({
 
 vi.mock('@/shared/feedback/globalFeedbackModel', () => ({
   dispatchGlobalFeedback: vi.fn(),
+}))
+
+vi.mock('@/modules/content/public', () => ({
+  getPalacesGroupedApi: vi.fn(async () => ({
+    groups: [],
+    ungrouped: [],
+    subjects: [{
+      subject: null,
+      chapter_groups: [],
+      ungrouped_palaces: [{ id: 1, title: '第一节', resolved_title: '第一节新教育运动' }],
+    }],
+  })),
 }))
 
 vi.mock('@/widgets/palace-memory-lookup', async (importOriginal) => {
@@ -113,6 +125,7 @@ const shortAnswerQuestion = {
 describe('NodeBoundQuizDialog', () => {
   beforeEach(() => {
     window.localStorage.clear()
+    clearQuizSessionProgress()
     resetClientPreferenceCacheForTest()
     saveQuizAnswerMode('choice')
     vi.clearAllMocks()
@@ -270,6 +283,50 @@ describe('NodeBoundQuizDialog', () => {
     )
 
     expect(screen.queryByRole('button', { name: '查看宫殿' })).toBeNull()
+  })
+
+  it('puts 清除进度 to the right of 查看宫殿 and clears the current answers', async () => {
+    writeQuizSessionState(42, { resolved: true, correct: false, selectedOptionId: 'B' }, 1)
+    writeQuizSessionState(43, { resolved: true, correct: true, selectedOptionId: 'A' }, 1)
+    render(
+      <NodeBoundQuizDialog
+        open
+        onOpenChange={() => {}}
+        palaceId={1}
+        nodeUid="node-1"
+        questionIds={[42, 43]}
+        onQuestionCompleted={() => {}}
+      />,
+    )
+
+    await screen.findByText('已答 2 / 2')
+    const lookup = screen.getByRole('button', { name: '查看宫殿' })
+    const clear = screen.getByRole('button', { name: '清除进度' })
+    expect(lookup.compareDocumentPosition(clear) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+    fireEvent.click(clear)
+    expect(screen.getByRole('radio', { name: '当前题' })).toBeTruthy()
+    expect(screen.getByRole('radio', { name: '指定宫殿' })).toBeTruthy()
+    expect(screen.getByRole('radio', { name: '全部题' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    expect(screen.getByText('已答 2 / 2')).toBeTruthy()
+    expect(readQuizSessionState(42).resolved).toBe(true)
+
+    fireEvent.click(screen.getByRole('button', { name: '清除进度' }))
+    fireEvent.click(screen.getByRole('button', { name: '清除' }))
+
+    expect(screen.getByText('已答 1 / 2')).toBeTruthy()
+    expect(readQuizSessionState(42)).toEqual({})
+    expect(readQuizSessionState(43).resolved).toBe(true)
+
+    fireEvent.click(screen.getByRole('button', { name: '清除进度' }))
+    fireEvent.click(screen.getByRole('radio', { name: '指定宫殿' }))
+    expect((screen.getByRole('combobox', { name: '指定宫殿' }) as HTMLSelectElement).value).toBe('1')
+    fireEvent.click(screen.getByRole('button', { name: '清除' }))
+
+    expect(screen.getByText('已答 0 / 2')).toBeTruthy()
+    expect(readQuizSessionState(43)).toEqual({})
+    expect(screen.getByText('16/29')).toBeTruthy()
   })
 
   it('answers the linked question with number and letter keys', async () => {

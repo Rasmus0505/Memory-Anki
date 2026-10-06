@@ -152,6 +152,13 @@ describe('QuizQuestionIndexPager', () => {
       expect(screen.getByRole('button', { name: '17' })).toBeTruthy()
       expect(screen.queryByRole('button', { name: '16' })).toBeNull()
 
+      width = widthFor(8) - 10
+      act(() => {
+        resizeCallback?.([], {} as ResizeObserver)
+      })
+      expect(screen.getByRole('button', { name: '17' })).toBeTruthy()
+      expect(screen.queryByRole('button', { name: '16' })).toBeNull()
+
       width = widthFor(6)
       act(() => {
         resizeCallback?.([], {} as ResizeObserver)

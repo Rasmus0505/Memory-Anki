@@ -3,6 +3,18 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/shared/components/ui/button'
 import { cn } from '@/shared/lib/utils'
 
+/**
+ * Stable answering-panel size. Height is fixed while the floating layout has
+ * not remembered one, so revealing an answer scrolls inside instead of growing
+ * the panel and recentering it. A remembered resize still wins via inline height.
+ */
+export const QUIZ_ANSWERING_DIALOG_CLASS =
+  'h-[min(82vh,100dvh-2rem)] max-h-[min(92vh,100dvh-1rem)] w-[min(46rem,calc(100vw-1rem))] max-w-none p-0'
+
+/** Scrolls the stem and the revealed answer. The question-number rail stays outside. */
+export const QUIZ_ANSWERING_SCROLL_CLASS =
+  'min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-3 [scrollbar-gutter:stable]'
+
 /** Unmeasured fallback. A real row replaces this with however many pills fit. */
 export const QUIZ_QUESTION_INDEX_PAGE_SIZE = 20
 
@@ -54,6 +66,7 @@ export function QuizQuestionIndexPager({
   count,
   currentIndex,
   pageSize: explicitPageSize,
+  pinned = false,
   getItemState,
   onSelect,
 }: {
@@ -61,10 +74,13 @@ export function QuizQuestionIndexPager({
   currentIndex: number
   /** Lock the page length. Omit it and the row width decides. */
   pageSize?: number
+  /** Sit outside the scrolling answer body so width and position stay fixed. */
+  pinned?: boolean
   getItemState: (index: number) => { done: boolean; correct?: boolean; marked?: boolean }
   onSelect: (index: number) => void
 }) {
   const rowRef = useRef<HTMLDivElement>(null)
+  const lastWidthRef = useRef(0)
   const [measuredPageSize, setMeasuredPageSize] = useState<number | null>(null)
   const pageSize =
     explicitPageSize != null && explicitPageSize > 0
@@ -80,6 +96,13 @@ export function QuizQuestionIndexPager({
     const node = rowRef.current
     if (!node) return
     const measure = () => {
+      const width = node.clientWidth
+      if (!(width > 0)) return
+      // A scrollbar or sub-pixel reflow is smaller than one pill. Ignore it so
+      // revealing an answer cannot reshuffle which numbers are on this page.
+      const stride = QUIZ_INDEX_BUTTON_PX + QUIZ_INDEX_GAP_PX
+      if (lastWidthRef.current > 0 && Math.abs(width - lastWidthRef.current) < stride) return
+      lastWidthRef.current = width
       const capacity = readIndexRowCapacity(node)
       if (capacity > 0) {
         setMeasuredPageSize((current) => (current === capacity ? current : capacity))
@@ -111,7 +134,15 @@ export function QuizQuestionIndexPager({
   const label = quizIndexPagerLabel(page, pageCount, currentIndex, safeCount)
 
   return (
-    <div className="sticky -top-3 z-10 -mx-4 -mt-3 space-y-2 border-b border-border/60 bg-background/95 px-4 py-2 backdrop-blur">
+    <div
+      data-quiz-index-rail={pinned ? '' : undefined}
+      className={cn(
+        'space-y-2 border-b border-border/60 bg-background/95 px-4 py-2',
+        pinned
+          ? 'shrink-0'
+          : 'sticky -top-3 z-10 -mx-4 -mt-3 backdrop-blur',
+      )}
+    >
       <div
         className={cn(
           'flex items-center gap-2',
