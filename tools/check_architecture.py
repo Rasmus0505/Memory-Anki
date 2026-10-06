@@ -220,10 +220,13 @@ BASELINE_PERSONAL_PATH_TOOLS = {
 }
 BASELINE_OVERSIZED_FILES = {
     # Registered follow-up refactors in docs/architecture/README.md.
+    # Entries are only legitimate while the file is still over its limit. A file
+    # that was split, deleted, or renamed must be dropped here, or the exemption
+    # silently covers a future regression in its place — see
+    # `check_oversized_baseline_is_current`.
     "apps/web/src/shared/ui/mindmap-canvas/layout.ts",
     "apps/web/src/shared/ui/mindmap-canvas/NodeCard.tsx",
     "apps/web/src/shared/ui/mindmap-canvas/useMindMapCanvasState.ts",
-    "apps/web/src/pages/create/PalaceEditorPage.tsx",
     "apps/web/src/modules/practice/ui/freestyle/ImmersiveFreestylePage.tsx",
     # Freestyle round-plan migration and stable rating diagnostics are being
     # extracted from these established integration hosts incrementally.
@@ -233,12 +236,6 @@ BASELINE_OVERSIZED_FILES = {
     # Existing oversized English integration page; tracked separately from
     # the freestyle architecture work.
     "apps/web/src/modules/english/ui/english/EnglishCoursePage.tsx",
-    "apps/web/src/modules/quiz/ui/palace-quiz/components/PalaceQuizGenerationPanel.tsx",
-    "apps/web/src/shared/components/session/GlobalTimerProvider.test.tsx",
-    "apps/web/src/shared/components/session/GlobalTimerProvider.tsx",
-    "apps/web/src/shared/components/session/TimerAutomationDialog.tsx",
-    "apps/web/src/shared/hooks/useTimedSession.test.tsx",
-    "apps/web/src/shared/hooks/useTimedSession.ts",
     "apps/web/src/widgets/palace-memory-lookup/PalaceMemoryLookupDialog.tsx",
     "apps/web/src/modules/session/domain/session-entity/model/timed-session/timedSessionStateMachine.ts",
     "apps/web/src/modules/memory/domain/review-entity/model/review-flow-tree.ts",
@@ -246,7 +243,6 @@ BASELINE_OVERSIZED_FILES = {
     "apps/web/src/modules/content/ui/mindmap-editor/MindMapCanvas.integration.test.tsx",
     # Pre-existing oversized hosts/harnesses (not introduced by english-lookup work).
     "apps/web/src/shared/ui/mindmap-canvas/useMindMapViewport.ts",
-    "apps/web/src/pages/create/PalaceMindMapWorkspace.tsx",
     "apps/web/src/modules/practice/ui/freestyle/components/FreestyleUnitReviewCardView.test.tsx",
     # Existing shared UI/test harnesses; split tracked separately from this
     # architecture review so the quality gate remains focused on new violations.
@@ -677,6 +673,35 @@ def check_file_sizes(errors: list[str]) -> None:
             relative = path.relative_to(REPO_ROOT)
             errors.append(
                 f"{relative}: exceeds {MAX_API_FILE_LINES} lines ({line_count}); split the module service/router into layered submodules."
+            )
+
+
+def check_oversized_baseline_is_current(errors: list[str]) -> None:
+    """Keep `BASELINE_OVERSIZED_FILES` honest.
+
+    The exemption list is only legitimate while each listed file is still over its
+    limit. Because `check_file_sizes` skips those paths entirely, a file that was
+    split or deleted left a permanent hole: the entry kept exempting that path, so
+    the next regression there would pass silently. Eight of twenty-seven entries
+    had already gone stale this way (one deleted, seven under the limit).
+
+    This is a maintenance check, not a style one: it fails when the list no longer
+    describes reality, and the fix is to delete the stale entry.
+    """
+    for relative_posix in sorted(BASELINE_OVERSIZED_FILES):
+        path = REPO_ROOT / relative_posix
+        if not path.exists():
+            errors.append(
+                f"{relative_posix}: listed in BASELINE_OVERSIZED_FILES but no longer "
+                "exists; remove the stale entry so the path is not silently exempt."
+            )
+            continue
+        line_count = len(path.read_text(encoding="utf-8", errors="ignore").splitlines())
+        limit = MAX_API_FILE_LINES if relative_posix.endswith(".py") else MAX_WEB_FILE_LINES
+        if line_count <= limit:
+            errors.append(
+                f"{relative_posix}: listed in BASELINE_OVERSIZED_FILES but is now "
+                f"{line_count} lines (limit {limit}); remove the stale entry."
             )
 
 
@@ -5642,6 +5667,7 @@ def main() -> int:
     check_mindmap_architecture(errors)
     check_unified_training_evidence(errors)
     check_file_sizes(errors)
+    check_oversized_baseline_is_current(errors)
     check_router_residency(errors)
     check_shared_local_storage_facade(errors)
     check_db_pool_budget(errors)
