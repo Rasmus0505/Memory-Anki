@@ -64,10 +64,17 @@ def _frontend_steps(*, full: bool) -> list[QualityStep]:
         QualityStep("frontend typecheck", (npm, "run", "typecheck"), WEB_ROOT),
     ]
     if full:
+        isolated_out_dir = os.environ.get("MEMORY_ANKI_VALIDATION_OUT_DIR", "").strip()
+        build_command = (npm, "run", "build")
+        if isolated_out_dir:
+            output = Path(isolated_out_dir)
+            if output.is_absolute() or ".." in output.parts or output == Path("dist"):
+                raise ValueError("validation output must be a relative directory other than dist")
+            build_command += ("--", "--outDir", isolated_out_dir)
         steps.extend(
             [
                 QualityStep("frontend tests", (npm, "run", "test"), WEB_ROOT),
-                QualityStep("frontend build", (npm, "run", "build"), WEB_ROOT),
+                QualityStep("frontend build", build_command, WEB_ROOT),
                 QualityStep("frontend e2e smoke", (npm, "run", "e2e"), WEB_ROOT),
             ]
         )

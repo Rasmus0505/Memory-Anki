@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from '@/shared/feedback/toast'
 import type { MindMapSelection } from '@/modules/content/domain/mindmap-document-entity'
@@ -358,8 +358,12 @@ export function usePalaceEditPage() {
     hasUnsavedChanges: documentState.hasUnsavedChanges,
     saveStatus: documentState.saveStatus,
     flushSave: documentState.flushSave,
+    readCurrentDocumentState: documentState.readCurrentState,
+    adoptArticleTransferState: documentState.adoptArticleTransferState,
     flushSaveWithReconcile: documentState.flushSaveWithReconcile,
     armNextSaveOverride: documentState.armNextSaveOverride,
+    pendingConflict: documentState.pendingConflict,
+    resolveConflict: documentState.resolveConflict,
     saveError: documentState.error,
     isLoadError: documentState.isLoadError,
     isCreatingDraft: documentState.isCreatingDraft,

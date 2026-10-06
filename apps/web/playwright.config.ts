@@ -7,6 +7,8 @@ export default defineConfig({
     timeout: 5_000,
   },
   fullyParallel: true,
+  // Bound local browser contention so shell startup checks exercise the app reliably.
+  workers: 2,
   reporter: process.env.CI ? 'github' : 'list',
   use: {
     baseURL: 'http://127.0.0.1:4173',
@@ -15,7 +17,9 @@ export default defineConfig({
     serviceWorkers: 'block',
   },
   webServer: {
-    command: 'npm run preview -- --host 127.0.0.1 --port 4173 --strictPort',
+    command: process.env.MEMORY_ANKI_VALIDATION_OUT_DIR
+      ? `npm run preview -- --host 127.0.0.1 --port 4173 --strictPort --outDir "${process.env.MEMORY_ANKI_VALIDATION_OUT_DIR}"`
+      : 'npm run preview -- --host 127.0.0.1 --port 4173 --strictPort',
     url: 'http://127.0.0.1:4173',
     // Never reuse a stray preview: it may still proxy /api to the live 8012 service.
     reuseExistingServer: false,

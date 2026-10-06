@@ -88,6 +88,7 @@ def build_dashboard_payload(session: Session) -> dict:
         session,
         start=current_month_start,
         end=current_month_end,
+        kind="review",
     )
     weekly_formal_review_duration_seconds = get_time_record_duration_seconds(
         session,

@@ -13,6 +13,7 @@ from memory_anki.modules.content.api import (
     list_active_palace_tree_structures,
     palace_json,
     parse_segment_node_uids,
+    read_learning_progress_catalog,
     resolve_palace_subject,
     resolve_palace_title,
     stable_tree_order,
@@ -20,6 +21,7 @@ from memory_anki.modules.content.api import (
 )
 
 __all__ = [
+    "read_learning_progress_catalog",
     "ancestor_path",
     "build_today_new_palace_outline",
     "build_tree_from_editor_doc",

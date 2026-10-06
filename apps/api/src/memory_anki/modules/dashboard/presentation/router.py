@@ -3,6 +3,10 @@ from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.deps import session_dep
 from memory_anki.modules.dashboard.application.heatmap_service import build_heatmap_payload
+from memory_anki.modules.dashboard.application.learning_progress import (
+    LearningProgressResponse,
+    build_learning_progress,
+)
 from memory_anki.modules.dashboard.application.service import (
     build_dashboard_payload,
     build_weekly_report_payload,
@@ -16,6 +20,11 @@ def api_dashboard(
     session: Session = Depends(session_dep),
 ):
     return build_dashboard_payload(session)
+
+
+@router.get("/dashboard/learning-progress", response_model=LearningProgressResponse)
+def api_learning_progress(session: Session = Depends(session_dep)):
+    return build_learning_progress(session)
 
 
 @router.get("/dashboard/heatmap")

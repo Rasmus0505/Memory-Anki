@@ -88,6 +88,41 @@ def test_dashboard_duration_is_not_a_separate_filterable_read_model(client, sess
     assert "selected_total_review_duration_seconds" not in response.json()
 
 
+def test_dashboard_monthly_review_duration_excludes_non_review_time(client, session_factory):
+    month_start, _ = today_bounds()
+    with session_factory() as session:
+        session.add_all(
+            [
+                StudySession(
+                    id="monthly-review",
+                    status="completed",
+                    scene="formal_unit_review",
+                    target_type="none",
+                    title="review",
+                    started_at=month_start + timedelta(hours=8),
+                    ended_at=month_start + timedelta(hours=9),
+                    effective_seconds=60,
+                ),
+                StudySession(
+                    id="monthly-practice",
+                    status="completed",
+                    scene="practice",
+                    target_type="none",
+                    title="practice",
+                    started_at=month_start + timedelta(hours=10),
+                    ended_at=month_start + timedelta(hours=11),
+                    effective_seconds=300,
+                ),
+            ]
+        )
+        session.commit()
+
+    response = client.get("/api/v1/dashboard")
+
+    assert response.status_code == 200
+    assert response.json()["monthly_total_review_duration_seconds"] == 60
+
+
 def test_dashboard_today_total_matches_unified_today_records(client, session_factory):
     today_start, _ = today_bounds()
     now = today_start + timedelta(hours=12)

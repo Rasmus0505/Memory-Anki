@@ -26,9 +26,14 @@ export {
   FREESTYLE_WORKSPACE_SECONDARY,
   freestyleWorkspaceLabel,
   freestyleWorkspacePath,
+  isPalaceReviewWorkspace,
   normalizeFreestyleWorkspaceId,
+  palaceReviewPath,
+  palaceReviewWorkspaceId,
+  parsePalaceReviewWorkspaceId,
   peerFreestyleWorkspace,
   type FreestyleWorkspaceId,
+  type PalaceReviewWorkspaceId,
 } from './domain/freestyleWorkspace'
 export {
   createOperationId,

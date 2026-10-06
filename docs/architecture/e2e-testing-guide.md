@@ -129,3 +129,5 @@ test('宫殿列表在接口离线时显示降级提示', async ({ page }) => {
 - 架构检查：`python tools/check_architecture.py`
 - 门禁回归：`python tools/test_check_architecture.py`
 - 完整交付（含 Playwright 冒烟）：`python tools/quality_gate.py --full`
+- 日常服务运行期间，使用隔离构建避免替换其静态文件：PowerShell `$env:MEMORY_ANKI_VALIDATION_OUT_DIR='dist-validation-trusted-loop'; python tools/quality_gate.py --full`。质量门会把构建写到独立目录，Playwright 预览同一目录；不能指定 `dist`、绝对路径或上级目录。
+- 隔离构建不等于发布，不运行 `--launchers`；后者会中断共享服务，应在用户确认维护窗口后执行。

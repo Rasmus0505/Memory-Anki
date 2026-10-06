@@ -107,7 +107,6 @@ export function QuizKnowledgeDigressionDialog({
             <DialogTitle className="truncate text-base font-semibold">{title}</DialogTitle>
             <DialogDescription className="truncate text-xs text-muted-foreground">
               {edge?.node_text || nodeUid || '只读导图 · 关闭后继续做题'}
-              {edge?.is_cross_palace ? ' · 跨宫引用' : ''}
             </DialogDescription>
           </div>
         </div>
@@ -186,7 +185,6 @@ export function QuizKnowledgeEdgePicker({
                 <span className="text-sm font-medium">{edge.node_text || edge.node_uid}</span>
                 <span className="text-xs text-muted-foreground">
                   {palaceLabel}
-                  {edge.is_cross_palace ? ' · 跨宫' : ''}
                 </span>
               </button>
             )

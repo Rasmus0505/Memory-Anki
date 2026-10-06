@@ -18,6 +18,11 @@ from memory_anki.modules.quiz.application.node_binding import (
     mutate_quiz_node_bindings,
     search_mindmap_nodes,
 )
+from memory_anki.modules.quiz.application.practice_progress import (
+    clear_practice_progress,
+    read_practice_progress,
+    upsert_practice_progress,
+)
 from memory_anki.modules.quiz.application.question_mutation_commands import (
     batch_create_chapter_questions_command,
     batch_create_palace_questions_command,
@@ -300,6 +305,32 @@ def api_batch_delete_palace_quiz_questions(data: dict, s: Session = Depends(sess
         return {"ok": True, "deleted_count": deleted_count}
     except Exception as exc:  # pragma: no cover - centralized HTTP mapping
         _raise_http_error(exc)
+
+
+@router.get("/quiz/practice-progress")
+def api_read_quiz_practice_progress(s: Session = Depends(session_dep)):
+    return read_practice_progress(s)
+
+
+@router.put("/quiz/practice-progress")
+def api_upsert_quiz_practice_progress(data: dict | None = Body(default=None), s: Session = Depends(session_dep)):
+    payload = data if isinstance(data, dict) else {}
+    items = payload.get("items")
+    return upsert_practice_progress(s, items if isinstance(items, list) else [])
+
+
+@router.post("/quiz/practice-progress/clear")
+def api_clear_quiz_practice_progress(data: dict | None = Body(default=None), s: Session = Depends(session_dep)):
+    payload = data if isinstance(data, dict) else {}
+    palace_ids = payload.get("palace_ids")
+    question_ids = payload.get("question_ids")
+    return clear_practice_progress(
+        s,
+        clear_all=bool(payload.get("all")),
+        palace_ids=palace_ids if isinstance(palace_ids, list) else [],
+        question_ids=question_ids if isinstance(question_ids, list) else [],
+        cleared_at=str(payload.get("cleared_at") or ""),
+    )
 
 
 @router.post("/palace-quiz-questions/reset-attempts")

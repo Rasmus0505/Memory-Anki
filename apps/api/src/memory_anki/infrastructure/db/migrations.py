@@ -18,4 +18,9 @@ def build_alembic_config() -> Config:
 
 
 def run_migrations() -> None:
-    command.upgrade(build_alembic_config(), "head")
+    from memory_anki.core.config import DB_PATH
+    from memory_anki.infrastructure.db.migration_binding_guard import ensure_binding_migration_safe
+
+    config = build_alembic_config()
+    ensure_binding_migration_safe(config, DB_PATH)
+    command.upgrade(config, "head")

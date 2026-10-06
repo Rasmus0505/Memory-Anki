@@ -1,5 +1,6 @@
 """Public facade for permanent-mark review units."""
 
+from .application.learning_progress_evidence import read_learning_progress_evidence
 from .application.unit_ladder_progress import get_palace_ladder_progress
 from .application.unit_review_preview import get_unit_review_preview
 from .application.unit_review_projection import (
@@ -33,6 +34,7 @@ from .application.unit_review_summary import (
     get_review_queue_summary,
     get_unit_review_weekly_stats,
     project_palace_review_summaries,
+    read_palace_due_signals,
 )
 from .application.unit_scheduler import (
     INTERVAL_DAYS,
@@ -42,6 +44,7 @@ from .application.unit_scheduler import (
 )
 
 __all__ = [
+    "read_learning_progress_evidence",
     "get_unit_review_preview",
     "warm_unit_projection_cache",
     "INTERVAL_DAYS",
@@ -70,6 +73,7 @@ __all__ = [
     "reconcile_palace_units",
     "resolve_unit_definitions",
     "project_palace_review_summaries",
+    "read_palace_due_signals",
     "start_freestyle_unit_review_session",
     "start_unit_review_session",
     "undo_content_schedule_batch",

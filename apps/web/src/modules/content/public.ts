@@ -2,6 +2,9 @@
  * Public surface for module `content`.
  * Other modules may import only from this file.
  */
+export * from './api/articleReadingApi'
+export { useArticleTransfer } from './ui/mindmap-editor/article/transfer/useArticleTransfer'
+export { ArticleTransferDialog } from './ui/mindmap-editor/article/transfer/ArticleTransferDialog'
 export * from './domain/knowledge-entity/api'
 export * from './domain/mindmap-document-entity'
 export * from './domain/palace-entity/api'

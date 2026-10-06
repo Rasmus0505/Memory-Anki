@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.deps import session_dep
@@ -26,6 +26,8 @@ from memory_anki.modules.memory.api import (
     undo_content_schedule_batch,
     undo_unit_rating,
 )
+from memory_anki.platform.application import MutationIdentity, mutation_identity_from_headers
+from memory_anki.platform.persistence import SqlAlchemyMutationResponseStore
 
 router = APIRouter(tags=["review"])
 
@@ -98,11 +100,24 @@ def reconcile_units(palace_id: int, session: Session = Depends(session_dep)):
 def patch_unit_schedule(
     unit_id: str,
     data: dict,
+    request: Request,
     session: Session = Depends(session_dep),
 ):
     try:
         payload = data if isinstance(data, dict) else {}
+        mutation_identity = mutation_identity_from_headers(request.headers)
+        mutation_store = SqlAlchemyMutationResponseStore(session)
         stage_raw = payload.get("stage_index", payload.get("stageIndex"))
+        body_operation_id = str(payload.get("operation_id") or payload.get("operationId") or "").strip()
+        if mutation_identity is None and body_operation_id:
+            mutation_identity = MutationIdentity(operation_id=body_operation_id)
+        existing_response = mutation_store.get(mutation_identity)
+        if existing_response is not None:
+            saved_item = existing_response.get("item") if isinstance(existing_response, dict) else None
+            saved_unit = saved_item.get("unit") if isinstance(saved_item, dict) else None
+            if not isinstance(saved_unit, dict) or saved_unit.get("id") != unit_id:
+                raise ValueError("operation_id belongs to another operation or unit")
+            return existing_response
         due_raw = payload.get("due_date", payload.get("dueDate"))
         passed_raw = payload.get("has_passed", payload.get("hasPassed"))
         item = adjust_unit_schedule(
@@ -114,8 +129,10 @@ def patch_unit_schedule(
             has_passed=None if passed_raw is None else bool(passed_raw),
             reason=str(payload.get("reason") or "manual_adjust"),
         )
+        response = {"item": item}
+        mutation_store.save(mutation_identity, response)
         session.commit()
-        return {"item": item}
+        return response
     except (TypeError, ValueError) as exc:
         session.rollback()
         raise _bad_request(ValueError(str(exc))) from exc

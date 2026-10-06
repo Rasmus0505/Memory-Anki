@@ -23,7 +23,7 @@ def write_file(path: Path, content: str) -> None:
 
 
 SIX_NAV_LABELS = ("随心", "随心 2", "知识", "英语", "创建", "洞察")
-FIVE_NAV_LABELS = ("随心", "知识", "英语", "创建", "洞察")
+PROGRESS_NAV_LABELS = ("随心", "知识", "英语", "创建", "进度", "洞察")
 
 
 def write_unified_training_fixture(root: Path, *, labels: tuple[str, ...]) -> tuple[Path, Path]:
@@ -49,10 +49,10 @@ def write_unified_training_fixture(root: Path, *, labels: tuple[str, ...]) -> tu
     return api_src, web_src
 
 
-def test_unified_training_evidence_accepts_five_nav_labels(
+def test_unified_training_evidence_accepts_independent_progress_navigation(
     tmp_path: Path, monkeypatch
 ) -> None:
-    api_src, web_src = write_unified_training_fixture(tmp_path, labels=FIVE_NAV_LABELS)
+    api_src, web_src = write_unified_training_fixture(tmp_path, labels=PROGRESS_NAV_LABELS)
     monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(check_architecture, "API_SRC", api_src)
     monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
@@ -76,6 +76,22 @@ def test_unified_training_evidence_rejects_six_nav_labels(
 
     assert any("primary navigation must remain exactly" in error for error in errors)
     assert any("随心 2" in error for error in errors)
+
+
+def test_learning_progress_projection_forbids_database_writes(tmp_path: Path, monkeypatch) -> None:
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", tmp_path / "apps" / "web" / "src")
+    path = api_src / "modules" / "dashboard" / "application" / "learning_progress.py"
+    write_file(path, "def read(session):\n    session.commit()\n")
+    errors: list[str] = []
+    check_architecture.check_learning_progress_read_only(errors)
+    assert any("must not write" in error for error in errors)
+    write_file(path, "def read(session):\n    values = set()\n    values.add(1)\n    return session.execute('SELECT 1')\n")
+    errors = []
+    check_architecture.check_learning_progress_read_only(errors)
+    assert errors == []
 
 
 def test_freestyle_facade_requires_round_plan_public_surface(
@@ -1195,8 +1211,63 @@ def test_freestyle_knowledge_entry_scope_rejects_saved_selection_override(
 
     assert any("memory-palace stream" in error for error in errors)
     assert any("must not ignore knowledge-page review" in error for error in errors)
-    assert any("shelf review must enter /freestyle?palaceId=" in error for error in errors)
+    assert any("shelf review must open /palaces/<id>/review" in error for error in errors)
     assert any("locks every stream to one palace" in error for error in errors)
+
+
+def test_identity_keyed_progress_rejects_private_ledgers(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    write_file(
+        api_src / "modules" / "practice" / "application" / "round_state_service.py",
+        "def apply_round_rating():\n    return None\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "domain" / "peer_progress.py",
+        "def progress_identity():\n    return ''\n",
+    )
+    write_file(
+        web_src / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx",
+        "const questionStates = {}\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "hooks" / "useFreestyleQuizFlow.ts",
+        "export function useFreestyleQuizFlow() {}\n",
+    )
+    write_file(tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md", "two workspaces\n")
+    write_file(tmp_path / "docs" / "architecture" / "unified-training-evidence.md", "quiz evidence\n")
+
+    errors: list[str] = []
+    check_architecture.check_identity_keyed_progress(errors)
+
+    assert any("other active rounds" in error for error in errors)
+    assert any("private ledger" in error for error in errors)
+    assert any("shared question progress" in error for error in errors)
+
+
+def test_identity_keyed_progress_rejects_false_sync_acknowledgment(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    monkeypatch.setattr(check_architecture, "API_SRC", tmp_path / "api")
+    quiz_api = web_src / "modules" / "quiz" / "domain" / "quiz-entity" / "api"
+    write_file(
+        quiz_api / "quizPracticeProgressSync.ts",
+        "remember(readQuizPracticeProgressSnapshot())\n",
+    )
+    write_file(quiz_api / "quizApi.ts", "coalesceKey: 'quiz-practice-progress'\n")
+    errors: list[str] = []
+    check_architecture.check_identity_keyed_progress(errors)
+    assert any("unsent local answers" in error for error in errors)
+    assert any("drain in-flight changes" in error for error in errors)
+    assert any("different question progress batches" in error for error in errors)
 
 
 def test_freestyle_knowledge_entry_scope_accepts_stream_lock(
@@ -1213,7 +1284,11 @@ def test_freestyle_knowledge_entry_scope_accepts_stream_lock(
     )
     write_file(
         web_src / "modules" / "content" / "ui" / "palace-catalog" / "components" / "palace-list" / "usePalaceListCardActions.tsx",
-        "navigate(`/freestyle?palaceId=${palace.id}`)\n",
+        "navigate(`/palaces/${palace.id}/review`)\n",
+    )
+    write_file(
+        web_src / "pages" / "library" / "PalaceReviewPage.tsx",
+        "export default function PalaceReviewPage() { return <ImmersiveFreestylePage lockedPalaceId={1} /> }\n",
     )
     write_file(
         web_src / "modules" / "practice" / "ui" / "freestyle" / "hooks" / "useImmersiveQueue.ts",
@@ -2069,6 +2144,24 @@ def test_palace_read_projection_cannot_repair_binding(
     ]
 
 
+def test_catalog_reads_cannot_reconcile_review_units(
+    tmp_path: Path, monkeypatch
+) -> None:
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    path = api_src / "modules" / "content" / "application" / "palace_review_rollups.py"
+    write_file(path, "reconcile_palace_units(session, palace.id)\n")
+
+    errors: list[str] = []
+    check_architecture.check_palace_read_side_purity(errors)
+
+    assert errors == [
+        "apps/api/src/memory_anki/modules/content/application/palace_review_rollups.py: "
+        "catalog and review-summary reads must not reconcile review units."
+    ]
+
+
 def test_business_query_cannot_run_palace_maintenance(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -2226,6 +2319,29 @@ def test_quiz_shortcut_primitive_must_live_in_quiz_entity(
     check_architecture.check_quiz_shortcut_primitive(errors)
 
     assert any("quiz shortcut primitive is required" in item for item in errors)
+
+
+def test_quiz_shortcut_primitive_requires_delete_and_enter_advance(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    write_file(
+        web_src / "modules" / "quiz" / "domain" / "quiz-entity" / "model" / "quizShortcuts.ts",
+        "toggle_mark ArrowUp resolveQuizShortcutAction run: !context.repeat\n",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "quiz-frontend-boundary.md",
+        "quiz_shortcuts ArrowUp\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_quiz_shortcut_primitive(errors)
+
+    assert any("delete_question" in item for item in errors)
+    assert any("answerRevealed" in item for item in errors)
+    assert any("confirmation dialog" in item for item in errors)
 
 
 def test_window_layout_memory_is_required(tmp_path: Path, monkeypatch) -> None:
@@ -3176,9 +3292,9 @@ def test_live_study_presence_rejects_sqlite_and_missing_sw_bypass(
     assert any("永久功能" in error for error in errors)
     assert any("useFreestyleLiveMirror" in error for error in errors)
     assert any("LiveStudyPresenceProvider" in error for error in errors)
-    assert any("跟随重试" in error for error in errors)
+    assert any("设备本地视图" in error for error in errors)
     assert any("hello hydration" in error for error in errors)
-    assert any("follow retry" in error for error in errors)
+    assert any("round refresh" in error for error in errors)
     assert any("BaseHTTPMiddleware" in error for error in errors)
 
 

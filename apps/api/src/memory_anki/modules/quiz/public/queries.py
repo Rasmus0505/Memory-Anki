@@ -10,10 +10,12 @@ from memory_anki.modules.quiz.api import (
     normalize_overlay_question_range,
     project_palace_quiz_count_badges,
     question_is_due,
+    read_learning_progress_quiz,
     serialize_question,
 )
 
 __all__ = [
+    "read_learning_progress_quiz",
     "list_mastery_profiles_for_palaces",
     "list_node_bindings_for_palaces",
     "list_published_questions_for_palaces",

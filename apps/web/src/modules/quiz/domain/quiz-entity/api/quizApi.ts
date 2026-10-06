@@ -156,6 +156,53 @@ export function purgeQuizTrashApi() {
   })
 }
 
+export interface QuizPracticeProgressWire {
+  items: Array<{
+    question_id: number
+    palace_id: number | null
+    state: Record<string, unknown>
+    updated_at: string
+  }>
+  clears: {
+    all: string | null
+    palaces: Record<string, string>
+    questions: Record<string, string>
+  }
+}
+
+export function getQuizPracticeProgressApi() {
+  return request<QuizPracticeProgressWire>('/quiz/practice-progress')
+}
+
+export function saveQuizPracticeProgressApi(items: QuizPracticeProgressWire['items']) {
+  return request<QuizPracticeProgressWire>('/quiz/practice-progress', {
+    method: 'PUT',
+    body: JSON.stringify({ items }),
+    persistence: {
+      resourceKey: 'quiz-practice-progress',
+      description: '保存做题进度',
+      replayMode: 'auto',
+    },
+  })
+}
+
+export function clearQuizPracticeProgressApi(payload: {
+  all?: boolean
+  palace_ids?: number[]
+  question_ids?: number[]
+  cleared_at?: string
+}) {
+  return request<QuizPracticeProgressWire>('/quiz/practice-progress/clear', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    persistence: {
+      resourceKey: `quiz-practice-progress:clear:${payload.cleared_at || 'now'}`,
+      description: '清除做题进度',
+      replayMode: 'auto',
+    },
+  })
+}
+
 export function resetPalaceQuizQuestionAttemptsApi(questionIds: number[]) {
   return request<{ ok: boolean; reset_count: number }>(`/palace-quiz-questions/reset-attempts`, {
     method: 'POST',

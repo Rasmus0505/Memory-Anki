@@ -16,10 +16,13 @@ from memory_anki.modules.memory.api import (
     list_trusted_due_units_for_queue,
     normalize_rating,
     project_palace_review_summaries,
+    read_learning_progress_evidence,
+    read_palace_due_signals,
     resolve_unit_definitions,
 )
 
 __all__ = [
+    "read_learning_progress_evidence",
     "INTERVAL_DAYS",
     "RATING_LABELS",
     "VALID_RATINGS",
@@ -36,4 +39,5 @@ __all__ = [
     "normalize_rating",
     "resolve_unit_definitions",
     "project_palace_review_summaries",
+    "read_palace_due_signals",
 ]
