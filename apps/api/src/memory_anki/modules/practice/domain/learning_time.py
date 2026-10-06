@@ -12,6 +12,8 @@ from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from memory_anki.modules.practice.domain.workspace import is_palace_review_workspace
+
 BUCKETS = ("unit", "quiz", "lookup")
 QUIZ_TITLES = {"做题", "关联题目"}
 LOOKUP_TITLE = "查看宫殿"
@@ -146,6 +148,8 @@ def apply_learning_adds(
 
 def route_matches_workspace(route: str, workspace: str) -> bool:
     path = str(route or "").split("?", 1)[0].rstrip("/") or "/"
+    if is_palace_review_workspace(workspace):
+        return path == f"/palaces/{workspace[1:]}/review"
     if workspace == "secondary":
         return path == "/freestyle-2" or path.startswith("/freestyle-2/")
     return path == "/freestyle" or (
@@ -159,6 +163,8 @@ def segment_in_workspace(segment: Mapping[str, Any], workspace: str) -> bool:
         return route_matches_workspace(route, workspace)
     title = str(segment.get("title") or "")
     scene = str(segment.get("scene") or "")
+    if is_palace_review_workspace(workspace):
+        return scene == "freestyle" and title == "宫殿复习"
     if workspace == "secondary":
         return scene == "freestyle" and title == "随心 2"
     return scene == "freestyle" and title == "随心"

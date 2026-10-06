@@ -6,6 +6,7 @@ from memory_anki.modules.practice.domain.peer_progress import (
     apply_peer_progress,
     apply_peer_restore,
     progress_identity,
+    project_identity_ratings,
 )
 from memory_anki.modules.practice.domain.round_compress import (
     compress_completed,
@@ -699,6 +700,33 @@ def test_progress_identity_ignores_revision_and_maps_quiz_cards():
     quiz = _card("quiz_question:9", kind="quiz_question")
     assert progress_identity(unit) == "unit:u1"
     assert progress_identity(quiz) == "quiz:9"
+
+
+def test_identity_rating_stamps_the_same_unit_without_moving_the_other_cursor():
+    shelf = plan_from_cards([_card("review_unit:unit-a:r1", unit_id="unit-a")])
+    freestyle = set_cursor(
+        plan_from_cards(
+            [
+                _card("review_unit:unit-a:r2", unit_id="unit-a"),
+                _card("review_unit:unit-b:r1", unit_id="unit-b"),
+            ]
+        ),
+        "review_unit:unit-b:r1",
+    )
+    projected, changed = project_identity_ratings(freestyle, {"unit-a": 3})
+    assert changed
+    assert projected["current_card_id"] == "review_unit:unit-b:r1"
+    assert "review_unit:unit-a:r2" in projected["completed_ids"]
+    assert projected["encounters"]["review_unit:unit-a:r2"]["rating"] == 3
+    assert "review_unit:unit-b:r1" not in projected["completed_ids"]
+    again, changed_again = project_identity_ratings(projected, {"unit-a": 3})
+    assert not changed_again
+    stored = normalize_plan(again)
+    assert stored["encounters"]["review_unit:unit-a:r2"]["rating"] == 3
+    weak, _changed = project_identity_ratings(stored, {"unit-a": 2})
+    assert weak["encounters"]["review_unit:unit-a:r2"]["rating"] == 2
+    assert "review_unit:unit-a:r2" not in weak["completed_ids"]
+    assert shelf["original_cards"]
 
 
 def test_peer_progress_completes_overlapping_unit_without_moving_cursor():

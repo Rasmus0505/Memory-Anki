@@ -37,6 +37,7 @@ import {
   scrollFrameFromPosition,
 } from '@/modules/practice/ui/freestyle/model/freestyleScrollChannel'
 import { useFreestyleEdgeRubberBand } from '@/modules/practice/ui/freestyle/hooks/useFreestyleEdgeRubberBand'
+import { useFreestyleWheelPaging } from '@/modules/practice/ui/freestyle/hooks/useFreestyleWheelPaging'
 
 function slotIndexOfKey(key: string, cardIds: readonly string[]) {
   if (key.startsWith('slot:')) return Number(key.slice(5))
@@ -478,6 +479,8 @@ export function useFreestyleFeedNavigation({
     }, 90)
   }, [flushScrollSettled])
   settleWhileTouchingRef.current = scheduleScrollSettle
+
+  useFreestyleWheelPaging(scrollRef, `${loading}:${cards.length}`, navigateNext, navigatePrevious)
 
   useEffect(() => {
     const node = scrollRef.current

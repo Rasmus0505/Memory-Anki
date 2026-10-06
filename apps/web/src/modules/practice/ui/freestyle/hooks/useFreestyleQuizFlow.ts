@@ -22,7 +22,7 @@ import {
   type FreestyleMode,
 } from '@/modules/practice/ui/freestyle/model/today-training'
 import type { QuizRuntimeState } from '@/modules/quiz/public'
-import { useQuizAttemptOrchestration } from '@/modules/quiz/public'
+import { useQuizAttemptOrchestration, writeQuizSessionState } from '@/modules/quiz/public'
 import { emitQuizResultFeedback } from '@/modules/quiz/public'
 import type { FreestyleCard, FreestyleQuizCard } from '@/shared/api/contracts'
 import { emitReviewConfetti } from '@/shared/components/celebration'
@@ -112,9 +112,11 @@ export function useFreestyleQuizFlow({
 
   const updateQuestionState = useCallback(
     (questionId: number, updater: (current: QuizRuntimeState) => QuizRuntimeState) => {
+      let sharedState: QuizRuntimeState | null = null
       setProgressAndPersist((current) => {
         const previous = current.questionStates[questionId] || {}
         const nextState = updater(previous)
+        sharedState = nextState
         const wasResolved = Boolean(previous.resolved)
         const isResolved = Boolean(nextState.resolved)
         const resolvedIds = new Set(current.resolvedQuestionIds)
@@ -135,8 +137,14 @@ export function useFreestyleQuizFlow({
           },
         }
       })
+      if (sharedState) {
+        const palaceId = queueRef.current.find(
+          (card) => isQuizCard(card) && card.question.id === questionId,
+        )?.palace_context?.id
+        writeQuizSessionState(questionId, sharedState, palaceId)
+      }
     },
-    [setProgressAndPersist],
+    [queueRef, setProgressAndPersist],
   )
 
   const orchestration = useQuizAttemptOrchestration({

@@ -13,7 +13,7 @@ import type { QuizRuntimeState } from '@/modules/quiz/public'
 type ImmersiveQueue = ReturnType<typeof useImmersiveQueue>
 type QuizFlow = ReturnType<typeof useFreestyleQuizFlow>
 
-/** Mirrors the feed between PWA and desktop: seek, quiz state, reveal map, ratings. */
+/** Shares rating evidence while routes, card positions, and reveal UI stay local. */
 export function useFreestyleLiveSync({
   fullPath,
   entryPalaceId,
@@ -162,7 +162,7 @@ export function useFreestyleLiveSync({
       }]
     })
     if (entries.length > 0) {
-      completeCardBatch(entries, rating.currentCardId ?? undefined)
+      completeCardBatch(entries, queueStateRef.current.currentCardId ?? undefined)
     }
   }, [adoptRoundVersion, completeCardBatch, updateUnitEncounter])
   const queueCardIds = useMemo(() => cards.map((card) => card.id), [cards])

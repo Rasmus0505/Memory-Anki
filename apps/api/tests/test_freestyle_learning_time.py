@@ -258,6 +258,9 @@ def test_route_matches_workspace_separates_primary_and_secondary() -> None:
     assert route_matches_workspace("/freestyle", "secondary") is False
     assert route_matches_workspace("/freestyle-2", "secondary") is True
     assert route_matches_workspace("/freestyle-2", "primary") is False
+    assert route_matches_workspace("/palaces/23/review", "p23") is True
+    assert route_matches_workspace("/palaces/23/review", "primary") is False
+    assert route_matches_workspace("/freestyle", "p23") is False
 
 
 def test_normalize_plan_keeps_learning_time() -> None:

@@ -642,4 +642,5 @@ def _set_encounter(plan: Plan, card_id: str, encounter_id: str, revision: int, r
         "encounter_id": encounter_id,
         "status": "passed" if rating in PASS_RATINGS else "failed",
         "unit_revision": _int(revision),
+        "rating": rating,
     }

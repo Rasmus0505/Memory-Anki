@@ -133,6 +133,8 @@ export function useFreestyleEdgeRubberBand(
     }
 
     const onWheel = (event: WheelEvent) => {
+      // The feed pager preventDefaults wheel notches before they reach this bubble.
+      if (event.defaultPrevented) return
       if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) return
       const edge: FeedEdge | null = event.deltaY < 0 && atEdge(scroller, 'top')
         ? 'top'

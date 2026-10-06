@@ -5,8 +5,10 @@ import {
   FREESTYLE_WORKSPACE_SECONDARY,
   freestyleWorkspaceLabel,
   freestyleWorkspacePath,
+  isPalaceReviewWorkspace,
   peerFreestyleWorkspace,
   type FreestyleWorkspaceId,
+  type PalaceReviewWorkspaceId,
 } from '@/modules/practice/public'
 import {
   DropdownMenu,
@@ -35,13 +37,16 @@ export function FreestyleHudOverflow({
   onOpenPlan,
   onSyncProgress,
   onOpenHistory,
+  returnTo,
 }: {
   summaryLabel: string
-  slot: FreestyleWorkspaceId
+  slot: FreestyleWorkspaceId | PalaceReviewWorkspaceId
   onOpenPlan: () => void
   onSyncProgress: () => void
   onOpenHistory: () => void
+  returnTo?: string | null
 }) {
+  const peer = isPalaceReviewWorkspace(slot) ? null : peerFreestyleWorkspace(slot)
   return (
     <>
       <button
@@ -74,11 +79,18 @@ export function FreestyleHudOverflow({
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuLabel className="text-xs text-muted-foreground">切换模块</DropdownMenuLabel>
-          <DropdownMenuItem asChild>
-            <Link to={freestyleWorkspacePath(peerFreestyleWorkspace(slot))}>
-              {freestyleWorkspaceLabel(peerFreestyleWorkspace(slot))}
-            </Link>
-          </DropdownMenuItem>
+          {returnTo ? (
+            <DropdownMenuItem asChild>
+              <Link to={returnTo}>返回书架</Link>
+            </DropdownMenuItem>
+          ) : null}
+          {peer ? (
+            <DropdownMenuItem asChild>
+              <Link to={freestyleWorkspacePath(peer)}>
+                {freestyleWorkspaceLabel(peer)}
+              </Link>
+            </DropdownMenuItem>
+          ) : null}
           {FREESTYLE_SECTION_LINKS.map((item) => (
             <DropdownMenuItem key={item.to} asChild>
               <Link to={item.to}>{item.label}</Link>

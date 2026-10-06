@@ -6,9 +6,12 @@ import {
   sanitizeFreestyleFeedConfig,
 } from '../domain/feedConfig'
 import {
+  FREESTYLE_WORKSPACE_PRIMARY,
   FREESTYLE_WORKSPACE_SECONDARY,
+  isPalaceReviewWorkspace,
   normalizeFreestyleWorkspaceId,
   type FreestyleWorkspaceId,
+  type PalaceReviewWorkspaceId,
 } from '../domain/freestyleWorkspace'
 import {
   DEFAULT_QUEUE_STATE,
@@ -26,6 +29,8 @@ export const FREESTYLE_SECONDARY_FEED_CONFIG_UPDATED_EVENT = 'memory-anki-freest
 export const FREESTYLE_SECONDARY_FEED_CONFIG_STORAGE_KEY = 'memory-anki.freestyle.feed-config.secondary.v2'
 export const FREESTYLE_SECONDARY_QUEUE_STATE_STORAGE_KEY = 'memory-anki.freestyle.queue-state.secondary.v1'
 export const FREESTYLE_PEER_ROUND_EVENT = 'memory-anki-freestyle-peer-round'
+
+export type FreestyleQueueWorkspace = FreestyleWorkspaceId | PalaceReviewWorkspaceId
 
 export type FreestylePeerRoundDetail = {
   workspace: FreestyleWorkspaceId
@@ -52,21 +57,27 @@ const secondaryFeedConfigStore = createPersistentPreferenceStore<FreestyleFeedCo
   isValidCache: isValidFeedConfigCache,
 })
 
-function isSecondaryWorkspace(workspace?: FreestyleWorkspaceId) {
+function isSecondaryWorkspace(workspace?: FreestyleQueueWorkspace) {
   return normalizeFreestyleWorkspaceId(workspace) === FREESTYLE_WORKSPACE_SECONDARY
+    && !isPalaceReviewWorkspace(workspace)
 }
 
-function feedConfigStoreFor(workspace?: FreestyleWorkspaceId) {
+function feedConfigStoreFor(workspace?: FreestyleQueueWorkspace) {
   return isSecondaryWorkspace(workspace) ? secondaryFeedConfigStore : feedConfigStore
 }
 
-function queueStateStorageKey(workspace?: FreestyleWorkspaceId) {
+function queueStateStorageKey(workspace?: FreestyleQueueWorkspace) {
+  if (isPalaceReviewWorkspace(workspace)) {
+    return `memory-anki.freestyle.queue-state.${workspace}.v1`
+  }
   return isSecondaryWorkspace(workspace)
     ? FREESTYLE_SECONDARY_QUEUE_STATE_STORAGE_KEY
     : FREESTYLE_QUEUE_STATE_STORAGE_KEY
 }
 
-export function readFreestyleFeedConfig(workspace?: FreestyleWorkspaceId): FreestyleFeedConfig {
+export function readFreestyleFeedConfig(workspace?: FreestyleQueueWorkspace): FreestyleFeedConfig {
+  // Palace review borrows mix/content settings. It must not read a palace-locked copy.
+  if (isPalaceReviewWorkspace(workspace)) return readFreestyleFeedConfig(FREESTYLE_WORKSPACE_PRIMARY)
   const store = feedConfigStoreFor(workspace)
   if (!isSecondaryWorkspace(workspace) && typeof window !== 'undefined' && !window.localStorage.getItem(FREESTYLE_FEED_CONFIG_STORAGE_KEY)) {
     const legacy = window.localStorage.getItem(LEGACY_FREESTYLE_FEED_CONFIG_STORAGE_KEY)
@@ -83,18 +94,22 @@ export function readFreestyleFeedConfig(workspace?: FreestyleWorkspaceId): Frees
   return store.read()
 }
 
-export function saveFreestyleFeedConfig(config: FreestyleFeedConfig, workspace?: FreestyleWorkspaceId) {
+export function saveFreestyleFeedConfig(config: FreestyleFeedConfig, workspace?: FreestyleQueueWorkspace) {
+  // A single-palace review must not write the global 随心 selection or emit its change event.
+  if (isPalaceReviewWorkspace(workspace)) return sanitizeFreestyleFeedConfig(config)
   return feedConfigStoreFor(workspace).write(config)
 }
 
-export function resetFreestyleFeedConfig(workspace?: FreestyleWorkspaceId) {
+export function resetFreestyleFeedConfig(workspace?: FreestyleQueueWorkspace) {
+  if (isPalaceReviewWorkspace(workspace)) return sanitizeFreestyleFeedConfig(DEFAULT_FREESTYLE_FEED_CONFIG)
   if (!isSecondaryWorkspace(workspace) && typeof window !== 'undefined') {
     window.localStorage.removeItem(LEGACY_FREESTYLE_FEED_CONFIG_STORAGE_KEY)
   }
   return feedConfigStoreFor(workspace).reset()
 }
 
-export function emitFreestylePeerRound(workspace: FreestyleWorkspaceId) {
+export function emitFreestylePeerRound(workspace: FreestyleQueueWorkspace) {
+  if (isPalaceReviewWorkspace(workspace)) return
   const detail: FreestylePeerRoundDetail = {
     workspace: normalizeFreestyleWorkspaceId(workspace),
   }
@@ -116,7 +131,7 @@ export function isQueueStateFromPreviousDay(state: FreestyleSkipState, now = Dat
   return !isSameLocalDay(state.startedAt, now)
 }
 
-export function readQueueState(workspace?: FreestyleWorkspaceId): FreestyleSkipState {
+export function readQueueState(workspace?: FreestyleQueueWorkspace): FreestyleSkipState {
   if (typeof window === 'undefined') return DEFAULT_QUEUE_STATE
   try {
     const raw = window.localStorage.getItem(queueStateStorageKey(workspace))
@@ -179,7 +194,7 @@ function persistQueueState(storageKey: string, state: FreestyleSkipState): Frees
   }
 }
 
-export function saveQueueState(state: FreestyleSkipState, workspace?: FreestyleWorkspaceId) {
+export function saveQueueState(state: FreestyleSkipState, workspace?: FreestyleQueueWorkspace) {
   return persistQueueState(queueStateStorageKey(workspace), state)
 }
 

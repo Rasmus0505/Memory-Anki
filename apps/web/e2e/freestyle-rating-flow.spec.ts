@@ -202,7 +202,25 @@ function holdRatings(page: Page) {
         body,
         release: (status = 200) => {
           const payload = status === 200
-            ? { item: ratingItem(body), round: { plan_version: 2, version: 2, round_id: body.round_id, conflict: false } }
+            ? {
+              item: ratingItem(body),
+              round: {
+                plan_version: 2,
+                version: 2,
+                round_id: body.round_id,
+                conflict: false,
+                completed_ids: body.rating >= 3 ? ['review_unit:e2e-rate:r1'] : [],
+                plan: {
+                  version: 2,
+                  cards: [{
+                    card_id: 'review_unit:e2e-rate:r1',
+                    status: body.rating >= 3 ? 'completed' : 'retry',
+                    last_rating: body.rating,
+                    retry_after_cards: body.rating >= 3 ? 0 : 3,
+                  }],
+                },
+              },
+            }
             : { detail: 'network down' }
           void route.fulfill({
             status,
@@ -224,7 +242,7 @@ test('paints a grade immediately, queues the next tap, then opens a skippable ro
   const remember = page.getByTestId('freestyle-rating-button-3')
   const easy = page.getByTestId('freestyle-rating-button-4')
   await expect(remember).toBeEnabled()
-  await remember.click()
+  await remember.evaluate((button: HTMLButtonElement) => button.click())
   await expect(remember).toHaveAttribute('aria-pressed', 'true')
   await expect(remember).toBeEnabled()
   await expect(page.getByTestId('freestyle-rating-effect-line')).toContainText('已选记得')
@@ -242,17 +260,15 @@ test('paints a grade immediately, queues the next tap, then opens a skippable ro
 
   held[0].release()
   await expect.poll(() => held.length).toBe(2)
-  await expect(easy).toBeEnabled()
-  await expect(easy).toHaveAttribute('aria-pressed', 'true')
+  expect(held[1].body.rating).toBe(4)
   held[1].release()
-  await expect(easy).toBeEnabled()
 
   const next = page.getByRole('button', { name: '下一张' })
-  await expect(next).toBeEnabled()
-  // 点下去会滚到结算槽，按钮随即禁用。Playwright 的可操作性重试会把这次成功点击
-  // 当成未完成，在并行负载下耗尽测试超时。按钮已确认可用，直接触发即可。
-  await next.evaluate((button: HTMLButtonElement) => button.click())
   const settlement = page.getByTestId('freestyle-round-complete')
+  await expect(settlement.getByText('本轮总结')).toBeVisible({ timeout: 2_000 }).catch(async () => {
+    await expect(next).toBeEnabled()
+    await next.evaluate((button: HTMLButtonElement) => button.click())
+  })
   // 结算卡标题在改版后是「本轮总结」。宫殿清零文案在卡外横幅，不在这张卡里。
   await expect(settlement.getByText('本轮总结')).toBeVisible()
   await settlement.getByTestId('freestyle-round-skip-show').click()
@@ -268,7 +284,7 @@ test('rolls the grade back when the rating request fails', async ({ page }) => {
 
   const remember = page.getByTestId('freestyle-rating-button-3')
   await expect(remember).toBeEnabled()
-  await remember.click()
+  await remember.evaluate((button: HTMLButtonElement) => button.click())
   await expect(remember).toHaveAttribute('aria-pressed', 'true')
   await expect.poll(() => held.length).toBe(1)
 

@@ -10,6 +10,7 @@ import {
   startFreestyleRoundApi,
 } from '@/modules/practice/ui/freestyle/api'
 import { coalesceHydrationLedger, commitHydratedRoundLedger } from '@/modules/practice/domain/hydrateRoundLedger'
+import { deviceLocalCursor } from '@/modules/practice/domain/deviceLocalCursor'
 import {
   mergePartialSettlementLists,
   toServerPartialSettlement,
@@ -64,7 +65,10 @@ import {
   FREESTYLE_SECONDARY_FEED_CONFIG_UPDATED_EVENT,
   FREESTYLE_WORKSPACE_PRIMARY,
   freestyleWorkspacePath,
+  isPalaceReviewWorkspace,
   normalizeFreestyleWorkspaceId,
+  parsePalaceReviewWorkspaceId,
+  type PalaceReviewWorkspaceId,
   readFreestyleFeedConfig,
   readQueueState,
   resolveRebuildIndex,
@@ -349,16 +353,18 @@ export type StaleDropResult = StaleDropDecision & {
 
 export function useImmersiveQueue(
   entryPalaceId: number | null = null,
-  workspace: FreestyleWorkspaceId = FREESTYLE_WORKSPACE_PRIMARY,
+  workspace: FreestyleWorkspaceId | PalaceReviewWorkspaceId = FREESTYLE_WORKSPACE_PRIMARY,
 ) {
-  const slot = normalizeFreestyleWorkspaceId(workspace)
+  const slot = isPalaceReviewWorkspace(workspace) ? workspace : normalizeFreestyleWorkspaceId(workspace)
   const slotRef = useRef(slot)
   slotRef.current = slot
+  const lockedPalaceId = parsePalaceReviewWorkspaceId(slot)
+  const scopedPalaceId = lockedPalaceId ?? entryPalaceId
   const location = useLocation()
   const unlockedEntryPalaceIdRef = useRef<number | null>(null)
   const scopeEntryConfig = useCallback(
-    (next: FreestyleFeedConfig) => applyFreestyleEntryScopeUnlessSaved(next, entryPalaceId),
-    [entryPalaceId],
+    (next: FreestyleFeedConfig) => applyFreestyleEntryScopeUnlessSaved(next, scopedPalaceId),
+    [scopedPalaceId],
   )
   const [config, setConfig] = useState<FreestyleFeedConfig>(() =>
     scopeEntryConfig(readFreestyleFeedConfig(slot)),
@@ -1086,16 +1092,18 @@ export function useImmersiveQueue(
     configRef.current = next
     setConfig(next)
     rebuildKeepingProgress(next, 'entry_scope_changed')
-  }, [entryPalaceId, rebuildKeepingProgress, resetStaleRecovery, scopeEntryConfig, slot, syncPendingRestudyIds])
+  }, [scopedPalaceId, rebuildKeepingProgress, resetStaleRecovery, scopeEntryConfig, slot, syncPendingRestudyIds])
 
   // Backend preference bootstrap / cross-client updates can arrive after mount.
+  // A palace review must not rebuild when the global 随心 selection changes.
   useEffect(() => {
+    if (lockedPalaceId != null) return
     const configEvent = slot === 'secondary'
       ? FREESTYLE_SECONDARY_FEED_CONFIG_UPDATED_EVENT
       : FREESTYLE_FEED_CONFIG_UPDATED_EVENT
     return onAppEvent(configEvent, (detail) => {
       const saved = sanitizeFreestyleFeedConfig(detail)
-      const next = entryPalaceId != null && unlockedEntryPalaceIdRef.current === entryPalaceId
+      const next = scopedPalaceId != null && unlockedEntryPalaceIdRef.current === scopedPalaceId
         ? saved
         : scopeEntryConfig(saved)
       if (sameFeedConfig(next, configRef.current)) return
@@ -1110,7 +1118,7 @@ export function useImmersiveQueue(
       }
       rebuildKeepingProgress(next, scopeChanged ? 'palace_scope_changed' : 'config_event')
     })
-  }, [entryPalaceId, rebuildKeepingProgress, scopeEntryConfig, slot, syncPendingRestudyIds])
+  }, [lockedPalaceId, scopedPalaceId, rebuildKeepingProgress, scopeEntryConfig, slot, syncPendingRestudyIds])
 
   const setConfigAndPersist = useCallback(
     (
@@ -1132,18 +1140,18 @@ export function useImmersiveQueue(
           ? (updater as (c: FreestyleFeedConfig) => FreestyleFeedConfig)(current)
           : updater,
       )
-      const useSelectionScope = shouldUseFreestyleSelectionScope(
+      const useSelectionScope = lockedPalaceId == null && shouldUseFreestyleSelectionScope(
         current,
         rawRequested,
-        entryPalaceId,
+        scopedPalaceId,
         unlockedEntryPalaceIdRef.current,
       )
-      if (useSelectionScope && entryPalaceId != null) {
-        unlockedEntryPalaceIdRef.current = entryPalaceId
+      if (useSelectionScope && scopedPalaceId != null) {
+        unlockedEntryPalaceIdRef.current = scopedPalaceId
       }
       const requested = useSelectionScope ? rawRequested : scopeEntryConfig(rawRequested)
       const stored = readFreestyleFeedConfig(slot)
-      const nextToPersist = entryPalaceId == null || useSelectionScope
+      const nextToPersist = scopedPalaceId == null || useSelectionScope
         ? requested
         : persistFreestyleConfigWithoutEntryLock(requested, stored)
       const saved = saveFreestyleFeedConfig(nextToPersist, slot)
@@ -1163,7 +1171,7 @@ export function useImmersiveQueue(
         preferCardId: options?.preferCardId ?? null,
       })
     },
-    [entryPalaceId, rebuildKeepingProgress, resetStaleRecovery, scopeEntryConfig, slot, syncPendingRestudyIds],
+    [lockedPalaceId, scopedPalaceId, rebuildKeepingProgress, resetStaleRecovery, scopeEntryConfig, slot, syncPendingRestudyIds],
   )
 
   /** Stale recovery and feed-error retry. Keeps the frozen round and local scores. */
@@ -1345,18 +1353,18 @@ export function useImmersiveQueue(
   const startNextRound = useCallback((nextConfig: FreestyleFeedConfig) => {
     const current = configRef.current
     const rawRequested = sanitizeFreestyleFeedConfig(nextConfig)
-    const useSelectionScope = shouldUseFreestyleSelectionScope(
+    const useSelectionScope = lockedPalaceId == null && shouldUseFreestyleSelectionScope(
       current,
       rawRequested,
-      entryPalaceId,
+      scopedPalaceId,
       unlockedEntryPalaceIdRef.current,
     )
-    if (useSelectionScope && entryPalaceId != null) {
-      unlockedEntryPalaceIdRef.current = entryPalaceId
+    if (useSelectionScope && scopedPalaceId != null) {
+      unlockedEntryPalaceIdRef.current = scopedPalaceId
     }
     const requested = useSelectionScope ? rawRequested : scopeEntryConfig(rawRequested)
     const stored = readFreestyleFeedConfig(slot)
-    const nextToPersist = entryPalaceId == null || useSelectionScope
+    const nextToPersist = scopedPalaceId == null || useSelectionScope
       ? requested
       : persistFreestyleConfigWithoutEntryLock(requested, stored)
     const saved = saveFreestyleFeedConfig(nextToPersist, slot)
@@ -1392,7 +1400,8 @@ export function useImmersiveQueue(
     })
   }, [
     buildQueue,
-    entryPalaceId,
+    lockedPalaceId,
+    scopedPalaceId,
     persistQueueState,
     resetStaleRecovery,
     scopeEntryConfig,
@@ -2650,11 +2659,9 @@ export function useImmersiveQueue(
       )
       const previousCardId = cardsRef.current[currentIndexRef.current]?.id
       const remoteCardId = String(round.current_card_id || '').trim()
-      const nextCurrentId = nextCards.some((card) => card.id === remoteCardId)
-        ? remoteCardId
-        : nextCards.some((card) => card.id === previousCardId)
-          ? previousCardId
-          : nextCards[0]?.id ?? null
+      const nextCurrentId = deviceLocalCursor(
+        nextCards.map((card) => card.id), previousCardId, remoteCardId,
+      )
       const nextIndex = nextCurrentId
         ? nextCards.findIndex((card) => card.id === nextCurrentId)
         : 0
@@ -2747,15 +2754,19 @@ export function useImmersiveQueue(
   }, [])
 
   useEffect(() => {
+    if (lockedPalaceId != null) return
     return onAppEvent(FREESTYLE_PEER_ROUND_EVENT, (detail: FreestylePeerRoundDetail) => {
       if (!detail || detail.workspace === slot) return
       void hydrateFromServerRound(false)
     })
-  }, [hydrateFromServerRound, slot])
+  }, [hydrateFromServerRound, lockedPalaceId, slot])
 
-  const workspacePath = freestyleWorkspacePath(slot)
-  const isActiveRoute =
-    location.pathname === workspacePath || location.pathname.startsWith(`${workspacePath}/`)
+  const workspacePath = lockedPalaceId != null
+    ? `/palaces/${lockedPalaceId}/review`
+    : freestyleWorkspacePath(normalizeFreestyleWorkspaceId(slot))
+  const isActiveRoute = lockedPalaceId != null
+    ? location.pathname === workspacePath
+    : location.pathname === workspacePath || location.pathname.startsWith(`${workspacePath}/`)
   const skipInitialRouteHydrateRef = useRef(true)
   useEffect(() => {
     if (!isActiveRoute) return

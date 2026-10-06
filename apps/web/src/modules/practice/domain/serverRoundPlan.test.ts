@@ -295,6 +295,25 @@ describe('server round plan hydrate', () => {
     expect(hud.cardsById.b.lastRating).toBe(2)
   })
 
+  it('lights the same unit rating stored on the encounter', () => {
+    const server: FreestyleRoundPlanPayload = {
+      original_cards: [],
+      presented_ids: ['a'],
+      current_card_id: 'a',
+      current_index: 0,
+      completed_ids: ['a'],
+      excluded_ids: [],
+      occurrences: [],
+      encounters: {
+        a: { encounter_id: 'identity:unit-a', status: 'passed', unit_revision: 1, rating: 3 },
+      },
+    }
+    const merged = mergeServerPlanIntoLocalEncounters({}, server, 'round-primary')
+    expect(merged.a.selectedRating).toBe(3)
+    const local = createRoundPlan('round-primary', [branch('a')], DEFAULT_FREESTYLE_FEED_CONFIG)
+    expect(applyServerRatingsToRoundPlan(local, server).cardsById.a.lastRating).toBe(3)
+  })
+
   it('does not invent a rating for peer completion with no local encounter', () => {
     const server: FreestyleRoundPlanPayload = {
       original_cards: [],

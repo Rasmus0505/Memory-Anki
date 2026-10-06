@@ -49,6 +49,7 @@ export function FreestyleRoundConfigDialog({
   onOpenChange,
   onSaveConfig,
   mode = 'replan',
+  scopeLocked = false,
 }: {
   open: boolean
   config: FreestyleFeedConfig
@@ -56,6 +57,8 @@ export function FreestyleRoundConfigDialog({
   onSaveConfig: (config: FreestyleFeedConfig, choice?: FreestyleConfigSaveChoice) => void
   /** Settlement 「再来一轮」 uses nextRound; in-round HUD uses replan. */
   mode?: 'replan' | 'nextRound'
+  /** Single-palace review cannot widen the round to other palaces. */
+  scopeLocked?: boolean
 }) {
   const [draft, setDraft] = useState(() => sanitizeFreestyleFeedConfig(config))
   const [pendingSave, setPendingSave] = useState<FreestyleFeedConfig | null>(null)
@@ -200,6 +203,7 @@ export function FreestyleRoundConfigDialog({
               scopeSubjects={scopeSubjects}
               onOpenPalacePicker={setPickerStream}
               onChange={setDraft}
+              scopeLocked={scopeLocked}
             />
           </div>
 

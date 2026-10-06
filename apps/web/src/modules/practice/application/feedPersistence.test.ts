@@ -174,6 +174,24 @@ describe('per-workspace feed config and queue drafts', () => {
     expect(readFreestyleFeedConfig(FREESTYLE_WORKSPACE_SECONDARY).queue_length).toBe(22)
   })
 
+  it('does not write the global freestyle selection for a palace review', () => {
+    saveFreestyleFeedConfig({
+      ...DEFAULT_FREESTYLE_FEED_CONFIG,
+      seed: 11,
+      queue_length: 11,
+    })
+    const saved = saveFreestyleFeedConfig({
+      ...DEFAULT_FREESTYLE_FEED_CONFIG,
+      seed: 99,
+      queue_length: 4,
+    }, 'p23')
+
+    expect(saved.seed).toBe(99)
+    expect(readFreestyleFeedConfig().seed).toBe(11)
+    expect(readFreestyleFeedConfig().queue_length).toBe(11)
+    expect(readFreestyleFeedConfig('p23').seed).toBe(11)
+  })
+
   it('reads unsynced localStorage drafts from matching workspace keys', () => {
     window.localStorage.setItem(FREESTYLE_FEED_CONFIG_STORAGE_KEY, JSON.stringify({
       ...DEFAULT_FREESTYLE_FEED_CONFIG,
@@ -207,6 +225,21 @@ describe('per-workspace feed config and queue drafts', () => {
     expect(readQueueState(FREESTYLE_WORKSPACE_SECONDARY).completedIds).toEqual(['s-done'])
     expect(JSON.parse(window.localStorage.getItem(FREESTYLE_QUEUE_STATE_STORAGE_KEY) || '{}').currentCardId).toBe('primary-card')
     expect(JSON.parse(window.localStorage.getItem(FREESTYLE_SECONDARY_QUEUE_STATE_STORAGE_KEY) || '{}').currentCardId).toBe('secondary-card')
+  })
+
+  it('keeps a palace review queue draft off the primary key', () => {
+    saveQueueState({
+      ...DEFAULT_QUEUE_STATE,
+      currentCardId: 'primary-card',
+    })
+    saveQueueState({
+      ...DEFAULT_QUEUE_STATE,
+      currentCardId: 'palace-card',
+    }, 'p23')
+
+    expect(readQueueState().currentCardId).toBe('primary-card')
+    expect(readQueueState('p23').currentCardId).toBe('palace-card')
+    expect(JSON.parse(window.localStorage.getItem(FREESTYLE_QUEUE_STATE_STORAGE_KEY) || '{}').currentCardId).toBe('primary-card')
   })
 
   it('emits a peer-round event for the workspace that just mutated', () => {

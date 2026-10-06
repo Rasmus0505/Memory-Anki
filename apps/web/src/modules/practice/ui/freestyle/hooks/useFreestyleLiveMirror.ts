@@ -3,7 +3,6 @@ import {
   isPassiveLiveStudyFollower,
   isPendingLiveStudyApply,
   isWeakerRevealMap,
-  resolveFreestyleLiveFollowAction,
   shouldApplyLiveStudyView,
   shouldPublishLiveStudyView,
   useLiveStudyPresence,
@@ -34,10 +33,10 @@ export function useFreestyleLiveMirror({
   questionState,
   revealMap,
   rating,
-  applyViewport,
+  applyViewport: _applyViewport,
   requestRoundSync,
-  applyQuestionState,
-  applyRevealMap,
+  applyQuestionState: _applyQuestionState,
+  applyRevealMap: _applyRevealMap,
   applyRating,
   isActive = true,
 }: {
@@ -55,15 +54,17 @@ export function useFreestyleLiveMirror({
   questionState: QuizRuntimeState | undefined
   revealMap: Record<string, string> | null
   rating: FreestyleLiveRating | null
-  applyViewport: (viewport: FreestyleLiveViewport) => boolean
+  /** @deprecated Remote viewport is intentionally device-local. */
+  applyViewport?: (viewport: FreestyleLiveViewport) => boolean
   requestRoundSync?: (view: FreestyleLiveView) => void
-  applyQuestionState: (questionId: number, state: QuizRuntimeState) => void
-  applyRevealMap: (revealMap: Record<string, string> | null) => void
+  /** @deprecated Remote question state is intentionally device-local. */
+  applyQuestionState?: (questionId: number, state: QuizRuntimeState) => void
+  /** @deprecated Remote reveal UI is intentionally device-local. */
+  applyRevealMap?: (revealMap: Record<string, string> | null) => void
   applyRating: (rating: FreestyleLiveRating) => void
   isActive?: boolean
 }) {
   const presence = useLiveStudyPresence()
-  const skipUntilCardIdRef = useRef<string | null>(null)
   const lastSentRef = useRef('')
   const lastAppliedRevisionRef = useRef(-1)
   const pendingApplyRef = useRef(false)
@@ -97,83 +98,35 @@ export function useFreestyleLiveMirror({
     }
     const applyRemoteDetails = () => {
       if (appliedRemoteDetailsRevisionRef.current === remoteRevision) return
-      if (decoded.questionState) {
-        applyQuestionState(decoded.questionState.questionId, decoded.questionState.state)
-      }
-      if (decoded.revealMap && !isWeakerRevealMap(decoded.revealMap, revealMap)) {
-        applyRevealMap(decoded.revealMap)
-      }
+      // Card position, quiz answer/reveal state, and completion slot are
+      // intentionally device-local. Only learning progress is shared.
       applyRemoteRating()
       appliedRemoteDetailsRevisionRef.current = remoteRevision
     }
-    const followAction = resolveFreestyleLiveFollowAction({
-      applyDecision,
-      remoteCardId: decoded.currentCardId,
-      localCardId: currentCardId,
-      queueCardIds,
-    })
-    if (followAction === 'skip') return
-    if (followAction === 'wait-queue') {
-      if (!decoded.roundId || decoded.roundId === roundId) applyRemoteRating()
-      pendingRemoteRevisionRef.current = presence.projection.revision
-      skipUntilCardIdRef.current = decoded.currentCardId
-      if (requestRoundSync && syncRequestedRevisionRef.current !== presence.projection.revision) {
-        syncRequestedRevisionRef.current = presence.projection.revision
+    if (applyDecision === 'skip') return
+    if (applyDecision === 'consume-revision') {
+      lastAppliedRevisionRef.current = remoteRevision
+      return
+    }
+    const remoteRoundChanged = Boolean(decoded.roundId && decoded.roundId !== roundId)
+    if (remoteRoundChanged) {
+      // A remote round may have a different queue. Refresh the local plan, but
+      // never seek this device to the remote card or apply its reveal state.
+      pendingRemoteRevisionRef.current = remoteRevision
+      if (requestRoundSync && syncRequestedRevisionRef.current !== remoteRevision) {
+        syncRequestedRevisionRef.current = remoteRevision
         requestRoundSync(decoded)
       }
       return
     }
-    if (followAction === 'abandon') {
-      if (decoded.roundId && decoded.roundId !== roundId) {
-        pendingRemoteRevisionRef.current = presence.projection.revision
-        skipUntilCardIdRef.current = decoded.currentCardId
-        if (requestRoundSync && syncRequestedRevisionRef.current !== presence.projection.revision) {
-          syncRequestedRevisionRef.current = presence.projection.revision
-          requestRoundSync(decoded)
-        }
-        return
-      }
-      pendingRemoteRevisionRef.current = null
-      lastAppliedRevisionRef.current = presence.projection.revision
-      skipUntilCardIdRef.current = null
-      return
-    }
-    if (followAction === 'consume-revision') {
-      lastAppliedRevisionRef.current = presence.projection.revision
-      return
-    }
-    if (!applyViewport({
-      currentCardId: decoded.currentCardId,
-      visualIndex: decoded.visualIndex,
-      viewingCompleteSlot: decoded.viewingCompleteSlot,
-      roundId: decoded.roundId,
-      planVersion: decoded.planVersion,
-    })) {
-      if (!decoded.roundId || decoded.roundId === roundId) applyRemoteRating()
-      pendingRemoteRevisionRef.current = presence.projection.revision
-      skipUntilCardIdRef.current = decoded.currentCardId
-      return
-    }
+    applyRemoteRating()
     pendingRemoteRevisionRef.current = null
-    lastAppliedRevisionRef.current = presence.projection.revision
+    lastAppliedRevisionRef.current = remoteRevision
     lastSentRef.current = viewJson
-    const viewportChanged = decoded.currentCardId !== currentCardId
-      || decoded.visualIndex !== visualIndex
-      || decoded.viewingCompleteSlot !== viewingCompleteSlot
-      || decoded.roundId !== roundId
-      || decoded.planVersion !== planVersion
-    const detailsChanged = Boolean(
-      decoded.questionState
-      || (decoded.revealMap && !isWeakerRevealMap(decoded.revealMap, revealMap))
-      || (decoded.rating && isWeakerLiveRating(rating, decoded.rating)),
-    )
-    pendingApplyRef.current = viewportChanged || detailsChanged
-    skipUntilCardIdRef.current = decoded.currentCardId
+    pendingApplyRef.current = false
     applyRemoteDetails()
   }, [
-    applyQuestionState,
     applyRating,
-    applyRevealMap,
     currentCardId,
     presence,
     queueCardIds,
@@ -182,7 +135,6 @@ export function useFreestyleLiveMirror({
     visualIndex,
     viewingCompleteSlot,
     revealMap,
-    applyViewport,
     isActive,
     route,
     roundId,
@@ -192,8 +144,6 @@ export function useFreestyleLiveMirror({
   useEffect(() => {
     if (!presence) return
     if (pendingRemoteRevisionRef.current === presence.projection.revision) return
-    if (skipUntilCardIdRef.current && currentCardId !== skipUntilCardIdRef.current) return
-    skipUntilCardIdRef.current = null
     const view: FreestyleLiveView = {
       palaceId,
       currentCardId,

@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import json
 import uuid
 from datetime import date
 from typing import Any
 
 from sqlalchemy.orm import Session
 
-from memory_anki.core.time import to_api_datetime, utc_now_naive
+from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.misc import (
     FreestyleRoundOperationReceipt,
     FreestyleRoundState,
@@ -32,12 +31,12 @@ from memory_anki.modules.practice.domain.peer_progress import (
     apply_peer_progress,
     apply_peer_restore,
     progress_identity,
+    project_identity_ratings,
 )
 from memory_anki.modules.practice.domain.round_compress import compress_completed
 from memory_anki.modules.practice.domain.round_plan import (
     apply_rating,
     assert_rating_identity,
-    cleared_review_palace_ids,
     complete_card,
     exclude_card,
     leave_card,
@@ -61,6 +60,17 @@ from memory_anki.modules.practice.domain.workspace import (
     peer_workspace,
 )
 
+from .round_state_payload import (
+    _fingerprint,
+    _json_dump,
+    _json_load_object,
+    _payload,
+    _plan_of,
+)
+from .round_state_payload import (
+    _json_object as _json_object,
+)
+
 _ACTIONS = {
     "set_cursor",
     "leave_card",
@@ -73,22 +83,6 @@ _ACTIONS = {
     "bind_cards",
     "set_encounter",
 }
-
-
-def _json_object(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _json_dump(value: Any) -> str:
-    return json.dumps(value if value is not None else {}, ensure_ascii=False, sort_keys=True)
-
-
-def _json_load_object(raw: str | None) -> dict[str, Any]:
-    try:
-        loaded = json.loads(raw or "{}")
-    except (TypeError, json.JSONDecodeError):
-        return {}
-    return loaded if isinstance(loaded, dict) else {}
 
 
 def _text(value: Any) -> str:
@@ -112,53 +106,6 @@ def _require_operation_id(operation_id: str | None) -> str:
     if not op_id:
         raise ValueError("operation_id is required")
     return op_id
-
-
-def _plan_of(row: FreestyleRoundState) -> dict[str, Any]:
-    return normalize_plan(_json_load_object(row.plan_json))
-
-
-def _fingerprint(row: FreestyleRoundState, plan: dict[str, Any] | None = None) -> str:
-    return _json_dump(
-        {
-            "status": row.status,
-            "config": _json_load_object(row.config_json),
-            "plan": plan if plan is not None else _plan_of(row),
-            "current_card_id": row.current_card_id,
-            "scope_key": row.scope_key,
-        }
-    )
-
-
-def _payload(
-    row: FreestyleRoundState,
-    *,
-    conflict: bool = False,
-    duplicate: bool = False,
-    plan: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    config = _json_load_object(row.config_json)
-    resolved_plan = normalize_plan(plan if plan is not None else _json_load_object(row.plan_json))
-    version = int(row.version or 1)
-    current = resolved_plan.get("current_card_id")
-    if current is None:
-        current = row.current_card_id
-    return {
-        "round_id": row.round_id,
-        "workspace": normalize_workspace(getattr(row, "workspace", None)),
-        "scope_key": row.scope_key,
-        "status": row.status,
-        "version": version,
-        "plan_version": version,
-        "config": _json_object(config),
-        "plan": resolved_plan,
-        "current_card_id": current,
-        "last_operation_id": row.last_operation_id,
-        "updated_at": to_api_datetime(row.updated_at) if row.updated_at else None,
-        "conflict": conflict,
-        "duplicate": duplicate,
-        "cleared_review_palace_ids": sorted(cleared_review_palace_ids(resolved_plan)),
-    }
 
 
 def _row_by_id(session: Session, round_id: str) -> FreestyleRoundState | None:
@@ -203,7 +150,10 @@ def _latest_active_for_workspace(session: Session, workspace: str) -> FreestyleR
 
 
 def _peer_plan(session: Session, workspace: str) -> dict[str, Any] | None:
-    peer = _latest_active_for_workspace(session, peer_workspace(workspace))
+    peer_slot = peer_workspace(workspace)
+    if not peer_slot:
+        return None
+    peer = _latest_active_for_workspace(session, peer_slot)
     return _plan_of(peer) if peer is not None else None
 
 
@@ -233,7 +183,10 @@ def _sync_peer_progress(
     *,
     restore_identity: str = "",
 ) -> None:
-    peer = _latest_active_for_workspace(session, peer_workspace(source_row.workspace))
+    peer_slot = peer_workspace(source_row.workspace)
+    if not peer_slot:
+        return
+    peer = _latest_active_for_workspace(session, peer_slot)
     if peer is None or peer.round_id == source_row.round_id:
         return
     if restore_identity:
@@ -246,6 +199,51 @@ def _sync_peer_progress(
             preserve_cursor=True,
         )
     _apply_plan(peer, next_plan, operation_id=f"{operation_id}:peer")
+
+
+def _project_identity_ratings(
+    session: Session,
+    *,
+    source_round_id: str,
+    ratings: dict[str, int],
+    operation_id: str,
+) -> None:
+    """Write one unit rating onto every other active round that contains it."""
+    if not ratings:
+        return
+    rows = (
+        session.query(FreestyleRoundState)
+        .filter(FreestyleRoundState.status == "active")
+        .all()
+    )
+    source = _text(source_round_id)
+    for row in rows:
+        if row.round_id == source:
+            continue
+        next_plan, changed = project_identity_ratings(_plan_of(row), ratings)
+        if not changed:
+            continue
+        _apply_plan(
+            row,
+            next_plan,
+            operation_id=f"{operation_id}:identity"[:128],
+        )
+
+
+def _ratings_from_item(item: dict[str, Any] | None, unit_id: str, rating: int) -> dict[str, int]:
+    value = int(rating)
+    if value not in {1, 2, 3, 4}:
+        return {}
+    if isinstance(item, dict):
+        batch_ids = item.get("rated_unit_ids")
+        if isinstance(batch_ids, list) and batch_ids:
+            return {
+                text: value
+                for raw in batch_ids
+                if (text := _text(raw))
+            }
+    text = _text(unit_id)
+    return {text: value} if text else {}
 
 
 def _apply_plan(
@@ -603,6 +601,7 @@ def apply_round_rating(
     rating: int,
     unit_id: str | None = None,
     unit_revision: int | None = None,
+    identity_ratings: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     op_id = _require_operation_id(operation_id)
     row = _row_by_id(session, round_id)
@@ -626,6 +625,15 @@ def apply_round_rating(
     )
     changed = _apply_plan(row, plan, operation_id=op_id)
     _sync_peer_progress(session, row, op_id)
+    ratings = dict(identity_ratings or {})
+    if _text(unit_id):
+        ratings.setdefault(_text(unit_id), int(rating))
+    _project_identity_ratings(
+        session,
+        source_round_id=row.round_id,
+        ratings=ratings,
+        operation_id=op_id,
+    )
     if not changed:
         row.last_operation_id = op_id
     _commit_operation(session, row, op_id)
@@ -713,6 +721,7 @@ def rate_freestyle_round_unit(
         rating=rating,
         unit_id=unit_id,
         unit_revision=unit_revision,
+        identity_ratings=_ratings_from_item(item, unit_id, rating),
     )
     return {"item": item, "round": payload}
 

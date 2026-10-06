@@ -84,8 +84,12 @@ import {
   RESTUDY_MAX_INTERVENING,
   FREESTYLE_WORKSPACE_PRIMARY,
   FREESTYLE_WORKSPACE_SECONDARY,
+  isPalaceReviewWorkspace,
   isQueueStateFromPreviousDay,
+  palaceReviewWorkspaceId,
+  parsePalaceReviewWorkspaceId,
   type FreestyleWorkspaceId,
+  type PalaceReviewWorkspaceId,
   type UnitRating,
   freestyleWorkspacePath,
   normalizeFreestyleWorkspaceId,
@@ -165,17 +169,37 @@ function FreestyleRetryCornerBadge({
   )
 }
 
+function palaceReviewReturnPath(subjectId: string | null) {
+  return subjectId && /^\d+$/.test(subjectId) ? `/palaces/list?subjectId=${subjectId}` : '/palaces'
+}
+
 export default function ImmersiveFreestylePage({
   workspace = FREESTYLE_WORKSPACE_PRIMARY,
+  lockedPalaceId = null,
 }: {
-  workspace?: FreestyleWorkspaceId
+  workspace?: FreestyleWorkspaceId | PalaceReviewWorkspaceId
+  /** Shelf review locks this page to one palace and must not enter /freestyle. */
+  lockedPalaceId?: number | null
 } = {}) {
-  const slot = normalizeFreestyleWorkspaceId(workspace)
-  const workspacePath = freestyleWorkspacePath(slot)
-  const workspaceTitle = slot === FREESTYLE_WORKSPACE_SECONDARY ? '随心 2' : '随心模式'
+  const palaceLocked = typeof lockedPalaceId === 'number' && lockedPalaceId > 0
+  const slot = palaceLocked
+    ? palaceReviewWorkspaceId(lockedPalaceId)
+    : isPalaceReviewWorkspace(workspace)
+      ? workspace
+      : normalizeFreestyleWorkspaceId(workspace)
+  const reviewPalaceId = palaceLocked ? lockedPalaceId : parsePalaceReviewWorkspaceId(slot)
+  const workspacePath = reviewPalaceId != null
+    ? `/palaces/${reviewPalaceId}/review`
+    : freestyleWorkspacePath(normalizeFreestyleWorkspaceId(slot))
+  const workspaceTitle = reviewPalaceId != null
+    ? '宫殿复习'
+    : slot === FREESTYLE_WORKSPACE_SECONDARY
+      ? '随心 2'
+      : '随心模式'
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const entryPalaceId = parseFreestyleEntryPalaceId(searchParams.toString())
+  const entryPalaceId = reviewPalaceId ?? parseFreestyleEntryPalaceId(searchParams.toString())
+  const reviewReturnSubjectId = searchParams.get('subjectId')
   const { isActive, becameActiveAt, fullPath } = useRouteResidency()
   useFreestyleWakeLock(isActive)
   useFreestyleChromeTheme(isActive)
@@ -251,13 +275,15 @@ export default function ImmersiveFreestylePage({
     } else {
       setConfigAndPersist(nextConfig)
     }
-    // A shelf link is a launch hint. Remove it after saving so refresh cannot
-    // reapply the old single-palace scope over the saved selection.
-    if (entryPalaceId != null) navigate(workspacePath, { replace: true })
+    // A query-param launch hint is not the shelf's palace review. Remove it after
+    // saving so refresh cannot reapply that hint over a saved 随心 selection.
+    // Palace review keeps its own route and must never be rewritten to /freestyle.
+    if (reviewPalaceId == null && entryPalaceId != null) navigate(workspacePath, { replace: true })
   }, [
     configIntent,
     entryPalaceId,
     navigate,
+    reviewPalaceId,
     resetStaleRecovery,
     setConfigAndPersist,
     startNextRound,
@@ -393,13 +419,21 @@ export default function ImmersiveFreestylePage({
   }, [])
 
   const timer = useTimedSession({
-    sessionKey: slot === FREESTYLE_WORKSPACE_SECONDARY ? 'freestyle-secondary' : 'freestyle',
+    sessionKey: reviewPalaceId != null
+      ? `palace-review-${reviewPalaceId}`
+      : slot === FREESTYLE_WORKSPACE_SECONDARY
+        ? 'freestyle-secondary'
+        : 'freestyle',
     kind: 'quiz',
     title: workspaceTitle,
-    palaceId: null,
+    palaceId: reviewPalaceId,
     automationScene: 'freestyle',
     sourceKind: null,
-    persistKey: slot === FREESTYLE_WORKSPACE_SECONDARY ? 'freestyle-immersive-secondary' : 'freestyle-immersive',
+    persistKey: reviewPalaceId != null
+      ? `palace-review-${reviewPalaceId}`
+      : slot === FREESTYLE_WORKSPACE_SECONDARY
+        ? 'freestyle-immersive-secondary'
+        : 'freestyle-immersive',
     persistCompletionRecord: false,
   })
 
@@ -720,8 +754,9 @@ export default function ImmersiveFreestylePage({
       onOpenPlan={openPlan}
       onSyncProgress={syncComputerProgress}
       onOpenHistory={openHistory}
+      returnTo={reviewPalaceId != null ? palaceReviewReturnPath(reviewReturnSubjectId) : null}
     />
-  ), [openHistory, openPlan, overflowSummary, slot, syncComputerProgress])
+  ), [openHistory, openPlan, overflowSummary, reviewPalaceId, reviewReturnSubjectId, slot, syncComputerProgress])
 
   return (
     <TooltipProvider>
@@ -797,6 +832,7 @@ export default function ImmersiveFreestylePage({
             if (!open) setConfigIntent('replan')
           }}
           onSaveConfig={saveFreestyleConfig}
+          scopeLocked={reviewPalaceId != null}
         />
         <FreestyleScopeQuizDialog
           open={scopeQuizOpen}
@@ -855,7 +891,7 @@ export default function ImmersiveFreestylePage({
         <FreestyleProgressRail
           summary={progressSummary}
           scrollChannel={scrollChannel}
-          workspaceSwitcher={<FreestyleWorkspaceSwitcher slot={slot} />}
+          workspaceSwitcher={reviewPalaceId == null ? <FreestyleWorkspaceSwitcher slot={normalizeFreestyleWorkspaceId(slot)} /> : null}
           onOpenPlan={openPlan}
           onJump={jumpFromProgressRail}
           overflow={progressRailOverflow}

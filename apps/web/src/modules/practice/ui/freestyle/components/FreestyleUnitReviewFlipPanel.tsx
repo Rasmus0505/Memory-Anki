@@ -607,6 +607,7 @@ export function FreestyleUnitReviewFlipPanel({
       />
 
       <FlipCardMindMapPanel
+        viewMemoryScope={`palace:${session.palace_id}`}
         fullscreen={fullscreen}
         displayMode={displayMode}
         sessionKind="review"

@@ -102,7 +102,7 @@ function Harness({
 }
 
 describe('useFreestyleLiveMirror follow retry', () => {
-  it('applies remote viewport and reveal updates while this client is controller', () => {
+  it('does not mirror remote card navigation or reveal UI', () => {
     const applyViewport = vi.fn(() => true)
     const applyRevealMap = vi.fn()
     const presence = presenceValue({ isController: true })
@@ -117,14 +117,8 @@ describe('useFreestyleLiveMirror follow retry', () => {
         />
       </LiveStudyPresenceContext.Provider>,
     )
-    expect(applyViewport).toHaveBeenCalledWith({
-      currentCardId: 'card-2',
-      visualIndex: 1,
-      viewingCompleteSlot: false,
-      roundId: 'round-1',
-      planVersion: 1,
-    })
-    expect(applyRevealMap).toHaveBeenCalledWith(RICH_REVEAL)
+    expect(applyViewport).not.toHaveBeenCalled()
+    expect(applyRevealMap).not.toHaveBeenCalled()
     expect(presence.publish).not.toHaveBeenCalled()
   })
 
@@ -178,22 +172,15 @@ describe('useFreestyleLiveMirror follow retry', () => {
       </LiveStudyPresenceContext.Provider>
     )
     const { rerender } = render(tree(1))
-    expect(applyViewport).toHaveBeenCalledTimes(1)
+    expect(applyViewport).not.toHaveBeenCalled()
     expect(applyRevealMap).not.toHaveBeenCalled()
     ready = true
     rerender(tree(2))
-    expect(applyViewport).toHaveBeenCalledTimes(2)
-    expect(applyViewport).toHaveBeenLastCalledWith({
-      currentCardId: 'card-2',
-      visualIndex: 1,
-      viewingCompleteSlot: false,
-      roundId: 'round-1',
-      planVersion: 2,
-    })
-    expect(applyRevealMap).toHaveBeenCalledWith(RICH_REVEAL)
-    expect(presence.publish).not.toHaveBeenCalled()
+    expect(applyViewport).not.toHaveBeenCalled()
+    expect(applyRevealMap).not.toHaveBeenCalled()
+    expect(presence.publish).toHaveBeenCalledTimes(2)
     rerender(tree(2))
-    expect(applyViewport).toHaveBeenCalledTimes(2)
+    expect(applyViewport).not.toHaveBeenCalled()
   })
 
   it('applies a same-round settlement once while the completion viewport is waiting', () => {
@@ -237,30 +224,23 @@ describe('useFreestyleLiveMirror follow retry', () => {
       </LiveStudyPresenceContext.Provider>
     )
     const { rerender } = render(tree(1))
-    expect(applyViewport).toHaveBeenCalledTimes(1)
+    expect(applyViewport).not.toHaveBeenCalled()
     expect(applyRating).toHaveBeenCalledExactlyOnceWith(remoteRating)
     expect(applyRevealMap).not.toHaveBeenCalled()
     expect(presence.publish).not.toHaveBeenCalled()
     rerender(tree(2))
-    expect(applyViewport).toHaveBeenCalledTimes(2)
+    expect(applyViewport).not.toHaveBeenCalled()
     expect(applyRating).toHaveBeenCalledTimes(1)
     expect(presence.publish).not.toHaveBeenCalled()
     ready = true
     rerender(tree(3))
-    expect(applyViewport).toHaveBeenCalledTimes(3)
-    expect(applyViewport).toHaveBeenLastCalledWith({
-      currentCardId: 'card-2',
-      visualIndex: 2,
-      viewingCompleteSlot: true,
-      roundId: 'round-1',
-      planVersion: 2,
-    })
+    expect(applyViewport).not.toHaveBeenCalled()
     expect(applyRating).toHaveBeenCalledTimes(1)
-    expect(applyRevealMap).toHaveBeenCalledWith(RICH_REVEAL)
+    expect(applyRevealMap).not.toHaveBeenCalled()
     expect(presence.publish).not.toHaveBeenCalled()
   })
 
-  it('waits for round hydration before applying a different-round settlement once', () => {
+  it('refreshes a different round without mirroring the remote card or reveal', () => {
     const remoteRating: NonNullable<FreestyleLiveView['rating']> = {
       planVersion: 2,
       currentCardId: 'card-2',
@@ -303,20 +283,20 @@ describe('useFreestyleLiveMirror follow retry', () => {
       </LiveStudyPresenceContext.Provider>
     )
     const { rerender } = render(tree('round-1', 1))
-    expect(applyViewport).toHaveBeenCalledTimes(1)
+    expect(applyViewport).not.toHaveBeenCalled()
     expect(applyRating).not.toHaveBeenCalled()
     expect(applyRevealMap).not.toHaveBeenCalled()
     expect(presence.publish).not.toHaveBeenCalled()
     rerender(tree('round-2', 2))
-    expect(applyViewport).toHaveBeenCalledTimes(2)
+    expect(applyViewport).not.toHaveBeenCalled()
     expect(applyRating).toHaveBeenCalledExactlyOnceWith(remoteRating)
     expect(applyRevealMap).not.toHaveBeenCalled()
     expect(presence.publish).not.toHaveBeenCalled()
     ready = true
     rerender(tree('round-2', 3))
-    expect(applyViewport).toHaveBeenCalledTimes(3)
+    expect(applyViewport).not.toHaveBeenCalled()
     expect(applyRating).toHaveBeenCalledTimes(1)
-    expect(applyRevealMap).toHaveBeenCalledWith(RICH_REVEAL)
+    expect(applyRevealMap).not.toHaveBeenCalled()
     expect(presence.publish).not.toHaveBeenCalled()
   })
 
@@ -341,9 +321,9 @@ describe('useFreestyleLiveMirror follow retry', () => {
         />
       </LiveStudyPresenceContext.Provider>,
     )
-    expect(applyViewport).toHaveBeenCalledTimes(1)
+    expect(applyViewport).not.toHaveBeenCalled()
     expect(applyRevealMap).not.toHaveBeenCalled()
-    expect(presence.publish).not.toHaveBeenCalled()
+    expect(presence.publish).toHaveBeenCalledTimes(1)
   })
 
   it.each([
@@ -381,17 +361,10 @@ describe('useFreestyleLiveMirror follow retry', () => {
     )
     const { rerender } = render(tree(presence, initialIndex, initialSlot))
     rerender(tree(nextPresence, initialIndex, initialSlot))
-    expect(applyViewport).toHaveBeenCalledTimes(2)
-    expect(applyViewport).toHaveBeenLastCalledWith({
-      currentCardId: 'card-2',
-      visualIndex: nextIndex,
-      viewingCompleteSlot: nextSlot,
-      roundId: 'round-1',
-      planVersion: 1,
-    })
-    expect(presence.publish).not.toHaveBeenCalled()
+    expect(applyViewport).not.toHaveBeenCalled()
+    expect(presence.publish).toHaveBeenCalledTimes(1)
     rerender(tree(nextPresence, nextIndex, nextSlot))
-    expect(presence.publish).not.toHaveBeenCalled()
+    expect(presence.publish).toHaveBeenCalledTimes(2)
   })
 
   it.each([
@@ -464,13 +437,7 @@ describe('useFreestyleLiveMirror follow retry', () => {
         />
       </LiveStudyPresenceContext.Provider>,
     )
-    expect(applyViewport).toHaveBeenCalledWith({
-      currentCardId: 'card-2',
-      visualIndex: 1,
-      viewingCompleteSlot: false,
-      roundId: 'round-1',
-      planVersion: 1,
-    })
+    expect(applyViewport).not.toHaveBeenCalled()
     expect(presence.publish).not.toHaveBeenCalled()
   })
 

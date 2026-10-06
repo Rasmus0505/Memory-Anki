@@ -163,11 +163,13 @@ export function FreestyleTrainingConfigForm({
   scopeSubjects,
   onChange,
   onOpenPalacePicker,
+  scopeLocked = false,
 }: {
   config: FreestyleFeedConfig
   scopeSubjects: FreestylePalaceScopeSubject[]
   onChange: (config: FreestyleFeedConfig) => void
   onOpenPalacePicker: (stream: FreestyleTrainingStream) => void
+  scopeLocked?: boolean
 }) {
   const selectedMode = visibleTrainingMode(config)
   const activeStreams = selectedMode === 'mixed'
@@ -239,9 +241,13 @@ export function FreestyleTrainingConfigForm({
                 {value.specific_palace_ids.length ? `已选 ${value.specific_palace_ids.length} 个宫殿` : `当前可用 ${availablePalaceCount} 个`}
               </div>
             </div>
-            <Button type="button" size="sm" variant="outline" onClick={() => onOpenPalacePicker('memory_palace')}>
-              <ListChecks className="size-3.5" />选择宫殿
-            </Button>
+            {scopeLocked ? (
+              <span className="shrink-0 text-xs text-muted-foreground">只复习当前宫殿</span>
+            ) : (
+              <Button type="button" size="sm" variant="outline" onClick={() => onOpenPalacePicker('memory_palace')}>
+                <ListChecks className="size-3.5" />选择宫殿
+              </Button>
+            )}
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field
@@ -284,9 +290,13 @@ export function FreestyleTrainingConfigForm({
                 {value.specific_palace_ids.length ? ` · 已选 ${value.specific_palace_ids.length} 个宫殿` : ''}
               </div>
             </div>
-            <Button type="button" size="sm" variant="outline" onClick={() => onOpenPalacePicker('quiz')}>
-              <ListChecks className="size-3.5" />选择宫殿
-            </Button>
+            {scopeLocked ? (
+              <span className="shrink-0 text-xs text-muted-foreground">只复习当前宫殿</span>
+            ) : (
+              <Button type="button" size="sm" variant="outline" onClick={() => onOpenPalacePicker('quiz')}>
+                <ListChecks className="size-3.5" />选择宫殿
+              </Button>
+            )}
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="题型">
@@ -330,13 +340,21 @@ export function FreestyleTrainingConfigForm({
         </div>
       </Section>
 
-      <Section title="学科" description="多选学科，或一键全选。只选英语等于以前的英语宫殿。">
-        <SubjectChips
-          subjects={scopeSubjects}
-          selectedIds={selectedSubjectIds}
-          onChange={applySubjects}
-        />
-      </Section>
+      {scopeLocked ? (
+        <Section title="范围" description="这一轮只复习书架上点开的那一座宫殿。">
+          <div className="rounded-xl border border-border/60 bg-background/80 px-3.5 py-3 text-sm">
+            只复习当前宫殿
+          </div>
+        </Section>
+      ) : (
+        <Section title="学科" description="多选学科，或一键全选。只选英语等于以前的英语宫殿。">
+          <SubjectChips
+            subjects={scopeSubjects}
+            selectedIds={selectedSubjectIds}
+            onChange={applySubjects}
+          />
+        </Section>
+      )}
 
       {selectedMode === 'mixed' ? (
         <Section title="混合内容" description="至少选择两种内容，内容会按下面的策略穿插。">

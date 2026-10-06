@@ -395,6 +395,8 @@ export interface FreestyleRoundPlanPayload {
     encounter_id: string
     status: string
     unit_revision: number
+    /** Concrete 1–4 score. Absent means completion without a displayed rating. */
+    rating?: number | null
   }>
   overlay_quiz?: FreestyleOverlayQuizState
   learning_time?: FreestyleRoundLearningTimePayload
@@ -476,7 +478,7 @@ export interface FreestyleRoundStatePayload {
   updated_at: string | null
   conflict: boolean
   duplicate: boolean
-  workspace?: 'primary' | 'secondary'
+  workspace?: 'primary' | 'secondary' | `p${number}`
   cleared_review_palace_ids?: number[]
   learning_backfill_applied?: boolean
 }
@@ -487,7 +489,7 @@ export interface FreestyleRoundActiveRequest {
   config: FreestyleFeedConfig
   cards?: FreestyleCard[]
   round_id?: string
-  workspace?: 'primary' | 'secondary'
+  workspace?: 'primary' | 'secondary' | `p${number}`
   replan?: boolean
 }
 

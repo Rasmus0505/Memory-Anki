@@ -12,19 +12,26 @@ older `FreestyleConfig` settings path is compatibility-only and must not drive q
 
 ## Review Entry
 
-The palace shelf and all review-oriented frontend actions enter the same immersive workspace.
-`/freestyle?palaceId=<id>` applies a transient single-palace scope for that round by locking every
+Shelf 「立即复习」 opens `/palaces/<id>/review` and reuses the freestyle feed. That route is a
+knowledge-section page, not `/freestyle` or `/freestyle-2`, and it must not publish a followable
+live-study route. Its round workspace is `p<id>` (column width 20). It has no peer, does not write
+the global 随心 selection, and does not emit the peer-round event. The round still applies a transient single-palace scope by locking every
 training stream to that palace. A saved 随心 palace/subject selection does not keep showing the full
-feed. Content/mix/queue settings stay, the lock is not written back to stored prefs, and there is no
-separate formal page session before the queue loads. Refreshing that URL keeps the same palace scope. There is no standalone `/review` frontend route or
-completion screen; unknown retired `/review...` paths fall back to `/freestyle`.
+feed. Content/mix/queue settings are borrowed, the lock is not written back to stored prefs, and
+there is no separate formal page session before the queue loads. Editor 「开始随心复习」 and the
+starmap may still enter `/freestyle?palaceId=<id>` as an intentional 随心 launch. There is no
+standalone `/review` frontend route or completion screen; unknown retired `/review...` paths fall
+back to `/freestyle`.
 
 ## Two immersive workspaces
 
 Freestyle has two independent immersive routes: `/freestyle` (随心) and `/freestyle-2` (随心 2).
 Each workspace keeps its own feed config, round cursor, and round plan. Overlap identity is
 `unit:{unit_id}` / `quiz:{question_id}`. Complete, exclude, and retry progress is inherited
-across workspaces for the same identity. Cursors stay independent. A fully handled round
+across workspaces for the same identity. A 1–4 unit rating is not workspace-owned: rating a
+unit from palace review or either freestyle round stamps that same rating onto every other
+active round that contains the unit, without moving those cursors. Completion without a
+stored rating still must not invent 记得. Cursors stay independent. A fully handled round
 freezes on `get_or_create` so the closing settlement slot stays reachable; leftover due
 work advances only when the learner explicitly starts the next round via config confirm
 (`「再来一轮」` → `/rounds/start`). Page refresh, app restart, and HUD queue refresh must
@@ -137,9 +144,14 @@ leave. A later due-list rebuild appends newly seen identities as the
 today segment and must not move an already-inserted leftover retry. `leave_card` confirmation
 pins the card now under the viewport and must not yank back to the source. The source card
 stays in place so swipe-back is geometric. Looking back at history cards does not move the
-committed cursor and does not insert retries. Finger/wheel paging
+committed cursor and does not insert retries. Finger paging
 commits `active` only after scroll settle so a mid-gesture index change cannot close one
-encounter and open another. The review map stays pannable (`mobileViewPolicy` defaults to
+encounter and open another. A mouse wheel or trackpad over the feed pages one card per
+notch; trackpad inertia is coalesced so it cannot skip the queue. That wheel must not
+scroll the snap scroller natively — mandatory snap plus the settle pin would pull a
+partial notch back to the current page and the wheel would feel stuck. Wheel over the
+review map still pans the canvas. Wheel over a nested scroller that can still move in
+that direction scrolls that scroller. Ctrl/meta wheel stays a zoom gesture. The review map stays pannable (`mobileViewPolicy` defaults to
 `auto`); one-finger drag on the canvas pans the tree and is not yielded to the snap
 scroller. The right pager is the same three buttons on PWA and desktop: 上一张, 下一张,
 and 完成. 上一张 / 下一张 always page cards, including while the rating
@@ -433,10 +445,11 @@ Already answered overlay progress stays answered; newly included question ids ap
 Durable progress lives on the round plan as `overlay_quiz` (question ids, index, completed ids,
 runtime states, per-question palace ids, and `parked` out-of-scope progress). PWA reload, app
 restart, and next-day reopen restore answered content and the current index from that plan. The
-SPA `quizSessionProgress` mirror is same-session only: reload empties it, and toolbar 做题
-re-seeds it from `overlay_quiz` on ensure/hydrate so node-bound badges stay in sync for the SPA
-lifetime. Starting a new round (`「再来一轮」` → config confirm → `/rounds/start`) starts overlay
-已做 empty and clears the SPA mirror. Changing subject or palace scope parks answered questions
+SPA `quizSessionProgress` is the shared question 已做. Refresh restores it from
+`quiz_practice_progress` and does not clear it. Toolbar 做题 still re-seeds any missing
+answers from `overlay_quiz` on ensure/hydrate. Starting a new round (`「再来一轮」` →
+config confirm → `/rounds/start`) is an explicit clear: it starts overlay 已做 empty
+and clears the shared 已做. Changing subject or palace scope parks answered questions
 that left the filter instead of deleting them; they return when the palace is in scope again.
 Finishing one palace's ratings does not ask to clear overlay 已做. After the configured queue
 is fully handled, the right-side 完成 control opens the settlement slot. That page asks once

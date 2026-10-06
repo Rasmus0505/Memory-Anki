@@ -176,6 +176,46 @@ def test_start_new_round_only_resets_current_workspace_and_seeds_overlap(make_cl
     assert leftover["current_card_id"] == "b"
 
 
+def test_palace_review_workspace_does_not_touch_primary_round(make_client):
+    client = _client(make_client)
+    primary = _create(
+        client,
+        operation_id="op-primary",
+        cards=_unit_cards(("a", "unit-a"), ("b", "unit-b")),
+        round_id="round-primary",
+        workspace="primary",
+    )
+    palace = _create(
+        client,
+        operation_id="op-palace",
+        cards=_unit_cards(("shelf", "unit-shelf")),
+        round_id="round-palace-23",
+        workspace="p23",
+        scope_key="palace-23",
+    )
+    assert palace["workspace"] == "p23"
+    assert palace["round_id"] == "round-palace-23"
+    completed = _action(
+        client,
+        palace["round_id"],
+        operation_id="op-palace-complete",
+        action="complete",
+        version=palace["version"],
+        card_id="shelf",
+    )
+    assert "shelf" in completed["plan"]["completed_ids"]
+    untouched = client.get("/api/v1/freestyle/rounds/round-primary").json()
+    assert untouched["round_id"] == primary["round_id"]
+    assert untouched["status"] == "active"
+    assert untouched["current_card_id"] == "a"
+    assert "a" not in untouched["plan"]["completed_ids"]
+    active = client.get("/api/v1/freestyle/rounds/active", params={"workspace": "p23"})
+    assert active.status_code == 200, active.text
+    assert active.json()["round_id"] == "round-palace-23"
+    primary_active = client.get("/api/v1/freestyle/rounds/active", params={"workspace": "primary"})
+    assert primary_active.json()["round_id"] == "round-primary"
+
+
 def test_get_active_round_follows_workspace(make_client):
     client = _client(make_client)
     primary = _create(

@@ -199,11 +199,15 @@ def normalize_plan(plan: Mapping[str, Any] | None) -> Plan:
             card_id = _text(key)
             if not card_id or not isinstance(value, Mapping):
                 continue
-            encounters[card_id] = {
+            encounter = {
                 "encounter_id": _text(value.get("encounter_id")),
                 "status": _text(value.get("status")) or "open",
                 "unit_revision": _int(value.get("unit_revision")),
             }
+            rating = _int(value.get("rating"))
+            if rating in {1, 2, 3, 4}:
+                encounter["rating"] = rating
+            encounters[card_id] = encounter
     normalized: Plan = {
         "original_cards": original,
         "presented_ids": _unique(raw.get("presented_ids") or [item["card_id"] for item in original]),

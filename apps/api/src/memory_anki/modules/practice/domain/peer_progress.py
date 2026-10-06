@@ -27,6 +27,58 @@ from .round_plan import (
 )
 
 
+def project_identity_ratings(
+    plan: Mapping[str, Any],
+    ratings: Mapping[str, int],
+) -> tuple[Plan, bool]:
+    """Stamp unit ratings onto matching cards. The cursor stays put.
+
+    A shelf review and a freestyle round are two views of the same unit.
+    Completion alone must not invent 记得; only a real 1–4 rating does.
+    """
+    next_plan = normalize_plan(plan)
+    held = next_plan.get("current_card_id")
+    changed = False
+    for raw_unit_id, raw_rating in ratings.items():
+        unit_id = _text(raw_unit_id)
+        rating = _int(raw_rating)
+        if not unit_id or rating not in {1, 2, 3, 4}:
+            continue
+        passed = rating >= 3
+        for card in next_plan["original_cards"]:
+            if progress_identity(card) != f"unit:{unit_id}":
+                continue
+            card_id = _text(card.get("card_id"))
+            if not card_id:
+                continue
+            existing = next_plan["encounters"].get(card_id) or {}
+            already = (
+                _int(existing.get("rating")) == rating
+                and existing.get("status") == ("passed" if passed else "failed")
+                and (card_id in next_plan["completed_ids"]) == passed
+            )
+            if already:
+                continue
+            changed = True
+            next_plan["encounters"][card_id] = {
+                "encounter_id": _text(existing.get("encounter_id")) or f"identity:{unit_id}",
+                "status": "passed" if passed else "failed",
+                "unit_revision": _int(existing.get("unit_revision") or card.get("unit_revision")),
+                "rating": rating,
+            }
+            if passed:
+                _settle_source(next_plan, card_id)
+            else:
+                next_plan["completed_ids"] = [
+                    item for item in next_plan["completed_ids"] if item != card_id
+                ]
+    if held and _text(held) in next_plan["presented_ids"]:
+        next_plan["current_card_id"] = held
+    if changed:
+        _sync_index(next_plan)
+    return next_plan, changed
+
+
 def progress_identity(card: Mapping[str, Any] | None, *, card_id: str = "") -> str:
     """Stable overlap key across workspaces. Revision is not part of identity."""
     payload = card if isinstance(card, Mapping) else {}
