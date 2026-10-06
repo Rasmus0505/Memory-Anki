@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#fbf6ef" />
+    <script>
+      ;(() => {
+        try {
+          var t = localStorage.getItem('memory-anki-theme')
+          var dark = t === 'dark' || ((t === null || t === 'system') && matchMedia('(prefers-color-scheme: dark)').matches)
+          if (dark) {
+            document.documentElement.classList.add('dark')
+            document.querySelector('meta[name="theme-color"]').content = '#181411'
+          }
+          if (location.pathname === '/timer-overlay') {
+            document.documentElement.classList.add('memory-anki-timer-overlay-page')
+          }
+        } catch (e) {}
+      })()
+    </script>
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Memory Anki" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>记忆宫殿复习系统</title>
+    <script>
+      ;(() => {
+        const startedAt = Date.now()
+        const issues = []
+
+        function describeTarget(target) {
+          if (!target) return ''
+          return target.currentSrc || target.src || target.href || target.data || ''
+        }
+
+        function formatError(error) {
+          if (!error) return { name: 'UnknownError', message: 'unknown', stack: '' }
+          if (typeof error === 'object') {
+            return {
+              name: typeof error.name === 'string' ? error.name : 'Error',
+              message: typeof error.message === 'string' ? error.message : String(error),
+              stack: typeof error.stack === 'string' ? error.stack : '',
+            }
+          }
+          return { name: 'Error', message: String(error), stack: '' }
+        }
+
+        function releaseId() {
+          try {
+            return document.querySelector('meta[name="memory-anki-release"]')?.getAttribute('content') || 'unknown'
+          } catch {
+            return 'unavailable'
+          }
+        }
+
+        function serviceWorkerController() {
+          try {
+            if (!('serviceWorker' in navigator)) return 'unsupported'
+            return navigator.serviceWorker.controller?.scriptURL || 'uncontrolled'
+          } catch {
+            return 'unavailable'
+          }
+        }
+
+        function displayMode() {
+          try {
+            const standaloneNavigator = navigator
+            if (standaloneNavigator.standalone === true || window.matchMedia?.('(display-mode: standalone)').matches) {
+              return 'standalone'
+            }
+            return 'browser'
+          } catch {
+            return 'unavailable'
+          }
+        }
+
+        function diagnosticText(reason, detail, error) {
+          const failure = formatError(error)
+          const lines = [
+            `PWA 启动失败：${reason}`,
+            detail ? `细节：${detail}` : null,
+            `release=${releaseId()}`,
+            `timestamp=${new Date().toISOString()}`,
+            `url=${location.href}`,
+            `online=${navigator.onLine ? 'online' : 'offline'}`,
+            `display_mode=${displayMode()}`,
+            `service_worker=${serviceWorkerController()}`,
+            `browser=${navigator.userAgent}`,
+            `error_name=${failure.name}`,
+            `error_message=${failure.message}`,
+            failure.stack ? `error_stack=${failure.stack}` : 'error_stack=unavailable',
+            `boot_elapsed_ms=${Date.now() - startedAt}`,
+          ].filter(Boolean)
+          return lines.join('\n')
+        }
+
+        function copyText(text) {
+          if (navigator.clipboard?.writeText) {
+            return navigator.clipboard.writeText(text).then(() => true).catch(() => copyWithSelection(text))
+          }
+          return Promise.resolve(copyWithSelection(text))
+        }
+
+        function copyWithSelection(text) {
+          const host = document.body || document.documentElement
+          if (!host || typeof document.execCommand !== 'function') return false
+          const textarea = document.createElement('textarea')
+          textarea.value = text
+          textarea.setAttribute('readonly', '')
+          textarea.setAttribute('aria-hidden', 'true')
+          textarea.style.position = 'fixed'
+          textarea.style.top = '0'
+          textarea.style.left = '-9999px'
+          textarea.style.opacity = '0'
+          host.appendChild(textarea)
+          try {
+            textarea.focus()
+            textarea.select()
+            textarea.setSelectionRange(0, text.length)
+            return document.execCommand('copy')
+          } catch {
+            return false
+          } finally {
+            textarea.remove()
+          }
+        }
+
+        function renderBootIssue(reason, detail, error) {
+          const root = document.getElementById('root')
+          if (!root || root.childElementCount > 0) return
+          const text = diagnosticText(reason, detail, error)
+          root.innerHTML = `
+            <main style="min-height:100vh;display:grid;place-items:center;background:#020617;color:#f8fafc;padding:24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+              <section style="width:min(100%,520px);border:1px solid rgba(248,113,113,.45);border-radius:14px;background:rgba(127,29,29,.18);padding:18px;box-shadow:0 24px 80px rgba(0,0,0,.38);">
+                <h1 style="margin:0 0 8px;font-size:20px;">PWA 启动失败</h1>
+                <p style="margin:0 0 12px;color:#fecaca;line-height:1.6;">页面资源或网络请求没有成功加载。下面的信息可用于定位手机端 Load failed。</p>
+                <pre style="white-space:pre-wrap;word-break:break-word;margin:0;border-radius:10px;background:rgba(15,23,42,.9);padding:12px;color:#e2e8f0;font-size:12px;line-height:1.5;">${text.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char])}</pre>
+                <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;">
+                  <button id="pwa-copy-diagnostics" style="min-height:40px;border:0;border-radius:8px;background:#f8fafc;color:#020617;padding:0 14px;font-weight:700;">复制诊断信息</button>
+                  <a href="/pwa-reset.html" style="min-height:40px;display:inline-flex;align-items:center;border-radius:8px;background:#34d399;color:#020617;padding:0 14px;font-weight:700;text-decoration:none;">清理 PWA 缓存</a>
+                  <a href="/freestyle?boot_retry=1" style="min-height:40px;display:inline-flex;align-items:center;border-radius:8px;border:1px solid rgba(248,250,252,.3);color:#f8fafc;padding:0 14px;font-weight:700;text-decoration:none;">重试</a>
+                </div>
+              </section>
+            </main>
+          `
+          document.getElementById('pwa-copy-diagnostics')?.addEventListener('click', (event) => {
+            const button = event.currentTarget
+            void copyText(text).then((copied) => {
+              if (button) button.textContent = copied ? '已复制诊断信息' : '请手动复制上方诊断'
+            })
+          })
+        }
+
+        window.addEventListener(
+          'error',
+          (event) => {
+            const resource = describeTarget(event.target)
+            if (resource) {
+              issues.push(`资源加载失败：${resource}`)
+              renderBootIssue('资源加载失败', resource, event.error)
+              return
+            }
+            if (event.message) {
+              issues.push(`脚本错误：${event.message}`)
+              renderBootIssue('脚本错误', event.message, event.error)
+            }
+          },
+          true,
+        )
+
+        window.addEventListener('unhandledrejection', (event) => {
+          const reason = event.reason
+          const failure = formatError(reason)
+          const message = failure.message
+          issues.push(`Promise 失败：${message}`)
+          if (/load failed|failed to fetch|loading chunk|import/i.test(message)) {
+            renderBootIssue('脚本或网络请求失败', message, reason)
+          }
+        })
+
+        window.setTimeout(() => {
+          const root = document.getElementById('root')
+          if (root && root.childElementCount === 0) {
+            renderBootIssue('React 未启动', issues.slice(-3).join('\n') || '入口脚本没有在 8 秒内渲染内容')
+          }
+        }, 8000)
+      })()
+    </script>
+    <script type="module" crossorigin src="/assets/index-DFo_SZ8o.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-Cyuzqnbw.js">
+    <link rel="modulepreload" crossorigin href="/assets/icons-vendor-BaxOjYdx.js">
+    <link rel="modulepreload" crossorigin href="/assets/radix-vendor-DzOvyo-0.js">
+    <link rel="modulepreload" crossorigin href="/assets/react-vendor-rBAFV3VG.js">
+    <link rel="modulepreload" crossorigin href="/assets/QueryClientProvider-CpNFf3zg.js">
+    <link rel="modulepreload" crossorigin href="/assets/rolling-number-CpGkncZx.js">
+    <link rel="modulepreload" crossorigin href="/assets/utils-B6KiDbIe.js">
+    <link rel="modulepreload" crossorigin href="/assets/ui-vendor-DFU-fYSx.js">
+    <link rel="modulepreload" crossorigin href="/assets/http-CItk0UYz.js">
+    <link rel="modulepreload" crossorigin href="/assets/button-C6XB3TyO.js">
+    <link rel="modulepreload" crossorigin href="/assets/widget-error-boundary-aUQKRGOn.js">
+    <link rel="modulepreload" crossorigin href="/assets/dialog-CX0vlr4V.js">
+    <link rel="modulepreload" crossorigin href="/assets/skeleton-DVMSB1Yk.js">
+    <link rel="modulepreload" crossorigin href="/assets/state-placeholders-y73CbBsW.js">
+    <link rel="modulepreload" crossorigin href="/assets/input-mJ7tTjIn.js">
+    <link rel="modulepreload" crossorigin href="/assets/native-dialog-BNrGBP6Q.js">
+    <link rel="modulepreload" crossorigin href="/assets/label-CpgcfTVM.js">
+    <link rel="modulepreload" crossorigin href="/assets/lazyWithRetry-DPtkGHEE.js">
+    <link rel="modulepreload" crossorigin href="/assets/public-C3FDLGlj.js">
+    <link rel="stylesheet" crossorigin href="/assets/index-XqZSSJJH.css">
+      <meta name="memory-anki-release" content="20261006140712-d7be24958a" />
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

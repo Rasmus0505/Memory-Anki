@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Memory Anki">
+  <rect width="512" height="512" rx="112" fill="#020617"/>
+  <circle cx="382" cy="128" r="56" fill="#34d399"/>
+  <path d="M132 164c0-38 31-69 69-69h110c38 0 69 31 69 69v184c0 38-31 69-69 69H201c-38 0-69-31-69-69V164Z" fill="#f8fafc"/>
+  <path d="M184 190h144M184 252h104M184 314h144" stroke="#020617" stroke-width="34" stroke-linecap="round"/>
+  <path d="M112 349c26 42 71 68 120 68h88c-16 25-44 40-75 40h-36c-53 0-97-38-97-85v-23Z" fill="#34d399"/>
+</svg>

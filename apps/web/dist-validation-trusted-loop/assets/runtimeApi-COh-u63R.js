@@ -1,0 +1,1 @@
+import{n as e}from"./http-CItk0UYz.js";function t(){return e(`/runtime-info`)}function n(t){return e(`/runtime-config`,{method:`PUT`,body:JSON.stringify({local_app_home:t})})}export{n,t};
