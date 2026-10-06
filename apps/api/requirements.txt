@@ -14,3 +14,8 @@ python-dotenv>=1.0
 fsrs==6.3.1
 pypdf>=5.0
 lxml>=5.0
+# Imported directly by modules/english/infrastructure/dashscope_gateway.py.
+# It was only reachable as a transitive dependency of dashscope, so a rebuild
+# that resolved dashscope differently could drop it and break that import at
+# runtime rather than at install time.
+requests==2.32.3

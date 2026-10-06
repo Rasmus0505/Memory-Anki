@@ -595,6 +595,11 @@ function stackNodesWithoutOverlap(
   minGap: number,
 ): Node[] {
   let currentTop = Math.min(...nodes.map((node) => node.position.y), ROOT_Y)
+  // Original order, resolved once. Looking each id up with `findIndex` inside the
+  // comparator below rescanned the array on every comparison, which is O(N^2 log N)
+  // for a stack that can hold every node of a wide palace.
+  const originalIndexById = new Map(nodes.map((node, index) => [node.id, index]))
+  const originalIndexOf = (node: Node) => originalIndexById.get(node.id) ?? 0
   return [...nodes]
     .sort((a, b) => a.position.y - b.position.y || a.position.x - b.position.x)
     .map((node) => {
@@ -605,7 +610,7 @@ function stackNodesWithoutOverlap(
       currentTop += getResolvedNodeSize(node, undefined, measuredSizes).height + minGap
       return nextNode
     })
-    .sort((a, b) => nodes.findIndex((node) => node.id === a.id) - nodes.findIndex((node) => node.id === b.id))
+    .sort((a, b) => originalIndexOf(a) - originalIndexOf(b))
 }
 
 function resolveOverlaps(
