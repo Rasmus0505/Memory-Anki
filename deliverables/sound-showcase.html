@@ -1,0 +1,1187 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Memory Anki · 声音终选室</title>
+<style>
+:root {
+  --bg: #121410;
+  --ink: #f4f1ea;
+  --muted: #b0a79c;
+  --dim: #7d756c;
+  --line: #2c322c;
+  --panel: #1b1f1b;
+  --panel-2: #232824;
+  --crystal: #8fd0ff;
+  --wood: #e2a15a;
+  --celesta: #f0b4c4;
+  --file: #e4d2b0;
+  --paper: #241c14;
+  --paper-line: #5c4a36;
+  --ok: #8fbf8a;
+  --bad: #e07a6a;
+  --shadow: 0 18px 50px rgba(0,0,0,.35);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); }
+body {
+  font: 15px/1.55 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  padding: 28px 22px 120px;
+}
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--crystal); outline-offset: 2px; }
+main { max-width: 1180px; margin: 0 auto; }
+.eyebrow { letter-spacing: .22em; font-size: 11px; font-weight: 700; color: var(--file); }
+h1 { font-size: 34px; line-height: 1.15; margin: 8px 0 10px; letter-spacing: -.03em; }
+h2 { font-size: 18px; margin: 0 0 8px; }
+.lede { max-width: 760px; color: var(--muted); margin: 0; }
+.rules {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 22px 0;
+}
+.rule {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.rule b { display: block; color: var(--ink); margin-bottom: 4px; font-size: 13px; }
+.voices { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.voice {
+  text-align: left;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 16px;
+  box-shadow: var(--shadow);
+  position: relative;
+}
+.voice[data-voice="crystal"] { border-top: 4px solid var(--crystal); }
+.voice[data-voice="wood"] { border-top: 4px solid var(--wood); }
+.voice[data-voice="celesta"] { border-top: 4px solid var(--celesta); }
+.voice.active { background: var(--panel-2); }
+.voice header { display: flex; justify-content: space-between; gap: 8px; align-items: start; }
+.kicker { font-size: 11px; letter-spacing: .14em; color: var(--dim); font-weight: 700; }
+.voice h2 { font-size: 20px; }
+.tag { font-size: 11px; border: 1px solid var(--line); border-radius: 999px; padding: 3px 8px; color: var(--muted); }
+.spec { display: grid; grid-template-columns: 72px 1fr; gap: 3px 8px; font-size: 12px; margin: 12px 0; color: var(--muted); }
+.spec b { color: var(--ink); font-weight: 650; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn, .scene-btn, .grade, .desk-btn {
+  border: 1px solid var(--line);
+  background: #141814;
+  color: var(--ink);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+.btn:hover, .scene-btn:hover, .grade:hover, .desk-btn:hover { border-color: #6d7a6e; }
+.btn.primary { background: #f4f1ea; color: #17140f; border-color: #f4f1ea; font-weight: 700; }
+.btn.tiny, .desk-btn { padding: 6px 8px; font-size: 12px; }
+.cta, .toolbar, .readout, .panel, .file-room, .journeys {
+  margin-top: 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 14px;
+}
+.cta p, .hint { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 14px 18px; align-items: center; }
+label.ctrl { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+input[type=range] { accent-color: var(--file); width: 120px; }
+select, .search {
+  background: #101410;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 8px;
+}
+.search { min-width: 180px; }
+.layers { display: flex; gap: 10px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+.layers label { display: flex; gap: 5px; align-items: center; }
+.readout { display: grid; grid-template-columns: 1.3fr .7fr; gap: 12px; }
+#status { font-weight: 700; }
+#log { margin: 8px 0 0; padding-left: 18px; color: var(--muted); font-size: 13px; }
+canvas { width: 100%; height: 72px; background: #0c0f0c; border-radius: 10px; display: block; }
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 16px; }
+.card {
+  min-height: 148px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, #2a312b, #171c18);
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  text-align: center; padding: 16px; cursor: pointer;
+}
+.card.revealed { background: linear-gradient(180deg, #314338, #1a221c); }
+.card small { color: var(--dim); letter-spacing: .12em; font-size: 11px; }
+.card strong { font-size: 18px; margin-top: 6px; }
+.card em { color: var(--ok); font-style: normal; margin-top: 8px; opacity: 0; }
+.card.revealed em { opacity: 1; }
+.grades { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 10px; }
+.grade b { display: block; font-size: 13px; }
+.grade span { color: var(--dim); font-size: 11px; }
+.g1 { border-color: #6d403c; } .g2 { border-color: #6d5a38; } .g3 { border-color: #3d5d6d; } .g4 { border-color: #3d5d45; }
+.file-room { background: var(--paper); border-color: var(--paper-line); }
+.file-room h2, .file-kicker { color: var(--file); }
+.folders { display: flex; gap: 8px; margin: 8px 0; }
+.folder-btn.active { border-color: var(--file); color: var(--file); }
+.file-row {
+  width: 100%; text-align: left; display: flex; justify-content: space-between; gap: 8px;
+  border: 1px solid transparent; background: transparent; border-radius: 8px; padding: 7px 8px; color: var(--file);
+}
+.file-row.selected { background: rgba(228,210,176,.1); border-color: var(--paper-line); }
+.file-row small { color: #a89478; }
+.group { margin-top: 12px; }
+.group summary { cursor: pointer; font-weight: 700; }
+.scenes { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; margin-top: 8px; }
+.scene-btn { text-align: left; display: flex; flex-direction: column; gap: 2px; min-height: 64px; }
+.scene-btn b { font-size: 13px; }
+.scene-btn span { color: var(--dim); font-size: 11px; }
+.chip { font-style: normal; font-size: 10px; border-radius: 999px; padding: 1px 6px; margin-left: 6px; border: 1px solid var(--line); color: var(--dim); }
+.chip.new { color: var(--file); border-color: var(--paper-line); }
+.journeys .row { margin-top: 8px; }
+.dock {
+  position: sticky; bottom: 12px; margin-top: 18px;
+  display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: center;
+  background: rgba(24,22,18,.94); border: 1px solid var(--line); border-radius: 16px;
+  padding: 12px 14px; backdrop-filter: blur(10px);
+}
+.toast {
+  position: fixed; top: 16px; right: 16px; background: #f4f1ea; color: #17140f;
+  padding: 10px 14px; border-radius: 10px; font-weight: 700; opacity: 0; transform: translateY(-8px);
+  transition: .2s ease; pointer-events: none;
+}
+.toast.show { opacity: 1; transform: none; }
+.foot { color: var(--dim); font-size: 12px; margin-top: 14px; }
+@media (max-width: 900px) {
+  .rules, .voices, .readout, .split { grid-template-columns: 1fr; }
+  h1 { font-size: 28px; }
+}
+</style>
+</head>
+<body>
+<div class="toast" id="toast" role="status"></div>
+<main>
+  <p class="eyebrow">MEMORY ANKI / FINAL THREE</p>
+  <h1>三套终选，听得出谁是谁。</h1>
+  <p class="lede">A / B / F 不再是同一只铃换音高。日常动作共用一套语义语法，方便比较；发声原理、完成和弦和文件声部分开。随机只改音色和十几音分，不把「忘记」听成「简单」。这一页不改应用。</p>
+
+  <section class="rules" aria-label="选型时一并听的规则">
+    <div class="rule"><b>1 · 语法共用，乐器分开</b>上行是肯定，下行是否定，完成才用各自主和弦。玻璃是调频，木是槌击，簧片是延迟颤音。</div>
+    <div class="rule"><b>2 · 文件声部独立</b>删文件不是删节点。纸声、抽屉闷响、无颤音翻页，不借用翻卡铃。</div>
+    <div class="rule"><b>3 · 变体有边界</b>四色轮换，偶尔跳一格。游走不超过 ±14 音分，小三度不会翻成上行。</div>
+    <div class="rule"><b>4 · 别让果汁变噪音</b>悬停不进旅程。连击到顶只换色彩不加响。微交互在动作后 120ms 让路。进度只在四分点响。</div>
+    <div class="rule"><b>5 · 错误要善意</b>答错、保存失败、权限不足都是钝的下行，没有锯齿蜂鸣。失败比答错更低一点。</div>
+    <div class="rule"><b>6 · 对比不要掺运气</b>三套连听锁定同一个变体。单钮试听不受密度档影响；马拉松和「混合的一天」才遵守密度。</div>
+  </section>
+
+  <section class="voices" id="voices">
+    <article class="voice active" data-voice="crystal">
+      <header><div><div class="kicker">A · CRYSTAL</div><h2>晶莹微风</h2></div><span class="tag">调频玻璃</span></header>
+      <div class="spec"><b>身份</b><span>高音区 FM，起音有敲击指数，尾音中长</span><b>完成</b><span>空五度 0–7–12，中空</span><b>文件</b><span>高频纸声 + 极短晶点，不留长尾</span></div>
+      <div class="row">
+        <button class="btn tiny" data-act="identity" data-voice="crystal">听身份</button>
+        <button class="btn tiny" data-act="scene" data-voice="crystal" data-scene="grade_good">良好</button>
+        <button class="btn tiny" data-act="scene" data-voice="crystal" data-scene="file_delete">删文件</button>
+        <button class="btn tiny primary" data-act="pick" data-voice="crystal">先听这套</button>
+      </div>
+    </article>
+    <article class="voice" data-voice="wood">
+      <header><div><div class="kicker">B · WOOD</div><h2>禅境温木</h2></div><span class="tag">槌击木琴</span></header>
+      <div class="spec"><b>身份</b><span>低通三角波 + 槌击噪声，尾音被掐到 130ms 内</span><b>完成</b><span>挂二 0–5–7，温，不悲</span><b>文件</b><span>抽屉闷响 + 低频纸滑，几乎没有泛音</span></div>
+      <div class="row">
+        <button class="btn tiny" data-act="identity" data-voice="wood">听身份</button>
+        <button class="btn tiny" data-act="scene" data-voice="wood" data-scene="grade_good">良好</button>
+        <button class="btn tiny" data-act="scene" data-voice="wood" data-scene="file_delete">删文件</button>
+        <button class="btn tiny primary" data-act="pick" data-voice="wood">先听这套</button>
+      </div>
+    </article>
+    <article class="voice" data-voice="celesta">
+      <header><div><div class="kicker">F · CELESTA</div><h2>灵音八音盒</h2></div><span class="tag">延迟颤音</span></header>
+      <div class="spec"><b>身份</b><span>正弦合唱，颤音晚 80ms 才进来，尾音最长</span><b>完成</b><span>大三加八度，甜，有乐句</span><b>文件</b><span>翻页沙沙 + 无颤音短簧，避免把整理听成奖励</span></div>
+      <div class="row">
+        <button class="btn tiny" data-act="identity" data-voice="celesta">听身份</button>
+        <button class="btn tiny" data-act="scene" data-voice="celesta" data-scene="grade_good">良好</button>
+        <button class="btn tiny" data-act="scene" data-voice="celesta" data-scene="file_delete">删文件</button>
+        <button class="btn tiny primary" data-act="pick" data-voice="celesta">先听这套</button>
+      </div>
+    </article>
+  </section>
+
+  <section class="cta">
+    <div class="row">
+      <button class="btn primary" id="btnIdentityAll">先听区别：三套身份连播</button>
+      <button class="btn" id="btnCompareGood">同一句「良好」A→B→F</button>
+      <button class="btn" id="btnCompareDelete">同一句「删文件」A→B→F</button>
+      <button class="btn" id="btnNodeVsFile">删节点 vs 删文件</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button class="btn" id="btnMech">机械重复翻开 ×8</button>
+      <button class="btn" id="btnVaried">变体轮换翻开 ×8</button>
+      <button class="btn" id="btnBlind">闭眼四连，听完再揭晓</button>
+      <button class="btn" id="btnStop">停止</button>
+    </div>
+    <p>身份连播每套都含：学习单音 → 文件删除 → 四张连弹。听尾音何时停下：木先停，玻璃还在响，八音盒更久。键盘 A / B / F 选音色，R 重听，C 对比上一动作，Esc 停止。</p>
+  </section>
+
+  <section class="toolbar">
+    <label class="ctrl">音量 <input id="vol" type="range" min="0" max="100" value="100"><output id="volNum">100%</output></label>
+    <label class="ctrl">变体幅度 <input id="wander" type="range" min="0" max="100" value="70"><output id="wanderNum">70%</output></label>
+    <label class="ctrl">密度
+      <select id="density">
+        <option value="full">全汁（马拉松仍跳过悬停）</option>
+        <option value="study" selected>学习专注（文件让路）</option>
+        <option value="library">文件专注</option>
+        <option value="quiet">安静：只留结果</option>
+      </select>
+    </label>
+    <div class="layers">
+      <label><input id="layerStudy" type="checkbox" checked>学习</label>
+      <label><input id="layerFile" type="checkbox" checked>文件</label>
+      <label><input id="layerMicro" type="checkbox" checked>微交互</label>
+      <label><input id="layerCeremony" type="checkbox" checked>庆典</label>
+    </div>
+    <input class="search" id="filter" type="search" placeholder="筛选动作，例如 导入 / 评分" aria-label="筛选动作">
+  </section>
+
+  <section class="readout">
+    <div>
+      <div id="status">点任意按钮开始。页面不会自动播放。</div>
+      <ol id="log"></ol>
+    </div>
+    <canvas id="scope" width="640" height="140" aria-hidden="true"></canvas>
+  </section>
+
+  <section class="split">
+    <div class="panel" id="sandbox" tabindex="0">
+      <h2>刷题沙盒 <span id="streak" class="chip">连击 0</span></h2>
+      <div class="card" id="studyCard"><small>空格翻转 · 聚焦后 1–4 打分</small><strong id="front">海马体把短时记忆变成什么？</strong><em id="back">长时记忆的巩固</em></div>
+      <div class="grades">
+        <button class="grade g1" data-grade="grade_forget"><b>忘记</b><span>下行双音</span></button>
+        <button class="grade g2" data-grade="grade_hard"><b>困难</b><span>单音偏沉</span></button>
+        <button class="grade g3" data-grade="grade_good"><b>良好</b><span>上行三度</span></button>
+        <button class="grade g4" data-grade="grade_easy"><b>简单</b><span>亮，但不是完成和弦</span></button>
+      </div>
+      <p class="hint">连击 3 / 5 加一句，第 10 下封顶换色彩，不再加响。聚焦这个面板后，1–4 不会误切音色。</p>
+    </div>
+    <div class="file-room" id="desk">
+      <div class="file-kicker">FILE DESK · 独立声部</div>
+      <h2>文件桌</h2>
+      <div class="folders" id="folders"></div>
+      <div id="fileList"></div>
+      <div class="row" style="margin-top:10px">
+        <button class="desk-btn" data-desk="new-folder">新建文件夹</button>
+        <button class="desk-btn" data-desk="copy">复制</button>
+        <button class="desk-btn" data-desk="paste">粘贴</button>
+        <button class="desk-btn" data-desk="delete">删除</button>
+        <button class="desk-btn" data-desk="restore">恢复</button>
+        <button class="desk-btn" data-desk="upload">上传</button>
+        <button class="desk-btn" data-desk="download">下载完成</button>
+        <button class="desk-btn" data-desk="import">导入确认</button>
+      </div>
+      <p class="hint">单击选中，Shift 多选会往上走。双击打开。这里的声音全部走文件声部。</p>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>学习、导图、题库、微交互 <span id="countMain" class="chip"></span></h2>
+    <p class="hint">「重做」是应用里已有的事件，这里换音色试听。「预留」是为了果汁补上的动作，还没写进应用。单钮永远出声；密度档不拦单钮。</p>
+    <div id="catalogMain"></div>
+  </section>
+
+  <section class="file-room">
+    <h2>文件管理全表 <span id="countFile" class="chip"></span></h2>
+    <p class="hint">上传完成是五度，下载完成是大六度，避免两个「好了」撞车。导入确认是纸声接到各自主和弦，不是再翻一次卡。</p>
+    <div id="catalogFile"></div>
+  </section>
+
+  <section class="journeys">
+    <h2>旅程</h2>
+    <p class="hint">点名的旅程照播。只有「混合的一天」和马拉松遵守密度，并主动跳过悬停。</p>
+    <div class="row">
+      <button class="btn" data-journey="review">复习八张</button>
+      <button class="btn" data-journey="palace">整理宫殿</button>
+      <button class="btn" data-journey="files">文件家务</button>
+      <button class="btn" data-journey="import">导入一座宫殿</button>
+      <button class="btn" data-journey="mixed">混合的一天</button>
+      <button class="btn" data-journey="marathon">疲劳马拉松</button>
+    </div>
+  </section>
+
+  <p class="foot" id="checkLine">声景自检中…</p>
+  <p class="foot">独立试听页。无网络请求，无音频素材。落地时仍走 cue()，不在业务组件里裸建 AudioContext，也不新增音频文件。选定后直接说 A / B / F，以及变体幅度、密度档、文件声部要不要保留。</p>
+
+  <div class="dock">
+    <div>
+      <div class="kicker">当前选定</div>
+      <strong id="choiceName">还没选定</strong>
+    </div>
+    <div class="row">
+      <button class="btn" id="btnWav">导出上一动作 WAV</button>
+      <button class="btn" id="btnJson">导出选型 JSON</button>
+      <button class="btn primary" id="btnConfirm">确定用当前这套</button>
+    </div>
+  </div>
+</main>
+<script>
+'use strict';
+const VOICES = {
+  crystal: { id: 'crystal', name: 'A · 晶莹微风', base: 1567.98, decay: 0.44, loud: 0.22, wander: 14, motif: '0@0,7@120,12@250' },
+  wood: { id: 'wood', name: 'B · 禅境温木', base: 523.25, decay: 0.12, loud: 0.28, wander: 12, motif: '0@0,5@80,7@155' },
+  celesta: { id: 'celesta', name: 'F · 灵音八音盒', base: 1046.5, decay: 0.58, loud: 0.18, wander: 10, motif: '0@0,4@150,7@300,12@470' }
+};
+const CATALOG = [
+  ['学习','reveal','翻开一张','单音身份','study','flat','重做','0@0',0],
+  ['学习','reveal2','翻开两张','每张变体不同','study','up','重做','0@0,4@80',1],
+  ['学习','reveal4','翻开四张','等程，尾音收短','study','up','重做','0@0,2@72,4@144,7@216',1],
+  ['学习','reveal10','翻开十张','前清后轻，不叠墙','study','up','重做','0/1/0.75@0,2/0.9/0.7@68,4/0.8/0.62@136,7/0.7/0.55@204,4/0.55/0.45@262,2/0.42/0.4@305,5/0.34/0.36@348,7/0.28/0.32@388,9/0.22/0.3@428,12/0.18/0.28@468',1],
+  ['学习','page_turn','翻页','比翻卡更宽','study','up','重做','0@0,5@70',0],
+  ['学习','card_remove','移走卡片','下行，仍是学习声部','study','down','重做','2@0,-3@70',0],
+  ['学习','retry_drop','再来一张落下','先沉后起','study','up','重做','-2@0,3@80',0],
+  ['学习','answer_correct','答对','三音上行','study','up','重做','0@0,4@60,7@130',0,1],
+  ['学习','answer_wrong','答错','钝的下行，不是蜂鸣','study','down','重做','-2@0,-7@80',0,1],
+  ['学习','grade_undo','撤销评分','倒带','study','down','重做','0@0,-5@70',0],
+  ['学习','session_reset','重置一轮','沉一点的下行','study','down','重做','-2@0,-7@100',0],
+  ['学习','area_clear','清空区域','三音收回','study','down','重做','4@0,-1@60,-6@140',0],
+  ['评分','grade_forget','忘记','下行小三度','study','down','重做','0@0,-3@85',0,1],
+  ['评分','grade_hard','困难','单音，低于良好、高于忘记的落点','study','flat','重做','-2@0',0,1],
+  ['评分','grade_good','良好','上行大三度','study','up','重做','0@0,4@70',0,1],
+  ['评分','grade_easy','简单','更亮，但不是完成和弦','study','up','重做','4@0,7@60,12@140',0,1],
+  ['庆典','combo3','三连击','小阶梯，不加响','study','up','重做','0@0,4@70,7@140',0],
+  ['庆典','combo5','五连击','仍不抬音量','study','up','重做','0@0,4@60,7@120,11@185,12@250',1],
+  ['庆典','combo10','十连击封顶','换色彩，不升增益','study','up','重做','0/0.82@0,4/0.82@55,7/0.8@110,12/0.78@170,16/0.76@235',0],
+  ['庆典','progress25','进度 25%','只在四分点响','study','flat','重做','0@0',0],
+  ['庆典','progress50','进度 50%','大二度抬一步','study','up','重做','0@0,2@80',0],
+  ['庆典','progress75','进度 75%','三音，仍不是通关','study','up','重做','0@0,4@70,7@150',0],
+  ['庆典','unit_complete','单元完成','共用大三，短于通关','study','up','重做','0@0,4@80,7@170',0,1],
+  ['庆典','session_complete','一轮完成','各自主和弦','ceremony','ceremony','重做','MOTIF@0',0,1],
+  ['庆典','round_complete','本轮再点一下头','主和弦后再补一个五度','ceremony','ceremony','重做','MOTIF@0,7@640',0,1],
+  ['庆典','all_clear','全清就绪','快扇，不是主和弦','study','up','重做','0@0,7@80,12@170,19@270',0],
+  ['庆典','rare_show','稀有闪光','高音碎光，不走主和弦','study','up','重做','12@0,16@55,19@110,24@180',0],
+  ['庆典','xp_gain','经验入账','高音小簇','study','up','重做','12@0,16@45,19@90',1],
+  ['庆典','level_up','升级','主和弦再跳八度','ceremony','ceremony','重做','MOTIF@0,12@500',0],
+  ['庆典','stamp_unlock','印章解锁','纯八度一击','study','up','重做','0@0,12@100',0],
+  ['庆典','quest_done','任务完成','从三度起的另一组和弦','study','up','重做','4@0,7@80,11@170',0],
+  ['庆典','pack_unbox','开包','翻页接到主和弦','study','handoff','重做','F:page@0,MOTIF@200',0],
+  ['导图','node_select','选中节点','短，居中','study','flat','重做','0/0.55/0.45@0',0],
+  ['导图','node_create','新建节点','上行三度','study','up','重做','0@0,4@70',0],
+  ['导图','node_delete','删除节点','学习声部下行，无纸声','study','down','重做','2@0,-3@70,-7@150',0],
+  ['导图','node_move','平移节点','大二度，不是肯定句','study','flat','重做','0@0,2@45',0],
+  ['导图','drag_start','拿起','很轻','study','flat','重做','0/0.4/0.3@0',0],
+  ['导图','drag_drop','落定','五度锁定','study','up','重做','0@0,7@60',0],
+  ['导图','fold4','折回四张','倒着收','study','down','重做','4@0,2@70,0@140,-3@210',1],
+  ['导图','category_expand','展开一类','三音','study','up','重做','0@0,4@70,7@150',0],
+  ['导图','next_level','展开下一层','比展开更窄','study','up','重做','0@0,2@60,5@130',0],
+  ['导图','branch_clear','整枝清空','快扇','study','up','重做','0@0,4@50,7@100,12@160',1],
+  ['导图','unlink','断开连线','纯四度下行','study','down','重做','0@0,-5@70',0],
+  ['导图','context_menu','打开菜单','短点','study','flat','重做','0/0.45/0.35@0',0],
+  ['导图','edit_start','开始编辑','轻','study','flat','重做','2/0.4/0.3@0',0],
+  ['导图','field_focus','字段聚焦','微交互音量','micro','flat','重做','0/0.4/0.3@0',0],
+  ['导图','field_commit','字段提交','上行三度','study','up','重做','0@0,4@55',0],
+  ['导图','text_commit','文本提交','大二度，轻于字段','study','up','重做','0@0,2@50',0],
+  ['导图','map_land','节点落定','先沉后五度','study','up','重做','-2@0,5@50',0],
+  ['题库','quiz_open','进入练习','宽五度','study','up','重做','0@0,7@80',0],
+  ['题库','quiz_prev','上一题','退两音','study','down','重做','2@0,0@55',0],
+  ['题库','quiz_next','下一题','进两音','study','up','重做','0@0,2@55',0],
+  ['题库','quiz_scope','切换范围','三步','study','up','重做','0@0,3@50,7@110',0],
+  ['题库','quiz_view','切换视图','从低处抬到五度','study','up','重做','-2@0,5@80',0],
+  ['题库','quiz_tab','切换标签','纯四度','study','up','重做','0@0,5@50',0],
+  ['题库','quiz_select','点选选项','微点','micro','flat','重做','2/0.4/0.25@0',0],
+  ['题库','quiz_submit','提交','上行三度','study','up','重做','0@0,4@50',0],
+  ['题库','quiz_reset','重答','下行四度','study','down','重做','0@0,-5@70',0],
+  ['题库','quiz_correct','题目答对','与答对同族','study','up','重做','0@0,4@55,7@120',0,1],
+  ['题库','quiz_incorrect','题目答错','比保存失败高一点','study','down','重做','-2@0,-8@80',0,1],
+  ['题库','quiz_reveal','揭晓答案','五度','study','up','重做','0@0,7@70',0],
+  ['题库','quiz_ai','评语就绪','慢一点的上行','study','up','重做','0@0,4@90,9@190',0],
+  ['题库','quiz_create','开始新建题','上行三度','study','up','重做','0@0,4@60',0],
+  ['题库','quiz_edit','开始改题','短点','study','flat','重做','2/0.5/0.35@0',0],
+  ['题库','quiz_save','保存题目','三音肯定','study','up','重做','0@0,4@50,7@120',0],
+  ['题库','quiz_delete','删除一题','下行','study','down','重做','1@0,-4@70',0],
+  ['题库','quiz_batch','批量删除','倒着收四下','study','down','重做','4@0,1@60,-2@120,-6@185',1],
+  ['题库','quiz_gen_start','开始生成','三步抬升','study','up','重做','0@0,5@80,9@170',0],
+  ['题库','quiz_attach','附上材料','文件声部，不是翻卡','file','up','重做','F:thud@0,0@50,4@110',0],
+  ['题库','quiz_preview','预览就绪','五度','study','up','重做','0@0,7@80',0],
+  ['题库','quiz_gen_save','生成后保存','收到八度','study','up','重做','0@0,4@60,12@140',0],
+  ['题库','quiz_classify','归类完成','四音扇','study','up','重做','0@0,4@60,7@120,12@200',0],
+  ['题库','quiz_cancel','取消生成','下行四度','study','down','重做','0@0,-5@70',0],
+  ['题库','err_missing','缺输入','错误族，钝','study','down','重做','-5@0,-9@80',0,1],
+  ['题库','err_ai','生成失败','更低','study','down','重做','-7@0,-12@100',0,1],
+  ['题库','err_persist','没写进去','抽屉响 + 下行','file','down','重做','F:thud@0,0@40,-7@110',0,1],
+  ['题库','err_stat','统计失败','错误族中段','study','down','重做','-4@0,-8@90',0,1],
+  ['微交互','pointer_down','按下','最短','micro','flat','重做','0/0.42/0.3@0',0],
+  ['微交互','click','点击','比按下高一点','micro','flat','重做','3/0.48/0.28@0',0],
+  ['微交互','hover','悬停','旅程里默认不播','micro','flat','重做','7/0.28/0.25@0',0],
+  ['微交互','key','按键','轻敲','micro','flat','重做','1/0.36/0.22@0',0],
+  ['微交互','shortcut','快捷键','大二度小抬','micro','up','重做','0/0.5/0.3@0,2/0.45/0.28@36',0],
+  ['微交互','navigation','页面导航','宽五度','study','up','重做','0@0,7@80',0],
+  ['微交互','toggle_on','开关打开','纯四度上','study','up','重做','0@0,5@48',0],
+  ['微交互','toggle_off','开关关闭','纯四度下','study','down','重做','0@0,-5@48',0],
+  ['微交互','mode_switch','模式切换','三音，宽于导航','study','up','重做','0@0,5@55,10@125',0],
+  ['微交互','toolbar','工具栏','短点','study','flat','重做','0/0.45/0.3@0',0],
+  ['微交互','save_success','保存成功','三音肯定','study','up','重做','0@0,4@60,7@140',0,1],
+  ['微交互','save_error','保存失败','比答错更低','study','down','重做','-5@0,-10@90',0,1],
+  ['微交互','segment','分段动作','两下轻点','micro','up','重做','0/0.4/0.25@0,2/0.35/0.22@40',0],
+  ['文件','file_open','打开文件夹','纸声后上行五度','file','up','预留','F:rustle@0,0@40,7@105',0],
+  ['文件','file_close','合上文件夹','纸声后下行','file','down','预留','F:rustle@0,0@35,-5@95',0],
+  ['文件','file_enter','进入目录','翻页后抬高','file','up','预留','F:page@0,0@30,5@85',0],
+  ['文件','file_up','返回上级','闷响后下行','file','down','预留','F:thud@0,0@30,-5@90',0],
+  ['文件','file_select','选中文件','短点','file','flat','预留','F:tick@0',0],
+  ['文件','file_multi','多选四下','逐个升高','file','up','预留','F:tick@0,2@48,4@96,7@144',1],
+  ['文件','file_deselect','取消选择','更轻','file','flat','预留','F:tick/0.4@0',0],
+  ['文件','file_new_folder','新建文件夹','闷响 + 五度','file','up','预留','F:thud@0,0@55,7@125',0],
+  ['文件','file_new_file','新建文件','点后三度','file','up','预留','F:tick@0,0@20,4@70',0],
+  ['文件','file_rename_start','开始重命名','短点','file','flat','预留','F:tick@0',0],
+  ['文件','file_rename_commit','重命名完成','上行三度','file','up','预留','F:tick@0,0@18,4@68',0],
+  ['文件','file_copy','复制','短点','file','flat','预留','F:tick@0',0],
+  ['文件','file_cut','剪切','纸声下行','file','down','预留','F:rustle@0,0@30,-2@80',0],
+  ['文件','file_paste','粘贴','闷响后三度','file','up','预留','F:thud@0,0@35,4@90',0],
+  ['文件','file_duplicate','生成副本','点后五度','file','up','预留','F:tick@0,0@20,7@80',0],
+  ['文件','file_drag_start','拖起文件','只剩纸声','file','flat','预留','F:rustle@0',0],
+  ['文件','file_drop','放入文件夹','闷响锁定','file','up','预留','F:thud@0,0@30,7@80',0],
+  ['文件','file_drop_reject','类型不对','锁扣 + 下行','file','down','预留','F:lock@0,-2@35,-9@100',0,1],
+  ['文件','file_delete','删除文件','纸声 + 下行，不是删节点','file','down','预留','F:rustle@0,0@45,-5@120',0,1],
+  ['文件','file_restore','从回收站恢复','翻页后抬起','file','up','预留','F:page@0,-3@25,4@110',0],
+  ['文件','file_empty','清空回收站','两下噪声再下行','file','down','预留','F:thud@0,F:rustle@50,0@70,-5@140,-10@210',0],
+  ['文件','file_pin','固定','锁扣后五度','file','up','预留','F:lock@0,0@40,7@95',0],
+  ['文件','file_unpin','取消固定','下行四度','file','down','预留','F:tick@0,0@25,-5@80',0],
+  ['文件','file_star','加星','短点跳八度','file','up','预留','F:tick@0,0@20,12@75',0],
+  ['文件','file_sort','排序','三下往上','file','up','预留','F:tick@0,2@36,5@78',0],
+  ['文件','file_filter_on','筛选打开','上行四度','file','up','预留','F:tick@0,0@18,5@55',0],
+  ['文件','file_filter_off','筛选关闭','下行四度','file','down','预留','F:tick@0,0@18,-5@60',0],
+  ['文件','file_search_hit','搜到了','短点后五度','file','up','预留','F:tick@0,0@15,7@50',0],
+  ['文件','file_search_miss','没有结果','锁扣，不惩罚','file','flat','预留','F:lock@0',0],
+  ['文件','file_search_type','搜索打字','45ms 后逐渐拉开，按住不连发','file','flat','预留','F:tick@0,F:tick@48,F:tick@118,F:tick@210',0],
+  ['文件','file_upload_start','开始上传','纸声抬起','file','up','预留','F:rustle@0,0@35,5@95',0],
+  ['文件','file_upload_tick','上传进度点','很轻，不每字节都响','file','flat','预留','F:tick/0.45@0',0],
+  ['文件','file_upload_done','上传完成','五度，区别于下载','file','up','预留','F:thud@0,0@40,7@115',0],
+  ['文件','file_upload_fail','上传失败','锁扣下行','file','down','预留','F:lock@0,-2@40,-8@110',0],
+  ['文件','file_download_done','下载完成','大六度，不是五度','file','up','预留','F:page@0,0@40,9@125',0],
+  ['文件','file_zip','打包','拉链噪声','file','flat','预留','F:zipper@0',0],
+  ['文件','file_unzip','解开','拉链后再抬五度','file','up','预留','F:zipper@0,0@150,7@210',0],
+  ['文件','file_export','导出 JSON','翻页后三音','file','up','预留','F:page@0,0@45,4@115,7@195',0],
+  ['文件','file_import_preview','导入预览','翻页后五度','file','up','预留','F:page@0,0@50,7@130',0],
+  ['文件','file_import_apply','导入确认','纸声接到主和弦','file','handoff','重做','F:rustle@0,F:thud@80,MOTIF@230',0,1],
+  ['文件','file_attach','加上附件','闷响后三度','file','up','预留','F:thud@0,0@40,4@100',0],
+  ['文件','file_detach','移除附件','纸声下行','file','down','预留','F:rustle@0,0@30,-5@95',0],
+  ['文件','file_backup_start','开始备份','只剩纸声','file','flat','预留','F:rustle@0',0],
+  ['文件','file_backup_done','备份完成','收到八度','file','up','预留','F:thud@0,0@50,7@140,12@250',0],
+  ['文件','file_sync','同步完成','两下轻点再五度','file','up','预留','F:tick@0,F:tick@130,0@250,7@320',0],
+  ['文件','file_conflict','同步冲突','锁扣后下行，不警报','file','down','预留','F:lock@0,0@40,-5@115',0],
+  ['文件','file_too_large','文件过大','闷响下行','file','down','预留','F:thud@0,0@30,-5@90,-9@160',0],
+  ['文件','file_denied','没有权限','锁扣，钝','file','down','预留','F:lock@0,-2@40,-9@110',0,1],
+  ['文件','file_autosave','自动保存','几乎听不见的一点','file','flat','预留','F:tick/0.32@0',0],
+  ['文件','file_overwrite','覆盖确认','锁扣后小下行','file','down','预留','F:lock@0,0@45,-3@115',0]
+];
+function sceneFrom(row) {
+  return { group: row[0], id: row[1], label: row[2], detail: row[3], family: row[4], expect: row[5], status: row[6], score: row[7], varyNotes: !!row[8], essential: !!row[9], tight: row[4] !== 'ceremony' && !!row[8] };
+}
+const SCENES = CATALOG.map(sceneFrom);
+const byId = id => SCENES.find(s => s.id === id);
+function parseScore(score) {
+  if (!score) return [];
+  return score.split(',').map(part => {
+    const bits = part.split('@');
+    const body = bits[0];
+    const t = Number(bits[1]) / 1000;
+    if (body === 'MOTIF') return { t, motif: true };
+    if (body.startsWith('F:')) {
+      const g = body.slice(2).split('/');
+      return { t, family: 'file', grain: g[0], amp: g[1] ? Number(g[1]) : 0.72, decay: 1, semis: 0, pitched: false };
+    }
+    const n = body.split('/').map(Number);
+    return { t, semis: n[0], amp: n[1] || 0.8, decay: n[2] || 1, family: '', pitched: true };
+  });
+}
+function expand(score, voice, family) {
+  const out = [];
+  for (const ev of parseScore(score)) {
+    if (ev.motif) {
+      for (const m of parseScore(voice.motif)) out.push({ ...m, t: ev.t + m.t, family: 'ceremony', amp: m.amp || 0.86, decay: 1.15 });
+    } else out.push({ ...ev, family: ev.family || family });
+  }
+  return out;
+}
+function pitchedOf(events) { return events.filter(e => e.pitched && !e.grain && Number.isFinite(e.semis)); }
+function assertCatalog() {
+  const bases = [VOICES.crystal.base, VOICES.celesta.base, VOICES.wood.base];
+  if (!(bases[0] > bases[1] && bases[1] > bases[2])) throw new Error('registers collapsed');
+  if (new Set([VOICES.crystal.motif, VOICES.wood.motif, VOICES.celesta.motif]).size !== 3) throw new Error('motifs collapsed');
+  for (const voice of Object.values(VOICES)) if (voice.wander > 16) throw new Error('wander too wide');
+  const ids = new Set();
+  for (const scene of SCENES) {
+    if (ids.has(scene.id)) throw new Error('dup ' + scene.id);
+    ids.add(scene.id);
+    const events = expand(scene.score, VOICES.crystal, scene.family);
+    if (!events.length) throw new Error('silent ' + scene.id);
+    const pitched = pitchedOf(events);
+    if (scene.expect === 'up' || scene.expect === 'down') {
+      if (pitched.length < 2) throw new Error('need interval ' + scene.id);
+      const dir = pitched[pitched.length - 1].semis - pitched[0].semis;
+      if (scene.expect === 'up' && dir < 2) throw new Error('weak up ' + scene.id + ' ' + dir);
+      if (scene.expect === 'down' && dir > -2) throw new Error('weak down ' + scene.id + ' ' + dir);
+    }
+    if (scene.expect === 'ceremony' && !events.some(e => e.family === 'ceremony')) throw new Error('no ceremony ' + scene.id);
+    if (scene.expect === 'handoff' && !(events.some(e => e.grain) && events.some(e => e.family === 'ceremony'))) throw new Error('bad handoff ' + scene.id);
+    if (scene.family === 'file' && !events.some(e => e.family === 'file' || e.grain)) throw new Error('no file voice ' + scene.id);
+  }
+  const final = id => pitchedOf(expand(byId(id).score, VOICES.crystal, byId(id).family)).at(-1).semis;
+  const first = id => pitchedOf(expand(byId(id).score, VOICES.crystal, byId(id).family))[0].semis;
+  if (!(final('grade_forget') < final('grade_hard') && final('grade_hard') < first('grade_good') && first('grade_good') < first('grade_easy'))) throw new Error('grade ladder');
+  if (!(final('answer_wrong') > final('save_error'))) throw new Error('error ladder');
+  const nodeDel = expand(byId('node_delete').score, VOICES.crystal, 'study');
+  const fileDel = expand(byId('file_delete').score, VOICES.crystal, 'file');
+  if (nodeDel.some(e => e.grain) || !fileDel.some(e => e.grain)) throw new Error('delete families collapsed');
+  return SCENES.length;
+}
+
+let current = 'crystal';
+let chosen = null;
+let randomness = 0.7;
+let runToken = 0;
+let lastScene = 'reveal';
+let audioCtx = null;
+let master = null;
+let analyser = null;
+const live = new Set();
+const timers = new Set();
+const rr = {};
+let duckUntil = 0;
+const cards = [
+  ['海马体把短时记忆变成什么？', '长时记忆的巩固'],
+  ['间隔重复在什么时候复习最省？', '临近遗忘的时候'],
+  ['记忆宫殿靠的是哪种旧能力？', '空间导航']
+];
+let cardIndex = 0;
+let streak = 0;
+const desk = {
+  folder: '宫殿',
+  clip: null,
+  selected: new Set(),
+  items: [
+    { id: 'a', name: '解剖-骨骼.json', folder: '宫殿', kind: 'JSON' },
+    { id: 'b', name: '英语-句模.json', folder: '宫殿', kind: 'JSON' },
+    { id: 'c', name: '封面.png', folder: '附件', kind: '图片' },
+    { id: 'd', name: '讲义.pdf', folder: '附件', kind: 'PDF' }
+  ]
+};
+function $(id) { return document.getElementById(id); }
+function toast(text) { const n = $('toast'); n.textContent = text; n.classList.add('show'); setTimeout(() => n.classList.remove('show'), 1800); }
+function log(text) {
+  const ol = $('log');
+  if (!ol) return;
+  const li = document.createElement('li');
+  li.textContent = text;
+  ol.prepend(li);
+  while (ol.children.length > 7) ol.removeChild(ol.lastChild);
+}
+function status(text) { const n = $('status'); if (n) n.textContent = text; log(text); }
+function halt() { runToken += 1; for (const id of timers) clearTimeout(id); timers.clear(); silence(); }
+function silence() { for (const n of live) { try { n.stop(); } catch (e) {} } live.clear(); }
+function wait(ms) { return new Promise(resolve => { const id = setTimeout(() => { timers.delete(id); resolve(); }, ms); timers.add(id); }); }
+function own(node) { live.add(node); node.onended = () => live.delete(node); }
+function layerOn(family) {
+  const map = { study: 'layerStudy', file: 'layerFile', micro: 'layerMicro', ceremony: 'layerCeremony' };
+  const el = $(map[family] || 'layerStudy');
+  return !el || el.checked;
+}
+function volume() { return $('vol') ? Number($('vol').value) / 100 : 1; }
+function nextHuman(key, locked) {
+  if (locked != null) return { color: locked, pitch: 1, gain: 1, decay: 1, pan: 0, cents: 0 };
+  const prev = rr[key] || 0;
+  const color = randomness === 0 ? 0 : (prev + (Math.random() < 0.22 ? 2 : 1)) % 4;
+  rr[key] = color;
+  const cents = (Math.random() * 2 - 1) * VOICES[current].wander * randomness;
+  return { color, pitch: 2 ** (cents / 1200), gain: 1 + (Math.random() * 2 - 1) * 0.06 * randomness, decay: 1 + (Math.random() * 2 - 1) * 0.1 * randomness, pan: (Math.random() * 2 - 1) * 0.22 * randomness, cents };
+}
+function humanFor(base, index, vary, locked) {
+  if (locked != null || !vary) return base;
+  const cents = (Math.random() * 2 - 1) * 12 * randomness;
+  return { ...base, color: (base.color + index) % 4, pitch: 2 ** (cents / 1200), pan: Math.max(-0.32, Math.min(0.32, (index - 1.5) * 0.08)), cents };
+}
+function ensureAudio() {
+  const Ctor = window.AudioContext || window.webkitAudioContext;
+  if (!Ctor) return Promise.reject(new Error('这个浏览器没有 Web Audio。请用 Chrome 或 Edge 打开。'));
+  if (!audioCtx) {
+    audioCtx = new Ctor();
+    master = audioCtx.createGain();
+    master.gain.value = volume();
+    const comp = audioCtx.createDynamicsCompressor();
+    comp.threshold.value = -18; comp.knee.value = 8; comp.ratio.value = 3; comp.attack.value = 0.003; comp.release.value = 0.12;
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 256;
+    master.connect(comp); comp.connect(analyser); analyser.connect(audioCtx.destination);
+    drawScope();
+  }
+  const pending = audioCtx.state === 'running' ? Promise.resolve() : audioCtx.resume();
+  return pending.then(() => audioCtx);
+}
+function outNode(ctx, dest, pan) {
+  if (!ctx.createStereoPanner) return dest;
+  const p = ctx.createStereoPanner();
+  p.pan.setValueAtTime(Math.max(-1, Math.min(1, pan || 0)), ctx.currentTime);
+  p.connect(dest);
+  return p;
+}
+function noiseSweep(ctx, dest, t, dur, f0, f1, q, amp) {
+  const n = Math.max(8, Math.floor(ctx.sampleRate * dur));
+  const buffer = ctx.createBuffer(1, n, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < n; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / n);
+  const src = ctx.createBufferSource();
+  src.buffer = buffer;
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.Q.setValueAtTime(q, t);
+  filter.frequency.setValueAtTime(Math.max(40, f0), t);
+  filter.frequency.exponentialRampToValueAtTime(Math.max(40, f1), t + dur);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(Math.max(0.0002, amp), t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  src.connect(filter); filter.connect(g); g.connect(dest);
+  own(src); src.start(t); src.stop(t + dur + 0.02);
+}
+function tone(ctx, dest, t, type, hz, amp, attack, decay) {
+  const o = ctx.createOscillator();
+  o.type = type;
+  o.frequency.setValueAtTime(Math.max(40, hz), t);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(Math.max(0.0002, amp), t + attack);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + attack + decay);
+  o.connect(g); g.connect(dest);
+  own(o); o.start(t); o.stop(t + attack + decay + 0.03);
+  return o;
+}
+function playCrystal(ctx, dest, t, hz, amp, decay, color) {
+  const ratios = [1.41, 2, 2.76, 3.14];
+  const indexes = [2.1, 2.8, 3.4, 2.4];
+  const carrier = ctx.createOscillator();
+  const mod = ctx.createOscillator();
+  const modAmt = ctx.createGain();
+  carrier.type = 'sine'; mod.type = 'sine';
+  carrier.frequency.setValueAtTime(hz, t);
+  mod.frequency.setValueAtTime(hz * ratios[color % 4], t);
+  modAmt.gain.setValueAtTime(hz * indexes[color % 4], t);
+  modAmt.gain.exponentialRampToValueAtTime(Math.max(1, hz * 0.08), t + Math.min(0.08, decay));
+  mod.connect(modAmt); modAmt.connect(carrier.frequency);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(Math.max(0.0002, amp), t + 0.003);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.003 + decay);
+  carrier.connect(g); g.connect(dest);
+  own(carrier); own(mod);
+  carrier.start(t); mod.start(t);
+  carrier.stop(t + decay + 0.04); mod.stop(t + decay + 0.04);
+  if (color % 2 === 0) noiseSweep(ctx, dest, t, 0.01, 6200, 4800, 0.7, amp * 0.08);
+}
+function playWood(ctx, dest, t, hz, amp, decay, color) {
+  const stretch = [1, 1.012, 0.988, 1.02][color % 4];
+  const body = Math.min(decay, 0.13);
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.setValueAtTime(980 + color * 70, t);
+  lp.connect(dest);
+  [[1, 1, 1, 'triangle'], [3.9, 0.16, 0.4, 'sine'], [8.7, 0.04, 0.22, 'sine']].forEach(([ratio, mul, dmul, type]) => {
+    tone(ctx, lp, t, type, hz * ratio * stretch, amp * mul, 0.002, body * dmul);
+  });
+  noiseSweep(ctx, dest, t, 0.007, 900 + color * 180, 700, 1.6, amp * 0.42);
+  tone(ctx, dest, t, 'sine', hz * 0.5, amp * 0.18, 0.001, 0.035);
+  if (color === 3) noiseSweep(ctx, dest, t + 0.028, 0.005, 1400, 900, 1.2, amp * 0.16);
+}
+function playCelesta(ctx, dest, t, hz, amp, decay, color, family) {
+  const detune = [4, 8, 5, 11][color % 4];
+  [0, detune].forEach((cents, i) => {
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    const f = hz * 2 ** (cents / 1200);
+    o.frequency.setValueAtTime(f, t);
+    if (i === 0 && family !== 'micro') {
+      const lfo = ctx.createOscillator();
+      const lg = ctx.createGain();
+      lfo.frequency.setValueAtTime(4.2 + color * 0.35, t);
+      lg.gain.setValueAtTime(0.0001, t);
+      lg.gain.exponentialRampToValueAtTime(Math.max(0.2, f * 0.008), t + 0.08);
+      lfo.connect(lg); lg.connect(o.frequency);
+      own(lfo); lfo.start(t); lfo.stop(t + decay + 0.05);
+    }
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, amp * (i ? 0.28 : 1)), t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + decay);
+    o.connect(g); g.connect(dest);
+    own(o); o.start(t); o.stop(t + decay + 0.04);
+  });
+  tone(ctx, dest, t, 'sine', hz * 2.76, amp * 0.16, 0.004, decay * 0.38);
+  if (color === 1 && family !== 'micro') tone(ctx, dest, t + 0.02, 'sine', hz * 1.5, amp * 0.12, 0.006, decay * 0.45);
+}
+function playFile(voice, ctx, dest, t, ev, amp, human) {
+  const hz = voice.base * 2 ** ((ev.semis || 0) / 12) * human.pitch;
+  if (voice.id === 'crystal') {
+    if (ev.grain === 'rustle' || ev.grain === 'page') noiseSweep(ctx, dest, t, ev.grain === 'page' ? 0.07 : 0.045, 5400, 1800, 0.8, amp * 0.55);
+    else if (ev.grain === 'thud') playCrystal(ctx, dest, t, 620, amp * 0.7, 0.05, human.color);
+    else if (ev.grain === 'zipper') for (let i = 0; i < 5; i++) noiseSweep(ctx, dest, t + i * 0.018, 0.012, 1800 + i * 500, 2400, 2, amp * 0.35);
+    else if (ev.grain === 'lock') { playCrystal(ctx, dest, t, 1860, amp * 0.45, 0.03, 0); playCrystal(ctx, dest, t + 0.028, 1760, amp * 0.4, 0.03, 2); }
+    else playCrystal(ctx, dest, t, hz * 0.75, amp * 0.55, 0.045, human.color);
+    return;
+  }
+  if (voice.id === 'wood') {
+    if (ev.grain === 'rustle' || ev.grain === 'page') noiseSweep(ctx, dest, t, ev.grain === 'page' ? 0.08 : 0.05, 900, 380, 0.9, amp * 0.6);
+    else if (ev.grain === 'thud') { tone(ctx, dest, t, 'sine', 98, amp * 0.9, 0.002, 0.05); noiseSweep(ctx, dest, t, 0.02, 240, 120, 0.6, amp * 0.3); }
+    else if (ev.grain === 'zipper') for (let i = 0; i < 5; i++) noiseSweep(ctx, dest, t + i * 0.02, 0.008, 700, 500, 1.4, amp * 0.4);
+    else if (ev.grain === 'lock') { noiseSweep(ctx, dest, t, 0.008, 500, 300, 1, amp * 0.5); noiseSweep(ctx, dest, t + 0.03, 0.008, 420, 240, 1, amp * 0.4); }
+    else { tone(ctx, dest, t, 'triangle', Math.max(140, hz * 0.5), amp * 0.75, 0.002, 0.05); noiseSweep(ctx, dest, t, 0.006, 1500, 900, 1.5, amp * 0.28); }
+    return;
+  }
+  if (ev.grain === 'rustle' || ev.grain === 'page') noiseSweep(ctx, dest, t, ev.grain === 'page' ? 0.09 : 0.05, 1800, 700, 0.7, amp * 0.35);
+  else if (ev.grain === 'thud') tone(ctx, dest, t, 'sine', 196, amp * 0.7, 0.004, 0.06);
+  else if (ev.grain === 'zipper') for (let i = 0; i < 5; i++) tone(ctx, dest, t + i * 0.02, 'sine', 660 * 2 ** (i / 12), amp * 0.28, 0.002, 0.03);
+  else if (ev.grain === 'lock') { tone(ctx, dest, t, 'sine', 880, amp * 0.35, 0.003, 0.04); tone(ctx, dest, t + 0.03, 'sine', 830, amp * 0.3, 0.003, 0.04); }
+  else tone(ctx, dest, t, 'sine', hz * 0.85, amp * 0.4, 0.003, 0.045);
+}
+function noteDecay(voice, ev, human, scene) {
+  let d = voice.decay * (ev.decay || 1) * human.decay;
+  if (ev.family === 'micro') d *= 0.32;
+  else if (ev.family === 'ceremony') d *= 1.15;
+  else if (scene && scene.tight && voice.id !== 'wood') d *= 0.56;
+  if (voice.id === 'wood') d = Math.min(d, ev.family === 'ceremony' ? 0.16 : 0.12);
+  return Math.max(0.035, d);
+}
+function renderEvent(ctx, voice, dest, t, ev, human, scene) {
+  if (!layerOn(ev.family)) return false;
+  let amp = (ev.amp || 0.8) * human.gain * voice.loud;
+  if (ev.family === 'micro' && ctx.currentTime < duckUntil) amp *= 0.28;
+  if (amp < 0.0003) return false;
+  const destPan = outNode(ctx, dest, human.pan);
+  if (ev.family === 'file' || ev.grain) playFile(voice, ctx, destPan, t, ev, amp, human);
+  else {
+    const hz = voice.base * 2 ** (ev.semis / 12) * human.pitch;
+    const decay = noteDecay(voice, ev, human, scene);
+    if (voice.id === 'crystal') playCrystal(ctx, destPan, t, hz, amp, decay, human.color);
+    else if (voice.id === 'wood') playWood(ctx, destPan, t, hz, amp, decay, human.color);
+    else playCelesta(ctx, destPan, t, hz, amp, decay, human.color, ev.family);
+  }
+  if (ev.family !== 'micro') duckUntil = ctx.currentTime + 0.12;
+  return true;
+}
+function playScene(id, voiceId = current, opts = {}) {
+  const scene = byId(id);
+  if (!scene) return Promise.resolve();
+  if (!opts.keepRun) halt();
+  else silence();
+  const mine = runToken;
+  lastScene = id;
+  const voice = VOICES[voiceId] || VOICES[current];
+  const locked = opts.locked == null ? null : opts.locked;
+  const baseHuman = nextHuman(scene.id + ':' + voice.id, locked);
+  return ensureAudio().then(ctx => {
+    if (runToken !== mine) return;
+    if (master) master.gain.setTargetAtTime(volume(), ctx.currentTime, 0.01);
+    const events = expand(scene.score, voice, scene.family);
+    const t0 = ctx.currentTime + 0.02;
+    let played = 0;
+    events.forEach((ev, i) => {
+      const human = humanFor(baseHuman, i, scene.varyNotes, locked);
+      if (renderEvent(ctx, voice, master, t0 + ev.t, ev, human, scene)) played += 1;
+    });
+    const cents = Math.round(baseHuman.cents);
+    const line = voice.name + ' · ' + scene.label + ' · 变体 ' + (baseHuman.color + 1) + '/4 · ' + (cents >= 0 ? '+' : '') + cents + ' 音分';
+    if (!played) { status(scene.label + '：这一层关着'); return; }
+    status(line);
+  }).catch(error => status(error.message));
+}
+function tailMs(voiceId, events) {
+  const ceremony = events.some(e => e.family === 'ceremony');
+  const study = events.some(e => e.family === 'study');
+  if (voiceId === 'wood') return ceremony ? 460 : 220;
+  if (voiceId === 'celesta') return ceremony ? 980 : study ? 700 : 300;
+  return ceremony ? 760 : study ? 520 : 260;
+}
+async function compareScene(id) {
+  halt();
+  const mine = runToken;
+  for (const key of ['crystal', 'wood', 'celesta']) {
+    if (runToken !== mine) return;
+    selectVoice(key, false);
+    const scene = byId(id);
+    const events = expand(scene.score, VOICES[key], scene.family);
+    await playScene(id, key, { keepRun: true, locked: 0 });
+    await wait(tailMs(key, events) + 320);
+  }
+  if (runToken === mine) status('三套对比结束 · ' + byId(id).label);
+}
+async function playIdentity(voiceId, opts = {}) {
+  selectVoice(voiceId, false);
+  if (!opts.keepRun) halt();
+  const mine = runToken;
+  const steps = [['reveal', 820, '学习身份，听尾音何时停'], ['file_delete', 620, '文件声部'], ['reveal4', 980, '四连弹']];
+  for (const [id, ms, name] of steps) {
+    if (runToken !== mine) return;
+    status(VOICES[voiceId].name + ' · ' + name);
+    await playScene(id, voiceId, { keepRun: true, locked: 0 });
+    await wait(ms);
+  }
+}
+async function identityAll() {
+  halt();
+  const mine = runToken;
+  status('先听尾音：木会先停，玻璃还在响，八音盒更久。');
+  for (const key of ['crystal', 'wood', 'celesta']) {
+    if (runToken !== mine) return;
+    await playIdentity(key, { keepRun: true });
+    await wait(420);
+  }
+  if (runToken === mine) status('三套身份听完。若仍像同一只铃换调，就还没拉开。');
+}
+async function repeatReveal(mechanical) {
+  halt();
+  const mine = runToken;
+  const saved = randomness;
+  if (mechanical) randomness = 0;
+  for (let i = 0; i < 8; i++) {
+    if (runToken !== mine) break;
+    await playScene('reveal', current, { keepRun: true, locked: mechanical ? 0 : null });
+    await wait(380);
+  }
+  randomness = saved;
+  if ($('wander')) randomness = Number($('wander').value) / 100;
+}
+async function blindFour() {
+  const pool = ['grade_forget', 'grade_easy', 'file_delete', 'save_success', 'node_delete', 'file_restore'];
+  const picks = pool.sort(() => Math.random() - 0.5).slice(0, 4);
+  halt();
+  const mine = runToken;
+  status('闭眼四连开始。先别看下面即将出现的揭晓。');
+  for (const id of picks) {
+    if (runToken !== mine) return;
+    await playScene(id, current, { keepRun: true, locked: 1 });
+    await wait(880);
+  }
+  await wait(240);
+  if (runToken !== mine) return;
+  status('揭晓：' + picks.map(id => byId(id).label).join(' → '));
+}
+function densityOf() { return $('density') ? $('density').value : 'study'; }
+function mixedKeeps(scene) {
+  const density = densityOf();
+  if (scene.id === 'hover') return false;
+  if (density === 'full') return true;
+  if (density === 'study') return scene.family !== 'file';
+  if (density === 'library') return scene.family === 'file';
+  return !!scene.essential;
+}
+const JOURNEYS = {
+  review: [['reveal', 700], ['grade_good', 850], ['reveal', 700], ['grade_easy', 850], ['reveal', 700], ['grade_forget', 900], ['reveal', 700], ['grade_hard', 800], ['reveal4', 900], ['grade_good', 800], ['combo5', 700]],
+  palace: [['node_select', 350], ['drag_start', 280], ['drag_drop', 520], ['fold4', 700], ['category_expand', 650], ['node_create', 500], ['node_delete', 650]],
+  files: [['file_open', 500], ['file_select', 280], ['file_multi', 620], ['file_drag_start', 300], ['file_drop', 520], ['file_delete', 640], ['file_restore', 640], ['file_rename_commit', 500]],
+  import: [['file_upload_start', 420], ['file_upload_tick', 280], ['file_upload_tick', 280], ['file_upload_done', 560], ['file_import_preview', 700], ['file_import_apply', 1400]],
+  mixed: [['reveal', 750], ['grade_good', 800], ['file_select', 320], ['file_open', 480], ['hover', 200], ['reveal', 750], ['grade_easy', 800], ['file_delete', 640], ['save_success', 700]],
+  marathon: [['reveal', 980], ['grade_good', 1100], ['reveal', 980], ['grade_easy', 1100], ['reveal', 980], ['grade_good', 1000], ['combo3', 700], ['reveal', 980], ['grade_forget', 1200], ['hover', 200], ['reveal', 980], ['grade_hard', 1000], ['node_select', 360], ['drag_drop', 520], ['reveal4', 860], ['grade_good', 1000], ['combo5', 760], ['progress50', 500], ['save_success', 700], ['unit_complete', 900]]
+};
+async function runJourney(name) {
+  halt();
+  const mine = runToken;
+  const obey = name === 'mixed' || name === 'marathon';
+  for (const [id, ms] of JOURNEYS[name]) {
+    if (runToken !== mine) return;
+    const scene = byId(id);
+    if (obey && !mixedKeeps(scene)) {
+      status('跳过 ' + scene.label + (scene.id === 'hover' ? '（悬停不进旅程）' : '（密度档让路）'));
+      await wait(160);
+      continue;
+    }
+    await playScene(id, current, { keepRun: true });
+    await wait(ms);
+  }
+  if (runToken === mine) status('旅程结束 · ' + name);
+}
+function selectVoice(id, announce = true) {
+  current = id;
+  document.querySelectorAll('.voice').forEach(el => el.classList.toggle('active', el.dataset.voice === id));
+  if (announce) status('当前试听 ' + VOICES[id].name + '。点动作或身份。');
+}
+function renderCatalog(host, groups) {
+  host.innerHTML = '';
+  for (const name of groups) {
+    const scenes = SCENES.filter(s => s.group === name);
+    const details = document.createElement('details');
+    details.className = 'group';
+    details.open = name === '学习' || name === '评分' || name === '文件' || name === '导图';
+    const summary = document.createElement('summary');
+    summary.textContent = name + ' · ' + scenes.length;
+    details.appendChild(summary);
+    const grid = document.createElement('div');
+    grid.className = 'scenes';
+    for (const scene of scenes) {
+      const btn = document.createElement('button');
+      btn.className = 'scene-btn';
+      btn.dataset.search = (scene.label + scene.detail + scene.group + scene.id).toLowerCase();
+      btn.innerHTML = '<b>' + scene.label + '<i class="chip ' + (scene.status === '预留' ? 'new' : '') + '">' + scene.status + '</i></b><span>' + scene.detail + '</span>';
+      btn.addEventListener('click', () => playScene(scene.id));
+      grid.appendChild(btn);
+    }
+    details.appendChild(grid);
+    host.appendChild(details);
+  }
+}
+function renderDesk() {
+  const folders = $('folders');
+  folders.innerHTML = '';
+  for (const name of ['宫殿', '附件', '回收站']) {
+    const btn = document.createElement('button');
+    btn.className = 'desk-btn folder-btn' + (desk.folder === name ? ' active' : '');
+    btn.textContent = name;
+    btn.onclick = () => { desk.folder = name; desk.selected.clear(); playScene(name === '回收站' ? 'file_enter' : 'file_open'); renderDesk(); };
+    folders.appendChild(btn);
+  }
+  const list = $('fileList');
+  list.innerHTML = '';
+  const rows = desk.items.filter(item => item.folder === desk.folder);
+  if (!rows.length) {
+    const empty = document.createElement('div');
+    empty.className = 'hint';
+    empty.textContent = '这里是空的。';
+    list.appendChild(empty);
+    return;
+  }
+  rows.forEach(item => {
+    const btn = document.createElement('button');
+    btn.className = 'file-row' + (desk.selected.has(item.id) ? ' selected' : '');
+    btn.innerHTML = '<span>' + item.name + '</span><small>' + item.kind + '</small>';
+    btn.onclick = event => {
+      if (event.shiftKey) desk.selected.add(item.id);
+      else desk.selected = new Set([item.id]);
+      playScene(desk.selected.size > 1 ? 'file_sort' : 'file_select');
+      renderDesk();
+    };
+    btn.ondblclick = () => playScene(item.kind === 'JSON' ? 'file_enter' : 'file_open');
+    list.appendChild(btn);
+  });
+}
+function selectedItems() { return desk.items.filter(item => desk.selected.has(item.id)); }
+async function uploadDemo() {
+  halt();
+  const mine = runToken;
+  await playScene('file_upload_start', current, { keepRun: true });
+  await wait(360);
+  if (runToken !== mine) return;
+  await playScene('file_upload_tick', current, { keepRun: true });
+  await wait(280);
+  if (runToken !== mine) return;
+  await playScene('file_upload_done', current, { keepRun: true });
+  desk.items.push({ id: 'up' + Date.now(), name: '新上传.json', folder: desk.folder === '回收站' ? '宫殿' : desk.folder, kind: 'JSON' });
+  renderDesk();
+}
+function drawScope() {
+  const canvas = $('scope');
+  if (!canvas || !analyser) return;
+  const g = canvas.getContext('2d');
+  const data = new Uint8Array(analyser.frequencyBinCount);
+  const paint = () => {
+    requestAnimationFrame(paint);
+    analyser.getByteTimeDomainData(data);
+    g.fillStyle = '#0c0f0c';
+    g.fillRect(0, 0, canvas.width, canvas.height);
+    g.strokeStyle = current === 'wood' ? '#e2a15a' : current === 'celesta' ? '#f0b4c4' : '#8fd0ff';
+    g.lineWidth = 2;
+    g.beginPath();
+    const slice = canvas.width / data.length;
+    for (let i = 0; i < data.length; i++) {
+      const y = data[i] / 128 * (canvas.height / 2);
+      if (i === 0) g.moveTo(0, y); else g.lineTo(i * slice, y);
+    }
+    g.stroke();
+  };
+  paint();
+}
+function choiceLabel() { return chosen ? VOICES[chosen].name : '还没选定'; }
+function showChoice() { $('choiceName').textContent = choiceLabel(); }
+async function exportWav() {
+  const Offline = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+  if (!Offline) { status('这个浏览器不能导出 WAV。'); return; }
+  const scene = byId(lastScene);
+  const voice = VOICES[current];
+  const events = expand(scene.score, voice, scene.family);
+  const dur = Math.min(6, events.at(-1).t + tailMs(voice.id, events) / 1000 + 0.3);
+  const rate = 44100;
+  const offline = new Offline(2, Math.ceil(dur * rate), rate);
+  const dest = offline.createGain();
+  dest.gain.value = volume();
+  dest.connect(offline.destination);
+  const human = { color: 0, pitch: 1, gain: 1, decay: 1, pan: 0, cents: 0 };
+  events.forEach(ev => renderEvent(offline, voice, dest, 0.03 + ev.t, ev, human, scene));
+  status('正在渲染 WAV…');
+  const buffer = await offline.startRendering();
+  const left = buffer.getChannelData(0);
+  const right = buffer.numberOfChannels > 1 ? buffer.getChannelData(1) : left;
+  const bytes = new ArrayBuffer(44 + left.length * 4);
+  const view = new DataView(bytes);
+  const text = (offset, str) => { for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i)); };
+  text(0, 'RIFF'); view.setUint32(4, 36 + left.length * 4, true); text(8, 'WAVE'); text(12, 'fmt ');
+  view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 2, true);
+  view.setUint32(24, rate, true); view.setUint32(28, rate * 4, true); view.setUint16(32, 4, true); view.setUint16(34, 16, true);
+  text(36, 'data'); view.setUint32(40, left.length * 4, true);
+  for (let i = 0; i < left.length; i++) {
+    view.setInt16(44 + i * 4, Math.max(-1, Math.min(1, left[i])) * 32767, true);
+    view.setInt16(46 + i * 4, Math.max(-1, Math.min(1, right[i])) * 32767, true);
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([bytes], { type: 'audio/wav' }));
+  a.download = 'anki-' + voice.id + '-' + scene.id + '.wav';
+  a.click();
+  status('已导出 ' + voice.name + ' · ' + scene.label);
+}
+function init() {
+  try {
+    const n = assertCatalog();
+    const redo = SCENES.filter(s => s.status === '重做').length;
+    const reserved = SCENES.length - redo;
+    $('checkLine').textContent = '声景自检通过 · ' + n + ' 个动作 · 重做 ' + redo + ' · 预留 ' + reserved + '。随机游走锁在 ±' + Math.max(...Object.values(VOICES).map(v => v.wander)) + ' 音分内。';
+  } catch (error) {
+    $('checkLine').textContent = '声景自检失败：' + error.message;
+  }
+  try { chosen = localStorage.getItem('memory-anki-sound-finalist'); } catch (e) {}
+  if (chosen && VOICES[chosen]) selectVoice(chosen, false);
+  showChoice();
+  renderCatalog($('catalogMain'), ['学习', '评分', '庆典', '导图', '题库', '微交互']);
+  renderCatalog($('catalogFile'), ['文件']);
+  $('countMain').textContent = SCENES.filter(s => s.group !== '文件').length + ' 个';
+  $('countFile').textContent = SCENES.filter(s => s.group === '文件').length + ' 个';
+  renderDesk();
+  document.querySelectorAll('.voice').forEach(el => el.addEventListener('click', event => {
+    if (event.target.closest('button')) return;
+    selectVoice(el.dataset.voice);
+  }));
+  document.body.addEventListener('click', event => {
+    const btn = event.target.closest('button');
+    if (!btn) return;
+    if (btn.dataset.act === 'identity') { event.stopPropagation(); playIdentity(btn.dataset.voice); }
+    if (btn.dataset.act === 'scene') { event.stopPropagation(); selectVoice(btn.dataset.voice, false); playScene(btn.dataset.scene, btn.dataset.voice, { locked: 0 }); }
+    if (btn.dataset.act === 'pick') { event.stopPropagation(); selectVoice(btn.dataset.voice); playIdentity(btn.dataset.voice); }
+  });
+  $('btnIdentityAll').onclick = identityAll;
+  $('btnCompareGood').onclick = () => compareScene('grade_good');
+  $('btnCompareDelete').onclick = () => compareScene('file_delete');
+  $('btnNodeVsFile').onclick = async () => {
+    halt();
+    const mine = runToken;
+    await playScene('node_delete', current, { keepRun: true, locked: 0 });
+    await wait(700);
+    if (runToken !== mine) return;
+    await playScene('file_delete', current, { keepRun: true, locked: 0 });
+  };
+  $('btnMech').onclick = () => repeatReveal(true);
+  $('btnVaried').onclick = () => repeatReveal(false);
+  $('btnBlind').onclick = blindFour;
+  $('btnStop').onclick = () => { halt(); status('已停止。'); };
+  $('vol').oninput = () => { $('volNum').textContent = $('vol').value + '%'; if (master && audioCtx) master.gain.setTargetAtTime(volume(), audioCtx.currentTime, 0.015); };
+  $('wander').oninput = () => { randomness = Number($('wander').value) / 100; $('wanderNum').textContent = $('wander').value + '%'; };
+  $('filter').oninput = () => {
+    const q = $('filter').value.trim().toLowerCase();
+    document.querySelectorAll('[data-search]').forEach(el => { el.hidden = !!q && !el.dataset.search.includes(q); });
+  };
+  document.querySelectorAll('[data-grade]').forEach(btn => btn.onclick = () => grade(btn.dataset.grade));
+  $('studyCard').onclick = () => { $('studyCard').classList.toggle('revealed'); playScene('reveal'); };
+  $('sandbox').addEventListener('keydown', event => {
+    if (event.key === ' ') { event.preventDefault(); $('studyCard').click(); }
+    if (event.key === '1') grade('grade_forget');
+    if (event.key === '2') grade('grade_hard');
+    if (event.key === '3') grade('grade_good');
+    if (event.key === '4') grade('grade_easy');
+  });
+  document.querySelectorAll('[data-journey]').forEach(btn => btn.onclick = () => runJourney(btn.dataset.journey));
+  document.querySelectorAll('[data-desk]').forEach(btn => btn.onclick = () => deskAct(btn.dataset.desk));
+  $('btnConfirm').onclick = () => {
+    chosen = current;
+    try { localStorage.setItem('memory-anki-sound-finalist', chosen); } catch (e) {}
+    showChoice();
+    toast('已记下 ' + VOICES[chosen].name);
+    status('已选定 ' + VOICES[chosen].name + '。应用还没改。');
+  };
+  $('btnJson').onclick = () => {
+    const payload = {
+      version: 2,
+      selected: current,
+      label: VOICES[current].name,
+      randomness,
+      density: densityOf(),
+      layers: { study: $('layerStudy').checked, file: $('layerFile').checked, micro: $('layerMicro').checked, ceremony: $('layerCeremony').checked },
+      grammar: 'up=affirm, down=deny, ceremony=voice motif',
+      fileVoice: 'separate',
+      createdAt: new Date().toISOString()
+    };
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
+    a.download = 'memory-anki-sound-finalist.json';
+    a.click();
+  };
+  $('btnWav').onclick = () => exportWav().catch(error => status(error.message));
+  window.addEventListener('keydown', event => {
+    if (['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement && document.activeElement.tagName)) return;
+    if (document.activeElement === $('sandbox')) return;
+    const key = event.key.toLowerCase();
+    if (key === 'a') { selectVoice('crystal'); playIdentity('crystal'); }
+    if (key === 'b') { selectVoice('wood'); playIdentity('wood'); }
+    if (key === 'f') { selectVoice('celesta'); playIdentity('celesta'); }
+    if (key === 'r') playScene(lastScene);
+    if (key === 'c') compareScene(lastScene);
+    if (key === 'escape') { halt(); status('已停止。'); }
+  });
+}
+async function grade(id) {
+  if (id === 'grade_forget') streak = 0; else streak += 1;
+  $('streak').textContent = '连击 ' + streak;
+  $('studyCard').classList.add('revealed');
+  halt();
+  const mine = runToken;
+  await playScene(id, current, { keepRun: true });
+  const bonus = streak === 10 ? 'combo10' : streak === 5 ? 'combo5' : streak === 3 ? 'combo3' : streak > 10 && streak % 5 === 0 ? 'combo5' : null;
+  if (bonus) {
+    await wait(320);
+    if (runToken !== mine) return;
+    await playScene(bonus, current, { keepRun: true });
+    if (streak >= 10) status('连击已封顶：换色彩，不加响。');
+  }
+  await wait(420);
+  if (runToken !== mine) return;
+  cardIndex = (cardIndex + 1) % cards.length;
+  $('front').textContent = cards[cardIndex][0];
+  $('back').textContent = cards[cardIndex][1];
+  $('studyCard').classList.remove('revealed');
+}
+function deskAct(kind) {
+  const picked = selectedItems();
+  if (kind === 'new-folder') { playScene('file_new_folder'); toast('示意：新建文件夹'); return; }
+  if (kind === 'copy') { if (!picked.length) return playScene('file_denied'); desk.clip = picked.map(item => ({ ...item, id: item.id + '-copy' })); playScene('file_copy'); return; }
+  if (kind === 'paste') {
+    if (!desk.clip) return playScene('file_denied');
+    desk.clip.forEach(item => desk.items.push({ ...item, id: item.id + Date.now(), folder: desk.folder === '回收站' ? '宫殿' : desk.folder }));
+    playScene('file_paste'); renderDesk(); return;
+  }
+  if (kind === 'delete') {
+    if (!picked.length) return playScene('file_denied');
+    picked.forEach(item => { item.origin = item.folder; item.folder = '回收站'; });
+    desk.selected.clear();
+    playScene('file_delete'); renderDesk(); return;
+  }
+  if (kind === 'restore') {
+    const trash = selectedItems().filter(item => item.folder === '回收站');
+    const batch = trash.length ? trash : desk.items.filter(item => item.folder === '回收站');
+    if (!batch.length) return playScene('file_search_miss');
+    batch.forEach(item => { item.folder = item.origin || '宫殿'; });
+    desk.selected.clear();
+    playScene('file_restore'); renderDesk(); return;
+  }
+  if (kind === 'upload') return uploadDemo();
+  if (kind === 'download') return playScene('file_download_done');
+  if (kind === 'import') return playScene('file_import_apply');
+}
+const SoundLab = { VOICES, SCENES, parseScore, expand, assertCatalog, byId, renderEvent };
+if (typeof window !== 'undefined') window.SoundLab = SoundLab;
+if (typeof document !== 'undefined') document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

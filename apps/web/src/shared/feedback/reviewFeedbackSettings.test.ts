@@ -27,6 +27,14 @@ describe('reviewFeedbackSettings', () => {
     expect(DEFAULT_REVIEW_FEEDBACK_SETTINGS.gameplayFx.magneticArcEnabled).toBe(true)
     expect(DEFAULT_REVIEW_FEEDBACK_SETTINGS.gameplayFx.feverComboEnabled).toBe(true)
     expect(DEFAULT_REVIEW_FEEDBACK_SETTINGS.gameplayFx.chimeSynthesizerEnabled).toBe(true)
+    expect(DEFAULT_REVIEW_FEEDBACK_SETTINGS.soundVoice).toBe('mixed')
+  })
+
+  it('defaults an unknown voice to mixed and keeps a chosen set', () => {
+    expect(sanitizeReviewFeedbackSettings({}).soundVoice).toBe('mixed')
+    expect(sanitizeReviewFeedbackSettings({ soundVoice: 'classic' }).soundVoice).toBe('mixed')
+    expect(sanitizeReviewFeedbackSettings({ soundVoice: 'wood' }).soundVoice).toBe('wood')
+    expect(sanitizeReviewFeedbackSettings({ soundVoice: 'celesta' }).soundVoice).toBe('celesta')
   })
 
   it('sanitizes gameplay feedback fx settings within bounds', () => {

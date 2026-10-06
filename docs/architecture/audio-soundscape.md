@@ -39,27 +39,41 @@ interface ToneSpec {
   endFrequency?: number   // 滑音终点频率
   pan?: number            // -1..1 立体声位置
   attackMs?: number
-  envelope?: 'glass'     // 固定试听音色：4ms 起音后立即指数衰减，不受主题着色影响
+  envelope?: 'glass'     // 固定试听包络：4ms 起音后立即指数衰减，不受 origin 调制
 }
 ```
 
-### 清透玻璃（当前选定音色）
+### 三套音色与混合默认
 
-用户从独立试听页（`deliverables/sound-audition.html`）中选定 **A · 清透玻璃**，`getToneSpec` 因此优先返回
-`GLASS_PROFILES`，它由 `layeredPops.ts` 的 `buildGlassBell()` 构造：
+用户保留试听页的三套终选，不按主题包着色。设置项是 `ReviewFeedbackSettings.soundVoice`：
+
+| 值 | 听感 |
+|---|---|
+| `mixed` | **默认**。每次发声抽 `crystal` / `wood` / `celesta` 之一，同一句连弹不中途换 |
+| `crystal` | 晶莹微风。调频玻璃，尾音中等 |
+| `wood` | 禅境温木。低通木击，衰减封顶约 120ms |
+| `celesta` | 灵音八音盒。延迟颤音，尾音最长 |
+
+播放在 `playToneSequence` 里调用 `pickConcreteVoice` 一次，再把整句交给 `renderVoicedTone`。
+主题包的 `colorTone` 不再改写播放。语义音高仍来自 `getToneSpec` / `buildGlassBell()`，音色只改变发声方式与音区。
+
+响度在播放层放大（`SOUND_PRESENCE`），整句还有最低响度（`SEQUENCE_FLOOR`），所以微交互也不会发虚。
+音量滑条仍然相乘；滑到 0 仍然静音。输出经过共享压缩器，连弹偏响但不削波。
+
+`getToneSpec` 仍优先返回 `GLASS_PROFILES`，由 `layeredPops.ts` 的 `buildGlassBell()` 构造音高与间隔：
 
 | 参数 | 值 |
 |---|---|
 | 基频 | `1318.5Hz`（与删除成功 toast 风铃同族） |
 | 泛音 | `2.4×` 基频，增益比 `.15`，衰减 ×`.52` |
-| 主音 | 峰值增益 `.076`、衰减 `380ms`、起音 `4ms` |
+| 主音 | 语义增益 `.076`（播放再放大）、衰减 `380ms`、起音 `4ms` |
 | 连弹间距 | 前 5 记 `82ms`；第 6 记起收成 `38ms` 轻尾巴 |
 | 连弹音高 | 等程音阶模式 `[0, 0, 2, 0, 4]` 半音 |
 | 连弹增益 | 前 5 记 `1 - i×.08`；之后 `max(.18, .57 - (i-5)×.055)` |
 | 评分四档 | 忘记 `1×` / 困难 `9/8` / 良好 `5/4` / 简单 `4/3`，增益 `.82`、时长 ×`1.10` |
 
-`envelope: 'glass'` 的音**绕过主题着色与 `tuneToneSpec`**：用户选中的是确定的听感，主题包不应改写它。
-其余（烟花重音、连击里程碑尾音等）仍走旧的主题着色通道。
+`envelope: 'glass'` 的音绕过 `tuneToneSpec`。三套音色和混合模式都绕过主题包着色；
+烟花、连击和界面音走同一套音色解析，不再另走 pack timbre。
 
 `TONE_PROFILES` 是 `Record<MindMapFeedbackEvent, ToneSpec[]>`，因此**新增事件时 TypeScript 会强制要求补配**，
 不会静默回落。语义维度（用于"听声辨事"）如下：

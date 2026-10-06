@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui
 import { Input } from '@/shared/components/ui/input'
 import { Switch } from '@/shared/components/ui/switch'
 import { InlineFeedback } from '@/shared/feedback/FeedbackStatus'
+import { SOUND_VOICE_OPTIONS, type SoundVoiceId } from '@/shared/feedback/mindmap-audio/soundVoices'
 import {
   DEFAULT_REVIEW_FEEDBACK_SETTINGS,
   REVIEW_FEEDBACK_SETTINGS_UPDATED_EVENT,
@@ -183,6 +184,14 @@ export default function ProfileFeedbackPage() {
       setDraftSettings((current) => updater(current))
     },
     [],
+  )
+
+  const selectVoice = React.useCallback(
+    (soundVoice: SoundVoiceId) => {
+      updateDraft((current) => ({ ...current, soundVoice }))
+      audio.playEvent('quiz_result_correct', { audioScope: 'global', voice: soundVoice })
+    },
+    [audio, updateDraft],
   )
 
   const selectPreset = React.useCallback(
@@ -419,12 +428,43 @@ export default function ProfileFeedbackPage() {
               />
               <SettingRow
                 title="界面音效"
-                description="导航翻纸声、按钮木质轻敲、保存成功风铃。随心模式保留自己的声音设计。"
+                description="导航、按钮和保存都走当前音色，而且偏响。随心模式保留自己的声音设计。"
                 checked={draftSettings.uiSoundEnabled}
                 onCheckedChange={(uiSoundEnabled) =>
                   updateDraft((current) => ({ ...current, uiSoundEnabled }))
                 }
               />
+              <div className="border-b border-border/55 py-4">
+                <div className="text-sm font-semibold">音色</div>
+                <p className="mt-1 text-sm leading-5 text-muted-foreground">
+                  三套都在。点一下会用这套试听，保存后全应用生效。所有声音都偏响，音量滑条仍然有效。
+                </p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {SOUND_VOICE_OPTIONS.map((option) => {
+                    const active = draftSettings.soundVoice === option.id
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        aria-pressed={active}
+                        onClick={() => selectVoice(option.id)}
+                        className={cn(
+                          'rounded-xl border p-3 text-left',
+                          active
+                            ? 'border-primary/55 bg-primary/7 ring-1 ring-primary/20'
+                            : 'border-border/70 bg-background hover:border-border',
+                        )}
+                      >
+                        <span className="flex items-center justify-between gap-3 text-sm font-semibold">
+                          {option.title}
+                          {active ? <Check className="size-4 text-primary" aria-hidden="true" /> : null}
+                        </span>
+                        <span className="mt-1 block text-sm leading-5 text-muted-foreground">{option.description}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
               <div className="border-b border-border/55 py-4">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
@@ -494,10 +534,10 @@ export default function ProfileFeedbackPage() {
                 <div className="text-sm font-semibold">答题结果</div>
                 <p className="mt-1 text-sm text-muted-foreground">答对清晰鼓励；答错保持克制并引向解析。</p>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Button type="button" size="sm" onClick={() => audio.playEvent('quiz_result_correct', { audioScope: 'global' })}>
+                  <Button type="button" size="sm" onClick={() => audio.playEvent('quiz_result_correct', { audioScope: 'global', voice: draftSettings.soundVoice })}>
                     试听答对
                   </Button>
-                  <Button type="button" size="sm" variant="outline" onClick={() => audio.playEvent('quiz_result_incorrect', { audioScope: 'global' })}>
+                  <Button type="button" size="sm" variant="outline" onClick={() => audio.playEvent('quiz_result_incorrect', { audioScope: 'global', voice: draftSettings.soundVoice })}>
                     试听答错
                   </Button>
                 </div>

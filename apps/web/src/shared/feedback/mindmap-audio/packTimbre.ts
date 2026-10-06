@@ -3,8 +3,8 @@ import type { PackTimbre } from '@/shared/theme/packs/types'
 import { activeThemePack } from '@/shared/theme/themePacks'
 
 /**
- * How a theme pack colors every procedural tone. Pitch and envelope only —
- * no samples. Warm worlds stay warm: wood sits low, lacquer and celesta sit high.
+ * Theme-pack pitch color. Playback no longer calls this: the sound-voice
+ * setting owns timbre. Kept so a pack can still declare a warm or bright world.
  */
 export interface TimbreVoice {
   type: OscillatorType

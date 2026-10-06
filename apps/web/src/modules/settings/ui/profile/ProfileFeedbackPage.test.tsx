@@ -41,6 +41,7 @@ describe('ProfileFeedbackPage', () => {
     expect(screen.getByRole('button', { name: /专注/ })).toBeTruthy()
     expect(screen.getByRole('button', { name: /平衡/ }).getAttribute('aria-pressed')).toBe('true')
     expect(screen.getByRole('switch', { name: '声音反馈' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /混合随机/ }).getAttribute('aria-pressed')).toBe('true')
     expect(screen.queryByText('计时器反馈设置')).toBeNull()
   })
 
@@ -82,8 +83,8 @@ describe('ProfileFeedbackPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '试听答对' }))
     fireEvent.click(screen.getByRole('button', { name: '试听答错' }))
 
-    expect(playEvent).toHaveBeenNthCalledWith(1, 'quiz_result_correct', { audioScope: 'global' })
-    expect(playEvent).toHaveBeenNthCalledWith(2, 'quiz_result_incorrect', { audioScope: 'global' })
+    expect(playEvent).toHaveBeenNthCalledWith(1, 'quiz_result_correct', { audioScope: 'global', voice: 'mixed' })
+    expect(playEvent).toHaveBeenNthCalledWith(2, 'quiz_result_incorrect', { audioScope: 'global', voice: 'mixed' })
     expect(emitReviewConfetti).not.toHaveBeenCalled()
   })
 

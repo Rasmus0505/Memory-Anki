@@ -170,16 +170,18 @@ describe('webAudioFeedback iOS Safari unlock', () => {
     const listeners = new Map<string, ListenerEntry[]>()
     const { playWebAudioFireworkAccent } = await importWebAudioFeedback(listeners)
 
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0)
     playWebAudioFireworkAccent({ kind: 'all_clear_ready', volume: 1 })
 
     expect(MockAudioContext.instances).toHaveLength(1)
     expect(MockAudioContext.oscillators).toHaveLength(4)
-    // The live theme pack recolors every tone. Study (paper-wood) is triangle.
+    // Mixed draws once for the whole phrase, then the selected voice replaces pack timbre.
+    expect(random).toHaveBeenCalledTimes(1)
     expect(MockAudioContext.oscillators.map((oscillator) => oscillator.type)).toEqual([
-      'triangle',
-      'triangle',
-      'triangle',
-      'triangle',
+      'sine',
+      'sine',
+      'sine',
+      'sine',
     ])
   })
 

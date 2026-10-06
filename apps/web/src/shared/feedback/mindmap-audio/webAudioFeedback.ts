@@ -5,7 +5,8 @@ import {
 } from '@/shared/feedback/reviewFeedbackSettings'
 import type { MindMapFeedbackEvent, MindMapFeedbackOrigin } from '@/shared/feedback/feedbackEvents'
 import { buildLayeredPops, type PopRole } from './layeredPops'
-import { colorTone } from './packTimbre'
+import { pickConcreteVoice, type SoundVoiceId } from './soundVoices'
+import { renderVoicedTone, sequencePeaks } from './voiceSynth'
 import {
   getComboMilestoneTone,
   getLandingChimeTone,
@@ -227,69 +228,50 @@ export function tuneToneSpec(
   }
 }
 
-function scheduleTonePlayback(context: AudioContext, tone: ToneSpec, volume: number) {
+const outputBuses = new WeakMap<AudioContext, AudioNode>()
+
+/** Shared limiter so a loud phrase stays loud without turning into a clip. */
+export function sharedAudioOutput(context: AudioContext) {
+  const existing = outputBuses.get(context)
+  if (existing) return existing
+  const factory = (context as AudioContext & { createDynamicsCompressor?: () => DynamicsCompressorNode }).createDynamicsCompressor
+  if (typeof factory !== 'function') {
+    outputBuses.set(context, context.destination)
+    return context.destination
+  }
   try {
-    const oscillator = context.createOscillator()
-    const gainNode = context.createGain()
-    const startAt = sharedAudioStartTime(context, tone.offsetMs)
-    const attackSeconds = Math.max(0.002, (tone.attackMs ?? 4) / 1000)
-    const durationSeconds = Math.max(attackSeconds + 0.012, Math.max(0.018, tone.durationMs / 1000))
-    const releaseSeconds = Math.min(0.08, Math.max(0.012, durationSeconds * 0.32))
-    const endAt = startAt + durationSeconds
-    const attackAt = startAt + attackSeconds
-    const bodyAt = attackAt + Math.max(0.001, durationSeconds * 0.45 - attackSeconds)
-    const isGlass = tone.envelope === 'glass'
-    const releaseAt = isGlass
-      ? attackAt + Math.max(0.018, tone.durationMs / 1000)
-      : Math.max(endAt + releaseSeconds, bodyAt + 0.001)
-    const stopAt = releaseAt + (isGlass ? 0.025 : 0.02)
-
-    oscillator.type = tone.type
-    oscillator.frequency.setValueAtTime(tone.frequency, startAt)
-    if (typeof tone.endFrequency === 'number' && Number.isFinite(tone.endFrequency)) {
-      oscillator.frequency.linearRampToValueAtTime(tone.endFrequency, endAt)
-    }
-
-    const peakGain = Math.max(0, tone.gain * volume)
-    gainNode.gain.setValueAtTime(0.0001, startAt)
-    if (isGlass) {
-      gainNode.gain.exponentialRampToValueAtTime(Math.max(0.0002, peakGain), attackAt)
-    } else {
-      gainNode.gain.linearRampToValueAtTime(peakGain, attackAt)
-      gainNode.gain.exponentialRampToValueAtTime(Math.max(0.0001, peakGain * 0.85), bodyAt)
-    }
-    gainNode.gain.exponentialRampToValueAtTime(0.0001, releaseAt)
-
-    const stereoFactory = (context as AudioContext & { createStereoPanner?: () => StereoPannerNode }).createStereoPanner
-    let panner: StereoPannerNode | null = null
-    if (typeof stereoFactory === 'function') {
-      panner = stereoFactory.call(context)
-      panner.pan.setValueAtTime(tone.pan ?? 0, startAt)
-      oscillator.connect(gainNode)
-      gainNode.connect(panner)
-      panner.connect(context.destination)
-    } else {
-      oscillator.connect(gainNode)
-      gainNode.connect(context.destination)
-    }
-
-    oscillator.onended = () => {
-      try { oscillator.disconnect() } catch { /* already disconnected */ }
-      try { gainNode.disconnect() } catch { /* already disconnected */ }
-      try { panner?.disconnect() } catch { /* already disconnected */ }
-    }
-    oscillator.start(startAt)
-    oscillator.stop(stopAt)
+    const compressor = factory.call(context)
+    compressor.threshold.value = -8
+    compressor.knee.value = 8
+    compressor.ratio.value = 3
+    compressor.attack.value = 0.003
+    compressor.release.value = 0.08
+    compressor.connect(context.destination)
+    outputBuses.set(context, compressor)
+    return compressor
   } catch {
-    // One failed node must not abort the rest of a chord.
+    outputBuses.set(context, context.destination)
+    return context.destination
   }
 }
 
-function playToneSequence(tones: ToneSpec[], volume: number) {
+function playToneSequence(tones: ToneSpec[], volume: number, voice?: SoundVoiceId) {
+  if (tones.length === 0 || volume <= 0) return
+  const concrete = pickConcreteVoice(voice ?? readReviewFeedbackSettings().soundVoice)
+  const peaks = sequencePeaks(tones.map((tone) => tone.gain), volume)
   runWithSharedAudioContext((context) => {
-    for (const tone of tones) {
-      scheduleTonePlayback(context, colorTone(tone), volume)
-    }
+    const destination = sharedAudioOutput(context)
+    tones.forEach((tone, index) => {
+      renderVoicedTone(
+        context,
+        destination,
+        concrete,
+        tone,
+        peaks[index] ?? 0,
+        index,
+        sharedAudioStartTime(context, tone.offsetMs),
+      )
+    })
   })
 }
 
@@ -299,14 +281,15 @@ export function playWebAudioFeedbackEvent(args: {
   origin?: MindMapFeedbackOrigin
   audioScope?: 'local' | 'global'
   volume?: number
+  voice?: SoundVoiceId
 }) {
-  const { event, surprise = false, origin, audioScope, volume = 1 } = args
+  const { event, surprise = false, origin, audioScope, volume = 1, voice } = args
   const feedbackVolume = clampFeedbackVolume(volume)
   if (feedbackVolume <= 0) return
   const tones = getToneSpec(event, surprise).map((tone) =>
     tuneToneSpec(event, tone, origin, audioScope),
   )
-  playToneSequence(tones, feedbackVolume)
+  playToneSequence(tones, feedbackVolume, voice)
 }
 
 export function playWebAudioComboMilestone(args: {
@@ -368,7 +351,7 @@ function scheduleNoiseSwipe(
     envelope.gain.exponentialRampToValueAtTime(0.0001, releaseAt)
     source.connect(band)
     band.connect(envelope)
-    envelope.connect(context.destination)
+    envelope.connect(sharedAudioOutput(context))
     source.onended = () => {
       try { source.disconnect() } catch { /* already disconnected */ }
       try { band.disconnect() } catch { /* already disconnected */ }
@@ -385,30 +368,41 @@ function scheduleNoiseSwipe(
 export function playWebAudioPageTurn(args: { volume?: number; direction?: 'forward' | 'backward' }) {
   const feedbackVolume = clampFeedbackVolume(args.volume ?? 1)
   if (feedbackVolume <= 0) return
+  const voice = pickConcreteVoice(readReviewFeedbackSettings().soundVoice)
+  const band = voice === 'wood' ? [720, 280] : voice === 'celesta' ? [1600, 640] : [3200, 1400]
   runWithSharedAudioContext((context) => {
-    if (typeof context.createBufferSource !== 'function') return
     const now = sharedAudioStartTime(context)
+    renderVoicedTone(
+      context,
+      sharedAudioOutput(context),
+      voice,
+      { frequency: voice === 'wood' ? 220 : voice === 'celesta' ? 880 : 1568, durationMs: 90, gain: 0.08, type: 'sine', offsetMs: 0 },
+      sequencePeaks([0.08], feedbackVolume)[0] ?? 0,
+      0,
+      now,
+    )
+    if (typeof context.createBufferSource !== 'function') return
     // Phone speakers drop a wide random pitch, so each swipe sounded different
     // or vanished. Keep a little movement without leaving the audible band.
     const jitter = 0.985 + Math.random() * 0.03
-    const [fromHz, toHz] = args.direction === 'backward' ? [1400, 2800] : [2800, 1100]
+    const [fromHz, toHz] = args.direction === 'backward' ? [band[1], band[0]] : band
     scheduleNoiseSwipe(context, {
       startAt: now,
       durationS: 0.11 * jitter,
       fromHz: fromHz * jitter,
       toHz: toHz * jitter,
       q: 0.9,
-      gain: 0.05 * feedbackVolume,
+      gain: 0.28 * feedbackVolume,
     })
     // Edge flick stays inside a phone speaker's band. 6 kHz was often silent,
     // which made some swipes sound like a different effect than others.
     scheduleNoiseSwipe(context, {
       startAt: now + 0.075 * jitter,
       durationS: 0.03,
-      fromHz: 3400,
-      toHz: 2200,
+      fromHz: band[0] * 1.15,
+      toHz: Math.max(180, band[1]),
       q: 2.4,
-      gain: 0.022 * feedbackVolume,
+      gain: 0.14 * feedbackVolume,
     })
   })
 }

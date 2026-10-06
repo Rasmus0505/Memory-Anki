@@ -5,6 +5,7 @@ import {
 } from '@/shared/preferences/clientPreferences'
 export type { CelebrationPreset } from '@/shared/feedback/celebrationEngine'
 import type { CelebrationPreset } from '@/shared/feedback/celebrationEngine'
+import { sanitizeSoundVoice, type SoundVoiceId } from '@/shared/feedback/mindmap-audio/soundVoices'
 
 export type FeedbackPreset = 'focus' | 'balanced' | 'motivating'
 
@@ -161,6 +162,8 @@ export interface ReviewFeedbackSettings {
   schemaVersion: 4
   preset: FeedbackPreset
   soundEnabled: boolean
+  /** Which of the three audition voices plays. `mixed` draws once per phrase. */
+  soundVoice: SoundVoiceId
   /** Paper/wood interface sounds outside review scenes; still gated by `soundEnabled`. */
   uiSoundEnabled: boolean
   volume: number
@@ -250,6 +253,7 @@ export const DEFAULT_REVIEW_FEEDBACK_SETTINGS: ReviewFeedbackSettings = {
   schemaVersion: 4,
   preset: 'balanced',
   soundEnabled: true,
+  soundVoice: 'mixed',
   uiSoundEnabled: true,
   volume: 1.15,
   animationEnabled: true,
@@ -540,6 +544,7 @@ export function sanitizeReviewFeedbackSettings(value: unknown): ReviewFeedbackSe
     schemaVersion: 4,
     preset,
     soundEnabled,
+    soundVoice: sanitizeSoundVoice(raw.soundVoice),
     uiSoundEnabled: sanitizeBoolean(raw.uiSoundEnabled, DEFAULT_REVIEW_FEEDBACK_SETTINGS.uiSoundEnabled),
     volume: sanitizeNumber(raw.volume, DEFAULT_REVIEW_FEEDBACK_SETTINGS.volume, 0, REVIEW_FEEDBACK_VOLUME_MAX),
     animationEnabled,

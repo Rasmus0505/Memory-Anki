@@ -1,4 +1,12 @@
-import { runWithSharedAudioContext, sharedAudioStartTime } from '@/shared/feedback/mindmap-audio/webAudioFeedback'
+import { readReviewFeedbackSettings } from '@/shared/feedback/reviewFeedbackSettings'
+import { pickConcreteVoice } from '@/shared/feedback/mindmap-audio/soundVoices'
+import { renderVoicedTone, sequencePeaks } from '@/shared/feedback/mindmap-audio/voiceSynth'
+import {
+  runWithSharedAudioContext,
+  sharedAudioOutput,
+  sharedAudioStartTime,
+} from '@/shared/feedback/mindmap-audio/webAudioFeedback'
+import type { ToneSpec } from '@/shared/feedback/mindmap-audio/toneProfiles'
 
 export type UiSound = 'wood' | 'wood-soft' | 'toggle-on' | 'toggle-off' | 'paper' | 'swish' | 'chime' | 'thud'
 
@@ -26,8 +34,12 @@ function envelope(context: AudioContext, start: number, peak: number, attack: nu
   gain.gain.setValueAtTime(0.0001, start)
   gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), start + attack)
   gain.gain.exponentialRampToValueAtTime(0.0001, start + attack + decay)
-  gain.connect(context.destination)
+  gain.connect(sharedAudioOutput(context))
   return gain
+}
+
+function phrase(notes: Array<Pick<ToneSpec, 'frequency' | 'durationMs' | 'gain' | 'offsetMs'>>): ToneSpec[] {
+  return notes.map((note) => ({ ...note, type: 'sine' as const, attackMs: 3 }))
 }
 
 function noiseBurst(context: AudioContext, start: number, args: {
@@ -52,61 +64,66 @@ function noiseBurst(context: AudioContext, start: number, args: {
   source.stop(start + args.attack + args.decay + 0.05)
 }
 
-function tone(context: AudioContext, start: number, frequency: number, peak: number, decay: number, type: OscillatorType = 'sine') {
-  const oscillator = context.createOscillator()
-  oscillator.type = type
-  oscillator.frequency.setValueAtTime(frequency, start)
-  oscillator.connect(envelope(context, start, peak, 0.004, decay))
-  oscillator.start(start)
-  oscillator.stop(start + decay + 0.05)
-}
-
-/** Wood knock = resonant body tone + a short filtered transient. */
-function wood(context: AudioContext, start: number, pitch: number, peak: number) {
-  tone(context, start, pitch, peak * 0.9, 0.07, 'triangle')
-  tone(context, start, pitch * 2.76, peak * 0.22, 0.035)
-  noiseBurst(context, start, { type: 'bandpass', from: pitch * 3.2, q: 6, peak: peak * 0.8, attack: 0.002, decay: 0.028 })
+function playPhrase(context: AudioContext, start: number, volume: number, notes: ToneSpec[]) {
+  const voice = pickConcreteVoice(readReviewFeedbackSettings().soundVoice)
+  const peaks = sequencePeaks(notes.map((note) => note.gain), volume)
+  const destination = sharedAudioOutput(context)
+  notes.forEach((note, index) => {
+    renderVoicedTone(
+      context,
+      destination,
+      voice,
+      note,
+      peaks[index] ?? 0,
+      index,
+      start + note.offsetMs / 1000,
+    )
+  })
 }
 
 export function synthUiSound(sound: UiSound, volume: number) {
   if (volume <= 0) return
   runWithSharedAudioContext((context) => {
-    if (typeof context.createBufferSource !== 'function') return
     const now = sharedAudioStartTime(context)
-    const v = Math.min(1.6, volume)
-    const jitter = 1 + (Math.random() - 0.5) * 0.06
+    const v = Math.min(2, volume)
     switch (sound) {
       case 'wood':
-        wood(context, now, 520 * jitter, 0.16 * v)
+        playPhrase(context, now, v, phrase([{ frequency: 620, durationMs: 90, gain: 0.16, offsetMs: 0 }]))
         break
       case 'wood-soft':
-        wood(context, now, 680 * jitter, 0.09 * v)
+        playPhrase(context, now, v, phrase([{ frequency: 740, durationMs: 70, gain: 0.12, offsetMs: 0 }]))
         break
       case 'toggle-on':
-        wood(context, now, 620, 0.12 * v)
-        wood(context, now + 0.045, 930, 0.1 * v)
+        playPhrase(context, now, v, phrase([
+          { frequency: 620, durationMs: 80, gain: 0.14, offsetMs: 0 },
+          { frequency: 930, durationMs: 90, gain: 0.14, offsetMs: 45 },
+        ]))
         break
       case 'toggle-off':
-        wood(context, now, 780, 0.1 * v)
-        wood(context, now + 0.045, 520, 0.1 * v)
+        playPhrase(context, now, v, phrase([
+          { frequency: 780, durationMs: 80, gain: 0.14, offsetMs: 0 },
+          { frequency: 520, durationMs: 90, gain: 0.14, offsetMs: 45 },
+        ]))
         break
       case 'paper':
-        noiseBurst(context, now, { type: 'bandpass', from: 1800 * jitter, to: 4200, q: 0.9, peak: 0.12 * v, attack: 0.03, decay: 0.16 })
-        noiseBurst(context, now + 0.05, { type: 'highpass', from: 3800, q: 0.5, peak: 0.05 * v, attack: 0.02, decay: 0.09 })
+        if (typeof context.createBufferSource !== 'function') break
+        noiseBurst(context, now, { type: 'bandpass', from: 1400, to: 3200, q: 0.8, peak: 0.32 * v, attack: 0.02, decay: 0.14 })
         break
       case 'swish':
-        noiseBurst(context, now, { type: 'bandpass', from: 700, to: 2600, q: 1.4, peak: 0.08 * v, attack: 0.06, decay: 0.18 })
+        if (typeof context.createBufferSource !== 'function') break
+        noiseBurst(context, now, { type: 'bandpass', from: 700, to: 2400, q: 1.1, peak: 0.26 * v, attack: 0.03, decay: 0.16 })
         break
       case 'thud':
-        tone(context, now, 150, 0.14 * v, 0.12, 'sine')
-        noiseBurst(context, now, { type: 'lowpass', from: 900, q: 0.7, peak: 0.1 * v, attack: 0.003, decay: 0.06 })
+        playPhrase(context, now, v, phrase([{ frequency: 140, durationMs: 110, gain: 0.2, offsetMs: 0 }]))
+        if (typeof context.createBufferSource === 'function') {
+          noiseBurst(context, now, { type: 'lowpass', from: 700, q: 0.7, peak: 0.22 * v, attack: 0.003, decay: 0.06 })
+        }
         break
       case 'chime':
-        // Short wind-chime: two bell partials, the second slightly late.
-        tone(context, now, 1318.5, 0.07 * v, 0.9)
-        tone(context, now, 1318.5 * 2.4, 0.018 * v, 0.5)
-        tone(context, now + 0.07, 1760, 0.055 * v, 1.1)
-        tone(context, now + 0.07, 1760 * 2.4, 0.014 * v, 0.6)
+        playPhrase(context, now, v, phrase([
+          { frequency: 1318.5, durationMs: 280, gain: 0.16, offsetMs: 0 },
+          { frequency: 1760, durationMs: 320, gain: 0.14, offsetMs: 70 },
+        ]))
         break
     }
   })

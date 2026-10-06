@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { buildGlassBell, buildLayeredPops } from './layeredPops'
+import { sequencePeaks } from './voiceSynth'
 
 const fundamental = (tones: ReturnType<typeof buildLayeredPops>) =>
   tones.filter((_, index) => index % 2 === 0)
@@ -132,14 +133,17 @@ describe('glass playback', () => {
       }
     }
     vi.stubGlobal('AudioContext', GlassAudioContext)
+    vi.spyOn(Math, 'random').mockReturnValue(0)
     __resetWebAudioContextForTests()
     try {
       playWebAudioLayeredPops({ role: 'reveal', volume: 1 })
       expect(gains).toHaveLength(2)
       const envelope = gains[0]!
+      const [fundamental] = sequencePeaks([0.076, 0.076 * 0.15], 1)
       expect(envelope.linearRampToValueAtTime).not.toHaveBeenCalled()
       expect(envelope.exponentialRampToValueAtTime).toHaveBeenCalledTimes(2)
-      expect(envelope.exponentialRampToValueAtTime.mock.calls[0]![0]).toBe(0.076)
+      expect(envelope.exponentialRampToValueAtTime.mock.calls[0]![0]).toBeCloseTo(fundamental ?? 0)
+      expect(fundamental ?? 0).toBeGreaterThan(0.3)
       expect(envelope.exponentialRampToValueAtTime.mock.calls[0]![1]).toBeCloseTo(1.034)
       expect(envelope.exponentialRampToValueAtTime.mock.calls[1]![0]).toBe(0.0001)
       expect(envelope.exponentialRampToValueAtTime.mock.calls[1]![1]).toBeCloseTo(1.414)
