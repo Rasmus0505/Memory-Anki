@@ -4,6 +4,8 @@
  * when its stored revision equals the requested one, so content edited on the other
  * device and synced in by Syncthing is never served stale.
  */
+import { createIdbHandle } from '@/shared/persistence/indexedDb'
+
 export interface VersionedCacheRecord<T> {
   key: string
   namespace: string
@@ -28,44 +30,24 @@ const STORE_NAME = 'entries'
 const DB_VERSION = 1
 const EVICT_EVERY_PUTS = 50
 
-let dbPromise: Promise<IDBDatabase | null> | null = null
-
-function openDb(): Promise<IDBDatabase | null> {
-  if (typeof indexedDB === 'undefined') return Promise.resolve(null)
-  dbPromise ??= new Promise<IDBDatabase | null>((resolve) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION)
-    request.onupgradeneeded = () => {
-      const store = request.result.createObjectStore(STORE_NAME, { keyPath: 'key' })
-      store.createIndex('namespace', 'namespace')
-    }
-    request.onsuccess = () => {
-      const db = request.result
-      // Another tab upgrading the schema must not be blocked by this connection.
-      db.onversionchange = () => {
-        db.close()
-        dbPromise = null
-      }
-      resolve(db)
-    }
-    request.onerror = () => resolve(null)
-    request.onblocked = () => resolve(null)
-  })
-  return dbPromise
-}
+/**
+ * This is a read cache, so every operation degrades instead of throwing: a miss
+ * or a storage failure must not break the page that was going to fall back to
+ * the network anyway. `put`/`delete` are fire-and-forget by design.
+ */
+const idb = createIdbHandle({
+  db: DB_NAME,
+  version: DB_VERSION,
+  store: STORE_NAME,
+  upgrade: (db) => {
+    if (db.objectStoreNames.contains(STORE_NAME)) return
+    const store = db.createObjectStore(STORE_NAME, { keyPath: 'key' })
+    store.createIndex('namespace', 'namespace')
+  },
+})
 
 function run<T>(mode: IDBTransactionMode, action: (store: IDBObjectStore) => IDBRequest<T>): Promise<T | null> {
-  return openDb().then((db) => {
-    if (!db) return null
-    return new Promise<T | null>((resolve) => {
-      try {
-        const request = action(db.transaction(STORE_NAME, mode).objectStore(STORE_NAME))
-        request.onsuccess = () => resolve(request.result)
-        request.onerror = () => resolve(null)
-      } catch {
-        resolve(null)
-      }
-    })
-  })
+  return idb.run(mode, action, { strict: false })
 }
 
 export function createVersionedCache<T>(namespace: string, { maxEntries = 1500 } = {}): VersionedCache<T> {

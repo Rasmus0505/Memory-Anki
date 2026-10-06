@@ -1,4 +1,5 @@
 import type { MindMapEditorState } from '@/shared/api/contracts'
+import { createIdbHandle } from '@/shared/persistence/indexedDb'
 
 export interface MindMapEditorDraftRecord {
   resourceKey: string
@@ -22,54 +23,30 @@ function nowIso() {
   return new Date().toISOString()
 }
 
-function canUseIndexedDb() {
-  return typeof indexedDB !== 'undefined'
+/**
+ * Draft writes are strict (they settle on transaction commit and reject on
+ * abort) so an offline editor save is never acknowledged before it is durable.
+ * Reads degrade to `null` instead of throwing: a draft that cannot be read is
+ * simply absent, and the editor falls back to server state.
+ */
+const idb = createIdbHandle({
+  db: DB_NAME,
+  version: DB_VERSION,
+  store: STORE_NAME,
+  upgrade: (db) => {
+    if (db.objectStoreNames.contains(STORE_NAME)) return
+    db.createObjectStore(STORE_NAME, { keyPath: 'resourceKey' })
+  },
+})
+
+/** Writes must reject on failure: a draft acknowledged but not committed is lost work. */
+function withStore<T>(mode: 'readwrite', action: (store: IDBObjectStore) => IDBRequest<T>) {
+  return idb.run(mode, action)
 }
 
-function openDb() {
-  if (!canUseIndexedDb()) {
-    return Promise.resolve<IDBDatabase | null>(null)
-  }
-  return new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION)
-    request.onupgradeneeded = () => {
-      const db = request.result
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: 'resourceKey' })
-      }
-    }
-    request.onsuccess = () => resolve(request.result)
-    request.onerror = () => reject(request.error ?? new Error('Failed to open mindmap draft store'))
-  }).catch(() => null)
-}
-
-async function withStore<T>(
-  mode: IDBTransactionMode,
-  action: (store: IDBObjectStore) => IDBRequest<T>,
-) {
-  const db = await openDb()
-  if (!db) return null
-  return new Promise<T>((resolve, reject) => {
-    const transaction = db.transaction(STORE_NAME, mode)
-    const store = transaction.objectStore(STORE_NAME)
-    const request = action(store)
-    request.onerror = () => reject(request.error ?? new Error('Mindmap draft store request failed'))
-    transaction.oncomplete = () => {
-      db.close()
-      resolve(request.result)
-    }
-    transaction.onabort = () => {
-      db.close()
-      reject(transaction.error ?? new Error('Mindmap draft store transaction aborted'))
-    }
-    transaction.onerror = () => {
-      db.close()
-      reject(transaction.error ?? new Error('Mindmap draft store transaction failed'))
-    }
-  }).catch(() => {
-    db.close()
-    return null
-  })
+/** Reads degrade gracefully; the caller already has a "no draft" branch. */
+function readStore<T>(action: (store: IDBObjectStore) => IDBRequest<T>) {
+  return idb.run('readonly', action, { strict: false })
 }
 
 export function buildMindMapEditorDraftKey(loadCacheKey: string, entityId: number) {
@@ -118,7 +95,7 @@ export async function writeMindMapEditorDraft(input: {
 export async function readMindMapEditorDraft(
   resourceKey: string,
 ): Promise<MindMapEditorDraftRecord | null> {
-  const result = await withStore<MindMapEditorDraftRecord | undefined>('readonly', (store) =>
+  const result = await readStore<MindMapEditorDraftRecord | undefined>((store) =>
     store.get(resourceKey),
   )
   if (result === null) {
@@ -157,24 +134,18 @@ export async function archiveMindMapEditorConflict(
     ...JSON.parse(JSON.stringify(conflict)) as MindMapEditorConflict,
     updatedAt: nowIso(),
   }
-  const result = await withStore('readwrite', (store) => store.put(record))
+  // The conflict archive keeps its own user-facing failure contract: both
+  // "IndexedDB is unavailable" and "the write did not commit" mean the recovery
+  // snapshot is not durable, and the caller must not proceed as if it were.
+  // Collapsing the two would either leak a raw DOMException into the UI or
+  // acknowledge a snapshot that was rolled back.
+  const result = await withStore('readwrite', (store) => store.put(record)).catch(() => null)
   if (result === null) throw new Error('无法持久保存冲突双方快照，请恢复浏览器本地存储后重试。')
 }
 
 export async function resetMindMapEditorDraftStoreForTest(): Promise<void> {
   memoryStore.clear()
-  const db = await openDb()
-  if (!db) return
-  await new Promise<void>((resolve) => {
-    const transaction = db.transaction(STORE_NAME, 'readwrite')
-    transaction.objectStore(STORE_NAME).clear()
-    transaction.oncomplete = () => {
-      db.close()
-      resolve()
-    }
-    transaction.onerror = () => {
-      db.close()
-      resolve()
-    }
-  })
+  // Test-only: clearing the store must never reject, or a failing assertion in
+  // one test would surface as an unrelated rejection from teardown.
+  await idb.run('readwrite', (store) => store.clear(), { strict: false })
 }
