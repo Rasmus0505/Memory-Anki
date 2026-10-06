@@ -243,10 +243,50 @@ function resolveDurationMs(preset: CelebrationPresetDefinition, amount: number, 
   return Math.round((preset.minDurationMs + span * (clamp(amount, 0, 3) / 3)) * multiplier)
 }
 
+/**
+ * Timer host captured while the environment is alive.
+ *
+ * `runPreset` schedules work up to `durationMs` ahead, so its callbacks can fire
+ * after a test environment has been torn down and the global `window` is gone.
+ * Dereferencing `window` inside the callback then threw
+ * `ReferenceError: window is not defined` as an unhandled exception *after* the
+ * suite had passed, which fails an otherwise green `quality_gate --full`.
+ *
+ * Reading the timer functions off `globalThis` at call time keeps the callback
+ * independent of the `window` binding, and the `typeof` guard makes a late
+ * callback a no-op instead of a crash. Ids are typed as the DOM `number` because
+ * that is what this module has always stored.
+ */
+interface TimerHost {
+  setTimeout: (callback: () => void, delayMs: number) => number
+  clearTimeout: (id: number) => void
+  setInterval: (callback: () => void, delayMs: number) => number
+  clearInterval: (id: number) => void
+}
+
+function timerHost(): TimerHost | null {
+  const host = globalThis as unknown as Partial<TimerHost>
+  if (
+    typeof host.setTimeout !== 'function'
+    || typeof host.clearTimeout !== 'function'
+    || typeof host.setInterval !== 'function'
+    || typeof host.clearInterval !== 'function'
+  ) {
+    return null
+  }
+  return host as TimerHost
+}
+
 function clearScheduledWork() {
-  scheduledTimeouts.forEach((id) => window.clearTimeout(id))
+  const host = timerHost()
+  if (!host) {
+    scheduledTimeouts.clear()
+    scheduledIntervals.clear()
+    return
+  }
+  scheduledTimeouts.forEach((id) => host.clearTimeout(id))
   scheduledTimeouts.clear()
-  scheduledIntervals.forEach((id) => window.clearInterval(id))
+  scheduledIntervals.forEach((id) => host.clearInterval(id))
   scheduledIntervals.clear()
 }
 
@@ -255,6 +295,8 @@ function runPreset(preset: CelebrationPresetDefinition, amount: number, duration
   clearScheduledWork()
   const runId = activeRunId
   const startedAt = Date.now()
+  // Captured now, so the callbacks below never touch a `window` that may be gone.
+  const host = timerHost()
   const shoot = () => {
     if (runId !== activeRunId) return
     const elapsedRatio = clamp((Date.now() - startedAt) / durationMs, 0, 1)
@@ -266,11 +308,12 @@ function runPreset(preset: CelebrationPresetDefinition, amount: number, duration
     })
   }
   shoot()
-  const intervalId = window.setInterval(shoot, Math.max(60, Math.round(1000 / preset.speed)))
+  if (!host) return
+  const intervalId = host.setInterval(shoot, Math.max(60, Math.round(1000 / preset.speed)))
   scheduledIntervals.add(intervalId)
-  const timeoutId = window.setTimeout(() => {
+  const timeoutId = host.setTimeout(() => {
     scheduledTimeouts.delete(timeoutId)
-    window.clearInterval(intervalId)
+    host.clearInterval(intervalId)
     scheduledIntervals.delete(intervalId)
   }, durationMs)
   scheduledTimeouts.add(timeoutId)
