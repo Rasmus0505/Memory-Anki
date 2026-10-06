@@ -26,17 +26,12 @@ import { updatePalaceKnowledgeBindingApi } from '@/modules/content/public'
 import type { PalaceMeta } from '@/modules/content/public'
 import { MindMapEditorSurface, MindMapPageToolbar, type MindMapEditorSurfaceHandle } from '@/modules/content/public'
 import { useMindMapDocumentSession } from '@/shared/hooks/useMindMapDocumentSession'
+import { MindMapDocumentConflictDialog } from '@/shared/components/mindmap-document-conflict'
 import { toast } from '@/shared/feedback/toast'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/shared/components/ui/dialog'
+import { PalaceChapterBindingDialog } from './PalaceChapterBindingDialog'
 import { Input } from '@/shared/components/ui/input'
 import { cn } from '@/shared/lib/utils'
 import { detectClientSource } from '@/shared/lib/clientSource'
@@ -64,49 +59,6 @@ function collectLinkedUids(node: MindMapNode, linkedIds: Set<number>, result: st
   const data = node.data ?? {}
   if (typeof data.memoryAnkiId === 'number' && linkedIds.has(data.memoryAnkiId) && typeof data.uid === 'string') result.push(data.uid)
   for (const child of node.children ?? []) collectLinkedUids(child, linkedIds, result)
-}
-
-function ChapterBindingNode({
-  node,
-  depth,
-  explicitIds,
-  busy,
-  onToggle,
-}: {
-  node: ChapterSummary
-  depth: number
-  explicitIds: number[]
-  busy: boolean
-  onToggle: (chapterId: number, nextLinked: boolean, chapterName: string) => void
-}) {
-  const linked = explicitIds.includes(node.id)
-  return (
-    <div className="space-y-1">
-      <label
-        className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted/50"
-        style={{ paddingLeft: `${depth * 14 + 8}px` }}
-      >
-        <input
-          type="checkbox"
-          checked={linked}
-          disabled={busy}
-          onChange={() => onToggle(node.id, !linked, node.name)}
-          aria-label={`关联章节 ${node.name}`}
-        />
-        <span className={linked ? 'font-medium text-foreground' : 'text-muted-foreground'}>{node.name}</span>
-      </label>
-      {(node.children ?? []).map((child) => (
-        <ChapterBindingNode
-          key={child.id}
-          node={child}
-          depth={depth + 1}
-          explicitIds={explicitIds}
-          busy={busy}
-          onToggle={onToggle}
-        />
-      ))}
-    </div>
-  )
 }
 
 type PalaceKnowledgeContextValue = {
@@ -378,6 +330,10 @@ export function PalaceKnowledgeWorkspaceProvider({
 
   const switchDocument = useCallback(async (key: string) => {
     if (key === activeKey) return
+    if (session.pendingConflict) {
+      toast.error('请先解决当前文档的版本冲突，再切换。')
+      return
+    }
     if (selectedSubjectId != null && session.hasUnsavedChanges) {
       try {
         await session.flushSave()
@@ -472,82 +428,15 @@ export function PalaceKnowledgeWorkspaceProvider({
 
   return (
     <PalaceKnowledgeContext.Provider value={value}>
+      <MindMapDocumentConflictDialog pendingConflict={session.pendingConflict} resolveConflict={session.resolveConflict} />
       {children}
     </PalaceKnowledgeContext.Provider>
   )
 }
 
-function ChapterBindingDialog() {
-  const {
-    subjects,
-    explicitIds,
-    bindingBusy,
-    chapterTrees,
-    chapterTreesLoading,
-    toggleChapterBinding,
-    chapterDialogOpen,
-    setChapterDialogOpen,
-  } = usePalaceKnowledge()
-
-  return (
-    <Dialog open={chapterDialogOpen} onOpenChange={setChapterDialogOpen}>
-      <DialogContent className="max-h-[85vh] max-w-2xl overflow-hidden">
-        <DialogHeader>
-          <DialogTitle>绑定章节</DialogTitle>
-          <DialogDescription>
-            勾选要关联到本宫殿的章节。也可在学科导图中开启「关联章节」模式点选节点。主章节用于宫殿默认名称来源。
-          </DialogDescription>
-        </DialogHeader>
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-sm text-muted-foreground">在树中勾选或取消章节</span>
-          <Badge variant="secondary">已选 {explicitIds.length}</Badge>
-        </div>
-        {subjects.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border/70 px-3 py-6 text-sm text-muted-foreground">
-            请先关联至少一个学科，再选择章节。
-          </div>
-        ) : chapterTreesLoading ? (
-          <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
-            <LoaderCircle className="size-3.5 animate-spin" />
-            正在加载章节树…
-          </div>
-        ) : chapterTrees.every((tree) => (tree.chapters ?? []).length === 0) ? (
-          <div className="space-y-3 rounded-lg border border-dashed border-border/70 px-3 py-6 text-sm text-muted-foreground">
-            <p>当前关联学科还没有章节。请先编辑学科思维导图生成章节结构。</p>
-            <Button asChild type="button" size="sm" variant="outline">
-              <Link to={subjects[0] ? `/knowledge?subjectId=${subjects[0].id}` : '/knowledge'}>
-                去编辑学科思维导图
-              </Link>
-            </Button>
-          </div>
-        ) : (
-          <div className="max-h-[60vh] space-y-3 overflow-y-auto rounded-md border border-border/60 bg-background/80 p-2">
-            {chapterTrees.map((tree) => (
-              <div key={tree.subject?.id ?? 'subject'} className="space-y-1">
-                <div className="px-2 text-xs font-semibold text-muted-foreground">
-                  {tree.subject?.name || '未命名学科'}
-                </div>
-                {(tree.chapters ?? []).map((node) => (
-                  <ChapterBindingNode
-                    key={node.id}
-                    node={node}
-                    depth={0}
-                    explicitIds={explicitIds}
-                    busy={bindingBusy}
-                    onToggle={toggleChapterBinding}
-                  />
-                ))}
-              </div>
-            ))}
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
-  )
-}
-
 /** Left sidebar: compact subject/chapter binding controls. */
 export function PalaceKnowledgeBindingCard() {
+  const workspace = usePalaceKnowledge()
   const {
     activeKey,
     tabs,
@@ -721,7 +610,7 @@ export function PalaceKnowledgeBindingCard() {
           </div>
         </CardContent>
       </Card>
-      <ChapterBindingDialog />
+      <PalaceChapterBindingDialog {...workspace} />
     </>
   )
 }
@@ -800,6 +689,7 @@ export function PalaceSubjectMindMapCard({
             ref={frameRef}
             key={`palace-subject:${selectedSubjectId}`}
             editorState={session.editorState}
+            readonly={Boolean(session.pendingConflict)}
             sceneChrome="edit"
             presentationStrategy={isPwa ? 'viewport-only' : 'native-preferred'}
             highlightedNodeUids={highlightedNodeUids}

@@ -55,6 +55,35 @@ export type NodeCardData = MindMapNode & {
 }
 
 export const MEASURE_DELTA_PX = 1
+/**
+ * Fallback window when the browser never fires `dblclick` (select-none text,
+ * especially yellow emphasis). Matches the common Windows default.
+ */
+export const CARD_DOUBLE_CLICK_MS = 500
+
+const lastCardClickAt = new Map<string, number>()
+
+/**
+ * True when this click is the second press of a double-click on the same card.
+ * Module-scoped so a select re-render that remounts yellow-emphasis markup
+ * cannot drop the gesture.
+ */
+export function consumeCardDoubleClick(nodeId: string, now = Date.now()): boolean {
+  const previous = lastCardClickAt.get(nodeId)
+  lastCardClickAt.set(nodeId, now)
+  if (previous == null) return false
+  const delta = now - previous
+  if (delta >= 0 && delta <= CARD_DOUBLE_CLICK_MS) {
+    lastCardClickAt.delete(nodeId)
+    return true
+  }
+  return false
+}
+
+/** Test isolation: click timestamps must not leak across card mounts. */
+export function resetCardDoubleClickTracking() {
+  lastCardClickAt.clear()
+}
 export const LONG_PRESS_DELAY_MS = 550
 export const LONG_PRESS_MOVE_TOLERANCE_PX = 18
 export const SYNTHETIC_CONTEXT_MENU_WINDOW_MS = 1_000

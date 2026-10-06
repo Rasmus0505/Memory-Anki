@@ -83,6 +83,30 @@ describe('useMindMapViewport preferred zoom', () => {
     expect(onControlledViewportChange).not.toHaveBeenCalled()
   })
 
+  it('commits a wheel pan that arrives before move-start instead of restoring the old camera', () => {
+    const canvas = document.createElement('div')
+    const onControlledViewportChange = vi.fn()
+    const props = buildProps({
+      canvasRef: { current: canvas },
+      onControlledViewportChange,
+    })
+    const { result } = renderHook((nextProps) => useMindMapViewport(nextProps), {
+      initialProps: props,
+    })
+    const panned = { x: 120, y: -180, zoom: 0.5 }
+
+    act(() => {
+      result.current.handleViewportChange(panned)
+    })
+    expect(onControlledViewportChange).not.toHaveBeenCalled()
+
+    act(() => {
+      canvas.dispatchEvent(new WheelEvent('wheel', { deltaY: 100, bubbles: true, cancelable: true }))
+      result.current.handleViewportChange(panned)
+    })
+    expect(onControlledViewportChange).toHaveBeenCalledWith(panned)
+  })
+
   it('reports only a user gesture that changes zoom', () => {
     const onUserZoomChange = vi.fn()
     const props = buildProps({ onUserZoomChange })

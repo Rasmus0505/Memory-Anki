@@ -20,7 +20,8 @@ describe('mind map layout sizing', () => {
 
     expect(longSize.width).toBeGreaterThan(shortSize.width)
     expect(shortSize.width).toBe(78)
-    expect(longSize.width).toBeLessThanOrEqual(295)
+    // 59 full-width characters still fit in four lines, so the preferred cap holds.
+    expect(longSize.width).toBe(295)
     expect(longSize.height).toBeGreaterThan(shortSize.height)
   })
 
@@ -42,6 +43,51 @@ describe('mind map layout sizing', () => {
     expect(nineteenCharacters.width).toBe(295)
     expect(nineteenCharacters.height).toBeGreaterThan(eighteenCharacters.height)
     expect(mixedText.width).toBeLessThan(eighteenCharacters.width)
+  })
+
+  it('widens only far enough to bring soft-wrapped text back to four lines', () => {
+    const preferred = getNodeSize('branch', '一'.repeat(18))
+    const withinBudget = getNodeSize('branch', '一'.repeat(72))
+    const onePast = getNodeSize('branch', '一'.repeat(73))
+    const eighty = getNodeSize('branch', '一'.repeat(80))
+    const atHardCap = getNodeSize('branch', '一'.repeat(112))
+    const pastHardCap = getNodeSize('branch', '一'.repeat(113))
+    const essay = getNodeSize('branch', '一'.repeat(200))
+
+    expect(withinBudget.width).toBe(preferred.width)
+    expect(withinBudget.height).toBe(eighty.height)
+    expect(onePast.width).toBe(310)
+    expect(onePast.width).toBeGreaterThan(preferred.width)
+    expect(eighty.width).toBe(324)
+    expect(eighty.width).toBeLessThan(atHardCap.width)
+    expect(atHardCap.width).toBe(440)
+    expect(pastHardCap.width).toBe(atHardCap.width)
+    expect(essay.width).toBe(atHardCap.width)
+    expect(pastHardCap.height).toBeGreaterThan(atHardCap.height)
+    expect(essay.height).toBeGreaterThan(pastHardCap.height)
+  })
+
+  it('does not widen the root or author line breaks', () => {
+    const rootPreferred = getNodeSize('root', '一'.repeat(18))
+    const rootEssay = getNodeSize('root', '一'.repeat(200))
+    const shortLine = getNodeSize('branch', '短句')
+    const hardLines = getNodeSize('branch', Array.from({ length: 6 }, () => '短句').join('\n'))
+    const mixed = getNodeSize('branch', `${'测'.repeat(80)}\n短`)
+
+    expect(rootEssay.width).toBe(rootPreferred.width)
+    expect(rootEssay.height).toBeGreaterThan(rootPreferred.height)
+    expect(hardLines.width).toBe(shortLine.width)
+    expect(hardLines.height).toBeGreaterThan(shortLine.height)
+    expect(mixed.width).toBeGreaterThan(getNodeSize('branch', '一'.repeat(18)).width)
+    expect(mixed.height).toBe(getNodeSize('branch', '一'.repeat(72)).height)
+  })
+
+  it('lets an unbreakable English token exceed the hard character cap', () => {
+    const hardCap = getNodeSize('branch', '一'.repeat(200))
+    const token = getNodeSize('branch', 'a'.repeat(60))
+
+    expect(token.width).toBeGreaterThan(hardCap.width)
+    expect(token.height).toBe(getNodeSize('branch', 'cat').height)
   })
 
   it('sizes by depth so a card keeps its typography when it gains a first child', () => {

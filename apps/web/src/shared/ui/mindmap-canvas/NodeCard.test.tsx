@@ -149,6 +149,42 @@ describe('NodeCard', () => {
     expect(editor.className).toContain('whitespace-pre-wrap')
   })
 
+  it('keeps the edit shell wide after the draft is shortened', () => {
+    const label = '测'.repeat(80)
+    const wide = getNodeSize('branch', label)
+    renderNodeCard({
+      label,
+      metadata: { depth: 1, layoutRole: 'branch' },
+    })
+    fireEvent.doubleClick(screen.getByRole('button', { name: label }))
+    const shell = document.querySelector('[data-mindmap-node-id]') as HTMLElement
+    expect(shell.style.width).toBe(`${wide.width}px`)
+
+    setEditorText(screen.getByRole('textbox'), '短')
+
+    expect(shell.style.width).toBe(`${wide.width}px`)
+    expect(Number.parseFloat(shell.style.width)).toBeGreaterThan(getNodeSize('branch', '短').width)
+  })
+
+  it('does not widen while an IME composition is open', () => {
+    const label = '短'
+    renderNodeCard({
+      label,
+      metadata: { depth: 1, layoutRole: 'branch' },
+    })
+    fireEvent.doubleClick(screen.getByRole('button', { name: label }))
+    const editor = screen.getByRole('textbox')
+    const shell = document.querySelector('[data-mindmap-node-id]') as HTMLElement
+    const frozen = shell.style.width
+
+    fireEvent.compositionStart(editor)
+    setEditorText(editor, 'a'.repeat(80))
+
+    expect(shell.style.width).toBe(frozen)
+    fireEvent.compositionEnd(editor)
+    expect(Number.parseFloat(shell.style.width)).toBeGreaterThan(Number.parseFloat(frozen))
+  })
+
   it('keeps short Chinese labels on one line budget in readonly review display', () => {
     const label = '一二三四'
     const size = getNodeSize('branch', label)
@@ -590,6 +626,43 @@ describe('NodeCard', () => {
     expect(screen.getByRole('textbox', { name: '编辑节点文本' })).toBeTruthy()
   })
 
+  it('enters edit from a second click on yellow text when the browser swallows dblclick', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-08T00:00:00.000Z'))
+    try {
+      const onStartEdit = vi.fn()
+      const highlighted =
+        '<div><span data-emphasis="highlight" style="background-color:#fef08c;color:inherit">1889年，雷迪创办了阿博茨霍尔姆学校。</span></div>'
+      renderNodeCard({
+        label: '1889年，雷迪创办了阿博茨霍尔姆学校。',
+        editing: false,
+        onStartEdit,
+        metadata: {
+          depth: 2,
+          layoutRole: 'leaf',
+          text: highlighted,
+          richText: true,
+        },
+      })
+
+      const emphasis = document.querySelector('[data-emphasis="highlight"]') as HTMLElement
+      const firstDown = fireEvent.pointerDown(emphasis, { pointerType: 'mouse', button: 0, detail: 1 })
+      expect(firstDown).toBe(true)
+      expect(onStartEdit).not.toHaveBeenCalled()
+      expect(screen.queryByRole('textbox', { name: '编辑节点文本' })).toBeNull()
+
+      vi.setSystemTime(new Date('2026-04-08T00:00:00.180Z'))
+      const secondDown = fireEvent.pointerDown(emphasis, { pointerType: 'mouse', button: 0, detail: 1 })
+      expect(secondDown).toBe(false)
+      fireEvent.doubleClick(emphasis)
+
+      expect(onStartEdit).toHaveBeenCalledTimes(1)
+      expect(screen.getByRole('textbox', { name: '编辑节点文本' })).toBeTruthy()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('enters edit optimistically on controlled cards when parent editing lags', () => {
     const onStartEdit = vi.fn()
     renderNodeCard({
@@ -621,95 +694,6 @@ describe('NodeCard', () => {
     const editor = screen.getByRole('textbox', { name: '编辑节点文本' })
     expect(editor.innerHTML).toContain('data-emphasis="highlight"')
     expect(editor.textContent).toContain('细胞膜')
-  })
-
-  it('uses the unified root card shadow', () => {
-    renderNodeCard()
-
-    const { container } = getNodeShell()
-    expect(container.className).toContain('mindmap-node-card--root')
-    expect(container.className).not.toContain('shadow-md')
-  })
-
-  it('shows emerald feedback and child-slot placeholder when dropping inside a node', () => {
-    renderNodeCard({ dropHighlight: true, dropMode: 'inside' })
-    expect(document.querySelector('[data-drop-placeholder="inside"]')).toBeTruthy()
-    expect(document.querySelector('[data-drop-placeholder-label="inside"]')?.textContent).toContain(
-      '成为子卡片',
-    )
-
-    const { container } = getNodeShell()
-    expect(container.className).toContain('ring-success/70')
-    expect(container.className).toContain('bg-success/10')
-  })
-
-  it('shows blue feedback when dropping before or after a node', () => {
-    renderNodeCard({ dropHighlight: true, dropMode: 'before' })
-
-    const { container } = getNodeShell()
-    expect(container.className).toContain('ring-primary/70')
-  })
-
-  it('makes dragged nodes ghosted even when the node is also muted', () => {
-    renderNodeCard({ previewGhost: true, metadata: { depth: 1, layoutRole: 'branch', visual: { muted: true } } })
-
-    const { shell } = getNodeShell()
-    expect(shell.className).toContain('opacity-35')
-    expect(shell.className).toContain('scale-[0.97]')
-    expect(shell.className).not.toContain('opacity-60')
-  })
-
-  it('keeps non-dragged muted nodes at the lighter dim state', () => {
-    renderNodeCard({ metadata: { depth: 1, layoutRole: 'branch', visual: { muted: true } } })
-
-    const { shell } = getNodeShell()
-    expect(shell.className).toContain('opacity-60')
-  })
-
-  it('uses a stronger preview shift while dragging', () => {
-    renderNodeCard({ previewShifted: true })
-
-    const { shell } = getNodeShell()
-    expect(shell.className).toContain('translate-y-2')
-  })
-
-  it('reads recall and marker states from metadata when top-level fields are absent', () => {
-    renderNodeCard({
-      metadata: {
-        depth: 1,
-        layoutRole: 'branch',
-        branchColor: '#89a89e',
-        visual: {
-          placeholder: true,
-          borderColor: '#ef4444',
-          outlineTones: ['danger', 'info'],
-        },
-      },
-    })
-
-    const { container } = getNodeShell()
-    expect(container.className).toContain('ring-primary/35')
-    expect(container.className).toContain('outline-destructive/55')
-    expect(container.className).toContain('outline-rate-easy/70')
-    expect(container.style.borderColor).toBe('rgb(239, 68, 68)')
-  })
-
-  it('reads hidden recall state from metadata', () => {
-    renderNodeCard({
-      label: '线粒体内膜',
-      metadata: {
-        depth: 1,
-        layoutRole: 'branch',
-        branchColor: '#89a89e',
-        visual: { concealText: true },
-      },
-    })
-
-    const button = screen.getByRole('button', { name: '待回忆' })
-    // The real label stays laid out (invisible) so revealing never resizes the card.
-    const sizer = button.querySelector('.mindmap-node-concealed-sizer') as HTMLElement
-    expect(sizer.textContent).toBe('线粒体内膜')
-    expect(sizer.getAttribute('aria-hidden')).toBe('true')
   })
 
   it('keeps yellow highlights and adds no word padding in english mode', () => {

@@ -133,6 +133,11 @@ describe('FlipCardMindMapPanel', () => {
     })
   })
 
+  it('locks the editor while the host resolves a persistence conflict without changing the view', () => {
+    renderInRouter(<FlipCardMindMapPanel {...baseProps} displayMode="edit" editorReadonly editableEditorState={editorState} />)
+    expect(getLatestMindMapEditorSurfaceProps()).toMatchObject({ readonly: true, sceneChrome: 'edit', preserveViewOnSync: true })
+  })
+
   it('forwards scoped branch edit without collapsing the unit tree', () => {
     renderInRouter(
       <FlipCardMindMapPanel

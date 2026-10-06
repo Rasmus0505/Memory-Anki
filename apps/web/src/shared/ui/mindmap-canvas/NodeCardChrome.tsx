@@ -3,6 +3,7 @@ import { stripMindMapHtml } from '@/shared/lib/mindmapRichText'
 import type { MindMapCountBadge, MindMapNodeVisual } from './adapter'
 import { statusChipClassName } from './NodeCardToolbar'
 import { NodeCountBadgeCluster } from './NodeCountBadge'
+import { RichDocument } from '@/shared/ui/rich-document/RichDocument'
 
 function cornerCountBadges(visual: MindMapNodeVisual): MindMapCountBadge[] {
   if (visual.countBadges && visual.countBadges.length > 0) return visual.countBadges
@@ -145,6 +146,7 @@ export function NodeCardTextFace({
   onEnglishWordClick,
   textSelectionModeActive = false,
   readonly = false,
+  articleBody,
 }: {
   textCls: string
   displayHtml: string
@@ -158,6 +160,7 @@ export function NodeCardTextFace({
   onEnglishWordClick?: (word: string, event: MouseEvent<HTMLElement>) => void
   textSelectionModeActive?: boolean
   readonly?: boolean
+  articleBody?: unknown
 }) {
   const showEnglishInteraction =
     englishInteractionActive && !concealed && typeof onEnglishWordClick === 'function'
@@ -224,6 +227,7 @@ export function NodeCardTextFace({
       ) : (
         plainLabel
       )}
+      {!concealed && articleBody ? <RichDocument document={articleBody} className="mt-2 border-t border-current/10 pt-2 text-sm font-normal leading-relaxed" /> : null}
     </div>
   )
 }

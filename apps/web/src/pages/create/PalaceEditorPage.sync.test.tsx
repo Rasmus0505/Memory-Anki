@@ -1,5 +1,6 @@
-﻿import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import * as palaceApi from '@/modules/content/domain/palace-entity/api'
+import { resetMindMapEditorDraftStoreForTest } from '@/shared/persistence/mindmapEditorDraftStore'
 import {
   fireEvent,
   renderPalaceEditPage,
@@ -9,7 +10,9 @@ import {
 } from '@/pages/create/PalaceEditorPage.test-support'
 
 describe('usePalaceEditPage sync behavior', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    // Every case reuses palace 101 with a different server fixture; drafts are independent state.
+    await resetMindMapEditorDraftStoreForTest()
     setupPalaceEditPageTestDefaults()
   })
 

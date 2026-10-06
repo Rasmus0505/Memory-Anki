@@ -7,8 +7,15 @@ const ROOT_Y = 280
 const ROOT_NODE_MIN_HEIGHT = 47
 const BRANCH_NODE_MIN_HEIGHT = 40
 const LEAF_NODE_MIN_HEIGHT = 35
-/** Soft wrap budget: cards grow with text until this many full-width characters. */
+/**
+ * Preferred wrap budget. Cards grow with text until this many full-width characters,
+ * then wrap. Overflow past the comfort line count may widen further, up to the hard cap.
+ */
 export const NODE_MAX_VISUAL_CHARACTERS = 18
+/** Visual lines at the preferred measure before a non-root card is allowed to widen. */
+export const NODE_COMFORT_LINE_COUNT = 4
+/** Hard line-length cap. Past this, extra width turns CJK into one unreadably long line. */
+export const NODE_HARD_VISUAL_CHARACTERS = 28
 /**
  * Extra shell width so real CJK/font metrics never wrap earlier than the character
  * budget (formula uses average char width; YaHei/subpixel/zoom can run slightly wider).
@@ -191,43 +198,120 @@ function getLongestEnglishTokenWeightedLength(text: string): number {
   return longest
 }
 
-export function getNodeMaxWidth(source?: NodeSizeSource): number {
-  const base = getBaseNodeSize(getNodeRole(source))
+export interface NodeSizeConstraints {
+  /** Keep at least this shell width (edit sessions ratchet up and must not shrink). */
+  minWidth?: number
+  /** Do not grow past this shell width (IME composition freezes the current width). */
+  maxWidth?: number
+}
+
+function widthForVisualCharacters(
+  base: ReturnType<typeof getBaseNodeSize>,
+  characters: number,
+): number {
   return Math.ceil(
-    NODE_MAX_VISUAL_CHARACTERS * base.averageCharWidth + base.horizontalChrome + NODE_WIDTH_SAFETY_PX,
+    characters * base.averageCharWidth + base.horizontalChrome + NODE_WIDTH_SAFETY_PX,
   )
 }
 
-export function getNodeSize(source?: NodeSizeSource, labelOverride?: string): NodeSize {
+export function getNodeMaxWidth(source?: NodeSizeSource): number {
+  const base = getBaseNodeSize(getNodeRole(source))
+  return widthForVisualCharacters(base, NODE_MAX_VISUAL_CHARACTERS)
+}
+
+function splitHardLines(label: string): string[] {
+  const lines = label.split(/\r?\n/)
+  return lines.length > 0 ? lines : ['']
+}
+
+function predictLineCount(
+  label: string,
+  width: number,
+  base: ReturnType<typeof getBaseNodeSize>,
+): number {
+  const contentWidth = Math.max(width - base.horizontalChrome - NODE_WIDTH_SAFETY_PX, base.averageCharWidth)
+  // Compare pixel widths, not whole "chars per line": flooring made short Latin
+  // labels (e.g. "child") predict a phantom second line and inflate min-height.
+  return splitHardLines(label).reduce((total, line) => {
+    const linePx = getWeightedTextLength(line) * base.averageCharWidth
+    return total + Math.max(1, Math.ceil(linePx / contentWidth - 1e-6))
+  }, 0)
+}
+
+/**
+ * Preferred measure first. Widen only when soft wrap would exceed the comfort
+ * line count, and only to the smallest full-width step that gets back under it.
+ * Hard breaks cannot be removed by width, so they raise the line target instead
+ * of stretching the card. Root stays on the preferred measure: widening it shifts
+ * the whole tree. Unbreakable English tokens may still exceed the hard cap.
+ */
+function selectWrapWidth(
+  role: LayoutRole,
+  label: string,
+  base: ReturnType<typeof getBaseNodeSize>,
+  preferredWidth: number,
+  tokenMinWidth: number,
+): number {
+  if (role === 'root') return preferredWidth
+
+  const hardLineCount = splitHardLines(label).length
+  const targetLines = Math.max(NODE_COMFORT_LINE_COUNT, hardLineCount)
+  const linesAtPreferred = predictLineCount(label, preferredWidth, base)
+  if (linesAtPreferred <= targetLines) return preferredWidth
+
+  const hardWidth = Math.max(
+    widthForVisualCharacters(base, NODE_HARD_VISUAL_CHARACTERS),
+    tokenMinWidth,
+  )
+  const linesAtHard = predictLineCount(label, hardWidth, base)
+  // Token floor already at or past the hard cap, or hard breaks already dominate.
+  if (linesAtHard >= linesAtPreferred) return preferredWidth
+  if (linesAtHard > targetLines) return hardWidth
+
+  let width = hardWidth
+  for (let characters = NODE_MAX_VISUAL_CHARACTERS + 1; characters <= NODE_HARD_VISUAL_CHARACTERS; characters += 1) {
+    const candidate = Math.max(widthForVisualCharacters(base, characters), tokenMinWidth)
+    if (candidate < preferredWidth) continue
+    if (predictLineCount(label, candidate, base) <= targetLines) {
+      width = candidate
+      break
+    }
+  }
+  return width
+}
+
+export function getNodeSize(
+  source?: NodeSizeSource,
+  labelOverride?: string,
+  constraints?: NodeSizeConstraints,
+): NodeSize {
   const role = getNodeRole(source)
   const base = getBaseNodeSize(role)
   const label = ((labelOverride ?? getNodeLabel(source)) || '').trim() || '未命名节点'
-  const longestLineLength = label
-    .split(/\r?\n/)
-    .reduce((longest, line) => Math.max(longest, getWeightedTextLength(line)), 0)
+  const longestLineLength = splitHardLines(label).reduce(
+    (longest, line) => Math.max(longest, getWeightedTextLength(line)),
+    0,
+  )
   const tokenMinWidth = Math.ceil(
     getLongestEnglishTokenWeightedLength(label) * base.averageCharWidth +
       base.horizontalChrome +
       NODE_WIDTH_SAFETY_PX,
   )
-  const maxWidth = Math.max(getNodeMaxWidth(role), tokenMinWidth)
+  const preferredCap = Math.max(getNodeMaxWidth(role), tokenMinWidth)
   // Safety on natural width so short CJK labels keep a single line under real fonts.
   const naturalWidth = Math.ceil(
     longestLineLength * base.averageCharWidth + base.horizontalChrome + NODE_WIDTH_SAFETY_PX,
   )
-  const width = Math.min(
-    maxWidth,
+  const preferredWidth = Math.min(
+    preferredCap,
     Math.max(base.horizontalChrome + base.averageCharWidth + NODE_WIDTH_SAFETY_PX, naturalWidth, tokenMinWidth),
   )
-  const contentWidth = Math.max(width - base.horizontalChrome - NODE_WIDTH_SAFETY_PX, base.averageCharWidth)
-  // Compare pixel widths, not whole "chars per line": flooring made short Latin
-  // labels (e.g. "child") predict a phantom second line and inflate min-height.
-  const textLineCount = label
-    .split(/\r?\n/)
-    .reduce((total, line) => {
-      const linePx = getWeightedTextLength(line) * base.averageCharWidth
-      return total + Math.max(1, Math.ceil(linePx / contentWidth - 1e-6))
-    }, 0)
+  let width = selectWrapWidth(role, label, base, preferredWidth, tokenMinWidth)
+  const minWidth = constraints?.minWidth
+  if (typeof minWidth === 'number' && minWidth > width) width = Math.ceil(minWidth)
+  const maxWidth = constraints?.maxWidth
+  if (typeof maxWidth === 'number' && maxWidth > 0 && width > maxWidth) width = Math.ceil(maxWidth)
+  const textLineCount = predictLineCount(label, width, base)
   const height = Math.max(base.minHeight, Math.ceil(base.verticalChrome + textLineCount * base.lineHeight + base.metaHeight))
   return { width, height }
 }

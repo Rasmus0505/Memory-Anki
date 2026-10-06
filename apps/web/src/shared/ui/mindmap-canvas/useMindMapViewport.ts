@@ -125,6 +125,11 @@ export function useMindMapViewport({
   const restoreViewportFrameRef = useRef<number | null>(null)
   const explicitViewportChangeRef = useRef(false)
   const manualViewportGestureRef = useRef(false)
+  /** Wheel capture time. React Flow reports the panned camera before move-start. */
+  const wheelPanUntilRef = useRef(0)
+  /** Bumps on each wheel so an in-flight restore cannot write the old camera back. */
+  const viewportEpochRef = useRef(0)
+  const wheelEndTimerRef = useRef<number | null>(null)
   const userGestureStartZoomRef = useRef<number | null>(null)
   const explicitViewportTimeoutRef = useRef<number | null>(null)
   const controlledViewportRef = useRef<Viewport>(controlledViewport)
@@ -227,16 +232,29 @@ export function useMindMapViewport({
     if (restoreViewportFrameRef.current !== null) {
       cancelAnimationFrame(restoreViewportFrameRef.current)
     }
+    const epoch = viewportEpochRef.current
     // Mark explicit so RF move callbacks do not treat the correction as a new
     // "drift" and thrash between intermediate layout viewports.
     restoreViewportFrameRef.current = requestAnimationFrame(() => {
       restoreViewportFrameRef.current = null
-      if (manualViewportGestureRef.current) return
+      if (
+        manualViewportGestureRef.current
+        || performance.now() < wheelPanUntilRef.current
+        || viewportEpochRef.current !== epoch
+      ) return
       const locked = preservedViewportRef.current
       explicitViewportChangeRef.current = true
       void setViewport(locked, { duration: 0 })
       // Re-assert controlled source of truth on the next frame after RF applies.
       requestAnimationFrame(() => {
+        if (
+          manualViewportGestureRef.current
+          || performance.now() < wheelPanUntilRef.current
+          || viewportEpochRef.current !== epoch
+        ) {
+          explicitViewportChangeRef.current = false
+          return
+        }
         const still = getViewport()
         if (
           Math.abs(still.x - locked.x) >= 0.01 ||
@@ -267,8 +285,14 @@ export function useMindMapViewport({
       explicitViewportChangeRef.current = false
       manualViewportGestureRef.current = true
       userGestureStartZoomRef.current = viewport.zoom
+      // panOnScroll's first event is start-only and already carries the post-delta camera.
+      // Controlled mode paints only what we commit, so dropping this frame snaps the wheel back.
+      if ('type' in event && event.type === 'wheel') {
+        preservedViewportRef.current = viewport
+        commitControlledViewport(viewport)
+      }
     }
-  }, [preserveViewport])
+  }, [commitControlledViewport, preserveViewport])
 
   const handleViewportChange = useCallback((viewport: Viewport) => {
     // Explicit programmatic camera (fit / center / zoom): must still write into
@@ -279,7 +303,12 @@ export function useMindMapViewport({
       commitControlledViewport(viewport)
       return
     }
-    if (!preserveViewport || manualViewportGestureRef.current) {
+    const wheelPan = performance.now() < wheelPanUntilRef.current
+    if (!preserveViewport || manualViewportGestureRef.current || wheelPan) {
+      if (wheelPan && restoreViewportFrameRef.current !== null) {
+        cancelAnimationFrame(restoreViewportFrameRef.current)
+        restoreViewportFrameRef.current = null
+      }
       preservedViewportRef.current = viewport
       commitControlledViewport(viewport)
     }
@@ -723,11 +752,42 @@ export function useMindMapViewport({
     if (!preserveViewport || !isCanvasReady) return
     if (isDraggingNodeRef.current) return
     // Never fight the user mid pan/zoom/wheel — that causes a one-frame camera flash.
-    if (manualViewportGestureRef.current) return
+    if (manualViewportGestureRef.current || performance.now() < wheelPanUntilRef.current) return
     if (pendingSceneRecenterNodeIdRef.current || sceneRecenterLockRef.current) return
     if (explicitViewportChangeRef.current) return
     restorePreservedViewport()
   }, [isCanvasReady, isDraggingNodeRef, layoutFingerprint, preserveViewport, restorePreservedViewport])
+
+  useLayoutEffect(() => {
+    if (!preserveViewport) return
+    const element = canvasRef.current
+    if (!element) return
+    const armWheelPan = () => {
+      wheelPanUntilRef.current = performance.now() + 280
+      viewportEpochRef.current += 1
+      manualViewportGestureRef.current = true
+      explicitViewportChangeRef.current = false
+      if (restoreViewportFrameRef.current !== null) {
+        cancelAnimationFrame(restoreViewportFrameRef.current)
+        restoreViewportFrameRef.current = null
+      }
+      if (wheelEndTimerRef.current !== null) window.clearTimeout(wheelEndTimerRef.current)
+      const epoch = viewportEpochRef.current
+      wheelEndTimerRef.current = window.setTimeout(() => {
+        wheelEndTimerRef.current = null
+        if (viewportEpochRef.current !== epoch) return
+        manualViewportGestureRef.current = false
+      }, 280)
+    }
+    element.addEventListener('wheel', armWheelPan, { capture: true, passive: true })
+    return () => {
+      element.removeEventListener('wheel', armWheelPan, true)
+      if (wheelEndTimerRef.current !== null) {
+        window.clearTimeout(wheelEndTimerRef.current)
+        wheelEndTimerRef.current = null
+      }
+    }
+  }, [canvasRef, preserveViewport])
 
   useLayoutEffect(() => {
     const element = canvasRef.current
@@ -1045,6 +1105,9 @@ export function useMindMapViewport({
       }
       if (sceneRecenterLockTimeoutRef.current !== null) {
         window.clearTimeout(sceneRecenterLockTimeoutRef.current)
+      }
+      if (wheelEndTimerRef.current !== null) {
+        window.clearTimeout(wheelEndTimerRef.current)
       }
     }
   }, [])

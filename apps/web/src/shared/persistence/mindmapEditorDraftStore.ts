@@ -5,6 +5,7 @@ export interface MindMapEditorDraftRecord {
   snapshot: MindMapEditorState
   /** Server fingerprint the draft was based on when first dirtied (optional). */
   baseEditorFingerprint: string
+  baseSnapshot?: MindMapEditorState
   /** Stable content serialization used to detect equality with server state. */
   contentFingerprint: string
   changeVersion: number
@@ -52,9 +53,15 @@ async function withStore<T>(
     const transaction = db.transaction(STORE_NAME, mode)
     const store = transaction.objectStore(STORE_NAME)
     const request = action(store)
-    request.onsuccess = () => resolve(request.result)
     request.onerror = () => reject(request.error ?? new Error('Mindmap draft store request failed'))
-    transaction.oncomplete = () => db.close()
+    transaction.oncomplete = () => {
+      db.close()
+      resolve(request.result)
+    }
+    transaction.onabort = () => {
+      db.close()
+      reject(transaction.error ?? new Error('Mindmap draft store transaction aborted'))
+    }
     transaction.onerror = () => {
       db.close()
       reject(transaction.error ?? new Error('Mindmap draft store transaction failed'))
@@ -87,6 +94,7 @@ export async function writeMindMapEditorDraft(input: {
   resourceKey: string
   snapshot: MindMapEditorState
   baseEditorFingerprint?: string
+  baseSnapshot?: MindMapEditorState
   changeVersion: number
   contentFingerprint?: string
 }): Promise<MindMapEditorDraftRecord> {
@@ -94,6 +102,7 @@ export async function writeMindMapEditorDraft(input: {
     resourceKey: input.resourceKey,
     snapshot: input.snapshot,
     baseEditorFingerprint: input.baseEditorFingerprint ?? '',
+    baseSnapshot: input.baseSnapshot,
     contentFingerprint:
       input.contentFingerprint ?? stableMindMapEditorContentFingerprint(input.snapshot),
     changeVersion: input.changeVersion,
@@ -125,6 +134,31 @@ export async function clearMindMapEditorDraft(resourceKey: string): Promise<void
   } else {
     memoryStore.delete(resourceKey)
   }
+}
+
+export interface MindMapEditorConflict {
+  ownerId: number
+  operationId: number
+  localSnapshot: MindMapEditorState
+  remoteSnapshot: MindMapEditorState | null
+  baselineSnapshot?: MindMapEditorState
+  baseEditorFingerprint: string
+  remoteEditorFingerprint: string
+  reason: 'draft-base-mismatch' | 'save-conflict'
+}
+
+/** An independent recovery record: clearing the active draft never removes either version. */
+export async function archiveMindMapEditorConflict(
+  resourceKey: string,
+  conflict: MindMapEditorConflict,
+): Promise<void> {
+  const record = {
+    resourceKey: `${resourceKey}:conflict:${conflict.operationId}:${nowIso()}`,
+    ...JSON.parse(JSON.stringify(conflict)) as MindMapEditorConflict,
+    updatedAt: nowIso(),
+  }
+  const result = await withStore('readwrite', (store) => store.put(record))
+  if (result === null) throw new Error('无法持久保存冲突双方快照，请恢复浏览器本地存储后重试。')
 }
 
 export async function resetMindMapEditorDraftStoreForTest(): Promise<void> {

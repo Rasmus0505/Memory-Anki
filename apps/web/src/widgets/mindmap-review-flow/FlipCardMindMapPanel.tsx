@@ -74,6 +74,8 @@ type FlipCardSurfaceExtensions = Pick<
 export interface FlipCardMindMapPanelProps extends FlipCardSurfaceExtensions {
   fullscreen: boolean
   displayMode?: 'review' | 'edit'
+  /** Host persistence conflict locks editing without changing the current view. */
+  editorReadonly?: boolean
   sessionKind?: 'review' | 'practice'
   modeSyncVersion?: number
   viewMemoryScope?: string | null
@@ -158,6 +160,7 @@ export interface FlipCardMindMapPanelProps extends FlipCardSurfaceExtensions {
 export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipCardMindMapPanelProps>(function FlipCardMindMapPanel({
   fullscreen,
   displayMode = 'review',
+  editorReadonly = false,
   sessionKind = 'practice',
   modeSyncVersion = 0,
   viewMemoryScope = null,
@@ -544,7 +547,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
         ref={frameRef}
         editorState={frameEditorState}
         presentationStrategy={resolvedPresentationStrategy}
-        readonly={!isEditMode}
+        readonly={!isEditMode || editorReadonly}
         practiceModeActive={!isEditMode}
         forceExpanded={isEditMode && forceExpanded}
         revealCollapsedNodeIds={isEditMode ? revealCollapsedNodeIds : null}

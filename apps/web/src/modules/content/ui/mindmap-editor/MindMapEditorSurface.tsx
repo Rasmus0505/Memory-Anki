@@ -9,6 +9,9 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react'
 import type { MindMapEditorState } from '@/shared/api/contracts'
+import { ArticleWorkspace } from './article/ArticleWorkspace'
+import { ArticleViewSwitch, type DocumentView } from './article/ArticleViewSwitch'
+import { readArticleViewPreference, resolveArticleOwner, writeArticleViewPreference } from './article/articleViewPreference'
 import {
   MindMapCanvas,
   mindMapSceneChromeClassName,
@@ -62,6 +65,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   forceExpanded = false,
   revealCollapsedNodeIds = null,
   scopeBranchUid = null,
+  viewMemoryScope = null,
   immersiveModeActive = false,
   englishInteractionActive = false,
   onEnglishWordClick,
@@ -117,6 +121,10 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   onUiClearedChange,
   onReady,
 }: MindMapEditorSurfaceProps, ref) {
+  const articleOwnerId = resolveArticleOwner(viewMemoryScope)
+  const [viewState, setViewState] = useState(() => ({ owner: articleOwnerId, view: readArticleViewPreference(articleOwnerId) }))
+  const documentView = viewState.owner === articleOwnerId ? viewState.view : readArticleViewPreference(articleOwnerId)
+  const setDocumentView = (view: DocumentView) => setViewState({ owner: articleOwnerId, view })
   const frameRef = useRef<HTMLDivElement | null>(null)
   const [interaction, setInteraction] = useState<MindMapInteractionState>({ mode: 'idle' })
   const interactionRef = useRef<MindMapInteractionState>(interaction)
@@ -650,6 +658,12 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
     toggleCanvasFullscreen,
     toggleViewportFullscreen,
   ])
+  const switchDocumentView = (view: DocumentView) => {
+    commitEditingDraft()
+    setDocumentView(view)
+    writeArticleViewPreference(articleOwnerId, view)
+  }
+  const viewSwitch = <ArticleViewSwitch value={documentView} onChange={switchDocumentView} />
   const canvas = (
     <WidgetErrorBoundary label="思维导图">
       <MindMapCanvas
@@ -668,7 +682,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
         focusMode={nativeFullscreenActive}
         presentationMode={delegateFullscreenToHost ? (immersiveModeActive ? 'viewport' : 'embedded') : fullscreen.mode}
         showSystemFullscreenControl={showSystemFullscreenControl}
-        showToolbar={!uiCleared} toolbarContent={toolbarContent} toolbarCenterContent={toolbarCenterContent}
+        showToolbar={!uiCleared} toolbarContent={toolbarContent} toolbarCenterContent={<>{viewSwitch}{toolbarCenterContent}</>}
         mobileViewPolicy={mobileViewPolicy}
         nodeClickViewportPolicy={resolvedNodeClickViewportPolicy}
         contentChangeViewportPolicy={resolvedContentChangeViewportPolicy}
@@ -711,7 +725,20 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
           {sceneLabel}
         </span>
       ) : null}
-      {canvas}
+      {documentView === 'mindmap' && <div className="absolute left-2 top-2 z-30 sm:hidden">{viewSwitch}</div>}
+      <div className="h-full w-full" hidden={documentView !== 'mindmap'}>{canvas}</div>
+      <div className="h-full w-full" hidden={documentView !== 'article'}><ArticleWorkspace
+        key={articleOwnerId ?? viewMemoryScope ?? 'unscoped'} active={documentView === 'article'} focusRequestUid={focusRequestNodeUid} focusRequestNonce={focusRequestNonce} ownerId={articleOwnerId} document={normalizedEditorDoc} canEdit={canEdit} scopeBranchUid={scopeBranchUid}
+        selectedUid={selectedNodeId} toolbar={<>{viewSwitch}<div className="article-host-toolbar">{toolbarContent}{toolbarCenterContent}</div></>}
+        fullscreen={delegateFullscreenToHost ? immersiveModeActive : fullscreen.active}
+        onToggleFullscreen={fullscreen.mode === 'native' && !delegateFullscreenToHost ? handleSystemFullscreenToggle : handleWebpageFullscreenToggle}
+        canUndo={canUndo} canRedo={canRedo} onUndo={undoEditorDoc} onRedo={redoEditorDoc}
+        getDocument={getCurrentEditorDoc} onCommit={commitEditorDoc} onSelect={selectNode} onActivate={activateNode}
+        onLocate={(uid) => { setDocumentView('mindmap'); requestFocusNode(uid) }}
+        onDelete={handleDeleteNode} buildActions={buildNodeActions} onCountBadgeClick={onCountBadgeClick}
+        revealMap={practiceModeActive ? revealMap : undefined} onReveal={activateNode} decorations={graphOptions} selectionActions={buildSelectionToolbarActions}
+        countByUid={Object.fromEntries(Object.entries(graphOptions.countBadgeByNodeUid ?? {}).map(([uid, badges]) => [uid, badges.reduce((sum, badge) => sum + (Number.parseInt(badge.text, 10) || 0), 0)]))}
+      /></div>
       {frameOverlay}
     </div>
   )

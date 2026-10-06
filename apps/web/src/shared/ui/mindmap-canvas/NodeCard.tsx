@@ -5,6 +5,7 @@ import {
   useState,
   type KeyboardEvent,
   type MouseEvent,
+  type PointerEvent,
 } from 'react'
 import {
   Handle,
@@ -34,6 +35,7 @@ import {
   EDIT_BLUR_GUARD_MS,
   EDIT_FOCUS_RETRY_DELAYS_MS,
   MEASURE_DELTA_PX,
+  consumeCardDoubleClick,
   getElementFeedbackPoint,
   getMouseFeedbackPoint,
   placeContentEditableCaret,
@@ -59,6 +61,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   const plainLabel = stripMindMapHtml(nodeData.label) || nodeData.label || ''
   const [localEdit, setLocalEdit] = useState(false)
   const [editText, setEditText] = useState(rawNodeText)
+  const [imeComposing, setImeComposing] = useState(false)
   const shellRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLDivElement>(null)
   /** Delay single-click fold so double-click can expand subtree without a toggle race. */
@@ -72,8 +75,6 @@ function MindMapNodeCard({ data, id }: NodeProps) {
     ? Boolean(nodeData.editing) || localEdit
     : localEdit
   const editValue = editText
-  const measureText = stripMindMapHtml(isEditing ? editValue : plainLabel) || plainLabel
-  const nodeSize = getNodeSize(layoutRole, measureText)
   const readonly = Boolean(nodeData.readonly)
   const onMeasure = nodeData.onMeasure
   const wasEditingRef = useRef(false)
@@ -81,8 +82,40 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   const pendingInputSnapshotRef = useRef<EditSnapshot | null>(null)
   const compositionStartSnapshotRef = useRef<EditSnapshot | null>(null)
   const isComposingRef = useRef(false)
+  /** Edit sessions may grow, but deleting must not shrink the shell until commit. */
+  const editWidthFloorRef = useRef(0)
+  const editSessionOpenRef = useRef(false)
+  // Opening frame must size from the text the effect will seed, not a leftover draft.
+  const openingEdit = isEditing && !editSessionOpenRef.current
+  const draftSource = openingEdit
+    ? (typeof nodeData.editText === 'string' ? nodeData.editText : rawNodeText)
+    : editValue
+  const measureText = stripMindMapHtml(isEditing ? draftSource : plainLabel) || plainLabel
+  const fittedSize = getNodeSize(layoutRole, measureText)
+  if (!isEditing) {
+    editSessionOpenRef.current = false
+    editWidthFloorRef.current = 0
+  } else if (openingEdit) {
+    editSessionOpenRef.current = true
+    editWidthFloorRef.current = getNodeSize(layoutRole, plainLabel).width
+  }
+  const composing = isEditing && (imeComposing || isComposingRef.current)
+  if (isEditing && !composing) {
+    editWidthFloorRef.current = Math.max(editWidthFloorRef.current, fittedSize.width)
+  }
+  const nodeSize = isEditing
+    ? getNodeSize(
+        layoutRole,
+        measureText,
+        composing
+          ? { minWidth: editWidthFloorRef.current, maxWidth: editWidthFloorRef.current }
+          : { minWidth: editWidthFloorRef.current },
+      )
+    : fittedSize
   const editSessionClosedRef = useRef(false)
   const editStartedAtRef = useRef(0)
+  /** Collapse click+dblclick of one gesture so edit-start sound does not double-fire. */
+  const lastEditGestureAtRef = useRef(0)
   /** True between optimistic startEdit and parent `editing=true` confirmation. */
   const optimisticEditPendingRef = useRef(false)
   const extract = useMindMapExtractDrag({
@@ -205,6 +238,8 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   useLayoutEffect(() => {
     if (!isEditing) {
       wasEditingRef.current = false
+      isComposingRef.current = false
+      setImeComposing(false)
       return undefined
     }
 
@@ -309,9 +344,16 @@ function MindMapNodeCard({ data, id }: NodeProps) {
     [id, nodeData, readonly],
   )
 
-  const handleDoubleClick = useCallback(
+  const openFromDoubleClick = useCallback(
     (event: MouseEvent) => {
       if (textInteractionActive) return
+      const now = Date.now()
+      if (now - lastEditGestureAtRef.current < 80) {
+        event.preventDefault()
+        event.stopPropagation()
+        return
+      }
+      lastEditGestureAtRef.current = now
       event.preventDefault()
       event.stopPropagation()
       if (readonly) {
@@ -321,6 +363,37 @@ function MindMapNodeCard({ data, id }: NodeProps) {
       startEdit(event)
     },
     [id, nodeData, readonly, startEdit, textInteractionActive],
+  )
+
+  const handleDoubleClick = openFromDoubleClick
+
+  const handleShellPointerDown = useCallback(
+    (event: PointerEvent<HTMLDivElement>) => {
+      longPress.handlePointerDown(event)
+      if (textInteractionActive || event.ctrlKey || event.metaKey) return
+      // Touch keeps the long-press menu. Mouse (and test events that omit the
+      // fields) count presses here because Chrome drops dblclick on select-none text.
+      const pointerType = event.pointerType || 'mouse'
+      const button = event.button ?? 0
+      if (pointerType !== 'mouse' || button !== 0) return
+      // Yellow emphasis fills the face, so only the empty padding — usually the
+      // bottom-right corner — used to produce a real dblclick.
+      const timedFollowUp = consumeCardDoubleClick(id)
+      const followUp = event.detail > 1 || timedFollowUp
+      if (!followUp) return
+      event.preventDefault()
+      event.stopPropagation()
+      openFromDoubleClick(event)
+    },
+    [id, longPress, openFromDoubleClick, textInteractionActive],
+  )
+
+  const handleShellClick = useCallback(
+    (event: MouseEvent) => {
+      if (textInteractionActive || event.ctrlKey || event.metaKey || event.detail <= 1) return
+      openFromDoubleClick(event)
+    },
+    [openFromDoubleClick, textInteractionActive],
   )
 
   const stopTextModeCardClick = useCallback((event: MouseEvent) => {
@@ -513,11 +586,13 @@ function MindMapNodeCard({ data, id }: NodeProps) {
 
   const handleCompositionStart = useCallback(() => {
     isComposingRef.current = true
+    setImeComposing(true)
     compositionStartSnapshotRef.current = readEditorSnapshot()
   }, [readEditorSnapshot])
 
   const handleCompositionEnd = useCallback(() => {
     isComposingRef.current = false
+    setImeComposing(false)
     const input = inputRef.current
     if (!input) return
     const nextValue = serializeContentEditable(input)
@@ -567,15 +642,22 @@ function MindMapNodeCard({ data, id }: NodeProps) {
     ...(markFill ? { backgroundColor: markFill } : {}),
   }
   const borderStyle = Object.keys(shellStyle).length > 0 ? shellStyle : undefined
-  // Editing reuses the display card box (same border/padding), so width never changes.
+  // Editing reuses the display card chrome. Width may grow with the draft, but a
+  // delete or an open IME composition must not shrink or jump the shell.
   const shellWidth = nodeSize.width
 
   return (
     <div
       ref={shellRef}
-      onClick={textSelectionModeActive ? stopTextModeCardClick : undefined}
+      onClick={
+        textSelectionModeActive
+          ? stopTextModeCardClick
+          : textInteractionActive
+            ? undefined
+            : handleShellClick
+      }
       onDoubleClick={textInteractionActive ? undefined : handleDoubleClick}
-      onPointerDown={longPress.handlePointerDown}
+      onPointerDown={textInteractionActive ? longPress.handlePointerDown : handleShellPointerDown}
       onPointerMove={longPress.handlePointerMove}
       onPointerUp={longPress.finishPointerInteraction}
       onPointerCancel={longPress.finishPointerInteraction}
@@ -770,6 +852,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
           <NodeCardTextFace
             textCls={textCls}
             displayHtml={displayHtml}
+            articleBody={metadata.articleBody}
             concealed={concealed}
             label={plainLabel}
             isRoot={isRoot}

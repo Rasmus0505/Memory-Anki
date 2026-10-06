@@ -2,6 +2,7 @@ import * as React from 'react'
 import { fireEvent, render } from '@testing-library/react'
 import { vi } from 'vitest'
 import NodeCard from '@/shared/ui/mindmap-canvas/NodeCard'
+import { resetCardDoubleClickTracking } from '@/shared/ui/mindmap-canvas/nodeCardModel'
 
 export function setEditorText(editor: HTMLElement, value: string) {
   // Simulate a pre-input snapshot + contenteditable mutation.
@@ -50,6 +51,7 @@ export function renderNodeCard(
   wrapperOnClick?: () => void,
   wrapperOnContextMenu?: () => void,
 ) {
+  resetCardDoubleClickTracking()
   const onFinishEdit = vi.fn()
   const nodeCard = (
     <NodeCard

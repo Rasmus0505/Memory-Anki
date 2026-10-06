@@ -97,6 +97,7 @@ export function usePalaceEditorDocument({
     setEditorState,
     replaceEditorState,
     adoptExternalState,
+    readCurrentState,
     isLoadError,
     isSaving,
     hasUnsavedChanges,
@@ -104,6 +105,8 @@ export function usePalaceEditorDocument({
     error,
     reload,
     flushSave,
+    pendingConflict,
+    resolveConflict,
   } = useMindMapDocumentSession({
     entityId: palaceId,
     adapter: {
@@ -288,6 +291,7 @@ export function usePalaceEditorDocument({
 
   const applyImportedPalaceEditorState = useCallback(
     async (nextState: MindMapEditorState, context?: ImportApplyContext) => {
+      if (pendingConflict) throw new Error('请先解决文档版本冲突，再导入内容。')
       if (!palaceId) {
         throw new Error('当前还没有稳定的宫殿标识，暂时无法应用导入结果。')
       }
@@ -365,6 +369,7 @@ export function usePalaceEditorDocument({
       editorState,
       flushSave,
       moveImportApplyGuardToAwaitingSync,
+      pendingConflict,
       palaceId,
       releaseImportApplyGuard,
       reload,
@@ -411,6 +416,11 @@ export function usePalaceEditorDocument({
     setMeta,
     editorState,
     setEditorState,
+    readCurrentState,
+    adoptArticleTransferState: (state: MindMapEditorState) => {
+      adoptExternalState(state, { protectFromStaleLoads: true, releaseAfterMs: 4000 })
+      setReplaceSyncVersion((value) => value + 1)
+    },
     isLoadError,
     isSaving,
     hasUnsavedChanges,
@@ -418,6 +428,12 @@ export function usePalaceEditorDocument({
     error,
     reload,
     flushSave,
+    pendingConflict,
+    resolveConflict: async (resolution: Parameters<typeof resolveConflict>[0]) => {
+      const accepted = await resolveConflict(resolution)
+      if (accepted) setReplaceSyncVersion((value) => value + 1)
+      return accepted
+    },
     flushSaveWithReconcile,
     armNextSaveOverride,
     isCreatingDraft,

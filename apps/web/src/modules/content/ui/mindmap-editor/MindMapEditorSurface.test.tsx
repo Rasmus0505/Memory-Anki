@@ -1,5 +1,5 @@
 import { createRef } from 'react'
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MindMapEditorSurface, type MindMapEditorSurfaceHandle } from './MindMapEditorSurface'
 import type { MindMapEditorState } from '@/shared/api/contracts'
@@ -321,15 +321,15 @@ describe('MindMapEditorSurface native host', () => {
       />,
     )
 
-    await screen.findByTitle('进入全屏')
+    await within(screen.getByTestId('mindmap-canvas-frame')).findByTitle('进入全屏')
     await act(async () => {
-      fireEvent.click(screen.getByTitle('进入全屏'))
+      fireEvent.click(within(screen.getByTestId('mindmap-canvas-frame')).getByTitle('进入全屏'))
     })
 
     expect(onFullscreenToggle).not.toHaveBeenCalled()
     expect(requestFullscreen).not.toHaveBeenCalled()
     expect(screen.getByTestId('mindmap-frame-native').dataset.presentationMode).toBe('viewport')
-    expect(screen.getByTitle('退出全屏')).toBeTruthy()
+    expect(within(screen.getByTestId('mindmap-canvas-frame')).getByTitle('退出全屏')).toBeTruthy()
   })
 
   it('delegates both canvas fullscreen controls to an immersive host', async () => {
@@ -349,9 +349,9 @@ describe('MindMapEditorSurface native host', () => {
       />,
     )
 
-    await screen.findByTitle('进入全屏')
+    await within(screen.getByTestId('mindmap-canvas-frame')).findByTitle('进入全屏')
     await act(async () => {
-      fireEvent.click(screen.getByTitle('进入全屏'))
+      fireEvent.click(within(screen.getByTestId('mindmap-canvas-frame')).getByTitle('进入全屏'))
     })
 
     expect(onFullscreenToggle).toHaveBeenCalledTimes(1)

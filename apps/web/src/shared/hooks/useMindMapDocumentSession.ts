@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef } from 'react'
 import type { MindMapEditorState } from '@/shared/api/contracts'
-import { createMindMapSessionState, mindMapSessionReducer } from '@/shared/lib/mindmapDocumentSessionModel'
+import { createMindMapSessionState, mindMapSessionReducer, stableSerialize, getEditorFingerprint, isConflictError } from '@/shared/lib/mindmapDocumentSessionModel'
 import {
   buildMindMapEditorDraftKey,
   clearMindMapEditorDraft,
@@ -9,14 +9,13 @@ import {
   writeMindMapEditorDraft,
 } from '@/shared/persistence/mindmapEditorDraftStore'
 import { createSavePromiseTracker, type MindMapFlushSaveOptions } from '@/shared/hooks/mindMapDocumentSaveQueue'
-
+import { useMindMapDocumentConflict } from './mindMapDocumentConflict'
 export interface MindMapPersistenceAdapter<TResponse, TMeta> {
   load: (id: number) => Promise<TResponse>
   save: (id: number, data: PersistedMindMapSavePayload) => Promise<TResponse>
   selectMeta: (response: TResponse) => TMeta
   selectEditorState: (response: TResponse) => MindMapEditorState
 }
-
 interface MindMapDocumentSessionOptions<TResponse, TMeta> {
   entityId: number | null
   loadCacheKey?: string
@@ -28,40 +27,20 @@ interface MindMapDocumentSessionOptions<TResponse, TMeta> {
   onSaveError?: (error: Error, pendingState: MindMapEditorState) => Promise<boolean> | boolean
   beforeAutoSave?: (nextState: MindMapEditorState, currentState: MindMapEditorState | null) => string | null
 }
-
 type PersistedMindMapSavePayload = MindMapEditorState & {
   expected_editor_fingerprint?: string | null
 }
-
 interface ExternalStateGuard {
   expectedFingerprint: string
   releaseAt: number
 }
-
 interface AdoptExternalStateOptions {
   protectFromStaleLoads?: boolean
   releaseAfterMs?: number
 }
-
 export type PersistedMindMapSaveStatus = 'saved' | 'saving' | 'unsaved' | 'error'
-
 const inflightEditorLoads = new Map<string, Promise<unknown>>()
 const AUTO_SAVE_DEBOUNCE_MS = 800
-
-function stableSerialize(value: unknown) {
-  try {
-    return JSON.stringify(value) ?? ''
-  } catch {
-    return ''
-  }
-}
-
-function getEditorFingerprint(state: MindMapEditorState | null | undefined) {
-  return typeof state?.editor_fingerprint === 'string' && state.editor_fingerprint.trim()
-    ? state.editor_fingerprint.trim()
-    : ''
-}
-
 /** Ignore revision-token rotation when deciding whether the canvas needs a sync. */
 function sameEditorContent(
   left: MindMapEditorState | null | undefined,
@@ -69,11 +48,6 @@ function sameEditorContent(
 ) {
   return stableMindMapEditorContentFingerprint(left) === stableMindMapEditorContentFingerprint(right)
 }
-
-function isConflictError(error: Error) {
-  return /冲突|fingerprint|stale|服务端已有更新/.test(error.message)
-}
-
 export function useMindMapDocumentSession<TResponse, TMeta>({
   entityId,
   loadCacheKey = 'persisted-mindmap',
@@ -111,8 +85,8 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
   const replaceEditorState = useCallback((nextState: MindMapEditorState | null) => {
     dispatch({ type: 'editor-replaced', editorState: nextState })
   }, [])
-
   const editorStateRef = useRef<MindMapEditorState | null>(null)
+  const baselineSnapshotRef = useRef<MindMapEditorState | undefined>(undefined)
   const dirtyRef = useRef(false)
   const dirtyOwnerIdRef = useRef<number | null>(null)
   const pendingSnapshotRef = useRef<{
@@ -137,7 +111,6 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
   const loadRequestIdRef = useRef(0)
   const saveOperationIdRef = useRef(0)
   const externalStateGuardRef = useRef<ExternalStateGuard | null>(null)
-
   type SaveOperation = {
     ownerId: number
     operationId: number
@@ -150,7 +123,6 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
     selectEditorState: (response: TResponse) => MindMapEditorState
     onSaveError?: (error: Error, pendingState: MindMapEditorState) => Promise<boolean> | boolean
   }
-
   const activeSaveOperationRef = useRef<SaveOperation | null>(null)
   const saveTrackerRef = useRef(createSavePromiseTracker())
   const retryPersistRef = useRef<(operation: SaveOperation) => void>(() => {})
@@ -158,7 +130,6 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
   const enqueuePersistRef = useRef<(operation: SaveOperation) => Promise<void>>(() => Promise.resolve())
   /** When beforeAutoSave blocks a version, keep local UI but skip network for that version. */
   const networkSaveBlockedVersionRef = useRef<number | null>(null)
-
   editorStateRef.current = editorState
   entityIdRef.current = entityId
   loadCacheKeyRef.current = loadCacheKey
@@ -168,18 +139,15 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
   selectEditorStateRef.current = selectEditorState
   onSaveErrorRef.current = onSaveError
   beforeAutoSaveRef.current = beforeAutoSave
-
   useEffect(() => {
     isMountedRef.current = true
     return () => {
       isMountedRef.current = false
     }
   }, [])
-
   const draftKeyFor = useCallback((ownerId: number) => {
     return buildMindMapEditorDraftKey(loadCacheKeyRef.current, ownerId)
   }, [])
-
   const persistLocalDraft = useCallback((
     ownerId: number,
     snapshot: MindMapEditorState,
@@ -189,15 +157,34 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
       resourceKey: draftKeyFor(ownerId),
       snapshot,
       baseEditorFingerprint: lastSavedEditorFingerprintRef.current,
+      baseSnapshot: baselineSnapshotRef.current,
       changeVersion: saveVersion,
       contentFingerprint: stableMindMapEditorContentFingerprint(snapshot),
     })
   }, [draftKeyFor])
-
   const clearLocalDraft = useCallback((ownerId: number) => {
     void clearMindMapEditorDraft(draftKeyFor(ownerId))
   }, [draftKeyFor])
-
+  const applyConflictResolution = useCallback((snapshot: MindMapEditorState, remote: MindMapEditorState, dirty: boolean) => {
+    const ownerId = entityIdRef.current
+    if (ownerId == null) return
+    const next = { ...snapshot, editor_fingerprint: getEditorFingerprint(remote) }
+    baselineSnapshotRef.current = remote
+    lastSavedEditorFingerprintRef.current = getEditorFingerprint(remote)
+    lastStateFingerprintRef.current = stableSerialize(next)
+    editorStateRef.current = next
+    dirtyRef.current = dirty
+    dirtyOwnerIdRef.current = dirty ? ownerId : null
+    changeVersionRef.current += 1
+    pendingSnapshotRef.current = dirty ? { ownerId, snapshot: next, saveVersion: changeVersionRef.current } : null
+    dispatch({ type: 'external-state-adopted', editorState: next })
+    if (dirty) {
+      dispatch({ type: 'editor-changed', editorState: next })
+      persistLocalDraft(ownerId, next, changeVersionRef.current)
+      timerRef.current = window.setTimeout(() => flushCurrentSaveRef.current(), 0)
+    } else clearLocalDraft(ownerId)
+  }, [clearLocalDraft, persistLocalDraft])
+  const { pendingConflict, conflictRef, publishConflict, resolveConflict } = useMindMapDocumentConflict(entityId, draftKeyFor, applyConflictResolution)
   const isCurrentLoadRequest = useCallback((requestId: number, requestEntityId: number) => {
     return (
       isMountedRef.current &&
@@ -205,7 +192,6 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
       entityIdRef.current === requestEntityId
     )
   }, [])
-
   const isActiveSaveOperation = useCallback((operation: SaveOperation) => {
     const activeOperation = activeSaveOperationRef.current
     return (
@@ -213,7 +199,6 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
       && activeOperation.operationId === operation.operationId
     )
   }, [])
-
   /** UI-facing: only apply reducer updates while mounted on the same owner. */
   const canPublishSaveToSession = useCallback((operation: SaveOperation) => {
     return (
@@ -222,25 +207,21 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
       && isActiveSaveOperation(operation)
     )
   }, [isActiveSaveOperation])
-
   const clearTimer = () => {
     if (timerRef.current != null) {
       window.clearTimeout(timerRef.current)
       timerRef.current = null
     }
   }
-
   const releaseExternalStateGuard = useCallback(() => {
     externalStateGuardRef.current = null
   }, [])
-
   const armExternalStateGuard = useCallback((nextState: MindMapEditorState, releaseAfterMs = 4000) => {
     externalStateGuardRef.current = {
       expectedFingerprint: stableSerialize(nextState),
       releaseAt: Date.now() + releaseAfterMs,
     }
   }, [])
-
   const shouldIgnoreIncomingState = useCallback((nextState: MindMapEditorState) => {
     const guard = externalStateGuardRef.current
     if (!guard) return false
@@ -255,9 +236,9 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
     }
     return true
   }, [])
-
   const adoptExternalState = useCallback(
     (nextState: MindMapEditorState, options?: AdoptExternalStateOptions) => {
+      if (conflictRef.current?.ownerId === entityIdRef.current) return
       clearTimer()
       dirtyRef.current = false
       dirtyOwnerIdRef.current = null
@@ -265,6 +246,7 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
       dispatch({ type: 'external-state-adopted', editorState: nextState })
       const nextFingerprint = stableSerialize(nextState)
       lastStateFingerprintRef.current = nextFingerprint
+      baselineSnapshotRef.current = nextState
       lastSavedEditorFingerprintRef.current = getEditorFingerprint(nextState)
       if (entityIdRef.current != null) {
         clearLocalDraft(entityIdRef.current)
@@ -273,9 +255,8 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
         armExternalStateGuard(nextState, options.releaseAfterMs)
       }
     },
-    [armExternalStateGuard, clearLocalDraft],
+    [armExternalStateGuard, clearLocalDraft, conflictRef],
   )
-
   const createSaveOperation = useCallback((
     ownerId: number,
     snapshot: MindMapEditorState,
@@ -296,7 +277,6 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
       onSaveError: onSaveErrorRef.current,
     }
   }, [])
-
   const persistOperation = useCallback(
     async (operation: SaveOperation) => {
       if (!isActiveSaveOperation(operation)) return
@@ -332,6 +312,7 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
         if (isActiveSaveOperation(operation)) {
           const nextEditorState = operation.selectEditorState(response)
           if (!shouldIgnoreIncomingState(nextEditorState)) {
+            baselineSnapshotRef.current = { ...operation.snapshot, editor_fingerprint: getEditorFingerprint(nextEditorState) }
             lastSavedEditorFingerprintRef.current = getEditorFingerprint(nextEditorState)
             const hasNewerChanges = changeVersionRef.current !== operation.saveVersion
             if (!hasNewerChanges) {
@@ -362,6 +343,25 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
       } catch (err) {
         if (isActiveSaveOperation(operation)) {
           const nextError = err instanceof Error ? err : new Error('Failed to save editor')
+          if (isConflictError(nextError) && canPublishSaveToSession(operation)) {
+            clearTimer()
+            const localSnapshot = pendingSnapshotRef.current?.ownerId === operation.ownerId
+              ? pendingSnapshotRef.current.snapshot : operation.snapshot
+            dirtyRef.current = true
+            dirtyOwnerIdRef.current = operation.ownerId
+            const conflict = publishConflict({ ownerId: operation.ownerId, localSnapshot, baselineSnapshot: baselineSnapshotRef.current,
+              remoteSnapshot: null, baseEditorFingerprint: operation.expectedEditorFingerprint,
+              remoteEditorFingerprint: '', reason: 'save-conflict' })
+            dispatch({ type: 'save-failed', ownerId: operation.ownerId, operationId: operation.operationId,
+              dirty: true, conflicted: true, error: nextError.message })
+            try {
+              const response = await fetcherRef.current(operation.ownerId)
+              if (!canPublishSaveToSession(operation) || conflictRef.current !== conflict) return
+              const remoteSnapshot = operation.selectEditorState(response)
+              publishConflict({ ...conflict, remoteSnapshot, remoteEditorFingerprint: getEditorFingerprint(remoteSnapshot) })
+            } catch { /* Keep the local snapshot and expose an unresolved conflict if reload fails. */ }
+            return
+          }
           let handled = false
           if (operation.onSaveError && canPublishSaveToSession(operation)) {
             handled = await operation.onSaveError(nextError, operation.snapshot)
@@ -458,6 +458,8 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
     },
     [
       canPublishSaveToSession,
+      conflictRef,
+      publishConflict,
       clearLocalDraft,
       createSaveOperation,
       isActiveSaveOperation,
@@ -465,13 +467,11 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
       shouldIgnoreIncomingState,
     ],
   )
-
   enqueuePersistRef.current = (operation) =>
     saveTrackerRef.current.track(() => persistOperation(operation))
   retryPersistRef.current = (operation) => {
     void enqueuePersistRef.current(operation)
   }
-
   const load = useCallback(async (options?: { force?: boolean }) => {
     const requestId = loadRequestIdRef.current + 1
     loadRequestIdRef.current = requestId
@@ -502,13 +502,17 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
       if (shouldIgnoreIncomingState(nextEditorState)) {
         return
       }
-
       // Never let a reload replace a locally dirty or in-flight canvas with an older server snapshot.
       const hasLocalWorkForOwner =
         (dirtyRef.current && dirtyOwnerIdRef.current === entityId)
         || pendingSnapshotRef.current?.ownerId === entityId
         || activeSaveOperationRef.current?.ownerId === entityId
       if (hasLocalWorkForOwner) {
+        const conflict = conflictRef.current
+        if (conflict?.ownerId === entityId) {
+          publishConflict({ ...conflict, remoteSnapshot: nextEditorState,
+            remoteEditorFingerprint: getEditorFingerprint(nextEditorState) })
+        }
         dispatch({
           type: 'load-local-state-preserved',
           ownerId: entityId,
@@ -517,14 +521,18 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
         })
         return
       }
-
       const serverContentFingerprint = stableMindMapEditorContentFingerprint(nextEditorState)
       const draft = await readMindMapEditorDraft(draftKeyFor(entityId))
+      if (!isCurrentLoadRequest(requestId, entityId)) return
+      if (dirtyOwnerIdRef.current === entityId || pendingSnapshotRef.current?.ownerId === entityId) {
+        dispatch({ type: 'load-local-state-preserved', ownerId: entityId, operationId: requestId,
+          meta: selectMetaRef.current(response) })
+        return
+      }
       const shouldRecoverDraft =
         draft != null
         && draft.contentFingerprint !== ''
         && draft.contentFingerprint !== serverContentFingerprint
-
       changeVersionRef.current = shouldRecoverDraft ? Math.max(1, draft.changeVersion || 1) : 0
       dirtyRef.current = shouldRecoverDraft
       dirtyOwnerIdRef.current = shouldRecoverDraft ? entityId : null
@@ -535,7 +543,13 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
             saveVersion: changeVersionRef.current,
           }
         : null
-      lastSavedEditorFingerprintRef.current = getEditorFingerprint(nextEditorState)
+      const draftConflicted = shouldRecoverDraft && (!draft.baseEditorFingerprint
+        || draft.baseEditorFingerprint !== getEditorFingerprint(nextEditorState))
+      lastSavedEditorFingerprintRef.current = draftConflicted ? draft.baseEditorFingerprint : getEditorFingerprint(nextEditorState)
+      baselineSnapshotRef.current = draftConflicted ? draft.baseSnapshot : nextEditorState
+      if (draftConflicted) publishConflict({ ownerId: entityId, localSnapshot: draft.snapshot, baselineSnapshot: draft.baseSnapshot,
+        remoteSnapshot: nextEditorState, baseEditorFingerprint: draft.baseEditorFingerprint,
+        remoteEditorFingerprint: getEditorFingerprint(nextEditorState), reason: 'draft-base-mismatch' })
       const adoptedState = shouldRecoverDraft ? draft.snapshot : nextEditorState
       lastStateFingerprintRef.current = shouldRecoverDraft
         ? draft.contentFingerprint
@@ -543,7 +557,6 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
       if (!shouldRecoverDraft && draft) {
         clearLocalDraft(entityId)
       }
-
       dispatch({
         type: 'load-succeeded',
         ownerId: entityId,
@@ -552,10 +565,9 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
         editorState: adoptedState,
       })
       if (shouldRecoverDraft) {
-        // load-succeeded clears dirty; re-mark and push recovered content into the save pipeline.
         dispatch({ type: 'editor-changed', editorState: draft.snapshot })
         clearTimer()
-        timerRef.current = window.setTimeout(() => flushCurrentSaveRef.current(), 0)
+        if (!draftConflicted) timerRef.current = window.setTimeout(() => flushCurrentSaveRef.current(), 0)
       }
     } catch (err) {
       if (!isCurrentLoadRequest(requestId, entityId)) return
@@ -566,27 +578,26 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
         error: err instanceof Error ? err.message : 'Failed to load editor',
       })
     }
-  }, [clearLocalDraft, draftKeyFor, entityId, isCurrentLoadRequest, loadCacheKey, shouldIgnoreIncomingState])
-
+  }, [clearLocalDraft, conflictRef, publishConflict, draftKeyFor, entityId, isCurrentLoadRequest, loadCacheKey, shouldIgnoreIncomingState])
   const reload = useCallback(() => load({ force: true }), [load])
-
   const startSaveForPending = useCallback((
     targetEntityId: number,
     snapshot: MindMapEditorState,
     saveVersion: number,
   ) => {
+    if (conflictRef.current?.ownerId === targetEntityId) return false
     if (activeSaveOperationRef.current?.ownerId === targetEntityId) return false
     if (networkSaveBlockedVersionRef.current === saveVersion) return false
     const operation = createSaveOperation(targetEntityId, snapshot, saveVersion)
     activeSaveOperationRef.current = operation
     void enqueuePersistRef.current(operation)
     return true
-  }, [createSaveOperation])
-
+  }, [conflictRef, createSaveOperation])
   const flushSave = useCallback(async (options?: MindMapFlushSaveOptions) => {
     const saveEntityId = entityIdRef.current
     if (!saveEntityId) return
     await saveTrackerRef.current.wait()
+    if (entityIdRef.current !== saveEntityId || conflictRef.current?.ownerId === saveEntityId) return
     if (!options?.force && (!dirtyRef.current || dirtyOwnerIdRef.current !== saveEntityId)) return
     if (activeSaveOperationRef.current?.ownerId === saveEntityId) return
     const pendingSnapshot = pendingSnapshotRef.current
@@ -602,12 +613,10 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
     const operation = createSaveOperation(saveEntityId, snapshot, saveVersion)
     activeSaveOperationRef.current = operation
     await enqueuePersistRef.current(operation)
-  }, [createSaveOperation, persistLocalDraft])
-
+  }, [conflictRef, createSaveOperation, persistLocalDraft])
   flushCurrentSaveRef.current = () => {
     void flushSave()
   }
-
   const flushPendingForEntity = useCallback(async (targetEntityId: number | null) => {
     if (!targetEntityId || !dirtyRef.current || dirtyOwnerIdRef.current !== targetEntityId) return
     const pendingSnapshot = pendingSnapshotRef.current
@@ -627,8 +636,9 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
     clearTimer()
     startSaveForPending(targetEntityId, snapshot, saveVersion)
   }, [persistLocalDraft, startSaveForPending])
-
   const scheduleSave = useCallback((nextState: MindMapEditorState) => {
+    const conflict = conflictRef.current
+    if (conflict?.ownerId === entityIdRef.current) publishConflict({ ...conflict, localSnapshot: nextState })
     const nextFingerprint = stableSerialize(nextState)
     if (nextFingerprint === lastStateFingerprintRef.current) {
       return
@@ -661,18 +671,14 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
     timerRef.current = window.setTimeout(() => {
       void flushSave()
     }, AUTO_SAVE_DEBOUNCE_MS)
-  }, [flushSave, persistLocalDraft])
-
+  }, [conflictRef, publishConflict, flushSave, persistLocalDraft])
   useEffect(() => {
     let disposed = false
-
     const run = async () => {
       const previousEntityId = previousEntityIdRef.current
       if (previousEntityId !== entityId) {
         await flushPendingForEntity(previousEntityId)
         if (disposed) return
-        // Do not null an in-flight save for the previous owner — let it finish and chain
-        // follow-ups via pendingSnapshot. Local drafts cover hard closes.
         dispatch({ type: 'owner-cleared', ownerId: entityId })
         const pending = pendingSnapshotRef.current
         const keepPendingForInFlight =
@@ -691,36 +697,29 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
       }
       await load()
     }
-
     void run()
-
     return () => {
       disposed = true
       clearTimer()
     }
   }, [entityId, flushPendingForEntity, load])
-
   useEffect(() => {
     const flushWhenHidden = () => {
       if (document.visibilityState === 'hidden') {
         void flushPendingForEntity(previousEntityIdRef.current)
       }
     }
-
     const flushOnPageHide = () => {
       void flushPendingForEntity(previousEntityIdRef.current)
     }
-
     document.addEventListener('visibilitychange', flushWhenHidden)
     window.addEventListener('pagehide', flushOnPageHide)
-
     return () => {
       document.removeEventListener('visibilitychange', flushWhenHidden)
       window.removeEventListener('pagehide', flushOnPageHide)
       void flushPendingForEntity(previousEntityIdRef.current)
     }
   }, [flushPendingForEntity])
-
   const saveStatus: PersistedMindMapSaveStatus = error
     ? 'error'
     : isSaving
@@ -728,7 +727,6 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
       : hasUnsavedChanges
         ? 'unsaved'
         : 'saved'
-
   return {
     meta,
     setMeta,
@@ -746,5 +744,7 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
     error,
     reload,
     flushSave,
+    pendingConflict, resolveConflict,
+    readCurrentState: () => ({ entityId: entityIdRef.current, editorState: editorStateRef.current, revision: lastSavedEditorFingerprintRef.current, dirty: dirtyRef.current, pendingConflict: conflictRef.current }),
   }
 }

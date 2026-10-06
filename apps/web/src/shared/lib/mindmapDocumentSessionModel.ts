@@ -1,4 +1,17 @@
-﻿import type { MindMapEditorState } from '@/shared/api/contracts'
+import type { MindMapEditorState } from '@/shared/api/contracts'
+
+export function stableSerialize(value: unknown) {
+  try { return JSON.stringify(value) ?? '' } catch { return '' }
+}
+
+export function getEditorFingerprint(state: MindMapEditorState | null | undefined) {
+  return typeof state?.editor_fingerprint === 'string' ? state.editor_fingerprint.trim() : ''
+}
+
+export function isConflictError(error: Error) {
+  return ('status' in error && error.status === 409)
+    || /冲突|fingerprint|stale|服务端已有更新/.test(error.message)
+}
 
 export type MindMapSessionStatus = 'idle' | 'loading' | 'ready' | 'saving' | 'conflicted' | 'error'
 

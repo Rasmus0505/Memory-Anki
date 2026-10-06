@@ -24,6 +24,7 @@
 - 折叠状态不写回 editor_doc，仅 canvas 本地；节点数 >= 36 时默认折叠 depth>=1 的有子节点分支；practiceModeActive（复习/练习）强制全展开。
 - 视口 minZoom 降到 0.12 支持鸟瞰；中大图开启 React Flow onlyRenderVisibleElements。
 - 手机策略：`map` / `auto` 允许单指拖移；只有显式 `guided` 才把单指让给父级滚动。随心复习卡使用 `auto`：窄屏只读仍用更紧的 fit/zoom，但画布保持可拖；翻卡走 pager，不靠在图上单指滑动。
+- 鼠标滚轮平移（`panOnScroll`）必须记入受控相机。React Flow 会在 `move-start` 之前上报 viewport；preserve 模式不得把这次上报当成漂移丢掉，否则滚轮会弹回原位、滑不动。
 - Enter reveal follow：随心复习按 Enter 翻出的卡若被画面裁切，画布只做最小平移，把这一步里裁切最多的那张完整推进视野并留边距，保持当前缩放，约 200ms，连按打断上一次动画跟上最新一步。鼠标点卡、Shift 收回和 A/S 批量翻卡不挪视野。
 - **不做** MiniMap、搜索跳转、大纲双栏（宿主可另组）。
 
@@ -69,10 +70,20 @@ schemaVersion, document, editorPreferences, localPreferences, language, revision
 ## 自动保存与关页耐久
 
 - **正式数据只有一份**：服务端对同一 `editor_doc` 就地覆盖；`PalaceVersion` 仍按约 5 分钟节流（最多 50 条），不为每次编辑增殖版本。
-- **编辑即写本地草稿**：`scheduleSave` 将最新快照写入 IndexedDB 草稿槽（key = `loadCacheKey:entityId`，同 key 覆盖）。浏览器关页/杀进程后重开时，若草稿内容与服务端不一致则恢复草稿并立即回写。
+- **编辑即写本地草稿**：`scheduleSave` 将最新快照写入 IndexedDB 草稿槽（key = `loadCacheKey:entityId`，同 key 覆盖），新草稿保留真实基线快照与指纹。恢复时只有草稿基线匹配服务端 revision 才允许自动回写；未知/不匹配基线进入显式冲突并阻止自动与强制保存。异步草稿读取和解决操作都核对 owner/operation。
+- **冲突解决**：`mindMapDocumentConflict` 保留本地、远端及可用基线；选择前必须把双方快照写入独立 IndexedDB 归档并等待事务完成。归档失败不覆盖。共享冲突对话框提供双方摘要、恢复文件下载和保守三方合并；无真实基线或结构/同节点冲突交由显式选择。
 - **HTTP 防抖约 800ms**，单飞保存；在飞期间的后续编辑更新 `pendingSnapshot`；当前保存成功后若仍有更新的 pending，**必须**再发一次（不依赖组件仍 mounted）。宫殿编辑器的自动保存使用轻量 ack，只返回服务端元数据和 revision，当前本地文档不因保存响应而重建。
 - **编辑滚动备份在响应后后台执行**，保存事务先提交并返回；备份失败只记录日志，不影响已成功的编辑保存。启动、周期和关机备份仍保留。
 - **关页**时 `visibilitychange` / `pagehide` 刷新草稿；若无在飞请求则立刻 flush。失败请求仍走既有 `mutationQueue`。
+
+## 文章视图
+
+- `MindMapEditorSurface` 内组合文章与画布，共用 `useMindMapEditHistory`、完整规范文档和宿主保存回调。切换不创建第二份持久化文章。
+- `articleDocument` 纯规则将标题/列表节点投影成文章块，`data.articleBody` 是受限富文本 JSON，正文段落与图片、公式、表格属于节点。旧 text/note 不破坏性迁移；`shared/ui/rich-document` 只负责通用安全渲染。
+- 文章输入由 Tiptap 承载，文档命令拥有 UID、子树移动和关联；删除仍通过宿主 guard，分支范围仍保存完整文档。阅读模式使用轻量渲染，仅活动编辑块挂载编辑器。
+- 导图与文章共用 capability 动作和题目入口。宿主回忆 conceal 状态必须遮挡正文，文章揭晓委托宿主，不私自写学习事实。
+- 视图选择保存浏览器本地，阅读锚点通过独立 cursor API 保存，见 [article-reading-cursor.md](./article-reading-cursor.md)。跨电脑仍遵守外部 Syncthing 单写入设备限制。
+- 文章文件转换、四种导入与附件/题目恢复见 [article-transfer.md](./article-transfer.md)。完整包不是整库备份恢复。
 
 ## 新增能力流程
 
