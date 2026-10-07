@@ -14,7 +14,25 @@ from memory_anki.modules.settings.presentation import router as settings_router
 
 
 class RuntimeInfoTests(unittest.TestCase):
-    def test_resolve_app_home_defaults_to_local_app_home(self):
+    def test_resolve_app_home_falls_back_to_local_config(self):
+        """Without an env override, prefer the configured data directory.
+
+        This is what keeps a manual/bare ``uvicorn`` launch on the real database
+        instead of silently opening the stale ``%LOCALAPPDATA%`` copy.
+        """
+        configured_home = Path("F:/configured-runtime")
+        with patch.dict(os.environ, {}, clear=False), patch.object(
+            config_module,
+            "_configured_app_home",
+            return_value=configured_home,
+        ):
+            os.environ.pop("MEMORY_ANKI_HOME", None)
+            app_home, source = config_module._resolve_app_home()
+
+        self.assertEqual(app_home, configured_home)
+        self.assertEqual(source, "local-config")
+
+    def test_resolve_app_home_defaults_to_local_app_home_without_config(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             default_home = Path(temp_dir) / "MemoryAnki"
             (default_home / "shared-home.txt").parent.mkdir(parents=True, exist_ok=True)
@@ -24,6 +42,10 @@ class RuntimeInfoTests(unittest.TestCase):
                 config_module,
                 "_default_app_home",
                 return_value=default_home,
+            ), patch.object(
+                config_module,
+                "_configured_app_home",
+                return_value=None,
             ):
                 os.environ.pop("MEMORY_ANKI_HOME", None)
                 app_home, source = config_module._resolve_app_home()

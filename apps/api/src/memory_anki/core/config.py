@@ -92,12 +92,33 @@ def _default_app_home() -> Path:
     return default_app_home()
 
 
+def _configured_app_home() -> Path | None:
+    """Resolve ``local_app_home`` from local-config, ignoring resolution errors.
+
+    When the process is started without ``MEMORY_ANKI_HOME`` (a manual
+    ``uvicorn`` launch, a scheduled task, or a tool), falling back to
+    ``%LOCALAPPDATA%\\MemoryAnki`` silently opens a *stale* second database
+    instead of the real one that local-config points at. Prefer the configured
+    path so every entry point agrees on one live database.
+    """
+    try:
+        from memory_anki.core.local_config import load_local_runtime_config
+
+        configured = load_local_runtime_config().local_app_home
+    except Exception:  # noqa: BLE001 - missing/invalid config must not break startup
+        return None
+    return configured if configured is not None else None
+
+
 def _resolve_app_home() -> tuple[Path, str]:
     explicit_home = os.environ.get("MEMORY_ANKI_HOME")
-    if not explicit_home:
-        return _default_app_home(), "default"
-    resolution = resolve_app_home()
-    return resolution.app_home, resolution.source
+    if explicit_home:
+        resolution = resolve_app_home()
+        return resolution.app_home, resolution.source
+    configured = _configured_app_home()
+    if configured is not None:
+        return configured, "local-config"
+    return _default_app_home(), "default"
 
 
 LEGACY_DATA_DIR = REPO_ROOT / "data"

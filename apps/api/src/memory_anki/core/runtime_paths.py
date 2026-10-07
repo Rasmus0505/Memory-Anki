@@ -39,7 +39,25 @@ def resolve_app_home() -> AppHomeResolution:
     configured = os.environ.get(APP_HOME_ENV)
     if configured and configured.strip():
         return AppHomeResolution(_expand_path(configured.strip()), "env")
+    from_local_config = _local_config_app_home()
+    if from_local_config is not None:
+        return AppHomeResolution(from_local_config, "local-config")
     return AppHomeResolution(default_app_home(), "default")
+
+
+def _local_config_app_home() -> Path | None:
+    """Prefer the operator-configured data directory over ``%LOCALAPPDATA%``.
+
+    Keeps the database, the time ledger, and the shared storage lock on the same
+    home when a process starts without ``MEMORY_ANKI_HOME``. Imported lazily to
+    avoid a circular import (``local_config`` depends on this module).
+    """
+    try:
+        from memory_anki.core.local_config import load_local_runtime_config
+
+        return load_local_runtime_config().local_app_home
+    except Exception:  # noqa: BLE001 - missing/invalid config must not break startup
+        return None
 
 
 def get_app_home() -> Path:
