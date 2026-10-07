@@ -6,6 +6,25 @@ import { usePageHistoryAdapter } from '@/shared/page-history/usePageHistoryAdapt
 
 const MAX_RESIDENT_ROUTE_COUNT = 4
 
+/**
+ * 随心工作区在整段会话里保持挂载。
+ *
+ * 切换工作区（随心 ↔ 随心 2）和切去别的模块再切回来，都必须回到离开时的那张卡，
+ * 而不是把队列清空重建、让用户再看一次加载态。进度本身一直有持久化
+ * （localStorage + 服务端 round cursor），这里要保住的是「不需要重新搬一遍」。
+ *
+ * 代价是这两个页面的队列常驻内存；页面内所有定时器/预取都已按 isActive 分流，
+ * 非当前页不会持续消耗 CPU。
+ */
+const ALWAYS_RESIDENT_ROUTE_PATTERNS: readonly RegExp[] = [
+  /^\/freestyle$/,
+  /^\/freestyle-2$/,
+]
+
+export function isAlwaysResidentRoute(pathname: string) {
+  return ALWAYS_RESIDENT_ROUTE_PATTERNS.some((pattern) => pattern.test(pathname))
+}
+
 interface ResidentRoute {
   location: Location
   becameActiveAt: number
@@ -40,15 +59,22 @@ function pruneResidentRoutes(
   activePathname: string,
 ) {
   const entries = Object.entries(routes)
-  if (entries.length <= MAX_RESIDENT_ROUTE_COUNT) return routes
+  // Pinned 随心 workspaces never count against the budget and are never evicted.
+  const pinned = entries.filter(([pathname]) => isAlwaysResidentRoute(pathname))
+  const evictable = entries.filter(([pathname]) => !isAlwaysResidentRoute(pathname))
+  // The budget applies to evictable routes only, so pinned workspaces can never
+  // push ordinary pages out on their own, nor be pushed out by them.
+  const budget = Math.max(1, MAX_RESIDENT_ROUTE_COUNT - pinned.length)
+  if (evictable.length <= budget) return routes
   const retained = new Set(
-    entries
+    evictable
       .filter(([pathname]) => pathname !== activePathname)
       .sort(([, left], [, right]) => right.lastActiveOrder - left.lastActiveOrder)
-      .slice(0, MAX_RESIDENT_ROUTE_COUNT - 1)
+      .slice(0, budget - 1)
       .map(([pathname]) => pathname),
   )
   retained.add(activePathname)
+  for (const [pathname] of pinned) retained.add(pathname)
   return Object.fromEntries(entries.filter(([pathname]) => retained.has(pathname)))
 }
 
