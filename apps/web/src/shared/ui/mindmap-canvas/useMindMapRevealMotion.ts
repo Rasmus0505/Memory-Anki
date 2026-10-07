@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, type RefObject } from 'react'
 import type { Edge, Node } from '@xyflow/react'
 import { cue, openPlayback, rectCenter, type FxPlayback } from '@/shared/fx'
+import { prefersReducedMotion } from '@/shared/lib/prefersReducedMotion'
 import { themeMotion } from '@/shared/theme/themePacks'
 
 const FLIP_ID = 'mindmap-reveal-flip'
@@ -102,12 +103,6 @@ function noteRevealGesture() {
 function recentRevealGesture() {
   const now = typeof performance !== 'undefined' ? performance.now() : Date.now()
   return now - lastGestureAt < GESTURE_WINDOW_MS
-}
-
-function prefersReducedMotion() {
-  return typeof window !== 'undefined'
-    && typeof window.matchMedia === 'function'
-    && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 }
 
 function escapeId(id: string) {

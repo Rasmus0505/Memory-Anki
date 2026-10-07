@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, type Location } from 'react-router-dom'
 import { RouteResidencyProvider } from '@/shared/routing/RouteResidency'
 import { AppRoutes } from '@/app/router/appRoutes'
@@ -39,6 +39,8 @@ export function withActiveResidentRoute(
 ) {
   const existing = routes[location.pathname]
   if (existing?.location === location) return routes
+  // Spread keeps the identity of every other entry, so only the route that
+  // actually changed re-renders its subtree.
   return {
     ...routes,
     [location.pathname]: {
@@ -75,7 +77,19 @@ function pruneResidentRoutes(
   )
   retained.add(activePathname)
   for (const [pathname] of pinned) retained.add(pathname)
-  return Object.fromEntries(entries.filter(([pathname]) => retained.has(pathname)))
+  // Preserve the identity of every surviving entry. Rebuilding them all would
+  // change each `residentRoute` prop on every navigation and re-render every
+  // hidden page's subtree — the cost this pruning is supposed to avoid paying.
+  const next: Record<string, ResidentRoute> = {}
+  let changed = false
+  for (const [pathname, route] of entries) {
+    if (!retained.has(pathname)) {
+      changed = true
+      continue
+    }
+    next[pathname] = route
+  }
+  return changed ? next : routes
 }
 
 export function AppRouter() {
@@ -130,6 +144,11 @@ export function AppRouter() {
   // `useEffect` below persists and prunes the route after commit. Include the
   // active route here as well so navigation never commits a frame with every
   // resident page hidden.
+  //
+  // `withActiveResidentRoute` returns the original map unchanged when the active
+  // entry already matches, so a navigation that only changes the active pathname
+  // still leaves an untouched route's entry identity — and therefore its
+  // memoised subtree — alone.
   const routesForRender = useMemo(
     () => withActiveResidentRoute(residentRoutes, location, activationOrderRef.current + 1),
     [location, residentRoutes],
@@ -141,27 +160,77 @@ export function AppRouter() {
       {entries.map(([pathname, residentRoute]) => {
         const isActive = pathname === activePathname
         return (
-          <div
+          <ResidentRouteSlot
             key={pathname}
-            data-page-history-route={pathname}
-            aria-hidden={!isActive}
-            inert={!isActive}
-            className="flex h-full min-h-0 flex-1 flex-col"
-            style={{ display: isActive ? 'flex' : 'none' }}
-          >
-            <RouteResidencyProvider
-              value={{
-                isActive,
-                pathname,
-                fullPath: `${residentRoute.location.pathname}${residentRoute.location.search}${residentRoute.location.hash}`,
-                becameActiveAt: residentRoute.becameActiveAt,
-              }}
-            >
-              <ResidentRouteHistory location={residentRoute.location} />
-            </RouteResidencyProvider>
-          </div>
+            pathname={pathname}
+            residentRoute={residentRoute}
+            isActive={isActive}
+          />
         )
       })}
     </>
   )
 }
+
+/**
+ * One resident page.
+ *
+ * Kept in its own memoised component so that navigating away does not re-render
+ * the hidden page's whole subtree. `AppRouter` re-renders on every location
+ * change; without this boundary each resident page — including a full freestyle
+ * feed — re-ran its body on every navigation, which is the background cost of
+ * keeping pages mounted.
+ *
+ * The comparator is explicit because `ResidentRoute.location` is a fresh object
+ * from React Router on each navigation. Comparing the stored location by value
+ * means a hidden page only re-renders when *its* route actually changed — or
+ * when it is the page becoming active/inactive.
+ *
+ * The residency context value is memoised on its actual inputs for the same
+ * reason: a fresh object literal would invalidate every consumer of
+ * `useRouteResidency` even when nothing about this route changed.
+ */
+const ResidentRouteSlot = memo(
+  function ResidentRouteSlot({
+    pathname,
+    residentRoute,
+    isActive,
+  }: {
+    pathname: string
+    residentRoute: ResidentRoute
+    isActive: boolean
+  }) {
+    const residency = useMemo(
+      () => ({
+        isActive,
+        pathname,
+        fullPath: `${residentRoute.location.pathname}${residentRoute.location.search}${residentRoute.location.hash}`,
+        becameActiveAt: residentRoute.becameActiveAt,
+      }),
+      [isActive, pathname, residentRoute],
+    )
+
+    return (
+      <div
+        data-page-history-route={pathname}
+        aria-hidden={!isActive}
+        inert={!isActive}
+        className="flex h-full min-h-0 flex-1 flex-col"
+        style={{ display: isActive ? 'flex' : 'none' }}
+      >
+        <RouteResidencyProvider value={residency}>
+          <ResidentRouteHistory location={residentRoute.location} />
+        </RouteResidencyProvider>
+      </div>
+    )
+  },
+  (previous, next) => (
+    previous.isActive === next.isActive
+    && previous.pathname === next.pathname
+    && previous.residentRoute.becameActiveAt === next.residentRoute.becameActiveAt
+    && previous.residentRoute.location.pathname === next.residentRoute.location.pathname
+    && previous.residentRoute.location.search === next.residentRoute.location.search
+    && previous.residentRoute.location.hash === next.residentRoute.location.hash
+    && previous.residentRoute.location.key === next.residentRoute.location.key
+  ),
+)

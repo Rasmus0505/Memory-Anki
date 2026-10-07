@@ -1,12 +1,7 @@
 import { useEffect, useRef, type CSSProperties } from 'react'
 import type { AmbientTone } from './ambientModel'
 import { createDustMotes } from './dustMotes'
-
-function prefersReducedMotion() {
-  return typeof window !== 'undefined'
-    && typeof window.matchMedia === 'function'
-    && window.matchMedia('(prefers-reduced-motion: reduce)').matches
-}
+import { prefersReducedMotion } from '@/shared/lib/prefersReducedMotion'
 
 function DustMotesCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null)

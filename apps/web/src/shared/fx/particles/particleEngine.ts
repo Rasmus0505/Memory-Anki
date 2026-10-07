@@ -1,3 +1,4 @@
+import { prefersReducedMotion } from '@/shared/lib/prefersReducedMotion'
 import { createCanvas2dRenderer } from './canvas2dRenderer'
 import { createParticle, stepParticle, type Particle, type ParticleRenderer, type ParticleSpec } from './particleModel'
 import { createWebglRenderer } from './webglRenderer'
@@ -26,9 +27,7 @@ let lastFrame = 0
 const live: Particle[] = []
 
 export function prefersReducedParticleMotion() {
-  return typeof window !== 'undefined'
-    && typeof window.matchMedia === 'function'
-    && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  return prefersReducedMotion()
 }
 
 function resize() {

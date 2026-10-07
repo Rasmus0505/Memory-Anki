@@ -18,6 +18,10 @@ const HISTORY_LIMIT = 100
  */
 const LOCAL_ECHO_ABSORB_MS = 8_000
 
+/**
+ * Raw serialisation. Do not call this directly — it stringifies the whole palace
+ * and every edit path compares two documents.
+ */
 function fingerprint(editorDoc: EditorDoc) {
   return JSON.stringify(editorDoc ?? null)
 }
@@ -25,6 +29,10 @@ function fingerprint(editorDoc: EditorDoc) {
 /** Docs are immutable snapshots. Re-rendering with the same reference must not stringify the palace again. */
 const fingerprintCache = new WeakMap<object, string>()
 
+/**
+ * The only fingerprint entry point. Every comparison in this module must use it,
+ * otherwise an edit pays a full-document `JSON.stringify` per side per call.
+ */
 function cachedFingerprint(editorDoc: EditorDoc) {
   if (editorDoc && typeof editorDoc === 'object') {
     const cached = fingerprintCache.get(editorDoc)
@@ -107,7 +115,7 @@ export function useMindMapEditHistory(
   }, [])
 
   const publish = useCallback((editorDoc: EditorDoc) => {
-    const docFingerprint = fingerprint(editorDoc)
+    const docFingerprint = cachedFingerprint(editorDoc)
     currentEditorDocRef.current = editorDoc
     // This set identifies later controlled-state echoes. It must not suppress
     // an intentional publish of a previously visited snapshot (for example redo).
@@ -123,7 +131,7 @@ export function useMindMapEditHistory(
   const commit = useCallback(
     (editorDoc: EditorDoc) => {
       const current = currentEditorDocRef.current
-      if (fingerprint(current) === fingerprint(editorDoc)) return false
+      if (cachedFingerprint(current) === cachedFingerprint(editorDoc)) return false
       replaceHistory(pushMindMapHistory(historyRef.current, current))
       publish(editorDoc)
       recordMindMapDocumentChange('commit', current, editorDoc)
@@ -134,7 +142,7 @@ export function useMindMapEditHistory(
 
   const stage = useCallback((editorDoc: EditorDoc) => {
     const current = currentEditorDocRef.current
-    if (fingerprint(current) === fingerprint(editorDoc)) return false
+    if (cachedFingerprint(current) === cachedFingerprint(editorDoc)) return false
     publish(editorDoc)
     recordMindMapDocumentChange('stage', current, editorDoc)
     return true
@@ -142,7 +150,7 @@ export function useMindMapEditHistory(
 
   const commitFrom = useCallback(
     (baseEditorDoc: EditorDoc, editorDoc: EditorDoc) => {
-      if (fingerprint(baseEditorDoc) === fingerprint(editorDoc)) {
+      if (cachedFingerprint(baseEditorDoc) === cachedFingerprint(editorDoc)) {
         publish(baseEditorDoc)
         return false
       }
@@ -179,12 +187,12 @@ export function useMindMapEditHistory(
   useEffect(() => {
     if (pendingLocalFingerprintsRef.current.has(incomingFingerprint)) {
       pendingLocalFingerprintsRef.current.delete(incomingFingerprint)
-      if (fingerprint(currentEditorDocRef.current) === incomingFingerprint) {
+      if (cachedFingerprint(currentEditorDocRef.current) === incomingFingerprint) {
         currentEditorDocRef.current = incomingEditorDoc
       }
       return
     }
-    if (fingerprint(currentEditorDocRef.current) === incomingFingerprint) return
+    if (cachedFingerprint(currentEditorDocRef.current) === incomingFingerprint) return
 
     // Controlled-state / autosave may rewrite the doc we just published with a
     // backend-normalized form (different fingerprint, same edit lineage).

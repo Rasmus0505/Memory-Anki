@@ -82,8 +82,22 @@ function StartupRedirect() {
 }
 
 export function AppRoutes({ location }: { location?: Location }) {
-  const routerLocation = useLocation()
-  const fallbackPathname = (location ?? routerLocation).pathname || '/'
+  // A resident route always passes its own stored location. In that case the
+  // route table must NOT read the router's live location: `useLocation`
+  // subscribes the caller to every navigation, which re-rendered each hidden
+  // resident page's entire subtree on every route change. Only the non-resident
+  // path (no `location` prop) needs the live value.
+  if (location) return <AppRouteTable location={location} />
+  return <LiveLocationRouteTable />
+}
+
+function LiveLocationRouteTable() {
+  const location = useLocation()
+  return <AppRouteTable location={location} />
+}
+
+function AppRouteTable({ location }: { location: Location }) {
+  const fallbackPathname = location.pathname || '/'
   return (
     <Suspense fallback={<RouteFallback pathname={fallbackPathname} />}>
       <RouteErrorBoundary resetKey={fallbackPathname}>

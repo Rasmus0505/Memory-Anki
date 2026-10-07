@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { prefersReducedMotion } from '@/shared/lib/prefersReducedMotion'
 
 const NUMBER_RUN = /\d+(?:\.\d+)?/g
 const DURATION_MS = 900
@@ -37,7 +38,7 @@ function skipMotion() {
   if (typeof window === 'undefined' || typeof document === 'undefined') return true
   // No Web Animations means no real compositor (jsdom): always show the final value.
   if (typeof document.body?.animate !== 'function') return true
-  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+  return prefersReducedMotion()
 }
 
 /** Text whose numbers roll up like an odometer whenever the value changes. */

@@ -1,4 +1,5 @@
 import { readReviewFeedbackSettings } from '@/shared/feedback/reviewFeedbackSettings'
+import { prefersReducedMotion } from '@/shared/lib/prefersReducedMotion'
 
 export type HapticPattern = 'tap' | 'select' | 'success' | 'soft-fail' | 'milestone' | 'long-press' | 'celebrate'
 
@@ -10,12 +11,6 @@ const HAPTIC_PATTERNS: Record<HapticPattern, number | number[]> = {
   milestone: [16, 50, 16, 50, 28],
   'long-press': 35,
   celebrate: [20, 60, 20, 60, 40, 80, 60],
-}
-
-function prefersReducedMotion() {
-  return typeof window !== 'undefined'
-    && typeof window.matchMedia === 'function'
-    && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 }
 
 // iOS Safari/PWA has no Vibration API; the call is a silent no-op there.

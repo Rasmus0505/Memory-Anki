@@ -17,6 +17,7 @@ import {
   TooltipTrigger,
 } from '@/shared/components/ui/tooltip'
 import { cn } from '@/shared/lib/utils'
+import { prefersReducedMotion } from '@/shared/lib/prefersReducedMotion'
 import type {
   FreestyleScrollChannel,
   FreestyleScrollFrame,
@@ -61,12 +62,6 @@ const INSERT_BATCH_LIMIT = 3
 const FOLLOW_BASE_WIDTH = 100
 /** A follow-driven arrival suppresses the comet only if the playhead catches up this fast. */
 const FOLLOW_ARRIVAL_WINDOW_MS = 700
-
-function prefersReducedMotion(): boolean {
-  return typeof window !== 'undefined'
-    && typeof window.matchMedia === 'function'
-    && window.matchMedia('(prefers-reduced-motion: reduce)').matches
-}
 
 function easeOutCubic(t: number): number {
   return 1 - (1 - t) ** 3

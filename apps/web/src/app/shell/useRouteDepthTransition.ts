@@ -1,13 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, type RefObject } from 'react'
+import { prefersReducedMotion } from '@/shared/lib/prefersReducedMotion'
 
 const DURATION_MS = 540
 const EASE_RISE = 'cubic-bezier(0.2, 0.85, 0.25, 1)'
 const GHOST_NODE_LIMIT = 12000
 const SHEET_CLASS = 'ma-route-sheet'
-
-function reducedMotion() {
-  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
-}
 
 function findRoute(container: HTMLElement, pathname: string) {
   for (const child of Array.from(container.children)) {
@@ -83,7 +80,7 @@ export function useRouteDepthTransition(args: {
     cleanupRef.current = null
     const root = rootRef.current
     const content = contentRef.current
-    if (!enabled || !root || !content || typeof content.animate !== 'function' || reducedMotion()) return
+    if (!enabled || !root || !content || typeof content.animate !== 'function' || prefersReducedMotion()) return
 
     const current = findRoute(content, pathname)
     const previous = wasEnabled ? findRoute(content, fromPath) : null
