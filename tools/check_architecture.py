@@ -1131,6 +1131,176 @@ def check_timed_session_architecture(errors: list[str]) -> None:
             )
 
 
+def _code_lines_with_string_literal(source: str, needle: str) -> list[int]:
+    """Line numbers of real string literals containing ``needle``.
+
+    Docstrings and comments that merely explain a removed API must not trip the
+    rule, so this walks the AST instead of grepping text.
+    """
+
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return []
+    docstring_nodes: set[int] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Module | ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+            continue
+        body = getattr(node, "body", None)
+        if not body:
+            continue
+        first = body[0]
+        if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant):
+            if isinstance(first.value.value, str):
+                docstring_nodes.add(id(first.value))
+    hits: list[int] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
+            continue
+        if id(node) in docstring_nodes:
+            continue
+        if needle in node.value:
+            hits.append(node.lineno)
+    return sorted(set(hits))
+
+
+def check_time_record_timezone_rule(errors: list[str]) -> None:
+    """One explicit local zone; never SQLite's implicit 'localtime' modifier.
+
+    The modifier follows the server process OS timezone, which disagreed with the
+    Python-side day splitting and shifted records onto the wrong local day once
+    the API host zone differed from the learner's.
+    """
+
+    core_time = API_SRC / "core" / "time.py"
+    if not core_time.exists():
+        errors.append("apps/api/src/memory_anki/core/time.py: timezone helper module is missing.")
+        return
+    source = core_time.read_text(encoding="utf-8", errors="ignore")
+    for marker in (
+        "MEMORY_ANKI_LOCAL_TZ",
+        "def resolve_local_timezone",
+        "def local_calendar_day_of",
+        "def parse_client_datetime",
+    ):
+        if marker not in source:
+            errors.append(
+                f"{core_time.relative_to(REPO_ROOT)}: local-zone contract must declare `{marker}`."
+            )
+
+    application_dir = API_SRC / "modules" / "session" / "application"
+    for path in sorted(application_dir.glob("*.py")):
+        body = path.read_text(encoding="utf-8", errors="ignore")
+        for line_number in _code_lines_with_string_literal(body, "localtime"):
+            errors.append(
+                f"{path.relative_to(REPO_ROOT)}:{line_number}: use resolve_local_timezone() "
+                "instead of SQLite's 'localtime' modifier (follows the server OS zone)."
+            )
+
+    architecture_doc = REPO_ROOT / "docs" / "architecture" / "timed-session.md"
+    if architecture_doc.exists():
+        document = architecture_doc.read_text(encoding="utf-8", errors="ignore")
+        for marker in ("resolve_local_timezone", "本地日界线", "显式 UTC 偏移"):
+            if marker not in document:
+                errors.append(
+                    f"{architecture_doc.relative_to(REPO_ROOT)}: must document `{marker}`."
+                )
+
+
+def check_time_record_attribution(errors: list[str]) -> None:
+    """Time records must carry 学科/章节/单元 + 场景 + 行为.
+
+    The ledger once stored only `session_key` + `completion_method`, so no total
+    could be grouped per subject. Every interval-writing path must stamp
+    attribution, including the unload/beacon path.
+    """
+
+    domain_path = API_SRC / "modules" / "session" / "domain" / "time_record_attribution.py"
+    if not domain_path.exists():
+        errors.append(
+            "apps/api/src/memory_anki/modules/session/domain/time_record_attribution.py: "
+            "attribution contract is missing."
+        )
+    else:
+        source = domain_path.read_text(encoding="utf-8", errors="ignore")
+        for marker in ("subject_id", "chapter_id", "unit_label", "palace_id", "scene", "behavior"):
+            if f'"{marker}"' not in source:
+                errors.append(
+                    f"{domain_path.relative_to(REPO_ROOT)}: attribution must declare `{marker}`."
+                )
+
+    for relative in (
+        "modules/session/domain/session-entity/model/session-records-store.ts",
+        "shared/hooks/timedSessionRecovery.ts",
+    ):
+        path = WEB_SRC / relative
+        if not path.exists():
+            errors.append(f"apps/web/{relative}: expected ledger writer is missing.")
+            continue
+        body = path.read_text(encoding="utf-8", errors="ignore")
+        if "attributionToMetadata(record.attribution)" not in body:
+            errors.append(
+                f"apps/web/{relative}: ledger writes must include "
+                "`attributionToMetadata(record.attribution)` so records stay attributable."
+            )
+
+    architecture_doc = REPO_ROOT / "docs" / "architecture" / "timed-session.md"
+    if architecture_doc.exists():
+        document = architecture_doc.read_text(encoding="utf-8", errors="ignore")
+        for marker in ("四级归因", "subject_id", "chapter_id", "behavior"):
+            if marker not in document:
+                errors.append(
+                    f"{architecture_doc.relative_to(REPO_ROOT)}: must document `{marker}`."
+                )
+
+
+def check_study_duration_span_contract(errors: list[str]) -> None:
+    """effective_seconds must never exceed the stored wall span.
+
+    Paused and multi-day sessions legitimately have span > duration, so the two
+    accounts are *not* supposed to be equal — but no unedited row may claim more
+    study time than its own timestamps can hold.
+    """
+
+    duration_path = (
+        API_SRC / "modules" / "session" / "application" / "study_session_duration.py"
+    )
+    if not duration_path.exists():
+        errors.append(
+            "apps/api/src/memory_anki/modules/session/application/study_session_duration.py: "
+            "duration normalizer is missing."
+        )
+    else:
+        source = duration_path.read_text(encoding="utf-8", errors="ignore")
+        for marker in ("def wall_clock_seconds", "def normalize_effective_seconds"):
+            if marker not in source:
+                errors.append(
+                    f"{duration_path.relative_to(REPO_ROOT)}: must declare `{marker}`."
+                )
+
+    # The unit-review completion path is where the invariant was broken: the
+    # billed encounter sum was stamped against a later `ended_at`.
+    unit_review = (
+        API_SRC / "modules" / "memory" / "application" / "unit_review_service.py"
+    )
+    if unit_review.exists():
+        body = unit_review.read_text(encoding="utf-8", errors="ignore")
+        if "billed_seconds_before_clamp" not in body:
+            errors.append(
+                f"{unit_review.relative_to(REPO_ROOT)}: billed encounter seconds must be "
+                "clamped to the wall span before storing effective_seconds."
+            )
+
+    architecture_doc = REPO_ROOT / "docs" / "architecture" / "timed-session.md"
+    if architecture_doc.exists():
+        document = architecture_doc.read_text(encoding="utf-8", errors="ignore")
+        for marker in ("时长与墙钟必须自洽", "0068_clamp_session_duration_span"):
+            if marker not in document:
+                errors.append(
+                    f"{architecture_doc.relative_to(REPO_ROOT)}: must document `{marker}`."
+                )
+
+
 def check_live_study_presence(errors: list[str]) -> None:
     """PWA/desktop study mirroring stays in session and never hits SQLite."""
 
@@ -4813,6 +4983,59 @@ def check_backup_snapshot_policy(errors: list[str]) -> None:
                 f"{startup.relative_to(REPO_ROOT).as_posix()}: startup must not create full media-copying backups."
             )
 
+    _check_backup_lock_scope(errors)
+
+
+def _check_backup_lock_scope(errors: list[str]) -> None:
+    """A snapshot must not hold the shared runtime lock while bulk-copying.
+
+    Holding it across a full database/media copy stalled every autosave and
+    review write for the duration of the copy (observed: ~9 minutes), which the
+    client saw as ``PUT /palaces/{id}/editor -> 500``.
+    """
+    storage = API_SRC / "modules" / "backups" / "application" / "storage_backup.py"
+    if not storage.exists():
+        return
+    source = storage.read_text(encoding="utf-8", errors="ignore")
+    relative = storage.relative_to(REPO_ROOT).as_posix()
+    if "_snapshot_databases_under_lock" not in source:
+        errors.append(
+            f"{relative}: backup writes must snapshot the database under the runtime lock "
+            "via _snapshot_databases_under_lock."
+        )
+    if "captured = _snapshot_databases_under_lock(stage, items)" not in source:
+        errors.append(
+            f"{relative}: write_storage_backup must capture the database snapshot before "
+            "copying remaining items outside the runtime lock."
+        )
+    # The bulk copy must not be nested inside a storage_write_lock block.
+    if "with storage_write_lock(APP_HOME):\n            included_items" in source or (
+        "with storage_write_lock(APP_HOME):\n                _copy_item_to_backup(item, stage)"
+        in source
+    ):
+        errors.append(
+            f"{relative}: bulk backup copies must run outside storage_write_lock; only the "
+            "fast database snapshot may hold the runtime lock."
+        )
+
+    lock_module = API_SRC / "core" / "runtime_storage_lock.py"
+    if lock_module.exists():
+        lock_source = lock_module.read_text(encoding="utf-8", errors="ignore")
+        if "class StorageBusyError" not in lock_source:
+            errors.append(
+                f"{lock_module.relative_to(REPO_ROOT).as_posix()}: lock contention must raise "
+                "StorageBusyError so HTTP can answer 503 + Retry-After instead of 500."
+            )
+
+    handlers = API_SRC / "app" / "error_handlers.py"
+    if handlers.exists():
+        handler_source = handlers.read_text(encoding="utf-8", errors="ignore")
+        if "async def handle_storage_busy" not in handler_source:
+            errors.append(
+                f"{handlers.relative_to(REPO_ROOT).as_posix()}: storage contention must be "
+                "reported as a retryable 503 response."
+            )
+
 
 def check_mindmap_architecture(errors: list[str]) -> None:
     autosave_hook = WEB_SRC / "shared" / "hooks" / "useMindMapDocumentSession.ts"
@@ -5337,9 +5560,22 @@ def check_unit_review_boundary(errors: list[str]) -> None:
         if marker in router_source:
             errors.append(f"retired review runtime route must not return: {marker}")
     required = {
-        API_SRC / "modules/memory/application/unit_review_projection.py": (
+        API_SRC / "modules/memory/application/unit_reconcile.py": (
             "def reconcile_palace_units",
+        ),
+        API_SRC / "modules/memory/application/unit_review_projection.py": (
             "def _active_unit_key",
+        ),
+        # A permanent-mark change must carry progress over instead of restarting
+        # the unit. Inheritance has to consider rows that were deactivated
+        # (deleting the final mark only flips `active`), and a retired row must
+        # stop voting once a live unit covers the region.
+        API_SRC / "modules/memory/application/unit_inheritance.py": (
+            "def inheritance_candidates",
+            "def overlapping_sources",
+            "def region_is_live",
+            "def inheritance_vote",
+            "def same_identity_sources",
         ),
         API_SRC / "modules/memory/application/unit_review_service.py": (
             "def open_unit_review_encounter",
@@ -5752,6 +5988,9 @@ def main() -> int:
     check_removed_focus_practice(errors)
     check_study_session_legacy_usage(errors)
     check_timed_session_architecture(errors)
+    check_time_record_timezone_rule(errors)
+    check_time_record_attribution(errors)
+    check_study_duration_span_contract(errors)
     check_live_study_presence(errors)
     check_runtime_data_ignored(errors)
     check_frontend_config_contract(errors)

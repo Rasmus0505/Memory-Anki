@@ -3104,6 +3104,10 @@ def test_unit_review_boundary_requires_scheduler_service_and_topology(
     write_file(api_src / "modules/memory/presentation/router.py", "")
     write_file(api_src / "modules/memory/application/unit_review_service.py", "def rate_review_unit(): pass\n")
     write_file(api_src / "modules/memory/application/unit_review_projection.py", "")
+    # The reconcile write path moved out of the projection read model; both must
+    # carry their invariants. Empty files here mean "missing every marker".
+    write_file(api_src / "modules/memory/application/unit_reconcile.py", "")
+    write_file(api_src / "modules/memory/application/unit_inheritance.py", "")
     write_file(api_src / "modules/memory/application/unit_scheduler.py", "INTERVAL_DAYS = (1, 3)\n")
     write_file(api_src / "modules/mindmap_document/split_units.py", "")
     monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
@@ -3115,6 +3119,8 @@ def test_unit_review_boundary_requires_scheduler_service_and_topology(
 
     assert any("reconcile_palace_units" in error for error in errors)
     assert any("_active_unit_key" in error for error in errors)
+    assert any("inheritance_candidates" in error for error in errors)
+    assert any("region_is_live" in error for error in errors)
     assert any("INTERVAL_DAYS" in error for error in errors)
     assert any("split_scheduling_units" in error for error in errors)
     assert any("UNIT_KIND_COHORT" in error for error in errors)

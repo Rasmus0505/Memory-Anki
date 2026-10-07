@@ -665,10 +665,42 @@ def _run_frontend_build() -> bool:
     if result.returncode != 0:
         print(f"[!] PWA frontend build failed ({result.returncode}). See {log_path}")
         return False
+    # dist 用 emptyOutDir=false 保住旧 hash 别名链，所以每次构建都会新增文件而
+    # 从不删除。不在这里清理，产物会无限累积（曾达到 617 MB / 11455 个 chunk），
+    # 每次构建和同步都为此付出代价。清理失败不是构建失败：新产物已经就绪，
+    # 留下的只是磁盘占用。
+    _prune_stale_web_dist(log_path)
     if not _validate_web_release():
         print(f"[!] PWA frontend release validation failed. See {log_path}")
         return False
     return True
+
+
+def _prune_stale_web_dist(log_path: Path) -> None:
+    """Run the release-manifest-based dist pruner after a successful build."""
+    script = REPO_ROOT / "tools" / "clean_web_dist.py"
+    if not script.exists():
+        return
+    try:
+        result = subprocess.run(
+            [sys.executable, str(script)],
+            cwd=str(REPO_ROOT),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=180,
+            check=False,
+            **dev_server.hidden_console_kwargs(),
+        )
+    except Exception as exc:
+        print(f"[i] Skipped dist pruning: {exc}")
+        return
+    summary = (result.stdout or "").strip().splitlines()
+    if summary:
+        print(f"[i] Dist pruning: {summary[-1]}")
+    if result.returncode != 0:
+        print(f"[i] Dist pruning exited {result.returncode}; continuing.")
 
 
 def _prepare_runtime() -> bool:
