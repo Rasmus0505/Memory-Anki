@@ -503,4 +503,29 @@ describe('MindMapEditorSurface native host', () => {
     )
     expect(onNodeActive).toHaveBeenCalledTimes(2)
   })
+
+  it('hides the 思维导图/文章 switch and stays on the map view when the host opts out', () => {
+    // A persisted `article` preference (the <=640px default) must not strand a
+    // host that has hidden the switch with no way back to the map.
+    window.localStorage.setItem('memory-anki.document-view.palace:55', 'article')
+    try {
+      render(
+        <MindMapEditorSurface
+          editorState={editorState}
+          onEditorStateChange={vi.fn()}
+          viewMemoryScope="palace:55"
+          hideDocumentViewSwitch
+        />,
+      )
+
+      expect(screen.queryByRole('button', { name: '思维导图' })).toBeNull()
+      expect(screen.queryByRole('button', { name: '文章' })).toBeNull()
+      // The persisted `article` pane stays hidden; the map pane is the visible one.
+      const hiddenPanes = screen.getByTestId('mindmap-frame-native').querySelectorAll('div[hidden]')
+      expect(hiddenPanes).toHaveLength(1)
+      expect(hiddenPanes[0]?.textContent).toContain('知识点')
+    } finally {
+      window.localStorage.removeItem('memory-anki.document-view.palace:55')
+    }
+  })
 })

@@ -52,6 +52,12 @@ export interface MindMapEditorSurfaceProps {
   onEnglishWordClick?: (word: string, event: import('react').MouseEvent<HTMLElement>) => void
   /** Host text-selection mode: keep node text selectable and disable touch actions. */
   textSelectionModeActive?: boolean
+  /**
+   * Hosts that own their own reading surface (freestyle on PWA) hide the
+   * 思维导图/文章 switch entirely and stay on the map view, so a persisted
+   * `article` preference cannot strand the user without a way back.
+   */
+  hideDocumentViewSwitch?: boolean
   viewMemoryScope?: string | null
   immersiveModeActive?: boolean
   presentationStrategy?: MindMapPresentationStrategy

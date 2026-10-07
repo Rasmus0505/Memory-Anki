@@ -47,6 +47,7 @@ export function FreestyleRatingBar({
   hasEncounter,
   actionError,
   blockedHint,
+  disabledReason = null,
   shortcutsActive,
   ratingScope = 'unit',
   palaceDueCount = 1,
@@ -68,6 +69,8 @@ export function FreestyleRatingBar({
   reviewReady: boolean
   hasEncounter: boolean
   actionError: string | null
+  /** Why every rating button is unavailable. Without it a disabled bar is silent. */
+  disabledReason?: string | null
   /** Why 「下一组」 is unavailable — inline so touch users see it without a toast. */
   blockedHint?: string | null
   /** Only the card under the viewport owns the 1-4 shortcuts. */
@@ -224,6 +227,16 @@ export function FreestyleRatingBar({
             className="mb-1.5 line-clamp-2 rounded-lg border border-rate-hard/30 bg-rate-hard/10 px-2.5 py-1 text-[11px] leading-snug text-stage-ink"
           >
             {blockedHint}
+          </div>
+        ) : null}
+        {disabledReason && !blockedHint ? (
+          <div
+            data-testid="freestyle-rating-disabled-reason"
+            /* A disabled button cannot be tapped, so it can never explain itself.
+               State the reason above the bar instead of dimming in silence. */
+            className="mb-1.5 line-clamp-2 rounded-lg border border-stage-line-strong bg-stage-line px-2.5 py-1 text-[11px] leading-snug text-stage-muted"
+          >
+            {disabledReason}
           </div>
         ) : null}
         {onRatingScopeChange ? (

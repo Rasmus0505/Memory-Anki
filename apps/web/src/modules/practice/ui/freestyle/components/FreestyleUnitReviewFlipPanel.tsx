@@ -40,6 +40,7 @@ import {
   type EditorDoc,
 } from '@/shared/lib/mindmap-split-marks/splitMarks'
 import { computeRevealCollapsedNodeIdsFromParentMap } from '@/shared/ui/mindmap-canvas/mindMapCollapse'
+import { detectClientSource } from '@/shared/lib/clientSource'
 import {
   FlipCardMindMapPanel,
   persistPalaceEditor,
@@ -597,6 +598,9 @@ export function FreestyleUnitReviewFlipPanel({
     displayModeRef, editRevealSnapshotRef, setPermanentMarkMode, setDisplayMode,
     setModeSyncVersion, handleEditorStateChange,
   })
+  // 随心 on the phone is a card-flip surface: the 思维导图/文章 switch would take
+  // over a narrow screen with no way back, so it stays desktop-only here.
+  const hideDocumentViewSwitch = useMemo(() => detectClientSource() === 'pwa', [])
 
   return (
     <>
@@ -612,6 +616,7 @@ export function FreestyleUnitReviewFlipPanel({
         displayMode={displayMode}
         sessionKind="review"
         chromeDensity="compact"
+        hideDocumentViewSwitch={hideDocumentViewSwitch}
         hidePresentationOverflowActions
         hostFullscreenControl
         modeSyncVersion={modeSyncVersion}

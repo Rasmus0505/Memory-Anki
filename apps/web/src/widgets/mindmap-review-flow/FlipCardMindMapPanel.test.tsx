@@ -188,6 +188,14 @@ describe('FlipCardMindMapPanel', () => {
     expect(getLatestMindMapEditorSurfaceProps()?.sceneChrome).toBe('review')
   })
 
+  it('forwards the document-view switch opt-out to the surface', () => {
+    const { rerender } = renderInRouter(<FlipCardMindMapPanel {...baseProps} />)
+    expect(getLatestMindMapEditorSurfaceProps()?.hideDocumentViewSwitch).toBe(false)
+
+    rerender(<FlipCardMindMapPanel {...baseProps} hideDocumentViewSwitch />)
+    expect(getLatestMindMapEditorSurfaceProps()?.hideDocumentViewSwitch).toBe(true)
+  })
+
   it('dims nodes outside the current permanent-mark unit while preserving its ancestor path', () => {
     const state = {
       ...editorState,

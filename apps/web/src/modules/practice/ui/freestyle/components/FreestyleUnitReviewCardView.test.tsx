@@ -545,6 +545,38 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(onUserZoomChange).toHaveBeenCalledWith(0.84)
   })
 
+  it('hides the 思维导图/文章 switch on the PWA and keeps it on desktop', async () => {
+    const card = buildCard('unit-document-view-switch')
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!))
+    const originalMatchMedia = window.matchMedia
+
+    try {
+      Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        value: vi.fn((query: string) => ({
+          matches: query === '(display-mode: standalone)',
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+        })),
+      })
+      renderCard(card)
+      await screen.findByTestId('flip-card-mind-map-panel')
+      expect(capturedPanelProps).toMatchObject({ hideDocumentViewSwitch: true })
+    } finally {
+      Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        value: originalMatchMedia,
+      })
+    }
+
+    // Desktop (no standalone display, Electron UA) keeps the switch.
+    document.body.innerHTML = ''
+    capturedPanelProps = null
+    renderCard(card)
+    await screen.findByTestId('flip-card-mind-map-panel')
+    expect(capturedPanelProps).toMatchObject({ hideDocumentViewSwitch: false })
+  })
+
   it('lets a cached preview flip locally and preserves that progress when the live session lands', async () => {
     writeFlipCardRevealSettings({ granularity: 'single', stage: 'direct' })
     const card = buildCard('unit-preview-flip')

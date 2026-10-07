@@ -1227,6 +1227,16 @@ export function FreestyleUnitReviewCardView({
             hasEncounter={Boolean(currentEncounter)}
             actionError={actionError}
             blockedHint={blockedHint}
+            /* All four rating buttons disable when the encounter is not ready, which
+               used to leave a dimmed bar whose only clue was a tiny '加载中' label.
+               A tap then did nothing and read as a dead app. Say why, in words. */
+            disabledReason={
+              currentEncounter
+                ? null
+                : loadError
+                  ? '复习会话加载失败，请下拉刷新重试。'
+                  : '复习会话仍在加载，评分暂不可用…'
+            }
             shortcutsActive={active && !inlineEditing}
             onRate={(rating) => void rate(rating)}
             onRemoveFromQueue={
