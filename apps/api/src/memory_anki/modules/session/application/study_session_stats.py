@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta, tzinfo
 from typing import Any
 
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
-from memory_anki.core.time import local_calendar_day_start_as_utc_naive
+from memory_anki.core.time import (
+    local_calendar_day_bounds_as_utc_naive,
+    resolve_local_timezone,
+    utc_now,
+)
 from memory_anki.infrastructure.db._tables.misc import StudySession
 from memory_anki.infrastructure.db._tables.palaces import Palace
 
@@ -27,9 +31,44 @@ from .time_record_read_model import (
 )
 
 
-def _local_calendar_date_expr(column):
-    """SQLite: treat stored UTC-naive as UTC and project to the host local calendar day."""
-    return func.date(column, "localtime")
+def _local_calendar_date_expr(column, tz: tzinfo | None = None):
+    """Project stored UTC-naive datetimes onto the resolved local calendar day.
+
+    Replaces SQLite's ``'localtime'`` modifier, which follows the *server
+    process* OS timezone. That disagreed with the UTC-aware ledger bucketing
+    and drifted silently whenever the API host zone differed from the learner's.
+    """
+    zone = tz or resolve_local_timezone()
+    return func.date(_to_zone(column, zone))
+
+
+def _utc_modifier() -> str:
+    """SQLite modifier that reinterprets a naive datetime string as UTC."""
+    return "+00:00"
+
+
+def _zone_modifier(zone: tzinfo, *, reference: datetime | None = None) -> str:
+    """Fixed-offset SQLite modifier for ``zone`` evaluated at ``reference``.
+
+    SQLite cannot resolve IANA rules, so the offset is resolved in Python. The
+    reference instant is the row's own attribution time when the caller can
+    supply it; otherwise the whole window shares one offset, which is exact for
+    fixed-offset zones and an acceptable approximation for DST zones whose
+    sessions do not straddle a transition.
+    """
+    moment = reference or utc_now()
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=UTC)
+    offset = moment.astimezone(zone).utcoffset() or timedelta(0)
+    total_minutes = int(offset.total_seconds() // 60)
+    sign = "+" if total_minutes >= 0 else "-"
+    hours, minutes = divmod(abs(total_minutes), 60)
+    return f"{sign}{hours:02d}:{minutes:02d}"
+
+
+def _to_zone(column, zone: tzinfo):
+    """Render a stored UTC-naive column as a local wall-clock datetime string."""
+    return func.datetime(column, _utc_modifier(), _zone_modifier(zone))
 
 
 def get_study_session_duration_seconds(
@@ -216,7 +255,7 @@ def _build_time_record_trend(
     range_end: datetime,
 ) -> list[dict[str, Any]]:
     start_date = _range_start(session, range_value=range_value, today=today)
-    start = local_calendar_day_start_as_utc_naive(start_date)
+    start = local_calendar_day_bounds_as_utc_naive(start_date)[0]
     attributed_at = _session_attribution_at()
     local_day = _local_calendar_date_expr(attributed_at)
     rows = (
@@ -273,7 +312,7 @@ def _build_time_record_breakdown(
         .filter(
             StudySession.deleted_at.is_(None),
             StudySession.status == "completed",
-            attributed_at >= local_calendar_day_start_as_utc_naive(start_date),
+            attributed_at >= local_calendar_day_bounds_as_utc_naive(start_date)[0],
             attributed_at < range_end,
         )
         .all()

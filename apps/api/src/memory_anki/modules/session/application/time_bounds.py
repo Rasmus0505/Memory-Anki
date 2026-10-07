@@ -4,41 +4,45 @@ from datetime import date, datetime, timedelta
 
 from memory_anki.core.time import (
     local_calendar_day_bounds_as_utc_naive,
-    local_calendar_day_start_as_utc_naive,
+    resolve_local_timezone,
 )
+
+
+def _today_local() -> date:
+    """Today on the resolved local calendar, never the raw process clock."""
+    return datetime.now(resolve_local_timezone()).date()
+
+
+def _day_start(day: date) -> datetime:
+    """Local midnight for ``day`` as UTC-naive, via the resolved zone."""
+    return local_calendar_day_bounds_as_utc_naive(day)[0]
 
 
 def today_bounds() -> tuple[datetime, datetime]:
     """Half-open local calendar day expressed as UTC-naive bounds."""
-    return local_calendar_day_bounds_as_utc_naive()
+    return local_calendar_day_bounds_as_utc_naive(_today_local())
 
 
 def current_week_bounds() -> tuple[datetime, datetime]:
     """Monday 00:00 local → next Monday 00:00 local, as UTC-naive."""
-    today = date.today()
+    today = _today_local()
     week_start = today - timedelta(days=today.weekday())
-    start = local_calendar_day_start_as_utc_naive(week_start)
-    end = local_calendar_day_start_as_utc_naive(week_start + timedelta(days=7))
-    return start, end
+    return _day_start(week_start), _day_start(week_start + timedelta(days=7))
 
 
 def current_month_bounds() -> tuple[datetime, datetime]:
-    today = date.today()
+    today = _today_local()
     return month_bounds(today.replace(day=1))
 
 
 def month_bounds(target: date) -> tuple[datetime, datetime]:
     start_of_month = target.replace(day=1)
-    start = local_calendar_day_start_as_utc_naive(start_of_month)
-    end = local_calendar_day_start_as_utc_naive(_start_of_next_month_date(start_of_month))
-    return start, end
+    return _day_start(start_of_month), _day_start(_start_of_next_month_date(start_of_month))
 
 
 def date_range_bounds(start_date: date, end_date: date) -> tuple[datetime, datetime]:
     """Inclusive local calendar dates → half-open UTC-naive datetime bounds."""
-    start = local_calendar_day_start_as_utc_naive(start_date)
-    end = local_calendar_day_start_as_utc_naive(end_date + timedelta(days=1))
-    return start, end
+    return _day_start(start_date), _day_start(end_date + timedelta(days=1))
 
 
 def _start_of_next_month_date(start_of_month: date) -> date:

@@ -1,18 +1,23 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone, tzinfo
 from typing import Any, Literal
 
 from sqlalchemy import String, and_, cast, func, or_
 from sqlalchemy.orm import Query, Session
 from sqlalchemy.sql.elements import ColumnElement
 
-from memory_anki.core.time import local_calendar_day_start_as_utc_naive
+from memory_anki.core.time import (
+    local_calendar_day_bounds_as_utc_naive,
+    resolve_local_timezone,
+    utc_now,
+)
 from memory_anki.infrastructure.db._tables.misc import StudySession
 from memory_anki.infrastructure.time_ledger_store import read_intervals
 
+from ..domain.time_record_attribution import StudySessionAttribution
 from .serialization import study_session_json
 from .time_bounds import date_range_bounds, month_bounds, today_bounds
 
@@ -138,6 +143,31 @@ def resolve_time_record_range(
     return ResolvedTimeRecordRange(
         "month", start, end, first_day, last_day, month=month_value
     )
+
+
+def _local_calendar_date_expr(column, tz: tzinfo | None = None):
+    """Project a stored UTC-naive column onto the resolved local calendar day.
+
+    Replaces SQLite's ``'localtime'`` modifier, which follows the server process
+    OS timezone and therefore disagreed with ``split_interval_local_days`` (which
+    resolves the zone in Python) whenever the two differed.
+    """
+    zone = tz or resolve_local_timezone()
+    return func.date(
+        func.datetime(column, "+00:00", _fixed_offset_modifier(zone))
+    )
+
+
+def _fixed_offset_modifier(zone: tzinfo, *, reference: datetime | None = None) -> str:
+    """Fixed-offset SQLite modifier for ``zone`` (SQLite cannot resolve IANA)."""
+    moment = reference or utc_now()
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=UTC)
+    offset = moment.astimezone(zone).utcoffset() or timedelta(0)
+    total_minutes = int(offset.total_seconds() // 60)
+    sign = "+" if total_minutes >= 0 else "-"
+    hours, minutes = divmod(abs(total_minutes), 60)
+    return f"{sign}{hours:02d}:{minutes:02d}"
 
 
 def time_record_attributed_at():
@@ -294,6 +324,22 @@ def time_record_kind(scene: str | None, summary_json: str | None = None) -> tupl
     else:
         kind = "practice"
     return kind, TIME_RECORD_KIND_LABELS[kind], True
+
+
+def _ledger_attribution(row: dict[str, Any]) -> StudySessionAttribution:
+    """Attribution stored on a ledger interval.
+
+    Falls back to the interval's own palace/kind when the revision predates the
+    four-dimension contract, so old rows still report *something* rather than
+    appearing entirely unattributed.
+    """
+    stored = StudySessionAttribution.from_metadata(row.get("metadata"))
+    if stored.has_target or stored.scene:
+        return stored
+    return StudySessionAttribution(
+        palace_id=row.get("palace_id"),
+        scene=str(row.get("kind") or "") or None,
+    ).normalized()
 
 
 def _scene_segments(summary: dict[str, Any]) -> list[dict[str, Any]]:
@@ -557,7 +603,7 @@ def build_time_record_read_model(
     )
 
     attributed_at = time_record_attributed_at()
-    local_day = func.date(attributed_at, "localtime")
+    local_day = _local_calendar_date_expr(attributed_at)
     trend_rows = (
         base.with_entities(
             local_day,
@@ -620,7 +666,14 @@ def build_time_record_read_model(
     # describe one combined read model.
     item_rows = base.order_by(order, StudySession.id.asc()).all()
     ledger_items = [
-        {**{key: value for key, value in row.items() if key != "_fragments"}, "id": "ledger:" + row["interval_id"], "status": "completed", "scene": row.get("kind", "custom"), "title": row.get("title", "")}
+        {
+            **{key: value for key, value in row.items() if key != "_fragments"},
+            "id": "ledger:" + row["interval_id"],
+            "status": "completed",
+            "scene": row.get("kind", "custom"),
+            "title": row.get("title", ""),
+            "attribution": _ledger_attribution(row).model_dump(exclude_none=True),
+        }
         for row in ledger_rows
     ]
     merged_items = [study_session_json(row) for row in item_rows] + ledger_items
@@ -691,7 +744,7 @@ def get_time_record_daily_totals(
     kind: str | None = None,
 ) -> list[tuple[str, int, int]]:
     attributed_at = time_record_attributed_at()
-    local_day = func.date(attributed_at, "localtime")
+    local_day = _local_calendar_date_expr(attributed_at)
     rows = (
         valid_time_records_query(session, start=start, end=end, kind=kind)
         .with_entities(
@@ -710,7 +763,8 @@ def get_time_record_daily_totals(
 
 
 def local_date_range_bounds(start_date: date, end_date: date) -> tuple[datetime, datetime]:
+    """Inclusive local dates → half-open UTC-naive bounds on the resolved zone."""
     return (
-        local_calendar_day_start_as_utc_naive(start_date),
-        local_calendar_day_start_as_utc_naive(end_date + timedelta(days=1)),
+        local_calendar_day_bounds_as_utc_naive(start_date)[0],
+        local_calendar_day_bounds_as_utc_naive(end_date)[1],
     )

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
+
+import pytest
 
 from memory_anki.infrastructure.time_ledger_store import (
     append_revision,
@@ -71,6 +73,28 @@ def test_patch_replaces_growing_group_and_delete_stays_deleted(tmp_path: Path):
     assert delete_intervals(["s:1:120"], app_home=tmp_path, device_id="d") == 1
     assert read_intervals(app_home=tmp_path) == []
     assert read_intervals(app_home=tmp_path, include_deleted=True)
+
+
+def test_naive_interval_timestamps_are_rejected(tmp_path: Path):
+    """An offset-less instant cannot be placed on a calendar; guessing shifted records."""
+    naive_start = datetime(2026, 1, 1, 12, 0, 0)
+    interval = TimeLedgerInterval(
+        interval_id="naive", session_id="naive", started_at=naive_start,
+        ended_at=naive_start + timedelta(seconds=60), kind="review",
+    )
+    with pytest.raises(ValueError, match="UTC offset"):
+        interval.normalized()
+
+
+def test_explicitly_offset_interval_is_accepted_and_normalised_to_utc():
+    local = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone(timedelta(hours=8)))
+    interval = TimeLedgerInterval(
+        interval_id="offset", session_id="offset", started_at=local,
+        ended_at=local + timedelta(seconds=60), kind="review",
+    )
+    normalised = interval.normalized()
+    assert normalised.started_at == datetime(2026, 1, 1, 4, 0, 0, tzinfo=UTC)
+    assert normalised.effective_seconds == 60
 
 
 def test_invalid_group_operation_revision_is_ignored_atomically(tmp_path: Path):
