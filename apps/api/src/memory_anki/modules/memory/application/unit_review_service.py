@@ -21,13 +21,13 @@ from memory_anki.infrastructure.db._tables.unit_reviews import (
 )
 from memory_anki.modules.mindmap_document.api import deserialize_editor_payload
 
+from .unit_reconcile import reconcile_palace_units
 from .unit_review_projection import (
     _active_unit_key,
     adjust_unit_schedule,
     get_palace_unit_projection,
     json_load_list,
     list_due_units,
-    reconcile_palace_units,
     resolve_unit_definitions,
     undo_content_schedule_batch,
     unit_payload,

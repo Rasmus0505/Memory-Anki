@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import uuid
 from dataclasses import dataclass
 from datetime import date
 from typing import Any
@@ -26,8 +25,8 @@ from memory_anki.modules.mindmap_document.api import (
 )
 
 from .unit_projection_cache import cached_document_projection, clear_unit_projection_cache
+from .unit_reconcile_scheduler import schedule_reconcile
 from .unit_schedule_projection import (
-    _change_entry,
     _parse_due_date,
     _schedule_snapshot_from_row,
 )
@@ -344,169 +343,6 @@ def undo_content_schedule_batch(
     }
 
 
-def reconcile_palace_units(session: Session, palace_id: int) -> dict[str, Any]:
-    tree, definitions = resolve_unit_definitions(session, palace_id)
-    today = date.today()
-    old_states = _active_states(session, palace_id)
-    old_by_key = {
-        _active_unit_key(row.anchor_uid, row.unit_kind): row for row in old_states
-    }
-    old_members = {row.id: set(json_load_list(row.node_uids_json)) for row in old_states}
-    changes: list[dict[str, Any]] = []
-    demotion_entries: list[dict[str, Any]] = []
-
-    if not definitions:
-        for row in old_states:
-            before = _schedule_snapshot_from_row(row)
-            row.active = False
-            row.revision += 1
-            changes.append(
-                _change_entry(
-                    unit_id=row.id,
-                    anchor_uid=row.anchor_uid,
-                    title="",
-                    action="deactivated",
-                    before=before,
-                    after=_schedule_snapshot_from_row(row),
-                )
-            )
-        invalidated = _invalidate_active_sessions(session, palace_id) if old_states else 0
-        session.flush()
-        return {
-            "palace_id": palace_id,
-            "mark_required": True,
-            "unit_count": 0,
-            "changed": bool(old_states),
-            "invalidated_session_count": invalidated,
-            "changes": changes,
-            "undo_token": None,
-            "schedule_batch_id": None,
-        }
-
-    used_ids: set[str] = set()
-    changed = False
-    for index, definition in enumerate(definitions):
-        members = set(definition.node_uids)
-        overlapping = [row for row in old_states if old_members[row.id] & members]
-        current = old_by_key.get(
-            _active_unit_key(definition.anchor_uid, definition.unit_kind)
-        )
-        sources = overlapping or ([current] if current is not None else [])
-        inherited_stage = min((row.stage_index for row in sources), default=0)
-        inherited_due = min((row.due_date for row in sources), default=today)
-        inherited_passed = bool(sources) and all(row.has_passed for row in sources)
-
-        if current is None:
-            current = ReviewUnitState(
-                id=uuid.uuid4().hex,
-                palace_id=palace_id,
-                anchor_uid=definition.anchor_uid,
-                unit_kind=definition.unit_kind,
-                node_uids_json=json.dumps(definition.node_uids, ensure_ascii=False),
-                membership_hash=definition.membership_hash,
-                content_hash=definition.content_hash,
-                revision=1,
-                stage_index=inherited_stage,
-                has_passed=inherited_passed,
-                due_date=inherited_due,
-                topology_order=index,
-                active=True,
-            )
-            session.add(current)
-            changed = True
-            after = _schedule_snapshot_from_row(current)
-            changes.append(
-                _change_entry(
-                    unit_id=current.id,
-                    anchor_uid=current.anchor_uid,
-                    title=definition.title,
-                    action="created",
-                    before=None,
-                    after=after,
-                )
-            )
-        else:
-            membership_changed = current.membership_hash != definition.membership_hash
-            content_changed = current.content_hash != definition.content_hash
-            before = _schedule_snapshot_from_row(current)
-            action: str | None = None
-            if membership_changed or content_changed:
-                current.revision += 1
-                changed = True
-            if membership_changed:
-                current.stage_index = inherited_stage
-                current.has_passed = inherited_passed
-                current.due_date = inherited_due
-                action = "membership_updated"
-            elif content_changed:
-                current.stage_index = max(0, current.stage_index - 1)
-                current.due_date = today
-                action = "content_demoted"
-            current.unit_kind = definition.unit_kind
-            current.node_uids_json = json.dumps(definition.node_uids, ensure_ascii=False)
-            current.membership_hash = definition.membership_hash
-            current.content_hash = definition.content_hash
-            current.topology_order = index
-            current.active = True
-            if action is not None:
-                after = _schedule_snapshot_from_row(current)
-                entry = _change_entry(
-                    unit_id=current.id,
-                    anchor_uid=current.anchor_uid,
-                    title=definition.title,
-                    action=action,
-                    before=before,
-                    after=after,
-                )
-                changes.append(entry)
-                if action == "content_demoted":
-                    demotion_entries.append(entry)
-        used_ids.add(current.id)
-
-    for row in old_states:
-        if row.id not in used_ids:
-            before = _schedule_snapshot_from_row(row)
-            row.active = False
-            row.revision += 1
-            changed = True
-            changes.append(
-                _change_entry(
-                    unit_id=row.id,
-                    anchor_uid=row.anchor_uid,
-                    title="",
-                    action="deactivated",
-                    before=before,
-                    after=_schedule_snapshot_from_row(row),
-                )
-            )
-
-    undo_token: str | None = None
-    if demotion_entries:
-        undo_token = uuid.uuid4().hex
-        session.add(
-            ReviewUnitScheduleBatch(
-                id=undo_token,
-                palace_id=palace_id,
-                reason="content_reconcile",
-                entries_json=json.dumps(demotion_entries, ensure_ascii=False),
-            )
-        )
-
-    invalidated = _invalidate_active_sessions(session, palace_id) if changed else 0
-    session.flush()
-    return {
-        "palace_id": palace_id,
-        "mark_required": False,
-        "unit_count": len(definitions),
-        "changed": changed,
-        "invalidated_session_count": invalidated,
-        "title": tree.get("title") or "",
-        "changes": changes,
-        "undo_token": undo_token,
-        "schedule_batch_id": undo_token,
-    }
-
-
 def unit_payload(
     row: ReviewUnitState,
     definition: UnitDefinition | None = None,
@@ -560,6 +396,8 @@ def _unit_hashes_lag(
 
 def _reconcile_if_unit_hashes_lag(session: Session, palace_id: int) -> bool:
     """Flush-only reconcile when hashes lag. Does not commit (caller owns txn)."""
+    from .unit_reconcile import reconcile_palace_units
+
     try:
         _tree, definitions = resolve_unit_definitions(session, palace_id)
     except ValueError:
@@ -572,6 +410,8 @@ def _reconcile_if_unit_hashes_lag(session: Session, palace_id: int) -> bool:
 
 
 def get_palace_unit_projection(session: Session, palace_id: int) -> dict[str, Any]:
+    from .unit_reconcile import reconcile_palace_units
+
     tree, definitions = resolve_unit_definitions(session, palace_id)
     states = _active_states(session, palace_id)
     if _unit_hashes_lag(states, definitions):
@@ -628,7 +468,24 @@ def _query_due_unit_rows(
     ).all()
 
 
-def list_due_units(session: Session, palace_id: int | None = None) -> list[dict[str, Any]]:
+def list_due_units(
+    session: Session,
+    palace_id: int | None = None,
+    *,
+    allow_reconcile: bool = True,
+) -> list[dict[str, Any]]:
+    """Due review units, reading the projection without widening write scope.
+
+    ``allow_reconcile=False`` is the read-only contract for request paths that
+    must never take the global storage write lock. A lagging hash is then
+    *deferred*: the stale palace is recorded for the background reconciler
+    (``schedule_reconcile``) and its units are skipped for this read rather than
+    repaired in-line. This is what stops a "look at my queue" request from
+    turning into a multi-second locked write that starves every other request.
+
+    Callers that legitimately own the write path (freestyle round build, session
+    start) keep the default and heal in-line as before.
+    """
     rows = _query_due_unit_rows(session, palace_id)
     candidate_palace_ids = sorted({row.palace_id for row in rows})
     if not candidate_palace_ids:
@@ -668,6 +525,16 @@ def list_due_units(session: Session, palace_id: int | None = None) -> list[dict[
             stale_palace_ids.append(palace.id)
 
     reconciled_any = False
+    from .unit_reconcile import reconcile_palace_units
+
+    if stale_palace_ids and not allow_reconcile:
+        # Read-only path: hand the stale palaces to the background reconciler and
+        # serve what the projection already knows. The units belonging to a stale
+        # palace are dropped below by the hash check, so nothing inconsistent is
+        # projected -- the queue is briefly short rather than the whole API stalled.
+        schedule_reconcile(stale_palace_ids)
+        stale_palace_ids = []
+
     for pid in stale_palace_ids:
         reconcile_palace_units(session, pid)
         reconciled_any = True
@@ -781,7 +648,6 @@ __all__ = [
     "list_active_review_unit_ids",
     "list_due_review_unit_ids",
     "list_due_units",
-    "reconcile_palace_units",
     "resolve_unit_definitions",
     "undo_content_schedule_batch",
     "unit_payload",

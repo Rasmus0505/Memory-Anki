@@ -7,6 +7,7 @@ from sqlalchemy import text
 
 from memory_anki.infrastructure.db._tables._base import get_session
 from memory_anki.modules.memory.api import warm_unit_projection_cache
+from memory_anki.modules.memory.application.unit_reconcile_scheduler import drain_once
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +55,15 @@ def run_startup_warmup() -> None:
         # Shelf, dashboard and review queue all re-project palace documents; warming
         # the content-keyed memo moves that ~1s off the first user request.
         warmed = warm_unit_projection_cache(session)
-        logger.info("startup warmup completed", extra={"warmed_palaces": warmed})
+        # Drain any palaces whose unit hashes lagged while the app was closed. The
+        # read path defers instead of rebuilding in-request, so this is where that
+        # work actually lands -- off the request path and without holding the
+        # global storage lock across a user-visible call.
+        drained = drain_once(limit=8)
+        logger.info(
+            "startup warmup completed",
+            extra={"warmed_palaces": warmed, "reconciled": drained.get("reconciled", 0)},
+        )
     finally:
         session.close()
 

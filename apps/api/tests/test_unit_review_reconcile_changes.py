@@ -567,3 +567,176 @@ def test_adjust_and_undo_schedule_http_endpoints(session_factory, make_client):
         json={},
     )
     assert wrong.status_code == 400
+
+
+# --- Permanent-mark changes must carry review progress over, never restart it ---
+#
+# Deleting the final permanent mark deactivates every unit row but leaves the
+# earned stage/due on disk. Re-marking used to read only active rows, find no
+# overlap, and restart at first-learning -- silently discarding a ladder
+# position that was still stored. These tests pin the carry-over contract.
+
+
+def _marked_branch_doc(*, mark_a: bool, deeper: bool = False) -> str:
+    """Unmarked root; the only permanent mark sits on A (or deeper on A1).
+
+    The root is deliberately left unmarked so removing A's mark removes the
+    palace's final mark and deactivates every unit.
+    """
+    a1 = {"uid": "a1", "text": "A1"}
+    if deeper:
+        a1["permanentSplitMark"] = True
+    a = {"uid": "a", "text": "A"}
+    if mark_a:
+        a["permanentSplitMark"] = True
+    return json.dumps(
+        {
+            "root": {
+                "data": {
+                    "uid": "root",
+                    "text": "P",
+                    "memoryAnkiRootKind": "palace",
+                },
+                "children": [{"data": a, "children": [{"data": a1, "children": []}]}],
+            }
+        },
+        ensure_ascii=False,
+    )
+
+
+def _earned_palace(session, doc: str, *, stage: int = 6, days: int = 60):
+    palace = Palace(title="P", archived=False, editor_doc=doc)
+    session.add(palace)
+    session.commit()
+    reconcile_palace_units(session, palace.id)
+    session.commit()
+    due = date.today() + timedelta(days=days)
+    for row in session.query(ReviewUnitState).filter_by(palace_id=palace.id, active=True):
+        row.stage_index = stage
+        row.has_passed = True
+        row.due_date = due
+    session.commit()
+    return palace, due
+
+
+def _active_rows(session, palace_id):
+    return (
+        session.query(ReviewUnitState)
+        .filter_by(palace_id=palace_id, active=True)
+        .order_by(ReviewUnitState.topology_order)
+        .all()
+    )
+
+
+def test_remark_after_deleting_every_mark_keeps_earned_schedule(db_session):
+    """Delete the final mark, then re-add it: stage and due date come back."""
+    palace, due = _earned_palace(db_session, _marked_branch_doc(mark_a=True))
+    initial = _active_rows(db_session, palace.id)
+    assert initial
+    original_ids = {row.id for row in initial}
+
+    # Remove the only mark: every unit deactivates, schedule stays on disk.
+    palace.editor_doc = _marked_branch_doc(mark_a=False)
+    db_session.commit()
+    result = reconcile_palace_units(db_session, palace.id)
+    db_session.commit()
+    assert result["mark_required"] is True
+    assert _active_rows(db_session, palace.id) == []
+
+    # Re-add the same mark. Nothing active owned the region, so the previous
+    # incarnation is reactivated with its earned stage and due date intact.
+    palace.editor_doc = _marked_branch_doc(mark_a=True)
+    db_session.commit()
+    result = reconcile_palace_units(db_session, palace.id)
+    db_session.commit()
+
+    rows = _active_rows(db_session, palace.id)
+    assert rows
+    # The same rows come back rather than fresh ones, so unit identity, rating
+    # history and the earned schedule stay attached to the original records.
+    assert {row.id for row in rows} == original_ids
+    assert all(
+        item["action"] == "reactivated" for item in result["changes"]
+    ), result["changes"]
+    for row in rows:
+        assert (row.stage_index, row.due_date) == (6, due), (
+            f"{row.anchor_uid}/{row.unit_kind} restarted instead of inheriting"
+        )
+        assert row.has_passed is True
+
+
+def test_remark_at_a_different_anchor_inherits_by_node_overlap(db_session):
+    """Mark moves A -> A1: same studied region, so progress follows the content."""
+    palace, due = _earned_palace(db_session, _marked_branch_doc(mark_a=True))
+
+    # Delete, then re-add one level deeper so the anchor uid differs.
+    palace.editor_doc = _marked_branch_doc(mark_a=False)
+    db_session.commit()
+    reconcile_palace_units(db_session, palace.id)
+    db_session.commit()
+
+    palace.editor_doc = _marked_branch_doc(mark_a=False, deeper=True)
+    db_session.commit()
+    reconcile_palace_units(db_session, palace.id)
+    db_session.commit()
+
+    deeper = [
+        row for row in _active_rows(db_session, palace.id) if row.anchor_uid == "a1"
+    ]
+    assert deeper, "expected the deeper mark to create a unit"
+    assert (deeper[0].stage_index, deeper[0].due_date) == (6, due)
+    assert deeper[0].has_passed is True
+
+
+def test_retired_low_stage_row_does_not_drag_a_live_unit_down(db_session):
+    """A superseded row still holds its old schedule; it must not lower a successor."""
+    doc = json.dumps(
+        {
+            "root": {
+                "data": {"uid": "A", "text": "A", "memoryAnkiRootKind": "palace"},
+                "children": [
+                    {
+                        "data": {"uid": "B1", "text": "B1", "permanentSplitMark": True},
+                        "children": [{"data": {"uid": "C1", "text": "C1"}, "children": []}],
+                    },
+                    {
+                        "data": {"uid": "B2", "text": "B2", "permanentSplitMark": True},
+                        "children": [{"data": {"uid": "C2", "text": "C2"}, "children": []}],
+                    },
+                ],
+            }
+        },
+        ensure_ascii=False,
+    )
+    palace = Palace(title="P", archived=False, editor_doc=doc)
+    db_session.add(palace)
+    db_session.commit()
+    reconcile_palace_units(db_session, palace.id)
+    db_session.commit()
+
+    rows = _active_rows(db_session, palace.id)
+    cohort = next(row for row in rows if row.unit_kind == "cohort")
+    live_due = date.today() + timedelta(days=60)
+    for row in rows:
+        if row.unit_kind == "mark":
+            row.stage_index = 8
+            row.has_passed = True
+            row.due_date = live_due
+    # Retire the cohort as stale evidence carrying a much weaker schedule.
+    cohort.stage_index = 0
+    cohort.has_passed = False
+    cohort.due_date = date.today()
+    cohort.active = False
+    db_session.commit()
+
+    reconcile_palace_units(db_session, palace.id)
+    db_session.commit()
+
+    fresh = next(
+        row for row in _active_rows(db_session, palace.id) if row.unit_kind == "cohort"
+    )
+    assert fresh.id != cohort.id
+    assert (fresh.stage_index, fresh.due_date) == (8, live_due), (
+        "a retired row must not speak for a region that is still live"
+    )
+

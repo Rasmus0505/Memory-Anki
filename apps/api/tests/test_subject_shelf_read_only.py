@@ -10,7 +10,7 @@ from memory_anki.core.runtime_storage_lock import storage_write_lock
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitState
 from memory_anki.modules.content.presentation import router as palace_router
-from memory_anki.modules.memory.application.unit_review_projection import (
+from memory_anki.modules.memory.application.unit_reconcile import (
     reconcile_palace_units,
 )
 from memory_anki.modules.memory.application.unit_review_summary import (

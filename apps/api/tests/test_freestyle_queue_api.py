@@ -9,7 +9,7 @@ from memory_anki.infrastructure.db._tables.knowledge import Subject
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitState
 from memory_anki.infrastructure.db.deps import session_dep
-from memory_anki.modules.memory.application.unit_review_projection import reconcile_palace_units
+from memory_anki.modules.memory.application.unit_reconcile import reconcile_palace_units
 from memory_anki.modules.memory.presentation import router as review_router
 from memory_anki.modules.practice.domain.study_window import take_study_window
 from memory_anki.modules.practice.presentation import router as freestyle_router

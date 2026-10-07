@@ -241,7 +241,11 @@ def _build_projection(
 
 
 def get_review_queue_summary(session: Session, **_: Any) -> dict[str, Any]:
-    items = list_due_units(session)
+    # Read-only summary (dashboard, review queue). Defer a lagging palace to the
+    # background reconciler instead of rebuilding inside this request: the rebuild
+    # is a write that would take the global storage lock and stall every other
+    # caller behind a 15s timeout.
+    items = list_due_units(session, allow_reconcile=False)
     return {
         "items": items,
         "count": len(items),

@@ -54,7 +54,9 @@ def _optional_nonnegative_seconds(value: object) -> int | None:
 
 @router.get("/review/queue")
 def review_queue(session: Session = Depends(session_dep)):
-    return {"items": list_due_units(session)}
+    # Read-only: defer any lagging palace to the background reconciler rather
+    # than taking the global storage write lock inside a GET.
+    return {"items": list_due_units(session, allow_reconcile=False)}
 
 
 @router.get("/review/palaces/{palace_id}/units")

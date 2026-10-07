@@ -43,6 +43,9 @@ from memory_anki.modules.english.presentation import router as english_router
 from memory_anki.modules.english_lookup.presentation import router as english_lookup_router
 from memory_anki.modules.exam.presentation import router as exam_router
 from memory_anki.modules.knowledge.presentation import router as knowledge_router
+from memory_anki.modules.memory.application.unit_reconcile_scheduler import (
+    start_reconcile_worker,
+)
 from memory_anki.modules.memory.presentation import router as review_router
 from memory_anki.modules.practice.presentation import router as freestyle_router
 from memory_anki.modules.produce.presentation import import_router
@@ -137,6 +140,12 @@ async def lifespan(app: FastAPI):
         )
         start_periodic_backup_loop()
         start_startup_warmup()
+        # The review-queue read path defers a lagging palace instead of rebuilding
+        # it inside the request (that rebuild is a write and would take the global
+        # storage lock, which is what made ratings appear frozen). This worker is
+        # the other half of that deal: it drains the deferred queue continuously so
+        # content still converges to current without stalling a request.
+        start_reconcile_worker()
     try:
         yield
     finally:
