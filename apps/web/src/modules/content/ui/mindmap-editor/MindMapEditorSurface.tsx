@@ -22,9 +22,7 @@ import { WidgetErrorBoundary } from '@/shared/components/widget-error-boundary'
 import { collectMindMapBranchScope } from '@/modules/content/domain/mindmap-document-entity'
 import {
   buildSelectionFromDoc,
-  editEditorDocNode,
   editorDocToGraph,
-  getEditorDocStoredText,
   normalizeEditorDocTree,
 } from './documentGraphProjection'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
@@ -34,6 +32,7 @@ import {
   type MindMapEditorSurfaceProps,
 } from './MindMapEditorSurface.types'
 import { useMindMapEditHistory } from './useMindMapEditHistory'
+import { useMindMapNodeEditing } from './useMindMapNodeEditing'
 import { useMindMapEditorDocActions } from './useMindMapEditorDocActions'
 import { useMindMapFullscreen } from './useMindMapFullscreen'
 import { useMindMapSurfaceViewCommands } from './useMindMapSurfaceViewCommands'
@@ -336,69 +335,16 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
     return () => window.clearTimeout(timer)
   }, [graphData.nodes])
 
-  const commitEditingDraft = useCallback(() => {
-    const current = interactionRef.current
-    if (current.mode !== 'editing') return
-    const text = current.draftText.trim()
-    if (text && text !== current.originalText) {
-      const nextEditorDoc = editEditorDocNode(getCurrentEditorDoc(), current.nodeId, text)
-      if (current.createdFromDoc) commitEditorDocFrom(current.createdFromDoc, nextEditorDoc)
-      else commitEditorDoc(nextEditorDoc)
-    } else if (current.createdFromDoc) {
-      commitEditorDocFrom(current.createdFromDoc, getCurrentEditorDoc())
-    }
-    replaceInteraction(selectedInteraction(current.nodeId))
-  }, [commitEditorDoc, commitEditorDocFrom, getCurrentEditorDoc, replaceInteraction])
-
-  const cancelEditing = useCallback(() => {
-    const current = interactionRef.current
-    if (current.mode !== 'editing') return
-    if (current.createdFromDoc) {
-      stageEditorDoc(current.createdFromDoc)
-      const returnNodeId = current.returnNodeId ?? null
-      replaceInteraction(returnNodeId ? selectedInteraction(returnNodeId) : { mode: 'idle' })
-      onNodeActive?.(buildSelectionFromDoc(current.createdFromDoc, returnNodeId))
-      return
-    }
-    replaceInteraction(selectedInteraction(current.nodeId))
-  }, [onNodeActive, replaceInteraction, stageEditorDoc])
-
-  const beginEditingNode = useCallback(
-    (nodeId: string) => {
-      const current = interactionRef.current
-      if (current.mode === 'editing' && current.nodeId === nodeId) {
-        // Re-assert editing so a desynced card (e.g. after yellow-emphasis double-click
-        // races) remounts the editor instead of silently no-oping.
-        replaceInteraction({ ...current })
-        return
-      }
-      if (current.mode === 'editing' && current.nodeId !== nodeId) commitEditingDraft()
-      const editorDoc = getCurrentEditorDoc()
-      const selection = buildSelectionFromDoc(editorDoc, nodeId)
-      // Prefer stored markup (yellow emphasis HTML) so double-click edit keeps highlights.
-      const stored = getEditorDocStoredText(editorDoc, nodeId).trim()
-      const text = stored || selection[0]?.text || '未命名知识点'
-      replaceInteraction({
-        mode: 'editing',
-        nodeId,
-        originalText: text,
-        draftText: text,
-        selectAllOnStart: false,
-      })
-      onNodeActive?.(selection)
-    },
-    [commitEditingDraft, getCurrentEditorDoc, onNodeActive, replaceInteraction],
-  )
-
-  const updateEditingDraft = useCallback((nodeId: string, draftText: string) => {
-    const current = interactionRef.current
-    if (current.mode !== 'editing' || current.nodeId !== nodeId) return
-    if (current.draftText === draftText) return
-    // Keystrokes stay on the ref. Lifting each one into React state rebuilt the
-    // editor surface and the canvas, and fingerprinted the whole palace doc.
-    // NodeCard owns the live editor; commitEditingDraft reads this ref.
-    interactionRef.current = { ...current, draftText }
-  }, [])
+  const { commitEditingDraft, cancelEditing, beginEditingNode, updateEditingDraft } =
+    useMindMapNodeEditing({
+      interactionRef,
+      replaceInteraction,
+      getCurrentEditorDoc,
+      commitEditorDoc,
+      commitEditorDocFrom,
+      stageEditorDoc,
+      onNodeActive,
+    })
 
   const selectNode = useCallback(
     (nodeId: string | null, options?: { additive?: boolean }) => {
