@@ -315,6 +315,24 @@ function nextBackoffMs(attemptCount: number) {
   return Math.min(5 * 60_000, Math.max(1_000, 2 ** Math.min(attemptCount, 8) * 1_000))
 }
 
+/** How many 503 retries before a busy server becomes a visible manual failure. */
+const MAX_BUSY_ATTEMPTS = 8
+
+/** Retry-After is seconds or an HTTP date; ignore anything unparseable. */
+function parseRetryAfterMs(response: Response): number | null {
+  const raw = response.headers.get('Retry-After')
+  if (!raw) return null
+  const seconds = Number(raw)
+  if (Number.isFinite(seconds) && seconds >= 0) {
+    return Math.min(30_000, Math.max(500, seconds * 1000))
+  }
+  const at = Date.parse(raw)
+  if (Number.isFinite(at)) {
+    return Math.min(30_000, Math.max(500, at - Date.now()))
+  }
+  return null
+}
+
 async function replayOneMutation(item: PersistedMutation, force = false) {
   if (!force && item.replayMode !== 'auto') return
   if (!force && item.nextAttemptAt > Date.now()) return
@@ -349,11 +367,22 @@ async function replayOneMutation(item: PersistedMutation, force = false) {
       return
     }
     const attemptCount = current.attemptCount + 1
+    // 503 is the server's "storage is busy, retry shortly" signal, not a
+    // permanent failure. Treating it as `failed` is what made a locked backend
+    // look like a dead button: the entry stopped retrying and nothing surfaced.
+    // Honour Retry-After so the client backs off in step with the server instead
+    // of hammering the very lock it is waiting on.
+    const busyRetryMs = response.status === 503 ? parseRetryAfterMs(response) : null
+    // A busy server must not be retried forever: past this budget the entry
+    // becomes a visible, user-retryable failure instead of an endless spinner.
+    const busyExhausted = busyRetryMs !== null && attemptCount >= MAX_BUSY_ATTEMPTS
     await updateMutation(current, {
-      status: response.status >= 500 ? 'failed' : 'manual',
+      status: busyExhausted ? 'manual' : response.status >= 500 ? 'failed' : 'manual',
       attemptCount,
-      nextAttemptAt: Date.now() + nextBackoffMs(attemptCount),
-      errorMessage,
+      nextAttemptAt: Date.now() + (busyRetryMs ?? nextBackoffMs(attemptCount)),
+      errorMessage: busyExhausted
+        ? '服务器持续繁忙，已停止自动重试。请稍后手动重试。'
+        : errorMessage,
       lastResponseStatus: response.status,
     })
   } catch (error) {
