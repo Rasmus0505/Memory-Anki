@@ -1,3 +1,5 @@
+import { prefersReducedMotion } from '@/shared/lib/prefersReducedMotion'
+
 const LIT_SELECTOR = '.ma-lit, .ma-tilt'
 const SKIP_SCOPE = '.freestyle-stage, [data-ui-sound="off"]'
 
@@ -52,7 +54,7 @@ function release(element: HTMLElement | null) {
  */
 export function installPointerLight() {
   if (typeof document === 'undefined') return () => undefined
-  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return () => undefined
+  if (prefersReducedMotion()) return () => undefined
   let hovered: HTMLElement | null = null
   let pressed: HTMLElement | null = null
   let pending: { element: HTMLElement; x: number; y: number } | null = null

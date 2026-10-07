@@ -12,6 +12,7 @@ import {
   type FeedbackDescriptor,
   type GlobalFeedbackRequestDetail,
 } from '@/shared/feedback/globalFeedbackModel'
+import { usePrefersReducedMotion } from '@/shared/lib/prefersReducedMotion'
 
 const PULSE_TTL_MS = 420
 
@@ -19,21 +20,6 @@ function getBurstTtlMs(descriptor: FeedbackDescriptor) {
   if (descriptor.level === 'micro') return 420
   if (descriptor.level === 'milestone') return 780
   return 620
-}
-
-function usePrefersReducedMotion() {
-  const [reducedMotion, setReducedMotion] = React.useState(false)
-
-  React.useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
-    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
-    const sync = () => setReducedMotion(mediaQuery.matches)
-    sync()
-    mediaQuery.addEventListener?.('change', sync)
-    return () => mediaQuery.removeEventListener?.('change', sync)
-  }, [])
-
-  return reducedMotion
 }
 
 /**

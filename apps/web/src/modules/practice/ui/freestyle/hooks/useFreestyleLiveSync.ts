@@ -13,6 +13,18 @@ import type { QuizRuntimeState } from '@/modules/quiz/public'
 type ImmersiveQueue = ReturnType<typeof useImmersiveQueue>
 type QuizFlow = ReturnType<typeof useFreestyleQuizFlow>
 
+/** Node uid → reveal state. Small maps, so a key walk beats serialising both sides. */
+function sameRevealMap(
+  left: Record<string, string> | null,
+  right: Record<string, string> | null,
+) {
+  if (left === right) return true
+  if (!left || !right) return !left && !right
+  const leftKeys = Object.keys(left)
+  if (leftKeys.length !== Object.keys(right).length) return false
+  return leftKeys.every((key) => left[key] === right[key])
+}
+
 /** Shares rating evidence while routes, card positions, and reveal UI stay local. */
 export function useFreestyleLiveSync({
   fullPath,
@@ -53,17 +65,32 @@ export function useFreestyleLiveSync({
   completeCardBatch: ImmersiveQueue['completeCardBatch']
   hydrateLiveRound: ImmersiveQueue['hydrateLiveRound']
 }) {
-  const [liveRevealMap, setLiveRevealMap] = useState<Record<string, string> | null>(null)
-  const seededRevealCardIdRef = useRef<string | null>(null)
   const queueStateRef = useRef(queueState)
   queueStateRef.current = queueState
 
   const currentCardId = currentCard?.id ?? null
   const revealCacheKey = currentCardId
-  if (seededRevealCardIdRef.current !== revealCacheKey) {
-    seededRevealCardIdRef.current = revealCacheKey
-    setLiveRevealMap(revealCacheKey ? readFreestyleRevealMap(revealCacheKey) : null)
-  }
+  /**
+   * The reveal map for the card under the viewport.
+   *
+   * This used to be seeded by calling setState *during render*, which makes React
+   * throw away the in-progress render and immediately re-run the whole freestyle
+   * page on every card change — the visible hitch when flipping.
+   *
+   * `liveRevealMap` is now only an override written by a peer device. The value
+   * shown is derived, so a flip costs no extra render pass.
+   */
+  const memoizedRevealMap = useMemo(
+    () => (revealCacheKey ? readFreestyleRevealMap(revealCacheKey) : null),
+    [revealCacheKey],
+  )
+  const [remoteRevealMap, setRemoteRevealMap] = useState<{
+    cardId: string
+    map: Record<string, string> | null
+  } | null>(null)
+  const liveRevealMap = remoteRevealMap?.cardId === revealCacheKey
+    ? remoteRevealMap.map
+    : memoizedRevealMap
 
   const applyLiveViewport = useCallback((viewport: {
     currentCardId: string | null
@@ -103,10 +130,11 @@ export function useFreestyleLiveSync({
     ))
   }, [updateQuestionState])
   const applyLiveRevealMap = useCallback((map: Record<string, string> | null) => {
-    setLiveRevealMap((current) => {
-      if (JSON.stringify(current) === JSON.stringify(map)) return current
-      if (map && revealCacheKey) writeFreestyleRevealMap(revealCacheKey, map)
-      return map
+    if (!revealCacheKey) return
+    if (map) writeFreestyleRevealMap(revealCacheKey, map)
+    setRemoteRevealMap((current) => {
+      if (current?.cardId === revealCacheKey && sameRevealMap(current.map, map)) return current
+      return { cardId: revealCacheKey, map }
     })
   }, [revealCacheKey])
   const liveRating = useMemo<FreestyleLiveRating | null>(() => {

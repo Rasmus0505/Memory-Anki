@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { triggerHaptic } from '@/shared/feedback/haptics'
+import { prefersReducedMotion } from '@/shared/lib/prefersReducedMotion'
 
 export type FeedEdge = 'top' | 'bottom'
 
@@ -14,11 +15,6 @@ export function rubberBand(offset: number, limit = MAX_STRETCH_PX) {
   const sign = Math.sign(offset)
   const magnitude = Math.abs(offset)
   return sign * (1 - 1 / ((magnitude * 0.55) / limit + 1)) * limit
-}
-
-function prefersReducedMotion() {
-  return typeof window.matchMedia === 'function'
-    && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 }
 
 function edgePage(scroller: HTMLElement, edge: FeedEdge) {

@@ -1,15 +1,10 @@
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import type { Edge, Node } from '@xyflow/react'
+import { prefersReducedMotion } from '@/shared/lib/prefersReducedMotion'
 import { readRevealPhase } from './useMindMapRevealMotion'
 
 const SETTLE_DELAY_MS = 650
 const MAX_ANIMATED_PER_BATCH = 40
-
-function prefersReducedMotion() {
-  return typeof window !== 'undefined'
-    && typeof window.matchMedia === 'function'
-    && window.matchMedia('(prefers-reduced-motion: reduce)').matches
-}
 
 function escapeId(id: string) {
   return typeof CSS !== 'undefined' && typeof CSS.escape === 'function' ? CSS.escape(id) : id.replace(/"/g, '\\"')

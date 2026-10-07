@@ -37,7 +37,8 @@ import { useMindMapEditHistory } from './useMindMapEditHistory'
 import { useMindMapEditorDocActions } from './useMindMapEditorDocActions'
 import { useMindMapFullscreen } from './useMindMapFullscreen'
 import { useMindMapSurfaceViewCommands } from './useMindMapSurfaceViewCommands'
-import { createMindMapCapabilities, mergeMindMapGraphOptions } from './capabilities'
+import { createMindMapCapabilities } from './capabilities'
+import { useMindMapGraphOptionsSignature } from './useMindMapGraphOptionsSignature'
 import { detectClientSource } from '@/shared/lib/clientSource'
 import {
   collectRevealMap,
@@ -210,10 +211,11 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
       segmentRangeDraft, segments, statusChipsByNodeUid,
     ],
   )
-  const graphOptions = useMemo(() => mergeMindMapGraphOptions(capabilities), [capabilities])
-  // Content signature absorbs shallow-new decoration objects with identical payload
-  // (e.g. empty mastery maps recreated each render in review).
-  const graphOptionsSignature = useMemo(() => JSON.stringify(graphOptions), [graphOptions])
+  const { graphOptions, graphOptionsSignature } = useMindMapGraphOptionsSignature({
+    capabilities, segments, activeSegmentId, segmentColorMode, segmentRangeDraft,
+    highlightedNodeUids, outlinedNodeUids, mutedNodeUids, masteryByNodeUid,
+    statusChipsByNodeUid, countBadgeByNodeUid, practiceModeActive, providedCapabilities,
+  })
   const branchScope = useMemo(
     () => scopeBranchUid
       ? collectMindMapBranchScope(normalizedEditorState.editor_doc, scopeBranchUid)

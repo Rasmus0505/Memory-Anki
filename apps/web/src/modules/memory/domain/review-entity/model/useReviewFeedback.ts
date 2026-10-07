@@ -27,6 +27,7 @@ import {
   type ReviewFeedbackSettings,
 } from '@/shared/feedback/reviewFeedbackSettings'
 import { emitReviewConfetti } from '@/shared/components/celebration'
+import { usePrefersReducedMotion } from '@/shared/lib/prefersReducedMotion'
 import type { MindMapReviewFxPayload } from '@/shared/feedback/feedbackEvents'
 import type {
   RevealFlowMode,
@@ -90,24 +91,7 @@ function deriveFxIntensity(args: {
   return 'full'
 }
 
-export function usePrefersReducedMotion() {
-  const [reducedMotion, setReducedMotion] = React.useState(false)
-
-  React.useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
-    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
-    const sync = () => setReducedMotion(mediaQuery.matches)
-    sync()
-    if (typeof mediaQuery.addEventListener === 'function') {
-      mediaQuery.addEventListener('change', sync)
-      return () => mediaQuery.removeEventListener('change', sync)
-    }
-    mediaQuery.addListener(sync)
-    return () => mediaQuery.removeListener(sync)
-  }, [])
-
-  return reducedMotion
-}
+export { usePrefersReducedMotion } from '@/shared/lib/prefersReducedMotion'
 
 export function useReviewFeedback({
   root,
