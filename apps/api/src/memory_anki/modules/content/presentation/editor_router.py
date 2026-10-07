@@ -1,9 +1,10 @@
-﻿import logging
+import logging
 import time
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from memory_anki.core.runtime_storage_lock import StorageBusyError
 from memory_anki.infrastructure.db.deps import session_dep
 from memory_anki.modules.content.application.editor_state_service import (
     EditorStateConflictError,
@@ -88,6 +89,11 @@ def api_update_editor(
             data,
             uow=SqlAlchemyUnitOfWork(s),
         )
+    except StorageBusyError:
+        # The shared runtime lock was held by a background snapshot. The save is
+        # safe to replay, so let the global handler answer 503 + Retry-After
+        # instead of masking contention as an internal error.
+        raise
     except EditorStateConflictError as exc:
         raise HTTPException(status_code=409, detail={"code": "mindmap_conflict", "message": str(exc), "remoteSnapshot": exc.current_snapshot}) from exc
     except ValueError as exc:

@@ -28,7 +28,10 @@ logger = logging.getLogger(__name__)
 
 # 自动/手动/关机均走轻量 rolling；rescue 在替换前包含 ledger 与附件，full 包含所有 managed media。
 AUTO_ROLLING_BACKUP_INTERVAL = timedelta(hours=4)
-ROLLING_EDIT_BACKUP_INTERVAL = timedelta(minutes=30)
+# 编辑触发的滚动备份每次都要完整快照数据库（本机约 200 MB，落在同步盘上）。
+# 30 分钟的间隔意味着每小时反复重写数百 MB，既拖慢同步盘又会长时间占用运行锁，
+# 因此放宽到 2 小时：数据库仍有每日启动备份 + 每 4 小时周期备份兜底。
+ROLLING_EDIT_BACKUP_INTERVAL = timedelta(hours=2)
 
 # 保留策略：每次新建备份后自动清理超出上限的旧备份，避免磁盘无限增长。
 MAX_FULL_BACKUPS = 1

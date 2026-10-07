@@ -197,38 +197,59 @@ def create_storage_backup_manifest(
     }
 
 
+def _snapshot_databases_under_lock(stage: Path, items: list[ManagedStorageItem]) -> dict[str, dict[str, Any]]:
+    """Capture DB (and sidecar) bytes while holding the shared runtime lock.
+
+    This is the only part of a backup that must be mutually exclusive with live
+    writes. It is a fast, streaming ``sqlite3`` online backup — not a file copy —
+    so the lock is released in milliseconds-to-seconds instead of the minutes a
+    bulk ``shutil`` copy of hundreds of MB over a synced drive would take.
+    """
+    captured: dict[str, dict[str, Any]] = {}
+    with storage_write_lock(APP_HOME):
+        for item in items:
+            if item.key == "database":
+                captured[item.key] = _copy_item_to_backup(item, stage)
+    return captured
+
+
 def write_storage_backup(
     destination_root: Path, *, reason: str, full: bool = True, scope: str | None = None
 ) -> dict[str, Any]:
     ensure_runtime_dirs()
     checkpoint_sqlite_wal(require_complete=True)
     destination_root = Path(destination_root)
-    with storage_write_lock(APP_HOME):
-        if destination_root.exists() and any(destination_root.iterdir()):
-            raise FileExistsError(f"backup destination is not empty: {destination_root}")
-        destination_root.parent.mkdir(parents=True, exist_ok=True)
-        with tempfile.TemporaryDirectory(prefix=".backup-stage-", dir=destination_root.parent) as stage_dir:
-            stage = Path(stage_dir)
-            included_items = [
-                _copy_item_to_backup(item, stage)
-                for item in _select_backup_items(full=full, scope=scope)
-            ]
-            manifest = create_storage_backup_manifest(
-                reason=reason, included_items=included_items, full=full
-            )
-            manifest["scope"] = scope or ("full" if full else "rolling")
-            manifest["database_snapshot"] = "sqlite_online_backup"
-            manifest["excluded_items"] = [
-                item.key for item in get_backup_storage_items()
-                if item.key not in {entry["key"] for entry in included_items}
-            ]
-            (stage / BACKUP_MANIFEST_NAME).write_text(
-                json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
-            destination_root.mkdir(parents=True, exist_ok=True)
-            for child in stage.iterdir():
-                child.replace(destination_root / child.name)
-        return manifest
+    items = _select_backup_items(full=full, scope=scope)
+    if destination_root.exists() and any(destination_root.iterdir()):
+        raise FileExistsError(f"backup destination is not empty: {destination_root}")
+    destination_root.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=".backup-stage-", dir=destination_root.parent) as stage_dir:
+        stage = Path(stage_dir)
+        # Phase 1 (locked, fast): consistent database snapshot.
+        captured = _snapshot_databases_under_lock(stage, items)
+        # Phase 2 (unlocked, slow): copy remaining files/media. Live writers are
+        # free to commit while this runs, which is what previously turned a
+        # 9-minute rolling copy into a wall of 500s for autosave and review.
+        included_items = [
+            captured[item.key] if item.key in captured else _copy_item_to_backup(item, stage)
+            for item in items
+        ]
+        manifest = create_storage_backup_manifest(
+            reason=reason, included_items=included_items, full=full
+        )
+        manifest["scope"] = scope or ("full" if full else "rolling")
+        manifest["database_snapshot"] = "sqlite_online_backup"
+        manifest["excluded_items"] = [
+            item.key for item in get_backup_storage_items()
+            if item.key not in {entry["key"] for entry in included_items}
+        ]
+        (stage / BACKUP_MANIFEST_NAME).write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        destination_root.mkdir(parents=True, exist_ok=True)
+        for child in stage.iterdir():
+            child.replace(destination_root / child.name)
+    return manifest
 
 
 def read_storage_backup_manifest(backup_root: Path) -> dict[str, Any]:

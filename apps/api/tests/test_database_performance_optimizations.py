@@ -410,6 +410,78 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
 
         copy_item_to_backup.assert_not_called()
 
+    def test_bulk_backup_copy_runs_outside_the_runtime_write_lock(self):
+        """Only the fast DB snapshot may hold the shared runtime lock.
+
+        Regression: the whole rolling backup used to run inside
+        ``storage_write_lock``, so a ~200 MB database copy over a synced drive
+        held the lock for ~9 minutes and every autosave/review write answered
+        500 (``timed out acquiring runtime storage thread lock``).
+        """
+        lock_depth = {"held": 0, "max_depth_during_media_copy": -1}
+        observed: list[str] = []
+
+        class _TrackingLock:
+            def __enter__(self):
+                lock_depth["held"] += 1
+                observed.append("lock:enter")
+                return self
+
+            def __exit__(self, exc_type, exc, traceback):
+                lock_depth["held"] -= 1
+                observed.append("lock:exit")
+                return False
+
+        def fake_copy(item, destination):
+            observed.append(f"copy:{item.key}")
+            if item.key == "attachments":
+                # The slow, bulk phase: the runtime lock must NOT be held here.
+                lock_depth["max_depth_during_media_copy"] = lock_depth["held"]
+            return {"key": item.key}
+
+        database_item = _BackupItem()
+        media_item = _BackupItem()
+        media_item.key = "attachments"
+
+        with TemporaryDirectory() as temp_dir, patch.object(
+            storage_backup,
+            "ensure_runtime_dirs",
+        ), patch.object(
+            storage_backup,
+            "checkpoint_sqlite_wal",
+        ), patch.object(
+            storage_backup,
+            "_select_backup_items",
+            return_value=[database_item, media_item],
+        ), patch.object(
+            storage_backup,
+            "_copy_item_to_backup",
+            side_effect=fake_copy,
+        ), patch.object(
+            storage_backup,
+            "create_storage_backup_manifest",
+            return_value={"ok": True},
+        ), patch.object(
+            storage_backup,
+            "get_backup_storage_items",
+            return_value=[],
+        ), patch.object(
+            storage_backup,
+            "storage_write_lock",
+            side_effect=lambda *a, **k: _TrackingLock(),
+        ):
+            storage_backup.write_storage_backup(
+                Path(temp_dir), reason="rolling-edit", full=False, scope="rescue"
+            )
+
+        # The database snapshot is captured under the lock...
+        assert "copy:database" in observed
+        assert "copy:attachments" in observed
+        # ...and the bulk copy is reached only with the lock fully released.
+        assert lock_depth["max_depth_during_media_copy"] == 0, (
+            "bulk backup copy must not run while the runtime storage lock is held"
+        )
+
     def test_full_backup_analyzes_after_successful_backup(self):
         events: list[str] = []
         backup_lock = _RecordingLock(events)
@@ -541,7 +613,7 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
         self.assertTrue(db_maintenance.checkpoint_sqlite_wal(_FakeCheckpointEngine((0, -1, -1))))
 
     def test_unit_queue_select_count_stays_flat_with_many_palaces(self):
-        from memory_anki.modules.memory.application.unit_review_projection import (
+        from memory_anki.modules.memory.application.unit_reconcile import (
             reconcile_palace_units,
         )
         from memory_anki.modules.memory.application.unit_review_summary import (
@@ -594,7 +666,7 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
         self.assertLessEqual(len(statements), 3)
 
     def test_batch_unit_summary_matches_single_palace_summary(self):
-        from memory_anki.modules.memory.application.unit_review_projection import (
+        from memory_anki.modules.memory.application.unit_reconcile import (
             reconcile_palace_units,
         )
         from memory_anki.modules.memory.application.unit_review_summary import (
@@ -732,6 +804,28 @@ class _RecordingLock:
 
     def locked(self) -> bool:
         return self._locked
+
+
+class _LockSpy:
+    """Records lock enter/exit around a real lock so ordering can be asserted."""
+
+    def __init__(self, events: list[str], kwargs: dict) -> None:
+        self._events = events
+        self._kwargs = kwargs
+        self._cm = None
+
+    def __enter__(self):
+        self._events.append("lock:enter")
+        from contextlib import nullcontext
+
+        self._cm = nullcontext()
+        return self._cm.__enter__()
+
+    def __exit__(self, exc_type, exc, traceback):
+        self._events.append("lock:exit")
+        if self._cm is None:
+            return False
+        return self._cm.__exit__(exc_type, exc, traceback)
 
 
 class _FakeCheckpointEngine:

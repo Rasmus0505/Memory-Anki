@@ -9,6 +9,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from memory_anki.core.runtime_storage_lock import StorageBusyError
+
 logger = logging.getLogger(__name__)
 
 
@@ -41,6 +43,36 @@ def install_error_handlers(app: FastAPI) -> None:
                 "validation_error",
                 "请求参数校验失败。",
                 errors=exc.errors(),
+            ),
+        )
+
+    @app.exception_handler(StorageBusyError)
+    async def handle_storage_busy(
+        request: Request, exc: StorageBusyError
+    ) -> JSONResponse:
+        """Report lock contention as retryable instead of an internal error.
+
+        The shared runtime lock is held by whatever write is currently in flight
+        (a background snapshot, a palace rebuild, a slow autosave). The client's
+        write is safe to replay, so answer 503 with a Retry-After hint rather
+        than a misleading 500. The message names the condition, not one guessed
+        cause, because guessing "backup" here previously sent debugging in the
+        wrong direction.
+        """
+        logger.warning(
+            "storage busy on %s %s after %.1fs wait; client should retry",
+            request.method,
+            request.url.path,
+            exc.wait_seconds,
+        )
+        retry_after = exc.retry_after_seconds
+        return JSONResponse(
+            status_code=503,
+            headers={"Retry-After": str(retry_after)},
+            content=_error_detail(
+                "storage_busy",
+                "数据正在写入中，本次操作已自动重试。",
+                retryAfterSeconds=retry_after,
             ),
         )
 

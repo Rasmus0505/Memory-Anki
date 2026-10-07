@@ -29,6 +29,14 @@ def make_error_app() -> FastAPI:
     def boom_route():
         raise RuntimeError("boom with traceback")
 
+    @app.put("/busy")
+    def busy_route():
+        from memory_anki.core.runtime_storage_lock import StorageBusyError
+
+        raise StorageBusyError(
+            "timed out acquiring runtime storage thread lock", wait_seconds=15.0
+        )
+
     return app
 
 
@@ -64,3 +72,26 @@ def test_unexpected_error_hides_traceback():
     }
     assert "traceback" not in response.text.lower()
     assert "boom with traceback" not in response.text
+
+
+def test_storage_busy_reports_retryable_503_not_internal_error():
+    """Lock contention must be retryable, not an opaque 500.
+
+    A rolling backup can hold the shared runtime lock for minutes; the mindmap
+    autosave used to surface that as "服务器内部错误", which hid a safely
+    repeatable condition.
+    """
+    response = TestClient(make_error_app(), raise_server_exceptions=False).put("/busy")
+
+    assert response.status_code == 503
+    assert response.headers["Retry-After"] == "15"
+    detail = response.json()["detail"]
+    assert detail["code"] == "storage_busy"
+    assert detail["retryAfterSeconds"] == 15
+    # The client-facing message must not leak the internal lock class name.
+    assert "StorageBusyError" not in response.text
+    assert "traceback" not in response.text.lower()
+    # Nor may it name a single guessed holder. The message used to blame
+    # "后台备份", but the common cause turned out to be a lagging-palace rebuild
+    # inside a read request, so that wording sent debugging the wrong way.
+    assert "备份" not in detail["message"]
