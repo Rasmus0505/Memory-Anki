@@ -55,6 +55,11 @@ export interface StudySessionItem {
   progress: Record<string, unknown>
   events: StudySessionEvent[]
   summary: Record<string, unknown>
+  /**
+   * Four-dimension attribution (学科/章节/单元 + 场景 + 行为 + 宫殿).
+   * Present on ledger rows; SQLite rows fall back to `summary` metadata.
+   */
+  attribution?: Record<string, unknown>
   deleted_at: string | null
   deleted_reason: string | null
   created_at: string | null
@@ -367,6 +372,11 @@ export interface TimeLedgerIntervalPayload {
   kind: string
   title?: string
   client_source?: string
+  /**
+   * Interval metadata. Carries four-dimension attribution
+   * (`subject_id`/`chapter_id`/`unit_label`/`scene`/`behavior`) alongside
+   * `session_key` and `completion_method`.
+   */
   metadata?: Record<string, unknown>
 }
 

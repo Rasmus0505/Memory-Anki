@@ -42,6 +42,7 @@ import {
   filterGroupedPalacesByScope,
   flattenGroupedPalaces,
   getPalaceCatalogScopeTitle,
+  publishPalaceKnowledgeBindings,
 } from '@/modules/content/ui/palace-catalog/model/palaceCatalog'
 
 export default function PalaceList() {
@@ -130,6 +131,12 @@ export default function PalaceList() {
       showUncategorizedOnly,
     })
   }, [groupedData, selectedSubjectId, showUncategorizedOnly])
+
+  useEffect(() => {
+    if (!groupedData) return
+    // Hand the session module the palace → 学科/章节 map while the catalog is warm.
+    publishPalaceKnowledgeBindings(groupedData)
+  }, [groupedData])
 
   useEffect(() => {
     return onAppEvent(PALACE_CATALOG_INVALIDATED_EVENT, () => {

@@ -1,3 +1,5 @@
+import type { TimeRecordAttribution } from '@/modules/session/domain/session-entity/model/timeRecordAttribution'
+
 export type RevealState = 'hidden' | 'placeholder' | 'revealed'
 
 export type SessionKind = 'palace_edit' | 'practice' | 'quiz' | 'review' | 'custom'
@@ -90,6 +92,11 @@ export interface TimeSessionRecord {
   activityTag?: string | null
   /** Display label snapshot for custom tags. */
   activityTagLabel?: string | null
+  /**
+   * Four-dimension attribution: 学科/章节/单元 + 场景 + 行为 + 宫殿.
+   * Persisted into the ledger metadata so totals can be grouped per subject.
+   */
+  attribution?: TimeRecordAttribution
   /** Legacy table or source named by the migration that imported this row. */
   importedFrom?: string | null
   deletedAt?: string | null

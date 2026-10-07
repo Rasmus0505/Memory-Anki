@@ -223,8 +223,29 @@ export function dwellKindToSessionKind(kind: string | null | undefined): Session
   return 'practice'
 }
 
-export function pickDominantFragmentKind(
-  segments: Array<{ kind?: string | null; effectiveSeconds?: number | null }>,
+/**
+ * The scene fragment that consumed the most time, used to attribute a record.
+ *
+ * Ties break toward the earliest fragment so the originating surface wins,
+ * matching how the record title is chosen.
+ */
+export function pickDominantSegment<
+  T extends { kind?: string | null; effectiveSeconds?: number | null },
+>(segments: readonly T[]): T | null {
+  let winner: T | null = null
+  let winnerSeconds = -1
+  for (const segment of segments) {
+    if (!String(segment.kind || '').trim()) continue
+    const seconds = Math.max(0, Math.round(segment.effectiveSeconds || 0))
+    if (seconds > winnerSeconds) {
+      winner = segment
+      winnerSeconds = seconds
+    }
+  }
+  return winner
+}
+
+export function pickDominantFragmentKind(  segments: Array<{ kind?: string | null; effectiveSeconds?: number | null }>,
   fallback: DwellFragmentKind,
 ): DwellFragmentKind {
   const totals = new Map<string, number>()

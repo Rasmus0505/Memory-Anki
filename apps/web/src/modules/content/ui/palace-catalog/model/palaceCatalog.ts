@@ -2,6 +2,7 @@ import type {
   PalaceGroupedItem,
   PalaceGroupedListResponse,
 } from '@/shared/api/contracts'
+import { setPalaceKnowledgeBinding } from '@/modules/session/public'
 export {
   buildPalaceCatalogGroupedQueryKey,
   PALACE_CATALOG_GROUPED_QUERY_KEY,
@@ -155,4 +156,45 @@ export function flattenGroupedPalaces(
     list.push(...subject.ungrouped_palaces)
   }
   return list
+}
+
+/**
+ * Publish palace → subject/chapter bindings for time attribution.
+ *
+ * Called wherever the grouped catalog loads. Time records must be stamped with
+ * 学科/章节 at the moment they close, but the session module cannot query the
+ * knowledge module then; this hands it the mapping while the catalog is warm.
+ */
+export function publishPalaceKnowledgeBindings(
+  data: Pick<PalaceGroupedListResponse, 'subjects'>,
+): void {
+  for (const subject of data.subjects) {
+    const subjectId = subject.subject?.id ?? null
+    const subjectName = subject.subject?.name ?? null
+    const publish = (palace: PalaceGroupedItem, chapterId: number | null, chapterName: string | null) => {
+      setPalaceKnowledgeBinding(palace.id, {
+        subjectId,
+        subjectName,
+        chapterId,
+        chapterName,
+      })
+    }
+    for (const group of subject.chapter_groups) {
+      const chapterId = group.source_chapter?.id ?? null
+      const chapterName = group.source_chapter?.name ?? null
+      for (const palace of group.palaces) {
+        // A palace's own primary chapter is more specific than its group.
+        const resolved = palace.primary_chapter
+        publish(
+          palace,
+          resolved?.id ?? chapterId,
+          resolved?.name ?? chapterName,
+        )
+      }
+    }
+    for (const palace of subject.ungrouped_palaces) {
+      const resolved = palace.primary_chapter
+      publish(palace, resolved?.id ?? null, resolved?.name ?? null)
+    }
+  }
 }

@@ -5,6 +5,13 @@ import type {
   TimeSessionRecord,
 } from '@/modules/session/domain/session-entity/model/session-records'
 import {
+  attributionFromMetadata,
+  attributionToMetadata,
+  hasAttributionTarget,
+  normalizeAttribution,
+  type TimeRecordAttribution,
+} from '@/modules/session/domain/session-entity/model/timeRecordAttribution'
+import {
   bulkDeleteStudySessionsApi,
   createStudySessionFromTimeRecordApi,
   uploadTimeLedgerApi,
@@ -156,7 +163,13 @@ export function buildTimeLedgerUpload(record: TimeSessionRecord) {
     kind: record.activityTag ?? record.kind,
     title: record.title,
     client_source: record.clientSource ?? 'unknown',
-    metadata: { session_key: record.sessionKey, completion_method: record.completionMethod },
+    // Attribution must travel with the interval: without it the row only says
+    // that time passed, not which subject/chapter/unit it belongs to.
+    metadata: {
+      ...attributionToMetadata(record.attribution),
+      session_key: record.sessionKey,
+      completion_method: record.completionMethod,
+    },
   }))
 }
 
@@ -227,6 +240,7 @@ function studySessionToTimeRecord(item: StudySessionItem): TimeSessionRecord {
     clientSource: normalizeClientSource(summary.client_source),
     activityTag,
     activityTagLabel,
+    attribution: resolveRecordAttribution(item, summary, activityTag),
     importedFrom: readOptionalString(summary.migrated_from),
     deletedAt: item.deleted_at,
     deletedReason: item.deleted_reason === 'manual' ? 'manual' : null,
@@ -239,6 +253,49 @@ function readOptionalString(value: unknown): string | null {
   if (typeof value !== 'string') return null
   const trimmed = value.trim()
   return trimmed ? trimmed : null
+}
+
+/**
+ * Prefer the API's dedicated `attribution`, then the ledger metadata bag, then
+ * the legacy palace/scene fields, so both new and pre-contract rows resolve.
+ */
+function resolveRecordAttribution(
+  item: StudySessionItem,
+  summary: Record<string, unknown>,
+  activityTag: string | null,
+): TimeRecordAttribution {
+  const explicit = item.attribution
+    ? attributionFromMetadata(item.attribution)
+    : {}
+  if (hasAttributionTarget(explicit) || explicit.scene || explicit.behavior) {
+    return explicit
+  }
+  const fromSummary = attributionFromMetadata(summary)
+  if (hasAttributionTarget(fromSummary) || fromSummary.scene || fromSummary.behavior) {
+    return fromSummary
+  }
+  return normalizeAttribution({
+    palaceId: item.palace_id,
+    palaceSegmentId: item.palace_segment_id,
+    scene: item.scene,
+    behavior: attributionBehaviorForScene(item.scene, activityTag),
+  })
+}
+
+/** Map a scene + activity tag onto the concrete action label. */
+function attributionBehaviorForScene(
+  scene: string | null | undefined,
+  activityTag: string | null,
+): string | null {
+  if (activityTag === 'quiz' || scene === 'quiz') return 'quiz'
+  if (scene === 'palace_edit' || activityTag === 'palace_edit') return 'edit'
+  if (scene === 'english_reading') return 'reading'
+  if (scene === 'english') return 'listening'
+  if (scene === 'freestyle' || activityTag === 'practice' || activityTag === 'review') {
+    return 'flip'
+  }
+  if (scene === 'review') return 'review'
+  return null
 }
 
 function normalizeClientSource(value: unknown): TimeSessionRecord['clientSource'] {

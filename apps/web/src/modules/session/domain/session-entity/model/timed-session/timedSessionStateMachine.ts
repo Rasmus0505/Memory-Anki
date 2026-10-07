@@ -17,9 +17,12 @@ import {
   formatDwellRecordTitle,
   isDwellSessionKey,
   pickDominantFragmentKind,
+  pickDominantSegment,
   segmentKindFromScene,
   shouldResumeDwell,
 } from './dwellPolicy'
+import { peekPalaceKnowledgeBinding } from '../palaceKnowledgeBinding'
+import { buildSurfaceAttribution } from '../timeRecordAttribution'
 import {
   buildPersistedTimedSessionSnapshot,
   buildRecordFromExpiredSuspendedSnapshot,
@@ -425,8 +428,43 @@ function nextClientRevision(store: TimerStore) {
   return store.clientRevision
 }
 
-function collectSegments(store: TimerStore, endedAt: string): SessionSceneSegment[] {
-  const segments = [...store.sceneSegments]
+/**
+ * Attribution for a completed record.
+ *
+ * The dominant fragment decides scene/behavior so a session that started in the
+ * pal ace list but mostly ran inside a palace is filed under the palace, and the
+ * palace id is taken from the dominant segment rather than the attachment, which
+ * may already have been detached. Subject/chapter resolve from the cached
+ * knowledge binding when the session module has one.
+ */
+function buildRecordAttribution(
+  store: TimerStore,
+  dominantKind: string,
+  segments: readonly SessionSceneSegment[] = store.sceneSegments,
+) {
+  const dominantSegment = pickDominantSegment(segments)
+  const scene = dominantSegment?.scene ?? (store.activeSegment?.scene || store.kind)
+  const palaceId = dominantSegment?.palaceId ?? store.palaceId
+  return buildSurfaceAttribution({
+    scene: String(scene ?? ''),
+    behavior: behaviorForKind(dominantKind, String(scene ?? '')),
+    palaceId,
+    unitLabel: dominantSegment?.title ?? store.title ?? null,
+    binding: peekPalaceKnowledgeBinding(palaceId),
+  })
+}
+
+function behaviorForKind(kind: string, scene: string): string | null {
+  if (kind === 'quiz' || scene === 'quiz') return 'quiz'
+  if (kind === 'palace_edit' || scene === 'palace_edit') return 'edit'
+  if (scene === 'english_reading') return 'reading'
+  if (scene === 'english') return 'listening'
+  if (scene === 'review' || kind === 'review') return 'review'
+  if (scene === 'freestyle' || kind === 'practice') return 'flip'
+  return null
+}
+
+function collectSegments(store: TimerStore, endedAt: string): SessionSceneSegment[] {  const segments = [...store.sceneSegments]
   const active = store.activeSegment
   if (!active) return segments
   const seconds = Math.max(0, store.snapshot.effectiveSeconds - active.startEffectiveSeconds)
@@ -452,6 +490,7 @@ function buildRecord(store: TimerStore, method: SessionCompletionMethod, endedAt
   updateEffectiveSnapshot(store)
   closeActiveSegment(store, endedAt)
   const dominantKind = pickDominantFragmentKind(store.sceneSegments, store.kind)
+  const attribution = buildRecordAttribution(store, dominantKind)
   return {
     id: store.recordId,
     sessionKey: isDwellSessionKey(store.key)
@@ -474,6 +513,7 @@ function buildRecord(store: TimerStore, method: SessionCompletionMethod, endedAt
     durationEdited: false,
     clientSource: detectClientSource(),
     activityTag: dominantKind,
+    attribution,
     events: [...store.events],
     sceneSegments: [...store.sceneSegments],
     activityIntervals: confirmedClickIntervals(store.activityIntervals, store.lastClickAtMs),
@@ -485,10 +525,8 @@ function buildCheckpointRecord(store: TimerStore) {
   settleRunning(store)
   updateEffectiveSnapshot(store)
   const endedAt = nowIso()
-  const dominantKind = pickDominantFragmentKind(
-    collectSegments(store, endedAt),
-    store.kind,
-  )
+  const segments = collectSegments(store, endedAt)
+  const dominantKind = pickDominantFragmentKind(segments, store.kind)
   return {
     id: store.recordId,
     sessionKey: isDwellSessionKey(store.key)
@@ -511,8 +549,9 @@ function buildCheckpointRecord(store: TimerStore) {
     durationEdited: false,
     clientSource: detectClientSource(),
     activityTag: dominantKind,
+    attribution: buildRecordAttribution(store, dominantKind, segments),
     events: [...store.events],
-    sceneSegments: collectSegments(store, endedAt),
+    sceneSegments: segments,
     activityIntervals: confirmedClickIntervals(store.activityIntervals, store.lastClickAtMs),
   } satisfies TimeSessionRecord
 }

@@ -8,6 +8,7 @@ import {
   upsertPendingTimeRecordRecovery,
 } from '@/modules/session/public'
 import type { TimeSessionRecord } from '@/modules/session/public'
+import { attributionToMetadata } from '@/modules/session/public'
 
 const JSON_CONTENT_TYPE = 'application/json'
 const MUTATION_ID_HEADER = 'X-Memory-Anki-Mutation-ID'
@@ -34,7 +35,12 @@ function buildLedgerRequestBody(record: TimeSessionRecord) {
     kind: record.activityTag ?? record.kind,
     title: record.title,
     client_source: record.clientSource ?? 'unknown',
-    metadata: { session_key: record.sessionKey },
+    // The unload path must carry the same attribution as the normal one; a
+    // closed tab used to be exactly where subject/chapter was dropped.
+    metadata: {
+      ...attributionToMetadata(record.attribution),
+      session_key: record.sessionKey,
+    },
   }))
   return JSON.stringify({ intervals })
 }

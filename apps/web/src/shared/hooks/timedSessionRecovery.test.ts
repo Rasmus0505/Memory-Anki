@@ -8,12 +8,17 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/shared/api/http', () => ({ API_BASE: '/api/v1' }))
 vi.mock('@/shared/api/apiToken', () => ({ getApiToken: () => 'test-token' }))
 vi.mock('@/shared/persistence/mutationQueue', () => ({ enqueueMutation: mocks.enqueue }))
-vi.mock('@/modules/session/public', () => ({
-  buildTimeRecordRecoveryMutationId: (id: string) => `recovery:${id}`,
-  removePendingTimeRecordRecovery: mocks.remove,
-  serializeStudySessionRecordPayload: mocks.serialize,
-  upsertPendingTimeRecordRecovery: mocks.pending,
-}))
+vi.mock('@/modules/session/public', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/modules/session/public')>()
+  return {
+    // Keep the real (pure) attribution serializer so the unload body is covered.
+    attributionToMetadata: actual.attributionToMetadata,
+    buildTimeRecordRecoveryMutationId: (id: string) => `recovery:${id}`,
+    removePendingTimeRecordRecovery: mocks.remove,
+    serializeStudySessionRecordPayload: mocks.serialize,
+    upsertPendingTimeRecordRecovery: mocks.pending,
+  }
+})
 import { fireAndQueueTimeRecordOnUnload } from './timedSessionRecovery'
 
 const record: TimeSessionRecord = {
@@ -39,5 +44,34 @@ describe('confirmed timer unload recovery', () => {
     expect(payload.intervals[0].session_id).toBe('session-a')
     expect(fetch).toHaveBeenCalledWith(queued.url, expect.objectContaining({ body: queued.body, keepalive: true }))
     expect(mocks.serialize).not.toHaveBeenCalled()
+  })
+
+  it('carries subject/chapter/unit attribution through the unload path', async () => {
+    // A closed tab used to drop exactly this: the interval reached the ledger
+    // with no way to tell which subject the time belonged to.
+    await fireAndQueueTimeRecordOnUnload({
+      ...record,
+      attribution: {
+        subjectId: 4,
+        subjectName: '中国教育史',
+        chapterId: 6,
+        chapterName: '第一节 民国初年的教育改革',
+        unitLabel: '夸美纽斯宫殿',
+        palaceId: 12,
+        scene: 'freestyle',
+        behavior: 'flip',
+      },
+    })
+    const payload = JSON.parse(mocks.enqueue.mock.calls[0][0].body)
+    expect(payload.intervals[0].metadata).toMatchObject({
+      subject_id: 4,
+      subject_name: '中国教育史',
+      chapter_id: 6,
+      chapter_name: '第一节 民国初年的教育改革',
+      unit_label: '夸美纽斯宫殿',
+      palace_id: 12,
+      scene: 'freestyle',
+      behavior: 'flip',
+    })
   })
 })
