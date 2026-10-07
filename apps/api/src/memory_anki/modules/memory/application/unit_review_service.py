@@ -1687,6 +1687,15 @@ def _complete_unit_review_session(session: Session, study: StudySession) -> dict
     # start (desktop/pwa freestyle or formal review) is not wiped to 未知端.
     prior = _load_study_summary(study)
     wall_span = max(0, int((now - study.started_at).total_seconds())) if study.started_at else duration
+    # ``duration`` bills rated closed encounters, but ``started_at`` is the first
+    # encounter's start and ``ended_at`` is *now* — after the last card was
+    # already on screen. The final render gap therefore let the billed sum exceed
+    # the stored wall span by a second or two, producing rows whose
+    # "effective_seconds" could not fit inside their own timestamps.
+    # Clamp so the two accounts always agree, and record when that happened.
+    billed_seconds = duration
+    if duration > wall_span:
+        duration = wall_span
     summary = {
         **prior,
         "study_session_id": study.id,
@@ -1700,6 +1709,9 @@ def _complete_unit_review_session(session: Session, study: StudySession) -> dict
         "next_review_date": next_due.due_date.isoformat() if next_due else None,
         "completed_at": to_api_datetime(now),
     }
+    if billed_seconds != duration:
+        # Keep the raw figure for audit; the stored duration is the clamped one.
+        summary["billed_seconds_before_clamp"] = billed_seconds
     prior_source = _normalize_unit_review_client_source(prior.get("client_source"))
     if prior_source is not None:
         summary["client_source"] = prior_source
