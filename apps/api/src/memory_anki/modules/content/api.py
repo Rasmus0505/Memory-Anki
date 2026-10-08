@@ -25,6 +25,7 @@ from .application.tree_structure import (
     list_active_palace_ids_by_subject_ids,
     list_active_palace_ids_by_subject_scope,
     list_active_palace_tree_structures,
+    resolve_palace_titles,
     stable_tree_order,
     subtree_node_uids,
 )
@@ -49,6 +50,7 @@ __all__ = [
     "parse_segment_node_uids",
     "resolve_palace_subject",
     "resolve_palace_title",
+    "resolve_palace_titles",
     "stable_tree_order",
     "subtree_node_uids",
     "update_palace_chapter_binding",

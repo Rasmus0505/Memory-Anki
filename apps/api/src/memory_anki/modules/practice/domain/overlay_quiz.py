@@ -29,6 +29,172 @@ from .quiz_stream import deterministic_shuffle, order_quiz_stream_by_scope
 
 OverlayQuiz = dict[str, Any]
 
+# Why a palace this round scheduled is not contributing questions to 做题.
+SCOPE_REASON_NO_QUESTIONS = "no_questions"
+SCOPE_REASON_KINDS_FILTERED = "kinds_filtered"
+# The learner took every card of this palace out of the queue (移除本队列).
+SCOPE_REASON_PALACE_REMOVED = "palace_removed"
+
+# Sentinel for "this round has not rated that knowledge point yet". The card
+# shows words, never a fabricated score. Kept as a value rather than an absent
+# key so the frontend can tell "not rated this round" from "question has no
+# bound knowledge point at all".
+QUESTION_RATING_NONE = 0
+
+
+def empty_scope_palaces() -> dict[str, Any]:
+    return {"scheduled_count": 0, "in_pool_count": 0, "question_count": 0, "palaces": []}
+
+
+def build_scope_palaces(
+    *,
+    scheduled_palace_ids: Sequence[int],
+    counts_by_palace: Mapping[int, Mapping[str, int]],
+    titles: Mapping[int, str],
+    in_pool_palace_ids: Sequence[int] = (),
+    removed_palace_ids: Sequence[int] = (),
+    no_questions_reason: str = SCOPE_REASON_NO_QUESTIONS,
+    kinds_filtered_reason: str = SCOPE_REASON_KINDS_FILTERED,
+    palace_removed_reason: str = SCOPE_REASON_PALACE_REMOVED,
+) -> dict[str, Any]:
+    """Authoritative per-palace 做题 scope report for the UI to render.
+
+    The dialog must show this instead of re-deriving membership from the round
+    plan and the config: two derivations of one scope let the header claim
+    "8 palaces" while the pool was empty, with nothing explaining why.
+
+    ``scheduled_palace_ids`` is the round's review set. There is deliberately no
+    "not in current config" reason: a palace this round scheduled stays in scope
+    even when today's 随心 config would no longer pick it. But a palace whose
+    cards were all 移除本队列 (``removed_palace_ids``) does leave — the learner
+    explicitly took it out of this round.
+
+    Reason priority is `palace_removed` → `no_questions` → `kinds_filtered`:
+    the most actionable, learner-caused explanation wins, so a removed palace
+    never reads as "no questions" when it actually has plenty.
+
+    Reasons are stable codes; the frontend owns their Chinese copy.
+    """
+    live = {int(item) for item in in_pool_palace_ids}
+    removed = {int(item) for item in removed_palace_ids}
+    rows: list[dict[str, Any]] = []
+    total = 0
+    in_pool_count = 0
+    for raw_palace_id in scheduled_palace_ids:
+        palace_id = int(raw_palace_id)
+        counts = counts_by_palace.get(palace_id) or {}
+        objective = max(0, int(counts.get("objective") or 0))
+        subjective = max(0, int(counts.get("subjective") or 0))
+        question_count = objective + subjective
+        total += question_count
+        if palace_id in removed:
+            reason = palace_removed_reason
+        elif question_count <= 0:
+            reason = no_questions_reason
+        elif palace_id not in live:
+            # In scope with questions, but every one is of an unselected kind.
+            reason = kinds_filtered_reason
+        else:
+            reason = ""
+        contributes = not reason
+        if contributes:
+            in_pool_count += 1
+        rows.append(
+            {
+                "palace_id": palace_id,
+                "title": str(titles.get(palace_id) or "") or f"宫殿 {palace_id}",
+                "question_count": question_count,
+                "objective": objective,
+                "subjective": subjective,
+                "in_pool": contributes,
+                "reason": reason,
+            }
+        )
+    return {
+        "scheduled_count": len(rows),
+        "in_pool_count": in_pool_count,
+        "question_count": total,
+        "palaces": rows,
+    }
+
+
+def pick_question_node_rating(
+    bound_node_uids: Sequence[str],
+    rating_by_node_uid: Mapping[str, int],
+) -> int | None:
+    """Weakest this-round rating among a question's bound knowledge points.
+
+    Returns ``None`` when the question binds no knowledge point at all (nothing
+    to show), and ``QUESTION_RATING_NONE`` when it does bind nodes but this round
+    has not rated any of them. The two must stay distinct: the first hides the
+    badge, the second shows 「本轮尚未复习」.
+
+    Lowest wins. A question binding several nodes is judged by its weakest one,
+    which is the actionable signal before answering; an average would point at
+    no particular knowledge point.
+    """
+    uids = [str(item) for item in bound_node_uids if str(item).strip()]
+    if not uids:
+        return None
+    found = [
+        int(rating_by_node_uid[uid])
+        for uid in uids
+        if uid in rating_by_node_uid and int(rating_by_node_uid[uid]) in {1, 2, 3, 4}
+    ]
+    if not found:
+        return QUESTION_RATING_NONE
+    return min(found)
+
+
+def normalize_question_node_ratings(raw: Any) -> dict[str, int]:
+    """Persist/restore the per-question badge map; it is display data."""
+    data = raw if isinstance(raw, Mapping) else {}
+    result: dict[str, int] = {}
+    for key, value in data.items():
+        question_id = _as_int(key, 0)
+        if question_id <= 0:
+            continue
+        rating = _as_int(value, -1)
+        # Absent means "no bound knowledge point"; only real scores are stored.
+        if rating in {1, 2, 3, 4}:
+            result[str(question_id)] = rating
+    return result
+
+
+def normalize_scope_palaces(raw: Any) -> dict[str, Any]:
+    """Persist/restore the scope report verbatim; it is display data, not state."""
+    data = raw if isinstance(raw, Mapping) else None
+    if data is None:
+        return empty_scope_palaces()
+    rows: list[dict[str, Any]] = []
+    raw_rows = data.get("palaces")
+    if isinstance(raw_rows, Sequence) and not isinstance(raw_rows, str | bytes):
+        for item in list(raw_rows)[:400]:
+            if not isinstance(item, Mapping):
+                continue
+            palace_id = _as_int(item.get("palace_id"), 0)
+            if palace_id <= 0:
+                continue
+            objective = max(0, _as_int(item.get("objective"), 0))
+            subjective = max(0, _as_int(item.get("subjective"), 0))
+            rows.append(
+                {
+                    "palace_id": palace_id,
+                    "title": str(item.get("title") or "").strip()[:80] or f"宫殿 {palace_id}",
+                    "question_count": max(0, _as_int(item.get("question_count"), objective + subjective)),
+                    "objective": objective,
+                    "subjective": subjective,
+                    "in_pool": bool(item.get("in_pool")),
+                    "reason": str(item.get("reason") or "").strip()[:40],
+                }
+            )
+    return {
+        "scheduled_count": max(0, _as_int(data.get("scheduled_count"), len(rows))),
+        "in_pool_count": max(0, _as_int(data.get("in_pool_count"), 0)),
+        "question_count": max(0, _as_int(data.get("question_count"), 0)),
+        "palaces": rows,
+    }
+
 
 def empty_parked_overlay() -> dict[str, Any]:
     return {
@@ -51,6 +217,8 @@ def empty_overlay_quiz() -> OverlayQuiz:
         "candidate_count": 0,
         "question_palace_ids": {},
         "kind_counts": empty_kind_counts(),
+        "scope_palaces": empty_scope_palaces(),
+        "question_node_ratings": {},
         "parked": empty_parked_overlay(),
         "excluded_ids": [],
     }
@@ -220,6 +388,10 @@ def normalize_overlay_quiz(raw: Mapping[str, Any] | None) -> OverlayQuiz:
         "candidate_count": max(0, _as_int(data.get("candidate_count"), 0)),
         "question_palace_ids": palace_ids,
         "kind_counts": _normalize_kind_counts(data.get("kind_counts")),
+        "scope_palaces": normalize_scope_palaces(data.get("scope_palaces")),
+        "question_node_ratings": normalize_question_node_ratings(
+            data.get("question_node_ratings")
+        ),
         "parked": parked,
         "excluded_ids": excluded_ids,
     }
@@ -236,6 +408,8 @@ def merge_overlay_quiz(
     candidate_count: int,
     question_palace_ids: Mapping[str, Any] | None = None,
     kind_counts: Mapping[str, Any] | None = None,
+    scope_palaces: Mapping[str, Any] | None = None,
+    question_node_ratings: Mapping[str, Any] | None = None,
 ) -> OverlayQuiz:
     previous = normalize_overlay_quiz(existing)
     excluded = set(previous["excluded_ids"])
@@ -246,6 +420,20 @@ def merge_overlay_quiz(
         _normalize_kind_counts(kind_counts)
         if kind_counts is not None
         else previous["kind_counts"]
+    )
+    # The scope report always comes from the current pack: it describes the
+    # scope right now, unlike question_ids which may keep the learner's order.
+    scopes = (
+        normalize_scope_palaces(scope_palaces)
+        if scope_palaces is not None
+        else previous["scope_palaces"]
+    )
+    # The badge map also comes from the current pack: it is this round's rating
+    # state right now, which changes as the learner rates more units.
+    badge_ratings = (
+        normalize_question_node_ratings(question_node_ratings)
+        if question_node_ratings is not None
+        else previous["question_node_ratings"]
     )
     same_scope = (
         previous["scope_signature"] == str(scope_signature or "")
@@ -265,6 +453,8 @@ def merge_overlay_quiz(
                 "question_palace_ids": palace_ids,
                 "kind_counts": counts,
                 "excluded_ids": previous["excluded_ids"],
+                "scope_palaces": scopes,
+                "question_node_ratings": badge_ratings,
             }
         )
 
@@ -315,6 +505,8 @@ def merge_overlay_quiz(
             "question_palace_ids": palace_ids,
             "kind_counts": counts,
             "excluded_ids": previous["excluded_ids"],
+            "scope_palaces": scopes,
+            "question_node_ratings": badge_ratings,
             "parked": {
                 "question_ids": parked_ids,
                 "completed_ids": parked_completed,
@@ -493,15 +685,24 @@ def _as_int(value: Any, default: int) -> int:
 __all__ = [
     "QUIZ_SCOPE_CROSS",
     "QUIZ_SCOPE_SINGLE",
+    "QUESTION_RATING_NONE",
+    "SCOPE_REASON_KINDS_FILTERED",
+    "SCOPE_REASON_NO_QUESTIONS",
+    "SCOPE_REASON_PALACE_REMOVED",
     "apply_overlay_progress",
+    "build_scope_palaces",
     "drop_overlay_for_palaces",
     "empty_kind_counts",
     "empty_overlay_quiz",
     "empty_parked_overlay",
+    "empty_scope_palaces",
     "inherit_overlay_completed",
     "merge_overlay_quiz",
     "normalize_overlay_quiz",
+    "normalize_question_node_ratings",
+    "normalize_scope_palaces",
     "order_overlay_questions",
     "overlay_question_kind",
     "overlay_quiz_scope_signature",
+    "pick_question_node_rating",
 ]

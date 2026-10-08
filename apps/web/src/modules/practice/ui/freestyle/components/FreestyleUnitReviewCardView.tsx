@@ -1191,6 +1191,7 @@ export function FreestyleUnitReviewCardView({
             onEditorStateSaved={flipSource.live ? setSavedEditorState : undefined}
             onUnitsReconciled={flipSource.live ? onUnitsReconciled : undefined}
             onRevealProgressChange={flipSource.live ? handleRevealProgressChange : undefined}
+            roundId={flipSource.live ? roundId : null}
             syncedRevealMap={flipSource.live ? liveRevealMap : null}
             onRevealMapChange={flipSource.live ? onLiveRevealMapChange : undefined}
             onOpenScopeQuiz={flipSource.live ? onOpenScopeQuiz : undefined}

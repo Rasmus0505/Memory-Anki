@@ -44,6 +44,17 @@ vi.mock('@/shared/feedback/toast', () => ({
   toast: { error: vi.fn(), success: vi.fn() },
 }))
 
+/** This-round ratings as the backend would return them for the sample questions. */
+/** This-round ratings as the backend would return them for the sample questions. */
+export const useRoundQuestionRatingsMock = vi.fn(
+  (_args: { roundId?: string | null; enabled?: boolean }): Record<string, number> | null => null,
+)
+
+vi.mock('@/modules/practice/ui/freestyle/hooks/useRoundQuestionRatings', () => ({
+  useRoundQuestionRatings: (args: { roundId?: string | null; enabled?: boolean }) =>
+    useRoundQuestionRatingsMock(args),
+}))
+
 vi.mock('@/shared/feedback/globalFeedbackModel', () => ({
   dispatchGlobalFeedback: vi.fn(),
 }))
@@ -164,6 +175,7 @@ export function renderDialog(props: {
   palaceId?: number
   nodeUid?: string
   onQuestionCompleted?: () => void
+  roundId?: string | null
 } = {}) {
   return render(
     <NodeBoundQuizDialog
@@ -173,6 +185,7 @@ export function renderDialog(props: {
       nodeUid={props.nodeUid ?? 'node-1'}
       questionIds={props.questionIds ?? [42]}
       onQuestionCompleted={props.onQuestionCompleted ?? (() => {})}
+      roundId={props.roundId ?? null}
     />,
   )
 }

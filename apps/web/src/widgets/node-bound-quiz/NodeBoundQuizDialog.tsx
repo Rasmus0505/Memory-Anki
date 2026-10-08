@@ -30,11 +30,12 @@ import {
   clearQuizSessionProgressForPalaces,
   readQuizSessionState,
   removeQuizSessionQuestions,
-  subscribeQuizSessionProgress,
   writeQuizSessionState,
   type QuizRuntimeState,
 } from '@/modules/quiz/public'
 import { ownerPalaceLabel } from '@/modules/quiz/ui/palace-quiz/model/quizNodeBindingAggregation'
+import { QuizQuestionRoundRating } from '@/widgets/quiz-round-rating'
+import { useQuizSessionProgressMirror } from './useQuizSessionProgressMirror'
 import { getQuestionTypeLabel } from '@/modules/quiz/ui/palace-quiz/model/palaceQuizPage'
 import { sortPalaceQuizQuestions } from '@/modules/quiz/ui/palace-quiz/model/questionBankOrder'
 import { firstIncompleteQuestionIndex } from '@/modules/quiz/ui/palace-quiz/model/quizNodeBindingAggregation'
@@ -74,6 +75,7 @@ export function NodeBoundQuizDialog({
   onQuestionStateChange,
   onQuestionCompleted,
   onQuestionDeleted,
+  roundId = null,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -88,6 +90,11 @@ export function NodeBoundQuizDialog({
   onQuestionCompleted: (questionId: number) => void
   /** Drop the id from the opener's queue so a later reload cannot paint it again. */
   onQuestionDeleted?: (questionId: number) => void
+  /**
+   * The 随心 round this window was opened inside, if any. Only then does the
+   * rating badge appear; see `QuizQuestionRoundRating`.
+   */
+  roundId?: string | null
 }) {
   const { promptForAiOptions, aiRunConfigDialog } = useAiRunConfigDialog()
   const { mode: answerMode } = useQuizAnswerMode()
@@ -262,22 +269,7 @@ export function NodeBoundQuizDialog({
     [onQuestionCompleted],
   )
 
-  useEffect(() => {
-    return subscribeQuizSessionProgress(() => {
-      setQuestionStates((current) => {
-        let changed = false
-        const next = { ...current }
-        for (const question of questionsRef.current) {
-          const incoming = readQuizSessionState(question.id)
-          if (!incoming.resolved && !incoming.selectedOptionId && !incoming.rating) continue
-          if (JSON.stringify(next[question.id]) === JSON.stringify(incoming)) continue
-          next[question.id] = incoming
-          changed = true
-        }
-        return changed ? next : current
-      })
-    })
-  }, [])
+  useQuizSessionProgressMirror({ questionsRef, setQuestionStates })
 
   const updateLocalState = useCallback(
     (questionId: number, updater: (current: QuizRuntimeState) => QuizRuntimeState) => {
@@ -609,6 +601,13 @@ export function NodeBoundQuizDialog({
                       attemptCount={current.attempt_count}
                     />
                     <Badge variant="outline">{getQuestionTypeLabel(current.question_type)}</Badge>
+                    <QuizQuestionRoundRating
+                      roundId={roundId}
+                      questionId={current.id}
+                      palaceId={current.palace_id ?? palaceId ?? null}
+                      open={open}
+                      onOpenSource={() => setPalaceLookupOpen(true)}
+                    />
                     {current.marked ? (
                       <Badge className="border-rose-600 bg-rose-600 text-white">已标记</Badge>
                     ) : null}

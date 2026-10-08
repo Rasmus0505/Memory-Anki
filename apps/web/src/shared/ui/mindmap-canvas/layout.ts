@@ -280,14 +280,46 @@ function selectWrapWidth(
   return width
 }
 
+/**
+ * Memo for `getNodeSize`. It is a pure function of `(role, label, minWidth, maxWidth)`,
+ * and layout asks for the same card's size many times per pass: once in `measureTree`,
+ * again on every pairwise comparison in `resolveOverlaps`, then in
+ * `hasNodeOverlaps` / `stackNodesWithoutOverlap`. The metric work is regex + per-character
+ * scanning over the label, so it is not cheap (measured ~2µs per call for a CJK label,
+ * ~6µs for a long mixed one). At 900 nodes the repeated calls dominated a full layout —
+ * ~15ms median, i.e. a whole frame budget gone before React Flow even touched the DOM.
+ *
+ * Keyed by the exact inputs, so a changed label/role can never return a stale size.
+ * Bounded: labels repeat heavily inside one palace (short CJK phrases), and the map is
+ * cleared once it outgrows the current graph so palace switches cannot leak.
+ */
+const nodeSizeMemo = new Map<string, NodeSize>()
+const NODE_SIZE_MEMO_LIMIT = 20_000
+
 export function getNodeSize(
   source?: NodeSizeSource,
   labelOverride?: string,
   constraints?: NodeSizeConstraints,
 ): NodeSize {
   const role = getNodeRole(source)
-  const base = getBaseNodeSize(role)
   const label = ((labelOverride ?? getNodeLabel(source)) || '').trim() || '未命名节点'
+  const minWidth = constraints?.minWidth
+  const maxWidth = constraints?.maxWidth
+  const key = `${role}\u0000${minWidth ?? ''}\u0000${maxWidth ?? ''}\u0000${label}`
+  const cached = nodeSizeMemo.get(key)
+  if (cached) return cached
+  const size = computeNodeSize(role, label, constraints)
+  if (nodeSizeMemo.size >= NODE_SIZE_MEMO_LIMIT) nodeSizeMemo.clear()
+  nodeSizeMemo.set(key, size)
+  return size
+}
+
+function computeNodeSize(
+  role: LayoutRole,
+  label: string,
+  constraints?: NodeSizeConstraints,
+): NodeSize {
+  const base = getBaseNodeSize(role)
   const longestLineLength = splitHardLines(label).reduce(
     (longest, line) => Math.max(longest, getWeightedTextLength(line)),
     0,

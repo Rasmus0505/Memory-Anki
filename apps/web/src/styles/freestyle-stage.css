@@ -331,6 +331,34 @@
   filter: none !important;
 }
 
+/*
+ * Any card holding a live React Flow surface opts out of the scroll-linked depth
+ * transform — not just native fullscreen.
+ *
+ * A view-timeline animation on this wrapper re-rasterizes everything inside it on
+ * every scroll frame, because the whole subtree is re-composited under a changing
+ * transform+scale. A mind map is thousands of DOM nodes plus an SVG edge layer, so
+ * that turns a cheap page turn into a per-frame full-tree repaint. The `.fs-page`
+ * parent keeps its own paint order, so neighbours still slide over each other; only
+ * the animated travel/veil/shadow on the wrapper is dropped for map cards.
+ *
+ * Feathered into the same `@supports` gate as the animation itself: without
+ * `animation-timeline` support there is nothing to disable.
+ */
+@supports (animation-timeline: view()) {
+  .fs-depth:has(.memory-anki-mindmap-frame),
+  .fs-depth:has(.memory-anki-mindmap-frame)::after,
+  .fs-depth:has(.memory-anki-mindmap-frame)::before {
+    animation: none !important;
+    transform: none !important;
+  }
+}
+
+/* Contact shadow still separates the pinned map card from the one sliding over it. */
+.fs-depth:has(.memory-anki-mindmap-frame) {
+  box-shadow: 0 18px 44px -14px rgb(0 0 0 / 0.55);
+}
+
 /* ---------- Unit skeleton (content not arrived yet) ---------- */
 .fs-skeleton-edge {
   stroke: var(--color-paper-line-strong);

@@ -1,10 +1,20 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { BookOpen, Check, ChevronLeft, ChevronRight, LoaderCircle, RotateCcw, Settings2, Trash2 } from 'lucide-react'
 import { createOperationId } from '@/modules/practice/application/feedPersistence'
+import { freestylePalaceScopeSignature } from '@/modules/practice/domain/feedConfig'
 import { ensureFreestyleOverlayQuizApi } from '@/modules/practice/ui/freestyle/api'
-import { overlayQuizScopeLabel } from '@/modules/practice/ui/freestyle/model/overlayQuizRange'
+import {
+  overlayQuestionRating,
+  overlayQuizScopeLabel,
+  overlayScopeLeftPool,
+  overlayScopeLeftPoolNotice,
+  overlayScopeSummary,
+} from '@/modules/practice/ui/freestyle/model/overlayQuizRange'
 import { OverlayQuizSetupPanel, type OverlayQuizSetupChoice } from './OverlayQuizSetupPanel'
+import { OverlayQuizScopeLeftNotice } from './OverlayQuizScopeList'
+import { QuizQuestionRoundRatingBadge } from '@/widgets/quiz-round-rating'
 import { useOverlayProgressPersistence } from './useOverlayProgressPersistence'
+import { useOverlayQuizClear } from './useOverlayQuizClear'
 import {
   getPalaceQuizQuestionsByIdsApi,
   listQuestionNodeBindingsApi,
@@ -27,10 +37,7 @@ import {
   useQuizAnsweringShortcuts,
   useQuizAttemptOrchestration,
   useQuizDialogFontScale,
-  clearQuizSessionProgress,
-  clearQuizSessionProgressForPalaces,
   readQuizSessionState,
-  removeQuizSessionQuestions,
   subscribeQuizSessionProgress,
   writeQuizSessionState,
   type QuizRuntimeState,
@@ -67,7 +74,7 @@ import {
   pickMemoryLookupBinding,
   resolveMemoryLookupPalaceId,
 } from '@/widgets/palace-memory-lookup'
-import { QuizProgressClearDialog, type QuizProgressClearChoice } from '@/widgets/quiz-progress-clear/QuizProgressClearDialog'
+import { QuizProgressClearDialog } from '@/widgets/quiz-progress-clear/QuizProgressClearDialog'
 
 export function FreestyleScopeQuizDialog({
   open,
@@ -76,8 +83,7 @@ export function FreestyleScopeQuizDialog({
   planVersion,
   storedConfig,
   setupDone,
-  rangeLabel,
-  palaceCount = 0,
+  roundReviewPalaceCount,
   onConfirmSetup,
   onRoundSync,
 }: {
@@ -87,8 +93,8 @@ export function FreestyleScopeQuizDialog({
   planVersion: number
   storedConfig: FreestyleFeedConfig
   setupDone: boolean
-  rangeLabel: string
-  palaceCount?: number
+  /** Round-scoped palace count for the settlement copy, not the 做题 pool. */
+  roundReviewPalaceCount: number
   onConfirmSetup: (next: OverlayQuizSetupChoice) => void
   onRoundSync: (round: FreestyleRoundStatePayload) => void
 }) {
@@ -99,6 +105,10 @@ export function FreestyleScopeQuizDialog({
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState('')
   const [overlay, setOverlay] = useState<FreestyleOverlayQuizState | null>(null)
+  const scopePalaces = overlay?.scope_palaces ?? null
+  /** Notice after a config change removed palaces from 做题. */
+  const [scopeNotice, setScopeNotice] = useState('')
+  const scopePalacesRef = useRef<FreestyleOverlayQuizState['scope_palaces']>(null)
   const [questions, setQuestions] = useState<PalaceQuizQuestion[]>([])
   const [index, setIndex] = useState(0)
   const [questionStates, setQuestionStates] = useState<Record<number, QuizRuntimeState>>({})
@@ -158,6 +168,11 @@ export function FreestyleScopeQuizDialog({
       planVersionRef.current = round.version
     }
     const next = overlayFromRound(round)
+    // Follow the 随心 config immediately, and say which palaces the edit took
+    // out of 做题. Without this the pool shrank silently mid-session.
+    const left = overlayScopeLeftPool(scopePalacesRef.current, next?.scope_palaces)
+    if (left.length) setScopeNotice(overlayScopeLeftPoolNotice(left))
+    scopePalacesRef.current = next?.scope_palaces ?? null
     setOverlay(next)
     if (next) {
       const merged = mergeOverlayAndSessionStates(next)
@@ -222,6 +237,24 @@ export function FreestyleScopeQuizDialog({
     void ensureSession()
   }, [configOpen, ensureSession, open, setupDone])
 
+  /**
+   * Follow a 随心 config change immediately while the dialog stays open.
+   *
+   * Without this the pool kept the scope it was first built with until the
+   * dialog was closed and reopened, so an edit made in the config dialog looked
+   * like it had been ignored. Keyed on the palace/subject scope only: question
+   * kind and order choices are re-ensured by the setup panel itself.
+   */
+  const storedScopeSignature = freestylePalaceScopeSignature(storedConfig)
+  const lastScopeSignatureRef = useRef(storedScopeSignature)
+  useEffect(() => {
+    if (!open || !setupDone) return
+    if (lastScopeSignatureRef.current === storedScopeSignature) return
+    lastScopeSignatureRef.current = storedScopeSignature
+    storedConfigRef.current = storedConfig
+    void ensureSession()
+  }, [ensureSession, open, setupDone, storedConfig, storedScopeSignature])
+
   // Debounce, conflict retry and the pagehide/visibility flush live in the hook;
   // the dialog keeps owning what the current index and question states are.
   const { persistProgress } = useOverlayProgressPersistence({
@@ -241,41 +274,19 @@ export function FreestyleScopeQuizDialog({
   }, [current?.id])
   const currentState = current ? questionStates[current.id] ?? {} : {}
   const answeredCount = questions.filter((item) => questionStates[item.id]?.resolved).length
+  // This round's weakest rating among the question's bound knowledge points.
+  // Null renders as 「本轮尚未复习」, never as a zero score.
+  const currentRating = overlayQuestionRating(overlay?.question_node_ratings, current?.id)
 
-  const handleClearChoice = useCallback((choice: QuizProgressClearChoice) => {
-    const palaceOf = (question: PalaceQuizQuestion) => {
-      const mapped = overlay?.question_palace_ids?.[String(question.id)]
-      return typeof mapped === 'number' && mapped > 0 ? mapped : question.palace_id ?? null
-    }
-    const publish = (nextStates: Record<number, QuizRuntimeState>) => {
-      setQuestionStates(nextStates)
-      persistProgress(index, nextStates)
-    }
-    if (choice.scope === 'question') {
-      if (!current) return
-      removeQuizSessionQuestions([current.id])
-      const nextStates = { ...questionStates }
-      delete nextStates[current.id]
-      publish(nextStates)
-      toast.success('已清除当前题的做题进度。')
-      return
-    }
-    if (choice.scope === 'palace') {
-      const targetPalaceId = choice.palaceId
-      if (!targetPalaceId) return
-      clearQuizSessionProgressForPalaces([targetPalaceId])
-      const ids = questions.filter((item) => palaceOf(item) === targetPalaceId).map((item) => item.id)
-      if (ids.length > 0) removeQuizSessionQuestions(ids)
-      const nextStates = { ...questionStates }
-      for (const id of ids) delete nextStates[id]
-      publish(nextStates)
-      toast.success('已清除所选宫殿的做题进度。')
-      return
-    }
-    clearQuizSessionProgress()
-    publish({})
-    toast.success('已清除全部题目的做题进度。')
-  }, [current, index, overlay, persistProgress, questionStates, questions])
+  const handleClearChoice = useOverlayQuizClear({
+    overlay,
+    questions,
+    current,
+    questionStates,
+    index,
+    setQuestionStates,
+    persistProgress,
+  })
   const questionPalaceId = current?.palace_id ?? null
   const lookupPalaceId = lookupPalaceIdOverride ?? questionPalaceId
 
@@ -457,8 +468,19 @@ export function FreestyleScopeQuizDialog({
   })
 
   const showConfig = !setupDone || configOpen
+  // The palace of the current question, by name from the backend scope report.
+  // A bare `宫殿 27` is unreadable during a session and disagrees with the name
+  // shown on the card and in the scope list, so an unknown name shows nothing
+  // rather than an id.
+  const currentPalaceTitle = (() => {
+    const palaceId = current?.palace_id
+    if (palaceId == null) return ''
+    const row = scopePalaces?.palaces.find((item) => item.palace_id === palaceId)
+    return row?.title || ''
+  })()
+  const scopeSummary = overlayScopeSummary(scopePalaces)
   const headerDetail = showConfig
-    ? rangeLabel
+    ? scopeSummary
     : loading
       ? '加载中…'
       : questions.length > 0
@@ -466,11 +488,11 @@ export function FreestyleScopeQuizDialog({
             // The pager row owns 「第 n / m 题」 once there is more than one question.
             questions.length > 1 ? null : `第 ${index + 1} / ${questions.length} 题`,
             answeredCount > 0 ? `已答 ${answeredCount}` : null,
-            current?.palace_id != null ? `宫殿 ${current.palace_id}` : null,
+            currentPalaceTitle || null,
           ]
             .filter((part) => part != null && part !== '')
             .join(' · ')
-        : rangeLabel
+        : scopeSummary
 
   return (
     <>
@@ -538,6 +560,10 @@ export function FreestyleScopeQuizDialog({
                 {headerDetail}
               </DialogDescription>
             ) : null}
+            <OverlayQuizScopeLeftNotice
+              notice={scopeNotice}
+              onDismiss={() => setScopeNotice('')}
+            />
           </DialogHeader>
 
           <div className="flex min-h-0 flex-1 flex-col">
@@ -565,9 +591,12 @@ export function FreestyleScopeQuizDialog({
                 planVersion={planVersion}
                 storedConfig={storedConfig}
                 setupDone={setupDone}
-                rangeLabel={rangeLabel}
-                palaceCount={palaceCount}
-                onRoundSync={onRoundSync}
+                scopePalaces={scopePalaces}
+                palaceCount={roundReviewPalaceCount}
+                // adoptRound, not raw onRoundSync: the setup panel's ensure is
+                // what first populates `scope_palaces` on a fresh open, and the
+                // list beside it renders that state.
+                onRoundSync={adoptRound}
                 onConfirm={(choice) => {
                   onConfirmSetup(choice)
                   setConfigOpen(false)
@@ -598,6 +627,11 @@ export function FreestyleScopeQuizDialog({
                       attemptCount={current.attempt_count}
                     />
                     <Badge variant="outline">{getQuestionTypeLabel(current.question_type)}</Badge>
+                    <QuizQuestionRoundRatingBadge
+                      rating={currentRating}
+                      palaceId={current.palace_id ?? null}
+                      onOpenSource={() => setPalaceLookupOpen(true)}
+                    />
                     {current.marked ? (
                       <Badge className="border-rose-600 bg-rose-600 text-white">已标记</Badge>
                     ) : null}

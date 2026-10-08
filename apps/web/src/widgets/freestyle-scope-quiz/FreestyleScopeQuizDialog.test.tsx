@@ -127,7 +127,7 @@ describe('FreestyleScopeQuizDialog', () => {
         planVersion={1}
         storedConfig={DEFAULT_FREESTYLE_FEED_CONFIG}
         setupDone
-        rangeLabel="本轮纳入复习的 1 个宫殿"
+        roundReviewPalaceCount={1}
         onConfirmSetup={vi.fn()}
         onRoundSync={vi.fn()}
       />,
@@ -147,7 +147,7 @@ describe('FreestyleScopeQuizDialog', () => {
         planVersion={1}
         storedConfig={DEFAULT_FREESTYLE_FEED_CONFIG}
         setupDone={false}
-        rangeLabel="当前配置下的全部宫殿"
+        roundReviewPalaceCount={2}
         onConfirmSetup={onConfirmSetup}
         onRoundSync={vi.fn()}
       />,
@@ -196,8 +196,7 @@ describe('FreestyleScopeQuizDialog', () => {
         planVersion={1}
         storedConfig={DEFAULT_FREESTYLE_FEED_CONFIG}
         setupDone={false}
-        palaceCount={2}
-        rangeLabel="本轮纳入复习的 2 个宫殿"
+        roundReviewPalaceCount={2}
         onConfirmSetup={onConfirmSetup}
         onRoundSync={vi.fn()}
       />,
@@ -282,7 +281,7 @@ describe('FreestyleScopeQuizDialog', () => {
         planVersion={1}
         storedConfig={DEFAULT_FREESTYLE_FEED_CONFIG}
         setupDone
-        rangeLabel="当前配置下的全部宫殿"
+        roundReviewPalaceCount={2}
         onConfirmSetup={vi.fn()}
         onRoundSync={vi.fn()}
       />,
@@ -345,7 +344,7 @@ describe('FreestyleScopeQuizDialog', () => {
         planVersion={1}
         storedConfig={DEFAULT_FREESTYLE_FEED_CONFIG}
         setupDone
-        rangeLabel="当前配置下的全部宫殿"
+        roundReviewPalaceCount={2}
         onConfirmSetup={vi.fn()}
         onRoundSync={vi.fn()}
       />,
@@ -375,6 +374,17 @@ describe('FreestyleScopeQuizDialog', () => {
           scope_signature: 'sig',
           limit_reached: false,
           candidate_count: 21,
+          // Scope-list rendering is covered by OverlayQuizScopeList.test.tsx;
+          // this only needs the palace name for the header.
+          scope_palaces: {
+            scheduled_count: 1,
+            in_pool_count: 1,
+            question_count: 21,
+            palaces: [{
+              palace_id: 7, title: '第一节英国近代教育', question_count: 21,
+              objective: 21, subjective: 0, in_pool: true, reason: '' as const,
+            }],
+          },
         },
       },
     } as never)
@@ -406,7 +416,7 @@ describe('FreestyleScopeQuizDialog', () => {
         planVersion={1}
         storedConfig={DEFAULT_FREESTYLE_FEED_CONFIG}
         setupDone
-        rangeLabel="当前配置下的全部宫殿"
+        roundReviewPalaceCount={2}
         onConfirmSetup={vi.fn()}
         onRoundSync={vi.fn()}
       />,
@@ -416,7 +426,10 @@ describe('FreestyleScopeQuizDialog', () => {
     expect(screen.getByRole('button', { name: '20' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '21' })).toBeNull()
     expect(screen.getByText('第 1/2 页 · 第 1 / 21 题')).toBeTruthy()
-    expect(screen.getByText('宫殿 7')).toBeTruthy()
+    // The palace is named, not shown as a bare id: 「宫殿 7」 was unreadable
+    // mid-session and disagreed with the name on the card and in the scope list.
+    expect(screen.getByText('第一节英国近代教育')).toBeTruthy()
+    expect(screen.queryByText('宫殿 7')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: '下一页' }))
     expect(screen.getByRole('button', { name: '21' })).toBeTruthy()
@@ -474,7 +487,7 @@ describe('FreestyleScopeQuizDialog', () => {
         planVersion={1}
         storedConfig={DEFAULT_FREESTYLE_FEED_CONFIG}
         setupDone
-        rangeLabel="当前配置下的全部宫殿"
+        roundReviewPalaceCount={2}
         onConfirmSetup={vi.fn()}
         onRoundSync={vi.fn()}
       />,
@@ -535,7 +548,7 @@ describe('FreestyleScopeQuizDialog', () => {
         planVersion={1}
         storedConfig={DEFAULT_FREESTYLE_FEED_CONFIG}
         setupDone
-        rangeLabel="当前配置下的全部宫殿"
+        roundReviewPalaceCount={2}
         onConfirmSetup={vi.fn()}
         onRoundSync={vi.fn()}
       />,
@@ -628,7 +641,7 @@ describe('FreestyleScopeQuizDialog', () => {
         planVersion={1}
         storedConfig={DEFAULT_FREESTYLE_FEED_CONFIG}
         setupDone
-        rangeLabel="当前配置下的全部宫殿"
+        roundReviewPalaceCount={2}
         onConfirmSetup={vi.fn()}
         onRoundSync={vi.fn()}
       />,
@@ -700,7 +713,7 @@ describe('FreestyleScopeQuizDialog', () => {
         planVersion={1}
         storedConfig={DEFAULT_FREESTYLE_FEED_CONFIG}
         setupDone
-        rangeLabel="当前配置下的全部宫殿"
+        roundReviewPalaceCount={2}
         onConfirmSetup={vi.fn()}
         onRoundSync={vi.fn()}
       />,
@@ -723,7 +736,7 @@ describe('FreestyleScopeQuizDialog', () => {
         planVersion={2}
         storedConfig={DEFAULT_FREESTYLE_FEED_CONFIG}
         setupDone
-        rangeLabel="当前配置下的全部宫殿"
+        roundReviewPalaceCount={2}
         onConfirmSetup={vi.fn()}
         onRoundSync={vi.fn()}
       />,

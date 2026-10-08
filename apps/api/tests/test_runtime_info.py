@@ -1,3 +1,4 @@
+import contextlib
 import json
 import os
 import tempfile
@@ -287,6 +288,19 @@ class RuntimeInfoTests(unittest.TestCase):
 
             def close(self):
                 return None
+
+            @property
+            def no_autoflush(self):
+                """Mirror the real Session API used by the write path.
+
+                ``write_client_preferences`` reads committed state inside a loop
+                that stages rows, so it opens a ``no_autoflush`` block to keep a
+                staged row from being flushed by the next iteration's lookup (see
+                docs/incidents/0001). A real SQLAlchemy ``Session`` exposes this as
+                a context manager, and a fake that omits it fails the route for a
+                reason that has nothing to do with the behaviour under test.
+                """
+                return contextlib.nullcontext()
 
         def override_session_dep():
             session = FakeSession()

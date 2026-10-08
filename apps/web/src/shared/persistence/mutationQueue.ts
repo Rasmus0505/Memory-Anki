@@ -1,5 +1,6 @@
 import { isConflictResponse } from '@/shared/api/conflict'
 import { getApiToken } from '@/shared/api/apiToken'
+import { generateLocalId } from '@/shared/lib/ids'
 import { createIdbHandle } from '@/shared/persistence/indexedDb'
 
 export type MutationQueueStatus = 'pending' | 'syncing' | 'failed' | 'conflict' | 'manual'
@@ -78,10 +79,7 @@ function nowIso() {
 }
 
 function generateId() {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID()
-  }
-  return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
+  return generateLocalId()
 }
 
 /**

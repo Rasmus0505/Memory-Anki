@@ -34,7 +34,34 @@ def make_error_app() -> FastAPI:
         from memory_anki.core.runtime_storage_lock import StorageBusyError
 
         raise StorageBusyError(
-            "timed out acquiring runtime storage thread lock", wait_seconds=15.0
+            "timed out acquiring runtime storage lock", wait_seconds=15.0
+        )
+
+    @app.post("/db-locked")
+    def db_locked_route():
+        import sqlite3
+
+        # The shape SQLAlchemy actually produces: the DBAPI error wrapped in a
+        # SQLAlchemy exception, with the message one hop down the cause chain.
+        from sqlalchemy.exc import OperationalError
+
+        raise OperationalError(
+            "UPDATE review_unit_encounters SET status=?",
+            {},
+            sqlite3.OperationalError("database is locked"),
+        )
+
+    @app.post("/db-other-operational")
+    def db_other_operational_route():
+        """A non-lock SQLite failure must stay a 500: it is not retryable."""
+        import sqlite3
+
+        from sqlalchemy.exc import OperationalError
+
+        raise OperationalError(
+            "SELECT * FROM does_not_exist",
+            {},
+            sqlite3.OperationalError("no such table: does_not_exist"),
         )
 
     return app
@@ -47,6 +74,41 @@ def test_http_exception_uses_structured_detail():
     assert response.json() == {
         "detail": {"code": "http_404", "message": "not found"},
     }
+
+
+def test_sqlite_lock_error_reports_retryable_503_not_internal_error():
+    """`database is locked` must be retryable, not an opaque 500.
+
+    Measured 2026-10-07: 284 of these in one day, every one reported as
+    "服务器内部错误，请查看服务端日志。" with HTTP 500 -- indistinguishable to the
+    client from a genuine bug, so the study loop simply died on that card. The
+    condition is transient, and the app-level lock already answers 503.
+    """
+    response = TestClient(make_error_app(), raise_server_exceptions=False).post("/db-locked")
+
+    assert response.status_code == 503
+    assert response.headers["Retry-After"] == "2"
+    detail = response.json()["detail"]
+    assert detail["code"] == "database_busy"
+    assert detail["retryAfterSeconds"] == 2
+    # The message must stay plain and must not leak SQLite internals.
+    assert "database is locked" not in response.text
+    assert "OperationalError" not in response.text
+    assert "traceback" not in response.text.lower()
+
+
+def test_other_sqlite_operational_errors_stay_500():
+    """Only lock contention is retryable.
+
+    `sqlite3.OperationalError` also covers missing tables and bad SQL. Advising a
+    retry for those would loop forever on a request that can never succeed.
+    """
+    response = TestClient(
+        make_error_app(), raise_server_exceptions=False
+    ).post("/db-other-operational")
+
+    assert response.status_code == 500
+    assert response.json()["detail"]["code"] == "internal_error"
 
 
 def test_validation_error_uses_structured_detail():

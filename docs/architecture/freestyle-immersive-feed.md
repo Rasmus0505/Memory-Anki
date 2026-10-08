@@ -420,15 +420,15 @@ persist preferred zoom. 做题 opens `widgets/freestyle-scope-quiz` over the cur
 **not** change `training_mode` or rebuild the feed into quiz cards.
 
 Question membership is the palaces already scheduled as review units in this round
-(`original_cards` with kind `mindmap_branch`), not the subject union and not
-`streams.quiz.specific_palace_ids`. A subject-wide config still only contributes the palaces
-that this round actually put into review. Overlay membership does not use
-`streams.quiz.question_type`. Every non-deleted question in that round palace set is
-counted, including rows whose stored `lifecycle_status` is `candidate`, `rejected`,
-`temporary`, or `published`. 客观 is every type except `short_answer`; 主观 is
-`short_answer`. The config shows a checkbox only for a group that exists in this pool,
-with its count. At least one present group stays selected. Both selected defaults to
-混合插入; 先客观后主观 and 先主观后客观 are the other choices. 宫殿优先 vs 题型优先
+(`original_cards` with kind `mindmap_branch`) — not the subject union, and not
+`streams.quiz.specific_palace_ids` — narrowed by the current memory-palace stream
+scope. A subject-wide config still only contributes the palaces that this round actually put
+into review. Overlay membership does not use `streams.quiz.question_type`. Every non-deleted
+question in that round palace set is counted, including rows whose stored `lifecycle_status`
+is `candidate`, `rejected`, `temporary`, or `published`. 客观 is every type except
+`short_answer`; 主观 is `short_answer`. The config shows a checkbox only for a group that
+exists in this pool, with its count. At least one present group stays selected. Both selected
+defaults to 混合插入; 先客观后主观 and 先主观后客观 are the other choices. 宫殿优先 vs 题型优先
 appears only when 一个宫殿刷完再换 and a sequential type order are both selected, and
 this round has more than one review palace. Unselected groups stay in `kind_counts`
 so they can be turned back on. Mastery buckets, weak priority, question due dates, and
@@ -436,6 +436,97 @@ so they can be turned back on. Mastery buckets, weak priority, question due date
 `streams.quiz.quiz_scope`. Confirm always sends `overlay_question_range: all`. The
 first open asks for palace order, then sets `overlay_quiz_setup_done`; later opens
 skip setup. Config stays reachable from the dialog’s top-left. That panel includes the shared 快捷键 section. Mark defaults to ArrowUp and toggles once per press. While the dialog is open, ArrowUp and ArrowDown must not page the feed underneath.
+
+### 做题 scope has exactly one owner
+
+`build_overlay_question_pack` (`practice/application/overlay_quiz_service.py`) owns **which
+palaces 做题 covers**, and the rule is: *the round's own review set is the whole scope.*
+The product statement is 「配置选了 20 座宫殿，但本轮只安排了 10 座，那就只出这 10 座的题」.
+The saved 随心 config supplies presentation choices (draw order, 客观/主观 kinds) but **must
+not** narrow which palaces contribute. An earlier version applied the config a second time;
+on a real round that emptied the pool to 0 questions while the header still counted the
+round's 8 palaces.
+
+**One thing does leave the scope: 移除本队列.** When *every* review card a palace had in this
+round is excluded, that palace's questions go with it — the learner explicitly took it out.
+A palace with even one card still queued is unaffected, and a palace whose cards were
+*completed* keeps its questions (finishing a palace leaves it available for extra practice).
+`removed_review_palace_ids` owns that judgement. Answered 做题 progress for such a palace
+parks rather than being deleted, and returns if the round arranges it again.
+
+The pack returns `scope_palaces` on the overlay: per scheduled palace its title, its
+available 客观/主观 counts, whether it currently contributes questions, and a stable reason
+code when it does not (`palace_removed` / `no_questions` / `kinds_filtered`, in that priority
+so the most actionable, learner-caused explanation wins). There is deliberately no
+"excluded by config" reason. Reason codes are data; the Chinese copy lives in
+`practice/ui/freestyle/model/overlayQuizRange.ts`.
+
+The dialog renders that report and **must not re-derive membership** from the round plan plus
+the feed config. `check_architecture.check_freestyle_scope_quiz_overlay` rejects
+`overlayReviewPalaceIds`, a frontend re-application of the feed palace filter, a backend
+subject lookup inside the pack, a pack that stops returning the report or honouring removals,
+and a bare `宫殿 <id>` label.
+
+Two questions that look alike and are not:
+
+- “Which palaces does the pool draw from” — the backend report: the round's set minus
+  all-removed palaces.
+- “Which palaces may settlement clear 做题 progress for” — `overlayRoundReviewPalaceIds`
+  plus `review_palace_ids`. This one deliberately **includes** removed palaces, because
+  settlement clears this round's own history and must still name a palace whose cards were
+  removed mid-round.
+
+A 随心 config change still takes effect on the open dialog immediately (keyed on
+`freestylePalaceScopeSignature`), because a config save replans the round. Palace *parking*
+is driven by the round losing a palace, never by the config: answered progress for a palace
+the round drops is parked and returns if the round arranges it again.
+
+### 做题 badge: the bound knowledge point's this-round rating
+
+Each question shows, above its stem beside the 题型 badge, the **weakest** this-round rating
+among its bound knowledge points — or 「本轮尚未复习」 when this round has not rated any of
+them. The two states must not look alike: an unrated question never shows a `0`, because
+"not reviewed yet" and "reviewed and forgotten" are different information.
+
+**Both answering windows show it through one component.** `FreestyleScopeQuizDialog` (the
+toolbar 做题 overlay) and `NodeBoundQuizDialog` (关联题目) are separate dialogs with separate
+data sources, and badging only the first left the second blank — which is exactly what the
+learner reported. The badge lives in `widgets/quiz-round-rating/`:
+
+- `QuizQuestionRoundRatingBadge` — pure presentation.
+- `QuizQuestionRoundRating` — the wired container: it fetches and resolves, so a window
+  cannot derive a score of its own. 关联题目 uses this. 做题 already holds the round's
+  ratings from the overlay payload, so it passes the score straight to the badge.
+
+关联题目 renders the badge **only inside a 随心 round** (`roundId` present). Outside one there
+is no round to score against, and claiming 「本轮尚未复习」 about a round that does not exist
+would be worse than showing nothing. It reads the round through
+`GET /freestyle/rounds/{id}/question-ratings`, which is **read-only on purpose**: opening a
+question window must not write the round, or its version would move under the study loop and
+409 the next rating.
+
+That endpoint covers **every question bound to the round's palaces**, not just the 做题 pool.
+Measured on a real round: the palaces hold 235 questions while the kind-filtered pool holds
+165, so reading a rating off the pool would leave the rest blank even when their knowledge
+points were rated. Both surfaces share one rule through
+`build_round_question_ratings` (`overlay_quiz_service.py`), so 「本轮最低 N」 cannot mean two
+different things depending on which window is open.
+
+Resolution chain: `question → bound node_uid → the round's review unit owning that node →
+this round's rating for that unit`. Only units in the round's own `review_unit_ids` are
+considered, so a node owned elsewhere cannot borrow a rating.
+
+Ratings are read from `review_unit_encounters` (`list_round_unit_ratings`), **not** from the
+round plan's cached `encounters` map. The cache is not the authority: on a real round it held
+29 entries with only 3 carrying a `rating` field while the encounter table held all 29
+ratings, so trusting it would print 「本轮尚未复习」 for knowledge points the learner had just
+scored. Lowest wins when a unit was rated more than once, and a completion with no score
+never invents one.
+
+Tapping the badge opens 查看宫殿 focused on that knowledge point (the same dialog the card
+toolbar opens), so an unfamiliar question is one tap from its source text. The badge is a
+plain label when there is no palace to point at. It does not affect draw order: 出题顺序
+remains `streams.quiz.quiz_scope` plus the type-order settings.
 
 Mark / unmark replaces answer-then-rate. The toggle writes `marked` on the question and does not
 change `schedule_stage`, `schedule_due_on`, palace review units, or the current index. Marked

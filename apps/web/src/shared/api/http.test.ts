@@ -54,6 +54,51 @@ describe('shared api http token headers', () => {
     window.localStorage.clear()
   })
 
+  it('sends a correlation id on every request so the server log can be matched', async () => {
+    // The backend accepts and echoes X-Request-ID, but the client never sent one.
+    // Consequence measured 2026-10-07: a request killed by a lock or timeout has
+    // no response, so no server id ever reached the browser and nothing could be
+    // matched against logs/pwa-api.log. One action must yield one id.
+    const fetchMock = vi.fn(async () => jsonResponse({ ok: true }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await request('/palaces')
+
+    const headers = readFirstFetchInit(fetchMock).headers as Record<string, string>
+    expect(headers['X-Request-ID']).toEqual(expect.any(String))
+    expect(headers['X-Request-ID'].length).toBeGreaterThan(0)
+  })
+
+  it('keeps a caller supplied correlation id so a retry stays on one trace', async () => {
+    // Attempt 2 of the same user action must correlate with attempt 1 in the log,
+    // otherwise a retried card looks like two unrelated requests.
+    const fetchMock = vi.fn(async () => jsonResponse({ ok: true }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await request('/palaces', {
+      method: 'POST',
+      body: JSON.stringify({}),
+      headers: { 'X-Request-ID': 'trace-card-abc' },
+      persistence: false,
+    })
+
+    const headers = readFirstFetchInit(fetchMock).headers as Record<string, string>
+    expect(headers['X-Request-ID']).toBe('trace-card-abc')
+  })
+
+  it('gives different requests different correlation ids', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ ok: true }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await request('/palaces')
+    await request('/review/units')
+
+    const calls = fetchMock.mock.calls as unknown as Array<[string, RequestInit]>
+    const first = calls[0][1].headers as Record<string, string>
+    const second = calls[1][1].headers as Record<string, string>
+    expect(first['X-Request-ID']).not.toBe(second['X-Request-ID'])
+  })
+
   it('adds the stored API token to JSON requests without adding mutation ids to GETs', async () => {
     setApiToken('stored-token')
     const fetchMock = vi.fn(async () => jsonResponse({ ok: true }))

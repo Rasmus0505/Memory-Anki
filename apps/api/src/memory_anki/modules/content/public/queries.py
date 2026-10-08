@@ -16,6 +16,7 @@ from memory_anki.modules.content.api import (
     read_learning_progress_catalog,
     resolve_palace_subject,
     resolve_palace_title,
+    resolve_palace_titles,
     stable_tree_order,
     subtree_node_uids,
 )
@@ -34,6 +35,7 @@ __all__ = [
     "parse_segment_node_uids",
     "resolve_palace_subject",
     "resolve_palace_title",
+    "resolve_palace_titles",
     "stable_tree_order",
     "subtree_node_uids",
 ]

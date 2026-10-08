@@ -1,3 +1,5 @@
+import { generateLocalId } from '@/shared/lib/ids'
+
 export type AppLogKind = 'ai_call' | 'app_error'
 
 export interface AppLogEntry {
@@ -29,10 +31,7 @@ function nowIso() {
 }
 
 function generateId() {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID()
-  }
-  return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
+  return generateLocalId()
 }
 
 function getStorage(): Storage | null {

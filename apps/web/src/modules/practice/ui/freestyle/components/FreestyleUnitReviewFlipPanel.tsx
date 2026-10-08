@@ -70,6 +70,7 @@ export function FreestyleUnitReviewFlipPanel({
   syncedRevealMap = null,
   onRevealMapChange,
   onOpenScopeQuiz,
+  roundId = null,
 }: {
   card: FreestyleReviewUnitCard
   session: UnitReviewSessionDto
@@ -92,6 +93,8 @@ export function FreestyleUnitReviewFlipPanel({
   syncedRevealMap?: Record<string, string> | null
   onRevealMapChange?: (revealMap: Record<string, string>) => void
   onOpenScopeQuiz?: () => void
+  /** The 随心 round, so 关联题目 can badge each question with its this-round rating. */
+  roundId?: string | null
 }) {
   const flipCardRevealSettings = useFlipCardRevealSettings()
   // Sticky: once this card has been the active one, keep its ladder so swiping back
@@ -713,6 +716,7 @@ export function FreestyleUnitReviewFlipPanel({
         lastUndoToken={lastUndoToken}
         recentUnitChanges={recentUnitChanges}
         onUnitsReconciled={onUnitsReconciled}
+        roundId={roundId}
       />
       {textToMindMap.drawer}
     </>

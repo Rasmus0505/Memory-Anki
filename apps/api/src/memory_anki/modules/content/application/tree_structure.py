@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Sequence
 from typing import Any
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from memory_anki.infrastructure.db._tables.knowledge import Subject
 from memory_anki.infrastructure.db._tables.palaces import Palace
+
+from .palace_view_resolvers import resolve_palace_title
 
 
 def _node_uid(raw: dict[str, Any], fallback: str) -> str:
@@ -216,6 +219,26 @@ def list_active_palace_ids_by_subject_scope(session: Session, subject_scope: str
     ]
 
 
+def resolve_palace_titles(session: Session, palace_ids: Sequence[int]) -> dict[int, str]:
+    """Batch palace display titles through the one title rule.
+
+    Callers that need names for a set of palaces must use this instead of
+    formatting ``宫殿 {id}`` or reading ``Palace.title`` directly: a bound
+    chapter or a manual title overrides the stored column, so the two would
+    disagree with the title shown everywhere else.
+    """
+    ids = sorted({int(item) for item in palace_ids if int(item) > 0})
+    if not ids:
+        return {}
+    rows = (
+        session.query(Palace)
+        .options(joinedload(Palace.primary_chapter))
+        .filter(Palace.id.in_(ids))
+        .all()
+    )
+    return {int(row.id): resolve_palace_title(row) for row in rows if row.id is not None}
+
+
 def list_active_palace_ids_by_subject_ids(session: Session, subject_ids: list[int]) -> list[int]:
     """Resolve palaces belonging to any of the given subjects."""
     normalized = sorted({int(value) for value in subject_ids if int(value) > 0})
@@ -250,6 +273,7 @@ __all__ = [
     "list_active_palace_tree_structures",
     "list_active_palace_ids_by_subject_ids",
     "list_active_palace_ids_by_subject_scope",
+    "resolve_palace_titles",
     "stable_tree_order",
     "subtree_node_uids",
 ]

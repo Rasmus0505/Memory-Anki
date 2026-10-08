@@ -93,6 +93,7 @@ export function FreestyleUnitReviewFlipDialogs({
   lastUndoToken,
   recentUnitChanges,
   onUnitsReconciled,
+  roundId = null,
 }: {
   nodeQuizOpen: boolean
   setNodeQuizOpen: (open: boolean) => void
@@ -109,6 +110,8 @@ export function FreestyleUnitReviewFlipDialogs({
   lastUndoToken: string | null
   recentUnitChanges: PalaceReviewUnitChangeHighlight[]
   onUnitsReconciled?: () => void
+  /** The 随心 round, so 关联题目 can badge each question with its this-round rating. */
+  roundId?: string | null
 }) {
   return (
     <>
@@ -123,6 +126,7 @@ export function FreestyleUnitReviewFlipDialogs({
         onQuestionStateChange={updateQuestionState}
         onQuestionCompleted={markQuestionCompleted}
         onQuestionDeleted={onQuestionDeleted}
+        roundId={roundId}
       />
       <PalaceReviewUnitsPanel
         open={reviewUnitsPanelOpen}

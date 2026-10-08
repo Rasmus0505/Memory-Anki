@@ -36,7 +36,7 @@ import { compressibleRoundPlanIds, createOperationId } from '@/modules/practice/
 import { FreestyleHistoryDialog } from '@/modules/practice/ui/freestyle/components/FreestyleHistoryDialog'
 import { FreestyleRoundConfigDialog } from '@/modules/practice/ui/freestyle/components/FreestyleRoundConfigDialog'
 import type { FreestyleConfigSaveChoice } from '@/modules/practice/ui/freestyle/model/overlapProgressChoice'
-import { overlayQuizRangeLabel, overlayReviewPalaceIds } from '@/modules/practice/ui/freestyle/model/overlayQuizRange'
+import { overlayRoundReviewPalaceIds } from '@/modules/practice/ui/freestyle/model/overlayQuizRange'
 import { FreestyleScopeQuizDialog } from '@/modules/practice/ui/freestyle/components/FreestyleDialogsHost'
 import { FreestyleRoundSheet } from '@/modules/practice/ui/freestyle/components/FreestyleRoundSheet'
 import { FreestyleUnitReviewCardView } from '@/modules/practice/ui/freestyle/components/FreestyleUnitReviewCardView'
@@ -841,8 +841,7 @@ export default function ImmersiveFreestylePage({
           planVersion={planVersion}
           storedConfig={readFreestyleFeedConfig(slot)}
           setupDone={Boolean(readFreestyleFeedConfig(slot).overlay_quiz_setup_done)}
-          rangeLabel={overlayQuizRangeLabel(overlayReviewPalaceIds(roundPlan, config).length)}
-          palaceCount={overlayReviewPalaceIds(roundPlan, config).length}
+          roundReviewPalaceCount={overlayRoundReviewPalaceIds(roundPlan).length}
           onConfirmSetup={({
             quizScope,
             overlayQuestionRange,
@@ -1117,7 +1116,7 @@ export default function ImmersiveFreestylePage({
               <FreestyleRoundCompleteCard
                 completion={roundCompletion}
                 roundKey={queueState.roundId}
-                quizPalaceCount={overlayReviewPalaceIds(roundPlan, config).length}
+                quizPalaceCount={overlayRoundReviewPalaceIds(roundPlan).length}
                 onClearQuizProgress={clearConfiguredOverlayQuiz}
                 onAnotherRound={() => {
                   setConfigIntent('nextRound')

@@ -443,6 +443,15 @@ export interface FreestyleLearningTimeBackfillRequest {
   expected_version: number
 }
 
+// The 做题 scope report types live in `freestyleOverlayScope.ts`: one owner, one
+// incident history, and this file's size budget.
+export type {
+  FreestyleOverlayScopePalace,
+  FreestyleOverlayScopePalaces,
+  FreestyleOverlayScopeReason,
+} from './freestyleOverlayScope'
+import type { FreestyleOverlayScopePalaces } from './freestyleOverlayScope'
+
 export interface FreestyleOverlayQuizState {
   scope_signature: string
   quiz_scope: FreestyleQuizScope
@@ -456,6 +465,15 @@ export interface FreestyleOverlayQuizState {
   question_palace_ids?: Record<string, number>
   /** Unfiltered 客观/主观 counts for the current round palace set. */
   kind_counts?: Record<FreestyleOverlayQuestionKind, number>
+  /** Per-palace scope report. See `FreestyleOverlayScopePalaces`. */
+  scope_palaces?: FreestyleOverlayScopePalaces
+  /**
+   * Question id → the weakest this-round rating (1–4) among that question's
+   * bound knowledge points. Absent means either the question binds no knowledge
+   * point in this round, or none of them were rated this round — both render as
+   * 「本轮尚未复习」, never as a fabricated score.
+   */
+  question_node_ratings?: Record<string, number>
   parked?: {
     question_ids: number[]
     completed_ids: number[]
@@ -463,6 +481,17 @@ export interface FreestyleOverlayQuizState {
   }
   /** Subjective (or any) questions taken out of this round's 做题 queue. */
   excluded_ids?: number[]
+}
+
+export interface FreestyleRoundQuestionRatingsResponse {
+  round_id: string
+  /**
+   * Question id → the weakest this-round rating (1–4) among that question's
+   * bound knowledge points. Covers every question bound to this round's palaces,
+   * not just the 做题 pool, so 关联题目 can badge a question the pool filtered out.
+   * A question absent here was not rated this round.
+   */
+  question_node_ratings: Record<string, number>
 }
 
 export interface FreestyleRoundStatePayload {
@@ -479,7 +508,15 @@ export interface FreestyleRoundStatePayload {
   conflict: boolean
   duplicate: boolean
   workspace?: 'primary' | 'secondary' | `p${number}`
-  cleared_review_palace_ids?: number[]
+  /**
+   * Deliberately absent: `cleared_review_palace_ids`.
+   *
+   * It used to ship a palace-clearance answer (skip/exclude counted as handled)
+   * that no client ever read, while the chapter banner computed the opposite
+   * rule locally ("skip / exclude do not count"). Two answers to one question,
+   * with the shipped one unused — reading it later would have silently changed
+   * the banner. See docs/incidents/0002-quiz-scope-two-owners.md §6.
+   */
   learning_backfill_applied?: boolean
 }
 

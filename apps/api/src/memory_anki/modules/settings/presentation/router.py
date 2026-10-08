@@ -164,19 +164,36 @@ def read_client_preferences(session: Session) -> dict:
 
 
 def write_client_preferences(data: dict, session: Session) -> dict:
+    """Merge the supplied preference groups and persist them in one transaction.
+
+    The lookup is wrapped in ``no_autoflush``, which here is a correctness *and* a
+    locking fix (docs/incidents/0001):
+
+    * Locking: each loop iteration stages a ``Config`` row when the key is new. A
+      bare query on the next iteration autoflushes that staged row, so the SQLite
+      write transaction opens inside the loop instead of at the commit. SQLite
+      permits one writer, so the whole read-modify-write then blocks every other
+      write for ``busy_timeout``. This function alone accounts for 46
+      ``Query-invoked autoflush`` entries in the 2026-10-07 log.
+    * Correctness: the question "does this key already exist?" is about *committed*
+      state. Flushing the row this same call just staged would make the second
+      iteration see its own pending insert, and the branch that updates an existing
+      row would then be taken for a key that does not exist yet.
+    """
     next_preferences = read_client_preferences(session)
-    for group in CLIENT_PREFERENCE_GROUPS:
-        if group not in data:
-            continue
-        value = data.get(group)
-        payload = "" if value is None else json.dumps(value, ensure_ascii=False)
-        row = session.query(Config).filter_by(key=_client_preference_key(group)).first()
-        if row:
-            row.value = payload
-            row.updated_at = utc_now_naive()
-        else:
-            session.add(Config(key=_client_preference_key(group), value=payload))
-        next_preferences[group] = value
+    with session.no_autoflush:
+        for group in CLIENT_PREFERENCE_GROUPS:
+            if group not in data:
+                continue
+            value = data.get(group)
+            payload = "" if value is None else json.dumps(value, ensure_ascii=False)
+            row = session.query(Config).filter_by(key=_client_preference_key(group)).first()
+            if row:
+                row.value = payload
+                row.updated_at = utc_now_naive()
+            else:
+                session.add(Config(key=_client_preference_key(group), value=payload))
+            next_preferences[group] = value
     session.commit()
     return next_preferences
 

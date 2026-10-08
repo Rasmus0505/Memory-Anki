@@ -19,6 +19,7 @@ import type {
   FreestyleRoundActionRequest,
   FreestyleRoundActiveRequest,
   FreestyleRoundRatingRequest,
+  FreestyleRoundQuestionRatingsResponse,
   FreestyleRoundStatePayload,
   WrongQuestionsResponse,
 } from '@/shared/api/contracts'
@@ -151,6 +152,22 @@ export function getFreestyleRoundApi(roundId: string, options?: Pick<RequestInit
     ...options,
     persistence: false,
   })
+}
+
+/**
+ * This round's weakest rating per question, for the 关联题目 rating badge.
+ *
+ * Read-only: opening a question window must not write the round. `persistence:
+ * false` keeps it out of the offline replay queue for the same reason.
+ */
+export function getFreestyleRoundQuestionRatingsApi(
+  roundId: string,
+  options?: Pick<RequestInit, 'signal'>,
+) {
+  return request<FreestyleRoundQuestionRatingsResponse>(
+    `/freestyle/rounds/${encodeURIComponent(roundId)}/question-ratings`,
+    { ...options, persistence: false },
+  )
 }
 
 export function applyFreestyleRoundActionApi(

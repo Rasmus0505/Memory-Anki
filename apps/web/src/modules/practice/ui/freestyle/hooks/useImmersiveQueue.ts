@@ -108,7 +108,7 @@ import {
   insertReviewHintCards,
   stripReviewHintCards,
 } from '@/modules/practice/domain/reviewHintCard'
-import { overlayReviewPalaceIds } from '@/modules/practice/ui/freestyle/model/overlayQuizRange'
+import { overlayRoundReviewPalaceIds } from '@/modules/practice/ui/freestyle/model/overlayQuizRange'
 import {
   applyFreestyleEntryScopeUnlessSaved,
   persistFreestyleConfigWithoutEntryLock,
@@ -2373,7 +2373,7 @@ export function useImmersiveQueue(
    */
   const clearConfiguredOverlayQuiz = useCallback(async () => {
     const roundId = queueStateRef.current.roundId
-    const palaceIds = overlayReviewPalaceIds(queueStateRef.current.roundPlan)
+    const palaceIds = overlayRoundReviewPalaceIds(queueStateRef.current.roundPlan)
     if (!roundId || palaceIds.length === 0) {
       throw new Error('这次随心配置里没有可清除做题进度的宫殿。')
     }

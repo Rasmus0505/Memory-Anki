@@ -347,26 +347,57 @@ def review_palace_ids(plan: Mapping[str, Any] | None) -> list[int]:
     return ordered
 
 
-def cleared_review_palace_ids(plan: Mapping[str, Any] | None) -> set[int]:
+def removed_review_palace_ids(plan: Mapping[str, Any] | None) -> set[int]:
+    """Palaces the learner took out of this round via 移除本队列.
+
+    A palace counts as removed only when **every** review card it had in this
+    round is excluded. A palace with even one card still in the queue is still
+    being reviewed, so its questions stay in 做题.
+
+    Only ``excluded_ids`` counts. Completed cards do NOT remove a palace: the
+    product decision is that a palace you have finished reviewing keeps its
+    questions available for extra practice. Compressed (小结算) cards are also
+    not removals — those were passed, then cleared from the feed.
+
+    Used by 做题 scope: a palace whose cards were all removed must not
+    contribute questions.
+    """
     normalized = normalize_plan(plan)
-    completed, excluded = set(normalized["completed_ids"]), set(normalized["excluded_ids"])
-    pending = {
-        item["source_card_id"]
-        for item in normalized["occurrences"]
-        if item["status"] in {OCCURRENCE_PENDING, OCCURRENCE_INSERTED}
-    }
+    excluded = set(normalized["excluded_ids"])
     by_palace: dict[int, list[str]] = {}
     for card in normalized["original_cards"]:
+        if card.get("kind") != "mindmap_branch":
+            continue
         palace_id = card.get("palace_id")
-        if card.get("kind") == "mindmap_branch" and palace_id:
-            by_palace.setdefault(int(palace_id), []).append(card["card_id"])
+        if not palace_id:
+            continue
+        by_palace.setdefault(int(palace_id), []).append(card["card_id"])
     return {
         palace_id
         for palace_id, card_ids in by_palace.items()
-        if card_ids
-        and not any(card_id in pending and card_id not in excluded for card_id in card_ids)
-        and all(card_id in completed or card_id in excluded for card_id in card_ids)
+        if card_ids and all(card_id in excluded for card_id in card_ids)
     }
+
+
+def review_unit_ids(plan: Mapping[str, Any] | None) -> list[str]:
+    """Review-unit ids this round scheduled, in plan order (deduped).
+
+    Quiz cards and retry occurrences are not units. Used to resolve questions'
+    bound knowledge points to this round's own units, so a node owned elsewhere
+    cannot borrow a rating.
+    """
+    normalized = normalize_plan(plan)
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for card in normalized["original_cards"]:
+        if card.get("kind") != "mindmap_branch":
+            continue
+        unit_id = _text(card.get("unit_id"))
+        if not unit_id or unit_id in seen:
+            continue
+        seen.add(unit_id)
+        ordered.append(unit_id)
+    return ordered
 
 
 def _known_presented_ids(plan: Plan) -> set[str]:

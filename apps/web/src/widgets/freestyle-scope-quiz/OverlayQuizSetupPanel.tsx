@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { createOperationId } from '@/modules/practice/application/feedPersistence'
 import { ensureFreestyleOverlayQuizApi } from '@/modules/practice/ui/freestyle/api'
+import { OverlayQuizScopeList, OverlayQuizScopeSummary } from './OverlayQuizScopeList'
 import { overlayFromRound } from './overlayQuizHydrate'
 import type {
   FreestyleFeedConfig,
   FreestyleOverlayQuestionKind,
+  FreestyleOverlayScopePalaces,
   FreestyleOverlayTypeOrder,
   FreestyleOverlayTypePalaceNesting,
   FreestyleQuizScope,
@@ -54,7 +56,7 @@ export function OverlayQuizSetupPanel({
   planVersion,
   storedConfig,
   setupDone,
-  rangeLabel,
+  scopePalaces,
   palaceCount,
   onRoundSync,
   onConfirm,
@@ -63,7 +65,9 @@ export function OverlayQuizSetupPanel({
   planVersion: number
   storedConfig: FreestyleFeedConfig
   setupDone: boolean
-  rangeLabel: string
+  /** Authoritative scope from the backend pack. Never re-derived here. */
+  scopePalaces: FreestyleOverlayScopePalaces | null
+  /** Round-scoped palace count: gates the 宫殿/题型 nesting choice only. */
   palaceCount: number
   onRoundSync: (round: FreestyleRoundStatePayload) => void
   onConfirm: (choice: OverlayQuizSetupChoice) => void
@@ -141,7 +145,8 @@ export function OverlayQuizSetupPanel({
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">{rangeLabel}。只出这些宫殿的题，不会改训练方向。</p>
+      <OverlayQuizScopeSummary scopePalaces={scopePalaces} />
+      <OverlayQuizScopeList scopePalaces={scopePalaces} />
       <div role="radiogroup" aria-label="宫殿间顺序" className="grid gap-2">
         {([
           ['cross_palace_random', '跨宫殿乱序', '每道题可能来自不同宫殿'],

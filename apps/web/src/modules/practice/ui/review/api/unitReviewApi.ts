@@ -1,4 +1,5 @@
 import { request } from '@/shared/api/http'
+import { retryWhileBusy } from '@/shared/api/busyRetry'
 import { shareInFlightRequest } from '@/shared/api/inFlightRequest'
 import { APP_EVENT_NAMES, emitAppEvent } from '@/shared/events/appEvents'
 import { detectClientSource } from '@/shared/lib/clientSource'
@@ -363,22 +364,40 @@ export async function startFreestyleUnitReviewSessionApi(
   unit: Pick<ReviewUnitDto, 'id' | 'revision'>,
   roundId: string,
   encounterId: string,
-  options?: { allowNotDue?: boolean },
+  options?: { allowNotDue?: boolean; onBusyRetry?: (attempt: number) => void },
 ) {
-  const response = await request<{ item: UnitReviewSessionDto }>(`/review/units/${unit.id}/sessions`, {
-    method: 'POST',
-    body: JSON.stringify({
-      unit_revision: unit.revision,
-      round_id: roundId,
-      encounter_id: encounterId,
-      clientSource: detectClientSource(),
-      allow_not_due: Boolean(options?.allowNotDue),
-    }),
-    // The UI retries this itself, so it is deliberately not queued as a
-    // mutation: a stale replay would reopen an encounter the user moved past.
-    timeoutMs: SESSION_START_TIMEOUT_MS,
-    persistence: false,
+  // Opening the encounter is idempotent server-side: the same encounter_id
+  // returns the existing open encounter instead of stacking a second one. That
+  // makes a bounded retry safe, and it is what keeps a contended card from
+  // becoming a dead banner the learner has to repair by hand.
+  //
+  // Measured 2026-10-07: this exact endpoint answered `database is locked` (500)
+  // and `storage busy` (503) while the write lock was held elsewhere. Previously
+  // every one of those ended at the same 重试 button, and retrying by hand
+  // re-entered the same contention.
+  //
+  // One X-Request-ID spans every attempt, so the server log shows one action
+  // rather than N unrelated requests.
+  const payload = JSON.stringify({
+    unit_revision: unit.revision,
+    round_id: roundId,
+    encounter_id: encounterId,
+    clientSource: detectClientSource(),
+    allow_not_due: Boolean(options?.allowNotDue),
   })
+  const response = await retryWhileBusy(
+    (headers) => request<{ item: UnitReviewSessionDto }>(`/review/units/${unit.id}/sessions`, {
+      method: 'POST',
+      body: payload,
+      headers,
+      // Deliberately not queued as a mutation: a stale replay would reopen an
+      // encounter the user moved past. The bounded retry above covers the busy
+      // case without that risk.
+      timeoutMs: SESSION_START_TIMEOUT_MS,
+      persistence: false,
+    }),
+    { onRetry: options?.onBusyRetry },
+  )
   return response.item
 }
 

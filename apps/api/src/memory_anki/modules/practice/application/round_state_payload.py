@@ -7,7 +7,7 @@ from typing import Any
 
 from memory_anki.core.time import to_api_datetime
 from memory_anki.infrastructure.db._tables.misc import FreestyleRoundState
-from memory_anki.modules.practice.domain.round_plan import cleared_review_palace_ids, normalize_plan
+from memory_anki.modules.practice.domain.round_plan import normalize_plan
 from memory_anki.modules.practice.domain.workspace import normalize_workspace
 
 
@@ -70,7 +70,6 @@ def _payload(
         "updated_at": to_api_datetime(row.updated_at) if row.updated_at else None,
         "conflict": conflict,
         "duplicate": duplicate,
-        "cleared_review_palace_ids": sorted(cleared_review_palace_ids(resolved_plan)),
     }
 
 

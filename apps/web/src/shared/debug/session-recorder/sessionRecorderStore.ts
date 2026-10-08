@@ -1,3 +1,4 @@
+import { generateLocalId } from '@/shared/lib/ids'
 import { readAppLogs, subscribeAppLogs, type AppLogEntry } from '@/shared/logs/model/appLogs'
 import { describeClickForRecorder } from './sessionRecorderCapture'
 import { summarizeEditorDocChange } from './sessionRecorderDocDiff'
@@ -34,10 +35,7 @@ function nowIso() {
 }
 
 function generateId() {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID()
-  }
-  return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`
+  return generateLocalId()
 }
 
 function currentRoute() {

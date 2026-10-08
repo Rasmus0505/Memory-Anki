@@ -17,6 +17,22 @@ import {
 
 export const API_BASE = '/api/v1'
 const MUTATION_ID_HEADER = 'X-Memory-Anki-Mutation-ID'
+/**
+ * Correlation id for the server's request log.
+ *
+ * The backend already accepts and echoes this header
+ * (`core/request_logging.py` reads `X-Request-ID`, stamps it on every log line
+ * and returns it in the response), but the client never sent one, so the server
+ * minted its own id per request and threw it away when the response failed to
+ * arrive. That broke the causal chain in exactly the case that matters: a
+ * request that times out or is killed by a lock has no response, therefore no
+ * server-generated id, therefore nothing in the browser that can be matched
+ * against `logs/pwa-api.log`. Diagnosing it required guessing from timestamps.
+ *
+ * Sending our own id fixes that: one user action, one id, visible in the copied
+ * diagnostics AND in every server log line for that request.
+ */
+const REQUEST_ID_HEADER = 'X-Request-ID'
 const LOW_INFORMATION_NETWORK_ERRORS = [
   'load failed',
   'failed to fetch',
@@ -85,6 +101,27 @@ function getMutationId(headers: Record<string, string>) {
     if (key.toLowerCase() === MUTATION_ID_HEADER.toLowerCase()) return value
   }
   return null
+}
+
+function hasHeader(headers: Record<string, string>, name: string) {
+  return Object.keys(headers).some((key) => key.toLowerCase() === name.toLowerCase())
+}
+
+/**
+ * Ensure the request carries a correlation id, returning the one in use.
+ *
+ * A caller that already set `X-Request-ID` keeps it, so a retry of the same
+ * operation can deliberately reuse the id its first attempt was logged under —
+ * that is what turns "three failed attempts" into one traceable story.
+ */
+function ensureRequestId(headers: Record<string, string>) {
+  if (!hasHeader(headers, REQUEST_ID_HEADER)) {
+    headers[REQUEST_ID_HEADER] = generateMutationId()
+  }
+  for (const [key, value] of Object.entries(headers)) {
+    if (key.toLowerCase() === REQUEST_ID_HEADER.toLowerCase()) return value
+  }
+  return ''
 }
 
 function readBrowserRuntimeSummary() {
@@ -401,6 +438,7 @@ export async function fetchWithMutationQueue(
   if (method.toUpperCase() !== 'GET' && !hasMutationId(headers)) {
     headers[MUTATION_ID_HEADER] = mutationId
   }
+  ensureRequestId(headers)
   const body = options.body
   try {
     const response = await fetch(requestUrl, {
@@ -474,6 +512,7 @@ export async function request<T>(url: string, options?: PersistedRequestInit): P
   if (isWrite && !hasMutationId(headers)) {
     headers[MUTATION_ID_HEADER] = mutationId
   }
+  ensureRequestId(headers)
   let timedResponse: TimedFetchResponse
 
   try {

@@ -28,6 +28,15 @@
 - Enter reveal follow：随心复习按 Enter 翻出的卡若被画面裁切，画布只做最小平移，把这一步里裁切最多的那张完整推进视野并留边距，保持当前缩放，约 200ms，连按打断上一次动画跟上最新一步。鼠标点卡、Shift 收回和 A/S 批量翻卡不挪视野。
 - **不做** MiniMap、搜索跳转、大纲双栏（宿主可另组）。
 
+## 布局热路径与滚动合成（性能不变量）
+
+大图卡顿曾经有两个根因，功能测试都看不见，改坏也没有测试会红。两条都必须保留：
+
+- **`getNodeSize` 必须走 `nodeSizeMemo`。** 它是 `(role, label, minWidth, maxWidth)` 的纯函数，但一次布局里会被反复问同一张卡：`measureTree` 一次、`resolveOverlaps` 每对比较一次、`hasNodeOverlaps` / `stackNodesWithoutOverlap` 再一次。度量本身是正则加逐字符扫描，并不便宜；900 节点时单次布局实测约 15ms，等于一帧预算在 React Flow 碰 DOM 之前就没了。真实度量逻辑留在 `computeNodeSize`，公开入口 `getNodeSize` 只负责缓存。
+- **含活导图的卡必须退出 `.fs-depth` 的滚动联动变换。** `styles/freestyle-stage.css` 的深度堆叠用 `animation-timeline: view()` 在滚动时平移+缩放整个 `.fs-depth` 子树；导图在里面等于每一滚动帧重合成、重光栅化整棵画布（上千 DOM 节点加一层 SVG 连线）。因此 `:has(.memory-anki-mindmap-frame)` 的卡关闭 travel/veil/shadow 动画（原生全屏本来就是例外）。相邻卡仍按 `.fs-page` 的绘制顺序互相盖过，只去掉被覆盖卡的位移与压暗。
+
+回归守卫：`tools/check_architecture.py::check_mindmap_layout_hot_path`。
+
 ## 展示策略
 
 - `MindMapPresentationMachine` 明确区分 `nativeFullscreen` 与 `viewportFullscreen`，原生 Fullscreen API 被拒绝时只能进入 viewport 模式，不得继续上报为系统全屏。

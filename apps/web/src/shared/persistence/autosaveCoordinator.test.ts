@@ -78,6 +78,45 @@ describe('autosaveCoordinator', () => {
     })
   })
 
+  it('stops retrying once the attempt budget is exhausted', async () => {
+    // Regression guard for a 47-hour livelock: a save that failed forever was
+    // retried forever. The key stays dirty (only success clears it), so each tick
+    // re-attempted the same doomed request. On the owner's machine this produced
+    // `PUT /palaces/40/editor -> 409` every 30–60s, 3,020 times, without pause.
+    const flush = vi.fn().mockRejectedValue(new Error('always fails'))
+    registerAutoSaveTarget('timer:1', { flush })
+
+    markDirty('timer:1', 'tick')
+
+    await vi.advanceTimersByTimeAsync(30_000)   // attempt 1
+    await vi.advanceTimersByTimeAsync(5_000)    // attempt 2
+    await vi.advanceTimersByTimeAsync(15_000)   // attempt 3
+    const attemptsWhenExhausted = flush.mock.calls.length
+    expect(attemptsWhenExhausted).toBe(3)
+
+    // Past the budget, no further attempts may be scheduled — ever.
+    await vi.advanceTimersByTimeAsync(60 * 60 * 1000)
+    expect(flush).toHaveBeenCalledTimes(attemptsWhenExhausted)
+    expect(getAutoSaveState().status).toBe('error')
+    expect(getAutoSaveState().errorMessage).toBe('always fails')
+  })
+
+  it('a fresh edit after exhaustion restores the retry budget', async () => {
+    // Stopping must not strand the user: the next real edit has to be saved.
+    const flush = vi.fn().mockRejectedValue(new Error('boom'))
+    registerAutoSaveTarget('timer:1', { flush })
+
+    markDirty('timer:1', 'tick')
+    await vi.advanceTimersByTimeAsync(30_000 + 5_000 + 15_000)
+    const afterExhaustion = flush.mock.calls.length
+
+    markDirty('timer:1', 'user edited again')
+    expect(getAutoSaveState().retryAttempt).toBe(0)
+
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(flush.mock.calls.length).toBe(afterExhaustion + 1)
+  })
+
   it('publishes save state transitions to subscribers', async () => {
     const flush = vi.fn(async () => undefined)
     const listener = vi.fn()

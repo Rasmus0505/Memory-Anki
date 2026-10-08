@@ -24,6 +24,7 @@ from memory_anki.modules.practice.application.round_overlay_service import (
     drop_overlay_quiz_for_palaces,
     ensure_overlay_quiz,
     progress_overlay_quiz,
+    read_round_question_ratings,
 )
 from memory_anki.modules.practice.application.round_state_service import (
     apply_round_action,
@@ -148,6 +149,22 @@ def api_get_freestyle_round(
     if payload is None:
         raise HTTPException(status_code=400, detail="freestyle round not found")
     return payload
+
+
+@router.get("/freestyle/rounds/{round_id}/question-ratings")
+def api_freestyle_round_question_ratings(
+    round_id: str,
+    session: Session = Depends(session_dep),
+):
+    """This round's weakest rating per question, for the 关联题目 rating badge.
+
+    Read-only on purpose: opening a question window must not write the round, or
+    its version would move under the study loop and 409 the next rating.
+    """
+    return {
+        "round_id": round_id,
+        "question_node_ratings": read_round_question_ratings(session, round_id=round_id),
+    }
 
 
 @router.post("/freestyle/rounds/{round_id}/learning-time")

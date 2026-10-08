@@ -2434,19 +2434,275 @@ def check_freestyle_scope_quiz_overlay(errors: list[str]) -> None:
     overlay_service = API_SRC / "modules" / "practice" / "application" / "overlay_quiz_service.py"
     if overlay_service.exists():
         overlay_pack_source = overlay_service.read_text(encoding="utf-8", errors="ignore")
-        narrows_round_scope = (
-            "resolved_palace_ids = [item for item in resolved_palace_ids if item in allowed_ids]"
-            in overlay_pack_source
-        )
-        if "list_active_palace_ids_by_subject" in overlay_pack_source and not narrows_round_scope:
+        # A subject lookup may never widen the scope: only the round's own
+        # palaces contribute, so any palace-scope query here is a smell.
+        if "list_active_palace_ids_by_subject" in overlay_pack_source:
             errors.append(
                 f"{overlay_service.relative_to(REPO_ROOT).as_posix()}: "
-                "overlay quiz must not expand a subject into every palace."
+                "overlay quiz must not resolve subjects into palaces; the round's "
+                "review palaces are the scope."
             )
         if "order_overlay_questions" not in overlay_pack_source or "overlay_question_kind" not in overlay_pack_source:
             errors.append(
                 f"{overlay_service.relative_to(REPO_ROOT).as_posix()}: "
                 "overlay quiz must filter 客观/主观 and order them with order_overlay_questions."
+            )
+        # 做题 scope has exactly one owner, and that owner does NOT re-apply the
+        # feed config. The product rule: if the 随心 config selects 20 palaces but
+        # this round scheduled 10, 做题 draws only from those 10. Applying the
+        # config a second time emptied a real round's pool to 0 questions while
+        # the header still counted the round's palaces.
+        if "allowed_ids" in overlay_pack_source or "_config_allowed_palace_ids" in overlay_pack_source:
+            errors.append(
+                f"{overlay_service.relative_to(REPO_ROOT).as_posix()}: "
+                "overlay quiz must not narrow the round's review set with the saved "
+                "feed config; the round's own palaces are the whole 做题 scope."
+            )
+        for marker in ("scope_palaces", "build_scope_palaces", "resolve_palace_titles"):
+            if marker not in overlay_pack_source:
+                errors.append(
+                    f"{overlay_service.relative_to(REPO_ROOT).as_posix()}: "
+                    f"overlay quiz must return the authoritative `{marker}` scope report "
+                    "so the dialog renders membership instead of re-deriving it."
+                )
+        # The rating badge: question → bound node → round unit → this round's score.
+        # `list_round_unit_ratings` is read by the sibling round_overlay_service
+        # (checked below), so only the pack-side markers are required here.
+        for marker in ("question_node_ratings", "_resolve_question_node_ratings"):
+            if marker not in overlay_pack_source:
+                errors.append(
+                    f"{overlay_service.relative_to(REPO_ROOT).as_posix()}: "
+                    f"overlay quiz must resolve `{marker}` so each question can show "
+                    "its bound knowledge point's this-round rating."
+                )
+        # Both answering windows must read ONE rating rule. 关联题目 is not the 做题
+        # overlay, so a second derivation there would let 「本轮最低 N」 mean two
+        # different things depending on which window is open.
+        if "def build_round_question_ratings" not in overlay_pack_source:
+            errors.append(
+                f"{overlay_service.relative_to(REPO_ROOT).as_posix()}: "
+                "must own `build_round_question_ratings`; it is the single source "
+                "for the this-round rating both quiz windows show."
+            )
+    round_overlay = (
+        API_SRC / "modules" / "practice" / "application" / "round_overlay_service.py"
+    )
+    if round_overlay.exists():
+        round_overlay_source = round_overlay.read_text(encoding="utf-8", errors="ignore")
+        if "def read_round_question_ratings" not in round_overlay_source:
+            errors.append(
+                f"{round_overlay.relative_to(REPO_ROOT).as_posix()}: "
+                "must expose `read_round_question_ratings` for 关联题目's badge."
+            )
+        # Opening a question window must not write the round: a write would move
+        # the version under the study loop and 409 the next rating.
+        read_body = round_overlay_source.split("def read_round_question_ratings", 1)[-1]
+        read_body = read_body.split("\ndef ", 1)[0]
+        for forbidden in ("_begin_round_write", "_apply_plan", "session.commit()"):
+            if forbidden in read_body:
+                errors.append(
+                    f"{round_overlay.relative_to(REPO_ROOT).as_posix()}: "
+                    f"`read_round_question_ratings` must stay read-only; found "
+                    f"`{forbidden}`. Opening 关联题目 must not write the round."
+                )
+        # 移除本队列 must take the palace's questions with it.
+        for marker in ("removed_palace_ids", "SCOPE_REASON_PALACE_REMOVED"):
+            if marker not in overlay_pack_source:
+                errors.append(
+                    f"{overlay_service.relative_to(REPO_ROOT).as_posix()}: "
+                    f"overlay quiz must honour `{marker}` so a palace whose cards "
+                    "were all 移除本队列 stops contributing questions."
+                )
+    # Both answering windows show the same this-round rating through one shared
+    # component. 关联题目 used to show nothing at all, which is what the learner
+    # reported; a private copy in either window would let the two drift.
+    # Both answering windows show the same this-round rating. 关联题目 used to
+    # show nothing at all, which is what the learner reported; a second
+    # derivation in either window would let 「本轮最低 N」 drift apart.
+    #
+    # 做题 already holds the round's ratings from the overlay payload, so it
+    # renders the badge directly. 关联题目 has no round payload, so it goes
+    # through the container that fetches them.
+    for rel, marker in (
+        (
+            "widgets/freestyle-scope-quiz/FreestyleScopeQuizDialog.tsx",
+            "QuizQuestionRoundRatingBadge",
+        ),
+        (
+            "widgets/node-bound-quiz/NodeBoundQuizDialog.tsx",
+            "QuizQuestionRoundRating",
+        ),
+    ):
+        host = WEB_SRC / Path(rel)
+        if not host.exists():
+            errors.append(f"{rel}: quiz overlay host is required.")
+            continue
+        host_source = host.read_text(encoding="utf-8", errors="ignore")
+        if marker not in host_source:
+            errors.append(
+                f"{rel}: must render `{marker}` so the question shows its bound "
+                "knowledge point's this-round rating."
+            )
+    # 关联题目 must read the score through the shared container, never derive one.
+    node_bound_rating = WEB_SRC / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx"
+    if node_bound_rating.exists():
+        nb_source = node_bound_rating.read_text(encoding="utf-8", errors="ignore")
+        if "QuizQuestionRoundRating" not in nb_source:
+            errors.append(
+                "widgets/node-bound-quiz/NodeBoundQuizDialog.tsx: must show the "
+                "round rating through `QuizQuestionRoundRating`."
+            )
+    rating_container = (
+        WEB_SRC / "widgets" / "quiz-round-rating" / "QuizQuestionRoundRating.tsx"
+    )
+    if not rating_container.exists():
+        errors.append(
+            "widgets/quiz-round-rating/QuizQuestionRoundRating.tsx: the shared "
+            "this-round rating container is required so 做题 and 关联题目 agree."
+        )
+    else:
+        container_source = rating_container.read_text(encoding="utf-8", errors="ignore")
+        # One owner for the rule: the container reads the backend's map, so a
+        # second derivation cannot appear in a window.
+        if "useRoundQuestionRatings" not in container_source:
+            errors.append(
+                "widgets/quiz-round-rating/QuizQuestionRoundRating.tsx: must read "
+                "the round's ratings via `useRoundQuestionRatings` rather than "
+                "deriving a score of its own."
+            )
+    # Ratings must come from the encounter table, not the round plan's cached
+    # `encounters` map: on a real round the cache held 29 entries with only 3
+    # carrying a rating while the table held all 29.
+    round_overlay = (
+        API_SRC / "modules" / "practice" / "application" / "round_overlay_service.py"
+    )
+    if round_overlay.exists():
+        round_overlay_source = round_overlay.read_text(encoding="utf-8", errors="ignore")
+        if "round_rating_by_unit" in round_overlay_source:
+            errors.append(
+                f"{round_overlay.relative_to(REPO_ROOT).as_posix()}: "
+                "must read this round's ratings from the encounter table "
+                "(list_round_unit_ratings), not the round plan's cached copy."
+            )
+        if "list_round_unit_ratings" not in round_overlay_source:
+            errors.append(
+                f"{round_overlay.relative_to(REPO_ROOT).as_posix()}: "
+                "must pass `list_round_unit_ratings` into the overlay pack so the "
+                "做题 badge reflects this round's real scores."
+            )
+        # 移除本队列 removes a palace's questions with it. Dropping this means a
+        # palace the learner explicitly took out keeps feeding questions.
+        if "removed_review_palace_ids" not in round_overlay_source:
+            errors.append(
+                f"{round_overlay.relative_to(REPO_ROOT).as_posix()}: "
+                "must pass `removed_review_palace_ids` so palaces whose cards were "
+                "all 移除本队列 stop contributing 做题 questions."
+            )
+    plan_domain = API_SRC / "modules" / "practice" / "domain" / "round_plan.py"
+    if plan_domain.exists():
+        plan_domain_source = plan_domain.read_text(encoding="utf-8", errors="ignore")
+        if "def removed_review_palace_ids" not in plan_domain_source:
+            errors.append(
+                f"{plan_domain.relative_to(REPO_ROOT).as_posix()}: "
+                "must keep `removed_review_palace_ids`; a palace leaves the round "
+                "only when every one of its cards was excluded."
+            )
+    # A lost update race on freestyle_round_states must stay a retryable
+    # `conflict`, not an uncaught StaleDataError → HTTP 500. The ORM version
+    # guard fires after the module's own expected_version check, whenever another
+    # writer commits in between (the live-study heartbeat fires every few
+    # seconds), so the commit boundary has to convert it.
+    commit_boundary = (
+        API_SRC / "modules" / "practice" / "application" / "round_commit.py"
+    )
+    if not commit_boundary.exists():
+        errors.append(
+            "modules/practice/application/round_commit.py: the freestyle round "
+            "commit boundary must exist; it converts a lost version race into a "
+            "retryable conflict instead of an unhandled StaleDataError (500)."
+        )
+    else:
+        commit_source = commit_boundary.read_text(encoding="utf-8", errors="ignore")
+        for marker in ("StaleDataError", "session.rollback()", "session.refresh(row)"):
+            if marker not in commit_source:
+                errors.append(
+                    f"{commit_boundary.relative_to(REPO_ROOT).as_posix()}: "
+                    f"must handle a lost update race via `{marker}` so a "
+                    "concurrent commit is a conflict, not a 500."
+                )
+    # Every round write must go through the commit boundary, which is the one
+    # place that converts a lost version race into a retryable conflict.
+    #
+    # This covers the whole round-write surface, not one file: `round_overlay_service`
+    # is a separate path (做题 progress/ensure/settlement) and kept its own
+    # `session.commit()` after the first fix, so the same StaleDataError still
+    # reached the learner as 「保存随心做题进度 ... 500」.
+    for name in ("round_state_service.py", "round_overlay_service.py"):
+        service = API_SRC / "modules" / "practice" / "application" / name
+        if not service.exists():
+            errors.append(f"modules/practice/application/{name}: round write path is required.")
+            continue
+        source = service.read_text(encoding="utf-8", errors="ignore")
+        if "_commit_operation" not in source:
+            errors.append(
+                f"{service.relative_to(REPO_ROOT).as_posix()}: "
+                "round writes must commit through round_commit.commit_operation so "
+                "a lost race cannot escape as StaleDataError."
+            )
+        stray = [line for line in source.splitlines() if "session.commit()" in line]
+        if stray:
+            errors.append(
+                f"{service.relative_to(REPO_ROOT).as_posix()}: "
+                "must not call session.commit() directly; use "
+                f"commit_operation (found {len(stray)} direct commit(s)). "
+                "A direct commit re-opens the 500 on a lost version race."
+            )
+    overlay_range = (
+        WEB_SRC
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "model"
+        / "overlayQuizRange.ts"
+    )
+    if overlay_range.exists():
+        overlay_range_source = overlay_range.read_text(encoding="utf-8", errors="ignore")
+        if "export function overlayReviewPalaceIds" in overlay_range_source:
+            errors.append(
+                f"{overlay_range.relative_to(REPO_ROOT).as_posix()}: "
+                "the frontend must not re-derive 做题 pool membership. Render the "
+                "backend `scope_palaces` report; the round-scoped helper is "
+                "`overlayRoundReviewPalaceIds` and is only for settlement clearing."
+            )
+        if "specific_palace_ids.includes" in overlay_range_source:
+            errors.append(
+                f"{overlay_range.relative_to(REPO_ROOT).as_posix()}: "
+                "the frontend must not re-apply the feed palace filter to decide "
+                "做题 membership; that rule belongs to build_overlay_question_pack."
+            )
+        if "FreestyleOverlayScopePalaces" not in overlay_range_source:
+            errors.append(
+                f"{overlay_range.relative_to(REPO_ROOT).as_posix()}: "
+                "must consume and render the backend `FreestyleOverlayScopePalaces` "
+                "report rather than re-deriving 做题 membership."
+            )
+    scope_quiz_dialog = (
+        WEB_SRC / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx"
+    )
+    if scope_quiz_dialog.exists():
+        scope_dialog_source = scope_quiz_dialog.read_text(encoding="utf-8", errors="ignore")
+        if "scope_palaces" not in scope_dialog_source:
+            errors.append(
+                f"{scope_quiz_dialog.relative_to(REPO_ROOT).as_posix()}: "
+                "the 做题 dialog must show the backend scope report."
+            )
+        # A palace rendered as a bare id is unreadable mid-session and disagrees
+        # with the name shown on the card and in the scope list.
+        if "`宫殿 ${current.palace_id}`" in scope_dialog_source:
+            errors.append(
+                f"{scope_quiz_dialog.relative_to(REPO_ROOT).as_posix()}: "
+                "must show the palace title, not a bare palace id."
             )
     canvas = WEB_SRC / "shared" / "ui" / "mindmap-canvas" / "MindMapCanvas.tsx"
     if canvas.exists():
@@ -2481,6 +2737,43 @@ def check_freestyle_scope_quiz_overlay(errors: list[str]) -> None:
             errors.append(
                 f"{flip_panel.relative_to(REPO_ROOT).as_posix()}: "
                 "freestyle must keep 英语 inline left of 文字, not in ⋯."
+            )
+    # Palace clearance has one intended owner: the frontend banner rule
+    # (`isPalaceRoundCleared`, where skip/exclude do NOT count). A second,
+    # differently-ruled answer used to ride along on every round payload with no
+    # consumer; reading it later would have silently flipped the banner. See
+    # docs/incidents/0002-quiz-scope-two-owners.md §6.
+    payload_path = (
+        API_SRC
+        / "modules"
+        / "practice"
+        / "application"
+        / "round_state_payload.py"
+    )
+    if payload_path.exists():
+        payload_source = payload_path.read_text(encoding="utf-8", errors="ignore")
+        if "cleared_review_palace_ids" in payload_source:
+            errors.append(
+                f"{payload_path.relative_to(REPO_ROOT).as_posix()}: "
+                "must not ship a palace-clearance list. The chapter banner owns "
+                "that rule (skip/exclude do not count) and computed it locally."
+            )
+    plan_path = API_SRC / "modules" / "practice" / "domain" / "round_plan.py"
+    if plan_path.exists():
+        plan_source = plan_path.read_text(encoding="utf-8", errors="ignore")
+        if "def cleared_review_palace_ids" in plan_source:
+            errors.append(
+                f"{plan_path.relative_to(REPO_ROOT).as_posix()}: "
+                "the unused palace-clearance rule must stay deleted; the banner "
+                "owns palace clearance and its rule is not this one."
+            )
+    contract_path = WEB_SRC / "shared" / "api" / "contracts" / "freestyle.ts"
+    if contract_path.exists():
+        contract_source = contract_path.read_text(encoding="utf-8", errors="ignore")
+        if "cleared_review_palace_ids?:" in contract_source:
+            errors.append(
+                f"{contract_path.relative_to(REPO_ROOT).as_posix()}: "
+                "must not re-declare the removed `cleared_review_palace_ids` field."
             )
     feed_doc = REPO_ROOT / "docs" / "architecture" / "freestyle-immersive-feed.md"
     if feed_doc.exists():
@@ -5018,6 +5311,15 @@ def _check_backup_lock_scope(errors: list[str]) -> None:
             "fast database snapshot may hold the runtime lock."
         )
 
+    check_runtime_storage_lock(errors)
+
+
+def check_runtime_storage_lock(errors: list[str]) -> None:
+    """The shared storage lock must survive a cross-thread release.
+
+    Split from the backup-policy check so this property can be tested on its own
+    (see ``test_storage_lock_must_be_releasable_from_another_thread``).
+    """
     lock_module = API_SRC / "core" / "runtime_storage_lock.py"
     if lock_module.exists():
         lock_source = lock_module.read_text(encoding="utf-8", errors="ignore")
@@ -5025,6 +5327,27 @@ def _check_backup_lock_scope(errors: list[str]) -> None:
             errors.append(
                 f"{lock_module.relative_to(REPO_ROOT).as_posix()}: lock contention must raise "
                 "StorageBusyError so HTTP can answer 503 + Retry-After instead of 500."
+            )
+        # The lock is released by whichever thread finishes the work, which is
+        # legitimately not the one that took it: FastAPI runs a sync endpoint and
+        # its generator-dependency teardown in separate threadpool calls, so a
+        # flush that raises defers its ROLLBACK to `session.close()` on another
+        # worker. `RLock` may only be released by its owner, so that teardown
+        # raised `RuntimeError: cannot release un-acquired lock` — which replaced
+        # the real exception in the log (a buried StaleDataError) AND aborted the
+        # `finally` before `lock.release()`, wedging the process-wide lock. One
+        # such event produced 55 later `storage_busy` 503s.
+        if "threading.RLock()" in lock_source:
+            errors.append(
+                f"{lock_module.relative_to(REPO_ROOT).as_posix()}: must not use "
+                "threading.RLock(); a cross-thread release raises 'cannot release "
+                "un-acquired lock', which masks the original error and wedges the "
+                "lock for every later writer. Reentrancy is tracked per thread."
+            )
+        if "threading.Lock()" not in lock_source:
+            errors.append(
+                f"{lock_module.relative_to(REPO_ROOT).as_posix()}: the lock registry "
+                "must use threading.Lock() so a cross-thread release is legal."
             )
 
     handlers = API_SRC / "app" / "error_handlers.py"
@@ -5942,6 +6265,306 @@ def check_article_reading_cursor_boundary(errors: list[str]) -> None:
         errors.append(f"{bridge}: stale cursor writes must not enter automatic offline replay.")
 
 
+# Pre-existing staged-then-read / loop-autoflush sites found when the
+# `database is locked` hygiene guard was introduced (2026-10-07). Each is a real
+# instance of the same defect class, but they sit in startup and admin paths rather
+# than the study hot path that caused the outage, so converting them is a separate,
+# reviewable change. Baselining keeps the guard's value -- **no new occurrence can
+# be introduced** -- while making the remaining debt explicit rather than silently
+# tolerated.
+#
+# `check_db_write_lock_hygiene` fails once a listed site stops matching, so this
+# list cannot quietly keep exempting code that has already been fixed, and it
+# cannot grow without an intentional edit here.
+BASELINE_STAGED_THEN_READ: set[str] = {
+    # Startup seed: the loop reads-then-inserts, so iteration 2 flushes iteration
+    # 1's row. Runs once at boot, not on the request path.
+    "app/startup_runtime.py:54",
+    # Palette snapshot restore: already inside one long explicit transaction that
+    # is expected to be exclusive.
+    "modules/backups/application/backup_palace_restore.py:183",
+    # Practice-progress upsert: loop-scoped get-then-stage, with the commit landing
+    # immediately after the loop.
+    "modules/quiz/application/practice_progress.py:103",
+    # AI prompt/scene seeds and admin edits: settings writes made by one person from
+    # one settings page, none on the study hot path.
+    "modules/settings/application/ai_prompt_composition.py:52",
+    "modules/settings/application/ai_prompt_composition.py:99",
+    "modules/settings/application/ai_prompt_composition.py:124",
+    "modules/settings/application/ai_prompt_composition.py:398",
+}
+
+
+def check_db_write_lock_hygiene(errors: list[str]) -> None:
+    """Keep the two `database is locked` defect classes from coming back.
+
+    Background (see docs/incidents/0001-review-session-locked.md): SQLite in WAL
+    mode allows many readers but exactly ONE writer. Two habits recreate the
+    outage that cost a day of study, and both are invisible to functional tests
+    because every request still succeeds whenever the machine is idle:
+
+    1. **A read that opens a write.** SQLAlchemy autoflushes staged changes before
+       a query. In a write path, a plain `session.query(...)` / `session.get(...)`
+       therefore opens the SQLite write transaction *at that query* and holds it
+       until the handler commits — so slow non-SQL work afterwards blocks every
+       other writer for `busy_timeout`, which then fails. The fix is
+       `session.no_autoflush` around lookups that ask about *committed* state
+       (see `modules/practice/application/round_read_lookups.py`, which documents
+       the rule once for its callers).
+
+    2. **A heavy foreground action on the request path.** `wal_checkpoint(TRUNCATE)`
+       against a ~200 MB database on a synced USB volume can take seconds to
+       minutes, and it needs the write lock. Running it on a foreground request
+       (or outside the shared runtime lock) stalls every concurrent write.
+
+    This guard is intentionally structural, not a per-bug patch: it fails any new
+    occurrence of either class anywhere under `apps/api/src`, while allowing the
+    audited exceptions listed below (each must state why it is safe).
+    """
+    # Functions whose *purpose* is to read committed state from inside a write
+    # path, so their lookups must not flush. Keep this list tiny and justified.
+    no_autoflush_lookup_allowlist = {
+        "modules/practice/application/round_read_lookups.py": (
+            "dedicated committed-state lookups; every function wraps no_autoflush"
+        ),
+    }
+
+    # A checkpoint/ANALYZE call site that is allowed on the request path because it
+    # runs in a background task or at startup, not inline in a user request.
+    foreground_maintenance_allowlist: set[str] = set()
+
+    BASELINE_STAGED_THEN_READ = globals()["BASELINE_STAGED_THEN_READ"]
+    api_root = API_SRC
+    if not api_root.exists():
+        errors.append(f"{api_root}: backend source tree is missing.")
+        return
+
+    found_staged_then_read: set[str] = set()
+    session_calls = re.compile(
+        r"session\.(?P<name>add|add_all|delete|commit|rollback|flush|query|get)\s*\("
+    )
+    # Calls that leave pending changes in the session.
+    stages = {"add", "add_all", "delete", "flush"}
+    # Calls that clear pending changes, so a later read is safe again.
+    clears = {"commit", "rollback"}
+    # Reads. SQLAlchemy autoflushes pending changes before these.
+    reads = {"query", "get"}
+
+    # ── 1. Reads inside write paths must not autoflush ────────────────────────
+    for path in sorted(api_root.rglob("*.py")):
+        relative = path.relative_to(api_root).as_posix()
+        if "/tests/" in relative or relative.startswith("tests/"):
+            continue
+        if "infrastructure/db/" in relative or "alembic/" in relative:
+            continue
+        source = path.read_text(encoding="utf-8")
+
+        for match in re.finditer(r"^def\s+(\w+)\s*\(", source, re.MULTILINE):
+            name = match.group(1)
+            body = _extract_python_function_body(source, name)
+            if body is None:
+                continue
+            calls = list(session_calls.finditer(body))
+            if not any(call.group("name") in stages for call in calls):
+                continue
+
+            # Track pending-change state in source order. A read is only a hazard
+            # while something is already staged and no commit/rollback cleared it:
+            # `query` then `delete` is fine, and `commit` then `query` is fine.
+            # This ordering matters — an order-blind scan reports the repo's own
+            # fixed helpers (`_delete_open_unrated_encounters` reads *before* it
+            # deletes) as violations, which is how a guard loses its credibility.
+            dirty = False
+            guarded = "no_autoflush" in body
+            for call in calls:
+                kind = call.group("name")
+                if kind in stages:
+                    dirty = True
+                    continue
+                if kind in clears:
+                    dirty = False
+                    continue
+                if kind not in reads or not dirty:
+                    continue
+                # A guarded function is treated as safe for the whole body, and a
+                # read is reported at most once per function: per-read dataflow
+                # analysis would be a fragile reimplementation of SQLAlchemy's own
+                # autoflush rules, and the actionable unit is the function.
+                if guarded or relative in no_autoflush_lookup_allowlist:
+                    break
+                line_offset = body[: call.start()].count("\n")
+                line_no = source[: match.start()].count("\n") + 1 + line_offset
+                key = f"{relative}:{line_no}"
+                found_staged_then_read.add(key)
+                if key in BASELINE_STAGED_THEN_READ:
+                    break
+                errors.append(
+                    f"{path}:{line_no}: `{name}` stages writes and then calls "
+                    f"`session.{kind}()` without `no_autoflush`; that query "
+                    "autoflushes, opening the SQLite write transaction early and "
+                    "holding it across the rest of the handler. Wrap the lookup in "
+                    "`with session.no_autoflush:` (see docs/incidents/0001)."
+                )
+                break
+
+            # A loop makes source order irrelevant: a stage in iteration N-1 is
+            # already pending when iteration N reads. The linear pass above cannot
+            # see this, because within one iteration the read can precede the
+            # stage. This is not hypothetical -- it is exactly the shape of
+            # `write_client_preferences`, whose second loop iteration autoflushed
+            # the first iteration's staged Config row (46 `Query-invoked autoflush`
+            # entries in the 2026-10-07 production log).
+            if guarded or relative in no_autoflush_lookup_allowlist:
+                continue
+            for loop_read_line, loop_kind in _loop_scoped_stage_then_read(
+                body, source, match.start(), session_calls, stages, reads
+            ):
+                key = f"{relative}:{loop_read_line}"
+                found_staged_then_read.add(key)
+                if key in BASELINE_STAGED_THEN_READ:
+                    continue
+                errors.append(
+                    f"{path}:{loop_read_line}: `{name}` calls `session.{loop_kind}()` "
+                    "and stages writes inside the same loop, so a later iteration "
+                    "autoflushes the previous iteration's pending writes -- opening "
+                    "the SQLite write transaction early. Wrap the lookup in "
+                    "`with session.no_autoflush:` (see docs/incidents/0001)."
+                )
+
+    # A baselined site that no longer exists means the debt was paid (or the file
+    # moved). Either way the exemption must be deleted, so this list cannot
+    # silently keep exempting a line that is already fixed.
+    for stale in sorted(BASELINE_STAGED_THEN_READ - found_staged_then_read):
+        errors.append(
+            f"BASELINE_STAGED_THEN_READ entry `{stale}` no longer matches a "
+            "staged-then-read site. Remove it from the baseline in "
+            "check_db_write_lock_hygiene (the debt is paid or the code moved)."
+        )
+
+    # ── 2. Heavy database maintenance must not run on the foreground path ─────
+    for path in sorted(api_root.rglob("*.py")):
+        relative = path.relative_to(api_root).as_posix()
+        if "infrastructure/db/" in relative or "alembic/" in relative:
+            continue
+        source = path.read_text(encoding="utf-8")
+        if "presentation/" not in relative:
+            continue
+        if relative in foreground_maintenance_allowlist:
+            continue
+        for marker in ("checkpoint_sqlite_wal", "analyze_database"):
+            if marker in source:
+                errors.append(
+                    f"{path}: presentation layer must not trigger `{marker}`; a "
+                    "WAL checkpoint over a large synced database holds the single "
+                    "SQLite write lock for seconds and stalls every concurrent "
+                    "request (see docs/incidents/0001). Move it off the request path."
+                )
+
+    # ── 3. The lock-error classifier must stay precise ───────────────────────
+    classifier = api_root / "infrastructure/db/lock_errors.py"
+    if not classifier.exists():
+        errors.append(
+            f"{classifier}: missing; SQLite lock collisions would again surface as "
+            "an opaque 500 instead of a retryable 503 (docs/incidents/0001)."
+        )
+    else:
+        source = classifier.read_text(encoding="utf-8")
+        for forbidden in ("OperationalError,", "except OperationalError", "isinstance"):
+            if forbidden in source:
+                errors.append(
+                    f"{classifier}: must classify by lock message, not by exception "
+                    f"type (`{forbidden}` found); `sqlite3.OperationalError` also "
+                    "covers missing tables and bad SQL, which are not retryable."
+                )
+
+
+def _extract_python_function_body(source: str, function_name: str) -> str | None:
+    """Return the body of a top-level ``def function_name(...)`` by indentation.
+
+    ``_extract_function_body`` is brace-based and only understands JavaScript
+    ``function name(...) { }``. Using it on Python silently returns ``None`` for
+    every function, which makes a guard that depends on it pass unconditionally —
+    a broken instrument rather than a passing check. Python bodies are delimited
+    by indentation, so they need their own extractor.
+    """
+    match = re.search(rf"^def\s+{re.escape(function_name)}\s*\(", source, re.MULTILINE)
+    if match is None:
+        return None
+    lines = source[match.start() :].splitlines()
+    collected: list[str] = []
+    for index, line in enumerate(lines):
+        if index == 0:
+            collected.append(line)
+            continue
+        stripped = line.strip()
+        if not stripped:
+            collected.append(line)
+            continue
+        # A non-indented, non-decorator line ends the function.
+        if not line[:1].isspace() and not stripped.startswith("@"):
+            break
+        collected.append(line)
+    body = "\n".join(collected)
+    return body if len(collected) > 1 else None
+
+
+def _loop_scoped_stage_then_read(
+    body: str,
+    source: str,
+    body_start: int,
+    session_calls: "re.Pattern[str]",
+    stages: set[str],
+    reads: set[str],
+) -> list[tuple[int, str]]:
+    """Find reads that share a loop with a staged write.
+
+    A plain source-order scan misses the loop case, where a stage in one iteration
+    is still pending when the next iteration reads — which is how
+    ``write_client_preferences`` autoflushed a freshly added ``Config`` row.
+
+    Approximation used deliberately: within any ``for``/``while`` block that
+    contains **both** a read and a staged write, report the read. Full path
+    sensitivity would be a fragile reimplementation of SQLAlchemy's own autoflush
+    rules; flagging the loop is cheap, has no false negatives for this shape, and
+    the fix (``no_autoflush``) is correct for the whole loop body anyway.
+    """
+    findings: list[tuple[int, str]] = []
+    lines = body.splitlines()
+
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        stripped = line.strip()
+        if not re.match(r"(for|while)\b", stripped):
+            index += 1
+            continue
+        indent = len(line) - len(line.lstrip())
+        block: list[str] = []
+        cursor = index
+        while cursor < len(lines):
+            candidate = lines[cursor]
+            if candidate.strip() and cursor > index:
+                candidate_indent = len(candidate) - len(candidate.lstrip())
+                if candidate_indent <= indent:
+                    break
+            block.append(candidate)
+            cursor += 1
+
+        block_text = "\n".join(block)
+        has_stage = any(call.group("name") in stages for call in session_calls.finditer(block_text))
+        if has_stage:
+            for call in session_calls.finditer(block_text):
+                if call.group("name") not in reads:
+                    continue
+                offset_in_block = block_text[: call.start()].count("\n")
+                absolute_line = index + offset_in_block
+                line_no = source[:body_start].count("\n") + 1 + absolute_line
+                findings.append((line_no, call.group("name")))
+                break
+        index = cursor
+    return findings
+
+
 def check_article_workspace_boundary(errors: list[str]) -> None:
     domain = WEB_SRC / "modules/content/domain/mindmap-document-entity/model/articleDocument.ts"
     if domain.exists():
@@ -5960,6 +6583,112 @@ def check_article_workspace_boundary(errors: list[str]) -> None:
         errors.append(f"{renderer}: generic rich document renderer must not depend on business modules.")
 
 
+def _extract_function_body(source: str, function_name: str) -> str | None:
+    """Return the brace-balanced body of `function function_name(...) { ... }`.
+
+    Used to assert behaviour inside one function instead of grepping the whole file,
+    where an identifier can survive a regression that removed its actual use.
+    """
+    match = re.search(rf"\bfunction\s+{re.escape(function_name)}\s*\(", source)
+    if match is None:
+        return None
+    open_brace = source.find("{", match.end())
+    if open_brace == -1:
+        return None
+    depth = 0
+    for index in range(open_brace, len(source)):
+        char = source[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return source[open_brace : index + 1]
+    return None
+
+
+def check_mindmap_layout_hot_path(errors: list[str]) -> None:
+    """Keep the mind-map layout hot path memoized and the map out of scroll-linked transforms.
+
+    Two defects made 随心 mind-map cards drop frames on large palaces, and both were
+    invisible to every functional test:
+
+    1. `getNodeSize` is pure but was recomputed on every call. Layout asks for one
+       card's size in `measureTree`, again per pair in `resolveOverlaps`, then in
+       `hasNodeOverlaps` / `stackNodesWithoutOverlap`. It is regex plus per-character
+       scanning, so at 900 nodes a single layout cost ~15ms — a full frame budget
+       before React Flow touched the DOM.
+    2. The freestyle depth-stack wrapper (`.fs-depth`) carries a scroll-linked
+       view-timeline transform. A mind map inside it was re-composited and
+       re-rasterized on every scroll frame. Only native fullscreen opted out.
+
+    Both fixes must survive: re-adding an unmemoized size call, or dropping the
+    map-card opt-out, silently restores the stutter.
+    """
+    layout = WEB_SRC / "shared" / "ui" / "mindmap-canvas" / "layout.ts"
+    stage_css = WEB_SRC / "styles" / "freestyle-stage.css"
+    mindmap_doc = REPO_ROOT / "docs" / "architecture" / "mindmap.md"
+
+    if not layout.exists():
+        errors.append("shared/ui/mindmap-canvas/layout.ts is missing.")
+    else:
+        source = layout.read_text(encoding="utf-8", errors="ignore")
+        # Assert behaviour, not the presence of an identifier: a regression that
+        # stops consulting the cache leaves both names in place but deletes the hit.
+        public_body = _extract_function_body(source, "getNodeSize")
+        if public_body is None:
+            errors.append(
+                f"{layout.relative_to(REPO_ROOT).as_posix()}: `getNodeSize` must stay the "
+                "memoized public entry point."
+            )
+        else:
+            if "nodeSizeMemo.get(" not in public_body:
+                errors.append(
+                    f"{layout.relative_to(REPO_ROOT).as_posix()}: `getNodeSize` must read its "
+                    "result from nodeSizeMemo before recomputing; an uncached recompute costs "
+                    "a whole frame at large palace sizes."
+                )
+            if not re.search(r"if\s*\(\s*cached\s*\)\s*return\s+cached", public_body):
+                errors.append(
+                    f"{layout.relative_to(REPO_ROOT).as_posix()}: `getNodeSize` must return the "
+                    "memoized hit (`if (cached) return cached`)."
+                )
+            if "nodeSizeMemo.set(" not in public_body:
+                errors.append(
+                    f"{layout.relative_to(REPO_ROOT).as_posix()}: `getNodeSize` must populate "
+                    "nodeSizeMemo so repeated layout passes reuse the measured size."
+                )
+            if "computeNodeSize(" not in public_body:
+                errors.append(
+                    f"{layout.relative_to(REPO_ROOT).as_posix()}: keep the uncached metric work in "
+                    "`computeNodeSize` so the public `getNodeSize` stays the memoized entry point."
+                )
+
+    if not stage_css.exists():
+        errors.append("styles/freestyle-stage.css is missing.")
+    else:
+        css = stage_css.read_text(encoding="utf-8", errors="ignore")
+        if "memory-anki-mindmap-frame" not in css:
+            errors.append(
+                f"{stage_css.relative_to(REPO_ROOT).as_posix()}: a card holding a live mind map "
+                "(.memory-anki-mindmap-frame) must opt out of the scroll-linked .fs-depth "
+                "transform, otherwise the whole canvas re-rasterizes on every scroll frame."
+            )
+        elif ":has(.memory-anki-mindmap-frame)" not in css:
+            errors.append(
+                f"{stage_css.relative_to(REPO_ROOT).as_posix()}: the mind-map depth-stack opt-out "
+                "must be expressed with `:has(.memory-anki-mindmap-frame)`."
+            )
+
+    if mindmap_doc.exists() and "nodeSizeMemo" not in mindmap_doc.read_text(
+        encoding="utf-8", errors="ignore"
+    ):
+        errors.append(
+            f"{mindmap_doc.relative_to(REPO_ROOT).as_posix()}: note why the mind-map layout "
+            "hot path is memoized and why map cards skip the depth-stack transform."
+        )
+
+
 def main() -> int:
     errors: list[str] = []
     check_article_workspace_boundary(errors)
@@ -5969,6 +6698,7 @@ def main() -> int:
     check_forbidden_imports(errors)
     check_backup_snapshot_policy(errors)
     check_mindmap_architecture(errors)
+    check_mindmap_layout_hot_path(errors)
     check_unified_training_evidence(errors)
     check_file_sizes(errors)
     check_oversized_baseline_is_current(errors)
@@ -6053,6 +6783,7 @@ def main() -> int:
     check_mutation_replay_adoption(errors)
     check_tool_personal_paths(errors)
     check_article_reading_cursor_boundary(errors)
+    check_db_write_lock_hygiene(errors)
 
     if errors:
         print("Architecture check failed:")

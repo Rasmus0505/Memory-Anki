@@ -102,6 +102,11 @@ class FreestyleRoundState(Base):
     scope_key: Mapped[str] = mapped_column(String(256), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    # Keep SQLAlchemy's version counter as the last line of defence against a
+    # lost update (a stale session must not clobber a newer plan). It used to
+    # escape as an unhandled ``StaleDataError`` → HTTP 500; the round service now
+    # converts that into its own retryable conflict at the commit choke point.
+    # See docs/incidents/0003-round-stale-data-500.md.
     __mapper_args__ = {"version_id_col": version, "version_id_generator": False}
 
     config_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")

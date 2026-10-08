@@ -8,7 +8,11 @@ from .application.unit_review_projection import (
     list_due_review_unit_ids,
     warm_unit_projection_cache,
 )
-from .application.unit_review_queue_read import list_trusted_due_units_for_queue
+from .application.unit_review_queue_read import (
+    list_round_unit_ratings,
+    list_trusted_due_units_for_queue,
+    list_unit_node_members,
+)
 from .application.unit_review_service import (
     adjust_unit_schedule,
     cancel_unrated_unit_review_encounter,
@@ -66,6 +70,8 @@ __all__ = [
     "list_due_review_unit_ids",
     "list_due_units",
     "list_trusted_due_units_for_queue",
+    "list_unit_node_members",
+    "list_round_unit_ratings",
     "normalize_rating",
     "open_unit_review_encounter",
     "rate_palace_due_units",

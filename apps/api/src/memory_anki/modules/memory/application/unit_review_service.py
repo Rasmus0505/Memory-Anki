@@ -146,25 +146,45 @@ def _delete_open_unrated_encounters(session: Session, study_session_id: str) -> 
 
 
 def _session_has_billable_progress(session: Session, study_session_id: str) -> bool:
-    rated_closed = (
-        session.query(ReviewUnitEncounter.id)
-        .filter(
-            ReviewUnitEncounter.study_session_id == study_session_id,
-            ReviewUnitEncounter.status == ENCOUNTER_CLOSED,
-            ReviewUnitEncounter.selected_rating.isnot(None),
+    """Does this study session already own real, billable progress?
+
+    Read-only on purpose, and wrapped in ``no_autoflush`` for a reason that is
+    not stylistic. Callers stage writes before asking this question (for example
+    ``cancel_unit_review_encounter`` deletes the encounter first, then asks
+    whether the session earned anything). A bare query would autoflush those
+    staged writes, which opens the SQLite write transaction *there* — and it then
+    stays open across everything the caller does until it commits. SQLite allows
+    one writer, so every other write in the product waits out ``busy_timeout``
+    (10s) and fails with "database is locked".
+
+    Measured: `POST /review/units/{id}/sessions -> 503 in 51302ms` with
+    `sql_total_ms=21.4` — 21 ms of real SQL, 51 s of holding the write lock. The
+    session watchdog named this function as the opener.
+
+    ``no_autoflush`` is correct here because the question is about *committed*
+    progress, not about rows this same call just staged. Flushing early would
+    also change the answer it is asking for.
+    """
+    with session.no_autoflush:
+        rated_closed = (
+            session.query(ReviewUnitEncounter.id)
+            .filter(
+                ReviewUnitEncounter.study_session_id == study_session_id,
+                ReviewUnitEncounter.status == ENCOUNTER_CLOSED,
+                ReviewUnitEncounter.selected_rating.isnot(None),
+            )
+            .first()
         )
-        .first()
-    )
-    if rated_closed is not None:
-        return True
-    passed_item = (
-        session.query(ReviewSessionUnit.id)
-        .filter(
-            ReviewSessionUnit.study_session_id == study_session_id,
-            ReviewSessionUnit.status == ITEM_PASSED,
+        if rated_closed is not None:
+            return True
+        passed_item = (
+            session.query(ReviewSessionUnit.id)
+            .filter(
+                ReviewSessionUnit.study_session_id == study_session_id,
+                ReviewSessionUnit.status == ITEM_PASSED,
+            )
+            .first()
         )
-        .first()
-    )
     return passed_item is not None
 
 

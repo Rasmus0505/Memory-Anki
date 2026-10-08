@@ -3365,7 +3365,8 @@ def test_freestyle_scope_quiz_overlay_requires_parked_progress_and_carry(
     )
     write_file(
         api_src / "modules" / "practice" / "application" / "overlay_quiz_service.py",
-        "list_active_palace_ids_by_subject_ids(session, [5])\n",
+        "list_active_palace_ids_by_subject_ids(session, [5])\n"
+        "question_node_ratings = _resolve_question_node_ratings()\n",
     )
     write_file(
         tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
@@ -3376,24 +3377,731 @@ def test_freestyle_scope_quiz_overlay_requires_parked_progress_and_carry(
     assert any("park out-of-scope progress" in error for error in errors)
     assert any("empty overlay quiz progress" in error for error in errors)
     assert any("this round's review palaces" in error for error in errors)
-    assert any("must not expand a subject" in error for error in errors)
+    assert any("must not resolve subjects into palaces" in error for error in errors)
     assert any("not the subject union" in error for error in errors)
 
 
-def test_overlay_subject_lookup_may_only_narrow_the_scheduled_round(tmp_path: Path, monkeypatch) -> None:
+def test_overlay_quiz_never_resolves_subjects_into_palaces(tmp_path: Path, monkeypatch) -> None:
+    """The round's own palaces are the scope; a subject lookup means widening."""
     api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    web_src = tmp_path / "apps" / "web" / "src"
     monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
-    monkeypatch.setattr(check_architecture, "WEB_SRC", tmp_path / "apps" / "web" / "src")
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
     monkeypatch.setattr(check_architecture, "API_SRC", api_src)
     write_file(
         api_src / "modules" / "practice" / "application" / "overlay_quiz_service.py",
         "allowed_ids = list_active_palace_ids_by_subject_ids(session, subject_ids)\n"
-        "resolved_palace_ids = [item for item in resolved_palace_ids if item in allowed_ids]\n"
-        "order_overlay_questions()\noverlay_question_kind()\n",
+        "scope_palaces = build_scope_palaces(titles=resolve_palace_titles(session, ids))\n"
+        "order_overlay_questions()\noverlay_question_kind()\n"
+        "question_node_ratings = _resolve_question_node_ratings()\n",
+    )
+    # The check returns early without the dialog, so every case needs it present.
+    write_file(
+        web_src / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx",
+        "const scopePalaces = overlay?.scope_palaces ?? null\n"
+        "QuizQuestionRoundRatingBadge\n",
+    )
+    write_file(
+        web_src / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx",
+        "QuizQuestionRoundRating\n",
+    )
+    write_file(
+        web_src / "widgets" / "quiz-round-rating" / "QuizQuestionRoundRating.tsx",
+        "export function QuizQuestionRoundRating() { return null }\n"
+        "useRoundQuestionRatings\n",
     )
     errors: list[str] = []
     check_architecture.check_freestyle_scope_quiz_overlay(errors)
-    assert not any("must not expand a subject" in error for error in errors)
+    assert any("must not resolve subjects into palaces" in error for error in errors)
+
+
+def test_overlay_quiz_must_not_reapply_the_feed_config(tmp_path: Path, monkeypatch) -> None:
+    """Config narrowing the round's review set is the bug, not the fix.
+
+    Product rule: if the 随心 config selects 20 palaces but this round scheduled
+    10, 做题 draws only from those 10. Applying the config a second time emptied
+    a real round's pool to 0 questions while the header still counted the
+    round's palaces.
+    """
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    write_file(
+        api_src / "modules" / "practice" / "application" / "overlay_quiz_service.py",
+        "allowed_ids = _config_allowed_palace_ids(session, config)\n"
+        "scope_palaces = build_scope_palaces(titles=resolve_palace_titles(session, ids))\n"
+        "order_overlay_questions()\noverlay_question_kind()\n"
+        "question_node_ratings = _resolve_question_node_ratings()\n",
+    )
+    write_file(
+        web_src / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx",
+        "const scopePalaces = overlay?.scope_palaces ?? null\n"
+        "QuizQuestionRoundRatingBadge\n",
+    )
+    write_file(
+        web_src / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx",
+        "QuizQuestionRoundRating\n",
+    )
+    write_file(
+        web_src / "widgets" / "quiz-round-rating" / "QuizQuestionRoundRating.tsx",
+        "export function QuizQuestionRoundRating() { return null }\n"
+        "useRoundQuestionRatings\n",
+    )
+    errors: list[str] = []
+    check_architecture.check_freestyle_scope_quiz_overlay(errors)
+    assert any("must not narrow the round's review set" in error for error in errors)
+
+
+def test_round_ratings_must_come_from_the_encounter_table(tmp_path: Path, monkeypatch) -> None:
+    """The round plan's cached `encounters` map is not the rating authority.
+
+    On a real round that cache held 29 entries where only 3 carried a rating,
+    while the encounter table held all 29. Trusting it would print
+    「本轮尚未复习」 for knowledge points the learner had just scored.
+    """
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    write_file(
+        api_src / "modules" / "practice" / "application" / "overlay_quiz_service.py",
+        "scope_palaces = build_scope_palaces(titles=resolve_palace_titles(session, ids))\n"
+        "order_overlay_questions()\noverlay_question_kind()\n"
+        "question_node_ratings = _resolve_question_node_ratings()\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "application" / "round_overlay_service.py",
+        "round_ratings = round_rating_by_unit(plan)\n",
+    )
+    write_file(
+        web_src / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx",
+        "const scopePalaces = overlay?.scope_palaces ?? null\n"
+        "QuizQuestionRoundRatingBadge\n",
+    )
+    write_file(
+        web_src / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx",
+        "QuizQuestionRoundRating\n",
+    )
+    write_file(
+        web_src / "widgets" / "quiz-round-rating" / "QuizQuestionRoundRating.tsx",
+        "export function QuizQuestionRoundRating() { return null }\n"
+        "useRoundQuestionRatings\n",
+    )
+    errors: list[str] = []
+    check_architecture.check_freestyle_scope_quiz_overlay(errors)
+    assert any("not the round plan's cached copy" in error for error in errors)
+    assert any("must pass `list_round_unit_ratings`" in error for error in errors)
+
+
+def test_overlay_scope_report_must_stay_the_single_owner(tmp_path: Path, monkeypatch) -> None:
+    """做题 membership has one owner: the backend pack's `scope_palaces` report.
+
+    Regression: the dialog re-derived membership from the round plan plus the
+    feed config while the pack narrowed by config too. The two drifted, and the
+    header claimed palaces the pool did not contain with nothing explaining why.
+    """
+    web_src = tmp_path / "apps" / "web" / "src"
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    # The pack drops the scope report.
+    write_file(
+        api_src / "modules" / "practice" / "application" / "overlay_quiz_service.py",
+        "order_overlay_questions()\noverlay_question_kind()\n",
+    )
+    # The dialog re-derives membership and renders a bare palace id.
+    write_file(
+        web_src / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx",
+        "export function FreestyleScopeQuizDialog() { return `宫殿 ${current.palace_id}` }\n",
+    )
+    write_file(
+        web_src
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "model"
+        / "overlayQuizRange.ts",
+        "export function overlayReviewPalaceIds() { return [] }\n"
+        "scope?.specific_palace_ids.includes(palaceId)\n",
+    )
+    errors: list[str] = []
+    check_architecture.check_freestyle_scope_quiz_overlay(errors)
+    assert any("authoritative `scope_palaces` scope report" in error for error in errors)
+    assert any("must not re-derive 做题 pool membership" in error for error in errors)
+    assert any("must not re-apply the feed palace filter" in error for error in errors)
+    assert any("FreestyleOverlayScopePalaces" in error for error in errors)
+    assert any("must show the palace title" in error for error in errors)
+
+
+def test_removed_palace_must_take_its_questions_with_it(tmp_path: Path, monkeypatch) -> None:
+    """移除本队列 removes the palace's 做题 questions too.
+
+    Dropping this wiring means a palace the learner explicitly took out of the
+    round keeps feeding questions.
+    """
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    # A valid pack, but with no removal handling at all.
+    write_file(
+        api_src / "modules" / "practice" / "application" / "overlay_quiz_service.py",
+        "scope_palaces = build_scope_palaces(titles=resolve_palace_titles(session, ids))\n"
+        "order_overlay_questions()\noverlay_question_kind()\n"
+        "question_node_ratings = _resolve_question_node_ratings()\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "application" / "round_overlay_service.py",
+        "round_ratings = list_round_unit_ratings(session, round_id)\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "domain" / "round_plan.py",
+        "def review_palace_ids():\n    return []\n",
+    )
+    write_file(
+        web_src / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx",
+        "const scopePalaces = overlay?.scope_palaces ?? null\n"
+        "QuizQuestionRoundRatingBadge\n",
+    )
+    write_file(
+        web_src / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx",
+        "QuizQuestionRoundRating\n",
+    )
+    write_file(
+        web_src / "widgets" / "quiz-round-rating" / "QuizQuestionRoundRating.tsx",
+        "export function QuizQuestionRoundRating() { return null }\n"
+        "useRoundQuestionRatings\n",
+    )
+    errors: list[str] = []
+    check_architecture.check_freestyle_scope_quiz_overlay(errors)
+    assert any("removed_palace_ids" in error for error in errors)
+    assert any("SCOPE_REASON_PALACE_REMOVED" in error for error in errors)
+    assert any("must keep `removed_review_palace_ids`" in error for error in errors)
+
+
+def test_overlay_scope_report_guard_accepts_the_owned_shape(tmp_path: Path, monkeypatch) -> None:
+    """The guard must not fire on the correct implementation."""
+    web_src = tmp_path / "apps" / "web" / "src"
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    write_file(
+        api_src / "modules" / "practice" / "application" / "overlay_quiz_service.py",
+        "scope_palaces = build_scope_palaces(titles=resolve_palace_titles(session, ids))\n"
+        "order_overlay_questions()\noverlay_question_kind()\n"
+        "question_node_ratings = _resolve_question_node_ratings()\n"
+        "def build_round_question_ratings():\n    return {}\n"
+        "removed_palace_ids = _positive_ids(missing)\n"
+        "SCOPE_REASON_PALACE_REMOVED\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "application" / "round_overlay_service.py",
+        "round_ratings = list_round_unit_ratings(session, round_id)\n"
+        "removed_review_palace_ids(plan)\n"
+        "def read_round_question_ratings(session, round_id):\n"
+        "    return {}\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "domain" / "round_plan.py",
+        "def removed_review_palace_ids():\n    return set()\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "application" / "round_overlay_service.py",
+        "round_ratings = list_round_unit_ratings(session, round_id)\n"
+        "removed_review_palace_ids(plan)\n"
+        "def read_round_question_ratings(session, round_id):\n"
+        "    return {}\n"
+        "_commit_operation(session, row, op_id)\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "application" / "round_state_service.py",
+        "from .round_commit import commit_operation\n"
+        "from .round_overlay_service import review_palace_ids\n"
+        "empty_overlay_quiz()\n"
+        "def _commit_operation(session, row, op):\n"
+        "    return commit_operation(session, row, op)\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "application" / "round_commit.py",
+        "from sqlalchemy.orm.exc import StaleDataError\n"
+        "def commit_operation(session, row, operation_id):\n"
+        "    try:\n"
+        "        session.commit()\n"
+        "    except StaleDataError:\n"
+        "        session.rollback()\n"
+        "        session.refresh(row)\n"
+        "        return False\n"
+        "    return True\n",
+    )
+    write_file(
+        web_src / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx",
+        "const scopePalaces = overlay?.scope_palaces ?? null\n"
+        "QuizQuestionRoundRatingBadge\n",
+    )
+    write_file(
+        web_src / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx",
+        "QuizQuestionRoundRating\n",
+    )
+    write_file(
+        web_src / "widgets" / "quiz-round-rating" / "QuizQuestionRoundRating.tsx",
+        "export function QuizQuestionRoundRating() { return null }\n"
+        "useRoundQuestionRatings\n",
+    )
+    write_file(
+        web_src
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "model"
+        / "overlayQuizRange.ts",
+        "export function overlayRoundReviewPalaceIds() { return [] }\n"
+        "export function overlayScopeSummary(scope: FreestyleOverlayScopePalaces) { return '' }\n",
+    )
+    errors: list[str] = []
+    check_architecture.check_freestyle_scope_quiz_overlay(errors)
+    assert errors == []
+
+
+def test_lost_round_write_race_must_not_escape_as_stale_data(tmp_path: Path, monkeypatch) -> None:
+    """A lost version race on a round write must be a conflict, not a 500.
+
+    ``FreestyleRoundState`` is mapped with SQLAlchemy's ``version_id_col`` on the
+    same ``version`` column the practice module guards with ``expected_version``.
+    The ORM raise fires after the module's check passes, whenever another writer
+    commits in between — 68 HTTP 500s in one day's log.
+    """
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    practice = api_src / "modules" / "practice" / "application"
+    # A valid pack so only the commit-boundary assertions fire.
+    write_file(
+        practice / "overlay_quiz_service.py",
+        "scope_palaces = build_scope_palaces(titles=resolve_palace_titles(session, ids))\n"
+        "order_overlay_questions()\noverlay_question_kind()\n"
+        "question_node_ratings = _resolve_question_node_ratings()\n"
+        "def build_round_question_ratings():\n    return {}\n"
+        "removed_palace_ids = _positive_ids(missing)\n"
+        "SCOPE_REASON_PALACE_REMOVED\n",
+    )
+    write_file(
+        practice / "round_overlay_service.py",
+        "round_ratings = list_round_unit_ratings(session, round_id)\n"
+        "removed_review_palace_ids(plan)\n"
+        "def read_round_question_ratings(session, round_id):\n"
+        "    return {}\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "domain" / "round_plan.py",
+        "def removed_review_palace_ids():\n    return set()\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "application" / "round_overlay_service.py",
+        "round_ratings = list_round_unit_ratings(session, round_id)\n"
+        "removed_review_palace_ids(plan)\n"
+        "def read_round_question_ratings(session, round_id):\n"
+        "    return {}\n"
+        "_commit_operation(session, row, op_id)\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "application" / "round_state_service.py",
+        "from .round_commit import commit_operation\n"
+        "from .round_overlay_service import review_palace_ids\n"
+        "empty_overlay_quiz()\n"
+        "def _commit_operation(session, row, op):\n"
+        "    return commit_operation(session, row, op)\n",
+    )
+    write_file(
+        web_src / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx",
+        "const scopePalaces = overlay?.scope_palaces ?? null\n"
+        "QuizQuestionRoundRatingBadge\n",
+    )
+    write_file(
+        web_src / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx",
+        "QuizQuestionRoundRating\n",
+    )
+    write_file(
+        web_src / "widgets" / "quiz-round-rating" / "QuizQuestionRoundRating.tsx",
+        "export function QuizQuestionRoundRating() { return null }\n"
+        "useRoundQuestionRatings\n",
+    )
+    write_file(
+        web_src
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "model"
+        / "overlayQuizRange.ts",
+        "export function overlayRoundReviewPalaceIds() { return [] }\n"
+        "export function overlayScopeSummary(scope: FreestyleOverlayScopePalaces) { return '' }\n",
+    )
+    # The commit boundary is gone, and the service commits directly again.
+    write_file(
+        practice / "round_state_service.py",
+        "def _commit_operation(session, row, operation_id):\n"
+        "    session.commit()\n",
+    )
+    errors: list[str] = []
+    check_architecture.check_freestyle_scope_quiz_overlay(errors)
+    assert any("commit boundary must exist" in error for error in errors)
+    assert any("must not call session.commit() directly" in error for error in errors)
+
+
+def test_lost_race_guard_accepts_the_owned_shape(tmp_path: Path, monkeypatch) -> None:
+    """The guard must not fire on the correct implementation."""
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    practice = api_src / "modules" / "practice" / "application"
+    write_file(
+        practice / "overlay_quiz_service.py",
+        "scope_palaces = build_scope_palaces(titles=resolve_palace_titles(session, ids))\n"
+        "order_overlay_questions()\noverlay_question_kind()\n"
+        "question_node_ratings = _resolve_question_node_ratings()\n"
+        "def build_round_question_ratings():\n    return {}\n"
+        "removed_palace_ids = _positive_ids(missing)\n"
+        "SCOPE_REASON_PALACE_REMOVED\n",
+    )
+    write_file(
+        practice / "round_overlay_service.py",
+        "round_ratings = list_round_unit_ratings(session, round_id)\n"
+        "removed_review_palace_ids(plan)\n"
+        "def read_round_question_ratings(session, round_id):\n"
+        "    return {}\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "domain" / "round_plan.py",
+        "def removed_review_palace_ids():\n    return set()\n",
+    )
+    write_file(
+        practice / "round_commit.py",
+        "from sqlalchemy.orm.exc import StaleDataError\n"
+        "def commit_operation(session, row, operation_id):\n"
+        "    try:\n"
+        "        session.commit()\n"
+        "    except StaleDataError:\n"
+        "        session.rollback()\n"
+        "        session.refresh(row)\n"
+        "        return False\n"
+        "    return True\n",
+    )
+    write_file(
+        practice / "round_state_service.py",
+        "from .round_commit import commit_operation\n"
+        "from .round_overlay_service import review_palace_ids\n"
+        "empty_overlay_quiz()\n"
+        "def _commit_operation(session, row, op):\n"
+        "    return commit_operation(session, row, op)\n",
+    )
+    write_file(
+        practice / "round_overlay_service.py",
+        "round_ratings = list_round_unit_ratings(session, round_id)\n"
+        "removed_review_palace_ids(plan)\n"
+        "def read_round_question_ratings(session, round_id):\n"
+        "    return {}\n"
+        "_commit_operation(session, row, op_id)\n",
+    )
+    write_file(
+        web_src / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx",
+        "const scopePalaces = overlay?.scope_palaces ?? null\n"
+        "QuizQuestionRoundRatingBadge\n",
+    )
+    write_file(
+        web_src / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx",
+        "QuizQuestionRoundRating\n",
+    )
+    write_file(
+        web_src / "widgets" / "quiz-round-rating" / "QuizQuestionRoundRating.tsx",
+        "export function QuizQuestionRoundRating() { return null }\n"
+        "useRoundQuestionRatings\n",
+    )
+    write_file(
+        web_src
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "model"
+        / "overlayQuizRange.ts",
+        "export function overlayRoundReviewPalaceIds() { return [] }\n"
+        "export function overlayScopeSummary(scope: FreestyleOverlayScopePalaces) { return '' }\n",
+    )
+    errors: list[str] = []
+    check_architecture.check_freestyle_scope_quiz_overlay(errors)
+    assert errors == []
+
+
+def test_both_quiz_windows_must_share_one_rating_badge(tmp_path: Path, monkeypatch) -> None:
+    """关联题目 and 做题 must show the this-round rating through one component.
+
+    The learner reported 「没看见题目对应的评分」 in 关联题目 — a *different* window
+    from the 做题 overlay, so badging only one left the other blank. A private
+    copy in either window would let 「本轮最低 N」 drift apart again.
+    """
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    practice = api_src / "modules" / "practice" / "application"
+    write_file(
+        practice / "overlay_quiz_service.py",
+        "scope_palaces = build_scope_palaces(titles=resolve_palace_titles(session, ids))\n"
+        "order_overlay_questions()\noverlay_question_kind()\n"
+        "question_node_ratings = _resolve_question_node_ratings()\n"
+        "def build_round_question_ratings():\n    return {}\n"
+        "removed_palace_ids = _positive_ids(missing)\n"
+        "SCOPE_REASON_PALACE_REMOVED\n",
+    )
+    write_file(
+        practice / "round_overlay_service.py",
+        "round_ratings = list_round_unit_ratings(session, round_id)\n"
+        "removed_review_palace_ids(plan)\n"
+        "def read_round_question_ratings(session, round_id):\n"
+        "    return {}\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "domain" / "round_plan.py",
+        "def removed_review_palace_ids():\n    return set()\n",
+    )
+    write_file(
+        practice / "round_commit.py",
+        "from sqlalchemy.orm.exc import StaleDataError\n"
+        "def commit_operation(session, row, operation_id):\n"
+        "    try:\n"
+        "        session.commit()\n"
+        "    except StaleDataError:\n"
+        "        session.rollback()\n"
+        "        session.refresh(row)\n"
+        "        return False\n"
+        "    return True\n",
+    )
+    write_file(
+        practice / "round_state_service.py",
+        "from .round_commit import commit_operation\n"
+        "from .round_overlay_service import review_palace_ids\n"
+        "empty_overlay_quiz()\n"
+        "def _commit_operation(session, row, op):\n"
+        "    return commit_operation(session, row, op)\n",
+    )
+    # Neither window renders the shared badge, and 关联题目 derives its own.
+    write_file(
+        web_src / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx",
+        "const scopePalaces = overlay?.scope_palaces ?? null\n",
+    )
+    write_file(
+        web_src / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx",
+        "const scopePalaces = overlay?.scope_palaces ?? null\n",
+    )
+    write_file(
+        web_src
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "model"
+        / "overlayQuizRange.ts",
+        "export function overlayRoundReviewPalaceIds() { return [] }\n"
+        "export function overlayScopeSummary(scope: FreestyleOverlayScopePalaces) { return '' }\n",
+    )
+    errors: list[str] = []
+    check_architecture.check_freestyle_scope_quiz_overlay(errors)
+    assert any("shared this-round rating container is required" in error for error in errors)
+    assert any("QuizQuestionRoundRating" in error for error in errors)
+
+
+def test_reading_round_ratings_must_not_write_the_round(tmp_path: Path, monkeypatch) -> None:
+    """Opening 关联题目 must not move the round version.
+
+    A write here would 409 the study loop behind the open question window.
+    """
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    practice = api_src / "modules" / "practice" / "application"
+    write_file(
+        practice / "overlay_quiz_service.py",
+        "scope_palaces = build_scope_palaces(titles=resolve_palace_titles(session, ids))\n"
+        "order_overlay_questions()\noverlay_question_kind()\n"
+        "question_node_ratings = _resolve_question_node_ratings()\n"
+        "def build_round_question_ratings():\n    return {}\n"
+        "removed_palace_ids = _positive_ids(missing)\n"
+        "SCOPE_REASON_PALACE_REMOVED\n",
+    )
+    # The read path writes the round instead of staying read-only.
+    write_file(
+        practice / "round_overlay_service.py",
+        "round_ratings = list_round_unit_ratings(session, round_id)\n"
+        "removed_review_palace_ids(plan)\n"
+        "def read_round_question_ratings(session, round_id):\n"
+        "    _begin_round_write(session)\n"
+        "    session.commit()\n"
+        "    return {}\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "domain" / "round_plan.py",
+        "def removed_review_palace_ids():\n    return set()\n",
+    )
+    write_file(
+        practice / "round_commit.py",
+        "StaleDataError\nsession.rollback()\nsession.refresh(row)\n",
+    )
+    write_file(
+        practice / "round_state_service.py",
+        "from .round_commit import commit_operation\n"
+        "from .round_overlay_service import review_palace_ids\n"
+        "empty_overlay_quiz()\ncommit_operation\n",
+    )
+    write_file(
+        web_src / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx",
+        "QuizQuestionRoundRating\n",
+    )
+    write_file(
+        web_src / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx",
+        "QuizQuestionRoundRating\n",
+    )
+    write_file(
+        web_src / "widgets" / "quiz-round-rating" / "QuizQuestionRoundRating.tsx",
+        "export function QuizQuestionRoundRating() { return null }\n"
+        "useRoundQuestionRatings\n",
+    )
+    write_file(
+        web_src
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "model"
+        / "overlayQuizRange.ts",
+        "export function overlayRoundReviewPalaceIds() { return [] }\n"
+        "export function overlayScopeSummary(scope: FreestyleOverlayScopePalaces) { return '' }\n",
+    )
+    errors: list[str] = []
+    check_architecture.check_freestyle_scope_quiz_overlay(errors)
+    assert any("must stay read-only" in error for error in errors)
+
+
+def test_storage_lock_must_be_releasable_from_another_thread(tmp_path: Path, monkeypatch) -> None:
+    """The storage lock must not be an RLock.
+
+    FastAPI runs a sync endpoint and its generator-dependency teardown in separate
+    threadpool calls, so a flush that raises defers its ROLLBACK to
+    `session.close()` on another worker. `RLock` can only be released by its owner
+    thread, so that raised `RuntimeError: cannot release un-acquired lock` — which
+    replaced the real exception in the log and aborted the `finally` before
+    `lock.release()`, wedging the lock. One event produced 55 later 503s.
+    """
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    write_file(
+        api_src / "core" / "runtime_storage_lock.py",
+        "class StorageBusyError(TimeoutError):\n"
+        "    pass\n"
+        "_locks: dict[str, object] = {}\n"
+        "lock = threading.RLock()\n",
+    )
+    errors: list[str] = []
+    check_architecture.check_runtime_storage_lock(errors)
+    assert any("must not use threading.RLock()" in error for error in errors)
+    assert any("must use threading.Lock()" in error for error in errors)
+
+
+def test_storage_lock_guard_accepts_the_owned_shape(tmp_path: Path, monkeypatch) -> None:
+    """The guard must not fire on the correct implementation."""
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    write_file(
+        api_src / "core" / "runtime_storage_lock.py",
+        "class StorageBusyError(TimeoutError):\n"
+        "    pass\n"
+        "_locks: dict[str, object] = {}\n"
+        "lock = threading.Lock()\n",
+    )
+    errors: list[str] = []
+    check_architecture.check_runtime_storage_lock(errors)
+    assert errors == []
+
+
+def test_palace_clearance_must_not_ship_a_second_answer(tmp_path: Path, monkeypatch) -> None:
+    """One owner for palace clearance: the frontend chapter-banner rule.
+
+    A second, differently-ruled answer (skip/exclude counted as handled) used to
+    ride along on every round payload with no consumer.
+    """
+    web_src = tmp_path / "apps" / "web" / "src"
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    # The scope half must stay valid so only the clearance assertions fire.
+    write_file(
+        api_src / "modules" / "practice" / "application" / "overlay_quiz_service.py",
+        "allowed_ids is None\n"
+        "scope_palaces = build_scope_palaces(titles=resolve_palace_titles(session, ids))\n"
+        "order_overlay_questions()\noverlay_question_kind()\n",
+    )
+    write_file(
+        web_src / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx",
+        "const scopePalaces = overlay?.scope_palaces ?? null\n"
+        "QuizQuestionRoundRatingBadge\n",
+    )
+    write_file(
+        web_src / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx",
+        "QuizQuestionRoundRating\n",
+    )
+    write_file(
+        web_src / "widgets" / "quiz-round-rating" / "QuizQuestionRoundRating.tsx",
+        "export function QuizQuestionRoundRating() { return null }\n"
+        "useRoundQuestionRatings\n",
+    )
+    write_file(
+        web_src
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "model"
+        / "overlayQuizRange.ts",
+        "export function overlayScopeSummary(scope: FreestyleOverlayScopePalaces) { return '' }\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "application" / "round_state_payload.py",
+        '"cleared_review_palace_ids": sorted(cleared_review_palace_ids(plan))\n',
+    )
+    write_file(
+        api_src / "modules" / "practice" / "domain" / "round_plan.py",
+        "def cleared_review_palace_ids(plan):\n    return set()\n",
+    )
+    write_file(
+        web_src / "shared" / "api" / "contracts" / "freestyle.ts",
+        "  cleared_review_palace_ids?: number[]\n",
+    )
+    errors: list[str] = []
+    check_architecture.check_freestyle_scope_quiz_overlay(errors)
+    assert any("must not ship a palace-clearance list" in error for error in errors)
+    assert any("must stay deleted" in error for error in errors)
+    assert any("must not re-declare" in error for error in errors)
 
 
 def test_freestyle_overlay_clear_is_settlement_not_per_palace(
@@ -3998,3 +4706,290 @@ def test_tool_personal_paths_allows_windows_system_fallback(tmp_path: Path, monk
     check_architecture.check_tool_personal_paths(errors)
 
     assert errors == []
+
+
+HEALTHY_MINDMAP_LAYOUT = """
+const nodeSizeMemo = new Map<string, NodeSize>()
+const NODE_SIZE_MEMO_LIMIT = 20_000
+
+export function getNodeSize(
+  source?: NodeSizeSource,
+  labelOverride?: string,
+  constraints?: NodeSizeConstraints,
+): NodeSize {
+  const role = getNodeRole(source)
+  const label = ((labelOverride ?? getNodeLabel(source)) || '').trim() || '未命名节点'
+  const key = `${role}\\u0000${label}`
+  const cached = nodeSizeMemo.get(key)
+  if (cached) return cached
+  const size = computeNodeSize(role, label, constraints)
+  if (nodeSizeMemo.size >= NODE_SIZE_MEMO_LIMIT) nodeSizeMemo.clear()
+  nodeSizeMemo.set(key, size)
+  return size
+}
+"""
+
+HEALTHY_STAGE_CSS = """
+@supports (animation-timeline: view()) {
+  .fs-depth:has(.memory-anki-mindmap-frame) {
+    animation: none !important;
+    transform: none !important;
+  }
+}
+"""
+
+
+def _write_mindmap_hot_path_fixture(
+    root: Path,
+    *,
+    layout_source: str = HEALTHY_MINDMAP_LAYOUT,
+    stage_css: str = HEALTHY_STAGE_CSS,
+) -> Path:
+    web_src = root / "apps" / "web" / "src"
+    write_file(web_src / "shared" / "ui" / "mindmap-canvas" / "layout.ts", layout_source)
+    write_file(web_src / "styles" / "freestyle-stage.css", stage_css)
+    write_file(
+        root / "docs" / "architecture" / "mindmap.md",
+        "# mind map\n\nnodeSizeMemo\n",
+    )
+    return web_src
+
+
+def test_mindmap_layout_hot_path_accepts_memoized_layout(tmp_path: Path, monkeypatch) -> None:
+    web_src = _write_mindmap_hot_path_fixture(tmp_path)
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_mindmap_layout_hot_path(errors)
+
+    assert errors == []
+
+
+def test_mindmap_layout_hot_path_rejects_unmemoized_get_node_size(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A regression that stops consulting the cache must fail, not just lose a name."""
+    broken = HEALTHY_MINDMAP_LAYOUT.replace("if (cached) return cached", "/* cache hit removed */")
+    assert broken != HEALTHY_MINDMAP_LAYOUT
+    web_src = _write_mindmap_hot_path_fixture(tmp_path, layout_source=broken)
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_mindmap_layout_hot_path(errors)
+
+    assert any("memoized hit" in item for item in errors), errors
+
+
+def test_mindmap_layout_hot_path_rejects_missing_memo_read(
+    tmp_path: Path, monkeypatch
+) -> None:
+    broken = HEALTHY_MINDMAP_LAYOUT.replace("nodeSizeMemo.get(key)", "undefined")
+    assert broken != HEALTHY_MINDMAP_LAYOUT
+    web_src = _write_mindmap_hot_path_fixture(tmp_path, layout_source=broken)
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_mindmap_layout_hot_path(errors)
+
+    assert any("read its result from nodeSizeMemo" in item for item in errors), errors
+
+
+def test_mindmap_layout_hot_path_rejects_map_card_depth_transform(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Map cards must stay out of the scroll-linked .fs-depth transform."""
+    web_src = _write_mindmap_hot_path_fixture(
+        tmp_path,
+        stage_css=HEALTHY_STAGE_CSS.replace(
+            ":has(.memory-anki-mindmap-frame)", ":has(.something-else)"
+        ),
+    )
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_mindmap_layout_hot_path(errors)
+
+    assert any("must opt out of the scroll-linked" in item for item in errors), errors
+
+
+# ── db write-lock hygiene (docs/incidents/0001) ───────────────────────────────
+
+
+def _write_lock_hygiene_fixture(tmp_path: Path, body: str) -> Path:
+    """A minimal backend tree containing one module with `body` as a function."""
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    write_file(
+        api_src / "modules" / "practice" / "application" / "sample.py",
+        body,
+    )
+    return api_src
+
+
+def test_db_write_lock_hygiene_requires_no_autoflush_after_staging(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Staging a write then querying autoflushes, opening the write transaction early.
+
+    This is the defect that produced 284 `database is locked` failures in one day:
+    the transaction opened at an incidental query and stayed open across the rest
+    of the handler, blocking every other writer for `busy_timeout`.
+    """
+    api_src = _write_lock_hygiene_fixture(
+        tmp_path,
+        "def handler(session, key):\n"
+        "    session.add(row)\n"
+        "    return session.query(Thing).filter_by(k=key).first()\n",
+    )
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+
+    errors: list[str] = []
+    check_architecture.check_db_write_lock_hygiene(errors)
+
+    assert any("without `no_autoflush`" in item for item in errors), errors
+
+
+def test_db_write_lock_hygiene_rejects_loop_scoped_autoflush(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A stage in one loop iteration is pending when the next iteration reads.
+
+    Source order alone cannot see this, which is why the guard checks loop bodies
+    separately. It is the shape of `write_client_preferences`, the function behind
+    46 `Query-invoked autoflush` entries in the 2026-10-07 log.
+    """
+    api_src = _write_lock_hygiene_fixture(
+        tmp_path,
+        "def write_prefs(session, groups):\n"
+        "    for group in groups:\n"
+        "        row = session.query(Config).filter_by(key=group).first()\n"
+        "        session.add(Config(key=group))\n"
+        "    session.commit()\n",
+    )
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+
+    errors: list[str] = []
+    check_architecture.check_db_write_lock_hygiene(errors)
+
+    assert any("inside the same loop" in item for item in errors), errors
+
+
+def test_db_write_lock_hygiene_accepts_guarded_and_ordered_code(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Safe shapes must not be flagged, or the guard gets ignored as noise.
+
+    `no_autoflush` marks intent; a commit before the read clears pending state; and
+    a read before any staging has nothing to flush.
+    """
+    api_src = _write_lock_hygiene_fixture(
+        tmp_path,
+        "def guarded(session, key):\n"
+        "    session.add(row)\n"
+        "    with session.no_autoflush:\n"
+        "        return session.query(Thing).filter_by(k=key).first()\n"
+        "\n"
+        "def committed_first(session):\n"
+        "    session.add(row)\n"
+        "    session.commit()\n"
+        "    return session.query(Thing).first()\n"
+        "\n"
+        "def read_first(session):\n"
+        "    found = session.query(Thing).first()\n"
+        "    session.add(row)\n"
+        "    return found\n",
+    )
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+
+    errors: list[str] = []
+    check_architecture.check_db_write_lock_hygiene(errors)
+
+    assert not [item for item in errors if "no_autoflush" in item or "same loop" in item], errors
+
+
+def test_db_write_lock_hygiene_flags_stale_baseline_entry(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A baselined site that no longer exists must not silently stay exempt.
+
+    Otherwise the baseline would keep granting an exemption to code that has since
+    been fixed, and the guard's real coverage would quietly shrink.
+    """
+    api_src = _write_lock_hygiene_fixture(
+        tmp_path,
+        "def clean(session):\n"
+        "    return session.query(Thing).first()\n",
+    )
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+
+    errors: list[str] = []
+    check_architecture.check_db_write_lock_hygiene(errors)
+
+    # The real baseline names files that do not exist in this minimal fixture
+    # tree, so all of its entries are stale here. That is exactly the condition
+    # being asserted.
+    assert any("no longer matches a staged-then-read site" in item for item in errors), errors
+
+
+def test_db_write_lock_hygiene_rejects_foreground_wal_checkpoint(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A WAL checkpoint over a large synced DB must not run on the request path.
+
+    It needs the single SQLite write lock and can take seconds to minutes on a
+    ~200 MB database on a synced USB volume, stalling every concurrent request.
+    """
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    write_file(
+        api_src / "modules" / "backups" / "presentation" / "router.py",
+        "def create():\n    checkpoint_sqlite_wal(require_complete=True)\n",
+    )
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+
+    errors: list[str] = []
+    check_architecture.check_db_write_lock_hygiene(errors)
+
+    assert any("must not trigger `checkpoint_sqlite_wal`" in item for item in errors), errors
+
+
+def test_db_write_lock_hygiene_requires_lock_classifier(tmp_path: Path, monkeypatch) -> None:
+    """Without the classifier, lock collisions surface as an opaque 500 again."""
+    api_src = _write_lock_hygiene_fixture(
+        tmp_path,
+        "def clean(session):\n    return session.query(Thing).first()\n",
+    )
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    monkeypatch.setattr(check_architecture, "BASELINE_STAGED_THEN_READ", set())
+
+    errors: list[str] = []
+    check_architecture.check_db_write_lock_hygiene(errors)
+
+    assert any("lock_errors.py" in item for item in errors), errors
+
+
+def test_db_write_lock_hygiene_rejects_imprecise_classifier(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Classifying by exception type would retry errors that can never succeed.
+
+    `sqlite3.OperationalError` also covers missing tables and bad SQL; telling the
+    client to retry those produces an infinite loop instead of a real error.
+    """
+    api_src = _write_lock_hygiene_fixture(
+        tmp_path,
+        "def clean(session):\n    return session.query(Thing).first()\n",
+    )
+    write_file(
+        api_src / "infrastructure" / "db" / "lock_errors.py",
+        "def is_sqlite_lock_error(exc):\n    return isinstance(exc, Exception)\n",
+    )
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    monkeypatch.setattr(check_architecture, "BASELINE_STAGED_THEN_READ", set())
+
+    errors: list[str] = []
+    check_architecture.check_db_write_lock_hygiene(errors)
+
+    assert any("must classify by lock message" in item for item in errors), errors
