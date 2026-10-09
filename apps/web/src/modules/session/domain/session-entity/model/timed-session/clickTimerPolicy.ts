@@ -1,4 +1,11 @@
-export const CLICK_IDLE_LIMIT_MS = 5 * 60 * 1000
+/** Time to think on a learning page. Anything beyond this is not study. */
+export const STUDY_THINKING_GRACE_MS = 90 * 1000
+
+/**
+ * Kept as the grace alias so existing imports compile. It is no longer a
+ * fixed five-minute subtraction: idle time past the grace is excluded entirely.
+ */
+export const CLICK_IDLE_LIMIT_MS = STUDY_THINKING_GRACE_MS
 
 export interface ClickActivityInterval { startedAt: string; endedAt: string }
 
@@ -56,7 +63,21 @@ export interface ClickTimerTransition {
   timedOut: boolean
 }
 
-/** Pure transition for the click-driven foreground timer contract. */
+/** Latest instant that still counts as thinking, never past the grace. */
+export function countableUntilMs(lastClickAtMs: number, currentMs: number) {
+  return Math.min(currentMs, lastClickAtMs + STUDY_THINKING_GRACE_MS)
+}
+
+export function thinkingGraceExceeded(lastClickAtMs: number | null, currentMs: number) {
+  if (lastClickAtMs == null) return false
+  return currentMs - lastClickAtMs > STUDY_THINKING_GRACE_MS
+}
+
+/**
+ * A click on a learning page keeps or restarts timing.
+ * Silence longer than the grace pauses and does not count the idle tail.
+ * The grace itself still counts: that is the "pause to think" window.
+ */
 export function transitionClickTimer(input: ClickTimerTransitionInput): ClickTimerTransition {
   const currentMs = Number.isFinite(input.currentMs) ? input.currentMs : 0
   const effectiveMs = Math.max(0, input.effectiveMs)
@@ -64,12 +85,11 @@ export function transitionClickTimer(input: ClickTimerTransitionInput): ClickTim
     return { status: 'running', effectiveMs, lastClickAtMs: currentMs, timedOut: false }
   }
 
-  const gapMs = currentMs - input.lastClickAtMs
-  if (gapMs > CLICK_IDLE_LIMIT_MS) {
+  if (thinkingGraceExceeded(input.lastClickAtMs, currentMs)) {
     return {
-      status: 'running',
-      effectiveMs: Math.max(0, effectiveMs - CLICK_IDLE_LIMIT_MS),
-      lastClickAtMs: currentMs,
+      status: 'paused',
+      effectiveMs,
+      lastClickAtMs: input.lastClickAtMs,
       timedOut: true,
     }
   }

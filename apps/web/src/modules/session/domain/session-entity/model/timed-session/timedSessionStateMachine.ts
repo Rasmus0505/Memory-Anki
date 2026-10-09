@@ -14,15 +14,15 @@ import {
   DWELL_RESUME_WINDOW_MS,
   dwellKindToSessionKind,
   dwellSessionKeyForRecord,
-  formatDwellRecordTitle,
   isDwellSessionKey,
+  learningContextKey,
   pickDominantFragmentKind,
   pickDominantSegment,
   segmentKindFromScene,
   shouldResumeDwell,
 } from './dwellPolicy'
 import { peekPalaceKnowledgeBinding } from '../palaceKnowledgeBinding'
-import { buildSurfaceAttribution } from '../timeRecordAttribution'
+import { buildSurfaceAttribution, formatAttributionLabel } from '../timeRecordAttribution'
 import {
   buildPersistedTimedSessionSnapshot,
   buildRecordFromExpiredSuspendedSnapshot,
@@ -54,7 +54,7 @@ import { useStableTimedSessionController } from './useStableTimedSessionControll
 import {
   subscribeLiveForegroundClock,
 } from './liveClockOwnership'
-import { appendClickInterval, CLICK_IDLE_LIMIT_MS, confirmedClickIntervals, rollbackClickIntervals, transitionClickTimer } from './clickTimerPolicy'
+import { appendClickInterval, confirmedClickIntervals, countableUntilMs, STUDY_THINKING_GRACE_MS, thinkingGraceExceeded, transitionClickTimer } from './clickTimerPolicy'
 
 interface TimerStoreSnapshot {
   sessionId: string
@@ -111,6 +111,7 @@ interface TimerStore {
   lastCheckpointAtMs: number | null
   lastCheckpointSignature: string | null
   lastClickAtMs: number | null
+  openLearningContextKey: string | null
   activityIntervals: { startedAt: string; endedAt: string }[]
 }
 
@@ -148,12 +149,11 @@ function currentEffectiveMs(store: TimerStore, currentMs = Date.now()) {
   if (store.runningSinceMs == null) return store.effectiveMs
   const elapsed = currentMs - store.runningSinceMs
   if (elapsed <= 0) return store.effectiveMs
-  // Click-driven sessions settle exactly through the five-minute deadline.
-  // Legacy explicit-start callers without a click retain the foreground-gap
-  // safeguard for API compatibility.
+  // Learning-page time counts only through the thinking grace. The idle tail
+  // beyond that grace is never added, so a long absence cannot keep 25 minutes.
   const clickDeadline = store.lastClickAtMs == null
     ? null
-    : store.lastClickAtMs + CLICK_IDLE_LIMIT_MS
+    : store.lastClickAtMs + STUDY_THINKING_GRACE_MS
   if (clickDeadline == null) {
     if (elapsed > MAX_FOREGROUND_GAP_MS) {
       store.runningSinceMs = currentMs
@@ -163,18 +163,16 @@ function currentEffectiveMs(store: TimerStore, currentMs = Date.now()) {
     store.runningSinceMs = currentMs
     return store.effectiveMs
   }
-  const cappedNow = Math.min(currentMs, clickDeadline)
+  const cappedNow = countableUntilMs(store.lastClickAtMs, currentMs)
   const slice = Math.max(0, cappedNow - store.runningSinceMs)
   if (slice > 0) {
     store.effectiveMs += slice
     store.activityIntervals = appendClickInterval(store.activityIntervals, store.runningSinceMs, cappedNow)
   }
   store.runningSinceMs = cappedNow
-  if (currentMs > clickDeadline) {
+  if (thinkingGraceExceeded(store.lastClickAtMs, currentMs)) {
     store.runningSinceMs = null
-    store.effectiveMs = Math.max(0, store.effectiveMs - CLICK_IDLE_LIMIT_MS)
-    store.activityIntervals = rollbackClickIntervals(store.activityIntervals, CLICK_IDLE_LIMIT_MS)
-    pushEvent(store, 'pause', { reason: 'click_idle_timeout', rollback_seconds: 300 })
+    pushEvent(store, 'pause', { reason: 'click_idle_timeout', rollback_seconds: 0 })
     store.snapshot = {
       ...store.snapshot,
       status: 'paused',
@@ -391,8 +389,14 @@ function startStore(store: TimerStore, meta?: TimedSessionMeta) {
     store.snapshot = { ...store.snapshot, startedAt: nowIso() }
   }
   if (!store.recordId) store.recordId = createStableRecordId()
-  if (isDwellSessionKey(store.key) && store.startedAtMs != null) {
-    store.title = formatDwellRecordTitle(new Date(store.startedAtMs))
+  if (isDwellSessionKey(store.key)) {
+    store.title = dwellRecordTitle(store)
+    store.openLearningContextKey = learningContextKey(activeLearningAttachment(store) ?? {
+      scene: store.scene,
+      kind: store.kind,
+      palaceId: store.palaceId,
+      englishCourseId: store.englishCourseId,
+    })
   }
   store.runningSinceMs = Date.now()
   store.snapshot = {
@@ -445,13 +449,46 @@ function buildRecordAttribution(
   const dominantSegment = pickDominantSegment(segments)
   const scene = dominantSegment?.scene ?? (store.activeSegment?.scene || store.kind)
   const palaceId = dominantSegment?.palaceId ?? store.palaceId
+  const binding = peekPalaceKnowledgeBinding(palaceId)
+  const segmentTitle = dominantSegment?.title ?? store.title ?? null
   return buildSurfaceAttribution({
     scene: String(scene ?? ''),
     behavior: behaviorForKind(dominantKind, String(scene ?? '')),
     palaceId,
-    unitLabel: dominantSegment?.title ?? store.title ?? null,
-    binding: peekPalaceKnowledgeBinding(palaceId),
+    unitLabel: specificUnitLabel(segmentTitle, binding?.palaceName ?? null),
+    binding,
   })
+}
+
+const GENERIC_UNIT_TITLES = new Set([
+  '随心',
+  '随心 2',
+  '宫殿编辑',
+  '宫殿做题',
+  '宫殿查看',
+  '洞察',
+  '英语',
+  '设置',
+  '学习',
+])
+
+function specificUnitLabel(title: string | null, palaceName: string | null) {
+  if (palaceName) return palaceName
+  if (!title || GENERIC_UNIT_TITLES.has(title) || title.endsWith('学习时段')) return null
+  return title
+}
+
+function activeLearningAttachment(store: TimerStore) {
+  return activeAttachments(store).find((item) => item.active) ?? null
+}
+
+function dwellRecordTitle(store: TimerStore, segments: readonly SessionSceneSegment[] = store.sceneSegments) {
+  const dominantKind = pickDominantFragmentKind([...segments], store.kind)
+  const label = formatAttributionLabel(buildRecordAttribution(store, dominantKind, segments))
+  if (label) return label
+  const segmentTitle = store.activeSegment?.title || store.title
+  if (segmentTitle && !segmentTitle.endsWith('学习时段')) return segmentTitle
+  return '学习'
 }
 
 function behaviorForKind(kind: string, scene: string): string | null {
@@ -502,9 +539,7 @@ function buildRecord(store: TimerStore, method: SessionCompletionMethod, endedAt
     palaceId: store.palaceId,
     sourceKind: store.sourceKind,
     englishCourseId: store.englishCourseId,
-    title: isDwellSessionKey(store.key)
-      ? formatDwellRecordTitle(new Date(store.startedAtMs ?? Date.now()))
-      : store.title,
+    title: isDwellSessionKey(store.key) ? dwellRecordTitle(store) : store.title,
     startedAt: store.snapshot.startedAt,
     endedAt,
     effectiveSeconds: store.snapshot.effectiveSeconds,
@@ -538,9 +573,7 @@ function buildCheckpointRecord(store: TimerStore) {
     palaceId: store.palaceId,
     sourceKind: store.sourceKind,
     englishCourseId: store.englishCourseId,
-    title: isDwellSessionKey(store.key)
-      ? formatDwellRecordTitle(new Date(store.startedAtMs ?? Date.now()))
-      : store.title,
+    title: isDwellSessionKey(store.key) ? dwellRecordTitle(store, segments) : store.title,
     startedAt: store.snapshot.startedAt,
     endedAt,
     effectiveSeconds: store.snapshot.effectiveSeconds,
@@ -626,6 +659,8 @@ async function completeStore(
 function releaseStoreAfterCompletion(store: TimerStore) {
   if (typeof window === 'undefined') return
   window.setTimeout(() => {
+    // A click may already have opened the next place's record. Do not wipe it.
+    if (store.snapshot.status !== 'completed') return
     if (store.attachments.size > 0 && isDwellSessionKey(store.key)) {
       resetStore(store)
       return
@@ -654,6 +689,7 @@ function resetStore(store: TimerStore) {
   store.lastCheckpointAtMs = null
   store.lastCheckpointSignature = null
   store.lastClickAtMs = null
+  store.openLearningContextKey = null
   store.activityIntervals = []
   store.snapshot = {
     ...store.snapshot,
@@ -691,6 +727,16 @@ function syncAttachment(store: TimerStore, id: string, attachment: TimerAttachme
     return
   }
   if (!next.active) return
+  const nextContext = learningContextKey(next)
+  if (
+    isDwellSessionKey(store.key)
+    && store.openLearningContextKey
+    && nextContext
+    && nextContext !== store.openLearningContextKey
+  ) {
+    sealOpenLearningRecord(store)
+    return
+  }
   if (store.snapshot.status === 'running') {
     switchSegment(store, next)
     persistSnapshot(store)
@@ -748,13 +794,9 @@ function setSceneActiveStore(store: TimerStore, id: string, active: boolean, _me
   if (!active) {
     const remainingActive = activeAttachments(store)
     if (remainingActive.length === 0) {
-      // Route changes stop the current active interval, but are not a system or
-      // manual pause. This lets a same-target page attach and continue without
-      // changing the public pause state or auto-resuming a paused session.
-      settleRunning(store)
-      stopTicker(store)
-      closeActiveSegment(store)
-      persistSnapshot(store)
+      // Leaving a learning page stops immediately. Time after the leave is not
+      // study, and a later click must not inherit the away interval.
+      freezeAwayFromLearning(store, 'scene_inactive')
       scheduleFinalizeIfUnused(store)
     } else if (
       store.activeSegment &&
@@ -893,6 +935,7 @@ function createStore(key: string, options: TimedSessionOptions): TimerStore {
     lastCheckpointAtMs: null,
     lastCheckpointSignature: null,
     lastClickAtMs: null,
+    openLearningContextKey: null,
     activityIntervals: [],
   }
   hydrateStore(store)
@@ -969,16 +1012,50 @@ function markVisiblePageAlive() {
   }
 }
 
+function freezeAwayFromLearning(store: TimerStore, reason: Exclude<TimedSessionPauseReason, null>) {
+  if (store.snapshot.status === 'running') {
+    settleRunning(store)
+  }
+  if (store.snapshot.status === 'running') {
+    stopTicker(store)
+    store.runningSinceMs = null
+    store.snapshot = {
+      ...store.snapshot,
+      status: 'paused',
+      pauseReason: reason,
+      glowState: 'paused',
+      pauseCount: store.snapshot.pauseCount + 1,
+    }
+    pushEvent(store, 'pause', { reason })
+  } else {
+    stopTicker(store)
+    store.runningSinceMs = null
+  }
+  closeActiveSegment(store)
+  persistSnapshot(store, { suspended: reason === 'document_hidden' })
+  notify(store)
+}
+
+function sealOpenLearningRecord(store: TimerStore) {
+  if (!isDwellSessionKey(store.key) || !store.persistCompletionRecord) return
+  if (store.snapshot.status !== 'running' && store.snapshot.status !== 'paused') return
+  settleRunning(store)
+  updateEffectiveSnapshot(store)
+  store.openLearningContextKey = null
+  if (store.snapshot.effectiveSeconds <= 0) {
+    resetStore(store)
+    return
+  }
+  void completeStore(store, 'left_page', { source: 'context_change' })
+}
+
 function markStoresHidden() {
   const hiddenAtMs = Date.now()
   for (const store of stores.values()) {
     if (store.snapshot.status === 'idle' || store.snapshot.status === 'completed') continue
     store.hiddenAtMs = hiddenAtMs
     if (store.snapshot.status === 'running') {
-      // Visibility alone does not pause the click-driven clock; the ticker
-      // settles at the five-minute click deadline.
-      updateEffectiveSnapshot(store, hiddenAtMs)
-      persistSnapshot(store)
+      freezeAwayFromLearning(store, 'document_hidden')
     } else {
       persistSnapshot(store, { suspended: true })
     }
@@ -1061,7 +1138,7 @@ function handleUserInputActivity(event: Event) {
       continue
     }
     const runningSinceMs = store.runningSinceMs ?? now
-    const cappedNow = Math.min(now, store.lastClickAtMs + CLICK_IDLE_LIMIT_MS)
+    const cappedNow = countableUntilMs(store.lastClickAtMs, now)
     const accruedMs = Math.max(0, cappedNow - runningSinceMs)
     store.activityIntervals = appendClickInterval(store.activityIntervals, runningSinceMs, cappedNow)
     const transition = transitionClickTimer({
@@ -1071,18 +1148,27 @@ function handleUserInputActivity(event: Event) {
       currentMs: now,
     })
     store.effectiveMs = transition.effectiveMs
-    store.runningSinceMs = now
-    store.lastClickAtMs = transition.lastClickAtMs
-    store.snapshot = {
-      ...store.snapshot,
-      status: 'running',
-      pauseReason: null,
-      glowState: 'running',
-    }
     if (transition.timedOut) {
-      store.activityIntervals = rollbackClickIntervals(store.activityIntervals, CLICK_IDLE_LIMIT_MS)
-      store.snapshot = { ...store.snapshot, pauseCount: store.snapshot.pauseCount + 1 }
-      pushEvent(store, 'pause', { reason: 'click_idle_timeout', rollback_seconds: 300 })
+      store.runningSinceMs = null
+      store.snapshot = {
+        ...store.snapshot,
+        status: 'paused',
+        pauseReason: 'click_idle_timeout',
+        glowState: 'paused',
+        pauseCount: store.snapshot.pauseCount + 1,
+      }
+      pushEvent(store, 'pause', { reason: 'click_idle_timeout', rollback_seconds: 0 })
+      resumeStore(store, { source: 'input_activity' })
+      store.lastClickAtMs = now
+    } else {
+      store.runningSinceMs = now
+      store.lastClickAtMs = transition.lastClickAtMs
+      store.snapshot = {
+        ...store.snapshot,
+        status: 'running',
+        pauseReason: null,
+        glowState: 'running',
+      }
     }
     if (store.tickTimer == null) startTicker(store)
     updateEffectiveSnapshot(store, now)

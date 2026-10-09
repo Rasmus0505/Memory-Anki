@@ -38,6 +38,47 @@ export function dwellSessionKeyForRecord(recordId: string) {
   return `dwell:${recordId}`
 }
 
+const LEARNING_DWELL_SCENES = new Set([
+  'freestyle',
+  'palace_edit',
+  'quiz',
+  'practice',
+  'review',
+  'english',
+  'english_reading',
+  'english_hub',
+  'english_patterns',
+  'english_vocab',
+])
+
+/** Settings, lists, insights and similar browsing pages are not study. */
+export function isLearningDwellScene(scene: string | null | undefined) {
+  return LEARNING_DWELL_SCENES.has(String(scene || ''))
+}
+
+export function isLearningDwellFragment(fragment: Pick<DwellFragment, 'countable' | 'scene'>) {
+  return fragment.countable && isLearningDwellScene(fragment.scene)
+}
+
+/**
+ * Identity of one visible time record: a different palace, course, or activity
+ * must not continue the previous record.
+ */
+export function learningContextKey(input: {
+  scene?: string | null
+  kind?: string | null
+  palaceId?: number | null
+  englishCourseId?: number | null
+}) {
+  if (!isLearningDwellScene(input.scene)) return null
+  return [
+    input.palaceId ?? '',
+    input.englishCourseId ?? '',
+    input.scene ?? '',
+    input.kind ?? '',
+  ].join('|')
+}
+
 export function isDwellExcludedPath(path: string) {
   const pathname = pathnameOf(path)
   if (pathname === '/profile' || pathname.startsWith('/profile/')) return true

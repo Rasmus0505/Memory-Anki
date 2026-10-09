@@ -51,7 +51,7 @@ export function TimerAutomationDialog({
             <div>
               <DialogTitle>计时器设置</DialogTitle>
               <DialogDescription className="mt-1">
-                页面可见就计时，即使窗口失焦。切走标签、进后台或息屏会暂停；超过 15 分钟再回来会开一条新记录。
+                只在翻卡、做题、编辑宫殿和英语这些学习页计时。想一想可以停大约一分半，再不动就停表，空档不算。锁屏、切走或离开学习页会立刻停。换宫殿或换做法会另记一笔。
               </DialogDescription>
             </div>
           </div>

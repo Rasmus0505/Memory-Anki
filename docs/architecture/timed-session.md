@@ -1,19 +1,19 @@
 # 点击驱动的跨设备计时边界
 
-计时器属于 `modules/session`。应用壳层维护当前 dwell，页面和浮层只提供当前路由、标题和场景信息；计时状态由全局点击适配器和本地 interval ledger 负责。列表一行对应一个连续记录，区间详情保留其 route/scene 变化。
+计时器属于 `modules/session`。应用壳层维护当前 dwell，页面和浮层只提供当前路由、标题和场景信息；计时状态由全局点击适配器和本地 interval ledger 负责。换宫殿或换做法会另起一行；同一处暂停后再学仍是同一行。
 
 ## 点击契约
 
-全局使用 `document` capture 监听 `pointerdown`；不支持 `PointerEvent` 的环境使用 `mousedown`/`touchstart`，并做兼容去重。任意 route 的点击都有效，包括设置、备份和 timer overlay；route 过滤不决定是否计时。只有 active attachment 的 store 处理事件，避免多个 UI 实例重复写入。
+全局使用 `document` capture 监听 `pointerdown`；不支持 `PointerEvent` 的环境使用 `mousedown`/`touchstart`，并做兼容去重。只有学习页的 active attachment 处理事件。设置、备份、宫殿列表、洞察和知识树浏览不接受点击，离开这些页面或进入它们会立刻停表。
 
-- `idle` 的首击立即启动记录，并设置 `lastClick=now`。
-- `running` 的每次点击先结算到 `min(now, lastClick + 300000)`。
-- 两次点击间隔严格大于 **300000 ms（5 分钟）** 时，旧计时段在 effective seconds 和尾部 interval 上最多回退到恰好 5 分钟，记录 `pause`/`click_idle_timeout` 事件；当前点击立即作为新计时段起点，状态继续为 `running`。
-- `paused` 或因 hidden/timeout 暂停后，首次点击恢复并从点击时刻建立新起点。
-- `completed` 收到点击时创建新的记录。
-- visibility 不会提前结束或自动暂停记录。隐藏超过 5 分钟由 ticker 或下一次点击结算回退；墙钟时间不会在恢复时追赶计入。
+学习页包括翻卡、做题、编辑宫殿、查看某一座宫殿、复习和英语。人还停在学习页上时，给 **90000 ms（90 秒）** 想一想；超过后停表，并且缓冲之后的空档整段不计入。锁屏、切走也立刻停，离开后的时间不算。
 
-计时只记录点击驱动的活动区间。页面切换更新当前 scene/route，不额外创建一个独立计时器。每次 checkpoint、scene 切换、暂停或完成都可以闭合当前 interval；同一 session 的 growing checkpoint 允许产生多个区间行。
+- `idle` 的学习页首击立即启动记录。
+- 换宫殿、换课程或换做法会结束上一笔，下一击另起一笔。标题用学科-章节-宫殿-做法，不再用时钟标题。
+- 同一处暂停后再点，仍是同一笔。
+- `completed` 收到学习页点击时创建新的记录。
+
+两台设备的日期和钟点都按北京时间（UTC+8）显示和切日。存储仍是带偏移的 UTC。亲手改过时长的记录不自动改写。
 
 ## 已确认 UTC interval ledger
 
@@ -43,7 +43,7 @@ analytics、时间列表、summary、kind/source breakdown 和 trend 都从同�
 
 存储保持 UTC-naive（`core/time.utc_now_naive`），但"某条记录算哪一天"统一由 `core.time.resolve_local_timezone()` 决定，禁止依赖进程或 SQLite 的隐式本地时区：
 
-- `MEMORY_ANKI_LOCAL_TZ` 可显式指定：IANA 名（`Asia/Shanghai`）、固定偏移（`UTC`、`+08:00`）或 Windows 时区名；非法值只告警并回退到宿主时区，不抛错。
+- `MEMORY_ANKI_LOCAL_TZ` 可显式指定：IANA 名（`Asia/Shanghai`）、固定偏移（`UTC`、`+08:00`）或 Windows 时区名；未设置时日历固定为北京时间 UTC+8，不跟随进程时区。非法值只告警并回退到北京时间，不抛错。
 - `local_calendar_day_bounds_as_utc_naive` / `local_calendar_day_of` 是该规则唯一入口。
 - 统计 SQL 不再使用 SQLite 的 `datetime(col, 'localtime')` 修饰符（它跟随**服务进程的 OS 时区**，与 Python 侧的日界线计算可能不一致，换机器或改时区会静默漂移）；改为显式拼出 `datetime(col, '+00:00', '±HH:MM')`。
 
@@ -77,6 +77,8 @@ read model 对每个 ledger interval 输出 `attribution`；早于该契约的�
 - `complete_unit_review_session` 曾破坏这条不变量：`effective_seconds` 取"已评分已闭合卡片场次之和"，而 `ended_at` 在最后一张卡已经显示之后才落笔，于是求和可能比跨度多出 1–2 秒。现在写入前裁剪，并把原始值留在 `summary.billed_seconds_before_clamp`。
 
 历史修复见迁移 `0068_clamp_session_duration_span`：只在 `span < effective_seconds` 时裁剪，逐行写入 `summary.duration_span_repair` 审计字段，跳过 `duration_edited` 与软删除行，且 `downgrade()` 可完整还原。实测影响 80 行、共 80 秒（占总量 0.01%）。
+
+迁移 `0069_repair_beijing_offset_study_sessions` 只改自动记录：`started_at` 比服务器 `created_at` 晚大约 8 小时时，视为把北京时间当成了 UTC，整段回拨 8 小时。`duration_edited` 不改。
 
 ## 依赖边界
 

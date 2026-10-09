@@ -142,7 +142,7 @@ describe('useTimedSession foreground clock', () => {
     })
   })
 
-  it('keeps the click timer running when pagehide happens while the document is hidden', () => {
+  it('stops immediately when the document hides and does not count the lock-screen gap', () => {
     const visibility = vi.spyOn(document, 'visibilityState', 'get')
     const { result } = renderHook(() => useTimedSession({
       sessionKey: 'dwell:live',
@@ -162,8 +162,8 @@ describe('useTimedSession foreground clock', () => {
     })
 
     const hiddenSeconds = result.current.effectiveSeconds
-    expect(result.current.status).toBe('running')
-    expect(result.current.pauseReason).toBeNull()
+    expect(result.current.status).toBe('paused')
+    expect(result.current.pauseReason).toBe('document_hidden')
     expect(hiddenSeconds).toBe(2)
 
     act(() => {
@@ -173,12 +173,12 @@ describe('useTimedSession foreground clock', () => {
       window.dispatchEvent(new Event('pagehide'))
     })
 
-    expect(result.current.status).toBe('running')
-    expect(result.current.effectiveSeconds).toBeGreaterThanOrEqual(hiddenSeconds)
+    expect(result.current.status).toBe('paused')
+    expect(result.current.effectiveSeconds).toBe(hiddenSeconds)
     visibility.mockRestore()
   })
 
-  it('observes visibility without pausing or resuming the click timer', () => {
+  it('pauses when the document hides and does not resume until the next click', () => {
     const visibility = vi.spyOn(document, 'visibilityState', 'get')
     const { result } = renderHook(() => useTestTimedSession())
 
@@ -189,8 +189,8 @@ describe('useTimedSession foreground clock', () => {
       document.dispatchEvent(new Event('visibilitychange'))
     })
 
-    expect(result.current.status).toBe('running')
-    expect(result.current.pauseReason).toBeNull()
+    expect(result.current.status).toBe('paused')
+    expect(result.current.pauseReason).toBe('document_hidden')
     const pausedSeconds = result.current.effectiveSeconds
 
     act(() => {
@@ -200,8 +200,8 @@ describe('useTimedSession foreground clock', () => {
       vi.advanceTimersByTime(1_100)
     })
 
-    expect(result.current.status).toBe('running')
-    expect(result.current.effectiveSeconds).toBeGreaterThanOrEqual(pausedSeconds + 1)
+    expect(result.current.status).toBe('paused')
+    expect(result.current.effectiveSeconds).toBe(pausedSeconds)
     visibility.mockRestore()
   })
 
@@ -352,7 +352,9 @@ describe('useTimedSession foreground clock', () => {
       visibility.mockReturnValue('hidden')
       document.dispatchEvent(new Event('visibilitychange'))
     })
-    expect(result.current.status).toBe('running')
+    expect(result.current.status).toBe('paused')
+    expect(result.current.pauseReason).toBe('document_hidden')
+    expect(result.current.effectiveSeconds).toBe(2)
 
     act(() => {
       vi.advanceTimersByTime(10 * 60 * 1000)
@@ -360,8 +362,7 @@ describe('useTimedSession foreground clock', () => {
       document.dispatchEvent(new Event('visibilitychange'))
     })
     expect(result.current.status).toBe('paused')
-    expect(result.current.pauseReason).toBe('click_idle_timeout')
-    expect(result.current.effectiveSeconds).toBe(0)
+    expect(result.current.effectiveSeconds).toBe(2)
     act(() => document.dispatchEvent(new Event('pointerdown')))
     expect(result.current.status).toBe('running')
 
@@ -410,7 +411,7 @@ describe('useTimedSession foreground clock', () => {
     expect(result.current.effectiveSeconds).toBe(8)
   })
 
-  it('keeps running on settings until a click timeout, without writing a settings fragment', async () => {
+  it('stops as soon as the learner leaves a learning page and does not count settings', async () => {
     const { result, rerender } = renderHook(
       ({ path }: { path: string }) => {
         const fragment = resolveDwellFragment(path)
@@ -437,15 +438,11 @@ describe('useTimedSession foreground clock', () => {
 
     act(() => {
       rerender({ path: '/profile/timer' })
-    })
-    expect(result.current.status).toBe('running')
-    expect(result.current.pauseReason).toBeNull()
-
-    act(() => {
+      result.current.setSceneActive(false, { source: 'route_inactive' })
       vi.advanceTimersByTime(20 * 60 * 1000)
     })
     expect(result.current.status).toBe('paused')
-    expect(result.current.pauseReason).toBe('click_idle_timeout')
+    expect(result.current.pauseReason).toBe('scene_inactive')
     expect(result.current.effectiveSeconds).toBe(secondsBeforeSettings)
     expect(persistSpy.mock.calls.some(([record]) => (
       record.sessionKey?.startsWith('dwell:') && record.completionMethod !== 'saved'
@@ -453,14 +450,12 @@ describe('useTimedSession foreground clock', () => {
 
     act(() => {
       rerender({ path: '/dashboard' })
-    })
-    act(() => {
-      result.current.setSceneActive(true)
+      result.current.setSceneActive(false, { source: 'route_inactive' })
       document.dispatchEvent(new Event('pointerdown'))
       vi.advanceTimersByTime(1_200)
     })
-    expect(result.current.status).toBe('running')
-    expect(result.current.effectiveSeconds).toBeGreaterThanOrEqual(secondsBeforeSettings)
+    expect(result.current.status).toBe('paused')
+    expect(result.current.effectiveSeconds).toBe(secondsBeforeSettings)
 
     let record: Awaited<ReturnType<typeof result.current.complete>> = null
     await act(async () => {
@@ -472,7 +467,31 @@ describe('useTimedSession foreground clock', () => {
     expect(record?.sceneSegments?.some((segment) => segment.title === '随心')).toBe(true)
   })
 
-  it('writes a saved dwell checkpoint when the fragment changes and again after 30 seconds', async () => {
+  it('counts the thinking grace and excludes the idle tail', () => {
+    const { result } = renderHook(() => useTimedSession({
+      sessionKey: 'dwell:live',
+      kind: 'quiz',
+      title: '随心',
+      palaceId: null,
+      persistCompletionRecord: true,
+    }))
+
+    act(() => {
+      document.dispatchEvent(new Event('pointerdown'))
+      vi.advanceTimersByTime(90_000)
+    })
+    expect(result.current.status).toBe('running')
+    expect(result.current.effectiveSeconds).toBe(90)
+
+    act(() => {
+      vi.advanceTimersByTime(30 * 60 * 1000)
+    })
+    expect(result.current.status).toBe('paused')
+    expect(result.current.pauseReason).toBe('click_idle_timeout')
+    expect(result.current.effectiveSeconds).toBe(90)
+  })
+
+  it('closes the current record when the learning activity changes', async () => {
     const { result, rerender } = renderHook(
       ({ title, scene }: { title: string; scene: 'freestyle' | 'quiz' }) => useTimedSession({
         sessionKey: 'dwell:live',
@@ -502,29 +521,27 @@ describe('useTimedSession foreground clock', () => {
       await Promise.resolve()
     })
 
-    const firstSaved = persistSpy.mock.calls
+    const sealed = persistSpy.mock.calls
       .map(([record]) => record)
-      .filter((record) => record.completionMethod === 'saved')
-    expect(firstSaved.length).toBeGreaterThanOrEqual(1)
-    const firstSavedRecord = firstSaved[firstSaved.length - 1]
-    expect(firstSavedRecord?.sceneSegments?.some((segment) => segment.title === '随心')).toBe(true)
-    const recordId = firstSavedRecord?.id
+      .filter((record) => record.completionMethod === 'left_page')
+    expect(sealed.length).toBeGreaterThanOrEqual(1)
+    expect(sealed.at(-1)?.sceneSegments?.some((segment) => segment.title === '随心' || segment.scene === 'freestyle')).toBe(true)
+    const sealedId = sealed.at(-1)?.id
 
     act(() => {
-      vi.advanceTimersByTime(31_000)
+      document.dispatchEvent(new Event('pointerdown'))
+      vi.advanceTimersByTime(2_100)
     })
-    await act(async () => {
-      await Promise.resolve()
-      await Promise.resolve()
-    })
-
-    const saved = persistSpy.mock.calls
-      .map(([record]) => record)
-      .filter((record) => record.completionMethod === 'saved')
-    expect(saved.length).toBeGreaterThan(1)
-    expect(saved.at(-1)?.id).toBe(recordId)
-    expect(saved.at(-1)?.effectiveSeconds).toBeGreaterThan(firstSaved[0]?.effectiveSeconds ?? 0)
     expect(result.current.status).toBe('running')
+    expect(result.current.effectiveSeconds).toBeLessThan(idBefore)
+    expect(result.current.effectiveSeconds).toBeGreaterThan(0)
+
+    await act(async () => {
+      await result.current.complete('manual_complete')
+    })
+    const nextRecord = persistSpy.mock.calls.map(([record]) => record).at(-1)
+    expect(nextRecord?.id).not.toBe(sealedId)
+    expect(nextRecord?.sceneSegments?.some((segment) => segment.scene === 'quiz')).toBe(true)
   })
 
   it('does not checkpoint a page timer that must not persist', () => {

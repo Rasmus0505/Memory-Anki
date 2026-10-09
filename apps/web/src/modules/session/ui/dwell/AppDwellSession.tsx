@@ -11,6 +11,7 @@ import {
   DWELL_LIVE_SESSION_KEY,
   applyDwellFragmentOverride,
   dwellKindToSessionKind,
+  isLearningDwellFragment,
   resolveDwellFragment,
 } from '@/modules/session/domain/session-entity/model/timed-session/dwellPolicy'
 
@@ -33,6 +34,7 @@ export function AppDwellSession() {
     () => applyDwellFragmentOverride(routeFragment, override),
     [override, routeFragment],
   )
+  const learning = isLearningDwellFragment(fragment)
   const options = React.useMemo(() => ({
     sessionKey: DWELL_LIVE_SESSION_KEY,
     kind: dwellKindToSessionKind(fragment.kind),
@@ -50,16 +52,19 @@ export function AppDwellSession() {
     scene: toFocusScene(fragment.scene),
     title: fragment.title,
     timer,
-    isRouteActive: true,
+    isRouteActive: learning,
     becameActiveAt: 0,
     routePath: fragment.routePath,
     isDwellSession: true,
   })
 
   React.useEffect(() => {
-    // All application routes accept clicks; route changes never start/resume time.
-    timer.setSceneActive(true, { source: 'route_activity' })
-  }, [fragment.countable, fragment.routePath, timer])
+    // Only a real learning page can accept clicks. Lists, insights and settings
+    // stop the clock immediately and must not resume it.
+    timer.setSceneActive(learning, {
+      source: learning ? 'route_activity' : 'route_inactive',
+    })
+  }, [fragment.routePath, learning, timer])
 
   return null
 }

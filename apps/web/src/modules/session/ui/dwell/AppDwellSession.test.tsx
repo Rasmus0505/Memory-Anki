@@ -15,21 +15,26 @@ import { AppDwellSession } from './AppDwellSession'
 describe('AppDwellSession click activation', () => {
   beforeEach(() => { vi.clearAllMocks(); mocks.pathname = '/dashboard' })
 
-  it('registers the initial route without starting time before the first click', () => {
+  it('does not count insights before a learning page is open', () => {
     render(<AppDwellSession />)
     expect(mocks.start).not.toHaveBeenCalled()
     expect(mocks.resume).not.toHaveBeenCalled()
-    expect(mocks.register).toHaveBeenCalledWith(expect.objectContaining({ isRouteActive: true, isDwellSession: true }))
-    expect(mocks.setSceneActive).toHaveBeenCalledWith(true, { source: 'route_activity' })
+    expect(mocks.register).toHaveBeenCalledWith(expect.objectContaining({ isRouteActive: false, isDwellSession: true }))
+    expect(mocks.setSceneActive).toHaveBeenCalledWith(false, { source: 'route_inactive' })
   })
 
-  it('keeps settings click eligible without resuming time on navigation', () => {
+  it('stops settings immediately and only activates a learning page', () => {
     const { rerender } = render(<AppDwellSession />)
     mocks.pathname = '/profile/timer'
     rerender(<AppDwellSession />)
     expect(mocks.start).not.toHaveBeenCalled()
     expect(mocks.resume).not.toHaveBeenCalled()
-    expect(mocks.register).toHaveBeenLastCalledWith(expect.objectContaining({ isRouteActive: true, routePath: '/profile/timer' }))
+    expect(mocks.register).toHaveBeenLastCalledWith(expect.objectContaining({ isRouteActive: false, routePath: '/profile/timer' }))
+    expect(mocks.setSceneActive).toHaveBeenLastCalledWith(false, { source: 'route_inactive' })
+
+    mocks.pathname = '/freestyle'
+    rerender(<AppDwellSession />)
+    expect(mocks.register).toHaveBeenLastCalledWith(expect.objectContaining({ isRouteActive: true, routePath: '/freestyle' }))
     expect(mocks.setSceneActive).toHaveBeenLastCalledWith(true, { source: 'route_activity' })
   })
 })
