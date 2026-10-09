@@ -98,6 +98,11 @@ Any snapshot overlapping study guarantees 503s for its whole duration. This is
 the "occasional long stall" half of the problem; the transaction-scoped hold is
 the "constant background" half that produces 314 events.
 
+Later change: the database snapshot no longer takes the study lock. SQLite's
+online backup API copies committed pages in steps while writers continue. The
+2026-10-09 overlay-progress 503 (15s wait, then `storage_busy`) was this same
+snapshot still holding the lock on a ~200 MB synced-drive database.
+
 ## Requirements for a fix
 
 The owner's stated preferences, from the 2026-10-07 product interview:

@@ -6,7 +6,7 @@ import threading
 from sqlalchemy import text
 
 from memory_anki.infrastructure.db._tables._base import get_session
-from memory_anki.modules.memory.api import warm_unit_projection_cache
+from memory_anki.modules.memory.api import repair_absurd_due_dates, warm_unit_projection_cache
 from memory_anki.modules.memory.application.unit_reconcile_scheduler import drain_once
 
 logger = logging.getLogger(__name__)
@@ -16,9 +16,12 @@ _warmup_lock = threading.Lock()
 
 
 def run_startup_warmup() -> None:
-    """Warm the common SQLite and study-query paths without changing data."""
+    """Warm study-query paths, and pull absurd future due dates back to today."""
     session = get_session()
     try:
+        repaired = repair_absurd_due_dates(session)
+        if repaired:
+            session.commit()
         connection = session.connection()
         connection.execute(text("SELECT 1")).scalar()
         connection.execute(text("PRAGMA schema_version")).scalar()

@@ -57,8 +57,10 @@ def storage_write_lock(
     """Serialize cooperating writers/snapshots; the OS releases on process exit.
 
     ``wait_seconds`` lets a background job that legitimately needs a long slot
-    (for example an online database snapshot) opt into a longer budget without
-    making foreground requests wait that long.
+    opt into a longer budget without making foreground requests wait that long.
+    An online database snapshot must not use this lock: SQLite's backup API
+    already runs beside writers, and holding the lock across that copy makes
+    study writes wait out this budget and return 503.
 
     Reentrancy is decided *before* touching the thread lock, because a plain
     ``Lock`` cannot be re-acquired by the thread already holding it. A nested call

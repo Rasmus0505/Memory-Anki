@@ -28,7 +28,6 @@ is free, and immediately rolls back. It never writes data.
 """
 from __future__ import annotations
 
-import json
 import sqlite3
 import subprocess
 import sys
@@ -41,29 +40,23 @@ API_PID_HINT = "memory_anki.app.main:app"
 
 
 def find_api_pid() -> int | None:
-    """Locate the uvicorn process serving the app."""
+    """Locate the uvicorn process serving the app.
+
+    Uses the shared WMI-free enumeration: `Get-CimInstance` blocks forever on a
+    machine with a damaged WMI repository, which would silently disable the
+    py-spy half of this diagnostic exactly when it is needed most.
+    """
     try:
-        out = subprocess.run(
-            [
-                "powershell",
-                "-NoProfile",
-                "-Command",
-                "Get-CimInstance Win32_Process -Filter \"Name like '%python%'\" | "
-                "Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=25,
-        ).stdout.strip()
-        if not out:
-            return None
-        data = json.loads(out)
-        if isinstance(data, dict):
-            data = [data]
-        for row in data:
-            cmd = str(row.get("CommandLine") or "")
-            if API_PID_HINT in cmd:
-                return int(row["ProcessId"])
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import dev_server
+
+        # The uvicorn target lives in the command line, not the image path, so
+        # only python processes need the (still WMI-free) command line lookup.
+        for pid, image_path in dev_server.process_command_lines().items():
+            if "python" not in image_path.lower():
+                continue
+            if API_PID_HINT in dev_server.process_command_line(pid):
+                return pid
     except Exception as exc:  # noqa: BLE001 - diagnostic helper
         print(f"  (pid lookup failed: {exc})")
     return None

@@ -1,16 +1,27 @@
 """apps/api/tests shared fixtures."""
 import os
 import shutil
+import sys
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
-import pytest
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
+_API_SRC = Path(__file__).resolve().parents[1] / "src"
+if str(_API_SRC) not in sys.path:
+    sys.path.insert(0, str(_API_SRC))
+
+from memory_anki.core.windows_wmi import disable_hanging_windows_wmi  # noqa: E402
+
+# sqlalchemy imports platform.machine(), which blocks forever on a wedged WMI
+# provider. Disable that path before the sqlalchemy import below.
+disable_hanging_windows_wmi()
+
+import pytest  # noqa: E402
+from fastapi import FastAPI  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+from sqlalchemy import create_engine  # noqa: E402
+from sqlalchemy.orm import sessionmaker  # noqa: E402
+from sqlalchemy.pool import StaticPool  # noqa: E402
 
 _TEST_APP_HOME = Path(tempfile.mkdtemp(prefix="memory-anki-tests-"))
 os.environ["MEMORY_ANKI_HOME"] = str(_TEST_APP_HOME)

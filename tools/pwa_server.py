@@ -18,15 +18,50 @@ from pathlib import Path
 from urllib.error import URLError
 from urllib.request import urlopen
 
+# Before importing anything that can reach SQLAlchemy. platform.machine()
+# queries WMI with no timeout; a wedged provider freezes this process.
+if os.name == "nt":
+    import platform
+
+    platform._wmi = None
+
 TOOLS_DIR = Path(__file__).resolve().parent
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
 import dev_server  # noqa: E402
 
+
+def _line_buffer_stdio() -> None:
+    """Show launcher progress immediately when stdout is a pipe.
+
+    start-all.bat captures this process through PowerShell. Block-buffered
+    prints then stay invisible until the process exits, so a lock wait looks
+    like a freeze on "Checking for updates...".
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(line_buffering=True)
+        except (OSError, ValueError):
+            continue
+
+
+_line_buffer_stdio()
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 API_SRC = REPO_ROOT / "apps" / "api" / "src"
 API_DIR = REPO_ROOT / "apps" / "api"
+if str(API_SRC) not in sys.path:
+    sys.path.insert(0, str(API_SRC))
+from memory_anki.core.windows_wmi import disable_hanging_windows_wmi
+
+# Alembic's import pulls SQLAlchemy, which calls platform.machine(). That WMI
+# query does not time out. Disable it before any later import in this process,
+# including the child processes that import memory_anki themselves.
+disable_hanging_windows_wmi()
 WEB_DIR = REPO_ROOT / "apps" / "web"
 WEB_DIST = WEB_DIR / "dist"
 LOGS_DIR = REPO_ROOT / "logs"
@@ -141,6 +176,9 @@ def _write_update_state(fingerprints: dict[str, str]) -> None:
 
 def _database_at_alembic_head() -> bool:
     try:
+        # Re-apply in case another library restored the WMI hook. Importing
+        # alembic imports SQLAlchemy, and SQLAlchemy calls platform.machine().
+        disable_hanging_windows_wmi()
         from alembic.script import ScriptDirectory
         from memory_anki.infrastructure.db.migrations import build_alembic_config
 
@@ -165,29 +203,17 @@ def _append_log_separator(path: Path, title: str) -> None:
 
 
 def _process_command_line(pid: int) -> str:
+    """Read a process command line (lower-cased) without WMI.
+
+    A damaged WMI repository makes `Get-CimInstance Win32_Process` block forever
+    rather than fail, which froze the launcher at "Checking for updates...".
+    Reading the command line through NtQueryInformationProcess avoids that service
+    entirely and returns in microseconds. Callers compare against lower-case
+    markers, so the result is lower-cased here as it always has been.
+    """
     if os.name != "nt":
         return ""
-    try:
-        result = subprocess.run(
-            [
-                "powershell.exe",
-                "-NoProfile",
-                "-Command",
-                (
-                    "$process = Get-CimInstance Win32_Process -Filter "
-                    f"\"ProcessId={pid}\" -ErrorAction SilentlyContinue; "
-                    "if ($process) { $process.CommandLine }"
-                ),
-            ],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            check=False,
-        )
-    except Exception:
-        return ""
-    return result.stdout.strip().lower()
+    return dev_server.process_command_line(pid).lower()
 
 
 def _is_memory_anki_service_process(pid: int) -> bool:
@@ -262,11 +288,14 @@ def service_lock(timeout_seconds: float = 180.0):
                 acquired = True
                 if wait_started is not None:
                     waited = time.monotonic() - wait_started
-                    print(f"[i] Acquired Memory Anki service lock after {waited:.1f}s wait")
+                    print(
+                        f"[i] Acquired Memory Anki service lock after {waited:.1f}s wait",
+                        flush=True,
+                    )
             except OSError:
                 if wait_started is None:
                     wait_started = time.monotonic()
-                    print("[i] Waiting for another Memory Anki launcher to finish…")
+                    print("[i] Waiting for another Memory Anki launcher to finish…", flush=True)
                 if time.monotonic() >= deadline:
                     raise TimeoutError("Timed out waiting for the Memory Anki service lock")
                 time.sleep(0.1)
@@ -329,17 +358,23 @@ def _stop_service_unlocked() -> bool:
             f"process(es): {unsafe}. Stop that program before starting Memory Anki."
         )
         return False
-    print(f"[i] Stopping existing Memory Anki service: {pids}")
+    print(f"[i] Stopping existing Memory Anki service: {pids}", flush=True)
     _mark_service_stop_reason(_STOP_REASON_REQUESTED)
     for pid in pids:
         dev_server.kill_process_tree(pid)
     PWA_PID_FILE.unlink(missing_ok=True)
     deadline = time.monotonic() + 10
+    remaining = pids
     while time.monotonic() < deadline:
-        if not dev_server.list_listening_pids(dev_server.BACKEND_PORT):
+        remaining = dev_server.list_listening_pids(dev_server.BACKEND_PORT)
+        if not remaining:
             return True
         time.sleep(0.2)
-    print("[!] The shared service did not stop within 10 seconds.")
+    print(
+        "[!] The shared service did not stop within 10 seconds. "
+        f"Still listening: {remaining}.",
+        flush=True,
+    )
     return False
 
 
@@ -1100,6 +1135,7 @@ def restart_for_desktop() -> int:
 
 
 def prepare(*, build: bool = True) -> int:
+    print("[i] Checking Memory Anki runtime…", flush=True)
     with service_lock():
         started_at = time.perf_counter()
         current = _current_update_fingerprints()

@@ -315,7 +315,7 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
             storage_backup,
             "checkpoint_sqlite_wal",
             side_effect=lambda **kwargs: events.append(
-                f"checkpoint:{kwargs.get('require_complete')}"
+                f"checkpoint:{kwargs.get('mode')}:{kwargs.get('require_complete')}"
             ),
         ), patch.object(
             storage_backup,
@@ -332,7 +332,7 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
         ):
             storage_backup.write_storage_backup(Path(temp_dir), reason="rolling-edit", full=False)
 
-        self.assertEqual(events, ["ensure", "checkpoint:True", "copy:database", "manifest"])
+        self.assertEqual(events, ["ensure", "checkpoint:PASSIVE:None", "copy:database", "manifest"])
 
     def test_storage_backup_manifest_records_database_info(self):
         manifest = storage_backup.create_storage_backup_manifest(
@@ -393,7 +393,7 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
         self.assertEqual(restored_wal, b"wal")
         self.assertEqual(restored_shm, b"shm")
 
-    def test_storage_backup_stops_when_required_checkpoint_fails(self):
+    def test_storage_backup_continues_when_passive_checkpoint_is_busy(self):
         with TemporaryDirectory() as temp_dir, patch.object(
             storage_backup,
             "ensure_runtime_dirs",
@@ -403,22 +403,30 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
             side_effect=db_maintenance.DatabaseMaintenanceError("checkpoint busy"),
         ), patch.object(
             storage_backup,
+            "_select_backup_items",
+            return_value=[_BackupItem()],
+        ), patch.object(
+            storage_backup,
             "_copy_item_to_backup",
-        ) as copy_item_to_backup:
-            with self.assertRaises(db_maintenance.DatabaseMaintenanceError):
-                storage_backup.write_storage_backup(Path(temp_dir), reason="rolling-edit", full=False)
+            return_value={"key": "database"},
+        ) as copy_item_to_backup, patch.object(
+            storage_backup,
+            "create_storage_backup_manifest",
+            return_value={"ok": True},
+        ):
+            storage_backup.write_storage_backup(Path(temp_dir), reason="rolling-edit", full=False)
 
-        copy_item_to_backup.assert_not_called()
+        copy_item_to_backup.assert_called_once()
 
     def test_bulk_backup_copy_runs_outside_the_runtime_write_lock(self):
-        """Only the fast DB snapshot may hold the shared runtime lock.
+        """Neither the database snapshot nor the media copy may hold the study lock.
 
-        Regression: the whole rolling backup used to run inside
-        ``storage_write_lock``, so a ~200 MB database copy over a synced drive
-        held the lock for ~9 minutes and every autosave/review write answered
-        500 (``timed out acquiring runtime storage thread lock``).
+        Regression: wrapping the online snapshot in ``storage_write_lock`` made a
+        ~200 MB copy on a synced drive hold the lock for minutes. Study writes
+        then waited 15s and returned 503. SQLite's online backup API is already
+        consistent without that lock.
         """
-        lock_depth = {"held": 0, "max_depth_during_media_copy": -1}
+        lock_depth = {"held": 0, "during_database": -1, "during_media": -1}
         observed: list[str] = []
 
         class _TrackingLock:
@@ -434,9 +442,10 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
 
         def fake_copy(item, destination):
             observed.append(f"copy:{item.key}")
+            if item.key == "database":
+                lock_depth["during_database"] = lock_depth["held"]
             if item.key == "attachments":
-                # The slow, bulk phase: the runtime lock must NOT be held here.
-                lock_depth["max_depth_during_media_copy"] = lock_depth["held"]
+                lock_depth["during_media"] = lock_depth["held"]
             return {"key": item.key}
 
         database_item = _BackupItem()
@@ -474,11 +483,12 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
                 Path(temp_dir), reason="rolling-edit", full=False, scope="rescue"
             )
 
-        # The database snapshot is captured under the lock...
         assert "copy:database" in observed
         assert "copy:attachments" in observed
-        # ...and the bulk copy is reached only with the lock fully released.
-        assert lock_depth["max_depth_during_media_copy"] == 0, (
+        assert lock_depth["during_database"] == 0, (
+            "database snapshot must not run while the runtime storage lock is held"
+        )
+        assert lock_depth["during_media"] == 0, (
             "bulk backup copy must not run while the runtime storage lock is held"
         )
 

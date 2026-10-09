@@ -61,13 +61,13 @@ def _desktop_failed_after(started_at: float) -> str | None:
 def _terminate_process_tree(process: subprocess.Popen[bytes]) -> None:
     if process.poll() is not None:
         return
-    subprocess.run(
-        ["taskkill.exe", "/PID", str(process.pid), "/T", "/F"],
-        cwd=REPO_ROOT,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        check=False,
-    )
+    tools_dir = Path(__file__).resolve().parent
+    if str(tools_dir) not in sys.path:
+        sys.path.insert(0, str(tools_dir))
+    import dev_server
+
+    # taskkill /T hangs on a damaged WMI repository and may not kill the target.
+    dev_server.kill_process_tree(process.pid)
     try:
         process.wait(timeout=15)
     except subprocess.TimeoutExpired:

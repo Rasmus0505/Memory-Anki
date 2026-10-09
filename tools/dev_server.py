@@ -101,6 +101,96 @@ def hidden_console_kwargs() -> dict:
     return kwargs
 
 
+def _create_detached_process(command_line: str, cwd: str) -> int:
+    """Start ``command_line`` outside the current Job when the Job allows it.
+
+    ``CREATE_BREAKAWAY_FROM_JOB`` is what keeps the PWA backend alive after the
+    launcher exits. A Job that forbids breakaway gets a normal detached process
+    instead of a hang. This never calls WMI.
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    class STARTUPINFOW(ctypes.Structure):
+        _fields_ = [
+            ("cb", wintypes.DWORD),
+            ("lpReserved", wintypes.LPWSTR),
+            ("lpDesktop", wintypes.LPWSTR),
+            ("lpTitle", wintypes.LPWSTR),
+            ("dwX", wintypes.DWORD),
+            ("dwY", wintypes.DWORD),
+            ("dwXSize", wintypes.DWORD),
+            ("dwYSize", wintypes.DWORD),
+            ("dwXCountChars", wintypes.DWORD),
+            ("dwYCountChars", wintypes.DWORD),
+            ("dwFillAttribute", wintypes.DWORD),
+            ("dwFlags", wintypes.DWORD),
+            ("wShowWindow", wintypes.WORD),
+            ("cbReserved2", wintypes.WORD),
+            ("lpReserved2", ctypes.POINTER(ctypes.c_byte)),
+            ("hStdInput", wintypes.HANDLE),
+            ("hStdOutput", wintypes.HANDLE),
+            ("hStdError", wintypes.HANDLE),
+        ]
+
+    class PROCESS_INFORMATION(ctypes.Structure):
+        _fields_ = [
+            ("hProcess", wintypes.HANDLE),
+            ("hThread", wintypes.HANDLE),
+            ("dwProcessId", wintypes.DWORD),
+            ("dwThreadId", wintypes.DWORD),
+        ]
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CreateProcessW.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.LPWSTR,
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        wintypes.BOOL,
+        wintypes.DWORD,
+        ctypes.c_void_p,
+        wintypes.LPCWSTR,
+        ctypes.POINTER(STARTUPINFOW),
+        ctypes.POINTER(PROCESS_INFORMATION),
+    ]
+    kernel32.CreateProcessW.restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+
+    create_breakaway_from_job = 0x01000000
+    create_new_process_group = 0x00000200
+    detached_process = 0x00000008
+    create_no_window = 0x08000000
+    base_flags = create_new_process_group | detached_process | create_no_window
+    last_error = 0
+    for flags in (base_flags | create_breakaway_from_job, base_flags):
+        startup = STARTUPINFOW()
+        startup.cb = ctypes.sizeof(STARTUPINFOW)
+        process_info = PROCESS_INFORMATION()
+        buffer = ctypes.create_unicode_buffer(command_line)
+        if kernel32.CreateProcessW(
+            None,
+            buffer,
+            None,
+            None,
+            False,
+            flags,
+            None,
+            cwd,
+            ctypes.byref(startup),
+            ctypes.byref(process_info),
+        ):
+            pid = int(process_info.dwProcessId)
+            kernel32.CloseHandle(process_info.hProcess)
+            kernel32.CloseHandle(process_info.hThread)
+            return pid
+        last_error = ctypes.get_last_error()
+        if last_error != 5:
+            break
+    raise RuntimeError(f"CreateProcessW failed: {last_error}")
+
+
 def spawn_detached_windows_process(
     *,
     command: list[str],
@@ -111,9 +201,11 @@ def spawn_detached_windows_process(
 ) -> int:
     """Start a process outside the current console Job Object (Windows).
 
-    Agent/diagnostic shells often wrap work in a Job that kills children when the
-    launcher exits. CIM Win32_Process.Create starts a process that is not tied to
-    that Job, so the PWA backend keeps running after start-pwa returns.
+    Agent shells often wrap work in a Job that kills children when the launcher
+    exits. ``CreateProcessW`` with ``CREATE_BREAKAWAY_FROM_JOB`` leaves that Job
+    without calling WMI. ``Win32_Process.Create`` used to do the same thing, but
+    a damaged WMI provider never returns, which froze desktop startup while it
+    held the service lock.
     """
     if os.name != "nt":
         raise RuntimeError("spawn_detached_windows_process is only implemented on Windows")
@@ -173,40 +265,10 @@ def spawn_detached_windows_process(
     with launcher.open("w", encoding="ascii", errors="replace", newline="") as handle:
         handle.write("\r\n".join(lines) + "\r\n")
 
-    # CIM Create is not a child of the current Job Object (unlike subprocess.Popen).
-    ps = (
-        "$ErrorActionPreference = 'Stop'; "
-        f"$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create "
-        f"-Arguments @{{ CommandLine = 'cmd.exe /c {_cmd_quote(str(launcher))}'; "
-        f"CurrentDirectory = {_cmd_quote(str(cwd))} }}; "
-        "if ($r.ReturnValue -ne 0) { throw \"Win32_Process.Create failed: $($r.ReturnValue)\" }; "
-        "Write-Output $r.ProcessId"
+    return _create_detached_process(
+        f"cmd.exe /c {_cmd_quote(str(launcher))}",
+        str(cwd),
     )
-    completed = subprocess.run(
-        [
-            "powershell.exe",
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-Command",
-            ps,
-        ],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        check=False,
-    )
-    if completed.returncode != 0:
-        raise RuntimeError(
-            "Failed to start detached Windows process: "
-            f"{completed.stderr.strip() or completed.stdout.strip() or completed.returncode}"
-        )
-    pid_text = (completed.stdout or "").strip().splitlines()[-1].strip()
-    try:
-        return int(pid_text)
-    except ValueError as exc:
-        raise RuntimeError(f"Detached process PID parse failed: {pid_text!r}") from exc
 
 
 def list_listening_pids(port: int) -> list[int]:
@@ -234,54 +296,352 @@ def list_listening_pids(port: int) -> list[int]:
     return sorted(p for p in pids if p > 0)
 
 
+# Toolhelp32 snapshot flag. Defined here so process-tree kill does not depend on
+# the later command-line helpers, and so neither path reaches WMI.
+_TH32CS_SNAPPROCESS = 0x2
+
+
+def _windows_process_parents() -> dict[int, int]:
+    """Return ``{pid: parent_pid}`` from a Toolhelp snapshot. Never calls WMI."""
+    if os.name != "nt":
+        return {}
+
+    import ctypes
+    from ctypes import wintypes
+
+    class PROCESSENTRY32W(ctypes.Structure):
+        _fields_ = [
+            ("dwSize", wintypes.DWORD),
+            ("cntUsage", wintypes.DWORD),
+            ("th32ProcessID", wintypes.DWORD),
+            ("th32DefaultHeapID", ctypes.POINTER(ctypes.c_ulong)),
+            ("th32ModuleID", wintypes.DWORD),
+            ("cntThreads", wintypes.DWORD),
+            ("th32ParentProcessID", wintypes.DWORD),
+            ("pcPriClassBase", ctypes.c_long),
+            ("dwFlags", wintypes.DWORD),
+            ("szExeFile", wintypes.WCHAR * 260),
+        ]
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+    kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    kernel32.Process32FirstW.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESSENTRY32W)]
+    kernel32.Process32FirstW.restype = wintypes.BOOL
+    kernel32.Process32NextW.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESSENTRY32W)]
+    kernel32.Process32NextW.restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+
+    parents: dict[int, int] = {}
+    snapshot = kernel32.CreateToolhelp32Snapshot(_TH32CS_SNAPPROCESS, 0)
+    if snapshot == wintypes.HANDLE(-1).value or not snapshot:
+        return parents
+    try:
+        entry = PROCESSENTRY32W()
+        entry.dwSize = ctypes.sizeof(PROCESSENTRY32W)
+        if not kernel32.Process32FirstW(snapshot, ctypes.byref(entry)):
+            return parents
+        while True:
+            pid = int(entry.th32ProcessID)
+            if pid > 0:
+                parents[pid] = int(entry.th32ParentProcessID)
+            if not kernel32.Process32NextW(snapshot, ctypes.byref(entry)):
+                break
+    finally:
+        kernel32.CloseHandle(snapshot)
+    return parents
+
+
+def process_tree_pids(pid: int) -> list[int]:
+    """Return ``pid`` and its descendants, leaves first. Toolhelp only, no WMI."""
+    if pid <= 0:
+        return []
+    children: dict[int, list[int]] = {}
+    for child, parent in _windows_process_parents().items():
+        children.setdefault(parent, []).append(child)
+    ordered: list[int] = []
+    seen: set[int] = set()
+
+    def walk(node: int) -> None:
+        if node in seen or node <= 0:
+            return
+        seen.add(node)
+        for child in children.get(node, []):
+            walk(child)
+        ordered.append(node)
+
+    walk(pid)
+    return ordered
+
+
+def _terminate_pid(pid: int) -> bool:
+    """Force-stop one process. Already-exited counts as success. No WMI, no taskkill."""
+    if pid <= 0 or pid == os.getpid():
+        return False
+    if os.name != "nt":
+        try:
+            os.kill(pid, 9)
+        except OSError:
+            return False
+        return True
+
+    import ctypes
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.TerminateProcess.argtypes = [wintypes.HANDLE, wintypes.UINT]
+    kernel32.TerminateProcess.restype = wintypes.BOOL
+    kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    kernel32.WaitForSingleObject.restype = wintypes.DWORD
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+
+    # PROCESS_TERMINATE | SYNCHRONIZE. SYNCHRONIZE lets us wait until it is gone.
+    handle = kernel32.OpenProcess(0x0001 | 0x00100000, False, pid)
+    if not handle:
+        # 87 ERROR_INVALID_PARAMETER: the pid already exited.
+        return ctypes.get_last_error() == 87
+    try:
+        if not kernel32.TerminateProcess(handle, 1):
+            return ctypes.get_last_error() == 87
+        kernel32.WaitForSingleObject(handle, 3000)
+        return True
+    finally:
+        kernel32.CloseHandle(handle)
+
+
 def kill_process_tree(pid: int) -> None:
-    subprocess.run(
-        ["taskkill", "/PID", str(pid), "/T", "/F"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        check=False,
-    )
+    """Force-stop ``pid`` and its descendants without WMI.
+
+    ``taskkill /T`` enumerates children through WMI. On a damaged repository
+    that call blocks for about a minute and returns without terminating the
+    target, so ``start-all.bat`` reported "did not stop within 10 seconds"
+    while the shared service was still listening.
+    """
+    if pid <= 0:
+        return
+    failed: list[int] = []
+    targets = process_tree_pids(pid) or [pid]
+    for target in targets:
+        if not _terminate_pid(target):
+            failed.append(target)
+    if failed:
+        print(
+            f"[!] Could not terminate process(es) {failed}. "
+            "The shared service may still be listening.",
+            flush=True,
+        )
+
+
+# Enumerating command lines must never use WMI. On a machine whose WMI repository
+# is damaged, `Get-CimInstance Win32_Process` does not fail -- it blocks forever,
+# which froze start-all.bat at "Checking for updates..." with no error and no log.
+# The Win32 API (Toolhelp32 + NtQueryInformationProcess) answers in milliseconds
+# and has no service dependency, so it is both faster and failure-proof here.
+_WINDOWS_PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+
+
+def process_command_lines() -> dict[int, str]:
+    """Return {pid: executable_path} for running processes without touching WMI.
+
+    Best-effort: processes that exit mid-scan are skipped, and images that are
+    unreadable (permissions, protected/system processes) come back empty.
+    """
+    if os.name != "nt":
+        return {}
+
+    import ctypes
+    from ctypes import wintypes
+
+    class PROCESSENTRY32W(ctypes.Structure):
+        _fields_ = [
+            ("dwSize", wintypes.DWORD),
+            ("cntUsage", wintypes.DWORD),
+            ("th32ProcessID", wintypes.DWORD),
+            ("th32DefaultHeapID", ctypes.POINTER(ctypes.c_ulong)),
+            ("th32ModuleID", wintypes.DWORD),
+            ("cntThreads", wintypes.DWORD),
+            ("th32ParentProcessID", wintypes.DWORD),
+            ("pcPriClassBase", ctypes.c_long),
+            ("dwFlags", wintypes.DWORD),
+            ("szExeFile", wintypes.WCHAR * 260),
+        ]
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+
+    kernel32.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+    kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    kernel32.Process32FirstW.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESSENTRY32W)]
+    kernel32.Process32FirstW.restype = wintypes.BOOL
+    kernel32.Process32NextW.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESSENTRY32W)]
+    kernel32.Process32NextW.restype = wintypes.BOOL
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+    kernel32.QueryFullProcessImageNameW.argtypes = [
+        wintypes.HANDLE,
+        wintypes.DWORD,
+        wintypes.LPWSTR,
+        ctypes.POINTER(wintypes.DWORD),
+    ]
+    kernel32.QueryFullProcessImageNameW.restype = wintypes.BOOL
+
+    def _image_path(handle, fallback: str) -> str:
+        size = wintypes.DWORD(32768)
+        buffer = ctypes.create_unicode_buffer(size.value)
+        if kernel32.QueryFullProcessImageNameW(handle, 0, buffer, ctypes.byref(size)):
+            return buffer.value
+        return fallback
+
+    result: dict[int, str] = {}
+    snapshot = kernel32.CreateToolhelp32Snapshot(_TH32CS_SNAPPROCESS, 0)
+    if snapshot == wintypes.HANDLE(-1).value or not snapshot:
+        return result
+    try:
+        entry = PROCESSENTRY32W()
+        entry.dwSize = ctypes.sizeof(PROCESSENTRY32W)
+        if not kernel32.Process32FirstW(snapshot, ctypes.byref(entry)):
+            return result
+        while True:
+            pid = int(entry.th32ProcessID)
+            if pid > 0:
+                # LIMITED_INFORMATION is enough for the image path and is granted
+                # even for processes whose full handle would be denied.
+                handle = kernel32.OpenProcess(
+                    _WINDOWS_PROCESS_QUERY_LIMITED_INFORMATION, False, pid
+                )
+                if handle:
+                    try:
+                        result[pid] = _image_path(handle, entry.szExeFile)
+                    finally:
+                        kernel32.CloseHandle(handle)
+            if not kernel32.Process32NextW(snapshot, ctypes.byref(entry)):
+                break
+    finally:
+        kernel32.CloseHandle(snapshot)
+    return result
+
+
+def process_command_line(pid: int) -> str:
+    """Return the command line of ``pid`` without touching WMI.
+
+    Returns an empty string when the process is gone or the command line is not
+    readable (protected/elevated processes).
+
+    The kernel returns a UNICODE_STRING whose Buffer points into the target
+    process. Current Windows also copies the text into the local buffer after
+    that header; ReadProcessMemory on the remote pointer fails with
+    ERROR_PARTIAL_COPY even for the calling process, so the inline copy is read
+    first. Neither path uses WMI.
+    """
+    if os.name != "nt" or pid <= 0:
+        return ""
+
+    import ctypes
+    from ctypes import wintypes
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    ntdll = ctypes.WinDLL("ntdll", use_last_error=True)
+
+    kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+    kernel32.ReadProcessMemory.argtypes = [
+        wintypes.HANDLE,
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        ctypes.c_size_t,
+        ctypes.POINTER(ctypes.c_size_t),
+    ]
+    kernel32.ReadProcessMemory.restype = wintypes.BOOL
+    ntdll.NtQueryInformationProcess.argtypes = [
+        wintypes.HANDLE,
+        ctypes.c_int,
+        ctypes.c_void_p,
+        wintypes.ULONG,
+        ctypes.POINTER(wintypes.ULONG),
+    ]
+    ntdll.NtQueryInformationProcess.restype = ctypes.c_long
+
+    process_information_command_line = 60
+    # PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ: VM_READ is required to
+    # dereference the returned Buffer, and nothing stronger is needed.
+    access = _WINDOWS_PROCESS_QUERY_LIMITED_INFORMATION | 0x0010
+    handle = kernel32.OpenProcess(access, False, pid)
+    if not handle:
+        return ""
+    try:
+        # The result is a UNICODE_STRING followed by the string data it points at.
+        # Its exact size is version-dependent, so ask the kernel for the required
+        # length first (STATUS_INFO_LENGTH_MISMATCH reports it in ReturnLength).
+        required = wintypes.ULONG()
+        ntdll.NtQueryInformationProcess(
+            handle,
+            process_information_command_line,
+            None,
+            0,
+            ctypes.byref(required),
+        )
+        size = max(int(required.value), 16)
+        block = ctypes.create_string_buffer(size)
+        written = wintypes.ULONG()
+        status = ntdll.NtQueryInformationProcess(
+            handle,
+            process_information_command_line,
+            block,
+            size,
+            ctypes.byref(written),
+        )
+        if status != 0:
+            return ""
+
+        length = ctypes.cast(block, ctypes.POINTER(wintypes.USHORT))[0]
+        pointer_offset = 8 if ctypes.sizeof(ctypes.c_void_p) == 8 else 4
+        if not length:
+            return ""
+        header_size = pointer_offset + ctypes.sizeof(ctypes.c_void_p)
+        if int(written.value) >= header_size + length:
+            inline = block.raw[header_size : header_size + length]
+            if inline and any(inline):
+                return inline.decode("utf-16le", errors="replace")
+        remote_buffer = ctypes.cast(
+            ctypes.addressof(block) + pointer_offset, ctypes.POINTER(ctypes.c_void_p)
+        )[0]
+        if not remote_buffer:
+            return ""
+
+        text = ctypes.create_unicode_buffer(length // 2 + 1)
+        read = ctypes.c_size_t()
+        if not kernel32.ReadProcessMemory(
+            handle,
+            ctypes.c_void_p(remote_buffer),
+            text,
+            length,
+            ctypes.byref(read),
+        ):
+            return ""
+        return text.value
+    finally:
+        kernel32.CloseHandle(handle)
 
 
 def kill_memory_anki_desktop_processes() -> None:
     """Stop Memory Anki desktop processes from this checkout or a sibling worktree."""
     current_pid = os.getpid()
     matches: set[int] = set()
-    ps_script = (
-        "$ErrorActionPreference='SilentlyContinue'; "
-        "Get-CimInstance Win32_Process | "
-        "Where-Object { $_.Name -in @('python.exe','node.exe','electron.exe') } | "
-        "ForEach-Object { \"$($_.ProcessId)`t$($_.CommandLine)\" }"
-    )
-    try:
-        out = subprocess.run(
-            ["powershell.exe", "-NoProfile", "-Command", ps_script],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            check=False,
-        ).stdout
-    except Exception:
-        out = ""
-
-    for line in out.splitlines():
-        if "\t" not in line:
-            continue
-        pid_text, command_line = line.split("\t", 1)
-        lower = command_line.lower()
+    for pid, image_path in process_command_lines().items():
+        lower = image_path.lower()
         is_desktop_process = (
-            "tools\\desktop_timer.py" in lower
-            or "tools/desktop_timer.py" in lower
-            or "desktop-timer\\main.cjs" in lower
-            or "desktop-timer/main.cjs" in lower
-            or "run desktop:timer" in lower
+            "desktop_timer.py" in lower
+            or "desktop-timer" in lower
+            or "desktop:timer" in lower
         )
         if not is_desktop_process:
-            continue
-        try:
-            pid = int(pid_text.strip())
-        except ValueError:
             continue
         if pid > 0 and pid != current_pid:
             matches.add(pid)

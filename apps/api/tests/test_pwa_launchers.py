@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import ast
+import inspect
 import json
+import os
 import sys
 from contextlib import nullcontext
 from pathlib import Path
@@ -174,6 +177,203 @@ def test_start_rejects_non_memory_anki_port_owner():
     start_backend.assert_not_called()
 
 
+def _code_without_docstrings(func) -> str:
+    """Source of ``func`` with its docstring removed.
+
+    The docstrings deliberately explain which WMI call used to hang here, so only
+    executable code should be searched for forbidden APIs.
+    """
+    tree = ast.parse(inspect.getsource(func))
+    node = tree.body[0]
+    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.body:
+        first = node.body[0]
+        if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant):
+            if isinstance(first.value.value, str):
+                node.body = node.body[1:] or [ast.Pass()]
+    return ast.unparse(tree)
+
+
+def test_sqlalchemy_import_does_not_wait_on_windows_wmi():
+    """SQLAlchemy calls platform.machine() at import, and that WMI query never times out.
+
+    A spinning WMI provider froze pwa_server --prepare on the service lock, so
+    start-all.bat stayed on "Checking for updates...". Importing the package
+    must take the registry fallback before any SQLAlchemy import.
+    """
+    import subprocess
+
+    script = """
+import platform
+
+class _Hang:
+    def exec_query(self, query):
+        raise SystemExit("wmi was queried: " + query)
+
+platform._wmi = _Hang()
+import memory_anki
+assert platform._wmi is None
+import sqlalchemy
+print(platform.machine())
+"""
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(ROOT / "apps" / "api" / "src")
+    env.pop("PYTHONSTARTUP", None)
+    completed = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        timeout=20,
+        env=env,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout.strip()
+    assert "wmi was queried" not in completed.stderr
+
+
+def test_pwa_server_disables_wmi_before_alembic_import():
+    import subprocess
+
+    script = """
+import os
+import sys
+from pathlib import Path
+root = Path(os.environ["MEMORY_ANKI_TEST_ROOT"])
+sys.path.insert(0, str(root / "tools"))
+sys.path.insert(0, str(root / "apps" / "api" / "src"))
+import platform
+
+class _Hang:
+    def exec_query(self, query):
+        raise SystemExit("wmi was queried: " + query)
+
+platform._wmi = _Hang()
+import pwa_server
+assert platform._wmi is None
+print("ok")
+"""
+    env = os.environ.copy()
+    env["MEMORY_ANKI_TEST_ROOT"] = str(ROOT)
+    completed = subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        timeout=20,
+        env=env,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+    assert completed.stdout.strip() == "ok"
+
+
+def test_process_lookup_never_invokes_wmi():
+    """A damaged WMI repository blocks `Get-CimInstance` forever instead of failing.
+
+    That froze start-all.bat at "Checking for updates..." with no error and no log,
+    so these paths must never shell out to WMI again.
+    """
+    import dev_server
+
+    producers = [
+        dev_server.process_command_lines,
+        dev_server.process_command_line,
+        dev_server.kill_memory_anki_desktop_processes,
+        dev_server.kill_process_tree,
+        dev_server.process_tree_pids,
+        dev_server.spawn_detached_windows_process,
+        dev_server._create_detached_process,
+        pwa_server._process_command_line,
+    ]
+    for func in producers:
+        code = _code_without_docstrings(func)
+        assert "Get-CimInstance" not in code, func.__name__
+        assert "Get-WmiObject" not in code, func.__name__
+        assert "wmic" not in code.lower(), func.__name__
+        # Shelling out would reintroduce an unbounded external wait.
+        assert "powershell" not in code.lower(), func.__name__
+        assert "subprocess" not in code, func.__name__
+
+
+def test_kill_process_tree_stops_a_descendant_without_taskkill(tmp_path: Path):
+    """taskkill /T hangs on this machine's damaged WMI repository and may not kill."""
+    import subprocess
+    import time
+
+    import dev_server
+
+    if sys.platform != "win32":
+        assert dev_server.process_tree_pids(os.getpid()) == [os.getpid()]
+        return
+
+    child_pid_file = tmp_path / "child.pid"
+    parent = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import pathlib, subprocess, sys, time\n"
+                "child = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(120)'])\n"
+                "pathlib.Path(sys.argv[1]).write_text(str(child.pid), encoding='utf-8')\n"
+                "time.sleep(120)\n"
+            ),
+            str(child_pid_file),
+        ],
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    try:
+        deadline = time.monotonic() + 10
+        while not child_pid_file.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert child_pid_file.exists(), "child pid file was not written"
+        child_pid = int(child_pid_file.read_text(encoding="utf-8"))
+        tree = dev_server.process_tree_pids(parent.pid)
+        assert child_pid in tree
+        assert tree[-1] == parent.pid
+        started = time.monotonic()
+        dev_server.kill_process_tree(parent.pid)
+        parent.wait(timeout=5)
+        assert time.monotonic() - started < 5
+        assert parent.returncode is not None
+    finally:
+        if parent.poll() is None:
+            parent.kill()
+
+
+def test_process_command_lines_is_wmi_free_and_tolerates_missing_processes():
+    import dev_server
+
+    if sys.platform != "win32":
+        assert dev_server.process_command_lines() == {}
+        return
+    # Enumerating must be fast and must not raise when processes exit mid-scan.
+    processes = dev_server.process_command_lines()
+    assert isinstance(processes, dict)
+    assert all(isinstance(pid, int) and pid > 0 for pid in processes)
+    # The current process must appear with a resolvable image path.
+    assert os.getpid() in processes
+
+
+def test_process_command_line_returns_empty_for_dead_or_invalid_pid():
+    import dev_server
+
+    assert dev_server.process_command_line(0) == ""
+    assert dev_server.process_command_line(-1) == ""
+    # A pid that cannot exist must degrade to "" rather than raise or hang.
+    assert dev_server.process_command_line(0xFFFFFFF0) == ""
+
+
+def test_process_command_line_reads_own_command_line():
+    import dev_server
+
+    if sys.platform != "win32":
+        return
+    command_line = dev_server.process_command_line(os.getpid())
+    # Either a real command line or a graceful empty read; never an exception.
+    assert isinstance(command_line, str)
+    if command_line:
+        assert "python" in command_line.lower() or "pytest" in command_line.lower()
+
+
 def test_stale_pid_file_does_not_trust_unrelated_windows_process(tmp_path):
     pid_file = tmp_path / "pwa-server.pid"
     pid_file.write_text("99", encoding="utf-8")
@@ -184,6 +384,17 @@ def test_stale_pid_file_does_not_trust_unrelated_windows_process(tmp_path):
     ):
         assert pwa_server._is_memory_anki_service_process(99) is False
         assert pwa_server._service_belongs_to_this_checkout(99) is False
+
+
+def test_process_command_line_lowercases_for_marker_matching():
+    """Callers compare lower-case markers, so the helper must lower-case."""
+    with patch.object(
+        pwa_server.dev_server, "process_command_line", return_value="PYTHON -M UVICORN"
+    ) as native:
+        result = pwa_server._process_command_line(1234)
+
+    native.assert_called_once_with(1234)
+    assert result == "python -m uvicorn"
 
 
 def test_other_memory_anki_checkout_can_be_replaced(tmp_path):

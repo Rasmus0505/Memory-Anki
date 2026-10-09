@@ -18,12 +18,22 @@ def checkpoint_sqlite_wal(
     engine: Engine = default_engine,
     *,
     require_complete: bool = False,
+    mode: str = "TRUNCATE",
 ) -> bool:
+    """Checkpoint the WAL.
+
+    ``TRUNCATE`` resets the log file and waits for every reader. That is fine
+    when nothing is studying. During review it is the wrong tool: it takes the
+    only write lock and the card the learner is looking at waits it out.
+    ``PASSIVE`` checkpoints what it can and returns immediately, which is what
+    a backup overlapping a study session must use.
+    """
     if engine.dialect.name != "sqlite":
         return False
+    checkpoint_mode = "PASSIVE" if str(mode).upper() == "PASSIVE" else "TRUNCATE"
     try:
         with engine.begin() as connection:
-            result = connection.execute(text("PRAGMA wal_checkpoint(TRUNCATE)"))
+            result = connection.execute(text(f"PRAGMA wal_checkpoint({checkpoint_mode})"))
             row = result.first()
     except Exception:
         if require_complete:
