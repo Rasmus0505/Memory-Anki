@@ -30,6 +30,7 @@ from memory_anki.modules.english.application.task_service import (
     retry_current_task,
     stream_task_events,
 )
+from memory_anki.modules.english.application.cloze_corpus import load_cloze_corpus
 from memory_anki.modules.english.domain.errors import EnglishCourseError
 from memory_anki.modules.settings.api import SettingsAiRuntimeProvider, SettingsPromptCatalog
 
@@ -206,6 +207,11 @@ def api_get_english_course_media(course_id: int, session: Session = Depends(sess
         )
     except EnglishCourseError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/english/cloze")
+def api_get_english_cloze():
+    return load_cloze_corpus()
 
 
 @router.delete("/english/courses/{course_id}")

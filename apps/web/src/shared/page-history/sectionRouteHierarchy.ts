@@ -202,6 +202,7 @@ export function describeNavigationPath(fullPath: string): string {
   if (pathname === '/knowledge' || pathname.startsWith('/knowledge/')) return '知识树编辑'
   if (pathname === '/english') return '英语总览'
   if (pathname === '/english/listening') return '听力库'
+  if (pathname === '/english/cloze') return '完形阅读'
   if (/^\/english\/listening\/courses\/\d+$/.test(pathname)) {
     return '听力课程'
   }

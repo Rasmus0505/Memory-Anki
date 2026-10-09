@@ -17,10 +17,10 @@ export const preloadFreestylePage = () => import('@/pages/today/ImmersiveFreesty
 export const preloadFreestyleSecondaryPage = () => import('@/pages/today/ImmersiveFreestyleSecondaryPage')
 export const preloadKnowledgePage = () => import('@/pages/library/KnowledgeLibraryPage')
 export const preloadExamPage = () => import('@/pages/exam/ExamWarRoomPage')
-export const preloadGrowthPage = () => import('@/pages/growth/GrowthPage')
 export const preloadProgressPage = () => import('@/pages/progress/ProgressPage')
 export const preloadEnglishWorkspacePage = () => import('@/pages/library/EnglishLibraryPage')
 export const preloadEnglishCoursePage = () => import('@/pages/library/EnglishCoursePage')
+export const preloadEnglishClozePage = () => import('@/pages/library/EnglishClozePage')
 export const preloadPalaceEditPage = () => import('@/pages/create/PalaceEditorPage')
 export const preloadPalaceQuizPage = () => import('@/pages/create/QuizWorkspacePage')
 export const preloadPalaceReviewPage = () => import('@/pages/library/PalaceReviewPage')
@@ -39,11 +39,11 @@ const PalaceShelfPage = lazyWithRetry(preloadPalaceShelfPage)
 const FreestylePage = lazyWithRetry(preloadFreestylePage)
 const FreestyleSecondaryPage = lazyWithRetry(preloadFreestyleSecondaryPage)
 const ExamPage = lazyWithRetry(preloadExamPage)
-const GrowthPage = lazyWithRetry(preloadGrowthPage)
 const ProgressPage = lazyWithRetry(preloadProgressPage)
 const FxLabPage = lazyWithRetry(() => import('@/pages/settings/FxLabPage'))
 const EnglishWorkspacePage = lazyWithRetry(preloadEnglishWorkspacePage)
 const EnglishCoursePage = lazyWithRetry(preloadEnglishCoursePage)
+const EnglishClozePage = lazyWithRetry(preloadEnglishClozePage)
 
 const PalaceEditPage = lazyWithRetry(preloadPalaceEditPage)
 const PalaceViewPage = lazyWithRetry(preloadPalaceViewPage)
@@ -106,7 +106,8 @@ function AppRouteTable({ location }: { location: Location }) {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/progress" element={<ProgressPage />} />
           <Route path="/exam" element={<ExamPage />} />
-          <Route path="/growth" element={<GrowthPage />} />
+          {/* Retired growth page: old bookmarks and remembered insight URLs land on the insight hub. */}
+          <Route path="/growth" element={<Navigate to="/dashboard" replace />} />
           <Route path="/lab/fx" element={<FxLabPage />} />
           <Route path="/freestyle" element={<FreestylePage />} />
           <Route path="/freestyle-2" element={<FreestyleSecondaryPage />} />
@@ -115,6 +116,7 @@ function AppRouteTable({ location }: { location: Location }) {
           <Route path="/palaces" element={<PalaceShelfPage />} />
           <Route path="/english" element={<Navigate to="/english/listening" replace />} />
           <Route path="/english/listening" element={<EnglishWorkspacePage />} />
+          <Route path="/english/cloze" element={<EnglishClozePage />} />
           <Route path="/english/listening/courses/:id" element={<EnglishCoursePage />} />
           <Route path="/palaces/list" element={<PalaceListPage />} />
           <Route path="/palaces/new" element={<PalaceEditPage />} />

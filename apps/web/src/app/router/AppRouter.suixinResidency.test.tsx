@@ -126,7 +126,7 @@ describe('随心 workspace residency', () => {
     renderAt('/freestyle')
     await expectActive('/freestyle')
 
-    for (const route of ['/dashboard', '/palaces', '/knowledge', '/progress', '/exam', '/growth']) {
+    for (const route of ['/dashboard', '/palaces', '/knowledge', '/progress', '/exam', '/profile']) {
       await clickGo(route)
       // The 随心 queue must survive every single navigation.
       expect(screen.getByTestId('page:/freestyle')).toBeTruthy()
@@ -162,7 +162,7 @@ describe('随心 workspace residency', () => {
     renderAt('/dashboard')
     await expectActive('/dashboard')
 
-    for (const route of ['/palaces', '/knowledge', '/progress', '/exam', '/growth']) {
+    for (const route of ['/palaces', '/knowledge', '/progress', '/exam', '/profile']) {
       await clickGo(route)
     }
 
@@ -170,6 +170,6 @@ describe('随心 workspace residency', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('page:/dashboard')).toBeNull()
     })
-    expect(screen.getByTestId('page:/growth')).toBeTruthy()
+    expect(screen.getByTestId('page:/profile')).toBeTruthy()
   })
 })

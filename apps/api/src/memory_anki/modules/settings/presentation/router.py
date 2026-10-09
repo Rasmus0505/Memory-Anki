@@ -86,6 +86,7 @@ CLIENT_PREFERENCE_GROUPS = {
     "quiz_shortcuts",
     "window_layouts",
     "growth_state",
+    "english_cloze_marks",
 }
 
 CLIENT_PREFERENCE_KEY_PREFIX = "client_preferences."

@@ -5,5 +5,6 @@
 export * from './domain/english-entity/api'
 export * from './ui/english-shell'
 export * from './ui/english-text-interactions'
+export { default as EnglishClozePage } from './ui/english/EnglishClozePage'
 export { default as EnglishCoursePage } from './ui/english/EnglishCoursePage'
 export { default as EnglishWorkspacePage } from './ui/english/EnglishWorkspacePage'

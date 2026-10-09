@@ -1,3 +1,4 @@
+import type { ClozeCorpus } from '@/modules/english/domain/english-cloze/clozeReading'
 import { API_BASE, request, uploadWithFormData } from '@/shared/api/http'
 import { logAppError } from '@/shared/logs/model/appLogs'
 import type {
@@ -337,6 +338,10 @@ export function reviewEnglishPatternSentenceApi(
       },
     },
   )
+}
+
+export function getEnglishClozeApi() {
+  return request<ClozeCorpus>('/english/cloze')
 }
 
 export function collectEnglishPatternSentenceApi(payload: EnglishPatternCollectRequest) {

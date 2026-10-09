@@ -1,13 +1,14 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import {
+  BookOpenText,
   Captions,
   Languages,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/shared/lib/utils'
 
-export type EnglishHubZone = 'hub' | 'listening'
+export type EnglishHubZone = 'hub' | 'listening' | 'cloze'
 
 const ZONE_LINKS: Array<{
   id: EnglishHubZone
@@ -17,6 +18,7 @@ const ZONE_LINKS: Array<{
   primary?: boolean
 }> = [
   { id: 'listening', label: '听力', to: '/english/listening', icon: Captions, primary: true },
+  { id: 'cloze', label: '完形', to: '/english/cloze', icon: BookOpenText },
 ]
 
 /** Sticky zone switcher for the listening workspace and course chrome. */

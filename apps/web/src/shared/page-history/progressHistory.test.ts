@@ -45,7 +45,7 @@ describe('progress navigation history', () => {
 
   it('keeps insight history separate when entering progress', () => {
     const initial = createSectionNavigationHistoryState(
-      { key: 'growth', fullPath: '/growth' }, 'review',
+      { key: 'exam', fullPath: '/exam' }, 'review',
     )
     const state = applySectionNavigationTransition(
       initial, { key: 'progress', fullPath: '/progress' }, 'progress', 'PUSH',

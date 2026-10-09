@@ -17,7 +17,7 @@ const appRoutesSource = readFileSync(
 )
 
 /** JSX 路由表中的重定向占位路由，不要求在 manifest 登记。 */
-const REDIRECT_ONLY_JSX_PATHS = new Set(['/palaces/quiz', '/today'])
+const REDIRECT_ONLY_JSX_PATHS = new Set(['/palaces/quiz', '/today', '/growth'])
 /** manifest 中不出现在 <Routes> 里的路径（/timer-overlay 在 App.tsx 硬分支）。 */
 const NON_JSX_MANIFEST_PATHS = new Set(['/timer-overlay'])
 /** dev-only 路由不参与对账。 */
@@ -64,7 +64,6 @@ describe('routeManifest 行为快照（与统一前的四处实现对拍）', ()
     ['/', 'review', 'dashboard', 'route:/'],
     ['/dashboard', 'review', 'dashboard', 'dashboard'],
     ['/progress', 'progress', 'progress', 'progress'],
-    ['/growth', 'review', 'dashboard', 'growth'],
     ['/freestyle', 'freestyle', 'freestyle', 'freestyle'],
     ['/freestyle-2', 'freestyleSecondary', 'freestyleSecondary', 'freestyle-secondary'],
     ['/palaces', 'palaces', 'palaces', 'palace:shelf'],
@@ -75,6 +74,7 @@ describe('routeManifest 行为快照（与统一前的四处实现对拍）', ()
     ['/knowledge/chapter/9', 'palaces', 'knowledge', 'route:/knowledge/chapter/9'],
     ['/english', 'english', 'english', 'english:hub'],
     ['/english/listening', 'english', 'english', 'english:listening'],
+    ['/english/cloze', 'english', 'english', 'english:cloze'],
     ['/palaces/42', 'palaces', 'palaces', 'palace:view:42'],
     ['/palaces/42/edit', 'knowledge', 'palaces', 'palace:edit:42'],
     ['/palaces/42/review', 'palaces', 'palaces', 'palace:review:42'],
@@ -110,6 +110,13 @@ describe('routeManifest 行为快照（与统一前的四处实现对拍）', ()
     expect(resolveRouteFallbackTarget('/review/session/9')).toBe('/freestyle')
     expect(resolveRouteFallbackTarget('/review/completed/4')).toBe('/freestyle')
     expect(resolveNavSection('/review')).toBeNull()
+  })
+
+  it('does not register the retired /growth page in the manifest', () => {
+    expect(resolveRouteFallbackTarget('/growth')).toBe('/freestyle')
+    expect(resolveRouteFallbackTarget('/growth/starmap')).toBe('/freestyle')
+    expect(resolveNavSection('/growth')).toBeNull()
+    expect(EXACT_ROUTES.some((entry) => entry.path === '/growth')).toBe(false)
   })
 
   it('does not register the retired /today workspace in the manifest', () => {
