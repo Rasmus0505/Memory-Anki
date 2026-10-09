@@ -28,12 +28,14 @@ Automatic, manual, and shutdown snapshots are database-only (`rolling`). Rescue 
 
 Database and file-backed writers serialize on the shared runtime storage lock (`core.runtime_storage_lock`, surfaced on disk as `日志缓存/runtime-storage.lock`). SQLAlchemy acquires it on `before_flush` and holds it until the outermost transaction ends.
 
-A snapshot must **not** hold that lock for its bulk copy. `write_storage_backup` therefore runs in two phases:
+A snapshot must **not** hold that lock at all. `write_storage_backup` therefore runs in two unlocked phases:
 
-1. **Locked, fast** — `_snapshot_databases_under_lock` captures the database via `sqlite3` online backup (a consistent, streaming snapshot).
-2. **Unlocked, slow** — every remaining item (media, attachments, exports) is copied with the lock released, so live autosave and review writes keep committing.
+1. **Database snapshot** — `_snapshot_databases` captures the database via `sqlite3` online backup in page steps. The backup API already copies committed pages while other connections write, so the study lock is not taken.
+2. **Remaining items** — media, attachments, and exports are copied the same way, with the lock released, so live autosave and review writes keep committing.
 
-Regression context: the whole rolling backup used to run inside `storage_write_lock`. On this product's ~200 MB database hosted on a synced drive, one rolling copy held the lock for ~9 minutes, and every foreground write during that window failed with `TimeoutError: timed out acquiring runtime storage thread lock` — surfacing to users as `PUT /api/v1/palaces/{id}/editor -> 500` and "自动保存暂时失败". `test_bulk_backup_copy_runs_outside_the_runtime_write_lock` pins the two-phase ordering.
+The only backup path that still takes the lock is the rare raw-file fallback after an online snapshot fails. A raw copy of a live database can tear; the healthy path must not pay that cost.
+
+Regression context: the whole rolling backup used to run inside `storage_write_lock`, and a later narrowing still held the lock for the database snapshot. On this product's ~200 MB database hosted on a synced drive, that snapshot lasted minutes, not milliseconds. Foreground writes waited out `_WAIT_SECONDS` and returned 503 (`storage_busy`), including overlay-quiz progress saves. `test_bulk_backup_copy_runs_outside_the_runtime_write_lock` pins that neither phase holds the lock.
 
 Contention is reported as a **retryable** condition, not an internal error: `StorageBusyError` (a `TimeoutError` subclass) is translated by the app error handlers into `503` with a `Retry-After` header and `code: storage_busy`. Foreground writes wait `_WAIT_SECONDS`; background jobs may pass a longer `wait_seconds`.
 

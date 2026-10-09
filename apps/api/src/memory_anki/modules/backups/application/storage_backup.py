@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import shutil
 import sqlite3
 import tempfile
@@ -24,7 +25,12 @@ from memory_anki.core.storage_layout import (
     load_storage_layout,
     validate_relative_storage_path,
 )
-from memory_anki.infrastructure.db.maintenance import checkpoint_sqlite_wal
+from memory_anki.infrastructure.db.maintenance import (
+    DatabaseMaintenanceError,
+    checkpoint_sqlite_wal,
+)
+
+logger = logging.getLogger(__name__)
 
 BACKUP_MANIFEST_NAME = "manifest.json"
 BACKUP_MANIFEST_VERSION = 3
@@ -64,12 +70,24 @@ def _database_backup_info() -> dict[str, Any]:
     }
 
 
+# One backup() of every page holds a source read transaction for the whole
+# copy. On this product's ~200 MB database that is minutes, and wrapping it in
+# the study lock made every progress save wait 15s and return 503. Small steps
+# release that read lock between batches so writers and WAL checkpoints proceed.
+_ONLINE_BACKUP_PAGES = 128
+_ONLINE_BACKUP_SLEEP_SECONDS = 0.01
+
+
 def _sqlite_online_backup(source: Path, target: Path) -> bool:
     """Snapshot a healthy database. Return False when only raw bytes were copied.
 
     A consistent online backup already includes WAL frames, so callers must not
     attach the live sidecars. A corrupt source cannot be snapshotted; copy the
     main file and let the caller keep its sidecars for rescue.
+
+    The online path does not take the study lock. SQLite's backup API already
+    copies committed pages while other connections write. Only the rare raw
+    fallback, which can tear a live file, takes the lock, and only for that copy.
     """
     target.parent.mkdir(parents=True, exist_ok=True)
     if not source.exists():
@@ -79,7 +97,11 @@ def _sqlite_online_backup(source: Path, target: Path) -> bool:
     try:
         source_conn = sqlite3.connect(source.resolve().as_uri() + "?mode=ro", uri=True)
         target_conn = sqlite3.connect(str(target))
-        source_conn.backup(target_conn)
+        source_conn.backup(
+            target_conn,
+            pages=_ONLINE_BACKUP_PAGES,
+            sleep=_ONLINE_BACKUP_SLEEP_SECONDS,
+        )
         result = target_conn.execute("PRAGMA quick_check").fetchone()
         if result != ("ok",):
             raise sqlite3.DatabaseError(f"invalid SQLite snapshot: {result}")
@@ -93,7 +115,8 @@ def _sqlite_online_backup(source: Path, target: Path) -> bool:
             source_conn = None
         if target.exists():
             target.unlink()
-        shutil.copy2(source, target)
+        with storage_write_lock(APP_HOME):
+            shutil.copy2(source, target)
         return False
     finally:
         if target_conn is not None:
@@ -197,19 +220,18 @@ def create_storage_backup_manifest(
     }
 
 
-def _snapshot_databases_under_lock(stage: Path, items: list[ManagedStorageItem]) -> dict[str, dict[str, Any]]:
-    """Capture DB (and sidecar) bytes while holding the shared runtime lock.
+def _snapshot_databases(stage: Path, items: list[ManagedStorageItem]) -> dict[str, dict[str, Any]]:
+    """Capture a consistent database snapshot without the study lock.
 
-    This is the only part of a backup that must be mutually exclusive with live
-    writes. It is a fast, streaming ``sqlite3`` online backup — not a file copy —
-    so the lock is released in milliseconds-to-seconds instead of the minutes a
-    bulk ``shutil`` copy of hundreds of MB over a synced drive would take.
+    SQLite's online backup API copies committed pages and yields between steps,
+    so writers keep committing. The previous wrapper held ``storage_write_lock``
+    for the whole copy. On a ~200 MB database sitting on a synced drive that
+    lasted minutes, and every study write waited 15s then returned 503.
     """
     captured: dict[str, dict[str, Any]] = {}
-    with storage_write_lock(APP_HOME):
-        for item in items:
-            if item.key == "database":
-                captured[item.key] = _copy_item_to_backup(item, stage)
+    for item in items:
+        if item.key == "database":
+            captured[item.key] = _copy_item_to_backup(item, stage)
     return captured
 
 
@@ -217,7 +239,14 @@ def write_storage_backup(
     destination_root: Path, *, reason: str, full: bool = True, scope: str | None = None
 ) -> dict[str, Any]:
     ensure_runtime_dirs()
-    checkpoint_sqlite_wal(require_complete=True)
+    # The copy below is an online backup, so it is already consistent. A
+    # TRUNCATE checkpoint here used to run outside the study lock and freeze
+    # every rating for as long as the synced database took to reset its log.
+    # PASSIVE never waits on a reader, and a busy log must not fail the backup.
+    try:
+        checkpoint_sqlite_wal(mode="PASSIVE")
+    except DatabaseMaintenanceError:
+        logger.warning("Skipping WAL checkpoint; online backup does not need it", exc_info=True)
     destination_root = Path(destination_root)
     items = _select_backup_items(full=full, scope=scope)
     if destination_root.exists() and any(destination_root.iterdir()):
@@ -225,11 +254,10 @@ def write_storage_backup(
     destination_root.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".backup-stage-", dir=destination_root.parent) as stage_dir:
         stage = Path(stage_dir)
-        # Phase 1 (locked, fast): consistent database snapshot.
-        captured = _snapshot_databases_under_lock(stage, items)
-        # Phase 2 (unlocked, slow): copy remaining files/media. Live writers are
-        # free to commit while this runs, which is what previously turned a
-        # 9-minute rolling copy into a wall of 500s for autosave and review.
+        # Phase 1: consistent database snapshot. Online backup does not take the
+        # study lock, so a progress save can commit while the copy is still running.
+        captured = _snapshot_databases(stage, items)
+        # Phase 2: copy remaining files/media, also without the study lock.
         included_items = [
             captured[item.key] if item.key in captured else _copy_item_to_backup(item, stage)
             for item in items
