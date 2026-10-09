@@ -10,7 +10,7 @@ import {
 } from '@/modules/session/domain/session-entity/model'
 import type { TimeRecordKind } from '@/modules/session/domain/study-session-entity/api'
 import type { TimeRecordFilterState } from '@/modules/session/ui/time-records/model/time-record-filter'
-import { formatTableDateTime } from '@/modules/session/ui/time-records/model/time-record-form'
+import { displayTimeRecordTitle, formatTableDateTime } from '@/modules/session/ui/time-records/model/time-record-form'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
@@ -288,7 +288,7 @@ export function TimeRecordsTable({
                       <td className="px-3 py-2 align-top"><input aria-label={`选择记录 ${record.title}`} type="checkbox" checked={selectedRecordIds.includes(record.id)} disabled={isBulkDeleting || isDeleting} onChange={(event) => onToggleRecordSelection(record.id, event.target.checked)} /></td>
                       <td className="px-3 py-2">
                         <div className="min-w-[180px] max-w-[320px]">
-                          <div className="font-medium text-foreground">{record.title}</div>
+                          <div className="font-medium text-foreground">{displayTimeRecordTitle(record)}</div>
                           <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                             <span>来源：{formatSessionSource(record)}</span>
                             {record.importedFrom ? (

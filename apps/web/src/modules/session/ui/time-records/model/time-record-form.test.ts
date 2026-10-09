@@ -7,6 +7,7 @@ import {
   buildTimeRecordQuickAddFormState,
   calculateEndedAtFromEffectiveMinutes,
   formatEffectiveSecondsAsMinutes,
+  displayTimeRecordTitle,
   formatTableDateTime,
   formatTableTime,
   parseEffectiveMinutesToSeconds,
@@ -158,5 +159,22 @@ describe('time-record-form', () => {
     expect(parsed.value.activityTag).toBe('tag_paper')
     expect(parsed.value.activityTagLabel).toBe('论文')
     expect(parsed.value.durationEdited).toBe(true)
+  })
+
+  it('shows the place instead of the old clock title, and keeps a renamed title', () => {
+    expect(displayTimeRecordTitle({
+      title: '09:12 学习时段',
+      attribution: {
+        subjectName: '中国教育史',
+        chapterName: '第一节',
+        unitLabel: '夸美纽斯宫殿',
+        scene: 'freestyle',
+        behavior: 'flip',
+      },
+    })).toBe('中国教育史-第一节-夸美纽斯宫殿-随心-翻卡')
+    expect(displayTimeRecordTitle({
+      title: '昨晚补记',
+      attribution: { subjectName: '中国教育史', scene: 'freestyle', behavior: 'flip' },
+    })).toBe('昨晚补记')
   })
 })

@@ -177,6 +177,7 @@ export function publishPalaceKnowledgeBindings(
         subjectName,
         chapterId,
         chapterName,
+        palaceName: palace.resolved_title || palace.title || null,
       })
     }
     for (const group of subject.chapter_groups) {

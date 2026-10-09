@@ -45,8 +45,9 @@ export function setPalaceKnowledgeBinding(
     subjectName: clean(binding.subjectName),
     chapterId: normalize(binding.chapterId),
     chapterName: clean(binding.chapterName),
+    palaceName: clean(binding.palaceName),
   }
-  if (!next.subjectId && !next.chapterId && !next.subjectName && !next.chapterName) {
+  if (!next.subjectId && !next.chapterId && !next.subjectName && !next.chapterName && !next.palaceName) {
     if (bindings.delete(id)) notify()
     return
   }
@@ -56,7 +57,8 @@ export function setPalaceKnowledgeBinding(
     previous.subjectId === next.subjectId &&
     previous.subjectName === next.subjectName &&
     previous.chapterId === next.chapterId &&
-    previous.chapterName === next.chapterName
+    previous.chapterName === next.chapterName &&
+    previous.palaceName === next.palaceName
   ) {
     return
   }

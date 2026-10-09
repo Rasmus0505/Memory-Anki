@@ -50,6 +50,11 @@ def test_offset_accepts_common_spellings(zone_env, value):
     assert resolve_local_timezone().utcoffset(None) == timedelta(hours=8)
 
 
+def test_unset_zone_uses_beijing_time(zone_env):
+    zone_env(None)
+    assert resolve_local_timezone().utcoffset(None) == timedelta(hours=8)
+
+
 def test_invalid_zone_falls_back_instead_of_raising(zone_env):
     zone_env("Not/AZone")
     # Must not raise: a bad override cannot be allowed to break time recording.

@@ -61,6 +61,35 @@ export function formatLocalApiDateTime(value: Date) {
   return `${year}-${month}-${day}T${hour}:${minute}:${second}.${milliseconds}`
 }
 
+const BEIJING_TIME_ZONE = 'Asia/Shanghai'
+
+/**
+ * Clock and calendar the learner actually lived. Both devices must show this
+ * zone even if one Windows install is left on UTC.
+ */
+export function formatBeijingDateTime(value: Date): string {
+  if (Number.isNaN(value.getTime())) return ''
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: BEIJING_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(value)
+  const read = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? ''
+  const year = read('year')
+  const month = read('month')
+  const day = read('day')
+  const hour = read('hour')
+  const minute = read('minute')
+  const second = read('second')
+  if (!year || !month || !day || !hour || !minute || !second) return ''
+  return `${year}/${month}/${day} ${hour}:${minute}:${second}`
+}
+
 export function formatLocalDateKey(value: Date): string {
   const year = value.getFullYear()
   const month = `${value.getMonth() + 1}`.padStart(2, '0')

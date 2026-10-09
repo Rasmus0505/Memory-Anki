@@ -113,8 +113,8 @@ def resolve_local_timezone() -> tzinfo:
     UTC-aware ledger path. One explicit zone keeps day bucketing deterministic.
 
     ``MEMORY_ANKI_LOCAL_TZ`` accepts an IANA name (``Asia/Shanghai``), a fixed
-    offset (``UTC``, ``+08:00``), or a Windows zone id, so a headless server can
-    pin the calendar without changing the machine's own timezone setting.
+    offset (``UTC``, ``+08:00``), or a Windows zone id. When it is unset, the
+    calendar is Beijing time (UTC+8), not the process OS zone.
     """
     configured = os.environ.get(LOCAL_TZ_ENV, "").strip()
     if configured:
@@ -122,12 +122,14 @@ def resolve_local_timezone() -> tzinfo:
         if resolved is not None:
             return resolved
         logger.warning(
-            "Ignoring invalid %s=%r; falling back to the OS local timezone.",
+            "Ignoring invalid %s=%r; falling back to Beijing time.",
             LOCAL_TZ_ENV,
             configured,
         )
-    # astimezone() with no argument returns the host zone on aware datetimes.
-    return datetime.now().astimezone().tzinfo or UTC
+    # This product's two devices share one lived calendar: Beijing time.
+    # Falling back to the process OS zone made the same evening land on
+    # different days when one machine was left on UTC.
+    return timezone(timedelta(hours=8))
 
 
 def _parse_configured_zone(value: str) -> tzinfo | None:

@@ -3,7 +3,9 @@ import type {
   SessionKind,
   TimeSessionRecord,
 } from '@/modules/session/domain/session-entity/model/session-records'
+import { formatAttributionLabel } from '@/modules/session/domain/session-entity/model/timeRecordAttribution'
 import {
+  formatBeijingDateTime,
   formatLocalDateTimeInputFromDate,
   formatLocalDateTimeInputValue,
   formatUtcApiDateTime,
@@ -138,11 +140,17 @@ export function formatTableTime(dateString: string) {
 }
 
 export function formatTableDateTime(dateString: string) {
-  const date = parseApiDateTime(dateString)
-  const ymd = formatLocalYmd(date)
-  const clock = formatLocalH23Clock(date)
-  if (!ymd || !clock) return ''
-  return `${ymd} ${clock}`
+  return formatBeijingDateTime(parseApiDateTime(dateString))
+}
+
+const CLOCK_BLOB_TITLE = /^\d{2}:\d{2}\s*学习时段$/
+
+/** Prefer 学科-章节-宫殿-做法 over the old clock blob, but keep a renamed title. */
+export function displayTimeRecordTitle(record: Pick<TimeSessionRecord, 'title' | 'attribution'>) {
+  const label = formatAttributionLabel(record.attribution)
+  const title = record.title?.trim() || ''
+  if (label && (!title || CLOCK_BLOB_TITLE.test(title) || title === '学习')) return label
+  return title || label || '学习'
 }
 
 export function buildTimeRecordFormState(

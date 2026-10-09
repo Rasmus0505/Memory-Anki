@@ -80,6 +80,7 @@ export interface PalaceKnowledgeBinding {
   subjectName: string | null
   chapterId: number | null
   chapterName: string | null
+  palaceName?: string | null
 }
 
 function clean(value: unknown, limit = 200): string | null {
@@ -207,7 +208,7 @@ export function buildSurfaceAttribution(input: {
       behavior: input.behavior ?? null,
       palaceId: input.palaceId ?? null,
       palaceSegmentId: input.palaceSegmentId ?? null,
-      unitLabel: input.unitLabel ?? null,
+      unitLabel: input.unitLabel ?? input.binding?.palaceName ?? null,
     },
     input.binding
       ? {
@@ -215,6 +216,7 @@ export function buildSurfaceAttribution(input: {
           subjectName: input.binding.subjectName,
           chapterId: input.binding.chapterId,
           chapterName: input.binding.chapterName,
+          unitLabel: input.binding.palaceName,
         }
       : null,
   )

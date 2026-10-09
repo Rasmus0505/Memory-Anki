@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 from dataclasses import dataclass
@@ -149,8 +149,7 @@ def _local_calendar_date_expr(column, tz: tzinfo | None = None):
     """Project a stored UTC-naive column onto the resolved local calendar day.
 
     Replaces SQLite's ``'localtime'`` modifier, which follows the server process
-    OS timezone and therefore disagreed with ``split_interval_local_days`` (which
-    resolves the zone in Python) whenever the two differed.
+    OS timezone. Day splits must use the same Beijing calendar as this expression.
     """
     zone = tz or resolve_local_timezone()
     return func.date(
@@ -391,7 +390,7 @@ def _client_source(summary_json: str | None) -> str:
 
 def _to_local_date(value: datetime) -> date:
     aware = value if value.tzinfo is not None else value.replace(tzinfo=UTC)
-    return aware.astimezone().date()
+    return aware.astimezone(resolve_local_timezone()).date()
 
 
 def split_interval_local_days(
@@ -400,7 +399,7 @@ def split_interval_local_days(
     tz: timezone | None = None,
 ) -> list[tuple[str, int]]:
     """Split one interval on local midnights, not UTC midnights."""
-    zone = tz or datetime.now().astimezone().tzinfo or UTC
+    zone = tz or resolve_local_timezone()
     cursor = start.astimezone(zone) if start.tzinfo else start.replace(tzinfo=UTC).astimezone(zone)
     end_local = end.astimezone(zone) if end.tzinfo else end.replace(tzinfo=UTC).astimezone(zone)
     pieces: list[tuple[str, int]] = []
