@@ -492,7 +492,7 @@ describe('AppShell', () => {
     expect(screen.queryByRole('button', { name: '去做题' })).toBeNull()
   })
 
-  it('shows the global recorder stop control only while recording', async () => {
+  it('keeps the global recorder button as 录制', async () => {
     getRuntimeInfoApi.mockResolvedValue({
       channel: 'stable',
       commit: 'abcdef1234567890',
@@ -516,7 +516,8 @@ describe('AppShell', () => {
     const launch = screen.getByRole('button', { name: '录制' })
     expect(launch.closest('[data-session-recorder-hud="true"]')?.className).toContain('z-[20000]')
     act(() => startSessionRecording())
-    expect(screen.getByRole('button', { name: '停止' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '录制' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '停止' })).toBeNull()
   })
 
   it('flushes mind-map host pages to the window edge', async () => {

@@ -25,7 +25,7 @@ Memory Anki 是一个自用的本地学习产品，核心是“记忆宫殿 + �
 | 随心模式 `freestyle` | 面向当天训练的沉浸刷卡流；默认入口 `/freestyle`；另有可从 HUD 切换进入的 `/freestyle-2` |
 | 学习会话 `session` | 宫殿练习、分段、迷你宫殿、复习等会话进度 |
 | 仪表盘 `dashboard` | 今日复习、近期状态、时长统计 |
-| 成长 `progression` | 经验/等级、每日委托、印章册、知识星图、反馈皮肤衣柜（只读投影，`/growth`） |
+| 成长 `progression` | 经验/等级、每日委托、印章与主题包解锁（只读投影）。`/growth` 星图页已删除，旧地址转到 `/dashboard` |
 | 反馈导演 `shared/fx` | 统一动效运行时：`cue()` → 配方 → 粒子/声音/触觉/DOM，owner 作用域取消，`/lab/fx` 实验室 |
 | 主题包 `shared/theme` | 整世界主题（色板、卡面材质、环境浮尘、粒子皮肤、合成音色、节奏），随成长解锁 |
 | PWA `pwa` | 通过 Tailscale 访问完整桌面端前端，默认进入 `/freestyle` |

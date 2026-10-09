@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react'
-import { Link } from 'react-router-dom'
 import { FX_ANCHORS, cue, fxAnchor } from '@/shared/fx'
 import { cn } from '@/shared/lib/utils'
 import { useLiveGrowthToasts } from '../model/useGrowthCeremony'
@@ -26,8 +25,7 @@ export function GrowthHudChip({ className }: { className?: string }) {
   const daily = data.quests.filter((quest) => quest.scope === 'daily')
   const done = daily.filter((quest) => quest.done).length
   return (
-    <Link
-      to="/growth"
+    <span
       data-testid="growth-hud-chip"
       aria-label={`等级 ${data.level.level}，今日委托 ${done}/${daily.length}`}
       className={cn('freestyle-stage-glass inline-flex h-7 items-center gap-1.5 rounded-full border border-stage-line-strong pl-0.5 pr-2.5 text-[11px] font-semibold text-stage-ink', className)}
@@ -50,6 +48,6 @@ export function GrowthHudChip({ className }: { className?: string }) {
         <span className="relative text-[10px] font-black tabular-nums">{data.level.level}</span>
       </span>
       <span className="tabular-nums">委托 {done}/{daily.length}</span>
-    </Link>
+    </span>
   )
 }

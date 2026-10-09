@@ -5,7 +5,7 @@ A theme pack re-dresses the entire app: surface tokens (light + dark), stage and
 ```text
 shared/theme/packs/<id>.ts   one manifest per world (ThemePack)
 shared/theme/themePacks.ts   registry: THEME_PACKS, applyThemePack, themeMotion, themeAmbient, onThemePackChange
-modules/progression          unlock ladder (level / stamp), wardrobe, round-end unboxing, growth_state.pack
+modules/progression          unlock ladder (level / stamp), round-end unboxing, growth_state.pack
 app/shell                    useGrowthCosmetics(): applyThemePack + setFxSkin (the only place both are bound)
 ```
 

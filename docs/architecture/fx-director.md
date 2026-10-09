@@ -22,7 +22,7 @@ caller ──cue('grade.commit', payload, { owner })──▶ director ──▶
 | `skins.ts` | Particle palettes (`ink` default, `foil`, `galaxy`, `firefly`). Recipes read the live `pal` at emit time; `setFxSkin` swaps it in place. Warm hues only. The active theme pack picks the palette (see `theme-packs.md`). |
 | `conductor.ts` | Variety inside one cue. `grade.commit` rotates `paper` / `ink` / `leaf` / `mote` and never repeats the same look back to back. The grade itself has no expanding ring. |
 | `rarity.ts` | Pure rare-show roll: ~1/45 per eligible rating, ramp from 55, guaranteed at 80, never after 忘记, never the same show twice in a row. Counter is per device. |
-| `glowLayer.ts` | Retained-mode glow canvas (same renderer, non-aging points) used by the starmap. |
+| `glowLayer.ts` | Retained-mode glow canvas (same renderer, non-aging points). The starmap was its only caller and is gone with `/growth`; the helper stays exported. |
 
 ## Rules
 

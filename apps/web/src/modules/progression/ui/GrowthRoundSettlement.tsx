@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { FX_ANCHORS, fxAnchor, resolveFxGate } from '@/shared/fx'
 import type { ThemePack } from '@/shared/theme/themePacks'
 import { updateGrowthState, useGrowthState } from '../model/growthStateStore'
@@ -83,9 +82,6 @@ export function GrowthRoundSettlement({ roundKey }: { roundKey: string }) {
         ))}
       </div>
       {view.unboxPack ? <UnboxedPack pack={view.unboxPack} /> : null}
-      <Link to="/growth" className="mt-2 inline-block text-xs text-stage-glow hover:underline">
-        看星图与印章册 →
-      </Link>
     </div>
   )
 }

@@ -22,7 +22,6 @@ const SAMPLE_PATHS = [
   '/dashboard',
   '/progress',
   '/progress/unknown',
-  '/growth',
   '/freestyle?palaceId=9',
   '/profile',
   '/profile/backups',
@@ -36,14 +35,14 @@ describe('navSections ↔ navigationSection sync', () => {
     }
   })
 
-  it('exposes progress separately from the existing insight and growth section', () => {
+  it('exposes progress separately from the insight section', () => {
     expect(navSections.find((section) => section.to === '/progress')).toMatchObject({
       key: 'progress', label: '进度', rememberLastVisited: true,
     })
     expect(navSections.filter((section) => section.matches('/progress')).map((section) => section.key))
       .toEqual(['progress'])
     expect(resolveNavigationSection('/dashboard')).toBe('review')
-    expect(resolveNavigationSection('/growth')).toBe('review')
+    expect(resolveNavigationSection('/growth')).toBeNull()
   })
 
   it('keeps section home paths aligned with navSections[].to', () => {

@@ -1,7 +1,7 @@
 {
   "name": "progression",
   "owns": [
-    "growth view: level, XP breakdown, quests, stamp book, knowledge starmap, wardrobe",
+    "freestyle growth chip and round-end settlement",
     "ceremony bookkeeping (growth_state client preference)"
   ],
   "forbids": [
@@ -19,7 +19,6 @@
     "level-up and big stamp ceremonies play only at round end; mid-round shows corner stamps only"
   ],
   "requiredTests": [
-    "ceremony.test.ts",
-    "starmapLayout.test.ts"
+    "ceremony.test.ts"
   ]
 }
