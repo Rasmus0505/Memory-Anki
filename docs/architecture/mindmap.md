@@ -21,10 +21,11 @@
 ## 大图导航（canvas 本地）
 
 - 通用画布支持分支折叠：节点右侧折叠按钮（单击展开/折叠本层；双击展开该节点下整棵子树）、工具栏「适应整树 / 适应当前分支 / 展开本支整树 / 展开全部 / 折叠深层」。「刷新脑图」仍会重建宿主并 fit。
+- 双击进编辑由卡片捕获阶段统一认领（`useCardEditGesture`），不依赖浏览器是否在黄底、富文本或 `user-select: none` 上发出 `dblclick`。第二次点击若被浏览器打到卡片外面、但仍落在该卡盒子里，窗口捕获监听补上进编辑，避免只剩右下角空白能点。折叠按钮、角标和工具栏不进编辑。黄底保留，光标落在双击处。英文可编辑卡的查词会让过双击窗口，只读复习查词仍立即发生。
 - 折叠状态不写回 editor_doc，仅 canvas 本地；节点数 >= 36 时默认折叠 depth>=1 的有子节点分支；practiceModeActive（复习/练习）强制全展开。
 - 视口 minZoom 降到 0.12 支持鸟瞰；中大图开启 React Flow onlyRenderVisibleElements。
 - 手机策略：`map` / `auto` 允许单指拖移；只有显式 `guided` 才把单指让给父级滚动。随心复习卡使用 `auto`：窄屏只读仍用更紧的 fit/zoom，但画布保持可拖；翻卡走 pager，不靠在图上单指滑动。
-- 鼠标滚轮平移（`panOnScroll`）必须记入受控相机。React Flow 会在 `move-start` 之前上报 viewport；preserve 模式不得把这次上报当成漂移丢掉，否则滚轮会弹回原位、滑不动。
+- 鼠标滚轮平移（`panOnScroll`）必须记入受控相机。React Flow 会在 `move-start` 之前上报 viewport；preserve 模式不得把这次上报当成漂移丢掉，否则滚轮会弹回原位、滑不动。编辑卡上的 `nopan` / `nowheel` 只拦住拖拽，不得吃掉滚轮平移；滚轮仍按与空白处相同的距离挪整张图，松手即停，Ctrl 才缩放。
 - Enter reveal follow：随心复习按 Enter 翻出的卡若被画面裁切，画布只做最小平移，把这一步里裁切最多的那张完整推进视野并留边距，保持当前缩放，约 200ms，连按打断上一次动画跟上最新一步。鼠标点卡、Shift 收回和 A/S 批量翻卡不挪视野。
 - **不做** MiniMap、搜索跳转、大纲双栏（宿主可另组）。
 
@@ -36,6 +37,12 @@
 - **含活导图的卡必须退出 `.fs-depth` 的滚动联动变换。** `styles/freestyle-stage.css` 的深度堆叠用 `animation-timeline: view()` 在滚动时平移+缩放整个 `.fs-depth` 子树；导图在里面等于每一滚动帧重合成、重光栅化整棵画布（上千 DOM 节点加一层 SVG 连线）。因此 `:has(.memory-anki-mindmap-frame)` 的卡关闭 travel/veil/shadow 动画（原生全屏本来就是例外）。相邻卡仍按 `.fs-page` 的绘制顺序互相盖过，只去掉被覆盖卡的位移与压暗。
 
 回归守卫：`tools/check_architecture.py::check_mindmap_layout_hot_path`。
+
+## 画布就是这一页
+
+导图不是叠在另一张纸上的卡片。`memory-anki-mindmap-frame` 默认铺满宿主：无圆角、无投影、背景只用 `--memory-anki-mindmap-canvas`。标题、工具条、评分条浮在画布上，不得为它们在画布外留一条异色底（随心复习曾经用 `pb-[6.75rem]` 把评分条的位置留成米色纸；复习面板曾经用 `h-[64vh]` 把剩下的视口留成桌面）。对话框里的版本预览要卡片感时显式加 `is-inset`，页面宿主不要加。
+
+回归守卫：`tools/check_architecture.py::check_mindmap_surface_fill`。
 
 ## 展示策略
 

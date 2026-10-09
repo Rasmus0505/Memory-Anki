@@ -39,6 +39,25 @@
   word-break: normal;
 }
 
+/*
+ * Highlight spans paint a background. Chrome then drops dblclick on that text
+ * unless selection is blocked on the span itself, not only the parent.
+ * English / text-select modes override this below.
+ */
+.mindmap-node-text.select-none,
+.mindmap-node-text.select-none * {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+[data-english-mode='true'] .mindmap-node-text,
+[data-english-mode='true'] .mindmap-node-text *,
+[data-text-mode='true'] .mindmap-node-text,
+[data-text-mode='true'] .mindmap-node-text * {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 /* Shared card typography: identical in display / edit / english / text / concealed. */
 .mindmap-node-type {
   font-family: var(--font-sans);

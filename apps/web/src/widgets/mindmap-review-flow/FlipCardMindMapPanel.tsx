@@ -641,8 +641,9 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
         onReady={handleSurfaceReady}
         onReadyTimeout={handleSurfaceReadyTimeout}
         className={cn(
-          'w-full rounded-lg border border-border/70 bg-zinc-50',
-          fullscreen || compactChrome ? 'min-h-0 flex-1' : 'h-[64vh]',
+          // Fill the host. A fixed 64vh card leaves the page color showing
+          // under the map — the sheet this surface is not allowed to paint.
+          'h-full min-h-0 w-full flex-1',
           surfaceClassName,
         )}
       />

@@ -39,12 +39,15 @@ import {
   getElementFeedbackPoint,
   getMouseFeedbackPoint,
   placeContentEditableCaret,
+  plainTextOffsetFromPoint,
   buildNodeCardContainerClassNames,
   buildNodeCardTextClassNames,
   resolveNodeRawText,
   type EditSnapshot,
   type NodeCardData,
 } from './nodeCardModel'
+import { noteCardEditStarted } from './cardEditGesture'
+import { useCardEditGesture } from './useCardEditGesture'
 import { useNodeCardLongPress } from './useNodeCardLongPress'
 
 function MindMapNodeCard({ data, id }: NodeProps) {
@@ -118,6 +121,8 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   const lastEditGestureAtRef = useRef(0)
   /** True between optimistic startEdit and parent `editing=true` confirmation. */
   const optimisticEditPendingRef = useRef(false)
+  /** Plain-text offset under the double-click, applied once the editor mounts. */
+  const pendingCaretOffsetRef = useRef<number | null>(null)
   const extract = useMindMapExtractDrag({
     nodeId: id,
     editValue,
@@ -209,7 +214,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   }, [id, nodeData])
 
   const focusEditorCaret = useCallback(
-    (options?: { selectAll?: boolean; value?: string; seedContent?: boolean }) => {
+    (options?: { selectAll?: boolean; value?: string; seedContent?: boolean; plainOffset?: number | null }) => {
       const input = inputRef.current
       if (!input || editSessionClosedRef.current) return false
       const selectAll = options?.selectAll ?? Boolean(nodeData.selectEditText)
@@ -221,7 +226,10 @@ function MindMapNodeCard({ data, id }: NodeProps) {
           input.textContent = options.value
         }
       }
-      placeContentEditableCaret(input, { selectAll })
+      placeContentEditableCaret(input, {
+        selectAll,
+        plainOffset: selectAll ? null : options?.plainOffset,
+      })
       return document.activeElement === input
     },
     [nodeData.selectEditText],
@@ -239,6 +247,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
     if (!isEditing) {
       wasEditingRef.current = false
       isComposingRef.current = false
+      pendingCaretOffsetRef.current = null
       setImeComposing(false)
       return undefined
     }
@@ -262,10 +271,12 @@ function MindMapNodeCard({ data, id }: NodeProps) {
     editSessionClosedRef.current = false
 
     // Seed content once on enter-edit.
+    const plainOffset = selectAll ? null : pendingCaretOffsetRef.current
     focusEditorCaretRef.current({
       selectAll,
       value: initialValue,
       seedContent: true,
+      plainOffset,
     })
 
     const restoreIfBlurred = () => {
@@ -286,7 +297,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
         input.focus({ preventScroll: true })
         return
       }
-      focusEditorCaretRef.current({ selectAll })
+      focusEditorCaretRef.current({ selectAll, plainOffset })
     }
 
     const timers: number[] = []
@@ -323,13 +334,23 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   }, [editingIsControlled, nodeData.editing])
 
   const startEdit = useCallback(
-    (event?: MouseEvent) => {
+    (event?: { clientX?: number; clientY?: number; preventDefault?: () => void; stopPropagation?: () => void }) => {
       if (readonly) return
-      event?.preventDefault()
-      event?.stopPropagation()
+      event?.preventDefault?.()
+      event?.stopPropagation?.()
+      noteCardEditStarted()
       // Clear native word-selection from double-click on yellow emphasis spans.
       const selection = window.getSelection()
       if (selection && !selection.isCollapsed) selection.removeAllRanges()
+      const face = shellRef.current?.querySelector('.mindmap-node-text')
+      pendingCaretOffsetRef.current =
+        !nodeData.selectEditText
+        && event
+        && typeof event.clientX === 'number'
+        && typeof event.clientY === 'number'
+        && face instanceof HTMLElement
+          ? plainTextOffsetFromPoint(face, event.clientX, event.clientY)
+          : null
       dispatchGlobalFeedback('node_edit_start', {
         point: getMouseFeedbackPoint(event),
         origin: 'node',
@@ -345,24 +366,24 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   )
 
   const openFromDoubleClick = useCallback(
-    (event: MouseEvent) => {
-      if (textInteractionActive) return
+    (event: { clientX?: number; clientY?: number; preventDefault?: () => void; stopPropagation?: () => void }) => {
+      if (textSelectionModeActive) return
       const now = Date.now()
       if (now - lastEditGestureAtRef.current < 80) {
-        event.preventDefault()
-        event.stopPropagation()
+        event.preventDefault?.()
+        event.stopPropagation?.()
         return
       }
       lastEditGestureAtRef.current = now
-      event.preventDefault()
-      event.stopPropagation()
+      event.preventDefault?.()
+      event.stopPropagation?.()
       if (readonly) {
         nodeData.onReadonlyDoubleClick?.(id)
         return
       }
       startEdit(event)
     },
-    [id, nodeData, readonly, startEdit, textInteractionActive],
+    [id, nodeData, readonly, startEdit, textSelectionModeActive],
   )
 
   const handleDoubleClick = openFromDoubleClick
@@ -370,31 +391,37 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   const handleShellPointerDown = useCallback(
     (event: PointerEvent<HTMLDivElement>) => {
       longPress.handlePointerDown(event)
-      if (textInteractionActive || event.ctrlKey || event.metaKey) return
-      // Touch keeps the long-press menu. Mouse (and test events that omit the
-      // fields) count presses here because Chrome drops dblclick on select-none text.
-      const pointerType = event.pointerType || 'mouse'
-      const button = event.button ?? 0
-      if (pointerType !== 'mouse' || button !== 0) return
-      // Yellow emphasis fills the face, so only the empty padding — usually the
-      // bottom-right corner — used to produce a real dblclick.
-      const timedFollowUp = consumeCardDoubleClick(id)
-      const followUp = event.detail > 1 || timedFollowUp
-      if (!followUp) return
-      event.preventDefault()
-      event.stopPropagation()
-      openFromDoubleClick(event)
+      if (textSelectionModeActive || event.ctrlKey || event.metaKey) return
+      // Real mouse/pen presses are counted in the capture-phase owner. This
+      // bubble path is only for events that omit pointerType (jsdom), which
+      // that owner ignores so it cannot steal a touch long-press.
+      if (event.pointerType) return
+      if (event.detail > 1 || consumeCardDoubleClick(id)) {
+        event.preventDefault()
+        event.stopPropagation()
+        openFromDoubleClick(event)
+      }
     },
-    [id, longPress, openFromDoubleClick, textInteractionActive],
+    [id, longPress, openFromDoubleClick, textSelectionModeActive],
   )
 
   const handleShellClick = useCallback(
     (event: MouseEvent) => {
-      if (textInteractionActive || event.ctrlKey || event.metaKey || event.detail <= 1) return
+      if (textSelectionModeActive || event.ctrlKey || event.metaKey || event.detail <= 1) return
       openFromDoubleClick(event)
     },
-    [openFromDoubleClick, textInteractionActive],
+    [openFromDoubleClick, textSelectionModeActive],
   )
+
+  useCardEditGesture({
+    nodeId: id,
+    shellRef,
+    enabled: !isEditing && !textSelectionModeActive,
+    blockNativeTextSelection: !englishInteractionActive && !textSelectionModeActive && !readonly,
+    onSecondPress: (point) => {
+      openFromDoubleClick({ clientX: point.x, clientY: point.y })
+    },
+  })
 
   const stopTextModeCardClick = useCallback((event: MouseEvent) => {
     // Text-select: swallow RF node click so PWA can keep the system Copy bar.
@@ -656,8 +683,8 @@ function MindMapNodeCard({ data, id }: NodeProps) {
             ? undefined
             : handleShellClick
       }
-      onDoubleClick={textInteractionActive ? undefined : handleDoubleClick}
-      onPointerDown={textInteractionActive ? longPress.handlePointerDown : handleShellPointerDown}
+      onDoubleClick={textSelectionModeActive ? undefined : handleDoubleClick}
+      onPointerDown={textSelectionModeActive ? longPress.handlePointerDown : handleShellPointerDown}
       onPointerMove={longPress.handlePointerMove}
       onPointerUp={longPress.finishPointerInteraction}
       onPointerCancel={longPress.finishPointerInteraction}
@@ -693,6 +720,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
             <button
               key={action.id}
               type="button"
+              data-mindmap-card-control="true"
               disabled={action.disabled}
               className={selectionToolbarButtonClass(action.variant)}
               onClick={(event) => {

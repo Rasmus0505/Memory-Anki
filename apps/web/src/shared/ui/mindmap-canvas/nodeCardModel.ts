@@ -100,12 +100,20 @@ export interface EditSnapshot {
 
 export function placeContentEditableCaret(
   input: HTMLElement,
-  options: { selectAll: boolean },
+  options: { selectAll: boolean; plainOffset?: number | null },
 ) {
   input.focus({ preventScroll: true })
   const selection = window.getSelection()
   if (!selection) return
   try {
+    if (
+      !options.selectAll
+      && options.plainOffset != null
+      && options.plainOffset >= 0
+      && placePlainTextOffset(input, options.plainOffset, selection)
+    ) {
+      return
+    }
     const range = document.createRange()
     range.selectNodeContents(input)
     if (!options.selectAll) {
@@ -118,6 +126,77 @@ export function placeContentEditableCaret(
   }
 }
 
+function placePlainTextOffset(root: HTMLElement, offset: number, selection: Selection): boolean {
+  const placed = textPointAtPlainOffset(root, offset)
+  if (!placed) return false
+  const range = root.ownerDocument.createRange()
+  range.setStart(placed.node, placed.offset)
+  range.collapse(true)
+  selection.removeAllRanges()
+  selection.addRange(range)
+  return true
+}
+
+function textPointAtPlainOffset(root: HTMLElement, offset: number): { node: Text; offset: number } | null {
+  const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  let remaining = offset
+  let current = walker.nextNode()
+  let last: Text | null = null
+  while (current) {
+    const text = current as Text
+    const length = text.textContent?.length ?? 0
+    if (remaining <= length) {
+      return { node: text, offset: remaining }
+    }
+    remaining -= length
+    last = text
+    current = walker.nextNode()
+  }
+  if (!last) return null
+  return { node: last, offset: last.textContent?.length ?? 0 }
+}
+
+/**
+ * Plain-text offset under a screen point, measured the same way the editor
+ * caret is placed (text nodes only). Returns null when the point is not in
+ * this card's text, so enter-edit can fall back to the end.
+ */
+export function plainTextOffsetFromPoint(root: HTMLElement, x: number, y: number): number | null {
+  const doc = root.ownerDocument as Document & {
+    caretRangeFromPoint?: (clientX: number, clientY: number) => Range | null
+    caretPositionFromPoint?: (clientX: number, clientY: number) => { offsetNode: Node; offset: number } | null
+  }
+  let node: Node | null = null
+  let offset = 0
+  const range = doc.caretRangeFromPoint?.(x, y)
+  if (range) {
+    node = range.startContainer
+    offset = range.startOffset
+  } else {
+    const position = doc.caretPositionFromPoint?.(x, y)
+    if (!position) return null
+    node = position.offsetNode
+    offset = position.offset
+  }
+  if (!node || !root.contains(node)) return null
+  if (node.nodeType !== Node.TEXT_NODE) {
+    const child = node.childNodes[offset] ?? node
+    const text = child.nodeType === Node.TEXT_NODE ? child : child.firstChild
+    if (!text || text.nodeType !== Node.TEXT_NODE || !root.contains(text)) return null
+    node = text
+    offset = 0
+  }
+  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  let total = 0
+  let current = walker.nextNode()
+  while (current) {
+    if (current === node) return total + Math.min(offset, current.textContent?.length ?? 0)
+    total += current.textContent?.length ?? 0
+    current = walker.nextNode()
+  }
+  return null
+}
+
 export function resolveNodeRawText(nodeData: NodeCardData) {
   const metadata = nodeData.metadata ?? {}
   if (typeof metadata.text === 'string' && metadata.text) return metadata.text
@@ -125,8 +204,8 @@ export function resolveNodeRawText(nodeData: NodeCardData) {
   return nodeData.label || ''
 }
 
-export function getMouseFeedbackPoint(event?: MouseEvent) {
-  return event
+export function getMouseFeedbackPoint(event?: { clientX?: number; clientY?: number }) {
+  return event && typeof event.clientX === 'number' && typeof event.clientY === 'number'
     ? {
         x: event.clientX,
         y: event.clientY,

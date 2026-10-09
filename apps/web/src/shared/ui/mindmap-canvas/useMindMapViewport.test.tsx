@@ -107,6 +107,60 @@ describe('useMindMapViewport preferred zoom', () => {
     expect(onControlledViewportChange).toHaveBeenCalledWith(panned)
   })
 
+  it('moves the map when a wheel starts on an edit card that blocks drag', () => {
+    const canvas = document.createElement('div')
+    const card = document.createElement('button')
+    card.className = 'nopan'
+    canvas.appendChild(card)
+    const onControlledViewportChange = vi.fn()
+    reactFlowMock.setViewport.mockClear()
+    renderHook((nextProps) => useMindMapViewport(nextProps), {
+      initialProps: buildProps({
+        canvasRef: { current: canvas },
+        onControlledViewportChange,
+      }),
+    })
+
+    act(() => {
+      card.dispatchEvent(new WheelEvent('wheel', {
+        deltaY: 100,
+        bubbles: true,
+        cancelable: true,
+      }))
+    })
+
+    expect(onControlledViewportChange).toHaveBeenCalledWith({ x: 120, y: -98, zoom: 0.5 })
+    expect(reactFlowMock.setViewport).toHaveBeenCalledWith(
+      { x: 120, y: -98, zoom: 0.5 },
+      { duration: 0 },
+    )
+  })
+
+  it('does not turn ctrl-wheel on an edit card into a pan', () => {
+    const canvas = document.createElement('div')
+    const card = document.createElement('button')
+    card.className = 'nowheel nopan'
+    canvas.appendChild(card)
+    const onControlledViewportChange = vi.fn()
+    renderHook((nextProps) => useMindMapViewport(nextProps), {
+      initialProps: buildProps({
+        canvasRef: { current: canvas },
+        onControlledViewportChange,
+      }),
+    })
+
+    act(() => {
+      card.dispatchEvent(new WheelEvent('wheel', {
+        deltaY: 100,
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      }))
+    })
+
+    expect(onControlledViewportChange).not.toHaveBeenCalled()
+  })
+
   it('reports only a user gesture that changes zoom', () => {
     const onUserZoomChange = vi.fn()
     const props = buildProps({ onUserZoomChange })

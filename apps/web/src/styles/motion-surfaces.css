@@ -268,7 +268,7 @@
   }
 }
 
-/* 欠账/今天分界线：竖向展开。 */
+/* 每天分界线：竖向展开。 */
 @keyframes progress-boundary-enter {
   from {
     opacity: 0;

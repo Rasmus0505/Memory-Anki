@@ -594,7 +594,7 @@ export default function Knowledge() {
                   onFullscreenToggle={setMindMapFullscreen}
                   onFullscreenChange={setMindMapNativeFullscreen}
                   onUiClearedChange={setMindMapUiCleared}
-                  className="h-full min-h-0 w-full flex-1 rounded-lg border border-border/70 bg-zinc-50"
+                  className="h-full min-h-0 w-full flex-1"
                 />
               </div>
             ) : (

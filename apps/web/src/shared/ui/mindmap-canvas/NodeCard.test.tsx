@@ -700,6 +700,7 @@ describe('NodeCard', () => {
     const onEnglishWordClick = vi.fn()
     renderNodeCard({
       label: '<div>the <span data-emphasis="highlight" style="background-color:#fef08c">powerhouse</span> cell</div>',
+      readonly: true,
       englishInteractionActive: true,
       onEnglishWordClick,
       metadata: { depth: 2, layoutRole: 'leaf', richText: true },

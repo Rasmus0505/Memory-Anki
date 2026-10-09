@@ -1,5 +1,6 @@
 import type { KeyboardEvent, MouseEvent, PointerEvent, ReactNode } from 'react'
 import { stripMindMapHtml } from '@/shared/lib/mindmapRichText'
+import { scheduleEditableWordClick } from './cardEditGesture'
 import type { MindMapCountBadge, MindMapNodeVisual } from './adapter'
 import { statusChipClassName } from './NodeCardToolbar'
 import { NodeCountBadgeCluster } from './NodeCountBadge'
@@ -72,7 +73,12 @@ type EnglishWordClick = (word: string, event: MouseEvent<HTMLElement>) => void
 
 // Word spans carry no padding/border: underline + inset glow only, so english
 // mode never widens a line and never re-wraps the card (see mindmap-scene.css).
-function renderEnglishInteractiveLabel(label: string, onEnglishWordClick: EnglishWordClick, keyPrefix = '') {
+function renderEnglishInteractiveLabel(
+  label: string,
+  onEnglishWordClick: EnglishWordClick,
+  keyPrefix = '',
+  deferWordClick = false,
+) {
   const parts = String(label || '').split(ENGLISH_WORD_SPLIT)
   return parts.map((part, index) => {
     if (!part) return null
@@ -87,6 +93,11 @@ function renderEnglishInteractiveLabel(label: string, onEnglishWordClick: Englis
           onClick={(event) => {
             event.preventDefault()
             event.stopPropagation()
+            if (event.detail > 1) return
+            if (deferWordClick) {
+              scheduleEditableWordClick(() => onEnglishWordClick(part, event))
+              return
+            }
             onEnglishWordClick(part, event)
           }}
           onKeyDown={(event) => {
@@ -109,28 +120,44 @@ function renderEnglishInteractiveLabel(label: string, onEnglishWordClick: Englis
  * split only text nodes into clickable words. Input is already sanitized; only
  * the emphasis attribute is carried over, inline styles are dropped for CSS.
  */
-function renderEnglishInteractiveRich(html: string, onEnglishWordClick: EnglishWordClick): ReactNode[] {
-  if (typeof DOMParser === 'undefined') {
-    return renderEnglishInteractiveLabel(stripMindMapHtml(html), onEnglishWordClick)
-  }
+function renderSanitizedRichHtml(
+  html: string,
+  renderText: (text: string, key: string) => ReactNode,
+): ReactNode[] {
+  if (typeof DOMParser === 'undefined') return [renderText(stripMindMapHtml(html), 'plain')]
   const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html')
   const walk = (nodes: NodeListOf<ChildNode>, path: string): ReactNode[] =>
     Array.from(nodes).map((node, index) => {
       const key = `${path}${index}`
-      if (node.nodeType === Node.TEXT_NODE) {
-        return renderEnglishInteractiveLabel(node.textContent ?? '', onEnglishWordClick, `${key}-`)
-      }
+      if (node.nodeType === Node.TEXT_NODE) return renderText(node.textContent ?? '', key)
       if (!(node instanceof Element)) return null
       const tag = node.tagName.toLowerCase()
       if (tag === 'br') return <br key={key} />
       const children = walk(node.childNodes, `${key}.`)
       const emphasis = node.getAttribute('data-emphasis') ?? undefined
-      if (tag === 'div') return <div key={key} data-emphasis={emphasis}>{children}</div>
+      // nodrag stays on the emphasis node itself so a browser that reparents
+      // invalid markup still cannot hand the press to React Flow drag.
+      const emphasisClass = emphasis === 'highlight' ? 'nodrag' : undefined
+      if (tag === 'div') {
+        return <div key={key} className={emphasisClass} data-emphasis={emphasis}>{children}</div>
+      }
       if (tag === 'u') return <u key={key}>{children}</u>
-      if (tag === 'mark') return <mark key={key} data-emphasis={emphasis}>{children}</mark>
-      return <span key={key} data-emphasis={emphasis}>{children}</span>
+      if (tag === 'mark') {
+        return <mark key={key} className="nodrag" data-emphasis={emphasis ?? 'highlight'}>{children}</mark>
+      }
+      return <span key={key} className={emphasisClass} data-emphasis={emphasis}>{children}</span>
     })
   return walk(doc.body.childNodes, 'n')
+}
+
+function renderEnglishInteractiveRich(
+  html: string,
+  onEnglishWordClick: EnglishWordClick,
+  deferWordClick: boolean,
+): ReactNode[] {
+  return renderSanitizedRichHtml(html, (text, key) => (
+    renderEnglishInteractiveLabel(text, onEnglishWordClick, `${key}-`, deferWordClick)
+  ))
 }
 
 export function NodeCardTextFace({
@@ -162,11 +189,13 @@ export function NodeCardTextFace({
   readonly?: boolean
   articleBody?: unknown
 }) {
-  const showEnglishInteraction =
-    englishInteractionActive && !concealed && typeof onEnglishWordClick === 'function'
+  const englishWordClick = typeof onEnglishWordClick === 'function' ? onEnglishWordClick : undefined
+  const showEnglishInteraction = englishInteractionActive && !concealed && Boolean(englishWordClick)
   const nativeCopySurface = textSelectionModeActive && !showEnglishInteraction
   const plainLabel = label || (isRoot ? '未命名主题' : '未命名知识点')
-  // Readonly cards (except english / text-select) let pane pan start on the label.
+  // Readonly cards (except english / text-select) let a drag-pan start on the label.
+  // Edit cards keep nopan so a drag starts on the shell. Wheel pan is recovered
+  // separately — nopan must not make the wheel feel stuck.
   const blockPanePan = !readonly || englishInteractionActive || textSelectionModeActive
 
   const stopCardClick = (event: PointerEvent<HTMLDivElement> | MouseEvent<HTMLElement>) => {
@@ -186,7 +215,7 @@ export function NodeCardTextFace({
       tabIndex={nativeCopySurface ? undefined : -1}
       onPointerDown={nativeCopySurface ? stopCardClick : undefined}
       onClick={nativeCopySurface ? undefined : onClick}
-      onDoubleClick={nativeCopySurface || showEnglishInteraction ? undefined : onDoubleClick}
+      onDoubleClick={nativeCopySurface ? undefined : onDoubleClick}
       onContextMenu={
         nativeCopySurface
           ? undefined
@@ -210,20 +239,20 @@ export function NodeCardTextFace({
           </span>
           <span className="mindmap-node-concealed">待回忆</span>
         </>
-      ) : showEnglishInteraction ? (
+      ) : showEnglishInteraction && englishWordClick ? (
         // Interactive words keep highlight markup; long-press drag can still select across spans.
         <span className="block w-full">
           {displayHtml
-            ? renderEnglishInteractiveRich(displayHtml, onEnglishWordClick)
-            : renderEnglishInteractiveLabel(plainLabel, onEnglishWordClick)}
+            ? renderEnglishInteractiveRich(displayHtml, englishWordClick, !readonly)
+            : renderEnglishInteractiveLabel(plainLabel, englishWordClick, '', !readonly)}
         </span>
       ) : displayHtml ? (
-        // div (not span): stored markup is often <div>…</div>; span>div is invalid
-        // and browsers may reparent highlight nodes outside the double-click target.
-        <div
-          className="block w-full mindmap-rich-text"
-          dangerouslySetInnerHTML={{ __html: displayHtml }}
-        />
+        // React nodes, not innerHTML: a highlight span stays inside this nodrag
+        // face. innerHTML of <div> inside a span used to be reparented, so the
+        // yellow text no longer received the card's double-click.
+        <div className="block w-full mindmap-rich-text nodrag">
+          {renderSanitizedRichHtml(displayHtml, (text) => text)}
+        </div>
       ) : (
         plainLabel
       )}

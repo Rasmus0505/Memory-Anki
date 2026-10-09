@@ -324,12 +324,12 @@ export default function PalaceView() {
                   onUiClearedChange={setMindMapUiCleared}
                   onReady={() => setHostReadyTimedOut(false)}
                   onReadyTimeout={() => setHostReadyTimedOut(true)}
-                  className="h-full min-h-0 w-full flex-1 rounded-lg border border-border/70 bg-zinc-50"
+                  className="h-full min-h-0 w-full flex-1"
                 />
               ) : (
                 <LoadingState
                   text="正在准备脑图视图…"
-                  className="h-full min-h-0 w-full flex-1 rounded-lg border border-border/70 bg-zinc-50 px-4"
+                  className="h-full min-h-0 w-full flex-1 bg-[var(--memory-anki-mindmap-canvas)] px-4"
                 />
               )}
             </div>

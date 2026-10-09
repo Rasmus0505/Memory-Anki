@@ -597,7 +597,7 @@ export default function PalaceEdit() {
                           onToggleFullscreen={page.toggleMindMapFullscreen}
                           onUiClearedChange={setMindMapUiCleared}
                           className="flex min-h-0 flex-1 flex-col"
-                          surfaceClassName="h-full min-h-0 w-full flex-1 rounded-lg border border-border/70 bg-zinc-50"
+                          surfaceClassName="h-full min-h-0 w-full flex-1"
                         />
                       </div>
                     ) : (
@@ -630,7 +630,7 @@ export default function PalaceEdit() {
             forceSyncKey={`preview:${version}`}
             preserveViewOnSync={false}
             onEditorStateChange={() => {}}
-            className="h-full w-full rounded-[inherit] bg-zinc-50"
+            className="h-full w-full"
           />
         )}
         targetNodeLabel={selectedNodeLabel}

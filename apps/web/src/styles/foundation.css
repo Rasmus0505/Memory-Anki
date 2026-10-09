@@ -161,7 +161,7 @@
   background-attachment: fixed;
 }
 
-.dark .memory-anki-mindmap-frame {
+.dark .memory-anki-mindmap-frame.is-inset {
   border-color: var(--color-paper-line);
   background: var(--memory-anki-mindmap-canvas);
   box-shadow:
@@ -216,7 +216,17 @@ body.memory-anki-timer-overlay-page #root {
   justify-content: flex-start;
 }
 
-.memory-anki-mindmap-frame {
+/* The map is the page. Radius, border, and shadow paint a card on whatever
+   parent is left uncovered — the cream sheet under the canvas. Only a dialog
+   preview opts back into that card with .is-inset. */
+.memory-anki-mindmap-frame:not(.is-inset) {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: var(--memory-anki-mindmap-canvas) !important;
+  box-shadow: none !important;
+}
+
+.memory-anki-mindmap-frame.is-inset {
   border: 1px solid var(--color-paper-line);
   border-radius: 1rem;
   background: var(--memory-anki-mindmap-canvas);
