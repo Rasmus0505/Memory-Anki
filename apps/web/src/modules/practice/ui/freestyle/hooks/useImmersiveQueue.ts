@@ -111,6 +111,8 @@ import {
 import { overlayRoundReviewPalaceIds } from '@/modules/practice/ui/freestyle/model/overlayQuizRange'
 import {
   applyFreestyleEntryScopeUnlessSaved,
+  freestyleEntryScopeKey,
+  normalizeFreestyleEntryPalaceIds,
   persistFreestyleConfigWithoutEntryLock,
   shouldUseFreestyleSelectionScope,
 } from '@/modules/practice/ui/freestyle/model/freestyle-entry-scope'
@@ -352,19 +354,24 @@ export type StaleDropResult = StaleDropDecision & {
 }
 
 export function useImmersiveQueue(
-  entryPalaceId: number | null = null,
+  entryPalaceId: number | readonly number[] | null = null,
   workspace: FreestyleWorkspaceId | PalaceReviewWorkspaceId = FREESTYLE_WORKSPACE_PRIMARY,
 ) {
   const slot = isPalaceReviewWorkspace(workspace) ? workspace : normalizeFreestyleWorkspaceId(workspace)
   const slotRef = useRef(slot)
   slotRef.current = slot
   const lockedPalaceId = parsePalaceReviewWorkspaceId(slot)
-  const scopedPalaceId = lockedPalaceId ?? entryPalaceId
+  const entryScopeKey = freestyleEntryScopeKey(lockedPalaceId ?? entryPalaceId)
+  const entryScopeIdsRef = useRef<number[]>([])
+  entryScopeIdsRef.current = normalizeFreestyleEntryPalaceIds(lockedPalaceId ?? entryPalaceId)
   const location = useLocation()
-  const unlockedEntryPalaceIdRef = useRef<number | null>(null)
+  const unlockedEntryPalaceIdRef = useRef<string | null>(null)
   const scopeEntryConfig = useCallback(
-    (next: FreestyleFeedConfig) => applyFreestyleEntryScopeUnlessSaved(next, scopedPalaceId),
-    [scopedPalaceId],
+    (next: FreestyleFeedConfig) => applyFreestyleEntryScopeUnlessSaved(
+      next,
+      entryScopeIdsRef.current.length ? entryScopeIdsRef.current : null,
+    ),
+    [],
   )
   const [config, setConfig] = useState<FreestyleFeedConfig>(() =>
     scopeEntryConfig(readFreestyleFeedConfig(slot)),
@@ -1092,7 +1099,7 @@ export function useImmersiveQueue(
     configRef.current = next
     setConfig(next)
     rebuildKeepingProgress(next, 'entry_scope_changed')
-  }, [scopedPalaceId, rebuildKeepingProgress, resetStaleRecovery, scopeEntryConfig, slot, syncPendingRestudyIds])
+  }, [entryScopeKey, rebuildKeepingProgress, resetStaleRecovery, scopeEntryConfig, slot, syncPendingRestudyIds])
 
   // Backend preference bootstrap / cross-client updates can arrive after mount.
   // A palace review must not rebuild when the global 随心 selection changes.
@@ -1103,7 +1110,7 @@ export function useImmersiveQueue(
       : FREESTYLE_FEED_CONFIG_UPDATED_EVENT
     return onAppEvent(configEvent, (detail) => {
       const saved = sanitizeFreestyleFeedConfig(detail)
-      const next = scopedPalaceId != null && unlockedEntryPalaceIdRef.current === scopedPalaceId
+      const next = entryScopeKey != null && unlockedEntryPalaceIdRef.current === entryScopeKey
         ? saved
         : scopeEntryConfig(saved)
       if (sameFeedConfig(next, configRef.current)) return
@@ -1118,7 +1125,7 @@ export function useImmersiveQueue(
       }
       rebuildKeepingProgress(next, scopeChanged ? 'palace_scope_changed' : 'config_event')
     })
-  }, [lockedPalaceId, scopedPalaceId, rebuildKeepingProgress, scopeEntryConfig, slot, syncPendingRestudyIds])
+  }, [lockedPalaceId, entryScopeKey, rebuildKeepingProgress, scopeEntryConfig, slot, syncPendingRestudyIds])
 
   const setConfigAndPersist = useCallback(
     (
@@ -1143,15 +1150,15 @@ export function useImmersiveQueue(
       const useSelectionScope = lockedPalaceId == null && shouldUseFreestyleSelectionScope(
         current,
         rawRequested,
-        scopedPalaceId,
+        entryScopeKey,
         unlockedEntryPalaceIdRef.current,
       )
-      if (useSelectionScope && scopedPalaceId != null) {
-        unlockedEntryPalaceIdRef.current = scopedPalaceId
+      if (useSelectionScope && entryScopeKey != null) {
+        unlockedEntryPalaceIdRef.current = entryScopeKey
       }
       const requested = useSelectionScope ? rawRequested : scopeEntryConfig(rawRequested)
       const stored = readFreestyleFeedConfig(slot)
-      const nextToPersist = scopedPalaceId == null || useSelectionScope
+      const nextToPersist = entryScopeKey == null || useSelectionScope
         ? requested
         : persistFreestyleConfigWithoutEntryLock(requested, stored)
       const saved = saveFreestyleFeedConfig(nextToPersist, slot)
@@ -1171,7 +1178,7 @@ export function useImmersiveQueue(
         preferCardId: options?.preferCardId ?? null,
       })
     },
-    [lockedPalaceId, scopedPalaceId, rebuildKeepingProgress, resetStaleRecovery, scopeEntryConfig, slot, syncPendingRestudyIds],
+    [lockedPalaceId, entryScopeKey, rebuildKeepingProgress, resetStaleRecovery, scopeEntryConfig, slot, syncPendingRestudyIds],
   )
 
   /** Stale recovery and feed-error retry. Keeps the frozen round and local scores. */
@@ -1356,15 +1363,15 @@ export function useImmersiveQueue(
     const useSelectionScope = lockedPalaceId == null && shouldUseFreestyleSelectionScope(
       current,
       rawRequested,
-      scopedPalaceId,
+      entryScopeKey,
       unlockedEntryPalaceIdRef.current,
     )
-    if (useSelectionScope && scopedPalaceId != null) {
-      unlockedEntryPalaceIdRef.current = scopedPalaceId
+    if (useSelectionScope && entryScopeKey != null) {
+      unlockedEntryPalaceIdRef.current = entryScopeKey
     }
     const requested = useSelectionScope ? rawRequested : scopeEntryConfig(rawRequested)
     const stored = readFreestyleFeedConfig(slot)
-    const nextToPersist = scopedPalaceId == null || useSelectionScope
+    const nextToPersist = entryScopeKey == null || useSelectionScope
       ? requested
       : persistFreestyleConfigWithoutEntryLock(requested, stored)
     const saved = saveFreestyleFeedConfig(nextToPersist, slot)
@@ -1401,7 +1408,7 @@ export function useImmersiveQueue(
   }, [
     buildQueue,
     lockedPalaceId,
-    scopedPalaceId,
+    entryScopeKey,
     persistQueueState,
     resetStaleRecovery,
     scopeEntryConfig,

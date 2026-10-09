@@ -936,13 +936,42 @@ def test_drop_vanished_unstarted_keeps_live_quiz_and_completed():
     assert dropped["current_card_id"] == "live"
 
 
-def test_drop_vanished_unstarted_keeps_retry_source_and_drops_the_other():
+def test_drop_vanished_unstarted_drops_retry_of_a_gone_unit():
     cards = [
         _card("weak", unit_id="gone-unit"),
         _card("other", unit_id="also-gone"),
     ]
     plan = leave_card(_rate(plan_from_cards(cards), "weak", 2, "enc-weak"), "weak")
     dropped = drop_vanished_unstarted(plan, set())
+    assert dropped["original_cards"] == []
+    assert dropped["occurrences"] == []
+    assert dropped["presented_ids"] == []
+    assert dropped["current_card_id"] in {None, ""}
+
+
+def test_drop_vanished_unstarted_removes_retry_of_a_completed_gone_unit():
+    cards = [
+        _card("done", unit_id="gone-unit"),
+        _card("next", unit_id="live-unit"),
+    ]
+    plan = leave_card(_rate(plan_from_cards(cards), "done", 2, "enc-done"), "done")
+    plan = complete_card(plan, "done")
+    plan["current_card_id"] = plan["occurrences"][0]["occurrence_id"]
+    dropped = drop_vanished_unstarted(plan, {"live-unit"})
+    assert [item["card_id"] for item in dropped["original_cards"]] == ["done", "next"]
+    assert dropped["occurrences"] == []
+    assert dropped["completed_ids"] == ["done"]
+    assert "gone-unit" not in str(dropped["current_card_id"])
+    assert dropped["current_card_id"] == "next"
+
+
+def test_drop_vanished_unstarted_keeps_retry_whose_unit_is_still_live():
+    cards = [
+        _card("weak", unit_id="live-unit"),
+        _card("other", unit_id="gone-unit"),
+    ]
+    plan = leave_card(_rate(plan_from_cards(cards), "weak", 2, "enc-weak"), "weak")
+    dropped = drop_vanished_unstarted(plan, {"live-unit"})
     assert [item["card_id"] for item in dropped["original_cards"]] == ["weak"]
     assert dropped["occurrences"][0]["source_card_id"] == "weak"
     assert dropped["occurrences"][0]["occurrence_id"] in dropped["presented_ids"]
@@ -1076,6 +1105,84 @@ def test_compress_completed_does_not_return_on_append_today():
     assert "done" not in appended["presented_ids"]
     assert "done" in appended["compressed_ids"]
     assert "todo" in appended["presented_ids"]
+    assert "fresh" in appended["presented_ids"]
+
+
+def test_new_day_reopens_a_due_again_card_and_cancels_its_retry():
+    plan = _rate(
+        plan_from_cards(
+            [_card("done", unit_id="unit-done"), _card("todo", unit_id="unit-todo")],
+            today="2026-10-08",
+        ),
+        "done",
+        3,
+        "enc-pass",
+    )
+    plan = compress_completed(plan)
+    plan["occurrences"].append(
+        {
+            "occurrence_id": "retry:round-1:done:1",
+            "source_card_id": "done",
+            "status": "completed",
+            "encounter_id": "enc-pass",
+        }
+    )
+    plan["encounters"]["done"] = {"status": "passed", "rating": 3, "encounter_id": "enc-pass"}
+    appended = append_today_cards(
+        plan,
+        [_card("done", unit_id="unit-done"), _card("todo", unit_id="unit-todo")],
+        today="2026-10-09",
+    )
+    assert "done" in appended["presented_ids"]
+    assert "done" not in appended["compressed_ids"]
+    assert "done" not in appended["completed_ids"]
+    assert appended["occurrences"][0]["status"] == "cancelled"
+    assert "done" not in appended["encounters"]
+    seen = []
+    cursor = None
+    for _ in range(6):
+        cursor = next_unfinished_id(appended, after_id=cursor)
+        if not cursor or cursor in seen:
+            break
+        seen.append(cursor)
+    assert "done" in seen
+
+
+def test_new_day_does_not_restore_an_excluded_card_or_a_card_that_is_not_due():
+    plan = exclude_card(
+        compress_completed(
+            _rate(
+                plan_from_cards(
+                    [
+                        _card("done", unit_id="unit-done"),
+                        _card("skip", unit_id="unit-skip"),
+                    ],
+                    today="2026-10-08",
+                ),
+                "done",
+                3,
+                "enc-pass",
+            )
+        ),
+        "skip",
+    )
+    appended = append_today_cards(
+        plan,
+        [_card("skip", unit_id="unit-skip"), _card("fresh", unit_id="unit-fresh")],
+        today="2026-10-09",
+    )
+    assert "skip" in appended["excluded_ids"]
+    assert next_unfinished_id(appended) != "skip"
+    seen = []
+    cursor = None
+    for _ in range(6):
+        cursor = next_unfinished_id(appended, after_id=cursor)
+        if not cursor or cursor in seen:
+            break
+        seen.append(cursor)
+    assert "skip" not in seen
+    assert "done" in appended["compressed_ids"]
+    assert "done" not in appended["presented_ids"]
     assert "fresh" in appended["presented_ids"]
 
 

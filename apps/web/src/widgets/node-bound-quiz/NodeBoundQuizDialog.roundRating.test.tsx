@@ -25,7 +25,7 @@ describe('NodeBoundQuizDialog round rating badge', () => {
   })
 
   it('shows the weakest bound knowledge point score for this round', async () => {
-    useRoundQuestionRatingsMock.mockReturnValue({ 42: 2 })
+    useRoundQuestionRatingsMock.mockReturnValue({ ratings: { 42: 2 }, pendingIds: [] })
     renderDialog({ roundId: 'round-1' })
     await waitFor(() =>
       expect(screen.getByTestId('overlay-question-rating').textContent).toContain(
@@ -34,14 +34,22 @@ describe('NodeBoundQuizDialog round rating badge', () => {
     )
   })
 
-  it('says 本轮尚未复习 when the round has not reached the knowledge point', async () => {
-    useRoundQuestionRatingsMock.mockReturnValue({})
+  it('says 本轮尚未复习 when the bar still has the knowledge point open', async () => {
+    useRoundQuestionRatingsMock.mockReturnValue({ ratings: {}, pendingIds: ['42'] })
     renderDialog({ roundId: 'round-1' })
     await waitFor(() =>
       expect(screen.getByTestId('overlay-question-rating').textContent).toContain(
         '本轮尚未复习',
       ),
     )
+  })
+
+  it('hides the badge when the bar already drew the point done', async () => {
+    useRoundQuestionRatingsMock.mockReturnValue({ ratings: {}, pendingIds: [] })
+    renderDialog({ roundId: 'round-1' })
+    await screen.findByText('下列哪一项是细胞膜的主要成分？')
+    expect(screen.queryByText('本轮尚未复习')).toBeNull()
+    expect(screen.queryByTestId('overlay-question-rating')).toBeNull()
   })
 
   it('omits the badge entirely outside a round', async () => {

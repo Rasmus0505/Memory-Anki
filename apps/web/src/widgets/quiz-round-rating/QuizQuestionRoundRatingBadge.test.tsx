@@ -15,12 +15,20 @@ describe('QuizQuestionRoundRatingBadge', () => {
     expect(screen.getByTestId('overlay-question-rating').textContent).toContain('本轮最低 2 · 困难')
   })
 
-  it('says 本轮尚未复习 instead of a zero score', () => {
-    render(<QuizQuestionRoundRatingBadge rating={null} palaceId={7} />)
+  it('says 本轮尚未复习 only while the bar still has the point open', () => {
+    render(<QuizQuestionRoundRatingBadge rating={null} pending palaceId={7} />)
     const badge = screen.getByTestId('overlay-question-rating')
     expect(badge.textContent).toContain('本轮尚未复习')
     // "not reviewed yet" and "reviewed and forgotten" must not look alike.
     expect(badge.textContent).not.toContain('0')
+  })
+
+  it('hides the badge when the bar is already done or the point was never scheduled', () => {
+    const { unmount } = render(<QuizQuestionRoundRatingBadge rating={null} palaceId={7} />)
+    expect(screen.queryByTestId('overlay-question-rating')).toBeNull()
+    unmount()
+    render(<QuizQuestionRoundRatingBadge rating={null} pending={false} palaceId={7} />)
+    expect(screen.queryByText('本轮尚未复习')).toBeNull()
   })
 
   it('jumps to the knowledge point when the source is known', () => {

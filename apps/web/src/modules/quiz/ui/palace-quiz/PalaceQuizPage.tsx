@@ -20,8 +20,8 @@ import {
 } from '@/modules/quiz/domain/quiz-entity/api'
 import {
   beginQuizQuestionMarkRequest,
+  commitQuizQuestionMark,
   isCurrentQuizQuestionMarkRequest,
-  submitQuizQuestionMark,
 } from '@/modules/quiz/domain/quiz-entity'
 import type { PalaceQuizQuestion, QuizNodeBindingEdge } from '@/shared/api/contracts'
 import { usePalaceQuizManagement } from '@/modules/quiz/ui/palace-quiz/hooks/usePalaceQuizManagement'
@@ -292,18 +292,27 @@ export default function PalaceQuizPage() {
   }
 
   const handleToggleMark = async (question: (typeof questions)[number], marked: boolean) => {
-    const token = beginQuizQuestionMarkRequest(question.id)
+    const questionId = question.id
+    const previousMarked = Boolean(question.marked)
+    const token = beginQuizQuestionMarkRequest(questionId)
+    const stillCurrent = () => isCurrentQuizQuestionMarkRequest(questionId, token)
     try {
-      const { question: updated } = await submitQuizQuestionMark({
-        questionId: question.id,
+      await commitQuizQuestionMark({
+        questionId,
         marked,
+        previousMarked,
+        token,
+        stillCurrent,
+        apply: (nextMarked, saved) => {
+          setQuestions((current) => current.map((item) => {
+            if (item.id !== questionId) return item
+            if (saved && saved.id === item.id) return { ...item, ...saved, marked: nextMarked }
+            return { ...item, marked: nextMarked }
+          }))
+        },
       })
-      if (!isCurrentQuizQuestionMarkRequest(question.id, token)) return
-      setQuestions((current) =>
-        current.map((item) => (item.id === updated.id ? { ...item, ...updated } : item)),
-      )
     } catch (error) {
-      if (!isCurrentQuizQuestionMarkRequest(question.id, token)) return
+      if (!stillCurrent()) return
       toast.error(error instanceof Error ? error.message : '保存标记失败。')
     }
   }
@@ -474,6 +483,7 @@ export default function PalaceQuizPage() {
           onViewKnowledge={(question) => {
             void handleViewKnowledge(question)
           }}
+          palaceTitle={palace?.title || ''}
         />
       ) : null}
 

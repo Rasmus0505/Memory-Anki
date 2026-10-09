@@ -1,5 +1,6 @@
 import type {
   FreestyleOverlayQuestionKind,
+  FreestyleOverlayRatingInherit,
   FreestyleOverlayTypeOrder,
   FreestyleOverlayTypePalaceNesting,
 } from '@/shared/api/contracts'
@@ -38,4 +39,8 @@ export function asOverlayTypeOrder(value: unknown): FreestyleOverlayTypeOrder {
 
 export function asOverlayTypePalaceNesting(value: unknown): FreestyleOverlayTypePalaceNesting {
   return value === 'type_then_palace' ? 'type_then_palace' : 'palace_then_type'
+}
+
+export function asOverlayRatingInherit(value: unknown): FreestyleOverlayRatingInherit {
+  return value === 'blank' ? 'blank' : 'lowest_reviewed'
 }

@@ -136,7 +136,6 @@ describe('FreestyleScopeQuizDialog', () => {
     expect(ensureFreestyleOverlayQuizApiMock.mock.calls[1][1].expected_version).toBe(7)
     expect(getPalaceQuizQuestionsByIdsApiMock).not.toHaveBeenCalled()
   })
-
   it('asks for palace order before the first session', async () => {
     const onConfirmSetup = vi.fn()
     render(
@@ -154,6 +153,7 @@ describe('FreestyleScopeQuizDialog', () => {
     )
 
     expect(screen.getByTestId('freestyle-scope-quiz-dialog')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /出题顺序/ }))
     expect(screen.getByRole('radio', { name: /跨宫殿乱序/ })).toBeTruthy()
     fireEvent.click(screen.getByRole('radio', { name: /一个宫殿刷完再换/ }))
     const start = await screen.findByRole('button', { name: '开始做题' })
@@ -165,9 +165,9 @@ describe('FreestyleScopeQuizDialog', () => {
       overlayQuestionKinds: ['objective', 'subjective'],
       overlayTypeOrder: 'interleave',
       overlayTypePalaceNesting: 'palace_then_type',
+      overlayRatingInherit: 'lowest_reviewed',
     })
   })
-
   it('shows kind checkboxes and nesting only for the selected combination', async () => {
     ensureFreestyleOverlayQuizApiMock.mockResolvedValue({
       round_id: 'round-1',
@@ -202,6 +202,7 @@ describe('FreestyleScopeQuizDialog', () => {
       />,
     )
 
+    fireEvent.click(screen.getByRole('button', { name: /出题顺序/ }))
     const objective = await screen.findByRole('checkbox', { name: '客观（4）' })
     const subjective = screen.getByRole('checkbox', { name: '主观（2）' })
     expect((objective as HTMLInputElement).checked).toBe(true)
@@ -225,9 +226,9 @@ describe('FreestyleScopeQuizDialog', () => {
       overlayQuestionKinds: ['objective'],
       overlayTypeOrder: 'objective_then_subjective',
       overlayTypePalaceNesting: 'type_then_palace',
+      overlayRatingInherit: 'lowest_reviewed',
     })
   })
-
   it('opens palace lookup centered on the current question binding', async () => {
     ensureFreestyleOverlayQuizApiMock.mockResolvedValue({
       round_id: 'round-1',
@@ -295,7 +296,6 @@ describe('FreestyleScopeQuizDialog', () => {
       expect(lookup.getAttribute('data-focus-node')).toBe('bound-9')
     })
   })
-
   it('shows historical attempt stats left of the question type badge', async () => {
     ensureFreestyleOverlayQuizApiMock.mockResolvedValue({
       round_id: 'round-1',

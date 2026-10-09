@@ -624,6 +624,34 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(apiMocks.ratePalaceDueUnitsApi).not.toHaveBeenCalled()
   })
 
+  it('keeps the map when preparing the score fails and does not start a second glance', async () => {
+    const card = buildCard('unit-prepare-keeps-map')
+    const preview: UnitReviewSessionDto = {
+      ...buildSession(card.unit_id!),
+      id: `preview:${card.unit_id}`,
+      units: [{
+        ...buildSession(card.unit_id!).units[0],
+        encounter: null,
+      }],
+    }
+    previewCacheMocks.useUnitPreview.mockReturnValue(preview)
+    apiMocks.startFreestyleUnitReviewSessionApi.mockRejectedValue(
+      new Error('请求超过 15 秒未响应'),
+    )
+    const view = renderCard(card)
+
+    expect(await screen.findByTestId('flip-card-mind-map-panel')).toBeTruthy()
+    expect(await screen.findByTestId('freestyle-copy-for-assistant')).toBeTruthy()
+    expect(screen.queryByText(/网络请求失败/)).toBeNull()
+    expect(screen.queryByText(/start-all/)).toBeNull()
+    expect(screen.getByText('正在准备评分')).toBeTruthy()
+
+    view.rerenderCard({
+      encounter: queueEncounter({ status: 'pending' }),
+    })
+    await waitFor(() => expect(apiMocks.startFreestyleUnitReviewSessionApi).toHaveBeenCalledTimes(1))
+  })
+
   it('keeps four disabled rating buttons visible while the session is loading', async () => {
     const card = buildCard('unit-loading-ratings')
     apiMocks.startFreestyleUnitReviewSessionApi.mockReturnValue(new Promise(() => undefined))
@@ -634,7 +662,7 @@ describe('FreestyleUnitReviewCardView', () => {
     for (const value of [1, 2, 3, 4]) {
       const button = screen.getByTestId(`freestyle-rating-button-${value}`) as HTMLButtonElement
       expect(button.disabled).toBe(true)
-      expect(button.getAttribute('aria-label')).toContain('加载中')
+      expect(button.getAttribute('aria-label')).toContain('正在准备评分')
     }
   })
 
@@ -876,7 +904,7 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(capturedPanelProps?.onPaneLongPress).toBeUndefined()
     expect(typeof capturedPanelProps?.onNodeClick).toBe('function')
     expect(typeof capturedPanelProps?.onNodeContextMenu).toBe('function')
-    expect(screen.getByTestId('freestyle-unit-review-map-shell').className).toContain('pb-[6.75rem]')
+    expect(screen.getByTestId('freestyle-unit-review-map-shell').className).not.toContain('pb-[6.75rem]')
     expect(screen.getByTestId('freestyle-rating-bar')).toBeTruthy()
 
     act(() => (capturedPanelProps?.onPaneDoubleClick as () => void)())
@@ -897,7 +925,7 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(typeof capturedPanelProps?.onNodeClick).toBe('function')
     expect(typeof capturedPanelProps?.onNodeContextMenu).toBe('function')
     expect(screen.getByTestId('freestyle-rating-bar')).toBeTruthy()
-    expect(screen.getByTestId('freestyle-unit-review-map-shell').className).toContain('pb-[6.75rem]')
+    expect(screen.getByTestId('freestyle-unit-review-map-shell').className).not.toContain('pb-[6.75rem]')
   })
 
   it('keeps flip progress and preserve camera policy across edit/review toggles', async () => {
@@ -1889,7 +1917,9 @@ describe('FreestyleUnitReviewCardView', () => {
     await waitFor(() => expect(onSaveFailed).toHaveBeenCalled())
     expect(onBranchComplete).toHaveBeenLastCalledWith(card.id, { cleared: true })
     expect(screen.queryByText(/已选记得/)).toBeNull()
-    expect(screen.getByRole('alert').textContent).toContain('network down')
+    expect(screen.getByRole('alert').textContent).toContain('评分没有记下')
+    expect(screen.getByRole('alert').textContent).not.toContain('network down')
+    expect(screen.getByTestId('freestyle-copy-for-assistant')).toBeTruthy()
   })
 
   it('does not close the encounter until the in-flight rate resolves', async () => {
@@ -2184,7 +2214,7 @@ describe('FreestyleUnitReviewCardView', () => {
     apiMocks.startFreestyleUnitReviewSessionApi.mockRejectedValue(new Error('temporary API failure'))
     const { onSaveFailed, onStaleDrop, onRebuildRound } = renderCard(card)
 
-    await screen.findByText('这张卡暂时打不开')
+    await screen.findByText('这张还在准备评分')
     expect(onSaveFailed).not.toHaveBeenCalled()
     expect(screen.queryByText(/temporary API failure/)).toBeNull()
     expect(screen.getByRole('button', { name: '重试' })).not.toBeNull()
@@ -2192,6 +2222,20 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(onStaleDrop).toHaveBeenCalledWith(card.id)
     fireEvent.click(screen.getByRole('button', { name: '重建本轮' }))
     expect(onRebuildRound).toHaveBeenCalled()
+  })
+
+  it('force-drops a deleted palace instead of redrawing the dead wall', async () => {
+    const card = buildCard('unit-deleted-palace')
+    apiMocks.startFreestyleUnitReviewSessionApi.mockRejectedValue({
+      status: 400,
+      message: 'palace not found: 145',
+    })
+    const { onStaleDrop, onSaveFailed } = renderCard(card)
+
+    await waitFor(() => expect(onStaleDrop).toHaveBeenCalledWith(card.id, { force: true }))
+    expect(onSaveFailed).not.toHaveBeenCalled()
+    expect(screen.queryByText('这张卡暂时打不开')).toBeNull()
+    expect(screen.getByText('正在更新复习安排...')).toBeTruthy()
   })
 
   it('drops silently when encounter_id belongs to another review unit', async () => {

@@ -36,7 +36,7 @@ export interface FreestyleProgressSegment {
   sourceLabel?: string
   waitingRetry?: boolean
   retryAfterCards?: number
-  /** True on the first today-source tick so the rail can draw 欠账 | 今天. */
+  /** True on the first source tick of a new entry day, so the rail can cut every day. */
   cohortBoundary?: boolean
   enteredOn?: string
 }
@@ -280,6 +280,8 @@ export const PROGRESS_RAIL_RETRY_SLOT_PX = 14
 /** Preferred width of the retry circle on the card currently on screen (`size-5`). */
 export const PROGRESS_RAIL_RETRY_VIEWING_SLOT_PX = 20
 export const PROGRESS_RAIL_GAP_PX = 1
+/** Hit width of a day cut. The drawn stroke is narrower; this keeps it tappable. */
+export const PROGRESS_RAIL_DAY_LINE_PX = 12
 export const PROGRESS_RAIL_TICK_MIN_PX = 2
 export const PROGRESS_RAIL_VIEWING_TICK_MIN_PX = 6
 /** When the rail is too narrow, only this many cards on each side of the playhead keep a retry count. */
@@ -303,6 +305,7 @@ export function freestyleProgressRailFits(
   let flexMin = 0
   for (const segment of segments) {
     const viewing = Boolean(segment.viewing || segment.tone === 'current')
+    if (segment.cohortBoundary) fixed += PROGRESS_RAIL_DAY_LINE_PX
     if (segment.kind === 'retry') {
       fixed += viewing ? PROGRESS_RAIL_RETRY_VIEWING_SLOT_PX : PROGRESS_RAIL_RETRY_SLOT_PX
     } else {
@@ -449,19 +452,105 @@ function segmentStatusLabel(segment: FreestyleProgressSegment): string {
   return '待练'
 }
 
+const DAY_MS = 86_400_000
+
+/** Local calendar day, not an instant. Invalid keys stay unlabeled. */
+export function parseDayKey(value: string | undefined): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || '').trim())
+  if (!match) return null
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  const date = new Date(year, month - 1, day)
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null
+  return date
+}
+
+/** How many midnights `today` is after `enteredOn`. Negative means a future stamp. */
+export function daysBefore(enteredOn: string | undefined, today: string): number | null {
+  const from = parseDayKey(enteredOn)
+  const to = parseDayKey(today)
+  if (!from || !to) return null
+  return Math.round((to.getTime() - from.getTime()) / DAY_MS)
+}
+
+/**
+ * Spoken day, anchored to the learner's today — not "欠账 / 今天新增".
+ * Far days use a date so "12天前" does not have to be counted on the fingers.
+ */
+export function dayCohortLabel(enteredOn: string | undefined, today: string): string {
+  const distance = daysBefore(enteredOn, today)
+  const date = parseDayKey(enteredOn)
+  if (distance == null || !date) return '更早留下的'
+  if (distance === 0) return '今天'
+  if (distance === 1) return '昨天'
+  if (distance === 2) return '前天'
+  if (distance > 2 && distance <= 6) return `${distance}天前`
+  return `${date.getMonth() + 1}月${date.getDate()}日`
+}
+
+/** Inclusive calendar span from the earliest entry day through today. One day stays 1. */
+export function roundDaySpan(enteredOns: Iterable<string | undefined>, today: string): number {
+  const todayDate = parseDayKey(today)
+  if (!todayDate) return 1
+  let earliest: Date | null = null
+  for (const value of enteredOns) {
+    const date = parseDayKey(value)
+    if (!date || date.getTime() > todayDate.getTime()) continue
+    if (!earliest || date.getTime() < earliest.getTime()) earliest = date
+  }
+  if (!earliest) return 1
+  return Math.round((todayDate.getTime() - earliest.getTime()) / DAY_MS) + 1
+}
+
+export function dayRemainingCount(
+  segments: readonly FreestyleProgressSegment[],
+  enteredOn: string,
+): number {
+  return segments.filter((segment) => segment.enteredOn === enteredOn && segment.tone !== 'done').length
+}
+
+/** Hover for the day cut itself: which day, what's left, and that a click jumps. */
+export function dayCutHoverLabel(
+  enteredOn: string | undefined,
+  today: string,
+  remaining: number,
+): string {
+  const name = dayCohortLabel(enteredOn, today)
+  const left = remaining > 0 ? `还剩 ${remaining} 张` : '都过了'
+  return `${name} · ${left} · 点此跳到这一天的第一张`
+}
+
+/**
+ * A cut wherever the queue steps into another entry day.
+ * Retry insertions keep their source day but do not punch a new cut into the middle of a day.
+ */
+export function markDayCohortBoundaries(segments: FreestyleProgressSegment[]): void {
+  let previous = ''
+  for (const segment of segments) {
+    if (segment.kind === 'retry') continue
+    const day = String(segment.enteredOn || '').trim()
+    if (!day) continue
+    if (previous && day !== previous) segment.cohortBoundary = true
+    previous = day
+  }
+}
+
 /** Hover copy for one rail tick: that card, not the card currently on screen. */
 export function progressSegmentHoverLabel(
   segment: FreestyleProgressSegment,
   index: number,
   total: number,
+  today = '',
 ): string {
   const place = total > 0 ? `${index + 1}/${total}` : ''
+  const day = today && segment.enteredOn ? dayCohortLabel(segment.enteredOn, today) : ''
   if (segment.kind === 'retry') {
-    return [place, retryNodeLabel(segment), segmentStatusLabel(segment)].filter(Boolean).join(' · ')
+    return [place, retryNodeLabel(segment), segmentStatusLabel(segment), day].filter(Boolean).join(' · ')
   }
   const name = String(segment.sourceLabel || '').trim()
   const titled = name ? `《${name}》` : ''
-  return [place, titled, segmentStatusLabel(segment)].filter(Boolean).join(' · ')
+  return [place, titled, segmentStatusLabel(segment), day].filter(Boolean).join(' · ')
 }
 
 export function buildFreestyleProgressSummary(
@@ -624,18 +713,7 @@ export function buildFreestyleProgressSummary(
   collapseRetrySegments(segments)
   retryInserted = segments.filter((segment) => segment.kind === 'retry').length
 
-  const today = String(roundPlan?.today || '').trim()
-  if (today) {
-    const firstToday = segments.findIndex(
-      (segment) => segment.kind !== 'retry' && segment.enteredOn === today,
-    )
-    if (firstToday > 0) {
-      const hasCarried = segments.slice(0, firstToday).some(
-        (segment) => segment.enteredOn && segment.enteredOn !== today,
-      )
-      if (hasCarried) segments[firstToday].cohortBoundary = true
-    }
-  }
+  markDayCohortBoundaries(segments)
 
   const unfinishedPalaces = new Set(
     segments

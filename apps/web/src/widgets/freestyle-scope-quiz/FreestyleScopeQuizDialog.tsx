@@ -21,6 +21,7 @@ import {
 } from '@/modules/quiz/domain/quiz-entity/api'
 import {
   beginQuizQuestionMarkRequest,
+  commitQuizQuestionMark,
   isCurrentQuizQuestionMarkRequest,
   isQuizChoiceAttemptClosed,
   isQuizChoiceShortcutActive,
@@ -32,7 +33,6 @@ import {
   QuizFontScaleHint,
   QuizQuestionInteraction,
   QuizQuestionStem,
-  submitQuizQuestionMark,
   useQuizAnswerMode,
   useQuizAnsweringShortcuts,
   useQuizAttemptOrchestration,
@@ -274,9 +274,12 @@ export function FreestyleScopeQuizDialog({
   }, [current?.id])
   const currentState = current ? questionStates[current.id] ?? {} : {}
   const answeredCount = questions.filter((item) => questionStates[item.id]?.resolved).length
-  // This round's weakest rating among the question's bound knowledge points.
-  // Null renders as 「本轮尚未复习」, never as a zero score.
+  // Weakest 1–4 this round. 「本轮尚未复习」 only when the bar still has the
+  // point open. A finished or never-scheduled point hides the badge.
   const currentRating = overlayQuestionRating(overlay?.question_node_ratings, current?.id)
+  const currentPending = Boolean(
+    current && (overlay?.question_pending_ids ?? []).includes(String(current.id)),
+  )
 
   const handleClearChoice = useOverlayQuizClear({
     overlay,
@@ -399,14 +402,29 @@ export function FreestyleScopeQuizDialog({
   const handleToggleMark = useCallback(async (marked: boolean) => {
     if (!current) return
     const questionId = current.id
+    const previousMarked = Boolean(current.marked)
     const token = beginQuizQuestionMarkRequest(questionId)
+    const stillCurrent = () => (
+      isCurrentQuizQuestionMarkRequest(questionId, token)
+      && !removedQuestionIdsRef.current.has(questionId)
+    )
     try {
-      const { question } = await submitQuizQuestionMark({ questionId, marked })
-      if (!isCurrentQuizQuestionMarkRequest(questionId, token)) return
-      setQuestions((items) => items.map((item) => (item.id === question.id ? { ...item, ...question } : item)))
+      await commitQuizQuestionMark({
+        questionId,
+        marked,
+        previousMarked,
+        token,
+        stillCurrent,
+        apply: (nextMarked, saved) => {
+          setQuestions((items) => items.map((item) => {
+            if (item.id !== questionId) return item
+            if (saved && saved.id === item.id) return { ...item, ...saved, marked: nextMarked }
+            return { ...item, marked: nextMarked }
+          }))
+        },
+      })
     } catch (error) {
-      if (!isCurrentQuizQuestionMarkRequest(questionId, token)) return
-      if (removedQuestionIdsRef.current.has(questionId)) return
+      if (!stillCurrent()) return
       toast.error(error instanceof Error ? error.message : '保存标记失败。')
     }
   }, [current])
@@ -486,13 +504,15 @@ export function FreestyleScopeQuizDialog({
       : questions.length > 0
         ? [
             // The pager row owns 「第 n / m 题」 once there is more than one question.
-            questions.length > 1 ? null : `第 ${index + 1} / ${questions.length} 题`,
             answeredCount > 0 ? `已答 ${answeredCount}` : null,
             currentPalaceTitle || null,
           ]
             .filter((part) => part != null && part !== '')
             .join(' · ')
         : scopeSummary
+  const singleQuestionLabel = !showConfig && !loading && questions.length === 1
+    ? `第 ${index + 1} / ${questions.length} 题`
+    : null
 
   return (
     <>
@@ -555,8 +575,15 @@ export function FreestyleScopeQuizDialog({
                 </div>
               ) : null}
             </div>
-            {headerDetail ? (
+            {singleQuestionLabel || headerDetail ? (
               <DialogDescription className="text-xs leading-relaxed text-muted-foreground">
+                {singleQuestionLabel ? (
+                  <span className={current?.marked ? 'font-medium text-rose-700 dark:text-rose-300' : undefined}>
+                    {singleQuestionLabel}
+                    {current?.marked ? ' · 已标记' : ''}
+                  </span>
+                ) : null}
+                {singleQuestionLabel && headerDetail ? ' · ' : null}
                 {headerDetail}
               </DialogDescription>
             ) : null}
@@ -629,6 +656,7 @@ export function FreestyleScopeQuizDialog({
                     <Badge variant="outline">{getQuestionTypeLabel(current.question_type)}</Badge>
                     <QuizQuestionRoundRatingBadge
                       rating={currentRating}
+                      pending={currentPending}
                       palaceId={current.palace_id ?? null}
                       onOpenSource={() => setPalaceLookupOpen(true)}
                     />

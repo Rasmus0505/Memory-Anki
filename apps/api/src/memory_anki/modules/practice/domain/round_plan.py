@@ -400,6 +400,48 @@ def review_unit_ids(plan: Mapping[str, Any] | None) -> list[str]:
     return ordered
 
 
+def waiting_review_unit_ids(plan: Mapping[str, Any] | None) -> list[str]:
+    """Units the progress bar has not finished yet, in plan order.
+
+    A card the bar already drew as done (completed, excluded, or compressed)
+    is not waiting, even when it never received a 1–4 score. A live inserted
+    retry of that card puts the unit back in the waiting set until the retry
+    itself is done. Quiz cards have no unit.
+    """
+    normalized = normalize_plan(plan)
+    unit_by_card: dict[str, str] = {}
+    for card in normalized["original_cards"]:
+        if card.get("kind") != "mindmap_branch":
+            continue
+        card_id = _text(card.get("card_id"))
+        unit_id = _text(card.get("unit_id"))
+        if card_id and unit_id:
+            unit_by_card[card_id] = unit_id
+    open_retry_sources: set[str] = set()
+    for item in normalized["occurrences"]:
+        if item.get("status") != OCCURRENCE_INSERTED:
+            continue
+        occ_id = _text(item.get("occurrence_id"))
+        source_id = _text(item.get("source_card_id"))
+        if not occ_id or not source_id or source_id not in unit_by_card:
+            continue
+        if _is_unfinished(normalized, occ_id):
+            open_retry_sources.add(source_id)
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for card in normalized["original_cards"]:
+        if card.get("kind") != "mindmap_branch":
+            continue
+        card_id = _text(card.get("card_id"))
+        unit_id = _text(card.get("unit_id"))
+        if not unit_id or unit_id in seen or not card_id:
+            continue
+        if _is_unfinished(normalized, card_id) or card_id in open_retry_sources:
+            seen.add(unit_id)
+            ordered.append(unit_id)
+    return ordered
+
+
 def _known_presented_ids(plan: Plan) -> set[str]:
     known = {item["card_id"] for item in plan["original_cards"]}
     known.update(plan["completed_ids"])

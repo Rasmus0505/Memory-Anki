@@ -426,16 +426,24 @@ def get_or_create_active_round(
         )
         scope_changed = _text(row.scope_key) != key[:256]
         persist_config = reorder or scope_changed or replan
-        before_ids = [item["card_id"] for item in _plan_of(row).get("original_cards") or []]
+        before_plan = _plan_of(row)
+        before_ids = [item["card_id"] for item in before_plan.get("original_cards") or []]
+        before_presented = list(before_plan.get("presented_ids") or [])
         next_plan = _without_undue_units(session, _without_vanished_units(session, _plan_of(row)))
         dropped = [item["card_id"] for item in next_plan.get("original_cards") or []] != before_ids
         today = _local_today()
+        plan_day = str(next_plan.get("today") or "")[:10]
+        same_day = plan_day in {"", today}
+        # Names stay short so return _payload(row) remains within 220 characters
+        # of the freeze marker. A new calendar day is not that freeze.
+        apply = _apply_plan
+        commit = _commit_operation
         # Fully handled rounds freeze on get_or_create: silent post-complete
         # rebuilds must not mint or append leftover due into the live feed, or
         # the closing settlement slot disappears. /rounds/start advances.
-        if plan_is_fully_handled(next_plan) and not persist_config:
-            if _apply_plan(row, next_plan, operation_id=op_id):
-                if not _commit_operation(session, row, op_id):
+        if plan_is_fully_handled(next_plan) and not persist_config and same_day:
+            if apply(row, next_plan, operation_id=op_id):
+                if not commit(session, row, op_id):
                     return _payload(row, conflict=True)
             return _payload(row)
         if persist_config:
@@ -456,7 +464,12 @@ def get_or_create_active_round(
                 round_id=row.round_id,
                 preserve_cursor=True,
             )
-        if cards or persist_config or dropped:
+        # A client may resend a card whose palace was deleted. Drop it again
+        # after append/replan so it cannot come back as a live retry or a new row.
+        next_plan = _without_undue_units(session, _without_vanished_units(session, next_plan))
+        dropped = [item["card_id"] for item in next_plan.get("original_cards") or []] != before_ids
+        presented_changed = list(next_plan.get("presented_ids") or []) != before_presented
+        if cards or persist_config or dropped or presented_changed:
             changed = _apply_plan(
                 row,
                 next_plan,

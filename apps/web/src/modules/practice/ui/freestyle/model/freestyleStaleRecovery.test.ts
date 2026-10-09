@@ -194,6 +194,7 @@ describe('isStaleUnitError', () => {
   it('drops 404 / not due / wrong encounter only', () => {
     expect(isStaleUnitError({ status: 404 })).toBe(true)
     expect(isStaleUnitError({ message: 'Review unit not found' })).toBe(true)
+    expect(isStaleUnitError({ message: 'palace not found: 145' })).toBe(true)
     expect(isStaleUnitError({ message: 'not due' })).toBe(true)
     expect(isStaleUnitError({ message: 'encounter_id belongs to another review unit' })).toBe(true)
     expect(isStaleUnitError({ message: 'Active unit review session required' })).toBe(false)

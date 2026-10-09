@@ -36,12 +36,15 @@ service module stays within its size budget.
 
 from __future__ import annotations
 
+import json
+
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables.misc import (
     FreestyleRoundOperationReceipt,
     FreestyleRoundState,
 )
+from memory_anki.modules.practice.domain.round_plan_normalization import normalize_plan
 from memory_anki.modules.practice.domain.workspace import normalize_workspace
 
 
@@ -88,8 +91,27 @@ def lookup_operation_receipt(
         return session.get(FreestyleRoundOperationReceipt, op_id)
 
 
+def restored_card_ids(session: Session, round_id: str) -> list[str]:
+    """Cards this round put back. Read committed plan only; never autoflush."""
+    rid = str(round_id or "").strip()
+    if not rid:
+        return []
+    with session.no_autoflush:
+        row = session.get(FreestyleRoundState, rid)
+    if row is None or not row.plan_json:
+        return []
+    try:
+        raw = json.loads(row.plan_json)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(raw, dict):
+        return []
+    return [str(item) for item in normalize_plan(raw).get("restored_ids") or [] if str(item).strip()]
+
+
 __all__ = [
     "latest_active_round",
     "lookup_operation_receipt",
     "operation_already_applied",
+    "restored_card_ids",
 ]

@@ -107,6 +107,134 @@ export function coalesceHydrationLedger(
   return { ...base, plan, hiddenIds: hidden }
 }
 
+function calendarDay(value: string | null | undefined): string {
+  const text = String(value || '').trim()
+  return text.length >= 10 && text[4] === '-' && text[7] === '-' ? text.slice(0, 10) : ''
+}
+
+/**
+ * A new calendar day can put a finished card back into today's queue.
+ * Yesterday's local score must not be merged back over that reopen.
+ * Same-day hydration still keeps a score the server snapshot has not received.
+ */
+function dropReopenedLocalFacts(
+  localPlan: FreestyleRoundPlanState | null,
+  localCompletedIds: readonly string[],
+  localEncounters: Record<string, FreestyleUnitEncounterState>,
+  serverPlan: FreestyleRoundPlanPayload | null | undefined,
+): {
+  localPlan: FreestyleRoundPlanState | null
+  localCompletedIds: readonly string[]
+  localEncounters: Record<string, FreestyleUnitEncounterState>
+  reopenedIds: ReadonlySet<string>
+} {
+  const localDay = calendarDay(localPlan?.today)
+  const serverDay = calendarDay(serverPlan?.today)
+  const empty = new Set<string>()
+  if (!localPlan || !localDay || !serverDay || localDay >= serverDay) {
+    return { localPlan, localCompletedIds, localEncounters, reopenedIds: empty }
+  }
+  const stillHeld = new Set(
+    [
+      ...(serverPlan?.completed_ids || []),
+      ...(serverPlan?.compressed_ids || []),
+      ...(serverPlan?.excluded_ids || []),
+    ].map((id) => String(id || '').trim()).filter(Boolean),
+  )
+  const reopened = new Set<string>()
+  for (const raw of localPlan.compressedIds ?? []) {
+    const cardId = String(raw || '').trim()
+    if (cardId && !stillHeld.has(cardId)) reopened.add(cardId)
+  }
+  for (const card of Object.values(localPlan.cardsById)) {
+    if (card.status === 'excluded' || stillHeld.has(card.cardId)) continue
+    if (card.status === 'completed' || card.status === 'retry' || card.lastRating != null) {
+      reopened.add(card.cardId)
+    }
+  }
+  for (const raw of localCompletedIds) {
+    const cardId = String(raw || '').trim()
+    if (cardId && !stillHeld.has(cardId)) reopened.add(cardId)
+  }
+  if (reopened.size === 0) {
+    return { localPlan, localCompletedIds, localEncounters, reopenedIds: empty }
+  }
+  const cardsById = { ...localPlan.cardsById }
+  for (const id of reopened) {
+    const card = cardsById[id]
+    if (!card || card.status === 'excluded') continue
+    cardsById[id] = { ...card, status: 'pending', lastRating: null }
+  }
+  const nextEncounters = { ...localEncounters }
+  for (const id of reopened) delete nextEncounters[id]
+  return {
+    localPlan: {
+      ...localPlan,
+      today: serverDay,
+      cardsById,
+      compressedIds: (localPlan.compressedIds ?? []).filter((id) => !reopened.has(id)),
+    },
+    localCompletedIds: localCompletedIds.filter((id) => !reopened.has(String(id || '').trim())),
+    localEncounters: nextEncounters,
+    reopenedIds: reopened,
+  }
+}
+
+function restoredIdsReleasedByServer(
+  server: FreestyleRoundPlanPayload | null | undefined,
+  blocked: ReadonlySet<string>,
+): string[] {
+  const held = new Set(
+    [
+      ...(server?.completed_ids || []),
+      ...(server?.compressed_ids || []),
+      ...(server?.excluded_ids || []),
+    ].map((id) => String(id || '').trim()).filter(Boolean),
+  )
+  const seen = new Set<string>()
+  const ids: string[] = []
+  for (const raw of server?.restored_ids ?? []) {
+    const id = String(raw || '').trim()
+    if (!id || seen.has(id) || held.has(id) || blocked.has(id)) continue
+    seen.add(id)
+    ids.push(id)
+  }
+  return ids
+}
+
+function dropMarkedLocalFacts(
+  localPlan: FreestyleRoundPlanState | null,
+  localCompletedIds: readonly string[],
+  localEncounters: Record<string, FreestyleUnitEncounterState>,
+  marked: ReadonlySet<string>,
+): {
+  localPlan: FreestyleRoundPlanState | null
+  localCompletedIds: readonly string[]
+  localEncounters: Record<string, FreestyleUnitEncounterState>
+} {
+  const completed = localCompletedIds.filter((id) => !marked.has(String(id || '').trim()))
+  if (!localPlan || marked.size === 0) {
+    return { localPlan, localCompletedIds: completed, localEncounters }
+  }
+  const cardsById = { ...localPlan.cardsById }
+  for (const id of marked) {
+    const card = cardsById[id]
+    if (!card) continue
+    cardsById[id] = { ...card, status: 'pending', lastRating: null }
+  }
+  const nextEncounters = { ...localEncounters }
+  for (const id of marked) delete nextEncounters[id]
+  return {
+    localPlan: {
+      ...localPlan,
+      cardsById,
+      compressedIds: (localPlan.compressedIds ?? []).filter((id) => !marked.has(id)),
+    },
+    localCompletedIds: completed,
+    localEncounters: nextEncounters,
+  }
+}
+
 function applyServerExcludedIds(
   plan: FreestyleRoundPlanState,
   server: FreestyleRoundPlanPayload | null | undefined,
@@ -177,14 +305,43 @@ export function commitHydratedRoundLedger(input: {
   adoptServerLedger?: boolean
 }): HydratedRoundLedger {
   const adopt = input.adoptServerLedger === true
-  const localPlan = adopt ? null : input.localPlan
-  const localCompletedIds = adopt ? [] : input.localCompletedIds
-  const localHiddenIds = adopt ? [] : input.localHiddenIds
-  const localEncounters = adopt ? {} : input.localEncounters
+  const releasedIncoming = (input.releasedIds ?? [])
+    .map((id) => String(id || '').trim())
+    .filter(Boolean)
+  const forceExcludedIds = (input.forceExcludedIds ?? [])
+    .map((id) => String(id || '').trim())
+    .filter((id) => id && !releasedIncoming.includes(id))
+  const forceCompressedIds = (input.forceCompressedIds ?? [])
+    .map((id) => String(id || '').trim())
+    .filter(Boolean)
+  const restoredIds = restoredIdsReleasedByServer(
+    input.serverPlan,
+    new Set([...forceExcludedIds, ...forceCompressedIds]),
+  )
+  const restored = new Set(restoredIds)
+  const stripped = dropReopenedLocalFacts(
+    adopt ? null : input.localPlan,
+    adopt ? [] : input.localCompletedIds,
+    adopt ? {} : input.localEncounters,
+    input.serverPlan,
+  )
+  const marked = dropMarkedLocalFacts(
+    stripped.localPlan,
+    stripped.localCompletedIds,
+    stripped.localEncounters,
+    restored,
+  )
+  const localPlan = marked.localPlan
+  const localCompletedIds = marked.localCompletedIds
+  const localHiddenIds = (adopt ? [] : input.localHiddenIds)
+    .map((id) => String(id || '').trim())
+    .filter((id) => id && !restored.has(id))
+  const localEncounters = marked.localEncounters
   const serverPlan = input.serverPlan
-  const serverCompleted = Array.isArray(serverPlan?.completed_ids)
+  const serverCompleted = (Array.isArray(serverPlan?.completed_ids)
     ? serverPlan.completed_ids.map(String)
-    : (adopt ? [] : [...input.localCompletedIds])
+    : (adopt ? [] : [...localCompletedIds])
+  ).filter((id) => !restored.has(String(id || '').trim()))
   const serverExcluded = Array.isArray(serverPlan?.excluded_ids)
     ? serverPlan.excluded_ids.map(String)
     : []
@@ -219,10 +376,7 @@ export function commitHydratedRoundLedger(input: {
       input.adoptedRoundId,
     ),
   })
-  const releasedIds = input.releasedIds ?? []
-  const forceExcludedIds = (input.forceExcludedIds ?? [])
-    .map((id) => String(id || '').trim())
-    .filter((id) => id && !releasedIds.includes(id))
+  const releasedIds = [...releasedIncoming, ...restoredIds]
   const planForForce = retained.plan
     ?? (forceExcludedIds.length
       ? createRoundPlan(input.adoptedRoundId, input.cards, input.config, input.meta, null)
@@ -231,13 +385,10 @@ export function commitHydratedRoundLedger(input: {
   const serverCompressed = Array.isArray(serverPlan?.compressed_ids)
     ? serverPlan.compressed_ids.map(String)
     : []
-  const forceCompressedIds = (input.forceCompressedIds ?? [])
-    .map((id) => String(id || '').trim())
-    .filter(Boolean)
   const compressedIds = [...new Set([
     ...(forced?.compressedIds ?? []),
     ...serverCompressed,
-    ...forceCompressedIds,
+    ...forceCompressedIds.filter((id) => !stripped.reopenedIds.has(id) && !restored.has(id)),
   ])]
   const compressed = compressRoundPlanCards(forced, compressedIds) ?? forced
   return {

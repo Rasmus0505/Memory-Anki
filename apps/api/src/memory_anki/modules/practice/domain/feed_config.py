@@ -47,6 +47,9 @@ OVERLAY_TYPE_ORDER_OBJECTIVE_FIRST = "objective_then_subjective"
 OVERLAY_TYPE_ORDER_SUBJECTIVE_FIRST = "subjective_then_objective"
 OVERLAY_NESTING_PALACE_THEN_TYPE = "palace_then_type"
 OVERLAY_NESTING_TYPE_THEN_PALACE = "type_then_palace"
+OVERLAY_RATING_INHERIT_BLANK = "blank"
+OVERLAY_RATING_INHERIT_LOWEST = "lowest_reviewed"
+DEFAULT_OVERLAY_RATING_INHERIT = OVERLAY_RATING_INHERIT_LOWEST
 
 QUIZ_MASTERY_UNSEEN = "unseen"
 QUIZ_MASTERY_WEAK = "weak"
@@ -128,6 +131,11 @@ OVERLAY_TYPE_ORDERS = {
 OVERLAY_TYPE_PALACE_NESTINGS = {
     OVERLAY_NESTING_PALACE_THEN_TYPE,
     OVERLAY_NESTING_TYPE_THEN_PALACE,
+}
+
+OVERLAY_RATING_INHERITS = {
+    OVERLAY_RATING_INHERIT_BLANK,
+    OVERLAY_RATING_INHERIT_LOWEST,
 }
 
 SUBJECT_SCOPES = {"all", "english", "non_english"}
@@ -278,6 +286,13 @@ def _as_overlay_type_palace_nesting(value: Any) -> str:
     if key in OVERLAY_TYPE_PALACE_NESTINGS:
         return key
     return OVERLAY_NESTING_PALACE_THEN_TYPE
+
+
+def _as_overlay_rating_inherit(value: Any) -> str:
+    key = str(value or "").strip()
+    if key in OVERLAY_RATING_INHERITS:
+        return key
+    return DEFAULT_OVERLAY_RATING_INHERIT
 
 
 def _as_subject_scope(value: Any) -> str:
@@ -628,6 +643,9 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
         "overlay_type_palace_nesting": _as_overlay_type_palace_nesting(
             data.get("overlay_type_palace_nesting")
         ),
+        # Display only. Must stay out of queue_construction_signature: changing
+        # how a blank score is shown must not rebuild the card queue.
+        "overlay_rating_inherit": _as_overlay_rating_inherit(data.get("overlay_rating_inherit")),
     }
 
 

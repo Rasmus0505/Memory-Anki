@@ -28,7 +28,7 @@ export function FreestyleMindMapImportDrawer({
           forceSyncKey={`preview:${version}`}
           preserveViewOnSync={false}
           onEditorStateChange={() => {}}
-          className="h-full w-full rounded-[inherit] bg-zinc-50"
+          className="h-full w-full"
         />
       )}
       targetNodeLabel={targetNodeLabel}

@@ -21,12 +21,15 @@ import {
 import type { FreestyleCard } from '@/shared/api/contracts'
 import {
   buildFreestyleProgressSummary,
+  dayCohortLabel,
   palaceAccentToneClass,
   retryChromeClass,
   retryNodeToneClass,
+  roundDaySpan,
   visualPlanStatus,
   type FreestyleProgressSegment,
 } from '@/modules/practice/ui/freestyle/model/freestyleProgressSegments'
+import { formatLocalDateKey } from '@/shared/lib/dateTime'
 import { Button } from '@/shared/components/ui/button'
 import {
   Sheet,
@@ -340,6 +343,7 @@ export function FreestyleRoundSheet({
   onOpenConfig,
   onRateCard,
   onRemoveCard,
+  labelToday,
 }: {
   open: boolean
   cards: FreestyleCard[]
@@ -356,7 +360,10 @@ export function FreestyleRoundSheet({
   onRateCard?: (cardId: string, rating: UnitRating) => void
   onRemoveCard?: (cardId: string) => void
   loading?: boolean
+  /** Day the section titles speak from. Defaults to the learner's today. */
+  labelToday?: string
 }) {
+  const spokenToday = labelToday || formatLocalDateKey(new Date())
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [dragOverId, setDragOverId] = useState<string | null>(null)
@@ -392,18 +399,23 @@ export function FreestyleRoundSheet({
       })
       return [...result.entries()]
     }
-    const today = roundPlan?.today || ''
-    if (!today) return [{ key: 'all', title: '', groups: groupPalace(rows) }]
-    const carried = rows.filter((entry) => entry.enteredOn !== today)
-    const fresh = rows.filter((entry) => entry.enteredOn === today)
-    if (!carried.length || !fresh.length) {
-      return [{ key: 'all', title: '', groups: groupPalace(rows) }]
-    }
-    return [
-      { key: 'carried', title: '此前欠账', groups: groupPalace(carried) },
-      { key: 'today', title: '今天新增', groups: groupPalace(fresh) },
-    ]
-  }, [rows, roundPlan?.today])
+    const distinct = new Set(rows.map((entry) => entry.enteredOn || ''))
+    if (distinct.size <= 1) return [{ key: 'all', title: '', groups: groupPalace(rows) }]
+    const order: string[] = []
+    const buckets = new Map<string, FreestyleRoundPlanCard[]>()
+    rows.forEach((entry) => {
+      const day = entry.enteredOn || ''
+      const bucket = buckets.get(day) ?? []
+      if (!buckets.has(day)) order.push(day)
+      bucket.push(entry)
+      buckets.set(day, bucket)
+    })
+    return order.map((day) => ({
+      key: day || 'undated',
+      title: day ? dayCohortLabel(day, spokenToday) : '更早留下的',
+      groups: groupPalace(buckets.get(day) ?? []),
+    }))
+  }, [rows, spokenToday])
   const currentCardId = cards[currentIndex]?.id ?? queueState.currentCardId
   const selectedSet = new Set(selectedIds)
   const fillStatus = useCallback((entry: FreestyleRoundPlanCard): FreestyleRoundPlanCardStatus => {
@@ -470,27 +482,33 @@ export function FreestyleRoundSheet({
       const entry = byId[segment.cardId]
       return entry ? [entry] : []
     })
-    const boundary = progressSummary.segments.findIndex((segment) => segment.cohortBoundary)
-    const sections: Array<{ key: string; title: string; entries: FreestyleRoundPlanCard[] }> = boundary > 0
-      ? [
-          { key: 'carried', title: '此前欠账', entries: entriesFor(progressSummary.segments.slice(0, boundary)) },
-          { key: 'today', title: '今天新增', entries: entriesFor(progressSummary.segments.slice(boundary)) },
-        ]
-      : [{ key: 'all', title: '', entries: entriesFor(progressSummary.segments) }]
+    const split = progressSummary.segments.some((segment) => segment.cohortBoundary)
+    const runs: FreestyleProgressSegment[][] = []
+    progressSummary.segments.forEach((segment) => {
+      if (segment.cohortBoundary || runs.length === 0) runs.push([])
+      runs[runs.length - 1]?.push(segment)
+    })
+    const sections: Array<{ key: string; title: string; entries: FreestyleRoundPlanCard[] }> = runs
+      .map((run, index) => {
+        const day = run.find((segment) => segment.enteredOn)?.enteredOn || ''
+        return {
+          key: day ? `${day}-${index}` : `run-${index}`,
+          title: split ? (day ? dayCohortLabel(day, spokenToday) : '更早留下的') : '',
+          entries: entriesFor(run),
+        }
+      })
+      .filter((section) => section.entries.length)
     const shown = new Set(sections.flatMap((section) => section.entries.map((entry) => entry.cardId)))
     const excluded = rows.filter((entry) => !shown.has(entry.cardId) && fillStatus(entry) === 'excluded')
     if (excluded.length) sections.push({ key: 'excluded', title: '已排除', entries: excluded })
     return sections
-  }, [fillStatus, progressSummary.segments, roundPlan?.cardsById, rows])
+  }, [fillStatus, progressSummary.segments, roundPlan?.cardsById, spokenToday])
 
   const moveRow = (sourceId: string, targetId: string) => {
     if (sourceId === targetId || !roundPlan) return
-    const today = roundPlan.today || ''
-    if (today) {
-      const source = roundPlan.cardsById[sourceId]
-      const target = roundPlan.cardsById[targetId]
-      if (source && target && (source.enteredOn === today) !== (target.enteredOn === today)) return
-    }
+    const source = roundPlan.cardsById[sourceId]
+    const target = roundPlan.cardsById[targetId]
+    if (source && target && (source.enteredOn || '') !== (target.enteredOn || '')) return
     const next = [...roundPlan.orderIds]
     const sourceIndex = next.indexOf(sourceId)
     const targetIndex = next.indexOf(targetId)
@@ -595,6 +613,9 @@ export function FreestyleRoundSheet({
           </div>
           <SheetDescription className="text-xs">
             本轮 {roundPlan?.scheduledCount ?? rows.length} 张
+            {roundDaySpan(rows.map((entry) => entry.enteredOn), spokenToday) > 1
+              ? ` · 跨了 ${roundDaySpan(rows.map((entry) => entry.enteredOn), spokenToday)} 天`
+              : ''}
           </SheetDescription>
         </SheetHeader>
 

@@ -22,14 +22,21 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from memory_anki.modules.content.public.queries import resolve_palace_titles
+from memory_anki.modules.content.public.queries import (
+    list_node_parent_uids,
+    resolve_palace_titles,
+)
 from memory_anki.modules.memory.public.queries import list_unit_node_members
 from memory_anki.modules.quiz.public.queries import (
     list_node_bindings_for_palaces,
     list_published_questions_for_palaces,
 )
 
-from ..domain.feed_config import sanitize_feed_config
+from ..domain.feed_config import (
+    OVERLAY_RATING_INHERIT_BLANK,
+    OVERLAY_RATING_INHERIT_LOWEST,
+    sanitize_feed_config,
+)
 from ..domain.overlay_quiz import (
     QUESTION_RATING_NONE,
     SCOPE_REASON_KINDS_FILTERED,
@@ -61,53 +68,91 @@ def _positive_ids(value: Any) -> list[int]:
     return result
 
 
-def _round_node_ratings(
+def _round_node_units(
     session: Session,
     *,
     unit_ids: list[str],
-    round_ratings: dict[str, int],
-) -> dict[str, int]:
-    """``node_uid`` → this round's 1–4 rating, for the round's own units only.
+) -> dict[str, str]:
+    """``node_uid`` → the round's review unit that owns it.
 
-    The chain is: ``node_uid`` → the round's review unit owning that node → this
-    round's rating for that unit. Only units in ``unit_ids`` are considered, so a
-    node owned by some other palace's unit cannot borrow a rating.
+    Only units in ``unit_ids`` are considered, so a node owned by some other
+    palace's unit cannot borrow a rating or a "still waiting" mark.
     """
     if not unit_ids:
         return {}
     members_by_unit = list_unit_node_members(session, list(unit_ids))
-    # node_uid → unit_id, only for units this round actually scheduled.
     node_unit: dict[str, str] = {}
     for unit_id, members in members_by_unit.items():
         for node_uid in members:
             node_unit.setdefault(str(node_uid), unit_id)
-    if not node_unit:
-        return {}
+    return node_unit
+
+
+def _rating_inherit_mode(value: str | None) -> str:
+    key = str(value or "").strip()
+    if key == OVERLAY_RATING_INHERIT_BLANK:
+        return OVERLAY_RATING_INHERIT_BLANK
+    return OVERLAY_RATING_INHERIT_LOWEST
+
+
+def _lowest_reviewed_ancestor_rating(
+    node_uids: list[str],
+    rating_by_node: dict[str, int],
+    parents: dict[str, str],
+) -> int | None:
+    """Weakest 1–4 among ancestors whose own round unit was scored.
+
+    Starts at the parent, so a sibling's score cannot leak in. Display only:
+    it does not put the question on the ancestor's card.
+    """
+    found: list[int] = []
+    for uid in node_uids:
+        current = parents.get(str(uid))
+        seen: set[str] = set()
+        while current and current not in seen:
+            seen.add(current)
+            rating = rating_by_node.get(current)
+            if rating in {1, 2, 3, 4}:
+                found.append(int(rating))
+            current = parents.get(current)
+    if not found:
+        return None
+    return min(found)
+
+
+def classify_round_question_badges(
+    session: Session,
+    *,
+    palace_ids: list[int],
+    unit_ids: list[str],
+    waiting_unit_ids: list[str] | None,
+    round_ratings: dict[str, int],
+    rating_inherit: str | None = None,
+) -> tuple[dict[str, int], list[str]]:
+    """``(ratings, pending_ids)`` for every question bound to these palaces.
+
+    ``ratings`` is question id → weakest 1–4 among bound nodes this round rated.
+    ``pending_ids`` are questions with no such score whose bound node belongs to
+    a unit still unfinished on the progress bar.
+
+    A question in neither list must not be labelled 「本轮尚未复习」. Its point
+    was never in this round, or the bar already drew that card as done. Saying
+    the round has not reviewed it contradicts the bar.
+
+    When ``rating_inherit`` is ``lowest_reviewed`` (the default), a question
+    with no own 1–4 and not pending takes the weakest 1–4 among reviewed
+    ancestor nodes. ``blank`` leaves that case out of both lists. Own score
+    and pending still win. This is a display fallback, not queue membership.
+    """
+    if not palace_ids:
+        return {}, []
+    node_unit = _round_node_units(session, unit_ids=unit_ids)
     rating_by_node: dict[str, int] = {}
     for node_uid, unit_id in node_unit.items():
         rating = round_ratings.get(unit_id)
         if rating in {1, 2, 3, 4}:
             rating_by_node[node_uid] = int(rating)
-    return rating_by_node
-
-
-def _question_ratings_from_nodes(
-    session: Session,
-    *,
-    palace_ids: list[int],
-    rating_by_node: dict[str, int],
-) -> dict[str, int]:
-    """``question_id`` → weakest this-round rating among its bound knowledge points.
-
-    Shared by both 做题 surfaces: the toolbar 做题 overlay and 关联题目. They read
-    the same rule through here rather than each deriving a score, so 「本轮最低 N」
-    cannot mean two different things depending on which window is open.
-
-    Only rated questions appear. A question whose bound nodes are all unrated this
-    round is absent, which the UI renders as 「本轮尚未复习」 — never as a zero.
-    """
-    if not palace_ids or not rating_by_node:
-        return {}
+    waiting = {str(item) for item in (waiting_unit_ids or []) if str(item)}
     bindings = list_node_bindings_for_palaces(session, palace_ids=palace_ids)
     bound_by_question: dict[int, list[str]] = {}
     for row in bindings:
@@ -117,11 +162,26 @@ def _question_ratings_from_nodes(
             continue
         bound_by_question.setdefault(qid, []).append(node_uid)
     ratings: dict[str, int] = {}
+    pending: list[str] = []
+    inherit_later: list[tuple[str, list[str]]] = []
+    inherit = _rating_inherit_mode(rating_inherit) == OVERLAY_RATING_INHERIT_LOWEST
     for qid, node_uids in bound_by_question.items():
         picked = pick_question_node_rating(node_uids, rating_by_node)
         if picked is not None and picked != QUESTION_RATING_NONE:
             ratings[str(qid)] = picked
-    return ratings
+            continue
+        if any(node_unit.get(uid) in waiting for uid in node_uids):
+            pending.append(str(qid))
+            continue
+        if inherit:
+            inherit_later.append((str(qid), node_uids))
+    if inherit_later:
+        parents = list_node_parent_uids(session, palace_ids)
+        for qid, node_uids in inherit_later:
+            inherited = _lowest_reviewed_ancestor_rating(node_uids, rating_by_node, parents)
+            if inherited is not None:
+                ratings[qid] = inherited
+    return ratings, pending
 
 
 def build_round_question_ratings(
@@ -130,20 +190,49 @@ def build_round_question_ratings(
     palace_ids: list[int],
     unit_ids: list[str],
     round_ratings: dict[str, int],
+    rating_inherit: str | None = None,
 ) -> dict[str, int]:
     """``question_id`` → this round's weakest rating, for **every** bound question.
 
-    The 做题 pool only holds questions passing the kind filter, but 关联题目 can
-    open any question bound to a node of the round's palaces (measured: 235 across
-    the round's palaces against a 165-question pool). Reading a rating off the pool
-    would leave those questions blank, so this covers the whole round instead.
+    Ratings only. 「本轮尚未复习」 is not "missing from this map": that sentence
+    belongs to ``question_pending_ids``, which this wrapper deliberately omits.
     """
-    return _question_ratings_from_nodes(
+    ratings, _pending = classify_round_question_badges(
         session,
         palace_ids=palace_ids,
-        rating_by_node=_round_node_ratings(
-            session, unit_ids=unit_ids, round_ratings=round_ratings
-        ),
+        unit_ids=unit_ids,
+        waiting_unit_ids=[],
+        round_ratings=round_ratings,
+        rating_inherit=rating_inherit,
+    )
+    return ratings
+
+
+def _resolve_question_badges(
+    session: Session,
+    *,
+    question_palace_ids: dict[str, int],
+    unit_ids: list[str],
+    waiting_unit_ids: list[str] | None,
+    round_ratings: dict[str, int],
+    rating_inherit: str | None = None,
+) -> tuple[dict[str, int], list[str]]:
+    """Badge pair narrowed to the overlay pool's own questions."""
+    if not question_palace_ids:
+        return {}, []
+    palace_ids = sorted({int(item) for item in question_palace_ids.values() if int(item) > 0})
+    ratings, pending = classify_round_question_badges(
+        session,
+        palace_ids=palace_ids,
+        unit_ids=unit_ids,
+        waiting_unit_ids=waiting_unit_ids,
+        round_ratings=round_ratings,
+        rating_inherit=rating_inherit,
+    )
+    pool_ids = {str(int(raw)) for raw in question_palace_ids}
+    return (
+        {qid: rating for qid, rating in ratings.items() if qid in pool_ids},
+        [qid for qid in pending if qid in pool_ids],
     )
 
 
@@ -154,18 +243,15 @@ def _resolve_question_node_ratings(
     unit_ids: list[str],
     round_ratings: dict[str, int],
 ) -> dict[str, int]:
-    """Badge map narrowed to the overlay pool's own questions."""
-    if not question_palace_ids:
-        return {}
-    palace_ids = sorted({int(item) for item in question_palace_ids.values() if int(item) > 0})
-    ratings = build_round_question_ratings(
+    """Ratings map narrowed to the overlay pool. Pending ids are a separate field."""
+    ratings, _pending = _resolve_question_badges(
         session,
-        palace_ids=palace_ids,
+        question_palace_ids=question_palace_ids,
         unit_ids=unit_ids,
+        waiting_unit_ids=[],
         round_ratings=round_ratings,
     )
-    pool_ids = {str(int(raw)) for raw in question_palace_ids}
-    return {qid: rating for qid, rating in ratings.items() if qid in pool_ids}
+    return ratings
 
 
 def build_overlay_question_pack(
@@ -174,6 +260,7 @@ def build_overlay_question_pack(
     *,
     palace_ids: list[int] | None = None,
     unit_ids: list[str] | None = None,
+    waiting_unit_ids: list[str] | None = None,
     round_ratings: dict[str, int] | None = None,
     removed_palace_ids: list[int] | None = None,
 ) -> dict[str, Any]:
@@ -189,9 +276,10 @@ def build_overlay_question_pack(
     card still queued is unaffected.
 
     ``unit_ids`` are the round's review units, used to resolve each question's
-    bound knowledge points to this round's rating. ``round_ratings`` maps
-    ``unit_id`` → this round's 1–4 rating (lowest wins per unit); a unit absent
-    from it simply has no rating this round.
+    bound knowledge points to this round's rating. ``waiting_unit_ids`` are the
+    subset the progress bar has not finished yet; only those may be labelled
+    「本轮尚未复习」. ``round_ratings`` maps ``unit_id`` → this round's 1–4 rating
+    (lowest wins per unit); a unit absent from it simply has no rating this round.
     """
     config = sanitize_feed_config(config_raw or {})
     raw_streams = config.get("streams")
@@ -279,11 +367,13 @@ def build_overlay_question_pack(
         for item in ordered
         if int(item.get("id") or 0) > 0 and int(item.get("palace_id") or 0) > 0
     }
-    question_node_ratings = _resolve_question_node_ratings(
+    question_node_ratings, question_pending_ids = _resolve_question_badges(
         session,
         question_palace_ids=question_palace_ids,
         unit_ids=list(unit_ids or []),
+        waiting_unit_ids=list(waiting_unit_ids or []),
         round_ratings=dict(round_ratings or {}),
+        rating_inherit=str(config.get("overlay_rating_inherit") or ""),
     )
     scope_palaces = build_scope_palaces(
         # The report lists every palace this round scheduled, including removed
@@ -314,6 +404,7 @@ def build_overlay_question_pack(
         "kind_counts": kind_counts,
         "scope_palaces": scope_palaces,
         "question_node_ratings": question_node_ratings,
+        "question_pending_ids": question_pending_ids,
     }
 
 

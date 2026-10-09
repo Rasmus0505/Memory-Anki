@@ -22,7 +22,12 @@ export function operationId() {
 }
 
 function sessionCacheKey(cardId: string, encounter: FreestyleUnitEncounterState) {
-  return `${cardId}:${encounter.encounterId}:${encounter.status}:${encounter.sessionId ?? ''}`
+  // Status must not split the key. pending→open used to miss the in-flight
+  // start and POST the same glance twice.
+  if (encounter.status === 'closed' && encounter.sessionId) {
+    return `closed:${cardId}:${encounter.encounterId}:${encounter.sessionId}`
+  }
+  return `start:${cardId}:${encounter.encounterId}`
 }
 
 function loadSession(
@@ -62,9 +67,9 @@ export function loadSessionWithTimeout(
 ) {
   return new Promise<UnitReviewSessionDto>((resolve, reject) => {
     const timeout = window.setTimeout(() => {
-      // Do not let a hung request poison retry with the same in-flight cache key.
-      inFlightSessionLoads.delete(sessionCacheKey(card.id, encounter))
-      reject(new Error('加载单元超时，请重试或重建队列。'))
+      // Leave the shared promise in place. A retry of this same glance must
+      // attach to the request already on the wire, not open another one.
+      reject(new Error('这张还在准备评分，你可以先看。'))
     }, SESSION_LOAD_TIMEOUT_MS)
     void loadSession(card, encounter, roundId).then(
       (value) => {

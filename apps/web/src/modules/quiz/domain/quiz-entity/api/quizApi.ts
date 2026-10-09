@@ -221,8 +221,11 @@ export function setPalaceQuizQuestionMarkedApi(questionId: number, marked: boole
     body: JSON.stringify({ marked }),
     persistence: {
       resourceKey: `palace-quiz-question:${questionId}:mark`,
+      coalesceKey: `palace-quiz-question:${questionId}:mark`,
       description: marked ? '标记题目' : '取消标记题目',
-      replayMode: 'manual',
+      // A storage-busy 503 used to sit in the manual queue, so the click looked
+      // like a no-op. Auto-replay keeps the latest toggle and retries it.
+      replayMode: 'auto',
     },
   })
 }

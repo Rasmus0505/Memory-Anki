@@ -353,6 +353,24 @@ def quiz_card_payload(
     }
 
 
+def omit_restored_ids(
+    completed_ids: Sequence[str],
+    hidden_ids: Sequence[str],
+    restored_ids: Sequence[str],
+) -> tuple[list[str], list[str]]:
+    """A card the round put back must survive a stale client hide or completion list."""
+    released = {str(item).strip() for item in restored_ids if str(item).strip()}
+    if not released:
+        return (
+            [str(item) for item in completed_ids if str(item).strip()],
+            [str(item) for item in hidden_ids if str(item).strip()],
+        )
+    return (
+        [str(item) for item in completed_ids if str(item).strip() and str(item).strip() not in released],
+        [str(item) for item in hidden_ids if str(item).strip() and str(item).strip() not in released],
+    )
+
+
 def filter_completed(
     cards: Sequence[dict[str, Any]],
     *,

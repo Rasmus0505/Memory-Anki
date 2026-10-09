@@ -173,6 +173,57 @@ describe('FreestyleProgressRail', () => {
     expect(screen.getByTestId('freestyle-progress-hud').textContent).toBe('2/3')
   })
 
+  it('draws a thicker day line for every day and jumps to that day\'s first card', () => {
+    const onJump = vi.fn()
+    renderRail({
+      today: '2026-09-18',
+      onJump,
+      summary: summary({
+        segments: [
+          { cardId: 'one', tone: 'done', palaceId: 1, palaceDone: false, kind: 'source', enteredOn: '2026-09-16' },
+          { cardId: 'two', tone: 'done', palaceId: 1, palaceDone: false, kind: 'source', enteredOn: '2026-09-17', cohortBoundary: true },
+          { cardId: 'three', tone: 'pending', palaceId: 2, palaceDone: false, kind: 'source', enteredOn: '2026-09-18', cohortBoundary: true, viewing: true },
+        ],
+        position: 3,
+        total: 3,
+      }),
+    })
+
+    const lines = screen.getAllByTestId('freestyle-progress-day-line')
+    expect(lines).toHaveLength(2)
+    expect(lines[0].querySelector('span')?.className).toContain('w-[3px]')
+    expect(lines[0].getAttribute('aria-label')).toContain('昨天')
+    expect(lines[0].getAttribute('aria-label')).toContain('都过了')
+    expect(lines[1].getAttribute('aria-label')).toContain('今天')
+    expect(lines[1].getAttribute('aria-label')).toContain('还剩 1 张')
+    fireEvent.click(lines[0])
+    expect(onJump).toHaveBeenCalledWith('two')
+    expect(screen.getByTestId('freestyle-progress-hud').textContent).toContain('跨了 3 天')
+  })
+
+  it('keeps day lines when the rail is too narrow for every tick', () => {
+    const width = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(40)
+    try {
+      const segments = Array.from({ length: 12 }, (_, index) => ({
+        cardId: `card-${index}`,
+        tone: 'pending' as const,
+        palaceId: 1,
+        palaceDone: false,
+        kind: 'source' as const,
+        enteredOn: index < 6 ? '2026-09-17' : '2026-09-18',
+        cohortBoundary: index === 6,
+      }))
+      renderRail({
+        today: '2026-09-18',
+        summary: summary({ segments, total: 12, position: 1 }),
+      })
+      expect(screen.getByTestId('freestyle-progress-rail').getAttribute('data-compact')).toBe('true')
+      expect(screen.getAllByTestId('freestyle-progress-day-line')).toHaveLength(1)
+    } finally {
+      width.mockRestore()
+    }
+  })
+
   it('collapses distant retry counts into ticks when the round no longer fits', () => {
     const width = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(96)
     try {

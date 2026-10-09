@@ -18,8 +18,10 @@ live-study route. Its round workspace is `p<id>` (column width 20). It has no pe
 the global 随心 selection, and does not emit the peer-round event. The round still applies a transient single-palace scope by locking every
 training stream to that palace. A saved 随心 palace/subject selection does not keep showing the full
 feed. Content/mix/queue settings are borrowed, the lock is not written back to stored prefs, and
-there is no separate formal page session before the queue loads. Editor 「开始随心复习」 and the
-starmap may still enter `/freestyle?palaceId=<id>` as an intentional 随心 launch. There is no
+there is no separate formal page session before the queue loads. Editor 「开始随心复习」
+may still enter `/freestyle?palaceId=<id>` as an intentional 随心 launch. A memory-stage
+review may enter `/freestyle?palaceIds=<id,id>` and lock every stream to exactly those
+palaces for one round; saving still writes the stored 随心 selection, not that transient lock. There is no
 standalone `/review` frontend route or completion screen; unknown retired `/review...` paths fall
 back to `/freestyle`.
 
@@ -79,12 +81,14 @@ round. If the previous study session is still `active` with a passed item and no
 encounter, start finishes that session and opens a new one. It must not return
 `passed review unit cannot start another encounter`. Freestyle unit load failures that
 cannot be healed do not toast English API text; the card offers 重试 / 跳过这张 / 重建本轮 /
-只看不评. A card's `POST /review/units/{id}/sessions` carries a 15s transport timeout
+只看不评. A slow session start must not replace a visible map with that wall: the learner
+keeps reading, and the rating bar says 正在准备评分 until the same glance is ready. A card's
+`POST /review/units/{id}/sessions` carries a 45s transport timeout
 (`SESSION_START_TIMEOUT_MS`) and is deliberately kept out of the mutation queue
-(`persistence: false`) because the UI re-issues it. That budget, the 20s read budget on
-`GET /review/session/{id}`, `loadSessionWithTimeout`'s 30s guard, and the server's 10s SQLite
-`busy_timeout` are ordered on purpose: a half-open Tailscale link must fail fast, and a real
-`database is locked` must reach the card before the generic 「加载单元超时」 message can.
+(`persistence: false`) because the UI re-issues the same encounter id, not a new glance.
+That budget sits above the server's 10s SQLite `busy_timeout`, so a lock wait can finish
+and be adopted instead of aborting at 15s and starting a second write. The visible failure
+is one sentence plus a hidden 复制给助手; it must not tell the learner to restart the app.
 A later due-list rebuild with the same construction knobs (`append_today_cards`) keeps every
 original card, including unstarted leftover work that dropped off today's due set, and appends
 newly seen identities with `entered_on` equal to the local calendar day so retry copies cannot
@@ -98,10 +102,12 @@ without that reminder. Settlement 「开始下一轮」 already starts fresh and
 Changing palace/subject scope (`replan_remaining`) keeps completed ticks, drops unstarted work
 outside the new incoming set unless it still has a live retry, restamps remaining work as today,
 and parks live retries after at most three cards of the new remaining queue (or immediately after
-the completed prefix if fewer remain). Unstarted cards whose review unit is no longer active
+the completed prefix if fewer remain). Unstarted cards whose review unit is no longer openable
 (`drop_vanished_unstarted`) are removed on `get_or_create` without parsing `editor_doc`.
-Completed ticks, excluded cards, quiz cards, live retry sources, and units that still exist
-but are not due today stay. If that drop leaves the round fully handled, the plan is
+A unit is not openable when it is inactive or its palace is deleted or archived, even
+if this round still has a live retry for it. A completed tick may stay in the round
+history, but its retry leaves too, because opening either one would only redraw a dead card. Completed ticks, excluded cards, and quiz
+cards stay. Units that still exist but are not due today stay. If that drop leaves the round fully handled, the plan is
 persisted and frozen; it does not append new due cards. Queue build reads active due
 `ReviewUnitState` rows (`list_trusted_due_units_for_queue`) and palace titles only — it does
 not parse every `editor_doc` on the critical path. Opening a unit still reconciles that
@@ -484,9 +490,12 @@ the round drops is parked and returns if the round arranges it again.
 ### 做题 badge: the bound knowledge point's this-round rating
 
 Each question shows, above its stem beside the 题型 badge, the **weakest** this-round rating
-among its bound knowledge points — or 「本轮尚未复习」 when this round has not rated any of
-them. The two states must not look alike: an unrated question never shows a `0`, because
-"not reviewed yet" and "reviewed and forgotten" are different information.
+among its bound knowledge points. 「本轮尚未复习」 is shown only when that point is still
+unfinished on the progress bar and has no 1–4 yet. A point the bar already drew as done
+(completed, excluded, or compressed), and a point this round never scheduled, hide the
+badge. Saying they were not reviewed would contradict the bar. An unrated question never
+shows a `0`, because "not reviewed yet" and "reviewed and forgotten" are different
+information. A failed fetch hides the badge rather than inventing the sentence.
 
 **Both answering windows show it through one component.** `FreestyleScopeQuizDialog` (the
 toolbar 做题 overlay) and `NodeBoundQuizDialog` (关联题目) are separate dialogs with separate
@@ -513,15 +522,30 @@ points were rated. Both surfaces share one rule through
 different things depending on which window is open.
 
 Resolution chain: `question → bound node_uid → the round's review unit owning that node →
-this round's rating for that unit`. Only units in the round's own `review_unit_ids` are
-considered, so a node owned elsewhere cannot borrow a rating.
+this round's rating for that unit`. A direct 1–4 still wins. 「本轮尚未复习」 still wins
+when a bound unit is waiting on the bar. Only units in the round's own `review_unit_ids`
+are considered for that direct score, so a node owned elsewhere cannot borrow a rating
+into the queue.
+
+When the question has no own 1–4 and is not pending, `overlay_rating_inherit` decides the
+blank case. `blank` hides the badge. `lowest_reviewed` (the default) shows the weakest
+1–4 among ancestor nodes whose own round unit was scored this round. A sibling's score
+does not count. If no ancestor was reviewed, the badge stays hidden. This is display
+only: the question stays on its own isolation unit and is not attached to the ancestor's
+card. The field is not part of `queue_construction_signature` or the overlay scope
+signature, so changing it does not rebuild the card queue or reset 做题 progress.
+Both windows read the same mode: the pack stamps `question_node_ratings` at ensure time,
+and `read_round_question_badge` applies the mode stored on the round (missing means the
+default).
 
 Ratings are read from `review_unit_encounters` (`list_round_unit_ratings`), **not** from the
 round plan's cached `encounters` map. The cache is not the authority: on a real round it held
 29 entries with only 3 carrying a `rating` field while the encounter table held all 29
-ratings, so trusting it would print 「本轮尚未复习」 for knowledge points the learner had just
-scored. Lowest wins when a unit was rated more than once, and a completion with no score
-never invents one.
+ratings, so trusting it would hide a score the learner had just given, or — under the old
+rule — print 「本轮尚未复习」 for a point already drawn done. Lowest wins when a unit was
+rated more than once. A completion with no score does not invent a 1–4, and it does not
+keep the "not reviewed" sentence once the bar has drawn the card done. The waiting set is
+`waiting_review_unit_ids`: source unfinished, or a live inserted retry of a finished source.
 
 Tapping the badge opens 查看宫殿 focused on that knowledge point (the same dialog the card
 toolbar opens), so an unfamiliar question is one tap from its source text. The badge is a

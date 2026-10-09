@@ -46,6 +46,7 @@ export function FreestyleRatingBar({
   reviewReady,
   hasEncounter,
   actionError,
+  assistantCopy = null,
   blockedHint,
   disabledReason = null,
   shortcutsActive,
@@ -69,6 +70,8 @@ export function FreestyleRatingBar({
   reviewReady: boolean
   hasEncounter: boolean
   actionError: string | null
+  /** Technical detail kept off the card. Shown only as 复制给助手. */
+  assistantCopy?: string | null
   /** Why every rating button is unavailable. Without it a disabled bar is silent. */
   disabledReason?: string | null
   /** Why 「下一组」 is unavailable — inline so touch users see it without a toast. */
@@ -175,10 +178,11 @@ export function FreestyleRatingBar({
             <div className="mt-1 flex gap-3">
               <button
                 type="button"
+                data-testid="freestyle-copy-for-assistant"
                 className="underline underline-offset-2"
-                onClick={() => void navigator.clipboard?.writeText(actionError)}
+                onClick={() => void navigator.clipboard?.writeText(assistantCopy || actionError)}
               >
-                复制诊断
+                复制给助手
               </button>
               {onDismissError ? (
                 <button type="button" className="underline underline-offset-2" onClick={onDismissError}>
@@ -227,6 +231,18 @@ export function FreestyleRatingBar({
             className="mb-1.5 line-clamp-2 rounded-lg border border-rate-hard/30 bg-rate-hard/10 px-2.5 py-1 text-[11px] leading-snug text-stage-ink"
           >
             {blockedHint}
+          </div>
+        ) : null}
+        {assistantCopy && !actionError ? (
+          <div className="mb-1 flex justify-end">
+            <button
+              type="button"
+              data-testid="freestyle-copy-for-assistant"
+              className="text-[10px] text-stage-faint underline underline-offset-2 hover:text-stage-muted"
+              onClick={() => void navigator.clipboard?.writeText(assistantCopy)}
+            >
+              复制给助手
+            </button>
           </div>
         ) : null}
         {disabledReason && !blockedHint ? (
@@ -317,7 +333,7 @@ export function FreestyleRatingBar({
                 ? '继续'
                 : reviewReady
                   ? '计划不可用'
-                  : '加载中'
+                  : '正在准备评分'
             const preview = effect
               ? palaceMode && palaceKind
                 ? palaceRatingPreviewLabel(palaceDueCount, palaceKind)

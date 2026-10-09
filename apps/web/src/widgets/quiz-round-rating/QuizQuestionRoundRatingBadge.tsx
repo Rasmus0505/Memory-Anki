@@ -11,23 +11,29 @@ import { cn } from '@/shared/lib/utils'
  * (`build_round_question_ratings`); this component only renders it.
  *
  * Shows the weakest score among the question's bound knowledge points, or
- * 「本轮尚未复习」 when the round has not reached them yet. Clicking it opens the
- * palace lookup focused on that knowledge point, so a question that feels
- * unfamiliar is one tap from its source text.
+ * 「本轮尚未复习」 only when `pending` is true: the progress bar still has that
+ * point open, and it has no 1–4 yet. A point the bar already drew as done, or
+ * one this round never scheduled, hides the badge. Saying it was not reviewed
+ * would contradict the bar.
  *
  * A missing score renders as words, never as `0`: "not reviewed yet" and
  * "reviewed and forgotten" must not look alike.
  */
 export function QuizQuestionRoundRatingBadge({
   rating,
+  pending = false,
   palaceId,
   onOpenSource,
 }: {
   rating: number | null
+  /** True only when this question's unit is still unfinished on the bar. */
+  pending?: boolean
   palaceId: number | null
   onOpenSource?: () => void
 }) {
-  const label = overlayQuestionRatingLabel(rating)
+  const scored = rating === 1 || rating === 2 || rating === 3 || rating === 4
+  if (!scored && !pending) return null
+  const label = scored ? overlayQuestionRatingLabel(rating) : '本轮尚未复习'
   const tone =
     rating == null
       ? 'border-border/60 bg-muted/40 text-muted-foreground'

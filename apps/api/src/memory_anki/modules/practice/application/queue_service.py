@@ -30,7 +30,9 @@ from ..domain.queue_builder import (
     QuizCandidate,
     assemble_queue,
     merge_content_streams,
+    omit_restored_ids,
 )
+from .round_read_lookups import restored_card_ids
 from ..domain.review_units import ReviewUnitCandidate, context_path_including_anchor
 from ..domain.study_window import take_study_window
 
@@ -49,6 +51,11 @@ def build_freestyle_queue(
     op_id = str(operation_id or "").strip()
     if not op_id:
         raise ValueError("operation_id is required")
+    completed_ids, hidden_ids = omit_restored_ids(
+        completed_ids or [],
+        hidden_ids or [],
+        restored_card_ids(session, round_id),
+    )
 
     training_mode = str(config.get("training_mode") or "mixed")
     active_streams = list(config.get("mixed_modes") or [training_mode])

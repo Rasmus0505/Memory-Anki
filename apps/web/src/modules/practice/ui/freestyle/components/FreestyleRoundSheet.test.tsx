@@ -138,10 +138,13 @@ describe('FreestyleRoundSheet', () => {
           two: { ...base.cardsById.two, enteredOn: '2026-09-18' },
         },
       },
+      labelToday: '2026-09-18',
     })
 
-    expect(screen.getByTestId('round-plan-cohort-carried').textContent).toContain('此前欠账')
-    expect(screen.getByTestId('round-plan-cohort-today').textContent).toContain('今天新增')
+    expect(screen.getByTestId('round-plan-cohort-2026-09-17').textContent).toContain('昨天')
+    expect(screen.getByTestId('round-plan-cohort-2026-09-18').textContent).toContain('今天')
+    expect(screen.queryByText('此前欠账')).toBeNull()
+    expect(screen.queryByText('今天新增')).toBeNull()
     const dataTransfer = {
       effectAllowed: '',
       dropEffect: '',
@@ -260,14 +263,16 @@ describe('FreestyleRoundSheet', () => {
           two: { ...base.cardsById.two, enteredOn: '2026-09-18' },
         },
       },
+      labelToday: '2026-09-18',
     })
 
     fireEvent.click(screen.getByRole('button', { name: '按进度' }))
 
-    expect(screen.getByTestId('round-plan-cohort-carried').textContent).toContain('此前欠账')
-    expect(screen.getByTestId('round-plan-cohort-today').textContent).toContain('今天新增')
-    const carried = screen.getByTestId('round-plan-cohort-carried').parentElement
-    const today = screen.getByTestId('round-plan-cohort-today').parentElement
+    expect(screen.getByTestId('round-plan-cohort-2026-09-17-0').textContent).toContain('昨天')
+    expect(screen.getByTestId('round-plan-cohort-2026-09-18-1').textContent).toContain('今天')
+    expect(screen.queryByText('此前欠账')).toBeNull()
+    const carried = screen.getByTestId('round-plan-cohort-2026-09-17-0').parentElement
+    const today = screen.getByTestId('round-plan-cohort-2026-09-18-1').parentElement
     expect(carried?.querySelector('[data-testid="round-plan-card-one"]')).toBeTruthy()
     expect(today?.querySelector('[data-testid="round-plan-card-two"]')).toBeTruthy()
     expect(carried?.querySelector('[data-testid="round-plan-card-two"]')).toBeNull()

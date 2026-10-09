@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitState
@@ -555,6 +555,51 @@ def test_get_or_create_drops_vanished_unstarted_and_keeps_live_quiz(
     assert again["current_card_id"] == "review_unit:live-unit:r1"
     assert "review_unit:ghost:r1" not in again["plan"]["presented_ids"]
     assert "review_unit:inactive:r1" not in again["plan"]["presented_ids"]
+
+
+def test_get_or_create_drops_active_units_of_a_deleted_palace(
+    session_factory, make_client
+):
+    session = session_factory()
+    gone = Palace(title="Deleted palace", editor_doc="{}", archived=False)
+    live = Palace(title="Live palace", editor_doc="{}", archived=False)
+    session.add_all([gone, live])
+    session.flush()
+    session.add(_review_state(gone.id, "deleted-palace-unit"))
+    session.add(_review_state(live.id, "live-unit"))
+    session.commit()
+    gone_id = gone.id
+    live_id = live.id
+    session.close()
+
+    client = _client(make_client)
+    dead = _unit_card("review_unit:deleted-palace-unit:r1", "deleted-palace-unit", gone_id)
+    kept = _unit_card("review_unit:live-unit:r1", "live-unit", live_id)
+    created = _create(
+        client,
+        operation_id="op-deleted-palace-create",
+        cards=[dead, kept],
+        round_id="round-deleted-palace",
+    )
+    assert created["current_card_id"] == "review_unit:deleted-palace-unit:r1"
+
+    session = session_factory()
+    palace = session.get(Palace, gone_id)
+    palace.deleted_at = datetime(2026, 10, 4, 8, 35, 31)
+    session.commit()
+    session.close()
+
+    again = _create(
+        client,
+        operation_id="op-deleted-palace-drop",
+        cards=[kept],
+        round_id="round-ignored",
+    )
+    assert again["round_id"] == "round-deleted-palace"
+    original_ids = [item["card_id"] for item in again["plan"]["original_cards"]]
+    assert original_ids == ["review_unit:live-unit:r1"]
+    assert again["current_card_id"] == "review_unit:live-unit:r1"
+    assert "review_unit:deleted-palace-unit:r1" not in again["plan"]["presented_ids"]
 
 
 def test_vanished_drop_that_finishes_the_round_does_not_append(session_factory, make_client):

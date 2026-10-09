@@ -28,6 +28,7 @@ export function PalaceQuizPracticePanel({
   onNavigateFeedback,
   resetAttemptsLoading,
   onViewKnowledge,
+  palaceTitle = '',
 }: {
   questions: PalaceQuizQuestion[]
   miniPalaces: PalaceSegmentSummary[]
@@ -50,6 +51,7 @@ export function PalaceQuizPracticePanel({
   onNavigateFeedback: (direction: 'prev' | 'next') => void
   resetAttemptsLoading: boolean
   onViewKnowledge?: (question: PalaceQuizQuestion) => void
+  palaceTitle?: string
 }) {
   return (
     <div className="space-y-4">
@@ -126,7 +128,13 @@ export function PalaceQuizPracticePanel({
           </CardContent>
         </Card>
       ) : viewMode === 'single' && currentQuestion ? (
-        <div className="space-y-4">
+        <div
+          className="space-y-4"
+          data-recorder-current="true"
+          data-recorder-place={[palaceTitle, currentQuestion.source_chapter?.name || currentQuestion.classified_chapter?.name].filter(Boolean).join(' / ') || '这道题'}
+          data-recorder-title={currentQuestion.stem}
+          data-recorder-excerpt={currentQuestion.stem}
+        >
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/70 bg-card/90 px-4 py-3 text-sm">
             <div>
               第 {currentQuestionIndex + 1} / {filteredQuestions.length} 题

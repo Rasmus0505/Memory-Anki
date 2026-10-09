@@ -155,13 +155,13 @@ describe('FreestyleRatingBar', () => {
     input.remove()
   })
 
-  it('keeps four disabled buttons labelled 加载中 before the plan arrives', () => {
+  it('keeps four disabled buttons labelled 正在准备评分 before the plan arrives', () => {
     renderBar({ ratingEffects: [], reviewReady: false, hasEncounter: false })
 
     for (const value of [1, 2, 3, 4]) {
       const button = screen.getByTestId(`freestyle-rating-button-${value}`) as HTMLButtonElement
       expect(button.disabled).toBe(true)
-      expect(button.getAttribute('aria-label')).toContain('加载中')
+      expect(button.getAttribute('aria-label')).toContain('正在准备评分')
     }
   })
 

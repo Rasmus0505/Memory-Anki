@@ -6,6 +6,8 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from .round_plan import (
+    OCCURRENCE_CANCELLED,
+    OCCURRENCE_COMPLETED,
     OCCURRENCE_INSERTED,
     OCCURRENCE_PENDING,
     RETRY_GAP,
@@ -71,42 +73,47 @@ def drop_vanished_unstarted(
     plan: Mapping[str, Any],
     live_unit_ids: set[str],
 ) -> Plan:
-    """Drop unstarted cards whose review unit is no longer active.
+    """Drop cards whose review unit can no longer be opened.
 
-    Quiz cards (empty ``unit_id``), units that are still active even if they are
-    not due today, completed cards, excluded cards, and sources of a live retry
-    stay. Occurrences whose source was removed go with it. A vanished current
-    card moves to the next unfinished card.
+    ``live_unit_ids`` are units that are still active on a palace that has not
+    been deleted or archived. A vanished unit is removed even when this round
+    still has a live retry for it: the retry cannot open either, and leaving
+    it on screen is a dead wall. Quiz cards (empty ``unit_id``), completed
+    cards, and excluded cards stay in the round history, but a retry of a
+    vanished unit does not: opening it is the same dead wall. A vanished
+    current card moves to the next unfinished card.
     """
     next_plan = normalize_plan(plan)
     live = {_text(item) for item in live_unit_ids if _text(item)}
     completed = set(next_plan["completed_ids"])
     excluded = set(next_plan["excluded_ids"])
-    retry_sources = live_retry_sources(next_plan)
     kept: list[dict[str, Any]] = []
     dropped: set[str] = set()
+    unopenable_sources: set[str] = set()
     for item in next_plan["original_cards"]:
         unit_id = _text(item.get("unit_id"))
         card_id = item["card_id"]
         vanished = bool(unit_id) and unit_id not in live
+        if vanished:
+            unopenable_sources.add(card_id)
         protected = (
             not unit_id
             or card_id in completed
             or card_id in excluded
-            or card_id in retry_sources
         )
         if vanished and not protected:
             dropped.add(card_id)
             continue
         kept.append(item)
-    if not dropped:
-        return next_plan
-    next_plan["original_cards"] = kept
-    next_plan["occurrences"] = [
+    kept_occurrences = [
         occ
         for occ in next_plan["occurrences"]
-        if _text(occ.get("source_card_id")) not in dropped
+        if _text(occ.get("source_card_id")) not in unopenable_sources
     ]
+    if not dropped and kept_occurrences == list(next_plan["occurrences"]):
+        return next_plan
+    next_plan["original_cards"] = kept
+    next_plan["occurrences"] = kept_occurrences
     next_plan["encounters"] = {
         key: value
         for key, value in next_plan["encounters"].items()
@@ -186,10 +193,14 @@ def append_today_cards(
 ) -> Plan:
     """Natural due rebuild: freeze leftover order, append newly seen identities."""
     next_plan = normalize_plan(plan)
-    stamp = _day(today) or _day(next_plan.get("today"))
+    previous_day = _day(next_plan.get("today"))
+    stamp = _day(today) or previous_day
+    day_advanced = bool(previous_day and stamp and previous_day < stamp)
     if stamp:
         next_plan["today"] = stamp
     incoming = snapshot_cards(cards, today=stamp)
+    if day_advanced:
+        _reopen_due_again(next_plan, incoming)
     _merge_incoming(
         next_plan,
         incoming,
@@ -232,10 +243,14 @@ def replan_remaining(
 ) -> Plan:
     """Config save: keep handled ticks, rebuild unstarted, park live retries near the split."""
     next_plan = normalize_plan(plan)
-    stamp = _day(today) or _day(next_plan.get("today"))
+    previous_day = _day(next_plan.get("today"))
+    stamp = _day(today) or previous_day
+    day_advanced = bool(previous_day and stamp and previous_day < stamp)
     if stamp:
         next_plan["today"] = stamp
     incoming = snapshot_cards(cards, today=stamp)
+    if day_advanced:
+        _reopen_due_again(next_plan, incoming)
     keep_old = set(next_plan["completed_ids"]) | set(next_plan["excluded_ids"])
     keep_old.update(live_retry_sources(next_plan))
     previous_presented = list(next_plan["presented_ids"])
@@ -307,6 +322,54 @@ def replan_remaining(
     next_plan["presented_ids"] = [item for item in next_plan["presented_ids"] if item in known]
     _repair_current(next_plan)
     return next_plan
+
+
+def _reopen_due_again(plan: Plan, incoming: Sequence[Mapping[str, Any]]) -> None:
+    """Put cards that are due again back into today's queue.
+
+    Only runs after the calendar day advances. A removal stays removed.
+    Inserted or completed retries are cancelled, or the source still looks
+    finished after it leaves ``completed_ids``.
+    """
+    due_ids = {_text(item.get("card_id")) for item in incoming}
+    due_ids.discard("")
+    if not due_ids:
+        return
+    excluded = set(plan["excluded_ids"])
+    finished = {OCCURRENCE_INSERTED, OCCURRENCE_COMPLETED}
+    reopen = {
+        card_id
+        for card_id in due_ids
+        if card_id not in excluded
+        and (
+            card_id in plan["completed_ids"]
+            or card_id in plan["compressed_ids"]
+            or any(
+                _text(item.get("source_card_id")) == card_id and item.get("status") in finished
+                for item in plan["occurrences"]
+            )
+        )
+    }
+    if not reopen:
+        return
+    drop_ids = set(reopen)
+    for item in plan["occurrences"]:
+        if _text(item.get("source_card_id")) not in reopen:
+            continue
+        if item.get("status") in {OCCURRENCE_PENDING, OCCURRENCE_INSERTED, OCCURRENCE_COMPLETED}:
+            item["status"] = OCCURRENCE_CANCELLED
+        occ_id = _text(item.get("occurrence_id"))
+        if occ_id:
+            drop_ids.add(occ_id)
+            plan["encounters"].pop(occ_id, None)
+    for card_id in reopen:
+        plan["encounters"].pop(card_id, None)
+    plan["completed_ids"] = [item for item in plan["completed_ids"] if item not in drop_ids]
+    plan["compressed_ids"] = [item for item in plan["compressed_ids"] if item not in drop_ids]
+    if drop_ids - reopen:
+        plan["presented_ids"] = [
+            item for item in plan["presented_ids"] if item not in (drop_ids - reopen)
+        ]
 
 
 def _blocked_unit_ids(plan: Mapping[str, Any], blocked_ids: set[str]) -> set[str]:

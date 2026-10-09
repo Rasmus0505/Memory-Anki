@@ -4,6 +4,7 @@ import {
   applyFreestyleEntryScope,
   applyFreestyleEntryScopeUnlessSaved,
   parseFreestyleEntryPalaceId,
+  parseFreestyleEntryPalaceIds,
   persistFreestyleConfigWithoutEntryLock,
   shouldUseFreestyleSelectionScope,
 } from './freestyle-entry-scope'
@@ -12,6 +13,8 @@ describe('freestyle entry palace scope', () => {
   it('parses a positive palace id from the query string', () => {
     expect(parseFreestyleEntryPalaceId('?palaceId=42')).toBe(42)
     expect(parseFreestyleEntryPalaceId('palaceId=42&from=shelf')).toBe(42)
+    expect(parseFreestyleEntryPalaceIds('?palaceIds=8,3,3')).toEqual([3, 8])
+    expect(parseFreestyleEntryPalaceId('?palaceIds=8,3')).toBeNull()
   })
 
   it.each(['', '?palaceId=0', '?palaceId=-2', '?palaceId=1.5', '?palaceId=abc'])('rejects invalid palace ids: %s', (search) => {
@@ -57,6 +60,15 @@ describe('freestyle entry palace scope', () => {
   it('does not change the config without an entry palace', () => {
     const config = DEFAULT_FREESTYLE_FEED_CONFIG
     expect(applyFreestyleEntryScope(config, null)).toBe(config)
+  })
+
+  it('locks one round to the palaces at a memory stage without a second scheduler', () => {
+    const scoped = applyFreestyleEntryScope(DEFAULT_FREESTYLE_FEED_CONFIG, [8, 3, 3, 0])
+    expect(scoped.specific_palace_ids).toEqual([3, 8])
+    expect(scoped.streams.memory_palace.specific_palace_ids).toEqual([3, 8])
+    expect(scoped.streams.quiz.specific_palace_ids).toEqual([3, 8])
+    const persisted = persistFreestyleConfigWithoutEntryLock(scoped, DEFAULT_FREESTYLE_FEED_CONFIG)
+    expect(persisted.specific_palace_ids).toEqual([])
   })
 
   it('overrides a saved palace selection for knowledge-page review', () => {

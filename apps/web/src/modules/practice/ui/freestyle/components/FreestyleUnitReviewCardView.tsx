@@ -60,6 +60,7 @@ import { useFreestyleFlowFeedback } from '@/modules/practice/ui/freestyle/hooks/
 import { FLOW_BREATH_CLASS } from '@/modules/practice/ui/freestyle/model/freestyleFlowFeedback'
 import {
   decideLoadedUnitSession,
+  isPermanentUnitAbsence,
   isStaleUnitError,
 } from '@/modules/practice/ui/freestyle/model/freestyleStaleRecovery'
 import { freestyleUnitLoadFailureCopy } from '@/modules/practice/ui/freestyle/model/freestyleUnitLoadRecovery'
@@ -167,7 +168,7 @@ export function FreestyleUnitReviewCardView({
     cardId: string,
     options?: { restudy?: boolean; cleared?: boolean; rating?: number; retryAfterCards?: number },
   ) => void
-  onStaleDrop: (cardId: string) => void
+  onStaleDrop: (cardId: string, options?: { force?: boolean }) => void
   /** Drop this card from the current round. Does not write a review rating. */
   onRemoveFromQueue?: (cardId: string) => void
   /** Rebuild this round's queue without treating the card as stale. */
@@ -233,7 +234,12 @@ export function FreestyleUnitReviewCardView({
   // (pending→open, rating amend) do not re-enter start and race an in-flight rate.
   const openedForKeyRef = useRef<string | null>(null)
   const loadOperationRef = useRef<string | null>(null)
+  const lastLoadErrorRef = useRef<unknown>(null)
   const loadGenerationRef = useRef(0)
+  const loadAttemptRef = useRef(0)
+  const pendingGlanceRef = useRef<string | null>(null)
+  const glanceTimerRef = useRef<number | null>(null)
+  const encounterRef = useRef(encounter)
   const ensureEncounterRef = useRef(onEnsureEncounter)
   const revisionAdoptedRef = useRef(onRevisionAdopted)
   ensureEncounterRef.current = onEnsureEncounter
@@ -242,6 +248,8 @@ export function FreestyleUnitReviewCardView({
   cardRef.current = card
 
   activeRef.current = active
+  loadAttemptRef.current = loadAttempt
+  encounterRef.current = encounter
   busyRef.current = busy
   planVersionRef.current = planVersion
   roundIdRef.current = roundId
@@ -305,7 +313,7 @@ export function FreestyleUnitReviewCardView({
   const previewEditorState = useMemo(() => (preview ? buildEditorState(preview) : null), [preview])
   const flipSource = editorState && session && unit && unit.encounter
     ? { live: true, session, unit, editorState: savedEditorState ?? editorState }
-    : !recapOnly && !loadError && !staleRecovery && preview && previewUnit && previewEditorState
+    : !recapOnly && !staleRecovery && preview && previewUnit && previewEditorState
       ? { live: false, session: preview, unit: previewUnit, editorState: previewEditorState }
       : null
   // One FlipPanel across preview → live; only a genuine encounter renewal (restudy after
@@ -359,6 +367,10 @@ export function FreestyleUnitReviewCardView({
   }, [active, clearBreath])
 
   const retryLoad = useCallback(() => {
+    if (isPermanentUnitAbsence(lastLoadErrorRef.current)) {
+      onStaleDrop(cardRef.current.id, { force: true })
+      return
+    }
     openedForKeyRef.current = null
     loadOperationRef.current = null
     setSession(null)
@@ -370,7 +382,7 @@ export function FreestyleUnitReviewCardView({
     setAdoptedRevision(null)
     setActionError(null)
     setLoadAttempt((value) => value + 1)
-  }, [])
+  }, [onStaleDrop])
 
   const handleRevealProgressChange = useCallback((progress: FlipProgress) => {
     setFlipProgress((current) => (
@@ -523,10 +535,15 @@ export function FreestyleUnitReviewCardView({
       && liveEncounter.selected_rating != null
       && identity?.status !== 'pending'
     )
+    const glanceToken = `${cardUnitKey}:${identity?.encounterId ?? ''}:${loadAttempt}`
     if (sameOpenGlance || sameClosedView || sameRatedOpenGlance) {
+      if (pendingGlanceRef.current === glanceToken) pendingGlanceRef.current = null
       return
     }
-    const requestIdentity = `${cardUnitKey}:${identity?.encounterId ?? ''}:${loadAttempt}:${operationId()}`
+    // Parent echo of the encounter we just opened must not start a second POST.
+    if (pendingGlanceRef.current === glanceToken) return
+    pendingGlanceRef.current = glanceToken
+    const requestIdentity = `${glanceToken}:${operationId()}`
     const generation = ++loadGenerationRef.current
     loadOperationRef.current = requestIdentity
     const sessionCard =
@@ -536,7 +553,9 @@ export function FreestyleUnitReviewCardView({
     // A card that is only passed through must not open or cancel a session.
     // Rating still waits on the encounter, which the bar already disables.
     const delay = loadAttempt > 0 ? 0 : FREESTYLE_SESSION_OPEN_DELAY_MS
+    if (glanceTimerRef.current != null) window.clearTimeout(glanceTimerRef.current)
     const timer = window.setTimeout(() => {
+      if (glanceTimerRef.current === timer) glanceTimerRef.current = null
       void enqueueFreestyleSessionTask(async () => {
         if (loadGenerationRef.current !== generation || !activeRef.current) return
         const liveIdentity = ensureEncounterRef.current(liveCard.id, effectiveRevision, !readOnly)
@@ -569,6 +588,7 @@ export function FreestyleUnitReviewCardView({
             if (liveCard.unit_id) revisionAdoptedRef.current?.(liveCard.id, liveCard.unit_id, nextUnit.revision)
           }
           openedForKeyRef.current = `${liveCard.id}:${liveCard.unit_id}:${nextUnit.revision}:${roundId}`
+          lastLoadErrorRef.current = null
           setSession(value)
           setLoadError(null)
           setStaleRecovery(false)
@@ -579,6 +599,12 @@ export function FreestyleUnitReviewCardView({
           )
         } catch (error) {
           if (loadGenerationRef.current !== generation || !activeRef.current || !mountedRef.current) return
+          lastLoadErrorRef.current = error
+          if (isPermanentUnitAbsence(error)) {
+            setStaleRecovery(true)
+            rateBridgeRef.current.onStaleDrop(liveCard.id, { force: true })
+            return
+          }
           if (isStaleUnitError(error)) {
             setStaleRecovery(true)
             rateBridgeRef.current.onStaleDrop(liveCard.id)
@@ -592,6 +618,7 @@ export function FreestyleUnitReviewCardView({
             operationId: requestIdentity,
             stage: '加载复习会话',
           })
+          if (pendingGlanceRef.current === glanceToken) pendingGlanceRef.current = null
           setLoadError(message)
           setLoadErrorTitle(copy.title)
           setLoadErrorHint(copy.hint)
@@ -599,8 +626,24 @@ export function FreestyleUnitReviewCardView({
         }
       })
     }, delay)
+    glanceTimerRef.current = timer
     return () => {
+      // Unmount cleanup runs after the mountedRef effect, which is declared
+      // later. A leaked timer would POST into the next card.
+      if (!mountedRef.current) {
+        window.clearTimeout(timer)
+        if (glanceTimerRef.current === timer) glanceTimerRef.current = null
+        if (pendingGlanceRef.current === glanceToken) pendingGlanceRef.current = null
+        if (loadGenerationRef.current === generation) loadGenerationRef.current += 1
+        return
+      }
+      const sameGlance = activeRef.current
+        && cardRef.current.id === liveCard.id
+        && loadAttemptRef.current === loadAttempt
+        && (encounterRef.current?.encounterId ?? '') === (identity?.encounterId ?? '')
+      if (sameGlance && pendingGlanceRef.current === glanceToken) return
       window.clearTimeout(timer)
+      if (pendingGlanceRef.current === glanceToken) pendingGlanceRef.current = null
       if (loadGenerationRef.current === generation) loadGenerationRef.current += 1
     }
     // Identity fields only. The full encounter/card object is intentionally omitted.
@@ -640,6 +683,10 @@ export function FreestyleUnitReviewCardView({
     mountedRef.current = true
     return () => {
       mountedRef.current = false
+      if (glanceTimerRef.current != null) {
+        window.clearTimeout(glanceTimerRef.current)
+        glanceTimerRef.current = null
+      }
       mailboxRef.current = { ...emptyMailbox(), latest: mailboxRef.current.latest + 1 }
       void enqueueFreestyleSessionTask(() => closeCurrentEncounterRef.current())
     }
@@ -934,8 +981,9 @@ export function FreestyleUnitReviewCardView({
       }
       if (current && !follow.undo) {
         rollbackRating(ticket.generation)
-        if (mountedRef.current) setActionError(diagnostic)
-        rateBridgeRef.current.onSaveFailed(diagnostic)
+        if (mountedRef.current) setActionError('评分没有记下，请再点一次。')
+        setLoadError(diagnostic)
+        rateBridgeRef.current.onSaveFailed('评分没有记下，请再点一次。')
       }
       baselinesRef.current.delete(ticket.generation)
       if (follow.send) await dispatchRating(follow.send)
@@ -956,16 +1004,16 @@ export function FreestyleUnitReviewCardView({
       return
     }
     const blockedReason = !session || !unit || !currentEncounter
-      ? '评分按钮暂不可用：复习会话仍在加载。'
+      ? '正在准备评分，请稍等。'
       : busy
-        ? '操作正在提交，请稍候。'
+        ? '正在记下这一笔，请稍候。'
         : readOnly
           ? '历史记录为只读，不能评分。'
           : currentEncounter.status !== 'open'
             ? (
               encounter?.status === 'pending'
-                ? '评分按钮暂不可用：复习会话仍在加载。'
-                : '本次复习会话已关闭，请重建队列后重试。'
+                ? '正在准备评分，请稍等。'
+                : '这次评分已经结束。可以返回上一张再改，或跳过。'
             )
             : null
     if (blockedReason) {
@@ -1129,8 +1177,8 @@ export function FreestyleUnitReviewCardView({
 
   return (
     <section ref={sectionRef} className="flex h-full min-h-0 flex-col" aria-label="永久标记复习单元">
-      {/* Warm paper: same canvas as PWA review; dark stage chrome stays on the shell. */}
-      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.4rem] border border-stage-line-strong bg-paper shadow-[inset_0_1px_0_hsl(43_100%_100%/0.9),0_24px_60px_-18px_rgb(0_0_0/0.65)] sm:rounded-3xl">
+      {/* One canvas. Title and rating float; a second paper sheet must not show under the map. */}
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.4rem] border border-stage-line-strong bg-[var(--memory-anki-mindmap-canvas)] shadow-[inset_0_1px_0_hsl(43_100%_100%/0.9),0_24px_60px_-18px_rgb(0_0_0/0.65)] sm:rounded-3xl">
         {/* Rate confirmation, at the edge of the card being read rather than at screen
             center. Keyed by nonce so two rates inside one breath window restart it. */}
         {breath ? (
@@ -1159,10 +1207,7 @@ export function FreestyleUnitReviewCardView({
           <div
             data-testid="freestyle-unit-review-map-shell"
             data-preview={flipSource.live ? undefined : 'true'}
-            className={cn(
-              'fs-unit-arrive flex min-h-0 flex-1 flex-col',
-              !inlineEditing && 'pb-[6.75rem] sm:pb-[7.25rem]',
-            )}
+            className="fs-unit-arrive flex min-h-0 flex-1 flex-col"
           >
           <FreestyleUnitReviewFlipPanel
             key={`${card.id}:${flipIdentity.generation}`}
@@ -1207,7 +1252,14 @@ export function FreestyleUnitReviewCardView({
             staleRecovery={staleRecovery}
             onRetry={retryLoad}
             onSkip={() => onStaleDrop(card.id)}
-            onRebuildRound={onRebuildRound}
+            onRebuildRound={() => {
+              setLoadErrorTitle('正在整理这一轮')
+              setLoadErrorHint('整理好就换到下一张能学的。')
+              if (isPermanentUnitAbsence(lastLoadErrorRef.current)) {
+                onStaleDrop(card.id, { force: true })
+              }
+              onRebuildRound?.()
+            }}
             onRecapOnly={() => {
               setRecapOnly(true)
               setLoadError(null)
@@ -1216,7 +1268,7 @@ export function FreestyleUnitReviewCardView({
           />
         )}
 
-        {active && !inlineEditing && !loadError && !recapOnly ? (
+        {active && !inlineEditing && !recapOnly && (flipSource || !loadError) ? (
           <FreestyleRatingBar
             ratingEffects={currentEncounter?.rating_effects ?? []}
             selectedRating={selectedRating}
@@ -1234,10 +1286,9 @@ export function FreestyleUnitReviewCardView({
             disabledReason={
               currentEncounter
                 ? null
-                : loadError
-                  ? '复习会话加载失败，请下拉刷新重试。'
-                  : '复习会话仍在加载，评分暂不可用…'
+                : '正在准备评分'
             }
+            assistantCopy={loadError}
             shortcutsActive={active && !inlineEditing}
             onRate={(rating) => void rate(rating)}
             onRemoveFromQueue={

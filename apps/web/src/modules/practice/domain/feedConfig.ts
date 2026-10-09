@@ -21,6 +21,7 @@ import type {
 import type { FreestylePalaceContext } from '@/shared/api/contracts'
 import {
   asOverlayQuestionKinds,
+  asOverlayRatingInherit,
   asOverlayTypeOrder,
   asOverlayTypePalaceNesting,
   DEFAULT_OVERLAY_QUESTION_KINDS,
@@ -158,10 +159,8 @@ export const DEFAULT_FREESTYLE_FEED_CONFIG: FreestyleFeedConfig = {
     mindmap: 2,
     quiz: 1,
   },
-  // Legacy projection only. New queue code reads `mix` and stream config.
   bound_quiz_placement: 'into_mix',
   palace_order: 'finish_palace_then_next',
-  // Legacy projection only; new palace streams default to due-first expansion.
   due_policy: 'due_only',
   quiz_mastery_buckets: [...DEFAULT_QUIZ_MASTERY_BUCKETS],
   quiz_scope: 'cross_palace_random',
@@ -175,6 +174,7 @@ export const DEFAULT_FREESTYLE_FEED_CONFIG: FreestyleFeedConfig = {
   overlay_question_kinds: [...DEFAULT_OVERLAY_QUESTION_KINDS],
   overlay_type_order: 'interleave',
   overlay_type_palace_nesting: 'palace_then_type',
+  overlay_rating_inherit: 'lowest_reviewed',
 }
 
 function asBoolean(value: unknown, fallback: boolean) {
@@ -663,6 +663,7 @@ export function sanitizeFreestyleFeedConfig(value: unknown): FreestyleFeedConfig
     overlay_question_kinds: asOverlayQuestionKinds(raw.overlay_question_kinds),
     overlay_type_order: asOverlayTypeOrder(raw.overlay_type_order),
     overlay_type_palace_nesting: asOverlayTypePalaceNesting(raw.overlay_type_palace_nesting),
+    overlay_rating_inherit: asOverlayRatingInherit(raw.overlay_rating_inherit),
   }
 }
 

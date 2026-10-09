@@ -607,6 +607,7 @@ export function FreestyleUnitReviewFlipPanel({
 
   return (
     <>
+      {active ? <span hidden data-recorder-current="true" data-recorder-place={card.palace_title || session.title || ''} data-recorder-title={unit.title || ''} data-recorder-excerpt={root.text || unit.title || ''} /> : null}
       <FreestyleUnitReviewStatusBanner
         saveState={saveState}
         onRetry={retrySave}

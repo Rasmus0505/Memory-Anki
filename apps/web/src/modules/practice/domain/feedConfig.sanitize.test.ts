@@ -63,6 +63,12 @@ describe('freestyle feed config', () => {
     expect(sanitizeFreestyleFeedConfig(null).overlay_question_kinds).toEqual(['objective', 'subjective'])
     expect(sanitizeFreestyleFeedConfig(null).overlay_type_order).toBe('interleave')
     expect(sanitizeFreestyleFeedConfig(null).overlay_type_palace_nesting).toBe('palace_then_type')
+    expect(sanitizeFreestyleFeedConfig(null).overlay_rating_inherit).toBe('lowest_reviewed')
+    expect(sanitizeFreestyleFeedConfig({ overlay_rating_inherit: 'blank' }).overlay_rating_inherit).toBe('blank')
+    expect(sanitizeFreestyleFeedConfig({ overlay_rating_inherit: 'nope' }).overlay_rating_inherit).toBe('lowest_reviewed')
+    expect(queueConstructionSignature({ overlay_rating_inherit: 'blank' })).toBe(
+      queueConstructionSignature({ overlay_rating_inherit: 'lowest_reviewed' }),
+    )
     expect(sanitizeFreestyleFeedConfig({
       overlay_question_kinds: ['subjective', 'nope', 'subjective'],
       overlay_type_order: 'subjective_then_objective',

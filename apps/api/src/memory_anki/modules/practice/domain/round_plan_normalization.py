@@ -223,6 +223,10 @@ def normalize_plan(plan: Mapping[str, Any] | None) -> Plan:
         "overlay_quiz": normalize_overlay_quiz(raw.get("overlay_quiz") if isinstance(raw.get("overlay_quiz"), Mapping) else None),
         "learning_time": normalize_learning_time(raw.get("learning_time") if isinstance(raw.get("learning_time"), Mapping) else None),
     }
+    held = set(normalized["completed_ids"]) | set(normalized["excluded_ids"]) | set(normalized["compressed_ids"])
+    restored = [item for item in _unique(raw.get("restored_ids") or []) if item not in held]
+    if restored:
+        normalized["restored_ids"] = restored
     _collapse_retries(normalized)
     _strip_compressed(normalized)
     return normalized

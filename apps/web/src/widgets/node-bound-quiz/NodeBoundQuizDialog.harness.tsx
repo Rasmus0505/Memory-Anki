@@ -47,7 +47,10 @@ vi.mock('@/shared/feedback/toast', () => ({
 /** This-round ratings as the backend would return them for the sample questions. */
 /** This-round ratings as the backend would return them for the sample questions. */
 export const useRoundQuestionRatingsMock = vi.fn(
-  (_args: { roundId?: string | null; enabled?: boolean }): Record<string, number> | null => null,
+  (_args: { roundId?: string | null; enabled?: boolean }): {
+    ratings: Record<string, number>
+    pendingIds: string[]
+  } | null => null,
 )
 
 vi.mock('@/modules/practice/ui/freestyle/hooks/useRoundQuestionRatings', () => ({

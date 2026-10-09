@@ -2,7 +2,7 @@ import json
 from datetime import date, datetime
 
 from memory_anki.infrastructure.db._tables.knowledge import Subject
-from memory_anki.infrastructure.db._tables.misc import StudySession
+from memory_anki.infrastructure.db._tables.misc import FreestyleRoundState, StudySession
 from memory_anki.infrastructure.db._tables.palaces import (
     Palace,
     PalaceQuizQuestion,
@@ -15,12 +15,15 @@ from memory_anki.infrastructure.db._tables.unit_reviews import (
 from memory_anki.modules.practice.application.overlay_quiz_service import (
     build_overlay_question_pack,
     build_round_question_ratings,
+    classify_round_question_badges,
 )
 from memory_anki.modules.practice.application.round_overlay_service import (
     drop_overlay_quiz_for_palaces,
     ensure_overlay_quiz,
     progress_overlay_quiz,
+    read_round_question_badge,
 )
+from memory_anki.modules.practice.domain.feed_config import queue_construction_signature
 from memory_anki.modules.practice.application.round_state_service import (
     apply_round_action,
     apply_round_rating,
@@ -48,6 +51,7 @@ from memory_anki.modules.practice.domain.round_plan import (
     plan_from_cards,
     removed_review_palace_ids,
     review_palace_ids,
+    waiting_review_unit_ids,
 )
 
 
@@ -945,8 +949,123 @@ def test_question_without_a_round_rating_shows_no_score(db_session) -> None:
         unit_ids=["unit-unrated"],
         round_ratings={},
     )
-    # Absent, so the card renders 「本轮尚未复习」 rather than a zero.
+    # No 1–4. Without a waiting unit this is not 「本轮尚未复习」.
     assert pack["question_node_ratings"] == {}
+    assert pack["question_pending_ids"] == []
+    waiting = build_overlay_question_pack(
+        db_session,
+        {"training_mode": "memory_palace", "streams": {"quiz": {"question_type": "all"}}},
+        palace_ids=[palace.id],
+        unit_ids=["unit-unrated"],
+        round_ratings={},
+        waiting_unit_ids=["unit-unrated"],
+    )
+    assert waiting["question_pending_ids"] == [str(question.id)]
+
+
+def test_waiting_review_unit_ids_skip_bar_done_and_keep_inserted_retry() -> None:
+    """The badge follows the bar: done cards are not 'not reviewed', a live retry is."""
+    plan = plan_from_cards(
+        [
+            {"id": "done", "type": "mindmap_branch", "palace_id": 1, "unit_id": "u-done"},
+            {"id": "open", "type": "mindmap_branch", "palace_id": 1, "unit_id": "u-open"},
+            {"id": "quiz", "type": "quiz", "question_id": 9},
+        ]
+    )
+    finished = complete_card(plan, "done")
+    assert waiting_review_unit_ids(finished) == ["u-open"]
+    excluded = exclude_card(finished, "open")
+    assert waiting_review_unit_ids(excluded) == []
+    compressed = normalize_plan(plan)
+    compressed["compressed_ids"] = ["done", "open"]
+    assert waiting_review_unit_ids(compressed) == []
+    retried = normalize_plan(finished)
+    retried["occurrences"].append(
+        {
+            "occurrence_id": "retry:round:done:1",
+            "source_card_id": "done",
+            "source_unit_id": "u-done",
+            "retry_attempt": 1,
+            "rating": 1,
+            "status": "inserted",
+            "encounter_id": "enc-1",
+        }
+    )
+    assert waiting_review_unit_ids(retried) == ["u-done", "u-open"]
+
+
+def test_pending_badge_only_for_waiting_unscored_questions(db_session) -> None:
+    """A 1–4, a bar-done unit, and a never-scheduled unit must not say 尚未复习."""
+    palace = Palace(title="徽章")
+    db_session.add(palace)
+    db_session.flush()
+    scored = ReviewUnitState(
+        id="unit-scored", palace_id=palace.id, anchor_uid="a", unit_kind="mark",
+        node_uids_json=json.dumps(["a"]), membership_hash="h", content_hash="c",
+        revision=1, stage_index=0, has_passed=False, due_date=date.today(),
+    )
+    waiting = ReviewUnitState(
+        id="unit-wait", palace_id=palace.id, anchor_uid="b", unit_kind="mark",
+        node_uids_json=json.dumps(["b"]), membership_hash="h", content_hash="c",
+        revision=1, stage_index=0, has_passed=False, due_date=date.today(),
+    )
+    db_session.add_all([scored, waiting])
+    scored_q = PalaceQuizQuestion(palace_id=palace.id, stem="已评分")
+    wait_q = PalaceQuizQuestion(palace_id=palace.id, stem="还在进度条上")
+    db_session.add_all([scored_q, wait_q])
+    db_session.flush()
+    db_session.add_all(
+        [
+            PalaceQuizQuestionNodeBinding(question_id=scored_q.id, palace_id=palace.id, node_uid="a"),
+            PalaceQuizQuestionNodeBinding(question_id=wait_q.id, palace_id=palace.id, node_uid="b"),
+        ]
+    )
+    db_session.commit()
+    ratings, pending = classify_round_question_badges(
+        db_session,
+        palace_ids=[palace.id],
+        unit_ids=["unit-scored", "unit-wait"],
+        round_ratings={"unit-scored": 4},
+        waiting_unit_ids=["unit-scored", "unit-wait"],
+    )
+    assert ratings == {str(scored_q.id): 4}
+    assert pending == [str(wait_q.id)]
+    # Same bindings, but the bar already drew both cards done.
+    _, done = classify_round_question_badges(
+        db_session,
+        palace_ids=[palace.id],
+        unit_ids=["unit-scored", "unit-wait"],
+        round_ratings={"unit-scored": 4},
+        waiting_unit_ids=[],
+    )
+    assert done == []
+
+
+def test_overlay_progress_keeps_pending_ids() -> None:
+    """A progress write re-normalizes; it must not drop who is still waiting."""
+    overlay = normalize_overlay_quiz(
+        {
+            "question_ids": [7, 8],
+            "question_pending_ids": ["7", "missing"],
+            "question_node_ratings": {"8": 2},
+        }
+    )
+    saved = apply_overlay_progress(
+        overlay,
+        current_index=1,
+        completed_ids=[8],
+        states={"8": {"resolved": True}},
+    )
+    assert saved["question_pending_ids"] == ["7"]
+    assert saved["question_node_ratings"] == {"8": 2}
+    dropped = drop_overlay_for_palaces(
+        {
+            **saved,
+            "question_palace_ids": {"7": 1, "8": 2},
+        },
+        [1],
+    )
+    assert dropped["question_pending_ids"] == []
 
 
 def test_removed_review_palace_ids_requires_every_card_excluded() -> None:
@@ -1228,3 +1347,225 @@ def test_round_unit_ratings_read_the_encounter_table_not_the_plan_cache(db_sessi
     assert list_round_unit_ratings(db_session, "round-x") == {"unit-rate": 1}
     assert list_round_unit_ratings(db_session, "round-other") == {"unit-rate": 3}
     assert list_round_unit_ratings(db_session, "") == {}
+
+
+def _mind_node(uid: str, text: str, children: list | None = None) -> dict:
+    return {"data": {"uid": uid, "text": text}, "children": list(children or [])}
+
+
+def _seed_ancestor_question(db_session):
+    """A question bound to a mark whose ancestors are separate round units."""
+    editor = json.dumps(
+        {
+            "root": _mind_node(
+                "root",
+                "宫殿",
+                [
+                    _mind_node(
+                        "section",
+                        "第一节",
+                        [
+                            _mind_node("mark", "标志"),
+                            _mind_node("sibling", "旁边"),
+                        ],
+                    )
+                ],
+            )
+        }
+    )
+    palace = Palace(title="祖先分数", editor_doc=editor)
+    db_session.add(palace)
+    db_session.flush()
+    units = [
+        ("unit-root", "root", ["root"]),
+        ("unit-section", "section", ["section"]),
+        ("unit-sibling", "sibling", ["sibling"]),
+        ("unit-mark", "mark", ["mark"]),
+    ]
+    for unit_id, anchor, members in units:
+        db_session.add(
+            ReviewUnitState(
+                id=unit_id,
+                palace_id=palace.id,
+                anchor_uid=anchor,
+                unit_kind="mark",
+                node_uids_json=json.dumps(members),
+                membership_hash="h",
+                content_hash="c",
+                revision=1,
+                stage_index=1,
+                has_passed=True,
+                due_date=date.today(),
+            )
+        )
+    question = PalaceQuizQuestion(palace_id=palace.id, stem="标志国民教育制度正式形成")
+    db_session.add(question)
+    db_session.flush()
+    db_session.add(
+        PalaceQuizQuestionNodeBinding(
+            question_id=question.id, palace_id=palace.id, node_uid="mark"
+        )
+    )
+    db_session.commit()
+    return palace, question
+
+
+def test_unscheduled_question_follows_lowest_reviewed_ancestor(db_session) -> None:
+    """A blank score may show the weakest reviewed ancestor. Own score and pending win."""
+    palace, question = _seed_ancestor_question(db_session)
+    qid = str(question.id)
+    ratings, pending = classify_round_question_badges(
+        db_session,
+        palace_ids=[palace.id],
+        unit_ids=["unit-section", "unit-root", "unit-sibling"],
+        waiting_unit_ids=[],
+        round_ratings={"unit-section": 4, "unit-root": 2, "unit-sibling": 1},
+    )
+    # Ancestors are 4 and 2. The sibling's 1 must not leak in.
+    assert ratings[qid] == 2
+    assert pending == []
+
+    blank_ratings, blank_pending = classify_round_question_badges(
+        db_session,
+        palace_ids=[palace.id],
+        unit_ids=["unit-section", "unit-root", "unit-sibling"],
+        waiting_unit_ids=[],
+        round_ratings={"unit-section": 4, "unit-root": 2, "unit-sibling": 1},
+        rating_inherit="blank",
+    )
+    assert qid not in blank_ratings
+    assert blank_pending == []
+
+    none_ratings, none_pending = classify_round_question_badges(
+        db_session,
+        palace_ids=[palace.id],
+        unit_ids=["unit-section", "unit-root"],
+        waiting_unit_ids=[],
+        round_ratings={},
+    )
+    assert qid not in none_ratings
+    assert none_pending == []
+
+    pending_ratings, pending_ids = classify_round_question_badges(
+        db_session,
+        palace_ids=[palace.id],
+        unit_ids=["unit-section", "unit-mark"],
+        waiting_unit_ids=["unit-mark"],
+        round_ratings={"unit-section": 4},
+    )
+    assert qid not in pending_ratings
+    assert pending_ids == [qid]
+
+    own, own_pending = classify_round_question_badges(
+        db_session,
+        palace_ids=[palace.id],
+        unit_ids=["unit-mark", "unit-section"],
+        waiting_unit_ids=[],
+        round_ratings={"unit-mark": 3, "unit-section": 1},
+    )
+    assert own[qid] == 3
+    assert own_pending == []
+
+
+def test_rating_display_choice_does_not_rebuild_or_reset_progress(db_session) -> None:
+    """Changing how a blank score looks must not rebuild the queue or drop answers."""
+    palace, question = _seed_ancestor_question(db_session)
+    qid = str(question.id)
+    db_session.add(PalaceQuizQuestion(palace_id=palace.id, stem="另一题"))
+    db_session.commit()
+    cards = [
+        {"id": "card-section", "type": "mindmap_branch", "palace_id": palace.id, "unit_id": "unit-section"},
+        {"id": "card-root", "type": "mindmap_branch", "palace_id": palace.id, "unit_id": "unit-root"},
+        {"id": "card-sibling", "type": "mindmap_branch", "palace_id": palace.id, "unit_id": "unit-sibling"},
+    ]
+    created = get_or_create_active_round(
+        db_session,
+        scope_key="inherit-display",
+        config={"training_mode": "memory_palace"},
+        cards=cards,
+        operation_id="create-inherit",
+        round_id="round-inherit",
+    )
+    session_row = StudySession(
+        id="sess-inherit",
+        palace_id=palace.id,
+        scene="review",
+        started_at=datetime(2026, 10, 9, 12, 0, 0),
+    )
+    db_session.add(session_row)
+    db_session.flush()
+    db_session.add_all(
+        [
+            ReviewUnitEncounter(
+                id="enc-section", study_session_id="sess-inherit", unit_id="unit-section",
+                unit_revision=1, round_id=created["round_id"], sequence=1,
+                baseline_state_json="{}", selected_rating=4, status="closed",
+            ),
+            ReviewUnitEncounter(
+                id="enc-root", study_session_id="sess-inherit", unit_id="unit-root",
+                unit_revision=1, round_id=created["round_id"], sequence=2,
+                baseline_state_json="{}", selected_rating=2, status="closed",
+            ),
+            ReviewUnitEncounter(
+                id="enc-sibling", study_session_id="sess-inherit", unit_id="unit-sibling",
+                unit_revision=1, round_id=created["round_id"], sequence=3,
+                baseline_state_json="{}", selected_rating=1, status="closed",
+            ),
+        ]
+    )
+    db_session.commit()
+
+    blank = ensure_overlay_quiz(
+        db_session,
+        round_id=created["round_id"],
+        operation_id="ensure-blank",
+        expected_version=created["version"],
+        config={"training_mode": "memory_palace", "overlay_rating_inherit": "blank"},
+    )
+    blank_overlay = blank["plan"]["overlay_quiz"]
+    assert qid not in blank_overlay["question_node_ratings"]
+    stored = db_session.get(FreestyleRoundState, blank["round_id"])
+    assert stored is not None
+    assert json.loads(stored.config_json)["overlay_rating_inherit"] == "blank"
+    read_ratings, read_pending = read_round_question_badge(db_session, round_id=blank["round_id"])
+    assert qid not in read_ratings
+    assert qid not in read_pending
+
+    answered = progress_overlay_quiz(
+        db_session,
+        round_id=blank["round_id"],
+        operation_id="answer-inherit",
+        expected_version=blank["version"],
+        current_index=1,
+        completed_ids=[question.id],
+        states={qid: {"resolved": True}},
+    )
+    followed = ensure_overlay_quiz(
+        db_session,
+        round_id=answered["round_id"],
+        operation_id="ensure-follow",
+        expected_version=answered["version"],
+        config={"training_mode": "memory_palace", "overlay_rating_inherit": "lowest_reviewed"},
+    )
+    overlay = followed["plan"]["overlay_quiz"]
+    assert overlay["question_node_ratings"][qid] == 2
+    assert overlay["completed_ids"] == [question.id]
+    assert overlay["current_index"] == 1
+    assert overlay["scope_signature"] == blank_overlay["scope_signature"]
+    read_ratings, read_pending = read_round_question_badge(db_session, round_id=followed["round_id"])
+    assert read_ratings[qid] == 2
+    assert qid not in read_pending
+
+    kept = ensure_overlay_quiz(
+        db_session,
+        round_id=followed["round_id"],
+        operation_id="ensure-omit",
+        expected_version=followed["version"],
+        config={"training_mode": "memory_palace"},
+    )
+    kept_row = db_session.get(FreestyleRoundState, kept["round_id"])
+    assert kept_row is not None
+    assert json.loads(kept_row.config_json)["overlay_rating_inherit"] == "lowest_reviewed"
+    assert queue_construction_signature({"overlay_rating_inherit": "blank"}) == (
+        queue_construction_signature({"overlay_rating_inherit": "lowest_reviewed"})
+    )

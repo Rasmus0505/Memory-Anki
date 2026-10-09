@@ -31,6 +31,12 @@ export function freestyleUnitLoadFailureCopy(error: unknown): FreestyleUnitLoadC
       hint: '先重试；不行再跳过或重建本轮。',
     }
   }
+  if (message.includes('palace not found') || message.includes('review unit not found')) {
+    return {
+      title: '这张内容已经不在了',
+      hint: '正在换到下一张能学的。',
+    }
+  }
   if (message.includes('review unit changed') || message.includes('rebuild the queue')) {
     return {
       title: '这张内容刚被改过',
@@ -38,7 +44,7 @@ export function freestyleUnitLoadFailureCopy(error: unknown): FreestyleUnitLoadC
     }
   }
   return {
-    title: '这张卡暂时打不开',
-    hint: '可以重试、跳过、重建本轮，或只看不评。',
+    title: '这张还在准备评分',
+    hint: '你可以先看。需要的话再重试、跳过或只看不评。',
   }
 }

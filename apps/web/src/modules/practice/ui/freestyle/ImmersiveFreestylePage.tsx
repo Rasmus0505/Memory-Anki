@@ -67,7 +67,7 @@ import { useFreestyleFullscreen } from '@/modules/practice/ui/freestyle/hooks/us
 import { useFreestyleDisplayPrefs } from '@/modules/practice/ui/freestyle/hooks/useFreestyleDisplayPrefs'
 import { useFreestyleSubjectMap } from '@/modules/practice/ui/freestyle/hooks/useFreestyleSubjectMap'
 import { resetFreestyleCombo } from '@/modules/practice/ui/freestyle/model/freestyleComboStore'
-import { parseFreestyleEntryPalaceId } from '@/modules/practice/ui/freestyle/model/freestyle-entry-scope'
+import { parseFreestyleEntryPalaceId, parseFreestyleEntryPalaceIds } from '@/modules/practice/ui/freestyle/model/freestyle-entry-scope'
 import {
   isMindMapBranchCard,
   isQuizCard,
@@ -85,7 +85,6 @@ import {
   FREESTYLE_WORKSPACE_PRIMARY,
   FREESTYLE_WORKSPACE_SECONDARY,
   isPalaceReviewWorkspace,
-  isQueueStateFromPreviousDay,
   palaceReviewWorkspaceId,
   parsePalaceReviewWorkspaceId,
   type FreestyleWorkspaceId,
@@ -198,7 +197,11 @@ export default function ImmersiveFreestylePage({
       : '随心模式'
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const entryPalaceId = reviewPalaceId ?? parseFreestyleEntryPalaceId(searchParams.toString())
+  const search = searchParams.toString()
+  const entryPalaceIds = parseFreestyleEntryPalaceIds(search)
+  const entryPalaceId = reviewPalaceId ?? (
+    entryPalaceIds.length > 0 ? entryPalaceIds : parseFreestyleEntryPalaceId(search)
+  )
   const reviewReturnSubjectId = searchParams.get('subjectId')
   const { isActive, becameActiveAt, fullPath } = useRouteResidency()
   useFreestyleWakeLock(isActive)
@@ -216,7 +219,6 @@ export default function ImmersiveFreestylePage({
   const [historyOpen, setHistoryOpen] = useState(false)
   const [saveError, setSaveError] = useState('')
   const { promptForAiOptions } = useAiRunConfigDialog()
-  const [yesterdayHintDismissed, setYesterdayHintDismissed] = useState(false)
   const [inlineEditing, setInlineEditing] = useState(false)
   const [sheetRatingRequest, setSheetRatingRequest] = useState<{ cardId: string; rating: UnitRating } | null>(null)
   const { flipMode, mindmapZoom, updateFlipMode, updateMindmapZoom } = useFreestyleDisplayPrefs()
@@ -485,7 +487,8 @@ export default function ImmersiveFreestylePage({
 
   const { liveRevealMap, applyLiveRevealMap } = useFreestyleLiveSync({
     fullPath,
-    entryPalaceId,
+    // Live mirror is keyed by one palace. Multi-palace entry stays local.
+    entryPalaceId: typeof entryPalaceId === 'number' ? entryPalaceId : null,
     isActive,
     cards,
     currentIndex,
@@ -566,9 +569,10 @@ export default function ImmersiveFreestylePage({
   }, [cancelAutoAdvance])
 
   const handleStaleDrop = useCallback(
-    (cardId: string) => {
+    (cardId: string, options?: { force?: boolean }) => {
       // Do not mark completed — still-due units must stay eligible (vs Insights queue).
-      const result = dropStaleCard(cardId)
+      // A deleted palace is not a sync burst: force past the hold circuit.
+      const result = dropStaleCard(cardId, options?.force ? { force: true } : undefined)
       if (result.shouldToast) {
         toast.info('这张已在其他设备复习，或内容刚被改过', { id: FREESTYLE_STALE_TOAST_ID })
         return
@@ -848,6 +852,7 @@ export default function ImmersiveFreestylePage({
             overlayQuestionKinds,
             overlayTypeOrder,
             overlayTypePalaceNesting,
+            overlayRatingInherit,
           }) => {
             setConfigAndPersist((current) => ({
               ...current,
@@ -857,6 +862,7 @@ export default function ImmersiveFreestylePage({
               overlay_question_kinds: overlayQuestionKinds,
               overlay_type_order: overlayTypeOrder,
               overlay_type_palace_nesting: overlayTypePalaceNesting,
+              overlay_rating_inherit: overlayRatingInherit,
               streams: {
                 ...current.streams,
                 quiz: {
@@ -898,8 +904,6 @@ export default function ImmersiveFreestylePage({
         <FreestyleRailParticles segments={progressSummary.segments} />
 
         <FreestyleTopNotices
-          showYesterday={!yesterdayHintDismissed && isQueueStateFromPreviousDay(queueState)}
-          onDismissYesterday={() => setYesterdayHintDismissed(true)}
           channelAppliedHint={channelAppliedHint}
           onDismissChannelApplied={() => setChannelAppliedHint('')}
           saveError={saveError}

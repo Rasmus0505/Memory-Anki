@@ -15,14 +15,30 @@ function copyStreamScope<T extends FreestyleStreamScope>(target: T, source: Free
 
 function lockStreamScope<T extends FreestyleStreamScope>(
   target: T,
-  palaceId: number,
+  palaceIds: readonly number[],
   subjectScope: T['subject_scope'],
 ): T {
   return copyStreamScope(target, {
-    specific_palace_ids: [palaceId],
+    specific_palace_ids: [...palaceIds],
     subject_scope: subjectScope,
     subject_ids: [],
   })
+}
+
+export function normalizeFreestyleEntryPalaceIds(
+  value: number | readonly number[] | null | undefined,
+): number[] {
+  if (value == null) return []
+  const list = typeof value === 'number' ? [value] : value
+  return [...new Set(list.filter((id) => Number.isInteger(id) && id > 0))].sort((left, right) => left - right)
+}
+
+export function freestyleEntryScopeKey(
+  value: number | readonly number[] | string | null | undefined,
+): string | null {
+  if (typeof value === 'string') return value || null
+  const ids = normalizeFreestyleEntryPalaceIds(value)
+  return ids.length ? ids.join(',') : null
 }
 
 function palaceScopeKey(config: FreestylePalaceScopeConfig): string {
@@ -56,28 +72,37 @@ function palaceScopeKey(config: FreestylePalaceScopeConfig): string {
 
 /** Read the optional palace lock carried by a shelf-to-freestyle entry. */
 export function parseFreestyleEntryPalaceId(search: string): number | null {
-  const raw = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search).get('palaceId')
-  if (!raw || !/^\d+$/.test(raw)) return null
-  const palaceId = Number(raw)
-  return Number.isSafeInteger(palaceId) && palaceId > 0 ? palaceId : null
+  const ids = parseFreestyleEntryPalaceIds(search, 'palaceId')
+  return ids.length === 1 ? ids[0] : null
 }
 
-/** Keep the user's freestyle settings while narrowing this round to one palace. */
+/** Read a one-round stage lock. `palaceId` stays the single-palace path. */
+export function parseFreestyleEntryPalaceIds(
+  search: string,
+  key: 'palaceId' | 'palaceIds' = 'palaceIds',
+): number[] {
+  const raw = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search).get(key)
+  if (!raw) return []
+  return normalizeFreestyleEntryPalaceIds(raw.split(',').map((part) => Number(part)))
+}
+
+/** Keep the user's freestyle settings while narrowing this round to these palaces. */
 export function applyFreestyleEntryScope(
   config: FreestyleFeedConfig,
-  palaceId: number | null,
+  palaceId: number | readonly number[] | null,
 ): FreestyleFeedConfig {
-  if (palaceId == null) return config
+  const palaceIds = normalizeFreestyleEntryPalaceIds(palaceId)
+  if (palaceIds.length === 0) return config
   return {
     ...config,
-    specific_palace_ids: [palaceId],
+    specific_palace_ids: palaceIds,
     subject_scope: 'all',
     subject_ids: [],
     streams: {
       ...config.streams,
-      memory_palace: lockStreamScope(config.streams.memory_palace, palaceId, 'all'),
-      quiz: lockStreamScope(config.streams.quiz, palaceId, 'all'),
-      english: lockStreamScope(config.streams.english, palaceId, 'english'),
+      memory_palace: lockStreamScope(config.streams.memory_palace, palaceIds, 'all'),
+      quiz: lockStreamScope(config.streams.quiz, palaceIds, 'all'),
+      english: lockStreamScope(config.streams.english, palaceIds, 'english'),
     },
   }
 }
@@ -88,7 +113,7 @@ export function applyFreestyleEntryScope(
  */
 export function applyFreestyleEntryScopeUnlessSaved(
   config: FreestyleFeedConfig,
-  palaceId: number | null,
+  palaceId: number | readonly number[] | null,
 ): FreestyleFeedConfig {
   return applyFreestyleEntryScope(config, palaceId)
 }
@@ -119,10 +144,11 @@ export function persistFreestyleConfigWithoutEntryLock(
 export function shouldUseFreestyleSelectionScope(
   current: FreestylePalaceScopeConfig,
   requested: FreestylePalaceScopeConfig,
-  entryPalaceId: number | null,
-  unlockedEntryPalaceId: number | null,
+  entryPalaceId: number | readonly number[] | string | null,
+  unlockedEntryPalaceId: number | readonly number[] | string | null,
 ) {
-  if (entryPalaceId == null) return true
-  if (unlockedEntryPalaceId === entryPalaceId) return true
+  const entryKey = freestyleEntryScopeKey(entryPalaceId)
+  if (entryKey == null) return true
+  if (freestyleEntryScopeKey(unlockedEntryPalaceId) === entryKey) return true
   return palaceScopeKey(current) !== palaceScopeKey(requested)
 }

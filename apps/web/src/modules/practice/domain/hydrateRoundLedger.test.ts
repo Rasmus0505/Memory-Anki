@@ -251,6 +251,115 @@ describe('commitHydratedRoundLedger', () => {
     })).toBe(visible.findIndex((card) => card.id === 'b'))
   })
 
+  it('drops yesterday scores when the server put the card back into today', () => {
+    const cards = [branch('done'), branch('keep')]
+    let localPlan = createRoundPlan('round-1', cards, DEFAULT_FREESTYLE_FEED_CONFIG)
+    localPlan = { ...localPlan, today: '2026-10-08' }
+    localPlan = updateRoundPlanCard(localPlan, 'done', { status: 'completed', lastRating: 3 })
+    localPlan = { ...localPlan, compressedIds: ['done'] }
+    const result = commitHydratedRoundLedger({
+      localPlan,
+      localCompletedIds: ['done'],
+      localHiddenIds: [],
+      localEncounters: { done: encounter('done', 3) },
+      adoptedRoundId: 'round-1',
+      cards,
+      config: DEFAULT_FREESTYLE_FEED_CONFIG,
+      meta: { candidate_count: 2, scheduled_count: 2, queue_limit: 20, limit_reached: false },
+      serverPlan: serverPlan({
+        today: '2026-10-09',
+        presented_ids: ['done', 'keep'],
+        completed_ids: [],
+        compressed_ids: [],
+      }),
+      forceCompressedIds: ['done'],
+    })
+    expect(result.plan.cardsById.done).toMatchObject({ status: 'pending', lastRating: null })
+    expect(result.completedIds).not.toContain('done')
+    expect(result.plan.compressedIds ?? []).not.toContain('done')
+    expect(result.encounters.done?.selectedRating ?? null).toBeNull()
+  })
+
+  it('keeps a same-day score the server snapshot has not received yet', () => {
+    const cards = [branch('done')]
+    let localPlan = createRoundPlan('round-1', cards, DEFAULT_FREESTYLE_FEED_CONFIG)
+    localPlan = { ...localPlan, today: '2026-10-09' }
+    localPlan = updateRoundPlanCard(localPlan, 'done', { status: 'completed', lastRating: 4 })
+    const result = commitHydratedRoundLedger({
+      localPlan,
+      localCompletedIds: ['done'],
+      localHiddenIds: [],
+      localEncounters: { done: encounter('done', 4) },
+      adoptedRoundId: 'round-1',
+      cards,
+      config: DEFAULT_FREESTYLE_FEED_CONFIG,
+      meta: { candidate_count: 1, scheduled_count: 1, queue_limit: 20, limit_reached: false },
+      serverPlan: serverPlan({
+        today: '2026-10-09',
+        presented_ids: ['done'],
+        completed_ids: [],
+      }),
+    })
+    expect(result.plan.cardsById.done).toMatchObject({ status: 'completed', lastRating: 4 })
+    expect(result.completedIds).toContain('done')
+  })
+
+  it('drops a same-day hide when the server put that card back', () => {
+    const cards = [branch('back'), branch('keep')]
+    let localPlan = createRoundPlan('round-1', cards, DEFAULT_FREESTYLE_FEED_CONFIG)
+    localPlan = { ...localPlan, today: '2026-10-09' }
+    localPlan = updateRoundPlanCard(localPlan, 'back', { status: 'excluded' })
+    localPlan = updateRoundPlanCard(localPlan, 'keep', { status: 'completed', lastRating: 4 })
+    const result = commitHydratedRoundLedger({
+      localPlan,
+      localCompletedIds: ['back', 'keep'],
+      localHiddenIds: ['back'],
+      localEncounters: { back: encounter('back', 3), keep: encounter('keep', 4) },
+      adoptedRoundId: 'round-1',
+      cards,
+      config: DEFAULT_FREESTYLE_FEED_CONFIG,
+      meta: { candidate_count: 2, scheduled_count: 2, queue_limit: 20, limit_reached: false },
+      serverPlan: serverPlan({
+        today: '2026-10-09',
+        presented_ids: ['back', 'keep'],
+        completed_ids: [],
+        excluded_ids: [],
+        restored_ids: ['back'],
+      }),
+    })
+    expect(result.plan.cardsById.back).toMatchObject({ status: 'pending', lastRating: null })
+    expect(result.hiddenIds).not.toContain('back')
+    expect(result.completedIds).not.toContain('back')
+    expect(result.completedIds).toContain('keep')
+    expect(result.plan.cardsById.keep).toMatchObject({ status: 'completed', lastRating: 4 })
+  })
+
+  it('keeps a removal the user just confirmed over a restored card', () => {
+    const cards = [branch('back')]
+    let localPlan = createRoundPlan('round-1', cards, DEFAULT_FREESTYLE_FEED_CONFIG)
+    localPlan = { ...localPlan, today: '2026-10-09' }
+    const result = commitHydratedRoundLedger({
+      localPlan,
+      localCompletedIds: [],
+      localHiddenIds: [],
+      localEncounters: {},
+      adoptedRoundId: 'round-1',
+      cards,
+      config: DEFAULT_FREESTYLE_FEED_CONFIG,
+      meta: { candidate_count: 1, scheduled_count: 1, queue_limit: 20, limit_reached: false },
+      serverPlan: serverPlan({
+        today: '2026-10-09',
+        presented_ids: ['back'],
+        completed_ids: [],
+        excluded_ids: [],
+        restored_ids: ['back'],
+      }),
+      forceExcludedIds: ['back'],
+    })
+    expect(result.plan.cardsById.back?.status).toBe('excluded')
+    expect(result.hiddenIds).toContain('back')
+  })
+
   it('drops local-only scores when adopting the server ledger', () => {
     let localPlan = createRoundPlan(
       'round-1',

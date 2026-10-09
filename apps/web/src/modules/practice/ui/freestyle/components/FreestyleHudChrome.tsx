@@ -130,33 +130,19 @@ export function FreestyleWorkspaceSwitcher({ slot }: { slot: FreestyleWorkspaceI
 const noticeEnter = 'animate-in fade-in-0 slide-in-from-top-2'
 
 export function FreestyleTopNotices({
-  showYesterday,
-  onDismissYesterday,
   channelAppliedHint,
   onDismissChannelApplied,
   saveError,
   onDismissSaveError,
 }: {
-  showYesterday: boolean
-  onDismissYesterday: () => void
   channelAppliedHint: string
   onDismissChannelApplied: () => void
   saveError: string
   onDismissSaveError: () => void
 }) {
-  if (!showYesterday && !channelAppliedHint && !saveError) return null
+  if (!channelAppliedHint && !saveError) return null
   return (
     <div className="pointer-events-none absolute left-1/2 top-[4.25rem] z-30 flex max-w-[min(24rem,calc(100%-1.5rem))] -translate-x-1/2 flex-col items-center gap-2">
-      {showYesterday ? (
-        <button
-          type="button"
-          data-testid="freestyle-yesterday-hint"
-          className={cn(noticeEnter, 'freestyle-stage-glass pointer-events-auto rounded-2xl border border-stage-glow/35 px-3 py-2 text-xs text-stage-ink')}
-          onClick={onDismissYesterday}
-        >
-          这是昨天未完成的一轮
-        </button>
-      ) : null}
       {channelAppliedHint ? (
         <button
           type="button"

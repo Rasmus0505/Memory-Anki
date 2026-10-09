@@ -146,8 +146,35 @@ def pick_question_node_rating(
     return min(found)
 
 
+def normalize_question_pending_ids(raw: Any) -> list[str]:
+    """Question ids still waiting on this round's progress bar, with no 1–4 score.
+
+    Only these may be labelled 「本轮尚未复习」. A question absent from both this
+    list and ``question_node_ratings`` was never scheduled, or its card is
+    already drawn done — the badge stays hidden so it cannot contradict the bar.
+    """
+    if not isinstance(raw, Sequence) or isinstance(raw, str | bytes):
+        return []
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for item in raw:
+        question_id = _as_int(item, 0)
+        if question_id <= 0:
+            continue
+        key = str(question_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        ordered.append(key)
+    return ordered
+
+
 def normalize_question_node_ratings(raw: Any) -> dict[str, int]:
-    """Persist/restore the per-question badge map; it is display data."""
+    """Persist/restore the per-question badge map; it is display data.
+
+    Absent is not 「本轮尚未复习」. That sentence is reserved for ids in
+    ``question_pending_ids``.
+    """
     data = raw if isinstance(raw, Mapping) else {}
     result: dict[str, int] = {}
     for key, value in data.items():
@@ -219,6 +246,7 @@ def empty_overlay_quiz() -> OverlayQuiz:
         "kind_counts": empty_kind_counts(),
         "scope_palaces": empty_scope_palaces(),
         "question_node_ratings": {},
+        "question_pending_ids": [],
         "parked": empty_parked_overlay(),
         "excluded_ids": [],
     }
@@ -376,6 +404,12 @@ def normalize_overlay_quiz(raw: Mapping[str, Any] | None) -> OverlayQuiz:
         for question_id, palace_id in palace_ids.items()
         if _as_int(question_id, 0) in known_ids
     }
+    question_node_ratings = normalize_question_node_ratings(data.get("question_node_ratings"))
+    question_pending_ids = [
+        item
+        for item in normalize_question_pending_ids(data.get("question_pending_ids"))
+        if _as_int(item, 0) in set(question_ids) and item not in question_node_ratings
+    ]
     return {
         "scope_signature": str(data.get("scope_signature") or ""),
         "quiz_scope": quiz_scope,
@@ -389,9 +423,8 @@ def normalize_overlay_quiz(raw: Mapping[str, Any] | None) -> OverlayQuiz:
         "question_palace_ids": palace_ids,
         "kind_counts": _normalize_kind_counts(data.get("kind_counts")),
         "scope_palaces": normalize_scope_palaces(data.get("scope_palaces")),
-        "question_node_ratings": normalize_question_node_ratings(
-            data.get("question_node_ratings")
-        ),
+        "question_node_ratings": question_node_ratings,
+        "question_pending_ids": question_pending_ids,
         "parked": parked,
         "excluded_ids": excluded_ids,
     }
@@ -410,6 +443,7 @@ def merge_overlay_quiz(
     kind_counts: Mapping[str, Any] | None = None,
     scope_palaces: Mapping[str, Any] | None = None,
     question_node_ratings: Mapping[str, Any] | None = None,
+    question_pending_ids: Sequence[Any] | None = None,
 ) -> OverlayQuiz:
     previous = normalize_overlay_quiz(existing)
     excluded = set(previous["excluded_ids"])
@@ -435,6 +469,13 @@ def merge_overlay_quiz(
         if question_node_ratings is not None
         else previous["question_node_ratings"]
     )
+    # Pending ids travel with the ratings: a progress write re-normalizes, and a
+    # field missing here is dropped the next time the learner answers a question.
+    badge_pending = (
+        normalize_question_pending_ids(question_pending_ids)
+        if question_pending_ids is not None
+        else previous["question_pending_ids"]
+    )
     same_scope = (
         previous["scope_signature"] == str(scope_signature or "")
         and previous["quiz_scope"] == (quiz_scope if quiz_scope in QUIZ_SCOPES else QUIZ_SCOPE_CROSS)
@@ -455,6 +496,7 @@ def merge_overlay_quiz(
                 "excluded_ids": previous["excluded_ids"],
                 "scope_palaces": scopes,
                 "question_node_ratings": badge_ratings,
+                "question_pending_ids": badge_pending,
             }
         )
 
@@ -507,6 +549,7 @@ def merge_overlay_quiz(
             "excluded_ids": previous["excluded_ids"],
             "scope_palaces": scopes,
             "question_node_ratings": badge_ratings,
+            "question_pending_ids": badge_pending,
             "parked": {
                 "question_ids": parked_ids,
                 "completed_ids": parked_completed,
@@ -598,6 +641,11 @@ def drop_overlay_for_palaces(
         for question_id, palace_id in current["question_palace_ids"].items()
         if _as_int(question_id, 0) not in drop_qids
     }
+    pending_ids = [
+        item
+        for item in current.get("question_pending_ids") or []
+        if _as_int(item, 0) not in drop_qids
+    ]
     return normalize_overlay_quiz(
         {
             **current,
@@ -606,6 +654,7 @@ def drop_overlay_for_palaces(
             "completed_ids": _keep(current["completed_ids"]),
             "states": _normalize_states(current["states"], question_ids),
             "question_palace_ids": palace_map,
+            "question_pending_ids": pending_ids,
             "parked": {
                 "question_ids": parked_ids,
                 "completed_ids": _keep(parked["completed_ids"]),
@@ -700,6 +749,7 @@ __all__ = [
     "merge_overlay_quiz",
     "normalize_overlay_quiz",
     "normalize_question_node_ratings",
+    "normalize_question_pending_ids",
     "normalize_scope_palaces",
     "order_overlay_questions",
     "overlay_question_kind",

@@ -280,6 +280,7 @@ def test_normalize_plan_keeps_learning_time() -> None:
     )
 
     assert "unknown_sibling" not in plan
+    assert "restored_ids" not in plan
     assert plan["learning_time"] == {
         "unit_seconds": 12,
         "quiz_seconds": 3,
@@ -289,6 +290,19 @@ def test_normalize_plan_keeps_learning_time() -> None:
             "11": {"unit_seconds": 0, "quiz_seconds": 3, "lookup_seconds": 0},
         },
     }
+
+
+def test_normalize_plan_keeps_restored_ids_until_held() -> None:
+    plan = normalize_plan(
+        {
+            "completed_ids": ["done"],
+            "excluded_ids": ["gone"],
+            "compressed_ids": ["folded"],
+            "restored_ids": ["back", "done", "gone", "folded", "back"],
+        }
+    )
+
+    assert plan["restored_ids"] == ["back"]
 
 
 def _interval(interval_id: str, start: datetime, seconds: int) -> dict:

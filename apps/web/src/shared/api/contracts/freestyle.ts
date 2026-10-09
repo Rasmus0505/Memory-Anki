@@ -63,6 +63,9 @@ export type FreestyleOverlayTypeOrder =
  */
 export type FreestyleOverlayTypePalaceNesting = 'palace_then_type' | 'type_then_palace'
 
+/** Blank score: hide, or follow the weakest reviewed ancestor. Display only. */
+export type FreestyleOverlayRatingInherit = 'blank' | 'lowest_reviewed'
+
 export type FreestyleSubjectScope = 'all' | 'english' | 'non_english'
 
 /** The first decision in the freestyle configuration flow. */
@@ -198,6 +201,8 @@ export interface FreestyleFeedConfig {
    * quiz_scope is single_palace_random and type order is sequential.
    */
   overlay_type_palace_nesting: FreestyleOverlayTypePalaceNesting
+  /** Blank-score display. Default lowest_reviewed. Not a queue-construction field. */
+  overlay_rating_inherit: FreestyleOverlayRatingInherit
 }
 
 export interface FreestyleContextPathItem {
@@ -387,6 +392,8 @@ export interface FreestyleRoundPlanPayload {
   completed_ids: string[]
   excluded_ids: string[]
   compressed_ids?: string[]
+  /** Cards this round put back. A stale local hide or score must not cover them. */
+  restored_ids?: string[]
   /** Confirmed 小结算 pages. The closing 大结算 reads these after cards leave the feed. */
   partial_settlements?: unknown[]
   today?: string
@@ -469,11 +476,15 @@ export interface FreestyleOverlayQuizState {
   scope_palaces?: FreestyleOverlayScopePalaces
   /**
    * Question id → the weakest this-round rating (1–4) among that question's
-   * bound knowledge points. Absent means either the question binds no knowledge
-   * point in this round, or none of them were rated this round — both render as
-   * 「本轮尚未复习」, never as a fabricated score.
+   * bound knowledge points. Absent is not 「本轮尚未复习」. That sentence is
+   * reserved for ids in `question_pending_ids`.
    */
   question_node_ratings?: Record<string, number>
+  /**
+   * Questions with no 1–4 whose bound point is still unfinished on the bar.
+   * Only these may be labelled 「本轮尚未复习」.
+   */
+  question_pending_ids?: string[]
   parked?: {
     question_ids: number[]
     completed_ids: number[]
@@ -489,9 +500,12 @@ export interface FreestyleRoundQuestionRatingsResponse {
    * Question id → the weakest this-round rating (1–4) among that question's
    * bound knowledge points. Covers every question bound to this round's palaces,
    * not just the 做题 pool, so 关联题目 can badge a question the pool filtered out.
-   * A question absent here was not rated this round.
+   * A question absent here was not rated this round. That is not the same as
+   * 「本轮尚未复习」 — see `question_pending_ids`.
    */
   question_node_ratings: Record<string, number>
+  /** Questions still waiting on the bar, with no 1–4. Badge hides otherwise. */
+  question_pending_ids?: string[]
 }
 
 export interface FreestyleRoundStatePayload {

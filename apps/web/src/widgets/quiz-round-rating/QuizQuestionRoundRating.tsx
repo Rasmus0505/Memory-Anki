@@ -28,14 +28,19 @@ export function QuizQuestionRoundRating({
   open?: boolean
   onOpenSource?: () => void
 }) {
-  const ratings = useRoundQuestionRatings({
+  const badge = useRoundQuestionRatings({
     roundId,
     enabled: open && Boolean(roundId),
   })
-  if (!roundId) return null
+  if (!roundId || badge == null) return null
+  const rating = overlayQuestionRating(badge.ratings, questionId)
+  const pending =
+    questionId != null && badge.pendingIds.includes(String(questionId))
+  if (rating == null && !pending) return null
   return (
     <QuizQuestionRoundRatingBadge
-      rating={overlayQuestionRating(ratings, questionId)}
+      rating={rating}
+      pending={pending}
       palaceId={palaceId}
       onOpenSource={onOpenSource}
     />

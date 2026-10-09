@@ -14,36 +14,45 @@ import { getFreestyleRoundQuestionRatingsApi } from '@/modules/practice/ui/frees
  *
  * `enabled` is the caller's "am I inside a round?" switch. Outside 随心 there is
  * no round to score against, and the badge must stay absent rather than claim
- * 「本轮尚未复习」 about a round that does not exist.
+ * 「本轮尚未复习」 about a round that does not exist. A failed fetch does the
+ * same: hiding the badge is honest; inventing "not reviewed yet" is not.
  *
  * Read-only: it never writes the round, so opening a question window cannot move
  * the round version under the study loop and 409 the next rating.
  */
+export type RoundQuestionBadge = {
+  ratings: Record<string, number>
+  pendingIds: string[]
+}
+
 export function useRoundQuestionRatings({
   roundId,
   enabled = true,
 }: {
   roundId: string | null | undefined
   enabled?: boolean
-}): Record<string, number> | null {
+}): RoundQuestionBadge | null {
   const id = String(roundId || '').trim()
-  const [ratings, setRatings] = useState<Record<string, number> | null>(null)
+  const [badge, setBadge] = useState<RoundQuestionBadge | null>(null)
 
   useEffect(() => {
     if (!id || !enabled) {
-      setRatings(null)
+      setBadge(null)
       return
     }
     let cancelled = false
     const controller = new AbortController()
     void getFreestyleRoundQuestionRatingsApi(id, { signal: controller.signal })
       .then((response) => {
-        if (!cancelled) setRatings(response.question_node_ratings ?? {})
+        if (cancelled) return
+        setBadge({
+          ratings: response.question_node_ratings ?? {},
+          pendingIds: response.question_pending_ids ?? [],
+        })
       })
       .catch(() => {
-        // A missing score is the honest fallback: the badge then reads
-        // 「本轮尚未复习」. Never invent a number, and never block the question.
-        if (!cancelled) setRatings(null)
+        // Hide the badge. A failed fetch is not evidence the point is unreviewed.
+        if (!cancelled) setBadge(null)
       })
     return () => {
       cancelled = true
@@ -51,5 +60,5 @@ export function useRoundQuestionRatings({
     }
   }, [id, enabled])
 
-  return ratings
+  return badge
 }

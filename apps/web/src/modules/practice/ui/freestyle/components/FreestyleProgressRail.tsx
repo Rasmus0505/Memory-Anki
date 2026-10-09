@@ -1,5 +1,7 @@
-import { type MouseEvent, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Fragment, type MouseEvent, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
+  dayCutHoverLabel,
+  dayRemainingCount,
   freestyleProgressRailFits,
   palaceAccentToneClass,
   progressHudText,
@@ -8,6 +10,7 @@ import {
   progressSegmentHoverLabel,
   progressSegmentShapeClass,
   retryNodeToneClass,
+  roundDaySpan,
   type FreestyleProgressSegment,
   type FreestyleProgressSummary,
 } from '@/modules/practice/ui/freestyle/model/freestyleProgressSegments'
@@ -16,6 +19,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/shared/components/ui/tooltip'
+import { formatLocalDateKey } from '@/shared/lib/dateTime'
 import { cn } from '@/shared/lib/utils'
 import { prefersReducedMotion } from '@/shared/lib/prefersReducedMotion'
 import type {
@@ -215,13 +219,7 @@ function ProgressRailItem({
     'data-rail-slot': segment.cardId,
     'data-rail-palace': palaceId,
   }
-  const gapClass = compact
-    ? null
-    : segment.cohortBoundary
-      ? 'ml-1.5 border-l border-stage-ink/45 pl-1 progress-boundary-enter'
-      : palaceGap
-        ? 'ml-0.5'
-        : null
+  const gapClass = !compact && palaceGap ? 'ml-0.5' : null
 
   if (segment.kind === 'retry' && showRetryCount) {
     return (
@@ -341,6 +339,49 @@ interface RailSheen {
   width: number
 }
 
+function segmentHoverLabel(
+  segment: FreestyleProgressSegment,
+  index: number,
+  segments: readonly FreestyleProgressSegment[],
+  today: string,
+): string {
+  const base = progressSegmentHoverLabel(segment, index, segments.length, today)
+  if (!segment.enteredOn) return base
+  const left = dayRemainingCount(segments, segment.enteredOn)
+  return `${base} · ${left > 0 ? `这天还剩 ${left} 张` : '这天都过了'}`
+}
+
+function DayCut({
+  label,
+  onJump,
+}: {
+  label: string
+  onJump: () => void
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          data-testid="freestyle-progress-day-line"
+          aria-label={label}
+          className="relative z-10 flex h-full w-3 shrink-0 items-stretch justify-center"
+          onClick={(event) => {
+            event.stopPropagation()
+            onJump()
+          }}
+        >
+          <span
+            aria-hidden
+            className="progress-boundary-enter h-full w-[3px] rounded-full bg-stage-ink shadow-[0_0_0_1px_rgb(0_0_0/0.45)]"
+          />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">{label}</TooltipContent>
+    </Tooltip>
+  )
+}
+
 export function FreestyleProgressRail({
   summary,
   onOpenPlan,
@@ -348,6 +389,7 @@ export function FreestyleProgressRail({
   overflow,
   workspaceSwitcher,
   scrollChannel,
+  today,
 }: {
   summary: FreestyleProgressSummary
   onOpenPlan: () => void
@@ -358,9 +400,15 @@ export function FreestyleProgressRail({
   workspaceSwitcher?: ReactNode
   /** Continuous feed position; the glider tracks the finger while it moves. */
   scrollChannel?: FreestyleScrollChannel
+  /** Wall-clock day the labels speak from. Tests pass a fixed day. */
+  today?: string
 }) {
+  const labelToday = today || formatLocalDateKey(new Date())
   const canJump = Boolean(onJump) && summary.total > 0 && summary.segments.length > 0
-  const railLabel = progressRailLabel(summary, canJump)
+  const daySpan = roundDaySpan(summary.segments.map((segment) => segment.enteredOn), labelToday)
+  const railLabel = daySpan > 1
+    ? `${progressRailLabel(summary, canJump)}这一轮跨了 ${daySpan} 天。`
+    : progressRailLabel(summary, canJump)
   const hudText = progressHudText(summary)
   const railRef = useRef<HTMLDivElement>(null)
   const gliderRef = useRef<HTMLSpanElement>(null)
@@ -655,18 +703,29 @@ export function FreestyleProgressRail({
           <span className="ma-skeleton h-1.5 w-full rounded-[1px] [--color-muted:hsl(34_30%_80%/0.18)]" aria-hidden />
         ) : (
           segments.map((segment, index) => (
-            <ProgressRailItem
-              key={segment.cardId}
-              segment={segment}
-              hoverLabel={progressSegmentHoverLabel(segment, index, segments.length)}
-              palaceStaggerIndex={palaceStaggerIndex(segments, index)}
-              palaceGap={
-                index > 0 && segments[index - 1]?.palaceId !== segment.palaceId
-              }
-              showRetryCount={progressRailRetryCountVisible(segments, index, railWidth)}
-              compact={compact}
-              inserted={segment.kind === 'retry' && insertedIds.has(segment.cardId)}
-            />
+            <Fragment key={segment.cardId}>
+              {segment.cohortBoundary ? (
+                <DayCut
+                  label={dayCutHoverLabel(
+                    segment.enteredOn,
+                    labelToday,
+                    dayRemainingCount(segments, segment.enteredOn || ''),
+                  )}
+                  onJump={() => onJump?.(segment.cardId)}
+                />
+              ) : null}
+              <ProgressRailItem
+                segment={segment}
+                hoverLabel={segmentHoverLabel(segment, index, segments, labelToday)}
+                palaceStaggerIndex={palaceStaggerIndex(segments, index)}
+                palaceGap={
+                  index > 0 && segments[index - 1]?.palaceId !== segment.palaceId
+                }
+                showRetryCount={progressRailRetryCountVisible(segments, index, railWidth)}
+                compact={compact}
+                inserted={segment.kind === 'retry' && insertedIds.has(segment.cardId)}
+              />
+            </Fragment>
           ))
         )}
         <span ref={gliderRef} aria-hidden data-testid="freestyle-progress-glider" className="progress-glider" />
@@ -690,10 +749,13 @@ export function FreestyleProgressRail({
               type="button"
               data-testid="freestyle-progress-hud"
               className="pointer-events-auto truncate rounded-full px-2 py-1 text-left text-[11px] font-medium tabular-nums text-stage-ink/88 transition-colors hover:text-stage-glow"
-              aria-label={`${hudText}，打开本轮安排`}
+              aria-label={daySpan > 1 ? `${hudText}，这一轮跨了 ${daySpan} 天，打开本轮安排` : `${hudText}，打开本轮安排`}
               onClick={onOpenPlan}
             >
               {hudText}
+              {daySpan > 1 ? (
+                <span className="ml-1 font-normal text-stage-muted">跨了 {daySpan} 天</span>
+              ) : null}
             </button>
           ) : null}
         </div>

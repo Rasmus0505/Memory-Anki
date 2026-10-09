@@ -165,7 +165,7 @@ export function FreestyleUnitReviewPlaceholder({
             className="text-xs text-paper-muted underline underline-offset-2 hover:text-paper-ink"
             onClick={() => void navigator.clipboard?.writeText(loadError)}
           >
-            复制诊断
+            复制给助手
           </button>
         </div>
       ) : staleRecovery ? (

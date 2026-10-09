@@ -183,9 +183,16 @@ export function isStaleUnitError(error: unknown): boolean {
   // Content-revision drift is adopted in place. Only vanished units, other-device
   // reviews (not due), and mismatched encounters trip the recovery overlay.
   return requestError?.status === 404
+    || message.includes('palace not found')
     || message.includes('review unit not found')
     || message.includes('not due')
     || message.includes('encounter_id belongs to another review unit')
+}
+
+/** The palace or unit is gone. Retrying the same open only redraws the wall. */
+export function isPermanentUnitAbsence(error: unknown): boolean {
+  const message = String((error as { message?: string })?.message || error || '').toLowerCase()
+  return message.includes('palace not found') || message.includes('review unit not found')
 }
 
 /**

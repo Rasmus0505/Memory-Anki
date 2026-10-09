@@ -13,6 +13,8 @@ import { createRetryOccurrence, insertRetryOccurrenceAfterGap } from '@/modules/
 import type { FreestyleCard } from '@/shared/api/contracts'
 import {
   buildFreestyleProgressSummary,
+  dayCohortLabel,
+  dayCutHoverLabel,
   palaceAccent,
   palaceAccentToneClass,
   freestyleProgressRailFits,
@@ -20,6 +22,7 @@ import {
   progressRailLabel,
   progressRailRetryCountVisible,
   progressSegmentHoverLabel,
+  roundDaySpan,
   progressSegmentShapeClass,
   liveEncounterFillDone,
   retryChromeClass,
@@ -493,14 +496,14 @@ describe('buildFreestyleProgressSummary', () => {
     expect(summary.retryInserted).toBe(1)
   })
 
-  it('marks the first today source as the leftover/today rail split', () => {
+  it('cuts the rail at every entry day, not only today versus earlier', () => {
     const cards = [card('one'), card('two'), card('three')]
     const roundPlan = {
       ...plan(cards),
       today: '2026-09-18',
       cardsById: {
         ...plan(cards).cardsById,
-        one: { ...plan(cards).cardsById.one, enteredOn: '2026-09-17' },
+        one: { ...plan(cards).cardsById.one, enteredOn: '2026-09-16' },
         two: { ...plan(cards).cardsById.two, enteredOn: '2026-09-17' },
         three: { ...plan(cards).cardsById.three, enteredOn: '2026-09-18' },
       },
@@ -508,9 +511,58 @@ describe('buildFreestyleProgressSummary', () => {
     const summary = buildFreestyleProgressSummary(cards, roundPlan, [], [], 'one')
     expect(summary.segments.map((segment) => Boolean(segment.cohortBoundary))).toEqual([
       false,
+      true,
+      true,
+    ])
+    expect(roundDaySpan(summary.segments.map((segment) => segment.enteredOn), '2026-09-18')).toBe(3)
+  })
+
+  it('does not let a retry insertion cut a day in half', () => {
+    const cards = [
+      card('one'),
+      { ...card('retry:round-1:one:1'), source_card_id: 'one', occurrence_kind: 'retry' as const, retry_attempt: 1 },
+      card('two'),
+    ]
+    const base = plan(cards)
+    const roundPlan = {
+      ...base,
+      today: '2026-09-18',
+      cardsById: {
+        ...base.cardsById,
+        one: { ...base.cardsById.one, enteredOn: '2026-09-17' },
+        'retry:round-1:one:1': {
+          ...base.cardsById['retry:round-1:one:1'],
+          enteredOn: '2026-09-17',
+          occurrenceKind: 'retry' as const,
+          sourceCardId: 'one',
+        },
+        two: { ...base.cardsById.two, enteredOn: '2026-09-18' },
+      },
+    }
+    const summary = buildFreestyleProgressSummary(cards, roundPlan, [], [], 'two')
+    expect(summary.segments.map((segment) => Boolean(segment.cohortBoundary))).toEqual([
+      false,
       false,
       true,
     ])
+  })
+})
+
+describe('day cohort language', () => {
+  it('speaks in days, not debt', () => {
+    expect(dayCohortLabel('2026-09-18', '2026-09-18')).toBe('今天')
+    expect(dayCohortLabel('2026-09-17', '2026-09-18')).toBe('昨天')
+    expect(dayCohortLabel('2026-09-16', '2026-09-18')).toBe('前天')
+    expect(dayCohortLabel('2026-09-15', '2026-09-18')).toBe('3天前')
+    expect(dayCohortLabel('2026-09-01', '2026-09-18')).toBe('9月1日')
+    expect(dayCutHoverLabel('2026-09-17', '2026-09-18', 0)).toBe('昨天 · 都过了 · 点此跳到这一天的第一张')
+    expect(dayCutHoverLabel('2026-09-17', '2026-09-18', 2)).toContain('还剩 2 张')
+    expect(progressSegmentHoverLabel(
+      { cardId: 'one', tone: 'done', palaceId: 1, palaceDone: false, sourceLabel: 'one', enteredOn: '2026-09-17' },
+      0,
+      2,
+      '2026-09-18',
+    )).toBe('1/2 · 《one》 · 已过 · 昨天')
   })
 })
 

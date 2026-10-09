@@ -12,12 +12,21 @@ from memory_anki.modules.practice.domain.queue_builder import (
     assemble_queue,
     attach_questions_to_units,
     merge_content_streams,
+    omit_restored_ids,
     unit_key,
 )
 from memory_anki.modules.practice.domain.review_units import (
     ReviewUnitCandidate,
     context_path_including_anchor,
 )
+
+
+def test_omit_restored_ids_drops_stale_client_lists() -> None:
+    completed, hidden = omit_restored_ids(["back", "keep"], ["back", "other"], ["back"])
+
+    assert completed == ["keep"]
+    assert hidden == ["other"]
+    assert omit_restored_ids(["keep"], ["other"], []) == (["keep"], ["other"])
 
 
 def _unit(
