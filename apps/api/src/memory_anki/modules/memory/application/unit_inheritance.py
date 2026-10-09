@@ -18,6 +18,8 @@ from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitState
 
+from .unit_scheduler import clamp_schedulable_due
+
 
 def _json_load_list(raw: str | None) -> list[str]:
     """Local copy of the projection helper, kept here to avoid an import cycle."""
@@ -111,9 +113,12 @@ def inheritance_vote(
     """
     if not sources:
         return default_stage, default_due, False
+    # A parked date past the ladder (the old 2099 rows) must not win the vote.
+    # ``default_due`` is the caller's today.
+    voted_due = min(row.due_date for row in sources)
     return (
         min(row.stage_index for row in sources),
-        min(row.due_date for row in sources),
+        clamp_schedulable_due(voted_due, today=default_due),
         all(row.has_passed for row in sources),
     )
 

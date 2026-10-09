@@ -353,12 +353,12 @@ export async function undoContentScheduleBatchApi(
 }
 
 /**
- * Half-open links (phone sleep + Tailscale reconnect) never reject a fetch, so
- * an uncapped session-start POST would hang until loadSessionWithTimeout()'s 30s
- * guard and surface the generic "加载单元超时" message. Cap the transport wait so
- * the card fails fast into its own retry path.
+ * A lock wait on this machine can outlast 15s and still succeed. Aborting at
+ * 15s threw that work away, then the card started a second glance and showed a
+ * red error. 45s covers the server's busy wait; the card keeps the map up and
+ * only says "正在准备评分" while this is outstanding.
  */
-export const SESSION_START_TIMEOUT_MS = 15_000
+export const SESSION_START_TIMEOUT_MS = 45_000
 
 export async function startFreestyleUnitReviewSessionApi(
   unit: Pick<ReviewUnitDto, 'id' | 'revision'>,

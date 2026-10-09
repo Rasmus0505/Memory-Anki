@@ -84,6 +84,30 @@ def _fuzz_offset(interval: int, seed: str) -> int:
     return int.from_bytes(digest, "big") % (2 * span + 1) - span
 
 
+def latest_schedulable_due(today: date) -> date:
+    """Latest due date a rating on ``today`` can produce.
+
+    The ladder tops out at 365 days, plus the same fuzz span a top-stage pass
+    may add. Anything later is not a schedule.
+    """
+    span = max(1, round(INTERVAL_DAYS[-1] * FUZZ_RATIO))
+    return today + timedelta(days=INTERVAL_DAYS[-1] + span)
+
+
+def clamp_schedulable_due(due: date, *, today: date) -> date:
+    """Pull an absurd future due back to today. Past and in-window dates stay."""
+    if due > latest_schedulable_due(today):
+        return today
+    return due
+
+
+def assert_schedulable_due(due: date, *, today: date) -> date:
+    """Reject a manually chosen date the ladder cannot produce."""
+    if due > latest_schedulable_due(today):
+        raise ValueError("到期日不能超过一年。复习间隔最长一年，更远的日期不会进入复习。")
+    return due
+
+
 def scheduled_interval_days(stage_index: int, *, fuzz_key: str | None = None) -> int:
     """Ladder interval with deterministic per-unit spread applied.
 
@@ -198,7 +222,10 @@ __all__ = [
     "RETRY_AFTER_CARDS",
     "VALID_RATINGS",
     "UnitScheduleResult",
+    "assert_schedulable_due",
+    "clamp_schedulable_due",
     "interval_days",
+    "latest_schedulable_due",
     "lapse_stage",
     "normalize_rating",
     "rate_unit",

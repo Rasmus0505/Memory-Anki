@@ -33,7 +33,13 @@ from .unit_schedule_projection import (
 from .unit_schedule_projection import (
     _schedule_snapshot as _schedule_snapshot,
 )
-from .unit_scheduler import INTERVAL_DAYS, clamp_stage
+from .unit_scheduler import (
+    INTERVAL_DAYS,
+    assert_schedulable_due,
+    clamp_schedulable_due,
+    clamp_stage,
+    latest_schedulable_due,
+)
 
 
 @dataclass(frozen=True)
@@ -199,6 +205,30 @@ def _invalidate_active_sessions(session: Session, palace_id: int) -> int:
     return len(rows)
 
 
+def repair_absurd_due_dates(session: Session, *, today: date | None = None) -> int:
+    """Pull due dates past the ladder cap back to today.
+
+    A date beyond the longest interval plus fuzz is not a schedule. Inactive
+    rows are included so the next mark cannot inherit the parked date.
+    Revision stays put: the queue card id is the unit id plus revision.
+    """
+    current = today or date.today()
+    limit = latest_schedulable_due(current)
+    rows = (
+        session.query(ReviewUnitState)
+        .filter(ReviewUnitState.due_date > limit)
+        .all()
+    )
+    # Startup tests pass a MagicMock session. A real query returns a list.
+    if not isinstance(rows, list):
+        return 0
+    for row in rows:
+        row.due_date = current
+    if rows:
+        session.flush()
+    return len(rows)
+
+
 def adjust_unit_schedule(
     session: Session,
     *,
@@ -232,7 +262,7 @@ def adjust_unit_schedule(
     if stage_index is not None:
         row.stage_index = clamp_stage(int(stage_index))
     if due_date is not None:
-        row.due_date = _parse_due_date(due_date)
+        row.due_date = assert_schedulable_due(_parse_due_date(due_date), today=date.today())
     if has_passed is not None:
         row.has_passed = bool(has_passed)
     row.revision += 1
@@ -317,7 +347,10 @@ def undo_content_schedule_batch(
         if row is None or row.palace_id != batch.palace_id:
             continue
         row.stage_index = clamp_stage(int(before.get("stage_index") or 0))
-        row.due_date = _parse_due_date(before.get("due_date"))
+        row.due_date = clamp_schedulable_due(
+            _parse_due_date(before.get("due_date")),
+            today=date.today(),
+        )
         row.has_passed = bool(before.get("has_passed"))
         row.revision += 1
         restored.append(
@@ -586,7 +619,11 @@ def list_due_units(
 
 
 def list_active_review_unit_ids(session: Session, unit_ids: list[str]) -> set[str]:
-    """Active review-unit ids among ``unit_ids``. Does not parse editor_doc."""
+    """Openable review-unit ids among ``unit_ids``. Does not parse editor_doc.
+
+    Inactive units, and units whose palace is deleted or archived, are not
+    openable even when the unit row itself is still marked active.
+    """
     ids = [str(item).strip() for item in unit_ids if str(item).strip()]
     if not ids:
         return set()
@@ -596,9 +633,12 @@ def list_active_review_unit_ids(session: Session, unit_ids: list[str]) -> set[st
         part = ids[start : start + chunk]
         rows = (
             session.query(ReviewUnitState.id)
+            .join(Palace, Palace.id == ReviewUnitState.palace_id)
             .filter(
                 ReviewUnitState.active.is_(True),
                 ReviewUnitState.id.in_(part),
+                Palace.deleted_at.is_(None),
+                Palace.archived.is_(False),
             )
             .all()
         )
@@ -627,10 +667,13 @@ def list_due_review_unit_ids(
         part = ids[start : start + chunk]
         rows = (
             session.query(ReviewUnitState.id)
+            .join(Palace, Palace.id == ReviewUnitState.palace_id)
             .filter(
                 ReviewUnitState.active.is_(True),
                 ReviewUnitState.id.in_(part),
                 ReviewUnitState.due_date <= on,
+                Palace.deleted_at.is_(None),
+                Palace.archived.is_(False),
             )
             .all()
         )

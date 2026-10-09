@@ -14,6 +14,7 @@ import {
   type ReconcilePalaceUnitsResultDto,
   type UnitScheduleSnapshotDto,
 } from '../api'
+import { PalaceLadderProgress } from './PalaceLadderProgress'
 
 /** Ebbinghaus-style interval ladder used by unit review stages. */
 export const UNIT_INTERVAL_LADDER_DAYS = [0, 1, 3, 7, 14, 30, 60, 120, 240, 365] as const
@@ -45,6 +46,28 @@ type UnitRow = PalaceUnitProjectionDto['units'][number]
 
 function operationId() {
   return crypto.randomUUID?.() ?? `unit-schedule-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+function schedulableDueMax(now = new Date()) {
+  const top = UNIT_INTERVAL_LADDER_DAYS[UNIT_INTERVAL_LADDER_DAYS.length - 1]
+  const span = Math.max(1, Math.round(top * 0.05))
+  const limit = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  limit.setDate(limit.getDate() + top + span)
+  const month = String(limit.getMonth() + 1).padStart(2, '0')
+  const day = String(limit.getDate()).padStart(2, '0')
+  return `${limit.getFullYear()}-${month}-${day}`
+}
+
+function queueAbsenceNote(units: UnitRow[]) {
+  if (units.length === 0) return '还没有复习单元。标记之后才会进入复习。'
+  const dueCount = units.filter((unit) => unit.due).length
+  if (dueCount > 0) {
+    return `有 ${dueCount} 个已经到期。如果今天的复习里还没有，重新开始一轮就会出现。`
+  }
+  const next = units.map((unit) => unit.due_date).filter(Boolean).sort()[0]
+  return next
+    ? `还没到复习日（${formatDueLabel(next)}），所以今天不会出现。`
+    : '还没到复习日，所以今天不会出现。'
 }
 
 function formatDueLabel(value: string) {
@@ -289,6 +312,9 @@ export function PalaceReviewUnitsPanel({
                   ? ` · ${projection.unit_count} 单元 · 到期 ${projection.due_unit_count}`
                   : null}
               </div>
+              {projection ? (
+                <p className="mt-1 text-xs text-muted-foreground">{queueAbsenceNote(units)} 把鼠标放在进度节点上，可以看到复习时间。</p>
+              ) : null}
             </div>
           </div>
           <button
@@ -426,6 +452,7 @@ export function PalaceReviewUnitsPanel({
                       <ChevronDown className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                     )}
                   </button>
+                  <PalaceLadderProgress palaceId={palaceId} unitId={unit.id} className="mt-2" />
 
                   {expanded ? (
                     <div className="mt-3 space-y-3 border-t border-border pt-3">
@@ -451,9 +478,12 @@ export function PalaceReviewUnitsPanel({
                             type="date"
                             className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-sm text-foreground"
                             value={draftDue}
+                            min="1970-01-01"
+                            max={schedulableDueMax()}
                             onChange={(event) => setDraftDue(event.target.value)}
                             disabled={saving}
                           />
+                          <span className="mt-1 block">最长一年。更远的日期不会保存。</span>
                         </label>
                       </div>
                       <label className="flex items-center gap-2 text-xs text-muted-foreground">

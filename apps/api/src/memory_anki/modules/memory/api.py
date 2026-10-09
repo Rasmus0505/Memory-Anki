@@ -1,11 +1,13 @@
 """Public facade for permanent-mark review units."""
 
 from .application.learning_progress_evidence import read_learning_progress_evidence
+from .application.subject_memory_ladder import get_subject_memory_ladder
 from .application.unit_ladder_progress import get_palace_ladder_progress
 from .application.unit_review_preview import get_unit_review_preview
 from .application.unit_review_projection import (
     list_active_review_unit_ids,
     list_due_review_unit_ids,
+    repair_absurd_due_dates,
     warm_unit_projection_cache,
 )
 from .application.unit_review_queue_read import (
@@ -61,6 +63,7 @@ __all__ = [
     "encounter_focus_seconds_by_palace",
     "get_palace_unit_projection",
     "get_palace_ladder_progress",
+    "get_subject_memory_ladder",
     "get_palace_review_summary",
     "get_review_queue_summary",
     "get_unit_review_weekly_stats",
@@ -77,6 +80,7 @@ __all__ = [
     "rate_palace_due_units",
     "rate_review_unit",
     "reconcile_palace_units",
+    "repair_absurd_due_dates",
     "resolve_unit_definitions",
     "project_palace_review_summaries",
     "read_palace_due_signals",

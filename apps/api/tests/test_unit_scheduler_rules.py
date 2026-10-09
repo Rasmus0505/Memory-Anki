@@ -12,7 +12,10 @@ from memory_anki.modules.memory.application.unit_scheduler import (
     FUZZ_RATIO,
     INTERVAL_DAYS,
     MIN_PASSED_STAGE,
+    assert_schedulable_due,
+    clamp_schedulable_due,
     lapse_stage,
+    latest_schedulable_due,
     rate_unit,
     scheduled_interval_days,
 )
@@ -232,6 +235,40 @@ def test_fuzz_scatters_a_same_day_cohort_within_bounds():
     for value in observed:
         assert value >= 1
         assert abs(value - nominal) <= span
+
+
+def test_absurd_future_due_is_not_a_schedule():
+    today = date(2026, 10, 9)
+    limit = latest_schedulable_due(today)
+    assert limit == date(2027, 10, 27)
+    assert clamp_schedulable_due(date(2099, 1, 1), today=today) == today
+    assert clamp_schedulable_due(limit, today=today) == limit
+    assert clamp_schedulable_due(date(2026, 10, 5), today=today) == date(2026, 10, 5)
+    try:
+        assert_schedulable_due(date(2099, 1, 1), today=today)
+    except ValueError as exc:
+        assert "一年" in str(exc)
+    else:
+        raise AssertionError("a date past the ladder must be rejected")
+
+
+def test_inheritance_does_not_keep_a_parked_future_due():
+    from types import SimpleNamespace
+
+    from memory_anki.modules.memory.application.unit_inheritance import inheritance_vote
+
+    today = date(2026, 10, 9)
+    stage, due, passed = inheritance_vote(
+        [
+            SimpleNamespace(stage_index=1, due_date=date(2099, 1, 1), has_passed=True),
+            SimpleNamespace(stage_index=2, due_date=date(2099, 6, 1), has_passed=True),
+        ],
+        default_stage=0,
+        default_due=today,
+    )
+    assert stage == 1
+    assert due == today
+    assert passed is True
 
 
 def test_fuzz_never_produces_a_non_positive_interval():

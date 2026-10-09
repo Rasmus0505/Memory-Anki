@@ -34,6 +34,7 @@ from .unit_inheritance import (
     region_is_live,
 )
 from .unit_schedule_projection import _change_entry, _schedule_snapshot_from_row
+from .unit_scheduler import clamp_schedulable_due
 
 
 def _active_unit_key(anchor_uid: str, unit_kind: str) -> tuple[str, str]:
@@ -150,6 +151,7 @@ def reconcile_palace_units(session: Session, palace_id: int) -> dict[str, Any]:
         inherited_stage, inherited_due, inherited_passed = inheritance_vote(
             sources, default_stage=0, default_due=today
         )
+        inherited_due = clamp_schedulable_due(inherited_due, today=today)
 
         if current is None:
             # No active unit owns this identity. Either the region is still

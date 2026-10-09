@@ -1674,18 +1674,55 @@ def close_unit_review_encounter(
 def _complete_unit_review_session(session: Session, study: StudySession) -> dict[str, Any]:
     if study.status != SESSION_ACTIVE:
         raise ValueError("active unit review session not found")
-    items = (
-        session.query(ReviewSessionUnit)
-        .filter(ReviewSessionUnit.study_session_id == study.id)
-        .all()
-    )
-    if not items or any(item.status != ITEM_PASSED for item in items):
-        raise ValueError("all review units must pass before completion")
-    now = utc_now_naive()
-    # Bill only rated closed encounters (card-visible intervals). Never use
-    # bare (now - started_at): freestyle leaves sessions open across other cards.
-    duration = _sum_billable_encounter_seconds(session, study.id)
-    first_billable_at = _first_billable_encounter_started_at(session, study.id)
+    # Callers have already staged the encounter close. A bare query would
+    # autoflush that write and hold SQLite's only writer across the rest of
+    # this function. Measured: close waited on the lock, then held it ~15s,
+    # and the next card's session start timed out in the learner's hands.
+    # These reads are about committed unit rows, not the close being staged.
+    with session.no_autoflush:
+        items = (
+            session.query(ReviewSessionUnit)
+            .filter(ReviewSessionUnit.study_session_id == study.id)
+            .all()
+        )
+        if not items or any(item.status != ITEM_PASSED for item in items):
+            raise ValueError("all review units must pass before completion")
+        now = utc_now_naive()
+        # Bill only rated closed encounters (card-visible intervals). Never use
+        # bare (now - started_at): freestyle leaves sessions open across other cards.
+        duration = _sum_billable_encounter_seconds(session, study.id)
+        counted_ids = {
+            row.id
+            for row in session.query(ReviewUnitEncounter.id)
+            .filter(
+                ReviewUnitEncounter.study_session_id == study.id,
+                ReviewUnitEncounter.status == ENCOUNTER_CLOSED,
+            )
+            .all()
+        }
+        first_billable_at = _first_billable_encounter_started_at(session, study.id)
+        next_due = (
+            session.query(ReviewUnitState)
+            .filter(
+                ReviewUnitState.palace_id == study.palace_id,
+                ReviewUnitState.active.is_(True),
+            )
+            .order_by(ReviewUnitState.due_date.asc())
+            .first()
+        )
+    for staged in list(session.new) + list(session.dirty):
+        if (
+            isinstance(staged, ReviewUnitEncounter)
+            and staged.study_session_id == study.id
+            and staged.status == ENCOUNTER_CLOSED
+            and staged.id not in counted_ids
+            and staged.selected_rating is not None
+        ):
+            duration += _encounter_billable_seconds(staged)
+            if first_billable_at is None or (
+                staged.created_at is not None and staged.created_at < first_billable_at
+            ):
+                first_billable_at = staged.created_at
     if first_billable_at is not None:
         # Align list "开始时间" with first real attempt, not a prior unrated glance
         # that may have been cancelled — or an earlier scroll-past on another unit
@@ -1694,15 +1731,6 @@ def _complete_unit_review_session(session: Session, study: StudySession) -> dict
     study.status = SESSION_COMPLETED
     study.ended_at = now
     study.completion_method = "all_units_passed"
-    next_due = (
-        session.query(ReviewUnitState)
-        .filter(
-            ReviewUnitState.palace_id == study.palace_id,
-            ReviewUnitState.active.is_(True),
-        )
-        .order_by(ReviewUnitState.due_date.asc())
-        .first()
-    )
     # Merge completion receipt into existing summary so client_source stamped at
     # start (desktop/pwa freestyle or formal review) is not wiped to 未知端.
     prior = _load_study_summary(study)

@@ -12,6 +12,8 @@ content          -> saves palace documents; may save editor_doc without schedule
 practice         -> consumes reviews.api unit projections and the shared rating command
 ```
 
+`GET /api/v1/review/subject-ladder` is a read-only map of active units onto the existing ten scheduling stages. It does not reconcile, write due dates, or invent a second scheduler. A palace is listed in every stage where it already has an active unit; the shown review time is the earliest due date among those units. The shelf shows only the shape, and the subject palace list and progress page can scrub a stage and open the existing palace review or a one-round freestyle lock for exactly those palaces.
+
 The review scheduling and encounter API remains owned by `memory` and is consumed by
 freestyle cards. The frontend review UI lives in `apps/web/src/modules/practice/ui/freestyle`.
 The palace shelf opens `/palaces/<id>/review`, which reuses that UI for one palace and keeps a
