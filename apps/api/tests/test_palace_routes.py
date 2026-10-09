@@ -34,6 +34,23 @@ def assert_missing(response):
     assert_http_error(response)
 
 
+def _grouped_palace_ids(payload: dict) -> set[int]:
+    return set(_grouped_hints(payload))
+
+
+def _grouped_hints(payload: dict) -> dict[int, str]:
+    hints: dict[int, str] = {}
+    for subject in payload.get("subjects") or []:
+        for group in subject.get("chapter_groups") or []:
+            for palace in group.get("palaces") or []:
+                hints[int(palace["id"])] = str(palace.get("search_hint") or "")
+        for palace in subject.get("ungrouped_palaces") or []:
+            hints[int(palace["id"])] = str(palace.get("search_hint") or "")
+    for palace in payload.get("ungrouped") or []:
+        hints[int(palace["id"])] = str(palace.get("search_hint") or "")
+    return hints
+
+
 def create_palace(client, title: str = "Test Palace") -> int:
     response = client.post(
         "/api/v1/palaces",
@@ -194,6 +211,81 @@ class TestPalaceGroupedLists:
         body = client.get("/api/v1/palaces/grouped-summary").json()
 
         assert set(body) == {"groups", "ungrouped", "subjects"}
+
+    def test_grouped_lookup_finds_bubble_text_without_searching_article(self, client, db_session):
+        bubble_id = create_palace(client, "近代学校")
+        article_id = create_palace(client, "文章宫")
+        title_id = create_palace(client, "英国教育")
+        bubble = db_session.get(Palace, bubble_id)
+        article = db_session.get(Palace, article_id)
+        assert bubble is not None and article is not None
+        bubble.editor_doc = json.dumps(
+            {
+                "root": {
+                    "data": {"uid": "root", "text": "近代学校"},
+                    "children": [
+                        {
+                            "data": {
+                                "uid": "background",
+                                "text": "背景",
+                                "articleBody": "义务教育只写在文章里",
+                                "note": "备注里的义务教育也不算",
+                            },
+                            "children": [
+                                {
+                                    "data": {"uid": "law", "text": "1870年颁布《初等教育法》"},
+                                    "children": [],
+                                },
+                                {
+                                    "data": {"uid": "later", "text": "后面也写了初等教育法"},
+                                    "children": [],
+                                },
+                            ],
+                        }
+                    ],
+                }
+            },
+            ensure_ascii=False,
+        )
+        article.editor_doc = json.dumps(
+            {
+                "root": {
+                    "data": {
+                        "uid": "root",
+                        "text": "文章宫",
+                        "articleBody": "义务教育只在文章里",
+                    },
+                    "children": [
+                        {
+                            "data": {"uid": "note", "text": "格子上没有那个词", "note": "义务教育在备注里"},
+                            "children": [],
+                        }
+                    ],
+                }
+            },
+            ensure_ascii=False,
+        )
+        db_session.commit()
+
+        title_only = client.get("/api/v1/palaces/grouped", params={"search": "初等教育法"}).json()
+        assert _grouped_palace_ids(title_only) == set()
+
+        found = client.get(
+            "/api/v1/palaces/grouped",
+            params={"search": "初等教育法", "include_node_text": "true"},
+        ).json()
+        hints = _grouped_hints(found)
+        assert hints[bubble_id] == "1870年颁布《初等教育法》"
+        assert article_id not in hints
+        assert title_id not in _grouped_palace_ids(found)
+
+        named = client.get(
+            "/api/v1/palaces/grouped",
+            params={"search": "英国", "include_node_text": "true"},
+        ).json()
+        named_ids = _grouped_palace_ids(named)
+        assert title_id in named_ids
+        assert _grouped_hints(named).get(title_id) in (None, "")
 
     def test_subject_shelf_returns_payload(self, client, palace_id):
         response = client.get("/api/v1/palaces/subjects")

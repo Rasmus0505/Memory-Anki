@@ -7,6 +7,7 @@ import {
   resolveMemoryLookupFocusNodeUid,
   resolveMemoryLookupPalaceId,
   shouldBlockMemoryLookupClose,
+  splitLookupHint,
 } from './memoryLookupDialogSupport'
 
 function editorStateWithTree(
@@ -198,5 +199,19 @@ describe('memory lookup binding pick', () => {
         3,
       ),
     ).toEqual(['root-1', 'leaf-9'])
+  })
+})
+
+describe('lookup hint highlight', () => {
+  it('marks the typed words without changing the rest of the sentence', () => {
+    expect(splitLookupHint('1870年颁布《初等教育法》', '初等教育法')).toEqual([
+      { text: '1870年颁布《', match: false },
+      { text: '初等教育法', match: true },
+      { text: '》', match: false },
+    ])
+    expect(splitLookupHint('英国教育', '英国教育')).toEqual([
+      { text: '英国教育', match: true },
+    ])
+    expect(splitLookupHint('没有命中', '')).toEqual([{ text: '没有命中', match: false }])
   })
 })

@@ -32,6 +32,7 @@ import { usePalaceListCardActions } from '@/modules/content/ui/palace-catalog/co
 import { useLocalStorageState } from '@/shared/lib/localStorage'
 import { onAppEvent } from '@/shared/events/appEvents'
 import { cn } from '@/shared/lib/utils'
+import { SubjectMemoryLadder } from '@/modules/practice/public'
 import {
   buildPalaceCatalogQuery,
   createEmptyPalaceGroupedListResponse,
@@ -500,6 +501,10 @@ export default function PalaceShelfPage() {
                   />
                   <CardContent className={cn('relative flex h-full flex-col justify-between', getShelfCardContentClass(viewSettings.densityMode))}>
                     <div className={getShelfMetaSpacingClass(viewSettings.densityMode)}>
+                      <SubjectMemoryLadder
+                        subjectKey={item.subject?.id ?? 'unassigned'}
+                        variant="thumb"
+                      />
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-center gap-3">
                           <div

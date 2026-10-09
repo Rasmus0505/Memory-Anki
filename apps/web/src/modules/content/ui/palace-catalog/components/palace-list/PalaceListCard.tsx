@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { BookOpen, ChevronDown, ChevronRight, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
+import { BookOpen, CalendarClock, ChevronDown, ChevronRight, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
+import { PalaceReviewUnitsPanel } from '@/modules/practice/public'
 import type { PalaceListViewSettings } from '@/modules/settings/public'
 import type { PalaceGroupedItem } from '@/shared/api/contracts'
 import { Button } from '@/shared/components/ui/button'
@@ -78,6 +79,25 @@ function formatReviewDate(value?: string | null) {
   return month && day ? `${month}月${day}日复习` : '日期复习'
 }
 
+function whyNotToday(palace: PalaceGroupedItem): string | null {
+  if (palace.review_status === 'marking_required') {
+    return '还没标记，不会出现在今天的复习里'
+  }
+  if (palace.review_status === 'scheduled') {
+    const when = formatReviewDate(palace.next_review_date).replace(/复习$/, '')
+    return when && when !== '日期'
+      ? `还没到复习日（${when}），今天不会出现`
+      : '还没到复习日，今天不会出现'
+  }
+  if (palace.review_status === 'due') {
+    const count = palace.due_review_unit_count
+    return count > 0
+      ? `今天有 ${count} 个到期，会出现在今天的复习里`
+      : '今天到期，会出现在今天的复习里'
+  }
+  return null
+}
+
 export function PalaceListCard({
   palace,
   viewSettings,
@@ -88,6 +108,7 @@ export function PalaceListCard({
 }: PalaceListCardProps) {
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [progressOpen, setProgressOpen] = useState(false)
   const [expanded, setExpanded] = useState(defaultExpanded)
   const menuRef = useRef<HTMLDivElement | null>(null)
   const unitReviewStatus = palace.review_status
@@ -164,6 +185,7 @@ export function PalaceListCard({
             {palace.review_unit_count > 0 ? (
               <span>{palace.due_review_unit_count} 个到期</span>
             ) : null}
+            {whyNotToday(palace) ? <span>{whyNotToday(palace)}</span> : null}
             {showExpandButton ? (
               <button
                 type="button"
@@ -222,6 +244,17 @@ export function PalaceListCard({
               <div className="absolute right-0 top-9 z-40 min-w-[132px] rounded-xl border border-border/70 bg-background p-1 shadow-lg">
                 <button
                   type="button"
+                  className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-muted"
+                  onClick={() => {
+                    setMenuOpen(false)
+                    setProgressOpen(true)
+                  }}
+                >
+                  <CalendarClock className="size-4" />
+                  复习进度
+                </button>
+                <button
+                  type="button"
                   className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-destructive transition-colors hover:bg-destructive/10"
                   onClick={() => {
                     setMenuOpen(false)
@@ -236,6 +269,13 @@ export function PalaceListCard({
           </div>
         </div>
       </CardContent>
+      {progressOpen ? (
+        <PalaceReviewUnitsPanel
+          open
+          palaceId={palace.id}
+          onClose={() => setProgressOpen(false)}
+        />
+      ) : null}
       <NodeCountBadgeCluster
         countBadges={quizCountBadges}
         onBadgeClick={() => navigate(`/palaces/${palace.id}/quiz`)}

@@ -62,6 +62,8 @@ export interface PalaceGroupedItem extends PalaceListItem {
   resolved_parent_chapter: ChapterSummary | null
   group_id: number | null
   group_sort_order: number
+  /** First mind-map bubble that contained the lookup query. Absent for name-only matches. */
+  search_hint?: string
 }
 export interface PalaceEditorMeta {
   id: number

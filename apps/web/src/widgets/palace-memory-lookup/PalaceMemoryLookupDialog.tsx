@@ -65,6 +65,7 @@ import {
   normalizeMemoryLookupFocusNodeUids,
   resolveMemoryLookupFocusNodeUid,
   shouldBlockMemoryLookupClose,
+  splitLookupHint,
   useMemoryLookupNarrowViewport,
   type MemoryLookupPreviewMode,
 } from '@/widgets/palace-memory-lookup/model/memoryLookupDialogSupport'
@@ -91,6 +92,7 @@ export function PalaceMemoryLookupDialog({
   focusAncestorNodeUid?: string | null
 }) {
   const [search, setSearch] = useState('')
+  const [submittedSearch, setSubmittedSearch] = useState('')
   const [groupedData, setGroupedData] = useState<PalaceGroupedListResponse>(createEmptyGroupedData)
   const [listLoading, setListLoading] = useState(false)
   const [listError, setListError] = useState('')
@@ -287,30 +289,29 @@ export function PalaceMemoryLookupDialog({
   }), [applyRememberedLayout])
 
   useEffect(() => {
+    const trimmed = search.trim()
+    if (!trimmed) {
+      setSubmittedSearch('')
+      return
+    }
+    const timer = window.setTimeout(() => setSubmittedSearch(trimmed), 200)
+    return () => window.clearTimeout(timer)
+  }, [search])
+
+  useEffect(() => {
     if (!open) return
     let cancelled = false
     const loadPalaces = async () => {
       setListLoading(true)
       setListError('')
       try {
-        const data = await getPalacesGroupedApi(search.trim() ? { search: search.trim() } : undefined)
+        const data = await getPalacesGroupedApi(
+          submittedSearch
+            ? { search: submittedSearch, include_node_text: 'true' }
+            : undefined,
+        )
         if (cancelled) return
         setGroupedData(data)
-        const flattened = flattenPalaces(data)
-        setSelectedPalaceId((current) => {
-          if (
-            currentPalaceId != null
-            && followCurrentPalace
-            && flattened.some((palace) => palace.id === currentPalaceId)
-          ) {
-            return currentPalaceId
-          }
-          if (current && flattened.some((palace) => palace.id === current)) return current
-          if (currentPalaceId != null && flattened.some((palace) => palace.id === currentPalaceId)) {
-            return currentPalaceId
-          }
-          return flattened[0]?.id ?? null
-        })
       } catch (error) {
         if (cancelled) return
         setListError(error instanceof Error ? error.message : '加载记忆宫殿列表失败。')
@@ -323,7 +324,7 @@ export function PalaceMemoryLookupDialog({
     return () => {
       cancelled = true
     }
-  }, [currentPalaceId, followCurrentPalace, open, search])
+  }, [open, submittedSearch])
 
   useEffect(() => {
     if (!open || selectedPalaceId == null) {
@@ -519,13 +520,13 @@ export function PalaceMemoryLookupDialog({
       <Input
         value={search}
         onChange={(event) => setSearch(event.target.value)}
-        placeholder="搜索记忆宫殿"
+        placeholder="搜索宫殿或里面的一句话"
         className={cn('h-9 pl-9', inputClassName)}
       />
     </div>
   )
   const renderPalaceList = () => {
-    if (listLoading) {
+    if (listLoading && palaces.length === 0) {
       return (
         <div className="flex h-28 items-center justify-center gap-2 text-sm text-muted-foreground">
           <LoaderCircle className="size-4 animate-spin" />
@@ -576,6 +577,31 @@ export function PalaceMemoryLookupDialog({
               >
                 {getPalaceContext(palace)}
               </div>
+              {submittedSearch && palace.search_hint ? (
+                <div
+                  className={cn(
+                    'mt-1 truncate text-xs',
+                    active ? 'text-primary-foreground/88' : 'text-foreground/80',
+                  )}
+                  title={palace.search_hint}
+                >
+                  {splitLookupHint(palace.search_hint, submittedSearch).map((part, index) =>
+                    part.match ? (
+                      <mark
+                        key={`${palace.id}-hint-${index}`}
+                        className={cn(
+                          'bg-transparent font-medium underline decoration-2 underline-offset-2',
+                          active ? 'text-primary-foreground' : 'text-foreground',
+                        )}
+                      >
+                        {part.text}
+                      </mark>
+                    ) : (
+                      <span key={`${palace.id}-hint-${index}`}>{part.text}</span>
+                    ),
+                  )}
+                </div>
+              ) : null}
               <div
                 className={cn(
                   'mt-1 text-xs',
@@ -637,7 +663,7 @@ export function PalaceMemoryLookupDialog({
     </div>
   )
   const renderMindMapContent = () => (
-    <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-border/70 bg-zinc-50">
+    <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-border/70 bg-[var(--memory-anki-mindmap-canvas)]">
       {previewLoading ? (
         <div className="flex h-full min-h-[180px] items-center justify-center gap-2 text-sm text-muted-foreground">
           <LoaderCircle className="size-4 animate-spin" />

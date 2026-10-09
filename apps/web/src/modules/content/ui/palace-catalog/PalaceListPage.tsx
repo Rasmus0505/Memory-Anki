@@ -28,6 +28,7 @@ import {
 } from '@/modules/content/domain/palace-entity/api'
 import { Button } from '@/shared/components/ui/button'
 import { PageIntro } from '@/shared/components/layout/PageIntro'
+import { SubjectMemoryLadder } from '@/modules/practice/public'
 import { ErrorState } from '@/shared/components/state-placeholders'
 import { useLocalStorageState } from '@/shared/lib/localStorage'
 import { onAppEvent } from '@/shared/events/appEvents'
@@ -221,6 +222,15 @@ export default function PalaceList() {
         }
         compact
       />
+
+      {(selectedSubjectId || showUncategorizedOnly) && (
+        <SubjectMemoryLadder
+          subjectKey={showUncategorizedOnly || !/^\d+$/.test(selectedSubjectId ?? '')
+            ? 'unassigned'
+            : Number(selectedSubjectId)}
+          variant="full"
+        />
+      )}
 
       <PalaceListToolbar
         search={search}

@@ -76,6 +76,20 @@ describe('PalaceListCard unit review entry', () => {
     expect(screen.getByRole('button', { name: '7月30日复习' }).hasAttribute('disabled')).toBe(true)
   })
 
+  it('says why a scheduled palace is not in today and offers progress from the menu', () => {
+    renderCard(buildPalace({
+      review_status: 'scheduled',
+      next_review_date: '2026-07-30',
+      review_unit_count: 2,
+      due_review_unit_count: 0,
+    }))
+
+    expect(screen.getByText('还没到复习日（7月30日），今天不会出现')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '复习进度' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /更多操作/ }))
+    expect(screen.getByRole('button', { name: '复习进度' })).toBeTruthy()
+  })
+
   it('does not reconstruct an entry from legacy node or segment fields', () => {
     renderCard({
       ...buildPalace(),

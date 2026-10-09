@@ -8,6 +8,7 @@ expresses intent (list / get / add / delete / sync-pegs).
 
 from __future__ import annotations
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from memory_anki.infrastructure.db._tables.knowledge import Chapter
@@ -82,6 +83,40 @@ class PalaceRepository:
         if search:
             query = query.filter(Palace.title.ilike(f"%{search}%"))
         return query.order_by(Palace.updated_at.desc()).all()
+
+    def list_lookup_text_rows(self, *, pattern: str) -> list[tuple[int, str, str]]:
+        """Active palaces whose title or stored document might contain the words."""
+        rows = (
+            self._session.query(Palace.id, Palace.title, Palace.editor_doc)
+            .filter(
+                Palace.deleted_at.is_(None),
+                Palace.archived.is_(False),
+                or_(
+                    Palace.title.ilike(pattern, escape="\\"),
+                    Palace.editor_doc.ilike(pattern, escape="\\"),
+                ),
+            )
+            .order_by(Palace.updated_at.desc(), Palace.id.desc())
+            .all()
+        )
+        return [(int(row.id), str(row.title or ""), str(row.editor_doc or "")) for row in rows]
+
+    def list_catalog_palaces_by_ids(self, palace_ids: list[int]) -> list[Palace]:
+        if not palace_ids:
+            return []
+        palaces = (
+            self._session.query(Palace)
+            .options(*_list_loader_options())
+            .filter(
+                Palace.id.in_(palace_ids),
+                Palace.deleted_at.is_(None),
+                Palace.archived.is_(False),
+            )
+            .all()
+        )
+        order = {palace_id: index for index, palace_id in enumerate(palace_ids)}
+        palaces.sort(key=lambda palace: order.get(int(palace.id), len(order)))
+        return palaces
 
     def get_palace(self, palace_id: int) -> Palace | None:
         return (

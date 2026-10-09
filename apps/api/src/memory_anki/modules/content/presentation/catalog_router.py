@@ -12,6 +12,7 @@ from memory_anki.modules.content.application.palace_service import (
     count_palaces,
     list_catalog_palaces,
     list_catalog_palaces_by_subject,
+    list_catalog_palaces_for_lookup,
     list_deleted_palaces,
     list_palaces,
 )
@@ -144,9 +145,31 @@ def _attach_quiz_count_badges(session: Session, payload: dict) -> dict:
     return payload
 
 
+def _attach_search_hints(payload: dict, hints: dict[int, str]) -> dict:
+    if not hints:
+        return payload
+    for item in _iter_palace_payloads(payload):
+        if not isinstance(item, dict):
+            continue
+        raw_id = item.get("id")
+        hint = hints.get(raw_id) if isinstance(raw_id, int) else None
+        if hint:
+            item["search_hint"] = hint
+    return payload
+
+
 @router.get("/palaces/grouped")
-def api_list_grouped(search: str = "", subject_id: int | None = None, s: Session = Depends(session_dep)):
-    palaces = list_catalog_palaces_by_subject(s, subject_id, search)
+def api_list_grouped(
+    search: str = "",
+    subject_id: int | None = None,
+    include_node_text: bool = False,
+    s: Session = Depends(session_dep),
+):
+    hints: dict[int, str] = {}
+    if include_node_text and search.strip():
+        palaces, hints = list_catalog_palaces_for_lookup(s, subject_id, search)
+    else:
+        palaces = list_catalog_palaces_by_subject(s, subject_id, search)
     explicit_map = _precomputed_palace_serialization_context(s, palaces)
     memory_map = batch_palace_due_rollups(s, palaces)
     serialize = _cached_palace_serializer(
@@ -154,11 +177,11 @@ def api_list_grouped(search: str = "", subject_id: int | None = None, s: Session
     )
     chapter_grouped = build_chapter_grouped_palace_list(s, palaces, serialize)
     model_grouped = build_grouped_palace_list(s, palaces, serialize)
-    return _attach_quiz_count_badges(s, {
+    return _attach_search_hints(_attach_quiz_count_badges(s, {
         "groups": model_grouped.get("groups", []),
         "ungrouped": model_grouped.get("ungrouped", []),
         "subjects": chapter_grouped.get("subjects", []),
-    })
+    }), hints)
 
 
 @router.get("/palaces/grouped-summary")

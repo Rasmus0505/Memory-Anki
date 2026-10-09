@@ -219,6 +219,29 @@ def list_active_palace_ids_by_subject_scope(session: Session, subject_scope: str
     ]
 
 
+def list_node_parent_uids(session: Session, palace_ids: Sequence[int]) -> dict[str, str]:
+    """``node_uid`` → ``parent_uid`` for the given palaces.
+
+    Used to display a question's score from a reviewed ancestor when the
+    question's own point was not scheduled. Deleted palaces stay included:
+    a question can still be open against a document that was later removed.
+    A node with no parent is omitted.
+    """
+    ids = sorted({int(item) for item in palace_ids if int(item) > 0})
+    if not ids:
+        return {}
+    rows = session.query(Palace.id, Palace.editor_doc).filter(Palace.id.in_(ids)).all()
+    parents: dict[str, str] = {}
+    for _palace_id, editor_doc in rows:
+        _root, nodes = build_tree_from_editor_doc(editor_doc)
+        for uid, node in nodes.items():
+            parent = str(node.get("parent_uid") or "").strip()
+            node_uid = str(uid or "").strip()
+            if node_uid and parent:
+                parents[node_uid] = parent
+    return parents
+
+
 def resolve_palace_titles(session: Session, palace_ids: Sequence[int]) -> dict[int, str]:
     """Batch palace display titles through the one title rule.
 

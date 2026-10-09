@@ -75,6 +75,27 @@ export function getPalaceContext(palace: PalaceGroupedItem) {
   return [subjectName, chapterName].filter(Boolean).join(' / ') || '未分类'
 }
 
+export function splitLookupHint(text: string, query: string): Array<{ text: string; match: boolean }> {
+  const needle = query.trim()
+  if (!text) return []
+  if (!needle) return [{ text, match: false }]
+  const folded = text.toLocaleLowerCase()
+  const target = needle.toLocaleLowerCase()
+  const parts: Array<{ text: string; match: boolean }> = []
+  let cursor = 0
+  let index = folded.indexOf(target, cursor)
+  while (index >= 0) {
+    if (index > cursor) parts.push({ text: text.slice(cursor, index), match: false })
+    const end = index + target.length
+    parts.push({ text: text.slice(index, end), match: true })
+    cursor = end
+    if (target.length === 0) break
+    index = folded.indexOf(target, cursor)
+  }
+  if (cursor < text.length) parts.push({ text: text.slice(cursor), match: false })
+  return parts.length > 0 ? parts : [{ text, match: false }]
+}
+
 export function buildEditorState(
   response: Awaited<ReturnType<typeof getPalaceEditorApi>>,
 ): MindMapEditorState {

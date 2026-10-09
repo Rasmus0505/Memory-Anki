@@ -13,6 +13,11 @@ from sqlalchemy.orm import Session
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.palaces import Palace, Peg
 from memory_anki.modules.content.application.knowledge_binding_service import assign_palace_subjects
+from memory_anki.modules.content.application.mindmap_bubble_search import (
+    first_matching_bubble_text,
+    like_contains_pattern,
+)
+from memory_anki.modules.content.application.palace_view_resolvers import resolve_palace_title
 from memory_anki.modules.content.domain.schemas import PalaceCreate, PalaceUpdate, PegIn
 from memory_anki.modules.content.infrastructure.repositories import PalaceRepository
 from memory_anki.platform.application import UnitOfWork
@@ -58,6 +63,49 @@ def list_palaces_by_subject(session: Session, subject_id: int | None, search: st
 
 def list_catalog_palaces_by_subject(session: Session, subject_id: int | None, search: str = ""):
     palaces = list_catalog_palaces(session, search)
+    if subject_id is None:
+        return palaces
+    return [
+        palace
+        for palace in palaces
+        if any(subject.id == subject_id for subject in (getattr(palace, "subjects", []) or []))
+    ]
+
+
+def list_catalog_palaces_for_lookup(
+    session: Session,
+    subject_id: int | None,
+    search: str,
+) -> tuple[list[Palace], dict[int, str]]:
+    """Palaces whose name or mind-map bubbles contain the words, plus one hint each."""
+    query = search.strip()
+    if not query:
+        return list_catalog_palaces_by_subject(session, subject_id, ""), {}
+
+    repo = _repo(session)
+    matched_ids: list[int] = []
+    hints: dict[int, str] = {}
+    needle = query.casefold()
+    for palace_id, title, editor_doc in repo.list_lookup_text_rows(pattern=like_contains_pattern(query)):
+        title_hit = needle in title.casefold()
+        hint = first_matching_bubble_text(editor_doc, query, skip_equal_to=title)
+        if not title_hit and hint is None:
+            continue
+        matched_ids.append(palace_id)
+        if hint:
+            hints[palace_id] = hint
+
+    palaces = _palaces_in_subject(repo.list_catalog_palaces_by_ids(matched_ids), subject_id)
+    visible_ids = {int(palace.id) for palace in palaces}
+    resolved_hints: dict[int, str] = {}
+    for palace in palaces:
+        hint = hints.get(int(palace.id), "")
+        if hint and hint.casefold() != resolve_palace_title(palace).casefold():
+            resolved_hints[int(palace.id)] = hint
+    return palaces, {palace_id: hint for palace_id, hint in resolved_hints.items() if palace_id in visible_ids}
+
+
+def _palaces_in_subject(palaces: list[Palace], subject_id: int | None) -> list[Palace]:
     if subject_id is None:
         return palaces
     return [
