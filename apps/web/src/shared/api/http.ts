@@ -1,3 +1,4 @@
+import { noteApiStep } from '@/shared/api/requestOutcome'
 import { logAppError } from '@/shared/logs/model/appLogs'
 import {
   buildRequestError,
@@ -299,8 +300,8 @@ function buildNetworkFailureMessage(input: {
   if (isRequestTimeoutError(input.error)) {
     if (isLocalDesktopRuntime(runtime.currentUrl, runtime.userAgent)) {
       lines.push(
-        '连接已建立但服务端迟迟没有返回，通常是本机服务正在重启、迁移数据库或被占用。',
-        '请稍等几秒后重试；若持续如此，请重新运行 start-all.bat 并查看 logs/ 下的日志。',
+        '连接是通的，这一步还没完成。先继续看这张卡，软件会自己再试。',
+        '不用重启软件。若多次都这样，用「复制给助手」把下面的内容发过来即可。',
       )
     } else {
       // A timeout means the request reached the server and the server is slow:
@@ -317,8 +318,8 @@ function buildNetworkFailureMessage(input: {
   } else if (isLowInformationNetworkError(rawMessage)) {
     if (isLocalDesktopRuntime(runtime.currentUrl, runtime.userAgent)) {
       lines.push(
-        '这通常表示本机共享服务尚未启动、正在重启或暂时无法连接。',
-        '请重新运行 start-all.bat（可选 --desktop / --pwa / --both）。桌面端与手机端会共用同一个本机服务。',
+        '本机服务正在重新连上，软件会自己再试。',
+        '先继续看题即可，不用重启。',
       )
     } else {
       lines.push(
@@ -491,6 +492,10 @@ export async function fetchWithMutationQueue(
 export async function request<T>(url: string, options?: PersistedRequestInit): Promise<T> {
   const requestUrl = `${API_BASE}${url}`
   const method = options?.method || 'GET'
+  const startedAt = Date.now()
+  const note = (ok: boolean, status: number | null, message: string, queuedRetry: boolean) => {
+    noteApiStep({ method, url: requestUrl, ok, status, message, queuedRetry, startedAt })
+  }
   const { persistence: rawPersistence, timeoutMs, ...fetchOptions } = options ?? {}
   const isWrite = method.toUpperCase() !== 'GET'
   const replayRequest = isQueuedReplayRequest(fetchOptions.headers)
@@ -548,6 +553,7 @@ export async function request<T>(url: string, options?: PersistedRequestInit): P
         originalError: error instanceof Error ? error.message : String(error),
       },
     })
+    note(false, null, networkMessage, Boolean(persistence))
     throw new Error(networkMessage, { cause: error })
   }
 
@@ -593,6 +599,12 @@ export async function request<T>(url: string, options?: PersistedRequestInit): P
           requestId,
         },
       })
+      note(
+        false,
+        response.status,
+        message,
+        Boolean(persistence && (response.status >= 500 || isConflictResponse(response.status, message))),
+      )
       throw buildRequestError(message, requestId, {
         feature: persistence?.description || 'API 请求',
         method,
@@ -608,7 +620,9 @@ export async function request<T>(url: string, options?: PersistedRequestInit): P
     const contentType = response.headers.get('content-type')
     if (contentType?.includes('application/json')) {
       try {
-        return await timedResponse.readBody(() => response.json())
+        const payload = await timedResponse.readBody(() => response.json())
+        note(true, response.status, '', false)
+        return payload
       } catch (error) {
         const normalized = timedResponse.normalizeBodyError(error)
         if (isRequestTimeoutError(normalized)) throw normalized
@@ -626,6 +640,7 @@ export async function request<T>(url: string, options?: PersistedRequestInit): P
             requestId,
           },
         })
+        note(false, response.status, error instanceof Error ? error.message || 'JSON 解析失败' : 'JSON 解析失败', false)
         throw buildRequestError(
           error instanceof Error ? error.message || 'JSON 解析失败' : 'JSON 解析失败',
           requestId,
@@ -638,7 +653,9 @@ export async function request<T>(url: string, options?: PersistedRequestInit): P
         )
       }
     }
-    return await timedResponse.readBody(() => response.text()) as unknown as T
+    const text = await timedResponse.readBody(() => response.text())
+    note(true, response.status, '', false)
+    return text as unknown as T
   } catch (error) {
     const normalized = timedResponse.normalizeBodyError(error)
     if (!isRequestTimeoutError(normalized)) throw error
@@ -658,6 +675,7 @@ export async function request<T>(url: string, options?: PersistedRequestInit): P
         originalError: normalized instanceof Error ? normalized.message : String(normalized),
       },
     })
+    note(false, null, networkMessage, false)
     throw new Error(networkMessage, { cause: error })
   } finally {
     timedResponse.finish()
@@ -669,17 +687,21 @@ export async function uploadWithFormData<T>(
   formData: FormData,
   persistence: { resourceKey: string; description: string },
 ): Promise<T> {
-  const response = await fetchWithMutationQueue(
-    `${API_BASE}${url}`,
-    {
-      method: 'POST',
-      body: formData,
-    },
-    {
+  const startedAt = Date.now()
+  const requestUrl = `${API_BASE}${url}`
+  const note = (ok: boolean, status: number | null, message: string, queuedRetry: boolean) => {
+    noteApiStep({ method: 'POST', url: requestUrl, ok, status, message, queuedRetry, startedAt })
+  }
+  let response: Response
+  try {
+    response = await fetchWithMutationQueue(requestUrl, { method: 'POST', body: formData }, {
       ...persistence,
       replayMode: 'manual',
-    },
-  )
+    })
+  } catch (error) {
+    note(false, null, error instanceof Error ? error.message : '上传没有成功', true)
+    throw error
+  }
   if (!response.ok) {
     const body = await response.text().catch(() => '')
     let message = body || `HTTP ${response.status}`
@@ -699,7 +721,9 @@ export async function uploadWithFormData<T>(
     } catch {
       // Ignore JSON parse failures and use the raw text body.
     }
+    note(false, response.status, message, response.status >= 500)
     throw new Error(message)
   }
+  note(true, response.status, '', false)
   return response.json() as Promise<T>
 }

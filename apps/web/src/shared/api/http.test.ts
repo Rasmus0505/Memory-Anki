@@ -229,8 +229,9 @@ describe('shared api http token headers', () => {
     vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new TypeError('Failed to fetch'))))
 
     await expect(request('/review/session/2063')).rejects.toThrow(
-      /本机共享服务尚未启动.*暂时无法连接/s,
+      /正在重新连上.*不用重启/s,
     )
+    await expect(request('/review/session/2063')).rejects.not.toThrow(/start-all\.bat/)
     await expect(request('/review/session/2063')).rejects.not.toThrow(/8012|5173/)
     await expect(request('/review/session/2063')).rejects.not.toThrow(/手机 Tailscale/)
   })
