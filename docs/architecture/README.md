@@ -34,9 +34,10 @@ The repository is a local-first Windows product used on two devices. SQLite, fil
 | Route metadata (nav/history/fallback) | `shared/routing/routeManifest.ts` (single source) | — |
 | Feedback runtime (cues, recipes, particles, skins, rare shows) | `shared/fx` — see [fx-director.md](./fx-director.md). Callers use `cue()` from `@/shared/fx` only; WebGL2 + bloom with Canvas2D fallback | — |
 | Learning progress (`/progress`, hierarchy / distribution / question coverage) | `modules/dashboard` — see [dashboard-read-model.md](./dashboard-read-model.md) | `modules/dashboard` composed through content/memory/quiz public read capabilities |
-| Growth meta (XP, levels, quests, stamps, starmap, wardrobe) | `modules/progression` — see [progression.md](./progression.md) | `modules/progression` (read-only projection) |
+| Growth meta (XP, levels, quests, stamps; no `/growth` page) | `modules/progression` — see [progression.md](./progression.md) | `modules/progression` (read-only projection) |
 | Ambient room layer (tint, grain, dust motes, pointer light) | `shared/ambient` (pure, data-free); `app/shell/useAmbientTone` feeds it dashboard/exam data | — |
 | Interface sounds | `shared/feedback/uiSounds` (delegated listener, gated by `uiSoundEnabled` + `soundEnabled`; silent inside `.freestyle-stage`); synth voices in `shared/feedback/mindmap-audio` — see [audio-soundscape.md](./audio-soundscape.md) | — |
+| Diagnosis brief (top-left 录制) | `shared/debug/session-recorder` subscribes to `shared/api/requestOutcome`; `shared/api` must not import the recorder | — |
 
 ## Hard Invariants
 
@@ -191,7 +192,7 @@ The concentrated architecture replacement has started with the two failure-prone
 - Quiz learning loop: docs/architecture/quiz-learning-loop.md
 - Unified training evidence boundary: `docs/architecture/unified-training-evidence.md`
 
-Historical notes for removed in-app AI and PDF features (code gone, database tables kept): `batch-generation-workspace.md`, `ai-learning-workbench.md`, `ai-run-workspace.md`, `english-reading-gap-loop.md`. English keeps listening (`/english/listening`) and word lookup. Manual JSON import (“文字转脑图”) remains.
+Historical notes for removed in-app AI and PDF features (code gone, database tables kept): `batch-generation-workspace.md`, `ai-learning-workbench.md`, `ai-run-workspace.md`, `english-reading-gap-loop.md`. English keeps listening (`/english/listening`), cloze reading (`/english/cloze`), and word lookup. Manual JSON import (“文字转脑图”) remains.
 
 ## Review Settlement Boundary
 

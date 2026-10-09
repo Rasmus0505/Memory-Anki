@@ -251,7 +251,7 @@
           "sessionKeyRegistry",
           "timing",
           "clickActivityIntervals",
-          "fiveMinuteIdleRollback",
+          "ninetySecondThinkingGrace",
           "continuousBlock",
           "pause",
           "complete",

@@ -84,6 +84,8 @@
 .lp-row:last-child { border-bottom: 0; }
 .lp-row[data-selected="true"] { background: color-mix(in srgb, var(--lp-green-soft) 70%, var(--color-card)); box-shadow: inset 3px 0 var(--lp-green); }
 .lp-row-name { min-width: 0; display: flex; align-items: center; gap: 7px; padding-left: min(calc(var(--lp-depth, 0) * 16px), 64px); }
+.lp-row-name-stack { display: grid; align-items: stretch; gap: 8px; }
+.lp-row-name-line { min-width: 0; display: flex; align-items: center; gap: 7px; }
 .lp-node-icon { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; color: var(--lp-green); background: var(--lp-green-soft); flex-shrink: 0; }
 .lp-node-text { min-width: 0; text-align: left; border-radius: 3px; }
 .lp-node-text strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 750; }

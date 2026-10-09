@@ -3,6 +3,7 @@ import { BookOpen, ChevronDown, ChevronLeft, ChevronRight, ChevronsRight, Circle
 import type { LearningProgressNode } from '@/shared/api/contracts/learningProgress'
 import { KIND_LABELS, STATE_LABELS, memoryState, percentage, type IndexedProgressNode, type ProgressView } from '../../domain/learningProgress'
 import { ProgressBar, ProgressLegend } from './ProgressOverview'
+import { SubjectMemoryLadder, subjectKeyFromProgressId } from '@/modules/practice/public'
 
 function NodeIcon({ kind }: { kind: string }) {
   if (kind === 'subject') return <GraduationCap size={16} />
@@ -40,8 +41,12 @@ export function ProgressExplorer({ rows, view, expanded, onToggle, selectedId, o
     {view === 'hierarchy' && <>
       <div className="lp-table-head" aria-hidden="true"><span>知识结构</span><span>复习覆盖</span><span>题目作答</span></div>
       <ul aria-label="知识层级进度">
-        {visible.map(({ node, ancestors, depth }) => <li className="lp-row" key={node.id} data-selected={node.id === selectedId}>
-          <div className="lp-row-name" style={{ '--lp-depth': depth } as CSSProperties}>
+        {visible.map(({ node, ancestors, depth }) => {
+          const subjectKey = node.kind === 'subject' ? subjectKeyFromProgressId(node.id) : null
+          return <li className="lp-row" key={node.id} data-selected={node.id === selectedId}>
+          <div className={subjectKey == null ? 'lp-row-name' : 'lp-row-name lp-row-name-stack'} style={{ '--lp-depth': depth } as CSSProperties}>
+            {subjectKey != null && <SubjectMemoryLadder subjectKey={subjectKey} variant="full" />}
+            <div className="lp-row-name-line">
             {node.children.length ? <button className="lp-icon-button" onClick={() => onToggle(node.id)} aria-expanded={expanded.has(node.id)} aria-label={`${expanded.has(node.id) ? '收起' : '展开'}${node.name}`}>
               {expanded.has(node.id) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
             </button> : <span style={{ width: 16, flexShrink: 0 }} />}
@@ -49,10 +54,12 @@ export function ProgressExplorer({ rows, view, expanded, onToggle, selectedId, o
             <button className="lp-node-text" onClick={() => onSelect(node)} aria-label={`查看${node.name}详情`} aria-pressed={node.id === selectedId} title={node.name}>
               <strong>{node.name}</strong><small>{KIND_LABELS[node.kind] ?? node.kind}{node.children.length ? ` · ${node.children.length} 个子项` : ''}{node.metrics.memory_due > 0 ? ` · ${node.metrics.memory_due} 待复习` : ''}{ancestors.length > 0 ? ` · ${ancestors.at(-1)?.name}` : ''}</small>
             </button>
+            </div>
           </div>
           <div className="lp-row-metric"><div><span>{node.metrics.memory_reviewed} / {node.metrics.memory_total}</span><small>{node.metrics.memory_total ? `${percentage(node.metrics.memory_reviewed, node.metrics.memory_total)}%` : '—'}</small></div><ProgressBar metrics={node.metrics} /></div>
           <div className="lp-row-quiz">{node.metrics.quiz_total ? `${node.metrics.quiz_answered} / ${node.metrics.quiz_total}` : '—'}<small>{node.metrics.quiz_total ? '已作答 / 总题数' : '暂无关联题目'}</small></div>
-        </li>)}
+        </li>
+          })}
       </ul>
     </>}
     {view === 'matrix' && <div className="lp-matrix">

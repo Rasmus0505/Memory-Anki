@@ -1083,8 +1083,8 @@ def check_timed_session_architecture(errors: list[str]) -> None:
     architecture_doc = REPO_ROOT / "docs" / "architecture" / "timed-session.md"
     required_doc_markers = (
         "pointerdown",
-        "300000",
-        "5 分钟",
+        "90000",
+        "90 秒",
         "interval_id",
         "device_id",
         "tombstone",
@@ -1119,7 +1119,7 @@ def check_timed_session_architecture(errors: list[str]) -> None:
     for capability in (
         "sessionKeyRegistry",
         "clickActivityIntervals",
-        "fiveMinuteIdleRollback",
+        "ninetySecondThinkingGrace",
         "continuousBlock",
         "immutableLedgerRevisions",
         "crossDeviceIntervalUnion",
@@ -2383,6 +2383,7 @@ def check_freestyle_scope_quiz_overlay(errors: list[str]) -> None:
             "overlay_question_kinds",
             "overlay_type_order",
             "overlay_type_palace_nesting",
+            "overlay_rating_inherit",
         ):
             if marker not in contract_source:
                 errors.append(
@@ -2971,12 +2972,18 @@ def check_freestyle_knowledge_entry_scope(errors: list[str]) -> None:
         )
         return
     source = entry_scope.read_text(encoding="utf-8", errors="ignore")
-    if "lockStreamScope(config.streams.memory_palace, palaceId, 'all')" not in source:
+    memory_lock = "lockStreamScope(config.streams.memory_palace, palaceIds, 'all')"
+    quiz_lock = "lockStreamScope(config.streams.quiz, palaceIds, 'all')"
+    single_memory_lock = "lockStreamScope(config.streams.memory_palace, palaceId, 'all')"
+    single_quiz_lock = "lockStreamScope(config.streams.quiz, palaceId, 'all')"
+    streams_share_lock = (memory_lock in source and quiz_lock in source) or (
+        single_memory_lock in source and single_quiz_lock in source
+    )
+    if not streams_share_lock:
         errors.append(
             f"{entry_scope.relative_to(REPO_ROOT).as_posix()}: "
             "entry palace must lock the memory-palace stream, not only legacy specific_palace_ids."
         )
-    if "lockStreamScope(config.streams.quiz, palaceId, 'all')" not in source:
         errors.append(
             f"{entry_scope.relative_to(REPO_ROOT).as_posix()}: "
             "entry palace must lock the quiz stream to the same palace."
@@ -3456,6 +3463,10 @@ def check_wheel_scroll_does_not_snap_back(errors: list[str]) -> None:
                 f"{viewport.relative_to(REPO_ROOT).as_posix()}: preserve mode must commit "
                 "a wheel pan reported before move-start."
             )
+        if "elementBlocksMindMapWheelPan" not in source:
+            errors.append(
+                f"{viewport.relative_to(REPO_ROOT).as_posix()}: edit-card nopan must not swallow wheel pan."
+            )
     if feed_doc.exists() and "partial notch" not in feed_doc.read_text(encoding="utf-8", errors="ignore"):
         errors.append(
             f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: document that wheel must not snap back."
@@ -3463,6 +3474,10 @@ def check_wheel_scroll_does_not_snap_back(errors: list[str]) -> None:
     if mindmap_doc.exists() and "panOnScroll" not in mindmap_doc.read_text(encoding="utf-8", errors="ignore"):
         errors.append(
             f"{mindmap_doc.relative_to(REPO_ROOT).as_posix()}: document that wheel pan is not restored."
+        )
+    if mindmap_doc.exists() and "不得吃掉滚轮平移" not in mindmap_doc.read_text(encoding="utf-8", errors="ignore"):
+        errors.append(
+            f"{mindmap_doc.relative_to(REPO_ROOT).as_posix()}: document that nopan must not swallow wheel pan."
         )
 
 
@@ -5280,35 +5295,51 @@ def check_backup_snapshot_policy(errors: list[str]) -> None:
 
 
 def _check_backup_lock_scope(errors: list[str]) -> None:
-    """A snapshot must not hold the shared runtime lock while bulk-copying.
+    """A snapshot must not hold the shared runtime lock.
 
-    Holding it across a full database/media copy stalled every autosave and
-    review write for the duration of the copy (observed: ~9 minutes), which the
-    client saw as ``PUT /palaces/{id}/editor -> 500``.
+    SQLite's online backup API is already consistent with concurrent writers.
+    Wrapping that copy in ``storage_write_lock`` stalled every study write for
+    the whole copy (observed: minutes on a ~200 MB synced-drive database), which
+    the client saw as 503 after a 15s wait.
     """
     storage = API_SRC / "modules" / "backups" / "application" / "storage_backup.py"
     if not storage.exists():
         return
     source = storage.read_text(encoding="utf-8", errors="ignore")
     relative = storage.relative_to(REPO_ROOT).as_posix()
-    if "_snapshot_databases_under_lock" not in source:
+    if "def _snapshot_databases(" not in source:
         errors.append(
-            f"{relative}: backup writes must snapshot the database under the runtime lock "
-            "via _snapshot_databases_under_lock."
+            f"{relative}: backup writes must snapshot the database via _snapshot_databases, "
+            "without taking the study lock."
         )
-    if "captured = _snapshot_databases_under_lock(stage, items)" not in source:
+    if "captured = _snapshot_databases(stage, items)" not in source:
         errors.append(
             f"{relative}: write_storage_backup must capture the database snapshot before "
-            "copying remaining items outside the runtime lock."
+            "copying remaining items, and must not wrap that snapshot in storage_write_lock."
         )
-    # The bulk copy must not be nested inside a storage_write_lock block.
+    snapshot = source.split("def _snapshot_databases(", 1)[-1].split("\ndef ", 1)[0]
+    if "with storage_write_lock" in snapshot:
+        errors.append(
+            f"{relative}: the database snapshot must not take storage_write_lock. "
+            "SQLite online backup is concurrent; holding the study lock across a large "
+            "copy makes progress saves return 503."
+        )
+    online = source.split("def _sqlite_online_backup(", 1)[-1].split("\ndef ", 1)[0]
+    if "with storage_write_lock" in online.split("source_conn.backup", 1)[0]:
+        errors.append(
+            f"{relative}: source_conn.backup must not run inside storage_write_lock."
+        )
+    if "source_conn.backup(" not in online or "pages=_ONLINE_BACKUP_PAGES" not in online:
+        errors.append(
+            f"{relative}: online backup must copy in page steps so a long snapshot "
+            "releases the source read lock between batches."
+        )
     if "with storage_write_lock(APP_HOME):\n            included_items" in source or (
         "with storage_write_lock(APP_HOME):\n                _copy_item_to_backup(item, stage)"
         in source
     ):
         errors.append(
-            f"{relative}: bulk backup copies must run outside storage_write_lock; only the "
-            "fast database snapshot may hold the runtime lock."
+            f"{relative}: bulk backup copies must run outside storage_write_lock."
         )
 
     check_runtime_storage_lock(errors)
@@ -6689,6 +6720,148 @@ def check_mindmap_layout_hot_path(errors: list[str]) -> None:
         )
 
 
+def check_mindmap_surface_fill(errors: list[str]) -> None:
+    """The live mind map is the page, not a card on a second sheet.
+
+    A cream band under the canvas came back whenever a host capped the frame
+    (`h-[64vh]`), reserved rating space on the parent (`pb-[6.75rem]`), or
+    painted a second color (`!bg-zinc-50` / rounded bordered zinc card) on top
+    of `--memory-anki-mindmap-canvas`. The frame stays flush unless a dialog
+    preview opts into `.is-inset`.
+    """
+    panel = WEB_SRC / "widgets" / "mindmap-review-flow" / "FlipCardMindMapPanel.tsx"
+    card = (
+        WEB_SRC
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "components"
+        / "FreestyleUnitReviewCardView.tsx"
+    )
+    types = (
+        WEB_SRC
+        / "modules"
+        / "content"
+        / "ui"
+        / "mindmap-editor"
+        / "MindMapEditorSurface.types.ts"
+    )
+    foundation = WEB_SRC / "styles" / "foundation.css"
+    doc = REPO_ROOT / "docs" / "architecture" / "mindmap.md"
+    page_surfaces = (
+        WEB_SRC / "pages" / "create" / "PalaceEditorPage.tsx",
+        WEB_SRC / "pages" / "create" / "PalaceMindMapWorkspace.tsx",
+        WEB_SRC / "pages" / "library" / "KnowledgeLibraryPage.tsx",
+        WEB_SRC / "app" / "router" / "PalaceViewPage.tsx",
+    )
+
+    def read(path: Path) -> str | None:
+        if not path.exists():
+            errors.append(f"{path.relative_to(REPO_ROOT).as_posix()} is missing.")
+            return None
+        return path.read_text(encoding="utf-8", errors="ignore")
+
+    panel_text = read(panel)
+    if panel_text is not None and "h-[64vh]" in panel_text:
+        errors.append(
+            f"{panel.relative_to(REPO_ROOT).as_posix()}: do not cap the live mind map at "
+            "h-[64vh]; the leftover viewport paints a second sheet under the canvas."
+        )
+    card_text = read(card)
+    if card_text is not None and "pb-[6.75rem]" in card_text:
+        errors.append(
+            f"{card.relative_to(REPO_ROOT).as_posix()}: do not reserve pb-[6.75rem] under the "
+            "map. The rating dock already overlays the canvas; that padding shows the parent sheet."
+        )
+    types_text = read(types)
+    if types_text is not None and "!bg-zinc-50" in types_text:
+        errors.append(
+            f"{types.relative_to(REPO_ROOT).as_posix()}: do not force !bg-zinc-50 on the frame. "
+            "The only canvas color is --memory-anki-mindmap-canvas."
+        )
+    css = read(foundation)
+    if css is not None:
+        if ".memory-anki-mindmap-frame:not(.is-inset)" not in css:
+            errors.append(
+                f"{foundation.relative_to(REPO_ROOT).as_posix()}: page mind maps must flush via "
+                ".memory-anki-mindmap-frame:not(.is-inset). Dialog previews opt into .is-inset."
+            )
+        if "border-radius: 0 !important" not in css:
+            errors.append(
+                f"{foundation.relative_to(REPO_ROOT).as_posix()}: the flush frame must zero "
+                "border-radius so a rounded card cannot sit on a second sheet."
+            )
+    for path in page_surfaces:
+        text = read(path)
+        if text is not None and "rounded-lg border border-border/70 bg-zinc-50" in text:
+            errors.append(
+                f"{path.relative_to(REPO_ROOT).as_posix()}: do not put the mind map in a rounded "
+                "zinc card. That card is the sheet under the canvas."
+            )
+    doc_text = read(doc)
+    if doc_text is not None and "画布就是这一页" not in doc_text:
+        errors.append(
+            f"{doc.relative_to(REPO_ROOT).as_posix()}: document that the mind map fills its host "
+            "and must not leave a second sheet underneath."
+        )
+
+
+def check_mindmap_edit_gesture(errors: list[str]) -> None:
+    """Double-click edit must not depend on the browser firing dblclick on yellow text.
+
+    Chrome drops or retargets the second click of a double-click on select-none
+    text once a highlight span paints a background. The visible symptom is that
+    only the empty padding — usually the bottom-right corner — enters edit.
+    The capture-phase owner plus the fell-through window listener are the fix;
+    deleting either one restores the corner-only bug without a functional test
+    that can see real Chrome hit-testing.
+    """
+    gesture = WEB_SRC / "shared" / "ui" / "mindmap-canvas" / "cardEditGesture.ts"
+    hook = WEB_SRC / "shared" / "ui" / "mindmap-canvas" / "useCardEditGesture.ts"
+    card = WEB_SRC / "shared" / "ui" / "mindmap-canvas" / "NodeCard.tsx"
+    mindmap_doc = REPO_ROOT / "docs" / "architecture" / "mindmap.md"
+    for path in (gesture, hook, card, mindmap_doc):
+        if not path.exists():
+            errors.append(f"{path.relative_to(REPO_ROOT).as_posix()} is missing.")
+            return
+    gesture_source = gesture.read_text(encoding="utf-8", errors="ignore")
+    hook_source = hook.read_text(encoding="utf-8", errors="ignore")
+    card_source = card.read_text(encoding="utf-8", errors="ignore")
+    doc_source = mindmap_doc.read_text(encoding="utf-8", errors="ignore")
+    if "addEventListener('pointerdown', onWindowPointerDown, true)" not in gesture_source:
+        errors.append(
+            "cardEditGesture.ts must keep a window capture listener so a second click "
+            "retargeted off yellow text still enters edit."
+        )
+    if "shell.addEventListener('pointerdown', onPointerDown, true)" not in hook_source:
+        errors.append(
+            "useCardEditGesture.ts must count presses in the capture phase, before "
+            "highlight markup or React Flow drag can swallow them."
+        )
+    if "useCardEditGesture(" not in card_source:
+        errors.append("NodeCard.tsx must own enter-edit through useCardEditGesture.")
+    if "useCardEditGesture" not in doc_source:
+        errors.append(
+            "docs/architecture/mindmap.md must record that double-click edit does not "
+            "depend on dblclick reaching yellow emphasis."
+        )
+
+
+def check_session_recorder_boundary(errors: list[str]) -> None:
+    api_root = WEB_SRC / "shared" / "api"
+    if api_root.exists():
+        for path in api_root.rglob("*.ts*"):
+            content = path.read_text(encoding="utf-8", errors="ignore")
+            if "session-recorder" in content:
+                errors.append(
+                    f"{path.relative_to(REPO_ROOT).as_posix()}: shared/api must not import session-recorder; publish outcomes and let the recorder subscribe."
+                )
+    readme = REPO_ROOT / "docs" / "architecture" / "README.md"
+    if "session-recorder" not in readme.read_text(encoding="utf-8"):
+        errors.append("docs/architecture/README.md: diagnosis brief ownership row is missing.")
+
+
 def main() -> int:
     errors: list[str] = []
     check_article_workspace_boundary(errors)
@@ -6699,6 +6872,8 @@ def main() -> int:
     check_backup_snapshot_policy(errors)
     check_mindmap_architecture(errors)
     check_mindmap_layout_hot_path(errors)
+    check_mindmap_surface_fill(errors)
+    check_mindmap_edit_gesture(errors)
     check_unified_training_evidence(errors)
     check_file_sizes(errors)
     check_oversized_baseline_is_current(errors)
@@ -6715,6 +6890,7 @@ def main() -> int:
     check_frontend_public_api_surfaces(errors)
     check_retired_placeholder_modules(errors)
     check_frontend_runtime_module_boundaries(errors)
+    check_session_recorder_boundary(errors)
     check_removed_focus_practice(errors)
     check_study_session_legacy_usage(errors)
     check_timed_session_architecture(errors)

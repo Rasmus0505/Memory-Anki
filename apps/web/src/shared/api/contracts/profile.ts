@@ -1,4 +1,4 @@
-﻿export interface BackupSummary {
+export interface BackupSummary {
   /** list_backups walks three directories; "rolling" was missing here, so those entries rendered as 事故快照. */
   kind: "full" | "rolling" | "rescue"
   /** full = 完整备份(含附件等大目录)，rolling = 轻量备份(仅数据库+迁移状态) */
@@ -349,6 +349,8 @@ export interface ClientPreferences {
   window_layouts?: Record<string, unknown> | null
   /** Growth wardrobe picks and which ceremonies were already shown; shared across devices. */
   growth_state?: Record<string, unknown> | null
+  /** English II cloze words the reader marked or dismissed. */
+  english_cloze_marks?: { marked?: string[]; dismissed?: string[] } | null
 }
 export interface ClientPreferencesResponse {
   items: ClientPreferences

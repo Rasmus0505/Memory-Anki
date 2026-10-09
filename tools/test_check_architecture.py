@@ -4249,7 +4249,7 @@ def test_timed_session_architecture_requires_click_and_ledger_markers(
     )
     write_file(
         tmp_path / "docs" / "architecture" / "timed-session.md",
-        "pointerdown 300000 5 分钟 interval_id device_id tombstone UTC dwell\n",
+        "pointerdown 90000 90 秒 interval_id device_id tombstone UTC dwell\n",
     )
     write_file(
         tmp_path / "docs" / "architecture" / "context-map.yaml",
@@ -4278,7 +4278,7 @@ def test_timed_session_architecture_requires_click_and_ledger_markers(
     check_architecture.check_timed_session_architecture(errors)
     assert not any("timer architecture must document" in error for error in errors)
     assert any("clickActivityIntervals" in error for error in errors)
-    assert any("fiveMinuteIdleRollback" in error for error in errors)
+    assert any("ninetySecondThinkingGrace" in error for error in errors)
     assert any("crossDeviceIntervalUnion" in error for error in errors)
     assert any("continuousBlock" in error for error in errors)
 
@@ -4795,6 +4795,44 @@ def test_mindmap_layout_hot_path_rejects_missing_memo_read(
     check_architecture.check_mindmap_layout_hot_path(errors)
 
     assert any("read its result from nodeSizeMemo" in item for item in errors), errors
+
+
+def test_mindmap_surface_fill_rejects_a_capped_card(tmp_path: Path, monkeypatch) -> None:
+    """A 64vh cap or a paper band under the map must fail the fill contract."""
+    web_src = tmp_path / "apps" / "web" / "src"
+    write_file(
+        web_src / "widgets" / "mindmap-review-flow" / "FlipCardMindMapPanel.tsx",
+        "className=\"h-[64vh]\"\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "components" / "FreestyleUnitReviewCardView.tsx",
+        "className=\"pb-[6.75rem]\"\n",
+    )
+    write_file(
+        web_src / "modules" / "content" / "ui" / "mindmap-editor" / "MindMapEditorSurface.types.ts",
+        "const MIND_MAP_FRAME_BASE_CLASS = 'memory-anki-mindmap-frame relative !bg-zinc-50'\n",
+    )
+    write_file(web_src / "styles" / "foundation.css", ".memory-anki-mindmap-frame { border-radius: 1rem; }\n")
+    write_file(tmp_path / "docs" / "architecture" / "mindmap.md", "# mind map\n")
+    for rel in (
+        "pages/create/PalaceEditorPage.tsx",
+        "pages/create/PalaceMindMapWorkspace.tsx",
+        "pages/library/KnowledgeLibraryPage.tsx",
+        "app/router/PalaceViewPage.tsx",
+    ):
+        write_file(web_src / rel, "rounded-lg border border-border/70 bg-zinc-50\n")
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_mindmap_surface_fill(errors)
+
+    joined = "\n".join(errors)
+    assert "h-[64vh]" in joined
+    assert "pb-[6.75rem]" in joined
+    assert "!bg-zinc-50" in joined
+    assert "not(.is-inset)" in joined
+    assert "second sheet" in joined
 
 
 def test_mindmap_layout_hot_path_rejects_map_card_depth_transform(
