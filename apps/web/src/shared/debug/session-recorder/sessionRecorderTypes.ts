@@ -11,6 +11,9 @@ export type SessionRecorderEventKind =
   | 'doc'
   | 'error'
   | 'ai'
+  | 'step'
+
+export const LIVE_BRIEF_ID = 'live'
 
 export interface SessionRecorderEvent {
   at: string
@@ -35,4 +38,7 @@ export interface SessionRecorderState {
   history: SessionRecorderSession[]
   dialogOpen: boolean
   selectedId: string | null
+  viewingLive: boolean
+  liveReport: string
+  liveNotes: string
 }

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { noteApiStep } from '@/shared/api/requestOutcome'
 import { addAppLog, clearAppLogs } from '@/shared/logs/model/appLogs'
 import { describeClickForRecorder } from './sessionRecorderCapture'
 import { summarizeEditorDocChange, summarizeRevealMapChange } from './sessionRecorderDocDiff'
@@ -8,6 +9,7 @@ import {
   getSessionRecorderCopyText,
   getSessionRecorderState,
   deleteSelectedSessionRecorderHistory,
+  ensureSessionRecorderCapture,
   openSessionRecorderDialog,
   recordMindMapDocumentChange,
   recordSessionRecorderRoute,
@@ -127,10 +129,37 @@ describe('session recorder store', () => {
     expect(getSessionRecorderState().history[0]?.reportText).toContain('409 冲突')
   })
 
-  it('opens the history dialog without starting a recording', () => {
+  it('keeps a failed save in the live brief without starting a recording', () => {
+    ensureSessionRecorderCapture()
+    noteApiStep({
+      method: 'POST',
+      url: 'http://127.0.0.1:8000/api/v1/palace-quiz-attempt-events',
+      ok: false,
+      status: 500,
+      message: 'Internal Server Error http://127.0.0.1:8000/api/v1/palace-quiz-attempt-events',
+      queuedRetry: true,
+      startedAt: Date.now() - 40,
+    })
     openSessionRecorderDialog()
-    expect(getSessionRecorderState().dialogOpen).toBe(true)
+    const report = getSessionRecorderState().liveReport
+    expect(report).toContain('交这道题')
+    expect(report).toContain('软件后台暂时出错')
+    expect(report).toContain('稍后重试')
+    expect(report).not.toContain('http://')
+    expect(report).not.toContain('palace-quiz-attempt-events')
     expect(getSessionRecorderState().recording).toBe(false)
+    expect(getSessionRecorderState().history).toHaveLength(0)
+  })
+
+  it('opens a live brief without starting a recording', () => {
+    recordSessionRecorderUiAction('click', '点击', '「保存」')
+    openSessionRecorderDialog()
+    const state = getSessionRecorderState()
+    expect(state.dialogOpen).toBe(true)
+    expect(state.recording).toBe(false)
+    expect(state.viewingLive).toBe(true)
+    expect(state.liveReport).toContain('保存')
+    expect(state.history).toHaveLength(0)
   })
 
   it('deletes the selected history session', () => {

@@ -13,20 +13,20 @@ import {
 } from '@/shared/components/ui/dialog'
 import { Textarea } from '@/shared/components/ui/textarea'
 import { cn } from '@/shared/lib/utils'
-import { formatSessionRecorderClock } from './sessionRecorderFormat'
 import {
   closeSessionRecorderDialog,
   deleteSelectedSessionRecorderHistory,
+  ensureSessionRecorderCapture,
   getSelectedSessionRecorder,
   getSessionRecorderCopyText,
   openSessionRecorderDialog,
+  pinLiveBriefToHistory,
   recordSessionRecorderRoute,
   selectSessionRecorderHistory,
-  startSessionRecording,
-  stopSessionRecording,
   updateSelectedSessionRecorderNotes,
   updateSelectedSessionRecorderReport,
 } from './sessionRecorderStore'
+import { LIVE_BRIEF_ID } from './sessionRecorderTypes'
 import { useSessionRecorderState } from './useSessionRecorderState'
 
 export const SESSION_RECORDER_ANCHOR_ATTR = 'data-session-recorder-anchor'
@@ -69,16 +69,18 @@ async function copyText(value: string) {
 function SessionRecorderDialog() {
   const state = useSessionRecorderState()
   const selected = getSelectedSessionRecorder()
+  const showingLive = state.viewingLive || !selected
   const [copied, setCopied] = useState(false)
   const [copyFailed, setCopyFailed] = useState(false)
 
   useEffect(() => {
     setCopied(false)
     setCopyFailed(false)
-  }, [state.selectedId, state.dialogOpen])
+  }, [state.selectedId, state.dialogOpen, state.viewingLive])
 
   const handleCopy = async () => {
-    const text = getSessionRecorderCopyText(selected)
+    if (showingLive) pinLiveBriefToHistory()
+    const text = getSessionRecorderCopyText()
     const ok = await copyText(text)
     setCopied(ok)
     setCopyFailed(!ok)
@@ -94,8 +96,8 @@ function SessionRecorderDialog() {
     >
       <DialogContent className="max-w-2xl" floating={false} showCloseButton data-session-recorder="true">
         <DialogHeader>
-          <DialogTitle>操作记录</DialogTitle>
-          <DialogDescription>上方是这次的文本操作记录，下方可补充你碰到的问题。复制会带上两段。</DialogDescription>
+          <DialogTitle>刚才几分钟</DialogTitle>
+          <DialogDescription>上面是刚才的说明，可以直接贴给 AI。下面可以补一句你看到了什么。</DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-3 px-6 py-4">
           <label className="flex flex-col gap-1 text-sm">
@@ -103,10 +105,10 @@ function SessionRecorderDialog() {
             <select
               aria-label="历史记录"
               className="h-9 rounded-md border bg-background px-2 text-sm"
-              value={state.selectedId ?? ''}
+              value={showingLive ? LIVE_BRIEF_ID : selected.id}
               onChange={(event) => selectSessionRecorderHistory(event.target.value)}
             >
-              {state.history.length === 0 ? <option value="">还没有历史记录</option> : null}
+              <option value={LIVE_BRIEF_ID}>刚才几分钟</option>
               {state.history.map((session) => (
                 <option key={session.id} value={session.id}>
                   {new Date(session.startedAt).toLocaleString('zh-CN')}
@@ -116,25 +118,23 @@ function SessionRecorderDialog() {
             </select>
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-muted-foreground">文本操作记录</span>
+            <span className="text-muted-foreground">给 AI 的说明</span>
             <Textarea
-              aria-label="文本操作记录"
-              className="min-h-40 font-mono text-xs"
-              value={selected?.reportText ?? ''}
-              placeholder="还没有记录。点下方「开始录制」。"
+              aria-label="给 AI 的说明"
+              className="min-h-40 text-sm"
+              value={showingLive ? state.liveReport : selected.reportText}
+              placeholder="这几分钟还没有点到什么。"
               onChange={(event) => updateSelectedSessionRecorderReport(event.target.value)}
-              disabled={!selected}
             />
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-muted-foreground">额外补充</span>
+            <span className="text-muted-foreground">你看到了什么</span>
             <Textarea
               aria-label="刚才碰到什么问题？（可选）"
               className="min-h-24"
-              value={selected?.notes ?? ''}
+              value={showingLive ? state.liveNotes : selected.notes}
               placeholder="刚才碰到什么问题？（可选）"
               onChange={(event) => updateSelectedSessionRecorderNotes(event.target.value)}
-              disabled={!selected}
             />
           </label>
         </div>
@@ -142,16 +142,13 @@ function SessionRecorderDialog() {
           <Button
             type="button"
             variant="outline"
-            disabled={!selected}
+            disabled={showingLive}
             onClick={() => deleteSelectedSessionRecorderHistory()}
           >
             删除
           </Button>
-          <Button type="button" variant="outline" disabled={!selected} onClick={() => void handleCopy()}>
-            {copied ? '已复制' : copyFailed ? '请手动复制' : '复制'}
-          </Button>
-          <Button type="button" onClick={() => startSessionRecording()}>
-            开始录制
+          <Button type="button" onClick={() => void handleCopy()}>
+            {copied ? '已复制' : copyFailed ? '请手动复制' : '复制给 AI'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -160,8 +157,6 @@ function SessionRecorderDialog() {
 }
 
 function SessionRecorderFloatingControl() {
-  const state = useSessionRecorderState()
-  const [now, setNow] = useState(() => Date.now())
   const [position, setPosition] = useState(() => fallbackPosition(36))
   const [dragged, setDragged] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -176,17 +171,11 @@ function SessionRecorderFloatingControl() {
     originY: number
   } | null>(null)
 
-  useEffect(() => {
-    if (!state.recording) return
-    const timer = window.setInterval(() => setNow(Date.now()), 1000)
-    return () => window.clearInterval(timer)
-  }, [state.recording])
-
   useLayoutEffect(() => {
     if (dragged) return
     const sync = () => {
       if (draggedRef.current) return
-      const width = rootRef.current?.offsetWidth ?? (state.recording ? 180 : 36)
+      const width = rootRef.current?.offsetWidth ?? 36
       const height = rootRef.current?.offsetHeight ?? 36
       const anchored = readAnchorPosition() ?? fallbackPosition(width)
       const next = clampPosition(anchored.x, anchored.y, width, height)
@@ -202,7 +191,7 @@ function SessionRecorderFloatingControl() {
       window.removeEventListener('resize', sync)
       observer?.disconnect()
     }
-  }, [dragged, state.recording])
+  }, [dragged])
 
   useEffect(() => {
     const handleDown = (event: PointerEvent) => {
@@ -254,10 +243,6 @@ function SessionRecorderFloatingControl() {
     }
   }, [])
 
-  const elapsed = state.current
-    ? formatSessionRecorderClock(now - Date.parse(state.current.startedAt))
-    : '00:00'
-
   const openRecorder = () => {
     if (suppressClickRef.current) {
       suppressClickRef.current = false
@@ -278,33 +263,16 @@ function SessionRecorderFloatingControl() {
       data-session-recorder-hud="true"
       title="拖动可移动"
     >
-      {state.recording && state.current ? (
-        <div className="flex items-center gap-2 rounded-full border bg-background/95 px-3 py-1.5 shadow-soft">
-          <span className="size-2.5 shrink-0 rounded-full bg-destructive" aria-hidden />
-          <span className="text-xs tabular-nums text-muted-foreground">录制中 {elapsed}</span>
-          <Button
-            type="button"
-            size="sm"
-            variant="destructive"
-            data-session-recorder-control="true"
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={() => stopSessionRecording()}
-          >
-            停止
-          </Button>
-        </div>
-      ) : (
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          aria-label="录制"
-          title="操作记录"
-          onClick={openRecorder}
-        >
-          <CircleDot />
-        </Button>
-      )}
+      <Button
+        type="button"
+        variant="outline"
+        size="icon"
+        aria-label="录制"
+        title="刚才几分钟"
+        onClick={openRecorder}
+      >
+        <CircleDot />
+      </Button>
     </div>
   )
 
@@ -314,12 +282,14 @@ function SessionRecorderFloatingControl() {
 
 export function SessionRecorderHost() {
   const location = useLocation()
-  const state = useSessionRecorderState()
 
   useEffect(() => {
-    if (!state.recording) return
+    ensureSessionRecorderCapture()
+  }, [])
+
+  useEffect(() => {
     recordSessionRecorderRoute(`${location.pathname}${location.search}${location.hash}`)
-  }, [location.hash, location.pathname, location.search, state.recording])
+  }, [location.hash, location.pathname, location.search])
 
   return (
     <>

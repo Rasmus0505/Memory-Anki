@@ -18,7 +18,7 @@ describe('SessionRecorderHost', () => {
     resetSessionRecorderForTest()
   })
 
-  it('starts from the dialog, shows a global stop control, then copy includes notes', async () => {
+  it('opens a live brief and copies it with notes', async () => {
     render(
       <MemoryRouter>
         <SessionRecorderHost />
@@ -26,33 +26,26 @@ describe('SessionRecorderHost', () => {
     )
 
     act(() => openSessionRecorderDialog())
-    expect(await screen.findByRole('dialog', { name: '操作记录' })).toBeTruthy()
-    expect(screen.getByLabelText('文本操作记录')).toBeTruthy()
+    expect(await screen.findByRole('dialog', { name: '刚才几分钟' })).toBeTruthy()
+    expect(screen.getByLabelText('给 AI 的说明')).toBeTruthy()
     expect(screen.getByLabelText('刚才碰到什么问题？（可选）')).toBeTruthy()
     expect(screen.queryByRole('button', { name: '停止' })).toBeNull()
-
-    fireEvent.click(screen.getByRole('button', { name: '开始录制' }))
-    expect(screen.queryByRole('dialog', { name: '操作记录' })).toBeNull()
-    expect(screen.getByRole('button', { name: '停止' })).toBeTruthy()
-    expect(screen.getByText(/录制中/)).toBeTruthy()
-
-    fireEvent.click(screen.getByRole('button', { name: '停止' }))
-    expect(await screen.findByRole('dialog', { name: '操作记录' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '开始录制' })).toBeNull()
     fireEvent.change(screen.getByLabelText('刚才碰到什么问题？（可选）'), {
       target: { value: '点保存后卡片没了' },
     })
-    fireEvent.click(screen.getByRole('button', { name: '复制' }))
+    fireEvent.click(screen.getByRole('button', { name: '复制给 AI' }))
 
     await waitFor(() => {
       expect(navigator.clipboard.writeText).toHaveBeenCalled()
     })
     const copied = vi.mocked(navigator.clipboard.writeText).mock.calls.at(-1)?.[0] as string
-    expect(copied).toContain('请根据以下操作记录排查错误。')
+    expect(copied).toContain('请根据下面这段刚才的操作')
     expect(copied).toContain('## 用户补充')
     expect(copied).toContain('点保存后卡片没了')
   })
 
-  it('does not show the floating stop control until recording starts', () => {
+  it('keeps the floating button as 录制 and never shows stop', () => {
     render(
       <MemoryRouter>
         <SessionRecorderHost />
@@ -61,7 +54,8 @@ describe('SessionRecorderHost', () => {
     expect(screen.getByRole('button', { name: '录制' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '停止' })).toBeNull()
     act(() => startSessionRecording())
-    expect(screen.getByRole('button', { name: '停止' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '录制' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '停止' })).toBeNull()
   })
 
   it('keeps the recorder above dialogs, follows the sidebar anchor, and can be dragged', () => {

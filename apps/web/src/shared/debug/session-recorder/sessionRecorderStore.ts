@@ -1,9 +1,19 @@
+import { subscribeRequestOutcomes, type RequestOutcome } from '@/shared/api/requestOutcome'
 import { generateLocalId } from '@/shared/lib/ids'
 import { readAppLogs, subscribeAppLogs, type AppLogEntry } from '@/shared/logs/model/appLogs'
 import { describeClickForRecorder } from './sessionRecorderCapture'
 import { summarizeEditorDocChange } from './sessionRecorderDocDiff'
-import { buildSessionRecorderCopyText, formatSessionRecorderReport } from './sessionRecorderFormat'
 import {
+  buildDiagnosisBrief,
+  describeRequestStep,
+  filterRecentEvents,
+  readRecorderFocus,
+  redactRecorderSecrets,
+  describeRecorderPage,
+} from './sessionRecorderBrief'
+import { buildSessionRecorderCopyText, formatSessionRecorderReport, truncateRecorderText } from './sessionRecorderFormat'
+import {
+  LIVE_BRIEF_ID,
   SESSION_RECORDER_HISTORY_KEY,
   SESSION_RECORDER_MAX_EVENTS,
   SESSION_RECORDER_MAX_HISTORY,
@@ -19,8 +29,11 @@ const listeners = new Set<Listener>()
 
 let clickBound = false
 let logsUnsub: (() => void) | null = null
+let outcomeUnsub: (() => void) | null = null
+let captureInstalled = false
 let seenLogIds = new Set<string>()
 let truncated = false
+let recentEvents: SessionRecorderEvent[] = []
 
 let state: SessionRecorderState = {
   recording: false,
@@ -28,6 +41,9 @@ let state: SessionRecorderState = {
   history: loadHistory(),
   dialogOpen: false,
   selectedId: null,
+  viewingLive: false,
+  liveReport: '',
+  liveNotes: '',
 }
 
 function nowIso() {
@@ -101,7 +117,28 @@ function mergeRepeatedDetail(previous: string, next: string) {
   return `${nextBase} ×${count}`
 }
 
-function appendEvent(kind: SessionRecorderEventKind, action: string, detail = '') {
+function remember(kind: SessionRecorderEventKind, action: string, detail = '') {
+  recentEvents = filterRecentEvents([
+    ...recentEvents,
+    {
+      at: nowIso(),
+      kind,
+      action,
+      detail: redactRecorderSecrets(truncateRecorderText(detail, 240)),
+    },
+  ])
+}
+
+function currentLiveReport() {
+  const path = typeof window === 'undefined' ? '' : window.location.pathname
+  return buildDiagnosisBrief({
+    events: recentEvents,
+    pageLabel: describeRecorderPage(path),
+    focus: typeof document === 'undefined' ? null : readRecorderFocus(document),
+  })
+}
+
+function appendToCurrentSession(kind: SessionRecorderEventKind, action: string, detail = '') {
   if (!state.recording || !state.current) return
   const last = state.current.events.at(-1)
   if (last && last.kind === kind && last.action === action) {
@@ -149,6 +186,16 @@ function appendEvent(kind: SessionRecorderEventKind, action: string, detail = ''
   notify()
 }
 
+function appendEvent(kind: SessionRecorderEventKind, action: string, detail = '') {
+  remember(kind, action, detail)
+  appendToCurrentSession(kind, action, detail)
+}
+
+function onOutcome(outcome: RequestOutcome) {
+  const step = describeRequestStep(outcome)
+  appendEvent('step', step.action, step.detail)
+}
+
 function onWindowClick(event: Event) {
   const described = describeClickForRecorder(event)
   if (!described) return
@@ -158,21 +205,17 @@ function onWindowClick(event: Event) {
 function ingestLog(entry: AppLogEntry) {
   if (seenLogIds.has(entry.id)) return
   seenLogIds.add(entry.id)
-  if (!state.recording || !state.current) return
-  if (Date.parse(entry.createdAt) < Date.parse(state.current.startedAt)) return
+  if (entry.kind === 'app_error' && entry.feature === 'API 请求') return
   if (entry.kind === 'app_error') {
-    appendEvent('error', entry.feature || '错误', entry.errorMessage)
+    appendEvent('error', entry.feature || '页面报错', entry.errorMessage)
     return
   }
-  appendEvent(
-    'ai',
-    entry.feature || 'AI',
-    [entry.stage, entry.responseSummary || entry.errorMessage].filter(Boolean).join(' '),
-  )
+  appendEvent('ai', entry.feature || 'AI', entry.stage || '完成')
 }
 
-function installCapture() {
-  uninstallCapture()
+export function ensureSessionRecorderCapture() {
+  if (captureInstalled) return
+  captureInstalled = true
   truncated = false
   seenLogIds = new Set(readAppLogs().map((entry) => entry.id))
   if (typeof window !== 'undefined') {
@@ -182,15 +225,19 @@ function installCapture() {
   logsUnsub = subscribeAppLogs(() => {
     readAppLogs().forEach(ingestLog)
   })
+  outcomeUnsub = subscribeRequestOutcomes(onOutcome)
 }
 
 function uninstallCapture() {
+  captureInstalled = false
   if (clickBound && typeof window !== 'undefined') {
     window.removeEventListener('click', onWindowClick, true)
     clickBound = false
   }
   logsUnsub?.()
   logsUnsub = null
+  outcomeUnsub?.()
+  outcomeUnsub = null
 }
 
 export function getSessionRecorderState() {
@@ -205,8 +252,16 @@ export function subscribeSessionRecorder(listener: Listener) {
 }
 
 export function openSessionRecorderDialog(selectedId?: string | null) {
-  const nextSelected = selectedId ?? state.selectedId ?? state.history[0]?.id ?? null
-  setState({ dialogOpen: true, selectedId: nextSelected })
+  if (selectedId) {
+    setState({ dialogOpen: true, selectedId, viewingLive: false })
+    return
+  }
+  setState({
+    dialogOpen: true,
+    selectedId: null,
+    viewingLive: true,
+    liveReport: currentLiveReport(),
+  })
 }
 
 export function closeSessionRecorderDialog() {
@@ -214,7 +269,11 @@ export function closeSessionRecorderDialog() {
 }
 
 export function selectSessionRecorderHistory(id: string) {
-  setState({ selectedId: id || null })
+  if (!id || id === LIVE_BRIEF_ID) {
+    setState({ selectedId: null, viewingLive: true, liveReport: currentLiveReport() })
+    return
+  }
+  setState({ selectedId: id, viewingLive: false })
 }
 
 export function startSessionRecording() {
@@ -242,8 +301,9 @@ export function startSessionRecording() {
     current,
     dialogOpen: false,
     selectedId: null,
+    viewingLive: false,
   })
-  installCapture()
+  ensureSessionRecorderCapture()
 }
 
 export function stopSessionRecording() {
@@ -251,7 +311,6 @@ export function stopSessionRecording() {
     openSessionRecorderDialog()
     return
   }
-  uninstallCapture()
   const endedAt = nowIso()
   const current = {
     ...state.current,
@@ -278,19 +337,25 @@ export function stopSessionRecording() {
     history,
     dialogOpen: true,
     selectedId: finished.id,
+    viewingLive: false,
+    liveReport: state.liveReport,
+    liveNotes: state.liveNotes,
   }
   notify()
 }
 
 export function recordSessionRecorderRoute(path: string) {
-  if (!state.recording || !state.current || !path) return
+  if (!path) return
+  const lastRoute = [...recentEvents].reverse().find((event) => event.kind === 'route')
+  if (lastRoute?.detail !== path) remember('route', '打开页面', path)
+  if (!state.recording || !state.current) return
   const last = state.current.routes.at(-1)
   if (last === path) return
   state.current = {
     ...state.current,
     routes: [...state.current.routes, path],
   }
-  appendEvent('route', '路由', last ? `${last} → ${path}` : path)
+  appendToCurrentSession('route', '路由', last ? `${last} → ${path}` : path)
 }
 
 export function recordSessionRecorderUiAction(kind: SessionRecorderEventKind, action: string, detail = '') {
@@ -298,24 +363,27 @@ export function recordSessionRecorderUiAction(kind: SessionRecorderEventKind, ac
 }
 
 export function recordMindMapDocumentChange(action: string, previous: unknown, next: unknown) {
-  if (!state.recording) return
   appendEvent('doc', `文档变更(${action})`, summarizeEditorDocChange(previous, next))
 }
 
 export function updateSelectedSessionRecorderNotes(notes: string) {
-  const selectedId = state.selectedId
-  if (!selectedId) return
+  if (state.viewingLive || !state.selectedId) {
+    setState({ liveNotes: notes })
+    return
+  }
   const history = state.history.map((session) =>
-    session.id === selectedId ? { ...session, notes } : session,
+    session.id === state.selectedId ? { ...session, notes } : session,
   )
   updateHistory(history)
 }
 
 export function updateSelectedSessionRecorderReport(reportText: string) {
-  const selectedId = state.selectedId
-  if (!selectedId) return
+  if (state.viewingLive || !state.selectedId) {
+    setState({ liveReport: reportText })
+    return
+  }
   const history = state.history.map((session) =>
-    session.id === selectedId ? { ...session, reportText } : session,
+    session.id === state.selectedId ? { ...session, reportText } : session,
   )
   updateHistory(history)
 }
@@ -328,6 +396,8 @@ export function deleteSelectedSessionRecorderHistory() {
   setState({
     history,
     selectedId: history[0]?.id ?? null,
+    viewingLive: history.length === 0,
+    liveReport: history.length === 0 ? currentLiveReport() : state.liveReport,
   })
 }
 
@@ -337,14 +407,41 @@ export function getSelectedSessionRecorder() {
 }
 
 export function getSessionRecorderCopyText(session = getSelectedSessionRecorder()) {
-  if (!session) return ''
+  if (state.viewingLive || !session) {
+    return buildSessionRecorderCopyText(state.liveReport, state.liveNotes)
+  }
   return buildSessionRecorderCopyText(session.reportText, session.notes)
+}
+
+export function pinLiveBriefToHistory() {
+  if (!state.viewingLive && state.selectedId) return state.selectedId
+  const now = nowIso()
+  const session: SessionRecorderSession = {
+    id: generateId(),
+    startedAt: now,
+    endedAt: now,
+    routes: [],
+    events: [...recentEvents],
+    notes: state.liveNotes,
+    reportText: state.liveReport || currentLiveReport(),
+  }
+  const history = [session, ...state.history].slice(0, SESSION_RECORDER_MAX_HISTORY)
+  persistHistory(history)
+  state = {
+    ...state,
+    history,
+    viewingLive: true,
+    selectedId: null,
+  }
+  notify()
+  return session.id
 }
 
 export function resetSessionRecorderForTest() {
   uninstallCapture()
   truncated = false
   seenLogIds = new Set()
+  recentEvents = []
   if (typeof window !== 'undefined') {
     window.localStorage.removeItem(SESSION_RECORDER_HISTORY_KEY)
   }
@@ -354,6 +451,9 @@ export function resetSessionRecorderForTest() {
     history: [],
     dialogOpen: false,
     selectedId: null,
+    viewingLive: false,
+    liveReport: '',
+    liveNotes: '',
   }
   notify()
 }
