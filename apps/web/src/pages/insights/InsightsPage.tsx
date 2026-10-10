@@ -16,7 +16,6 @@ import {
   StudyHeatmap,
   TimeRecordChartCard,
   getDashboardApi,
-  invalidateDashboardApi,
 } from '@/modules/dashboard/public'
 import {
   ExamCountdownBlock,
@@ -89,7 +88,6 @@ export default function Dashboard() {
     const requestId = ++dashboardRequestIdRef.current
     setLoadError(null)
     try {
-      invalidateDashboardApi()
       const dashboard = await getDashboardApi()
       if (requestId !== dashboardRequestIdRef.current) return
       setData(dashboard)
@@ -107,19 +105,6 @@ export default function Dashboard() {
 
   useEffect(() => {
     void loadDashboard().catch(() => undefined)
-  }, [loadDashboard])
-
-  useEffect(() => {
-    const refreshWhenVisible = () => {
-      if (document.visibilityState !== 'visible') return
-      void loadDashboard().catch(() => undefined)
-    }
-    window.addEventListener('focus', refreshWhenVisible)
-    document.addEventListener('visibilitychange', refreshWhenVisible)
-    return () => {
-      window.removeEventListener('focus', refreshWhenVisible)
-      document.removeEventListener('visibilitychange', refreshWhenVisible)
-    }
   }, [loadDashboard])
 
   if (!data && loadError) {

@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { DashboardResponse } from '@/shared/api/contracts'
 import { getDashboardApi } from '@/modules/dashboard/ui/dashboard/api'
 
@@ -7,15 +7,17 @@ export function useDashboardOverview() {
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const requestIdRef = useRef(0)
+  const dataRef = useRef<DashboardResponse | null>(null)
 
   const reload = useCallback(async () => {
     const requestId = requestIdRef.current + 1
     requestIdRef.current = requestId
     setError(null)
-    setIsLoading(true)
+    if (!dataRef.current) setIsLoading(true)
     try {
       const dashboard = await getDashboardApi()
       if (requestIdRef.current !== requestId) return
+      dataRef.current = dashboard
       setData(dashboard)
     } catch (caughtError) {
       if (requestIdRef.current !== requestId) return

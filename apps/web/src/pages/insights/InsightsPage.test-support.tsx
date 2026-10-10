@@ -42,6 +42,8 @@ export const getWeeklyReportApi = vi.fn();
 export const saveStudyGoalsApi = vi.fn();
 export const examOverviewState: { data: unknown; error: string | null } = { data: null, error: null };
 
+export let notifyRecordsChanged: (() => void) | undefined
+
 export const timeRecordsDashboardMock = {
   filter: {
     version: 2 as const,
@@ -158,7 +160,9 @@ vi.mock("@/modules/exam/model/useExamOverview", () => ({
 }));
 
 vi.mock("@/modules/session/ui/time-records/hooks/useTimeRecordsDashboard", () => ({
-  useTimeRecordsDashboard: () => ({
+  useTimeRecordsDashboard: (options?: { onRecordsChanged?: () => void }) => {
+    notifyRecordsChanged = options?.onRecordsChanged
+    return {
     ...timeRecordsDashboardMock,
     trend: [{
       dateKey: "2026-07-01",
@@ -171,7 +175,8 @@ vi.mock("@/modules/session/ui/time-records/hooks/useTimeRecordsDashboard", () =>
       seconds: 1,
       sessions: 1,
     }],
-  }),
+  }
+  },
 }));
 
 vi.mock("@/modules/session/ui/time-records/components/TimeRecordsTrendChart", () => ({

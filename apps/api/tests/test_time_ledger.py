@@ -118,3 +118,31 @@ def test_invalid_group_operation_revision_is_ignored_atomically(tmp_path: Path):
     (revisions[0].parent / "bad-revision.json").write_text(json.dumps(payload), encoding="utf-8")
     rows = read_intervals(app_home=tmp_path)
     assert [row["interval_id"] for row in rows] == ["valid"]
+
+
+def test_folded_ledger_is_cached_until_the_revision_directory_changes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    start = datetime.now(UTC) - timedelta(minutes=5)
+    interval = TimeLedgerInterval(
+        interval_id="cached", session_id="cached", started_at=start,
+        ended_at=start + timedelta(seconds=30), kind="review",
+    )
+    append_revision(TimeLedgerUpload(intervals=[interval]), app_home=tmp_path, device_id="d")
+    assert [row["interval_id"] for row in read_intervals(app_home=tmp_path)] == ["cached"]
+
+    def fail_fold(_root: Path) -> list[dict]:
+        raise AssertionError("ledger folded again")
+
+    monkeypatch.setattr("memory_anki.infrastructure.time_ledger_store._fold_intervals", fail_fold)
+    assert [row["interval_id"] for row in read_intervals(app_home=tmp_path)] == ["cached"]
+    from memory_anki.infrastructure import time_ledger_store
+
+    time_ledger_store._FOLDED_CACHE.clear()
+    assert [row["interval_id"] for row in read_intervals(app_home=tmp_path)] == ["cached"]
+
+    revisions = tmp_path / "学习数据" / "time-ledger" / "devices" / "d" / "revisions"
+    (revisions / "direct.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(
+        "memory_anki.infrastructure.time_ledger_store._fold_intervals",
+        lambda _root: (_ for _ in ()).throw(AssertionError("full fold on the request path")),
+    )
+    assert [row["interval_id"] for row in read_intervals(app_home=tmp_path)] == ["cached"]

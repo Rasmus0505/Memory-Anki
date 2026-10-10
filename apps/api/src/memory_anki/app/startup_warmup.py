@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import threading
 
 from sqlalchemy import text
@@ -76,6 +77,32 @@ def _run_startup_warmup_safely() -> None:
         run_startup_warmup()
     except Exception:
         logger.exception("startup warmup failed")
+
+
+def _warm_time_ledger() -> None:
+    try:
+        from memory_anki.infrastructure.time_ledger_store import read_intervals
+
+        read_intervals()
+    except Exception:
+        logger.exception("time ledger warmup failed")
+
+
+def start_ledger_prefetch() -> threading.Thread | None:
+    """Fold the time ledger off the request path.
+
+    The desktop/PWA process starts in healthcheck mode, so the serve-only warmup
+    never runs there. The dashboard still reads this ledger on every open.
+    """
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return None
+    thread = threading.Thread(
+        target=_warm_time_ledger,
+        name="memory-anki-ledger-prefetch",
+        daemon=True,
+    )
+    thread.start()
+    return thread
 
 
 def start_startup_warmup() -> threading.Thread | None:

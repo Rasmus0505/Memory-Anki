@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   getDashboardApi,
   invalidateDashboardApi,
+  notifyRecordsChanged,
   openRecordsTab,
   renderDashboardPage,
   setupDashboardPageTest,
@@ -52,19 +53,18 @@ describe('DashboardPage unified time-record filters', () => {
     expect(getDashboardApi).toHaveBeenCalledWith()
   })
 
-  it('invalidates the dashboard cache before loading and refreshes after window focus', async () => {
+  it('loads the dashboard once and does not refresh on window focus', async () => {
     renderDashboardPage()
 
-    await waitFor(() => expect(invalidateDashboardApi).toHaveBeenCalledTimes(1))
     await waitFor(() => expect(getDashboardApi).toHaveBeenCalledTimes(1))
+    expect(invalidateDashboardApi).not.toHaveBeenCalled()
 
     act(() => window.dispatchEvent(new Event('focus')))
 
-    await waitFor(() => expect(invalidateDashboardApi).toHaveBeenCalledTimes(2))
-    await waitFor(() => expect(getDashboardApi).toHaveBeenCalledTimes(2))
+    expect(getDashboardApi).toHaveBeenCalledTimes(1)
   })
 
-  it('refreshes after returning from the background', async () => {
+  it('does not refresh when returning from the background', async () => {
     const visibility = vi.spyOn(document, 'visibilityState', 'get')
     visibility.mockReturnValue('hidden')
     renderDashboardPage()
@@ -76,7 +76,7 @@ describe('DashboardPage unified time-record filters', () => {
     visibility.mockReturnValue('visible')
     act(() => document.dispatchEvent(new Event('visibilitychange')))
 
-    await waitFor(() => expect(getDashboardApi).toHaveBeenCalledTimes(2))
+    expect(getDashboardApi).toHaveBeenCalledTimes(1)
     visibility.mockRestore()
   })
 
@@ -92,7 +92,7 @@ describe('DashboardPage unified time-record filters', () => {
     renderDashboardPage()
     await waitFor(() => expect(getDashboardApi).toHaveBeenCalledTimes(1))
 
-    act(() => window.dispatchEvent(new Event('focus')))
+    act(() => notifyRecordsChanged?.())
     await waitFor(() => expect(getDashboardApi).toHaveBeenCalledTimes(2))
     expect(await screen.findByText('2分 0秒')).toBeTruthy()
 

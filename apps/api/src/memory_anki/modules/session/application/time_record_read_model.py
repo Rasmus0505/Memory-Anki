@@ -420,10 +420,11 @@ def _filtered_ledger_rows(
     end: datetime | None,
     keyword: str | None,
     kind: str | None,
+    source: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     groups: dict[tuple[str, str], dict[str, Any]] = {}
-    for candidate in read_intervals():
+    for candidate in source if source is not None else read_intervals():
         group = (str(candidate["session_id"]), str(candidate["started_at"]))
         previous = groups.get(group)
         if previous is None or (str(candidate["ended_at"]), str(candidate["interval_id"])) > (str(previous["ended_at"]), str(previous["interval_id"])):
@@ -534,6 +535,7 @@ def build_time_record_read_model(
         end=resolved.end,
         keyword=keyword,
         kind=kind,
+        source=[row for row in all_ledger_rows if not row.get("deleted")],
     )
     # The file ledger is authoritative for intervals. Suppress legacy SQLite rows
     # only when their session id is represented by a ledger interval; never hide a

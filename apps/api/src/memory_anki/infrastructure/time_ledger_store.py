@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,120 @@ def _default_ledger_home() -> Path:
 
 def ledger_root(app_home: Path | None = None) -> Path:
     return Path(app_home or _default_ledger_home()) / "学习数据" / "time-ledger"
+
+
+# Folding the ledger re-reads every immutable revision and re-validates every
+# interval. On the owner's USB volume that is ~2,700 small JSON files and costs
+# about 20s cold, or about 1s once the OS cache is warm. The dashboard used to
+# do that four times per request, and a 20s client timeout then retried, so the
+# folds stacked on the GIL and every retry got slower. Cache the folded rows
+# for this process, and let concurrent readers wait for the one fold already
+# in flight instead of starting another.
+_CACHE_GUARD = threading.Lock()
+_FOLDED_CACHE: dict[str, tuple[tuple[Any, ...], list[dict[str, Any]]]] = {}
+_FOLD_EVENTS: dict[str, threading.Event] = {}
+_GENERATION: dict[str, int] = {}
+_SNAPSHOT_NAME = "_folded_cache.json"
+
+
+def _root_key(app_home: Path | None) -> tuple[Path, str]:
+    root = ledger_root(app_home).resolve()
+    return root, str(root)
+
+
+def _revision_signature(root: Path) -> tuple[tuple[str, int], ...]:
+    devices_dir = root / "devices"
+    if not devices_dir.is_dir():
+        return ()
+    found: list[tuple[str, int]] = []
+    for device_dir in devices_dir.iterdir():
+        revisions = device_dir / "revisions"
+        try:
+            found.append((device_dir.name, revisions.stat().st_mtime_ns))
+        except OSError:
+            continue
+    found.sort()
+    return tuple(found)
+
+
+def _cache_token(root: Path, key: str) -> tuple[Any, ...]:
+    with _CACHE_GUARD:
+        generation = _GENERATION.get(key, 0)
+    return (_revision_signature(root), generation)
+
+
+def _invalidate_ledger_cache(app_home: Path | None) -> None:
+    _root, key = _root_key(app_home)
+    with _CACHE_GUARD:
+        _GENERATION[key] = _GENERATION.get(key, 0) + 1
+        _FOLDED_CACHE.pop(key, None)
+
+
+def _copy_visible(rows: list[dict[str, Any]], *, include_deleted: bool) -> list[dict[str, Any]]:
+    if include_deleted:
+        return [dict(row) for row in rows]
+    return [dict(row) for row in rows if not row.get("deleted")]
+
+
+def _snapshot_path(root: Path) -> Path:
+    return root / _SNAPSHOT_NAME
+
+
+def _snapshot_rows(payload: dict[str, Any]) -> list[dict[str, Any]] | None:
+    rows = payload.get("rows")
+    if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+        return None
+    return rows
+
+
+def _read_snapshot_payload(root: Path) -> dict[str, Any] | None:
+    try:
+        payload = json.loads(_snapshot_path(root).read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ValueError, TypeError):
+        return None
+    if not isinstance(payload, dict) or payload.get("schema_version") != 1:
+        return None
+    return payload
+
+
+def _load_snapshot(root: Path, signature: tuple[tuple[str, int], ...]) -> list[dict[str, Any]] | None:
+    payload = _read_snapshot_payload(root)
+    if payload is None:
+        return None
+    expected = [[name, mtime] for name, mtime in signature]
+    if payload.get("signature") != expected:
+        return None
+    return _snapshot_rows(payload)
+
+
+def _load_any_snapshot(root: Path) -> tuple[list[dict[str, Any]], tuple[tuple[str, int], ...]] | None:
+    payload = _read_snapshot_payload(root)
+    if payload is None:
+        return None
+    rows = _snapshot_rows(payload)
+    stored = payload.get("signature")
+    if rows is None or not isinstance(stored, list):
+        return None
+    signature: list[tuple[str, int]] = []
+    for item in stored:
+        if not isinstance(item, list) or len(item) != 2 or not isinstance(item[0], str) or not isinstance(item[1], int):
+            return None
+        signature.append((item[0], item[1]))
+    return rows, tuple(signature)
+
+
+def _write_snapshot(root: Path, signature: tuple[tuple[str, int], ...], rows: list[dict[str, Any]]) -> None:
+    try:
+        _atomic_json_write(
+            _snapshot_path(root),
+            {
+                "schema_version": 1,
+                "signature": [[name, mtime] for name, mtime in signature],
+                "rows": rows,
+            },
+        )
+    except (OSError, TypeError, ValueError):
+        return
 
 
 def _atomic_json_write(path: Path, payload: dict[str, Any]) -> None:
@@ -61,6 +176,7 @@ def _append(items: list[dict[str, Any]], tombstones: list[str], *, app_home: Pat
                "group_operations": group_operations or []}
     home = app_home if app_home is not None else _default_ledger_home()
     _atomic_json_write(ledger_root(home) / "devices" / device / "revisions" / f"{revision}.json", payload)
+    _invalidate_ledger_cache(home)
     return {"revision_id": revision, "device_id": device, "interval_count": len(items)}
 
 
@@ -69,11 +185,119 @@ def append_revision(upload: TimeLedgerUpload, *, app_home: Path | None = None, d
     return _append(items, [], app_home=app_home, device_id=device_id)
 
 
+_REFRESHING: set[str] = set()
+_MAX_INCREMENTAL_FILES = 64
+
+
+def _store_folded(root: Path, key: str, token: tuple[Any, ...], rows: list[dict[str, Any]], *, persist: bool) -> None:
+    signature_now = _revision_signature(root)
+    stored = False
+    with _CACHE_GUARD:
+        # Lock is not re-entrant; do not call _cache_token while holding it.
+        if (signature_now, _GENERATION.get(key, 0)) != token:
+            return
+        _FOLDED_CACHE[key] = (token, rows)
+        stored = True
+    if persist and stored:
+        _write_snapshot(root, signature_now, rows)
+
+
+def _files_newer_than(root: Path, signature: tuple[tuple[str, int], ...]) -> list[Path] | None:
+    """Return revision files written after the snapshot, or None if that is not enough."""
+    known = dict(signature)
+    seen: set[str] = set()
+    files: list[Path] = []
+    devices_dir = root / "devices"
+    if not devices_dir.is_dir():
+        return None if signature else []
+    for device_dir in devices_dir.iterdir():
+        revisions = device_dir / "revisions"
+        if not revisions.is_dir():
+            continue
+        seen.add(device_dir.name)
+        cutoff = known.get(device_dir.name)
+        try:
+            candidates = list(revisions.glob("*.json"))
+        except OSError:
+            return None
+        if cutoff is None:
+            files.extend(candidates)
+            continue
+        for path in candidates:
+            try:
+                if path.stat().st_mtime_ns > cutoff:
+                    files.append(path)
+            except OSError:
+                return None
+    if set(known) - seen:
+        return None
+    return files
+
+
+def _schedule_full_refresh(root: Path, key: str) -> None:
+    with _CACHE_GUARD:
+        if key in _REFRESHING:
+            return
+        _REFRESHING.add(key)
+
+    def refresh() -> None:
+        try:
+            token = _cache_token(root, key)
+            rows = _fold_intervals(root)
+            _store_folded(root, key, token, rows, persist=True)
+        except Exception:
+            return
+        finally:
+            with _CACHE_GUARD:
+                _REFRESHING.discard(key)
+
+    threading.Thread(target=refresh, name="memory-anki-ledger-refresh", daemon=True).start()
+
+
 def read_intervals(*, app_home: Path | None = None, include_deleted: bool = False) -> list[dict[str, Any]]:
+    root, key = _root_key(app_home)
+    token = _cache_token(root, key)
+    with _CACHE_GUARD:
+        cached = _FOLDED_CACHE.get(key)
+        if cached is not None and cached[0] == token:
+            return _copy_visible(cached[1], include_deleted=include_deleted)
+    snapshot = _load_any_snapshot(root)
+    if snapshot is not None:
+        rows, stored_signature = snapshot
+        if stored_signature == token[0]:
+            _store_folded(root, key, token, rows, persist=False)
+            return _copy_visible(rows, include_deleted=include_deleted)
+        newer = _files_newer_than(root, stored_signature)
+        if newer is not None and len(newer) <= _MAX_INCREMENTAL_FILES:
+            # A new revision must not replay every historical file. That replay is
+            # ~45s on the USB volume and blows the 20s client timeout.
+            folded = _fold_paths(sorted(newer), base_rows=rows) if newer else rows
+            _store_folded(root, key, token, folded, persist=True)
+            return _copy_visible(folded, include_deleted=include_deleted)
+        _schedule_full_refresh(root, key)
+        return _copy_visible(rows, include_deleted=include_deleted)
+    folded = _fold_intervals(root)
+    _store_folded(root, key, token, folded, persist=True)
+    return _copy_visible(folded, include_deleted=include_deleted)
+
+
+def _fold_intervals(root: Path) -> list[dict[str, Any]]:
+    return _fold_paths(sorted(root.glob("devices/*/revisions/*.json")))
+
+
+def _fold_paths(paths: list[Path], base_rows: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     by_id: dict[str, tuple[tuple[str, str], dict[str, Any]]] = {}
     deleted: set[str] = set()
     group_operations: dict[str, tuple[tuple[str, str], str, dict[str, Any] | None]] = {}
-    for path in sorted(ledger_root(app_home).glob("devices/*/revisions/*.json")):
+    for row in base_rows or []:
+        interval_id = row.get("interval_id")
+        if not isinstance(interval_id, str) or not interval_id:
+            continue
+        item = {key: value for key, value in row.items() if key != "deleted"}
+        by_id[interval_id] = (("", ""), item)
+        if row.get("deleted"):
+            deleted.add(interval_id)
+    for path in paths:
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
             if not isinstance(payload, dict) or payload.get("schema_version") != 1:
@@ -150,8 +374,7 @@ def read_intervals(*, app_home: Path | None = None, include_deleted: bool = Fals
         origin_operation = group_operations.get(str(replacement.get("_origin_group") or ""))
         if key not in deleted and not (current_group and current_group[1] == "delete") and not (origin_operation and origin_operation[1] == "delete"):
             suppressed.discard(key)
-    return [{**item, "deleted": key in suppressed} for key, (_, item) in sorted(by_id.items())
-            if include_deleted or key not in suppressed]
+    return [{**item, "deleted": key in suppressed} for key, (_, item) in sorted(by_id.items())]
 
 
 def ledger_item(row: dict[str, Any]) -> dict[str, Any]:
