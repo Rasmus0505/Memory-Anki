@@ -1,3 +1,4 @@
+import { retryWhileBusy } from '@/shared/api/busyRetry'
 import { request } from '@/shared/api/http'
 import type {
   CreateFreestyleAiExplanationPayload,
@@ -234,17 +235,20 @@ export function ensureFreestyleOverlayQuizApi(
   roundId: string,
   payload: FreestyleOverlayQuizEnsureRequest,
 ) {
-  return request<FreestyleRoundStatePayload>(
-    `/freestyle/rounds/${encodeURIComponent(roundId)}/overlay-quiz/ensure`,
-    {
+  const body = JSON.stringify(payload)
+  const url = `/freestyle/rounds/${encodeURIComponent(roundId)}/overlay-quiz/ensure`
+  // Interactive open: a 503 means another write (usually the scoring glance)
+  // still holds SQLite. Queueing it and throwing shows "数据正在写入中" while
+  // the learner is waiting to do questions. Retry here, out of the mutation
+  // queue, so a stale replay cannot rewrite the pack after they have moved on.
+  return retryWhileBusy(
+    (headers) => request<FreestyleRoundStatePayload>(url, {
       method: 'POST',
-      body: JSON.stringify(payload),
-      persistence: {
-        resourceKey: `freestyle-overlay-quiz-ensure:${payload.operation_id}`,
-        description: '同步随心做题会话',
-        replayMode: 'auto',
-      },
-    },
+      body,
+      headers,
+      persistence: false,
+    }),
+    { delaysMs: [400, 900, 1_800, 3_000] },
   )
 }
 

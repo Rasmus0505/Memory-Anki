@@ -7,7 +7,7 @@ import {
   type CSSProperties,
 } from 'react'
 import { RefreshCw } from 'lucide-react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { FreestyleProgressRail } from '@/modules/practice/ui/freestyle/components/FreestyleProgressRail'
 import { FreestyleRailParticles } from '@/modules/practice/ui/freestyle/components/FreestyleRailParticles'
 import { FreestyleRoundCompleteCard } from '@/modules/practice/ui/freestyle/components/FreestyleRoundCompleteCard'
@@ -100,6 +100,10 @@ import { readTimerAutomationConfig } from '@/shared/components/session/timer-aut
 import { useGlobalTimerRegistration } from '@/shared/components/session/GlobalTimerProvider'
 import { TooltipProvider } from '@/shared/components/ui/tooltip'
 import { toast } from '@/shared/feedback/toast'
+import {
+  palaceEditorVisitGeneration,
+  waitForPalaceEditorLeave,
+} from '@/shared/events/palaceEditorLeaveGate'
 import { shouldAutoStartOnPageEnter, useTimedSession } from '@/shared/hooks/useTimedSession'
 import { cn } from '@/shared/lib/utils'
 import { ExamCountdownChip, ExamRoundSummary, ExamStarBadge, useExamOverview } from '@/modules/exam/public'
@@ -238,6 +242,7 @@ export default function ImmersiveFreestylePage({
     loading,
     error,
     refreshQueue,
+    updateReviewQueue,
     syncDesktopProgress,
     startNextRound,
     reshuffleQueue,
@@ -724,9 +729,61 @@ export default function ImmersiveFreestylePage({
       setPlanOpen(true)
       return
     }
+    const direction: -1 | 0 | 1 = index > currentIndex ? 1 : index < currentIndex ? -1 : 0
+    requestRoundPreview(cards, index, direction)
     navigateToIndex(index)
-  }, [cards, navigateToIndex])
+  }, [cards, currentIndex, navigateToIndex])
   const openHistory = useCallback(() => setHistoryOpen(true), [])
+  const location = useLocation()
+  const seenEditorVisitRef = useRef(0)
+  const inlineEditingRef = useRef(inlineEditing)
+  inlineEditingRef.current = inlineEditing
+  const updateReviewQueueRef = useRef(updateReviewQueue)
+  updateReviewQueueRef.current = updateReviewQueue
+  const announceQueueUpdate = useCallback((message: string) => {
+    const notify = message === '已经是最新的' ? toast.info : toast.success
+    notify(message, { id: 'freestyle-queue-update' })
+  }, [])
+  const runQueueUpdate = useCallback(() => {
+    if (inlineEditingRef.current) {
+      toast.info('先退出这张的编辑，再更新队列', { id: 'freestyle-queue-update' })
+      return
+    }
+    void updateReviewQueue().then((result) => {
+      if (result.status === 'busy') return
+      if (result.status === 'error') {
+        toast.error('没能更新队列，请再试一次', { id: 'freestyle-queue-update' })
+        return
+      }
+      announceQueueUpdate(result.message)
+    }).catch(() => {
+      toast.error('没能更新队列，请再试一次', { id: 'freestyle-queue-update' })
+    })
+  }, [announceQueueUpdate, updateReviewQueue])
+  useEffect(() => {
+    if (!isActive) return
+    const onThisWorkspace = location.pathname === workspacePath
+      || location.pathname.startsWith(`${workspacePath}/`)
+    if (!onThisWorkspace) return
+    const editorVisit = palaceEditorVisitGeneration()
+    if (editorVisit <= seenEditorVisitRef.current) return
+    if (inlineEditingRef.current) return
+    seenEditorVisitRef.current = editorVisit
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        await waitForPalaceEditorLeave()
+        if (cancelled || inlineEditingRef.current) return
+        const result = await updateReviewQueueRef.current()
+        if (cancelled || result.status !== 'ok') return
+        announceQueueUpdate(result.message)
+      })()
+    }, 0)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [announceQueueUpdate, isActive, location.pathname, workspacePath])
   const syncComputerProgress = useCallback(() => {
     void syncDesktopProgress().then((result) => {
       if (result.status === 'busy' || result.status === 'stale') return
@@ -756,11 +813,12 @@ export default function ImmersiveFreestylePage({
       summaryLabel={overflowSummary}
       slot={slot}
       onOpenPlan={openPlan}
+      onUpdateQueue={runQueueUpdate}
       onSyncProgress={syncComputerProgress}
       onOpenHistory={openHistory}
       returnTo={reviewPalaceId != null ? palaceReviewReturnPath(reviewReturnSubjectId) : null}
     />
-  ), [openHistory, openPlan, overflowSummary, reviewPalaceId, reviewReturnSubjectId, slot, syncComputerProgress])
+  ), [openHistory, openPlan, overflowSummary, reviewPalaceId, reviewReturnSubjectId, runQueueUpdate, slot, syncComputerProgress])
 
   return (
     <TooltipProvider>
@@ -783,10 +841,8 @@ export default function ImmersiveFreestylePage({
           roundPlan={roundPlan}
           onOpenChange={setPlanOpen}
           onJump={(cardId) => {
-            const index = cards.findIndex((card) => card.id === cardId)
-            if (index < 0) return
             setPlanOpen(false)
-            navigateToIndex(index)
+            jumpFromProgressRail(cardId)
           }}
           onExclude={excludePlanCards}
           onRestore={restorePlanCards}
@@ -794,6 +850,7 @@ export default function ImmersiveFreestylePage({
             const ids = compressibleRoundPlanIds(roundPlan, {
               completedIds: queueState.completedIds,
               encounters: queueState.unitEncountersByCardId,
+              liveCardIds: cards.map((card) => card.id),
             })
             if (!ids.length) return
             const snapshot = buildPartialSettlementSnapshot({

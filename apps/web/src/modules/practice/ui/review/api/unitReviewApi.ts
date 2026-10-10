@@ -355,8 +355,8 @@ export async function undoContentScheduleBatchApi(
 /**
  * A lock wait on this machine can outlast 15s and still succeed. Aborting at
  * 15s threw that work away, then the card started a second glance and showed a
- * red error. 45s covers the server's busy wait; the card keeps the map up and
- * only says "正在准备评分" while this is outstanding.
+ * red error. 45s covers the server's busy wait; the card keeps the map up.
+ * Scoring does not wait on this call.
  */
 export const SESSION_START_TIMEOUT_MS = 45_000
 

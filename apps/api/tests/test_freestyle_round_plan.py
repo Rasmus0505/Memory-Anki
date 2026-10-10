@@ -1082,6 +1082,38 @@ def test_compress_completed_skips_weak_rated_source_with_live_retry():
     assert retry_id in kept["presented_ids"]
 
 
+def test_compress_completed_takes_the_source_when_its_retry_passed():
+    plan = leave_card(
+        _rate(
+            plan_from_cards(
+                [_card("weak", unit_id="unit-weak"), _card("todo", unit_id="unit-todo")]
+            ),
+            "weak",
+            1,
+            "enc-fail",
+        ),
+        "weak",
+    )
+    retry_id = _inserted(plan, "weak")["occurrence_id"]
+    plan = _rate(
+        plan,
+        retry_id,
+        3,
+        "enc-pass",
+        occurrence_id=retry_id,
+        unit_id="unit-weak",
+    )
+    ids = compressible_ids(plan)
+    assert "weak" in ids
+    assert retry_id in ids
+    assert "todo" not in ids
+    compressed = compress_completed(plan)
+    assert "weak" not in compressed["presented_ids"]
+    assert retry_id not in compressed["presented_ids"]
+    assert "todo" in compressed["presented_ids"]
+    assert "weak" in compressed["completed_ids"]
+
+
 def test_compress_completed_does_not_return_on_append_today():
     plan = _rate(
         plan_from_cards(

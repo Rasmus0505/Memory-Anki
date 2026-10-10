@@ -13,6 +13,7 @@ import {
   compactRatingEffectLabel,
   ratingDestinationLabel,
   ratingEffectLabel,
+  retryPositionLabel,
 } from '@/modules/practice/ui/freestyle/model/ratingEffectLabels'
 import { isFreestyleShortcutBlocked } from '@/modules/practice/ui/freestyle/model/freestyleKeyboard'
 import {
@@ -45,6 +46,7 @@ export function FreestyleRatingBar({
   locked,
   reviewReady,
   hasEncounter,
+  canRateWithoutPlan = false,
   actionError,
   assistantCopy = null,
   blockedHint,
@@ -69,6 +71,8 @@ export function FreestyleRatingBar({
   locked: boolean
   reviewReady: boolean
   hasEncounter: boolean
+  /** The learner can score before the glance plan arrives. Save follows the tap. */
+  canRateWithoutPlan?: boolean
   actionError: string | null
   /** Technical detail kept off the card. Shown only as 复制给助手. */
   assistantCopy?: string | null
@@ -325,20 +329,22 @@ export function FreestyleRatingBar({
                   : 'pass'
                 : 'fail'
               : null
+            const earlyHint = canRateWithoutPlan
+              ? item.value >= 3 ? '记下' : retryPositionLabel(retryAfterCards)
+              : null
             const hint = effect
               ? palaceMode && palaceKind
                 ? palaceRatingEffectLine(effect.label, palaceDueCount)
                 : ratingEffectLabel(effect, retryAfterCards)
               : hintMode
                 ? '继续'
-                : reviewReady
-                  ? '计划不可用'
-                  : '正在准备评分'
+                : earlyHint
+                  ?? (reviewReady ? '计划不可用' : '这张还不能评分')
             const preview = effect
               ? palaceMode && palaceKind
                 ? palaceRatingPreviewLabel(palaceDueCount, palaceKind)
                 : compactRatingEffectLabel(effect, retryAfterCards)
-              : null
+              : earlyHint
             const selected = shownRating === item.value
             const pending = pendingRating === item.value
             return (
@@ -346,7 +352,7 @@ export function FreestyleRatingBar({
                 data-testid={`freestyle-rating-button-${item.value}`}
                 key={item.value}
                 type="button"
-                disabled={busy || locked || !hasEncounter}
+                disabled={busy || locked || (!hasEncounter && !canRateWithoutPlan)}
                 aria-pressed={selected}
                 aria-busy={pending || undefined}
                 data-pending={pending ? 'true' : undefined}

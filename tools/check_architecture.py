@@ -3515,6 +3515,58 @@ def check_freestyle_unit_progress_kernel(errors: list[str]) -> None:
             )
 
 
+def check_freestyle_settled_retry_leaves(errors: list[str]) -> None:
+    """A 结算 must drop live retries of that source, and a missing plan must not mint."""
+    compress = WEB_SRC / "modules" / "practice" / "domain" / "roundPlanCompress.ts"
+    queue = WEB_SRC / "modules" / "practice" / "ui" / "freestyle" / "hooks" / "useImmersiveQueue.ts"
+    rail = WEB_SRC / "modules" / "practice" / "ui" / "freestyle" / "model" / "freestyleProgressSegments.ts"
+    sheet = WEB_SRC / "modules" / "practice" / "ui" / "freestyle" / "components" / "FreestyleRoundSheet.tsx"
+    exam = WEB_SRC / "modules" / "exam" / "model" / "useExamOverview.ts"
+    rating = WEB_SRC / "modules" / "practice" / "ui" / "freestyle" / "components" / "FreestyleRatingBar.tsx"
+    doc = REPO_ROOT / "docs" / "architecture" / "freestyle-immersive-feed.md"
+    for path, marker in (
+        (compress, "cardSettledOut"),
+        (queue, "cardSettledOut"),
+        (rail, "cardSettledOut"),
+        (sheet, "cardSettledOut"),
+    ):
+        if not path.exists() or marker not in path.read_text(encoding="utf-8", errors="ignore"):
+            errors.append(
+                f"{path.relative_to(REPO_ROOT).as_posix()}: "
+                "settled cards must leave via cardSettledOut, including retry siblings."
+            )
+    queue_source = queue.read_text(encoding="utf-8", errors="ignore") if queue.exists() else ""
+    hydrate = queue_source[queue_source.find("const hydrateFromServerRound"): queue_source.find("const hydrateFromServerRound") + 2500]
+    if "getActiveFreestyleRoundApi(slot)" not in hydrate or "getOrCreateFreestyleRoundApi" not in hydrate:
+        errors.append(
+            f"{queue.relative_to(REPO_ROOT).as_posix()}: "
+            "a missing local plan must adopt the active round before creating one."
+        )
+    if "isRemoteWindowEvent" not in queue_source:
+        errors.append(
+            f"{queue.relative_to(REPO_ROOT).as_posix()}: "
+            "another window of the same desk must hydrate; do not steal the other desk."
+        )
+    exam_source = exam.read_text(encoding="utf-8", errors="ignore") if exam.exists() else ""
+    if "reviewStateChanged" not in exam_source:
+        errors.append(
+            f"{exam.relative_to(REPO_ROOT).as_posix()}: "
+            "subject progress must reload when a score is saved."
+        )
+    rating_source = rating.read_text(encoding="utf-8", errors="ignore") if rating.exists() else ""
+    if "正在准备评分" in rating_source:
+        errors.append(
+            f"{rating.relative_to(REPO_ROOT).as_posix()}: "
+            "a card on screen must not say it is still preparing a score."
+        )
+    doc_source = doc.read_text(encoding="utf-8", errors="ignore") if doc.exists() else ""
+    if "every live retry of that source" not in doc_source:
+        errors.append(
+            f"{doc.relative_to(REPO_ROOT).as_posix()}: "
+            "must document that a 结算 drops live retries of that source."
+        )
+
+
 def check_freestyle_retry_starts_unrated(errors: list[str]) -> None:
     """A 重练 card starts blank. 困难 on the parent only schedules it."""
     plan = WEB_SRC / "modules" / "practice" / "domain" / "roundPlan.ts"
@@ -4083,6 +4135,42 @@ def check_freestyle_round_learning_time(errors: list[str]) -> None:
                 f"{doc.relative_to(REPO_ROOT).as_posix()}: "
                 "must document round learning_time and the separate 做题时间 line."
             )
+        if "three minutes" not in doc_source or "empty round clock must not wipe" not in doc_source:
+            errors.append(
+                f"{doc.relative_to(REPO_ROOT).as_posix()}: "
+                "must document the three-minute leave and that an empty clock does not wipe queue time."
+            )
+    completion = (
+        WEB_SRC
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "model"
+        / "roundCompletion.ts"
+    )
+    if completion.exists():
+        completion_source = completion.read_text(encoding="utf-8", errors="ignore")
+        if "empty clock must not wipe" not in completion_source:
+            errors.append(
+                f"{completion.relative_to(REPO_ROOT).as_posix()}: "
+                "an empty round clock must not wipe the progress-bar queue time."
+            )
+    presence = WEB_SRC / "modules" / "practice" / "ui" / "studyClockPresence.ts"
+    for clock in (
+        WEB_SRC / "modules" / "practice" / "ui" / "freestyle" / "hooks" / "useFreestyleRoundLearningClock.ts",
+        WEB_SRC / "modules" / "practice" / "ui" / "review" / "hooks" / "useForegroundEncounterClock.ts",
+    ):
+        if not clock.exists() or "studyClockPresence" not in clock.read_text(encoding="utf-8", errors="ignore"):
+            errors.append(
+                f"{clock.relative_to(REPO_ROOT).as_posix()}: "
+                "study clocks must share studyClockPresence so a visible window still counts."
+            )
+    if not presence.exists():
+        errors.append(
+            "apps/web/src/modules/practice/ui/studyClockPresence.ts: "
+            "shared study-window presence is required."
+        )
 
 
 def check_freestyle_complete_slot_reachable(errors: list[str]) -> None:
@@ -5950,8 +6038,12 @@ def check_unit_review_boundary(errors: list[str]) -> None:
             "def candidate_from_projection",
         ),
         WEB_SRC / "modules/practice/ui/review/hooks/useForegroundEncounterClock.ts": (
-            "document.visibilityState !== 'visible'",
+            "studyClockPresence",
             "MAX_CONTIGUOUS_TICK_SECONDS",
+        ),
+        WEB_SRC / "modules/practice/ui/studyClockPresence.ts": (
+            "document.visibilityState !== 'hidden'",
+            "STUDY_AWAY_GRACE_MS",
         ),
         WEB_SRC / "modules/content/ui/palace-edit/hooks/usePalaceEditorDocument.ts": (
             "flushSave({ force: true })",
@@ -6938,6 +7030,7 @@ def main() -> int:
     check_freestyle_canvas_pan(errors)
     check_wheel_scroll_does_not_snap_back(errors)
     check_enter_reveal_viewport_follow(errors)
+    check_freestyle_settled_retry_leaves(errors)
     check_freestyle_retry_starts_unrated(errors)
     check_freestyle_unit_progress_kernel(errors)
     check_freestyle_rating_retap_clears(errors)

@@ -43,8 +43,9 @@ export interface FreestyleRoundCompletion {
   /** Quiz cards handled in the feed plus overlay 做题. */
   quizCount: number
   /**
-   * Round learning seconds. Encounter focus when no learning clock is supplied;
-   * otherwise unit dwell + quiz + palace lookup for the whole round.
+   * Round learning seconds. The progress-bar queue's card time is the floor.
+   * A round clock that actually counted cards replaces it, so quiz time is not
+   * added twice. An empty clock must not wipe that queue time.
    */
   totalEffectiveSeconds: number
   /** Quiz-overlay seconds only. Absent on older callers; settlement treats that as 0. */
@@ -253,17 +254,25 @@ export function buildFreestyleRoundCompletion(
   ))
 
   const learningTime = options?.learningTime
-  let totalEffectiveSeconds = 0
+  let queueSeconds = 0
+  for (const encounter of Object.values(encountersByCardId)) {
+    queueSeconds += billableSeconds(encounter)
+  }
+  let totalEffectiveSeconds = queueSeconds
   let quizSeconds = 0
   if (learningTime) {
     const totals = freestyleLearningTotals(learningTime)
-    totalEffectiveSeconds = totals.totalSeconds
     quizSeconds = totals.quizSeconds
-    bySubject = applyAttributedLearningTime(bySubject, learningTime, subjectByPalaceId)
-  } else {
-    for (const encounter of Object.values(encountersByCardId)) {
-      totalEffectiveSeconds += billableSeconds(encounter)
+    const clockUnit = Math.max(0, learningTime.unitSeconds || 0)
+    if (clockUnit > 0) {
+      // The clock watched the same cards. Do not add the queue again.
+      totalEffectiveSeconds = totals.totalSeconds
+      bySubject = applyAttributedLearningTime(bySubject, learningTime, subjectByPalaceId)
+    } else if (totals.totalSeconds > 0) {
+      // Quiz or lookup was recorded, but the card queue was not. Keep the queue.
+      totalEffectiveSeconds = queueSeconds + totals.quizSeconds + Math.max(0, learningTime.lookupSeconds || 0)
     }
+    // An empty clock must not wipe the progress-bar queue.
   }
 
   return {

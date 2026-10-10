@@ -92,7 +92,7 @@ export function FreestyleLoadingState() {
             ))}
           </div>
         </div>
-        <p className="mt-4 text-center text-sm text-stage-muted">正在加载随心队列...</p>
+        <p className="mt-4 text-center text-sm text-stage-muted">正在准备今天的内容…</p>
       </div>
     </section>
   )

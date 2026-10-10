@@ -112,6 +112,27 @@ describe('FreestyleScopeQuizDialog', () => {
     } as never)
   })
 
+  it('shows a calm retry instead of the write-lock diagnostic when ensure is busy', async () => {
+    const busy = Object.assign(new Error('数据正在写入中，请稍候重试。\n操作：同步随心做题会话'), { status: 503 })
+    ensureFreestyleOverlayQuizApiMock.mockRejectedValue(busy)
+    render(
+      <FreestyleScopeQuizDialog
+        open
+        onOpenChange={vi.fn()}
+        roundId="round-1"
+        planVersion={1}
+        storedConfig={DEFAULT_FREESTYLE_FEED_CONFIG}
+        setupDone
+        roundReviewPalaceCount={1}
+        onConfirmSetup={vi.fn()}
+        onRoundSync={vi.fn()}
+      />,
+    )
+    expect(await screen.findByText('做题还在同步，请再点一次。')).toBeTruthy()
+    expect(screen.queryByText(/HTTP 状态/)).toBeNull()
+    expect(screen.getByRole('button', { name: '再试一次' })).toBeTruthy()
+  })
+
   it('retries a picker replan conflict before loading questions from the new scope', async () => {
     ensureFreestyleOverlayQuizApiMock.mockResolvedValueOnce({
       round_id: 'round-1',

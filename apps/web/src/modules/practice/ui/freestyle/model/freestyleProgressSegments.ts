@@ -7,7 +7,6 @@ import {
 } from '@/modules/practice/domain/queueState'
 import {
   isOccurrenceScored,
-  isShadowOfQueueRemoval,
 } from '@/modules/practice/domain/unitProgressState'
 import {
   planCardStatus,
@@ -15,6 +14,7 @@ import {
   type FreestyleRoundPlanCardStatus,
   type FreestyleRoundPlanState,
 } from '@/modules/practice/domain/roundPlan'
+import { cardSettledOut, settledIdSet } from '@/modules/practice/domain/roundPlanCompress'
 import type { FreestyleCard } from '@/shared/api/contracts'
 import { FREESTYLE_REVIEW_HINT_ID, isReviewHintCard } from '@/shared/api/contracts'
 
@@ -353,24 +353,43 @@ function progressIds(
   cards: FreestyleCard[],
   roundPlan: FreestyleRoundPlanState | null,
 ): string[] {
-  if (!roundPlan) return cards.map((card) => String(card.id || '')).filter(Boolean)
-  const compressed = new Set((roundPlan.compressedIds ?? []).map((id) => String(id || '').trim()).filter(Boolean))
+  // Live cards first, in swipe order. Then walk roundPlan.orderIds so a scored
+  // card that left the feed still paints until the learner settles. A 结算
+  // drops the source and its retry siblings. An unscored or removed id that
+  // already left the feed must not light a tick the learner cannot reach.
+  const compressed = settledIdSet(roundPlan?.compressedIds)
   const seen = new Set<string>()
   const ids: string[] = []
-  for (const raw of roundPlan.orderIds) {
-    const id = String(raw || '').trim()
-    if (!id || seen.has(id) || compressed.has(id)) continue
-    seen.add(id)
-    ids.push(id)
-  }
   for (const card of cards) {
     const id = String(card.id || '').trim()
-    if (!id || seen.has(id) || compressed.has(id)) continue
+    if (!id || seen.has(id) || cardSettledOut(card, compressed)) continue
     seen.add(id)
     ids.push(id)
   }
-  // Plan-first ordering parks the plan-external yellow hint at the tail —
-  // seat it immediately before the first formal review unit instead.
+  const orderIds = roundPlan?.orderIds ?? []
+  for (const id of orderIds) {
+    if (!id || seen.has(id)) continue
+    const entry = roundPlan?.cardsById[id]
+    if (!entry) continue
+    if (cardSettledOut({ id, source_card_id: entry.sourceCardId }, compressed)) continue
+    if (entry.status === 'excluded') continue
+    // An unfinished retry that already left the feed is not a score. Only a
+    // scored row stays lit until the learner settles.
+    const scored = entry.status === 'completed' || entry.lastRating != null
+    if (!scored) continue
+    let insertAt = ids.length
+    const planIndex = orderIds.indexOf(id)
+    for (let later = planIndex + 1; later < orderIds.length; later += 1) {
+      const at = ids.indexOf(orderIds[later] ?? '')
+      if (at >= 0) {
+        insertAt = at
+        break
+      }
+    }
+    ids.splice(insertAt, 0, id)
+    seen.add(id)
+  }
+  // Seat the yellow hint immediately before the first formal review unit.
   const hintIndex = ids.indexOf(FREESTYLE_REVIEW_HINT_ID)
   if (hintIndex >= 0) {
     const firstReview = cards.find(
@@ -383,16 +402,6 @@ function progressIds(
     }
   }
   return ids
-}
-
-function snapshotPlanStatus(
-  id: string,
-  planEntry: FreestyleRoundPlanCard | undefined,
-  completed: Set<string>,
-): FreestyleRoundPlanCardStatus | null {
-  if (completed.has(id) || planEntry?.status === 'completed') return 'completed'
-  if (planEntry?.status === 'retry' || planEntry?.status === 'pending') return planEntry.status
-  return null
 }
 
 function snapshotSourceLabel(
@@ -570,7 +579,7 @@ export function buildFreestyleProgressSummary(
   const passedSources = new Set<string>()
   const drawnRemovalUnits = new Set<string>()
 
-  // Visual only: keep completed/retry/removed ticks after the live feed drops them.
+  // Live cards, plus scored ledger rows that left the feed until 结算.
   for (const id of progressIds(cards, roundPlan)) {
     const planEntry = roundPlan?.cardsById[id]
     if (planEntry?.status === 'excluded') {
@@ -609,16 +618,48 @@ export function buildFreestyleProgressSummary(
     if (hidden.has(id)) continue
 
     const card = liveById.get(id)
+    if (!card) {
+      if (!planEntry || hidden.has(id)) continue
+      const retryKind = planEntry.occurrenceKind === 'retry'
+      const sourceId = planEntry.sourceCardId || id
+      const encounter = encounters[id]
+      const scored = isOccurrenceScored(id, { completedIds, encounters, roundPlan })
+      const status = visualPlanStatus(planEntry.status, encounter, planEntry.status, scored)
+      const tone = segmentTone(status)
+      if (!tone) continue
+      segments.push({
+        cardId: id,
+        tone,
+        palaceId: planEntry.palaceId ?? null,
+        palaceDone: false,
+        viewing: currentCardId === id,
+        kind: retryKind ? 'retry' : 'source',
+        enteredOn: planEntry.enteredOn,
+        sourceLabel: snapshotSourceLabel(id, sourceId, planEntry, roundPlan),
+        ...(retryKind
+          ? {
+              retryAttempt: Math.max(1, Math.round(Number(planEntry.retryAttempt) || 1)),
+              sourceCardId: sourceId,
+            }
+          : {
+              waitingRetry: planEntry.status === 'retry' && !scored,
+              ...(planEntry.status === 'retry'
+                ? { retryAfterCards: Math.max(0, Math.round(Number(planEntry.retryAfterCards) || 0)) }
+                : {}),
+            }),
+      })
+      if (retryKind) retryInserted += 1
+      else baseItems.push({ id, sourceId })
+      if (tone === 'done' || completed.has(id) || completed.has(sourceId) || scored) {
+        passedSources.add(sourceId || id)
+      }
+      continue
+    }
     if (card) {
       const sourceId = sourceCardId(card)
       const encounter = encounters[card.id]
       const scored = isOccurrenceScored(card.id, { completedIds, encounters, roundPlan })
       const retryKind = isRetryOccurrence(card)
-      if (
-        !retryKind
-        && !scored
-        && isShadowOfQueueRemoval(card.id, roundPlan, 'unit_id' in card ? String(card.unit_id || '') : '')
-      ) continue
       const status = visualPlanStatus(
         planCardStatus(card, roundPlan, completedIds, hiddenIds, currentCardId),
         encounter,
@@ -663,50 +704,6 @@ export function buildFreestyleProgressSummary(
         passedSources.add(sourceId || card.id)
       }
       continue
-    }
-
-    // A scored card that left the live feed still fills solid. Excluded is handled above.
-    const scoredOffFeed = isOccurrenceScored(id, { completedIds, encounters, roundPlan })
-    const offFeedRetry = planEntry?.occurrenceKind === 'retry'
-    if (!offFeedRetry && !scoredOffFeed && isShadowOfQueueRemoval(id, roundPlan)) continue
-    const status = scoredOffFeed ? 'completed' : snapshotPlanStatus(id, planEntry, completed)
-    const tone = status ? segmentTone(status) : null
-    if (!tone) continue
-    const retryKind = planEntry?.occurrenceKind === 'retry'
-    const sourceId = planEntry?.sourceCardId || id
-    const waitingRetry = !retryKind && planEntry?.status === 'retry'
-    segments.push({
-      cardId: id,
-      tone,
-      palaceId: planEntry?.palaceId ?? null,
-      palaceDone: false,
-      viewing: currentCardId === id,
-      kind: retryKind ? 'retry' : 'source',
-      enteredOn: planEntry?.enteredOn,
-      sourceLabel: snapshotSourceLabel(id, sourceId, planEntry, roundPlan),
-      ...(retryKind
-        ? {
-            retryAttempt: Math.max(1, Math.round(Number(planEntry?.retryAttempt) || 1)),
-            sourceCardId: sourceId,
-          }
-        : {
-            waitingRetry,
-            ...(waitingRetry
-              ? { retryAfterCards: Math.max(0, Math.round(Number(planEntry?.retryAfterCards) || 0)) }
-              : {}),
-          }),
-    })
-    if (retryKind) {
-      retryInserted += 1
-    } else {
-      baseItems.push({ id, sourceId })
-    }
-    if (
-      tone === 'done'
-      || completed.has(id)
-      || completed.has(sourceId)
-    ) {
-      passedSources.add(sourceId || id)
     }
   }
 

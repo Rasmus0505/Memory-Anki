@@ -155,13 +155,28 @@ describe('FreestyleRatingBar', () => {
     input.remove()
   })
 
-  it('keeps four disabled buttons labelled 正在准备评分 before the plan arrives', () => {
+  it('lets the learner score before the plan arrives', () => {
+    const { onRate } = renderBar({
+      ratingEffects: [],
+      reviewReady: false,
+      hasEncounter: false,
+      canRateWithoutPlan: true,
+    })
+
+    const button = screen.getByTestId('freestyle-rating-button-3') as HTMLButtonElement
+    expect(button.disabled).toBe(false)
+    expect(button.getAttribute('aria-label')).toContain('记下')
+    fireEvent.click(button)
+    expect(onRate).toHaveBeenCalledWith(3)
+  })
+
+  it('keeps four disabled buttons labelled 这张还不能评分 when the card cannot be scored yet', () => {
     renderBar({ ratingEffects: [], reviewReady: false, hasEncounter: false })
 
     for (const value of [1, 2, 3, 4]) {
       const button = screen.getByTestId(`freestyle-rating-button-${value}`) as HTMLButtonElement
       expect(button.disabled).toBe(true)
-      expect(button.getAttribute('aria-label')).toContain('正在准备评分')
+      expect(button.getAttribute('aria-label')).toContain('这张还不能评分')
     }
   })
 

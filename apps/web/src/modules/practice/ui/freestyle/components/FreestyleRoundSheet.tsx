@@ -11,8 +11,11 @@ import {
   X,
 } from 'lucide-react'
 import {
+  cardSettledOut,
   compressibleRoundPlanIds,
   planCardStatus,
+  planEntryForLiveCard,
+  settledIdSet,
   type FreestyleRoundPlanCard,
   type FreestyleRoundPlanCardStatus,
   type FreestyleRoundPlanState,
@@ -384,10 +387,25 @@ export function FreestyleRoundSheet({
   }, [open, cards])
 
   const liveById = useMemo(() => new Map(cards.map((card) => [card.id, card])), [cards])
-  const rows = useMemo(() => {
+  const planRows = useMemo(() => {
     if (!roundPlan) return []
     return roundPlan.orderIds.map((id) => roundPlan.cardsById[id]).filter(Boolean)
   }, [roundPlan])
+  const workingRows = useMemo(() => {
+    const compressed = settledIdSet(roundPlan?.compressedIds)
+    return cards.flatMap((card) => {
+      const id = String(card.id || '').trim()
+      if (!id || cardSettledOut(card, compressed)) return []
+      const entry = planEntryForLiveCard(card, roundPlan)
+      return entry ? [entry] : []
+    })
+  }, [cards, roundPlan])
+  const arrangementCatchingUp = !roundPlan && cards.length > 0
+  const arrangementCount = arrangementCatchingUp ? cards.length : workingRows.length
+  const excludedOffFeed = useMemo(() => {
+    const shown = new Set(workingRows.map((entry) => entry.cardId))
+    return planRows.filter((entry) => !shown.has(entry.cardId) && entry.status === 'excluded')
+  }, [planRows, workingRows])
   const sections = useMemo(() => {
     const groupPalace = (entries: FreestyleRoundPlanCard[]) => {
       const result = new Map<number, FreestyleRoundPlanCard[]>()
@@ -399,11 +417,11 @@ export function FreestyleRoundSheet({
       })
       return [...result.entries()]
     }
-    const distinct = new Set(rows.map((entry) => entry.enteredOn || ''))
-    if (distinct.size <= 1) return [{ key: 'all', title: '', groups: groupPalace(rows) }]
+    const distinct = new Set(workingRows.map((entry) => entry.enteredOn || ''))
+    if (distinct.size <= 1) return [{ key: 'all', title: '', groups: groupPalace(workingRows) }]
     const order: string[] = []
     const buckets = new Map<string, FreestyleRoundPlanCard[]>()
-    rows.forEach((entry) => {
+    workingRows.forEach((entry) => {
       const day = entry.enteredOn || ''
       const bucket = buckets.get(day) ?? []
       if (!buckets.has(day)) order.push(day)
@@ -415,7 +433,7 @@ export function FreestyleRoundSheet({
       title: day ? dayCohortLabel(day, spokenToday) : '更早留下的',
       groups: groupPalace(buckets.get(day) ?? []),
     }))
-  }, [rows, spokenToday])
+  }, [workingRows, spokenToday])
   const currentCardId = cards[currentIndex]?.id ?? queueState.currentCardId
   const selectedSet = new Set(selectedIds)
   const fillStatus = useCallback((entry: FreestyleRoundPlanCard): FreestyleRoundPlanCardStatus => {
@@ -445,8 +463,9 @@ export function FreestyleRoundSheet({
     () => compressibleRoundPlanIds(roundPlan, {
       completedIds: queueState.completedIds,
       encounters: queueState.unitEncountersByCardId,
+      liveCardIds: cards.map((card) => card.id),
     }),
-    [queueState.completedIds, queueState.unitEncountersByCardId, roundPlan],
+    [cards, queueState.completedIds, queueState.unitEncountersByCardId, roundPlan],
   )
   const progressSummary = useMemo(
     () => buildFreestyleProgressSummary(
@@ -479,7 +498,8 @@ export function FreestyleRoundSheet({
   const progressSections = useMemo(() => {
     const byId = roundPlan?.cardsById ?? {}
     const entriesFor = (list: FreestyleProgressSegment[]) => list.flatMap((segment) => {
-      const entry = byId[segment.cardId]
+      const card = liveById.get(segment.cardId)
+      const entry = byId[segment.cardId] ?? (card ? planEntryForLiveCard(card, roundPlan) : null)
       return entry ? [entry] : []
     })
     const split = progressSummary.segments.some((segment) => segment.cohortBoundary)
@@ -499,10 +519,10 @@ export function FreestyleRoundSheet({
       })
       .filter((section) => section.entries.length)
     const shown = new Set(sections.flatMap((section) => section.entries.map((entry) => entry.cardId)))
-    const excluded = rows.filter((entry) => !shown.has(entry.cardId) && fillStatus(entry) === 'excluded')
+    const excluded = planRows.filter((entry) => !shown.has(entry.cardId) && fillStatus(entry) === 'excluded')
     if (excluded.length) sections.push({ key: 'excluded', title: '已排除', entries: excluded })
     return sections
-  }, [fillStatus, progressSummary.segments, roundPlan?.cardsById, spokenToday])
+  }, [fillStatus, liveById, planRows, progressSummary.segments, roundPlan, spokenToday])
 
   const moveRow = (sourceId: string, targetId: string) => {
     if (sourceId === targetId || !roundPlan) return
@@ -612,9 +632,9 @@ export function FreestyleRoundSheet({
             </div>
           </div>
           <SheetDescription className="text-xs">
-            本轮 {roundPlan?.scheduledCount ?? rows.length} 张
-            {roundDaySpan(rows.map((entry) => entry.enteredOn), spokenToday) > 1
-              ? ` · 跨了 ${roundDaySpan(rows.map((entry) => entry.enteredOn), spokenToday)} 天`
+            本轮 {arrangementCount} 张
+            {roundDaySpan(workingRows.map((entry) => entry.enteredOn), spokenToday) > 1
+              ? ` · 跨了 ${roundDaySpan(workingRows.map((entry) => entry.enteredOn), spokenToday)} 天`
               : ''}
           </SheetDescription>
         </SheetHeader>
@@ -660,13 +680,15 @@ export function FreestyleRoundSheet({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 sm:px-5">
-          {!roundPlan || !rows.length ? (
+          {!workingRows.length && !excludedOffFeed.length ? (
             <div className="flex min-h-40 items-center justify-center text-sm text-muted-foreground">
-              当前还没有本轮安排。
+              {arrangementCatchingUp ? '安排正在接上，先按上面的进度翻。' : '当前还没有本轮安排。'}
             </div>
           ) : null}
           <div className="space-y-4" data-testid="round-plan-list" data-mode={viewMode}>
-            {viewMode === 'palace' ? sections.map((section) => (
+            {viewMode === 'palace' ? (
+              <>
+            {sections.map((section) => (
               <div key={section.key} className="space-y-3">
                 {section.title ? (
                   <div
@@ -716,7 +738,21 @@ export function FreestyleRoundSheet({
                   )
                 })}
               </div>
-            )) : progressSections.map((section) => {
+            ))}
+            {excludedOffFeed.length ? (
+              <section className="rounded-xl border border-border/70 bg-card/30">
+                <div className="border-b border-border/60 px-3 py-2 text-sm font-semibold">已排除</div>
+                <div className="divide-y divide-border/50">
+                  {excludedOffFeed.map((entry) => renderPlanRow(
+                    entry,
+                    excludedOffFeed.map((item) => item.cardId),
+                    false,
+                  ))}
+                </div>
+              </section>
+            ) : null}
+              </>
+            ) : progressSections.map((section) => {
               const neighborIds = section.entries.map((entry) => entry.cardId)
               return (
                 <div key={section.key} className="space-y-1">

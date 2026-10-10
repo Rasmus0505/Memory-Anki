@@ -10,7 +10,13 @@ import {
   startFreestyleRoundApi,
 } from '@/modules/practice/ui/freestyle/api'
 import { coalesceHydrationLedger, commitHydratedRoundLedger } from '@/modules/practice/domain/hydrateRoundLedger'
+import {
+  describeQueuePlanUpdate,
+  queueWorkIdentity,
+  type QueuePlanUpdateCard,
+} from '@/modules/practice/ui/freestyle/model/queuePlanUpdate'
 import { deviceLocalCursor } from '@/modules/practice/domain/deviceLocalCursor'
+import { ensureStudyTextLibrary } from '@/shared/study-text/studyTextLibrary'
 import {
   mergePartialSettlementLists,
   toServerPartialSettlement,
@@ -31,8 +37,11 @@ import {
   clearMutedPalaces,
   createRoundPlan,
   createOperationId,
+  cardSettledOut,
   compressRoundPlanCards,
   compressibleRoundPlanIds,
+  expandSettledIds,
+  settledIdSet,
   excludeRoundPlanCards,
   mergeRetainedHiddenIds,
   filterMutedPalaces,
@@ -128,7 +137,7 @@ import {
   type StaleDropCircuit,
   type StaleDropDecision,
 } from '@/modules/practice/ui/freestyle/model/freestyleStaleRecovery'
-import { onAppEvent } from '@/shared/events/appEvents'
+import { APP_EVENT_NAMES, isRemoteWindowEvent, onAppEvent } from '@/shared/events/appEvents'
 import { logAppError } from '@/shared/logs/model/appLogs'
 import {
   CLIENT_PREFERENCES_UPDATED_EVENT,
@@ -211,14 +220,20 @@ function cardsWithoutHidden(cards: FreestyleCard[], hiddenIds: readonly string[]
 
 function cardsWithoutCompressed(cards: FreestyleCard[], compressedIds: readonly string[] | undefined) {
   if (!compressedIds?.length) return cards
-  const compressed = new Set(compressedIds.map((id) => String(id)))
-  return cards.filter((card) => !compressed.has(String(card.id)))
+  const compressed = settledIdSet(compressedIds)
+  return cards.filter((card) => !cardSettledOut(card, compressed))
 }
 
 async function buildQueueWithTimeout(
   payload: Parameters<typeof buildFreestyleQueueApi>[0],
   signal: AbortSignal,
 ) {
+  try {
+    await ensureStudyTextLibrary()
+  } catch {
+    // The first card can still be built if today's text prepare fails.
+  }
+  if (signal.aborted) throw signal.reason ?? new DOMException('Aborted', 'AbortError')
   let lastError: unknown
   for (let attempt = 0; attempt < QUEUE_BUILD_MAX_ATTEMPTS; attempt += 1) {
     if (signal.aborted) throw signal.reason ?? new DOMException('Aborted', 'AbortError')
@@ -390,6 +405,8 @@ export function useImmersiveQueue(
     palace_leftover_due: {} as Record<string, number>,
   })
   const operationIdRef = useRef<string>('')
+  const queueBuildOutcomeRef = useRef<{ id: string; status: 'ok' | 'error' } | null>(null)
+  const updateReviewInFlightRef = useRef(false)
   const queueBuildControllerRef = useRef<AbortController | null>(null)
   const localQueueMutationRef = useRef(0)
   const liveHydrationRef = useRef<LiveHydrationEntry | null>(null)
@@ -483,9 +500,14 @@ export function useImmersiveQueue(
   const persistQueueState = useCallback((next: FreestyleSkipState) => {
     localQueueMutationRef.current += 1
     const sanitized = saveQueueState(next, slot)
-    queueStateRef.current = sanitized
-    setQueueState(sanitized)
-    return sanitized
+    // A quota miss may store a plan-less snapshot. The live session must keep
+    // the plan, or the sheet says 0 while the rail still has the cards.
+    const kept = sanitized.roundPlan == null && next.roundPlan != null
+      ? { ...sanitized, roundPlan: next.roundPlan }
+      : sanitized
+    queueStateRef.current = kept
+    setQueueState(kept)
+    return kept
   }, [slot])
 
   const notifyPeerRound = useCallback(() => {
@@ -1004,6 +1026,7 @@ export function useImmersiveQueue(
           setStartupVisualIndex(null)
         }
         setQueueFrozen(false)
+        queueBuildOutcomeRef.current = { id: operationId, status: 'ok' }
         tailPending = Boolean(response.round_meta?.tail_pending) && options?.studyWindow === true
         tailPreferId = nextCards[resolved]?.id ?? queueStateRef.current.currentCardId
       } catch (err) {
@@ -1024,6 +1047,7 @@ export function useImmersiveQueue(
           requestSummary: `POST /freestyle/queue/build (${options?.reason ?? 'unknown'})`,
           meta: { operationId, elapsedMs: Date.now() - startedAt, config: nextConfig },
         })
+        queueBuildOutcomeRef.current = { id: operationId, status: 'error' }
         // Silent rebuild failures must not blank the feed mid-session.
         if (!silent) {
           setError(diagnostic)
@@ -1426,6 +1450,57 @@ export function useImmersiveQueue(
       replan: true,
     })
   }, [buildQueue, config, resetStaleRecovery])
+
+  /**
+   * HUD「更新队列」. Keep rated cards, add or drop unrated work from the latest
+   * due projection, and stay on the card under the viewport when it still exists.
+   */
+  const updateReviewQueue = useCallback(async () => {
+    if (updateReviewInFlightRef.current) return { status: 'busy' as const }
+    updateReviewInFlightRef.current = true
+    const beforeCards = cardsRef.current
+    const beforeCompleted = [...queueStateRef.current.completedIds]
+    const beforeIndex = Math.min(
+      currentIndexRef.current,
+      Math.max(0, beforeCards.length - 1),
+    )
+    const beforeCard = beforeCards[beforeIndex] ?? null
+    const beforeId = beforeCard?.id ?? queueStateRef.current.currentCardId ?? null
+    const beforeOutcome = queueBuildOutcomeRef.current
+    try {
+      staleCardKeysRef.current.clear()
+      resetStaleRecovery()
+      await buildQueue(configRef.current, {
+        preserveCompleted: true,
+        reason: 'update_queue',
+        replan: true,
+        silent: true,
+        preferCardId: beforeId,
+      })
+      const outcome = queueBuildOutcomeRef.current
+      if (!outcome || outcome === beforeOutcome || outcome.status === 'error') {
+        return { status: 'error' as const }
+      }
+      const afterCards = cardsRef.current
+      const beforeIdentity = queueWorkIdentity(beforeCard as QueuePlanUpdateCard | null)
+      const stillThere = !beforeId || afterCards.some((card) => (
+        card.id === beforeId || (beforeIdentity !== '' && queueWorkIdentity(card) === beforeIdentity)
+      ))
+      const visibleAfter = afterCards.filter((card) => card.type !== 'review_hint')
+      return {
+        status: 'ok' as const,
+        message: describeQueuePlanUpdate({
+          before: beforeCards,
+          after: afterCards,
+          completedIds: beforeCompleted,
+          currentCardGone: Boolean(beforeId) && !stillThere,
+          queueEmpty: visibleAfter.length === 0,
+        }),
+      }
+    } finally {
+      updateReviewInFlightRef.current = false
+    }
+  }, [buildQueue, resetStaleRecovery])
 
   /**
    * Mark a card done for this round without removing it from the local feed.
@@ -2231,12 +2306,14 @@ export function useImmersiveQueue(
 
   const compressCompletedPlanCards = useCallback((snapshot?: FreestylePartialSettlementSnapshot) => {
     const current = queueStateRef.current
-    const ids = snapshot?.cardIds?.length
+    const requested = snapshot?.cardIds?.length
       ? snapshot.cardIds
       : compressibleRoundPlanIds(current.roundPlan, {
         completedIds: current.completedIds,
         encounters: current.unitEncountersByCardId,
+        liveCardIds: cardsRef.current.map((card) => card.id),
       })
+    const ids = expandSettledIds(requested, cardsRef.current)
     if (!ids.length || !current.roundPlan) return
     const stamped = snapshot
       ? {
@@ -2449,6 +2526,15 @@ export function useImmersiveQueue(
     }
     try {
       let round = roundId ? await getFreestyleRoundApi(roundId).catch(() => null) : null
+      if (!round?.plan) {
+        try {
+          const active = await getActiveFreestyleRoundApi(slot)
+          if (active?.plan) round = active
+        } catch (error) {
+          // A missing round is the only reason to create. A busy server must not mint.
+          if (!isMissingActiveRound(error)) return
+        }
+      }
       if (!round?.plan && hasLoadedClientPreferences()) {
         round = await getOrCreateFreestyleRoundApi({
           operation_id: createOperationId(),
@@ -2762,10 +2848,19 @@ export function useImmersiveQueue(
 
   useEffect(() => {
     if (lockedPalaceId != null) return
-    return onAppEvent(FREESTYLE_PEER_ROUND_EVENT, (detail: FreestylePeerRoundDetail) => {
-      if (!detail || detail.workspace === slot) return
+    const stopPeer = onAppEvent(FREESTYLE_PEER_ROUND_EVENT, (detail: FreestylePeerRoundDetail, event) => {
+      // Same desk, other window. Do not steal the other desk's queue.
+      if (!detail || detail.workspace !== slot || !isRemoteWindowEvent(event)) return
       void hydrateFromServerRound(false)
     })
+    const stopReviews = onAppEvent(APP_EVENT_NAMES.reviewStateChanged, (_detail, event) => {
+      if (!isRemoteWindowEvent(event)) return
+      void hydrateFromServerRound(false)
+    })
+    return () => {
+      stopPeer()
+      stopReviews()
+    }
   }, [hydrateFromServerRound, lockedPalaceId, slot])
 
   const workspacePath = lockedPalaceId != null
@@ -2802,6 +2897,7 @@ export function useImmersiveQueue(
     roundMeta,
     roundPlan: queueState.roundPlan,
     refreshQueue,
+    updateReviewQueue,
     syncDesktopProgress,
     startNextRound,
     reshuffleQueue: reshuffleQueueWithRestudyClear,

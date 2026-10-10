@@ -67,6 +67,7 @@ import {
 } from '@/shared/components/ui/dialog'
 import { useDwellFragmentOverride } from '@/modules/session/public'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
+import { isBusyResponseError } from '@/shared/api/busyRetry'
 import { toast } from '@/shared/feedback/toast'
 import {
   PalaceMemoryLookupDialog,
@@ -219,9 +220,15 @@ export function FreestyleScopeQuizDialog({
       const next = adoptRound(round)
       if (next) await loadQuestions(next)
     } catch (error) {
-      const message = error instanceof Error ? error.message : '加载做题会话失败。'
+      const busy = isBusyResponseError(error)
+        || (error instanceof Error && error.message.includes('数据正在写入中'))
+      // The raw 503 names the write lock and the request URL. That is a pause,
+      // not a broken quiz. Keep the calm line in the dialog; do not toast it.
+      const message = busy
+        ? '做题还在同步，请再点一次。'
+        : error instanceof Error ? error.message : '加载做题会话失败。'
       setLoadError(message)
-      toast.error(message)
+      if (!busy) toast.error(message)
     } finally {
       setLoading(false)
     }
@@ -636,7 +643,10 @@ export function FreestyleScopeQuizDialog({
               </div>
             ) : loadError ? (
               <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-4 text-sm text-destructive">
-                {loadError}
+                <p>{loadError}</p>
+                <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => void ensureSession()}>
+                  再试一次
+                </Button>
               </div>
             ) : !current ? (
               <div className="py-12 text-center text-sm text-muted-foreground">当前宫殿范围内没有题目</div>

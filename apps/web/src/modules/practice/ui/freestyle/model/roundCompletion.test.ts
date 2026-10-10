@@ -300,6 +300,49 @@ describe('buildFreestyleRoundCompletion', () => {
     expect(uncategorized?.palaces.find((palace) => palace.palaceId === 12)?.effectiveSeconds).toBe(35)
     expect(education?.effectiveSeconds).toBe(80)
   })
+
+  it('does not let an empty round clock wipe the progress-bar queue time', () => {
+    const cards = [card('one', { palace_id: 11, palace_title: '卢梭' })]
+    const completion = buildFreestyleRoundCompletion(
+      cards,
+      { one: encounter({ effectiveSeconds: 42 }) },
+      1,
+      {
+        learningTime: {
+          unitSeconds: 0,
+          quizSeconds: 0,
+          lookupSeconds: 0,
+          backfilled: true,
+          byPalace: {},
+        },
+      },
+    )
+
+    expect(completion.totalEffectiveSeconds).toBe(42)
+    expect(completion.bySubject[0]?.effectiveSeconds).toBe(42)
+  })
+
+  it('keeps queue time when the clock only recorded quiz or lookup', () => {
+    const cards = [card('one', { palace_id: 11, palace_title: '卢梭' })]
+    const completion = buildFreestyleRoundCompletion(
+      cards,
+      { one: encounter({ effectiveSeconds: 42 }) },
+      1,
+      {
+        learningTime: {
+          unitSeconds: 0,
+          quizSeconds: 15,
+          lookupSeconds: 5,
+          backfilled: true,
+          byPalace: {},
+        },
+      },
+    )
+
+    expect(completion.totalEffectiveSeconds).toBe(62)
+    expect(completion.quizSeconds).toBe(15)
+    expect(completion.bySubject[0]?.effectiveSeconds).toBe(42)
+  })
 })
 
 describe('isFreestyleRoundComplete', () => {

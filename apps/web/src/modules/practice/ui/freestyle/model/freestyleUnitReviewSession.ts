@@ -69,7 +69,7 @@ export function loadSessionWithTimeout(
     const timeout = window.setTimeout(() => {
       // Leave the shared promise in place. A retry of this same glance must
       // attach to the request already on the wire, not open another one.
-      reject(new Error('这张还在准备评分，你可以先看。'))
+      reject(new Error('这张图还在打开，评分可以先点。'))
     }, SESSION_LOAD_TIMEOUT_MS)
     void loadSession(card, encounter, roundId).then(
       (value) => {

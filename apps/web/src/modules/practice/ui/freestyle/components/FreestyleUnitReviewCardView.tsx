@@ -146,7 +146,8 @@ export function FreestyleUnitReviewCardView({
   blockedHint?: string | null
   /**
    * Fired when the learner rates, before the server answers, so the channel and
-   * the next card do not wait on the network. A failed post rolls the card back.
+   * the next card do not wait on the network. A failed post keeps the score and
+   * asks for one more tap; it must not reload the card.
    */
   onRatingSettled?: (
     cardId: string,
@@ -222,6 +223,14 @@ export function FreestyleUnitReviewCardView({
   const rateHoldRef = useRef(0)
   const mailboxRef = useRef<RateMailbox>(emptyMailbox())
   const optimisticRatingRef = useRef<UnitRating | null>(null)
+  const saveFailedRef = useRef(false)
+  const commitHoldRef = useRef(0)
+  const commitIdleRef = useRef(true)
+  const commitChainRef = useRef<Promise<void>>(Promise.resolve())
+  const urgentGlanceRef = useRef(false)
+  const glanceWaitersRef = useRef<Array<(value: UnitReviewSessionDto | null) => void>>([])
+  const [intentRating, setIntentRating] = useState<UnitRating | null>(null)
+  const [glanceKick, setGlanceKick] = useState(0)
   const baselinesRef = useRef(new Map<number, UnitReviewSessionDto>())
   const lastOperationIdRef = useRef<string | null>(null)
   const planVersionRef = useRef(planVersion)
@@ -254,9 +263,13 @@ export function FreestyleUnitReviewCardView({
   planVersionRef.current = planVersion
   roundIdRef.current = roundId
   lastOperationIdRef.current = lastOperationId
-  sessionRef.current = session
-  const unit = session?.units.find((item) => item.id === card.unit_id) ?? null
-  unitRef.current = unit
+  // A render can land before setSession flushes. Do not wipe the glance the
+  // in-flight score just adopted, or the post reads an empty unit and fails.
+  if (session || commitHoldRef.current === 0) {
+    sessionRef.current = session
+    unitRef.current = session?.units.find((item) => item.id === card.unit_id) ?? null
+  }
+  const unit = unitRef.current
   const { breath, signalRating, clearBreath } = useFreestyleFlowFeedback()
   const rateBridgeRef = useRef({
     onEncounterChange,
@@ -337,6 +350,9 @@ export function FreestyleUnitReviewCardView({
     setRecapOnly(false)
     setLoadErrorTitle(null)
     setLoadErrorHint(null)
+    setIntentRating(null)
+    optimisticRatingRef.current = null
+    saveFailedRef.current = false
   }, [card.id, roundId])
 
   const revealUndo = useCallback(() => {
@@ -397,7 +413,7 @@ export function FreestyleUnitReviewCardView({
 
   const closeCurrentEncounter = useCallback(() => {
     // A rate POST still references this encounter. Leave-close waits until it settles.
-    if (busyRef.current || rateHoldRef.current > 0) {
+    if (busyRef.current || rateHoldRef.current > 0 || commitHoldRef.current > 0) {
       return Promise.resolve(null)
     }
     const currentSession = sessionRef.current
@@ -492,9 +508,14 @@ export function FreestyleUnitReviewCardView({
   const closeCurrentEncounterRef = useRef(closeCurrentEncounter)
   closeCurrentEncounterRef.current = closeCurrentEncounter
 
+  function resolveGlanceWaiters(value: UnitReviewSessionDto | null) {
+    const waiters = glanceWaitersRef.current.splice(0)
+    waiters.forEach((waiter) => waiter(value))
+  }
+
   useEffect(() => {
     const liveCard = cardRef.current
-    if (!active) return
+    if (!active && commitHoldRef.current === 0) return
     if (recapOnly) return
     if (!liveCard.unit_id || effectiveRevision == null || !cardUnitKey) {
       rateBridgeRef.current.onStaleDrop(liveCard.id)
@@ -538,6 +559,7 @@ export function FreestyleUnitReviewCardView({
     const glanceToken = `${cardUnitKey}:${identity?.encounterId ?? ''}:${loadAttempt}`
     if (sameOpenGlance || sameClosedView || sameRatedOpenGlance) {
       if (pendingGlanceRef.current === glanceToken) pendingGlanceRef.current = null
+      if (sessionRef.current) resolveGlanceWaiters(sessionRef.current)
       return
     }
     // Parent echo of the encounter we just opened must not start a second POST.
@@ -550,9 +572,11 @@ export function FreestyleUnitReviewCardView({
       effectiveRevision !== liveCard.unit_revision
         ? { ...liveCard, unit_revision: effectiveRevision }
         : liveCard
-    // A card that is only passed through must not open or cancel a session.
-    // Rating still waits on the encounter, which the bar already disables.
-    const delay = loadAttempt > 0 ? 0 : FREESTYLE_SESSION_OPEN_DELAY_MS
+    // A flashed card, a fast flip, or a progress-rail flyby must not open a glance.
+    // Scoring does not wait on this delay: a tap opens the glance immediately.
+    const urgent = urgentGlanceRef.current
+    urgentGlanceRef.current = false
+    const delay = loadAttempt > 0 || urgent ? 0 : FREESTYLE_SESSION_OPEN_DELAY_MS
     if (glanceTimerRef.current != null) window.clearTimeout(glanceTimerRef.current)
     const timer = window.setTimeout(() => {
       if (glanceTimerRef.current === timer) glanceTimerRef.current = null
@@ -566,9 +590,18 @@ export function FreestyleUnitReviewCardView({
           const value = await loadSessionWithTimeout(sessionCard, liveIdentity, roundId)
           const left = loadGenerationRef.current !== generation || !activeRef.current || !mountedRef.current
           if (left) {
+            const nextUnit = value.units.find((item) => item.id === liveCard.unit_id)
+            if (commitHoldRef.current > 0 && nextUnit?.encounter) {
+              sessionRef.current = value
+              unitRef.current = nextUnit
+              if (mountedRef.current && activeRef.current) setSession(value)
+              resolveGlanceWaiters(value)
+              return
+            }
             if (!activeRef.current || !mountedRef.current) {
               await abandonUnshownSession(value, liveCard.unit_id)
             }
+            if (loadGenerationRef.current === generation) resolveGlanceWaiters(null)
             return
           }
           const nextUnit = value.units.find((item) => item.id === liveCard.unit_id)
@@ -580,6 +613,7 @@ export function FreestyleUnitReviewCardView({
           })
           if (decision.action === 'drop' || !nextUnit?.encounter) {
             rateBridgeRef.current.onStaleDrop(liveCard.id)
+            resolveGlanceWaiters(null)
             return
           }
           if (liveCard.unit_id) rememberUnitPreview(liveCard.unit_id, nextUnit.revision, value)
@@ -597,17 +631,20 @@ export function FreestyleUnitReviewCardView({
             liveCard.id,
             encounterState(value.id, nextUnit.revision, nextUnit.encounter),
           )
+          resolveGlanceWaiters(value)
         } catch (error) {
           if (loadGenerationRef.current !== generation || !activeRef.current || !mountedRef.current) return
           lastLoadErrorRef.current = error
           if (isPermanentUnitAbsence(error)) {
             setStaleRecovery(true)
             rateBridgeRef.current.onStaleDrop(liveCard.id, { force: true })
+            resolveGlanceWaiters(null)
             return
           }
           if (isStaleUnitError(error)) {
             setStaleRecovery(true)
             rateBridgeRef.current.onStaleDrop(liveCard.id)
+            resolveGlanceWaiters(null)
             return
           }
           const copy = freestyleUnitLoadFailureCopy(error)
@@ -623,6 +660,7 @@ export function FreestyleUnitReviewCardView({
           setLoadErrorTitle(copy.title)
           setLoadErrorHint(copy.hint)
           setActionError(null)
+          resolveGlanceWaiters(null)
         }
       })
     }, delay)
@@ -630,11 +668,13 @@ export function FreestyleUnitReviewCardView({
     return () => {
       // Unmount cleanup runs after the mountedRef effect, which is declared
       // later. A leaked timer would POST into the next card.
+      if (commitHoldRef.current > 0) return
       if (!mountedRef.current) {
         window.clearTimeout(timer)
         if (glanceTimerRef.current === timer) glanceTimerRef.current = null
         if (pendingGlanceRef.current === glanceToken) pendingGlanceRef.current = null
         if (loadGenerationRef.current === generation) loadGenerationRef.current += 1
+        resolveGlanceWaiters(null)
         return
       }
       const sameGlance = activeRef.current
@@ -666,6 +706,7 @@ export function FreestyleUnitReviewCardView({
     readOnly,
     roundId,
     loadAttempt,
+    glanceKick,
   ])
 
   const wasActiveRef = useRef(false)
@@ -683,11 +724,13 @@ export function FreestyleUnitReviewCardView({
     mountedRef.current = true
     return () => {
       mountedRef.current = false
+      if (commitHoldRef.current > 0) return
       if (glanceTimerRef.current != null) {
         window.clearTimeout(glanceTimerRef.current)
         glanceTimerRef.current = null
       }
       mailboxRef.current = { ...emptyMailbox(), latest: mailboxRef.current.latest + 1 }
+      resolveGlanceWaiters(null)
       void enqueueFreestyleSessionTask(() => closeCurrentEncounterRef.current())
     }
   }, [])
@@ -708,7 +751,7 @@ export function FreestyleUnitReviewCardView({
     }
   }
 
-  function paintOptimistic(rating: UnitRating, encounterId: string) {
+  function paintOptimistic(rating: UnitRating, encounterId: string, notifyParent = true) {
     const currentSession = sessionRef.current
     const currentUnit = unitRef.current
     const currentEncounter = currentUnit?.encounter
@@ -731,17 +774,20 @@ export function FreestyleUnitReviewCardView({
     const bridge = rateBridgeRef.current
     const cardId = cardRef.current.id
     bridge.onEncounterChange(cardId, encounterState(currentSession.id, nextUnit.revision, nextEncounter))
-    bridge.onBranchComplete(cardId, { restudy: !passed, rating, retryAfterCards: gap })
     bridge.onRatingSettled?.(cardId, passed, rating, {
       occurrenceId: cardRef.current.occurrence_kind === 'retry' ? cardId : cardId,
       encounterId,
       planVersion: planVersionRef.current,
     })
+    if (!notifyParent) return
+    bridge.onBranchComplete(cardId, { restudy: !passed, rating, retryAfterCards: gap })
     bridge.signalRating(rating, passed)
   }
 
   function paintCleared() {
     optimisticRatingRef.current = null
+    saveFailedRef.current = false
+    if (mountedRef.current) setIntentRating(null)
     const currentSession = sessionRef.current
     const currentUnit = unitRef.current
     const currentEncounter = currentUnit?.encounter
@@ -770,9 +816,10 @@ export function FreestyleUnitReviewCardView({
 
   function rollbackRating(generation: number) {
     const baseline = baselinesRef.current.get(generation)
-    optimisticRatingRef.current = null
     const cardId = cardRef.current.id
     if (!baseline) {
+      optimisticRatingRef.current = null
+      if (mountedRef.current) setIntentRating(null)
       rateBridgeRef.current.onBranchComplete(cardId, { cleared: true })
       return
     }
@@ -781,6 +828,8 @@ export function FreestyleUnitReviewCardView({
     unitRef.current = nextUnit
     if (mountedRef.current) setSession(baseline)
     const previous = asUnitRating(nextUnit?.encounter?.selected_rating)
+    optimisticRatingRef.current = previous
+    if (mountedRef.current) setIntentRating(previous)
     if (nextUnit?.encounter) {
       rateBridgeRef.current.onEncounterChange(
         cardId,
@@ -800,7 +849,7 @@ export function FreestyleUnitReviewCardView({
 
   async function postRating(ticket: RateTicket) {
     const currentUnit = unitRef.current
-    if (!currentUnit) return null
+    if (!currentUnit && !roundIdRef.current) return null
     const payload = {
       operation_id: ticket.operationId,
       expected_version: planVersionRef.current,
@@ -872,10 +921,20 @@ export function FreestyleUnitReviewCardView({
       currentSession.id === nextSessionId ? currentSession : { ...currentSession, id: nextSessionId },
       nextUnit,
     )
-    optimisticRatingRef.current = asUnitRating(nextEncounter.selected_rating)
+    const newerIntent = optimisticRatingRef.current != null
+      && optimisticRatingRef.current !== ticket.rating
     sessionRef.current = nextSession
     unitRef.current = nextUnit
     if (mountedRef.current) setSession(nextSession)
+    if (newerIntent) {
+      // A slower reply must not paint over the grade they tapped afterwards.
+      paintOptimistic(optimisticRatingRef.current, nextEncounter.id, false)
+      return
+    }
+    const settledRating = asUnitRating(nextEncounter.selected_rating)
+    optimisticRatingRef.current = settledRating
+    saveFailedRef.current = false
+    if (mountedRef.current) setIntentRating(settledRating)
     rememberOperation(unitResult.operation_id)
     rateBridgeRef.current.onEncounterChange(
       ticket.cardId,
@@ -949,11 +1008,9 @@ export function FreestyleUnitReviewCardView({
         if (typeof revision === 'number') follow.send.unitRevision = revision
       }
       if (!posted?.unitResult) {
-        if (current) {
-          rollbackRating(ticket.generation)
-          if (mountedRef.current) setActionError('评分没有记下，请重试。')
-        }
+        if (current) markSaveFailed()
       } else if (current) {
+        saveFailedRef.current = false
         settleRating(posted.unitResult, ticket, posted.nextPlanVersion)
       }
       baselinesRef.current.delete(ticket.generation)
@@ -979,12 +1036,7 @@ export function FreestyleUnitReviewCardView({
         rateBridgeRef.current.onStaleDrop(ticket.cardId)
         return
       }
-      if (current && !follow.undo) {
-        rollbackRating(ticket.generation)
-        if (mountedRef.current) setActionError('评分没有记下，请再点一次。')
-        setLoadError(diagnostic)
-        rateBridgeRef.current.onSaveFailed('评分没有记下，请再点一次。')
-      }
+      if (current && !follow.undo) markSaveFailed()
       baselinesRef.current.delete(ticket.generation)
       if (follow.send) await dispatchRating(follow.send)
     } finally {
@@ -992,56 +1044,162 @@ export function FreestyleUnitReviewCardView({
     }
   }
 
-  async function rate(rating: UnitRating) {
-    const currentEncounter = unit?.encounter
-    const liveSelected = optimisticRatingRef.current ?? currentEncounter?.selected_rating
-    if (liveSelected === rating) {
-      await undoRating({ clearAll: true })
+  function markSaveFailed() {
+    saveFailedRef.current = true
+    if (mountedRef.current) setActionError('评分没有记下，请再点一次。')
+    rateBridgeRef.current.onSaveFailed('评分没有记下，请再点一次。')
+  }
+
+  function requestGlanceNow() {
+    urgentGlanceRef.current = true
+    if (glanceTimerRef.current != null) {
+      window.clearTimeout(glanceTimerRef.current)
+      glanceTimerRef.current = null
+    }
+    pendingGlanceRef.current = null
+    setGlanceKick((value) => value + 1)
+  }
+
+  function waitForGlance() {
+    const open = sessionRef.current
+    const openUnit = open?.units.find((item) => item.id === cardRef.current.unit_id) ?? null
+    if (open && openUnit?.encounter?.status === 'open') return Promise.resolve(open)
+    return new Promise<UnitReviewSessionDto | null>((resolve) => {
+      const finish = (value: UnitReviewSessionDto | null) => {
+        window.clearTimeout(timer)
+        resolve(value)
+      }
+      const timer = window.setTimeout(() => {
+        glanceWaitersRef.current = glanceWaitersRef.current.filter((waiter) => waiter !== finish)
+        resolve(null)
+      }, 50_000)
+      glanceWaitersRef.current.push(finish)
+    })
+  }
+
+  function paintLocalIntent(rating: UnitRating) {
+    optimisticRatingRef.current = rating
+    saveFailedRef.current = false
+    if (mountedRef.current) {
+      setIntentRating(rating)
+      setActionError(null)
+    }
+    const passed = ratingPassed(rating)
+    const cardId = cardRef.current.id
+    const knownEncounterId = unitRef.current?.encounter?.id
+    rateBridgeRef.current.onBranchComplete(cardId, {
+      restudy: !passed,
+      rating,
+      retryAfterCards: passed ? 0 : retryAfterCards,
+    })
+    rateBridgeRef.current.onRatingSettled?.(cardId, passed, rating, {
+      occurrenceId: cardRef.current.occurrence_kind === 'retry' ? cardId : cardId,
+      ...(knownEncounterId ? { encounterId: knownEncounterId } : {}),
+      planVersion: planVersionRef.current,
+    })
+    rateBridgeRef.current.signalRating(rating, passed)
+  }
+
+  async function ensureAndDispatch(rating: UnitRating) {
+    if (optimisticRatingRef.current !== rating) return
+    let currentSession = sessionRef.current
+    let currentUnit = currentSession?.units.find((item) => item.id === cardRef.current.unit_id) ?? unitRef.current
+    let currentEncounter = currentUnit?.encounter ?? null
+    if (!currentSession || !currentUnit || currentEncounter?.status !== 'open') {
+      requestGlanceNow()
+      const opened = await waitForGlance()
+      if (optimisticRatingRef.current !== rating) return
+      currentSession = opened ?? sessionRef.current
+      currentUnit = currentSession?.units.find((item) => item.id === cardRef.current.unit_id) ?? null
+      currentEncounter = currentUnit?.encounter ?? null
+    }
+    if (optimisticRatingRef.current !== rating) return
+    if (!currentSession || !currentUnit || !currentEncounter || currentEncounter.status !== 'open') {
+      markSaveFailed()
       return
     }
-    const recorded = asUnitRating(lastRating) ?? asUnitRating(encounter?.selectedRating)
-    if (optimisticRatingRef.current == null && currentEncounter?.selected_rating == null && recorded === rating) {
-      return
-    }
-    const blockedReason = !session || !unit || !currentEncounter
-      ? '正在准备评分，请稍等。'
-      : busy
-        ? '正在记下这一笔，请稍候。'
-        : readOnly
-          ? '历史记录为只读，不能评分。'
-          : currentEncounter.status !== 'open'
-            ? (
-              encounter?.status === 'pending'
-                ? '正在准备评分，请稍等。'
-                : '这次评分已经结束。可以返回上一张再改，或跳过。'
-            )
-            : null
-    if (blockedReason) {
-      setActionError(blockedReason)
-      return
-    }
-    setActionError(null)
     const generation = mailboxRef.current.latest + 1
-    // A grade queued behind one already on the wire rolls back to the last
-    // confirmed session, not to the optimistic paint of that in-flight grade.
     const inflightGeneration = mailboxRef.current.inflight?.generation
     const baseline = (inflightGeneration != null
       ? baselinesRef.current.get(inflightGeneration)
-      : null) ?? sessionRef.current
+      : null) ?? currentSession
     if (baseline) baselinesRef.current.set(generation, baseline)
     const decision = acceptRating(mailboxRef.current, {
       rating,
       operationId: operationId(),
-      cardId: card.id,
-      occurrenceId: card.occurrence_kind === 'retry' ? card.id : '',
+      cardId: cardRef.current.id,
+      occurrenceId: cardRef.current.occurrence_kind === 'retry' ? cardRef.current.id : '',
       encounterId: currentEncounter.id,
-      unitId: unit.id,
-      sessionId: session.id,
-      unitRevision: unit.revision,
+      unitId: currentUnit.id,
+      sessionId: currentSession.id,
+      unitRevision: currentUnit.revision,
     })
     mailboxRef.current = decision.box
-    paintOptimistic(rating, currentEncounter.id)
-    if (decision.sendNow) void dispatchRating(decision.ticket)
+    paintOptimistic(rating, currentEncounter.id, false)
+    if (decision.sendNow) await dispatchRating(decision.ticket)
+  }
+
+  function enqueueCommit(rating: UnitRating) {
+    holdEncounter()
+    commitHoldRef.current += 1
+    const job = async () => {
+      try {
+        await ensureAndDispatch(rating)
+      } finally {
+        commitHoldRef.current = Math.max(0, commitHoldRef.current - 1)
+        releaseEncounter()
+      }
+    }
+    // An already-open glance must post in this turn. Chaining on a resolved
+    // promise would defer the write until a microtask, after the tap returns.
+    if (commitIdleRef.current) {
+      commitIdleRef.current = false
+      const run = job()
+      commitChainRef.current = run.then(() => {
+        commitIdleRef.current = true
+      }, () => {
+        commitIdleRef.current = true
+      })
+      return
+    }
+    const run = commitChainRef.current.then(job, job)
+    commitChainRef.current = run.then(() => undefined, () => undefined)
+  }
+
+  async function rate(rating: UnitRating) {
+    if (readOnly) {
+      setActionError('历史记录为只读，不能评分。')
+      return
+    }
+    const currentEncounter = unitRef.current?.encounter ?? null
+    const liveSelected = optimisticRatingRef.current ?? asUnitRating(currentEncounter?.selected_rating)
+    if (liveSelected === rating && !saveFailedRef.current) {
+      await undoRating({ clearAll: true })
+      return
+    }
+    const recorded = asUnitRating(lastRating) ?? asUnitRating(encounterRef.current?.selectedRating)
+    if (
+      !saveFailedRef.current
+      && optimisticRatingRef.current == null
+      && currentEncounter?.selected_rating == null
+      && recorded === rating
+    ) {
+      return
+    }
+    if (
+      currentEncounter?.status === 'closed'
+      && encounterRef.current?.status !== 'pending'
+      && encounterRef.current?.status !== 'open'
+    ) {
+      setActionError('这次评分已经结束。可以返回上一张再改，或跳过。')
+      return
+    }
+    if (!cardRef.current.unit_id) {
+      setActionError('这张卡不能评分。')
+      return
+    }
+    paintLocalIntent(rating)
+    enqueueCommit(rating)
   }
 
   const rateFromSheetRef = useRef(rate)
@@ -1049,14 +1207,12 @@ export function FreestyleUnitReviewCardView({
   const handledSheetRating = useRef('')
   useEffect(() => {
     if (!active || requestedRating == null) return
-    const openEncounter = unit?.encounter
-    if (!session || !unit || openEncounter?.status !== 'open' || busy) return
-    const key = `${card.id}:${openEncounter.id}:${requestedRating}`
+    const key = `${card.id}:${requestedRating}`
     if (handledSheetRating.current === key) return
     handledSheetRating.current = key
     onRequestedRatingHandled?.()
     void rateFromSheetRef.current(requestedRating)
-  }, [active, busy, card.id, onRequestedRatingHandled, requestedRating, session, unit])
+  }, [active, card.id, onRequestedRatingHandled, requestedRating])
 
   async function undoRating(options?: { clearAll?: boolean }) {
     if (readOnly) {
@@ -1107,8 +1263,13 @@ export function FreestyleUnitReviewCardView({
       cardParticles.playUndo(undoneRating as UnitRating | null)
       sessionRef.current = workingSession
       unitRef.current = workingUnit
-      optimisticRatingRef.current = asUnitRating(lastResult.encounter.selected_rating)
-      if (mountedRef.current) setSession(workingSession)
+      const undoneSelection = asUnitRating(lastResult.encounter.selected_rating)
+      optimisticRatingRef.current = undoneSelection
+      saveFailedRef.current = false
+      if (mountedRef.current) {
+        setIntentRating(undoneSelection)
+        setSession(workingSession)
+      }
       rememberOperation(lastResult.encounter.effective_operation_id)
       const cardId = cardRef.current.id
       rateBridgeRef.current.onEncounterChange(
@@ -1157,11 +1318,13 @@ export function FreestyleUnitReviewCardView({
   const reviewReady = Boolean(editorState && session && unit && unit.encounter)
   const currentEncounter = unit?.encounter ?? null
   const liveRating = currentEncounter?.selected_rating ?? null
-  const selectedRating = asUnitRating(liveRating)
+  const selectedRating = intentRating ?? asUnitRating(liveRating)
   const recordedRating = asUnitRating(lastRating) ?? asUnitRating(encounter?.selectedRating)
-  const locked = readOnly || !reviewReady || (
-    currentEncounter?.status === 'closed' && encounter?.status !== 'pending' && encounter?.status !== 'open'
-  )
+  const ended = currentEncounter?.status === 'closed'
+    && encounter?.status !== 'pending'
+    && encounter?.status !== 'open'
+  const canRateWithoutPlan = !readOnly && !ended && !recapOnly && Boolean(card.unit_id)
+  const locked = readOnly || ended
   const titleText = stripMindMapHtml(
     unit?.title || card.palace_title || `宫殿 ${card.palace_id}`,
   )
@@ -1239,7 +1402,10 @@ export function FreestyleUnitReviewCardView({
             roundId={flipSource.live ? roundId : null}
             syncedRevealMap={flipSource.live ? liveRevealMap : null}
             onRevealMapChange={flipSource.live ? onLiveRevealMapChange : undefined}
-            onOpenScopeQuiz={flipSource.live ? onOpenScopeQuiz : undefined}
+            // 做题 is the round overlay, not this card's glance. A preview map is
+            // already on screen while the score session is still opening; hiding
+            // the button until that write finishes is what made 做题 look gone.
+            onOpenScopeQuiz={active ? onOpenScopeQuiz : undefined}
           />
           </div>
         ) : (
@@ -1268,7 +1434,20 @@ export function FreestyleUnitReviewCardView({
           />
         )}
 
-        {active && !inlineEditing && !recapOnly && (flipSource || !loadError) ? (
+        {active && !flipSource && onOpenScopeQuiz ? (
+          <div className="flex justify-end px-3 pt-2">
+            <button
+              type="button"
+              data-testid="freestyle-quiz-while-opening"
+              className="ma-pressable rounded-full border border-stage-line bg-stage-overlay px-3 py-1 text-xs font-medium text-stage-ink"
+              onClick={onOpenScopeQuiz}
+            >
+              做题
+            </button>
+          </div>
+        ) : null}
+
+        {active && !inlineEditing && !recapOnly && (flipSource || !loadError || canRateWithoutPlan) ? (
           <FreestyleRatingBar
             ratingEffects={currentEncounter?.rating_effects ?? []}
             selectedRating={selectedRating}
@@ -1278,16 +1457,10 @@ export function FreestyleUnitReviewCardView({
             locked={locked}
             reviewReady={reviewReady}
             hasEncounter={Boolean(currentEncounter)}
+            canRateWithoutPlan={canRateWithoutPlan}
             actionError={actionError}
             blockedHint={blockedHint}
-            /* All four rating buttons disable when the encounter is not ready, which
-               used to leave a dimmed bar whose only clue was a tiny '加载中' label.
-               A tap then did nothing and read as a dead app. Say why, in words. */
-            disabledReason={
-              currentEncounter
-                ? null
-                : '正在准备评分'
-            }
+            disabledReason={null}
             assistantCopy={loadError}
             shortcutsActive={active && !inlineEditing}
             onRate={(rating) => void rate(rating)}

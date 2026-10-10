@@ -515,11 +515,22 @@ function planCardFromLive(
   }
 }
 
+/** Plan row for a swipeable card, even when this round has not stamped one yet. */
+export function planEntryForLiveCard(
+  card: FreestyleCard,
+  plan: FreestyleRoundPlanState | null,
+): FreestyleRoundPlanCard | null {
+  const id = String(card.id || '').trim()
+  if (!id) return null
+  return plan?.cardsById[id] ?? planCardFromLive(card, 'pending', 0)
+}
+
 /**
  * Confirm 移除队列 on these ids. This round stops arranging them, the same as
  * 记得/轻松, without a 1–4 rating. A live id missing from the plan is inserted
- * excluded. An id that is no longer in the feed still gets a ledger tick, so
- * the rail stays filled after the card is hidden. Unscored siblings of the
+ * excluded. An id that is no longer in the feed still gets a ledger row, so
+ * 已排除 can restore it, but the progress rail only draws cards still in the
+ * swipeable feed. Unscored siblings of the
  * same unit, including a retry that has not been graded, are excluded too.
  * A row that already has its own score stays.
  */

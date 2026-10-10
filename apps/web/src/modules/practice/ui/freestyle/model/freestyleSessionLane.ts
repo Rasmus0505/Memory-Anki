@@ -66,5 +66,9 @@ export function resetFreestyleSessionLaneForTests() {
   wakeIdleWaiters()
 }
 
-/** How long a card must stay active before a session write is worth sending. */
-export const FREESTYLE_SESSION_OPEN_DELAY_MS = 160
+/**
+ * How long a settled card must stay before a background glance is worth opening.
+ * Scoring does not wait on this. A flash, a fast flip, or a progress-rail flyby
+ * must not open or cancel a session.
+ */
+export const FREESTYLE_SESSION_OPEN_DELAY_MS = 480

@@ -37,7 +37,7 @@ stored rating still must not invent 记得. Cursors stay independent. A fully ha
 freezes on `get_or_create` so the closing settlement slot stays reachable; leftover due
 work advances only when the learner explicitly starts the next round via config confirm
 (`「再来一轮」` → `/rounds/start`). Page refresh, app restart, and HUD queue refresh must
-never mint a new `round_id`. The overflow action 「同步进度」 reads
+never mint a new `round_id`. The overflow action 「更新队列」 is separate: it replans this round from the latest due projection, keeps already-rated cards, and does not replace the ledger with the other computer's scores. The overflow action 「同步进度」 reads
 `GET /freestyle/rounds/active` and replaces the local ledger with that workspace
 round. It drops local-only scores so a phone draft cannot keep ratings the
 computer's round does not have, and it does not mint a `round_id`, append cards,
@@ -70,8 +70,8 @@ the first card or minting a fresh queue.
 A palace/subject scope change rebinds the same `round_id`: overlapping identities keep
 completed / excluded / retry marks; only unstarted work outside the new scope is dropped.
 Refresh must not mint a new `round_id` or drop completed cards from the HUD/feed, except cards
-the learner explicitly compressed with 「结算已完成单元」. Completed source
-cards stay in presented order so swipe-back / 上一张 can reopen them until that compress. Re-scoring a completed
+the learner explicitly compressed with 「结算已完成单元」. A 结算 drops the source and every live retry of that source. A retry whose source id is in `compressedIds` leaves the rail, the sheet, and the swipe feed; it must not stay as a lit tick the learner cannot reach. Scoring alone never removes those ticks. Completed source
+cards stay in presented order so swipe-back / 上一张 can reopen them until that compress. A window that has lost its local plan adopts the workspace active round and must not mint a new `round_id` while that round exists. A quota miss may compact the stored snapshot, but the live session keeps the plan the learner is looking at. 做题 stays available while the map is still opening. The card must not say it is still preparing a score. Re-scoring a completed
 unit in the same round amends from that round's original baseline; it does not stack SRS.
 A rating write that arrives after the glance session was abandoned, completed, or cancelled
 reopens that unit in the same round and applies the latest rating; it must not return
@@ -81,8 +81,13 @@ round. If the previous study session is still `active` with a passed item and no
 encounter, start finishes that session and opens a new one. It must not return
 `passed review unit cannot start another encounter`. Freestyle unit load failures that
 cannot be healed do not toast English API text; the card offers 重试 / 跳过这张 / 重建本轮 /
-只看不评. A slow session start must not replace a visible map with that wall: the learner
-keeps reading, and the rating bar says 正在准备评分 until the same glance is ready. A card's
+只看不评. A slow session start must not replace a visible map, and it must not block
+scoring. The four ratings are pressable as soon as the card is on screen; the score paints
+immediately and the save follows. A failed save keeps that score and asks for one more tap —
+it must not reload the card or make the learner re-read it. Fast flips and progress-rail
+jumps must not open a glance for cards that were only passed. A glance opens when the learner
+rates, or after they settle on a card. Returning to a card shows the score already recorded
+for this round without starting preparation over. A card's
 `POST /review/units/{id}/sessions` carries a 45s transport timeout
 (`SESSION_START_TIMEOUT_MS`) and is deliberately kept out of the mutation queue
 (`persistence: false`) because the UI re-issues the same encounter id, not a new glance.
@@ -572,6 +577,6 @@ whether to clear overlay 已做 for every review palace this 随心配置 round 
 the answered records so 做题 can still be reviewed. 清除 calls `/overlay-quiz/drop-palaces`
 with those palace ids and clears the SPA mirror for them.
 
-Settlement time is round-scoped and survives a restart or the next day. 「本次随心」 is unit dwell plus 做题 plus 查看宫殿. Looking at a card, flipping its nodes, and reading the back are unit dwell; flip is not added again. 「做题时间」 is only the quiz overlay, whether it was opened from the card corner badge or the toolbar. 查看宫殿 while a quiz is open stays in the round total and out of 做题时间. Seconds live on the round plan as `learning_time`. The first open of a round copies dwell segments since that round was created, then the page clock adds only later seconds so the same interval is not counted twice. Durations of at least one hour render as `H:MM:SS`; shorter times stay `M:SS`.
+Settlement time is round-scoped and survives a restart or the next day. It is the time spent on the progress-bar queue: looking at a card, flipping, and recalling, including a leave of about three minutes. A longer absence is not backfilled. A visible window counts even when the page focus flag is false; the desktop shell reports its own window focus so a real switch away can stop after that grace. An empty round clock must not wipe the queue's card time. 「本次随心」 is unit dwell plus 做题 plus 查看宫殿. Looking at a card, flipping its nodes, and reading the back are unit dwell; flip is not added again. 「做题时间」 is only the quiz overlay, whether it was opened from the card corner badge or the toolbar. 查看宫殿 while a quiz is open stays in the round total and out of 做题时间. Seconds live on the round plan as `learning_time`. The first open of a round copies dwell segments since that round was created, then the page clock adds only later seconds so the same interval is not counted twice. Durations of at least one hour render as `H:MM:SS`; shorter times stay `M:SS`.
 
 Leaving the settlement slot cancels that visit and does not end the round. The card’s 「取消结算」 and the right-side 「上一张」 both return to the previous card. The learning clock pauses only while the settlement slot is on screen. After that leave, later card dwell and 做题 still accumulate on the same `learning_time`.

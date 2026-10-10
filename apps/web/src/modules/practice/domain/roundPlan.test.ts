@@ -15,7 +15,13 @@ import {
   excludeRoundPlanCards,
   updateRoundPlanCard,
 } from './roundPlan'
-import { compressRoundPlanCards, compressibleRoundPlanIds } from './roundPlanCompress'
+import {
+  cardSettledOut,
+  compressRoundPlanCards,
+  compressibleRoundPlanIds,
+  expandSettledIds,
+  settledIdSet,
+} from './roundPlanCompress'
 import {
   cardPalaceId,
   createRetryOccurrence,
@@ -488,5 +494,46 @@ describe('round plan reducer', () => {
         },
       },
     })).toEqual([])
+  })
+
+  it('compresses a passed retry together with its weak source', () => {
+    const cards = [card('a', 1), card('b', 1)]
+    const retry = createRetryOccurrence(cards[0], 'round-1', 1, 3)
+    const withRetry = createRoundPlan('round-1', [...cards, retry], config)
+    const stamped = updateRoundPlanCard(
+      updateRoundPlanCard(withRetry, 'a', { status: 'retry', lastRating: 1 }),
+      retry.id,
+      { status: 'completed', occurrenceKind: 'retry', sourceCardId: 'a', lastRating: 3 },
+    )
+    expect(compressibleRoundPlanIds(stamped, {
+      completedIds: [retry.id],
+      encounters: {
+        a: {
+          encounterId: 'enc-a',
+          unitRevision: 1,
+          status: 'closed',
+          sessionId: null,
+          selectedRating: 1,
+          passed: false,
+          retryAfterCards: 3,
+        },
+        [retry.id]: {
+          encounterId: 'enc-retry',
+          unitRevision: 1,
+          status: 'closed',
+          sessionId: null,
+          selectedRating: 3,
+          passed: true,
+          retryAfterCards: 0,
+        },
+      },
+    })).toEqual(['a', retry.id])
+  })
+
+  it('treats a live retry as settled when its source was compressed', () => {
+    const compressed = settledIdSet(['a'])
+    expect(cardSettledOut({ id: 'a-retry', source_card_id: 'a' }, compressed)).toBe(true)
+    expect(cardSettledOut({ id: 'b' }, compressed)).toBe(false)
+    expect(expandSettledIds(['a'], [{ id: 'a-retry', source_card_id: 'a' }])).toEqual(['a', 'a-retry'])
   })
 })

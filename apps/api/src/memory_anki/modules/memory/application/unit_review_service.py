@@ -695,7 +695,16 @@ def start_freestyle_unit_review_session(
     # Queue projection may reconcile a stale editor document inside its request
     # and return the new revision before that request is committed. Re-project
     # here so the queue card and the session start observe the same unit state.
+    #
+    # Reconcile flushes but does not commit. Leaving that write transaction open
+    # across the rest of this handler (another palace walk, competing-session
+    # release) holds SQLite's single writer for the whole start. Every other
+    # write — including 做题's overlay ensure — then waits out busy_timeout and
+    # comes back 503 "数据正在写入中". Commit the projection before continuing
+    # so a glance start is a short write, not a lock on the rest of the product.
     projection = get_palace_unit_projection(session, state.palace_id)
+    if session.new or session.dirty or session.deleted:
+        session.commit()
     session.refresh(state)
     if not state.active:
         raise ValueError("review unit not found")
@@ -714,7 +723,11 @@ def start_freestyle_unit_review_session(
 
     # Drop competing freestyle sessions from other units / clients before opening
     # this card. Prevents multi-palace wall-clock rows that all share one start.
+    # Commit here too: the next lookup would autoflush these staged abandons and
+    # keep the write transaction open until the encounter commit at the end.
     _release_competing_freestyle_unit_sessions(session, keep_unit_id=state.id)
+    if session.new or session.dirty or session.deleted:
+        session.commit()
 
     study = (
         session.query(StudySession)

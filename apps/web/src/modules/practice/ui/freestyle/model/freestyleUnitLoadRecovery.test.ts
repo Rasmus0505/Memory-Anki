@@ -16,10 +16,10 @@ describe('freestyleUnitLoadFailureCopy', () => {
   it('maps session-required and generic load failures without raw API text', () => {
     expect(freestyleUnitLoadFailureCopy({
       message: 'Active unit review session required',
-    }).title).toBe('复习会话还没准备好')
+    }).title).toBe('复习图还没打开')
     expect(freestyleUnitLoadFailureCopy(new Error('temporary API failure'))).toEqual({
-      title: '这张还在准备评分',
-      hint: '你可以先看。需要的话再重试、跳过或只看不评。',
+      title: '这张图还在打开',
+      hint: '评分可以先点。图晚一点也行。',
     })
   })
 })

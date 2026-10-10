@@ -142,6 +142,7 @@ export {
   isSequentialPalaceBlocked,
   mergeRetainedHiddenIds,
   planCardStatus,
+  planEntryForLiveCard,
   reorderRoundPlan,
   roundPlanConfigSignature,
   sanitizeRoundPlan,
@@ -152,8 +153,11 @@ export {
   type FreestyleRoundPlanState,
 } from './domain/roundPlan'
 export {
+  cardSettledOut,
   compressRoundPlanCards,
   compressibleRoundPlanIds,
+  expandSettledIds,
+  settledIdSet,
 } from './domain/roundPlanCompress'
 export { default as ImmersiveFreestylePage } from './ui/freestyle/ImmersiveFreestylePage'
 export * from './ui/review/api'

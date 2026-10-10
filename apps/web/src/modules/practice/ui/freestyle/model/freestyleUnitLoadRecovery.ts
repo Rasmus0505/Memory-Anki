@@ -27,8 +27,8 @@ export function freestyleUnitLoadFailureCopy(error: unknown): FreestyleUnitLoadC
     || message.includes('open review encounter required')
   ) {
     return {
-      title: '复习会话还没准备好',
-      hint: '先重试；不行再跳过或重建本轮。',
+      title: '复习图还没打开',
+      hint: '评分可以先点。需要的话再重试。',
     }
   }
   if (message.includes('palace not found') || message.includes('review unit not found')) {
@@ -44,7 +44,7 @@ export function freestyleUnitLoadFailureCopy(error: unknown): FreestyleUnitLoadC
     }
   }
   return {
-    title: '这张还在准备评分',
-    hint: '你可以先看。需要的话再重试、跳过或只看不评。',
+    title: '这张图还在打开',
+    hint: '评分可以先点。图晚一点也行。',
   }
 }

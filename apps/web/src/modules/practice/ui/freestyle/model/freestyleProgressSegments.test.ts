@@ -206,8 +206,8 @@ describe('buildFreestyleProgressSummary', () => {
     const retry = createRetryOccurrence(sources[0], 'round-1', 1, 3)
     const inserted = insertRetryOccurrenceAfterGap(sources, retry, 0)
     const unstamped = buildFreestyleProgressSummary(inserted, prior, [], [], 'a')
-    // The occurrence is in the feed but not in orderIds, so the rail dumps it at the tail.
-    expect(unstamped.segments.map((segment) => segment.cardId)).toEqual(['a', 'b', 'c', 'd', 'e', retry.id])
+    // The rail follows the swipeable feed, so the gap seat shows before the plan stamps it.
+    expect(unstamped.segments.map((segment) => segment.cardId)).toEqual(['a', 'b', 'c', 'd', retry.id, 'e'])
 
     const stamped = stampRestudyPlan(prior, inserted, 'round-1', DEFAULT_FREESTYLE_FEED_CONFIG, [{
       cardId: 'a',
@@ -242,7 +242,7 @@ describe('buildFreestyleProgressSummary', () => {
     expect(summary.segments.map((segment) => segment.palaceDone)).toEqual([true, true, true])
   })
 
-  it('lights a queue removal as a solid tick without counting it as a pass', () => {
+  it('does not light a queue removal that already left the feed', () => {
     const cards = [card('one'), card('gone'), card('two'), card('three')]
     const roundPlan = updateRoundPlanCard(plan(cards), 'gone', { status: 'excluded' })
     const summary = buildFreestyleProgressSummary(
@@ -252,29 +252,24 @@ describe('buildFreestyleProgressSummary', () => {
       ['gone'],
       'two',
     )
-    const removed = summary.segments.find((segment) => segment.cardId === 'gone')
-    const removedIndex = summary.segments.findIndex((segment) => segment.cardId === 'gone')
 
-    expect(summary.segments.map((segment) => segment.cardId)).toEqual(['one', 'gone', 'two', 'three'])
-    expect(removed).toMatchObject({ tone: 'done', removed: true, viewing: false })
-    expect(palaceAccentToneClass(removed?.palaceId ?? null, 'done')).not.toMatch(/\/\d+/)
-    expect(progressSegmentHoverLabel(removed!, removedIndex, summary.total)).toContain('已移出队列')
+    expect(summary.segments.map((segment) => segment.cardId)).toEqual(['one', 'two', 'three'])
     expect(summary.passedCount).toBe(0)
-    expect(summary.doneCount).toBe(1)
+    expect(summary.doneCount).toBe(0)
     expect(summary.scheduledBase).toBe(3)
-    expect(summary.total).toBe(4)
-    expect(summary.position).toBe(3)
-    expect(summary.segments.every((segment) => segment.palaceDone === false)).toBe(true)
+    expect(summary.total).toBe(3)
+    expect(summary.position).toBe(2)
   })
 
-  it('counts a lone queue removal as done and finishes its palace', () => {
+  it('does not keep a lone queue removal on an empty feed', () => {
     const cards = [card('gone')]
     const roundPlan = updateRoundPlanCard(plan(cards), 'gone', { status: 'excluded' })
     const summary = buildFreestyleProgressSummary([], roundPlan, [], ['gone'], null)
 
-    expect(summary.doneCount).toBe(1)
+    expect(summary.segments).toEqual([])
+    expect(summary.doneCount).toBe(0)
     expect(summary.passedCount).toBe(0)
-    expect(summary.segments[0]).toMatchObject({ tone: 'done', removed: true, palaceDone: true })
+    expect(summary.total).toBe(0)
   })
 
   it('keeps a removed card solid while it is the viewing playhead', () => {
@@ -385,12 +380,12 @@ describe('buildFreestyleProgressSummary', () => {
       [removed],
       'two',
     )
-    expect(summary.segments.map((segment) => segment.cardId)).toEqual([removed, 'two'])
-    expect(summary.segments[0]).toMatchObject({ tone: 'done', removed: true })
-    expect(palaceAccentToneClass(summary.segments[0]?.palaceId ?? null, 'done')).not.toMatch(/\/\d+/)
+    expect(summary.segments.map((segment) => segment.cardId)).toEqual([rebound, 'two'])
+    expect(summary.segments[0]).toMatchObject({ cardId: rebound, tone: 'pending' })
+    expect(summary.segments.some((segment) => segment.cardId === removed)).toBe(false)
   })
 
-  it('keeps a scored card solid after it leaves the live feed', () => {
+  it('keeps a scored card on the rail after it leaves the live feed until the learner settles', () => {
     const scheduled = [card('one'), card('two')]
     const remaining = [card('two')]
     const roundPlan = updateRoundPlanCard(plan(scheduled), 'one', { status: 'retry', lastRating: 1 })
@@ -408,11 +403,10 @@ describe('buildFreestyleProgressSummary', () => {
 
     expect(summary.segments.map((segment) => segment.cardId)).toEqual(['one', 'two'])
     expect(summary.segments[0]).toMatchObject({ cardId: 'one', tone: 'done' })
-    expect(summary.segments[0].removed).toBeUndefined()
     expect(summary.segments[1]).toMatchObject({ cardId: 'two', tone: 'pending' })
   })
 
-  it('keeps completed ticks from the plan when live cards only have remaining work', () => {
+  it('keeps completed ticks that left the live feed until the learner settles', () => {
     const scheduled = [card('one'), card('two'), card('three')]
     const remaining = [card('two'), card('three')]
     const roundPlan = applyCompletedIdsToRoundPlan(plan(scheduled), ['one'])
@@ -464,7 +458,7 @@ describe('buildFreestyleProgressSummary', () => {
     expect(progressSegmentHoverLabel(summary.segments[1], 1, 3)).toBe('2/3 · 重练《one》第 1 次 · 已过')
   })
 
-  it('keeps a retry occurrence tick when it is missing from live cards', () => {
+  it('does not keep a retry tick that is missing from live cards', () => {
     const scheduled = [
       card('one'),
       { ...card('retry:round-1:one:1'), source_card_id: 'one', occurrence_kind: 'retry' as const, retry_attempt: 1 },
@@ -484,16 +478,10 @@ describe('buildFreestyleProgressSummary', () => {
       'two',
     )
 
-    expect(summary.segments.map((segment) => segment.cardId)).toEqual(['one', 'retry:round-1:one:1', 'two'])
-    expect(summary.segments.map((segment) => segment.tone)).toEqual(['retry', 'retry', 'pending'])
-    expect(summary.segments.map((segment) => segment.kind)).toEqual(['source', 'retry', 'source'])
-    expect(summary.segments[1]).toMatchObject({
-      kind: 'retry',
-      tone: 'retry',
-      retryAttempt: 1,
-      sourceCardId: 'one',
-    })
-    expect(summary.retryInserted).toBe(1)
+    expect(summary.segments.map((segment) => segment.cardId)).toEqual(['one', 'two'])
+    expect(summary.segments.map((segment) => segment.tone)).toEqual(['retry', 'pending'])
+    expect(summary.segments.map((segment) => segment.kind)).toEqual(['source', 'source'])
+    expect(summary.retryInserted).toBe(0)
   })
 
   it('cuts the rail at every entry day, not only today versus earlier', () => {
@@ -827,5 +815,19 @@ describe('yellow boundary hint segment', () => {
     )
     expect(summary.segments.map((segment) => segment.cardId))
       .toEqual(['path', 'review_hint:formal_review', 'one'])
+  })
+
+  it('drops a live retry whose source was settled', () => {
+    const source = card('a')
+    const retry = createRetryOccurrence(source, 'round-1', 1, 3)
+    const summary = buildFreestyleProgressSummary(
+      [source, retry],
+      compressRoundPlanCards(plan([source]), ['a']),
+      [],
+      [],
+      null,
+    )
+    expect(summary.segments.map((segment) => segment.cardId)).not.toContain(retry.id)
+    expect(summary.segments.map((segment) => segment.cardId)).not.toContain('a')
   })
 })

@@ -644,7 +644,7 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(await screen.findByTestId('freestyle-copy-for-assistant')).toBeTruthy()
     expect(screen.queryByText(/网络请求失败/)).toBeNull()
     expect(screen.queryByText(/start-all/)).toBeNull()
-    expect(screen.getByText('正在准备评分')).toBeTruthy()
+    expect((screen.getByTestId('freestyle-rating-button-3') as HTMLButtonElement).disabled).toBe(false)
 
     view.rerenderCard({
       encounter: queueEncounter({ status: 'pending' }),
@@ -652,7 +652,7 @@ describe('FreestyleUnitReviewCardView', () => {
     await waitFor(() => expect(apiMocks.startFreestyleUnitReviewSessionApi).toHaveBeenCalledTimes(1))
   })
 
-  it('keeps four disabled rating buttons visible while the session is loading', async () => {
+  it('keeps four rating buttons pressable while the session is loading', async () => {
     const card = buildCard('unit-loading-ratings')
     apiMocks.startFreestyleUnitReviewSessionApi.mockReturnValue(new Promise(() => undefined))
     renderCard(card)
@@ -661,9 +661,32 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(bar).toBeTruthy()
     for (const value of [1, 2, 3, 4]) {
       const button = screen.getByTestId(`freestyle-rating-button-${value}`) as HTMLButtonElement
-      expect(button.disabled).toBe(true)
-      expect(button.getAttribute('aria-label')).toContain('正在准备评分')
+      expect(button.disabled).toBe(false)
+      expect(button.getAttribute('aria-label')).not.toContain('正在准备评分')
     }
+  })
+
+  it('paints a rating immediately and posts after the glance arrives', async () => {
+    const card = buildCard('unit-rate-before-session')
+    let resolveSession: (value: UnitReviewSessionDto) => void = () => undefined
+    apiMocks.startFreestyleUnitReviewSessionApi.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSession = resolve
+      }),
+    )
+    const onRatingSettled = vi.fn()
+    renderCard(card, { onRatingSettled })
+
+    const button = await screen.findByTestId('freestyle-rating-button-3')
+    expect((button as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.click(button)
+
+    expect(button.getAttribute('aria-pressed')).toBe('true')
+    expect(onRatingSettled).toHaveBeenCalledWith(card.id, true, 3, expect.anything())
+    expect(apiMocks.rateFreestyleRoundUnitApi).not.toHaveBeenCalled()
+
+    resolveSession(buildSession(card.unit_id!))
+    await waitFor(() => expect(apiMocks.rateFreestyleRoundUnitApi).toHaveBeenCalled())
   })
 
   it('shows flip progress badge next to the unit title (empty tone at start)', async () => {
@@ -819,6 +842,28 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(quizAction?.label).toBe('做题')
     expect(capturedPanelProps?.englishInOverflow).toBeUndefined()
     expect(capturedPanelProps?.textActionLabel).toBe('文字')
+    act(() => quizAction!.onClick())
+    expect(onOpenScopeQuiz).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows 做题 while the score session is still opening', async () => {
+    const onOpenScopeQuiz = vi.fn()
+    const card = buildCard('unit-quiz-before-glance')
+    const preview: UnitReviewSessionDto = {
+      ...buildSession(card.unit_id!),
+      id: `preview:${card.unit_id}`,
+      units: [{
+        ...buildSession(card.unit_id!).units[0],
+        encounter: null,
+      }],
+    }
+    previewCacheMocks.useUnitPreview.mockReturnValue(preview)
+    apiMocks.startFreestyleUnitReviewSessionApi.mockReturnValue(new Promise(() => undefined))
+    renderCard(card, { onOpenScopeQuiz })
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    const quizAction = (capturedPanelProps?.toolbarExtensions as { quizAction?: { label: string; onClick: () => void } | null })?.quizAction
+    expect(quizAction?.label).toBe('做题')
     act(() => quizAction!.onClick())
     expect(onOpenScopeQuiz).toHaveBeenCalledTimes(1)
   })
@@ -1903,7 +1948,7 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(screen.getByText('已选轻松 · 3天后复习 · 7月30日')).toBeTruthy()
   })
 
-  it('rolls the card back when the rate post fails', async () => {
+  it('keeps the score when the rate post fails and asks for one more tap', async () => {
     const card = buildCard('unit-rate-rollback')
     const session = buildSession(card.unit_id!)
     apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(session)
@@ -1915,11 +1960,11 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(onBranchComplete).toHaveBeenCalledWith(card.id, expect.objectContaining({ rating: 3 }))
 
     await waitFor(() => expect(onSaveFailed).toHaveBeenCalled())
-    expect(onBranchComplete).toHaveBeenLastCalledWith(card.id, { cleared: true })
-    expect(screen.queryByText(/已选记得/)).toBeNull()
-    expect(screen.getByRole('alert').textContent).toContain('评分没有记下')
+    expect(onBranchComplete).not.toHaveBeenCalledWith(card.id, { cleared: true })
+    expect(screen.getByTestId('freestyle-rating-button-3').getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('alert').textContent).toContain('评分没有记下，请再点一次。')
     expect(screen.getByRole('alert').textContent).not.toContain('network down')
-    expect(screen.getByTestId('freestyle-copy-for-assistant')).toBeTruthy()
+    expect(screen.queryByText(/网络请求失败/)).toBeNull()
   })
 
   it('does not close the encounter until the in-flight rate resolves', async () => {
@@ -2212,9 +2257,13 @@ describe('FreestyleUnitReviewCardView', () => {
   it('shows recovery actions instead of an endless loading state for a non-stale load failure', async () => {
     const card = buildCard('unit-load-failure')
     apiMocks.startFreestyleUnitReviewSessionApi.mockRejectedValue(new Error('temporary API failure'))
-    const { onSaveFailed, onStaleDrop, onRebuildRound } = renderCard(card)
+    const onOpenScopeQuiz = vi.fn()
+    const { onSaveFailed, onStaleDrop, onRebuildRound } = renderCard(card, { onOpenScopeQuiz })
 
-    await screen.findByText('这张还在准备评分')
+    await screen.findByText('这张图还在打开')
+    expect((screen.getByTestId('freestyle-rating-button-3') as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.click(screen.getByTestId('freestyle-quiz-while-opening'))
+    expect(onOpenScopeQuiz).toHaveBeenCalled()
     expect(onSaveFailed).not.toHaveBeenCalled()
     expect(screen.queryByText(/temporary API failure/)).toBeNull()
     expect(screen.getByRole('button', { name: '重试' })).not.toBeNull()
@@ -2264,7 +2313,8 @@ describe('FreestyleUnitReviewCardView', () => {
     const { onStaleDrop, onSaveFailed } = renderCard(card)
 
     expect(await screen.findByRole('button', { name: '重试' })).toBeTruthy()
-    expect(await screen.findByText('复习会话还没准备好')).toBeTruthy()
+    expect(await screen.findByText('复习图还没打开')).toBeTruthy()
+    expect((screen.getByTestId('freestyle-rating-button-3') as HTMLButtonElement).disabled).toBe(false)
     expect(onStaleDrop).not.toHaveBeenCalled()
     expect(onSaveFailed).not.toHaveBeenCalled()
   })

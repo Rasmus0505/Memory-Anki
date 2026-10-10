@@ -1,4 +1,4 @@
-import { History, ListChecks, MoreHorizontal, RefreshCw } from 'lucide-react'
+import { History, ListChecks, ListRestart, MoreHorizontal, RefreshCw } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import {
   FREESTYLE_WORKSPACE_PRIMARY,
@@ -35,16 +35,20 @@ export function FreestyleHudOverflow({
   summaryLabel,
   slot,
   onOpenPlan,
+  onUpdateQueue,
   onSyncProgress,
   onOpenHistory,
   returnTo,
+  menuDefaultOpen = false,
 }: {
   summaryLabel: string
   slot: FreestyleWorkspaceId | PalaceReviewWorkspaceId
   onOpenPlan: () => void
+  onUpdateQueue: () => void
   onSyncProgress: () => void
   onOpenHistory: () => void
   returnTo?: string | null
+  menuDefaultOpen?: boolean
 }) {
   const peer = isPalaceReviewWorkspace(slot) ? null : peerFreestyleWorkspace(slot)
   return (
@@ -58,13 +62,18 @@ export function FreestyleHudOverflow({
       >
         <ListChecks className="size-4" />
       </button>
-      <DropdownMenu modal={false}>
+      <DropdownMenu modal={false} defaultOpen={menuDefaultOpen}>
         <DropdownMenuTrigger asChild>
           <button type="button" className={hudActionClass} title="更多" aria-label="更多">
             <MoreHorizontal className="size-4" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="min-w-44">
+          <DropdownMenuItem onSelect={() => onUpdateQueue()}>
+            <ListRestart className="mr-2 size-4" />
+            更新队列
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
           <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
             {summaryLabel}
           </DropdownMenuLabel>
