@@ -32,6 +32,37 @@ type AppEventDetailArgs<Name extends AppEventName> = undefined extends AppEventM
   ? [detail?: AppEventMap[Name]]
   : [detail: AppEventMap[Name]]
 
+const WINDOW_CHANNEL = 'memory-anki-window'
+const TAB_ID = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+let windowChannel: BroadcastChannel | null | undefined
+
+function bridgeWindowEvents(): BroadcastChannel | null {
+  if (windowChannel !== undefined) return windowChannel
+  if (typeof window === 'undefined' || typeof BroadcastChannel === 'undefined') {
+    windowChannel = null
+    return null
+  }
+  try {
+    const channel = new BroadcastChannel(WINDOW_CHANNEL)
+    channel.onmessage = (event: MessageEvent) => {
+      const data = event.data as { name?: string; detail?: unknown; sender?: string } | null
+      if (!data || data.sender === TAB_ID || typeof data.name !== 'string') return
+      const delivered = new CustomEvent(data.name, { detail: data.detail })
+      Object.defineProperty(delivered, 'remote', { value: true })
+      window.dispatchEvent(delivered)
+    }
+    windowChannel = channel
+    return channel
+  } catch {
+    windowChannel = null
+    return null
+  }
+}
+
+export function isRemoteWindowEvent(event: Event | undefined): boolean {
+  return Boolean(event && (event as Event & { remote?: boolean }).remote)
+}
+
 export function emitAppEvent<Name extends AppEventName>(
   name: Name,
   ...args: AppEventDetailArgs<Name>
@@ -41,6 +72,7 @@ export function emitAppEvent(name: string, detail?: unknown) {
   if (typeof window === 'undefined') return
   const init = arguments.length >= 2 ? { detail } : undefined
   window.dispatchEvent(new CustomEvent(name, init))
+  bridgeWindowEvents()?.postMessage({ name, detail, sender: TAB_ID })
 }
 
 export function onAppEvent<Name extends AppEventName>(
@@ -56,6 +88,7 @@ export function onAppEvent<Detail = unknown>(
   handler: AppEventHandler<Detail>,
 ) {
   if (typeof window === 'undefined') return () => {}
+  bridgeWindowEvents()
   const listener = (event: Event) => {
     const customEvent = event as CustomEvent<Detail>
     handler(customEvent.detail, customEvent)

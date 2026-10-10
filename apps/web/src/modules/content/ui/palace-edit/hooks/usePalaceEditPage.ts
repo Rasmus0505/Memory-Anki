@@ -16,6 +16,11 @@ import type { StatusBadgeState } from '@/modules/content/ui/palace-edit/model/pa
 import { getEnglishContinueCourseApi } from '@/modules/english/public'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import { useMemoryAnkiShortcuts } from '@/modules/settings/public'
+import {
+  notePalaceEditorClosed,
+  notePalaceEditorOpen,
+  trackPalaceEditorLeave,
+} from '@/shared/events/palaceEditorLeaveGate'
 export type { PalaceMeta } from '@/modules/content/ui/palace-edit/model/palace-edit-types'
 
 function readSelectionNodeUid(nodes: MindMapSelection[]) {
@@ -256,16 +261,26 @@ export function usePalaceEditPage() {
       if (!palaceId) return
       // Soft route leave (SPA navigation): palace-only reconcile flush.
       // Capture-phase leave arming covers tab hide/pagehide via the shared session flush.
-      void documentStateRef.current?.flushSaveWithReconcile('editor_leave', { reconcileUnits: true })
+      trackPalaceEditorLeave(
+        documentStateRef.current?.flushSaveWithReconcile('editor_leave', { reconcileUnits: true }),
+      )
     }
   }, [palaceId])
+
+  useEffect(() => {
+    if (!isActive || !palaceId) return undefined
+    notePalaceEditorOpen()
+    return () => notePalaceEditorClosed()
+  }, [isActive, palaceId])
 
   useEffect(() => {
     if (isActive) return
     if (!palaceId) return
     // Keep-alive hide does not unmount the editor, so palaceId cleanup never runs.
     // Treat residency inactive as leave so marked units still enter the review list.
-    void documentStateRef.current?.flushSaveWithReconcile('editor_leave', { reconcileUnits: true })
+    trackPalaceEditorLeave(
+      documentStateRef.current?.flushSaveWithReconcile('editor_leave', { reconcileUnits: true }),
+    )
   }, [isActive, palaceId])
 
   useEffect(() => {
