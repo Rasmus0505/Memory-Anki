@@ -2,10 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setApiToken } from '@/shared/api/apiToken'
 import {
   confirmQueuedMutationOverwrite,
+  discardQueuedConflictsByCoalesceKey,
   enqueueMutation,
   readQueuedMutations,
   replayQueuedMutations,
   resetMutationQueueForTest,
+  retryQueuedConflictWithCurrentFingerprint,
 } from './mutationQueue'
 
 const REMOVED_MUTATION_QUEUE_EVENT = ['memory-anki', 'mutation-queue:changed'].join('-')
@@ -116,10 +118,49 @@ describe('mutationQueue', () => {
     expect(await readQueuedMutations()).toHaveLength(0)
   })
 
+  it('does not replay conflict or manual entries when a queue scan forces them', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const conflict = await enqueueMutation({
+      id: 'conflict-entry',
+      resourceKey: 'palace:1:editor',
+      url: '/api/v1/palaces/1/editor',
+      method: 'PUT',
+      bodyKind: 'json',
+      body: JSON.stringify({ expected_editor_fingerprint: 'stale' }),
+      replayMode: 'auto',
+      initialStatus: 'conflict',
+    })
+    const manual = await enqueueMutation({
+      id: 'manual-entry',
+      resourceKey: 'palace:2:editor',
+      url: '/api/v1/palaces/2/editor',
+      method: 'PUT',
+      bodyKind: 'json',
+      body: JSON.stringify({ expected_editor_fingerprint: 'stale' }),
+      replayMode: 'auto',
+      initialStatus: 'manual',
+    })
+
+    await replayQueuedMutations()
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect((await readQueuedMutations()).map((item) => item.status)).toEqual(['conflict', 'manual'])
+
+    // `forceIds` remains the explicit-retry escape hatch for user actions.
+    await replayQueuedMutations({ forceIds: [manual.id] })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
   it('keeps conflicts pending until the user confirms overwrite', async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ detail: '脑图保存冲突' }), { status: 409 }))
+      // Confirmation first re-reads the server revision, then replays the save.
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ editor_fingerprint: 'server-current' }), { status: 200 }),
+      )
       .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
 
@@ -147,13 +188,113 @@ describe('mutationQueue', () => {
     await confirmQueuedMutationOverwrite(item.id)
     await replayQueuedMutations({ forceIds: [item.id] })
 
-    const [, confirmedInit] = fetchMock.mock.calls[1] as unknown as [string, RequestInit]
-    expect(JSON.parse((confirmedInit?.body as string) || '{}')).toMatchObject({
+    const [probeUrl] = fetchMock.mock.calls[1] as unknown as [string]
+    expect(probeUrl).toContain('/api/v1/palaces/1/editor')
+
+    const [, confirmedInit] = fetchMock.mock.calls[2] as unknown as [string, RequestInit]
+    const confirmedBody = JSON.parse((confirmedInit?.body as string) || '{}')
+    expect(confirmedBody).toMatchObject({
       confirm_dangerous_change: true,
       editor_source: 'palace_edit',
-      expected_editor_fingerprint: 'server-before-local-edit',
+      // The overwrite must be signed with the revision the server reported, not
+      // the superseded one that produced the original 409.
+      expected_editor_fingerprint: 'server-current',
     })
-    expect(JSON.parse((confirmedInit?.body as string) || '{}')).not.toHaveProperty('allow_stale_overwrite')
+    // The local document is still what gets written.
+    expect(confirmedBody.editor_doc.root.data.text).toBe('本地版本')
+    expect(confirmedBody).not.toHaveProperty('allow_stale_overwrite')
     expect(await readQueuedMutations()).toHaveLength(0)
+  })
+
+  it('releases a parked conflict by re-signing it with the current fingerprint', async () => {
+    setApiToken('token')
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(
+        JSON.stringify({ detail: { code: 'mindmap_conflict', message: '脑图保存冲突' } }),
+        { status: 409 },
+      ))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ editor_fingerprint: 'server-now' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const item = await enqueueMutation({
+      resourceKey: 'palace:7:editor',
+      coalesceKey: 'palace:7:editor',
+      description: '保存宫殿脑图',
+      url: '/api/v1/palaces/7/editor',
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      bodyKind: 'json',
+      body: JSON.stringify({
+        editor_doc: { root: { data: { text: '本地' }, children: [] } },
+        expected_editor_fingerprint: 'rejected',
+      }),
+      replayMode: 'auto',
+    })
+    await replayQueuedMutations()
+    expect((await readQueuedMutations())[0]?.status).toBe('conflict')
+
+    // Ordinary scans must keep skipping it: that guard is what stopped the
+    // once-a-minute 409 storm.
+    await replayQueuedMutations()
+    expect((await readQueuedMutations())[0]?.status).toBe('conflict')
+
+    // The explicit recovery path is the only thing that may send it again.
+    await expect(retryQueuedConflictWithCurrentFingerprint(item.id)).resolves.toBe(true)
+
+    const [, confirmedInit] = fetchMock.mock.calls[2] as unknown as [string, RequestInit]
+    expect(JSON.parse((confirmedInit?.body as string) || '{}')).toMatchObject({
+      expected_editor_fingerprint: 'server-now',
+      confirm_dangerous_change: true,
+    })
+    expect(await readQueuedMutations()).toHaveLength(0)
+  })
+
+  it('drops parked conflicts for a resource the session already resolved', async () => {
+    for (const status of ['conflict', 'manual'] as const) {
+      await enqueueMutation({
+        resourceKey: 'palace:9:editor',
+        coalesceKey: 'palace:9:editor',
+        description: '保存宫殿脑图',
+        url: '/api/v1/palaces/9/editor',
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        bodyKind: 'json',
+        body: JSON.stringify({ expected_editor_fingerprint: 'stale' }),
+        initialStatus: status,
+      })
+    }
+    await enqueueMutation({
+      resourceKey: 'palace:9:editor',
+      coalesceKey: 'palace:9:editor',
+      description: '保存宫殿脑图',
+      url: '/api/v1/palaces/9/editor',
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      bodyKind: 'json',
+      body: JSON.stringify({ expected_editor_fingerprint: 'stale' }),
+      initialStatus: 'pending',
+    })
+    await enqueueMutation({
+      resourceKey: 'palace:10:editor',
+      coalesceKey: 'palace:10:editor',
+      description: '另一个宫殿',
+      url: '/api/v1/palaces/10/editor',
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      bodyKind: 'json',
+      body: JSON.stringify({ expected_editor_fingerprint: 'other' }),
+      initialStatus: 'conflict',
+    })
+
+    await discardQueuedConflictsByCoalesceKey('palace:9:editor')
+
+    const remaining = await readQueuedMutations()
+    // The still-runnable pending entry and the unrelated palace survive.
+    expect(remaining.map((entry) => entry.coalesceKey)).toEqual([
+      'palace:9:editor',
+      'palace:10:editor',
+    ])
+    expect(remaining.map((entry) => entry.status)).toEqual(['pending', 'conflict'])
   })
 })

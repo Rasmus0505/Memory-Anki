@@ -332,8 +332,13 @@ function parseRetryAfterMs(response: Response): number | null {
 }
 
 async function replayOneMutation(item: PersistedMutation, force = false) {
+  // Conflict/manual entries stay visible in the queue, but ordinary scans must
+  // not send them again. `force` is reserved for an explicit user retry (or the
+  // overwrite-confirmation flow), so it intentionally bypasses this status
+  // guard and the replay-mode/backoff gates below.
   if (!force && item.replayMode !== 'auto') return
   if (!force && item.nextAttemptAt > Date.now()) return
+  if (!force && (item.status === 'conflict' || item.status === 'manual')) return
 
   const current = await updateMutation(item, { status: 'syncing' })
   try {
@@ -419,6 +424,38 @@ export async function discardQueuedMutation(id: string) {
   await deleteMutationFromStore(id)
 }
 
+/**
+ * Retry one parked mindmap save with the fingerprint the server reports *now*.
+ *
+ * A 409 on `palace:<id>:editor` leaves an entry in `conflict`. Ordinary scans
+ * skip those entries on purpose (replaying the rejected fingerprint is exactly
+ * the repeating-409 loop), which means nothing would ever send it again. This is
+ * the only path that releases such an entry, so it must use the current
+ * fingerprint rather than the stored one.
+ */
+export async function retryQueuedConflictWithCurrentFingerprint(id: string): Promise<boolean> {
+  const item = await readQueuedMutation(id)
+  if (!item || item.status !== 'conflict') return false
+  const resigned = await confirmQueuedMutationOverwrite(id)
+  if (!resigned) return false
+  await replayQueuedMutations({ forceIds: [id] })
+  const after = await readQueuedMutation(id)
+  return after == null || after.status === 'pending' || after.status === 'syncing'
+}
+
+/** Drop parked conflicts for a resource the session has already superseded. */
+export async function discardQueuedConflictsByCoalesceKey(coalesceKey: string | null | undefined) {
+  if (!coalesceKey) return
+  const items = await readQueuedMutationsByCoalesceKey(coalesceKey)
+  await Promise.all(
+    items
+      .filter((item) => item.status === 'conflict' || item.status === 'manual')
+      .map((item) => deleteMutationFromStore(item.id).catch((error: unknown) => {
+        console.error('[mutation-queue] failed to discard superseded conflict', item.id, error)
+      })),
+  )
+}
+
 export async function discardQueuedMutationsByCoalesceKey(coalesceKey: string | null | undefined) {
   if (!coalesceKey) return
   const items = await readQueuedMutationsByCoalesceKey(coalesceKey)
@@ -462,6 +499,20 @@ export async function confirmQueuedMutationOverwrite(id: string) {
       nextAttemptAt: Number.POSITIVE_INFINITY,
     })
   }
+  // The stored fingerprint is the revision the client edited *from*, which is
+  // exactly what the server already rejected. Replaying it verbatim produced the
+  // repeating-409 loop this flow exists to end. The user has now seen the server
+  // state, so the overwrite must be signed with the fingerprint the server
+  // currently reports; anything else cannot be accepted as "overwrite current".
+  const currentFingerprint = await fetchCurrentEditorFingerprint(item, body)
+  if (!currentFingerprint) {
+    return updateMutation(item, {
+      status: 'manual',
+      errorMessage: '无法读取服务端当前脑图版本，已停止覆盖；请重新打开宫殿后保存。',
+      nextAttemptAt: Number.POSITIVE_INFINITY,
+    })
+  }
+  body.expected_editor_fingerprint = currentFingerprint
   body.confirm_dangerous_change = true
   delete body.allow_stale_overwrite
   if (!body.editor_source || body.editor_source === 'palace_edit_autosave') {
@@ -475,6 +526,39 @@ export async function confirmQueuedMutationOverwrite(id: string) {
     conflictMessage: undefined,
     errorMessage: undefined,
   })
+}
+
+// Only the palace editor documents a resource key the server can re-read, and
+// only its conflicts are fingerprint conflicts. Every other queued write keeps
+// the previous behaviour rather than inventing a version to claim.
+const EDITOR_RESOURCE_KEY = /^palace:(\d+):editor$/
+
+async function fetchCurrentEditorFingerprint(
+  item: PersistedMutation,
+  body: Record<string, unknown>,
+): Promise<string | null> {
+  const match = EDITOR_RESOURCE_KEY.exec(item.resourceKey)
+  if (!match) return null
+  const headers: Record<string, string> = { Accept: 'application/json' }
+  const token = getApiToken()
+  if (token) headers.Authorization = `Bearer ${token}`
+  try {
+    const response = await fetch(`/api/v1/palaces/${match[1]}/editor`, { headers })
+    if (!response.ok) return null
+    const payload = (await response.json()) as unknown
+    if (!payload || typeof payload !== 'object') return null
+    const state = payload as Record<string, unknown>
+    const direct = state.editor_fingerprint
+    if (typeof direct === 'string' && direct.trim()) return direct.trim()
+    const snapshot = state.snapshot
+    if (snapshot && typeof snapshot === 'object') {
+      const revision = (snapshot as Record<string, unknown>).revision
+      if (typeof revision === 'string' && revision.trim()) return revision.trim()
+    }
+    return null
+  } catch {
+    return null
+  }
 }
 
 export async function resetMutationQueueForTest() {

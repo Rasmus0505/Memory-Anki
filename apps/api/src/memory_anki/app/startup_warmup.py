@@ -105,6 +105,51 @@ def start_ledger_prefetch() -> threading.Thread | None:
     return thread
 
 
+def _warm_db_pool() -> None:
+    """Open pooled connections so the first user request does not pay for it.
+
+    Opening the database is a cold, first-touch read of a ~200MB file on the
+    (often Syncthing- or USB-backed) data drive. When several requests arrive at
+    once on a cold process they all park in ``do_connect`` behind that one open
+    and finish together -- the log signature is a burst of unrelated endpoints
+    all reporting ``connect_total_ms`` around the same multi-second value while
+    ``sql_total_ms`` stays in the single digits. Warming a few connections here
+    moves that cost to startup instead of a user-visible request.
+    """
+    from memory_anki.infrastructure.db._tables._base import DB_POOL_SIZE, engine
+
+    # Hold them open simultaneously: the point is to fill the pool, not to open
+    # and release one connection at a time.
+    count = max(1, DB_POOL_SIZE)
+    connections = []
+    try:
+        for _ in range(count):
+            connection = engine.connect()
+            connection.execute(text("SELECT 1")).scalar()
+            connections.append(connection)
+    except Exception:
+        logger.exception("database pool warmup failed")
+    finally:
+        for connection in connections:
+            try:
+                connection.close()
+            except Exception:
+                logger.debug("failed to close warmup connection", exc_info=True)
+
+
+def start_db_pool_warmup() -> threading.Thread | None:
+    """Pre-open the SQLAlchemy pool off the request path."""
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return None
+    thread = threading.Thread(
+        target=_warm_db_pool,
+        name="memory-anki-db-pool-warmup",
+        daemon=True,
+    )
+    thread.start()
+    return thread
+
+
 def start_startup_warmup() -> threading.Thread | None:
     global _warmup_started
     with _warmup_lock:

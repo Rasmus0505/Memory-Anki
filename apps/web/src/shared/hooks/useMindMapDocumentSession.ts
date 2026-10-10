@@ -27,6 +27,12 @@ interface MindMapDocumentSessionOptions<TResponse, TMeta> {
   onSaveError?: (error: Error, pendingState: MindMapEditorState) => Promise<boolean> | boolean
   beforeAutoSave?: (nextState: MindMapEditorState, currentState: MindMapEditorState | null) => string | null
   onLocalSnapshot?: (ownerId: number, snapshot: MindMapEditorState) => void
+  /**
+   * A conflict was resolved for this owner. The same rejected save may also be
+   * parked in the mutation queue; the caller drops it here so it cannot linger
+   * as an unresolvable entry.
+   */
+  onConflictResolved?: (ownerId: number) => void
 }
 type PersistedMindMapSavePayload = MindMapEditorState & {
   expected_editor_fingerprint?: string | null
@@ -60,6 +66,7 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
   onSaveError,
   beforeAutoSave,
   onLocalSnapshot,
+  onConflictResolved,
 }: MindMapDocumentSessionOptions<TResponse, TMeta>) {
   const resolvedAdapter = adapter ?? {
     load: legacyFetcher,
@@ -107,6 +114,7 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
   const onSaveErrorRef = useRef(onSaveError)
   const beforeAutoSaveRef = useRef(beforeAutoSave)
   const onLocalSnapshotRef = useRef(onLocalSnapshot)
+  const onConflictResolvedRef = useRef(onConflictResolved)
   const lastStateFingerprintRef = useRef('')
   const previousEntityIdRef = useRef<number | null>(entityId)
   const lastSavedEditorFingerprintRef = useRef('')
@@ -143,6 +151,7 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
   onSaveErrorRef.current = onSaveError
   beforeAutoSaveRef.current = beforeAutoSave
   onLocalSnapshotRef.current = onLocalSnapshot
+  onConflictResolvedRef.current = onConflictResolved
   useEffect(() => {
     isMountedRef.current = true
     return () => {
@@ -173,6 +182,12 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
   const applyConflictResolution = useCallback((snapshot: MindMapEditorState, remote: MindMapEditorState, dirty: boolean) => {
     const ownerId = entityIdRef.current
     if (ownerId == null) return
+    // The 409 also parked a duplicate of this save in the mutation queue. That
+    // entry holds the fingerprint the server already rejected, and ordinary
+    // replay scans deliberately skip parked conflicts, so nothing would ever
+    // release it. The user's choice here supersedes it: whatever gets sent next
+    // comes from the session, signed with the remote fingerprint below.
+    onConflictResolvedRef.current?.(ownerId)
     const next = { ...snapshot, editor_fingerprint: getEditorFingerprint(remote) }
     baselineSnapshotRef.current = remote
     lastSavedEditorFingerprintRef.current = getEditorFingerprint(remote)

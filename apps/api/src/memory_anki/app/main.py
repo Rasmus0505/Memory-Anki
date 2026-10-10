@@ -17,7 +17,11 @@ from memory_anki.app.startup_runtime import (
     initialize_service_runtime,
     resolve_startup_mode,
 )
-from memory_anki.app.startup_warmup import start_ledger_prefetch, start_startup_warmup
+from memory_anki.app.startup_warmup import (
+    start_db_pool_warmup,
+    start_ledger_prefetch,
+    start_startup_warmup,
+)
 from memory_anki.core.api_token_auth import ApiTokenAuthMiddleware
 from memory_anki.core.config import (
     ATTACHMENTS_DIR,
@@ -137,6 +141,10 @@ async def lifespan(app: FastAPI):
     startup_state = initialize_service_runtime(app, mode=startup_mode)
     runtime_activity_handle = None
     start_ledger_prefetch()
+    # Runs in every mode: the desktop/PWA process serves in healthcheck mode,
+    # where start_startup_warmup() is skipped, and it is exactly that process
+    # whose first user request would otherwise pay the cold pool open.
+    start_db_pool_warmup()
     if startup_mode == STARTUP_MODE_SERVE:
         runtime_activity_handle = start_runtime_activity_heartbeat(
             channel=str(startup_state.runtime_info.get("channel") or "production"),

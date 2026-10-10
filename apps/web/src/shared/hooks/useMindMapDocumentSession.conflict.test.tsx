@@ -21,6 +21,16 @@ function setup(load = vi.fn(async () => remote), save = vi.fn(async (_id: number
   { initialProps: { id: 1 } })
   return { ...hook, save, load }
 }
+function setupWithConflictHook(
+  load = vi.fn(async () => remote),
+  save = vi.fn(async (_id: number, value: MindMapEditorState) => value),
+) {
+  const onConflictResolved = vi.fn()
+  const hook = renderHook(({ id }) => useMindMapDocumentSession({ entityId: id, onConflictResolved,
+    loadCacheKey: 'conflict-test', adapter: { load, save, selectMeta: () => null, selectEditorState: (value) => value } }),
+  { initialProps: { id: 1 } })
+  return { ...hook, save, load, onConflictResolved }
+}
 async function seed(base = 'r1') {
   await drafts.writeMindMapEditorDraft({ resourceKey: 'conflict-test:1', snapshot: local, baseEditorFingerprint: base, changeVersion: 1 })
 }
@@ -87,6 +97,20 @@ describe('draft conflict protection', () => {
     await act(() => result.current.flushSave())
     expect(save).toHaveBeenCalledTimes(choice === 'remote' ? 0 : 1)
   })
+  it('notifies the queue hook when a conflict is resolved', async () => {
+    await seed()
+    const archive = deferred<void>()
+    vi.spyOn(drafts, 'archiveMindMapEditorConflict').mockReturnValue(archive.promise)
+    const { result, onConflictResolved } = setupWithConflictHook()
+    await waitFor(() => expect(result.current.pendingConflict).not.toBeNull())
+    expect(onConflictResolved).not.toHaveBeenCalled()
+    let resolution!: Promise<boolean>
+    act(() => { resolution = result.current.resolveConflict({ ...result.current.pendingConflict!, choice: 'local' }) })
+    await act(async () => { archive.resolve(); expect(await resolution).toBe(true) })
+    // The 409 left a parked copy of this save in the mutation queue; the owner
+    // must be told so it can be dropped instead of lingering unresolved.
+    expect(onConflictResolved).toHaveBeenCalledWith(1)
+  })
   it('ignores resolution completing after navigation while retaining the archive', async () => {
     await seed()
     const archive = deferred<void>()
@@ -100,6 +124,24 @@ describe('draft conflict protection', () => {
     expect(result.current.pendingConflict).toBeNull()
     expect(result.current.editorState).toEqual(remote)
     expect(save).not.toHaveBeenCalled()
+  })
+  it('re-signs a kept-local overwrite with the remote revision it was shown', async () => {
+    await seed()
+    const archive = deferred<void>()
+    vi.spyOn(drafts, 'archiveMindMapEditorConflict').mockReturnValue(archive.promise)
+    const { result, save } = setup()
+    await waitFor(() => expect(result.current.pendingConflict).not.toBeNull())
+    let resolution!: Promise<boolean>
+    act(() => { resolution = result.current.resolveConflict({ ...result.current.pendingConflict!, choice: 'local' }) })
+    await act(async () => { archive.resolve(); expect(await resolution).toBe(true) })
+    await act(() => result.current.flushSave())
+    expect(save).toHaveBeenCalledTimes(1)
+    // The local document is re-saved, but its version claim must be the remote
+    // revision the user just saw. Replaying the superseded `r1` would be a 409
+    // again, which is the loop this resolution exists to break.
+    const [, payload] = save.mock.calls[0]
+    expect(payload.editor_doc).toEqual(local.editor_doc)
+    expect(payload).toMatchObject({ expected_editor_fingerprint: 'r2' })
   })
   it('fails closed without durable storage', async () => {
     await seed()

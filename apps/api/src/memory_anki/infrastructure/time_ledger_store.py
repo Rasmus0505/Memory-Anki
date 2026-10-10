@@ -43,6 +43,10 @@ _FOLDED_CACHE: dict[str, tuple[tuple[Any, ...], list[dict[str, Any]]]] = {}
 _FOLD_EVENTS: dict[str, threading.Event] = {}
 _GENERATION: dict[str, int] = {}
 _SNAPSHOT_NAME = "_folded_cache.json"
+# v1: rows keyed by directory mtime signature (cannot be extended safely).
+# v2: rows plus the reducer state and the exact revision files they cover.
+_SNAPSHOT_SCHEMA_VERSION = 2
+_SNAPSHOT_SCHEMA_VERSIONS = (1, 2)
 
 
 def _root_key(app_home: Path | None) -> tuple[Path, str]:
@@ -50,17 +54,36 @@ def _root_key(app_home: Path | None) -> tuple[Path, str]:
     return root, str(root)
 
 
-def _revision_signature(root: Path) -> tuple[tuple[str, int], ...]:
+def _revision_signature(root: Path) -> tuple[tuple[str, str, int, int], ...]:
+    """Inventory revision files, including files copied with an old mtime.
+
+    Directory mtimes are not a reliable sync boundary: Syncthing can copy a
+    revision whose timestamp predates the directory's current mtime.  The
+    filename is the stable revision identity; size and mtime detect replacement
+    or corruption of an existing file and force a full fold.
+    """
     devices_dir = root / "devices"
     if not devices_dir.is_dir():
         return ()
-    found: list[tuple[str, int]] = []
-    for device_dir in devices_dir.iterdir():
+    found: list[tuple[str, str, int, int]] = []
+    try:
+        device_dirs = list(devices_dir.iterdir())
+    except OSError:
+        return ()
+    for device_dir in device_dirs:
         revisions = device_dir / "revisions"
+        if not revisions.is_dir():
+            continue
         try:
-            found.append((device_dir.name, revisions.stat().st_mtime_ns))
+            paths = list(revisions.glob("*.json"))
         except OSError:
             continue
+        for path in paths:
+            try:
+                stat = path.stat()
+            except OSError:
+                continue
+            found.append((device_dir.name, path.name, stat.st_size, stat.st_mtime_ns))
     found.sort()
     return tuple(found)
 
@@ -95,50 +118,73 @@ def _snapshot_rows(payload: dict[str, Any]) -> list[dict[str, Any]] | None:
     return rows
 
 
+def _snapshot_covers(payload: dict[str, Any]) -> tuple[bool, tuple[tuple[str, str, int, int], ...]]:
+    """Rows plus their covered revision set.
+
+    Schema 1 stored a per-directory mtime signature and plain rows. Schema 2
+    stores one entry per revision file, which is what makes an incremental
+    append detectable. Only schema 2 also carries the reducer state that group
+    replacements and tombstones live in, so only schema 2 may be extended by
+    folding new files. A legacy snapshot is still usable as rows, but its
+    history must never be reopened, because dropping `deleted` /
+    `group_operations` would resurrect intervals the user deleted.
+    """
+    rows = _snapshot_rows(payload)
+    if rows is None:
+        return False, ()
+    version = payload.get("schema_version")
+    if version == 1:
+        return False, ()
+    stored = payload.get("revision_files")
+    if not isinstance(stored, list) or payload.get("state") is None:
+        return False, ()
+    signature: list[tuple[str, str, int, int]] = []
+    for item in stored:
+        if (not isinstance(item, list) or len(item) != 4 or not isinstance(item[0], str)
+                or not isinstance(item[1], str) or not isinstance(item[2], int) or not isinstance(item[3], int)):
+            return False, ()
+        signature.append((item[0], item[1], item[2], item[3]))
+    return True, tuple(signature)
+
+
 def _read_snapshot_payload(root: Path) -> dict[str, Any] | None:
     try:
         payload = json.loads(_snapshot_path(root).read_text(encoding="utf-8"))
     except (OSError, UnicodeError, ValueError, TypeError):
         return None
-    if not isinstance(payload, dict) or payload.get("schema_version") != 1:
+    if not isinstance(payload, dict) or payload.get("schema_version") not in _SNAPSHOT_SCHEMA_VERSIONS:
         return None
     return payload
 
 
-def _load_snapshot(root: Path, signature: tuple[tuple[str, int], ...]) -> list[dict[str, Any]] | None:
+def _snapshot_state(payload: dict[str, Any]) -> dict[str, Any] | None:
+    state = payload.get("state")
+    return state if isinstance(state, dict) else None
+
+
+def _load_any_snapshot(root: Path) -> dict[str, Any] | None:
     payload = _read_snapshot_payload(root)
-    if payload is None:
+    if payload is None or _snapshot_rows(payload) is None:
         return None
-    expected = [[name, mtime] for name, mtime in signature]
-    if payload.get("signature") != expected:
-        return None
-    return _snapshot_rows(payload)
+    complete, signature = _snapshot_covers(payload)
+    return {"payload": payload, "rows": _snapshot_rows(payload), "complete": complete,
+            "signature": signature, "state": _snapshot_state(payload)}
 
 
-def _load_any_snapshot(root: Path) -> tuple[list[dict[str, Any]], tuple[tuple[str, int], ...]] | None:
-    payload = _read_snapshot_payload(root)
-    if payload is None:
-        return None
-    rows = _snapshot_rows(payload)
-    stored = payload.get("signature")
-    if rows is None or not isinstance(stored, list):
-        return None
-    signature: list[tuple[str, int]] = []
-    for item in stored:
-        if not isinstance(item, list) or len(item) != 2 or not isinstance(item[0], str) or not isinstance(item[1], int):
-            return None
-        signature.append((item[0], item[1]))
-    return rows, tuple(signature)
-
-
-def _write_snapshot(root: Path, signature: tuple[tuple[str, int], ...], rows: list[dict[str, Any]]) -> None:
+def _write_snapshot(root: Path, signature: tuple[tuple[str, str, int, int], ...], snapshot: dict[str, Any]) -> None:
+    state = snapshot.get("state")
+    if not isinstance(state, dict):
+        # Without reducer state an incremental fold would drop tombstones and
+        # group replacements, so such a snapshot is only ever a row cache.
+        return
     try:
         _atomic_json_write(
             _snapshot_path(root),
             {
-                "schema_version": 1,
-                "signature": [[name, mtime] for name, mtime in signature],
-                "rows": rows,
+                "schema_version": _SNAPSHOT_SCHEMA_VERSION,
+                "revision_files": [list(item) for item in signature],
+                "rows": snapshot["rows"],
+                "state": state,
             },
         )
     except (OSError, TypeError, ValueError):
@@ -189,45 +235,61 @@ _REFRESHING: set[str] = set()
 _MAX_INCREMENTAL_FILES = 64
 
 
-def _store_folded(root: Path, key: str, token: tuple[Any, ...], rows: list[dict[str, Any]], *, persist: bool) -> None:
+def _store_folded(root: Path, key: str, token: tuple[Any, ...], snapshot: dict[str, Any], *, persist: bool) -> None:
+    """Cache and optionally persist a fold result.
+
+    `snapshot` is `{"rows": [...], "state": {...}}`; `state` is required for
+    `persist=True` because a snapshot without reducer state can only ever serve
+    rows, never receive an incremental append.
+    """
     signature_now = _revision_signature(root)
     stored = False
     with _CACHE_GUARD:
         # Lock is not re-entrant; do not call _cache_token while holding it.
         if (signature_now, _GENERATION.get(key, 0)) != token:
             return
-        _FOLDED_CACHE[key] = (token, rows)
+        _FOLDED_CACHE[key] = (token, snapshot)
         stored = True
     if persist and stored:
-        _write_snapshot(root, signature_now, rows)
+        _write_snapshot(root, signature_now, snapshot)
 
 
-def _files_newer_than(root: Path, signature: tuple[tuple[str, int], ...]) -> list[Path] | None:
-    """Return revision files written after the snapshot, or None if that is not enough."""
-    known = dict(signature)
-    seen: set[str] = set()
+def _files_newer_than(root: Path, signature: tuple[tuple[str, str, int, int], ...]) -> list[Path] | None:
+    """Return revision files the snapshot does not cover, or None if unsure.
+
+    Only additions are incremental: a file whose size or mtime differs from the
+    snapshot's record of it, or a revision the snapshot listed but that is now
+    gone, means the history was rewritten and must be folded from scratch.
+    """
+    known = {(device, name): (size, mtime) for device, name, size, mtime in signature}
+    seen: set[tuple[str, str]] = set()
     files: list[Path] = []
     devices_dir = root / "devices"
     if not devices_dir.is_dir():
         return None if signature else []
-    for device_dir in devices_dir.iterdir():
+    try:
+        device_dirs = list(devices_dir.iterdir())
+    except OSError:
+        return None
+    for device_dir in device_dirs:
         revisions = device_dir / "revisions"
         if not revisions.is_dir():
             continue
-        seen.add(device_dir.name)
-        cutoff = known.get(device_dir.name)
         try:
             candidates = list(revisions.glob("*.json"))
         except OSError:
             return None
-        if cutoff is None:
-            files.extend(candidates)
-            continue
         for path in candidates:
+            identity = (device_dir.name, path.name)
+            seen.add(identity)
             try:
-                if path.stat().st_mtime_ns > cutoff:
-                    files.append(path)
+                stat = path.stat()
             except OSError:
+                return None
+            previous = known.get(identity)
+            if previous is None:
+                files.append(path)
+            elif previous != (stat.st_size, stat.st_mtime_ns):
                 return None
     if set(known) - seen:
         return None
@@ -243,8 +305,7 @@ def _schedule_full_refresh(root: Path, key: str) -> None:
     def refresh() -> None:
         try:
             token = _cache_token(root, key)
-            rows = _fold_intervals(root)
-            _store_folded(root, key, token, rows, persist=True)
+            _store_folded(root, key, token, _fold_intervals(root), persist=True)
         except Exception:
             return
         finally:
@@ -260,43 +321,71 @@ def read_intervals(*, app_home: Path | None = None, include_deleted: bool = Fals
     with _CACHE_GUARD:
         cached = _FOLDED_CACHE.get(key)
         if cached is not None and cached[0] == token:
-            return _copy_visible(cached[1], include_deleted=include_deleted)
+            return _copy_visible(cached[1]["rows"], include_deleted=include_deleted)
     snapshot = _load_any_snapshot(root)
     if snapshot is not None:
-        rows, stored_signature = snapshot
-        if stored_signature == token[0]:
-            _store_folded(root, key, token, rows, persist=False)
+        rows = snapshot["rows"]
+        if snapshot["complete"] and snapshot["signature"] == token[0]:
+            _store_folded(root, key, token, snapshot, persist=False)
             return _copy_visible(rows, include_deleted=include_deleted)
-        newer = _files_newer_than(root, stored_signature)
-        if newer is not None and len(newer) <= _MAX_INCREMENTAL_FILES:
-            # A new revision must not replay every historical file. That replay is
-            # ~45s on the USB volume and blows the 20s client timeout.
-            folded = _fold_paths(sorted(newer), base_rows=rows) if newer else rows
-            _store_folded(root, key, token, folded, persist=True)
-            return _copy_visible(folded, include_deleted=include_deleted)
+        if snapshot["complete"]:
+            newer = _files_newer_than(root, snapshot["signature"])
+            if newer is not None and len(newer) <= _MAX_INCREMENTAL_FILES:
+                # A new revision must not replay every historical file. That
+                # replay is ~45s on the USB volume and blows the 20s timeout.
+                folded = _fold_paths(sorted(newer), base_state=snapshot["state"])
+                _store_folded(root, key, token, folded, persist=True)
+                return _copy_visible(folded["rows"], include_deleted=include_deleted)
+        # Legacy snapshot, or history rewritten: serve what we have now and
+        # refold in the background instead of blocking the request.
         _schedule_full_refresh(root, key)
         return _copy_visible(rows, include_deleted=include_deleted)
     folded = _fold_intervals(root)
     _store_folded(root, key, token, folded, persist=True)
-    return _copy_visible(folded, include_deleted=include_deleted)
+    return _copy_visible(folded["rows"], include_deleted=include_deleted)
 
 
-def _fold_intervals(root: Path) -> list[dict[str, Any]]:
-    return _fold_paths(sorted(root.glob("devices/*/revisions/*.json")))
+def _fold_intervals(root: Path) -> dict[str, Any]:
+    return _fold_snapshot(sorted(root.glob("devices/*/revisions/*.json")))
 
 
-def _fold_paths(paths: list[Path], base_rows: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+def _fold_paths(paths: list[Path], base_rows: list[dict[str, Any]] | None = None,
+                base_state: dict[str, Any] | None = None) -> dict[str, Any]:
+    return _fold_snapshot(paths, base_rows=base_rows, base_state=base_state)
+
+
+def _fold_snapshot(paths: list[Path], base_rows: list[dict[str, Any]] | None = None,
+                   base_state: dict[str, Any] | None = None) -> dict[str, Any]:
+    rows, state = _fold_state(paths, base_rows=base_rows, base_state=base_state)
+    return {"rows": rows, "state": state}
+
+
+def _fold_state(paths: list[Path], base_rows: list[dict[str, Any]] | None = None,
+                base_state: dict[str, Any] | None = None) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     by_id: dict[str, tuple[tuple[str, str], dict[str, Any]]] = {}
     deleted: set[str] = set()
     group_operations: dict[str, tuple[tuple[str, str], str, dict[str, Any] | None]] = {}
-    for row in base_rows or []:
-        interval_id = row.get("interval_id")
-        if not isinstance(interval_id, str) or not interval_id:
-            continue
-        item = {key: value for key, value in row.items() if key != "deleted"}
-        by_id[interval_id] = (("", ""), item)
-        if row.get("deleted"):
-            deleted.add(interval_id)
+    if base_state:
+        for key, value in base_state.get("by_id", {}).items():
+            if isinstance(value, list) and len(value) == 2 and isinstance(value[0], list) and isinstance(value[1], dict):
+                order = tuple(value[0])
+                if len(order) == 2 and all(isinstance(item, str) for item in order):
+                    by_id[key] = (order, dict(value[1]))
+        deleted = {item for item in base_state.get("deleted", []) if isinstance(item, str)}
+        for group, value in base_state.get("group_operations", {}).items():
+            if isinstance(value, list) and len(value) == 3 and isinstance(value[0], list) and isinstance(value[1], str):
+                order = tuple(value[0])
+                if len(order) == 2 and all(isinstance(item, str) for item in order):
+                    group_operations[group] = (order, value[1], value[2] if isinstance(value[2], dict) else None)
+    else:
+        for row in base_rows or []:
+            interval_id = row.get("interval_id")
+            if not isinstance(interval_id, str) or not interval_id:
+                continue
+            item = {key: value for key, value in row.items() if key != "deleted"}
+            by_id[interval_id] = (("", ""), item)
+            if row.get("deleted"):
+                deleted.add(interval_id)
     for path in paths:
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
@@ -374,7 +463,17 @@ def _fold_paths(paths: list[Path], base_rows: list[dict[str, Any]] | None = None
         origin_operation = group_operations.get(str(replacement.get("_origin_group") or ""))
         if key not in deleted and not (current_group and current_group[1] == "delete") and not (origin_operation and origin_operation[1] == "delete"):
             suppressed.discard(key)
-    return [{**item, "deleted": key in suppressed} for key, (_, item) in sorted(by_id.items())]
+    rows = [{**item, "deleted": key in suppressed} for key, (_, item) in sorted(by_id.items())]
+    # The tombstone and group-operation history is not recoverable from `rows`
+    # alone, so it travels with them: a later incremental fold that inherited
+    # only rows would resurrect every interval the user deleted.
+    state = {
+        "by_id": {key: [list(order), item] for key, (order, item) in by_id.items()},
+        "deleted": sorted(suppressed),
+        "group_operations": {group: [list(order), operation, replacement]
+                             for group, (order, operation, replacement) in group_operations.items()},
+    }
+    return rows, state
 
 
 def ledger_item(row: dict[str, Any]) -> dict[str, Any]:

@@ -27,6 +27,7 @@ import { appConfirm } from '@/shared/components/ui/native-dialog'
 import { readMindMapEditorState } from '@/modules/content/domain/mindmap-document-entity'
 import { APP_EVENT_NAMES, emitAppEvent } from '@/shared/events/appEvents'
 import { rememberPalaceEditorDraft } from '@/shared/study-text/studyTextLibrary'
+import { discardQueuedConflictsByCoalesceKey } from '@/shared/persistence/mutationQueue'
 
 type ImportApplyGuardPhase = 'saving' | 'reloading' | 'awaiting_sync'
 
@@ -117,6 +118,12 @@ export function usePalaceEditorDocument({
       selectEditorState: readMindMapEditorState,
     },
     onLocalSnapshot: rememberPalaceEditorDraft,
+    onConflictResolved: (ownerId) => {
+      // The 409 left a parked copy of this save in the mutation queue. Nothing
+      // can replay it (parked conflicts are skipped on purpose), so resolving the
+      // conflict here must clear it or the entry outlives the conflict forever.
+      void discardQueuedConflictsByCoalesceKey(`palace:${ownerId}:editor`)
+    },
     onSaveError: async (nextError, pendingState) => {
       if (!nextError.message.includes('危险结构变更')) return false
       const forced = await confirmDangerousPalaceSave(pendingState)
@@ -263,13 +270,23 @@ export function usePalaceEditorDocument({
         { title: '确认危险保存', tone: 'danger' },
       )
       if (!confirmed) return null
+      // `editorState.editor_fingerprint` is the revision this client edited from.
+      // When the save is being retried after a 409, that revision is exactly what
+      // the server already rejected, so reusing it would conflict again and loop.
+      // Re-read the current revision and sign the deliberate overwrite with that.
+      let expectedFingerprint = editorState?.editor_fingerprint
+      try {
+        expectedFingerprint = readMindMapEditorState(await getPalaceEditorApi(palaceId)).editor_fingerprint
+          || expectedFingerprint
+      } catch {
+        // Keep the local revision: an unreachable server will reject the save
+        // anyway, and the failure surfaces through the normal error path.
+      }
       return await savePalaceEditorWithOptionsApi(palaceId, {
         ...nextState,
         confirm_dangerous_change: true,
         editor_source: 'palace_edit',
-        ...(editorState?.editor_fingerprint
-          ? { expected_editor_fingerprint: editorState.editor_fingerprint }
-          : {}),
+        ...(expectedFingerprint ? { expected_editor_fingerprint: expectedFingerprint } : {}),
       })
     },
     [editorState?.editor_fingerprint, palaceId],

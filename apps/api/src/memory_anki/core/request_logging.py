@@ -37,32 +37,38 @@ class RequestLoggingMiddleware:
         timing = RequestTiming(started_at)
         timing_token = request_timing.set(timing)
         status_code = 500
+        response_completed_ms: float | None = None
 
         async def send_wrapper(message: Message) -> None:
-            nonlocal status_code
+            nonlocal status_code, response_completed_ms
             if message["type"] == "http.response.start":
                 status_code = int(message.get("status") or 500)
                 headers = MutableHeaders(raw=list(message.get("headers") or []))
                 headers["X-Request-ID"] = request_id
                 message["headers"] = headers.raw
             await send(message)
+            if message["type"] == "http.response.body" and not message.get("more_body", False):
+                response_completed_ms = round((time.perf_counter() - started_at) * 1000, 2)
 
         try:
             await self.app(scope, receive, send_wrapper)
         finally:
             try:
                 duration_ms = round((time.perf_counter() - started_at) * 1000, 2)
+                response_duration_ms = response_completed_ms if response_completed_ms is not None else duration_ms
                 path = request.url.path
                 extra = {
                     "request_id": request_id,
                     "method": request.method,
                     "path": path,
                     "status_code": status_code,
-                    "duration_ms": duration_ms,
+                    "duration_ms": response_duration_ms,
+                    "application_duration_ms": duration_ms,
+                    "after_response_ms": round(max(0.0, duration_ms - response_duration_ms), 2),
                 }
                 message = "%s %s -> %s in %sms"
-                args = (request.method, path, status_code, duration_ms)
-                if duration_ms >= SLOW_REQUEST_THRESHOLD_MS and not path.endswith("/stream"):
+                args = (request.method, path, status_code, response_duration_ms)
+                if response_duration_ms >= SLOW_REQUEST_THRESHOLD_MS and not path.endswith("/stream"):
                     fields = timing.log_fields()
                     extra.update(fields)
                     self.logger.warning(

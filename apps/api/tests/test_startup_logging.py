@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import logging
+import time
 import unittest
 from logging.config import fileConfig
 from pathlib import Path
 from unittest.mock import patch
 
-from fastapi import FastAPI
+from fastapi import BackgroundTasks, FastAPI
 from fastapi.testclient import TestClient
+
+
+def _sleep_sync(seconds: float) -> None:
+    time.sleep(seconds)
 
 from memory_anki.app import startup_runtime
 from memory_anki.core import request_logging
@@ -126,7 +131,8 @@ class _FakeTime:
         self._values = list(values)
 
     def perf_counter(self) -> float:
-        return self._values.pop(0)
+        # Requests the middleware makes: start, response body sent, log site.
+        return self._values.pop(0) if len(self._values) > 1 else self._values[0]
 
 
 class RequestLoggingMiddlewareTests(unittest.TestCase):
@@ -164,6 +170,39 @@ class RequestLoggingMiddlewareTests(unittest.TestCase):
         self.assertEqual(len(captured.records), 1)
         self.assertEqual(captured.records[0].levelno, logging.INFO)
         self.assertIn("GET /session/live/stream -> 200", captured.records[0].getMessage())
+
+    def test_response_duration_excludes_after_response_work(self):
+        """Split response time from work that runs after the response is sent.
+
+        Starlette's ``call_next`` only returns after the response was sent, so a
+        middleware-based simulation cannot place work after the response. Use a
+        real ``BackgroundTasks`` handler instead: its callback runs after the
+        body, exactly like the rolling SQLite backup that follows an editor
+        save. Counting that time inside ``duration_ms`` made saves look like they
+        took minutes while the user had already received the response.
+        """
+        app = FastAPI()
+        app.add_middleware(RequestLoggingMiddleware)
+
+        @app.get("/save")
+        def save(background_tasks: BackgroundTasks):
+            background_tasks.add_task(_sleep_sync, 0.4)
+            return {"ok": True}
+
+        client = TestClient(app)
+
+        def _get() -> logging.LogRecord:
+            with self.assertLogs("memory_anki.request", level="INFO") as captured:
+                client.get("/save")
+            return captured.records[0]
+
+        _get()  # warm-up, excludes first-request import overhead
+        record = _get()
+
+        self.assertLess(record.duration_ms, 200)
+        self.assertGreaterEqual(record.after_response_ms, 300)
+        self.assertIn("GET /save -> 200 in ", record.getMessage())
+        self.assertNotIn("[slow]", record.getMessage())
 
 
 if __name__ == "__main__":

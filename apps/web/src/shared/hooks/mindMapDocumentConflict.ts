@@ -49,6 +49,7 @@ export function useMindMapDocumentConflict(
       resolving.current = false
     }
   }, [apply, draftKeyFor])
-  return { pendingConflict: pendingConflict?.ownerId === ownerId ? pendingConflict : null,
+  const visibleConflict = pendingConflict?.ownerId === ownerId ? pendingConflict : null
+  return { pendingConflict: visibleConflict,
     conflictRef, publishConflict, resolveConflict }
 }

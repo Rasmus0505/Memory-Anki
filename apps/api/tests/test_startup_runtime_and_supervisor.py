@@ -133,6 +133,90 @@ class StartupModeTests(unittest.TestCase):
 
         asyncio.run(run_lifespan())
 
+    def test_db_pool_warmup_fills_the_pool_and_releases_every_connection(self):
+        from memory_anki.app import startup_warmup
+
+        engine = MagicMock()
+        connection = MagicMock()
+        engine.connect.return_value = connection
+
+        with patch.dict(
+            "memory_anki.infrastructure.db._tables._base.__dict__",
+            {"engine": engine, "DB_POOL_SIZE": 3},
+        ):
+            startup_warmup._warm_db_pool()
+
+        # Every pooled slot is opened, then handed back: a leaked checkout would
+        # permanently shrink the pool the warmup was meant to fill.
+        self.assertEqual(engine.connect.call_count, 3)
+        self.assertEqual(connection.close.call_count, 3)
+
+    def test_db_pool_warmup_still_closes_what_it_opened_when_a_connect_fails(self):
+        from memory_anki.app import startup_warmup
+
+        engine = MagicMock()
+        opened = MagicMock()
+        engine.connect.side_effect = [opened, RuntimeError("boom")]
+
+        with (
+            patch.dict(
+                "memory_anki.infrastructure.db._tables._base.__dict__",
+                {"engine": engine, "DB_POOL_SIZE": 3},
+            ),
+            patch.object(startup_warmup.logger, "exception") as log_exception,
+        ):
+            startup_warmup._warm_db_pool()
+
+        log_exception.assert_called_once_with("database pool warmup failed")
+        opened.close.assert_called_once()
+
+    def test_db_pool_warmup_is_skipped_under_pytest(self):
+        from memory_anki.app import startup_warmup
+
+        # PYTEST_CURRENT_TEST is set by the runner, so this is inert here; the
+        # assertion pins the guard that keeps tests from opening the real pool.
+        with patch.object(startup_warmup.threading, "Thread") as thread_cls:
+            self.assertIsNone(startup_warmup.start_db_pool_warmup())
+        thread_cls.assert_not_called()
+
+    def test_db_pool_warmup_is_started_as_background_daemon(self):
+        from memory_anki.app import startup_warmup
+
+        with (
+            patch.dict(os.environ, {}, clear=False),
+            patch.object(startup_warmup.threading, "Thread") as thread_cls,
+        ):
+            os.environ.pop("PYTEST_CURRENT_TEST", None)
+            thread = thread_cls.return_value
+
+            started = startup_warmup.start_db_pool_warmup()
+
+        self.assertIs(started, thread)
+        self.assertEqual(thread_cls.call_args.kwargs["name"], "memory-anki-db-pool-warmup")
+        self.assertTrue(thread_cls.call_args.kwargs["daemon"])
+        thread.start.assert_called_once()
+
+    def test_lifespan_warms_db_pool_even_in_healthcheck_mode(self):
+        from memory_anki.app import main as app_main
+
+        async def run_lifespan():
+            # The desktop/PWA process serves in healthcheck mode and is exactly
+            # the one whose first user request paid the multi-second cold open.
+            with (
+                patch.object(app_main, "resolve_startup_mode", return_value="healthcheck"),
+                patch.object(
+                    app_main,
+                    "initialize_service_runtime",
+                    return_value=SimpleNamespace(runtime_info={"channel": "test"}),
+                ),
+                patch.object(app_main, "start_db_pool_warmup") as start_pool_warmup,
+            ):
+                async with app_main.lifespan(FastAPI()):
+                    pass
+                start_pool_warmup.assert_called_once()
+
+        asyncio.run(run_lifespan())
+
     def test_study_startup_indexes_are_declared_on_review_unit_state_table(self):
         from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitState
 

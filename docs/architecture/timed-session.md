@@ -80,6 +80,10 @@ read model 对每个 ledger interval 输出 `attribution`；早于该契约的�
 
 迁移 `0069_repair_beijing_offset_study_sessions` 只改自动记录：`started_at` 比服务器 `created_at` 晚大约 8 小时时，视为把北京时间当成了 UTC，整段回拨 8 小时。`duration_edited` 不改。
 
+## 读取路径
+
+学习时打开仪表盘或时长列表，不得在请求里重放全部历史 revision。用户要求的体验是：快速看到数据，不报错，不卡顿，不等待。选定方式是快照加只补新记录：签名一致就用 `学习数据/time-ledger/_folded_cache.json`；只多了少量新文件就在快照上补；差得太多则请求里先返回已有快照，整本重算放到后台。不要改回每次打开整本重读。故障记录和未完成的现场门禁见 [0004](../incidents/0004-dashboard-ledger-full-fold.md)。
+
 ## 依赖边界
 
 页面和 widgets 只能从 `modules/session/public.ts` 使用会话能力。全局 click、ticker、visibility 适配属于运行时层；UTC interval、union、revision、correction 和 tombstone 属于框架无关 domain/service。服务端负责 schema/timestamp 校验、immutable revision、group correction、terminal deletion 和旧 SQLite 兼容过滤。
