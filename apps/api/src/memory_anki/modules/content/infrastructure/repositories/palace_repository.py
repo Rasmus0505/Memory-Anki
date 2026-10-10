@@ -74,6 +74,16 @@ class PalaceRepository:
             query = query.filter(Palace.title.ilike(f"%{search}%"))
         return query.count()
 
+    def list_study_text_palaces(self) -> list[Palace]:
+        """Active palaces with the editor shell graph, without pegs or review logs."""
+        return (
+            self._session.query(Palace)
+            .options(*_catalog_loader_options(), selectinload(Palace.attachments))
+            .filter(Palace.deleted_at.is_(None), Palace.archived.is_(False))
+            .order_by(Palace.id.asc())
+            .all()
+        )
+
     def list_catalog_palaces(self, *, search: str = "") -> list[Palace]:
         query = (
             self._session.query(Palace)

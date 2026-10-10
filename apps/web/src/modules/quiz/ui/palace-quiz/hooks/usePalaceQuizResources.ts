@@ -2,15 +2,36 @@ import { useEffect, useState } from 'react'
 import type { PalaceQuizQuestion } from '@/shared/api/contracts'
 import { loadPalaceQuizPageData, loadPalaceQuizQuestions } from '@/modules/quiz/ui/palace-quiz/api'
 import type { PalaceQuizPageMeta } from '@/modules/quiz/ui/palace-quiz/model/palaceQuizPage'
+import { peekPalaceEditor, peekPalaceQuestions } from '@/shared/study-text/studyTextLibrary'
+
+function preparedQuiz(palaceId: number | null) {
+  if (palaceId == null) return null
+  const editor = peekPalaceEditor(palaceId)
+  const questions = peekPalaceQuestions(palaceId)
+  if (!editor?.palace || questions == null) return null
+  return {
+    palace: editor.palace as PalaceQuizPageMeta,
+    questions,
+  }
+}
 
 export function usePalaceQuizResources(palaceId: number | null) {
-  const [palace, setPalace] = useState<PalaceQuizPageMeta | null>(null)
-  const [questions, setQuestions] = useState<PalaceQuizQuestion[]>([])
-  const [loading, setLoading] = useState(false)
+  const prepared = preparedQuiz(palaceId)
+  const [palace, setPalace] = useState<PalaceQuizPageMeta | null>(prepared?.palace ?? null)
+  const [questions, setQuestions] = useState<PalaceQuizQuestion[]>(prepared?.questions ?? [])
+  const [loading, setLoading] = useState(palaceId != null && prepared == null)
   const [error, setError] = useState('')
 
   useEffect(() => {
     if (!palaceId) return
+    const ready = preparedQuiz(palaceId)
+    if (ready) {
+      setPalace(ready.palace)
+      setQuestions(ready.questions)
+      setLoading(false)
+      setError('')
+      return
+    }
     let cancelled = false
     const load = async () => {
       setLoading(true)

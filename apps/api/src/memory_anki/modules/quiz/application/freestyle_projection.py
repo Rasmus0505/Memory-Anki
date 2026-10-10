@@ -78,6 +78,62 @@ def list_node_bindings_for_palaces(
     ]
 
 
+def list_study_text_bindings(
+    session: Session,
+    *,
+    palace_ids: list[int] | None = None,
+) -> list[dict[str, Any]]:
+    """Binding edges for the session text library.
+
+    Node labels and palace titles are filled by the caller from documents it
+    already loaded, so this stays one query.
+    """
+    query = (
+        session.query(PalaceQuizQuestionNodeBinding, PalaceQuizQuestion)
+        .join(
+            PalaceQuizQuestion,
+            PalaceQuizQuestion.id == PalaceQuizQuestionNodeBinding.question_id,
+        )
+        .filter(PalaceQuizQuestion.deleted_at.is_(None))
+        .order_by(
+            PalaceQuizQuestionNodeBinding.palace_id.asc(),
+            PalaceQuizQuestionNodeBinding.question_id.asc(),
+            PalaceQuizQuestionNodeBinding.node_uid.asc(),
+        )
+    )
+    if palace_ids is not None:
+        if not palace_ids:
+            return []
+        query = query.filter(PalaceQuizQuestionNodeBinding.palace_id.in_(palace_ids))
+    items: list[dict[str, Any]] = []
+    for row, question in query.all():
+        if not row.palace_id or not row.question_id or not row.node_uid:
+            continue
+        target_palace_id = int(row.palace_id)
+        items.append(
+            {
+                "id": row.id,
+                "palace_id": target_palace_id,
+                "target_palace_id": target_palace_id,
+                "target_palace_title": "",
+                "question_id": int(row.question_id),
+                "question_type": question.question_type or "",
+                "marked": bool(question.marked),
+                "question_owner_palace_id": int(question.palace_id) if question.palace_id else None,
+                "question_owner_palace_title": "",
+                "node_uid": str(row.node_uid),
+                "node_text": "",
+                "confidence": row.confidence,
+                "reason": row.reason or "",
+                "source": row.source or "",
+                "run_id": row.run_id,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+                "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+            }
+        )
+    return items
+
+
 def list_mastery_profiles_for_palaces(
     session: Session,
     *,

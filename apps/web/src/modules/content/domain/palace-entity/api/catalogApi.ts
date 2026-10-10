@@ -15,6 +15,15 @@ import {
 } from '@/shared/api/promiseWarmupCache'
 import { emitAppEvent } from '@/shared/events/appEvents'
 import { PALACE_CATALOG_INVALIDATED_EVENT } from './catalogQuery'
+import {
+  ensureStudyTextLibrary,
+  forgetPreparedCatalog,
+  isDefaultCatalogQuery,
+  isStudyTextLibraryPending,
+  peekGroupedPalaces,
+  peekPalaceEditor,
+  peekSubjectShelf,
+} from '@/shared/study-text/studyTextLibrary'
 
 export { PALACE_CATALOG_INVALIDATED_EVENT } from './catalogQuery'
 
@@ -59,9 +68,17 @@ export function getPalacesApi(params?: Record<string, string>) {
 export function getPalacesGroupedApi(params?: Record<string, string>) {
   const q = buildQueryString(params)
   const cacheKey = `grouped:${q}`
-  return consumeWarmedPalaceGet(cacheKey, () =>
-    request<PalaceGroupedListResponse>(`/palaces/grouped${q}`),
-  )
+  const load = () =>
+    consumeWarmedPalaceGet(cacheKey, () =>
+      request<PalaceGroupedListResponse>(`/palaces/grouped${q}`),
+    )
+  if (!isDefaultCatalogQuery(params)) return load()
+  const cached = peekGroupedPalaces()
+  if (cached) return Promise.resolve(cached)
+  if (isStudyTextLibraryPending()) {
+    return ensureStudyTextLibrary().then((library) => library.grouped ?? load()).catch(() => load())
+  }
+  return load()
 }
 
 export function invalidatePalaceCatalogCache() {
@@ -96,9 +113,17 @@ export function prefetchPalacesGroupedSummaryApi(params?: Record<string, string>
 export function getPalaceSubjectShelfApi(params?: Record<string, string>) {
   const q = buildQueryString(params)
   const cacheKey = `subjects:${q}`
-  return consumeWarmedPalaceGet(cacheKey, () =>
-    request<PalaceSubjectShelfResponse>(`/palaces/subjects${q}`),
-  )
+  const load = () =>
+    consumeWarmedPalaceGet(cacheKey, () =>
+      request<PalaceSubjectShelfResponse>(`/palaces/subjects${q}`),
+    )
+  if (!isDefaultCatalogQuery(params)) return load()
+  const cached = peekSubjectShelf()
+  if (cached) return Promise.resolve(cached)
+  if (isStudyTextLibraryPending()) {
+    return ensureStudyTextLibrary().then((library) => library.subjects ?? load()).catch(() => load())
+  }
+  return load()
 }
 
 export function prefetchPalaceSubjectShelfApi(params?: Record<string, string>) {
@@ -110,6 +135,13 @@ export function prefetchPalaceSubjectShelfApi(params?: Record<string, string>) {
 }
 
 export function getPalaceApi(id: number) {
+  const cached = peekPalaceEditor(id)
+  if (cached?.palace) return Promise.resolve(cached.palace)
+  if (isStudyTextLibraryPending()) {
+    return ensureStudyTextLibrary()
+      .then((library) => library.editors.get(id)?.palace ?? request<PalaceEditorMeta>(`/palaces/${id}`))
+      .catch(() => request<PalaceEditorMeta>(`/palaces/${id}`))
+  }
   return request<PalaceEditorMeta>(`/palaces/${id}`)
 }
 
@@ -122,6 +154,9 @@ export function createPalaceApi(data: PalaceMutationPayload) {
       description: '创建宫殿',
       replayMode: 'manual',
     },
+  }).then((created) => {
+    forgetPreparedCatalog()
+    return created
   })
 }
 
@@ -135,6 +170,9 @@ export function updatePalaceApi(id: number, data: PalaceMutationPayload) {
       description: '保存宫殿信息',
       replayMode: 'auto',
     },
+  }).then((saved) => {
+    forgetPreparedCatalog()
+    return saved
   })
 }
 
@@ -146,6 +184,9 @@ export function deletePalaceApi(id: number) {
       description: '删除宫殿',
       replayMode: 'manual',
     },
+  }).then((deleted) => {
+    forgetPreparedCatalog()
+    return deleted
   })
 }
 
@@ -170,6 +211,13 @@ export function deleteAttachmentApi(id: number) {
 }
 
 export function getPalaceEditorApi(id: number) {
+  const cached = peekPalaceEditor(id)
+  if (cached) return Promise.resolve(cached)
+  if (isStudyTextLibraryPending()) {
+    return ensureStudyTextLibrary()
+      .then((library) => library.editors.get(id) ?? request<PalaceEditorResponse>(`/palaces/${id}/editor`))
+      .catch(() => request<PalaceEditorResponse>(`/palaces/${id}/editor`))
+  }
   return request<PalaceEditorResponse>(`/palaces/${id}/editor`)
 }
 

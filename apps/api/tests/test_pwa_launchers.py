@@ -467,6 +467,42 @@ def test_desktop_reuses_healthy_service():
     start_backend.assert_not_called()
 
 
+def test_desktop_waits_for_text_before_opening_the_window():
+    with (
+        patch.object(pwa_server, "service_lock", return_value=nullcontext()),
+        patch.object(pwa_server, "_shared_service_healthy", return_value=True),
+        patch.object(pwa_server, "_pwa_dist_ready", return_value=True),
+        patch.object(pwa_server, "_prepare_study_text_library", return_value=True) as prepare_text,
+    ):
+        assert pwa_server.restart_for_desktop() == 0
+
+    prepare_text.assert_called_once_with()
+
+
+def test_prepare_study_text_library_posts_before_use(monkeypatch, capsys):
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+
+    class _Response:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def getcode(self):
+            return 200
+
+    with patch.object(pwa_server, "urlopen", return_value=_Response()) as opened:
+        assert pwa_server._prepare_study_text_library() is True
+
+    request = opened.call_args.args[0]
+    assert request.get_method() == "POST"
+    assert request.full_url.endswith("/api/v1/study-text-library/prepare")
+    assert "已准备好" in capsys.readouterr().out
+
+
 def test_fingerprint_uses_metadata_not_file_contents(tmp_path):
     source = tmp_path / "a.txt"
     source.write_text("hello", encoding="utf-8")

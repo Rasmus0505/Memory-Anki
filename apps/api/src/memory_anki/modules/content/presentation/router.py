@@ -25,6 +25,9 @@ from memory_anki.modules.content.presentation.editor_router import (
 from memory_anki.modules.content.presentation.segment_router import (
     router as segment_router,
 )
+from memory_anki.modules.content.presentation.study_text_library_router import (
+    router as study_text_library_router,
+)
 from memory_anki.modules.content.presentation.version_router import (
     router as version_router,
 )
@@ -40,6 +43,7 @@ __all__ = [
 router = APIRouter(tags=["palaces"])
 
 router.include_router(catalog_router)
+router.include_router(study_text_library_router)
 router.include_router(core_router)
 router.include_router(editor_router)
 router.include_router(segment_router)

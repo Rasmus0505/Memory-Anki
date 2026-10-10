@@ -8,10 +8,6 @@ import {
   Shuffle,
 } from 'lucide-react'
 import {
-  prefetchPalacesGroupedSummaryApi,
-  prefetchPalaceSubjectShelfApi,
-} from '@/modules/content/public'
-import {
   preloadEnglishWorkspacePage,
   preloadExamPage,
   preloadFreestylePage,
@@ -23,7 +19,6 @@ import {
   preloadPracticeRoutes,
   preloadProgressPage,
 } from '@/app/router/appRoutes'
-import { prefetchDashboardApi } from '@/modules/dashboard/public'
 // 路径归属规则统一由 routeManifest 派生（新增路由请在 manifest 登记）。
 import { createNavSectionMatcher, type NavSectionKey } from '@/shared/routing/routeManifest'
 
@@ -62,8 +57,6 @@ export const navSections: NavSectionDefinition[] = [
     rememberLastVisited: true,
     matches: createNavSectionMatcher('palaces'),
     warmup: () => {
-      prefetchPalaceSubjectShelfApi()
-      prefetchPalacesGroupedSummaryApi()
       void preloadPalaceShelfPage()
       void preloadPalaceListPage()
       void preloadKnowledgePage()
@@ -114,7 +107,6 @@ export const navSections: NavSectionDefinition[] = [
     rememberLastVisited: true,
     matches: createNavSectionMatcher('review'),
     warmup: () => {
-      prefetchDashboardApi()
       void preloadDashboardPage()
       void preloadExamPage()
     },

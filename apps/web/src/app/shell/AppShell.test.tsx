@@ -41,6 +41,16 @@ vi.mock('@/modules/dashboard/ui/dashboard/api', () => ({
   prefetchDashboardApi: () => prefetchDashboardApi(),
 }))
 
+vi.mock('@/shared/study-text/studyTextLibrary', () => ({
+  ensureStudyTextLibrary: () => Promise.resolve({
+    editors: new Map(),
+    questionsByPalace: new Map(),
+    bindingsByPalace: new Map(),
+    grouped: null,
+    subjects: null,
+  }),
+}))
+
 vi.mock('@/app/router/appRoutes', () => ({
   preloadPracticeRoutes: () => preloadPracticeRoutes(),
   preloadEnglishWorkspacePage: () => preloadEnglishWorkspacePage(),
@@ -345,12 +355,12 @@ describe('AppShell', () => {
     )
 
     await screen.findAllByText(/Stable abcdef12/)
-    const beforeHoverCalls = prefetchPalaceSubjectShelfApi.mock.calls.length
-
     fireEvent.mouseEnter(screen.getAllByRole('link', { name: '知识' })[0]!)
 
-    expect(prefetchPalaceSubjectShelfApi.mock.calls.length).toBe(beforeHoverCalls + 1)
-    expect(prefetchPalacesGroupedSummaryApi.mock.calls.length).toBeGreaterThanOrEqual(1)
+    expect(prefetchPalaceSubjectShelfApi).not.toHaveBeenCalled()
+    expect(prefetchPalacesGroupedSummaryApi).not.toHaveBeenCalled()
+    expect(preloadPalaceShelfPage).toHaveBeenCalled()
+    expect(preloadPalaceListPage).toHaveBeenCalled()
     expect(preloadKnowledgePage).toHaveBeenCalled()
   })
 
@@ -374,8 +384,8 @@ describe('AppShell', () => {
 
     await screen.findAllByText(/Stable abcdef12/)
     await waitFor(() => {
-      expect(prefetchPalaceSubjectShelfApi).toHaveBeenCalledTimes(1)
-      expect(prefetchPalacesGroupedSummaryApi).toHaveBeenCalledTimes(1)
+      expect(prefetchPalaceSubjectShelfApi).not.toHaveBeenCalled()
+      expect(prefetchPalacesGroupedSummaryApi).not.toHaveBeenCalled()
       expect(prefetchDashboardApi).toHaveBeenCalledTimes(1)
       expect(preloadPracticeRoutes).toHaveBeenCalledTimes(1)
       expect(preloadFreestylePage).toHaveBeenCalledTimes(1)

@@ -302,7 +302,13 @@ def palace_summary_json(
     }
 
 
-def palace_editor_meta_json(p, session: Session | None = None) -> dict:
+def palace_editor_meta_json(
+    p,
+    session: Session | None = None,
+    *,
+    precomputed_explicit_chapter_ids: set[int] | None = None,
+    precomputed_memory_projection: dict[str, Any] | None = None,
+) -> dict:
     """Serialize only the palace metadata required by editor/view/review shells.
 
     Keep this payload intentionally lighter than ``palace_json`` by excluding
@@ -313,10 +319,18 @@ def palace_editor_meta_json(p, session: Session | None = None) -> dict:
     frontend briefly apply a successful binding response and then wipe the
     subject list on editor reload.
     """
-    payload = palace_summary_json(p, session)
-    explicit_chapter_ids: set[int] = set()
-    if session is not None:
+    payload = palace_summary_json(
+        p,
+        session,
+        precomputed_explicit_chapter_ids=precomputed_explicit_chapter_ids,
+        precomputed_memory_projection=precomputed_memory_projection,
+    )
+    if precomputed_explicit_chapter_ids is not None:
+        explicit_chapter_ids = precomputed_explicit_chapter_ids
+    elif session is not None:
         explicit_chapter_ids = get_palace_explicit_chapter_ids(session, p)
+    else:
+        explicit_chapter_ids = set()
     subjects = list(getattr(p, "subjects", []) or [])
     payload.update(
         {

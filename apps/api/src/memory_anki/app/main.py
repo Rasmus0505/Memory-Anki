@@ -17,7 +17,7 @@ from memory_anki.app.startup_runtime import (
     initialize_service_runtime,
     resolve_startup_mode,
 )
-from memory_anki.app.startup_warmup import start_startup_warmup
+from memory_anki.app.startup_warmup import start_ledger_prefetch, start_startup_warmup
 from memory_anki.core.api_token_auth import ApiTokenAuthMiddleware
 from memory_anki.core.config import (
     ATTACHMENTS_DIR,
@@ -37,6 +37,9 @@ from memory_anki.modules.backups.application.backup_lifecycle import (
     stop_periodic_backup_loop,
 )
 from memory_anki.modules.backups.presentation import router as backups_router
+from memory_anki.modules.content.application.study_text_library_cache import (
+    start_study_text_prepare,
+)
 from memory_anki.modules.content.presentation import router as palace_router
 from memory_anki.modules.dashboard.presentation import router as dashboard_router
 from memory_anki.modules.english.presentation import router as english_router
@@ -133,6 +136,7 @@ async def lifespan(app: FastAPI):
     startup_mode = resolve_startup_mode()
     startup_state = initialize_service_runtime(app, mode=startup_mode)
     runtime_activity_handle = None
+    start_ledger_prefetch()
     if startup_mode == STARTUP_MODE_SERVE:
         runtime_activity_handle = start_runtime_activity_heartbeat(
             channel=str(startup_state.runtime_info.get("channel") or "production"),
@@ -140,6 +144,7 @@ async def lifespan(app: FastAPI):
         )
         start_periodic_backup_loop()
         start_startup_warmup()
+        start_study_text_prepare()
         # The review-queue read path defers a lagging palace instead of rebuilding
         # it inside the request (that rebuild is a write and would take the global
         # storage lock, which is what made ratings appear frozen). This worker is

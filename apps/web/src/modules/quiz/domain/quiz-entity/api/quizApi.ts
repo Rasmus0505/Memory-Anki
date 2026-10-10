@@ -1,5 +1,14 @@
 import { request } from '@/shared/api/http'
 import { invalidateSharedRequest } from '@/shared/api/inFlightRequest'
+import {
+  ensureStudyTextLibrary,
+  forgetPalaceQuestion,
+  isStudyTextLibraryPending,
+  peekPalaceBindings,
+  peekPalaceQuestions,
+  rememberPalaceBindings,
+  rememberPalaceQuestion,
+} from '@/shared/study-text/studyTextLibrary'
 import type {
   PalaceQuizOcrSource,
   PalaceQuizOcrSourceDraft,
@@ -11,7 +20,19 @@ import type {
 } from '@/shared/api/contracts'
 
 export function getPalaceQuizQuestionsApi(palaceId: number) {
-  return request<{ items: PalaceQuizQuestion[] }>(`/palaces/${palaceId}/aggregated-quiz-questions`)
+  const cached = peekPalaceQuestions(palaceId)
+  if (cached) return Promise.resolve({ items: cached })
+  const load = () =>
+    request<{ items: PalaceQuizQuestion[] }>(`/palaces/${palaceId}/aggregated-quiz-questions`)
+  if (isStudyTextLibraryPending()) {
+    return ensureStudyTextLibrary()
+      .then(() => {
+        const items = peekPalaceQuestions(palaceId)
+        return items == null ? load() : { items }
+      })
+      .catch(() => load())
+  }
+  return load()
 }
 
 export function getPalaceQuizOcrSourcesApi(palaceId: number) {
@@ -34,6 +55,9 @@ export function createPalaceQuizQuestionApi(
       description: '新增宫殿题目',
       replayMode: 'manual',
     },
+  }).then((saved) => {
+    if (saved.item) rememberPalaceQuestion(saved.item)
+    return saved
   })
 }
 
@@ -88,6 +112,9 @@ export function updatePalaceQuizQuestionApi(
       description: '保存宫殿题目',
       replayMode: 'auto',
     },
+  }).then((saved) => {
+    if (saved.item) rememberPalaceQuestion(saved.item)
+    return saved
   })
 }
 
@@ -99,6 +126,9 @@ export function deletePalaceQuizQuestionApi(questionId: number) {
       description: '删除宫殿题目',
       replayMode: 'manual',
     },
+  }).then((saved) => {
+    forgetPalaceQuestion(questionId)
+    return saved
   })
 }
 
@@ -331,9 +361,21 @@ export function recordQuizAttemptEventApi(data: {
 }
 
 export function listPalaceQuizNodeBindingsApi(palaceId: number) {
-  return request<{ items: QuizNodeBindingEdge[]; item_count: number }>(
-    `/palaces/${palaceId}/quiz-node-bindings`,
-  )
+  const cached = peekPalaceBindings(palaceId)
+  if (cached) return Promise.resolve({ items: cached, item_count: cached.length })
+  const load = () =>
+    request<{ items: QuizNodeBindingEdge[]; item_count: number }>(
+      `/palaces/${palaceId}/quiz-node-bindings`,
+    )
+  if (isStudyTextLibraryPending()) {
+    return ensureStudyTextLibrary()
+      .then(() => {
+        const items = peekPalaceBindings(palaceId)
+        return items == null ? load() : { items, item_count: items.length }
+      })
+      .catch(() => load())
+  }
+  return load()
 }
 
 /** Shared-cache key for `listPalaceQuizNodeBindingsApi`. Keep the two in sync. */
@@ -425,5 +467,8 @@ export function mutatePalaceQuizNodeBindingsApi(
       description: '手改题库知识点绑定',
       replayMode: 'manual',
     },
+  }).then((saved) => {
+    if (saved.items) rememberPalaceBindings(palaceId, saved.items)
+    return saved
   })
 }

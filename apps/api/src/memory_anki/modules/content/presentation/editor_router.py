@@ -14,6 +14,9 @@ from memory_anki.modules.content.application.palace_serializer import (
     palace_editor_meta_json,
 )
 from memory_anki.modules.content.application.palace_service import get_palace
+from memory_anki.modules.content.application.study_text_library_cache import (
+    remember_prepared_editor,
+)
 from memory_anki.modules.content.presentation.errors import raise_not_found
 from memory_anki.platform.persistence import SqlAlchemyUnitOfWork
 
@@ -99,7 +102,9 @@ def api_update_editor(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     background_tasks.add_task(_run_rolling_backup_after_response)
-    return {
+    saved = {
         "palace": palace_editor_meta_json(palace, s),
         **state,
     }
+    remember_prepared_editor(palace_id, saved)
+    return saved

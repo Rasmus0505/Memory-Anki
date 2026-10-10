@@ -1,4 +1,5 @@
 import { request } from '@/shared/api/http'
+import { rememberPalaceEditor } from '@/shared/study-text/studyTextLibrary'
 import type {
   MindMapAiSplitRequest,
   MindMapAiSplitResponse,
@@ -35,6 +36,11 @@ export function savePalaceEditorApi(
       description: '保存宫殿脑图',
       replayMode: 'auto',
     },
+  }).then((saved) => {
+    if (responseMode !== 'ack' && saved && typeof saved === 'object' && 'editor_doc' in saved) {
+      rememberPalaceEditor(id, saved)
+    }
+    return saved
   })
 }
 
@@ -51,6 +57,9 @@ export function savePalaceEditorWithOptionsApi(
       description: '保存宫殿脑图',
       replayMode: 'auto',
     },
+  }).then((saved) => {
+    if (saved && typeof saved === 'object' && 'editor_doc' in saved) rememberPalaceEditor(id, saved)
+    return saved
   })
 }
 

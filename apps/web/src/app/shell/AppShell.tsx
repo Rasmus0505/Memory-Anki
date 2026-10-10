@@ -10,10 +10,6 @@ import { NavLink, useLocation } from 'react-router-dom'
 import type { RuntimeInfo } from '@/shared/api/contracts'
 import { getRuntimeInfoApi } from '@/modules/settings/public'
 import {
-  prefetchPalacesGroupedSummaryApi,
-  prefetchPalaceSubjectShelfApi,
-} from '@/modules/content/public'
-import {
   preloadDashboardPage,
   preloadFreestylePage,
   preloadPalaceEditPage,
@@ -23,6 +19,7 @@ import {
   preloadProfilePage,
 } from '@/app/router/appRoutes'
 import { prefetchDashboardApi } from '@/modules/dashboard/public'
+import { ensureStudyTextLibrary } from '@/shared/study-text/studyTextLibrary'
 import { ShellProvider, useShellContext } from '@/shared/components/layout/ShellContext'
 import { useClientPreferenceBootstrap } from '@/app/providers/useClientPreferenceBootstrap'
 import { Badge } from '@/shared/components/ui/badge'
@@ -98,9 +95,6 @@ function warmNavSection(section: NavSectionDefinition) {
   warmedNavSections.add(section.key)
   section.warmup?.()
 }
-
-/** On the immersive feed, shell warmups wait for the first card instead of racing it. */
-const FEED_WARMUP_DELAY_MS = 4_000
 
 function scheduleIdleWarmup(callback: () => void) {
   if (typeof window === 'undefined') return () => {}
@@ -235,36 +229,34 @@ function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
   }, [hash, pathname, search])
 
   useEffect(() => {
-    // Do not wait for requestIdleCallback: freestyle keeps the main thread busy,
-    // so idle warmup often has not fetched the insights chunk before the user
-    // clicks 洞察 and the route falls back to an empty-looking page.
-    // On the feed itself, wait until the first card is up: these requests shared
-    // the backend with the first card's session and slowed it.
-    const timer = window.setTimeout(() => {
-      prefetchDashboardApi()
-      void preloadDashboardPage()
-    }, isImmersiveFeedPath(window.location.pathname) ? FEED_WARMUP_DELAY_MS : 0)
-    return () => window.clearTimeout(timer)
+    // Page code is not the study library. Load those chunks immediately so a
+    // later click does not sit on an empty shell. Do not fetch catalog data
+    // here: that races the one text prepare and the first card.
+    preloadPracticeRoutes()
+    void preloadFreestylePage()
+    void preloadDashboardPage()
+    void preloadPalaceShelfPage()
+    void preloadPalaceListPage()
   }, [])
 
   useEffect(() => {
-    let cancelIdle: (() => void) | undefined
-    const timer = window.setTimeout(() => {
-      cancelIdle = scheduleIdleWarmup(() => {
-        preloadPracticeRoutes()
-        prefetchPalaceSubjectShelfApi()
-        prefetchPalacesGroupedSummaryApi()
-        void preloadFreestylePage()
-        void preloadDashboardPage()
-        void preloadPalaceShelfPage()
-        void preloadPalaceListPage()
-      })
-    }, isImmersiveFeedPath(window.location.pathname) ? FEED_WARMUP_DELAY_MS : 0)
-    return () => {
-      window.clearTimeout(timer)
-      cancelIdle?.()
+    if (isImmersiveFeedPath(pathname)) return
+    // The overview page is the earlier sibling of the page content, so this
+    // warm starts before that page asks. Other pages wait until text is ready.
+    if (pathname === '/' || pathname === '/dashboard') {
+      prefetchDashboardApi()
+      return
     }
-  }, [])
+    let cancelled = false
+    void ensureStudyTextLibrary()
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) prefetchDashboardApi()
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [pathname])
 
   useEffect(() => {
     if (pathname !== '/' && pathname !== '/dashboard') return
@@ -382,6 +374,9 @@ function MobileBottomNav() {
 }
 
 function ShellFrame({ children }: PropsWithChildren) {
+  // Start the one text prepare during render so the first card and later pages
+  // join the same promise. A failed prepare falls through to the old page loads.
+  void ensureStudyTextLibrary().catch(() => undefined)
   const { pathname } = useLocation()
   const immersiveFeed = isImmersiveFeedPath(pathname)
   const mindMapHost = isMindMapHostPath(pathname)

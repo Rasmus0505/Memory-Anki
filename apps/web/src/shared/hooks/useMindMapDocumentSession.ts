@@ -26,6 +26,7 @@ interface MindMapDocumentSessionOptions<TResponse, TMeta> {
   selectEditorState?: (response: TResponse) => MindMapEditorState
   onSaveError?: (error: Error, pendingState: MindMapEditorState) => Promise<boolean> | boolean
   beforeAutoSave?: (nextState: MindMapEditorState, currentState: MindMapEditorState | null) => string | null
+  onLocalSnapshot?: (ownerId: number, snapshot: MindMapEditorState) => void
 }
 type PersistedMindMapSavePayload = MindMapEditorState & {
   expected_editor_fingerprint?: string | null
@@ -58,6 +59,7 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
   selectEditorState: legacySelectEditorState,
   onSaveError,
   beforeAutoSave,
+  onLocalSnapshot,
 }: MindMapDocumentSessionOptions<TResponse, TMeta>) {
   const resolvedAdapter = adapter ?? {
     load: legacyFetcher,
@@ -104,6 +106,7 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
   const selectEditorStateRef = useRef(selectEditorState)
   const onSaveErrorRef = useRef(onSaveError)
   const beforeAutoSaveRef = useRef(beforeAutoSave)
+  const onLocalSnapshotRef = useRef(onLocalSnapshot)
   const lastStateFingerprintRef = useRef('')
   const previousEntityIdRef = useRef<number | null>(entityId)
   const lastSavedEditorFingerprintRef = useRef('')
@@ -139,6 +142,7 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
   selectEditorStateRef.current = selectEditorState
   onSaveErrorRef.current = onSaveError
   beforeAutoSaveRef.current = beforeAutoSave
+  onLocalSnapshotRef.current = onLocalSnapshot
   useEffect(() => {
     isMountedRef.current = true
     return () => {
@@ -153,6 +157,7 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
     snapshot: MindMapEditorState,
     saveVersion: number,
   ) => {
+    onLocalSnapshotRef.current?.(ownerId, snapshot)
     void writeMindMapEditorDraft({
       resourceKey: draftKeyFor(ownerId),
       snapshot,
@@ -720,13 +725,7 @@ export function useMindMapDocumentSession<TResponse, TMeta>({
       void flushPendingForEntity(previousEntityIdRef.current)
     }
   }, [flushPendingForEntity])
-  const saveStatus: PersistedMindMapSaveStatus = error
-    ? 'error'
-    : isSaving
-      ? 'saving'
-      : hasUnsavedChanges
-        ? 'unsaved'
-        : 'saved'
+  const saveStatus: PersistedMindMapSaveStatus = error ? 'error' : isSaving ? 'saving' : hasUnsavedChanges ? 'unsaved' : 'saved'
   return {
     meta,
     setMeta,

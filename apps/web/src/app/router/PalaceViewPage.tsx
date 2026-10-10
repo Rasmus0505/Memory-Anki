@@ -17,6 +17,11 @@ import { useMindMapDocumentSession } from '@/shared/hooks/useMindMapDocumentSess
 import { MindMapDocumentConflictDialog } from '@/shared/components/mindmap-document-conflict'
 import { cn } from '@/shared/lib/utils'
 import { readMindMapEditorState } from '@/modules/content/public'
+import {
+  isStudyTextLibraryPending,
+  peekPalaceEditor,
+  rememberPalaceEditorDraft,
+} from '@/shared/study-text/studyTextLibrary'
 import { detectClientSource } from '@/shared/lib/clientSource'
 import { useRouteResidency } from '@/shared/routing/RouteResidency'
 import { shouldAutoStartOnPageEnter, useTimedSession } from '@/shared/hooks/useTimedSession'
@@ -57,7 +62,14 @@ export default function PalaceView() {
   const [shouldMountMindMap, setShouldMountMindMap] = useState(false)
   const [hostReadyTimedOut, setHostReadyTimedOut] = useState(false)
 
-  const { meta, editorState, isLoading, error, pendingConflict, resolveConflict } = useMindMapDocumentSession({
+  const {
+    meta,
+    editorState: sessionEditorState,
+    isLoading,
+    error,
+    pendingConflict,
+    resolveConflict,
+  } = useMindMapDocumentSession({
     entityId: palaceId,
     adapter: {
       load: getPalaceEditorApi,
@@ -65,9 +77,11 @@ export default function PalaceView() {
       selectMeta: (response) => response.palace as PalaceMeta,
       selectEditorState: readMindMapEditorState,
     },
+    onLocalSnapshot: rememberPalaceEditorDraft,
   })
-
-  const palace = meta as PalaceMeta | null
+  const preparedEditor = palaceId != null ? peekPalaceEditor(palaceId) : null
+  const palace = (meta as PalaceMeta | null) ?? (preparedEditor?.palace as PalaceMeta | null) ?? null
+  const editorState = sessionEditorState ?? (preparedEditor ? readMindMapEditorState(preparedEditor) : null)
   const timerTitle = palace?.title ? `${palace.title} · 宫殿学习` : '宫殿学习'
   const [currentNodeUid, setCurrentNodeUid] = useState<string | null>(null)
   const handlePracticeCurrentNodeUid = useCallback((uid: string | null) => {
@@ -142,8 +156,8 @@ export default function PalaceView() {
     }
   }, [editorState, palace])
 
-  if (!palaceId || (!palace && isLoading)) {
-    return <LoadingState text="正在加载宫殿详情…" />
+  if (!palaceId || (!palace && (isLoading || isStudyTextLibraryPending()))) {
+    return <LoadingState text="正在准备宫殿…" />
   }
 
   if (!palace || !editorState) {

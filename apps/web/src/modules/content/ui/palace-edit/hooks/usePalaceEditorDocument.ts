@@ -26,6 +26,7 @@ import type { PalaceMeta } from '@/modules/content/ui/palace-edit/model/palace-e
 import { appConfirm } from '@/shared/components/ui/native-dialog'
 import { readMindMapEditorState } from '@/modules/content/domain/mindmap-document-entity'
 import { APP_EVENT_NAMES, emitAppEvent } from '@/shared/events/appEvents'
+import { rememberPalaceEditorDraft } from '@/shared/study-text/studyTextLibrary'
 
 type ImportApplyGuardPhase = 'saving' | 'reloading' | 'awaiting_sync'
 
@@ -115,6 +116,7 @@ export function usePalaceEditorDocument({
       selectMeta: (response) => response.palace as PalaceMeta,
       selectEditorState: readMindMapEditorState,
     },
+    onLocalSnapshot: rememberPalaceEditorDraft,
     onSaveError: async (nextError, pendingState) => {
       if (!nextError.message.includes('危险结构变更')) return false
       const forced = await confirmDangerousPalaceSave(pendingState)

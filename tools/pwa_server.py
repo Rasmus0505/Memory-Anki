@@ -16,7 +16,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 from urllib.error import URLError
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 # Before importing anything that can reach SQLAlchemy. platform.machine()
 # queries WMI with no timeout; a wedged provider freezes this process.
@@ -929,6 +929,46 @@ def _wait_for_pwa(timeout_seconds: int = 120, process: subprocess.Popen | None =
     return False
 
 
+STUDY_TEXT_PREPARE_TIMEOUT_SECONDS = 180
+
+
+def _prepare_study_text_library() -> bool:
+    """Read palace and question text before the window opens.
+
+    A reused service is refreshed here too, so another device's edits are ready
+    before use. The wait belongs to startup, not to the first card.
+    """
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return True
+    print(
+        "[i] 正在准备宫殿和题目文字。U 盘正在同步时，这一步可能要十几秒到半分钟。",
+        flush=True,
+    )
+    started = time.perf_counter()
+    request = Request(
+        (
+            f"http://{dev_server.BACKEND_HOST}:{dev_server.BACKEND_PORT}"
+            "/api/v1/study-text-library/prepare"
+        ),
+        data=b"{}",
+        method="POST",
+        headers={"Content-Type": "application/json", "Accept": "application/json"},
+    )
+    try:
+        with urlopen(request, timeout=STUDY_TEXT_PREPARE_TIMEOUT_SECONDS) as response:
+            status = getattr(response, "status", None) or response.getcode()
+            if int(status) != 200:
+                print("[!] 文字没有准备好，打开后第一次可能还会等一次。", flush=True)
+                return False
+    except (OSError, TimeoutError, URLError) as exc:
+        print(f"[!] 文字没有准备好：{exc}", flush=True)
+        print("[!] 打开后第一次可能还会等一次。", flush=True)
+        return False
+    elapsed = time.perf_counter() - started
+    print(f"[ok] 宫殿和题目文字已准备好 ({elapsed:.1f}s)", flush=True)
+    return True
+
+
 def _pwa_is_ready() -> bool:
     payload = dev_server.http_get_json(dev_server.HEALTH_URL, timeout=1.5)
     if not payload or not payload.get("ok"):
@@ -1095,6 +1135,8 @@ def start(
 
             print("[ok] Shared Memory Anki service is ready")
 
+    if not _prepare_study_text_library():
+        print("[!] 文字没有在启动时准备好。打开后第一次可能还会等一次。", flush=True)
     print(f"[ok] Startup completed in {time.perf_counter() - started_at:.2f}s", flush=True)
     if configure_serve:
         _configure_tailscale_serve()
@@ -1117,6 +1159,7 @@ def restart_for_desktop() -> int:
             if not _pwa_dist_ready() and not _run_frontend_build():
                 return 1
             print("[ok] Reusing running Memory Anki service for desktop")
+            _prepare_study_text_library()
             return 0
 
         if not _stop_service_unlocked():
@@ -1131,6 +1174,7 @@ def restart_for_desktop() -> int:
             dev_server.kill_process_tree(process.pid)
             return 1
         print("[ok] Shared Memory Anki service is ready")
+        _prepare_study_text_library()
         return 0
 
 

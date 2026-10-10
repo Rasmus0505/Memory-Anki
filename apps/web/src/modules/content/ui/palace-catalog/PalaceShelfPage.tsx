@@ -22,6 +22,7 @@ import {
   getPalaceSubjectShelfApi,
   PALACE_CATALOG_INVALIDATED_EVENT,
 } from '@/modules/content/domain/palace-entity/api'
+import { isStudyTextLibraryPending, peekGroupedPalaces, peekSubjectShelf } from '@/shared/study-text/studyTextLibrary'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent } from '@/shared/components/ui/card'
@@ -129,9 +130,15 @@ export default function PalaceShelfPage() {
   const seenActiveAtRef = useRef<number | null>(null)
   const [searchParams, setSearchParams] = useSearchParams()
   const search = searchParams.get('search') || ''
-  const [items, setItems] = useState<PalaceSubjectShelfItem[]>([])
-  const [groupedData, setGroupedData] = useState<PalaceGroupedListResponse | null>(null)
-  const [groupedDataSearch, setGroupedDataSearch] = useState<string | null>(null)
+  const [items, setItems] = useState<PalaceSubjectShelfItem[]>(() => (
+    search ? [] : peekSubjectShelf()?.items ?? []
+  ))
+  const [groupedData, setGroupedData] = useState<PalaceGroupedListResponse | null>(() => (
+    search ? null : peekGroupedPalaces()
+  ))
+  const [groupedDataSearch, setGroupedDataSearch] = useState<string | null>(() => (
+    search || !peekGroupedPalaces() ? null : search
+  ))
   const [loadError, setLoadError] = useState<string | null>(null)
   const [collapsedChapters, setCollapsedChapters] = useState<Set<number>>(new Set())
   const [viewSettings, setViewSettings] = useLocalStorageState<PalaceShelfViewSettings>(
@@ -555,6 +562,8 @@ export default function PalaceShelfPage() {
             )
           })}
         </div>
+      ) : isStudyTextLibraryPending() ? (
+        <PalaceShelfSkeleton />
       ) : (
         <Card>
           <CardContent>
