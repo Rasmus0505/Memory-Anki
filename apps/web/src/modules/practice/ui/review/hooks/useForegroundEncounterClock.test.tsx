@@ -1,6 +1,10 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setLiveForegroundClockSuppressed } from '@/modules/session/public'
+import {
+  resetStudyClockPresenceForTests,
+  setStudyClockDesktopFocusedForTests,
+} from '@/modules/practice/ui/studyClockPresence'
 import { useForegroundEncounterClock } from './useForegroundEncounterClock'
 
 function setVisibility(value: DocumentVisibilityState) {
@@ -16,8 +20,9 @@ describe('useForegroundEncounterClock', () => {
 
   beforeEach(() => {
     setLiveForegroundClockSuppressed(false)
+    resetStudyClockPresenceForTests()
     vi.useFakeTimers()
-    vi.spyOn(performance, 'now').mockImplementation(() => now)
+    vi.spyOn(Date, 'now').mockImplementation(() => now)
     vi.spyOn(document, 'hasFocus').mockReturnValue(true)
     window.localStorage.clear()
     setVisibility('visible')
@@ -25,6 +30,7 @@ describe('useForegroundEncounterClock', () => {
 
   afterEach(() => {
     setLiveForegroundClockSuppressed(false)
+    resetStudyClockPresenceForTests()
     vi.useRealTimers()
     vi.restoreAllMocks()
   })
@@ -81,9 +87,28 @@ describe('useForegroundEncounterClock', () => {
     expect(result.current.getEffectiveSeconds()).toBe(2)
   })
 
-  it('stops while the desktop window is blurred even when the document stays visible', () => {
+  it('counts a visible page even when the document focus flag is false', () => {
     const { result } = renderHook(() => useForegroundEncounterClock({
-      encounterId: 'encounter-blurred',
+      encounterId: 'encounter-visible-unfocused',
+      active: true,
+      open: true,
+    }))
+
+    act(() => {
+      vi.mocked(document.hasFocus).mockReturnValue(false)
+      window.dispatchEvent(new Event('blur'))
+      for (let step = 0; step < 3; step += 1) {
+        now += 1000
+        vi.advanceTimersByTime(1000)
+      }
+    })
+
+    expect(result.current.getEffectiveSeconds()).toBe(3)
+  })
+
+  it('counts a short leave, then stops without backfilling a long one', () => {
+    const { result } = renderHook(() => useForegroundEncounterClock({
+      encounterId: 'encounter-grace',
       active: true,
       open: true,
     }))
@@ -94,21 +119,29 @@ describe('useForegroundEncounterClock', () => {
     })
     expect(result.current.getEffectiveSeconds()).toBe(1)
 
+    act(() => setStudyClockDesktopFocusedForTests(false))
     act(() => {
-      vi.mocked(document.hasFocus).mockReturnValue(false)
-      window.dispatchEvent(new Event('blur'))
-      now += 10 * 60 * 1000
-      vi.advanceTimersByTime(10 * 60 * 1000)
+      for (let step = 0; step < 120; step += 1) {
+        now += 1000
+        vi.advanceTimersByTime(1000)
+      }
     })
-    expect(result.current.getEffectiveSeconds()).toBe(1)
+    expect(result.current.getEffectiveSeconds()).toBe(121)
 
     act(() => {
-      vi.mocked(document.hasFocus).mockReturnValue(true)
-      window.dispatchEvent(new Event('focus'))
+      for (let step = 0; step < 8 * 60; step += 1) {
+        now += 1000
+        vi.advanceTimersByTime(1000)
+      }
+    })
+    expect(result.current.getEffectiveSeconds()).toBe(1 + 3 * 60)
+
+    act(() => setStudyClockDesktopFocusedForTests(null))
+    act(() => {
       now += 1000
       vi.advanceTimersByTime(1000)
     })
-    expect(result.current.getEffectiveSeconds()).toBe(2)
+    expect(result.current.getEffectiveSeconds()).toBe(1 + 3 * 60 + 1)
   })
 
   it('does not count when canAccumulate is false', () => {

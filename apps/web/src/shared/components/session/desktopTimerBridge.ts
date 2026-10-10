@@ -64,6 +64,7 @@ export type UnifiedTimerCommand =
 export interface DesktopTimerBridge {
   isDesktop?: boolean
   setMainWindowFullscreen?: (active: boolean) => void
+  onMainWindowFocusChange?: (handler: (active: boolean) => void) => () => void
   onMainWindowFullscreenChange?: (handler: (active: boolean) => void) => () => void
   onDesktopFlushRequest?: (
     handler: (request: { requestId: string; reason?: string; requestedAt?: number }) => Promise<unknown> | unknown,

@@ -144,6 +144,11 @@ function publishMainWindowFullscreen(active) {
   mainWindow.webContents.send('memory-anki-main-window-fullscreen-change', Boolean(active))
 }
 
+function publishMainWindowFocus(active) {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  mainWindow.webContents.send('memory-anki-main-window-focus-change', Boolean(active))
+}
+
 function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -176,6 +181,7 @@ function createMainWindow() {
       if (mainWindow.isMinimized()) mainWindow.restore()
       mainWindow.show()
       mainWindow.focus()
+      publishMainWindowFocus(mainWindow.isFocused())
     }
     writeDesktopReady()
   })
@@ -186,6 +192,8 @@ function createMainWindow() {
   })
   mainWindow.on('enter-full-screen', () => publishMainWindowFullscreen(true))
   mainWindow.on('leave-full-screen', () => publishMainWindowFullscreen(false))
+  mainWindow.on('focus', () => publishMainWindowFocus(true))
+  mainWindow.on('blur', () => publishMainWindowFocus(false))
   mainWindow.on('closed', () => {
     allowMainWindowClose = false
     mainWindow = null
@@ -370,6 +378,10 @@ ipcMain.on('memory-anki-desktop-flush-complete', (_event, result) => {
     ok: Boolean(result.ok),
     errors: Array.isArray(result.errors) ? result.errors : [],
   })
+})
+
+ipcMain.on('memory-anki-main-window-focused', (event) => {
+  event.returnValue = Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isFocused())
 })
 
 ipcMain.on('memory-anki-main-window-fullscreen', (event, active) => {

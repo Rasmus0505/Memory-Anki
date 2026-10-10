@@ -3,14 +3,15 @@ import {
   isLiveForegroundClockSuppressed,
   subscribeLiveForegroundClock,
 } from '@/modules/session/public'
+import {
+  STUDY_AWAY_GRACE_MS,
+  isStudyClockCounting,
+  subscribeStudyClockPresence,
+} from '@/modules/practice/ui/studyClockPresence'
 
 const STORAGE_KEY_PREFIX = 'memory_anki_review_foreground_seconds:'
 const TICK_INTERVAL_MS = 1000
-const MAX_CONTIGUOUS_TICK_SECONDS = 5
-
-function isWindowFocused() {
-  return typeof document.hasFocus !== 'function' || document.hasFocus()
-}
+const MAX_CONTIGUOUS_TICK_SECONDS = STUDY_AWAY_GRACE_MS / 1000
 
 export function useForegroundEncounterClock({
   encounterId,
@@ -37,25 +38,24 @@ export function useForegroundEncounterClock({
   }, [storageKey])
 
   const tick = useCallback(() => {
+    const now = Date.now()
     if (
       !canAccumulate
       || isLiveForegroundClockSuppressed()
       || !active
       || !open
-      || document.visibilityState !== 'visible'
-      || !isWindowFocused()
+      || !isStudyClockCounting(now)
     ) {
       tickAtRef.current = null
       return
     }
-    const now = performance.now()
     if (tickAtRef.current == null) {
       tickAtRef.current = now
       return
     }
     const delta = (now - tickAtRef.current) / 1000
-    // A browser thaw can deliver one very late timer callback. That gap was not
-    // observed foreground activity, so restart the clock without backfilling it.
+    // A short leave still counts. A longer thaw was not observed study, so
+    // restart without backfilling that gap.
     if (delta >= 0 && delta <= MAX_CONTIGUOUS_TICK_SECONDS) {
       secondsRef.current += delta
       persist()
@@ -82,6 +82,7 @@ export function useForegroundEncounterClock({
     const onVisibilityChange = () => tick()
     const onWindowFocusChange = () => tick()
     const stopLiveClock = subscribeLiveForegroundClock(() => tick())
+    const stopPresence = subscribeStudyClockPresence(() => tick())
     document.addEventListener('visibilitychange', onVisibilityChange)
     window.addEventListener('pagehide', onVisibilityChange)
     window.addEventListener('focus', onWindowFocusChange)
@@ -90,6 +91,7 @@ export function useForegroundEncounterClock({
       tick()
       window.clearInterval(interval)
       stopLiveClock()
+      stopPresence()
       document.removeEventListener('visibilitychange', onVisibilityChange)
       window.removeEventListener('pagehide', onVisibilityChange)
       window.removeEventListener('focus', onWindowFocusChange)

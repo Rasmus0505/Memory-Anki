@@ -17,8 +17,29 @@ ipcRenderer.on('memory-anki-desktop-flush-request', async (_event, request) => {
   })
 })
 
+const focusHandlers = new Set()
+let mainWindowFocused = true
+
+function readMainWindowFocused() {
+  try {
+    return Boolean(ipcRenderer.sendSync('memory-anki-main-window-focused'))
+  } catch {
+    return mainWindowFocused
+  }
+}
+
+ipcRenderer.on('memory-anki-main-window-focus-change', (_event, active) => {
+  mainWindowFocused = Boolean(active)
+  for (const handler of focusHandlers) handler(mainWindowFocused)
+})
+
 contextBridge.exposeInMainWorld('memoryAnkiDesktopTimer', {
   isDesktop: true,
+  onMainWindowFocusChange(handler) {
+    focusHandlers.add(handler)
+    handler(readMainWindowFocused())
+    return () => focusHandlers.delete(handler)
+  },
   setMainWindowFullscreen(active) {
     ipcRenderer.send('memory-anki-main-window-fullscreen', Boolean(active))
   },

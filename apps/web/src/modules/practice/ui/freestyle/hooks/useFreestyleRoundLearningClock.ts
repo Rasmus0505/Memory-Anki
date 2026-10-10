@@ -31,6 +31,12 @@ import {
 } from '@/modules/session/public'
 import { detectClientSource } from '@/shared/lib/clientSource'
 import type { FreestyleLearningInterval, FreestyleRoundStatePayload } from '@/shared/api/contracts'
+import {
+  STUDY_AWAY_GRACE_MS,
+  isStudyClockCounting,
+  readStudyClockCounting,
+  subscribeStudyClockPresence,
+} from '@/modules/practice/ui/studyClockPresence'
 
 const PENDING_PREFIX = 'memory-anki.freestyle.round-learning-pending.v1:'
 const OUTBOX_PREFIX = 'memory-anki.freestyle.round-learning-outbox.v2:'
@@ -39,7 +45,7 @@ const PLACEHOLDER_ROUND_ID = 'freestyle-round-default'
 const TICK_MS = 1000
 const FLUSH_MS = 15_000
 const RETRY_MS = 30_000
-const MAX_TICK_GAP_MS = 2000
+const MAX_TICK_GAP_MS = STUDY_AWAY_GRACE_MS
 const MAX_INTERVAL_SECONDS = 12 * 60 * 60
 
 interface OpenInterval {
@@ -122,19 +128,11 @@ function writeAck(roundId: string) {
 }
 
 function subscribePageVisibility(listener: () => void) {
-  const onChange = () => listener()
-  document.addEventListener('visibilitychange', onChange)
-  window.addEventListener('focus', onChange)
-  window.addEventListener('blur', onChange)
-  return () => {
-    document.removeEventListener('visibilitychange', onChange)
-    window.removeEventListener('focus', onChange)
-    window.removeEventListener('blur', onChange)
-  }
+  return subscribeStudyClockPresence(listener)
 }
 
 function readPageVisible() {
-  return document.visibilityState === 'visible' && document.hasFocus()
+  return readStudyClockCounting()
 }
 
 function planVersionOf(round: { plan_version?: number, version?: number } | null | undefined) {
@@ -343,8 +341,8 @@ export function useFreestyleRoundLearningClock(input: {
     void runBackfill()
     const tickTimer = window.setInterval(() => {
       if (!canTickRef.current) return
-      const bucket = surfaceRef.current
       const now = Date.now()
+      const bucket = isStudyClockCounting(now) ? surfaceRef.current : null
       if (!bucket) {
         sealOpen()
         return
@@ -364,7 +362,11 @@ export function useFreestyleRoundLearningClock(input: {
         }
       }
       if (!open) return
-      open.seconds += 1
+      const elapsed = Math.min(
+        Math.max(1, Math.round((now - open.lastWallMs) / 1000)),
+        Math.floor(MAX_TICK_GAP_MS / 1000),
+      )
+      open.seconds += elapsed
       open.lastWallMs = now
       if (publishLiveRef.current) publish()
     }, TICK_MS)

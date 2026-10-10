@@ -18,6 +18,9 @@ function loadPreload() {
     send(...args) {
       sent.push(args)
     },
+    sendSync() {
+      return true
+    },
   }
   const contextBridge = {
     exposeInMainWorld(_name, api) {
@@ -48,4 +51,20 @@ test('exposes desktop main-window fullscreen controls through the preload bridge
 
   dispose()
   assert.equal(listeners.has('memory-anki-main-window-fullscreen-change'), false)
+})
+
+test('reports desktop window focus separately from page focus', () => {
+  const { exposed, listeners } = loadPreload()
+  const seen = []
+  const dispose = exposed.onMainWindowFocusChange((active) => {
+    seen.push(active)
+  })
+
+  assert.deepEqual(seen, [true])
+  listeners.get('memory-anki-main-window-focus-change')({}, false)
+  assert.deepEqual(seen, [true, false])
+
+  dispose()
+  listeners.get('memory-anki-main-window-focus-change')({}, true)
+  assert.deepEqual(seen, [true, false])
 })
