@@ -83,6 +83,40 @@ export function planRevealMotion(
 export const MAX_ANIMATED_FLIPS = 8
 export const MAX_ANIMATED_DEALS = 12
 const GESTURE_WINDOW_MS = 800
+/**
+ * Layout springs on node left/top and edge `d` run for 360ms. While they run,
+ * the card slides out from under a rapid click (pointerup misses) and the path
+ * tween stalls the main thread. Hold them off a little longer than that spring
+ * so a burst of reveal clicks lands on a still card.
+ */
+export const REVEAL_LAYOUT_HOLD_MS = 480
+
+export interface RevealLayoutHold {
+  poke(root: HTMLElement): void
+  cancel(): void
+}
+
+export function createRevealLayoutHold(): RevealLayoutHold {
+  let timer = 0
+  let root: HTMLElement | null = null
+  return {
+    poke(next) {
+      root = next
+      next.dataset.revealMotion = 'true'
+      window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        timer = 0
+        if (root === next) delete next.dataset.revealMotion
+      }, REVEAL_LAYOUT_HOLD_MS)
+    },
+    cancel() {
+      window.clearTimeout(timer)
+      timer = 0
+      if (root) delete root.dataset.revealMotion
+      root = null
+    },
+  }
+}
 
 export function shouldPlayRevealMotion(
   plan: RevealMotionPlan,
@@ -94,10 +128,26 @@ export function shouldPlayRevealMotion(
   return plan.flips.length <= 1 && plan.deals.length <= 1
 }
 
+/** A second reveal this soon skips the paper turn so the next press is instant. */
+export const RAPID_REVEAL_MS = 280
+
 let lastGestureAt = 0
+let lastGestureGap = Number.POSITIVE_INFINITY
+
+export function resetRevealGestureTiming() {
+  lastGestureAt = 0
+  lastGestureGap = Number.POSITIVE_INFINITY
+}
 
 function noteRevealGesture() {
-  lastGestureAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
+  const now = typeof performance !== 'undefined' ? performance.now() : Date.now()
+  lastGestureGap = lastGestureAt === 0 ? Number.POSITIVE_INFINITY : now - lastGestureAt
+  lastGestureAt = now
+}
+
+/** True when this reveal is a burst press, not the first card of a quiet pause. */
+export function shouldSnapRapidReveal(gapMs = lastGestureGap) {
+  return gapMs >= 0 && gapMs < RAPID_REVEAL_MS
 }
 
 function recentRevealGesture() {
@@ -335,12 +385,23 @@ export function useMindMapRevealMotion(
   const parents = useRef<Map<string, string>>(new Map())
   const activeWaits = useRef(new Set<() => void>())
   const batchRef = useRef<FxPlayback | null>(null)
+  const layoutHold = useRef<RevealLayoutHold | null>(null)
+  if (layoutHold.current == null) layoutHold.current = createRevealLayoutHold()
 
   useEffect(() => {
-    const mark = () => noteRevealGesture()
+    const mark = (event: Event) => {
+      const root = container.current
+      const target = event.target
+      const inside = Boolean(root && target instanceof globalThis.Node && root.contains(target))
+      // Only presses on the map (or a keyboard reveal) count. A click in the
+      // toolbar must not make the next card skip its flip.
+      if (event.type === 'keydown' || inside) noteRevealGesture()
+      if (inside && root) layoutHold.current?.poke(root)
+    }
     window.addEventListener('pointerdown', mark, true)
     window.addEventListener('keydown', mark, true)
     const waits = activeWaits.current
+    const hold = layoutHold.current
     return () => {
       window.removeEventListener('pointerdown', mark, true)
       window.removeEventListener('keydown', mark, true)
@@ -348,8 +409,9 @@ export function useMindMapRevealMotion(
       waits.clear()
       batchRef.current?.cancel()
       batchRef.current = null
+      hold?.cancel()
     }
-  }, [])
+  }, [container])
 
   useLayoutEffect(() => {
     const previous = phases.current
@@ -364,7 +426,24 @@ export function useMindMapRevealMotion(
     const folds = planFoldBack(previous, previousParents, nodes)
     const willFold = folds.length > 0 && folds.length <= MAX_FOLDS_PER_BATCH
     const plan = planRevealMotion(previous, nodes)
-    const play = shouldPlayRevealMotion(plan, { userGesture: recentRevealGesture() })
+    // A burst press cancels the paper still turning and does not start another
+    // 500ms+ turn. The reveal state has already committed; the animation was
+    // what made the next click feel like it had to wait.
+    const snapRapid = recentRevealGesture() && shouldSnapRapidReveal()
+      && (plan.flips.length > 0 || plan.deals.length > 0 || willFold)
+    const play = !snapRapid && shouldPlayRevealMotion(plan, { userGesture: recentRevealGesture() })
+    if (snapRapid) {
+      batchRef.current?.cancel()
+      activeWaits.current.forEach((stop) => stop())
+      activeWaits.current.clear()
+      retireRevealLayers(root)
+      if (plan.flips.length > 0 || plan.deals.length > 0) {
+        cue('audio.pops', { role: plan.flips.length > 0 ? 'reveal' : 'deal', count: 1 })
+      }
+    }
+    if (recentRevealGesture() && (snapRapid || willFold || (play && (plan.flips.length > 0 || plan.deals.length > 0)))) {
+      layoutHold.current?.poke(root)
+    }
     if (willFold) cue('audio.pops', { role: 'fold', count: folds.length })
     if (play && plan.flips.length > 0) {
       cue('audio.pops', { role: 'reveal', count: Math.min(plan.flips.length, MAX_ANIMATED_FLIPS) })
@@ -372,7 +451,7 @@ export function useMindMapRevealMotion(
     if (play && plan.deals.length > 0) {
       cue('audio.pops', { role: 'deal', count: Math.min(plan.deals.length, MAX_ANIMATED_DEALS) })
     }
-    if (prefersReducedMotion() || typeof root.animate !== 'function') return
+    if (snapRapid || prefersReducedMotion() || typeof root.animate !== 'function') return
     if (willFold) {
       folds.forEach(({ id, into }) => foldNode(root, id, into))
     }

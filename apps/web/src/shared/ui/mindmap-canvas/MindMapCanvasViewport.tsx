@@ -23,6 +23,14 @@ import { usePaneModeGestures } from './usePaneModeGestures'
 import { useAxisLockedPan } from './useAxisLockedPan'
 import './mindMapAxisLock.css'
 
+/** Keep a rapid second click on a card from also zooming the canvas. */
+function stopReadonlyNodeDoubleClickZoom(event: { target: EventTarget | null; stopPropagation: () => void }) {
+  const target = event.target
+  if (target instanceof Element && target.closest('.react-flow__node')) {
+    event.stopPropagation()
+  }
+}
+
 interface MindMapCanvasViewportProps {
   width: number
   height: number
@@ -127,6 +135,7 @@ export function MindMapCanvasViewport({
       onPointerMoveCapture={paneGestures.onPointerMoveCapture}
       onPointerUpCapture={paneGestures.onPointerUpCapture}
       onPointerCancelCapture={paneGestures.onPointerCancelCapture}
+      onDoubleClickCapture={readonly ? stopReadonlyNodeDoubleClickZoom : undefined}
     >
       <ReactFlow
         nodes={nodes}

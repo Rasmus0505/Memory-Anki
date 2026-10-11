@@ -34,6 +34,7 @@
 大图卡顿曾经有两个根因，功能测试都看不见，改坏也没有测试会红。两条都必须保留：
 
 - **`getNodeSize` 必须走 `nodeSizeMemo`。** 它是 `(role, label, minWidth, maxWidth)` 的纯函数，但一次布局里会被反复问同一张卡：`measureTree` 一次、`resolveOverlaps` 每对比较一次、`hasNodeOverlaps` / `stackNodesWithoutOverlap` 再一次。度量本身是正则加逐字符扫描，并不便宜；900 节点时单次布局实测约 15ms，等于一帧预算在 React Flow 碰 DOM 之前就没了。真实度量逻辑留在 `computeNodeSize`，公开入口 `getNodeSize` 只负责缓存。
+- **翻卡手势期间必须关掉节点 left/top 和边 `d` 的布局弹簧。** 弹簧在 `data-motion-settled` 之后给 `.react-flow__node` 的 left/top 和 `.react-flow__edge-path` 的 `d` 各 360ms。连点时卡片在 pointerdown 与 pointerup 之间被移走，点击要等动画结束才生效；`d` 的逐帧插值同时卡住主线程。揭示手势给视口加上 `data-reveal-motion`，这两条过渡关掉，翻牌本身仍走 WAAPI。回归守卫：`tools/check_architecture.py::check_mindmap_reveal_layout_hold`。
 - **含活导图的卡必须退出 `.fs-depth` 的滚动联动变换。** `styles/freestyle-stage.css` 的深度堆叠用 `animation-timeline: view()` 在滚动时平移+缩放整个 `.fs-depth` 子树；导图在里面等于每一滚动帧重合成、重光栅化整棵画布（上千 DOM 节点加一层 SVG 连线）。因此 `:has(.memory-anki-mindmap-frame)` 的卡关闭 travel/veil/shadow 动画（原生全屏本来就是例外）。相邻卡仍按 `.fs-page` 的绘制顺序互相盖过，只去掉被覆盖卡的位移与压暗。
 
 回归守卫：`tools/check_architecture.py::check_mindmap_layout_hot_path`。

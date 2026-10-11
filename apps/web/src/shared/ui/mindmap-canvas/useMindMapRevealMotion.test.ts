@@ -1,6 +1,16 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Node } from '@xyflow/react'
-import { planRevealMotion, readRevealPhase, shouldPlayRevealMotion, type RevealPhase } from './useMindMapRevealMotion'
+import {
+  createRevealLayoutHold,
+  planRevealMotion,
+  RAPID_REVEAL_MS,
+  REVEAL_LAYOUT_HOLD_MS,
+  readRevealPhase,
+  resetRevealGestureTiming,
+  shouldPlayRevealMotion,
+  shouldSnapRapidReveal,
+  type RevealPhase,
+} from './useMindMapRevealMotion'
 
 function node(id: string, phase: RevealPhase, depth = 1, y = 0): Node {
   const visual = phase === 'hidden' ? { concealText: true } : phase === 'revealed' ? { revealed: true } : {}
@@ -74,5 +84,51 @@ describe('shouldPlayRevealMotion', () => {
     expect(shouldPlayRevealMotion(restored)).toBe(false)
     expect(shouldPlayRevealMotion(restored, { userGesture: true })).toBe(false)
     expect(shouldPlayRevealMotion({ flips: ['a', 'b'], deals: [] })).toBe(false)
+  })
+})
+
+describe('shouldSnapRapidReveal', () => {
+  afterEach(() => {
+    resetRevealGestureTiming()
+  })
+
+  it('snaps only a burst, not the first card or a pause', () => {
+    expect(shouldSnapRapidReveal(Number.POSITIVE_INFINITY)).toBe(false)
+    expect(shouldSnapRapidReveal(0)).toBe(true)
+    expect(shouldSnapRapidReveal(RAPID_REVEAL_MS - 1)).toBe(true)
+    expect(shouldSnapRapidReveal(RAPID_REVEAL_MS)).toBe(false)
+  })
+})
+
+describe('createRevealLayoutHold', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('holds the layout spring off across a click burst, then restores it', () => {
+    vi.useFakeTimers()
+    const root = document.createElement('div')
+    const hold = createRevealLayoutHold()
+    hold.poke(root)
+    expect(root.dataset.revealMotion).toBe('true')
+    expect(REVEAL_LAYOUT_HOLD_MS).toBeGreaterThan(360)
+    vi.advanceTimersByTime(REVEAL_LAYOUT_HOLD_MS - 1)
+    hold.poke(root)
+    vi.advanceTimersByTime(REVEAL_LAYOUT_HOLD_MS - 1)
+    expect(root.dataset.revealMotion).toBe('true')
+    vi.advanceTimersByTime(1)
+    expect(root.dataset.revealMotion).toBeUndefined()
+    hold.cancel()
+  })
+
+  it('drops the attribute immediately when the canvas unmounts', () => {
+    vi.useFakeTimers()
+    const root = document.createElement('div')
+    const hold = createRevealLayoutHold()
+    hold.poke(root)
+    hold.cancel()
+    expect(root.dataset.revealMotion).toBeUndefined()
+    vi.advanceTimersByTime(REVEAL_LAYOUT_HOLD_MS)
+    expect(root.dataset.revealMotion).toBeUndefined()
   })
 })

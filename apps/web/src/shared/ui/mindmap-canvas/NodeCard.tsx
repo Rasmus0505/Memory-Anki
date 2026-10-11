@@ -391,7 +391,10 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   const handleShellPointerDown = useCallback(
     (event: PointerEvent<HTMLDivElement>) => {
       longPress.handlePointerDown(event)
-      if (textSelectionModeActive || event.ctrlKey || event.metaKey) return
+      // Readonly review flips on every press, including the second press inside
+      // the OS double-click window. Swallowing that press is what made rapid
+      // flips wait until the paper animation (and the 500ms window) ended.
+      if (readonly || textSelectionModeActive || event.ctrlKey || event.metaKey) return
       // Real mouse/pen presses are counted in the capture-phase owner. This
       // bubble path is only for events that omit pointerType (jsdom), which
       // that owner ignores so it cannot steal a touch long-press.
@@ -402,21 +405,23 @@ function MindMapNodeCard({ data, id }: NodeProps) {
         openFromDoubleClick(event)
       }
     },
-    [id, longPress, openFromDoubleClick, textSelectionModeActive],
+    [id, longPress, openFromDoubleClick, readonly, textSelectionModeActive],
   )
 
   const handleShellClick = useCallback(
     (event: MouseEvent) => {
-      if (textSelectionModeActive || event.ctrlKey || event.metaKey || event.detail <= 1) return
+      if (readonly || textSelectionModeActive || event.ctrlKey || event.metaKey || event.detail <= 1) return
       openFromDoubleClick(event)
     },
-    [openFromDoubleClick, textSelectionModeActive],
+    [openFromDoubleClick, readonly, textSelectionModeActive],
   )
 
   useCardEditGesture({
     nodeId: id,
     shellRef,
-    enabled: !isEditing && !textSelectionModeActive,
+    // Edit-only. In readonly the capture owner used to stopPropagation on the
+    // second press and the flip click never reached the canvas.
+    enabled: !readonly && !isEditing && !textSelectionModeActive,
     blockNativeTextSelection: !englishInteractionActive && !textSelectionModeActive && !readonly,
     onSecondPress: (point) => {
       openFromDoubleClick({ clientX: point.x, clientY: point.y })

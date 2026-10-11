@@ -493,6 +493,25 @@ describe('NodeCard', () => {
     expect(textarea.className).not.toMatch(/\bborder-\[/)
   })
 
+  it('forwards a rapid second press in readonly so the flip is not swallowed', () => {
+    const wrapperOnClick = vi.fn()
+    renderNodeCard({ label: '待回忆', readonly: true }, wrapperOnClick)
+    const { shell } = getNodeShell()
+    const seen: number[] = []
+    const onDown = (event: Event) => {
+      seen.push((event as PointerEvent).detail)
+    }
+    document.addEventListener('pointerdown', onDown)
+    fireEvent.pointerDown(shell, { button: 0, pointerType: 'mouse', detail: 1, clientX: 8, clientY: 8 })
+    fireEvent.pointerDown(shell, { button: 0, pointerType: 'mouse', detail: 2, clientX: 12, clientY: 12 })
+    document.removeEventListener('pointerdown', onDown)
+    fireEvent.click(screen.getByRole('button', { name: '待回忆' }), { detail: 1 })
+    fireEvent.click(screen.getByRole('button', { name: '待回忆' }), { detail: 2 })
+
+    expect(seen).toHaveLength(2)
+    expect(wrapperOnClick).toHaveBeenCalledTimes(2)
+  })
+
   it('maps readonly double click to the recall cancel handler', () => {
     const onReadonlyDoubleClick = vi.fn()
     renderNodeCard({

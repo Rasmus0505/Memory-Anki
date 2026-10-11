@@ -563,6 +563,22 @@
   transition: d 360ms var(--ease-spring-soft), stroke 200ms ease;
 }
 
+/*
+ * Reveal clicks must not ride that spring. left/top keeps moving the card
+ * between pointerdown and pointerup, so a rapid click misses until the 360ms
+ * ends, and interpolating edge `d` stalls the main thread. The paper flip
+ * itself stays on WAAPI. data-reveal-motion is set for the gesture burst.
+ */
+.memory-anki-mindmap-viewport[data-motion-settled='true'][data-reveal-motion='true'][data-dragging='false'][data-large-graph='false']
+  .react-flow__node:not(.dragging) {
+  transition: none;
+}
+
+.memory-anki-mindmap-viewport[data-motion-settled='true'][data-reveal-motion='true'][data-dragging='false'][data-large-graph='false']
+  .react-flow__edge-path {
+  transition: none;
+}
+
 .react-flow__edge.selected .react-flow__edge-path,
 .react-flow__edge:hover .react-flow__edge-path {
   stroke: var(--color-primary) !important;
