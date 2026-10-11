@@ -9,7 +9,6 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from memory_anki.core.runtime_storage_lock import StorageBusyError
 from memory_anki.infrastructure.db.lock_errors import is_sqlite_lock_error
 
 logger = logging.getLogger(__name__)
@@ -52,44 +51,13 @@ def install_error_handlers(app: FastAPI) -> None:
             ),
         )
 
-    @app.exception_handler(StorageBusyError)
-    async def handle_storage_busy(
-        request: Request, exc: StorageBusyError
-    ) -> JSONResponse:
-        """Report lock contention as retryable instead of an internal error.
-
-        The shared runtime lock is held by whatever write is currently in flight
-        (a background snapshot, a palace rebuild, a slow autosave). The client's
-        write is safe to replay, so answer 503 with a Retry-After hint rather
-        than a misleading 500. The message names the condition, not one guessed
-        cause, because guessing "backup" here previously sent debugging in the
-        wrong direction.
-        """
-        logger.warning(
-            "storage busy on %s %s after %.1fs wait; client should retry",
-            request.method,
-            request.url.path,
-            exc.wait_seconds,
-        )
-        retry_after = exc.retry_after_seconds
-        return JSONResponse(
-            status_code=503,
-            headers={"Retry-After": str(retry_after)},
-            content=_error_detail(
-                "storage_busy",
-                "数据正在写入中，本次操作已自动重试。",
-                retryAfterSeconds=retry_after,
-            ),
-        )
-
     @app.exception_handler(Exception)
     async def handle_unexpected_error(request: Request, exc: Exception) -> JSONResponse:
         # A SQLite write-lock collision is transient and retryable, but it reached
         # the learner as an opaque 500 ("服务器内部错误，请查看服务端日志") that the
-        # client could not tell apart from a real bug. Report it the same retryable
-        # way the app-level storage lock already is (503 + Retry-After), so the
-        # existing client retry/backoff applies instead of the request failing
-        # permanently. 284 such failures were measured in one day before this.
+        # client could not tell apart from a real bug. Report it as retryable
+        # (503 + Retry-After), so the existing client retry/backoff applies instead
+        # of the request failing permanently.
         if is_sqlite_lock_error(exc):
             logger.warning(
                 "database write lock busy on %s %s; reporting retryable 503",

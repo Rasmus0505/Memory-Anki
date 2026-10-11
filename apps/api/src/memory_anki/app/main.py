@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import re
@@ -39,8 +40,9 @@ from memory_anki.core.runtime_activity import (
 )
 from memory_anki.infrastructure.db._tables._base import get_session as _get_session
 from memory_anki.modules.backups.application.backup_lifecycle import (
-    create_shutdown_backup,
+    run_shutdown_backup_bounded,
     start_periodic_backup_loop,
+    start_startup_backups,
     stop_periodic_backup_loop,
 )
 from memory_anki.modules.backups.presentation import router as backups_router
@@ -157,6 +159,7 @@ async def lifespan(app: FastAPI):
             channel=str(startup_state.runtime_info.get("channel") or "production"),
             startup_mode=startup_mode,
         )
+        start_startup_backups()
         start_periodic_backup_loop()
         start_startup_warmup()
         start_study_text_prepare()
@@ -172,10 +175,7 @@ async def lifespan(app: FastAPI):
         if startup_mode == STARTUP_MODE_SERVE:
             stop_periodic_backup_loop()
             stop_runtime_activity_heartbeat(runtime_activity_handle)
-            try:
-                create_shutdown_backup()
-            except Exception:
-                logger.exception("shutdown backup failed")
+            await asyncio.to_thread(run_shutdown_backup_bounded)
 
 
 app = FastAPI(title="Memory Anki API", lifespan=lifespan)

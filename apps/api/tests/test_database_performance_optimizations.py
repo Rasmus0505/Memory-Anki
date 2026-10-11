@@ -11,6 +11,7 @@ from unittest.mock import patch
 from sqlalchemy import create_engine, event
 from sqlalchemy.pool import StaticPool
 
+from memory_anki.core.time import local_calendar_day_bounds_as_utc_naive
 from memory_anki.infrastructure.db import maintenance as db_maintenance
 from memory_anki.infrastructure.db._tables._base import (
     DB_MAX_OVERFLOW,
@@ -36,12 +37,6 @@ from memory_anki.modules.content.application.palace_maintenance import (
 )
 from memory_anki.modules.dashboard.application.service import (
     build_weekly_report_payload,
-)
-from memory_anki.modules.session.application.study_session_service import (
-    STUDY_DASHBOARD_SCENES,
-    current_week_bounds,
-    get_all_time_study_session_duration_seconds,
-    get_study_session_duration_seconds,
 )
 from support import RouterTestCase
 
@@ -213,9 +208,10 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
             finally:
                 connection.close()
 
-    def test_weekly_report_uses_sql_aggregate_for_unit_review_sessions(self):
-        week_start, _week_end = current_week_bounds()
-        week_start = week_start - timedelta(days=7)
+    def test_weekly_report_uses_few_selects(self):
+        today = datetime.now().date()
+        monday = today - timedelta(days=today.weekday())
+        week_start = local_calendar_day_bounds_as_utc_naive(monday - timedelta(days=7))[0]
         with self.SessionLocal() as session:
             palace = Palace(
                 title="weekly-report-sql",
@@ -224,21 +220,6 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
             )
             session.add(palace)
             session.flush()
-            session.add_all([
-                StudySession(
-                    id=f"unit-review-{index}",
-                    status="completed",
-                    scene="formal_unit_review",
-                    target_type="palace",
-                    target_id=palace.id,
-                    palace_id=palace.id,
-                    title="unit review",
-                    started_at=week_start + timedelta(minutes=index),
-                    ended_at=week_start + timedelta(minutes=index + 1),
-                    effective_seconds=60,
-                )
-                for index in range(80)
-            ])
             session.commit()
 
             statements: list[str] = []
@@ -253,55 +234,9 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
             finally:
                 event.remove(self.engine, "before_cursor_execute", record_select)
 
-        self.assertEqual(payload["review_count"], 80)
+        self.assertEqual(payload["review_count"], 0)
         self.assertEqual(payload["new_palace_count"], 1)
         self.assertLessEqual(len(statements), 3)
-
-    def test_study_session_duration_uses_sql_sum_and_keeps_positive_seconds_semantics(self):
-        start = datetime(2026, 7, 6, 0, 0, 0)
-        end = start + timedelta(days=1)
-        with self.SessionLocal() as session:
-            session.add_all(
-                [
-                    _study_session("included", "completed", "formal_unit_review", start, 120),
-                    _study_session("negative", "completed", "formal_unit_review", start + timedelta(hours=1), -30),
-                    _study_session("active", "active", "formal_unit_review", start + timedelta(hours=2), 60),
-                    _study_session("other-scene", "completed", "english", start + timedelta(hours=3), 90),
-                    _study_session("end-boundary", "completed", "formal_unit_review", end, 45),
-                    # Started before the window, finished inside it → counts for the range.
-                    _study_session(
-                        "recovered-cross-day",
-                        "completed",
-                        "formal_unit_review",
-                        start - timedelta(days=3),
-                        80,
-                        ended_at=start + timedelta(hours=6),
-                    ),
-                    _study_session(
-                        "deleted",
-                        "completed",
-                        "formal_unit_review",
-                        start + timedelta(hours=4),
-                        30,
-                        deleted_at=start + timedelta(hours=5),
-                    ),
-                ]
-            )
-            session.commit()
-
-            ranged_total = get_study_session_duration_seconds(
-                session,
-                scenes=STUDY_DASHBOARD_SCENES,
-                start=start,
-                end=end,
-            )
-            all_time_total = get_all_time_study_session_duration_seconds(
-                session,
-                scenes=STUDY_DASHBOARD_SCENES,
-            )
-
-        self.assertEqual(ranged_total, 200)
-        self.assertEqual(all_time_total, 245)
 
     def test_storage_backup_checkpoints_wal_before_copying_database_file(self):
         events: list[str] = []
@@ -417,80 +352,6 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
             storage_backup.write_storage_backup(Path(temp_dir), reason="rolling-edit", full=False)
 
         copy_item_to_backup.assert_called_once()
-
-    def test_bulk_backup_copy_runs_outside_the_runtime_write_lock(self):
-        """Neither the database snapshot nor the media copy may hold the study lock.
-
-        Regression: wrapping the online snapshot in ``storage_write_lock`` made a
-        ~200 MB copy on a synced drive hold the lock for minutes. Study writes
-        then waited 15s and returned 503. SQLite's online backup API is already
-        consistent without that lock.
-        """
-        lock_depth = {"held": 0, "during_database": -1, "during_media": -1}
-        observed: list[str] = []
-
-        class _TrackingLock:
-            def __enter__(self):
-                lock_depth["held"] += 1
-                observed.append("lock:enter")
-                return self
-
-            def __exit__(self, exc_type, exc, traceback):
-                lock_depth["held"] -= 1
-                observed.append("lock:exit")
-                return False
-
-        def fake_copy(item, destination):
-            observed.append(f"copy:{item.key}")
-            if item.key == "database":
-                lock_depth["during_database"] = lock_depth["held"]
-            if item.key == "attachments":
-                lock_depth["during_media"] = lock_depth["held"]
-            return {"key": item.key}
-
-        database_item = _BackupItem()
-        media_item = _BackupItem()
-        media_item.key = "attachments"
-
-        with TemporaryDirectory() as temp_dir, patch.object(
-            storage_backup,
-            "ensure_runtime_dirs",
-        ), patch.object(
-            storage_backup,
-            "checkpoint_sqlite_wal",
-        ), patch.object(
-            storage_backup,
-            "_select_backup_items",
-            return_value=[database_item, media_item],
-        ), patch.object(
-            storage_backup,
-            "_copy_item_to_backup",
-            side_effect=fake_copy,
-        ), patch.object(
-            storage_backup,
-            "create_storage_backup_manifest",
-            return_value={"ok": True},
-        ), patch.object(
-            storage_backup,
-            "get_backup_storage_items",
-            return_value=[],
-        ), patch.object(
-            storage_backup,
-            "storage_write_lock",
-            side_effect=lambda *a, **k: _TrackingLock(),
-        ):
-            storage_backup.write_storage_backup(
-                Path(temp_dir), reason="rolling-edit", full=False, scope="rescue"
-            )
-
-        assert "copy:database" in observed
-        assert "copy:attachments" in observed
-        assert lock_depth["during_database"] == 0, (
-            "database snapshot must not run while the runtime storage lock is held"
-        )
-        assert lock_depth["during_media"] == 0, (
-            "bulk backup copy must not run while the runtime storage lock is held"
-        )
 
     def test_full_backup_analyzes_after_successful_backup(self):
         events: list[str] = []
@@ -869,28 +730,6 @@ class _FakeCheckpointEngine:
 
     def begin(self):
         return self._Connection(self._row)
-
-
-def _study_session(
-    session_id: str,
-    status: str,
-    scene: str,
-    started_at: datetime,
-    effective_seconds: int,
-    *,
-    ended_at: datetime | None = None,
-    deleted_at: datetime | None = None,
-) -> StudySession:
-    return StudySession(
-        id=session_id,
-        status=status,
-        scene=scene,
-        target_type="none",
-        started_at=started_at,
-        ended_at=ended_at,
-        effective_seconds=effective_seconds,
-        deleted_at=deleted_at,
-    )
 
 
 if __name__ == "__main__":

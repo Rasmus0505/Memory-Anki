@@ -5,6 +5,7 @@ import logging
 import shutil
 import sqlite3
 import tempfile
+import time
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -18,13 +19,13 @@ from memory_anki.core.config import (
     ensure_runtime_dirs,
 )
 from memory_anki.core.runtime import build_runtime_info
-from memory_anki.core.runtime_storage_lock import storage_write_lock
 from memory_anki.core.storage_layout import (
     ManagedStorageItem,
     get_backup_storage_items,
     load_storage_layout,
     validate_relative_storage_path,
 )
+from memory_anki.infrastructure.db._tables._base import engine
 from memory_anki.infrastructure.db.maintenance import (
     DatabaseMaintenanceError,
     checkpoint_sqlite_wal,
@@ -37,7 +38,16 @@ BACKUP_MANIFEST_VERSION = 3
 
 # 滚动（轻量）备份时只复制的存储项 key，避免把大媒体目录反复整库复制。
 ROLLING_BACKUP_ITEM_KEYS = ("database", "migration_state")
-RESCUE_BACKUP_ITEM_KEYS = ("database", "time_ledger", "attachments", "migration_state")
+RESCUE_BACKUP_ITEM_KEYS = ("database", "attachments", "migration_state")
+
+
+def staging_root() -> Path:
+    """Half-written backups live beside, never inside, the backup kinds.
+
+    The rolling directory is what "latest backup" and pruning scan, so a stage
+    left there by a crash looked like a newer, empty backup.
+    """
+    return BACKUPS_DIR / ".staging"
 
 
 def _database_sidecar_paths(path: Path) -> tuple[Path, Path]:
@@ -76,6 +86,14 @@ def _database_backup_info() -> dict[str, Any]:
 # release that read lock between batches so writers and WAL checkpoints proceed.
 _ONLINE_BACKUP_PAGES = 128
 _ONLINE_BACKUP_SLEEP_SECONDS = 0.01
+# A copy that keeps restarting under write pressure, or crawls on a busy synced
+# drive, must neither run forever nor stay silent about being slow.
+_ONLINE_BACKUP_WARN_SECONDS = 120.0
+_ONLINE_BACKUP_MAX_SECONDS = 1200.0
+
+
+class BackupTooSlowError(RuntimeError):
+    """The online snapshot exceeded its duration cap and was abandoned."""
 
 
 def _sqlite_online_backup(source: Path, target: Path) -> bool:
@@ -97,10 +115,30 @@ def _sqlite_online_backup(source: Path, target: Path) -> bool:
     try:
         source_conn = sqlite3.connect(source.resolve().as_uri() + "?mode=ro", uri=True)
         target_conn = sqlite3.connect(str(target))
+        started = time.monotonic()
+        warned = False
+
+        def check_budget(status: int, remaining: int, total: int) -> None:
+            nonlocal warned
+            elapsed = time.monotonic() - started
+            if elapsed > _ONLINE_BACKUP_MAX_SECONDS:
+                raise BackupTooSlowError(
+                    f"online backup abandoned after {elapsed:.0f}s ({remaining}/{total} pages left)"
+                )
+            if elapsed > _ONLINE_BACKUP_WARN_SECONDS and not warned:
+                warned = True
+                logger.warning(
+                    "online backup is slow: %.0fs elapsed, %s/%s pages left",
+                    elapsed,
+                    remaining,
+                    total,
+                )
+
         source_conn.backup(
             target_conn,
             pages=_ONLINE_BACKUP_PAGES,
             sleep=_ONLINE_BACKUP_SLEEP_SECONDS,
+            progress=check_budget,
         )
         result = target_conn.execute("PRAGMA quick_check").fetchone()
         if result != ("ok",):
@@ -115,8 +153,7 @@ def _sqlite_online_backup(source: Path, target: Path) -> bool:
             source_conn = None
         if target.exists():
             target.unlink()
-        with storage_write_lock(APP_HOME):
-            shutil.copy2(source, target)
+        shutil.copy2(source, target)
         return False
     finally:
         if target_conn is not None:
@@ -224,9 +261,7 @@ def _snapshot_databases(stage: Path, items: list[ManagedStorageItem]) -> dict[st
     """Capture a consistent database snapshot without the study lock.
 
     SQLite's online backup API copies committed pages and yields between steps,
-    so writers keep committing. The previous wrapper held ``storage_write_lock``
-    for the whole copy. On a ~200 MB database sitting on a synced drive that
-    lasted minutes, and every study write waited 15s then returned 503.
+    so writers keep committing.
     """
     captured: dict[str, dict[str, Any]] = {}
     for item in items:
@@ -252,7 +287,8 @@ def write_storage_backup(
     if destination_root.exists() and any(destination_root.iterdir()):
         raise FileExistsError(f"backup destination is not empty: {destination_root}")
     destination_root.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix=".backup-stage-", dir=destination_root.parent) as stage_dir:
+    staging_root().mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=".backup-stage-", dir=staging_root()) as stage_dir:
         stage = Path(stage_dir)
         # Phase 1: consistent database snapshot. Online backup does not take the
         # study lock, so a progress save can commit while the copy is still running.
@@ -294,89 +330,100 @@ def read_storage_backup_manifest(backup_root: Path) -> dict[str, Any]:
 def restore_storage_backup(backup_root: Path) -> list[str]:
     ensure_runtime_dirs()
     backup_root = Path(backup_root).resolve()
-    with storage_write_lock(APP_HOME):
-        manifest = read_storage_backup_manifest(backup_root)
-        manifest_items = manifest.get("included_items")
-        if not isinstance(manifest_items, list):
-            raise ValueError("backup manifest has no included_items")
-        managed = {item.key: item for item in get_backup_storage_items()}
-        home = Path(APP_HOME).resolve()
-        plan: list[tuple[str, str, Path, Path]] = []
-        for raw in manifest_items:
-            if not isinstance(raw, dict) or not raw.get("included"):
+    manifest = read_storage_backup_manifest(backup_root)
+    manifest_items = manifest.get("included_items")
+    if not isinstance(manifest_items, list):
+        raise ValueError("backup manifest has no included_items")
+    managed = {item.key: item for item in get_backup_storage_items()}
+    home = Path(APP_HOME).resolve()
+    plan: list[tuple[str, str, Path, Path]] = []
+    for raw in manifest_items:
+        if not isinstance(raw, dict) or not raw.get("included"):
+            continue
+        key = str(raw.get("key") or "")
+        if key not in managed:
+            raise ValueError(f"backup contains unmanaged key: {key!r}")
+        relative_path = validate_relative_storage_path(str(raw.get("relative_path") or ""))
+        if relative_path != managed[key].relative_path:
+            raise ValueError(f"manifest path does not match managed key: {key}")
+        source = (backup_root / relative_path).resolve()
+        if source != backup_root and backup_root not in source.parents:
+            raise ValueError("backup path escapes backup root")
+        if not source.exists():
+            raise FileNotFoundError(source)
+        destination = (home / relative_path).resolve()
+        if destination != home and home not in destination.parents:
+            raise ValueError("managed path escapes app home")
+        plan.append((key, managed[key].kind, source, destination))
+        if key != "database":
+            continue
+        db_name = Path(relative_path).name
+        allowed_sidecars = {f"{db_name}-wal", f"{db_name}-shm"}
+        for sidecar in raw.get("sidecars") or []:
+            if not isinstance(sidecar, dict) or not sidecar.get("included"):
                 continue
-            key = str(raw.get("key") or "")
-            if key not in managed:
-                raise ValueError(f"backup contains unmanaged key: {key!r}")
-            relative_path = validate_relative_storage_path(str(raw.get("relative_path") or ""))
-            if relative_path != managed[key].relative_path:
-                raise ValueError(f"manifest path does not match managed key: {key}")
-            source = (backup_root / relative_path).resolve()
-            if source != backup_root and backup_root not in source.parents:
+            sidecar_relative = validate_relative_storage_path(str(sidecar.get("relative_path") or ""))
+            if PurePosixPath(sidecar_relative).name not in allowed_sidecars:
+                raise ValueError("unexpected database sidecar")
+            sidecar_source = (backup_root / sidecar_relative).resolve()
+            if sidecar_source != backup_root and backup_root not in sidecar_source.parents:
                 raise ValueError("backup path escapes backup root")
-            if not source.exists():
-                raise FileNotFoundError(source)
-            destination = (home / relative_path).resolve()
-            if destination != home and home not in destination.parents:
+            if not sidecar_source.is_file():
+                raise FileNotFoundError(sidecar_source)
+            sidecar_destination = destination.with_name(sidecar_source.name).resolve()
+            if home not in sidecar_destination.parents:
                 raise ValueError("managed path escapes app home")
-            plan.append((key, managed[key].kind, source, destination))
+            plan.append((f"{key}:sidecar", "file", sidecar_source, sidecar_destination))
+    # Preflight all entries before replacing any live data.
+    for _, kind, source, _ in plan:
+        if kind == "directory" and not source.is_dir():
+            raise ValueError(f"expected directory in backup: {source}")
+        if kind == "file" and not source.is_file():
+            raise ValueError(f"expected file in backup: {source}")
+    staged: list[tuple[Path, Path]] = []
+    swapped: list[tuple[Path, Path | None]] = []
+    # Pooled connections keep the replaced file's pages and -wal/-shm open;
+    # drop them so the next request opens the restored database.
+    engine.dispose()
+    try:
+        for key, kind, source, destination in plan:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            stage_name = key.replace(":", "-")
+            stage = Path(tempfile.mkdtemp(prefix=f"restore-{stage_name}-", dir=destination.parent))
+            staged_copy = stage / destination.name
+            if kind == "directory":
+                shutil.copytree(source, staged_copy)
+            else:
+                shutil.copy2(source, staged_copy)
+            staged.append((destination, stage))
+        for destination, stage in staged:
+            old = destination.with_name(f".{destination.name}.restore-old")
+            if destination.exists():
+                if old.exists():
+                    shutil.rmtree(old) if old.is_dir() else old.unlink()
+                destination.replace(old)
+                swapped.append((destination, old))
+            (stage / destination.name).replace(destination)
+        restored_sidecars = {destination for key, _, _, destination in plan if key.endswith(":sidecar")}
+        for key, _, _, destination in plan:
             if key != "database":
                 continue
-            db_name = Path(relative_path).name
-            allowed_sidecars = {f"{db_name}-wal", f"{db_name}-shm"}
-            for sidecar in raw.get("sidecars") or []:
-                if not isinstance(sidecar, dict) or not sidecar.get("included"):
-                    continue
-                sidecar_relative = validate_relative_storage_path(str(sidecar.get("relative_path") or ""))
-                if PurePosixPath(sidecar_relative).name not in allowed_sidecars:
-                    raise ValueError("unexpected database sidecar")
-                sidecar_source = (backup_root / sidecar_relative).resolve()
-                if sidecar_source != backup_root and backup_root not in sidecar_source.parents:
-                    raise ValueError("backup path escapes backup root")
-                if not sidecar_source.is_file():
-                    raise FileNotFoundError(sidecar_source)
-                sidecar_destination = destination.with_name(sidecar_source.name).resolve()
-                if home not in sidecar_destination.parents:
-                    raise ValueError("managed path escapes app home")
-                plan.append((f"{key}:sidecar", "file", sidecar_source, sidecar_destination))
-        # Preflight all entries before replacing any live data.
-        for _, kind, source, _ in plan:
-            if kind == "directory" and not source.is_dir():
-                raise ValueError(f"expected directory in backup: {source}")
-            if kind == "file" and not source.is_file():
-                raise ValueError(f"expected file in backup: {source}")
-        staged: list[tuple[Path, Path]] = []
-        swapped: list[tuple[Path, Path | None]] = []
-        try:
-            for key, kind, source, destination in plan:
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                stage_name = key.replace(":", "-")
-                stage = Path(tempfile.mkdtemp(prefix=f"restore-{stage_name}-", dir=destination.parent))
-                staged_copy = stage / destination.name
-                if kind == "directory":
-                    shutil.copytree(source, staged_copy)
-                else:
-                    shutil.copy2(source, staged_copy)
-                staged.append((destination, stage))
-            for destination, stage in staged:
-                old = destination.with_name(f".{destination.name}.restore-old")
-                if destination.exists():
-                    if old.exists():
-                        shutil.rmtree(old) if old.is_dir() else old.unlink()
-                    destination.replace(old)
-                    swapped.append((destination, old))
-                (stage / destination.name).replace(destination)
-            for _, previous in swapped:
-                if previous is not None and previous.exists():
-                    shutil.rmtree(previous) if previous.is_dir() else previous.unlink()
-            return [key for key, _, _, _ in plan if not key.endswith(":sidecar")]
-        except Exception:
-            for restored, previous in reversed(swapped):
-                if restored.exists():
-                    shutil.rmtree(restored) if restored.is_dir() else restored.unlink()
-                if previous is not None and previous.exists():
-                    previous.replace(restored)
-            raise
-        finally:
-            for _, stage in staged:
-                shutil.rmtree(stage, ignore_errors=True)
+            # A stale log left next to a restored main file would be replayed
+            # into it on the next open.
+            for stale in _database_sidecar_paths(destination):
+                if stale not in restored_sidecars and stale.exists():
+                    stale.unlink()
+        for _, previous in swapped:
+            if previous is not None and previous.exists():
+                shutil.rmtree(previous) if previous.is_dir() else previous.unlink()
+        return [key for key, _, _, _ in plan if not key.endswith(":sidecar")]
+    except Exception:
+        for restored, previous in reversed(swapped):
+            if restored.exists():
+                shutil.rmtree(restored) if restored.is_dir() else restored.unlink()
+            if previous is not None and previous.exists():
+                previous.replace(restored)
+        raise
+    finally:
+        for _, stage in staged:
+            shutil.rmtree(stage, ignore_errors=True)

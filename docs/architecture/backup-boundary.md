@@ -24,24 +24,15 @@ The facade does not introduce cloud storage or a remote service. All backup and 
 
 Automatic, manual, and shutdown snapshots are database-only (`rolling`). Rescue snapshots before restore/import are also database-only. Snapshot files live under `日志缓存/backups`. Attachments stay in `学科附件`; English media stays in `学习数据`. Those trees must not be copied into every backup. `create_full_backup` remains as an explicit/internal helper and is not on the product create/startup path.
 
-## Runtime Lock Scope
+## Write Locking
 
-Database and file-backed writers serialize on the shared runtime storage lock (`core.runtime_storage_lock`, surfaced on disk as `日志缓存/runtime-storage.lock`). SQLAlchemy acquires it on `before_flush` and holds it until the outermost transaction ends.
+There is no app-level storage lock any more (`core.runtime_storage_lock` and `日志缓存/runtime-storage.lock` were removed on 2026-10-11; see `storage-lock-contention.md`). SQLite (WAL, `busy_timeout`) is the only write serializer. A transient `database is locked` is answered as a retryable `503` + `Retry-After` by the app error handler.
 
-A snapshot must **not** hold that lock at all. `write_storage_backup` therefore runs in two unlocked phases:
-
-1. **Database snapshot** — `_snapshot_databases` captures the database via `sqlite3` online backup in page steps. The backup API already copies committed pages while other connections write, so the study lock is not taken.
-2. **Remaining items** — media, attachments, and exports are copied the same way, with the lock released, so live autosave and review writes keep committing.
-
-The only backup path that still takes the lock is the rare raw-file fallback after an online snapshot fails. A raw copy of a live database can tear; the healthy path must not pay that cost.
-
-Regression context: the whole rolling backup used to run inside `storage_write_lock`, and a later narrowing still held the lock for the database snapshot. On this product's ~200 MB database hosted on a synced drive, that snapshot lasted minutes, not milliseconds. Foreground writes waited out `_WAIT_SECONDS` and returned 503 (`storage_busy`), including overlay-quiz progress saves. `test_bulk_backup_copy_runs_outside_the_runtime_write_lock` pins that neither phase holds the lock.
-
-Contention is reported as a **retryable** condition, not an internal error: `StorageBusyError` (a `TimeoutError` subclass) is translated by the app error handlers into `503` with a `Retry-After` header and `code: storage_busy`. Foreground writes wait `_WAIT_SECONDS`; background jobs may pass a longer `wait_seconds`.
+`write_storage_backup` captures the database with the `sqlite3` online backup API in page steps (`_snapshot_databases`), then copies remaining items; neither phase blocks writers. Restore and full import replace live files without any lock, so run them while no study session is writing.
 
 ### Read paths must not write
 
-The lock is process-wide and single. Anything that takes it inside a *read* request therefore stalls every writer in the product, and a read that waits past `_WAIT_SECONDS` returns 503 — which clients retry, adding contention to the lock they are already waiting on.
+SQLite allows one writer. A *read* request that writes therefore stalls every other writer, and a wait past `busy_timeout` returns 503 — which clients retry, adding contention to the lock they are already waiting on.
 
 `list_due_units` used to do exactly that: on a lagging palace hash it called `reconcile_palace_units` in-request (a write, hence the lock). Because the dashboard and review queue both read through it, merely opening a page could hold the lock long enough to fail `POST /review/units/{id}/sessions`, which is what builds the encounter the rating bar needs. The observed symptom was a rating bar whose buttons were silently disabled and a queue stuck at "18/43".
 
@@ -55,6 +46,23 @@ The rule now:
 `test_unit_reconcile_deferral.py` pins both halves: the read path issues no `UPDATE`/`INSERT`/`DELETE`, and a scheduled drain actually heals the palace.
 
 Editor saves additionally trigger `maybe_create_rolling_backup`, gated by `ROLLING_EDIT_BACKUP_INTERVAL`. Because each rolling snapshot rewrites the full database, that interval must stay long enough that a large synced-drive database is not re-copied continuously.
+
+## Backups never run in the study path (2026-10-11)
+
+Study must never wait for a backup. All four triggers are kept, and all of them run off the request path:
+
+- **Edit-triggered**: `maybe_create_rolling_backup` only calls `request_rolling_backup`, which starts one daemon worker and merges further requests into it (single-flight). The worker re-checks the newest backup's age inside `_BACKUP_LOCK`, so a burst of edits produces one backup. Call sites stay one-liners; none of them may call `create_rolling_backup` inline. Only the explicit `POST /backups/create` button does.
+- **Startup**: `start_startup_backups()` in the serve lifespan removes crash leftovers, then runs the daily and age-gated periodic backups in a thread. The short-lived prepare step no longer takes backups.
+- **Scheduled**: the 5-minute loop calls `maybe_create_periodic_backup`, age-gated at `AUTO_ROLLING_BACKUP_INTERVAL`.
+- **Shutdown**: `run_shutdown_backup_bounded` runs in a worker off the event loop. It waits at most 5 s for a running backup and stops waiting after 20 s; the worker is a daemon and the process exits anyway.
+
+Staging is isolated: half-written backups live in `backups/.staging/.backup-stage-*`, never inside `rolling/`. `_latest_backup_in`, pruning, listing and the daily check ignore dot-folders, so a crash can no longer leave something that looks like a newer, empty backup. `cleanup_stale_backup_staging` clears leftovers at startup.
+
+The online snapshot takes no study lock and yields every 128 pages. It warns after 120 s and is abandoned after 1200 s (`BackupTooSlowError`) instead of restarting forever under write pressure. Only the raw-copy fallback for a corrupt source takes the study lock, with a 5 s budget so it fails the (background) backup rather than stalling writers.
+
+Restore disposes pooled connections (`engine.dispose()`) before swapping files and deletes any stale `-wal`/`-shm` that the backup did not bring, otherwise the old log would be replayed into the restored file. Restore holds the study lock, so writes during it get the plain 503 "数据正在写入中，请稍候再试。".
+
+Full export/import (`full_transfer_service.py`) no longer hold the lock for the whole operation: export locks only the table dump and revision read, and import extracts outside the lock and locks only the swap window.
 
 ## Runtime Home Resolution
 

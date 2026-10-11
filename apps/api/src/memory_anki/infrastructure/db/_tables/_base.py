@@ -16,7 +16,6 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Session
 
 from memory_anki.core.config import DATABASE_URL, ensure_runtime_dirs
-from memory_anki.core.runtime_storage_lock import storage_write_lock
 from memory_anki.infrastructure.db.diagnostics import (
     finish_connection_timer,
     install_query_diagnostics,
@@ -94,64 +93,6 @@ def _configure_sqlite_pragmas(dbapi_connection, _connection_record) -> None:
 install_query_diagnostics(engine)
 
 
-def _release_storage_lock(session: Session) -> None:
-    lock = session.info.pop("_storage_write_lock", None)
-    if lock is not None:
-        lock.__exit__(None, None, None)
-
-
-@event.listens_for(Session, "before_flush")
-def _acquire_storage_lock(session: Session, _flush_context, _instances) -> None:
-    """Take the shared runtime lock only for the duration of the SQL flush.
-
-    Ledger and backup writers take the same lock, and a backup must never copy a
-    half-written row. That is a *flush-scoped* requirement: the bytes are on disk
-    once ``flush`` returns, so holding the lock past that point protects nothing
-    and costs everything.
-
-    It previously spanned the whole transaction (acquired here, released on
-    ``after_transaction_end``). Any handler that flushed early and then did slow
-    non-SQL work therefore held the single process-wide lock for its entire
-    remaining runtime, and every other writer queued behind it. Measured on the
-    owner's machine this produced 314 `storage_busy` 503s in one day, clustered
-    on the rating path, with the handler reporting ~28ms of SQL and a 15000ms
-    lock wait. See docs/architecture/storage-lock-contention.md.
-
-    The lock is still held across the flush itself and across any nested flush,
-    so a concurrent snapshot can never observe a partial write.
-    """
-    if session.info.get("_storage_write_lock") is not None:
-        # Already held by an enclosing flush (re-entrant use, or a flush that
-        # triggers another flush through an event handler).
-        return
-    if not (session.new or session.dirty or session.deleted):
-        return
-    lock = storage_write_lock()
-    lock.__enter__()
-    session.info["_storage_write_lock"] = lock
-
-
-@event.listens_for(Session, "after_flush")
-def _release_storage_lock_after_flush(session: Session, _flush_context) -> None:
-    """Release once the SQL statement has actually been emitted.
-
-    ``after_flush`` runs after the statements are sent to the DBAPI but *before*
-    ``commit``, which is exactly the window a backup snapshot must be excluded
-    from. Anything the handler does afterwards (building a response payload,
-    serializing a mindmap, computing the next queue) no longer blocks writers.
-    """
-    _release_storage_lock(session)
-
-
-@event.listens_for(Session, "after_transaction_end")
-def _release_storage_lock_after_transaction(session: Session, transaction) -> None:
-    # Defensive: a flush that raises leaves the lock attached to the session,
-    # and the rollback path ends the transaction without an ``after_flush``.
-    if getattr(transaction, "parent", None) is not None:
-        return
-    _release_storage_lock(session)
-
-
 # ── Open-write-transaction watchdog ───────────────────────────────────────────
 #
 # SQLite (WAL) allows many concurrent readers but exactly ONE writer. A write
@@ -159,10 +100,8 @@ def _release_storage_lock_after_transaction(session: Session, transaction) -> No
 # writer for `busy_timeout` (10s) and then fails them with "database is locked",
 # which reaches the learner as a dead rating bar.
 #
-# The app-level runtime lock does NOT cover this window: it is released per flush
-# (see _release_storage_lock_after_flush) while SQLite keeps the transaction open
-# until commit/rollback. So the guard has to observe the transaction, not the
-# lock.
+# SQLite itself is the only write lock (the old app-level storage lock was
+# removed), so the guard observes the open transaction.
 #
 # WHY THIS WATCHDOG WAS REWRITTEN (2026-10-07)
 # -------------------------------------------

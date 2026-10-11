@@ -1,12 +1,10 @@
-"""Subject shelf stays a read while another writer holds the storage lock."""
+"""Subject shelf reads stored due state and never rewrites review units."""
 
 from __future__ import annotations
 
 import json
-import threading
 import time
 
-from memory_anki.core.runtime_storage_lock import storage_write_lock
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitState
 from memory_anki.modules.content.presentation import router as palace_router
@@ -39,7 +37,7 @@ def _marked_editor_doc(child_text: str) -> str:
     )
 
 
-def test_subject_shelf_reads_stored_due_without_taking_storage_lock(make_client, session_factory):
+def test_subject_shelf_reads_stored_due_without_writing(make_client, session_factory):
     client = make_client(palace_router)
     with session_factory() as session:
         palace = Palace(title="shelf-lock", editor_doc=_marked_editor_doc("original"))
@@ -53,23 +51,8 @@ def test_subject_shelf_reads_stored_due_without_taking_storage_lock(make_client,
         stored_revision = stored.revision
         stored_content_hash = stored.content_hash
 
-    started = threading.Event()
-    release = threading.Event()
-
-    def hold_lock() -> None:
-        with storage_write_lock():
-            started.set()
-            assert release.wait(timeout=5)
-
-    holder = threading.Thread(target=hold_lock)
-    holder.start()
-    assert started.wait(timeout=2)
     started_at = time.perf_counter()
-    try:
-        response = client.get("/api/v1/palaces/subjects")
-    finally:
-        release.set()
-        holder.join(timeout=2)
+    response = client.get("/api/v1/palaces/subjects")
     elapsed = time.perf_counter() - started_at
 
     assert response.status_code == 200

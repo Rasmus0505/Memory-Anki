@@ -13,7 +13,7 @@ false assumption that background work is already serialized.
 What actually runs background work today, each with its own stop event and its own
 reentrancy guard:
   - ``modules/backups/application/backup_lifecycle.py`` — 300 s periodic loop
-    (``create_rolling_backup`` takes a module lock and ``storage_write_lock``)
+    (``create_rolling_backup`` takes a module lock)
   - ``core/runtime_activity.py`` — instance heartbeat loop
   - ``app/startup_warmup.py`` — one-shot warmup thread
 

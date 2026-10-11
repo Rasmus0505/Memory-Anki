@@ -13,10 +13,6 @@ from memory_anki.core.migration import ensure_legacy_repo_data_migrated
 from memory_anki.core.runtime import build_runtime_info, record_runtime_start
 from memory_anki.infrastructure.db._tables._base import get_session, init_db
 from memory_anki.infrastructure.db._tables.misc import Config
-from memory_anki.modules.backups.application.backup_lifecycle import (
-    ensure_daily_backup,
-    maybe_create_periodic_backup,
-)
 from memory_anki.modules.english.application.startup import (
     prepare_english_runtime,
 )
@@ -72,8 +68,6 @@ def run_prepare_runtime() -> StartupState:
         session.commit()
         # Each device only deletes expired local cache rows; repeated cleanup is safe.
         purge_expired_mutation_responses(session)
-        ensure_daily_backup()
-        maybe_create_periodic_backup()
         try:
             from memory_anki.infrastructure.llm.external_ai_call_logs import (
                 prune_old_ai_call_log_files,

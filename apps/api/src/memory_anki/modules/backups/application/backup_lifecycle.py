@@ -21,12 +21,13 @@ from memory_anki.infrastructure.db.maintenance import analyze_database
 from memory_anki.modules.backups.application.storage_backup import (
     read_storage_backup_manifest,
     restore_storage_backup,
+    staging_root,
     write_storage_backup,
 )
 
 logger = logging.getLogger(__name__)
 
-# 自动/手动/关机均走轻量 rolling；rescue 在替换前包含 ledger 与附件，full 包含所有 managed media。
+# 自动/手动/关机均走轻量 rolling；rescue 在替换前包含附件，full 包含所有 managed media。
 AUTO_ROLLING_BACKUP_INTERVAL = timedelta(hours=4)
 # 编辑触发的滚动备份每次都要完整快照数据库（本机约 200 MB，落在同步盘上）。
 # 30 分钟的间隔意味着每小时反复重写数百 MB，既拖慢同步盘又会长时间占用运行锁，
@@ -39,6 +40,11 @@ MAX_ROLLING_BACKUPS = 3
 MAX_RESCUE_BACKUPS = 2
 
 _BACKUP_LOCK = threading.Lock()
+# Waiting for a backup that is already running must never block the caller for
+# long: a shutdown or an edit-triggered request just gives up on that round.
+_BACKUP_LOCK_WAIT_SECONDS = 5.0
+_ROLLING_REQUEST_GUARD = threading.Lock()
+_ROLLING_REQUEST_RUNNING = False
 _BACKUP_LOOP_THREAD: threading.Thread | None = None
 _BACKUP_LOOP_STOP = threading.Event()
 
@@ -49,7 +55,7 @@ def timestamp_slug(now: datetime | None = None) -> str:
 
 
 def create_rescue_snapshot(reason: str) -> Path:
-    """替换前保护数据库、time-ledger、附件和迁移状态。"""
+    """替换前保护数据库、附件和迁移状态。"""
     with _BACKUP_LOCK:
         folder = RESCUE_BACKUPS_DIR / f"{timestamp_slug()}-{reason}"
         write_storage_backup(folder, reason=reason, full=False, scope="rescue")
@@ -74,12 +80,76 @@ def create_full_backup(reason: str) -> Path:
 
 
 def create_rolling_backup(reason: str) -> Path:
-    """轻量备份：数据库和迁移状态；不含 time-ledger 与附件。"""
+    """轻量备份：数据库和迁移状态；不含附件。"""
     with _BACKUP_LOCK:
-        folder = ROLLING_BACKUPS_DIR / f"{timestamp_slug()}-{reason}"
-        write_storage_backup(folder, reason=reason, full=False)
-        prune_old_backups(ROLLING_BACKUPS_DIR, MAX_ROLLING_BACKUPS)
-        return folder
+        return _write_rolling_backup_locked(reason)
+
+
+def _write_rolling_backup_locked(reason: str) -> Path:
+    folder = ROLLING_BACKUPS_DIR / f"{timestamp_slug()}-{reason}"
+    write_storage_backup(folder, reason=reason, full=False)
+    prune_old_backups(ROLLING_BACKUPS_DIR, MAX_ROLLING_BACKUPS)
+    return folder
+
+
+def _create_rolling_backup_if_due(
+    reason: str, minimum_interval: timedelta, *, wait_seconds: float | None = None
+) -> Path | None:
+    """Take the backup lock (bounded wait), re-check the age inside it, then back up.
+
+    The age re-check is what makes a burst of edits produce one backup: every
+    waiter sees the folder the first one just wrote and returns.
+    """
+    if wait_seconds is None:
+        acquired = _BACKUP_LOCK.acquire()
+    else:
+        acquired = _BACKUP_LOCK.acquire(timeout=wait_seconds)
+    if not acquired:
+        logger.info("rolling backup %s skipped: another backup is running", reason)
+        return None
+    try:
+        latest = _latest_backup_in(ROLLING_BACKUPS_DIR)
+        if latest and _backup_age(latest) < minimum_interval:
+            return None
+        return _write_rolling_backup_locked(reason)
+    finally:
+        _BACKUP_LOCK.release()
+
+
+def request_rolling_backup(
+    reason: str = "rolling-edit", minimum_interval: timedelta | None = None
+) -> bool:
+    """Ask for a rolling backup without ever making the caller wait for it.
+
+    Single-flight: while one request is queued or running, further requests are
+    merged into it. Returns True when this call started the worker.
+    """
+    global _ROLLING_REQUEST_RUNNING
+    interval = ROLLING_EDIT_BACKUP_INTERVAL if minimum_interval is None else minimum_interval
+    with _ROLLING_REQUEST_GUARD:
+        if _ROLLING_REQUEST_RUNNING:
+            return False
+        _ROLLING_REQUEST_RUNNING = True
+
+    def run() -> None:
+        global _ROLLING_REQUEST_RUNNING
+        try:
+            _create_rolling_backup_if_due(
+                reason, interval, wait_seconds=_BACKUP_LOCK_WAIT_SECONDS
+            )
+        except Exception:
+            logger.exception("background rolling backup failed (%s)", reason)
+        finally:
+            with _ROLLING_REQUEST_GUARD:
+                _ROLLING_REQUEST_RUNNING = False
+
+    try:
+        threading.Thread(target=run, name="memory-anki-rolling-backup", daemon=True).start()
+    except Exception:
+        with _ROLLING_REQUEST_GUARD:
+            _ROLLING_REQUEST_RUNNING = False
+        raise
+    return True
 
 
 def list_backups() -> list[dict]:
@@ -92,7 +162,7 @@ def list_backups() -> list[dict]:
         if not root.exists():
             continue
         for folder in sorted(root.iterdir(), reverse=True):
-            if not folder.is_dir():
+            if not _is_backup_folder(folder):
                 continue
             manifest = read_storage_backup_manifest(folder)
             raw_included_items = manifest.get("included_items")
@@ -153,23 +223,59 @@ def maybe_create_interval_backup(reason: str, minimum_interval: timedelta) -> Pa
 
 
 def maybe_create_rolling_backup(reason: str = "rolling-edit") -> Path | None:
-    """编辑触发的滚动备份，只含数据库和迁移状态。"""
-    latest = _latest_backup_in(ROLLING_BACKUPS_DIR)
-    if latest and _backup_age(latest) < ROLLING_EDIT_BACKUP_INTERVAL:
-        return None
-    return create_rolling_backup(reason)
+    """编辑触发的滚动备份：只排队，永远不在请求线程里做。"""
+    request_rolling_backup(reason)
+    return None
 
 
 def maybe_create_periodic_backup() -> Path | None:
     """后台周期备份：轻量 rolling，避免把 PDF/视频反复整盘复制。"""
-    latest = _latest_backup_in(ROLLING_BACKUPS_DIR)
-    if latest and _backup_age(latest) < AUTO_ROLLING_BACKUP_INTERVAL:
-        return None
-    return create_rolling_backup("periodic")
+    return _create_rolling_backup_if_due("periodic", AUTO_ROLLING_BACKUP_INTERVAL)
 
 
 def create_shutdown_backup() -> Path | None:
-    return create_rolling_backup("shutdown")
+    """Best effort on the way out: never wait long behind a running backup."""
+    return _create_rolling_backup_if_due(
+        "shutdown", timedelta(0), wait_seconds=_BACKUP_LOCK_WAIT_SECONDS
+    )
+
+
+def start_startup_backups() -> threading.Thread:
+    """Clean crash leftovers and take the due startup backups off the serving path."""
+
+    def run() -> None:
+        try:
+            cleanup_stale_backup_staging()
+            ensure_daily_backup()
+            maybe_create_periodic_backup()
+        except Exception:
+            logger.exception("startup backup failed")
+
+    thread = threading.Thread(target=run, name="memory-anki-startup-backup", daemon=True)
+    thread.start()
+    return thread
+
+
+def run_shutdown_backup_bounded(timeout_seconds: float = 20.0) -> bool:
+    """Run the shutdown backup in a worker and stop waiting after the timeout.
+
+    Returns True when it finished in time. The worker is a daemon, so a slow copy
+    never keeps the process from exiting; staging it leaves is cleaned on next start.
+    """
+
+    def run() -> None:
+        try:
+            create_shutdown_backup()
+        except Exception:
+            logger.exception("shutdown backup failed")
+
+    thread = threading.Thread(target=run, name="memory-anki-shutdown-backup", daemon=True)
+    thread.start()
+    thread.join(timeout_seconds)
+    if thread.is_alive():
+        logger.warning("shutdown backup still running after %.0fs; exiting without it", timeout_seconds)
+        return False
+    return True
 
 
 def start_periodic_backup_loop() -> None:
@@ -206,7 +312,7 @@ def prune_old_backups(root: Path, keep: int) -> int:
     if keep <= 0 or not root.exists():
         return 0
     try:
-        folders = [child for child in root.iterdir() if child.is_dir()]
+        folders = [child for child in root.iterdir() if _is_backup_folder(child)]
     except OSError:
         return 0
     if len(folders) <= keep:
@@ -277,7 +383,7 @@ def _daily_rolling_backup_exists() -> bool:
     if not ROLLING_BACKUPS_DIR.exists():
         return False
     return any(
-        child.is_dir() and child.name.startswith(prefix)
+        _is_backup_folder(child) and child.name.startswith(prefix)
         for child in ROLLING_BACKUPS_DIR.iterdir()
     )
 
@@ -287,10 +393,33 @@ def _daily_backup_exists() -> bool:
     return _daily_full_backup_exists()
 
 
+def _is_backup_folder(child: Path) -> bool:
+    # ``.backup-stage-*`` and other dot-folders are half-written staging, never a backup.
+    return child.is_dir() and not child.name.startswith(".")
+
+
+def cleanup_stale_backup_staging() -> int:
+    """Remove staging left behind by a crash or kill mid-backup."""
+    removed = 0
+    roots = [ROLLING_BACKUPS_DIR, FULL_BACKUPS_DIR, RESCUE_BACKUPS_DIR, staging_root()]
+    for root in roots:
+        if not root.exists():
+            continue
+        try:
+            children = list(root.iterdir())
+        except OSError:
+            continue
+        for child in children:
+            if child.is_dir() and child.name.startswith(".backup-stage-"):
+                shutil.rmtree(child, ignore_errors=True)
+                removed += 1
+    return removed
+
+
 def _latest_backup_in(root: Path) -> Path | None:
     if not root.exists():
         return None
-    folders = [child for child in root.iterdir() if child.is_dir()]
+    folders = [child for child in root.iterdir() if _is_backup_folder(child)]
     if not folders:
         return None
     return max(folders, key=lambda item: item.stat().st_mtime)

@@ -6,20 +6,9 @@ SQLite in WAL mode allows many concurrent readers but exactly ONE writer. When a
 second writer arrives it waits ``busy_timeout`` and then raises
 ``sqlite3.OperationalError: database is locked``.
 
-That condition is **transient and safe to retry**, but nothing in the app said so.
-It surfaced through the catch-all handler as an opaque 500:
-
-    服务器内部错误，请查看服务端日志。
-    请求：POST /api/v1/review/units/<id>/sessions
-    HTTP 状态：500
-
-...while the *other* contention layer (the app-level runtime lock) already had a
-proper retryable answer (``StorageBusyError`` -> 503 + ``Retry-After``). The two
-locks therefore behaved completely differently to the client for the same
-underlying cause, and only one of them was retryable. Measured on the owner's
-machine this produced 284 ``database is locked`` failures in a single day, every
-one of them reported as a 500 that the client could not distinguish from a real
-bug.
+That condition is **transient and safe to retry**, but it used to surface through
+the catch-all handler as an opaque 500 that the client could not distinguish from
+a real bug. It is now answered as a retryable 503 + ``Retry-After``.
 
 This module keeps the SQL-level knowledge out of the HTTP layer: the app package
 asks "is this a lock error?", it does not parse SQLite messages itself.

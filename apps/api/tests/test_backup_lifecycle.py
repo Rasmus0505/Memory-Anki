@@ -98,12 +98,11 @@ def test_create_rolling_backup_uses_rolling_dir_and_light_scope(backup_env):
     assert manifest.get("scope") == "rolling"
     included = {item["key"] for item in manifest["included_items"]}
     assert {"database", "migration_state"} <= included
-    assert "time_ledger" not in included
     assert "attachments" not in included
     assert _read_marker(folder / "学习数据" / "memory_palace.db") == _DB_MARKER
 
 
-def test_create_rescue_snapshot_includes_ledger_and_attachments(backup_env):
+def test_create_rescue_snapshot_includes_attachments(backup_env):
     folder = backup_lifecycle.create_rescue_snapshot("before-test")
 
     assert folder.parent == backup_env["rescue"]
@@ -111,7 +110,8 @@ def test_create_rescue_snapshot_includes_ledger_and_attachments(backup_env):
     assert manifest.get("full") is False
     assert manifest.get("scope") == "rescue"
     included = {item["key"] for item in manifest["included_items"]}
-    assert {"database", "time_ledger", "attachments", "migration_state"} <= included
+    assert {"database", "attachments", "migration_state"} <= included
+    assert "time_ledger" not in included
 
 
 def test_list_backups_reads_created_folder(backup_env):
@@ -268,3 +268,102 @@ def test_create_backup_route_writes_rolling(backup_env, make_client):
     assert items[0]["kind"] == "rolling"
     assert items[0]["reason"] == "manual"
     assert not any(backup_env["full"].iterdir())
+
+
+def test_request_rolling_backup_is_single_flight(backup_env, monkeypatch):
+    import threading
+
+    started = threading.Event()
+    release = threading.Event()
+    calls: list[str] = []
+
+    def slow_backup(reason, minimum_interval, *, wait_seconds=None):
+        calls.append(reason)
+        started.set()
+        release.wait(5)
+        return None
+
+    monkeypatch.setattr(backup_lifecycle, "_create_rolling_backup_if_due", slow_backup)
+    assert backup_lifecycle.request_rolling_backup("a") is True
+    assert started.wait(5)
+    assert backup_lifecycle.request_rolling_backup("b") is False
+    assert backup_lifecycle.maybe_create_rolling_backup("c") is None
+    release.set()
+    for _ in range(100):
+        if not backup_lifecycle._ROLLING_REQUEST_RUNNING:
+            break
+        threading.Event().wait(0.05)
+    assert calls == ["a"]
+    assert backup_lifecycle.request_rolling_backup("d") is True
+    threading.Event().wait(0.2)
+
+
+def test_stale_staging_is_not_a_backup_and_is_cleaned(backup_env):
+    stale = backup_env["rolling"] / ".backup-stage-crashed"
+    stale.mkdir()
+    (stale / "junk.db").write_bytes(b"x")
+    nested = storage_backup.staging_root() / ".backup-stage-old"
+    nested.mkdir(parents=True)
+
+    assert backup_lifecycle._latest_backup_in(backup_env["rolling"]) is None
+    assert backup_lifecycle._daily_rolling_backup_exists() is False
+    assert backup_lifecycle.list_backups() == []
+
+    assert backup_lifecycle.cleanup_stale_backup_staging() == 2
+    assert not stale.exists()
+    assert not nested.exists()
+
+
+def test_backup_stage_lives_outside_rolling_dir(backup_env, monkeypatch):
+    seen: list = []
+    real = storage_backup.tempfile.TemporaryDirectory
+
+    def spy(*args, **kwargs):
+        seen.append(kwargs.get("dir"))
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(storage_backup.tempfile, "TemporaryDirectory", spy)
+    backup_lifecycle.create_rolling_backup("stage-location")
+    assert seen == [storage_backup.staging_root()]
+    assert not any(p.name.startswith(".") for p in backup_env["rolling"].iterdir())
+
+
+def test_restore_removes_stale_wal_and_shm(backup_env):
+    folder = backup_lifecycle.create_rolling_backup("before")
+    db = backup_env["db"]
+    _write_marker_db(db, "changed")
+    wal = db.with_name(db.name + "-wal")
+    shm = db.with_name(db.name + "-shm")
+    wal.write_bytes(b"stale-wal")
+    shm.write_bytes(b"stale-shm")
+
+    storage_backup.restore_storage_backup(folder)
+
+    assert _read_marker(db) == _DB_MARKER
+    assert not wal.exists()
+    assert not shm.exists()
+
+
+def test_online_backup_gives_up_after_duration_cap(backup_env, monkeypatch):
+    db = backup_env["db"]
+    connection = sqlite3.connect(db)
+    connection.execute("CREATE TABLE bulk(v BLOB)")
+    connection.executemany("INSERT INTO bulk VALUES (?)", [(b"x" * 4000,)] * 500)
+    connection.commit()
+    connection.close()
+    monkeypatch.setattr(storage_backup, "_ONLINE_BACKUP_PAGES", 1)
+    monkeypatch.setattr(storage_backup, "_ONLINE_BACKUP_MAX_SECONDS", -1.0)
+
+    with pytest.raises(storage_backup.BackupTooSlowError):
+        storage_backup._sqlite_online_backup(db, backup_env["app_home"] / "out.db")
+
+
+def test_bounded_shutdown_backup_stops_waiting(backup_env, monkeypatch):
+    import threading
+
+    release = threading.Event()
+    monkeypatch.setattr(
+        backup_lifecycle, "create_shutdown_backup", lambda: release.wait(5) and None
+    )
+    assert backup_lifecycle.run_shutdown_backup_bounded(0.05) is False
+    release.set()

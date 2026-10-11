@@ -35,14 +35,8 @@ class SqlAlchemyMutationResponseStore:
         except Exception:
             return
         # Read-then-write on purpose. ``config.key`` is already UNIQUE, so this pair
-        # looks like a lost race, and rewriting it as a Core
-        # ``insert(...).on_conflict_do_update(...)`` was tried and reverted:
-        # ``_acquire_storage_lock`` only fires on ``before_flush`` when the session
-        # holds pending ORM instances, so a Core upsert silently stopped taking
-        # ``storage_write_lock``. That lock is what keeps a backup from copying a
-        # half-committed write, so losing it is worse than the narrow race. Same-id
-        # retries are already collapsed upstream by the idempotency lookup; keep the
-        # ORM write and the lock it acquires.
+        # looks like a lost race; same-id retries are already collapsed upstream by
+        # the idempotency lookup, so keep the plain ORM write.
         row = self._session.query(Config).filter_by(key=self._key(identity)).first()
         if row is None:
             self._session.add(Config(key=self._key(identity), value=value))

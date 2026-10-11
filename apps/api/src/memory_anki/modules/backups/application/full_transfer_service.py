@@ -15,8 +15,7 @@ from sqlalchemy import Date, DateTime, Table, text
 from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.orm import Session
 
-from memory_anki.core.config import APP_HOME, ATTACHMENTS_DIR
-from memory_anki.core.runtime_storage_lock import storage_write_lock
+from memory_anki.core.config import ATTACHMENTS_DIR
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables import Base, engine
 
@@ -24,7 +23,6 @@ ARCHIVE_FORMAT_VERSION = 2
 DATA_JSON_NAME = "data.json"
 MANIFEST_JSON_NAME = "manifest.json"
 ATTACHMENTS_PREFIX = "attachments/"
-LEDGER_PREFIX = "time-ledger/"
 
 
 class FullTransferError(ValueError):
@@ -54,28 +52,29 @@ def _dump_all_tables(session: Session) -> dict[str, list[dict[str, Any]]]:
 
 
 def build_full_archive(session: Session) -> tuple[bytes, str]:
-    """Return a consistent DB + time-ledger + attachments archive."""
-    with storage_write_lock(APP_HOME):
-        data = _dump_all_tables(session)
-        manifest = {
-            "format_version": ARCHIVE_FORMAT_VERSION,
-            "alembic_revision": _current_alembic_revision(session),
-            "created_at": utc_now_naive().isoformat(timespec="seconds"),
-            "table_counts": {name: len(rows) for name, rows in data.items()},
-            "contents": ["database", "time-ledger", "attachments"],
-        }
-        buffer = io.BytesIO()
-        with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-            archive.writestr(MANIFEST_JSON_NAME, json.dumps(manifest, ensure_ascii=False, indent=2))
-            archive.writestr(DATA_JSON_NAME, json.dumps(data, ensure_ascii=False, default=_json_default))
-            for root, prefix in ((Path(ATTACHMENTS_DIR), ATTACHMENTS_PREFIX), (APP_HOME / "学习数据" / "time-ledger", LEDGER_PREFIX)):
-                if not root.exists():
-                    continue
-                for file_path in root.rglob("*"):
-                    if file_path.is_file():
-                        archive.write(file_path, prefix + file_path.relative_to(root).as_posix())
-        filename = f"memory-anki-full-{date.today().strftime('%Y%m%d')}.zip"
-        return buffer.getvalue(), filename
+    """Return a DB + attachments archive.
+
+    """
+    data = _dump_all_tables(session)
+    revision = _current_alembic_revision(session)
+    manifest = {
+        "format_version": ARCHIVE_FORMAT_VERSION,
+        "alembic_revision": revision,
+        "created_at": utc_now_naive().isoformat(timespec="seconds"),
+        "table_counts": {name: len(rows) for name, rows in data.items()},
+        "contents": ["database", "attachments"],
+    }
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(MANIFEST_JSON_NAME, json.dumps(manifest, ensure_ascii=False, indent=2))
+        archive.writestr(DATA_JSON_NAME, json.dumps(data, ensure_ascii=False, default=_json_default))
+        root = Path(ATTACHMENTS_DIR)
+        if root.exists():
+            for file_path in root.rglob("*"):
+                if file_path.is_file():
+                    archive.write(file_path, ATTACHMENTS_PREFIX + file_path.relative_to(root).as_posix())
+    filename = f"memory-anki-full-{date.today().strftime('%Y%m%d')}.zip"
+    return buffer.getvalue(), filename
 
 
 def inspect_archive(zip_bytes: bytes, session: Session) -> dict[str, Any]:
@@ -117,12 +116,13 @@ def import_full_archive(zip_bytes: bytes, session: Session) -> dict[str, Any]:
     bind = session.get_bind() or engine
     session.close()
 
-    with storage_write_lock(APP_HOME), _open_archive(zip_bytes) as archive:
+    with _open_archive(zip_bytes) as archive:
         data = _read_data_json(archive)
         # Files are staged before the database transaction and originals remain
         # available until the DB commit has succeeded.
-        roots = [(Path(ATTACHMENTS_DIR), ATTACHMENTS_PREFIX),
-                 (APP_HOME / "学习数据" / "time-ledger", LEDGER_PREFIX)]
+        # Entries outside attachments/ (e.g. the retired time-ledger/ folder of
+        # older archives) are ignored on purpose.
+        roots = [(Path(ATTACHMENTS_DIR), ATTACHMENTS_PREFIX)]
         with tempfile.TemporaryDirectory(prefix="full-import-") as temporary:
             temp = Path(temporary)
             counts = []
@@ -169,8 +169,6 @@ def import_full_archive(zip_bytes: bytes, session: Session) -> dict[str, Any]:
     return {
         "table_counts": imported_counts,
         "restored_attachments": counts[0],
-        "restored_ledger_files": counts[1],
-        "legacy_ledger_reset": int(preview["manifest"].get("format_version") or 0) == 1,
     }
 
 

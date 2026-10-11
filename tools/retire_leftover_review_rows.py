@@ -12,8 +12,8 @@ Explicitly NOT touched: review_unit_states (schedule/progress), palaces
 
 Safety:
   * ``--dry-run`` is the default; nothing is written without ``--apply``.
-  * Refuses to run while the API holds the runtime storage lock, because a
-    concurrent writer could be mid-round on exactly these rows.
+  * Stop the app before ``--apply``: a concurrent writer could be mid-round on
+    exactly these rows.
   * Takes its own backup path argument so the caller proves a backup exists.
   * Prints every count it changes.
 """
@@ -25,34 +25,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 DEFAULT_DB = Path(r"F:\memory anki data\学习数据\memory_palace.db")
-DEFAULT_LOCK = Path(r"F:\memory anki data\日志缓存\runtime-storage.lock")
 
 # Sessions that legitimately stay open for a long time are excluded by scene:
 # a quiz round can span a study day, so only clearly abandoned ones are closed.
 STALE_CUTOFF_HOURS = 24
-
-
-def api_lock_is_free(lock_path: Path) -> bool:
-    """True when no other process holds the runtime storage lock."""
-    if not lock_path.exists():
-        return True
-    try:
-        handle = lock_path.open("a+b")
-    except OSError:
-        return False
-    try:
-        import msvcrt
-
-        handle.seek(0)
-        try:
-            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
-        except OSError:
-            return False
-        handle.seek(0)
-        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
-        return True
-    finally:
-        handle.close()
 
 
 def run(db: Path, *, apply: bool, cutoff_hours: int) -> int:
@@ -121,22 +97,10 @@ def run(db: Path, *, apply: bool, cutoff_hours: int) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--db", type=Path, default=DEFAULT_DB)
-    parser.add_argument("--lock", type=Path, default=DEFAULT_LOCK)
     parser.add_argument("--apply", action="store_true", help="actually write changes")
     parser.add_argument("--cutoff-hours", type=int, default=STALE_CUTOFF_HOURS)
-    parser.add_argument(
-        "--force",
-        action="store_true",
-        help="skip the runtime-lock check (only when the app is stopped)",
-    )
     args = parser.parse_args()
 
-    if args.apply and not args.force and not api_lock_is_free(args.lock):
-        print(
-            "refusing to write: the API holds the runtime storage lock.\n"
-            "Stop the app first, or pass --force if you are certain it is idle."
-        )
-        return 2
     return run(args.db, apply=args.apply, cutoff_hours=args.cutoff_hours)
 
 
