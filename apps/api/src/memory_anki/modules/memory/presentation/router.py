@@ -204,6 +204,9 @@ def start_freestyle_session(
                 round_id=str(data.get("round_id") or ""),
                 client_source=data.get("client_source") or data.get("clientSource"),
                 allow_not_due=bool(data.get("allow_not_due") or data.get("allowNotDue")),
+                card_id=str(data.get("card_id") or ""),
+                occurrence_id=str(data.get("occurrence_id") or ""),
+                retry_attempt=int(data.get("retry_attempt") or 0),
             )
         }
     except (TypeError, ValueError) as exc:
@@ -243,9 +246,12 @@ def unit_preview(unit_id: str, session: Session = Depends(session_dep)):
 
 
 @router.get("/review/session/{study_session_id}")
-def session_detail(study_session_id: str, session: Session = Depends(session_dep)):
+def session_detail(
+    study_session_id: str, encounter_id: str | None = None,
+    session: Session = Depends(session_dep),
+):
     try:
-        return {"item": get_unit_review_session(session, study_session_id)}
+        return {"item": get_unit_review_session(session, study_session_id, encounter_id=encounter_id)}
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 

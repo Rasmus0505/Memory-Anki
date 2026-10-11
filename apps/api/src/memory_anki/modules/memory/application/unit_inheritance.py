@@ -12,29 +12,56 @@ decisions live in small pure helpers so the reconcile loop stays readable.
 from __future__ import annotations
 
 import json
-from datetime import date
+from dataclasses import dataclass
+from datetime import date, datetime
+from typing import Any
 
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitState
 
-from .unit_scheduler import clamp_schedulable_due
+from .unit_scheduler import assert_schedulable_due
+
+
+@dataclass(frozen=True)
+class InheritanceSource:
+    """Entry-time evidence: reconciliation must not vote on its own mutations."""
+
+    id: str
+    anchor_uid: str
+    unit_kind: str
+    node_uids: frozenset[str]
+    active: bool
+    stage_index: int
+    due_date: date
+    has_passed: bool
+    last_passed_at: datetime | None
+
+    @classmethod
+    def from_row(cls, row: ReviewUnitState) -> InheritanceSource:
+        return cls(
+            id=row.id, anchor_uid=row.anchor_uid, unit_kind=row.unit_kind,
+            node_uids=frozenset(_json_load_list(row.node_uids_json)), active=row.active,
+            stage_index=row.stage_index, due_date=row.due_date,
+            has_passed=row.has_passed, last_passed_at=row.last_passed_at,
+        )
 
 
 def _json_load_list(raw: str | None) -> list[str]:
-    """Local copy of the projection helper, kept here to avoid an import cycle."""
-    try:
-        value = json.loads(raw or "[]")
-    except (TypeError, ValueError):
-        return []
-    return [str(item) for item in value] if isinstance(value, list) else []
+    """Corrupt membership is not evidence of a genuinely unstudied region."""
+    if not raw:
+        raise ValueError("review unit membership is missing")
+    value = json.loads(raw)
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        raise ValueError("review unit membership must be a list of node UIDs")
+    return value
 
 
-def _members(row: ReviewUnitState) -> set[str]:
-    return set(_json_load_list(row.node_uids_json))
+def _members(row: InheritanceSource) -> frozenset[str]:
+    return row.node_uids
 
 
-def inheritance_candidates(session: Session, palace_id: int) -> list[ReviewUnitState]:
+def inheritance_candidates(session: Session, palace_id: int) -> list[InheritanceSource]:
     """Every unit row for a palace, active or not, as inheritance candidates.
 
     Deleting the final permanent mark deactivates every row while leaving its
@@ -46,15 +73,16 @@ def inheritance_candidates(session: Session, palace_id: int) -> list[ReviewUnitS
     Ordered oldest-first: when several incarnations exist, the newest one is the
     most recent expression of the learner's progress and wins.
     """
-    return (
+    rows = (
         session.query(ReviewUnitState)
         .filter(ReviewUnitState.palace_id == palace_id)
         .order_by(ReviewUnitState.updated_at.asc(), ReviewUnitState.id.asc())
         .all()
     )
+    return [InheritanceSource.from_row(row) for row in rows]
 
 
-def region_is_live(candidates: list[ReviewUnitState], members: set[str]) -> bool:
+def region_is_live(candidates: list[InheritanceSource], members: set[str]) -> bool:
     """True when any *live* unit already covers part of this region.
 
     Judged against the revision-time active set, never the set the reconcile
@@ -66,9 +94,9 @@ def region_is_live(candidates: list[ReviewUnitState], members: set[str]) -> bool
 
 
 def overlapping_sources(
-    candidates: list[ReviewUnitState],
+    candidates: list[InheritanceSource],
     members: set[str],
-) -> list[ReviewUnitState]:
+) -> list[InheritanceSource]:
     """Units whose stored membership intersects ``members``.
 
     Identity is deliberately membership-based, not ``(anchor_uid, unit_kind)``:
@@ -81,16 +109,57 @@ def overlapping_sources(
     split-off remainder -- still holds the *old* schedule, and letting it vote
     would drag a healthy unit down to a stale stage.
     """
-    overlapping = [row for row in candidates if _members(row) & members]
-    active = [row for row in overlapping if row.active]
-    return active or overlapping
+    selected: dict[str, InheritanceSource] = {}
+    for uid in sorted(members):
+        overlapping = [row for row in candidates if uid in _members(row)]
+        active = [row for row in overlapping if row.active]
+        for row in active or overlapping:
+            selected[row.id] = row
+    return list(selected.values())
+
+
+def sources_for_members(
+    candidates: list[InheritanceSource],
+    members: set[str],
+    nodes: dict[str, Any],
+    *,
+    unit_kind: str,
+) -> list[InheritanceSource]:
+    """Existing content follows its region; new content follows its closest branch.
+
+    Walk through newly inserted ancestors until stored branch evidence exists.
+    Cohorts assess siblings together and are not the ancestor's branch schedule.
+    Never borrow a sibling's schedule merely because it shares an ancestor.
+    """
+    branches = [row for row in candidates if row.unit_kind != "cohort"]
+    region_candidates = candidates if unit_kind == "cohort" else branches
+    selected = {row.id: row for row in overlapping_sources(region_candidates, members)}
+    known_members = set().union(*(_members(row) for row in candidates))
+    for uid in sorted(members - known_members):
+        parent = nodes[uid].get("parent_uid")
+        visited = {uid}
+        while parent is not None:
+            if parent in visited:
+                raise ValueError("cycle in review unit ancestor chain")
+            visited.add(parent)
+            owners = [
+                row for row in branches
+                if parent in _members(row) or parent == row.anchor_uid
+            ]
+            active = [row for row in owners if row.active]
+            if owners:
+                for row in active or owners:
+                    selected[row.id] = row
+                break
+            parent = nodes[parent].get("parent_uid")
+    return list(selected.values())
 
 
 def same_identity_sources(
-    candidates: list[ReviewUnitState],
+    candidates: list[InheritanceSource],
     anchor_uid: str,
     unit_kind: str,
-) -> list[ReviewUnitState]:
+) -> list[InheritanceSource]:
     """Prior incarnations of one active identity, oldest first."""
     return [
         row
@@ -100,7 +169,7 @@ def same_identity_sources(
 
 
 def inheritance_vote(
-    sources: list[ReviewUnitState],
+    sources: list[InheritanceSource],
     *,
     default_stage: int,
     default_due: date,
@@ -113,23 +182,23 @@ def inheritance_vote(
     """
     if not sources:
         return default_stage, default_due, False
-    # A parked date past the ladder (the old 2099 rows) must not win the vote.
-    # ``default_due`` is the caller's today.
-    voted_due = min(row.due_date for row in sources)
+    # Bad evidence must fail before writes, never silently rebook studied content.
+    for row in sources:
+        assert_schedulable_due(row.due_date, today=default_due)
     return (
         min(row.stage_index for row in sources),
-        clamp_schedulable_due(voted_due, today=default_due),
+        min(row.due_date for row in sources),
         all(row.has_passed for row in sources),
     )
 
 
 def find_resurrectable(
-    candidates: list[ReviewUnitState],
+    candidates: list[InheritanceSource],
     *,
     anchor_uid: str,
     unit_kind: str,
     region_is_live: bool,
-) -> ReviewUnitState | None:
+) -> InheritanceSource | None:
     """The prior row to reactivate for a re-added mark, if any.
 
     Returns ``None`` whenever the region still has a live owner: that shape is an

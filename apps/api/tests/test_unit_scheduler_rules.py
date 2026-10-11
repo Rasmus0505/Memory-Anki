@@ -252,23 +252,23 @@ def test_absurd_future_due_is_not_a_schedule():
         raise AssertionError("a date past the ladder must be rejected")
 
 
-def test_inheritance_does_not_keep_a_parked_future_due():
+def test_inheritance_rejects_a_parked_future_due_instead_of_rebooking():
     from types import SimpleNamespace
+
+    import pytest
 
     from memory_anki.modules.memory.application.unit_inheritance import inheritance_vote
 
     today = date(2026, 10, 9)
-    stage, due, passed = inheritance_vote(
-        [
-            SimpleNamespace(stage_index=1, due_date=date(2099, 1, 1), has_passed=True),
-            SimpleNamespace(stage_index=2, due_date=date(2099, 6, 1), has_passed=True),
-        ],
-        default_stage=0,
-        default_due=today,
-    )
-    assert stage == 1
-    assert due == today
-    assert passed is True
+    with pytest.raises(ValueError, match="一年"):
+        inheritance_vote(
+            [
+                SimpleNamespace(stage_index=1, due_date=today, has_passed=True),
+                SimpleNamespace(stage_index=2, due_date=date(2099, 6, 1), has_passed=True),
+            ],
+            default_stage=0,
+            default_due=today,
+        )
 
 
 def test_fuzz_never_produces_a_non_positive_interval():

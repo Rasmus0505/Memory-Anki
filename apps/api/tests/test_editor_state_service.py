@@ -380,7 +380,7 @@ class PalaceEditorReconcileGateTests(RouterTestCase):
             self.assertEqual(unit.content_hash, content_hash_before)
             self.assertGreater(unit.due_date, date.today())
 
-    def test_reconcile_flag_or_editor_leave_demotes_and_returns_changes(self):
+    def test_reconcile_flag_or_editor_leave_preserves_schedule_and_returns_changes(self):
         from datetime import date
 
         from memory_anki.infrastructure.db._tables.unit_reviews import (
@@ -409,16 +409,13 @@ class PalaceEditorReconcileGateTests(RouterTestCase):
             changes = reconcile.get("changes") or []
 
             self.assertTrue(reconcile.get("changed"))
-            self.assertEqual(unit.stage_index, stage_before - 1)
-            self.assertEqual(unit.due_date, date.today())
-            self.assertEqual(unit.due_date.isoformat() != due_before.isoformat(), True)
-            self.assertTrue(any(item.get("action") == "content_demoted" for item in changes))
-            self.assertTrue(reconcile.get("undo_token"))
-            batch = session.get(ReviewUnitScheduleBatch, reconcile["undo_token"])
-            self.assertIsNotNone(batch)
-            self.assertEqual(batch.reason, "content_reconcile")
+            self.assertEqual(unit.stage_index, stage_before)
+            self.assertEqual(unit.due_date, due_before)
+            self.assertTrue(any(item.get("action") == "content_updated" for item in changes))
+            self.assertIsNone(reconcile.get("undo_token"))
+            self.assertEqual(session.query(ReviewUnitScheduleBatch).count(), 0)
 
-            # Explicit reconcile_units also demotes even without leave reason.
+            # Explicit reconciliation also preserves the earned schedule.
             unit.stage_index = 2
             unit.due_date = date.today().replace(year=date.today().year + 1)
             session.commit()
@@ -434,8 +431,8 @@ class PalaceEditorReconcileGateTests(RouterTestCase):
             session.expire_all()
             unit = session.get(ReviewUnitState, unit.id)
             assert unit is not None
-            self.assertEqual(unit.stage_index, 1)
-            self.assertEqual(unit.due_date, date.today())
+            self.assertEqual(unit.stage_index, 2)
+            self.assertEqual(unit.due_date, date.today().replace(year=date.today().year + 1))
             self.assertTrue((flagged.get("unit_reconcile") or {}).get("changes"))
 
     def test_mark_toggle_on_plain_autosave_defers_membership_reconcile(self):
@@ -613,8 +610,8 @@ class PalaceEditorReturnToReviewTests(PalaceEditorReconcileGateTests):
             )
             self.assertEqual(palace.editor_doc, stored_before)
             self.assertTrue(reconcile.get("changed"))
-            self.assertTrue(any(item.get("action") == "content_demoted" for item in changes))
-            self.assertEqual(unit.stage_index, stage_before - 1)
+            self.assertTrue(any(item.get("action") == "content_updated" for item in changes))
+            self.assertEqual(unit.stage_index, stage_before)
 
 
 class PalaceVersionSignatureQueryTests(RouterTestCase):

@@ -22,7 +22,6 @@ from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.misc import StudySession
 from memory_anki.infrastructure.db._tables.unit_reviews import (
     ReviewUnitEncounter,
-    ReviewUnitScheduleBatch,
     ReviewUnitState,
 )
 
@@ -30,11 +29,10 @@ from .unit_inheritance import (
     find_resurrectable,
     inheritance_candidates,
     inheritance_vote,
-    overlapping_sources,
     region_is_live,
+    sources_for_members,
 )
 from .unit_schedule_projection import _change_entry, _schedule_snapshot_from_row
-from .unit_scheduler import clamp_schedulable_due
 
 
 def _active_unit_key(anchor_uid: str, unit_kind: str) -> tuple[str, str]:
@@ -102,7 +100,6 @@ def reconcile_palace_units(session: Session, palace_id: int) -> dict[str, Any]:
         _active_unit_key(row.anchor_uid, row.unit_kind): row for row in old_states
     }
     changes: list[dict[str, Any]] = []
-    demotion_entries: list[dict[str, Any]] = []
 
     if not definitions:
         for row in old_states:
@@ -137,22 +134,38 @@ def reconcile_palace_units(session: Session, palace_id: int) -> dict[str, Any]:
     # Snapshot the active set as it stood on entry. The loop below activates and
     # deactivates rows, and liveness questions must not be answered by units this
     # same reconcile just brought back.
-    active_on_entry = list(old_states)
-    for index, definition in enumerate(definitions):
+    active_on_entry = [row for row in candidates if row.active]
+    source_by_id = {row.id: row for row in candidates}
+    inheritance_plans = []
+    for definition in definitions:
         members = set(definition.node_uids)
         current = old_by_key.get(
             _active_unit_key(definition.anchor_uid, definition.unit_kind)
         )
-        overlapping = overlapping_sources(candidates, members)
+        overlapping = sources_for_members(
+            candidates, members, tree["nodes"], unit_kind=definition.unit_kind,
+        )
         # A region still covered by a live unit was never abandoned; only a
         # region with no live owner at all can be a resurrection.
         live_region = region_is_live(active_on_entry, members)
-        sources = overlapping or ([current] if current is not None else [])
+        sources = overlapping or ([source_by_id[current.id]] if current is not None else [])
         inherited_stage, inherited_due, inherited_passed = inheritance_vote(
             sources, default_stage=0, default_due=today
         )
-        inherited_due = clamp_schedulable_due(inherited_due, today=today)
+        inherited_last_passed = (
+            min(row.last_passed_at for row in sources if row.last_passed_at is not None)
+            if sources and all(row.last_passed_at is not None for row in sources)
+            else None
+        )
+        inheritance_plans.append((
+            definition, current, live_region, inherited_stage, inherited_due,
+            inherited_passed, inherited_last_passed,
+        ))
 
+    # Resolve and validate every source before touching any persisted unit.
+    for index, plan in enumerate(inheritance_plans):
+        (definition, current, live_region, inherited_stage, inherited_due,
+         inherited_passed, inherited_last_passed) = plan
         if current is None:
             # No active unit owns this identity. Either the region is still
             # represented by other active units (a resized cohort, a split) and
@@ -160,13 +173,17 @@ def reconcile_palace_units(session: Session, palace_id: int) -> dict[str, Any]:
             # covers it -- every mark was deleted and this one is added back --
             # in which case the deactivated row still holds the earned progress
             # and is reactivated instead of restarting at first-learning.
-            resurrect = find_resurrectable(
+            resurrect_source = find_resurrectable(
                 candidates,
                 anchor_uid=definition.anchor_uid,
                 unit_kind=definition.unit_kind,
                 region_is_live=live_region,
             )
-            if resurrect is not None:
+            if resurrect_source is not None:
+                with session.no_autoflush:
+                    resurrect = session.get(ReviewUnitState, resurrect_source.id)
+                if resurrect is None:
+                    raise ValueError("inheritance source disappeared during reconciliation")
                 # Reactivate the existing row so unit_id, rating history, and
                 # earned schedule stay attached to the same record.
                 resurrect.active = True
@@ -206,6 +223,7 @@ def reconcile_palace_units(session: Session, palace_id: int) -> dict[str, Any]:
                 stage_index=inherited_stage,
                 has_passed=inherited_passed,
                 due_date=inherited_due,
+                last_passed_at=inherited_last_passed,
                 topology_order=index,
                 active=True,
             )
@@ -236,9 +254,8 @@ def reconcile_palace_units(session: Session, palace_id: int) -> dict[str, Any]:
                 current.due_date = inherited_due
                 action = "membership_updated"
             elif content_changed:
-                current.stage_index = max(0, current.stage_index - 1)
-                current.due_date = today
-                action = "content_demoted"
+                # Editing is not recall evidence. Keep the earned schedule intact.
+                action = "content_updated"
             current.unit_kind = definition.unit_kind
             current.node_uids_json = json.dumps(definition.node_uids, ensure_ascii=False)
             current.membership_hash = definition.membership_hash
@@ -256,8 +273,6 @@ def reconcile_palace_units(session: Session, palace_id: int) -> dict[str, Any]:
                     after=after,
                 )
                 changes.append(entry)
-                if action == "content_demoted":
-                    demotion_entries.append(entry)
         used_ids.add(current.id)
 
     for row in old_states:
@@ -277,18 +292,6 @@ def reconcile_palace_units(session: Session, palace_id: int) -> dict[str, Any]:
                 )
             )
 
-    undo_token: str | None = None
-    if demotion_entries:
-        undo_token = uuid.uuid4().hex
-        session.add(
-            ReviewUnitScheduleBatch(
-                id=undo_token,
-                palace_id=palace_id,
-                reason="content_reconcile",
-                entries_json=json.dumps(demotion_entries, ensure_ascii=False),
-            )
-        )
-
     invalidated = _invalidate_active_sessions(session, palace_id) if changed else 0
     session.flush()
     return {
@@ -299,6 +302,6 @@ def reconcile_palace_units(session: Session, palace_id: int) -> dict[str, Any]:
         "invalidated_session_count": invalidated,
         "title": tree.get("title") or "",
         "changes": changes,
-        "undo_token": undo_token,
-        "schedule_batch_id": undo_token,
+        "undo_token": None,
+        "schedule_batch_id": None,
     }

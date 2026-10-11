@@ -59,7 +59,7 @@ def _seed(session, *, stage_index: int = 3) -> ReviewUnitState:
     return unit
 
 
-def test_reconcile_content_change_returns_demotion_and_batch(db_session):
+def test_reconcile_content_change_preserves_schedule_without_batch(db_session):
     unit = _seed(db_session, stage_index=3)
     palace = db_session.get(Palace, unit.palace_id)
     assert palace is not None
@@ -74,23 +74,39 @@ def test_reconcile_content_change_returns_demotion_and_batch(db_session):
 
     unit = db_session.get(ReviewUnitState, unit.id)
     assert unit is not None
-    demotions = [item for item in result["changes"] if item["action"] == "content_demoted"]
-    assert len(demotions) == 1
-    change = demotions[0]
+    updates = [item for item in result["changes"] if item["action"] == "content_updated"]
+    assert len(updates) == 1
+    change = updates[0]
     assert change["unit_id"] == unit.id
     assert change["before"]["stage_index"] == before_stage
     assert change["before"]["due_date"] == before_due.isoformat()
-    assert change["after"]["stage_index"] == before_stage - 1
-    assert change["after"]["due_date"] == date.today().isoformat()
-    assert result["undo_token"] == result["schedule_batch_id"]
-    assert result["undo_token"]
-    batch = db_session.get(ReviewUnitScheduleBatch, result["undo_token"])
-    assert batch is not None
-    assert batch.reason == "content_reconcile"
-    assert batch.undone_at is None
-    assert unit.stage_index == before_stage - 1
-    assert unit.due_date == date.today()
+    assert change["after"] == change["before"]
+    assert result["undo_token"] is None
+    assert result["schedule_batch_id"] is None
+    assert db_session.query(ReviewUnitScheduleBatch).count() == 0
+    assert unit.stage_index == before_stage
+    assert unit.due_date == before_due
     assert unit.content_hash != content_hash_before
+
+
+def _legacy_demotion_batch(session, unit):
+    """Previously persisted batches remain undoable; new edits never create one."""
+    from uuid import uuid4
+
+    before = {
+        "stage_index": unit.stage_index,
+        "due_date": unit.due_date.isoformat(),
+        "has_passed": unit.has_passed,
+    }
+    unit.stage_index = max(0, unit.stage_index - 1)
+    unit.due_date = date.today()
+    batch = ReviewUnitScheduleBatch(
+        id=uuid4().hex, palace_id=unit.palace_id, reason="content_reconcile",
+        entries_json=json.dumps([{"unit_id": unit.id, "before": before}]),
+    )
+    session.add(batch)
+    session.flush()
+    return batch.id
 
 
 def test_undo_content_schedule_batch_restores_schedule_not_content_hash(db_session):
@@ -109,8 +125,8 @@ def test_undo_content_schedule_batch_restores_schedule_not_content_hash(db_sessi
     assert unit is not None
     demoted_hash = unit.content_hash
     demoted_revision = unit.revision
-    token = result["undo_token"]
-    assert token
+    assert result["undo_token"] is None
+    token = _legacy_demotion_batch(db_session, unit)
 
     undo = undo_content_schedule_batch(db_session, token)
     db_session.commit()
@@ -305,7 +321,7 @@ def test_cohort_deactivates_when_it_duplicates_the_isolation_unit(db_session):
 
 
 def test_list_due_units_reconciles_content_hash_lag_without_leave(db_session):
-    """Mid-edit kill: editor_doc advanced, unit hashes lag, unit still due → demote."""
+    """Mid-edit kill: reconcile lagging hashes without changing earned progress."""
     from memory_anki.modules.memory.api import list_due_units
 
     unit = _seed(db_session, stage_index=3)
@@ -333,17 +349,17 @@ def test_list_due_units_reconciles_content_hash_lag_without_leave(db_session):
     unit = db_session.get(ReviewUnitState, unit.id)
     assert unit is not None
     assert unit.content_hash != hash_before
-    assert unit.stage_index == stage_before - 1
+    assert unit.stage_index == stage_before
     assert unit.due_date == date.today()
 
     matched = [item for item in items if item["id"] == unit.id]
     assert len(matched) == 1
-    assert matched[0]["stage_index"] == stage_before - 1
+    assert matched[0]["stage_index"] == stage_before
     assert matched[0]["due"] is True
 
 
 def test_get_palace_unit_projection_reconciles_hash_lag_for_freestyle(db_session):
-    """Freestyle queue path uses projection; lag must demote even if not yet due."""
+    """Write-side projection reconciles content without bringing future work due."""
     from memory_anki.modules.memory.api import get_palace_unit_projection
 
     unit = _seed(db_session, stage_index=4)
@@ -356,18 +372,19 @@ def test_get_palace_unit_projection_reconciles_hash_lag_for_freestyle(db_session
     palace.editor_doc = _doc(text="节点 A freestyle 前未 leave")
     db_session.commit()
 
-    projection = get_palace_unit_projection(db_session, palace.id)
+    due_before = unit.due_date
+    projection = get_palace_unit_projection(db_session, palace.id, allow_reconcile=True)
     db_session.commit()
 
     unit = db_session.get(ReviewUnitState, unit.id)
     assert unit is not None
     assert unit.content_hash != hash_before
-    assert unit.stage_index == stage_before - 1
-    assert unit.due_date == date.today()
-    assert projection["due_unit_count"] == 1
+    assert unit.stage_index == stage_before
+    assert unit.due_date == due_before
+    assert projection["due_unit_count"] == 0
     projected = next(item for item in projection["units"] if item["id"] == unit.id)
-    assert projected["due"] is True
-    assert projected["stage_index"] == stage_before - 1
+    assert projected["due"] is False
+    assert projected["stage_index"] == stage_before
 
 
 def test_adjust_unit_schedule_updates_fields_without_content_hash(db_session):
@@ -530,8 +547,11 @@ def test_adjust_and_undo_schedule_http_endpoints(session_factory, make_client):
         session.commit()
         result = reconcile_palace_units(session, palace_id)
         session.commit()
-        batch_id = result["undo_token"]
-        assert batch_id
+        assert result["undo_token"] is None
+        unit = session.get(ReviewUnitState, unit_id)
+        assert unit is not None
+        batch_id = _legacy_demotion_batch(session, unit)
+        session.commit()
 
     undo = client.post(
         f"/api/v1/review/palaces/{palace_id}/schedule-batches/{batch_id}/undo",
