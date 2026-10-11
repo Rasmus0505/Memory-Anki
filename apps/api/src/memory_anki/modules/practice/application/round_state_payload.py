@@ -3,11 +3,18 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from datetime import UTC
+from typing import Any, overload
 
-from memory_anki.core.time import to_api_datetime
+from memory_anki.core.time import (
+    local_calendar_day_bounds_as_utc_naive,
+    local_calendar_day_of,
+    to_api_datetime,
+    utc_now,
+)
 from memory_anki.infrastructure.db._tables.misc import FreestyleRoundState
 from memory_anki.modules.practice.application.round_fresh_due import project_served_plan
+from memory_anki.modules.practice.domain.learning_time import project_learning_day
 from memory_anki.modules.practice.domain.round_plan import normalize_plan
 from memory_anki.modules.practice.domain.workspace import normalize_workspace
 
@@ -53,6 +60,12 @@ def _payload(
 ) -> dict[str, Any]:
     config = _json_load_object(row.config_json)
     resolved_plan = normalize_plan(plan if plan is not None else _json_load_object(row.plan_json))
+    day = local_calendar_day_of(utc_now())
+    start, end = local_calendar_day_bounds_as_utc_naive(day)
+    learning = resolved_plan["learning_time"]
+    learning["today"] = project_learning_day(
+        learning, day=day.isoformat(), day_start=start.replace(tzinfo=UTC), day_end=end.replace(tzinfo=UTC),
+    )
     version = int(row.version or 1)
     current = resolved_plan.get("current_card_id")
     if current is None:
@@ -72,6 +85,14 @@ def _payload(
         "conflict": conflict,
         "duplicate": duplicate,
     }
+
+
+@overload
+def _serve(session: Any, row: FreestyleRoundState, **kwargs: Any) -> dict[str, Any]: ...
+
+
+@overload
+def _serve(session: Any, row: None, **kwargs: Any) -> None: ...
 
 
 def _serve(session: Any, row: FreestyleRoundState | None, **kwargs: Any) -> dict[str, Any] | None:

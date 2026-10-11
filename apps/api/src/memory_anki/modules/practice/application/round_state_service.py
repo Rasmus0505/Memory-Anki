@@ -68,8 +68,8 @@ from .round_state_payload import (
     _fingerprint,
     _json_dump,
     _json_load_object,
-    _serve,
     _plan_of,
+    _serve,
 )
 from .round_state_payload import (
     _json_object as _json_object,
@@ -434,16 +434,12 @@ def get_or_create_active_round(
         today = _local_today()
         plan_day = str(next_plan.get("today") or "")[:10]
         same_day = plan_day in {"", today}
-        # Names stay short so return _serve(session, row) remains within 220 characters
-        # of the freeze marker. A new calendar day is not that freeze.
-        apply = _apply_plan
-        commit = _commit_operation
         # Fully handled rounds freeze on get_or_create: silent post-complete
         # rebuilds must not mint or append leftover due into the live feed, or
         # the closing settlement slot disappears. /rounds/start advances.
         if plan_is_fully_handled(next_plan) and not persist_config and same_day:
-            if apply(row, next_plan, operation_id=op_id):
-                if not commit(session, row, op_id):
+            if _apply_plan(row, next_plan, operation_id=op_id):
+                if not _commit_operation(session, row, op_id):
                     return _serve(session, row, conflict=True)
             return _serve(session, row)
         if persist_config:
@@ -690,6 +686,16 @@ def rate_freestyle_round_unit(
         unit_id=unit_id,
     )
 
+    occurrence = next(
+        (entry for entry in _plan_of(row).get("occurrences", [])
+         if entry.get("occurrence_id") == occurrence_id),
+        None,
+    )
+    attempt_identity = {
+        "card_id": card_id,
+        "occurrence_id": occurrence_id or "",
+        "retry_attempt": int((occurrence or {}).get("retry_attempt") or 0),
+    }
     item: dict[str, Any] | None = None
     batch = palace_batch if isinstance(palace_batch, dict) else None
     if batch:
@@ -707,7 +713,7 @@ def rate_freestyle_round_unit(
             operation_id=op_id,
             rating=rating,
             round_id=row.round_id,
-            current=current,
+            current={**current, **attempt_identity},
             exclude_unit_ids=[str(value) for value in batch.get("exclude_unit_ids") or []],
             include_unit_ids=[str(value) for value in batch.get("include_unit_ids") or []],
             commit=False,
@@ -723,6 +729,9 @@ def rate_freestyle_round_unit(
             rating=rating,
             round_id=row.round_id,
             commit=False,
+            card_id=card_id,
+            occurrence_id=occurrence_id or "",
+            retry_attempt=int((occurrence or {}).get("retry_attempt") or 0),
         )
 
     if _operation_seen(session, row, op_id):

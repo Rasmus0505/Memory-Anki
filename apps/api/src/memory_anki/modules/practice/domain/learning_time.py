@@ -312,8 +312,6 @@ def _normalize_stored_intervals(raw: Any) -> list[dict[str, Any]]:
             continue
         seen.add(fact["interval_id"])
         kept.append(_public_interval(fact))
-        if len(kept) >= MAX_INTERVALS:
-            break
     return kept
 
 
@@ -366,6 +364,29 @@ def _uncovered_seconds(
     return max(0, int((end - start).total_seconds()) - covered)
 
 
+def project_learning_day(
+    time: Mapping[str, Any] | None, *, day_start: datetime, day_end: datetime, day: str,
+) -> dict[str, Any]:
+    """Read-only union projection; scalar legacy seconds have no invented date."""
+    current = normalize_learning_time(time)
+    spans = []
+    for fact in current.get("intervals") or []:
+        start, end = _parse_aware(fact["started_at"]), _parse_aware(fact["ended_at"])
+        if start is not None and end is not None:
+            spans.append((start, end))
+    merged = _merge_spans(spans)
+    known = sum(int((end - start).total_seconds()) for start, end in merged)
+    today = sum(
+        max(0, int((min(end, day_end) - max(start, day_start)).total_seconds()))
+        for start, end in merged
+    )
+    total = sum(current[f"{bucket}_seconds"] for bucket in BUCKETS)
+    return {
+        "day": day, "started_at": day_start.isoformat(), "ended_at": day_end.isoformat(),
+        "known_seconds": today, "unattributed_seconds": max(0, total - known),
+    }
+
+
 def apply_learning_intervals(
     time: Mapping[str, Any] | None,
     intervals: Sequence[Mapping[str, Any]] | None,
@@ -389,8 +410,6 @@ def apply_learning_intervals(
         fact = normalize_learning_interval(raw)
         if fact is None or fact["interval_id"] in known:
             continue
-        if len(stored) + len(accepted) >= MAX_INTERVALS:
-            break
         known.add(fact["interval_id"])
         started = _parse_aware(fact["started_at"])
         ended = _parse_aware(fact["ended_at"])

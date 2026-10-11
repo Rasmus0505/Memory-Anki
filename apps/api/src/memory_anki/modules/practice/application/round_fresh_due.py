@@ -15,9 +15,7 @@ from sqlalchemy.orm import Session
 
 from memory_anki.core.time import local_calendar_day_of, utc_now_naive
 from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitRatingOperation
-from memory_anki.modules.memory.application.unit_review_projection import (
-    list_due_review_unit_ids,
-)
+from memory_anki.modules.memory.api import list_due_review_unit_ids
 from memory_anki.modules.practice.domain.round_plan_values import _review_unit_id, _text
 
 

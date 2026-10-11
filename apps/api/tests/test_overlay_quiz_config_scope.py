@@ -8,8 +8,11 @@ questions, because the config had since been narrowed. See
 docs/incidents/0002-quiz-scope-two-owners.md.
 """
 
+from datetime import date
+
 from memory_anki.infrastructure.db._tables.knowledge import Subject
 from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceQuizQuestion
+from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitState
 from memory_anki.modules.practice.application.overlay_quiz_service import (
     build_overlay_question_pack,
 )
@@ -114,6 +117,15 @@ def test_round_losing_a_palace_parks_its_overlay_progress(db_session):
     q_kept = PalaceQuizQuestion(palace_id=kept.id, stem="夸美纽斯题")
     q_dropped = PalaceQuizQuestion(palace_id=dropped.id, stem="福禄培尔题")
     db_session.add_all([q_kept, q_dropped])
+    db_session.commit()
+    # Replanning validates unit existence and due dates. These cards must refer
+    # to real due units, otherwise both are correctly removed as vanished work.
+    for palace in (kept, dropped):
+        db_session.add(ReviewUnitState(
+            id=f"unit-{palace.id}", palace_id=palace.id, anchor_uid="root",
+            unit_kind="isolation", node_uids_json='["root"]',
+            membership_hash="membership", content_hash="content", due_date=date.today(),
+        ))
     db_session.commit()
     config = _config()
 

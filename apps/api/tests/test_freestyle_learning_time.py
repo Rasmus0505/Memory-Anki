@@ -12,10 +12,37 @@ from memory_anki.modules.practice.domain.learning_time import (
     empty_learning_time,
     fold_freestyle_segment,
     normalize_learning_time,
+    project_learning_day,
     route_matches_workspace,
     single_palace_weight,
 )
 from memory_anki.modules.practice.domain.round_plan import normalize_plan
+
+
+def test_day_projection_clips_midnight_deduplicates_devices_and_marks_legacy_unknown() -> None:
+    start = datetime(2025, 1, 1, 16, tzinfo=UTC)  # Beijing midnight
+    intervals = [
+        {"interval_id": "a", "session_id": "s", "bucket": "unit", "started_at": (start - timedelta(seconds=30)).isoformat(), "ended_at": (start + timedelta(seconds=30)).isoformat()},
+        {"interval_id": "b", "session_id": "t", "bucket": "quiz", "started_at": start.isoformat(), "ended_at": (start + timedelta(seconds=60)).isoformat()},
+    ]
+    value = apply_learning_intervals(empty_learning_time(), intervals)
+    value = add_learning_seconds(value, bucket="unit", seconds=20)
+    projection = project_learning_day(value, day="2025-01-02", day_start=start, day_end=start + timedelta(days=1))
+    assert projection["known_seconds"] == 60
+    assert projection["unattributed_seconds"] == 20
+    assert "today" not in value  # Derived response, not a second persisted counter.
+    tomorrow = project_learning_day(value, day="2025-01-03", day_start=start + timedelta(days=1), day_end=start + timedelta(days=2))
+    assert tomorrow["known_seconds"] == 0
+    assert tomorrow["unattributed_seconds"] == 20
+
+
+def test_stored_interval_history_is_not_truncated_at_request_batch_limit() -> None:
+    start = datetime(2025, 1, 1, tzinfo=UTC)
+    facts = [{"interval_id": str(i), "session_id": "s", "bucket": "unit", "started_at": (start + timedelta(seconds=i * 2)).isoformat(), "ended_at": (start + timedelta(seconds=i * 2 + 1)).isoformat()} for i in range(501)]
+    value = apply_learning_intervals(empty_learning_time(), facts[:500])
+    value = apply_learning_intervals(value, facts[500:])
+    assert len(normalize_learning_time(value)["intervals"]) == 501
+    assert value["unit_seconds"] == 501
 
 
 def test_normalize_learning_time_drops_unknown_keys_and_keeps_positive_palaces() -> None:
