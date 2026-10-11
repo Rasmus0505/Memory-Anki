@@ -1,4 +1,4 @@
-import type { RevealState } from '@/modules/session/public'
+import type { RevealState } from './revealState'
 import type {
   RevealFlowMode,
   ReviewMindMapNode,

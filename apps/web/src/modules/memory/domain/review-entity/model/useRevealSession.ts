@@ -1,5 +1,5 @@
 import * as React from 'react'
-import type { RevealState } from '@/modules/session/public'
+import type { RevealState } from './revealState'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import type { MindMapSelection } from '@/modules/content/public'
 import {

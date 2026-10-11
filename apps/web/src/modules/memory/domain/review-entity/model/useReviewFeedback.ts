@@ -33,7 +33,7 @@ import type {
   RevealFlowMode,
   ReviewMindMapNode,
 } from '@/modules/memory/domain/review-entity/model/review-flow-tree'
-import type { RevealState } from '@/modules/session/public'
+import type { RevealState } from './revealState'
 import { useMindMapFeedbackAudio } from '@/shared/feedback/mindmap-audio/useMindMapFeedback'
 
 const FLASH_RESET_MS = 680
