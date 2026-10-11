@@ -1,6 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { DEFAULT_FREESTYLE_FEED_CONFIG } from '@/modules/practice/domain/feedConfig'
 import { clearQuizSessionProgress, readQuizSessionState } from '@/modules/quiz/public'
 import {
   ensureFreestyleOverlayQuizApi,
@@ -12,6 +11,10 @@ import {
   listQuestionNodeBindingsApi,
 } from '@/modules/quiz/domain/quiz-entity/api'
 import { FreestyleScopeQuizDialog } from './FreestyleScopeQuizDialog'
+import {
+  buildScopeQuizProps,
+  renderScopeQuizDialog,
+} from './FreestyleScopeQuizDialog.testHelpers'
 
 vi.mock('@/modules/practice/public', () => ({
   createOperationId: () => 'op-1',
@@ -115,19 +118,7 @@ describe('FreestyleScopeQuizDialog', () => {
   it('shows a calm retry instead of the write-lock diagnostic when ensure is busy', async () => {
     const busy = Object.assign(new Error('数据正在写入中，请稍候重试。\n操作：同步随心做题会话'), { status: 503 })
     ensureFreestyleOverlayQuizApiMock.mockRejectedValue(busy)
-    render(
-      <FreestyleScopeQuizDialog
-        open
-        onOpenChange={vi.fn()}
-        roundId="round-1"
-        planVersion={1}
-        storedConfig={DEFAULT_FREESTYLE_FEED_CONFIG}
-        setupDone
-        roundReviewPalaceCount={1}
-        onConfirmSetup={vi.fn()}
-        onRoundSync={vi.fn()}
-      />,
-    )
+    renderScopeQuizDialog({ roundReviewPalaceCount: 1 })
     expect(await screen.findByText('做题还在同步，请再点一次。')).toBeTruthy()
     expect(screen.queryByText(/HTTP 状态/)).toBeNull()
     expect(screen.getByRole('button', { name: '再试一次' })).toBeTruthy()
@@ -140,38 +131,14 @@ describe('FreestyleScopeQuizDialog', () => {
       conflict: true,
       plan: { overlay_quiz: { question_ids: [99] } },
     } as never)
-    render(
-      <FreestyleScopeQuizDialog
-        open
-        onOpenChange={vi.fn()}
-        roundId="round-1"
-        planVersion={1}
-        storedConfig={DEFAULT_FREESTYLE_FEED_CONFIG}
-        setupDone
-        roundReviewPalaceCount={1}
-        onConfirmSetup={vi.fn()}
-        onRoundSync={vi.fn()}
-      />,
-    )
+    renderScopeQuizDialog({ roundReviewPalaceCount: 1 })
     await waitFor(() => expect(ensureFreestyleOverlayQuizApiMock).toHaveBeenCalledTimes(2))
     expect(ensureFreestyleOverlayQuizApiMock.mock.calls[1][1].expected_version).toBe(7)
     expect(getPalaceQuizQuestionsByIdsApiMock).not.toHaveBeenCalled()
   })
   it('asks for palace order before the first session', async () => {
     const onConfirmSetup = vi.fn()
-    render(
-      <FreestyleScopeQuizDialog
-        open
-        onOpenChange={vi.fn()}
-        roundId="round-1"
-        planVersion={1}
-        storedConfig={DEFAULT_FREESTYLE_FEED_CONFIG}
-        setupDone={false}
-        roundReviewPalaceCount={2}
-        onConfirmSetup={onConfirmSetup}
-        onRoundSync={vi.fn()}
-      />,
-    )
+    renderScopeQuizDialog({ setupDone: false, onConfirmSetup })
 
     expect(screen.getByTestId('freestyle-scope-quiz-dialog')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /出题顺序/ }))
@@ -209,19 +176,7 @@ describe('FreestyleScopeQuizDialog', () => {
       },
     } as never)
     const onConfirmSetup = vi.fn()
-    render(
-      <FreestyleScopeQuizDialog
-        open
-        onOpenChange={vi.fn()}
-        roundId="round-1"
-        planVersion={1}
-        storedConfig={DEFAULT_FREESTYLE_FEED_CONFIG}
-        setupDone={false}
-        roundReviewPalaceCount={2}
-        onConfirmSetup={onConfirmSetup}
-        onRoundSync={vi.fn()}
-      />,
-    )
+    renderScopeQuizDialog({ setupDone: false, onConfirmSetup })
 
     fireEvent.click(screen.getByRole('button', { name: /出题顺序/ }))
     const objective = await screen.findByRole('checkbox', { name: '客观（4）' })
@@ -295,19 +250,7 @@ describe('FreestyleScopeQuizDialog', () => {
       item_count: 1,
     })
 
-    render(
-      <FreestyleScopeQuizDialog
-        open
-        onOpenChange={vi.fn()}
-        roundId="round-1"
-        planVersion={1}
-        storedConfig={DEFAULT_FREESTYLE_FEED_CONFIG}
-        setupDone
-        roundReviewPalaceCount={2}
-        onConfirmSetup={vi.fn()}
-        onRoundSync={vi.fn()}
-      />,
-    )
+    renderScopeQuizDialog()
 
     expect(await screen.findByRole('button', { name: '查看宫殿' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '查看宫殿' }))
@@ -357,19 +300,7 @@ describe('FreestyleScopeQuizDialog', () => {
       item_count: 1,
     } as never)
 
-    render(
-      <FreestyleScopeQuizDialog
-        open
-        onOpenChange={vi.fn()}
-        roundId="round-1"
-        planVersion={1}
-        storedConfig={DEFAULT_FREESTYLE_FEED_CONFIG}
-        setupDone
-        roundReviewPalaceCount={2}
-        onConfirmSetup={vi.fn()}
-        onRoundSync={vi.fn()}
-      />,
-    )
+    renderScopeQuizDialog()
 
     const stats = await screen.findByTestId('quiz-attempt-stats')
     const typeBadge = screen.getByText('选择题')
@@ -429,19 +360,7 @@ describe('FreestyleScopeQuizDialog', () => {
       item_count: 21,
     } as never)
 
-    render(
-      <FreestyleScopeQuizDialog
-        open
-        onOpenChange={vi.fn()}
-        roundId="round-1"
-        planVersion={1}
-        storedConfig={DEFAULT_FREESTYLE_FEED_CONFIG}
-        setupDone
-        roundReviewPalaceCount={2}
-        onConfirmSetup={vi.fn()}
-        onRoundSync={vi.fn()}
-      />,
-    )
+    renderScopeQuizDialog()
 
     expect(await screen.findByRole('button', { name: '1' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '20' })).toBeTruthy()
@@ -500,19 +419,7 @@ describe('FreestyleScopeQuizDialog', () => {
       item_count: 3,
     } as never)
 
-    render(
-      <FreestyleScopeQuizDialog
-        open
-        onOpenChange={vi.fn()}
-        roundId="round-1"
-        planVersion={1}
-        storedConfig={DEFAULT_FREESTYLE_FEED_CONFIG}
-        setupDone
-        roundReviewPalaceCount={2}
-        onConfirmSetup={vi.fn()}
-        onRoundSync={vi.fn()}
-      />,
-    )
+    renderScopeQuizDialog()
 
     expect(await screen.findByText(/第 3 \/ 3 题/)).toBeTruthy()
     expect(screen.getByText(/已答 2 \/ 3/)).toBeTruthy()
@@ -561,19 +468,7 @@ describe('FreestyleScopeQuizDialog', () => {
       item_count: 3,
     } as never)
 
-    render(
-      <FreestyleScopeQuizDialog
-        open
-        onOpenChange={vi.fn()}
-        roundId="round-1"
-        planVersion={1}
-        storedConfig={DEFAULT_FREESTYLE_FEED_CONFIG}
-        setupDone
-        roundReviewPalaceCount={2}
-        onConfirmSetup={vi.fn()}
-        onRoundSync={vi.fn()}
-      />,
-    )
+    renderScopeQuizDialog()
 
     expect(await screen.findByText(/已答 2 \/ 3/)).toBeTruthy()
     const lookup = screen.getByRole('button', { name: '查看宫殿' })
@@ -654,19 +549,7 @@ describe('FreestyleScopeQuizDialog', () => {
       item_count: 2,
     } as never)
 
-    render(
-      <FreestyleScopeQuizDialog
-        open
-        onOpenChange={vi.fn()}
-        roundId="round-1"
-        planVersion={1}
-        storedConfig={DEFAULT_FREESTYLE_FEED_CONFIG}
-        setupDone
-        roundReviewPalaceCount={2}
-        onConfirmSetup={vi.fn()}
-        onRoundSync={vi.fn()}
-      />,
-    )
+    renderScopeQuizDialog()
 
     expect(await screen.findByText('第 42 题干')).toBeTruthy()
     ensureFreestyleOverlayQuizApiMock.mockClear()
@@ -726,19 +609,7 @@ describe('FreestyleScopeQuizDialog', () => {
     const toastModule = await import('@/shared/feedback/toast')
     const errorSpy = vi.spyOn(toastModule.toast, 'error').mockImplementation(() => undefined)
 
-    const view = render(
-      <FreestyleScopeQuizDialog
-        open
-        onOpenChange={vi.fn()}
-        roundId="round-1"
-        planVersion={1}
-        storedConfig={DEFAULT_FREESTYLE_FEED_CONFIG}
-        setupDone
-        roundReviewPalaceCount={2}
-        onConfirmSetup={vi.fn()}
-        onRoundSync={vi.fn()}
-      />,
-    )
+    const view = renderScopeQuizDialog()
 
     expect(await screen.findByText('第 42 题干')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '删除本题' }))
@@ -749,19 +620,7 @@ describe('FreestyleScopeQuizDialog', () => {
     })
     expect(errorSpy).not.toHaveBeenCalled()
 
-    view.rerender(
-      <FreestyleScopeQuizDialog
-        open
-        onOpenChange={vi.fn()}
-        roundId="round-2"
-        planVersion={2}
-        storedConfig={DEFAULT_FREESTYLE_FEED_CONFIG}
-        setupDone
-        roundReviewPalaceCount={2}
-        onConfirmSetup={vi.fn()}
-        onRoundSync={vi.fn()}
-      />,
-    )
+    view.rerender(<FreestyleScopeQuizDialog {...buildScopeQuizProps({ roundId: 'round-2', planVersion: 2 })} />)
     await waitFor(() => {
       expect(screen.getByText('第 43 题干')).toBeTruthy()
     })

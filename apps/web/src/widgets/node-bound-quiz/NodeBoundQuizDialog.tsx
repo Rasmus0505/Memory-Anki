@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { BookOpen, Check, ChevronLeft, ChevronRight, Keyboard, LoaderCircle, RotateCcw, Trash2 } from 'lucide-react'
+import { BookOpen, Keyboard, LoaderCircle, RotateCcw, Trash2 } from 'lucide-react'
 import { useAiRunConfigDialog } from '@/modules/settings/public'
 import {
   deletePalaceQuizQuestionApi,
@@ -36,6 +36,7 @@ import {
 import { ownerPalaceLabel } from '@/modules/quiz/ui/palace-quiz/model/quizNodeBindingAggregation'
 import { QuizQuestionRoundRating } from '@/widgets/quiz-round-rating'
 import { useQuizSessionProgressMirror } from './useQuizSessionProgressMirror'
+import { NodeBoundQuizFooter } from './NodeBoundQuizFooter'
 import { getQuestionTypeLabel } from '@/modules/quiz/ui/palace-quiz/model/palaceQuizPage'
 import { sortPalaceQuizQuestions } from '@/modules/quiz/ui/palace-quiz/model/questionBankOrder'
 import { firstIncompleteQuestionIndex } from '@/modules/quiz/ui/palace-quiz/model/quizNodeBindingAggregation'
@@ -50,7 +51,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/shared/components/ui/dialog'
-import { useDwellFragmentOverride } from '@/modules/session/public'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import { toast } from '@/shared/feedback/toast'
 import {
@@ -120,14 +120,6 @@ export function NodeBoundQuizDialog({
   const [clearProgressOpen, setClearProgressOpen] = useState(false)
   const questionInteractionRef = useRef<HTMLDivElement | null>(null)
   const answerScrollRef = useRef<HTMLDivElement | null>(null)
-  useDwellFragmentOverride(open, {
-    scene: 'quiz',
-    kind: 'quiz',
-    title: '关联题目',
-    palaceId,
-    sourceKind: palaceId != null ? 'palace' : null,
-    priority: 1,
-  })
 
   const questionIdsKey = questionIds.join(',')
 
@@ -679,65 +671,15 @@ export function NodeBoundQuizDialog({
             </div>
           </div>
 
-          {/*
-            Footer: navigation used to sit in the top-right, above the stem — the
-            furthest point from the thumb right after answering. Progress lives here
-            too so the header description stops being the only place that counts.
-          */}
           {current ? (
-            <div className="flex shrink-0 items-center justify-between gap-2 border-t px-4 py-3">
-              <span className="min-w-0 truncate text-xs tabular-nums text-muted-foreground">
-                {questions.length > 1
-                  ? `已答 ${answeredCount} / ${questions.length}`
-                  : currentState.resolved
-                    ? '已作答'
-                    : '待作答'}
-              </span>
-              <div className="flex shrink-0 items-center gap-2">
-                {currentState.resolved && index < questions.length - 1 ? (
-                  <span className="shrink-0 text-xs text-muted-foreground">Enter 下一题</span>
-                ) : null}
-                {questions.length > 1 ? (
-                  <>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      aria-label="上一题"
-                      disabled={index <= 0}
-                      onClick={() => setIndex((value) => Math.max(0, value - 1))}
-                    >
-                      <ChevronLeft className="size-4" />
-                      上一题
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={currentState.resolved ? 'default' : 'outline'}
-                      aria-label="下一题"
-                      disabled={index >= questions.length - 1}
-                      onClick={() =>
-                        setIndex((value) => Math.min(questions.length - 1, value + 1))
-                      }
-                    >
-                      下一题
-                      <ChevronRight className="size-4" />
-                    </Button>
-                  </>
-                ) : null}
-                {/* Last question answered: an explicit way out beats hunting for ✕. */}
-                {index >= questions.length - 1 && currentState.resolved ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => onOpenChange(false)}
-                  >
-                    <Check className="size-4" />
-                    完成
-                  </Button>
-                ) : null}
-              </div>
-            </div>
+            <NodeBoundQuizFooter
+              questionCount={questions.length}
+              answeredCount={answeredCount}
+              index={index}
+              currentState={currentState}
+              setIndex={setIndex}
+              onFinish={() => onOpenChange(false)}
+            />
           ) : null}
         </DialogContent>
       </Dialog>

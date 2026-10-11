@@ -426,11 +426,6 @@ describe('FreestyleProgressRail', () => {
     expect(screen.getByTestId('freestyle-progress-rail').getAttribute('title')).toBeNull()
   })
 
-  it('does not show a session timer on the HUD', () => {
-    renderRail()
-    expect(screen.queryByTestId('freestyle-timer-dot')).toBeNull()
-  })
-
   describe('finger follow', () => {
     afterEach(() => {
       vi.restoreAllMocks()

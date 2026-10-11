@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { BookOpen, Check, ChevronLeft, ChevronRight, LoaderCircle, RotateCcw, Settings2, Trash2 } from 'lucide-react'
+import { BookOpen, LoaderCircle, RotateCcw, Settings2, Trash2 } from 'lucide-react'
 import { createOperationId } from '@/modules/practice/application/feedPersistence'
 import { freestylePalaceScopeSignature } from '@/modules/practice/domain/feedConfig'
 import { ensureFreestyleOverlayQuizApi } from '@/modules/practice/ui/freestyle/api'
@@ -15,10 +15,7 @@ import { OverlayQuizScopeLeftNotice } from './OverlayQuizScopeList'
 import { QuizQuestionRoundRatingBadge } from '@/widgets/quiz-round-rating'
 import { useOverlayProgressPersistence } from './useOverlayProgressPersistence'
 import { useOverlayQuizClear } from './useOverlayQuizClear'
-import {
-  getPalaceQuizQuestionsByIdsApi,
-  listQuestionNodeBindingsApi,
-} from '@/modules/quiz/domain/quiz-entity/api'
+import { getPalaceQuizQuestionsByIdsApi } from '@/modules/quiz/domain/quiz-entity/api'
 import {
   beginQuizQuestionMarkRequest,
   commitQuizQuestionMark,
@@ -48,6 +45,8 @@ import {
   resolveOverlayResumeIndex,
 } from './overlayQuizHydrate'
 import { useFreestyleQuestionTrash } from './useFreestyleQuestionTrash'
+import { FreestyleScopeQuizFooter } from './FreestyleScopeQuizFooter'
+import { useQuestionLookupFocus } from './useQuestionLookupFocus'
 import { useAiRunConfigDialog } from '@/modules/settings/public'
 import { getQuestionTypeLabel } from '@/modules/quiz/ui/palace-quiz/model/palaceQuizPage'
 import type {
@@ -65,16 +64,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/shared/components/ui/dialog'
-import { useDwellFragmentOverride } from '@/modules/session/public'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import { isBusyResponseError } from '@/shared/api/busyRetry'
 import { toast } from '@/shared/feedback/toast'
-import {
-  PalaceMemoryLookupDialog,
-  collectMemoryLookupFocusNodeUids,
-  pickMemoryLookupBinding,
-  resolveMemoryLookupPalaceId,
-} from '@/widgets/palace-memory-lookup'
+import { PalaceMemoryLookupDialog } from '@/widgets/palace-memory-lookup'
 import { QuizProgressClearDialog } from '@/widgets/quiz-progress-clear/QuizProgressClearDialog'
 
 export function FreestyleScopeQuizDialog({
@@ -116,8 +109,6 @@ export function FreestyleScopeQuizDialog({
   const [keyboardOptionIndex, setKeyboardOptionIndex] = useState(0)
   const [palaceLookupOpen, setPalaceLookupOpen] = useState(false)
   const [clearProgressOpen, setClearProgressOpen] = useState(false)
-  const [lookupFocusNodeUids, setLookupFocusNodeUids] = useState<string[]>([])
-  const [lookupPalaceIdOverride, setLookupPalaceIdOverride] = useState<number | null>(null)
   const questionInteractionRef = useRef<HTMLDivElement | null>(null)
   const answerScrollRef = useRef<HTMLDivElement | null>(null)
   const removedQuestionIdsRef = useRef(new Set<number>())
@@ -126,15 +117,6 @@ export function FreestyleScopeQuizDialog({
   const indexRef = useRef(0)
   const questionStatesRef = useRef<Record<number, QuizRuntimeState>>({})
   const roundIdRef = useRef(roundId)
-  const dwellPalaceId = questions[index]?.palace_id ?? null
-  useDwellFragmentOverride(open, {
-    scene: 'quiz',
-    kind: 'quiz',
-    title: '做题',
-    palaceId: dwellPalaceId,
-    sourceKind: dwellPalaceId != null ? 'palace' : null,
-    priority: 1,
-  })
 
   useEffect(() => {
     planVersionRef.current = planVersion
@@ -298,35 +280,8 @@ export function FreestyleScopeQuizDialog({
     persistProgress,
   })
   const questionPalaceId = current?.palace_id ?? null
+  const { lookupFocusNodeUids, lookupPalaceIdOverride } = useQuestionLookupFocus(current, palaceLookupOpen)
   const lookupPalaceId = lookupPalaceIdOverride ?? questionPalaceId
-
-  useEffect(() => {
-    if (!palaceLookupOpen || !current) {
-      if (!palaceLookupOpen) {
-        setLookupFocusNodeUids([])
-        setLookupPalaceIdOverride(null)
-      }
-      return
-    }
-    const fallbackPalaceId = current.palace_id ?? null
-    let cancelled = false
-    void listQuestionNodeBindingsApi(current.id)
-      .then((response) => {
-        if (cancelled) return
-        const items = response.items || []
-        const binding = pickMemoryLookupBinding(items, fallbackPalaceId)
-        setLookupFocusNodeUids(collectMemoryLookupFocusNodeUids(items, fallbackPalaceId))
-        setLookupPalaceIdOverride(resolveMemoryLookupPalaceId(binding, fallbackPalaceId))
-      })
-      .catch(() => {
-        if (cancelled) return
-        setLookupFocusNodeUids([])
-        setLookupPalaceIdOverride(fallbackPalaceId)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [current, palaceLookupOpen])
 
   useEffect(() => {
     if (!open) return
@@ -715,52 +670,15 @@ export function FreestyleScopeQuizDialog({
           </div>
 
           {!showConfig && current ? (
-            <div className="flex shrink-0 items-center justify-between gap-2 border-t px-4 py-3">
-              <span className="min-w-0 truncate text-xs tabular-nums text-muted-foreground">
-                {questions.length > 1
-                  ? `已答 ${answeredCount} / ${questions.length} · ${overlayQuizScopeLabel(storedConfig.streams.quiz.quiz_scope)}`
-                  : currentState.resolved
-                    ? '已作答'
-                    : '待作答'}
-              </span>
-              <div className="flex shrink-0 items-center gap-2">
-                {currentState.resolved && index < questions.length - 1 ? (
-                  <span className="shrink-0 text-xs text-muted-foreground">Enter 下一题</span>
-                ) : null}
-                {questions.length > 1 ? (
-                  <>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      aria-label="上一题"
-                      disabled={index <= 0}
-                      onClick={() => goToIndex(Math.max(0, index - 1))}
-                    >
-                      <ChevronLeft className="size-4" />
-                      上一题
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant={currentState.resolved ? 'default' : 'outline'}
-                      aria-label="下一题"
-                      disabled={index >= questions.length - 1}
-                      onClick={() => goToIndex(Math.min(questions.length - 1, index + 1))}
-                    >
-                      下一题
-                      <ChevronRight className="size-4" />
-                    </Button>
-                  </>
-                ) : null}
-                {index >= questions.length - 1 && currentState.resolved ? (
-                  <Button type="button" size="sm" onClick={() => onOpenChange(false)}>
-                    <Check className="size-4" />
-                    完成
-                  </Button>
-                ) : null}
-              </div>
-            </div>
+            <FreestyleScopeQuizFooter
+              questionCount={questions.length}
+              answeredCount={answeredCount}
+              index={index}
+              currentState={currentState}
+              scopeLabel={overlayQuizScopeLabel(storedConfig.streams.quiz.quiz_scope)}
+              goToIndex={goToIndex}
+              onFinish={() => onOpenChange(false)}
+            />
           ) : null}
         </DialogContent>
       </Dialog>
