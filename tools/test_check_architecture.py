@@ -716,110 +716,6 @@ def test_freestyle_complete_slot_reachable_accepts_feed_slot_helpers(
     assert errors == []
 
 
-def test_freestyle_settlement_cancel_keeps_later_learning_time(
-    tmp_path: Path, monkeypatch
-) -> None:
-    web_src = tmp_path / "apps" / "web" / "src"
-    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
-    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
-    write_file(
-        web_src / "modules" / "practice" / "ui" / "freestyle" / "ImmersiveFreestylePage.tsx",
-        "clampFreestyleFeedIndex(index, cards.length, roundComplete)\n"
-        "const viewingCompleteSlot = isFreestyleCompleteSlot(visualIndex, cards.length, roundComplete)\n"
-        "viewingCard: !roundComplete\n",
-    )
-    write_file(
-        web_src / "modules" / "practice" / "ui" / "freestyle" / "model" / "roundCompletion.ts",
-        "export function freestyleFeedSlotCount(cardCount: number, roundComplete: boolean) {\n"
-        "  return cardCount + (roundComplete ? 1 : 0)\n"
-        "}\n",
-    )
-    write_file(
-        tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
-        "open that closing slot so 再来一轮 and 调整配置 stay reachable.\n"
-        "settlement 再来一轮 mints via startFreestyleRoundApi.\n",
-    )
-    write_file(
-        web_src / "modules" / "practice" / "ui" / "freestyle" / "components" / "FreestyleRoundCompleteCard.tsx",
-        "onAnotherRound()\n再来一轮\ntotalEffectiveSeconds\nbySubject\n",
-    )
-    write_file(
-        web_src / "modules" / "practice" / "ui" / "freestyle" / "hooks" / "useImmersiveQueue.ts",
-        "forceStart\nstartNextRound\nstartFreestyleRoundApi\n",
-    )
-    write_file(
-        web_src / "modules" / "practice" / "ui" / "freestyle" / "model" / "freestyle-cards.ts",
-        "export function formatTimer(seconds: number) { return String(seconds) }\n",
-    )
-
-    errors: list[str] = []
-    check_architecture.check_freestyle_complete_slot_reachable(errors)
-
-    assert any("取消结算" in error for error in errors)
-    assert any("navigatePrevious" in error for error in errors)
-    assert any("roundComplete" in error for error in errors)
-    assert any("3600" in error for error in errors)
-
-
-def test_freestyle_settlement_clock_rejects_only_pausing_completed_round(
-    tmp_path: Path, monkeypatch
-) -> None:
-    web_src = tmp_path / "apps" / "web" / "src"
-    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
-    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
-    write_file(
-        web_src / "modules/practice/ui/freestyle/ImmersiveFreestylePage.tsx",
-        "clampFreestyleFeedIndex\nviewingCompleteSlot\n"
-        "onCancelSettlement={navigatePrevious}\n"
-        "viewingCard: !viewingCompleteSlot && currentCard != null\n",
-    )
-    write_file(
-        web_src / "modules/practice/ui/freestyle/model/roundCompletion.ts",
-        "export function freestyleFeedSlotCount() {}\n",
-    )
-    errors: list[str] = []
-    check_architecture.check_freestyle_complete_slot_reachable(errors)
-    assert any("all settlement surfaces must pause" in error for error in errors)
-
-
-def test_freestyle_round_learning_time_requires_plan_clock_and_settlement_line(
-    tmp_path: Path, monkeypatch
-) -> None:
-    web_src = tmp_path / "apps" / "web" / "src"
-    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
-    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
-    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
-    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
-    write_file(
-        api_src / "modules" / "practice" / "domain" / "round_plan.py",
-        "normalized = {}\n",
-    )
-    write_file(
-        api_src / "modules" / "practice" / "presentation" / "router.py",
-        "@router.post('/overlay-quiz/ensure')\n",
-    )
-    write_file(
-        web_src / "modules" / "practice" / "ui" / "freestyle" / "components" / "FreestyleRoundCompleteCard.tsx",
-        "本次随心\n",
-    )
-    write_file(
-        web_src / "modules" / "practice" / "ui" / "freestyle" / "ImmersiveFreestylePage.tsx",
-        "export default function Page() { return null }\n",
-    )
-    write_file(
-        tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
-        "closing slot\n",
-    )
-
-    errors: list[str] = []
-    check_architecture.check_freestyle_round_learning_time(errors)
-
-    assert any("learning_time" in error for error in errors)
-    assert any("/learning-time" in error for error in errors)
-    assert any("做题时间" in error for error in errors)
-    assert any("useFreestyleRoundLearningClock" in error for error in errors)
-
-
 def test_freestyle_config_overlap_choice_requires_save_prompt(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -3192,48 +3088,6 @@ def test_unit_review_boundary_accepts_split_projection_and_encounter_lifecycle(
     assert errors == []
 
 
-def test_unit_review_boundary_rejects_close_wall_span_400(
-    tmp_path: Path, monkeypatch
-) -> None:
-    api_src = tmp_path / "apps/api/src/memory_anki"
-    web_src = tmp_path / "apps/web/src"
-    write_file(api_src / "modules/memory/presentation/router.py", "")
-    write_file(
-        api_src / "modules/memory/application/unit_review_projection.py",
-        "def reconcile_palace_units(): pass\n",
-    )
-    write_file(
-        api_src / "modules/memory/application/unit_review_service.py",
-        "def open_unit_review_encounter(): pass\n"
-        "def rate_review_unit(): pass\n"
-        "def rate_palace_due_units(): pass\n"
-        "def close_unit_review_encounter(): pass\n"
-        "def undo_unit_rating(): pass\n"
-        "raise ValueError('effective_seconds cannot exceed the encounter wall-clock span')\n",
-    )
-    write_file(
-        api_src / "modules/memory/application/unit_scheduler.py",
-        "INTERVAL_DAYS: tuple[int, ...] = (0, 1, 3, 7, 14, 30, 60, 120, 240, 365)\n",
-    )
-    write_file(
-        api_src / "modules/mindmap_document/split_units.py",
-        "def split_scheduling_units(): pass\n",
-    )
-    write_file(
-        api_src / "modules/practice/domain/review_units.py",
-        "class ReviewUnitCandidate: pass\ndef candidate_from_projection(): pass\n",
-    )
-    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
-    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
-    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
-
-    errors: list[str] = []
-    check_architecture.check_unit_review_boundary(errors)
-
-    assert any("clamp effective_seconds to the wall span, not 400" in error for error in errors)
-    assert any("normalized_seconds = wall_seconds" in error for error in errors)
-
-
 def test_english_reading_gap_loop_rejects_recreated_page(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -4019,16 +3873,7 @@ def test_reading_round_ratings_must_not_write_the_round(tmp_path: Path, monkeypa
     assert any("must stay read-only" in error for error in errors)
 
 
-def test_storage_lock_must_be_releasable_from_another_thread(tmp_path: Path, monkeypatch) -> None:
-    """The storage lock must not be an RLock.
-
-    FastAPI runs a sync endpoint and its generator-dependency teardown in separate
-    threadpool calls, so a flush that raises defers its ROLLBACK to
-    `session.close()` on another worker. `RLock` can only be released by its owner
-    thread, so that raised `RuntimeError: cannot release un-acquired lock` — which
-    replaced the real exception in the log and aborted the `finally` before
-    `lock.release()`, wedging the lock. One event produced 55 later 503s.
-    """
+def test_removed_storage_lock_must_not_return(tmp_path: Path, monkeypatch) -> None:
     api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
     web_src = tmp_path / "apps" / "web" / "src"
     monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
@@ -4036,31 +3881,25 @@ def test_storage_lock_must_be_releasable_from_another_thread(tmp_path: Path, mon
     monkeypatch.setattr(check_architecture, "API_SRC", api_src)
     write_file(
         api_src / "core" / "runtime_storage_lock.py",
-        "class StorageBusyError(TimeoutError):\n"
-        "    pass\n"
-        "_locks: dict[str, object] = {}\n"
-        "lock = threading.RLock()\n",
+        "def storage_write_lock():\n    pass\n",
+    )
+    write_file(
+        api_src / "modules" / "demo.py",
+        "from memory_anki.core.runtime_storage_lock import storage_write_lock\n",
     )
     errors: list[str] = []
     check_architecture.check_runtime_storage_lock(errors)
-    assert any("must not use threading.RLock()" in error for error in errors)
-    assert any("must use threading.Lock()" in error for error in errors)
+    assert any("was removed" in error for error in errors)
+    assert any("demo.py" in error for error in errors)
 
 
-def test_storage_lock_guard_accepts_the_owned_shape(tmp_path: Path, monkeypatch) -> None:
-    """The guard must not fire on the correct implementation."""
+def test_storage_lock_guard_accepts_lock_free_tree(tmp_path: Path, monkeypatch) -> None:
     api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
     web_src = tmp_path / "apps" / "web" / "src"
     monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
     monkeypatch.setattr(check_architecture, "API_SRC", api_src)
-    write_file(
-        api_src / "core" / "runtime_storage_lock.py",
-        "class StorageBusyError(TimeoutError):\n"
-        "    pass\n"
-        "_locks: dict[str, object] = {}\n"
-        "lock = threading.Lock()\n",
-    )
+    write_file(api_src / "modules" / "demo.py", "x = 1\n")
     errors: list[str] = []
     check_architecture.check_runtime_storage_lock(errors)
     assert errors == []
@@ -4260,52 +4099,6 @@ def test_freestyle_scope_quiz_overlay_requires_inline_english_and_no_zoom_chrome
     assert any("immediately left of 文字" in error for error in errors)
 
 
-def test_timed_session_architecture_requires_click_and_ledger_markers(
-    tmp_path: Path, monkeypatch
-) -> None:
-    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
-    monkeypatch.setattr(check_architecture, "WEB_SRC", tmp_path / "apps" / "web" / "src")
-    monkeypatch.setattr(
-        check_architecture,
-        "CONTEXT_MAP_PATH",
-        tmp_path / "docs" / "architecture" / "context-map.yaml",
-    )
-    write_file(
-        tmp_path / "docs" / "architecture" / "timed-session.md",
-        "pointerdown 90000 90 秒 interval_id device_id tombstone UTC dwell\n",
-    )
-    write_file(
-        tmp_path / "docs" / "architecture" / "context-map.yaml",
-        json.dumps(
-            {
-                "runtime": {
-                    "ports": {
-                        "SessionPort": {
-                            "capabilities": [
-                                "sessionKeyRegistry",
-                                "foregroundIntervals",
-                                "singleTerminalWrite",
-                                "versionedWrite",
-                            ]
-                        }
-                    }
-                }
-            }
-        ),
-    )
-    write_file(
-        tmp_path / "apps" / "web" / "src" / "modules" / "session" / "domain" / "study-session-entity" / "api" / "studySessionApi.ts",
-        "session_key client_revision operation_id\n",
-    )
-    errors: list[str] = []
-    check_architecture.check_timed_session_architecture(errors)
-    assert not any("timer architecture must document" in error for error in errors)
-    assert any("clickActivityIntervals" in error for error in errors)
-    assert any("ninetySecondThinkingGrace" in error for error in errors)
-    assert any("crossDeviceIntervalUnion" in error for error in errors)
-    assert any("continuousBlock" in error for error in errors)
-
-
 def test_freestyle_viewing_playhead_rejects_rating_owned_tick(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -4481,6 +4274,20 @@ def test_backup_snapshot_policy_blocks_full_create_on_router(
         "POST /backups/create must write rolling DB snapshots, not full media copies."
     ]
 
+
+
+def test_retired_sync_tool_wording_is_rejected(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    term = "sync" + "thing"
+    write_file(tmp_path / "docs" / "ok.md", "跨设备同步在应用外完成。")
+    write_file(tmp_path / "docs" / "bad.md", f"data lives in a {term.title()} folder")
+    write_file(tmp_path / "apps" / "web" / "node_modules" / "x.md", term)
+
+    errors: list[str] = []
+    check_architecture.check_no_retired_sync_tool_wording(errors)
+
+    assert len(errors) == 1
+    assert errors[0].startswith("docs/bad.md:")
 
 
 def test_freestyle_composition_reads_split_page_files(tmp_path: Path, monkeypatch) -> None:

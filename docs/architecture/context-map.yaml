@@ -131,6 +131,7 @@
       ],
       "dashboard": [
         "content",
+        "english",
         "memory",
         "quiz",
         "session"
@@ -198,8 +199,7 @@
       "modules/content/application/palace_service.py",
       "modules/content/application/palace_template_service.py",
       "modules/content/application/segment_management_service.py",
-      "modules/quiz/application/question_mutation_commands.py",
-      "modules/session/application/study_session_commands.py"
+      "modules/quiz/application/question_mutation_commands.py"
     ]
   },
   "frontend": {
@@ -249,14 +249,6 @@
         "capabilities": [
           "identity",
           "sessionKeyRegistry",
-          "timing",
-          "clickActivityIntervals",
-          "ninetySecondThinkingGrace",
-          "continuousBlock",
-          "pause",
-          "complete",
-          "immutableLedgerRevisions",
-          "crossDeviceIntervalUnion",
           "versionedWrite",
           "idempotentSave"
         ]
@@ -491,10 +483,7 @@
       },
       "session": {
         "publicEntry": "src/modules/session/public.ts",
-        "architectureDoc": "docs/architecture/timed-session.md",
-        "extraArchitectureDocs": [
-          "docs/architecture/live-study-presence.md"
-        ]
+        "architectureDoc": "docs/architecture/live-study-presence.md"
       },
       "settings": {
         "publicEntry": "src/modules/settings/public.ts"

@@ -177,14 +177,6 @@ FORBIDDEN_SHARED_LOCAL_STORAGE_KEYS = (
     "palace_shelf_view_settings",
 )
 BASELINE_SHARED_ENTITY_IMPORTS = {
-    "shared/components/session/SessionTimerBar.tsx",
-    "shared/components/session/timer-automation-config.ts",
-    "shared/hooks/timedSessionModel.ts",
-    "shared/hooks/timedSessionRecovery.ts",
-    "shared/hooks/timedSessionRestore.ts",
-    "shared/hooks/timedSessionSnapshot.ts",
-    "shared/hooks/useTimedSession.test.tsx",
-    "shared/hooks/useTimedSession.ts",
     "shared/lib/localStorage.test.tsx",
     "shared/logs/components/AppLogDrawer.tsx",
     "shared/preferences/clientPreferences.test.ts",
@@ -237,7 +229,6 @@ BASELINE_OVERSIZED_FILES = {
     # the freestyle architecture work.
     "apps/web/src/modules/english/ui/english/EnglishCoursePage.tsx",
     "apps/web/src/widgets/palace-memory-lookup/PalaceMemoryLookupDialog.tsx",
-    "apps/web/src/modules/session/domain/session-entity/model/timed-session/timedSessionStateMachine.ts",
     "apps/web/src/modules/memory/domain/review-entity/model/review-flow-tree.ts",
     # Pre-existing oversized integration harness; split tracked separately from feature work.
     "apps/web/src/modules/content/ui/mindmap-editor/MindMapCanvas.integration.test.tsx",
@@ -248,12 +239,10 @@ BASELINE_OVERSIZED_FILES = {
     # architecture review so the quality gate remains focused on new violations.
     "apps/web/src/shared/components/ui/dialog.tsx",
     "apps/web/src/modules/practice/ui/freestyle/model/freestyleProgressSegments.test.ts",
-    "apps/web/src/modules/practice/ui/freestyle/model/roundCompletion.test.ts",
     "apps/api/src/memory_anki/modules/memory/application/unit_review_service.py",
     # Session write validation grew with revision/operation race protection;
     # keep the existing service boundary tracked while the next extraction is
     # scheduled.
-    "apps/api/src/memory_anki/modules/session/application/study_session_service.py",
 }
 
 MAX_WEB_FILE_LINES = 750
@@ -323,19 +312,6 @@ PERSONAL_ABSOLUTE_PATH_PATTERNS = (
 )
 BACKEND_PRIVATE_CROSS_MODULE_SEGMENTS = (".infrastructure", ".presentation")
 BACKEND_CROSS_MODULE_PRIVATE_NAMES = ("repository", "repositories", "_")
-FRONTEND_STUDY_SESSION_LEGACY_ENDPOINT_PATTERN = re.compile(
-    r"/(?:time-records|sessions/[^'\"\s`]*/progress)"
-)
-FRONTEND_STUDY_SESSION_LEGACY_SYMBOLS = ("appendTimeRecord",)
-BACKEND_LEGACY_TIME_RECORD_MODULE = "modules/time_records/"
-BACKEND_STUDY_SESSION_LEGACY_PATTERNS = (
-    "memory_anki.modules.time_records",
-    " TimeRecord",
-    "(TimeRecord",
-    ", TimeRecord",
-    "TimeRecord,",
-    "query(TimeRecord",
-)
 FRONTEND_IMPORT_FROM_PATTERN = re.compile(r"\bfrom\s+['\"]([^'\"]+)['\"]")
 FRONTEND_DYNAMIC_IMPORT_PATTERN = re.compile(
     r"\bimport\s*\(\s*['\"]([^'\"]+)['\"]\s*\)"
@@ -1028,109 +1004,6 @@ def check_frontend_public_api_surfaces(errors: list[str]) -> None:
                     errors.append(f"{relative}: {message}")
 
 
-def check_study_session_legacy_usage(errors: list[str]) -> None:
-    for path in iter_files(WEB_SRC, (".ts", ".tsx")):
-        relative = path.relative_to(WEB_SRC).as_posix()
-        if is_frontend_test_file(relative):
-            continue
-        content = path.read_text(encoding="utf-8", errors="ignore")
-        # `modules/session/ui/time-records` is the current Session-owned UI
-        # slice.  Its directory/import names intentionally retain the user
-        # term “time records”; the API boundary itself is `/study-sessions`.
-        is_session_time_record_slice = relative.startswith(
-            "modules/session/ui/time-records/"
-        ) or relative in {
-            "modules/session/public.ts",
-            "modules/session/domain/study-session-entity/api/studySessionApi.ts",
-        }
-        if (
-            not is_session_time_record_slice
-            and FRONTEND_STUDY_SESSION_LEGACY_ENDPOINT_PATTERN.search(content)
-        ):
-            errors.append(
-                f"{relative}: production frontend must use /study-sessions APIs instead of legacy "
-                "/time-records or /sessions/*/progress endpoints."
-            )
-        for symbol in FRONTEND_STUDY_SESSION_LEGACY_SYMBOLS:
-            if symbol in content:
-                errors.append(
-                    f"{relative}: production frontend must persist learning sessions through "
-                    "StudySession helpers, not the old TimeRecord helper name."
-                )
-
-    backend_roots = (API_SRC / "app", API_SRC / "modules")
-    for root in backend_roots:
-        for path in iter_files(root, (".py",)):
-            relative = path.relative_to(API_SRC).as_posix()
-            if relative.startswith(BACKEND_LEGACY_TIME_RECORD_MODULE) or relative in {
-                "modules/session/application/time_record_read_model.py",
-                "modules/session/presentation/router.py",
-            }:
-                continue
-            content = path.read_text(encoding="utf-8", errors="ignore")
-            if any(
-                pattern in content for pattern in BACKEND_STUDY_SESSION_LEGACY_PATTERNS
-            ):
-                errors.append(
-                    f"{path.relative_to(REPO_ROOT)}: production backend modules must use "
-                    "modules.session StudySession services instead of TimeRecord/time_records."
-                )
-
-
-def check_timed_session_architecture(errors: list[str]) -> None:
-    """Keep the click timer and cross-device ledger contracts in sync."""
-
-    architecture_doc = REPO_ROOT / "docs" / "architecture" / "timed-session.md"
-    required_doc_markers = (
-        "pointerdown",
-        "90000",
-        "90 秒",
-        "interval_id",
-        "device_id",
-        "tombstone",
-        "UTC",
-        "dwell",
-    )
-    if not architecture_doc.exists():
-        errors.append(
-            "docs/architecture/timed-session.md: click timer architecture document is missing."
-        )
-    else:
-        document = architecture_doc.read_text(encoding="utf-8", errors="ignore")
-        for marker in required_doc_markers:
-            if marker not in document:
-                errors.append(
-                    f"{architecture_doc.relative_to(REPO_ROOT)}: timer architecture must document `{marker}`."
-                )
-
-    api_path = WEB_SRC / "modules" / "session" / "domain" / "study-session-entity" / "api" / "studySessionApi.ts"
-    api_source = api_path.read_text(encoding="utf-8", errors="ignore") if api_path.exists() else ""
-    for marker in ("session_key", "client_revision", "operation_id"):
-        if marker not in api_source:
-            errors.append(
-                f"{api_path.relative_to(REPO_ROOT)}: StudySession API must expose version field `{marker}`."
-            )
-
-    context = load_context_map()
-    runtime = context.get("runtime") if isinstance(context.get("runtime"), dict) else {}
-    ports = runtime.get("ports") if isinstance(runtime.get("ports"), dict) else {}
-    session_port = ports.get("SessionPort") if isinstance(ports.get("SessionPort"), dict) else {}
-    capabilities = session_port.get("capabilities") if isinstance(session_port.get("capabilities"), list) else []
-    for capability in (
-        "sessionKeyRegistry",
-        "clickActivityIntervals",
-        "ninetySecondThinkingGrace",
-        "continuousBlock",
-        "immutableLedgerRevisions",
-        "crossDeviceIntervalUnion",
-        "versionedWrite",
-    ):
-        if capability not in capabilities:
-            errors.append(
-                f"docs/architecture/context-map.yaml: SessionPort must declare `{capability}`."
-            )
-
-
 def _code_lines_with_string_literal(source: str, needle: str) -> list[int]:
     """Line numbers of real string literals containing ``needle``.
 
@@ -1162,143 +1035,6 @@ def _code_lines_with_string_literal(source: str, needle: str) -> list[int]:
         if needle in node.value:
             hits.append(node.lineno)
     return sorted(set(hits))
-
-
-def check_time_record_timezone_rule(errors: list[str]) -> None:
-    """One explicit local zone; never SQLite's implicit 'localtime' modifier.
-
-    The modifier follows the server process OS timezone, which disagreed with the
-    Python-side day splitting and shifted records onto the wrong local day once
-    the API host zone differed from the learner's.
-    """
-
-    core_time = API_SRC / "core" / "time.py"
-    if not core_time.exists():
-        errors.append("apps/api/src/memory_anki/core/time.py: timezone helper module is missing.")
-        return
-    source = core_time.read_text(encoding="utf-8", errors="ignore")
-    for marker in (
-        "MEMORY_ANKI_LOCAL_TZ",
-        "def resolve_local_timezone",
-        "def local_calendar_day_of",
-        "def parse_client_datetime",
-    ):
-        if marker not in source:
-            errors.append(
-                f"{core_time.relative_to(REPO_ROOT)}: local-zone contract must declare `{marker}`."
-            )
-
-    application_dir = API_SRC / "modules" / "session" / "application"
-    for path in sorted(application_dir.glob("*.py")):
-        body = path.read_text(encoding="utf-8", errors="ignore")
-        for line_number in _code_lines_with_string_literal(body, "localtime"):
-            errors.append(
-                f"{path.relative_to(REPO_ROOT)}:{line_number}: use resolve_local_timezone() "
-                "instead of SQLite's 'localtime' modifier (follows the server OS zone)."
-            )
-
-    architecture_doc = REPO_ROOT / "docs" / "architecture" / "timed-session.md"
-    if architecture_doc.exists():
-        document = architecture_doc.read_text(encoding="utf-8", errors="ignore")
-        for marker in ("resolve_local_timezone", "本地日界线", "显式 UTC 偏移"):
-            if marker not in document:
-                errors.append(
-                    f"{architecture_doc.relative_to(REPO_ROOT)}: must document `{marker}`."
-                )
-
-
-def check_time_record_attribution(errors: list[str]) -> None:
-    """Time records must carry 学科/章节/单元 + 场景 + 行为.
-
-    The ledger once stored only `session_key` + `completion_method`, so no total
-    could be grouped per subject. Every interval-writing path must stamp
-    attribution, including the unload/beacon path.
-    """
-
-    domain_path = API_SRC / "modules" / "session" / "domain" / "time_record_attribution.py"
-    if not domain_path.exists():
-        errors.append(
-            "apps/api/src/memory_anki/modules/session/domain/time_record_attribution.py: "
-            "attribution contract is missing."
-        )
-    else:
-        source = domain_path.read_text(encoding="utf-8", errors="ignore")
-        for marker in ("subject_id", "chapter_id", "unit_label", "palace_id", "scene", "behavior"):
-            if f'"{marker}"' not in source:
-                errors.append(
-                    f"{domain_path.relative_to(REPO_ROOT)}: attribution must declare `{marker}`."
-                )
-
-    for relative in (
-        "modules/session/domain/session-entity/model/session-records-store.ts",
-        "shared/hooks/timedSessionRecovery.ts",
-    ):
-        path = WEB_SRC / relative
-        if not path.exists():
-            errors.append(f"apps/web/{relative}: expected ledger writer is missing.")
-            continue
-        body = path.read_text(encoding="utf-8", errors="ignore")
-        if "attributionToMetadata(record.attribution)" not in body:
-            errors.append(
-                f"apps/web/{relative}: ledger writes must include "
-                "`attributionToMetadata(record.attribution)` so records stay attributable."
-            )
-
-    architecture_doc = REPO_ROOT / "docs" / "architecture" / "timed-session.md"
-    if architecture_doc.exists():
-        document = architecture_doc.read_text(encoding="utf-8", errors="ignore")
-        for marker in ("四级归因", "subject_id", "chapter_id", "behavior"):
-            if marker not in document:
-                errors.append(
-                    f"{architecture_doc.relative_to(REPO_ROOT)}: must document `{marker}`."
-                )
-
-
-def check_study_duration_span_contract(errors: list[str]) -> None:
-    """effective_seconds must never exceed the stored wall span.
-
-    Paused and multi-day sessions legitimately have span > duration, so the two
-    accounts are *not* supposed to be equal — but no unedited row may claim more
-    study time than its own timestamps can hold.
-    """
-
-    duration_path = (
-        API_SRC / "modules" / "session" / "application" / "study_session_duration.py"
-    )
-    if not duration_path.exists():
-        errors.append(
-            "apps/api/src/memory_anki/modules/session/application/study_session_duration.py: "
-            "duration normalizer is missing."
-        )
-    else:
-        source = duration_path.read_text(encoding="utf-8", errors="ignore")
-        for marker in ("def wall_clock_seconds", "def normalize_effective_seconds"):
-            if marker not in source:
-                errors.append(
-                    f"{duration_path.relative_to(REPO_ROOT)}: must declare `{marker}`."
-                )
-
-    # The unit-review completion path is where the invariant was broken: the
-    # billed encounter sum was stamped against a later `ended_at`.
-    unit_review = (
-        API_SRC / "modules" / "memory" / "application" / "unit_review_service.py"
-    )
-    if unit_review.exists():
-        body = unit_review.read_text(encoding="utf-8", errors="ignore")
-        if "billed_seconds_before_clamp" not in body:
-            errors.append(
-                f"{unit_review.relative_to(REPO_ROOT)}: billed encounter seconds must be "
-                "clamped to the wall span before storing effective_seconds."
-            )
-
-    architecture_doc = REPO_ROOT / "docs" / "architecture" / "timed-session.md"
-    if architecture_doc.exists():
-        document = architecture_doc.read_text(encoding="utf-8", errors="ignore")
-        for marker in ("时长与墙钟必须自洽", "0068_clamp_session_duration_span"):
-            if marker not in document:
-                errors.append(
-                    f"{architecture_doc.relative_to(REPO_ROOT)}: must document `{marker}`."
-                )
 
 
 def check_live_study_presence(errors: list[str]) -> None:
@@ -1433,7 +1169,7 @@ def check_live_study_presence(errors: list[str]) -> None:
 
     if architecture_doc.exists():
         document = architecture_doc.read_text(encoding="utf-8", errors="ignore")
-        for marker in ("take_control", "接管计时", "lease"):
+        for marker in ("take_control", "接管控制", "lease"):
             if marker not in document:
                 errors.append(
                     f"{architecture_doc.relative_to(REPO_ROOT)}: live study presence must document `{marker}`."
@@ -2180,6 +1916,9 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
     )
     if progress_path.exists():
         progress_source = progress_path.read_text(encoding="utf-8", errors="ignore")
+        accent_path = progress_path.with_name("freestylePalaceAccent.ts")
+        if accent_path.exists():
+            progress_source += accent_path.read_text(encoding="utf-8", errors="ignore")
         for marker in ("scheduledBase", "retryInserted", "progressHudText"):
             if marker not in progress_source:
                 errors.append(
@@ -2246,6 +1985,9 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
     )
     if sheet_path.exists():
         sheet_source = sheet_path.read_text(encoding="utf-8", errors="ignore")
+        plan_row_path = sheet_path.with_name("FreestyleRoundPlanRow.tsx")
+        if plan_row_path.exists():
+            sheet_source += plan_row_path.read_text(encoding="utf-8", errors="ignore")
         if "retryChromeClass" not in sheet_source or "visualPlanStatus" not in sheet_source:
             errors.append(
                 f"{sheet_path.relative_to(REPO_ROOT).as_posix()}: "
@@ -3869,6 +3611,9 @@ def check_freestyle_progress_rail_jump(errors: list[str]) -> None:
     page = WEB_SRC / "modules" / "practice" / "ui" / "freestyle" / "ImmersiveFreestylePage.tsx"
     doc = REPO_ROOT / "docs" / "architecture" / "freestyle-immersive-feed.md"
     rail_source = rail.read_text(encoding="utf-8", errors="ignore") if rail.exists() else ""
+    rail_item = rail.with_name("FreestyleProgressRailItem.tsx")
+    if rail_item.exists():
+        rail_source += rail_item.read_text(encoding="utf-8", errors="ignore")
     if "onJump" not in rail_source or "data-rail-slot" not in rail_source:
         errors.append(
             f"{rail.relative_to(REPO_ROOT).as_posix()}: "
@@ -4094,96 +3839,6 @@ def check_freestyle_viewing_playhead(errors: list[str]) -> None:
             )
 
 
-def check_freestyle_round_learning_time(errors: list[str]) -> None:
-    """Settlement shows this round's learning time, with quiz time on its own line."""
-    round_plan = API_SRC / "modules" / "practice" / "domain" / "round_plan.py"
-    normalization = API_SRC / "modules" / "practice" / "domain" / "round_plan_normalization.py"
-    router = API_SRC / "modules" / "practice" / "presentation" / "router.py"
-    card = (
-        WEB_SRC
-        / "modules"
-        / "practice"
-        / "ui"
-        / "freestyle"
-        / "components"
-        / "FreestyleRoundCompleteCard.tsx"
-    )
-    page = (
-        WEB_SRC
-        / "modules"
-        / "practice"
-        / "ui"
-        / "freestyle"
-        / "ImmersiveFreestylePage.tsx"
-    )
-    doc = REPO_ROOT / "docs" / "architecture" / "freestyle-immersive-feed.md"
-    round_plan_source = round_plan.read_text(encoding="utf-8", errors="ignore") if round_plan.exists() else ""
-    normalization_source = normalization.read_text(encoding="utf-8", errors="ignore") if normalization.exists() else ""
-    if "learning_time" not in f"{round_plan_source}\n{normalization_source}":
-        errors.append(
-            "apps/api/src/memory_anki/modules/practice/domain/round_plan.py: "
-            "normalize_plan must keep learning_time."
-        )
-    if not router.exists() or "/learning-time" not in router.read_text(encoding="utf-8", errors="ignore"):
-        errors.append(
-            "apps/api/src/memory_anki/modules/practice/presentation/router.py: "
-            "must expose /learning-time for the round clock."
-        )
-    if not card.exists() or "做题时间" not in card.read_text(encoding="utf-8", errors="ignore"):
-        errors.append(
-            "apps/web/src/modules/practice/ui/freestyle/components/FreestyleRoundCompleteCard.tsx: "
-            "settlement card must show 做题时间."
-        )
-    if not page.exists() or "useFreestyleRoundLearningClock" not in page.read_text(encoding="utf-8", errors="ignore"):
-        errors.append(
-            "apps/web/src/modules/practice/ui/freestyle/ImmersiveFreestylePage.tsx: "
-            "must run useFreestyleRoundLearningClock."
-        )
-    if doc.exists():
-        doc_source = doc.read_text(encoding="utf-8", errors="ignore")
-        if "learning_time" not in doc_source or "做题时间" not in doc_source:
-            errors.append(
-                f"{doc.relative_to(REPO_ROOT).as_posix()}: "
-                "must document round learning_time and the separate 做题时间 line."
-            )
-        if "three minutes" not in doc_source or "empty round clock must not wipe" not in doc_source:
-            errors.append(
-                f"{doc.relative_to(REPO_ROOT).as_posix()}: "
-                "must document the three-minute leave and that an empty clock does not wipe queue time."
-            )
-    completion = (
-        WEB_SRC
-        / "modules"
-        / "practice"
-        / "ui"
-        / "freestyle"
-        / "model"
-        / "roundCompletion.ts"
-    )
-    if completion.exists():
-        completion_source = completion.read_text(encoding="utf-8", errors="ignore")
-        if "empty clock must not wipe" not in completion_source:
-            errors.append(
-                f"{completion.relative_to(REPO_ROOT).as_posix()}: "
-                "an empty round clock must not wipe the progress-bar queue time."
-            )
-    presence = WEB_SRC / "modules" / "practice" / "ui" / "studyClockPresence.ts"
-    for clock in (
-        WEB_SRC / "modules" / "practice" / "ui" / "freestyle" / "hooks" / "useFreestyleRoundLearningClock.ts",
-        WEB_SRC / "modules" / "practice" / "ui" / "review" / "hooks" / "useForegroundEncounterClock.ts",
-    ):
-        if not clock.exists() or "studyClockPresence" not in clock.read_text(encoding="utf-8", errors="ignore"):
-            errors.append(
-                f"{clock.relative_to(REPO_ROOT).as_posix()}: "
-                "study clocks must share studyClockPresence so a visible window still counts."
-            )
-    if not presence.exists():
-        errors.append(
-            "apps/web/src/modules/practice/ui/studyClockPresence.ts: "
-            "shared study-window presence is required."
-        )
-
-
 def check_freestyle_complete_slot_reachable(errors: list[str]) -> None:
     """The last handled unit must still page into the closing card."""
     page = (
@@ -4259,11 +3914,6 @@ def check_freestyle_complete_slot_reachable(errors: list[str]) -> None:
                 f"{complete_card.relative_to(REPO_ROOT).as_posix()}: "
                 "settlement card must expose 再来一轮 via onAnotherRound."
             )
-        if "totalEffectiveSeconds" not in complete_source or "bySubject" not in complete_source:
-            errors.append(
-                f"{complete_card.relative_to(REPO_ROOT).as_posix()}: "
-                "settlement card must show totalEffectiveSeconds and bySubject breakdown."
-            )
         if "取消结算" not in complete_source or "onCancelSettlement" not in complete_source:
             errors.append(
                 f"{complete_card.relative_to(REPO_ROOT).as_posix()}: "
@@ -4274,32 +3924,6 @@ def check_freestyle_complete_slot_reachable(errors: list[str]) -> None:
             f"{page.relative_to(REPO_ROOT).as_posix()}: "
             "取消结算 and 上一张 must leave the settlement slot via navigatePrevious."
         )
-    if (
-        "viewingCard: !settlementVisible" not in page_source
-        or "viewingCompleteSlot || studySettlementOpen || partialSettlement != null" not in page_source
-        or "viewingCard: !roundComplete" in page_source
-    ):
-        errors.append(
-            f"{page.relative_to(REPO_ROOT).as_posix()}: "
-            "all settlement surfaces must pause the learning clock and leaving must resume it; "
-            "gate viewingCard on settlementVisible, not roundComplete."
-        )
-    timer = (
-        WEB_SRC
-        / "modules"
-        / "practice"
-        / "ui"
-        / "freestyle"
-        / "model"
-        / "freestyle-cards.ts"
-    )
-    if timer.exists():
-        timer_source = timer.read_text(encoding="utf-8", errors="ignore")
-        if "3600" not in timer_source or "formatTimer" not in timer_source:
-            errors.append(
-                f"{timer.relative_to(REPO_ROOT).as_posix()}: "
-                "formatTimer must roll minutes into hours once the duration reaches 3600 seconds."
-            )
     if feed_doc.exists() and "取消结算" not in feed_doc.read_text(encoding="utf-8", errors="ignore"):
         errors.append(
             f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
@@ -5364,6 +4988,43 @@ def check_settings_module_boundaries(errors: list[str]) -> None:
             )
 
 
+_RETIRED_SYNC_TOOL_TERMS = ("sync" + "thing", "sync" + "-conflict", "sync" + "_conflict")
+_RETIRED_SYNC_TOOL_SCAN_ROOTS = (
+    "apps/api/src",
+    "apps/api/tests",
+    "apps/web/src",
+    "apps/web/e2e",
+    "apps/web/vite.config.ts",
+    "tools",
+    "docs",
+    "AGENTS.md",
+    "AI_PROJECT_CONTEXT.md",
+    "PWA.md",
+)
+_RETIRED_SYNC_TOOL_SKIP_DIRS = {"node_modules", "dist", "__pycache__", ".venv", "_local"}
+_RETIRED_SYNC_TOOL_SUFFIXES = {".py", ".ts", ".tsx", ".md", ".json", ".ps1", ".bat", ".yml", ".yaml"}
+
+
+def check_no_retired_sync_tool_wording(errors: list[str]) -> None:
+    """The app owns no file sync and names no sync tool; sync stays a manual, external step."""
+    for root_name in _RETIRED_SYNC_TOOL_SCAN_ROOTS:
+        root = REPO_ROOT / root_name
+        if not root.exists():
+            continue
+        paths = [root] if root.is_file() else sorted(root.rglob("*"))
+        for path in paths:
+            if not path.is_file() or path.suffix.lower() not in _RETIRED_SYNC_TOOL_SUFFIXES:
+                continue
+            if _RETIRED_SYNC_TOOL_SKIP_DIRS.intersection(path.relative_to(REPO_ROOT).parts):
+                continue
+            text = path.read_text(encoding="utf-8", errors="ignore").lower()
+            if any(term in text for term in _RETIRED_SYNC_TOOL_TERMS):
+                errors.append(
+                    f"{path.relative_to(REPO_ROOT).as_posix()}: do not name a specific sync tool or its "
+                    "conflict-copy files; say 'cross-device sync' and keep the one-writer-at-a-time rule."
+                )
+
+
 def check_backup_snapshot_policy(errors: list[str]) -> None:
     lifecycle = API_SRC / "modules" / "backups" / "application" / "backup_lifecycle.py"
     router = API_SRC / "modules" / "backups" / "presentation" / "router.py"
@@ -5399,99 +5060,51 @@ def check_backup_snapshot_policy(errors: list[str]) -> None:
 
 
 def _check_backup_lock_scope(errors: list[str]) -> None:
-    """A snapshot must not hold the shared runtime lock.
+    """Backups snapshot via SQLite online backup; the app-level storage lock is gone.
 
-    SQLite's online backup API is already consistent with concurrent writers.
-    Wrapping that copy in ``storage_write_lock`` stalled every study write for
-    the whole copy (observed: minutes on a ~200 MB synced-drive database), which
-    the client saw as 503 after a 15s wait.
+    The old ``storage_write_lock`` put every study write behind one process-wide
+    lock plus a lock-file round trip on the (removable) data drive, which stalled
+    ratings. It must not come back.
     """
     storage = API_SRC / "modules" / "backups" / "application" / "storage_backup.py"
-    if not storage.exists():
-        return
-    source = storage.read_text(encoding="utf-8", errors="ignore")
-    relative = storage.relative_to(REPO_ROOT).as_posix()
-    if "def _snapshot_databases(" not in source:
-        errors.append(
-            f"{relative}: backup writes must snapshot the database via _snapshot_databases, "
-            "without taking the study lock."
-        )
-    if "captured = _snapshot_databases(stage, items)" not in source:
-        errors.append(
-            f"{relative}: write_storage_backup must capture the database snapshot before "
-            "copying remaining items, and must not wrap that snapshot in storage_write_lock."
-        )
-    snapshot = source.split("def _snapshot_databases(", 1)[-1].split("\ndef ", 1)[0]
-    if "with storage_write_lock" in snapshot:
-        errors.append(
-            f"{relative}: the database snapshot must not take storage_write_lock. "
-            "SQLite online backup is concurrent; holding the study lock across a large "
-            "copy makes progress saves return 503."
-        )
-    online = source.split("def _sqlite_online_backup(", 1)[-1].split("\ndef ", 1)[0]
-    if "with storage_write_lock" in online.split("source_conn.backup", 1)[0]:
-        errors.append(
-            f"{relative}: source_conn.backup must not run inside storage_write_lock."
-        )
-    if "source_conn.backup(" not in online or "pages=_ONLINE_BACKUP_PAGES" not in online:
-        errors.append(
-            f"{relative}: online backup must copy in page steps so a long snapshot "
-            "releases the source read lock between batches."
-        )
-    if "with storage_write_lock(APP_HOME):\n            included_items" in source or (
-        "with storage_write_lock(APP_HOME):\n                _copy_item_to_backup(item, stage)"
-        in source
-    ):
-        errors.append(
-            f"{relative}: bulk backup copies must run outside storage_write_lock."
-        )
+    if storage.exists():
+        source = storage.read_text(encoding="utf-8", errors="ignore")
+        relative = storage.relative_to(REPO_ROOT).as_posix()
+        if "def _snapshot_databases(" not in source:
+            errors.append(
+                f"{relative}: backup writes must snapshot the database via _snapshot_databases."
+            )
+        if "captured = _snapshot_databases(stage, items)" not in source:
+            errors.append(
+                f"{relative}: write_storage_backup must capture the database snapshot before "
+                "copying remaining items."
+            )
+        online = source.split("def _sqlite_online_backup(", 1)[-1].split("\ndef ", 1)[0]
+        if "source_conn.backup(" not in online or "pages=_ONLINE_BACKUP_PAGES" not in online:
+            errors.append(
+                f"{relative}: online backup must copy in page steps so a long snapshot "
+                "releases the source read lock between batches."
+            )
 
     check_runtime_storage_lock(errors)
 
 
 def check_runtime_storage_lock(errors: list[str]) -> None:
-    """The shared storage lock must survive a cross-thread release.
-
-    Split from the backup-policy check so this property can be tested on its own
-    (see ``test_storage_lock_must_be_releasable_from_another_thread``).
-    """
+    """The removed app-level storage lock must not be reintroduced."""
     lock_module = API_SRC / "core" / "runtime_storage_lock.py"
     if lock_module.exists():
-        lock_source = lock_module.read_text(encoding="utf-8", errors="ignore")
-        if "class StorageBusyError" not in lock_source:
+        errors.append(
+            f"{lock_module.relative_to(REPO_ROOT).as_posix()}: the app-level storage write "
+            "lock was removed (SQLite serialises writers itself); do not bring it back."
+        )
+    if not API_SRC.exists():
+        return
+    for path in API_SRC.rglob("*.py"):
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        if "storage_write_lock" in text or "runtime_storage_lock" in text:
             errors.append(
-                f"{lock_module.relative_to(REPO_ROOT).as_posix()}: lock contention must raise "
-                "StorageBusyError so HTTP can answer 503 + Retry-After instead of 500."
-            )
-        # The lock is released by whichever thread finishes the work, which is
-        # legitimately not the one that took it: FastAPI runs a sync endpoint and
-        # its generator-dependency teardown in separate threadpool calls, so a
-        # flush that raises defers its ROLLBACK to `session.close()` on another
-        # worker. `RLock` may only be released by its owner, so that teardown
-        # raised `RuntimeError: cannot release un-acquired lock` — which replaced
-        # the real exception in the log (a buried StaleDataError) AND aborted the
-        # `finally` before `lock.release()`, wedging the process-wide lock. One
-        # such event produced 55 later `storage_busy` 503s.
-        if "threading.RLock()" in lock_source:
-            errors.append(
-                f"{lock_module.relative_to(REPO_ROOT).as_posix()}: must not use "
-                "threading.RLock(); a cross-thread release raises 'cannot release "
-                "un-acquired lock', which masks the original error and wedges the "
-                "lock for every later writer. Reentrancy is tracked per thread."
-            )
-        if "threading.Lock()" not in lock_source:
-            errors.append(
-                f"{lock_module.relative_to(REPO_ROOT).as_posix()}: the lock registry "
-                "must use threading.Lock() so a cross-thread release is legal."
-            )
-
-    handlers = API_SRC / "app" / "error_handlers.py"
-    if handlers.exists():
-        handler_source = handlers.read_text(encoding="utf-8", errors="ignore")
-        if "async def handle_storage_busy" not in handler_source:
-            errors.append(
-                f"{handlers.relative_to(REPO_ROOT).as_posix()}: storage contention must be "
-                "reported as a retryable 503 response."
+                f"{path.relative_to(REPO_ROOT).as_posix()}: references the removed "
+                "storage_write_lock / runtime_storage_lock."
             )
 
 
@@ -6077,21 +5690,6 @@ def check_unit_review_boundary(errors: list[str]) -> None:
             if marker not in source:
                 errors.append(f"permanent-mark review invariant missing {marker!r}: {path.relative_to(REPO_ROOT)}")
 
-    service_path = API_SRC / "modules/memory/application/unit_review_service.py"
-    service_source = service_path.read_text(encoding="utf-8", errors="ignore") if service_path.exists() else ""
-    if "encounter.closed_at - encounter.created_at" in service_source:
-        errors.append(
-            "unit review duration must use client-observed foreground seconds, not encounter wall time"
-        )
-    if "cannot exceed the encounter wall-clock span" in service_source:
-        errors.append(
-            "close_unit_review_encounter must clamp effective_seconds to the wall span, not 400"
-        )
-    if service_source and "normalized_seconds = wall_seconds" not in service_source:
-        errors.append(
-            "close_unit_review_encounter must clamp observed seconds with "
-            "'normalized_seconds = wall_seconds'"
-        )
 
 
 def check_english_reading_gap_loop(errors: list[str]) -> None:
@@ -6236,7 +5834,6 @@ def check_window_layout_memory(errors: list[str]) -> None:
     dialog_layout = WEB_SRC / "shared" / "components" / "ui" / "dialogFloatingLayout.ts"
     palace = WEB_SRC / "widgets" / "palace-memory-lookup" / "PalaceMemoryLookupDialog.tsx"
     dialog = WEB_SRC / "shared" / "components" / "ui" / "dialog.tsx"
-    timer = WEB_SRC / "shared" / "components" / "session" / "GlobalTimerFloatingOverlay.tsx"
     english = WEB_SRC / "modules" / "english-lookup" / "useEnglishLookup.ts"
     mindmap = REPO_ROOT / "docs" / "architecture" / "mindmap.md"
     router = (
@@ -6302,18 +5899,6 @@ def check_window_layout_memory(errors: list[str]) -> None:
         errors.append(
             f"{dialog.relative_to(REPO_ROOT).as_posix()}: "
             "viewport resize must reapply floating dialog ratios without saving them."
-        )
-
-    timer_source = timer.read_text(encoding="utf-8", errors="ignore") if timer.exists() else ""
-    timer_resize = _resize_handler_source(
-        timer_source,
-        "const handleResize = () => {",
-        "window.addEventListener('resize'",
-    )
-    if "readTimerOverlayLayout" not in timer_resize or "saveTimerOverlayLayout" in timer_resize:
-        errors.append(
-            f"{timer.relative_to(REPO_ROOT).as_posix()}: "
-            "viewport resize must re-read the timer overlay without saving clamped pixels."
         )
 
     english_source = english.read_text(encoding="utf-8", errors="ignore") if english.exists() else ""
@@ -6418,7 +6003,7 @@ def check_article_reading_cursor_boundary(errors: list[str]) -> None:
 BASELINE_STAGED_THEN_READ: set[str] = {
     # Startup seed: the loop reads-then-inserts, so iteration 2 flushes iteration
     # 1's row. Runs once at boot, not on the request path.
-    "app/startup_runtime.py:54",
+    "app/startup_runtime.py:50",
     # Palette snapshot restore: already inside one long explicit transaction that
     # is expected to be exclusive.
     "modules/backups/application/backup_palace_restore.py:183",
@@ -7028,6 +6613,7 @@ def main() -> int:
     check_context_dependency_map(errors)
     check_forbidden_imports(errors)
     check_backup_snapshot_policy(errors)
+    check_no_retired_sync_tool_wording(errors)
     check_mindmap_architecture(errors)
     check_mindmap_layout_hot_path(errors)
     check_mindmap_reveal_layout_hold(errors)
@@ -7051,11 +6637,6 @@ def main() -> int:
     check_frontend_runtime_module_boundaries(errors)
     check_session_recorder_boundary(errors)
     check_removed_focus_practice(errors)
-    check_study_session_legacy_usage(errors)
-    check_timed_session_architecture(errors)
-    check_time_record_timezone_rule(errors)
-    check_time_record_attribution(errors)
-    check_study_duration_span_contract(errors)
     check_live_study_presence(errors)
     check_runtime_data_ignored(errors)
     check_frontend_config_contract(errors)
@@ -7108,7 +6689,6 @@ def main() -> int:
     check_freestyle_viewing_playhead(errors)
     check_freestyle_queue_removal_rail(errors)
     check_freestyle_complete_slot_reachable(errors)
-    check_freestyle_round_learning_time(errors)
     check_freestyle_config_overlap_choice(errors)
     check_knowledge_context_boundaries(errors)
     check_contexts_without_persistence_dependency(errors)
