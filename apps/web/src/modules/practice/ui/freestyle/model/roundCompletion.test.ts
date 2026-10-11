@@ -60,6 +60,25 @@ function encounter(
 }
 
 describe('buildFreestyleRoundCompletion', () => {
+  it('keeps restored weak ratings unresolved and excludes removed work from success counts', () => {
+    const roundPlan = {
+      cardsById: {
+        weak: { lastRating: 2, status: 'retry' },
+        passed: { lastRating: 3, status: 'completed' },
+        removed: { lastRating: null, status: 'excluded' },
+      },
+    } as never
+    const summary = buildFreestyleRoundCompletion(
+      [card('weak'), card('passed'), card('removed'), card('unrated')],
+      { weak: encounter({ status: 'open', selectedRating: null, passed: null }) },
+      4,
+      { roundPlan, completedIds: ['removed'] },
+    )
+    expect(summary.ratedCount).toBe(2)
+    expect(summary.passedCount).toBe(1)
+    expect(summary.ratedCount - summary.passedCount).toBe(1)
+  })
+
   it('splits ratings into passed and retry', () => {
     const cards = [card('one'), card('two'), card('three')]
     const completion = buildFreestyleRoundCompletion(cards, {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { ChevronDown, RotateCcw, Sparkles, Trophy } from 'lucide-react'
 import type { FreestylePartialSettlementSnapshot } from '@/modules/practice/domain/partialSettlement'
 import type { FreestyleRoundCompletion } from '@/modules/practice/ui/freestyle/model/roundCompletion'
@@ -113,6 +113,9 @@ export function FreestyleRoundCompleteCard({
   variant = 'round',
   partialSettlements = [],
   onConfirmPartial,
+  onFinishStudy,
+  onAddDueToday,
+  unscoredCount,
 }: {
   completion: FreestyleRoundCompletion
   roundKey: string
@@ -124,22 +127,32 @@ export function FreestyleRoundCompleteCard({
   /** Exam progress block (lit knowledge points, weak spots, goal delta). */
   examSummary?: ReactNode
   /** 小结算 confirms a finished batch. 大结算 is the closing round page. */
-  variant?: 'round' | 'partial'
+  variant?: 'round' | 'partial' | 'study'
   partialSettlements?: readonly FreestylePartialSettlementSnapshot[]
   onConfirmPartial?: () => void
+  /** Finish this visit only; never marks the underlying round or its units passed. */
+  onFinishStudy?: () => void
+  onAddDueToday?: () => void
+  /** Occurrence-local pending count, from the existing queue scoring projection. */
+  unscoredCount?: number
 }) {
   const reducedMotion = usePrefersReducedMotion()
   const subjects = useMemo(() => completion.bySubject ?? [], [completion.bySubject])
   const [quizChoice, setQuizChoice] = useState<QuizClearChoice>('pending')
   const [quizClearError, setQuizClearError] = useState('')
+  const clearOwnerRef = useRef({ roundKey, operation: 0 })
+  if (clearOwnerRef.current.roundKey !== roundKey) clearOwnerRef.current = { roundKey, operation: 0 }
+  useEffect(() => () => { clearOwnerRef.current.operation += 1 }, [])
   useEffect(() => {
     setQuizChoice('pending')
     setQuizClearError('')
   }, [roundKey])
-  useRoundCompleteCelebration(roundKey, reducedMotion)
+  useRoundCompleteCelebration(roundKey, reducedMotion, variant !== 'study')
   const partial = variant === 'partial'
+  const study = variant === 'study'
+  const quizChoiceResolved = quizPalaceCount === 0 || quizChoice === 'kept' || quizChoice === 'cleared'
   const ratedShown = useCountUp(completion.ratedCount, { durationMs: 1100, delayMs: 180, disabled: reducedMotion })
-  const passRatio = completion.ratedCount > 0 ? completion.passedCount / completion.ratedCount : 1
+  const passRatio = completion.ratedCount > 0 ? completion.passedCount / completion.ratedCount : 0
   const firstKey = subjects[0]
     ? subjectKey(subjects[0].subjectId, subjects[0].subjectName)
     : null
@@ -169,17 +182,19 @@ export function FreestyleRoundCompleteCard({
           className="ma-pressable mb-4 flex w-full items-center justify-center rounded-2xl border border-stage-line-strong px-4 py-3 text-sm font-medium text-stage-ink hover:bg-stage-ink/8"
           onClick={onCancelSettlement}
         >
-          {partial ? '取消结算' : '返回上一张'}
+          {partial ? '取消结算' : study ? '继续本轮学习' : '返回上一张'}
         </button>
         <Rise index={0} className="text-center">
-          <PassRing
-            ratio={passRatio}
-            reducedMotion={reducedMotion}
-            gradientId={partial ? 'fs-ring-gradient-partial' : 'fs-ring-gradient'}
-          />
+          {!study ? (
+            <PassRing
+              ratio={passRatio}
+              reducedMotion={reducedMotion}
+              gradientId={partial ? 'fs-ring-gradient-partial' : 'fs-ring-gradient'}
+            />
+          ) : null}
           <div className="mt-3 flex items-center justify-center gap-3">
             <div className="text-xs font-semibold tracking-[0.18em] text-stage-glow">
-              {partial ? '小结算' : '本轮总结'}
+              {partial ? '小结算' : study ? '结束本次学习' : '本轮总结'}
             </div>
             <button
               type="button"
@@ -210,15 +225,35 @@ export function FreestyleRoundCompleteCard({
           已评分含通过与重练；“经历过重练”表示本轮曾需重练，不代表仍有待办。
         </p>
 
+        {!partial && unscoredCount != null ? (
+          <p data-testid="freestyle-study-pending-counts" className="mt-3 text-center text-sm text-stage-ink">
+            待评分 {unscoredCount} 次（含重练） · 已评分未通过 {Math.max(0, completion.ratedCount - completion.passedCount)} 个学习内容
+          </p>
+        ) : null}
+        {!partial ? (
+          <p data-testid="freestyle-study-resume-note" className="mt-3 text-center text-sm leading-6 text-stage-ink">
+            结束本次学习不等于全部通过。未评分和未通过的内容会保留在同一轮，下次继续；不会补记通过或重置复习安排。
+          </p>
+        ) : null}
+
         <Rise index={6}>
           <div
             data-testid="freestyle-round-complete-total-time"
             className="mt-4 rounded-2xl border border-rate-good/25 bg-rate-good/10 px-4 py-3 text-center"
           >
-            <div className="text-[11px] font-medium tracking-wide text-rate-good/85">本轮专注时长</div>
+            <div className="text-[11px] font-medium tracking-wide text-rate-good/85">{partial ? '本次小结时长' : '本轮累计'}</div>
             <div className="mt-0.5 text-2xl font-semibold tabular-nums text-stage-ink sm:text-3xl">
               {formatTimer(completion.totalEffectiveSeconds ?? 0)}
             </div>
+            {!partial ? (
+              <div data-testid="freestyle-round-today-time" className="mt-2 text-sm text-stage-ink">
+                本轮今日：{completion.today ? `${completion.today.unattributed_seconds > 0 ? '已知 ' : ''}${formatTimer(completion.today.known_seconds)}` : '等待日期核对'}
+                {completion.today ? <span className="ml-2 text-xs text-stage-muted">{completion.today.day}</span> : null}
+                {completion.today && completion.today.unattributed_seconds > 0 ? (
+                  <p className="mt-1 text-xs text-stage-muted">另有 {formatTimer(completion.today.unattributed_seconds)} 历史时长缺少日期，未分配到今天；已包含在累计中。</p>
+                ) : null}
+              </div>
+            ) : null}
             <div
               data-testid="freestyle-round-complete-quiz-time"
               className="mt-2 border-t border-rate-good/15 pt-2 text-sm text-stage-ink/90"
@@ -337,7 +372,7 @@ export function FreestyleRoundCompleteCard({
               {quizChoice === 'kept' ? (
                 <p className="mt-1 text-xs leading-5 text-stage-muted">已保留做题进度，之后仍可查看。</p>
               ) : quizChoice === 'cleared' ? (
-                <p className="mt-1 text-xs leading-5 text-stage-muted">已清除本次随心配置中所有宫殿的做题进度。</p>
+                <p className="mt-1 text-xs leading-5 text-stage-muted">已清除本轮涉及宫殿的做题已完成状态，学习历史和复习安排保持不变。</p>
               ) : (
                 <>
                   <p className="mt-1 text-xs leading-5 text-stage-muted">
@@ -367,9 +402,13 @@ export function FreestyleRoundCompleteCard({
                       onClick={() => {
                         setQuizClearError('')
                         setQuizChoice('clearing')
+                        const owner = clearOwnerRef.current
+                        const operation = ++owner.operation
+                        const stillCurrent = () => clearOwnerRef.current === owner && owner.operation === operation
                         void onClearQuizProgress()
-                          .then(() => setQuizChoice('cleared'))
+                          .then(() => { if (stillCurrent()) setQuizChoice('cleared') })
                           .catch((error: unknown) => {
+                            if (!stillCurrent()) return
                             setQuizChoice('pending')
                             setQuizClearError(error instanceof Error ? error.message : '清除做题进度失败。')
                           })
@@ -385,6 +424,25 @@ export function FreestyleRoundCompleteCard({
         ) : null}
 
         <Rise index={9}>
+          {!partial && onFinishStudy ? (
+            <button
+              type="button"
+              data-testid="freestyle-study-finish-confirm"
+              className="ma-pressable mt-3 w-full rounded-2xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+              disabled={!quizChoiceResolved}
+              onClick={onFinishStudy}
+            >
+              结束并保留本轮
+            </button>
+          ) : null}
+          {!partial && onAddDueToday ? (
+            <button type="button" className="ma-pressable mt-2 w-full rounded-2xl border border-stage-line-strong px-4 py-3 text-sm" onClick={onAddDueToday}>
+              加入今天到期内容，继续本轮
+            </button>
+          ) : null}
+          {!partial && !quizChoiceResolved && onFinishStudy ? (
+            <p className="mt-2 text-center text-xs text-stage-muted">结束前请选择保留或清除做题已完成状态。</p>
+          ) : null}
           {partial ? (
             <button
               type="button"
@@ -394,18 +452,19 @@ export function FreestyleRoundCompleteCard({
             >
               确认结算
             </button>
-          ) : (
+          ) : onAnotherRound ? (
             <button
               type="button"
               data-testid="freestyle-round-another"
               className="ma-pressable fs-cta-shine relative mt-2 flex w-full items-center justify-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-r from-primary to-primary-strong px-4 py-3 text-sm font-semibold text-primary-foreground shadow-glow hover:brightness-110"
+              disabled={!quizChoiceResolved}
               onClick={onAnotherRound}
             >
               <RotateCcw className="size-4" />
               配置下一轮
             </button>
-          )}
-          {!partial ? (
+          ) : null}
+          {!partial && onAnotherRound ? (
             <>
               <p className="mt-2 text-center text-xs leading-5 text-stage-muted">
                 将打开本轮配置；确认后才会开始新一轮。已完成单元的复习安排不会因本按钮重置。

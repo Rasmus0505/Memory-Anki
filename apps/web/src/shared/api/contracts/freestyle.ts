@@ -411,46 +411,14 @@ export interface FreestyleRoundPlanPayload {
   learning_time?: FreestyleRoundLearningTimePayload
 }
 
-export interface FreestyleRoundLearningTimePayload {
-  unit_seconds: number
-  quiz_seconds: number
-  lookup_seconds: number
-  backfilled?: boolean
-  by_palace?: Record<string, {
-    unit_seconds: number
-    quiz_seconds: number
-    lookup_seconds: number
-  }>
-}
-
-export interface FreestyleLearningTimeAdd {
-  bucket: 'unit' | 'quiz' | 'lookup'
-  seconds: number
-  palace_id?: number | null
-}
-
-export interface FreestyleLearningInterval {
-  interval_id: string
-  session_id: string
-  started_at: string
-  ended_at: string
-  bucket: 'unit' | 'quiz' | 'lookup'
-  palace_id?: number | null
-  client_source: 'desktop' | 'pwa' | 'unknown'
-}
-
-export interface FreestyleLearningTimeRequest {
-  operation_id: string
-  expected_version: number
-  intervals?: FreestyleLearningInterval[]
-  /** Historical clients without actual interval boundaries. */
-  adds?: FreestyleLearningTimeAdd[]
-}
-
-export interface FreestyleLearningTimeBackfillRequest {
-  operation_id: string
-  expected_version: number
-}
+export type {
+  FreestyleRoundLearningTimePayload,
+  FreestyleLearningTimeAdd,
+  FreestyleLearningInterval,
+  FreestyleLearningTimeRequest,
+  FreestyleLearningTimeBackfillRequest,
+} from './freestyleLearningTime'
+import type { FreestyleRoundLearningTimePayload } from './freestyleLearningTime'
 
 // The 做题 scope report types live in `freestyleOverlayScope.ts`: one owner, one
 // incident history, and this file's size budget.

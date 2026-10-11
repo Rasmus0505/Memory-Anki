@@ -33,7 +33,7 @@ export function skipRoundCelebration(roundKey: string) {
 }
 
 /** Fires the round-complete cue once per round; any later pointer or key skips the rest. */
-export function useRoundCompleteCelebration(roundKey: string, reducedMotion: boolean) {
+export function useRoundCompleteCelebration(roundKey: string, reducedMotion: boolean, enabled = true) {
   const firedFor = useRef<string | null>(null)
   const skippedRef = useRef(false)
   const owner = useFxOwner(`round:${roundKey}`)
@@ -53,7 +53,7 @@ export function useRoundCompleteCelebration(roundKey: string, reducedMotion: boo
   }, [roundKey])
 
   useEffect(() => {
-    if (firedFor.current === roundKey) return
+    if (!enabled || firedFor.current === roundKey) return
     // Deferred so a StrictMode effect replay still celebrates exactly once.
     const timer = window.setTimeout(() => {
       firedFor.current = roundKey
@@ -61,5 +61,5 @@ export function useRoundCompleteCelebration(roundKey: string, reducedMotion: boo
       cue('round.complete', { quiet: reducedMotion }, { owner })
     }, 0)
     return () => window.clearTimeout(timer)
-  }, [owner, reducedMotion, roundKey])
+  }, [enabled, owner, reducedMotion, roundKey])
 }

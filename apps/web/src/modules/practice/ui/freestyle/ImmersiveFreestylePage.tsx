@@ -28,6 +28,7 @@ import {
   buildFreestyleRoundCompletion,
   buildPartialSettlementSnapshot,
   foldPartialSettlementsIntoCompletion,
+  findUnscoredCompleteSeekIndices,
   freestyleCanPageNext,
   isFreestyleRoundComplete,
 } from '@/modules/practice/ui/freestyle/model/roundCompletion'
@@ -216,6 +217,8 @@ export default function ImmersiveFreestylePage({
   const autoAdvanceTimerRef = useRef<number | null>(null)
   const [planOpen, setPlanOpen] = useState(false)
   const [partialSettlement, setPartialSettlement] = useState<FreestylePartialSettlementSnapshot | null>(null)
+  // A visit can end without completing the round. Ratings/queue remain authoritative.
+  const [studySettlementRoundId, setStudySettlementRoundId] = useState<string | null>(null)
   const [configOpen, setConfigOpen] = useState(false)
   /** Settlement 「再来一轮」 opens config in nextRound mode; HUD uses replan. */
   const [configIntent, setConfigIntent] = useState<'replan' | 'nextRound'>('replan')
@@ -377,6 +380,10 @@ export default function ImmersiveFreestylePage({
     error,
   })
 
+  const unscoredCount = findUnscoredCompleteSeekIndices(cards, queueState.unitEncountersByCardId, queueState.completedIds, roundPlan, queueState.hiddenIds).length
+  const studySettlementOpen = studySettlementRoundId === queueState.roundId
+  const settlementVisible = viewingCompleteSlot || studySettlementOpen || partialSettlement != null
+
   const learningClock = useFreestyleRoundLearningClock({
     roundId: queueState.roundId,
     planVersion,
@@ -384,9 +391,9 @@ export default function ImmersiveFreestylePage({
     isActive,
     // Pause only while the settlement slot is on screen. 上一张 / 取消结算
     // leaves that slot; later card dwell and 做题 still accumulate.
-    viewingCard: !viewingCompleteSlot && currentCard != null,
+    viewingCard: !settlementVisible && currentCard != null,
     cardPalaceId: currentCard ? cardPalaceId(currentCard) : null,
-    publishLive: viewingCompleteSlot,
+    publishLive: settlementVisible,
   })
 
   useEffect(() => {
@@ -472,15 +479,16 @@ export default function ImmersiveFreestylePage({
   })
 
   useEffect(() => {
-    timer.setSceneActive(isActive, { source: isActive ? 'route_active' : 'route_inactive' })
-  }, [isActive, timer])
+    const studying = isActive && !settlementVisible
+    timer.setSceneActive(studying, { source: studying ? 'route_active' : 'route_inactive' })
+  }, [isActive, settlementVisible, timer])
 
   useEffect(() => {
-    if (!isActive) return
+    if (!isActive || settlementVisible) return
     if (timer.status !== 'idle') return
     if (!shouldAutoStartOnPageEnter(readTimerAutomationConfig())) return
     timer.start({ source: 'page_enter' })
-  }, [isActive, timer])
+  }, [isActive, settlementVisible, timer])
 
   // New round / reshuffle clears completed bookkeeping; reset local ack set too.
   // Intentionally omit completedIds: mid-round membership must not rebuild the ack set
@@ -800,6 +808,23 @@ export default function ImmersiveFreestylePage({
       toast.error('同步失败，请确认手机连的是这台电脑')
     })
   }, [syncDesktopProgress])
+  const settlementOwnerRef = useRef(queueState.roundId)
+  settlementOwnerRef.current = queueState.roundId
+  const finishStudy = () => {
+    // Leaving preserves the active round and its current position for next visit.
+    navigate(reviewPalaceId != null ? palaceReviewReturnPath(reviewReturnSubjectId) : '/dashboard')
+    setStudySettlementRoundId(null)
+  }
+  const continueWithDueToday = async () => {
+    const owner = queueState.roundId
+    const result = await updateReviewQueue()
+    if (settlementOwnerRef.current !== owner) return
+    if (result.status === 'error') throw new Error('更新今天到期内容失败。')
+    if (result.status !== 'ok') return
+    announceQueueUpdate(result.message)
+    setStudySettlementRoundId(null)
+    if (viewingCompleteSlot) navigateToIndex(currentIndex, { skipHistory: true })
+  }
   const openScopeQuiz = useCallback(() => setScopeQuizOpen(true), [])
   const removeCardFromQueue = useCallback(
     (cardId: string) => excludePlanCards([cardId]),
@@ -1024,7 +1049,7 @@ export default function ImmersiveFreestylePage({
                       recede. Keeps the 6px progress rail band on the dark shell for PWA. */}
                   <div className="fs-depth flex min-h-0 flex-1 flex-col pt-[calc(env(safe-area-inset-top,0px)+4.75rem)]">
                   <FreestyleRatingReaction
-                    active={isActive && index === currentIndex && index === visualIndex && !viewingCompleteSlot}
+                    active={isActive && index === currentIndex && index === visualIndex && !settlementVisible}
                   >
                     <div
                       className="relative flex min-h-0 flex-1 flex-col"
@@ -1032,7 +1057,7 @@ export default function ImmersiveFreestylePage({
                     >
                       {examStarsOf(card) === 3 ? (
                         <FreestyleKeyCardMotes
-                          active={isActive && index === currentIndex && index === visualIndex && !viewingCompleteSlot}
+                          active={isActive && index === currentIndex && index === visualIndex && !settlementVisible}
                         />
                       ) : null}
                       {examStarsOf(card) ? (
@@ -1044,7 +1069,7 @@ export default function ImmersiveFreestylePage({
                           card.unit_id && card.unit_revision != null ? (
                             <FreestyleUnitReviewCardView
                               card={card}
-                              active={isActive && index === currentIndex && index === visualIndex && !viewingCompleteSlot}
+                              active={isActive && index === currentIndex && index === visualIndex && !settlementVisible}
                               nearViewport={isActive && Math.abs(index - visualIndex) <= 1}
                               readOnly={readOnlyHistoryCardId === card.id}
                               roundId={queueState.roundId}
@@ -1095,7 +1120,7 @@ export default function ImmersiveFreestylePage({
                       ) : isQuizCard(card) ? (
                         <FreestyleQuizCardView
                           card={card}
-                          active={isActive && index === currentIndex && index === visualIndex && !viewingCompleteSlot}
+                          active={isActive && index === currentIndex && index === visualIndex && !settlementVisible}
                           state={progress.questionStates[card.question.id]}
                           answeredBefore={answeredQuestionIds.has(card.question.id)}
                           onStateChange={(updater) => updateQuestionState(card.question.id, updater)}
@@ -1112,7 +1137,7 @@ export default function ImmersiveFreestylePage({
                       ) : isReviewHintCard(card) ? (
                         <FreestyleReviewHintCardView
                           card={card}
-                          active={isActive && index === currentIndex && index === visualIndex && !viewingCompleteSlot}
+                          active={isActive && index === currentIndex && index === visualIndex && !settlementVisible}
                           onAdvance={() => {
                             navigateToIndex(index + 1)
                           }}
@@ -1176,6 +1201,7 @@ export default function ImmersiveFreestylePage({
               >
               <FreestyleRoundCompleteCard
                 completion={roundCompletion}
+                unscoredCount={unscoredCount}
                 roundKey={queueState.roundId}
                 quizPalaceCount={overlayRoundReviewPalaceIds(roundPlan).length}
                 onClearQuizProgress={clearConfiguredOverlayQuiz}
@@ -1184,6 +1210,8 @@ export default function ImmersiveFreestylePage({
                   setConfigOpen(true)
                 }}
                 onCancelSettlement={navigatePrevious}
+                onFinishStudy={finishStudy}
+                onAddDueToday={() => { void continueWithDueToday().catch((error: unknown) => toast.error(error instanceof Error ? error.message : '更新今天到期内容失败。')) }}
                 partialSettlements={roundPlan?.partialSettlements}
                 examSummary={
                   <>
@@ -1196,9 +1224,34 @@ export default function ImmersiveFreestylePage({
             </div>
           ) : null}
         </div>
+        {studySettlementOpen ? (
+          <div
+            role="dialog"
+            aria-label="结束本次学习"
+            aria-modal="true"
+            data-keyboard-shortcuts-suspended="true"
+            data-testid="freestyle-study-settlement"
+            className="absolute inset-0 z-[70] overflow-y-auto overscroll-contain bg-stage/95 px-3 pt-[max(0.75rem,env(safe-area-inset-top,0px))] backdrop-blur-sm"
+          >
+            <FreestyleRoundCompleteCard
+              key={`${queueState.roundId}:study`}
+              variant="study"
+              completion={roundCompletion}
+              unscoredCount={unscoredCount}
+              roundKey={`${queueState.roundId}:study`}
+              quizPalaceCount={overlayRoundReviewPalaceIds(roundPlan).length}
+              onClearQuizProgress={clearConfiguredOverlayQuiz}
+              onCancelSettlement={() => setStudySettlementRoundId(null)}
+              onFinishStudy={finishStudy}
+              onAddDueToday={() => { void continueWithDueToday().catch((error: unknown) => toast.error(error instanceof Error ? error.message : '更新今天到期内容失败。')) }}
+              partialSettlements={roundPlan?.partialSettlements}
+            />
+          </div>
+        ) : null}
         {partialSettlement ? (
           <div
             data-testid="freestyle-partial-settlement"
+            data-keyboard-shortcuts-suspended="true"
             className="absolute inset-0 z-[70] flex flex-col bg-stage/95 backdrop-blur-sm"
           >
             <div className="flex shrink-0 items-center justify-end px-3 pt-[max(0.75rem,env(safe-area-inset-top,0px))]">
@@ -1249,7 +1302,17 @@ export default function ImmersiveFreestylePage({
         ) : null}
 
         {/* Card paging stays on this pager so the review map can keep one-finger pan. */}
-        {!inlineEditing ? (
+        {!inlineEditing && !settlementVisible && !loading && !error && roundPlan != null ? (
+          <button
+            type="button"
+            data-testid="freestyle-finish-study"
+            className="ma-pressable absolute bottom-24 right-3 z-30 rounded-xl border border-stage-line-strong bg-stage-raised px-3 py-2 text-sm text-stage-ink"
+            onClick={() => { cancelAutoAdvance(); setStudySettlementRoundId(queueState.roundId) }}
+          >
+            结束本次学习
+          </button>
+        ) : null}
+        {!inlineEditing && !studySettlementOpen && !partialSettlement ? (
         <FreestyleFeedPager
           canGoPrevious={
             viewingCompleteSlot

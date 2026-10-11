@@ -41,8 +41,13 @@ for (const viewport of viewports) {
         }),
       })
     })
-    // The component must retain the disabled rating bar before this request settles.
+    // Input remains available while the glance opens, but no score is recorded yet.
     await page.route('**/api/v1/review/units/e2e-mobile/sessions', () => new Promise(() => undefined))
+    let ratingPosts = 0
+    await page.route('**/api/v1/freestyle/rounds/*/ratings', async (route) => {
+      ratingPosts += 1
+      await route.fulfill({ status: 500, body: 'Unexpected score before session readiness' })
+    })
 
     await page.goto('/freestyle')
 
@@ -51,7 +56,7 @@ for (const viewport of viewports) {
     for (const rating of [1, 2, 3, 4]) {
       const button = page.getByTestId(`freestyle-rating-button-${rating}`)
       await expect(button).toBeVisible()
-      await expect(button).toBeDisabled()
+      await expect(button).toBeEnabled()
     }
     const remove = page.getByTestId('freestyle-rating-button-remove')
     await expect(remove).toBeVisible()
@@ -63,5 +68,13 @@ for (const viewport of viewports) {
     expect(nextButtonBox).not.toBeNull()
     expect((barBox?.y ?? 0) + (barBox?.height ?? 0)).toBeLessThanOrEqual(viewport.height)
     expect((nextButtonBox?.y ?? viewport.height) + (nextButtonBox?.height ?? 0)).toBeLessThanOrEqual(barBox?.y ?? 0)
+
+    const remember = page.getByTestId('freestyle-rating-button-3')
+    await remember.click()
+    await expect(remember).toHaveAttribute('aria-pressed', 'true')
+    await expect(ratingBar).toBeVisible()
+    await expect(page.getByTestId('freestyle-round-complete')).not.toBeVisible()
+    await expect(page.getByText(/今日到期已清/)).not.toBeVisible()
+    expect(ratingPosts).toBe(0)
   })
 }

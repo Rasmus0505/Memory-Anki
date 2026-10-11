@@ -1,3 +1,13 @@
+import type { FreestyleLearningInterval } from '@/shared/api/contracts'
+
+export interface FreestyleLearningDay {
+  day: string
+  started_at: string
+  ended_at: string
+  known_seconds: number
+  unattributed_seconds: number
+}
+
 export type FreestyleLearningBucket = 'unit' | 'quiz' | 'lookup'
 
 export interface FreestylePalaceLearningSeconds {
@@ -11,6 +21,8 @@ export interface FreestyleRoundLearningTime {
   quizSeconds: number
   lookupSeconds: number
   backfilled: boolean
+  intervals?: FreestyleLearningInterval[]
+  today?: FreestyleLearningDay
   byPalace: Record<string, FreestylePalaceLearningSeconds>
 }
 
@@ -41,6 +53,28 @@ export function emptyFreestyleLearningTime(): FreestyleRoundLearningTime {
   }
 }
 
+function isLearningInterval(raw: unknown): raw is FreestyleLearningInterval {
+  if (!raw || typeof raw !== 'object') return false
+  const item = raw as Partial<FreestyleLearningInterval>
+  const start = Date.parse(item.started_at ?? '')
+  const end = Date.parse(item.ended_at ?? '')
+  return typeof item.interval_id === 'string' && item.interval_id.length > 0
+    && typeof item.session_id === 'string' && ['unit', 'quiz', 'lookup'].includes(item.bucket ?? '')
+    && ['desktop', 'pwa', 'unknown'].includes(item.client_source ?? '')
+    && Number.isFinite(start) && Number.isFinite(end) && end > start
+}
+
+function isLearningDay(raw: unknown): raw is FreestyleLearningDay {
+  if (!raw || typeof raw !== 'object') return false
+  const day = raw as Partial<FreestyleLearningDay>
+  const start = Date.parse(day.started_at ?? '')
+  const end = Date.parse(day.ended_at ?? '')
+  return typeof day.day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(day.day)
+    && Number.isFinite(start) && Number.isFinite(end) && end > start
+    && typeof day.known_seconds === 'number' && Number.isFinite(day.known_seconds) && day.known_seconds >= 0
+    && typeof day.unattributed_seconds === 'number' && Number.isFinite(day.unattributed_seconds) && day.unattributed_seconds >= 0
+}
+
 export function parseFreestyleLearningTime(raw: unknown): FreestyleRoundLearningTime {
   const source = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {}
   const byPalace: Record<string, FreestylePalaceLearningSeconds> = {}
@@ -66,7 +100,40 @@ export function parseFreestyleLearningTime(raw: unknown): FreestyleRoundLearning
     lookupSeconds: nonneg(source.lookup_seconds ?? source.lookupSeconds),
     backfilled: Boolean(source.backfilled),
     byPalace,
+    ...(Array.isArray(source.intervals) ? { intervals: source.intervals.filter(isLearningInterval) } : {}),
+    ...(isLearningDay(source.today) ? { today: source.today } : {}),
   }
+}
+
+/** Project pending facts against the server's exact calendar window, never the browser timezone. */
+export function projectFreestyleLearningDay(
+  baseline: FreestyleRoundLearningTime,
+  pending: FreestyleLearningInterval[],
+  legacySeconds = 0,
+  now = Date.now(),
+): FreestyleLearningDay | undefined {
+  const day = baseline.today
+  if (!day || now < Date.parse(day.started_at) || now >= Date.parse(day.ended_at)) return undefined
+  const spans: [number, number][] = (baseline.intervals ?? []).map((item) => [Date.parse(item.started_at), Date.parse(item.ended_at)])
+  const ids = new Set((baseline.intervals ?? []).map((item) => item.interval_id))
+  let extra = 0
+  for (const item of pending) {
+    if (ids.has(item.interval_id)) continue
+    ids.add(item.interval_id)
+    const start = Math.max(Date.parse(item.started_at), Date.parse(day.started_at))
+    const end = Math.min(Date.parse(item.ended_at), Date.parse(day.ended_at))
+    if (end <= start) continue
+    let fragments: [number, number][] = [[start, end]]
+    for (const [left, right] of spans) {
+      fragments = fragments.flatMap(([a, b]): [number, number][] => {
+        if (right <= a || left >= b) return [[a, b]]
+        return [...(a < left ? [[a, left] as [number, number]] : []), ...(b > right ? [[right, b] as [number, number]] : [])]
+      })
+    }
+    extra += fragments.reduce((sum, [a, b]) => sum + Math.floor((b - a) / 1000), 0)
+    spans.push([start, end])
+  }
+  return { ...day, known_seconds: day.known_seconds + extra, unattributed_seconds: day.unattributed_seconds + legacySeconds }
 }
 
 export function addFreestyleLearningSeconds(

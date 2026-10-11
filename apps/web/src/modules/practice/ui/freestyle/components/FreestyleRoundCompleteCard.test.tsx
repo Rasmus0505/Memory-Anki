@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { FreestyleRoundCompletion } from '@/modules/practice/ui/freestyle/model/roundCompletion'
 import { FreestyleRoundCompleteCard } from './FreestyleRoundCompleteCard'
@@ -23,6 +23,15 @@ const completion: FreestyleRoundCompletion = {
 }
 
 describe('FreestyleRoundCompleteCard', () => {
+  it('separates calendar-day time from cumulative time and labels undated history', () => {
+    render(<FreestyleRoundCompleteCard completion={{ ...completion, today: { day: '2025-01-02', started_at: '2025-01-01T16:00:00Z', ended_at: '2025-01-02T16:00:00Z', known_seconds: 60, unattributed_seconds: 20 } }} roundKey="daily" quizPalaceCount={0} onClearQuizProgress={vi.fn()} onCancelSettlement={vi.fn()} />)
+    expect(screen.getByText('本轮累计')).toBeTruthy()
+    const day = screen.getByTestId('freestyle-round-today-time')
+    expect(day.textContent).toContain('本轮今日：已知')
+    expect(day.textContent).toContain('2025-01-02')
+    expect(day.textContent).toContain('历史时长缺少日期，未分配到今天')
+  })
+
   it('skips the round show without leaving the settlement', () => {
     const onAnotherRound = vi.fn()
     const onCancelSettlement = vi.fn()
@@ -56,6 +65,65 @@ describe('FreestyleRoundCompleteCard', () => {
     expect(onCancelSettlement).toHaveBeenCalledOnce()
   })
 
+  it('allows finishing with unrated or weak work without declaring it passed', () => {
+    const finish = vi.fn()
+    const resume = vi.fn()
+    render(<FreestyleRoundCompleteCard variant="study" unscoredCount={3} completion={{ ...completion, ratedCount: 1, passedCount: 0 }} roundKey="unfinished" quizPalaceCount={2} onClearQuizProgress={vi.fn()} onCancelSettlement={resume} onFinishStudy={finish} />)
+    expect(screen.getByText('结束本次学习')).toBeTruthy()
+    expect(screen.getByTestId('freestyle-study-pending-counts').textContent).toContain('待评分 3 次（含重练） · 已评分未通过 1 个学习内容')
+    expect(screen.getByTestId('freestyle-study-resume-note').textContent).toContain('未评分和未通过的内容会保留在同一轮')
+    const confirm = screen.getByRole('button', { name: '结束并保留本轮' }) as HTMLButtonElement
+    expect(confirm.disabled).toBe(true)
+    fireEvent.click(confirm)
+    expect(finish).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '保留' }))
+    expect(confirm.disabled).toBe(false)
+    fireEvent.click(confirm)
+    expect(finish).toHaveBeenCalledOnce()
+    fireEvent.click(screen.getByRole('button', { name: '继续本轮学习' }))
+    expect(resume).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('button', { name: '配置下一轮' })).toBeNull()
+  })
+
+  it('does not finish while clear is pending or failed', async () => {
+    const clear = vi.fn().mockRejectedValueOnce(new Error('clear failed')).mockResolvedValueOnce(undefined)
+    const finish = vi.fn()
+    render(<FreestyleRoundCompleteCard variant="study" completion={completion} roundKey="clear" quizPalaceCount={3} onClearQuizProgress={clear} onCancelSettlement={vi.fn()} onFinishStudy={finish} />)
+    const confirm = screen.getByRole('button', { name: '结束并保留本轮' }) as HTMLButtonElement
+    fireEvent.click(screen.getByRole('button', { name: '清除' }))
+    expect(confirm.disabled).toBe(true)
+    await waitFor(() => expect(screen.getByText('clear failed')).toBeTruthy())
+    expect(confirm.disabled).toBe(true)
+    expect(finish).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '清除' }))
+    await waitFor(() => expect(confirm.disabled).toBe(false))
+    expect(screen.getByText(/已清除本轮涉及宫殿/)).toBeTruthy()
+  })
+
+  it('ignores a clear response owned by an older round', async () => {
+    let resolve!: () => void
+    const clear = vi.fn(() => new Promise<void>((done) => { resolve = done }))
+    const props = { completion, quizPalaceCount: 1, onClearQuizProgress: clear, onFinishStudy: vi.fn(), onAnotherRound: vi.fn(), onCancelSettlement: vi.fn() }
+    const { rerender } = render(<FreestyleRoundCompleteCard {...props} roundKey="old" />)
+    fireEvent.click(screen.getByRole('button', { name: '清除' }))
+    rerender(<FreestyleRoundCompleteCard {...props} roundKey="new" />)
+    await act(async () => resolve())
+    expect((screen.getByRole('button', { name: '结束并保留本轮' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: '配置下一轮' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: '返回上一张' }) as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: '保留' }))
+    expect((screen.getByRole('button', { name: '配置下一轮' }) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('offers adding due work separately from finishing or starting a new round', () => {
+    const add = vi.fn()
+    const finish = vi.fn()
+    render(<FreestyleRoundCompleteCard variant="study" completion={completion} roundKey="due" quizPalaceCount={0} onClearQuizProgress={vi.fn()} onCancelSettlement={vi.fn()} onFinishStudy={finish} onAddDueToday={add} />)
+    fireEvent.click(screen.getByRole('button', { name: '加入今天到期内容，继续本轮' }))
+    expect(add).toHaveBeenCalledOnce()
+    expect(finish).not.toHaveBeenCalled()
+  })
+
   it('lets a partial settlement grow so 取消结算 stays in the document', () => {
     const onCancelSettlement = vi.fn()
     render(
@@ -70,6 +138,8 @@ describe('FreestyleRoundCompleteCard', () => {
       />,
     )
 
+    expect(screen.queryByTestId('freestyle-round-quiz-clear')).toBeNull()
+    expect(screen.queryByTestId('freestyle-study-finish-confirm')).toBeNull()
     const card = screen.getByTestId('freestyle-partial-settlement-card')
     expect(card.className).toContain('h-auto')
     expect(card.className).toContain('shrink-0')

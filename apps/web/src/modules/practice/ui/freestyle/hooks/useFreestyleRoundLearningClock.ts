@@ -4,6 +4,7 @@ import {
   classifyFreestyleLearningSurface,
   emptyFreestyleLearningTime,
   parseFreestyleLearningTime,
+  projectFreestyleLearningDay,
   type FreestyleLearningBucket,
   type FreestyleRoundLearningTime,
 } from '@/modules/practice/domain/freestyleLearningTime'
@@ -242,6 +243,12 @@ export function useFreestyleRoundLearningClock(input: {
       if (open && open.seconds > 0) {
         time = addFreestyleLearningSeconds(time, open.bucket, open.seconds, open.palaceId)
       }
+      const live = closeInterval(open, roundId)
+      time.today = projectFreestyleLearningDay(
+        outbox.baseline,
+        [...outbox.pendingIntervals, ...(outbox.inflight?.intervals ?? []), ...(live ? [live] : [])],
+        [...outbox.legacyAdds, ...(outbox.inflight?.adds ?? [])].reduce((sum, item) => sum + item.seconds, 0),
+      )
       return time
     }
     const publish = () => {
@@ -338,10 +345,19 @@ export function useFreestyleRoundLearningClock(input: {
       }
     }
 
+    let refreshingDay = false
+    let nextDayRefreshAt = 0
     void runBackfill()
     const tickTimer = window.setInterval(() => {
       if (!canTickRef.current) return
       const now = Date.now()
+      const dayEnd = outbox.baseline.today?.ended_at
+      if (dayEnd && now >= Date.parse(dayEnd) && !refreshingDay && now >= nextDayRefreshAt) {
+        nextDayRefreshAt = now + RETRY_MS
+        refreshingDay = true
+        void runBackfill().finally(() => { refreshingDay = false })
+      }
+      if (publishLiveRef.current) publish()
       const bucket = isStudyClockCounting(now) ? surfaceRef.current : null
       if (!bucket) {
         sealOpen()

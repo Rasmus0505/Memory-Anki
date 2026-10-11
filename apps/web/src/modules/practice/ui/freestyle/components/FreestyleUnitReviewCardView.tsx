@@ -146,9 +146,9 @@ export function FreestyleUnitReviewCardView({
   /** Why 「下一组」 is blocked, shown inline instead of a toast. */
   blockedHint?: string | null
   /**
-   * Fired when the learner rates, before the server answers, so the channel and
-   * the next card do not wait on the network. A failed post keeps the score and
-   * asks for one more tap; it must not reload the card.
+   * Fired only after the latest rating is acknowledged by the server. Immediate
+   * button selection is local intent, never completion or permission to advance.
+   * A failed post retains that unsaved intent without reloading the card.
    */
   onRatingSettled?: (
     cardId: string,
@@ -752,39 +752,6 @@ export function FreestyleUnitReviewCardView({
     }
   }
 
-  function paintOptimistic(rating: UnitRating, encounterId: string, notifyParent = true) {
-    const currentSession = sessionRef.current
-    const currentUnit = unitRef.current
-    const currentEncounter = currentUnit?.encounter
-    if (!currentSession || !currentUnit || !currentEncounter) return
-    const effect = currentEncounter.rating_effects.find((item) => item.rating === rating)
-    const passed = ratingPassed(rating)
-    const gap = effect?.retry_after_cards ?? (passed ? 0 : retryAfterCards)
-    const nextEncounter = {
-      ...currentEncounter,
-      selected_rating: rating,
-      passed,
-      retry_after_cards: gap,
-    }
-    const nextUnit: ReviewUnitDto = { ...currentUnit, final_rating: rating, encounter: nextEncounter }
-    const nextSession = updateSessionUnit(currentSession, nextUnit)
-    optimisticRatingRef.current = rating
-    sessionRef.current = nextSession
-    unitRef.current = nextUnit
-    if (mountedRef.current) setSession(nextSession)
-    const bridge = rateBridgeRef.current
-    const cardId = cardRef.current.id
-    bridge.onEncounterChange(cardId, encounterState(currentSession.id, nextUnit.revision, nextEncounter))
-    bridge.onRatingSettled?.(cardId, passed, rating, {
-      occurrenceId: cardRef.current.occurrence_kind === 'retry' ? cardId : cardId,
-      encounterId,
-      planVersion: planVersionRef.current,
-    })
-    if (!notifyParent) return
-    bridge.onBranchComplete(cardId, { restudy: !passed, rating, retryAfterCards: gap })
-    bridge.signalRating(rating, passed)
-  }
-
   function paintCleared() {
     optimisticRatingRef.current = null
     saveFailedRef.current = false
@@ -928,15 +895,6 @@ export function FreestyleUnitReviewCardView({
     sessionRef.current = nextSession
     unitRef.current = nextUnit
     if (mountedRef.current) setSession(nextSession)
-    if (newerIntent) {
-      // A slower reply must not paint over the grade they tapped afterwards.
-      paintOptimistic(optimisticRatingRef.current, nextEncounter.id, false)
-      return
-    }
-    const settledRating = asUnitRating(nextEncounter.selected_rating)
-    optimisticRatingRef.current = settledRating
-    saveFailedRef.current = false
-    if (mountedRef.current) setIntentRating(settledRating)
     rememberOperation(unitResult.operation_id)
     rateBridgeRef.current.onEncounterChange(
       ticket.cardId,
@@ -953,14 +911,20 @@ export function FreestyleUnitReviewCardView({
         retryAfterCards: unitResult.retry_after_cards,
       })
     }
+    // A newer tap can still be waiting in the serialized commit chain rather
+    // than the mailbox. Keep this acknowledgement, but never overwrite that tap
+    // or emit its advance callback before the newer request is saved.
+    if (newerIntent) return
+    const settledRating = asUnitRating(nextEncounter.selected_rating)
+    optimisticRatingRef.current = settledRating
+    saveFailedRef.current = false
+    if (mountedRef.current) setIntentRating(settledRating)
     if (mountedRef.current) revealUndo()
-    if (unitResult.rating !== ticket.rating || unitResult.passed !== ratingPassed(ticket.rating)) {
-      rateBridgeRef.current.onRatingSettled?.(ticket.cardId, unitResult.passed, unitResult.rating, {
-        occurrenceId: ticket.occurrenceId || ticket.cardId,
-        encounterId: ticket.encounterId,
-        planVersion: nextPlanVersion,
-      })
-    }
+    rateBridgeRef.current.onRatingSettled?.(ticket.cardId, unitResult.passed, unitResult.rating, {
+      occurrenceId: ticket.occurrenceId || ticket.cardId,
+      encounterId: ticket.encounterId,
+      planVersion: nextPlanVersion,
+    })
   }
 
   function confirmedSession(
@@ -1003,9 +967,30 @@ export function FreestyleUnitReviewCardView({
         }
         return
       }
-      if (follow.send && posted?.unitResult) {
+      if (posted?.unitResult && !current) {
         const confirmed = confirmedSession(posted.unitResult, ticket)
-        if (confirmed) baselinesRef.current.set(follow.send.generation, confirmed)
+        const confirmedUnit = confirmed?.units.find((item) => item.id === ticket.unitId)
+        if (confirmed && confirmedUnit?.encounter) {
+          // Preserve every acknowledgement as the saved baseline while a newer
+          // selection remains local intent. Its eventual failure must not erase
+          // the earlier successful save or turn it into the unsaved newer grade.
+          sessionRef.current = confirmed
+          unitRef.current = confirmedUnit
+          if (mountedRef.current) setSession(confirmed)
+          rememberOperation(posted.unitResult.operation_id)
+          rateBridgeRef.current.onEncounterChange(
+            ticket.cardId,
+            encounterState(confirmed.id, confirmedUnit.revision, confirmedUnit.encounter),
+          )
+          rateBridgeRef.current.onBranchComplete(ticket.cardId, {
+            restudy: !posted.unitResult.passed,
+            rating: posted.unitResult.rating,
+            retryAfterCards: posted.unitResult.retry_after_cards,
+          })
+          if (follow.send) baselinesRef.current.set(follow.send.generation, confirmed)
+        }
+      }
+      if (follow.send && posted?.unitResult) {
         const revision = posted.unitResult.unit?.revision
         if (typeof revision === 'number') follow.send.unitRevision = revision
       }
@@ -1086,20 +1071,9 @@ export function FreestyleUnitReviewCardView({
       setIntentRating(rating)
       setActionError(null)
     }
-    const passed = ratingPassed(rating)
-    const cardId = cardRef.current.id
-    const knownEncounterId = unitRef.current?.encounter?.id
-    rateBridgeRef.current.onBranchComplete(cardId, {
-      restudy: !passed,
-      rating,
-      retryAfterCards: passed ? 0 : retryAfterCards,
-    })
-    rateBridgeRef.current.onRatingSettled?.(cardId, passed, rating, {
-      occurrenceId: cardRef.current.occurrence_kind === 'retry' ? cardId : cardId,
-      ...(knownEncounterId ? { encounterId: knownEncounterId } : {}),
-      planVersion: planVersionRef.current,
-    })
-    rateBridgeRef.current.signalRating(rating, passed)
+    // A tap is local intent, not a recorded practice result. Only the successful
+    // response can update round counts, retry planning, or palace completion.
+    rateBridgeRef.current.signalRating(rating, ratingPassed(rating))
   }
 
   async function ensureAndDispatch(rating: UnitRating) {
@@ -1138,7 +1112,6 @@ export function FreestyleUnitReviewCardView({
       unitRevision: currentUnit.revision,
     })
     mailboxRef.current = decision.box
-    paintOptimistic(rating, currentEncounter.id, false)
     if (decision.sendNow) await dispatchRating(decision.ticket)
   }
 
@@ -1175,6 +1148,7 @@ export function FreestyleUnitReviewCardView({
       return
     }
     const currentEncounter = unitRef.current?.encounter ?? null
+    if (currentEncounter?.rating_editable === false) return
     const liveSelected = optimisticRatingRef.current ?? ratingOnThisAppearance(currentEncounter)
     if (liveSelected === rating && !saveFailedRef.current) {
       await undoRating({ clearAll: true })
@@ -1214,6 +1188,7 @@ export function FreestyleUnitReviewCardView({
       setActionError('历史记录为只读，不能撤销评分。')
       return
     }
+    if (unitRef.current?.encounter?.rating_editable === false) return
     // The grade is still on the wire. Drop it locally now; the reply undoes
     // itself once the server returns an operation id.
     if (mailboxRef.current.inflight) {
@@ -1327,8 +1302,9 @@ export function FreestyleUnitReviewCardView({
   const recordedRating = appearanceRating != null || previousClosed
     ? null
     : asUnitRating(lastRating) ?? (encounter?.status === 'closed' ? null : asUnitRating(encounter?.selectedRating))
-  const canRateWithoutPlan = !readOnly && !recapOnly && Boolean(card.unit_id)
-  const locked = readOnly
+  const superseded = currentEncounter?.rating_editable === false
+  const canRateWithoutPlan = !readOnly && !superseded && !recapOnly && Boolean(card.unit_id)
+  const locked = readOnly || superseded
   const titleText = stripMindMapHtml(
     unit?.title || card.palace_title || `宫殿 ${card.palace_id}`,
   )
@@ -1464,7 +1440,7 @@ export function FreestyleUnitReviewCardView({
             canRateWithoutPlan={canRateWithoutPlan}
             actionError={actionError}
             blockedHint={blockedHint}
-            disabledReason={null}
+            disabledReason={superseded ? '已有后续练习，这次评分仅供回看；请到最近一次练习修改。' : null}
             assistantCopy={loadError}
             shortcutsActive={active && !inlineEditing}
             onRate={(rating) => void rate(rating)}

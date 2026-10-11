@@ -40,18 +40,19 @@ function loadSession(
   const cached = inFlightSessionLoads.get(key)
   if (cached) return cached
   const promise = encounter.status === 'closed' && encounter.sessionId
-    ? getUnitReviewSessionApi(encounter.sessionId)
+    ? getUnitReviewSessionApi(encounter.sessionId, encounter.encounterId)
     : startFreestyleUnitReviewSessionApi(
         { id: card.unit_id!, revision: card.unit_revision! },
         roundId,
         encounter.encounterId,
-        ...(
-          card.phase === 'fill'
-          || encounter.selectedRating != null
-          || encounter.passed === true
-            ? [{ allowNotDue: true }]
-            : []
-        ),
+        {
+          allowNotDue: card.phase === 'fill'
+            || encounter.selectedRating != null
+            || encounter.passed === true,
+          cardId: card.id,
+          occurrenceId: card.occurrence_kind === 'retry' ? card.id : '',
+          retryAttempt: card.retry_attempt ?? 0,
+        },
       )
   inFlightSessionLoads.set(key, promise)
   const clear = () => {

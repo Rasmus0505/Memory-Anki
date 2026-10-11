@@ -47,9 +47,24 @@ describe('ImmersiveFreestylePage layout', () => {
 
   it('cancels settlement by leaving the slot so later dwell still counts', () => {
     expect(source).toContain('onCancelSettlement={navigatePrevious}')
-    expect(source).toContain('viewingCard: !viewingCompleteSlot && currentCard != null')
+    expect(source).toContain('viewingCard: !settlementVisible && currentCard != null')
+    expect(source).toContain('viewingCompleteSlot || studySettlementOpen || partialSettlement != null')
+    expect(source).toContain('publishLive: settlementVisible')
     expect(source).not.toContain('viewingCard: !roundComplete')
     expect(source).toContain('取消结算，返回上一张')
+  })
+
+  it('ends a visit independently of queue completion and reuses the existing round', () => {
+    expect(source).toContain('data-testid="freestyle-finish-study"')
+    expect(source).toContain('data-testid="freestyle-study-settlement"')
+    expect(source).toContain('variant="study"')
+    expect(source).toContain('onFinishStudy={finishStudy}')
+    expect(source).toContain('data-keyboard-shortcuts-suspended="true"')
+    const finish = source.slice(source.indexOf('const finishStudy ='), source.indexOf('const continueWithDueToday ='))
+    expect(finish).toContain('navigate(')
+    expect(finish).not.toContain('completeCard')
+    expect(finish).not.toContain('startNextRound')
+    expect(source).toContain('const result = await updateReviewQueue()')
   })
 
   it('wires settlement 再来一轮 through nextRound config then startNextRound', () => {

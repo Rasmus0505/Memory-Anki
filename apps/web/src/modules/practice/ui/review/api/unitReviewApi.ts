@@ -35,6 +35,8 @@ export interface UnitReviewEncounterDto {
   effective_seconds?: number | null
   closed_at: string | null
   rating_effects: UnitRatingEffectDto[]
+  /** False after another real practice attempt supersedes this one. */
+  rating_editable?: boolean
 }
 
 export interface ReviewUnitDto {
@@ -364,7 +366,13 @@ export async function startFreestyleUnitReviewSessionApi(
   unit: Pick<ReviewUnitDto, 'id' | 'revision'>,
   roundId: string,
   encounterId: string,
-  options?: { allowNotDue?: boolean; onBusyRetry?: (attempt: number) => void },
+  options?: {
+    allowNotDue?: boolean
+    cardId?: string
+    occurrenceId?: string
+    retryAttempt?: number
+    onBusyRetry?: (attempt: number) => void
+  },
 ) {
   // Opening the encounter is idempotent server-side: the same encounter_id
   // returns the existing open encounter instead of stacking a second one. That
@@ -384,6 +392,9 @@ export async function startFreestyleUnitReviewSessionApi(
     encounter_id: encounterId,
     clientSource: detectClientSource(),
     allow_not_due: Boolean(options?.allowNotDue),
+    card_id: options?.cardId,
+    occurrence_id: options?.occurrenceId,
+    retry_attempt: options?.retryAttempt,
   })
   const response = await retryWhileBusy(
     (headers) => request<{ item: UnitReviewSessionDto }>(`/review/units/${unit.id}/sessions`, {
@@ -421,8 +432,9 @@ export async function openUnitReviewEncounterApi(
   return response.item
 }
 
-export async function getUnitReviewSessionApi(id: string) {
-  const response = await request<{ item: UnitReviewSessionDto }>(`/review/session/${id}`)
+export async function getUnitReviewSessionApi(id: string, encounterId?: string) {
+  const query = encounterId ? `?encounter_id=${encodeURIComponent(encounterId)}` : ''
+  const response = await request<{ item: UnitReviewSessionDto }>(`/review/session/${id}${query}`)
   return response.item
 }
 

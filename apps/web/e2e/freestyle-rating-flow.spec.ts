@@ -277,7 +277,7 @@ test('paints a grade immediately, queues the next tap, then opens a skippable ro
   await expect(page.getByTestId('freestyle-round-config-dialog')).toBeVisible()
 })
 
-test('rolls the grade back when the rating request fails', async ({ page }) => {
+test('retains an unsaved selection without claiming completion, then retries the score', async ({ page }) => {
   await installCardRoutes(page)
   const { held } = holdRatings(page)
   await page.goto('/freestyle')
@@ -288,9 +288,23 @@ test('rolls the grade back when the rating request fails', async ({ page }) => {
   await expect(remember).toHaveAttribute('aria-pressed', 'true')
   await expect.poll(() => held.length).toBe(1)
 
+  const settlement = page.getByTestId('freestyle-round-complete')
+  await expect(settlement).not.toBeVisible()
   held[0].release(400)
-  await expect(remember).toHaveAttribute('aria-pressed', 'false')
+  await expect(page.getByRole('alert').filter({ hasText: '评分没有记下，请再点一次。' })).toBeVisible()
+  await expect(remember).toHaveAttribute('aria-pressed', 'true')
   await expect(remember).toBeEnabled()
-  await expect(page.getByRole('alert').filter({ hasText: 'network down' })).toBeVisible()
-  await expect(page.getByRole('button', { name: '下一张' })).toBeDisabled()
+  await expect(settlement).not.toBeVisible()
+  await expect(page.getByText(/今日到期已清/)).not.toBeVisible()
+
+  // Retapping is a save retry, not undo, and must await a successful response.
+  await remember.evaluate((button: HTMLButtonElement) => button.click())
+  await expect.poll(() => held.length).toBe(2)
+  expect(held[1].body.rating).toBe(3)
+  await expect(settlement).not.toBeVisible()
+  held[1].release()
+  const next = page.getByRole('button', { name: '下一张' })
+  await expect(next).toBeEnabled()
+  await next.evaluate((button: HTMLButtonElement) => button.click())
+  await expect(settlement.getByText('本轮总结')).toBeVisible()
 })

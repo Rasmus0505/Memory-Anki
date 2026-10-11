@@ -11,6 +11,7 @@ import {
   type FreestyleRoundPlanState,
   type FreestyleUnitEncounterState,
 } from '@/modules/practice/public'
+import { isOccurrencePassed, isOccurrenceScored } from '@/modules/practice/domain/unitProgressState'
 import type { FreestylePartialSettlementSnapshot } from '@/modules/practice/domain/partialSettlement'
 import type { FreestyleCard } from '@/shared/api/contracts'
 import { isReviewHintId } from '@/shared/api/contracts'
@@ -50,6 +51,7 @@ export interface FreestyleRoundCompletion {
   totalEffectiveSeconds: number
   /** Quiz-overlay seconds only. Absent on older callers; settlement treats that as 0. */
   quizSeconds?: number
+  today?: FreestyleRoundLearningTime['today']
   /** Attempted sources grouped by subject → palace for settlement. */
   bySubject: FreestyleRoundSubjectStat[]
 }
@@ -135,7 +137,6 @@ export function buildFreestyleRoundCompletion(
   },
 ): FreestyleRoundCompletion {
   const completedIds = options?.completedIds ?? []
-  const completed = new Set(Array.from(completedIds, String))
   const scheduledCount = options?.scheduledCount ?? cards.filter((card) => !isRetryOccurrence(card)).length
   const subjectByPalaceId = options?.subjectByPalaceId
   const sources = new Map<string, {
@@ -150,7 +151,9 @@ export function buildFreestyleRoundCompletion(
     effectiveSeconds: number
   }>()
 
+  const progressInput = { completedIds, encounters: encountersByCardId, roundPlan: options?.roundPlan ?? null }
   for (const card of cards) {
+    if (isReviewHintId(card.id) || options?.roundPlan?.cardsById[card.id]?.status === 'excluded') continue
     const sourceId = sourceIdOf(card)
     const current = sources.get(sourceId) ?? {
       passed: false,
@@ -166,16 +169,8 @@ export function buildFreestyleRoundCompletion(
     const encounter = encountersByCardId[card.id]
     const handled = isHandled(card, encountersByCardId, completedIds, cards, options?.roundPlan)
     if (handled) current.handled = true
-    if (
-      encounter?.selectedRating != null
-      || completed.has(card.id)
-      || completed.has(sourceId)
-    ) {
-      current.attempted = true
-    }
-    if (encounterPassed(encounter) || (handled && !isRetryOccurrence(card) && !encounter)) {
-      current.passed = true
-    }
+    if (isOccurrenceScored(card.id, progressInput)) current.attempted = true
+    if (isOccurrencePassed(card.id, progressInput)) current.passed = true
     if (isRetryOccurrence(card) || encounter?.passed === false) current.retried = true
     current.effectiveSeconds += billableSeconds(encounter)
     // Prefer the source card for palace/subject labels; fall back to retry metadata.
@@ -284,6 +279,10 @@ export function buildFreestyleRoundCompletion(
     quizCount: Math.max(0, Math.round(Number(options?.quizCount) || 0)),
     totalEffectiveSeconds,
     quizSeconds,
+    today: learningTime?.today ? {
+      ...learningTime.today,
+      unattributed_seconds: learningTime.today.unattributed_seconds + Math.max(0, totalEffectiveSeconds - freestyleLearningTotals(learningTime).totalSeconds),
+    } : undefined,
     bySubject,
   }
 }
