@@ -216,15 +216,22 @@ describe('FreestyleRatingBar', () => {
       expect(pressed.getAttribute('aria-pressed')).toBe('false')
       expect(pressed.getAttribute('aria-busy')).toBe('true')
       expect(screen.getByTestId('freestyle-rating-pending-2')).toBeTruthy()
-      expect(screen.getByTestId('freestyle-rating-effect-line').textContent)
-        .toContain('正在记录困难')
+      expect(screen.getByTestId('freestyle-rating-saving-line').textContent).toContain('保存中')
     })
 
-    it('names the pending rating 正在记录 instead of 已选', () => {
+    it('shows only a quiet 保存中 line, never 已选 or the schedule effect, while saving', () => {
       renderBar({ pendingRating: 3, busy: true })
 
-      expect(screen.getByTestId('freestyle-rating-effect-line').textContent)
-        .toContain('正在记录记得')
+      expect(screen.getByTestId('freestyle-rating-saving-line').textContent).toBe('保存中…')
+      expect(screen.queryByTestId('freestyle-rating-effect-line')).toBeNull()
+      expect(screen.queryByText(/已选/)).toBeNull()
+    })
+
+    it('keeps the last confirmed grade lit while another one saves', () => {
+      renderBar({ selectedRating: 3, pendingRating: 4, busy: true })
+
+      expect(screen.getByTestId('freestyle-rating-button-3').getAttribute('aria-pressed')).toBe('true')
+      expect(screen.getByTestId('freestyle-rating-button-4').getAttribute('aria-pressed')).toBe('false')
     })
 
     it('does not mark a pending rate as 已锁定 while it is still in flight', () => {

@@ -43,6 +43,7 @@ export function FreestyleRatingBar({
   retryAfterCards,
   busy,
   pendingRating = null,
+  failedRating = null,
   locked,
   reviewReady,
   hasEncounter,
@@ -66,8 +67,10 @@ export function FreestyleRatingBar({
   recordedRating?: UnitRating | null
   retryAfterCards: number
   busy: boolean
-  /** The rating being submitted right now — shown as selected before the server answers. */
+  /** The rating being saved right now. Only a subtle 保存中 hint; never lit as chosen. */
   pendingRating?: UnitRating | null
+  /** The rating whose save failed. Shown as 未保存, never as chosen. */
+  failedRating?: UnitRating | null
   locked: boolean
   reviewReady: boolean
   hasEncounter: boolean
@@ -95,7 +98,7 @@ export function FreestyleRatingBar({
   onRemoveFromQueue?: () => void
   onDismissError?: () => void
 }) {
-  // Confirmed fill only. In-flight uses 正在记录 so a failed POST cannot look like
+  // Confirmed fill only. In-flight uses 正在保存 so a failed POST cannot look like
   // a kept score, and a late response cannot light the wrong button.
   const [removeArmed, setRemoveArmed] = useState(false)
   const removeArmedRef = useRef(false)
@@ -116,12 +119,12 @@ export function FreestyleRatingBar({
   const shownRating = removeArmed ? null : (selectedRating ?? recordedRating)
   const showingRecorded = !removeArmed && pendingRating == null && selectedRating == null && recordedRating != null
   const selectedEffect = ratingEffects.find(
-    (effect) => effect.rating === (pendingRating ?? shownRating),
+    (effect) => effect.rating === (failedRating ?? shownRating),
   )
   const palaceMode = ratingScope === 'palace'
 
   // Adjust-state-during-render: a new pick (not a restored one on mount) floats a destination tag.
-  const activeRating = pendingRating ?? selectedRating
+  const activeRating = selectedRating
   const [prevActiveRating, setPrevActiveRating] = useState(activeRating)
   const [flyTag, setFlyTag] = useState<{ rating: UnitRating; text: string; seq: number } | null>(null)
   if (prevActiveRating !== activeRating) {
@@ -203,26 +206,33 @@ export function FreestyleRatingBar({
           >
             <span className="min-w-0 truncate">再点确认移除 · 本轮不再安排</span>
           </div>
+        ) : pendingRating != null ? (
+          <div
+            data-testid="freestyle-rating-saving-line"
+            className="mb-1.5 flex items-center gap-1.5 px-2.5 py-1 text-[11px] text-stage-faint sm:text-xs"
+          >
+            <LoaderCircle className="size-3 shrink-0 animate-spin" aria-hidden />
+            <span>保存中…</span>
+          </div>
         ) : selectedEffect ? (
           <div
             data-testid="freestyle-rating-effect-line"
             className="mb-1.5 flex items-center gap-1.5 rounded-lg bg-stage-line px-2.5 py-1 text-[11px] font-medium text-stage-ink sm:text-xs"
           >
-            {pendingRating != null ? (
-              <LoaderCircle className="size-3 shrink-0 animate-spin text-stage-glow" aria-hidden />
-            ) : null}
             <span className="min-w-0 truncate">
-              {pendingRating != null
-                ? `正在记录${selectedEffect.label}`
+              {failedRating != null
+                ? `未保存${selectedEffect.label}`
                 : palaceMode
                   ? palaceRatingEffectLine(selectedEffect.label, palaceDueCount)
                   : `已选${selectedEffect.label} · ${ratingEffectLabel(selectedEffect, retryAfterCards)}`}
             </span>
-            {locked && pendingRating == null ? (
+            {locked ? (
               <span className="shrink-0 text-stage-faint">已锁定</span>
             ) : showingRecorded ? (
               <span className="shrink-0 text-stage-faint">上次评分</span>
-            ) : pendingRating == null && shownRating != null ? (
+            ) : failedRating != null ? (
+              <span className="shrink-0 text-stage-faint">再点一次重试</span>
+            ) : shownRating != null ? (
               <span className="shrink-0 text-stage-faint">再点取消</span>
             ) : null}
           </div>

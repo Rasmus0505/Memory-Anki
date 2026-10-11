@@ -403,6 +403,21 @@ async function replayOneMutation(item: PersistedMutation, force = false) {
   }
 }
 
+const NEVER_AUTO_REPLAY_URL = new RegExp(
+  [
+    '/review/session/[^/]+/units/[^/]+/ratings',
+    '/review/session/[^/]+/units/[^/]+/encounters/[^/]+/close',
+    '/review/palaces/[^/]+/due-units/ratings',
+    '/freestyle/rounds/[^/]+/ratings',
+  ].join('|'),
+)
+const NEVER_AUTO_REPLAY_MESSAGE = '这一次没有保存成功，不会在后台补发，请回到卡片重新点评分。'
+
+/** Entries queued by an older build: a rating or close is never sent in the background. */
+export function isNeverAutoReplayMutation(item: Pick<PersistedMutation, 'url' | 'method'>) {
+  return item.method.toUpperCase() === 'POST' && NEVER_AUTO_REPLAY_URL.test(item.url)
+}
+
 export async function replayQueuedMutations(options: { forceIds?: string[] } = {}) {
   if (replayInFlight) return replayInFlight
   replayInFlight = (async () => {
@@ -413,6 +428,19 @@ export async function replayQueuedMutations(options: { forceIds?: string[] } = {
       // abort the rest of the replay or become an unhandled rejection, because
       // every caller invokes this as a background `void` sync.
       try {
+        if (
+          !forceIds.has(item.id)
+          && item.status !== 'manual'
+          && isNeverAutoReplayMutation(item)
+        ) {
+          await updateMutation(item, {
+            status: 'manual',
+            replayMode: 'manual',
+            errorMessage: NEVER_AUTO_REPLAY_MESSAGE,
+            nextAttemptAt: Number.MAX_SAFE_INTEGER,
+          })
+          continue
+        }
         await replayOneMutation(item, forceIds.has(item.id))
       } catch (error) {
         console.error('[mutation-queue] replay failed for entry', item.id, error)

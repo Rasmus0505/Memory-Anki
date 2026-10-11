@@ -214,7 +214,6 @@ function buildEncounter(overrides: Record<string, unknown> = {}) {
     passed: null,
     retry_after_cards: 0,
     effective_operation_id: null,
-    effective_seconds: null,
     closed_at: null,
     rating_effects: effects,
     ...overrides,
@@ -667,7 +666,7 @@ describe('FreestyleUnitReviewCardView', () => {
     }
   })
 
-  it('paints a rating immediately and posts after the glance arrives', async () => {
+  it('posts a rating without waiting for the glance and lights it only once saved', async () => {
     const card = buildCard('unit-rate-before-session')
     let resolveSession: (value: UnitReviewSessionDto) => void = () => undefined
     apiMocks.startFreestyleUnitReviewSessionApi.mockReturnValue(
@@ -682,12 +681,16 @@ describe('FreestyleUnitReviewCardView', () => {
     expect((button as HTMLButtonElement).disabled).toBe(false)
     fireEvent.click(button)
 
-    expect(button.getAttribute('aria-pressed')).toBe('true')
+    expect(button.getAttribute('aria-pressed')).toBe('false')
+    expect(screen.getByTestId('freestyle-rating-saving-line')).toBeTruthy()
     expect(onRatingSettled).not.toHaveBeenCalled()
-    expect(apiMocks.rateFreestyleRoundUnitApi).not.toHaveBeenCalled()
+    await waitFor(() => expect(apiMocks.rateFreestyleRoundUnitApi).toHaveBeenCalled())
+    expect(apiMocks.rateFreestyleRoundUnitApi.mock.calls[0][1]).toMatchObject({
+      study_session_id: '',
+      encounter_id: expect.any(String),
+    })
 
     resolveSession(buildSession(card.unit_id!))
-    await waitFor(() => expect(apiMocks.rateFreestyleRoundUnitApi).toHaveBeenCalled())
   })
 
   it('shows flip progress badge next to the unit title (empty tone at start)', async () => {
@@ -1884,7 +1887,7 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(onBatchCardsSettled).not.toHaveBeenCalled()
   })
 
-  it('marks the tapped rating as chosen while the rate is still in flight', async () => {
+  it('shows the tapped rating as saving while the rate is still in flight', async () => {
     const card = buildCard('unit-pending-rate')
     const session = buildSession(card.unit_id!)
     apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(session)
@@ -1901,10 +1904,12 @@ describe('FreestyleUnitReviewCardView', () => {
     fireEvent.click(screen.getByRole('button', { name: /记得：1天后复习/ }))
 
     const button = screen.getByTestId('freestyle-rating-button-3')
-    expect(button.getAttribute('aria-pressed')).toBe('true')
+    // Saving is quiet: the tap is not lit as chosen until the server confirms.
+    expect(button.getAttribute('aria-pressed')).toBe('false')
     expect(button.hasAttribute('disabled')).toBe(false)
-    expect(screen.queryByTestId('freestyle-rating-pending-3')).toBeNull()
-    expect(screen.getByTestId('freestyle-rating-effect-line').textContent).toContain('已选记得')
+    expect(screen.getByTestId('freestyle-rating-saving-line').textContent).toContain('保存中')
+    expect(screen.getByTestId('freestyle-rating-pending-3')).toBeTruthy()
+    expect(screen.queryByText(/已选/)).toBeNull()
     expect(onBranchComplete).not.toHaveBeenCalled()
 
     await act(async () => {
@@ -1914,10 +1919,40 @@ describe('FreestyleUnitReviewCardView', () => {
       restudy: false, rating: 3, retryAfterCards: 0,
     })
     expect(screen.getByText('已选记得 · 1天后复习 · 7月28日')).toBeTruthy()
+    expect(button.getAttribute('aria-pressed')).toBe('true')
+    expect(screen.queryByTestId('freestyle-rating-saving-line')).toBeNull()
     expect(button.hasAttribute('disabled')).toBe(false)
   })
 
-  it('keeps a second grade shown and posts it after the first reply', async () => {
+  it('reports a failed round rating at once without retrying and lets the next tap save it', async () => {
+    const card = buildCard('unit-busy-rate')
+    const session = buildSession(card.unit_id!)
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(session)
+    apiMocks.rateFreestyleRoundUnitApi.mockRejectedValueOnce(new Error('storage busy'))
+    apiMocks.rateReviewUnitApi.mockImplementation(
+      async (_sessionId, _unit, _encounterId, rating, operationId) =>
+        ratingResult(session, rating, operationId),
+    )
+    const { onSaveFailed } = renderCard(card)
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    fireEvent.click(screen.getByTestId('freestyle-rating-button-3'))
+
+    await waitFor(() => expect(onSaveFailed).toHaveBeenCalled())
+    expect(apiMocks.rateFreestyleRoundUnitApi).toHaveBeenCalledTimes(1)
+    expect(apiMocks.rateFreestyleRoundUnitApi.mock.calls[0]).toHaveLength(2)
+    expect(screen.getByRole('alert').textContent).toContain('这一次没有保存成功')
+    expect(screen.getByTestId('freestyle-rating-button-3').getAttribute('aria-pressed')).toBe('false')
+    expect(screen.queryByTestId('freestyle-rating-saving-line')).toBeNull()
+
+    fireEvent.click(screen.getByTestId('freestyle-rating-button-3'))
+    await waitFor(() => expect(apiMocks.rateFreestyleRoundUnitApi).toHaveBeenCalledTimes(2))
+    await waitFor(() => {
+      expect(screen.getByTestId('freestyle-rating-button-3').getAttribute('aria-pressed')).toBe('true')
+    })
+  })
+
+  it('keeps a second grade quiet and posts it after the first reply', async () => {
     const card = buildCard('unit-queued-rate')
     const session = buildSession(card.unit_id!)
     apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(session)
@@ -1932,9 +1967,9 @@ describe('FreestyleUnitReviewCardView', () => {
 
     await screen.findByTestId('flip-card-mind-map-panel')
     fireEvent.click(screen.getByTestId('freestyle-rating-button-3'))
-    expect(screen.getByTestId('freestyle-rating-button-3').getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByTestId('freestyle-rating-button-3').getAttribute('aria-pressed')).toBe('false')
     fireEvent.click(screen.getByTestId('freestyle-rating-button-4'))
-    expect(screen.getByTestId('freestyle-rating-button-4').getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByTestId('freestyle-rating-button-4').getAttribute('aria-pressed')).toBe('false')
     expect(screen.getByTestId('freestyle-rating-button-4').hasAttribute('disabled')).toBe(false)
     expect(apiMocks.rateReviewUnitApi).toHaveBeenCalledTimes(1)
 
@@ -1977,12 +2012,14 @@ describe('FreestyleUnitReviewCardView', () => {
       selectedRating: 3,
     }))
     expect(onRatingSettled).not.toHaveBeenCalled()
-    expect(screen.getByTestId('freestyle-rating-button-4').getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByTestId('freestyle-rating-button-4').getAttribute('aria-pressed')).toBe('false')
     await act(async () => pending[1].reject())
     await waitFor(() => expect(onSaveFailed).toHaveBeenCalled())
     expect(onBranchComplete).toHaveBeenCalledTimes(1)
     expect(onRatingSettled).not.toHaveBeenCalled()
-    expect(screen.getByTestId('freestyle-rating-button-4').getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByTestId('freestyle-rating-button-4').getAttribute('aria-pressed')).toBe('false')
+    expect(screen.getByTestId('freestyle-rating-effect-line').textContent).toContain('未保存轻松')
+    expect(screen.getByRole('alert').textContent).toContain('这一次没有保存成功')
 
     fireEvent.click(screen.getByTestId('freestyle-rating-button-4'))
     await waitFor(() => expect(pending).toHaveLength(3))
@@ -2006,9 +2043,11 @@ describe('FreestyleUnitReviewCardView', () => {
 
     await waitFor(() => expect(onSaveFailed).toHaveBeenCalled())
     expect(onBranchComplete).not.toHaveBeenCalledWith(card.id, { cleared: true })
-    expect(screen.getByTestId('freestyle-rating-button-3').getAttribute('aria-pressed')).toBe('true')
-    expect(screen.getByRole('alert').textContent).toContain('评分没有记下，请再点一次。')
+    expect(screen.getByTestId('freestyle-rating-button-3').getAttribute('aria-pressed')).toBe('false')
+    expect(screen.getByTestId('freestyle-rating-effect-line').textContent).toContain('未保存记得')
+    expect(screen.getByRole('alert').textContent).toContain('这一次没有保存成功')
     expect(screen.getByRole('alert').textContent).not.toContain('network down')
+    expect(apiMocks.rateReviewUnitApi).toHaveBeenCalledTimes(1)
     expect(screen.queryByText(/网络请求失败/)).toBeNull()
   })
 
@@ -2176,7 +2215,6 @@ describe('FreestyleUnitReviewCardView', () => {
       card.unit_id,
       'encounter-1',
       expect.any(String),
-      expect.any(Number),
       'round-1',
     ))
   })
@@ -2455,7 +2493,7 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(onBranchComplete).toHaveBeenCalledWith(card.id, { cleared: true })
   })
 
-  it('retries a null unit rating once instead of throwing', async () => {
+  it('reports a null unit rating as a failed save and never re-posts on its own', async () => {
     const card = buildCard('unit-stale-palace')
     const session = buildSession(card.unit_id!)
     const unitResult = ratingResult(session, 2, 'overwrite')
@@ -2466,16 +2504,23 @@ describe('FreestyleUnitReviewCardView', () => {
         item: unitResult,
         round: { conflict: false, version: 5, plan_version: 5 },
       })
-    const { onSaveFailed, onRoundSync, onBranchComplete } = renderCard(card)
+    const { onSaveFailed, onBranchComplete } = renderCard(card)
     await screen.findByTestId('flip-card-mind-map-panel')
     fireEvent.click(screen.getByTestId('freestyle-rating-button-2'))
+    await waitFor(() => expect(onSaveFailed).toHaveBeenCalled())
+    expect(apiMocks.rateFreestyleRoundUnitApi).toHaveBeenCalledTimes(1)
+    expect(onBranchComplete).not.toHaveBeenCalledWith(card.id, expect.objectContaining({ rating: 2 }))
+
+    fireEvent.click(screen.getByTestId('freestyle-rating-button-2'))
     await waitFor(() => expect(apiMocks.rateFreestyleRoundUnitApi).toHaveBeenCalledTimes(2))
-    expect(onRoundSync).toHaveBeenCalled()
-    expect(onSaveFailed).not.toHaveBeenCalled()
-    expect(onBranchComplete).toHaveBeenCalledWith(card.id, {
+    const operationIds = apiMocks.rateFreestyleRoundUnitApi.mock.calls.map(
+      (call) => (call[1] as { operation_id: string }).operation_id,
+    )
+    expect(new Set(operationIds).size).toBe(2)
+    await waitFor(() => expect(onBranchComplete).toHaveBeenCalledWith(card.id, {
       restudy: true,
       rating: 2,
       retryAfterCards: 3,
-    })
+    }))
   })
 })

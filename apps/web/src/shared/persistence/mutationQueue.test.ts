@@ -93,6 +93,30 @@ describe('mutationQueue', () => {
     expect(await readQueuedMutations()).toHaveLength(0)
   })
 
+  it('parks a rating left in the queue by an older build instead of replaying it', async () => {
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await enqueueMutation({
+      mutationId: 'legacy-rating',
+      resourceKey: 'rating:legacy',
+      description: '保存评分',
+      url: '/api/v1/freestyle/rounds/r1/ratings',
+      method: 'POST',
+      bodyKind: 'json',
+      body: JSON.stringify({ rating: 3 }),
+      replayMode: 'auto',
+    })
+
+    await replayQueuedMutations()
+
+    expect(fetchMock).not.toHaveBeenCalled()
+    const [item] = await readQueuedMutations()
+    expect(item?.status).toBe('manual')
+    expect(item?.replayMode).toBe('manual')
+    expect(item?.errorMessage).toContain('没有保存成功')
+  })
+
   it('injects the current API token when replaying a legacy queued mutation', async () => {
     setApiToken('current-pwa-token')
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }))
