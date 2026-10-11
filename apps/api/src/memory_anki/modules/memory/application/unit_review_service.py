@@ -320,7 +320,9 @@ def start_unit_review_session(
     return get_unit_review_session(session, study.id)
 
 
-def get_unit_review_session(session: Session, study_session_id: str) -> dict[str, Any]:
+def get_unit_review_session(
+    session: Session, study_session_id: str, *, encounter_id: str | None = None,
+) -> dict[str, Any]:
     study = session.get(StudySession, study_session_id)
     if study is None or study.scene not in ("formal_unit_review", "freestyle_unit_review"):
         raise ValueError("unit review session not found")
@@ -331,6 +333,11 @@ def get_unit_review_session(session: Session, study_session_id: str) -> dict[str
         .order_by(ReviewSessionUnit.order_index.asc())
         .all()
     )
+    requested_encounter = session.get(ReviewUnitEncounter, encounter_id) if encounter_id else None
+    if encounter_id and (
+        requested_encounter is None or requested_encounter.study_session_id != study.id
+    ):
+        raise ValueError("review encounter is outside the session")
     palace = session.get(Palace, study.palace_id) if study.palace_id is not None else None
     if study.palace_id is None:
         raise ValueError("unit review session has no palace")
@@ -353,6 +360,11 @@ def get_unit_review_session(session: Session, study_session_id: str) -> dict[str
             )
             .first()
         )
+        if requested_encounter is not None and requested_encounter.unit_id == state.id:
+            encounter = requested_encounter
+        encounter_payload = _encounter_payload(encounter) if encounter is not None else None
+        if encounter is not None and encounter_payload is not None:
+            encounter_payload["rating_editable"] = not _has_later_attempt(session, encounter)
         payload.update(
             {
                 "node_uids": json_load_list(item.node_uids_json),
@@ -361,7 +373,7 @@ def get_unit_review_session(session: Session, study_session_id: str) -> dict[str
                 "hard_count": item.hard_count,
                 "again_count": item.again_count,
                 "final_rating": item.final_rating,
-                "encounter": _encounter_payload(encounter) if encounter is not None else None,
+                "encounter": encounter_payload,
             }
         )
         units.append(payload)
@@ -546,6 +558,7 @@ def open_unit_review_encounter(
     unit_revision: int,
     encounter_id: str,
     round_id: str,
+    baseline: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     requested_encounter_id = str(encounter_id or "").strip()
     requested_round_id = str(round_id or "").strip()
@@ -600,7 +613,7 @@ def open_unit_review_encounter(
             unit_revision=state.revision,
             round_id=requested_round_id,
             sequence=sequence,
-            baseline_state_json=json.dumps(_state_snapshot(state, item), ensure_ascii=False),
+            baseline_state_json=json.dumps(baseline or _state_snapshot(state, item), ensure_ascii=False),
             status=ENCOUNTER_OPEN,
         )
     )
@@ -687,6 +700,9 @@ def start_freestyle_unit_review_session(
     round_id: str,
     client_source: str | None = None,
     allow_not_due: bool = False,
+    card_id: str = "",
+    occurrence_id: str = "",
+    retry_attempt: int = 0,
 ) -> dict[str, Any]:
     state = session.get(ReviewUnitState, unit_id)
     if state is None or not state.active:
@@ -714,11 +730,19 @@ def start_freestyle_unit_review_session(
     requested_round_id = str(round_id or "").strip()
     if not requested_round_id:
         raise ValueError("round_id is required")
-    previous_rated = _same_day_amend_source(
-        session,
-        unit_id=state.id,
-        round_id=requested_round_id,
+    requested = session.get(ReviewUnitEncounter, str(encounter_id or "").strip())
+    identity = _attempt_identity(card_id, occurrence_id, retry_attempt)
+    if requested is not None and requested.unit_id == state.id and not identity:
+        identity = json.loads(requested.baseline_state_json).get("attempt_identity", {})
+    previous_rated = _same_day_attempt_source(
+        session, unit_id=state.id, round_id=requested_round_id,
+        identity=identity, encounter_id=encounter_id,
     )
+    latest_rated = _latest_rated_round_encounter(
+        session, unit_id=state.id, round_id=requested_round_id,
+    )
+    if previous_rated is not None:
+        _assert_no_later_attempt(session, previous_rated)
     not_due_ok = bool(allow_not_due or previous_rated is not None)
 
     # Drop competing freestyle sessions from other units / clients before opening
@@ -825,6 +849,20 @@ def start_freestyle_unit_review_session(
         unit_id=state.id,
         requested_encounter_id=requested_encounter_id,
     )
+    item = _session_item(session, study.id, state.id)
+    baseline = _state_snapshot(state, item)
+    if previous_rated is not None:
+        baseline = json.loads(previous_rated.baseline_state_json)
+        baseline["amend_source_id"] = previous_rated.id
+    elif latest_rated is not None and _effective_rating_day(session, latest_rated) == date.today():
+        # A freestyle session is a viewing/time owner, not the retry history.
+        # Moving past another card may have abandoned it; carry failed attempts
+        # into the new session without rolling the schedule back.
+        previous_item = _session_item(session, latest_rated.study_session_id, state.id)
+        for key in ("retry_count", "hard_count", "again_count"):
+            baseline["item"][key] = getattr(previous_item, key)
+    if identity:
+        baseline["attempt_identity"] = identity
     return open_unit_review_encounter(
         session,
         study_session_id=study.id,
@@ -832,6 +870,7 @@ def start_freestyle_unit_review_session(
         unit_revision=live_revision,
         encounter_id=requested_encounter_id,
         round_id=round_id,
+        baseline=baseline,
     )
 
 
@@ -935,25 +974,47 @@ def _apply_rating_from_snapshot(
     return result
 
 
-def _first_rated_round_encounter(
-    session: Session,
-    *,
-    unit_id: str,
-    round_id: str,
+def _attempt_identity(card_id: str, occurrence_id: str, retry_attempt: int) -> dict[str, Any]:
+    if not card_id and not occurrence_id:
+        return {}
+    return {
+        "card_id": str(card_id or occurrence_id).strip(),
+        "occurrence_id": str(occurrence_id or "").strip(),
+        "retry_attempt": int(retry_attempt) if occurrence_id else 0,
+    }
+
+
+def _latest_rated_round_encounter(
+    session: Session, *, unit_id: str, round_id: str,
 ) -> ReviewUnitEncounter | None:
-    requested_round_id = str(round_id or "").strip()
-    if not requested_round_id:
-        return None
     return (
         session.query(ReviewUnitEncounter)
-        .filter(
-            ReviewUnitEncounter.unit_id == unit_id,
-            ReviewUnitEncounter.round_id == requested_round_id,
-            ReviewUnitEncounter.selected_rating.isnot(None),
-        )
-        .order_by(ReviewUnitEncounter.created_at.asc())
+        .filter_by(unit_id=unit_id, round_id=round_id)
+        .filter(ReviewUnitEncounter.selected_rating.isnot(None))
+        .order_by(ReviewUnitEncounter.created_at.desc(), ReviewUnitEncounter.sequence.desc())
         .first()
     )
+
+
+def _same_day_attempt_source(
+    session: Session, *, unit_id: str, round_id: str,
+    identity: dict[str, Any], encounter_id: str,
+) -> ReviewUnitEncounter | None:
+    candidates = (
+        session.query(ReviewUnitEncounter)
+        .filter_by(unit_id=unit_id, round_id=round_id)
+        .filter(ReviewUnitEncounter.selected_rating.isnot(None))
+        .order_by(ReviewUnitEncounter.created_at.desc(), ReviewUnitEncounter.sequence.desc())
+        .all()
+    )
+    for candidate in candidates:
+        matches = candidate.id == encounter_id or (
+            bool(identity)
+            and json.loads(candidate.baseline_state_json).get("attempt_identity") == identity
+        )
+        if matches and _effective_rating_day(session, candidate) == date.today():
+            return candidate
+    return None
 
 
 def _effective_rating_day(session: Session, encounter: ReviewUnitEncounter) -> date | None:
@@ -971,24 +1032,37 @@ def _effective_rating_day(session: Session, encounter: ReviewUnitEncounter) -> d
     return local_calendar_day_of(operation.created_at)
 
 
-def _same_day_amend_source(
-    session: Session,
-    *,
-    unit_id: str,
-    round_id: str,
-) -> ReviewUnitEncounter | None:
-    """Baseline for a later rating only when that rating's local day is today.
 
-    A previous visit already moved the due date. Reusing its snapshot would
-    rewrite that visit instead of scheduling the new due cycle from now.
-    """
-    original = _first_rated_round_encounter(session, unit_id=unit_id, round_id=round_id)
-    if original is None:
-        return None
-    rated_on = _effective_rating_day(session, original)
-    if rated_on is None or rated_on != local_calendar_day_of(utc_now_naive()):
-        return None
-    return original
+def _has_later_attempt(session: Session, encounter: ReviewUnitEncounter) -> bool:
+    """Read-only constraint shared by session display and mutation validation."""
+    later = (
+        session.query(ReviewUnitEncounter)
+        .filter(
+            ReviewUnitEncounter.unit_id == encounter.unit_id,
+            ReviewUnitEncounter.created_at > encounter.created_at,
+            ReviewUnitEncounter.selected_rating.isnot(None),
+        )
+        .all()
+    )
+    own_identity = json.loads(encounter.baseline_state_json).get("attempt_identity")
+    for candidate in later:
+        if _effective_rating_day(session, candidate) is None:
+            continue
+        candidate_baseline = json.loads(candidate.baseline_state_json)
+        same_attempt = (
+            bool(own_identity)
+            and candidate.round_id == encounter.round_id
+            and candidate_baseline.get("attempt_identity") == own_identity
+        ) or candidate_baseline.get("amend_source_id") == encounter.id
+        if not same_attempt:
+            return True
+    return False
+
+
+def _assert_no_later_attempt(session: Session, encounter: ReviewUnitEncounter) -> None:
+    """An old correction must never roll back a subsequently practiced attempt."""
+    if _has_later_attempt(session, encounter):
+        raise ValueError("已有后续真实练习，不能修改或撤销较早的评分；请修改最近一次练习的评分")
 
 
 def _closed_rating_is_today(
@@ -1019,16 +1093,22 @@ def _rate_open_encounter(
 ) -> dict[str, Any]:
     """Apply a rating without committing.
 
-    If this unit already has a rated encounter in the same round, reuse that
-    encounter's baseline so a later rating overwrites instead of stacking SRS.
-    Idempotent replay is per glance: a retry occurrence must not return the source glance's after_state (that remounts the map at the root).
+    Corrections reuse this attempt's frozen baseline. A distinct retry has a
+    new baseline containing the previous demotion and failed-attempt counters.
     """
+    baseline = json.loads(encounter.baseline_state_json)
     source = baseline_from or encounter
+    if source is encounter and not encounter.effective_operation_id and baseline.get("amend_source_id"):
+        amend_source = session.get(ReviewUnitEncounter, baseline["amend_source_id"])
+        if amend_source is None:
+            raise ValueError("rating correction source not found")
+        source = amend_source
+    _assert_no_later_attempt(session, source)
     own_previous_id = encounter.effective_operation_id
     own_previous = (
         session.get(ReviewUnitRatingOperation, own_previous_id) if own_previous_id else None
     )
-    if own_previous is not None and own_previous.rating == rating and not batch_id:
+    if own_previous is not None and own_previous.undone_at is None and own_previous.replaced_at is None and own_previous.rating == rating and not batch_id:
         return json.loads(own_previous.after_state_json)
     previous_id = source.effective_operation_id or encounter.effective_operation_id
     previous = session.get(ReviewUnitRatingOperation, previous_id) if previous_id else None
@@ -1236,12 +1316,14 @@ def _ensure_open_freestyle_rating_target(
     unit_revision: int,
     encounter_id: str,
     round_id: str | None,
+    card_id: str = "",
+    occurrence_id: str = "",
+    retry_attempt: int = 0,
 ) -> tuple[StudySession, ReviewUnitState, ReviewSessionUnit, ReviewUnitEncounter]:
     """Return a live open glance, reopening the same round if the old session died.
 
-    Freestyle ratings are last-write-wins. An abandoned, completed, or cancelled
-    glance must not 400; the latest rating reopens the unit and overwrites SRS
-    from that round's original baseline.
+    Reopening retains the attempt identity; a retry never inherits the original
+    card's baseline merely because both belong to the same round.
     """
     state = session.get(ReviewUnitState, unit_id)
     if state is None or not state.active:
@@ -1274,6 +1356,14 @@ def _ensure_open_freestyle_rating_target(
     )
     if live:
         assert study is not None and encounter is not None
+        identity = _attempt_identity(card_id, occurrence_id, retry_attempt)
+        snapshot = json.loads(encounter.baseline_state_json)
+        stored_identity = snapshot.get("attempt_identity")
+        if identity and stored_identity and identity != stored_identity:
+            raise ValueError("rating attempt identity mismatch")
+        if identity and not stored_identity:
+            snapshot["attempt_identity"] = identity
+            encounter.baseline_state_json = json.dumps(snapshot, ensure_ascii=False)
         return study, state, _session_item(session, study.id, state.id), encounter
 
     can_reopen = bool(requested_round_id) and (
@@ -1291,6 +1381,9 @@ def _ensure_open_freestyle_rating_target(
         encounter_id=requested_encounter_id or str(uuid.uuid4()),
         round_id=requested_round_id,
         allow_not_due=True,
+        card_id=card_id,
+        occurrence_id=occurrence_id,
+        retry_attempt=retry_attempt,
     )
     session.refresh(state)
     study = session.get(StudySession, str(started.get("id") or ""))
@@ -1320,6 +1413,9 @@ def rate_review_unit(
     rating: int | str,
     round_id: str | None = None,
     commit: bool = True,
+    card_id: str = "",
+    occurrence_id: str = "",
+    retry_attempt: int = 0,
 ) -> dict[str, Any]:
     op_id = str(operation_id or "").strip()
     if not op_id:
@@ -1336,12 +1432,9 @@ def rate_review_unit(
         unit_revision=unit_revision,
         encounter_id=encounter_id,
         round_id=round_id,
-    )
-    requested_round_id = str(round_id or encounter.round_id or "").strip()
-    original = _same_day_amend_source(
-        session,
-        unit_id=state.id,
-        round_id=requested_round_id,
+        card_id=card_id,
+        occurrence_id=occurrence_id,
+        retry_attempt=retry_attempt,
     )
     after = _rate_open_encounter(
         session,
@@ -1351,7 +1444,6 @@ def rate_review_unit(
         encounter=encounter,
         operation_id=op_id,
         rating=normalize_rating(rating),
-        baseline_from=original,
     )
     if commit:
         session.commit()
@@ -1419,6 +1511,9 @@ def rate_palace_due_units(
         unit_revision=current_revision,
         encounter_id=current_encounter_id,
         round_id=requested_round_id,
+        card_id=str(current_payload.get("card_id") or ""),
+        occurrence_id=str(current_payload.get("occurrence_id") or ""),
+        retry_attempt=int(current_payload.get("retry_attempt") or 0),
     )
     if current_study.palace_id != int(palace_id):
         raise ValueError("open review encounter required")
@@ -1443,11 +1538,6 @@ def rate_palace_due_units(
     targets[current_state.id] = current_state
 
     operations: list[ReviewUnitRatingOperation] = []
-    current_original = _same_day_amend_source(
-        session,
-        unit_id=current_state.id,
-        round_id=requested_round_id,
-    )
     _rate_open_encounter(
         session,
         study=current_study,
@@ -1457,7 +1547,6 @@ def rate_palace_due_units(
         operation_id=batch_id,
         rating=normalized,
         batch_id=batch_id,
-        baseline_from=current_original,
     )
     current_op = session.get(ReviewUnitRatingOperation, batch_id)
     if current_op is not None:
@@ -1467,12 +1556,22 @@ def rate_palace_due_units(
         if unit_id == current_state.id:
             continue
         sibling_op_id = f"{batch_id}:{state.id}"
-        original = _same_day_amend_source(
+        original = _latest_rated_round_encounter(
             session,
             unit_id=state.id,
             round_id=requested_round_id,
         )
-        if original is not None:
+        batch_identity = json.loads(current_encounter.baseline_state_json).get("attempt_identity", {})
+        real_retry = bool(batch_identity.get("occurrence_id"))
+        sibling_identity = (
+            json.loads(original.baseline_state_json).get("attempt_identity", {})
+            if original is not None else {}
+        )
+        if (
+            original is not None
+            and _effective_rating_day(session, original) == date.today()
+            and (not real_retry or sibling_identity == batch_identity)
+        ):
             study = session.get(StudySession, original.study_session_id)
             if study is None:
                 raise ValueError("review encounter not found")
@@ -1506,6 +1605,14 @@ def rate_palace_due_units(
             encounter_id=sibling_encounter_id,
             round_id=requested_round_id,
         )
+        sibling_baseline = json.loads(encounter.baseline_state_json)
+        if batch_identity:
+            sibling_baseline["attempt_identity"] = batch_identity
+        if original is not None and _effective_rating_day(session, original) == date.today():
+            previous_item = _session_item(session, original.study_session_id, state.id)
+            for key in ("retry_count", "hard_count", "again_count"):
+                sibling_baseline["item"][key] = getattr(previous_item, key)
+        encounter.baseline_state_json = json.dumps(sibling_baseline, ensure_ascii=False)
         _rate_open_encounter(
             session,
             study=study,
@@ -1557,7 +1664,8 @@ def _undo_one_rating_operation(
     if state is None:
         raise ValueError("review unit not found")
     item = _session_item(session, operation.study_session_id, operation.unit_id)
-    snapshot = json.loads(encounter.baseline_state_json)
+    _assert_no_later_attempt(session, encounter)
+    snapshot = json.loads(operation.before_state_json)
     operation.undone_at = utc_now_naive()
     previous = (
         session.get(ReviewUnitRatingOperation, operation.replaces_operation_id)

@@ -56,7 +56,11 @@ def _seed_review_unit(session) -> ReviewUnitState:
     return session.query(ReviewUnitState).filter_by(palace_id=palace.id, active=True).one()
 
 
-def _start(session, state: ReviewUnitState, encounter_id: str, client_source: str | None = "desktop"):
+def _start(
+    session, state: ReviewUnitState, encounter_id: str,
+    client_source: str | None = "desktop", *,
+    card_id: str = "source-card", occurrence_id: str = "", retry_attempt: int = 0,
+):
     return start_freestyle_unit_review_session(
         session,
         unit_id=state.id,
@@ -64,6 +68,9 @@ def _start(session, state: ReviewUnitState, encounter_id: str, client_source: st
         encounter_id=encounter_id,
         round_id="round-2026-07-27",
         client_source=client_source,
+        card_id=card_id,
+        occurrence_id=occurrence_id,
+        retry_attempt=retry_attempt,
     )
 
 
@@ -202,7 +209,10 @@ def test_retry_glance_does_not_inherit_the_open_parent_rating(db_session):
     first = _start(db_session, state, "encounter-source")
     _rate(db_session, first, state, "encounter-source", "rating-hard", 2)
 
-    retry = _start(db_session, state, "encounter-retry")
+    retry = _start(
+        db_session, state, "encounter-retry",
+        card_id="retry-card", occurrence_id="retry-card", retry_attempt=1,
+    )
     encounter = retry["units"][0]["encounter"]
     assert encounter["id"] == "encounter-retry"
     assert encounter["status"] == "open"
@@ -239,7 +249,10 @@ def test_retry_glance_same_rating_keeps_this_encounter(db_session):
     )
     assert closed["session_status"] == "active"
 
-    retry = _start(db_session, state, "encounter-retry")
+    retry = _start(
+        db_session, state, "encounter-retry",
+        card_id="retry-card", occurrence_id="retry-card", retry_attempt=1,
+    )
     assert retry["units"][0]["encounter"]["id"] == "encounter-retry"
     rated = _rate(db_session, retry, state, "encounter-retry", "rating-retry-hard", 2)
 
@@ -318,6 +331,7 @@ def test_closed_pass_locks_rating_and_future_unit_cannot_restart(db_session):
         unit_revision=state.revision,
         encounter_id="encounter-amend",
         round_id="round-2026-07-27",
+        card_id="source-card",
     )
     assert resumed["id"] != review_session["id"]
     assert resumed["units"][0]["encounter"]["id"] == "encounter-amend"
@@ -430,6 +444,7 @@ def test_start_reopens_passed_unit_when_session_still_active(db_session):
         unit_revision=state.revision,
         encounter_id="encounter-amend",
         round_id="round-2026-07-27",
+        card_id="source-card",
         allow_not_due=True,
     )
 
@@ -790,3 +805,123 @@ def test_review_http_contract_carries_encounter_identity(session_factory, make_c
     )
     assert replayed_close.status_code == 200
     assert replayed_close.json()["item"]["encounter"]["effective_seconds"] == clamped_seconds
+
+
+@pytest.mark.parametrize("early", [False, True])
+@pytest.mark.parametrize("first_rating", [1, 2])
+@pytest.mark.parametrize("passing_rating", [3, 4])
+def test_real_retry_preserves_failure_and_preview_matches_commit(
+    db_session, early, first_rating, passing_rating,
+):
+    from memory_anki.modules.memory.application.unit_scheduler import rate_unit
+
+    state = _seed_review_unit(db_session)
+    state.stage_index = 7
+    state.has_passed = True
+    state.due_date = date.today() + timedelta(days=14 if early else 0)
+    db_session.commit()
+    first = start_freestyle_unit_review_session(
+        db_session, unit_id=state.id, unit_revision=state.revision,
+        encounter_id="real-source", round_id="real-round", card_id="source",
+        allow_not_due=early,
+    )
+    failed = _rate(db_session, first, state, "real-source", "real-fail", first_rating)
+    lowered = failed["unit"]["stage_index"]
+    close_unit_review_encounter(
+        db_session, study_session_id=first["id"], unit_id=state.id,
+        encounter_id="real-source", operation_id="real-close",
+    )
+    # A feed glance can be abandoned while other cards are practiced.
+    study = db_session.get(StudySession, first["id"])
+    study.status = "abandoned"
+    db_session.commit()
+    retry = start_freestyle_unit_review_session(
+        db_session, unit_id=state.id, unit_revision=state.revision,
+        encounter_id="real-retry", round_id="real-round", card_id="retry-slot",
+        occurrence_id="retry-slot", retry_attempt=1,
+    )
+    effect = next(x for x in retry["units"][0]["encounter"]["rating_effects"] if x["rating"] == passing_rating)
+    passed = _rate(db_session, retry, state, "real-retry", "real-pass", passing_rating)
+    expected = rate_unit(
+        stage_index=lowered, has_passed=True, rating=passing_rating,
+        had_failure_in_encounter=True, today=date.today(), fuzz_key=state.id,
+    )
+    assert state.stage_index == expected.stage_index
+    assert state.due_date == expected.due_date
+    assert effect["target_stage_index"] == state.stage_index
+    assert effect["target_due_date"] == state.due_date.isoformat()
+    assert passed["amended"] is False
+    assert db_session.get(ReviewUnitRatingOperation, "real-fail").replaced_at is None
+    assert db_session.get(ReviewUnitRatingOperation, "real-pass").replaces_operation_id is None
+    item = db_session.query(ReviewSessionUnit).filter_by(study_session_id=retry["id"]).one()
+    assert item.retry_count == 1
+    assert (item.again_count, item.hard_count) == (int(first_rating == 1), int(first_rating == 2))
+    from memory_anki.modules.memory.application.unit_review_service import get_unit_review_session
+
+    historical = get_unit_review_session(db_session, first['id'], encounter_id='real-source')
+    assert historical['units'][0]['encounter']['id'] == 'real-source'
+    assert historical['units'][0]['encounter']['rating_editable'] is False
+    with pytest.raises(ValueError, match="后续真实练习"):
+        undo_unit_rating(db_session, "real-fail")
+    with pytest.raises(ValueError, match="后续真实练习"):
+        start_freestyle_unit_review_session(
+            db_session, unit_id=state.id, unit_revision=state.revision,
+            encounter_id="source-revisit", round_id="real-round", card_id="source",
+        )
+    assert state.stage_index == expected.stage_index
+    undo_unit_rating(db_session, "real-pass")
+    assert state.stage_index == lowered
+    assert state.due_date == date.today()
+    assert item.retry_count == 1
+
+
+def test_retry_slot_new_attempt_stacks_penalty_but_correction_does_not(db_session):
+    state = _seed_review_unit(db_session)
+    state.stage_index = 7
+    state.has_passed = True
+    db_session.commit()
+    first = _start(db_session, state, "source")
+    _rate(db_session, first, state, "source", "source-hard", 2)
+    assert state.stage_index == 6
+    for attempt in (1, 2):
+        retry = _start(
+            db_session, state, f"retry-{attempt}", card_id="same-slot",
+            occurrence_id="same-slot", retry_attempt=attempt,
+        )
+        _rate(db_session, retry, state, f"retry-{attempt}", f"hard-{attempt}", 2)
+        assert state.stage_index == 6 - attempt
+    corrected = _rate(db_session, retry, state, "retry-2", "correct-last", 3)
+    assert corrected["amended"] is True
+    assert state.stage_index == 5
+    item = db_session.query(ReviewSessionUnit).filter_by(study_session_id=retry["id"]).one()
+    assert item.retry_count == 2
+    assert item.hard_count == 2
+    assert db_session.get(ReviewUnitRatingOperation, "hard-2").replaced_at is not None
+    assert db_session.get(ReviewUnitRatingOperation, "hard-1").replaced_at is None
+    undo_unit_rating(db_session, "correct-last")
+    assert state.stage_index == 4
+    assert item.retry_count == 3
+
+
+def test_same_attempt_revisit_correction_uses_preview_baseline(db_session):
+    state = _seed_review_unit(db_session)
+    state.stage_index = 7
+    state.has_passed = True
+    db_session.commit()
+    first = _start(db_session, state, "source")
+    _rate(db_session, first, state, "source", "source-hard", 2)
+    close_unit_review_encounter(
+        db_session, study_session_id=first["id"], unit_id=state.id,
+        encounter_id="source", operation_id="source-close",
+    )
+    revisit = _start(db_session, state, "source-revisit")
+    effect = next(x for x in revisit["units"][0]["encounter"]["rating_effects"] if x["rating"] == 3)
+    corrected = _rate(db_session, revisit, state, "source-revisit", "source-corrected", 3)
+    assert corrected["amended"] is True
+    assert state.stage_index == 8
+    assert effect["target_stage_index"] == 8
+    assert effect["target_due_date"] == state.due_date.isoformat()
+    assert db_session.query(ReviewSessionUnit).one().retry_count == 0
+    undo_unit_rating(db_session, "source-corrected")
+    assert state.stage_index == 6
+    assert db_session.query(ReviewSessionUnit).one().retry_count == 1

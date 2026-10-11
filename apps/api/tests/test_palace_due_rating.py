@@ -398,3 +398,34 @@ def test_palace_due_rating_does_not_move_non_due_siblings(db_session):
     db_session.refresh(future)
     assert future.due_date == date.today() + timedelta(days=9)
     assert future.has_passed is False
+
+
+def test_palace_real_retry_keeps_all_siblings_failure_history(db_session):
+    palace, units = _seed_palace(db_session)
+    for unit in units:
+        unit.stage_index = 7
+        unit.has_passed = True
+    db_session.commit()
+    current = units[0]
+    first = start_freestyle_unit_review_session(
+        db_session, unit_id=current.id, unit_revision=current.revision,
+        encounter_id='batch-source', round_id='round-palace', card_id='source',
+    )
+    rate_palace_due_units(
+        db_session, palace_id=palace.id, operation_id='batch-hard', rating=2,
+        round_id='round-palace', current=_current(first, current, 'batch-source'),
+    )
+    assert all(unit.stage_index == 6 for unit in units)
+    retry = start_freestyle_unit_review_session(
+        db_session, unit_id=current.id, unit_revision=current.revision,
+        encounter_id='batch-retry', round_id='round-palace', card_id='retry',
+        occurrence_id='retry', retry_attempt=1,
+    )
+    rate_palace_due_units(
+        db_session, palace_id=palace.id, operation_id='batch-pass', rating=3,
+        round_id='round-palace', current=_current(retry, current, 'batch-retry'),
+    )
+    assert all(unit.stage_index == 6 for unit in units)
+    assert all(op.replaced_at is None for op in db_session.query(ReviewUnitRatingOperation).filter_by(batch_id='batch-hard'))
+    undo_unit_rating(db_session, 'batch-pass', 'round-palace')
+    assert all(unit.stage_index == 6 and unit.due_date == date.today() for unit in units)
