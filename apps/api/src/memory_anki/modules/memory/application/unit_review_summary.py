@@ -268,12 +268,43 @@ def get_unit_review_weekly_stats(session: Session) -> dict[str, Any]:
     return {
         "review_count": sum(1 for item in operations if item.passed),
         "rating_count": len(operations),
-        "review_duration_seconds": 0,
     }
 
 
+def count_unit_review_ratings(session: Session, *, start: datetime, end: datetime) -> int:
+    """Live (not undone, not replaced) passed ratings made in [start, end), UTC-naive."""
+    return (
+        session.query(ReviewUnitRatingOperation)
+        .filter(
+            ReviewUnitRatingOperation.created_at >= start,
+            ReviewUnitRatingOperation.created_at < end,
+            ReviewUnitRatingOperation.undone_at.is_(None),
+            ReviewUnitRatingOperation.replaced_at.is_(None),
+            ReviewUnitRatingOperation.passed.is_(True),
+        )
+        .count()
+    )
+
+
+def count_rating_days(session: Session, *, start: datetime, end: datetime) -> list[tuple[datetime, int]]:
+    """(created_at, 1) rows for live passed ratings in [start, end); caller buckets by local day."""
+    rows = (
+        session.query(ReviewUnitRatingOperation.created_at)
+        .filter(
+            ReviewUnitRatingOperation.created_at >= start,
+            ReviewUnitRatingOperation.created_at < end,
+            ReviewUnitRatingOperation.undone_at.is_(None),
+            ReviewUnitRatingOperation.replaced_at.is_(None),
+            ReviewUnitRatingOperation.passed.is_(True),
+        )
+        .all()
+    )
+    return [(row[0], 1) for row in rows]
+
+
 __all__ = [
-    "get_palace_review_summary",
+    "count_rating_days",
+    "count_unit_review_ratings",    "get_palace_review_summary",
     "get_review_queue_summary",
     "get_unit_review_weekly_stats",
     "project_palace_review_summaries",

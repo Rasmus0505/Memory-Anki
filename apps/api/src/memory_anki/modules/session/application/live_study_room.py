@@ -1,7 +1,7 @@
 """In-process live study room for PWA and desktop mirroring.
 
 The projection is ephemeral process memory. It must not be written to the
-database or the Syncthing data directory.
+database or the synced data directory.
 """
 
 from __future__ import annotations
@@ -51,7 +51,6 @@ def _empty_projection() -> dict[str, Any]:
         "route": "",
         "surface": "idle",
         "view": None,
-        "timer": None,
         "desktop_reload_nonce": 0,
         "updated_at": iso_utc_now(),
     }
@@ -129,24 +128,6 @@ def _emit_locked(event: str, publisher_client_id: str | None) -> None:
             pass
 
 
-def _pause_timer_locked() -> bool:
-    timer = _projection.get("timer")
-    if not isinstance(timer, dict):
-        return False
-    status = str(timer.get("status") or "")
-    semantic = str(timer.get("semanticState") or timer.get("semantic_state") or "")
-    if status != "running" and semantic != "running":
-        return False
-    paused = dict(timer)
-    paused["status"] = "paused"
-    paused["semanticState"] = "paused"
-    paused["progressMode"] = "frozen"
-    paused["updatedAt"] = int(time.time() * 1000)
-    _projection["timer"] = paused
-    _projection["updated_at"] = iso_utc_now()
-    return True
-
-
 def _clear_controller_locked() -> None:
     global _controller_lease_until
     _projection["controller_client_id"] = None
@@ -202,7 +183,6 @@ def expire_disconnected_controllers(now: float | None = None) -> None:
         )
         if not disconnected and not lease_expired:
             return
-        _pause_timer_locked()
         _clear_controller_locked()
         _projection["revision"] = int(_projection.get("revision") or 0) + 1
         _projection["updated_at"] = iso_utc_now()
@@ -265,7 +245,7 @@ def _normalize_surface(value: Any) -> str | None:
     return surface
 
 
-def _timer_changed(current: Any, incoming: Any) -> bool:
+def _json_changed(current: Any, incoming: Any) -> bool:
     return json.dumps(current, sort_keys=True, default=str) != json.dumps(
         incoming, sort_keys=True, default=str
     )
@@ -317,18 +297,13 @@ def apply_live_study_command(payload: dict[str, Any]) -> dict[str, Any]:
         has_route = "route" in payload and payload.get("route") is not None
         has_surface = "surface" in payload and payload.get("surface") is not None
         has_view = "view" in payload
-        has_timer = "timer" in payload
         surface = _normalize_surface(payload.get("surface")) if has_surface else None
         route = str(payload.get("route") or "") if has_route else None
         current_controller = _projection.get("controller_client_id")
         is_controller = current_controller == client_id
-        # Timer ticks never elect a controller. Only explicit take_control does,
-        # including the empty-room case (controller is None AND take_control).
-        accept_timer = has_timer and (is_controller or take_control)
 
         changed = False
         if take_control and current_controller != client_id:
-            _pause_timer_locked()
             _projection["controller_client_id"] = client_id
             is_controller = True
             changed = True
@@ -351,13 +326,8 @@ def apply_live_study_command(payload: dict[str, Any]) -> dict[str, Any]:
             changed = True
         if has_view:
             incoming_view = payload.get("view")
-            if _timer_changed(_projection.get("view"), incoming_view):
+            if _json_changed(_projection.get("view"), incoming_view):
                 _projection["view"] = incoming_view
-                changed = True
-        if accept_timer:
-            incoming_timer = payload.get("timer")
-            if _timer_changed(_projection.get("timer"), incoming_timer):
-                _projection["timer"] = incoming_timer
                 changed = True
 
         if changed:

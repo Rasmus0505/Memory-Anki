@@ -6,10 +6,10 @@ from dataclasses import dataclass
 from datetime import date
 
 from .quests import QuestProgress, quest_board, quest_xp_by_day, week_start
-from .rules import QuizEvent, RatingEvent, StudyBlock, build_days, level_for, xp_for_level
+from .rules import QuizEvent, RatingEvent, build_days, level_for, xp_for_level
 from .stamps import StampProgress, walk_stamps
 
-XP_SOURCES = ("rating", "conquer", "first_learn", "quiz", "time", "quest")
+XP_SOURCES = ("rating", "conquer", "first_learn", "quiz", "quest")
 
 
 @dataclass(frozen=True)
@@ -40,10 +40,9 @@ class Progression:
 def project(
     ratings: list[RatingEvent],
     quizzes: list[QuizEvent],
-    blocks: list[StudyBlock],
     today: date,
 ) -> Progression:
-    days, perfect_days = build_days(sorted(ratings, key=lambda e: (e.day, e.hour)), quizzes, blocks)
+    days, perfect_days = build_days(sorted(ratings, key=lambda e: (e.day, e.hour)), quizzes)
     quest_xp, quest_counts = quest_xp_by_day(days)
     xp_by_day: dict[date, float] = {}
     sources = dict.fromkeys(XP_SOURCES, 0.0)
@@ -75,7 +74,6 @@ def project(
             "conquered": sum(s.conquered for s in totals),
             "first_learned": sum(s.first_learned for s in totals),
             "quiz_correct": sum(s.quiz_correct for s in totals),
-            "minutes": sum(s.minutes for s in totals),
             "active_days": sum(1 for s in totals if s.active),
             "perfect_rounds": len(perfect_days),
             "quests_done": sum(quest_counts.values()),

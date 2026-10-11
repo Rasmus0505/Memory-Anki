@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
-from .rules import MARATHON_MINUTES, NIGHT_OR_DAWN_MIN, DayStats, level_for
+from .rules import NIGHT_OR_DAWN_MIN, DayStats, level_for
 
 
 @dataclass(frozen=True)
@@ -55,7 +55,6 @@ STAMPS: tuple[StampDef, ...] = (
     ]),
     StampDef("night_owl", "夜读人", f"一天里 23 点后评 {NIGHT_OR_DAWN_MIN} 张卡", "时光", "paper", "night_days", 1),
     StampDef("early_bird", "晨读人", f"一天里 5–8 点评 {NIGHT_OR_DAWN_MIN} 张卡", "时光", "paper", "dawn_days", 1),
-    StampDef("marathon", "长跑者", f"一天专注 {MARATHON_MINUTES} 分钟", "时光", "silver", "marathon_days", 1),
     *_ladder("quests", "委托", "quests_done", [
         (10, "有求必应", "完成 10 个委托", "paper"),
         (100, "委托达人", "完成 100 个委托", "gold"),
@@ -98,7 +97,6 @@ def walk_stamps(
         counters["perfect_rounds"] += perfect_by_day.get(day, 0)
         counters["night_days"] += 1 if stats.night >= NIGHT_OR_DAWN_MIN else 0
         counters["dawn_days"] += 1 if stats.dawn >= NIGHT_OR_DAWN_MIN else 0
-        counters["marathon_days"] += 1 if stats.minutes >= MARATHON_MINUTES else 0
         counters["quests_done"] += quest_counts.get(day, 0)
         running_xp += xp_by_day.get(day, 0.0)
         counters["level"] = level_for(round(running_xp))

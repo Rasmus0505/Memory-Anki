@@ -110,7 +110,7 @@ def resolve_local_timezone() -> tzinfo:
     instead of SQLite's ``datetime(column, 'localtime')``. The SQLite modifier
     depends on the *server process* OS timezone, which is not the learner's zone
     once the API runs anywhere else, and it silently disagreed with the
-    UTC-aware ledger path. One explicit zone keeps day bucketing deterministic.
+    UTC-aware path. One explicit zone keeps day bucketing deterministic.
 
     ``MEMORY_ANKI_LOCAL_TZ`` accepts an IANA name (``Asia/Shanghai``), a fixed
     offset (``UTC``, ``+08:00``), or a Windows zone id. When it is unset, the

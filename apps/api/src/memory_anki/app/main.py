@@ -20,7 +20,6 @@ from memory_anki.app.startup_runtime import (
 )
 from memory_anki.app.startup_warmup import (
     start_db_pool_warmup,
-    start_ledger_prefetch,
     start_startup_warmup,
 )
 from memory_anki.modules.memory.application.unit_reconcile_scheduler import (
@@ -153,7 +152,6 @@ async def lifespan(app: FastAPI):
     startup_mode = resolve_startup_mode()
     startup_state = initialize_service_runtime(app, mode=startup_mode)
     runtime_activity_handle = None
-    start_ledger_prefetch()
     # Runs in every mode: the desktop/PWA process serves in healthcheck mode,
     # where start_startup_warmup() is skipped, and it is exactly that process
     # whose first user request would otherwise pay the cold pool open.

@@ -6,8 +6,8 @@ from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
-from memory_anki.core.time import local_calendar_day_start_as_utc_naive
-from memory_anki.modules.session.public.queries import get_time_record_daily_totals
+from memory_anki.core.time import local_calendar_day_of, local_calendar_day_start_as_utc_naive
+from memory_anki.modules.memory.public.queries import count_rating_days
 
 MAX_HEATMAP_DAYS = 366
 DEFAULT_HEATMAP_DAYS = 182
@@ -19,35 +19,25 @@ def build_heatmap_payload(session: Session, days: int = DEFAULT_HEATMAP_DAYS) ->
     start = today - timedelta(days=days - 1)
     start_dt = local_calendar_day_start_as_utc_naive(start)
     end_dt = local_calendar_day_start_as_utc_naive(today + timedelta(days=1))
-    review_rows = get_time_record_daily_totals(
-        session, start=start_dt, end=end_dt, kind="review"
-    )
-    session_rows = get_time_record_daily_totals(session, start=start_dt, end=end_dt)
-
     by_day: dict[str, dict] = {}
-    for review_date, _seconds, count in review_rows:
-        key = str(review_date)
-        entry = by_day.setdefault(key, {"review_count": 0, "study_seconds": 0})
-        entry["review_count"] = int(count)
-    for day_value, seconds, _records in session_rows:
-        key = str(day_value)
-        entry = by_day.setdefault(key, {"review_count": 0, "study_seconds": 0})
-        entry["study_seconds"] += int(seconds)
+    for created_at, _one in count_rating_days(session, start=start_dt, end=end_dt):
+        key = local_calendar_day_of(created_at).isoformat()
+        entry = by_day.setdefault(key, {"review_count": 0})
+        entry["review_count"] += 1
 
     items = []
     active_days: set[str] = set()
     for offset in range(days):
         day = start + timedelta(days=offset)
         key = day.isoformat()
-        entry = by_day.get(key, {"review_count": 0, "study_seconds": 0})
-        active = entry["review_count"] > 0 or entry["study_seconds"] > 0
+        entry = by_day.get(key, {"review_count": 0})
+        active = entry["review_count"] > 0
         if active:
             active_days.add(key)
         items.append(
             {
                 "date": key,
                 "review_count": entry["review_count"],
-                "study_seconds": entry["study_seconds"],
                 "active": active,
             }
         )

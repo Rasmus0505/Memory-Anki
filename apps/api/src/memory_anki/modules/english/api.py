@@ -8,8 +8,10 @@ from .application.fsrs_runtime import (
     load_fsrs_settings,
     normalize_rating,
 )
+from .application.study_stats import get_english_study_stats
 
 __all__ = [
+    "get_english_study_stats",
     "get_recent_unfinished_course_payload",
     "RATING_LABELS",
     "VALID_RATINGS",

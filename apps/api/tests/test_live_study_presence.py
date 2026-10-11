@@ -117,7 +117,6 @@ def test_publishing_view_without_take_control_does_not_steal_controller() -> Non
         route="/freestyle",
         surface="freestyle",
         view={"currentCardId": "card-a"},
-        timer={"status": "running", "semanticState": "running", "effectiveSeconds": 6},
     )
     mirrored = _publish(
         "pwa",
@@ -130,16 +129,13 @@ def test_publishing_view_without_take_control_does_not_steal_controller() -> Non
     assert projection["controller_client_id"] == "desktop"
     assert projection["controller_card_id"] == "card-a"
     assert projection["view"]["currentCardId"] == "card-b"
-    assert projection["timer"]["status"] == "running"
-    assert projection["timer"]["effectiveSeconds"] == 6
 
 
-def test_take_control_by_pwa_pauses_desktop_timer_and_switches_controller() -> None:
+def test_take_control_by_pwa_switches_controller() -> None:
     _publish(
         "desktop",
         "op-1",
         take_control=True,
-        timer={"status": "running", "semanticState": "running", "effectiveSeconds": 20},
         view={"currentCardId": "card-desktop"},
     )
     taken = apply_live_study_command(
@@ -153,17 +149,13 @@ def test_take_control_by_pwa_pauses_desktop_timer_and_switches_controller() -> N
     projection = taken["projection"]
     assert projection["controller_client_id"] == "pwa"
     assert projection["controller_card_id"] == "card-pwa"
-    assert projection["timer"]["status"] == "paused"
-    assert projection["timer"]["semanticState"] == "paused"
-    assert projection["timer"]["effectiveSeconds"] == 20
 
 
-def test_heartbeat_timeout_pauses_without_adding_seconds() -> None:
+def test_heartbeat_timeout_clears_controller() -> None:
     _publish(
         "desktop",
         "op-1",
         take_control=True,
-        timer={"status": "running", "semanticState": "running", "effectiveSeconds": 8},
     )
     subscriber_id, _inbox = subscribe_live_study("desktop")
     expire_disconnected_controllers(now=time.monotonic() + CONTROLLER_LEASE_SECONDS + 0.01)
@@ -172,9 +164,6 @@ def test_heartbeat_timeout_pauses_without_adding_seconds() -> None:
     assert projection["controller_card_id"] is None
     assert projection["controller_heartbeat_at"] is None
     assert projection["controller_lease_expires_at"] is None
-    assert projection["timer"]["status"] == "paused"
-    assert projection["timer"]["semanticState"] == "paused"
-    assert projection["timer"]["effectiveSeconds"] == 8
     unsubscribe_live_study(subscriber_id)
 
 
@@ -183,7 +172,6 @@ def test_heartbeat_from_non_controller_is_ignored() -> None:
         "desktop",
         "op-1",
         take_control=True,
-        timer={"status": "running", "semanticState": "running", "effectiveSeconds": 4},
     )
     ignored = apply_live_study_command(
         {
@@ -204,34 +192,23 @@ def test_heartbeat_from_non_controller_is_ignored() -> None:
     expire_disconnected_controllers(now=time.monotonic() + CONTROLLER_LEASE_SECONDS / 2)
     projection = get_live_study_projection()
     assert projection["controller_client_id"] == "desktop"
-    assert projection["timer"]["status"] == "running"
-    assert projection["timer"]["effectiveSeconds"] == 4
 
 
-def test_timer_without_take_control_is_ignored_when_uncontrolled() -> None:
-    ignored = _publish(
-        "desktop",
-        "op-1",
-        timer={"status": "running", "semanticState": "running", "effectiveSeconds": 5},
-    )
-    assert ignored["projection"]["controller_client_id"] is None
-    assert ignored["projection"]["timer"] is None
-
-
-def test_non_controller_timer_publish_is_ignored() -> None:
-    _publish(
+def test_legacy_timer_field_is_ignored_and_never_projected() -> None:
+    result = _publish(
         "desktop",
         "op-1",
         take_control=True,
         timer={"status": "running", "effectiveSeconds": 12},
     )
-    ignored = _publish(
-        "pwa",
-        "op-2",
-        timer={"status": "paused", "effectiveSeconds": 99},
-    )
+    assert "timer" not in result["projection"]
+    assert "timer" not in get_live_study_projection()
+
+
+def test_non_controller_publish_without_view_is_ignored() -> None:
+    _publish("desktop", "op-1", take_control=True)
+    ignored = _publish("pwa", "op-2")
     assert ignored["projection"]["controller_client_id"] == "desktop"
-    assert ignored["projection"]["timer"]["effectiveSeconds"] == 12
     assert ignored["projection"]["revision"] == 1
 
 
@@ -253,20 +230,17 @@ def test_subscribers_receive_updates_and_echo_publisher_id() -> None:
     unsubscribe_live_study(subscriber_id)
 
 
-def test_controller_disconnect_pauses_timer_after_grace() -> None:
+def test_controller_disconnect_clears_controller_after_grace() -> None:
     _publish(
         "desktop",
         "op-1",
         take_control=True,
-        timer={"status": "running", "semanticState": "running", "effectiveSeconds": 8},
     )
     subscriber_id, _inbox = subscribe_live_study("desktop")
     unsubscribe_live_study(subscriber_id)
     expire_disconnected_controllers(now=time.monotonic() + CONTROLLER_DISCONNECT_GRACE_SECONDS + 0.01)
     projection = get_live_study_projection()
     assert projection["controller_client_id"] is None
-    assert projection["timer"]["status"] == "paused"
-    assert projection["timer"]["semanticState"] == "paused"
 
 
 def test_http_command_returns_projection() -> None:

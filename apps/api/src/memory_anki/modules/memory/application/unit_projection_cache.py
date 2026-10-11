@@ -1,7 +1,7 @@
 """Process-local memo for per-document review-unit projections.
 
 Keyed by a digest of the document's own content, so a document edited here or
-synced in by Syncthing always misses. Nothing is persisted and no business state
+synced in from another device always misses. Nothing is persisted and no business state
 is written: this only avoids re-walking unchanged mind-map documents per request.
 """
 

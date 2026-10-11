@@ -1,16 +1,13 @@
 """dashboard aggregate endpoint direct tests."""
 import json
-from datetime import date, datetime, timedelta
 
 import pytest
 
 from memory_anki.core.time import utc_now_naive
-from memory_anki.infrastructure.db._tables.misc import StudySession
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.modules.dashboard.application.service import build_weekly_report_payload
 from memory_anki.modules.dashboard.presentation import router as dashboard_router
 from memory_anki.modules.memory.api import reconcile_palace_units
-from memory_anki.modules.session.application.time_bounds import today_bounds
 
 EDITOR_DOC = json.dumps(
     {
@@ -66,162 +63,41 @@ def test_seeded_palace_with_permanent_mark_unit_shows_up(client, session_factory
     assert body["today_new_palace_count"] == 1
 
 
-def test_dashboard_duration_is_not_a_separate_filterable_read_model(client, session_factory):
-    now = datetime.now()
+def test_dashboard_payload_has_no_duration_fields(session_factory):
+    from memory_anki.modules.dashboard.application.service import build_dashboard_payload
+
     with session_factory() as session:
-        session.add(
-            StudySession(
-                id="session-1",
-                status="completed",
-                scene="formal_unit_review",
-                target_type="palace",
-                title="formal review",
-                started_at=now,
-                ended_at=now + timedelta(minutes=3),
-                effective_seconds=180,
-            )
-        )
-        session.commit()
+        body = build_dashboard_payload(session)
 
-    response = client.get("/api/v1/dashboard")
-    assert response.status_code == 200
-    assert "selected_total_review_duration_seconds" not in response.json()
-
-
-def test_dashboard_monthly_review_duration_excludes_non_review_time(client, session_factory):
-    month_start, _ = today_bounds()
-    with session_factory() as session:
-        session.add_all(
-            [
-                StudySession(
-                    id="monthly-review",
-                    status="completed",
-                    scene="formal_unit_review",
-                    target_type="none",
-                    title="review",
-                    started_at=month_start + timedelta(hours=8),
-                    ended_at=month_start + timedelta(hours=9),
-                    effective_seconds=60,
-                ),
-                StudySession(
-                    id="monthly-practice",
-                    status="completed",
-                    scene="practice",
-                    target_type="none",
-                    title="practice",
-                    started_at=month_start + timedelta(hours=10),
-                    ended_at=month_start + timedelta(hours=11),
-                    effective_seconds=300,
-                ),
-            ]
-        )
-        session.commit()
-
-    response = client.get("/api/v1/dashboard")
-
-    assert response.status_code == 200
-    assert response.json()["monthly_total_review_duration_seconds"] == 60
-
-
-def test_dashboard_today_total_matches_unified_today_records(client, session_factory):
-    today_start, _ = today_bounds()
-    now = today_start + timedelta(hours=12)
-    with session_factory() as session:
-        session.add_all(
-            [
-                StudySession(
-                    id="today-completed",
-                    status="completed",
-                    scene="practice",
-                    target_type="none",
-                    title="today completed",
-                    started_at=now - timedelta(minutes=5),
-                    ended_at=now,
-                    effective_seconds=120,
-                ),
-                StudySession(
-                    id="today-active",
-                    status="active",
-                    scene="practice",
-                    target_type="none",
-                    title="today active checkpoint",
-                    started_at=now - timedelta(minutes=10),
-                    ended_at=None,
-                    effective_seconds=9_000,
-                ),
-            ]
-        )
-        session.commit()
-
-    response = client.get("/api/v1/dashboard")
-
-    assert response.status_code == 200
-    assert response.json()["today_total_review_duration_seconds"] == 120
+    assert not [key for key in body if "duration" in key]
+    assert "today_learning_palaces" not in body
+    assert body["english_stats"] == {
+        "total_courses": 0,
+        "unfinished_courses": 0,
+        "completed_courses": 0,
+    }
+    assert "review_duration_seconds" not in body["stats"]
 
 
 def test_weekly_report_payload(session_factory):
     with session_factory() as session:
-        today = date.today()
-        current_week_start = today - timedelta(days=today.weekday())
-        previous_week_day = current_week_start - timedelta(days=1)
         palace = Palace(title="Weekly", editor_doc=EDITOR_DOC)
         session.add(palace)
         session.flush()
-        previous_week_at = datetime.combine(previous_week_day, datetime.min.time())
-        session.add(StudySession(
-            id="previous-week-unit-review",
-            status="completed",
-            scene="formal_unit_review",
-            target_type="palace",
-            target_id=palace.id,
-            palace_id=palace.id,
-            title="unit review",
-            started_at=previous_week_at,
-            ended_at=previous_week_at + timedelta(minutes=1),
-            effective_seconds=60,
-        ))
         session.commit()
         payload = build_weekly_report_payload(session, offset_weeks=1)
 
     assert "week_start" in payload
     assert "review_count" in payload
-    assert "study_seconds" in payload
+    assert "study_seconds" not in payload
 
 
-def test_heatmap_excludes_active_checkpoint_seconds(session_factory):
+def test_heatmap_items_have_no_study_seconds(session_factory):
     from memory_anki.modules.dashboard.application.heatmap_service import build_heatmap_payload
 
-    now = utc_now_naive().replace(microsecond=0)
     with session_factory() as session:
-        session.add(
-            StudySession(
-                id="active-checkpoint",
-                status="active",
-                scene="quiz",
-                target_type="none",
-                title="checkpoint",
-                started_at=now,
-                ended_at=None,
-                effective_seconds=9_000,
-                completion_method="saved",
-            )
-        )
-        session.add(
-            StudySession(
-                id="completed-real",
-                status="completed",
-                scene="quiz",
-                target_type="none",
-                title="real",
-                started_at=now - timedelta(minutes=10),
-                ended_at=now,
-                effective_seconds=600,
-                completion_method="left_page",
-            )
-        )
-        session.commit()
         payload = build_heatmap_payload(session, days=7)
 
-    today_key = date.today().isoformat()
-    today_item = next(item for item in payload["items"] if item["date"] == today_key)
-    assert today_item["study_seconds"] == 600
+    assert len(payload["items"]) == 7
+    assert all("study_seconds" not in item for item in payload["items"])
+    assert all(item["review_count"] == 0 and item["active"] is False for item in payload["items"])

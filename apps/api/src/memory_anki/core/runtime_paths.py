@@ -48,7 +48,7 @@ def resolve_app_home() -> AppHomeResolution:
 def _local_config_app_home() -> Path | None:
     """Prefer the operator-configured data directory over ``%LOCALAPPDATA%``.
 
-    Keeps the database, the time ledger, and the shared storage lock on the same
+    Keeps the database and the shared storage lock on the same
     home when a process starts without ``MEMORY_ANKI_HOME``. Imported lazily to
     avoid a circular import (``local_config`` depends on this module).
     """

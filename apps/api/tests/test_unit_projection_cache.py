@@ -33,7 +33,7 @@ def test_edited_document_misses_the_projection_cache(db_session):
     _, repeat = resolve_unit_definitions(db_session, palace.id)
     assert [item.content_hash for item in repeat] == [item.content_hash for item in first]
 
-    # Same shape, new text: an edit here or a Syncthing-synced doc from the other device.
+    # Same shape, new text: an edit here or a doc synced in from the other device.
     palace.editor_doc = _doc("第二版")
     db_session.commit()
     tree, edited = resolve_unit_definitions(db_session, palace.id)

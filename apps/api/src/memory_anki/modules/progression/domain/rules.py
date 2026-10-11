@@ -18,13 +18,11 @@ CONQUER_BONUS = 15
 FIRST_LEARN_BONUS = 8
 QUIZ_CORRECT_XP = 8
 QUIZ_TRIED_XP = 3
-SESSION_MINUTE_CAP = 120
 # Same card (or question) rated again on the same day earns less each time.
 REPEAT_FACTORS = (1.0, 0.5, 0.25)
 REPEAT_FLOOR = 0.1
 PERFECT_ROUND_MIN = 10
 NIGHT_OR_DAWN_MIN = 10
-MARATHON_MINUTES = 120
 LEVEL_BASE = 150
 LEVEL_EXPONENT = 1.9
 
@@ -68,12 +66,6 @@ class QuizEvent:
     stars: int = 1
 
 
-@dataclass(frozen=True)
-class StudyBlock:
-    day: date
-    seconds: int
-
-
 @dataclass
 class _Round:
     count: int = 0
@@ -91,7 +83,6 @@ class DayStats:
     star3_passes: int = 0
     quiz_answered: int = 0
     quiz_correct: int = 0
-    minutes: int = 0
     night: int = 0
     dawn: int = 0
     xp: dict[str, float] = field(default_factory=lambda: defaultdict(float))
@@ -103,7 +94,7 @@ class DayStats:
 
 
 def build_days(
-    ratings: list[RatingEvent], quizzes: list[QuizEvent], blocks: list[StudyBlock]
+    ratings: list[RatingEvent], quizzes: list[QuizEvent]
 ) -> tuple[dict[date, DayStats], list[date]]:
     """Per-day stats and XP, plus the day each perfect round finished. ``ratings`` must be chronological."""
     days: dict[date, DayStats] = defaultdict(DayStats)
@@ -158,14 +149,6 @@ def build_days(
         stats.quiz_correct += 1 if quiz.correct else 0
         base = QUIZ_CORRECT_XP if quiz.correct else QUIZ_TRIED_XP
         stats.xp["quiz"] += base * star_multiplier(quiz.stars) * factor
-
-    for block in blocks:
-        minutes = min(SESSION_MINUTE_CAP, max(0, block.seconds) // 60)
-        if minutes <= 0:
-            continue
-        stats = days[block.day]
-        stats.minutes += minutes
-        stats.xp["time"] += minutes
 
     perfect_days = sorted(
         played.last_day

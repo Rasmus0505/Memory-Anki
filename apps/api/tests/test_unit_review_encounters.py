@@ -1,5 +1,5 @@
 import json
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 import pytest
 
@@ -20,9 +20,6 @@ from memory_anki.modules.memory.application.unit_review_service import (
     reconcile_palace_units,
     start_freestyle_unit_review_session,
     undo_unit_rating,
-)
-from memory_anki.modules.session.application.study_session_bridge import (
-    audit_inflated_study_sessions,
 )
 
 
@@ -221,7 +218,6 @@ def test_retry_glance_does_not_inherit_the_open_parent_rating(db_session):
     parent = db_session.get(ReviewUnitEncounter, "encounter-source")
     assert parent.status == "closed"
     assert parent.selected_rating == 2
-    assert parent.effective_seconds is None
     parent.created_at = utc_now_naive() - timedelta(seconds=30)
     db_session.commit()
 
@@ -231,9 +227,8 @@ def test_retry_glance_does_not_inherit_the_open_parent_rating(db_session):
         unit_id=state.id,
         encounter_id="encounter-source",
         operation_id="close-hard",
-        effective_seconds=4,
     )
-    assert closed["encounter"]["effective_seconds"] == 4
+    assert closed["encounter"]["status"] == "closed"
 
 
 def test_retry_glance_same_rating_keeps_this_encounter(db_session):
@@ -568,6 +563,25 @@ def test_rate_after_unrated_abandon_applies_latest_rating(db_session):
     assert db_session.get(StudySession, rated["study_session_id"]).status == "active"
 
 
+def test_rate_with_empty_session_id_opens_the_glance_inline(db_session):
+    state = _seed_review_unit(db_session)
+
+    rated = rate_review_unit(
+        db_session,
+        study_session_id="",
+        unit_id=state.id,
+        unit_revision=state.revision,
+        encounter_id="encounter-never-started",
+        operation_id="rating-no-session",
+        rating=3,
+        round_id="round-2026-07-27",
+    )
+
+    assert rated["rating"] == 3
+    assert rated["study_session_id"]
+    assert db_session.get(StudySession, rated["study_session_id"]).status == "active"
+
+
 def test_freestyle_complete_preserves_client_source_in_summary(db_session):
     state = _seed_review_unit(db_session)
     review_session = _start(db_session, state, "encounter-source", client_source="pwa")
@@ -589,115 +603,6 @@ def test_freestyle_complete_preserves_client_source_in_summary(db_session):
     summary = json.loads(study.summary_json or "{}")
     assert summary["client_source"] == "pwa"
     assert summary["completed_unit_count"] == 1
-
-
-def test_close_uses_client_observed_foreground_seconds(db_session):
-    state = _seed_review_unit(db_session)
-    review_session = _start(db_session, state, "encounter-foreground")
-    _rate(db_session, review_session, state, "encounter-foreground", "rating-foreground", 3)
-    encounter = db_session.query(ReviewUnitEncounter).filter_by(id="encounter-foreground").one()
-    encounter.created_at = datetime.now() - timedelta(hours=12)
-    db_session.commit()
-
-    closed = close_unit_review_encounter(
-        db_session,
-        study_session_id=review_session["id"],
-        unit_id=state.id,
-        encounter_id="encounter-foreground",
-        operation_id="close-foreground",
-        effective_seconds=7,
-    )
-
-    assert closed["session_status"] == "completed"
-    encounter = db_session.query(ReviewUnitEncounter).filter_by(id="encounter-foreground").one()
-    study = db_session.get(StudySession, review_session["id"])
-    assert encounter.effective_seconds == 7
-    assert study.effective_seconds == 7
-    assert closed["completion"]["duration_seconds"] == 7
-
-
-def test_close_clamps_seconds_beyond_server_wall_span(db_session):
-    state = _seed_review_unit(db_session)
-    review_session = _start(db_session, state, "encounter-wall-guard")
-    _rate(db_session, review_session, state, "encounter-wall-guard", "rating-wall-guard", 3)
-    encounter = db_session.query(ReviewUnitEncounter).filter_by(id="encounter-wall-guard").one()
-    created_at = utc_now_naive() - timedelta(seconds=5)
-    encounter.created_at = created_at
-    db_session.commit()
-
-    closed = close_unit_review_encounter(
-        db_session,
-        study_session_id=review_session["id"],
-        unit_id=state.id,
-        encounter_id="encounter-wall-guard",
-        operation_id="close-wall-guard",
-        effective_seconds=60,
-    )
-
-    encounter = db_session.query(ReviewUnitEncounter).filter_by(id="encounter-wall-guard").one()
-    wall_seconds = max(0, round((encounter.closed_at - created_at).total_seconds()))
-    assert encounter.status == "closed"
-    assert encounter.effective_seconds == wall_seconds
-    assert encounter.effective_seconds < 60
-    assert closed["encounter"]["effective_seconds"] == wall_seconds
-
-
-def test_close_without_observed_seconds_does_not_bill_wall_clock(db_session):
-    state = _seed_review_unit(db_session)
-    review_session = _start(db_session, state, "encounter-no-clock")
-    _rate(db_session, review_session, state, "encounter-no-clock", "rating-no-clock", 3)
-    encounter = db_session.query(ReviewUnitEncounter).filter_by(id="encounter-no-clock").one()
-    encounter.created_at = datetime.now() - timedelta(hours=12)
-    db_session.commit()
-
-    closed = close_unit_review_encounter(
-        db_session,
-        study_session_id=review_session["id"],
-        unit_id=state.id,
-        encounter_id="encounter-no-clock",
-        operation_id="close-no-clock",
-    )
-
-    study = db_session.get(StudySession, review_session["id"])
-    assert study.effective_seconds == 0
-    assert closed["completion"]["duration_seconds"] == 0
-
-
-def test_audit_reports_long_freestyle_encounters_without_repairing_them(db_session):
-    state = _seed_review_unit(db_session)
-    review_session = _start(db_session, state, "encounter-audit")
-    _rate(db_session, review_session, state, "encounter-audit", "rating-audit", 3)
-    study = db_session.get(StudySession, review_session["id"])
-    encounter = db_session.query(ReviewUnitEncounter).filter_by(id="encounter-audit").one()
-    created_at = utc_now_naive() - timedelta(hours=2)
-    closed_at = created_at + timedelta(seconds=3601)
-    encounter.created_at = created_at
-    encounter.closed_at = closed_at
-    encounter.status = "closed"
-    encounter.effective_seconds = 3601
-    study.status = "completed"
-    study.ended_at = closed_at
-    study.effective_seconds = 3601
-    db_session.commit()
-
-    report = audit_inflated_study_sessions(db_session)
-
-    assert report["long_freestyle_encounter_threshold_seconds"] == 3600
-    assert report["long_freestyle_encounter_count"] == 1
-    assert report["long_freestyle_encounters"] == [
-        {
-            "encounter_id": "encounter-audit",
-            "study_session_id": review_session["id"],
-            "unit_id": state.id,
-            "title": study.title,
-            "effective_seconds": 3601,
-            "wall_seconds": 3601,
-            "created_at": created_at.isoformat(sep=" "),
-            "closed_at": closed_at.isoformat(sep=" "),
-            "client_source": "desktop",
-        }
-    ]
-    assert encounter.effective_seconds == 3601
 
 
 def test_failed_close_keeps_session_and_next_encounter_retains_penalty(db_session):
@@ -786,25 +691,23 @@ def test_review_http_contract_carries_encounter_identity(session_factory, make_c
     assert wrong_round_close.status_code == 400
     assert "round_id does not match the active encounter" in wrong_round_close.json()["detail"]
 
-    clamped_close = client.post(
+    close_response = client.post(
         f"/api/v1/review/session/{review_session['id']}/units/{unit_id}"
         "/encounters/http-encounter/close",
-        json={"operation_id": "http-close-impossible-duration", "effective_seconds": 11},
+        json={"operation_id": "http-close-ignores-duration", "effective_seconds": 11},
     )
-    assert clamped_close.status_code == 200
-    clamped_seconds = clamped_close.json()["item"]["encounter"]["effective_seconds"]
-    assert clamped_seconds is not None
-    assert 9 <= clamped_seconds <= 11
-    assert clamped_close.json()["item"]["encounter"]["status"] == "closed"
-    assert clamped_close.json()["item"]["completion"]["duration_seconds"] == clamped_seconds
+    assert close_response.status_code == 200
+    assert close_response.json()["item"]["encounter"]["status"] == "closed"
+    assert "effective_seconds" not in close_response.json()["item"]["encounter"]
+    assert "duration_seconds" not in close_response.json()["item"]["completion"]
 
-    replayed_close = client.post(
+    replay_response = client.post(
         f"/api/v1/review/session/{review_session['id']}/units/{unit_id}"
         "/encounters/http-encounter/close",
         json={"operation_id": "http-close", "effective_seconds": 9},
     )
-    assert replayed_close.status_code == 200
-    assert replayed_close.json()["item"]["encounter"]["effective_seconds"] == clamped_seconds
+    assert replay_response.status_code == 200
+    assert replay_response.json()["item"]["encounter"]["status"] == "closed"
 
 
 @pytest.mark.parametrize("early", [False, True])

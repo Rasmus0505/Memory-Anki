@@ -6,20 +6,16 @@ import json
 from datetime import date, datetime, timedelta
 from typing import Any, Literal
 
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from memory_anki.core.time import local_calendar_day_start_as_utc_naive, to_api_datetime
 from memory_anki.infrastructure.db._tables.misc import StudySession
 from memory_anki.infrastructure.db._tables.palaces import FreestyleQuizAttempt
 from memory_anki.infrastructure.db._tables.unit_reviews import (
-    ReviewUnitEncounter,
     ReviewUnitRatingOperation,
-    ReviewUnitState,
 )
 
 from .unit_review_projection import get_palace_unit_projection
-from .unit_review_service import _encounter_billable_seconds
 from .unit_scheduler import INTERVAL_DAYS, clamp_stage
 
 LadderRange = Literal["today", "last3days", "week", "all"]
@@ -32,7 +28,6 @@ def _empty_stage_bucket(stage_index: int) -> dict[str, Any]:
         "interval_days": INTERVAL_DAYS[stage_index],
         "pass_count": 0,
         "last_at": None,
-        "seconds": 0,
     }
 
 
@@ -45,7 +40,6 @@ def _empty_range_stats(range_key: str) -> dict[str, Any]:
         "range": range_key,
         "per_stage": [_empty_stage_bucket(i) for i in range(len(INTERVAL_DAYS))],
         "total_reviews": 0,
-        "total_seconds": 0,
         "rating_share": _empty_rating_share(),
     }
 
@@ -100,7 +94,7 @@ def _accumulate_ops(
             continue
         # A pass belongs to the stage that was actually reviewed, not the
         # destination stage after scheduling advances (which may jump twice on
-        # an "easy" rating). This matches encounter duration attribution below.
+        # an "easy" rating).
         stage = _stage_from_state_snapshot_json(op.before_state_json)
         if stage is None:
             continue
@@ -110,23 +104,6 @@ def _accumulate_ops(
         if stamp and (bucket["last_at"] is None or stamp > bucket["last_at"]):
             bucket["last_at"] = stamp
     return per_stage, share, total_reviews
-
-
-def _accumulate_encounter_seconds(
-    encounters: list[ReviewUnitEncounter],
-    per_stage: list[dict[str, Any]],
-) -> int:
-    total = 0
-    for encounter in encounters:
-        seconds = _encounter_billable_seconds(encounter)
-        if seconds <= 0:
-            continue
-        total += seconds
-        stage = _stage_from_state_snapshot_json(encounter.baseline_state_json)
-        if stage is None:
-            continue
-        per_stage[stage]["seconds"] += seconds
-    return total
 
 
 def _build_range_stats(
@@ -149,71 +126,12 @@ def _build_range_stats(
     ops = op_query.order_by(ReviewUnitRatingOperation.created_at.asc()).all()
     per_stage, share, total_reviews = _accumulate_ops(ops)
 
-    encounter_query = (
-        session.query(ReviewUnitEncounter)
-        .join(ReviewUnitState, ReviewUnitState.id == ReviewUnitEncounter.unit_id)
-        .filter(
-            ReviewUnitState.palace_id == palace_id,
-            ReviewUnitEncounter.status == "closed",
-            ReviewUnitEncounter.selected_rating.isnot(None),
-        )
-    )
-    if unit_id:
-        encounter_query = encounter_query.filter(ReviewUnitEncounter.unit_id == unit_id)
-    if since is not None:
-        encounter_query = encounter_query.filter(ReviewUnitEncounter.closed_at >= since)
-    encounters = encounter_query.all()
-    total_seconds = _accumulate_encounter_seconds(encounters, per_stage)
-
     return {
         "range": range_key,
         "per_stage": per_stage,
         "total_reviews": total_reviews,
-        "total_seconds": total_seconds,
         "rating_share": share,
     }
-
-
-def _summary_seconds_for_palace(row: StudySession, palace_id: int | None) -> int:
-    """Return a completed session's trusted seconds for an optional palace scope.
-
-    A completed timed session may contain several scene segments.  When those
-    segments are present they are the only safe way to attribute a multi-palace
-    freestyle session; never add the top-level duration a second time.
-    """
-    total = max(0, int(row.effective_seconds or 0))
-    if palace_id is None:
-        return total
-    try:
-        summary = json.loads(row.summary_json or "{}")
-    except (TypeError, ValueError):
-        summary = {}
-    segments = summary.get("scene_segments") if isinstance(summary, dict) else None
-    if isinstance(segments, list) and segments:
-        attributed = 0
-        valid = False
-        for segment in segments:
-            if not isinstance(segment, dict):
-                continue
-            raw_palace = segment.get("palaceId", segment.get("palace_id"))
-            raw_seconds = segment.get("effectiveSeconds", segment.get("effective_seconds"))
-            try:
-                raw_palace_value = (
-                    raw_palace if isinstance(raw_palace, str | int | float) else None
-                )
-                if raw_palace_value is None or int(raw_palace_value) != palace_id:
-                    continue
-                seconds = max(0, int(raw_seconds or 0))
-            except (TypeError, ValueError):
-                continue
-            valid = True
-            attributed += seconds
-        # Corrupt segment payloads must not inflate the session total.
-        if valid and attributed <= total:
-            return attributed
-        if valid:
-            return 0
-    return total if row.palace_id == palace_id else 0
 
 
 def _build_learning_summary(
@@ -257,19 +175,9 @@ def _build_learning_summary(
         quiz_query = quiz_query.filter(FreestyleQuizAttempt.created_at >= since)
     quiz_count = quiz_query.count()
 
-    attributed_at = func.coalesce(StudySession.ended_at, StudySession.started_at)
-    sessions = session.query(StudySession).filter(
-        StudySession.status == "completed",
-        StudySession.deleted_at.is_(None),
-        StudySession.effective_seconds > 0,
-    )
-    if since is not None:
-        sessions = sessions.filter(attributed_at >= since)
-    total_seconds = sum(_summary_seconds_for_palace(row, palace_id) for row in sessions.all())
     return {
         "range": range_key,
         "unit_count": unit_count,
-        "total_seconds": total_seconds,
         "freestyle_rating_count": rating_count,
         "quiz_count": quiz_count,
     }

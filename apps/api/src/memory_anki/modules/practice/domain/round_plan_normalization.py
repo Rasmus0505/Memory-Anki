@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from .learning_time import empty_learning_time, normalize_learning_time
 from .overlay_quiz import normalize_overlay_quiz
 from .round_plan_values import (
     _day,
@@ -58,7 +57,6 @@ def _partial_settlements(raw: Any) -> list[dict[str, Any]]:
                                 "palace_title": _text(palace.get("palace_title"))[:80]
                                 or (f"宫殿 {palace_id}" if palace_id else "未分类"),
                                 "card_count": max(0, _int(palace.get("card_count"))),
-                                "effective_seconds": max(0, _int(palace.get("effective_seconds"))),
                             }
                         )
                 subjects.append(
@@ -67,7 +65,6 @@ def _partial_settlements(raw: Any) -> list[dict[str, Any]]:
                         "subject_name": _text(subject.get("subject_name"))[:80] or "未分类",
                         "palace_count": max(0, _int(subject.get("palace_count"))) or len(palaces),
                         "card_count": max(0, _int(subject.get("card_count"))),
-                        "effective_seconds": max(0, _int(subject.get("effective_seconds"))),
                         "palaces": palaces,
                     }
                 )
@@ -80,8 +77,6 @@ def _partial_settlements(raw: Any) -> list[dict[str, Any]]:
                 "passed_count": max(0, _int(item.get("passed_count"))),
                 "retry_count": max(0, _int(item.get("retry_count"))),
                 "quiz_count": max(0, _int(item.get("quiz_count"))),
-                "total_effective_seconds": max(0, _int(item.get("total_effective_seconds"))),
-                "quiz_seconds": max(0, _int(item.get("quiz_seconds"))),
                 "by_subject": subjects,
             }
         )
@@ -101,7 +96,6 @@ def empty_plan() -> Plan:
         "occurrences": [],
         "encounters": {},
         "today": "",
-        "learning_time": empty_learning_time(),
     }
 
 
@@ -221,7 +215,6 @@ def normalize_plan(plan: Mapping[str, Any] | None) -> Plan:
         "encounters": encounters,
         "today": _day(raw.get("today")),
         "overlay_quiz": normalize_overlay_quiz(raw.get("overlay_quiz") if isinstance(raw.get("overlay_quiz"), Mapping) else None),
-        "learning_time": normalize_learning_time(raw.get("learning_time") if isinstance(raw.get("learning_time"), Mapping) else None),
     }
     held = set(normalized["completed_ids"]) | set(normalized["excluded_ids"]) | set(normalized["compressed_ids"])
     restored = [item for item in _unique(raw.get("restored_ids") or []) if item not in held]

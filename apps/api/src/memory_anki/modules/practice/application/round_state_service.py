@@ -673,8 +673,6 @@ def rate_freestyle_round_unit(
         raise ValueError("freestyle round not found")
     if _operation_seen(session, row, op_id):
         return {"item": None, "round": _serve(session, row, duplicate=True)}
-    if intent_sequence > 0 and intent_sequence <= int(row.version or 0):
-        return {"item": None, "round": _serve(session, row, duplicate=True)}
     # Ratings last-write-wins: a stale expected_version still applies so PWA
     # and desktop cannot 409 each other after one side already scored.
     # Wrong card / occurrence / encounter / unit never last-writes.
@@ -718,7 +716,9 @@ def rate_freestyle_round_unit(
             include_unit_ids=[str(value) for value in batch.get("include_unit_ids") or []],
             commit=False,
         )
-    elif _text(unit_id) and _text(study_session_id):
+    elif _text(unit_id):
+        # An empty study_session_id is valid: the unit service reopens the glance
+        # for this encounter inside the same write.
         item = rate_review_unit(
             session,
             study_session_id=study_session_id,

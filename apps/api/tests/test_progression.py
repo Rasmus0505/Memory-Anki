@@ -27,7 +27,6 @@ from memory_anki.modules.progression.domain.rules import (
     DayStats,
     QuizEvent,
     RatingEvent,
-    StudyBlock,
     build_days,
     level_for,
     xp_for_level,
@@ -42,7 +41,7 @@ def rating(unit: str, grade: int, *, day: date = DAY, hour: int = 20, stars: int
 
 
 def test_forgetting_still_earns_and_honest_recall_earns_more():
-    days, _ = build_days([rating("a", 1), rating("b", 3)], [], [])
+    days, _ = build_days([rating("a", 1), rating("b", 3)], [])
     xp = days[DAY].xp
     assert xp["rating"] == GRADE_XP[1] + GRADE_XP[3]
     assert xp["first_learn"] == FIRST_LEARN_BONUS
@@ -50,25 +49,20 @@ def test_forgetting_still_earns_and_honest_recall_earns_more():
 
 def test_conquering_a_forgotten_card_pays_once_per_day():
     events = [rating("a", 1, day=DAY - timedelta(days=1)), rating("a", 3), rating("a", 1), rating("a", 4)]
-    days, _ = build_days(events, [], [])
+    days, _ = build_days(events, [])
     assert days[DAY].conquered == 1
     assert days[DAY].xp["conquer"] == CONQUER_BONUS
 
 
 def test_repeating_a_card_the_same_day_has_diminishing_returns():
-    days, _ = build_days([rating("a", 3), rating("a", 3), rating("a", 3), rating("a", 3)], [], [])
+    days, _ = build_days([rating("a", 3), rating("a", 3), rating("a", 3), rating("a", 3)], [])
     assert days[DAY].xp["rating"] == pytest.approx(GRADE_XP[3] * (1 + 0.5 + 0.25 + 0.1))
 
 
 def test_exam_stars_multiply_card_value():
-    plain, _ = build_days([rating("a", 3)], [], [])
-    key, _ = build_days([rating("a", 3, stars=3)], [], [])
+    plain, _ = build_days([rating("a", 3)], [])
+    key, _ = build_days([rating("a", 3, stars=3)], [])
     assert key[DAY].xp["rating"] > plain[DAY].xp["rating"]
-
-
-def test_study_time_is_capped_per_session():
-    days, _ = build_days([], [], [StudyBlock(day=DAY, seconds=5 * 3600), StudyBlock(day=DAY, seconds=30)])
-    assert days[DAY].minutes == 120
 
 
 def test_level_curve_is_fast_early_and_monotonic():
@@ -88,7 +82,7 @@ def test_daily_quests_are_deterministic_and_never_share_a_metric():
 
 
 def test_quest_xp_is_credited_only_when_the_target_is_met():
-    stats = DayStats(ratings=40, conquered=3, high_star=10, first_learned=5, quiz_correct=5, minutes=25, passes=40)
+    stats = DayStats(ratings=40, conquered=3, high_star=10, first_learned=5, quiz_correct=5, passes=40)
     credited, counts = quest_xp_by_day({DAY: stats})
     assert credited[DAY] >= DAILY_COUNT * DAILY_XP
     assert counts[DAY] >= DAILY_COUNT
@@ -97,20 +91,20 @@ def test_quest_xp_is_credited_only_when_the_target_is_met():
 
 def test_perfect_round_needs_ten_clean_ratings():
     clean = [rating(f"u{i}", 3, round_id="r1") for i in range(10)]
-    _, perfect = build_days(clean, [], [])
+    _, perfect = build_days(clean, [])
     assert perfect == [DAY]
-    _, spoiled = build_days([*clean, rating("x", 1, round_id="r1")], [], [])
+    _, spoiled = build_days([*clean, rating("x", 1, round_id="r1")], [])
     assert spoiled == []
 
 
 def test_projection_levels_up_and_unlocks_stamps_that_never_unlock_again():
     events = [rating(f"u{i}", 3, day=DAY - timedelta(days=i % 8)) for i in range(120)]
-    view = project(events, [QuizEvent(question_id=1, correct=True, day=DAY)], [], today=DAY)
+    view = project(events, [QuizEvent(question_id=1, correct=True, day=DAY)], today=DAY)
     assert view.level.level > 1
     assert 0 <= view.level.progress <= 1
     unlocked = {item.stamp.id: item.unlocked_on for item in view.stamps if item.unlocked_on}
     assert "ratings_100" in unlocked and "days_7" in unlocked
-    later = project(events, [], [], today=DAY + timedelta(days=30))
+    later = project(events, [], today=DAY + timedelta(days=30))
     assert {item.stamp.id: item.unlocked_on for item in later.stamps if item.unlocked_on}["ratings_100"] == unlocked["ratings_100"]
     assert later.xp_today == 0
 
@@ -155,7 +149,6 @@ def test_overview_route_projects_recorded_evidence(make_client, db_session):
     assert body["stats"]["conquered"] == 1
     assert body["level"]["xp"] > 0
     assert body["xp"]["sources"]["conquer"] == CONQUER_BONUS
-    assert body["xp"]["sources"]["time"] == 30
     assert len([q for q in body["quests"] if q["scope"] == "daily"]) == DAILY_COUNT
     assert any(stamp["id"] == "ratings_100" and stamp["unlocked_on"] is None for stamp in body["stamps"])
     starmap = body["starmap"]

@@ -8,8 +8,16 @@ Import rule for other contexts:
 
 from __future__ import annotations
 
-from . import queries
+from memory_anki.modules.session.api import (
+    apply_live_study_command,
+    get_live_study_projection,
+    reset_live_study_room,
+    stream_live_study_events,
+)
 
 __all__ = [
-    "queries",
+    "apply_live_study_command",
+    "get_live_study_projection",
+    "reset_live_study_room",
+    "stream_live_study_events",
 ]

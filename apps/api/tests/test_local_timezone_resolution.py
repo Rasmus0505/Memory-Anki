@@ -19,8 +19,7 @@ from memory_anki.core.time import (
     parse_client_datetime,
     resolve_local_timezone,
 )
-from memory_anki.modules.session.application import time_bounds
-from memory_anki.modules.session.application import time_record_read_model as read_model
+from memory_anki.modules.dashboard.application import bounds as time_bounds
 
 
 @pytest.fixture
@@ -83,17 +82,6 @@ def test_day_start_is_consistent_with_day_bounds(zone_env):
     assert local_calendar_day_start_as_utc_naive(day) == (
         local_calendar_day_bounds_as_utc_naive(day)[0]
     )
-
-
-def test_local_day_expression_emits_explicit_offset_not_localtime(zone_env):
-    """The SQL must pin an offset; 'localtime' leaks the server OS zone."""
-    zone_env("+08:00")
-    expression = read_model._local_calendar_date_expr(
-        read_model.time_record_attributed_at()
-    )
-    rendered = str(expression.compile(compile_kwargs={"literal_binds": True}))
-    assert "localtime" not in rendered
-    assert "+08:00" in rendered
 
 
 def test_time_bounds_use_the_configured_zone(zone_env):

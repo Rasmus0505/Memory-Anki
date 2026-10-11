@@ -37,22 +37,6 @@ def _bad_request(exc: ValueError) -> HTTPException:
     return HTTPException(status_code=400, detail=str(exc))
 
 
-def _optional_nonnegative_seconds(value: object) -> int | None:
-    if value is None:
-        return None
-    if isinstance(value, bool):
-        raise ValueError("effective_seconds must be a non-negative integer")
-    if not isinstance(value, str | int | float):
-        raise ValueError("effective_seconds must be a non-negative integer")
-    try:
-        seconds = int(value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError("effective_seconds must be a non-negative integer") from exc
-    if seconds < 0:
-        raise ValueError("effective_seconds must be a non-negative integer")
-    return seconds
-
-
 @router.get("/review/queue")
 def review_queue(session: Session = Depends(session_dep)):
     # Read-only: defer any lagging palace to the background reconciler rather
@@ -338,7 +322,6 @@ def close_encounter(
                 unit_id=unit_id,
                 encounter_id=encounter_id,
                 operation_id=str(data.get("operation_id") or ""),
-                effective_seconds=_optional_nonnegative_seconds(data.get("effective_seconds")),
                 round_id=str(data.get("round_id") or "") or None,
             )
         }

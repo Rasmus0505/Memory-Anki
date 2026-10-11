@@ -5,10 +5,12 @@ return the in-memory copy. English audio and subject image files stay on disk
 until a page actually opens them.
 """
 
+from contextlib import contextmanager
+
 from fastapi import APIRouter
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db._tables._base import get_session
+from memory_anki.infrastructure.db.deps import session_dep
 from memory_anki.modules.content.application.study_text_library import (
     build_study_text_editors,
     group_bindings_by_palace,
@@ -49,11 +51,8 @@ def compose_study_text_library(session: Session) -> dict:
 
 
 def _build_study_text_library() -> dict:
-    session = get_session()
-    try:
+    with contextmanager(session_dep)() as session:
         return compose_study_text_library(session)
-    finally:
-        session.close()
 
 
 @router.get("/study-text-library")

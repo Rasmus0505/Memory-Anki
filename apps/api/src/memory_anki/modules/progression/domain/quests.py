@@ -33,14 +33,12 @@ DAILY_TEMPLATES = (
     QuestTemplate("star_10", "复习 10 张三星卡", "high_star", 10, "高分值章节优先"),
     QuestTemplate("learn_5", "新学会 5 张卡", "first_learned", 5, "第一次评到记得"),
     QuestTemplate("quiz_5", "答对 5 道题", "quiz_correct", 5, "随心工具栏的做题"),
-    QuestTemplate("focus_25", "专注学习 25 分钟", "minutes", 25, "一个番茄钟"),
 )
 
 WEEKLY_TEMPLATES = (
     QuestTemplate("week_days_5", "本周学习 5 天", "active_days", 5, "每天一点点就算"),
     QuestTemplate("week_rate_200", "本周评 200 张卡", "ratings", 200, "攒着慢慢来"),
     QuestTemplate("week_conquer_15", "本周攻克 15 张卡", "conquered", 15, "薄弱点最值钱"),
-    QuestTemplate("week_minutes_300", "本周专注 5 小时", "minutes", 300, "计时器会自动记"),
 )
 
 

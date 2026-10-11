@@ -1,10 +1,10 @@
 # Module: session
 
 ## Status
-active — owns study sessions, timing, and scene attribution.
+active — owns the in-process live study room (presence).
 
 ## Owns
-Study sessions, timing, scene attribution, and the in-process live study room.
+The in-process live study room (presence, controller lease, SSE).
 
 ## Migrates from
 - sessions
@@ -13,7 +13,7 @@ Study sessions, timing, scene attribution, and the in-process live study room.
 No FSRS math
 
 ## Public surface
-- `public/queries.py` — read contracts
+- `api.py` / `public/__init__.py` — live study room commands and stream
 
 ## Cross-module rule
 Import only `memory_anki.modules.session.public`. Never import another module's application/infrastructure/presentation.

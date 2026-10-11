@@ -7,7 +7,6 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from memory_anki.infrastructure.db._tables.misc import StudySession
 from memory_anki.infrastructure.db._tables.palaces import QuizAttemptEvent
 from memory_anki.infrastructure.db._tables.unit_reviews import (
     ReviewUnitEncounter,
@@ -16,7 +15,7 @@ from memory_anki.infrastructure.db._tables.unit_reviews import (
 from memory_anki.modules.exam.api import build_memory_snapshot
 
 from ..domain.projection import Progression, project
-from ..domain.rules import QuizEvent, RatingEvent, StudyBlock
+from ..domain.rules import QuizEvent, RatingEvent
 
 
 def _local(value: datetime | None) -> datetime | None:
@@ -24,7 +23,7 @@ def _local(value: datetime | None) -> datetime | None:
     return value.replace(tzinfo=UTC).astimezone() if value else None
 
 
-def load_evidence(session: Session, stars: dict[int, int]) -> tuple[list[RatingEvent], list[QuizEvent], list[StudyBlock]]:
+def load_evidence(session: Session, stars: dict[int, int]) -> tuple[list[RatingEvent], list[QuizEvent]]:
     ratings: list[RatingEvent] = []
     rows = (
         session.query(
@@ -75,16 +74,7 @@ def load_evidence(session: Session, stars: dict[int, int]) -> tuple[list[RatingE
             )
         )
 
-    blocks: list[StudyBlock] = []
-    for started_at, seconds in (
-        session.query(StudySession.started_at, StudySession.effective_seconds)
-        .filter(StudySession.deleted_at.is_(None))
-        .filter(StudySession.effective_seconds > 0)
-    ):
-        at = _local(started_at)
-        if at is not None:
-            blocks.append(StudyBlock(day=at.date(), seconds=int(seconds)))
-    return ratings, quizzes, blocks
+    return ratings, quizzes
 
 
 def serialize(progression: Progression) -> dict[str, Any]:

@@ -35,9 +35,6 @@ from memory_anki.modules.english.infrastructure.task_runner import (
     EnglishTaskRunner,
     LocalThreadEnglishTaskRunner,
 )
-from memory_anki.modules.session.public.queries import (
-    get_english_study_stats,
-)
 from memory_anki.platform.application import AiRuntimeOptions
 
 from .ai_dependencies import EnglishAiDependencies
@@ -48,6 +45,7 @@ from .course_service import (
     guess_media_type,
     list_recent_courses,
 )
+from .study_stats import get_english_study_stats
 from .task_runtime import (
     TASK_RUNTIME_FILE,
     load_task_runtime_identity,

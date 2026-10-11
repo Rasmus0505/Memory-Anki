@@ -44,37 +44,13 @@ ENCOUNTER_OPEN = "open"
 ENCOUNTER_CLOSED = "closed"
 
 
-def encounter_focus_seconds_by_palace(session: Session, round_id: str) -> dict[int, int]:
-    """Closed-glance focus seconds for one freestyle round, grouped by palace."""
-    rid = str(round_id or "").strip()
-    if not rid:
-        return {}
-    rows = (
-        session.query(ReviewUnitState.palace_id, ReviewUnitEncounter.effective_seconds)
-        .join(ReviewUnitEncounter, ReviewUnitEncounter.unit_id == ReviewUnitState.id)
-        .filter(ReviewUnitEncounter.round_id == rid)
-        .all()
-    )
-    weights: dict[int, int] = {}
-    for palace_id, seconds in rows:
-        try:
-            pid = int(palace_id)
-            sec = int(seconds or 0)
-        except (TypeError, ValueError):
-            continue
-        if pid <= 0 or sec <= 0:
-            continue
-        weights[pid] = weights.get(pid, 0) + sec
-    return weights
-# Freestyle used to keep one StudySession.started_at from the first card glance
-# until eventual pass, so scrolling past three cards in 7s then finishing later
-# minted three overlapping wall-clock rows. Rated closed encounters are the only
-# billable intervals; unrated glances are cancelled on leave.
+# Rated closed encounters are the only counted intervals; unrated glances are
+# cancelled on leave, so freestyle never keeps a session open across other cards.
 FREESTYLE_UNIT_REVIEW_SCENE = "freestyle_unit_review"
 
 
 def _normalize_unit_review_client_source(value: Any) -> str | None:
-    """Align with study-session time-record client_source buckets."""
+    """Normalize the client source recorded on review sessions."""
     normalized = str(value or "").strip().lower()
     if normalized == "desktop":
         return "desktop"
@@ -89,27 +65,6 @@ def _load_study_summary(study: StudySession) -> dict[str, Any]:
     except (TypeError, json.JSONDecodeError):
         raw = {}
     return raw if isinstance(raw, dict) else {}
-
-
-def _encounter_billable_seconds(encounter: ReviewUnitEncounter) -> int:
-    """Client-observed foreground seconds for a rated, closed card encounter."""
-    if encounter.status != ENCOUNTER_CLOSED or encounter.selected_rating is None:
-        return 0
-    if encounter.effective_seconds is None:
-        return 0
-    return max(0, int(encounter.effective_seconds))
-
-
-def _sum_billable_encounter_seconds(session: Session, study_session_id: str) -> int:
-    rows = (
-        session.query(ReviewUnitEncounter)
-        .filter(
-            ReviewUnitEncounter.study_session_id == study_session_id,
-            ReviewUnitEncounter.status == ENCOUNTER_CLOSED,
-        )
-        .all()
-    )
-    return sum(_encounter_billable_seconds(row) for row in rows)
 
 
 def _first_billable_encounter_started_at(
@@ -200,7 +155,6 @@ def _abandon_freestyle_study_session(
     study.status = SESSION_ABANDONED
     study.ended_at = now
     study.completion_method = reason
-    study.effective_seconds = _sum_billable_encounter_seconds(session, study.id)
     summary = _load_study_summary(study)
     summary["abandoned_reason"] = reason
     summary["abandoned_at"] = to_api_datetime(now)
@@ -527,7 +481,6 @@ def _encounter_payload(encounter: ReviewUnitEncounter) -> dict[str, Any]:
         "passed": encounter.passed,
         "retry_after_cards": encounter.retry_after_cards,
         "effective_operation_id": encounter.effective_operation_id,
-        "effective_seconds": encounter.effective_seconds,
         "closed_at": to_api_datetime(encounter.closed_at),
         # Same fuzz key as the commit path (unit id), so the previewed due date is
         # the one actually booked instead of an unfuzzed approximation.
@@ -1161,9 +1114,8 @@ def _close_rated_encounter(
     study: StudySession,
     encounter: ReviewUnitEncounter,
     close_operation_id: str,
-    effective_seconds: int = 0,
 ) -> None:
-    """Close a rated encounter without committing. Sibling palace rates use 0s."""
+    """Close a rated encounter without committing."""
     if encounter.status == ENCOUNTER_CLOSED:
         return
     if encounter.effective_operation_id is None or encounter.selected_rating is None:
@@ -1171,7 +1123,6 @@ def _close_rated_encounter(
     closed_at = utc_now_naive()
     encounter.status = ENCOUNTER_CLOSED
     encounter.close_operation_id = close_operation_id
-    encounter.effective_seconds = max(0, int(effective_seconds))
     encounter.closed_at = closed_at
     if encounter.passed and study.scene == FREESTYLE_UNIT_REVIEW_SCENE:
         _complete_unit_review_session(session, study)
@@ -1628,14 +1579,12 @@ def rate_palace_due_units(
             study=study,
             encounter=encounter,
             close_operation_id=f"{sibling_op_id}:close",
-            effective_seconds=0,
         )
         if study.status == SESSION_ACTIVE:
             # Failed siblings must not linger as a second live freestyle session.
             study.status = SESSION_ABANDONED
             study.ended_at = utc_now_naive()
             study.completion_method = "palace_due_batch"
-            study.effective_seconds = _sum_billable_encounter_seconds(session, study.id)
         sibling_op = session.get(ReviewUnitRatingOperation, sibling_op_id)
         if sibling_op is not None:
             operations.append(sibling_op)
@@ -1777,7 +1726,6 @@ def close_unit_review_encounter(
     unit_id: str,
     encounter_id: str,
     operation_id: str,
-    effective_seconds: int | None = None,
     round_id: str | None = None,
 ) -> dict[str, Any]:
     close_operation_id = str(operation_id or "").strip()
@@ -1795,18 +1743,6 @@ def close_unit_review_encounter(
     if round_id and encounter.round_id != str(round_id).strip():
         raise ValueError("round_id does not match the active encounter")
     if encounter.status == ENCOUNTER_CLOSED:
-        # A 重练 handoff may close the parent glance before the client reports
-        # focus time. Fill that gap once; do not overwrite a reported value.
-        if effective_seconds is not None and encounter.effective_seconds is None:
-            normalized_seconds = int(effective_seconds)
-            if normalized_seconds < 0:
-                raise ValueError("effective_seconds must be non-negative")
-            if encounter.created_at is not None:
-                wall_seconds = max(0, round((utc_now_naive() - encounter.created_at).total_seconds()))
-                if normalized_seconds > wall_seconds:
-                    normalized_seconds = wall_seconds
-            encounter.effective_seconds = normalized_seconds
-            session.commit()
         completion = (
             json.loads(study.summary_json or "{}")
             if study.status == SESSION_COMPLETED
@@ -1822,20 +1758,9 @@ def close_unit_review_encounter(
         }
     if encounter.effective_operation_id is None or encounter.selected_rating is None:
         raise ValueError("rate the review unit before leaving it")
-    normalized_seconds = 0 if effective_seconds is None else int(effective_seconds)
-    if normalized_seconds < 0:
-        raise ValueError("effective_seconds must be non-negative")
     closed_at = utc_now_naive()
-    if encounter.created_at is not None:
-        # Cap inflation only. Client clocks start after the start response lands
-        # (PWA/Tailscale lag) and round up; a 400 here left the rating saved and
-        # the learner stuck on the card.
-        wall_seconds = max(0, round((closed_at - encounter.created_at).total_seconds()))
-        if normalized_seconds > wall_seconds:
-            normalized_seconds = wall_seconds
     encounter.status = ENCOUNTER_CLOSED
     encounter.close_operation_id = close_operation_id
-    encounter.effective_seconds = normalized_seconds
     encounter.closed_at = closed_at
     completion = None
     if encounter.passed and study.scene == FREESTYLE_UNIT_REVIEW_SCENE:
@@ -1868,9 +1793,6 @@ def _complete_unit_review_session(session: Session, study: StudySession) -> dict
         if not items or any(item.status != ITEM_PASSED for item in items):
             raise ValueError("all review units must pass before completion")
         now = utc_now_naive()
-        # Bill only rated closed encounters (card-visible intervals). Never use
-        # bare (now - started_at): freestyle leaves sessions open across other cards.
-        duration = _sum_billable_encounter_seconds(session, study.id)
         counted_ids = {
             row.id
             for row in session.query(ReviewUnitEncounter.id)
@@ -1898,7 +1820,6 @@ def _complete_unit_review_session(session: Session, study: StudySession) -> dict
             and staged.id not in counted_ids
             and staged.selected_rating is not None
         ):
-            duration += _encounter_billable_seconds(staged)
             if first_billable_at is None or (
                 staged.created_at is not None and staged.created_at < first_billable_at
             ):
@@ -1914,39 +1835,22 @@ def _complete_unit_review_session(session: Session, study: StudySession) -> dict
     # Merge completion receipt into existing summary so client_source stamped at
     # start (desktop/pwa freestyle or formal review) is not wiped to 未知端.
     prior = _load_study_summary(study)
-    wall_span = max(0, int((now - study.started_at).total_seconds())) if study.started_at else duration
-    # ``duration`` bills rated closed encounters, but ``started_at`` is the first
-    # encounter's start and ``ended_at`` is *now* — after the last card was
-    # already on screen. The final render gap therefore let the billed sum exceed
-    # the stored wall span by a second or two, producing rows whose
-    # "effective_seconds" could not fit inside their own timestamps.
-    # Clamp so the two accounts always agree, and record when that happened.
-    billed_seconds = duration
-    if duration > wall_span:
-        duration = wall_span
     summary = {
         **prior,
         "study_session_id": study.id,
         "palace_id": study.palace_id,
         "completed_unit_count": len(items),
-        "duration_seconds": duration,
-        "wall_span_seconds": wall_span,
-        "duration_basis": "rated_closed_encounters",
         "hard_retry_count": sum(item.hard_count for item in items),
         "again_retry_count": sum(item.again_count for item in items),
         "next_review_date": next_due.due_date.isoformat() if next_due else None,
         "completed_at": to_api_datetime(now),
     }
-    if billed_seconds != duration:
-        # Keep the raw figure for audit; the stored duration is the clamped one.
-        summary["billed_seconds_before_clamp"] = billed_seconds
     prior_source = _normalize_unit_review_client_source(prior.get("client_source"))
     if prior_source is not None:
         summary["client_source"] = prior_source
     elif "client_source" in summary:
         # Drop invalid leftover values so summarize stays clean.
         summary.pop("client_source", None)
-    study.effective_seconds = duration
     study.summary_json = json.dumps(summary, ensure_ascii=False)
     return summary
 

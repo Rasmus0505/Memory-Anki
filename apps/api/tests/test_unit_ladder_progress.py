@@ -5,10 +5,9 @@ from __future__ import annotations
 import json
 from datetime import date, timedelta
 
-from memory_anki.core.time import local_calendar_day_start_as_utc_naive, utc_now_naive
+from memory_anki.core.time import local_calendar_day_start_as_utc_naive
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.unit_reviews import (
-    ReviewUnitEncounter,
     ReviewUnitState,
 )
 from memory_anki.modules.memory.application.unit_ladder_progress import (
@@ -60,7 +59,6 @@ def _pass_once(
     encounter_id: str,
     operation_id: str,
     rating: int = 3,
-    elapsed_seconds: int = 0,
 ):
     review = start_freestyle_unit_review_session(
         session,
@@ -79,18 +77,12 @@ def _pass_once(
         operation_id=operation_id,
         rating=rating,
     )
-    if elapsed_seconds:
-        encounter = session.get(ReviewUnitEncounter, encounter_id)
-        assert encounter is not None
-        encounter.created_at = utc_now_naive() - timedelta(seconds=elapsed_seconds)
-        session.flush()
     close_unit_review_encounter(
         session,
         study_session_id=review["id"],
         unit_id=state.id,
         encounter_id=encounter_id,
         operation_id=f"close-{operation_id}",
-        effective_seconds=elapsed_seconds,
     )
     session.refresh(state)
     return review
@@ -116,7 +108,6 @@ def test_ladder_progress_tracks_current_stage_and_pass_stats(db_session):
         encounter_id="enc-1",
         operation_id="op-1",
         rating=3,
-        elapsed_seconds=65,
     )
     # 记得 on first pass lands at the one-day stage.
     assert state.stage_index == 1
@@ -138,9 +129,9 @@ def test_ladder_progress_tracks_current_stage_and_pass_stats(db_session):
     assert payload["unit_range_stats"]["total_reviews"] == 1
     assert payload["unit_range_stats"]["rating_share"]["remember"] == 1
     assert payload["unit_range_stats"]["per_stage"][0]["pass_count"] == 1
-    assert payload["unit_range_stats"]["per_stage"][0]["seconds"] == 65
+    assert "seconds" not in payload["unit_range_stats"]["per_stage"][0]
     assert payload["unit_range_stats"]["per_stage"][1]["pass_count"] == 0
-    assert payload["unit_range_stats"]["total_seconds"] == 65
+    assert "total_seconds" not in payload["unit_range_stats"]
     assert payload["palace_range_stats"]["total_reviews"] == 1
 
 

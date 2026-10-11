@@ -8,21 +8,14 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 from memory_anki.infrastructure.db._tables.knowledge import Chapter
 from memory_anki.infrastructure.db._tables.palaces import Palace, Peg
 from memory_anki.modules.content.public.queries import build_today_new_palace_outline
+from memory_anki.modules.english.api import get_english_study_stats
 from memory_anki.modules.memory.public.queries import (
+    count_unit_review_ratings,
     get_review_queue_summary,
     get_unit_review_weekly_stats,
 )
-from memory_anki.modules.session.public.queries import (
-    build_time_record_read_model,
-    count_time_records,
-    current_month_bounds,
-    current_week_bounds,
-    date_range_bounds,
-    get_english_study_stats,
-    get_time_record_duration_seconds,
-    get_today_palace_learning_breakdown,
-    today_bounds,
-)
+
+from .bounds import date_range_bounds, today_bounds
 
 
 def _dashboard_palace_loader_options():
@@ -71,31 +64,6 @@ def build_dashboard_payload(session: Session) -> dict:
         .all()
     )
 
-    current_month_start, current_month_end = current_month_bounds()
-    current_week_start, current_week_end = current_week_bounds()
-    today_time_records = build_time_record_read_model(
-        session,
-        range_mode="today",
-        limit=1,
-    )
-    today_review_records = build_time_record_read_model(
-        session,
-        range_mode="today",
-        kind="review",
-        limit=1,
-    )
-    monthly_total_review_duration_seconds = get_time_record_duration_seconds(
-        session,
-        start=current_month_start,
-        end=current_month_end,
-        kind="review",
-    )
-    weekly_formal_review_duration_seconds = get_time_record_duration_seconds(
-        session,
-        start=current_week_start,
-        end=current_week_end,
-        kind="review",
-    )
 
     reviews = []
     for item in queue.get("reviews") or []:
@@ -118,26 +86,11 @@ def build_dashboard_payload(session: Session) -> dict:
         "due_later_today_count": 0,
         "reviews": reviews,
         "stats": get_unit_review_weekly_stats(session),
-        "today_review_duration_seconds": today_review_records["summary"][
-            "total_effective_seconds"
-        ],
-        "weekly_review_duration_seconds": weekly_formal_review_duration_seconds,
-        "today_total_review_duration_seconds": today_time_records["summary"][
-            "total_effective_seconds"
-        ],
-        "monthly_total_review_duration_seconds": monthly_total_review_duration_seconds,
-        "weekly_total_review_duration_seconds": get_time_record_duration_seconds(
-            session,
-            start=current_week_start,
-            end=current_week_end,
-        ),
-        "weekly_formal_review_duration_seconds": weekly_formal_review_duration_seconds,
         "english_stats": get_english_study_stats(session),
         "recent_palaces": [
             _palace_summary(palace, peg_count=peg_counts.get(palace.id, 0))
             for palace in recent
         ],
-        "today_learning_palaces": get_today_palace_learning_breakdown(session),
         "today_new_palace_count": len(today_new_palaces),
         "today_new_palaces": build_today_new_palace_outline(session, today_new_palaces),
     }
@@ -162,17 +115,7 @@ def build_weekly_report_payload(session: Session, *, offset_weeks: int = 1) -> d
     week_end_date = week_start_date + timedelta(days=7)
     week_start, week_end = date_range_bounds(week_start_date, week_end_date - timedelta(days=1))
 
-    study_seconds = get_time_record_duration_seconds(
-        session,
-        start=week_start,
-        end=week_end,
-    )
-    review_count = count_time_records(
-        session,
-        start=week_start,
-        end=week_end,
-        kind="review",
-    )
+    review_count = count_unit_review_ratings(session, start=week_start, end=week_end)
     average_score = 0
     new_palace_count = (
         session.query(func.count(Palace.id))
@@ -188,7 +131,6 @@ def build_weekly_report_payload(session: Session, *, offset_weeks: int = 1) -> d
     return {
         "week_start": week_start_date.isoformat(),
         "week_end": (week_end_date - timedelta(days=1)).isoformat(),
-        "study_seconds": int(study_seconds or 0),
         "review_count": review_count,
         "average_score": average_score,
         "new_palace_count": int(new_palace_count),
