@@ -3,7 +3,7 @@ import { BookOpen, Copy, Search } from 'lucide-react'
 import { cn } from '@/shared/lib/utils'
 import { EnglishLookupPanel, useEnglishLookup } from '@/modules/english-lookup/public'
 import { getEnglishClozeApi } from '../../domain/english-entity/api'
-import { useClozeMarks } from '../../domain/english-cloze/clozeMarks'
+import { useClozeMarks } from './hooks/useClozeMarks'
 import {
   articleCopyText,
   buildHardKeys,

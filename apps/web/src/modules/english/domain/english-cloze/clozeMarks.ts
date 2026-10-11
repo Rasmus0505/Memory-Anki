@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react'
 import { createPersistentPreferenceStore } from '@/shared/preferences/persistentPreferenceStore'
 import { EMPTY_CLOZE_MARKS, vocabKey, type ClozeMarks } from './clozeReading'
 
@@ -35,14 +34,4 @@ export function readClozeMarks() {
 
 export function writeClozeMarks(next: ClozeMarks) {
   return store.write(sanitizeClozeMarks(next))
-}
-
-export function useClozeMarks() {
-  const [marks, setMarks] = useState<ClozeMarks>(() => store.read())
-  useEffect(() => {
-    const sync = () => setMarks(store.read())
-    window.addEventListener(CLOZE_MARKS_UPDATED_EVENT, sync)
-    return () => window.removeEventListener(CLOZE_MARKS_UPDATED_EVENT, sync)
-  }, [])
-  return { marks, writeMarks: writeClozeMarks }
 }
