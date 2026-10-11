@@ -146,7 +146,7 @@ describe('session recorder store', () => {
     expect(report).toContain('软件后台暂时出错')
     expect(report).toContain('稍后重试')
     expect(report).not.toContain('http://')
-    expect(report).not.toContain('palace-quiz-attempt-events')
+    expect(report).toContain('POST /palace-quiz-attempt-events → HTTP 500')
     expect(getSessionRecorderState().recording).toBe(false)
     expect(getSessionRecorderState().history).toHaveLength(0)
   })

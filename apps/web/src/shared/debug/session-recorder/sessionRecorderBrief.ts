@@ -3,7 +3,7 @@ import { resolveNavSection, type NavSectionKey } from '@/shared/routing/routeMan
 import { truncateRecorderText } from './sessionRecorderFormat'
 import type { SessionRecorderEvent } from './sessionRecorderTypes'
 
-export const DIAGNOSIS_WINDOW_MS = 5 * 60 * 1000
+export const DIAGNOSIS_WINDOW_MS = 3 * 60 * 1000
 export const DIAGNOSIS_RECENT_MAX = 160
 const CLICK_FOLLOW_MS = 4_000
 
@@ -18,6 +18,7 @@ const SECTION_LABEL: Record<NavSectionKey, string> = {
 }
 
 const STEP_RULES: Array<{ method?: string; test: RegExp; label: string }> = [
+  { test: /\/freestyle\/rounds\/[^/]+\/ratings$/, label: '提交评分' },
   { test: /\/freestyle\/rounds\/[^/]+\/actions$/, label: '记下这题的作答' },
   { test: /\/freestyle\/question-attempts$/, label: '记下这题的作答' },
   { test: /\/freestyle\/question-explanations$/, label: '请 AI 讲这题' },
@@ -127,7 +128,9 @@ export function describeRequestStep(outcome: RequestOutcome) {
   if (outcome.ok) return { action, detail: '成功' }
   const reason = plainFailureReason(outcome.message, outcome.status)
   const retry = outcome.queuedRetry ? '软件已留下稍后重试。' : ''
-  return { action, detail: `没有成功：${reason}。${retry}`.trim() }
+  const message = outcome.message.replace(/https?:\/\/\S+/g, '').replace(/\s+/g, ' ').trim()
+  const technical = `${outcome.method} ${outcome.path} → ${outcome.status != null ? `HTTP ${outcome.status}` : '没有收到回应'}${message ? `：${message}` : ''}`
+  return { action, detail: `没有成功：${reason}。${retry}［${technical}］`.trim() }
 }
 
 export function readRecorderFocus(root: ParentNode): RecorderFocus | null {
@@ -239,7 +242,7 @@ export function buildDiagnosisBrief(input: {
 
   const lines = [
     '请根据下面这段刚才的操作，帮我看看出了什么问题。以这段记录为准，不要假设我记得按钮的内部名字。',
-    '记录里没有密码、密钥，也没有完整网页地址。',
+    '记录里没有密码、密钥，也没有完整网页地址；失败的请求会写出接口路径和状态码。',
     '',
     '我当时在看',
     `- 页面：${input.pageLabel || '这个页面'}`,

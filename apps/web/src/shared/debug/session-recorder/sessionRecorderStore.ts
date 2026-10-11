@@ -124,7 +124,7 @@ function remember(kind: SessionRecorderEventKind, action: string, detail = '') {
       at: nowIso(),
       kind,
       action,
-      detail: redactRecorderSecrets(truncateRecorderText(detail, 240)),
+      detail: redactRecorderSecrets(truncateRecorderText(detail, 500)),
     },
   ])
 }
@@ -262,6 +262,17 @@ export function openSessionRecorderDialog(selectedId?: string | null) {
     viewingLive: true,
     liveReport: currentLiveReport(),
   })
+}
+
+export async function copyRecentBriefToClipboard() {
+  const text = buildSessionRecorderCopyText(currentLiveReport(), state.liveNotes)
+  try {
+    if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) return false
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch {
+    return false
+  }
 }
 
 export function closeSessionRecorderDialog() {

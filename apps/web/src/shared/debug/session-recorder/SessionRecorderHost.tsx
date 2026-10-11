@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { CircleDot } from 'lucide-react'
+import { Check, CircleDot, TriangleAlert } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import { Button } from '@/shared/components/ui/button'
 import {
@@ -15,6 +15,7 @@ import { Textarea } from '@/shared/components/ui/textarea'
 import { cn } from '@/shared/lib/utils'
 import {
   closeSessionRecorderDialog,
+  copyRecentBriefToClipboard,
   deleteSelectedSessionRecorderHistory,
   ensureSessionRecorderCapture,
   getSelectedSessionRecorder,
@@ -243,12 +244,22 @@ function SessionRecorderFloatingControl() {
     }
   }, [])
 
-  const openRecorder = () => {
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle')
+  const resetTimerRef = useRef<number | null>(null)
+  useEffect(() => () => {
+    if (resetTimerRef.current != null) window.clearTimeout(resetTimerRef.current)
+  }, [])
+
+  const copyRecent = async () => {
     if (suppressClickRef.current) {
       suppressClickRef.current = false
       return
     }
-    openSessionRecorderDialog()
+    const ok = await copyRecentBriefToClipboard()
+    setCopyState(ok ? 'copied' : 'failed')
+    if (!ok) openSessionRecorderDialog()
+    if (resetTimerRef.current != null) window.clearTimeout(resetTimerRef.current)
+    resetTimerRef.current = window.setTimeout(() => setCopyState('idle'), 2500)
   }
 
   const layer = (
@@ -262,17 +273,29 @@ function SessionRecorderFloatingControl() {
       data-session-recorder="true"
       data-session-recorder-hud="true"
       title="拖动可移动"
+      onContextMenu={(event) => {
+        event.preventDefault()
+        openSessionRecorderDialog()
+      }}
     >
       <Button
         type="button"
         variant="outline"
         size="icon"
         aria-label="录制"
-        title="刚才几分钟"
-        onClick={openRecorder}
+        title="点一下：复制最近 3 分钟的操作和报错，直接粘贴给 AI（右键可查看和补充说明）"
+        onClick={() => void copyRecent()}
       >
-        <CircleDot />
+        {copyState === 'copied' ? <Check className="text-emerald-500" /> : copyState === 'failed' ? <TriangleAlert className="text-amber-500" /> : <CircleDot />}
       </Button>
+      {copyState !== 'idle' ? (
+        <span
+          role="status"
+          className="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 whitespace-nowrap rounded-md bg-foreground px-2 py-1 text-xs text-background shadow"
+        >
+          {copyState === 'copied' ? '已复制，去粘贴给 AI' : '复制失败，请在弹窗里手动复制'}
+        </span>
+      ) : null}
     </div>
   )
 
