@@ -56,7 +56,7 @@ API_SRC = REPO_ROOT / "apps" / "api" / "src"
 API_DIR = REPO_ROOT / "apps" / "api"
 if str(API_SRC) not in sys.path:
     sys.path.insert(0, str(API_SRC))
-from memory_anki.core.windows_wmi import disable_hanging_windows_wmi
+from memory_anki.core.windows_wmi import disable_hanging_windows_wmi  # noqa: E402
 
 # Alembic's import pulls SQLAlchemy, which calls platform.machine(). That WMI
 # query does not time out. Disable it before any later import in this process,
@@ -363,7 +363,7 @@ def _stop_service_unlocked() -> bool:
     for pid in pids:
         dev_server.kill_process_tree(pid)
     PWA_PID_FILE.unlink(missing_ok=True)
-    deadline = time.monotonic() + 10
+    deadline = time.monotonic() + 30
     remaining = pids
     while time.monotonic() < deadline:
         remaining = dev_server.list_listening_pids(dev_server.BACKEND_PORT)
@@ -371,7 +371,7 @@ def _stop_service_unlocked() -> bool:
             return True
         time.sleep(0.2)
     print(
-        "[!] The shared service did not stop within 10 seconds. "
+        "[!] The shared service did not stop within 30 seconds. "
         f"Still listening: {remaining}.",
         flush=True,
     )
@@ -626,7 +626,7 @@ def _install_desktop_runtime() -> bool:
 def _frontend_dependencies_ready() -> bool:
     """Verify the build toolchain really resolves, not just that folders exist.
 
-    A directory left behind by Syncthing can exist while being empty, so probing
+    A directory left behind by file sync can exist while being empty, so probing
     for `node_modules/.bin/tsc` is not enough — check the real entry points.
     """
     probes = [
@@ -641,7 +641,7 @@ def _frontend_dependencies_ready() -> bool:
 def _ensure_frontend_dependencies() -> bool:
     """Repair a missing/emptied node_modules tree before building.
 
-    Syncthing and interrupted installs can leave package directories present but
+    File sync and interrupted installs can leave package directories present but
     empty, so `tsc`/`vite` shims vanish and the build dies with a confusing
     "'tsc' is not recognized" error. A build must never run on a broken tree.
     """
@@ -812,6 +812,9 @@ def _backend_env() -> dict[str, str]:
     env["MEMORY_ANKI_STARTUP_MODE"] = "healthcheck"
     env[PWA_PROCESS_MARKER] = "1"
     env["PYTHONPATH"] = str(API_SRC)
+    # Redirected to a file Python block-buffers; the backend is killed, not stopped,
+    # so buffered request logs were lost (and lagged by hours).
+    env["PYTHONUNBUFFERED"] = "1"
     return env
 
 

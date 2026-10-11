@@ -890,18 +890,6 @@ def test_windows_electron_disables_gpu_before_ready():
     assert gpu_guard.index("disableHardwareAcceleration()") < electron_main.index("app.whenReady()")
 
 
-def test_hidden_desktop_timer_overlay_is_not_kept_on_screen():
-    electron_main = (ROOT / "apps" / "desktop-timer" / "main.cjs").read_text(encoding="utf-8")
-    ready = electron_main.split("function writeDesktopReady()", 1)[1].split("\n}\n", 1)[0]
-    startup = electron_main.split("app.whenReady().then", 1)[1].split("ipcMain.on", 1)[0]
-
-    assert "timerWindowLoaded" not in ready
-    assert "createTimerWindow()" not in startup
-    assert "function destroyTimerWindow()" in electron_main
-    assert "TIMER_OFFSCREEN" in electron_main
-    assert "closing.hide()" in electron_main
-
-
 def test_desktop_launcher_detaches_after_electron_ready_signal():
     desktop_timer = (TOOLS_DIR / "desktop_timer.py").read_text(encoding="utf-8")
     electron_main = (ROOT / "apps" / "desktop-timer" / "main.cjs").read_text(encoding="utf-8")

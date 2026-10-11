@@ -1,4 +1,4 @@
-"""Start the Memory Anki web stack and open the desktop app with a timer overlay."""
+"""Start the Memory Anki web stack and open the desktop app."""
 
 from __future__ import annotations
 
@@ -47,6 +47,22 @@ def ensure_shared_tray() -> None:
     )
 
 
+def stop_stale_desktop_instances() -> None:
+    """Kill leftover Electron desktops so the single-instance lock cannot reuse an old window."""
+    electron_root = str(WEB_DIR / "node_modules" / "electron").lower()
+    current_pid = os.getpid()
+    stale = [
+        pid
+        for pid, image in dev_server.process_command_lines().items()
+        if pid != current_pid and image.lower().startswith(electron_root)
+    ]
+    for pid in stale:
+        print(f"[i] Closing previous Memory Anki desktop (pid {pid}) so the new build loads.")
+        dev_server.kill_process_tree(pid)
+    if stale:
+        time.sleep(0.5)
+
+
 def main() -> int:
     started_at = time.perf_counter()
     log_path = dev_server.LOGS_DIR / "desktop-startup.log"
@@ -72,6 +88,7 @@ def main() -> int:
     if not pwa_server._ensure_desktop_runtime():
         log("Electron runtime repair failed")
         return 1
+    stop_stale_desktop_instances()
     ready_path = dev_server.LOGS_DIR / f"desktop-ready-{uuid.uuid4().hex}.json"
     env = os.environ.copy()
     # Parent Node shims set this so their own node can run inside Electron.
@@ -79,9 +96,8 @@ def main() -> int:
     # window never opens.
     env.pop("ELECTRON_RUN_AS_NODE", None)
     env["MEMORY_ANKI_DESKTOP_URL"] = FRONTEND_URL
-    env["MEMORY_ANKI_TIMER_OVERLAY_URL"] = f"{FRONTEND_URL.rstrip('/')}/timer-overlay"
     env["MEMORY_ANKI_DESKTOP_READY_FILE"] = str(ready_path)
-    print("[i] Launching Memory Anki desktop + timer overlay ...")
+    print("[i] Launching Memory Anki desktop ...")
     log_file = log_path.open("a", encoding="utf-8")
     try:
         # Launch electron.exe directly. `npm run desktop:timer` goes through the

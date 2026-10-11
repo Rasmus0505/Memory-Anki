@@ -1,5 +1,5 @@
 const electron = require('electron')
-const { app, BrowserWindow, globalShortcut, ipcMain, shell, session } = typeof electron === 'object' ? electron : {}
+const { app, BrowserWindow, ipcMain, shell, session } = typeof electron === 'object' ? electron : {}
 const fs = require('node:fs')
 const path = require('node:path')
 
@@ -8,7 +8,6 @@ if (!app) {
 }
 
 const APP_URL = process.env.MEMORY_ANKI_DESKTOP_URL || 'http://127.0.0.1:8012/'
-const OVERLAY_URL = process.env.MEMORY_ANKI_TIMER_OVERLAY_URL || `${APP_URL.replace(/\/$/, '')}/timer-overlay`
 const READY_FILE = process.env.MEMORY_ANKI_DESKTOP_READY_FILE || ''
 
 // Electron 39 on some Windows GPU stacks aborts before ready-to-show with
@@ -43,18 +42,10 @@ const desktopUserData = resolveDesktopUserData()
 app.setPath('userData', desktopUserData)
 
 let mainWindow = null
-let timerWindow = null
-let lastTimerSnapshot = null
 let pendingFlush = null
 let allowMainWindowClose = false
 let desktopReadyWritten = false
 let mainWindowLoaded = false
-let overlayDesiredVisible = false
-// A hidden transparent window still composites on Windows and flashes over the
-// study window whenever the timer page repaints. Keep it off-screen until the
-// user actually wants the overlay, and destroy it when they hide it.
-const TIMER_OFFSCREEN = { x: -32000, y: -32000 }
-let timerWindowBounds = { x: 80, y: 80, width: 320, height: 196 }
 
 const FLUSH_TIMEOUT_MS = 1800
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
@@ -89,7 +80,6 @@ if (!hasSingleInstanceLock) {
 } else {
   app.on('second-instance', () => {
     ensureMainWindow()
-    ensureTimerWindow()
   })
 }
 
@@ -133,7 +123,6 @@ function closeMainWindowAfterFlush(reason, options = {}) {
     allowMainWindowClose = true
     mainWindow.close()
     if (options.quitApp) {
-      timerWindow?.close()
       app.quit()
     }
   })
@@ -174,8 +163,25 @@ function createMainWindow() {
     mainWindow.show()
     mainWindow.focus()
   })
+  const loadingPage =
+    'data:text/html;charset=utf-8,' +
+    encodeURIComponent(
+      '<body style="margin:0;display:flex;align-items:center;justify-content:center;height:100vh;background:#fffaf2;color:#6b5b4b;font:20px sans-serif">Memory Anki 正在连接后台，请稍等…（会自动重试）</body>',
+    )
+  let loadRetries = 0
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, _desc, validatedUrl, isMainFrame) => {
+    if (!isMainFrame || errorCode === -3 || !String(validatedUrl).startsWith(APP_URL)) return
+    loadRetries += 1
+    const win = mainWindow
+    if (!win || win.isDestroyed()) return
+    if (loadRetries === 1) win.loadURL(loadingPage)
+    setTimeout(() => {
+      if (win && !win.isDestroyed()) win.loadURL(APP_URL)
+    }, 2000)
+  })
   mainWindow.loadURL(APP_URL)
   mainWindow.webContents.on('did-finish-load', () => {
+    if (!String(mainWindow.webContents.getURL()).startsWith(APP_URL)) return
     mainWindowLoaded = true
     if (mainWindow && !mainWindow.isDestroyed()) {
       if (mainWindow.isMinimized()) mainWindow.restore()
@@ -204,91 +210,6 @@ function createMainWindow() {
   })
 }
 
-function rememberTimerWindowBounds() {
-  if (!timerWindow || timerWindow.isDestroyed()) return
-  const bounds = timerWindow.getBounds()
-  if (bounds.x <= -16000 || bounds.y <= -16000) return
-  if (bounds.width <= 0 || bounds.height <= 0) return
-  timerWindowBounds = bounds
-}
-
-function destroyTimerWindow() {
-  if (!timerWindow || timerWindow.isDestroyed()) {
-    timerWindow = null
-    return
-  }
-  rememberTimerWindowBounds()
-  const closing = timerWindow
-  timerWindow = null
-  try {
-    closing.setAlwaysOnTop(false)
-    const bounds = closing.getBounds()
-    closing.setBounds({ x: TIMER_OFFSCREEN.x, y: TIMER_OFFSCREEN.y, width: bounds.width, height: bounds.height })
-    closing.hide()
-  } catch {
-    // The surface is going away either way.
-  }
-  setImmediate(() => {
-    if (!closing.isDestroyed()) closing.destroy()
-  })
-}
-
-function presentTimerWindow(created) {
-  if (!overlayDesiredVisible || !created || created.isDestroyed() || timerWindow !== created) return
-  created.setBounds(timerWindowBounds)
-  created.setAlwaysOnTop(true, 'screen-saver')
-  created.showInactive()
-  created.moveTop()
-}
-
-function createTimerWindow() {
-  if (timerWindow && !timerWindow.isDestroyed()) return timerWindow
-  const created = new BrowserWindow({
-    width: timerWindowBounds.width,
-    height: timerWindowBounds.height,
-    minWidth: 280,
-    minHeight: 56,
-    x: TIMER_OFFSCREEN.x,
-    y: TIMER_OFFSCREEN.y,
-    frame: false,
-    resizable: true,
-    skipTaskbar: true,
-    alwaysOnTop: false,
-    show: false,
-    title: 'Memory Anki Timer',
-    backgroundColor: '#00000000',
-    transparent: true,
-    hasShadow: false,
-    thickFrame: false,
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      preload: path.join(__dirname, 'preload.cjs'),
-    },
-  })
-  timerWindow = created
-
-  created.loadURL(OVERLAY_URL)
-  created.webContents.on('did-finish-load', () => {
-    if (created.isDestroyed()) return
-    if (lastTimerSnapshot) {
-      created.webContents.send('memory-anki-timer-snapshot', lastTimerSnapshot)
-    }
-    presentTimerWindow(created)
-  })
-  created.on('move', () => {
-    if (timerWindow === created) rememberTimerWindowBounds()
-  })
-  created.on('resize', () => {
-    if (timerWindow === created) rememberTimerWindowBounds()
-  })
-  created.on('closed', () => {
-    if (timerWindow === created) timerWindow = null
-  })
-  return created
-}
-
 function ensureMainWindow() {
   if (!mainWindow) createMainWindow()
   if (mainWindow?.isMinimized()) mainWindow.restore()
@@ -296,80 +217,11 @@ function ensureMainWindow() {
   mainWindow?.focus()
 }
 
-function ensureTimerWindow() {
-  if (!overlayDesiredVisible) return
-  if (!timerWindow || timerWindow.isDestroyed()) {
-    createTimerWindow()
-    return
-  }
-  presentTimerWindow(timerWindow)
-}
-
-function setTimerOverlayVisible(visible) {
-  overlayDesiredVisible = Boolean(visible)
-  if (!overlayDesiredVisible) {
-    destroyTimerWindow()
-    return
-  }
-  if (!timerWindow || timerWindow.isDestroyed()) {
-    createTimerWindow()
-    return
-  }
-  presentTimerWindow(timerWindow)
-}
-
-function toggleTimerWindow() {
-  const currentlyVisible = Boolean(timerWindow && !timerWindow.isDestroyed() && timerWindow.isVisible())
-  setTimerOverlayVisible(!currentlyVisible)
-}
-
 if (hasSingleInstanceLock) app.whenReady().then(async () => {
   // Desktop always reads the current server build and must never remain controlled by a PWA worker.
   await session.defaultSession.clearCache()
   await session.defaultSession.clearStorageData({ storages: ['serviceworkers', 'cachestorage'] })
   createMainWindow()
-  globalShortcut.register('CommandOrControl+Shift+M', toggleTimerWindow)
-})
-
-ipcMain.on('memory-anki-timer-collapse', (_event, collapsed) => {
-  const width = collapsed ? 280 : 320
-  const height = collapsed ? 64 : 196
-  timerWindowBounds = { ...timerWindowBounds, width, height }
-  if (!timerWindow || timerWindow.isDestroyed()) return
-  timerWindow.setSize(width, height)
-})
-
-ipcMain.on('memory-anki-timer-snapshot', (_event, snapshot) => {
-  lastTimerSnapshot = snapshot
-  if (!timerWindow || timerWindow.isDestroyed()) return
-  timerWindow.webContents.send('memory-anki-timer-snapshot', snapshot)
-})
-
-ipcMain.on('memory-anki-timer-command', (_event, command) => {
-  const supportedCommands = new Set(['start', 'pause', 'resume', 'collapse', 'closeOverlay', 'showOverlay', 'openTimerSettings'])
-  if (!command || typeof command.type !== 'string' || !supportedCommands.has(command.type)) return
-  if (command?.type === 'closeOverlay') {
-    setTimerOverlayVisible(false)
-    return
-  }
-  if (command?.type === 'showOverlay') {
-    setTimerOverlayVisible(true)
-    return
-  }
-  if (command?.type === 'collapse') {
-    const collapsed = Boolean(command.collapsed)
-    const width = collapsed ? 280 : 320
-    const height = collapsed ? 64 : 196
-    timerWindowBounds = { ...timerWindowBounds, width, height }
-    if (timerWindow && !timerWindow.isDestroyed()) {
-      timerWindow.setSize(width, height)
-    }
-    return
-  }
-  if (command?.type === 'openTimerSettings') {
-    ensureMainWindow()
-  }
-  mainWindow?.webContents.send('memory-anki-timer-command', command)
 })
 
 ipcMain.on('memory-anki-desktop-flush-complete', (_event, result) => {
@@ -408,9 +260,4 @@ app.on('before-quit', (event) => {
 
 app.on('activate', () => {
   ensureMainWindow()
-  ensureTimerWindow()
-})
-
-app.on('will-quit', () => {
-  globalShortcut.unregisterAll()
 })

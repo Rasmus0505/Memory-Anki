@@ -255,12 +255,14 @@ def spawn_detached_windows_process(
     lines.append(f"cd /d {_cmd_quote(str(cwd))}")
     quoted_cmd = " ".join(_cmd_quote(part) for part in command)
     # On Windows, `>>a 2>>a` fails with "file in use"; use a single stream redirect.
+    # Redirect inside a nested `cmd /s /c`: a console program started straight
+    # from this console-less launcher gets character-device stdio instead of the
+    # file, so the backend ran fine but its log stayed empty.
     if Path(stdout_path) == Path(err_path):
-        lines.append(f"{quoted_cmd} >> {_cmd_quote(str(stdout_path))} 2>&1")
+        inner = f"{quoted_cmd} >> {_cmd_quote(str(stdout_path))} 2>&1"
     else:
-        lines.append(
-            f"{quoted_cmd} >> {_cmd_quote(str(stdout_path))} 2>> {_cmd_quote(str(err_path))}"
-        )
+        inner = f"{quoted_cmd} >> {_cmd_quote(str(stdout_path))} 2>> {_cmd_quote(str(err_path))}"
+    lines.append(f'cmd /d /s /c "{inner}"')
     # newline="" disables Windows \n -> \r\n translation so we control CRLF once.
     with launcher.open("w", encoding="ascii", errors="replace", newline="") as handle:
         handle.write("\r\n".join(lines) + "\r\n")

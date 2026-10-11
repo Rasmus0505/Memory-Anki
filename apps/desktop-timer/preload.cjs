@@ -52,23 +52,4 @@ contextBridge.exposeInMainWorld('memoryAnkiDesktopTimer', {
     desktopFlushHandlers.add(handler)
     return () => desktopFlushHandlers.delete(handler)
   },
-  setOverlayCollapsed(collapsed) {
-    ipcRenderer.send('memory-anki-timer-collapse', Boolean(collapsed))
-  },
-  publishTimerSnapshot(snapshot) {
-    ipcRenderer.send('memory-anki-timer-snapshot', snapshot)
-  },
-  onTimerSnapshot(handler) {
-    const listener = (_event, snapshot) => handler(snapshot)
-    ipcRenderer.on('memory-anki-timer-snapshot', listener)
-    return () => ipcRenderer.removeListener('memory-anki-timer-snapshot', listener)
-  },
-  sendTimerCommand(command) {
-    ipcRenderer.send('memory-anki-timer-command', command)
-  },
-  onTimerCommand(handler) {
-    const listener = (_event, command) => handler(command)
-    ipcRenderer.on('memory-anki-timer-command', listener)
-    return () => ipcRenderer.removeListener('memory-anki-timer-command', listener)
-  },
 })
