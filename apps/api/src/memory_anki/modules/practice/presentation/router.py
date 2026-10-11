@@ -301,6 +301,7 @@ def api_freestyle_round_rating(
             occurrence_id=data.occurrence_id,
             encounter_id=data.encounter_id,
             rating=data.rating,
+            intent_sequence=data.intent_sequence,
             study_session_id=data.study_session_id,
             unit_id=data.unit_id,
             unit_revision=data.unit_revision,

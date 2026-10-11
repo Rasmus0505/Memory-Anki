@@ -39,6 +39,7 @@ import {
   asUnitRating,
   buildEditorState,
   encounterState,
+  ratingOnThisAppearance,
   formatUnitDiagnostic,
   loadSessionWithTimeout,
   operationId,
@@ -853,6 +854,7 @@ export function FreestyleUnitReviewCardView({
     const payload = {
       operation_id: ticket.operationId,
       expected_version: planVersionRef.current,
+      intent_sequence: ticket.intentSequence ?? ticket.generation,
       card_id: ticket.cardId,
       occurrence_id: ticket.occurrenceId,
       encounter_id: ticket.encounterId,
@@ -1127,6 +1129,7 @@ export function FreestyleUnitReviewCardView({
     const decision = acceptRating(mailboxRef.current, {
       rating,
       operationId: operationId(),
+      intentSequence: generation,
       cardId: cardRef.current.id,
       occurrenceId: cardRef.current.occurrence_kind === 'retry' ? cardRef.current.id : '',
       encounterId: currentEncounter.id,
@@ -1172,7 +1175,7 @@ export function FreestyleUnitReviewCardView({
       return
     }
     const currentEncounter = unitRef.current?.encounter ?? null
-    const liveSelected = optimisticRatingRef.current ?? asUnitRating(currentEncounter?.selected_rating)
+    const liveSelected = optimisticRatingRef.current ?? ratingOnThisAppearance(currentEncounter)
     if (liveSelected === rating && !saveFailedRef.current) {
       await undoRating({ clearAll: true })
       return
@@ -1181,17 +1184,9 @@ export function FreestyleUnitReviewCardView({
     if (
       !saveFailedRef.current
       && optimisticRatingRef.current == null
-      && currentEncounter?.selected_rating == null
+      && ratingOnThisAppearance(currentEncounter) == null
       && recorded === rating
     ) {
-      return
-    }
-    if (
-      currentEncounter?.status === 'closed'
-      && encounterRef.current?.status !== 'pending'
-      && encounterRef.current?.status !== 'open'
-    ) {
-      setActionError('这次评分已经结束。可以返回上一张再改，或跳过。')
       return
     }
     if (!cardRef.current.unit_id) {
@@ -1223,6 +1218,10 @@ export function FreestyleUnitReviewCardView({
     // itself once the server returns an operation id.
     if (mailboxRef.current.inflight) {
       mailboxRef.current = requestUndo(mailboxRef.current)
+      paintCleared()
+      return
+    }
+    if (optimisticRatingRef.current != null && !lastOperationIdRef.current && !unitRef.current?.encounter?.effective_operation_id) {
       paintCleared()
       return
     }
@@ -1317,14 +1316,19 @@ export function FreestyleUnitReviewCardView({
 
   const reviewReady = Boolean(editorState && session && unit && unit.encounter)
   const currentEncounter = unit?.encounter ?? null
-  const liveRating = currentEncounter?.selected_rating ?? null
-  const selectedRating = intentRating ?? asUnitRating(liveRating)
-  const recordedRating = asUnitRating(lastRating) ?? asUnitRating(encounter?.selectedRating)
-  const ended = currentEncounter?.status === 'closed'
-    && encounter?.status !== 'pending'
-    && encounter?.status !== 'open'
-  const canRateWithoutPlan = !readOnly && !ended && !recapOnly && Boolean(card.unit_id)
-  const locked = readOnly || ended
+  const appearanceRating = readOnly
+    ? asUnitRating(currentEncounter?.selected_rating)
+    : ratingOnThisAppearance(currentEncounter)
+  const previousClosed = !readOnly
+    && currentEncounter?.status === 'closed'
+    && appearanceRating == null
+    && asUnitRating(currentEncounter.selected_rating) != null
+  const selectedRating = intentRating ?? appearanceRating
+  const recordedRating = appearanceRating != null || previousClosed
+    ? null
+    : asUnitRating(lastRating) ?? (encounter?.status === 'closed' ? null : asUnitRating(encounter?.selectedRating))
+  const canRateWithoutPlan = !readOnly && !recapOnly && Boolean(card.unit_id)
+  const locked = readOnly
   const titleText = stripMindMapHtml(
     unit?.title || card.palace_title || `宫殿 ${card.palace_id}`,
   )

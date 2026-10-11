@@ -202,6 +202,56 @@ function restoredIdsReleasedByServer(
   return ids
 }
 
+function freshDueIdsReleasedByServer(
+  server: FreestyleRoundPlanPayload | null | undefined,
+  blocked: ReadonlySet<string>,
+): string[] {
+  const quiet = new Set(
+    [
+      ...(server?.excluded_ids || []),
+      ...(server?.compressed_ids || []),
+    ].map((id) => String(id || '').trim()).filter(Boolean),
+  )
+  const seen = new Set<string>()
+  const ids: string[] = []
+  for (const raw of server?.fresh_due_ids ?? []) {
+    const id = String(raw || '').trim()
+    if (!id || seen.has(id) || quiet.has(id) || blocked.has(id)) continue
+    seen.add(id)
+    ids.push(id)
+  }
+  return ids
+}
+
+function dropFreshDueLocalFacts(
+  localPlan: FreestyleRoundPlanState | null,
+  localCompletedIds: readonly string[],
+  localEncounters: Record<string, FreestyleUnitEncounterState>,
+  marked: ReadonlySet<string>,
+): {
+  localPlan: FreestyleRoundPlanState | null
+  localCompletedIds: readonly string[]
+  localEncounters: Record<string, FreestyleUnitEncounterState>
+} {
+  const completed = localCompletedIds.filter((id) => !marked.has(String(id || '').trim()))
+  if (!localPlan || marked.size === 0) {
+    return { localPlan, localCompletedIds: completed, localEncounters }
+  }
+  const cardsById = { ...localPlan.cardsById }
+  for (const id of marked) {
+    const card = cardsById[id]
+    if (!card || card.status === 'excluded') continue
+    cardsById[id] = { ...card, status: 'pending', lastRating: null }
+  }
+  const nextEncounters = { ...localEncounters }
+  for (const id of marked) delete nextEncounters[id]
+  return {
+    localPlan: { ...localPlan, cardsById },
+    localCompletedIds: completed,
+    localEncounters: nextEncounters,
+  }
+}
+
 function dropMarkedLocalFacts(
   localPlan: FreestyleRoundPlanState | null,
   localCompletedIds: readonly string[],
@@ -331,17 +381,31 @@ export function commitHydratedRoundLedger(input: {
     stripped.localEncounters,
     restored,
   )
-  const localPlan = marked.localPlan
-  const localCompletedIds = marked.localCompletedIds
+  const freshIds = freshDueIdsReleasedByServer(
+    input.serverPlan,
+    new Set([...forceExcludedIds, ...forceCompressedIds]),
+  )
+  const fresh = dropFreshDueLocalFacts(
+    marked.localPlan,
+    marked.localCompletedIds,
+    marked.localEncounters,
+    new Set(freshIds),
+  )
+  const localPlan = fresh.localPlan
+  const localCompletedIds = fresh.localCompletedIds
   const localHiddenIds = (adopt ? [] : input.localHiddenIds)
     .map((id) => String(id || '').trim())
     .filter((id) => id && !restored.has(id))
-  const localEncounters = marked.localEncounters
+  const localEncounters = fresh.localEncounters
   const serverPlan = input.serverPlan
+  const freshSet = new Set(freshIds)
   const serverCompleted = (Array.isArray(serverPlan?.completed_ids)
     ? serverPlan.completed_ids.map(String)
     : (adopt ? [] : [...localCompletedIds])
-  ).filter((id) => !restored.has(String(id || '').trim()))
+  ).filter((id) => {
+    const key = String(id || '').trim()
+    return key && !restored.has(key) && !freshSet.has(key)
+  })
   const serverExcluded = Array.isArray(serverPlan?.excluded_ids)
     ? serverPlan.excluded_ids.map(String)
     : []

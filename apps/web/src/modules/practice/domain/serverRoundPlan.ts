@@ -464,6 +464,7 @@ export function mergeServerPlanIntoLocalEncounters(
   roundId: string,
 ): Record<string, FreestyleUnitEncounterState> {
   if (!plan) return encounters
+  const fresh = new Set((plan.fresh_due_ids || []).map((id) => String(id || '').trim()).filter(Boolean))
   const next: Record<string, FreestyleUnitEncounterState> = { ...encounters }
   const writeGap = (
     cardId: string,
@@ -475,7 +476,7 @@ export function mergeServerPlanIntoLocalEncounters(
     },
   ) => {
     const id = String(cardId || '').trim()
-    if (!id) return
+    if (!id || fresh.has(id)) return
     const existing = next[id]
     if (existing?.selectedRating != null) return
     const selectedRating = patch.selectedRating ?? existing?.selectedRating ?? null
@@ -561,6 +562,7 @@ export function applyServerRatingsToRoundPlan(
 ): FreestyleRoundPlanState {
   if (!server) return plan
   let next = plan
+  const fresh = new Set((server.fresh_due_ids || []).map((id) => String(id || '').trim()).filter(Boolean))
   const ratings = new Map<string, 1 | 2 | 3 | 4>()
   const unratedRetries = new Set<string>()
   for (const occ of server.occurrences || []) {
@@ -583,8 +585,13 @@ export function applyServerRatingsToRoundPlan(
   }
   for (const [cardId, rating] of ratings) {
     const current = next.cardsById[cardId]
-    if (!current || current.lastRating != null) continue
+    if (!current || current.lastRating != null || fresh.has(cardId)) continue
     next = updateRoundPlanCard(next, cardId, { lastRating: rating })
+  }
+  for (const cardId of fresh) {
+    const current = next.cardsById[cardId]
+    if (!current || current.lastRating == null || current.status === 'excluded') continue
+    next = updateRoundPlanCard(next, cardId, { lastRating: null, status: 'pending' })
   }
   for (const occId of unratedRetries) {
     const current = next.cardsById[occId]

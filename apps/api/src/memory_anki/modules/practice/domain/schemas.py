@@ -138,6 +138,7 @@ class FreestyleRoundRatingRequest(BaseModel):
 
     operation_id: str
     expected_version: int
+    intent_sequence: int = 0
     card_id: str
     occurrence_id: str = ""
     encounter_id: str

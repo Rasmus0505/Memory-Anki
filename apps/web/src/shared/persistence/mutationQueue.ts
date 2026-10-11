@@ -259,8 +259,10 @@ export async function enqueueMutation(input: EnqueueMutationInput) {
   if (nextItem.coalesceKey) {
     const existing = (await readQueuedMutationsByCoalesceKey(nextItem.coalesceKey))[0]
     if (existing) {
+      // Reuse the queue row so coalescing stays bounded, but issue a fresh
+      // mutation id for the new body. The previous id may already have been
+      // applied by the server even if its response was lost.
       nextItem.id = existing.id
-      nextItem.mutationId = existing.mutationId
       nextItem.createdAt = existing.createdAt
     }
   }
@@ -315,6 +317,7 @@ function nextBackoffMs(attemptCount: number) {
 
 /** How many 503 retries before a busy server becomes a visible manual failure. */
 const MAX_BUSY_ATTEMPTS = 8
+const MAX_NETWORK_ATTEMPTS = 8
 
 /** Retry-After is seconds or an HTTP date; ignore anything unparseable. */
 function parseRetryAfterMs(response: Response): number | null {
@@ -378,7 +381,7 @@ async function replayOneMutation(item: PersistedMutation, force = false) {
     const busyRetryMs = response.status === 503 ? parseRetryAfterMs(response) : null
     // A busy server must not be retried forever: past this budget the entry
     // becomes a visible, user-retryable failure instead of an endless spinner.
-    const busyExhausted = busyRetryMs !== null && attemptCount >= MAX_BUSY_ATTEMPTS
+    const busyExhausted = response.status === 503 && attemptCount >= MAX_BUSY_ATTEMPTS
     await updateMutation(current, {
       status: busyExhausted ? 'manual' : response.status >= 500 ? 'failed' : 'manual',
       attemptCount,
@@ -390,11 +393,12 @@ async function replayOneMutation(item: PersistedMutation, force = false) {
     })
   } catch (error) {
     const attemptCount = current.attemptCount + 1
+    const exhausted = attemptCount >= MAX_NETWORK_ATTEMPTS
     await updateMutation(current, {
-      status: 'failed',
+      status: exhausted ? 'manual' : 'failed',
       attemptCount,
-      nextAttemptAt: Date.now() + nextBackoffMs(attemptCount),
-      errorMessage: error instanceof Error ? error.message : '同步失败',
+      nextAttemptAt: exhausted ? Number.MAX_SAFE_INTEGER : Date.now() + nextBackoffMs(attemptCount),
+      errorMessage: exhausted ? '网络持续不可用，已停止自动重试。请恢复网络后手动重试。' : error instanceof Error ? error.message : '同步失败',
     })
   }
 }
@@ -456,7 +460,11 @@ export async function discardQueuedConflictsByCoalesceKey(coalesceKey: string | 
   )
 }
 
-export async function discardQueuedMutationsByCoalesceKey(coalesceKey: string | null | undefined) {
+export async function discardQueuedMutationsByCoalesceKey(
+  coalesceKey: string | null | undefined,
+  acknowledgedMutationId?: string | null,
+  acknowledgedBefore?: string,
+) {
   if (!coalesceKey) return
   const items = await readQueuedMutationsByCoalesceKey(coalesceKey)
   // Best-effort cleanup: this runs *after* a successful save, so a storage
@@ -465,9 +473,14 @@ export async function discardQueuedMutationsByCoalesceKey(coalesceKey: string | 
   // worst case of a leftover entry is a redundant replay, and replays carry the
   // original mutation id, so the server deduplicates them.
   await Promise.all(
-    items.map((item) => deleteMutationFromStore(item.id).catch((error: unknown) => {
-      console.error('[mutation-queue] failed to discard superseded entry', item.id, error)
-    })),
+    items
+      .filter((item) =>
+        item.mutationId !== acknowledgedMutationId &&
+        (!acknowledgedBefore || item.createdAt < acknowledgedBefore),
+      )
+      .map((item) => deleteMutationFromStore(item.id).catch((error: unknown) => {
+        console.error('[mutation-queue] failed to discard superseded entry', item.id, error)
+      })),
   )
 }
 

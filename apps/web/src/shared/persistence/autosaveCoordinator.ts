@@ -16,30 +16,20 @@ type AutoSaveListener = (state: AutoSaveState) => void
 
 const AUTO_SAVE_DELAY_MS = 30_000
 const AUTO_SAVE_RETRY_DELAYS_MS = [5_000, 15_000, 30_000] as const
-
-/**
- * How many consecutive failed attempts before automatic retrying stops.
- *
- * Without a terminal state this coordinator retried **forever**: a failed flush
- * rescheduled itself, the key stayed in `dirtyKeys` (only a success removes it),
- * and the retry count was capped for *backoff* purposes only — the delay simply
- * settled at 30s and kept firing. On the owner's machine that produced a
- * `PUT /palaces/40/editor -> 409` every 30–60s for 47 hours straight (3,020
- * failures), each one taking a connection and a write attempt.
- *
- * Stopping is the correct behaviour, not a degradation: the local draft is
- * already persisted for recovery, so the user's edit is not at risk, and a
- * save that has failed this many times will not start succeeding on its own.
- * The next real edit, or an explicit flush, starts a fresh attempt budget.
- */
+// Conflicts must not create an endless autosave loop. The durable draft belongs
+// to each target; a new edit or an explicit flush can resume its retry budget.
 const AUTO_SAVE_MAX_ATTEMPTS = AUTO_SAVE_RETRY_DELAYS_MS.length
 
 class AutoSaveCoordinator {
   private listeners = new Set<AutoSaveListener>()
   private targets = new Map<string, AutoSaveTarget>()
-  private dirtyKeys = new Set<string>()
+  private dirtyKeys = new Map<string, number>()
+  private generation = 0
+  private inFlight = new Map<string, Promise<void>>()
+  private attempts = new Map<string, number>()
+  private errors = new Map<string, string>()
+  private dueAt = new Map<string, number>()
   private timerId: number | null = null
-  private flushPromise: Promise<void> | null = null
   private state: AutoSaveState = {
     status: 'idle',
     dirtyKeys: [],
@@ -51,84 +41,84 @@ class AutoSaveCoordinator {
   registerTarget(key: string, target: AutoSaveTarget) {
     this.targets.set(key, target)
     return () => {
+      // An old component's cleanup must not unregister its replacement.
+      if (this.targets.get(key) !== target) return
       this.targets.delete(key)
-      this.dirtyKeys.delete(key)
-      this.syncState(this.dirtyKeys.size > 0 ? 'dirty' : 'idle')
-      if (this.dirtyKeys.size === 0) {
-        this.clearTimer()
-      }
+      this.clearDirty(key)
+      this.syncState()
+      this.scheduleNext()
     }
   }
 
   markDirty(key: string, reason: string) {
     if (!this.targets.has(key)) return
-    this.dirtyKeys.add(key)
-    // A fresh edit restores the retry budget. Once the previous attempt series
-    // was exhausted the timer is intentionally stopped (see the catch block in
-    // flushNow); without this reset, a later genuine edit would never be saved
-    // automatically, which would be a worse bug than the livelock being fixed.
-    this.syncState('dirty', { lastReason: reason, errorMessage: null, retryAttempt: 0 })
-    if (!this.flushPromise && this.timerId == null) {
-      this.schedule(AUTO_SAVE_DELAY_MS)
+    const hadFailure = this.attempts.has(key)
+    this.dirtyKeys.set(key, ++this.generation)
+    this.attempts.delete(key)
+    this.errors.delete(key)
+    if (!this.dueAt.has(key) || hadFailure) {
+      this.dueAt.set(key, Date.now() + AUTO_SAVE_DELAY_MS)
     }
+    this.syncState(reason)
+    this.scheduleNext()
   }
 
   async flushNow(reason: string, keys?: Iterable<string>) {
     const requestedKeys = keys ? new Set(keys) : null
-    if (this.flushPromise) {
-      return this.flushPromise
-    }
-    const dirtyKeys = Array.from(this.dirtyKeys).filter((key) => requestedKeys == null || requestedKeys.has(key))
+    const dirtyKeys = Array.from(this.dirtyKeys.keys())
+      .filter((key) => requestedKeys == null || requestedKeys.has(key))
     if (dirtyKeys.length === 0) {
-      this.syncState(this.dirtyKeys.size > 0 ? 'dirty' : 'idle', { lastReason: reason })
+      this.syncState(reason)
       return
     }
 
-    this.clearTimer()
-    this.syncState('saving', { lastReason: reason })
-    this.flushPromise = (async () => {
+    // Targets are independent. A slow or failed palace must not hold up a timer
+    // checkpoint or a different palace. Each individual target remains serial.
+    const results = await Promise.allSettled(dirtyKeys.map((key) => this.flushTarget(key, reason)))
+    const failure = results.find((result) => result.status === 'rejected')
+    if (failure?.status === 'rejected') throw failure.reason
+  }
+
+  private flushTarget(key: string, reason: string): Promise<void> {
+    const existing = this.inFlight.get(key)
+    if (existing) return existing
+    const target = this.targets.get(key)
+    const generation = this.dirtyKeys.get(key)
+    if (!target || generation == null) return Promise.resolve()
+    this.dueAt.delete(key)
+
+    // Defer invoking a target until the in-flight identity is installed. A
+    // synchronously throwing/re-entrant target obeys the same owner boundary.
+    const operation = Promise.resolve().then(async () => {
       try {
-        for (const key of dirtyKeys) {
-          const target = this.targets.get(key)
-          if (!target) {
-            this.dirtyKeys.delete(key)
-            continue
-          }
-          await target.flush(reason)
-          this.dirtyKeys.delete(key)
-        }
-        this.syncState(this.dirtyKeys.size > 0 ? 'dirty' : 'idle', {
-          lastReason: reason,
-          errorMessage: null,
-          retryAttempt: 0,
-        })
-        if (this.dirtyKeys.size > 0) {
-          this.schedule(AUTO_SAVE_DELAY_MS)
+        await target.flush(reason)
+        if (this.targets.get(key) !== target) return
+        if (this.dirtyKeys.get(key) === generation) {
+          this.clearDirty(key)
+        } else if (this.dirtyKeys.has(key) && !this.dueAt.has(key)) {
+          this.dueAt.set(key, Date.now() + AUTO_SAVE_DELAY_MS)
         }
       } catch (error) {
-        const retryAttempt = Math.min(this.state.retryAttempt + 1, AUTO_SAVE_MAX_ATTEMPTS)
-        const errorMessage = error instanceof Error ? error.message : '自动保存失败'
-        this.syncState('error', {
-          lastReason: reason,
-          errorMessage,
-          retryAttempt,
-        })
-        // Stop once the budget is spent. Retrying past this point is a livelock:
-        // the key stays dirty, so every tick re-attempts the same doomed save.
-        // The local draft keeps the user's work recoverable, and the next edit
-        // (or an explicit flushNow) resets the budget and tries again.
-        if (retryAttempt < AUTO_SAVE_MAX_ATTEMPTS) {
-          this.schedule(AUTO_SAVE_RETRY_DELAYS_MS[retryAttempt - 1] ?? AUTO_SAVE_RETRY_DELAYS_MS[2])
-        } else {
-          this.clearTimer()
+        // A previous generation's failure cannot spend a newer edit's budget
+        // or put a replacement component into an error state.
+        if (this.targets.get(key) !== target || this.dirtyKeys.get(key) !== generation) return
+        const attempt = Math.min((this.attempts.get(key) ?? 0) + 1, AUTO_SAVE_MAX_ATTEMPTS)
+        this.attempts.set(key, attempt)
+        this.errors.set(key, error instanceof Error ? error.message : '自动保存失败')
+        if (attempt < AUTO_SAVE_MAX_ATTEMPTS) {
+          this.dueAt.set(key, Date.now() + AUTO_SAVE_RETRY_DELAYS_MS[attempt - 1])
         }
         throw error
       } finally {
-        this.flushPromise = null
+        if (this.inFlight.get(key) === operation) this.inFlight.delete(key)
+        this.syncState(reason)
+        this.scheduleNext()
       }
-    })()
-
-    return this.flushPromise
+    })
+    this.inFlight.set(key, operation)
+    this.syncState(reason)
+    this.scheduleNext()
+    return operation
   }
 
   subscribe(listener: AutoSaveListener) {
@@ -148,7 +138,10 @@ class AutoSaveCoordinator {
     this.listeners.clear()
     this.targets.clear()
     this.dirtyKeys.clear()
-    this.flushPromise = null
+    this.inFlight.clear()
+    this.attempts.clear()
+    this.errors.clear()
+    this.dueAt.clear()
     this.state = {
       status: 'idle',
       dirtyKeys: [],
@@ -158,13 +151,27 @@ class AutoSaveCoordinator {
     }
   }
 
-  private schedule(delayMs: number) {
+  private clearDirty(key: string) {
+    this.dirtyKeys.delete(key)
+    this.dueAt.delete(key)
+    this.attempts.delete(key)
+    this.errors.delete(key)
+  }
+
+  private scheduleNext() {
     this.clearTimer()
     if (typeof window === 'undefined') return
+    const dueTimes = Array.from(this.dueAt.entries())
+      .filter(([key]) => this.dirtyKeys.has(key) && !this.inFlight.has(key))
+      .map(([, due]) => due)
+    if (dueTimes.length === 0) return
     this.timerId = window.setTimeout(() => {
       this.timerId = null
-      void this.flushNow('scheduled').catch(() => {})
-    }, delayMs)
+      const keys = Array.from(this.dueAt.entries())
+        .filter(([, due]) => due <= Date.now())
+        .map(([key]) => key)
+      void this.flushNow('scheduled', keys).catch(() => {})
+    }, Math.max(0, Math.min(...dueTimes) - Date.now()))
   }
 
   private clearTimer() {
@@ -174,19 +181,17 @@ class AutoSaveCoordinator {
     this.timerId = null
   }
 
-  private syncState(
-    status: AutoSaveStatus,
-    patch?: Partial<Omit<AutoSaveState, 'status' | 'dirtyKeys'>>,
-  ) {
+  private syncState(reason?: string) {
+    const status: AutoSaveStatus = this.inFlight.size > 0 ? 'saving'
+      : this.errors.size > 0 ? 'error' : this.dirtyKeys.size > 0 ? 'dirty' : 'idle'
     this.state = {
-      ...this.state,
-      ...patch,
       status,
-      dirtyKeys: Array.from(this.dirtyKeys),
+      dirtyKeys: Array.from(this.dirtyKeys.keys()),
+      lastReason: reason ?? this.state.lastReason,
+      errorMessage: this.errors.values().next().value ?? null,
+      retryAttempt: Math.max(0, ...this.attempts.values()),
     }
-    for (const listener of this.listeners) {
-      listener(this.state)
-    }
+    for (const listener of this.listeners) listener(this.state)
   }
 }
 

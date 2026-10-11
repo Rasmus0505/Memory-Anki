@@ -334,6 +334,45 @@ describe('commitHydratedRoundLedger', () => {
     expect(result.plan.cardsById.keep).toMatchObject({ status: 'completed', lastRating: 4 })
   })
 
+  it('drops a previous visit score when the card is due again', () => {
+    const cards = [branch('due'), branch('today'), branch('hidden')]
+    let localPlan = createRoundPlan('round-1', cards, DEFAULT_FREESTYLE_FEED_CONFIG)
+    localPlan = { ...localPlan, today: '2026-10-11' }
+    localPlan = updateRoundPlanCard(localPlan, 'due', { status: 'completed', lastRating: 3 })
+    localPlan = updateRoundPlanCard(localPlan, 'today', { status: 'completed', lastRating: 2 })
+    localPlan = updateRoundPlanCard(localPlan, 'hidden', { status: 'excluded', lastRating: 3 })
+    const result = commitHydratedRoundLedger({
+      localPlan,
+      localCompletedIds: ['due', 'today', 'hidden'],
+      localHiddenIds: ['hidden'],
+      localEncounters: {
+        due: encounter('due', 3),
+        today: encounter('today', 2),
+        hidden: encounter('hidden', 3),
+      },
+      adoptedRoundId: 'round-1',
+      cards,
+      config: DEFAULT_FREESTYLE_FEED_CONFIG,
+      meta: { candidate_count: 3, scheduled_count: 3, queue_limit: 20, limit_reached: false },
+      serverPlan: serverPlan({
+        today: '2026-10-11',
+        presented_ids: ['due', 'today', 'hidden'],
+        completed_ids: ['due', 'today'],
+        excluded_ids: ['hidden'],
+        fresh_due_ids: ['due', 'hidden'],
+        encounters: {
+          today: { encounter_id: 'enc-today', status: 'failed', unit_revision: 1, rating: 2 },
+        },
+      }),
+    })
+    expect(result.plan.cardsById.due).toMatchObject({ status: 'pending', lastRating: null })
+    expect(result.completedIds).not.toContain('due')
+    expect(result.encounters.due).toBeUndefined()
+    expect(result.plan.cardsById.today).toMatchObject({ status: 'completed', lastRating: 2 })
+    expect(result.plan.cardsById.hidden?.status).toBe('excluded')
+    expect(result.hiddenIds).toContain('hidden')
+  })
+
   it('keeps a removal the user just confirmed over a restored card', () => {
     const cards = [branch('back')]
     let localPlan = createRoundPlan('round-1', cards, DEFAULT_FREESTYLE_FEED_CONFIG)

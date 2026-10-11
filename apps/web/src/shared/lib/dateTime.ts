@@ -90,6 +90,23 @@ export function formatBeijingDateTime(value: Date): string {
   return `${year}/${month}/${day} ${hour}:${minute}:${second}`
 }
 
+/** Calendar day the learner lives, even if this Windows install is left on UTC. */
+export function beijingCalendarDay(value: Date = new Date()): string {
+  if (Number.isNaN(value.getTime())) return ''
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: BEIJING_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(value)
+  const read = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? ''
+  const year = read('year')
+  const month = read('month')
+  const day = read('day')
+  if (!year || !month || !day) return ''
+  return `${year}-${month}-${day}`
+}
+
 export function formatLocalDateKey(value: Date): string {
   const year = value.getFullYear()
   const month = `${value.getMonth() + 1}`.padStart(2, '0')

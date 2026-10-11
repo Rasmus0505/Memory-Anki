@@ -117,6 +117,97 @@ describe('autosaveCoordinator', () => {
     expect(flush.mock.calls.length).toBe(afterExhaustion + 1)
   })
 
+  it('keeps edits made during a save dirty until the newer generation is saved', async () => {
+    let completeSave!: () => void
+    const flush = vi.fn()
+      .mockImplementationOnce(() => new Promise<void>((resolve) => { completeSave = resolve }))
+      .mockResolvedValue(undefined)
+    registerAutoSaveTarget('palace:1', { flush })
+    markDirty('palace:1', 'edit A')
+    const saving = flushNow('manual')
+    await Promise.resolve()
+
+    markDirty('palace:1', 'edit B')
+    completeSave()
+    await saving
+    expect(getAutoSaveState().dirtyKeys).toEqual(['palace:1'])
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(flush).toHaveBeenCalledTimes(2)
+    expect(getAutoSaveState().dirtyKeys).toEqual([])
+  })
+
+  it('saves an independent target while another target is waiting', async () => {
+    let completeSlow!: () => void
+    const slow = vi.fn(() => new Promise<void>((resolve) => { completeSlow = resolve }))
+    const fast = vi.fn(async () => undefined)
+    registerAutoSaveTarget('palace:slow', { flush: slow })
+    registerAutoSaveTarget('timer:fast', { flush: fast })
+    markDirty('palace:slow', 'edit')
+    const slowSave = flushNow('manual', ['palace:slow'])
+    await Promise.resolve()
+
+    markDirty('timer:fast', 'checkpoint')
+    await flushNow('checkpoint', ['timer:fast'])
+    expect(fast).toHaveBeenCalledTimes(1)
+    expect(getAutoSaveState().dirtyKeys).toEqual(['palace:slow'])
+    completeSlow()
+    await slowSave
+  })
+
+  it('does not let one failed target retry or block a healthy target', async () => {
+    const failed = vi.fn().mockRejectedValue(new Error('conflict'))
+    const healthy = vi.fn().mockResolvedValue(undefined)
+    registerAutoSaveTarget('palace:conflict', { flush: failed })
+    registerAutoSaveTarget('timer:healthy', { flush: healthy })
+    markDirty('palace:conflict', 'edit')
+    markDirty('timer:healthy', 'checkpoint')
+    await expect(flushNow('manual')).rejects.toThrow('conflict')
+    expect(healthy).toHaveBeenCalledTimes(1)
+    expect(getAutoSaveState().dirtyKeys).toEqual(['palace:conflict'])
+    await vi.advanceTimersByTimeAsync(20_000)
+    expect(failed).toHaveBeenCalledTimes(3)
+    markDirty('timer:healthy', 'new checkpoint')
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(healthy).toHaveBeenCalledTimes(2)
+    expect(failed).toHaveBeenCalledTimes(3)
+  })
+
+  it('ignores an old generation failure and preserves the fresh edit retry budget', async () => {
+    let failOld!: (error: Error) => void
+    const flush = vi.fn()
+      .mockImplementationOnce(() => new Promise<void>((_, reject) => { failOld = reject }))
+      .mockResolvedValue(undefined)
+    registerAutoSaveTarget('palace:1', { flush })
+    markDirty('palace:1', 'edit A')
+    const saving = flushNow('manual')
+    await Promise.resolve()
+    markDirty('palace:1', 'edit B')
+    failOld(new Error('old conflict'))
+    await saving
+    expect(getAutoSaveState()).toMatchObject({ status: 'dirty', retryAttempt: 0, errorMessage: null })
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(flush).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not unregister a replacement target or clear its newer edit', async () => {
+    let completeOld!: () => void
+    const unregisterOld = registerAutoSaveTarget('palace:1', {
+      flush: () => new Promise<void>((resolve) => { completeOld = resolve }),
+    })
+    markDirty('palace:1', 'old edit')
+    const saving = flushNow('manual')
+    await Promise.resolve()
+    const replacement = vi.fn().mockResolvedValue(undefined)
+    registerAutoSaveTarget('palace:1', { flush: replacement })
+    unregisterOld()
+    markDirty('palace:1', 'new owner edit')
+    completeOld()
+    await saving
+    expect(getAutoSaveState().dirtyKeys).toEqual(['palace:1'])
+    await flushNow('manual')
+    expect(replacement).toHaveBeenCalledTimes(1)
+  })
+
   it('publishes save state transitions to subscribers', async () => {
     const flush = vi.fn(async () => undefined)
     const listener = vi.fn()

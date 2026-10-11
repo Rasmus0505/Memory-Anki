@@ -441,6 +441,7 @@ export async function fetchWithMutationQueue(
   }
   ensureRequestId(headers)
   const body = options.body
+  const requestStartedAt = new Date().toISOString()
   try {
     const response = await fetch(requestUrl, {
       ...options,
@@ -465,7 +466,7 @@ export async function fetchWithMutationQueue(
       })
     }
     if (response.ok && persistence.coalesceKey) {
-      await discardQueuedMutationsByCoalesceKey(persistence.coalesceKey)
+      await discardQueuedMutationsByCoalesceKey(persistence.coalesceKey, mutationId, requestStartedAt)
     }
     return response
   } catch (error) {
@@ -519,6 +520,7 @@ export async function request<T>(url: string, options?: PersistedRequestInit): P
   }
   ensureRequestId(headers)
   let timedResponse: TimedFetchResponse
+  const requestStartedAt = new Date().toISOString()
 
   try {
     timedResponse = await fetchWithTransientRetry(requestUrl, {
@@ -614,7 +616,7 @@ export async function request<T>(url: string, options?: PersistedRequestInit): P
     }
 
     if (persistence?.coalesceKey) {
-      await discardQueuedMutationsByCoalesceKey(persistence.coalesceKey)
+      await discardQueuedMutationsByCoalesceKey(persistence.coalesceKey, mutationId, requestStartedAt)
     }
 
     const contentType = response.headers.get('content-type')

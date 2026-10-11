@@ -63,7 +63,7 @@ def review_queue(session: Session = Depends(session_dep)):
 @router.get("/review/palaces/{palace_id}/units")
 def palace_units(palace_id: int, session: Session = Depends(session_dep)):
     try:
-        return {"item": get_palace_unit_projection(session, palace_id)}
+        return {"item": get_palace_unit_projection(session, palace_id, allow_reconcile=False)}
     except ValueError as exc:
         raise _bad_request(exc) from exc
 

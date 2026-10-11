@@ -7,6 +7,7 @@ import type { UnitRating } from '@/modules/practice/public'
  */
 export interface RateTicket {
   generation: number
+  intentSequence?: number
   rating: UnitRating
   operationId: string
   cardId: string

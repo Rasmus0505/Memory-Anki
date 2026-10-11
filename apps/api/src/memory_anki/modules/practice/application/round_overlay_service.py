@@ -17,7 +17,7 @@ from memory_anki.modules.practice.application.round_state_service import (
     _begin_round_write,
     _commit_operation,
     _json_load_object,
-    _payload,
+    _serve,
     _plan_of,
     _require_operation_id,
     _sync_peer_progress,
@@ -154,8 +154,8 @@ def ensure_overlay_quiz(
     if not changed:
         row.last_operation_id = op_id
     if not _commit_operation(session, row, op_id):
-        return _payload(row, conflict=True)
-    return _payload(row)
+        return _serve(session, row, conflict=True)
+    return _serve(session, row)
 
 
 def progress_overlay_quiz(
@@ -190,8 +190,8 @@ def progress_overlay_quiz(
     if not changed:
         row.last_operation_id = op_id
     if not _commit_operation(session, row, op_id):
-        return _payload(row, conflict=True)
-    return _payload(row)
+        return _serve(session, row, conflict=True)
+    return _serve(session, row)
 
 
 def drop_overlay_quiz_for_palaces(
@@ -220,5 +220,5 @@ def drop_overlay_quiz_for_palaces(
     if not changed:
         row.last_operation_id = op_id
     if not _commit_operation(session, row, op_id):
-        return _payload(row, conflict=True)
-    return _payload(row)
+        return _serve(session, row, conflict=True)
+    return _serve(session, row)

@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import type { DashboardResponse } from '@/shared/api/contracts'
+import { useState } from 'react'
 import {
   TimeRecordDialog,
   TimeRecordQuickAddDialog,
@@ -15,7 +14,7 @@ import {
   DashboardTodayLearningCard,
   StudyHeatmap,
   TimeRecordChartCard,
-  getDashboardApi,
+  useDashboardOverview,
 } from '@/modules/dashboard/public'
 import {
   ExamCountdownBlock,
@@ -77,35 +76,14 @@ function paneClass(active: boolean) {
 }
 
 export default function Dashboard() {
-  const [data, setData] = useState<DashboardResponse | null>(null)
-  const [loadError, setLoadError] = useState<string | null>(null)
+  const { data, error: loadError, isLoading, snapshotStatus, reload: loadDashboard } = useDashboardOverview()
   const [tab, setTab] = useState<DashboardTab>('overview')
   const [overviewPane, setOverviewPane] = useState<OverviewPane>('exam')
   const [recordsPane, setRecordsPane] = useState<RecordsPane>('list')
-  const dashboardRequestIdRef = useRef(0)
-
-  const loadDashboard = useCallback(async (): Promise<void> => {
-    const requestId = ++dashboardRequestIdRef.current
-    setLoadError(null)
-    try {
-      const dashboard = await getDashboardApi()
-      if (requestId !== dashboardRequestIdRef.current) return
-      setData(dashboard)
-    } catch (error) {
-      if (requestId !== dashboardRequestIdRef.current) return
-      setLoadError(error instanceof Error ? error.message : '加载仪表盘失败。')
-      throw error
-    }
-  }, [])
-
   const { data: examOverview, error: examError } = useExamOverview()
   const timeRecordsDashboard = useTimeRecordsDashboard({
     onRecordsChanged: loadDashboard,
   })
-
-  useEffect(() => {
-    void loadDashboard().catch(() => undefined)
-  }, [loadDashboard])
 
   if (!data && loadError) {
     return (
@@ -136,6 +114,12 @@ export default function Dashboard() {
 
   return (
     <Tabs value={tab} onValueChange={(value) => setTab(value as DashboardTab)} className="dashboard-fit flex flex-col gap-3">
+      {snapshotStatus === 'stale' && (
+        <p className="text-xs text-muted-foreground" role="status">显示最近一次概览，正在后台更新。</p>
+      )}
+      {snapshotStatus === 'pending' && isLoading && (
+        <p className="text-xs text-muted-foreground" role="status">正在准备最新学习概览。</p>
+      )}
       <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2">
         {/* 窄屏左上角浮着全局返回按钮、右上角是录制浮标：标题独占一行并让出两侧。 */}
         <h1 className="basis-full pl-[5.5rem] pr-12 text-2xl font-semibold leading-9 tracking-tight lg:basis-auto lg:p-0">仪表盘</h1>

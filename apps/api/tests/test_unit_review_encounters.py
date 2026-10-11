@@ -303,8 +303,6 @@ def test_closed_pass_locks_rating_and_future_unit_cannot_restart(db_session):
     assert closed["session_status"] == "completed"
     assert state.stage_index == 1
     assert state.due_date == date.today() + timedelta(days=1)
-    with pytest.raises(ValueError, match="current open encounter"):
-        undo_unit_rating(db_session, "rating-pass")
     with pytest.raises(ValueError, match="not due"):
         start_freestyle_unit_review_session(
             db_session,
@@ -336,6 +334,77 @@ def test_closed_pass_locks_rating_and_future_unit_cannot_restart(db_session):
     )
     assert amended["amended"] is True
     assert amended["rating"] == 4
+
+
+def test_today_closed_rating_can_be_undone(db_session):
+    state = _seed_review_unit(db_session)
+    before = state.due_date
+    review_session = _start(db_session, state, "encounter-hard")
+    _rate(db_session, review_session, state, "encounter-hard", "rating-hard", 2)
+    close_unit_review_encounter(
+        db_session,
+        study_session_id=review_session["id"],
+        unit_id=state.id,
+        encounter_id="encounter-hard",
+        operation_id="close-hard",
+    )
+
+    undone = undo_unit_rating(db_session, "rating-hard")
+
+    assert undone["encounter"]["selected_rating"] is None
+    assert undone["encounter"]["effective_operation_id"] is None
+    assert state.due_date == before
+
+
+def test_previous_day_closed_rating_cannot_be_undone(db_session):
+    state = _seed_review_unit(db_session)
+    review_session = _start(db_session, state, "encounter-old")
+    _rate(db_session, review_session, state, "encounter-old", "rating-old", 3)
+    close_unit_review_encounter(
+        db_session,
+        study_session_id=review_session["id"],
+        unit_id=state.id,
+        encounter_id="encounter-old",
+        operation_id="close-old",
+    )
+    operation = db_session.get(ReviewUnitRatingOperation, "rating-old")
+    operation.created_at = utc_now_naive() - timedelta(days=2)
+    db_session.commit()
+
+    with pytest.raises(ValueError, match="current open encounter"):
+        undo_unit_rating(db_session, "rating-old")
+
+
+def test_previous_day_rating_does_not_amend_a_new_due_cycle(db_session):
+    state = _seed_review_unit(db_session)
+    review_session = _start(db_session, state, "encounter-old")
+    _rate(db_session, review_session, state, "encounter-old", "rating-old", 3)
+    close_unit_review_encounter(
+        db_session,
+        study_session_id=review_session["id"],
+        unit_id=state.id,
+        encounter_id="encounter-old",
+        operation_id="close-old",
+    )
+    operation = db_session.get(ReviewUnitRatingOperation, "rating-old")
+    operation.created_at = utc_now_naive() - timedelta(days=2)
+    state.due_date = date.today()
+    state.stage_index = 1
+    state.has_passed = True
+    db_session.commit()
+
+    again = _rate(
+        db_session,
+        review_session,
+        state,
+        "encounter-next",
+        "rating-next",
+        3,
+        round_id="round-2026-07-27",
+    )
+
+    assert again["amended"] is False
+    assert state.stage_index == 2
 
 
 def test_start_reopens_passed_unit_when_session_still_active(db_session):

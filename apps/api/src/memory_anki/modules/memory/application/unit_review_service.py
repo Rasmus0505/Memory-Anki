@@ -10,7 +10,7 @@ from typing import Any
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from memory_anki.core.time import to_api_datetime, utc_now_naive
+from memory_anki.core.time import local_calendar_day_of, to_api_datetime, utc_now_naive
 from memory_anki.infrastructure.db._tables.misc import StudySession
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.unit_reviews import (
@@ -271,7 +271,7 @@ def start_unit_review_session(
     # Freestyle start already projected this palace to adopt the live revision.
     # Parsing the document again held the write lock for a second full walk.
     if projection is None:
-        projection = get_palace_unit_projection(session, palace_id)
+        projection = get_palace_unit_projection(session, palace_id, allow_reconcile=True)
     if projection["mark_required"]:
         raise ValueError("permanent marks are required before review")
     definitions = {item["id"]: item for item in projection["units"]}
@@ -702,7 +702,7 @@ def start_freestyle_unit_review_session(
     # write — including 做题's overlay ensure — then waits out busy_timeout and
     # comes back 503 "数据正在写入中". Commit the projection before continuing
     # so a glance start is a short write, not a lock on the rest of the product.
-    projection = get_palace_unit_projection(session, state.palace_id)
+    projection = get_palace_unit_projection(session, state.palace_id, allow_reconcile=True)
     if session.new or session.dirty or session.deleted:
         session.commit()
     session.refresh(state)
@@ -714,7 +714,7 @@ def start_freestyle_unit_review_session(
     requested_round_id = str(round_id or "").strip()
     if not requested_round_id:
         raise ValueError("round_id is required")
-    previous_rated = _first_rated_round_encounter(
+    previous_rated = _same_day_amend_source(
         session,
         unit_id=state.id,
         round_id=requested_round_id,
@@ -954,6 +954,55 @@ def _first_rated_round_encounter(
         .order_by(ReviewUnitEncounter.created_at.asc())
         .first()
     )
+
+
+def _effective_rating_day(session: Session, encounter: ReviewUnitEncounter) -> date | None:
+    op_id = str(encounter.effective_operation_id or "").strip()
+    if not op_id:
+        return None
+    operation = session.get(ReviewUnitRatingOperation, op_id)
+    if (
+        operation is None
+        or operation.undone_at is not None
+        or operation.replaced_at is not None
+        or operation.created_at is None
+    ):
+        return None
+    return local_calendar_day_of(operation.created_at)
+
+
+def _same_day_amend_source(
+    session: Session,
+    *,
+    unit_id: str,
+    round_id: str,
+) -> ReviewUnitEncounter | None:
+    """Baseline for a later rating only when that rating's local day is today.
+
+    A previous visit already moved the due date. Reusing its snapshot would
+    rewrite that visit instead of scheduling the new due cycle from now.
+    """
+    original = _first_rated_round_encounter(session, unit_id=unit_id, round_id=round_id)
+    if original is None:
+        return None
+    rated_on = _effective_rating_day(session, original)
+    if rated_on is None or rated_on != local_calendar_day_of(utc_now_naive()):
+        return None
+    return original
+
+
+def _closed_rating_is_today(
+    session: Session,
+    encounter: ReviewUnitEncounter,
+    operation: ReviewUnitRatingOperation,
+) -> bool:
+    if encounter.effective_operation_id != operation.id:
+        return False
+    if operation.undone_at is not None or operation.replaced_at is not None:
+        return False
+    if operation.created_at is None:
+        return False
+    return local_calendar_day_of(operation.created_at) == local_calendar_day_of(utc_now_naive())
 
 
 def _rate_open_encounter(
@@ -1289,7 +1338,7 @@ def rate_review_unit(
         round_id=round_id,
     )
     requested_round_id = str(round_id or encounter.round_id or "").strip()
-    original = _first_rated_round_encounter(
+    original = _same_day_amend_source(
         session,
         unit_id=state.id,
         round_id=requested_round_id,
@@ -1348,7 +1397,7 @@ def rate_palace_due_units(
         raise ValueError("operation_id belongs to another encounter")
 
     # Heal hash lag before we freeze the due set.
-    get_palace_unit_projection(session, int(palace_id))
+    get_palace_unit_projection(session, int(palace_id), allow_reconcile=True)
     normalized = normalize_rating(rating)
     excluded = {str(unit_id).strip() for unit_id in (exclude_unit_ids or []) if str(unit_id).strip()}
     included = {str(unit_id).strip() for unit_id in (include_unit_ids or []) if str(unit_id).strip()}
@@ -1394,7 +1443,7 @@ def rate_palace_due_units(
     targets[current_state.id] = current_state
 
     operations: list[ReviewUnitRatingOperation] = []
-    current_original = _first_rated_round_encounter(
+    current_original = _same_day_amend_source(
         session,
         unit_id=current_state.id,
         round_id=requested_round_id,
@@ -1418,7 +1467,7 @@ def rate_palace_due_units(
         if unit_id == current_state.id:
             continue
         sibling_op_id = f"{batch_id}:{state.id}"
-        original = _first_rated_round_encounter(
+        original = _same_day_amend_source(
             session,
             unit_id=state.id,
             round_id=requested_round_id,
@@ -1524,7 +1573,7 @@ def _undo_one_rating_operation(
         encounter.retry_after_cards = result.retry_after_cards
     else:
         _restore_snapshot(state, item, snapshot)
-        if encounter.status == ENCOUNTER_OPEN:
+        if encounter.status == ENCOUNTER_OPEN or allow_closed:
             encounter.effective_operation_id = None
             encounter.selected_rating = None
             encounter.passed = None
@@ -1566,7 +1615,12 @@ def _undo_rating_batch(
     if current is None:
         raise ValueError("active unit rating operation not found")
     current_encounter = session.get(ReviewUnitEncounter, current.encounter_id)
-    if current_encounter is None or current_encounter.status != ENCOUNTER_OPEN:
+    closed_today = (
+        current_encounter is not None
+        and current_encounter.status != ENCOUNTER_OPEN
+        and _closed_rating_is_today(session, current_encounter, current)
+    )
+    if current_encounter is None or (current_encounter.status != ENCOUNTER_OPEN and not closed_today):
         raise ValueError("only the current open encounter can be undone")
     if round_id and current_encounter.round_id != str(round_id).strip():
         raise ValueError("round_id does not match the active encounter")
@@ -1575,7 +1629,7 @@ def _undo_rating_batch(
         result = _undo_one_rating_operation(
             session,
             operation,
-            allow_closed=operation.id != batch_id,
+            allow_closed=operation.id != batch_id or closed_today,
         )
         if operation.id == batch_id:
             current_result = result
@@ -1594,11 +1648,16 @@ def undo_unit_rating(session: Session, operation_id: str, round_id: str | None =
     if operation.batch_id:
         return _undo_rating_batch(session, operation.batch_id, round_id)
     encounter = session.get(ReviewUnitEncounter, operation.encounter_id)
-    if encounter is None or encounter.status != ENCOUNTER_OPEN:
+    closed_today = (
+        encounter is not None
+        and encounter.status != ENCOUNTER_OPEN
+        and _closed_rating_is_today(session, encounter, operation)
+    )
+    if encounter is None or (encounter.status != ENCOUNTER_OPEN and not closed_today):
         raise ValueError("only the current open encounter can be undone")
     if round_id and encounter.round_id != str(round_id).strip():
         raise ValueError("round_id does not match the active encounter")
-    result = _undo_one_rating_operation(session, operation, allow_closed=False)
+    result = _undo_one_rating_operation(session, operation, allow_closed=closed_today)
     session.commit()
     return result
 

@@ -11,6 +11,7 @@ import type {
   MindMapEditorState,
 } from '@/shared/api/contracts'
 import { coerceEditorDoc } from '@/shared/lib/mindmap-split-marks/splitMarks'
+import { beijingCalendarDay, parseApiDateTime } from '@/shared/lib/dateTime'
 
 const inFlightSessionLoads = new Map<string, Promise<UnitReviewSessionDto>>()
 const SESSION_LOAD_TIMEOUT_MS = 30_000
@@ -129,6 +130,23 @@ export function asUnitRating(value: unknown): UnitRating | null {
   return value === 1 || value === 2 || value === 3 || value === 4 ? value : null
 }
 
+/** A closed encounter lights the button only when that rating's local day is today. */
+export function ratingOnThisAppearance(
+  encounter: {
+    status?: string
+    selected_rating?: number | null
+    closed_at?: string | null
+  } | null | undefined,
+  now: Date = new Date(),
+): UnitRating | null {
+  const rating = asUnitRating(encounter?.selected_rating)
+  if (rating == null || !encounter) return null
+  if (encounter.status !== 'closed') return rating
+  const closed = parseApiDateTime(encounter.closed_at)
+  if (Number.isNaN(closed.getTime())) return null
+  return beijingCalendarDay(closed) === beijingCalendarDay(now) ? rating : null
+}
+
 export function encounterState(
   sessionId: string,
   unitRevision: number,
@@ -140,7 +158,7 @@ export function encounterState(
     unitRevision,
     status: encounter.status,
     sessionId,
-    selectedRating: encounter.selected_rating,
+    selectedRating: ratingOnThisAppearance(encounter),
     passed: encounter.passed,
     retryAfterCards: encounter.retry_after_cards,
     effectiveSeconds: encounter.effective_seconds ?? null,

@@ -11,7 +11,15 @@ export interface DashboardReviewUnit {
   overdue: boolean
 }
 
+export interface DashboardSnapshotMetadata {
+  status: 'ready' | 'stale' | 'pending'
+  generated_at: string | null
+  scope: string
+  refresh_pending: boolean
+}
+
 export interface DashboardResponse {
+  snapshot?: DashboardSnapshotMetadata
   due_count: number
   overdue_count: number
   due_later_today_count: number

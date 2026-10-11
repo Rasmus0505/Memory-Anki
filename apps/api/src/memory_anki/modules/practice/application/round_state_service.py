@@ -68,7 +68,7 @@ from .round_state_payload import (
     _fingerprint,
     _json_dump,
     _json_load_object,
-    _payload,
+    _serve,
     _plan_of,
 )
 from .round_state_payload import (
@@ -353,7 +353,7 @@ def _complete_active(
 
 def get_round(session: Session, round_id: str) -> dict[str, Any] | None:
     row = _row_by_id(session, round_id)
-    return _payload(row) if row is not None else None
+    return _serve(session, row) if row is not None else None
 
 
 def get_active_round(
@@ -362,7 +362,7 @@ def get_active_round(
     workspace: str = "primary",
 ) -> dict[str, Any] | None:
     row = _active_row(session, scope_key, workspace)
-    return _payload(row) if row is not None else None
+    return _serve(session, row) if row is not None else None
 
 
 def read_workspace_active_round(
@@ -373,7 +373,7 @@ def read_workspace_active_round(
     """Read the workspace's current round. Never creates, replans, or appends cards."""
     slot = normalize_workspace(workspace)
     row = _latest_active_for_workspace(session, slot)
-    return _payload(row) if row is not None else None
+    return _serve(session, row) if row is not None else None
 
 
 def _plan_unit_ids(plan: dict[str, Any]) -> list[str]:
@@ -418,7 +418,7 @@ def get_or_create_active_round(
         row = _latest_active_for_workspace(session, slot)
     if row is not None:
         if op_id and _operation_seen(session, row, op_id):
-            return _payload(row, duplicate=True)
+            return _serve(session, row, duplicate=True)
         next_config = sanitize_feed_config(config or {})
         previous_config = _json_load_object(row.config_json)
         reorder = queue_construction_signature(previous_config) != queue_construction_signature(
@@ -434,7 +434,7 @@ def get_or_create_active_round(
         today = _local_today()
         plan_day = str(next_plan.get("today") or "")[:10]
         same_day = plan_day in {"", today}
-        # Names stay short so return _payload(row) remains within 220 characters
+        # Names stay short so return _serve(session, row) remains within 220 characters
         # of the freeze marker. A new calendar day is not that freeze.
         apply = _apply_plan
         commit = _commit_operation
@@ -444,8 +444,8 @@ def get_or_create_active_round(
         if plan_is_fully_handled(next_plan) and not persist_config and same_day:
             if apply(row, next_plan, operation_id=op_id):
                 if not commit(session, row, op_id):
-                    return _payload(row, conflict=True)
-            return _payload(row)
+                    return _serve(session, row, conflict=True)
+            return _serve(session, row)
         if persist_config:
             next_plan = replan_remaining(next_plan, cards, today=today)
             next_plan = _seed_from_peer(
@@ -479,8 +479,8 @@ def get_or_create_active_round(
             )
             if changed:
                 if not _commit_operation(session, row, op_id):
-                    return _payload(row, conflict=True)
-        return _payload(row)
+                    return _serve(session, row, conflict=True)
+        return _serve(session, row)
     overlay = empty_overlay_quiz()
     row = _create_row(
         session,
@@ -494,7 +494,7 @@ def get_or_create_active_round(
     )
     # A freshly created row cannot lose a version race, so the result is moot.
     _commit_operation(session, row, op_id)
-    return _payload(row)
+    return _serve(session, row)
 
 
 def start_new_round(
@@ -514,7 +514,7 @@ def start_new_round(
     slot = normalize_workspace(workspace)
     active = _active_row(session, key, slot)
     if active is not None and _operation_seen(session, active, op_id):
-        return _payload(active, duplicate=True)
+        return _serve(session, active, duplicate=True)
     overlay = empty_overlay_quiz()
     _complete_active(session, workspace=slot)
     row = _create_row(
@@ -528,8 +528,8 @@ def start_new_round(
         overlay_quiz=overlay,
     )
     if not _commit_operation(session, row, op_id):
-        return _payload(row, conflict=True)
-    return _payload(row)
+        return _serve(session, row, conflict=True)
+    return _serve(session, row)
 
 
 def apply_round_action(
@@ -546,9 +546,9 @@ def apply_round_action(
     if row is None:
         raise ValueError("freestyle round not found")
     if op_id and _operation_seen(session, row, op_id):
-        return _payload(row, duplicate=True)
+        return _serve(session, row, duplicate=True)
     if int(expected_version or 0) > 0 and int(row.version or 0) != int(expected_version):
-        return _payload(row, conflict=True)
+        return _serve(session, row, conflict=True)
     name = _text(action)
     if name not in _ACTIONS:
         raise ValueError(f"unknown round action: {action}")
@@ -599,8 +599,8 @@ def apply_round_action(
     if not changed:
         row.last_operation_id = op_id
     if not _commit_operation(session, row, op_id):
-        return _payload(row, conflict=True)
-    return _payload(row)
+        return _serve(session, row, conflict=True)
+    return _serve(session, row)
 
 
 def apply_round_rating(
@@ -622,9 +622,9 @@ def apply_round_rating(
     if row is None:
         raise ValueError("freestyle round not found")
     if op_id and _operation_seen(session, row, op_id):
-        return _payload(row, duplicate=True)
+        return _serve(session, row, duplicate=True)
     if int(expected_version or 0) > 0 and int(row.version or 0) != int(expected_version):
-        return _payload(row, conflict=True)
+        return _serve(session, row, conflict=True)
     if row.status != "active":
         raise ValueError("freestyle round is not active")
     plan = apply_rating(
@@ -651,8 +651,8 @@ def apply_round_rating(
     if not changed:
         row.last_operation_id = op_id
     if not _commit_operation(session, row, op_id):
-        return _payload(row, conflict=True)
-    return _payload(row)
+        return _serve(session, row, conflict=True)
+    return _serve(session, row)
 
 
 def rate_freestyle_round_unit(
@@ -661,6 +661,7 @@ def rate_freestyle_round_unit(
     round_id: str,
     operation_id: str,
     expected_version: int,
+    intent_sequence: int = 0,
     card_id: str,
     occurrence_id: str,
     encounter_id: str,
@@ -675,7 +676,9 @@ def rate_freestyle_round_unit(
     if row is None:
         raise ValueError("freestyle round not found")
     if _operation_seen(session, row, op_id):
-        return {"item": None, "round": _payload(row, duplicate=True)}
+        return {"item": None, "round": _serve(session, row, duplicate=True)}
+    if intent_sequence > 0 and intent_sequence <= int(row.version or 0):
+        return {"item": None, "round": _serve(session, row, duplicate=True)}
     # Ratings last-write-wins: a stale expected_version still applies so PWA
     # and desktop cannot 409 each other after one side already scored.
     # Wrong card / occurrence / encounter / unit never last-writes.
@@ -723,7 +726,7 @@ def rate_freestyle_round_unit(
         )
 
     if _operation_seen(session, row, op_id):
-        return {"item": item, "round": _payload(row, duplicate=True)}
+        return {"item": item, "round": _serve(session, row, duplicate=True)}
 
     payload = apply_round_rating(
         session,
@@ -761,8 +764,8 @@ def _commit_plan(
     if not changed:
         row.last_operation_id = operation_id
     if not _commit_operation(session, row, operation_id):
-        return _payload(row, conflict=True)
-    return _payload(row)
+        return _serve(session, row, conflict=True)
+    return _serve(session, row)
 
 
 
@@ -778,9 +781,9 @@ def _begin_round_write(
     if row is None:
         raise ValueError("freestyle round not found")
     if op_id and _operation_seen(session, row, op_id):
-        return None, _payload(row, duplicate=True)
+        return None, _serve(session, row, duplicate=True)
     if int(expected_version or 0) > 0 and int(row.version or 0) != int(expected_version):
-        return None, _payload(row, conflict=True)
+        return None, _serve(session, row, conflict=True)
     if row.status != "active":
         raise ValueError("freestyle round is not active")
     return row, None

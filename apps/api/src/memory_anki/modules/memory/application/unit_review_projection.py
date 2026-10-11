@@ -442,16 +442,25 @@ def _reconcile_if_unit_hashes_lag(session: Session, palace_id: int) -> bool:
     return True
 
 
-def get_palace_unit_projection(session: Session, palace_id: int) -> dict[str, Any]:
-    from .unit_reconcile import reconcile_palace_units
-
+def get_palace_unit_projection(
+    session: Session,
+    palace_id: int,
+    *,
+    allow_reconcile: bool = False,
+) -> dict[str, Any]:
     tree, definitions = resolve_unit_definitions(session, palace_id)
     states = _active_states(session, palace_id)
     if _unit_hashes_lag(states, definitions):
-        # Catch mid-edit kill before freestyle / session start projects due units.
-        reconcile_palace_units(session, palace_id)
-        tree, definitions = resolve_unit_definitions(session, palace_id)
-        states = _active_states(session, palace_id)
+        if not allow_reconcile:
+            # GET callers must remain read-only. Queue the repair and serve the
+            # last persisted projection until the background worker catches up.
+            schedule_reconcile([palace_id])
+        else:
+            from .unit_reconcile import reconcile_palace_units
+
+            reconcile_palace_units(session, palace_id)
+            tree, definitions = resolve_unit_definitions(session, palace_id)
+            states = _active_states(session, palace_id)
     definition_by_key = {
         _active_unit_key(item.anchor_uid, item.unit_kind): item for item in definitions
     }

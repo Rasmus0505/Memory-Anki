@@ -6,6 +6,7 @@ export function useDashboardOverview() {
   const [data, setData] = useState<DashboardResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [snapshotStatus, setSnapshotStatus] = useState<'ready' | 'stale' | 'pending'>('pending')
   const requestIdRef = useRef(0)
   const dataRef = useRef<DashboardResponse | null>(null)
 
@@ -19,6 +20,7 @@ export function useDashboardOverview() {
       if (requestIdRef.current !== requestId) return
       dataRef.current = dashboard
       setData(dashboard)
+      setSnapshotStatus(dashboard.snapshot?.status ?? 'ready')
     } catch (caughtError) {
       if (requestIdRef.current !== requestId) return
       setError(caughtError instanceof Error ? caughtError.message : '加载今日学习概览失败。')
@@ -34,5 +36,5 @@ export function useDashboardOverview() {
     }
   }, [reload])
 
-  return { data, error, isLoading, reload }
+  return { data, error, isLoading, snapshotStatus, reload }
 }

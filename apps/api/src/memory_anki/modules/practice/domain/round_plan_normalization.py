@@ -227,6 +227,10 @@ def normalize_plan(plan: Mapping[str, Any] | None) -> Plan:
     restored = [item for item in _unique(raw.get("restored_ids") or []) if item not in held]
     if restored:
         normalized["restored_ids"] = restored
+    quiet = set(normalized["excluded_ids"]) | set(normalized["compressed_ids"])
+    fresh = [item for item in _unique(raw.get("fresh_due_ids") or []) if item not in quiet]
+    if fresh:
+        normalized["fresh_due_ids"] = fresh
     _collapse_retries(normalized)
     _strip_compressed(normalized)
     return normalized

@@ -394,6 +394,8 @@ export interface FreestyleRoundPlanPayload {
   compressed_ids?: string[]
   /** Cards this round put back. A stale local hide or score must not cover them. */
   restored_ids?: string[]
+  /** Due again with no rating today. Appear with an empty selection; do not un-hide. */
+  fresh_due_ids?: string[]
   /** Confirmed 小结算 pages. The closing 大结算 reads these after cards leave the feed. */
   partial_settlements?: unknown[]
   today?: string
@@ -589,6 +591,7 @@ export interface FreestyleOverlayQuizDropPalacesRequest {
 export interface FreestyleRoundRatingRequest {
   operation_id: string
   expected_version: number
+  intent_sequence?: number
   card_id: string
   occurrence_id?: string
   encounter_id: string
