@@ -99,7 +99,7 @@ schemaVersion, document, editorPreferences, localPreferences, language, revision
 - `articleDocument` 纯规则将标题/列表节点投影成文章块，`data.articleBody` 是受限富文本 JSON，正文段落与图片、公式、表格属于节点。旧 text/note 不破坏性迁移；`shared/ui/rich-document` 只负责通用安全渲染。
 - 文章输入由 Tiptap 承载，文档命令拥有 UID、子树移动和关联；删除仍通过宿主 guard，分支范围仍保存完整文档。阅读模式使用轻量渲染，仅活动编辑块挂载编辑器。
 - 导图与文章共用 capability 动作和题目入口。宿主回忆 conceal 状态必须遮挡正文，文章揭晓委托宿主，不私自写学习事实。
-- 视图选择保存浏览器本地，阅读锚点通过独立 cursor API 保存，见 [article-reading-cursor.md](./article-reading-cursor.md)。跨电脑仍遵守外部 Syncthing 单写入设备限制。
+- 视图选择保存浏览器本地，阅读锚点通过独立 cursor API 保存，见 [article-reading-cursor.md](./article-reading-cursor.md)。跨电脑仍遵守单写入设备限制。
 - 文章文件转换、四种导入与附件/题目恢复见 [article-transfer.md](./article-transfer.md)。完整包不是整库备份恢复。
 
 ## 新增能力流程

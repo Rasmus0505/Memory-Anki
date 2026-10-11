@@ -109,7 +109,7 @@ def _warm_db_pool() -> None:
     """Open pooled connections so the first user request does not pay for it.
 
     Opening the database is a cold, first-touch read of a ~200MB file on the
-    (often Syncthing- or USB-backed) data drive. When several requests arrive at
+    (often synced or USB-backed) data drive. When several requests arrive at
     once on a cold process they all park in ``do_connect`` behind that one open
     and finish together -- the log signature is a burst of unrelated endpoints
     all reporting ``connect_total_ms`` around the same multi-second value while

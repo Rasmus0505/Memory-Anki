@@ -312,7 +312,7 @@ export default defineConfig({
   },
   server: {
     hmr: false,
-    // E2E must never reach the live service on 8012 (real Syncthing data).
+    // E2E must never reach the live service on 8012 (real synced data).
     proxy: process.env.MEMORY_ANKI_E2E === '1'
       ? {}
       : {

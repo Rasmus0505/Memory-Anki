@@ -160,7 +160,7 @@ Replacing these with a library would be a regression:
   with coalescing, a `Retry-After`-aware busy path, per-entity
   `resourceKey`/`coalesceKey`, and idempotent replay via a mutation id the server
   deduplicates. Generic offline libraries assume a sync protocol this app does
-  not have (Syncthing moves files outside the app). This is legitimately custom.
+  not have (file sync happens outside the app). This is legitimately custom.
 - **`platform/events/bus.py` (41 lines)** — a synchronous in-process pub/sub, and
   its docstring says so. Pulling in a broker for this would be strictly worse.
 - **`platform/jobs/registry.py`** — already self-documented as an unused

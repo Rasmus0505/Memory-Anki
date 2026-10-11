@@ -161,7 +161,7 @@ write transaction held 14.83s opened at ..._delete_open_unrated_encounters
 `write_storage_backup` 在 `storage_backup.py:220` 执行
 `checkpoint_sqlite_wal(require_complete=True)`，而共享锁在 **229 行**才获取——
 这个"整库 checkpoint"动作**跑在锁外面**，由每次编辑保存、每 5 分钟定时循环、
-启动和关机触发，作用在 197 MB、位于 U 盘、Syncthing 正在同时读写的文件上。
+启动和关机触发，作用在 197 MB、位于 U 盘、同步工具正在同时读写的文件上。
 它用 `engine.begin()`，本身就是一次写事务。
 
 注意：上面第 2 类门禁只覆盖 **presentation 层**，而这条路径在 application 层 +

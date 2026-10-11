@@ -16,7 +16,7 @@ PUT includes `node_uid`, `block_offset`, `client_id`, `operation_id`, `client_se
 
 `useArticleReadingProgress(ownerId)` returns `resumeCursor`, `recordProgress(uid, offset)`, and `error`. Resume is offered explicitly, never an automatic jump. Writes debounce 500ms and serialize, carrying a tab client ID, monotonic sequence, and unique operation ID. Owner context and operation guards ignore stale completions; switching owners aborts pending requests and timers. Local fallback uses separate `article.reading.local.<owner>` browser keys; client identity/sequence survive remounts in session storage. On save uncertainty the hook re-reads the server and does not replay the failed position. Pending debounced writes at unmount remain in the local fallback; they are not force-sent as stale background writes.
 
-Runtime data location and external Syncthing behavior remain unchanged. This feature adds no file synchronization.
+Runtime data location and external cross-device sync behavior remain unchanged. This feature adds no file synchronization.
 
 ## Verification
 

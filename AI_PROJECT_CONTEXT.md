@@ -10,7 +10,7 @@
 
 Memory Anki 是一个自用的本地学习产品，核心是“记忆宫殿 + 间隔重复 + AI 辅助知识生产”。PWA 使用完整桌面端前端，默认入口是 `/freestyle`，不再维护单独移动端应用或 `/m` 功能面。
 
-它不是公开 SaaS，不面向多用户，也不需要把数据上传到云服务。主要运行在两台 Windows 电脑上，运行时数据（数据库与附件）放在每台电脑各自的 Syncthing 同步文件夹中；**不要**使用固定盘符、`MemoryAnki-Sync` 或百度同步目录作为运行时约束。设备间由 Syncthing 在应用外同步文件，应用本身不实现文件同步。PWA 通过本机后端和 Tailscale 私有网络访问，不是独立后端或公网服务。因此代码修改时最重要的隐含约束是：**不能写出只能在当前电脑运行的路径、配置或数据假设**。
+它不是公开 SaaS，不面向多用户，也不需要把数据上传到云服务。主要运行在两台 Windows 电脑上，运行时数据（数据库与附件）放在每台电脑各自的同步数据文件夹中；**不要**使用固定盘符、`MemoryAnki-Sync` 或百度同步目录作为运行时约束。设备间由应用外的同步工具同步文件，应用本身不实现文件同步。PWA 通过本机后端和 Tailscale 私有网络访问，不是独立后端或公网服务。因此代码修改时最重要的隐含约束是：**不能写出只能在当前电脑运行的路径、配置或数据假设**。
 
 当前产品能力大致包括：
 
@@ -68,11 +68,11 @@ Memory Anki 是一个自用的本地学习产品，核心是“记忆宫殿 + �
 - 开发模式：显式运行 Vite 时使用 `127.0.0.1:5173`，并将 `/api` 代理到 `127.0.0.1:8012`
 - 生产/日常本地启动：Electron 桌面端和手机 PWA 共用 `127.0.0.1:8012`，后端同时服务 API 和已构建前端
 - PWA 私有访问：Tailscale Serve 将当前设备的 HTTPS 地址转发到 `http://127.0.0.1:8012`，手机访问脚本输出的 HTTPS 地址并追加 `/freestyle`
-- 运行时数据默认：`%LOCALAPPDATA%\MemoryAnki`（仅作未配置时的回退；日常数据应放在本机 Syncthing 文件夹）
+- 运行时数据默认：`%LOCALAPPDATA%\MemoryAnki`（仅作未配置时的回退；日常数据应放在本机同步数据文件夹）
 - 可用 `MEMORY_ANKI_HOME` 覆盖运行时数据目录；启动脚本优先读 `local-config/memory-anki.local.json` 的 `local_app_home`
-- Syncthing 数据目录：每台电脑在 `local_app_home` 填本机实际同步文件夹（例如 `F:\memory anki data`），不要写死盘符
-- 跨设备同步：完全由 Syncthing 在应用外完成；应用不读取或写入同步配置，也不提供应用内同步流程
-- SQLite 使用约束：同一时间只允许一台设备写入同步目录；切换设备前先停止应用并等待 Syncthing 完成同步。不要在 Syncthing 忽略模式中排除数据库、附件或上传目录
+- 同步数据目录：每台电脑在 `local_app_home` 填本机实际同步文件夹（例如 `F:\memory anki data`），不要写死盘符
+- 跨设备同步：完全在应用外完成；应用不读取或写入同步配置，也不提供应用内同步流程
+- SQLite 使用约束：同一时间只允许一台设备写入同步目录；切换设备前先停止应用并等待同步完成。不要在同步忽略规则中排除数据库、附件或上传目录
 - 本地设备身份配置：`local-config/memory-anki.local.json`（gitignore，模板见 `local-config/memory-anki.local.example.json`）
 
 运行时数据、真实密钥、数据库、日志、上传文件、生成文件等不要提交到 git。
@@ -91,7 +91,7 @@ Memory Anki/
 │   ├── api/                    FastAPI 后端
 │   ├── web/                    React + Vite 前端
 │   ├── shared/                 跨应用静态数据
-│   └── desktop-timer/          Electron 桌面计时器
+│   └── desktop-timer/          Electron 桌面壳
 ├── tools/                      启动、停止、配置、自启、备份、迁移、架构检查、内容处理脚本
 ├── local-config/               每台电脑自己的本地配置
 ├── runtime-data/               本地运行数据目录，原则上不提交用户数据
@@ -487,7 +487,7 @@ AI 相关功能分布较广：
 
 这些路径通常由 `memory_anki.core.config` 派生，根目录来自 `MEMORY_ANKI_HOME` 或默认 `%LOCALAPPDATA%\MemoryAnki`。涉及新增路径时要考虑：
 
-- 两台设备的 Syncthing 文件夹是否指向同一套逻辑数据目录
+- 两台设备的同步文件夹是否指向同一套逻辑数据目录
 - `.gitignore` 是否正确
 - 是否需要迁移旧位置
 - 是否需要备份/恢复支持

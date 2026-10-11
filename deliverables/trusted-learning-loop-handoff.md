@@ -55,7 +55,7 @@ No `--launchers` run has occurred. It restarts the shared PWA service and starts
 - External Agent Mail hourly email automation is not established as owned by this repository. Facts-only preferences are recorded; its live task prompt has not been changed.
 - Historical has_passed can count as reviewed schedule-state evidence. The existing note labels it as rating-or-passed coverage, not mastery; historical missing operation evidence has not been reconstructed.
 - Real textbook/chapter/question bindings need source-based audit before any data repair. Malformed documents receive a warning, not invented replacement UIDs or guessed counts.
-- Computer-to-computer database synchronization remains Syncthing-owned and requires one writer at a time. Phone/desktop clients on the same backend are a different scenario; no new file-sync implementation is introduced.
+- Computer-to-computer database synchronization happens outside the app and requires one writer at a time. Phone/desktop clients on the same backend are a different scenario; no new file-sync implementation is introduced.
 - Phone hardware/network behavior and three actual uninterrupted learning sessions remain unverified until user observation.
 
 ## Release and Learning Observation
