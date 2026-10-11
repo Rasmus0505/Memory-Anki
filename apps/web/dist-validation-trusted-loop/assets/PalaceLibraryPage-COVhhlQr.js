@@ -1,1 +1,0 @@
-import{N as e}from"./radix-vendor-DzOvyo-0.js";import{on as t}from"./index-DHtSGP0s.js";var n=e();function r(){return(0,n.jsx)(t,{})}export{r as default};
