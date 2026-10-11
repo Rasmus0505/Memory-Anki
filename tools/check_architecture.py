@@ -2122,11 +2122,19 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
                 errors.append(
                     f"{round_service.relative_to(REPO_ROOT).as_posix()}: must keep `{marker}`."
                 )
-        if (
-            "plan_is_fully_handled(next_plan) and not persist_config" in service_source
-            and "return _payload(row)" not in service_source.split(
-                "plan_is_fully_handled(next_plan) and not persist_config", 1
-            )[1][:220]
+        freeze_blocks = [
+            node for node in ast.walk(ast.parse(service_source))
+            if isinstance(node, ast.If)
+            and "plan_is_fully_handled(next_plan)" in ast.unparse(node.test)
+            and "not persist_config" in ast.unparse(node.test)
+        ]
+        if not any(
+            block.body
+            and isinstance(block.body[-1], ast.Return)
+            and isinstance(block.body[-1].value, ast.Call)
+            and isinstance(block.body[-1].value.func, ast.Name)
+            and block.body[-1].value.func.id in {"_serve", "_payload"}
+            for block in freeze_blocks
         ):
             errors.append(
                 f"{round_service.relative_to(REPO_ROOT).as_posix()}: "
@@ -3725,7 +3733,10 @@ def check_freestyle_rating_last_write_wins(errors: list[str]) -> None:
             f"{service.relative_to(REPO_ROOT).as_posix()}: "
             "rating reopen must reuse start_freestyle_unit_review_session."
         )
-    if "retry occurrence must not return the source glance" not in source:
+    if (
+        "own_previous_id = encounter.effective_operation_id" not in source
+        or "return json.loads(own_previous.after_state_json)" not in source
+    ):
         errors.append(
             f"{service.relative_to(REPO_ROOT).as_posix()}: "
             "idempotent rating replay must stay on this retry glance."
@@ -4263,10 +4274,15 @@ def check_freestyle_complete_slot_reachable(errors: list[str]) -> None:
             f"{page.relative_to(REPO_ROOT).as_posix()}: "
             "取消结算 and 上一张 must leave the settlement slot via navigatePrevious."
         )
-    if "viewingCard: !viewingCompleteSlot" not in page_source or "viewingCard: !roundComplete" in page_source:
+    if (
+        "viewingCard: !settlementVisible" not in page_source
+        or "viewingCompleteSlot || studySettlementOpen || partialSettlement != null" not in page_source
+        or "viewingCard: !roundComplete" in page_source
+    ):
         errors.append(
             f"{page.relative_to(REPO_ROOT).as_posix()}: "
-            "leaving settlement must resume the learning clock; do not gate viewingCard on roundComplete."
+            "all settlement surfaces must pause the learning clock and leaving must resume it; "
+            "gate viewingCard on settlementVisible, not roundComplete."
         )
     timer = (
         WEB_SRC
@@ -6812,6 +6828,56 @@ def check_mindmap_layout_hot_path(errors: list[str]) -> None:
         )
 
 
+def check_mindmap_reveal_layout_hold(errors: list[str]) -> None:
+    """Reveal clicks must not ride the 360ms left/top and edge-d springs.
+
+    Those springs slide the card out from under pointerup, so rapid flips do
+    nothing until the animation ends, and interpolating `d` stalls the main
+    thread. A reveal gesture sets data-reveal-motion and the springs turn off.
+    The paper flip stays on WAAPI.
+    """
+    scene_css = WEB_SRC / "styles" / "mindmap-scene.css"
+    motion = WEB_SRC / "shared" / "ui" / "mindmap-canvas" / "useMindMapRevealMotion.ts"
+    mindmap_doc = REPO_ROOT / "docs" / "architecture" / "mindmap.md"
+    if not scene_css.exists():
+        errors.append("styles/mindmap-scene.css is missing.")
+    else:
+        css = scene_css.read_text(encoding="utf-8", errors="ignore")
+        held = re.findall(
+            r"data-reveal-motion='true'[\s\S]{0,240}?transition:\s*none",
+            css,
+        )
+        if len(held) < 2:
+            errors.append(
+                f"{scene_css.relative_to(REPO_ROOT).as_posix()}: a reveal gesture "
+                "(data-reveal-motion) must disable both the node left/top spring and the "
+                "edge `d` spring (`transition: none`), or rapid card flips miss until the "
+                "spring ends."
+            )
+    if not motion.exists():
+        errors.append("shared/ui/mindmap-canvas/useMindMapRevealMotion.ts is missing.")
+    else:
+        source = motion.read_text(encoding="utf-8", errors="ignore")
+        if "dataset.revealMotion" not in source:
+            errors.append(
+                f"{motion.relative_to(REPO_ROOT).as_posix()}: reveal gestures must set "
+                "`dataset.revealMotion` so the layout spring stays off while the learner "
+                "is still clicking."
+            )
+        if "REVEAL_LAYOUT_HOLD_MS" not in source:
+            errors.append(
+                f"{motion.relative_to(REPO_ROOT).as_posix()}: keep REVEAL_LAYOUT_HOLD_MS longer "
+                "than the 360ms layout spring so a burst of clicks stays on still cards."
+            )
+    if mindmap_doc.exists() and "data-reveal-motion" not in mindmap_doc.read_text(
+        encoding="utf-8", errors="ignore"
+    ):
+        errors.append(
+            f"{mindmap_doc.relative_to(REPO_ROOT).as_posix()}: note why reveal clicks suppress "
+            "the mind-map layout spring."
+        )
+
+
 def check_mindmap_surface_fill(errors: list[str]) -> None:
     """The live mind map is the page, not a card on a second sheet.
 
@@ -6964,6 +7030,7 @@ def main() -> int:
     check_backup_snapshot_policy(errors)
     check_mindmap_architecture(errors)
     check_mindmap_layout_hot_path(errors)
+    check_mindmap_reveal_layout_hold(errors)
     check_mindmap_surface_fill(errors)
     check_mindmap_edit_gesture(errors)
     check_unified_training_evidence(errors)

@@ -616,7 +616,8 @@ def test_freestyle_rating_last_write_wins_accepts_reopen_helper(
         api_src / "modules" / "memory" / "application" / "unit_review_service.py",
         "def _ensure_open_freestyle_rating_target():\n"
         "    return start_freestyle_unit_review_session()\n"
-        "retry occurrence must not return the source glance\n",
+        "own_previous_id = encounter.effective_operation_id\n"
+        "return json.loads(own_previous.after_state_json)\n",
     )
     write_file(
         tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
@@ -667,7 +668,8 @@ def test_freestyle_complete_slot_reachable_accepts_feed_slot_helpers(
         web_src / "modules" / "practice" / "ui" / "freestyle" / "ImmersiveFreestylePage.tsx",
         "clampFreestyleFeedIndex(index, cards.length, roundComplete)\n"
         "const viewingCompleteSlot = isFreestyleCompleteSlot(visualIndex, cards.length, roundComplete)\n"
-        "viewingCard: !viewingCompleteSlot && currentCard != null\n"
+        "const settlementVisible = viewingCompleteSlot || studySettlementOpen || partialSettlement != null\n"
+        "viewingCard: !settlementVisible && currentCard != null\n"
         "onCancelSettlement={navigatePrevious}\n",
     )
     write_file(
@@ -757,6 +759,27 @@ def test_freestyle_settlement_cancel_keeps_later_learning_time(
     assert any("navigatePrevious" in error for error in errors)
     assert any("roundComplete" in error for error in errors)
     assert any("3600" in error for error in errors)
+
+
+def test_freestyle_settlement_clock_rejects_only_pausing_completed_round(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    write_file(
+        web_src / "modules/practice/ui/freestyle/ImmersiveFreestylePage.tsx",
+        "clampFreestyleFeedIndex\nviewingCompleteSlot\n"
+        "onCancelSettlement={navigatePrevious}\n"
+        "viewingCard: !viewingCompleteSlot && currentCard != null\n",
+    )
+    write_file(
+        web_src / "modules/practice/ui/freestyle/model/roundCompletion.ts",
+        "export function freestyleFeedSlotCount() {}\n",
+    )
+    errors: list[str] = []
+    check_architecture.check_freestyle_complete_slot_reachable(errors)
+    assert any("all settlement surfaces must pause" in error for error in errors)
 
 
 def test_freestyle_round_learning_time_requires_plan_clock_and_settlement_line(

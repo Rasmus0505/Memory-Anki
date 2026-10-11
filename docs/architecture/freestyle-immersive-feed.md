@@ -72,10 +72,15 @@ completed / excluded / retry marks; only unstarted work outside the new scope is
 Refresh must not mint a new `round_id` or drop completed cards from the HUD/feed, except cards
 the learner explicitly compressed with 「结算已完成单元」. A 结算 drops the source and every live retry of that source. A retry whose source id is in `compressedIds` leaves the rail, the sheet, and the swipe feed; it must not stay as a lit tick the learner cannot reach. Scoring alone never removes those ticks. Completed source
 cards stay in presented order so swipe-back / 上一张 can reopen them until that compress. A window that has lost its local plan adopts the workspace active round and must not mint a new `round_id` while that round exists. A quota miss may compact the stored snapshot, but the live session keeps the plan the learner is looking at. 做题 stays available while the map is still opening. The card must not say it is still preparing a score. Re-scoring a completed
-unit in the same round amends from that round's original baseline; it does not stack SRS.
-A rating write that arrives after the glance session was abandoned, completed, or cancelled
-reopens that unit in the same round and applies the latest rating; it must not return
-`active unit review session required`.
+unit amends from that exact recall attempt's original baseline; it does not stack SRS.
+The identity includes round, source card, occurrence and retry attempt. A real retry starts
+from the current penalized schedule, never replaces the earlier failure, and replays only
+its own operation. A rating write after a glance was abandoned, completed, or cancelled
+reopens the same attempt and applies the latest rating; it must not return
+`active unit review session required`. Once a later real attempt has been rated, an older
+attempt is read-only: correction/undo must target the most recent attempt rather than
+silently rewrite the basis of later evidence. Tapping the currently selected rating again
+clears that latest editable attempt back to unrated; it does not erase earlier real retries.
 Swipe-back / 上一张 onto a completed (passed) unit must open an amend glance in the same
 round. If the previous study session is still `active` with a passed item and no open
 encounter, start finishes that session and opens a new one. It must not return
@@ -83,8 +88,10 @@ encounter, start finishes that session and opens a new one. It must not return
 cannot be healed do not toast English API text; the card offers 重试 / 跳过这张 / 重建本轮 /
 只看不评. A slow session start must not replace a visible map, and it must not block
 scoring. The four ratings are pressable as soon as the card is on screen; the score paints
-immediately and the save follows. A failed save keeps that score and asks for one more tap —
-it must not reload the card or make the learner re-read it. Fast flips and progress-rail
+immediately and the save follows. Immediate selection is only local intent: completed ids,
+passed counts, retry scheduling and cleared-due feedback update only after server acknowledgement.
+A failed save keeps the selected button with an explicit unsaved warning and asks for one more tap —
+it must not claim passing/completion, reload the card or make the learner re-read it. Fast flips and progress-rail
 jumps must not open a glance for cards that were only passed. A glance opens when the learner
 rates, or after they settle on a card. Returning to a card shows the score already recorded
 for this round without starting preparation over. A card's
@@ -290,15 +297,14 @@ construction settings must not reshuffle.
 ## Palace Review Cards
 
 - Palace cards are built only from active due review units returned by Reviews.
-- Card identity carries stable `unit_id` plus `unit_revision`. A permanent-mark membership change may drop a vanished unit. A content-only demotion rebinds the same parent unit in the current round; it does not mint a new unfinished card.
+- Card identity carries stable `unit_id` plus `unit_revision`. A permanent-mark membership change may drop a vanished unit. A content-only update preserves the schedule and rebinds the same parent unit in the current round; it does not mint a new unfinished card.
 - The card displays the full palace for context while the frozen Reviews unit membership defines the rating scope.
-- Freestyle starts a one-unit `freestyle_unit_review` session and uses the same rating and undo commands as formal review. Tapping the currently selected rating again undoes until the card is unrated; it must not post the same score. The transient 撤销 chip still undoes one step. Clearing the rating also uncompletes that card in the round plan so the HUD tick goes back to pending.
-- The rating bar can switch between **section** (`unit`) and **palace** scope. Section is the default and the stored preference. Palace scope calls `rate_palace_due_units` for the current card plus still-due units that have already passed first review. First-learning siblings stay one-by-one and are not batch-scored, so 「记得」 cannot mark unseen sections as passed. Fill cards are `schedule_locked`. Units already rated in this round are not overwritten except the current card. Each mature unit keeps its own ladder. Undo of the still-open card undoes the whole batch. Quiz cards never take this path. In palace scope, 上一张 / 下一张 jump to the previous / next palace and skip already-rated sections; section scope keeps card-by-card paging.
-- `忘记` and every `困难` create a retry occurrence. Insertion happens on the rating
-  itself: `apply_rating` puts the occurrence into `presented_ids` immediately, and the
-  frontend inserts the same optimistic copy into the feed and round-plan order before the
-  silent rebuild returns, so the progress rail shows the faint amber node without waiting
-  for `leave_card`. The gap is exactly three already-presented cards in the
+- Freestyle starts a one-unit `freestyle_unit_review` session and uses the same rating and undo commands as formal review. Tapping a successfully saved selected rating again undoes until the card is unrated; it must not post the same score. A selected rating whose save failed instead retries saving on the next tap. The transient 撤销 chip still undoes one step. Clearing the rating also uncompletes that card in the round plan so the HUD tick goes back to pending.
+- Freestyle always scores only the current review unit; an old palace-scope preference must not batch-score siblings or mark unseen sections as passed. The separate formal review `rate_palace_due_units` API remains available outside this freestyle card flow, with per-unit schedules and batch undo. Quiz cards never enter either palace-unit rating path.
+- A successfully saved `忘记` or `困难` creates a retry occurrence. The server's
+  `apply_rating` puts the occurrence into `presented_ids`, and the frontend adopts that
+  confirmed result into the feed and round-plan order without waiting for `leave_card`
+  or a separate silent rebuild. An unsaved local tap never inserts retry work. The gap is exactly three already-presented cards in the
   source's leftover/today segment (palace, quiz, and other occurrences); if fewer remain in that
   segment, the copy appends at the segment tail and must not pull cards from the other
   segment. When the gap is 0 (no cards remain after the weak-rated source), the retry is
@@ -306,7 +312,7 @@ construction settings must not reshuffle.
   viewport stays on the source so pager / locate / settlement cannot deadlock on the last card.
   `current_card_id` does not move. `leave_card` on an already-inserted source is a no-op
   for placement. An inserted retry must not freeze the round as fully handled and drop the
-  optimistic 重练. An inserted retry parked at or before its source is moved back behind
+  confirmed 重练. An inserted retry parked at or before its source is moved back behind
   the source on `leave_card` and on silent append. A round whose sources and retries are actually finished still freezes, and
   a silent rebuild still does not append leftover due onto it.
   Confirmation pins the live viewport card, never the source just left.
@@ -327,14 +333,17 @@ construction settings must not reshuffle.
   A rate is rejected unless `card_id + occurrence_id + encounter_id + unit_id` name one
   consistent card. A retry card without `occurrence_id`, an occurrence from another unit,
   or an encounter bound to another unit is a mismatch — last-write-wins never applies to
-  the wrong identity. The rating bar and 1–4 shortcuts stay locked until scroll has
-  settled on that card and its encounter is open. The tapped score is not filled until
-  the server confirms; a failed POST stays unrated with a Chinese retry. A late response
-  updates that card's ledger only and must not yank the viewport.
+  the wrong identity. The active card's rating bar remains pressable while its encounter
+  opens. A tapped score is selected immediately as local intent; posting waits for a valid
+  encounter. Only a successful response updates recorded progress, retry planning, and
+  palace completion. A failed POST retains the selected intent, shows that it was not saved,
+  and allows another tap to retry; it must not claim a completed round or cleared palace.
+  A late response updates that card's ledger only and must not yank the viewport.
   Rating callbacks carry `card_id + occurrence_id + encounter_id + plan_version` and adopt the
   returned `plan_version` so the next rate is not a stale conflict. Silent
-  rebuilds keep the current DOM card by id, never by the old index. Freestyle never
-  auto-advances after a rating. Queue rebuilds freeze
+  rebuilds keep the current DOM card by id, never by the old index. By default Freestyle
+  stays on the card after a rating; an explicit auto-advance preference may move it after
+  a successfully recorded rating. Queue rebuilds freeze
   the current page so index churn cannot look like the next card.
 - Freestyle palace streams are `due_only`. Expand/fill policies sanitize to due-only and do not
   emit fill cards. Formal review may still use `allow_not_due` for non-freestyle callers.
@@ -350,7 +359,7 @@ construction settings must not reshuffle.
   mint or append leftover due into the feed, or the closing slot disappears before the
   learner can open it.
 - Queue rebuilds exclude palaces without permanent marks.
-- Content edits bump `unit_revision` on the parent review unit. Freestyle adopts the live revision in place: the current card stays, remaining cards rebind by `unit_id`, and already-rated units keep this-round ratings. Starting a freestyle session with a stale revision opens a fresh encounter at the live revision instead of raising `review unit changed`. A newer revision must not appear as unfinished work in the same round; a new round with empty `completed_ids` may show the demoted unit. Stale recovery (skip / rebuild / open config) is only for a vanished unit, a non-fill card that is not due (reviewed elsewhere), or an encounter that belongs to another unit. Consecutive those drops still trip the circuit breaker (three in a row, or three within ~2s). Practice freestyle must not hard-fail the feed on schedule/revision drift after concurrent edits.
+- Content edits bump `unit_revision` on the parent review unit. Freestyle adopts the live revision in place: the current card stays, remaining cards rebind by `unit_id`, and already-rated units keep this-round ratings. Starting a freestyle session with a stale revision opens a fresh encounter at the live revision instead of raising `review unit changed`. A newer revision must not appear as unfinished work in the same round; a new round with empty `completed_ids` may include the revised unit if its preserved schedule is due. Content edits alone never demote its review stage. Stale recovery (skip / rebuild / open config) is only for a vanished unit, a non-fill card that is not due (reviewed elsewhere), or an encounter that belongs to another unit. Consecutive those drops still trip the circuit breaker (three in a row, or three within ~2s). Practice freestyle must not hard-fail the feed on schedule/revision drift after concurrent edits.
 
 ## Permanent Marks
 
@@ -571,12 +580,18 @@ answers from `overlay_quiz` on ensure/hydrate. Starting a new round (`「再来�
 config confirm → `/rounds/start`) is an explicit clear: it starts overlay 已做 empty
 and clears the shared 已做. Changing subject or palace scope parks answered questions
 that left the filter instead of deleting them; they return when the palace is in scope again.
-Finishing one palace's ratings does not ask to clear overlay 已做. After the configured queue
-is fully handled, the right-side 完成 control opens the settlement slot. That page asks once
-whether to clear overlay 已做 for every review palace this 随心配置 round scheduled. 保留 keeps
+Finishing one palace's ratings does not ask to clear overlay 已做; partial settlement does not ask either.
+The right-side 完成 control still seeks unscored work before opening the closing slot.
+The separate 结束本次学习 entry opens a summary even with unscored work or pending retries;
+it preserves the same round, remaining work and cursor, and never fabricates passing ratings.
+The summary distinguishes pending attempts (including retries), rated-but-not-passed content,
+and passed content. It asks once whether to clear overlay 已做 for every review palace
+actually involved in this round, not every palace merely selected in saved configuration. 保留 keeps
 the answered records so 做题 can still be reviewed. 清除 calls `/overlay-quiz/drop-palaces`
 with those palace ids and clears the SPA mirror for them.
 
 Settlement time is round-scoped and survives a restart or the next day. It is the time spent on the progress-bar queue: looking at a card, flipping, and recalling, including a leave of about three minutes. A longer absence is not backfilled. A visible window counts even when the page focus flag is false; the desktop shell reports its own window focus so a real switch away can stop after that grace. An empty round clock must not wipe the queue's card time. 「本次随心」 is unit dwell plus 做题 plus 查看宫殿. Looking at a card, flipping its nodes, and reading the back are unit dwell; flip is not added again. 「做题时间」 is only the quiz overlay, whether it was opened from the card corner badge or the toolbar. 查看宫殿 while a quiz is open stays in the round total and out of 做题时间. Seconds live on the round plan as `learning_time`. The first open of a round copies dwell segments since that round was created, then the page clock adds only later seconds so the same interval is not counted twice. Durations of at least one hour render as `H:MM:SS`; shorter times stay `M:SS`.
 
-Leaving the settlement slot cancels that visit and does not end the round. The card’s 「取消结算」 and the right-side 「上一张」 both return to the previous card. The learning clock pauses only while the settlement slot is on screen. After that leave, later card dwell and 做题 still accumulate on the same `learning_time`.
+Leaving the settlement slot cancels that visit and does not end the round. The card’s 「取消结算」 and the right-side 「上一张」 both return to the previous card. The learning clock pauses on every settlement surface: the closing slot, finish-study summary, and partial settlement. After leaving those surfaces, later card dwell and 做题 still accumulate on the same `learning_time`.
+
+The summary separates 本轮累计 from 本轮今日. The backend projects today's union of recorded intervals against the product timezone's calendar boundaries at read time, without a second persisted counter. The frontend adds only uncovered pending/in-flight/current intervals and refreshes the server date window at midnight. Historical scalar time without dated evidence stays in the round total and is explicitly labelled as unattributed; it must not be silently assigned to today. Stored round interval history is not truncated to the per-request upload batch limit.
