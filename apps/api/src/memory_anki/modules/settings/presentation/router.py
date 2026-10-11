@@ -96,20 +96,39 @@ _SETTINGS_EXCLUDED_PREFIXES = (
 )
 
 
-def _like_prefix_pattern(prefix: str) -> str:
-    return prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+def _prefix_upper_bound(prefix: str) -> str:
+    return prefix[:-1] + chr(ord(prefix[-1]) + 1)
+
+
+def _key_ranges_outside_excluded_prefixes() -> list[tuple[str | None, str | None]]:
+    """Half-open ``[lower, upper)`` key ranges that skip the excluded prefixes.
+
+    ``NOT LIKE 'prefix%'`` and a single OR of ranges both make SQLite scan every
+    row, including the tens of thousands of idempotency receipts. One query per
+    range gets an index SEARCH that never touches the receipt rows.
+    """
+    bounds = sorted(_SETTINGS_EXCLUDED_PREFIXES)
+    ranges: list[tuple[str | None, str | None]] = [(None, bounds[0])]
+    for lower, upper in zip(bounds, bounds[1:], strict=False):
+        ranges.append((_prefix_upper_bound(lower), upper))
+    ranges.append((_prefix_upper_bound(bounds[-1]), None))
+    return ranges
+
+
+def _range_query(session: Session, lower: str | None, upper: str | None):
+    query = session.query(Config.key, Config.value)
+    if lower is not None:
+        query = query.filter(Config.key >= lower)
+    if upper is not None:
+        query = query.filter(Config.key < upper)
+    return query
 
 
 def read_settings(session: Session) -> dict:
     result = dict(DEFAULTS)
-    rows = session.query(Config).filter(
-        *[
-            Config.key.notlike(_like_prefix_pattern(prefix), escape="\\")
-            for prefix in _SETTINGS_EXCLUDED_PREFIXES
-        ]
-    ).all()
-    for row in rows:
-        result[row.key] = row.value
+    for lower, upper in _key_ranges_outside_excluded_prefixes():
+        for key, value in _range_query(session, lower, upper).all():
+            result[key] = value
     return result
 
 

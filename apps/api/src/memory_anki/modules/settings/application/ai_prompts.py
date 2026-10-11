@@ -70,8 +70,12 @@ def _normalize_template(value: str) -> str:
 
 
 def _get_template_override_map(session: Session) -> dict[str, str]:
-    rows = session.query(Config).all()
-    return {row.key: row.value for row in rows if row.key in PROMPT_DEFINITIONS}
+    rows = (
+        session.query(Config.key, Config.value)
+        .filter(Config.key.in_(list(PROMPT_DEFINITIONS)))
+        .all()
+    )
+    return {key: value for key, value in rows}
 
 
 def _definition_for(key: str) -> PromptTemplateDefinition:

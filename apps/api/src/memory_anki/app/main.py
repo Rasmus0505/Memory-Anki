@@ -45,6 +45,10 @@ from memory_anki.modules.backups.application.backup_lifecycle import (
     start_startup_backups,
     stop_periodic_backup_loop,
 )
+from memory_anki.platform.persistence import (
+    start_mutation_response_purge_loop,
+    stop_mutation_response_purge_loop,
+)
 from memory_anki.modules.backups.presentation import router as backups_router
 from memory_anki.modules.content.application.study_text_library_cache import (
     start_study_text_prepare,
@@ -160,6 +164,7 @@ async def lifespan(app: FastAPI):
             startup_mode=startup_mode,
         )
         start_startup_backups()
+        start_mutation_response_purge_loop()
         start_periodic_backup_loop()
         start_startup_warmup()
         start_study_text_prepare()
@@ -174,6 +179,7 @@ async def lifespan(app: FastAPI):
         stop_dashboard_snapshot_worker()
         if startup_mode == STARTUP_MODE_SERVE:
             stop_periodic_backup_loop()
+            stop_mutation_response_purge_loop()
             stop_runtime_activity_heartbeat(runtime_activity_handle)
             await asyncio.to_thread(run_shutdown_backup_bounded)
 
