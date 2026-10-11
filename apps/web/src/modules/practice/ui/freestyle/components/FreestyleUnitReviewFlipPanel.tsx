@@ -3,8 +3,8 @@ import {
   type PalaceReviewUnitChangeHighlight,
 } from '@/modules/practice/ui/review/components/PalaceReviewUnitsPanel'
 import { PalaceLadderProgress } from '@/modules/practice/ui/review/components/PalaceLadderProgress'
-import { useRevealSession } from '@/modules/memory/public'
-import { isWeakerRevealMap, type RevealState } from '@/modules/session/public'
+import { useRevealSession, type RevealState } from '@/modules/memory/public'
+import { isWeakerRevealMap } from '@/modules/session/public'
 import { useFlipCardRevealSettings } from '@/modules/settings/public'
 import {
   FreestyleUnitReviewFlipDialogs,

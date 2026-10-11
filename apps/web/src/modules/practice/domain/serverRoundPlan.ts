@@ -492,7 +492,6 @@ export function mergeServerPlanIntoLocalEncounters(
       selectedRating,
       passed,
       retryAfterCards: existing?.retryAfterCards ?? 0,
-      effectiveSeconds: existing?.effectiveSeconds ?? null,
     }
   }
 

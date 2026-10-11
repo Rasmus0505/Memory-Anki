@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   ArrowRight,
@@ -11,7 +11,6 @@ import {
   Waves,
 } from 'lucide-react'
 import type { EnglishGenerationTask } from '@/shared/api/contracts'
-import { formatDuration } from '@/modules/session/public'
 import { EmptyState } from '@/shared/components/state-placeholders'
 import { EnglishWorkspaceSkeleton } from './EnglishWorkspaceSkeleton'
 import { Badge } from '@/shared/components/ui/badge'
@@ -39,6 +38,12 @@ function formatFileSize(bytes: number) {
   if (safe >= 1024 * 1024) return `${(safe / (1024 * 1024)).toFixed(1)} MB`
   if (safe >= 1024) return `${(safe / 1024).toFixed(1)} KB`
   return `${safe} B`
+}
+
+function formatMediaDuration(totalSeconds: number) {
+  const seconds = Math.max(0, Math.round(totalSeconds))
+  const minutes = Math.floor(seconds / 60)
+  return minutes > 0 ? `${minutes}分 ${seconds % 60}秒` : `${seconds}秒`
 }
 
 function getTaskStatusLabel(status: EnglishGenerationTask['status']) {
@@ -95,20 +100,6 @@ export default function EnglishWorkspacePage() {
     workspace,
   } = useEnglishWorkspaceController()
 
-  const headerAside = useMemo(() => {
-    if (!workspace) return null
-    return (
-      <div className="rounded-2xl border border-border/70 bg-card/90 px-4 py-3 text-right shadow-soft">
-        <div className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-          今日听力
-        </div>
-        <div className="mt-1 text-lg font-semibold">
-          {formatDuration(workspace.stats.today_practice_seconds)}
-        </div>
-      </div>
-    )
-  }, [workspace])
-
   if (!workspace) {
     return <EnglishWorkspaceSkeleton />
   }
@@ -120,7 +111,6 @@ export default function EnglishWorkspacePage() {
       zone="listening"
       title="英语听力"
       description="上传视频生成逐句听写课程；右侧可切换课程历史，布局与阅读区一致。"
-      headerAside={headerAside}
     >
       {aiRunConfigDialog}
 
@@ -279,7 +269,6 @@ export default function EnglishWorkspacePage() {
             items={[
               { label: '课程', value: workspace.stats.total_courses },
               { label: '未完成', value: workspace.stats.unfinished_courses },
-              { label: '累计听力', value: formatDuration(workspace.stats.total_practice_seconds) },
             ]}
           />
 
@@ -340,7 +329,7 @@ export default function EnglishWorkspacePage() {
                           </div>
                           <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
                             <span>{course.sentenceCount} 句</span>
-                            <span>{formatDuration(course.durationSeconds)}</span>
+                            <span>{formatMediaDuration(course.durationSeconds)}</span>
                             <span>
                               {course.updatedAt
                                 ? new Date(course.updatedAt).toLocaleString('zh-CN')

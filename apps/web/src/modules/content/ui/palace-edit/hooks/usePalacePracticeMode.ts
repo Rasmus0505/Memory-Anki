@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { RevealState } from '@/modules/session/public'
+import type { RevealState } from '@/modules/memory/public'
 import { useRevealSession } from '@/modules/memory/public'
 import {
   allNodesRevealed,

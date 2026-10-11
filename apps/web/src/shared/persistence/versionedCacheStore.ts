@@ -2,7 +2,7 @@
  * Revision-checked read cache: memory first (synchronous, so a first render can use it
  * without flashing), IndexedDB behind it (survives reloads). An entry is only returned
  * when its stored revision equals the requested one, so content edited on the other
- * device and synced in by Syncthing is never served stale.
+ * device and synced in from another device is never served stale.
  */
 import { createIdbHandle } from '@/shared/persistence/indexedDb'
 

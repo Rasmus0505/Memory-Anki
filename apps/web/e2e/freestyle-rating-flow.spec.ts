@@ -92,7 +92,6 @@ function sessionItem(body: { unit_revision?: number; round_id?: string; encounte
         passed: null,
         retry_after_cards: 0,
         effective_operation_id: null,
-        effective_seconds: null,
         closed_at: null,
         rating_effects: EFFECTS,
       },
@@ -113,7 +112,6 @@ function ratingItem(body: RateBody) {
     passed: effect.passed,
     retry_after_cards: effect.retry_after_cards,
     effective_operation_id: body.operation_id,
-    effective_seconds: null,
     closed_at: null,
     rating_effects: EFFECTS,
   }
@@ -234,7 +232,7 @@ function holdRatings(page: Page) {
   return { held, installed }
 }
 
-test('paints a grade immediately, queues the next tap, then opens a skippable round end', async ({ page }) => {
+test('lights a grade only once saved, queues the next tap, then opens a skippable round end', async ({ page }) => {
   await installCardRoutes(page)
   const { held } = holdRatings(page)
   await page.goto('/freestyle')
@@ -243,25 +241,26 @@ test('paints a grade immediately, queues the next tap, then opens a skippable ro
   const easy = page.getByTestId('freestyle-rating-button-4')
   await expect(remember).toBeEnabled()
   await remember.evaluate((button: HTMLButtonElement) => button.click())
-  await expect(remember).toHaveAttribute('aria-pressed', 'true')
-  await expect(remember).toBeEnabled()
-  await expect(page.getByTestId('freestyle-rating-effect-line')).toContainText('已选记得')
   await expect.poll(() => held.length).toBe(1)
-
-  // The selected grade animates the dock, so a second pointer click can miss
-  // the stability check. The 1–4 shortcut is the same rate path and stays live
-  // while the first request is still held.
-  await page.keyboard.press('4')
-  await expect(easy).toHaveAttribute('aria-pressed', 'true')
-  await expect(easy).toBeEnabled()
+  // Not lit while the request is outstanding: only a quiet 保存中 hint.
   await expect(remember).toHaveAttribute('aria-pressed', 'false')
-  await expect(page.getByTestId('freestyle-rating-effect-line')).toContainText('已选轻松')
+  await expect(remember).toBeEnabled()
+  await expect(page.getByTestId('freestyle-rating-saving-line')).toContainText('保存中')
+  await expect(page.getByText(/已选记得/)).toHaveCount(0)
+
+  // The 1–4 shortcut is the same rate path and stays live while the first
+  // request is still held; it queues behind it.
+  await page.keyboard.press('4')
+  await expect(easy).toHaveAttribute('aria-pressed', 'false')
+  await expect(easy).toBeEnabled()
   expect(held.length).toBe(1)
 
   held[0].release()
   await expect.poll(() => held.length).toBe(2)
   expect(held[1].body.rating).toBe(4)
   held[1].release()
+  await expect(easy).toHaveAttribute('aria-pressed', 'true')
+  await expect(remember).toHaveAttribute('aria-pressed', 'false')
 
   const next = page.getByRole('button', { name: '下一张' })
   const settlement = page.getByTestId('freestyle-round-complete')
@@ -277,7 +276,7 @@ test('paints a grade immediately, queues the next tap, then opens a skippable ro
   await expect(page.getByTestId('freestyle-round-config-dialog')).toBeVisible()
 })
 
-test('retains an unsaved selection without claiming completion, then retries the score', async ({ page }) => {
+test('reports an unsaved grade at once without claiming completion, then retries the score', async ({ page }) => {
   await installCardRoutes(page)
   const { held } = holdRatings(page)
   await page.goto('/freestyle')
@@ -285,14 +284,15 @@ test('retains an unsaved selection without claiming completion, then retries the
   const remember = page.getByTestId('freestyle-rating-button-3')
   await expect(remember).toBeEnabled()
   await remember.evaluate((button: HTMLButtonElement) => button.click())
-  await expect(remember).toHaveAttribute('aria-pressed', 'true')
   await expect.poll(() => held.length).toBe(1)
+  await expect(remember).toHaveAttribute('aria-pressed', 'false')
 
   const settlement = page.getByTestId('freestyle-round-complete')
   await expect(settlement).not.toBeVisible()
   held[0].release(400)
-  await expect(page.getByRole('alert').filter({ hasText: '评分没有记下，请再点一次。' })).toBeVisible()
-  await expect(remember).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByRole('alert').filter({ hasText: '这一次没有保存成功' })).toBeVisible()
+  await expect(remember).toHaveAttribute('aria-pressed', 'false')
+  await expect(page.getByTestId('freestyle-rating-effect-line')).toContainText('未保存记得')
   await expect(remember).toBeEnabled()
   await expect(settlement).not.toBeVisible()
   await expect(page.getByText(/今日到期已清/)).not.toBeVisible()

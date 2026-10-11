@@ -34,14 +34,12 @@ export function useMindMapReviewFlowController({
   revealMode = "standard",
   checkpointNodeUids = EMPTY_CHECKPOINT_NODE_UIDS,
   displayMode = "review",
-  persistKey = null,
   reviewEditorState,
   editEditorState = null,
   onComplete,
   onModeToggle,
   onEditEditorStateChange,
   onRestart,
-  persistProgress = false,
   initialSnapshot = null,
   onSnapshotChange,
   onFullscreenChange,
@@ -72,16 +70,13 @@ export function useMindMapReviewFlowController({
 
   const flow = useReviewFlowSession({
     title,
-    palaceId,
     sessionKind,
     revealMode,
     checkpointNodeUids,
     focusNodeUids: EMPTY_CHECKPOINT_NODE_UIDS,
-    persistKey,
     editorState: reviewEditorState,
     onComplete,
     onRestart,
-    persistProgress,
     initialSnapshot,
     onSnapshotChange,
     onFullscreenChange,
@@ -124,24 +119,9 @@ export function useMindMapReviewFlowController({
     inlineEditEnabled && displayMode === "edit" ? "edit" : "review";
   const isInlineEditMode = resolvedDisplayMode === "edit";
   const isCheckpointMode = revealMode === "segment-checkpoint";
-  const previousDisplayModeRef = React.useRef(resolvedDisplayMode);
   const mapDisplayMode: "review" | "edit" = resolvedDisplayMode;
   const mapEditorState = flow.visibleEditorState;
   const mapVisibleSyncKey = flow.visibleEditorSyncKey;
-React.useEffect(() => {
-    const previousDisplayMode = previousDisplayModeRef.current;
-    if (previousDisplayMode === resolvedDisplayMode) return;
-    if (resolvedDisplayMode === "edit") {
-      flow.timer.logEvent("enter_edit_mode", {
-        source: "review_inline_edit",
-      });
-    } else {
-      flow.timer.logEvent("exit_edit_mode", {
-        source: "review_inline_edit",
-      });
-    }
-    previousDisplayModeRef.current = resolvedDisplayMode;
-  }, [flow.timer, resolvedDisplayMode]);
 
   const handleEditorStateChange = React.useCallback(
     (nextState: MindMapEditorState) => {

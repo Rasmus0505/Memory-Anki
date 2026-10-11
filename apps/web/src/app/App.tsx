@@ -6,11 +6,6 @@ import { lazyWithRetry } from '@/shared/lib/lazyWithRetry'
 // same bounded recovery as route chunks so a stalled PWA asset request cannot
 // leave the application-level Suspense fallback on screen indefinitely.
 const DesktopApp = lazyWithRetry(() => import('@/app/DesktopApp'))
-const TimerOverlayApp = lazyWithRetry(() =>
-  import('@/modules/session/ui/timer-overlay/TimerOverlayApp').then((module) => ({
-    default: module.TimerOverlayApp,
-  })),
-)
 
 function AppFallback() {
   return (
@@ -21,14 +16,6 @@ function AppFallback() {
 }
 
 export default function App() {
-  if (window.location.pathname === '/timer-overlay') {
-    return (
-      <Suspense fallback={<AppFallback />}>
-        <TimerOverlayApp />
-      </Suspense>
-    )
-  }
-
   return (
     <AppProviders>
       <Suspense fallback={<AppFallback />}>

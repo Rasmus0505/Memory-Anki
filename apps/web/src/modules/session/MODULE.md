@@ -4,7 +4,7 @@
 active — production module after FSD removal.
 
 ## Owns
-Timed session / study session client
+Live study presence and practice session progress client
 
 ## Public entry
 `public.ts` — only cross-module import path.

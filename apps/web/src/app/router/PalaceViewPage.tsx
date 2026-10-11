@@ -24,9 +24,6 @@ import {
 } from '@/shared/study-text/studyTextLibrary'
 import { detectClientSource } from '@/shared/lib/clientSource'
 import { useRouteResidency } from '@/shared/routing/RouteResidency'
-import { shouldAutoStartOnPageEnter, useTimedSession } from '@/shared/hooks/useTimedSession'
-import { readTimerAutomationConfig } from '@/shared/components/session/timer-automation-config'
-import { useGlobalTimerRegistration } from '@/shared/components/session/GlobalTimerProvider'
 import { usePalacePracticeMode } from '@/modules/content/public'
 
 interface PalaceMeta {
@@ -38,7 +35,7 @@ interface PalaceMeta {
 }
 
 export default function PalaceView() {
-  const { isActive, becameActiveAt, fullPath } = useRouteResidency()
+  const { isActive, fullPath } = useRouteResidency()
   const { id } = useParams()
   const { openQuizLauncher } = useQuizLauncher()
   const parsedPalaceId = id ? Number(id) : null
@@ -46,10 +43,6 @@ export default function PalaceView() {
     parsedPalaceId != null && Number.isFinite(parsedPalaceId) && parsedPalaceId > 0
       ? parsedPalaceId
       : null
-  const palaceSessionKey =
-    palaceId != null && Number.isFinite(palaceId)
-      ? `palace:${palaceId}`
-      : `palace:pending:${id ?? 'none'}`
   const isPwaClient = detectClientSource() === 'pwa'
   const mindMapFrameRef = useRef<MindMapEditorSurfaceHandle | null>(null)
   const [mindMapFullscreen, setMindMapFullscreen] = useState(false)
@@ -82,7 +75,6 @@ export default function PalaceView() {
   const preparedEditor = palaceId != null ? peekPalaceEditor(palaceId) : null
   const palace = (meta as PalaceMeta | null) ?? (preparedEditor?.palace as PalaceMeta | null) ?? null
   const editorState = sessionEditorState ?? (preparedEditor ? readMindMapEditorState(preparedEditor) : null)
-  const timerTitle = palace?.title ? `${palace.title} · 宫殿学习` : '宫殿学习'
   const [currentNodeUid, setCurrentNodeUid] = useState<string | null>(null)
   const handlePracticeCurrentNodeUid = useCallback((uid: string | null) => {
     setCurrentNodeUid(uid)
@@ -90,7 +82,7 @@ export default function PalaceView() {
   const practice = usePalacePracticeMode({
     palaceId,
     editorState,
-    title: palace?.title || timerTitle,
+    title: palace?.title || '宫殿学习',
     currentNodeUid,
     onCurrentNodeUid: handlePracticeCurrentNodeUid,
     studyRoute: fullPath,
@@ -99,35 +91,6 @@ export default function PalaceView() {
   const displayedEditorState = practice.editorMode === 'recall'
     ? practice.activeMindMapEditorState
     : editorState
-  const timer = useTimedSession({
-    sessionKey: palaceSessionKey,
-    kind: 'practice',
-    title: timerTitle,
-    palaceId,
-    automationScene: 'practice',
-    sourceKind: palaceId != null ? 'palace' : null,
-    persistKey: palaceId ? `palace_view:${palaceId}` : null,
-    persistCompletionRecord: false,
-  })
-  useGlobalTimerRegistration({
-    scene: 'practice',
-    title: timerTitle,
-    timer,
-    isRouteActive: isActive,
-    becameActiveAt,
-    routePath: fullPath,
-  })
-
-  useEffect(() => {
-    timer.setSceneActive(isActive, { source: isActive ? 'route_active' : 'route_inactive' })
-  }, [isActive, timer])
-
-  useEffect(() => {
-    if (!palaceId || !palace || !editorState || !isActive) return
-    if (timer.status !== 'idle') return
-    if (!shouldAutoStartOnPageEnter(readTimerAutomationConfig())) return
-    timer.start({ source: 'page_enter' })
-  }, [editorState, isActive, palace, palaceId, timer])
 
   useEffect(() => {
     if (!palace || !editorState) {

@@ -9,7 +9,7 @@ export interface RecentVisit {
 const STORAGE_KEY = 'memory-anki-recent-visits'
 const MAX_ITEMS = 5
 
-const IGNORED_PATHS = new Set(['/', '/timer-overlay'])
+const IGNORED_PATHS = new Set(['/'])
 
 export function readRecentVisits(): RecentVisit[] {
   try {

@@ -35,24 +35,6 @@ import {
   sanitizeMemoryAnkiShortcutMap,
 } from '@/modules/settings/public'
 import {
-  DEFAULT_TIMER_AUTOMATION_CONFIG,
-  TIMER_AUTOMATION_STORAGE_KEY,
-  TIMER_AUTOMATION_UPDATED_EVENT,
-  sanitizeTimerAutomationConfig,
-} from '@/shared/components/session/timer-automation-config'
-import {
-  DEFAULT_TIMER_FOCUS_CONFIG,
-  TIMER_FOCUS_STORAGE_KEY,
-  TIMER_FOCUS_UPDATED_EVENT,
-  sanitizeTimerFocusConfig,
-} from '@/shared/components/session/timer-focus-config'
-import {
-  BREAK_GUARD_STORAGE_KEY,
-  BREAK_GUARD_UPDATED_EVENT,
-  DEFAULT_BREAK_GUARD_CONFIG,
-  sanitizeBreakGuardConfig,
-} from '@/shared/components/session/break-guard-config'
-import {
   initializeClientPreferences,
   migrateLocalPreferenceToBackend,
 } from '@/shared/preferences/clientPreferences'
@@ -63,7 +45,6 @@ import {
   sanitizeMarkColorLabelsSettings,
 } from '@/shared/preferences/markColorLabels'
 import { emitAppEvent } from '@/shared/events/appEvents'
-import { migrateTimerAndFeedbackConfigs } from '@/shared/components/session/timerConfigMigration'
 import { migrateLegacyWindowLayouts } from '@/shared/preferences/windowLayoutMemory'
 
 export function useClientPreferenceBootstrap() {
@@ -76,9 +57,6 @@ export async function bootstrapClientPreferences() {
   await initializeClientPreferences()
   if (typeof window === 'undefined') return
 
-  // Must precede the migrations below: those sanitize each payload on its way
-  // to the backend, and the new schemas drop the very fields this carries over.
-  await migrateTimerAndFeedbackConfigs()
   await migrateLegacyWindowLayouts()
 
   const migrations = [
@@ -102,27 +80,6 @@ export async function bootstrapClientPreferences() {
       DEFAULT_ENGLISH_PRACTICE_SETTINGS,
       sanitizeEnglishPracticeSettings,
       ENGLISH_PRACTICE_SETTINGS_UPDATED_EVENT,
-    ),
-    migrateAndNotify(
-      'timer_automation_config',
-      TIMER_AUTOMATION_STORAGE_KEY,
-      DEFAULT_TIMER_AUTOMATION_CONFIG,
-      sanitizeTimerAutomationConfig,
-      TIMER_AUTOMATION_UPDATED_EVENT,
-    ),
-    migrateAndNotify(
-      'timer_focus_config',
-      TIMER_FOCUS_STORAGE_KEY,
-      DEFAULT_TIMER_FOCUS_CONFIG,
-      sanitizeTimerFocusConfig,
-      TIMER_FOCUS_UPDATED_EVENT,
-    ),
-    migrateAndNotify(
-      'break_guard_config',
-      BREAK_GUARD_STORAGE_KEY,
-      DEFAULT_BREAK_GUARD_CONFIG,
-      sanitizeBreakGuardConfig,
-      BREAK_GUARD_UPDATED_EVENT,
     ),
     migrateAndNotify(
       'palace_list_view_settings',
@@ -165,9 +122,6 @@ export async function bootstrapClientPreferences() {
     Boolean(window.localStorage.getItem(MEMORY_ANKI_SHORTCUTS_STORAGE_KEY)) ||
     Boolean(window.localStorage.getItem(REVIEW_FEEDBACK_SETTINGS_STORAGE_KEY)) ||
     Boolean(window.localStorage.getItem(ENGLISH_PRACTICE_SETTINGS_STORAGE_KEY)) ||
-    Boolean(window.localStorage.getItem(TIMER_AUTOMATION_STORAGE_KEY)) ||
-    Boolean(window.localStorage.getItem(TIMER_FOCUS_STORAGE_KEY)) ||
-    Boolean(window.localStorage.getItem(BREAK_GUARD_STORAGE_KEY)) ||
     Boolean(window.localStorage.getItem(PALACE_LIST_VIEW_SETTINGS_KEY)) ||
     Boolean(window.localStorage.getItem(PALACE_SHELF_VIEW_SETTINGS_KEY)) ||
     Boolean(window.localStorage.getItem(FREESTYLE_FEED_CONFIG_STORAGE_KEY))
@@ -178,9 +132,6 @@ export async function bootstrapClientPreferences() {
     Boolean(window.localStorage.getItem(MEMORY_ANKI_SHORTCUTS_STORAGE_KEY)) ||
     Boolean(window.localStorage.getItem(REVIEW_FEEDBACK_SETTINGS_STORAGE_KEY)) ||
     Boolean(window.localStorage.getItem(ENGLISH_PRACTICE_SETTINGS_STORAGE_KEY)) ||
-    Boolean(window.localStorage.getItem(TIMER_AUTOMATION_STORAGE_KEY)) ||
-    Boolean(window.localStorage.getItem(TIMER_FOCUS_STORAGE_KEY)) ||
-    Boolean(window.localStorage.getItem(BREAK_GUARD_STORAGE_KEY)) ||
     Boolean(window.localStorage.getItem(PALACE_LIST_VIEW_SETTINGS_KEY)) ||
     Boolean(window.localStorage.getItem(PALACE_SHELF_VIEW_SETTINGS_KEY)) ||
     Boolean(window.localStorage.getItem(FREESTYLE_FEED_CONFIG_STORAGE_KEY))

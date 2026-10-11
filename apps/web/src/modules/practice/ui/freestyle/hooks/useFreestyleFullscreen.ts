@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { getDesktopTimerBridge } from '@/shared/components/session/desktopTimerBridge'
+import { getDesktopTimerBridge } from '@/shared/lib/desktopBridge'
 
 /** Native window fullscreen on desktop, Fullscreen API fallback on PWA/browser. */
 export function useFreestyleFullscreen() {

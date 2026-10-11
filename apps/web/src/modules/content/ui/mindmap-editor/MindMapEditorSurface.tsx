@@ -132,8 +132,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   const onNodeActiveRef = useRef(onNodeActive)
   const onReadyRef = useRef(onReady)
   const onUiClearedChangeRef = useRef(onUiClearedChange)
-  // Action callbacks must not rebuild capabilities/graphData on timer ticks or parent re-renders.
-  // Review hosts recreate these handlers every second when effectiveSeconds updates.
+  // Action callbacks must not rebuild capabilities/graphData on parent re-renders.
   const onNodeClickRef = useRef(onNodeClick)
   const onNodeContextMenuRef = useRef(onNodeContextMenu)
   const onCreateSegmentFromSelectionRef = useRef(onCreateSegmentFromSelection)

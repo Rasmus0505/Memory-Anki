@@ -38,32 +38,8 @@ const emptyEditorState = {
   lang: 'zh',
 }
 
-const timedSessionMock = {
-  effectiveSeconds: 0,
-  idleSeconds: 0,
-  pauseCount: 0,
-  status: 'idle',
-  startedAt: null,
-  durationEdited: false,
-  glowState: 'idle',
-  start: vi.fn(),
-  pause: vi.fn(),
-  resume: vi.fn(),
-  leaveScene: vi.fn(),
-  adjustDuration: vi.fn(),
-  registerActivity: vi.fn(),
-  logEvent: vi.fn(),
-  complete: vi.fn(),
-  reset: vi.fn(),
-}
-
 const importHookState = vi.hoisted(() => ({
   triggerReplace: (() => {}) as () => void,
-}))
-
-vi.mock('@/shared/hooks/useTimedSession', () => ({
-  useTimedSession: () => timedSessionMock,
-  shouldAutoStartOnPageEnter: () => false,
 }))
 
 vi.mock('@/modules/produce/ui/mindmap-import', () => ({
@@ -206,10 +182,6 @@ vi.mock('@/modules/content/ui/mindmap-editor', async (importOriginal) => ({
   ),
 }))
 
-vi.mock('@/shared/components/session/SessionTimerBar', () => ({
-  SessionTimerBar: () => <div>timer</div>,
-}))
-
 vi.mock('@/widgets/quiz-launcher', () => ({
   useQuizLauncher: () => ({
     openQuizLauncher: vi.fn(),
@@ -250,7 +222,6 @@ describe('PalaceEditPage import apply guard', () => {
   beforeEach(async () => {
     await resetMindMapEditorDraftStoreForTest()
     vi.restoreAllMocks()
-    timedSessionMock.registerActivity.mockReset()
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     vi.spyOn(knowledgeApi, 'getSubjectsApi').mockResolvedValue([])
     vi.spyOn(knowledgeApi, 'getSubjectTreeApi').mockResolvedValue({ chapters: [], subject: null } as never)

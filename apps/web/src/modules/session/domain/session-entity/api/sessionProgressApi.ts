@@ -1,13 +1,70 @@
+import { request } from '@/shared/api/http'
+import type { PersistedRequestInit } from '@/shared/api/http'
 import type { SessionProgressSnapshot } from '@/shared/api/contracts'
-import {
-  createStudySessionApi,
-  getActiveStudySessionByTargetApi,
-  patchStudySessionApi,
-  type StudySessionItem,
-  type StudySessionPayload,
-  type StudySessionScene,
-  type StudySessionTargetType,
-} from '@/modules/session/domain/study-session-entity/api'
+
+type StudySessionScene = 'practice'
+type StudySessionTargetType = 'palace'
+
+interface StudySessionItem {
+  id: string
+  palace_id: number | null
+  progress: Record<string, unknown>
+  updated_at: string | null
+}
+
+interface StudySessionPayload {
+  id?: string
+  status?: 'active' | 'abandoned'
+  scene: StudySessionScene
+  target_type?: StudySessionTargetType
+  target_id?: number | null
+  started_at?: string | null
+  ended_at?: string | null
+  progress?: unknown
+}
+
+function createOperationId(prefix: string) {
+  return `${prefix}:${crypto.randomUUID()}`
+}
+
+function getActiveStudySessionByTargetApi(params: {
+  targetType: StudySessionTargetType
+  targetId: number
+  scene: StudySessionScene
+}) {
+  const query = new URLSearchParams()
+  query.set('target_type', params.targetType)
+  query.set('target_id', String(params.targetId))
+  query.set('scene', params.scene)
+  return request<{ item: StudySessionItem | null }>(`/study-sessions/by-target?${query}`)
+}
+
+function createStudySessionApi(payload: StudySessionPayload) {
+  return request<{ item: StudySessionItem }>('/study-sessions', {
+    method: 'POST',
+    body: JSON.stringify({
+      ...payload,
+      operation_id: createOperationId('study-session:create'),
+    }),
+    persistence: {
+      resourceKey: `study-session:${payload.id ?? payload.scene}:create`,
+      description: 'Create study session',
+      replayMode: 'auto',
+    },
+  })
+}
+
+function patchStudySessionApi(
+  id: string,
+  payload: Partial<StudySessionPayload>,
+  options: { persistence: PersistedRequestInit['persistence'] },
+) {
+  return request<{ item: StudySessionItem }>(`/study-sessions/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ ...payload, operation_id: createOperationId(`study-session:${id}:patch`) }),
+    persistence: options.persistence,
+  })
+}
 
 export type SessionProgressMode = 'practice'
 

@@ -10,7 +10,6 @@ describe('root application chunk loading', () => {
 
     expect(source).toContain("import { lazyWithRetry } from '@/shared/lib/lazyWithRetry'")
     expect(source).toContain("const DesktopApp = lazyWithRetry(() => import('@/app/DesktopApp'))")
-    expect(source).toContain('const TimerOverlayApp = lazyWithRetry(() =>')
     expect(source).not.toContain("import { Suspense, lazy } from 'react'")
   })
 })

@@ -162,7 +162,6 @@ export function encounterState(
     selectedRating: ratingOnThisAppearance(encounter),
     passed: encounter.passed,
     retryAfterCards: encounter.retry_after_cards,
-    effectiveSeconds: encounter.effective_seconds ?? null,
   }
 }
 

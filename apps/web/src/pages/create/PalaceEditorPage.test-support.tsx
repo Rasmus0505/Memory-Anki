@@ -25,34 +25,6 @@ const mindMapFrameMockState = vi.hoisted(() => ({
   nextMountId: 1,
 }))
 
-export const timedSessionMock = {
-  sessionId: 'timed-session-1',
-  effectiveSeconds: 0,
-  idleSeconds: 0,
-  pauseCount: 0,
-  status: 'idle',
-  startedAt: null,
-  durationEdited: false,
-  glowState: 'idle',
-  start: vi.fn(),
-  pause: vi.fn(),
-  resume: vi.fn(),
-  setSceneActive: vi.fn(),
-  leaveScene: vi.fn(),
-  adjustDuration: vi.fn(),
-  registerActivity: vi.fn(),
-  logEvent: vi.fn(),
-  complete: vi.fn(),
-  reset: vi.fn(),
-}
-
-export const shouldAutoStartOnPageEnterMock = vi.fn<(config: unknown) => boolean>(() => false)
-
-vi.mock('@/shared/hooks/useTimedSession', () => ({
-  useTimedSession: () => timedSessionMock,
-  shouldAutoStartOnPageEnter: (config: unknown) => shouldAutoStartOnPageEnterMock(config),
-}))
-
 vi.mock('@/widgets/quiz-launcher', () => ({
   useQuizLauncher: () => ({
     openQuizLauncher: vi.fn(),
@@ -400,10 +372,6 @@ vi.mock('@/modules/produce/ui/mindmap-import', async (importOriginal) => {
   }
 })
 
-vi.mock('@/shared/components/session/SessionTimerBar', () => ({
-  SessionTimerBar: () => <div>timer</div>,
-}))
-
 export function getMindMapTexts() {
   return {
     root: testingLibraryScreen.getByText(/^root-/).textContent,
@@ -441,19 +409,6 @@ export function setupPalaceEditPageTestDefaults() {
   window.localStorage.clear()
   mindMapFrameMockState.nextMountId = 1
   vi.spyOn(window, 'confirm').mockReturnValue(true)
-  timedSessionMock.status = 'idle'
-  timedSessionMock.startedAt = null
-  timedSessionMock.start.mockReset()
-  timedSessionMock.pause.mockReset()
-  timedSessionMock.resume.mockReset()
-  timedSessionMock.setSceneActive.mockReset()
-  timedSessionMock.adjustDuration.mockReset()
-  timedSessionMock.registerActivity.mockReset()
-  timedSessionMock.logEvent.mockReset()
-  timedSessionMock.complete.mockReset()
-  timedSessionMock.reset.mockReset()
-  shouldAutoStartOnPageEnterMock.mockReset()
-  shouldAutoStartOnPageEnterMock.mockReturnValue(false)
   vi.spyOn(knowledgeApi, 'getSubjectsApi').mockResolvedValue([{ id: 1, name: '测试学科', color: '#6366f1', sort_order: 0 }])
   vi.spyOn(knowledgeApi, 'getSubjectTreeApi').mockResolvedValue({ chapters: [], subject: null } as never)
   vi.spyOn(palaceApi, 'getPracticeSessionProgressApi').mockResolvedValue({ progress: null } as never)

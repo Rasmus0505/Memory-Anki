@@ -1,5 +1,4 @@
 import { createContext, useContext } from 'react'
-import type { UnifiedTimerSnapshot } from '@/shared/components/session/desktopTimerBridge'
 import type {
   LiveStudyProjection,
   LiveStudySurface,
@@ -10,7 +9,6 @@ export interface LiveStudyPublishPatch {
   route?: string | null
   surface?: LiveStudySurface
   view?: unknown
-  timer?: UnifiedTimerSnapshot | null
 }
 
 export interface LiveStudyPresenceValue {

@@ -205,7 +205,6 @@ describe('freestyle queue skip rules', () => {
         selectedRating: 3,
         passed: true,
         retryAfterCards: 3,
-        effectiveSeconds: null,
       },
     })
     expect(startNewRound(sanitized).unitEncountersByCardId).toEqual({})

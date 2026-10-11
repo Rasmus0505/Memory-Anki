@@ -121,7 +121,6 @@ export function retainLocalRoundLedger(input: {
       selectedRating,
       passed: localEncounter.passed ?? selectedRating >= 3,
       retryAfterCards: hydrated?.retryAfterCards ?? localEncounter.retryAfterCards ?? 0,
-      effectiveSeconds: hydrated?.effectiveSeconds ?? localEncounter.effectiveSeconds ?? null,
     }
   }
 

@@ -1,11 +1,10 @@
 import { Fragment } from 'react'
-import { Bot, HardDriveDownload, Settings, Sparkles, Timer } from 'lucide-react'
+import { Bot, HardDriveDownload, Settings, Sparkles } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
 import { cn } from '@/shared/lib/utils'
 
 const ITEMS = [
   { href: '/profile', label: '复习与偏好', icon: Settings },
-  { href: '/profile/timer', label: '计时与休息', icon: Timer },
   { href: '/profile/feedback', label: '反馈中心', icon: Sparkles },
   { href: '/profile/ai', label: 'AI 管理', icon: Bot },
   { href: '/profile/backups', label: '数据与备份', icon: HardDriveDownload },

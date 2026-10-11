@@ -24,7 +24,6 @@ export function usePalaceQuizManagement({
   visibleQuestionIds,
   refreshQuestions,
   removeQuestionStates,
-  registerQuizActivity,
   emitQuizFeedback,
 }: {
   palaceId: number | null
@@ -32,7 +31,6 @@ export function usePalaceQuizManagement({
   visibleQuestionIds: number[]
   refreshQuestions: () => Promise<void>
   removeQuestionStates: (questionIds: number[]) => void
-  registerQuizActivity: (source: string) => void
   emitQuizFeedback: (
     event: Parameters<typeof dispatchGlobalFeedback>[0],
     options?: Parameters<typeof dispatchGlobalFeedback>[1],
@@ -59,7 +57,6 @@ export function usePalaceQuizManagement({
   }, [questions])
 
   const handleStartCreateQuestion = () => {
-    registerQuizActivity('manage_create_start')
     emitQuizFeedback('quiz_manage_create_start', { label: '新增题目', audioScope: 'local' })
     setEditingQuestionId(null)
     setQuestionForm(buildEmptyQuestionForm())
@@ -70,7 +67,6 @@ export function usePalaceQuizManagement({
       toast.message('这类题目前只支持做题、查看和删除，暂不支持手工编辑。')
       return false
     }
-    registerQuizActivity('manage_edit_question')
     emitQuizFeedback('quiz_manage_edit_start', { label: '编辑题目', audioScope: 'local' })
     setEditingQuestionId(question.id)
     setQuestionForm(buildQuestionFormFromQuestion(question))
@@ -84,7 +80,6 @@ export function usePalaceQuizManagement({
 
   const handleSaveQuestion = async () => {
     if (!palaceId) return
-    registerQuizActivity('manage_save_question')
     emitQuizFeedback('quiz_manage_save', {
       label: editingQuestionId != null ? '更新题目' : '保存题目',
       audioScope: 'global',
@@ -119,7 +114,6 @@ export function usePalaceQuizManagement({
       confirmText: '删除题目',
       tone: 'danger',
     })) return
-    registerQuizActivity('manage_delete_question')
     // No sound yet: the confirm dialog above can still be cancelled, and the
     // delete tone used to ring on a cancelled confirmation.
     setManageDeletingId(questionId)
@@ -173,7 +167,6 @@ export function usePalaceQuizManagement({
       confirmText: '批量删除',
       tone: 'danger',
     })) return
-    registerQuizActivity('manage_batch_delete_questions')
     setManageBulkDeleting(true)
     try {
       await batchDeletePalaceQuizQuestionsApi(selectedQuestionIds)

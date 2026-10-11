@@ -25,14 +25,9 @@ function emptyPreferences() {
     memory_anki_shortcuts: null,
     review_feedback_settings: null,
     english_practice_settings: null,
-    timer_automation_config: null,
-    timer_focus_config: null,
-    break_guard_config: null,
-    dashboard_duration_filter: null,
     study_goals: null,
     palace_list_view_settings: null,
     palace_shelf_view_settings: null,
-    time_record_tags: null,
     freestyle_feed_config: null,
     freestyle_feed_config_secondary: null,
   }
@@ -86,7 +81,7 @@ describe('clientPreferences', () => {
     window.localStorage.setItem('legacy-focus', JSON.stringify({ enabled: true }))
 
     const migrated = await migrateLocalPreferenceToBackend(
-      'timer_focus_config',
+      'study_goals',
       'legacy-focus',
       { enabled: false },
       (value) => ({
@@ -106,12 +101,12 @@ describe('clientPreferences', () => {
       events.push(event instanceof CustomEvent ? event.detail : null)
     })
 
-    const saved = await saveClientPreference('timer_focus_config', { enabled: true })
+    const saved = await saveClientPreference('study_goals', { enabled: true })
 
     expect(saved.persisted).toBe(false)
     expect(
       getCachedClientPreference(
-        'timer_focus_config',
+        'study_goals',
         null,
         (value): value is { enabled: boolean } => Boolean(value && typeof value === 'object'),
       ),
@@ -137,13 +132,13 @@ describe('clientPreferences', () => {
           }),
       )
 
-    const firstSave = saveClientPreference('timer_focus_config', { enabled: true })
-    const secondSave = saveClientPreference('timer_focus_config', { enabled: false })
+    const firstSave = saveClientPreference('study_goals', { enabled: true })
+    const secondSave = saveClientPreference('study_goals', { enabled: false })
 
     resolveSecond?.({
       items: {
         ...emptyPreferences(),
-        timer_focus_config: { enabled: false },
+        study_goals: { enabled: false },
       },
     })
     await secondSave
@@ -151,14 +146,14 @@ describe('clientPreferences', () => {
     resolveFirst?.({
       items: {
         ...emptyPreferences(),
-        timer_focus_config: { enabled: true },
+        study_goals: { enabled: true },
       },
     })
     await firstSave
 
     expect(
       getCachedClientPreference(
-        'timer_focus_config',
+        'study_goals',
         null,
         (value): value is { enabled: boolean } => Boolean(value && typeof value === 'object'),
       ),

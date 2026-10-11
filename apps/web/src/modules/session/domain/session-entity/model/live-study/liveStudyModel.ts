@@ -1,5 +1,3 @@
-import type { UnifiedTimerSnapshot } from '@/shared/components/session/desktopTimerBridge'
-
 export const LIVE_STUDY_CLIENT_STORAGE_KEY = 'memory-anki.live-study.client-id'
 export const LIVE_STUDY_SURFACES = [
   'idle',
@@ -21,7 +19,6 @@ export interface LiveStudyProjection {
   route: string
   surface: LiveStudySurface
   view: unknown
-  timer: UnifiedTimerSnapshot | null
   updatedAt: string
 }
 
@@ -39,7 +36,6 @@ export interface LiveStudyCommandInput {
   route?: string | null
   surface?: LiveStudySurface
   view?: unknown
-  timer?: UnifiedTimerSnapshot | null
 }
 
 export interface LiveStudyCommandResponse {
@@ -89,7 +85,6 @@ export function emptyLiveStudyProjection(): LiveStudyProjection {
     route: '',
     surface: 'idle',
     view: null,
-    timer: null,
     updatedAt: '',
   }
 }
@@ -154,10 +149,6 @@ export function decodeLiveStudyProjection(raw: unknown): LiveStudyProjection {
     route: readString(record.route),
     surface: isLiveStudySurface(surfaceRaw) ? surfaceRaw : 'idle',
     view: 'view' in record ? record.view : null,
-    timer:
-      record.timer && typeof record.timer === 'object'
-        ? (record.timer as UnifiedTimerSnapshot)
-        : null,
     updatedAt: readString(record.updated_at) || readString(record.updatedAt),
   }
 }
@@ -186,16 +177,7 @@ export function encodeLiveStudyCommand(input: LiveStudyCommandInput) {
   if (input.route !== undefined) payload.route = input.route
   if (input.surface !== undefined) payload.surface = input.surface
   if (input.view !== undefined) payload.view = input.view
-  if (input.timer !== undefined) payload.timer = input.timer
   return payload
-}
-
-export function interpolateTimerSeconds(timer: UnifiedTimerSnapshot, now = Date.now()) {
-  const base = Math.max(0, Math.round(timer.effectiveSeconds ?? timer.displaySeconds ?? 0))
-  const running = timer.status === 'running' || timer.semanticState === 'running'
-  if (!running) return base
-  const elapsed = Math.max(0, Math.round((now - timer.updatedAt) / 1000))
-  return base + elapsed
 }
 
 export function createLiveStudyClientId() {

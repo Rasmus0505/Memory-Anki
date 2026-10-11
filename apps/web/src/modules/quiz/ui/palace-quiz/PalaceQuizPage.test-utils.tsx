@@ -20,7 +20,6 @@ export const dispatchGlobalFeedbackMock = vi.fn()
 export const emitReviewConfettiMock = vi.fn()
 export const getSubjectsApiMock = vi.fn()
 export const getSubjectTreeApiMock = vi.fn()
-export const useTimedSessionMock = vi.fn()
 export const promptForAiOptionsMock = vi.fn()
 export const promptForScenarioAiOptionsMock = vi.fn()
 export const mindMapFramePropsMock = vi.fn()
@@ -123,11 +122,6 @@ vi.mock('@/modules/quiz/domain/quiz-entity/api', () => ({
 vi.mock('@/modules/content/domain/knowledge-entity/api', () => ({
   getSubjectsApi: (...args: unknown[]) => getSubjectsApiMock(...args),
   getSubjectTreeApi: (...args: unknown[]) => getSubjectTreeApiMock(...args),
-}))
-
-vi.mock('@/shared/hooks/useTimedSession', () => ({
-  useTimedSession: (...args: unknown[]) => useTimedSessionMock(...args),
-  shouldAutoStartOnPageEnter: vi.fn(() => true),
 }))
 
 vi.mock('@/shared/feedback/globalFeedbackModel', () => ({
@@ -388,26 +382,6 @@ export function setupPalaceQuizPageTest() {
   vi.clearAllMocks()
   vi.stubGlobal('confirm', vi.fn(() => true))
   window.localStorage.clear()
-  useTimedSessionMock.mockReturnValue({
-    sessionId: 'quiz-timer-1',
-    effectiveSeconds: 0,
-    idleSeconds: 0,
-    pauseCount: 0,
-    status: 'idle',
-    startedAt: null,
-    durationEdited: false,
-    glowState: 'idle',
-    start: vi.fn(),
-    pause: vi.fn(),
-    resume: vi.fn(),
-    setSceneActive: vi.fn(),
-    leaveScene: vi.fn().mockResolvedValue(null),
-    registerActivity: vi.fn(),
-    logEvent: vi.fn(),
-    adjustDuration: vi.fn(),
-    complete: vi.fn().mockResolvedValue(null),
-    reset: vi.fn(),
-  })
   getPalaceApiMock.mockResolvedValue(palaceResponse)
   getPalacesGroupedApiMock.mockResolvedValue(palaceLookupGroupedResponse)
   getPalaceEditorApiMock.mockImplementation(async (palaceId: number) =>

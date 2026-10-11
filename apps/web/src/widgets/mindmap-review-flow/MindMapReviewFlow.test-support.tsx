@@ -12,48 +12,7 @@ import {
 } from "@/shared/feedback/reviewFeedbackSettings";
 import type { MindMapEditorState } from "@/shared/api/contracts";
 
-export const persistStudySessionRecordMock = vi.fn();
-
-vi.mock("@/modules/session/domain/session-entity/model", async () => {
-  const actual = await vi.importActual<typeof import("@/modules/session/domain/session-entity/model")>(
-    "@/modules/session/domain/session-entity/model",
-  );
-  return {
-    ...actual,
-    persistStudySessionRecord: (...args: unknown[]) => persistStudySessionRecordMock(...args),
-  };
-});
-
-export const timer = {
-  sessionId: 'test-review-session',
-  effectiveSeconds: 7,
-  idleSeconds: 0,
-  pauseCount: 0,
-  status: "running" as const,
-  startedAt: Date.now(),
-  durationEdited: false,
-  glowState: "running" as const,
-  start: vi.fn(),
-  pause: vi.fn(),
-  resume: vi.fn(),
-  setSceneActive: vi.fn(),
-  leaveScene: vi.fn(),
-  adjustDuration: vi.fn(),
-  getEffectiveSeconds: vi.fn(() => 7),
-  registerActivity: vi.fn(),
-  logEvent: vi.fn(),
-  complete: vi.fn(async () => ({ effectiveSeconds: 7 })),
-  reset: vi.fn(),
-};
-
-export const useTimedSessionMock = vi.fn();
 export const openQuizLauncherMock = vi.fn();
-
-vi.mock("@/shared/hooks/useTimedSession", () => ({
-  useTimedSession: (args: unknown) => useTimedSessionMock(args),
-  shouldAutoStartOnPageEnter: (config: { autoStartOnPageEnter?: boolean }) =>
-    config.autoStartOnPageEnter === true,
-}));
 
 vi.mock("@/widgets/quiz-launcher", () => ({
   useQuizLauncher: () => ({
@@ -300,21 +259,8 @@ export function renderInRouter(node: React.ReactNode) {
 }
 
 export function setupMindMapReviewFlowTest() {
-  (timer as { status: string }).status = "running";
-  persistStudySessionRecordMock.mockReset();
-  persistStudySessionRecordMock.mockResolvedValue(null);
-  timer.complete.mockClear();
-  timer.start.mockClear();
-  timer.resume.mockClear();
-  timer.pause.mockClear();
-  timer.setSceneActive.mockClear();
-  timer.registerActivity.mockClear();
-  timer.logEvent.mockClear();
-  timer.reset.mockClear();
   mindMapFrameMock.mockClear();
-  useTimedSessionMock.mockClear();
   openQuizLauncherMock.mockClear();
-  useTimedSessionMock.mockImplementation(() => timer);
   window.localStorage.clear();
   window.localStorage.setItem(
     REVIEW_FEEDBACK_SETTINGS_STORAGE_KEY,

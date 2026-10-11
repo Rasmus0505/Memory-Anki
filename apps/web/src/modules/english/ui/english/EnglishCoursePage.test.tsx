@@ -12,30 +12,9 @@ const mocks = vi.hoisted(() => ({
   getEnglishCourseApiMock: vi.fn(),
   checkEnglishSentenceApiMock: vi.fn(),
   updateEnglishCourseProgressApiMock: vi.fn(),
-  shouldAutoStartOnPageEnterMock: vi.fn(() => true),
-  timerStartMock: vi.fn(),
-  timerRegisterActivityMock: vi.fn(),
   toastErrorMock: vi.fn(),
   mediaPlayMock: vi.fn().mockResolvedValue(undefined),
   mediaPauseMock: vi.fn(),
-  timerController: {
-    effectiveSeconds: 0,
-    idleSeconds: 0,
-    pauseCount: 0,
-    status: 'idle',
-    startedAt: null,
-    durationEdited: false,
-    glowState: 'idle',
-    start: vi.fn(),
-    pause: vi.fn(),
-    resume: vi.fn(),
-    leaveScene: vi.fn(),
-    adjustDuration: vi.fn(),
-    complete: vi.fn(),
-    registerActivity: vi.fn(),
-    logEvent: vi.fn(),
-    reset: vi.fn(),
-  },
 }))
 
 vi.mock('@/modules/english/domain/english-entity/api', () => ({
@@ -43,17 +22,6 @@ vi.mock('@/modules/english/domain/english-entity/api', () => ({
   checkEnglishSentenceApi: mocks.checkEnglishSentenceApiMock,
   getEnglishCourseApi: mocks.getEnglishCourseApiMock,
   updateEnglishCourseProgressApi: mocks.updateEnglishCourseProgressApiMock,
-}))
-
-vi.mock('@/shared/hooks/useTimedSession', () => ({
-  shouldAutoStartOnPageEnter: mocks.shouldAutoStartOnPageEnterMock,
-  useTimedSession: () => mocks.timerController,
-}))
-
-vi.mock('@/shared/components/session/SessionTimerBar', () => ({
-  SessionTimerBar: ({ layout }: { layout?: 'card' | 'compact' }) => (
-    <div data-testid="session-timer-bar" data-layout={layout ?? 'card'} />
-  ),
 }))
 
 vi.mock('@/modules/english/ui/english/useEnglishTypingFeedbackSounds', () => ({
@@ -203,10 +171,6 @@ describe('EnglishCoursePage', () => {
   beforeEach(() => {
     vi.useRealTimers()
     window.localStorage.clear()
-    mocks.shouldAutoStartOnPageEnterMock.mockReset()
-    mocks.shouldAutoStartOnPageEnterMock.mockReturnValue(true)
-    mocks.timerStartMock.mockReset()
-    mocks.timerRegisterActivityMock.mockReset()
     mocks.getEnglishCourseApiMock.mockReset()
     mocks.checkEnglishSentenceApiMock.mockReset()
     mocks.updateEnglishCourseProgressApiMock.mockReset()
@@ -214,14 +178,6 @@ describe('EnglishCoursePage', () => {
     mocks.mediaPlayMock.mockReset()
     mocks.mediaPlayMock.mockResolvedValue(undefined)
     mocks.mediaPauseMock.mockReset()
-    mocks.timerController.status = 'idle'
-    mocks.timerController.startedAt = null
-    mocks.timerController.start = mocks.timerStartMock
-    mocks.timerController.pause = vi.fn()
-    mocks.timerController.resume = vi.fn()
-    mocks.timerController.adjustDuration = vi.fn()
-    mocks.timerController.complete = vi.fn()
-    mocks.timerController.registerActivity = mocks.timerRegisterActivityMock
     vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback: FrameRequestCallback) => {
       callback(0)
       return 1
@@ -474,7 +430,7 @@ describe('EnglishCoursePage', () => {
     expect(within(screen.getByTestId('english-course-inline-translation')).getByText('翻译区')).toBeTruthy()
   })
 
-  it('auto starts the timer and uses the fixed dense layout for long sentences', async () => {
+  it('uses the fixed dense layout for long sentences', async () => {
     mocks.getEnglishCourseApiMock.mockResolvedValue(
       buildCourse({
         sentences: [
@@ -505,11 +461,6 @@ describe('EnglishCoursePage', () => {
 
     await screen.findByText('测试英语课')
 
-    await waitFor(() => {
-      expect(mocks.shouldAutoStartOnPageEnterMock).toHaveBeenCalledWith(expect.anything())
-    })
-    expect(mocks.timerStartMock).toHaveBeenCalledWith({ source: 'page_enter', scene: 'english_course' })
-    expect(screen.queryByTestId('session-timer-bar')).toBeNull()
     expect(screen.getByTestId('english-course-workbench').className).toContain('overflow-hidden')
     expect(screen.getByTestId('english-course-main-panel').dataset.density).toBe('dense')
     expect(screen.getByTestId('english-word-rail').dataset.density).toBe('dense')

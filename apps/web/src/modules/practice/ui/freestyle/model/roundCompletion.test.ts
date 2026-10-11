@@ -8,19 +8,12 @@ import {
   findEarliestCompleteSeekIndex,
   findUnscoredCompleteSeekIndices,
   findEarliestUnhandledIndex,
-  freestyleCanPageNext,
   freestyleFeedSlotCount,
   isFreestyleCompleteSlot,
   isFreestyleRoundComplete,
   resolveFreestyleCompleteSeek,
   resolveFreestyleOpenFeedIndex,
 } from './roundCompletion'
-import {
-  createRetryOccurrence,
-  insertRetryOccurrenceAfterGap,
-  isImmediateRestudyGap,
-  restudyInterveningGap,
-} from '@/modules/practice/domain/queueState'
 
 function card(
   id: string,
@@ -159,18 +152,7 @@ describe('buildFreestyleRoundCompletion', () => {
     expect(completion.remainingCandidates).toBe(0)
   })
 
-  it('sums billable effectiveSeconds across closed rated encounters', () => {
-    const cards = [card('one'), card('two'), card('three')]
-    const completion = buildFreestyleRoundCompletion(cards, {
-      one: encounter({ effectiveSeconds: 12 }),
-      two: encounter({ selectedRating: 1, passed: false, effectiveSeconds: 8 }),
-      three: encounter({ selectedRating: null, passed: null, status: 'open', effectiveSeconds: 99 }),
-    }, 3)
-
-    expect(completion.totalEffectiveSeconds).toBe(20)
-  })
-
-  it('groups attempted sources by subject and palace with retry seconds included', () => {
+  it('groups attempted sources by subject and palace with retries folded into the source', () => {
     const retry = {
       ...card('retry:round-1:two:1', { palace_id: 2, palace_title: '宫殿 B' }),
       source_card_id: 'two',
@@ -186,10 +168,10 @@ describe('buildFreestyleRoundCompletion', () => {
     const completion = buildFreestyleRoundCompletion(
       cards,
       {
-        one: encounter({ effectiveSeconds: 10 }),
-        two: encounter({ selectedRating: 1, passed: false, effectiveSeconds: 5 }),
-        [retry.id]: encounter({ selectedRating: 3, passed: true, effectiveSeconds: 7 }),
-        three: encounter({ effectiveSeconds: 3 }),
+        one: encounter(),
+        two: encounter({ selectedRating: 1, passed: false }),
+        [retry.id]: encounter({ selectedRating: 3, passed: true }),
+        three: encounter(),
       },
       3,
       {
@@ -201,17 +183,15 @@ describe('buildFreestyleRoundCompletion', () => {
       },
     )
 
-    expect(completion.totalEffectiveSeconds).toBe(25)
     expect(completion.bySubject).toEqual([
       {
         subjectId: 10,
         subjectName: '学科甲',
         palaceCount: 2,
         cardCount: 2,
-        effectiveSeconds: 22,
         palaces: [
-          { palaceId: 2, palaceTitle: '宫殿 B', cardCount: 1, effectiveSeconds: 12 },
-          { palaceId: 1, palaceTitle: '宫殿 A', cardCount: 1, effectiveSeconds: 10 },
+          { palaceId: 1, palaceTitle: '宫殿 A', cardCount: 1 },
+          { palaceId: 2, palaceTitle: '宫殿 B', cardCount: 1 },
         ],
       },
       {
@@ -219,30 +199,18 @@ describe('buildFreestyleRoundCompletion', () => {
         subjectName: '学科乙',
         palaceCount: 1,
         cardCount: 1,
-        effectiveSeconds: 3,
         palaces: [
-          { palaceId: 3, palaceTitle: '宫殿 C', cardCount: 1, effectiveSeconds: 3 },
+          { palaceId: 3, palaceTitle: '宫殿 C', cardCount: 1 },
         ],
       },
     ])
-  })
-
-  it('counts open or unrated encounters as zero billable seconds', () => {
-    const cards = [card('one'), card('two')]
-    const completion = buildFreestyleRoundCompletion(cards, {
-      one: encounter({ status: 'open', selectedRating: null, passed: null, effectiveSeconds: 40 }),
-      two: encounter({ status: 'closed', selectedRating: null, passed: null, effectiveSeconds: 15 }),
-    }, 2)
-
-    expect(completion.totalEffectiveSeconds).toBe(0)
-    expect(completion.bySubject).toEqual([])
   })
 
   it('falls back to 未分类 when the subject map is missing a palace', () => {
     const cards = [card('one', { palace_id: 9, palace_title: '独立宫殿' })]
     const completion = buildFreestyleRoundCompletion(
       cards,
-      { one: encounter({ effectiveSeconds: 6 }) },
+      { one: encounter() },
       1,
     )
 
@@ -252,15 +220,14 @@ describe('buildFreestyleRoundCompletion', () => {
         subjectName: '未分类',
         palaceCount: 1,
         cardCount: 1,
-        effectiveSeconds: 6,
         palaces: [
-          { palaceId: 9, palaceTitle: '独立宫殿', cardCount: 1, effectiveSeconds: 6 },
+          { palaceId: 9, palaceTitle: '独立宫殿', cardCount: 1 },
         ],
       },
     ])
   })
 
-  it('folds a confirmed 小结算 into 大结算 counts without adding its seconds again', () => {
+  it('folds a confirmed 小结算 into 大结算 counts', () => {
     const cards = [card('still', { palace_id: 11, palace_title: '还在' })]
     const completion = buildFreestyleRoundCompletion(cards, { still: encounter() }, 1)
     const folded = foldPartialSettlementsIntoCompletion(
@@ -273,94 +240,12 @@ describe('buildFreestyleRoundCompletion', () => {
         passedCount: 1,
         retryCount: 0,
         quizCount: 0,
-        totalEffectiveSeconds: 40,
-        quizSeconds: 0,
         bySubject: [],
       }],
       ['still'],
     )
     expect(folded.ratedCount).toBe(completion.ratedCount + 1)
     expect(folded.passedCount).toBe(completion.passedCount + 1)
-    expect(folded.totalEffectiveSeconds).toBe(completion.totalEffectiveSeconds)
-  })
-
-  it('uses the round clock for the headline and palace rows, and does not add encounter seconds again', () => {
-    const cards = [
-      card('one', { palace_id: 11, palace_title: '卢梭' }),
-      card('two', { palace_id: 12, palace_title: '康德' }),
-    ]
-    const completion = buildFreestyleRoundCompletion(
-      cards,
-      {
-        one: encounter({ effectiveSeconds: 999 }),
-        two: encounter({ effectiveSeconds: 999 }),
-      },
-      2,
-      {
-        subjectByPalaceId: new Map([[11, { id: 1, name: '教育学' }]]),
-        learningTime: {
-          unitSeconds: 100,
-          quizSeconds: 40,
-          lookupSeconds: 10,
-          backfilled: true,
-          byPalace: {
-            '11': { unitSeconds: 80, quizSeconds: 0, lookupSeconds: 0 },
-            '12': { unitSeconds: 0, quizSeconds: 25, lookupSeconds: 10 },
-          },
-        },
-      },
-    )
-
-    expect(completion.totalEffectiveSeconds).toBe(150)
-    expect(completion.quizSeconds).toBe(40)
-    const education = completion.bySubject.find((subject) => subject.subjectName === '教育学')
-    const uncategorized = completion.bySubject.find((subject) => subject.subjectName === '未分类')
-    expect(education?.palaces.find((palace) => palace.palaceId === 11)?.effectiveSeconds).toBe(80)
-    expect(uncategorized?.palaces.find((palace) => palace.palaceId === 12)?.effectiveSeconds).toBe(35)
-    expect(education?.effectiveSeconds).toBe(80)
-  })
-
-  it('does not let an empty round clock wipe the progress-bar queue time', () => {
-    const cards = [card('one', { palace_id: 11, palace_title: '卢梭' })]
-    const completion = buildFreestyleRoundCompletion(
-      cards,
-      { one: encounter({ effectiveSeconds: 42 }) },
-      1,
-      {
-        learningTime: {
-          unitSeconds: 0,
-          quizSeconds: 0,
-          lookupSeconds: 0,
-          backfilled: true,
-          byPalace: {},
-        },
-      },
-    )
-
-    expect(completion.totalEffectiveSeconds).toBe(42)
-    expect(completion.bySubject[0]?.effectiveSeconds).toBe(42)
-  })
-
-  it('keeps queue time when the clock only recorded quiz or lookup', () => {
-    const cards = [card('one', { palace_id: 11, palace_title: '卢梭' })]
-    const completion = buildFreestyleRoundCompletion(
-      cards,
-      { one: encounter({ effectiveSeconds: 42 }) },
-      1,
-      {
-        learningTime: {
-          unitSeconds: 0,
-          quizSeconds: 15,
-          lookupSeconds: 5,
-          backfilled: true,
-          byPalace: {},
-        },
-      },
-    )
-
-    expect(completion.totalEffectiveSeconds).toBe(62)
-    expect(completion.quizSeconds).toBe(15)
-    expect(completion.bySubject[0]?.effectiveSeconds).toBe(42)
   })
 })
 
@@ -808,60 +693,5 @@ describe('resolveFreestyleCompleteSeek', () => {
       earliestUnhandledIndex: null,
       visualIndex: 1,
     })).toBe(2)
-  })
-})
-
-describe('gap-0 restudy insert and canGoNext', () => {
-  it('inserts the retry into the feed without requiring leave first', () => {
-    const source = card('only')
-    expect(isImmediateRestudyGap(0)).toBe(true)
-    expect(restudyInterveningGap(0)).toBe(0)
-    const occurrence = createRetryOccurrence(source, 'round-1', 1, 0)
-    const next = insertRetryOccurrenceAfterGap([source], occurrence, 0, 0)
-    expect(next.map((item) => item.id)).toEqual([source.id, occurrence.id])
-    // Viewport stays on the source; 下一张 can move onto the retry.
-    expect(clampFreestyleFeedIndex(1, next.length, false)).toBe(1)
-    expect(freestyleCanPageNext(0, next.length, false, false)).toBe(true)
-  })
-
-  it('keeps 下一张 enabled on the last card while a pending restudy is uninserted', () => {
-    // Fallback only. A successful 忘记/困难 already grew the feed, so this latch
-    // covers the moment before that insert lands — not the steady state.
-    expect(freestyleCanPageNext(2, 3, false, false)).toBe(false)
-    expect(freestyleCanPageNext(2, 3, false, true)).toBe(true)
-    expect(freestyleCanPageNext(3, 3, true, true)).toBe(false)
-  })
-})
-
-describe('yellow boundary hint never blocks completion', () => {
-  const hint = {
-    id: 'review_hint:formal_review',
-    type: 'review_hint',
-    content_type: 'review_hint',
-    text: '下一张：正式复习',
-  } as FreestyleCard
-
-  it('round is complete once every real card is scored', () => {
-    const cards = [card('one'), hint, card('two')]
-    expect(isFreestyleRoundComplete(cards, {
-      one: encounter(),
-      two: encounter(),
-    }, [], null)).toBe(true)
-    expect(isFreestyleRoundComplete(cards, {
-      one: encounter(),
-      two: encounter({ selectedRating: 1, passed: false }),
-    }, [], null)).toBe(true)
-  })
-
-  it('round stays open while a real card is still unscored', () => {
-    const cards = [card('one'), hint, card('two')]
-    expect(isFreestyleRoundComplete(cards, { one: encounter() }, [], null)).toBe(false)
-  })
-
-  it('完成 seek targets the earliest real unscored card, never the hint', () => {
-    const cards = [card('one'), hint, card('two')]
-    expect(findEarliestCompleteSeekIndex(cards, {}, ['one'], null)).toBe(2)
-    expect(findEarliestCompleteSeekIndex(cards, {}, ['one', 'two'], null)).toBeNull()
-    expect(findEarliestUnhandledIndex(cards, {}, ['one', 'two'], null)).toBeNull()
   })
 })

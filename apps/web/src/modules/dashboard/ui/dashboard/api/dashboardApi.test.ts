@@ -30,19 +30,6 @@ describe("dashboard api", () => {
     expect(requestMock).toHaveBeenCalledWith("/dashboard")
   })
 
-  it("serializes dashboard query fields", async () => {
-    await getDashboardApi({
-      duration_mode: "range",
-      month: "2026-06",
-      start_date: "2026-06-01",
-      end_date: "2026-06-18",
-    })
-
-    expect(requestMock).toHaveBeenCalledWith(
-      "/dashboard?duration_mode=range&month=2026-06&start_date=2026-06-01&end_date=2026-06-18",
-    )
-  })
-
   it("reuses a warmed dashboard request exactly once", async () => {
     requestMock.mockResolvedValue({})
 
@@ -77,14 +64,12 @@ describe("dashboard api", () => {
     requestMock.mockResolvedValue({
       items: {
         study_goals: {
-          weekly_study_minutes: 60,
           weekly_review_count: 7,
         },
       },
     })
 
     await expect(getStudyGoalsApi()).resolves.toEqual({
-      weekly_study_minutes: 60,
       weekly_review_count: 7,
     })
     expect(requestMock).toHaveBeenCalledWith("/profile/client-preferences")

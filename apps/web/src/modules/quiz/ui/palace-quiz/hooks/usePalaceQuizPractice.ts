@@ -7,7 +7,6 @@ export function usePalaceQuizPractice({
   palaceId,
   setQuestions,
   promptForAiOptions,
-  registerQuizActivity,
   emitQuizFeedback,
 }: {
   palaceId?: number | null
@@ -17,7 +16,6 @@ export function usePalaceQuizPractice({
     entrypointKey: string
     title: string
   }) => Promise<AiRuntimeOptions | null | undefined>
-  registerQuizActivity: (source: string) => void
   emitQuizFeedback: (
     event: Parameters<typeof dispatchGlobalFeedback>[0],
     options?: Parameters<typeof dispatchGlobalFeedback>[1],
@@ -41,7 +39,6 @@ export function usePalaceQuizPractice({
   }
 
   const handleResetQuestionState = (questionId: number) => {
-    registerQuizActivity('question_reset')
     emitQuizFeedback('quiz_answer_reset', { label: '重做', audioScope: 'local' })
     resetQuestionState(questionId)
   }
@@ -62,7 +59,6 @@ export function usePalaceQuizPractice({
     emitFeedback: emitQuizFeedback,
     emitChoiceStatErrorFeedback: true,
     onChoiceStart: ({ optionId }) => {
-      registerQuizActivity('choice_select')
       emitQuizFeedback('quiz_answer_select', { label: optionId, audioScope: 'local' })
     },
   })
@@ -72,7 +68,6 @@ export function usePalaceQuizPractice({
   }
 
   const handleShortAnswerSubmit = (questionId: number) => {
-    registerQuizActivity('short_answer_submit')
     emitQuizFeedback('quiz_answer_submit', { label: '提交答案', audioScope: 'local' })
     orchestration.handleShortAnswerSubmit(questionId)
   }

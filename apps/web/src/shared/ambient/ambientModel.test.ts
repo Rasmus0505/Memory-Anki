@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { dailyGoalSeconds, resolveAmbientTone, resolveExamPulse, resolveTint } from './ambientModel'
+import { dailyReviewGoal, resolveAmbientTone, resolveExamPulse, resolveTint } from './ambientModel'
 import { createMote, stepMote } from './dustMotes'
 import { resolveLightPoint } from './pointerLight'
 
@@ -32,9 +32,9 @@ describe('resolveAmbientTone', () => {
   })
 
   it('derives a daily goal from the weekly goal with a sane default', () => {
-    expect(dailyGoalSeconds(420)).toBe(3600)
-    expect(dailyGoalSeconds(0)).toBe(dailyGoalSeconds(300))
-    expect(dailyGoalSeconds(null)).toBe(dailyGoalSeconds(300))
+    expect(dailyReviewGoal(70)).toBe(10)
+    expect(dailyReviewGoal(0)).toBe(dailyReviewGoal(20))
+    expect(dailyReviewGoal(null)).toBe(dailyReviewGoal(20))
   })
 })
 

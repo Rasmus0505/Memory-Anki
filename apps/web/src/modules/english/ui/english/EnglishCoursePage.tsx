@@ -8,9 +8,7 @@ import {
   getEnglishCourseApi,
   updateEnglishCourseProgressApi,
 } from '@/modules/english/domain/english-entity/api'
-import { shouldAutoStartOnPageEnter, useTimedSession } from '@/shared/hooks/useTimedSession'
 import { useLatestRef } from '@/shared/hooks/useLatestRef'
-import { readTimerAutomationConfig } from '@/shared/components/session/timer-automation-config'
 import {
   type StatusNotice,
   type WordRailDensity,
@@ -31,7 +29,6 @@ import { resolveDisplaySentenceIndex } from '@/modules/english/ui/english/model/
 import { useEnglishTypingFeedbackSounds } from '@/modules/english/ui/english/useEnglishTypingFeedbackSounds'
 import { useEnglishWordTyping } from '@/modules/english/ui/english/useEnglishWordTyping'
 import { useRouteResidency } from '@/shared/routing/RouteResidency'
-import { useGlobalTimerRegistration } from '@/shared/components/session/GlobalTimerProvider'
 import { useLiveStudySurfaceMirror } from '@/modules/session/public'
 import {
   applyEnglishCourseLiveView,
@@ -85,12 +82,9 @@ function resolveWordRailDensity(
 }
 
 export default function EnglishCoursePage() {
-  const { isActive, becameActiveAt, fullPath } = useRouteResidency()
+  const { isActive, fullPath } = useRouteResidency()
   const { id } = useParams()
   const courseId = Number(id)
-  const courseSessionKey = Number.isFinite(courseId)
-    ? `english:${courseId}`
-    : `english:pending:${id ?? 'none'}`
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const typingInputRef = useRef<HTMLInputElement | null>(null)
   const focusRestoreTimerRef = useRef<number | null>(null)
@@ -114,27 +108,6 @@ export default function EnglishCoursePage() {
   const [helperPanelOpen, setHelperPanelOpen] = useState(false)
   const [sidePanelTab, setSidePanelTab] = useState<'info' | 'shortcuts' | 'rhythm'>('info')
   const isTouchDevice = useMemo(() => isTouchPrimaryInputDevice(), [])
-
-  const timer = useTimedSession({
-    sessionKey: courseSessionKey,
-    kind: 'practice',
-    title: course ? `英语听写 · ${course.title}` : '英语听写',
-    palaceId: null,
-    automationScene: 'english',
-    sourceKind: 'english',
-    englishCourseId: Number.isFinite(courseId) ? courseId : null,
-    persistKey: Number.isFinite(courseId) ? `english-course:${courseId}` : null,
-    persistCompletionRecord: false,
-  })
-
-  useGlobalTimerRegistration({
-    scene: 'english',
-    title: course ? `英语听写 · ${course.title}` : '英语听写',
-    timer,
-    isRouteActive: isActive,
-    becameActiveAt,
-    routePath: fullPath,
-  })
 
   const courseRef = useLatestRef<EnglishCourseDetail | null>(course)
   const typingSentenceIndexRef = useLatestRef(typingSentenceIndex)
@@ -191,10 +164,6 @@ export default function EnglishCoursePage() {
   }, [loadCourse])
 
   useEffect(() => {
-    timer.setSceneActive?.(isActive, { source: isActive ? 'route_active' : 'route_inactive' })
-  }, [isActive, timer])
-
-  useEffect(() => {
     const syncPracticeSettings = () => {
       setPracticeSettings(readEnglishPracticeSettings())
     }
@@ -224,14 +193,6 @@ export default function EnglishCoursePage() {
       if (hardUnloadRef.current) return
     }
   }, [])
-
-  useEffect(() => {
-    if (!course) return
-    if (!isActive) return
-    if (timer.status !== 'idle') return
-    if (!shouldAutoStartOnPageEnter(readTimerAutomationConfig())) return
-    timer.start({ source: 'page_enter', scene: 'english_course' })
-  }, [course, isActive, timer])
 
   const courseLiveView = useMemo<EnglishCourseLiveView>(() => ({
     courseId: Number.isFinite(courseId) ? courseId : 0,

@@ -199,21 +199,8 @@ body {
   outline-color: var(--color-ring);
 }
 
-.memory-anki-timer-overlay-page,
-.memory-anki-timer-overlay-page body,
-body.memory-anki-timer-overlay-page {
-  background: transparent;
-}
-
 #root {
   min-height: 100vh;
-}
-
-body.memory-anki-timer-overlay-page #root {
-  min-height: 100vh;
-  display: flex;
-  align-items: flex-start;
-  justify-content: flex-start;
 }
 
 /* The map is the page. Radius, border, and shadow paint a card on whatever

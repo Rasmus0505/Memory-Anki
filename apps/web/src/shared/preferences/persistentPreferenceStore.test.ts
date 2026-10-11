@@ -26,14 +26,9 @@ function emptyPreferences() {
     memory_anki_shortcuts: null,
     review_feedback_settings: null,
     english_practice_settings: null,
-    timer_automation_config: null,
-    timer_focus_config: null,
-    break_guard_config: null,
-    dashboard_duration_filter: null,
     study_goals: null,
     palace_list_view_settings: null,
     palace_shelf_view_settings: null,
-    time_record_tags: null,
     freestyle_feed_config: null,
     freestyle_feed_config_secondary: null,
   }
@@ -41,7 +36,7 @@ function emptyPreferences() {
 
 function createFlagStore() {
   return createPersistentPreferenceStore<FlagPreference>({
-    cacheKey: 'timer_focus_config',
+    cacheKey: 'study_goals',
     defaultValue: { enabled: false },
     localStorageKey: 'legacy-flag',
     sanitize: (value) => ({
@@ -63,7 +58,7 @@ describe('createPersistentPreferenceStore', () => {
     mockGetClientPreferencesApi.mockResolvedValue({
       items: {
         ...emptyPreferences(),
-        timer_focus_config: { enabled: true },
+        study_goals: { enabled: true },
       },
     })
     window.localStorage.setItem('legacy-flag', JSON.stringify({ enabled: false }))
@@ -97,7 +92,7 @@ describe('createPersistentPreferenceStore', () => {
     mockGetClientPreferencesApi.mockResolvedValue({
       items: {
         ...emptyPreferences(),
-        timer_focus_config: { enabled: true },
+        study_goals: { enabled: true },
       },
     })
     await initializeClientPreferences()

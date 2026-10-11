@@ -32,7 +32,6 @@ export interface UnitReviewEncounterDto {
   passed: boolean | null
   retry_after_cards: number
   effective_operation_id: string | null
-  effective_seconds?: number | null
   closed_at: string | null
   rating_effects: UnitRatingEffectDto[]
   /** False after another real practice attempt supersedes this one. */
@@ -487,11 +486,9 @@ export async function ratePalaceDueUnitsApi(
         exclude_unit_ids: payload.excludeUnitIds,
         include_unit_ids: payload.includeUnitIds ?? [],
       }),
-      persistence: {
-        resourceKey: `review-palace-due-rate:${payload.operationId}`,
-        description: 'Rate palace due units',
-        replayMode: 'auto',
-      },
+      // A rating is never replayed in the background: a failure is shown to the
+      // learner immediately and they decide whether to press again.
+      persistence: false,
     },
   )
   emitAppEvent(APP_EVENT_NAMES.palaceCatalogInvalidated)
@@ -518,7 +515,7 @@ export async function rateReviewUnitApi(
         ...(roundId ? { round_id: roundId } : {}),
         rating,
       }),
-      persistence: { resourceKey: `review-unit-rate:${operationId}`, description: 'Rate review unit', replayMode: 'auto' },
+      persistence: false,
     },
   )
   emitAppEvent(APP_EVENT_NAMES.palaceCatalogInvalidated)
@@ -531,7 +528,6 @@ export async function closeUnitReviewEncounterApi(
   unitId: string,
   encounterId: string,
   operationId: string,
-  effectiveSeconds?: number,
   roundId?: string,
 ) {
   const response = await request<{ item: CloseUnitEncounterResultDto }>(
@@ -541,13 +537,8 @@ export async function closeUnitReviewEncounterApi(
       body: JSON.stringify({
         operation_id: operationId,
         ...(roundId ? { round_id: roundId } : {}),
-        ...(effectiveSeconds == null ? {} : { effective_seconds: Math.max(0, Math.round(effectiveSeconds)) }),
       }),
-      persistence: {
-        resourceKey: `review-unit-encounter-close:${operationId}`,
-        description: 'Close review unit encounter',
-        replayMode: 'auto',
-      },
+      persistence: false,
     },
   )
   emitAppEvent(APP_EVENT_NAMES.palaceCatalogInvalidated)

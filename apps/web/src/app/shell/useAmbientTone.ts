@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { getDashboardApi, getStudyGoalsApi } from '@/modules/dashboard/public'
+import { getStudyGoalsApi } from '@/modules/dashboard/public'
 import { getExamOverviewApi } from '@/modules/exam/public'
-import { dailyGoalSeconds, resolveAmbientTone, type AmbientTone } from '@/shared/ambient/ambientModel'
+import { dailyReviewGoal, resolveAmbientTone, type AmbientTone } from '@/shared/ambient/ambientModel'
 
 const REFRESH_MS = 10 * 60 * 1000
 const CLOCK_MS = 5 * 60 * 1000
@@ -26,17 +26,13 @@ export function useAmbientTone(enabled: boolean): AmbientTone {
     let requestId = 0
     const load = async () => {
       const current = ++requestId
-      const [dashboard, goals, exam] = await Promise.allSettled([
-        getDashboardApi(),
-        getStudyGoalsApi(),
-        getExamOverviewApi(),
-      ])
+      const [goals, exam] = await Promise.allSettled([getStudyGoalsApi(), getExamOverviewApi()])
       if (current !== requestId) return
-      if (dashboard.status === 'fulfilled') {
-        const weekly = goals.status === 'fulfilled' ? goals.value?.weekly_study_minutes : null
-        setProgress(dashboard.value.today_total_review_duration_seconds / dailyGoalSeconds(weekly))
+      if (exam.status === 'fulfilled') {
+        const weekly = goals.status === 'fulfilled' ? goals.value?.weekly_review_count : null
+        setProgress(exam.value.totals.reviewed_today / dailyReviewGoal(weekly))
+        setExamDaysLeft(exam.value.days_left)
       }
-      if (exam.status === 'fulfilled') setExamDaysLeft(exam.value.days_left)
       setHour(currentHour())
     }
     const onVisible = () => {

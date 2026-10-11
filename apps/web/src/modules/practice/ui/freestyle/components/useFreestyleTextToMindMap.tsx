@@ -1,7 +1,7 @@
 import { useCallback, useState, type Dispatch, type MutableRefObject, type SetStateAction } from 'react'
 import type { MindMapSelection } from '@/modules/content/public'
 import { readClipboardTextForMindMapImport, useMindMapImport } from '@/modules/produce/public'
-import type { RevealState } from '@/modules/session/public'
+import type { RevealState } from '@/modules/memory/public'
 import type { FreestyleReviewUnitCard, MindMapEditorState } from '@/shared/api/contracts'
 import { FreestyleMindMapImportDrawer } from './FreestyleMindMapImportDrawer'
 import { useFreestyleUnitReviewMoreActions } from './freestyleUnitReviewFlipToolbar'

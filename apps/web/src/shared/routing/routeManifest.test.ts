@@ -18,8 +18,6 @@ const appRoutesSource = readFileSync(
 
 /** JSX 路由表中的重定向占位路由，不要求在 manifest 登记。 */
 const REDIRECT_ONLY_JSX_PATHS = new Set(['/palaces/quiz', '/today', '/growth'])
-/** manifest 中不出现在 <Routes> 里的路径（/timer-overlay 在 App.tsx 硬分支）。 */
-const NON_JSX_MANIFEST_PATHS = new Set(['/timer-overlay'])
 /** dev-only 路由不参与对账。 */
 const DEV_ONLY_JSX_PATHS = new Set(['/dev/tokens'])
 
@@ -47,7 +45,6 @@ describe('routeManifest ⇄ appRoutes JSX 对账', () => {
   it('manifest 的每条精确路径都有对应 JSX 路由', () => {
     const jsxPaths = new Set(jsxRoutePaths())
     for (const entry of EXACT_ROUTES) {
-      if (NON_JSX_MANIFEST_PATHS.has(entry.path)) continue
       expect(jsxPaths.has(entry.path), `manifest 路径 ${entry.path} 缺少 JSX 路由`).toBe(true)
     }
   })
@@ -81,9 +78,7 @@ describe('routeManifest 行为快照（与统一前的四处实现对拍）', ()
     ['/palaces/42/quiz', 'knowledge', 'palaces', 'palace:quiz:42'],
     ['/english/listening/courses/3', 'english', 'english', 'english:course:3'],
     ['/profile', null, 'profile', 'profile:overview'],
-    ['/profile/timer', null, 'profile', 'profile:timer'],
     ['/profile/unknown', null, 'profile', 'profile:unknown'],
-    ['/timer-overlay', null, 'other', 'route:/timer-overlay'],
     ['/totally-unknown', null, 'other', 'route:/totally-unknown'],
     ['/freestyle/legacy', null, 'other', 'route:/freestyle/legacy'],
   ] as const)('%s → nav=%s history=%s key=%s', (pathname, nav, history, key) => {

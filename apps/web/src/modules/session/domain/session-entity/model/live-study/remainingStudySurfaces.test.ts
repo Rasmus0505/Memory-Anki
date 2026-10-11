@@ -35,7 +35,6 @@ describe('remaining live-study surfaces', () => {
     expect(isFollowableStudyPath('/palaces/7/edit')).toBe(false)
     expect(isFollowableStudyPath('/palaces/23/review')).toBe(false)
     expect(isFollowableStudyPath('/profile')).toBe(false)
-    expect(isFollowableStudyPath('/profile/timer')).toBe(false)
     expect(liveStudySurfaceFromPath('/palaces/7/quiz')).toBe('palace_quiz')
     expect(liveStudySurfaceFromPath('/palaces/7')).toBe('mindmap_review')
     expect(liveStudySurfaceFromPath('/english/listening/courses/3')).toBe('english_course')

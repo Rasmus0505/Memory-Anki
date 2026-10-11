@@ -3,31 +3,11 @@ import {
   decodeLiveStudyEnvelope,
   emptyLiveStudyProjection,
   encodeLiveStudyCommand,
-  interpolateTimerSeconds,
   isFollowableStudyPath,
   liveStudySurfaceFromPath,
   preferNewerLiveStudyProjection,
   shouldFollowLiveRoute,
 } from './liveStudyModel'
-import type { UnifiedTimerSnapshot } from '@/shared/components/session/desktopTimerBridge'
-
-function timer(overrides: Partial<UnifiedTimerSnapshot>): UnifiedTimerSnapshot {
-  return {
-    mode: 'study',
-    status: 'idle',
-    title: '随心模式',
-    scene: '学习计时',
-    displaySeconds: 0,
-    primaryText: '',
-    secondaryText: '',
-    availableActions: [],
-    targetPath: '/freestyle',
-    updatedAt: 1_000_000,
-    effectiveSeconds: 0,
-    ...overrides,
-  }
-}
-
 describe('liveStudyModel', () => {
   it('decodes snake_case envelopes and ignores own follow when controller', () => {
     const envelope = decodeLiveStudyEnvelope({
@@ -38,7 +18,7 @@ describe('liveStudyModel', () => {
         route: '/freestyle',
         surface: 'freestyle',
         view: { currentCardId: 'card-1' },
-        timer: timer({ status: 'running', effectiveSeconds: 9 }),
+        timer: { status: 'running' },
         updated_at: '2026-01-01T00:00:00Z',
       },
     })
@@ -163,18 +143,7 @@ describe('liveStudyModel', () => {
     ).toBe(false)
   })
 
-  it('interpolates running timer seconds from snapshot age', () => {
-    const snapshot = timer({
-      status: 'running',
-      semanticState: 'running',
-      effectiveSeconds: 10,
-      updatedAt: 5_000,
-    })
-    expect(interpolateTimerSeconds(snapshot, 8_000)).toBe(13)
-    expect(interpolateTimerSeconds({ ...snapshot, status: 'paused', semanticState: 'paused' }, 8_000)).toBe(10)
-  })
-
-  it('encodes commands without defaulting omitted view/timer fields', () => {
+  it('encodes commands without defaulting omitted view fields', () => {
     expect(
       encodeLiveStudyCommand({
         clientId: 'pwa',
@@ -203,7 +172,6 @@ describe('liveStudyModel', () => {
         route: '/freestyle',
         surface: 'freestyle',
         view: { currentCardId: 'card-9' },
-        timer: null,
         updated_at: '2026-01-01T00:00:01Z',
       },
     }).projection
@@ -223,7 +191,6 @@ describe('liveStudyModel', () => {
         route: '/freestyle',
         surface: 'freestyle',
         view: null,
-        timer: null,
         updatedAt: 't1',
       },
     }).projection

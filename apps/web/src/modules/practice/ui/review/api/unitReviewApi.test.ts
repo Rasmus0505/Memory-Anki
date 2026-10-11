@@ -23,17 +23,15 @@ describe('unit review API', () => {
     requestMock.mockResolvedValue({ item: {} })
   })
 
-  it('persists client-observed foreground seconds with the close operation identity', async () => {
-    await closeUnitReviewEncounterApi('session-1', 'unit-1', 'encounter-1', 'operation-1', 8.6)
+  it('sends the close operation identity and never queues it', async () => {
+    await closeUnitReviewEncounterApi('session-1', 'unit-1', 'encounter-1', 'operation-1')
 
     expect(requestMock).toHaveBeenCalledWith(
       '/review/session/session-1/units/unit-1/encounters/encounter-1/close',
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ operation_id: 'operation-1', effective_seconds: 9 }),
-        persistence: expect.objectContaining({
-          resourceKey: 'review-unit-encounter-close:operation-1',
-        }),
+        body: JSON.stringify({ operation_id: 'operation-1' }),
+        persistence: false,
       }),
     )
   })

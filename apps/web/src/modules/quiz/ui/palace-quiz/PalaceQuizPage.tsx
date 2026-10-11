@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { BookOpen } from 'lucide-react'
 import { useAiRunConfigDialog } from '@/modules/settings/public'
@@ -34,11 +34,8 @@ import { PageIntro } from '@/shared/components/layout/PageIntro'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { ConfirmDialog } from '@/shared/components/ui/confirm-dialog'
-import { readTimerAutomationConfig } from '@/shared/components/session/timer-automation-config'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import { toast } from '@/shared/feedback/toast'
-import { shouldAutoStartOnPageEnter, useTimedSession } from '@/shared/hooks/useTimedSession'
-import { useGlobalTimerRegistration } from '@/shared/components/session/GlobalTimerProvider'
 import { useLiveStudySurfaceMirror } from '@/modules/session/public'
 import {
   applyPalaceQuizLiveView,
@@ -48,7 +45,7 @@ import {
 } from '@/modules/quiz/ui/palace-quiz/model/palaceQuizLiveView'
 
 export default function PalaceQuizPage() {
-  const { isActive, becameActiveAt, fullPath } = useRouteResidency()
+  const { isActive, fullPath } = useRouteResidency()
   const { id } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
   const parsedPalaceId = id ? Number(id) : null
@@ -72,33 +69,6 @@ export default function PalaceQuizPage() {
   const { palace, questions, loading, error, setQuestions, refreshQuestions } =
     usePalaceQuizResources(palaceId)
   const miniPalaces = palace?.segments || []
-  const timer = useTimedSession({
-    sessionKey:
-      palaceId != null && Number.isFinite(palaceId)
-        ? `palace:${palaceId}`
-        : `palace:pending:${id ?? 'none'}`,
-    kind: 'quiz',
-    title: palace?.title ? `${palace.title} · 配套习题` : '宫殿配套习题',
-    palaceId,
-    automationScene: 'quiz',
-    sourceKind: palaceId != null ? 'palace' : null,
-    persistKey: palaceId ? `palace_quiz:${palaceId}` : null,
-    persistCompletionRecord: false,
-  })
-  useGlobalTimerRegistration({
-    scene: 'quiz',
-    title: palace?.title ? `${palace.title} · 配套习题` : '宫殿配套习题',
-    timer,
-    isRouteActive: isActive,
-    becameActiveAt,
-    routePath: fullPath,
-  })
-  const timerRef = useRef(timer)
-  const hardUnloadRef = useRef(false)
-
-  // Child quiz hooks retain this callback for API compatibility; timer state is
-  // now driven only by explicit start/pause/resume and system visibility events.
-  const registerQuizActivity = useCallback((_source: string) => undefined, [])
 
   const emitQuizFeedback = (
     event: Parameters<typeof dispatchGlobalFeedback>[0],
@@ -115,7 +85,6 @@ export default function PalaceQuizPage() {
     palaceId,
     setQuestions,
     promptForAiOptions,
-    registerQuizActivity,
     emitQuizFeedback,
   })
   const management = usePalaceQuizManagement({
@@ -124,7 +93,6 @@ export default function PalaceQuizPage() {
     visibleQuestionIds: browser.visibleQuestionIds,
     refreshQuestions,
     removeQuestionStates: practice.removeQuestionStates,
-    registerQuizActivity,
     emitQuizFeedback,
   })
   useEffect(() => {
@@ -141,40 +109,6 @@ export default function PalaceQuizPage() {
       return next
     }, { replace: true })
   }, [activeTab, searchParams, setSearchParams])
-
-  useEffect(() => {
-    timer.setSceneActive?.(isActive, { source: isActive ? 'route_active' : 'route_inactive' })
-  }, [isActive, timer])
-
-  useEffect(() => {
-    timerRef.current = timer
-  }, [timer])
-
-  useEffect(() => {
-    const markHardUnload = () => {
-      hardUnloadRef.current = true
-    }
-    window.addEventListener('beforeunload', markHardUnload)
-    window.addEventListener('pagehide', markHardUnload)
-    return () => {
-      window.removeEventListener('beforeunload', markHardUnload)
-      window.removeEventListener('pagehide', markHardUnload)
-    }
-  }, [])
-
-  useEffect(() => {
-    return () => {
-      if (hardUnloadRef.current) return
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!palaceId || !palace) return
-    if (!isActive) return
-    if (timer.status !== 'idle') return
-    if (!shouldAutoStartOnPageEnter(readTimerAutomationConfig())) return
-    timer.start({ source: 'page_enter' })
-  }, [isActive, palace, palaceId, timer])
 
   useEffect(() => {
     const currentQuestion = browser.currentQuestion

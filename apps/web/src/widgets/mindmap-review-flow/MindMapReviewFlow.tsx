@@ -138,7 +138,7 @@ export function MindMapReviewFlow({
   );
 
   return (
-    <div className={cn(compact ? "flex h-full min-h-0 flex-col" : "space-y-5", review.flow.screenGlowClass)}>
+    <div className={cn(compact ? "flex h-full min-h-0 flex-col" : "space-y-5")}>
       {review.comboBurst ? (
         <ComboMilestoneBurst
           key={review.flow.feedback.milestoneCelebration?.nonce ?? review.comboBurst.comboCount}

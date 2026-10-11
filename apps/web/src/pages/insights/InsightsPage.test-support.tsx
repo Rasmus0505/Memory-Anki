@@ -1,5 +1,5 @@
 import * as React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render } from "@testing-library/react";
 import { vi } from "vitest";
 import DashboardPage from "@/pages/insights/InsightsPage";
 import { buildDashboardResponse } from "@/pages/insights/InsightsPage.test-utils";
@@ -42,99 +42,6 @@ export const getWeeklyReportApi = vi.fn();
 export const saveStudyGoalsApi = vi.fn();
 export const examOverviewState: { data: unknown; error: string | null } = { data: null, error: null };
 
-export let notifyRecordsChanged: (() => void) | undefined
-
-export const timeRecordsDashboardMock = {
-  filter: {
-    version: 2 as const,
-    rangeMode: "month" as const,
-    month: "2026-07",
-    rollingDays: 30 as const,
-    startDate: "",
-    endDate: "",
-    keyword: "",
-    kind: "all" as const,
-    sortBy: "started_at" as const,
-    sortOrder: "desc" as const,
-    pageSize: 20,
-  },
-  setRangeMode: vi.fn(),
-  setMonth: vi.fn(),
-  setRollingDays: vi.fn(),
-  setStartDate: vi.fn(),
-  setEndDate: vi.fn(),
-  kindFilter: "all" as const,
-  setKindFilter: vi.fn(),
-  keyword: "",
-  setKeyword: vi.fn(),
-  sortBy: "started_at" as const,
-  setSortBy: vi.fn(),
-  sortOrder: "desc" as const,
-  setSortOrder: vi.fn(),
-  sourceSummary: {
-    totalEffectiveSeconds: 267350,
-    desktopEffectiveSeconds: 222979,
-    pwaEffectiveSeconds: 44371,
-    unknownEffectiveSeconds: 0,
-  },
-  page: 1,
-  pageSize: 20,
-  totalRecords: 0,
-  totalPages: 1,
-  setPage: vi.fn(),
-  setPageSize: vi.fn(),
-  isLoadingRecords: false,
-  recordsError: null,
-  selectedRecordIds: [],
-  dialogMode: "create" as const,
-  dialogOpen: false,
-  formState: {},
-  editingSceneSegments: [],
-  formError: null,
-  isSubmittingRecord: false,
-  deletingRecordId: null,
-  restoringRecordId: null,
-  isBulkDeleting: false,
-  trend: [],
-  breakdown: [],
-  visibleRecords: [],
-  hasSelectableRecords: false,
-  allSelectableChecked: false,
-  hasSelectedRecords: false,
-  refreshRecords: vi.fn(),
-  openCreateDialog: vi.fn(),
-  openEditDialog: vi.fn(),
-  handleDeleteRecord: vi.fn(),
-  handleRestoreRecord: vi.fn(),
-  toggleRecordSelection: vi.fn(),
-  toggleSelectAllVisible: vi.fn(),
-  handleBulkDelete: vi.fn(),
-  onDialogOpenChange: vi.fn(),
-  onFormChange: vi.fn(),
-  handleSubmitRecord: vi.fn(),
-  customTags: [],
-  quickAddOpen: false,
-  quickAddForm: {
-    tagId: 'review',
-    minutes: '30',
-    date: '2026-07-21',
-    title: '',
-    titleEdited: false,
-    showAdvanced: false,
-    startedAt: '',
-    endedAt: '',
-  },
-  quickAddError: null,
-  isSubmittingQuickAdd: false,
-  onQuickAddOpenChange: vi.fn(),
-  onQuickAddFormChange: vi.fn(),
-  onCustomTagsChange: vi.fn(),
-  handleSubmitQuickAdd: vi.fn(),
-  handleReplayPendingRecovery: vi.fn(),
-  handleDismissPendingRecovery: vi.fn(),
-  pendingRecoveryRecords: [],
-};
-
 vi.mock("@/modules/dashboard/ui/dashboard/api", () => ({
   getDashboardApi: async (...args: unknown[]) =>
     buildDashboardResponse(await getDashboardApi(...args)),
@@ -150,61 +57,12 @@ vi.mock("@/modules/dashboard/ui/dashboard/api", () => ({
   saveStudyGoalsApi: async (...args: unknown[]) =>
     saveStudyGoalsApi(...args),
   DEFAULT_STUDY_GOALS: {
-    weekly_study_minutes: 300,
     weekly_review_count: 20,
   },
 }));
 
 vi.mock("@/modules/exam/model/useExamOverview", () => ({
   useExamOverview: () => ({ ...examOverviewState, reload: vi.fn(), setData: vi.fn() }),
-}));
-
-vi.mock("@/modules/session/ui/time-records/hooks/useTimeRecordsDashboard", () => ({
-  useTimeRecordsDashboard: (options?: { onRecordsChanged?: () => void }) => {
-    notifyRecordsChanged = options?.onRecordsChanged
-    return {
-    ...timeRecordsDashboardMock,
-    trend: [{
-      dateKey: "2026-07-01",
-      label: "7/1",
-      seconds: 1,
-    }],
-    breakdown: [{
-      kind: "review",
-      label: "复习",
-      seconds: 1,
-      sessions: 1,
-    }],
-  }
-  },
-}));
-
-vi.mock("@/modules/session/ui/time-records/components/TimeRecordsTrendChart", () => ({
-  TimeRecordsTrendChart: ({ trend }: { trend: Array<{ label: string }> }) => (
-    <div data-testid="trend-chart">{trend[0]?.label ?? ""}</div>
-  ),
-}));
-
-vi.mock("@/modules/session/ui/time-records/components/TimeRecordsBreakdownChart", () => ({
-  TimeRecordsBreakdownChart: ({
-    breakdown,
-  }: {
-    breakdown: Array<{ label: string }>;
-  }) => <div data-testid="breakdown-chart">{breakdown[0]?.label ?? ""}</div>,
-}));
-
-vi.mock("@/modules/session/ui/time-records/components/TimeRecordsTable", () => ({
-  TimeRecordsTable: ({ filter }: { filter: { rangeMode: string; month: string } }) => (
-    <div data-testid="records-table">{filter.rangeMode}:{filter.month}</div>
-  ),
-}));
-
-vi.mock("@/modules/session/ui/time-records/components/TimeRecordDialog", () => ({
-  TimeRecordDialog: () => null,
-}));
-
-vi.mock("@/modules/session/ui/time-records/components/TimeRecordQuickAddDialog", () => ({
-  TimeRecordQuickAddDialog: () => null,
 }));
 
 export function setupDashboardPageTest() {
@@ -228,7 +86,6 @@ export function setupDashboardPageTest() {
   getWeeklyReportApi.mockImplementation(async (offsetWeeks = 1) => ({
     week_start: offsetWeeks === 0 ? "2026-07-06" : "2026-06-29",
     week_end: offsetWeeks === 0 ? "2026-07-12" : "2026-07-05",
-    study_seconds: 0,
     review_count: 0,
     average_score: 0,
     new_palace_count: 0,
@@ -243,9 +100,4 @@ export function setupDashboardPageTest() {
 
 export function renderDashboardPage() {
   return render(<DashboardPage />);
-}
-
-export async function openRecordsTab() {
-  // Radix Tabs 在 mousedown 时切换页签。
-  fireEvent.mouseDown(await screen.findByRole("tab", { name: "记录" }), { button: 0 });
 }

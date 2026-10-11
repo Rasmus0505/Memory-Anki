@@ -1,55 +1,12 @@
 import * as React from 'react'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import PalaceViewPage from '@/app/router/PalaceViewPage'
 import { RouteResidencyProvider } from '@/shared/routing/RouteResidency'
 
 const mocks = vi.hoisted(() => ({
-  useTimedSession: vi.fn(),
-  useGlobalTimerRegistration: vi.fn(),
   usePalacePracticeMode: vi.fn(),
-  setSceneActive: vi.fn(),
-}))
-
-const timer = {
-  sessionId: 'palace-view-session',
-  effectiveSeconds: 0,
-  idleSeconds: 0,
-  pauseCount: 0,
-  status: 'idle' as const,
-  startedAt: null,
-  durationEdited: false,
-  glowState: 'idle' as const,
-  focusRound: {
-    roundIndex: 1,
-    startedAtEffectiveSeconds: 0,
-    acknowledgedIntervalCount: 0,
-    goalCelebrated: false,
-  },
-  start: vi.fn(),
-  pause: vi.fn(),
-  resume: vi.fn(),
-  setSceneActive: mocks.setSceneActive,
-  leaveScene: vi.fn(),
-  registerActivity: vi.fn(),
-  logEvent: vi.fn(),
-  acknowledgeFocusInterval: vi.fn(),
-  acknowledgeFocusGoal: vi.fn(),
-  startNextFocusRound: vi.fn(),
-  adjustDuration: vi.fn(),
-  getEffectiveSeconds: vi.fn(() => 0),
-  complete: vi.fn(),
-  reset: vi.fn(),
-}
-
-vi.mock('@/shared/hooks/useTimedSession', () => ({
-  useTimedSession: (...args: unknown[]) => mocks.useTimedSession(...args),
-  shouldAutoStartOnPageEnter: () => false,
-}))
-
-vi.mock('@/shared/components/session/GlobalTimerProvider', () => ({
-  useGlobalTimerRegistration: (...args: unknown[]) => mocks.useGlobalTimerRegistration(...args),
 }))
 
 vi.mock('@/shared/hooks/useMindMapDocumentSession', () => ({
@@ -104,10 +61,9 @@ vi.mock('@/modules/content/ui/mindmap-editor', () => ({
   MindMapPageToolbar: () => <div data-testid="palace-view-toolbar" />,
 }))
 
-describe('PalaceViewPage timer registration', () => {
+describe('PalaceViewPage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mocks.useTimedSession.mockReturnValue(timer)
     mocks.usePalacePracticeMode.mockReturnValue({
       editorMode: 'edit',
       activeMindMapEditorState: null,
@@ -116,7 +72,7 @@ describe('PalaceViewPage timer registration', () => {
     })
   })
 
-  it('registers the active read-only palace route without starting its timer by default', async () => {
+  it('renders the read-only palace route and forwards study route state', async () => {
     render(
       <MemoryRouter initialEntries={['/palaces/101']}>
         <RouteResidencyProvider
@@ -135,28 +91,6 @@ describe('PalaceViewPage timer registration', () => {
     )
 
     expect(await screen.findByText('测试宫殿')).toBeTruthy()
-    expect(mocks.useTimedSession).toHaveBeenCalledWith({
-      sessionKey: 'palace:101',
-      kind: 'practice',
-      title: '测试宫殿 · 宫殿学习',
-      palaceId: 101,
-      automationScene: 'practice',
-      sourceKind: 'palace',
-      persistKey: 'palace_view:101',
-      persistCompletionRecord: false,
-    })
-    expect(mocks.useGlobalTimerRegistration).toHaveBeenCalledWith({
-      scene: 'practice',
-      title: '测试宫殿 · 宫殿学习',
-      timer,
-      isRouteActive: true,
-      becameActiveAt: 42,
-      routePath: '/palaces/101',
-    })
-    await waitFor(() => {
-      expect(mocks.setSceneActive).toHaveBeenCalledWith(true, { source: 'route_active' })
-    })
-    expect(timer.start).not.toHaveBeenCalled()
     expect(mocks.usePalacePracticeMode).toHaveBeenCalledWith(expect.objectContaining({
       palaceId: 101,
       currentNodeUid: null,

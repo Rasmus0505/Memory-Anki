@@ -1,4 +1,4 @@
-import type { RevealState } from '@/modules/session/public'
+import type { RevealState } from '@/modules/memory/public'
 
 /**
  * Nodes the learner must reveal for this unit.

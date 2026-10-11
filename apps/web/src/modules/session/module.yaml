@@ -1,8 +1,8 @@
 {
   "name": "session",
   "owns": [
-    "study sessions",
-    "timer"
+    "live study presence",
+    "session progress"
   ],
   "forbids": [
     "private cross-module imports"

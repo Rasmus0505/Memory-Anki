@@ -1,13 +1,3 @@
-export {
-  addFreestyleLearningSeconds,
-  classifyFreestyleLearningSurface,
-  emptyFreestyleLearningTime,
-  freestyleLearningTotals,
-  mergeFreestyleLearningTime,
-  parseFreestyleLearningTime,
-  type FreestyleLearningBucket,
-  type FreestyleRoundLearningTime,
-} from './domain/freestyleLearningTime'
 export { canCompleteRound, clampTrainingIndex } from './domain/trainingRound'
 export { freestyleTrainingMachine } from './application/workflows/freestyleTrainingMachine'
 export {
@@ -167,6 +157,5 @@ export * from './ui/review/components/PalaceLadderProgress'
 export { SubjectMemoryLadder, subjectKeyFromProgressId } from './ui/review/components/subject-memory-ladder'
 export * from './ui/review/hooks/useReviewCompletionCoordinator'
 export * from './ui/review/hooks/useReviewFlowSession'
-export * from './ui/review/hooks/useForegroundEncounterClock'
 export * from './ui/review/model/mind-map-review-flow'
 export * from './ui/review/ReviewSessionSkeleton'

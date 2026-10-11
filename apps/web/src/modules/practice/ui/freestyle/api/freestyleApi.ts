@@ -12,8 +12,6 @@ import type {
   FreestyleQueueBuildResponse,
   FreestyleQuizAttemptRecord,
   FreestyleRange,
-  FreestyleLearningTimeBackfillRequest,
-  FreestyleLearningTimeRequest,
   FreestyleOverlayQuizDropPalacesRequest,
   FreestyleOverlayQuizEnsureRequest,
   FreestyleOverlayQuizProgressRequest,
@@ -201,36 +199,6 @@ export function startFreestyleRoundApi(payload: FreestyleRoundActiveRequest) {
   })
 }
 
-export function accumulateFreestyleLearningTimeApi(
-  roundId: string,
-  payload: FreestyleLearningTimeRequest,
-) {
-  return request<FreestyleRoundStatePayload>(
-    `/freestyle/rounds/${encodeURIComponent(roundId)}/learning-time`,
-    {
-      method: 'POST',
-      body: JSON.stringify(payload),
-      // The clock owns the durable outbox and acknowledgement. A second HTTP
-      // replay queue would submit an already acknowledged interval again.
-      persistence: false,
-    },
-  )
-}
-
-export function backfillFreestyleLearningTimeApi(
-  roundId: string,
-  payload: FreestyleLearningTimeBackfillRequest,
-) {
-  return request<FreestyleRoundStatePayload>(
-    `/freestyle/rounds/${encodeURIComponent(roundId)}/learning-time/backfill`,
-    {
-      method: 'POST',
-      body: JSON.stringify(payload),
-      persistence: false,
-    },
-  )
-}
-
 export function ensureFreestyleOverlayQuizApi(
   roundId: string,
   payload: FreestyleOverlayQuizEnsureRequest,
@@ -288,17 +256,19 @@ export function dropFreestyleOverlayQuizPalacesApi(
   )
 }
 
-export function rateFreestyleRoundUnitApi(roundId: string, payload: FreestyleRoundRatingRequest) {
+export function rateFreestyleRoundUnitApi(
+  roundId: string,
+  payload: FreestyleRoundRatingRequest,
+) {
+  // No retry: the grade only shows as saved once the server confirms it, so a
+  // failure (including a transient 503) is reported at once and the learner
+  // taps again. Not queued/replayed across page loads.
   return request<{ item: unknown; round: FreestyleRoundStatePayload }>(
     `/freestyle/rounds/${encodeURIComponent(roundId)}/ratings`,
     {
       method: 'POST',
       body: JSON.stringify(payload),
-      persistence: {
-        resourceKey: `freestyle-round-rate:${payload.operation_id}`,
-        description: '评分并更新随心回合计划',
-        replayMode: 'auto',
-      },
+      persistence: false,
     },
   )
 }

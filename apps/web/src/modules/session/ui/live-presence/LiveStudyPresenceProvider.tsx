@@ -8,7 +8,6 @@ import {
   shouldFollowLiveRoute,
   type LiveStudyProjection,
 } from '@/modules/session/domain/session-entity/model/live-study/liveStudyModel'
-import { setLiveForegroundClockSuppressed } from '@/modules/session/domain/session-entity/model/timed-session/liveClockOwnership'
 import {
   LiveStudyPresenceContext,
   type LiveStudyPublishPatch,
@@ -45,7 +44,6 @@ export function LiveStudyPresenceProvider({ children }: PropsWithChildren) {
       route: patch.route,
       surface: patch.surface,
       view: patch.view,
-      timer: patch.timer,
     }).then((response) => {
       setProjection((current) => preferNewerLiveStudyProjection(current, response.projection))
     }).catch(() => {
@@ -135,10 +133,6 @@ export function LiveStudyPresenceProvider({ children }: PropsWithChildren) {
       controller?.abort()
     }
   }, [clientId])
-
-  useEffect(() => {
-    setLiveForegroundClockSuppressed(Boolean(projection.controllerClientId) && projection.controllerClientId !== clientId)
-  }, [clientId, projection.controllerClientId])
 
   useEffect(() => {
     const localPath = `${location.pathname}${location.search}`

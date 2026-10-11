@@ -3,37 +3,7 @@
  * Other modules may import only from this file.
  */
 export * from './domain/session-entity/api'
-export * from './domain/session-entity/model'
-export * from './domain/study-session-entity/api'
 export {
-  adoptLiveTimerSnapshot,
-  resetTimedSessionStoresForTests,
-  useTimedSession,
-} from './domain/session-entity/model/timed-session/timedSessionStateMachine'
-export {
-  CLICK_IDLE_LIMIT_MS,
-  transitionClickTimer,
-  type ClickTimerStatus,
-  type ClickTimerTransition,
-  type ClickTimerTransitionInput,
-} from './domain/session-entity/model/timed-session/clickTimerPolicy'
-export { AppDwellSession } from './ui/dwell/AppDwellSession'
-export {
-  DWELL_CHECKPOINT_INTERVAL_MS,
-  DWELL_LIVE_SESSION_KEY,
-  DWELL_RESUME_WINDOW_MS,
-  applyDwellFragmentOverride,
-  dwellKindToSessionKind,
-  resolveDwellFragment,
-  type DwellFragmentOverride,
-} from './domain/session-entity/model/timed-session/dwellPolicy'
-export { useDwellFragmentOverride } from './ui/dwell/useDwellFragmentOverride'
-export {
-  peekDwellFragmentOverride,
-  subscribeDwellFragmentOverrides,
-} from './domain/session-entity/model/timed-session/dwellFragmentOverride'
-export {
-  interpolateTimerSeconds,
   isFollowableStudyPath,
   liveStudySurfaceFromPath,
   preferNewerLiveStudyProjection,
@@ -41,11 +11,6 @@ export {
   type LiveStudyProjection,
   type LiveStudySurface,
 } from './domain/session-entity/model/live-study/liveStudyModel'
-export {
-  isLiveForegroundClockSuppressed,
-  setLiveForegroundClockSuppressed,
-  subscribeLiveForegroundClock,
-} from './domain/session-entity/model/timed-session/liveClockOwnership'
 export { LiveStudyPresenceProvider } from './ui/live-presence/LiveStudyPresenceProvider'
 export { useLiveStudyPresence } from './ui/live-presence/liveStudyPresenceContext'
 export { useLiveStudySurfaceMirror } from './ui/live-presence/useLiveStudySurfaceMirror'
@@ -58,10 +23,3 @@ export {
   shouldApplyLiveStudyView,
   shouldPublishLiveStudyView,
 } from './ui/live-presence/shouldPublishLiveStudyView'
-export * from './ui/time-records/components/TimeRecordDialog'
-export * from './ui/time-records/components/TimeRecordQuickAddDialog'
-export * from './ui/time-records/components/TimeRecordsBreakdownChart'
-export * from './ui/time-records/components/TimeRecordsTable'
-export * from './ui/time-records/components/TimeRecordsTrendChart'
-export * from './ui/time-records/hooks/useTimeRecordsDashboard'
-export * from './ui/time-records/model/time-record-filter'

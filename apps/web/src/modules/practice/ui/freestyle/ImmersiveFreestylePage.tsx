@@ -77,14 +77,11 @@ import { FreestyleChannelHint } from '@/modules/practice/ui/freestyle/components
 import { FreestyleFeedPager } from '@/modules/practice/ui/freestyle/components/FreestyleFeedPager'
 import { FreestylePalaceClearedBanner } from '@/modules/practice/ui/freestyle/components/FreestylePalaceClearedBanner'
 import { useFreestyleChromeTheme } from '@/modules/practice/ui/freestyle/hooks/useFreestyleChromeTheme'
-import { useFreestyleRoundLearningClock } from '@/modules/practice/ui/freestyle/hooks/useFreestyleRoundLearningClock'
 import { useFreestyleWakeLock } from '@/modules/practice/ui/freestyle/hooks/useFreestyleWakeLock'
 import { useAiRunConfigDialog } from '@/modules/settings/public'
 import {
-  cardPalaceId,
   RESTUDY_MAX_INTERVENING,
   FREESTYLE_WORKSPACE_PRIMARY,
-  FREESTYLE_WORKSPACE_SECONDARY,
   isPalaceReviewWorkspace,
   palaceReviewWorkspaceId,
   parsePalaceReviewWorkspaceId,
@@ -97,15 +94,12 @@ import {
 } from '@/modules/practice/public'
 import type { FreestyleCard, FreestyleFeedConfig, FreestyleQuizCard } from '@/shared/api/contracts'
 import { isReviewHintCard } from '@/shared/api/contracts'
-import { readTimerAutomationConfig } from '@/shared/components/session/timer-automation-config'
-import { useGlobalTimerRegistration } from '@/shared/components/session/GlobalTimerProvider'
 import { TooltipProvider } from '@/shared/components/ui/tooltip'
 import { toast } from '@/shared/feedback/toast'
 import {
   palaceEditorVisitGeneration,
   waitForPalaceEditorLeave,
 } from '@/shared/events/palaceEditorLeaveGate'
-import { shouldAutoStartOnPageEnter, useTimedSession } from '@/shared/hooks/useTimedSession'
 import { cn } from '@/shared/lib/utils'
 import { ExamCountdownChip, ExamRoundSummary, ExamStarBadge, useExamOverview } from '@/modules/exam/public'
 import { GrowthHudChip, GrowthRoundSettlement } from '@/modules/progression/public'
@@ -161,7 +155,7 @@ function FreestyleRetryCornerBadge({
       role="status"
       // Left, under the title chip: the mobile nav dock this used to dodge is gone,
       // the bottom edge belongs to the rating bar, and the top-right holds the
-      // timer dot + overflow.
+      // overflow.
       className={cn(
         'pointer-events-none absolute left-4 top-[calc(3.25rem+env(safe-area-inset-top,0px))] z-30 inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold shadow-lg backdrop-blur-sm sm:top-14',
         retryChromeClass(done),
@@ -195,11 +189,6 @@ export default function ImmersiveFreestylePage({
   const workspacePath = reviewPalaceId != null
     ? `/palaces/${reviewPalaceId}/review`
     : freestyleWorkspacePath(normalizeFreestyleWorkspaceId(slot))
-  const workspaceTitle = reviewPalaceId != null
-    ? '宫殿复习'
-    : slot === FREESTYLE_WORKSPACE_SECONDARY
-      ? '随心 2'
-      : '随心模式'
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const search = searchParams.toString()
@@ -384,18 +373,6 @@ export default function ImmersiveFreestylePage({
   const studySettlementOpen = studySettlementRoundId === queueState.roundId
   const settlementVisible = viewingCompleteSlot || studySettlementOpen || partialSettlement != null
 
-  const learningClock = useFreestyleRoundLearningClock({
-    roundId: queueState.roundId,
-    planVersion,
-    adoptRoundVersion,
-    isActive,
-    // Pause only while the settlement slot is on screen. 上一张 / 取消结算
-    // leaves that slot; later card dwell and 做题 still accumulate.
-    viewingCard: !settlementVisible && currentCard != null,
-    cardPalaceId: currentCard ? cardPalaceId(currentCard) : null,
-    publishLive: settlementVisible,
-  })
-
   useEffect(() => {
     setInlineEditing(false)
   }, [currentIndex])
@@ -432,34 +409,6 @@ export default function ImmersiveFreestylePage({
     }
   }, [])
 
-  const timer = useTimedSession({
-    sessionKey: reviewPalaceId != null
-      ? `palace-review-${reviewPalaceId}`
-      : slot === FREESTYLE_WORKSPACE_SECONDARY
-        ? 'freestyle-secondary'
-        : 'freestyle',
-    kind: 'quiz',
-    title: workspaceTitle,
-    palaceId: reviewPalaceId,
-    automationScene: 'freestyle',
-    sourceKind: null,
-    persistKey: reviewPalaceId != null
-      ? `palace-review-${reviewPalaceId}`
-      : slot === FREESTYLE_WORKSPACE_SECONDARY
-        ? 'freestyle-immersive-secondary'
-        : 'freestyle-immersive',
-    persistCompletionRecord: false,
-  })
-
-  useGlobalTimerRegistration({
-    scene: 'freestyle',
-    title: workspaceTitle,
-    timer,
-    isRouteActive: isActive,
-    becameActiveAt,
-    routePath: fullPath,
-  })
-
   const {
     progress,
     updateQuestionState,
@@ -477,18 +426,6 @@ export default function ImmersiveFreestylePage({
       // Question payload updates are optional for immersive queue cards.
     },
   })
-
-  useEffect(() => {
-    const studying = isActive && !settlementVisible
-    timer.setSceneActive(studying, { source: studying ? 'route_active' : 'route_inactive' })
-  }, [isActive, settlementVisible, timer])
-
-  useEffect(() => {
-    if (!isActive || settlementVisible) return
-    if (timer.status !== 'idle') return
-    if (!shouldAutoStartOnPageEnter(readTimerAutomationConfig())) return
-    timer.start({ source: 'page_enter' })
-  }, [isActive, settlementVisible, timer])
 
   // New round / reshuffle clears completed bookkeeping; reset local ack set too.
   // Intentionally omit completedIds: mid-round membership must not rebuild the ack set
@@ -613,9 +550,27 @@ export default function ImmersiveFreestylePage({
     setConfigOpen(true)
   }, [])
 
-  const handleCardSaveFailed = useCallback((message: string) => {
-    setSaveError(message)
-    toast.error(message)
+  const saveFailureViewRef = useRef({ cards, currentIndex, goToIndex })
+  saveFailureViewRef.current = { cards, currentIndex, goToIndex }
+  const handleCardSaveFailed = useCallback((message: string, cardId: string) => {
+    const view = saveFailureViewRef.current
+    const index = view.cards.findIndex((card) => card.id === cardId)
+    if (index < 0 || index === view.currentIndex) {
+      setSaveError(message)
+      toast.error(message)
+      return
+    }
+    // The learner already moved on: tell them which unit failed and let them
+    // jump back; never navigate for them.
+    toast.error(`第 ${index + 1} 个单元没有保存成功`, {
+      id: `freestyle-rating-failed:${cardId}`,
+      action: {
+        label: '回到这张',
+        onClick: () => {
+          saveFailureViewRef.current.goToIndex(index, { reorderRestudy: false })
+        },
+      },
+    })
   }, [])
 
   const onChoiceResolve = useCallback(
@@ -690,7 +645,6 @@ export default function ImmersiveFreestylePage({
         scheduledCount: roundMeta.scheduled_count || roundPlan?.scheduledCount,
         roundPlan,
         subjectByPalaceId,
-        learningTime: learningClock.ready ? learningClock.learningTime : null,
         quizCount: new Set([
           ...cards.flatMap((card) => (
             isQuizCard(card) && (
@@ -714,8 +668,6 @@ export default function ImmersiveFreestylePage({
       queueState.unitEncountersByCardId,
       roundMeta.candidate_count,
       roundMeta.scheduled_count,
-      learningClock.learningTime,
-      learningClock.ready,
       roundPlan,
       subjectByPalaceId,
     ],
@@ -1098,7 +1050,7 @@ export default function ImmersiveFreestylePage({
                               onRemoveFromQueue={removeCardFromQueue}
                               onRebuildRound={reshuffleQueue}
                               onRevisionAdopted={adoptLiveUnitRevision}
-                              onSaveFailed={handleCardSaveFailed}
+                              onSaveFailed={(message) => handleCardSaveFailed(message, card.id)}
                               onEditingChange={index === currentIndex ? setInlineEditing : undefined}
                               onUnitsReconciled={() => {
                                 void buildQueue(config, {
@@ -1274,8 +1226,6 @@ export default function ImmersiveFreestylePage({
                   retryCount: partialSettlement.retryCount,
                   remainingCandidates: 0,
                   quizCount: partialSettlement.quizCount,
-                  totalEffectiveSeconds: partialSettlement.totalEffectiveSeconds,
-                  quizSeconds: partialSettlement.quizSeconds,
                   bySubject: partialSettlement.bySubject,
                 }}
                 roundKey={`${queueState.roundId}:${partialSettlement.id}`}
@@ -1302,16 +1252,6 @@ export default function ImmersiveFreestylePage({
         ) : null}
 
         {/* Card paging stays on this pager so the review map can keep one-finger pan. */}
-        {!inlineEditing && !settlementVisible && !loading && !error && roundPlan != null ? (
-          <button
-            type="button"
-            data-testid="freestyle-finish-study"
-            className="ma-pressable absolute bottom-24 right-3 z-30 rounded-xl border border-stage-line-strong bg-stage-raised px-3 py-2 text-sm text-stage-ink"
-            onClick={() => { cancelAutoAdvance(); setStudySettlementRoundId(queueState.roundId) }}
-          >
-            结束本次学习
-          </button>
-        ) : null}
         {!inlineEditing && !studySettlementOpen && !partialSettlement ? (
         <FreestyleFeedPager
           canGoPrevious={

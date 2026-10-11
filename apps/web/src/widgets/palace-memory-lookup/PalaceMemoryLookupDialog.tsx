@@ -40,7 +40,6 @@ import {
   type MemoryLookupResizeState,
 } from '@/widgets/palace-memory-lookup/model/memoryLookupLayout'
 import { MindMapEditorSurface } from '@/modules/content/public'
-import { useDwellFragmentOverride } from '@/modules/session/public'
 import { Button } from '@/shared/components/ui/button'
 import {
   Dialog,
@@ -97,15 +96,6 @@ export function PalaceMemoryLookupDialog({
   const [listLoading, setListLoading] = useState(false)
   const [listError, setListError] = useState('')
   const [selectedPalaceId, setSelectedPalaceId] = useState<number | null>(currentPalaceId ?? null)
-  const dwellPalaceId = selectedPalaceId ?? currentPalaceId ?? null
-  useDwellFragmentOverride(open, {
-    scene: 'practice',
-    kind: 'practice',
-    title: '查看宫殿',
-    palaceId: dwellPalaceId,
-    sourceKind: dwellPalaceId != null ? 'palace' : null,
-    priority: 2,
-  })
   const [previewTitle, setPreviewTitle] = useState('')
   const [previewState, setPreviewState] = useState<MindMapEditorState | null>(null)
   const [loadedPalaceId, setLoadedPalaceId] = useState<number | null>(null)

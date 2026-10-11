@@ -18,20 +18,10 @@ const completion: FreestyleRoundCompletion = {
   retryCount: 1,
   remainingCandidates: 0,
   quizCount: 0,
-  totalEffectiveSeconds: 120,
   bySubject: [],
 }
 
 describe('FreestyleRoundCompleteCard', () => {
-  it('separates calendar-day time from cumulative time and labels undated history', () => {
-    render(<FreestyleRoundCompleteCard completion={{ ...completion, today: { day: '2025-01-02', started_at: '2025-01-01T16:00:00Z', ended_at: '2025-01-02T16:00:00Z', known_seconds: 60, unattributed_seconds: 20 } }} roundKey="daily" quizPalaceCount={0} onClearQuizProgress={vi.fn()} onCancelSettlement={vi.fn()} />)
-    expect(screen.getByText('本轮累计')).toBeTruthy()
-    const day = screen.getByTestId('freestyle-round-today-time')
-    expect(day.textContent).toContain('本轮今日：已知')
-    expect(day.textContent).toContain('2025-01-02')
-    expect(day.textContent).toContain('历史时长缺少日期，未分配到今天')
-  })
-
   it('skips the round show without leaving the settlement', () => {
     const onAnotherRound = vi.fn()
     const onCancelSettlement = vi.fn()

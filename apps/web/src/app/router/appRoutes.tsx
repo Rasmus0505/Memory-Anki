@@ -51,7 +51,6 @@ const PalaceQuizPage = lazyWithRetry(preloadPalaceQuizPage)
 const PalaceReviewPage = lazyWithRetry(preloadPalaceReviewPage)
 const ProfilePage = lazyWithRetry(preloadProfilePage)
 const ProfileFeedbackPage = lazyWithRetry(() => import('@/pages/settings/FeedbackSettingsPage'))
-const ProfileTimerPage = lazyWithRetry(() => import('@/pages/settings/TimerSettingsPage'))
 const ProfileAiPage = lazyWithRetry(() => import('@/pages/settings/AiSettingsPage'))
 const ProfileBackupsPage = lazyWithRetry(
   () => import('@/pages/settings/BackupSettingsPage'),
@@ -128,7 +127,6 @@ function AppRouteTable({ location }: { location: Location }) {
           <Route path="/palaces/:id/edit" element={<PalaceEditPage />} />
           <Route path="/knowledge" element={<KnowledgePage />} />
           <Route path="/profile" element={<ProfilePage />} />
-          <Route path="/profile/timer" element={<ProfileTimerPage />} />
           <Route path="/profile/feedback" element={<ProfileFeedbackPage />} />
           <Route path="/profile/ai" element={<ProfileAiPage />} />
           <Route path="/profile/backups" element={<ProfileBackupsPage />} />

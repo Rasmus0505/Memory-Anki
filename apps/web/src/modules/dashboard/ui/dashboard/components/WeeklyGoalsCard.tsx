@@ -26,7 +26,6 @@ import { Progress } from '@/shared/components/ui/progress'
 const EMPTY_WEEKLY_REPORT: WeeklyReport = {
   week_start: '',
   week_end: '',
-  study_seconds: 0,
   review_count: 0,
   average_score: 0,
   new_palace_count: 0,
@@ -34,7 +33,6 @@ const EMPTY_WEEKLY_REPORT: WeeklyReport = {
 
 function normalizeGoals(value: StudyGoals): StudyGoals {
   return {
-    weekly_study_minutes: Math.max(1, Math.round(Number(value.weekly_study_minutes) || DEFAULT_STUDY_GOALS.weekly_study_minutes)),
     weekly_review_count: Math.max(1, Math.round(Number(value.weekly_review_count) || DEFAULT_STUDY_GOALS.weekly_review_count)),
   }
 }
@@ -77,19 +75,10 @@ export function WeeklyGoalsCard() {
     }
   }, [])
 
-  const studyMinutes = Math.floor(report.study_seconds / 60)
-  const studyProgress = progressPercent(studyMinutes, goals.weekly_study_minutes)
   const reviewProgress = progressPercent(report.review_count, goals.weekly_review_count)
-  const allReached = studyProgress >= 100 && reviewProgress >= 100
+  const allReached = reviewProgress >= 100
   const goalRows = useMemo(
     () => [
-      {
-        label: '学习时长',
-        current: studyMinutes,
-        target: goals.weekly_study_minutes,
-        unit: '分钟',
-        progress: studyProgress,
-      },
       {
         label: '复习次数',
         current: report.review_count,
@@ -98,7 +87,7 @@ export function WeeklyGoalsCard() {
         progress: reviewProgress,
       },
     ],
-    [goals.weekly_review_count, goals.weekly_study_minutes, report.review_count, reviewProgress, studyMinutes, studyProgress],
+    [goals.weekly_review_count, report.review_count, reviewProgress],
   )
 
   const handleOpenEditor = () => {
@@ -165,21 +154,6 @@ export function WeeklyGoalsCard() {
             <DialogDescription>目标会同步到客户端偏好，刷新或换设备后继续生效。</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 px-6 py-5">
-            <div className="grid gap-2">
-              <Label htmlFor="weekly-study-minutes">每周学习时长目标</Label>
-              <Input
-                id="weekly-study-minutes"
-                min={1}
-                type="number"
-                value={draft.weekly_study_minutes}
-                onChange={(event) =>
-                  setDraft((current) => ({
-                    ...current,
-                    weekly_study_minutes: Number(event.target.value),
-                  }))
-                }
-              />
-            </div>
             <div className="grid gap-2">
               <Label htmlFor="weekly-review-count">每周复习次数目标</Label>
               <Input

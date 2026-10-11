@@ -76,34 +76,6 @@ export const REGISTERED_STORAGE_KEYS = defineStorageRegistry([
     purpose: 'Local API token for remote access.',
   },
   {
-    id: 'timer.automationConfig',
-    key: 'memory-anki-timer-automation-config',
-    area: 'localStorage',
-    owner: 'shared/components/session',
-    purpose: 'Legacy timer automation preference before backend preference migration.',
-  },
-  {
-    id: 'timer.focusConfig',
-    key: 'memory-anki-timer-focus-config',
-    area: 'localStorage',
-    owner: 'shared/components/session',
-    purpose: 'Legacy timer focus preference before backend preference migration.',
-  },
-  {
-    id: 'breakGuard.config',
-    key: 'memory-anki-break-guard-config',
-    area: 'localStorage',
-    owner: 'shared/components/session',
-    purpose: 'Legacy break guard preference before backend preference migration.',
-  },
-  {
-    id: 'breakGuard.logs',
-    key: 'memory-anki-break-guard-logs',
-    area: 'localStorage',
-    owner: 'shared/components/session',
-    purpose: 'Local break guard history.',
-  },
-  {
     id: 'clientPreference.memoryAnkiShortcuts',
     key: 'memory_anki_shortcuts',
     area: 'localStorage',
@@ -144,13 +116,6 @@ export const REGISTERED_STORAGE_KEYS = defineStorageRegistry([
     area: 'localStorage',
     owner: 'modules/practice',
     purpose: 'Legacy freestyle immersive feed config before backend preference migration.',
-  },
-  {
-    id: 'clientPreference.dashboardDurationFilter',
-    key: 'memory_anki_dashboard_total_duration_filter',
-    area: 'localStorage',
-    owner: 'features/dashboard',
-    purpose: 'Legacy dashboard duration filter before backend preference migration.',
   },
   {
     id: 'pageHistory.device',

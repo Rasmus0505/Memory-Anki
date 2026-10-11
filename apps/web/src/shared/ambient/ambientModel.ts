@@ -1,7 +1,7 @@
 export interface AmbientInput {
   /** Local hour with fraction, 0–24. */
   hour: number
-  /** Today's study progress towards the daily goal, 0–1. */
+  /** Today's review progress towards the daily goal, 0–1. */
   progress: number
   examDaysLeft: number | null
 }
@@ -61,7 +61,7 @@ export function resolveAmbientTone(input: AmbientInput): AmbientTone {
   }
 }
 
-export function dailyGoalSeconds(weeklyStudyMinutes: number | null | undefined) {
-  const weekly = weeklyStudyMinutes && weeklyStudyMinutes > 0 ? weeklyStudyMinutes : 300
-  return (weekly * 60) / 7
+export function dailyReviewGoal(weeklyReviewCount: number | null | undefined) {
+  const weekly = weeklyReviewCount && weeklyReviewCount > 0 ? weeklyReviewCount : 20
+  return weekly / 7
 }

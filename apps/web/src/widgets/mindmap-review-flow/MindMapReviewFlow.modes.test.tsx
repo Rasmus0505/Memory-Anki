@@ -8,7 +8,6 @@ import {
   getVisibleTextsFromLatestFrame,
   renderInRouter,
   setupMindMapReviewFlowTest,
-  timer,
 } from "@/widgets/mindmap-review-flow/MindMapReviewFlow.test-support";
 import { MindMapReviewFlow } from "@/widgets/mindmap-review-flow";
 
@@ -181,9 +180,6 @@ describe("MindMapReviewFlow modes", () => {
       expect(screen.getByRole("button", { name: "复习" })).toBeTruthy();
     });
     expect(screen.queryByRole("button", { name: /完成/ })).toBeNull();
-    expect(timer.logEvent).toHaveBeenCalledWith("enter_edit_mode", {
-      source: "review_inline_edit",
-    });
     fireEvent.click(screen.getByRole("button", { name: "复习" }));
 
     await waitFor(() => {
@@ -191,9 +187,6 @@ describe("MindMapReviewFlow modes", () => {
       expect(screen.getByRole("button", { name: "编辑" })).toBeTruthy();
     });
     expect(screen.getByRole("button", { name: /完成/ })).toBeTruthy();
-    expect(timer.logEvent).toHaveBeenCalledWith("exit_edit_mode", {
-      source: "review_inline_edit",
-    });
   });
 
   it("keeps reveal progress by node uid after editing and switching back to review mode", async () => {

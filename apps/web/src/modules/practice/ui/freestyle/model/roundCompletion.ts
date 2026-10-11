@@ -3,11 +3,9 @@ import {
   cardUnitId,
   findEarliestUnratedIndex,
   unscoredOccurrenceIndices,
-  freestyleLearningTotals,
   isRetryOccurrence,
   reviewUnitIdFromCardId,
   sourceCardId,
-  type FreestyleRoundLearningTime,
   type FreestyleRoundPlanState,
   type FreestyleUnitEncounterState,
 } from '@/modules/practice/public'
@@ -20,7 +18,6 @@ export interface FreestyleRoundSubjectPalaceStat {
   palaceId: number
   palaceTitle: string
   cardCount: number
-  effectiveSeconds: number
 }
 
 export interface FreestyleRoundSubjectStat {
@@ -28,7 +25,6 @@ export interface FreestyleRoundSubjectStat {
   subjectName: string
   palaceCount: number
   cardCount: number
-  effectiveSeconds: number
   palaces: FreestyleRoundSubjectPalaceStat[]
 }
 
@@ -43,15 +39,6 @@ export interface FreestyleRoundCompletion {
   remainingCandidates: number
   /** Quiz cards handled in the feed plus overlay 做题. */
   quizCount: number
-  /**
-   * Round learning seconds. The progress-bar queue's card time is the floor.
-   * A round clock that actually counted cards replaces it, so quiz time is not
-   * added twice. An empty clock must not wipe that queue time.
-   */
-  totalEffectiveSeconds: number
-  /** Quiz-overlay seconds only. Absent on older callers; settlement treats that as 0. */
-  quizSeconds?: number
-  today?: FreestyleRoundLearningTime['today']
   /** Attempted sources grouped by subject → palace for settlement. */
   bySubject: FreestyleRoundSubjectStat[]
 }
@@ -63,11 +50,6 @@ function sourceIdOf(card: FreestyleCard) {
 function encounterPassed(encounter: FreestyleUnitEncounterState | undefined) {
   const rating = Number(encounter?.selectedRating)
   return encounter?.passed === true || (encounter?.passed == null && rating >= 3)
-}
-
-function billableSeconds(encounter: FreestyleUnitEncounterState | undefined) {
-  if (!encounter || encounter.status !== 'closed' || encounter.selectedRating == null) return 0
-  return Math.max(0, encounter.effectiveSeconds ?? 0)
 }
 
 function resolvePalaceTitle(card: FreestyleCard, palaceId: number) {
@@ -129,11 +111,6 @@ export function buildFreestyleRoundCompletion(
     quizCount?: number
     roundPlan?: FreestyleRoundPlanState | null
     subjectByPalaceId?: ReadonlyMap<number, { id: number; name: string }>
-    /**
-     * Round clock. When present, headline and palace rows use it instead of
-     * encounter focus seconds, so quiz time is not added twice.
-     */
-    learningTime?: FreestyleRoundLearningTime | null
   },
 ): FreestyleRoundCompletion {
   const completedIds = options?.completedIds ?? []
@@ -148,7 +125,6 @@ export function buildFreestyleRoundCompletion(
     palaceTitle: string
     subjectId: number | null
     subjectName: string
-    effectiveSeconds: number
   }>()
 
   const progressInput = { completedIds, encounters: encountersByCardId, roundPlan: options?.roundPlan ?? null }
@@ -164,7 +140,6 @@ export function buildFreestyleRoundCompletion(
       palaceTitle: '',
       subjectId: null,
       subjectName: '未分类',
-      effectiveSeconds: 0,
     }
     const encounter = encountersByCardId[card.id]
     const handled = isHandled(card, encountersByCardId, completedIds, cards, options?.roundPlan)
@@ -172,7 +147,6 @@ export function buildFreestyleRoundCompletion(
     if (isOccurrenceScored(card.id, progressInput)) current.attempted = true
     if (isOccurrencePassed(card.id, progressInput)) current.passed = true
     if (isRetryOccurrence(card) || encounter?.passed === false) current.retried = true
-    current.effectiveSeconds += billableSeconds(encounter)
     // Prefer the source card for palace/subject labels; fall back to retry metadata.
     if (current.palaceId == null || !isRetryOccurrence(card)) {
       const palaceId = cardPalaceId(card)
@@ -222,17 +196,15 @@ export function buildFreestyleRoundCompletion(
       palaceId,
       palaceTitle,
       cardCount: 0,
-      effectiveSeconds: 0,
     }
     palace.cardCount += 1
-    palace.effectiveSeconds += entry.effectiveSeconds
     if (!palace.palaceTitle && palaceTitle) palace.palaceTitle = palaceTitle
     subject.palaces.set(palaceId, palace)
   })
 
-  let bySubject = Array.from(subjectBuckets.values()).map((subject) => {
+  const bySubject = Array.from(subjectBuckets.values()).map((subject) => {
     const palaces = Array.from(subject.palaces.values()).sort((left, right) => (
-      right.effectiveSeconds - left.effectiveSeconds
+      right.cardCount - left.cardCount
       || left.palaceTitle.localeCompare(right.palaceTitle, 'zh')
     ))
     return {
@@ -240,35 +212,12 @@ export function buildFreestyleRoundCompletion(
       subjectName: subject.subjectName,
       palaceCount: palaces.length,
       cardCount: palaces.reduce((sum, palace) => sum + palace.cardCount, 0),
-      effectiveSeconds: palaces.reduce((sum, palace) => sum + palace.effectiveSeconds, 0),
       palaces,
     }
   }).sort((left, right) => (
-    right.effectiveSeconds - left.effectiveSeconds
+    right.cardCount - left.cardCount
     || left.subjectName.localeCompare(right.subjectName, 'zh')
   ))
-
-  const learningTime = options?.learningTime
-  let queueSeconds = 0
-  for (const encounter of Object.values(encountersByCardId)) {
-    queueSeconds += billableSeconds(encounter)
-  }
-  let totalEffectiveSeconds = queueSeconds
-  let quizSeconds = 0
-  if (learningTime) {
-    const totals = freestyleLearningTotals(learningTime)
-    quizSeconds = totals.quizSeconds
-    const clockUnit = Math.max(0, learningTime.unitSeconds || 0)
-    if (clockUnit > 0) {
-      // The clock watched the same cards. Do not add the queue again.
-      totalEffectiveSeconds = totals.totalSeconds
-      bySubject = applyAttributedLearningTime(bySubject, learningTime, subjectByPalaceId)
-    } else if (totals.totalSeconds > 0) {
-      // Quiz or lookup was recorded, but the card queue was not. Keep the queue.
-      totalEffectiveSeconds = queueSeconds + totals.quizSeconds + Math.max(0, learningTime.lookupSeconds || 0)
-    }
-    // An empty clock must not wipe the progress-bar queue.
-  }
 
   return {
     ratedCount,
@@ -277,98 +226,8 @@ export function buildFreestyleRoundCompletion(
     retryCount: retriedCount,
     remainingCandidates: Math.max(0, candidateCount - scheduledCount),
     quizCount: Math.max(0, Math.round(Number(options?.quizCount) || 0)),
-    totalEffectiveSeconds,
-    quizSeconds,
-    today: learningTime?.today ? {
-      ...learningTime.today,
-      unattributed_seconds: learningTime.today.unattributed_seconds + Math.max(0, totalEffectiveSeconds - freestyleLearningTotals(learningTime).totalSeconds),
-    } : undefined,
     bySubject,
   }
-}
-
-function sortPalaces(palaces: FreestyleRoundSubjectPalaceStat[]) {
-  return [...palaces].sort((left, right) => (
-    right.effectiveSeconds - left.effectiveSeconds
-    || left.palaceTitle.localeCompare(right.palaceTitle, 'zh')
-  ))
-}
-
-function sortSubjects(subjects: FreestyleRoundSubjectStat[]) {
-  return [...subjects].sort((left, right) => (
-    right.effectiveSeconds - left.effectiveSeconds
-    || left.subjectName.localeCompare(right.subjectName, 'zh')
-  ))
-}
-
-/**
- * Palace rows show this round's attributed clock. Unassigned historical unit
- * seconds stay on the headline and are not invented as an equal split here.
- */
-function applyAttributedLearningTime(
-  bySubject: FreestyleRoundSubjectStat[],
-  learningTime: FreestyleRoundLearningTime,
-  subjectByPalaceId?: ReadonlyMap<number, { id: number; name: string }>,
-): FreestyleRoundSubjectStat[] {
-  const subjects = bySubject.map((subject) => ({
-    ...subject,
-    effectiveSeconds: 0,
-    palaces: subject.palaces.map((palace) => ({ ...palace, effectiveSeconds: 0 })),
-  }))
-  const located = new Map<number, { subjectIndex: number; palaceIndex: number }>()
-  subjects.forEach((subject, subjectIndex) => {
-    subject.palaces.forEach((palace, palaceIndex) => {
-      if (palace.palaceId > 0) located.set(palace.palaceId, { subjectIndex, palaceIndex })
-    })
-  })
-  for (const [key, palaceTime] of Object.entries(learningTime.byPalace || {})) {
-    const palaceId = Number(key)
-    if (!Number.isInteger(palaceId) || palaceId <= 0) continue
-    const seconds = Math.max(
-      0,
-      (palaceTime.unitSeconds || 0) + (palaceTime.quizSeconds || 0) + (palaceTime.lookupSeconds || 0),
-    )
-    if (seconds <= 0) continue
-    const found = located.get(palaceId)
-    if (found) {
-      subjects[found.subjectIndex].palaces[found.palaceIndex].effectiveSeconds = seconds
-      continue
-    }
-    const subjectInfo = subjectByPalaceId?.get(palaceId)
-    const subjectId = subjectInfo?.id ?? null
-    const subjectName = subjectInfo?.name ?? '未分类'
-    let subject = subjects.find((item) => (
-      item.subjectId === subjectId && item.subjectName === subjectName
-    ))
-    if (!subject) {
-      subject = {
-        subjectId,
-        subjectName,
-        palaceCount: 0,
-        cardCount: 0,
-        effectiveSeconds: 0,
-        palaces: [],
-      }
-      subjects.push(subject)
-    }
-    subject.palaces.push({
-      palaceId,
-      palaceTitle: `宫殿 ${palaceId}`,
-      cardCount: 0,
-      effectiveSeconds: seconds,
-    })
-    located.set(palaceId, { subjectIndex: subjects.indexOf(subject), palaceIndex: subject.palaces.length - 1 })
-  }
-  return sortSubjects(subjects.map((subject) => {
-    const palaces = sortPalaces(subject.palaces)
-    return {
-      ...subject,
-      palaceCount: palaces.length,
-      cardCount: palaces.reduce((sum, palace) => sum + palace.cardCount, 0),
-      effectiveSeconds: palaces.reduce((sum, palace) => sum + palace.effectiveSeconds, 0),
-      palaces,
-    }
-  }))
 }
 
 /**
@@ -687,15 +546,13 @@ export function buildPartialSettlementSnapshot(input: {
     passedCount: completion.passedCount,
     retryCount: completion.retryCount,
     quizCount: completion.quizCount,
-    totalEffectiveSeconds: completion.totalEffectiveSeconds,
-    quizSeconds: completion.quizSeconds ?? 0,
     bySubject: completion.bySubject,
   }
 }
 
 /**
  * Headline counts on 大结算 must include cards that already left the feed.
- * Round clock and answered-quiz set stay as-is so time and 做题 are not added twice.
+ * The answered-quiz set stays as-is so 做题 is not added twice.
  * A snapshot whose cards are still in the feed is listed, not folded.
  */
 export function foldPartialSettlementsIntoCompletion(

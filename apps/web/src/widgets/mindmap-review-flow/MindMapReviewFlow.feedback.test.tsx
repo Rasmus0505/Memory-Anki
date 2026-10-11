@@ -5,7 +5,6 @@ import {
   getLatestMindMapEditorSurfaceProps,
   renderInRouter,
   setupMindMapReviewFlowTest,
-  timer,
 } from "@/widgets/mindmap-review-flow/MindMapReviewFlow.test-support";
 import { MindMapReviewFlow } from "@/widgets/mindmap-review-flow";
 import { writeReviewFeedbackSettings } from "@/shared/feedback/reviewFeedbackSettings";
@@ -85,13 +84,9 @@ describe("MindMapReviewFlow feedback", () => {
 
     expect(onComplete).toHaveBeenCalledTimes(1);
     expect(screen.getByText("通关结算中")).toBeTruthy();
-    expect(timer.complete).not.toHaveBeenCalled();
-
     await act(async () => {
       await vi.advanceTimersByTimeAsync(850);
     });
-
-    expect(timer.complete).toHaveBeenCalledTimes(1);
     vi.useRealTimers();
   });
 

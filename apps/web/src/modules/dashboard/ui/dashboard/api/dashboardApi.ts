@@ -1,7 +1,6 @@
 import { request } from "@/shared/api/http"
 import type {
   DashboardHeatmapResponse,
-  DashboardQuery,
   DashboardResponse,
   WeeklyReport,
 } from "@/shared/api/contracts"
@@ -11,23 +10,13 @@ import {
   prefetchPromise,
 } from "@/shared/api/promiseWarmupCache"
 
-function buildDashboardPath(query?: DashboardQuery) {
-  const params = new URLSearchParams()
-  if (query?.duration_mode) params.set("duration_mode", query.duration_mode)
-  if (query?.month) params.set("month", query.month)
-  if (query?.start_date) params.set("start_date", query.start_date)
-  if (query?.end_date) params.set("end_date", query.end_date)
-  const suffix = params.toString() ? `?${params.toString()}` : ""
-  return `/dashboard${suffix}`
-}
-
-export function getDashboardApi(query?: DashboardQuery) {
-  const path = buildDashboardPath(query)
+export function getDashboardApi() {
+  const path = '/dashboard'
   return consumePrefetchedPromise(`dashboard:${path}`, () => request<DashboardResponse>(path))
 }
 
-export function prefetchDashboardApi(query?: DashboardQuery) {
-  const path = buildDashboardPath(query)
+export function prefetchDashboardApi() {
+  const path = '/dashboard'
   prefetchPromise(`dashboard:${path}`, () => request<DashboardResponse>(path))
 }
 
@@ -40,12 +29,10 @@ export function getDashboardHeatmapApi(days = 182) {
 }
 
 export interface StudyGoals {
-  weekly_study_minutes: number
   weekly_review_count: number
 }
 
 export const DEFAULT_STUDY_GOALS: StudyGoals = {
-  weekly_study_minutes: 300,
   weekly_review_count: 20,
 }
 

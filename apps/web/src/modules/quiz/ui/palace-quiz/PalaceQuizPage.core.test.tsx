@@ -14,7 +14,6 @@ import {
   renderPage,
   resetPalaceQuizQuestionAttemptsApiMock,
   setupPalaceQuizPageTest,
-  useTimedSessionMock,
 } from '@/modules/quiz/ui/palace-quiz/PalaceQuizPage.test-utils'
 
 describe('PalaceQuizPage core flows', () => {
@@ -26,15 +25,6 @@ describe('PalaceQuizPage core flows', () => {
     expect(await screen.findByText('细胞生物学宫殿 · 配套习题')).toBeTruthy()
     expect(screen.getByRole('button', { name: '查看记忆宫殿' })).toBeTruthy()
     expect(screen.getByText('多图生成')).toBeTruthy()
-    expect(useTimedSessionMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'quiz',
-        palaceId: 1,
-        automationScene: 'quiz',
-        sourceKind: 'palace',
-        persistKey: 'palace_quiz:1',
-      }),
-    )
 
     fireEvent.click(screen.getByRole('button', { name: '管理' }))
     expect(await screen.findByText('题库列表')).toBeTruthy()

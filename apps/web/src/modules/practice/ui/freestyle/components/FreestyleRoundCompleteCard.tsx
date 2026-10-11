@@ -3,7 +3,6 @@ import { ChevronDown, RotateCcw, Sparkles, Trophy } from 'lucide-react'
 import type { FreestylePartialSettlementSnapshot } from '@/modules/practice/domain/partialSettlement'
 import type { FreestyleRoundCompletion } from '@/modules/practice/ui/freestyle/model/roundCompletion'
 import { settlementQuizClearCopy } from '@/modules/practice/ui/freestyle/model/overlayQuizClearance'
-import { formatTimer } from '@/modules/practice/ui/freestyle/model/freestyle-cards'
 import { usePrefersReducedMotion } from '@/modules/practice/ui/freestyle/hooks/usePrefersReducedMotion'
 import {
   skipRoundCelebration,
@@ -122,7 +121,7 @@ export function FreestyleRoundCompleteCard({
   quizPalaceCount: number
   onClearQuizProgress: () => Promise<void>
   onAnotherRound?: () => void
-  /** Leave this slot. Later card dwell and 做题 stay on this round's learning clock. */
+  /** Leave this slot and return to the previous card. */
   onCancelSettlement: () => void
   /** Exam progress block (lit knowledge points, weak spots, goal delta). */
   examSummary?: ReactNode
@@ -236,36 +235,6 @@ export function FreestyleRoundCompleteCard({
           </p>
         ) : null}
 
-        <Rise index={6}>
-          <div
-            data-testid="freestyle-round-complete-total-time"
-            className="mt-4 rounded-2xl border border-rate-good/25 bg-rate-good/10 px-4 py-3 text-center"
-          >
-            <div className="text-[11px] font-medium tracking-wide text-rate-good/85">{partial ? '本次小结时长' : '本轮累计'}</div>
-            <div className="mt-0.5 text-2xl font-semibold tabular-nums text-stage-ink sm:text-3xl">
-              {formatTimer(completion.totalEffectiveSeconds ?? 0)}
-            </div>
-            {!partial ? (
-              <div data-testid="freestyle-round-today-time" className="mt-2 text-sm text-stage-ink">
-                本轮今日：{completion.today ? `${completion.today.unattributed_seconds > 0 ? '已知 ' : ''}${formatTimer(completion.today.known_seconds)}` : '等待日期核对'}
-                {completion.today ? <span className="ml-2 text-xs text-stage-muted">{completion.today.day}</span> : null}
-                {completion.today && completion.today.unattributed_seconds > 0 ? (
-                  <p className="mt-1 text-xs text-stage-muted">另有 {formatTimer(completion.today.unattributed_seconds)} 历史时长缺少日期，未分配到今天；已包含在累计中。</p>
-                ) : null}
-              </div>
-            ) : null}
-            <div
-              data-testid="freestyle-round-complete-quiz-time"
-              className="mt-2 border-t border-rate-good/15 pt-2 text-sm text-stage-ink/90"
-            >
-              <span className="text-[11px] font-medium tracking-wide text-rate-good/75">做题时间</span>
-              <span className="ml-2 font-semibold tabular-nums">
-                {formatTimer(completion.quizSeconds ?? 0)}
-              </span>
-            </div>
-          </div>
-        </Rise>
-
         {!partial && examSummary ? <Rise index={7}>{examSummary}</Rise> : null}
 
         {!partial && partialSettlements.length ? (
@@ -279,7 +248,6 @@ export function FreestyleRoundCompleteCard({
                   <li key={item.id} className="rounded-xl border border-stage-line bg-stage-raised/50 px-3 py-2">
                     <div className="flex items-baseline justify-between gap-3 text-sm">
                       <span className="font-medium">第 {index + 1} 次 · {item.cardCount} 张</span>
-                      <span className="tabular-nums text-stage-muted">{formatTimer(item.totalEffectiveSeconds)}</span>
                     </div>
                     <div className="mt-1 text-xs leading-5 text-stage-muted">
                       已评分 {item.ratedCount} · 已通过 {item.passedCount}
@@ -335,7 +303,7 @@ export function FreestyleRoundCompleteCard({
                         {subject.subjectName}
                       </span>
                       <span className="shrink-0 text-[11px] tabular-nums text-stage-muted sm:text-xs">
-                        {subject.palaceCount} 宫 · {subject.cardCount} 卡 · {formatTimer(subject.effectiveSeconds)}
+                        {subject.palaceCount} 宫 · {subject.cardCount} 卡
                       </span>
                     </button>
                     {open ? (
@@ -348,7 +316,7 @@ export function FreestyleRoundCompleteCard({
                           >
                             <span className="min-w-0 truncate">{palace.palaceTitle}</span>
                             <span className="shrink-0 text-[11px] tabular-nums text-stage-muted">
-                              {palace.cardCount} 卡 · {formatTimer(palace.effectiveSeconds)}
+                              {palace.cardCount} 卡
                             </span>
                           </div>
                         ))}

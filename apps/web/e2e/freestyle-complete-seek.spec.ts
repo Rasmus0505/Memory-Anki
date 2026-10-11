@@ -84,7 +84,6 @@ function sessionItem(unitId: string) {
         passed: null,
         retry_after_cards: 0,
         effective_operation_id: null,
-        effective_seconds: null,
         closed_at: null,
         rating_effects: EFFECTS,
       },
@@ -100,7 +99,6 @@ async function installRoutes(page: Page, options: { clearFails?: boolean } = {})
   const actions: string[] = []
   const clearRequests: unknown[] = []
   const starts: string[] = []
-  const seenOperations = new Set<string>()
   const reply = (route: Route, body: unknown, status = 200) => route.fulfill({
     status, contentType: 'application/json', body: JSON.stringify(body),
   })
@@ -129,7 +127,6 @@ async function installRoutes(page: Page, options: { clearFails?: boolean } = {})
             presented_ids: cards.map((card) => card.id), current_card_id: cards[0].id,
             current_index: 0, completed_ids: [], excluded_ids: [], compressed_ids: [],
             occurrences: [], encounters: {}, partial_settlements: [],
-            learning_time: { unit_seconds: 0, quiz_seconds: 0, lookup_seconds: 0, backfilled: true },
           },
         }
       }
@@ -162,24 +159,6 @@ async function installRoutes(page: Page, options: { clearFails?: boolean } = {})
       persisted.plan_version = persisted.version
       return reply(route, persisted)
     }
-    if (pathname.endsWith('/learning-time/backfill')) {
-      return reply(route, { ...persisted, learning_backfill_applied: true })
-    }
-    if (pathname.endsWith('/learning-time')) {
-      const request = route.request().postDataJSON() as {
-        operation_id: string
-        intervals?: Array<{ started_at: string; ended_at: string; bucket: 'unit' | 'quiz' | 'lookup' }>
-      }
-      if (!seenOperations.has(request.operation_id)) {
-        seenOperations.add(request.operation_id)
-        for (const interval of request.intervals || []) {
-          const time = persisted.plan.learning_time!
-          const seconds = Math.round((Date.parse(interval.ended_at) - Date.parse(interval.started_at)) / 1000)
-          time[`${interval.bucket}_seconds`] += seconds
-        }
-      }
-      return reply(route, persisted)
-    }
     if (pathname.endsWith('/overlay-quiz/drop-palaces')) {
       clearRequests.push(route.request().postDataJSON())
       return reply(route, { detail: 'e2e: explicit clear rejected' }, options.clearFails ? 500 : 422)
@@ -210,72 +189,6 @@ function readVisualIndex(page: Page) {
     el.clientHeight ? Math.round(el.scrollTop / el.clientHeight) : -1,
   )
 }
-
-test('finish study preserves unrated work and resumes the same round', async ({ page }) => {
-  const backend = await installRoutes(page)
-  const ratings: string[] = []
-  page.on('request', (request) => {
-    if (request.method() === 'POST' && /\/ratings?(?:\?|$)/.test(request.url())) ratings.push(request.url())
-  })
-  await page.goto('/freestyle')
-  await expect(page.getByTestId('freestyle-finish-study')).toBeVisible()
-  await page.getByTestId('freestyle-finish-study').click()
-  const settlement = page.getByTestId('freestyle-study-settlement')
-  await expect(settlement).toBeVisible()
-  await expect(settlement.getByTestId('freestyle-study-pending-counts')).toContainText('待评分 4 次')
-  await expect(settlement.getByTestId('freestyle-study-finish-confirm')).toBeDisabled()
-  await settlement.getByRole('button', { name: '继续本轮学习' }).click()
-  await expect(settlement).toBeHidden()
-  await expect.poll(() => readVisualIndex(page)).toBe(0)
-  await page.getByTestId('freestyle-finish-study').click()
-  await settlement.getByRole('button', { name: '保留', exact: true }).click()
-  await settlement.getByTestId('freestyle-study-finish-confirm').click()
-  await expect(page).toHaveURL(/\/dashboard$/)
-  await page.goBack()
-  await expect(page).toHaveURL(/\/freestyle$/)
-  // SPA navigation may retain the same in-memory round; reload proves persisted resumption.
-  const resumedRound = page.waitForResponse((response) => {
-    const pathname = new URL(response.url()).pathname
-    return response.ok() && pathname.startsWith('/api/v1/freestyle/rounds/')
-      && (pathname.endsWith('/active') || pathname.endsWith(`/${ROUND_ID}`))
-  })
-  await page.reload()
-  await resumedRound
-  await expect(page.getByTestId('freestyle-finish-study')).toBeVisible()
-  await page.getByTestId('freestyle-finish-study').click()
-  await expect(settlement.getByTestId('freestyle-study-pending-counts')).toContainText('待评分 4 次')
-  expect(ratings).toEqual([])
-  expect(backend.starts).toEqual([])
-  expect(backend.clearRequests).toEqual([])
-  expect(backend.activeRoundIds.length).toBeGreaterThan(1)
-  expect(new Set(backend.activeRoundIds)).toEqual(new Set([ROUND_ID]))
-  expect(backend.getRound()?.plan.completed_ids).toEqual([])
-  expect(backend.getRound()?.plan.presented_ids).toHaveLength(4)
-})
-
-test('failed clear keeps settlement open and cannot claim study finished', async ({ page }) => {
-  const backend = await installRoutes(page, { clearFails: true })
-  await page.goto('/freestyle')
-  await page.getByTestId('freestyle-finish-study').click()
-  const settlement = page.getByTestId('freestyle-study-settlement')
-  await settlement.getByRole('button', { name: '清除', exact: true }).click()
-  await expect(settlement).toContainText('e2e: explicit clear rejected')
-  await expect(settlement.getByTestId('freestyle-study-finish-confirm')).toBeDisabled()
-  await expect(page).toHaveURL(/\/freestyle$/)
-  // Transport may retry a failed request, but must preserve the logical operation and scope.
-  expect(backend.clearRequests.length).toBeGreaterThanOrEqual(1)
-  const firstClear = backend.clearRequests[0] as { operation_id: string }
-  expect(firstClear.operation_id).toEqual(expect.any(String))
-  expect(firstClear.operation_id.length).toBeGreaterThan(0)
-  for (const request of backend.clearRequests) {
-    expect(request).toMatchObject({ operation_id: firstClear.operation_id, palace_ids: [1] })
-  }
-  expect(backend.starts).toEqual([])
-  expect(backend.getRound()?.plan.completed_ids).toEqual([])
-  await settlement.getByRole('button', { name: '继续本轮学习' }).click()
-  await expect(settlement).toBeHidden()
-  await expect(page.getByTestId('freestyle-finish-study')).toBeVisible()
-})
 
 test('完成 walks the unscored cards one by one and wraps', async ({ page }) => {
   await installRoutes(page)

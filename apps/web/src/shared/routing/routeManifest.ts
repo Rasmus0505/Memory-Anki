@@ -68,12 +68,10 @@ export const EXACT_ROUTES: ExactRouteEntry[] = [
   { path: '/english/listening', nav: 'english', history: 'english', historyKey: 'english:listening', commandLabel: '英语听力' },
   { path: '/english/cloze', nav: 'english', history: 'english', historyKey: 'english:cloze', commandLabel: '英语完形' },
   { path: '/profile', nav: null, history: 'profile', historyKey: 'profile:overview', commandLabel: '设置' },
-  { path: '/profile/timer', nav: null, history: 'profile', historyKey: 'profile:timer' },
   { path: '/profile/feedback', nav: null, history: 'profile', historyKey: 'profile:feedback' },
   { path: '/profile/ai', nav: null, history: 'profile', historyKey: 'profile:ai' },
   { path: '/profile/backups', nav: null, history: 'profile', historyKey: 'profile:backups' },
   { path: '/lab/fx', nav: null, history: 'profile', historyKey: 'lab:fx', commandLabel: 'FX 实验室' },
-  { path: '/timer-overlay', nav: null, history: 'other' },
 ]
 
 export const DYNAMIC_ROUTES: DynamicRouteEntry[] = [
@@ -137,7 +135,6 @@ export const PREFIX_RULES: PrefixRule[] = [
   { prefix: '/profile/', nav: null, history: 'profile', fallbackTarget: '/profile' },
   { prefix: '/english/', nav: 'english', history: 'english', fallbackTarget: '/english/listening' },
   { prefix: '/palaces/', nav: null, history: 'palaces', fallbackTarget: '/palaces' },
-  { prefix: '/timer-overlay/', nav: null, history: 'other', fallbackTarget: '/timer-overlay' },
 ]
 
 /** 导航分区根路径（侧栏第二次点击的目标），与 navSections[].to 对齐。 */

@@ -6,8 +6,6 @@ import {
   renderPalaceEditPageStrict,
   screen,
   setupPalaceEditPageTestDefaults,
-  shouldAutoStartOnPageEnterMock,
-  timedSessionMock,
   waitFor,
 } from '@/pages/create/PalaceEditorPage.test-support'
 
@@ -44,59 +42,5 @@ describe('usePalaceEditPage draft creation', () => {
         expect.objectContaining({ title: '教育史宫殿', subject_ids: [1] }),
       ),
     )
-  })
-
-  it('does not auto start on page enter by default', async () => {
-    vi.spyOn(palaceApi, 'getPalaceEditorApi').mockResolvedValue({
-      palace: {
-        id: 101,
-        title: '测试宫殿',
-        description: '',
-        created_at: null,
-        attachments: [],
-        chapters: [],
-      },
-      editor_doc: { root: { data: { text: '测试宫殿', uid: 'root-1' }, children: [] } },
-      editor_config: {},
-      editor_local_config: {},
-      lang: 'zh',
-    } as never)
-
-    renderPalaceEditPage()
-
-    await waitFor(() => {
-      expect(screen.getByText('测试宫殿')).toBeTruthy()
-    })
-
-    expect(shouldAutoStartOnPageEnterMock).toHaveBeenCalledWith(expect.anything())
-    expect(timedSessionMock.start).not.toHaveBeenCalled()
-  })
-
-  it('auto starts on page enter when the action rule is enabled', async () => {
-    shouldAutoStartOnPageEnterMock.mockReturnValue(true)
-    vi.spyOn(palaceApi, 'getPalaceEditorApi').mockResolvedValue({
-      palace: {
-        id: 101,
-        title: '测试宫殿',
-        description: '',
-        created_at: null,
-        attachments: [],
-        chapters: [],
-      },
-      editor_doc: { root: { data: { text: '测试宫殿', uid: 'root-1' }, children: [] } },
-      editor_config: {},
-      editor_local_config: {},
-      lang: 'zh',
-    } as never)
-
-    renderPalaceEditPage()
-
-    await waitFor(() => {
-      expect(screen.getByText('测试宫殿')).toBeTruthy()
-    })
-
-    await waitFor(() => {
-      expect(timedSessionMock.start).toHaveBeenCalledWith({ source: 'page_enter' })
-    })
   })
 })

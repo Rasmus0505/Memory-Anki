@@ -25,7 +25,6 @@ export type ReviewCompletionState<TTarget, TInput> =
 
 export interface ReviewCompletionSubmitResult<TResult> {
   result: TResult
-  persistTimeRecord?: boolean
 }
 
 function createCompletionOperationId() {
@@ -142,7 +141,7 @@ export function useReviewCompletionCoordinator<TTarget, TInput, TResult>({
     }
 
     try {
-      await draft.payload.finalize({ persistTimeRecord: submission.persistTimeRecord })
+      await draft.payload.finalize()
     } catch (error) {
       console.error('Review completion local finalization failed after submit succeeded.', error)
     }
@@ -180,15 +179,12 @@ export function useReviewCompletionCoordinator<TTarget, TInput, TResult>({
       ? state.target
       : null
   const error = state.status === 'failed' ? state.error : null
-  const durationSeconds =
-    state.status === 'idle' || state.status === 'completed' ? undefined : state.draft.payload.durationSeconds
 
   return {
     state,
     status: state.status,
     target,
     error,
-    durationSeconds,
     open: state.status !== 'idle' && state.status !== 'completed',
     preparing: state.status === 'preparing',
     preparationFailed: state.status === 'failed' && state.phase === 'prepare',

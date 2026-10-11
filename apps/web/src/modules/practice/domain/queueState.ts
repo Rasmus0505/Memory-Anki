@@ -16,8 +16,6 @@ export type FreestyleUnitEncounterState = {
   selectedRating: number | null
   passed: boolean | null
   retryAfterCards: number
-  /** Billable focus seconds for a closed rated encounter; null when unknown. */
-  effectiveSeconds?: number | null
   cancelled?: boolean
   abandoned?: boolean
 }
@@ -165,10 +163,6 @@ function asUnitEncounterMap(value: unknown) {
         : null,
       passed: typeof raw.passed === 'boolean' ? raw.passed : null,
       retryAfterCards: Math.max(0, Math.min(3, Math.round(Number(raw.retryAfterCards) || 0))),
-      effectiveSeconds: (() => {
-        const n = Number(raw.effectiveSeconds)
-        return Number.isFinite(n) && n >= 0 ? Math.round(n) : null
-      })(),
     }
   })
   return result

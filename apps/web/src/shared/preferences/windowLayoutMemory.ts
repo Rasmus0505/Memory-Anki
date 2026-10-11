@@ -9,7 +9,6 @@ import { onAppEvent } from '@/shared/events/appEvents'
 export const WINDOW_LAYOUTS_STORAGE_KEY = 'memory-anki.window-layouts.v1'
 export const LEGACY_PALACE_LOOKUP_LAYOUT_KEY = 'memory-anki-quiz-memory-lookup-layout'
 export const LEGACY_FLOATING_DIALOG_PREFIX = 'memory-anki-floating-dialog:'
-export const LEGACY_TIMER_OVERLAY_LAYOUT_KEY = 'memory-anki-timer-overlay-layout'
 export const LEGACY_ENGLISH_LOOKUP_CARD_KEY = 'memory-anki.english-lookup.card-state'
 
 const MAX_FLOATING_DIALOGS = 40
@@ -34,15 +33,6 @@ export interface FloatingDialogWindowMemory {
   pinned: boolean
 }
 
-export interface TimerOverlayWindowMemory {
-  xRatio: number
-  yRatio: number
-  widthRatio: number
-  heightRatio: number
-  collapsed: boolean
-  hidden: boolean
-}
-
 export interface EnglishLookupWindowMemory {
   widthRatio: number | null
   heightRatio: number | null
@@ -54,7 +44,6 @@ export interface EnglishLookupWindowMemory {
 export interface WindowLayoutsDocument {
   palaceMemoryLookup: PalaceLookupWindowMemory | null
   floatingDialogs: Record<string, FloatingDialogWindowMemory>
-  timerOverlay: TimerOverlayWindowMemory | null
   englishLookup: EnglishLookupWindowMemory | null
 }
 
@@ -62,7 +51,6 @@ export function emptyWindowLayoutsDocument(): WindowLayoutsDocument {
   return {
     palaceMemoryLookup: null,
     floatingDialogs: {},
-    timerOverlay: null,
     englishLookup: null,
   }
 }
@@ -136,18 +124,6 @@ function sanitizeFloating(value: unknown): FloatingDialogWindowMemory | null {
   }
 }
 
-function sanitizeTimer(value: unknown): TimerOverlayWindowMemory | null {
-  if (!isRecord(value) || !Number.isFinite(Number(value.widthRatio))) return null
-  return {
-    xRatio: viewportRatio(finiteNumber(value.xRatio, 0), 1),
-    yRatio: viewportRatio(finiteNumber(value.yRatio, 0), 1),
-    widthRatio: viewportRatio(finiteNumber(value.widthRatio, 0.2), 1, 0.05, 1.5),
-    heightRatio: viewportRatio(finiteNumber(value.heightRatio, 0.2), 1, 0.05, 1.5),
-    collapsed: Boolean(value.collapsed),
-    hidden: Boolean(value.hidden),
-  }
-}
-
 function sanitizeEnglish(value: unknown): EnglishLookupWindowMemory | null {
   if (!isRecord(value)) return null
   const widthRatio = value.widthRatio == null ? null : viewportRatio(finiteNumber(value.widthRatio, 0.3), 1, 0.05, 1.5)
@@ -179,7 +155,6 @@ export function sanitizeWindowLayoutsDocument(value: unknown): WindowLayoutsDocu
   return {
     palaceMemoryLookup: sanitizePalace(raw.palaceMemoryLookup),
     floatingDialogs,
-    timerOverlay: sanitizeTimer(raw.timerOverlay),
     englishLookup: sanitizeEnglish(raw.englishLookup),
   }
 }
@@ -211,7 +186,6 @@ function writeAggregateLocal(document: WindowLayoutsDocument) {
 function documentHasMemory(document: WindowLayoutsDocument) {
   return Boolean(
     document.palaceMemoryLookup
-    || document.timerOverlay
     || document.englishLookup
     || Object.keys(document.floatingDialogs).length > 0,
   )
@@ -320,14 +294,6 @@ export function writePalaceLookupMemory(memory: PalaceLookupWindowMemory) {
   updateWindowLayouts((current) => ({ ...current, palaceMemoryLookup: memory }))
 }
 
-export function readTimerOverlayMemory() {
-  return readWindowLayoutsDocument().timerOverlay
-}
-
-export function writeTimerOverlayMemory(memory: TimerOverlayWindowMemory) {
-  updateWindowLayouts((current) => ({ ...current, timerOverlay: memory }))
-}
-
 export function readEnglishLookupMemory() {
   return readWindowLayoutsDocument().englishLookup
 }
@@ -368,31 +334,6 @@ function foldLegacyPalace(document: WindowLayoutsDocument, viewport: { width: nu
         widthRatio,
         heightRatio,
         collapsed: parsed.collapsed,
-      }),
-    }
-  } catch {
-    return document
-  }
-}
-
-function foldLegacyTimer(document: WindowLayoutsDocument, viewport: { width: number; height: number }) {
-  if (document.timerOverlay || typeof window === 'undefined') return document
-  try {
-    const raw = window.localStorage.getItem(LEGACY_TIMER_OVERLAY_LAYOUT_KEY)
-    if (!raw) return document
-    const parsed = JSON.parse(raw) as Record<string, unknown>
-    const widthRatio = legacyRatio(parsed.width, viewport.width)
-    const heightRatio = legacyRatio(parsed.height, viewport.height)
-    if (widthRatio == null || heightRatio == null) return document
-    return {
-      ...document,
-      timerOverlay: sanitizeTimer({
-        xRatio: legacyRatio(parsed.x, viewport.width, -1.5),
-        yRatio: legacyRatio(parsed.y, viewport.height, -1.5),
-        widthRatio,
-        heightRatio,
-        collapsed: parsed.collapsed,
-        hidden: parsed.hidden,
       }),
     }
   } catch {
@@ -463,7 +404,7 @@ function clearLegacyWindowLayoutKeys() {
     const key = window.localStorage.key(index)
     if (key?.startsWith(LEGACY_FLOATING_DIALOG_PREFIX)) keys.push(key)
   }
-  keys.push(LEGACY_PALACE_LOOKUP_LAYOUT_KEY, LEGACY_TIMER_OVERLAY_LAYOUT_KEY, LEGACY_ENGLISH_LOOKUP_CARD_KEY)
+  keys.push(LEGACY_PALACE_LOOKUP_LAYOUT_KEY, LEGACY_ENGLISH_LOOKUP_CARD_KEY)
   for (const key of keys) window.localStorage.removeItem(key)
 }
 
@@ -472,7 +413,6 @@ export async function migrateLegacyWindowLayouts() {
   const viewport = currentViewportSize()
   let folded = readWindowLayoutsDocument()
   folded = foldLegacyPalace(folded, viewport)
-  folded = foldLegacyTimer(folded, viewport)
   folded = foldLegacyEnglish(folded)
   folded = foldLegacyFloatingDialogs(folded, viewport)
   if (!documentHasMemory(folded)) return folded

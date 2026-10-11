@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { MindMapSelection } from '@/modules/content/public'
-import type { RevealState } from '@/modules/session/public'
+import type { RevealState } from '@/modules/memory/public'
 import { isFreestyleShortcutBlocked } from '@/modules/practice/ui/freestyle/model/freestyleKeyboard'
 
 export interface FreestyleEnterRevealApi {

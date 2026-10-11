@@ -8,8 +8,7 @@ import { createAppQueryClient } from '@/shared/api/queryClient'
 import { GlobalFeedbackProvider } from '@/shared/feedback/GlobalFeedbackProvider'
 import { cleanupExpiredAppLogs, logAppError } from '@/shared/logs/model/appLogs'
 import { useMutationQueueAutoSync } from '@/shared/persistence/useMutationQueue'
-import { LiveStudyPresenceProvider, usePendingTimeRecordRecoveryAutoSync } from '@/modules/session/public'
-import { GlobalTimerProvider } from '@/shared/components/session/GlobalTimerProvider'
+import { LiveStudyPresenceProvider } from '@/modules/session/public'
 import { RouteProgressBar } from '@/shared/components/route-progress/RouteProgressBar'
 import { NativeDialogProvider } from '@/shared/components/ui/native-dialog'
 import { PageHistoryCoordinator } from '@/shared/page-history/PageHistoryCoordinator'
@@ -20,7 +19,6 @@ const queryClient = createAppQueryClient()
 
 export function AppProviders({ children }: PropsWithChildren) {
   useMutationQueueAutoSync()
-  usePendingTimeRecordRecoveryAutoSync()
 
   useEffect(() => {
     const id = 'quiz-progress-sync'
@@ -93,13 +91,11 @@ export function AppProviders({ children }: PropsWithChildren) {
             <RouteProgressBar />
             <GlobalErrorBoundary>
               <GlobalFeedbackProvider>
-                <GlobalTimerProvider>
-                  <QuizLauncherProvider>
-                    {children}
-                    <NativeDialogProvider />
-                    <Toaster position="bottom-right" richColors closeButton={false} gap={10} offset={20} />
-                  </QuizLauncherProvider>
-                </GlobalTimerProvider>
+                <QuizLauncherProvider>
+                  {children}
+                  <NativeDialogProvider />
+                  <Toaster position="bottom-right" richColors closeButton={false} gap={10} offset={20} />
+                </QuizLauncherProvider>
               </GlobalFeedbackProvider>
             </GlobalErrorBoundary>
           </LiveStudyPresenceProvider>

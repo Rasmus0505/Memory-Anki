@@ -70,14 +70,12 @@ export function EnglishZoneNav({
 export function EnglishZoneLayout({
   zone = 'hub',
   children,
-  headerAside,
   title = '英语学习',
   description = '上传视频生成逐句听写课程。',
   showZoneNav = true,
 }: {
   zone?: EnglishHubZone
   children: ReactNode
-  headerAside?: ReactNode
   title?: string
   description?: string
   showZoneNav?: boolean
@@ -95,7 +93,6 @@ export function EnglishZoneLayout({
           </h1>
           <p className="max-w-xl text-sm leading-6 text-muted-foreground">{description}</p>
         </div>
-        {headerAside ? <div className="shrink-0">{headerAside}</div> : null}
       </header>
 
       {showZoneNav ? <EnglishZoneNav zone={zone} /> : null}

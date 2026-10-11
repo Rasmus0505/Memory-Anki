@@ -31,7 +31,7 @@ export function FreestyleChannelHint({
       data-state={state}
       role="status"
       // Above the rating bar: the bottom edge belongs to rating, and the top holds the
-      // rail + timer. This band is otherwise empty.
+      // progress rail. This band is otherwise empty.
       className="pointer-events-none absolute inset-x-0 bottom-[5.25rem] z-20 flex justify-center px-3 sm:bottom-[5.75rem]"
     >
       <div

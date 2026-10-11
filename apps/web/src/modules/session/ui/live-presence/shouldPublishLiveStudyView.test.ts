@@ -90,7 +90,7 @@ describe('shouldPublishLiveStudyView', () => {
     })).toBe(false)
   })
 
-  it('consumes timer-only revision bumps without re-applying the same view', () => {
+  it('consumes revision-only bumps without re-applying the same view', () => {
     expect(shouldApplyLiveStudyView({
       revision: 4,
       lastAppliedRevision: 4,

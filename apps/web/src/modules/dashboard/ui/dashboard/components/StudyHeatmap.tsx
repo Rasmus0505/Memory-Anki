@@ -4,7 +4,6 @@ import type {
   HeatmapDayItem,
   WeeklyReport,
 } from '@/shared/api/contracts'
-import { formatDuration } from '@/modules/session/public'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { cn } from '@/shared/lib/utils'
 import { getDashboardHeatmapApi, getWeeklyReportApi } from '../api'
@@ -14,7 +13,6 @@ type HeatmapCell = HeatmapDayItem | null
 const EMPTY_WEEKLY_REPORT: WeeklyReport = {
   week_start: '',
   week_end: '',
-  study_seconds: 0,
   review_count: 0,
   average_score: 0,
   new_palace_count: 0,
@@ -28,15 +26,11 @@ function getLeadingEmptyCells(items: HeatmapDayItem[]) {
 
 function intensityClass(item: HeatmapDayItem) {
   if (!item.active) return 'bg-muted'
-  const minutes = item.study_seconds / 60 + item.review_count * 5
+  const minutes = item.review_count * 5
   if (minutes >= 90) return 'bg-emerald-600'
   if (minutes >= 45) return 'bg-emerald-500'
   if (minutes >= 15) return 'bg-emerald-400'
   return 'bg-emerald-200'
-}
-
-function formatMinutes(seconds: number) {
-  return Math.round(seconds / 60)
 }
 
 export function StudyHeatmap({ className }: { className?: string }) {
@@ -93,7 +87,6 @@ export function StudyHeatmap({ className }: { className?: string }) {
   const weekCount = Math.max(1, Math.ceil(cells.length / 7))
 
   const hasActivity =
-    report.study_seconds > 0 ||
     report.review_count > 0 ||
     report.average_score > 0 ||
     report.new_palace_count > 0
@@ -102,7 +95,6 @@ export function StudyHeatmap({ className }: { className?: string }) {
       ? `（${report.week_start} ~ ${report.week_end}）`
       : ''
   const metrics = [
-    { label: '学习时长', value: formatDuration(report.study_seconds) },
     { label: '复习次数', value: `${report.review_count} 次` },
     { label: '平均分', value: report.average_score.toFixed(1) },
     { label: '新建宫殿', value: `${report.new_palace_count} 个` },
@@ -129,7 +121,7 @@ export function StudyHeatmap({ className }: { className?: string }) {
               item ? (
                 <div
                   key={item.date}
-                  title={`${item.date}：复习 ${item.review_count} 次，学习 ${formatMinutes(item.study_seconds)} 分钟`}
+                  title={`${item.date}：复习 ${item.review_count} 次`}
                   className={`aspect-square w-full rounded-sm ${intensityClass(item)}`}
                 />
               ) : (

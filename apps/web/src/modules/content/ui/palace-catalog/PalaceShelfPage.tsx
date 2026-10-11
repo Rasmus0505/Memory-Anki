@@ -38,7 +38,6 @@ import {
   buildPalaceCatalogQuery,
   createEmptyPalaceGroupedListResponse,
   flattenGroupedPalaces,
-  publishPalaceKnowledgeBindings,
 } from '@/modules/content/ui/palace-catalog/model/palaceCatalog'
 
 const shelfLayoutOptions: Array<{ value: PalaceShelfLayoutMode; label: string; icon: typeof List }> = [
@@ -178,12 +177,6 @@ export default function PalaceShelfPage() {
       setLoadError(error instanceof Error ? error.message : '加载宫殿列表失败。')
     })
   }, [fetchGroupedData, groupedData, groupedDataSearch, isExpandedMode, search])
-
-  useEffect(() => {
-    if (!groupedData) return
-    // Hand the session module the palace → 学科/章节 map while the shelf is warm.
-    publishPalaceKnowledgeBindings(groupedData)
-  }, [groupedData])
 
   const fetchData = useCallback(async () => {
     setLoadError(null)

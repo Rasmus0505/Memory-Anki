@@ -45,17 +45,14 @@ describe('ImmersiveFreestylePage layout', () => {
     expect(source).toContain('setPartialSettlement(null)')
   })
 
-  it('cancels settlement by leaving the slot so later dwell still counts', () => {
+  it('cancels settlement by leaving the slot', () => {
     expect(source).toContain('onCancelSettlement={navigatePrevious}')
-    expect(source).toContain('viewingCard: !settlementVisible && currentCard != null')
     expect(source).toContain('viewingCompleteSlot || studySettlementOpen || partialSettlement != null')
-    expect(source).toContain('publishLive: settlementVisible')
-    expect(source).not.toContain('viewingCard: !roundComplete')
     expect(source).toContain('取消结算，返回上一张')
   })
 
   it('ends a visit independently of queue completion and reuses the existing round', () => {
-    expect(source).toContain('data-testid="freestyle-finish-study"')
+    expect(source).not.toContain('data-testid="freestyle-finish-study"')
     expect(source).toContain('data-testid="freestyle-study-settlement"')
     expect(source).toContain('variant="study"')
     expect(source).toContain('onFinishStudy={finishStudy}')

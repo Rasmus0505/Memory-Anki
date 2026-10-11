@@ -1,13 +1,11 @@
 import { useEffect, useState } from 'react'
 import { getWeeklyReportApi } from '@/modules/dashboard/ui/dashboard/api'
 import type { WeeklyReport } from '@/shared/api/contracts'
-import { formatDuration } from '@/modules/session/public'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 
 const EMPTY_WEEKLY_REPORT: WeeklyReport = {
   week_start: '',
   week_end: '',
-  study_seconds: 0,
   review_count: 0,
   average_score: 0,
   new_palace_count: 0,
@@ -37,10 +35,9 @@ export function WeeklyReportCard() {
     }
   }, [])
 
-  const hasActivity = report.study_seconds > 0 || report.review_count > 0 || report.average_score > 0 || report.new_palace_count > 0
+  const hasActivity = report.review_count > 0 || report.average_score > 0 || report.new_palace_count > 0
   const titleRange = report.week_start && report.week_end ? `（${report.week_start} ~ ${report.week_end}）` : ''
   const metrics = [
-    { label: '学习时长', value: formatDuration(report.study_seconds) },
     { label: '复习次数', value: `${report.review_count} 次` },
     { label: '平均分', value: report.average_score.toFixed(1) },
     { label: '新建宫殿', value: `${report.new_palace_count} 个` },

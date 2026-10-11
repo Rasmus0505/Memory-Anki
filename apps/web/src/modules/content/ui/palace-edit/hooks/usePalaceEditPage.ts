@@ -4,10 +4,7 @@ import { toast } from '@/shared/feedback/toast'
 import type { MindMapSelection } from '@/modules/content/domain/mindmap-document-entity'
 import type { ImportApplyContext } from '@/shared/api/contracts/imports'
 import type { MindMapFeedbackEvent, MindMapFeedbackFxPayload } from '@/shared/feedback/feedbackEvents'
-import { readTimerAutomationConfig } from '@/shared/components/session/timer-automation-config'
-import { shouldAutoStartOnPageEnter, useTimedSession } from '@/shared/hooks/useTimedSession'
 import { useRouteResidency } from '@/shared/routing/RouteResidency'
-import { useGlobalTimerRegistration } from '@/shared/components/session/GlobalTimerProvider'
 import { usePalaceEditorDocument } from '@/modules/content/ui/palace-edit/hooks/usePalaceEditorDocument'
 import { usePalaceMetaController } from '@/modules/content/ui/palace-edit/hooks/usePalaceMetaController'
 import { usePalacePracticeMode } from '@/modules/content/ui/palace-edit/hooks/usePalacePracticeMode'
@@ -29,7 +26,7 @@ function readSelectionNodeUid(nodes: MindMapSelection[]) {
 }
 
 export function usePalaceEditPage() {
-  const { isActive, becameActiveAt, fullPath } = useRouteResidency()
+  const { isActive, fullPath } = useRouteResidency()
   const { id } = useParams()
   const navigate = useNavigate()
   const parsedPalaceId = id ? Number(id) : null
@@ -37,10 +34,6 @@ export function usePalaceEditPage() {
     parsedPalaceId != null && Number.isFinite(parsedPalaceId) && parsedPalaceId > 0
       ? parsedPalaceId
       : null
-  const palaceSessionKey =
-    palaceId != null && Number.isFinite(palaceId)
-      ? `palace:${palaceId}`
-      : `palace:pending:${id ?? 'new'}`
   const [replaceSyncVersion, setReplaceSyncVersion] = useState(0)
   const [selectedNodes, setSelectedNodes] = useState<MindMapSelection[]>([])
   const [mindMapFullscreen, setMindMapFullscreen] = useState(false)
@@ -49,16 +42,6 @@ export function usePalaceEditPage() {
   const feedbackFxNonceRef = useRef(0)
   const selectedNodeUidRef = useRef<string | null>(null)
   const documentStateRef = useRef<ReturnType<typeof usePalaceEditorDocument> | null>(null)
-
-  const timer = useTimedSession({
-    sessionKey: palaceSessionKey,
-    kind: 'palace_edit',
-    title: '未命名宫殿',
-    palaceId,
-    sourceKind: palaceId != null ? 'palace' : null,
-    persistKey: palaceId ? `palace_edit:${palaceId}` : null,
-    persistCompletionRecord: false,
-  })
 
   const documentState = usePalaceEditorDocument({
     palaceId,
@@ -72,14 +55,6 @@ export function usePalaceEditPage() {
   const meta = usePalaceMetaController({
     palace,
     reload: documentState.reload,
-  })
-  useGlobalTimerRegistration({
-    scene: 'palace_edit',
-    title: meta.title || palaceTitle,
-    timer,
-    isRouteActive: isActive,
-    becameActiveAt,
-    routePath: fullPath,
   })
 
   const handlePracticeCurrentNodeUid = useCallback((uid: string | null) => {
@@ -221,18 +196,6 @@ export function usePalaceEditPage() {
   }, [documentState, id, navigate, palaceId])
 
   useEffect(() => {
-    if (!palaceId || !documentState.editorState) return
-    if (!isActive) return
-    if (timer.status !== 'idle') return
-    if (!shouldAutoStartOnPageEnter(readTimerAutomationConfig())) return
-    timer.start({ source: 'page_enter' })
-  }, [documentState.editorState, isActive, palaceId, timer])
-
-  useEffect(() => {
-    timer.setSceneActive?.(isActive, { source: isActive ? 'route_active' : 'route_inactive' })
-  }, [isActive, timer])
-
-  useEffect(() => {
     if (isActive) return
     setMindMapFullscreen(false)
   }, [isActive])
@@ -334,7 +297,6 @@ export function usePalaceEditPage() {
     palaceId,
     palace,
     reload: documentState.reload,
-    timer,
     title: meta.title,
     setTitle: meta.setTitle,
     createdAt: meta.createdAt,

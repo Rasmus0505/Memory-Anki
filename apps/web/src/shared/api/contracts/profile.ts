@@ -321,14 +321,9 @@ export interface ClientPreferences {
   memory_anki_shortcuts: Record<string, unknown> | null
   review_feedback_settings: Record<string, unknown> | null
   english_practice_settings: Record<string, unknown> | null
-  timer_automation_config: Record<string, unknown> | null
-  timer_focus_config: Record<string, unknown> | null
-  break_guard_config: Record<string, unknown> | null
-  dashboard_duration_filter: Record<string, unknown> | null
   study_goals: Record<string, unknown> | null
   palace_list_view_settings: Record<string, unknown> | null
   palace_shelf_view_settings: Record<string, unknown> | null
-  time_record_tags: Array<Record<string, unknown>> | null
   /** Immersive freestyle queue settings; shared across PWA and desktop via backend. */
   freestyle_feed_config: Record<string, unknown> | null
   /** Secondary immersive workspace (`/freestyle-2`) queue settings. Independent of primary. */
@@ -354,7 +349,4 @@ export interface ClientPreferences {
 }
 export interface ClientPreferencesResponse {
   items: ClientPreferences
-}
-export interface TimeRecordListResponse<TItem = Record<string, unknown>> {
-  items: TItem[]
 }

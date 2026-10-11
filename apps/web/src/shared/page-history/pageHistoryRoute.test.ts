@@ -9,6 +9,5 @@ describe('pageHistoryRoute', () => {
   })
 
   it('maps nested routes to their navigation section', () => {    expect(resolvePageHistorySection('/profile/backups')).toBe('profile')
-    expect(resolvePageHistorySection('/timer-overlay')).toBe('other')
   })
 })

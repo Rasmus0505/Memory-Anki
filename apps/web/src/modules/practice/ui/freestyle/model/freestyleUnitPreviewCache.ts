@@ -5,7 +5,7 @@ import { createVersionedCache } from '@/shared/persistence/versionedCacheStore'
 /**
  * Read-only unit previews so a feed card can draw its real map while it slides in,
  * before the encounter is opened on activation. Keyed by unit revision: a map edited
- * on the other device (Syncthing) bumps the revision and is never shown stale.
+ * on the other device bumps the revision and is never shown stale.
  */
 const cache = createVersionedCache<UnitReviewSessionDto>('freestyle-unit-preview')
 const inFlight = new Map<string, Promise<void>>()

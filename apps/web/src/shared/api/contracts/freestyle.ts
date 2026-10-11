@@ -408,17 +408,7 @@ export interface FreestyleRoundPlanPayload {
     rating?: number | null
   }>
   overlay_quiz?: FreestyleOverlayQuizState
-  learning_time?: FreestyleRoundLearningTimePayload
 }
-
-export type {
-  FreestyleRoundLearningTimePayload,
-  FreestyleLearningTimeAdd,
-  FreestyleLearningInterval,
-  FreestyleLearningTimeRequest,
-  FreestyleLearningTimeBackfillRequest,
-} from './freestyleLearningTime'
-import type { FreestyleRoundLearningTimePayload } from './freestyleLearningTime'
 
 // The 做题 scope report types live in `freestyleOverlayScope.ts`: one owner, one
 // incident history, and this file's size budget.
