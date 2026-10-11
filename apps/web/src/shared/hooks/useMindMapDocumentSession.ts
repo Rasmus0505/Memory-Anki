@@ -10,42 +10,14 @@ import {
 } from '@/shared/persistence/mindmapEditorDraftStore'
 import { createSavePromiseTracker, type MindMapFlushSaveOptions } from '@/shared/hooks/mindMapDocumentSaveQueue'
 import { useMindMapDocumentConflict } from './mindMapDocumentConflict'
-export interface MindMapPersistenceAdapter<TResponse, TMeta> {
-  load: (id: number) => Promise<TResponse>
-  save: (id: number, data: PersistedMindMapSavePayload) => Promise<TResponse>
-  selectMeta: (response: TResponse) => TMeta
-  selectEditorState: (response: TResponse) => MindMapEditorState
-}
-interface MindMapDocumentSessionOptions<TResponse, TMeta> {
-  entityId: number | null
-  loadCacheKey?: string
-  adapter?: MindMapPersistenceAdapter<TResponse, TMeta>
-  fetcher?: (id: number) => Promise<TResponse>
-  saver?: (id: number, data: PersistedMindMapSavePayload) => Promise<TResponse>
-  selectMeta?: (response: TResponse) => TMeta
-  selectEditorState?: (response: TResponse) => MindMapEditorState
-  onSaveError?: (error: Error, pendingState: MindMapEditorState) => Promise<boolean> | boolean
-  beforeAutoSave?: (nextState: MindMapEditorState, currentState: MindMapEditorState | null) => string | null
-  onLocalSnapshot?: (ownerId: number, snapshot: MindMapEditorState) => void
-  /**
-   * A conflict was resolved for this owner. The same rejected save may also be
-   * parked in the mutation queue; the caller drops it here so it cannot linger
-   * as an unresolvable entry.
-   */
-  onConflictResolved?: (ownerId: number) => void
-}
-type PersistedMindMapSavePayload = MindMapEditorState & {
-  expected_editor_fingerprint?: string | null
-}
-interface ExternalStateGuard {
-  expectedFingerprint: string
-  releaseAt: number
-}
-interface AdoptExternalStateOptions {
-  protectFromStaleLoads?: boolean
-  releaseAfterMs?: number
-}
-export type PersistedMindMapSaveStatus = 'saved' | 'saving' | 'unsaved' | 'error'
+import type {
+  AdoptExternalStateOptions,
+  ExternalStateGuard,
+  MindMapDocumentSessionOptions,
+  PersistedMindMapSavePayload,
+} from './mindMapDocumentSessionTypes'
+export type { MindMapPersistenceAdapter, PersistedMindMapSaveStatus } from './mindMapDocumentSessionTypes'
+import type { PersistedMindMapSaveStatus } from './mindMapDocumentSessionTypes'
 const inflightEditorLoads = new Map<string, Promise<unknown>>()
 const AUTO_SAVE_DEBOUNCE_MS = 800
 /** Ignore revision-token rotation when deciding whether the canvas needs a sync. */
