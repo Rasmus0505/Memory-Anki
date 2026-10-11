@@ -157,7 +157,7 @@ function FreestyleRetryCornerBadge({
       // the bottom edge belongs to the rating bar, and the top-right holds the
       // overflow.
       className={cn(
-        'pointer-events-none absolute left-4 top-[calc(3.25rem+env(safe-area-inset-top,0px))] z-30 inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold shadow-lg backdrop-blur-sm sm:top-14',
+        'pointer-events-none absolute left-4 top-[calc(3.25rem+env(safe-area-inset-top,0px))] z-30 inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold shadow-lg sm:top-14',
         retryChromeClass(done),
       )}
     >

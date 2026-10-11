@@ -489,15 +489,13 @@ select:focus-visible,
 
 .memory-anki-freestyle-breath-affirm {
   box-shadow:
-    inset 0 0 0 2px color-mix(in oklab, var(--color-rate-good) 38%, transparent),
-    inset 0 0 48px color-mix(in oklab, var(--color-stage-glow) 16%, transparent);
+    inset 0 0 0 2px color-mix(in oklab, var(--color-rate-good) 38%, transparent);
 }
 
 /* 忘记/困难 is information, not a loss: a warm neutral note, never a red alarm. */
 .memory-anki-freestyle-breath-note {
   box-shadow:
-    inset 0 0 0 2px color-mix(in oklab, var(--color-stage-muted) 30%, transparent),
-    inset 0 0 40px color-mix(in oklab, var(--color-stage-muted) 12%, transparent);
+    inset 0 0 0 2px color-mix(in oklab, var(--color-stage-muted) 30%, transparent);
 }
 
 @keyframes memory-anki-freestyle-breath {

@@ -471,6 +471,7 @@ export function useImmersiveQueue(
   currentIndexRef.current = currentIndex
 
   useEffect(() => {
+    mountedRef.current = true
     return () => {
       mountedRef.current = false
       queueBuildControllerRef.current?.abort()

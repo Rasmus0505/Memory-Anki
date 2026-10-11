@@ -11,36 +11,19 @@ describe('sessionProgressApi', () => {
     httpMocks.request.mockReset()
   })
 
-  it('uses one stable session id when concurrent first saves race', async () => {
-    httpMocks.request.mockImplementation(async (path: string, init?: { method?: string, body?: string }) => {
-      if (path.startsWith('/study-sessions/by-target')) return { item: null }
-      const payload = JSON.parse(init?.body ?? '{}')
-      return {
-        item: {
-          id: payload.id,
-          palace_id: null,
-          progress: payload.progress ?? {},
-          updated_at: null,
-        },
-      }
+  it('keeps progress local without calling the removed study-session API', async () => {
+    const result = await saveSessionProgressApi('practice', 42, {
+      reveal_map: { a: 'revealed' },
+      red_node_ids: ['node-1'],
+      completed: false,
+    }, 'save')
+
+    expect(httpMocks.request).not.toHaveBeenCalled()
+    expect(result.progress).toMatchObject({
+      palace_id: 42,
+      reveal_map: { a: 'revealed' },
+      red_node_ids: ['node-1'],
+      completed: false,
     })
-
-    await Promise.all([
-      saveSessionProgressApi('practice', 42, {
-        reveal_map: {},
-        red_node_ids: [],
-        completed: false,
-      }, 'save one'),
-      saveSessionProgressApi('practice', 42, {
-        reveal_map: {},
-        red_node_ids: ['node-1'],
-        completed: false,
-      }, 'save two'),
-    ])
-
-    const createdIds = httpMocks.request.mock.calls
-      .filter(([path]) => path === '/study-sessions')
-      .map(([, init]) => JSON.parse(init.body).id)
-    expect(createdIds).toEqual(['session-progress-practice-42', 'session-progress-practice-42'])
   })
 })

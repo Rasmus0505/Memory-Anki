@@ -2015,10 +2015,12 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(screen.getByTestId('freestyle-rating-button-4').getAttribute('aria-pressed')).toBe('false')
     await act(async () => pending[1].reject())
     await waitFor(() => expect(onSaveFailed).toHaveBeenCalled())
-    expect(onBranchComplete).toHaveBeenCalledTimes(1)
+    expect(onBranchComplete).toHaveBeenLastCalledWith(card.id, {
+      restudy: false, rating: 3, retryAfterCards: 0,
+    })
     expect(onRatingSettled).not.toHaveBeenCalled()
     expect(screen.getByTestId('freestyle-rating-button-4').getAttribute('aria-pressed')).toBe('false')
-    expect(screen.getByTestId('freestyle-rating-effect-line').textContent).toContain('未保存轻松')
+    expect(screen.getByTestId('freestyle-rating-effect-line').textContent).not.toContain('未保存')
     expect(screen.getByRole('alert').textContent).toContain('这一次没有保存成功')
 
     fireEvent.click(screen.getByTestId('freestyle-rating-button-4'))
@@ -2030,7 +2032,7 @@ describe('FreestyleUnitReviewCardView', () => {
     })
   })
 
-  it('keeps the score when the rate post fails and asks for one more tap', async () => {
+  it('clears the score and progress when the rate post fails', async () => {
     const card = buildCard('unit-rate-rollback')
     const session = buildSession(card.unit_id!)
     apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(session)
@@ -2042,9 +2044,9 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(onBranchComplete).not.toHaveBeenCalled()
 
     await waitFor(() => expect(onSaveFailed).toHaveBeenCalled())
-    expect(onBranchComplete).not.toHaveBeenCalledWith(card.id, { cleared: true })
+    expect(onBranchComplete).toHaveBeenCalledWith(card.id, { cleared: true })
     expect(screen.getByTestId('freestyle-rating-button-3').getAttribute('aria-pressed')).toBe('false')
-    expect(screen.getByTestId('freestyle-rating-effect-line').textContent).toContain('未保存记得')
+    expect(screen.queryByTestId('freestyle-rating-effect-line')).toBeNull()
     expect(screen.getByRole('alert').textContent).toContain('这一次没有保存成功')
     expect(screen.getByRole('alert').textContent).not.toContain('network down')
     expect(apiMocks.rateReviewUnitApi).toHaveBeenCalledTimes(1)

@@ -1,70 +1,4 @@
-import { request } from '@/shared/api/http'
-import type { PersistedRequestInit } from '@/shared/api/http'
 import type { SessionProgressSnapshot } from '@/shared/api/contracts'
-
-type StudySessionScene = 'practice'
-type StudySessionTargetType = 'palace'
-
-interface StudySessionItem {
-  id: string
-  palace_id: number | null
-  progress: Record<string, unknown>
-  updated_at: string | null
-}
-
-interface StudySessionPayload {
-  id?: string
-  status?: 'active' | 'abandoned'
-  scene: StudySessionScene
-  target_type?: StudySessionTargetType
-  target_id?: number | null
-  started_at?: string | null
-  ended_at?: string | null
-  progress?: unknown
-}
-
-function createOperationId(prefix: string) {
-  return `${prefix}:${crypto.randomUUID()}`
-}
-
-function getActiveStudySessionByTargetApi(params: {
-  targetType: StudySessionTargetType
-  targetId: number
-  scene: StudySessionScene
-}) {
-  const query = new URLSearchParams()
-  query.set('target_type', params.targetType)
-  query.set('target_id', String(params.targetId))
-  query.set('scene', params.scene)
-  return request<{ item: StudySessionItem | null }>(`/study-sessions/by-target?${query}`)
-}
-
-function createStudySessionApi(payload: StudySessionPayload) {
-  return request<{ item: StudySessionItem }>('/study-sessions', {
-    method: 'POST',
-    body: JSON.stringify({
-      ...payload,
-      operation_id: createOperationId('study-session:create'),
-    }),
-    persistence: {
-      resourceKey: `study-session:${payload.id ?? payload.scene}:create`,
-      description: 'Create study session',
-      replayMode: 'auto',
-    },
-  })
-}
-
-function patchStudySessionApi(
-  id: string,
-  payload: Partial<StudySessionPayload>,
-  options: { persistence: PersistedRequestInit['persistence'] },
-) {
-  return request<{ item: StudySessionItem }>(`/study-sessions/${id}`, {
-    method: 'PATCH',
-    body: JSON.stringify({ ...payload, operation_id: createOperationId(`study-session:${id}:patch`) }),
-    persistence: options.persistence,
-  })
-}
 
 export type SessionProgressMode = 'practice'
 
@@ -74,112 +8,32 @@ export interface SessionProgressPayload {
   completed: boolean
 }
 
-function sessionProgressResourceKey(mode: SessionProgressMode, id: number) {
-  return `session-progress:${mode}:${id}`
-}
-
-function sessionProgressSessionId(mode: SessionProgressMode, id: number) {
-  return `session-progress-${mode}-${id}`
-}
-
-function modeToStudyTarget(mode: SessionProgressMode, id: number): {
-  scene: StudySessionScene
-  targetType: StudySessionTargetType
-  targetId: number
-} {
-  return { scene: 'practice', targetType: 'palace', targetId: id }
-}
-
-function studySessionToProgress(item: StudySessionItem | null): SessionProgressSnapshot | null {
-  if (!item) return null
-  const progress = item.progress || {}
-  return {
-    id: Number.parseInt(item.id.replace(/\D+/g, ''), 10) || 0,
-    session_kind: 'practice',
-    palace_id: item.palace_id,
-    reveal_map: (progress.reveal_map || {}) as SessionProgressSnapshot['reveal_map'],
-    red_node_ids: (progress.red_node_ids || []) as string[],
-    completed: Boolean(progress.completed),
-    updated_at: item.updated_at,
-  }
-}
-
-export async function getSessionProgressApi(mode: SessionProgressMode, id: number) {
-  const target = modeToStudyTarget(mode, id)
-  const result = await getActiveStudySessionByTargetApi({
-    targetType: target.targetType,
-    targetId: target.targetId,
-    scene: target.scene,
-  })
-  return { progress: studySessionToProgress(result.item) }
+export async function getSessionProgressApi(_mode: SessionProgressMode, _id: number) {
+  return { progress: null as SessionProgressSnapshot | null }
 }
 
 export async function saveSessionProgressApi(
   mode: SessionProgressMode,
   id: number,
   data: SessionProgressPayload,
-  description: string,
+  _description: string,
 ) {
-  const resourceKey = sessionProgressResourceKey(mode, id)
-  const target = modeToStudyTarget(mode, id)
-  const existing = await getActiveStudySessionByTargetApi({
-    targetType: target.targetType,
-    targetId: target.targetId,
-    scene: target.scene,
-  })
-  const payload: Partial<StudySessionPayload> = {
-    scene: target.scene,
-    target_type: target.targetType,
-    target_id: target.targetId,
-    progress: data,
+  const progress: SessionProgressSnapshot = {
+    id: 0,
+    session_kind: mode,
+    palace_id: id,
+    reveal_map: data.reveal_map as SessionProgressSnapshot['reveal_map'],
+    red_node_ids: data.red_node_ids,
+    completed: data.completed,
+    updated_at: new Date().toISOString(),
   }
-  const result = existing.item
-    ? await patchStudySessionApi(existing.item.id, payload, {
-        persistence: {
-          resourceKey,
-          coalesceKey: resourceKey,
-          description,
-          replayMode: 'auto',
-        },
-      })
-    : await createStudySessionApi({
-        ...payload,
-        id: sessionProgressSessionId(mode, id),
-        status: 'active',
-        started_at: new Date().toISOString(),
-      } as StudySessionPayload)
-  return { progress: studySessionToProgress(result.item) as SessionProgressSnapshot }
+  return { progress }
 }
 
 export async function clearSessionProgressApi(
-  mode: SessionProgressMode,
-  id: number,
-  description?: string,
+  _mode: SessionProgressMode,
+  _id: number,
+  _description?: string,
 ) {
-  const target = modeToStudyTarget(mode, id)
-  const existing = await getActiveStudySessionByTargetApi({
-    targetType: target.targetType,
-    targetId: target.targetId,
-    scene: target.scene,
-  })
-  if (!existing.item) return { ok: true }
-  const persistence = description
-    ? {
-        resourceKey: `${sessionProgressResourceKey(mode, id)}:clear`,
-        description,
-        replayMode: 'manual' as const,
-      }
-    : {
-        resourceKey: `${sessionProgressResourceKey(mode, id)}:clear`,
-        description: 'Clear session progress',
-        replayMode: 'manual' as const,
-      }
-  await patchStudySessionApi(existing.item.id, {
-    status: 'abandoned',
-    ended_at: new Date().toISOString(),
-    progress: { ...existing.item.progress, completed: true },
-  }, {
-    persistence,
-  })
   return { ok: true }
 }

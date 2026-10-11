@@ -980,7 +980,7 @@ export function FreestyleUnitReviewCardView({
         if (typeof revision === 'number') follow.send.unitRevision = revision
       }
       if (!posted?.unitResult) {
-        if (current) markSaveFailed('评分没有保存：没有拿到后台的评分结果（页面没有这张卡的单元或回合，或后台把这次评分当作重复请求忽略了）')
+        if (current) markSaveFailed('评分没有保存：没有拿到后台的评分结果（页面没有这张卡的单元或回合，或后台把这次评分当作重复请求忽略了）', ticket.generation)
       } else if (current) {
         saveFailedRef.current = false
         settleRating(posted.unitResult, ticket, posted.nextPlanVersion)
@@ -1008,7 +1008,7 @@ export function FreestyleUnitReviewCardView({
         rateBridgeRef.current.onStaleDrop(ticket.cardId)
         return
       }
-      if (current && !follow.undo) markSaveFailed(diagnostic)
+      if (current && !follow.undo) markSaveFailed(diagnostic, ticket.generation)
       baselinesRef.current.delete(ticket.generation)
       if (follow.send) await dispatchRating(follow.send)
     } finally {
@@ -1016,14 +1016,12 @@ export function FreestyleUnitReviewCardView({
     }
   }
 
-  function markSaveFailed(detail?: string) {
-    saveFailedRef.current = true
+  function markSaveFailed(detail: string | undefined, generation: number) {
     if (detail) recordSessionRecorderUiAction('error', '评分没有保存', detail)
-    if (mountedRef.current) {
-      setActionError(RATING_SAVE_FAILED_COPY)
-      const failed = optimisticRatingRef.current
-      setRatingSave(failed == null ? null : { rating: failed, status: 'failed' })
-    }
+    // An unsaved grade must not stay lit, nor keep the progress bar lit.
+    rollbackRating(generation)
+    saveFailedRef.current = false
+    if (mountedRef.current) setActionError(RATING_SAVE_FAILED_COPY)
     rateBridgeRef.current.onSaveFailed(RATING_SAVE_FAILED_COPY)
   }
 
@@ -1070,7 +1068,7 @@ export function FreestyleUnitReviewCardView({
         ? ensureEncounterRef.current(cardRef.current.id, effectiveRevision, true)
         : null
       if (!unitId || !identity?.encounterId) {
-        markSaveFailed(`评分前没有拿到这张卡的复习记录（单元：${unitId || '无'}，卡片：${cardRef.current.id}，回合：${roundIdRef.current || '无'}）`)
+        markSaveFailed(`评分前没有拿到这张卡的复习记录（单元：${unitId || '无'}，卡片：${cardRef.current.id}，回合：${roundIdRef.current || '无'}）`, mailboxRef.current.latest + 1)
         return
       }
       requestGlanceNow()

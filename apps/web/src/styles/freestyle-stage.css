@@ -11,22 +11,14 @@
     var(--color-stage);
 }
 
+/* Opaque on every viewport. These chips sit over the live React Flow canvas; a
+   backdrop-filter re-blurs the strip under each one on every map repaint. Phones
+   were already opaque and smooth; desktop kept the blur and dropped frames. */
 .freestyle-stage-glass {
-  background: var(--color-stage-overlay);
+  background: hsl(24 16% 9% / 0.96);
   box-shadow:
     inset 0 1px 0 hsl(38 60% 90% / 0.06),
     0 14px 36px -10px rgb(0 0 0 / 0.55);
-  -webkit-backdrop-filter: blur(14px) saturate(1.2);
-  backdrop-filter: blur(14px) saturate(1.2);
-}
-
-/* Phones: even a small glass chip blurring the live map is too expensive. */
-@media (max-width: 639px) {
-  .freestyle-stage-glass {
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-    background: hsl(24 16% 9% / 0.96);
-  }
 }
 
 /* ---------- Rating dock ---------- */

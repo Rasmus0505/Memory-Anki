@@ -12,9 +12,9 @@ import { cue, useFxOwner } from '@/shared/fx'
 const REACTION_KEYFRAMES: Record<FlowRatingReaction, { frames: Keyframe[]; duration: number }> = {
   sink: {
     frames: [
-      { transform: 'translate3d(0,0,0) scale(1)' },
-      { transform: 'translate3d(-6px,10px,0) scale(0.985)' },
-      { transform: 'translate3d(0,0,0) scale(1)' },
+      { transform: 'translate3d(0,0,0)' },
+      { transform: 'translate3d(-6px,10px,0)' },
+      { transform: 'translate3d(0,0,0)' },
     ],
     duration: 380,
   },
@@ -31,17 +31,17 @@ const REACTION_KEYFRAMES: Record<FlowRatingReaction, { frames: Keyframe[]; durat
   },
   lift: {
     frames: [
-      { transform: 'translate3d(0,0,0) scale(1)' },
-      { transform: 'translate3d(0,-12px,0) scale(1.012)' },
-      { transform: 'translate3d(0,0,0) scale(1)' },
+      { transform: 'translate3d(0,0,0)' },
+      { transform: 'translate3d(0,-12px,0)' },
+      { transform: 'translate3d(0,0,0)' },
     ],
     duration: 360,
   },
   fling: {
     frames: [
-      { transform: 'translate3d(0,0,0) rotate(0deg) scale(1)' },
-      { transform: 'translate3d(10px,-18px,0) rotate(1.2deg) scale(1.02)' },
-      { transform: 'translate3d(0,0,0) rotate(0deg) scale(1)' },
+      { transform: 'translate3d(0,0,0)' },
+      { transform: 'translate3d(10px,-18px,0)' },
+      { transform: 'translate3d(0,0,0)' },
     ],
     duration: 420,
   },
@@ -102,7 +102,7 @@ function Flash({ reaction, tone }: { reaction: FlowRatingReaction; tone: string 
       data-testid="freestyle-rating-reaction"
       data-reaction={reaction}
       className="pointer-events-none absolute inset-0 z-20 rounded-[inherit] opacity-0"
-      style={{ boxShadow: `inset 0 0 0 2px ${tone}, inset 0 0 80px -20px ${tone}` }}
+      style={{ boxShadow: `inset 0 0 0 2px ${tone}` }}
       aria-hidden
     />
   )
