@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FreestyleFeedConfig } from '@/shared/api/contracts'
 import { FreestyleRoundConfigDialog } from './FreestyleRoundConfigDialog'

@@ -18,7 +18,6 @@ import type {
   FreestyleTrainingStreams,
   FreestyleUnitOrder,
 } from '@/shared/api/contracts'
-import type { FreestylePalaceContext } from '@/shared/api/contracts'
 import {
   asOverlayQuestionKinds,
   asOverlayRatingInherit,

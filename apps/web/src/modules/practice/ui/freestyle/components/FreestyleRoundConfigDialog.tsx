@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { Save, SlidersHorizontal } from 'lucide-react'
 import { getPalacesGroupedApi, getSubjectTreeApi } from '@/modules/content/public'
 import { sanitizeFreestyleFeedConfig } from '@/modules/practice/domain/feedConfig'
-import { flattenPalaceOptions } from '@/modules/practice/ui/freestyle/model/freestyle-cards'
 import {
   allFreestylePalaceIdsFromSubjects,
   buildFreestylePalaceScopeSubjects,
@@ -19,7 +18,6 @@ import { FreestylePalacePickerDialog } from './FreestylePalacePickerDialog'
 import { FreestyleTrainingConfigForm } from './FreestyleTrainingConfigForm'
 import type {
   FreestyleFeedConfig,
-  FreestylePalaceContext,
   FreestyleTrainingStream,
 } from '@/shared/api/contracts'
 import { Button } from '@/shared/components/ui/button'
@@ -57,7 +55,6 @@ export function FreestyleRoundConfigDialog({
 }) {
   const [draft, setDraft] = useState(() => sanitizeFreestyleFeedConfig(config))
   const [pendingSave, setPendingSave] = useState<FreestyleFeedConfig | null>(null)
-  const [palaces, setPalaces] = useState<FreestylePalaceContext[]>([])
   const [scopeSubjects, setScopeSubjects] = useState<FreestylePalaceScopeSubject[]>([])
   const [pickerStream, setPickerStream] = useState<FreestyleTrainingStream | null>(null)
 
@@ -80,7 +77,6 @@ export function FreestyleRoundConfigDialog({
         .map((item) => item.subject?.id)
         .filter((id): id is number => Boolean(id))
       if (active) {
-        setPalaces(flattenPalaceOptions(value))
         setScopeSubjects(buildFreestylePalaceScopeSubjects(value))
       }
       const trees = typeof getSubjectTreeApi === 'function'
@@ -100,7 +96,6 @@ export function FreestyleRoundConfigDialog({
       }
     }).catch(() => {
       if (active) {
-        setPalaces([])
         setScopeSubjects([])
       }
     })

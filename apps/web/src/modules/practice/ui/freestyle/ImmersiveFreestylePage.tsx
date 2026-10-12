@@ -18,7 +18,6 @@ import {
   buildFreestyleRoundCompletion,
   buildPartialSettlementSnapshot,
   foldPartialSettlementsIntoCompletion,
-  findUnscoredCompleteSeekIndices,
   isFreestyleRoundComplete,
 } from '@/modules/practice/ui/freestyle/model/roundCompletion'
 import type { FreestylePartialSettlementSnapshot } from '@/modules/practice/domain/partialSettlement'
