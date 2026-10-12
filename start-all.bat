@@ -83,7 +83,7 @@ goto wait_port_free
 
 :find_backend_pid
 set "BACKEND_PID="
-for /f "tokens=5" %%p in ('netstat -ano -p tcp ^| findstr /R ":8012 .*LISTENING"') do set "BACKEND_PID=%%p"
+for /f "tokens=5" %%p in ('netstat -ano -p tcp ^| findstr ":8012" ^| findstr "LISTENING"') do set "BACKEND_PID=%%p"
 exit /b 0
 
 :smoke_test
