@@ -75,12 +75,26 @@ def _unit_has_due(unit: ReviewUnitCandidate, due_uids: set[str]) -> bool:
     return _unit_due_count(unit, due_uids) > 0
 
 
+def _least_recently_passed_key(unit: ReviewUnitCandidate) -> tuple[int, float, str]:
+    """Never-passed units first, then the longest-ago passed unit."""
+    if unit.last_passed_at is None:
+        return (0, 0.0, unit.unit_id)
+    return (1, unit.last_passed_at.timestamp(), unit.unit_id)
+
+
 def sort_due_phase_units(
     units: Sequence[ReviewUnitCandidate],
     due_by_palace: Mapping[int, set[str]],
 ) -> list[ReviewUnitCandidate]:
+    """Most overdue first; ties go to the least recently passed unit."""
     del due_by_palace
-    return list(units)
+    return sorted(
+        units,
+        key=lambda unit: (
+            unit.due_date.toordinal() if unit.due_date is not None else 0,
+            _least_recently_passed_key(unit),
+        ),
+    )
 
 
 def attach_questions_to_units(

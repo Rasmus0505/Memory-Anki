@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import date, datetime
 from typing import Any
 
 from memory_anki.modules.mindmap_document.api import ancestor_path
@@ -21,6 +22,8 @@ class ReviewUnitCandidate:
     unit_id: str
     revision: int
     unit_kind: str = ""
+    due_date: date | None = None
+    last_passed_at: datetime | None = None
 
     @property
     def node_count(self) -> int:

@@ -151,6 +151,8 @@ def list_trusted_due_units_for_queue(
             ReviewUnitState.node_uids_json,
             ReviewUnitState.revision,
             ReviewUnitState.has_passed,
+            ReviewUnitState.due_date,
+            ReviewUnitState.last_passed_at,
             Palace.group_sort_order,
             Palace.title,
             Palace.manual_title,
@@ -189,6 +191,8 @@ def list_trusted_due_units_for_queue(
                 "node_uids": node_uids,
                 "revision": int(row.revision or 1),
                 "has_passed": bool(row.has_passed),
+                "due_date": row.due_date,
+                "last_passed_at": row.last_passed_at,
                 "title": title,
                 "group_sort_order": int(row.group_sort_order or 0),
             }
