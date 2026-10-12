@@ -9,9 +9,12 @@ from memory_anki.core.time import (
     to_api_datetime,
 )
 from memory_anki.infrastructure.db._tables.misc import FreestyleRoundState
+from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitState
 from memory_anki.modules.practice.application.round_fresh_due import project_served_plan
 from memory_anki.modules.practice.domain.round_plan import normalize_plan
 from memory_anki.modules.practice.domain.workspace import normalize_workspace
+
+_SUMMARY_CHUNK = 400
 
 
 def _json_object(value: Any) -> dict[str, Any]:
@@ -84,6 +87,48 @@ def _serve(session: Any, row: FreestyleRoundState, **kwargs: Any) -> dict[str, A
 def _serve(session: Any, row: None, **kwargs: Any) -> None: ...
 
 
+def _unfinished_summary(session: Any, plan: dict[str, Any]) -> dict[str, Any]:
+    excluded = set(plan.get("excluded_ids") or [])
+    completed = set(plan.get("completed_ids") or [])
+    cards: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in plan.get("original_cards") or []:
+        if not isinstance(item, dict):
+            continue
+        card_id = item.get("card_id")
+        if not card_id or card_id in seen or card_id in excluded or card_id in completed:
+            continue
+        seen.add(card_id)
+        cards.append(item)
+    unit_ids = sorted({str(c["unit_id"]) for c in cards if c.get("unit_id")})
+    passed: set[str] = set()
+    for start in range(0, len(unit_ids), _SUMMARY_CHUNK):
+        part = unit_ids[start : start + _SUMMARY_CHUNK]
+        for uid, has_passed in session.query(ReviewUnitState.id, ReviewUnitState.has_passed).filter(
+            ReviewUnitState.id.in_(part)
+        ):
+            if has_passed:
+                passed.add(uid)
+    order: list[dict[str, Any]] = []
+    for card in cards:
+        unit_id = str(card["unit_id"]) if card.get("unit_id") else None
+        order.append(
+            {
+                "card_id": card["card_id"],
+                "unit_id": unit_id,
+                "palace_id": card.get("palace_id"),
+                "kind": "review" if unit_id in passed else "new",
+            }
+        )
+    new_count = sum(1 for item in order if item["kind"] == "new")
+    return {
+        "new_count": new_count,
+        "review_count": len(order) - new_count,
+        "skipped_count": len(excluded),
+        "order": order,
+    }
+
+
 def _serve(session: Any, row: FreestyleRoundState | None, **kwargs: Any) -> dict[str, Any] | None:
     """Response wrapper. Strips a previous visit's score without touching the row."""
     if row is None:
@@ -94,6 +139,7 @@ def _serve(session: Any, row: FreestyleRoundState | None, **kwargs: Any) -> dict
         return payload
     served = dict(payload)
     served["plan"] = project_served_plan(session, plan)
+    served["summary"] = _unfinished_summary(session, served["plan"])
     return served
 
 

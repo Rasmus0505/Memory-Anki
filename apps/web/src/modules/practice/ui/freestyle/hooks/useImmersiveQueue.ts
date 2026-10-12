@@ -16,6 +16,10 @@ import {
   type QueuePlanUpdateCard,
 } from '@/modules/practice/ui/freestyle/model/queuePlanUpdate'
 import { deviceLocalCursor } from '@/modules/practice/domain/deviceLocalCursor'
+import {
+  judgeFreestyleSaveOutcome,
+  type FreestyleSaveOutcome,
+} from '@/modules/practice/ui/freestyle/model/freestyleSettlementModel'
 import { ensureStudyTextLibrary } from '@/shared/study-text/studyTextLibrary'
 import {
   mergePartialSettlementLists,
@@ -113,6 +117,7 @@ import type {
   FreestyleRoundStatePayload,
 } from '@/shared/api/contracts'
 import { isReviewHintId } from '@/shared/api/contracts'
+import type { FreestyleRoundSummary } from '@/shared/api/contracts'
 import {
   insertReviewHintCards,
   stripReviewHintCards,
@@ -438,6 +443,52 @@ export function useImmersiveQueue(
   const [staleCircuitOpen, setStaleCircuitOpen] = useState(false)
   const [staleRecoveryCardId, setStaleRecoveryCardId] = useState<string | null>(null)
   const serverPlanVersionRef = useRef(0)
+  const [roundSave, setRoundSave] = useState<{ roundId: string; outcome: FreestyleSaveOutcome; seq: number } | null>(null)
+  const roundSaveSeqRef = useRef(0)
+  const [roundSummary, setRoundSummary] = useState<{ roundId: string; summary: FreestyleRoundSummary; seq: number } | null>(null)
+  const roundSummarySeqRef = useRef(0)
+  const lastFailedSaveRef = useRef<{ roundId: string; body: Parameters<typeof applyFreestyleRoundActionApi>[1] } | null>(null)
+  const saveRoundAction = useCallback((
+    roundId: string,
+    body: Parameters<typeof applyFreestyleRoundActionApi>[1],
+  ) => {
+    const beforeVersion = serverPlanVersionRef.current
+    const beforeCompleted = queueStateRef.current.completedIds.length
+    const record = (outcome: FreestyleSaveOutcome) => {
+      roundSaveSeqRef.current += 1
+      setRoundSave({ roundId, outcome, seq: roundSaveSeqRef.current })
+    }
+    return applyFreestyleRoundActionApi(roundId, body).then((round) => {
+      lastFailedSaveRef.current = null
+      record(judgeFreestyleSaveOutcome({
+        beforeVersion,
+        beforeCompleted,
+        response: {
+          version: serverPlanVersion(round),
+          conflict: round.conflict === true,
+          duplicate: (round as { duplicate?: boolean }).duplicate === true,
+          completedCount: round.plan?.completed_ids?.length ?? 0,
+        },
+      }))
+      return round
+    }, (error: unknown) => {
+      const httpStatus = (error as { status?: number }).status
+      lastFailedSaveRef.current = { roundId, body }
+      record(judgeFreestyleSaveOutcome({
+        beforeVersion,
+        beforeCompleted,
+        response: null,
+        httpStatus,
+        networkError: httpStatus == null,
+      }))
+      throw error
+    })
+  }, [])
+  const retryRoundSave = useCallback(() => {
+    const failed = lastFailedSaveRef.current
+    if (!failed) return Promise.resolve(null)
+    return saveRoundAction(failed.roundId, failed.body).catch(() => null)
+  }, [saveRoundAction])
   const cursorCommitTimerRef = useRef<number | null>(null)
   const pendingCursorRef = useRef<string | null>(null)
   /** Restores in flight. A stale server exclude list must not hide these again. */
@@ -532,7 +583,7 @@ export function useImmersiveQueue(
   const sendRoundCursor = useCallback((target: string) => {
     const roundId = queueStateRef.current.roundId
     if (!roundId || isReviewHintId(target)) return
-    void applyFreestyleRoundActionApi(roundId, {
+    void saveRoundAction(roundId, {
       operation_id: createOperationId(),
       expected_version: serverPlanVersionRef.current,
       action: 'set_cursor',
@@ -544,7 +595,7 @@ export function useImmersiveQueue(
     }).catch(() => {
       // Local draft cursor remains; next successful settle retries.
     })
-  }, [])
+  }, [saveRoundAction])
 
   /** Commit the viewport card to the server round cursor so F5 can restore it. */
   const commitRoundCursor = useCallback((cardId: string | null | undefined) => {
@@ -915,6 +966,10 @@ export function useImmersiveQueue(
           serverPlanVersionRef.current = version
           setPlanVersion(version)
           const adoptedRoundId = round.round_id || queueStateRef.current.roundId
+          if (options?.forceStart && round.summary) {
+            roundSummarySeqRef.current += 1
+            setRoundSummary({ roundId: adoptedRoundId, summary: round.summary, seq: roundSummarySeqRef.current })
+          }
           nextCards = cardsForServerPlan(builtCards, round.plan, adoptedRoundId)
           incomingMeta.scheduled_count = nextCards.length
           serverCurrentId = nextUnfinishedCardId(round.plan, nextCards)
@@ -1515,7 +1570,7 @@ export function useImmersiveQueue(
         : null
       persistQueueState({ ...markCompleted(queueStateRef.current, cardId), roundPlan: nextPlan })
       const roundId = queueStateRef.current.roundId
-      void applyFreestyleRoundActionApi(roundId, {
+      void saveRoundAction(roundId, {
         operation_id: createOperationId(),
         expected_version: serverPlanVersionRef.current,
         action: 'complete',
@@ -1529,7 +1584,7 @@ export function useImmersiveQueue(
         // Local completion remains the offline draft.
       })
     },
-    [notifyPeerRound, persistQueueState],
+    [notifyPeerRound, persistQueueState, saveRoundAction],
   )
 
   /**
@@ -1577,7 +1632,7 @@ export function useImmersiveQueue(
           roundPlan: plan,
         })
         const roundId = queueStateRef.current.roundId
-        void applyFreestyleRoundActionApi(roundId, {
+        void saveRoundAction(roundId, {
           operation_id: createOperationId(),
           expected_version: serverPlanVersionRef.current,
           action: 'uncomplete',
@@ -1712,7 +1767,7 @@ export function useImmersiveQueue(
         preferCardId: preferViewportId,
       })
     },
-    [applyCurrentIndex, buildQueue, notifyPeerRound, persistQueueState, syncPendingRestudyIds],
+    [applyCurrentIndex, buildQueue, notifyPeerRound, persistQueueState, syncPendingRestudyIds, saveRoundAction],
   )
 
   const completeCardBatch = useCallback(
@@ -1848,7 +1903,7 @@ export function useImmersiveQueue(
         for (const cardId of clearedLogicalIds) {
           if (queueStateRef.current.roundId !== roundId) return
           try {
-            const round = await applyFreestyleRoundActionApi(roundId, {
+            const round = await saveRoundAction(roundId, {
               operation_id: createOperationId(),
               expected_version: serverPlanVersionRef.current,
               action: 'uncomplete',
@@ -1875,7 +1930,7 @@ export function useImmersiveQueue(
         rebuild()
       })()
     },
-    [applyCurrentIndex, buildQueue, completeCard, notifyPeerRound, persistQueueState, syncPendingRestudyIds],
+    [applyCurrentIndex, buildQueue, completeCard, notifyPeerRound, persistQueueState, syncPendingRestudyIds, saveRoundAction],
   )
 
   /**
@@ -1949,7 +2004,7 @@ export function useImmersiveQueue(
       }
     }
 
-    void applyFreestyleRoundActionApi(roundId, {
+    void saveRoundAction(roundId, {
       operation_id: createOperationId(),
       expected_version: serverPlanVersionRef.current,
       action: 'leave_card',
@@ -2009,7 +2064,7 @@ export function useImmersiveQueue(
         setCards(fallback)
       }
     })
-  }, [applyCurrentIndex, notifyPeerRound, persistQueueState, syncPendingRestudyIds])
+  }, [applyCurrentIndex, notifyPeerRound, persistQueueState, syncPendingRestudyIds, saveRoundAction])
   applyPendingRestudyPlacementRef.current = applyPendingRestudyPlacement
 
   /**
@@ -2209,7 +2264,7 @@ export function useImmersiveQueue(
       let echoedExcluded: string[] | null = null
       for (const cardId of excludedIds) {
         for (let attempt = 0; attempt < 3; attempt += 1) {
-          const round = await applyFreestyleRoundActionApi(roundId, {
+          const round = await saveRoundAction(roundId, {
             operation_id: createOperationId(),
             expected_version: serverPlanVersionRef.current,
             action: 'exclude',
@@ -2259,7 +2314,7 @@ export function useImmersiveQueue(
       reason: 'plan_exclude',
       forceExcludedIds: [...excludedIds],
     })
-  }, [applyCurrentIndex, buildQueue, notifyPeerRound, persistQueueState])
+  }, [applyCurrentIndex, buildQueue, notifyPeerRound, persistQueueState, saveRoundAction])
 
   const restorePlanCards = useCallback((cardIds: string[]) => {
     const ids = cardIds.map((id) => String(id || '').trim()).filter(Boolean)
@@ -2275,7 +2330,7 @@ export function useImmersiveQueue(
     void (async () => {
       for (const cardId of ids) {
         for (let attempt = 0; attempt < 3; attempt += 1) {
-          const round = await applyFreestyleRoundActionApi(roundId, {
+          const round = await saveRoundAction(roundId, {
             operation_id: createOperationId(),
             expected_version: serverPlanVersionRef.current,
             action: 'restore',
@@ -2303,7 +2358,7 @@ export function useImmersiveQueue(
       completedIds: nextState.completedIds,
       reason: 'plan_restore',
     })
-  }, [buildQueue, notifyPeerRound, persistQueueState])
+  }, [buildQueue, notifyPeerRound, persistQueueState, saveRoundAction])
 
   const compressCompletedPlanCards = useCallback((snapshot?: FreestylePartialSettlementSnapshot) => {
     const current = queueStateRef.current
@@ -2336,7 +2391,7 @@ export function useImmersiveQueue(
     const roundId = current.roundId
     void (async () => {
       for (let attempt = 0; attempt < 3; attempt += 1) {
-        const round = await applyFreestyleRoundActionApi(roundId, {
+        const round = await saveRoundAction(roundId, {
           operation_id: createOperationId(),
           expected_version: serverPlanVersionRef.current,
           action: 'compress_completed',
@@ -2380,7 +2435,7 @@ export function useImmersiveQueue(
       reason: 'plan_compress_completed',
       forceCompressedIds: ids,
     })
-  }, [applyCurrentIndex, buildQueue, persistQueueState])
+  }, [applyCurrentIndex, buildQueue, persistQueueState, saveRoundAction])
 
   const goToIndex = useCallback(
     (index: number, options?: { reorderRestudy?: boolean }) => {
@@ -2928,5 +2983,8 @@ export function useImmersiveQueue(
     queueFrozen,
     startupVisualIndex,
     clearStartupVisualIndex,
+    roundSave,
+    roundSummary,
+    retryRoundSave,
   }
 }

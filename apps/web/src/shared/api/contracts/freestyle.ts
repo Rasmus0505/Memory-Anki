@@ -492,6 +492,55 @@ export interface FreestyleRoundStatePayload {
    * the banner. See docs/incidents/0002-quiz-scope-two-owners.md §6.
    */
   learning_backfill_applied?: boolean
+  summary?: FreestyleRoundSummary
+}
+
+export interface FreestyleRoundSummary {
+  new_count: number
+  review_count: number
+  skipped_count: number
+  order: FreestyleRoundSummaryItem[]
+}
+
+export interface FreestyleRoundSummaryItem {
+  card_id: string
+  unit_id: string | null
+  palace_id: number | null
+  kind: 'new' | 'review'
+}
+
+export interface FreestyleOverviewCounts {
+  palaces: number
+  units: number
+  new: number
+  review: number
+  done: number
+  remaining: number
+}
+
+export interface FreestyleOverviewRound {
+  round_id: string
+  version: number
+  counts: FreestyleOverviewCounts
+  by_subject: Array<{ subject_id: number | null; name: string; done: number; total: number }>
+}
+
+export interface FreestyleOverviewResponse {
+  round: FreestyleOverviewRound | null
+  today: { due_count: number; overdue_count: number; new_palace_count: number }
+  yesterday: {
+    date: string
+    learned_units: number
+    rated_count: number
+    weak_units: Array<{ unit_id: string; name: string; palace_name: string; again_ratio: number }>
+  }
+  next_reviews: Array<{
+    unit_id: string
+    name: string
+    palace_name: string
+    due_date: string
+    interval_days: number
+  }>
 }
 
 export interface FreestyleRoundActiveRequest {

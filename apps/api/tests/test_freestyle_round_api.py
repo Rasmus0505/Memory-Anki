@@ -241,6 +241,25 @@ def test_start_new_round_completes_previous(make_client):
     assert payload["round_id"] != first["round_id"]
 
 
+def test_started_round_carries_summary_of_unfinished_cards(make_client):
+    client = _client(make_client)
+    started = client.post(
+        "/api/v1/freestyle/rounds/start",
+        json={
+            "operation_id": "op-summary",
+            "scope_key": "scope-summary",
+            "config": {"queue_length": 10},
+            "cards": _cards("x", "y"),
+            "round_id": "round-summary",
+        },
+    )
+    assert started.status_code == 200, started.text
+    summary = started.json()["summary"]
+    assert summary["skipped_count"] == 0
+    assert summary["new_count"] + summary["review_count"] == 2
+    assert [item["card_id"] for item in summary["order"]] == ["x", "y"]
+
+
 def test_active_round_freezes_when_fully_handled_with_leftover_due(make_client):
     """Silent get_or_create must keep settlement; leftover due must not mint/append."""
     client = _client(make_client)

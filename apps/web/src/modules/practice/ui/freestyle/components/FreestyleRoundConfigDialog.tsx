@@ -283,7 +283,6 @@ export function FreestyleRoundConfigDialog({
           })
           setDraft(next)
           setPickerStream(null)
-          onSaveConfig(next)
         }}
       />
     </>

@@ -73,7 +73,7 @@ export function FreestyleLoadingState() {
   return (
     <section className="flex h-full snap-start items-center justify-center px-4" aria-busy="true">
       <div className="w-full max-w-xl">
-        <div className="fs-paper-card fs-rise rounded-[1.5rem] p-6 [--color-muted:var(--color-paper-line)]">
+        <div className="fs-rise rounded-[1.5rem] border border-stage-line-strong bg-stage-raised/90 p-6 shadow-[0_24px_70px_-18px_rgb(0_0_0/0.7)]">
           <div className="flex items-center gap-3">
             <div className="ma-skeleton size-9 rounded-xl" />
             <div className="flex-1 space-y-2">

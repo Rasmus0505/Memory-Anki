@@ -15,6 +15,7 @@ import type {
   FreestyleOverlayQuizDropPalacesRequest,
   FreestyleOverlayQuizEnsureRequest,
   FreestyleOverlayQuizProgressRequest,
+  FreestyleOverviewResponse,
   FreestyleRoundActionRequest,
   FreestyleRoundActiveRequest,
   FreestyleRoundRatingRequest,
@@ -50,6 +51,16 @@ export function buildFreestyleQueueApi(
     // Queue construction is a read operation even though its API uses POST.
     persistence: false,
   })
+}
+
+export function getFreestyleOverviewApi(params: {
+  date: string
+  tz: string
+  roundId?: string | null
+}, options?: Pick<RequestInit, 'signal'>) {
+  const searchParams = new URLSearchParams({ date: params.date, tz: params.tz })
+  if (params.roundId) searchParams.set('round_id', params.roundId)
+  return request<FreestyleOverviewResponse>(`/freestyle/overview?${searchParams.toString()}`, options)
 }
 
 function historySearchParams(params?: {

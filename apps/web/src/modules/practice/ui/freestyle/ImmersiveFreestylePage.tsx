@@ -11,6 +11,17 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { FreestyleProgressRail } from '@/modules/practice/ui/freestyle/components/FreestyleProgressRail'
 import { FreestyleRailParticles } from '@/modules/practice/ui/freestyle/components/FreestyleRailParticles'
 import { FreestyleRoundCompleteCard } from '@/modules/practice/ui/freestyle/components/FreestyleRoundCompleteCard'
+import { FreestyleSettlementPopup } from '@/modules/practice/ui/freestyle/components/FreestyleSettlementPopup'
+import { useFreestyleOverview } from '@/modules/practice/ui/freestyle/hooks/useFreestyleOverview'
+import { FreestyleStartOverview } from '@/modules/practice/ui/freestyle/components/FreestyleStartOverview'
+import { FreestyleConfigPreviewCard } from '@/modules/practice/ui/freestyle/components/FreestyleConfigPreviewCard'
+import type { FreestyleRoundSummary } from '@/shared/api/contracts'
+import { FreestyleDayRecap } from '@/modules/practice/ui/freestyle/components/FreestyleDayRecap'
+import {
+  isDayRecapPending,
+  markDayRecapShown,
+} from '@/modules/practice/ui/freestyle/model/freestyleDayRecap'
+import type { FreestyleSaveOutcome } from '@/modules/practice/ui/freestyle/model/freestyleSettlementModel'
 import {
   buildFreestyleProgressSummary,
   cardAmbientHsl,
@@ -209,6 +220,8 @@ export default function ImmersiveFreestylePage({
   // A visit can end without completing the round. Ratings/queue remain authoritative.
   const [studySettlementRoundId, setStudySettlementRoundId] = useState<string | null>(null)
   const [configOpen, setConfigOpen] = useState(false)
+  const [startOverviewOpen, setStartOverviewOpen] = useState(true)
+  const [dayRecapOpen, setDayRecapOpen] = useState(() => isDayRecapPending(window.localStorage, new Date()))
   /** Settlement 「再来一轮」 opens config in nextRound mode; HUD uses replan. */
   const [configIntent, setConfigIntent] = useState<'replan' | 'nextRound'>('replan')
   const [scopeQuizOpen, setScopeQuizOpen] = useState(false)
@@ -261,7 +274,21 @@ export default function ImmersiveFreestylePage({
     queueFrozen,
     startupVisualIndex,
     clearStartupVisualIndex,
+    roundSave,
+    roundSummary,
+    retryRoundSave,
   } = useImmersiveQueue(entryPalaceId, slot)
+  const freestyleOverview = useFreestyleOverview(queueState.roundId)
+  const [previewSummary, setPreviewSummary] = useState<FreestyleRoundSummary | null>(null)
+  const configPreviewPendingRef = useRef(false)
+  useEffect(() => {
+    if (!roundSummary || !configPreviewPendingRef.current) return
+    configPreviewPendingRef.current = false
+    setPreviewSummary(roundSummary.summary)
+  }, [roundSummary])
+  const studySettlementSaveOutcome: FreestyleSaveOutcome = roundSave?.roundId === queueState.roundId
+    ? roundSave.outcome
+    : 'unconfirmed'
 
   const saveFreestyleConfig = useCallback((
     nextConfig: FreestyleFeedConfig,
@@ -269,6 +296,7 @@ export default function ImmersiveFreestylePage({
   ) => {
     resetStaleRecovery()
     if (configIntent === 'nextRound' || choice === 'start-fresh') {
+      configPreviewPendingRef.current = true
       startNextRound(nextConfig)
       setConfigIntent('replan')
     } else {
@@ -763,9 +791,9 @@ export default function ImmersiveFreestylePage({
   const settlementOwnerRef = useRef(queueState.roundId)
   settlementOwnerRef.current = queueState.roundId
   const finishStudy = () => {
-    // Leaving preserves the active round and its current position for next visit.
-    navigate(reviewPalaceId != null ? palaceReviewReturnPath(reviewReturnSubjectId) : '/dashboard')
-    setStudySettlementRoundId(null)
+    // Settlement stays on 随心; closing it returns to this round's closing slot.
+    setStudySettlementRoundId(queueState.roundId)
+    void freestyleOverview.reload()
   }
   const continueWithDueToday = async () => {
     const owner = queueState.roundId
@@ -1178,26 +1206,70 @@ export default function ImmersiveFreestylePage({
         </div>
         {studySettlementOpen ? (
           <div
-            role="dialog"
-            aria-label="结束本次学习"
-            aria-modal="true"
-            data-keyboard-shortcuts-suspended="true"
             data-testid="freestyle-study-settlement"
-            className="absolute inset-0 z-[70] overflow-y-auto overscroll-contain bg-stage/95 px-3 pt-[max(0.75rem,env(safe-area-inset-top,0px))] backdrop-blur-sm"
+            data-keyboard-shortcuts-suspended="true"
+            className="absolute inset-0 z-[70] overflow-y-auto overscroll-contain bg-stage/95 backdrop-blur-sm"
           >
-            <FreestyleRoundCompleteCard
-              key={`${queueState.roundId}:study`}
-              variant="study"
-              completion={roundCompletion}
-              unscoredCount={unscoredCount}
-              roundKey={`${queueState.roundId}:study`}
-              quizPalaceCount={overlayRoundReviewPalaceIds(roundPlan).length}
-              onClearQuizProgress={clearConfiguredOverlayQuiz}
-              onCancelSettlement={() => setStudySettlementRoundId(null)}
-              onFinishStudy={finishStudy}
-              onAddDueToday={() => { void continueWithDueToday().catch((error: unknown) => toast.error(error instanceof Error ? error.message : '更新今天到期内容失败。')) }}
-              partialSettlements={roundPlan?.partialSettlements}
+            <FreestyleSettlementPopup
+              saveOutcome={studySettlementSaveOutcome}
+              onRetrySave={() => { void retryRoundSave() }}
+              ratedCount={roundCompletion.ratedCount}
+              passedCount={roundCompletion.passedCount}
+              remainingBefore={freestyleOverview.baseline?.round?.counts.remaining ?? roundCompletion.remainingCandidates}
+              remainingAfter={freestyleOverview.overview?.round?.counts.remaining ?? roundCompletion.remainingCandidates}
+              subjects={freestyleOverview.overview?.round?.by_subject ?? []}
+              palacesBySubject={roundCompletion.bySubject}
+              nextReviews={freestyleOverview.overview?.next_reviews ?? []}
+              onContinue={() => {
+                setConfigIntent('nextRound')
+                setConfigOpen(true)
+                setStudySettlementRoundId(null)
+              }}
+              onClose={() => setStudySettlementRoundId(null)}
             />
+          </div>
+        ) : null}
+        {previewSummary && !studySettlementOpen && !partialSettlement ? (
+          <div
+            data-testid="freestyle-config-preview-overlay"
+            data-keyboard-shortcuts-suspended="true"
+            className="absolute inset-0 z-[65] flex flex-col justify-center overflow-y-auto overscroll-contain bg-stage/95 px-3 py-6 backdrop-blur-sm"
+          >
+            <div className="mx-auto w-full max-w-md">
+              <FreestyleConfigPreviewCard
+                summary={previewSummary}
+                palaceTitleByCardId={Object.fromEntries(
+                  cards.map((card) => [card.id, (card as { palace_title?: string }).palace_title ?? '']),
+                )}
+                onStart={() => setPreviewSummary(null)}
+              />
+            </div>
+          </div>
+        ) : null}
+        {startOverviewOpen && !studySettlementOpen && !partialSettlement ? (
+          <div
+            data-testid="freestyle-start-overview"
+            data-keyboard-shortcuts-suspended="true"
+            className="absolute inset-0 z-[60] flex flex-col justify-center overflow-y-auto overscroll-contain bg-stage/95 px-3 py-6 backdrop-blur-sm"
+          >
+            <div className="mx-auto flex w-full max-w-md flex-col gap-3">
+              {dayRecapOpen && freestyleOverview.overview ? (
+                <FreestyleDayRecap
+                  yesterday={freestyleOverview.overview.yesterday}
+                  onDismiss={() => {
+                    markDayRecapShown(window.localStorage, new Date())
+                    setDayRecapOpen(false)
+                  }}
+                />
+              ) : null}
+              <FreestyleStartOverview
+                overview={freestyleOverview.overview}
+                loading={freestyleOverview.loading}
+                error={freestyleOverview.error}
+                onStart={() => setStartOverviewOpen(false)}
+                onRetry={() => { void freestyleOverview.reload() }}
+              />
+            </div>
           </div>
         ) : null}
         {partialSettlement ? (

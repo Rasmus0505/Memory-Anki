@@ -150,6 +150,17 @@ function ratingItem(body: RateBody) {
 }
 
 async function installCardRoutes(page: Page) {
+  await page.route('**/api/v1/freestyle/overview**', async (route) => {
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        round: null,
+        today: { due_count: 1, overdue_count: 0, new_palace_count: 0 },
+        yesterday: { date: '2026-10-11', learned_units: 0, rated_count: 0, weak_units: [] },
+        next_reviews: [],
+      }),
+    })
+  })
   await page.route('**/api/v1/freestyle/queue/build', async (route) => {
     const request = route.request().postDataJSON() as {
       operation_id: string
@@ -189,6 +200,13 @@ async function installCardRoutes(page: Page) {
       }),
     })
   })
+}
+
+async function startFromOverview(page: Page) {
+  const start = page.getByRole('button', { name: '开始学习' })
+  await expect(start).toBeEnabled()
+  await start.click()
+  await expect(page.getByTestId('freestyle-start-overview')).toHaveCount(0)
 }
 
 function holdRatings(page: Page) {
@@ -236,6 +254,7 @@ test('lights a grade only once saved, queues the next tap, then opens a skippabl
   await installCardRoutes(page)
   const { held } = holdRatings(page)
   await page.goto('/freestyle')
+  await startFromOverview(page)
 
   const remember = page.getByTestId('freestyle-rating-button-3')
   const easy = page.getByTestId('freestyle-rating-button-4')
@@ -280,6 +299,7 @@ test('reports an unsaved grade at once without claiming completion, then retries
   await installCardRoutes(page)
   const { held } = holdRatings(page)
   await page.goto('/freestyle')
+  await startFromOverview(page)
 
   const remember = page.getByTestId('freestyle-rating-button-3')
   await expect(remember).toBeEnabled()
@@ -292,7 +312,7 @@ test('reports an unsaved grade at once without claiming completion, then retries
   held[0].release(400)
   await expect(page.getByRole('alert').filter({ hasText: '这一次没有保存成功' })).toBeVisible()
   await expect(remember).toHaveAttribute('aria-pressed', 'false')
-  await expect(page.getByTestId('freestyle-rating-effect-line')).toContainText('未保存记得')
+  await expect(page.getByTestId('freestyle-rating-effect-line')).toHaveCount(0)
   await expect(remember).toBeEnabled()
   await expect(settlement).not.toBeVisible()
   await expect(page.getByText(/今日到期已清/)).not.toBeVisible()
@@ -307,4 +327,30 @@ test('reports an unsaved grade at once without claiming completion, then retries
   await expect(next).toBeEnabled()
   await next.evaluate((button: HTMLButtonElement) => button.click())
   await expect(settlement.getByText('本轮总结')).toBeVisible()
+})
+
+test('shows the start overview with today counts before any card loads', async ({ page }) => {
+  await installCardRoutes(page)
+  await page.route('**/api/v1/freestyle/overview**', async (route) => {
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        round: null,
+        today: { due_count: 4, overdue_count: 1, new_palace_count: 2 },
+        yesterday: {
+          date: '2026-10-11',
+          learned_units: 0,
+          rated_count: 0,
+          weak_units: [],
+        },
+        next_reviews: [],
+      }),
+    })
+  })
+  await page.goto('/freestyle')
+
+  const overview = page.getByRole('region', { name: '开始概览' })
+  await expect(overview).toBeVisible()
+  await expect(overview.getByText('待复习')).toBeVisible()
+  await expect(overview.getByText('4', { exact: true })).toBeVisible()
 })

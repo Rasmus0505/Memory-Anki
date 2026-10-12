@@ -144,11 +144,14 @@ describe('FreestyleRoundConfigDialog', () => {
     fireEvent.click(await screen.findByRole('checkbox', { name: '选择宫殿Palace A' }))
     fireEvent.click(screen.getByRole('button', { name: '确认选择' }))
 
+    expect(onSaveConfig).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '保存配置并重排' }))
+    fireEvent.click(await screen.findByRole('button', { name: '保留，继续这一轮' }))
     expect(onSaveConfig).toHaveBeenCalledWith(expect.objectContaining({
       streams: expect.objectContaining({
         memory_palace: expect.objectContaining({ specific_palace_ids: [11] }),
       }),
-    }))
+    }), 'keep-overlap')
   })
 
   it('lets the user pick subjects from chips instead of an English training mode', async () => {
