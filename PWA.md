@@ -31,7 +31,7 @@ PWA 必须保持本地运行，使用本机服务和本机数据目录。手机 
 
 按下面顺序切换设备，网页刷新不能替代其中任何一步：
 
-1. 在当前设备完成学习后，关闭浏览器/PWA 页面，并运行 `tools\stop.bat` 停止 Memory Anki 后端。
+1. 在当前设备完成学习后，关闭浏览器/PWA 页面，并运行 `start-all.bat stop` 停止 Memory Anki 后端。
 2. 确认当前设备的 `memory_palace.db-wal` 和 `memory_palace.db-shm` 不再变化，再让同步继续进行。
 3. 等当前设备和目标设备都显示同步完成，并确认没有出现新的冲突数据库副本。
 4. 在目标设备确认只有一个同步进程，然后运行 Memory Anki；启动后重新加载 `/freestyle` 并重建随心队列。
@@ -49,7 +49,7 @@ PWA 只通过 Tailscale Serve 在 tailnet 内私有访问，不做公网暴露�
 4. 用 Safari 或 Chrome 打开 `tools\configure-tailscale-pwa.bat` 输出的 HTTPS 地址，并访问 `/freestyle`。
 5. 第一次打开后，使用浏览器菜单添加到主屏幕。
 
-电脑和手机同时使用时，直接运行 `start-all.bat`。启动和迁移期间手机可能短暂断开，随后 Electron 与手机 PWA 会共同使用 `8012` 服务。关闭 Electron 或启动窗口都不会停止 PWA；需要停止服务时运行 `tools\stop.bat`。
+电脑和手机同时使用时，直接运行 `start-all.bat`。启动和迁移期间手机可能短暂断开，随后 Electron 与手机 PWA 会共同使用 `8012` 服务。关闭 Electron 或启动窗口都不会停止 PWA；需要停止服务时运行 `start-all.bat stop`。
 
 同时打开时，随心模式的当前卡片、翻面通过本机 API 的 live room 镜像，不必手动刷新任一端。这不是文件同步，也不允许两台电脑同时写 SQLite。
 
@@ -126,7 +126,7 @@ tools\uninstall-pwa-autostart.bat
 ## 脚本说明
 
 - `start-all.bat`：唯一的统一启动入口，先执行智能增量更新，再启动或复用共享 `8012` 服务，并启动 Electron 与 PWA。
-- `tools\stop.bat`：停止 Electron、共享服务和开发前端；文件同步会在应用外继续进行。
+- `start-all.bat stop`：停止 Electron、共享服务和开发前端；文件同步会在应用外继续进行。
 - `tools\stop-pwa.bat`：停止占用 `8012` 的 PWA 后端。
 - `tools\configure-tailscale-pwa.bat`：配置当前设备的 Tailscale Serve，将 HTTPS 转发到 `127.0.0.1:8012`。
 - `tools\install-pwa-autostart.bat`：安装 Windows 登录自启快捷方式。
@@ -197,7 +197,7 @@ PWA 安装需要 HTTPS。请用 Tailscale Serve 输出的 HTTPS 地址访问 `/f
 运行：
 
 ```powershell
-.\tools\stop.bat
+.\start-all.bat stop
 .\start-all.bat
 ```
 

@@ -378,7 +378,7 @@ npm run dev
 停止：
 
 ```powershell
-.\tools\stop.bat
+.\start-all.bat stop
 ```
 
 ### 7.5 个人 PWA 启动

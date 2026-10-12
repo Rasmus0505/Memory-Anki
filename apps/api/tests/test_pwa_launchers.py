@@ -807,7 +807,6 @@ def test_all_batch_entrypoints_use_diagnostic_runner():
         ROOT / "start-all.bat",
         TOOLS_DIR / "configure-tailscale-pwa.bat",
         TOOLS_DIR / "install-pwa-autostart.bat",
-        ROOT / "stop.bat",
         TOOLS_DIR / "uninstall-pwa-autostart.bat",
     ]
 
