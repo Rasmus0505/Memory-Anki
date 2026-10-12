@@ -34,7 +34,7 @@ function StagePanel({
         <div
           className={cn(
             'fs-halo absolute inset-[-30%] rounded-full',
-            tone === 'alert' && '[background:radial-gradient(circle,hsl(8_76%_60%/0.3),transparent_68%)]',
+            tone === 'alert' && '[background:radial-gradient(circle,color-mix(in_srgb,var(--color-destructive)_30%,transparent),transparent_68%)]',
           )}
         />
         <div

@@ -46,6 +46,40 @@
   --color-rate-good: hsl(104 44% 46%);
   --color-rate-easy: hsl(190 56% 44%);
 
+  /* Status semantics: each tone has a soft tint for fills and a strong ink for text on it. */
+  --color-success-soft: hsl(104 40% 90%);
+  --color-success-strong: hsl(104 46% 30%);
+  --color-warning-soft: hsl(40 96% 90%);
+  --color-warning-strong: hsl(32 88% 34%);
+  --color-danger-soft: hsl(8 80% 93%);
+  --color-danger-strong: hsl(8 66% 42%);
+  --color-info-soft: hsl(198 60% 92%);
+  --color-info-strong: hsl(200 62% 32%);
+
+  /* Memory strength ramp, weakest to strongest, plus states that are not yet rated. */
+  --color-memory-new: hsl(198 58% 46%);
+  --color-memory-untrained: hsl(30 10% 62%);
+
+  /* Subject hues, cycled by subject index so one subject keeps one colour across screens. */
+  --color-subject-1: hsl(28 80% 51%);
+  --color-subject-2: hsl(198 58% 46%);
+  --color-subject-3: hsl(104 44% 46%);
+  --color-subject-4: hsl(280 36% 52%);
+  --color-subject-5: hsl(340 56% 56%);
+  --color-subject-6: hsl(46 80% 48%);
+
+  /* Surface and ink roles for cards, wells, and text hierarchy. */
+  --color-surface-raised: hsl(40 60% 98%);
+  --color-surface-sunken: hsl(38 40% 93%);
+  --color-ink-muted: var(--color-muted-foreground);
+  --color-ink-faint: hsl(26 10% 58%);
+
+  /* Immersive stage expressed as surface variants so overlays and pages share one vocabulary. */
+  --color-surface-stage: var(--color-stage);
+  --color-surface-stage-raised: var(--color-stage-raised);
+  --color-ink-stage: var(--color-stage-ink);
+  --color-ink-stage-muted: var(--color-stage-muted);
+
   /* Freestyle immersive stage: warm charcoal "reading lamp" surface, theme independent. */
   --color-stage: hsl(24 16% 8%);
   --color-stage-raised: hsl(24 14% 12%);
@@ -155,6 +189,29 @@
   --color-rate-hard: hsl(38 94% 60%);
   --color-rate-good: hsl(104 46% 56%);
   --color-rate-easy: hsl(190 60% 56%);
+
+  --color-success-soft: hsl(104 30% 18%);
+  --color-success-strong: hsl(104 50% 70%);
+  --color-warning-soft: hsl(38 50% 17%);
+  --color-warning-strong: hsl(38 96% 68%);
+  --color-danger-soft: hsl(8 40% 19%);
+  --color-danger-strong: hsl(8 80% 74%);
+  --color-info-soft: hsl(198 40% 17%);
+  --color-info-strong: hsl(194 70% 70%);
+
+  --color-memory-new: hsl(194 60% 60%);
+  --color-memory-untrained: hsl(30 8% 46%);
+
+  --color-subject-1: hsl(32 92% 62%);
+  --color-subject-2: hsl(194 62% 60%);
+  --color-subject-3: hsl(104 46% 58%);
+  --color-subject-4: hsl(280 40% 66%);
+  --color-subject-5: hsl(340 60% 68%);
+  --color-subject-6: hsl(46 84% 62%);
+
+  --color-surface-raised: hsl(24 14% 14%);
+  --color-surface-sunken: hsl(24 16% 6.5%);
+  --color-ink-faint: hsl(30 10% 46%);
 
   --shadow-soft: 0 1px 2px rgb(0 0 0 / 0.4);
   --shadow-card: 0 1px 2px rgb(0 0 0 / 0.45), 0 10px 28px -6px rgb(0 0 0 / 0.5);

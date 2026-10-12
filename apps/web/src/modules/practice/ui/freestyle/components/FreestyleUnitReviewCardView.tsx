@@ -1307,7 +1307,7 @@ export function FreestyleUnitReviewCardView({
   return (
     <section ref={sectionRef} className="flex h-full min-h-0 flex-col" aria-label="永久标记复习单元">
       {/* One canvas. Title and rating float; a second paper sheet must not show under the map. */}
-      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.4rem] border border-stage-line-strong bg-[var(--memory-anki-mindmap-canvas)] shadow-[inset_0_1px_0_hsl(43_100%_100%/0.9),0_24px_60px_-18px_rgb(0_0_0/0.65)] sm:rounded-3xl">
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.4rem] border border-stage-line-strong bg-[var(--memory-anki-mindmap-canvas)] shadow-[inset_0_1px_0_color-mix(in_srgb,white_90%,transparent),0_24px_60px_-18px_color-mix(in_srgb,black_65%,transparent)] sm:rounded-3xl">
         {/* Rate confirmation, at the edge of the card being read rather than at screen
             center. Keyed by nonce so two rates inside one breath window restart it. */}
         {breath ? (

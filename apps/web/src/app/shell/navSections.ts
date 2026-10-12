@@ -30,6 +30,8 @@ export interface NavSectionDefinition {
   label: string
   icon: typeof LayoutDashboard
   rememberLastVisited: boolean
+  /** Secondary entries stay reachable but read quieter: the start overview is the primary home now. */
+  secondary?: boolean
   matches: (pathname: string) => boolean
   warmup?: () => void
 }
@@ -105,6 +107,7 @@ export const navSections: NavSectionDefinition[] = [
     // Insight hub is /dashboard. Remember the last path when leaving this section;
     // clicking 洞察 again while already active returns to /dashboard.
     rememberLastVisited: true,
+    secondary: true,
     matches: createNavSectionMatcher('review'),
     warmup: () => {
       void preloadDashboardPage()

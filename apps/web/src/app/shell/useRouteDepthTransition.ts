@@ -103,9 +103,9 @@ export function useRouteDepthTransition(args: {
     animations.push(content.animate(
       ghost
         ? [
-            { transform: `translate3d(0, ${rise}px, 0)`, opacity: 0, boxShadow: '0 -4px 18px hsl(24 50% 20% / 0.10)' },
+            { transform: `translate3d(0, ${rise}px, 0)`, opacity: 0, boxShadow: '0 -4px 18px color-mix(in srgb, var(--color-foreground) 10%, transparent)' },
             { opacity: 1, offset: 0.42 },
-            { transform: 'translate3d(0, 0, 0)', opacity: 1, boxShadow: '0 -24px 60px hsl(24 50% 20% / 0.18)' },
+            { transform: 'translate3d(0, 0, 0)', opacity: 1, boxShadow: '0 -24px 60px color-mix(in srgb, var(--color-foreground) 18%, transparent)' },
           ]
         : [
             { transform: 'translate3d(0, 14px, 0)', opacity: 0 },

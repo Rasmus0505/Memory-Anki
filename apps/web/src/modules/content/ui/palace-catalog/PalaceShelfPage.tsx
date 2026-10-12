@@ -473,7 +473,7 @@ export default function PalaceShelfPage() {
           {items.map((item, index) => {
             const isUncategorized = item.subject == null
             const title = item.subject?.name || '未分类'
-            const color = item.subject?.color || '#94a3b8'
+            const color = item.subject?.color || 'var(--color-ink-faint)'
             return (
               <button
                 key={item.subject?.id ?? `uncategorized-${index}`}

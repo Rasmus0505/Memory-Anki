@@ -362,7 +362,7 @@ function MindMapCanvasInner({
       data-interaction-mode={props.editingNodeId ? 'editing' : props.selectedNodeId ? 'selected' : 'idle'}
       data-testid="mindmap-canvas-frame"
       className={cn(
-        'relative flex h-full min-h-[520px] min-w-0 flex-col overflow-hidden rounded-2xl border border-paper-line bg-paper shadow-[inset_0_1px_0_hsl(43_100%_100%/0.9),0_18px_44px_-12px_hsl(24_50%_24%/0.16)]',
+        'relative flex h-full min-h-[520px] min-w-0 flex-col overflow-hidden rounded-2xl border border-paper-line bg-paper shadow-[inset_0_1px_0_color-mix(in_srgb,white_90%,transparent),0_18px_44px_-12px_color-mix(in_srgb,var(--color-paper-ink)_16%,transparent)]',
         className,
       )}
     >

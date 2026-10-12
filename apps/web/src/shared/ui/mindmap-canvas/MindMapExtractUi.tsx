@@ -23,7 +23,7 @@ export function ExtractDropPlaceholders({
           aria-hidden="true"
           data-drop-placeholder="before"
           data-extract-placeholder="before"
-          className="pointer-events-none absolute inset-x-1 -top-1.5 z-30 h-1.5 rounded-full bg-primary shadow-[0_0_0_3px_hsl(28_80%_51%/0.3)]"
+          className="pointer-events-none absolute inset-x-1 -top-1.5 z-30 h-1.5 rounded-full bg-primary shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-primary)_30%,transparent)]"
         />
         <span
           aria-hidden="true"
@@ -42,7 +42,7 @@ export function ExtractDropPlaceholders({
           aria-hidden="true"
           data-drop-placeholder="after"
           data-extract-placeholder="after"
-          className="pointer-events-none absolute inset-x-1 -bottom-1.5 z-30 h-1.5 rounded-full bg-primary shadow-[0_0_0_3px_hsl(28_80%_51%/0.3)]"
+          className="pointer-events-none absolute inset-x-1 -bottom-1.5 z-30 h-1.5 rounded-full bg-primary shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-primary)_30%,transparent)]"
         />
         <span
           aria-hidden="true"

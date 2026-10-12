@@ -35,7 +35,7 @@ export function FreestyleUnitReviewIdentityRow({
     <div className="relative z-10 flex min-w-0 shrink-0 items-center gap-1.5 p-2 pr-[7rem] sm:p-2.5 sm:pr-2.5">
       <div className="flex min-w-0 items-center gap-1.5 rounded-full border border-paper-line bg-paper-card/95 px-2.5 py-1 shadow-soft">
         <span
-          className="relative size-2 shrink-0 rounded-full bg-primary shadow-[0_0_0_3px_hsl(28_80%_51%/0.22)]"
+          className="relative size-2 shrink-0 rounded-full bg-primary shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-primary)_22%,transparent)]"
           title="永久标记"
           aria-label="永久标记"
         />
@@ -46,7 +46,7 @@ export function FreestyleUnitReviewIdentityRow({
           <span
             data-testid="freestyle-fill-badge"
             title="补充练习：记得/轻松只记下，不改下次到期日"
-            className="inline-flex h-5 shrink-0 items-center rounded-full border border-[hsl(190_60%_36%/0.3)] bg-[hsl(190_60%_36%/0.1)] px-1.5 text-[10px] font-semibold text-[hsl(190_60%_30%)] sm:h-6 sm:px-2 sm:text-[11px]"
+            className="inline-flex h-5 shrink-0 items-center rounded-full border border-info-strong/30 bg-info-soft px-1.5 text-[10px] font-semibold text-info-strong sm:h-6 sm:px-2 sm:text-[11px]"
           >
             补充
           </span>
@@ -116,7 +116,7 @@ export function FreestyleUnitReviewPlaceholder({
       recapOnly
         ? 'bg-paper text-paper-ink-soft'
         : loadError
-        ? 'bg-[hsl(8_80%_97%)] text-paper-ink'
+        ? 'bg-danger-soft text-paper-ink'
         : staleRecovery
           ? 'bg-primary-soft/60 text-primary-strong'
           : 'bg-paper text-paper-muted',
@@ -141,7 +141,7 @@ export function FreestyleUnitReviewPlaceholder({
         </div>
       ) : loadError ? (
         <div className="fs-rise flex max-w-[min(22rem,100%)] flex-col items-center gap-3">
-          <span className="flex size-11 items-center justify-center rounded-2xl bg-[hsl(8_70%_52%/0.12)] text-[hsl(8_70%_48%)]" aria-hidden>
+          <span className="flex size-11 items-center justify-center rounded-2xl bg-danger-soft text-danger-strong" aria-hidden>
             <TriangleAlert className="size-5" />
           </span>
           <p className="font-medium">{loadErrorTitle || '这张卡暂时打不开'}</p>

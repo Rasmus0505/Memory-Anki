@@ -429,7 +429,7 @@ export function FreestyleProgressRail({
         }}
       >
         {segments.length === 0 ? (
-          <span className="ma-skeleton h-1.5 w-full rounded-[1px] [--color-muted:hsl(34_30%_80%/0.18)]" aria-hidden />
+          <span className="ma-skeleton h-1.5 w-full rounded-[1px] [--color-muted:var(--color-stage-line)]" aria-hidden />
         ) : (
           segments.map((segment, index) => (
             <Fragment key={segment.cardId}>

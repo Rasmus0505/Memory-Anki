@@ -38,8 +38,8 @@ export function FreestyleChannelHint({
         className={cn(
           'pointer-events-auto flex max-w-[min(26rem,100%)] items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] shadow-lg backdrop-blur-md sm:text-xs',
           state === 'anxious'
-            ? 'border-rate-easy/30 bg-stage-overlay text-stage-ink shadow-[0_10px_30px_-10px_hsl(190_60%_40%/0.5)]'
-            : 'border-stage-glow/30 bg-stage-overlay text-stage-ink shadow-[0_10px_30px_-10px_hsl(32_94%_50%/0.55)]',
+            ? 'border-rate-easy/30 bg-stage-overlay text-stage-ink shadow-[0_10px_30px_-10px_color-mix(in_srgb,var(--color-rate-easy)_50%,transparent)]'
+            : 'border-stage-glow/30 bg-stage-overlay text-stage-ink shadow-[0_10px_30px_-10px_color-mix(in_srgb,var(--color-stage-glow)_55%,transparent)]',
         )}
       >
         <span className="min-w-0 truncate">{hint}</span>

@@ -20,10 +20,20 @@ function percent(done: number, total: number) {
   return Math.min(100, Math.round((done / total) * 100))
 }
 
-function ProgressBar({ value }: { value: number }) {
+// Subject hues cycle through the semantic subject tokens so one subject keeps one colour across the settlement.
+const SUBJECT_HUE_COUNT = 6
+
+function subjectHue(index: number) {
+  return `var(--color-subject-${(index % SUBJECT_HUE_COUNT) + 1})`
+}
+
+function ProgressBar({ value, hue = 'var(--color-stage-glow)' }: { value: number; hue?: string }) {
   return (
     <div className="h-1.5 overflow-hidden rounded-full bg-stage-line">
-      <div className="h-full rounded-full bg-primary transition-[width] duration-500" style={{ width: `${value}%` }} />
+      <div
+        className="h-full rounded-full transition-[width] duration-500"
+        style={{ width: `${value}%`, backgroundColor: hue }}
+      />
     </div>
   )
 }
@@ -146,40 +156,50 @@ export function FreestyleRoundSettlement({
         </div>
 
         <ul data-testid="freestyle-round-complete-subjects" className="mt-5 space-y-2">
-          {subjects.map((subject) => {
+          {subjects.map((subject, subjectIndex) => {
             const key = subjectKey(subject.subjectId, subject.subjectName)
             const open = expanded.has(key)
+            const hue = subjectHue(subjectIndex)
             return (
               <li key={key} className="overflow-hidden rounded-2xl border border-stage-line bg-stage/40">
                 <button
                   type="button"
                   data-testid="freestyle-round-complete-subject"
                   aria-expanded={open}
-                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
+                  className="flex w-full flex-col gap-2 px-3 py-2.5 text-left"
                   onClick={() => toggleSubject(key)}
                 >
-                  <ChevronDown
-                    className={cn('size-4 shrink-0 text-stage-muted transition-transform duration-300', open ? 'rotate-0' : '-rotate-90')}
-                  />
-                  <span className="min-w-0 flex-1 truncate font-medium">{subject.subjectName}</span>
-                  <span className="shrink-0 text-xs tabular-nums text-stage-muted">
-                    {subject.cardCount} / {subject.totalUnits} · {percent(subject.cardCount, subject.totalUnits)}%
+                  <span className="flex w-full items-center gap-2">
+                    <ChevronDown
+                      className={cn('size-4 shrink-0 text-stage-muted transition-transform duration-300', open ? 'rotate-0' : '-rotate-90')}
+                    />
+                    <span className="min-w-0 flex-1 truncate font-medium">{subject.subjectName}</span>
+                    <span className="shrink-0 text-xs tabular-nums text-stage-muted">
+                      {subject.cardCount} / {subject.totalUnits} · {percent(subject.cardCount, subject.totalUnits)}%
+                    </span>
                   </span>
+                  <ProgressBar value={percent(subject.cardCount, subject.totalUnits)} hue={hue} />
                 </button>
                 {open ? (
-                  <ul className="space-y-1 border-t border-stage-line px-3 py-2">
-                    {subject.palaces.map((palace) => (
-                      <li
-                        key={palace.palaceId}
-                        data-testid="freestyle-round-complete-palace"
-                        className="flex items-center justify-between gap-2 text-sm"
-                      >
-                        <span className="min-w-0 truncate">{palace.palaceTitle}</span>
-                        <span className="shrink-0 text-xs tabular-nums text-stage-muted">
-                          {palace.cardCount} / {palace.totalUnits} · {percent(palace.cardCount, palace.totalUnits)}%
-                        </span>
-                      </li>
-                    ))}
+                  <ul className="space-y-2 border-t border-stage-line px-3 py-2.5">
+                    {subject.palaces.map((palace) => {
+                      const palacePercent = percent(palace.cardCount, palace.totalUnits)
+                      return (
+                        <li
+                          key={palace.palaceId}
+                          data-testid="freestyle-round-complete-palace"
+                          className="flex flex-col gap-1.5"
+                        >
+                          <span className="flex items-center justify-between gap-2 text-sm">
+                            <span className="min-w-0 truncate">{palace.palaceTitle}</span>
+                            <span className="shrink-0 text-xs tabular-nums text-stage-muted">
+                              {palace.cardCount} / {palace.totalUnits} · {palacePercent}%
+                            </span>
+                          </span>
+                          <ProgressBar value={palacePercent} hue={hue} />
+                        </li>
+                      )
+                    })}
                   </ul>
                 ) : null}
               </li>

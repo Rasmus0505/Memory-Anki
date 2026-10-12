@@ -47,7 +47,8 @@ describe('FreestyleConfigPreviewCard', () => {
       />,
     )
     expect((screen.getByRole('button', { name: '开始学习' }) as HTMLButtonElement).disabled).toBe(true)
-    expect(screen.getByText('跳过 2')).toBeTruthy()
+    expect(screen.getByText('跳过')).toBeTruthy()
+    expect(screen.getByText('另有 2 张不在本轮，会留到之后的轮次。')).toBeTruthy()
   })
 })
 

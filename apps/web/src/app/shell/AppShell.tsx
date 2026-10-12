@@ -156,8 +156,11 @@ function NavSectionLink({
       className={cn(
         'group relative flex items-center rounded-xl font-medium transition-[background-color,color,box-shadow] duration-200',
         isActive
-          ? 'ma-nav-active bg-primary-soft text-primary-strong shadow-[inset_0_0_0_1px_hsl(28_80%_51%/0.18)]'
-          : 'text-muted-foreground hover:bg-secondary/80 hover:text-foreground',
+          ? 'ma-nav-active bg-primary-soft text-primary-strong shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--color-primary)_18%,transparent)]'
+          : cn(
+              'hover:bg-secondary/80 hover:text-foreground',
+              section.secondary ? 'text-ink-faint' : 'text-muted-foreground',
+            ),
         collapsed
           ? 'justify-center px-2.5 py-2.5 text-sm'
           : 'flex-col justify-center gap-1 px-1 py-2.5 text-[11px] lg:flex-row lg:justify-start lg:gap-3 lg:px-3.5 lg:py-3 lg:text-sm',
@@ -338,7 +341,7 @@ function MobileBottomNav({ layoutMode }: { layoutMode: AppLayoutMode }) {
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border/70 bg-card/96 px-2 pb-[max(env(safe-area-inset-bottom),0.35rem)] pt-1.5 shadow-[0_-10px_34px_hsl(24_50%_20%/0.12)] backdrop-blur-md md:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border/70 bg-card/96 px-2 pb-[max(env(safe-area-inset-bottom),0.35rem)] pt-1.5 shadow-[0_-10px_34px_color-mix(in_srgb,var(--color-foreground)_12%,transparent)] backdrop-blur-md md:hidden"
       aria-label="移动端主导航"
     >
       {navSections.map((section) => (

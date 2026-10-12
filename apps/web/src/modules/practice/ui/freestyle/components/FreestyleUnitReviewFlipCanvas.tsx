@@ -42,12 +42,12 @@ export function FreestyleUnitReviewStatusBanner({
             </>
           ) : isError ? (
             <>
-              <CircleAlert className="size-3.5 text-[hsl(8_70%_52%)]" />
+              <CircleAlert className="size-3.5 text-danger-strong" />
               保存失败
               <button
                 type="button"
                 onClick={onRetry}
-                className="ml-1 inline-flex items-center gap-1 ma-pressable rounded-full border border-[hsl(8_70%_52%/0.3)] bg-[hsl(8_80%_96%)] px-2 py-0.5 text-[11px] font-semibold text-[hsl(8_70%_42%)] hover:bg-[hsl(8_80%_92%)]"
+                className="ml-1 inline-flex items-center gap-1 ma-pressable rounded-full border border-danger-strong/30 bg-danger-soft px-2 py-0.5 text-[11px] font-semibold text-danger-strong hover:brightness-95"
               >
                 <RotateCcw className="size-3" />
                 重试
@@ -55,7 +55,7 @@ export function FreestyleUnitReviewStatusBanner({
             </>
           ) : (
             <>
-              <CheckCircle2 className="size-3.5 text-[hsl(104_46%_38%)]" />
+              <CheckCircle2 className="size-3.5 text-success-strong" />
               已保存
             </>
           )}
