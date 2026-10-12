@@ -3,7 +3,8 @@ import { BookOpen, ChevronRight, FolderTree, LayoutGrid, LibraryBig, List, Plus,
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useRouteResidency } from '@/shared/routing/RouteResidency'
-import { PageIntro } from '@/shared/components/layout/PageIntro'
+import { PageHeader } from '@/shared/components/layout/PageHeader'
+import { PageContainer } from '@/shared/components/layout/PageLayout'
 import { PalaceListCard } from '@/modules/content/ui/palace-catalog/components/palace-list/PalaceListCard'
 import {
   DEFAULT_PALACE_SHELF_VIEW_SETTINGS,
@@ -77,9 +78,9 @@ function getShelfGridClass(layoutMode: PalaceShelfLayoutMode) {
 }
 
 function getShelfCardContentClass(densityMode: PalaceShelfDensityMode) {
-  if (densityMode === 'comfortable') return 'min-h-[248px] p-7 pl-11'
-  if (densityMode === 'compact') return 'min-h-[188px] p-4 pl-8'
-  return 'min-h-[220px] p-6 pl-10'
+  if (densityMode === 'comfortable') return 'min-h-62 p-7 pl-11'
+  if (densityMode === 'compact') return 'min-h-47 p-4 pl-8'
+  return 'min-h-55 p-6 pl-10'
 }
 
 function getShelfMetaSpacingClass(densityMode: PalaceShelfDensityMode) {
@@ -260,8 +261,8 @@ export default function PalaceShelfPage() {
   )
 
   return (
-    <div className="space-y-8">
-      <PageIntro
+    <PageContainer wide className="gap-8">
+      <PageHeader
         title="学科书架"
         description="一科一书：点击封面进入该学科的宫殿列表。常见科目如中国教育史、外国教育史、英语会各自成册。"
         actions={
@@ -285,7 +286,7 @@ export default function PalaceShelfPage() {
       <Card>
         <CardContent className="p-4">
           <div className="flex flex-wrap items-end gap-3">
-            <div className="min-w-[180px] flex-1">
+            <div className="min-w-45 flex-1">
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -576,6 +577,6 @@ export default function PalaceShelfPage() {
           </CardContent>
         </Card>
       )}
-    </div>
+    </PageContainer>
   )
 }

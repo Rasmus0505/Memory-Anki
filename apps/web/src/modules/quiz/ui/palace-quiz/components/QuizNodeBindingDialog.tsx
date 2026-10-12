@@ -33,7 +33,7 @@ export function QuizNodeBindingDialog({
             把题库题目绑定到思维导图知识点卡片。在列表里逐条查看、搜索并手改绑定。
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 overflow-y-auto pr-1" style={{ maxHeight: '55vh' }}>
+        <div className="max-h-[55vh] space-y-4 overflow-y-auto pr-1">
           {palaceId ? (
             <QuizNodeBindingManualPanel
               palaceId={palaceId}

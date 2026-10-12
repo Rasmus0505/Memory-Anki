@@ -26,7 +26,7 @@ import {
   type ReviewMilestoneCelebrationSettings,
   type ReviewFeedbackSettings,
 } from '@/shared/feedback/reviewFeedbackSettings'
-import { emitReviewConfetti } from '@/shared/components/celebration'
+import { emitReviewCelebration } from '@/shared/components/celebration'
 import { usePrefersReducedMotion } from '@/shared/lib/prefersReducedMotion'
 import type { MindMapReviewFxPayload } from '@/shared/feedback/feedbackEvents'
 import type {
@@ -364,13 +364,11 @@ export function useReviewFeedback({
         if (!celebrationDecision.allowed) {
           // noop
         } else {
-        emitReviewConfetti({
+        emitReviewCelebration({
           kind: 'branch_clear',
-          confettiAmount: settings.scenes.review.confettiAmount,
           reducedMotion,
           soundEnabled: celebrationDecision.soundEnabled,
           volume: getSceneEffectiveVolume(settings, 'review'),
-          confettiPreset: settings.scenes.review.confettiPreset,
         })
         }
       } else if (transition.events.includes('all_clear_ready')) {
@@ -378,13 +376,11 @@ export function useReviewFeedback({
         if (!celebrationDecision.allowed) {
           // noop
         } else {
-        emitReviewConfetti({
+        emitReviewCelebration({
           kind: 'all_clear_ready',
-          confettiAmount: settings.scenes.completion.confettiAmount,
           reducedMotion,
           soundEnabled: celebrationDecision.soundEnabled,
           volume: getSceneEffectiveVolume(settings, 'completion'),
-          confettiPreset: settings.scenes.completion.confettiPreset,
         })
         }
       }

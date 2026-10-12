@@ -27,7 +27,8 @@ import {
   PALACE_CATALOG_INVALIDATED_EVENT,
 } from '@/modules/content/domain/palace-entity/api'
 import { Button } from '@/shared/components/ui/button'
-import { PageIntro } from '@/shared/components/layout/PageIntro'
+import { PageHeader } from '@/shared/components/layout/PageHeader'
+import { PageContainer } from '@/shared/components/layout/PageLayout'
 import { SubjectMemoryLadder } from '@/modules/practice/public'
 import { ErrorState } from '@/shared/components/state-placeholders'
 import { useLocalStorageState } from '@/shared/lib/localStorage'
@@ -187,8 +188,8 @@ export default function PalaceList() {
   }
 
   return (
-    <div className="space-y-8">
-      <PageIntro
+    <PageContainer wide className="gap-8">
+      <PageHeader
         title={currentSubjectTitle ? `${currentSubjectTitle}` : '记忆宫殿'}
         description={
           currentSubjectTitle
@@ -279,6 +280,6 @@ export default function PalaceList() {
         />
       )}
 
-    </div>
+    </PageContainer>
   )
 }

@@ -1,39 +1,31 @@
-# Theme packs (whole-world skins)
+# 主题（单一 study 主题包）
 
-A theme pack re-dresses the entire app: surface tokens (light + dark), stage and paper, card texture and 3-star bookmark, ambient motes and window light, the fx particle palette, the synth timbre, and motion rhythm (page turn, flip length and overshoot). Business code never branches on a pack id.
+应用只剩一套主题「纸墨书房」（`study`）。主题包只描述数据：`ThemePack = { motion, themeColor }`。
+不再有多套主题、粒子皮肤、合成音色、环境浮尘或解锁条件；主题不随成长解锁，也没有外观奖励。
 
 ```text
-shared/theme/packs/<id>.ts   one manifest per world (ThemePack)
-shared/theme/themePacks.ts   registry: THEME_PACKS, applyThemePack, themeMotion, themeAmbient, onThemePackChange
-modules/progression          unlock ladder (level / stamp), round-end unboxing, growth_state.pack
-app/shell                    useGrowthCosmetics(): applyThemePack + setFxSkin (the only place both are bound)
+shared/theme/packs/study.ts   唯一的主题包 STUDY_PACK
+shared/theme/packs/types.ts   ThemePack / ThemeMotion 类型
+shared/theme/themePacks.ts    themeMotion()、themeColorFor(scheme)
 ```
 
-## Packs
+## 内容
 
-| id | 名称 | Unlock | fx skin | Timbre | Motes | Rhythm (turn / flip) |
-|---|---|---|---|---|---|---|
-| `study` | 纸墨书房 | Lv.1 (default, emits no overrides) | `ink` | `paper-wood` | dust | 380 / 560 ms |
-| `palace` | 金箔宫殿 | Lv.5 | `foil` | `bell-lacquer` | gild (falling flecks) | 430 / 640 ms |
-| `voyage` | 星河夜航 | Lv.12 | `galaxy` | `celesta-chime` | star (sharp twinkle) | 460 / 680 ms |
-| `forest` | 森林萤火 | stamp `days_30`「一月耕读」 | `firefly` | `marimba-water` | firefly (slow flare) | 340 / 520 ms |
+| 字段 | 当前值 | 用途 |
+|---|---|---|
+| `motion.pageTurnMs` | 380 | 随心模式翻页（键盘 / 按钮） |
+| `motion.flipMs` | 560 | 思维导图节点翻开 |
+| `motion.flipOvershootDeg` | 13 | 翻开落点回弹角度（回弹为其 1/3） |
+| `themeColor.light` / `dark` | `#fbf6ef` / `#181411` | 浏览器 `theme-color` |
 
-## How it applies
+动效时长在动画开始时读取（`themeMotion()`），因此改动只影响下一次翻页或翻开。
 
-- `applyThemePack(id)` writes one `<style id="memory-anki-theme-pack">` generated from the manifest, sets `data-theme-pack`, `data-card-material`, `data-card-bookmark`, `--ma-page-turn-ms`, `--ma-flip-ms` and the `theme-color` meta, and remembers the id in `memory-anki-theme-pack` so boot (`initializeTheme`) paints the right world before React.
-- Specificity: `:root[data-theme-pack=x]:not(.dark)` for light, `:root[data-theme-pack=x].dark` for dark. Light and dark must set the same keys (tested), otherwise dark would inherit a light token.
-- `shared` tokens (stage, paper, mind-map dot, `--ma-window-hue`) apply in both schemes: the mind-map canvas stays warm paper even in dark mode.
-- Motion is read at animation start (`themeMotion()`), so a switch applies from the next page turn / flip. Every pack stays ≤700 ms (tested) so rhythm never interrupts flow.
-- Timbre is read by `shared/feedback/mindmap-audio/packTimbre.ts` (`activeThemePack().timbre`) and recolors every procedural tone: oscillator type, pitch, duration, attack, gain. No samples. `shared/fx` does not import the theme registry, and `shared/theme` does not import `@/shared/fx`.
-- Warm-only rule: no pack uses a 190°–250° (cold blue) ground (tested).
+## 规则
 
-## Growth wiring
+- 业务代码不做主题分支，只有一个主题。
+- `shared/theme` 不导入 `@/shared/fx`；`shared/fx` 不导入 `@/shared/theme`。
+- `check_theme_pack_registry` 检查：每个 pack 文件必须被 `themePacks.ts` 引用；pack 中不得出现 `fxSkin`、`ambient`、`timbre`、`unlock`、`preview` 字段。
 
-- `growth_state.pack` is the synced source of truth; `unboxed` lists packs whose unboxing already played (written before the cue fires, so the other device never replays it). Pre-pack states (`skin`) migrate through `coerceThemePackId` without losing seen levels or stamps.
-- Round end unboxes at most one newly unlocked pack (`pack.unbox` cue in the new pack's palette + 「换上」 in the settlement card). Mid-round never unboxes.
+## 新增主题
 
-## Adding a pack
-
-1. `shared/theme/packs/<id>.ts` exporting a `ThemePack`; add the id to `ThemePackId` and the const to `THEME_PACKS`.
-2. If it needs a new particle palette, add it to `shared/fx/skins.ts`.
-3. `check_theme_pack_registry` fails if a pack file is not registered, if `shared/theme` imports `@/shared/fx`, or if `shared/fx` imports `@/shared/theme`.
+当前不计划新增。若要新增，先更新本文，并让 `check_theme_pack_registry` 覆盖新字段。

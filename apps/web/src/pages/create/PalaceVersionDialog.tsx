@@ -73,7 +73,7 @@ export function PalaceVersionDialog({
                   {versions.map((version) => (
                     <div
                       key={version.id}
-                      className="flex flex-col gap-4 rounded-[24px] border border-border/70 bg-card/90 px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
+                      className="flex flex-col gap-4 rounded-3xl border border-border/70 bg-card/90 px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
                     >
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-foreground">
@@ -155,7 +155,7 @@ export function PalaceVersionDialog({
                 </div>
               ) : previewVersionDetail ? (
                 <div className="space-y-4">
-                  <div className="rounded-[24px] border border-border/70 bg-card/90 px-5 py-4">
+                  <div className="rounded-3xl border border-border/70 bg-card/90 px-5 py-4">
                     <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-foreground">
                       <span>
                         {previewVersionDetail.trigger_reason === 'editor_save'

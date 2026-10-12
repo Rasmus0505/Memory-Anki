@@ -30,7 +30,7 @@ import { usePalaceQuizQuestionBrowser } from '@/modules/quiz/ui/palace-quiz/hook
 import { usePalaceQuizResources } from '@/modules/quiz/ui/palace-quiz/hooks/usePalaceQuizResources'
 import { readInitialTab, type PalaceQuizTabKey } from '@/modules/quiz/ui/palace-quiz/model/palaceQuizPage'
 import { useRouteResidency } from '@/shared/routing/RouteResidency'
-import { PageIntro } from '@/shared/components/layout/PageIntro'
+import { PageHeader } from '@/shared/components/layout/PageHeader'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { ConfirmDialog } from '@/shared/components/ui/confirm-dialog'
@@ -344,7 +344,7 @@ export default function PalaceQuizPage() {
         onOpenChange={setKnowledgeDigressionOpen}
         edge={knowledgeDigressionEdge}
       />
-      <PageIntro
+      <PageHeader
         eyebrow="宫殿做题"
         title={palace?.title ? `${palace.title} · 配套习题` : '宫殿配套习题'}
         description="这里做宫殿题库练习，也可以手动管理题目。选择题即时判题并累计统计，简答题提交后显示参考答案与解析。"

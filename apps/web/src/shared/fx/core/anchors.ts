@@ -1,9 +1,11 @@
-import type { Point } from '../particles/particleModel'
+interface Point {
+  x: number
+  y: number
+}
 
 /**
- * Named landing spots for effects. Elements opt in with `data-fx-anchor`, so effect
- * code never depends on test ids or component internals. Resolution happens every
- * frame for homing particles, so a target that moves or unmounts is handled.
+ * Named feedback targets. Elements opt in with `data-fx-anchor`, so effect code never
+ * depends on test ids or component internals.
  */
 export const FX_ANCHORS = {
   /** The whole round progress rail. */
@@ -12,13 +14,9 @@ export const FX_ANCHORS = {
   progressViewing: 'progress-viewing',
   /** Per-card flip counter (x/y). */
   flipBadge: 'flip-badge',
-  /** Round-end exam/growth summary block. */
+  /** Round-end summary block. */
   roundSummary: 'round-summary',
-  /** Round-end XP bar. */
-  xpBar: 'xp-bar',
-  /** HUD level ring. */
-  levelRing: 'level-ring',
-  /** Feed pager (page-turn dust). */
+  /** Feed pager (page-turn feedback). */
   feedPager: 'feed-pager',
 } as const
 
@@ -54,11 +52,6 @@ export function elementCenter(element: Element | null | undefined): Point | null
   if (!visible(element)) return null
   const rect = element.getBoundingClientRect()
   return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
-}
-
-/** A live target for homing particles: re-resolved every call. */
-export function anchorTarget(names: FxAnchorName | readonly FxAnchorName[], scope?: ParentNode | null) {
-  return () => elementCenter(findAnchor(names, scope))
 }
 
 /** Where round progress lands: the viewing segment, else the whole rail. */

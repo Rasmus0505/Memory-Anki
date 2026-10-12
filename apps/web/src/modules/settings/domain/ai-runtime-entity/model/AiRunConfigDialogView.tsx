@@ -247,7 +247,7 @@ export function AiRunConfigDialogView({
                   </div>
                 </div>
 
-                <div className="grid min-h-[260px] gap-3 text-sm">
+                <div className="grid min-h-65 gap-3 text-sm">
                   <div className="flex items-center justify-between gap-2">
                     <div className="space-y-0.5">
                       <span className="font-medium">提示词组合</span>
@@ -390,7 +390,7 @@ export function AiRunConfigDialogView({
                         }))
                       }}
                       placeholder="仅影响本次运行，不会写入以后默认。"
-                      className="min-h-[80px] resize-y rounded-lg border border-input bg-background px-4 py-3 text-sm"
+                      className="min-h-20 resize-y rounded-lg border border-input bg-background px-4 py-3 text-sm"
                     />
                   </label>
 

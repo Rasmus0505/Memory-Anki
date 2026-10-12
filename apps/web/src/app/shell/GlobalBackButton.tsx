@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { Button } from '@/shared/components/ui/button'
 import { useNavigationHistory } from '@/shared/page-history/useNavigationHistory'
 import { cn } from '@/shared/lib/utils'
+import { resolveAppLayoutMode } from '@/app/router/routeLayoutMeta'
 
 type GlobalBackButtonPlacement = 'sidebar' | 'mobile'
 
@@ -15,24 +16,13 @@ type GlobalBackButtonProps = {
 }
 
 /** Immersive feed owns its own top chrome; floating back/forward would cover the card. */
-export function isPalaceReviewPath(pathname: string) {
-  return /^\/palaces\/\d+\/review$/.test(pathname)
-}
-
 export function isImmersiveFeedPath(pathname: string) {
-  return (
-    pathname === '/freestyle' ||
-    pathname.startsWith('/freestyle/') ||
-    pathname === '/freestyle-2' ||
-    pathname.startsWith('/freestyle-2/') ||
-    isPalaceReviewPath(pathname)
-  )
+  return resolveAppLayoutMode(pathname) === 'immersive'
 }
 
 /** Full-page mind-map hosts that should flush the shell chrome to the window edge. */
 export function isMindMapHostPath(pathname: string) {
-  if (isImmersiveFeedPath(pathname) || pathname === '/knowledge') return true
-  return /^\/palaces\/\d+(?:\/edit)?$/.test(pathname)
+  return resolveAppLayoutMode(pathname) !== 'standard'
 }
 
 export function GlobalBackButton({
@@ -82,7 +72,7 @@ export function GlobalBackButton({
     <div
       className={cn(
         'pointer-events-auto flex rounded-xl border border-border/70 bg-background/85 p-0.5 shadow-sm backdrop-blur-xl',
-        compact ? 'flex-col gap-0.5' : 'items-center gap-0.5',
+        compact ? 'flex-col gap-0.5' : 'flex-col gap-0.5 lg:flex-row lg:items-center',
       )}
       data-testid="section-history-controls"
       title={`${sectionHint}内前进/后退（不会跨到其他侧栏分区）`}
@@ -116,7 +106,7 @@ export function GlobalBackButton({
 
   if (placement === 'mobile') {
     return (
-      <div className="pointer-events-none fixed left-[max(env(safe-area-inset-left),0.5rem)] top-[max(env(safe-area-inset-top),0.5rem)] z-[100] lg:hidden">
+      <div className="pointer-events-none fixed left-[max(env(safe-area-inset-left),0.5rem)] top-[max(env(safe-area-inset-top),0.5rem)] z-[100] md:hidden">
         {controls}
       </div>
     )

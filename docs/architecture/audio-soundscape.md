@@ -1,12 +1,12 @@
 # 音效与声景（Audio Soundscape）
 
-> 本文说明 Memory Anki 的全部程序化声音：合成音数据源、主题音色、音频上下文生命周期、
+> 本文说明 Memory Anki 的全部程序化声音：合成音数据源、音色选择、音频上下文生命周期、
 > 静音分区与音量优先级。所有声音均为 **Web Audio 实时合成**，项目没有音频素材文件依赖。
 
 ## 一句话模型
 
-「反馈事件（语义） → `ToneSpec[]`（数据源） → 主题包音色着色（`colorTone`） → 单一 `AudioContext` 播放」，
-再叠加两条独立通道：**界面音（`uiSounds`）** 与 **音景氛围（ambient）**。
+「反馈事件（语义） → `ToneSpec[]`（数据源） → 音色选择（`soundVoice`） → 单一 `AudioContext` 播放」，
+再叠加独立通道：**界面音（`uiSounds`）**。音色只由用户设置决定，不随任何主题变化。
 
 ## 分层与所有权
 
@@ -15,15 +15,15 @@
 | 事件语义 | `shared/feedback/feedbackEvents.ts` | `MindMapFeedbackEvent` 联合类型，唯一事件名来源 |
 | 音色数据源 | `shared/feedback/mindmap-audio/toneProfiles.ts` | 每个事件对应一组 `ToneSpec`（「听声辨事」唯一数据源） |
 | 播放器 | `shared/feedback/mindmap-audio/webAudioFeedback.ts` | `AudioContext` 单例、振荡器编排、音量钳制 |
-| 主题着色 | `shared/feedback/mindmap-audio/packTimbre.ts` | 按主题包 `PackTimbre` 调制音高/包络/波形 |
+| 音色选择 | `shared/feedback/mindmap-audio/soundVoices.ts` | `pickConcreteVoice` 为一句话选定一种音色 |
+| 发声渲染 | `shared/feedback/mindmap-audio/voiceSynth.ts` | 响度放大（`SOUND_PRESENCE`）与整句最低响度（`SEQUENCE_FLOOR`） |
 | 事件桥接 | `shared/feedback/mindmap-audio/useMindMapFeedback.ts` | 把编辑器/画布事件接到播放器 |
 | 界面音 | `shared/feedback/uiSounds.ts` + `uiSoundSynth.ts` | 全局委托监听，按钮/开关/标签页的通用音 |
-| 反馈导演 | `shared/fx`（`recipes/*`） | 业务只发 `cue()`，由 recipe 决定声音 + 粒子 + DOM + 触感 |
+| 反馈导演 | `shared/fx`（`recipes/*`） | 业务只发 `cue()`，由 recipe 决定声音 + 震动 + 果冻动效 / DOM 小动效 |
 | 分层弹跳 | `shared/feedback/mindmap-audio/layeredPops.ts` | 一次动作 = 一记，`count` 张对象 = 连弹几声 |
 
 硬规则：**业务代码不直接调用 `playXxx()` 或裸建 `AudioContext`**。
-业务声明「发生了什么」（`cue('grade.commit', …)`），由 recipe 决定听感；皮肤、稀有演出与 FX Lab
-可在不改调用方的前提下替换或重放。
+业务声明「发生了什么」（`cue('grade.commit', …)`），由 recipe 决定听感；recipe 可在不改调用方的前提下替换。
 
 ## 合成音数据源（`toneProfiles.ts`）
 
@@ -45,7 +45,7 @@ interface ToneSpec {
 
 ### 三套音色与混合默认
 
-用户保留试听页的三套终选，不按主题包着色。设置项是 `ReviewFeedbackSettings.soundVoice`：
+用户在设置中保留三套终选，不按主题包着色。设置项是 `ReviewFeedbackSettings.soundVoice`：
 
 | 值 | 听感 |
 |---|---|
@@ -55,7 +55,7 @@ interface ToneSpec {
 | `celesta` | 灵音八音盒。延迟颤音，尾音最长 |
 
 播放在 `playToneSequence` 里调用 `pickConcreteVoice` 一次，再把整句交给 `renderVoicedTone`。
-主题包的 `colorTone` 不再改写播放。语义音高仍来自 `getToneSpec` / `buildGlassBell()`，音色只改变发声方式与音区。
+音色只由 `soundVoice` 决定，不随任何主题改变。语义音高仍来自 `getToneSpec` / `buildGlassBell()`，音色只改变发声方式与音区。
 
 响度在播放层放大（`SOUND_PRESENCE`），整句还有最低响度（`SEQUENCE_FLOOR`），所以微交互也不会发虚。
 音量滑条仍然相乘；滑到 0 仍然静音。输出经过共享压缩器，连弹偏响但不削波。
@@ -72,8 +72,7 @@ interface ToneSpec {
 | 连弹增益 | 前 5 记 `1 - i×.08`；之后 `max(.18, .57 - (i-5)×.055)` |
 | 评分四档 | 忘记 `1×` / 困难 `9/8` / 良好 `5/4` / 简单 `4/3`，增益 `.82`、时长 ×`1.10` |
 
-`envelope: 'glass'` 的音绕过 `tuneToneSpec`。三套音色和混合模式都绕过主题包着色；
-烟花、连击和界面音走同一套音色解析，不再另走 pack timbre。
+`envelope: 'glass'` 的音绕过 `tuneToneSpec`。烟花、连击和界面音走同一套音色解析。
 
 `TONE_PROFILES` 是 `Record<MindMapFeedbackEvent, ToneSpec[]>`，因此**新增事件时 TypeScript 会强制要求补配**，
 不会静默回落。语义维度（用于"听声辨事"）如下：
@@ -90,25 +89,16 @@ interface ToneSpec {
 局部与整体的区分由 `tuneToneSpec(event, tone, origin, audioScope)` 在 `origin` / `audioScope` 维度二次调制。
 惊喜变体（如 `CARD_REVEAL_SURPRISE_TONES`）**不进入事件联合类型**，单独存放，避免污染事件表。
 
-## 主题音色（`packTimbre.ts`）
+## 主题与音色
 
-主题包通过 `PackTimbre` 为**所有**程序化音出色，只调音高与包络，不使用采样：
-
-| `PackTimbre` | 波形 | 音高倍率 | 时长倍率 | 起音倍率 | 增益倍率 | 听感 |
-|---|---|---|---|---|---|---|
-| `paper-wood` | `triangle` | 0.9 | 0.82 | 1.6 | 0.9 | 木质低沉 |
-| `bell-lacquer` | `sine` | 1.18 | 1.35 | 0.35 | 0.85 | 漆器清亮 |
-| `celesta-chime` | `sine` | 1.42 | 1.1 | 0.22 | 0.78 | 钢片琴高亮 |
-| `marimba-water` | `triangle` | 0.78 | 1.05 | 0.7 | 1.0 | 马林巴温润 |
-
-`colorTone(tone, timbre = activePackTimbre())` 是唯一着色入口；`attackMs` 最小 `2ms`、`durationMs` 最小 `18ms`，
-避免调制后出现爆音或零时长。业务代码**不得按主题包 id 分支**（见 [theme-packs.md](./theme-packs.md)）。
-`envelope: 'glass'` 的音在 `colorTone` 与 `tuneToneSpec` 中**原样返回**：用户选定的听感不随主题漂移。
+主题包不再影响声音：没有 `PackTimbre`，也没有 `colorTone`。音色只由 `soundVoice` 决定，
+`envelope: 'glass'` 的音在 `tuneToneSpec` 中**原样返回**，用户选定的听感不随主题漂移。
+主题本身见 [theme-packs.md](./theme-packs.md)。
 
 ## 分层弹跳（`layeredPops.ts`）
 
 一次动作 = 一记 `role`；这次动作带动了几个对象 = `count`。**一次 `playToneSequence` 调用排完全部连弹**，
-不能一张卡发一次 `cue()`——挂起上下文只保留最近一次声音（见上节），N 次调用会丢掉 N-1 记。
+不能一张卡发一次 `cue()`——挂起上下文只保留最近一次声音（见下文 AudioContext 生命周期），N 次调用会丢掉 N-1 记。
 
 | 角色 | 用途 |
 |---|---|
@@ -163,7 +153,6 @@ interface ToneSpec {
 - `ambient` 永不发声、永不触感（只有视觉）。
 - 三个通道全关时 `cue()` 直接返回 `null`，不创建 playback。
 
-FX Lab 预览使用 `cue(name, sample, { force: true })`，其中 `FORCED` 门全开，仅用于试听/重放。
 
 ## 反馈导演的 owner 取消
 
@@ -178,11 +167,10 @@ owner（一次卡片遭遇、一轮、一个页面）退役时 `retireOwner(owne
 - 不在 `toneProfiles` 之外另建事件→声音映射表（避免两处真相）。
 - 不绕过 `resolveFxGate` 自行判断静音。
 - 不让有独立声音设计的面同时收到通用界面音（必须列入 `SILENT_SCOPE`）。
-- 不按主题包 id 在业务代码里分支选音。
 
 ## 验证
 
-- 音色表与调制：`packTimbre.test.ts`、`toneProfiles` 相关测试、`webAudioFeedback.test.ts`
+- 音色与合成：`soundVoices.test.ts`、`toneProfiles` 相关测试、`webAudioFeedback.test.ts`
 - 落地音与连击音：`landingChime.test.ts`
 - 界面音：`uiSounds.test.ts`
 - 通道门：`apps/web/src/shared/fx/core/policy.ts`（配合 `director.test.ts`）

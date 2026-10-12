@@ -25,9 +25,9 @@ Memory Anki 是一个自用的本地学习产品，核心是“记忆宫殿 + �
 | 随心模式 `freestyle` | 面向当天训练的沉浸刷卡流；默认入口 `/freestyle`；另有可从 HUD 切换进入的 `/freestyle-2` |
 | 学习会话 `session` | 宫殿练习、分段、迷你宫殿、复习等会话进度 |
 | 仪表盘 `dashboard` | 今日复习、近期状态、时长统计 |
-| 成长 `progression` | 经验/等级、每日委托、印章与主题包解锁（只读投影）。`/growth` 星图页已删除，旧地址转到 `/dashboard` |
-| 反馈导演 `shared/fx` | 统一动效运行时：`cue()` → 配方 → 粒子/声音/触觉/DOM，owner 作用域取消，`/lab/fx` 实验室 |
-| 主题包 `shared/theme` | 整世界主题（色板、卡面材质、环境浮尘、粒子皮肤、合成音色、节奏），随成长解锁 |
+| 成长 `progression`（后端） | 经验、等级、委托、印章的只读投影（`GET /api/v1/progression/overview`）。前端不展示，无 `modules/progression`，`/growth` 旧地址转到 `/dashboard` |
+| 反馈导演 `shared/fx` | 统一反馈运行时：`cue()` → 配方 → 声音 / 震动 / CSS 果冻动效 / DOM 小动效，owner 作用域取消。无粒子、无 WebGL、无 FX Lab |
+| 主题包 `shared/theme` | 单一 `study` 主题（纸墨书房），只含翻页/翻开时长与 `theme-color`；不随成长解锁 |
 | PWA `pwa` | 通过 Tailscale 访问完整桌面端前端，默认进入 `/freestyle` |
 | 设置 `settings` | AI 模型注册、场景模型、提示词、复习参数、客户端偏好 |
 | 备份 `backups` | 启动/关闭/周期备份、宫殿版本、数据库恢复 |
@@ -233,7 +233,7 @@ apps/web/src/
 
 前端业务能力统一放在 `apps/web/src/modules/*`，当前模块包括：
 
-`backup`、`content`、`dashboard`、`english`、`english-lookup`、`exam`、`memory`、`mindmap`、`practice`、`produce`、`progression`、`quiz`、`search`、`session`、`settings`。
+`backup`、`content`、`dashboard`、`english`、`english-lookup`、`exam`、`memory`、`mindmap`、`practice`、`produce`、`quiz`、`search`、`session`、`settings`。
 
 模块内部按 `domain`、`application`、`ui`、`api` 组织；模块之间通过 `public.ts`、共享端口或页面/组件组合通信。
 
@@ -278,10 +278,10 @@ apps/web/src/
 
 动效、声音与触感有统一门面，业务代码只声明「发生了什么」，不自行实现：
 
-- `shared/fx`：`cue()` / 配方 / owner 取消 / 皮肤 / 稀有演出。详见 `docs/architecture/fx-director.md`。
+- `shared/fx`：`cue()` / 配方 / owner 取消 / 声音、震动与 CSS 果冻动效。详见 `docs/architecture/fx-director.md`。
 - `shared/feedback/mindmap-audio`：程序化合成音数据源、`AudioContext` 生命周期、静音分区与场景音量门。详见 `docs/architecture/audio-soundscape.md`。
-- `shared/theme`：主题包（色板、材质、粒子皮肤、音色、节奏）。详见 `docs/architecture/theme-packs.md`。
-- 硬规则：业务组件不得直接实例化 WebGL / WebAudio / 粒子 / DOM 动效；带延迟的步骤必须挂在 cue 的 `FxPlayback` owner 上。
+- `shared/theme`：单一 `study` 主题包（翻页/翻开时长、`theme-color`）。详见 `docs/architecture/theme-packs.md`。
+- 硬规则：业务组件不得直接实例化 WebGL / WebAudio，不做粒子或 canvas 特效；带延迟的步骤必须挂在 cue 的 `FxPlayback` owner 上。
 
 ### 5.7 统一质量入口
 
@@ -504,4 +504,5 @@ AI 相关功能分布较广：
 - 2026-07-10：Electron 日常入口改为复用 PWA 的 `127.0.0.1:8012` 共享服务；桌面与 PWA 启动通过跨进程锁协调，`5173` 仅保留给显式前端开发。
 - 2026-07-10：本机指纹驱动的智能增量更新已合并到 `start-all.bat`，不再保留独立 `update.bat` 或分开的桌面/PWA 启动入口；Desktop/PWA 共用单实例后台托盘。
 - 2026-10：反馈统一为 `shared/fx` 导演运行时（`cue()` → 配方 → 粒子/声音/触觉/DOM，owner 作用域取消、锚点注册、皮肤、稀有演出、`/lab/fx` 实验室）；移除 canvas-confetti。新增 `progression` 成长层（后端只读投影 + `/growth` 星图与印章册 + 随心 HUD/结算）。
+  - 后续已移除（当前状态以上文表格与 `docs/architecture/` 为准）：粒子、皮肤、稀有演出、`/lab/fx`、前端成长界面（`/growth`、等级环、委托、印章演出）与主题外观解锁。
 - 2026-10-03：撤回随心模式 juiciness 前端（果冻翻卡舞台 `JellyMindmapStage`、`parentCharge`、配套动效/粒子改造）。`apps/web` 回到 `44ce4bb9`。不要把果冻舞台当作当前架构补回。

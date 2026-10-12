@@ -71,7 +71,6 @@ export const EXACT_ROUTES: ExactRouteEntry[] = [
   { path: '/profile/feedback', nav: null, history: 'profile', historyKey: 'profile:feedback' },
   { path: '/profile/ai', nav: null, history: 'profile', historyKey: 'profile:ai' },
   { path: '/profile/backups', nav: null, history: 'profile', historyKey: 'profile:backups' },
-  { path: '/lab/fx', nav: null, history: 'profile', historyKey: 'lab:fx', commandLabel: 'FX 实验室' },
 ]
 
 export const DYNAMIC_ROUTES: DynamicRouteEntry[] = [

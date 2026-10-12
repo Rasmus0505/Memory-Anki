@@ -8,11 +8,11 @@ This directory is the current architectural source of truth. Product and runtime
 ## System Shape
 
 ```text
-apps/web: app -> pages/widgets -> modules (15, domain/application/ui/api + public.ts) -> shared/platform/pwa
+apps/web: app -> pages/widgets -> modules (14, domain/application/ui/api + public.ts) -> shared/platform/pwa
 apps/api: presentation -> application/use cases -> domain + ports <- infrastructure
 ```
 
-Frontend runtime modules (`apps/web/src/modules/*`): `backup content dashboard exam english english-lookup memory mindmap practice produce progression quiz search session settings`. The legacy `features/` and `entities/` layers have been fully migrated into `modules/*` (entity packages live under `modules/<name>/domain/*-entity`). Layer direction is enforced by ESLint (`eslint-plugin-boundaries` with the TypeScript resolver); module `public.ts` discipline is enforced by `tools/check_architecture.py`.
+Frontend runtime modules (`apps/web/src/modules/*`): `backup content dashboard exam english english-lookup memory mindmap practice produce quiz search session settings`. The legacy `features/` and `entities/` layers have been fully migrated into `modules/*` (entity packages live under `modules/<name>/domain/*-entity`). Layer direction is enforced by ESLint (`eslint-plugin-boundaries` with the TypeScript resolver); module `public.ts` discipline is enforced by `tools/check_architecture.py`.
 
 The repository is a local-first Windows product used on two devices. SQLite, files, backups, PWA, and desktop clients share one local backend. Cross-device behavior must be deterministic because runtime data is synchronized outside Git.
 
@@ -32,10 +32,10 @@ The repository is a local-first Windows product used on two devices. SQLite, fil
 | Background jobs | `shared/background-tasks` | target shared job lease/handler infrastructure |
 | Client preferences | `modules/settings/domain/preferences-entity` | settings/profile preference endpoint |
 | Route metadata (nav/history/fallback) | `shared/routing/routeManifest.ts` (single source) | — |
-| Feedback runtime (cues, recipes, particles, skins, rare shows) | `shared/fx` — see [fx-director.md](./fx-director.md). Callers use `cue()` from `@/shared/fx` only; WebGL2 + bloom with Canvas2D fallback | — |
+| Feedback runtime (cue → recipe → sound, haptics, CSS jelly, DOM flourish) | `shared/fx` — see [fx-director.md](./fx-director.md). Callers use `cue()` from `@/shared/fx` only; no particle or WebGL effects | — |
 | Learning progress (`/progress`, hierarchy / distribution / question coverage) | `modules/dashboard` — see [dashboard-read-model.md](./dashboard-read-model.md) | `modules/dashboard` composed through content/memory/quiz public read capabilities |
-| Growth meta (XP, levels, quests, stamps; no `/growth` page) | `modules/progression` — see [progression.md](./progression.md) | `modules/progression` (read-only projection) |
-| Ambient room layer (tint, grain, dust motes, pointer light) | `shared/ambient` (pure, data-free); `app/shell/useAmbientTone` feeds it dashboard/exam data | — |
+| Growth meta (XP, levels, quests, stamps; backend read projection only, no frontend module or page) | — (no frontend owner; `growth_state` is unused by the UI) — see [progression.md](./progression.md) | `modules/progression` (read-only projection) |
+| Ambient room layer (tint, grain, pointer light) | `shared/ambient` (pure, data-free); `app/shell/useAmbientTone` feeds it dashboard/exam data | — |
 | Interface sounds | `shared/feedback/uiSounds` (delegated listener, gated by `uiSoundEnabled` + `soundEnabled`; silent inside `.freestyle-stage`); synth voices in `shared/feedback/mindmap-audio` — see [audio-soundscape.md](./audio-soundscape.md) | — |
 | Diagnosis brief (top-left 录制) | `shared/debug/session-recorder` subscribes to `shared/api/requestOutcome`; `shared/api` must not import the recorder | — |
 
@@ -89,9 +89,9 @@ Frontend lint is a zero-warning contract. The `apps/web` lint script runs ESLint
 
 ## Sensory runtime
 
-- `fx-director.md` — cue → recipe feedback runtime (particles, sound, haptics, DOM).
-- `theme-packs.md` — whole-world theme packs (tokens, paper, motes, timbre, rhythm) and their growth unlocks.
-- `audio-soundscape.md` — procedural synth voices, theme timbre, `AudioContext` lifecycle/iOS unlock, mute scopes, per-scene volume gates.
+- `fx-director.md` — cue → recipe feedback runtime (sound, haptics, CSS jelly, DOM flourish; owner-scoped playback).
+- `theme-packs.md` — single `study` theme pack (`motion` and `themeColor` only).
+- `audio-soundscape.md` — procedural synth voices, `soundVoice` selection, `AudioContext` lifecycle/iOS unlock, mute scopes, per-scene volume gates.
 
 ## Validation
 

@@ -4,7 +4,7 @@ import { openPlayback, pendingPlaybackCount, retireOwner } from './owner'
 const gate = vi.hoisted(() => ({ motion: true, sound: true, haptic: true, volume: 1 }))
 vi.mock('./policy', () => ({ resolveFxGate: () => ({ ...gate }) }))
 
-import { __clearCuesForTests, cue, defineCue, listCues, onCue, replayCue } from './director'
+import { __clearCuesForTests, cue, defineCue } from './director'
 
 declare module './director' {
   interface FxCueMap {
@@ -55,31 +55,17 @@ describe('fx director', () => {
     __clearCuesForTests()
     Object.assign(gate, { motion: true, sound: true, haptic: true })
     play.mockReset()
-    defineCue('test.cue', { scene: 'review', label: '测试', group: 'T', sample: () => ({ value: 7 }), play })
+    defineCue('test.cue', { scene: 'review', play })
   })
 
   it('hands the payload and resolved gate to the recipe', () => {
     cue('test.cue', { value: 1 })
-    expect(play).toHaveBeenCalledWith({ value: 1 }, expect.objectContaining({ gate: expect.objectContaining({ motion: true }), forced: false }))
+    expect(play).toHaveBeenCalledWith({ value: 1 }, expect.objectContaining({ gate: expect.objectContaining({ motion: true }) }))
   })
 
-  it('skips the recipe when every channel is off, but still notifies listeners', () => {
+  it('skips the recipe when every channel is off', () => {
     Object.assign(gate, { motion: false, sound: false, haptic: false })
-    const listener = vi.fn()
-    const off = onCue(listener)
     expect(cue('test.cue', { value: 2 })).toBeNull()
     expect(play).not.toHaveBeenCalled()
-    expect(listener).toHaveBeenCalledWith('test.cue', { value: 2 })
-    off()
-  })
-
-  it('replays with the sample payload on every channel', () => {
-    Object.assign(gate, { motion: false, sound: false, haptic: false })
-    replayCue('test.cue')
-    expect(play).toHaveBeenCalledWith({ value: 7 }, expect.objectContaining({ forced: true, gate: expect.objectContaining({ motion: true, sound: true }) }))
-  })
-
-  it('lists registered cues for the lab', () => {
-    expect(listCues()).toEqual([expect.objectContaining({ name: 'test.cue', label: '测试', hasSample: true })])
   })
 })

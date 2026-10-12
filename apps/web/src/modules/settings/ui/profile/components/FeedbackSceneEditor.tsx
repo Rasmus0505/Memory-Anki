@@ -1,8 +1,6 @@
 import { Input } from '@/shared/components/ui/input'
 import { Switch } from '@/shared/components/ui/switch'
 import {
-  FEEDBACK_CONFETTI_PRESETS,
-  FEEDBACK_CONFETTI_PRESET_LABELS,
   REVIEW_FEEDBACK_SCENE_BOOST_MAX,
   REVIEW_FEEDBACK_VOLUME_MAX,
   type ReviewFeedbackSceneSettings,
@@ -76,62 +74,27 @@ export function FeedbackSceneEditor({
             </label>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
-            <label className="space-y-1.5 text-sm">
-              <span className="text-xs text-muted-foreground">烟花类型</span>
-              <select
-                className="h-9 w-full rounded-md border border-border/70 bg-background px-2 text-sm"
-                value={scene.confettiPreset ?? FEEDBACK_CONFETTI_PRESETS[0]}
-                onChange={(event) =>
-                  onChange({
-                    confettiPreset: event.target
-                      .value as ReviewFeedbackSceneSettings['confettiPreset'],
-                  })
-                }
-                aria-label={`${descriptor.title}烟花类型`}
-              >
-                {FEEDBACK_CONFETTI_PRESETS.map((preset) => (
-                  <option key={preset} value={preset}>
-                    {FEEDBACK_CONFETTI_PRESET_LABELS[preset]}
-                  </option>
-                ))}
-              </select>
-            </label>
-
-            <label className="space-y-1.5 text-sm">
-              <span className="text-xs text-muted-foreground">
-                音量倍率（当前实际 {effectivePercent}%）
-              </span>
-              <Input
-                type="number"
-                min={0}
-                max={REVIEW_FEEDBACK_SCENE_BOOST_MAX}
-                step={0.05}
-                value={boost}
-                onChange={(event) => onChange({ volumeBoost: Number(event.target.value) })}
-                aria-label={`${descriptor.title}音量倍率`}
-              />
-            </label>
-          </div>
+          <label className="block space-y-1.5 text-sm">
+            <span className="text-xs text-muted-foreground">
+              音量倍率（当前实际 {effectivePercent}%）
+            </span>
+            <Input
+              type="number"
+              min={0}
+              max={REVIEW_FEEDBACK_SCENE_BOOST_MAX}
+              step={0.05}
+              value={boost}
+              onChange={(event) => onChange({ volumeBoost: Number(event.target.value) })}
+              aria-label={`${descriptor.title}音量倍率`}
+            />
+          </label>
 
           <details className="rounded-lg border border-border/60 bg-background/50 p-3">
             <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
-              高级：烟花量与冷却
+              高级：冷却
             </summary>
-            <div className="mt-3 grid gap-3 md:grid-cols-2">
-              <label className="space-y-1.5 text-sm">
-                <span className="text-xs text-muted-foreground">烟花量（0-3）</span>
-                <Input
-                  type="number"
-                  min={0}
-                  max={3}
-                  step={0.05}
-                  value={scene.confettiAmount}
-                  onChange={(event) => onChange({ confettiAmount: Number(event.target.value) })}
-                  aria-label={`${descriptor.title}烟花量`}
-                />
-              </label>
-              <label className="space-y-1.5 text-sm">
+            <div className="mt-3">
+              <label className="block space-y-1.5 text-sm">
                 <span className="text-xs text-muted-foreground">冷却（毫秒）</span>
                 <Input
                   type="number"

@@ -1,8 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   DEFAULT_REVIEW_FEEDBACK_SETTINGS,
-  FEEDBACK_CONFETTI_PRESETS,
-  FEEDBACK_CONFETTI_PRESET_LABELS,
   applyFeedbackPreset,
   readReviewFeedbackSettings,
   resolveFeedbackChannels,
@@ -18,15 +16,7 @@ describe('reviewFeedbackSettings', () => {
   it('returns defaults when storage is empty', () => {
     expect(readReviewFeedbackSettings()).toEqual(DEFAULT_REVIEW_FEEDBACK_SETTINGS)
     expect(DEFAULT_REVIEW_FEEDBACK_SETTINGS.schemaVersion).toBe(4)
-    expect(DEFAULT_REVIEW_FEEDBACK_SETTINGS.gameplayFx.style).toBe('cyber')
-    expect(DEFAULT_REVIEW_FEEDBACK_SETTINGS.gameplayFx.flipMotion).toBe('flip-3d-gloss')
-    expect(DEFAULT_REVIEW_FEEDBACK_SETTINGS.gameplayFx.particleStyle).toBe('magnetic-arc')
     expect(DEFAULT_REVIEW_FEEDBACK_SETTINGS.gameplayFx.screenShakeIntensity).toBe(100)
-    expect(DEFAULT_REVIEW_FEEDBACK_SETTINGS.gameplayFx.particleDensity).toBe(100)
-    expect(DEFAULT_REVIEW_FEEDBACK_SETTINGS.gameplayFx.springOvershootRatio).toBe(100)
-    expect(DEFAULT_REVIEW_FEEDBACK_SETTINGS.gameplayFx.magneticArcEnabled).toBe(true)
-    expect(DEFAULT_REVIEW_FEEDBACK_SETTINGS.gameplayFx.feverComboEnabled).toBe(true)
-    expect(DEFAULT_REVIEW_FEEDBACK_SETTINGS.gameplayFx.chimeSynthesizerEnabled).toBe(true)
     expect(DEFAULT_REVIEW_FEEDBACK_SETTINGS.soundVoice).toBe('mixed')
   })
 
@@ -37,29 +27,15 @@ describe('reviewFeedbackSettings', () => {
     expect(sanitizeReviewFeedbackSettings({ soundVoice: 'celesta' }).soundVoice).toBe('celesta')
   })
 
-  it('sanitizes gameplay feedback fx settings within bounds', () => {
-    const customized = sanitizeReviewFeedbackSettings({
-      gameplayFx: {
-        style: 'cyber',
-        flipMotion: 'flip-jelly',
-        particleStyle: 'candy-confetti',
-        screenShakeIntensity: 250,
-        particleDensity: 20,
-        springOvershootRatio: -10,
-        magneticArcEnabled: false,
-        feverComboEnabled: false,
-        chimeSynthesizerEnabled: false,
-      },
-    })
-    expect(customized.gameplayFx.style).toBe('cyber')
-    expect(customized.gameplayFx.flipMotion).toBe('flip-jelly')
-    expect(customized.gameplayFx.particleStyle).toBe('candy-confetti')
-    expect(customized.gameplayFx.screenShakeIntensity).toBe(200)
-    expect(customized.gameplayFx.particleDensity).toBe(30)
-    expect(customized.gameplayFx.springOvershootRatio).toBe(0)
-    expect(customized.gameplayFx.magneticArcEnabled).toBe(false)
-    expect(customized.gameplayFx.feverComboEnabled).toBe(false)
-    expect(customized.gameplayFx.chimeSynthesizerEnabled).toBe(false)
+  it('clamps screen shake intensity within bounds', () => {
+    expect(
+      sanitizeReviewFeedbackSettings({ gameplayFx: { screenShakeIntensity: 250 } }).gameplayFx
+        .screenShakeIntensity,
+    ).toBe(200)
+    expect(
+      sanitizeReviewFeedbackSettings({ gameplayFx: { screenShakeIntensity: -10 } }).gameplayFx
+        .screenShakeIntensity,
+    ).toBe(0)
   })
 
   it('migrates legacy intensity into the preset model', () => {
@@ -120,29 +96,7 @@ describe('reviewFeedbackSettings', () => {
 
   it('lets presets drive the timer scenes now that they live here', () => {
     const focused = applyFeedbackPreset(DEFAULT_REVIEW_FEEDBACK_SETTINGS, 'focus')
-    const motivating = applyFeedbackPreset(DEFAULT_REVIEW_FEEDBACK_SETTINGS, 'motivating')
-
-    expect(focused.scenes.timerRound.confettiAmount).toBeLessThan(
-      motivating.scenes.timerRound.confettiAmount,
-    )
     expect(focused.scenes.timerInterval.animationEnabled).toBe(false)
-  })
-
-  it('exposes exactly five confetti presets with the chinese labels', () => {
-    expect(FEEDBACK_CONFETTI_PRESETS).toEqual([
-      'random_direction',
-      'fireworks',
-      'realistic_look',
-      'stars',
-      'school_pride',
-    ])
-    expect(FEEDBACK_CONFETTI_PRESET_LABELS).toEqual({
-      random_direction: '庆祝',
-      fireworks: '爆发',
-      realistic_look: '写实',
-      stars: '星爆',
-      school_pride: '庆典',
-    })
   })
 
   it('writes sanitized scene-based settings', () => {
@@ -155,11 +109,6 @@ describe('reviewFeedbackSettings', () => {
         review: {
           ...DEFAULT_REVIEW_FEEDBACK_SETTINGS.scenes.review,
           soundEnabled: false,
-          confettiPreset: 'stars',
-        },
-        timerRound: {
-          ...DEFAULT_REVIEW_FEEDBACK_SETTINGS.scenes.timerRound,
-          confettiAmount: 2.6,
         },
       },
     })
@@ -167,8 +116,6 @@ describe('reviewFeedbackSettings', () => {
     expect(saved.soundEnabled).toBe(false)
     expect(saved.volume).toBe(1.75)
     expect(saved.scenes.review.soundEnabled).toBe(false)
-    expect(saved.scenes.review.confettiPreset).toBe('stars')
-    expect(saved.scenes.timerRound.confettiAmount).toBe(2.6)
     // 形容词强度档位已彻底移除
     expect((saved.scenes.review as unknown as Record<string, unknown>).intensity).toBeUndefined()
     expect((saved as unknown as Record<string, unknown>).revealFxIntensity).toBeUndefined()
@@ -196,10 +143,7 @@ describe('reviewFeedbackSettings', () => {
     // scenes.milestone.steps 为有效值 [4,8]，优先于 celebration 里的脏数据
     expect(sanitized.scenes.milestone.steps).toEqual([4, 8])
     expect((sanitized.scenes.review as unknown as Record<string, unknown>).intensity).toBeUndefined()
-    // 烟花类型按场景默认兜底
-    expect(sanitized.scenes.review.confettiPreset).toBe('random_direction')
-    expect(sanitized.scenes.milestone.confettiPreset).toBe('fireworks')
-    expect(sanitized.scenes.completion.confettiPreset).toBe('stars')
+    expect((sanitized as unknown as Record<string, unknown>).confettiAmount).toBeUndefined()
   })
 
   it('fills missing timer scenes and clamps invalid values', () => {
@@ -219,9 +163,7 @@ describe('reviewFeedbackSettings', () => {
           enabled: true,
           soundEnabled: true,
           animationEnabled: false,
-          confettiAmount: 99,
           cooldownMs: -40,
-          confettiPreset: 'not-a-preset',
           volumeBoost: 99,
         },
       },
@@ -231,9 +173,7 @@ describe('reviewFeedbackSettings', () => {
       expect.objectContaining({
         enabled: true,
         animationEnabled: false,
-        confettiAmount: 3,
         cooldownMs: 0,
-        confettiPreset: 'school_pride',
         volumeBoost: 3,
       }),
     )

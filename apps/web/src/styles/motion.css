@@ -1,0 +1,604 @@
+/* Motion: jelly feedback, English and progress-rail keyframes, reduced-motion overrides for motion classes. Loaded before feature files so their reduced-motion rules win on !important. */
+
+/* 果冻反馈：挤压、拉伸、回弹。由 shared/fx/core/jelly.ts 挂载，动画结束后自动移除类名。 */
+
+@media (prefers-reduced-motion: no-preference) {
+  .fx-jelly-pop {
+    animation: fx-jelly-pop 420ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+
+  .fx-jelly-press {
+    animation: fx-jelly-press 260ms ease-out both;
+  }
+
+  .fx-jelly-wobble {
+    animation: fx-jelly-wobble 640ms ease-in-out both;
+  }
+}
+
+@keyframes fx-jelly-pop {
+  0% {
+    transform: scale(0.82, 0.82);
+  }
+  40% {
+    transform: scale(1.08, 0.94);
+  }
+  65% {
+    transform: scale(0.97, 1.04);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes fx-jelly-press {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.04, 0.92);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes fx-jelly-wobble {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  20% {
+    transform: scale(1.1, 0.9);
+  }
+  40% {
+    transform: scale(0.94, 1.06);
+  }
+  60% {
+    transform: scale(1.03, 0.98);
+  }
+  80% {
+    transform: scale(0.99, 1.01);
+  }
+}
+
+@keyframes english-letter-pop {
+  0% {
+    transform: scale(0.72);
+    opacity: 0.55;
+  }
+  70% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes english-word-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-3px);
+  }
+  40% {
+    transform: translateX(3px);
+  }
+  60% {
+    transform: translateX(-2px);
+  }
+  80% {
+    transform: translateX(2px);
+  }
+}
+
+@keyframes english-caret-blink {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0.15;
+  }
+}
+
+@keyframes english-word-correct-flash {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-success, #22c55e) 0%, transparent);
+  }
+  40% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-success, #22c55e) 28%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-success, #22c55e) 0%, transparent);
+  }
+}
+
+.english-letter-pop {
+  animation: english-letter-pop 0.16s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.english-word-shake {
+  animation: english-word-shake 0.22s ease-in-out both;
+}
+
+.english-word-correct-flash {
+  animation: english-word-correct-flash 0.36s ease-out both;
+}
+
+.english-caret {
+  animation: english-caret-blink 1s steps(1, end) infinite;
+}
+
+/* --- 进度条动画 ---
+   6px 量级的 tick 上，仅靠 filter 的亮度变化不可感知；可感知性必须建立在
+   几何变化（高度/缩放/光晕半径）上，亮度只作为叠加高光。
+   transform-origin 统一为 bottom：tick 靠 items-end 对齐，向上生长才不脱轨。
+
+   注意：`progress-rail-breath`（无限循环）与所有一次性脉冲 class 都写
+   transform + filter，同一元素同时挂两者时后声明者整条属性生效，前者会变成
+   死动画。因此播放头用「入场 → 呼吸」的时间顺序，而不是 class 互斥。 */
+
+/* 播放头呼吸：高度 ×1 ↔ ×1.3 并扩张光晕。周期 1.6s：2.5s 会被读成静止。
+   吸气 40% / 呼气 60%，比对称正弦更像真实呼吸。 */
+@keyframes progress-rail-breath {
+  0%,
+  100% {
+    transform: scaleY(1);
+    filter: brightness(0.92) drop-shadow(0 0 6px hsl(34 100% 68% / 0.55));
+  }
+  40% {
+    transform: scaleY(1.3);
+    filter: brightness(1.35) drop-shadow(0 0 14px hsl(36 100% 72% / 0.95));
+  }
+}
+
+/* 播放头入场：横向展开，在切卡彗星抵达时（~70%）光晕炸开，再落到呼吸起点。
+   必须自带 scaleY，否则与呼吸交接时会从 1.3 突跳回 1。 */
+@keyframes progress-rail-enter {
+  0% {
+    transform: scaleX(0.86) scaleY(1);
+    filter: brightness(0.92) drop-shadow(0 0 4px hsl(34 100% 68% / 0.4));
+  }
+  70% {
+    transform: scaleX(1.04) scaleY(1);
+    filter: brightness(1.6) drop-shadow(0 0 16px hsl(38 100% 80% / 1));
+  }
+  100% {
+    transform: scaleX(1) scaleY(1);
+    filter: brightness(0.92) drop-shadow(0 0 6px hsl(34 100% 68% / 0.55));
+  }
+}
+
+/* pending/retry → done：灌满扫到末端时（~70%）顶起并闪亮，再带一点过冲回落。 */
+@keyframes progress-tick-done {
+  0% {
+    transform: scaleY(1);
+    filter: brightness(1);
+  }
+  55% {
+    transform: scaleY(1.08);
+    filter: brightness(1.2);
+  }
+  72% {
+    transform: scaleY(1.6);
+    filter: brightness(1.8);
+  }
+  88% {
+    transform: scaleY(0.92);
+    filter: brightness(1.1);
+  }
+  100% {
+    transform: scaleY(1);
+    filter: brightness(1);
+  }
+}
+
+/* 宫殿全清：逐个错开的波浪（延迟由内联 animation-delay 提供），比单张完成更高、更亮。 */
+@keyframes progress-palace-done {
+  0% {
+    transform: scaleY(1);
+    filter: brightness(1);
+  }
+  30% {
+    transform: scaleY(2.1);
+    filter: brightness(2.3);
+  }
+  60% {
+    transform: scaleY(0.85);
+    filter: brightness(1.3);
+  }
+  100% {
+    transform: scaleY(1);
+    filter: brightness(1);
+  }
+}
+
+/* 完成灌满：宫殿色从左向右推进，末端带一道亮边。 */
+@keyframes progress-fill-sweep {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+/* 亮边固定在末端，被 clip-path 揭开的那一刻闪一下（与 tick-done 顶点同步）。 */
+@keyframes progress-fill-sweep-edge {
+  0%,
+  68% {
+    opacity: 0;
+  }
+  82% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* 切卡彗星：从旧播放头滑向新播放头，飞行中最亮，落点处淡出。 */
+@keyframes progress-glider-trail {
+  0% {
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* 宫殿/整轮扫光：一道高光带从范围左端扫到右端。 */
+@keyframes progress-sheen-sweep {
+  from {
+    transform: translateX(-120%);
+  }
+  to {
+    transform: translateX(320%);
+  }
+}
+
+/* 整轮完成：整条 rail 底色一次柔和提亮。 */
+@keyframes progress-round-glow {
+  0%,
+  100% {
+    box-shadow: inset 0 -2px 0 hsl(36 100% 70% / 0);
+    background-color: rgb(9 9 11 / 0.55);
+  }
+  35% {
+    box-shadow: inset 0 -2px 0 hsl(38 100% 76% / 0.6), 0 0 26px hsl(32 100% 58% / 0.32);
+    background-color: rgb(39 39 42 / 0.7);
+  }
+}
+
+/* 重练插入：槽位从 0 宽撑开，两侧 tick 让位。 */
+@keyframes progress-slot-open-fixed {
+  from {
+    max-width: 0;
+    opacity: 0;
+  }
+  to {
+    max-width: 24px;
+    opacity: 1;
+  }
+}
+
+@keyframes progress-slot-open-flex {
+  from {
+    flex-grow: 0;
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 重练圆点落位：弹性放大 + 琥珀色涟漪扩散。 */
+@keyframes progress-retry-insert {
+  0% {
+    transform: scale(0);
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.8);
+  }
+  55% {
+    transform: scale(1.25);
+    box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.45);
+  }
+  80% {
+    transform: scale(0.94);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 7px rgba(251, 191, 36, 0);
+  }
+}
+
+/* 新节点挂载：淡入 + 下落 + 缩放，比纯淡入更有"插入"感。 */
+@keyframes progress-tick-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.7);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* 每天分界线：竖向展开。 */
+@keyframes progress-boundary-enter {
+  from {
+    opacity: 0;
+    transform: scaleY(0.4);
+  }
+  to {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+
+.progress-rail-breath,
+.progress-rail-enter,
+.progress-tick-done,
+.progress-palace-done,
+.progress-tick-enter,
+.progress-boundary-enter {
+  transform-origin: bottom;
+  will-change: transform, filter;
+}
+
+/* 入场同时含 scaleX/scaleY，水平缩放绕中心线更自然。 */
+.progress-rail-enter {
+  transform-origin: center bottom;
+}
+
+.progress-rail-breath {
+  animation: progress-rail-breath 1.6s ease-in-out infinite;
+}
+
+.progress-rail-enter {
+  animation: progress-rail-enter 0.42s cubic-bezier(0.33, 1, 0.68, 1) both;
+}
+
+.progress-tick-done {
+  animation: progress-tick-done 0.46s cubic-bezier(0.33, 1, 0.68, 1) both;
+}
+
+.progress-palace-done {
+  animation: progress-palace-done 0.56s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* 播放头宽度（flex-grow）过渡，切卡时旧宽收、新宽放，而不是跳变。
+ * flex-grow 每帧都会重排整条 rail，触屏设备上只保留彗星(transform)过渡。 */
+@media (hover: hover) and (pointer: fine) {
+  .progress-slot {
+    transition: flex-grow 380ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+}
+
+.progress-bar {
+  transition-property: background-color, height, min-width, box-shadow;
+  transition-duration: 220ms;
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.progress-fill-sweep {
+  animation: progress-fill-sweep 0.32s cubic-bezier(0.65, 0, 0.35, 1) both;
+}
+
+.progress-fill-sweep::after {
+  content: '';
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 3px;
+  border-radius: inherit;
+  background: hsl(40 100% 92% / 0.95);
+  box-shadow: 0 0 6px hsl(34 100% 70% / 0.9);
+  animation: progress-fill-sweep-edge 0.42s linear both;
+}
+
+.progress-glider {
+  position: absolute;
+  left: 0;
+  bottom: 4px;
+  height: 14px;
+  border-radius: 2px;
+  pointer-events: none;
+  background: linear-gradient(90deg, hsl(36 100% 70% / 0), hsl(40 100% 86% / 0.92));
+  box-shadow: 0 0 12px hsl(32 100% 60% / 0.65);
+  opacity: 0;
+  will-change: transform, opacity;
+}
+
+.progress-glider-run {
+  animation: progress-glider-trail 380ms ease-out both;
+}
+
+.progress-glider[data-direction='backward'] {
+  background: linear-gradient(270deg, hsl(36 100% 70% / 0), hsl(40 100% 86% / 0.92));
+}
+
+/* Finger-follow: transform-only per frame (translateX + scaleX from a fixed base width). */
+.progress-glider-follow,
+.progress-glider-release {
+  transform-origin: 0 50%;
+}
+
+.progress-glider-follow {
+  opacity: 1;
+}
+
+@keyframes progress-glider-release {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+.progress-glider-release {
+  animation: progress-glider-release 220ms ease-out both;
+}
+
+/* Hand-over: the leaving tick's glow fades as the entering tick's rises. */
+[data-rail-slot][data-follow] {
+  position: relative;
+}
+
+[data-rail-slot][data-follow]::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 100%;
+  border-radius: 2px;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent 30%, hsl(40 100% 80% / 0.28));
+  box-shadow: 0 0 10px hsl(34 100% 62% / 0.45);
+  opacity: var(--fs-follow, 0);
+}
+
+.progress-sheen {
+  position: absolute;
+  bottom: 2px;
+  height: 18px;
+  overflow: hidden;
+  pointer-events: none;
+  border-radius: 3px;
+}
+
+.progress-sheen::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: linear-gradient(
+    90deg,
+    hsl(38 100% 80% / 0) 0%,
+    hsl(40 100% 88% / 0.8) 50%,
+    hsl(38 100% 80% / 0) 100%
+  );
+  mix-blend-mode: plus-lighter;
+  animation: progress-sheen-sweep 0.7s cubic-bezier(0.45, 0, 0.25, 1) both;
+  animation-delay: inherit;
+}
+
+.progress-sheen[data-kind='round']::before {
+  width: 30%;
+  background: linear-gradient(
+    90deg,
+    hsl(36 100% 70% / 0) 0%,
+    hsl(38 100% 78% / 0.9) 45%,
+    hsl(44 100% 96% / 1) 50%,
+    hsl(38 100% 78% / 0.9) 55%,
+    hsl(36 100% 70% / 0) 100%
+  );
+  animation-duration: 1.05s;
+}
+
+.progress-round-glow {
+  animation: progress-round-glow 1.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.progress-slot-open-fixed {
+  animation: progress-slot-open-fixed 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.progress-slot-open-flex {
+  animation: progress-slot-open-flex 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.progress-retry-insert {
+  transform-origin: center;
+  animation: progress-retry-insert 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: 0.12s;
+}
+
+.progress-tick-enter {
+  animation: progress-tick-enter 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.progress-boundary-enter {
+  animation: progress-boundary-enter 0.24s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* 尊重 prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  .memory-anki-completion-card,
+  .memory-anki-completion-icon,
+  .english-letter-pop,
+  .english-word-shake,
+  .english-word-correct-flash,
+  .english-caret,
+  .progress-tick-done,
+  .progress-tick-enter,
+  .progress-boundary-enter,
+  .progress-rail-enter,
+  .progress-rail-breath,
+  .progress-palace-done,
+  .progress-fill-sweep,
+  .progress-fill-sweep::after,
+  .progress-slot-open-fixed,
+  .progress-slot-open-flex,
+  .progress-retry-insert,
+  .fs-rise,
+  .fs-ring-draw,
+  .fs-trophy-pop,
+  .fs-expand,
+  .fs-option-correct {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    filter: none !important;
+  }
+
+  .fs-halo,
+  .fs-cta-shine::after {
+    animation: none !important;
+    display: none !important;
+  }
+
+  .fs-quiz-options [data-quiz-option-index] {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+
+  /* 无限循环若只压到 1ms 会变成高频闪烁，必须彻底停掉。 */
+  .progress-rail-breath,
+  .progress-palace-done {
+    animation: none !important;
+    filter: none !important;
+    transform: none !important;
+  }
+
+  /* 纯装饰的光效直接不显示。 */
+  .progress-glider,
+  .progress-sheen {
+    display: none !important;
+    animation: none !important;
+  }
+
+  /* Finger-follow is direct manipulation, so it stays; only its release fade goes. */
+  .progress-glider.progress-glider-follow {
+    display: block !important;
+    opacity: 1;
+  }
+
+  .progress-round-glow {
+    animation: none !important;
+  }
+
+  .progress-slot,
+  .progress-bar {
+    transition: none !important;
+  }
+
+  .english-caret {
+    opacity: 1 !important;
+  }
+}
+

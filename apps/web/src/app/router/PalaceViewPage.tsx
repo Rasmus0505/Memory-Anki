@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom'
 import { FileText } from 'lucide-react'
 import { useQuizLauncher } from '@/widgets/quiz-launcher'
 import { buildAttachmentUrl, getPalaceEditorApi, savePalaceEditorApi } from '@/modules/content/public'
-import { PageIntro } from '@/shared/components/layout/PageIntro'
+import { PageHeader } from '@/shared/components/layout/PageHeader'
 import { MindMapSplitLayout } from '@/shared/components/layout/MindMapSplitLayout'
 import { LoadingState } from '@/shared/components/state-placeholders'
 import {
@@ -158,7 +158,7 @@ export default function PalaceView() {
     <div className="flex min-h-0 flex-1 flex-col gap-2">
       <MindMapDocumentConflictDialog pendingConflict={pendingConflict} resolveConflict={resolveConflict} />
       {!mindMapFullscreen ? (
-        <PageIntro
+        <PageHeader
           compact
           collapsible
           eyebrow="宫殿详情"

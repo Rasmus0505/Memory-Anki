@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AlertCircle, CheckCircle2, LayoutTemplate, LoaderCircle, PencilLine } from 'lucide-react'
-import { PageIntro } from '@/shared/components/layout/PageIntro'
+import { PageHeader } from '@/shared/components/layout/PageHeader'
 import { MindMapDocumentConflictDialog } from '@/shared/components/mindmap-document-conflict'
 import { MindMapSplitLayout } from '@/shared/components/layout/MindMapSplitLayout'
 import {
@@ -398,7 +398,7 @@ export default function PalaceEdit() {
   if (!page.palaceId) {
     return (
       <div className="space-y-4">
-        <PageIntro
+        <PageHeader
           compact
           title="新建宫殿"
           description="进入此页面不会创建数据。选择一种方式后，才会创建宫殿。"
@@ -435,7 +435,7 @@ export default function PalaceEdit() {
         currentPalaceId={page.palaceId}
       />
       {!page.mindMapFullscreen ? (
-        <PageIntro
+        <PageHeader
           compact
           collapsible
           title={page.palace?.title || '宫殿编辑器'}

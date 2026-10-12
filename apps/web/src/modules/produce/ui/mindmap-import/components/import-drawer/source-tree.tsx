@@ -15,7 +15,7 @@ export function SourceTreeNode({
       >
         {node.rich_text_html ? (
           <div
-            className="mindmap-import-richtext whitespace-pre-wrap break-words [&_[data-emphasis=highlight]]:rounded-sm [&_[data-emphasis=highlight]]:bg-[#fef08c]"
+            className="mindmap-import-richtext whitespace-pre-wrap break-words [&_[data-emphasis=highlight]]:rounded-sm [&_[data-emphasis=highlight]]:bg-yellow-200"
             dangerouslySetInnerHTML={{ __html: node.rich_text_html }}
           />
         ) : (

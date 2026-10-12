@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { palaceClearanceCopy, type PalaceClearance } from '@/modules/practice/ui/freestyle/model/freestylePalaceClearance'
 import { cue } from '@/shared/fx'
-import { freestyleMotionOn } from './freestyleParticleScenes'
+import { freestyleMotionOn } from './freestyleFeedbackScenes'
 
 export function FreestylePalaceClearedBanner({
   clearance,
@@ -11,7 +11,7 @@ export function FreestylePalaceClearedBanner({
   onDismiss: () => void
 }) {
   const buttonRef = useRef<HTMLButtonElement | null>(null)
-  // Leaves and gold burst out of both ends as the banner pops in.
+  // Pops in with a springy scale; the jelly cue fires once it has landed.
   useEffect(() => {
     const button = buttonRef.current
     if (!button || !freestyleMotionOn()) return
@@ -22,7 +22,7 @@ export function FreestylePalaceClearedBanner({
       )
     }
     const timer = window.setTimeout(() => {
-      if (button.isConnected) cue('area.clear', { rect: button.getBoundingClientRect() })
+      if (button.isConnected) cue('area.clear', { element: button })
     }, 180)
     return () => window.clearTimeout(timer)
   }, [clearance])

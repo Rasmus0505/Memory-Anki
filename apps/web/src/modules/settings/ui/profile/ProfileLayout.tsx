@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
-import { PageIntro } from '@/shared/components/layout/PageIntro'
+import { PageContainer } from '@/shared/components/layout/PageLayout'
+import { PageHeader } from '@/shared/components/layout/PageHeader'
 import { ProfileNav } from '@/modules/settings/ui/profile/ProfileNav'
 
 interface ProfileLayoutProps {
@@ -10,8 +11,8 @@ interface ProfileLayoutProps {
 
 export function ProfileLayout({ title, description, children }: ProfileLayoutProps) {
   return (
-    <div className="space-y-6">
-      <PageIntro title={title} description={description} compact />
+    <PageContainer>
+      <PageHeader title={title} description={description} compact />
 
       <div className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)] lg:items-start">
         <aside className="lg:sticky lg:top-5">
@@ -19,6 +20,6 @@ export function ProfileLayout({ title, description, children }: ProfileLayoutPro
         </aside>
         <main className="min-w-0">{children}</main>
       </div>
-    </div>
+    </PageContainer>
   )
 }

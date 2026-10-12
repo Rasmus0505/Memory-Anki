@@ -1,19 +1,14 @@
-import { useEffect, useMemo, useState } from 'react'
-import { AnimatePresence, motion } from 'motion/react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { PartyPopper } from 'lucide-react'
-import { emitReviewConfetti } from '@/shared/components/celebration/reviewConfetti'
-import type { CelebrationPreset } from '@/shared/feedback/celebrationEngine'
+import { emitReviewCelebration } from '@/shared/components/celebration/reviewCelebration'
 
 export interface CompletionCelebrationProps {
   maxCombo: number
   completedNodes: number
   totalNodes: number
-  confettiAmount?: number
   reducedMotion?: boolean
   soundEnabled?: boolean
   volume?: number
-  /** 完成结算场景的烟花类型（缺省时由 reviewConfetti 按 kind 兜底）。 */
-  confettiPreset?: CelebrationPreset
   onComplete?: () => void
   durationMs?: number
 }
@@ -22,32 +17,32 @@ export function CompletionCelebration({
   maxCombo,
   completedNodes,
   totalNodes,
-  confettiAmount = 1.6,
   reducedMotion = false,
   soundEnabled = false,
   volume = 1,
-  confettiPreset,
   onComplete,
   durationMs = 2000,
 }: CompletionCelebrationProps) {
   const [visible, setVisible] = useState(true)
+  const onCompleteRef = useRef(onComplete)
 
   useEffect(() => {
-    emitReviewConfetti({
+    onCompleteRef.current = onComplete
+  }, [onComplete])
+
+  useEffect(() => {
+    emitReviewCelebration({
       kind: 'session_complete',
-      confettiAmount,
-      durationMs,
       reducedMotion,
       soundEnabled,
       volume,
-      confettiPreset,
     })
     const timer = window.setTimeout(() => {
       setVisible(false)
-      onComplete?.()
+      onCompleteRef.current?.()
     }, durationMs)
     return () => window.clearTimeout(timer)
-  }, [confettiAmount, confettiPreset, durationMs, onComplete, reducedMotion, soundEnabled, volume])
+  }, [durationMs, reducedMotion, soundEnabled, volume])
 
   const statCards = useMemo(
     () => [
@@ -57,55 +52,32 @@ export function CompletionCelebration({
     [completedNodes, maxCombo, totalNodes],
   )
 
+  if (!visible) return null
+
+  const jelly = (className: string) => (reducedMotion ? '' : className)
+
   return (
-    <AnimatePresence>
-      {visible ? (
-        <motion.div
-          className="memory-anki-completion-overlay"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: reducedMotion ? 0.16 : 0.28 }}
-        >
-          <motion.div
-            className="memory-anki-completion-backdrop"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          />
-          <motion.div
-            className="memory-anki-completion-card"
-            initial={{ scale: reducedMotion ? 1 : 0.84, y: reducedMotion ? 0 : 24, opacity: 0 }}
-            animate={{ scale: 1, y: 0, opacity: 1 }}
-            exit={{ scale: 0.96, opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 240, damping: 18 }}
-          >
-            <motion.div
-              className="memory-anki-completion-icon"
-              animate={reducedMotion ? undefined : { rotate: [0, -8, 6, 0], scale: [1, 1.12, 1] }}
-              transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+    <div className="memory-anki-completion-overlay">
+      <div className="memory-anki-completion-backdrop" />
+      <div className={`memory-anki-completion-card ${jelly('fx-jelly-pop')}`}>
+        <div className={`memory-anki-completion-icon ${jelly('fx-jelly-wobble')}`}>
+          <PartyPopper className="h-8 w-8 text-white" strokeWidth={2.5} />
+        </div>
+        <div className="memory-anki-completion-title">全域攻克完成</div>
+        <div className="memory-anki-completion-copy">整张地图已经点亮，学习势能结算完毕。</div>
+        <div className="memory-anki-completion-stats">
+          {statCards.map((card, index) => (
+            <div
+              key={card.label}
+              className="memory-anki-completion-stat"
+              style={reducedMotion ? undefined : { animationDelay: `${80 + index * 80}ms` }}
             >
-              <PartyPopper className="h-8 w-8 text-white" strokeWidth={2.5} />
-            </motion.div>
-            <div className="memory-anki-completion-title">全域攻克完成</div>
-            <div className="memory-anki-completion-copy">整张地图已经点亮，学习势能结算完毕。</div>
-            <div className="memory-anki-completion-stats">
-              {statCards.map((card, index) => (
-                <motion.div
-                  key={card.label}
-                  className="memory-anki-completion-stat"
-                  initial={{ opacity: 0, y: reducedMotion ? 0 : 14 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.08 + index * 0.08 }}
-                >
-                  <span className={`memory-anki-completion-stat-value ${card.accent}`}>{card.value}</span>
-                  <span className="memory-anki-completion-stat-label">{card.label}</span>
-                </motion.div>
-              ))}
+              <span className={`memory-anki-completion-stat-value ${card.accent}`}>{card.value}</span>
+              <span className="memory-anki-completion-stat-label">{card.label}</span>
             </div>
-          </motion.div>
-        </motion.div>
-      ) : null}
-    </AnimatePresence>
+          ))}
+        </div>
+      </div>
+    </div>
   )
 }

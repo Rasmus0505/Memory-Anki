@@ -18,6 +18,7 @@ import {
   preloadPracticeRoutes,
   preloadProfilePage,
 } from '@/app/router/appRoutes'
+import { resolveAppLayoutMode, type AppLayoutMode } from '@/app/router/routeLayoutMeta'
 import { prefetchDashboardApi } from '@/modules/dashboard/public'
 import { ensureStudyTextLibrary } from '@/shared/study-text/studyTextLibrary'
 import { markBoot } from '@/shared/lib/bootTiming'
@@ -33,20 +34,17 @@ import { cn } from '@/shared/lib/utils'
 import { GlobalCommandPalette } from '@/app/shell/GlobalCommandPalette'
 import { useRouteDepthTransition } from '@/app/shell/useRouteDepthTransition'
 import { useAmbientTone } from '@/app/shell/useAmbientTone'
-import { useGrowthCosmetics } from '@/modules/progression/public'
 import { AmbientLayer } from '@/shared/ambient/AmbientLayer'
 import { installUiSounds, playUiSound } from '@/shared/feedback/uiSounds'
 import { installPointerLight } from '@/shared/ambient/pointerLight'
-import { GlobalBackButton, isImmersiveFeedPath, isMindMapHostPath } from '@/app/shell/GlobalBackButton'
-import { navSections, type NavSectionDefinition, type NavSectionKey } from '@/app/shell/navSections'
+import { GlobalBackButton } from '@/app/shell/GlobalBackButton'
+import { navSections, type NavSectionDefinition } from '@/app/shell/navSections'
 import {
-  readPageHistorySectionUrl,
-  recordPageHistorySectionVisit,
-  resetPageHistoryStoreForTest,
-} from '@/shared/page-history/pageHistoryStore'
+  resolveNavSectionTarget,
+  useRememberNavSectionVisit,
+  warmNavSection,
+} from '@/app/shell/navSectionMemory'
 
-const navSectionLastUrls: Partial<Record<NavSectionKey, string>> = {}
-const warmedNavSections = new Set<NavSectionKey>()
 const sidebarDateFormatter = new Intl.DateTimeFormat('zh-CN', {
   month: '2-digit',
   day: '2-digit',
@@ -59,43 +57,23 @@ const sidebarTimeFormatter = new Intl.DateTimeFormat('zh-CN', {
   hour12: false,
 })
 
-function findNavSection(pathname: string) {
-  return navSections.find((section) => section.matches(pathname)) ?? null
-}
+// Sidebar is an icon+label rail below lg and the full column from lg up; collapsing only affects lg.
+const sidebarWidthClass = {
+  expanded: 'w-(--spacing-shell-rail) lg:w-(--spacing-shell-sidebar)',
+  collapsed: 'w-(--spacing-shell-rail) lg:w-(--spacing-shell-sidebar-collapsed)',
+} as const
 
-function normalizeRememberedSectionTarget(section: NavSectionDefinition, target: string) {
-  try {
-    const pathname = new URL(target, window.location.origin).pathname
-    if (!section.matches(pathname)) return section.to
-    return target
-  } catch {
-    return section.to
-  }
-}
-
-function resolveNavSectionTarget(section: NavSectionDefinition, isActive = false) {
-  // While already in this section, the nav link points at the section root so a
-  // second click can leave a deep page (edit/practice/queue) without hunting for it.
-  if (isActive) return section.to
-  if (!section.rememberLastVisited) return section.to
-  const rememberedTarget = navSectionLastUrls[section.key] ?? readPageHistorySectionUrl(section.key)
-  if (!rememberedTarget) return section.to
-  return normalizeRememberedSectionTarget(section, rememberedTarget)
-}
-
-export function resetNavSectionHistoryForTest() {
-  for (const key of Object.keys(navSectionLastUrls) as NavSectionKey[]) {
-    delete navSectionLastUrls[key]
-  }
-  warmedNavSections.clear()
-  if (typeof window !== 'undefined') resetPageHistoryStoreForTest()
-}
-
-function warmNavSection(section: NavSectionDefinition) {
-  if (warmedNavSections.has(section.key)) return
-  warmedNavSections.add(section.key)
-  section.warmup?.()
-}
+// Content offset past the floating sidebar. Flush hosts (full-window mind map) sit on the sidebar edge.
+const contentOffsetClass = {
+  inset: {
+    expanded: 'md:pl-(--spacing-shell-main-rail) lg:pl-(--spacing-shell-main-sidebar)',
+    collapsed: 'md:pl-(--spacing-shell-main-rail) lg:pl-(--spacing-shell-main-collapsed)',
+  },
+  flush: {
+    expanded: 'md:pl-(--spacing-shell-rail) lg:pl-(--spacing-shell-sidebar)',
+    collapsed: 'md:pl-(--spacing-shell-rail) lg:pl-(--spacing-shell-sidebar-collapsed)',
+  },
+} as const
 
 function scheduleIdleWarmup(callback: () => void) {
   if (typeof window === 'undefined') return () => {}
@@ -159,11 +137,11 @@ const SidebarClock = memo(function SidebarClock() {
 function NavSectionLink({
   section,
   pathname,
-  compact,
+  collapsed,
 }: {
   section: NavSectionDefinition
   pathname: string
-  compact: boolean
+  collapsed: boolean
 }) {
   const { to, label, icon: Icon } = section
   const isActive = section.matches(pathname)
@@ -176,22 +154,24 @@ function NavSectionLink({
       to={target}
       end={to === '/'}
       className={cn(
-        'group relative flex items-center rounded-xl text-sm font-medium transition-[background-color,color,box-shadow] duration-200',
+        'group relative flex items-center rounded-xl font-medium transition-[background-color,color,box-shadow] duration-200',
         isActive
           ? 'ma-nav-active bg-primary-soft text-primary-strong shadow-[inset_0_0_0_1px_hsl(28_80%_51%/0.18)]'
           : 'text-muted-foreground hover:bg-secondary/80 hover:text-foreground',
-        compact ? 'justify-center px-2.5 py-2.5' : 'gap-3 px-3.5 py-3',
+        collapsed
+          ? 'justify-center px-2.5 py-2.5 text-sm'
+          : 'flex-col justify-center gap-1 px-1 py-2.5 text-[11px] lg:flex-row lg:justify-start lg:gap-3 lg:px-3.5 lg:py-3 lg:text-sm',
       )}
       onMouseEnter={() => warmNavSection(section)}
       onFocus={() => warmNavSection(section)}
     >
       <Icon className="size-4" />
-      {!compact ? <span>{label}</span> : null}
+      {!collapsed ? <span className="max-w-full truncate">{label}</span> : null}
       {runningCount > 0 ? (
         <span
           className={cn(
             'inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold tabular-nums',
-            compact ? 'absolute right-1 top-1' : 'ml-auto',
+            collapsed ? 'absolute right-1 top-1' : 'absolute right-1 top-1 lg:static lg:ml-auto',
             isActive
               ? 'bg-primary/15 text-primary'
               : 'bg-info text-info-foreground',
@@ -201,10 +181,10 @@ function NavSectionLink({
           {runningCount}
         </span>
       ) : null}
-      {!compact && runningCount === 0 ? (
+      {!collapsed && runningCount === 0 ? (
         <ChevronRight
           className={cn(
-            'ml-auto size-4 transition-transform',
+            'ml-auto hidden size-4 transition-transform lg:block',
             isActive
               ? 'translate-x-0'
               : '-translate-x-1 opacity-0 group-hover:translate-x-0 group-hover:opacity-100',
@@ -216,18 +196,11 @@ function NavSectionLink({
 }
 
 function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
-  const { pathname, search, hash } = useLocation()
+  const { pathname } = useLocation()
   const shell = useShellContext()
-  const compact = shell?.sidebarCollapsed ?? false
+  const collapsed = shell?.sidebarCollapsed ?? false
 
-  useEffect(() => {
-    const matchedSection = findNavSection(pathname)
-    if (!matchedSection?.rememberLastVisited) return
-    const fullPath = `${pathname}${search}${hash}`
-    const rememberedTarget = normalizeRememberedSectionTarget(matchedSection, fullPath)
-    navSectionLastUrls[matchedSection.key] = rememberedTarget
-    recordPageHistorySectionVisit(matchedSection.key, rememberedTarget)
-  }, [hash, pathname, search])
+  useRememberNavSectionVisit()
 
   useEffect(() => {
     // Page code is not the study library. Load those chunks immediately so a
@@ -241,7 +214,7 @@ function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
   }, [])
 
   useEffect(() => {
-    if (isImmersiveFeedPath(pathname)) return
+    if (resolveAppLayoutMode(pathname) === 'immersive') return
     // The overview page is the earlier sibling of the page content, so this
     // warm starts before that page asks. Other pages wait until text is ready.
     if (pathname === '/' || pathname === '/dashboard') {
@@ -264,49 +237,50 @@ function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
 
   return (
     <>
-      <div className={cn('border-b border-border/70', compact ? 'px-2 py-3' : 'px-5 py-5')}>
-        <NavLink to="/freestyle" className={cn('flex items-center', compact ? 'justify-center' : 'gap-3')}>
+      <div className={cn('border-b border-border/70', collapsed ? 'px-2 py-3' : 'px-2 py-3 lg:px-5 lg:py-5')}>
+        <NavLink
+          to="/freestyle"
+          className={cn('flex items-center justify-center', !collapsed && 'lg:justify-start lg:gap-3')}
+        >
           <div className="flex size-10 items-center justify-center rounded-lg bg-primary text-base font-semibold text-primary-foreground shadow-sm">
             记
           </div>
-          {!compact ? (
-            <div className="min-w-0">
-              <div className="truncate text-sm font-semibold tracking-tight">Memory Anki</div>
-              <div className="mt-0.5 text-[11px] text-muted-foreground">沉浸知识工作室</div>
-              <SidebarClock />
-              <div className="mt-2">
-                <RuntimeChannelBadge runtimeInfo={runtimeInfo} />
-              </div>
+          <div className={cn('min-w-0', collapsed ? 'hidden' : 'hidden lg:block')}>
+            <div className="truncate text-sm font-semibold tracking-tight">Memory Anki</div>
+            <div className="mt-0.5 text-[11px] text-muted-foreground">沉浸知识工作室</div>
+            <SidebarClock />
+            <div className="mt-2">
+              <RuntimeChannelBadge runtimeInfo={runtimeInfo} />
             </div>
-          ) : null}
-        </NavLink>
-        {compact ? (
-          <div className="mt-2 flex justify-center">
-            <RuntimeChannelBadge runtimeInfo={runtimeInfo} compact />
           </div>
-        ) : null}
+        </NavLink>
+        <div className={cn('mt-2 justify-center', collapsed ? 'flex' : 'hidden')}>
+          <RuntimeChannelBadge runtimeInfo={runtimeInfo} compact />
+        </div>
       </div>
 
-      <nav className={cn('flex flex-1 flex-col gap-1', compact ? 'px-2 py-3' : 'px-3 py-4')}>
+      <nav className={cn('flex flex-1 flex-col gap-1', collapsed ? 'px-2 py-3' : 'px-2 py-3 lg:px-3 lg:py-4')}>
         {navSections.map((section) => (
           <NavSectionLink
             key={section.to}
             section={section}
             pathname={pathname}
-            compact={compact}
+            collapsed={collapsed}
           />
         ))}
       </nav>
 
-      <div className={cn('border-t border-border/70', compact ? 'px-2 py-2' : 'px-3 py-3')}>
+      <div className={cn('border-t border-border/70', collapsed ? 'px-2 py-2' : 'px-2 py-2 lg:px-3 lg:py-3')}>
         <NavLink
           to="/profile"
           onPointerEnter={() => void preloadProfilePage()}
           onFocus={() => void preloadProfilePage()}
           className={({ isActive }) =>
             cn(
-              'flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors',
-              compact && 'justify-center px-0',
+              'flex items-center rounded-lg font-medium transition-colors',
+              collapsed
+                ? 'justify-center px-0 py-2 text-sm'
+                : 'flex-col justify-center gap-1 px-1 py-2 text-[11px] lg:flex-row lg:justify-start lg:gap-2.5 lg:px-2.5 lg:text-sm',
               isActive
                 ? 'bg-primary/10 text-primary'
                 : 'text-muted-foreground hover:bg-secondary/70 hover:text-foreground',
@@ -316,56 +290,74 @@ function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
           title="设置"
         >
           <Settings className="size-4 shrink-0" />
-          {!compact ? <span className="truncate">设置</span> : null}
+          {!collapsed ? <span className="truncate">设置</span> : null}
         </NavLink>
       </div>
     </>
   )
 }
 
-function MobileBottomNav() {
-  const { pathname, search, hash } = useLocation()
-  const mobileSections = navSections
+function MobileNavItem({
+  to,
+  label,
+  icon: Icon,
+  isActive,
+  onWarm,
+}: {
+  to: string
+  label: string
+  icon: NavSectionDefinition['icon']
+  isActive: boolean
+  onWarm: () => void
+}) {
+  return (
+    <NavLink
+      to={to}
+      className={cn(
+        'flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-[11px] font-medium transition-colors',
+        isActive
+          ? 'ma-tab-active bg-primary-soft text-primary-strong'
+          : 'text-muted-foreground hover:bg-secondary/70 hover:text-foreground',
+      )}
+      onFocus={onWarm}
+      onTouchStart={onWarm}
+    >
+      <Icon className="size-4" />
+      <span className="max-w-full truncate">{label}</span>
+    </NavLink>
+  )
+}
 
-  useEffect(() => {
-    const matchedSection = findNavSection(pathname)
-    if (!matchedSection?.rememberLastVisited) return
-    const fullPath = `${pathname}${search}${hash}`
-    const rememberedTarget = normalizeRememberedSectionTarget(matchedSection, fullPath)
-    navSectionLastUrls[matchedSection.key] = rememberedTarget
-    recordPageHistorySectionVisit(matchedSection.key, rememberedTarget)
-  }, [hash, pathname, search])
+function MobileBottomNav({ layoutMode }: { layoutMode: AppLayoutMode }) {
+  const { pathname } = useLocation()
+
+  useRememberNavSectionVisit()
 
   // Freestyle owns full-screen chrome; section switch lives in the freestyle HUD menu.
-  if (isImmersiveFeedPath(pathname)) return null
+  if (layoutMode === 'immersive') return null
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border/70 bg-card/96 px-2 pb-[max(env(safe-area-inset-bottom),0.35rem)] pt-1.5 shadow-[0_-10px_34px_hsl(24_50%_20%/0.12)] backdrop-blur-md lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border/70 bg-card/96 px-2 pb-[max(env(safe-area-inset-bottom),0.35rem)] pt-1.5 shadow-[0_-10px_34px_hsl(24_50%_20%/0.12)] backdrop-blur-md md:hidden"
       aria-label="移动端主导航"
     >
-      {mobileSections.map((section) => {
-        const Icon = section.icon
-        const isActive = section.matches(pathname)
-        const target = resolveNavSectionTarget(section, isActive)
-        return (
-          <NavLink
-            key={section.key}
-            to={target}
-            className={cn(
-              'flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-[11px] font-medium transition-colors',
-              isActive
-                ? 'ma-tab-active bg-primary-soft text-primary-strong'
-                : 'text-muted-foreground hover:bg-secondary/70 hover:text-foreground',
-            )}
-            onFocus={() => warmNavSection(section)}
-            onTouchStart={() => warmNavSection(section)}
-          >
-            <Icon className="size-4" />
-            <span className="max-w-full truncate">{section.label}</span>
-          </NavLink>
-        )
-      })}
+      {navSections.map((section) => (
+        <MobileNavItem
+          key={section.key}
+          to={resolveNavSectionTarget(section, section.matches(pathname))}
+          label={section.label}
+          icon={section.icon}
+          isActive={section.matches(pathname)}
+          onWarm={() => warmNavSection(section)}
+        />
+      ))}
+      <MobileNavItem
+        to="/profile"
+        label="设置"
+        icon={Settings}
+        isActive={pathname === '/profile' || pathname.startsWith('/profile/')}
+        onWarm={() => void preloadProfilePage()}
+      />
     </nav>
   )
 }
@@ -375,8 +367,9 @@ function ShellFrame({ children }: PropsWithChildren) {
   // join the same promise. A failed prepare falls through to the old page loads.
   void ensureStudyTextLibrary().catch(() => undefined)
   const { pathname } = useLocation()
-  const immersiveFeed = isImmersiveFeedPath(pathname)
-  const mindMapHost = isMindMapHostPath(pathname)
+  const layoutMode = resolveAppLayoutMode(pathname)
+  const immersiveFeed = layoutMode === 'immersive'
+  const mindMapHost = layoutMode !== 'standard'
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [runtimeInfo, setRuntimeInfo] = useState<RuntimeInfo | null>(null)
   const [logDrawerOpen, setLogDrawerOpen] = useState(false)
@@ -396,14 +389,12 @@ function ShellFrame({ children }: PropsWithChildren) {
     rootRef,
     contentRef,
     pathname,
-    enabled: !immersiveFeed && !mindMapHost,
+    enabled: layoutMode === 'standard',
     onTransition: () => {
       if (!immersiveRef.current) playUiSound('paper')
     },
   })
   const ambientTone = useAmbientTone(!immersiveFeed)
-  // Saved wardrobe picks apply app-wide; the wardrobe only offers unlocked ones.
-  useGrowthCosmetics(null)
 
   useEffect(() => {
     let cancelled = false
@@ -423,20 +414,22 @@ function ShellFrame({ children }: PropsWithChildren) {
     }
   }, [])
 
+  const sidebarState = sidebarCollapsed ? 'collapsed' : 'expanded'
+
   return (
     <ShellProvider value={{ sidebarCollapsed, setSidebarCollapsed }}>
       <div ref={rootRef} className={cn('isolate', mindMapHost ? 'flex h-dvh flex-col bg-background' : 'min-h-screen bg-background')}>
-        {!immersiveFeed ? <AmbientLayer tone={ambientTone} motes={!mindMapHost} /> : null}
+        {!immersiveFeed ? <AmbientLayer tone={ambientTone} /> : null}
         <aside
           className={cn(
-            'memory-anki-warm-panel fixed z-20 hidden flex-col overflow-hidden border-border/80 bg-card transition-all duration-300 lg:flex',
+            'memory-anki-warm-panel fixed z-20 hidden flex-col overflow-hidden border-border/80 bg-card transition-all duration-300 md:flex',
             mindMapHost
               ? 'inset-y-0 left-0 rounded-none border-y-0 border-l-0 border-r shadow-none'
               : 'inset-y-3 left-3 rounded-2xl border shadow-soft',
-            sidebarCollapsed ? 'w-[76px]' : 'w-[236px]',
+            sidebarWidthClass[sidebarState],
           )}
         >
-          <div className={cn('flex px-3 pt-3', sidebarCollapsed ? 'justify-center' : 'justify-start')}>
+          <div className={cn('flex justify-center px-3 pt-3', !sidebarCollapsed && 'lg:justify-start')}>
             <div
               {...{ [SESSION_RECORDER_ANCHOR_ATTR]: 'true' }}
               className="size-9 shrink-0"
@@ -445,14 +438,12 @@ function ShellFrame({ children }: PropsWithChildren) {
           </div>
           <div
             className={cn(
-              'flex px-3 pt-2',
-              sidebarCollapsed
-                ? 'flex-col items-center gap-2 pb-1'
-                : 'items-center justify-between gap-2 pb-0',
+              'flex flex-col items-center gap-2 px-3 pt-2 pb-1',
+              !sidebarCollapsed && 'lg:flex-row lg:justify-between lg:pb-0',
             )}
           >
             <GlobalBackButton placement="sidebar" compact={sidebarCollapsed} />
-            <div className={cn('flex items-center gap-2', sidebarCollapsed && 'flex-col')}>
+            <div className={cn('flex items-center gap-2 flex-col', !sidebarCollapsed && 'lg:flex-row')}>
               <Button
                 type="button"
                 variant="outline"
@@ -466,7 +457,7 @@ function ShellFrame({ children }: PropsWithChildren) {
               <button
                 type="button"
                 onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                className="inline-flex size-9 items-center justify-center rounded-md border border-border/70 bg-background/80 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                className="hidden size-9 items-center justify-center rounded-md border border-border/70 bg-background/80 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground lg:inline-flex"
                 aria-label={sidebarCollapsed ? '展开导航' : '收起导航'}
               >
                 {sidebarCollapsed ? (
@@ -477,20 +468,17 @@ function ShellFrame({ children }: PropsWithChildren) {
               </button>
             </div>
           </div>
-          <div className={sidebarCollapsed ? 'origin-top scale-[0.92]' : ''}>
-            <SidebarContent runtimeInfo={runtimeInfo} />
-          </div>
+          <SidebarContent runtimeInfo={runtimeInfo} />
         </aside>
 
         <main
           className={cn(
-            'min-w-0 transition-[padding] duration-300 lg:pb-0',
+            'min-w-0 transition-[padding] duration-300 md:pb-0',
             mindMapHost && 'flex min-h-0 flex-1 flex-col',
             immersiveFeed
               ? 'pb-0'
-              : 'pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))]',
-            mindMapHost && (sidebarCollapsed ? 'lg:pl-[76px]' : 'lg:pl-[236px]'),
-            !mindMapHost && (sidebarCollapsed ? 'lg:pl-[104px]' : 'lg:pl-[264px]'),
+              : 'pb-[calc(var(--spacing-shell-bottom-nav)+env(safe-area-inset-bottom,0px))]',
+            contentOffsetClass[mindMapHost ? 'flush' : 'inset'][sidebarState],
           )}
         >
           <div
@@ -508,7 +496,7 @@ function ShellFrame({ children }: PropsWithChildren) {
             {children}
           </div>
         </main>
-        <MobileBottomNav />
+        <MobileBottomNav layoutMode={layoutMode} />
         <GlobalBackButton placement="mobile" />
         <AppLogDrawer open={logDrawerOpen} onOpenChange={setLogDrawerOpen} />
         <SessionRecorderHost />

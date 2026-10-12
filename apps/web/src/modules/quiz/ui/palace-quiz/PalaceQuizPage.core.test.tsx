@@ -4,7 +4,7 @@ import {
   baseQuestions,
   batchDeletePalaceQuizQuestionsApiMock,
   dispatchGlobalFeedbackMock,
-  emitReviewConfettiMock,
+  emitReviewCelebrationMock,
   getPalaceEditorApiMock,
   getPalacesGroupedApiMock,
   getPalaceQuizQuestionsApiMock,
@@ -287,7 +287,7 @@ describe('PalaceQuizPage core flows', () => {
         expect.objectContaining({ audioScope: 'local' }),
       )
     })
-    expect(emitReviewConfettiMock).not.toHaveBeenCalledWith(
+    expect(emitReviewCelebrationMock).not.toHaveBeenCalledWith(
       expect.objectContaining({ kind: 'quiz_correct' }),
     )
     fireEvent.click(screen.getByRole('button', { name: /再做一次/ }))
@@ -321,7 +321,7 @@ describe('PalaceQuizPage core flows', () => {
         expect.objectContaining({ audioScope: 'local' }),
       )
     })
-    expect(emitReviewConfettiMock).not.toHaveBeenCalledWith(
+    expect(emitReviewCelebrationMock).not.toHaveBeenCalledWith(
       expect.objectContaining({ kind: 'quiz_correct' }),
     )
   })

@@ -16,20 +16,8 @@ import {
 } from '@/shared/feedback/reviewFeedbackSettings'
 import { dispatchGlobalFeedback } from './globalFeedbackModel'
 import { playUiSound } from './uiSounds'
-import {
-  launchCelebrationPreset,
-  type CelebrationScenario,
-  type CelebrationPreset,
-} from './celebrationEngine'
 
-export type FeedbackScenario =
-  | MindMapFeedbackEvent
-  | 'timer_secondary_complete'
-  | 'timer_primary_complete'
-  | 'review_milestone'
-  | 'review_branch_clear'
-  | 'review_all_clear_ready'
-  | 'review_complete'
+export type CelebrationScenario = 'milestone' | 'review' | 'completion' | 'quiz'
 
 export type FeedbackToastKind = 'success' | 'error' | 'info' | 'warning' | 'message'
 
@@ -48,12 +36,7 @@ interface CelebrationAudioCue {
 }
 
 export interface TriggerCelebrationRequest {
-  amount?: number
-  animationEnabled?: boolean
   audioCue?: CelebrationAudioCue
-  durationMs?: number
-  preset: CelebrationPreset
-  reducedMotion: boolean
   scenario?: CelebrationScenario
   soundEnabled?: boolean
   volume?: number
@@ -69,21 +52,6 @@ interface FeedbackVisualRequest {
     y: number
   }
   screenPulse?: 'soft' | 'navigation' | 'celebration' | null
-}
-
-export interface FeedbackRequest {
-  scenario: FeedbackScenario
-  celebration?: TriggerCelebrationRequest | boolean
-  celebrationPreset?: CelebrationPreset | null
-  description?: string
-  message?: string
-  reducedMotion?: boolean
-  soundEnabled?: boolean
-  toastKind?: FeedbackToastKind | null
-  toastOptions?: ExternalToast
-  audio?: FeedbackAudioRequest | boolean
-  visual?: FeedbackVisualRequest | boolean
-  volume?: number
 }
 
 function clampVolume(value: number) {
@@ -177,28 +145,22 @@ export function emitVisualFeedback(request: FeedbackVisualRequest) {
   })
 }
 
-export function triggerCelebration(request: TriggerCelebrationRequest) {
+/** 庆祝动效（果冻 CSS）是否应当播放；声音与动效各自独立开关。 */
+export function isCelebrationAnimationEnabled(scenario?: CelebrationScenario) {
   const settings = getFeedbackSettings()
-  const milestoneScenario = request.scenario === 'milestone' || request.scenario === 'review'
-  const completionScenario = request.scenario === 'completion'
-  const animationEnabled =
-    (request.animationEnabled ?? true) &&
+  const milestoneScenario = scenario === 'milestone' || scenario === 'review'
+  const completionScenario = scenario === 'completion'
+  return (
     settings.animationEnabled &&
     (!milestoneScenario || settings.milestoneEffectsEnabled) &&
     (!completionScenario || settings.completionEffectsEnabled)
-  const soundEnabled =
-    request.soundEnabled ?? settings.soundEnabled
-  const volume = clampVolume(request.volume ?? settings.volume)
+  )
+}
 
-  if (animationEnabled) {
-    launchCelebrationPreset({
-      preset: request.preset,
-      reducedMotion: request.reducedMotion,
-      amount: request.amount,
-      durationMs: request.durationMs,
-      scenario: request.scenario,
-    })
-  }
+export function triggerCelebration(request: TriggerCelebrationRequest) {
+  const settings = getFeedbackSettings()
+  const soundEnabled = request.soundEnabled ?? settings.soundEnabled
+  const volume = clampVolume(request.volume ?? settings.volume)
 
   if (!soundEnabled || volume <= 0 || !request.audioCue) return
   playWebAudioFireworkAccent({
@@ -206,44 +168,4 @@ export function triggerCelebration(request: TriggerCelebrationRequest) {
     milestoneStep: request.audioCue.milestoneStep ?? 0,
     volume,
   })
-}
-
-export function notifyFeedback(request: FeedbackRequest) {
-  if (request.toastKind && request.message) {
-    showToast(request.toastKind, request.message, {
-      ...request.toastOptions,
-      description: request.description ?? request.toastOptions?.description,
-    })
-  }
-
-  if (request.audio && request.audio !== true) {
-    playFeedbackAudio({
-      ...request.audio,
-      volume: request.volume ?? request.audio.volume,
-    })
-  }
-
-  if (request.visual && request.visual !== true) {
-    emitVisualFeedback(request.visual)
-  }
-
-  const preset =
-    request.celebration !== false
-      ? typeof request.celebration === 'object'
-        ? request.celebration.preset
-        : request.celebrationPreset
-      : null
-  if (!preset) return
-
-  const celebrationRequest =
-    typeof request.celebration === 'object'
-      ? request.celebration
-      : {
-          preset,
-          reducedMotion: request.reducedMotion ?? false,
-          soundEnabled: request.soundEnabled,
-          volume: request.volume,
-        }
-
-  triggerCelebration(celebrationRequest)
 }

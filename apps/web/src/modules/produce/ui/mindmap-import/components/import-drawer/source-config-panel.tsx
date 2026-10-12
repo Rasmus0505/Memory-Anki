@@ -85,7 +85,7 @@ export function MindMapImportSourceConfigPanel({
         <label className="grid gap-1 text-sm">
           <span>粘贴 JSON 或大纲文本</span>
           <textarea
-            className="min-h-[160px] rounded-md border bg-background px-3 py-2 font-mono text-xs leading-relaxed"
+            className="min-h-40 rounded-md border bg-background px-3 py-2 font-mono text-xs leading-relaxed"
             value={manualImportText}
             onChange={(event) => onManualImportTextChange(event.target.value)}
             placeholder={`{\n  "title": "根节点标题",\n  "children": [\n    {\n      "text": "要点",\n      "children": [\n        { "text": "子要点", "children": [] }\n      ]\n    }\n  ]\n}`}

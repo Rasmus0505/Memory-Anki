@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { ChevronDown, Sparkles, Trophy } from 'lucide-react'
+import { ChevronDown, Trophy } from 'lucide-react'
 import type { FreestylePartialSettlementSnapshot } from '@/modules/practice/domain/partialSettlement'
 import type { FreestyleRoundCompletion } from '@/modules/practice/ui/freestyle/model/roundCompletion'
 import { settlementQuizClearCopy } from '@/modules/practice/ui/freestyle/model/overlayQuizClearance'
@@ -67,9 +67,6 @@ function PassRing({
           <Trophy className="size-7 sm:size-8" strokeWidth={2.2} />
         </div>
       </div>
-      {[0, 1, 2, 3].map((spark) => (
-        <Sparkles key={spark} className={cn('fs-sparkle absolute size-4 text-stage-glow', `fs-sparkle-${spark}`)} />
-      ))}
     </div>
   )
 }

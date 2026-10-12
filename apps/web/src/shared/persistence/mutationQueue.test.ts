@@ -146,7 +146,7 @@ describe('mutationQueue', () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
 
-    const conflict = await enqueueMutation({
+    await enqueueMutation({
       id: 'conflict-entry',
       resourceKey: 'palace:1:editor',
       url: '/api/v1/palaces/1/editor',

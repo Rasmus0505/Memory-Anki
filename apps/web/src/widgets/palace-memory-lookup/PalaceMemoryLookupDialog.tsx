@@ -655,12 +655,12 @@ export function PalaceMemoryLookupDialog({
   const renderMindMapContent = () => (
     <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-border/70 bg-[var(--memory-anki-mindmap-canvas)]">
       {previewLoading ? (
-        <div className="flex h-full min-h-[180px] items-center justify-center gap-2 text-sm text-muted-foreground">
+        <div className="flex h-full min-h-45 items-center justify-center gap-2 text-sm text-muted-foreground">
           <LoaderCircle className="size-4 animate-spin" />
           正在加载脑图...
         </div>
       ) : previewError ? (
-        <div className="flex h-full min-h-[180px] items-center justify-center p-4">
+        <div className="flex h-full min-h-45 items-center justify-center p-4">
           <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {previewError}
           </div>
@@ -715,7 +715,7 @@ export function PalaceMemoryLookupDialog({
           />
         )
       ) : (
-        <div className="flex h-full min-h-[180px] items-center justify-center text-sm text-muted-foreground">
+        <div className="flex h-full min-h-45 items-center justify-center text-sm text-muted-foreground">
           请选择一个记忆宫殿。
         </div>
       )}
@@ -796,7 +796,7 @@ export function PalaceMemoryLookupDialog({
             <DialogTitle className="sr-only">查看记忆宫殿</DialogTitle>
             <button
               type="button"
-              className="inline-flex max-w-[280px] items-center gap-2 rounded-full border border-border/80 bg-card/95 px-3 py-2 text-sm font-medium shadow-2xl backdrop-blur transition-colors hover:bg-secondary"
+              className="inline-flex max-w-70 items-center gap-2 rounded-full border border-border/80 bg-card/95 px-3 py-2 text-sm font-medium shadow-2xl backdrop-blur transition-colors hover:bg-secondary"
               onPointerDown={beginDrag}
               onClick={() => {
                 if (suppressCapsuleClickRef.current) {

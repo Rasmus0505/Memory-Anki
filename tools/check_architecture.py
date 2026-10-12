@@ -779,7 +779,7 @@ def check_db_pool_budget(errors: list[str], *, engine_path: Path | None = None) 
         )
 
 def check_visual_layer_purity(errors: list[str]) -> None:
-    """Ambient and particle layers render whatever they are handed; data wiring stays in app/shell."""
+    """Ambient layer and the cue() fx runtime render whatever they are handed; data wiring stays in app/shell."""
     for relative_dir in VISUAL_LAYER_DIRS:
         root = WEB_SRC / relative_dir
         if not root.exists():
@@ -797,11 +797,11 @@ def check_visual_layer_purity(errors: list[str]) -> None:
                     )
 
 
-FX_PRIVATE_PREFIXES = ("@/shared/fx/particles", "@/shared/fx/core", "@/shared/fx/recipes")
+FX_PRIVATE_PREFIXES = ("@/shared/fx/core", "@/shared/fx/recipes")
 
 
 def check_fx_director_boundary(errors: list[str]) -> None:
-    """Feedback goes through `cue()`: callers import `@/shared/fx`, never its engine or canvas-confetti."""
+    """Feedback goes through `cue()`: callers import `@/shared/fx`, never its internals or canvas-confetti."""
     for path in iter_files(WEB_SRC, (".ts", ".tsx")):
         relative = path.relative_to(WEB_SRC).as_posix()
         if relative.startswith("shared/fx/") or is_frontend_test_file(relative):
@@ -809,8 +809,8 @@ def check_fx_director_boundary(errors: list[str]) -> None:
         content = path.read_text(encoding="utf-8")
         for specifier in iter_frontend_import_specifiers(content):
             if specifier == "canvas-confetti":
-                errors.append(f"{relative}: canvas-confetti is retired; cue a celebration through @/shared/fx")
-            elif specifier.startswith(FX_PRIVATE_PREFIXES) and relative != "shared/feedback/celebrationEngine.ts":
+                errors.append(f"{relative}: canvas-confetti is banned; feedback goes through cue() from @/shared/fx")
+            elif specifier.startswith(FX_PRIVATE_PREFIXES):
                 errors.append(
                     f"{relative}: import `{specifier}` bypasses the fx director; "
                     "use cue()/anchors from @/shared/fx"
@@ -837,8 +837,11 @@ def check_sound_voice_default(errors: list[str]) -> None:
             )
 
 
+THEME_PACK_RETIRED_FIELDS = ("fxSkin", "ambient", "timbre", "unlock", "preview")
+
+
 def check_theme_pack_registry(errors: list[str]) -> None:
-    """Every pack manifest is registered in THEME_PACKS; shared/theme stays free of the fx runtime."""
+    """The study pack is re-exported by shared/theme/themePacks.ts and carries only motion and themeColor."""
     theme_dir = WEB_SRC / "shared" / "theme"
     registry = theme_dir / "themePacks.ts"
     packs_dir = theme_dir / "packs"
@@ -848,18 +851,22 @@ def check_theme_pack_registry(errors: list[str]) -> None:
     for path in sorted(packs_dir.glob("*.ts")):
         if path.name == "types.ts" or path.name.endswith(".test.ts"):
             continue
+        relative = path.relative_to(REPO_ROOT).as_posix()
         if f"./packs/{path.stem}'" not in registry_source:
-            errors.append(
-                f"{path.relative_to(REPO_ROOT).as_posix()}: theme pack must be imported and listed in "
-                "shared/theme/themePacks.ts THEME_PACKS."
-            )
+            errors.append(f"{relative}: theme pack must be imported by shared/theme/themePacks.ts.")
+        pack_source = path.read_text(encoding="utf-8", errors="ignore")
+        for field in THEME_PACK_RETIRED_FIELDS:
+            if re.search(rf"\b{field}\s*:", pack_source):
+                errors.append(
+                    f"{relative}: theme pack must not define `{field}`; packs carry motion and themeColor only."
+                )
     for path in iter_files(theme_dir, (".ts", ".tsx")):
         content = path.read_text(encoding="utf-8", errors="ignore")
         for specifier in iter_frontend_import_specifiers(content):
             if specifier.startswith("@/shared/fx"):
                 errors.append(
                     f"{path.relative_to(REPO_ROOT).as_posix()}: shared/theme must not import `{specifier}`; "
-                    "the app shell binds a pack's fx skin (useGrowthCosmetics)."
+                    "theme stays a pure data source and does not depend on the fx runtime."
                 )
     fx_dir = WEB_SRC / "shared" / "fx"
     if fx_dir.exists():
@@ -6349,7 +6356,7 @@ def check_mindmap_layout_hot_path(errors: list[str]) -> None:
     map-card opt-out, silently restores the stutter.
     """
     layout = WEB_SRC / "shared" / "ui" / "mindmap-canvas" / "layout.ts"
-    stage_css = WEB_SRC / "styles" / "freestyle-stage.css"
+    stage_css = WEB_SRC / "styles" / "freestyle.css"
     mindmap_doc = REPO_ROOT / "docs" / "architecture" / "mindmap.md"
 
     if not layout.exists():
@@ -6388,7 +6395,7 @@ def check_mindmap_layout_hot_path(errors: list[str]) -> None:
                 )
 
     if not stage_css.exists():
-        errors.append("styles/freestyle-stage.css is missing.")
+        errors.append("styles/freestyle.css is missing.")
     else:
         css = stage_css.read_text(encoding="utf-8", errors="ignore")
         if "memory-anki-mindmap-frame" not in css:
@@ -6420,11 +6427,11 @@ def check_mindmap_reveal_layout_hold(errors: list[str]) -> None:
     thread. A reveal gesture sets data-reveal-motion and the springs turn off.
     The paper flip stays on WAAPI.
     """
-    scene_css = WEB_SRC / "styles" / "mindmap-scene.css"
+    scene_css = WEB_SRC / "styles" / "mindmap.css"
     motion = WEB_SRC / "shared" / "ui" / "mindmap-canvas" / "useMindMapRevealMotion.ts"
     mindmap_doc = REPO_ROOT / "docs" / "architecture" / "mindmap.md"
     if not scene_css.exists():
-        errors.append("styles/mindmap-scene.css is missing.")
+        errors.append("styles/mindmap.css is missing.")
     else:
         css = scene_css.read_text(encoding="utf-8", errors="ignore")
         held = re.findall(

@@ -62,7 +62,7 @@ export function PalaceListToolbar({
     <Card>
       <CardContent className="p-4">
         <div className="flex flex-wrap items-end gap-3">
-          <div className="min-w-[180px] flex-1">
+          <div className="min-w-45 flex-1">
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input

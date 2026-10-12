@@ -706,7 +706,7 @@ export function PalaceSubjectMindMapCard({
             )}
           />
         ) : (
-          <div className="flex min-h-[420px] flex-1 items-center justify-center text-sm text-muted-foreground">
+          <div className="flex min-h-105 flex-1 items-center justify-center text-sm text-muted-foreground">
             正在加载学科思维导图…
           </div>
         )}

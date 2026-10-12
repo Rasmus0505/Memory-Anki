@@ -4,7 +4,7 @@ import {
   resolveFeedbackChannels,
   type FeedbackSceneKey,
 } from '@/shared/feedback/reviewFeedbackSettings'
-import { prefersReducedParticleMotion } from '../particles/particleEngine'
+import { prefersReducedMotion } from '@/shared/lib/prefersReducedMotion'
 
 /** Which settings scene a cue answers to. `ambient` follows only the global switches. */
 export type FxScene = 'review' | 'milestone' | 'completion' | 'ambient'
@@ -27,7 +27,7 @@ export function resolveFxGate(scene: FxScene): FxGate {
   if (typeof window === 'undefined') return CLOSED
   const settings = readReviewFeedbackSettings()
   const channels = resolveFeedbackChannels(settings)
-  const osMotion = !prefersReducedParticleMotion()
+  const osMotion = !prefersReducedMotion()
   const baseMotion = osMotion && settings.animationEnabled
   const haptic = settings.hapticsEnabled && osMotion
   const volumeFor = (key: FeedbackSceneKey) => getSceneEffectiveVolume(settings, key)

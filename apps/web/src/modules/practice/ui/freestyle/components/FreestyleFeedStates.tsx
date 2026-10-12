@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react'
-import { Copy, Moon, RotateCcw, SlidersHorizontal, Sparkles, TriangleAlert } from 'lucide-react'
+import { Copy, Moon, RotateCcw, SlidersHorizontal, TriangleAlert } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import type { FreestyleConfig } from '@/modules/practice/ui/freestyle/model/freestyle'
 import type { FreestyleMode, TodayTrainingConfig } from '@/modules/practice/ui/freestyle/model/today-training'
@@ -47,11 +47,6 @@ function StagePanel({
         >
           {icon}
         </div>
-        {tone === 'warm'
-          ? [0, 1, 2].map((spark) => (
-            <Sparkles key={spark} className={cn('fs-sparkle absolute size-3.5 text-stage-glow', `fs-sparkle-${spark}`)} />
-          ))
-          : null}
       </div>
       <p className="text-lg font-semibold leading-snug text-stage-ink">{title}</p>
       <div className="mx-auto mt-2 max-w-sm text-sm leading-6 text-stage-muted">{description}</div>

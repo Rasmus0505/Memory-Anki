@@ -40,7 +40,6 @@ const FreestylePage = lazyWithRetry(preloadFreestylePage)
 const FreestyleSecondaryPage = lazyWithRetry(preloadFreestyleSecondaryPage)
 const ExamPage = lazyWithRetry(preloadExamPage)
 const ProgressPage = lazyWithRetry(preloadProgressPage)
-const FxLabPage = lazyWithRetry(() => import('@/pages/settings/FxLabPage'))
 const EnglishWorkspacePage = lazyWithRetry(preloadEnglishWorkspacePage)
 const EnglishCoursePage = lazyWithRetry(preloadEnglishCoursePage)
 const EnglishClozePage = lazyWithRetry(preloadEnglishClozePage)
@@ -107,7 +106,6 @@ function AppRouteTable({ location }: { location: Location }) {
           <Route path="/exam" element={<ExamPage />} />
           {/* Retired growth page: old bookmarks and remembered insight URLs land on the insight hub. */}
           <Route path="/growth" element={<Navigate to="/dashboard" replace />} />
-          <Route path="/lab/fx" element={<FxLabPage />} />
           <Route path="/freestyle" element={<FreestylePage />} />
           <Route path="/freestyle-2" element={<FreestyleSecondaryPage />} />
           {/* Retired 今日工作台: keep bookmarks on the insight hub, not /freestyle. */}

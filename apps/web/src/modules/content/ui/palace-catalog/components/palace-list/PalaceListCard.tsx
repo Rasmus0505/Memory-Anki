@@ -165,7 +165,7 @@ export function PalaceListCard({
                         : formatReviewDate(palace.next_review_date)
                   }
                   className={cn(
-                    'h-8 min-w-[84px] max-w-[156px] shrink-0 px-2.5 text-[11px] sm:px-3 sm:text-xs',
+                    'h-8 min-w-21 max-w-39 shrink-0 px-2.5 text-[11px] sm:px-3 sm:text-xs',
                     unitReviewStatus === 'marking_required'
                       ? 'border-violet-500/60 bg-violet-500/15 text-violet-700 hover:bg-violet-500/25 dark:text-violet-300'
                       : unitReviewStatus === 'due'
@@ -241,7 +241,7 @@ export function PalaceListCard({
               <MoreHorizontal className="size-4" />
             </Button>
             {menuOpen ? (
-              <div className="absolute right-0 top-9 z-40 min-w-[132px] rounded-xl border border-border/70 bg-background p-1 shadow-lg">
+              <div className="absolute right-0 top-9 z-40 min-w-33 rounded-xl border border-border/70 bg-background p-1 shadow-lg">
                 <button
                   type="button"
                   className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-muted"

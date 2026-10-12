@@ -200,6 +200,8 @@ test('完成 walks the unscored cards one by one and wraps', async ({ page }) =>
   await expect(complete).toBeEnabled()
 
   await expect.poll(() => readVisualIndex(page)).toBe(0)
+  // The initial silent queue rebuild can land after an early click and revert it.
+  await page.waitForLoadState('networkidle')
 
   await complete.click()
   await expect.poll(() => readVisualIndex(page)).toBe(1)

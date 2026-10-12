@@ -28,15 +28,15 @@ export function MindMapImportResultsPanel({
         <div
           className={cn(
             'rounded-lg border border-border/70 bg-background/70',
-            !sourceTree && 'flex h-[260px] items-center justify-center text-sm text-muted-foreground',
+            !sourceTree && 'flex h-65 items-center justify-center text-sm text-muted-foreground',
           )}
         >
           {previewMindMapState ? (
-            <div className="h-[360px] overflow-hidden rounded-[inherit]" data-testid="mindmap-import-preview-frame">
+            <div className="h-90 overflow-hidden rounded-[inherit]" data-testid="mindmap-import-preview-frame">
               {renderMindMapPreview(previewMindMapState, previewFrameVersion)}
             </div>
           ) : sourceTree ? (
-            <div className="max-h-[320px] space-y-3 overflow-y-auto p-3 pr-1">
+            <div className="max-h-80 space-y-3 overflow-y-auto p-3 pr-1">
               {sourceTree.children.length > 0 ? (
                 sourceTree.children.map((node, index) => (
                   <SourceTreeNode key={`${node.text}-${index}`} node={node} />

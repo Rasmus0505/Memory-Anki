@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, type RefObject } from 'react'
 import type { Edge, Node } from '@xyflow/react'
-import { cue, openPlayback, rectCenter, type FxPlayback } from '@/shared/fx'
+import { cue, openPlayback, type FxPlayback } from '@/shared/fx'
 import { prefersReducedMotion } from '@/shared/lib/prefersReducedMotion'
 import { themeMotion } from '@/shared/theme/themePacks'
 
@@ -11,10 +11,7 @@ const flipMs = () => themeMotion().flipMs
 const FLIP_TURN = 0.42
 const STEP_MS = 45
 const MAX_SPREAD_MS = 540
-const MAX_BURSTS_PER_BATCH = 6
-/** A reveal this wide is a whole branch landing: finish it with gold rain over the map. */
-const GOLD_RAIN_MIN_FLIPS = 2
-/** Bubbled from a card when its flip lands, so hosts can relay particles to their own HUD. */
+/** Bubbled from a card when its flip lands, for hosts that react to a landed card. */
 export const MINDMAP_CARD_LANDED_EVENT = 'memory-anki:mindmap-card-landed'
 const FOLD_MS = 420
 const MAX_FOLDS_PER_BATCH = 24
@@ -182,7 +179,7 @@ function clearFx(card: HTMLElement) {
   card.querySelectorAll('[data-mm-flip-fx]').forEach((element) => element.remove())
 }
 
-function flipCard(card: HTMLElement, delay: number, burst: boolean, playback: FxPlayback) {
+function flipCard(card: HTMLElement, delay: number, playback: FxPlayback) {
   const FLIP_MS = flipMs()
   const overshoot = themeMotion().flipOvershootDeg
   clearFx(card)
@@ -221,7 +218,7 @@ function flipCard(card: HTMLElement, delay: number, burst: boolean, playback: Fx
     ],
     { duration: FLIP_MS + 180, delay, fill: 'both', easing: 'ease-out' },
   ), sheen)
-  landCard(card, delay + FLIP_MS * 0.7, burst, playback)
+  landCard(card, delay + FLIP_MS * 0.7, playback)
 }
 
 function dealCard(card: HTMLElement, delay: number) {
@@ -235,11 +232,9 @@ function dealCard(card: HTMLElement, delay: number) {
   )
 }
 
-/** Gold dust settles as the card lands; its rect is read then, since the camera may be following. */
-function landCard(card: HTMLElement, delay: number, burst: boolean, playback: FxPlayback) {
+function landCard(card: HTMLElement, delay: number, playback: FxPlayback) {
   playback.at(delay, () => {
     if (!card.isConnected || !playback.alive()) return
-    if (burst) cue('map.land', { rect: card.getBoundingClientRect() })
     card.dispatchEvent(new CustomEvent(MINDMAP_CARD_LANDED_EVENT, { bubbles: true }))
   })
 }
@@ -307,7 +302,6 @@ function foldNode(root: HTMLElement, id: string, into: string) {
   // while changing the guard's meaning (`offsetWidth` ignores transforms and
   // rounds to whole pixels). Kept as-is deliberately.
   if (!node || !parentCard || !node.parentElement || node.offsetWidth === 0) return
-  const rect = node.getBoundingClientRect()
   const ghost = node.cloneNode(true) as HTMLElement
   ghost.removeAttribute('data-id')
   ghost.setAttribute('aria-hidden', 'true')
@@ -317,7 +311,7 @@ function foldNode(root: HTMLElement, id: string, into: string) {
     [{ opacity: 1 }, { opacity: 0 }],
     { duration: FOLD_MS, easing: 'cubic-bezier(0.6, 0, 0.8, 0.4)', fill: 'forwards' },
   ).finished.catch(() => undefined).then(() => ghost.remove())
-  cue('map.fold', { rect, target: () => (parentCard.isConnected ? rectCenter(parentCard.getBoundingClientRect()) : null), onFirstArrive: () => bumpCard(parentCard) })
+  bumpCard(parentCard)
 }
 
 function inkEdge(path: SVGPathElement, delay: number) {
@@ -485,7 +479,6 @@ export function useMindMapRevealMotion(
         run: (card, elapsed) => flipCard(
           card as HTMLElement,
           Math.max(0, slot + lead - elapsed),
-          index < MAX_BURSTS_PER_BATCH,
           playback,
         ),
       })
@@ -505,12 +498,5 @@ export function useMindMapRevealMotion(
       })
     })
     runWhenMounted(root, jobs, activeWaits.current, playback)
-    if (flips.length >= GOLD_RAIN_MIN_FLIPS) {
-      const landMs = Math.round((flips.length - 1) * step) + INK_LEAD_MS + flipMs() * 0.74
-      playback.at(landMs, () => {
-        if (!root.isConnected || !playback.alive()) return
-        cue('map.branch', { rect: root.getBoundingClientRect() })
-      })
-    }
   }, [container, edges, nodes])
 }

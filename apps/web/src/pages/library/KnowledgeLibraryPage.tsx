@@ -4,7 +4,7 @@ import { FolderTree, Plus, Save, Trash2 } from 'lucide-react'
 import { toast } from '@/shared/feedback/toast'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import type { ImportApplyContext } from '@/shared/api/contracts/imports'
-import { PageIntro } from '@/shared/components/layout/PageIntro'
+import { PageHeader } from '@/shared/components/layout/PageHeader'
 import { MindMapSplitLayout } from '@/shared/components/layout/MindMapSplitLayout'
 import { EmptyState } from '@/shared/components/state-placeholders'
 import {
@@ -331,7 +331,7 @@ export default function Knowledge() {
     <div className="flex min-h-0 flex-1 flex-col gap-2">
       <MindMapDocumentConflictDialog pendingConflict={pendingConflict} resolveConflict={resolveConflict} />
       {!mindMapFullscreen ? (
-        <PageIntro
+        <PageHeader
           compact
           collapsible
           title="知识树编辑器"

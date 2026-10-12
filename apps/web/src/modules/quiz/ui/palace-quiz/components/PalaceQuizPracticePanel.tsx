@@ -121,7 +121,7 @@ export function PalaceQuizPracticePanel({
 
       {filteredQuestions.length === 0 ? (
         <Card className="border-border/70 bg-card/92">
-          <CardContent className="flex min-h-[220px] items-center justify-center text-sm text-muted-foreground">
+          <CardContent className="flex min-h-55 items-center justify-center text-sm text-muted-foreground">
             {questions.length === 0
               ? '这个宫殿还没有题目，先去“管理”手动新增。'
               : '当前范围下还没有题目。'}

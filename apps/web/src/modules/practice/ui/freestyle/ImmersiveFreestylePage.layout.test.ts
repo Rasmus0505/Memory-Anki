@@ -5,9 +5,21 @@ import { describe, expect, it } from 'vitest'
 const read = (path: string) =>
   readFileSync(resolve(process.cwd(), 'src/modules/practice/ui/freestyle', path), 'utf8')
 
-// The page composes feed navigation and HUD chrome from split files; assert on the whole surface.
+// The page composes feed, HUD, card area, dialogs and settlements from split files; assert on the whole surface.
 const source = [
   'ImmersiveFreestylePage.tsx',
+  'freestylePageHelpers.ts',
+  'StaleUnitReviewCard.tsx',
+  'FreestyleRetryCornerBadge.tsx',
+  'FreestyleHud.tsx',
+  'FreestylePageDialogs.tsx',
+  'FreestyleFeedCard.tsx',
+  'FreestyleCardArea.tsx',
+  'FreestyleClosingSlot.tsx',
+  'FreestyleStudySettlement.tsx',
+  'FreestylePartialSettlement.tsx',
+  'FreestyleEdgeHint.tsx',
+  'FreestyleBottomActions.tsx',
   'hooks/useFreestyleFeedNavigation.ts',
   'components/FreestyleHudChrome.tsx',
 ].map(read).join('\n')

@@ -146,14 +146,12 @@ export function MindMapReviewFlow({
           comboCount={review.comboBurst.comboCount}
           copy={review.comboBurst.copy}
           label={review.comboBurst.label}
-          confettiAmount={review.flow.feedback.settings.scenes.milestone.confettiAmount}
           reducedMotion={
             !review.flow.feedback.animationEnabled ||
             !review.flow.feedback.settings.celebration.milestone.animationEnabled
           }
           soundEnabled={review.flow.feedback.settings.celebration.milestone.soundEnabled}
           volume={effectiveVolume}
-          confettiPreset={review.flow.feedback.settings.scenes.milestone.confettiPreset}
           onComplete={() => review.setComboBurst(null)}
         />
       ) : null}
@@ -164,14 +162,12 @@ export function MindMapReviewFlow({
           maxCombo={review.flow.feedback.maxComboCount}
           completedNodes={review.flow.visibleNonRootCount}
           totalNodes={Math.max(review.flow.totalNodeCount - 1, 0)}
-          confettiAmount={review.flow.feedback.settings.scenes.completion.confettiAmount}
           reducedMotion={
             !review.flow.feedback.animationEnabled ||
             !review.flow.feedback.settings.celebration.sessionComplete.animationEnabled
           }
           soundEnabled={review.flow.feedback.settings.celebration.sessionComplete.soundEnabled}
           volume={effectiveVolume}
-          confettiPreset={review.flow.feedback.settings.scenes.completion.confettiPreset}
         />
       ) : null}
 
@@ -320,7 +316,7 @@ export function MindMapReviewFlow({
                       <div className="flex min-w-0 flex-wrap items-center gap-2">
                         <div
                           className={cn(
-                            "memory-anki-review-combo-badge inline-flex min-w-[108px] items-center justify-center rounded-lg border px-3 py-2 text-sm font-semibold",
+                            "memory-anki-review-combo-badge inline-flex min-w-27 items-center justify-center rounded-lg border px-3 py-2 text-sm font-semibold",
                             review.flow.feedback.animationEnabled &&
                               review.flow.feedback.feedbackFlashState === "card_reveal" &&
                               "memory-anki-review-combo-badge-pop",

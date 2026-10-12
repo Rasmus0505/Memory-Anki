@@ -262,7 +262,7 @@ export function EnglishCoursePageView(props: EnglishCoursePageViewProps) {
                     'relative aspect-video shrink-0 overflow-hidden rounded-2xl border border-border/60 bg-black shadow-soft transition-all',
                     videoCollapsed
                       ? 'h-12 w-full'
-                      : 'h-[500px] max-h-full',
+                      : 'h-125 max-h-full',
                   )}
                 >
                   <video

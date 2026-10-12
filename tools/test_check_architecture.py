@@ -4363,7 +4363,6 @@ def _write_web_file(tmp_path: Path, relative: str, content: str) -> Path:
 
 def test_fx_director_boundary_accepts_cue_facade(tmp_path: Path, monkeypatch) -> None:
     web_src = _write_web_file(tmp_path, "modules/practice/ui/A.tsx", "import { cue } from '@/shared/fx'\n")
-    _write_web_file(tmp_path, "shared/fx/recipes/x.ts", "import { emitFlight } from '../particles'\n")
     monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
 
     errors: list[str] = []
@@ -4372,8 +4371,8 @@ def test_fx_director_boundary_accepts_cue_facade(tmp_path: Path, monkeypatch) ->
     assert errors == []
 
 
-def test_fx_director_boundary_rejects_engine_and_confetti(tmp_path: Path, monkeypatch) -> None:
-    web_src = _write_web_file(tmp_path, "modules/practice/ui/A.tsx", "import { emitFlight } from '@/shared/fx/particles'\n")
+def test_fx_director_boundary_rejects_internals_and_confetti(tmp_path: Path, monkeypatch) -> None:
+    web_src = _write_web_file(tmp_path, "modules/practice/ui/A.tsx", "import { cue } from '@/shared/fx/core/director'\n")
     _write_web_file(tmp_path, "widgets/B.tsx", "import confetti from 'canvas-confetti'\n")
     monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
 
@@ -4381,7 +4380,7 @@ def test_fx_director_boundary_rejects_engine_and_confetti(tmp_path: Path, monkey
     check_architecture.check_fx_director_boundary(errors)
 
     assert any("bypasses the fx director" in error for error in errors)
-    assert any("canvas-confetti is retired" in error for error in errors)
+    assert any("canvas-confetti is banned" in error for error in errors)
 
 
 def _write_e2e_project(tmp_path: Path, spec_import: str, *, gated: bool = True) -> Path:
@@ -4438,6 +4437,22 @@ def test_theme_pack_registry_accepts_registered_packs(tmp_path: Path, monkeypatc
     assert errors == []
 
 
+def test_theme_pack_registry_rejects_retired_fx_fields(tmp_path: Path, monkeypatch) -> None:
+    web_src = _write_web_file(
+        tmp_path,
+        "shared/theme/packs/study.ts",
+        "export const STUDY_PACK = { motion: {}, themeColor: {}, fxSkin: 'x' }\n",
+    )
+    _write_web_file(tmp_path, "shared/theme/themePacks.ts", "import { STUDY_PACK } from './packs/study'\n")
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+
+    errors: list[str] = []
+    check_architecture.check_theme_pack_registry(errors)
+
+    assert any("must not define `fxSkin`" in error for error in errors)
+
+
 def test_theme_pack_registry_rejects_orphan_pack_and_fx_import(tmp_path: Path, monkeypatch) -> None:
     web_src = _write_web_file(tmp_path, "shared/theme/packs/orphan.ts", "export const ORPHAN = {}\n")
     _write_web_file(
@@ -4451,7 +4466,7 @@ def test_theme_pack_registry_rejects_orphan_pack_and_fx_import(tmp_path: Path, m
     errors: list[str] = []
     check_architecture.check_theme_pack_registry(errors)
 
-    assert any("must be imported and listed" in error for error in errors)
+    assert any("must be imported by shared/theme/themePacks.ts" in error for error in errors)
     assert any("shared/theme must not import" in error for error in errors)
 
 
@@ -4577,7 +4592,7 @@ def _write_mindmap_hot_path_fixture(
 ) -> Path:
     web_src = root / "apps" / "web" / "src"
     write_file(web_src / "shared" / "ui" / "mindmap-canvas" / "layout.ts", layout_source)
-    write_file(web_src / "styles" / "freestyle-stage.css", stage_css)
+    write_file(web_src / "styles" / "freestyle.css", stage_css)
     write_file(
         root / "docs" / "architecture" / "mindmap.md",
         "# mind map\n\nnodeSizeMemo\n",

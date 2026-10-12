@@ -32,19 +32,25 @@ function weekPassRate(overview: ExamOverview): number | null {
   return passes / reviews
 }
 
-export function ExamTodayBlock({ overview, className }: ExamDigestBlockProps) {
+export function ExamTodayBlock({ overview, className, primary = false }: ExamDigestBlockProps & { primary?: boolean }) {
   const topToday = overview.palaces.filter((row) => row.unit_count > 0).slice(0, 3)
   return (
     <Block
       question="今天该学什么"
-      className={className}
+      className={cn(primary && 'p-5', className)}
       action={
-        <Button asChild size="sm" className="h-7">
-          <Link to="/freestyle">开始</Link>
-        </Button>
+        primary ? (
+          <Button asChild size="lg">
+            <Link to="/freestyle">开始今日复习</Link>
+          </Button>
+        ) : (
+          <Button asChild size="sm" className="h-7">
+            <Link to="/freestyle">开始</Link>
+          </Button>
+        )
       }
     >
-      <p className="text-3xl font-semibold tabular-nums">
+      <p className={cn('font-semibold tabular-nums', primary ? 'text-4xl' : 'text-3xl')}>
         {overview.totals.due_today}
         <span className="ml-1.5 text-sm font-normal text-muted-foreground">个单元到期</span>
       </p>

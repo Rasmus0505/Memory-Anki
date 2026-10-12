@@ -4,11 +4,11 @@ import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ProfileFeedbackPage from '@/modules/settings/ui/profile/ProfileFeedbackPage'
 
-const emitReviewConfetti = vi.fn()
+const emitReviewCelebration = vi.fn()
 const playEvent = vi.fn()
 
 vi.mock('@/shared/components/celebration', () => ({
-  emitReviewConfetti: (...args: unknown[]) => emitReviewConfetti(...args),
+  emitReviewCelebration: (...args: unknown[]) => emitReviewCelebration(...args),
 }))
 
 vi.mock('@/shared/feedback/mindmap-audio/useMindMapFeedback', () => ({
@@ -21,7 +21,7 @@ vi.mock('@/shared/feedback/mindmap-audio/useMindMapFeedback', () => ({
 describe('ProfileFeedbackPage', () => {
   beforeEach(() => {
     window.localStorage.clear()
-    emitReviewConfetti.mockReset()
+    emitReviewCelebration.mockReset()
     playEvent.mockReset()
   })
 
@@ -45,14 +45,13 @@ describe('ProfileFeedbackPage', () => {
     expect(screen.queryByText('计时器反馈设置')).toBeNull()
   })
 
-  it('owns every celebration detail, including the timer scenes', () => {
-    // Timer celebration used to be configured on the timer page with a second
-    // set of labels for the same confetti presets.
+  it('shows every scene row, including the timer scenes', () => {
     renderPage()
 
     expect(screen.getByText('计时 · 阶段提醒')).toBeTruthy()
     expect(screen.getByText('计时 · 整轮完成')).toBeTruthy()
-    expect(screen.getByLabelText('计时 · 整轮完成烟花类型')).toBeTruthy()
+    expect(screen.getByLabelText('计时 · 整轮完成音量倍率')).toBeTruthy()
+    expect(screen.queryByLabelText(/烟花/)).toBeNull()
   })
 
   it('lets an explicit channel choice survive a preset switch', () => {
@@ -77,7 +76,7 @@ describe('ProfileFeedbackPage', () => {
     await waitFor(() => expect(screen.getByRole('status').textContent).toBe('已保存'), { timeout: 2000 })
   })
 
-  it('previews answer sounds without answer confetti', () => {
+  it('previews answer sounds without celebration', () => {
     renderPage()
 
     fireEvent.click(screen.getByRole('button', { name: '试听答对' }))
@@ -85,7 +84,7 @@ describe('ProfileFeedbackPage', () => {
 
     expect(playEvent).toHaveBeenNthCalledWith(1, 'quiz_result_correct', { audioScope: 'global', voice: 'mixed' })
     expect(playEvent).toHaveBeenNthCalledWith(2, 'quiz_result_incorrect', { audioScope: 'global', voice: 'mixed' })
-    expect(emitReviewConfetti).not.toHaveBeenCalled()
+    expect(emitReviewCelebration).not.toHaveBeenCalled()
   })
 
   it('reserves celebration previews for milestones and final completion', () => {
@@ -94,8 +93,8 @@ describe('ProfileFeedbackPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '预览里程碑' }))
     fireEvent.click(screen.getByRole('button', { name: '预览完成' }))
 
-    expect(emitReviewConfetti).toHaveBeenNthCalledWith(1, expect.objectContaining({ kind: 'milestone' }))
-    expect(emitReviewConfetti).toHaveBeenNthCalledWith(2, expect.objectContaining({ kind: 'session_complete' }))
+    expect(emitReviewCelebration).toHaveBeenNthCalledWith(1, expect.objectContaining({ kind: 'milestone' }))
+    expect(emitReviewCelebration).toHaveBeenNthCalledWith(2, expect.objectContaining({ kind: 'session_complete' }))
   })
 
   it('keeps timing rules off the feedback page', () => {

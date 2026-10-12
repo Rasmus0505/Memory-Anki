@@ -262,7 +262,7 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
           </div>
         ) : null}
         {searchControl ? (
-          <div className="relative min-w-[220px] flex-1 sm:max-w-sm">
+          <div className="relative min-w-55 flex-1 sm:max-w-sm">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={searchControl.value}

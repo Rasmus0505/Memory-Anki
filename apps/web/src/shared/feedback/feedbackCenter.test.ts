@@ -2,14 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { playFeedbackAudio, triggerCelebration } from '@/shared/feedback/feedbackCenter'
 
 const mocks = vi.hoisted(() => ({
-  launchCelebrationPreset: vi.fn(),
   playWebAudioComboMilestone: vi.fn(),
   playWebAudioFeedbackEvent: vi.fn(),
   playWebAudioFireworkAccent: vi.fn(),
-}))
-
-vi.mock('@/shared/feedback/celebrationEngine', () => ({
-  launchCelebrationPreset: (...args: unknown[]) => mocks.launchCelebrationPreset(...args),
 }))
 
 vi.mock('@/shared/feedback/mindmap-audio/webAudioFeedback', () => ({
@@ -48,31 +43,40 @@ vi.mock('sonner', () => ({
   },
 }))
 
-describe('feedbackCenter celebration bridge', () => {
+describe('feedbackCenter celebration audio', () => {
   beforeEach(() => {
-    mocks.launchCelebrationPreset.mockReset()
     mocks.playWebAudioComboMilestone.mockReset()
     mocks.playWebAudioFeedbackEvent.mockReset()
     mocks.playWebAudioFireworkAccent.mockReset()
   })
 
-  it('passes confetti amount and scenario through to the celebration engine', () => {
+  it('plays the firework accent for an audio cue when sound is on', () => {
     triggerCelebration({
-      preset: 'school_pride',
-      reducedMotion: false,
-      amount: 2.2,
-      durationMs: 1800,
-      scenario: 'timer',
-      soundEnabled: false,
+      scenario: 'completion',
+      audioCue: { kind: 'session_complete', milestoneStep: null },
     })
 
-    expect(mocks.launchCelebrationPreset).toHaveBeenCalledWith({
-      preset: 'school_pride',
-      reducedMotion: false,
-      amount: 2.2,
-      durationMs: 1800,
-      scenario: 'timer',
+    expect(mocks.playWebAudioFireworkAccent).toHaveBeenCalledWith({
+      kind: 'session_complete',
+      milestoneStep: 0,
+      volume: 1,
     })
+  })
+
+  it('stays silent when sound is explicitly disabled', () => {
+    triggerCelebration({
+      scenario: 'milestone',
+      soundEnabled: false,
+      audioCue: { kind: 'milestone', milestoneStep: 2 },
+    })
+
+    expect(mocks.playWebAudioFireworkAccent).not.toHaveBeenCalled()
+  })
+
+  it('stays silent without an audio cue', () => {
+    triggerCelebration({ scenario: 'review' })
+
+    expect(mocks.playWebAudioFireworkAccent).not.toHaveBeenCalled()
   })
 
   it('plays freestyle quiz feedback events in the default immersive sound path', () => {
@@ -109,23 +113,6 @@ describe('feedbackCenter celebration bridge', () => {
 
     expect(mocks.playWebAudioComboMilestone).toHaveBeenCalledWith({
       milestoneStep: 8,
-      volume: 1,
-    })
-  })
-
-  it('plays celebration audio cues through the web audio firework accent path', () => {
-    triggerCelebration({
-      preset: 'fireworks',
-      reducedMotion: false,
-      audioCue: {
-        kind: 'session_complete',
-        milestoneStep: null,
-      },
-    })
-
-    expect(mocks.playWebAudioFireworkAccent).toHaveBeenCalledWith({
-      kind: 'session_complete',
-      milestoneStep: 0,
       volume: 1,
     })
   })

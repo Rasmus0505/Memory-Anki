@@ -7,7 +7,7 @@ import {
 } from '@/modules/practice/ui/freestyle/model/freestyleComboStore'
 import { cue, useFxOwner } from '@/shared/fx'
 
-// Web Animations API instead of `motion`: this wraps every card on the startup route.
+// Web Animations API keeps the gesture off the layout path; this wraps every card on the startup route.
 // Every gesture returns to rest: rating never advances the card, so it must not leave.
 const REACTION_KEYFRAMES: Record<FlowRatingReaction, { frames: Keyframe[]; duration: number }> = {
   sink: {
@@ -66,19 +66,14 @@ function canAnimate(element: Element | null): element is HTMLElement {
   return !!element && typeof (element as HTMLElement).animate === 'function'
 }
 
-/** Read before the card gesture moves the button: the burst leaves from the keycap top. */
+/** Feedback for a rating press, cued from the card that was rated. */
 function cueGradeCommit(scope: HTMLElement, rating: UnitRating, owner: string | undefined) {
-  const button = scope.querySelector(`[data-testid="freestyle-rating-button-${rating}"]`)
-  const rect = button?.getBoundingClientRect()
-  if (!rect || rect.width === 0) return
   const { combo, milestoneIndex } = readFreestyleCombo()
   cue('grade.commit', {
-    origin: { x: rect.left + rect.width / 2, y: rect.top + 4 },
     scope,
     grade: rating,
     combo,
     milestone: milestoneIndex != null,
-    allowRare: true,
   }, { owner })
 }
 
@@ -117,7 +112,7 @@ export function FreestyleRatingReaction({ active, children }: { active: boolean;
   const seenNonceRef = useRef(pulse?.nonce ?? 0)
   const scopeRef = useRef<HTMLDivElement>(null)
   const [shown, setShown] = useState<ActiveReaction | null>(null)
-  // Leaving the card retires every pending step (milestone stamp, rare show) cued from it.
+  // Leaving the card retires every pending step (milestone stamp) cued from it.
   const owner = useFxOwner(`grade:${useId()}:${active ? 'on' : 'off'}`)
 
   useEffect(() => {

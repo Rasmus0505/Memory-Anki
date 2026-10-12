@@ -25,7 +25,7 @@ import type { QuizRuntimeState } from '@/modules/quiz/public'
 import { useQuizAttemptOrchestration, writeQuizSessionState } from '@/modules/quiz/public'
 import { emitQuizResultFeedback } from '@/modules/quiz/public'
 import type { FreestyleCard, FreestyleQuizCard } from '@/shared/api/contracts'
-import { emitReviewConfetti } from '@/shared/components/celebration'
+import { emitReviewCelebration } from '@/shared/components/celebration'
 import { appConfirm } from '@/shared/components/ui/native-dialog'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import {
@@ -248,10 +248,8 @@ export function useFreestyleQuizFlow({
     ) {
       return
     }
-    emitReviewConfetti({
+    emitReviewCelebration({
       kind: 'milestone',
-      confettiAmount: feedbackSettings.scenes.milestone.confettiAmount,
-      confettiPreset: feedbackSettings.scenes.milestone.confettiPreset,
       milestoneStep: milestoneSteps.indexOf(currentStreak),
       reducedMotion:
         reducedMotion ||

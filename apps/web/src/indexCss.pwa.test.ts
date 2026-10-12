@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const indexCssPath = resolve(process.cwd(), 'src/index.css')
-const celebrationsCssPath = resolve(process.cwd(), 'src/styles/celebrations.css')
+const layoutCssPath = resolve(process.cwd(), 'src/styles/layout.css')
 const indexHtmlPath = resolve(process.cwd(), 'index.html')
 
 describe('index.css desktop PWA contract', () => {
@@ -36,7 +36,7 @@ describe('index.css desktop PWA contract', () => {
   })
 
   it('keeps viewport fullscreen controls inside installed-PWA safe areas', () => {
-    const css = readFileSync(celebrationsCssPath, 'utf8')
+    const css = readFileSync(layoutCssPath, 'utf8')
 
     expect(css).toContain(`[data-presentation-mode='viewport']`)
     expect(css).toContain('env(safe-area-inset-top, 0px)')

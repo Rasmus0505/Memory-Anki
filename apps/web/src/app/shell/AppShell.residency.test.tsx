@@ -3,7 +3,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppRouter } from '@/app/router/AppRouter'
-import { AppShell, resetNavSectionHistoryForTest } from '@/app/shell/AppShell'
+import { AppShell } from '@/app/shell/AppShell'
+import { resetNavSectionHistoryForTest } from '@/app/shell/navSectionMemory'
 
 const getRuntimeInfoApi = vi.fn()
 

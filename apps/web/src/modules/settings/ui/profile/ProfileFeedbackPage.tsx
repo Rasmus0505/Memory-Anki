@@ -1,8 +1,7 @@
 import * as React from 'react'
-import { Link } from 'react-router-dom'
-import { Check, RotateCcw, Sparkles, Volume2, Zap } from 'lucide-react'
+import { Check, RotateCcw, Sparkles, Volume2 } from 'lucide-react'
 import { ProfileLayout } from '@/modules/settings/ui/profile/ProfileLayout'
-import { emitReviewConfetti } from '@/shared/components/celebration'
+import { emitReviewCelebration } from '@/shared/components/celebration'
 import { useMindMapFeedbackAudio } from '@/shared/feedback/mindmap-audio/useMindMapFeedback'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
@@ -96,7 +95,7 @@ const CHANNEL_ROWS = [
     field: 'completionEffectsEnabled',
     resolvedKey: 'completionEffects',
     title: '最终完成效果',
-    description: '控制整次训练完成的彩带与总结强调。',
+    description: '控制整次训练完成时的庆祝与总结强调。',
   },
 ] as const
 
@@ -209,10 +208,8 @@ export default function ProfileFeedbackPage() {
   }, [])
 
   const previewMilestone = React.useCallback(() => {
-    emitReviewConfetti({
+    emitReviewCelebration({
       kind: 'milestone',
-      confettiAmount: draftSettings.scenes.milestone.confettiAmount,
-      confettiPreset: draftSettings.scenes.milestone.confettiPreset,
       milestoneStep: 1,
       reducedMotion: draftSettings.reducedCelebrationMotion,
       soundEnabled: draftSettings.soundEnabled,
@@ -221,10 +218,8 @@ export default function ProfileFeedbackPage() {
   }, [draftSettings, effectiveVolume])
 
   const previewCompletion = React.useCallback(() => {
-    emitReviewConfetti({
+    emitReviewCelebration({
       kind: 'session_complete',
-      confettiAmount: draftSettings.scenes.completion.confettiAmount,
-      confettiPreset: draftSettings.scenes.completion.confettiPreset,
       reducedMotion: draftSettings.reducedCelebrationMotion,
       soundEnabled: draftSettings.soundEnabled,
       volume: effectiveVolume,
@@ -237,17 +232,6 @@ export default function ProfileFeedbackPage() {
       description="统一管理学习声音、动态效果与桌面提醒。计时阶段和轮次细节请在“计时与休息”中设置。"
     >
       <div className="space-y-6">
-        <Link
-          to="/lab/fx"
-          data-testid="profile-feedback-fx-lab"
-          className="flex items-center justify-between rounded-2xl border border-primary/25 bg-primary/5 px-4 py-3 text-sm hover:bg-primary/10"
-        >
-          <span>
-            <span className="font-bold">FX 实验室</span>
-            <span className="ml-2 text-muted-foreground">逐个回放全部反馈、切换皮肤、强制稀有演出</span>
-          </span>
-          <span aria-hidden>→</span>
-        </Link>
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">反馈模式</CardTitle>
@@ -285,121 +269,27 @@ export default function ProfileFeedbackPage() {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Zap className="size-4 text-amber-500" />
-              游戏化打击感与粒子引擎 (Next-Gen Fx)
-            </CardTitle>
+            <CardTitle className="text-base">屏幕微震</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-xs text-muted-foreground">
-              为翻卡与评分赋予物理弹性过冲、屏幕视口微震与二次贝塞尔引力磁吸能量流。
-            </p>
-            <div className="grid gap-4 md:grid-cols-3">
-              <div className="rounded-xl border border-border/70 p-4">
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-sm font-semibold">屏幕微震强度</span>
-                  <span className="text-xs font-mono text-muted-foreground">{draftSettings.gameplayFx.screenShakeIntensity}%</span>
-                </div>
-                <Input
-                  type="range"
-                  min="0"
-                  max="100"
-                  step="5"
-                  value={draftSettings.gameplayFx.screenShakeIntensity}
-                  onChange={(e) =>
-                    updateDraft((cur) => ({
-                      ...cur,
-                      gameplayFx: { ...cur.gameplayFx, screenShakeIntensity: Number(e.target.value) },
-                    }))
-                  }
-                />
-                <p className="mt-2 text-xs text-muted-foreground">
-                  击打评分时触发的轻微视口镜头震荡，带来爽快的机械触底感。
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-border/70 p-4">
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-sm font-semibold">粒子喷涌浓度</span>
-                  <span className="text-xs font-mono text-muted-foreground">{draftSettings.gameplayFx.particleDensity}%</span>
-                </div>
-                <Input
-                  type="range"
-                  min="30"
-                  max="200"
-                  step="10"
-                  value={draftSettings.gameplayFx.particleDensity}
-                  onChange={(e) =>
-                    updateDraft((cur) => ({
-                      ...cur,
-                      gameplayFx: { ...cur.gameplayFx, particleDensity: Number(e.target.value) },
-                    }))
-                  }
-                />
-                <p className="mt-2 text-xs text-muted-foreground">
-                  评分时爆发的引力金色光粒与微星数量，最高可达 200% 满负荷喷涌。
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-border/70 p-4">
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-sm font-semibold">物理微弹回弹比</span>
-                  <span className="text-xs font-mono text-muted-foreground">{draftSettings.gameplayFx.springOvershootRatio}%</span>
-                </div>
-                <Input
-                  type="range"
-                  min="0"
-                  max="100"
-                  step="5"
-                  value={draftSettings.gameplayFx.springOvershootRatio}
-                  onChange={(e) =>
-                    updateDraft((cur) => ({
-                      ...cur,
-                      gameplayFx: { ...cur.gameplayFx, springOvershootRatio: Number(e.target.value) },
-                    }))
-                  }
-                />
-                <p className="mt-2 text-xs text-muted-foreground">
-                  卡片翻转落定时产生的阻尼惯性微弹与桌面落地金尘圈。
-                </p>
-              </div>
+          <CardContent>
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">评分时视口震动强度</span>
+              <span className="text-xs font-mono text-muted-foreground">{draftSettings.gameplayFx.screenShakeIntensity}%</span>
             </div>
-
-            <div className="grid gap-2 sm:grid-cols-3 pt-2">
-              <SettingRow
-                title="引力磁吸能量入轨"
-                description="粒子沿二次贝塞尔弧线飞入顶部进度槽并激起脉冲。"
-                checked={draftSettings.gameplayFx.magneticArcEnabled}
-                onCheckedChange={(val) =>
-                  updateDraft((cur) => ({
-                    ...cur,
-                    gameplayFx: { ...cur.gameplayFx, magneticArcEnabled: val },
-                  }))
-                }
-              />
-              <SettingRow
-                title="三阶狂热连击 (Fever)"
-                description="5连击开启点金心流，10连击激活超频光环与暴击跳字。"
-                checked={draftSettings.gameplayFx.feverComboEnabled}
-                onCheckedChange={(val) =>
-                  updateDraft((cur) => ({
-                    ...cur,
-                    gameplayFx: { ...cur.gameplayFx, feverComboEnabled: val },
-                  }))
-                }
-              />
-              <SettingRow
-                title="金石编钟纯律音階"
-                description="数学振荡器合成东方编钟与磬石纯律，音高随连击递增。"
-                checked={draftSettings.gameplayFx.chimeSynthesizerEnabled}
-                onCheckedChange={(val) =>
-                  updateDraft((cur) => ({
-                    ...cur,
-                    gameplayFx: { ...cur.gameplayFx, chimeSynthesizerEnabled: val },
-                  }))
-                }
-              />
-            </div>
+            <Input
+              type="range"
+              min="0"
+              max="100"
+              step="5"
+              aria-label="屏幕微震强度"
+              value={draftSettings.gameplayFx.screenShakeIntensity}
+              onChange={(e) =>
+                updateDraft((cur) => ({
+                  ...cur,
+                  gameplayFx: { ...cur.gameplayFx, screenShakeIntensity: Number(e.target.value) },
+                }))
+              }
+            />
           </CardContent>
         </Card>
 
@@ -491,7 +381,7 @@ export default function ProfileFeedbackPage() {
               />
               <SettingRow
                 title="减少庆祝动态"
-                description="保留状态与文字，缩短或移除粒子和大幅移动。"
+                description="保留状态与文字，关闭弹跳与大幅移动。"
                 checked={draftSettings.reducedCelebrationMotion}
                 onCheckedChange={(reducedCelebrationMotion) =>
                   updateDraft((current) => ({ ...current, reducedCelebrationMotion }))

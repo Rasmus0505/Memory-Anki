@@ -49,7 +49,7 @@ export function ProgressExplorer({ rows, view, expanded, onToggle, selectedId, o
             <div className="lp-row-name-line">
             {node.children.length ? <button className="lp-icon-button" onClick={() => onToggle(node.id)} aria-expanded={expanded.has(node.id)} aria-label={`${expanded.has(node.id) ? '收起' : '展开'}${node.name}`}>
               {expanded.has(node.id) ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-            </button> : <span style={{ width: 16, flexShrink: 0 }} />}
+            </button> : <span className="w-4 shrink-0" />}
             <span className="lp-node-icon"><NodeIcon kind={node.kind} /></span>
             <button className="lp-node-text" onClick={() => onSelect(node)} aria-label={`查看${node.name}详情`} aria-pressed={node.id === selectedId} title={node.name}>
               <strong>{node.name}</strong><small>{KIND_LABELS[node.kind] ?? node.kind}{node.children.length ? ` · ${node.children.length} 个子项` : ''}{node.metrics.memory_due > 0 ? ` · ${node.metrics.memory_due} 待复习` : ''}{ancestors.length > 0 ? ` · ${ancestors.at(-1)?.name}` : ''}</small>

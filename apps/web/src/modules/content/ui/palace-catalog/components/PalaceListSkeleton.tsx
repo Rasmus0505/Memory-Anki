@@ -1,3 +1,4 @@
+import { PageContainer } from '@/shared/components/layout/PageLayout'
 import { Skeleton } from '@/shared/components/ui/skeleton'
 import {
   SkeletonListRows,
@@ -7,8 +8,8 @@ import {
 
 export function PalaceListSkeleton() {
   return (
-    <div className="space-y-6">
-      {/* PageIntro */}
+    <PageContainer wide>
+      {/* PageHeader */}
       <SkeletonPageHeader actions={1} titleClassName="h-7 w-28" withIcon />
 
       {/* Toolbar */}
@@ -26,6 +27,6 @@ export function PalaceListSkeleton() {
           />
         </div>
       ))}
-    </div>
+    </PageContainer>
   )
 }

@@ -72,7 +72,7 @@ const ENGLISH_WORD_SPLIT = /(\b[A-Za-z][A-Za-z'-]*\b)/g
 type EnglishWordClick = (word: string, event: MouseEvent<HTMLElement>) => void
 
 // Word spans carry no padding/border: underline + inset glow only, so english
-// mode never widens a line and never re-wraps the card (see mindmap-scene.css).
+// mode never widens a line and never re-wraps the card (see styles/mindmap.css).
 function renderEnglishInteractiveLabel(
   label: string,
   onEnglishWordClick: EnglishWordClick,

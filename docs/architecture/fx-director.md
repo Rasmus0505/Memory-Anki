@@ -1,38 +1,41 @@
-# FX Director (feedback runtime)
+# FX Director（反馈运行时）
 
-`apps/web/src/shared/fx` is the single sensory runtime: particles, sound accents, haptics and DOM flourishes. Business code says **what happened**; recipes decide **how it feels**.
+`apps/web/src/shared/fx` 是唯一的反馈入口。业务代码说**发生了什么**，recipe 决定**怎么反馈**。
+
+当前只有三类反馈通道：**声音**、**震动（haptics）**、**CSS 果冻动效（jelly）**，外加 DOM 小动效（bump / flash / charge）。
+粒子系统、WebGL/Canvas 特效、FX Lab 页面均已移除，不要再引入。
 
 ```text
 caller ──cue('grade.commit', payload, { owner })──▶ director ──▶ recipe.play(payload, stage)
-                                                     │              ├─ particles (WebGL2 + bloom, Canvas2D fallback)
-                                                     │              ├─ audio / haptics (shared/feedback)
-                                                     │              └─ DOM flourishes (stamp, flash, bump, peel)
-                                                     └─ policy gate (settings scene + OS reduced motion)
+                                                     │              ├─ sound / haptics (shared/feedback)
+                                                     │              └─ jelly / DOM flourish (CSS class)
+                                                     └─ policy gate (settings scene + prefers-reduced-motion)
 ```
 
-## Pieces
+## 文件
 
-| File | Role |
+| 文件 | 职责 |
 |---|---|
-| `core/director.ts` | `defineCue` / `cue` / `listCues` / `replayCue` / `onCue`. `FxCueMap` is declaration-merged by recipe files, so payloads are typed per cue. |
-| `core/policy.ts` | `resolveFxGate(scene)` — the only place that turns feedback settings + `prefers-reduced-motion` into motion/sound/haptic switches. Scenes: `review`, `milestone`, `completion`, `ambient`. |
-| `core/owner.ts` | Owner-scoped playback. Every delayed step belongs to an owner (card encounter, round, page); `retireOwner` cancels all pending steps and teardown. `useFxOwner(id)` binds an owner to a component identity. |
-| `core/anchors.ts` | Named landing spots via `data-fx-anchor` (`fxAnchor(FX_ANCHORS.xpBar)`), re-resolved every frame for homing particles. Effect code never uses test ids. |
-| `recipes/*` | `learning` (grade, flip relay, unit done, undo, remove, retry, quarters, quiz, page turn, motes, round complete), `map` (mind-map land/fold/branch), `meta` (XP, level, stamp, quest, theme pack unboxing), `rare` (koi, phoenix, fireflies, lotus). |
-| `skins.ts` | Particle palettes (`ink` default, `foil`, `galaxy`, `firefly`). Recipes read the live `pal` at emit time; `setFxSkin` swaps it in place. Warm hues only. The active theme pack picks the palette (see `theme-packs.md`). |
-| `conductor.ts` | Variety inside one cue. `grade.commit` rotates `paper` / `ink` / `leaf` / `mote` and never repeats the same look back to back. The grade itself has no expanding ring. |
-| `rarity.ts` | Pure rare-show roll: ~1/45 per eligible rating, ramp from 55, guaranteed at 80, never after 忘记, never the same show twice in a row. Counter is per device. |
-| `glowLayer.ts` | Retained-mode glow canvas (same renderer, non-aging points). The starmap was its only caller and is gone with `/growth`; the helper stays exported. |
+| `index.ts` | 公开出口：`cue`、owner 控制（`openPlayback`、`retireOwner`、`skipOwner`、`resumeOwner`）、`resolveFxGate`、锚点、DOM 小动效、`jellyOn`、`useFxOwner`。 |
+| `core/director.ts` | `defineCue(name, recipe)` / `cue(name, payload, { owner })`。`FxCueMap` 由 recipe 文件 declaration merge，payload 按事件有类型。 |
+| `core/policy.ts` | `resolveFxGate(scene)`：唯一把设置与 `prefers-reduced-motion` 翻译成通道开关的地方。场景：`review`、`milestone`、`completion`、`ambient`（`ambient` 只看全局开关，且不发声、不震动）。 |
+| `core/owner.ts` | owner 作用域播放。延迟步骤挂在 owner 上；`retireOwner` 取消全部待执行步骤。`useFxOwner` 把 owner 绑定到组件身份。 |
+| `core/anchors.ts` | 具名锚点（`data-fx-anchor`），供需要定位的反馈使用。不使用测试 id。 |
+| `core/domFlourish.ts` | `bumpElement` / `chargeElement` / `flashElement`。 |
+| `core/jelly.ts` | `jellyOn(el, 'pop' \| 'press' \| 'wobble')`：挂上 CSS 类，动画样式在 `apps/web/src/styles/jelly.css`，且只在 `prefers-reduced-motion: no-preference` 下生效。 |
+| `recipes/learning.ts` | 学习场景 cue：评分、翻卡落定、单元完成、撤销、移除、重试、进度四分之一、答对/答错、区域清空、翻页、轮次完成。 |
+| `recipes/map.ts` | 思维导图场景 cue（如 `audio.pops` 分层弹跳）。 |
 
-## Rules
+## 规则
 
-1. Outside `shared/fx`, import only `@/shared/fx`. `check_fx_director_boundary` rejects `@/shared/fx/{particles,core,recipes}` and `canvas-confetti` anywhere else (the celebration preset engine is the one documented consumer of the particle engine).
-2. Entity-scoped cues pass an `owner` derived from the entity identity (`card:${progressKey}`, `round:${roundKey}`). Leaving the entity retires the owner.
-3. Callers do not read feedback settings for cues; the recipe's `scene` decides. Recipes that escalate (combo milestone inside `grade.commit`) ask `stage.gateOf('milestone')`.
-4. Visual layer purity still holds: `shared/fx` never imports `modules/`, `pages/`, `widgets/` or `app/`.
-5. The FX Lab (`/lab/fx`, linked from 设置 › 反馈中心) replays every cue with a `sample` payload on all channels (`force`), switches skins and forces rare shows. Cues without a sample need a real scene and are shown disabled.
-6. A show never owns the keyboard. Mid-round cues stay at the card edge. `round.complete` is the ceremony, and a pointer, a key, or the round card's 跳过 calls `retireOwner('round:' + roundKey)` so the remaining steps drop. `shared/fx` does not import the theme registry; pack timbre is applied by the audio channel.
+1. 业务代码只从 `@/shared/fx` 导入。`check_fx_director_boundary` 拒绝 `@/shared/fx/{core,recipes}` 的深层导入，以及 `canvas-confetti`（已禁用）。
+2. 实体相关的 cue 传入由实体身份派生的 `owner`（如 `card:${progressKey}`、`round:${roundKey}`）。离开实体即 `retireOwner`。
+3. 调用方不读取反馈设置；由 recipe 的 `scene` 决定开关。需要升级的 recipe 通过 `stage.gateOf(scene)` 读取其他场景的门。
+4. `shared/fx` 不得导入 `modules/`、`pages/`、`widgets/`、`app/`，也不得导入 `@/shared/theme`（`check_visual_layer_purity`、`check_theme_pack_registry`）。
+5. 减弱动效（`prefers-reduced-motion: reduce`）时：`resolveFxGate` 关闭动效基础位，果冻动效不生效，声音与震动按各自设置降级。
+6. 带延迟的步骤必须挂在 `FxPlayback` owner 上，不得裸用 `setTimeout`。
 
-## Adding an effect
+## 新增一个反馈
 
-Declare the payload in the recipe file's `FxCueMap` augmentation, `defineCue(name, { scene, label, group, sample?, play })`, then call `cue(name, payload, { owner })` from the owner module. Add a `sample` whenever the effect can run without real DOM so the lab can replay it.
+在 recipe 文件中声明 payload（`FxCueMap` 扩展），再用 `defineCue(name, { scene, play })` 注册；业务在所属 owner 模块里调用 `cue(name, payload, { owner })`。
+新效果只能用声音、震动、jelly 类或 DOM 小动效表达。

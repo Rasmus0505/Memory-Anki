@@ -119,7 +119,7 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
         layout={layoutMode === 'sidebar' ? 'unstyled' : 'centered'}
         className={cn(
           layoutMode === 'sidebar'
-            ? 'ml-auto mr-0 h-[calc(100vh-32px)] max-w-[620px] rounded-none rounded-l-3xl border-l bg-card/98 p-0 shadow-floating'
+            ? 'ml-auto mr-0 h-[calc(100vh-32px)] max-w-155 rounded-none rounded-l-3xl border-l bg-card/98 p-0 shadow-floating'
             : 'h-[min(92vh,980px)] max-w-[min(92vw,1440px)] rounded-lg border bg-card/98 p-0 shadow-floating',
           'overflow-hidden overscroll-contain',
           className,

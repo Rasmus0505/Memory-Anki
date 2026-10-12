@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import { dailyReviewGoal, resolveAmbientTone, resolveExamPulse, resolveTint } from './ambientModel'
-import { createMote, stepMote } from './dustMotes'
 import { resolveLightPoint } from './pointerLight'
 
 describe('resolveTint', () => {
@@ -35,32 +34,6 @@ describe('resolveAmbientTone', () => {
     expect(dailyReviewGoal(70)).toBe(10)
     expect(dailyReviewGoal(0)).toBe(dailyReviewGoal(20))
     expect(dailyReviewGoal(null)).toBe(dailyReviewGoal(20))
-  })
-})
-
-describe('dust motes', () => {
-  const fixed = () => 0.5
-
-  it('drifts upward and wraps back to the bottom', () => {
-    const mote = createMote(100, 100, fixed)
-    mote.y = -20
-    stepMote(mote, 1, 0, 100, 100, null)
-    expect(mote.y).toBeGreaterThan(100)
-  })
-
-  it('is pushed away from a nearby pointer but ignores a distant one', () => {
-    const near = createMote(400, 400, fixed)
-    near.x = 200
-    near.y = 200
-    near.vx = 0
-    stepMote(near, 1, 0, 400, 400, { x: 180, y: 200 })
-    expect(near.vx).toBeGreaterThan(0)
-
-    const far = createMote(400, 400, fixed)
-    far.x = 200
-    far.vx = 0
-    stepMote(far, 1, 0, 400, 400, { x: 0, y: 0 })
-    expect(Math.abs(far.vx)).toBeLessThan(0.01)
   })
 })
 

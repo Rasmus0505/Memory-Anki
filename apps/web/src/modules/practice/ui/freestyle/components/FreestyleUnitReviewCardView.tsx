@@ -65,7 +65,7 @@ import {
 } from '@/modules/practice/ui/freestyle/model/freestyleStaleRecovery'
 import { freestyleUnitLoadFailureCopy } from '@/modules/practice/ui/freestyle/model/freestyleUnitLoadRecovery'
 import { FreestyleRatingBar } from './FreestyleRatingBar'
-import { useFreestyleCardParticles } from './useFreestyleCardParticles'
+import { useFreestyleCardFeedback } from './useFreestyleCardFeedback'
 import { FreestyleUnitReviewFlipPanel } from './FreestyleUnitReviewFlipPanel'
 import { FreestyleUnitReviewIdentityRow, FreestyleUnitReviewPlaceholder } from './FreestyleUnitReviewChrome'
 import { recordSessionRecorderUiAction } from '@/shared/debug/session-recorder'
@@ -304,7 +304,7 @@ export function FreestyleUnitReviewCardView({
   const activeFlipProgress =
     flipProgress && flipProgress.key === flipProgressKey ? flipProgress : null
   const sectionRef = useRef<HTMLElement | null>(null)
-  const cardParticles = useFreestyleCardParticles({
+  const cardFeedback = useFreestyleCardFeedback({
     sectionRef,
     active,
     progressKey: flipProgressKey,
@@ -1218,7 +1218,7 @@ export function FreestyleUnitReviewCardView({
         if (!options?.clearAll || result.encounter.selected_rating == null) break
       }
       if (!lastResult) return
-      cardParticles.playUndo(undoneRating as UnitRating | null)
+      cardFeedback.playUndo(undoneRating as UnitRating | null)
       sessionRef.current = workingSession
       unitRef.current = workingUnit
       const undoneSelection = asUnitRating(lastResult.encounter.selected_rating)
@@ -1436,7 +1436,7 @@ export function FreestyleUnitReviewCardView({
               readOnly || !onRemoveFromQueue
                 ? undefined
                 : () => {
-                    cardParticles.playRemove()
+                    cardFeedback.playRemove()
                     onRemoveFromQueue(card.id)
                   }
             }

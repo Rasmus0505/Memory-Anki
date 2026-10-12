@@ -1,7 +1,8 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { AppShell, resetNavSectionHistoryForTest } from '@/app/shell/AppShell'
+import { AppShell } from '@/app/shell/AppShell'
+import { resetNavSectionHistoryForTest } from '@/app/shell/navSectionMemory'
 import {
   resetSessionRecorderForTest,
   startSessionRecording,
@@ -242,8 +243,9 @@ describe('AppShell', () => {
     )
 
     const mobileNav = screen.getByRole('navigation', { name: '移动端主导航' })
-    expect(mobileNav.className).toContain('lg:hidden')
-    expect(mobileNav.querySelectorAll('a')).toHaveLength(6)
+    expect(mobileNav.className).toContain('md:hidden')
+    expect(mobileNav.querySelectorAll('a')).toHaveLength(7)
+    expect(mobileNav.querySelector('a[href="/profile"]')?.textContent).toContain('设置')
     expect(mobileNav.querySelector('a[href="/progress"]')).toBeTruthy()
     expect(mobileNav.querySelector('a[href="/palaces"]')?.className).toContain('bg-primary')
     expect(mobileNav.querySelector('a[href="/freestyle"]')).toBeTruthy()
@@ -553,7 +555,7 @@ describe('AppShell', () => {
     expect(main?.className).toContain('flex-1')
     expect(main?.className).toContain('min-h-0')
     expect(main?.className).not.toContain('overflow-hidden')
-    expect(main?.className).toContain('lg:pl-[236px]')
+    expect(main?.className).toContain('lg:pl-(--spacing-shell-sidebar)')
     expect(inner?.className).toContain('flex-1')
     expect(inner?.className).toContain('min-h-0')
     expect(inner?.className).toContain('p-0')
@@ -568,7 +570,7 @@ describe('AppShell', () => {
       </MemoryRouter>,
     )
     expect(document.querySelector('aside')?.className).toContain('rounded-none')
-    expect(document.querySelector('main')?.className).toContain('lg:pl-[236px]')
+    expect(document.querySelector('main')?.className).toContain('lg:pl-(--spacing-shell-sidebar)')
     expect(document.querySelector('main')?.firstElementChild?.className).toContain('p-0')
   })
 
@@ -588,7 +590,7 @@ describe('AppShell', () => {
     const inner = main?.firstElementChild
     expect(aside?.className).toContain('inset-y-3')
     expect(aside?.className).toContain('rounded-2xl')
-    expect(main?.className).toContain('lg:pl-[264px]')
+    expect(main?.className).toContain('lg:pl-(--spacing-shell-main-sidebar)')
     expect(inner?.className).toContain('max-w-[1600px]')
     expect(inner?.className).toContain('lg:px-7')
   })

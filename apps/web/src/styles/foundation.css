@@ -66,6 +66,17 @@
   --color-paper-ink-soft: hsl(24 16% 30%);
   --color-paper-muted: hsl(28 12% 46%);
 
+  /* App shell geometry: md rail, lg sidebar and its collapsed rail, the floating inset, and the content gutter. */
+  --spacing-shell-rail: 5.5rem;
+  --spacing-shell-sidebar: 14.75rem;
+  --spacing-shell-sidebar-collapsed: 4.75rem;
+  --spacing-shell-inset: 0.75rem;
+  --spacing-shell-gutter: 1rem;
+  --spacing-shell-bottom-nav: 4.5rem;
+  --spacing-shell-main-rail: calc(var(--spacing-shell-inset) + var(--spacing-shell-rail) + var(--spacing-shell-gutter));
+  --spacing-shell-main-sidebar: calc(var(--spacing-shell-inset) + var(--spacing-shell-sidebar) + var(--spacing-shell-gutter));
+  --spacing-shell-main-collapsed: calc(var(--spacing-shell-inset) + var(--spacing-shell-sidebar-collapsed) + var(--spacing-shell-gutter));
+
   --radius-sm: calc(var(--color-radius) - 4px);
   --radius-md: calc(var(--color-radius) - 2px);
   --radius-lg: var(--color-radius);
@@ -222,15 +233,103 @@ body {
     0 18px 44px -12px hsl(24 50% 24% / 0.16);
 }
 
-/* flashcard flip */
-.perspective-1000 { perspective: 1000px; }
-.backface-hidden { backface-visibility: hidden; }
-.rotate-y-180 { transform: rotateY(180deg); }
-.transform-style-3d { transform-style: preserve-3d; }
 
-/* star rating */
-.star-rating input { display: none; }
-.star-rating label { font-size: 1.5rem; color: var(--color-border); cursor: pointer; transition: color 0.15s; }
-.star-rating input:checked ~ label,
-.star-rating label:hover ~ label,
-.star-rating label:hover { color: var(--color-warning); }
+/* ---- Base controls: global click feedback, form controls, focus ---- */
+/* === GLOBAL CLICK FEEDBACK === */
+
+/* Card hover lift */
+.hover\:shadow-md:hover {
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+/* Select / dropdown */
+select {
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 32px;
+}
+
+/* Range slider */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--color-secondary);
+  outline: none;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  border: 2px solid white;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+input[type="range"]::-webkit-slider-thumb:active {
+  transform: scale(1.2);
+}
+
+/* Checkbox */
+input[type="checkbox"] {
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+input[type="radio"] {
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+
+/* Toast entrance */
+[data-sonner-toaster] {
+  --toast-transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Sidebar nav item */
+nav a {
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+/* === GLOBAL DOPAMINE FEEDBACK LAYER === */
+
+:root {
+  --memory-anki-feedback-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+button,
+a[href],
+input,
+textarea,
+select,
+summary,
+[role="button"],
+[role="link"],
+[role="switch"],
+[role="tab"] {
+  transition:
+    transform 0.14s var(--memory-anki-feedback-ease),
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    color 0.18s ease;
+  transform-origin: center;
+}
+
+button:active:not([disabled]),
+[role="button"]:active {
+  transform: translateY(1px) scale(0.985);
+}
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[contenteditable="true"]:focus-visible {
+  box-shadow:
+    0 0 0 1px rgba(59, 130, 246, 0.22),
+    0 0 0 3px rgba(56, 189, 248, 0.1);
+}

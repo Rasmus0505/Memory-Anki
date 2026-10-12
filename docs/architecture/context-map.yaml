@@ -471,10 +471,6 @@
       "produce": {
         "publicEntry": "src/modules/produce/public.ts"
       },
-      "progression": {
-        "publicEntry": "src/modules/progression/public.ts",
-        "architectureDoc": "docs/architecture/progression.md"
-      },
       "quiz": {
         "publicEntry": "src/modules/quiz/public.ts"
       },

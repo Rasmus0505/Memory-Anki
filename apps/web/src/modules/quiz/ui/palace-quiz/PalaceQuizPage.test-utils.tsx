@@ -17,7 +17,7 @@ export const listQuestionNodeBindingsApiMock = vi.fn()
 export const requestPalaceShortAnswerFeedbackApiMock = vi.fn()
 export const deletePalaceQuizQuestionApiMock = vi.fn()
 export const dispatchGlobalFeedbackMock = vi.fn()
-export const emitReviewConfettiMock = vi.fn()
+export const emitReviewCelebrationMock = vi.fn()
 export const getSubjectsApiMock = vi.fn()
 export const getSubjectTreeApiMock = vi.fn()
 export const promptForAiOptionsMock = vi.fn()
@@ -134,7 +134,7 @@ vi.mock('@/shared/components/celebration', async () => {
   )
   return {
     ...actual,
-    emitReviewConfetti: (...args: unknown[]) => emitReviewConfettiMock(...args),
+    emitReviewCelebration: (...args: unknown[]) => emitReviewCelebrationMock(...args),
   }
 })
 

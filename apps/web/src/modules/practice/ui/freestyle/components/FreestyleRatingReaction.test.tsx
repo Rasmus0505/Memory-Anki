@@ -36,13 +36,14 @@ describe('FreestyleRatingReaction cue', () => {
   beforeEach(() => resetFreestyleCombo())
   afterEach(() => vi.clearAllMocks())
 
-  it('cues grade.commit from the pressed keycap top with combo and an owner', () => {
+  it('cues grade.commit with the rated card scope, combo and an owner', () => {
     renderCard()
     rate()
     expect(fx.cue).toHaveBeenCalledTimes(1)
     const [name, payload, options] = fx.cue.mock.calls[0]
     expect(name).toBe('grade.commit')
-    expect(payload).toMatchObject({ origin: { x: 130, y: 404 }, grade: 3, combo: 1, milestone: false, allowRare: true })
+    expect(payload).toMatchObject({ grade: 3, combo: 1, milestone: false })
+    expect(payload.scope).toBeInstanceOf(HTMLElement)
     expect(options.owner).toMatch(/^grade:.*:on$/)
   })
 

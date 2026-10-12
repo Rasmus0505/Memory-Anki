@@ -164,8 +164,8 @@ export function plainTextOffsetFromPoint(root: HTMLElement, x: number, y: number
     caretRangeFromPoint?: (clientX: number, clientY: number) => Range | null
     caretPositionFromPoint?: (clientX: number, clientY: number) => { offsetNode: Node; offset: number } | null
   }
-  let node: Node | null = null
-  let offset = 0
+  let node: Node | null
+  let offset: number
   const range = doc.caretRangeFromPoint?.(x, y)
   if (range) {
     node = range.startContainer

@@ -1,0 +1,242 @@
+/* Layout: app shell, navigation, route transitions, dashboard frame, mind-map fullscreen host. */
+
+/*
+ * Enter/exit utilities compatible with the Radix `data-[state]` class vocabulary
+ * (animate-in, fade-in-0, zoom-in-95, slide-in-from-*). Handwritten so the curves
+ * use the app spring tokens instead of a generic plugin.
+ */
+@keyframes ma-enter {
+  from {
+    opacity: var(--ma-enter-opacity, 1);
+    transform: translate3d(var(--ma-enter-x, 0), var(--ma-enter-y, 0), 0) scale(var(--ma-enter-scale, 1));
+    filter: blur(var(--ma-enter-blur, 0));
+  }
+}
+
+@keyframes ma-exit {
+  to {
+    opacity: var(--ma-exit-opacity, 1);
+    transform: translate3d(var(--ma-exit-x, 0), var(--ma-exit-y, 0), 0) scale(var(--ma-exit-scale, 1));
+  }
+}
+
+@utility animate-in {
+  animation: ma-enter var(--ma-enter-duration, 260ms) var(--ease-spring-soft) both;
+}
+
+@utility animate-out {
+  animation: ma-exit var(--ma-exit-duration, 150ms) var(--ease-in-out-soft) both;
+}
+
+@utility fade-in-* {
+  --ma-enter-opacity: calc(--value(integer) / 100);
+}
+
+@utility fade-out-* {
+  --ma-exit-opacity: calc(--value(integer) / 100);
+}
+
+@utility zoom-in-* {
+  --ma-enter-scale: calc(--value(integer) / 100);
+}
+
+@utility zoom-out-* {
+  --ma-exit-scale: calc(--value(integer) / 100);
+}
+
+@utility slide-in-from-top-* {
+  --ma-enter-y: calc(--value(integer) * -0.25rem);
+}
+
+@utility slide-in-from-bottom-* {
+  --ma-enter-y: calc(--value(integer) * 0.25rem);
+}
+
+@utility slide-in-from-left-* {
+  --ma-enter-x: calc(--value(integer) * -0.25rem);
+}
+
+@utility slide-in-from-right-* {
+  --ma-enter-x: calc(--value(integer) * 0.25rem);
+}
+
+/* Radix popper content: rise from the side it is anchored to. */
+[data-radix-popper-content-wrapper] > [data-side='bottom'][data-state='open'],
+[data-radix-popper-content-wrapper] > [data-side='bottom'][data-state='delayed-open'] { --ma-enter-y: -6px; }
+[data-radix-popper-content-wrapper] > [data-side='top'][data-state='open'],
+[data-radix-popper-content-wrapper] > [data-side='top'][data-state='delayed-open'] { --ma-enter-y: 6px; }
+[data-radix-popper-content-wrapper] > [data-side='left'][data-state='open'] { --ma-enter-x: 6px; }
+[data-radix-popper-content-wrapper] > [data-side='right'][data-state='open'] { --ma-enter-x: -6px; }
+
+[data-radix-popper-content-wrapper] > [data-state] {
+  transform-origin: var(--radix-popper-transform-origin, center);
+}
+
+/* Skeleton: warm shimmer sweep instead of a flat pulse. */
+@keyframes ma-shimmer {
+  from { background-position: 180% 0; }
+  to { background-position: -80% 0; }
+}
+
+.ma-skeleton {
+  background-color: var(--color-muted);
+  background-image: linear-gradient(
+    100deg,
+    transparent 20%,
+    hsl(38 100% 97% / 0.75) 42%,
+    hsl(36 100% 92% / 0.55) 50%,
+    transparent 70%
+  );
+  background-size: 220% 100%;
+  animation: ma-shimmer 1.6s var(--ease-in-out-soft) infinite;
+}
+
+.dark .ma-skeleton {
+  background-image: linear-gradient(
+    100deg,
+    transparent 20%,
+    hsl(32 40% 30% / 0.35) 45%,
+    hsl(32 60% 40% / 0.18) 52%,
+    transparent 72%
+  );
+}
+
+/* Route change: content rises softly into place (driven by useRouteEnterAnimation). */
+@keyframes ma-route-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0);
+  }
+}
+
+/* Toasts: warm cards with a spring entrance. */
+[data-sonner-toaster] [data-sonner-toast] {
+  border-radius: 1rem;
+  border-color: var(--color-border);
+  background: var(--color-popover);
+  color: var(--color-popover-foreground);
+  box-shadow: var(--shadow-popover);
+  font-family: var(--font-sans);
+}
+
+/* Navigation active states. */
+@keyframes ma-nav-bar-in {
+  from { transform: translateY(-50%) scaleY(0); opacity: 0; }
+}
+
+@keyframes ma-tab-icon-pop {
+  0% { transform: scale(0.8) translateY(2px); }
+  60% { transform: scale(1.14) translateY(-1px); }
+  100% { transform: scale(1) translateY(0); }
+}
+
+.ma-nav-active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 3px;
+  height: 56%;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--color-primary), var(--color-warning));
+  transform: translateY(-50%);
+  animation: ma-nav-bar-in 360ms var(--ease-spring) both;
+}
+
+.ma-nav-active > svg,
+.ma-tab-active > svg {
+  animation: ma-tab-icon-pop 420ms var(--ease-spring) both;
+}
+
+/* Tactile press for any control that opts in. */
+.ma-pressable {
+  transition:
+    transform var(--duration-fast) var(--ease-spring),
+    box-shadow var(--duration-base) var(--ease-out-expo),
+    background-color var(--duration-fast) ease;
+}
+
+.ma-pressable:active:not(:disabled) {
+  transform: scale(0.96);
+  transition-duration: var(--duration-instant);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-in,
+  .animate-out,
+  .ma-skeleton,
+  .ma-nav-active::before,
+  .ma-nav-active > svg,
+  .ma-tab-active > svg {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+  }
+  .ma-pressable:active:not(:disabled) {
+    transform: none;
+  }
+}
+
+/* Depth-stack route change: the old page's ghost sinks behind the rising sheet. */
+.ma-route-ghost {
+  position: fixed;
+  z-index: 1;
+  overflow: hidden;
+  contain: strict;
+  pointer-events: none;
+  will-change: transform, filter, opacity;
+}
+
+.ma-route-sheet {
+  position: relative;
+  z-index: 2;
+  min-height: 100dvh;
+  border-radius: 22px 22px 0 0;
+  background-color: var(--color-background);
+  will-change: transform, opacity;
+}
+
+/* 仪表盘一屏布局：高度 = 视口 − 外壳内边距（与 AppShell 的 py-2 / sm:py-5 / lg:py-6 及移动底栏保持一致）。 */
+
+.dashboard-fit {
+  height: calc(100dvh - 1rem - 4.5rem - env(safe-area-inset-bottom, 0px));
+  min-height: 480px;
+}
+
+@media (min-width: 640px) {
+  .dashboard-fit {
+    height: calc(100dvh - 2.5rem - 4.5rem - env(safe-area-inset-bottom, 0px));
+  }
+}
+
+@media (min-width: 1024px) {
+  .dashboard-fit {
+    height: calc(100dvh - 3rem);
+    min-height: 560px;
+  }
+}
+
+/* 展示层全屏：原生全屏与 PWA visualViewport 全屏共用同一个稳定宿主。 */
+.memory-anki-mindmap-native-fullscreen {
+  position: fixed !important;
+  top: var(--memory-anki-mindmap-fullscreen-top, 0px) !important;
+  left: var(--memory-anki-mindmap-fullscreen-left, 0px) !important;
+  z-index: 230 !important;
+  width: var(--memory-anki-mindmap-fullscreen-width, 100dvw) !important;
+  height: var(--memory-anki-mindmap-fullscreen-height, 100dvh) !important;
+  max-width: none !important;
+  max-height: none !important;
+  border-radius: 0 !important;
+  border: none !important;
+  background: #f8fafc !important;
+  overflow: hidden !important;
+  overscroll-behavior: contain !important;
+}
+
+.memory-anki-mindmap-native-fullscreen[data-presentation-mode='viewport'] {
+  box-sizing: border-box !important;
+  padding:
+    env(safe-area-inset-top, 0px)
+    env(safe-area-inset-right, 0px)
+    env(safe-area-inset-bottom, 0px)
+    env(safe-area-inset-left, 0px) !important;
+}

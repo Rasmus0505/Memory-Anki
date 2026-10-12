@@ -13,7 +13,7 @@ export function PalaceEditorSkeleton() {
 
       {/* Editor layout: left binding/meta + right mind-map */}
       <div className="flex min-h-0 flex-1">
-        <div className="w-[280px] shrink-0 space-y-3">
+        <div className="w-70 shrink-0 space-y-3">
           <div className="space-y-3 rounded-lg border p-4">
             <Skeleton className="h-5 w-28" />
             <SkeletonBlockRows rows={4} />
@@ -29,7 +29,7 @@ export function PalaceEditorSkeleton() {
             <Skeleton className="size-8 rounded-md" />
             <Skeleton className="size-8 rounded-md" />
           </div>
-          <SkeletonPanel heightClassName="min-h-[360px] flex-1 rounded-md" />
+          <SkeletonPanel heightClassName="min-h-90 flex-1 rounded-md" />
         </div>
       </div>
     </div>

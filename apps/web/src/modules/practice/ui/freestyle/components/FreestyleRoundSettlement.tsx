@@ -28,6 +28,14 @@ function ProgressBar({ value }: { value: number }) {
   )
 }
 
+export interface FreestyleSettlementMeta {
+  saveOutcome?: FreestyleSaveOutcome
+  onRetrySave?: () => void
+  remainingBefore?: number | null
+  remainingAfter?: number | null
+  nextReviews?: FreestyleOverviewResponse['next_reviews']
+}
+
 /**
  * Closing slot of a 随心 round. It reports what was done and offers the two
  * next actions: clear 做题 progress, or open the config for the next round.
@@ -47,6 +55,7 @@ export function FreestyleRoundSettlement({
   nextReviews,
   onFinishStudy,
   onAddDueToday,
+  cancelLabel = '返回上一张',
 }: {
   completion: FreestyleRoundCompletion
   roundKey: string
@@ -63,6 +72,7 @@ export function FreestyleRoundSettlement({
   /** Finish this visit only; never marks the underlying round or its units passed. */
   onFinishStudy?: () => void
   onAddDueToday?: () => void
+  cancelLabel?: string
 }) {
   const subjects = useMemo(() => completion.bySubject, [completion.bySubject])
   const palaceTotal = subjects.reduce((sum, subject) => sum + subject.palaceCount, 0)
@@ -115,7 +125,7 @@ export function FreestyleRoundSettlement({
           className="mb-4 flex w-full items-center justify-center rounded-2xl border border-stage-line-strong px-4 py-3 text-sm font-medium text-stage-ink hover:bg-stage-ink/8"
           onClick={onCancelSettlement}
         >
-          返回上一张
+          {cancelLabel}
         </button>
 
         <div className="text-xs font-semibold tracking-[0.18em] text-stage-glow">本轮完成</div>

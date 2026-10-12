@@ -545,7 +545,7 @@ export async function confirmQueuedMutationOverwrite(id: string) {
   // repeating-409 loop this flow exists to end. The user has now seen the server
   // state, so the overwrite must be signed with the fingerprint the server
   // currently reports; anything else cannot be accepted as "overwrite current".
-  const currentFingerprint = await fetchCurrentEditorFingerprint(item, body)
+  const currentFingerprint = await fetchCurrentEditorFingerprint(item)
   if (!currentFingerprint) {
     return updateMutation(item, {
       status: 'manual',
@@ -574,10 +574,7 @@ export async function confirmQueuedMutationOverwrite(id: string) {
 // the previous behaviour rather than inventing a version to claim.
 const EDITOR_RESOURCE_KEY = /^palace:(\d+):editor$/
 
-async function fetchCurrentEditorFingerprint(
-  item: PersistedMutation,
-  body: Record<string, unknown>,
-): Promise<string | null> {
+async function fetchCurrentEditorFingerprint(item: PersistedMutation): Promise<string | null> {
   const match = EDITOR_RESOURCE_KEY.exec(item.resourceKey)
   if (!match) return null
   const headers: Record<string, string> = { Accept: 'application/json' }

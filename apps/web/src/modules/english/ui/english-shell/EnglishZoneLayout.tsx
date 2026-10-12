@@ -3,9 +3,10 @@ import { Link } from 'react-router-dom'
 import {
   BookOpenText,
   Captions,
-  Languages,
   type LucideIcon,
 } from 'lucide-react'
+import { PageContainer } from '@/shared/components/layout/PageLayout'
+import { PageHeader } from '@/shared/components/layout/PageHeader'
 import { cn } from '@/shared/lib/utils'
 
 export type EnglishHubZone = 'hub' | 'listening' | 'cloze'
@@ -81,23 +82,12 @@ export function EnglishZoneLayout({
   showZoneNav?: boolean
 }) {
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-5" data-testid="english-zone-layout">
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="space-y-1.5">
-          <div className="inline-flex items-center gap-2 text-xs font-medium uppercase tracking-[0.18em] text-info">
-            <Languages className="size-3.5" />
-            English
-          </div>
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-[1.7rem]">
-            {title}
-          </h1>
-          <p className="max-w-xl text-sm leading-6 text-muted-foreground">{description}</p>
-        </div>
-      </header>
+    <PageContainer wide className="gap-5">
+      <PageHeader eyebrow="English" title={title} description={description} />
 
       {showZoneNav ? <EnglishZoneNav zone={zone} /> : null}
 
       <div className="min-h-[50vh]">{children}</div>
-    </div>
+    </PageContainer>
   )
 }

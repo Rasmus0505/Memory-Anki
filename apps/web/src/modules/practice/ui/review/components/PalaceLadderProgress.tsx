@@ -325,7 +325,7 @@ export function PalaceLadderProgress({
           <div
             role="tooltip"
             data-testid={stageTooltip ? 'ladder-stage-tooltip' : summaryTooltip ? 'ladder-summary-tooltip' : 'ladder-track-tooltip'}
-            className="pointer-events-none w-max max-w-[280px] rounded-lg border border-border bg-popover px-2.5 py-2 text-left text-[11px] text-popover-foreground shadow-xl"
+            className="pointer-events-none w-max max-w-70 rounded-lg border border-border bg-popover px-2.5 py-2 text-left text-[11px] text-popover-foreground shadow-xl"
             style={{
               position: 'fixed',
               left: floatPos.left,
@@ -414,7 +414,7 @@ export function PalaceLadderProgress({
       </div>
       <div
         ref={trackRef}
-        className="relative min-h-8 min-w-[120px] flex-1 overflow-visible px-1"
+        className="relative min-h-8 min-w-30 flex-1 overflow-visible px-1"
         onMouseEnter={(event) => openTrack(event.currentTarget)}
         onMouseLeave={scheduleHide}
       >
