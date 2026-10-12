@@ -547,6 +547,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
         handleAddChildWithoutFocus,
         handleAddSibling,
         beginEditingNode,
+        selectNode: (nodeId) => selectNode(nodeId),
         handleDeleteNodes,
         pendingKeyboardFocusNodeIdRef,
       })(event)
@@ -560,6 +561,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
       handleAddSibling,
       handleDeleteNodes,
       redoEditorDoc,
+      selectNode,
       selectedNodeId,
       selectedNodeIds,
       undoEditorDoc,

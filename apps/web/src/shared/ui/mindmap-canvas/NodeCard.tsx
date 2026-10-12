@@ -7,13 +7,8 @@ import {
   type MouseEvent,
   type PointerEvent,
 } from 'react'
-import {
-  Handle,
-  Position,
-  type NodeProps,
-  useUpdateNodeInternals,
-} from '@xyflow/react'
-import { ChevronDown, ChevronRight, Highlighter, Scissors } from 'lucide-react'
+import { Handle, Position, type NodeProps } from '@xyflow/react'
+import { Highlighter, Scissors } from 'lucide-react'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import {
   hasHighlightMarkup,
@@ -23,18 +18,19 @@ import {
   toggleHighlightOnDomSelection,
 } from '@/shared/lib/mindmapRichText'
 import type { MindMapNodeVisual } from './adapter'
-import { getNodeSize, type LayoutRole, type NodeSize } from './layout'
+import { getNodeSize, type LayoutRole } from './layout'
 import {
   AdaptiveNodeToolbar,
   selectionToolbarButtonClass,
 } from './NodeCardToolbar'
 import { NodeCardStatusChrome, NodeCardTextFace } from './NodeCardChrome'
+import { NodeCardCollapseToggle } from './NodeCardCollapseToggle'
 import { ExtractDropPlaceholders, ExtractGhostPortal } from './MindMapExtractUi'
 import { useMindMapExtractDrag } from './useMindMapExtractDrag'
+import { useNodeCardEditHistory } from './useNodeCardEditHistory'
+import { useNodeCardMeasure } from './useNodeCardMeasure'
 import {
   EDIT_BLUR_GUARD_MS,
-  EDIT_FOCUS_RETRY_DELAYS_MS,
-  MEASURE_DELTA_PX,
   consumeCardDoubleClick,
   getElementFeedbackPoint,
   getMouseFeedbackPoint,
@@ -43,7 +39,6 @@ import {
   buildNodeCardContainerClassNames,
   buildNodeCardTextClassNames,
   resolveNodeRawText,
-  type EditSnapshot,
   type NodeCardData,
 } from './nodeCardModel'
 import { noteCardEditStarted } from './cardEditGesture'
@@ -67,10 +62,6 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   const [imeComposing, setImeComposing] = useState(false)
   const shellRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLDivElement>(null)
-  /** Delay single-click fold so double-click can expand subtree without a toggle race. */
-  const collapseClickTimerRef = useRef<number | null>(null)
-  const lastMeasuredRef = useRef<NodeSize | null>(null)
-  const updateNodeInternals = useUpdateNodeInternals()
   const editingIsControlled = typeof nodeData.editing === 'boolean'
   // Parent `editing` is authoritative when true; localEdit covers optimistic enter
   // and uncontrolled cards so a lagging host cannot drop the first double-click.
@@ -79,15 +70,42 @@ function MindMapNodeCard({ data, id }: NodeProps) {
     : localEdit
   const editValue = editText
   const readonly = Boolean(nodeData.readonly)
-  const onMeasure = nodeData.onMeasure
   const wasEditingRef = useRef(false)
-  const editHistoryRef = useRef<{ past: EditSnapshot[]; future: EditSnapshot[] }>({ past: [], future: [] })
-  const pendingInputSnapshotRef = useRef<EditSnapshot | null>(null)
-  const compositionStartSnapshotRef = useRef<EditSnapshot | null>(null)
-  const isComposingRef = useRef(false)
   /** Edit sessions may grow, but deleting must not shrink the shell until commit. */
   const editWidthFloorRef = useRef(0)
   const editSessionOpenRef = useRef(false)
+
+  const updateEditValue = useCallback(
+    (nextValue: string) => {
+      setEditText(nextValue)
+      nodeData.onEditTextChange?.(id, nextValue)
+    },
+    [id, nodeData],
+  )
+  const extract = useMindMapExtractDrag({
+    nodeId: id,
+    editValue,
+    inputRef,
+    onExtractSelection: nodeData.onExtractSelection,
+    onExtractDropPreview: nodeData.onExtractDropPreview,
+  })
+  const {
+    isComposingRef,
+    resetEditHistory,
+    recordChange,
+    handleUndoRedoKey,
+    handleBeforeInput,
+    handleInput,
+    handleCompositionStart,
+    handleCompositionEnd,
+  } = useNodeCardEditHistory({
+    inputRef,
+    editValue,
+    updateEditValue,
+    syncTextSelection: extract.syncTextSelection,
+    onCompositionChange: setImeComposing,
+  })
+
   // Opening frame must size from the text the effect will seed, not a leftover draft.
   const openingEdit = isEditing && !editSessionOpenRef.current
   const draftSource = openingEdit
@@ -123,13 +141,6 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   const optimisticEditPendingRef = useRef(false)
   /** Plain-text offset under the double-click, applied once the editor mounts. */
   const pendingCaretOffsetRef = useRef<number | null>(null)
-  const extract = useMindMapExtractDrag({
-    nodeId: id,
-    editValue,
-    inputRef,
-    onExtractSelection: nodeData.onExtractSelection,
-    onExtractDropPreview: nodeData.onExtractDropPreview,
-  })
   const englishInteractionActive = Boolean(nodeData.englishInteractionActive)
   const textSelectionModeActive = Boolean(nodeData.textSelectionModeActive)
   const textInteractionActive = englishInteractionActive || textSelectionModeActive
@@ -150,68 +161,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   const dropMode = nodeData.dropMode ?? null
   const previewShifted = Boolean(nodeData.previewShifted)
 
-  const reportMeasuredSize = useCallback(
-    (width: number, height: number) => {
-      if (width <= 0 || height <= 0) return
-
-      const nextSize = { width, height }
-      const previousSize = lastMeasuredRef.current
-      if (
-        previousSize &&
-        Math.abs(previousSize.width - nextSize.width) <= MEASURE_DELTA_PX &&
-        Math.abs(previousSize.height - nextSize.height) <= MEASURE_DELTA_PX
-      ) {
-        return
-      }
-
-      lastMeasuredRef.current = nextSize
-      onMeasure?.(id, nextSize)
-      updateNodeInternals(id)
-    },
-    [id, onMeasure, updateNodeInternals],
-  )
-
-  useLayoutEffect(() => {
-    const element = shellRef.current
-    if (!element) return undefined
-
-    const measure = () => {
-      // Prefer untransformed layout size. getBoundingClientRect() includes React Flow
-      // viewport zoom and can thrash measure→layout→zoom loops during review.
-      const width = element.offsetWidth
-      const height = element.offsetHeight
-      if (width > 0 && height > 0) {
-        reportMeasuredSize(width, height)
-        return
-      }
-      const rect = element.getBoundingClientRect()
-      reportMeasuredSize(rect.width, rect.height)
-    }
-
-    measure()
-    if (typeof ResizeObserver === 'undefined') {
-      return undefined
-    }
-
-    const observer = new ResizeObserver(measure)
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [reportMeasuredSize])
-
-  const restoreEditSnapshot = useCallback((snapshot: EditSnapshot) => {
-    setEditText(snapshot.value)
-    nodeData.onEditTextChange?.(id, snapshot.value)
-    requestAnimationFrame(() => {
-      const input = inputRef.current
-      if (!input) return
-      if (hasHighlightMarkup(snapshot.value)) {
-        input.innerHTML = sanitizeMindMapRichHtml(snapshot.value)
-      } else {
-        input.textContent = snapshot.value
-      }
-      placeContentEditableCaret(input, { selectAll: false })
-    })
-  }, [id, nodeData])
+  useNodeCardMeasure({ id, shellRef, onMeasure: nodeData.onMeasure })
 
   const focusEditorCaret = useCallback(
     (options?: { selectAll?: boolean; value?: string; seedContent?: boolean; plainOffset?: number | null }) => {
@@ -264,10 +214,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
     wasEditingRef.current = true
     editStartedAtRef.current = Date.now()
     setEditText(initialValue)
-    editHistoryRef.current = { past: [], future: [] }
-    pendingInputSnapshotRef.current = null
-    compositionStartSnapshotRef.current = null
-    isComposingRef.current = false
+    resetEditHistory()
     editSessionClosedRef.current = false
 
     // Seed content once on enter-edit.
@@ -300,21 +247,10 @@ function MindMapNodeCard({ data, id }: NodeProps) {
       focusEditorCaretRef.current({ selectAll, plainOffset })
     }
 
-    const timers: number[] = []
-    for (const delay of EDIT_FOCUS_RETRY_DELAYS_MS) {
-      timers.push(window.setTimeout(restoreIfBlurred, delay))
-    }
-
-    let nestedRaf = 0
-    const rafId = requestAnimationFrame(() => {
-      restoreIfBlurred()
-      nestedRaf = requestAnimationFrame(restoreIfBlurred)
-    })
+    const rafId = requestAnimationFrame(restoreIfBlurred)
 
     return () => {
       cancelAnimationFrame(rafId)
-      cancelAnimationFrame(nestedRaf)
-      for (const timer of timers) window.clearTimeout(timer)
     }
     // nodeData.editText / label / selectEditText are read only when isEditing flips true.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- enter-edit snapshot
@@ -489,24 +425,6 @@ function MindMapNodeCard({ data, id }: NodeProps) {
     setLocalEdit(false)
   }, [editValue, extract, focusEditorCaret, id, nodeData])
 
-  const updateEditValue = useCallback(
-    (nextValue: string) => {
-      setEditText(nextValue)
-      nodeData.onEditTextChange?.(id, nextValue)
-    },
-    [id, nodeData],
-  )
-
-  const readEditorSnapshot = useCallback((): EditSnapshot => {
-    const input = inputRef.current
-    const value = input ? serializeContentEditable(input) : editValue
-    return {
-      value,
-      selectionStart: 0,
-      selectionEnd: 0,
-    }
-  }, [editValue])
-
   const handleToggleHighlight = useCallback(() => {
     const input = inputRef.current
     if (!input || isComposingRef.current) return
@@ -514,36 +432,15 @@ function MindMapNodeCard({ data, id }: NodeProps) {
     if (!toggleHighlightOnDomSelection(input)) return
     const after = serializeContentEditable(input)
     if (before !== after) {
-      editHistoryRef.current.past.push({ value: before, selectionStart: 0, selectionEnd: 0 })
-      editHistoryRef.current.future = []
+      recordChange(before)
       updateEditValue(after)
-      }
+    }
     extract.syncTextSelection(input)
-  }, [extract, updateEditValue])
+  }, [extract, isComposingRef, recordChange, updateEditValue])
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
-      const primaryModifier = event.ctrlKey || event.metaKey
-      const lowerKey = event.key.toLowerCase()
-      if (primaryModifier && (lowerKey === 'z' || lowerKey === 'y')) {
-        event.preventDefault()
-        event.stopPropagation()
-        const history = editHistoryRef.current
-        const currentSnapshot = readEditorSnapshot()
-        const redoRequested = lowerKey === 'y' || event.shiftKey
-        if (redoRequested) {
-          const next = history.future.pop()
-          if (!next) return
-          history.past.push(currentSnapshot)
-          restoreEditSnapshot(next)
-        } else {
-          const previous = history.past.pop()
-          if (!previous) return
-          history.future.push(currentSnapshot)
-          restoreEditSnapshot(previous)
-        }
-        return
-      }
+      if (handleUndoRedoKey(event)) return
       if (event.key === 'Escape') {
         event.preventDefault()
         event.stopPropagation()
@@ -591,51 +488,8 @@ function MindMapNodeCard({ data, id }: NodeProps) {
         event.currentTarget.blur()
       }
     },
-    [id, nodeData, readEditorSnapshot, restoreEditSnapshot, updateEditValue],
+    [handleUndoRedoKey, id, nodeData, updateEditValue],
   )
-
-  const handleBeforeInput = useCallback(() => {
-    const input = inputRef.current
-    if (!input || isComposingRef.current) return
-    pendingInputSnapshotRef.current = readEditorSnapshot()
-  }, [readEditorSnapshot])
-
-  const handleInput = useCallback(() => {
-    const input = inputRef.current
-    if (!input) return
-    const nextValue = serializeContentEditable(input)
-    if (!isComposingRef.current) {
-      const snapshot = pendingInputSnapshotRef.current ?? { value: editValue, selectionStart: 0, selectionEnd: 0 }
-      if (snapshot.value !== nextValue) {
-        editHistoryRef.current.past.push(snapshot)
-        editHistoryRef.current.future = []
-      }
-      pendingInputSnapshotRef.current = null
-    }
-    updateEditValue(nextValue)
-    extract.syncTextSelection(input)
-  }, [editValue, extract, updateEditValue])
-
-  const handleCompositionStart = useCallback(() => {
-    isComposingRef.current = true
-    setImeComposing(true)
-    compositionStartSnapshotRef.current = readEditorSnapshot()
-  }, [readEditorSnapshot])
-
-  const handleCompositionEnd = useCallback(() => {
-    isComposingRef.current = false
-    setImeComposing(false)
-    const input = inputRef.current
-    if (!input) return
-    const nextValue = serializeContentEditable(input)
-    const snapshot = compositionStartSnapshotRef.current
-    compositionStartSnapshotRef.current = null
-    if (snapshot && snapshot.value !== nextValue) {
-      editHistoryRef.current.past.push(snapshot)
-      editHistoryRef.current.future = []
-    }
-    updateEditValue(nextValue)
-  }, [updateEditValue])
 
   const effectiveDropMode = extract.localHoverMode ?? dropMode
   const showDropChrome = Boolean(extract.localHoverMode || nodeData.dropHighlight)
@@ -831,56 +685,13 @@ function MindMapNodeCard({ data, id }: NodeProps) {
             onCountBadgeClick={nodeData.onCountBadgeClick}
           />
           {Number(metadata.childCount ?? 0) > 0 && nodeData.onToggleCollapse ? (
-            <button
-              type="button"
-              data-mindmap-collapse-toggle="true"
-              aria-label={metadata.collapsed ? '展开分支' : '折叠分支'}
-              title={
-                metadata.collapsed
-                  ? `展开分支（${Number(metadata.collapsedDescendantCount ?? 0)} 个节点）；双击展开整棵子树`
-                  : '折叠分支；双击展开整棵子树'
-              }
-              className="nodrag nopan absolute -right-2 top-1/2 z-30 flex h-5 min-w-5 -translate-y-1/2 items-center justify-center gap-0.5 mindmap-collapse-toggle rounded-full border border-paper-line-strong bg-paper-card px-1 text-[10px] font-semibold text-paper-muted shadow-sm hover:border-primary hover:text-primary-strong"
-              onClick={(event) => {
-                event.stopPropagation()
-                event.preventDefault()
-                // Defer toggle: a double-click fires click+click+dblclick; only the
-                // single-click path should flip one level after a short delay.
-                if (collapseClickTimerRef.current !== null) {
-                  window.clearTimeout(collapseClickTimerRef.current)
-                }
-                collapseClickTimerRef.current = window.setTimeout(() => {
-                  collapseClickTimerRef.current = null
-                  nodeData.onToggleCollapse?.(id)
-                }, 220)
-              }}
-              onPointerDown={(event) => event.stopPropagation()}
-              onDoubleClick={(event) => {
-                // Double-click fold control = expand whole subtree under this node.
-                event.stopPropagation()
-                event.preventDefault()
-                if (collapseClickTimerRef.current !== null) {
-                  window.clearTimeout(collapseClickTimerRef.current)
-                  collapseClickTimerRef.current = null
-                }
-                if (nodeData.onExpandSubtree) {
-                  nodeData.onExpandSubtree(id)
-                } else {
-                  nodeData.onToggleCollapse?.(id)
-                }
-              }}
-            >
-              {metadata.collapsed ? (
-                <>
-                  <ChevronRight className="size-3" />
-                  {Number(metadata.collapsedDescendantCount ?? 0) > 0 ? (
-                    <span>{Number(metadata.collapsedDescendantCount)}</span>
-                  ) : null}
-                </>
-              ) : (
-                <ChevronDown className="size-3" />
-              )}
-            </button>
+            <NodeCardCollapseToggle
+              nodeId={id}
+              collapsed={Boolean(metadata.collapsed)}
+              descendantCount={Number(metadata.collapsedDescendantCount ?? 0)}
+              onToggleCollapse={nodeData.onToggleCollapse}
+              onExpandSubtree={nodeData.onExpandSubtree}
+            />
           ) : null}
           <NodeCardTextFace
             textCls={textCls}

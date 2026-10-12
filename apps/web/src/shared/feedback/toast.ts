@@ -13,6 +13,12 @@ type ToastFn = ((message: string, options?: ExternalToast) => string | number) &
   promise: typeof sonnerToast.promise
 }
 
+/**
+ * Sonner 默认 4s。删除等破坏性操作靠 toast 上的「撤销」找回，窗口太短等于没有，
+ * 所以这些操作显式把时长拉到 8s。
+ */
+export const UNDO_TOAST_DURATION_MS = 8_000
+
 const toastBase = ((message: string, options?: ExternalToast) =>
   showToast('message', message, options)) as ToastFn
 

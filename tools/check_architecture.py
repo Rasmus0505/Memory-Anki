@@ -217,7 +217,6 @@ BASELINE_OVERSIZED_FILES = {
     # silently covers a future regression in its place — see
     # `check_oversized_baseline_is_current`.
     "apps/web/src/shared/ui/mindmap-canvas/layout.ts",
-    "apps/web/src/shared/ui/mindmap-canvas/NodeCard.tsx",
     "apps/web/src/shared/ui/mindmap-canvas/useMindMapCanvasState.ts",
     "apps/web/src/modules/practice/ui/freestyle/ImmersiveFreestylePage.tsx",
     # Freestyle round-plan migration and stable rating diagnostics are being

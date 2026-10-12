@@ -1,27 +1,19 @@
-import { useDeferredValue, useEffect, useMemo, useState } from 'react'
-import { BookOpen, Brain, FileText, FolderTree, History, Keyboard, Layers2, ListChecks, MapPin, Plus, Search } from 'lucide-react'
+import { Suspense, useDeferredValue, useEffect, useMemo, useState } from 'react'
+import { Brain, Layers2, Plus, Search } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { globalSearchApi } from '@/modules/search/public'
 import {
-  getShortcutLabel,
-  MEMORY_ANKI_SHORTCUT_ACTIONS,
   readMemoryAnkiShortcuts,
   type MemoryAnkiShortcutMap,
 } from '@/modules/settings/public'
 import type { GlobalSearchResponse } from '@/shared/api/contracts'
-import {
-  CommandDialog,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-  CommandShortcut,
-} from '@/shared/components/ui/command'
 import { navSections } from '@/app/shell/navSections'
 import { readRecentVisits, recordRecentVisit, type RecentVisit } from '@/app/shell/recentVisits'
-import { COMMAND_PAGES } from '@/shared/routing/routeManifest'
-import { translateAppMessage } from '@/shared/i18n/messages'
+import { lazyWithRetry } from '@/shared/lib/lazyWithRetry'
+
+export const preloadCommandPalette = () => import('@/app/shell/CommandPaletteSurface')
+
+const CommandPaletteSurface = lazyWithRetry(preloadCommandPalette)
 
 function isEditableTarget(target: EventTarget | null) {
   const element = target instanceof Element ? target : null
@@ -103,6 +95,12 @@ export function GlobalCommandPalette() {
   }, [open])
 
   useEffect(() => {
+    if (!open) return
+    // 命令面板的重 UI 只在首次唤出时才需要，先把它的块请求出去。
+    void preloadCommandPalette()
+  }, [open])
+
+  useEffect(() => {
     const trimmed = deferredQuery.trim()
     if (trimmed.length < 2) {
       setResults(null)
@@ -132,171 +130,20 @@ export function GlobalCommandPalette() {
     setShortcutMap(readMemoryAnkiShortcuts())
   }, [open, location.pathname, location.search])
 
-  const runAndClose = (run: () => void) => {
-    run()
-    setOpen(false)
-  }
+  if (!open) return null
 
   return (
-    <CommandDialog open={open} onOpenChange={setOpen}>
-      <CommandInput
-        value={query}
-        onValueChange={setQuery}
-        placeholder={translateAppMessage('command.searchPlaceholder')}
+    <Suspense fallback={null}>
+      <CommandPaletteSurface
+        open={open}
+        onOpenChange={setOpen}
+        query={query}
+        onQueryChange={setQuery}
+        results={results}
+        recentVisits={recentVisits}
+        shortcutMap={shortcutMap}
+        actions={actions}
       />
-      <CommandList>
-        <CommandEmpty>{translateAppMessage('command.noResults')}</CommandEmpty>
-
-        {recentVisits.length > 0 ? (
-          <CommandGroup heading={translateAppMessage('command.group.recent')}>
-            {recentVisits.map((visit) => (
-              <CommandItem
-                key={visit.path}
-                value={`recent ${visit.label}`}
-                onSelect={() => runAndClose(() => navigate(visit.path))}
-              >
-                <History className="size-4" />
-                <span className="truncate">{visit.label}</span>
-              </CommandItem>
-            ))}
-          </CommandGroup>
-        ) : null}
-
-        <CommandGroup heading={translateAppMessage('command.group.actions')}>
-          {actions.map((action) => {
-            const Icon = action.icon
-            return (
-              <CommandItem
-                key={action.label}
-                value={action.label}
-                onSelect={() => runAndClose(action.run)}
-              >
-                <Icon className="size-4" />
-                <span>{action.label}</span>
-                {action.shortcut ? <CommandShortcut>{action.shortcut}</CommandShortcut> : null}
-              </CommandItem>
-            )
-          })}
-        </CommandGroup>
-
-        <CommandGroup heading={translateAppMessage('command.group.shortcuts')}>
-          {MEMORY_ANKI_SHORTCUT_ACTIONS.map((action) => (
-            <CommandItem
-              key={action.id}
-              value={`shortcut 快捷键 ${action.label} ${action.description}`}
-              onSelect={() => runAndClose(() => navigate('/profile'))}
-            >
-              <Keyboard className="size-4" />
-              <span className="truncate">{action.label}</span>
-              <span className="min-w-0 truncate text-xs text-muted-foreground">{action.description}</span>
-              <CommandShortcut>{getShortcutLabel(shortcutMap[action.id])}</CommandShortcut>
-            </CommandItem>
-          ))}
-        </CommandGroup>
-
-        <CommandGroup heading={translateAppMessage('command.group.pages')}>
-          {navSections.map((section) => {
-            const Icon = section.icon
-            return (
-              <CommandItem
-                key={section.key}
-                value={`page ${section.label}`}
-                onSelect={() => runAndClose(() => navigate(section.to))}
-              >
-                <Icon className="size-4" />
-                <span>{section.label}</span>
-              </CommandItem>
-            )
-          })}
-          {COMMAND_PAGES.map((page) => (
-            <CommandItem
-              key={page.path}
-              value={`page ${page.label} ${page.path}`}
-              onSelect={() => runAndClose(() => navigate(page.path))}
-            >
-              <FileText className="size-4" />
-              <span>{page.label}</span>
-              <span className="min-w-0 truncate text-xs text-muted-foreground">{page.path}</span>
-            </CommandItem>
-          ))}
-        </CommandGroup>
-
-        {results && results.palaces.length > 0 ? (
-          <CommandGroup heading="宫殿">
-            {results.palaces.map((hit) => (
-              <CommandItem
-                key={`palace-${hit.id}`}
-                value={`palace-${hit.id}-${query}`}
-                onSelect={() => runAndClose(() => navigate(`/palaces/${hit.id}`))}
-              >
-                <BookOpen className="size-4" />
-                <span className="truncate">{hit.title}</span>
-                {hit.snippet ? (
-                  <span className="min-w-0 truncate text-xs text-muted-foreground">
-                    {hit.snippet}
-                  </span>
-                ) : null}
-              </CommandItem>
-            ))}
-          </CommandGroup>
-        ) : null}
-
-        {results && results.pegs.length > 0 ? (
-          <CommandGroup heading="记忆桩">
-            {results.pegs.map((hit) => (
-              <CommandItem
-                key={`peg-${hit.id}`}
-                value={`peg-${hit.id}-${query}`}
-                onSelect={() => runAndClose(() => navigate(`/palaces/${hit.palace_id}/edit`))}
-              >
-                <MapPin className="size-4" />
-                <span className="truncate">{hit.name}</span>
-                <span className="min-w-0 truncate text-xs text-muted-foreground">
-                  {hit.snippet || hit.palace_title}
-                </span>
-              </CommandItem>
-            ))}
-          </CommandGroup>
-        ) : null}
-
-        {results && results.questions.length > 0 ? (
-          <CommandGroup heading="题目">
-            {results.questions.map((hit) => (
-              <CommandItem
-                key={`question-${hit.id}`}
-                value={`question-${hit.id}-${query}`}
-                onSelect={() =>
-                  runAndClose(() => navigate(hit.palace_id ? `/palaces/${hit.palace_id}/quiz` : '/knowledge'))
-                }
-              >
-                <ListChecks className="size-4" />
-                <span className="min-w-0 truncate">{hit.snippet}</span>
-                {hit.palace_title ? (
-                  <span className="truncate text-xs text-muted-foreground">{hit.palace_title}</span>
-                ) : null}
-              </CommandItem>
-            ))}
-          </CommandGroup>
-        ) : null}
-
-        {results && results.chapters.length > 0 ? (
-          <CommandGroup heading="章节">
-            {results.chapters.map((hit) => (
-              <CommandItem
-                key={`chapter-${hit.id}`}
-                value={`chapter-${hit.id}-${query}`}
-                onSelect={() => runAndClose(() => navigate('/knowledge'))}
-              >
-                <FolderTree className="size-4" />
-                <span className="truncate">{hit.name}</span>
-                {hit.subject_name ? (
-                  <span className="truncate text-xs text-muted-foreground">{hit.subject_name}</span>
-                ) : null}
-              </CommandItem>
-            ))}
-          </CommandGroup>
-        ) : null}
-      </CommandList>
-    </CommandDialog>
+    </Suspense>
   )
 }

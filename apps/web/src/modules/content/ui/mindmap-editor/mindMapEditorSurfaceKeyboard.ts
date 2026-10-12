@@ -28,6 +28,24 @@ export function selectedInteraction(
   return { mode: 'selected', nodeIds: ids, primaryId: nextPrimary }
 }
 
+export function resolveArrowNavigationTarget(
+  nodes: ReadonlyArray<{ id: string; parentId?: string | null }>,
+  selectedId: string,
+  key: string,
+): string | null {
+  const selected = nodes.find((node) => node.id === selectedId)
+  if (!selected) return null
+  if (key === 'ArrowLeft') return selected.parentId ?? null
+  if (key === 'ArrowRight') {
+    return nodes.find((node) => node.parentId === selectedId)?.id ?? null
+  }
+  if (key !== 'ArrowUp' && key !== 'ArrowDown') return null
+  const siblings = nodes.filter((node) => (node.parentId ?? null) === (selected.parentId ?? null))
+  const index = siblings.findIndex((node) => node.id === selectedId)
+  const next = siblings[key === 'ArrowUp' ? index - 1 : index + 1]
+  return next?.id ?? null
+}
+
 export function createMindMapCanvasKeyDownHandler(deps: {
   canEdit: boolean
   selectedNodeId: string | null
@@ -39,6 +57,7 @@ export function createMindMapCanvasKeyDownHandler(deps: {
   handleAddChildWithoutFocus: (nodeId: string) => void
   handleAddSibling: (nodeId: string) => void
   beginEditingNode: (nodeId: string) => void
+  selectNode: (nodeId: string) => void
   handleDeleteNodes: (nodeIds: string[]) => void
   pendingKeyboardFocusNodeIdRef: { current: string | null }
 }) {
@@ -66,6 +85,19 @@ export function createMindMapCanvasKeyDownHandler(deps: {
     if (!selectedNode) return
     const multiSelected = deps.selectedNodeIds.length > 1
 
+    if (
+      event.key.startsWith('Arrow') &&
+      !event.shiftKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.altKey
+    ) {
+      const nextId = resolveArrowNavigationTarget(deps.graphNodes, deps.selectedNodeId, event.key)
+      if (nextId == null) return
+      event.preventDefault()
+      deps.selectNode(nextId)
+      return
+    }
     if (event.key === 'Tab' && !event.ctrlKey && !event.metaKey && !event.altKey) {
       if (multiSelected) return
       event.preventDefault()

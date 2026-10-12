@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ProfileFeedbackPage from '@/modules/settings/ui/profile/ProfileFeedbackPage'
@@ -68,13 +68,13 @@ describe('ProfileFeedbackPage', () => {
     ).toBe('false')
   })
 
-  it('applies a preset as a draft and confirms save inline', () => {
+  it('applies a preset as a draft and autosaves it without a save button', async () => {
     renderPage()
 
     fireEvent.click(screen.getByRole('button', { name: /专注/ }))
-    expect(screen.getByText('有尚未保存的更改')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: '保存设置' }))
-    expect(screen.getByRole('status').textContent).toContain('反馈偏好已保存')
+    expect(screen.getByText('正在保存…')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '保存设置' })).toBeNull()
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('已保存'), { timeout: 2000 })
   })
 
   it('previews answer sounds without answer confetti', () => {

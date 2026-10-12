@@ -89,8 +89,6 @@ export const LONG_PRESS_MOVE_TOLERANCE_PX = 18
 export const SYNTHETIC_CONTEXT_MENU_WINDOW_MS = 1_000
 /** Ignore blur right after entering edit (layout/toolbar teardown can steal focus). */
 export const EDIT_BLUR_GUARD_MS = 180
-/** Retry focus after enter-edit; RF toolbar teardown / layout can steal it once. */
-export const EDIT_FOCUS_RETRY_DELAYS_MS = [0, 16, 50, 120] as const
 
 export interface EditSnapshot {
   value: string

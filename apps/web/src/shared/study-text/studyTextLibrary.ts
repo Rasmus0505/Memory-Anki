@@ -37,6 +37,11 @@ interface StudyTextSnapshot {
 
 const CATALOG_REFRESH_DELAYS_MS = [0, 500, 1500, 4000, 10000, 20000]
 
+// 首屏和目录刷新只需要书架（grouped + subjects）。每个宫殿的编辑文本、题目和
+// 绑定在进入该宫殿时按需取（消费端 peek 未命中会回退到各自的单宫殿接口），
+// 因此启动只拉 summary，把整库文本从首屏关键路径上摘掉。
+const STUDY_TEXT_LIBRARY_URL = '/study-text-library?scope=summary'
+
 let snapshot: StudyTextSnapshot | null = null
 let pending: Promise<StudyTextSnapshot> | null = null
 let settled = false
@@ -94,7 +99,7 @@ export function ensureStudyTextLibrary() {
     return Promise.reject(lastError ?? new Error('今天的文字没有准备好'))
   }
   if (!pending) {
-    pending = request<StudyTextLibraryResponse>('/study-text-library')
+    pending = request<StudyTextLibraryResponse>(STUDY_TEXT_LIBRARY_URL)
       .then((payload) => {
         snapshot = indexPayload(payload)
         applyPatches(snapshot)
@@ -119,7 +124,8 @@ export function forgetPreparedCatalog() {
 }
 
 function pullNewerCatalog(previous: string | null, token: number, attempt: number) {
-  request<StudyTextLibraryResponse>('/study-text-library')
+  // 目录刷新只关心 grouped/subjects 和 prepared_at，与首屏口径一致用 summary。
+  request<StudyTextLibraryResponse>(STUDY_TEXT_LIBRARY_URL)
     .then((payload) => {
       if (token !== catalogRefreshToken || !snapshot) return
       const preparedAt = payload.prepared_at ?? null

@@ -7,7 +7,7 @@ import {
   type MindMapBranchScope,
   type MindMapExtractPlacement,
 } from '@/modules/content/domain/mindmap-document-entity'
-import { toast } from '@/shared/feedback/toast'
+import { toast, UNDO_TOAST_DURATION_MS } from '@/shared/feedback/toast'
 import { playEditLayeredPops } from '@/shared/feedback/mindmap-audio/webAudioFeedback'
 import {
   addEditorDocChildWithResult,
@@ -142,7 +142,7 @@ export function useMindMapEditorDocActions(deps: {
       playEditLayeredPops({ role: 'remove', count: removedCount })
       toast.success(
         removedCount > 1 ? `已删除整条分支（${removedCount} 张卡片）` : '已删除卡片',
-        { action: { label: '撤销', onClick: undoEditorDoc } },
+        { duration: UNDO_TOAST_DURATION_MS, action: { label: '撤销', onClick: undoEditorDoc } },
       )
     },
     [branchScope, commitEditorDoc, confirmDeleteNodes, getCurrentEditorDoc, onNodeActive, replaceInteraction, undoEditorDoc],
@@ -174,6 +174,7 @@ export function useMindMapEditorDocActions(deps: {
       onNodeActive?.([])
       playEditLayeredPops({ role: 'remove', count: removedCount })
       toast.success(`已删除 ${unique.length} 处选中（共 ${removedCount} 张卡片）`, {
+        duration: UNDO_TOAST_DURATION_MS,
         action: { label: '撤销', onClick: undoEditorDoc },
       })
     },
@@ -276,6 +277,7 @@ export function useMindMapEditorDocActions(deps: {
       // the pop count is the children who moved, not the one card that left.
       playEditLayeredPops({ role: 'lift', count: Math.max(promotedCount, 1) })
       toast.success('已单独删除卡片，子级已提升', {
+        duration: UNDO_TOAST_DURATION_MS,
         action: { label: '撤销', onClick: undoEditorDoc },
       })
     },
@@ -302,6 +304,7 @@ export function useMindMapEditorDocActions(deps: {
       onNodeActive?.([])
       playEditLayeredPops({ role: 'lift', count: Math.max(promotedCount, 1) })
       toast.success(`已单独删除 ${unique.length} 张卡片，子级已提升`, {
+        duration: UNDO_TOAST_DURATION_MS,
         action: { label: '撤销', onClick: undoEditorDoc },
       })
     },

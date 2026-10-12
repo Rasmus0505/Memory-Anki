@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Link } from 'react-router-dom'
-import { Check, RotateCcw, Save, Sparkles, Volume2, Zap } from 'lucide-react'
+import { Check, RotateCcw, Sparkles, Volume2, Zap } from 'lucide-react'
 import { ProfileLayout } from '@/modules/settings/ui/profile/ProfileLayout'
 import { emitReviewConfetti } from '@/shared/components/celebration'
 import { useMindMapFeedbackAudio } from '@/shared/feedback/mindmap-audio/useMindMapFeedback'
@@ -8,7 +8,6 @@ import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
 import { Switch } from '@/shared/components/ui/switch'
-import { InlineFeedback } from '@/shared/feedback/FeedbackStatus'
 import { SOUND_VOICE_OPTIONS, type SoundVoiceId } from '@/shared/feedback/mindmap-audio/soundVoices'
 import {
   DEFAULT_REVIEW_FEEDBACK_SETTINGS,
@@ -29,6 +28,8 @@ import {
   FeedbackSceneEditor,
 } from '@/modules/settings/ui/profile/components/FeedbackSceneEditor'
 import { cn } from '@/shared/lib/utils'
+import { useAutosaveDocument } from '@/shared/hooks/useAutosaveDocument'
+import { useUnsavedChangesGuard } from '@/shared/hooks/useUnsavedChangesGuard'
 
 const PRESET_OPTIONS: Array<{
   value: FeedbackPreset
@@ -146,10 +147,6 @@ export default function ProfileFeedbackPage() {
   const [draftSettings, setDraftSettings] = React.useState<ReviewFeedbackSettings>(() =>
     cloneSettings(readReviewFeedbackSettings()),
   )
-  const [status, setStatus] = React.useState<{
-    tone: 'success' | 'warning'
-    message: string
-  } | null>(null)
   const effectiveVolume = getReviewFeedbackEffectiveVolume(draftSettings)
   const audio = useMindMapFeedbackAudio(
     draftSettings.soundEnabled,
@@ -180,7 +177,6 @@ export default function ProfileFeedbackPage() {
 
   const updateDraft = React.useCallback(
     (updater: (current: ReviewFeedbackSettings) => ReviewFeedbackSettings) => {
-      setStatus(null)
       setDraftSettings((current) => updater(current))
     },
     [],
@@ -201,17 +197,15 @@ export default function ProfileFeedbackPage() {
     [updateDraft],
   )
 
-  const save = React.useCallback(() => {
-    const next = writeReviewFeedbackSettings(draftSettings)
-    setSavedSettings(cloneSettings(next))
-    setDraftSettings(cloneSettings(next))
-    setStatus({ tone: 'success', message: '反馈偏好已保存' })
-  }, [draftSettings])
+  const { status: autosaveStatus } = useAutosaveDocument({
+    value: draftSettings,
+    persist: writeReviewFeedbackSettings,
+  })
+  useUnsavedChangesGuard(autosaveStatus === 'pending' || autosaveStatus === 'saving')
 
   const reset = React.useCallback(() => {
     const next = applyFeedbackPreset(cloneSettings(DEFAULT_REVIEW_FEEDBACK_SETTINGS), 'balanced')
     setDraftSettings(next)
-    setStatus(null)
   }, [])
 
   const previewMilestone = React.useCallback(() => {
@@ -613,17 +607,20 @@ export default function ProfileFeedbackPage() {
 
         <div className="sticky bottom-20 z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/70 bg-background/95 p-3 shadow-lg backdrop-blur sm:bottom-4">
           <div className="flex min-h-8 items-center gap-2">
-            {status ? <InlineFeedback tone={status.tone} message={status.message} /> : null}
-            {!status && isDirty ? <span className="text-sm text-muted-foreground">有尚未保存的更改</span> : null}
+            <span className="text-sm text-muted-foreground" role="status" aria-live="polite">
+              {autosaveStatus === 'saving' || autosaveStatus === 'pending'
+                ? '正在保存…'
+                : autosaveStatus === 'error'
+                  ? '保存失败，请检查本机服务后重试'
+                  : autosaveStatus === 'saved'
+                    ? '已保存'
+                    : null}
+            </span>
           </div>
           <div className="flex gap-2">
             <Button type="button" variant="outline" onClick={reset}>
               <RotateCcw className="mr-2 size-4" />
               恢复默认
-            </Button>
-            <Button type="button" onClick={save} disabled={!isDirty}>
-              <Save className="mr-2 size-4" />
-              保存设置
             </Button>
           </div>
         </div>

@@ -56,8 +56,21 @@ def _build_study_text_library() -> dict:
 
 
 @router.get("/study-text-library")
-def api_study_text_library():
-    return read_prepared_study_text_library()
+def api_study_text_library(scope: str = "full"):
+    payload = read_prepared_study_text_library()
+    # The first screen only needs the shelf: grouped palaces and subjects. The
+    # per-palace editor text, questions and bindings are read when a palace is
+    # opened, so a summary read trims the startup payload without rebuilding it.
+    if scope == "summary":
+        return {
+            "editors": [],
+            "questions_by_palace": {},
+            "bindings_by_palace": {},
+            "grouped": payload.get("grouped"),
+            "subjects": payload.get("subjects"),
+            "prepared_at": payload.get("prepared_at"),
+        }
+    return payload
 
 
 @router.post("/study-text-library/prepare")

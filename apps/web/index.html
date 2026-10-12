@@ -10,6 +10,9 @@
     <script>
       ;(() => {
         try {
+          performance.mark('memory-anki:html')
+        } catch (e) {}
+        try {
           var t = localStorage.getItem('memory-anki-theme')
           var dark = t === 'dark' || ((t === null || t === 'system') && matchMedia('(prefers-color-scheme: dark)').matches)
           if (dark) {

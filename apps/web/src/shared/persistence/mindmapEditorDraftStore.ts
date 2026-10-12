@@ -1,4 +1,5 @@
 import type { MindMapEditorState } from '@/shared/api/contracts'
+import { toast } from '@/shared/feedback/toast'
 import { createIdbHandle } from '@/shared/persistence/indexedDb'
 
 export interface MindMapEditorDraftRecord {
@@ -88,8 +89,17 @@ export async function writeMindMapEditorDraft(input: {
   const putResult = await withStore('readwrite', (store) => store.put(record))
   if (putResult === null) {
     memoryStore.set(record.resourceKey, record)
+    warnMemoryOnlyDraftsOnce()
   }
   return record
+}
+
+let memoryOnlyWarningShown = false
+
+function warnMemoryOnlyDraftsOnce() {
+  if (memoryOnlyWarningShown) return
+  memoryOnlyWarningShown = true
+  toast.warning('当前浏览器无法离线暂存，刷新页面前请确认内容已保存。')
 }
 
 export async function readMindMapEditorDraft(
@@ -105,12 +115,8 @@ export async function readMindMapEditorDraft(
 }
 
 export async function clearMindMapEditorDraft(resourceKey: string): Promise<void> {
-  const result = await withStore('readwrite', (store) => store.delete(resourceKey))
-  if (result === null) {
-    memoryStore.delete(resourceKey)
-  } else {
-    memoryStore.delete(resourceKey)
-  }
+  await withStore('readwrite', (store) => store.delete(resourceKey))
+  memoryStore.delete(resourceKey)
 }
 
 export interface MindMapEditorConflict {

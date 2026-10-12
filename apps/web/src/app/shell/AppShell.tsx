@@ -20,6 +20,7 @@ import {
 } from '@/app/router/appRoutes'
 import { prefetchDashboardApi } from '@/modules/dashboard/public'
 import { ensureStudyTextLibrary } from '@/shared/study-text/studyTextLibrary'
+import { markBoot } from '@/shared/lib/bootTiming'
 import { ShellProvider, useShellContext } from '@/shared/components/layout/ShellContext'
 import { useClientPreferenceBootstrap } from '@/app/providers/useClientPreferenceBootstrap'
 import { Badge } from '@/shared/components/ui/badge'
@@ -247,15 +248,11 @@ function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
       prefetchDashboardApi()
       return
     }
-    let cancelled = false
-    void ensureStudyTextLibrary()
-      .catch(() => undefined)
-      .finally(() => {
-        if (!cancelled) prefetchDashboardApi()
-      })
-    return () => {
-      cancelled = true
-    }
+    // Both warmups hit independent endpoints — the dashboard summary never reads
+    // the study-text library — so start them together instead of waiting on one
+    // before the other leaves.
+    void ensureStudyTextLibrary().catch(() => undefined)
+    prefetchDashboardApi()
   }, [pathname])
 
   useEffect(() => {
@@ -387,6 +384,10 @@ function ShellFrame({ children }: PropsWithChildren) {
   const rootRef = useRef<HTMLDivElement>(null)
 
   useClientPreferenceBootstrap()
+  // 首屏外壳挂载即视为「应用打开」的终点，配合入口打点显示整段启动耗时。
+  useEffect(() => {
+    markBoot('shell')
+  }, [])
   const immersiveRef = useRef(immersiveFeed)
   immersiveRef.current = immersiveFeed
   useEffect(() => installUiSounds(() => immersiveRef.current), [])

@@ -293,8 +293,14 @@ export default defineConfig({
           if (id.includes('node_modules/lucide-react/')) {
             return 'icons-vendor'
           }
-          if (id.includes('node_modules/sonner/') || id.includes('node_modules/cmdk/')) {
+          if (id.includes('node_modules/sonner/')) {
             return 'ui-vendor'
+          }
+          // cmdk 不做强制分组：它只被懒加载的命令面板引用，跟随动态导入
+          // 自然成为异步块。若并入 ui-vendor，会和首屏静态引用的 sonner 同组，
+          // 把 cmdk 一起拉进首屏。
+          if (id.includes('node_modules/cmdk/')) {
+            return undefined
           }
           // @xyflow 与 recharts 不做强制分组：它们只被懒加载边界
           // （MindMapCanvasLazy / *.view.tsx）引用，跟随动态导入自然成为
