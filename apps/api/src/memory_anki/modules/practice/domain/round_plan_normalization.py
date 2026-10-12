@@ -57,6 +57,7 @@ def _partial_settlements(raw: Any) -> list[dict[str, Any]]:
                                 "palace_title": _text(palace.get("palace_title"))[:80]
                                 or (f"宫殿 {palace_id}" if palace_id else "未分类"),
                                 "card_count": max(0, _int(palace.get("card_count"))),
+                                "total_units": max(0, _int(palace.get("total_units"))),
                             }
                         )
                 subjects.append(
@@ -65,6 +66,7 @@ def _partial_settlements(raw: Any) -> list[dict[str, Any]]:
                         "subject_name": _text(subject.get("subject_name"))[:80] or "未分类",
                         "palace_count": max(0, _int(subject.get("palace_count"))) or len(palaces),
                         "card_count": max(0, _int(subject.get("card_count"))),
+                        "total_units": max(0, _int(subject.get("total_units"))),
                         "palaces": palaces,
                     }
                 )
@@ -75,6 +77,8 @@ def _partial_settlements(raw: Any) -> list[dict[str, Any]]:
                 "card_count": max(len(card_ids), _int(item.get("card_count"))),
                 "rated_count": max(0, _int(item.get("rated_count"))),
                 "passed_count": max(0, _int(item.get("passed_count"))),
+                "new_count": max(0, _int(item.get("new_count"))),
+                "review_count": max(0, _int(item.get("review_count"))),
                 "retry_count": max(0, _int(item.get("retry_count"))),
                 "quiz_count": max(0, _int(item.get("quiz_count"))),
                 "by_subject": subjects,
@@ -124,6 +128,7 @@ def snapshot_cards(cards: Sequence[Mapping[str, Any]] | None, *, today: str = ""
                 "palace_title": _text(card.get("palace_title")),
                 "label": label or card_id,
                 "entered_on": _day(card.get("entered_on")) or stamp,
+                "is_new": bool(card.get("is_new")),
             }
         )
     return result
@@ -160,6 +165,7 @@ def normalize_plan(plan: Mapping[str, Any] | None) -> Plan:
                 "palace_title": _text(item.get("palace_title")),
                 "label": _text(item.get("label")) or card_id,
                 "entered_on": _day(item.get("entered_on")),
+                "is_new": bool(item.get("is_new")),
             }
         )
     occurrences = []

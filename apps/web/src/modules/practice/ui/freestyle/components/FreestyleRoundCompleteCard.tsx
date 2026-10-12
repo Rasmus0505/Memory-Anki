@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { ChevronDown, RotateCcw, Sparkles, Trophy } from 'lucide-react'
+import { ChevronDown, Sparkles, Trophy } from 'lucide-react'
 import type { FreestylePartialSettlementSnapshot } from '@/modules/practice/domain/partialSettlement'
 import type { FreestyleRoundCompletion } from '@/modules/practice/ui/freestyle/model/roundCompletion'
 import { settlementQuizClearCopy } from '@/modules/practice/ui/freestyle/model/overlayQuizClearance'
@@ -97,19 +97,16 @@ function StatTile({
 }
 
 /**
- * Closing slot of a round: overview stats, subject/palace time breakdown,
- * one choice to clear 做题 progress for every palace in this 随心配置,
- * and 「再来一轮」 to reopen config for a fresh server round.
+ * Closing slot of a 随心 round for the 小结算 batch and the 结束本次学习 pause.
+ * The round-complete summary lives in FreestyleRoundSettlement.
  */
 export function FreestyleRoundCompleteCard({
   completion,
   roundKey,
   quizPalaceCount,
   onClearQuizProgress,
-  onAnotherRound,
   onCancelSettlement,
-  examSummary,
-  variant = 'round',
+  variant,
   partialSettlements = [],
   onConfirmPartial,
   onFinishStudy,
@@ -120,13 +117,10 @@ export function FreestyleRoundCompleteCard({
   roundKey: string
   quizPalaceCount: number
   onClearQuizProgress: () => Promise<void>
-  onAnotherRound?: () => void
   /** Leave this slot and return to the previous card. */
   onCancelSettlement: () => void
-  /** Exam progress block (lit knowledge points, weak spots, goal delta). */
-  examSummary?: ReactNode
-  /** 小结算 confirms a finished batch. 大结算 is the closing round page. */
-  variant?: 'round' | 'partial' | 'study'
+  /** 小结算 confirms a finished batch. 结束本次学习 pauses the round without passing it. */
+  variant: 'partial' | 'study'
   partialSettlements?: readonly FreestylePartialSettlementSnapshot[]
   onConfirmPartial?: () => void
   /** Finish this visit only; never marks the underlying round or its units passed. */
@@ -181,7 +175,7 @@ export function FreestyleRoundCompleteCard({
           className="ma-pressable mb-4 flex w-full items-center justify-center rounded-2xl border border-stage-line-strong px-4 py-3 text-sm font-medium text-stage-ink hover:bg-stage-ink/8"
           onClick={onCancelSettlement}
         >
-          {partial ? '取消结算' : study ? '继续本轮学习' : '返回上一张'}
+          {partial ? '取消结算' : '继续本轮学习'}
         </button>
         <Rise index={0} className="text-center">
           {!study ? (
@@ -193,7 +187,7 @@ export function FreestyleRoundCompleteCard({
           ) : null}
           <div className="mt-3 flex items-center justify-center gap-3">
             <div className="text-xs font-semibold tracking-[0.18em] text-stage-glow">
-              {partial ? '小结算' : study ? '结束本次学习' : '本轮总结'}
+              {partial ? '小结算' : '结束本次学习'}
             </div>
             <button
               type="button"
@@ -234,8 +228,6 @@ export function FreestyleRoundCompleteCard({
             结束本次学习不等于全部通过。未评分和未通过的内容会保留在同一轮，下次继续；不会补记通过或重置复习安排。
           </p>
         ) : null}
-
-        {!partial && examSummary ? <Rise index={7}>{examSummary}</Rise> : null}
 
         {!partial && partialSettlements.length ? (
           <Rise index={7}>
@@ -420,27 +412,6 @@ export function FreestyleRoundCompleteCard({
             >
               确认结算
             </button>
-          ) : onAnotherRound ? (
-            <button
-              type="button"
-              data-testid="freestyle-round-another"
-              className="ma-pressable fs-cta-shine relative mt-2 flex w-full items-center justify-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-r from-primary to-primary-strong px-4 py-3 text-sm font-semibold text-primary-foreground shadow-glow hover:brightness-110"
-              disabled={!quizChoiceResolved}
-              onClick={onAnotherRound}
-            >
-              <RotateCcw className="size-4" />
-              配置下一轮
-            </button>
-          ) : null}
-          {!partial && onAnotherRound ? (
-            <>
-              <p className="mt-2 text-center text-xs leading-5 text-stage-muted">
-                将打开本轮配置；确认后才会开始新一轮。已完成单元的复习安排不会因本按钮重置。
-              </p>
-              <p className="mt-1 text-center text-[11px] leading-5 text-stage-muted">
-                跨设备继续时，系统会合并本轮已完成进度；遇到版本更新的复习单元会按最新内容重新确认。
-              </p>
-            </>
           ) : null}
         </Rise>
       </div>

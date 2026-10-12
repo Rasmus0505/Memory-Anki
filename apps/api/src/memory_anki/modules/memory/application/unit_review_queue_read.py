@@ -9,6 +9,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables.palaces import Palace
@@ -21,6 +22,8 @@ from .unit_review_projection import json_load_list
 
 __all__ = [
     "list_palace_ids_without_units",
+    "count_active_units_by_palace",
+    "count_units_due_on",
     "list_round_unit_ratings",
     "list_trusted_due_units_for_queue",
     "list_unit_node_members",
@@ -147,6 +150,7 @@ def list_trusted_due_units_for_queue(
             ReviewUnitState.unit_kind,
             ReviewUnitState.node_uids_json,
             ReviewUnitState.revision,
+            ReviewUnitState.has_passed,
             Palace.group_sort_order,
             Palace.title,
             Palace.manual_title,
@@ -184,8 +188,47 @@ def list_trusted_due_units_for_queue(
                 "unit_kind": str(row.unit_kind or ""),
                 "node_uids": node_uids,
                 "revision": int(row.revision or 1),
+                "has_passed": bool(row.has_passed),
                 "title": title,
                 "group_sort_order": int(row.group_sort_order or 0),
             }
         )
     return result
+
+
+def count_active_units_by_palace(
+    session: Session,
+    palace_ids: list[int],
+) -> dict[int, int]:
+    """Active review-unit totals per palace, the denominator for round progress."""
+    ids = [int(pid) for pid in palace_ids if int(pid) > 0]
+    if not ids:
+        return {}
+    rows = (
+        session.query(ReviewUnitState.palace_id, func.count(ReviewUnitState.id))
+        .join(Palace, Palace.id == ReviewUnitState.palace_id)
+        .filter(
+            ReviewUnitState.active.is_(True),
+            ReviewUnitState.palace_id.in_(ids),
+            Palace.deleted_at.is_(None),
+            Palace.archived.is_(False),
+        )
+        .group_by(ReviewUnitState.palace_id)
+        .all()
+    )
+    return {int(palace_id): int(count or 0) for palace_id, count in rows}
+
+
+def count_units_due_on(session: Session, day: date) -> int:
+    total = (
+        session.query(func.count(ReviewUnitState.id))
+        .join(Palace, Palace.id == ReviewUnitState.palace_id)
+        .filter(
+            ReviewUnitState.active.is_(True),
+            ReviewUnitState.due_date == day,
+            Palace.deleted_at.is_(None),
+            Palace.archived.is_(False),
+        )
+        .scalar()
+    )
+    return int(total or 0)

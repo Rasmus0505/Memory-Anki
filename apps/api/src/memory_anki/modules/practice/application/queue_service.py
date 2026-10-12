@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date, timedelta
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -15,6 +16,8 @@ from memory_anki.modules.exam.api import palace_priority_scores, resolve_stars_f
 from memory_anki.modules.memory.public.commands import reconcile_palace_units
 from memory_anki.modules.memory.public.queries import (
     list_palace_ids_without_units,
+    count_active_units_by_palace,
+    count_units_due_on,
     list_trusted_due_units_for_queue,
     resolve_unit_definitions,
 )
@@ -38,6 +41,11 @@ from ..domain.queue_builder import (
 from ..domain.review_units import ReviewUnitCandidate, context_path_including_anchor
 from ..domain.study_window import take_study_window
 from .round_read_lookups import restored_card_ids
+
+
+def build_tomorrow_due_summary(session: Session) -> dict[str, int]:
+    tomorrow = date.today() + timedelta(days=1)
+    return {"due_tomorrow_count": count_units_due_on(session, tomorrow)}
 
 
 def build_freestyle_queue(
@@ -288,10 +296,19 @@ def build_freestyle_queue(
         tail_pending = len(limited) < len(remaining)
     card_palace_ids = sorted({int(card.get("palace_id") or 0) for card in limited} - {0})
     stars_by_palace = resolve_stars_for_palaces(session, card_palace_ids) if card_palace_ids else {}
+    new_unit_ids = {str(row["id"]) for row in due_rows if not row.get("has_passed")}
     limited = [
-        {**card, "exam_stars": stars_by_palace.get(int(card.get("palace_id") or 0), 1)}
+        {
+            **card,
+            "exam_stars": stars_by_palace.get(int(card.get("palace_id") or 0), 1),
+            "is_new": str(card.get("unit_id") or "") in new_unit_ids,
+        }
         for card in limited
     ]
+    palace_unit_totals = count_active_units_by_palace(
+        session,
+        sorted(set(palace_meta) | set(card_palace_ids)),
+    )
     phase_stats = {
         "candidate_count": len(remaining),
         "scheduled_count": len(limited),
@@ -328,6 +345,7 @@ def build_freestyle_queue(
             "scheduled_count": len(limited),
             "tail_pending": tail_pending,
             "palace_leftover_due": palace_leftover_due,
+            "palace_unit_totals": palace_unit_totals,
         },
         "counts": {
             "mindmap_branch": sum(1 for card in limited if card.get("type") == "mindmap_branch"),

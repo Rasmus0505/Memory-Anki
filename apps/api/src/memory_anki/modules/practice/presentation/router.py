@@ -16,7 +16,10 @@ from memory_anki.modules.practice.application.history_service import (
     list_question_explanations,
 )
 from memory_anki.modules.practice.application.freestyle_overview import build_freestyle_overview
-from memory_anki.modules.practice.application.queue_service import build_freestyle_queue
+from memory_anki.modules.practice.application.queue_service import (
+    build_freestyle_queue,
+    build_tomorrow_due_summary,
+)
 from memory_anki.modules.practice.application.round_overlay_service import (
     drop_overlay_quiz_for_palaces,
     ensure_overlay_quiz,
@@ -364,3 +367,8 @@ def api_list_freestyle_question_explanations(
 @router.get("/freestyle/history-summary")
 def api_freestyle_history_summary(session: Session = Depends(session_dep)):
     return build_history_summary(session)
+
+
+@router.get("/freestyle/tomorrow-due")
+def api_freestyle_tomorrow_due(session: Session = Depends(session_dep)):
+    return build_tomorrow_due_summary(session)

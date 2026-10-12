@@ -929,6 +929,7 @@ export function useImmersiveQueue(
           queue_limit: Number(rawMeta.queue_limit) || nextConfig.queue_length,
           limit_reached: Boolean(rawMeta.limit_reached),
           palace_leftover_due: asLeftoverDue(rawMeta.palace_leftover_due),
+          palace_unit_totals: asLeftoverDue(rawMeta.palace_unit_totals),
         }
         const builtCards = nextCards
         // Do not persist this ordering plan. A mismatched round id would publish

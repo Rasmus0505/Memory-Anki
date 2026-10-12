@@ -11,7 +11,6 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { FreestyleProgressRail } from '@/modules/practice/ui/freestyle/components/FreestyleProgressRail'
 import { FreestyleRailParticles } from '@/modules/practice/ui/freestyle/components/FreestyleRailParticles'
 import { FreestyleRoundCompleteCard } from '@/modules/practice/ui/freestyle/components/FreestyleRoundCompleteCard'
-import { FreestyleSettlementPopup } from '@/modules/practice/ui/freestyle/components/FreestyleSettlementPopup'
 import { useFreestyleOverview } from '@/modules/practice/ui/freestyle/hooks/useFreestyleOverview'
 import { FreestyleStartOverview } from '@/modules/practice/ui/freestyle/components/FreestyleStartOverview'
 import { FreestyleConfigPreviewCard } from '@/modules/practice/ui/freestyle/components/FreestyleConfigPreviewCard'
@@ -22,6 +21,7 @@ import {
   markDayRecapShown,
 } from '@/modules/practice/ui/freestyle/model/freestyleDayRecap'
 import type { FreestyleSaveOutcome } from '@/modules/practice/ui/freestyle/model/freestyleSettlementModel'
+import { FreestyleRoundSettlement } from '@/modules/practice/ui/freestyle/components/FreestyleRoundSettlement'
 import {
   buildFreestyleProgressSummary,
   cardAmbientHsl,
@@ -29,6 +29,7 @@ import {
   retryChromeClass,
 } from '@/modules/practice/ui/freestyle/model/freestyleProgressSegments'
 import { useFreestyleFlowFeedback } from '@/modules/practice/ui/freestyle/hooks/useFreestyleFlowFeedback'
+import { useTomorrowDueCount } from '@/modules/practice/ui/freestyle/hooks/useTomorrowDueCount'
 import { preloadMindMapCanvas } from '@/shared/ui/mindmap-canvas'
 import {
   hydrateUnitPreviews,
@@ -112,8 +113,8 @@ import {
   waitForPalaceEditorLeave,
 } from '@/shared/events/palaceEditorLeaveGate'
 import { cn } from '@/shared/lib/utils'
-import { ExamCountdownChip, ExamRoundSummary, ExamStarBadge, useExamOverview } from '@/modules/exam/public'
-import { GrowthHudChip, GrowthRoundSettlement } from '@/modules/progression/public'
+import { ExamCountdownChip, ExamStarBadge, useExamOverview } from '@/modules/exam/public'
+import { GrowthHudChip } from '@/modules/progression/public'
 import { useRouteResidency } from '@/shared/routing/RouteResidency'
 
 const FREESTYLE_STALE_TOAST_ID = 'freestyle-stale-card'
@@ -331,6 +332,14 @@ export default function ImmersiveFreestylePage({
     roundPlan,
     queueState.hiddenIds,
   )
+  const dueTomorrowCount = useTomorrowDueCount(roundComplete)
+  const settlementMeta = {
+    saveOutcome: studySettlementSaveOutcome,
+    onRetrySave: () => { void retryRoundSave() },
+    remainingBefore: freestyleOverview.baseline?.round?.counts.remaining ?? null,
+    remainingAfter: freestyleOverview.overview?.round?.counts.remaining ?? null,
+    nextReviews: freestyleOverview.overview?.next_reviews ?? [],
+  }
   const {
     scrollRef,
     visualIndex,
@@ -656,11 +665,6 @@ export default function ImmersiveFreestylePage({
   const sequentialBlockedHint = null
 
   const { data: examOverview } = useExamOverview()
-  // Snapshot at round start so the settlement can show what this round lit up.
-  const examBaselineRef = useRef<{ roundId: string; overview: NonNullable<typeof examOverview> } | null>(null)
-  if (examOverview && examBaselineRef.current?.roundId !== queueState.roundId) {
-    examBaselineRef.current = { roundId: queueState.roundId, overview: examOverview }
-  }
 
   const roundCompletion = useMemo(
     () => foldPartialSettlementsIntoCompletion(
@@ -1179,9 +1183,8 @@ export default function ImmersiveFreestylePage({
                 data-testid="freestyle-round-complete-scroll"
                 className="fs-depth min-h-0 flex-1 overflow-y-auto overscroll-contain pt-[calc(env(safe-area-inset-top,0px)+4.75rem)]"
               >
-              <FreestyleRoundCompleteCard
+              <FreestyleRoundSettlement
                 completion={roundCompletion}
-                unscoredCount={unscoredCount}
                 roundKey={queueState.roundId}
                 quizPalaceCount={overlayRoundReviewPalaceIds(roundPlan).length}
                 onClearQuizProgress={clearConfiguredOverlayQuiz}
@@ -1192,13 +1195,8 @@ export default function ImmersiveFreestylePage({
                 onCancelSettlement={navigatePrevious}
                 onFinishStudy={finishStudy}
                 onAddDueToday={() => { void continueWithDueToday().catch((error: unknown) => toast.error(error instanceof Error ? error.message : '更新今天到期内容失败。')) }}
-                partialSettlements={roundPlan?.partialSettlements}
-                examSummary={
-                  <>
-                    <ExamRoundSummary baseline={examBaselineRef.current?.overview ?? null} roundKey={queueState.roundId} />
-                    <GrowthRoundSettlement roundKey={queueState.roundId} />
-                  </>
-                }
+                dueTomorrowCount={dueTomorrowCount}
+                {...settlementMeta}
               />
               </div>
             </div>
@@ -1210,22 +1208,19 @@ export default function ImmersiveFreestylePage({
             data-keyboard-shortcuts-suspended="true"
             className="absolute inset-0 z-[70] overflow-y-auto overscroll-contain bg-stage/95 backdrop-blur-sm"
           >
-            <FreestyleSettlementPopup
-              saveOutcome={studySettlementSaveOutcome}
-              onRetrySave={() => { void retryRoundSave() }}
-              ratedCount={roundCompletion.ratedCount}
-              passedCount={roundCompletion.passedCount}
-              remainingBefore={freestyleOverview.baseline?.round?.counts.remaining ?? roundCompletion.remainingCandidates}
-              remainingAfter={freestyleOverview.overview?.round?.counts.remaining ?? roundCompletion.remainingCandidates}
-              subjects={freestyleOverview.overview?.round?.by_subject ?? []}
-              palacesBySubject={roundCompletion.bySubject}
-              nextReviews={freestyleOverview.overview?.next_reviews ?? []}
-              onContinue={() => {
+            <FreestyleRoundSettlement
+              completion={roundCompletion}
+              roundKey={queueState.roundId}
+              quizPalaceCount={overlayRoundReviewPalaceIds(roundPlan).length}
+              onClearQuizProgress={clearConfiguredOverlayQuiz}
+              onAnotherRound={() => {
+                setStudySettlementRoundId(null)
                 setConfigIntent('nextRound')
                 setConfigOpen(true)
-                setStudySettlementRoundId(null)
               }}
-              onClose={() => setStudySettlementRoundId(null)}
+              onCancelSettlement={() => setStudySettlementRoundId(null)}
+              dueTomorrowCount={dueTomorrowCount}
+              {...settlementMeta}
             />
           </div>
         ) : null}
@@ -1298,6 +1293,10 @@ export default function ImmersiveFreestylePage({
                   retryCount: partialSettlement.retryCount,
                   remainingCandidates: 0,
                   quizCount: partialSettlement.quizCount,
+                  newCount: partialSettlement.newCount,
+                  reviewCount: partialSettlement.reviewCount,
+                  involvedUnitCount: partialSettlement.ratedCount,
+                  totalUnits: partialSettlement.bySubject.reduce((sum, subject) => sum + subject.totalUnits, 0),
                   bySubject: partialSettlement.bySubject,
                 }}
                 roundKey={`${queueState.roundId}:${partialSettlement.id}`}

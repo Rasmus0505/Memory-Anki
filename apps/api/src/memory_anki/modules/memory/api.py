@@ -12,6 +12,8 @@ from .application.unit_review_projection import (
 )
 from .application.unit_review_queue_read import (
     list_palace_ids_without_units,
+    count_active_units_by_palace,
+    count_units_due_on,
     list_round_unit_ratings,
     list_trusted_due_units_for_queue,
     list_unit_node_members,
@@ -76,6 +78,8 @@ __all__ = [
     "list_due_review_unit_ids",
     "list_due_units",
     "list_palace_ids_without_units",
+    "count_active_units_by_palace",
+    "count_units_due_on",
     "list_trusted_due_units_for_queue",
     "list_unit_node_members",
     "list_round_unit_ratings",

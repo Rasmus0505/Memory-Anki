@@ -10,14 +10,17 @@ import {
   type FreestyleUnitEncounterState,
 } from '@/modules/practice/public'
 import { isOccurrencePassed, isOccurrenceScored } from '@/modules/practice/domain/unitProgressState'
-import type { FreestylePartialSettlementSnapshot } from '@/modules/practice/domain/partialSettlement'
+import type { FreestylePartialSettlementSnapshot, FreestylePartialSettlementSubject } from '@/modules/practice/domain/partialSettlement'
 import type { FreestyleCard } from '@/shared/api/contracts'
 import { isReviewHintId } from '@/shared/api/contracts'
 
 export interface FreestyleRoundSubjectPalaceStat {
   palaceId: number
   palaceTitle: string
+  /** Units rated this round. */
   cardCount: number
+  /** Active units in the palace; the progress denominator. */
+  totalUnits: number
 }
 
 export interface FreestyleRoundSubjectStat {
@@ -25,6 +28,7 @@ export interface FreestyleRoundSubjectStat {
   subjectName: string
   palaceCount: number
   cardCount: number
+  totalUnits: number
   palaces: FreestyleRoundSubjectPalaceStat[]
 }
 
@@ -39,6 +43,14 @@ export interface FreestyleRoundCompletion {
   remainingCandidates: number
   /** Quiz cards handled in the feed plus overlay 做题. */
   quizCount: number
+  /** Rated units that had never passed before this round. */
+  newCount: number
+  /** Rated units that had passed before this round. */
+  reviewCount: number
+  /** Distinct units the round touched, rated or not. */
+  involvedUnitCount: number
+  /** Active units across the involved palaces; the overall progress denominator. */
+  totalUnits: number
   /** Attempted sources grouped by subject → palace for settlement. */
   bySubject: FreestyleRoundSubjectStat[]
 }
@@ -50,6 +62,10 @@ function sourceIdOf(card: FreestyleCard) {
 function encounterPassed(encounter: FreestyleUnitEncounterState | undefined) {
   const rating = Number(encounter?.selectedRating)
   return encounter?.passed === true || (encounter?.passed == null && rating >= 3)
+}
+
+function cardIsNew(card: FreestyleCard, roundPlan: FreestyleRoundPlanState | null) {
+  return ('is_new' in card && card.is_new === true) || roundPlan?.cardsById[card.id]?.isNew === true
 }
 
 function resolvePalaceTitle(card: FreestyleCard, palaceId: number) {
@@ -121,6 +137,7 @@ export function buildFreestyleRoundCompletion(
     retried: boolean
     handled: boolean
     attempted: boolean
+    isNew: boolean
     palaceId: number | null
     palaceTitle: string
     subjectId: number | null
@@ -136,6 +153,7 @@ export function buildFreestyleRoundCompletion(
       retried: false,
       handled: false,
       attempted: false,
+      isNew: false,
       palaceId: null,
       palaceTitle: '',
       subjectId: null,
@@ -147,6 +165,7 @@ export function buildFreestyleRoundCompletion(
     if (isOccurrenceScored(card.id, progressInput)) current.attempted = true
     if (isOccurrencePassed(card.id, progressInput)) current.passed = true
     if (isRetryOccurrence(card) || encounter?.passed === false) current.retried = true
+    if (cardIsNew(card, options?.roundPlan ?? null)) current.isNew = true
     // Prefer the source card for palace/subject labels; fall back to retry metadata.
     if (current.palaceId == null || !isRetryOccurrence(card)) {
       const palaceId = cardPalaceId(card)
@@ -169,16 +188,22 @@ export function buildFreestyleRoundCompletion(
   let ratedCount = 0
   let passedCount = 0
   let retriedCount = 0
+  let newCount = 0
+  let reviewCount = 0
+  const palaceUnitTotals = options?.roundPlan?.palaceUnitTotals ?? {}
   const subjectBuckets = new Map<string, {
     subjectId: number | null
     subjectName: string
-    palaces: Map<number, FreestyleRoundSubjectPalaceStat>
+    palaces: Map<number, { palaceId: number; palaceTitle: string; cardCount: number; involved: number }>
   }>()
   sources.forEach((entry) => {
-    if (!entry.attempted) return
-    ratedCount += 1
-    if (entry.passed) passedCount += 1
-    if (entry.retried) retriedCount += 1
+    if (entry.attempted) {
+      ratedCount += 1
+      if (entry.passed) passedCount += 1
+      if (entry.retried) retriedCount += 1
+      if (entry.isNew) newCount += 1
+      else reviewCount += 1
+    }
 
     const palaceId = entry.palaceId ?? 0
     const palaceTitle = entry.palaceTitle || `宫殿 ${palaceId}`
@@ -196,14 +221,24 @@ export function buildFreestyleRoundCompletion(
       palaceId,
       palaceTitle,
       cardCount: 0,
+      involved: 0,
     }
-    palace.cardCount += 1
+    palace.involved += 1
+    if (entry.attempted) palace.cardCount += 1
     if (!palace.palaceTitle && palaceTitle) palace.palaceTitle = palaceTitle
     subject.palaces.set(palaceId, palace)
   })
 
   const bySubject = Array.from(subjectBuckets.values()).map((subject) => {
-    const palaces = Array.from(subject.palaces.values()).sort((left, right) => (
+    const palaces: FreestyleRoundSubjectPalaceStat[] = Array.from(subject.palaces.values()).map((palace) => ({
+      palaceId: palace.palaceId,
+      palaceTitle: palace.palaceTitle,
+      cardCount: palace.cardCount,
+      totalUnits: Math.max(
+        palace.involved,
+        Math.round(Number(palaceUnitTotals[String(palace.palaceId)]) || 0),
+      ),
+    })).sort((left, right) => (
       right.cardCount - left.cardCount
       || left.palaceTitle.localeCompare(right.palaceTitle, 'zh')
     ))
@@ -212,6 +247,7 @@ export function buildFreestyleRoundCompletion(
       subjectName: subject.subjectName,
       palaceCount: palaces.length,
       cardCount: palaces.reduce((sum, palace) => sum + palace.cardCount, 0),
+      totalUnits: palaces.reduce((sum, palace) => sum + palace.totalUnits, 0),
       palaces,
     }
   }).sort((left, right) => (
@@ -226,6 +262,10 @@ export function buildFreestyleRoundCompletion(
     retryCount: retriedCount,
     remainingCandidates: Math.max(0, candidateCount - scheduledCount),
     quizCount: Math.max(0, Math.round(Number(options?.quizCount) || 0)),
+    newCount,
+    reviewCount,
+    involvedUnitCount: sources.size,
+    totalUnits: bySubject.reduce((sum, subject) => sum + subject.totalUnits, 0),
     bySubject,
   }
 }
@@ -544,9 +584,20 @@ export function buildPartialSettlementSnapshot(input: {
     cardCount: cardIds.length,
     ratedCount: completion.ratedCount,
     passedCount: completion.passedCount,
+    newCount: completion.newCount,
+    reviewCount: completion.reviewCount,
     retryCount: completion.retryCount,
     quizCount: completion.quizCount,
-    bySubject: completion.bySubject,
+    bySubject: completion.bySubject.flatMap((subject) => {
+      const palaces = subject.palaces.filter((palace) => palace.cardCount > 0)
+      if (!palaces.length) return []
+      return [{
+        ...subject,
+        palaceCount: palaces.length,
+        cardCount: palaces.reduce((sum, palace) => sum + palace.cardCount, 0),
+        palaces,
+      }]
+    }),
   }
 }
 
@@ -566,11 +617,64 @@ export function foldPartialSettlementsIntoCompletion(
   const ratedCount = completion.ratedCount + settled.reduce((sum, item) => sum + item.ratedCount, 0)
   const passedCount = completion.passedCount + settled.reduce((sum, item) => sum + item.passedCount, 0)
   const retryCount = completion.retryCount + settled.reduce((sum, item) => sum + item.retryCount, 0)
+  const bySubject = mergeRoundSubjects(completion.bySubject, settled.flatMap((item) => item.bySubject))
   return {
     ...completion,
     ratedCount,
     passedCount,
+    newCount: completion.newCount + settled.reduce((sum, item) => sum + item.newCount, 0),
+    reviewCount: completion.reviewCount + settled.reduce((sum, item) => sum + item.reviewCount, 0),
     retriedCount: completion.retriedCount + settled.reduce((sum, item) => sum + item.retryCount, 0),
     retryCount,
+    involvedUnitCount: completion.involvedUnitCount + settled.reduce((sum, item) => sum + item.ratedCount, 0),
+    totalUnits: bySubject.reduce((sum, subject) => sum + subject.totalUnits, 0),
+    bySubject,
   }
+}
+
+function mergeRoundSubjects(
+  live: readonly FreestyleRoundSubjectStat[],
+  settled: readonly FreestylePartialSettlementSubject[],
+): FreestyleRoundSubjectStat[] {
+  const subjects = new Map<string, {
+    subjectId: number | null
+    subjectName: string
+    palaces: Map<number, FreestyleRoundSubjectPalaceStat>
+  }>()
+  const add = (subject: FreestyleRoundSubjectStat | FreestylePartialSettlementSubject) => {
+    const key = subject.subjectId == null ? `name:${subject.subjectName}` : `id:${subject.subjectId}`
+    let bucket = subjects.get(key)
+    if (!bucket) {
+      bucket = { subjectId: subject.subjectId, subjectName: subject.subjectName, palaces: new Map() }
+      subjects.set(key, bucket)
+    }
+    for (const palace of subject.palaces) {
+      const current = bucket.palaces.get(palace.palaceId)
+      if (!current) {
+        bucket.palaces.set(palace.palaceId, { ...palace })
+        continue
+      }
+      current.cardCount += palace.cardCount
+      current.totalUnits = Math.max(current.totalUnits, palace.totalUnits)
+    }
+  }
+  live.forEach(add)
+  settled.forEach(add)
+  return Array.from(subjects.values()).map((subject) => {
+    const palaces = Array.from(subject.palaces.values()).sort((left, right) => (
+      right.cardCount - left.cardCount
+      || left.palaceTitle.localeCompare(right.palaceTitle, 'zh')
+    ))
+    return {
+      subjectId: subject.subjectId,
+      subjectName: subject.subjectName,
+      palaceCount: palaces.length,
+      cardCount: palaces.reduce((sum, palace) => sum + palace.cardCount, 0),
+      totalUnits: palaces.reduce((sum, palace) => sum + palace.totalUnits, 0),
+      palaces,
+    }
+  }).sort((left, right) => (
+    right.cardCount - left.cardCount
+    || left.subjectName.localeCompare(right.subjectName, 'zh')
+  ))
 }

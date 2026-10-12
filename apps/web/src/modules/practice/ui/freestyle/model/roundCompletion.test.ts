@@ -189,9 +189,10 @@ describe('buildFreestyleRoundCompletion', () => {
         subjectName: '学科甲',
         palaceCount: 2,
         cardCount: 2,
+        totalUnits: 2,
         palaces: [
-          { palaceId: 1, palaceTitle: '宫殿 A', cardCount: 1 },
-          { palaceId: 2, palaceTitle: '宫殿 B', cardCount: 1 },
+          { palaceId: 1, palaceTitle: '宫殿 A', cardCount: 1, totalUnits: 1 },
+          { palaceId: 2, palaceTitle: '宫殿 B', cardCount: 1, totalUnits: 1 },
         ],
       },
       {
@@ -199,8 +200,9 @@ describe('buildFreestyleRoundCompletion', () => {
         subjectName: '学科乙',
         palaceCount: 1,
         cardCount: 1,
+        totalUnits: 1,
         palaces: [
-          { palaceId: 3, palaceTitle: '宫殿 C', cardCount: 1 },
+          { palaceId: 3, palaceTitle: '宫殿 C', cardCount: 1, totalUnits: 1 },
         ],
       },
     ])
@@ -220,11 +222,29 @@ describe('buildFreestyleRoundCompletion', () => {
         subjectName: '未分类',
         palaceCount: 1,
         cardCount: 1,
+        totalUnits: 1,
         palaces: [
-          { palaceId: 9, palaceTitle: '独立宫殿', cardCount: 1 },
+          { palaceId: 9, palaceTitle: '独立宫殿', cardCount: 1, totalUnits: 1 },
         ],
       },
     ])
+  })
+
+  it('counts never-passed units as new and the rest as review', () => {
+    const cards = [
+      card('fresh', { palace_id: 1, palace_title: '宫殿 A', is_new: true }),
+      card('old', { palace_id: 1, palace_title: '宫殿 A' }),
+    ]
+    const completion = buildFreestyleRoundCompletion(
+      cards,
+      { fresh: encounter(), old: encounter() },
+      2,
+    )
+
+    expect(completion.newCount).toBe(1)
+    expect(completion.reviewCount).toBe(1)
+    expect(completion.involvedUnitCount).toBe(2)
+    expect(completion.totalUnits).toBe(2)
   })
 
   it('folds a confirmed 小结算 into 大结算 counts', () => {
@@ -238,6 +258,8 @@ describe('buildFreestyleRoundCompletion', () => {
         cardCount: 1,
         ratedCount: 1,
         passedCount: 1,
+        newCount: 0,
+        reviewCount: 1,
         retryCount: 0,
         quizCount: 0,
         bySubject: [],
@@ -245,6 +267,7 @@ describe('buildFreestyleRoundCompletion', () => {
       ['still'],
     )
     expect(folded.ratedCount).toBe(completion.ratedCount + 1)
+    expect(folded.reviewCount).toBe(completion.reviewCount + 1)
     expect(folded.passedCount).toBe(completion.passedCount + 1)
   })
 })

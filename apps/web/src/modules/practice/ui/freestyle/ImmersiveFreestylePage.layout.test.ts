@@ -54,7 +54,7 @@ describe('ImmersiveFreestylePage layout', () => {
   it('ends a visit independently of queue completion and reuses the existing round', () => {
     expect(source).not.toContain('data-testid="freestyle-finish-study"')
     expect(source).toContain('data-testid="freestyle-study-settlement"')
-    expect(source).toContain('<FreestyleSettlementPopup')
+    expect(source).toContain('<FreestyleRoundSettlement')
     expect(source).toContain('onFinishStudy={finishStudy}')
     expect(source).toContain('data-keyboard-shortcuts-suspended="true"')
     const finish = source.slice(source.indexOf('const finishStudy ='), source.indexOf('const continueWithDueToday ='))

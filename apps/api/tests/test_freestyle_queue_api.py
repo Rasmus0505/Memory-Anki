@@ -457,6 +457,134 @@ def test_same_day_due_units_follow_topology_order(session_factory):
     assert rows[0]["unit_kind"] == "cohort"
 
 
+def test_queue_reads_pass_state_and_palace_unit_totals(session_factory):
+    from datetime import timedelta
+
+    from memory_anki.modules.memory.api import (
+        count_active_units_by_palace,
+        list_trusted_due_units_for_queue,
+    )
+
+    session = session_factory()
+    palace = Palace(title="统计宫殿", editor_doc="{}", archived=False, group_sort_order=0)
+    session.add(palace)
+    session.flush()
+    session.add_all(
+        [
+            ReviewUnitState(
+                id="never-passed",
+                palace_id=palace.id,
+                anchor_uid="N",
+                unit_kind="mark",
+                node_uids_json='["N"]',
+                membership_hash="n",
+                content_hash="n",
+                revision=1,
+                stage_index=0,
+                has_passed=False,
+                due_date=date.today(),
+                active=True,
+            ),
+            ReviewUnitState(
+                id="passed-before",
+                palace_id=palace.id,
+                anchor_uid="P",
+                unit_kind="mark",
+                node_uids_json='["P"]',
+                membership_hash="p",
+                content_hash="p",
+                revision=1,
+                stage_index=1,
+                has_passed=True,
+                due_date=date.today(),
+                active=True,
+            ),
+            ReviewUnitState(
+                id="not-due-yet",
+                palace_id=palace.id,
+                anchor_uid="F",
+                unit_kind="mark",
+                node_uids_json='["F"]',
+                membership_hash="f",
+                content_hash="f",
+                revision=1,
+                stage_index=1,
+                has_passed=True,
+                due_date=date.today() + timedelta(days=3),
+                active=True,
+            ),
+            ReviewUnitState(
+                id="inactive",
+                palace_id=palace.id,
+                anchor_uid="I",
+                unit_kind="mark",
+                node_uids_json='["I"]',
+                membership_hash="i",
+                content_hash="i",
+                revision=1,
+                stage_index=0,
+                has_passed=False,
+                due_date=date.today(),
+                active=False,
+            ),
+        ]
+    )
+    session.commit()
+    palace_id = palace.id
+    rows = {row["id"]: row for row in list_trusted_due_units_for_queue(session, date.today(), [palace_id])}
+    totals = count_active_units_by_palace(session, [palace_id])
+    session.close()
+
+    assert set(rows) == {"never-passed", "passed-before"}
+    assert rows["never-passed"]["has_passed"] is False
+    assert rows["passed-before"]["has_passed"] is True
+    assert totals == {palace_id: 3}
+
+
+def test_tomorrow_due_counts_only_active_units_on_live_palaces(session_factory, make_client):
+    from datetime import timedelta
+
+    session = session_factory()
+    live = Palace(title="明天宫殿", editor_doc="{}", archived=False, group_sort_order=0)
+    archived = Palace(title="归档宫殿", editor_doc="{}", archived=True, group_sort_order=1)
+    session.add_all([live, archived])
+    session.flush()
+    tomorrow = date.today() + timedelta(days=1)
+    specs = [
+        (live.id, "tomorrow-a", tomorrow, True),
+        (live.id, "tomorrow-b", tomorrow, True),
+        (live.id, "today", date.today(), True),
+        (live.id, "day-after", tomorrow + timedelta(days=1), True),
+        (live.id, "tomorrow-inactive", tomorrow, False),
+        (archived.id, "tomorrow-archived", tomorrow, True),
+    ]
+    session.add_all(
+        ReviewUnitState(
+            id=unit_id,
+            palace_id=palace_id,
+            anchor_uid=unit_id,
+            unit_kind="mark",
+            node_uids_json=json.dumps([unit_id]),
+            membership_hash=unit_id,
+            content_hash=unit_id,
+            revision=1,
+            stage_index=1,
+            has_passed=True,
+            due_date=due,
+            active=active,
+        )
+        for palace_id, unit_id, due, active in specs
+    )
+    session.commit()
+    session.close()
+
+    freestyle_router.session_dep = session_dep
+    client = make_client(freestyle_router)
+    response = client.get("/api/v1/freestyle/tomorrow-due")
+    assert response.status_code == 200
+    assert response.json() == {"due_tomorrow_count": 2}
+
+
 def test_queue_study_window_is_a_prefix_of_the_full_order(session_factory, make_client):
     session = session_factory()
     first = Palace(

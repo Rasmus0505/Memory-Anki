@@ -317,6 +317,7 @@ function applyServerExcludedIds(
       attemptCount: 0,
       updatedAt: 0,
       ...(original?.entered_on ? { enteredOn: original.entered_on } : {}),
+      ...(original?.is_new === true ? { isNew: true } : {}),
     }
     const orderIds = [...next.orderIds]
     if (!orderIds.includes(id)) {

@@ -29,6 +29,8 @@ export interface FreestyleRoundPlanCard {
   attemptCount: number
   updatedAt: number
   enteredOn?: string
+  /** Unit had never passed when this round was built. */
+  isNew?: boolean
 }
 
 export interface FreestyleRoundPlanState {
@@ -45,6 +47,8 @@ export interface FreestyleRoundPlanState {
   compressedIds?: string[]
   /** Confirmed 小结算 pages. Survive compress so the closing 大结算 can show them. */
   partialSettlements?: FreestylePartialSettlementSnapshot[]
+  /** Active unit totals per palace id, captured at round build as the progress denominator. */
+  palaceUnitTotals?: Record<string, number>
 }
 
 export interface FreestyleRoundMeta {
@@ -53,6 +57,7 @@ export interface FreestyleRoundMeta {
   queue_limit: number
   limit_reached: boolean
   palace_leftover_due?: Record<string, number>
+  palace_unit_totals?: Record<string, number>
 }
 
 function asString(value: unknown) {
@@ -88,6 +93,14 @@ function asStringList(value: unknown) {
   })
 }
 
+function asCountMap(value: unknown): Record<string, number> | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const entries = Object.entries(value as Record<string, unknown>).map(
+    ([key, count]) => [key, Math.max(0, Math.round(Number(count) || 0))] as const,
+  )
+  return entries.length ? Object.fromEntries(entries) : undefined
+}
+
 function asCards(value: unknown) {
   if (!value || typeof value !== 'object') return {}
   const result: Record<string, FreestyleRoundPlanCard> = {}
@@ -109,6 +122,7 @@ function asCards(value: unknown) {
       attemptCount: Math.max(0, Math.round(Number(item.attemptCount) || 0)),
       updatedAt: Number.isFinite(Number(item.updatedAt)) ? Number(item.updatedAt) : 0,
       enteredOn: asString(item.enteredOn) || undefined,
+      ...(item.isNew === true ? { isNew: true } : {}),
     }
   })
   return result
@@ -140,6 +154,7 @@ export function sanitizeRoundPlan(value: unknown): FreestyleRoundPlanState | nul
     today: asString(raw.today) || undefined,
     compressedIds,
     partialSettlements: parsePartialSettlements(raw.partialSettlements),
+    palaceUnitTotals: asCountMap(raw.palaceUnitTotals),
   })
 }
 
@@ -284,6 +299,7 @@ export function createRoundPlan(
         attemptCount: 0,
         updatedAt: now,
         enteredOn: existing?.enteredOn,
+        ...('is_new' in card && card.is_new === true ? { isNew: true } : {}),
       }
     }
   })
@@ -366,6 +382,9 @@ export function createRoundPlan(
     today: prior?.today,
     compressedIds: compressed.size ? [...compressed] : prior?.compressedIds,
     partialSettlements: prior?.partialSettlements,
+    palaceUnitTotals: meta?.palace_unit_totals || prior?.palaceUnitTotals
+      ? { ...prior?.palaceUnitTotals, ...meta?.palace_unit_totals }
+      : undefined,
   })
 }
 

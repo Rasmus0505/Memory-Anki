@@ -129,6 +129,10 @@ export function getFreestyleHistorySummaryApi() {
   return request<FreestyleHistorySummary>('/freestyle/history-summary')
 }
 
+export function getFreestyleTomorrowDueApi(options?: Pick<RequestInit, 'signal'>) {
+  return request<{ due_tomorrow_count: number }>('/freestyle/tomorrow-due', options)
+}
+
 export function getWrongQuestionsApi(limit = 200) {
   return request<WrongQuestionsResponse>(`/palace-quiz-questions/wrong?limit=${limit}`)
 }

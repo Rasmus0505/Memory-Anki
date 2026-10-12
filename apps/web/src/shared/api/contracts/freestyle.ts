@@ -215,6 +215,8 @@ interface FreestylePalaceCardBase {
   palace_id: number
   /** Resolved exam importance 1-3, attached by the queue builder. */
   exam_stars?: number
+  /** Unit has never passed; false for review. Attached by the queue builder. */
+  is_new?: boolean
   palace_title?: string
   anchor_uid: string
   context_path: FreestyleContextPathItem[]
@@ -370,6 +372,7 @@ export interface FreestyleRoundOriginalCard {
   palace_title: string
   label: string
   entered_on?: string
+  is_new?: boolean
 }
 
 export interface FreestyleRoundOccurrence {
@@ -644,6 +647,8 @@ export interface FreestyleQueueBuildResponse {
     tail_pending?: boolean
     /** Today's due review units left out of this round, keyed by palace id. */
     palace_leftover_due?: Record<string, number>
+    /** Active review units per palace in scope, the denominator for round progress. */
+    palace_unit_totals?: Record<string, number>
   }
   counts: {
     mindmap_branch: number

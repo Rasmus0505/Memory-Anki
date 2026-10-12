@@ -7,6 +7,7 @@ export interface FreestylePartialSettlementPalace {
   palaceId: number
   palaceTitle: string
   cardCount: number
+  totalUnits: number
 }
 
 export interface FreestylePartialSettlementSubject {
@@ -14,6 +15,7 @@ export interface FreestylePartialSettlementSubject {
   subjectName: string
   palaceCount: number
   cardCount: number
+  totalUnits: number
   palaces: FreestylePartialSettlementPalace[]
 }
 
@@ -23,6 +25,8 @@ export interface FreestylePartialSettlementSnapshot {
   cardCount: number
   ratedCount: number
   passedCount: number
+  newCount: number
+  reviewCount: number
   retryCount: number
   quizCount: number
   bySubject: FreestylePartialSettlementSubject[]
@@ -57,6 +61,7 @@ function asSubjects(value: unknown): FreestylePartialSettlementSubject[] {
             palaceId,
             palaceTitle: asString(row.palaceTitle) || asString(row.palace_title) || (palaceId ? `宫殿 ${palaceId}` : '未分类'),
             cardCount: asCount(row.cardCount ?? row.card_count),
+            totalUnits: asCount(row.totalUnits ?? row.total_units),
           }]
         })
       : []
@@ -65,6 +70,7 @@ function asSubjects(value: unknown): FreestylePartialSettlementSubject[] {
       subjectName,
       palaceCount: asCount(item.palaceCount ?? item.palace_count) || palaces.length,
       cardCount: asCount(item.cardCount ?? item.card_count),
+      totalUnits: asCount(item.totalUnits ?? item.total_units),
       palaces,
     }]
   })
@@ -87,6 +93,8 @@ export function parsePartialSettlement(value: unknown): FreestylePartialSettleme
     cardCount: asCount(raw.cardCount ?? raw.card_count) || ids.length,
     ratedCount: asCount(raw.ratedCount ?? raw.rated_count),
     passedCount: asCount(raw.passedCount ?? raw.passed_count),
+    newCount: asCount(raw.newCount ?? raw.new_count),
+    reviewCount: asCount(raw.reviewCount ?? raw.review_count),
     retryCount: asCount(raw.retryCount ?? raw.retry_count),
     quizCount: asCount(raw.quizCount ?? raw.quiz_count),
     bySubject: asSubjects(raw.bySubject ?? raw.by_subject),
@@ -126,6 +134,8 @@ export function toServerPartialSettlement(snapshot: FreestylePartialSettlementSn
     card_count: snapshot.cardCount,
     rated_count: snapshot.ratedCount,
     passed_count: snapshot.passedCount,
+    new_count: snapshot.newCount,
+    review_count: snapshot.reviewCount,
     retry_count: snapshot.retryCount,
     quiz_count: snapshot.quizCount,
     by_subject: snapshot.bySubject.map((subject) => ({
@@ -133,10 +143,12 @@ export function toServerPartialSettlement(snapshot: FreestylePartialSettlementSn
       subject_name: subject.subjectName,
       palace_count: subject.palaceCount,
       card_count: subject.cardCount,
+      total_units: subject.totalUnits,
       palaces: subject.palaces.map((palace) => ({
         palace_id: palace.palaceId,
         palace_title: palace.palaceTitle,
         card_count: palace.cardCount,
+        total_units: palace.totalUnits,
       })),
     })),
   }
