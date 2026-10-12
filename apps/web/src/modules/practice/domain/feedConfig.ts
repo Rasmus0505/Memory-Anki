@@ -93,20 +93,6 @@ export const DEFAULT_QUIZ_MASTERY_BUCKETS: FreestyleQuizMasteryBucket[] = [
   'reinforce',
 ]
 
-export type FreestyleQuickPresetId = 'quiz' | 'english' | 'memory_palace'
-
-export interface FreestyleQuickPreset {
-  id: FreestyleQuickPresetId
-  label: string
-  description: string
-}
-
-export const FREESTYLE_QUICK_PRESETS: FreestyleQuickPreset[] = [
-  { id: 'quiz', label: '刷题', description: '只进入练习题' },
-  { id: 'english', label: '英语', description: '记忆宫殿 + 英语学科' },
-  { id: 'memory_palace', label: '记忆宫殿', description: '只刷宫殿卡（全部学科）' },
-]
-
 export const DEFAULT_FREESTYLE_FEED_CONFIG: FreestyleFeedConfig = {
   training_mode: 'mixed',
   mixed_modes: ['memory_palace', 'quiz'],
@@ -684,63 +670,6 @@ export function freestylePalaceScopeSignature(config: FreestyleFeedConfig): stri
       specific_palace_ids: [...config.streams.english.specific_palace_ids].sort((left, right) => left - right),
       subject_scope: config.streams.english.subject_scope,
       subject_ids: [...config.streams.english.subject_ids].sort((left, right) => left - right),
-    },
-  })
-}
-
-export function applyFreestyleQuickPreset(
-  config: FreestyleFeedConfig,
-  presetId: FreestyleQuickPresetId,
-  palaces: FreestylePalaceContext[],
-) {
-  const englishSubjectId = palaces.find((palace) => palace.subject?.name.trim() === '英语')?.subject?.id
-
-  if (presetId === 'quiz') {
-    return sanitizeFreestyleFeedConfig({
-      ...config,
-      training_mode: 'quiz',
-      mixed_modes: ['quiz'],
-      streams: {
-        ...config.streams,
-        quiz: {
-          ...config.streams.quiz,
-          specific_palace_ids: [],
-          subject_scope: 'all',
-          subject_ids: [],
-        },
-      },
-    })
-  }
-
-  if (presetId === 'english') {
-    return sanitizeFreestyleFeedConfig({
-      ...config,
-      training_mode: 'memory_palace',
-      mixed_modes: ['memory_palace'],
-      streams: {
-        ...config.streams,
-        memory_palace: {
-          ...config.streams.memory_palace,
-          specific_palace_ids: [],
-          subject_scope: englishSubjectId ? 'all' : 'english',
-          subject_ids: englishSubjectId ? [englishSubjectId] : [],
-        },
-      },
-    })
-  }
-
-  return sanitizeFreestyleFeedConfig({
-    ...config,
-    training_mode: 'memory_palace',
-    mixed_modes: ['memory_palace'],
-    streams: {
-      ...config.streams,
-      memory_palace: {
-        ...config.streams.memory_palace,
-        specific_palace_ids: [],
-        subject_scope: 'all',
-        subject_ids: [],
-      },
     },
   })
 }

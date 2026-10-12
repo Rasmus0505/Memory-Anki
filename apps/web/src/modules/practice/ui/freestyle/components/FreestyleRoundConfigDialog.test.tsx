@@ -50,7 +50,7 @@ describe('FreestyleRoundConfigDialog', () => {
   it('saves the sanitized draft', async () => {
     const { onSaveConfig } = renderDialog()
 
-    await screen.findByText('快捷预设')
+    await screen.findByRole('button', { name: '保存配置并重排' })
     expect(screen.getByRole('radio', { name: /^记忆宫殿/ })).toBeTruthy()
     expect(screen.getByRole('radio', { name: /^刷题/ })).toBeTruthy()
     expect(screen.getByRole('radio', { name: /^混合模式/ })).toBeTruthy()
@@ -65,7 +65,7 @@ describe('FreestyleRoundConfigDialog', () => {
   it('starts a fresh round when overlapping progress is discarded', async () => {
     const { onSaveConfig } = renderDialog()
 
-    await screen.findByText('快捷预设')
+    await screen.findByRole('button', { name: '保存配置并重排' })
     fireEvent.click(screen.getByRole('button', { name: '保存配置并重排' }))
     fireEvent.click(await screen.findByRole('button', { name: '不保留，开启新一轮' }))
 
@@ -76,7 +76,7 @@ describe('FreestyleRoundConfigDialog', () => {
   it('cancels the save when the overlap reminder is dismissed', async () => {
     const { onSaveConfig } = renderDialog()
 
-    await screen.findByText('快捷预设')
+    await screen.findByRole('button', { name: '保存配置并重排' })
     fireEvent.click(screen.getByRole('button', { name: '保存配置并重排' }))
     const prompt = await screen.findByTestId('freestyle-overlap-progress-dialog')
     fireEvent.click(within(prompt).getByRole('button', { name: '关闭弹窗' }))
@@ -88,29 +88,11 @@ describe('FreestyleRoundConfigDialog', () => {
   it('uses next-round copy and CTA after settlement', async () => {
     const { onSaveConfig } = renderDialog(vi.fn(), 'nextRound')
 
-    await screen.findByText('快捷预设')
+    await screen.findByRole('button', { name: '开始下一轮' })
     expect(screen.getByText(/确认后开始全新一轮/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '开始下一轮' }))
     expect(screen.queryByTestId('freestyle-overlap-progress-dialog')).toBeNull()
     expect(onSaveConfig).toHaveBeenCalledTimes(1)
-  })
-
-  it('applies a quick preset into the saved config', async () => {
-    const { onSaveConfig } = renderDialog()
-
-    await screen.findByRole('button', { name: /^刷题/ })
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /^刷题/ }))
-      await Promise.resolve()
-    })
-    act(() => {
-      fireEvent.click(screen.getByRole('button', { name: '保存配置并重排' }))
-    })
-    fireEvent.click(await screen.findByRole('button', { name: '保留，继续这一轮' }))
-    expect(onSaveConfig.mock.calls[0][0]).toMatchObject({
-      mix_mode: 'quiz_only',
-      content: { mindmap_branch: false, anki_card: false, quiz_question: true },
-    })
   })
 
   it('opens the palace picker without unmounting the configuration dialog', async () => {

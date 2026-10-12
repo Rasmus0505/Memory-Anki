@@ -967,7 +967,7 @@ export function useImmersiveQueue(
           serverPlanVersionRef.current = version
           setPlanVersion(version)
           const adoptedRoundId = round.round_id || queueStateRef.current.roundId
-          if (options?.forceStart && round.summary) {
+          if (round.summary) {
             roundSummarySeqRef.current += 1
             setRoundSummary({ roundId: adoptedRoundId, summary: round.summary, seq: roundSummarySeqRef.current })
           }

@@ -1,12 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Save, SlidersHorizontal } from 'lucide-react'
 import { getPalacesGroupedApi, getSubjectTreeApi } from '@/modules/content/public'
-import {
-  applyFreestyleQuickPreset,
-  FREESTYLE_QUICK_PRESETS,
-  sanitizeFreestyleFeedConfig,
-  type FreestyleQuickPresetId,
-} from '@/modules/practice/domain/feedConfig'
+import { sanitizeFreestyleFeedConfig } from '@/modules/practice/domain/feedConfig'
 import { flattenPalaceOptions } from '@/modules/practice/ui/freestyle/model/freestyle-cards'
 import {
   allFreestylePalaceIdsFromSubjects,
@@ -112,10 +107,6 @@ export function FreestyleRoundConfigDialog({
     return () => { active = false }
   }, [open])
 
-  const applyQuickPreset = (presetId: FreestyleQuickPresetId) => {
-    setDraft((current) => applyFreestyleQuickPreset(current, presetId, palaces))
-  }
-
   const commitSave = (choice?: FreestyleConfigSaveChoice) => {
     const next = pendingSave ?? sanitizeFreestyleFeedConfig(draft)
     onSaveConfig(next, choice)
@@ -172,32 +163,6 @@ export function FreestyleRoundConfigDialog({
           </DialogHeader>
 
           <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
-            <section className="mb-3 space-y-2 rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-3">
-              <div>
-                <div className="text-sm font-semibold">快捷预设</div>
-                <div className="text-xs leading-5 text-muted-foreground">
-                  一键切换本轮要刷的内容范围。
-                </div>
-              </div>
-              <div className="grid gap-2 sm:grid-cols-3">
-                {FREESTYLE_QUICK_PRESETS.map((preset) => (
-                  <Button
-                    key={preset.id}
-                    type="button"
-                    variant="outline"
-                    className="h-auto min-h-14 justify-start px-3 py-2 text-left"
-                    onClick={() => applyQuickPreset(preset.id)}
-                  >
-                    <span className="min-w-0">
-                      <span className="block text-sm font-semibold">{preset.label}</span>
-                      <span className="block truncate text-[11px] font-normal text-muted-foreground">
-                        {preset.description}
-                      </span>
-                    </span>
-                  </Button>
-                ))}
-              </div>
-            </section>
             <FreestyleTrainingConfigForm
               config={draft}
               scopeSubjects={scopeSubjects}

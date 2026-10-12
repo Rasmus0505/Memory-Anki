@@ -201,6 +201,7 @@ export default function ImmersiveFreestylePage({
       startNextRound(nextConfig)
       setConfigIntent('replan')
     } else {
+      configPreviewPendingRef.current = true
       setConfigAndPersist(nextConfig)
     }
     // A query-param launch hint is not the shelf's palace review. Remove it after

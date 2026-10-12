@@ -386,13 +386,6 @@ export function FreestyleTrainingConfigForm({
       {activeStreams.includes('memory_palace') ? renderPalaceStream() : null}
       {activeStreams.includes('quiz') ? renderQuizStream() : null}
 
-      {config.training_mode === 'quiz' ? (
-        <Section title="本次题目数">
-          <Field label="题目数量" hint="纯刷题时抽这么多道。宫殿到期不受这个上限截断。">
-            <Input type="number" min={5} max={100} value={config.queue_length} onChange={(event) => set({ queue_length: Number(event.target.value) })} />
-          </Field>
-        </Section>
-      ) : null}
 
       <details className="rounded-xl border border-border/60 bg-card/40 p-4">
         <summary className="cursor-pointer text-sm font-semibold">高级设置</summary>
