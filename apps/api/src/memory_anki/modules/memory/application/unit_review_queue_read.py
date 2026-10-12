@@ -20,6 +20,7 @@ from memory_anki.infrastructure.db._tables.unit_reviews import (
 from .unit_review_projection import json_load_list
 
 __all__ = [
+    "list_palace_ids_without_units",
     "list_round_unit_ratings",
     "list_trusted_due_units_for_queue",
     "list_unit_node_members",
@@ -100,11 +101,39 @@ def list_unit_node_members(
     return result
 
 
-def list_trusted_due_units_for_queue(
+def list_palace_ids_without_units(
     session: Session,
     palace_ids: list[int] | None = None,
+) -> list[int]:
+    """Live palaces that have never produced a ``ReviewUnitState`` row.
+
+    These are the only palaces the queue cannot see without a reconcile: any
+    palace with rows is already readable, and a palace whose topology changed
+    is refreshed when it is opened.
+    """
+    if palace_ids is not None and not palace_ids:
+        return []
+    has_units = (
+        session.query(ReviewUnitState.id)
+        .filter(ReviewUnitState.palace_id == Palace.id)
+        .exists()
+    )
+    query = session.query(Palace.id).filter(
+        Palace.deleted_at.is_(None),
+        Palace.archived.is_(False),
+        ~has_units,
+    )
+    if palace_ids is not None:
+        query = query.filter(Palace.id.in_(list(palace_ids)))
+    return [int(row.id) for row in query.order_by(Palace.id.asc()).all()]
+
+
+def list_trusted_due_units_for_queue(
+    session: Session,
+    today: date,
+    palace_ids: list[int] | None = None,
 ) -> list[dict[str, Any]]:
-    """Active due units for queue build, without parsing editor_doc or reconciling.
+    """Active due units for queue build, without parsing editor_doc.
 
     ``palace_ids is None`` means every active palace. An empty list means none.
     """
@@ -125,7 +154,7 @@ def list_trusted_due_units_for_queue(
         .join(Palace, Palace.id == ReviewUnitState.palace_id)
         .filter(
             ReviewUnitState.active.is_(True),
-            ReviewUnitState.due_date <= date.today(),
+            ReviewUnitState.due_date <= today,
             Palace.deleted_at.is_(None),
             Palace.archived.is_(False),
         )

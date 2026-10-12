@@ -132,6 +132,17 @@ def resolve_local_timezone() -> tzinfo:
     return timezone(timedelta(hours=8))
 
 
+def local_day(tz_name: str | None = None) -> date:
+    """Calendar day in the request zone, or the product calendar zone when absent."""
+    if not tz_name:
+        return datetime.now(resolve_local_timezone()).date()
+    try:
+        zone = ZoneInfo(tz_name)
+    except (ZoneInfoNotFoundError, ValueError) as exc:
+        raise ValueError(f"invalid timezone: {tz_name}") from exc
+    return datetime.now(zone).date()
+
+
 def _parse_configured_zone(value: str) -> tzinfo | None:
     """Parse ``MEMORY_ANKI_LOCAL_TZ``; return None when it is unusable."""
     normalized = value.strip()

@@ -15,6 +15,7 @@ from memory_anki.modules.practice.application.history_service import (
     list_question_attempts,
     list_question_explanations,
 )
+from memory_anki.modules.practice.application.freestyle_overview import build_freestyle_overview
 from memory_anki.modules.practice.application.queue_service import build_freestyle_queue
 from memory_anki.modules.practice.application.round_overlay_service import (
     drop_overlay_quiz_for_palaces,
@@ -78,6 +79,7 @@ def api_freestyle_queue_build(
             completed_ids=list(data.completed_ids or []),
             hidden_ids=list(data.hidden_ids or []),
             study_window=bool(data.study_window),
+            tz_name=data.tz,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -113,6 +115,25 @@ def api_freestyle_round_active_read(
     if payload is None:
         raise HTTPException(status_code=404, detail="freestyle round not found")
     return payload
+
+
+@router.get("/freestyle/overview")
+def api_freestyle_overview(
+    date_value: str | None = Query(None, alias="date"),
+    tz: str | None = Query(None),
+    round_id: str | None = Query(None),
+    session: Session = Depends(session_dep),
+):
+    """Read-only start-page overview. Computed live, never from a snapshot."""
+    try:
+        return build_freestyle_overview(
+            session,
+            day_text=date_value,
+            tz_name=tz,
+            round_id=round_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/freestyle/rounds/start")

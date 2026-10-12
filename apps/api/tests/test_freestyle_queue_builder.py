@@ -72,8 +72,6 @@ def _assemble(
         palace_meta={1: {"title": "Test Palace"}},
         units_by_palace={1: units},
         due_by_palace={1: due_uids},
-        mastery_by_palace={1: 0.0},
-        recent_practice_rank={},
         quizzes=quizzes or [],
         completed_ids=completed_ids or [],
     )
@@ -138,7 +136,6 @@ def test_queue_schedules_every_due_palace_unit_without_truncating():
     assert len(result.cards) == 6
     assert result.phase_stats["candidate_count"] == 6
     assert result.phase_stats["scheduled_count"] == 6
-    assert result.phase_stats["limit_reached"] is False
     assert result.phase_stats["palace_leftover_due"] == {}
     assert "ratable_node_uids" not in result.cards[0]
 
@@ -173,8 +170,6 @@ def test_queue_keeps_every_due_palace_without_a_leftover_cut():
             2: [_unit("d", ("d",), palace_id=2, unit_id="u-d"), _unit("e", ("e",), palace_id=2, unit_id="u-e"), _unit("f", ("f",), palace_id=2, unit_id="u-f")],
         },
         due_by_palace={1: {"a", "b", "c"}, 2: {"d", "e", "f"}},
-        mastery_by_palace={1: 0.0, 2: 0.0},
-        recent_practice_rank={},
         quizzes=[],
     )
     assert len(result.cards) == 6
@@ -251,7 +246,7 @@ def test_sanitize_migrates_legacy_directions_and_removes_anki():
         "streams": {"english": {"due_policy": "due_only", "unit_order": "random"}},
     })
     assert folded["training_mode"] == "memory_palace"
-    assert folded["streams"]["memory_palace"]["due_policy"] == "due_only"
+    assert "due_policy" not in folded["streams"]["memory_palace"]
     assert folded["streams"]["memory_palace"]["unit_order"] == "random"
     mixed_english = sanitize_feed_config({
         "training_mode": "mixed",
@@ -453,8 +448,6 @@ def test_single_palace_quiz_scope_keeps_palace_blocks():
         palace_meta={1: {"title": "Palace A"}, 2: {"title": "Palace B"}},
         units_by_palace={1: [units[0]], 2: [units[1]]},
         due_by_palace={1: {"a"}, 2: {"b"}},
-        mastery_by_palace={1: 0.0, 2: 0.0},
-        recent_practice_rank={},
         quizzes=quizzes,
     )
     ids = [card["id"] for card in result.cards]
@@ -493,8 +486,6 @@ def test_interleave_round_robins_palaces_instead_of_finishing_one():
             2: _palace_units(2, ("d", "e")),
         },
         due_by_palace={1: {"a", "b"}, 2: {"d", "e"}},
-        mastery_by_palace={1: 0.0, 2: 0.0},
-        recent_practice_rank={},
         quizzes=[],
     )
     interleaved = assemble_queue(
@@ -517,8 +508,6 @@ def test_interleave_round_robins_palaces_instead_of_finishing_one():
             2: _palace_units(2, ("d", "e")),
         },
         due_by_palace={1: {"a", "b"}, 2: {"d", "e"}},
-        mastery_by_palace={1: 0.0, 2: 0.0},
-        recent_practice_rank={},
         quizzes=[],
     )
     sequential_palaces = [card["palace_id"] for card in sequential.cards]
@@ -532,8 +521,6 @@ def test_random_unit_order_is_stable_for_a_seed_and_differs_from_structured():
         "palace_meta": {1: {"title": "A"}},
         "units_by_palace": {1: _palace_units(1, ("a", "b", "c", "d", "e", "f"))},
         "due_by_palace": {1: {"a", "b", "c", "d", "e", "f"}},
-        "mastery_by_palace": {1: 0.0},
-        "recent_practice_rank": {},
         "quizzes": [],
     }
 

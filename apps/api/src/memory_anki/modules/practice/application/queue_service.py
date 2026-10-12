@@ -6,12 +6,15 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from memory_anki.core.time import local_day
 from memory_anki.modules.content.public.queries import (
     list_active_palace_ids_by_subject_ids,
     list_active_palace_ids_by_subject_scope,
 )
 from memory_anki.modules.exam.api import palace_priority_scores, resolve_stars_for_palaces
+from memory_anki.modules.memory.public.commands import reconcile_palace_units
 from memory_anki.modules.memory.public.queries import (
+    list_palace_ids_without_units,
     list_trusted_due_units_for_queue,
     resolve_unit_definitions,
 )
@@ -32,9 +35,9 @@ from ..domain.queue_builder import (
     merge_content_streams,
     omit_restored_ids,
 )
-from .round_read_lookups import restored_card_ids
 from ..domain.review_units import ReviewUnitCandidate, context_path_including_anchor
 from ..domain.study_window import take_study_window
+from .round_read_lookups import restored_card_ids
 
 
 def build_freestyle_queue(
@@ -46,6 +49,7 @@ def build_freestyle_queue(
     completed_ids: list[str] | None = None,
     hidden_ids: list[str] | None = None,
     study_window: bool = False,
+    tz_name: str | None = None,
 ) -> dict[str, Any]:
     config = sanitize_feed_config(config_raw or {})
     op_id = str(operation_id or "").strip()
@@ -93,21 +97,22 @@ def build_freestyle_queue(
         stream_ids[stream_name], stream_subjects[stream_name] = resolve_stream_ids(stream_name)
 
     all_selected_ids = sorted({item for values in stream_ids.values() for item in values})
-    # Empty id list means every active palace (subject scope "all" with no
-    # explicit palaces). A non-empty list is the in-scope subset. Due cards
-    # come from active ReviewUnitState rows — no bulk reconcile. Opening a
-    # unit still reconciles that palace. Row titles need the marked-node path,
-    # so each due palace is projected once through the document cache.
+    today = local_day(tz_name)
+    # Palaces with no ReviewUnitState rows are invisible to the due read below.
+    # Reconcile only those (a one-time backfill per palace), then read due units.
+    for palace_id in list_palace_ids_without_units(session, all_selected_ids or None):
+        reconcile_palace_units(session, palace_id)
+    # Empty id list means every active palace. Row titles need the marked-node
+    # path, so each due palace is projected once through the document cache.
     due_rows = list_trusted_due_units_for_queue(
         session,
+        today,
         all_selected_ids or None,
     )
 
     palace_meta: dict[int, dict[str, Any]] = {}
     units_by_palace: dict[int, list[Any]] = {}
     due_by_palace: dict[int, set[str]] = {}
-    mastery_by_palace: dict[int, float] = {}
-    recent_practice_rank: dict[int, int] = {}
     nodes_by_palace: dict[int, dict[str, Any]] = {}
 
     def nodes_for(palace_id: int) -> dict[str, Any]:
@@ -224,9 +229,7 @@ def build_freestyle_queue(
                 "subject_scope": stream_subjects.get(stream_name, "all"),
                 # Exam order is pre-applied to palace_meta; the builder then walks it sequentially.
                 "palace_order": PALACE_ORDER_SEQUENTIAL if order == PALACE_ORDER_EXAM_PRIORITY else order,
-                "due_policy": "due_only",
                 "unit_order": raw.get("unit_order") or "structured",
-                "queue_length": 100,
             }
         return {
             **config,
@@ -238,7 +241,6 @@ def build_freestyle_queue(
             "quiz_mastery_buckets": raw.get("mastery_buckets") or config.get("quiz_mastery_buckets"),
             "quiz_scope": raw.get("quiz_scope") or "cross_palace_random",
             "weak_quiz_priority": raw.get("weak_priority", True),
-            "queue_length": 100,
         }
 
     stream_results: dict[str, Any] = {}
@@ -250,8 +252,6 @@ def build_freestyle_queue(
             palace_meta=stream_palace_meta(stream_name, scoped_ids),
             units_by_palace=subset(units_by_palace, scoped_ids) if stream_name in {"memory_palace", "english"} else {},
             due_by_palace=subset(due_by_palace, scoped_ids) if stream_name in {"memory_palace", "english"} else {},
-            mastery_by_palace=subset(mastery_by_palace, scoped_ids) if stream_name in {"memory_palace", "english"} else {},
-            recent_practice_rank=subset(recent_practice_rank, scoped_ids),
             quizzes=quizzes if stream_name == "quiz" else [],
             completed_ids=completed_ids or [],
             hidden_ids=hidden_ids or [],
@@ -279,15 +279,13 @@ def build_freestyle_queue(
         and str(card.get("id") or "") not in hidden
     ]
     quiz_only = str(training_mode or "") == "quiz"
-    queue_length = int(config.get("queue_length") or 20)
-    full_limited = remaining[:queue_length] if quiz_only else remaining
     # Cold start only: a prefix of the same order (8 cards, or the first palace
     # boundary, whichever comes first). The tail is not a reshuffle.
     tail_pending = False
-    limited = full_limited
+    limited = remaining
     if study_window and not quiz_only:
-        limited = take_study_window(full_limited)
-        tail_pending = len(limited) < len(full_limited)
+        limited = take_study_window(remaining)
+        tail_pending = len(limited) < len(remaining)
     card_palace_ids = sorted({int(card.get("palace_id") or 0) for card in limited} - {0})
     stars_by_palace = resolve_stars_for_palaces(session, card_palace_ids) if card_palace_ids else {}
     limited = [
@@ -297,10 +295,7 @@ def build_freestyle_queue(
     phase_stats = {
         "candidate_count": len(remaining),
         "scheduled_count": len(limited),
-        "queue_limit": queue_length if quiz_only else len(full_limited),
-        "limit_reached": len(remaining) > len(full_limited),
-        # Preserve the former top-level diagnostic while each palace stream
-        # now owns its own due-policy evaluation.
+        # Due-only per palace stream; the per-stream due count is summed here.
         "due_unit_count": sum(
             int(stream_results[name].phase_stats.get("due_unit_count") or 0)
             for name in ("memory_palace", "english")
@@ -318,7 +313,7 @@ def build_freestyle_queue(
             result.phase_stats.get("palace_leftover_due")
             for result in stream_results.values()
         ),
-        leftover_due_by_palace(remaining, full_limited),
+        leftover_due_by_palace(remaining, remaining),
     )
     phase_stats["palace_leftover_due"] = palace_leftover_due
 
@@ -331,8 +326,6 @@ def build_freestyle_queue(
         "round_meta": {
             "candidate_count": len(remaining),
             "scheduled_count": len(limited),
-            "queue_limit": queue_length if quiz_only else len(full_limited),
-            "limit_reached": len(remaining) > len(full_limited),
             "tail_pending": tail_pending,
             "palace_leftover_due": palace_leftover_due,
         },

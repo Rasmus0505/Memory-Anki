@@ -40,6 +40,7 @@ class FreestyleQueueBuildRequest(BaseModel):
     completed_ids: list[str] = Field(default_factory=list)
     hidden_ids: list[str] = Field(default_factory=list)
     study_window: bool = False
+    tz: str | None = None
 
 
 class FreestyleRoundActiveRequest(BaseModel):

@@ -10,8 +10,6 @@ from .feed_config import (
     BOUND_QUIZ_FOLLOW_UNIT,
     BOUND_QUIZ_INTO_MIX,
     DEFAULT_QUIZ_MASTERY_BUCKETS,
-    DUE_POLICY_ALL_WEIGHTED,
-    DUE_POLICY_DUE_ONLY,
     MIX_MODE_MINDMAP_ONLY,
     MIX_MODE_QUIZ_ONLY,
     MIX_MODE_RANDOM,
@@ -65,8 +63,8 @@ class QueueBuildResult:
 
     @property
     def candidate_count(self) -> int:
-        """Number of cards available after round filters, before the limit."""
-        return int(self.phase_stats.get("remaining_before_limit") or 0)
+        """Number of cards available after round filters."""
+        return int(self.phase_stats.get("candidate_count") or 0)
 
 
 def _unit_due_count(unit: ReviewUnitCandidate, due_uids: set[str]) -> int:
@@ -77,35 +75,11 @@ def _unit_has_due(unit: ReviewUnitCandidate, due_uids: set[str]) -> bool:
     return _unit_due_count(unit, due_uids) > 0
 
 
-def partition_units_by_due(
-    units: Sequence[ReviewUnitCandidate],
-    due_by_palace: Mapping[int, set[str]],
-) -> tuple[list[ReviewUnitCandidate], list[ReviewUnitCandidate]]:
-    due_units: list[ReviewUnitCandidate] = []
-    later_units: list[ReviewUnitCandidate] = []
-    for unit in units:
-        due_uids = due_by_palace.get(unit.palace_id, set())
-        if _unit_has_due(unit, due_uids):
-            due_units.append(unit)
-        else:
-            later_units.append(unit)
-    return due_units, later_units
-
-
 def sort_due_phase_units(
     units: Sequence[ReviewUnitCandidate],
     due_by_palace: Mapping[int, set[str]],
 ) -> list[ReviewUnitCandidate]:
     del due_by_palace
-    return list(units)
-
-
-def sort_fill_phase_units(
-    units: Sequence[ReviewUnitCandidate],
-    mastery_by_palace: Mapping[int, float],
-    recent_practice_rank: Mapping[int, int],
-) -> list[ReviewUnitCandidate]:
-    del mastery_by_palace, recent_practice_rank
     return list(units)
 
 
@@ -410,8 +384,6 @@ def assemble_queue(
     palace_meta: Mapping[int, Mapping[str, Any]],
     units_by_palace: Mapping[int, Sequence[ReviewUnitCandidate]],
     due_by_palace: Mapping[int, set[str]],
-    mastery_by_palace: Mapping[int, float],
-    recent_practice_rank: Mapping[int, int],
     quizzes: Sequence[QuizCandidate],
     completed_ids: Iterable[str] = (),
     hidden_ids: Iterable[str] = (),
@@ -424,12 +396,10 @@ def assemble_queue(
     streams = raw_streams if isinstance(raw_streams, Mapping) else {}
     raw_memory = streams.get("memory_palace")
     memory_stream = raw_memory if isinstance(raw_memory, Mapping) else {}
-    due_policy = DUE_POLICY_DUE_ONLY
     palace_order = str(
         config.get("palace_order") or memory_stream.get("palace_order") or PALACE_ORDER_SEQUENTIAL
     )
     unit_order = str(config.get("unit_order") or memory_stream.get("unit_order") or "structured")
-    queue_length = int(config.get("queue_length") or 20)
     mindmap_enabled = bool((config.get("content") or {}).get("mindmap_branch", True))
     quiz_enabled = bool((config.get("content") or {}).get("quiz_question", True))
     weights = config.get("weights") or {}
@@ -478,43 +448,29 @@ def assemble_queue(
         )
 
     due_units_by_palace: dict[int, list[ReviewUnitCandidate]] = {}
-    later_units_by_palace: dict[int, list[ReviewUnitCandidate]] = {}
     for palace_id in palace_ids:
-        due_units, later_units = partition_units_by_due(
-            units_by_palace.get(palace_id, ()),
-            due_by_palace,
-        )
+        due_units = [
+            unit
+            for unit in units_by_palace.get(palace_id, ())
+            if _unit_has_due(unit, due_by_palace.get(palace_id, set()))
+        ]
         due_units_by_palace[palace_id] = sort_due_phase_units(due_units, due_by_palace)
-        later_units_by_palace[palace_id] = sort_fill_phase_units(
-            later_units,
-            mastery_by_palace,
-            recent_practice_rank,
-        )
         if unit_order == "random":
             due_units_by_palace[palace_id] = sorted(
                 due_units_by_palace[palace_id],
                 key=lambda unit: (_stable_mix(seed, "unit", unit.unit_id, unit.revision), unit.unit_id),
             )
-            later_units_by_palace[palace_id] = sorted(
-                later_units_by_palace[palace_id],
-                key=lambda unit: (_stable_mix(seed + 11, "unit-fill", unit.unit_id, unit.revision), unit.unit_id),
-            )
 
     # Every loaded question is in the pool. Mastery buckets do not drop questions.
-    # Due policy still gates mind-map fill units only.
     scoped_quizzes = list(quizzes)
     scoped_quizzes_by_palace: dict[int, list[QuizCandidate]] = {}
-    empty_quizzes_by_palace: dict[int, list[QuizCandidate]] = {}
     for palace_id in palace_ids:
         palace_quizzes = [quiz for quiz in scoped_quizzes if quiz.palace_id == palace_id]
         scoped_quizzes_by_palace[palace_id] = sort_quiz_candidates(
             palace_quizzes,
             weak_priority=weak_priority,
         )
-        empty_quizzes_by_palace[palace_id] = []
-    # Keep legacy names for phase wiring / stats.
     priority_quizzes_by_palace = scoped_quizzes_by_palace
-    fill_quizzes_by_palace = empty_quizzes_by_palace
 
     def unit_cards(
         units: Sequence[ReviewUnitCandidate], phase: str
@@ -640,9 +596,7 @@ def assemble_queue(
             quiz_scope=quiz_scope,
             seed=seed + (0 if phase == "due" else 11),
         )
-        if mix_mode == MIX_MODE_QUIZ_ONLY:
-            quiz_side = quiz_side[:queue_length]
-        elif map_side:
+        if mix_mode != MIX_MODE_QUIZ_ONLY and map_side:
             weight = max(1, mix_ratio_mindmap)
             quiz_side = quiz_side[: (len(map_side) * max(1, mix_ratio_quiz) + weight - 1) // weight]
         mixed = merge_streams_by_mix_mode(
@@ -667,54 +621,26 @@ def assemble_queue(
             final.extend(leftovers)
         return final
 
-    phase1 = compose_phase(due_units_by_palace, priority_quizzes_by_palace, "due")
-    phase2 = (
-        []
-        if due_policy == DUE_POLICY_DUE_ONLY
-        else compose_phase(later_units_by_palace, fill_quizzes_by_palace, "fill")
+    cards = filter_completed(
+        compose_phase(due_units_by_palace, priority_quizzes_by_palace, "due"),
+        completed_ids=completed,
+        hidden_ids=hidden,
     )
-    if due_policy == DUE_POLICY_ALL_WEIGHTED:
-        # Expand pool: fold fill into due phase with a fixed secondary interleave.
-        # mix_mode already ordered each phase; here we only combine priority vs fill pools.
-        phase1 = interleave_by_weights(
-            phase1,
-            phase2,
-            mindmap_weight=3,
-            quiz_weight=1,
-            seed=seed + 2,
-        )
-        phase2 = []
-    combined = phase1 + phase2
-    remaining = filter_completed(combined, completed_ids=completed, hidden_ids=hidden)
-    if mix_mode == MIX_MODE_QUIZ_ONLY:
-        limited = remaining[:queue_length]
-    else:
-        limited = remaining
-    palace_leftover_due = leftover_due_by_palace(remaining, limited)
-
+    palace_leftover_due = leftover_due_by_palace(cards, cards)
     return QueueBuildResult(
-        cards=limited,
+        cards=cards,
         phase_stats={
-            "phase1_count": len(phase1),
-            "phase2_count": len(phase2),
-            "remaining_before_limit": len(remaining),
-            "queue_length": len(limited),
             "due_unit_count": sum(len(items) for items in due_units_by_palace.values()),
-            "fill_unit_count": sum(len(items) for items in later_units_by_palace.values()),
             "priority_quiz_count": sum(len(items) for items in priority_quizzes_by_palace.values()),
-            "fill_quiz_count": sum(len(items) for items in fill_quizzes_by_palace.values()),
             "completed_excluded": len(completed),
             "hidden_excluded": len(hidden),
-            "due_policy": due_policy,
             "mix_mode": mix_mode,
             "bound_quiz_placement": bound_quiz_placement,
             "quiz_scope": quiz_scope,
             "quiz_mastery_buckets": ",".join(quiz_mastery_buckets),
             "scoped_quiz_count": len(scoped_quizzes),
-            "candidate_count": len(remaining),
-            "scheduled_count": len(limited),
-            "queue_limit": queue_length,
-            "limit_reached": len(remaining) > len(limited),
+            "candidate_count": len(cards),
+            "scheduled_count": len(cards),
             "palace_leftover_due": palace_leftover_due,
         },
         operation_id=operation_id,
@@ -735,11 +661,9 @@ __all__ = [
     "merge_streams_by_mix_mode",
     "mindmap_card_payload",
     "order_quiz_stream_by_scope",
-    "partition_units_by_due",
     "quiz_card_payload",
     "quiz_key",
     "sort_due_phase_units",
-    "sort_fill_phase_units",
     "sort_quiz_candidates",
     "review_unit_id_from_card_id",
     "unit_key",

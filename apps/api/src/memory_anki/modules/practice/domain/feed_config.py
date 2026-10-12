@@ -8,14 +8,9 @@ from typing import Any
 DEFAULT_MINDMAP_WEIGHT = 2
 DEFAULT_ANKI_WEIGHT = 2
 DEFAULT_QUIZ_WEIGHT = 1
-DEFAULT_QUEUE_LENGTH = 20
 DEFAULT_SEED = 17
 DEFAULT_MIX_RATIO_MINDMAP = 2
 DEFAULT_MIX_RATIO_QUIZ = 1
-
-DUE_POLICY_DUE_FIRST = "due_first_then_expand"
-DUE_POLICY_DUE_ONLY = "due_only"
-DUE_POLICY_ALL_WEIGHTED = "all_content_due_weighted"
 
 PALACE_ORDER_SEQUENTIAL = "finish_palace_then_next"
 PALACE_ORDER_INTERLEAVE = "interleave_palaces"
@@ -61,12 +56,6 @@ DEFAULT_QUIZ_MASTERY_BUCKETS = [
     QUIZ_MASTERY_WEAK,
     QUIZ_MASTERY_REINFORCE,
 ]
-
-DUE_POLICIES = {
-    DUE_POLICY_DUE_FIRST,
-    DUE_POLICY_DUE_ONLY,
-    DUE_POLICY_ALL_WEIGHTED,
-}
 
 MIX_MODES = {
     MIX_MODE_MINDMAP_ONLY,
@@ -156,11 +145,6 @@ def _as_int(value: Any, default: int, *, minimum: int, maximum: int) -> int:
     except (TypeError, ValueError):
         number = default
     return max(minimum, min(maximum, number))
-
-
-def _fold_due_policy(_value: Any) -> str:
-    """Freestyle palace streams only review due units; expand/fill policies fold away."""
-    return DUE_POLICY_DUE_ONLY
 
 
 def _as_positive_ids(value: Any) -> list[int]:
@@ -345,7 +329,6 @@ def _migrate_english_training(
     if training_mode == "english" or not had_memory:
         memory = {
             **memory,
-            "due_policy": english["due_policy"],
             "palace_order": english["palace_order"],
             "unit_order": english["unit_order"],
             "specific_palace_ids": (
@@ -430,12 +413,7 @@ def _sanitize_mixed_modes(value: Any, fallback: list[str]) -> list[str]:
     return list(fallback)
 
 
-def _as_quiz_mastery_buckets(
-    value: Any,
-    *,
-    due_policy: str,
-    has_explicit_field: bool,
-) -> list[str]:
+def _as_quiz_mastery_buckets(value: Any) -> list[str]:
     if isinstance(value, list):
         result: list[str] = []
         seen: set[str] = set()
@@ -447,12 +425,6 @@ def _as_quiz_mastery_buckets(
             result.append(key)
         if result:
             return result
-    # Legacy expand policies implied "also pull stable / fill" quizzes.
-    if not has_explicit_field and due_policy in {
-        DUE_POLICY_DUE_FIRST,
-        DUE_POLICY_ALL_WEIGHTED,
-    }:
-        return [*DEFAULT_QUIZ_MASTERY_BUCKETS, QUIZ_MASTERY_STABLE]
     return list(DEFAULT_QUIZ_MASTERY_BUCKETS)
 
 
@@ -471,7 +443,6 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
         subject_scope=legacy_subject,
     )
     legacy_ids = _as_positive_ids(data.get("specific_palace_ids"))
-    legacy_due = _fold_due_policy(data.get("due_policy"))
     legacy_order = str(data.get("palace_order") or PALACE_ORDER_SEQUENTIAL)
     if legacy_order not in PALACE_ORDERS:
         legacy_order = PALACE_ORDER_SEQUENTIAL
@@ -491,11 +462,9 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
             ids=[] if legacy_subject == "english" else legacy_ids,
             subject_scope=memory_fallback_scope,
         ),
-        "due_policy": _fold_due_policy(raw_memory.get("due_policy") or legacy_due),
         "palace_order": str(raw_memory.get("palace_order") or legacy_order),
         "unit_order": _as_unit_order(raw_memory.get("unit_order")),
     }
-    memory["due_policy"] = DUE_POLICY_DUE_ONLY
     if memory["palace_order"] not in PALACE_ORDERS:
         memory["palace_order"] = PALACE_ORDER_SEQUENTIAL
 
@@ -505,12 +474,10 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
             ids=legacy_ids if legacy_subject == "english" else [],
             subject_scope="english",
         ),
-        "due_policy": _fold_due_policy(raw_english.get("due_policy") or legacy_due),
         "palace_order": str(raw_english.get("palace_order") or legacy_order),
         "unit_order": _as_unit_order(raw_english.get("unit_order")),
     }
     english["subject_scope"] = "english"
-    english["due_policy"] = DUE_POLICY_DUE_ONLY
     if english["palace_order"] not in PALACE_ORDERS:
         english["palace_order"] = PALACE_ORDER_SEQUENTIAL
 
@@ -519,14 +486,6 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
         "question_type": str(raw_quiz.get("question_type") or data.get("question_type") or "all"),
         "mastery_buckets": _as_quiz_mastery_buckets(
             raw_quiz.get("mastery_buckets", data.get("quiz_mastery_buckets")),
-            due_policy=memory["due_policy"],
-            has_explicit_field=(
-                has_new_config
-                or not data
-                or "due_policy" not in data
-                or "mastery_buckets" in raw_quiz
-                or "quiz_mastery_buckets" in data
-            ),
         ),
         "quiz_scope": _as_quiz_scope(raw_quiz.get("quiz_scope", data.get("quiz_scope"))),
         "overlay_question_range": _as_overlay_question_range(
@@ -596,7 +555,6 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
         else quiz["subject_scope"] if training_mode == "quiz"
         else "all"
     )
-    map_due = memory["due_policy"] if has_memory else english["due_policy"]
     map_order = memory["palace_order"] if has_memory else english["palace_order"]
     map_unit_order = memory["unit_order"] if has_memory else english["unit_order"]
     mindmap_weight = max(1, map_ratio or 2) if has_memory or has_english else 0
@@ -607,7 +565,6 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
         "mixed_modes": mixed_modes,
         "streams": {"memory_palace": memory, "quiz": quiz, "english": english},
         "mix": mix,
-        "queue_length": _as_int(data.get("queue_length"), DEFAULT_QUEUE_LENGTH, minimum=5, maximum=100),
         "seed": _as_int(data.get("seed"), DEFAULT_SEED, minimum=1, maximum=2_147_483_647),
         "content": {
             "mindmap_branch": has_memory or has_english,
@@ -624,7 +581,6 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
         "bound_quiz_placement": _as_bound_placement(data.get("bound_quiz_placement")),
         "palace_order": map_order,
         "unit_order": map_unit_order,
-        "due_policy": map_due,
         "quiz_mastery_buckets": quiz["mastery_buckets"],
         "quiz_scope": quiz["quiz_scope"],
         "overlay_question_range": quiz["overlay_question_range"],
@@ -653,8 +609,7 @@ def queue_construction_signature(raw: Any) -> str:
     """Fields that rebuild unstarted round-plan order when they change.
 
     Scope-key changes rebind the same round. This signature is only the
-    queue-construction knobs: palace/unit order, due policy, mix, seed,
-    length, and quiz draw order.
+    queue-construction knobs: palace/unit order, mix, seed, and quiz draw order.
     """
     config = sanitize_feed_config(raw)
     memory = config["streams"]["memory_palace"]
@@ -665,10 +620,8 @@ def queue_construction_signature(raw: Any) -> str:
             "mixed_modes": config["mixed_modes"],
             "mix": config["mix"],
             "seed": config["seed"],
-            "queue_length": config["queue_length"],
             "palace_order": memory["palace_order"],
             "unit_order": memory["unit_order"],
-            "due_policy": memory["due_policy"],
             "quiz_scope": quiz["quiz_scope"],
             "overlay_question_range": quiz["overlay_question_range"],
             "mastery_buckets": quiz["mastery_buckets"],
@@ -691,14 +644,9 @@ __all__ = [
     "DEFAULT_MIX_RATIO_MINDMAP",
     "DEFAULT_MIX_RATIO_QUIZ",
     "DEFAULT_OVERLAY_QUESTION_KINDS",
-    "DEFAULT_QUEUE_LENGTH",
     "DEFAULT_QUIZ_MASTERY_BUCKETS",
     "DEFAULT_QUIZ_WEIGHT",
     "DEFAULT_SEED",
-    "DUE_POLICIES",
-    "DUE_POLICY_ALL_WEIGHTED",
-    "DUE_POLICY_DUE_FIRST",
-    "DUE_POLICY_DUE_ONLY",
     "MIX_MODE_MINDMAP_ONLY",
     "MIX_MODE_QUIZ_ONLY",
     "MIX_MODE_RANDOM",

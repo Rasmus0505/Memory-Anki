@@ -45,7 +45,7 @@ def test_queue_build_echoes_operation_and_sanitized_config(make_client):
     assert payload["operation_id"] == "op-test-1"
     assert "node_limit" not in payload["config"]
     assert "progress_scopes" not in payload["config"]
-    assert payload["config"]["queue_length"] == 20
+    assert "queue_length" not in payload["config"]
     assert "cards" in payload
     assert "phase_stats" in payload
     assert payload["counts"]["total"] == len(payload["cards"])
@@ -451,7 +451,7 @@ def test_same_day_due_units_follow_topology_order(session_factory):
     )
     session.commit()
     palace_id = palace.id
-    rows = list_trusted_due_units_for_queue(session, [palace_id])
+    rows = list_trusted_due_units_for_queue(session, date.today(), [palace_id])
     session.close()
     assert [row["id"] for row in rows] == ["unit-cohort", "unit-branch"]
     assert rows[0]["unit_kind"] == "cohort"
