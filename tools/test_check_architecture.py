@@ -4241,7 +4241,11 @@ def test_freestyle_round_sheet_views_accept_header_toggle(
     )
     write_file(
         web_src / "modules" / "practice" / "ui" / "freestyle" / "ImmersiveFreestylePage.tsx",
-        "freestyle-partial-settlement\nfreestyle-partial-settlement-exit\n退出\n",
+        "FreestylePartialSettlement\nFreestyleFeedPager\nonCancelSettlement={navigatePrevious}\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "FreestylePartialSettlement.tsx",
+        "freestyle-partial-settlement-exit\n退出\n",
     )
 
     errors: list[str] = []

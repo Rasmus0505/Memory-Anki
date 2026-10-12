@@ -3125,7 +3125,9 @@ def check_freestyle_canvas_pan(errors: list[str]) -> None:
                 f"{page.relative_to(WEB_SRC).as_posix()}: the snap scroller must not "
                 "use `touch-pan-y`; canvas pan owns one-finger drag over the map."
             )
-        if "FreestyleFeedPager" not in page_source:
+        bottom_actions = page.with_name("FreestyleBottomActions.tsx")
+        bottom_source = bottom_actions.read_text(encoding="utf-8", errors="ignore") if bottom_actions.exists() else ""
+        if "FreestyleFeedPager" not in page_source + bottom_source:
             errors.append(
                 f"{page.relative_to(WEB_SRC).as_posix()}: card changes must stay on "
                 "FreestyleFeedPager after restoring canvas pan."
@@ -3586,12 +3588,14 @@ def check_freestyle_round_sheet_views(errors: list[str]) -> None:
             f"{card.relative_to(REPO_ROOT).as_posix()}: "
             "结算已完成 must open a 小结算 page with 确认结算."
         )
-    if "freestyle-partial-settlement" not in page_source:
+    partial_settlement = page.with_name("FreestylePartialSettlement.tsx")
+    partial_source = partial_settlement.read_text(encoding="utf-8", errors="ignore") if partial_settlement.exists() else ""
+    if "FreestylePartialSettlement" not in page_source:
         errors.append(
             f"{page.relative_to(REPO_ROOT).as_posix()}: "
             "随心 feed must show the 小结算 page before compressing."
         )
-    if "freestyle-partial-settlement-exit" not in page_source or "退出" not in page_source:
+    if "freestyle-partial-settlement-exit" not in partial_source or "退出" not in partial_source:
         errors.append(
             f"{page.relative_to(REPO_ROOT).as_posix()}: "
             "小结算 must keep a visible 退出. The overlay covers the pager, so PWA cannot leave without it."
@@ -3911,19 +3915,19 @@ def check_freestyle_complete_slot_reachable(errors: list[str]) -> None:
         / "ui"
         / "freestyle"
         / "components"
-        / "FreestyleRoundCompleteCard.tsx"
+        / "FreestyleRoundSettlement.tsx"
     )
     if complete_card.exists():
         complete_source = complete_card.read_text(encoding="utf-8", errors="ignore")
-        if "再来一轮" not in complete_source or "onAnotherRound" not in complete_source:
+        if "开启下一轮" not in complete_source or "onAnotherRound" not in complete_source:
             errors.append(
                 f"{complete_card.relative_to(REPO_ROOT).as_posix()}: "
-                "settlement card must expose 再来一轮 via onAnotherRound."
+                "settlement must expose 开启下一轮 via onAnotherRound."
             )
-        if "取消结算" not in complete_source or "onCancelSettlement" not in complete_source:
+        if "返回上一张" not in complete_source or "onCancelSettlement" not in complete_source:
             errors.append(
                 f"{complete_card.relative_to(REPO_ROOT).as_posix()}: "
-                "settlement card must expose 取消结算 via onCancelSettlement."
+                "settlement card must expose 返回上一张 via onCancelSettlement."
             )
     if "onCancelSettlement={navigatePrevious}" not in page_source:
         errors.append(
