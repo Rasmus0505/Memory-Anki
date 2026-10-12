@@ -11,9 +11,9 @@ from .application.unit_review_projection import (
     warm_unit_projection_cache,
 )
 from .application.unit_review_queue_read import (
-    list_palace_ids_without_units,
     count_active_units_by_palace,
     count_units_due_on,
+    list_palace_ids_without_units,
     list_round_unit_ratings,
     list_trusted_due_units_for_queue,
     list_unit_node_members,

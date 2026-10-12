@@ -8,6 +8,7 @@ from memory_anki.modules.practice.application.feed_service import (
     FREESTYLE_RANGE_ALL,
     build_freestyle_feed,
 )
+from memory_anki.modules.practice.application.freestyle_overview import build_freestyle_overview
 from memory_anki.modules.practice.application.history_service import (
     build_history_summary,
     create_question_attempt,
@@ -15,7 +16,6 @@ from memory_anki.modules.practice.application.history_service import (
     list_question_attempts,
     list_question_explanations,
 )
-from memory_anki.modules.practice.application.freestyle_overview import build_freestyle_overview
 from memory_anki.modules.practice.application.queue_service import (
     build_freestyle_queue,
     build_tomorrow_due_summary,

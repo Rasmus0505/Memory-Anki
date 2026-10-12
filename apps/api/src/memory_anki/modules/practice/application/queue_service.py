@@ -15,9 +15,9 @@ from memory_anki.modules.content.public.queries import (
 from memory_anki.modules.exam.api import palace_priority_scores, resolve_stars_for_palaces
 from memory_anki.modules.memory.public.commands import reconcile_palace_units
 from memory_anki.modules.memory.public.queries import (
-    list_palace_ids_without_units,
     count_active_units_by_palace,
     count_units_due_on,
+    list_palace_ids_without_units,
     list_trusted_due_units_for_queue,
     resolve_unit_definitions,
 )
