@@ -28,6 +28,7 @@ import {
   updateSelectedSessionRecorderReport,
 } from './sessionRecorderStore'
 import { LIVE_BRIEF_ID } from './sessionRecorderTypes'
+import { DIAGNOSIS_WINDOW_OPTIONS_MINUTES, type DiagnosisWindowMinutes } from './sessionRecorderBrief'
 import { useSessionRecorderState } from './useSessionRecorderState'
 
 export const SESSION_RECORDER_ANCHOR_ATTR = 'data-session-recorder-anchor'
@@ -245,17 +246,23 @@ function SessionRecorderFloatingControl() {
   }, [])
 
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle')
+  const [pickerOpen, setPickerOpen] = useState(false)
   const resetTimerRef = useRef<number | null>(null)
   useEffect(() => () => {
     if (resetTimerRef.current != null) window.clearTimeout(resetTimerRef.current)
   }, [])
 
-  const copyRecent = async () => {
+  const togglePicker = () => {
     if (suppressClickRef.current) {
       suppressClickRef.current = false
       return
     }
-    const ok = await copyRecentBriefToClipboard()
+    setPickerOpen((open) => !open)
+  }
+
+  const copyRecent = async (minutes: DiagnosisWindowMinutes) => {
+    setPickerOpen(false)
+    const ok = await copyRecentBriefToClipboard(minutes)
     setCopyState(ok ? 'copied' : 'failed')
     if (!ok) openSessionRecorderDialog()
     if (resetTimerRef.current != null) window.clearTimeout(resetTimerRef.current)
@@ -283,12 +290,35 @@ function SessionRecorderFloatingControl() {
         variant="outline"
         size="icon"
         aria-label="录制"
-        title="点一下：复制最近 3 分钟的操作和报错，直接粘贴给 AI（右键可查看和补充说明）"
-        onClick={() => void copyRecent()}
+        aria-expanded={pickerOpen}
+        title="点一下选择复制最近几分钟的操作和报错，直接粘贴给 AI（右键可查看和补充说明）"
+        onClick={togglePicker}
       >
         {copyState === 'copied' ? <Check className="text-emerald-500" /> : copyState === 'failed' ? <TriangleAlert className="text-amber-500" /> : <CircleDot />}
       </Button>
-      {copyState !== 'idle' ? (
+      {pickerOpen ? (
+        <div
+          role="menu"
+          aria-label="选择复制的时长"
+          className="absolute left-full top-0 ml-2 flex flex-col gap-1 rounded-md border bg-background p-1 shadow"
+        >
+          {DIAGNOSIS_WINDOW_OPTIONS_MINUTES.map((minutes) => (
+            <Button
+              key={minutes}
+              type="button"
+              variant="ghost"
+              size="sm"
+              role="menuitem"
+              aria-label={`复制最近 ${minutes} 分钟`}
+              className="justify-start whitespace-nowrap"
+              onClick={() => void copyRecent(minutes)}
+            >
+              最近 {minutes} 分钟
+            </Button>
+          ))}
+        </div>
+      ) : null}
+      {copyState !== 'idle' && !pickerOpen ? (
         <span
           role="status"
           className="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 whitespace-nowrap rounded-md bg-foreground px-2 py-1 text-xs text-background shadow"

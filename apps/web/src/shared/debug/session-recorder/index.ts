@@ -21,6 +21,7 @@ export {
   recordMindMapDocumentChange,
   recordSessionRecorderRoute,
   recordSessionRecorderUiAction,
+  recordSessionRecorderView,
   resetSessionRecorderForTest,
   selectSessionRecorderHistory,
   startSessionRecording,

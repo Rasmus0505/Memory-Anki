@@ -40,7 +40,7 @@ describe('SessionRecorderHost', () => {
       expect(navigator.clipboard.writeText).toHaveBeenCalled()
     })
     const copied = vi.mocked(navigator.clipboard.writeText).mock.calls.at(-1)?.[0] as string
-    expect(copied).toContain('请根据下面这段刚才的操作')
+    expect(copied).not.toContain('请根据')
     expect(copied).toContain('## 用户补充')
     expect(copied).toContain('点保存后卡片没了')
   })

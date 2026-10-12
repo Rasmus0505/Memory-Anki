@@ -12,6 +12,7 @@ export type SessionRecorderEventKind =
   | 'error'
   | 'ai'
   | 'step'
+  | 'view'
 
 export const LIVE_BRIEF_ID = 'live'
 

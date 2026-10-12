@@ -39,6 +39,7 @@ import {
 import { useFreestyleEdgeRubberBand } from '@/modules/practice/ui/freestyle/hooks/useFreestyleEdgeRubberBand'
 import { useFreestyleWheelPaging } from '@/modules/practice/ui/freestyle/hooks/useFreestyleWheelPaging'
 import { prefersReducedMotion } from '@/shared/lib/prefersReducedMotion'
+import { recordSessionRecorderView } from '@/shared/debug/session-recorder'
 
 function slotIndexOfKey(key: string, cardIds: readonly string[]) {
   if (key.startsWith('slot:')) return Number(key.slice(5))
@@ -136,14 +137,23 @@ export function useFreestyleFeedNavigation({
 
   useEffect(() => {
     if (userScrollingRef.current) return
-    if (roundComplete && cards.length > 0 && visualIndexRef.current >= cards.length) {
+    const previous = visualIndexRef.current
+    if (roundComplete && cards.length > 0 && previous >= cards.length) {
       const completeIndex = cards.length
       visualIndexRef.current = completeIndex
       setVisualIndex(completeIndex)
+      if (previous !== completeIndex) recordSessionRecorderView('自动切到结算页')
       return
     }
     setVisualIndex(currentIndex)
     visualIndexRef.current = currentIndex
+    if (previous !== currentIndex) {
+      recordSessionRecorderView(
+        roundComplete && currentIndex >= cards.length
+          ? '自动切到结算页'
+          : `自动切到第 ${currentIndex + 1} 张（共 ${cards.length} 张）`,
+      )
+    }
   }, [cards.length, currentIndex, roundComplete])
 
   const [scrollChannel] = useState(createFreestyleScrollChannel)

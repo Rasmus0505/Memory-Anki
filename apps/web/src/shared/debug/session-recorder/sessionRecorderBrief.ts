@@ -3,9 +3,18 @@ import { resolveNavSection, type NavSectionKey } from '@/shared/routing/routeMan
 import { truncateRecorderText } from './sessionRecorderFormat'
 import type { SessionRecorderEvent } from './sessionRecorderTypes'
 
-export const DIAGNOSIS_WINDOW_MS = 3 * 60 * 1000
-export const DIAGNOSIS_RECENT_MAX = 160
+export const DIAGNOSIS_WINDOW_OPTIONS_MINUTES = [1, 2, 5] as const
+export type DiagnosisWindowMinutes = (typeof DIAGNOSIS_WINDOW_OPTIONS_MINUTES)[number]
+export const DIAGNOSIS_DEFAULT_WINDOW_MINUTES: DiagnosisWindowMinutes = 2
+/** Events are kept for the longest selectable window so any option can be copied. */
+export const DIAGNOSIS_MAX_WINDOW_MS = 5 * 60 * 1000
+export const DIAGNOSIS_RECENT_MAX = 400
 const CLICK_FOLLOW_MS = 4_000
+const VIEW_CLICK_LEAD_MS = 1_500
+
+export function diagnosisWindowMs(minutes: number) {
+  return minutes * 60 * 1000
+}
 
 const SECTION_LABEL: Record<NavSectionKey, string> = {
   freestyle: '随心',
@@ -62,7 +71,7 @@ export function redactRecorderSecrets(value: string) {
 export function filterRecentEvents(
   events: SessionRecorderEvent[],
   now = Date.now(),
-  windowMs = DIAGNOSIS_WINDOW_MS,
+  windowMs = DIAGNOSIS_MAX_WINDOW_MS,
 ) {
   const cutoff = now - windowMs
   return events
@@ -159,13 +168,30 @@ function actionLine(event: SessionRecorderEvent) {
   return [event.action, event.detail].filter(Boolean).join(' ')
 }
 
-function nearbyClick(events: SessionRecorderEvent[], step: SessionRecorderEvent) {
-  const at = Date.parse(step.at)
+/** The nearest click at or before `at`, within `windowMs`. */
+function precedingClick(events: SessionRecorderEvent[], at: string, windowMs: number) {
+  const time = Date.parse(at)
   return [...events].reverse().find((event) => {
     if (event.kind !== 'click' && event.kind !== 'menu') return false
-    const delta = at - Date.parse(event.at)
-    return delta >= 0 && delta <= CLICK_FOLLOW_MS
+    const delta = time - Date.parse(event.at)
+    return delta >= 0 && delta <= windowMs
   })
+}
+
+function nearbyClick(events: SessionRecorderEvent[], step: SessionRecorderEvent) {
+  return precedingClick(events, step.at, CLICK_FOLLOW_MS)
+}
+
+/**
+ * A view change the app made on its own (feed snapped to a card or the
+ * settlement page). The action text already says what changed; this only adds
+ * whether a click came right before it.
+ */
+function viewSentence(events: SessionRecorderEvent[], view: SessionRecorderEvent) {
+  const click = precedingClick(events, view.at, VIEW_CLICK_LEAD_MS)
+  return click
+    ? `点了${click.detail || click.action}之后，${view.action}`
+    : `没有点击，${view.action}`
 }
 
 function stepSentence(step: SessionRecorderEvent, click: SessionRecorderEvent | undefined) {
@@ -180,12 +206,19 @@ export function buildDiagnosisBrief(input: {
   events: SessionRecorderEvent[]
   pageLabel: string
   focus: RecorderFocus | null
+  windowMs?: number
   now?: number
 }) {
   const now = input.now ?? Date.now()
-  const events = filterRecentEvents(input.events, now)
+  const windowMs = input.windowMs ?? diagnosisWindowMs(DIAGNOSIS_DEFAULT_WINDOW_MINUTES)
+  const events = filterRecentEvents(input.events, now, windowMs)
   const actions = events.filter((event) => (
-    event.kind === 'click' || event.kind === 'menu' || event.kind === 'route' || event.kind === 'doc' || event.kind === 'mindmap'
+    event.kind === 'click'
+    || event.kind === 'menu'
+    || event.kind === 'route'
+    || event.kind === 'view'
+    || event.kind === 'doc'
+    || event.kind === 'mindmap'
   ))
   const steps = events.filter((event) => event.kind === 'step')
   const errors = events.filter((event) => event.kind === 'error')
@@ -209,28 +242,9 @@ export function buildDiagnosisBrief(input: {
     })
     : true
   if (lastClick && !lastClickFollowed) {
-    outcomeLines.push(`点了${lastClick.detail || lastClick.action}之后的几秒里，没有看到写入。如果这一步本来该保存，可能没写上；如果只是翻页或展开，可以忽略。`)
+    outcomeLines.push(`点了${lastClick.detail || lastClick.action}之后的几秒里，没有看到后端写入。`)
   }
   if (outcomeLines.length === 0) outcomeLines.push('没有看到保存或提交。')
-
-  const watch: string[] = []
-  const failedAfterClick = [...steps].reverse().find((step) => (
-    step.detail.startsWith('没有成功') && nearbyClick(events, step)
-  ))
-  if (failedAfterClick) {
-    const click = nearbyClick(events, failedAfterClick)
-    watch.push(click
-      ? `先看点了${click.detail || click.action}之后，「${failedAfterClick.action}」为什么没有成功。`
-      : `先看「${failedAfterClick.action}」为什么没有成功。`)
-  } else if (lastClick && !lastClickFollowed) {
-    watch.push(`先确认点了${lastClick.detail || lastClick.action}之后，该写上的内容有没有写上。`)
-  } else if (errors[0]) {
-    watch.push(`页面报了「${errors[0].action}」，先看这个报错和刚才的操作是不是同一件事。`)
-  } else if (steps.some((step) => step.detail === '成功')) {
-    watch.push('这几分钟里，看到的保存都成功了。如果画面不对，更可能是显示没有跟上，而不是没写上。')
-  } else {
-    watch.push('记录很少。如果问题出在更早，请补一句大概是什么时候、画面上看到了什么。')
-  }
 
   const focusLines = input.focus
     ? [
@@ -241,8 +255,7 @@ export function buildDiagnosisBrief(input: {
     : ['- 没有定位到当前这一题或这一张卡。']
 
   const lines = [
-    '请根据下面这段刚才的操作，帮我看看出了什么问题。以这段记录为准，不要假设我记得按钮的内部名字。',
-    '记录里没有密码、密钥，也没有完整网页地址；失败的请求会写出接口路径和状态码。',
+    `最近 ${Math.round(windowMs / 60_000)} 分钟`,
     '',
     '我当时在看',
     `- 页面：${input.pageLabel || '这个页面'}`,
@@ -250,8 +263,12 @@ export function buildDiagnosisBrief(input: {
     '',
     '我做了这些',
     ...(actions.length === 0
-      ? ['- 这几分钟里没有点到按钮，也没有换页面。']
-      : actions.slice(-12).map((event) => `- ${actionLine(event)}`)),
+      ? ['- 这段时间没有点击，也没有换页面或切换卡片。']
+      : actions.slice(-20).map((event) => {
+        const when = clock(event.at)
+        const text = event.kind === 'view' ? viewSentence(events, event) : actionLine(event)
+        return `- ${[when, text].filter(Boolean).join(' ')}`
+      })),
     '',
     '点完之后',
     ...outcomeLines.map((line) => `- ${line}`),
@@ -260,6 +277,5 @@ export function buildDiagnosisBrief(input: {
     lines.push('', '页面上的报错', ...errors.slice(-3).map((event) => `- ${event.action}：${truncateRecorderText(event.detail, 80)}`))
   }
   if (askedAi) lines.push('', '期间请过 AI。')
-  lines.push('', '请先看这些', ...watch.map((line) => `- ${line}`))
   return lines.join('\n')
 }

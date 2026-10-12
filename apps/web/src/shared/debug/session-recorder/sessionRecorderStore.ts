@@ -5,7 +5,9 @@ import { describeClickForRecorder } from './sessionRecorderCapture'
 import { summarizeEditorDocChange } from './sessionRecorderDocDiff'
 import {
   buildDiagnosisBrief,
+  DIAGNOSIS_DEFAULT_WINDOW_MINUTES,
   describeRequestStep,
+  diagnosisWindowMs,
   filterRecentEvents,
   readRecorderFocus,
   redactRecorderSecrets,
@@ -129,12 +131,13 @@ function remember(kind: SessionRecorderEventKind, action: string, detail = '') {
   ])
 }
 
-function currentLiveReport() {
+function currentLiveReport(windowMs = diagnosisWindowMs(DIAGNOSIS_DEFAULT_WINDOW_MINUTES)) {
   const path = typeof window === 'undefined' ? '' : window.location.pathname
   return buildDiagnosisBrief({
     events: recentEvents,
     pageLabel: describeRecorderPage(path),
     focus: typeof document === 'undefined' ? null : readRecorderFocus(document),
+    windowMs,
   })
 }
 
@@ -264,8 +267,8 @@ export function openSessionRecorderDialog(selectedId?: string | null) {
   })
 }
 
-export async function copyRecentBriefToClipboard() {
-  const text = buildSessionRecorderCopyText(currentLiveReport(), state.liveNotes)
+export async function copyRecentBriefToClipboard(windowMinutes: number = DIAGNOSIS_DEFAULT_WINDOW_MINUTES) {
+  const text = buildSessionRecorderCopyText(currentLiveReport(diagnosisWindowMs(windowMinutes)), state.liveNotes)
   try {
     if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) return false
     await navigator.clipboard.writeText(text)
@@ -371,6 +374,15 @@ export function recordSessionRecorderRoute(path: string) {
 
 export function recordSessionRecorderUiAction(kind: SessionRecorderEventKind, action: string, detail = '') {
   appendEvent(kind, action, detail)
+}
+
+/**
+ * A change of what the user is looking at that the app made itself (feed
+ * snapped to another card, settlement page opened or closed). `action` reads
+ * as a sentence: 「自动切到第 3 张」.
+ */
+export function recordSessionRecorderView(action: string) {
+  appendEvent('view', action)
 }
 
 export function recordMindMapDocumentChange(action: string, previous: unknown, next: unknown) {
