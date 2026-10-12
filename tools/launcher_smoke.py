@@ -77,7 +77,7 @@ def _terminate_process_tree(process: subprocess.Popen[bytes]) -> None:
 def _run_pwa_smoke() -> None:
     print("[launcher-smoke] Running start-all.bat --smoke-test", flush=True)
     completed = subprocess.run(
-        ["cmd.exe", "/d", "/c", "start-all.bat", "--smoke-test"],
+        ["cmd.exe", "/d", "/c", str(REPO_ROOT / "start-all.bat"), "--smoke-test"],
         cwd=REPO_ROOT,
         timeout=300,
         check=False,
@@ -94,7 +94,7 @@ def _run_desktop_smoke() -> None:
     print("[launcher-smoke] Running start-all.bat --desktop", flush=True)
     creationflags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
     process = subprocess.Popen(
-        ["cmd.exe", "/d", "/c", "start-all.bat", "--desktop"],
+        ["cmd.exe", "/d", "/c", str(REPO_ROOT / "start-all.bat"), "--desktop"],
         cwd=REPO_ROOT,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
