@@ -23,7 +23,6 @@ from memory_anki.modules.practice.application.round_overlay_service import (
     progress_overlay_quiz,
     read_round_question_badge,
 )
-from memory_anki.modules.practice.domain.feed_config import queue_construction_signature
 from memory_anki.modules.practice.application.round_state_service import (
     apply_round_action,
     apply_round_rating,
@@ -31,6 +30,7 @@ from memory_anki.modules.practice.application.round_state_service import (
     start_new_round,
 )
 from memory_anki.modules.practice.domain import round_plan
+from memory_anki.modules.practice.domain.feed_config import queue_construction_signature
 from memory_anki.modules.practice.domain.overlay_quiz import (
     QUESTION_RATING_NONE,
     apply_overlay_progress,

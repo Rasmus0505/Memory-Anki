@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import timedelta
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -44,7 +44,7 @@ from .round_read_lookups import restored_card_ids
 
 
 def build_tomorrow_due_summary(session: Session) -> dict[str, int]:
-    tomorrow = date.today() + timedelta(days=1)
+    tomorrow = local_day() + timedelta(days=1)
     return {"due_tomorrow_count": count_units_due_on(session, tomorrow)}
 
 
@@ -158,6 +158,7 @@ def build_freestyle_queue(
                 unit_kind=str(row.get("unit_kind") or ""),
                 due_date=row.get("due_date"),
                 last_passed_at=row.get("last_passed_at"),
+                has_passed=bool(row.get("has_passed")),
             )
         )
         due_by_palace.setdefault(palace_id, set()).update(node_uids)

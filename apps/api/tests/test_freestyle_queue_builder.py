@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
-from memory_anki.modules.practice.domain.feed_config import sanitize_feed_config
+from datetime import date, datetime
+
+from memory_anki.modules.practice.domain.feed_config import (
+    queue_construction_signature,
+    sanitize_feed_config,
+)
 from memory_anki.modules.practice.domain.leftover_due import (
     leftover_due_by_palace,
     merge_leftover_due,
 )
 from memory_anki.modules.practice.domain.queue_builder import (
     QuizCandidate,
+    arrange_new_and_review,
     assemble_queue,
     attach_questions_to_units,
     merge_content_streams,
@@ -77,15 +83,15 @@ def _assemble(
     )
 
 
-def test_bound_question_stays_on_the_isolation_unit_when_a_cohort_overlaps():
-    cohort = ReviewUnitCandidate(
+def test_bound_question_attaches_to_the_mark_unit_that_owns_its_node():
+    residual = ReviewUnitCandidate(
         palace_id=1,
         anchor_uid="A",
         context_path=(),
-        node_uids=("B1", "B2"),
-        unit_id="cohort",
+        node_uids=("B3",),
+        unit_id="residual",
         revision=1,
-        unit_kind="cohort",
+        unit_kind="residual",
     )
     branch = _unit("B1", ("B1", "C1"), unit_id="branch")
     quiz = QuizCandidate(
@@ -96,9 +102,9 @@ def test_bound_question_stays_on_the_isolation_unit_when_a_cohort_overlaps():
         mastery_label="unseen",
         question={"id": 7},
     )
-    attached, unbound = attach_questions_to_units([cohort, branch], [quiz])
+    attached, unbound = attach_questions_to_units([residual, branch], [quiz])
     assert unbound == []
-    assert attached[unit_key(cohort)] == []
+    assert attached[unit_key(residual)] == []
     assert [item.question_id for item in attached[unit_key(branch)]] == [7]
 
 
@@ -595,3 +601,226 @@ def test_context_path_includes_the_marked_node():
         {"uid": "mark", "text": "古典时期"},
     )
     assert context_path_including_anchor(nodes, "missing") == ()
+
+
+def _due_unit(
+    anchor: str,
+    *,
+    due: date,
+    passed_at: datetime | None,
+    palace_id: int = 1,
+) -> ReviewUnitCandidate:
+    return ReviewUnitCandidate(
+        palace_id=palace_id,
+        anchor_uid=anchor,
+        context_path=(),
+        node_uids=(anchor,),
+        unit_id=anchor,
+        revision=1,
+        due_date=due,
+        last_passed_at=passed_at,
+        has_passed=passed_at is not None,
+    )
+
+
+def _map_config(**extra) -> dict:
+    return {
+        "content": {"mindmap_branch": True, "anki_card": False, "quiz_question": False},
+        "mix_mode": "mindmap_only",
+        **extra,
+    }
+
+
+def _unit_order(result) -> list[str]:
+    return [card["unit_id"] for card in result.cards]
+
+
+def test_due_order_defaults_to_most_overdue_then_least_recently_passed():
+    a = _due_unit("A", due=date(2026, 10, 1), passed_at=datetime(2026, 10, 5))
+    b = _due_unit("B", due=date(2026, 9, 20), passed_at=datetime(2026, 10, 1))
+    c = _due_unit("C", due=date(2026, 9, 20), passed_at=None)
+
+    result = _assemble(units=[a, b, c], due_uids={"A", "B", "C"}, config=_map_config())
+
+    # Earliest due first; on the same due date the never-passed C goes before B.
+    assert _unit_order(result) == ["C", "B", "A"]
+
+
+def test_least_recently_reviewed_puts_never_passed_first():
+    p = _due_unit("P", due=date(2026, 9, 1), passed_at=datetime(2026, 10, 5))
+    q = _due_unit("Q", due=date(2026, 9, 30), passed_at=None)
+    r = _due_unit("R", due=date(2026, 9, 1), passed_at=datetime(2026, 9, 10))
+
+    result = _assemble(
+        units=[p, q, r],
+        due_uids={"P", "Q", "R"},
+        config=_map_config(due_order="least_recently_reviewed"),
+    )
+
+    assert _unit_order(result) == ["Q", "R", "P"]
+
+
+def test_palace_topology_keeps_input_order_within_a_palace():
+    # Input is the DB topology order; the most-overdue sort would reorder it.
+    a = _due_unit("A", due=date(2026, 10, 1), passed_at=None)
+    b = _due_unit("B", due=date(2026, 9, 1), passed_at=datetime(2026, 9, 2))
+    c = _due_unit("C", due=date(2026, 9, 15), passed_at=datetime(2026, 9, 16))
+
+    result = _assemble(
+        units=[a, b, c],
+        due_uids={"A", "B", "C"},
+        config=_map_config(due_order="palace_topology"),
+    )
+
+    assert _unit_order(result) == ["A", "B", "C"]
+
+
+def _placement_units() -> list[ReviewUnitCandidate]:
+    # Topology order R1, R2, N1, R3, N2, R4 (N = never passed, R = reviewed).
+    specs = [
+        ("R1", True),
+        ("R2", True),
+        ("N1", False),
+        ("R3", True),
+        ("N2", False),
+        ("R4", True),
+    ]
+    return [
+        _due_unit(
+            anchor,
+            due=date(2026, 9, 1),
+            passed_at=datetime(2026, 9, 2) if passed else None,
+        )
+        for anchor, passed in specs
+    ]
+
+
+def _placement_order(**extra) -> list[str]:
+    units = _placement_units()
+    result = _assemble(
+        units=units,
+        due_uids={unit.anchor_uid for unit in units},
+        config=_map_config(due_order="palace_topology", **extra),
+    )
+    return _unit_order(result)
+
+
+def test_new_placement_new_first_is_the_default_map_order():
+    assert _placement_order(new_placement="new_first") == ["N1", "N2", "R1", "R2", "R3", "R4"]
+    assert _placement_order() == ["N1", "N2", "R1", "R2", "R3", "R4"]
+
+
+def test_new_placement_review_first_puts_reviews_before_new():
+    assert _placement_order(new_placement="review_first") == ["R1", "R2", "R3", "R4", "N1", "N2"]
+
+
+def test_new_placement_ratio_interleaves_one_new_per_n_reviews():
+    assert _placement_order(new_placement="ratio", review_new_ratio=2) == [
+        "R1",
+        "R2",
+        "N1",
+        "R3",
+        "R4",
+        "N2",
+    ]
+
+
+def test_arrange_ratio_appends_leftover_new_after_reviews_run_out():
+    cards = [
+        {"id": "r1", "is_new": False},
+        {"id": "n1", "is_new": True},
+        {"id": "n2", "is_new": True},
+        {"id": "n3", "is_new": True},
+    ]
+
+    arranged = arrange_new_and_review(cards, "ratio", 2)
+
+    # One review, then news while reviews last, then the new leftovers in order.
+    assert [card["id"] for card in arranged] == ["r1", "n1", "n2", "n3"]
+
+
+def test_arrange_ratio_four_keeps_order_inside_each_stream():
+    reviews = [{"id": f"r{i}", "is_new": False} for i in range(1, 6)]
+    news = [{"id": f"n{i}", "is_new": True} for i in range(1, 3)]
+
+    arranged = arrange_new_and_review([*reviews, *news], "ratio", 4)
+
+    assert [card["id"] for card in arranged] == ["r1", "r2", "r3", "r4", "n1", "r5", "n2"]
+
+
+def test_bound_quiz_still_follows_its_anchor_when_new_cards_move_forward():
+    review = _due_unit("b", due=date(2026, 9, 1), passed_at=datetime(2026, 9, 2))
+    new = _due_unit("a", due=date(2026, 9, 1), passed_at=None)
+    quizzes = [
+        QuizCandidate(21, 1, ("a",), 0.1, "weak", {"id": 21, "palace_id": 1}),
+        QuizCandidate(22, 1, ("b",), 0.1, "weak", {"id": 22, "palace_id": 1}),
+    ]
+
+    result = _assemble(
+        units=[review, new],
+        due_uids={"a", "b"},
+        quizzes=quizzes,
+        config={
+            "content": {"mindmap_branch": True, "anki_card": False, "quiz_question": True},
+            "mix_mode": "sequential_map_quiz",
+            "bound_quiz_placement": "follow_unit",
+            "due_order": "palace_topology",
+            "new_placement": "new_first",
+            "due_policy": "due_only",
+            "queue_length": 20,
+        },
+    )
+
+    assert [card["id"] for card in result.cards] == [
+        "review_unit:a:r1",
+        "quiz_question:21",
+        "review_unit:b:r1",
+        "quiz_question:22",
+    ]
+
+
+def test_phase_stats_count_new_and_review_due_map_units():
+    units = _placement_units()
+    result = _assemble(
+        units=units,
+        due_uids={unit.anchor_uid for unit in units},
+        config=_map_config(),
+    )
+
+    assert result.phase_stats["new_unit_count"] == 2
+    assert result.phase_stats["review_unit_count"] == 4
+
+
+def test_sanitize_new_config_keys_default_and_fall_back_on_invalid_values():
+    defaults = sanitize_feed_config({})
+    assert defaults["due_order"] == "most_overdue"
+    assert defaults["new_placement"] == "new_first"
+    assert defaults["review_new_ratio"] == 4
+
+    invalid = sanitize_feed_config(
+        {"due_order": "bogus", "new_placement": "sideways", "review_new_ratio": 3}
+    )
+    assert invalid["due_order"] == "most_overdue"
+    assert invalid["new_placement"] == "new_first"
+    assert invalid["review_new_ratio"] == 4
+
+    boolean_ratio = sanitize_feed_config({"review_new_ratio": True})
+    assert boolean_ratio["review_new_ratio"] == 4
+
+    valid = sanitize_feed_config(
+        {"due_order": "palace_topology", "new_placement": "ratio", "review_new_ratio": "2"}
+    )
+    assert valid["due_order"] == "palace_topology"
+    assert valid["new_placement"] == "ratio"
+    assert valid["review_new_ratio"] == 2
+
+
+def test_new_config_keys_are_echoed_and_part_of_the_queue_signature():
+    config = sanitize_feed_config({"new_placement": "review_first"})
+    assert config["new_placement"] == "review_first"
+    assert queue_construction_signature({}) != queue_construction_signature(
+        {"new_placement": "review_first"}
+    )
+    assert queue_construction_signature({}) != queue_construction_signature(
+        {"due_order": "least_recently_reviewed"}
+    )

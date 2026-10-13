@@ -24,6 +24,8 @@ class ReviewUnitCandidate:
     unit_kind: str = ""
     due_date: date | None = None
     last_passed_at: datetime | None = None
+    # False means NEW (never passed); drives new_placement in the due phase.
+    has_passed: bool = False
 
     @property
     def node_count(self) -> int:

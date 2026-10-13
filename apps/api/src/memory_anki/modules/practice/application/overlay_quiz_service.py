@@ -177,10 +177,10 @@ def classify_round_question_badges(
             inherit_later.append((str(qid), node_uids))
     if inherit_later:
         parents = list_node_parent_uids(session, palace_ids)
-        for qid, node_uids in inherit_later:
+        for qkey, node_uids in inherit_later:
             inherited = _lowest_reviewed_ancestor_rating(node_uids, rating_by_node, parents)
             if inherited is not None:
-                ratings[qid] = inherited
+                ratings[qkey] = inherited
     return ratings, pending
 
 

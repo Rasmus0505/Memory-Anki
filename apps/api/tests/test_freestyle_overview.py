@@ -109,14 +109,19 @@ def test_today_counts_overdue_due_and_new_palaces(make_client, session_factory):
         _set_due(session, later, date(2026, 10, 20))
         overdue_units = len(_units(session, overdue))
         due_units = len(_units(session, due_today))
+        later_units = len(_units(session, later))
 
     response = client.get(OVERVIEW, params={"date": DAY, "tz": "Asia/Shanghai"})
 
     assert response.status_code == 200, response.text
+    # 待复习 = units due today or earlier, and the palaces holding them.
+    # 第一次学 = units never passed; every seeded unit is still unpassed here.
     assert response.json()["today"] == {
         "due_count": overdue_units + due_units,
+        "due_palace_count": 2,
         "overdue_count": overdue_units,
-        "new_palace_count": 1,
+        "new_unit_count": overdue_units + due_units + later_units,
+        "new_palace_count": 3,
     }
 
 
@@ -168,8 +173,9 @@ def test_yesterday_recap_uses_local_day_window_and_weak_ratio(make_client, sessi
     assert response.status_code == 200, response.text
     yesterday = response.json()["yesterday"]
     assert yesterday["date"] == "2026-10-11"
-    assert yesterday["rated_count"] == 4
+    assert "rated_count" not in yesterday
     assert yesterday["learned_units"] == 2
+    assert yesterday["learned_palace_count"] == 2
     assert [item["unit_id"] for item in yesterday["weak_units"]] == [edge_unit_id, weak_unit_id]
     assert yesterday["weak_units"][0]["again_ratio"] == 1.0
     assert yesterday["weak_units"][1]["again_ratio"] == 0.67
@@ -251,6 +257,8 @@ def test_round_block_counts_done_excluded_and_subjects(session_factory):
         "review": 1 - expected_new,
         "done": 1,
         "remaining": 2,
+        "remaining_palaces": 1,
+        "remaining_units": 1,
     }
     assert block["by_subject"] == [
         {"subject_id": subject_id, "name": "数学", "done": 1, "total": 3}

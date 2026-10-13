@@ -9,13 +9,20 @@ from typing import Any
 from .feed_config import (
     BOUND_QUIZ_FOLLOW_UNIT,
     BOUND_QUIZ_INTO_MIX,
+    DEFAULT_DUE_ORDER,
+    DEFAULT_NEW_PLACEMENT,
     DEFAULT_QUIZ_MASTERY_BUCKETS,
+    DEFAULT_REVIEW_NEW_RATIO,
+    DUE_ORDER_LEAST_RECENTLY_REVIEWED,
+    DUE_ORDER_PALACE_TOPOLOGY,
     MIX_MODE_MINDMAP_ONLY,
     MIX_MODE_QUIZ_ONLY,
     MIX_MODE_RANDOM,
     MIX_MODE_RATIO,
     MIX_MODE_SEQUENTIAL_MAP_QUIZ,
     MIX_MODE_SEQUENTIAL_QUIZ_MAP,
+    NEW_PLACEMENT_RATIO,
+    NEW_PLACEMENT_REVIEW_FIRST,
     PALACE_ORDER_INTERLEAVE,
     PALACE_ORDER_SEQUENTIAL,
     QUIZ_MASTERY_BUCKETS,
@@ -82,19 +89,41 @@ def _least_recently_passed_key(unit: ReviewUnitCandidate) -> tuple[int, float, s
     return (1, unit.last_passed_at.timestamp(), unit.unit_id)
 
 
+def _due_ordinal(unit: ReviewUnitCandidate) -> int:
+    return unit.due_date.toordinal() if unit.due_date is not None else 0
+
+
+def _most_overdue_key(unit: ReviewUnitCandidate) -> tuple[int, tuple[int, float, str]]:
+    return (_due_ordinal(unit), _least_recently_passed_key(unit))
+
+
+def _least_recently_reviewed_key(
+    unit: ReviewUnitCandidate,
+) -> tuple[int, float, int, str]:
+    """Never-passed first, then oldest last_passed_at; ties by due date, then id."""
+    if unit.last_passed_at is None:
+        return (0, 0.0, _due_ordinal(unit), unit.unit_id)
+    return (1, unit.last_passed_at.timestamp(), _due_ordinal(unit), unit.unit_id)
+
+
 def sort_due_phase_units(
     units: Sequence[ReviewUnitCandidate],
     due_by_palace: Mapping[int, set[str]],
+    *,
+    due_order: str = DEFAULT_DUE_ORDER,
 ) -> list[ReviewUnitCandidate]:
-    """Most overdue first; ties go to the least recently passed unit."""
+    """Order due units for the round. Unknown due_order means most_overdue.
+
+    - most_overdue: earliest due date first; ties to the least recently passed.
+    - least_recently_reviewed: never-passed first, then oldest last pass.
+    - palace_topology: keep the input order (DB topology order within a palace).
+    """
     del due_by_palace
-    return sorted(
-        units,
-        key=lambda unit: (
-            unit.due_date.toordinal() if unit.due_date is not None else 0,
-            _least_recently_passed_key(unit),
-        ),
-    )
+    if due_order == DUE_ORDER_PALACE_TOPOLOGY:
+        return list(units)
+    if due_order == DUE_ORDER_LEAST_RECENTLY_REVIEWED:
+        return sorted(units, key=_least_recently_reviewed_key)
+    return sorted(units, key=_most_overdue_key)
 
 
 def attach_questions_to_units(
@@ -114,8 +143,6 @@ def attach_questions_to_units(
             continue
         matched = False
         for unit in palace_units.get(quiz.palace_id, []):
-            if unit.unit_kind == "cohort":
-                continue
             ratable = set(unit.node_uids)
             if any(uid in ratable for uid in quiz.bound_node_uids):
                 unit_questions[unit_key(unit)].append(quiz)
@@ -272,6 +299,47 @@ def merge_streams_by_mix_mode(
     )
 
 
+def _interleave_review_new(
+    review_cards: Sequence[dict[str, Any]],
+    new_cards: Sequence[dict[str, Any]],
+    *,
+    every: int,
+) -> list[dict[str, Any]]:
+    """Insert one new card after each block of ``every`` review cards."""
+    result: list[dict[str, Any]] = []
+    review_index = 0
+    new_index = 0
+    while review_index < len(review_cards) or new_index < len(new_cards):
+        block = review_cards[review_index : review_index + every]
+        result.extend(block)
+        review_index += len(block)
+        if new_index < len(new_cards):
+            result.append(new_cards[new_index])
+            new_index += 1
+    return result
+
+
+def arrange_new_and_review(
+    map_cards: Sequence[dict[str, Any]],
+    placement: str,
+    ratio: int = DEFAULT_REVIEW_NEW_RATIO,
+) -> list[dict[str, Any]]:
+    """Place NEW map cards (``is_new``) relative to REVIEW map cards.
+
+    Order inside each stream is preserved. ``new_first`` (and any unknown
+    placement) puts every new card first. ``review_first`` is the reverse.
+    ``ratio`` inserts one new card after every ``ratio`` review cards; leftovers
+    of either stream are appended at the end.
+    """
+    new_cards = [card for card in map_cards if card.get("is_new")]
+    review_cards = [card for card in map_cards if not card.get("is_new")]
+    if placement == NEW_PLACEMENT_REVIEW_FIRST:
+        return [*review_cards, *new_cards]
+    if placement == NEW_PLACEMENT_RATIO:
+        return _interleave_review_new(review_cards, new_cards, every=max(1, int(ratio)))
+    return [*new_cards, *review_cards]
+
+
 def _is_map_side_card(card: Mapping[str, Any]) -> bool:
     return str(card.get("type") or "") == "mindmap_branch"
 
@@ -302,6 +370,7 @@ def mindmap_card_payload(
         "node_uids": list(unit.node_uids),
         "node_count": unit.node_count,
         "phase": phase,
+        "is_new": not unit.has_passed,
         "palace_context": {
             "id": unit.palace_id,
             "title": palace_title,
@@ -447,6 +516,9 @@ def assemble_queue(
     if quiz_weight <= 0:
         quiz_weight = mix_ratio_quiz
     weak_priority = bool(config.get("weak_quiz_priority", True))
+    due_order = str(config.get("due_order") or DEFAULT_DUE_ORDER)
+    new_placement = str(config.get("new_placement") or DEFAULT_NEW_PLACEMENT)
+    review_new_ratio = int(config.get("review_new_ratio") or DEFAULT_REVIEW_NEW_RATIO)
 
     # mix_mode can force-disable a stream even if content toggles are on.
     if mix_mode == MIX_MODE_MINDMAP_ONLY:
@@ -468,7 +540,11 @@ def assemble_queue(
             for unit in units_by_palace.get(palace_id, ())
             if _unit_has_due(unit, due_by_palace.get(palace_id, set()))
         ]
-        due_units_by_palace[palace_id] = sort_due_phase_units(due_units, due_by_palace)
+        due_units_by_palace[palace_id] = sort_due_phase_units(
+            due_units,
+            due_by_palace,
+            due_order=due_order,
+        )
         if unit_order == "random":
             due_units_by_palace[palace_id] = sorted(
                 due_units_by_palace[palace_id],
@@ -602,7 +678,11 @@ def assemble_queue(
                         result.append(queues[palace_id].pop(0))
             return result
 
-        map_side = order_palace_cards(map_by_palace)
+        map_side = arrange_new_and_review(
+            order_palace_cards(map_by_palace),
+            new_placement,
+            review_new_ratio,
+        )
         # Quiz draw order is controlled by quiz_scope (cross vs single palace).
         quiz_side = order_quiz_stream_by_scope(
             quiz_by_palace,
@@ -635,6 +715,7 @@ def assemble_queue(
             final.extend(leftovers)
         return final
 
+    due_map_units = [unit for items in due_units_by_palace.values() for unit in items]
     cards = filter_completed(
         compose_phase(due_units_by_palace, priority_quizzes_by_palace, "due"),
         completed_ids=completed,
@@ -644,7 +725,9 @@ def assemble_queue(
     return QueueBuildResult(
         cards=cards,
         phase_stats={
-            "due_unit_count": sum(len(items) for items in due_units_by_palace.values()),
+            "due_unit_count": len(due_map_units),
+            "new_unit_count": sum(1 for unit in due_map_units if not unit.has_passed),
+            "review_unit_count": sum(1 for unit in due_map_units if unit.has_passed),
             "priority_quiz_count": sum(len(items) for items in priority_quizzes_by_palace.values()),
             "completed_excluded": len(completed),
             "hidden_excluded": len(hidden),
@@ -664,6 +747,7 @@ def assemble_queue(
 __all__ = [
     "QuizCandidate",
     "QueueBuildResult",
+    "arrange_new_and_review",
     "assemble_queue",
     "attach_questions_to_units",
     "deterministic_random_merge",

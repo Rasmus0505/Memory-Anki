@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import date, datetime, timedelta, tzinfo
+from collections.abc import Sequence
+from datetime import date, timedelta, tzinfo
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from sqlalchemy import func, select
+from sqlalchemy import distinct, func, select
 from sqlalchemy.orm import Session
 
-from memory_anki.core.time import local_calendar_day_bounds_as_utc_naive, resolve_local_timezone
+from memory_anki.core.time import (
+    local_calendar_day_bounds_as_utc_naive,
+    local_day,
+    resolve_local_timezone,
+)
 from memory_anki.infrastructure.db._tables.knowledge import Subject
 from memory_anki.infrastructure.db._tables.palaces import Palace, palace_subject_table
 from memory_anki.infrastructure.db._tables.unit_reviews import (
@@ -92,6 +97,9 @@ def _subjects_for_palaces(
     owners: dict[int, list[tuple[int, str, int]]] = defaultdict(list)
     for pid, sid, name, order in session.execute(stmt).all():
         owners[int(pid)].append((int(sid), name, int(order or 0)))
+    for items in owners.values():
+        # The first entry is the palace's primary subject (lowest sort order).
+        items.sort(key=lambda item: (item[2], item[0]))
     return owners
 
 
@@ -113,20 +121,30 @@ def _round_block(session: Session, payload: dict[str, Any]) -> dict[str, Any]:
     buckets: dict[int | None, dict[str, Any]] = {}
     subject_order: dict[int, int] = {}
     done = 0
+    remaining_palace_ids: set[int] = set()
+    remaining_unit_ids: set[str] = set()
     for card in cards:
         is_done = card["card_id"] in completed
         done += int(is_done)
         pid = card.get("palace_id")
-        card_owners = owners.get(int(pid), []) if pid is not None else []
-        for subject_id, name, order in card_owners or [(None, UNSORTED_SUBJECT, 0)]:
-            if subject_id is not None:
-                subject_order[subject_id] = order
-            bucket = buckets.setdefault(
-                subject_id,
-                {"subject_id": subject_id, "name": name, "done": 0, "total": 0},
-            )
-            bucket["total"] += 1
-            bucket["done"] += int(is_done)
+        if not is_done:
+            if pid is not None:
+                remaining_palace_ids.add(int(pid))
+            if card.get("unit_id"):
+                remaining_unit_ids.add(str(card["unit_id"]))
+        card_owners: Sequence[tuple[int | None, str, int]] = (
+            owners.get(int(pid), []) if pid is not None else []
+        )
+        # Count each card under its primary subject only, so subject totals never double count.
+        subject_id, name, order = card_owners[0] if card_owners else (None, UNSORTED_SUBJECT, 0)
+        if subject_id is not None:
+            subject_order[subject_id] = order
+        bucket = buckets.setdefault(
+            subject_id,
+            {"subject_id": subject_id, "name": name, "done": 0, "total": 0},
+        )
+        bucket["total"] += 1
+        bucket["done"] += int(is_done)
 
     by_subject = sorted(
         buckets.values(),
@@ -142,29 +160,44 @@ def _round_block(session: Session, payload: dict[str, Any]) -> dict[str, Any]:
             "review": len(unit_ids) - len(new_units),
             "done": done,
             "remaining": len(cards) - done,
+            "remaining_palaces": len(remaining_palace_ids),
+            "remaining_units": len(remaining_unit_ids),
         },
         "by_subject": by_subject,
     }
 
 
-def _today_block(session: Session, day: date) -> dict[str, Any]:
-    live = (Palace.deleted_at.is_(None), Palace.archived.is_(False))
-    active_units = (
-        session.query(func.count(ReviewUnitState.id))
+def _unit_palace_counts(session: Session, *conditions: Any) -> dict[str, int]:
+    """Distinct live units and the palaces holding them, for units matching the conditions."""
+    row = (
+        session.query(
+            func.count(ReviewUnitState.id),
+            func.count(distinct(ReviewUnitState.palace_id)),
+        )
         .join(Palace, Palace.id == ReviewUnitState.palace_id)
-        .filter(ReviewUnitState.active.is_(True), *live)
+        .filter(
+            ReviewUnitState.active.is_(True),
+            Palace.deleted_at.is_(None),
+            Palace.archived.is_(False),
+            *conditions,
+        )
+        .one()
     )
-    palaces_with_units = select(ReviewUnitState.palace_id)
-    new_palaces = (
-        session.query(func.count(Palace.id))
-        .filter(*live, Palace.id.not_in(palaces_with_units))
-        .scalar()
-    )
+    return {"units": int(row[0] or 0), "palaces": int(row[1] or 0)}
+
+
+def _today_block(session: Session, day: date) -> dict[str, Any]:
+    due = _unit_palace_counts(session, ReviewUnitState.due_date <= day)
+    overdue = _unit_palace_counts(session, ReviewUnitState.due_date < day)
+    new = _unit_palace_counts(session, ReviewUnitState.has_passed.is_(False))
     return {
-        "due_count": active_units.filter(ReviewUnitState.due_date <= day).scalar() or 0,
-        "overdue_count": active_units.filter(ReviewUnitState.due_date < day).scalar() or 0,
-        "new_palace_count": new_palaces or 0,
+        "due_count": due["units"],
+        "due_palace_count": due["palaces"],
+        "overdue_count": overdue["units"],
+        "new_unit_count": new["units"],
+        "new_palace_count": new["palaces"],
     }
+
 
 
 def _yesterday_block(session: Session, day: date, zone: tzinfo) -> dict[str, Any]:
@@ -192,6 +225,8 @@ def _yesterday_block(session: Session, day: date, zone: tzinfo) -> dict[str, Any
         (uid for uid, ratio in ratios.items() if ratio >= WEAK_AGAIN_RATIO),
         key=lambda uid: (-ratios[uid], uid),
     )[:WEAK_LIMIT]
+    learned_states = _states_by_id(session, set(totals))
+    learned_palace_ids = {state.palace_id for state in learned_states.values()}
     states = _states_by_id(session, set(weak_ids))
     palace_ids = {state.palace_id for state in states.values()}
     titles = _unit_titles(session, palace_ids)
@@ -212,7 +247,7 @@ def _yesterday_block(session: Session, day: date, zone: tzinfo) -> dict[str, Any
     return {
         "date": yesterday.isoformat(),
         "learned_units": len(totals),
-        "rated_count": len(rows),
+        "learned_palace_count": len(learned_palace_ids),
         "weak_units": weak_units,
     }
 
@@ -253,7 +288,7 @@ def build_freestyle_overview(
     round_id: str | None = None,
 ) -> dict[str, Any]:
     zone = _zone(tz_name)
-    day = date.fromisoformat(day_text) if day_text else datetime.now(zone).date()
+    day = date.fromisoformat(day_text) if day_text else local_day(tz_name)
     payload = get_round(session, round_id) if round_id else None
     return {
         "round": _round_block(session, payload) if payload is not None else None,

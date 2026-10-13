@@ -14,7 +14,10 @@ from .application.freestyle_projection import (
 )
 from .application.learning_loop import build_mastery_profile, record_attempt_event
 from .application.learning_progress_evidence import read_learning_progress_quiz
-from .application.palace_count_badges import project_palace_quiz_count_badges
+from .application.palace_count_badges import (
+    project_palace_question_sets,
+    project_palace_quiz_count_badges,
+)
 from .application.question_contracts import sort_questions_for_bank_display
 from .application.question_scheduler import (
     OVERLAY_QUESTION_RANGE_DUE,
@@ -35,6 +38,7 @@ __all__ = [
     "list_node_bindings_for_palaces",
     "list_published_questions_for_palaces",
     "list_study_text_bindings",
+    "project_palace_question_sets",
     "project_palace_quiz_count_badges",
     "normalize_overlay_question_range",
     "OVERLAY_QUESTION_RANGE_DUE",

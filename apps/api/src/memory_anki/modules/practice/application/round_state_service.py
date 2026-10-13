@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date
 from typing import Any
 
 from sqlalchemy.orm import Session
 
-from memory_anki.core.time import utc_now_naive
+from memory_anki.core.time import local_day, utc_now_naive
 from memory_anki.infrastructure.db._tables.misc import (
     FreestyleRoundState,
 )
@@ -102,7 +101,7 @@ def _progress_identity_in_plan(plan: dict[str, Any], card_id: str) -> str:
 
 
 def _local_today() -> str:
-    return date.today().isoformat()
+    return local_day().isoformat()
 
 
 def _require_operation_id(operation_id: str | None) -> str:
@@ -393,7 +392,7 @@ def _without_undue_units(session: Session, plan: dict[str, Any]) -> dict[str, An
     unit_ids = _plan_unit_ids(plan)
     if not unit_ids:
         return plan
-    due_ids = list_due_review_unit_ids(session, unit_ids, today=date.today())
+    due_ids = list_due_review_unit_ids(session, unit_ids, today=local_day())
     return drop_undue_unstarted(plan, due_ids)
 
 
@@ -715,6 +714,7 @@ def rate_freestyle_round_unit(
             exclude_unit_ids=[str(value) for value in batch.get("exclude_unit_ids") or []],
             include_unit_ids=[str(value) for value in batch.get("include_unit_ids") or []],
             commit=False,
+            adopt_live_revision=True,
         )
     elif _text(unit_id):
         # An empty study_session_id is valid: the unit service reopens the glance
@@ -732,6 +732,7 @@ def rate_freestyle_round_unit(
             card_id=card_id,
             occurrence_id=occurrence_id or "",
             retry_attempt=int((occurrence or {}).get("retry_attempt") or 0),
+            adopt_live_revision=True,
         )
 
     if _operation_seen(session, row, op_id):

@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from datetime import date
 from typing import Any
 
 from sqlalchemy.orm import Session, selectinload
 
-from memory_anki.core.time import utc_now_naive
+from memory_anki.core.time import local_day, utc_now_naive
 from memory_anki.infrastructure.db._tables.knowledge import Chapter
 from memory_anki.infrastructure.db._tables.palaces import (
     Palace,
@@ -200,7 +199,7 @@ def _build_review_cards_from_rollups(
         for unit in due_units:
             unit_title = str(unit.get("title") or "剩余水流单元")
             due_date = str(unit.get("due_date") or "")
-            overdue = due_date < date.today().isoformat()
+            overdue = due_date < local_day().isoformat()
             cards.append(
                 _action_card(
                     card_id=f"review_unit:{unit['id']}:r{unit['revision']}",

@@ -434,13 +434,13 @@ def test_same_day_due_units_follow_topology_order(session_factory):
     )
     session.add(
         ReviewUnitState(
-            id="unit-cohort",
+            id="unit-residual",
             palace_id=palace.id,
             anchor_uid="A",
-            unit_kind="cohort",
-            node_uids_json='["B1","B2"]',
-            membership_hash="cohort",
-            content_hash="cohort",
+            unit_kind="residual",
+            node_uids_json='["B3"]',
+            membership_hash="residual",
+            content_hash="residual",
             revision=1,
             stage_index=2,
             has_passed=True,
@@ -453,8 +453,8 @@ def test_same_day_due_units_follow_topology_order(session_factory):
     palace_id = palace.id
     rows = list_trusted_due_units_for_queue(session, date.today(), [palace_id])
     session.close()
-    assert [row["id"] for row in rows] == ["unit-cohort", "unit-branch"]
-    assert rows[0]["unit_kind"] == "cohort"
+    assert [row["id"] for row in rows] == ["unit-residual", "unit-branch"]
+    assert rows[0]["unit_kind"] == "residual"
 
 
 def test_queue_reads_pass_state_and_palace_unit_totals(session_factory):

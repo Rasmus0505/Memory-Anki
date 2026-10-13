@@ -79,14 +79,6 @@ def _payload(
     }
 
 
-@overload
-def _serve(session: Any, row: FreestyleRoundState, **kwargs: Any) -> dict[str, Any]: ...
-
-
-@overload
-def _serve(session: Any, row: None, **kwargs: Any) -> None: ...
-
-
 def _unfinished_summary(session: Any, plan: dict[str, Any]) -> dict[str, Any]:
     excluded = set(plan.get("excluded_ids") or [])
     completed = set(plan.get("completed_ids") or [])
@@ -127,6 +119,14 @@ def _unfinished_summary(session: Any, plan: dict[str, Any]) -> dict[str, Any]:
         "skipped_count": len(excluded),
         "order": order,
     }
+
+
+@overload
+def _serve(session: Any, row: FreestyleRoundState, **kwargs: Any) -> dict[str, Any]: ...
+
+
+@overload
+def _serve(session: Any, row: None, **kwargs: Any) -> None: ...
 
 
 def _serve(session: Any, row: FreestyleRoundState | None, **kwargs: Any) -> dict[str, Any] | None:

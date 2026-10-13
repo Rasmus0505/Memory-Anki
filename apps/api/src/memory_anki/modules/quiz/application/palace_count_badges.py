@@ -31,6 +31,40 @@ def _badge(kind: BadgeKind, count: int, has_marked: bool) -> dict[str, str] | No
     }
 
 
+def project_palace_question_sets(
+    session: Session,
+    palace_ids: list[int],
+) -> dict[int, set[int]]:
+    """Distinct live question ids bound to each palace (any question type).
+
+    Used for progress-bar denominators: a chapter's total is the size of the union
+    of its palaces' sets, so a question shared by two palaces is counted once.
+    """
+    if not palace_ids:
+        return {}
+    rows = (
+        session.query(
+            PalaceQuizQuestionNodeBinding.palace_id,
+            PalaceQuizQuestion.id,
+        )
+        .join(
+            PalaceQuizQuestion,
+            PalaceQuizQuestion.id == PalaceQuizQuestionNodeBinding.question_id,
+        )
+        .filter(
+            PalaceQuizQuestionNodeBinding.palace_id.in_(palace_ids),
+            PalaceQuizQuestion.deleted_at.is_(None),
+        )
+        .all()
+    )
+    sets: dict[int, set[int]] = {}
+    for palace_id, question_id in rows:
+        if palace_id is None or question_id is None:
+            continue
+        sets.setdefault(int(palace_id), set()).add(int(question_id))
+    return sets
+
+
 def project_palace_quiz_count_badges(
     session: Session,
     palace_ids: list[int],
