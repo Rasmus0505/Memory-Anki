@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>节点卡片底色进度 · 预览</title>
+<style>
+  :root {
+    --paper: #fbf8f3;
+    --card: #ffffff;
+    --line: #d9d2c7;
+    --ink: #2b2620;
+    --ink-soft: #5d554a;
+    --new: hsl(198 58% 46%);
+    --review: hsl(38 92% 52%);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 28px 24px 48px;
+    font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+  }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: var(--ink-soft); font-size: 13px; margin: 0 0 20px; line-height: 1.7; }
+  .legend { display: flex; gap: 18px; font-size: 13px; margin-bottom: 26px; color: var(--ink-soft); }
+  .legend i { display: inline-block; width: 14px; height: 10px; border-radius: 3px; vertical-align: -1px; margin-right: 6px; }
+  .variant { margin: 0 0 36px; }
+  .variant h2 { font-size: 14px; margin: 0 0 4px; }
+  .variant p { font-size: 12.5px; color: var(--ink-soft); margin: 0 0 12px; line-height: 1.6; }
+  .canvas {
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 20px 18px 22px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+  }
+  .node {
+    position: relative;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 12px 12px 14px;
+    font-size: 13.5px;
+    line-height: 1.5;
+    min-height: 62px;
+    background-color: var(--card);
+    /* --p is the share of the map's questions: this node's subtree count ÷ 20. --tint is the type colour. */
+    background-image: linear-gradient(
+      to right,
+      color-mix(in srgb, var(--tint) var(--alpha), transparent) var(--p),
+      transparent var(--p)
+    );
+  }
+  .node.root { font-weight: 800; text-align: center; font-size: 15px; }
+  .node .count {
+    position: absolute; right: 8px; top: 6px;
+    font-size: 11px; color: var(--ink-soft); font-variant-numeric: tabular-nums;
+    display: none;
+  }
+  .node .badge {
+    position: absolute; right: -8px; bottom: -8px; z-index: 2;
+    background: var(--card); border: 1px solid var(--line); border-radius: 999px;
+    font-size: 11px; padding: 0 6px; line-height: 18px; color: var(--ink-soft);
+  }
+  .new { --tint: var(--new); }
+  .review { --tint: var(--review); }
+  /* Tint strength per variant */
+  .a .node { --alpha: 30%; }
+  .b .node { --alpha: 18%; }
+  .d .node { --alpha: 45%; }
+  .c .node { --alpha: 30%; }
+  .c .node .count { display: block; }
+  .note { font-size: 12px; color: var(--ink-soft); margin-top: 8px; line-height: 1.6; }
+</style>
+</head>
+<body>
+  <h1>节点卡片底色进度 · 预览</h1>
+  <p class="sub">
+    例子：「第三节德国教育的发展」共 20 题。卡片底色从左侧填充，填充长度 = 该节点绑定的题数（含子节点）÷ 整张思维导图的题数。<br />
+    颜色按类型：蓝 = 第一次学，琥珀 = 复习。文字始终在底色之上。卡片下方不再有单独的进度条。
+  </p>
+  <div class="legend">
+    <span><i style="background: var(--new)"></i>第一次学（蓝）</span>
+    <span><i style="background: var(--review)"></i>复习（琥珀）</span>
+    <span>卡片原底色 = 未填充部分</span>
+  </div>
+
+  <!-- Share of 20 questions: root 20/20 = 100%, 20世纪前期 3/20 = 15%, 德意志帝国时期 8/20 = 40%, 魏玛 1/20 = 5%, 二战后 12/20 = 60%, 90年代 6/20 = 30%. -->
+
+  <section class="variant a">
+    <h2>方案 A · 透明度 30%（当前实现）</h2>
+    <p>填充明显，文字可读。</p>
+    <div class="canvas">
+      <div class="node root review" style="--p:100%">第三节德国教育的发展<span class="badge">20</span></div>
+      <div class="node review" style="--p:15%">20 世纪前期的教育<span class="badge">3</span></div>
+      <div class="node new" style="--p:40%">德意志帝国时期<span class="badge">8</span></div>
+      <div class="node new" style="--p:5%">魏玛共和国时期<span class="badge">1</span></div>
+      <div class="node review" style="--p:60%">二战后的教育改革<span class="badge">12</span></div>
+      <div class="node new" style="--p:30%">20 世纪 90 年代的教育改革<span class="badge">6</span></div>
+    </div>
+  </section>
+
+  <section class="variant b">
+    <h2>方案 B · 透明度 18%（更淡）</h2>
+    <p>底色克制，适合长时间阅读；比例辨认较弱。</p>
+    <div class="canvas">
+      <div class="node root review" style="--p:100%">第三节德国教育的发展<span class="badge">20</span></div>
+      <div class="node review" style="--p:15%">20 世纪前期的教育<span class="badge">3</span></div>
+      <div class="node new" style="--p:40%">德意志帝国时期<span class="badge">8</span></div>
+      <div class="node new" style="--p:5%">魏玛共和国时期<span class="badge">1</span></div>
+      <div class="node review" style="--p:60%">二战后的教育改革<span class="badge">12</span></div>
+      <div class="node new" style="--p:30%">20 世纪 90 年代的教育改革<span class="badge">6</span></div>
+    </div>
+  </section>
+
+  <section class="variant c">
+    <h2>方案 C · 透明度 30% + 卡片内写出「题数/整图题数」</h2>
+    <p>比例不靠猜：每张卡片右上角直接写出数字，格式统一为「本节点题数/整图题数」。</p>
+    <div class="canvas">
+      <div class="node root review" style="--p:100%">第三节德国教育的发展<span class="count">20/20</span><span class="badge">20</span></div>
+      <div class="node review" style="--p:15%">20 世纪前期的教育<span class="count">3/20</span><span class="badge">3</span></div>
+      <div class="node new" style="--p:40%">德意志帝国时期<span class="count">8/20</span><span class="badge">8</span></div>
+      <div class="node new" style="--p:5%">魏玛共和国时期<span class="count">1/20</span><span class="badge">1</span></div>
+      <div class="node review" style="--p:60%">二战后的教育改革<span class="count">12/20</span><span class="badge">12</span></div>
+      <div class="node new" style="--p:30%">20 世纪 90 年代的教育改革<span class="count">6/20</span><span class="badge">6</span></div>
+    </div>
+  </section>
+
+  <section class="variant d">
+    <h2>方案 D · 透明度 45%（更浓）</h2>
+    <p>填充最醒目，但文字对比下降，深色主题下需要再调。</p>
+    <div class="canvas">
+      <div class="node root review" style="--p:100%">第三节德国教育的发展<span class="badge">20</span></div>
+      <div class="node review" style="--p:15%">20 世纪前期的教育<span class="badge">3</span></div>
+      <div class="node new" style="--p:40%">德意志帝国时期<span class="badge">8</span></div>
+      <div class="node new" style="--p:5%">魏玛共和国时期<span class="badge">1</span></div>
+      <div class="node review" style="--p:60%">二战后的教育改革<span class="badge">12</span></div>
+      <div class="node new" style="--p:30%">20 世纪 90 年代的教育改革<span class="badge">6</span></div>
+    </div>
+  </section>
+
+  <p class="note">
+    说明：这是静态示意，节点名与题数为虚构；真实页面的分母是整张思维导图的题数，分子是节点子树的题数。
+  </p>
+</body>
+</html>
