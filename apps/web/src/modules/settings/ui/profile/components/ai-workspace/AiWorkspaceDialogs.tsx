@@ -75,7 +75,7 @@ export function AiWorkspaceDialogs({
             <LoadingState text="正在分析模型影响…" />
           ) : impact ? (
             <div className="space-y-4">
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <Card>
                   <CardContent className="p-4">
                     <div className="text-xs text-muted-foreground">场景引用</div>
@@ -228,7 +228,7 @@ export function AiWorkspaceDialogs({
           {logDetailLoading ? (
             <LoadingState text="正在加载日志详情…" />
           ) : logDetail ? (
-            <div className="grid h-full gap-4 overflow-hidden lg:grid-cols-2">
+            <div className="grid grid-cols-1 h-full gap-4 overflow-hidden lg:grid-cols-2">
               <div className="space-y-3 overflow-y-auto pr-2">
                 <div className="rounded-xl border border-border/60 p-3 text-sm">
                   <div>Feature：{logDetail.feature}</div>

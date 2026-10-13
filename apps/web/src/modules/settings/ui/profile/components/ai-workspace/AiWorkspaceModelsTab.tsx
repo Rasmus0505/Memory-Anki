@@ -203,7 +203,7 @@ export function AiWorkspaceModelsTab({
             <DialogClose onClick={() => setModelEditorOpen(false)} />
           </DialogHeader>
           <div className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <select value={newModelType} onChange={(event) => onNewModelTypeChange(event.target.value as AiModelType)} className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm">
                 {MODEL_TYPE_OPTIONS.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
               </select>
@@ -213,7 +213,7 @@ export function AiWorkspaceModelsTab({
               <Input value={modelDraft.key} onChange={(event) => onModelDraftChange({ ...modelDraft, key: event.target.value })} placeholder="模型 key" />
               <Input value={modelDraft.displayName} onChange={(event) => onModelDraftChange({ ...modelDraft, displayName: event.target.value })} placeholder="显示名称（可选）" />
             </div>
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
               <select value={modelDraft.structuredOutputMode} onChange={(event) => onModelDraftChange({ ...modelDraft, structuredOutputMode: event.target.value as ModelDraft["structuredOutputMode"] })} className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm">
                 <option value="json_schema">JSON Schema</option>
                 <option value="json_object">JSON Object</option>
@@ -240,7 +240,7 @@ export function AiWorkspaceModelsTab({
         </DialogContent>
       </Dialog>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         {filteredModels.map((model) => (
           <Card key={model.key} className="border-border/70">
             <CardHeader className="space-y-3">
@@ -272,7 +272,7 @@ export function AiWorkspaceModelsTab({
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-2 text-sm text-muted-foreground sm:grid-cols-2">
                 <div>被场景使用：{model.usage_count ?? 0}</div>
                 <div>最近调用：{formatDateTime(model.last_used_at)}</div>
               </div>

@@ -237,7 +237,7 @@ export default function ProfileFeedbackPage() {
             <CardTitle className="text-base">反馈模式</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-3 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
               {PRESET_OPTIONS.map((option) => {
                 const active = draftSettings.preset === option.value
                 return (
@@ -323,7 +323,7 @@ export default function ProfileFeedbackPage() {
                 <p className="mt-1 text-sm leading-5 text-muted-foreground">
                   三套都在。点一下会用这套试听，保存后全应用生效。所有声音都偏响，音量滑条仍然有效。
                 </p>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {SOUND_VOICE_OPTIONS.map((option) => {
                     const active = draftSettings.soundVoice === option.id
                     return (
@@ -471,7 +471,7 @@ export default function ProfileFeedbackPage() {
           <CardHeader className="pb-2">
             <CardTitle className="text-base">按场景微调</CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-3 pt-0 xl:grid-cols-2">
+          <CardContent className="grid grid-cols-1 gap-3 pt-0 xl:grid-cols-2">
             {FEEDBACK_SCENE_DESCRIPTORS.map((descriptor) => (
               <FeedbackSceneEditor
                 key={descriptor.key}

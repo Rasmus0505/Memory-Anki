@@ -343,7 +343,7 @@ export function AppLogDrawer({ open, onOpenChange }: AppLogDrawerProps) {
                     {item.input_artifacts.length > 0 ? (
                       <div className="mt-4 space-y-2">
                         <div className="text-sm font-medium">输入图片 / 页面</div>
-                        <div className="grid gap-3 md:grid-cols-2">
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                           {item.input_artifacts.map((artifact) => (
                             <div key={artifact.name} className="rounded-xl border border-border/70 p-3">
                               <div className="mb-2 text-xs text-muted-foreground">{artifact.label}</div>
@@ -380,7 +380,7 @@ export function AppLogDrawer({ open, onOpenChange }: AppLogDrawerProps) {
                         </pre>
                       </div>
                     ) : null}
-                    <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                    <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
                       <div className="space-y-2">
                         <div className="text-sm font-medium">请求 JSON</div>
                         <pre className="overflow-x-auto rounded-xl bg-slate-950 px-3 py-2 text-xs text-slate-100">

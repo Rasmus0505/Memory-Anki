@@ -76,7 +76,7 @@ export function AiWorkspaceProvidersTab({
           </div>
         </CardContent>
       </Card>
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         {filteredProviders.map((provider) => {
           const draft = providerDrafts[provider.key] ?? {
             baseUrl: provider.base_url,
@@ -117,7 +117,7 @@ export function AiWorkspaceProvidersTab({
                     </Badge>
                   </div>
                 </div>
-                <div className="grid gap-2 text-xs text-muted-foreground md:grid-cols-2">
+                <div className="grid grid-cols-1 gap-2 text-xs text-muted-foreground md:grid-cols-2">
                   <div>最近调用：{formatDateTime(provider.last_called_at)}</div>
                   <div>最近成功：{formatDateTime(provider.last_success_at)}</div>
                   <div>最近失败：{formatDateTime(provider.last_error_at)}</div>
@@ -125,7 +125,7 @@ export function AiWorkspaceProvidersTab({
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label htmlFor={`provider-base-${provider.key}`}>Base URL</Label>
                     <Input

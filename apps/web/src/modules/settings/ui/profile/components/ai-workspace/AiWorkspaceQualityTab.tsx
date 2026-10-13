@@ -56,7 +56,7 @@ export function AiWorkspaceQualityTab() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
         {[
           ['调用成功率', metrics ? percent(metrics.success_rate) : '--'],
           ['结构输出成功率', metrics ? percent(metrics.structured_success_rate) : '--'],
@@ -72,7 +72,7 @@ export function AiWorkspaceQualityTab() {
         ))}
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Card>
           <CardHeader><CardTitle className="text-base">用量与错误</CardTitle></CardHeader>
           <CardContent className="space-y-3 text-sm">

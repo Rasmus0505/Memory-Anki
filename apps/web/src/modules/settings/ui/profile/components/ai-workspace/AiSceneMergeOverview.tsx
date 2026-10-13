@@ -54,7 +54,7 @@ export function AiSceneMergeOverview({ modelScenes }: { modelScenes: AiSceneBind
         </div>
       </CardHeader>
       <CardContent>
-        <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-3">
           {merged.map((scene) => (
             <div key={scene.key} className="rounded-lg border p-3">
               <div className="flex items-start justify-between gap-2">

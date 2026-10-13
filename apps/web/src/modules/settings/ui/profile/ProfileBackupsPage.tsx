@@ -314,7 +314,7 @@ export default function ProfileBackupsPage() {
                 导出
               </CardTitle>
             </CardHeader>
-            <CardContent className="grid gap-2 md:grid-cols-3">
+            <CardContent className="grid grid-cols-1 gap-2 md:grid-cols-3">
               <ExportLink href={exportJsonUrl()} icon={<FileJson className="size-5 shrink-0 text-muted-foreground" />} title="JSON 导出/迁移" />
               <ExportLink href={exportMarkdownUrl()} icon={<FileText className="size-5 shrink-0 text-muted-foreground" />} title="Markdown 导出/迁移" />
               <ExportLink href={fullExportUrl()} icon={<FileArchive className="size-5 shrink-0 text-muted-foreground" />} title="全库 zip（含附件）" />

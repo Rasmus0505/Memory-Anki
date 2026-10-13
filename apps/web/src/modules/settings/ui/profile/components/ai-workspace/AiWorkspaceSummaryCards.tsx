@@ -12,7 +12,7 @@ export function AiWorkspaceSummaryCards({
   recentSuccessCallCount: number;
 }) {
   return (
-    <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+    <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
       <Card>
         <CardContent className="p-4">
           <div className="text-sm text-muted-foreground">Provider 数</div>
