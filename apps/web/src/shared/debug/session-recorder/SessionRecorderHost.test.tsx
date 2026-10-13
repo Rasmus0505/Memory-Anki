@@ -102,4 +102,16 @@ describe('SessionRecorderHost', () => {
     expect(hud.style.top).toBe('78px')
     anchor.remove()
   })
+
+  it('falls back to the top-left corner when the sidebar anchor is hidden (PWA)', () => {
+    render(
+      <MemoryRouter>
+        <SessionRecorderHost />
+      </MemoryRouter>,
+    )
+
+    const hud = document.querySelector('[data-session-recorder-hud="true"]') as HTMLElement
+    expect(hud.style.left).toBe('12px')
+    expect(hud.style.top).toBe('12px')
+  })
 })

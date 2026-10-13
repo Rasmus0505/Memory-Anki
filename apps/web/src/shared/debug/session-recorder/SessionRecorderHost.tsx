@@ -43,12 +43,10 @@ function readAnchorPosition() {
   return { x: rect.left, y: rect.top }
 }
 
-function fallbackPosition(width: number) {
+// Used when the desktop sidebar anchor is hidden (PWA / narrow screens): sit in the top-left corner where the anchor normally is.
+function fallbackPosition() {
   const inset = 12
-  return {
-    x: Math.max(inset, window.innerWidth - width - inset),
-    y: inset,
-  }
+  return { x: inset, y: inset }
 }
 
 function clampPosition(x: number, y: number, width: number, height: number) {
@@ -159,7 +157,7 @@ function SessionRecorderDialog() {
 }
 
 function SessionRecorderFloatingControl() {
-  const [position, setPosition] = useState(() => fallbackPosition(36))
+  const [position, setPosition] = useState(() => fallbackPosition())
   const [dragged, setDragged] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const positionRef = useRef(position)
@@ -179,7 +177,7 @@ function SessionRecorderFloatingControl() {
       if (draggedRef.current) return
       const width = rootRef.current?.offsetWidth ?? 36
       const height = rootRef.current?.offsetHeight ?? 36
-      const anchored = readAnchorPosition() ?? fallbackPosition(width)
+      const anchored = readAnchorPosition() ?? fallbackPosition()
       const next = clampPosition(anchored.x, anchored.y, width, height)
       setPosition((current) => (current.x === next.x && current.y === next.y ? current : next))
     }
