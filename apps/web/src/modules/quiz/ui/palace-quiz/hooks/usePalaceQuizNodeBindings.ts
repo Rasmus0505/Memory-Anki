@@ -11,6 +11,7 @@ import {
 } from '@/modules/quiz/domain/quiz-entity/model/quizSessionProgress'
 import type { QuizRuntimeState } from '@/modules/quiz/domain/quiz-entity/model/quizRuntime'
 import type { MindMapDocumentInput } from '@/modules/content/public'
+import { usePalaceParentQuestionTotal } from '@/modules/content/public'
 import type { QuizNodeBindingEdge } from '@/shared/api/contracts'
 import {
   applyQuizQuestionMarkToBindings,
@@ -38,6 +39,7 @@ export function usePalaceQuizNodeBindings({
   const [bindings, setBindings] = useState<QuizNodeBindingEdge[]>([])
   const [unitPassStates, setUnitPassStates] = useState<UnitPassState[]>([])
   const [loading, setLoading] = useState(false)
+  const parentQuestionTotal = usePalaceParentQuestionTotal(palaceId, enabled)
   const [completedQuestionIds, setCompletedQuestionIds] = useState<Set<number>>(
     () => readQuizSessionCompletedIds(),
   )
@@ -134,8 +136,8 @@ export function usePalaceQuizNodeBindings({
   )
 
   const nodeProgressByNodeUid = useMemo(
-    () => (editorDoc ? buildNodeProgressByNodeUid(editorDoc, subtreeQuestions, unitPassStates) : {}),
-    [editorDoc, subtreeQuestions, unitPassStates],
+    () => (editorDoc ? buildNodeProgressByNodeUid(editorDoc, subtreeQuestions, unitPassStates, parentQuestionTotal) : {}),
+    [editorDoc, parentQuestionTotal, subtreeQuestions, unitPassStates],
   )
 
   const markQuestionCompleted = useCallback((questionId: number) => {

@@ -192,7 +192,7 @@ export function QuizQuestionInteraction({
     const resolved = currentState.trueFalseAnswer !== undefined
     return (
       <div className="space-y-3">
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {[true, false].map((value) => (
             <button
               key={String(value)}
@@ -301,7 +301,7 @@ export function QuizQuestionInteraction({
     const rightItems = [...pairs].reverse()
     return (
       <div className="space-y-4">
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-2">
             {pairs.map((pair) => (
               <button
@@ -488,7 +488,7 @@ export function QuizQuestionInteraction({
             </button>
           ))}
         </div>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {categories.map((category) => (
             <div
               key={category.id}

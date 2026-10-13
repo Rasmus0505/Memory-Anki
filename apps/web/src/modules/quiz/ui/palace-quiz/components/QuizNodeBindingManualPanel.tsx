@@ -190,7 +190,7 @@ export function QuizNodeBindingManualPanel({
 
       <div className="rounded-lg border p-3 space-y-2">
         <div className="text-sm font-medium">新增绑定</div>
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <label className="space-y-1 text-xs">
             <span className="text-muted-foreground">题目（本宫题库）</span>
             <select

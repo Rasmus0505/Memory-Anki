@@ -146,10 +146,16 @@ export function PalaceListCard({
         className={cn('relative overflow-visible', getPalaceCardClass(viewSettings.densityMode))}
         style={progressBackground ? { backgroundImage: progressBackground } : undefined}
       >
-      <CardContent className={cn('flex items-start', getPalaceCardContentClass(viewSettings.densityMode))}>
+      {/* Phones: icon + text on the first row, action buttons on a second row so the title keeps its width. */}
+      <CardContent
+        className={cn(
+          'grid grid-cols-[auto_minmax(0,1fr)] items-start sm:grid-cols-[auto_minmax(0,1fr)_auto]',
+          getPalaceCardContentClass(viewSettings.densityMode),
+        )}
+      >
         <div
           className={cn(
-            'flex shrink-0 items-center justify-center bg-secondary',
+            'row-span-2 flex shrink-0 items-center justify-center bg-secondary sm:row-span-1',
             getPalaceIconClass(viewSettings.densityMode),
           )}
         >
@@ -220,7 +226,7 @@ export function PalaceListCard({
 
         </div>
 
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="col-start-2 row-start-2 flex items-center justify-end gap-1 sm:col-start-auto sm:row-start-auto sm:justify-start">
           <Link to={`/palaces/${palace.id}/quiz`}>
             <Button
               variant="ghost"

@@ -29,19 +29,22 @@ export function resolveReviewButtonState(
 }
 
 export function getListSectionWrapperClass(layoutMode: PalaceListLayoutMode) {
-  if (layoutMode === 'chapter-card-grid') return 'grid gap-4 xl:grid-cols-2'
+  // Every grid below pins `grid-cols-1` (minmax(0,1fr)) on phones. Without it the implicit
+  // `auto` track grows to a card's min-content width (nowrap titles + action buttons) and the
+  // whole list overflows the viewport on narrow screens.
+  if (layoutMode === 'chapter-card-grid') return 'grid grid-cols-1 gap-4 xl:grid-cols-2'
   return 'space-y-4'
 }
 
 export function getChapterPalaceGridClass(layoutMode: PalaceListLayoutMode) {
-  if (layoutMode === 'chapter-double') return 'grid gap-3 xl:grid-cols-2'
-  if (layoutMode === 'flow') return 'grid gap-3 md:grid-cols-2 2xl:grid-cols-3'
+  if (layoutMode === 'chapter-double') return 'grid grid-cols-1 gap-3 xl:grid-cols-2'
+  if (layoutMode === 'flow') return 'grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3'
   return 'space-y-3'
 }
 
 export function getUngroupedPalaceGridClass(layoutMode: PalaceListLayoutMode) {
-  if (layoutMode === 'chapter-double' || layoutMode === 'chapter-card-grid') return 'grid gap-3 xl:grid-cols-2'
-  if (layoutMode === 'flow') return 'grid gap-3 md:grid-cols-2 2xl:grid-cols-3'
+  if (layoutMode === 'chapter-double' || layoutMode === 'chapter-card-grid') return 'grid grid-cols-1 gap-3 xl:grid-cols-2'
+  if (layoutMode === 'flow') return 'grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-3'
   return 'space-y-3'
 }
 
