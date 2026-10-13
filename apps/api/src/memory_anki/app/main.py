@@ -22,9 +22,6 @@ from memory_anki.app.startup_warmup import (
     start_db_pool_warmup,
     start_startup_warmup,
 )
-from memory_anki.modules.memory.application.unit_reconcile_scheduler import (
-    start_reconcile_worker,
-)
 from memory_anki.core.api_token_auth import ApiTokenAuthMiddleware
 from memory_anki.core.config import (
     ATTACHMENTS_DIR,
@@ -43,10 +40,6 @@ from memory_anki.modules.backups.application.backup_lifecycle import (
     start_periodic_backup_loop,
     start_startup_backups,
     stop_periodic_backup_loop,
-)
-from memory_anki.platform.persistence import (
-    start_mutation_response_purge_loop,
-    stop_mutation_response_purge_loop,
 )
 from memory_anki.modules.backups.presentation import router as backups_router
 from memory_anki.modules.content.application.study_text_library_cache import (
@@ -73,6 +66,10 @@ from memory_anki.modules.quiz.presentation import router as palace_quiz_router
 from memory_anki.modules.search.presentation import router as search_router
 from memory_anki.modules.session.presentation import router as sessions_router
 from memory_anki.modules.settings.presentation import router as settings_router
+from memory_anki.platform.persistence import (
+    start_mutation_response_purge_loop,
+    stop_mutation_response_purge_loop,
+)
 
 get_session = _get_session
 logger = logging.getLogger(__name__)

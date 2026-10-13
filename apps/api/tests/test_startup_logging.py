@@ -10,14 +10,15 @@ from unittest.mock import patch
 from fastapi import BackgroundTasks, FastAPI
 from fastapi.testclient import TestClient
 
-
-def _sleep_sync(seconds: float) -> None:
-    time.sleep(seconds)
-
 from memory_anki.app import startup_runtime
 from memory_anki.core import request_logging
 from memory_anki.core.logging import LOG_FORMAT, configure_logging
 from memory_anki.core.request_logging import RequestLoggingMiddleware
+
+
+def _sleep_sync(seconds: float) -> None:
+    time.sleep(seconds)
+
 
 API_ROOT = Path(__file__).resolve().parents[1]
 ALEMBIC_INI = API_ROOT / "alembic.ini"
