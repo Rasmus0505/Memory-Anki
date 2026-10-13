@@ -2,8 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createFreestyleScrollChannel } from '@/modules/practice/ui/freestyle/model/freestyleScrollChannel'
 import {
-  palaceAccent,
-  palaceAccentToneClass,
+  progressSegmentAccentClass,
   progressSegmentShapeClass,
   retryNodeToneClass,
   type FreestyleProgressSummary,
@@ -60,15 +59,15 @@ describe('FreestyleProgressRail', () => {
     expect(screen.getByTestId('freestyle-progress-rail').className).toContain('h-7')
   })
 
-  it('colors segments by palace identity, not a whole-palace emerald override', () => {
+  it('colors segments only by new (blue) or review (amber), never by palace', () => {
     renderRail({
       summary: summary({
         segments: [
-          { cardId: 'one', tone: 'done', palaceId: 1, palaceDone: true },
-          { cardId: 'two', tone: 'done', palaceId: 1, palaceDone: true },
-          { cardId: 'three', tone: 'current', palaceId: 2, palaceDone: false },
-          { cardId: 'four', tone: 'pending', palaceId: 2, palaceDone: false },
-          { cardId: 'five', tone: 'pending', palaceId: null, palaceDone: false },
+          { cardId: 'one', tone: 'done', palaceId: 1, palaceDone: true, isNew: true },
+          { cardId: 'two', tone: 'done', palaceId: 1, palaceDone: true, isNew: true },
+          { cardId: 'three', tone: 'current', palaceId: 2, palaceDone: false, isNew: false },
+          { cardId: 'four', tone: 'pending', palaceId: 2, palaceDone: false, isNew: false },
+          { cardId: 'five', tone: 'pending', palaceId: null, palaceDone: false, isNew: true },
         ],
       }),
     })
@@ -77,25 +76,21 @@ describe('FreestyleProgressRail', () => {
     expect(segments.map((node) => node.getAttribute('data-palace-id')))
       .toEqual(['1', '1', '2', '2', ''])
 
-    expect(palaceAccent(1)).not.toBe(palaceAccent(2))
-    expect(palaceAccent(null)).toBe('neutral')
+    // Same newness + same tone → identical fill class, whatever the palace.
+    expect(segments[0].className).toContain(progressSegmentAccentClass(true, 'done'))
+    expect(segments[1].className).toBe(segments[0].className)
+    expect(segments[0].className).not.toBe(segments[2].className)
 
-    // Same palace + same tone → identical fill class.
-    expect(segments[0].className).toContain(palaceAccentToneClass(1, 'done'))
-    expect(segments[1].className).toContain(palaceAccentToneClass(1, 'done'))
-    expect(segments[0].className).toBe(segments[1].className)
-
-    // Different palaces keep distinct accents even when tones match.
-    expect(segments[3].className).toContain(palaceAccentToneClass(2, 'pending'))
-    expect(palaceAccentToneClass(1, 'pending')).not.toBe(palaceAccentToneClass(2, 'pending'))
-
-    // Done no longer forces emerald via palaceDone.
-    expect(segments[0].className).not.toContain('bg-emerald-400')
-    expect(segments[4].className).toContain(palaceAccentToneClass(null, 'pending'))
+    // Review ticks are amber, new ticks are blue.
+    expect(segments[2].className).toContain(progressSegmentAccentClass(false, 'current'))
+    expect(segments[3].className).toContain(progressSegmentAccentClass(false, 'pending'))
+    expect(segments[4].className).toContain(progressSegmentAccentClass(true, 'pending'))
+    expect(progressSegmentAccentClass(true, 'done')).toContain('214_84%_62%')
+    expect(progressSegmentAccentClass(false, 'done')).toBe('bg-rate-hard')
 
     // Faint pending vs solid done must stay a glanceable contrast on 6px ticks.
-    expect(palaceAccentToneClass(2, 'pending')).toContain('/25')
-    expect(palaceAccentToneClass(1, 'done')).not.toMatch(/\/\d+/)
+    expect(progressSegmentAccentClass(false, 'pending')).toContain('/25')
+    expect(progressSegmentAccentClass(true, 'done')).not.toMatch(/\/\d+/)
     expect(segments[3].className).toContain('/25')
     expect(segments[0].className).not.toMatch(/bg-\S+\/\d+/)
   })
@@ -505,7 +500,7 @@ describe('FreestyleProgressRail', () => {
       const first = screen.getAllByTestId('freestyle-progress-segment')[0]
       expect(first.querySelector('.progress-fill-sweep')).not.toBeNull()
       // Base stays faint underneath so the sweep is visible.
-      expect(first.className).toContain(palaceAccentToneClass(1, 'pending'))
+      expect(first.className).toContain(progressSegmentAccentClass(false, 'pending'))
     })
 
     it('opens a slot for a retry occurrence inserted into a drawn rail', () => {

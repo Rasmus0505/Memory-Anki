@@ -8,14 +8,22 @@ const FLIP_ID = 'mindmap-reveal-flip'
 /** The live theme pack sets the flip's length and landing overshoot. */
 const flipMs = () => themeMotion().flipMs
 /** Edge-on moment: the paper back is swapped for the answer face here. */
-const FLIP_TURN = 0.42
-const STEP_MS = 45
-const MAX_SPREAD_MS = 540
+const FLIP_TURN = 0.3
+const STEP_MS = 35
+const MAX_SPREAD_MS = 140
 /** Bubbled from a card when its flip lands, for hosts that react to a landed card. */
 export const MINDMAP_CARD_LANDED_EVENT = 'memory-anki:mindmap-card-landed'
-const FOLD_MS = 420
+/** A fold is the card itself travelling back into its parent, not a faded copy. */
+const FOLD_MS = 320
+const FOLD_STAGGER_MS = 22
+const FOLD_MAX_SPREAD_MS = 90
+/** The parent's jelly pop lands as the first child reaches it. */
+const FOLD_PARENT_POP_MS = 240
 const MAX_FOLDS_PER_BATCH = 24
-const INK_LEAD_MS = 110
+/** Ink leads the paper turn by a short beat, so the click reads as an immediate answer. */
+const INK_LEAD_MS = 40
+/** Landing rebound as a share of the theme's overshoot: a jelly wobble, not a swing. */
+const REBOUND_SHARE = 0.4
 /** React Flow mounts new nodes (and their edges, after measuring) a few frames later. */
 const MOUNT_WAIT_MS = 1200
 const PERSPECTIVE = 'perspective(680px)'
@@ -181,20 +189,25 @@ function clearFx(card: HTMLElement) {
 
 function flipCard(card: HTMLElement, delay: number, playback: FxPlayback) {
   const FLIP_MS = flipMs()
-  const overshoot = themeMotion().flipOvershootDeg
+  const rebound = themeMotion().flipOvershootDeg * REBOUND_SHARE
   clearFx(card)
   // The paper face turns. The glyphs stay on the card and only fade, so a
-  // rotate/scale never rasterizes them.
+  // rotate/scale never rasterizes them. Every keyframe carries the same
+  // transform functions so the cover interpolates per function, not as a matrix.
   const cover = fxElement('mindmap-flip-cover', card)
   const sheen = fxElement('mindmap-flip-sheen', cover)
 
+  // Press squish → fast start (no ease-in dead time) → spring through edge-on →
+  // landing wobble. The press pose matches the CSS :active squish, so the cover
+  // takes over from the pressed card without a jump.
   removeWhenDone(cover.animate(
     [
-      { transform: `${PERSPECTIVE} rotateX(0deg) scale(1)`, opacity: 1, easing: 'cubic-bezier(0.55, 0, 0.85, 0.35)' },
-      { transform: `${PERSPECTIVE} rotateX(-90deg) scale(1.06)`, opacity: 1, offset: FLIP_TURN },
-      { transform: `${PERSPECTIVE} rotateX(90deg) scale(1.06)`, opacity: 1, offset: FLIP_TURN + 0.0001, easing: 'cubic-bezier(0.15, 0.7, 0.3, 1)' },
-      { transform: `${PERSPECTIVE} rotateX(${-overshoot}deg) scale(1.03)`, opacity: 0.45, offset: 0.74 },
-      { transform: 'none', opacity: 0 },
+      { transform: `${PERSPECTIVE} rotateX(0deg) translateY(0px) scale(1.02, 0.95)`, opacity: 1, easing: 'cubic-bezier(0.2, 0.8, 0.3, 1)' },
+      { transform: `${PERSPECTIVE} rotateX(-90deg) translateY(-10px) scale(1.04)`, opacity: 1, offset: FLIP_TURN },
+      { transform: `${PERSPECTIVE} rotateX(90deg) translateY(-10px) scale(1.04)`, opacity: 1, offset: FLIP_TURN + 0.0001, easing: 'cubic-bezier(0.34, 1.3, 0.64, 1)' },
+      { transform: `${PERSPECTIVE} rotateX(${-rebound}deg) translateY(0px) scale(0.97, 1.06)`, opacity: 1, offset: 0.62, easing: 'ease-out' },
+      { transform: `${PERSPECTIVE} rotateX(${rebound * 0.2}deg) translateY(0px) scale(1.03, 0.96)`, opacity: 1, offset: 0.84, easing: 'ease-in-out' },
+      { transform: `${PERSPECTIVE} rotateX(0deg) translateY(0px) scale(1)`, opacity: 0 },
     ],
     { duration: FLIP_MS, delay, fill: 'both' },
   ), cover)
@@ -248,22 +261,9 @@ function retireRevealLayers(root: HTMLElement) {
   })
 }
 
-function bumpCard(card: Element | null) {
-  if (!card || typeof (card as HTMLElement).animate !== 'function') return
-  const ring = fxElement('mindmap-land-ring', card as HTMLElement)
-  removeWhenDone(ring.animate(
-    [
-      { opacity: 0.85, transform: 'scale(0.98)' },
-      { opacity: 0, transform: 'scale(1.06)' },
-    ],
-    { duration: 380, easing: 'ease-out', fill: 'both' },
-  ), ring)
-}
-
 /**
- * Hidden children fold back into the card that hid them: a ghost of each leaving
- * node fades out while ink and gold are drawn in after it. The ghost is not
- * scaled — that transform is what softens the copied glyphs.
+ * Hidden children fold back into the card that hid them: each leaving card is
+ * pulled into its parent and shrinks away. See `foldNode`.
  * Runs in the same commit the nodes leave, while React Flow still has their DOM.
  */
 export function planFoldBack(
@@ -293,25 +293,74 @@ export function planFoldBack(
 
 const nodeSelector = (id: string) => `.react-flow__node[data-id="${escapeId(id)}"]`
 
-function foldNode(root: HTMLElement, id: string, into: string) {
+function centerOf(element: Element) {
+  const rect = element.getBoundingClientRect()
+  return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+}
+
+/** The i-th card of a fold batch: spaced out, but the whole batch lands within FOLD_MAX_SPREAD_MS. */
+export function foldStaggerMs(index: number, count: number) {
+  return index * Math.min(FOLD_STAGGER_MS, FOLD_MAX_SPREAD_MS / Math.max(1, count - 1))
+}
+
+/** The parent gives one jelly pop per batch, as its first child arrives. */
+function popParent(parentCard: HTMLElement, delay: number) {
+  if (typeof parentCard.animate !== 'function') return
+  parentCard.animate(
+    [
+      { transform: 'scale(1, 1)' },
+      { transform: 'scale(1.06, 0.92)', offset: 0.3 },
+      { transform: 'scale(0.97, 1.04)', offset: 0.62 },
+      { transform: 'scale(1, 1)' },
+    ],
+    { duration: 440, delay, easing: 'ease-out' },
+  )
+}
+
+/**
+ * The folding card travels back into the card that hid it and shrinks away.
+ * React Flow has already dropped the node, so the clone stands in for it. Only
+ * the clone's card moves: the React Flow wrapper keeps the node's own translate.
+ * Glyphs are scaled only on the way out, while they fade, so the softening is brief.
+ */
+function foldNode(root: HTMLElement, id: string, into: string, delay: number): HTMLElement | null {
   const node = root.querySelector<HTMLElement>(nodeSelector(id))
   const parentCard = root.querySelector<HTMLElement>(cardSelector(into))
+  const nodeCard = node?.querySelector<HTMLElement>('.mindmap-node-card') ?? null
   // `offsetWidth` and `getBoundingClientRect()` both read layout, and nothing
   // mutates the DOM between them, so the second read does not force a second
   // reflow. Collapsing them would not save a reflow — only a property access —
   // while changing the guard's meaning (`offsetWidth` ignores transforms and
   // rounds to whole pixels). Kept as-is deliberately.
-  if (!node || !parentCard || !node.parentElement || node.offsetWidth === 0) return
+  if (!node || !nodeCard || !parentCard || !node.parentElement || node.offsetWidth === 0) return null
+  // Translate is in the card's local px, which React Flow's zoom scales on screen.
+  const zoom = nodeCard.getBoundingClientRect().width / Math.max(1, nodeCard.offsetWidth)
+  if (!(zoom > 0)) return null
+  const from = centerOf(nodeCard)
+  const to = centerOf(parentCard)
+  const dx = (to.x - from.x) / zoom
+  const dy = (to.y - from.y) / zoom
+
   const ghost = node.cloneNode(true) as HTMLElement
   ghost.removeAttribute('data-id')
   ghost.setAttribute('aria-hidden', 'true')
   ghost.style.pointerEvents = 'none'
   node.parentElement.appendChild(ghost)
-  ghost.animate(
-    [{ opacity: 1 }, { opacity: 0 }],
-    { duration: FOLD_MS, easing: 'cubic-bezier(0.6, 0, 0.8, 0.4)', fill: 'forwards' },
+  const ghostCard = ghost.querySelector<HTMLElement>('.mindmap-node-card')
+  if (!ghostCard || typeof ghostCard.animate !== 'function') {
+    ghost.remove()
+    return null
+  }
+  ghostCard.animate(
+    [
+      { transform: 'translate(0px, 0px) scale(1, 1)', opacity: 1, easing: 'cubic-bezier(0.3, 0, 0.7, 1)' },
+      // Anticipation: a small squash away from the parent before it is pulled in.
+      { transform: 'translate(0px, -6px) scale(1.05, 0.93)', opacity: 1, offset: 0.22, easing: 'cubic-bezier(0.55, 0, 0.9, 0.5)' },
+      { transform: `translate(${dx * 0.92}px, ${dy * 0.92}px) scale(0.28)`, opacity: 0, offset: 1 },
+    ],
+    { duration: FOLD_MS, delay, fill: 'both' },
   ).finished.catch(() => undefined).then(() => ghost.remove())
-  bumpCard(parentCard)
+  return parentCard
 }
 
 function inkEdge(path: SVGPathElement, delay: number) {
@@ -447,7 +496,14 @@ export function useMindMapRevealMotion(
     }
     if (snapRapid || prefersReducedMotion() || typeof root.animate !== 'function') return
     if (willFold) {
-      folds.forEach(({ id, into }) => foldNode(root, id, into))
+      const parents = new Set<string>()
+      folds.forEach(({ id, into }, index) => {
+        const parentCard = foldNode(root, id, into, foldStaggerMs(index, folds.length))
+        if (parentCard && !parents.has(into)) {
+          parents.add(into)
+          popParent(parentCard, FOLD_PARENT_POP_MS)
+        }
+      })
     }
     if (!play || (plan.flips.length === 0 && plan.deals.length === 0)) return
 

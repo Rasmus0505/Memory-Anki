@@ -1,0 +1,636 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>翻卡 · 收卡 手感方案预览</title>
+<style>
+  :root {
+    --ink: #3b2a1d;
+    --ink-soft: #8a6d55;
+    --amber: #e8872a;
+    --line: rgba(120, 80, 40, 0.28);
+    --slow: 1;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    color: var(--ink);
+    background: #efe5d4;
+    min-height: 100vh;
+  }
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 24px 20px 56px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { margin: 0 0 18px; color: var(--ink-soft); font-size: 13px; line-height: 1.6; }
+
+  /* 方案选择 */
+  .packs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .pack {
+    text-align: left; cursor: pointer; font: inherit; color: inherit;
+    background: #fffaf2; border: 1.5px solid rgba(120, 80, 40, 0.14);
+    border-radius: 14px; padding: 12px 14px;
+    transition: border-color 200ms, box-shadow 200ms, transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .pack:hover { transform: translateY(-2px); }
+  .pack:active { transform: scale(0.97); }
+  .pack[aria-checked="true"] { border-color: var(--amber); box-shadow: 0 0 0 3px rgba(232, 135, 42, 0.18); }
+  .pack b { display: block; font-size: 15px; margin-bottom: 4px; }
+  .pack span { display: block; font-size: 12px; color: var(--ink-soft); line-height: 1.5; }
+  .pack em { display: inline-block; font-style: normal; font-size: 11px; color: #fff; background: var(--amber); border-radius: 999px; padding: 0 7px; margin-bottom: 6px; }
+
+  /* 工具条 */
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 10px; align-items: center; }
+  .btn {
+    font: inherit; font-size: 13px; cursor: pointer; color: var(--ink);
+    background: #fffaf2; border: 1px solid rgba(120, 80, 40, 0.22);
+    border-radius: 999px; padding: 7px 14px; transition: transform 160ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .btn:active { transform: scale(0.94); }
+  .btn[aria-pressed="true"] { background: var(--amber); color: #fff; border-color: var(--amber); }
+  kbd { font: inherit; font-size: 11px; color: var(--ink-soft); }
+  .hint { font-size: 12px; color: var(--ink-soft); margin-left: auto; }
+
+  /* 舞台 */
+  .stage-scroll { overflow-x: auto; border-radius: 22px; }
+  .stage {
+    position: relative; height: 360px; min-width: 660px;
+    border-radius: 22px;
+    background: radial-gradient(120% 90% at 50% 0%, #fffdf8, #f6ecdc 70%);
+    box-shadow: inset 0 0 0 1px rgba(120, 80, 40, 0.1);
+  }
+  .stage > svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+  .edge { fill: none; stroke: var(--line); stroke-width: 2; stroke-linecap: round; transition: opacity calc(240ms * var(--slow)) ease; }
+  .edge.folded { opacity: 0; }
+  .stage-hint { position: absolute; left: 0; right: 0; bottom: 14px; text-align: center; font-size: 12px; color: var(--ink-soft); pointer-events: none; }
+
+  /* 卡片：纸面与待回忆 */
+  .card {
+    position: absolute; border-radius: 16px; padding: 12px 10px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+    text-align: center; user-select: none; -webkit-user-select: none; cursor: pointer;
+    background: linear-gradient(160deg, #fffbf3, #f6e8d2);
+    border: 1px solid rgba(120, 80, 40, 0.18);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 6px 16px -8px rgba(90, 50, 20, 0.3);
+    transform-origin: 50% 50%;
+    outline: none;
+  }
+  .card:focus-visible { box-shadow: 0 0 0 3px var(--amber); }
+  .card.concealed {
+    background:
+      repeating-linear-gradient(135deg, rgba(232, 135, 42, 0.12) 0 6px, transparent 6px 12px),
+      radial-gradient(120% 140% at 0% 0%, #fdeed6, transparent 60%),
+      linear-gradient(160deg, #fbe0b4, #f2c08a);
+    border-color: rgba(200, 120, 50, 0.6);
+  }
+  .card.concealed::after {
+    content: ""; position: absolute; inset: 3px;
+    border: 1px dashed rgba(200, 110, 40, 0.42); border-radius: 12px; pointer-events: none;
+  }
+  .card .q { color: #b06a25; font-weight: 600; letter-spacing: 0.08em; font-size: 15px; }
+  .card .a { font-weight: 600; font-size: 15px; line-height: 1.35; }
+  .card.concealed .a { display: none; }
+  .card:not(.concealed) .q { display: none; }
+  .card .idx { position: absolute; left: 10px; top: 7px; font-size: 11px; color: var(--ink-soft); }
+  .child:hover { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 12px 24px -10px rgba(90, 50, 20, 0.36); }
+  .card.folded { visibility: hidden; pointer-events: none; }
+  .card.ghost { pointer-events: none; }
+  .root { width: 210px; height: 88px; font-size: 16px; cursor: default; }
+  .root .tag { position: absolute; left: 12px; top: 8px; font-size: 11px; color: var(--ink-soft); }
+  .root .count { position: absolute; right: 12px; bottom: 7px; font-size: 11px; color: #b06a25; }
+  .root .a { font-size: 16px; }
+  .ring {
+    position: absolute; inset: -1px; border-radius: inherit;
+    border: 2px solid rgba(232, 135, 42, 0.55); pointer-events: none;
+  }
+
+  /* 说明 */
+  .notes { margin-top: 16px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .note {
+    background: #fffaf2; border: 1px solid rgba(120, 80, 40, 0.12);
+    border-radius: 14px; padding: 14px 16px; font-size: 13px; line-height: 1.7;
+  }
+  .note.wide { grid-column: 1 / -1; }
+  .note h3 { margin: 0 0 6px; font-size: 14px; }
+  .note p { margin: 0 0 4px; }
+  .note ul { margin: 0; padding-left: 18px; }
+  .note .label { display: inline-block; min-width: 2.4em; color: var(--amber); font-weight: 600; }
+  .foot { font-size: 12px; color: var(--ink-soft); margin-top: 14px; line-height: 1.7; }
+
+  @media (max-width: 820px) {
+    .packs { grid-template-columns: 1fr 1fr; }
+    .notes { grid-template-columns: 1fr; }
+    .hint { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .pack, .btn { transition: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>翻卡 · 收卡 手感方案预览</h1>
+  <p class="sub">
+    选一个方案，在下面的舞台里点「待回忆」卡翻开、按 Shift 收卡，感受节奏。开「慢放」可以逐帧看起手的第一拍。
+    这里只预览动效，声音与震动沿用现有的 <code>cue('audio.pops')</code> 不变。
+  </p>
+
+  <div class="packs" role="radiogroup" aria-label="手感方案">
+    <button class="pack" role="radio" aria-checked="true" data-pack="jelly">
+      <em>我的推荐</em>
+      <b>A 果冻弹跳</b>
+      <span>按下就压、松手就翻，落地回弹一下，收卡时被父卡吸进去</span>
+    </button>
+    <button class="pack" role="radio" aria-checked="false" data-pack="paper">
+      <b>B 纸页轻翻</b>
+      <span>像翻纸页：抬起、卷过、阴影跟着走，不过冲，最安静</span>
+    </button>
+    <button class="pack" role="radio" aria-checked="false" data-pack="snappy">
+      <b>C 干脆即时</b>
+      <span>最快最克制，几乎没有等待；多于 3 张只淡入文字，不再弹一堆</span>
+    </button>
+    <button class="pack" role="radio" aria-checked="false" data-pack="base">
+      <b>现状（对照）</b>
+      <span>当前代码的参数，用来和上面三个比手感</span>
+    </button>
+  </div>
+
+  <div class="toolbar">
+    <button class="btn" id="btn-flip">全部翻开 <kbd>A</kbd></button>
+    <button class="btn" id="btn-fold">收卡 <kbd>Shift</kbd></button>
+    <button class="btn" id="btn-restore">摊开 <kbd>R</kbd></button>
+    <button class="btn" id="btn-slow" aria-pressed="false">慢放 ×4</button>
+    <button class="btn" id="btn-reset">重置</button>
+    <span class="hint">点卡翻开 · 收卡后子卡收回父卡</span>
+  </div>
+
+  <div class="stage-scroll">
+    <div class="stage" id="stage">
+      <svg aria-hidden="true"></svg>
+      <div class="card root paper" id="root">
+        <span class="tag">宫殿入口</span>
+        <b class="a">记忆宫殿 · 第一站</b>
+        <span class="count"></span>
+      </div>
+      <div class="stage-hint">待回忆卡 = 琥珀纸背；点它翻开，按 Shift 收回</div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <div class="note wide">
+      <h3>现状的三个手感问题（从当前代码读出来的）</h3>
+      <ul>
+        <li>翻卡前有 110 ms 的墨迹等待，卡牌前半程 ease-in 慢启动，所以点下去像「晚了一拍」。</li>
+        <li>收卡时子卡直接从状态里消失，剩下的是一张原地淡出的克隆残影；卡本身没有「被收回去」的方向感。</li>
+        <li>多卡 domino 最长 540 ms 全部在动，再叠墨迹、落地光环和音效，一次弹出很多东西。</li>
+      </ul>
+    </div>
+    <div class="note">
+      <h3 id="spec-title"></h3>
+      <p id="spec-tag" style="color:var(--ink-soft)"></p>
+      <p><span class="label">翻卡</span><span id="spec-flip"></span></p>
+      <p><span class="label">收卡</span><span id="spec-collect"></span></p>
+      <p><span class="label">多卡</span><span id="spec-batch"></span></p>
+    </div>
+    <div class="note">
+      <h3>正式实现落点</h3>
+      <ul>
+        <li><code>shared/ui/mindmap-canvas/useMindMapRevealMotion.ts</code>：<code>flipCard</code> / <code>foldNode</code> 与错开常数。</li>
+        <li>果冻关键帧走现有 <code>shared/fx</code> 的 <code>jellyOn</code>，样式在 <code>styles/motion.css</code>（AGENTS.md 里写的 <code>styles/jelly.css</code> 不存在）。</li>
+        <li>翻卡时长来自主题包 <code>shared/theme/packs/study.ts</code> 的 <code>flipMs</code>，改时长要改这里。</li>
+        <li>正式版保留覆盖层（<code>.mindmap-flip-cover</code>）只转覆盖层的做法，文字不会在旋转中糊。预览为简单起见旋转整卡。</li>
+        <li>所有延迟步骤挂在 <code>FxPlayback</code> owner 上；减弱动效时关闭位移，只留淡入淡出。</li>
+      </ul>
+    </div>
+  </div>
+
+  <p class="foot">
+    慢放 ×4 只影响预览里的动画时间，不改变最终速度。方案选定后，我会按所选方案改 <code>useMindMapRevealMotion.ts</code> 并补一条架构守卫。
+  </p>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  const stage = document.getElementById('stage');
+  const svg = stage.querySelector('svg');
+  const rootEl = document.getElementById('root');
+  const countEl = rootEl.querySelector('.count');
+
+  const ROOT = { w: 210, h: 88, top: 34 };
+  const KID = { h: 96, top: 214, gap: 16, min: 92, max: 136, count: 5 };
+  const ANSWERS = ['红伞 · 门口', '钥匙 · 墙钩', '猫 · 窗边', '书 · 第三层', '蓝碗 · 厨房'];
+
+  const SHADOW_REST = 'inset 0 1px 0 rgba(255,255,255,0.9), 0 6px 16px -8px rgba(90,50,20,0.3)';
+  const SHADOW_LIFT = 'inset 0 1px 0 rgba(255,255,255,0.9), 0 26px 34px -14px rgba(90,50,20,0.38)';
+
+  /** 按下时的预反馈。松手（click）后翻卡的第一帧就是这个姿态，所以不会跳。 */
+  const PRESS = {
+    squish: [{ transform: 'scale(1, 1)' }, { transform: 'scale(1.02, 0.95)' }],
+    lift: [
+      { transform: 'translateY(0px)', boxShadow: SHADOW_REST },
+      { transform: 'translateY(-3px)', boxShadow: SHADOW_LIFT },
+    ],
+  };
+
+  /** 同一批 n 张卡的错开：每张间隔 step，但总展开不超过 cap。 */
+  const slotOf = (i, n, step, cap) => (n <= 1 ? 0 : i * Math.min(step, cap / (n - 1)));
+
+  const PACKS = {
+    jelly: {
+      flip: {
+        lead: 40, duration: 520, swapAt: 0.3, press: 'squish',
+        frames: [
+          { transform: 'perspective(680px) rotateX(0deg) translateY(0px) scale(1.02, 0.95)', easing: 'cubic-bezier(0.2, 0.8, 0.3, 1)' },
+          { transform: 'perspective(680px) rotateX(-90deg) translateY(-10px) scale(1.04)', offset: 0.3 },
+          { transform: 'perspective(680px) rotateX(90deg) translateY(-10px) scale(1.04)', offset: 0.3001, easing: 'cubic-bezier(0.34, 1.3, 0.64, 1)' },
+          { transform: 'perspective(680px) rotateX(-5deg) translateY(0px) scale(0.97, 1.06)', offset: 0.62, easing: 'ease-out' },
+          { transform: 'perspective(680px) rotateX(1deg) scale(1.03, 0.96)', offset: 0.84, easing: 'ease-in-out' },
+          { transform: 'perspective(680px) rotateX(0deg) scale(1)' },
+        ],
+        batch: (i, n) => ({ slot: slotOf(i, n, 35, 140) }),
+      },
+      collect: {
+        mode: 'suck', duration: 320, stagger: 22, spread: 90, parentFx: 'pop', parentAt: 240,
+        frames: (dx, dy) => [
+          { transform: 'translate(0px, 0px) scale(1, 1)', easing: 'cubic-bezier(0.3, 0, 0.7, 1)' },
+          { transform: 'translate(0px, -6px) scale(1.05, 0.93)', offset: 0.22, easing: 'cubic-bezier(0.55, 0, 0.9, 0.5)' },
+          { transform: `translate(${dx * 0.92}px, ${dy * 0.92}px) scale(0.28)`, opacity: 0, offset: 1 },
+        ],
+      },
+      info: {
+        title: 'A 果冻弹跳',
+        tag: '按下就压，松手就翻，落地果冻回弹。最贴近「果冻质感」。',
+        flip: '按下即压扁（110 ms）；松手后 40 ms 起翻，前 30% 已到 90°；回弹越过 0° 再压回，共 520 ms。',
+        collect: '子卡先反向压一下（预备动作），再被父卡吸进去，缩到 28% 淡出 320 ms；父卡果冻 pop 一下。',
+        batch: '错开 35 ms，总展开不超过 140 ms，所有卡在 0.7 秒内落定。',
+      },
+    },
+    paper: {
+      flip: {
+        lead: 90, duration: 460, swapAt: 0.5, press: 'lift',
+        frames: [
+          { transform: 'perspective(900px) translateY(-3px) rotateX(0deg) skewX(0deg)', boxShadow: SHADOW_REST, easing: 'cubic-bezier(0.45, 0, 0.7, 0.2)' },
+          { transform: 'perspective(900px) translateY(-3px) rotateX(-86deg) skewX(-2deg)', boxShadow: SHADOW_LIFT, offset: 0.5 },
+          { transform: 'perspective(900px) translateY(-3px) rotateX(86deg) skewX(2deg)', boxShadow: SHADOW_LIFT, offset: 0.5001, easing: 'cubic-bezier(0.2, 0.6, 0.25, 1)' },
+          { transform: 'perspective(900px) translateY(0px) rotateX(0deg) skewX(0deg)', boxShadow: SHADOW_REST },
+        ],
+        batch: (i, n) => ({ slot: slotOf(i, n, 55, 330) }),
+      },
+      collect: {
+        mode: 'suck', duration: 380, stagger: 40, spread: 160, swapAt: 0.4, parentFx: 'stack', parentAt: 120,
+        frames: (dx, dy) => [
+          { transform: 'perspective(900px) translate(0px, 0px) rotateX(0deg)', easing: 'cubic-bezier(0.4, 0, 0.6, 1)' },
+          { transform: `perspective(900px) translate(${dx * 0.45}px, ${dy * 0.45 - 14}px) rotateX(-84deg) scale(0.96)`, offset: 0.4, easing: 'cubic-bezier(0.55, 0, 0.8, 0.5)' },
+          { transform: `perspective(900px) translate(${dx * 0.95}px, ${dy * 0.95}px) rotateX(-84deg) scale(0.4)`, opacity: 0, offset: 1 },
+        ],
+      },
+      info: {
+        title: 'B 纸页轻翻',
+        tag: '像翻一页纸：抬起、卷过、阴影跟着走。没有回弹，最安静。',
+        flip: '抬起 3 px；460 ms 卷到 86°，阴影随之加深；换面后缓出，不过冲。',
+        collect: '子卡翻回待回忆面，斜着滑进父卡并缩小淡出 380 ms；父卡向下压一下，像纸叠被压实。',
+        batch: '错开 55 ms，总展开不超过 330 ms。',
+      },
+    },
+    snappy: {
+      flip: {
+        lead: 0, duration: 300, swapAt: 0.42, press: null,
+        frames: [
+          { transform: 'perspective(680px) rotateX(0deg)', easing: 'cubic-bezier(0.2, 0.9, 0.3, 1)' },
+          { transform: 'perspective(680px) rotateX(-90deg) scale(1.02)', offset: 0.42 },
+          { transform: 'perspective(680px) rotateX(90deg) scale(1.02)', offset: 0.4201, easing: 'cubic-bezier(0.2, 0.9, 0.3, 1)' },
+          { transform: 'perspective(680px) rotateX(0deg) scale(1)' },
+        ],
+        batch: (i) => ({ slot: 0, quick: i >= 3 }),
+      },
+      collect: {
+        mode: 'fade', duration: 200, stagger: 0, spread: 0, parentFx: 'ring', parentAt: 120,
+        frames: (dx, dy) => [
+          { transform: 'translate(0px, 0px) scale(1)', opacity: 1, easing: 'cubic-bezier(0.3, 0, 0.8, 0.2)' },
+          { transform: `translate(${dx * 0.4}px, ${dy * 0.4}px) scale(0.85)`, opacity: 0, offset: 1 },
+        ],
+      },
+      info: {
+        title: 'C 干脆即时',
+        tag: '最快最克制。没有墨迹等待，多卡不弹一堆。',
+        flip: '无墨迹等待，300 ms；126 ms 时已翻到边缘，落定不过冲。',
+        collect: '200 ms 缩小淡入父卡，父卡一圈轻光。',
+        batch: '同时最多翻 3 张，其余只淡入文字、不翻牌。',
+      },
+    },
+    base: {
+      flip: {
+        lead: 110, duration: 560, swapAt: 0.42, press: null,
+        frames: [
+          { transform: 'perspective(680px) rotateX(0deg) scale(1)', easing: 'cubic-bezier(0.55, 0, 0.85, 0.35)' },
+          { transform: 'perspective(680px) rotateX(-90deg) scale(1.06)', offset: 0.42 },
+          { transform: 'perspective(680px) rotateX(90deg) scale(1.06)', offset: 0.4201, easing: 'cubic-bezier(0.15, 0.7, 0.3, 1)' },
+          { transform: 'perspective(680px) rotateX(-13deg) scale(1.03)', offset: 0.74 },
+          { transform: 'perspective(680px) rotateX(0deg) scale(1)' },
+        ],
+        batch: (i, n) => ({ slot: slotOf(i, n, 45, 540) }),
+      },
+      collect: {
+        mode: 'ghost', duration: 420, stagger: 0, spread: 0, parentFx: 'ring', parentAt: 0,
+      },
+      info: {
+        title: '现状（对照）',
+        tag: '当前代码的参数。',
+        flip: '墨迹先行 110 ms，卡牌 560 ms；前半程 ease-in 慢启动，回弹 13°。',
+        collect: '子卡立刻从状态里消失，留一张克隆残影原地淡出 420 ms；父卡一圈光环。',
+        batch: '最多 8 张 domino 错开 45 ms，最长 540 ms 全部在动。',
+      },
+    },
+  };
+
+  let pack = PACKS.jelly;
+  let slow = 1;
+  let timers = [];
+  const T = (ms) => ms * slow;
+  const later = (fn, ms) => { timers.push(setTimeout(fn, ms)); };
+  const geo = { W: 0 };
+
+  // ---------- 卡片 ----------
+  const kids = ANSWERS.map((answer, i) => {
+    const el = document.createElement('div');
+    el.className = 'card child concealed';
+    el.tabIndex = 0;
+    el.setAttribute('role', 'button');
+    el.innerHTML = `<span class="idx">${String(i + 1).padStart(2, '0')}</span><span class="q">待回忆</span><span class="a">${answer}</span>`;
+    stage.appendChild(el);
+    const edge = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    edge.setAttribute('class', 'edge');
+    svg.appendChild(edge);
+    const kid = { el, edge, revealed: false, folded: false, busy: false, pressing: false, press: null, cx: 0, cy: 0 };
+    el.addEventListener('pointerdown', () => pressDown(kid));
+    el.addEventListener('pointerleave', () => pressCancel(kid));
+    el.addEventListener('click', () => {
+      kid.pressing = false;
+      if (kid.press) { kid.press.cancel(); kid.press = null; }
+      flipBatch([kid]);
+    });
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flipBatch([kid]); }
+    });
+    return kid;
+  });
+
+  function layout() {
+    const W = stage.clientWidth;
+    geo.W = W;
+    Object.assign(rootEl.style, { left: (W - ROOT.w) / 2 + 'px', top: ROOT.top + 'px', width: ROOT.w + 'px', height: ROOT.h + 'px' });
+    const cw = Math.max(KID.min, Math.min(KID.max, (W - 48 - KID.gap * (KID.count - 1)) / KID.count));
+    const total = cw * KID.count + KID.gap * (KID.count - 1);
+    const x0 = (W - total) / 2;
+    kids.forEach((kid, i) => {
+      const left = x0 + i * (cw + KID.gap);
+      Object.assign(kid.el.style, { left: left + 'px', top: KID.top + 'px', width: cw + 'px', height: KID.h + 'px' });
+      kid.cx = left + cw / 2;
+      kid.cy = KID.top + KID.h / 2;
+      const sy = ROOT.top + ROOT.h;
+      const mid = (sy + KID.top) / 2;
+      kid.edge.setAttribute('d', `M ${W / 2} ${sy} C ${W / 2} ${mid}, ${kid.cx} ${mid}, ${kid.cx} ${KID.top}`);
+    });
+  }
+  window.addEventListener('resize', layout);
+  layout();
+
+  function setRevealed(kid) {
+    kid.revealed = true;
+    kid.el.classList.remove('concealed');
+  }
+  function setConcealed(kid) {
+    kid.el.classList.add('concealed');
+  }
+  function updateCount() {
+    const n = kids.filter((k) => k.folded).length;
+    countEl.textContent = n ? `收着 ${n} 张` : '';
+  }
+
+  // ---------- 按下 ----------
+  function pressDown(kid) {
+    const name = pack.flip.press;
+    if (!name || kid.revealed || kid.folded || kid.busy) return;
+    kid.pressing = true;
+    if (kid.press) kid.press.cancel();
+    kid.press = kid.el.animate(PRESS[name], { duration: T(110), easing: 'ease-out', fill: 'forwards' });
+  }
+  function pressCancel(kid) {
+    if (!kid.pressing) return;
+    kid.pressing = false;
+    if (kid.press) kid.press.reverse();
+  }
+
+  // ---------- 翻卡 ----------
+  function flipBatch(list) {
+    const targets = list.filter((k) => !k.revealed && !k.folded && !k.busy);
+    targets.forEach((kid, i) => {
+      const plan = pack.flip.batch(i, targets.length);
+      if (plan.quick) quickReveal(kid, plan.slot);
+      else playFlip(kid, plan.slot);
+    });
+  }
+
+  function inkEdge(path, slot) {
+    const len = Math.ceil(path.getTotalLength());
+    const ink = '#e8872a';
+    path.animate(
+      [
+        { strokeDasharray: `${len} ${len}`, strokeDashoffset: len, stroke: ink, strokeWidth: 3 },
+        { strokeDasharray: `${len} ${len}`, strokeDashoffset: 0, stroke: ink, strokeWidth: 3, offset: 0.62 },
+        { strokeDasharray: `${len} ${len}`, strokeDashoffset: 0, stroke: ink, strokeWidth: 3, offset: 0.9 },
+        { strokeDasharray: `${len} ${len}`, strokeDashoffset: 0, stroke: 'rgba(120,80,40,0.28)', strokeWidth: 2 },
+      ],
+      { duration: T(520), delay: T(slot), fill: 'backwards', easing: 'cubic-bezier(0.65, 0, 0.35, 1)' },
+    );
+  }
+
+  function playFlip(kid, slot) {
+    const flip = pack.flip;
+    kid.busy = true;
+    kid.pressing = false;
+    if (kid.press) { kid.press.cancel(); kid.press = null; }
+    if (flip.lead >= 0 && kid.edge) inkEdge(kid.edge, slot);
+    const start = slot + flip.lead;
+    const anim = kid.el.animate(flip.frames, { duration: T(flip.duration), delay: T(start), fill: 'backwards' });
+    later(() => setRevealed(kid), T(start + flip.duration * flip.swapAt));
+    const done = () => { kid.busy = false; };
+    anim.finished.then(done, done);
+  }
+
+  function quickReveal(kid, slot) {
+    kid.busy = true;
+    later(() => {
+      setRevealed(kid);
+      kid.el.animate([{ opacity: 0.4 }, { opacity: 1 }], { duration: T(200), easing: 'ease-out' });
+      kid.busy = false;
+    }, T(slot));
+  }
+
+  // ---------- 收卡 ----------
+  function foldAll() {
+    foldBatch(kids.filter((k) => !k.folded));
+  }
+
+  function foldBatch(list) {
+    if (!list.length) return;
+    const fold = pack.collect;
+    const n = list.length;
+    list.forEach((kid, i) => {
+      kid.folded = true;
+      kid.busy = false;
+      kid.pressing = false;
+      if (kid.press) { kid.press.cancel(); kid.press = null; }
+      kid.el.getAnimations().forEach((a) => a.cancel());
+      kid.edge.classList.add('folded');
+      const slot = i * Math.min(fold.stagger, fold.spread / Math.max(1, n - 1));
+      if (fold.mode === 'ghost') ghostFold(kid, T(slot));
+      else suckFold(kid, slot, fold);
+    });
+    later(() => parentFx(fold.parentFx), T(fold.parentAt));
+    updateCount();
+  }
+
+  /** 基线：原地留一张克隆残影淡出，原卡立即隐藏。 */
+  function ghostFold(kid, delay) {
+    const ghost = kid.el.cloneNode(true);
+    ghost.classList.remove('folded');
+    ghost.classList.add('ghost');
+    ghost.removeAttribute('tabindex');
+    stage.appendChild(ghost);
+    kid.el.classList.add('folded');
+    const done = () => ghost.remove();
+    ghost.animate(
+      [{ opacity: 1 }, { opacity: 0 }],
+      { duration: T(420), delay, easing: 'cubic-bezier(0.6, 0, 0.8, 0.4)', fill: 'backwards' },
+    ).finished.then(done, done);
+  }
+
+  /** 卡本身飞回父卡（A/B 共用的收卡骨架，帧由方案决定）。 */
+  function suckFold(kid, slot, fold) {
+    const parent = { x: geo.W / 2, y: ROOT.top + ROOT.h / 2 };
+    const dx = parent.x - kid.cx;
+    const dy = parent.y - kid.cy;
+    const anim = kid.el.animate(fold.frames(dx, dy), { duration: T(fold.duration), delay: T(slot), fill: 'both' });
+    if (fold.swapAt != null) later(() => setConcealed(kid), T(slot + fold.duration * fold.swapAt));
+    const hide = () => { kid.el.classList.add('folded'); anim.cancel(); };
+    anim.finished.then(hide, hide);
+  }
+
+  function ring() {
+    const el = document.createElement('span');
+    el.className = 'ring';
+    rootEl.appendChild(el);
+    el.animate(
+      [{ opacity: 0.85, transform: 'scale(0.98)' }, { opacity: 0, transform: 'scale(1.06)' }],
+      { duration: T(380), easing: 'ease-out', fill: 'both' },
+    ).finished.then(() => el.remove(), () => el.remove());
+  }
+
+  function parentFx(kind) {
+    if (kind === 'ring') ring();
+    if (kind === 'pop') {
+      rootEl.animate(
+        [
+          { transform: 'scale(1, 1)' },
+          { transform: 'scale(1.06, 0.92)', offset: 0.3 },
+          { transform: 'scale(0.97, 1.04)', offset: 0.62 },
+          { transform: 'scale(1, 1)' },
+        ],
+        { duration: T(440), easing: 'ease-out' },
+      );
+    }
+    if (kind === 'stack') {
+      rootEl.animate(
+        [{ transform: 'translateY(0px)' }, { transform: 'translateY(4px)', offset: 0.35 }, { transform: 'translateY(0px)' }],
+        { duration: T(340), easing: 'cubic-bezier(0.3, 0.7, 0.3, 1)' },
+      );
+    }
+  }
+
+  // ---------- 摊开 / 重置 ----------
+  function restoreAll() {
+    let i = 0;
+    kids.forEach((kid) => {
+      if (!kid.folded) return;
+      kid.folded = false;
+      kid.el.getAnimations().forEach((a) => a.cancel());
+      kid.el.classList.remove('folded');
+      kid.el.classList.toggle('concealed', !kid.revealed);
+      kid.edge.classList.remove('folded');
+      const parent = { x: geo.W / 2, y: ROOT.top + ROOT.h / 2 };
+      kid.el.animate(
+        [
+          { transform: `translate(${parent.x - kid.cx}px, ${parent.y - kid.cy}px) scale(0.4)`, opacity: 0 },
+          { transform: 'translate(0px, 0px) scale(1)', opacity: 1 },
+        ],
+        { duration: T(440), delay: T(i * 45), easing: 'cubic-bezier(0.16, 1, 0.3, 1)', fill: 'backwards' },
+      );
+      i += 1;
+    });
+    updateCount();
+  }
+
+  function reset() {
+    timers.forEach(clearTimeout);
+    timers = [];
+    stage.querySelectorAll('.ghost, .ring').forEach((el) => el.remove());
+    rootEl.getAnimations().forEach((a) => a.cancel());
+    kids.forEach((kid) => {
+      kid.el.getAnimations().forEach((a) => a.cancel());
+      if (kid.press) kid.press.cancel();
+      kid.press = null;
+      kid.pressing = false;
+      kid.busy = false;
+      kid.folded = false;
+      kid.revealed = false;
+      kid.el.classList.remove('folded');
+      kid.el.classList.add('concealed');
+      kid.edge.classList.remove('folded');
+    });
+    updateCount();
+  }
+
+  // ---------- 控制 ----------
+  const packBtns = [...document.querySelectorAll('.pack')];
+  function selectPack(id) {
+    pack = PACKS[id];
+    packBtns.forEach((b) => b.setAttribute('aria-checked', String(b.dataset.pack === id)));
+    const info = pack.info;
+    document.getElementById('spec-title').textContent = info.title;
+    document.getElementById('spec-tag').textContent = info.tag;
+    document.getElementById('spec-flip').textContent = info.flip;
+    document.getElementById('spec-collect').textContent = info.collect;
+    document.getElementById('spec-batch').textContent = info.batch;
+  }
+  packBtns.forEach((b) => b.addEventListener('click', () => selectPack(b.dataset.pack)));
+
+  const slowBtn = document.getElementById('btn-slow');
+  slowBtn.addEventListener('click', () => {
+    slow = slow === 1 ? 4 : 1;
+    const on = slow !== 1;
+    slowBtn.setAttribute('aria-pressed', String(on));
+    slowBtn.textContent = on ? '慢放 ×4（开）' : '慢放 ×4';
+    document.documentElement.style.setProperty('--slow', String(slow));
+  });
+
+  document.getElementById('btn-flip').addEventListener('click', () => flipBatch(kids));
+  document.getElementById('btn-fold').addEventListener('click', foldAll);
+  document.getElementById('btn-restore').addEventListener('click', restoreAll);
+  document.getElementById('btn-reset').addEventListener('click', reset);
+
+  window.addEventListener('keydown', (e) => {
+    if (e.repeat) return;
+    if (e.key === 'Shift') foldAll();
+    else if (e.key === 'a' || e.key === 'A') flipBatch(kids);
+    else if (e.key === 'r' || e.key === 'R') restoreAll();
+  });
+
+  selectPack('jelly');
+  updateCount();
+})();
+</script>
+</body>
+</html>

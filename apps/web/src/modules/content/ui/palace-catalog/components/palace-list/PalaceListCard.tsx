@@ -8,8 +8,8 @@ import type { PalaceGroupedItem } from '@/shared/api/contracts'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { cn } from '@/shared/lib/utils'
-import { NodeCountBadgeCluster } from '@/shared/ui/mindmap-canvas/NodeCountBadge'
-import { ShareBar, shareRatio } from '@/shared/ui/share-bar/ShareBar'
+import { NodeCountBadgeCluster, withRatioBadge } from '@/shared/ui/mindmap-canvas/NodeCountBadge'
+import { NEUTRAL_SHARE_FILL, shareFillBackground, shareRatio } from '@/shared/ui/share-fill/shareFill'
 import {
   formatCreatedAt,
   getPalaceCardClass,
@@ -135,11 +135,17 @@ export function PalaceListCard({
     return () => window.removeEventListener('pointerdown', handlePointerDown)
   }, [menuOpen])
 
-  const quizCountBadges = palace.quiz_count_badges ?? []
+  const questionCount = palace.quiz_question_total ?? 0
+  const chapterTotal = chapterQuestionTotal ?? 0
+  const quizCountBadges = withRatioBadge(palace.quiz_count_badges ?? [], questionCount, chapterTotal)
+  const progressBackground = shareFillBackground(shareRatio(questionCount, chapterTotal), NEUTRAL_SHARE_FILL)
 
   return (
     <div className="pb-3 pr-3">
-      <Card className={cn('relative overflow-visible', getPalaceCardClass(viewSettings.densityMode))}>
+      <Card
+        className={cn('relative overflow-visible', getPalaceCardClass(viewSettings.densityMode))}
+        style={progressBackground ? { backgroundImage: progressBackground } : undefined}
+      >
       <CardContent className={cn('flex items-start', getPalaceCardContentClass(viewSettings.densityMode))}>
         <div
           className={cn(
@@ -273,12 +279,6 @@ export function PalaceListCard({
           </div>
         </div>
       </CardContent>
-      <div className="px-4 pb-2">
-        <ShareBar
-          ratio={shareRatio(palace.quiz_question_total, chapterQuestionTotal)}
-          label={`题目占本章节 ${palace.quiz_question_total ?? 0}/${chapterQuestionTotal ?? 0}`}
-        />
-      </div>
       {progressOpen ? (
         <PalaceReviewUnitsPanel
           open

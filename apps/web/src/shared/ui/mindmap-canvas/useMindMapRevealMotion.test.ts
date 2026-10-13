@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Node } from '@xyflow/react'
 import {
   createRevealLayoutHold,
+  foldStaggerMs,
   planRevealMotion,
   RAPID_REVEAL_MS,
   REVEAL_LAYOUT_HOLD_MS,
@@ -130,5 +131,14 @@ describe('createRevealLayoutHold', () => {
     expect(root.dataset.revealMotion).toBeUndefined()
     vi.advanceTimersByTime(REVEAL_LAYOUT_HOLD_MS)
     expect(root.dataset.revealMotion).toBeUndefined()
+  })
+})
+
+describe('foldStaggerMs', () => {
+  it('starts the first card at once and keeps the whole batch inside one short spread', () => {
+    expect(foldStaggerMs(0, 1)).toBe(0)
+    expect(foldStaggerMs(1, 5)).toBeGreaterThan(0)
+    expect(foldStaggerMs(9, 10)).toBeLessThanOrEqual(90)
+    expect(foldStaggerMs(4, 5)).toBeGreaterThan(foldStaggerMs(3, 5))
   })
 })

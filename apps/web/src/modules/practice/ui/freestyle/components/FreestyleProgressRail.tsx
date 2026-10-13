@@ -33,6 +33,7 @@ import {
 } from '@/modules/practice/ui/freestyle/components/freestyleProgressRailGeometry'
 import {
   PALACE_LEAD_MS,
+  TOOLTIP_DELAY_MS,
   ProgressRailItem,
   palaceStaggerIndex,
 } from '@/modules/practice/ui/freestyle/components/FreestyleProgressRailItem'
@@ -88,7 +89,7 @@ function DayCut({
   onJump: () => void
 }) {
   return (
-    <Tooltip>
+    <Tooltip delayDuration={TOOLTIP_DELAY_MS}>
       <TooltipTrigger asChild>
         <button
           type="button"

@@ -49,6 +49,20 @@ export function NodeCountBadge({
   )
 }
 
+/**
+ * The bottom-right badge (last in the cluster) shows "本体/整体" instead of its bare count. A card with
+ * no badges has no questions, so nothing is added.
+ */
+export function withRatioBadge(
+  countBadges: MindMapCountBadge[],
+  part: number,
+  whole: number,
+): MindMapCountBadge[] {
+  if (whole <= 0 || countBadges.length === 0) return countBadges
+  const last = countBadges[countBadges.length - 1]
+  return [...countBadges.slice(0, -1), { ...last, text: `${part}/${whole}` }]
+}
+
 /** Bottom-right cluster shared by mind-map nodes and bookshelf palace cards. */
 export function NodeCountBadgeCluster({
   countBadges,

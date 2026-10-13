@@ -1,6 +1,7 @@
 import type { MouseEvent } from 'react'
 import type { MindMapNode, MindMapNodeProgress } from './adapter'
 import type { NodeSize } from './layout'
+import { shareFillBackground } from '@/shared/ui/share-fill/shareFill'
 import type {
   SelectionToolbarAction,
   SelectionToolbarPreferPosition,
@@ -248,15 +249,11 @@ const PROGRESS_TONE_VAR: Record<MindMapNodeProgress['tone'], string> = {
 
 /**
  * The card's own background is the progress bar: the share of the map's questions is painted as a
- * tint from the left edge, and the rest keeps the card colour. Only the tint is translucent, so the
- * text on top keeps its contrast. Returns null when the node has no progress to show.
+ * tint from the left edge, and the rest keeps the card colour. Returns null when the node has no progress.
  */
 export function nodeProgressBackgroundImage(progress: MindMapNodeProgress | null | undefined): string | null {
   if (!progress) return null
-  const percent = Math.round(Math.min(1, Math.max(0, progress.ratio)) * 100)
-  if (percent <= 0) return null
-  const tint = `color-mix(in srgb, ${PROGRESS_TONE_VAR[progress.tone]} 30%, transparent)`
-  return `linear-gradient(to right, ${tint} ${percent}%, transparent ${percent}%)`
+  return shareFillBackground(progress.ratio, PROGRESS_TONE_VAR[progress.tone])
 }
 
 export function buildNodeCardContainerClassNames(options: {

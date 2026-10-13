@@ -10,7 +10,7 @@ import type {
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { EmptyState } from '@/shared/components/state-placeholders'
-import { ShareBar, shareRatio } from '@/shared/ui/share-bar/ShareBar'
+import { NEUTRAL_SHARE_FILL, shareFillBackground, shareRatio } from '@/shared/ui/share-fill/shareFill'
 import type { PalaceListViewSettings } from '@/modules/settings/public'
 import {
   getChapterCardClass,
@@ -82,6 +82,7 @@ export function PalaceListSections<TPalace extends PalaceGroupedItem | PalaceGro
                 // parent is not on this shelf) is measured against the whole subject.
                 const parentId = group.source_chapter?.parent_id
                 const parentTotal = (parentId != null ? chapterTotalsOf(subject).get(parentId) : undefined) ?? subject.question_total ?? null
+                const chapterFill = shareFillBackground(shareRatio(group.question_total, parentTotal), NEUTRAL_SHARE_FILL)
                 return (
                   <div
                     key={chapterId ?? 'no-chapter'}
@@ -89,24 +90,31 @@ export function PalaceListSections<TPalace extends PalaceGroupedItem | PalaceGro
                     className={`${getChapterCardClass(viewSettings.layoutMode, viewSettings.densityMode)} [content-visibility:auto] [contain-intrinsic-size:auto_240px]`}
                   >
                     {group.source_chapter ? (
-                      <div className="mb-1 ml-2 flex flex-col gap-1">
+                      // The header row is the chapter's bar: its own background fills by the chapter's share of its parent.
+                      <div
+                        className="mb-1 ml-2 mr-2 flex items-center justify-between gap-2 rounded-lg px-2 py-1"
+                        style={chapterFill ? { backgroundImage: chapterFill } : undefined}
+                      >
                         <button
                           type="button"
-                          className="flex items-center gap-1 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+                          className="flex min-w-0 items-center gap-1 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
                           onClick={() => chapterId != null && onToggleChapter(chapterId)}
                         >
                           {isCollapsed ? (
-                            <ChevronRight className="h-3.5 w-3.5" />
+                            <ChevronRight className="h-3.5 w-3.5 shrink-0" />
                           ) : (
-                            <ChevronDown className="h-3.5 w-3.5" />
+                            <ChevronDown className="h-3.5 w-3.5 shrink-0" />
                           )}
-                          {group.source_chapter.name}
+                          <span className="truncate">{group.source_chapter.name}</span>
                         </button>
-                        <ShareBar
-                          className="mr-2 max-w-xs"
-                          ratio={shareRatio(group.question_total, parentTotal)}
-                          label={`章节题目占比 ${group.question_total ?? 0}/${parentTotal ?? 0}`}
-                        />
+                        {parentTotal != null && parentTotal > 0 ? (
+                          <span
+                            className="shrink-0 text-[10px] font-medium leading-4 tabular-nums text-muted-foreground"
+                            aria-label={`章节题目占比 ${group.question_total ?? 0}/${parentTotal}`}
+                          >
+                            {group.question_total ?? 0}/{parentTotal}
+                          </span>
+                        ) : null}
                       </div>
                     ) : null}
                     {!isCollapsed ? (

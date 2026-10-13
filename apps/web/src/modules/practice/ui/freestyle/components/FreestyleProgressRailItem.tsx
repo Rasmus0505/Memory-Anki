@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  palaceAccentToneClass,
+  progressSegmentAccentClass,
   progressSegmentShapeClass,
   retryNodeToneClass,
   type FreestyleProgressSegment,
@@ -12,6 +12,12 @@ import {
 } from '@/shared/components/ui/tooltip'
 import { cn } from '@/shared/lib/utils'
 import { FX_ANCHORS } from '@/shared/fx'
+
+/**
+ * Radix's default 700ms open delay made each tick feel dead on hover.
+ * Set on every rail tooltip root, not the page provider: the provider is shared.
+ */
+export const TOOLTIP_DELAY_MS = 120
 
 /** Circle text is this card's retry attempt in the current round, not its place in the rail. */
 function retryAttemptGlyph(segment: FreestyleProgressSegment): string {
@@ -178,7 +184,7 @@ export function ProgressRailItem({
 
   if (segment.kind === 'retry' && showRetryCount) {
     return (
-      <Tooltip>
+      <Tooltip delayDuration={TOOLTIP_DELAY_MS}>
         <TooltipTrigger asChild>
           <span
             {...slotData}
@@ -198,7 +204,7 @@ export function ProgressRailItem({
                 nodeEnterClass,
                 viewing ? 'size-5 text-[10px] ring-2 ring-stage-ink' : 'size-3.5 text-[9px]',
                 oneShotClass,
-                retryNodeToneClass(segment.tone),
+                retryNodeToneClass(segment.tone, segment.isNew),
               )}
             >
               {retryAttemptGlyph(segment)}
@@ -211,7 +217,7 @@ export function ProgressRailItem({
   }
   if (segment.kind === 'retry') {
     return (
-      <Tooltip>
+      <Tooltip delayDuration={TOOLTIP_DELAY_MS}>
         <TooltipTrigger asChild>
           <span
             {...slotData}
@@ -231,7 +237,7 @@ export function ProgressRailItem({
                 nodeEnterClass,
                 progressSegmentShapeClass(segment.tone, viewing),
                 oneShotClass,
-                retryNodeToneClass(segment.tone),
+                retryNodeToneClass(segment.tone, segment.isNew),
               )}
             />
           </span>
@@ -241,7 +247,7 @@ export function ProgressRailItem({
     )
   }
   return (
-    <Tooltip>
+    <Tooltip delayDuration={TOOLTIP_DELAY_MS}>
       <TooltipTrigger asChild>
         <span
           {...slotData}
@@ -264,7 +270,7 @@ export function ProgressRailItem({
               'progress-bar relative w-full overflow-hidden rounded-[1px]',
               progressSegmentShapeClass(segment.tone, viewing),
               // While the sweep runs the base stays faint; the overlay carries the solid fill.
-              palaceAccentToneClass(segment.palaceId, fillSweep ? 'pending' : segment.tone),
+              progressSegmentAccentClass(segment.isNew, fillSweep ? 'pending' : segment.tone),
               // Playhead 走「入场 -> 呼吸」两段，同时只挂一个。
               playheadClass,
               oneShotClass,
@@ -275,7 +281,7 @@ export function ProgressRailItem({
                 aria-hidden
                 className={cn(
                   'progress-fill-sweep absolute inset-0 rounded-[inherit]',
-                  palaceAccentToneClass(segment.palaceId, 'done'),
+                  progressSegmentAccentClass(segment.isNew, 'done'),
                 )}
               />
             ) : null}

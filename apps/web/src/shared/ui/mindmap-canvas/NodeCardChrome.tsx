@@ -3,7 +3,7 @@ import { stripMindMapHtml } from '@/shared/lib/mindmapRichText'
 import { scheduleEditableWordClick } from './cardEditGesture'
 import type { MindMapCountBadge, MindMapNodeVisual } from './adapter'
 import { statusChipClassName } from './NodeCardToolbar'
-import { NodeCountBadgeCluster } from './NodeCountBadge'
+import { NodeCountBadgeCluster, withRatioBadge } from './NodeCountBadge'
 import { RichDocument } from '@/shared/ui/rich-document/RichDocument'
 
 function cornerCountBadges(visual: MindMapNodeVisual): MindMapCountBadge[] {
@@ -23,20 +23,12 @@ export function NodeCardStatusChrome({
   nodeId: string
   onCountBadgeClick?: (nodeId: string, kind?: 'objective' | 'subjective') => void
 }) {
-  const countBadges = cornerCountBadges(visual)
+  const badges = cornerCountBadges(visual)
+  const countBadges = visual.progress
+    ? withRatioBadge(badges, visual.progress.count, visual.progress.total)
+    : badges
   return (
     <>
-      {visual.progress ? (
-        // Sits above the card's top edge, right-aligned, so it never covers the label text inside the card.
-        <span
-          data-testid="node-progress-count"
-          className="pointer-events-none absolute right-1 z-30 text-[10px] font-medium leading-4 tabular-nums text-paper-muted"
-          style={{ top: '-1.1rem' }}
-          aria-label={`本节点 ${visual.progress.count} 题，整图 ${visual.progress.total} 题`}
-        >
-          {visual.progress.count}/{visual.progress.total}
-        </span>
-      ) : null}
       {visual.statusChips && visual.statusChips.length > 0 ? (
         <div
           className="pointer-events-none absolute left-1/2 z-30 flex max-w-full -translate-x-1/2 items-center justify-center gap-0.5"

@@ -40,15 +40,53 @@ export interface FreestyleProgressSegment {
   /** True on the first source tick of a new entry day, so the rail can cut every day. */
   cohortBoundary?: boolean
   enteredOn?: string
+  /** Unit has never passed (新学, blue). Otherwise it is a review (复习, amber). */
+  isNew?: boolean
 }
 
 /**
- * Retry occurrence fill on the rail: unfinished is faint amber, completed is solid.
+ * Rail colour is only ever one of two hues: 新学 blue or 复习 amber.
+ * Palace identity is not on the rail any more. Tone is fill strength.
+ */
+const RAIL_ACCENT_CLASS: Record<'new' | 'review', Record<FreestyleSegmentTone, string>> = {
+  new: {
+    pending: 'bg-[hsl(214_84%_62%)]/25',
+    retry: 'bg-[hsl(214_84%_62%)]/60',
+    current: 'bg-[hsl(214_90%_76%)]',
+    done: 'bg-[hsl(214_84%_62%)]',
+  },
+  review: {
+    pending: 'bg-rate-hard/25',
+    retry: 'bg-rate-hard/60',
+    current: 'bg-[hsl(40_96%_72%)]',
+    done: 'bg-rate-hard',
+  },
+}
+
+/** Fill class for one rail tick: blue when the unit is new, amber when it is a review. */
+export function progressSegmentAccentClass(
+  isNew: boolean | undefined,
+  tone: FreestyleSegmentTone,
+): string {
+  return RAIL_ACCENT_CLASS[isNew ? 'new' : 'review'][tone]
+}
+
+/**
+ * Retry occurrence circle: same new/review colour as its source tick.
+ * Unfinished is faint, completed is solid.
  * Viewing size is separate (`progressSegmentShapeClass` / node size).
  */
-export function retryNodeToneClass(tone: FreestyleSegmentTone): string {
-  if (tone === 'done') return 'bg-rate-hard text-stage'
-  return 'bg-rate-hard/25 text-stage-ink'
+export function retryNodeToneClass(tone: FreestyleSegmentTone, isNew = false): string {
+  const fill = progressSegmentAccentClass(isNew, tone === 'done' ? 'done' : 'pending')
+  return tone === 'done' ? `${fill} text-stage` : `${fill} text-stage-ink`
+}
+
+function isNewUnit(
+  card: FreestyleCard | undefined,
+  ...entries: Array<{ isNew?: boolean } | undefined>
+): boolean {
+  if (entries.some((entry) => entry?.isNew === true)) return true
+  return Boolean(card && 'is_new' in card && card.is_new === true)
 }
 
 /** Card badge / 本轮安排 row chrome for a retry occurrence. */
@@ -627,6 +665,15 @@ export function buildFreestyleProgressSummary(
   retryInserted = segments.filter((segment) => segment.kind === 'retry').length
 
   markDayCohortBoundaries(segments)
+
+  // A retry takes its source's newness, so the whole family of one unit shares one hue.
+  for (const segment of segments) {
+    segment.isNew = isNewUnit(
+      liveById.get(segment.cardId),
+      roundPlan?.cardsById[segment.cardId],
+      roundPlan?.cardsById[segment.sourceCardId || segment.cardId],
+    )
+  }
 
   const unfinishedPalaces = new Set(
     segments
