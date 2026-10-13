@@ -30,7 +30,10 @@ from memory_anki.modules.content.application.title_sync_service import (
     get_explicit_chapter_ids_by_palace,
 )
 from memory_anki.modules.content.presentation.response_models import PalaceListResponse
-from memory_anki.modules.quiz.public.queries import project_palace_quiz_count_badges
+from memory_anki.modules.quiz.public.queries import (
+    project_palace_question_sets,
+    project_palace_quiz_count_badges,
+)
 from memory_anki.platform.application import open_mutation_replay
 from memory_anki.platform.persistence import (
     SqlAlchemyMutationResponseStore,
@@ -127,7 +130,8 @@ def _iter_palace_payloads(payload: dict):
 
 
 def _attach_quiz_count_badges(session: Session, payload: dict) -> dict:
-    """Stamp each catalog card with the same objective/subjective corner badges as a mind-map node."""
+    """Stamp each catalog card with the same objective/subjective corner badges as a mind-map node,
+    plus the distinct question totals the bookshelf progress bars divide by."""
     palace_ids: list[int] = []
     seen: set[int] = set()
     for item in _iter_palace_payloads(payload):
@@ -136,13 +140,35 @@ def _attach_quiz_count_badges(session: Session, payload: dict) -> dict:
             seen.add(raw_id)
             palace_ids.append(raw_id)
     badges = project_palace_quiz_count_badges(session, palace_ids)
+    question_sets = project_palace_question_sets(session, palace_ids)
     for item in _iter_palace_payloads(payload):
         if not isinstance(item, dict):
             continue
         raw_id = item.get("id")
         if isinstance(raw_id, int):
             item["quiz_count_badges"] = badges.get(raw_id, [])
+            item["quiz_question_total"] = len(question_sets.get(raw_id, set()))
+    _attach_bookshelf_question_totals(payload, question_sets)
     return payload
+
+
+def _attach_bookshelf_question_totals(payload: dict, question_sets: dict[int, set[int]]) -> None:
+    """Chapter and subject totals are distinct questions across their palaces, so a shared question counts once."""
+
+    def distinct_total(palace_items: list) -> int:
+        union: set[int] = set()
+        for palace in palace_items:
+            if isinstance(palace, dict) and isinstance(palace.get("id"), int):
+                union |= question_sets.get(palace["id"], set())
+        return len(union)
+
+    for subject in payload.get("subjects") or []:
+        subject_palaces: list = list(subject.get("ungrouped_palaces") or [])
+        for chapter in subject.get("chapter_groups") or []:
+            chapter_palaces = list(chapter.get("palaces") or [])
+            chapter["question_total"] = distinct_total(chapter_palaces)
+            subject_palaces.extend(chapter_palaces)
+        subject["question_total"] = distinct_total(subject_palaces)
 
 
 def _attach_search_hints(payload: dict, hints: dict[int, str]) -> dict:

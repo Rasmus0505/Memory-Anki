@@ -9,6 +9,7 @@ date among those units.
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Iterable
 from datetime import date
 from typing import Any
 
@@ -126,7 +127,7 @@ def get_subject_memory_ladder(
         stages_by_subject[None] = _empty_stages()
 
     for palace_id, palace in palaces.items():
-        owner_ids = subjects_by_palace.get(palace_id) or {None}
+        owner_ids: Iterable[int | None] = subjects_by_palace.get(palace_id) or [None]
         for subject_id in owner_ids:
             stages = stages_by_subject.get(subject_id)
             if stages is None:

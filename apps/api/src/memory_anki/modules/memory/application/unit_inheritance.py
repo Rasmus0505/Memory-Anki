@@ -105,8 +105,8 @@ def overlapping_sources(
     with no node overlap are unrelated work and never contribute.
 
     Inactive rows are considered only where the region has no live owner. A row
-    that was deactivated because its region moved on -- a superseded cohort, a
-    split-off remainder -- still holds the *old* schedule, and letting it vote
+    that was deactivated because its region moved on -- a split-off remainder, a
+    merged-away unit -- still holds the *old* schedule, and letting it vote
     would drag a healthy unit down to a stale stage.
     """
     selected: dict[str, InheritanceSource] = {}
@@ -122,18 +122,16 @@ def sources_for_members(
     candidates: list[InheritanceSource],
     members: set[str],
     nodes: dict[str, Any],
-    *,
-    unit_kind: str,
 ) -> list[InheritanceSource]:
     """Existing content follows its region; new content follows its closest branch.
 
     Walk through newly inserted ancestors until stored branch evidence exists.
-    Cohorts assess siblings together and are not the ancestor's branch schedule.
     Never borrow a sibling's schedule merely because it shares an ancestor.
+    Legacy ``cohort`` rows (retired by migration 0071) never speak for a region:
+    they were sibling-level assessments, not a branch schedule.
     """
     branches = [row for row in candidates if row.unit_kind != "cohort"]
-    region_candidates = candidates if unit_kind == "cohort" else branches
-    selected = {row.id: row for row in overlapping_sources(region_candidates, members)}
+    selected = {row.id: row for row in overlapping_sources(branches, members)}
     known_members = set().union(*(_members(row) for row in candidates))
     for uid in sorted(members - known_members):
         parent = nodes[uid].get("parent_uid")

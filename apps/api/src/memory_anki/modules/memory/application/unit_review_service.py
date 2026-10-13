@@ -1270,16 +1270,21 @@ def _ensure_open_freestyle_rating_target(
     card_id: str = "",
     occurrence_id: str = "",
     retry_attempt: int = 0,
+    adopt_live_revision: bool = False,
 ) -> tuple[StudySession, ReviewUnitState, ReviewSessionUnit, ReviewUnitEncounter]:
     """Return a live open glance, reopening the same round if the old session died.
 
     Reopening retains the attempt identity; a retry never inherits the original
     card's baseline merely because both belong to the same round.
+
+    Freestyle adopts the live revision: a content or topology edit bumps it, and
+    the reopen branch below opens a fresh encounter at the live revision. Only
+    formal review keeps the strict stale-revision rejection.
     """
     state = session.get(ReviewUnitState, unit_id)
     if state is None or not state.active:
         raise ValueError("review unit not found")
-    if int(unit_revision) != int(state.revision):
+    if not adopt_live_revision and int(unit_revision) != int(state.revision):
         raise ValueError("review unit changed; rebuild the queue")
 
     requested_session_id = str(study_session_id or "").strip()
@@ -1367,6 +1372,7 @@ def rate_review_unit(
     card_id: str = "",
     occurrence_id: str = "",
     retry_attempt: int = 0,
+    adopt_live_revision: bool = False,
 ) -> dict[str, Any]:
     op_id = str(operation_id or "").strip()
     if not op_id:
@@ -1386,6 +1392,7 @@ def rate_review_unit(
         card_id=card_id,
         occurrence_id=occurrence_id,
         retry_attempt=retry_attempt,
+        adopt_live_revision=adopt_live_revision,
     )
     after = _rate_open_encounter(
         session,
@@ -1412,6 +1419,7 @@ def rate_palace_due_units(
     exclude_unit_ids: list[str] | None = None,
     include_unit_ids: list[str] | None = None,
     commit: bool = True,
+    adopt_live_revision: bool = False,
 ) -> dict[str, Any]:
     """Rate the open current card, plus mature still-due siblings.
 
@@ -1465,6 +1473,7 @@ def rate_palace_due_units(
         card_id=str(current_payload.get("card_id") or ""),
         occurrence_id=str(current_payload.get("occurrence_id") or ""),
         retry_attempt=int(current_payload.get("retry_attempt") or 0),
+        adopt_live_revision=adopt_live_revision,
     )
     if current_study.palace_id != int(palace_id):
         raise ValueError("open review encounter required")

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from memory_anki.core.concurrency_limits import concurrency_slot
 from memory_anki.infrastructure.db.deps import session_dep
 from memory_anki.modules.english.application.ai_dependencies import EnglishAiDependencies
+from memory_anki.modules.english.application.cloze_corpus import load_cloze_corpus
 from memory_anki.modules.english.application.course_service import (
     check_sentence_input,
     delete_course,
@@ -30,7 +31,6 @@ from memory_anki.modules.english.application.task_service import (
     retry_current_task,
     stream_task_events,
 )
-from memory_anki.modules.english.application.cloze_corpus import load_cloze_corpus
 from memory_anki.modules.english.domain.errors import EnglishCourseError
 from memory_anki.modules.settings.api import SettingsAiRuntimeProvider, SettingsPromptCatalog
 

@@ -236,3 +236,27 @@ def count_units_due_on(session: Session, day: date) -> int:
         .scalar()
     )
     return int(total or 0)
+
+
+def list_palace_unit_pass_states(session: Session, palace_id: int) -> list[dict[str, Any]]:
+    """Active 复习单元 of one palace with the node members each one covers and whether it has ever passed.
+
+    Read-only. ``passed`` means the unit was rated 3 or 4 at least once, which is the 已学 definition.
+    The mind-map uses this to colour a node card 复习 only when every unit under it has passed.
+    """
+    rows = (
+        session.query(ReviewUnitState.id, ReviewUnitState.node_uids_json, ReviewUnitState.has_passed)
+        .filter(
+            ReviewUnitState.palace_id == palace_id,
+            ReviewUnitState.active.is_(True),
+        )
+        .all()
+    )
+    return [
+        {
+            "unit_id": str(row.id),
+            "node_uids": [uid for uid in json_load_list(row.node_uids_json) if uid],
+            "passed": bool(row.has_passed),
+        }
+        for row in rows
+    ]

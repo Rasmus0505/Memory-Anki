@@ -77,7 +77,7 @@ def _to_utc_naive(value: datetime) -> datetime:
 def _load_json(raw: Any, fallback: Any) -> Any:
     if raw in (None, ""):
         return fallback
-    if isinstance(raw, (dict, list)):
+    if isinstance(raw, dict | list):
         return raw
     try:
         return json.loads(str(raw))

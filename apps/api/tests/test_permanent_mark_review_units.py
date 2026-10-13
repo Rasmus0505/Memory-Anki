@@ -6,7 +6,6 @@ from memory_anki.modules.memory.application.unit_scheduler import (
     stage_from_legacy_interval_days,
 )
 from memory_anki.modules.mindmap_document.split_units import (
-    UNIT_KIND_COHORT,
     UNIT_KIND_MARK,
     UNIT_KIND_PALACE,
     UNIT_KIND_RESIDUAL,
@@ -34,13 +33,8 @@ def _brief(units):
     return [(unit.kind, unit.unit_root_uid, unit.node_uids) for unit in units]
 
 
-def _isolation_memberships(units):
-    return [
-        uid
-        for unit in units
-        if unit.kind != UNIT_KIND_COHORT
-        for uid in unit.node_uids
-    ]
+def _memberships(units):
+    return [uid for unit in units for uid in unit.node_uids]
 
 
 def test_child_marks_isolate_regions_and_leave_one_residual_unit():
@@ -48,12 +42,11 @@ def test_child_marks_isolate_regions_and_leave_one_residual_unit():
         nodes=_tree(), root_uid="root", permanent_mark_uids={"a", "deep"}
     )
     assert _brief(units) == [
-        (UNIT_KIND_COHORT, "root", ("a",)),
         (UNIT_KIND_MARK, "a", ("a", "a1", "a2")),
         (UNIT_KIND_MARK, "deep", ("deep",)),
         (UNIT_KIND_RESIDUAL, "root", ("b", "b1")),
     ]
-    memberships = _isolation_memberships(units)
+    memberships = _memberships(units)
     assert sorted(memberships) == sorted(_tree().keys() - {"root"})
     assert len(memberships) == len(set(memberships))
 
@@ -116,31 +109,42 @@ def _marks(nodes: dict) -> set[str]:
     }
 
 
-def test_same_parent_marks_add_a_cohort_before_each_branch():
+def test_same_parent_marks_are_independent_units():
     nodes = _palace(("B1*", ["C1"]), ("B2*", ["C2"]))
     units = split_scheduling_units(
         nodes=nodes, root_uid="A", permanent_mark_uids=_marks(nodes)
     )
     assert _brief(units) == [
-        (UNIT_KIND_COHORT, "A", ("B1", "B2")),
         (UNIT_KIND_MARK, "B1", ("B1", "C1")),
         (UNIT_KIND_MARK, "B2", ("B2", "C2")),
     ]
 
 
-def test_leaf_siblings_still_get_a_cohort_besides_their_own_cards():
-    nodes = _palace(("B1*", []), ("B2*", []))
+def test_marked_siblings_with_an_unmarked_sibling_make_three_units():
+    # A has B1 and B2 marked and B3 unmarked: A→B1, A→B2, and the rest A→B3.
+    nodes = _palace(("B1*", []), ("B2*", []), ("B3", []))
     units = split_scheduling_units(
         nodes=nodes, root_uid="A", permanent_mark_uids=_marks(nodes)
     )
     assert _brief(units) == [
-        (UNIT_KIND_COHORT, "A", ("B1", "B2")),
         (UNIT_KIND_MARK, "B1", ("B1",)),
         (UNIT_KIND_MARK, "B2", ("B2",)),
+        (UNIT_KIND_RESIDUAL, "A", ("B3",)),
     ]
 
 
-def test_single_leaf_mark_is_not_duplicated_as_a_cohort():
+def test_marked_sibling_with_descendants_keeps_its_subtree_in_one_unit():
+    nodes = _palace(("B1*", ["C1", "C2"]), ("B2", []))
+    units = split_scheduling_units(
+        nodes=nodes, root_uid="A", permanent_mark_uids=_marks(nodes)
+    )
+    assert _brief(units) == [
+        (UNIT_KIND_MARK, "B1", ("B1", "C1", "C2")),
+        (UNIT_KIND_RESIDUAL, "A", ("B2",)),
+    ]
+
+
+def test_single_leaf_mark_is_its_own_unit():
     nodes = _palace(("B1*", []))
     units = split_scheduling_units(
         nodes=nodes, root_uid="A", permanent_mark_uids=_marks(nodes)
@@ -148,25 +152,21 @@ def test_single_leaf_mark_is_not_duplicated_as_a_cohort():
     assert _brief(units) == [(UNIT_KIND_MARK, "B1", ("B1",))]
 
 
-def test_single_mark_with_descendants_gets_its_own_cohort():
+def test_single_mark_with_descendants_is_one_unit():
     nodes = _palace(("B1*", ["C1"]))
     units = split_scheduling_units(
         nodes=nodes, root_uid="A", permanent_mark_uids=_marks(nodes)
     )
-    assert _brief(units) == [
-        (UNIT_KIND_COHORT, "A", ("B1",)),
-        (UNIT_KIND_MARK, "B1", ("B1", "C1")),
-    ]
+    assert _brief(units) == [(UNIT_KIND_MARK, "B1", ("B1", "C1"))]
 
 
-def test_deeper_leaf_marks_cohort_omits_the_duplicate_parent_card():
+def test_deeper_leaf_marks_are_carved_out_of_their_parent_unit():
     nodes = _palace(("B1*", [("C1*", []), ("C2*", [])]))
     units = split_scheduling_units(
         nodes=nodes, root_uid="A", permanent_mark_uids=_marks(nodes)
     )
     assert _brief(units) == [
         (UNIT_KIND_MARK, "B1", ("B1",)),
-        (UNIT_KIND_COHORT, "B1", ("C1", "C2")),
         (UNIT_KIND_MARK, "C1", ("C1",)),
         (UNIT_KIND_MARK, "C2", ("C2",)),
     ]
@@ -178,16 +178,13 @@ def test_same_depth_marks_under_different_parents_stay_apart():
         nodes=nodes, root_uid="A", permanent_mark_uids=_marks(nodes)
     )
     assert _brief(units) == [
-        (UNIT_KIND_COHORT, "A", ("B1", "B2")),
         (UNIT_KIND_MARK, "B1", ("B1", "C1")),
         (UNIT_KIND_MARK, "B2", ("B2", "C2")),
         (UNIT_KIND_MARK, "F", ("F",)),
         (UNIT_KIND_RESIDUAL, "A", ("E",)),
     ]
-    cohort_members = [
-        unit.node_uids for unit in units if unit.kind == UNIT_KIND_COHORT
-    ]
-    assert cohort_members == [("B1", "B2")]
+    memberships = _memberships(units)
+    assert len(memberships) == len(set(memberships))
 
 
 def test_fixed_schedule_first_pass_failure_penalty_and_caps():

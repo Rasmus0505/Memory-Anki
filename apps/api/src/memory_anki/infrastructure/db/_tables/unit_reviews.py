@@ -24,6 +24,11 @@ from ._base import Base
 
 
 class ReviewUnitState(Base):
+    """One 复习单元: a unit cut by the permanent marks, rated as one unit in 随心.
+
+    Ratings apply to this row, never to a question. See docs/architecture/terminology.md.
+    """
+
     __tablename__ = "review_unit_states"
     __table_args__ = (
         Index("ix_review_unit_states_due", "active", "due_date", "palace_id"),

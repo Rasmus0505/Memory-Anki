@@ -55,8 +55,8 @@ class UnitDefinition:
 def _active_unit_key(anchor_uid: str, unit_kind: str) -> tuple[str, str]:
     """Active units are unique per palace on this pair, not on the anchor alone.
 
-    A parent node is both the anchor of its own isolation unit and the anchor of
-    the cohort of its marked children.
+    The palace root anchors both its residual unit and a root-mark unit when the
+    root itself is marked, so the anchor alone cannot identify a unit.
     """
     return (str(anchor_uid), str(unit_kind))
 

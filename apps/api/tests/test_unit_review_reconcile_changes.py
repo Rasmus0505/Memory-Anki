@@ -213,22 +213,18 @@ def _sibling_doc() -> str:
     )
 
 
-def test_new_cohort_inherits_lowest_overlapping_branch_schedule(db_session):
-    palace = Palace(title="自身卡", archived=False, editor_doc=_sibling_doc())
+def test_sibling_marks_keep_their_own_schedules_without_a_cohort(db_session):
+    palace = Palace(title="兄弟标记", archived=False, editor_doc=_sibling_doc())
     db_session.add(palace)
     db_session.commit()
     reconcile_palace_units(db_session, palace.id)
     db_session.commit()
 
-    rows = (
-        db_session.query(ReviewUnitState)
-        .filter_by(palace_id=palace.id, active=True)
-        .all()
-    )
-    cohort = next(row for row in rows if row.unit_kind == "cohort")
-    marks = {row.anchor_uid: row for row in rows if row.unit_kind == "mark"}
-    assert set(marks) == {"B1", "B2"}
-    assert json.loads(cohort.node_uids_json) == ["B1", "B2"]
+    marks = {row.anchor_uid: row for row in _active_rows(db_session, palace.id)}
+    assert {(row.unit_kind, row.anchor_uid) for row in marks.values()} == {
+        ("mark", "B1"),
+        ("mark", "B2"),
+    }
     early = date.today() + timedelta(days=10)
     late = date.today() + timedelta(days=40)
     marks["B1"].stage_index = 4
@@ -237,87 +233,58 @@ def test_new_cohort_inherits_lowest_overlapping_branch_schedule(db_session):
     marks["B2"].stage_index = 2
     marks["B2"].has_passed = True
     marks["B2"].due_date = early
-    retired_id = cohort.id
-    cohort.active = False
+    ids = {anchor: row.id for anchor, row in marks.items()}
     db_session.commit()
 
     result = reconcile_palace_units(db_session, palace.id)
     db_session.commit()
-    created = [item for item in result["changes"] if item["action"] == "created"]
-    assert len(created) == 1
-    fresh = db_session.get(ReviewUnitState, created[0]["unit_id"])
-    assert fresh is not None
-    assert fresh.id != retired_id
-    assert fresh.unit_kind == "cohort"
-    assert fresh.anchor_uid == "A"
-    assert json.loads(fresh.node_uids_json) == ["B1", "B2"]
-    assert (fresh.stage_index, fresh.due_date, fresh.has_passed) == (2, early, True)
-    assert fresh.topology_order == 0
-    b1 = db_session.get(ReviewUnitState, marks["B1"].id)
-    b2 = db_session.get(ReviewUnitState, marks["B2"].id)
-    assert b1 is not None and b2 is not None
-    assert (b1.stage_index, b1.due_date) == (4, late)
-    assert (b2.stage_index, b2.due_date) == (2, early)
-    assert [row.topology_order for row in (fresh, b1, b2)] == [0, 1, 2]
+    assert [item for item in result["changes"] if item["action"] == "created"] == []
+    b1 = db_session.get(ReviewUnitState, ids["B1"])
+    b2 = db_session.get(ReviewUnitState, ids["B2"])
+    assert (b1.active, b1.stage_index, b1.due_date) == (True, 4, late)
+    assert (b2.active, b2.stage_index, b2.due_date) == (True, 2, early)
 
 
-def test_cohort_deactivates_when_it_duplicates_the_isolation_unit(db_session):
-    palace = Palace(
-        title="单独标记",
-        archived=False,
-        editor_doc=json.dumps(
-            {
-                "root": {
-                    "data": {"uid": "A", "text": "A", "memoryAnkiRootKind": "palace"},
-                    "children": [
-                        {
-                            "data": {"uid": "B1", "text": "B1", "permanentSplitMark": True},
-                            "children": [
-                                {"data": {"uid": "C1", "text": "C1"}, "children": []},
-                            ],
-                        }
-                    ],
-                }
-            },
-            ensure_ascii=False,
-        ),
-    )
+def test_legacy_cohort_row_is_retired_and_marks_keep_their_schedules(db_session):
+    """A stored cohort from before the kind was removed must not speak for its marks."""
+    palace = Palace(title="遗留卡", archived=False, editor_doc=_sibling_doc())
     db_session.add(palace)
     db_session.commit()
     reconcile_palace_units(db_session, palace.id)
     db_session.commit()
-    cohort = (
-        db_session.query(ReviewUnitState)
-        .filter_by(palace_id=palace.id, unit_kind="cohort", active=True)
-        .one()
-    )
-    palace.editor_doc = json.dumps(
-        {
-            "root": {
-                "data": {"uid": "A", "text": "A", "memoryAnkiRootKind": "palace"},
-                "children": [
-                    {
-                        "data": {"uid": "B1", "text": "B1", "permanentSplitMark": True},
-                        "children": [],
-                    }
-                ],
-            }
-        },
-        ensure_ascii=False,
+
+    marks = {row.anchor_uid: row for row in _active_rows(db_session, palace.id)}
+    late = date.today() + timedelta(days=40)
+    marks["B1"].stage_index = 5
+    marks["B1"].has_passed = True
+    marks["B1"].due_date = late
+    b1_id = marks["B1"].id
+    db_session.add(
+        ReviewUnitState(
+            id="legacy-cohort",
+            palace_id=palace.id,
+            anchor_uid="A",
+            unit_kind="cohort",
+            node_uids_json=json.dumps(["B1", "B2"]),
+            membership_hash="legacy",
+            content_hash="legacy",
+            revision=1,
+            stage_index=0,
+            has_passed=False,
+            due_date=date.today(),
+            topology_order=0,
+            active=True,
+        )
     )
     db_session.commit()
+
     reconcile_palace_units(db_session, palace.id)
     db_session.commit()
-    db_session.refresh(cohort)
-    assert cohort.active is False
-    active = (
-        db_session.query(ReviewUnitState)
-        .filter_by(palace_id=palace.id, active=True)
-        .all()
-    )
-    assert [(row.unit_kind, json.loads(row.node_uids_json)) for row in active] == [
-        ("mark", ["B1"]),
-    ]
+    legacy = db_session.get(ReviewUnitState, "legacy-cohort")
+    assert legacy is not None and legacy.active is False
+    assert not [row for row in _active_rows(db_session, palace.id) if row.unit_kind == "cohort"]
+    b1 = db_session.get(ReviewUnitState, b1_id)
+    assert (b1.active, b1.stage_index, b1.due_date) == (True, 5, late)
 
 
 def test_list_due_units_reconciles_content_hash_lag_without_leave(db_session):
@@ -706,57 +673,3 @@ def test_remark_at_a_different_anchor_inherits_by_node_overlap(db_session):
     assert deeper, "expected the deeper mark to create a unit"
     assert (deeper[0].stage_index, deeper[0].due_date) == (6, due)
     assert deeper[0].has_passed is True
-
-
-def test_retired_low_stage_row_does_not_drag_a_live_unit_down(db_session):
-    """A superseded row still holds its old schedule; it must not lower a successor."""
-    doc = json.dumps(
-        {
-            "root": {
-                "data": {"uid": "A", "text": "A", "memoryAnkiRootKind": "palace"},
-                "children": [
-                    {
-                        "data": {"uid": "B1", "text": "B1", "permanentSplitMark": True},
-                        "children": [{"data": {"uid": "C1", "text": "C1"}, "children": []}],
-                    },
-                    {
-                        "data": {"uid": "B2", "text": "B2", "permanentSplitMark": True},
-                        "children": [{"data": {"uid": "C2", "text": "C2"}, "children": []}],
-                    },
-                ],
-            }
-        },
-        ensure_ascii=False,
-    )
-    palace = Palace(title="P", archived=False, editor_doc=doc)
-    db_session.add(palace)
-    db_session.commit()
-    reconcile_palace_units(db_session, palace.id)
-    db_session.commit()
-
-    rows = _active_rows(db_session, palace.id)
-    cohort = next(row for row in rows if row.unit_kind == "cohort")
-    live_due = date.today() + timedelta(days=60)
-    for row in rows:
-        if row.unit_kind == "mark":
-            row.stage_index = 8
-            row.has_passed = True
-            row.due_date = live_due
-    # Retire the cohort as stale evidence carrying a much weaker schedule.
-    cohort.stage_index = 0
-    cohort.has_passed = False
-    cohort.due_date = date.today()
-    cohort.active = False
-    db_session.commit()
-
-    reconcile_palace_units(db_session, palace.id)
-    db_session.commit()
-
-    fresh = next(
-        row for row in _active_rows(db_session, palace.id) if row.unit_kind == "cohort"
-    )
-    assert fresh.id != cohort.id
-    assert (fresh.stage_index, fresh.due_date) == (8, live_due), (
-        "a retired row must not speak for a region that is still live"
-    )
-

@@ -18,6 +18,7 @@ from memory_anki.modules.memory.api import (
     get_unit_review_preview,
     get_unit_review_session,
     list_due_units,
+    list_palace_unit_pass_states,
     open_unit_review_encounter,
     rate_palace_due_units,
     rate_review_unit,
@@ -50,6 +51,13 @@ def palace_units(palace_id: int, session: Session = Depends(session_dep)):
         return {"item": get_palace_unit_projection(session, palace_id, allow_reconcile=False)}
     except ValueError as exc:
         raise _bad_request(exc) from exc
+
+
+@router.get("/review/palaces/{palace_id}/unit-pass-states")
+def palace_unit_pass_states(palace_id: int, session: Session = Depends(session_dep)):
+    # Read-only: which 复习单元 each node covers and whether each has passed (已学) at least once.
+    items = list_palace_unit_pass_states(session, palace_id)
+    return {"items": items, "item_count": len(items)}
 
 
 @router.get("/review/subject-ladder")

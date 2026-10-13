@@ -77,7 +77,7 @@ def test_new_marked_node_walks_to_nearest_existing_branch(db_session, nested):
     active = rows(db_session, palace)
     assert_schedule(active[("new", "mark")], 6, 60)
     assert_schedule(active[("a", "mark")], 6, 60)
-    # A low sibling-cohort score is not this branch's schedule.
+    # A low sibling score is not this branch's schedule.
     assert_schedule(active[("root", "palace")], 1, 1)
 
 
@@ -116,9 +116,6 @@ def test_inactive_uncovered_region_is_not_lost_when_merged_with_live_region(db_s
     inactive = active[("a", "mark")]
     schedule(inactive, 2, 3)
     inactive.active = False
-    for row in active.values():
-        if row.unit_kind == "cohort":
-            row.active = False
     palace.editor_doc = document(node("a"), node("b"))
     reconcile_palace_units(db_session, palace.id)
     assert_schedule(rows(db_session, palace)[("root", "palace")], 2, 3)

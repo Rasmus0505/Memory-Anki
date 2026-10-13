@@ -828,3 +828,59 @@ def test_same_attempt_revisit_correction_uses_preview_baseline(db_session):
     undo_unit_rating(db_session, "source-corrected")
     assert state.stage_index == 6
     assert db_session.query(ReviewSessionUnit).one().retry_count == 1
+
+
+def test_freestyle_rating_adopts_live_revision_after_topology_edit(db_session):
+    # A mind-map edit that changes the unit topology invalidates the open
+    # freestyle session and bumps the unit revision. The card still carries the
+    # old revision, so the rating must reopen at the live revision, not 400.
+    state = _seed_review_unit(db_session)
+    review_session = _start(db_session, state, "encounter-topology-drift")
+    old_revision = int(state.revision)
+    adjust_unit_schedule(
+        db_session,
+        unit_id=state.id,
+        operation_id="topology-edit-during-card",
+        stage_index=state.stage_index,
+    )
+    db_session.commit()
+    db_session.refresh(state)
+    assert int(state.revision) != old_revision
+
+    rated = rate_review_unit(
+        db_session,
+        study_session_id=review_session["id"],
+        unit_id=state.id,
+        unit_revision=old_revision,
+        encounter_id="encounter-topology-drift",
+        operation_id="rate-after-topology-edit",
+        rating=2,
+        round_id="round-2026-07-27",
+        adopt_live_revision=True,
+    )
+
+    operation = db_session.get(ReviewUnitRatingOperation, "rate-after-topology-edit")
+    assert operation is not None
+    assert operation.unit_revision == int(state.revision)
+    assert rated["encounter"]["selected_rating"] == 2
+    assert rated["encounter"]["round_id"] == "round-2026-07-27"
+
+
+def test_rating_still_rejects_stale_revision_without_adoption(db_session):
+    state = _seed_review_unit(db_session)
+    review_session = _start(db_session, state, "encounter-strict")
+    old_revision = int(state.revision)
+    state.revision = old_revision + 1
+    db_session.commit()
+
+    with pytest.raises(ValueError, match="review unit changed"):
+        rate_review_unit(
+            db_session,
+            study_session_id=review_session["id"],
+            unit_id=state.id,
+            unit_revision=old_revision,
+            encounter_id="encounter-strict",
+            operation_id="rate-strict",
+            rating=3,
+            round_id="round-2026-07-27",
+        )

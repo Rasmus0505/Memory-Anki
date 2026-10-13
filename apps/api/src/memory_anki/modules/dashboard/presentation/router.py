@@ -4,6 +4,7 @@ import logging
 import os
 import threading
 import time
+from datetime import UTC
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
@@ -78,8 +79,8 @@ def _read_persisted_snapshot(scope: _DashboardScope) -> tuple[float, dict] | Non
 
 
 def _persist_snapshot(scope: _DashboardScope, payload: dict) -> str:
-    from datetime import datetime, timezone
-    generated_at = datetime.now(timezone.utc).isoformat()
+    from datetime import datetime
+    generated_at = datetime.now(UTC).isoformat()
     scope.path.parent.mkdir(parents=True, exist_ok=True)
     temp = scope.path.with_name(f".{scope.path.name}.{os.getpid()}.tmp")
     envelope = {"version": _DASHBOARD_SNAPSHOT_VERSION, "scope": scope.disk_key, "generated_at": generated_at, "payload": payload}
@@ -132,10 +133,14 @@ def _dashboard_worker_loop(session_factory) -> None:
         with _dashboard_lock:
             requested_scope = _dashboard_refresh_scope
             requested = _dashboard_refresh_requested.is_set()
-        if current is None and requested_scope is None:
-            continue
-        scope = requested_scope or current[0]
-        created = current[1] if current is not None and current[0] == scope else 0.0
+        if current is None:
+            if requested_scope is None:
+                continue
+            scope = requested_scope
+            created = 0.0
+        else:
+            scope = requested_scope or current[0]
+            created = current[1] if current[0] == scope else 0.0
         if time.monotonic() - created < _DASHBOARD_SNAPSHOT_TTL_SECONDS and not requested:
             continue
         _dashboard_refresh_requested.clear()

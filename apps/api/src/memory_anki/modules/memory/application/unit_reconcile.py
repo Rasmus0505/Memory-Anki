@@ -13,12 +13,11 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import date
 from typing import Any
 
 from sqlalchemy.orm import Session
 
-from memory_anki.core.time import utc_now_naive
+from memory_anki.core.time import local_day, utc_now_naive
 from memory_anki.infrastructure.db._tables.misc import StudySession
 from memory_anki.infrastructure.db._tables.unit_reviews import (
     ReviewUnitEncounter,
@@ -38,8 +37,8 @@ from .unit_schedule_projection import _change_entry, _schedule_snapshot_from_row
 def _active_unit_key(anchor_uid: str, unit_kind: str) -> tuple[str, str]:
     """Active units are unique per palace on this pair, not on the anchor alone.
 
-    A parent node is both the anchor of its own isolation unit and the anchor of
-    the cohort of its marked children.
+    The palace root anchors both its residual unit and a root-mark unit when the
+    root itself is marked, so the anchor alone cannot identify a unit.
     """
     return (str(anchor_uid), str(unit_kind))
 
@@ -91,7 +90,7 @@ def reconcile_palace_units(session: Session, palace_id: int) -> dict[str, Any]:
     from .unit_review_projection import resolve_unit_definitions
 
     tree, definitions = resolve_unit_definitions(session, palace_id)
-    today = date.today()
+    today = local_day()
     old_states = _active_states(session, palace_id)
     # Inheritance looks past the active set on purpose: an inactive row still
     # carries the ladder position earned before its mark was removed.
@@ -142,9 +141,7 @@ def reconcile_palace_units(session: Session, palace_id: int) -> dict[str, Any]:
         current = old_by_key.get(
             _active_unit_key(definition.anchor_uid, definition.unit_kind)
         )
-        overlapping = sources_for_members(
-            candidates, members, tree["nodes"], unit_kind=definition.unit_kind,
-        )
+        overlapping = sources_for_members(candidates, members, tree["nodes"])
         # A region still covered by a live unit was never abandoned; only a
         # region with no live owner at all can be a resurrection.
         live_region = region_is_live(active_on_entry, members)
@@ -168,7 +165,7 @@ def reconcile_palace_units(session: Session, palace_id: int) -> dict[str, Any]:
          inherited_passed, inherited_last_passed) = plan
         if current is None:
             # No active unit owns this identity. Either the region is still
-            # represented by other active units (a resized cohort, a split) and
+            # represented by other active units (a resized unit, a split) and
             # the overlap vote above carried the schedule, or nothing active
             # covers it -- every mark was deleted and this one is added back --
             # in which case the deactivated row still holds the earned progress

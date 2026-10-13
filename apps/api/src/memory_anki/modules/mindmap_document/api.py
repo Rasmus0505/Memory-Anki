@@ -33,7 +33,6 @@ from .snapshot import (
     unpack_editor_save_payload,
 )
 from .split_units import (
-    UNIT_KIND_COHORT,
     UNIT_KIND_MARK,
     UNIT_KIND_PALACE,
     UNIT_KIND_RESIDUAL,
@@ -51,7 +50,6 @@ from .tree import build_document_tree
 
 __all__ = [
     "SplitUnit",
-    "UNIT_KIND_COHORT",
     "UNIT_KIND_MARK",
     "UNIT_KIND_PALACE",
     "UNIT_KIND_RESIDUAL",
