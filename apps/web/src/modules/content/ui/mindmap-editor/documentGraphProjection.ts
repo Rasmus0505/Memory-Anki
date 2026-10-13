@@ -42,7 +42,7 @@ import {
   type MindMapRelocateMode,
 } from '@/modules/content/domain/mindmap-document-entity'
 import { hasHighlightMarkup } from '@/shared/lib/mindmapRichText'
-import type { GraphData, MindMapCountBadge, MindMapNode } from '@/shared/ui/mindmap-canvas/adapter'
+import type { GraphData, MindMapCountBadge, MindMapNode, MindMapNodeProgress } from '@/shared/ui/mindmap-canvas/adapter'
 import { BRANCH_COLORS } from '@/shared/ui/mindmap-canvas/branchColors'
 
 type RevealState = 'hidden' | 'placeholder' | 'revealed'
@@ -65,6 +65,7 @@ export interface EditorDocGraphOptions {
     Array<{ text: string; tone: 'danger' | 'success' | 'warning' | 'info' | 'neutral'; style: 'filled' | 'outline' }>
   >
   countBadgeByNodeUid?: Record<string, MindMapCountBadge[]>
+  nodeProgressByNodeUid?: Record<string, MindMapNodeProgress>
   /**
    * Freestyle inline-edit scope: keep the palace-root → branch spine and the
    * branch subtree. Missing uid falls back to the full document.
@@ -166,6 +167,7 @@ export function editorDocToGraph(
           mastery: options.masteryByNodeUid?.[uid],
           statusChips: statusChips.length > 0 ? statusChips : null,
           countBadges: readCountBadges(options.countBadgeByNodeUid?.[uid]),
+          progress: options.nodeProgressByNodeUid?.[uid] ?? null,
         }),
       },
     })
@@ -268,6 +270,7 @@ function buildNodeVisual(options: {
     style: 'filled' | 'outline'
   }> | null
   countBadges?: MindMapCountBadge[] | null
+  progress?: MindMapNodeProgress | null
 }) {
   const masteryStatus = options.mastery?.status ?? ''
   const manualLabel = options.mastery?.manualLabel ?? ''
@@ -302,6 +305,7 @@ function buildNodeVisual(options: {
     badge,
     statusChips: options.statusChips?.length ? options.statusChips : null,
     countBadges: options.countBadges ?? null,
+    progress: options.progress ?? null,
   }
 }
 

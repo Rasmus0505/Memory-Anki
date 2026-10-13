@@ -26,6 +26,17 @@ export function NodeCardStatusChrome({
   const countBadges = cornerCountBadges(visual)
   return (
     <>
+      {visual.progress ? (
+        // Sits above the card's top edge, right-aligned, so it never covers the label text inside the card.
+        <span
+          data-testid="node-progress-count"
+          className="pointer-events-none absolute right-1 z-30 text-[10px] font-medium leading-4 tabular-nums text-paper-muted"
+          style={{ top: '-1.1rem' }}
+          aria-label={`本节点 ${visual.progress.count} 题，整图 ${visual.progress.total} 题`}
+        >
+          {visual.progress.count}/{visual.progress.total}
+        </span>
+      ) : null}
       {visual.statusChips && visual.statusChips.length > 0 ? (
         <div
           className="pointer-events-none absolute left-1/2 z-30 flex max-w-full -translate-x-1/2 items-center justify-center gap-0.5"

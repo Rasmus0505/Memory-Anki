@@ -53,6 +53,7 @@ type FlipCardSurfaceExtensions = Pick<
   | 'mutedNodeUids'
   | 'masteryByNodeUid'
   | 'countBadgeByNodeUid'
+  | 'nodeProgressByNodeUid'
   | 'onCountBadgeClick'
   | 'confirmDeleteNodes'
   | 'focusRequestNodeUid'
@@ -208,6 +209,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   onUiClearedChange,
   masteryByNodeUid,
   countBadgeByNodeUid,
+  nodeProgressByNodeUid,
   onCountBadgeClick,
   confirmDeleteNodes,
   focusRequestNodeUid,
@@ -611,6 +613,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
         masteryByNodeUid={masteryByNodeUid}
         statusChipsByNodeUid={hostStatusChipsByNodeUid}
         countBadgeByNodeUid={countBadgeByNodeUid}
+        nodeProgressByNodeUid={nodeProgressByNodeUid}
         onCountBadgeClick={onCountBadgeClick}
         selectionToolbarPreferPosition="bottom"
         focusRequestNodeUid={focusRequestNodeUid}

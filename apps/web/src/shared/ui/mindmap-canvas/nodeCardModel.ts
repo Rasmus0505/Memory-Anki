@@ -1,5 +1,5 @@
 import type { MouseEvent } from 'react'
-import type { MindMapNode } from './adapter'
+import type { MindMapNode, MindMapNodeProgress } from './adapter'
 import type { NodeSize } from './layout'
 import type {
   SelectionToolbarAction,
@@ -239,6 +239,24 @@ export function buildNodeCardTextClassNames(options: {
     nativeTextSelect ? 'cursor-text select-text' : options.readonly ? 'cursor-default' : 'cursor-text',
     !nativeTextSelect && (options.concealed || !options.readonly) ? 'select-none' : '',
   ].filter(Boolean).join(' ')
+}
+
+const PROGRESS_TONE_VAR: Record<MindMapNodeProgress['tone'], string> = {
+  new: 'var(--color-memory-new)',
+  review: 'var(--color-memory-medium)',
+}
+
+/**
+ * The card's own background is the progress bar: the share of the map's questions is painted as a
+ * tint from the left edge, and the rest keeps the card colour. Only the tint is translucent, so the
+ * text on top keeps its contrast. Returns null when the node has no progress to show.
+ */
+export function nodeProgressBackgroundImage(progress: MindMapNodeProgress | null | undefined): string | null {
+  if (!progress) return null
+  const percent = Math.round(Math.min(1, Math.max(0, progress.ratio)) * 100)
+  if (percent <= 0) return null
+  const tint = `color-mix(in srgb, ${PROGRESS_TONE_VAR[progress.tone]} 30%, transparent)`
+  return `linear-gradient(to right, ${tint} ${percent}%, transparent ${percent}%)`
 }
 
 export function buildNodeCardContainerClassNames(options: {

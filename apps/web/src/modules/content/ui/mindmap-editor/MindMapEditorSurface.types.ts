@@ -5,7 +5,7 @@ import type {
   MindMapHostSegmentSummary,
 } from '@/shared/api/contracts'
 import type { MindMapSelection } from '@/modules/content/domain/mindmap-document-entity'
-import type { MindMapCountBadge } from '@/shared/ui/mindmap-canvas/adapter'
+import type { MindMapCountBadge, MindMapNodeProgress } from '@/shared/ui/mindmap-canvas/adapter'
 import type { MindMapFeedbackFxPayload, MindMapReviewFxPayload } from './hostBridgeUtils'
 import type {
   MindMapContentChangeViewportPolicy,
@@ -103,6 +103,8 @@ export interface MindMapEditorSurfaceProps {
     Array<{ text: string; tone: 'danger' | 'success' | 'warning' | 'info' | 'neutral'; style: 'filled' | 'outline' }>
   >
   countBadgeByNodeUid?: Record<string, MindMapCountBadge[]>
+  /** Bottom progress strip per node: subtree question share plus the 第一次学 / 复习 type colour. */
+  nodeProgressByNodeUid?: Record<string, MindMapNodeProgress>
   onCountBadgeClick?: (nodeUid: string, kind?: MindMapCountBadge['kind']) => void
   focusRequestNodeUid?: string | null
   focusRequestNonce?: number

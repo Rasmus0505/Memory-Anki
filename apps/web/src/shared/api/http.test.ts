@@ -170,6 +170,8 @@ describe('shared api http token headers', () => {
     expect(headers['X-Memory-Anki-Mutation-ID']).toEqual(expect.any(String))
     expect(mutationQueueMocks.discardQueuedMutationsByCoalesceKey).toHaveBeenCalledWith(
       'palace:1:editor',
+      headers['X-Memory-Anki-Mutation-ID'],
+      expect.any(String),
     )
   })
 

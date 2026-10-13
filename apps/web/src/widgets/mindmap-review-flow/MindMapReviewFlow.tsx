@@ -133,6 +133,7 @@ export function MindMapReviewFlow({
       }}
       revealSettings={review.flow.flipCardRevealSettings}
       countBadgeByNodeUid={quizNodeBindings.countBadgeByNodeUid}
+      nodeProgressByNodeUid={quizNodeBindings.nodeProgressByNodeUid}
       onCountBadgeClick={handleOpenNodeQuiz}
     />
   );

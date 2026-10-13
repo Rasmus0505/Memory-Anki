@@ -136,6 +136,7 @@ export function usePalaceEditorQuizBindings({
 
   return {
     countBadgeByNodeUid: quizNodeBindings.countBadgeByNodeUid,
+    nodeProgressByNodeUid: quizNodeBindings.nodeProgressByNodeUid,
     openNodeQuiz,
     confirmDeleteNodes,
     moreAction,

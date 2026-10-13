@@ -30,6 +30,20 @@ export interface MindMapNodeVisual {
   countBadge?: MindMapCountBadge | null
   /** Ordered corner badges. Later items sit closer to the bottom-right corner. */
   countBadges?: MindMapCountBadge[] | null
+  /**
+   * Bottom progress strip: `ratio` is the filled share (0–1) and `tone` picks the type colour.
+   * Host-owned numbers and colour semantics; the canvas only draws the strip.
+   */
+  progress?: MindMapNodeProgress | null
+}
+
+export interface MindMapNodeProgress {
+  ratio: number
+  tone: 'new' | 'review'
+  /** Questions bound to this node's subtree (the corner badge number). */
+  count: number
+  /** Questions bound to the whole map (the denominator). */
+  total: number
 }
 
 export type MindMapCountBadgeTone =

@@ -155,10 +155,11 @@ export default function PalaceList() {
   })
 
   const renderPalaceCard = useCallback(
-    (palace: PalaceGroupedItem) => (
+    (palace: PalaceGroupedItem, parentQuestionTotal?: number | null) => (
       <PalaceListCard
         key={palace.id}
         palace={palace}
+        chapterQuestionTotal={parentQuestionTotal}
         viewSettings={viewSettings}
         searchQuery={search}
         defaultExpanded

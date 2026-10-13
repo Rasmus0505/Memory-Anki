@@ -9,6 +9,7 @@ import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { cn } from '@/shared/lib/utils'
 import { NodeCountBadgeCluster } from '@/shared/ui/mindmap-canvas/NodeCountBadge'
+import { ShareBar, shareRatio } from '@/shared/ui/share-bar/ShareBar'
 import {
   formatCreatedAt,
   getPalaceCardClass,
@@ -18,6 +19,8 @@ import {
 
 interface PalaceListCardProps {
   palace: PalaceGroupedItem
+  /** Distinct questions in the chapter this card is grouped under; the palace bar's denominator. */
+  chapterQuestionTotal?: number | null
   viewSettings: PalaceListViewSettings
   searchQuery?: string
   defaultExpanded?: boolean
@@ -100,6 +103,7 @@ function whyNotToday(palace: PalaceGroupedItem): string | null {
 
 export function PalaceListCard({
   palace,
+  chapterQuestionTotal = null,
   viewSettings,
   searchQuery,
   defaultExpanded = false,
@@ -269,6 +273,12 @@ export function PalaceListCard({
           </div>
         </div>
       </CardContent>
+      <div className="px-4 pb-2">
+        <ShareBar
+          ratio={shareRatio(palace.quiz_question_total, chapterQuestionTotal)}
+          label={`题目占本章节 ${palace.quiz_question_total ?? 0}/${chapterQuestionTotal ?? 0}`}
+        />
+      </div>
       {progressOpen ? (
         <PalaceReviewUnitsPanel
           open

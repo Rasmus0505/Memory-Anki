@@ -493,6 +493,7 @@ export default function PalaceEdit() {
         <PalaceKnowledgeWorkspaceProvider
           palace={page.palace}
           activeKey={activeMindMapKey}
+          nodeProgressByNodeUid={quizBindingsHost.nodeProgressByNodeUid}
           onActiveKeyChange={setActiveMindMapKey}
           onReload={page.reload}
         >
@@ -580,6 +581,7 @@ export default function PalaceEdit() {
                               : mindMapExperience.highlightedNodeUids
                           }
                           countBadgeByNodeUid={quizBindingsHost.countBadgeByNodeUid}
+                          nodeProgressByNodeUid={quizBindingsHost.nodeProgressByNodeUid}
                           onCountBadgeClick={quizBindingsHost.openNodeQuiz}
                           confirmDeleteNodes={quizBindingsHost.confirmDeleteNodes}
                           focusRequestNodeUid={page.modeFocusRequestNodeUid}

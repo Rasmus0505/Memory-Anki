@@ -33,6 +33,8 @@ export interface PalaceListItem {
   permanent_mark_count: number
   /** Mind-map style corner badges: subjective then objective. Omitted side means zero. */
   quiz_count_badges?: PalaceQuizCountBadge[]
+  /** Distinct live questions bound to this palace; the bookshelf bar's numerator. */
+  quiz_question_total?: number
   next_review_date?: string | null
   segments?: PalaceSegmentSummary[]
   chapters?: Array<unknown>
@@ -113,6 +115,8 @@ export interface PalaceGroupedSummaryItem {
   permanent_mark_count: number
   next_review_date: string | null
   quiz_count_badges?: PalaceQuizCountBadge[]
+  /** Distinct live questions bound to this palace; the bookshelf bar's numerator. */
+  quiz_question_total?: number
   title_mode: string
   manual_title: string
   resolved_title: string
@@ -131,20 +135,25 @@ export interface PalaceGroupedSummaryItem {
 export interface PalaceChapterGroup {
   source_chapter: ChapterSummary
   palaces: PalaceGroupedItem[]
+  /** Distinct questions across this chapter's palaces; the chapter bar's numerator. */
+  question_total?: number
 }
 export interface PalaceSummaryChapterGroup {
   source_chapter: ChapterSummary
   palaces: PalaceGroupedSummaryItem[]
+  question_total?: number
 }
 export interface PalaceSubjectGroup {
   subject: SubjectSummary | null
   chapter_groups: PalaceChapterGroup[]
   ungrouped_palaces: PalaceGroupedItem[]
+  question_total?: number
 }
 export interface PalaceSummarySubjectGroup {
   subject: SubjectSummary | null
   chapter_groups: PalaceSummaryChapterGroup[]
   ungrouped_palaces: PalaceGroupedSummaryItem[]
+  question_total?: number
 }
 export interface PalaceSubjectShelfItem {
   subject: SubjectSummary | null

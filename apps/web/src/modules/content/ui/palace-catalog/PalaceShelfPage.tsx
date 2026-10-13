@@ -231,12 +231,13 @@ export default function PalaceShelfPage() {
     [examOverview],
   )
   const renderExpandedPalaceCard = useCallback(
-    (palace: PalaceGroupedItem) => {
+    (palace: PalaceGroupedItem, parentQuestionTotal?: number | null) => {
       const exam = examStarsById.get(palace.id)
       return (
         <div key={palace.id} className={`relative rounded-xl ${exam?.stars === 3 ? 'exam-key-card' : ''}`}>
           <PalaceListCard
             palace={palace}
+            chapterQuestionTotal={parentQuestionTotal}
             viewSettings={expandedViewSettings}
             defaultExpanded
             onPalaceReview={cardActions.onPalaceReview}

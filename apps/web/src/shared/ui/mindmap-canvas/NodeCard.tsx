@@ -38,6 +38,7 @@ import {
   plainTextOffsetFromPoint,
   buildNodeCardContainerClassNames,
   buildNodeCardTextClassNames,
+  nodeProgressBackgroundImage,
   resolveNodeRawText,
   type NodeCardData,
 } from './nodeCardModel'
@@ -507,6 +508,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   const markFill = typeof visual.fillColor === 'string' && visual.fillColor.trim()
     ? visual.fillColor.trim()
     : null
+  const progressImage = nodeProgressBackgroundImage(visual.progress)
   const containerCls = buildNodeCardContainerClassNames({
     isRoot,
     markFill,
@@ -526,6 +528,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   const shellStyle = {
     ...(visual.borderColor ? { borderColor: visual.borderColor } : {}),
     ...(markFill ? { backgroundColor: markFill } : {}),
+    ...(progressImage ? { backgroundImage: progressImage } : {}),
   }
   const borderStyle = Object.keys(shellStyle).length > 0 ? shellStyle : undefined
   // Editing reuses the display card chrome. Width may grow with the draft, but a

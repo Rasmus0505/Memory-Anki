@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { FileText } from 'lucide-react'
 import { useQuizLauncher } from '@/widgets/quiz-launcher'
+import { usePalaceQuizNodeBindings } from '@/modules/quiz/public'
 import { buildAttachmentUrl, getPalaceEditorApi, savePalaceEditorApi } from '@/modules/content/public'
 import { PageHeader } from '@/shared/components/layout/PageHeader'
 import { MindMapSplitLayout } from '@/shared/components/layout/MindMapSplitLayout'
@@ -118,6 +119,13 @@ export default function PalaceView() {
       window.clearTimeout(timeoutId)
     }
   }, [editorState, palace])
+
+  // Node progress strip only: the read-only map shows each node's question share and 复习/第一次学 colour.
+  const quizNodeBindings = usePalaceQuizNodeBindings({
+    palaceId: palace?.id ?? null,
+    editorDoc: editorState?.editor_doc ?? {},
+    enabled: Boolean(palace?.id),
+  })
 
   if (!palaceId || (!palace && (isLoading || isStudyTextLibraryPending()))) {
     return <LoadingState text="正在准备宫殿…" />
@@ -283,6 +291,7 @@ export default function PalaceView() {
                   key={`readonly-${palace.id}`}
                   viewMemoryScope={`palace:${palace.id}`}
                   editorState={displayedEditorState || editorState}
+                  nodeProgressByNodeUid={quizNodeBindings.nodeProgressByNodeUid}
                   readonly={Boolean(pendingConflict) || practice.editorMode !== 'recall'}
                   presentationStrategy={isPwaClient ? 'viewport-only' : 'native-preferred'}
                   mobileViewPolicy="map"

@@ -95,6 +95,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   masteryByNodeUid = EMPTY_MASTERY_BY_UID,
   statusChipsByNodeUid,
   countBadgeByNodeUid,
+  nodeProgressByNodeUid,
   onCountBadgeClick,
   focusRequestNodeUid = null,
   focusRequestNonce = 0,
@@ -195,6 +196,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
       masteryByNodeUid,
       statusChipsByNodeUid,
       countBadgeByNodeUid,
+      nodeProgressByNodeUid,
       practiceModeActive,
       revealMap: practiceModeActive ? revealMap : undefined,
       onCreateSegmentFromSelection: () => onCreateSegmentFromSelectionRef.current?.(),
@@ -203,7 +205,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
       onNodeContextMenu: (nodes) => onNodeContextMenuRef.current?.(nodes),
         }),
     [
-      activeSegmentId, countBadgeByNodeUid, highlightedNodeUids, masteryByNodeUid,
+      activeSegmentId, countBadgeByNodeUid, nodeProgressByNodeUid, highlightedNodeUids, masteryByNodeUid,
       outlinedNodeUids,
       mutedNodeUids, practiceModeActive, providedCapabilities, revealMap, segmentColorMode,
       segmentRangeDraft, segments, statusChipsByNodeUid,
@@ -212,7 +214,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   const { graphOptions, graphOptionsSignature } = useMindMapGraphOptionsSignature({
     capabilities, segments, activeSegmentId, segmentColorMode, segmentRangeDraft,
     highlightedNodeUids, outlinedNodeUids, mutedNodeUids, masteryByNodeUid,
-    statusChipsByNodeUid, countBadgeByNodeUid, practiceModeActive, providedCapabilities,
+    statusChipsByNodeUid, countBadgeByNodeUid, nodeProgressByNodeUid, practiceModeActive, providedCapabilities,
   })
   const branchScope = useMemo(
     () => scopeBranchUid

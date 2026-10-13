@@ -25,6 +25,7 @@ import { readMindMapEditorState, parseMindMapDocument, type MindMapNode, type Mi
 import { updatePalaceKnowledgeBindingApi } from '@/modules/content/public'
 import type { PalaceMeta } from '@/modules/content/public'
 import { MindMapEditorSurface, MindMapPageToolbar, type MindMapEditorSurfaceHandle } from '@/modules/content/public'
+import type { MindMapNodeProgress } from '@/shared/ui/mindmap-canvas/adapter'
 import { useMindMapDocumentSession } from '@/shared/hooks/useMindMapDocumentSession'
 import { MindMapDocumentConflictDialog } from '@/shared/components/mindmap-document-conflict'
 import { toast } from '@/shared/feedback/toast'
@@ -46,6 +47,8 @@ export type MindMapDocumentTab = {
 interface PalaceKnowledgeWorkspaceProviderProps {
   palace: PalaceMeta
   activeKey: string
+  /** Bottom progress strip per node, from the palace's quiz node bindings. */
+  nodeProgressByNodeUid?: Record<string, MindMapNodeProgress>
   onActiveKeyChange: (key: string) => void
   onReload: () => Promise<void>
   children: ReactNode
@@ -64,6 +67,7 @@ function collectLinkedUids(node: MindMapNode, linkedIds: Set<number>, result: st
 type PalaceKnowledgeContextValue = {
   palace: PalaceMeta
   activeKey: string
+  nodeProgressByNodeUid?: Record<string, MindMapNodeProgress>
   tabs: MindMapDocumentTab[]
   selectedSubjectId: number | null
   subjects: SubjectSummary[]
@@ -112,6 +116,7 @@ function usePalaceKnowledge() {
 export function PalaceKnowledgeWorkspaceProvider({
   palace,
   activeKey,
+  nodeProgressByNodeUid,
   onActiveKeyChange,
   onReload,
   children,
@@ -358,6 +363,7 @@ export function PalaceKnowledgeWorkspaceProvider({
   const value = useMemo<PalaceKnowledgeContextValue>(() => ({
     palace,
     activeKey,
+    nodeProgressByNodeUid,
     tabs,
     selectedSubjectId,
     subjects,
@@ -396,6 +402,7 @@ export function PalaceKnowledgeWorkspaceProvider({
   }), [
     activeKey,
     addSubject,
+    nodeProgressByNodeUid,
     availableSubjects,
     bindingBusy,
     chapterDialogOpen,
@@ -639,6 +646,7 @@ export function PalaceSubjectMindMapCard({
     handleNodeClick,
     frameRef,
     isPwa,
+    nodeProgressByNodeUid,
   } = usePalaceKnowledge()
 
   if (selectedSubjectId == null) return null
@@ -689,6 +697,7 @@ export function PalaceSubjectMindMapCard({
             ref={frameRef}
             key={`palace-subject:${selectedSubjectId}`}
             editorState={session.editorState}
+            nodeProgressByNodeUid={nodeProgressByNodeUid}
             readonly={Boolean(session.pendingConflict)}
             sceneChrome="edit"
             presentationStrategy={isPwa ? 'viewport-only' : 'native-preferred'}

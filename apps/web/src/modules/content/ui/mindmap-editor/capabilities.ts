@@ -1,6 +1,6 @@
 ﻿import { Brain, FolderTree } from 'lucide-react'
 import type { MindMapHostSegmentRangeDraft, MindMapHostSegmentSummary } from '@/shared/api/contracts'
-import type { MindMapCountBadge } from '@/shared/ui/mindmap-canvas/adapter'
+import type { MindMapCountBadge, MindMapNodeProgress } from '@/shared/ui/mindmap-canvas/adapter'
 import type { ContextMenuAction } from '@/shared/ui/mindmap-canvas/NodeContextMenu'
 import type { EditorDocGraphOptions } from './documentGraphProjection'
 import type { MindMapSelection } from '@/modules/content/domain/mindmap-document-entity'
@@ -35,6 +35,7 @@ interface CapabilityFactoryOptions {
     Array<{ text: string; tone: 'danger' | 'success' | 'warning' | 'info' | 'neutral'; style: 'filled' | 'outline' }>
   >
   countBadgeByNodeUid?: Record<string, MindMapCountBadge[]>
+  nodeProgressByNodeUid?: Record<string, MindMapNodeProgress>
   practiceModeActive: boolean
   revealMap?: Record<string, 'hidden' | 'placeholder' | 'revealed'>
   onCreateSegmentFromSelection?: () => void
@@ -77,6 +78,13 @@ export function createMindMapCapabilities(options: CapabilityFactoryOptions): Mi
     capabilities.push({
       key: 'count-badges',
       graphOptions: { countBadgeByNodeUid: options.countBadgeByNodeUid },
+    })
+  }
+
+  if (options.nodeProgressByNodeUid && Object.keys(options.nodeProgressByNodeUid).length > 0) {
+    capabilities.push({
+      key: 'node-progress',
+      graphOptions: { nodeProgressByNodeUid: options.nodeProgressByNodeUid },
     })
   }
 

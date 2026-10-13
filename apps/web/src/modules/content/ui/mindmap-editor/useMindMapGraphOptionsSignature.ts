@@ -30,6 +30,7 @@ export function useMindMapGraphOptionsSignature(inputs: {
   masteryByNodeUid: unknown
   statusChipsByNodeUid: unknown
   countBadgeByNodeUid: unknown
+  nodeProgressByNodeUid?: unknown
   practiceModeActive: unknown
   providedCapabilities: unknown
 }): { graphOptions: EditorDocGraphOptions; graphOptionsSignature: string } {
@@ -37,7 +38,7 @@ export function useMindMapGraphOptionsSignature(inputs: {
     capabilities,
     segments, activeSegmentId, segmentColorMode, segmentRangeDraft,
     highlightedNodeUids, outlinedNodeUids, mutedNodeUids,
-    masteryByNodeUid, statusChipsByNodeUid, countBadgeByNodeUid,
+    masteryByNodeUid, statusChipsByNodeUid, countBadgeByNodeUid, nodeProgressByNodeUid,
     practiceModeActive, providedCapabilities,
   } = inputs
   const graphOptions = useMemo(
@@ -51,7 +52,7 @@ export function useMindMapGraphOptionsSignature(inputs: {
     [
       segments, activeSegmentId, segmentColorMode, segmentRangeDraft,
       highlightedNodeUids, outlinedNodeUids, mutedNodeUids,
-      masteryByNodeUid, statusChipsByNodeUid, countBadgeByNodeUid,
+      masteryByNodeUid, statusChipsByNodeUid, countBadgeByNodeUid, nodeProgressByNodeUid,
       practiceModeActive, providedCapabilities,
     ],
   )

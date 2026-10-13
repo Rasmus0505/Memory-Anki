@@ -51,7 +51,6 @@ describe('bootstrapClientPreferences', () => {
       palace_order: 'interleave_palaces',
       due_policy: 'due_only',
       node_limit: 8,
-      queue_length: 15,
       specific_palace_ids: [3],
       question_type: 'all',
       weak_quiz_priority: false,
@@ -64,7 +63,6 @@ describe('bootstrapClientPreferences', () => {
     expect(clientPreferencesApi.updateClientPreferencesApi).toHaveBeenCalledWith(
       expect.objectContaining({
         freestyle_feed_config: expect.objectContaining({
-          queue_length: 15,
           seed: 42,
           content: expect.objectContaining({ mindmap_branch: true, quiz_question: false }),
           mix_mode: 'mindmap_only',
@@ -84,7 +82,6 @@ describe('bootstrapClientPreferences', () => {
       weights: { mindmap_branch: 2, quiz_question: 1 },
       palace_order: 'finish_palace_then_next',
       due_policy: 'due_first_then_expand',
-      queue_length: 21,
       specific_palace_ids: [8],
       question_type: 'all',
       weak_quiz_priority: true,
@@ -97,7 +94,6 @@ describe('bootstrapClientPreferences', () => {
     expect(clientPreferencesApi.updateClientPreferencesApi).toHaveBeenCalledWith(
       expect.objectContaining({
         freestyle_feed_config_secondary: expect.objectContaining({
-          queue_length: 21,
           seed: 9,
           specific_palace_ids: [8],
         }),

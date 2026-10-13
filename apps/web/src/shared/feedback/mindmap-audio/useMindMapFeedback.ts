@@ -76,7 +76,12 @@ export function useMindMapFeedbackAudio(
     [enabled, feedbackVolume],
   )
 
-  return { playEvent, playComboMilestone }
+  // Stable identity: callers put this controller in effect deps, and a fresh
+  // object each render re-runs those effects every render (update-depth loop).
+  return React.useMemo(
+    () => ({ playEvent, playComboMilestone }),
+    [playEvent, playComboMilestone],
+  )
 }
 
 export function useMindMapFeedbackSettings() {
