@@ -121,7 +121,7 @@ export function EnglishGenerationLogDialog({
                             </pre>
                           </div>
                         ) : null}
-                        <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                        <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
                           <div className="space-y-2">
                             <div className="text-xs font-medium text-muted-foreground">请求 JSON</div>
                             <pre className="overflow-x-auto rounded-xl bg-slate-950 px-3 py-2 text-xs text-slate-100">

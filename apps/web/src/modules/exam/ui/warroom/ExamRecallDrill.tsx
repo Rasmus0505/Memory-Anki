@@ -113,7 +113,7 @@ export function ExamRecallDrill({ palaces, loadDoc }: ExamRecallDrillProps) {
         {prompt?.kind === 'path' ? (
           <div className="flex flex-col gap-2">
             <p className="text-lg font-semibold">「{prompt.node.text}」属于哪一支？</p>
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {prompt.options.map((option) => {
                 const isAnswer = option === prompt.answer
                 const tone = chosen == null ? 'bg-card hover:bg-accent' : isAnswer ? 'bg-success/20 ring-1 ring-success' : option === chosen ? 'bg-destructive/15 ring-1 ring-destructive' : 'bg-card opacity-60'

@@ -52,7 +52,7 @@ export function ExamSettingsCard({ overview, subjects, onSaved }: ExamSettingsCa
         void save()
       }}
     >
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="flex flex-col gap-1 text-sm">
           考试名称
           <Input value={name} maxLength={80} placeholder="例如：考研" onChange={(event) => setName(event.target.value)} />

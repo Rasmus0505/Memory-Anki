@@ -141,7 +141,7 @@ function MindMapOverflowMenu({ actions }: { actions: OverflowAction[] }) {
             top: box.top,
             left: box.left,
             maxWidth: `calc(100vw - ${OVERFLOW_MENU_MARGIN * 2}px)`,
-            maxHeight: `calc(100vh - ${box.top + OVERFLOW_MENU_MARGIN}px)`,
+            maxHeight: `calc(100dvh - ${box.top + OVERFLOW_MENU_MARGIN}px)`,
           }}
         >
           {actions.map((action, index) => (
@@ -236,7 +236,8 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
 
   return (
     <div className={cn(embedded ? 'flex shrink-0 flex-nowrap items-center gap-2' : 'rounded-2xl border border-border/70 bg-background/90 p-3', !embedded && (compact ? 'space-y-2.5' : 'space-y-3'), className)}>
-      <div className="flex flex-nowrap items-center gap-2">
+      {/* Standalone toolbars wrap on phones (search + view controls would otherwise overflow 390px); the embedded flip-card strip stays on one line. */}
+      <div className={cn('flex items-center gap-2', embedded ? 'flex-nowrap' : 'flex-wrap')}>
         {quizAction ? (
           <Button
             type="button"

@@ -400,7 +400,7 @@ export function MindMapReviewFlow({
             <CardContent
               className={cn(
                 "min-h-[64vh]",
-                review.flow.fullscreen && "h-[calc(100vh-108px)] min-h-0",
+                review.flow.fullscreen && "h-[calc(100dvh-108px)] min-h-0",
               )}
             >
               <div className="relative flex h-full min-h-0">

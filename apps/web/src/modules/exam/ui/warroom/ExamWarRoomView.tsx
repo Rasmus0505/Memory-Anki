@@ -76,7 +76,7 @@ export function ExamWarRoomView({ overview, subjects, onChanged, loadDoc }: Exam
         <ExamKnowledgeMap overview={overview} onChanged={onChanged} />
       </Panel>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Panel title="星级分布" description="每一档的单元数和掌握率">
           <ExamStarDistribution overview={overview} />
         </Panel>

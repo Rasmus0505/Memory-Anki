@@ -2,9 +2,11 @@
  * Public surface for module `english`.
  * Other modules may import only from this file.
  */
+import { lazy } from 'react'
+
 export * from './domain/english-entity/api'
 export * from './ui/english-shell'
 export * from './ui/english-text-interactions'
-export { default as EnglishClozePage } from './ui/english/EnglishClozePage'
-export { default as EnglishCoursePage } from './ui/english/EnglishCoursePage'
-export { default as EnglishWorkspacePage } from './ui/english/EnglishWorkspacePage'
+export const EnglishClozePage = lazy(() => import('./ui/english/EnglishClozePage'))
+export const EnglishCoursePage = lazy(() => import('./ui/english/EnglishCoursePage'))
+export const EnglishWorkspacePage = lazy(() => import('./ui/english/EnglishWorkspacePage'))

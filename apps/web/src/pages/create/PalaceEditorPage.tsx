@@ -541,7 +541,7 @@ export default function PalaceEdit() {
                     {activeFrameEditorState ? (
                       <div className="flex h-full min-h-0 flex-col gap-2">
                         {mindMapExperience.task === 'learn' ? (
-                          <div className="grid shrink-0 gap-2 rounded-xl border bg-muted/15 p-3 sm:grid-cols-2 lg:grid-cols-3">
+                          <div className="grid grid-cols-1 shrink-0 gap-2 rounded-xl border bg-muted/15 p-3 sm:grid-cols-2 lg:grid-cols-3">
                             <button type="button" className="rounded-xl border bg-background p-3 text-left hover:border-primary" onClick={() => page.enterInlinePractice()}><div className="font-medium">主动回忆</div><div className="mt-1 text-xs text-muted-foreground">连续揭示并回忆整张脑图</div></button>
                             <button type="button" className="rounded-xl border bg-background p-3 text-left hover:border-primary" onClick={() => navigate(`/freestyle?palaceId=${page.palaceId}`)}><div className="font-medium">开始随心复习</div><div className="mt-1 text-xs text-muted-foreground">在随心模式中复习当前宫殿</div></button>
                             <button type="button" className="rounded-xl border bg-background p-3 text-left hover:border-primary" onClick={handleOpenQuizPage}><div className="font-medium">做题训练</div><div className="mt-1 text-xs text-muted-foreground">基于当前宫殿进入题目训练</div></button>
