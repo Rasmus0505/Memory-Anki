@@ -1,24 +1,20 @@
 import type { RevealState } from '@/modules/memory/public'
 
 /**
- * Nodes the learner must reveal for this unit.
- * A cohort's parent anchor is path context, not a flip target.
- * Isolation units still include an anchor that is missing from membership.
+ * Nodes the learner must reveal for this unit: its membership, plus the anchor.
+ * Isolation and residual units both include an anchor that is not a member.
  */
 export function unitFlipTargetUids(
   nodeUids: Iterable<string> | null | undefined,
   anchorUid?: string | null,
-  unitKind?: string | null,
 ): string[] {
   const ids = new Set<string>()
   for (const raw of nodeUids ?? []) {
     const uid = String(raw || '').trim()
     if (uid) ids.add(uid)
   }
-  if (unitKind !== 'cohort') {
-    const anchor = String(anchorUid || '').trim()
-    if (anchor) ids.add(anchor)
-  }
+  const anchor = String(anchorUid || '').trim()
+  if (anchor) ids.add(anchor)
   return [...ids]
 }
 

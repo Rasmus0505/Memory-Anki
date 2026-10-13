@@ -222,3 +222,60 @@ export function firstIncompleteQuestionIndex(
   const index = questionIds.findIndex((qid) => !completedQuestionIds.has(qid))
   return index >= 0 ? index : 0
 }
+
+export type NodeProgressTone = 'new' | 'review'
+
+export type NodeProgress = {
+  /** Subtree question count ÷ whole-map question count, 0–1. */
+  ratio: number
+  /** 复习 only when every 复习单元 the node covers has passed (评过 3 或 4) at least once. */
+  tone: NodeProgressTone
+  /** Subtree question count (the corner badge number). */
+  count: number
+  /** Whole-map question count (the denominator). */
+  total: number
+}
+
+export type UnitPassState = {
+  node_uids: readonly string[]
+  passed: boolean
+}
+
+/**
+ * Progress background for every node card. The length is the node's subtree question count over the
+ * whole map's total (the root's subtree), so it never depends on review units. The colour comes from the
+ * 复习单元 that cover the node or any of its descendants: all passed → 复习, otherwise (or none) → 第一次学.
+ */
+export function buildNodeProgressByNodeUid(
+  editorDoc: MindMapDocumentInput,
+  subtreeQuestions: Map<string, Set<number>>,
+  unitPassStates: readonly UnitPassState[],
+): Record<string, NodeProgress> {
+  let whole = 0
+  for (const questionIds of subtreeQuestions.values()) whole = Math.max(whole, questionIds.size)
+
+  const doc = normalizeMindMapDocument(editorDoc)
+  const subtreeUids = new Map<string, string[]>()
+  const walk = (node: MindMapDocNode, indexPath: number[]): string[] => {
+    const uid = getMindMapNodeUid(node, indexPath.join('-') || 'root')
+    const members = [uid]
+    const children = Array.isArray(node.children) ? node.children : []
+    children.forEach((child, childIndex) => {
+      members.push(...walk(child, [...indexPath, childIndex]))
+    })
+    subtreeUids.set(uid, members)
+    return members
+  }
+  walk(doc.root as MindMapDocNode, [])
+
+  const progress: Record<string, NodeProgress> = {}
+  for (const [uid, members] of subtreeUids) {
+    const memberSet = new Set(members)
+    const covering = unitPassStates.filter((unit) => unit.node_uids.some((nodeUid) => memberSet.has(nodeUid)))
+    const allPassed = covering.length > 0 && covering.every((unit) => unit.passed)
+    const questionCount = subtreeQuestions.get(uid)?.size ?? 0
+    const ratio = whole > 0 ? Math.min(1, questionCount / whole) : 0
+    progress[uid] = { ratio, tone: allPassed ? 'review' : 'new', count: questionCount, total: whole }
+  }
+  return progress
+}

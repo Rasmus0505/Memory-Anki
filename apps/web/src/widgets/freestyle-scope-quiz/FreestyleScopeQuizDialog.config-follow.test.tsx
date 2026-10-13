@@ -197,7 +197,7 @@ describe('FreestyleScopeQuizDialog config reactivity', () => {
         onOpenChange={onOpenChange}
         roundId="round-1"
         planVersion={1}
-        storedConfig={sanitizeFreestyleFeedConfig({ ...config, queue_length: 12 })}
+        storedConfig={sanitizeFreestyleFeedConfig({ ...config })}
         setupDone
         roundReviewPalaceCount={1}
         onConfirmSetup={onConfirmSetup}

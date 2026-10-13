@@ -23,6 +23,7 @@ import type { FreestyleCard } from '@/shared/api/contracts'
 import {
   buildFreestyleProgressSummary,
   dayCohortLabel,
+  palaceIdentityClass,
   roundDaySpan,
   visualPlanStatus,
   type FreestyleProgressSegment,
@@ -38,10 +39,13 @@ import {
 } from '@/shared/components/ui/sheet'
 import type { FreestyleSkipState } from '@/modules/practice/domain/queueState'
 import {
+  buildPlanRowModel,
+  cardPathTexts,
   palaceIdFromEntry,
   RoundPlanRow,
   rowAccentClass,
   rowLabel,
+  type PlanRowModel,
   type RoundPlanView,
 } from '@/modules/practice/ui/freestyle/components/FreestyleRoundPlanRow'
 import {
@@ -94,11 +98,13 @@ export function FreestyleRoundSheet({
 }) {
   const spokenToday = labelToday || formatLocalDateKey(new Date())
   const [selectedIds, setSelectedIds] = useState<string[]>([])
+  /** Last row the learner clicked; the anchor for shift-click ranges. */
+  const lastClickedIdRef = useRef<string | null>(null)
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [dragOverId, setDragOverId] = useState<string | null>(null)
   const [collapsedPalaces, setCollapsedPalaces] = useState<Set<number>>(new Set())
   const [viewMode, setViewMode] = useState<RoundPlanView>('palace')
-  usePalaceDocumentVersion()
+  const palaceDocumentVersion = usePalaceDocumentVersion()
   const requestedPalaces = useRef(new Set<number>())
   useEffect(() => {
     if (!open) return
@@ -161,7 +167,7 @@ export function FreestyleRoundSheet({
     }))
   }, [workingRows, spokenToday])
   const currentCardId = cards[currentIndex]?.id ?? queueState.currentCardId
-  const selectedSet = new Set(selectedIds)
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds])
   const fillStatus = useCallback((entry: FreestyleRoundPlanCard): FreestyleRoundPlanCardStatus => {
     const liveCard = liveById.get(entry.cardId)
     const planStatus = liveCard
@@ -250,7 +256,57 @@ export function FreestyleRoundSheet({
     return sections
   }, [fillStatus, liveById, planRows, progressSummary.segments, roundPlan, spokenToday])
 
-  const moveRow = (sourceId: string, targetId: string) => {
+  /** Path, status and label of one row. Built once per plan change, not per render. */
+  const buildModel = useCallback((
+    entry: FreestyleRoundPlanCard,
+    progressChrome: boolean,
+  ): PlanRowModel => {
+    const liveCard = liveById.get(entry.cardId)
+    const palaceHint = entry.palaceTitle && entry.palaceTitle !== rowLabel(entry)
+      ? entry.palaceTitle
+      : undefined
+    return buildPlanRowModel({
+      entry,
+      liveCard,
+      status: fillStatus(entry),
+      isCurrent: entry.cardId === currentCardId,
+      pathTexts: cardPathTexts(
+        liveCard,
+        liveCard?.type === 'mindmap_branch' ? readPalaceEditorDoc(liveCard.palace_id) : null,
+      ),
+      accentClass: progressChrome ? rowAccentClass(segmentById.get(entry.cardId)) : undefined,
+      railIndex: progressChrome ? railIndexById.get(entry.cardId) : undefined,
+      palaceHint: progressChrome ? palaceHint : undefined,
+    })
+  }, [currentCardId, fillStatus, liveById, railIndexById, segmentById])
+
+  const rowModels = useMemo(() => {
+    const map = new Map<string, PlanRowModel>()
+    for (const entry of [...planRows, ...workingRows]) {
+      if (map.has(entry.cardId)) continue
+      map.set(entry.cardId, buildModel(entry, viewMode === 'progress'))
+    }
+    return map
+    // palaceDocumentVersion: the path falls back to the editor document, so a newly loaded
+    // document must rebuild the labels.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buildModel, palaceDocumentVersion, planRows, viewMode, workingRows])
+
+  /** Row ids in on-screen order, used for shift-click ranges. Collapsed palaces are skipped. */
+  const visibleIds = useMemo(() => {
+    if (viewMode === 'progress') {
+      return progressSections.flatMap((section) => section.entries.map((entry) => entry.cardId))
+    }
+    const ids: string[] = []
+    sections.forEach((section) => section.groups.forEach(([palaceId, entries]) => {
+      if (collapsedPalaces.has(palaceId)) return
+      entries.forEach((entry) => ids.push(entry.cardId))
+    }))
+    excludedOffFeed.forEach((entry) => ids.push(entry.cardId))
+    return ids
+  }, [collapsedPalaces, excludedOffFeed, progressSections, sections, viewMode])
+
+  const moveRow = useCallback((sourceId: string, targetId: string) => {
     if (sourceId === targetId || !roundPlan) return
     const source = roundPlan.cardsById[sourceId]
     const target = roundPlan.cardsById[targetId]
@@ -262,19 +318,39 @@ export function FreestyleRoundSheet({
     next.splice(sourceIndex, 1)
     next.splice(next.indexOf(targetId), 0, sourceId)
     onReorder(next)
-  }
+  }, [onReorder, roundPlan])
 
-  const toggleSelected = (id: string) => setSelectedIds((current) => (
-    current.includes(id) ? current.filter((value) => value !== id) : [...current, id]
-  ))
-  const toggleGroup = (entries: FreestyleRoundPlanCard[]) => {
+  /** Click toggles one row; shift-click adds every row between the last click and this one. */
+  const handleRowSelect = useCallback((cardId: string, shiftKey: boolean) => {
+    const anchorId = lastClickedIdRef.current
+    const from = anchorId ? visibleIds.indexOf(anchorId) : -1
+    const to = visibleIds.indexOf(cardId)
+    if (shiftKey && from >= 0 && to >= 0) {
+      const [start, end] = from < to ? [from, to] : [to, from]
+      const range = visibleIds.slice(start, end + 1)
+      setSelectedIds((current) => [...new Set([...current, ...range])])
+    } else {
+      setSelectedIds((current) => (
+        current.includes(cardId) ? current.filter((id) => id !== cardId) : [...current, cardId]
+      ))
+    }
+    lastClickedIdRef.current = cardId
+  }, [visibleIds])
+
+  const selectPalaceRows = (entries: FreestyleRoundPlanCard[]) => {
     const ids = entries.map((entry) => entry.cardId)
-    const allSelected = ids.every((id) => selectedSet.has(id))
-    setSelectedIds((current) => (
-      allSelected
-        ? current.filter((id) => !ids.includes(id))
-        : [...new Set([...current, ...ids])]
-    ))
+    setSelectedIds((current) => [...new Set([...current, ...ids])])
+  }
+  const invertPalaceRows = (entries: FreestyleRoundPlanCard[]) => {
+    const ids = entries.map((entry) => entry.cardId)
+    setSelectedIds((current) => {
+      const next = new Set(current)
+      ids.forEach((id) => {
+        if (next.has(id)) next.delete(id)
+        else next.add(id)
+      })
+      return [...next]
+    })
   }
   const orderIds = roundPlan?.orderIds ?? []
   const onRate = useCallback((cardId: string, rating: UnitRating) => {
@@ -286,25 +362,20 @@ export function FreestyleRoundSheet({
     neighborIds: string[],
     progressChrome: boolean,
   ) => {
-    const label = rowLabel(entry)
-    const palaceHint = progressChrome && entry.palaceTitle && entry.palaceTitle !== label
-      ? entry.palaceTitle
-      : undefined
+    const model = rowModels.get(entry.cardId) ?? buildModel(entry, progressChrome)
+    const index = neighborIds.indexOf(entry.cardId)
     return (
       <RoundPlanRow
         key={entry.cardId}
         entry={entry}
-        liveCard={liveById.get(entry.cardId)}
-        status={fillStatus(entry)}
-        isCurrent={entry.cardId === currentCardId}
+        model={model}
+        showChrome={progressChrome}
         isSelected={selectedSet.has(entry.cardId)}
         draggingId={draggingId}
         dragOverId={dragOverId}
-        neighborIds={neighborIds}
-        accentClass={progressChrome ? rowAccentClass(segmentById.get(entry.cardId)) : undefined}
-        railIndex={progressChrome ? railIndexById.get(entry.cardId) : undefined}
-        palaceHint={palaceHint}
-        onToggle={toggleSelected}
+        previousId={index > 0 ? neighborIds[index - 1] ?? null : null}
+        nextId={index >= 0 ? neighborIds[index + 1] ?? null : null}
+        onSelect={handleRowSelect}
         onJump={onJump}
         onMove={moveRow}
         onDragOverId={setDragOverId}
@@ -319,7 +390,10 @@ export function FreestyleRoundSheet({
     <Sheet
       open={open}
       onOpenChange={(next) => {
-        if (!next) setSelectedIds([])
+        if (!next) {
+          setSelectedIds([])
+          lastClickedIdRef.current = null
+        }
         onOpenChange(next)
       }}
     >
@@ -365,25 +439,7 @@ export function FreestyleRoundSheet({
           </SheetDescription>
         </SheetHeader>
 
-        <div className="flex flex-wrap items-center gap-2 border-b border-border/60 px-4 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] sm:px-5">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={!selectedIds.length}
-            onClick={() => onExclude(selectedIds)}
-          >
-            <X className="size-3.5" />排除选中
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={!selectedIds.length}
-            onClick={() => onRestore(selectedIds)}
-          >
-            <Undo2 className="size-3.5" />恢复选中
-          </Button>
+        <div className="flex flex-wrap items-center gap-2 border-b border-border/60 px-4 py-2 sm:px-5">
           <Button
             type="button"
             size="sm"
@@ -444,16 +500,34 @@ export function FreestyleRoundSheet({
                         >
                           {collapsed ? <ChevronRight className="size-4" /> : <ChevronDown className="size-4" />}
                         </button>
-                        <input
-                          type="checkbox"
-                          checked={entries.every((entry) => selectedSet.has(entry.cardId))}
-                          onChange={() => toggleGroup(entries)}
-                          aria-label={`选择${title}全部安排`}
+                        <span
+                          aria-hidden
+                          className={cn('h-5 w-1 shrink-0 rounded-full', palaceIdentityClass(palaceId))}
                         />
                         <div className="min-w-0 flex-1 truncate text-sm font-semibold">{title}</div>
                         <span className="text-xs text-muted-foreground">
                           {entries.filter((entry) => fillStatus(entry) === 'completed').length}/{entries.length}
                         </span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-xs"
+                          aria-label={`全选${title}`}
+                          onClick={() => selectPalaceRows(entries)}
+                        >
+                          全选
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-xs"
+                          aria-label={`反选${title}`}
+                          onClick={() => invertPalaceRows(entries)}
+                        >
+                          反选
+                        </Button>
                       </div>
                       {!collapsed ? (
                         <div className="divide-y divide-border/50">
@@ -498,6 +572,53 @@ export function FreestyleRoundSheet({
             })}
           </div>
         </div>
+
+        {selectedIds.length ? (
+          <div
+            data-testid="round-plan-batch-bar"
+            role="toolbar"
+            aria-label="已选安排的批量操作"
+            className="sticky bottom-0 z-10 flex shrink-0 flex-wrap items-center gap-2 border-t border-border/60 bg-background/95 px-4 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] backdrop-blur sm:px-5"
+          >
+            <span className="mr-auto text-sm font-medium">已选 {selectedIds.length} 张</span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => onExclude(selectedIds)}
+            >
+              <X className="size-3.5" />排除
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => onRestore(selectedIds)}
+            >
+              <Undo2 className="size-3.5" />恢复
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={!compressibleIds.length}
+              onClick={onCompressCompleted}
+            >
+              <Archive className="size-3.5" />结算
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setSelectedIds([])
+                lastClickedIdRef.current = null
+              }}
+            >
+              取消选择
+            </Button>
+          </div>
+        ) : null}
       </SheetContent>
     </Sheet>
   )

@@ -20,6 +20,15 @@ export type FreestyleDuePolicy =
 /** Mutually exclusive freestyle progress buckets (multi-select). */
 export type FreestylePalaceOrder = 'finish_palace_then_next' | 'interleave_palaces' | 'exam_priority'
 
+/** Global order of due units: most overdue first, least recently passed first, or palace topology. */
+export type FreestyleDueOrder = 'most_overdue' | 'least_recently_reviewed' | 'palace_topology'
+
+/** Where never-passed (new) units sit relative to review units. */
+export type FreestyleNewPlacement = 'new_first' | 'review_first' | 'ratio'
+
+/** Review cards per new card when new_placement is ratio. */
+export type FreestyleReviewNewRatio = 1 | 2 | 4
+
 /** How palace-side cards and quiz cards are ordered relative to each other. */
 export type FreestyleMixMode =
   | 'mindmap_only'
@@ -128,10 +137,14 @@ export interface FreestyleFeedConfig {
   streams: FreestyleTrainingStreams
   /** Used only for mixed rounds. */
   mix: FreestyleTrainingMix
-  /** One total for every direction. Candidate shortfall never creates duplicates. */
-  queue_length: number
   /** Deterministic ordering seed. Kept under advanced settings in the UI. */
   seed: number
+  /** Global order of due review units. */
+  due_order: FreestyleDueOrder
+  /** Where never-passed units sit relative to review units. */
+  new_placement: FreestyleNewPlacement
+  /** Review cards per new card; only read when new_placement is ratio. */
+  review_new_ratio: FreestyleReviewNewRatio
 
   /**
    * Compatibility projection for v1 local preferences and callers during the
@@ -596,6 +609,8 @@ export interface FreestyleQueueBuildRequest {
   hidden_ids?: string[]
   /** Cold start only: return a prefix so study can begin before the tail arrives. */
   study_window?: boolean
+  /** IANA time zone of the device, used for due-day arithmetic. */
+  tz: string
 }
 
 export interface FreestyleQueueBuildResponse {
@@ -607,7 +622,6 @@ export interface FreestyleQueueBuildResponse {
   round_meta: {
     candidate_count: number
     scheduled_count: number
-    queue_limit: number
     limit_reached: boolean
     /** Cold-start prefix is shorter than the full ordered queue. Not a quiz cap. */
     tail_pending?: boolean

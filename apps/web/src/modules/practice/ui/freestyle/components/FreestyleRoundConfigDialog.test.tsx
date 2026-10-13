@@ -19,7 +19,6 @@ const config = {
   due_policy: 'due_only',
   quiz_mastery_buckets: ['unseen', 'weak'],
   quiz_scope: 'cross_palace_random',
-  queue_length: 50,
   specific_palace_ids: [],
   question_type: 'all',
   weak_quiz_priority: true,

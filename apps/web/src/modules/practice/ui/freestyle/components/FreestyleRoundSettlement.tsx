@@ -4,12 +4,13 @@ import type { FreestyleOverviewResponse } from '@/shared/api/contracts'
 import type { FreestyleRoundCompletion } from '@/modules/practice/ui/freestyle/model/roundCompletion'
 import type { FreestyleSaveOutcome } from '@/modules/practice/ui/freestyle/model/freestyleSettlementModel'
 import { settlementQuizClearCopy } from '@/modules/practice/ui/freestyle/model/overlayQuizClearance'
+import { formatPalaceUnit } from '@/modules/practice/ui/freestyle/model/formatPalaceUnit'
 import { FreestyleSaveStatus } from './FreestyleSaveStatus'
 import { cn } from '@/shared/lib/utils'
 
 type QuizChoice = 'pending' | 'confirming' | 'clearing' | 'cleared' | 'kept'
 
-const NEXT_REVIEW_PREVIEW = 5
+const NEXT_REVIEW_PREVIEW = 8
 
 function subjectKey(subjectId: number | null, subjectName: string) {
   return subjectId == null ? `name:${subjectName}` : `id:${subjectId}`
@@ -20,19 +21,15 @@ function percent(done: number, total: number) {
   return Math.min(100, Math.round((done / total) * 100))
 }
 
-// Subject hues cycle through the semantic subject tokens so one subject keeps one colour across the settlement.
-const SUBJECT_HUE_COUNT = 6
+// Progress fills are neutral on purpose: colour semantics live on the type/状态 channels, not on the bars.
+const PROGRESS_FILL = 'var(--color-stage-muted)'
 
-function subjectHue(index: number) {
-  return `var(--color-subject-${(index % SUBJECT_HUE_COUNT) + 1})`
-}
-
-function ProgressBar({ value, hue = 'var(--color-stage-glow)' }: { value: number; hue?: string }) {
+function ProgressBar({ value }: { value: number }) {
   return (
     <div className="h-1.5 overflow-hidden rounded-full bg-stage-line">
       <div
         className="h-full rounded-full transition-[width] duration-500"
-        style={{ width: `${value}%`, backgroundColor: hue }}
+        style={{ width: `${value}%`, backgroundColor: PROGRESS_FILL }}
       />
     </div>
   )
@@ -43,6 +40,8 @@ export interface FreestyleSettlementMeta {
   onRetrySave?: () => void
   remainingBefore?: number | null
   remainingAfter?: number | null
+  remainingPalaces?: number | null
+  remainingUnits?: number | null
   nextReviews?: FreestyleOverviewResponse['next_reviews']
 }
 
@@ -62,6 +61,8 @@ export function FreestyleRoundSettlement({
   onRetrySave,
   remainingBefore,
   remainingAfter,
+  remainingPalaces,
+  remainingUnits,
   nextReviews,
   onFinishStudy,
   onAddDueToday,
@@ -78,6 +79,9 @@ export function FreestyleRoundSettlement({
   onRetrySave?: () => void
   remainingBefore?: number | null
   remainingAfter?: number | null
+  /** Palaces and 复习单元 still waiting for the next round (server overview). */
+  remainingPalaces?: number | null
+  remainingUnits?: number | null
   nextReviews?: FreestyleOverviewResponse['next_reviews']
   /** Finish this visit only; never marks the underlying round or its units passed. */
   onFinishStudy?: () => void
@@ -88,6 +92,7 @@ export function FreestyleRoundSettlement({
   const palaceTotal = subjects.reduce((sum, subject) => sum + subject.palaceCount, 0)
   const [quizChoice, setQuizChoice] = useState<QuizChoice>('pending')
   const [quizError, setQuizError] = useState('')
+  const [nextReviewsExpanded, setNextReviewsExpanded] = useState(false)
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => (
     subjects[0] ? new Set([subjectKey(subjects[0].subjectId, subjects[0].subjectName)]) : new Set()
   ))
@@ -156,10 +161,9 @@ export function FreestyleRoundSettlement({
         </div>
 
         <ul data-testid="freestyle-round-complete-subjects" className="mt-5 space-y-2">
-          {subjects.map((subject, subjectIndex) => {
+          {subjects.map((subject) => {
             const key = subjectKey(subject.subjectId, subject.subjectName)
             const open = expanded.has(key)
-            const hue = subjectHue(subjectIndex)
             return (
               <li key={key} className="overflow-hidden rounded-2xl border border-stage-line bg-stage/40">
                 <button
@@ -178,7 +182,7 @@ export function FreestyleRoundSettlement({
                       {subject.cardCount} / {subject.totalUnits} · {percent(subject.cardCount, subject.totalUnits)}%
                     </span>
                   </span>
-                  <ProgressBar value={percent(subject.cardCount, subject.totalUnits)} hue={hue} />
+                  <ProgressBar value={percent(subject.cardCount, subject.totalUnits)} />
                 </button>
                 {open ? (
                   <ul className="space-y-2 border-t border-stage-line px-3 py-2.5">
@@ -196,7 +200,7 @@ export function FreestyleRoundSettlement({
                               {palace.cardCount} / {palace.totalUnits} · {palacePercent}%
                             </span>
                           </span>
-                          <ProgressBar value={palacePercent} hue={hue} />
+                          <ProgressBar value={palacePercent} />
                         </li>
                       )
                     })}
@@ -210,11 +214,13 @@ export function FreestyleRoundSettlement({
         <div className="mt-5 flex flex-col items-center gap-1 text-center text-xs leading-5 text-stage-muted">
           {saveOutcome ? <FreestyleSaveStatus outcome={saveOutcome} onRetry={onRetrySave} /> : null}
           <p data-testid="freestyle-round-status">
-            {completion.remainingCandidates > 0 ? `还剩 ${completion.remainingCandidates} 项待下一轮` : '本轮已全部完成'}
+            {remainingUnits != null && remainingPalaces != null
+              ? (remainingUnits > 0 ? `还剩 ${formatPalaceUnit(remainingPalaces, remainingUnits)} 待下一轮` : '本轮已全部完成')
+              : (completion.remainingCandidates > 0 ? `还剩 ${completion.remainingCandidates} 项待下一轮` : '本轮已全部完成')}
             {typeof remainingBefore === 'number' && typeof remainingAfter === 'number'
-              ? ` · 今日还剩 ${remainingBefore} → ${remainingAfter} 项`
+              ? ` · 今日还剩 ${remainingBefore} → ${remainingAfter} 复习单元`
               : ''}
-            {typeof dueTomorrowCount === 'number' ? ` · 明天 ${dueTomorrowCount} 项要复习` : ''}
+            {typeof dueTomorrowCount === 'number' ? ` · 明天 ${dueTomorrowCount} 个复习单元要复习` : ''}
           </p>
         </div>
 
@@ -225,7 +231,7 @@ export function FreestyleRoundSettlement({
               <p className="text-sm text-stage-muted">暂无已安排的复习</p>
             ) : (
               <ul className="flex flex-col gap-1 text-sm">
-                {nextReviews.slice(0, NEXT_REVIEW_PREVIEW).map((item) => (
+                {(nextReviewsExpanded ? nextReviews : nextReviews.slice(0, NEXT_REVIEW_PREVIEW)).map((item) => (
                   <li key={item.unit_id} className="flex justify-between gap-3">
                     <span className="truncate">{item.name || item.palace_name}</span>
                     <span className="shrink-0 tabular-nums text-stage-muted">{item.due_date}</span>
@@ -233,6 +239,16 @@ export function FreestyleRoundSettlement({
                 ))}
               </ul>
             )}
+            {nextReviews.length > NEXT_REVIEW_PREVIEW ? (
+              <button
+                type="button"
+                aria-expanded={nextReviewsExpanded}
+                className="self-start text-xs text-stage-muted underline-offset-2 hover:underline"
+                onClick={() => setNextReviewsExpanded((value) => !value)}
+              >
+                {nextReviewsExpanded ? '收起' : `展开全部 ${nextReviews.length} 项`}
+              </button>
+            ) : null}
           </section>
         ) : null}
 
@@ -289,7 +305,7 @@ export function FreestyleRoundSettlement({
             disabled={!quizResolved}
             onClick={onAnotherRound}
           >
-            开启下一轮
+            再来一轮
           </button>
         </div>
         {quizPalaceCount > 0 && quizChoice === 'pending' ? (

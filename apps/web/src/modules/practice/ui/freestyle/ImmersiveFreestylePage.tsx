@@ -29,6 +29,13 @@ import { FreestyleHud } from '@/modules/practice/ui/freestyle/FreestyleHud'
 import { FreestylePageDialogs } from '@/modules/practice/ui/freestyle/FreestylePageDialogs'
 import { FreestyleCardArea } from '@/modules/practice/ui/freestyle/FreestyleCardArea'
 import { FreestyleStudySettlement } from '@/modules/practice/ui/freestyle/FreestyleStudySettlement'
+import { FreestyleNewUnitsBanner } from '@/modules/practice/ui/freestyle/components/FreestyleNewUnitsBanner'
+import {
+  advanceNewUnitsBanner,
+  countPendingNewUnits,
+  INITIAL_NEW_UNITS_BANNER_TRACKER,
+  type NewUnitsBannerTracker,
+} from '@/modules/practice/ui/freestyle/model/newUnitsFinished'
 import { FreestyleStartOverview } from '@/modules/practice/ui/freestyle/components/FreestyleStartOverview'
 import { FreestyleConfigPreviewCard } from '@/modules/practice/ui/freestyle/components/FreestyleConfigPreviewCard'
 import { FreestyleDayRecap } from '@/modules/practice/ui/freestyle/components/FreestyleDayRecap'
@@ -128,6 +135,8 @@ export default function ImmersiveFreestylePage({
   /** Settlement 「再来一轮」 opens config in nextRound mode; HUD uses replan. */
   const [configIntent, setConfigIntent] = useState<'replan' | 'nextRound'>('replan')
   const [scopeQuizOpen, setScopeQuizOpen] = useState(false)
+  const [newUnitsBannerTracker, setNewUnitsBannerTracker] = useState<NewUnitsBannerTracker>(INITIAL_NEW_UNITS_BANNER_TRACKER)
+  const [newUnitsBannerVisible, setNewUnitsBannerVisible] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [saveError, setSaveError] = useState('')
   const { promptForAiOptions } = useAiRunConfigDialog()
@@ -307,8 +316,10 @@ export default function ImmersiveFreestylePage({
   const settlementMeta: FreestyleSettlementMeta = {
     saveOutcome: studySettlementSaveOutcome,
     onRetrySave: () => { void retryRoundSave() },
-    remainingBefore: freestyleOverview.baseline?.round?.counts.remaining ?? null,
-    remainingAfter: freestyleOverview.overview?.round?.counts.remaining ?? null,
+    remainingBefore: freestyleOverview.baseline?.round?.counts.remaining_units ?? null,
+    remainingAfter: freestyleOverview.overview?.round?.counts.remaining_units ?? null,
+    remainingPalaces: freestyleOverview.overview?.round?.counts.remaining_palaces ?? null,
+    remainingUnits: freestyleOverview.overview?.round?.counts.remaining_units ?? null,
     nextReviews: freestyleOverview.overview?.next_reviews ?? [],
   }
 
@@ -613,7 +624,7 @@ export default function ImmersiveFreestylePage({
   ).length
 
   const overflowSummary = cards.length === 0
-    ? `本轮 0 张 · 候选 ${roundMeta.candidate_count} · 上限 ${roundMeta.queue_limit}`
+    ? `本轮 0 张 · 候选 ${roundMeta.candidate_count}`
     : `导图 ${mindmapCount} · 题 ${quizCount}${resolvedQuiz > 0 ? ` · 已答 ${resolvedQuiz}` : ''} · 候选 ${roundMeta.candidate_count}`
   const openPlan = useCallback(() => setPlanOpen(true), [])
   const jumpFromProgressRail = useCallback((cardId: string) => {
@@ -795,7 +806,22 @@ export default function ImmersiveFreestylePage({
   const dismissChannelApplied = useCallback(() => setChannelAppliedHint(''), [setChannelAppliedHint])
   const dismissSaveError = useCallback(() => setSaveError(''), [])
   const dismissPalaceClearance = useCallback(() => setPalaceClearance(null), [setPalaceClearance])
+  const dismissNewUnitsBanner = useCallback(() => setNewUnitsBannerVisible(false), [])
   const workspaceSwitcherSlot = reviewPalaceId == null ? normalizeFreestyleWorkspaceId(slot) : null
+
+  const pendingNewUnits = countPendingNewUnits(
+    cards,
+    queueState.unitEncountersByCardId,
+    queueState.completedIds,
+    roundPlan,
+  )
+  const roundIdForBanner = queueState.roundId
+  useEffect(() => {
+    if (!roundIdForBanner) return
+    const next = advanceNewUnitsBanner(newUnitsBannerTracker, roundIdForBanner, pendingNewUnits)
+    if (next.tracker !== newUnitsBannerTracker) setNewUnitsBannerTracker(next.tracker)
+    if (next.show) setNewUnitsBannerVisible(true)
+  }, [newUnitsBannerTracker, pendingNewUnits, roundIdForBanner])
 
   return (
     <TooltipProvider>
@@ -842,6 +868,10 @@ export default function ImmersiveFreestylePage({
           onHistoryOpenChange={setHistoryOpen}
           currentCard={currentCard}
         />
+
+        {newUnitsBannerVisible ? (
+          <FreestyleNewUnitsBanner onDismiss={dismissNewUnitsBanner} />
+        ) : null}
 
         <FreestyleHud
           examOverview={examOverview}
@@ -950,6 +980,8 @@ export default function ImmersiveFreestylePage({
             <div className="mx-auto w-full max-w-md">
               <FreestyleConfigPreviewCard
                 summary={previewSummary}
+                orderMode={config.due_order}
+                newPlacement={config.new_placement}
                 palaceTitleByCardId={Object.fromEntries(
                   cards.map((card) => [card.id, (card as { palace_title?: string }).palace_title ?? '']),
                 )}

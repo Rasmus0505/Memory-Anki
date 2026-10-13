@@ -6,7 +6,10 @@ import {
   sanitizeFreestyleFeedConfig,
 } from '@/modules/practice/domain/feedConfig'
 import type {
+  FreestyleDueOrder,
   FreestyleFeedConfig,
+  FreestyleNewPlacement,
+  FreestyleReviewNewRatio,
   FreestyleTrainingMode,
   FreestyleTrainingStream,
 } from '@/shared/api/contracts'
@@ -31,6 +34,24 @@ const MODE_OPTIONS: Array<{
   { value: 'memory_palace', label: '记忆宫殿', description: '翻节点回忆结构和关系', icon: Brain },
   { value: 'quiz', label: '刷题', description: '只做题，不出现宫殿卡', icon: ListChecks },
   { value: 'mixed', label: '混合模式', description: '组合记忆宫殿和刷题', icon: Blend },
+]
+
+const DUE_ORDER_OPTIONS: Array<{ value: FreestyleDueOrder; label: string; hint: string }> = [
+  { value: 'most_overdue', label: '拖延最久优先', hint: '拖延最久：逾期天数最多的先。' },
+  { value: 'least_recently_reviewed', label: '最久未复习优先', hint: '最久未复习：最久没通过的先，从未学过的最先。' },
+  { value: 'palace_topology', label: '宫殿拓扑顺序', hint: '宫殿拓扑：保持宫殿内原顺序。' },
+]
+
+const NEW_PLACEMENT_OPTIONS: Array<{ value: FreestyleNewPlacement; label: string; hint: string }> = [
+  { value: 'new_first', label: '先学后复', hint: '先学后复：没学过的单元排在复习前面。' },
+  { value: 'review_first', label: '先复后学', hint: '先复后学：到期复习排在没学过的单元前面。' },
+  { value: 'ratio', label: '按比例穿插', hint: '按比例穿插：新学和复习按下面的比例交替出现。' },
+]
+
+const REVIEW_NEW_RATIO_OPTIONS: Array<{ value: FreestyleReviewNewRatio; label: string }> = [
+  { value: 1, label: '1:1' },
+  { value: 2, label: '2:1' },
+  { value: 4, label: '4:1' },
 ]
 
 const STREAM_LABELS: Record<'memory_palace' | 'quiz', string> = {
@@ -385,6 +406,34 @@ export function FreestyleTrainingConfigForm({
 
       {activeStreams.includes('memory_palace') ? renderPalaceStream() : null}
       {activeStreams.includes('quiz') ? renderQuizStream() : null}
+
+      <Section title="排序与新学" description="决定到期复习的先后，以及没学过的单元放在哪里。">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="排序" hint={DUE_ORDER_OPTIONS.find((item) => item.value === config.due_order)?.hint}>
+            <select className={FIELD_CLASS} value={config.due_order} onChange={(event) => set({ due_order: event.target.value as FreestyleDueOrder })}>
+              {DUE_ORDER_OPTIONS.map((item) => (
+                <option key={item.value} value={item.value}>{item.label}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="新学位置" hint={NEW_PLACEMENT_OPTIONS.find((item) => item.value === config.new_placement)?.hint}>
+            <select className={FIELD_CLASS} value={config.new_placement} onChange={(event) => set({ new_placement: event.target.value as FreestyleNewPlacement })}>
+              {NEW_PLACEMENT_OPTIONS.map((item) => (
+                <option key={item.value} value={item.value}>{item.label}</option>
+              ))}
+            </select>
+          </Field>
+        </div>
+        {config.new_placement === 'ratio' ? (
+          <Field label="复习:新学比例">
+            <select className={FIELD_CLASS} value={config.review_new_ratio} onChange={(event) => set({ review_new_ratio: Number(event.target.value) as FreestyleReviewNewRatio })}>
+              {REVIEW_NEW_RATIO_OPTIONS.map((item) => (
+                <option key={item.value} value={item.value}>{item.label}</option>
+              ))}
+            </select>
+          </Field>
+        ) : null}
+      </Section>
 
 
       <details className="rounded-xl border border-border/60 bg-card/40 p-4">

@@ -286,7 +286,6 @@ describe('server round plan hydrate', () => {
       createRoundPlan('round-1', [branch('a'), branch('b')], DEFAULT_FREESTYLE_FEED_CONFIG, {
         candidate_count: 2,
         scheduled_count: 2,
-        queue_limit: 20,
         limit_reached: false,
       }),
       plan,

@@ -7,32 +7,44 @@ const overview: FreestyleOverviewResponse = {
   round: {
     round_id: 'r1',
     version: 3,
-    counts: { palaces: 4, units: 18, new: 6, review: 12, done: 2, remaining: 16 },
+    counts: {
+      palaces: 4,
+      units: 18,
+      new: 6,
+      review: 12,
+      done: 2,
+      remaining: 16,
+      remaining_palaces: 3,
+      remaining_units: 14,
+    },
     by_subject: [],
   },
-  today: { due_count: 9, overdue_count: 2, new_palace_count: 1 },
-  yesterday: { date: '2026-10-11', learned_units: 0, rated_count: 0, weak_units: [] },
+  today: { due_count: 9, due_palace_count: 3, overdue_count: 2, new_unit_count: 6, new_palace_count: 2 },
+  yesterday: { date: '2026-10-11', learned_units: 0, learned_palace_count: 0, weak_units: [] },
   next_reviews: [],
 }
 
 describe('FreestyleStartOverview', () => {
-  it('shows palace, unit, due and new counts from the overview', () => {
+  it('shows due and new figures as 宫殿/复习单元 pairs', () => {
     render(<FreestyleStartOverview overview={overview} onStart={() => {}} />)
-    expect(screen.getByText('4')).toBeTruthy()
-    expect(screen.getByText('18')).toBeTruthy()
-    expect(screen.getByText('9')).toBeTruthy()
-    expect(screen.getByText('6')).toBeTruthy()
+    expect(screen.getByText('3/9')).toBeTruthy()
+    expect(screen.getByText('2/6')).toBeTruthy()
   })
 
-  it('falls back to today counts and dashes when no round is loaded', () => {
+  it('keeps both figures visible even when no round is loaded', () => {
     render(
       <FreestyleStartOverview
         overview={{ ...overview, round: null }}
         onStart={() => {}}
       />,
     )
+    expect(screen.getByText('3/9')).toBeTruthy()
+    expect(screen.getByText('2/6')).toBeTruthy()
+  })
+
+  it('shows dashes when the today figures are not available', () => {
+    render(<FreestyleStartOverview overview={{ ...overview, today: null }} onStart={() => {}} />)
     expect(screen.getAllByText('—')).toHaveLength(2)
-    expect(screen.getByText('1')).toBeTruthy()
   })
 
   it('starts when the button is pressed and work exists', () => {
@@ -46,7 +58,7 @@ describe('FreestyleStartOverview', () => {
     const empty: FreestyleOverviewResponse = {
       ...overview,
       round: { ...overview.round!, counts: { ...overview.round!.counts, remaining: 0, new: 0 } },
-      today: { due_count: 0, overdue_count: 0, new_palace_count: 0 },
+      today: { due_count: 0, due_palace_count: 0, overdue_count: 0, new_unit_count: 0, new_palace_count: 0 },
     }
     render(<FreestyleStartOverview overview={empty} onStart={() => {}} />)
     const button = screen.getByRole('button', { name: '暂无需要学习的内容' }) as HTMLButtonElement
@@ -58,7 +70,7 @@ describe('FreestyleStartOverview', () => {
     const finished: FreestyleOverviewResponse = {
       ...overview,
       round: { ...overview.round!, counts: { ...overview.round!.counts, remaining: 0, new: 0 } },
-      today: { due_count: 9, overdue_count: 2, new_palace_count: 0 },
+      today: { due_count: 9, due_palace_count: 3, overdue_count: 2, new_unit_count: 0, new_palace_count: 0 },
     }
     render(<FreestyleStartOverview overview={finished} onStart={onStart} />)
     fireEvent.click(screen.getByRole('button', { name: '开始学习' }))

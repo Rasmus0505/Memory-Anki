@@ -183,7 +183,6 @@ function queueBuildDiagnostic(input: {
     `耗时: ${input.elapsedMs}ms`,
     `宫殿筛选: ${selectedPalaces}`,
     `内容: 宫殿=${input.config.content.mindmap_branch}，题目=${input.config.content.quiz_question}`,
-    `目标队列长度: ${input.config.queue_length}`,
     requestError?.requestId ? `请求 ID: ${requestError.requestId}` : null,
     requestError?.status != null ? `HTTP 状态: ${requestError.status}` : null,
     requestError?.url ? `接口: ${requestError.url}` : null,
@@ -405,7 +404,6 @@ export function useImmersiveQueue(
   const [roundMeta, setRoundMeta] = useState({
     candidate_count: 0,
     scheduled_count: 0,
-    queue_limit: config.queue_length,
     limit_reached: false,
     palace_leftover_due: {} as Record<string, number>,
   })
@@ -918,7 +916,6 @@ export function useImmersiveQueue(
         const rawMeta = response.round_meta ?? {
           candidate_count: Number(response.phase_stats?.remaining_before_limit ?? nextCards.length),
           scheduled_count: nextCards.length,
-          queue_limit: nextConfig.queue_length,
           limit_reached: Number(response.phase_stats?.remaining_before_limit ?? 0) > nextCards.length,
         }
         // Local mute/exclude preferences can remove cards after the backend
@@ -926,7 +923,6 @@ export function useImmersiveQueue(
         const incomingMeta = {
           candidate_count: Number(rawMeta.candidate_count) || nextCards.length,
           scheduled_count: nextCards.length,
-          queue_limit: Number(rawMeta.queue_limit) || nextConfig.queue_length,
           limit_reached: Boolean(rawMeta.limit_reached),
           palace_leftover_due: asLeftoverDue(rawMeta.palace_leftover_due),
           palace_unit_totals: asLeftoverDue(rawMeta.palace_unit_totals),
@@ -1360,7 +1356,6 @@ export function useImmersiveQueue(
         meta: {
           candidate_count: Number(rawMeta?.candidate_count) || plannedCards.length,
           scheduled_count: plannedCards.length,
-          queue_limit: Number(rawMeta?.queue_limit) || configRef.current.queue_length,
           limit_reached: Boolean(rawMeta?.limit_reached),
           palace_leftover_due: asLeftoverDue(rawMeta?.palace_leftover_due),
         },
@@ -1407,7 +1402,6 @@ export function useImmersiveQueue(
         setRoundMeta({
           candidate_count: Number(rawMeta.candidate_count) || nextCards.length,
           scheduled_count: nextCards.length,
-          queue_limit: Number(rawMeta.queue_limit) || configRef.current.queue_length,
           limit_reached: Boolean(rawMeta.limit_reached),
           palace_leftover_due: asLeftoverDue(rawMeta.palace_leftover_due),
         })
@@ -2636,7 +2630,6 @@ export function useImmersiveQueue(
         meta: {
           candidate_count: plannedCards.length,
           scheduled_count: plannedCards.length,
-          queue_limit: configRef.current.queue_length,
           limit_reached: false,
           palace_leftover_due: {},
         },
@@ -2797,7 +2790,6 @@ export function useImmersiveQueue(
         meta: {
           candidate_count: Number(rawMeta?.candidate_count) || plannedCards.length,
           scheduled_count: plannedCards.length,
-          queue_limit: Number(rawMeta?.queue_limit) || remoteConfig.queue_length,
           limit_reached: Boolean(rawMeta?.limit_reached),
           palace_leftover_due: asLeftoverDue(rawMeta?.palace_leftover_due),
         },
@@ -2834,7 +2826,6 @@ export function useImmersiveQueue(
       setRoundMeta({
         candidate_count: Number(rawMeta?.candidate_count) || nextCards.length,
         scheduled_count: nextCards.length,
-        queue_limit: Number(rawMeta?.queue_limit) || remoteConfig.queue_length,
         limit_reached: Boolean(rawMeta?.limit_reached),
         palace_leftover_due: asLeftoverDue(rawMeta?.palace_leftover_due),
       })

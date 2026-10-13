@@ -41,13 +41,17 @@ export function getFreestyleFeedApi(params: {
 }
 
 export function buildFreestyleQueueApi(
-  payload: FreestyleQueueBuildRequest,
+  payload: Omit<FreestyleQueueBuildRequest, 'tz'>,
   options?: Pick<RequestInit, 'signal'>,
 ) {
+  const body: FreestyleQueueBuildRequest = {
+    ...payload,
+    tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  }
   return request<FreestyleQueueBuildResponse>('/freestyle/queue/build', {
     ...options,
     method: 'POST',
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
     // Queue construction is a read operation even though its API uses POST.
     persistence: false,
   })

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react'
+import type { PalaceGroupedItem } from '@/shared/api/contracts'
 import { ChevronDown, ChevronRight, ListChecks, RotateCcw } from 'lucide-react'
 import type {
   FreestylePalaceScopeChapter,
@@ -211,6 +212,38 @@ function SubjectRow({
   )
 }
 
+/** Every palace under the subject tree, once each, including nested chapters. */
+function palacesInSubjects(subjects: FreestylePalaceScopeSubject[]): PalaceGroupedItem[] {
+  const byId = new Map<number, PalaceGroupedItem>()
+  const walk = (chapters: FreestylePalaceScopeChapter[]) => {
+    chapters.forEach((chapter) => {
+      chapter.palaces.forEach((palace) => byId.set(palace.id, palace))
+      walk(chapter.children)
+    })
+  }
+  subjects.forEach((subject) => {
+    walk(subject.chapters)
+    subject.ungrouped?.palaces.forEach((palace) => byId.set(palace.id, palace))
+  })
+  return [...byId.values()]
+}
+
+/** Palaces with at least one unit due for review. 只选到期 selects exactly these. */
+function duePalaceIdsFromSubjects(subjects: FreestylePalaceScopeSubject[]): number[] {
+  return palacesInSubjects(subjects)
+    .filter((palace) => palace.due_review_unit_count > 0)
+    .map((palace) => palace.id)
+}
+
+/** Flips every listed palace. Selected ids outside the list stay as they were. */
+function invertPalaceSelection(current: number[], ids: number[]): number[] {
+  const listed = new Set(ids)
+  const selected = new Set(current)
+  const kept = current.filter((id) => !listed.has(id))
+  const flipped = ids.filter((id) => !selected.has(id))
+  return [...kept, ...flipped]
+}
+
 export function FreestylePalacePickerDialog({
   open,
   subjects,
@@ -232,6 +265,11 @@ export function FreestylePalacePickerDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
   const allIds = allFreestylePalaceIdsFromSubjects(subjects)
+  const allSelected = allIds.length > 0 && allIds.every((id) => draft.includes(id))
+  const dueIds = duePalaceIdsFromSubjects(subjects)
+  const dueOnlySelected = dueIds.length > 0
+    && dueIds.every((id) => draft.includes(id))
+    && draft.length === dueIds.length
   const toggle = (ids: number[], checked: boolean) => setDraft((current) => toggleFreestylePalaceGroup(current, ids, checked))
   return <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent
@@ -248,7 +286,9 @@ export function FreestylePalacePickerDialog({
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 bg-card/40 px-3 py-2">
           <span className="text-sm text-muted-foreground">已选 {draft.length} 个宫殿</span>
           <div className="flex gap-2">
-            <Button type="button" size="sm" variant="outline" aria-pressed={allIds.length > 0 && allIds.every((id) => draft.includes(id))} onClick={() => toggle(allIds, !(allIds.length > 0 && allIds.every((id) => draft.includes(id))))}>全选</Button>
+            <Button type="button" size="sm" variant="outline" aria-pressed={allSelected} onClick={() => toggle(allIds, !allSelected)}>全选</Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => setDraft((current) => invertPalaceSelection(current, allIds))}>反选</Button>
+            <Button type="button" size="sm" variant="outline" aria-pressed={dueOnlySelected} disabled={!dueIds.length} onClick={() => setDraft(dueIds)}>只选到期</Button>
             <Button type="button" size="sm" variant="ghost" onClick={() => setDraft([])}><RotateCcw className="size-3.5" />清空</Button>
           </div>
         </div>

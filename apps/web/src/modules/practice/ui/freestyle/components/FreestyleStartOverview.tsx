@@ -1,5 +1,6 @@
 import type { FreestyleOverviewResponse } from '@/shared/api/contracts'
 import { Metric } from '@/shared/components/ui/metric'
+import { formatPalaceUnit } from '@/modules/practice/ui/freestyle/model/formatPalaceUnit'
 
 interface FreestyleStartOverviewProps {
   overview: FreestyleOverviewResponse | null
@@ -43,11 +44,11 @@ export function FreestyleStartOverview({
   const today = overview?.today ?? null
   const yesterday = overview?.yesterday ?? null
   const counts = round?.counts ?? null
-  const palaces = counts ? counts.palaces : null
-  const units = counts ? counts.units : null
-  const due = today ? today.due_count : null
-  const fresh = counts ? counts.new : (today ? today.new_palace_count : null)
-  const hasWork = (counts?.remaining ?? 0) > 0 || (due ?? 0) > 0 || (fresh ?? 0) > 0
+  const dueUnits = today ? today.due_count : null
+  const duePalaces = today ? today.due_palace_count : null
+  const newUnits = today ? today.new_unit_count : null
+  const newPalaces = today ? today.new_palace_count : null
+  const hasWork = (counts?.remaining ?? 0) > 0 || (dueUnits ?? 0) > 0 || (newUnits ?? 0) > 0
   const weakUnits = yesterday?.weak_units ?? []
 
   return (
@@ -56,19 +57,29 @@ export function FreestyleStartOverview({
       aria-busy={loading || undefined}
       className="flex flex-col gap-5 rounded-2xl border border-stage-line bg-surface-stage-raised p-5"
     >
-      <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
-        <Metric surface="stage" label="宫殿" value={palaces} />
-        <Metric surface="stage" label="单元" value={units} />
-        <Metric surface="stage" label="待复习" value={due} tone={due ? 'warning' : 'default'} />
-        <Metric surface="stage" label="第一次学" value={fresh} tone={fresh ? 'info' : 'default'} />
+      <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+        <Metric
+          surface="stage"
+          label="待复习"
+          value={formatPalaceUnit(duePalaces, dueUnits)}
+          tone={dueUnits ? 'warning' : 'default'}
+        />
+        <Metric
+          surface="stage"
+          label="第一次学"
+          value={formatPalaceUnit(newPalaces, newUnits)}
+          tone={newUnits ? 'info' : 'default'}
+        />
       </div>
 
       {yesterday ? (
         <div className="flex flex-col gap-2 border-t border-stage-line pt-4">
           <p className="text-xs font-medium text-ink-stage-muted">昨天的回顾</p>
           <p className="text-sm text-ink-stage">
-            学了 <span className="font-semibold tabular-nums">{yesterday.learned_units}</span> 个单元，
-            评分 <span className="font-semibold tabular-nums">{yesterday.rated_count}</span> 次
+            学了{' '}
+            <span className="font-semibold tabular-nums">
+              {formatPalaceUnit(yesterday.learned_palace_count, yesterday.learned_units)}
+            </span>
           </p>
           {weakUnits.length > 0 ? (
             <ul className="flex flex-wrap gap-2" aria-label="薄弱单元">

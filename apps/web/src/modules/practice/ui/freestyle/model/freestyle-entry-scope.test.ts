@@ -24,7 +24,6 @@ describe('freestyle entry palace scope', () => {
   it('only overrides the palace scope and preserves freestyle settings', () => {
     const config = {
       ...DEFAULT_FREESTYLE_FEED_CONFIG,
-      queue_length: 37,
       mix_mode: 'random' as const,
       specific_palace_ids: [7, 8],
       streams: {
@@ -43,7 +42,6 @@ describe('freestyle entry palace scope', () => {
     const scoped = applyFreestyleEntryScope(config, 42)
 
     expect(scoped).toMatchObject({
-      queue_length: 37,
       mix_mode: 'random',
       specific_palace_ids: [42],
       subject_scope: 'all',
@@ -107,9 +105,9 @@ describe('freestyle entry palace scope', () => {
         },
       },
     }
-    const session = applyFreestyleEntryScope({ ...stored, queue_length: 40 }, 42)
+    const session = applyFreestyleEntryScope({ ...stored }, 42)
     const persisted = persistFreestyleConfigWithoutEntryLock(session, stored)
-    expect(persisted.queue_length).toBe(40)
+    expect(persisted).not.toHaveProperty('queue_length')
     expect(persisted.specific_palace_ids).toEqual([7, 8])
     expect(persisted.streams.memory_palace.specific_palace_ids).toEqual([7, 8])
     expect(persisted.streams.quiz.specific_palace_ids).toEqual([])

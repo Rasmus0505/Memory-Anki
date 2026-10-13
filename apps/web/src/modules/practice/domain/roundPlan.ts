@@ -38,7 +38,6 @@ export interface FreestyleRoundPlanState {
   createdAt: number
   candidateCount: number
   scheduledCount: number
-  queueLimit: number
   limitReached: boolean
   orderIds: string[]
   cardsById: Record<string, FreestyleRoundPlanCard>
@@ -53,7 +52,6 @@ export interface FreestyleRoundPlanState {
 export interface FreestyleRoundMeta {
   candidate_count: number
   scheduled_count: number
-  queue_limit: number
   limit_reached: boolean
   palace_leftover_due?: Record<string, number>
   palace_unit_totals?: Record<string, number>
@@ -245,7 +243,6 @@ export function createRoundPlan(
     createdAt: prior?.createdAt ?? now,
     candidateCount: Math.max(0, Math.round(Number(meta?.candidate_count ?? prior?.candidateCount ?? cards.length) || 0)),
     scheduledCount: Math.max(0, Math.round(Number(meta?.scheduled_count ?? cards.length) || 0)),
-    queueLimit: Math.max(1, Math.round(Number(meta?.queue_limit ?? config.queue_length) || config.queue_length)),
     limitReached: Boolean(meta?.limit_reached ?? prior?.limitReached),
     orderIds,
     cardsById: nextById,

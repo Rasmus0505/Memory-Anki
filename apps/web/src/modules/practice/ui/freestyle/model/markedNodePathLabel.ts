@@ -1,12 +1,22 @@
 /**
- * Round-sheet title: root node through the marked anchor, joined by "-".
- * Queue payloads historically stored only the palace title, so the sheet
- * resolves the path from a palace editor document when one is already loaded.
+ * Round-sheet path: root node through the marked anchor.
+ * Queue payloads carry `context_path` on each card, which is the preferred source.
+ * When a payload has no path, the sheet resolves it from a palace editor document
+ * that is already loaded.
  */
 
 type DocNode = {
   data?: { uid?: unknown; text?: unknown; memoryAnkiId?: unknown } | null
   children?: DocNode[] | null
+}
+
+export interface MarkedNodePathParts {
+  /** First node of the path. Null when the path has only one node. */
+  root: string | null
+  /** The marked node (last node of the path). Empty when there is no path. */
+  anchor: string
+  /** Every node of the path, root first, joined by "-" for titles. */
+  full: string
 }
 
 function plainText(value: unknown) {
@@ -34,10 +44,11 @@ function asRoot(doc: unknown): DocNode | null {
   return root && typeof root === 'object' ? root : null
 }
 
-export function markedNodePathLabel(doc: unknown, anchorUid: string | null | undefined): string {
+/** Text of each node from the document root through the anchor. Empty when the anchor is missing. */
+export function markedNodePathTexts(doc: unknown, anchorUid: string | null | undefined): string[] {
   const anchor = String(anchorUid || '').trim()
   const root = asRoot(doc)
-  if (!anchor || !root) return ''
+  if (!anchor || !root) return []
   const texts = new Map<string, string>()
   const parents = new Map<string, string | null>()
   const walk = (node: DocNode, parent: string | null, fallback: string) => {
@@ -51,7 +62,7 @@ export function markedNodePathLabel(doc: unknown, anchorUid: string | null | und
     })
   }
   walk(root, null, 'root')
-  if (!texts.has(anchor)) return ''
+  if (!texts.has(anchor)) return []
   const parts: string[] = []
   let current: string | null = anchor
   const seen = new Set<string>()
@@ -61,5 +72,27 @@ export function markedNodePathLabel(doc: unknown, anchorUid: string | null | und
     if (text) parts.push(text)
     current = parents.get(current) ?? null
   }
-  return parts.reverse().join('-')
+  return parts.reverse()
+}
+
+export function markedNodePathLabel(doc: unknown, anchorUid: string | null | undefined): string {
+  return markedNodePathTexts(doc, anchorUid).join('-')
+}
+
+/**
+ * Splits a root-first path into the row label parts: `root ⋯ anchor`.
+ * A single-node path has no root and shows only that node. Empty paths yield empty parts.
+ */
+export function markedNodePathParts(path: readonly string[]): MarkedNodePathParts {
+  const nodes = path.map((text) => String(text || '').trim()).filter(Boolean)
+  if (!nodes.length) return { root: null, anchor: '', full: '' }
+  const anchor = nodes[nodes.length - 1] ?? ''
+  const root = nodes.length > 1 ? nodes[0] ?? null : null
+  return { root, anchor, full: nodes.join('-') }
+}
+
+/** Visible row text for a path: `根 ⋯ 标记`, or only the node when the path has one node. */
+export function formatMarkedNodePath(parts: MarkedNodePathParts): string {
+  if (!parts.anchor) return ''
+  return parts.root ? `${parts.root} ⋯ ${parts.anchor}` : parts.anchor
 }

@@ -40,6 +40,27 @@ function renderSettlement(overrides: Partial<Parameters<typeof FreestyleRoundSet
   return props
 }
 
+describe('FreestyleRoundSettlement next reviews', () => {
+  const items = Array.from({ length: 11 }, (_, index) => ({
+    unit_id: `u${index}`,
+    name: `单元${index}`,
+    palace_name: '宫殿',
+    due_date: '2026-10-14',
+  }))
+
+  it('shows the first eight next reviews and expands to every item', () => {
+    renderSettlement({ nextReviews: items as never })
+    const list = screen.getByTestId('freestyle-round-next-reviews')
+    expect(list.querySelectorAll('li')).toHaveLength(8)
+
+    fireEvent.click(screen.getByRole('button', { name: '展开全部 11 项' }))
+    expect(list.querySelectorAll('li')).toHaveLength(11)
+
+    fireEvent.click(screen.getByRole('button', { name: '收起' }))
+    expect(list.querySelectorAll('li')).toHaveLength(8)
+  })
+})
+
 describe('FreestyleRoundSettlement', () => {
   it('reports new, review, palace, unit and percentage figures', () => {
     renderSettlement({ quizPalaceCount: 0 })
@@ -60,7 +81,7 @@ describe('FreestyleRoundSettlement', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: '已清空' })).toBeTruthy())
     expect(clear).toHaveBeenCalledOnce()
     expect(screen.getByText('已清空做题进度，学习历史和复习安排保持不变。')).toBeTruthy()
-    const next = screen.getByRole('button', { name: '开启下一轮' }) as HTMLButtonElement
+    const next = screen.getByRole('button', { name: '再来一轮' }) as HTMLButtonElement
     expect(next.disabled).toBe(false)
     fireEvent.click(next)
     expect(onAnotherRound).toHaveBeenCalledOnce()
@@ -68,7 +89,7 @@ describe('FreestyleRoundSettlement', () => {
 
   it('keeps next round locked until the quiz choice is resolved', () => {
     renderSettlement()
-    const next = screen.getByRole('button', { name: '开启下一轮' }) as HTMLButtonElement
+    const next = screen.getByRole('button', { name: '再来一轮' }) as HTMLButtonElement
     expect(next.disabled).toBe(true)
     fireEvent.click(screen.getByTestId('freestyle-round-quiz-keep'))
     expect(next.disabled).toBe(false)
@@ -77,7 +98,7 @@ describe('FreestyleRoundSettlement', () => {
   it('hides the quiz actions and unlocks next round when no palace has quiz progress', () => {
     renderSettlement({ quizPalaceCount: 0 })
     expect(screen.queryByRole('button', { name: '清空做题进度' })).toBeNull()
-    expect((screen.getByRole('button', { name: '开启下一轮' }) as HTMLButtonElement).disabled).toBe(false)
+    expect((screen.getByRole('button', { name: '再来一轮' }) as HTMLButtonElement).disabled).toBe(false)
   })
 
   it('shows the error and stays locked when clearing fails', async () => {
@@ -87,7 +108,7 @@ describe('FreestyleRoundSettlement', () => {
     fireEvent.click(screen.getByTestId('freestyle-round-quiz-clear-confirm'))
     await waitFor(() => expect(screen.getByText('clear failed')).toBeTruthy())
     expect(screen.getByRole('button', { name: '清空做题进度' })).toBeTruthy()
-    expect((screen.getByRole('button', { name: '开启下一轮' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: '再来一轮' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('discards a clear result that belongs to a previous round', async () => {
@@ -108,7 +129,7 @@ describe('FreestyleRoundSettlement', () => {
     await act(async () => resolve())
 
     expect(screen.queryByRole('button', { name: '已清空' })).toBeNull()
-    expect((screen.getByRole('button', { name: '开启下一轮' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: '再来一轮' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('returns to the previous card from the top action', () => {
@@ -119,12 +140,12 @@ describe('FreestyleRoundSettlement', () => {
 
   it('appends tomorrow due count to the status line when known', () => {
     renderSettlement({ quizPalaceCount: 0, dueTomorrowCount: 4 })
-    expect(screen.getByTestId('freestyle-round-status').textContent).toBe('还剩 2 项待下一轮 · 明天 4 项要复习')
+    expect(screen.getByTestId('freestyle-round-status').textContent).toBe('还剩 2 项待下一轮 · 明天 4 个复习单元要复习')
   })
 
   it('shows a zero tomorrow count rather than hiding it', () => {
     renderSettlement({ quizPalaceCount: 0, dueTomorrowCount: 0 })
-    expect(screen.getByTestId('freestyle-round-status').textContent).toBe('还剩 2 项待下一轮 · 明天 0 项要复习')
+    expect(screen.getByTestId('freestyle-round-status').textContent).toBe('还剩 2 项待下一轮 · 明天 0 个复习单元要复习')
   })
 
   it('omits the tomorrow clause when the count is unavailable', () => {
@@ -138,6 +159,11 @@ describe('FreestyleRoundSettlement', () => {
       completion: { ...completion, remainingCandidates: 0 },
       dueTomorrowCount: 4,
     })
-    expect(screen.getByTestId('freestyle-round-status').textContent).toBe('本轮已全部完成 · 明天 4 项要复习')
+    expect(screen.getByTestId('freestyle-round-status').textContent).toBe('本轮已全部完成 · 明天 4 个复习单元要复习')
+  })
+
+  it('shows the remaining palaces and 复习单元 when the server counts are known', () => {
+    renderSettlement({ quizPalaceCount: 0, remainingPalaces: 2, remainingUnits: 7 })
+    expect(screen.getByTestId('freestyle-round-status').textContent).toBe('还剩 2/7 待下一轮')
   })
 })

@@ -39,7 +39,6 @@ const config = {
   question_type: 'all',
   quiz_mastery_buckets: ['unseen'],
   specific_palace_ids: [],
-  queue_length: 50,
   seed: 17,
 } as unknown as FreestyleFeedConfig
 
@@ -258,14 +257,14 @@ describe('round plan reducer', () => {
       'round-1',
       [card('a', 1), card('b', 1), card('c', 2)],
       config,
-      { candidate_count: 9, scheduled_count: 3, queue_limit: 50, limit_reached: false },
+      { candidate_count: 9, scheduled_count: 3, limit_reached: false },
     )
     const completed = updateRoundPlanCard(first, 'a', { status: 'completed', lastRating: 3 })
     const rebuilt = createRoundPlan(
       'round-1',
       [card('c', 2), card('b', 1)],
       config,
-      { candidate_count: 8, scheduled_count: 2, queue_limit: 50, limit_reached: false },
+      { candidate_count: 8, scheduled_count: 2, limit_reached: false },
       completed,
     )
     expect(rebuilt.orderIds).toEqual(['a', 'b', 'c'])

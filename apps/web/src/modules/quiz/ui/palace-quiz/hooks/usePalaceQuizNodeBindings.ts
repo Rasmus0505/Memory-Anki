@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { listPalaceQuizNodeBindingsApi, palaceQuizNodeBindingsCacheKey } from '@/modules/quiz/domain/quiz-entity/api'
+import { listPalaceQuizNodeBindingsApi, listPalaceUnitPassStatesApi, palaceQuizNodeBindingsCacheKey, palaceUnitPassStatesCacheKey } from '@/modules/quiz/domain/quiz-entity/api'
 import { shareInFlightRequest } from '@/shared/api/inFlightRequest'
 import { subscribeQuizQuestionMarked } from '@/modules/quiz/domain/quiz-entity/model/quizQuestionMarkSync'
 import {
@@ -17,11 +17,13 @@ import {
   buildBoundQuestionFacts,
   buildCountBadgeByNodeUid,
   buildDirectBindingMap,
+  buildNodeProgressByNodeUid,
   buildRemainingCountByNodeUid,
   buildSubtreeQuestionMap,
   firstIncompleteQuestionIndex,
   getQuestionIdsForNode,
   type NodeQuizCountBadge,
+  type UnitPassState,
 } from '@/modules/quiz/ui/palace-quiz/model/quizNodeBindingAggregation'
 
 export function usePalaceQuizNodeBindings({
@@ -34,6 +36,7 @@ export function usePalaceQuizNodeBindings({
   enabled?: boolean
 }) {
   const [bindings, setBindings] = useState<QuizNodeBindingEdge[]>([])
+  const [unitPassStates, setUnitPassStates] = useState<UnitPassState[]>([])
   const [loading, setLoading] = useState(false)
   const [completedQuestionIds, setCompletedQuestionIds] = useState<Set<number>>(
     () => readQuizSessionCompletedIds(),
@@ -57,6 +60,7 @@ export function usePalaceQuizNodeBindings({
     const generation = ++refreshGenerationRef.current
     if (!palaceId || !enabled) {
       setBindings([])
+      setUnitPassStates([])
       setLoading(false)
       return
     }
@@ -70,9 +74,20 @@ export function usePalaceQuizNodeBindings({
         palaceQuizNodeBindingsCacheKey(palaceId),
         () => listPalaceQuizNodeBindingsApi(palaceId),
       )
-      if (generation === refreshGenerationRef.current) setBindings(response.items)
+      // Pass state only colours node progress, so a failure degrades to 第一次学 rather than blanking the map.
+      const passResponse = await shareInFlightRequest(
+        palaceUnitPassStatesCacheKey(palaceId),
+        () => listPalaceUnitPassStatesApi(palaceId),
+      ).catch(() => null)
+      if (generation === refreshGenerationRef.current) {
+        setBindings(response.items)
+        setUnitPassStates(passResponse?.items ?? [])
+      }
     } catch {
-      if (generation === refreshGenerationRef.current) setBindings([])
+      if (generation === refreshGenerationRef.current) {
+        setBindings([])
+        setUnitPassStates([])
+      }
     } finally {
       if (generation === refreshGenerationRef.current) setLoading(false)
     }
@@ -118,6 +133,11 @@ export function usePalaceQuizNodeBindings({
     [questionFacts, subtreeQuestions],
   )
 
+  const nodeProgressByNodeUid = useMemo(
+    () => (editorDoc ? buildNodeProgressByNodeUid(editorDoc, subtreeQuestions, unitPassStates) : {}),
+    [editorDoc, subtreeQuestions, unitPassStates],
+  )
+
   const markQuestionCompleted = useCallback((questionId: number) => {
     markQuizSessionCompleted(questionId, palaceId)
   }, [palaceId])
@@ -148,6 +168,7 @@ export function usePalaceQuizNodeBindings({
     loading,
     refresh,
     countBadgeByNodeUid,
+    nodeProgressByNodeUid,
     remainingCountByNodeUid,
     markQuestionCompleted,
     getOpenQuestionIds,

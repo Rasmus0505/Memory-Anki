@@ -383,6 +383,19 @@ export function palaceQuizNodeBindingsCacheKey(palaceId: number) {
   return `palace:${palaceId}:quiz-node-bindings`
 }
 
+/** Per-复习单元 node coverage and 已学 state, read-only. Feeds the mind-map node progress colour. */
+export function listPalaceUnitPassStatesApi(palaceId: number) {
+  return request<{
+    items: Array<{ unit_id: string; node_uids: string[]; passed: boolean }>
+    item_count: number
+  }>(`/review/palaces/${palaceId}/unit-pass-states`)
+}
+
+/** Shared-cache key for `listPalaceUnitPassStatesApi`. */
+export function palaceUnitPassStatesCacheKey(palaceId: number) {
+  return `palace:${palaceId}:unit-pass-states`
+}
+
 export function listQuestionNodeBindingsApi(questionId: number) {
   return request<{ question_id: number; items: QuizNodeBindingEdge[]; item_count: number }>(
     `/palace-quiz-questions/${questionId}/node-bindings`,

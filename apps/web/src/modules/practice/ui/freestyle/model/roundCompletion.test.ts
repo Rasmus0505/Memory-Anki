@@ -313,7 +313,6 @@ describe('isFreestyleRoundComplete', () => {
       createdAt: 1,
       candidateCount: 2,
       scheduledCount: 0,
-      queueLimit: 50,
       limitReached: false,
       orderIds: [] as string[],
       cardsById: {},

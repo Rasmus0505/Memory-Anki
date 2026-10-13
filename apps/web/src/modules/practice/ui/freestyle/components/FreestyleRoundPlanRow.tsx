@@ -1,18 +1,22 @@
+import { memo } from 'react'
 import type { UnitRating } from '@/modules/practice/public'
-import { Check, ChevronDown, GripVertical } from 'lucide-react'
+import { Check, ChevronDown, CornerDownRight, GripVertical } from 'lucide-react'
 import type {
   FreestyleRoundPlanCard,
   FreestyleRoundPlanCardStatus,
 } from '@/modules/practice/public'
 import type { FreestyleCard } from '@/shared/api/contracts'
 import {
-  palaceAccentToneClass,
+  palaceIdentityClass,
+  planStatusChromeClass,
   retryChromeClass,
-  retryNodeToneClass,
   type FreestyleProgressSegment,
 } from '@/modules/practice/ui/freestyle/model/freestyleProgressSegments'
-import { markedNodePathLabel } from '@/modules/practice/ui/freestyle/model/markedNodePathLabel'
-import { readPalaceEditorDoc } from '@/modules/practice/ui/freestyle/model/freestyleUnitPreviewCache'
+import {
+  formatMarkedNodePath,
+  markedNodePathParts,
+  markedNodePathTexts,
+} from '@/modules/practice/ui/freestyle/model/markedNodePathLabel'
 import { cn } from '@/shared/lib/utils'
 
 const STATUS_LABELS: Record<FreestyleRoundPlanCardStatus, string> = {
@@ -24,13 +28,32 @@ const STATUS_LABELS: Record<FreestyleRoundPlanCardStatus, string> = {
   stale: '需重建',
 }
 
-const STATUS_CLASSES: Record<FreestyleRoundPlanCardStatus, string> = {
-  pending: 'border-border/60 text-muted-foreground',
-  active: 'border-primary/60 bg-primary/10 text-primary',
-  completed: 'border-rate-good/30 bg-rate-good/8 text-rate-good',
-  retry: 'border-rate-hard/35 bg-rate-hard/10 text-rate-hard',
-  excluded: 'border-border/50 bg-muted/50 text-muted-foreground line-through',
-  stale: 'border-rate-again/35 bg-rate-again/10 text-rate-again',
+export type RoundPlanView = 'palace' | 'progress'
+
+/** Everything a row paints that does not depend on the selection or drag state. */
+export interface PlanRowModel {
+  cardId: string
+  status: FreestyleRoundPlanCardStatus
+  isCurrent: boolean
+  retry: boolean
+  retryDone: boolean
+  /** Retry attempt prefix, e.g. `重练第 2 次`. Empty for source rows. */
+  lead: string
+  /** Root node of the marked path, or null when the path has one node or is unknown. */
+  root: string | null
+  /** Marked node, or the plain row label when no path is known. */
+  anchor: string
+  /** Plain text for accessible names: `[lead · ]root ⋯ anchor`. */
+  label: string
+  /** Full path text for the title attribute. */
+  title: string
+  statusLabel: string
+  statusChrome: string
+  canJump: boolean
+  rateable: boolean
+  accentClass?: string
+  railIndex?: number
+  palaceHint?: string
 }
 
 export function palaceIdFromEntry(entry: FreestyleRoundPlanCard) {
@@ -43,21 +66,23 @@ export function rowLabel(entry: FreestyleRoundPlanCard) {
     : entry.label || entry.cardId
 }
 
-function pathLabelFor(card: FreestyleCard | undefined) {
-  if (!card || card.type !== 'mindmap_branch') return ''
-  const fromDocument = markedNodePathLabel(readPalaceEditorDoc(card.palace_id), card.anchor_uid)
-  if (fromDocument) return fromDocument
-  const fromPayload = card.context_path.map((item) => item.text.trim()).filter(Boolean)
-  if (fromPayload.length > 1) return fromPayload.join('-')
-  return ''
-}
-
-function displayLabel(entry: FreestyleRoundPlanCard, card: FreestyleCard | undefined) {
-  const path = pathLabelFor(card)
-  if (!path) return rowLabel(entry)
-  return entry.occurrenceKind === 'retry'
-    ? `重练第 ${Math.max(1, entry.retryAttempt)} 次 · ${path}`
-    : path
+/**
+ * Root-first node texts for a mind-map card. The payload `context_path` is preferred, so the
+ * label does not depend on the editor document being loaded. It is trusted only when it ends
+ * at the card's anchor; otherwise the loaded document is used, and the payload is the last resort.
+ */
+export function cardPathTexts(card: FreestyleCard | undefined, palaceDoc: unknown): string[] {
+  if (!card || card.type !== 'mindmap_branch') return []
+  const items = card.context_path ?? []
+  const fromPayload = items
+    .map((item) => String(item.text || '').trim())
+    .filter(Boolean)
+  const anchor = String(card.anchor_uid || '').trim()
+  const lastUid = String(items.at(-1)?.uid || '').trim()
+  if (fromPayload.length && (!anchor || lastUid === anchor)) return fromPayload
+  const fromDocument = markedNodePathTexts(palaceDoc, card.anchor_uid)
+  if (fromDocument.length) return fromDocument
+  return fromPayload
 }
 
 function retryRowStatusLabel(isCurrent: boolean, done: boolean, status: FreestyleRoundPlanCardStatus) {
@@ -67,63 +92,107 @@ function retryRowStatusLabel(isCurrent: boolean, done: boolean, status: Freestyl
   return STATUS_LABELS[status]
 }
 
-export type RoundPlanView = 'palace' | 'progress'
-
-export function rowAccentClass(segment: FreestyleProgressSegment | undefined) {
-  if (!segment) return undefined
-  if (segment.kind === 'retry') return retryNodeToneClass(segment.tone)
-  return palaceAccentToneClass(segment.palaceId, segment.tone)
-}
-
-export function RoundPlanRow({
+export function buildPlanRowModel({
   entry,
   liveCard,
   status,
   isCurrent,
-  isSelected,
-  draggingId,
-  dragOverId,
-  neighborIds,
+  pathTexts,
   accentClass,
   railIndex,
   palaceHint,
-  onToggle,
-  onJump,
-  onMove,
-  onDragOverId,
-  onDraggingId,
-  onRate,
-  onRemove,
 }: {
   entry: FreestyleRoundPlanCard
   liveCard: FreestyleCard | undefined
   status: FreestyleRoundPlanCardStatus
   isCurrent: boolean
-  isSelected: boolean
-  draggingId: string | null
-  dragOverId: string | null
-  neighborIds: string[]
+  pathTexts: string[]
   accentClass?: string
   railIndex?: number
   palaceHint?: string
-  onToggle: (id: string) => void
+}): PlanRowModel {
+  const retry = entry.occurrenceKind === 'retry'
+  const retryDone = retry && status === 'completed'
+  const parts = markedNodePathParts(pathTexts)
+  const hasPath = Boolean(parts.anchor)
+  const anchor = hasPath ? parts.anchor : rowLabel(entry)
+  const root = hasPath ? parts.root : null
+  const lead = retry ? `重练第 ${Math.max(1, entry.retryAttempt)} 次` : ''
+  const body = hasPath ? formatMarkedNodePath({ root, anchor, full: parts.full }) : anchor
+  const label = lead && hasPath ? `${lead} · ${body}` : body
+  return {
+    cardId: entry.cardId,
+    status,
+    isCurrent,
+    retry,
+    retryDone,
+    lead: hasPath ? lead : '',
+    root,
+    anchor,
+    label,
+    title: hasPath ? parts.full : label,
+    statusLabel: retry
+      ? retryRowStatusLabel(isCurrent, retryDone, status)
+      : isCurrent
+        ? (status === 'completed' ? '当前 · 已过' : '当前复习')
+        : STATUS_LABELS[status],
+    statusChrome: retry ? retryChromeClass(retryDone) : planStatusChromeClass(status),
+    canJump: Boolean(liveCard),
+    rateable: liveCard?.type === 'mindmap_branch' && status !== 'excluded',
+    accentClass,
+    railIndex,
+    palaceHint,
+  }
+}
+
+/** Identity stripe for a progress-view row: the palace colour, never the status. */
+export function rowAccentClass(segment: FreestyleProgressSegment | undefined) {
+  if (!segment) return undefined
+  return palaceIdentityClass(segment.palaceId)
+}
+
+export interface RoundPlanRowProps {
+  entry: FreestyleRoundPlanCard
+  model: PlanRowModel
+  /** Progress view shows the identity stripe, rail number and palace hint. */
+  showChrome: boolean
+  isSelected: boolean
+  draggingId: string | null
+  dragOverId: string | null
+  previousId: string | null
+  nextId: string | null
+  onSelect: (cardId: string, shiftKey: boolean) => void
   onJump: (cardId: string) => void
   onMove: (sourceId: string, targetId: string) => void
   onDragOverId: (id: string | null) => void
   onDraggingId: (id: string | null) => void
   onRate: (cardId: string, rating: UnitRating) => void
   onRemove?: (cardId: string) => void
-}) {
-  const label = displayLabel(entry, liveCard)
+}
+
+function RoundPlanRowView({
+  entry,
+  model,
+  showChrome,
+  isSelected,
+  draggingId,
+  dragOverId,
+  previousId,
+  nextId,
+  onSelect,
+  onJump,
+  onMove,
+  onDragOverId,
+  onDraggingId,
+  onRate,
+  onRemove,
+}: RoundPlanRowProps) {
+  const { cardId, status, label } = model
   const canDrag = status !== 'completed' && status !== 'excluded'
-  const retryDone = entry.occurrenceKind === 'retry' && status === 'completed'
-  const retryPending = entry.occurrenceKind === 'retry' && status !== 'completed' && status !== 'excluded'
-  const index = neighborIds.indexOf(entry.cardId)
-  const previousId = index > 0 ? neighborIds[index - 1] : null
-  const nextId = index >= 0 ? neighborIds[index + 1] : null
+  const retryPending = model.retry && !model.retryDone && status !== 'excluded'
   return (
     <div>
-      {dragOverId === entry.cardId && draggingId !== entry.cardId ? (
+      {dragOverId === cardId && draggingId !== cardId ? (
         <div
           data-testid="round-plan-drop-placeholder"
           className="mx-1 my-1 flex h-14 items-center justify-center rounded-lg border-2 border-dashed border-primary/60 bg-primary/8 text-xs font-medium text-primary fs-expand"
@@ -132,28 +201,35 @@ export function RoundPlanRow({
         </div>
       ) : null}
       <div
-        data-testid={`round-plan-card-${entry.cardId}`}
+        data-testid={`round-plan-card-${cardId}`}
         data-fill={status}
-        data-rail-index={railIndex ?? undefined}
-        data-retry={entry.occurrenceKind === 'retry' ? (retryDone ? 'done' : 'pending') : undefined}
+        data-selected={isSelected || undefined}
+        data-rail-index={model.railIndex ?? undefined}
+        data-retry={model.retry ? (model.retryDone ? 'done' : 'pending') : undefined}
         draggable={canDrag}
+        onClick={(event) => {
+          // Buttons and the checkbox handle their own clicks; the rest of the row toggles.
+          const target = event.target as HTMLElement
+          if (target.closest('button, input, select, textarea, a')) return
+          onSelect(cardId, event.shiftKey)
+        }}
         onDragStart={(event) => {
           if (!canDrag) return
           event.dataTransfer.effectAllowed = 'move'
-          event.dataTransfer.setData('text/plain', entry.cardId)
-          onDraggingId(entry.cardId)
+          event.dataTransfer.setData('text/plain', cardId)
+          onDraggingId(cardId)
         }}
-        onDragEnter={() => canDrag && onDragOverId(entry.cardId)}
+        onDragEnter={() => canDrag && onDragOverId(cardId)}
         onDragOver={(event) => {
           if (!canDrag) return
           event.preventDefault()
           event.dataTransfer.dropEffect = 'move'
-          onDragOverId(entry.cardId)
+          onDragOverId(cardId)
         }}
         onDrop={(event) => {
           event.preventDefault()
           const sourceId = draggingId || event.dataTransfer.getData('text/plain')
-          if (sourceId) onMove(sourceId, entry.cardId)
+          if (sourceId) onMove(sourceId, cardId)
           onDraggingId(null)
           onDragOverId(null)
         }}
@@ -162,16 +238,16 @@ export function RoundPlanRow({
           onDragOverId(null)
         }}
         className={cn(
-          'mx-1 my-1 flex min-h-14 items-center gap-2 rounded-xl border px-2 py-2 text-sm transition-[background-color,border-color,box-shadow,opacity] duration-200',
-          isCurrent
+          'mx-1 my-1 flex min-h-11 cursor-pointer flex-wrap items-center gap-x-2 gap-y-1.5 rounded-xl border px-2 py-2 text-sm transition-[background-color,border-color,box-shadow,opacity] duration-200',
+          model.isCurrent
             ? 'border-primary/60 bg-primary/12 shadow-sm ring-1 ring-primary/25'
             : retryPending
               ? 'border-rate-hard/35 bg-rate-hard/10 hover:border-rate-hard/50'
-              : retryDone
+              : model.retryDone
                 ? 'border-rate-good/25 bg-rate-good/8 hover:border-rate-good/40'
                 : 'border-transparent hover:border-border/70 hover:bg-background/70',
-          isSelected && !isCurrent && 'bg-primary/5',
-          draggingId === entry.cardId && 'opacity-45',
+          isSelected && 'border-primary/50 bg-primary/8',
+          draggingId === cardId && 'opacity-45',
           status === 'excluded' && 'opacity-65',
         )}
       >
@@ -192,7 +268,7 @@ export function RoundPlanRow({
               disabled={!canDrag || !previousId}
               className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-40"
               aria-label={`上移${label}`}
-              onClick={() => previousId && onMove(entry.cardId, previousId)}
+              onClick={() => previousId && onMove(cardId, previousId)}
             >
               <ChevronDown className="size-3.5 rotate-180" />
             </button>
@@ -201,7 +277,7 @@ export function RoundPlanRow({
               disabled={!canDrag || !nextId}
               className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted disabled:opacity-40"
               aria-label={`下移${label}`}
-              onClick={() => nextId && onMove(entry.cardId, nextId)}
+              onClick={() => nextId && onMove(cardId, nextId)}
             >
               <ChevronDown className="size-3.5" />
             </button>
@@ -209,59 +285,76 @@ export function RoundPlanRow({
         </div>
         <input
           type="checkbox"
+          className="size-4 shrink-0 accent-primary"
           checked={isSelected}
-          onChange={() => onToggle(entry.cardId)}
+          onChange={() => undefined}
+          onClick={(event) => {
+            event.stopPropagation()
+            onSelect(cardId, event.shiftKey)
+          }}
           aria-label={`选择${label}`}
         />
-        {accentClass ? (
+        {showChrome && model.accentClass ? (
           <span
             aria-hidden
-            data-testid={`round-plan-accent-${entry.cardId}`}
-            className={cn('h-6 w-1 shrink-0 rounded-full', accentClass)}
+            data-testid={`round-plan-accent-${cardId}`}
+            className={cn('h-6 w-1 shrink-0 rounded-full', model.accentClass)}
           />
         ) : null}
-        {railIndex ? (
+        {showChrome && model.railIndex ? (
           <span className="w-6 shrink-0 text-right text-[11px] tabular-nums text-muted-foreground">
-            {railIndex}
+            {model.railIndex}
           </span>
         ) : null}
+        <span
+          className="flex min-w-[10rem] flex-1 items-baseline gap-1.5 leading-snug"
+          title={model.title}
+        >
+          {model.lead ? (
+            <span className="shrink-0 text-[11px] font-medium text-rate-hard">{model.lead}</span>
+          ) : null}
+          {model.root ? (
+            <>
+              <span className="min-w-0 max-w-[45%] shrink truncate text-muted-foreground">{model.root}</span>
+              <span aria-hidden className="shrink-0 text-muted-foreground"> ⋯ </span>
+            </>
+          ) : null}
+          <span className="min-w-0 flex-1 truncate font-medium">{model.anchor}</span>
+        </span>
+        {showChrome && model.palaceHint ? (
+          <span className="max-w-[28%] shrink truncate text-[11px] text-muted-foreground">{model.palaceHint}</span>
+        ) : null}
+        <span className={cn('shrink-0 rounded-full border px-2 py-0.5 text-[11px]', model.statusChrome)}>
+          {model.statusLabel}
+        </span>
         <button
           type="button"
-          className="min-w-0 flex-1 text-left leading-snug hover:text-primary disabled:cursor-not-allowed"
-          disabled={!liveCard}
-          title={label}
-          onClick={() => liveCard && onJump(entry.cardId)}
+          data-row-control
+          className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-primary disabled:opacity-40"
+          disabled={!model.canJump}
+          aria-label={`跳到${label}`}
+          title="跳到这张卡片"
+          onClick={() => model.canJump && onJump(cardId)}
         >
-          {label}
+          <CornerDownRight className="size-4" />
         </button>
-        {palaceHint ? (
-          <span className="max-w-[28%] shrink truncate text-[11px] text-muted-foreground">{palaceHint}</span>
-        ) : null}
-        <span className={cn(
-          'shrink-0 rounded-full border px-2 py-0.5 text-[11px]',
-          entry.occurrenceKind === 'retry'
-            ? retryChromeClass(retryDone)
-            : STATUS_CLASSES[status],
-        )}>
-          {entry.occurrenceKind === 'retry'
-            ? retryRowStatusLabel(isCurrent, retryDone, status)
-            : isCurrent
-              ? (status === 'completed' ? '当前 · 已过' : '当前复习')
-              : STATUS_LABELS[status]}
-        </span>
-        {entry.occurrenceKind === 'retry' && !retryDone ? (
+        {entry.occurrenceKind === 'retry' && !model.retryDone ? (
           <span className="shrink-0 text-[11px] text-rate-hard">
             来源 {entry.sourceCardId} · {entry.retryAfterCards}张后
           </span>
         ) : null}
-        {liveCard?.type === 'mindmap_branch' && status !== 'excluded' ? (
-          <div className="flex shrink-0 items-center gap-1" role="group" aria-label={`给${label}评分`}>
+        {model.rateable ? (
+          <div
+            className="flex w-full items-center gap-1.5 sm:w-auto sm:gap-1"
+            role="group"
+            aria-label={`给${label}评分`}
+          >
             {onRemove ? (
               <button
                 type="button"
-                className="inline-flex h-7 items-center rounded-md border border-border/70 px-1.5 text-[11px] font-semibold text-muted-foreground hover:border-primary/60 hover:text-primary"
+                className="inline-flex h-11 flex-1 items-center justify-center rounded-lg border border-border/70 px-2 text-xs font-semibold text-muted-foreground hover:border-primary/60 hover:text-primary sm:h-7 sm:flex-none sm:rounded-md sm:px-1.5 sm:text-[11px]"
                 aria-label={`${label}移除本队列`}
-                onClick={() => onRemove(entry.cardId)}
+                onClick={() => onRemove(cardId)}
               >
                 移除
               </button>
@@ -271,14 +364,14 @@ export function RoundPlanRow({
                 key={rating}
                 type="button"
                 className={cn(
-                  'inline-flex size-7 items-center justify-center rounded-md border text-[11px] font-semibold transition-colors',
+                  'inline-flex h-11 flex-1 items-center justify-center rounded-lg border text-sm font-semibold transition-colors sm:h-7 sm:w-7 sm:flex-none sm:rounded-md sm:text-[11px]',
                   entry.lastRating === rating
                     ? 'border-primary bg-primary text-primary-foreground'
                     : 'border-border/70 text-muted-foreground hover:border-primary/60 hover:text-primary',
                 )}
                 aria-label={`${label}评分${rating}`}
                 aria-pressed={entry.lastRating === rating}
-                onClick={() => onRate(entry.cardId, rating as UnitRating)}
+                onClick={() => onRate(cardId, rating as UnitRating)}
               >
                 {rating}
               </button>
@@ -290,3 +383,5 @@ export function RoundPlanRow({
     </div>
   )
 }
+
+export const RoundPlanRow = memo(RoundPlanRowView)

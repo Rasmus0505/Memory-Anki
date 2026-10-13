@@ -85,4 +85,43 @@ describe('FreestylePalacePickerDialog', () => {
     expect(checkbox('选择章节第9章现代欧美教育思想').checked).toBe(false)
     expect(checkbox('选择宫殿第二节进步教育运动').checked).toBe(false)
   })
+
+  it('反选 flips every palace in the list and keeps that inversion on confirm', () => {
+    const onConfirm = vi.fn()
+    render(<FreestylePalacePickerDialog open subjects={subjects} value={[11]} onOpenChange={vi.fn()} onConfirm={onConfirm} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '反选' }))
+    expect(checkbox('选择宫殿第二节进步教育运动').checked).toBe(false)
+    expect(checkbox('选择宫殿Palace B').checked).toBe(true)
+
+    fireEvent.click(screen.getByRole('button', { name: '确认选择' }))
+    expect(onConfirm).toHaveBeenCalledWith([22])
+  })
+
+  it('只选到期 selects only palaces that have a unit due', () => {
+    const onConfirm = vi.fn()
+    const dueSubjects = [{
+      ...subjects[0],
+      chapters: [{
+        ...subjects[0].chapters[0],
+        palaces: [
+          { id: 11, title: '第二节进步教育运动', resolved_title: '第二节进步教育运动', due_review_unit_count: 0 },
+        ] as never,
+      }],
+      ungrouped: {
+        ...subjects[0].ungrouped,
+        palaces: [
+          { id: 22, title: 'Palace B', resolved_title: 'Palace B', due_review_unit_count: 3 },
+        ] as never,
+      },
+    }]
+    render(<FreestylePalacePickerDialog open subjects={dueSubjects} value={[11]} onOpenChange={vi.fn()} onConfirm={onConfirm} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '只选到期' }))
+    expect(checkbox('选择宫殿第二节进步教育运动').checked).toBe(false)
+    expect(checkbox('选择宫殿Palace B').checked).toBe(true)
+
+    fireEvent.click(screen.getByRole('button', { name: '确认选择' }))
+    expect(onConfirm).toHaveBeenCalledWith([22])
+  })
 })

@@ -5,6 +5,8 @@ export interface FreestyleOverviewCounts {
   review: number
   done: number
   remaining: number
+  remaining_palaces: number
+  remaining_units: number
 }
 
 export interface FreestyleOverviewRound {
@@ -16,11 +18,17 @@ export interface FreestyleOverviewRound {
 
 export interface FreestyleOverviewResponse {
   round: FreestyleOverviewRound | null
-  today: { due_count: number; overdue_count: number; new_palace_count: number }
+  today: {
+    due_count: number
+    due_palace_count: number
+    overdue_count: number
+    new_unit_count: number
+    new_palace_count: number
+  }
   yesterday: {
     date: string
     learned_units: number
-    rated_count: number
+    learned_palace_count: number
     weak_units: Array<{ unit_id: string; name: string; palace_name: string; again_ratio: number }>
   }
   next_reviews: Array<{

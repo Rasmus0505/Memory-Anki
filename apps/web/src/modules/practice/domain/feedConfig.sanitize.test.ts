@@ -12,11 +12,10 @@ describe('freestyle feed config', () => {
       progress_scopes: ['reinforcement'],
       include_calendar_today_due: true,
       within_palace_order: 'deterministic_shuffle',
-      queue_length: 2,
       content: { mindmap_branch: false, quiz_question: false, anki_card: false },
       seed: 0,
     })
-    expect(config.queue_length).toBe(5)
+    expect(config).not.toHaveProperty('queue_length')
     expect(config.seed).toBe(1)
     expect(config.content.mindmap_branch).toBe(true)
     expect(config.content.anki_card).toBe(false)
@@ -197,5 +196,34 @@ describe('freestyle feed config', () => {
     expect(config.streams.memory_palace.subject_ids).toEqual([7])
     expect(config.streams.memory_palace.subject_scope).toBe('all')
     expect(config.mixed_modes).not.toContain('english')
+  })
+})
+
+describe('freestyle order and new-placement keys', () => {
+  it('defaults to most_overdue, new_first and a 4:1 review ratio', () => {
+    const config = sanitizeFreestyleFeedConfig({})
+    expect(config.due_order).toBe('most_overdue')
+    expect(config.new_placement).toBe('new_first')
+    expect(config.review_new_ratio).toBe(4)
+  })
+
+  it('keeps valid values and falls back to defaults for invalid ones', () => {
+    const config = sanitizeFreestyleFeedConfig({
+      due_order: 'palace_topology',
+      new_placement: 'ratio',
+      review_new_ratio: 2,
+    })
+    expect(config.due_order).toBe('palace_topology')
+    expect(config.new_placement).toBe('ratio')
+    expect(config.review_new_ratio).toBe(2)
+
+    const fallback = sanitizeFreestyleFeedConfig({
+      due_order: 'random',
+      new_placement: 'sometimes',
+      review_new_ratio: 3,
+    })
+    expect(fallback.due_order).toBe('most_overdue')
+    expect(fallback.new_placement).toBe('new_first')
+    expect(fallback.review_new_ratio).toBe(4)
   })
 })

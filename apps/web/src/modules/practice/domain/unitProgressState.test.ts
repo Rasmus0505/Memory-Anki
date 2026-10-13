@@ -43,7 +43,6 @@ function plan(entries: Record<string, { lastRating?: number | null; status?: str
     createdAt: 0,
     candidateCount: 0,
     scheduledCount: 0,
-    queueLimit: 0,
     limitReached: false,
     orderIds: Object.keys(entries),
     cardsById: Object.fromEntries(

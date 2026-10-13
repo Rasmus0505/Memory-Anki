@@ -1,7 +1,10 @@
 import type {
   FreestyleBoundQuizPlacement,
+  FreestyleDueOrder,
   FreestyleDuePolicy,
   FreestyleFeedConfig,
+  FreestyleNewPlacement,
+  FreestyleReviewNewRatio,
   FreestyleMixMode,
   FreestyleMixRatio,
   FreestylePalaceOrder,
@@ -127,8 +130,10 @@ export const DEFAULT_FREESTYLE_FEED_CONFIG: FreestyleFeedConfig = {
     strategy: 'ratio',
     ratios: { memory_palace: 2, quiz: 1, english: 1 },
   },
-  queue_length: 20,
   seed: 17,
+  due_order: 'most_overdue',
+  new_placement: 'new_first',
+  review_new_ratio: 4,
   content: {
     mindmap_branch: true,
     anki_card: false,
@@ -214,6 +219,29 @@ function asMixMode(value: unknown): FreestyleMixMode | null {
   return FREESTYLE_MIX_MODES.includes(value as FreestyleMixMode)
     ? (value as FreestyleMixMode)
     : null
+}
+
+const FREESTYLE_DUE_ORDERS: readonly FreestyleDueOrder[] = ['most_overdue', 'least_recently_reviewed', 'palace_topology']
+const FREESTYLE_NEW_PLACEMENTS: readonly FreestyleNewPlacement[] = ['new_first', 'review_first', 'ratio']
+const FREESTYLE_REVIEW_NEW_RATIOS: readonly FreestyleReviewNewRatio[] = [1, 2, 4]
+
+function asDueOrder(value: unknown): FreestyleDueOrder {
+  return FREESTYLE_DUE_ORDERS.includes(value as FreestyleDueOrder)
+    ? (value as FreestyleDueOrder)
+    : DEFAULT_FREESTYLE_FEED_CONFIG.due_order
+}
+
+function asNewPlacement(value: unknown): FreestyleNewPlacement {
+  return FREESTYLE_NEW_PLACEMENTS.includes(value as FreestyleNewPlacement)
+    ? (value as FreestyleNewPlacement)
+    : DEFAULT_FREESTYLE_FEED_CONFIG.new_placement
+}
+
+function asReviewNewRatio(value: unknown): FreestyleReviewNewRatio {
+  const number = Number(value)
+  return FREESTYLE_REVIEW_NEW_RATIOS.includes(number as FreestyleReviewNewRatio)
+    ? (number as FreestyleReviewNewRatio)
+    : DEFAULT_FREESTYLE_FEED_CONFIG.review_new_ratio
 }
 
 function asBoundPlacement(value: unknown): FreestyleBoundQuizPlacement {
@@ -433,7 +461,9 @@ export function queueConstructionSignature(value: unknown): string {
     mixed_modes: config.mixed_modes,
     mix: config.mix,
     seed: config.seed,
-    queue_length: config.queue_length,
+    due_order: config.due_order,
+    new_placement: config.new_placement,
+    review_new_ratio: config.review_new_ratio,
     palace_order: config.streams.memory_palace.palace_order,
     unit_order: config.streams.memory_palace.unit_order,
     due_policy: config.streams.memory_palace.due_policy,
@@ -619,8 +649,10 @@ export function sanitizeFreestyleFeedConfig(value: unknown): FreestyleFeedConfig
       english: englishStream,
     } as FreestyleTrainingStreams,
     mix,
-    queue_length: asInt(raw.queue_length, 20, 5, 100),
     seed: asInt(raw.seed, 17, 1, 2_147_483_647),
+    due_order: asDueOrder(raw.due_order),
+    new_placement: asNewPlacement(raw.new_placement),
+    review_new_ratio: asReviewNewRatio(raw.review_new_ratio),
     content: {
       mindmap_branch: hasMemory || hasEnglish,
       anki_card: false,

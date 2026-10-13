@@ -24,8 +24,8 @@ describe('countUnitFlipProgress', () => {
     expect(countUnitFlipProgress({}, [], null)).toEqual({ revealed: 0, total: 0 })
   })
 
-  it('does not flip the parent anchor of a cohort card', () => {
-    expect(unitFlipTargetUids(['B1', 'B2'], 'A', 'cohort')).toEqual(['B1', 'B2'])
-    expect(unitFlipTargetUids(['B1', 'C1'], 'B1', 'mark')).toEqual(['B1', 'C1'])
+  it('flips the anchor alongside membership for isolation and residual units', () => {
+    expect(unitFlipTargetUids(['B1', 'C1'], 'B1')).toEqual(['B1', 'C1'])
+    expect(unitFlipTargetUids(['B3'], 'A')).toEqual(['B3', 'A'])
   })
 })

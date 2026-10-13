@@ -110,8 +110,8 @@ export function FreestyleUnitReviewFlipPanel({
   displayModeRef.current = displayMode
 
   const flipTargetUids = useMemo(
-    () => unitFlipTargetUids(unit.node_uids, unit.anchor_uid, unit.unit_kind),
-    [unit.anchor_uid, unit.node_uids, unit.unit_kind],
+    () => unitFlipTargetUids(unit.node_uids, unit.anchor_uid),
+    [unit.anchor_uid, unit.node_uids],
   )
   const allowedRevealNodeIds = useMemo(() => {
     if (freestyleFlipMode !== 'focused') return undefined
@@ -642,6 +642,7 @@ export function FreestyleUnitReviewFlipPanel({
         forceExpanded={isEditMode && flipCardRevealSettings.settings.editScope !== 'palace'}
         revealCollapsedNodeIds={editRevealCollapsedNodeIds}
         countBadgeByNodeUid={quizNodeBindings.countBadgeByNodeUid}
+        nodeProgressByNodeUid={quizNodeBindings.nodeProgressByNodeUid}
         onCountBadgeClick={handleOpenNodeQuiz}
         onEditorStateChange={isEditMode ? handleEditorStateChange : undefined}
         onNodeClick={isEditMode ? () => undefined : reveal.handleNodeClick}

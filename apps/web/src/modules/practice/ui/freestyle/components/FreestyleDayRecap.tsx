@@ -1,4 +1,5 @@
 import type { FreestyleOverviewResponse } from '@/shared/api/contracts'
+import { formatPalaceUnit } from '@/modules/practice/ui/freestyle/model/formatPalaceUnit'
 
 const PREVIEW_LIMIT = 3
 
@@ -20,12 +21,14 @@ export function FreestyleDayRecap({ yesterday, onDismiss }: FreestyleDayRecapPro
           知道了
         </button>
       </div>
-      {yesterday.rated_count === 0 ? (
+      {yesterday.learned_units === 0 ? (
         <p className="text-sm text-stage-muted">昨天没有学习记录</p>
       ) : (
         <p className="text-sm text-stage-muted">
-          学了 <span className="tabular-nums text-stage-ink">{yesterday.learned_units}</span> 个单元，
-          共 <span className="tabular-nums text-stage-ink">{yesterday.rated_count}</span> 次评分
+          学了{' '}
+          <span className="tabular-nums text-stage-ink">
+            {formatPalaceUnit(yesterday.learned_palace_count, yesterday.learned_units)}
+          </span>
         </p>
       )}
       {weak.length > 0 ? (

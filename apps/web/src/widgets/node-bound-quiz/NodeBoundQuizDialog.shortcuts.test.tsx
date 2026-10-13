@@ -12,6 +12,7 @@ vi.mock('@/modules/settings/public', () => ({
     promptForAiOptions: vi.fn(),
     aiRunConfigDialog: null,
   }),
+  useMemoryAnkiShortcuts: vi.fn(),
 }))
 
 vi.mock('@/modules/quiz/domain/quiz-entity/api', () => ({

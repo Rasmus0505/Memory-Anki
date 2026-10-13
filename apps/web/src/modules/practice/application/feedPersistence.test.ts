@@ -34,7 +34,6 @@ const compactablePlan = {
   createdAt: 1,
   candidateCount: 1,
   scheduledCount: 1,
-  queueLimit: 1,
   limitReached: false,
   orderIds: ['card-1'],
   cardsById: {
@@ -159,36 +158,32 @@ describe('per-workspace feed config and queue drafts', () => {
     saveFreestyleFeedConfig({
       ...DEFAULT_FREESTYLE_FEED_CONFIG,
       seed: 11,
-      queue_length: 11,
     })
     saveFreestyleFeedConfig({
       ...DEFAULT_FREESTYLE_FEED_CONFIG,
       seed: 22,
-      queue_length: 22,
     }, FREESTYLE_WORKSPACE_SECONDARY)
 
     expect(readFreestyleFeedConfig().seed).toBe(11)
-    expect(readFreestyleFeedConfig().queue_length).toBe(11)
+    expect(readFreestyleFeedConfig()).not.toHaveProperty('queue_length')
     expect(readFreestyleFeedConfig(FREESTYLE_WORKSPACE_PRIMARY).seed).toBe(11)
     expect(readFreestyleFeedConfig(FREESTYLE_WORKSPACE_SECONDARY).seed).toBe(22)
-    expect(readFreestyleFeedConfig(FREESTYLE_WORKSPACE_SECONDARY).queue_length).toBe(22)
+    expect(readFreestyleFeedConfig(FREESTYLE_WORKSPACE_SECONDARY)).not.toHaveProperty('queue_length')
   })
 
   it('does not write the global freestyle selection for a palace review', () => {
     saveFreestyleFeedConfig({
       ...DEFAULT_FREESTYLE_FEED_CONFIG,
       seed: 11,
-      queue_length: 11,
     })
     const saved = saveFreestyleFeedConfig({
       ...DEFAULT_FREESTYLE_FEED_CONFIG,
       seed: 99,
-      queue_length: 4,
     }, 'p23')
 
     expect(saved.seed).toBe(99)
     expect(readFreestyleFeedConfig().seed).toBe(11)
-    expect(readFreestyleFeedConfig().queue_length).toBe(11)
+    expect(readFreestyleFeedConfig()).not.toHaveProperty('queue_length')
     expect(readFreestyleFeedConfig('p23').seed).toBe(11)
   })
 

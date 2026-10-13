@@ -57,7 +57,6 @@ function renderSheet(overrides: Partial<Parameters<typeof FreestyleRoundSheet>[0
     roundPlan: createRoundPlan('round-1', cards, config, {
       candidate_count: 8,
       scheduled_count: 2,
-      queue_limit: 50,
       limit_reached: false,
     }),
     ...callbacks,
@@ -79,7 +78,7 @@ describe('FreestyleRoundSheet', () => {
     const { onExclude } = renderSheet()
 
     fireEvent.click(screen.getByRole('checkbox', { name: '选择one' }))
-    fireEvent.click(screen.getByRole('button', { name: '排除选中' }))
+    fireEvent.click(screen.getByRole('button', { name: '排除' }))
     expect(onExclude).toHaveBeenCalledWith(['one'])
   })
 
@@ -107,7 +106,7 @@ describe('FreestyleRoundSheet', () => {
   it('jumps to a card that is still live in the queue', () => {
     const { onJump } = renderSheet()
 
-    fireEvent.click(screen.getByRole('button', { name: 'one' }))
+    fireEvent.click(screen.getByRole('button', { name: '跳到one' }))
     expect(onJump).toHaveBeenCalledWith('one')
   })
 
@@ -401,11 +400,13 @@ describe('FreestyleRoundSheet', () => {
       roundPlan: createRoundPlan('round-1', cards, config, {
         candidate_count: 1,
         scheduled_count: 1,
-        queue_limit: 50,
         limit_reached: false,
       }),
     })
-    expect(screen.getByRole('button', { name: '古希腊的教育阶段-古典时期' })).toBeTruthy()
+    expect(screen.getByText('古希腊的教育阶段')).toBeTruthy()
+    expect(screen.getByText('⋯')).toBeTruthy()
+    expect(screen.getByText('古典时期')).toBeTruthy()
+    expect(screen.getByTitle('古希腊的教育阶段-古典时期')).toBeTruthy()
   })
 
   it('rates from the row and can remove the card from this round', () => {
@@ -416,5 +417,44 @@ describe('FreestyleRoundSheet', () => {
     fireEvent.click(screen.getByRole('button', { name: 'one移除本队列' }))
     expect(onRateCard).toHaveBeenCalledWith('one', 3)
     expect(onRemoveCard).toHaveBeenCalledWith('one')
+  })
+
+  it('toggles a row when the row body is clicked and shows the batch bar while rows are selected', () => {
+    renderSheet()
+    expect(screen.queryByTestId('round-plan-batch-bar')).toBeNull()
+
+    fireEvent.click(screen.getByTestId('round-plan-card-one'))
+    expect(screen.getByTestId('round-plan-card-one').getAttribute('data-selected')).toBe('true')
+    expect(screen.getByTestId('round-plan-batch-bar')).toBeTruthy()
+    expect(screen.getByText('已选 1 张')).toBeTruthy()
+
+    fireEvent.click(screen.getByTestId('round-plan-card-one'))
+    expect(screen.queryByTestId('round-plan-batch-bar')).toBeNull()
+  })
+
+  it('shift-click selects every row between the last clicked row and this one', () => {
+    const cards = [card('one'), card('two'), card('three')]
+    renderSheet({ cards, roundPlan: createRoundPlan('round-1', cards, config) })
+
+    fireEvent.click(screen.getByTestId('round-plan-card-one'))
+    fireEvent.click(screen.getByTestId('round-plan-card-three'), { shiftKey: true })
+
+    expect(screen.getByText('已选 3 张')).toBeTruthy()
+    expect(screen.getByTestId('round-plan-card-two').getAttribute('data-selected')).toBe('true')
+  })
+
+  it('全选 and 反选 act only on the rows of their palace', () => {
+    const cards = [card('one'), card('two'), card('three')]
+    renderSheet({ cards, roundPlan: createRoundPlan('round-1', cards, config) })
+
+    fireEvent.click(screen.getByRole('button', { name: '全选宫殿 A' }))
+    expect(screen.getByText('已选 3 张')).toBeTruthy()
+
+    fireEvent.click(screen.getByTestId('round-plan-card-one'))
+    expect(screen.getByText('已选 2 张')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: '反选宫殿 A' }))
+    expect(screen.getByText('已选 1 张')).toBeTruthy()
+    expect(screen.getByTestId('round-plan-card-one').getAttribute('data-selected')).toBe('true')
   })
 })

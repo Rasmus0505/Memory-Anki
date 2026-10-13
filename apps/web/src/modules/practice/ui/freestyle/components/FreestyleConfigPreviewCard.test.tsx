@@ -26,9 +26,74 @@ describe('FreestyleConfigPreviewCard', () => {
     )
     expect(screen.getByText('这一轮将学习 3 张')).toBeTruthy()
     expect(screen.getAllByRole('listitem')).toHaveLength(5)
-    expect(screen.getByText('函数宫殿')).toBeTruthy()
+    expect(screen.getAllByText('函数宫殿').length).toBeGreaterThan(0)
     fireEvent.click(screen.getByRole('button', { name: '展开全部 7 张' }))
     expect(screen.getAllByRole('listitem')).toHaveLength(7)
+  })
+
+  it('lists one palace row per palace in round order, with its item count', () => {
+    const mixed = {
+      new_count: 3,
+      review_count: 1,
+      skipped_count: 0,
+      order: [
+        { card_id: 'a1', unit_id: 'u1', palace_id: 1, kind: 'new' as const },
+        { card_id: 'b1', unit_id: 'u2', palace_id: 2, kind: 'new' as const },
+        { card_id: 'a2', unit_id: 'u3', palace_id: 1, kind: 'review' as const },
+        { card_id: 'a3', unit_id: 'u4', palace_id: 1, kind: 'new' as const },
+      ],
+    }
+    render(
+      <FreestyleConfigPreviewCard
+        summary={mixed}
+        palaceTitleByCardId={{ a1: '微积分', b1: '英语' }}
+        onStart={vi.fn()}
+      />,
+    )
+    const rows = screen.getAllByTestId('freestyle-preview-palace-row')
+    expect(rows).toHaveLength(2)
+    expect(rows[0]?.textContent).toContain('微积分')
+    expect(rows[0]?.textContent).toContain('3')
+    expect(rows[1]?.textContent).toContain('英语')
+    expect(rows[1]?.textContent).toContain('1')
+  })
+
+  it('stacks new and review counts into one bar and names both numbers', () => {
+    render(<FreestyleConfigPreviewCard summary={summary} palaceTitleByCardId={{}} onStart={vi.fn()} />)
+    expect(screen.getByText('新学 2 · 复习 1')).toBeTruthy()
+    const bar = screen.getByRole('img', { name: '新学 2 张，复习 1 张' })
+    expect(bar.children).toHaveLength(2)
+    expect(bar.children[0]?.className).toContain('bg-info')
+    expect(bar.children[1]?.className).toContain('bg-warning')
+  })
+
+  it('shows the order mode and new placement as plain chips', () => {
+    render(
+      <FreestyleConfigPreviewCard
+        summary={summary}
+        palaceTitleByCardId={{}}
+        orderMode="most_overdue"
+        newPlacement="ratio"
+        onStart={vi.fn()}
+      />,
+    )
+    expect(screen.getByText('拖延最久优先')).toBeTruthy()
+    expect(screen.getByText('按比例穿插')).toBeTruthy()
+  })
+
+  it('offers no controls that change the config, only expanding the order and starting', () => {
+    render(
+      <FreestyleConfigPreviewCard
+        summary={summary}
+        palaceTitleByCardId={{}}
+        orderMode="least_recently_reviewed"
+        newPlacement="new_first"
+        onStart={vi.fn()}
+      />,
+    )
+    const buttons = screen.getAllByRole('button').map((button) => button.textContent?.trim())
+    expect(buttons).toEqual(['展开全部 7 张', '开始学习'])
+    expect(document.querySelectorAll('input, select, textarea')).toHaveLength(0)
   })
 
   it('starts the round from the preview', () => {
@@ -56,7 +121,7 @@ describe('FreestyleDayRecap', () => {
   const yesterday = {
     date: '2026-10-11',
     learned_units: 3,
-    rated_count: 9,
+    learned_palace_count: 2,
     weak_units: [
       { unit_id: 'u1', name: '导数定义', palace_name: '微积分', again_ratio: 0.5 },
     ],
@@ -74,7 +139,7 @@ describe('FreestyleDayRecap', () => {
   it('says so when yesterday had no ratings', () => {
     render(
       <FreestyleDayRecap
-        yesterday={{ ...yesterday, learned_units: 0, rated_count: 0, weak_units: [] }}
+        yesterday={{ ...yesterday, learned_units: 0, learned_palace_count: 0, weak_units: [] }}
         onDismiss={vi.fn()}
       />,
     )

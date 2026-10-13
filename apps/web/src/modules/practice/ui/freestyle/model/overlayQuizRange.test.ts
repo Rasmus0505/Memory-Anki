@@ -67,7 +67,6 @@ describe('overlayQuizRange', () => {
       createdAt: 0,
       candidateCount: 3,
       scheduledCount: 3,
-      queueLimit: 20,
       limitReached: false,
       orderIds: ['a', 'b', 'q'],
       cardsById: {

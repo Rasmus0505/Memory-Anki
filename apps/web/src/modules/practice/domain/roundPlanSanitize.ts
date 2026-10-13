@@ -88,7 +88,6 @@ export function sanitizeRoundPlan(value: unknown): FreestyleRoundPlanState | nul
     createdAt: Number.isFinite(Number(raw.createdAt)) ? Number(raw.createdAt) : Date.now(),
     candidateCount: Math.max(0, Math.round(Number(raw.candidateCount) || 0)),
     scheduledCount: Math.max(0, Math.round(Number(raw.scheduledCount) || 0)),
-    queueLimit: Math.max(1, Math.round(Number(raw.queueLimit) || 20)),
     limitReached: Boolean(raw.limitReached),
     orderIds: asStringList(raw.orderIds).filter((id) => Boolean(cardsById[id])),
     cardsById,

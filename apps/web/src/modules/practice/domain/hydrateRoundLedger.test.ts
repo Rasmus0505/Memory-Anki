@@ -171,7 +171,7 @@ describe('commitHydratedRoundLedger', () => {
       adoptedRoundId: 'round-2',
       cards,
       config: DEFAULT_FREESTYLE_FEED_CONFIG,
-      meta: { candidate_count: 4, scheduled_count: 4, queue_limit: 20, limit_reached: false },
+      meta: { candidate_count: 4, scheduled_count: 4, limit_reached: false },
       serverPlan: serverPlan({
         presented_ids: ['a', rebound, 'b', 'c'],
         current_card_id: 'c',
@@ -207,7 +207,7 @@ describe('commitHydratedRoundLedger', () => {
       adoptedRoundId: 'round-1',
       cards: [branch('a'), branch('b')],
       config: DEFAULT_FREESTYLE_FEED_CONFIG,
-      meta: { candidate_count: 2, scheduled_count: 2, queue_limit: 20, limit_reached: false },
+      meta: { candidate_count: 2, scheduled_count: 2, limit_reached: false },
       serverPlan: serverPlan({ presented_ids: ['a', 'b'], completed_ids: [] }),
     })
     expect(result.plan.cardsById.a).toMatchObject({ status: 'pending', lastRating: null })
@@ -231,7 +231,7 @@ describe('commitHydratedRoundLedger', () => {
       adoptedRoundId: 'freestyle-round-server',
       cards,
       config: DEFAULT_FREESTYLE_FEED_CONFIG,
-      meta: { candidate_count: 3, scheduled_count: 3, queue_limit: 20, limit_reached: false },
+      meta: { candidate_count: 3, scheduled_count: 3, limit_reached: false },
       serverPlan: serverPlan({
         presented_ids: ['a', removed, 'b'],
         completed_ids: [],
@@ -265,7 +265,7 @@ describe('commitHydratedRoundLedger', () => {
       adoptedRoundId: 'round-1',
       cards,
       config: DEFAULT_FREESTYLE_FEED_CONFIG,
-      meta: { candidate_count: 2, scheduled_count: 2, queue_limit: 20, limit_reached: false },
+      meta: { candidate_count: 2, scheduled_count: 2, limit_reached: false },
       serverPlan: serverPlan({
         today: '2026-10-09',
         presented_ids: ['done', 'keep'],
@@ -293,7 +293,7 @@ describe('commitHydratedRoundLedger', () => {
       adoptedRoundId: 'round-1',
       cards,
       config: DEFAULT_FREESTYLE_FEED_CONFIG,
-      meta: { candidate_count: 1, scheduled_count: 1, queue_limit: 20, limit_reached: false },
+      meta: { candidate_count: 1, scheduled_count: 1, limit_reached: false },
       serverPlan: serverPlan({
         today: '2026-10-09',
         presented_ids: ['done'],
@@ -318,7 +318,7 @@ describe('commitHydratedRoundLedger', () => {
       adoptedRoundId: 'round-1',
       cards,
       config: DEFAULT_FREESTYLE_FEED_CONFIG,
-      meta: { candidate_count: 2, scheduled_count: 2, queue_limit: 20, limit_reached: false },
+      meta: { candidate_count: 2, scheduled_count: 2, limit_reached: false },
       serverPlan: serverPlan({
         today: '2026-10-09',
         presented_ids: ['back', 'keep'],
@@ -353,7 +353,7 @@ describe('commitHydratedRoundLedger', () => {
       adoptedRoundId: 'round-1',
       cards,
       config: DEFAULT_FREESTYLE_FEED_CONFIG,
-      meta: { candidate_count: 3, scheduled_count: 3, queue_limit: 20, limit_reached: false },
+      meta: { candidate_count: 3, scheduled_count: 3, limit_reached: false },
       serverPlan: serverPlan({
         today: '2026-10-11',
         presented_ids: ['due', 'today', 'hidden'],
@@ -385,7 +385,7 @@ describe('commitHydratedRoundLedger', () => {
       adoptedRoundId: 'round-1',
       cards,
       config: DEFAULT_FREESTYLE_FEED_CONFIG,
-      meta: { candidate_count: 1, scheduled_count: 1, queue_limit: 20, limit_reached: false },
+      meta: { candidate_count: 1, scheduled_count: 1, limit_reached: false },
       serverPlan: serverPlan({
         today: '2026-10-09',
         presented_ids: ['back'],
@@ -416,7 +416,7 @@ describe('commitHydratedRoundLedger', () => {
       adoptedRoundId: 'round-1',
       cards,
       config: DEFAULT_FREESTYLE_FEED_CONFIG,
-      meta: { candidate_count: 4, scheduled_count: 4, queue_limit: 20, limit_reached: false },
+      meta: { candidate_count: 4, scheduled_count: 4, limit_reached: false },
       serverPlan: serverPlan({
         presented_ids: ['a', 'b', 'c', 'removed'],
         current_card_id: 'b',

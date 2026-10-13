@@ -17,6 +17,7 @@ import {
 import { cardSettledOut, settledIdSet } from '@/modules/practice/domain/roundPlanCompress'
 import type { FreestyleCard } from '@/shared/api/contracts'
 import { FREESTYLE_REVIEW_HINT_ID, isReviewHintCard } from '@/shared/api/contracts'
+import { palaceAccentToneClass } from '@/modules/practice/ui/freestyle/model/freestylePalaceAccent'
 
 export type FreestyleSegmentTone = 'done' | 'retry' | 'current' | 'pending'
 
@@ -55,6 +56,35 @@ export function retryChromeClass(done: boolean): string {
   return done
     ? 'border-rate-good/40 bg-rate-good/12 text-rate-good'
     : 'border-rate-hard/50 bg-rate-hard/90 text-stage'
+}
+
+/**
+ * 本轮安排 row status pill for source rows. The only status colour map for plan rows: palace
+ * colour is never used here. Retry rows use `retryChromeClass` directly, so the amber lives in one place.
+ */
+export function planStatusChromeClass(status: FreestyleRoundPlanCardStatus): string {
+  switch (status) {
+    case 'completed':
+      return 'border-rate-good/30 bg-rate-good/8 text-rate-good'
+    case 'active':
+      return 'border-primary/60 bg-primary/10 text-primary'
+    case 'retry':
+      return retryChromeClass(false)
+    case 'stale':
+      return 'border-rate-again/35 bg-rate-again/10 text-rate-again'
+    case 'excluded':
+      return 'border-border/50 bg-muted/50 text-muted-foreground line-through'
+    default:
+      return 'border-border/60 text-muted-foreground'
+  }
+}
+
+/**
+ * Palace identity stripe: the solid palace colour, the same for every status.
+ * Status is shown by the row chrome, never by this stripe.
+ */
+export function palaceIdentityClass(palaceId: number | null): string {
+  return palaceAccentToneClass(palaceId, 'done')
 }
 
 /**
