@@ -3919,10 +3919,10 @@ def check_freestyle_complete_slot_reachable(errors: list[str]) -> None:
     )
     if complete_card.exists():
         complete_source = complete_card.read_text(encoding="utf-8", errors="ignore")
-        if "开启下一轮" not in complete_source or "onAnotherRound" not in complete_source:
+        if "再来一轮" not in complete_source or "onAnotherRound" not in complete_source:
             errors.append(
                 f"{complete_card.relative_to(REPO_ROOT).as_posix()}: "
-                "settlement must expose 开启下一轮 via onAnotherRound."
+                "settlement must expose 再来一轮 via onAnotherRound."
             )
         if "返回上一张" not in complete_source or "onCancelSettlement" not in complete_source:
             errors.append(
@@ -5670,7 +5670,7 @@ def check_unit_review_boundary(errors: list[str]) -> None:
         ),
         API_SRC / "modules/mindmap_document/split_units.py": (
             "def split_scheduling_units",
-            "UNIT_KIND_COHORT",
+            "UNIT_KIND_RESIDUAL",
         ),
         API_SRC / "modules/practice/domain/review_units.py": (
             "class ReviewUnitCandidate",

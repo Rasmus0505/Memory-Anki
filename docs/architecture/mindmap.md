@@ -178,7 +178,7 @@ schemaVersion, document, editorPreferences, localPreferences, language, revision
 
 ## Node identity and review units
 
-A palace document has one stable UID per node and stores permanent split marks. `mindmap_document.split_scheduling_units` is the only scheduling topology: water-pour isolation units, plus a same-parent cohort card for directly marked children. It contains no scheduling state. Reviews reconciles those memberships into stable unit IDs and revisions. Active identity is `(anchor_uid, unit_kind)`, because a parent can anchor both its isolation unit and its children's cohort.
+A palace document has one stable UID per node and stores permanent split marks. `mindmap_document.split_scheduling_units` is the only scheduling topology: water-pour isolation units plus one residual unit. It contains no scheduling state. Reviews reconciles those memberships into stable unit IDs and revisions. Active identity is `(anchor_uid, unit_kind)`, because the palace root can anchor both its residual unit and a root-mark unit.
 
 - Complete edit actions may save `editor_doc` immediately without reconciling schedule; editing must not block on unit arrangement. Freestyle uses a serialized latest-wins request chain and has no typing debounce.
 - Freestyle permanent mark / membership changes reconcile only on same-document `editor_leave` after the edited card becomes inactive or unmounts — never during active-card edits, mark toggles, or return-to-review. Other editor hosts may still use finished-mark, idle, return-to-review, or explicit reconcile boundaries.

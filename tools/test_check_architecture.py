@@ -3042,7 +3042,7 @@ def test_unit_review_boundary_requires_scheduler_service_and_topology(
     assert any("region_is_live" in error for error in errors)
     assert any("INTERVAL_DAYS" in error for error in errors)
     assert any("split_scheduling_units" in error for error in errors)
-    assert any("UNIT_KIND_COHORT" in error for error in errors)
+    assert any("UNIT_KIND_RESIDUAL" in error for error in errors)
 
 
 def test_unit_review_boundary_accepts_split_projection_and_encounter_lifecycle(
@@ -3072,7 +3072,7 @@ def test_unit_review_boundary_accepts_split_projection_and_encounter_lifecycle(
     write_file(
         api_src / "modules/mindmap_document/split_units.py",
         "def split_scheduling_units(): pass\n"
-        "UNIT_KIND_COHORT = 'cohort'\n",
+        "UNIT_KIND_RESIDUAL = 'residual'\n",
     )
     write_file(
         api_src / "modules/practice/domain/review_units.py",

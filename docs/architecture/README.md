@@ -117,6 +117,7 @@ Frontend lint is a zero-warning contract. The `apps/web` lint script runs ESLint
 - Backup context boundary: `docs/architecture/backup-boundary.md`
 - Quiz frontend boundary: `docs/architecture/quiz-frontend-boundary.md`
 - Knowledge context boundary: `docs/architecture/knowledge-boundary.md`
+- Product terminology (宫殿 / 章节 / 复习单元 / 题 and number formats): `docs/architecture/terminology.md`
 - Single architecture ledger: `docs/architecture/context-map.yaml`
 - Temporary file-level exceptions: `docs/architecture/boundary-exceptions.json`
 ## Mutation identity boundary
