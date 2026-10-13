@@ -1,3 +1,5 @@
+import { lazy } from 'react'
+
 export { canCompleteRound, clampTrainingIndex } from './domain/trainingRound'
 export { freestyleTrainingMachine } from './application/workflows/freestyleTrainingMachine'
 export {
@@ -145,7 +147,8 @@ export {
   expandSettledIds,
   settledIdSet,
 } from './domain/roundPlanCompress'
-export { default as ImmersiveFreestylePage } from './ui/freestyle/ImmersiveFreestylePage'
+// Immersive feed page is lazy so shell-level imports of this barrel do not load the whole freestyle graph.
+export const ImmersiveFreestylePage = lazy(() => import('./ui/freestyle/ImmersiveFreestylePage'))
 export * from './ui/review/api'
 export * from './ui/review/components/PracticeCompletionDialog'
 export * from './ui/review/components/PalaceReviewUnitsPanel'

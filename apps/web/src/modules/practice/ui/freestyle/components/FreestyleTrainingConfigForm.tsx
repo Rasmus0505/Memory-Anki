@@ -270,7 +270,7 @@ export function FreestyleTrainingConfigForm({
               </Button>
             )}
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field
               label="复习单元范围"
               hint="只刷今天到期的单元，到期没有就空着。"
@@ -319,7 +319,7 @@ export function FreestyleTrainingConfigForm({
               </Button>
             )}
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="题型">
               <select className={FIELD_CLASS} value={value.question_type} onChange={(event) => onChange(updateStream(config, 'quiz', { question_type: event.target.value }))}>
                 <option value="all">全部题型</option>
@@ -347,7 +347,7 @@ export function FreestyleTrainingConfigForm({
   return (
     <div className="space-y-4">
       <Section title="训练方向" description="先决定今天主要做什么，下面只显示相关配置。">
-        <div role="radiogroup" aria-label="训练方向" className="grid gap-2 sm:grid-cols-3">
+        <div role="radiogroup" aria-label="训练方向" className="grid grid-cols-1 gap-2 sm:grid-cols-3">
           {MODE_OPTIONS.filter((option) => FREESTYLE_UI_TRAINING_MODES.includes(option.value)).map((option) => {
             const Icon = option.icon
             const selected = selectedMode === option.value
@@ -379,7 +379,7 @@ export function FreestyleTrainingConfigForm({
 
       {selectedMode === 'mixed' ? (
         <Section title="混合内容" description="至少选择两种内容，内容会按下面的策略穿插。">
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {FREESTYLE_UI_TRAINING_STREAMS.map((stream) => (
               <label key={stream} className={cn('flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-3 text-sm', config.mixed_modes.includes(stream) ? 'border-primary/50 bg-primary/8' : 'border-border/60 bg-background/80')}>
                 <input type="checkbox" className="size-4 accent-primary" checked={config.mixed_modes.includes(stream)} aria-label={STREAM_LABELS[stream]} onChange={(event) => toggleMixedStream(stream, event.target.checked)} />
@@ -387,7 +387,7 @@ export function FreestyleTrainingConfigForm({
               </label>
             ))}
           </div>
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Field label="组合策略">
               <select className={FIELD_CLASS} value={config.mix.strategy} onChange={(event) => set({ mix: { ...config.mix, strategy: event.target.value as FreestyleFeedConfig['mix']['strategy'] } })}>
                 <option value="ratio">按比例穿插</option>
@@ -408,7 +408,7 @@ export function FreestyleTrainingConfigForm({
       {activeStreams.includes('quiz') ? renderQuizStream() : null}
 
       <Section title="排序与新学" description="决定到期复习的先后，以及没学过的单元放在哪里。">
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="排序" hint={DUE_ORDER_OPTIONS.find((item) => item.value === config.due_order)?.hint}>
             <select className={FIELD_CLASS} value={config.due_order} onChange={(event) => set({ due_order: event.target.value as FreestyleDueOrder })}>
               {DUE_ORDER_OPTIONS.map((item) => (
@@ -438,7 +438,7 @@ export function FreestyleTrainingConfigForm({
 
       <details className="rounded-xl border border-border/60 bg-card/40 p-4">
         <summary className="cursor-pointer text-sm font-semibold">高级设置</summary>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="随机种子" hint="相同种子会得到相同的随机顺序。">
             <Input type="number" min={1} value={config.seed} onChange={(event) => set({ seed: Number(event.target.value) })} />
           </Field>

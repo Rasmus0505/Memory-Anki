@@ -456,7 +456,7 @@ export function PalaceReviewUnitsPanel({
 
                   {expanded ? (
                     <div className="mt-3 space-y-3 border-t border-border pt-3">
-                      <div className="grid gap-2 sm:grid-cols-2">
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         <label className="block text-xs text-muted-foreground">
                           阶梯级别
                           <select

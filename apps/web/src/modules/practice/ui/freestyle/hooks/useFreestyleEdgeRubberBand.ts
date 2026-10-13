@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { triggerHaptic } from '@/shared/feedback/haptics'
 import { prefersReducedMotion } from '@/shared/lib/prefersReducedMotion'
+import { elementCanConsumeWheel } from '@/modules/practice/ui/freestyle/model/freestyleWheelPaging'
 
 export type FeedEdge = 'top' | 'bottom'
 
@@ -25,6 +26,20 @@ function edgePage(scroller: HTMLElement, edge: FeedEdge) {
 function atEdge(scroller: HTMLElement, edge: FeedEdge) {
   if (edge === 'top') return scroller.scrollTop <= 1
   return scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1
+}
+
+/**
+ * A nested overflow box (the closing settlement's own list) between the gesture target and
+ * the feed that can still move in this direction owns the motion. Stretching the feed page
+ * then fights the list's native scroll, so the page must stay still.
+ */
+function nestedScrollerConsumes(target: EventTarget | null, scroller: HTMLElement, deltaY: number) {
+  let cursor = target instanceof Element ? target : null
+  while (cursor && cursor !== scroller) {
+    if (cursor instanceof HTMLElement && elementCanConsumeWheel(cursor, deltaY)) return true
+    cursor = cursor.parentElement
+  }
+  return false
 }
 
 /**
@@ -87,7 +102,7 @@ export function useFreestyleEdgeRubberBand(
     const scroller = scrollRef.current
     if (!scroller) return
     const reduced = prefersReducedMotion()
-    let touch: { x: number; y: number; axis: 'x' | 'y' | null; edge: FeedEdge | null; offset: number } | null = null
+    let touch: { x: number; y: number; target: EventTarget | null; axis: 'x' | 'y' | null; edge: FeedEdge | null; offset: number } | null = null
     let wheel: { edge: FeedEdge; raw: number; timer: number } | null = null
 
     const apply = (edge: FeedEdge, offset: number) => {
@@ -103,7 +118,7 @@ export function useFreestyleEdgeRubberBand(
         return
       }
       const point = event.touches[0]
-      touch = { x: point.clientX, y: point.clientY, axis: null, edge: null, offset: 0 }
+      touch = { x: point.clientX, y: point.clientY, target: event.target, axis: null, edge: null, offset: 0 }
     }
     const onTouchMove = (event: TouchEvent) => {
       if (!touch || event.touches.length !== 1) return
@@ -113,7 +128,7 @@ export function useFreestyleEdgeRubberBand(
       if (!touch.axis) {
         if (Math.max(Math.abs(dx), Math.abs(dy)) < AXIS_LOCK_PX) return
         touch.axis = Math.abs(dy) > Math.abs(dx) ? 'y' : 'x'
-        if (touch.axis === 'y') {
+        if (touch.axis === 'y' && !nestedScrollerConsumes(touch.target, scroller, -dy)) {
           if (dy > 0 && atEdge(scroller, 'top')) touch.edge = 'top'
           else if (dy < 0 && atEdge(scroller, 'bottom')) touch.edge = 'bottom'
         }
@@ -132,6 +147,7 @@ export function useFreestyleEdgeRubberBand(
       // The feed pager preventDefaults wheel notches before they reach this bubble.
       if (event.defaultPrevented) return
       if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) return
+      if (nestedScrollerConsumes(event.target, scroller, event.deltaY)) return
       const edge: FeedEdge | null = event.deltaY < 0 && atEdge(scroller, 'top')
         ? 'top'
         : event.deltaY > 0 && atEdge(scroller, 'bottom') ? 'bottom' : null
