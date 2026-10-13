@@ -17,6 +17,11 @@ const prefetchPalaceSubjectShelfApi = vi.fn()
 const prefetchPalacesGroupedSummaryApi = vi.fn()
 const prefetchDashboardApi = vi.fn()
 const preloadPracticeRoutes = vi.fn()
+
+/** The page container is the first `<main>` child that is not the mobile sticky top bar. */
+function contentContainer(main: Element | null) {
+  return main ? Array.from(main.children).find((el) => !el.classList.contains('sticky')) ?? null : null
+}
 const preloadEnglishWorkspacePage = vi.fn()
 const preloadFreestylePage = vi.fn()
 const preloadKnowledgePage = vi.fn()
@@ -545,7 +550,7 @@ describe('AppShell', () => {
 
     const aside = document.querySelector('aside')
     const main = document.querySelector('main')
-    const inner = main?.firstElementChild
+    const inner = contentContainer(main)
     expect(aside?.className).toContain('inset-y-0')
     expect(aside?.className).toContain('left-0')
     expect(aside?.className).toContain('rounded-none')
@@ -571,7 +576,7 @@ describe('AppShell', () => {
     )
     expect(document.querySelector('aside')?.className).toContain('rounded-none')
     expect(document.querySelector('main')?.className).toContain('lg:pl-(--spacing-shell-sidebar)')
-    expect(document.querySelector('main')?.firstElementChild?.className).toContain('p-0')
+    expect(contentContainer(document.querySelector('main'))?.className).toContain('p-0')
   })
 
   it('keeps floating chrome on non-mind-map pages', async () => {
@@ -587,7 +592,7 @@ describe('AppShell', () => {
 
     const aside = document.querySelector('aside')
     const main = document.querySelector('main')
-    const inner = main?.firstElementChild
+    const inner = contentContainer(main)
     expect(aside?.className).toContain('inset-y-3')
     expect(aside?.className).toContain('rounded-2xl')
     expect(main?.className).toContain('lg:pl-(--spacing-shell-main-sidebar)')
@@ -606,7 +611,7 @@ describe('AppShell', () => {
       </MemoryRouter>,
     )
     expect(document.querySelector('aside')?.className).toContain('left-0')
-    expect(document.querySelector('main')?.firstElementChild?.className).toContain('p-0')
+    expect(contentContainer(document.querySelector('main'))?.className).toContain('p-0')
     unmount()
 
     render(
@@ -617,6 +622,6 @@ describe('AppShell', () => {
       </MemoryRouter>,
     )
     expect(document.querySelector('aside')?.className).toContain('inset-y-3')
-    expect(document.querySelector('main')?.firstElementChild?.className).toContain('max-w-[1600px]')
+    expect(contentContainer(document.querySelector('main'))?.className).toContain('max-w-[1600px]')
   })
 })

@@ -573,7 +573,7 @@ const DialogContent = forwardRef<
               top: floatingLayout.y,
               width: floatingLayout.width,
               height: floatingLayout.height ?? props.style?.height,
-              maxHeight: `calc(100vh - ${FLOATING_DIALOG_VIEWPORT_PADDING * 2}px)`,
+              maxHeight: `calc(100dvh - ${FLOATING_DIALOG_VIEWPORT_PADDING * 2}px)`,
               zIndex: floatingLayout.pinned ? 255 : 241,
             }
           : props.style

@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 const indexCssPath = resolve(process.cwd(), 'src/index.css')
 const layoutCssPath = resolve(process.cwd(), 'src/styles/layout.css')
+const foundationCssPath = resolve(process.cwd(), 'src/styles/foundation.css')
 const indexHtmlPath = resolve(process.cwd(), 'index.html')
 
 describe('index.css desktop PWA contract', () => {
@@ -43,5 +44,13 @@ describe('index.css desktop PWA contract', () => {
     expect(css).toContain('env(safe-area-inset-right, 0px)')
     expect(css).toContain('env(safe-area-inset-bottom, 0px)')
     expect(css).toContain('env(safe-area-inset-left, 0px)')
+  })
+
+  it('keeps phone text fields at 16px so iOS does not zoom on focus, and sizes the root with dvh', () => {
+    const css = readFileSync(foundationCssPath, 'utf8')
+
+    expect(css).toContain('@media (max-width: 767px)')
+    expect(css).toMatch(/input:not\(\[type='checkbox'\]\)[\s\S]*?textarea,\s*select\s*\{\s*font-size: 16px;/)
+    expect(css).toContain('min-height: 100dvh;')
   })
 })

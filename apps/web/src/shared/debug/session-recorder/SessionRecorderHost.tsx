@@ -43,10 +43,24 @@ function readAnchorPosition() {
   return { x: rect.left, y: rect.top }
 }
 
-// Used when the desktop sidebar anchor is hidden (PWA / narrow screens): sit in the top-left corner where the anchor normally is.
-function fallbackPosition() {
-  const inset = 12
-  return { x: inset, y: inset }
+// Used when the desktop sidebar anchor is hidden (PWA / narrow screens): sit at the top-right of the phone's sticky top bar,
+// level with the back/forward pill on the left and below the notch / status bar.
+const RECORDER_FALLBACK_WIDTH_PX = 36
+
+function fallbackPosition(width = RECORDER_FALLBACK_WIDTH_PX) {
+  const inset = 8
+  return { x: Math.max(0, window.innerWidth - width - inset), y: inset + readSafeAreaTop() }
+}
+
+// JS cannot read env() directly, so measure the top safe-area inset through a probe element.
+function readSafeAreaTop() {
+  if (typeof document === 'undefined' || !document.body) return 0
+  const probe = document.createElement('div')
+  probe.style.cssText = 'position:fixed;top:0;left:0;visibility:hidden;pointer-events:none;padding-top:env(safe-area-inset-top,0px)'
+  document.body.appendChild(probe)
+  const inset = parseFloat(getComputedStyle(probe).paddingTop) || 0
+  probe.remove()
+  return inset
 }
 
 function clampPosition(x: number, y: number, width: number, height: number) {
@@ -177,7 +191,7 @@ function SessionRecorderFloatingControl() {
       if (draggedRef.current) return
       const width = rootRef.current?.offsetWidth ?? 36
       const height = rootRef.current?.offsetHeight ?? 36
-      const anchored = readAnchorPosition() ?? fallbackPosition()
+      const anchored = readAnchorPosition() ?? fallbackPosition(width)
       const next = clampPosition(anchored.x, anchored.y, width, height)
       setPosition((current) => (current.x === next.x && current.y === next.y ? current : next))
     }
@@ -267,6 +281,7 @@ function SessionRecorderFloatingControl() {
     resetTimerRef.current = window.setTimeout(() => setCopyState('idle'), 2500)
   }
 
+  const openLeft = typeof window !== 'undefined' && position.x > window.innerWidth / 2
   const layer = (
     <div
       ref={rootRef}
@@ -298,7 +313,11 @@ function SessionRecorderFloatingControl() {
         <div
           role="menu"
           aria-label="选择复制的时长"
-          className="absolute left-full top-0 ml-2 flex flex-col gap-1 rounded-md border bg-background p-1 shadow"
+          className={cn(
+            'absolute top-0 flex flex-col gap-1 rounded-md border bg-background p-1 shadow',
+            // Open toward the screen's centre so a top-right recorder never pushes the menu off-screen.
+            openLeft ? 'right-full mr-2' : 'left-full ml-2',
+          )}
         >
           {DIAGNOSIS_WINDOW_OPTIONS_MINUTES.map((minutes) => (
             <Button
@@ -319,7 +338,10 @@ function SessionRecorderFloatingControl() {
       {copyState !== 'idle' && !pickerOpen ? (
         <span
           role="status"
-          className="pointer-events-none absolute left-full top-1/2 ml-2 -translate-y-1/2 whitespace-nowrap rounded-md bg-foreground px-2 py-1 text-xs text-background shadow"
+          className={cn(
+            'pointer-events-none absolute top-1/2 -translate-y-1/2 whitespace-nowrap rounded-md bg-foreground px-2 py-1 text-xs text-background shadow',
+            openLeft ? 'right-full mr-2' : 'left-full ml-2',
+          )}
         >
           {copyState === 'copied' ? '已复制，去粘贴给 AI' : '复制失败，请在弹窗里手动复制'}
         </span>

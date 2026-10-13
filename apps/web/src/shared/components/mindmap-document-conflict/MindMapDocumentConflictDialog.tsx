@@ -74,7 +74,7 @@ function ConflictPanel({ conflict, resolveConflict }: {
           <DialogTitle>文档版本冲突</DialogTitle>
           <DialogDescription>本地未保存内容与服务器版本不同。自动保存已暂停；选择前会先归档双方快照。远端指服务器当前版本，并非自动同步设备。</DialogDescription>
         </DialogHeader>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <SnapshotSummary label="本地版本" snapshot={conflict.localSnapshot} />
           <SnapshotSummary label="远端版本" snapshot={conflict.remoteSnapshot} />
         </div>

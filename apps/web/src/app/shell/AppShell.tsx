@@ -484,6 +484,7 @@ function ShellFrame({ children }: PropsWithChildren) {
             contentOffsetClass[mindMapHost ? 'flush' : 'inset'][sidebarState],
           )}
         >
+          <GlobalBackButton placement="mobile" />
           <div
             ref={contentRef}
             className={cn(
@@ -500,7 +501,6 @@ function ShellFrame({ children }: PropsWithChildren) {
           </div>
         </main>
         <MobileBottomNav layoutMode={layoutMode} />
-        <GlobalBackButton placement="mobile" />
         <AppLogDrawer open={logDrawerOpen} onOpenChange={setLogDrawerOpen} />
         <SessionRecorderHost />
         <GlobalCommandPalette />

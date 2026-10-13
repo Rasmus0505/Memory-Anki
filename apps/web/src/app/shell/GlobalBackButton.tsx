@@ -9,7 +9,7 @@ import { resolveAppLayoutMode } from '@/app/router/routeLayoutMeta'
 type GlobalBackButtonPlacement = 'sidebar' | 'mobile'
 
 type GlobalBackButtonProps = {
-  /** sidebar: 侧栏左上角内联；mobile: 小屏浮动（大屏隐藏，随侧栏壳层） */
+  /** sidebar: 侧栏左上角内联；mobile: 小屏顶部粘性栏（大屏隐藏，随侧栏壳层） */
   placement?: GlobalBackButtonPlacement
   /** 侧栏收起时纵向排列图标 */
   compact?: boolean
@@ -72,7 +72,7 @@ export function GlobalBackButton({
     <div
       className={cn(
         'pointer-events-auto flex rounded-xl border border-border/70 bg-background/85 p-0.5 shadow-sm backdrop-blur-xl',
-        compact ? 'flex-col gap-0.5' : 'flex-col gap-0.5 lg:flex-row lg:items-center',
+        placement === 'mobile' ? 'flex-row items-center gap-0.5' : compact ? 'flex-col gap-0.5' : 'flex-col gap-0.5 lg:flex-row lg:items-center',
       )}
       data-testid="section-history-controls"
       title={`${sectionHint}内前进/后退（不会跨到其他侧栏分区）`}
@@ -105,8 +105,9 @@ export function GlobalBackButton({
   )
 
   if (placement === 'mobile') {
+    // In-flow sticky top bar on phones: it reserves its own height, so page headers never sit under the controls.
     return (
-      <div className="pointer-events-none fixed left-[max(env(safe-area-inset-left),0.5rem)] top-[max(env(safe-area-inset-top),0.5rem)] z-[100] md:hidden">
+      <div className="sticky top-0 z-40 flex shrink-0 items-center border-b border-border/60 bg-background/95 px-2 pb-1.5 pt-[calc(env(safe-area-inset-top,0px)+0.5rem)] backdrop-blur-md md:hidden">
         {controls}
       </div>
     )

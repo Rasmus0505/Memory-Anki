@@ -103,7 +103,7 @@ describe('SessionRecorderHost', () => {
     anchor.remove()
   })
 
-  it('falls back to the top-left corner when the sidebar anchor is hidden (PWA)', () => {
+  it('falls back to the top-right corner of the phone top bar when the sidebar anchor is hidden (PWA)', () => {
     render(
       <MemoryRouter>
         <SessionRecorderHost />
@@ -111,7 +111,8 @@ describe('SessionRecorderHost', () => {
     )
 
     const hud = document.querySelector('[data-session-recorder-hud="true"]') as HTMLElement
-    expect(hud.style.left).toBe('12px')
-    expect(hud.style.top).toBe('12px')
+    // Right-aligned to the viewport with an 8px inset; jsdom reports offsetWidth 0, so the expected x uses the live width.
+    expect(hud.style.left).toBe(`${window.innerWidth - hud.offsetWidth - 8}px`)
+    expect(hud.style.top).toBe('8px')
   })
 })
