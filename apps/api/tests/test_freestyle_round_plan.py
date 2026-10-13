@@ -1253,3 +1253,14 @@ def test_compress_completed_keeps_partial_settlement_for_the_closing_page():
     assert len(again["partial_settlements"]) == 1
     kept = append_today_cards(compressed, [_card("fresh", unit_id="unit-fresh")], today="2026-09-22")
     assert kept["partial_settlements"][0]["card_ids"] == ["done"]
+
+
+def test_retry_is_never_inserted_behind_the_cursor():
+    cards = [_card(f"c{i}", unit_id=f"u{i}") for i in range(12)]
+    plan = set_cursor(plan_from_cards(cards), "c9")
+    # Rating an earlier source while the learner is already at c9 (lookback)
+    # must not strand its retry behind the cursor where it can never be shown.
+    plan = leave_card(_rate(plan, "c2", 1, "enc-back"), "c2")
+    retry_id = _inserted(plan, "c2")["occurrence_id"]
+    presented = plan["presented_ids"]
+    assert presented.index(retry_id) > presented.index("c9")

@@ -640,6 +640,9 @@ def _insert_retry_inplace(plan: Plan, occurrence_id: str, source_index: int) -> 
         presented = [occ_id]
     else:
         anchor = max(0, min(_int(source_index), len(presented) - 1))
+        # A source rated behind the learner (lookback) must not park its retry
+        # behind the cursor: the forward walk would never reach it again.
+        anchor = max(anchor, _cursor_index(plan, presented))
         cohort = _day(occ.get("entered_on")) or _cohort_of(plan, occ["source_card_id"])
         if not occ.get("entered_on") and cohort:
             occ["entered_on"] = cohort
@@ -649,6 +652,12 @@ def _insert_retry_inplace(plan: Plan, occurrence_id: str, source_index: int) -> 
     plan["presented_ids"] = presented
     occ["status"] = OCCURRENCE_INSERTED
     occ["insert_target_index"] = insert_at
+
+
+def _cursor_index(plan: Plan, presented: Sequence[str]) -> int:
+    """Index of the learner's current card in ``presented``, or -1 when it is not there."""
+    current = _text(plan.get("current_card_id"))
+    return presented.index(current) if current and current in presented else -1
 
 
 def _predicted_insert_index(plan: Plan, source_id: str) -> int:
