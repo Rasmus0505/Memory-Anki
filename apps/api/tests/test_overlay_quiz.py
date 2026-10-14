@@ -41,6 +41,7 @@ from memory_anki.modules.practice.domain.overlay_quiz import (
     order_overlay_questions,
     overlay_quiz_scope_signature,
     pick_question_node_rating,
+    set_overlay_palaces_skipped,
 )
 from memory_anki.modules.practice.domain.round_compress import compress_completed
 from memory_anki.modules.practice.domain.round_plan import (
@@ -1157,6 +1158,49 @@ def test_removal_reason_outranks_no_questions(db_session) -> None:
     row = pack["scope_palaces"]["palaces"][0]
     assert row["reason"] == "palace_removed"
     assert row["question_count"] == 1
+
+
+def test_skipped_palace_leaves_the_pool_without_touching_the_round(db_session) -> None:
+    """做题 deletion drops a palace's questions; the round's review state stays.
+
+    The skip lives in ``overlay_quiz`` only. It must not add the palace to the
+    round's excluded cards (that would change scheduling), and restoring it must
+    bring the questions back.
+    """
+    kept = Palace(title="保留宫殿")
+    skipped = Palace(title="被删除做题的宫殿")
+    db_session.add_all([kept, skipped])
+    db_session.flush()
+    q_kept = PalaceQuizQuestion(palace_id=kept.id, stem="保留题")
+    q_skipped = PalaceQuizQuestion(palace_id=skipped.id, stem="被删题")
+    db_session.add_all([q_kept, q_skipped])
+    db_session.commit()
+    config = {"training_mode": "memory_palace", "streams": {"quiz": {"question_type": "all"}}}
+    pack = build_overlay_question_pack(
+        db_session,
+        config,
+        palace_ids=[kept.id, skipped.id],
+        skipped_palace_ids=[skipped.id],
+    )
+    assert pack["question_ids"] == [q_kept.id]
+    rows = {row["palace_id"]: row for row in pack["scope_palaces"]["palaces"]}
+    assert rows[skipped.id]["in_pool"] is False
+    assert rows[skipped.id]["reason"] == "palace_skipped"
+    assert rows[skipped.id]["question_count"] == 1
+
+    # Round-side state is untouched: the overlay skip is its own list.
+    overlay = set_overlay_palaces_skipped(None, [skipped.id], skipped=True)
+    assert overlay["skipped_palace_ids"] == [skipped.id]
+    assert overlay["excluded_ids"] == []
+    restored = set_overlay_palaces_skipped(overlay, [skipped.id], skipped=False)
+    assert restored["skipped_palace_ids"] == []
+    back = build_overlay_question_pack(
+        db_session,
+        config,
+        palace_ids=[kept.id, skipped.id],
+        skipped_palace_ids=restored["skipped_palace_ids"],
+    )
+    assert sorted(back["question_ids"]) == sorted([q_kept.id, q_skipped.id])
 
 
 def test_removed_palace_answers_park_and_return_with_the_round(db_session) -> None:

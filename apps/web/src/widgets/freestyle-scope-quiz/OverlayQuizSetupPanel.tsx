@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createOperationId } from '@/modules/practice/application/feedPersistence'
-import { ensureFreestyleOverlayQuizApi } from '@/modules/practice/ui/freestyle/api'
+import { ensureFreestyleOverlayQuizApi, setFreestyleOverlaySkippedPalacesApi } from '@/modules/practice/ui/freestyle/api'
 import { OverlayQuizScopeList, OverlayQuizScopeSummary } from './OverlayQuizScopeList'
 import { overlayFromRound } from './overlayQuizHydrate'
 import type {
@@ -228,6 +228,17 @@ export function OverlayQuizSetupPanel({
     ? '没排到的题，保持空白'
     : '没排到的题，跟着已复习的最低分'
   const back = () => setPage('hub')
+  // Deleting or restoring palaces is a server write: the returned round carries
+  // the rebuilt scope report, so the list re-renders from the backend's answer.
+  const setPalacesSkipped = async (palaceIds: number[], skipped: boolean) => {
+    const round = await setFreestyleOverlaySkippedPalacesApi(roundId, {
+      operation_id: createOperationId(),
+      expected_version: planVersionRef.current,
+      palace_ids: palaceIds,
+      skipped,
+    })
+    onRoundSync(round)
+  }
 
   if (page === 'hub') {
     return (
@@ -245,7 +256,7 @@ export function OverlayQuizSetupPanel({
       <div className="space-y-4">
         <PageHeading title="出题范围" onBack={back} />
         <OverlayQuizScopeSummary scopePalaces={scopePalaces} />
-        <OverlayQuizScopeList scopePalaces={scopePalaces} />
+        <OverlayQuizScopeList scopePalaces={scopePalaces} onSetSkipped={setPalacesSkipped} />
         <SetupSaveButton setupDone={setupDone} countsReady={countsReady} onClick={save} />
       </div>
     )

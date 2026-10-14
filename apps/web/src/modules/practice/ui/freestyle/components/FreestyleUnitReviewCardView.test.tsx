@@ -1487,8 +1487,8 @@ describe('FreestyleUnitReviewCardView', () => {
     ).toBe('待回忆')
   })
 
-  it('uses Shift to right-click the root and return the card to its root node', async () => {
-    const card = buildCard('unit-shift-hide')
+  it('no longer treats Shift as a hide-to-root shortcut', async () => {
+    const card = buildCard('unit-shift-noop')
     apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!))
     renderCard(card)
 
@@ -1501,29 +1501,22 @@ describe('FreestyleUnitReviewCardView', () => {
     act(() => window.dispatchEvent(revealTarget))
     flushRevealFrame()
 
-    const revealChild = new KeyboardEvent('keydown', {
-      key: 'Enter',
-      bubbles: true,
-      cancelable: true,
-    })
-    act(() => window.dispatchEvent(revealChild))
-    flushRevealFrame()
-
-    const hideTarget = new KeyboardEvent('keydown', {
+    const childrenBefore = (capturedPanelProps?.visibleEditorState as {
+      editor_doc: { root: { children: unknown[] } }
+    }).editor_doc.root.children
+    const shiftEvent = new KeyboardEvent('keydown', {
       key: 'Shift',
       bubbles: true,
       cancelable: true,
     })
-    const followNonce = capturedPanelProps?.revealFollowNonce
-    act(() => window.dispatchEvent(hideTarget))
-    expect(hideTarget.defaultPrevented).toBe(true)
-    expect(capturedPanelProps?.revealFollowNonce).toBe(followNonce)
+    act(() => window.dispatchEvent(shiftEvent))
     flushRevealFrame()
+    expect(shiftEvent.defaultPrevented).toBe(false)
     expect(
       (capturedPanelProps?.visibleEditorState as {
         editor_doc: { root: { children: unknown[] } }
       }).editor_doc.root.children,
-    ).toEqual([])
+    ).toEqual(childrenBefore)
   })
 
   it('ignores Enter outside the active review surface and while editing or typing', async () => {
@@ -2347,7 +2340,10 @@ describe('FreestyleUnitReviewCardView', () => {
 
   it('drops when the session payload has no matching unit', async () => {
     const card = buildCard('unit-missing')
-    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession('other-unit', 3))
+    // A different anchor: a same-anchor unit would be the successor, not a miss.
+    const session = buildSession('other-unit', 3)
+    session.units[0].anchor_uid = 'other-anchor'
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(session)
     const { onStaleDrop, onSaveFailed } = renderCard(card)
 
     await waitFor(() => expect(onStaleDrop).toHaveBeenCalledWith(card.id))

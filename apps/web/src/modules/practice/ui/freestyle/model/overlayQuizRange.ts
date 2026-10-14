@@ -24,6 +24,7 @@ export const OVERLAY_SCOPE_REASON_LABELS: Record<Exclude<FreestyleOverlayScopeRe
   no_questions: '还没有题目',
   kinds_filtered: '题型未勾选',
   palace_removed: '已移除队列',
+  palace_skipped: '已从做题删除',
 }
 
 export function overlayScopeReasonLabel(reason: FreestyleOverlayScopeReason): string {

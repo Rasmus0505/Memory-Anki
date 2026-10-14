@@ -2,7 +2,9 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { BookOpen, LoaderCircle, RotateCcw, Settings2, Trash2 } from 'lucide-react'
 import { createOperationId } from '@/modules/practice/application/feedPersistence'
 import { freestylePalaceScopeSignature } from '@/modules/practice/domain/feedConfig'
-import { ensureFreestyleOverlayQuizApi } from '@/modules/practice/ui/freestyle/api'
+import {
+  ensureFreestyleOverlayQuizApi,
+} from '@/modules/practice/ui/freestyle/api'
 import {
   overlayQuestionRating,
   overlayQuizScopeLabel,
@@ -15,6 +17,7 @@ import { OverlayQuizScopeLeftNotice } from './OverlayQuizScopeList'
 import { QuizQuestionRoundRatingBadge } from '@/widgets/quiz-round-rating'
 import { useOverlayProgressPersistence } from './useOverlayProgressPersistence'
 import { useOverlayQuizClear } from './useOverlayQuizClear'
+import { useOverlayRatingRefresh } from './useOverlayRatingRefresh'
 import { getPalaceQuizQuestionsByIdsApi } from '@/modules/quiz/domain/quiz-entity/api'
 import {
   beginQuizQuestionMarkRequest,
@@ -45,6 +48,7 @@ import {
   resolveOverlayResumeIndex,
 } from './overlayQuizHydrate'
 import { useFreestyleQuestionTrash } from './useFreestyleQuestionTrash'
+import { useFreestylePalaceSkip } from './useFreestylePalaceSkip'
 import { FreestyleScopeQuizFooter } from './FreestyleScopeQuizFooter'
 import { useQuestionLookupFocus } from './useQuestionLookupFocus'
 import { useAiRunConfigDialog } from '@/modules/settings/public'
@@ -108,6 +112,8 @@ export function FreestyleScopeQuizDialog({
   const [questionStates, setQuestionStates] = useState<Record<number, QuizRuntimeState>>({})
   const [keyboardOptionIndex, setKeyboardOptionIndex] = useState(0)
   const [palaceLookupOpen, setPalaceLookupOpen] = useState(false)
+  // 「本轮最低」 chip opens the rating view; 「查看宫殿」 keeps the full map.
+  const [ratingLookupOpen, setRatingLookupOpen] = useState(false)
   const [clearProgressOpen, setClearProgressOpen] = useState(false)
   const questionInteractionRef = useRef<HTMLDivElement | null>(null)
   const answerScrollRef = useRef<HTMLDivElement | null>(null)
@@ -280,8 +286,26 @@ export function FreestyleScopeQuizDialog({
     persistProgress,
   })
   const questionPalaceId = current?.palace_id ?? null
+  // Only this round's 随心 pool changes: the palace's questions leave 做题, the
+  // review units and their ratings stay exactly as scheduled.
+  const skipPalaceQuestions = questions.filter((item) => item.palace_id === questionPalaceId)
+  const skipPalaceTitle = current?.palace_id != null
+    ? scopePalaces?.palaces.find((row) => row.palace_id === current.palace_id)?.title ?? ''
+    : ''
+  // Only this round's 随心 pool changes; see useFreestylePalaceSkip.
+  const palaceSkip = useFreestylePalaceSkip({
+    roundId,
+    planVersionRef,
+    palaceId: questionPalaceId,
+    palaceTitle: skipPalaceTitle,
+    palaceQuestions: skipPalaceQuestions,
+    adoptRound,
+    loadQuestions,
+  })
   const { lookupFocusNodeUids, lookupPalaceIdOverride } = useQuestionLookupFocus(current, palaceLookupOpen)
   const lookupPalaceId = lookupPalaceIdOverride ?? questionPalaceId
+
+  useOverlayRatingRefresh({ open, roundId, roundIdRef, setOverlay })
 
   useEffect(() => {
     if (!open) return
@@ -623,7 +647,7 @@ export function FreestyleScopeQuizDialog({
                       rating={currentRating}
                       pending={currentPending}
                       palaceId={current.palace_id ?? null}
-                      onOpenSource={() => setPalaceLookupOpen(true)}
+                      onOpenSource={() => setRatingLookupOpen(true)}
                     />
                     {current.marked ? (
                       <Badge className="border-rose-600 bg-rose-600 text-white">已标记</Badge>
@@ -637,13 +661,25 @@ export function FreestyleScopeQuizDialog({
                       type="button"
                       size="sm"
                       variant="ghost"
+                      aria-label="移除本宫殿本轮题目"
+                      title="只从本轮随心做题移除这座宫殿的题，不影响复习评分"
+                      className="ml-auto text-muted-foreground"
+                      onClick={palaceSkip.openSkipConfirm}
+                    >
+                      移除本宫殿
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
                       aria-label="删除本题"
                       title="移入回收站"
-                      className="ml-auto text-muted-foreground hover:text-destructive"
+                      className="text-muted-foreground hover:text-destructive"
                       onClick={openDeleteConfirm}
                     >
                       <Trash2 className="size-4" />
                     </Button>
+                    {palaceSkip.confirmDialog}
                   </div>
                 </div>
                 <QuizFontScaleBody percent={fontScale.percent}>
@@ -697,6 +733,13 @@ export function FreestyleScopeQuizDialog({
         followCurrentPalace
         focusNodeUid={lookupFocusNodeUids[0] ?? null}
         focusNodeUids={lookupFocusNodeUids}
+      />
+      <PalaceMemoryLookupDialog
+        open={ratingLookupOpen}
+        onOpenChange={setRatingLookupOpen}
+        currentPalaceId={lookupPalaceId}
+        followCurrentPalace
+        ratingMode
       />
       {aiRunConfigDialog}
     </>

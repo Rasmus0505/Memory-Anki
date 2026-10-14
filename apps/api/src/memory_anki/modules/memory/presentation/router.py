@@ -18,11 +18,14 @@ from memory_anki.modules.memory.api import (
     get_unit_review_preview,
     get_unit_review_session,
     list_due_units,
+    list_latest_unit_ratings,
     list_palace_unit_pass_states,
     open_unit_review_encounter,
     rate_palace_due_units,
     rate_review_unit,
     reconcile_palace_units,
+    rerate_unit_rating,
+    rerate_unit_ratings,
     start_freestyle_unit_review_session,
     start_unit_review_session,
     undo_content_schedule_batch,
@@ -58,6 +61,12 @@ def palace_unit_pass_states(palace_id: int, session: Session = Depends(session_d
     # Read-only: which 复习单元 each node covers and whether each has passed (已学) at least once.
     items = list_palace_unit_pass_states(session, palace_id)
     return {"items": items, "item_count": len(items)}
+
+
+@router.get("/review/palaces/{palace_id}/unit-ratings")
+def palace_unit_ratings(palace_id: int, session: Session = Depends(session_dep)):
+    # Read-only: each active unit's current live rating, keyed by unit id.
+    return {"items": list_latest_unit_ratings(session, palace_id)}
 
 
 @router.get("/review/subject-ladder")
@@ -360,6 +369,50 @@ def cancel_unrated_encounter(
     except ValueError as exc:
         session.rollback()
         raise _bad_request(exc) from exc
+
+
+@router.post("/review/units/{unit_id}/rating")
+def rerate_unit(unit_id: str, data: dict, session: Session = Depends(session_dep)):
+    """Change a review unit's one rating; reschedules it from the pre-rating baseline."""
+    try:
+        rating = data.get("rating")
+        if not isinstance(rating, int | str):
+            raise ValueError("rating is required")
+        return {
+            "item": rerate_unit_rating(
+                session,
+                unit_id=unit_id,
+                operation_id=str(data.get("operation_id") or ""),
+                rating=rating,
+                expected_revision=int(data.get("expected_revision") or 0),
+            )
+        }
+    except (TypeError, ValueError) as exc:
+        session.rollback()
+        raise _bad_request(ValueError(str(exc))) from exc
+
+
+@router.post("/review/palaces/{palace_id}/unit-ratings/rerate")
+def rerate_palace_unit_ratings(palace_id: int, data: dict, session: Session = Depends(session_dep)):
+    """Set one rating on several units of a palace together (the L1 → L2 cascade)."""
+    try:
+        rating = data.get("rating")
+        if not isinstance(rating, int | str):
+            raise ValueError("rating is required")
+        items = data.get("items")
+        if not isinstance(items, list):
+            raise ValueError("items is required")
+        return {
+            "item": rerate_unit_ratings(
+                session,
+                palace_id=palace_id,
+                rating=rating,
+                items=items,
+            )
+        }
+    except (TypeError, ValueError) as exc:
+        session.rollback()
+        raise _bad_request(ValueError(str(exc))) from exc
 
 
 @router.post("/review/ratings/{operation_id}/undo")

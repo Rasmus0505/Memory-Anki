@@ -60,14 +60,21 @@ export function cardRevisionOf(card: object): number | null {
 
 /**
  * Same card+revision stays out for the round. A later rebuild may re-enter the
- * card only when its unit_revision is different from the dropped key.
+ * card only when its unit_revision is different from the dropped key — except
+ * when the unit itself is gone ("review unit not found"): then no revision can
+ * make it renderable, so the card stays out for the round regardless of revision.
  */
+export function makeStaleUnitAbsentKey(roundId: string, cardId: string): string {
+  return `${roundId}:${cardId}:absent`
+}
+
 export function isCardBlockedByStaleKey(
   staleKeys: ReadonlySet<string>,
   roundId: string,
   card: { id: string; unit_revision?: unknown },
 ): boolean {
   return staleKeys.has(makeStaleCardKey(roundId, card.id, cardRevisionOf(card)))
+    || staleKeys.has(makeStaleUnitAbsentKey(roundId, card.id))
 }
 
 /**
@@ -193,6 +200,22 @@ export function isStaleUnitError(error: unknown): boolean {
 export function isPermanentUnitAbsence(error: unknown): boolean {
   const message = String((error as { message?: string })?.message || error || '').toLowerCase()
   return message.includes('palace not found') || message.includes('review unit not found')
+}
+
+/**
+ * A structural edit can retire a unit and create its successor under a new id
+ * with the same anchor (see the backend start path). Find that successor by
+ * anchor only when it is unambiguous; otherwise return undefined so the card drops.
+ */
+export function findSuccessorUnit<T extends { id: string; anchor_uid?: string | null }>(
+  units: readonly T[],
+  cardUnitId: string | null | undefined,
+  cardAnchorUid: string | null | undefined,
+): T | undefined {
+  if (!cardAnchorUid) return undefined
+  if (cardUnitId && units.some((unit) => unit.id === cardUnitId)) return undefined
+  const matches = units.filter((unit) => unit.anchor_uid === cardAnchorUid)
+  return matches.length === 1 ? matches[0] : undefined
 }
 
 /**

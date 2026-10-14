@@ -5,6 +5,7 @@ from .application.round_overlay_service import (
     drop_overlay_quiz_for_palaces,
     ensure_overlay_quiz,
     progress_overlay_quiz,
+    set_overlay_skipped_palaces,
 )
 from .application.round_state_service import (
     apply_round_action,
@@ -25,5 +26,6 @@ __all__ = [
     "get_round",
     "progress_overlay_quiz",
     "rate_freestyle_round_unit",
+    "set_overlay_skipped_palaces",
     "start_new_round",
 ]

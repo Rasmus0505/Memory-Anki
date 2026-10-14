@@ -143,6 +143,58 @@ describe('OverlayQuizScopeList', () => {
   })
 })
 
+describe('OverlayQuizScopeList selection', () => {
+  function withSkipped(): FreestyleOverlayScopePalaces {
+    const report = scope()
+    return {
+      ...report,
+      in_pool_count: 1,
+      palaces: report.palaces.map((row) =>
+        row.palace_id === 23 ? { ...row, in_pool: false, reason: 'palace_skipped' as const } : row,
+      ),
+    }
+  }
+
+  it('deletes selected palaces and reports the choice to the owner', () => {
+    const onSetSkipped = vi.fn(async () => {})
+    render(<OverlayQuizScopeList scopePalaces={scope()} onSetSkipped={onSetSkipped} />)
+    fireEvent.click(screen.getByRole('checkbox', { name: '选择 第一节英国近代教育' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: '选择 西欧中世纪的教育' }))
+    fireEvent.click(screen.getByRole('button', { name: '删除所选（2）' }))
+    expect(onSetSkipped).toHaveBeenCalledWith([27, 23], true)
+  })
+
+  it('resets only the selected palaces that were deleted from 做题', () => {
+    const onSetSkipped = vi.fn(async () => {})
+    render(<OverlayQuizScopeList scopePalaces={withSkipped()} onSetSkipped={onSetSkipped} />)
+    const reset = screen.getByRole('button', { name: '重置所选' }) as HTMLButtonElement
+    expect(reset.disabled).toBe(true)
+    fireEvent.click(screen.getByRole('checkbox', { name: '选择 西欧中世纪的教育' }))
+    fireEvent.click(screen.getByRole('button', { name: '重置所选（1）' }))
+    expect(onSetSkipped).toHaveBeenCalledWith([23], false)
+  })
+
+  it('never offers to delete a palace removed with 移除本队列', () => {
+    const report = scope()
+    const onSetSkipped = vi.fn(async () => {})
+    render(
+      <OverlayQuizScopeList
+        scopePalaces={{
+          ...report,
+          in_pool_count: 1,
+          palaces: report.palaces.map((row) =>
+            row.palace_id === 23 ? { ...row, in_pool: false, reason: 'palace_removed' as const } : row,
+          ),
+        }}
+        onSetSkipped={onSetSkipped}
+      />,
+    )
+    fireEvent.click(screen.getByRole('checkbox', { name: '选择 西欧中世纪的教育' }))
+    const del = screen.getByRole('button', { name: '删除所选' }) as HTMLButtonElement
+    expect(del.disabled).toBe(true)
+  })
+})
+
 describe('OverlayQuizScopeLeftNotice', () => {
   it('renders the named palaces and dismisses', () => {
     const onDismiss = vi.fn()

@@ -34,6 +34,9 @@ SCOPE_REASON_NO_QUESTIONS = "no_questions"
 SCOPE_REASON_KINDS_FILTERED = "kinds_filtered"
 # The learner took every card of this palace out of the queue (移除本队列).
 SCOPE_REASON_PALACE_REMOVED = "palace_removed"
+# The learner deleted this palace from 做题 (its questions only). Review cards and
+# ratings are untouched, so the round's scheduling does not change.
+SCOPE_REASON_PALACE_SKIPPED = "palace_skipped"
 
 # Sentinel for "this round has not rated that knowledge point yet". The card
 # shows words, never a fabricated score. Kept as a value rather than an absent
@@ -53,9 +56,11 @@ def build_scope_palaces(
     titles: Mapping[int, str],
     in_pool_palace_ids: Sequence[int] = (),
     removed_palace_ids: Sequence[int] = (),
+    skipped_palace_ids: Sequence[int] = (),
     no_questions_reason: str = SCOPE_REASON_NO_QUESTIONS,
     kinds_filtered_reason: str = SCOPE_REASON_KINDS_FILTERED,
     palace_removed_reason: str = SCOPE_REASON_PALACE_REMOVED,
+    palace_skipped_reason: str = SCOPE_REASON_PALACE_SKIPPED,
 ) -> dict[str, Any]:
     """Authoritative per-palace 做题 scope report for the UI to render.
 
@@ -77,6 +82,7 @@ def build_scope_palaces(
     """
     live = {int(item) for item in in_pool_palace_ids}
     removed = {int(item) for item in removed_palace_ids}
+    skipped = {int(item) for item in skipped_palace_ids}
     rows: list[dict[str, Any]] = []
     total = 0
     in_pool_count = 0
@@ -89,6 +95,8 @@ def build_scope_palaces(
         total += question_count
         if palace_id in removed:
             reason = palace_removed_reason
+        elif palace_id in skipped:
+            reason = palace_skipped_reason
         elif question_count <= 0:
             reason = no_questions_reason
         elif palace_id not in live:
@@ -249,6 +257,7 @@ def empty_overlay_quiz() -> OverlayQuiz:
         "question_pending_ids": [],
         "parked": empty_parked_overlay(),
         "excluded_ids": [],
+        "skipped_palace_ids": [],
     }
 
 
@@ -427,6 +436,7 @@ def normalize_overlay_quiz(raw: Mapping[str, Any] | None) -> OverlayQuiz:
         "question_pending_ids": question_pending_ids,
         "parked": parked,
         "excluded_ids": excluded_ids,
+        "skipped_palace_ids": _unique_positive_ids(data.get("skipped_palace_ids")),
     }
 
 
@@ -494,6 +504,7 @@ def merge_overlay_quiz(
                 "question_palace_ids": palace_ids,
                 "kind_counts": counts,
                 "excluded_ids": previous["excluded_ids"],
+                "skipped_palace_ids": previous["skipped_palace_ids"],
                 "scope_palaces": scopes,
                 "question_node_ratings": badge_ratings,
                 "question_pending_ids": badge_pending,
@@ -547,6 +558,7 @@ def merge_overlay_quiz(
             "question_palace_ids": palace_ids,
             "kind_counts": counts,
             "excluded_ids": previous["excluded_ids"],
+            "skipped_palace_ids": previous["skipped_palace_ids"],
             "scope_palaces": scopes,
             "question_node_ratings": badge_ratings,
             "question_pending_ids": badge_pending,
@@ -600,6 +612,26 @@ def apply_overlay_progress(
     current["states"] = _normalize_states(states, current["question_ids"])
     current["current_index"] = _as_int(current_index, current["current_index"])
     return normalize_overlay_quiz(current)
+
+
+def set_overlay_palaces_skipped(
+    overlay: Mapping[str, Any] | None,
+    palace_ids: Sequence[int] | set[int],
+    *,
+    skipped: bool,
+) -> OverlayQuiz:
+    """Mark palaces as deleted from 做题 (or restore them).
+
+    Only the 做题 pool changes. Review cards, ratings and ``excluded_ids`` are
+    the round's own state and stay as they are.
+    """
+    current = normalize_overlay_quiz(overlay)
+    targets = {int(item) for item in palace_ids if int(item) > 0}
+    if skipped:
+        merged = [*current["skipped_palace_ids"], *sorted(targets)]
+    else:
+        merged = [item for item in current["skipped_palace_ids"] if item not in targets]
+    return normalize_overlay_quiz({**current, "skipped_palace_ids": merged})
 
 
 def drop_overlay_for_palaces(
@@ -738,6 +770,7 @@ __all__ = [
     "SCOPE_REASON_KINDS_FILTERED",
     "SCOPE_REASON_NO_QUESTIONS",
     "SCOPE_REASON_PALACE_REMOVED",
+    "SCOPE_REASON_PALACE_SKIPPED",
     "apply_overlay_progress",
     "build_scope_palaces",
     "drop_overlay_for_palaces",
@@ -755,4 +788,5 @@ __all__ = [
     "overlay_question_kind",
     "overlay_quiz_scope_signature",
     "pick_question_node_rating",
+    "set_overlay_palaces_skipped",
 ]

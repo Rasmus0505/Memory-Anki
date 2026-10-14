@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import {
+  buildMemoryLookupKeywordDisplayState,
   collectMemoryLookupFocusNodeUids,
   describeMemoryLookupPreview,
+  findMemoryLookupKeywordHits,
+  markMemoryLookupKeywordInStoredText,
   pickMemoryLookupBinding,
   resolveMemoryLookupFocusNodeUid,
   resolveMemoryLookupPalaceId,
@@ -213,5 +216,77 @@ describe('lookup hint highlight', () => {
       { text: '英国教育', match: true },
     ])
     expect(splitLookupHint('没有命中', '')).toEqual([{ text: '没有命中', match: false }])
+  })
+})
+
+describe('lookup keyword center and mark', () => {
+  const doc = {
+    root: {
+      data: { uid: 'root', text: '第三节德国教育' },
+      children: [
+        {
+          data: { uid: 'a', text: '改组后的<span data-emphasis="highlight">完全中学</span>' },
+          children: [
+            { data: { uid: 'leaf', text: '完全中学的任务' }, children: [] },
+          ],
+        },
+        { data: { uid: 'b', text: '学术中学' }, children: [] },
+      ],
+    },
+  }
+  const state = { editor_doc: doc } as unknown as MindMapEditorState
+
+  it('finds hit nodes in document order and centers the first non-root hit', () => {
+    expect(findMemoryLookupKeywordHits(state, '完全中学')).toEqual({
+      nodeUids: ['a', 'leaf'],
+      focusNodeUid: 'a',
+    })
+  })
+
+  it('reports the root as a hit but never as the camera target', () => {
+    expect(findMemoryLookupKeywordHits(state, '德国')).toEqual({
+      nodeUids: ['root'],
+      focusNodeUid: null,
+    })
+  })
+
+  it('ignores blank queries and missing documents', () => {
+    expect(findMemoryLookupKeywordHits(state, '  ')).toEqual({ nodeUids: [], focusNodeUid: null })
+    expect(findMemoryLookupKeywordHits(null, '完全')).toEqual({ nodeUids: [], focusNodeUid: null })
+  })
+
+  it('marks the keyword inside tags-free and tagged node text without touching tags or entities', () => {
+    expect(markMemoryLookupKeywordInStoredText('完全中学', '完全中学')).toBe(
+      '<mark class="rounded-sm bg-primary/30 px-0.5">完全中学</mark>',
+    )
+    expect(
+      markMemoryLookupKeywordInStoredText('<span data-emphasis="highlight">完全中学</span>的', '完全'),
+    ).toBe('<span data-emphasis="highlight"><mark class="rounded-sm bg-primary/30 px-0.5">完全</mark>中学</span>的')
+    expect(markMemoryLookupKeywordInStoredText('a&amp;b', 'amp')).toBe('a&amp;b')
+    expect(markMemoryLookupKeywordInStoredText('a.b', '.')).toBe(
+      'a<mark class="rounded-sm bg-primary/30 px-0.5">.</mark>b',
+    )
+  })
+
+  it('builds a display copy that marks hits and leaves the stored document untouched', () => {
+    const display = buildMemoryLookupKeywordDisplayState(state, '完全中学')
+    const marked = (display?.editor_doc as { root: { children: Array<{ data: Record<string, unknown> }> } }).root.children[0]
+    expect(marked.data.text).toContain('<mark class="rounded-sm bg-primary/30 px-0.5">完全中学</mark>')
+    expect(marked.data.richText).toBe(true)
+    expect((state.editor_doc as typeof doc).root.children[0].data.text).toBe(
+      '改组后的<span data-emphasis="highlight">完全中学</span>',
+    )
+    expect(display).not.toBe(state)
+  })
+
+  it('returns the same state when nothing matches so the surface keeps its identity', () => {
+    expect(buildMemoryLookupKeywordDisplayState(state, '不存在')).toBe(state)
+    expect(buildMemoryLookupKeywordDisplayState(null, '完全')).toBeNull()
+  })
+
+  it('names the search centre in the caption', () => {
+    expect(
+      describeMemoryLookupPreview({ mode: 'view', centeredOnBinding: false, centeredOnSearch: true }),
+    ).toBe('只读脑图预览 · 搜索命中已置于中央')
   })
 })

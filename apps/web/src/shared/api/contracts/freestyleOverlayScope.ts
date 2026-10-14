@@ -14,6 +14,8 @@ export type FreestyleOverlayScopeReason =
   | 'kinds_filtered'
   /** The learner took every card of this palace out with 移除本队列. */
   | 'palace_removed'
+  /** The learner deleted this palace from 做题 (questions only; review is unchanged). */
+  | 'palace_skipped'
 
 /**
  * One row of the backend's authoritative 做题 scope report.

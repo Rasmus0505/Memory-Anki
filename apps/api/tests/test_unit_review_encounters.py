@@ -866,6 +866,45 @@ def test_freestyle_rating_adopts_live_revision_after_topology_edit(db_session):
     assert rated["encounter"]["round_id"] == "round-2026-07-27"
 
 
+def test_freestyle_start_follows_successor_after_structural_retire(db_session):
+    # Reconcile retires a unit and may create its successor under a new id with the
+    # same palace + anchor. A card still holding the retired id must start the
+    # successor instead of failing with "review unit not found".
+    state = _seed_review_unit(db_session)
+    retired_id = state.id
+    state.active = False
+    db_session.commit()
+    successor = ReviewUnitState(
+        id="successor-after-retire",
+        palace_id=state.palace_id,
+        anchor_uid=state.anchor_uid,
+        unit_kind=state.unit_kind,
+        node_uids_json=state.node_uids_json,
+        membership_hash=state.membership_hash,
+        content_hash=state.content_hash,
+        revision=1,
+        stage_index=state.stage_index,
+        has_passed=state.has_passed,
+        due_date=state.due_date,
+        topology_order=state.topology_order,
+        active=True,
+    )
+    db_session.add(successor)
+    db_session.commit()
+
+    review_session = start_freestyle_unit_review_session(
+        db_session,
+        unit_id=retired_id,
+        unit_revision=1,
+        encounter_id="encounter-successor",
+        round_id="round-2026-07-27",
+        client_source="desktop",
+        card_id="source-card",
+    )
+
+    assert review_session["units"][0]["id"] == successor.id
+
+
 def test_rating_still_rejects_stale_revision_without_adoption(db_session):
     state = _seed_review_unit(db_session)
     review_session = _start(db_session, state, "encounter-strict")

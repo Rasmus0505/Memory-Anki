@@ -42,6 +42,7 @@ from ..domain.overlay_quiz import (
     SCOPE_REASON_KINDS_FILTERED,
     SCOPE_REASON_NO_QUESTIONS,
     SCOPE_REASON_PALACE_REMOVED,
+    SCOPE_REASON_PALACE_SKIPPED,
     build_scope_palaces,
     order_overlay_questions,
     overlay_question_kind,
@@ -263,6 +264,7 @@ def build_overlay_question_pack(
     waiting_unit_ids: list[str] | None = None,
     round_ratings: dict[str, int] | None = None,
     removed_palace_ids: list[int] | None = None,
+    skipped_palace_ids: list[int] | None = None,
 ) -> dict[str, Any]:
     """Questions for toolbar 做题, plus the authoritative scope report.
 
@@ -274,6 +276,9 @@ def build_overlay_question_pack(
     this round with 移除本队列. They leave the scope too: the learner explicitly
     removed them, so their questions must go with them. A palace with even one
     card still queued is unaffected.
+
+    ``skipped_palace_ids`` are palaces the learner deleted from 做题 only. Their
+    questions leave the pool; their review cards and ratings are untouched.
 
     ``unit_ids`` are the round's review units, used to resolve each question's
     bound knowledge points to this round's rating. ``waiting_unit_ids`` are the
@@ -288,10 +293,13 @@ def build_overlay_question_pack(
     quiz_stream: dict[str, Any] = raw_quiz if isinstance(raw_quiz, dict) else {}
     scheduled_palace_ids = _positive_ids(palace_ids)
     removed_ids = {int(item) for item in (removed_palace_ids or []) if int(item) > 0}
-    # Removed palaces drop out of the scope entirely, but the report still lists
-    # them with the reason so the learner can see why their questions are gone.
+    skipped_ids = {int(item) for item in (skipped_palace_ids or []) if int(item) > 0}
+    # Removed and deleted palaces drop out of the scope entirely, but the report
+    # still lists them with the reason so the learner can see why they are gone.
     ordered_palace_ids = [
-        palace_id for palace_id in scheduled_palace_ids if palace_id not in removed_ids
+        palace_id
+        for palace_id in scheduled_palace_ids
+        if palace_id not in removed_ids and palace_id not in skipped_ids
     ]
     # One catalog read over every scheduled palace, then split it: the pool only
     # draws from the palaces still in this round, while the report needs counts
@@ -383,9 +391,11 @@ def build_overlay_question_pack(
         titles=resolve_palace_titles(session, scheduled_palace_ids),
         in_pool_palace_ids=in_pool_palace_ids,
         removed_palace_ids=sorted(removed_ids),
+        skipped_palace_ids=sorted(skipped_ids),
         no_questions_reason=SCOPE_REASON_NO_QUESTIONS,
         kinds_filtered_reason=SCOPE_REASON_KINDS_FILTERED,
         palace_removed_reason=SCOPE_REASON_PALACE_REMOVED,
+        palace_skipped_reason=SCOPE_REASON_PALACE_SKIPPED,
     )
     return {
         "question_ids": question_ids,

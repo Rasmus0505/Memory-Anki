@@ -6,6 +6,7 @@ import {
   cardReentersAfterStaleDrop,
   decideLoadedUnitSession,
   decideStaleDrop,
+  findSuccessorUnit,
   isCardBlockedByStaleKey,
   isStaleUnitError,
   makeStaleCardKey,
@@ -131,6 +132,27 @@ describe('stale key retention', () => {
     expect(
       isCardBlockedByStaleKey(staleKeys, roundId, { id: cardId, unit_revision: 4 }),
     ).toBe(false)
+  })
+})
+
+describe('findSuccessorUnit', () => {
+  it('returns the unit with the same anchor when the card id was retired', () => {
+    const units = [{ id: 'new-unit', anchor_uid: 'anchor-a' }, { id: 'other', anchor_uid: 'anchor-b' }]
+    expect(findSuccessorUnit(units, 'old-unit', 'anchor-a')?.id).toBe('new-unit')
+  })
+
+  it('does not guess when the card id is still present', () => {
+    const units = [{ id: 'same', anchor_uid: 'anchor-a' }, { id: 'twin', anchor_uid: 'anchor-a' }]
+    expect(findSuccessorUnit(units, 'same', 'anchor-a')).toBeUndefined()
+  })
+
+  it('does not guess when several units share the anchor', () => {
+    const units = [{ id: 'x', anchor_uid: 'anchor-a' }, { id: 'y', anchor_uid: 'anchor-a' }]
+    expect(findSuccessorUnit(units, 'old-unit', 'anchor-a')).toBeUndefined()
+  })
+
+  it('returns undefined without an anchor to match on', () => {
+    expect(findSuccessorUnit([{ id: 'x', anchor_uid: 'a' }], 'old', '')).toBeUndefined()
   })
 })
 

@@ -55,8 +55,10 @@ import { cn } from '@/shared/lib/utils'
 import { MindMapSplitLayout } from '@/shared/components/layout/MindMapSplitLayout'
 import {
   buildEditorState,
+  buildMemoryLookupKeywordDisplayState,
   createEmptyGroupedData,
   describeMemoryLookupPreview,
+  findMemoryLookupKeywordHits,
   flattenPalaces,
   getPalaceContext,
   getPalaceTitle,
@@ -69,6 +71,22 @@ import {
   type MemoryLookupPreviewMode,
 } from '@/widgets/palace-memory-lookup/model/memoryLookupDialogSupport'
 import { useMemoryLookupEditDocument } from '@/widgets/palace-memory-lookup/model/memoryLookupEditSession'
+import {
+  buildPermanentMarkRatingRows,
+  buildRatingEditorState,
+  descendantPermanentMarkUids,
+  ratingMasteryByNode,
+  unitIdByNodeFromPassStates,
+  type PermanentMarkRatingRow,
+} from '@/widgets/palace-memory-lookup/model/memoryLookupRatingView'
+import { PermanentMarkRatingPalette } from '@/widgets/palace-memory-lookup/PermanentMarkRatingPalette'
+import { listPalaceUnitPassStatesApi } from '@/modules/quiz/domain/quiz-entity/api'
+import {
+  listPalaceUnitRatingsApi,
+  rerateReviewUnitsApi,
+  type PalaceUnitRatingDto,
+} from '@/modules/practice/ui/review/api/unitReviewApi'
+import { cue } from '@/shared/fx'
 
 export function PalaceMemoryLookupDialog({
   open,
@@ -78,6 +96,7 @@ export function PalaceMemoryLookupDialog({
   focusNodeUid = null,
   focusNodeUids = null,
   focusAncestorNodeUid = null,
+  ratingMode = false,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -89,6 +108,11 @@ export function PalaceMemoryLookupDialog({
   focusNodeUids?: readonly string[] | null
   /** When opening from a card, prefer the deepest bound node under this ancestor. */
   focusAncestorNodeUid?: string | null
+  /**
+   * 评分视图（做题「本轮最低」chip）：只显示根和永久标记节点，并列出每个节点的评分、
+   * 可直接改评分。默认 false，「查看宫殿」保持完整导图。
+   */
+  ratingMode?: boolean
 }) {
   const [search, setSearch] = useState('')
   const [submittedSearch, setSubmittedSearch] = useState('')
@@ -155,7 +179,12 @@ export function PalaceMemoryLookupDialog({
     ]),
     [focusAncestorNodeUid, focusNodeUid, focusNodeUids],
   )
-  const focusTargetUid = useMemo(
+  const keywordHits = useMemo(
+    () => findMemoryLookupKeywordHits(previewState, submittedSearch),
+    [previewState, submittedSearch],
+  )
+  const searchFocusNodeUid = keywordHits.focusNodeUid
+  const bindingFocusNodeUid = useMemo(
     () => resolveMemoryLookupFocusNodeUid(
       previewState,
       requestedFocusNodeUids,
@@ -163,20 +192,135 @@ export function PalaceMemoryLookupDialog({
     ),
     [focusAncestorNodeUid, previewState, requestedFocusNodeUids],
   )
+  const focusTargetUid = searchFocusNodeUid ?? bindingFocusNodeUid
   const palaceRootUid = getRootNodeUid(previewState)
+  const centeredOnSearch = searchFocusNodeUid != null
   const centeredOnBinding = Boolean(
-    requestedFocusNodeUids.length > 0
+    !centeredOnSearch
+    && requestedFocusNodeUids.length > 0
     && focusTargetUid
     && requestedFocusNodeUids.includes(focusTargetUid)
     && focusTargetUid !== palaceRootUid,
   )
   const highlightedNodeUids = useMemo(
-    () => (centeredOnBinding && focusTargetUid ? [focusTargetUid] : []),
-    [centeredOnBinding, focusTargetUid],
+    () => (centeredOnBinding || centeredOnSearch) && focusTargetUid ? [focusTargetUid] : [],
+    [centeredOnBinding, centeredOnSearch, focusTargetUid],
   )
   const editSource = loadedPalaceId === selectedPalaceId ? previewState : null
   const editDocument = useMemoryLookupEditDocument(selectedPalaceId, editSource)
   const browsingEditorState = editDocument.editorState ?? previewState
+  // Keyword marks are display-only: edit and flip modes keep the stored document.
+  const viewEditorState = useMemo(
+    () => (previewMode === 'view'
+      ? buildMemoryLookupKeywordDisplayState(browsingEditorState, submittedSearch)
+      : browsingEditorState),
+    [browsingEditorState, previewMode, submittedSearch],
+  )
+  const ratingEditorState = useMemo(
+    () => (ratingMode && viewEditorState ? buildRatingEditorState(viewEditorState) : viewEditorState),
+    [ratingMode, viewEditorState],
+  )
+  const [ratingUnitByNode, setRatingUnitByNode] = useState<Record<string, string>>({})
+  const [ratingsByUnit, setRatingsByUnit] = useState<Record<string, PalaceUnitRatingDto>>({})
+  const [ratingError, setRatingError] = useState('')
+  const [ratingBusy, setRatingBusy] = useState(false)
+  const [ratingSelectedUid, setRatingSelectedUid] = useState<string | null>(null)
+  const ratingRequestRef = useRef(0)
+  const ratingPanelRef = useRef<HTMLDivElement>(null)
+  const ratingRows = useMemo<PermanentMarkRatingRow[]>(
+    () => (
+      ratingMode
+        ? buildPermanentMarkRatingRows(browsingEditorState?.editor_doc ?? null, ratingUnitByNode, ratingsByUnit)
+        : []
+    ),
+    [browsingEditorState, ratingMode, ratingUnitByNode, ratingsByUnit],
+  )
+  const ratingSelectedRow = useMemo(
+    () => ratingRows.find((row) => row.nodeUid === ratingSelectedUid) ?? null,
+    [ratingRows, ratingSelectedUid],
+  )
+  const ratingCascadeUids = useMemo(
+    () => (ratingSelectedUid && ratingMode
+      ? descendantPermanentMarkUids(browsingEditorState?.editor_doc ?? null, ratingSelectedUid)
+      : []),
+    [browsingEditorState, ratingMode, ratingSelectedUid],
+  )
+  // Rated descendant marks that a change to the selected node would also set.
+  const ratingCascadeCount = useMemo(
+    () => ratingCascadeUids.filter((uid) => {
+      const unitId = ratingUnitByNode[uid]
+      return unitId != null && ratingsByUnit[unitId] != null
+    }).length,
+    [ratingCascadeUids, ratingUnitByNode, ratingsByUnit],
+  )
+  const ratingMastery = useMemo(
+    () => (ratingMode ? ratingMasteryByNode(ratingRows) : undefined),
+    [ratingMode, ratingRows],
+  )
+  // Only the newest read may land: a slower response for a previous palace or
+  // an earlier change must not overwrite what the learner just saved.
+  const refreshRatings = useCallback(async (palaceId: number) => {
+    const requestId = ++ratingRequestRef.current
+    try {
+      const [passStates, ratings] = await Promise.all([
+        listPalaceUnitPassStatesApi(palaceId),
+        listPalaceUnitRatingsApi(palaceId),
+      ])
+      if (requestId !== ratingRequestRef.current) return
+      setRatingUnitByNode(unitIdByNodeFromPassStates(passStates.items))
+      setRatingsByUnit(ratings)
+      setRatingError('')
+    } catch (error) {
+      if (requestId !== ratingRequestRef.current) return
+      setRatingError(error instanceof Error ? error.message : '读取评分失败')
+    }
+  }, [])
+  useEffect(() => {
+    if (!ratingMode || !open || selectedPalaceId == null) return
+    setRatingUnitByNode({})
+    setRatingsByUnit({})
+    void refreshRatings(selectedPalaceId)
+  }, [open, ratingMode, refreshRatings, selectedPalaceId])
+  const handleChangeRating = useCallback(async (rating: number) => {
+    if (selectedPalaceId == null || ratingSelectedUid == null) return
+    const palaceId = selectedPalaceId
+    const grade = rating as Parameters<typeof rerateReviewUnitsApi>[1]
+    // The clicked mark and every mark it contains move together: one rating per
+    // unit, each unit set to the same grade. Units already at this grade are skipped.
+    const unitIds = [ratingSelectedUid, ...ratingCascadeUids]
+      .map((uid) => ratingUnitByNode[uid])
+      .filter((unitId): unitId is string => Boolean(unitId))
+    const items = [...new Set(unitIds)]
+      .map((unitId) => ({ unitId, rating: ratingsByUnit[unitId] }))
+      .filter((entry): entry is { unitId: string; rating: PalaceUnitRatingDto } => (
+        entry.rating != null && entry.rating.rating !== rating
+      ))
+      .map((entry) => ({
+        unitId: entry.unitId,
+        expectedRevision: entry.rating.revision,
+        operationId: crypto.randomUUID(),
+      }))
+    if (items.length === 0) return
+    setRatingBusy(true)
+    setRatingError('')
+    try {
+      await rerateReviewUnitsApi(palaceId, grade, items)
+      const scope = ratingPanelRef.current
+      if (scope) cue('grade.commit', { scope, grade, combo: 0, milestone: false })
+      await refreshRatings(palaceId)
+    } catch (error) {
+      setRatingError(error instanceof Error ? error.message : '改评分失败')
+    } finally {
+      setRatingBusy(false)
+    }
+  }, [ratingCascadeUids, ratingPanelRef, ratingSelectedUid, ratingUnitByNode, ratingsByUnit, refreshRatings, selectedPalaceId])
+  // Clicking a permanent mark on the map selects it for the rating palette.
+  // Clicks on unmarked nodes are ignored: they have no rating of their own.
+  const handleRatingNodeClick = useCallback((nodes: Array<{ uid: string | null }>) => {
+    const uid = nodes[0]?.uid ?? null
+    if (uid == null || !ratingRows.some((row) => row.nodeUid === uid)) return
+    setRatingSelectedUid(uid)
+  }, [ratingRows])
   const flushEditDocument = editDocument.flush
   useEffect(() => {
     if (open && previewMode === 'edit') return
@@ -494,12 +638,14 @@ export function PalaceMemoryLookupDialog({
   const previewCaption = describeMemoryLookupPreview({
     mode: previewMode,
     centeredOnBinding,
+    centeredOnSearch,
     saveStatus: editDocument.saveStatus,
     saveError: editDocument.saveError,
   })
   const compactPreviewCaption = describeMemoryLookupPreview({
     mode: previewMode,
     centeredOnBinding,
+    centeredOnSearch,
     compact: true,
     saveStatus: editDocument.saveStatus,
     saveError: editDocument.saveError,
@@ -653,6 +799,7 @@ export function PalaceMemoryLookupDialog({
     </div>
   )
   const renderMindMapContent = () => (
+    <>
     <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-border/70 bg-[var(--memory-anki-mindmap-canvas)]">
       {previewLoading ? (
         <div className="flex h-full min-h-45 items-center justify-center gap-2 text-sm text-muted-foreground">
@@ -692,8 +839,8 @@ export function PalaceMemoryLookupDialog({
         ) : (
           <MindMapEditorSurface
             key={`quiz-memory-lookup-${selectedPalaceId}-view-${palaceRootUid || 'root'}`}
-            editorState={browsingEditorState}
-            readonly={previewMode !== 'edit'}
+            editorState={ratingMode ? ratingEditorState : viewEditorState}
+            readonly={ratingMode || previewMode !== 'edit'}
             forceExpanded
             presentationStrategy={'viewport-only'}
             mobileViewPolicy="map"
@@ -711,6 +858,8 @@ export function PalaceMemoryLookupDialog({
                 ? editDocument.handleEditorStateChange
                 : ignoreLookupEditorChange
             }
+            masteryByNodeUid={ratingMastery}
+            onNodeClick={ratingMode ? handleRatingNodeClick : undefined}
             className="h-full min-h-0 w-full border-0"
           />
         )
@@ -720,6 +869,18 @@ export function PalaceMemoryLookupDialog({
         </div>
       )}
     </div>
+    {ratingMode ? (
+      <div ref={ratingPanelRef} className="mt-3 shrink-0 rounded-xl border border-border/70 p-3">
+        <PermanentMarkRatingPalette
+          row={ratingSelectedRow}
+          cascadeCount={ratingCascadeCount}
+          busy={ratingBusy}
+          error={ratingError}
+          onChangeRating={handleChangeRating}
+        />
+      </div>
+    ) : null}
+    </>
   )
 
   if (!open) return null
@@ -767,7 +928,7 @@ export function PalaceMemoryLookupDialog({
                   {compactPreviewCaption}
                 </div>
               </div>
-              {renderPreviewControls(true)}
+              {ratingMode ? null : renderPreviewControls(true)}
             </div>
             {renderMindMapContent()}
           </div>
@@ -918,7 +1079,7 @@ export function PalaceMemoryLookupDialog({
                     {previewCaption}
                   </div>
                 </div>
-                {renderPreviewControls()}
+                {ratingMode ? null : renderPreviewControls()}
               </div>
 
               {renderMindMapContent()}

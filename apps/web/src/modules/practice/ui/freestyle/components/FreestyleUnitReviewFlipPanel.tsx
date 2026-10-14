@@ -146,7 +146,7 @@ export function FreestyleUnitReviewFlipPanel({
     })
   }, [editEditorState, isEditMode, reveal.revealMap])
 
-  const { handleNodeContextMenu, root } = reveal
+  const { root } = reveal
   const { signalReveal } = useFreestyleFlowFeedback()
 
   const lastNotifiedRevealKeyRef = useRef('')
@@ -237,9 +237,6 @@ export function FreestyleUnitReviewFlipPanel({
     palaceTitle: card.palace_title || '',
     unitTitle: unit.title || '',
     anchorUid: unit.anchor_uid || '',
-    rootId: root.id,
-    rootText: root.text || '',
-    handleNodeContextMenu,
     revealApiRef,
   })
 

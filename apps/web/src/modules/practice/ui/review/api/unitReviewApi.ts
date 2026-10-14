@@ -577,3 +577,46 @@ export async function undoReviewUnitRatingApi(operationId: string, roundId?: str
   emitAppEvent(APP_EVENT_NAMES.palaceCatalogInvalidated)
   return response.item
 }
+
+export type PalaceUnitRatingDto = { rating: number; operation_id: string; revision: number }
+
+/** Each active unit's current live rating, keyed by unit id. Read-only. */
+export function listPalaceUnitRatingsApi(palaceId: number) {
+  return request<{ items: Record<string, PalaceUnitRatingDto> }>(
+    `/review/palaces/${palaceId}/unit-ratings`,
+  ).then((response) => response.items ?? {})
+}
+
+/**
+ * Change a unit's one rating (the same rating 正式复习 and 随心 share), rescheduling it.
+ * `expectedRevision` is the revision the learner saw; a stale one is refused.
+ */
+/**
+ * Set one rating on several units of a palace, all or nothing. Used by the L1 →
+ * descendant-mark cascade. The 随心 queue is told to refresh (`roundRefresh`), since
+ * these due dates are what the queue is built from.
+ */
+export async function rerateReviewUnitsApi(
+  palaceId: number,
+  rating: UnitRating,
+  items: Array<{ unitId: string; expectedRevision: number; operationId: string }>,
+) {
+  const response = await request<{ item: { items: UnitRatingResultDto[] } }>(
+    `/review/palaces/${palaceId}/unit-ratings/rerate`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        rating,
+        items: items.map((item) => ({
+          unit_id: item.unitId,
+          expected_revision: item.expectedRevision,
+          operation_id: item.operationId,
+        })),
+      }),
+      persistence: false,
+    },
+  )
+  emitAppEvent(APP_EVENT_NAMES.palaceCatalogInvalidated)
+  emitAppEvent(APP_EVENT_NAMES.reviewStateChanged, { roundRefresh: true })
+  return response.item.items
+}

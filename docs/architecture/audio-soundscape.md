@@ -134,6 +134,9 @@ interface ToneSpec {
 
 ### 界面音（`uiSounds.ts`）
 
+- **硬约束：任何鼠标点击都必须有声音。** 新增可点击元素时不得为了视觉或分区而静音；唯一允许的例外只有下面列出的静音分区，新增例外须先写进本文档并说明理由。
+  - 现有例外（已登记）：`[data-ui-sound="off"]`、`.freestyle-stage`、`[data-freestyle-stage]`（随心舞台，自有声音设计）。
+  - 已知缺口（待决定）：思维导图节点卡片的单击（`shared/ui/mindmap-canvas/NodeCard.tsx` 外壳 `div`）不是按钮角色，通用界面音不覆盖它，单击目前无声。
 - 全局**单一委托监听器**（`installUiSounds(isSuppressed)`），不给每个按钮挂监听。
 - 开关条件：`soundEnabled && uiSoundEnabled !== false`。
 - 频率限制：`MIN_GAP_MS = 45`ms，防止连点叠音。

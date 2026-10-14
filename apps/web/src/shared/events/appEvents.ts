@@ -11,7 +11,7 @@ export const APP_EVENT_NAMES = {
 export interface AppEventMap {
   [APP_EVENT_NAMES.clientPreferencesUpdated]: Partial<ClientPreferences>
   [APP_EVENT_NAMES.palaceCatalogInvalidated]: undefined
-  [APP_EVENT_NAMES.reviewStateChanged]: undefined
+  [APP_EVENT_NAMES.reviewStateChanged]: { roundRefresh?: boolean } | undefined
   [APP_EVENT_NAMES.themeUpdated]: ThemePreference
 }
 

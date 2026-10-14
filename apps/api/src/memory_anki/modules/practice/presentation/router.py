@@ -25,6 +25,7 @@ from memory_anki.modules.practice.application.round_overlay_service import (
     ensure_overlay_quiz,
     progress_overlay_quiz,
     read_round_question_badge,
+    set_overlay_skipped_palaces,
 )
 from memory_anki.modules.practice.application.round_state_service import (
     apply_round_action,
@@ -38,6 +39,7 @@ from memory_anki.modules.practice.domain.schemas import (
     FreestyleOverlayQuizDropPalacesRequest,
     FreestyleOverlayQuizEnsureRequest,
     FreestyleOverlayQuizProgressRequest,
+    FreestyleOverlayQuizSkipPalacesRequest,
     FreestyleQuestionAttemptCreate,
     FreestyleQuestionExplanationCreate,
     FreestyleQueueBuildRequest,
@@ -221,6 +223,25 @@ def api_freestyle_overlay_quiz_progress(
             current_index=data.current_index,
             completed_ids=list(data.completed_ids or []),
             states=data.states,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/freestyle/rounds/{round_id}/overlay-quiz/skip-palaces")
+def api_freestyle_overlay_quiz_skip_palaces(
+    round_id: str,
+    data: FreestyleOverlayQuizSkipPalacesRequest,
+    session: Session = Depends(session_dep),
+):
+    try:
+        return set_overlay_skipped_palaces(
+            session,
+            round_id=round_id,
+            operation_id=data.operation_id,
+            expected_version=data.expected_version,
+            palace_ids=list(data.palace_ids or []),
+            skipped=data.skipped,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

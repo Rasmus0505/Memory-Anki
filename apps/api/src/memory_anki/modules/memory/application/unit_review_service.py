@@ -644,6 +644,22 @@ def _release_failing_glance_for_new_encounter(
     session.commit()
 
 
+def _active_successor_state(
+    session: Session,
+    retired: ReviewUnitState,
+) -> ReviewUnitState | None:
+    return (
+        session.query(ReviewUnitState)
+        .filter_by(
+            palace_id=retired.palace_id,
+            anchor_uid=retired.anchor_uid,
+            unit_kind=retired.unit_kind,
+            active=True,
+        )
+        .first()
+    )
+
+
 def start_freestyle_unit_review_session(
     session: Session,
     *,
@@ -658,6 +674,11 @@ def start_freestyle_unit_review_session(
     retry_attempt: int = 0,
 ) -> dict[str, Any]:
     state = session.get(ReviewUnitState, unit_id)
+    if state is not None and not state.active:
+        # A structural edit retires the old row and may create its successor under
+        # a new id (unit_reconcile). The feed card still holds the old id, so follow
+        # the same palace + anchor to the live row instead of failing the start.
+        state = _active_successor_state(session, state)
     if state is None or not state.active:
         raise ValueError("review unit not found")
 
@@ -1406,6 +1427,137 @@ def rate_review_unit(
     if commit:
         session.commit()
     return after
+
+
+def _latest_effective_encounter(session: Session, unit_id: str) -> ReviewUnitEncounter | None:
+    """The encounter whose live rating currently stands for this unit, if any."""
+    candidates = (
+        session.query(ReviewUnitEncounter)
+        .filter(
+            ReviewUnitEncounter.unit_id == unit_id,
+            ReviewUnitEncounter.effective_operation_id.isnot(None),
+        )
+        .order_by(ReviewUnitEncounter.created_at.desc(), ReviewUnitEncounter.sequence.desc())
+        .all()
+    )
+    for candidate in candidates:
+        if _effective_rating_day(session, candidate) is not None:
+            return candidate
+    return None
+
+
+def rerate_unit_rating(
+    session: Session,
+    *,
+    unit_id: str,
+    operation_id: str,
+    rating: int | str,
+    expected_revision: int,
+    commit: bool = True,
+) -> dict[str, Any]:
+    """Change the one rating of a 复习单元, whenever it was given.
+
+    Semantics (single source, shared by 正式复习 and 随心模式): a review unit has
+    exactly one rating. The unit is a cut of the mind map by its permanent marks,
+    and each rating in 随心模式 is a rating of one such unit. Re-rating replaces
+    that rating and recomputes the unit's schedule from the frozen pre-rating
+    baseline, as if the new rating had been given first. It does not stack a
+    second promotion on top of the old one.
+    """
+    op_id = str(operation_id or "").strip()
+    if not op_id:
+        raise ValueError("operation_id is required")
+    existing = session.get(ReviewUnitRatingOperation, op_id)
+    if existing is not None:
+        if existing.unit_id != unit_id:
+            raise ValueError("operation_id belongs to another review unit")
+        return json.loads(existing.after_state_json)
+    state = session.get(ReviewUnitState, unit_id)
+    if state is None or not state.active:
+        raise ValueError("review unit not found")
+    if int(expected_revision) != state.revision:
+        raise ValueError("review unit changed; reload before changing its rating")
+    encounter = _latest_effective_encounter(session, unit_id)
+    if encounter is None:
+        raise ValueError("this review unit has no rating to change")
+    study = session.get(StudySession, encounter.study_session_id)
+    if study is None:
+        raise ValueError("review session not found")
+    item = _session_item(session, study.id, unit_id)
+    after = _rate_open_encounter(
+        session,
+        study=study,
+        state=state,
+        item=item,
+        encounter=encounter,
+        operation_id=op_id,
+        rating=normalize_rating(rating),
+    )
+    if commit:
+        session.commit()
+    return after
+
+
+def rerate_unit_ratings(
+    session: Session,
+    *,
+    palace_id: int,
+    rating: int | str,
+    items: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Set one rating on several units of one palace, all or nothing.
+
+    Used by the L1 cascade: a permanent mark's descendant marks are separate
+    units, and each keeps the single-rating rule of `rerate_unit_rating`. A
+    failing item rolls back every item, so the cascade never half-applies.
+    """
+    if not items:
+        raise ValueError("no review units to change")
+    results: list[dict[str, Any]] = []
+    try:
+        for item in items:
+            unit_id = str(item.get("unit_id") or "")
+            state = session.get(ReviewUnitState, unit_id)
+            if state is None or state.palace_id != palace_id:
+                raise ValueError("review unit does not belong to this palace")
+            results.append(
+                rerate_unit_rating(
+                    session,
+                    unit_id=unit_id,
+                    operation_id=str(item.get("operation_id") or ""),
+                    rating=rating,
+                    expected_revision=int(item.get("expected_revision") or 0),
+                    commit=False,
+                )
+            )
+        session.commit()
+    except ValueError:
+        session.rollback()
+        raise
+    return {"items": results}
+
+
+def list_latest_unit_ratings(session: Session, palace_id: int) -> dict[str, dict[str, Any]]:
+    """Current live rating per active unit of one palace, for the rating view."""
+    states = (
+        session.query(ReviewUnitState)
+        .filter_by(palace_id=palace_id, active=True)
+        .all()
+    )
+    result: dict[str, dict[str, Any]] = {}
+    for state in states:
+        encounter = _latest_effective_encounter(session, state.id)
+        if encounter is None or encounter.selected_rating is None:
+            continue
+        operation = session.get(ReviewUnitRatingOperation, encounter.effective_operation_id)
+        if operation is None:
+            continue
+        result[state.id] = {
+            "rating": encounter.selected_rating,
+            "operation_id": operation.id,
+            "revision": state.revision,
+        }
+    return result
 
 
 def rate_palace_due_units(

@@ -577,6 +577,14 @@ export interface FreestyleOverlayQuizDropPalacesRequest {
   palace_ids: number[]
 }
 
+export interface FreestyleOverlayQuizSkipPalacesRequest {
+  operation_id: string
+  expected_version: number
+  palace_ids: number[]
+  /** true deletes these palaces from 做题; false puts them back. */
+  skipped: boolean
+}
+
 export interface FreestyleRoundRatingRequest {
   operation_id: string
   expected_version: number

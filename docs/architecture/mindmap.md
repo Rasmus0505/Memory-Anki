@@ -26,7 +26,7 @@
 - 视口 minZoom 降到 0.12 支持鸟瞰；中大图开启 React Flow onlyRenderVisibleElements。
 - 手机策略：`map` / `auto` 允许单指拖移；只有显式 `guided` 才把单指让给父级滚动。随心复习卡使用 `auto`：窄屏只读仍用更紧的 fit/zoom，但画布保持可拖；翻卡走 pager，不靠在图上单指滑动。
 - 鼠标滚轮平移（`panOnScroll`）必须记入受控相机。React Flow 会在 `move-start` 之前上报 viewport；preserve 模式不得把这次上报当成漂移丢掉，否则滚轮会弹回原位、滑不动。编辑卡上的 `nopan` / `nowheel` 只拦住拖拽，不得吃掉滚轮平移；滚轮仍按与空白处相同的距离挪整张图，松手即停，Ctrl 才缩放。
-- Enter reveal follow：随心复习按 Enter 翻出的卡若被画面裁切，画布只做最小平移，把这一步里裁切最多的那张完整推进视野并留边距，保持当前缩放，约 200ms，连按打断上一次动画跟上最新一步。鼠标点卡、Shift 收回和 A/S 批量翻卡不挪视野。
+- Enter reveal follow：随心复习按 Enter 翻出的卡若被画面裁切，画布只做最小平移，把这一步里裁切最多的那张完整推进视野并留边距，保持当前缩放，约 200ms，连按打断上一次动画跟上最新一步。鼠标点卡和 A/S 批量翻卡不挪视野。
 - 翻卡 / 收卡手感（方案 A 果冻弹跳，`shared/ui/mindmap-canvas/useMindMapRevealMotion.ts`）：待回忆卡按下即压扁（CSS `:active`，与翻卡覆盖层的起始姿态一致）；墨迹先行 40ms；翻卡起步即快（无 ease-in 空档），过边缘后弹簧回弹并落地压一下，回弹幅度取主题 `flipOvershootDeg` 的 40%。收卡时子卡本体被父卡吸回并缩小淡出 320ms，子卡之间错开 22ms、整批不超过 90ms，父卡在第一张到达时果冻 pop 一次。多卡翻开错开 35ms、整批不超过 140ms。
 - **不做** MiniMap、搜索跳转、大纲双栏（宿主可另组）。
 

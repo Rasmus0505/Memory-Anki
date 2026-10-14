@@ -60,6 +60,7 @@ import { useFreestyleFlowFeedback } from '@/modules/practice/ui/freestyle/hooks/
 import { FLOW_BREATH_CLASS } from '@/modules/practice/ui/freestyle/model/freestyleFlowFeedback'
 import {
   decideLoadedUnitSession,
+  findSuccessorUnit,
   isPermanentUnitAbsence,
   isStaleUnitError,
 } from '@/modules/practice/ui/freestyle/model/freestyleStaleRecovery'
@@ -595,9 +596,10 @@ export function FreestyleUnitReviewCardView({
             }
             return
           }
-          const nextUnit = value.units.find((item) => item.id === liveCard.unit_id)
+          const sameUnit = value.units.find((item) => item.id === liveCard.unit_id)
+          const nextUnit = sameUnit ?? findSuccessorUnit(value.units, liveCard.unit_id, liveCard.anchor_uid)
           const decision = decideLoadedUnitSession({
-            cardUnitId: liveCard.unit_id,
+            cardUnitId: nextUnit ? nextUnit.id : liveCard.unit_id,
             cardRevision: effectiveRevision,
             unit: nextUnit,
             identityStatus: liveIdentity.status,
@@ -1005,7 +1007,7 @@ export function FreestyleUnitReviewCardView({
           setActionError(`${diagnostic}\n已检测到内容版本变化，正在自动更新复习安排。`)
         }
         rateBridgeRef.current.onSaveFailed(diagnostic)
-        rateBridgeRef.current.onStaleDrop(ticket.cardId)
+        rateBridgeRef.current.onStaleDrop(ticket.cardId, { force: isPermanentUnitAbsence(error) })
         return
       }
       if (current && !follow.undo) markSaveFailed(diagnostic, ticket.generation)

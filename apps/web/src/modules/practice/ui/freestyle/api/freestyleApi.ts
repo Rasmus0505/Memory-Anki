@@ -15,6 +15,7 @@ import type {
   FreestyleOverlayQuizDropPalacesRequest,
   FreestyleOverlayQuizEnsureRequest,
   FreestyleOverlayQuizProgressRequest,
+  FreestyleOverlayQuizSkipPalacesRequest,
   FreestyleOverviewResponse,
   FreestyleRoundActionRequest,
   FreestyleRoundActiveRequest,
@@ -251,6 +252,24 @@ export function progressFreestyleOverlayQuizApi(
       persistence: {
         resourceKey: `freestyle-overlay-quiz-progress:${payload.operation_id}`,
         description: '保存随心做题进度',
+        replayMode: 'auto',
+      },
+    },
+  )
+}
+
+export function setFreestyleOverlaySkippedPalacesApi(
+  roundId: string,
+  payload: FreestyleOverlayQuizSkipPalacesRequest,
+) {
+  return request<FreestyleRoundStatePayload>(
+    `/freestyle/rounds/${encodeURIComponent(roundId)}/overlay-quiz/skip-palaces`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      persistence: {
+        resourceKey: `freestyle-overlay-quiz-skip:${payload.operation_id}`,
+        description: payload.skipped ? '从做题删除宫殿' : '恢复宫殿到做题',
         replayMode: 'auto',
       },
     },

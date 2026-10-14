@@ -137,6 +137,7 @@ import {
   decideStaleDrop,
   isCardBlockedByStaleKey,
   makeStaleCardKey,
+  makeStaleUnitAbsentKey,
   noteStableCard,
   resetStaleDropCircuit,
   type StaleDropCircuit,
@@ -2092,6 +2093,9 @@ export function useImmersiveQueue(
         staleCard ? cardRevisionOf(staleCard) : 'unknown',
       )
       staleCardKeysRef.current.add(staleKey)
+      if (options?.force) {
+        staleCardKeysRef.current.add(makeStaleUnitAbsentKey(queueStateRef.current.roundId, cardId))
+      }
       const index = previous.findIndex((card) => card.id === cardId)
       const filtered = previous.filter((card) => card.id !== cardId)
       const preferCardId =
@@ -2901,8 +2905,10 @@ export function useImmersiveQueue(
       if (!detail || detail.workspace !== slot || !isRemoteWindowEvent(event)) return
       void hydrateFromServerRound(false)
     })
-    const stopReviews = onAppEvent(APP_EVENT_NAMES.reviewStateChanged, (_detail, event) => {
-      if (!isRemoteWindowEvent(event)) return
+    const stopReviews = onAppEvent(APP_EVENT_NAMES.reviewStateChanged, (detail, event) => {
+      // A same-window re-rate (评分视图) changes due dates the queue already holds;
+      // it asks for a refresh explicitly. Other same-window ratings keep their own flow.
+      if (!isRemoteWindowEvent(event) && !detail?.roundRefresh) return
       void hydrateFromServerRound(false)
     })
     return () => {

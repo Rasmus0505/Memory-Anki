@@ -5,6 +5,7 @@ import type {
   PalaceGroupedItem,
   PalaceGroupedListResponse,
 } from '@/shared/api/contracts'
+import { stripMindMapHtml } from '@/shared/lib/mindmapRichText'
 
 
 export function shouldBlockMemoryLookupClose(input: {
@@ -22,6 +23,7 @@ export type MemoryLookupEditSaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 export function describeMemoryLookupPreview(input: {
   mode: MemoryLookupPreviewMode
   centeredOnBinding: boolean
+  centeredOnSearch?: boolean
   compact?: boolean
   saveStatus?: MemoryLookupEditSaveStatus
   saveError?: string
@@ -39,6 +41,7 @@ export function describeMemoryLookupPreview(input: {
     }
     return '编辑模式：直接修改节点，改动会自动保存。'
   }
+  if (input.centeredOnSearch) return '只读脑图预览 · 搜索命中已置于中央'
   return input.centeredOnBinding
     ? '只读脑图预览 · 绑定节点已置于中央'
     : '只读脑图预览'
@@ -131,10 +134,17 @@ function editorNodeUid(node: unknown): string | null {
   return null
 }
 
+function editorNodeStoredText(node: unknown): string {
+  if (!node || typeof node !== 'object') return ''
+  const text = (node as { data?: { text?: unknown } }).data?.text
+  return typeof text === 'string' ? text : ''
+}
+
 interface EditorNodeLocation {
   uid: string
   depth: number
   ancestorUids: string[]
+  storedText: string
 }
 
 function walkEditorNodeLocations(doc: unknown): EditorNodeLocation[] {
@@ -142,7 +152,7 @@ function walkEditorNodeLocations(doc: unknown): EditorNodeLocation[] {
   const visit = (node: unknown, depth: number, ancestorUids: string[]) => {
     if (!node || typeof node !== 'object') return
     const uid = editorNodeUid(node)
-    if (uid) locations.push({ uid, depth, ancestorUids })
+    if (uid) locations.push({ uid, depth, ancestorUids, storedText: editorNodeStoredText(node) })
     const children = (node as { children?: unknown }).children
     if (!Array.isArray(children)) return
     const nextAncestors = uid ? [...ancestorUids, uid] : ancestorUids
@@ -205,6 +215,84 @@ export function resolveMemoryLookupFocusNodeUid(
   if (!editorState?.editor_doc) return requested[requested.length - 1] ?? rootUid
   const locations = walkEditorNodeLocations(editorState.editor_doc)
   return pickDeepestEditorNodeUid(locations, requested, preferredAncestorUid) ?? rootUid
+}
+
+export interface MemoryLookupKeywordHits {
+  /** Nodes whose visible text contains the keyword, in document order (root included). */
+  nodeUids: string[]
+  /** First hit that is not the palace root; null keeps the default camera. */
+  focusNodeUid: string | null
+}
+
+export function findMemoryLookupKeywordHits(
+  editorState: MindMapEditorState | null,
+  query: string,
+): MemoryLookupKeywordHits {
+  const needle = query.trim().toLocaleLowerCase()
+  if (!needle || !editorState?.editor_doc) return { nodeUids: [], focusNodeUid: null }
+  const rootUid = getRootNodeUid(editorState)
+  const nodeUids = walkEditorNodeLocations(editorState.editor_doc)
+    .filter((location) => stripMindMapHtml(location.storedText).toLocaleLowerCase().includes(needle))
+    .map((location) => location.uid)
+  return {
+    nodeUids,
+    focusNodeUid: nodeUids.find((uid) => uid !== rootUid) ?? null,
+  }
+}
+
+const KEYWORD_MARK_CLASS = 'rounded-sm bg-primary/30 px-0.5'
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/**
+ * Wrap keyword occurrences in the visible text of stored node markup.
+ * Tags and entities are skipped so the markup stays valid.
+ */
+export function markMemoryLookupKeywordInStoredText(storedText: string, keyword: string): string {
+  const needle = keyword.trim()
+  if (!needle) return storedText
+  const pattern = new RegExp(escapeRegExp(needle), 'giu')
+  return storedText
+    .split(/(<[^>]+>|&#?\w+;)/)
+    .map((part, index) => (
+      index % 2 === 1
+        ? part
+        : part.replace(pattern, (match) => `<mark class="${KEYWORD_MARK_CLASS}">${match}</mark>`)
+    ))
+    .join('')
+}
+
+/**
+ * Display-only copy of the palace with the keyword marked on every hit node.
+ * Returns the input state unchanged when nothing matches, so the surface keeps its identity.
+ */
+export function buildMemoryLookupKeywordDisplayState(
+  editorState: MindMapEditorState | null,
+  query: string,
+): MindMapEditorState | null {
+  if (!editorState) return null
+  const { nodeUids } = findMemoryLookupKeywordHits(editorState, query)
+  if (nodeUids.length === 0) return editorState
+  const hitUids = new Set(nodeUids)
+  const doc: unknown = JSON.parse(JSON.stringify(editorState.editor_doc))
+  const visit = (node: unknown) => {
+    if (!node || typeof node !== 'object') return
+    const uid = editorNodeUid(node)
+    const data = (node as { data?: Record<string, unknown> }).data
+    if (uid && hitUids.has(uid) && data && typeof data.text === 'string') {
+      const marked = markMemoryLookupKeywordInStoredText(data.text, query)
+      if (marked !== data.text) {
+        data.text = marked
+        data.richText = true
+      }
+    }
+    const children = (node as { children?: unknown }).children
+    if (Array.isArray(children)) children.forEach(visit)
+  }
+  visit(editorDocRoot(doc))
+  return { ...editorState, editor_doc: doc as MindMapEditorState['editor_doc'] }
 }
 
 export interface MemoryLookupBindingLike {

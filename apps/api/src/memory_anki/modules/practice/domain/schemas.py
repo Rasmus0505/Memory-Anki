@@ -98,6 +98,15 @@ class FreestyleOverlayQuizDropPalacesRequest(BaseModel):
     palace_ids: list[int] = Field(default_factory=list)
 
 
+class FreestyleOverlayQuizSkipPalacesRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    operation_id: str
+    expected_version: int
+    palace_ids: list[int] = Field(default_factory=list)
+    skipped: bool = True
+
+
 class FreestyleRoundRatingRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

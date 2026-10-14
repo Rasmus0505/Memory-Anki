@@ -30,6 +30,8 @@ from memory_anki.modules.practice.domain.overlay_quiz import (
     apply_overlay_progress,
     drop_overlay_for_palaces,
     merge_overlay_quiz,
+    normalize_overlay_quiz,
+    set_overlay_palaces_skipped,
 )
 from memory_anki.modules.practice.domain.round_plan import (
     removed_review_palace_ids,
@@ -98,6 +100,35 @@ def read_round_question_ratings(
     return ratings
 
 
+def _overlay_pack(
+    session: Session,
+    *,
+    round_id: str,
+    plan: dict[str, Any],
+    config: dict[str, Any],
+) -> dict[str, Any]:
+    """Authoritative 做题 pack for this round, with the learner's deletions applied."""
+    skipped = normalize_overlay_quiz(plan.get("overlay_quiz"))["skipped_palace_ids"]
+    return build_overlay_question_pack(
+        session,
+        config,
+        # The round's own review set IS the 做题 scope: the saved config must not
+        # narrow it a second time (see overlay_quiz_service docstring).
+        palace_ids=review_palace_ids(plan),
+        # ...minus palaces whose every card the learner took out with 移除本队列.
+        # Their questions leave with them. A palace with one card still queued
+        # is unaffected.
+        removed_palace_ids=sorted(removed_review_palace_ids(plan)),
+        # ...and palaces the learner deleted from 做题. Review cards are untouched.
+        skipped_palace_ids=skipped,
+        unit_ids=review_unit_ids(plan),
+        waiting_unit_ids=waiting_review_unit_ids(plan),
+        # From the encounter table, not the plan's cached copy: the cache omits
+        # most `rating` values (see list_round_unit_ratings).
+        round_ratings=list_round_unit_ratings(session, round_id),
+    )
+
+
 def ensure_overlay_quiz(
     session: Session,
     *,
@@ -122,21 +153,11 @@ def ensure_overlay_quiz(
     # Stamp the choice onto the pack config without replacing the round's other
     # saved fields. A blank choice must be stored, or the read path would fall
     # back to the default and the two windows would disagree.
-    pack = build_overlay_question_pack(
+    pack = _overlay_pack(
         session,
-        {**incoming, "overlay_rating_inherit": mode},
-        # The round's own review set IS the 做题 scope: the saved config must not
-        # narrow it a second time (see overlay_quiz_service docstring).
-        palace_ids=review_palace_ids(plan),
-        # ...minus palaces whose every card the learner took out with 移除本队列.
-        # Their questions leave with them. A palace with one card still queued
-        # is unaffected.
-        removed_palace_ids=sorted(removed_review_palace_ids(plan)),
-        unit_ids=review_unit_ids(plan),
-        waiting_unit_ids=waiting_review_unit_ids(plan),
-        # From the encounter table, not the plan's cached copy: the cache omits
-        # most `rating` values (see list_round_unit_ratings).
-        round_ratings=list_round_unit_ratings(session, round_id),
+        round_id=round_id,
+        plan=plan,
+        config={**incoming, "overlay_rating_inherit": mode},
     )
     plan["overlay_quiz"] = merge_overlay_quiz(plan.get("overlay_quiz"), **pack)
     op_id = _require_operation_id(operation_id)
@@ -184,6 +205,48 @@ def progress_overlay_quiz(
         completed_ids=list(completed_ids or []),
         states=states if isinstance(states, dict) else {},
     )
+    op_id = _require_operation_id(operation_id)
+    changed = _apply_plan(row, plan, operation_id=op_id)
+    _sync_peer_progress(session, row, op_id)
+    if not changed:
+        row.last_operation_id = op_id
+    if not _commit_operation(session, row, op_id):
+        return _serve(session, row, conflict=True)
+    return _serve(session, row)
+
+
+def set_overlay_skipped_palaces(
+    session: Session,
+    *,
+    round_id: str,
+    operation_id: str,
+    expected_version: int,
+    palace_ids: list[int] | None = None,
+    skipped: bool = True,
+) -> dict[str, Any]:
+    """Delete palaces from 做题 (``skipped=True``) or put them back (``False``).
+
+    Only the 做题 pool is rebuilt. Review cards, ratings and the round's
+    ``excluded_ids`` are not touched, so scheduling and scoring do not change.
+    """
+    row, early = _begin_round_write(
+        session,
+        round_id=round_id,
+        operation_id=operation_id,
+        expected_version=expected_version,
+    )
+    if early is not None:
+        return early
+    assert row is not None
+    plan = _plan_of(row)
+    plan["overlay_quiz"] = set_overlay_palaces_skipped(
+        plan.get("overlay_quiz"),
+        list(palace_ids or []),
+        skipped=skipped,
+    )
+    stored_config = _json_load_object(row.config_json)
+    pack = _overlay_pack(session, round_id=round_id, plan=plan, config=stored_config)
+    plan["overlay_quiz"] = merge_overlay_quiz(plan.get("overlay_quiz"), **pack)
     op_id = _require_operation_id(operation_id)
     changed = _apply_plan(row, plan, operation_id=op_id)
     _sync_peer_progress(session, row, op_id)
