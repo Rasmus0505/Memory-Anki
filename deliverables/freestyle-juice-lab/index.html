@@ -1,0 +1,1024 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>随心模式 · juiciness 样稿 v2</title>
+<style>
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  .squash { animation: squash .4s cubic-bezier(.2,1.6,.4,1); }
+  @keyframes squash { 0%{transform:scale(1,1)} 30%{transform:scale(1.08,.9)} 60%{transform:scale(.97,1.04)} 100%{transform:scale(1,1)} }
+  .pop-in { animation: popin .45s cubic-bezier(.2,1.8,.4,1); }
+  @keyframes popin { 0%{transform:scale(.4)} 60%{transform:scale(1.2)} 100%{transform:scale(1)} }
+  .bounce { animation: bounce .5s cubic-bezier(.2,1.8,.4,1); }
+  @keyframes bounce { 0%{transform:scale(1)} 30%{transform:scale(1.6)} 100%{transform:scale(1)} }
+  .hit { animation: hit .5s cubic-bezier(.2,1.6,.4,1); }
+  @keyframes hit { 0%{transform:scale(1); filter:brightness(1)} 22%{transform:scale(1.12); filter:brightness(1.35)} 55%{transform:scale(.97)} 100%{transform:scale(1); filter:brightness(1)} }
+  .shudder { animation: shudder .5s ease-in-out; }
+  @keyframes shudder { 0%,100%{transform:translateX(0)} 15%{transform:translateX(-12px) rotate(-1.5deg)} 35%{transform:translateX(10px) rotate(1.2deg)} 55%{transform:translateX(-7px)} 75%{transform:translateX(4px)} }
+  .break { animation: brk .5s ease-out; }
+  @keyframes brk { 0%{transform:scale(1.25) rotate(0)} 25%{transform:scale(.6) rotate(-12deg)} 55%{transform:scale(1.1) rotate(6deg)} 100%{transform:scale(1) rotate(0)} }
+  .banner { position: absolute; left: 50%; top: 44px; transform: translateX(-50%) scale(.6); opacity: 0; font-weight: 900; font-size: 24px; padding: 8px 18px; border-radius: 12px; background: var(--accent); color: #fff; z-index: 9; white-space: nowrap; transition: transform .35s cubic-bezier(.2,1.6,.4,1), opacity .3s; pointer-events: none; }
+  .banner.show { opacity: 1; transform: translateX(-50%) scale(1); }
+  body { margin: 0; font-family: system-ui, "Microsoft YaHei", sans-serif; background: #d9d4c7; color: #222; }
+  header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 14px 20px; background: #fff; border-bottom: 1px solid #ccc; position: sticky; top: 0; z-index: 50; }
+  header h1 { font-size: 17px; margin: 0; }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tabs button, .mute, .reset { border: 1px solid #bbb; background: #f7f7f7; border-radius: 999px; padding: 6px 14px; font-size: 14px; cursor: pointer; }
+  .tabs button.on { background: #222; color: #fff; border-color: #222; }
+  .hint { font-size: 12px; color: #666; }
+
+  .lab { max-width: 780px; margin: 22px auto 60px; padding: 18px; border-radius: 22px; background: var(--bg); color: var(--ink); position: relative; overflow: hidden; }
+  .lab[hidden] { display: none; }
+  .lab[data-v="A"] { --bg:#f6efe2; --paper:#fffdf7; --ink:#3b2f22; --accent:#d9822b; --accent2:#f2c46d; --muted:#cdbb9c; }
+  .lab[data-v="B"] { --bg:#0c0d1f; --paper:#17183a; --ink:#f4f1ff; --accent:#ff3d8b; --accent2:#22d3ee; --muted:#3b3f78; }
+  .lab[data-v="C"] { --bg:#efe6d2; --paper:#fbf4e4; --ink:#4a1d26; --accent:#8b1e3f; --accent2:#c9a24a; --muted:#cbb691; }
+  .lab[data-v="D"] { --bg:linear-gradient(160deg,#0e3b43,#1b5e6b); --paper:#f0fbfb; --ink:#0e3b43; --accent:#14b8a6; --accent2:#fbbf24; --muted:#7fc7c0; }
+
+  .desc { font-size: 13px; line-height: 1.6; margin: 0 0 14px; padding: 10px 14px; border-radius: 12px; background: rgba(255,255,255,.55); color: #333; }
+  .lab[data-v="B"] .desc { background: rgba(255,255,255,.06); color: #cfd0f2; }
+  .lab[data-v="D"] .desc { background: rgba(255,255,255,.14); color: #e7fbfa; }
+
+  .hud { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; min-height: 58px; }
+  .rail { flex: 1; display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .seg { height: 12px; border-radius: 6px; background: var(--muted); position: relative; overflow: visible; }
+  .seg i { position: absolute; inset: 0; border-radius: 6px; width: 0; background: var(--accent); transition: width .45s cubic-bezier(.2,1.7,.4,1); }
+  .seg.cur { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .seg.partial i { background: var(--accent2); }
+  .seg.bump { animation: bump .5s cubic-bezier(.2,1.8,.4,1); }
+  .seg.miss i { background: #e5484d; }
+  @keyframes bump { 0%{transform:scaleY(1)} 30%{transform:scaleY(2.1)} 100%{transform:scaleY(1)} }
+  .combo { min-width: 96px; text-align: center; }
+  .combo-num { font-size: 32px; font-weight: 900; color: var(--accent); display: inline-block; line-height: 1; font-variant-numeric: tabular-nums; transform-origin: center; }
+  .combo small { display: block; font-size: 12px; opacity: .7; }
+  .xp { min-width: 150px; display: none; }
+  .lab[data-v="D"] .xp { display: block; }
+  .xp-bar { height: 12px; border-radius: 6px; background: rgba(255,255,255,.3); overflow: visible; position: relative; }
+  .xp-bar i { display: block; height: 100%; width: 0; border-radius: 6px; background: linear-gradient(90deg, var(--accent2), var(--accent)); position: relative; }
+  .xp-bar i::after { content: ''; position: absolute; right: -4px; top: -4px; width: 14px; height: 20px; border-radius: 50%; background: #fff; filter: blur(3px); opacity: .9; }
+  .lvl { font-size: 13px; font-weight: 800; }
+
+  .stage { position: relative; min-height: 330px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 36px 10px 20px; }
+  .lane { position: absolute; top: 4px; left: 0; right: 0; height: 34px; pointer-events: none; z-index: 8; }
+  .pop { position: absolute; left: 50%; top: 0; transform: translateX(-50%); font-weight: 900; white-space: nowrap; font-size: 24px; color: var(--accent); text-shadow: 0 0 12px currentColor, 0 2px 0 rgba(0,0,0,.2); animation: popup 1.2s cubic-bezier(.2,1.4,.4,1) forwards; }
+  @keyframes popup { 0%{opacity:0; transform:translate(-50%,14px) scale(.5)} 18%{opacity:1; transform:translate(-50%,-4px) scale(1.25)} 30%{transform:translate(-50%,0) scale(1)} 85%{opacity:1} 100%{opacity:0; transform:translate(-50%,-26px) scale(1)} }
+  .fx-layer { position: absolute; inset: 0; pointer-events: none; z-index: 6; overflow: hidden; border-radius: 22px; }
+  .fx-layer canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .flash { position: absolute; inset: 0; opacity: 0; }
+  .flash.go { animation: flash .7s ease-out forwards; }
+  @keyframes flash { 0%{opacity:var(--a,.5)} 100%{opacity:0} }
+  .ring { position: absolute; left: 50%; top: 50%; width: 40px; height: 40px; margin: -20px 0 0 -20px; border-radius: 50%; border: 6px solid var(--accent); opacity: 0; }
+  .ring.go { animation: ring .7s cubic-bezier(.1,.7,.3,1) forwards; }
+  @keyframes ring { 0%{opacity:.9; transform:scale(.4)} 100%{opacity:0; transform:scale(9)} }
+
+  .stage-body { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; gap: 14px; width: 100%; }
+  .card-wrap { perspective: 1000px; width: 100%; max-width: 460px; }
+  .card { position: relative; height: 210px; transform-style: preserve-3d; transition: transform .6s cubic-bezier(.3,1.25,.5,1); }
+  .card.flipped { transform: rotateY(180deg); }
+  .card.flip-c { transition-duration: .8s; }
+  .card.wobble { animation: wobble .5s ease-in-out; }
+  @keyframes wobble { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-10px) rotate(-1.5deg)} 45%{transform:translateX(8px) rotate(1deg)} 70%{transform:translateX(-4px)} }
+  .face { position: absolute; inset: 0; border-radius: 18px; background: var(--paper); backface-visibility: hidden; -webkit-backface-visibility: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 18px; box-shadow: 0 12px 26px rgba(0,0,0,.14); border: 1px solid rgba(0,0,0,.07); }
+  .face.back { transform: rotateY(180deg); }
+  .meta { position: absolute; top: 12px; left: 16px; font-size: 12px; opacity: .65; }
+  .frost { font-size: 26px; font-weight: 800; letter-spacing: .12em; color: transparent; background: linear-gradient(100deg, var(--muted) 30%, var(--accent) 50%, var(--muted) 70%); background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; }
+  .card.arming .face.front { animation: arming 6s linear forwards; }
+  @keyframes arming { from { box-shadow: 0 12px 26px rgba(0,0,0,.14), 0 0 0 0 transparent } to { box-shadow: 0 12px 26px rgba(0,0,0,.14), 0 0 0 3px var(--accent) } }
+  .ladder { font-size: 26px; font-weight: 800; letter-spacing: .04em; min-height: 40px; display: flex; flex-wrap: wrap; justify-content: center; }
+  .ladder.empty { display: none; }
+  .ladder span { display: inline-block; animation: charin .35s cubic-bezier(.2,1.8,.4,1) both; }
+  @keyframes charin { 0%{transform:translateY(-14px) scale(.4); opacity:0} 100%{transform:none; opacity:1} }
+  .ladder .tail { font-size: 13px; font-weight: 600; opacity: .6; margin-left: 8px; align-self: center; }
+  .term { font-size: 30px; font-weight: 900; color: var(--accent); }
+  .def { font-size: 14px; margin-top: 8px; opacity: .8; text-align: center; line-height: 1.5; }
+  .face.back .term { animation: termin .5s cubic-bezier(.2,1.6,.4,1) .25s both; }
+  @keyframes termin { 0%{transform:scale(.3); opacity:0} 100%{transform:none; opacity:1} }
+  .stamp { position: absolute; right: 18px; top: 18px; border: 4px solid var(--accent); color: var(--accent); border-radius: 12px; padding: 4px 12px; font-weight: 900; font-size: 20px; opacity: 0; pointer-events: none; z-index: 9; letter-spacing: .08em; }
+  .stamp.go { animation: stampin .5s cubic-bezier(.2,1.5,.4,1) forwards; }
+  @keyframes stampin { 0%{opacity:0; transform:rotate(-14deg) scale(2.6)} 55%{opacity:.95; transform:rotate(-14deg) scale(.9)} 75%{transform:rotate(-14deg) scale(1.04)} 100%{opacity:.9; transform:rotate(-14deg) scale(1)} }
+
+  .cue-row { display: flex; align-items: center; gap: 10px; min-height: 42px; }
+  .chip { border: 0; border-radius: 999px; padding: 9px 18px; font-size: 14px; font-weight: 800; background: var(--accent); color: #fff; cursor: pointer; opacity: 0; transform: scale(.4); pointer-events: none; transition: opacity .2s, transform .35s cubic-bezier(.2,1.8,.4,1); box-shadow: 0 6px 0 rgba(0,0,0,.18); }
+  .chip.show { opacity: 1; transform: scale(1); pointer-events: auto; }
+  .chip.show:active { transform: scale(.9) translateY(3px); box-shadow: 0 2px 0 rgba(0,0,0,.18); }
+  .chip:disabled { background: var(--muted); color: var(--ink); box-shadow: none; }
+  .dots span { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-left: 4px; background: rgba(255,255,255,.55); transition: transform .3s; }
+  .dots span.on { background: #fff; transform: scale(1.35); }
+  .cue-hint { font-size: 12px; opacity: .6; }
+
+  .ratings { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 18px; }
+  .ratings button { position: relative; overflow: hidden; border: 0; border-radius: 14px; padding: 14px 6px; font-size: 15px; font-weight: 800; background: var(--paper); color: var(--ink); box-shadow: 0 5px 0 rgba(0,0,0,.16); cursor: pointer; transition: transform .12s, background .2s, opacity .3s; }
+  .ratings button:active { transform: translateY(4px); box-shadow: 0 1px 0 rgba(0,0,0,.16); }
+  .ratings button small { display: block; font-size: 11px; opacity: .6; font-weight: 400; }
+  .ratings button.picked { background: var(--accent); color: #fff; transform: scale(1.06) translateY(-3px); box-shadow: 0 9px 0 rgba(0,0,0,.2); animation: pick .45s cubic-bezier(.2,1.8,.4,1); }
+  .ratings button.dim { opacity: .35; transform: scale(.94); }
+  .ratings button.bad.picked { background: #e5484d; }
+  .ratings button:disabled { cursor: default; }
+  .ratings button .ripple { position: absolute; border-radius: 50%; background: rgba(255,255,255,.6); transform: scale(0); animation: ripple .55s ease-out forwards; pointer-events: none; }
+  @keyframes ripple { to { transform: scale(4); opacity: 0; } }
+  @keyframes pick { 0%{transform:scale(.9)} 60%{transform:scale(1.12) translateY(-5px)} 100%{transform:scale(1.06) translateY(-3px)} }
+
+  .summary { display: none; text-align: center; padding: 26px 20px; border-radius: 18px; background: var(--paper); color: var(--ink); position: relative; overflow: hidden; }
+  .summary.show { display: block; }
+  .summary .big { font-size: 46px; font-weight: 900; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .summary .row { display: flex; justify-content: space-around; margin-top: 14px; font-size: 13px; flex-wrap: wrap; gap: 8px; }
+  .summary .stat b { font-size: 22px; font-variant-numeric: tabular-nums; display: block; }
+  /* 翻卡：背面扫过一道光 */
+  .face { overflow: hidden; }
+  .face.back::after { content: ''; position: absolute; inset: 0; background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,.7) 50%, transparent 60%); transform: translateX(-120%); pointer-events: none; }
+  .card.flipped .face.back::after { animation: sheen .75s ease-out .3s forwards; }
+  @keyframes sheen { to { transform: translateX(120%); } }
+  .lift { animation: lift .22s ease-out; }
+  @keyframes lift { 0%{transform:translateY(0) scale(1)} 100%{transform:translateY(-10px) scale(1.04)} }
+  /* 收卡：托盘与飞行卡 */
+  .tray { display: flex; justify-content: center; gap: 8px; margin-top: 16px; }
+  .slot { width: 74px; height: 46px; border-radius: 10px; border: 2px dashed var(--muted); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; color: var(--ink); opacity: .55; position: relative; }
+  .slot.in { opacity: 1; border-style: solid; background: var(--paper); border-color: var(--accent); box-shadow: 0 3px 0 rgba(0,0,0,.14); }
+  .slot.in.miss { border-color: #e5484d; }
+  .slot.land { animation: land .5s cubic-bezier(.2,1.8,.4,1); }
+  @keyframes land { 0%{transform:scale(1.5) rotate(-6deg)} 60%{transform:scale(.92)} 100%{transform:scale(1)} }
+  .gone { opacity: 0 !important; transform: scale(.85) !important; transition: opacity .18s, transform .18s !important; }
+  .flyer { position: absolute; z-index: 7; border-radius: 12px; background: var(--paper); border: 2px solid var(--accent); color: var(--accent); font-weight: 900; font-size: 16px; display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 22px rgba(0,0,0,.25); pointer-events: none; white-space: nowrap; }
+  .flyer.orb { border-radius: 50%; width: 28px !important; height: 28px !important; font-size: 0; background: radial-gradient(circle, #fff 0 25%, var(--accent) 60%); border: 0; box-shadow: 0 0 18px var(--accent); }
+  .album { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 18px; }
+  .album .slot { width: 96px; height: 60px; opacity: 1; font-size: 13px; animation: charin .4s cubic-bezier(.2,1.6,.4,1) both; }
+  .reset { margin-top: 16px; }
+  .lab .reset { display: inline-block; }
+</style>
+</head>
+<body>
+<header>
+  <h1>随心模式 · juiciness 样稿 v2</h1>
+  <div class="tabs" id="tabs"></div>
+  <div><button class="mute" id="mute">声音：开</button></div>
+  <div class="hint">键盘：1–4 评分 · H 线索 · 停留 6 秒线索自动出现 · 首次点击页面后才发声</div>
+</header>
+<div id="labs"></div>
+
+<script>
+// ---------- content ----------
+const CARDS = [
+  { term: '安全库存', def: '为应对需求与交期波动而额外备的最低库存量。' },
+  { term: '牛鞭效应', def: '需求信息逐级放大，越往上游波动越大。' },
+  { term: '经济订货量', def: '让订货与持有成本之和最小的每次订货量。' },
+  { term: 'ABC分类法', def: '按价值把库存分为 A、B、C 三类分别管理。' },
+  { term: '零库存管理', def: '通过准时化配送，把库存压到接近零。' },
+];
+const IDLE_MS = 6000;
+const RATINGS = [
+  { g: 1, label: '忘记', key: '1', bad: true },
+  { g: 2, label: '困难', key: '2', bad: true },
+  { g: 3, label: '记得', key: '3' },
+  { g: 4, label: '轻松', key: '4' },
+];
+
+// Same ladder rule as shared/ui/mindmap-canvas/recallCueLadder.ts
+function prefixLengths(s) {
+  const n = Array.from(s).length;
+  if (n < 2) return [];
+  const steps = [1, Math.ceil(n / 3), Math.ceil((2 * n) / 3)];
+  return [...new Set(steps)].filter((l) => l >= 1 && l < n);
+}
+function ladderChars(s, level) {
+  const chars = Array.from(s);
+  const lens = prefixLengths(s);
+  const k = Math.min(level, lens.length);
+  const shown = k > 0 ? lens[k - 1] : 0;
+  return chars.map((c, i) => (i < shown || /\s/.test(c) ? c : '□'));
+}
+const unitOf = (s) => (/[㐀-鿿]/.test(s) ? '字' : ' 字符');
+
+// ---------- audio ----------
+let ctx = null;
+let muted = false;
+let noiseBuf = null;
+function audio() {
+  if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+  if (ctx.state === 'suspended') ctx.resume();
+  return ctx;
+}
+function noiseBurst(durSec, gain, freq) {
+  const c = audio();
+  if (!noiseBuf) {
+    noiseBuf = c.createBuffer(1, c.sampleRate * 0.5, c.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  const src = c.createBufferSource();
+  const f = c.createBiquadFilter();
+  const g = c.createGain();
+  src.buffer = noiseBuf;
+  f.type = 'bandpass';
+  f.frequency.value = freq;
+  g.gain.setValueAtTime(gain, c.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + durSec);
+  src.connect(f).connect(g).connect(c.destination);
+  src.start();
+  src.stop(c.currentTime + durSec + 0.02);
+}
+// notes: [freq, durationSec, type, gain, delayMs]
+function play(notes) {
+  if (muted || !notes || !notes.length) return;
+  const c = audio();
+  const t0 = c.currentTime;
+  notes.forEach(([f, d, type, v, delay]) => {
+    const o = c.createOscillator();
+    const g = c.createGain();
+    const s = t0 + delay / 1000;
+    o.type = type;
+    o.frequency.value = f;
+    g.gain.setValueAtTime(0.0001, s);
+    g.gain.exponentialRampToValueAtTime(v, s + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, s + d);
+    o.connect(g).connect(c.destination);
+    o.start(s);
+    o.stop(s + d + 0.03);
+  });
+}
+
+// Each version owns its palette of sounds; the engine asks for events by tier.
+const SFX = {
+  A: {
+    ready: () => [[784, 0.1, 'sine', 0.1, 0], [988, 0.14, 'sine', 0.09, 80]],
+    step: (l) => [[[523, 659, 784][l - 1] || 523, 0.14, 'sine', 0.14, 0]],
+    strong: () => [[523, 0.12, 'sine', 0.16, 0], [659, 0.12, 'sine', 0.16, 80], [784, 0.25, 'sine', 0.16, 160]],
+    mid: () => [[587, 0.14, 'sine', 0.13, 0], [740, 0.22, 'sine', 0.12, 90]],
+    miss: () => [[330, 0.22, 'sine', 0.12, 0]],
+    level: () => [[659, 0.2, 'sine', 0.14, 0], [988, 0.3, 'sine', 0.14, 140]],
+  },
+  B: {
+    ready: () => [[880, 0.06, 'square', 0.08, 0], [1320, 0.06, 'square', 0.08, 60]],
+    step: (l) => [[[660, 880, 1100][l - 1] || 660, 0.08, 'square', 0.1, 0]],
+    strong: (combo) => {
+      const base = 440 * Math.pow(2, Math.min(combo, 12) / 12);
+      return [[base, 0.07, 'square', 0.12, 0], [base * 1.5, 0.07, 'square', 0.12, 55], [base * 2, 0.16, 'square', 0.12, 110]];
+    },
+    mid: () => [[660, 0.08, 'square', 0.1, 0], [880, 0.12, 'square', 0.1, 70]],
+    miss: () => [[160, 0.3, 'sawtooth', 0.12, 0], [120, 0.3, 'sawtooth', 0.1, 120]],
+    milestone: () => [[660, 0.08, 'square', 0.14, 0], [990, 0.08, 'square', 0.14, 70], [1320, 0.24, 'square', 0.14, 140]],
+    level: () => [[523, 0.1, 'square', 0.12, 0], [784, 0.1, 'square', 0.12, 80], [1046, 0.3, 'square', 0.12, 160]],
+  },
+  C: {
+    ready: () => [[659, 0.2, 'triangle', 0.12, 0]],
+    step: (l) => [[[392, 494, 587][l - 1] || 392, 0.25, 'triangle', 0.14, 0]],
+    strong: () => [[523, 0.25, 'triangle', 0.16, 0], [659, 0.25, 'triangle', 0.16, 110], [784, 0.25, 'triangle', 0.16, 220], [1047, 0.5, 'triangle', 0.15, 330]],
+    mid: () => [[587, 0.25, 'triangle', 0.14, 0], [784, 0.35, 'triangle', 0.14, 120]],
+    miss: () => [[262, 0.4, 'triangle', 0.12, 0]],
+    level: () => [[523, 0.3, 'triangle', 0.16, 0], [784, 0.3, 'triangle', 0.16, 150], [1047, 0.6, 'triangle', 0.16, 300]],
+  },
+  D: {
+    ready: () => [[440, 0.1, 'sine', 0.1, 0]],
+    step: (l) => [[330 + l * 60, 0.12, 'sawtooth', 0.06, 0]],
+    strong: () => [[300, 0.08, 'sawtooth', 0.07, 0], [400, 0.08, 'sawtooth', 0.07, 40], [530, 0.08, 'sawtooth', 0.07, 80], [710, 0.08, 'sawtooth', 0.07, 120], [940, 0.22, 'sawtooth', 0.07, 160]],
+    mid: () => [[400, 0.08, 'sawtooth', 0.07, 0], [530, 0.14, 'sawtooth', 0.07, 60]],
+    miss: () => [[200, 0.3, 'sawtooth', 0.08, 0]],
+    level: () => [[392, 0.12, 'sawtooth', 0.1, 0], [523, 0.12, 'sawtooth', 0.1, 110], [659, 0.12, 'sawtooth', 0.1, 220], [784, 0.4, 'sawtooth', 0.1, 330]],
+  },
+};
+
+// 收卡的落点音：每个版本一种质感
+const COLLECT_SFX = {
+  A: [[880, 0.12, 'sine', 0.12, 0]],
+  B: [[1200, 0.08, 'square', 0.1, 0], [300, 0.2, 'square', 0.08, 40]],
+  C: [[1047, 0.3, 'triangle', 0.12, 0]],
+  D: [[600, 0.06, 'sawtooth', 0.08, 0], [900, 0.1, 'sawtooth', 0.08, 50]],
+};
+// 翻卡的缓动：回弹程度不同
+const FLIP_EASE = {
+  A: 'cubic-bezier(.3,1.15,.5,1)',
+  B: 'cubic-bezier(.2,1.6,.4,1)',
+  C: 'cubic-bezier(.45,.05,.3,1.02)',
+  D: 'cubic-bezier(.3,1.3,.5,1)',
+};
+
+// ---------- per-version juice profiles ----------
+// Every version runs the same engine; the numbers and shapes decide the character.
+const VERSIONS = {
+  A: {
+    name: '克制打磨',
+    desc: '果冻挤压、冲击环、音阶。没有抖屏、没有闪光，数字轻弹。强度最低，适合长时间刷；但每次评分仍然能感觉到“落下去”。',
+    hitstop: 0, shake: 0, flash: 0, ring: 1, shapes: ['dot'], particles: { strong: 40, mid: 16, miss: 0 }, glow: false,
+    palette: ['#d9822b', '#f2c46d', '#fffdf7'], comboFont: 1.0, stamp: false, banner: false, xp: false, flipMs: 600, wobble: 0.6, gravity: 0.18, life: 0.9,
+  },
+  B: {
+    name: '街机连击',
+    desc: '连击是主角：击中时停顿 90ms、强抖屏、整屏闪光、火花四射。连击数字随连击越长越大，每 3 连击砸出里程碑横幅。忘记会断连并整屏变红。',
+    hitstop: 90, shake: 16, flash: 0.8, ring: 2, shapes: ['spark', 'dot'], particles: { strong: 170, mid: 50, miss: 0 }, glow: true,
+    palette: ['#ff3d8b', '#22d3ee', '#fde047', '#ffffff'], comboFont: 1.0, stamp: false, banner: true, xp: false, flipMs: 420, wobble: 1.4, gravity: 0.28, life: 0.7,
+  },
+  C: {
+    name: '翻牌收藏',
+    desc: '每次评分都盖一枚印章：印章从大砸到小，墨迹冲击环扩散，金粉缓缓落下。翻面带一点纸的晃动，音如音乐盒。风格偏“收藏”，节奏慢。',
+    hitstop: 60, shake: 3, flash: 0.3, ring: 1, shapes: ['chip'], particles: { strong: 60, mid: 22, miss: 0 }, glow: false,
+    palette: ['#8b1e3f', '#c9a24a', '#f4e4bc'], comboFont: 1.0, stamp: true, banner: false, xp: false, flipMs: 800, wobble: 0.3, gravity: 0.06, life: 1.6,
+  },
+  D: {
+    name: '成长槽',
+    desc: '每个回忆都给经验：独立想起的经验更多，连续独立想起会乘倍率。经验条带亮边往前走，数字滚动计数；满槽升级时金币迸出、横幅砸下。',
+    hitstop: 40, shake: 8, flash: 0.5, ring: 2, shapes: ['coin'], particles: { strong: 110, mid: 36, miss: 0 }, glow: true,
+    palette: ['#fbbf24', '#14b8a6', '#ffffff'], comboFont: 1.0, stamp: false, banner: true, xp: true, flipMs: 560, wobble: 0.8, gravity: 0.22, life: 1.0,
+  },
+};
+
+const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// Animate a number from `from` to `to` over `ms`.
+function tween(from, to, ms, onUpdate) {
+  const t0 = performance.now();
+  const step = (now) => {
+    const k = Math.min(1, (now - t0) / ms);
+    const eased = 1 - Math.pow(1 - k, 3);
+    onUpdate(from + (to - from) * eased);
+    if (k < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+// Restart a CSS animation class on an element.
+function kick(el, cls) {
+  el.classList.remove(cls);
+  void el.offsetWidth;
+  el.classList.add(cls);
+}
+
+// ---------- particles (demo only; production goes through the fx layer) ----------
+class Particles {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.items = [];
+    this.raf = null;
+    this.gravity = 0.2;
+    this.life = 1;
+  }
+  resize() {
+    const r = this.canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    this.canvas.width = r.width * dpr;
+    this.canvas.height = r.height * dpr;
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  burst(x, y, count, { palette, shapes, spread = 1, speed = 1, gravity = 0.2, life = 1, glow = false }) {
+    if (reduceMotion || count <= 0) return;
+    this.gravity = gravity;
+    this.life = life;
+    this.glow = glow;
+    this.resize();
+    for (let i = 0; i < count; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const v = (4 + Math.random() * 10) * speed * spread;
+      this.items.push({
+        x, y,
+        vx: Math.cos(a) * v,
+        vy: Math.sin(a) * v - 5 * speed,
+        rot: Math.random() * 6,
+        vr: (Math.random() - 0.5) * 0.5,
+        size: 6 + Math.random() * 10,
+        color: palette[i % palette.length],
+        shape: shapes[i % shapes.length],
+        life: 1,
+        decay: (0.01 + Math.random() * 0.01) / this.life,
+      });
+    }
+    if (!this.raf) this.tick();
+  }
+  tick() {
+    const c = this.ctx;
+    c.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    this.items = this.items.filter((p) => p.life > 0);
+    for (const p of this.items) {
+      p.vy += this.gravity;
+      p.vx *= 0.985;
+      p.x += p.vx;
+      p.y += p.vy;
+      p.rot += p.vr;
+      p.life -= p.decay;
+      c.save();
+      c.globalAlpha = Math.max(0, Math.min(1, p.life));
+      if (this.glow) { c.shadowBlur = 12; c.shadowColor = p.color; }
+      c.translate(p.x, p.y);
+      c.rotate(p.rot);
+      c.fillStyle = p.color;
+      if (p.shape === 'spark') {
+        c.fillRect(-p.size * 0.12, -p.size * 1.3, p.size * 0.24, p.size * 2.6);
+      } else if (p.shape === 'chip') {
+        c.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2);
+      } else if (p.shape === 'coin') {
+        c.beginPath();
+        c.ellipse(0, 0, p.size * 0.6, Math.max(1, p.size * 0.6 * Math.abs(Math.cos(p.rot * 2))), 0, 0, Math.PI * 2);
+        c.fill();
+      } else {
+        c.beginPath();
+        c.arc(0, 0, p.size * 0.5, 0, Math.PI * 2);
+        c.fill();
+      }
+      c.restore();
+    }
+    this.raf = this.items.length ? requestAnimationFrame(() => this.tick()) : null;
+  }
+}
+
+// ---------- one playable lab per version ----------
+class Lab {
+  constructor(key, root) {
+    this.key = key;
+    this.p = VERSIONS[key];
+    this.sfx = SFX[key];
+    this.root = root;
+    this.el = (q) => root.querySelector(q);
+    this.particles = new Particles(this.el('.fx-layer canvas'));
+    this.token = 0;
+    this.idleTimer = null;
+    this.shakeRaf = null;
+    this.bindUi();
+    this.start();
+  }
+
+  bindUi() {
+    this.el('.chip').addEventListener('click', () => this.cue());
+    this.el('.ratings').addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-g]');
+      if (b && !b.disabled) this.rate(Number(b.dataset.g), b);
+    });
+  }
+
+  start() {
+    this.token++;
+    clearTimeout(this.idleTimer);
+    cancelAnimationFrame(this.shakeRaf);
+    this.i = 0;
+    this.combo = 0;
+    this.bestCombo = 0;
+    this.xp = 0;
+    this.lv = 1;
+    this.stats = { unaided: 0, assisted: 0, cueSteps: 0 };
+    this.el('.summary').classList.remove('show');
+    this.el('.stage-body').hidden = false;
+    this.el('.ratings').hidden = false;
+    this.el('.tray').hidden = false;
+    this.el('.rail').querySelectorAll('.seg').forEach((s) => { s.className = 'seg'; s.querySelector('i').style.width = ''; });
+    this.el('.tray').querySelectorAll('.slot').forEach((s) => { s.className = 'slot'; s.textContent = '·'; });
+    this.results = [];
+    this.renderCard();
+    this.renderHud(false);
+  }
+
+  get card() { return CARDS[this.i]; }
+
+  renderCard() {
+    const t = this.token;
+    this.cueLevel = 0;
+    this.usedCue = false;
+    this.revealed = false;
+    const cardEl = this.el('.card');
+    // Snap the card back to its front without a reverse flip animation.
+    cardEl.style.transition = 'none';
+    cardEl.classList.remove('flipped', 'arming', 'wobble', 'ready');
+    this.el('.card-wrap').classList.remove('gone');
+    void cardEl.offsetWidth;
+    cardEl.style.transition = '';
+    cardEl.style.transitionDuration = '';
+    this.el('.face.back').querySelector('.term').style.animation = '';
+    this.el('.idx').textContent = this.i + 1;
+    this.el('.term').textContent = this.card.term;
+    this.el('.def').textContent = this.card.def;
+    this.el('.frost').textContent = '待回忆';
+    this.el('.frost').style.display = '';
+    this.el('.ladder').innerHTML = '';
+    this.el('.ladder').classList.add('empty');
+    this.el('.chip').classList.remove('show');
+    this.el('.chip').disabled = false;
+    this.el('.chip').firstChild.textContent = '线索 ';
+    this.el('.dots').innerHTML = '<span></span><span></span><span></span>';
+    this.el('.rail').querySelectorAll('.seg')[this.i].classList.add('cur');
+    this.el('.ratings').querySelectorAll('button').forEach((b) => { b.disabled = false; b.className = b.dataset.bad ? 'bad' : ''; });
+    void cardEl.offsetWidth;
+    cardEl.classList.add('arming');
+    this.idleTimer = setTimeout(() => {
+      if (t === this.token && !this.revealed) this.showChip();
+    }, IDLE_MS);
+  }
+
+  showChip() {
+    this.el('.card').classList.add('ready');
+    const chip = this.el('.chip');
+    chip.classList.add('show');
+    kick(chip, 'pop-in');
+    play(this.sfx.ready());
+  }
+
+  cue() {
+    if (this.revealed) return;
+    const max = prefixLengths(this.card.term).length;
+    if (this.cueLevel >= max) return;
+    this.cueLevel++;
+    this.usedCue = true;
+    this.stats.cueSteps++;
+    const ladder = this.el('.ladder');
+    ladder.classList.remove('empty');
+    this.el('.frost').style.display = 'none';
+    // Characters are rebuilt so the newly revealed ones spring in with a stagger.
+    ladder.innerHTML = '';
+    const chars = ladderChars(this.card.term, this.cueLevel);
+    const shownCount = chars.filter((c) => c !== '□' && !/\s/.test(c)).length;
+    chars.forEach((c, idx) => {
+      const s = document.createElement('span');
+      s.textContent = c;
+      s.style.color = c === '□' ? 'var(--muted)' : 'var(--ink)';
+      s.style.animationDelay = (idx * 40) + 'ms';
+      ladder.appendChild(s);
+    });
+    const tail = document.createElement('span');
+    tail.className = 'tail';
+    tail.textContent = `${chars.length}${unitOf(this.card.term)}`;
+    ladder.appendChild(tail);
+    const dots = this.el('.dots').querySelectorAll('span');
+    dots.forEach((d, idx) => d.classList.toggle('on', idx < this.cueLevel));
+    if (this.cueLevel >= max) {
+      this.el('.chip').disabled = true;
+      this.el('.chip').firstChild.textContent = '线索给全了 ';
+    }
+    kick(this.el('.chip'), 'squash');
+    play(this.sfx.step(this.cueLevel));
+    this.popText(`线索 ${this.cueLevel}/${max}`, 'var(--accent2)');
+    void shownCount;
+  }
+
+  // Button press → hitstop → outcome. The press itself must already feel like a press.
+  rate(g, btn) {
+    if (this.revealed) return;
+    this.revealed = true;
+    clearTimeout(this.idleTimer);
+    const t = this.token;
+    const good = g >= 3;
+    const unaided = good && !this.usedCue;
+    const tier = !good ? 'miss' : unaided ? 'strong' : 'mid';
+
+    this.el('.ratings').querySelectorAll('button').forEach((b) => {
+      b.disabled = true;
+      b.classList.toggle('dim', b !== btn);
+    });
+    btn.classList.remove('dim');
+    btn.classList.add('picked');
+    this.ripple(btn);
+    kick(this.el('.card-wrap'), 'squash');
+
+    this.stats.rated = (this.stats.rated || 0) + 1;
+    if (unaided) this.stats.unaided++;
+    (this.results = this.results || [])[this.i] = { term: this.card.term, good, unaided };
+    if (good && !unaided) this.stats.assisted++;
+    if (good) this.combo = unaided ? this.combo + 1 : this.combo;
+    else this.combo = 0;
+    this.bestCombo = Math.max(this.bestCombo, this.combo);
+
+    const hitstop = reduceMotion ? 0 : this.p.hitstop;
+    setTimeout(() => {
+      if (t !== this.token) return;
+      this.resolve({ g, good, unaided, tier, btn });
+    }, hitstop);
+
+    setTimeout(() => {
+      if (t !== this.token) return;
+      this.advance();
+    }, 1900);
+  }
+
+  resolve({ g, good, unaided, tier, btn }) {
+    const p = this.p;
+    const card = this.el('.card');
+    const stage = this.el('.stage');
+    const rect = card.getBoundingClientRect();
+    const sRect = stage.getBoundingClientRect();
+    const cx = rect.left - sRect.left + rect.width / 2;
+    const cy = rect.top - sRect.top + rect.height / 2;
+
+    // 翻卡：先提起一下，再翻转（每个版本的缓动和时长不同）
+    kick(this.el('.card-wrap'), 'lift');
+    card.style.transition = `transform ${p.flipMs}ms ${FLIP_EASE[this.key]}`;
+    card.classList.add('flipped');
+    setTimeout(() => { if (this.revealed) this.revealBurst(); }, p.flipMs * 0.55);
+    // 收卡：翻完之后飞进托盘
+    setTimeout(() => this.collect(good, tier, unaided), p.flipMs + 220);
+    // The wobble goes on the wrapper: on the card itself it would fight the rotateY flip.
+    if (good) kick(this.el('.card-wrap'), 'hit');
+    else kick(this.el('.card-wrap'), 'shudder');
+    if (p.stamp) this.stamp(good, unaided);
+
+    // Segment on the progress rail.
+    const seg = this.el('.rail').querySelectorAll('.seg')[this.i];
+    seg.classList.remove('cur');
+    if (good && !unaided) seg.classList.add('partial');
+    if (!good) seg.classList.add('miss');
+    seg.querySelector('i').style.width = good ? '100%' : '40%';
+    kick(seg, 'bump');
+
+    if (tier === 'strong') {
+      play(this.sfx.strong(this.combo));
+      this.impact({ cx, cy, scale: 1, color: p.palette });
+    } else if (tier === 'mid') {
+      play(this.sfx.mid());
+      this.impact({ cx, cy, scale: 0.45, color: p.palette.slice(0, 2) });
+    } else {
+      play(this.sfx.miss());
+      this.impact({ cx, cy, scale: 0, color: ['#e5484d'] });
+      this.shake(p.shake * 0.5, 240);
+    }
+
+    // Labels.
+    if (tier === 'strong' && !p.xp) {
+      this.popText(this.combo > 1 ? `独立 ×${this.combo}` : '独立想起', 'var(--accent)');
+    }
+    if (tier === 'mid') this.popText('有线索 · 不计连击', 'var(--accent2)');
+    if (tier === 'miss') this.popText(this.combo === 0 && this.bestCombo > 0 ? '断连' : '再来', '#e5484d');
+
+    // Combo and XP.
+    if (good) {
+      this.renderHud(true);
+    } else {
+      this.renderHud(true, true);
+    }
+    if (p.xp) this.gainXp(good, unaided, { cx, cy });
+
+    if (tier === 'strong' && p.comboFont && this.combo > 0) this.checkMilestone({ cx, cy });
+    if (tier === 'strong' && this.combo >= 2) kick(this.el('.combo-num'), 'bounce');
+  }
+
+  xpGain(unaided) {
+    return unaided ? 10 * Math.min(Math.max(1, this.combo), 5) : 4;
+  }
+
+  gainXp(good, unaided, at) {
+    if (!good) return;
+    const gain = this.xpGain(unaided);
+    this.xp += gain;
+    const need = this.lv * 40;
+    const from = this.xp - gain;
+    const bar = this.el('.xp-bar i');
+    const lvlEl = this.el('.lvl');
+    const cap = Math.min(this.xp, need);
+    bar.style.transition = 'width .7s cubic-bezier(.2,1.2,.4,1)';
+    bar.style.width = Math.min(100, (cap / need) * 100) + '%';
+    tween(from, this.xp, 700, (v) => { lvlEl.textContent = `Lv ${this.lv} · ${Math.floor(v)} XP`; });
+    if (this.xp >= need) {
+      this.xp -= need;
+      this.lv++;
+      setTimeout(() => {
+        play(this.sfx.level());
+        this.banner(`升级 · Lv ${this.lv}`);
+        this.shake(this.p.shake * 1.2, 380);
+        this.flash('#fde047');
+        this.ring(at.cx, at.cy, '#fbbf24', 2);
+        this.burst(at.cx, at.cy, Math.round(this.p.particles.strong * 1.6), 1.5);
+        bar.style.transition = 'none';
+        bar.style.width = '0%';
+        void bar.offsetWidth;
+        bar.style.transition = 'width .7s';
+        bar.style.width = Math.min(100, (this.xp / (this.lv * 40)) * 100) + '%';
+      }, 350);
+    }
+    this.popText(`+${gain} XP`, 'var(--accent)');
+  }
+
+  checkMilestone(at) {
+    const p = this.p;
+    if (!p.banner || this.combo % 3 !== 0) return;
+    setTimeout(() => {
+      play(this.sfx.milestone ? this.sfx.milestone() : this.sfx.strong(this.combo));
+      this.banner(`连击 ×${this.combo}！`);
+      this.shake(p.shake * 1.1, 380);
+      this.flash('#22d3ee');
+      this.ring(at.cx, at.cy, '#22d3ee', 2);
+    }, 220);
+  }
+
+  // Shared impact kit: flash + ring + particles + shake, all scaled by `scale` (0 = none).
+  impact({ cx, cy, scale, color }) {
+    const p = this.p;
+    if (reduceMotion) return;
+    const n = Math.round((tierCount(this.key, scale) || 0) * Math.min(1, 0.5 + this.combo * 0.12));
+    if (scale > 0) {
+      if (p.flash) this.flash(color[0], p.flash * scale);
+      if (p.ring) this.ring(cx, cy, color[0], p.ring);
+      this.shake(p.shake * scale, 300);
+      this.burst(cx, cy, n, scale);
+    }
+  }
+
+  burst(cx, cy, count, scale) {
+    const p = this.p;
+    this.particles.burst(cx, cy, count, {
+      palette: this.p.palette,
+      shapes: p.shapes,
+      spread: 0.6 + scale * 0.6,
+      speed: 0.8 + scale * 0.5,
+      gravity: p.gravity,
+      life: p.life,
+      glow: p.glow,
+    });
+  }
+
+  flash(color, alpha = 0.5) {
+    if (reduceMotion || !alpha) return;
+    const f = document.createElement('div');
+    f.className = 'flash go';
+    f.style.background = `radial-gradient(circle at 50% 45%, ${color} 0%, transparent 70%)`;
+    f.style.setProperty('--a', alpha);
+    this.el('.fx-layer').appendChild(f);
+    setTimeout(() => f.remove(), 480);
+  }
+
+  ring(x, y, color, weight) {
+    if (reduceMotion) return;
+    const r = document.createElement('div');
+    r.className = 'ring go';
+    r.style.left = x + 'px';
+    r.style.top = y + 'px';
+    r.style.borderColor = color;
+    r.style.borderWidth = (weight * 3) + 'px';
+    this.el('.fx-layer').appendChild(r);
+    setTimeout(() => r.remove(), 720);
+  }
+
+  // Decaying random shake applied to the whole stage; time-based so it stays smooth.
+  shake(px, ms) {
+    if (reduceMotion || px <= 0) return;
+    const stage = this.el('.stage-body');
+    const t0 = performance.now();
+    cancelAnimationFrame(this.shakeRaf);
+    const step = (now) => {
+      const k = (now - t0) / ms;
+      if (k >= 1) { stage.style.transform = ''; return; }
+      const amp = px * (1 - k);
+      stage.style.transform = `translate(${(Math.random() * 2 - 1) * amp}px, ${(Math.random() * 2 - 1) * amp}px)`;
+      this.shakeRaf = requestAnimationFrame(step);
+    };
+    this.shakeRaf = requestAnimationFrame(step);
+  }
+
+  ripple(btn) {
+    const r = document.createElement('span');
+    r.className = 'ripple';
+    const size = Math.max(btn.offsetWidth, btn.offsetHeight);
+    r.style.width = r.style.height = size + 'px';
+    r.style.left = r.style.top = (btn.offsetWidth / 2 - size / 2) + 'px';
+    btn.appendChild(r);
+    setTimeout(() => r.remove(), 600);
+  }
+
+  stamp(good, unaided) {
+    const s = document.createElement('div');
+    s.className = 'stamp';
+    s.textContent = !good ? '再来' : unaided ? '独立记得' : '记得·线索';
+    this.el('.card-wrap').appendChild(s);
+    requestAnimationFrame(() => s.classList.add('go'));
+    setTimeout(() => s.remove(), 1400);
+  }
+
+  popText(text, color) {
+    const host = this.el('.lane');
+    const d = document.createElement('div');
+    d.className = 'pop';
+    d.textContent = text;
+    d.style.color = color;
+    d.style.left = (50 + (Math.random() * 30 - 15)) + '%';
+    host.appendChild(d);
+    setTimeout(() => d.remove(), 1250);
+  }
+
+  banner(text) {
+    if (!this.p.banner) return;
+    const b = this.el('.banner');
+    b.textContent = text;
+    b.classList.remove('show');
+    void b.offsetWidth;
+    b.classList.add('show');
+    clearTimeout(this._bannerT);
+    this._bannerT = setTimeout(() => b.classList.remove('show'), 1100);
+  }
+
+  renderHud(animate, broke = false) {
+    const n = this.el('.combo-num');
+    const from = Number(n.textContent) || 0;
+    const to = this.combo;
+    const scale = 1 + Math.min(this.combo, 10) * 0.07 * this.p.comboFont;
+    n.style.fontSize = (32 * scale) + 'px';
+    this.el('.combo small').textContent = this.key === 'D' ? '连续独立' : '连击';
+    if (animate && from !== to) {
+      tween(from, to, 260, (v) => { n.textContent = Math.round(v); });
+    } else {
+      n.textContent = to;
+    }
+    if (broke) kick(n, 'break');
+  }
+
+  // 翻卡落定时的光爆：只从背面标题的位置出，A 版几乎不出
+  revealBurst() {
+    if (reduceMotion || this.key === 'A') return;
+    const r = this.coords(this.el('.face.back .term'));
+    this.burst(r.cx, r.cy, this.key === 'B' ? 40 : 22, 0.7);
+  }
+
+  // 相对舞台的坐标（飞行卡和托盘都在舞台内定位）
+  coords(el) {
+    const s = this.el('.stage').getBoundingClientRect();
+    const r = el.getBoundingClientRect();
+    return { cx: r.left - s.left + r.width / 2, cy: r.top - s.top + r.height / 2 };
+  }
+
+  // 收卡：卡片变成飞行卡，弧线飞进托盘对应槽位（D 版变成金色光球飞向经验条）
+  collect(good, tier) {
+    if (!this.revealed) return;
+    const t = this.token;
+    const idx = this.i;
+    const orb = this.key === 'D';
+    const from = this.coords(this.el('.card'));
+    const slot = this.el('.tray').children[idx];
+    const to = orb ? this.coords(this.el('.xp-bar')) : this.coords(slot);
+    this.el('.card-wrap').classList.add('gone');
+
+    const fly = document.createElement('div');
+    fly.className = 'flyer' + (orb ? ' orb' : '');
+    if (!orb) fly.textContent = this.card.term.slice(0, 4);
+    const w = orb ? 28 : 120;
+    const h = orb ? 28 : 70;
+    fly.style.left = (from.cx - w / 2) + 'px';
+    fly.style.top = (from.cy - h / 2) + 'px';
+    fly.style.width = w + 'px';
+    fly.style.height = h + 'px';
+    this.el('.stage').appendChild(fly);
+
+    const sx = to.cx - from.cx;
+    const sy = to.cy - from.cy;
+    const lift = -Math.min(160, Math.abs(sx) * 0.35 + 60);
+    const spin = tier === 'miss' ? -8 : 6;
+    const anim = fly.animate([
+      { transform: 'translate(0px,0px) scale(1) rotate(0deg)', offset: 0 },
+      { transform: `translate(${sx * 0.5}px, ${sy * 0.5 + lift}px) scale(1.08) rotate(${spin}deg)`, offset: 0.5 },
+      { transform: `translate(${sx}px, ${sy}px) scale(${orb ? 0.6 : 0.4}) rotate(0deg)`, offset: 1 },
+    ], { duration: 560, easing: 'cubic-bezier(.5,0,.4,1)', fill: 'forwards' });
+
+    anim.onfinish = () => {
+      fly.remove();
+      if (t !== this.token) return;
+      slot.textContent = this.card.term.slice(0, 4);
+      slot.classList.add('in');
+      if (!good) slot.classList.add('miss');
+      kick(slot, 'land');
+      this.landFx(to, good, orb);
+    };
+  }
+
+  // 落点反馈：每个版本的收卡手感
+  landFx(to, good, orb) {
+    if (reduceMotion) return;
+    play(COLLECT_SFX[this.key]);
+    if (this.key === 'B') {
+      this.shake(4, 160);
+      this.burst(to.cx, to.cy, good ? 26 : 8, 0.6);
+    }
+    if (this.key === 'C') this.flash('#c9a24a', 0.25);
+    if (this.key === 'D' && orb) {
+      kick(this.el('.xp-bar'), 'bounce');
+      this.burst(to.cx, to.cy, 14, 0.5);
+    }
+  }
+
+  advance() {
+    this.i++;
+    if (this.i >= CARDS.length) return this.showSummary();
+    this.renderCard();
+  }
+
+  showSummary() {
+    this.el('.stage-body').hidden = true;
+    this.el('.ratings').hidden = true;
+    this.el('.tray').hidden = true;
+    const s = this.el('.summary');
+    s.innerHTML = `
+      <div>本单元完成</div>
+      <div class="big" data-count="${this.stats.unaided}">0</div>
+      <div>独立想起（没用线索）</div>
+      <div class="album">${(this.results || []).map((r, idx) => `<div class="slot in ${r.good ? '' : 'miss'}" style="animation-delay:${idx * 90}ms">${r.term.slice(0, 4)}</div>`).join('')}</div>
+      <div class="row">
+        <div class="stat"><b>×${this.bestCombo}</b>最高连击</div>
+        <div class="stat"><b>${this.stats.cueSteps}</b>线索步进</div>
+        <div class="stat"><b>${this.stats.assisted}</b>有线索记得</div>
+        ${this.p.xp ? `<div class="stat"><b>Lv ${this.lv}</b>当前等级</div>` : ''}
+      </div>
+      <button class="reset">再来一单元</button>`;
+    s.querySelector('.reset').addEventListener('click', () => this.start());
+    s.classList.add('show');
+    const big = s.querySelector('.big');
+    tween(0, this.stats.unaided, 700, (v) => { big.textContent = `${Math.round(v)} / ${CARDS.length}`; });
+    if (this.key === 'C') {
+      const st = document.createElement('div');
+      st.className = 'stamp go';
+      st.style.right = '24px';
+      st.style.top = '22px';
+      st.textContent = '已收藏';
+      s.appendChild(st);
+    }
+    if (!reduceMotion && this.key !== 'A') {
+      this.burst(s.offsetWidth / 2, 60, this.key === 'B' ? 120 : 80, 1.4);
+    }
+    play(this.sfx.level());
+    this.banner('单元完成');
+  }
+}
+
+// Particle count per tier: strong > mid > miss, from the version profile.
+function tierCount(key, scale) {
+  const pr = VERSIONS[key].particles;
+  if (scale >= 1) return pr.strong;
+  if (scale > 0) return pr.mid;
+  return pr.miss;
+}
+
+// ---------- mount ----------
+const labsRoot = document.getElementById('labs');
+const tabsRoot = document.getElementById('tabs');
+const labs = {};
+Object.keys(VERSIONS).forEach((key, idx) => {
+  const v = VERSIONS[key];
+  const btn = document.createElement('button');
+  btn.textContent = key + ' · ' + v.name;
+  tabsRoot.appendChild(btn);
+
+  const sec = document.createElement('section');
+  sec.className = 'lab';
+  sec.dataset.v = key;
+  sec.hidden = idx !== 0;
+  sec.innerHTML = `
+    <p class="desc">${v.desc}</p>
+    <div class="hud">
+      <div class="rail">${'<div class="seg"><i></i></div>'.repeat(CARDS.length)}</div>
+      <div class="combo"><span class="combo-num">0</span><small>连击</small></div>
+      <div class="xp"><div class="xp-bar"><i></i></div><span class="lvl">Lv 1 · 0 XP</span></div>
+    </div>
+    <div class="stage">
+      <div class="lane"></div>
+      <div class="fx-layer"><canvas></canvas></div>
+      <div class="stage-body">
+        <div class="card-wrap">
+          <div class="card">
+            <div class="face front">
+              <div class="meta">宫殿 · 供应链　第 <span class="idx">1</span> / ${CARDS.length}</div>
+              <div class="frost">待回忆</div>
+              <div class="ladder empty"></div>
+            </div>
+            <div class="face back">
+              <div class="meta">答案</div>
+              <div class="term"></div>
+              <div class="def"></div>
+            </div>
+          </div>
+        </div>
+        <div class="cue-row">
+          <button class="chip">线索 <span class="dots"><span></span><span></span><span></span></span></button>
+          <span class="cue-hint">停留 6 秒后出现 · H</span>
+        </div>
+      </div>
+      <div class="banner"></div>
+    </div>
+    <div class="tray">${'<div class="slot">·</div>'.repeat(CARDS.length)}</div>
+    <div class="ratings">
+      ${RATINGS.map((r) => `<button data-g="${r.g}" ${r.bad ? 'data-bad="1"' : ''}>${r.label}<small>${r.key}</small></button>`).join('')}
+    </div>
+    <div class="summary"></div>`;
+  labsRoot.appendChild(sec);
+  labs[key] = { sec, btn };
+  btn.addEventListener('click', () => show(key));
+});
+
+// Labs are created on first view; a hidden lab keeps its state and stops its idle timer.
+const instances = {};
+let activeKey = 'A';
+function show(key) {
+  activeKey = key;
+  Object.entries(labs).forEach(([k, { sec, btn }]) => {
+    sec.hidden = k !== key;
+    btn.classList.toggle('on', k === key);
+  });
+  if (!instances[key]) instances[key] = new Lab(key, labs[key].sec);
+  Object.keys(instances).forEach((k) => { if (k !== key) clearTimeout(instances[k].idleTimer); });
+}
+show('A');
+
+document.getElementById('mute').addEventListener('click', (e) => {
+  muted = !muted;
+  e.currentTarget.textContent = muted ? '声音：关' : '声音：开';
+});
+
+document.addEventListener('keydown', (e) => {
+  const lab = instances[activeKey];
+  if (!lab) return;
+  if (['1', '2', '3', '4'].includes(e.key)) {
+    const btn = lab.el(`.ratings button[data-g="${e.key}"]`);
+    if (btn && !btn.disabled) lab.rate(Number(e.key), btn);
+  }
+  if (e.key === 'h' || e.key === 'H') lab.cue();
+});
+</script>
+</body>
+</html>
