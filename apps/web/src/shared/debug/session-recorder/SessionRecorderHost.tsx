@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Check, CircleDot, TriangleAlert } from 'lucide-react'
+import { Check, CircleDot, LocateFixed, TriangleAlert } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import { Button } from '@/shared/components/ui/button'
 import {
@@ -15,6 +15,7 @@ import { Textarea } from '@/shared/components/ui/textarea'
 import { cn } from '@/shared/lib/utils'
 import {
   closeSessionRecorderDialog,
+  copyLastClickFocusToClipboard,
   copyRecentBriefToClipboard,
   deleteSelectedSessionRecorderHistory,
   ensureSessionRecorderCapture,
@@ -272,6 +273,19 @@ function SessionRecorderFloatingControl() {
     setPickerOpen((open) => !open)
   }
 
+  const [focusCopyState, setFocusCopyState] = useState<'idle' | 'copied' | 'failed'>('idle')
+  const focusResetTimerRef = useRef<number | null>(null)
+  useEffect(() => () => {
+    if (focusResetTimerRef.current != null) window.clearTimeout(focusResetTimerRef.current)
+  }, [])
+
+  const copyLastClickFocus = async () => {
+    const ok = await copyLastClickFocusToClipboard()
+    setFocusCopyState(ok ? 'copied' : 'failed')
+    if (focusResetTimerRef.current != null) window.clearTimeout(focusResetTimerRef.current)
+    focusResetTimerRef.current = window.setTimeout(() => setFocusCopyState('idle'), 2500)
+  }
+
   const copyRecent = async (minutes: DiagnosisWindowMinutes) => {
     setPickerOpen(false)
     const ok = await copyRecentBriefToClipboard(minutes)
@@ -286,7 +300,7 @@ function SessionRecorderFloatingControl() {
     <div
       ref={rootRef}
       className={cn(
-        'pointer-events-auto fixed cursor-grab touch-none select-none active:cursor-grabbing',
+        'pointer-events-auto fixed flex cursor-grab touch-none select-none flex-col gap-1 active:cursor-grabbing',
         SESSION_RECORDER_LAYER_ZCLASS,
       )}
       style={{ left: position.x, top: position.y }}
@@ -308,6 +322,16 @@ function SessionRecorderFloatingControl() {
         onClick={togglePicker}
       >
         {copyState === 'copied' ? <Check className="text-emerald-500" /> : copyState === 'failed' ? <TriangleAlert className="text-amber-500" /> : <CircleDot />}
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="icon"
+        aria-label="复制上一次点击的位置"
+        title="复制上一次点击时所在的位置（页面、标题、摘录），直接粘贴给 AI"
+        onClick={() => void copyLastClickFocus()}
+      >
+        {focusCopyState === 'copied' ? <Check className="text-emerald-500" /> : focusCopyState === 'failed' ? <TriangleAlert className="text-amber-500" /> : <LocateFixed />}
       </Button>
       {pickerOpen ? (
         <div

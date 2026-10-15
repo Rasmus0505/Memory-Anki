@@ -45,6 +45,28 @@ describe('SessionRecorderHost', () => {
     expect(copied).toContain('点保存后卡片没了')
   })
 
+  it('copies the focus captured at the last click, not the focus at copy time', async () => {
+    render(
+      <MemoryRouter>
+        <div data-recorder-current="true" data-recorder-place="第 2 题" data-recorder-title="细胞膜" data-recorder-excerpt="磷脂双分子层" />
+        <button type="button">第一题按钮</button>
+        <SessionRecorderHost />
+      </MemoryRouter>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: '第一题按钮' }))
+    document.querySelector('[data-recorder-current="true"]')?.setAttribute('data-recorder-place', '第 9 题')
+
+    fireEvent.click(screen.getByRole('button', { name: '复制上一次点击的位置' }))
+
+    await waitFor(() => {
+      expect(navigator.clipboard.writeText).toHaveBeenCalled()
+    })
+    const copied = vi.mocked(navigator.clipboard.writeText).mock.calls.at(-1)?.[0] as string
+    expect(copied).toContain('点了「第一题按钮」')
+    expect(copied).toContain('- 位置：第 2 题')
+    expect(copied).not.toContain('第 9 题')
+  })
+
   it('keeps the floating button as 录制 and never shows stop', () => {
     render(
       <MemoryRouter>

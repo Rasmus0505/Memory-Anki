@@ -201,6 +201,34 @@ function stepSentence(step: SessionRecorderEvent, click: SessionRecorderEvent | 
   return [when, text].filter(Boolean).join(' ')
 }
 
+function focusLines(focus: RecorderFocus | null) {
+  return focus
+    ? [
+      `- 位置：${focus.place || '没有写位置'}`,
+      `- 标题：${focus.title || '没有写标题'}`,
+      `- 摘录：${focus.excerpt || '没有摘录'}`,
+    ]
+    : ['- 没有定位到当前这一题或这一张卡。']
+}
+
+/** The page and focus captured at the last interactive click, as a short brief. */
+export function buildLastClickFocusBrief(input: {
+  at: string
+  clickText: string
+  pageLabel: string
+  focus: RecorderFocus | null
+} | null) {
+  if (!input) return '还没有点击过页面。'
+  return [
+    `上一次点击 ${clock(input.at)}`,
+    `点了${input.clickText}`,
+    '',
+    '我当时在看',
+    `- 页面：${input.pageLabel || '这个页面'}`,
+    ...focusLines(input.focus),
+  ].join('\n')
+}
+
 export function buildDiagnosisBrief(input: {
   events: SessionRecorderEvent[]
   pageLabel: string
@@ -245,20 +273,12 @@ export function buildDiagnosisBrief(input: {
   }
   if (outcomeLines.length === 0) outcomeLines.push('没有看到保存或提交。')
 
-  const focusLines = input.focus
-    ? [
-      `- 位置：${input.focus.place || '没有写位置'}`,
-      `- 标题：${input.focus.title || '没有写标题'}`,
-      `- 摘录：${input.focus.excerpt || '没有摘录'}`,
-    ]
-    : ['- 没有定位到当前这一题或这一张卡。']
-
   const lines = [
     `最近 ${Math.round(windowMs / 60_000)} 分钟`,
     '',
     '我当时在看',
     `- 页面：${input.pageLabel || '这个页面'}`,
-    ...focusLines,
+    ...focusLines(input.focus),
     '',
     '我做了这些',
     ...(actions.length === 0

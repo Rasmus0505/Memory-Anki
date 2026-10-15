@@ -33,6 +33,11 @@ export interface NavSectionDefinition {
   /** Secondary entries stay reachable but read quieter: the start overview is the primary home now. */
   secondary?: boolean
   matches: (pathname: string) => boolean
+  /**
+   * Paths whose visits are remembered under this entry, beyond `matches`.
+   * Kept separate so the highlight/shell matcher stays one section per path.
+   */
+  rememberMatches?: (pathname: string) => boolean
   warmup?: () => void
 }
 
@@ -46,6 +51,7 @@ export const navSections: NavSectionDefinition[] = [
     // Clicking 随心 again while already active still returns to /freestyle (section root).
     rememberLastVisited: true,
     matches: createNavSectionMatcher('freestyle'),
+    rememberMatches: createNavSectionMatcher('freestyle'),
     warmup: () => {
       void preloadFreestylePage()
       preloadPracticeRoutes()

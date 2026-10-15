@@ -14,10 +14,18 @@ export function findNavSection(pathname: string) {
   return navSections.find((section) => section.matches(pathname)) ?? null
 }
 
+function isRememberedPath(section: NavSectionDefinition, pathname: string) {
+  return (section.rememberMatches ?? section.matches)(pathname)
+}
+
+function findRememberSection(pathname: string) {
+  return navSections.find((section) => isRememberedPath(section, pathname)) ?? null
+}
+
 function normalizeRememberedSectionTarget(section: NavSectionDefinition, target: string) {
   try {
     const pathname = new URL(target, window.location.origin).pathname
-    if (!section.matches(pathname)) return section.to
+    if (!isRememberedPath(section, pathname)) return section.to
     return target
   } catch {
     return section.to
@@ -52,7 +60,7 @@ export function warmNavSection(section: NavSectionDefinition) {
 export function useRememberNavSectionVisit() {
   const { pathname, search, hash } = useLocation()
   useEffect(() => {
-    const matchedSection = findNavSection(pathname)
+    const matchedSection = findRememberSection(pathname)
     if (!matchedSection?.rememberLastVisited) return
     const fullPath = `${pathname}${search}${hash}`
     const rememberedTarget = normalizeRememberedSectionTarget(matchedSection, fullPath)

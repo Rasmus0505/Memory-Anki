@@ -5,6 +5,7 @@ import { describeClickForRecorder } from './sessionRecorderCapture'
 import { summarizeEditorDocChange } from './sessionRecorderDocDiff'
 import {
   buildDiagnosisBrief,
+  buildLastClickFocusBrief,
   DIAGNOSIS_DEFAULT_WINDOW_MINUTES,
   describeRequestStep,
   diagnosisWindowMs,
@@ -12,6 +13,7 @@ import {
   readRecorderFocus,
   redactRecorderSecrets,
   describeRecorderPage,
+  type RecorderFocus,
 } from './sessionRecorderBrief'
 import { buildSessionRecorderCopyText, formatSessionRecorderReport, truncateRecorderText } from './sessionRecorderFormat'
 import {
@@ -36,6 +38,8 @@ let captureInstalled = false
 let seenLogIds = new Set<string>()
 let truncated = false
 let recentEvents: SessionRecorderEvent[] = []
+// Snapshot taken at the last interactive click, so the copy reflects what the user was looking at then, not now.
+let lastClick: { at: string; clickText: string; pageLabel: string; focus: RecorderFocus | null } | null = null
 
 let state: SessionRecorderState = {
   recording: false,
@@ -202,6 +206,12 @@ function onOutcome(outcome: RequestOutcome) {
 function onWindowClick(event: Event) {
   const described = describeClickForRecorder(event)
   if (!described) return
+  lastClick = {
+    at: nowIso(),
+    clickText: described.detail || described.action,
+    pageLabel: describeRecorderPage(typeof window === 'undefined' ? '' : window.location.pathname),
+    focus: typeof document === 'undefined' ? null : readRecorderFocus(document),
+  }
   appendEvent('click', described.action, described.detail)
 }
 
@@ -269,6 +279,17 @@ export function openSessionRecorderDialog(selectedId?: string | null) {
 
 export async function copyRecentBriefToClipboard(windowMinutes: number = DIAGNOSIS_DEFAULT_WINDOW_MINUTES) {
   const text = buildSessionRecorderCopyText(currentLiveReport(diagnosisWindowMs(windowMinutes)), state.liveNotes)
+  try {
+    if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) return false
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function copyLastClickFocusToClipboard() {
+  const text = buildLastClickFocusBrief(lastClick)
   try {
     if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) return false
     await navigator.clipboard.writeText(text)
