@@ -4,7 +4,7 @@
 > 技术背景：React + TypeScript，SVG/Canvas 渲染思维导图节点与连线，翻卡 3D flip，已有 `cue()` facade 统一管 motion/audio/haptics
 > 目标：在不干扰学习效率的前提下，通过 game feel 设计提升操作反馈感、节奏感与成就感
 
-> **状态（2026-10）**：本方案中的**粒子系统（Canvas/WebGL/DOM 粒子）、FX Lab 页面、等级/XP 界面、外观奖励与主题解锁已移除**，相关条目标注为「已弃用」。
+> **状态（2026-10）**：粒子限制已解除，允许 DOM 粒子（仍不用 Canvas/WebGL）；FX Lab 页面、外观奖励与主题解锁已移除，相关条目标注为「已弃用」。经验条作为独立的游戏化反馈，与学习进度无关。
 > 当前保留的方向是：**声音（合成音）、震动（haptics）、CSS 果冻动效（`styles/jelly.css`）与 DOM 小动效**，统一经 `cue()`（`@/shared/fx`）调度，并尊重 `prefers-reduced-motion`。
 > 当前实现见 [fx-director.md](../architecture/fx-director.md) 与 [audio-soundscape.md](../architecture/audio-soundscape.md)。
 

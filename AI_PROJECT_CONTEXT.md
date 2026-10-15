@@ -26,7 +26,7 @@ Memory Anki 是一个自用的本地学习产品，核心是“记忆宫殿 + �
 | 学习会话 `session` | 宫殿练习、分段、迷你宫殿、复习等会话进度 |
 | 仪表盘 `dashboard` | 今日复习、近期状态、时长统计 |
 | 成长 `progression`（后端） | 经验、等级、委托、印章的只读投影（`GET /api/v1/progression/overview`）。前端不展示，无 `modules/progression`，`/growth` 旧地址转到 `/dashboard` |
-| 反馈导演 `shared/fx` | 统一反馈运行时：`cue()` → 配方 → 声音 / 震动 / CSS 果冻动效 / DOM 小动效，owner 作用域取消。无粒子、无 WebGL、无 FX Lab |
+| 反馈导演 `shared/fx` | 统一反馈运行时：`cue()` → 配方 → 声音 / 震动 / CSS 果冻动效 / DOM 小动效（含粒子），owner 作用域取消。无 WebGL、无 FX Lab |
 | 主题包 `shared/theme` | 单一 `study` 主题（纸墨书房），只含翻页/翻开时长与 `theme-color`；不随成长解锁 |
 | PWA `pwa` | 通过 Tailscale 访问完整桌面端前端，默认进入 `/freestyle` |
 | 设置 `settings` | AI 模型注册、场景模型、提示词、复习参数、客户端偏好 |
@@ -281,7 +281,7 @@ apps/web/src/
 - `shared/fx`：`cue()` / 配方 / owner 取消 / 声音、震动与 CSS 果冻动效。详见 `docs/architecture/fx-director.md`。
 - `shared/feedback/mindmap-audio`：程序化合成音数据源、`AudioContext` 生命周期、静音分区与场景音量门。详见 `docs/architecture/audio-soundscape.md`。
 - `shared/theme`：单一 `study` 主题包（翻页/翻开时长、`theme-color`）。详见 `docs/architecture/theme-packs.md`。
-- 硬规则：业务组件不得直接实例化 WebGL / WebAudio，不做粒子或 canvas 特效；带延迟的步骤必须挂在 cue 的 `FxPlayback` owner 上。
+- 硬规则：业务组件不得直接实例化 WebGL / WebAudio；带延迟的步骤必须挂在 cue 的 `FxPlayback` owner 上。
 
 ### 5.7 统一质量入口
 

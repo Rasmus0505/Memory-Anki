@@ -401,8 +401,8 @@ both framework-free and unit-tested.
   Freestyle feedback respects `scenes.review` and the `learningSounds` channel.
 - A weak rating is information, never a loss. `忘记`/`困难` never use
   `quiz_result_incorrect`; they use a neutral acknowledgement and a slate breath. There is
-  no streak that can break, and freestyle adds no combo counter, milestone, or confetti of
-  its own — quiz cards keep their existing shared-path feedback and are not double-signalled.
+  no streak that can break. Freestyle's own game-feel feedback (the XP bar, flip bursts) is
+  `cue()`-driven and does not double-signal quiz cards, which keep their existing shared-path feedback.
 - Reveal audio is rate-limited (90ms) so fast flipping stays information rather than texture.
   A rate is never rate-limited.
 

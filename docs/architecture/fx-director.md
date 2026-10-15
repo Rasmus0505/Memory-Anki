@@ -3,7 +3,7 @@
 `apps/web/src/shared/fx` 是唯一的反馈入口。业务代码说**发生了什么**，recipe 决定**怎么反馈**。
 
 当前只有三类反馈通道：**声音**、**震动（haptics）**、**CSS 果冻动效（jelly）**，外加 DOM 小动效（bump / flash / charge）。
-粒子系统、WebGL/Canvas 特效、FX Lab 页面均已移除，不要再引入。
+WebGL 特效与 FX Lab 页面仍不引入。粒子与 canvas 特效不再受限制。
 
 ```text
 caller ──cue('grade.commit', payload, { owner })──▶ director ──▶ recipe.play(payload, stage)
@@ -25,10 +25,12 @@ caller ──cue('grade.commit', payload, { owner })──▶ director ──▶
 | `core/jelly.ts` | `jellyOn(el, 'pop' \| 'press' \| 'wobble')`：挂上 CSS 类，动画样式在 `apps/web/src/styles/jelly.css`，且只在 `prefers-reduced-motion: no-preference` 下生效。 |
 | `recipes/learning.ts` | 学习场景 cue：评分、翻卡落定、单元完成、撤销、移除、重试、进度四分之一、答对/答错、区域清空、翻页、轮次完成。 |
 | `recipes/map.ts` | 思维导图场景 cue（如 `audio.pops` 分层弹跳）。 |
+| `recipes/recall.ts` | 主动回忆线索：`recall.ready` 线索气泡弹出；`recall.step` 每新翻开一个字随机播一个已有音源（间隔 90ms）。 |
+| `recipes/xp.ts` | 翻卡经验与评分：`xp.gain` 翻卡飞经验球（数量按卡片字数）；`rating.orbs` 评分按档位飞球（只是视觉，不加经验）；`xp.levelup` 每升一级比上一级更强。经验与学习进度无关。 |
 
 ## 规则
 
-1. 业务代码只从 `@/shared/fx` 导入。`check_fx_director_boundary` 拒绝 `@/shared/fx/{core,recipes}` 的深层导入，以及 `canvas-confetti`（已禁用）。
+1. 业务代码只从 `@/shared/fx` 导入。`check_fx_director_boundary` 拒绝 `@/shared/fx/{core,recipes}` 的深层导入。
 2. 实体相关的 cue 传入由实体身份派生的 `owner`（如 `card:${progressKey}`、`round:${roundKey}`）。离开实体即 `retireOwner`。
 3. 调用方不读取反馈设置；由 recipe 的 `scene` 决定开关。需要升级的 recipe 通过 `stage.gateOf(scene)` 读取其他场景的门。
 4. `shared/fx` 不得导入 `modules/`、`pages/`、`widgets/`、`app/`，也不得导入 `@/shared/theme`（`check_visual_layer_purity`、`check_theme_pack_registry`）。

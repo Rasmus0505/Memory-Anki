@@ -4375,16 +4375,14 @@ def test_fx_director_boundary_accepts_cue_facade(tmp_path: Path, monkeypatch) ->
     assert errors == []
 
 
-def test_fx_director_boundary_rejects_internals_and_confetti(tmp_path: Path, monkeypatch) -> None:
+def test_fx_director_boundary_rejects_internals(tmp_path: Path, monkeypatch) -> None:
     web_src = _write_web_file(tmp_path, "modules/practice/ui/A.tsx", "import { cue } from '@/shared/fx/core/director'\n")
-    _write_web_file(tmp_path, "widgets/B.tsx", "import confetti from 'canvas-confetti'\n")
     monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
 
     errors: list[str] = []
     check_architecture.check_fx_director_boundary(errors)
 
     assert any("bypasses the fx director" in error for error in errors)
-    assert any("canvas-confetti is banned" in error for error in errors)
 
 
 def _write_e2e_project(tmp_path: Path, spec_import: str, *, gated: bool = True) -> Path:

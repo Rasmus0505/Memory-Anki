@@ -801,16 +801,14 @@ FX_PRIVATE_PREFIXES = ("@/shared/fx/core", "@/shared/fx/recipes")
 
 
 def check_fx_director_boundary(errors: list[str]) -> None:
-    """Feedback goes through `cue()`: callers import `@/shared/fx`, never its internals or canvas-confetti."""
+    """Feedback goes through `cue()`: callers import `@/shared/fx`, never its internals."""
     for path in iter_files(WEB_SRC, (".ts", ".tsx")):
         relative = path.relative_to(WEB_SRC).as_posix()
         if relative.startswith("shared/fx/") or is_frontend_test_file(relative):
             continue
         content = path.read_text(encoding="utf-8")
         for specifier in iter_frontend_import_specifiers(content):
-            if specifier == "canvas-confetti":
-                errors.append(f"{relative}: canvas-confetti is banned; feedback goes through cue() from @/shared/fx")
-            elif specifier.startswith(FX_PRIVATE_PREFIXES):
+            if specifier.startswith(FX_PRIVATE_PREFIXES):
                 errors.append(
                     f"{relative}: import `{specifier}` bypasses the fx director; "
                     "use cue()/anchors from @/shared/fx"

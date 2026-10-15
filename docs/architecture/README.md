@@ -32,7 +32,7 @@ The repository is a local-first Windows product used on two devices. SQLite, fil
 | Background jobs | `shared/background-tasks` | target shared job lease/handler infrastructure |
 | Client preferences | `modules/settings/domain/preferences-entity` | settings/profile preference endpoint |
 | Route metadata (nav/history/fallback) | `shared/routing/routeManifest.ts` (single source) | — |
-| Feedback runtime (cue → recipe → sound, haptics, CSS jelly, DOM flourish) | `shared/fx` — see [fx-director.md](./fx-director.md). Callers use `cue()` from `@/shared/fx` only; no particle or WebGL effects | — |
+| Feedback runtime (cue → recipe → sound, haptics, CSS jelly, DOM flourish) | `shared/fx` — see [fx-director.md](./fx-director.md). Callers use `cue()` from `@/shared/fx` only; no WebGL effects | — |
 | Learning progress (`/progress`, hierarchy / distribution / question coverage) | `modules/dashboard` — see [dashboard-read-model.md](./dashboard-read-model.md) | `modules/dashboard` composed through content/memory/quiz public read capabilities |
 | Growth meta (XP, levels, quests, stamps; backend read projection only, no frontend module or page) | — (no frontend owner; `growth_state` is unused by the UI) — see [progression.md](./progression.md) | `modules/progression` (read-only projection) |
 | Ambient room layer (tint, grain, pointer light) | `shared/ambient` (pure, data-free); `app/shell/useAmbientTone` feeds it dashboard/exam data | — |
