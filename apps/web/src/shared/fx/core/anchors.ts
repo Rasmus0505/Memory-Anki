@@ -14,6 +14,8 @@ export const FX_ANCHORS = {
   progressViewing: 'progress-viewing',
   /** Per-card flip counter (x/y). */
   flipBadge: 'flip-badge',
+  /** Flip XP meter: a game-feel bar, not a learning-progress readout. */
+  xpBar: 'xp-bar',
   /** Round-end summary block. */
   roundSummary: 'round-summary',
   /** Feed pager (page-turn feedback). */

@@ -1,5 +1,7 @@
 import { LoaderCircle, RotateCcw, TriangleAlert } from 'lucide-react'
 import { flipProgressToneClass, type flipProgressTone } from '../model/flipProgressBadge'
+import type { FlipXpState } from '../model/freestyleFlipXp'
+import { FreestyleXpBar } from './FreestyleXpBar'
 import type { FreestyleReviewUnitCard } from '@/shared/api/contracts'
 import { cn } from '@/shared/lib/utils'
 import { FreestyleUnitMapSkeleton } from './FreestyleUnitMapSkeleton'
@@ -18,6 +20,7 @@ export function FreestyleUnitReviewIdentityRow({
   flipTone,
   flipLabel,
   flipTitle,
+  xp,
   showUndo,
   undoDisabled,
   onUndo,
@@ -27,6 +30,7 @@ export function FreestyleUnitReviewIdentityRow({
   flipTone: FlipTone | null
   flipLabel: string | null
   flipTitle: string | null
+  xp: FlipXpState
   showUndo: boolean
   undoDisabled: boolean
   onUndo: () => void
@@ -67,6 +71,7 @@ export function FreestyleUnitReviewIdentityRow({
             {flipLabel}
           </span>
         ) : null}
+        <FreestyleXpBar state={xp} />
       </div>
       {showUndo ? (
         <button

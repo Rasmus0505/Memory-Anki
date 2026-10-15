@@ -1,11 +1,18 @@
 import { useCallback, useEffect, useRef, type RefObject } from 'react'
 import type { UnitRating } from '@/modules/practice/public'
 import { readFreestyleCombo } from '@/modules/practice/ui/freestyle/model/freestyleComboStore'
+import { flipOrbCount, ratingOrbCount, recordFlipXp } from '@/modules/practice/ui/freestyle/model/freestyleFlipXp'
 import { cue, useFxOwner } from '@/shared/fx'
 import { MINDMAP_CARD_LANDED_EVENT } from '@/shared/ui/mindmap-canvas/useMindMapRevealMotion'
 
 /** Bulk reveals land dozens of cards at once; relay at most one cue per window. */
 const LAND_RELAY_GAP_MS = 60
+
+/** The visible label of a mind-map card; the concealed sizer carries the real text while hidden. */
+function labelOf(card: Element | null): string {
+  if (!card) return ''
+  return card.querySelector('.mindmap-node-concealed-sizer, .mindmap-node-text')?.textContent ?? ''
+}
 
 /**
  * Flip feedback for one unit card, owned by that card's identity: every landed flip
@@ -28,12 +35,19 @@ export function useFreestyleCardFeedback(args: {
     const section = sectionRef.current
     if (!section) return
     let lastRelayAt = 0
-    const onLanded = () => {
+    const onLanded = (event: Event) => {
       if (!ownerRef.current) return
       const now = performance.now()
       if (now - lastRelayAt < LAND_RELAY_GAP_MS) return
       lastRelayAt = now
-      cue('flip.land', { scope: section }, { owner: ownerRef.current })
+      const card = event.target instanceof Element ? event.target : null
+      cue('flip.land', { scope: section, card }, { owner: ownerRef.current })
+      // Only relayed flips earn XP, so a bulk reveal does not pay out for cards the learner never turned.
+      const gain = recordFlipXp()
+      // Orbs scale with the label length; the XP itself is the chain-based `gain.gained`.
+      const orbs = flipOrbCount(labelOf(card))
+      cue('xp.gain', { scope: section, amount: gain.gained, chain: gain.chain, card, orbs }, { owner: ownerRef.current })
+      if (gain.leveledUp) cue('xp.levelup', { scope: section, level: gain.state.level }, { owner: ownerRef.current })
     }
     section.addEventListener(MINDMAP_CARD_LANDED_EVENT, onLanded)
     return () => section.removeEventListener(MINDMAP_CARD_LANDED_EVENT, onLanded)
@@ -60,5 +74,17 @@ export function useFreestyleCardFeedback(args: {
     if (rect && rect.width > 0) cue('card.remove', { rect })
   }, [sectionRef])
 
-  return { playUndo, playRemove }
+  /**
+   * Orbs from the pressed rating button into the meter. Visual only: this never calls
+   * `recordFlipXp`, so a rating cannot change the XP the learner earns by flipping.
+   */
+  const playRating = useCallback((rating: UnitRating | null | undefined) => {
+    const grade = Number(rating)
+    if (grade !== 1 && grade !== 2 && grade !== 3 && grade !== 4) return
+    const button = sectionRef.current?.querySelector(`[data-testid="freestyle-rating-button-${grade}"]`)
+    if (!button || !sectionRef.current) return
+    cue('rating.orbs', { scope: sectionRef.current, button, grade, count: ratingOrbCount(grade) }, { owner: ownerRef.current })
+  }, [sectionRef])
+
+  return { playUndo, playRemove, playRating }
 }

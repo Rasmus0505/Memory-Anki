@@ -27,6 +27,8 @@ import type {
 import { countUnitFlipProgress, unitFlipTargetUids } from '@/modules/practice/ui/freestyle/model/unitFlipProgress'
 import { useFreestyleFlowFeedback } from '@/modules/practice/ui/freestyle/hooks/useFreestyleFlowFeedback'
 import { useFreestyleEnterRevealFollow } from './useFreestyleEnterRevealFollow'
+import { useRecallCueFocus } from '../hooks/useRecallCueFocus'
+import { FreestyleRecallCueBubble } from './FreestyleRecallCueBubble'
 import {
   recordSessionRecorderUiAction,
   summarizeRevealMapChange,
@@ -147,6 +149,18 @@ export function FreestyleUnitReviewFlipPanel({
   }, [editEditorState, isEditMode, reveal.revealMap])
 
   const { root } = reveal
+  const mapHostRef = useRef<HTMLDivElement | null>(null)
+  const recallAllowedIds = useMemo(() => (allowedRevealNodeIds ? new Set(allowedRevealNodeIds) : null), [allowedRevealNodeIds])
+  // Recall cue: a bubble beside the hidden card the learner is looking at, after a pause. Live card only.
+  const recallEnabled = active && !isEditMode
+  const recallCue = useRecallCueFocus({
+    hostRef: mapHostRef,
+    root,
+    revealMap: reveal.revealMap,
+    allowedNodeIds: recallAllowedIds,
+    enabled: recallEnabled,
+    cardKey: card.id,
+  })
   const { signalReveal } = useFreestyleFlowFeedback()
 
   const lastNotifiedRevealKeyRef = useRef('')
@@ -611,6 +625,7 @@ export function FreestyleUnitReviewFlipPanel({
         quietStatus={quietStatus ?? ''}
       />
 
+      <div ref={mapHostRef} className="contents">
       <FlipCardMindMapPanel
         viewMemoryScope={`palace:${session.palace_id}`}
         fullscreen={fullscreen}
@@ -699,6 +714,15 @@ export function FreestyleUnitReviewFlipPanel({
         className="min-h-0 flex-1"
         surfaceClassName="h-full min-h-0"
       />
+      </div>
+      {recallEnabled ? (
+        <FreestyleRecallCueBubble
+          hostRef={mapHostRef}
+          view={recallCue.view}
+          onStep={recallCue.step}
+          ownerKey={`card:${card.id}`}
+        />
+      ) : null}
       <FreestyleUnitReviewFlipDialogs
         nodeQuizOpen={nodeQuizOpen}
         setNodeQuizOpen={setNodeQuizOpen}

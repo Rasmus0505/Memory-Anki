@@ -66,6 +66,7 @@ import { FreestyleRatingBar } from './FreestyleRatingBar'
 import { useFreestyleCardFeedback } from './useFreestyleCardFeedback'
 import { FreestyleUnitReviewFlipPanel } from './FreestyleUnitReviewFlipPanel'
 import { FreestyleUnitReviewIdentityRow, FreestyleUnitReviewPlaceholder } from './FreestyleUnitReviewChrome'
+import { useFreestyleFlipXp } from './FreestyleXpBar'
 
 export {
   ratingEffectLabel,
@@ -909,6 +910,8 @@ export function FreestyleUnitReviewCardView({
   const flipTone = activeFlipProgress
     ? flipProgressTone(activeFlipProgress.revealed, activeFlipProgress.total)
     : null
+  // The XP meter is game feel only; it reads its own store, never the flip counter above.
+  const flipXp = useFreestyleFlipXp()
   const flipLabel = activeFlipProgress
     ? flipProgressLabel(activeFlipProgress.revealed, activeFlipProgress.total)
     : null
@@ -952,6 +955,7 @@ export function FreestyleUnitReviewCardView({
           flipTone={flipTone}
           flipLabel={flipLabel}
           flipTitle={flipTitle}
+          xp={flipXp}
           showUndo={Boolean(undoVisible && lastOperationId && !locked)}
           undoDisabled={pendingClear}
           onUndo={() => undoRating()}

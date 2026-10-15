@@ -17,6 +17,8 @@ export interface GradeCommitCue {
 export interface FlipLandCue {
   /** Container that holds this card's flip badge. */
   scope: ParentNode
+  /** The mind-map card that just turned over; it gives a small squash on landing. */
+  card?: Element | null
 }
 
 export interface UnitCompleteCue {
@@ -105,9 +107,11 @@ defineCue('grade.commit', {
 
 defineCue('flip.land', {
   scene: 'review',
-  play({ scope }, stage) {
+  play({ scope, card }, stage) {
     if (!stage.gate.motion) return
     jellyOn(findAnchor(FX_ANCHORS.flipBadge, scope), 'pop')
+    // The landed card itself takes the impact, not only its counter.
+    jellyOn(card, 'pop')
   },
 })
 
