@@ -11,7 +11,6 @@ export {
 } from './domain/feedConfig'
 export {
   FREESTYLE_WORKSPACE_PRIMARY,
-  FREESTYLE_WORKSPACE_SECONDARY,
   freestyleWorkspaceLabel,
   freestyleWorkspacePath,
   isPalaceReviewWorkspace,
@@ -19,7 +18,6 @@ export {
   palaceReviewPath,
   palaceReviewWorkspaceId,
   parsePalaceReviewWorkspaceId,
-  peerFreestyleWorkspace,
   type FreestyleWorkspaceId,
   type PalaceReviewWorkspaceId,
 } from './domain/freestyleWorkspace'
@@ -28,9 +26,6 @@ export {
   emitFreestylePeerRound,
   FREESTYLE_FEED_CONFIG_UPDATED_EVENT,
   FREESTYLE_PEER_ROUND_EVENT,
-  FREESTYLE_SECONDARY_FEED_CONFIG_STORAGE_KEY,
-  FREESTYLE_SECONDARY_FEED_CONFIG_UPDATED_EVENT,
-  FREESTYLE_SECONDARY_QUEUE_STATE_STORAGE_KEY,
   isQueueStateFromPreviousDay,
   readFreestyleFeedConfig,
   readQueueState,

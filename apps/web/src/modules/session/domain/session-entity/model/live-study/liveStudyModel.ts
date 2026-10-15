@@ -44,7 +44,7 @@ export interface LiveStudyCommandResponse {
   projection: LiveStudyProjection
 }
 
-const STUDY_FOLLOW_PREFIXES = ['/freestyle-2', '/freestyle']
+const STUDY_FOLLOW_PREFIXES = ['/freestyle']
 const STUDY_FOLLOW_PATTERNS = [
   /^\/palaces\/\d+$/,
   /^\/palaces\/\d+\/quiz$/,
@@ -59,11 +59,6 @@ function pathnameOf(path: string) {
 function isPrimaryFreestylePath(pathname: string) {
   const path = pathnameOf(pathname)
   return path === '/freestyle' || path.startsWith('/freestyle/')
-}
-
-function isSecondaryFreestylePath(pathname: string) {
-  const path = pathnameOf(pathname)
-  return path === '/freestyle-2' || path.startsWith('/freestyle-2/')
 }
 
 export function preferNewerLiveStudyProjection(
@@ -95,7 +90,7 @@ export function isLiveStudySurface(value: unknown): value is LiveStudySurface {
 
 export function liveStudySurfaceFromPath(pathname: string): LiveStudySurface | null {
   const path = pathnameOf(pathname)
-  if (isPrimaryFreestylePath(path) || isSecondaryFreestylePath(path)) return 'freestyle'
+  if (isPrimaryFreestylePath(path)) return 'freestyle'
   if (/^\/palaces\/\d+\/quiz$/.test(path)) return 'palace_quiz'
   if (/^\/palaces\/\d+$/.test(path)) return 'mindmap_review'
   if (/^\/english\/listening\/courses\/\d+$/.test(path)) return 'english_course'

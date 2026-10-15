@@ -67,115 +67,6 @@ def test_missing_workspace_defaults_to_primary(make_client):
     assert created["workspace"] == "primary"
 
 
-def test_two_workspaces_keep_independent_cursors(make_client):
-    client = _client(make_client)
-    cards = _unit_cards(("a", "unit-a"), ("b", "unit-b"))
-    primary = _create(client, operation_id="op-a", cards=cards, round_id="round-a", workspace="primary")
-    secondary = _create(
-        client,
-        operation_id="op-b",
-        cards=cards,
-        round_id="round-b",
-        workspace="secondary",
-    )
-    assert primary["round_id"] == "round-a"
-    assert secondary["round_id"] == "round-b"
-    assert primary["workspace"] == "primary"
-    assert secondary["workspace"] == "secondary"
-    assert primary["current_card_id"] == "a"
-    assert secondary["current_card_id"] == "a"
-
-    moved = _action(
-        client,
-        secondary["round_id"],
-        operation_id="op-cursor",
-        action="set_cursor",
-        version=secondary["version"],
-        card_id="b",
-    )
-    assert moved["current_card_id"] == "b"
-    fetched = client.get("/api/v1/freestyle/rounds/round-a")
-    assert fetched.status_code == 200
-    assert fetched.json()["current_card_id"] == "a"
-
-
-def test_complete_on_primary_marks_overlapping_secondary_card(make_client):
-    client = _client(make_client)
-    primary = _create(
-        client,
-        operation_id="op-a",
-        cards=_unit_cards(("a", "unit-a"), ("b", "unit-b")),
-        round_id="round-a",
-        workspace="primary",
-    )
-    secondary = _create(
-        client,
-        operation_id="op-b",
-        cards=_unit_cards(("x", "unit-a"), ("y", "unit-c")),
-        round_id="round-b",
-        workspace="secondary",
-    )
-    completed = _action(
-        client,
-        primary["round_id"],
-        operation_id="op-complete",
-        action="complete",
-        version=primary["version"],
-        card_id="a",
-    )
-    assert "a" in completed["plan"]["completed_ids"]
-    peer = client.get("/api/v1/freestyle/rounds/round-b").json()
-    assert "x" in peer["plan"]["completed_ids"]
-    assert "y" not in peer["plan"]["completed_ids"]
-    assert peer["current_card_id"] == secondary["current_card_id"]
-
-
-def test_start_new_round_only_resets_current_workspace_and_seeds_overlap(make_client):
-    client = _client(make_client)
-    primary = _create(
-        client,
-        operation_id="op-a",
-        cards=_unit_cards(("a", "unit-a"), ("b", "unit-b")),
-        round_id="round-a",
-        workspace="primary",
-    )
-    _create(
-        client,
-        operation_id="op-b",
-        cards=_unit_cards(("x", "unit-a"), ("y", "unit-c")),
-        round_id="round-b",
-        workspace="secondary",
-    )
-    _action(
-        client,
-        primary["round_id"],
-        operation_id="op-complete",
-        action="complete",
-        version=primary["version"],
-        card_id="a",
-    )
-    restarted = client.post(
-        "/api/v1/freestyle/rounds/start",
-        json={
-            "operation_id": "op-restart-b",
-            "scope_key": "scope-a",
-            "workspace": "secondary",
-            "config": {"queue_length": 20},
-            "cards": _unit_cards(("x", "unit-a"), ("y", "unit-c")),
-            "round_id": "round-b-2",
-        },
-    )
-    assert restarted.status_code == 200, restarted.text
-    body = restarted.json()
-    assert body["round_id"] == "round-b-2"
-    assert "x" in body["plan"]["completed_ids"]
-    assert body["current_card_id"] == "y"
-    leftover = client.get("/api/v1/freestyle/rounds/round-a").json()
-    assert leftover["status"] == "active"
-    assert leftover["round_id"] == "round-a"
-    assert leftover["current_card_id"] == "b"
-
-
 def test_palace_review_workspace_does_not_touch_primary_round(make_client):
     client = _client(make_client)
     primary = _create(
@@ -216,27 +107,14 @@ def test_palace_review_workspace_does_not_touch_primary_round(make_client):
     assert primary_active.json()["round_id"] == "round-primary"
 
 
-def test_get_active_round_follows_workspace(make_client):
+def test_secondary_workspace_request_lands_in_the_single_round_slot(make_client):
+    """随心2 is merged into 随心: an old client asking for `secondary` gets the one slot."""
     client = _client(make_client)
-    primary = _create(
+    created = _create(
         client,
-        operation_id="op-read-primary",
-        cards=_unit_cards(("a", "unit-a")),
-        round_id="round-read-primary",
-        workspace="primary",
-    )
-    secondary = _create(
-        client,
-        operation_id="op-read-secondary",
-        cards=_unit_cards(("x", "unit-x")),
-        round_id="round-read-secondary",
+        operation_id="op-merged-slot",
+        cards=[{"id": "a", "kind": "mindmap_branch", "unit_id": "unit-a"}],
         workspace="secondary",
     )
-    primary_read = client.get("/api/v1/freestyle/rounds/active", params={"workspace": "primary"})
-    secondary_read = client.get("/api/v1/freestyle/rounds/active", params={"workspace": "secondary"})
-    assert primary_read.status_code == 200, primary_read.text
-    assert secondary_read.status_code == 200, secondary_read.text
-    assert primary_read.json()["round_id"] == primary["round_id"]
-    assert secondary_read.json()["round_id"] == secondary["round_id"]
-    assert primary_read.json()["version"] == primary["version"]
-    assert secondary_read.json()["version"] == secondary["version"]
+
+    assert created["workspace"] == "primary"

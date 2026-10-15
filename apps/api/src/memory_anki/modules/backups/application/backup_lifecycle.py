@@ -17,7 +17,11 @@ from memory_anki.core.runtime_activity import (
     assert_exclusive_runtime_operation,
     current_runtime_instance_id,
 )
+from memory_anki.infrastructure.db._tables._base import get_session
 from memory_anki.infrastructure.db.maintenance import analyze_database
+from memory_anki.modules.backups.application.backup_palace_versions import (
+    prune_expired_palace_versions,
+)
 from memory_anki.modules.backups.application.storage_backup import (
     read_storage_backup_manifest,
     restore_storage_backup,
@@ -27,12 +31,10 @@ from memory_anki.modules.backups.application.storage_backup import (
 
 logger = logging.getLogger(__name__)
 
-# 自动/手动/关机均走轻量 rolling；rescue 在替换前包含附件，full 包含所有 managed media。
-AUTO_ROLLING_BACKUP_INTERVAL = timedelta(hours=4)
-# 编辑触发的滚动备份每次都要完整快照数据库（本机约 200 MB，落在同步盘上）。
-# 30 分钟的间隔意味着每小时反复重写数百 MB，既拖慢同步盘又会长时间占用运行锁，
-# 因此放宽到 2 小时：数据库仍有每日启动备份 + 每 4 小时周期备份兜底。
-ROLLING_EDIT_BACKUP_INTERVAL = timedelta(hours=2)
+# 自动备份只有一种：每个本地日历日第一次启动时做一份轻量数据库快照（不含附件）。
+# 编辑、周期、关机都不再写 U 盘：学习中途复制整库会拖慢每一次评分。
+# 启动后延迟一段时间再开始，避开刚开始学习的几分钟。
+DAILY_BACKUP_STARTUP_DELAY_SECONDS = 120.0
 
 # 保留策略：每次新建备份后自动清理超出上限的旧备份，避免磁盘无限增长。
 MAX_FULL_BACKUPS = 1
@@ -40,13 +42,9 @@ MAX_ROLLING_BACKUPS = 3
 MAX_RESCUE_BACKUPS = 2
 
 _BACKUP_LOCK = threading.Lock()
-# Waiting for a backup that is already running must never block the caller for
-# long: a shutdown or an edit-triggered request just gives up on that round.
+# Waiting for a backup that is already running must never block the caller for long.
 _BACKUP_LOCK_WAIT_SECONDS = 5.0
-_ROLLING_REQUEST_GUARD = threading.Lock()
-_ROLLING_REQUEST_RUNNING = False
-_BACKUP_LOOP_THREAD: threading.Thread | None = None
-_BACKUP_LOOP_STOP = threading.Event()
+_STARTUP_BACKUP_STOP = threading.Event()
 
 
 def timestamp_slug(now: datetime | None = None) -> str:
@@ -64,10 +62,15 @@ def create_rescue_snapshot(reason: str) -> Path:
 
 
 def ensure_daily_backup() -> Path | None:
-    """每天至多一份轻量数据库快照，不复制 PDF/视频。"""
-    if _daily_rolling_backup_exists():
-        return None
-    return create_rolling_backup("startup")
+    """每个本地日历日至多一份轻量数据库快照，不复制 PDF/视频。
+
+    The check and the write share one lock, so a launcher-triggered check and the
+    boot-time one can never both write today's snapshot.
+    """
+    with _BACKUP_LOCK:
+        if _daily_rolling_backup_exists():
+            return None
+        return _write_rolling_backup_locked("startup")
 
 
 def create_full_backup(reason: str) -> Path:
@@ -92,64 +95,14 @@ def _write_rolling_backup_locked(reason: str) -> Path:
     return folder
 
 
-def _create_rolling_backup_if_due(
-    reason: str, minimum_interval: timedelta, *, wait_seconds: float | None = None
-) -> Path | None:
-    """Take the backup lock (bounded wait), re-check the age inside it, then back up.
+def request_rolling_backup(reason: str = "rolling-edit") -> bool:
+    """Retired: edits never write a backup any more.
 
-    The age re-check is what makes a burst of edits produce one backup: every
-    waiter sees the folder the first one just wrote and returns.
+    Kept as a no-op so the edit call sites stay harmless until they are removed.
+    The only automatic backup is the once-per-local-day startup snapshot.
     """
-    if wait_seconds is None:
-        acquired = _BACKUP_LOCK.acquire()
-    else:
-        acquired = _BACKUP_LOCK.acquire(timeout=wait_seconds)
-    if not acquired:
-        logger.info("rolling backup %s skipped: another backup is running", reason)
-        return None
-    try:
-        latest = _latest_backup_in(ROLLING_BACKUPS_DIR)
-        if latest and _backup_age(latest) < minimum_interval:
-            return None
-        return _write_rolling_backup_locked(reason)
-    finally:
-        _BACKUP_LOCK.release()
-
-
-def request_rolling_backup(
-    reason: str = "rolling-edit", minimum_interval: timedelta | None = None
-) -> bool:
-    """Ask for a rolling backup without ever making the caller wait for it.
-
-    Single-flight: while one request is queued or running, further requests are
-    merged into it. Returns True when this call started the worker.
-    """
-    global _ROLLING_REQUEST_RUNNING
-    interval = ROLLING_EDIT_BACKUP_INTERVAL if minimum_interval is None else minimum_interval
-    with _ROLLING_REQUEST_GUARD:
-        if _ROLLING_REQUEST_RUNNING:
-            return False
-        _ROLLING_REQUEST_RUNNING = True
-
-    def run() -> None:
-        global _ROLLING_REQUEST_RUNNING
-        try:
-            _create_rolling_backup_if_due(
-                reason, interval, wait_seconds=_BACKUP_LOCK_WAIT_SECONDS
-            )
-        except Exception:
-            logger.exception("background rolling backup failed (%s)", reason)
-        finally:
-            with _ROLLING_REQUEST_GUARD:
-                _ROLLING_REQUEST_RUNNING = False
-
-    try:
-        threading.Thread(target=run, name="memory-anki-rolling-backup", daemon=True).start()
-    except Exception:
-        with _ROLLING_REQUEST_GUARD:
-            _ROLLING_REQUEST_RUNNING = False
-        raise
-    return True
+    logger.debug("edit-triggered backup %s ignored; daily startup backup only", reason)
+    return False
 
 
 def list_backups() -> list[dict]:
@@ -228,26 +181,25 @@ def maybe_create_rolling_backup(reason: str = "rolling-edit") -> Path | None:
     return None
 
 
-def maybe_create_periodic_backup() -> Path | None:
-    """后台周期备份：轻量 rolling，避免把 PDF/视频反复整盘复制。"""
-    return _create_rolling_backup_if_due("periodic", AUTO_ROLLING_BACKUP_INTERVAL)
+def start_startup_backups(
+    delay_seconds: float = DAILY_BACKUP_STARTUP_DELAY_SECONDS,
+) -> threading.Thread:
+    """Clean crash leftovers, then take today's backup once, off the serving path.
 
-
-def create_shutdown_backup() -> Path | None:
-    """Best effort on the way out: never wait long behind a running backup."""
-    return _create_rolling_backup_if_due(
-        "shutdown", timedelta(0), wait_seconds=_BACKUP_LOCK_WAIT_SECONDS
-    )
-
-
-def start_startup_backups() -> threading.Thread:
-    """Clean crash leftovers and take the due startup backups off the serving path."""
+    Runs in every startup mode (desktop/PWA healthcheck included). The daily check
+    uses the machine's local date, so it is at most one backup per local day.
+    """
 
     def run() -> None:
         try:
             cleanup_stale_backup_staging()
+            if _STARTUP_BACKUP_STOP.wait(timeout=delay_seconds):
+                return
             ensure_daily_backup()
-            maybe_create_periodic_backup()
+            # Prune only once today's snapshot exists, so history is never dropped
+            # before a copy of it has been written.
+            if _daily_rolling_backup_exists():
+                _prune_expired_palace_versions()
         except Exception:
             logger.exception("startup backup failed")
 
@@ -256,52 +208,19 @@ def start_startup_backups() -> threading.Thread:
     return thread
 
 
-def run_shutdown_backup_bounded(timeout_seconds: float = 20.0) -> bool:
-    """Run the shutdown backup in a worker and stop waiting after the timeout.
-
-    Returns True when it finished in time. The worker is a daemon, so a slow copy
-    never keeps the process from exiting; staging it leaves is cleaned on next start.
-    """
-
-    def run() -> None:
-        try:
-            create_shutdown_backup()
-        except Exception:
-            logger.exception("shutdown backup failed")
-
-    thread = threading.Thread(target=run, name="memory-anki-shutdown-backup", daemon=True)
-    thread.start()
-    thread.join(timeout_seconds)
-    if thread.is_alive():
-        logger.warning("shutdown backup still running after %.0fs; exiting without it", timeout_seconds)
-        return False
-    return True
+def _prune_expired_palace_versions() -> int:
+    session = get_session()
+    try:
+        removed = prune_expired_palace_versions(session)
+    finally:
+        session.close()
+    if removed:
+        logger.info("pruned %s palace versions older than the retention window", removed)
+    return removed
 
 
-def start_periodic_backup_loop() -> None:
-    global _BACKUP_LOOP_THREAD
-    if _BACKUP_LOOP_THREAD and _BACKUP_LOOP_THREAD.is_alive():
-        return
-    _BACKUP_LOOP_STOP.clear()
-
-    def run_loop() -> None:
-        while not _BACKUP_LOOP_STOP.wait(timeout=300):
-            try:
-                maybe_create_periodic_backup()
-            except Exception:
-                logger.exception("periodic backup loop iteration failed")
-                continue
-
-    _BACKUP_LOOP_THREAD = threading.Thread(
-        target=run_loop,
-        name="memory-anki-backup-loop",
-        daemon=True,
-    )
-    _BACKUP_LOOP_THREAD.start()
-
-
-def stop_periodic_backup_loop() -> None:
-    _BACKUP_LOOP_STOP.set()
+def stop_startup_backups() -> None:
+    _STARTUP_BACKUP_STOP.set()
 
 
 def prune_old_backups(root: Path, keep: int) -> int:

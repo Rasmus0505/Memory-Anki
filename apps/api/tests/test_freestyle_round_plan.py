@@ -2,12 +2,6 @@
 
 from __future__ import annotations
 
-from memory_anki.modules.practice.domain.peer_progress import (
-    apply_peer_progress,
-    apply_peer_restore,
-    progress_identity,
-    project_identity_ratings,
-)
 from memory_anki.modules.practice.domain.round_compress import (
     compress_completed,
     compressible_ids,
@@ -695,60 +689,6 @@ def test_multi_day_append_keeps_two_cohorts():
     assert plan["presented_ids"] == ["a", "b", "c", "d"]
 
 
-def test_progress_identity_ignores_revision_and_maps_quiz_cards():
-    unit = _card("review_unit:u1:r2", unit_id="u1", revision=2)
-    quiz = _card("quiz_question:9", kind="quiz_question")
-    assert progress_identity(unit) == "unit:u1"
-    assert progress_identity(quiz) == "quiz:9"
-
-
-def test_identity_rating_stamps_the_same_unit_without_moving_the_other_cursor():
-    shelf = plan_from_cards([_card("review_unit:unit-a:r1", unit_id="unit-a")])
-    freestyle = set_cursor(
-        plan_from_cards(
-            [
-                _card("review_unit:unit-a:r2", unit_id="unit-a"),
-                _card("review_unit:unit-b:r1", unit_id="unit-b"),
-            ]
-        ),
-        "review_unit:unit-b:r1",
-    )
-    projected, changed = project_identity_ratings(freestyle, {"unit-a": 3})
-    assert changed
-    assert projected["current_card_id"] == "review_unit:unit-b:r1"
-    assert "review_unit:unit-a:r2" in projected["completed_ids"]
-    assert projected["encounters"]["review_unit:unit-a:r2"]["rating"] == 3
-    assert "review_unit:unit-b:r1" not in projected["completed_ids"]
-    again, changed_again = project_identity_ratings(projected, {"unit-a": 3})
-    assert not changed_again
-    stored = normalize_plan(again)
-    assert stored["encounters"]["review_unit:unit-a:r2"]["rating"] == 3
-    weak, _changed = project_identity_ratings(stored, {"unit-a": 2})
-    assert weak["encounters"]["review_unit:unit-a:r2"]["rating"] == 2
-    assert "review_unit:unit-a:r2" not in weak["completed_ids"]
-    assert shelf["original_cards"]
-
-
-def test_peer_progress_completes_overlapping_unit_without_moving_cursor():
-    primary = complete_card(
-        plan_from_cards([_card("a", unit_id="unit-a"), _card("b", unit_id="unit-b")]),
-        "a",
-    )
-    secondary = set_cursor(
-        plan_from_cards(
-            [
-                _card("review_unit:unit-a:r1", unit_id="unit-a"),
-                _card("review_unit:unit-c:r1", unit_id="unit-c"),
-            ]
-        ),
-        "review_unit:unit-a:r1",
-    )
-    synced = apply_peer_progress(secondary, primary, round_id="round-b", preserve_cursor=True)
-    assert "review_unit:unit-a:r1" in synced["completed_ids"]
-    assert synced["current_card_id"] == "review_unit:unit-a:r1"
-    assert "review_unit:unit-c:r1" not in synced["completed_ids"]
-
-
 def test_exclude_cancels_unfinished_retries_without_writing_a_pass():
     cards = [_card("a", unit_id="unit-a"), _card("b"), _card("c"), _card("d")]
     failed = leave_card(_rate(plan_from_cards(cards), "a", 1, "enc-a"), "a")
@@ -760,51 +700,6 @@ def test_exclude_cancels_unfinished_retries_without_writing_a_pass():
     assert stored["status"] == "cancelled"
     assert retry["occurrence_id"] not in excluded["presented_ids"]
     assert excluded["current_card_id"] != retry["occurrence_id"]
-
-
-def test_peer_progress_excludes_and_copies_retry():
-    cards = [_card("a", unit_id="unit-a"), _card("b", unit_id="unit-b"), _card("c", unit_id="unit-c")]
-    failed = leave_card(_rate(plan_from_cards(cards), "a", 1, "enc-a"), "a")
-    excluded = exclude_card(plan_from_cards(cards), "b")
-    peer = apply_peer_progress(failed, excluded, round_id="round-a")
-    target = plan_from_cards(
-        [
-            _card("x", unit_id="unit-a"),
-            _card("y", unit_id="unit-b"),
-            _card("z", unit_id="unit-other"),
-        ]
-    )
-    synced = apply_peer_progress(target, peer, round_id="round-b", preserve_cursor=False)
-    assert "x" not in synced["completed_ids"]
-    assert "y" in synced["excluded_ids"]
-    assert "z" not in synced["excluded_ids"]
-    retries = [item for item in synced["occurrences"] if item["source_card_id"] == "x"]
-    assert retries
-    assert retries[0]["status"] == "inserted"
-    assert synced["current_card_id"] != "y"
-
-
-def test_peer_progress_quiz_overlap_and_restore():
-    primary = complete_card(plan_from_cards([_card("quiz_question:9", kind="quiz_question")]), "quiz_question:9")
-    secondary = plan_from_cards(
-        [_card("quiz_question:9", kind="quiz_question"), _card("quiz_question:10", kind="quiz_question")]
-    )
-    synced = apply_peer_progress(secondary, primary, preserve_cursor=False)
-    assert "quiz_question:9" in synced["completed_ids"]
-    assert "quiz_question:10" not in synced["completed_ids"]
-
-    excluded = exclude_card(secondary, "quiz_question:10")
-    restored = apply_peer_restore(excluded, "quiz:10")
-    assert "quiz_question:10" not in restored["excluded_ids"]
-
-
-def test_new_round_skips_peer_completed_as_current():
-    peer = complete_card(plan_from_cards([_card("a", unit_id="unit-a"), _card("b", unit_id="unit-b")]), "a")
-    fresh = plan_from_cards(
-        [_card("review_unit:unit-a:r3", unit_id="unit-a"), _card("review_unit:unit-b:r1", unit_id="unit-b")]
-    )
-    seeded = apply_peer_progress(fresh, peer, preserve_cursor=False)
-    assert seeded["current_card_id"] == "review_unit:unit-b:r1"
 
 
 def test_rating_rejects_retry_card_without_occurrence_id():

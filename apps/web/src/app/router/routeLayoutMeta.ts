@@ -17,7 +17,6 @@ export interface AppRouteLayoutMeta {
 
 export const APP_ROUTE_LAYOUT_META: readonly AppRouteLayoutMeta[] = [
   { pattern: /^\/freestyle(?:\/|$)/, layoutMode: 'immersive' },
-  { pattern: /^\/freestyle-2(?:\/|$)/, layoutMode: 'immersive' },
   { pattern: /^\/palaces\/\d+\/review$/, layoutMode: 'immersive' },
   { pattern: /^\/knowledge$/, layoutMode: 'mindmap' },
   { pattern: /^\/palaces\/\d+(?:\/edit)?$/, layoutMode: 'mindmap' },

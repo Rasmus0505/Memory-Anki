@@ -23,7 +23,6 @@ export function FreestyleFeedCard({
   isActive,
   settlementVisible,
   readOnlyHistoryCardId,
-  sheetRatingRequest,
   freestyleFullscreen,
   flipMode,
   mindmapZoom,
@@ -35,15 +34,11 @@ export function FreestyleFeedCard({
   questionState,
   answeredBefore,
   liveRevealMap,
-  onRequestedRatingHandled,
   onFlipModeChange,
   onMindmapZoomChange,
   onToggleFullscreen,
-  onRatingSettled,
-  onRoundSync,
   onEnsureEncounter,
   onEncounterChange,
-  onBranchComplete,
   onStaleDrop,
   onRemoveFromQueue,
   onRebuildRound,
@@ -65,7 +60,6 @@ export function FreestyleFeedCard({
   isActive: boolean
   settlementVisible: boolean
   readOnlyHistoryCardId: string | null
-  sheetRatingRequest: { cardId: string; rating: UnitProps['requestedRating'] } | null
   freestyleFullscreen: boolean
   flipMode: UnitProps['freestyleFlipMode']
   mindmapZoom: UnitProps['preferredZoom']
@@ -77,15 +71,11 @@ export function FreestyleFeedCard({
   questionState: QuizProps['state']
   answeredBefore: boolean
   liveRevealMap: UnitProps['liveRevealMap']
-  onRequestedRatingHandled: UnitProps['onRequestedRatingHandled']
   onFlipModeChange: UnitProps['onFreestyleFlipModeChange']
   onMindmapZoomChange: UnitProps['onUserZoomChange']
   onToggleFullscreen: UnitProps['onToggleFullscreen']
-  onRatingSettled: UnitProps['onRatingSettled']
-  onRoundSync: UnitProps['onRoundSync']
   onEnsureEncounter: UnitProps['onEnsureEncounter']
   onEncounterChange: UnitProps['onEncounterChange']
-  onBranchComplete: UnitProps['onBranchComplete']
   onStaleDrop: UnitProps['onStaleDrop']
   onRemoveFromQueue: UnitProps['onRemoveFromQueue']
   onRebuildRound: UnitProps['onRebuildRound']
@@ -130,8 +120,6 @@ export function FreestyleFeedCard({
                   planVersion={planVersion}
                   encounter={encounter}
                   lastRating={planEntry?.lastRating ?? null}
-                  requestedRating={sheetRatingRequest?.cardId === card.id ? sheetRatingRequest.rating : null}
-                  onRequestedRatingHandled={onRequestedRatingHandled}
                   retryAfterCards={RESTUDY_MAX_INTERVENING}
                   fullscreen={freestyleFullscreen && index === currentIndex}
                   onToggleFullscreen={onToggleFullscreen}
@@ -141,11 +129,8 @@ export function FreestyleFeedCard({
                   preferredZoom={mindmapZoom}
                   onUserZoomChange={onMindmapZoomChange}
                   blockedHint={null}
-                  onRatingSettled={onRatingSettled}
-                  onRoundSync={onRoundSync}
                   onEnsureEncounter={onEnsureEncounter}
                   onEncounterChange={onEncounterChange}
-                  onBranchComplete={onBranchComplete}
                   onStaleDrop={onStaleDrop}
                   onRemoveFromQueue={onRemoveFromQueue}
                   onRebuildRound={onRebuildRound}

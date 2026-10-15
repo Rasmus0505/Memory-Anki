@@ -1,6 +1,6 @@
 export const FREESTYLE_WORKSPACE_PRIMARY = 'primary' as const
-export const FREESTYLE_WORKSPACE_SECONDARY = 'secondary' as const
-export type FreestyleWorkspaceId = typeof FREESTYLE_WORKSPACE_PRIMARY | typeof FREESTYLE_WORKSPACE_SECONDARY
+/** 随心 is the single immersive workspace (随心 2 was merged in by migration 0072). */
+export type FreestyleWorkspaceId = typeof FREESTYLE_WORKSPACE_PRIMARY
 /** `p` + palace id. Matches the backend column width (String(20)). */
 export type PalaceReviewWorkspaceId = `p${number}`
 
@@ -32,18 +32,14 @@ export function palaceReviewPath(palaceId: number, subjectId?: string | null): s
   return subjectId && /^\d+$/.test(subjectId) ? `${path}?subjectId=${subjectId}` : path
 }
 
-export function normalizeFreestyleWorkspaceId(value: unknown): FreestyleWorkspaceId {
-  return value === FREESTYLE_WORKSPACE_SECONDARY ? FREESTYLE_WORKSPACE_SECONDARY : FREESTYLE_WORKSPACE_PRIMARY
+export function normalizeFreestyleWorkspaceId(_value: unknown): FreestyleWorkspaceId {
+  return FREESTYLE_WORKSPACE_PRIMARY
 }
 
-export function freestyleWorkspacePath(workspace: FreestyleWorkspaceId): string {
-  return workspace === FREESTYLE_WORKSPACE_SECONDARY ? '/freestyle-2' : '/freestyle'
+export function freestyleWorkspacePath(_workspace: FreestyleWorkspaceId): string {
+  return '/freestyle'
 }
 
-export function freestyleWorkspaceLabel(workspace: FreestyleWorkspaceId): string {
-  return workspace === FREESTYLE_WORKSPACE_SECONDARY ? '随心 2' : '随心'
-}
-
-export function peerFreestyleWorkspace(workspace: FreestyleWorkspaceId): FreestyleWorkspaceId {
-  return workspace === FREESTYLE_WORKSPACE_PRIMARY ? FREESTYLE_WORKSPACE_SECONDARY : FREESTYLE_WORKSPACE_PRIMARY
+export function freestyleWorkspaceLabel(_workspace: FreestyleWorkspaceId): string {
+  return '随心'
 }

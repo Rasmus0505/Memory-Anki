@@ -43,6 +43,7 @@ export function FreestyleRatingBar({
   retryAfterCards,
   busy,
   pendingRating = null,
+  pendingClear = false,
   failedRating = null,
   locked,
   reviewReady,
@@ -66,10 +67,13 @@ export function FreestyleRatingBar({
   /** This-round last rating while the amend glance is still empty. */
   recordedRating?: UnitRating | null
   retryAfterCards: number
+  /** Disables only 移除本队列 and the scope tabs. A pending save never freezes the ratings. */
   busy: boolean
   /** The rating being saved right now. Only a subtle 保存中 hint; never lit as chosen. */
   pendingRating?: UnitRating | null
-  /** The rating whose save failed. Shown as 未保存, never as chosen. */
+  /** A clear (re-tap of the chosen grade) is on the wire. */
+  pendingClear?: boolean
+  /** The rating whose save failed. Shown as 未保存, never as chosen; tapping it retries. */
   failedRating?: UnitRating | null
   locked: boolean
   reviewReady: boolean
@@ -118,9 +122,7 @@ export function FreestyleRatingBar({
   }, [busy, disarmRemove, onRemoveFromQueue])
   const shownRating = removeArmed ? null : (selectedRating ?? recordedRating)
   const showingRecorded = !removeArmed && pendingRating == null && selectedRating == null && recordedRating != null
-  const selectedEffect = ratingEffects.find(
-    (effect) => effect.rating === (failedRating ?? shownRating),
-  )
+  const selectedEffect = ratingEffects.find((effect) => effect.rating === shownRating)
   const palaceMode = ratingScope === 'palace'
 
   // Adjust-state-during-render: a new pick (not a restored one on mount) floats a destination tag.
@@ -145,13 +147,14 @@ export function FreestyleRatingBar({
     if (pendingRating != null) disarmRemove()
   }, [disarmRemove, pendingRating])
 
+  // Only a modal (isFreestyleShortcutBlocked) suspends 1-4. A save on the wire does not.
   useEffect(() => {
-    if (!shortcutsActive || busy) return
+    if (!shortcutsActive) return
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.defaultPrevented || isFreestyleShortcutBlocked(event.target)) return
       if (onRemoveFromQueue && isFreestyleRemoveFromQueueShortcut(event.key)) {
         event.preventDefault()
-        requestRemove()
+        if (!busy) requestRemove()
         return
       }
       if (locked) return
@@ -206,7 +209,18 @@ export function FreestyleRatingBar({
           >
             <span className="min-w-0 truncate">再点确认移除 · 本轮不再安排</span>
           </div>
-        ) : pendingRating != null ? (
+        ) : failedRating != null ? (
+          <div
+            data-testid="freestyle-rating-unsaved-line"
+            role="status"
+            className="mb-1.5 flex items-center gap-1.5 rounded-lg border border-rate-again/40 bg-rate-again/12 px-2.5 py-1 text-[11px] font-medium text-stage-ink sm:text-xs"
+          >
+            <span className="min-w-0 truncate">
+              未保存{FREESTYLE_RATINGS.find((item) => item.value === failedRating)?.label ?? ''}
+            </span>
+            <span className="shrink-0 text-stage-faint">再点一次重试</span>
+          </div>
+        ) : pendingRating != null || pendingClear ? (
           <div
             data-testid="freestyle-rating-saving-line"
             className="mb-1.5 flex items-center gap-1.5 px-2.5 py-1 text-[11px] text-stage-faint sm:text-xs"
@@ -220,18 +234,14 @@ export function FreestyleRatingBar({
             className="mb-1.5 flex items-center gap-1.5 rounded-lg bg-stage-line px-2.5 py-1 text-[11px] font-medium text-stage-ink sm:text-xs"
           >
             <span className="min-w-0 truncate">
-              {failedRating != null
-                ? `未保存${selectedEffect.label}`
-                : palaceMode
-                  ? palaceRatingEffectLine(selectedEffect.label, palaceDueCount)
-                  : `已选${selectedEffect.label} · ${ratingEffectLabel(selectedEffect, retryAfterCards)}`}
+              {palaceMode
+                ? palaceRatingEffectLine(selectedEffect.label, palaceDueCount)
+                : `已选${selectedEffect.label} · ${ratingEffectLabel(selectedEffect, retryAfterCards)}`}
             </span>
             {locked ? (
               <span className="shrink-0 text-stage-faint">已锁定</span>
             ) : showingRecorded ? (
               <span className="shrink-0 text-stage-faint">上次评分</span>
-            ) : failedRating != null ? (
-              <span className="shrink-0 text-stage-faint">再点一次重试</span>
             ) : shownRating != null ? (
               <span className="shrink-0 text-stage-faint">再点取消</span>
             ) : null}
@@ -357,17 +367,21 @@ export function FreestyleRatingBar({
               : earlyHint
             const selected = shownRating === item.value
             const pending = pendingRating === item.value
+            const failed = failedRating === item.value
             return (
               <button
                 data-testid={`freestyle-rating-button-${item.value}`}
                 key={item.value}
                 type="button"
-                disabled={busy || locked || (!hasEncounter && !canRateWithoutPlan)}
+                disabled={locked || (!hasEncounter && !canRateWithoutPlan)}
                 aria-pressed={selected}
                 aria-busy={pending || undefined}
                 data-pending={pending ? 'true' : undefined}
+                data-failed={failed ? 'true' : undefined}
                 aria-label={
-                  selected && !locked && !showingRecorded
+                  failed
+                    ? `${item.label}：未保存。再点一次重试`
+                    : selected && !locked && !showingRecorded
                     ? `${item.label}：${hint}。再点取消评分`
                     : selected && showingRecorded
                       ? `${item.label}：${hint}。上次评分`

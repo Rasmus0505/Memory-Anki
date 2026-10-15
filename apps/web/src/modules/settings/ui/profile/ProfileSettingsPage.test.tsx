@@ -25,7 +25,6 @@ function mockSettings() {
       palace_list_view_settings: null,
       palace_shelf_view_settings: null,
       freestyle_feed_config: null,
-      freestyle_feed_config_secondary: null,
     },
   })
 }

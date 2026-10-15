@@ -497,7 +497,7 @@ export interface FreestyleRoundStatePayload {
   updated_at: string | null
   conflict: boolean
   duplicate: boolean
-  workspace?: 'primary' | 'secondary' | `p${number}`
+  workspace?: 'primary' | `p${number}`
   /**
    * Deliberately absent: `cleared_review_palace_ids`.
    *
@@ -531,7 +531,7 @@ export interface FreestyleRoundActiveRequest {
   config: FreestyleFeedConfig
   cards?: FreestyleCard[]
   round_id?: string
-  workspace?: 'primary' | 'secondary' | `p${number}`
+  workspace?: 'primary' | `p${number}`
   replan?: boolean
 }
 

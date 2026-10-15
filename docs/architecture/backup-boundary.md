@@ -45,16 +45,17 @@ The rule now:
 
 `test_unit_reconcile_deferral.py` pins both halves: the read path issues no `UPDATE`/`INSERT`/`DELETE`, and a scheduled drain actually heals the palace.
 
-Editor saves additionally trigger `maybe_create_rolling_backup`, gated by `ROLLING_EDIT_BACKUP_INTERVAL`. Because each rolling snapshot rewrites the full database, that interval must stay long enough that a large synced-drive database is not re-copied continuously.
+Editor saves no longer write a backup. `maybe_create_rolling_backup` and `request_rolling_backup` are kept as no-ops so the edit call sites stay harmless; the only automatic backup is the daily startup snapshot described below.
 
-## Backups never run in the study path (2026-10-11)
+## Backups never run in the study path (2026-10-15)
 
-Study must never wait for a backup. All four triggers are kept, and all of them run off the request path:
+Study must never wait for a backup. Copying the synced-drive database during study slowed every rating, so automatic backups were reduced to one trigger:
 
-- **Edit-triggered**: `maybe_create_rolling_backup` only calls `request_rolling_backup`, which starts one daemon worker and merges further requests into it (single-flight). The worker re-checks the newest backup's age inside `_BACKUP_LOCK`, so a burst of edits produces one backup. Call sites stay one-liners; none of them may call `create_rolling_backup` inline. Only the explicit `POST /backups/create` button does.
-- **Startup**: `start_startup_backups()` in the serve lifespan removes crash leftovers, then runs the daily and age-gated periodic backups in a thread. The short-lived prepare step no longer takes backups.
-- **Scheduled**: the 5-minute loop calls `maybe_create_periodic_backup`, age-gated at `AUTO_ROLLING_BACKUP_INTERVAL`.
-- **Shutdown**: `run_shutdown_backup_bounded` runs in a worker off the event loop. It waits at most 5 s for a running backup and stops waiting after 20 s; the worker is a daemon and the process exits anyway.
+- **Daily startup snapshot (the only automatic backup).** `start_startup_backups()` runs in every startup mode, including the desktop/PWA healthcheck process that stays open all day. It removes crash leftovers, waits `DAILY_BACKUP_STARTUP_DELAY_SECONDS` (120 s) so the first minutes of study are not competing with a copy, then calls `ensure_daily_backup()`. That check uses the machine's local date and runs under `_BACKUP_LOCK`, so it writes at most one snapshot per local day even when two triggers overlap.
+- **Launcher hook.** `start-all.bat` (via `tools/pwa_server.py:_request_daily_backup_check`) calls `POST /api/v1/backups/daily-check` on every start, including when a running service is reused. Closing the window does not stop the service, so the check also runs when the window is reopened against a live process.
+- **Edit-triggered and periodic/shutdown backups are removed.** `request_rolling_backup` returns False; the periodic loop, shutdown worker and `run_shutdown_backup_bounded` were deleted. Only the explicit `POST /backups/create` button writes a backup on demand.
+- **Palace version retention.** After today's snapshot exists, the startup thread prunes `palace_versions` older than `VERSION_RETENTION` (7 days), deleting in `PRUNE_BATCH_SIZE` batches. Each palace always keeps its newest version, so no palace loses its last restore point (`prune_expired_palace_versions`).
+- **Receipt purge runs in every mode.** `start_mutation_response_purge_loop` no longer depends on serve mode, so expired `api_mutation.*` receipts are cleared from the desktop/PWA process as well.
 
 Staging is isolated: half-written backups live in `backups/.staging/.backup-stage-*`, never inside `rolling/`. `_latest_backup_in`, pruning, listing and the daily check ignore dot-folders, so a crash can no longer leave something that looks like a newer, empty backup. `cleanup_stale_backup_staging` clears leftovers at startup.
 

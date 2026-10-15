@@ -28,6 +28,7 @@ export function FreestylePageDialogs({
   onCompressCompleted,
   onReorderPlan,
   onRateCard,
+  onRateCards,
   onRemoveCard,
   onOpenConfigFromPlan,
   configOpen,
@@ -59,6 +60,7 @@ export function FreestylePageDialogs({
   onCompressCompleted: SheetProps['onCompressCompleted']
   onReorderPlan: SheetProps['onReorder']
   onRateCard: SheetProps['onRateCard']
+  onRateCards: SheetProps['onRateCards']
   onRemoveCard: SheetProps['onRemoveCard']
   onOpenConfigFromPlan: SheetProps['onOpenConfig']
   configOpen: boolean
@@ -92,6 +94,7 @@ export function FreestylePageDialogs({
         onCompressCompleted={onCompressCompleted}
         onReorder={onReorderPlan}
         onRateCard={onRateCard}
+        onRateCards={onRateCards}
         onRemoveCard={onRemoveCard}
         onOpenConfig={onOpenConfigFromPlan}
         loading={loading}

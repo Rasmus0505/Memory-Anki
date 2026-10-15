@@ -6,6 +6,7 @@ from memory_anki.modules.backups.application.backup_lifecycle import (
     create_rolling_backup,
     list_backups,
     restore_database_backup,
+    start_startup_backups,
 )
 from memory_anki.modules.backups.application.backup_palace_restore import (
     recover_palaces_from_git_snapshot,
@@ -37,6 +38,17 @@ def api_create_backup(data: dict | None = None):
     reason = (data or {}).get("reason") or "manual"
     folder = create_rolling_backup(str(reason))
     return {"ok": True, "path": str(folder)}
+
+
+@router.post("/backups/daily-check")
+def api_daily_backup_check():
+    """Launcher hook: runs on every start, including when a running service is reused.
+
+    The actual check is once per local calendar day, and it happens off the request
+    thread after the same startup delay as a fresh boot.
+    """
+    start_startup_backups()
+    return {"ok": True}
 
 
 @router.post("/backups/restore-database")

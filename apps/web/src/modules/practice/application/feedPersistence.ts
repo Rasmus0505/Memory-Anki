@@ -7,7 +7,6 @@ import {
 } from '../domain/feedConfig'
 import {
   FREESTYLE_WORKSPACE_PRIMARY,
-  FREESTYLE_WORKSPACE_SECONDARY,
   isPalaceReviewWorkspace,
   normalizeFreestyleWorkspaceId,
   type FreestyleWorkspaceId,
@@ -25,9 +24,6 @@ import { emitAppEvent } from '@/shared/events/appEvents'
 import { createPersistentPreferenceStore } from '@/shared/preferences/persistentPreferenceStore'
 
 export const FREESTYLE_FEED_CONFIG_UPDATED_EVENT = 'memory-anki-freestyle-feed-config-change'
-export const FREESTYLE_SECONDARY_FEED_CONFIG_UPDATED_EVENT = 'memory-anki-freestyle-feed-config-secondary-change'
-export const FREESTYLE_SECONDARY_FEED_CONFIG_STORAGE_KEY = 'memory-anki.freestyle.feed-config.secondary.v2'
-export const FREESTYLE_SECONDARY_QUEUE_STATE_STORAGE_KEY = 'memory-anki.freestyle.queue-state.secondary.v1'
 export const FREESTYLE_PEER_ROUND_EVENT = 'memory-anki-freestyle-peer-round'
 
 export type FreestyleQueueWorkspace = FreestyleWorkspaceId | PalaceReviewWorkspaceId
@@ -48,38 +44,22 @@ const feedConfigStore = createPersistentPreferenceStore<FreestyleFeedConfig>({
   isValidCache: isValidFeedConfigCache,
 })
 
-const secondaryFeedConfigStore = createPersistentPreferenceStore<FreestyleFeedConfig>({
-  cacheKey: 'freestyle_feed_config_secondary',
-  defaultValue: DEFAULT_FREESTYLE_FEED_CONFIG,
-  localStorageKey: FREESTYLE_SECONDARY_FEED_CONFIG_STORAGE_KEY,
-  sanitize: sanitizeFreestyleFeedConfig,
-  updatedEvent: FREESTYLE_SECONDARY_FEED_CONFIG_UPDATED_EVENT,
-  isValidCache: isValidFeedConfigCache,
-})
-
-function isSecondaryWorkspace(workspace?: FreestyleQueueWorkspace) {
-  return normalizeFreestyleWorkspaceId(workspace) === FREESTYLE_WORKSPACE_SECONDARY
-    && !isPalaceReviewWorkspace(workspace)
-}
-
-function feedConfigStoreFor(workspace?: FreestyleQueueWorkspace) {
-  return isSecondaryWorkspace(workspace) ? secondaryFeedConfigStore : feedConfigStore
+function feedConfigStoreFor(_workspace?: FreestyleQueueWorkspace) {
+  return feedConfigStore
 }
 
 function queueStateStorageKey(workspace?: FreestyleQueueWorkspace) {
   if (isPalaceReviewWorkspace(workspace)) {
     return `memory-anki.freestyle.queue-state.${workspace}.v1`
   }
-  return isSecondaryWorkspace(workspace)
-    ? FREESTYLE_SECONDARY_QUEUE_STATE_STORAGE_KEY
-    : FREESTYLE_QUEUE_STATE_STORAGE_KEY
+  return FREESTYLE_QUEUE_STATE_STORAGE_KEY
 }
 
 export function readFreestyleFeedConfig(workspace?: FreestyleQueueWorkspace): FreestyleFeedConfig {
   // Palace review borrows mix/content settings. It must not read a palace-locked copy.
   if (isPalaceReviewWorkspace(workspace)) return readFreestyleFeedConfig(FREESTYLE_WORKSPACE_PRIMARY)
   const store = feedConfigStoreFor(workspace)
-  if (!isSecondaryWorkspace(workspace) && typeof window !== 'undefined' && !window.localStorage.getItem(FREESTYLE_FEED_CONFIG_STORAGE_KEY)) {
+  if (typeof window !== 'undefined' && !window.localStorage.getItem(FREESTYLE_FEED_CONFIG_STORAGE_KEY)) {
     const legacy = window.localStorage.getItem(LEGACY_FREESTYLE_FEED_CONFIG_STORAGE_KEY)
     if (legacy) {
       try {
@@ -102,7 +82,7 @@ export function saveFreestyleFeedConfig(config: FreestyleFeedConfig, workspace?:
 
 export function resetFreestyleFeedConfig(workspace?: FreestyleQueueWorkspace) {
   if (isPalaceReviewWorkspace(workspace)) return sanitizeFreestyleFeedConfig(DEFAULT_FREESTYLE_FEED_CONFIG)
-  if (!isSecondaryWorkspace(workspace) && typeof window !== 'undefined') {
+  if (typeof window !== 'undefined') {
     window.localStorage.removeItem(LEGACY_FREESTYLE_FEED_CONFIG_STORAGE_KEY)
   }
   return feedConfigStoreFor(workspace).reset()

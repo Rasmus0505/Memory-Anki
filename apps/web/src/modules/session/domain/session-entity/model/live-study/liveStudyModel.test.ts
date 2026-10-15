@@ -4,7 +4,6 @@ import {
   emptyLiveStudyProjection,
   encodeLiveStudyCommand,
   isFollowableStudyPath,
-  liveStudySurfaceFromPath,
   preferNewerLiveStudyProjection,
   shouldFollowLiveRoute,
 } from './liveStudyModel'
@@ -52,9 +51,6 @@ describe('liveStudyModel', () => {
   it('retains study-path classification for local UI composition', () => {
     expect(isFollowableStudyPath('/settings')).toBe(false)
     expect(isFollowableStudyPath('/freestyle')).toBe(true)
-    expect(isFollowableStudyPath('/freestyle-2')).toBe(true)
-    expect(liveStudySurfaceFromPath('/freestyle-2')).toBe('freestyle')
-    expect(liveStudySurfaceFromPath('/freestyle-2/')).toBe('freestyle')
     expect(
       shouldFollowLiveRoute({
         localPath: '/settings',

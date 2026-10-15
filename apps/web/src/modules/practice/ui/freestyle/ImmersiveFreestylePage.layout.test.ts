@@ -103,7 +103,20 @@ describe('ImmersiveFreestylePage layout', () => {
 
   it('styles the 重练 badge by completed vs unfinished, not a single chrome', () => {
     expect(source).toContain('retryChromeClass')
-    expect(source).toContain('liveEncounterFillDone')
+    // Scored-ness comes from the single score kernel, not a call-site reassembly.
+    expect(source).toContain('isOccurrenceScored(card.id')
     expect(source).toContain('data-completed={done ? \'true\' : \'false\'}')
+  })
+
+  it('rates 本轮安排 rows in the background without moving the feed', () => {
+    const handler = source.slice(
+      source.indexOf('const handlePlanRateCard'),
+      source.indexOf('const handleCompressCompleted'),
+    )
+    expect(handler).toContain('rateCards(')
+    expect(handler).not.toContain('navigateToIndex')
+    expect(handler).not.toContain('jumpFromProgressRail')
+    expect(source).not.toContain('sheetRatingRequest')
+    expect(source).toContain('onRateCards={handlePlanRateCards}')
   })
 })

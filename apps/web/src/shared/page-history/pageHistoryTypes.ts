@@ -6,7 +6,6 @@ export type PageHistorySectionKey =
   | 'dashboard'
   | 'progress'
   | 'freestyle'
-  | 'freestyleSecondary'
   | 'palaces'
   | 'english'
   | 'knowledge'

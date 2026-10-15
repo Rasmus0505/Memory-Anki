@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import os
 import re
@@ -36,10 +35,8 @@ from memory_anki.core.runtime_activity import (
 )
 from memory_anki.infrastructure.db._tables._base import get_session as _get_session
 from memory_anki.modules.backups.application.backup_lifecycle import (
-    run_shutdown_backup_bounded,
-    start_periodic_backup_loop,
     start_startup_backups,
-    stop_periodic_backup_loop,
+    stop_startup_backups,
 )
 from memory_anki.modules.backups.presentation import router as backups_router
 from memory_anki.modules.content.application.study_text_library_cache import (
@@ -153,14 +150,15 @@ async def lifespan(app: FastAPI):
     # where start_startup_warmup() is skipped, and it is exactly that process
     # whose first user request would otherwise pay the cold pool open.
     start_db_pool_warmup()
+    # Cleanup and the once-per-day backup run in every mode. The desktop/PWA
+    # process serves in healthcheck mode, and it is the process that stays open all day.
+    start_mutation_response_purge_loop()
+    start_startup_backups()
     if startup_mode == STARTUP_MODE_SERVE:
         runtime_activity_handle = start_runtime_activity_heartbeat(
             channel=str(startup_state.runtime_info.get("channel") or "production"),
             startup_mode=startup_mode,
         )
-        start_startup_backups()
-        start_mutation_response_purge_loop()
-        start_periodic_backup_loop()
         start_startup_warmup()
         start_study_text_prepare()
     # Desktop/PWA launches may use healthcheck mode while still serving the real
@@ -172,11 +170,10 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         stop_dashboard_snapshot_worker()
+        stop_startup_backups()
+        stop_mutation_response_purge_loop()
         if startup_mode == STARTUP_MODE_SERVE:
-            stop_periodic_backup_loop()
-            stop_mutation_response_purge_loop()
             stop_runtime_activity_heartbeat(runtime_activity_handle)
-            await asyncio.to_thread(run_shutdown_backup_bounded)
 
 
 app = FastAPI(title="Memory Anki API", lifespan=lifespan)

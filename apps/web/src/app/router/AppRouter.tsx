@@ -18,7 +18,6 @@ const MAX_RESIDENT_ROUTE_COUNT = 4
  */
 const ALWAYS_RESIDENT_ROUTE_PATTERNS: readonly RegExp[] = [
   /^\/freestyle$/,
-  /^\/freestyle-2$/,
 ]
 
 export function isAlwaysResidentRoute(pathname: string) {

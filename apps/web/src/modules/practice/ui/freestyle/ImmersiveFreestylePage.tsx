@@ -59,6 +59,7 @@ import { usePalaceClearanceWatch } from '@/modules/practice/ui/freestyle/hooks/u
 import { useFreestyleFullscreen } from '@/modules/practice/ui/freestyle/hooks/useFreestyleFullscreen'
 import { useFreestyleDisplayPrefs } from '@/modules/practice/ui/freestyle/hooks/useFreestyleDisplayPrefs'
 import { useFreestyleSubjectMap } from '@/modules/practice/ui/freestyle/hooks/useFreestyleSubjectMap'
+import { useFreestyleRatingOutbox } from '@/modules/practice/ui/freestyle/hooks/useFreestyleRatingOutbox'
 import { resetFreestyleCombo } from '@/modules/practice/ui/freestyle/model/freestyleComboStore'
 import { parseFreestyleEntryPalaceId, parseFreestyleEntryPalaceIds } from '@/modules/practice/ui/freestyle/model/freestyle-entry-scope'
 import {
@@ -141,7 +142,6 @@ export default function ImmersiveFreestylePage({
   const [saveError, setSaveError] = useState('')
   const { promptForAiOptions } = useAiRunConfigDialog()
   const [inlineEditing, setInlineEditing] = useState(false)
-  const [sheetRatingRequest, setSheetRatingRequest] = useState<{ cardId: string; rating: UnitRating } | null>(null)
   const { flipMode, mindmapZoom, updateFlipMode, updateMindmapZoom } = useFreestyleDisplayPrefs()
   const { freestyleFullscreen, toggleFreestyleFullscreen } = useFreestyleFullscreen()
   const subjectByPalaceId = useFreestyleSubjectMap()
@@ -523,6 +523,33 @@ export default function ImmersiveFreestylePage({
     })
   }, [])
 
+  const excludedPlanIds = useMemo(() => new Set(
+    Object.values(roundPlan?.cardsById ?? {})
+      .filter((entry) => entry.status === 'excluded')
+      .map((entry) => entry.cardId),
+  ), [roundPlan])
+  // Every rating acknowledgement reaches the round ledger here, whether or not
+  // its card is mounted; 本轮安排 rates through the same per-card outbox.
+  const {
+    rateCards,
+    failedCount: unsavedRatingCount,
+    retryUnsaved: retryUnsavedRatings,
+  } = useFreestyleRatingOutbox({
+    roundId: queueState.roundId,
+    cards,
+    encounters: queueState.unitEncountersByCardId,
+    excludedIds: excludedPlanIds,
+    planVersion,
+    viewingCardId,
+    ensureUnitEncounter,
+    adoptRound: adoptRoundVersion,
+    encounterChange: updateUnitEncounter,
+    branchComplete: handleBranchComplete,
+    ratingSettled: handleRatingSettled,
+    cardSaveFailed: handleCardSaveFailed,
+    staleDrop: handleStaleDrop,
+  })
+
   const onChoiceResolve = useCallback(
     (card: FreestyleQuizCard, optionId: string, isCorrect: boolean) => {
       handleChoiceResolve(card, optionId, isCorrect)
@@ -732,18 +759,14 @@ export default function ImmersiveFreestylePage({
   const progressRailOverflow = useMemo(() => (
     <FreestyleHudOverflow
       summaryLabel={overflowSummary}
-      slot={slot}
       onOpenPlan={openPlan}
       onUpdateQueue={runQueueUpdate}
       onSyncProgress={syncComputerProgress}
       onOpenHistory={openHistory}
       returnTo={reviewPalaceId != null ? palaceReviewReturnPath(reviewReturnSubjectId) : null}
     />
-  ), [openHistory, openPlan, overflowSummary, reviewPalaceId, reviewReturnSubjectId, runQueueUpdate, slot, syncComputerProgress])
+  ), [openHistory, openPlan, overflowSummary, reviewPalaceId, reviewReturnSubjectId, runQueueUpdate, syncComputerProgress])
 
-  const handleSheetRatingHandled = useCallback((cardId: string) => {
-    setSheetRatingRequest((current) => (current?.cardId === cardId ? null : current))
-  }, [])
   const reconcileUnitsFor = useCallback((cardId: string) => {
     void buildQueue(config, {
       preserveCompleted: true,
@@ -755,12 +778,14 @@ export default function ImmersiveFreestylePage({
     setPlanOpen(false)
     jumpFromProgressRail(cardId)
   }, [jumpFromProgressRail])
+  // 本轮安排 rates in the background and never moves the feed (single row or 多选 评分).
   const handlePlanRateCard = useCallback((cardId: string, rating: UnitRating) => {
-    const index = cards.findIndex((card) => card.id === cardId)
-    if (index < 0) return
-    setSheetRatingRequest({ cardId, rating })
-    if (index !== currentIndex) navigateToIndex(index)
-  }, [cards, currentIndex, navigateToIndex])
+    rateCards([cardId], rating, { toggle: true })
+  }, [rateCards])
+  const handlePlanRateCards = useCallback(
+    (cardIds: string[], rating: UnitRating) => rateCards(cardIds, rating),
+    [rateCards],
+  )
   const handleCompressCompleted = useCallback(() => {
     const ids = compressibleRoundPlanIds(roundPlan, {
       completedIds: queueState.completedIds,
@@ -807,7 +832,6 @@ export default function ImmersiveFreestylePage({
   const dismissSaveError = useCallback(() => setSaveError(''), [])
   const dismissPalaceClearance = useCallback(() => setPalaceClearance(null), [setPalaceClearance])
   const dismissNewUnitsBanner = useCallback(() => setNewUnitsBannerVisible(false), [])
-  const workspaceSwitcherSlot = reviewPalaceId == null ? normalizeFreestyleWorkspaceId(slot) : null
 
   const pendingNewUnits = countPendingNewUnits(
     cards,
@@ -850,6 +874,7 @@ export default function ImmersiveFreestylePage({
           onCompressCompleted={handleCompressCompleted}
           onReorderPlan={reorderPlan}
           onRateCard={handlePlanRateCard}
+          onRateCards={handlePlanRateCards}
           onRemoveCard={removeCardFromQueue}
           onOpenConfigFromPlan={openConfigFromPlan}
           configOpen={configOpen}
@@ -877,7 +902,6 @@ export default function ImmersiveFreestylePage({
           examOverview={examOverview}
           progressSummary={progressSummary}
           scrollChannel={scrollChannel}
-          workspaceSwitcherSlot={workspaceSwitcherSlot}
           progressRailOverflow={progressRailOverflow}
           onOpenPlan={openPlan}
           onJump={jumpFromProgressRail}
@@ -885,6 +909,8 @@ export default function ImmersiveFreestylePage({
           onDismissChannelApplied={dismissChannelApplied}
           saveError={saveError}
           onDismissSaveError={dismissSaveError}
+          unsavedRatingCount={unsavedRatingCount}
+          onRetryUnsavedRatings={retryUnsavedRatings}
           palaceClearance={palaceClearance}
           onDismissPalaceClearance={dismissPalaceClearance}
           channelHintVisible={channelHintVisible}
@@ -916,8 +942,6 @@ export default function ImmersiveFreestylePage({
           onRefreshQueue={refreshQueue}
           onOpenConfig={handleOpenStaleConfig}
           readOnlyHistoryCardId={readOnlyHistoryCardId}
-          sheetRatingRequest={sheetRatingRequest}
-          onSheetRatingHandled={handleSheetRatingHandled}
           freestyleFullscreen={freestyleFullscreen}
           flipMode={flipMode}
           mindmapZoom={mindmapZoom}
@@ -930,11 +954,8 @@ export default function ImmersiveFreestylePage({
           onToggleFullscreen={toggleFreestyleFullscreen}
           onFlipModeChange={updateFlipMode}
           onMindmapZoomChange={updateMindmapZoom}
-          onRatingSettled={handleRatingSettled}
-          onRoundSync={adoptRoundVersion}
           onEnsureEncounter={ensureUnitEncounter}
           onEncounterChange={updateUnitEncounter}
-          onBranchComplete={handleBranchComplete}
           onStaleDrop={handleStaleDrop}
           onRemoveFromQueue={removeCardFromQueue}
           onRebuildRound={reshuffleQueue}

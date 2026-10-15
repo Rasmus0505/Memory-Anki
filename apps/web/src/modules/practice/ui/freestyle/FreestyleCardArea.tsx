@@ -5,7 +5,7 @@ import { FreestyleFeedCard } from '@/modules/practice/ui/freestyle/FreestyleFeed
 import { FreestyleClosingSlot } from '@/modules/practice/ui/freestyle/FreestyleClosingSlot'
 import type { FreestyleSettlementMeta } from '@/modules/practice/ui/freestyle/components/FreestyleRoundSettlement'
 import { overlayRoundReviewPalaceIds } from '@/modules/practice/ui/freestyle/model/overlayQuizRange'
-import { liveEncounterFillDone } from '@/modules/practice/ui/freestyle/model/freestyleProgressSegments'
+import { isOccurrenceScored } from '@/modules/practice/domain/unitProgressState'
 import { isQuizCard } from '@/modules/practice/ui/freestyle/model/freestyle-cards'
 import type { FreestyleCard } from '@/shared/api/contracts'
 import { toast } from '@/shared/feedback/toast'
@@ -30,8 +30,6 @@ export function FreestyleCardArea({
   onRefreshQueue,
   onOpenConfig,
   readOnlyHistoryCardId,
-  sheetRatingRequest,
-  onSheetRatingHandled,
   freestyleFullscreen,
   flipMode,
   mindmapZoom,
@@ -44,11 +42,8 @@ export function FreestyleCardArea({
   onToggleFullscreen,
   onFlipModeChange,
   onMindmapZoomChange,
-  onRatingSettled,
-  onRoundSync,
   onEnsureEncounter,
   onEncounterChange,
-  onBranchComplete,
   onStaleDrop,
   onRemoveFromQueue,
   onRebuildRound,
@@ -86,8 +81,6 @@ export function FreestyleCardArea({
   onRefreshQueue: () => void
   onOpenConfig: () => void
   readOnlyHistoryCardId: string | null
-  sheetRatingRequest: FeedProps['sheetRatingRequest']
-  onSheetRatingHandled: (cardId: string) => void
   freestyleFullscreen: boolean
   flipMode: FeedProps['flipMode']
   mindmapZoom: FeedProps['mindmapZoom']
@@ -100,11 +93,8 @@ export function FreestyleCardArea({
   onToggleFullscreen: FeedProps['onToggleFullscreen']
   onFlipModeChange: FeedProps['onFlipModeChange']
   onMindmapZoomChange: FeedProps['onMindmapZoomChange']
-  onRatingSettled: FeedProps['onRatingSettled']
-  onRoundSync: FeedProps['onRoundSync']
   onEnsureEncounter: FeedProps['onEnsureEncounter']
   onEncounterChange: FeedProps['onEncounterChange']
-  onBranchComplete: FeedProps['onBranchComplete']
   onStaleDrop: FeedProps['onStaleDrop']
   onRemoveFromQueue: FeedProps['onRemoveFromQueue']
   onRebuildRound: FeedProps['onRebuildRound']
@@ -162,7 +152,6 @@ export function FreestyleCardArea({
               isActive={isActive}
               settlementVisible={settlementVisible}
               readOnlyHistoryCardId={readOnlyHistoryCardId}
-              sheetRatingRequest={sheetRatingRequest}
               freestyleFullscreen={freestyleFullscreen}
               flipMode={flipMode}
               mindmapZoom={mindmapZoom}
@@ -170,19 +159,19 @@ export function FreestyleCardArea({
               planVersion={planVersion}
               encounter={encounter}
               planEntry={planEntry}
-              completed={liveEncounterFillDone(encounter, completedIds.includes(card.id))}
+              completed={isOccurrenceScored(card.id, {
+                completedIds,
+                encounters: queueState.unitEncountersByCardId,
+                roundPlan,
+              })}
               questionState={isQuizCard(card) ? questionStates[card.question.id] : undefined}
               answeredBefore={isQuizCard(card) && answeredQuestionIds.has(card.question.id)}
               liveRevealMap={liveRevealMap}
-              onRequestedRatingHandled={() => onSheetRatingHandled(card.id)}
               onFlipModeChange={onFlipModeChange}
               onMindmapZoomChange={onMindmapZoomChange}
               onToggleFullscreen={onToggleFullscreen}
-              onRatingSettled={onRatingSettled}
-              onRoundSync={onRoundSync}
               onEnsureEncounter={onEnsureEncounter}
               onEncounterChange={onEncounterChange}
-              onBranchComplete={onBranchComplete}
               onStaleDrop={onStaleDrop}
               onRemoveFromQueue={onRemoveFromQueue}
               onRebuildRound={onRebuildRound}

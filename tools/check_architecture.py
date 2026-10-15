@@ -2817,8 +2817,6 @@ def check_freestyle_knowledge_entry_scope(errors: list[str]) -> None:
 
 def check_identity_keyed_progress(errors: list[str]) -> None:
     """A unit rating and a question answer belong to the entity, not the entry."""
-    service = API_SRC / "modules" / "practice" / "application" / "round_state_service.py"
-    peer = API_SRC / "modules" / "practice" / "domain" / "peer_progress.py"
     dialog = WEB_SRC / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx"
     quiz_flow = (
         WEB_SRC
@@ -2831,17 +2829,15 @@ def check_identity_keyed_progress(errors: list[str]) -> None:
     )
     feed_doc = REPO_ROOT / "docs" / "architecture" / "freestyle-immersive-feed.md"
     evidence_doc = REPO_ROOT / "docs" / "architecture" / "unified-training-evidence.md"
-    if not service.exists() or "_project_identity_ratings" not in service.read_text(encoding="utf-8", errors="ignore"):
-        errors.append(
-            "round rating must project the same unit score onto other active rounds."
-        )
-    if not peer.exists() or "def project_identity_ratings" not in peer.read_text(encoding="utf-8", errors="ignore"):
-        errors.append("unit rating projection must stay framework-free.")
+    identity_values = API_SRC / "modules" / "practice" / "domain" / "round_plan_values.py"
+    identity_text = identity_values.read_text(encoding="utf-8", errors="ignore") if identity_values.exists() else ""
+    if 'f"unit:{unit_id}"' not in identity_text:
+        errors.append("round rating must be keyed by the stable unit identity.")
     if not dialog.exists() or "writeQuizSessionState" not in dialog.read_text(encoding="utf-8", errors="ignore"):
         errors.append("node-bound quiz must write the shared question progress, not a private ledger.")
     if not quiz_flow.exists() or "writeQuizSessionState" not in quiz_flow.read_text(encoding="utf-8", errors="ignore"):
         errors.append("freestyle quiz cards must write the shared question progress.")
-    if not feed_doc.exists() or "not workspace-owned" not in feed_doc.read_text(encoding="utf-8", errors="ignore"):
+    if not feed_doc.exists() or "keyed by `unit:{unit_id}`" not in feed_doc.read_text(encoding="utf-8", errors="ignore"):
         errors.append("freestyle architecture must document identity-keyed unit ratings.")
     evidence_text = evidence_doc.read_text(encoding="utf-8", errors="ignore") if evidence_doc.exists() else ""
     if "private answer ledger" not in evidence_text:
@@ -5045,7 +5041,7 @@ def check_backup_snapshot_policy(errors: list[str]) -> None:
             errors.append(
                 f"{lifecycle.relative_to(REPO_ROOT).as_posix()}: automatic backup helpers must not create media-copying full snapshots."
             )
-        if "def ensure_daily_backup" in source and "create_rolling_backup(\"startup\")" not in source:
+        if "def ensure_daily_backup" in source and "_write_rolling_backup_locked(\"startup\")" not in source:
             errors.append(
                 f"{lifecycle.relative_to(REPO_ROOT).as_posix()}: daily startup backup must write a rolling database snapshot."
             )
@@ -5350,14 +5346,6 @@ def check_unified_training_evidence(errors: list[str]) -> None:
             errors.append(
                 f"{path.relative_to(REPO_ROOT).as_posix()}: must register `/freestyle-2` as a second immersive workspace."
             )
-    peer_progress = API_SRC / "modules" / "practice" / "domain" / "peer_progress.py"
-    peer_progress_source = (
-        peer_progress.read_text(encoding="utf-8", errors="ignore") if peer_progress.exists() else ""
-    )
-    if "apply_peer_progress" not in peer_progress_source:
-        errors.append(
-            f"{peer_progress.relative_to(REPO_ROOT).as_posix()}: must define `apply_peer_progress` so workspaces inherit overlapping progress."
-        )
     round_state = API_SRC / "modules" / "practice" / "application" / "round_state_service.py"
     round_state_source = (
         round_state.read_text(encoding="utf-8", errors="ignore") if round_state.exists() else ""

@@ -19,7 +19,6 @@ import type { PageHistorySectionKey } from '@/shared/page-history/pageHistoryTyp
 
 export type NavSectionKey =
   | 'freestyle'
-  | 'freestyleSecondary'
   | 'palaces'
   | 'english'
   | 'knowledge'
@@ -59,7 +58,8 @@ export const EXACT_ROUTES: ExactRouteEntry[] = [
   { path: '/progress', nav: 'progress', history: 'progress', historyKey: 'progress' },
   { path: '/exam', nav: 'review', history: 'dashboard', historyKey: 'exam:war-room', commandLabel: '考试作战室' },
   { path: '/freestyle', nav: 'freestyle', history: 'freestyle', historyKey: 'freestyle' },
-  { path: '/freestyle-2', nav: 'freestyleSecondary', history: 'freestyleSecondary', historyKey: 'freestyle-secondary', commandLabel: '随心 2' },
+  // Retired 随心 2 bookmark: redirects to /freestyle, so it resolves to the same section.
+  { path: '/freestyle-2', nav: 'freestyle', history: 'freestyle', historyKey: 'freestyle' },
   { path: '/palaces', nav: 'palaces', history: 'palaces', historyKey: 'palace:shelf' },
   { path: '/palaces/list', nav: 'palaces', history: 'palaces', historyKey: 'palace:list', commandLabel: '宫殿列表' },
   { path: '/palaces/new', nav: 'knowledge', history: 'palaces', historyKey: 'palace:new' },
@@ -139,7 +139,6 @@ export const PREFIX_RULES: PrefixRule[] = [
 /** 导航分区根路径（侧栏第二次点击的目标），与 navSections[].to 对齐。 */
 export const NAV_SECTION_ROOTS: Record<NavSectionKey, string> = {
   freestyle: '/freestyle',
-  freestyleSecondary: '/freestyle-2',
   palaces: '/palaces',
   english: '/english/listening',
   knowledge: '/palaces/new',

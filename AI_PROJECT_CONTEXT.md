@@ -22,7 +22,7 @@ Memory Anki 是一个自用的本地学习产品，核心是“记忆宫殿 + �
 | 思维导图导入 `produce` | 手动 JSON、Markdown、整库导入导出；“文字转脑图”走 JSON 路径 |
 | 知识体系 `knowledge` | 学科、章节树、知识导入、章节与宫殿/题目联动 |
 | 英语学习 `english` / `english_lookup` | 听力课程与看视频敲字幕；查词翻译。阅读、CEFR、句型、词汇页已删除 |
-| 随心模式 `freestyle` | 面向当天训练的沉浸刷卡流；默认入口 `/freestyle`；另有可从 HUD 切换进入的 `/freestyle-2` |
+| 随心模式 `freestyle` | 面向当天训练的沉浸刷卡流；唯一入口 `/freestyle`（原随心 2 已于 0072 迁移并入） |
 | 学习会话 `session` | 宫殿练习、分段、迷你宫殿、复习等会话进度 |
 | 仪表盘 `dashboard` | 今日复习、近期状态、时长统计 |
 | 成长 `progression`（后端） | 经验、等级、委托、印章的只读投影（`GET /api/v1/progression/overview`）。前端不展示，无 `modules/progression`，`/growth` 旧地址转到 `/dashboard` |

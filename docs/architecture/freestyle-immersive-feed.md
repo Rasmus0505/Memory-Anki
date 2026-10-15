@@ -13,9 +13,9 @@ older `FreestyleConfig` settings path is compatibility-only and must not drive q
 ## Review Entry
 
 Shelf 「立即复习」 opens `/palaces/<id>/review` and reuses the freestyle feed. That route is a
-knowledge-section page, not `/freestyle` or `/freestyle-2`, and it must not publish a followable
-live-study route. Its round workspace is `p<id>` (column width 20). It has no peer, does not write
-the global 随心 selection, and does not emit the peer-round event. The round still applies a transient single-palace scope by locking every
+knowledge-section page, not `/freestyle`, and it must not publish a followable
+live-study route. Its round workspace is `p<id>` (column width 20). It does not write
+the global 随心 selection. The round still applies a transient single-palace scope by locking every
 training stream to that palace. A saved 随心 palace/subject selection does not keep showing the full
 feed. Content/mix/queue settings are borrowed, the lock is not written back to stored prefs, and
 there is no separate formal page session before the queue loads. Editor 「开始随心复习」
@@ -25,15 +25,17 @@ palaces for one round; saving still writes the stored 随心 selection, not that
 standalone `/review` frontend route or completion screen; unknown retired `/review...` paths fall
 back to `/freestyle`.
 
-## Two immersive workspaces
+## One immersive workspace
 
-Freestyle has two independent immersive routes: `/freestyle` (随心) and `/freestyle-2` (随心 2).
-Each workspace keeps its own feed config, round cursor, and round plan. Overlap identity is
-`unit:{unit_id}` / `quiz:{question_id}`. Complete, exclude, and retry progress is inherited
-across workspaces for the same identity. A 1–4 unit rating is not workspace-owned: rating a
-unit from palace review or either freestyle round stamps that same rating onto every other
-active round that contains the unit, without moving those cursors. Completion without a
-stored rating still must not invent 记得. Cursors stay independent. A fully handled round
+随心 is the only immersive round. `/freestyle-2` (随心 2) was merged into it by migration
+`0072_merge_secondary_freestyle_workspace`: its active round and feed settings took over the
+primary slot, and a displaced primary round is kept as `status='archived'`, never deleted.
+Any stale `workspace=secondary` request normalizes to primary, and `/freestyle-2` redirects to
+`/freestyle`. Overlap identity is `unit:{unit_id}` / `quiz:{question_id}`. A 1–4 unit rating is
+keyed by `unit:{unit_id}` on the round's own card. A rating from palace review or a freestyle
+round is stored once on that unit and is not copied to any other round. A tap never moves the
+cursor. Completion without a
+stored rating still must not invent 记得. A fully handled round
 freezes on `get_or_create` so the closing settlement slot stays reachable; leftover due
 work advances only when the learner explicitly starts the next round via config confirm
 (`「再来一轮」` → `/rounds/start`). Page refresh, app restart, and HUD queue refresh must

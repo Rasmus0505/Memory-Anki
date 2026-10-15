@@ -25,7 +25,6 @@ vi.mock('@/app/router/appRoutes', async () => {
     preloadPracticeRoutes: vi.fn(),
     preloadEnglishWorkspacePage: vi.fn(),
     preloadFreestylePage: vi.fn(),
-    preloadFreestyleSecondaryPage: vi.fn(),
     preloadKnowledgePage: vi.fn(),
     preloadPalaceEditPage: vi.fn(),
     preloadProfilePage: vi.fn(),
@@ -94,9 +93,9 @@ async function clickGo(id: string) {
 }
 
 describe('随心 workspace residency', () => {
-  it('pins /freestyle and /freestyle-2 as always-resident routes', () => {
+  it('pins /freestyle as the always-resident 随心 route', () => {
     expect(isAlwaysResidentRoute('/freestyle')).toBe(true)
-    expect(isAlwaysResidentRoute('/freestyle-2')).toBe(true)
+    expect(isAlwaysResidentRoute('/freestyle-2')).toBe(false)
     // Ordinary pages stay evictable.
     expect(isAlwaysResidentRoute('/palaces')).toBe(false)
     expect(isAlwaysResidentRoute('/dashboard')).toBe(false)
@@ -105,22 +104,6 @@ describe('随心 workspace residency', () => {
     expect(isAlwaysResidentRoute('/freestyle-3')).toBe(false)
   })
 
-  it('keeps both 随心 workspaces mounted when switching between them', async () => {
-    renderAt('/freestyle')
-    await expectActive('/freestyle')
-
-    await clickGo('/freestyle-2')
-
-    // Both stay mounted: switching is a visibility flip, not a reload.
-    expect(screen.getByTestId('mounts:/freestyle').textContent).toBe('1')
-    expect(screen.getByTestId('mounts:/freestyle-2').textContent).toBe('1')
-    expect(screen.getByTestId('page:/freestyle').getAttribute('data-active')).toBe('false')
-
-    // ...and switching back does not remount either.
-    await clickGo('/freestyle')
-    expect(screen.getByTestId('mounts:/freestyle').textContent).toBe('1')
-    expect(screen.getByTestId('mounts:/freestyle-2').textContent).toBe('1')
-  })
 
   it('never evicts the 随心 workspace, even after many unrelated navigations', async () => {
     renderAt('/freestyle')

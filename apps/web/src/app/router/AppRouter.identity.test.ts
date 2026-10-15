@@ -24,8 +24,8 @@ describe('resident route entry identity', () => {
     expect(again).toBe(routes)
   })
 
-  it('recognises the pinned freestyle workspaces', () => {
+  it('pins the single 随心 workspace; /freestyle-2 is a redirect', () => {
     expect(isAlwaysResidentRoute('/freestyle')).toBe(true)
-    expect(isAlwaysResidentRoute('/freestyle-2')).toBe(true)
+    expect(isAlwaysResidentRoute('/freestyle-2')).toBe(false)
   })
 })

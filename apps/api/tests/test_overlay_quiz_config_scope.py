@@ -138,7 +138,7 @@ def test_round_losing_a_palace_parks_its_overlay_progress(db_session):
         }
 
     round_state = get_or_create_active_round(
-        db_session, workspace="secondary", scope_key="both", config=config,
+        db_session, workspace="primary", scope_key="both", config=config,
         cards=[card(kept), card(dropped)], operation_id="create",
         round_id="secondary-scope-regression",
     )
@@ -156,7 +156,7 @@ def test_round_losing_a_palace_parks_its_overlay_progress(db_session):
     # Replan the round down to one palace. Its unstarted card for 福禄培尔 is
     # dropped, so that palace leaves this round's review set.
     replanned = get_or_create_active_round(
-        db_session, workspace="secondary", scope_key="both", config=config,
+        db_session, workspace="primary", scope_key="both", config=config,
         cards=[card(kept)], operation_id="replan", replan=True,
     )
     narrowed = ensure_overlay_quiz(

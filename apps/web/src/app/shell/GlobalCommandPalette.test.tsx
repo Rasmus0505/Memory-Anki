@@ -21,7 +21,6 @@ vi.mock('@/app/router/appRoutes', () => ({
   preloadPracticeRoutes: vi.fn(),
   preloadEnglishWorkspacePage: vi.fn(),
   preloadFreestylePage: vi.fn(),
-  preloadFreestyleSecondaryPage: vi.fn(),
   preloadKnowledgePage: vi.fn(),
   preloadProfilePage: vi.fn(),
   preloadDashboardPage: vi.fn(),
@@ -86,7 +85,7 @@ describe('GlobalCommandPalette', () => {
     expect(await screen.findByText('操作')).toBeTruthy()
     expect(screen.getByText('页面')).toBeTruthy()
     expect(screen.getByText('开始随心复习')).toBeTruthy()
-    expect(screen.getByText('打开随心 2')).toBeTruthy()
+    expect(screen.queryByText('打开随心 2')).toBeNull()
     expect(screen.queryByText('打开今日工作台')).toBeNull()
     expect(screen.getByText('新建宫殿')).toBeTruthy()
     expect(screen.getByText('搜索宫殿')).toBeTruthy()

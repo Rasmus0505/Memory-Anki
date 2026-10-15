@@ -11,7 +11,6 @@ describe('FreestyleHudOverflow', () => {
       <MemoryRouter>
         <FreestyleHudOverflow
           summaryLabel="导图 1"
-          slot="primary"
           onOpenPlan={vi.fn()}
           onUpdateQueue={onUpdateQueue}
           onSyncProgress={onSyncProgress}

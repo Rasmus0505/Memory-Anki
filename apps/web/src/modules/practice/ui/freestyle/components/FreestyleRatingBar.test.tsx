@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { UnitRatingEffectDto } from '@/modules/practice/public'
 import { FreestyleRatingBar } from './FreestyleRatingBar'
@@ -107,14 +107,38 @@ describe('FreestyleRatingBar', () => {
     expect(onRate).not.toHaveBeenCalled()
   })
 
-  it('ignores shortcuts while locked or busy', () => {
+  it('ignores shortcuts while locked, but not while another save is on the wire', () => {
     const locked = renderBar({ locked: true })
     fireEvent.keyDown(window, { key: '3' })
     expect(locked.onRate).not.toHaveBeenCalled()
+    cleanup()
 
-    const busy = renderBar({ busy: true })
+    // A pending save never freezes 1-4; only a modal suspends them.
+    const saving = renderBar({ busy: true, pendingRating: 2 })
     fireEvent.keyDown(window, { key: '3' })
-    expect(busy.onRate).not.toHaveBeenCalled()
+    expect(saving.onRate).toHaveBeenCalledWith(3)
+    expect((screen.getByTestId('freestyle-rating-button-4') as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('suspends 1-4 while a modal dialog owns the keyboard', () => {
+    const { onRate } = renderBar()
+    const dialog = document.createElement('div')
+    dialog.setAttribute('role', 'dialog')
+    const inside = document.createElement('button')
+    dialog.appendChild(inside)
+    document.body.appendChild(dialog)
+    fireEvent.keyDown(inside, { key: '3' })
+    expect(onRate).not.toHaveBeenCalled()
+    dialog.remove()
+  })
+
+  it('shows 未保存 with a retry hint for a failed save, even before the plan arrives', () => {
+    renderBar({ ratingEffects: [], failedRating: 3, canRateWithoutPlan: true, hasEncounter: false })
+    expect(screen.getByTestId('freestyle-rating-unsaved-line').textContent).toBe('未保存记得再点一次重试')
+    const failed = screen.getByTestId('freestyle-rating-button-3')
+    expect(failed.getAttribute('aria-pressed')).toBe('false')
+    expect(failed.getAttribute('data-failed')).toBe('true')
+    expect(failed.getAttribute('aria-label')).toContain('再点一次重试')
   })
 
   it('shows a this-round last rating without offering 再点取消', () => {

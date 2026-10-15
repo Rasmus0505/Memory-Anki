@@ -18,7 +18,6 @@ export function diagnosisWindowMs(minutes: number) {
 
 const SECTION_LABEL: Record<NavSectionKey, string> = {
   freestyle: '随心',
-  freestyleSecondary: '随心',
   palaces: '知识',
   english: '英语',
   knowledge: '创建',

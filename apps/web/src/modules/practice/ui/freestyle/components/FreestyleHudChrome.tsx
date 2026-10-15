@@ -1,16 +1,6 @@
 import { History, ListChecks, ListRestart, MoreHorizontal, RefreshCw } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import {
-  FREESTYLE_WORKSPACE_PRIMARY,
-  FREESTYLE_WORKSPACE_SECONDARY,
-  freestyleWorkspaceLabel,
-  freestyleWorkspacePath,
-  isPalaceReviewWorkspace,
-  peerFreestyleWorkspace,
-  type FreestyleWorkspaceId,
-  type PalaceReviewWorkspaceId,
-} from '@/modules/practice/public'
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -33,7 +23,6 @@ const hudActionClass =
 /** Stable subtree: the page memoizes it so Radix composeRefs never loops. */
 export function FreestyleHudOverflow({
   summaryLabel,
-  slot,
   onOpenPlan,
   onUpdateQueue,
   onSyncProgress,
@@ -42,7 +31,6 @@ export function FreestyleHudOverflow({
   menuDefaultOpen = false,
 }: {
   summaryLabel: string
-  slot: FreestyleWorkspaceId | PalaceReviewWorkspaceId
   onOpenPlan: () => void
   onUpdateQueue: () => void
   onSyncProgress: () => void
@@ -50,7 +38,6 @@ export function FreestyleHudOverflow({
   returnTo?: string | null
   menuDefaultOpen?: boolean
 }) {
-  const peer = isPalaceReviewWorkspace(slot) ? null : peerFreestyleWorkspace(slot)
   return (
     <>
       <button
@@ -93,13 +80,6 @@ export function FreestyleHudOverflow({
               <Link to={returnTo}>返回书架</Link>
             </DropdownMenuItem>
           ) : null}
-          {peer ? (
-            <DropdownMenuItem asChild>
-              <Link to={freestyleWorkspacePath(peer)}>
-                {freestyleWorkspaceLabel(peer)}
-              </Link>
-            </DropdownMenuItem>
-          ) : null}
           {FREESTYLE_SECTION_LINKS.map((item) => (
             <DropdownMenuItem key={item.to} asChild>
               <Link to={item.to}>{item.label}</Link>
@@ -108,31 +88,6 @@ export function FreestyleHudOverflow({
         </DropdownMenuContent>
       </DropdownMenu>
     </>
-  )
-}
-
-export function FreestyleWorkspaceSwitcher({ slot }: { slot: FreestyleWorkspaceId }) {
-  return (
-    <div
-      data-testid="freestyle-workspace-switcher"
-      className="pointer-events-auto mr-1 inline-flex items-center rounded-full border border-stage-line bg-stage-overlay p-0.5 text-[11px] font-medium"
-    >
-      {[FREESTYLE_WORKSPACE_PRIMARY, FREESTYLE_WORKSPACE_SECONDARY].map((id) => (
-        <Link
-          key={id}
-          to={freestyleWorkspacePath(id)}
-          className={cn(
-            'rounded-full px-2 py-0.5 transition-colors',
-            slot === id
-              ? 'bg-stage-raised text-stage-glow shadow-sm'
-              : 'text-stage-muted hover:text-stage-ink',
-          )}
-          aria-current={slot === id ? 'page' : undefined}
-        >
-          {freestyleWorkspaceLabel(id)}
-        </Link>
-      ))}
-    </div>
   )
 }
 

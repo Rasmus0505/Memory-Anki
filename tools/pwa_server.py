@@ -935,6 +935,30 @@ def _wait_for_pwa(timeout_seconds: int = 120, process: subprocess.Popen | None =
 STUDY_TEXT_PREPARE_TIMEOUT_SECONDS = 180
 
 
+def _request_daily_backup_check() -> None:
+    """Ask the serving process to check today's backup. Never blocks or fails startup.
+
+    The service decides whether a copy is due, using this machine's local date,
+    and it does the copy off the request thread after a startup delay.
+    """
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return
+    request = Request(
+        (
+            f"http://{dev_server.BACKEND_HOST}:{dev_server.BACKEND_PORT}"
+            "/api/v1/backups/daily-check"
+        ),
+        data=b"{}",
+        method="POST",
+        headers={"Content-Type": "application/json", "Accept": "application/json"},
+    )
+    try:
+        with urlopen(request, timeout=5):
+            pass
+    except (OSError, TimeoutError, URLError) as exc:
+        print(f"[i] 今天的备份检查没有发出，不影响使用：{exc}", flush=True)
+
+
 def _prepare_study_text_library() -> bool:
     """Read palace and question text before the window opens.
 
@@ -943,6 +967,7 @@ def _prepare_study_text_library() -> bool:
     """
     if os.environ.get("PYTEST_CURRENT_TEST"):
         return True
+    _request_daily_backup_check()
     print(
         "[i] 正在准备宫殿和题目文字。U 盘正在同步时，这一步可能要十几秒到半分钟。",
         flush=True,

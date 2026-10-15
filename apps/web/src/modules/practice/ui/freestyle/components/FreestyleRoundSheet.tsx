@@ -53,7 +53,15 @@ import {
   readPalaceEditorDoc,
   usePalaceDocumentVersion,
 } from '@/modules/practice/ui/freestyle/model/freestyleUnitPreviewCache'
+import { useRatingSaveEntries } from '@/modules/practice/ui/freestyle/hooks/useFreestyleRatingSaves'
 import { cn } from '@/shared/lib/utils'
+
+/** What a 多选 评分 sent: queued per card, already at that grade, or not rateable. */
+export interface PlanBatchRatingResult {
+  queued: number
+  unchanged: number
+  skipped: number
+}
 
 
 /**
@@ -75,6 +83,7 @@ export function FreestyleRoundSheet({
   onReorder,
   onOpenConfig,
   onRateCard,
+  onRateCards,
   onRemoveCard,
   labelToday,
 }: {
@@ -90,7 +99,10 @@ export function FreestyleRoundSheet({
   onCompressCompleted: () => void
   onReorder: (orderIds: string[]) => void
   onOpenConfig: () => void
+  /** Rate one row in the background. The feed does not move. */
   onRateCard?: (cardId: string, rating: UnitRating) => void
+  /** 多选 评分: every selected card through the same per-card background save. */
+  onRateCards?: (cardIds: string[], rating: UnitRating) => PlanBatchRatingResult | undefined
   onRemoveCard?: (cardId: string) => void
   loading?: boolean
   /** Day the section titles speak from. Defaults to the learner's today. */
@@ -104,6 +116,13 @@ export function FreestyleRoundSheet({
   const [dragOverId, setDragOverId] = useState<string | null>(null)
   const [collapsedPalaces, setCollapsedPalaces] = useState<Set<number>>(new Set())
   const [viewMode, setViewMode] = useState<RoundPlanView>('palace')
+  const saveEntries = useRatingSaveEntries(queueState.roundId)
+  const [batchRating, setBatchRating] = useState<{
+    rating: UnitRating
+    cardIds: string[]
+    unchanged: number
+    skipped: number
+  } | null>(null)
   const palaceDocumentVersion = usePalaceDocumentVersion()
   const requestedPalaces = useRef(new Set<number>())
   useEffect(() => {
@@ -353,6 +372,29 @@ export function FreestyleRoundSheet({
     })
   }
   const orderIds = roundPlan?.orderIds ?? []
+  const rateSelected = (rating: UnitRating) => {
+    if (!onRateCards || !selectedIds.length) return
+    const cardIds = [...selectedIds]
+    const result = onRateCards(cardIds, rating)
+    setBatchRating({
+      rating,
+      cardIds,
+      unchanged: result?.unchanged ?? 0,
+      skipped: result?.skipped ?? 0,
+    })
+  }
+  const batchCounts = batchRating
+    ? batchRating.cardIds.reduce(
+        (counts, id) => {
+          const save = saveEntries[id]
+          if (save?.status === 'saving') counts.saving += 1
+          else if (save?.status === 'failed') counts.failed += 1
+          else if (save?.status === 'saved' && save.ackedRating === batchRating.rating) counts.saved += 1
+          return counts
+        },
+        { saving: 0, saved: 0, failed: 0 },
+      )
+    : null
   const onRate = useCallback((cardId: string, rating: UnitRating) => {
     onRateCard?.(cardId, rating)
   }, [onRateCard])
@@ -382,6 +424,7 @@ export function FreestyleRoundSheet({
         onDraggingId={setDraggingId}
         onRate={onRate}
         onRemove={onRemoveCard}
+        saveState={saveEntries[entry.cardId] ?? null}
       />
     )
   }
@@ -392,6 +435,7 @@ export function FreestyleRoundSheet({
       onOpenChange={(next) => {
         if (!next) {
           setSelectedIds([])
+          setBatchRating(null)
           lastClickedIdRef.current = null
         }
         onOpenChange(next)
@@ -581,6 +625,24 @@ export function FreestyleRoundSheet({
             className="sticky bottom-0 z-10 flex shrink-0 flex-wrap items-center gap-2 border-t border-border/60 bg-background/95 px-4 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] backdrop-blur sm:px-5"
           >
             <span className="mr-auto text-sm font-medium">已选 {selectedIds.length} 张</span>
+            {onRateCards ? (
+              <div role="group" aria-label="给已选评分" className="flex items-center gap-1">
+                <span className="text-xs text-muted-foreground">评分</span>
+                {([1, 2, 3, 4] as const).map((rating) => (
+                  <Button
+                    key={rating}
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-8 w-8 px-0"
+                    aria-label={`已选评分${rating}`}
+                    onClick={() => rateSelected(rating)}
+                  >
+                    {rating}
+                  </Button>
+                ))}
+              </div>
+            ) : null}
             <Button
               type="button"
               size="sm"
@@ -612,11 +674,24 @@ export function FreestyleRoundSheet({
               variant="ghost"
               onClick={() => {
                 setSelectedIds([])
+                setBatchRating(null)
                 lastClickedIdRef.current = null
               }}
             >
               取消选择
             </Button>
+            {batchRating && batchCounts ? (
+              <div
+                data-testid="round-plan-batch-rating-status"
+                role="status"
+                className="basis-full text-xs text-muted-foreground"
+              >
+                评分 {batchRating.rating}：已保存 {batchCounts.saved + batchRating.unchanged}
+                {batchCounts.saving ? ` · 保存中 ${batchCounts.saving}` : ''}
+                {batchCounts.failed ? ` · 未保存 ${batchCounts.failed}（点该行重试）` : ''}
+                {batchRating.skipped ? ` · 跳过 ${batchRating.skipped}` : ''}
+              </div>
+            ) : null}
           </div>
         ) : null}
       </SheetContent>

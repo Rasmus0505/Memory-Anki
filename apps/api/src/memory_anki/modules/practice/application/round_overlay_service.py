@@ -20,7 +20,6 @@ from memory_anki.modules.practice.application.round_state_service import (
     _plan_of,
     _require_operation_id,
     _serve,
-    _sync_peer_progress,
 )
 from memory_anki.modules.practice.domain.feed_config import (
     OVERLAY_RATING_INHERIT_LOWEST,
@@ -171,7 +170,6 @@ def ensure_overlay_quiz(
     ):
         config_update = {**stored_config, "overlay_rating_inherit": mode}
     changed = _apply_plan(row, plan, operation_id=op_id, config=config_update)
-    _sync_peer_progress(session, row, op_id)
     if not changed:
         row.last_operation_id = op_id
     if not _commit_operation(session, row, op_id):
@@ -207,7 +205,6 @@ def progress_overlay_quiz(
     )
     op_id = _require_operation_id(operation_id)
     changed = _apply_plan(row, plan, operation_id=op_id)
-    _sync_peer_progress(session, row, op_id)
     if not changed:
         row.last_operation_id = op_id
     if not _commit_operation(session, row, op_id):
@@ -249,7 +246,6 @@ def set_overlay_skipped_palaces(
     plan["overlay_quiz"] = merge_overlay_quiz(plan.get("overlay_quiz"), **pack)
     op_id = _require_operation_id(operation_id)
     changed = _apply_plan(row, plan, operation_id=op_id)
-    _sync_peer_progress(session, row, op_id)
     if not changed:
         row.last_operation_id = op_id
     if not _commit_operation(session, row, op_id):
@@ -279,7 +275,6 @@ def drop_overlay_quiz_for_palaces(
     plan["overlay_quiz"] = drop_overlay_for_palaces(plan.get("overlay_quiz"), list(palace_ids or []))
     op_id = _require_operation_id(operation_id)
     changed = _apply_plan(row, plan, operation_id=op_id)
-    _sync_peer_progress(session, row, op_id)
     if not changed:
         row.last_operation_id = op_id
     if not _commit_operation(session, row, op_id):

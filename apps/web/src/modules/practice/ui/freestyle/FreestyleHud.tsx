@@ -6,11 +6,9 @@ import { FreestyleQuarterTag } from '@/modules/practice/ui/freestyle/components/
 import {
   FreestyleStaleRecoveryPanel,
   FreestyleTopNotices,
-  FreestyleWorkspaceSwitcher,
 } from '@/modules/practice/ui/freestyle/components/FreestyleHudChrome'
 import { FreestyleChannelHint } from '@/modules/practice/ui/freestyle/components/FreestyleChannelHint'
 import { FreestylePalaceClearedBanner } from '@/modules/practice/ui/freestyle/components/FreestylePalaceClearedBanner'
-import type { FreestyleWorkspaceId } from '@/modules/practice/public'
 
 type ProgressRailProps = ComponentProps<typeof FreestyleProgressRail>
 type PalaceClearance = ComponentProps<typeof FreestylePalaceClearedBanner>['clearance']
@@ -20,7 +18,6 @@ export function FreestyleHud({
   examOverview,
   progressSummary,
   scrollChannel,
-  workspaceSwitcherSlot,
   progressRailOverflow,
   onOpenPlan,
   onJump,
@@ -28,6 +25,8 @@ export function FreestyleHud({
   onDismissChannelApplied,
   saveError,
   onDismissSaveError,
+  unsavedRatingCount = 0,
+  onRetryUnsavedRatings,
   palaceClearance,
   onDismissPalaceClearance,
   channelHintVisible,
@@ -45,7 +44,6 @@ export function FreestyleHud({
   examOverview: ReturnType<typeof useExamOverview>['data']
   progressSummary: ProgressRailProps['summary']
   scrollChannel: ProgressRailProps['scrollChannel']
-  workspaceSwitcherSlot: FreestyleWorkspaceId | null
   progressRailOverflow: ReactNode
   onOpenPlan: () => void
   onJump: ProgressRailProps['onJump']
@@ -53,6 +51,9 @@ export function FreestyleHud({
   onDismissChannelApplied: () => void
   saveError: string
   onDismissSaveError: () => void
+  /** Ratings of this round that are 未保存. Shown until zero; tapping retries them. */
+  unsavedRatingCount?: number
+  onRetryUnsavedRatings?: () => void
   palaceClearance: PalaceClearance | null
   onDismissPalaceClearance: () => void
   channelHintVisible: boolean
@@ -75,12 +76,24 @@ export function FreestyleHud({
       <FreestyleProgressRail
         summary={progressSummary}
         scrollChannel={scrollChannel}
-        workspaceSwitcher={workspaceSwitcherSlot != null ? <FreestyleWorkspaceSwitcher slot={workspaceSwitcherSlot} /> : null}
         onOpenPlan={onOpenPlan}
         onJump={onJump}
         overflow={progressRailOverflow}
       />
       <FreestyleQuarterTag segments={progressSummary.segments} />
+      {unsavedRatingCount > 0 ? (
+        <div className="pointer-events-none absolute inset-x-0 top-[calc(env(safe-area-inset-top,0px)+3.35rem)] z-30 flex justify-center px-[5.75rem] sm:px-36">
+          <button
+            type="button"
+            data-testid="freestyle-unsaved-ratings"
+            className="pointer-events-auto rounded-full border border-rate-again/45 bg-stage-raised px-3 py-1 text-xs font-medium text-stage-ink shadow-sm"
+            title="点一下重新保存"
+            onClick={onRetryUnsavedRatings}
+          >
+            {unsavedRatingCount} 项没存上 · 点此重试
+          </button>
+        </div>
+      ) : null}
 
       <FreestyleTopNotices
         channelAppliedHint={channelAppliedHint}

@@ -28,6 +28,7 @@ import {
 } from '@/modules/practice/domain/partialSettlement'
 import {
   applyServerCohorts,
+  applyServerRatingsToRoundPlan,
   cardsForServerPlan,
   nextUnfinishedCardId,
   planCardCohort,
@@ -36,6 +37,7 @@ import {
 } from '@/modules/practice/domain/serverRoundPlan'
 import {
   syncCompletedIdsToRoundPlan,
+  applyCompletedIdsToRoundPlan,
   applyDeferredPalaceOrder,
   applyRoundPlanOrder,
   clearMutedPalaces,
@@ -75,7 +77,6 @@ import {
   reviewUnitIdFromCardId,
   emitFreestylePeerRound,
   FREESTYLE_PEER_ROUND_EVENT,
-  FREESTYLE_SECONDARY_FEED_CONFIG_UPDATED_EVENT,
   FREESTYLE_WORKSPACE_PRIMARY,
   freestyleWorkspacePath,
   isPalaceReviewWorkspace,
@@ -1183,9 +1184,7 @@ export function useImmersiveQueue(
   // A palace review must not rebuild when the global 随心 selection changes.
   useEffect(() => {
     if (lockedPalaceId != null) return
-    const configEvent = slot === 'secondary'
-      ? FREESTYLE_SECONDARY_FEED_CONFIG_UPDATED_EVENT
-      : FREESTYLE_FEED_CONFIG_UPDATED_EVENT
+    const configEvent = FREESTYLE_FEED_CONFIG_UPDATED_EVENT
     return onAppEvent(configEvent, (detail) => {
       const saved = sanitizeFreestyleFeedConfig(detail)
       const next = entryScopeKey != null && unlockedEntryPalaceIdRef.current === entryScopeKey
@@ -2551,6 +2550,12 @@ export function useImmersiveQueue(
     }
   }, [])
 
+  /**
+   * Adopt an acknowledged round (a rating ack, a conflict reply, an overlay write).
+   * Newer versions only, current round only. The plan's completed ticks and
+   * this-round ratings are stamped onto the local plan so the rail and HUD move
+   * with the server; local un-acknowledged work is never removed here.
+   */
   const adoptRoundVersion = useCallback((round: {
     plan_version?: number
     version?: number
@@ -2559,11 +2564,25 @@ export function useImmersiveQueue(
   } | null | undefined) => {
     if (round?.round_id && round.round_id !== queueStateRef.current.roundId) return
     const version = serverPlanVersion(round)
-    if (version > serverPlanVersionRef.current) {
-      serverPlanVersionRef.current = version
-      setPlanVersion(version)
-    }
-  }, [])
+    if (version <= serverPlanVersionRef.current) return
+    serverPlanVersionRef.current = version
+    setPlanVersion(version)
+    const serverPlan = round?.plan
+    const localPlan = queueStateRef.current.roundPlan
+    if (!serverPlan || !localPlan) return
+    const known = new Set(Object.keys(localPlan.cardsById))
+    const serverCompleted = (Array.isArray(serverPlan.completed_ids) ? serverPlan.completed_ids : [])
+      .map((id) => String(id || '').trim())
+      .filter((id) => known.has(id))
+    const localCompleted = queueStateRef.current.completedIds
+    const completedIds = [...new Set([...localCompleted, ...serverCompleted])]
+    const plan = applyServerRatingsToRoundPlan(
+      applyCompletedIdsToRoundPlan(localPlan, serverCompleted),
+      serverPlan,
+    )
+    if (plan === localPlan && completedIds.length === localCompleted.length) return
+    persistQueueState({ ...queueStateRef.current, completedIds, roundPlan: plan })
+  }, [persistQueueState])
 
   const reshuffleQueueWithRestudyClear = useCallback(() => {
     pendingRestudyByIdRef.current.clear()

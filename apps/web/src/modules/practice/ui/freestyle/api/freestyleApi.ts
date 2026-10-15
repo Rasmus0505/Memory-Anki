@@ -294,19 +294,26 @@ export function dropFreestyleOverlayQuizPalacesApi(
   )
 }
 
+/**
+ * Transport cap for one rating POST. The rating outbox (`model/ratingSaveStore`)
+ * shows 未保存 earlier (`RATING_SAVE_TIMEOUT_MS`) but keeps listening, so a late
+ * success still lands; this cap only ends a request that will never answer.
+ */
+export const FREESTYLE_RATING_TRANSPORT_TIMEOUT_MS = 45_000
+
 export function rateFreestyleRoundUnitApi(
   roundId: string,
   payload: FreestyleRoundRatingRequest,
 ) {
-  // No retry: the grade only shows as saved once the server confirms it, so a
-  // failure (including a transient 503) is reported at once and the learner
-  // taps again. Not queued/replayed across page loads.
+  // Not queued or replayed across page loads: the rating outbox owns retries and
+  // re-sends the same operation id, which the server de-duplicates.
   return request<{ item: unknown; round: FreestyleRoundStatePayload }>(
     `/freestyle/rounds/${encodeURIComponent(roundId)}/ratings`,
     {
       method: 'POST',
       body: JSON.stringify(payload),
       persistence: false,
+      timeoutMs: FREESTYLE_RATING_TRANSPORT_TIMEOUT_MS,
     },
   )
 }

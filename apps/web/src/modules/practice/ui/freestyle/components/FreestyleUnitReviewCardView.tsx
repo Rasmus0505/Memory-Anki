@@ -8,8 +8,6 @@ import {
 import {
   cancelUnratedUnitReviewEncounterApi,
   closeUnitReviewEncounterApi,
-  rateReviewUnitApi,
-  undoReviewUnitRatingApi,
   type FreestyleFlipMode,
   type FreestyleRatingScope,
   type FreestyleUnitEncounterState,
@@ -17,17 +15,16 @@ import {
   type UnitRating,
   type UnitReviewSessionDto,
 } from '@/modules/practice/public'
-import { rateFreestyleRoundUnitApi } from '@/modules/practice/ui/freestyle/api'
 import {
-  acceptRating,
-  emptyMailbox,
-  isCurrentIntent,
-  noteInflightDone,
   ratingPassed,
-  requestUndo,
-  type RateMailbox,
-  type RateTicket,
-} from '@/modules/practice/ui/freestyle/model/ratingOutbox'
+  type RatingSaveEvent,
+  type RatingTarget,
+} from '@/modules/practice/ui/freestyle/model/ratingSaveStore'
+import { freestyleRatingSaves } from '@/modules/practice/ui/freestyle/model/ratingSaveRuntime'
+import {
+  useRatingSaveEntry,
+  useRatingSaveEvents,
+} from '@/modules/practice/ui/freestyle/hooks/useFreestyleRatingSaves'
 import type { PalaceRatingTarget } from '@/modules/practice/ui/freestyle/model/freestylePalaceRating'
 import type {
   FreestyleReviewUnitCard,
@@ -69,7 +66,6 @@ import { FreestyleRatingBar } from './FreestyleRatingBar'
 import { useFreestyleCardFeedback } from './useFreestyleCardFeedback'
 import { FreestyleUnitReviewFlipPanel } from './FreestyleUnitReviewFlipPanel'
 import { FreestyleUnitReviewIdentityRow, FreestyleUnitReviewPlaceholder } from './FreestyleUnitReviewChrome'
-import { recordSessionRecorderUiAction } from '@/shared/debug/session-recorder'
 
 export {
   ratingEffectLabel,
@@ -78,6 +74,7 @@ export {
 
 
 export const RATING_SAVE_FAILED_COPY = '这一次没有保存成功'
+const SUPERSEDED_RATING_COPY = '已有后续练习，这次评分仅供回看；请到最近一次练习修改。'
 
 async function abandonUnshownSession(value: UnitReviewSessionDto, unitId: string | null | undefined) {
   const encounter = value.units.find((item) => item.id === unitId)?.encounter
@@ -99,7 +96,6 @@ export function FreestyleUnitReviewCardView({
   retryAfterCards,
   onEnsureEncounter,
   onEncounterChange,
-  onBranchComplete,
   onStaleDrop,
   onRemoveFromQueue,
   onRebuildRound,
@@ -116,19 +112,14 @@ export function FreestyleUnitReviewCardView({
   preferredZoom,
   onUserZoomChange,
   blockedHint = null,
-  onRatingSettled,
   ratingScope: _ratingScope = 'unit',
   onRatingScopeChange: _onRatingScopeChange,
   palaceTarget: _palaceTarget = null,
-  onBatchCardsSettled,
   liveRevealMap = null,
   onLiveRevealMapChange,
   planVersion = 0,
-  onRoundSync,
   onOpenScopeQuiz,
   lastRating = null,
-  requestedRating = null,
-  onRequestedRatingHandled,
 }: {
   card: FreestyleReviewUnitCard
   active: boolean
@@ -137,42 +128,19 @@ export function FreestyleUnitReviewCardView({
   readOnly: boolean
   roundId: string
   planVersion?: number
-  onRoundSync?: (round: { plan_version?: number; version?: number; conflict?: boolean } | null | undefined) => void
   onOpenScopeQuiz?: () => void
   encounter?: FreestyleUnitEncounterState
   /** This-round last rating, shown while the amend glance is still empty. */
   lastRating?: number | null
-  /** Sheet asked this active card to rate once its encounter is open. */
-  requestedRating?: UnitRating | null
-  onRequestedRatingHandled?: () => void
   retryAfterCards: number
   /** Why 「下一组」 is blocked, shown inline instead of a toast. */
   blockedHint?: string | null
-  /**
-   * Fired only after the latest rating is acknowledged by the server. Immediate
-   * button selection is local intent, never completion or permission to advance.
-   * A failed post retains that unsaved intent without reloading the card.
-   */
-  onRatingSettled?: (
-    cardId: string,
-    passed: boolean,
-    rating: UnitRating,
-    meta?: {
-      occurrenceId?: string
-      encounterId?: string
-      planVersion?: number
-    },
-  ) => void
   onEnsureEncounter: (
     cardId: string,
     unitRevision: number,
     allowRenew: boolean,
   ) => FreestyleUnitEncounterState
   onEncounterChange: (cardId: string, encounter: FreestyleUnitEncounterState) => void
-  onBranchComplete: (
-    cardId: string,
-    options?: { restudy?: boolean; cleared?: boolean; rating?: number; retryAfterCards?: number },
-  ) => void
   onStaleDrop: (cardId: string, options?: { force?: boolean }) => void
   /** Drop this card from the current round. Does not write a review rating. */
   onRemoveFromQueue?: (cardId: string) => void
@@ -196,15 +164,11 @@ export function FreestyleUnitReviewCardView({
   ratingScope?: FreestyleRatingScope
   onRatingScopeChange?: (scope: FreestyleRatingScope) => void
   palaceTarget?: PalaceRatingTarget | null
-  onBatchCardsSettled?: (
-    entries: Array<{ cardId: string; restudy?: boolean; cleared?: boolean; rating?: number; retryAfterCards?: number }>,
-  ) => void
   liveRevealMap?: Record<string, string> | null
   onLiveRevealMapChange?: (revealMap: Record<string, string>) => void
 }) {
   const [session, setSession] = useState<UnitReviewSessionDto | null>(null)
   const [savedEditorState, setSavedEditorState] = useState<MindMapEditorState | null>(null)
-  const [busy, setBusy] = useState(false)
   const [lastOperationId, setLastOperationId] = useState<string | null>(null)
   const [inlineEditing, setInlineEditing] = useState(false)
   const [flipProgress, setFlipProgress] = useState<(FlipProgress & { key: string }) | null>(null)
@@ -220,26 +184,18 @@ export function FreestyleUnitReviewCardView({
   /** Undo surfaces only right after a rate, then collapses to give the map the room. */
   const [undoVisible, setUndoVisible] = useState(false)
   const undoTimerRef = useRef<number | null>(null)
-  const lastSettledCardIdsRef = useRef<string[]>([])
   const activeRef = useRef(active)
-  const busyRef = useRef(false)
   const mountedRef = useRef(true)
-  const rateHoldRef = useRef(0)
-  const mailboxRef = useRef<RateMailbox>(emptyMailbox())
-  const optimisticRatingRef = useRef<UnitRating | null>(null)
-  const saveFailedRef = useRef(false)
-  const commitHoldRef = useRef(0)
-  const commitIdleRef = useRef(true)
-  const commitChainRef = useRef<Promise<void>>(Promise.resolve())
   const urgentGlanceRef = useRef(false)
-  // A tap is queued and saved in the background. It is never lit as chosen: the
-  // grade shows as selected only once the server confirms it (intentRating is
-  // set from confirmed results). Until then the bar shows a quiet 保存中 hint.
+  // Saves live in the round-scoped rating outbox, not in this component: leaving
+  // the card, the page or the module does not cancel them. A grade shows as
+  // selected only once the server acknowledges it (intentRating is set from
+  // acknowledgements only). Until then the bar shows a quiet 保存中 hint, and a
+  // failure shows 未保存 with one-tap retry.
+  const ratingStore = freestyleRatingSaves()
+  const saveEntry = useRatingSaveEntry(roundId, card.id)
   const [intentRating, setIntentRating] = useState<UnitRating | null>(null)
-  const [ratingSave, setRatingSave] = useState<{ rating: UnitRating; status: 'saving' | 'failed' } | null>(null)
-  const showSavingRating = ratingSave?.status === 'saving' ? ratingSave.rating : null
   const [glanceKick, setGlanceKick] = useState(0)
-  const baselinesRef = useRef(new Map<number, UnitReviewSessionDto>())
   const lastOperationIdRef = useRef<string | null>(null)
   const planVersionRef = useRef(planVersion)
   const roundIdRef = useRef(roundId)
@@ -267,13 +223,12 @@ export function FreestyleUnitReviewCardView({
   activeRef.current = active
   loadAttemptRef.current = loadAttempt
   encounterRef.current = encounter
-  busyRef.current = busy
   planVersionRef.current = planVersion
   roundIdRef.current = roundId
   lastOperationIdRef.current = lastOperationId
-  // A render can land before setSession flushes. Do not wipe the glance the
-  // in-flight score just adopted, or the post reads an empty unit and fails.
-  if (session || commitHoldRef.current === 0) {
+  // A render can land before setSession flushes. Do not wipe the glance a
+  // score still on the wire belongs to; leave-close needs it.
+  if (session || !ratingStore.isBusy(roundId, card.id)) {
     sessionRef.current = session
     unitRef.current = session?.units.find((item) => item.id === card.unit_id) ?? null
   }
@@ -281,22 +236,14 @@ export function FreestyleUnitReviewCardView({
   const { breath, signalRating, clearBreath } = useFreestyleFlowFeedback()
   const rateBridgeRef = useRef({
     onEncounterChange,
-    onBranchComplete,
-    onRatingSettled,
-    onRoundSync,
     onStaleDrop,
     onSaveFailed,
-    onBatchCardsSettled,
     signalRating,
   })
   rateBridgeRef.current = {
     onEncounterChange,
-    onBranchComplete,
-    onRatingSettled,
-    onRoundSync,
     onStaleDrop,
     onSaveFailed,
-    onBatchCardsSettled,
     signalRating,
   }
   const editorState = useMemo(() => session ? buildEditorState(session) : null, [session])
@@ -353,9 +300,6 @@ export function FreestyleUnitReviewCardView({
     setLoadErrorTitle(null)
     setLoadErrorHint(null)
     setIntentRating(null)
-    setRatingSave(null)
-    optimisticRatingRef.current = null
-    saveFailedRef.current = false
   }, [card.id, roundId])
 
   const revealUndo = useCallback(() => {
@@ -414,9 +358,18 @@ export function FreestyleUnitReviewCardView({
     ))
   }, [flipProgressKey])
 
-  const closeCurrentEncounter = useCallback(() => {
-    // A rate POST still references this encounter. Leave-close waits until it settles.
-    if (busyRef.current || rateHoldRef.current > 0 || commitHoldRef.current > 0) {
+  const closeCurrentEncounter = useCallback(function closeEncounter(): Promise<unknown> {
+    // A rate or clear still references this encounter. Leave-close waits until
+    // the outbox settles it, unless the learner came back to the card meanwhile.
+    const ownerRoundId = roundIdRef.current
+    const ownerCardId = cardRef.current.id
+    const outbox = freestyleRatingSaves()
+    if (outbox.isBusy(ownerRoundId, ownerCardId)) {
+      // Do not hold the session lane while the save is on the wire.
+      void outbox.whenIdle(ownerRoundId, ownerCardId).then(() => {
+        if (activeRef.current && mountedRef.current) return
+        void enqueueFreestyleSessionTask(closeEncounter)
+      })
       return Promise.resolve(null)
     }
     const currentSession = sessionRef.current
@@ -434,9 +387,13 @@ export function FreestyleUnitReviewCardView({
       return closeRequestRef.current.promise
     }
 
+    // An acknowledgement that landed after this card unmounted never reached the
+    // local session; the outbox still knows the glance is rated.
+    const stored = outbox.getEntry(ownerRoundId, ownerCardId)
+    const ratedInOutbox = stored?.ackedRating != null && stored.target?.encounterId === currentEncounter.id
     // Unrated leave must cancel the glance. Leaving the open encounter alive made
     // the later pass bill wall clock from first scroll-past (parallel palace rows).
-    if (currentEncounter.selected_rating == null) {
+    if (currentEncounter.selected_rating == null && !ratedInOutbox) {
       const promise = cancelUnratedUnitReviewEncounterApi(
         currentSession.id,
         currentUnit.id,
@@ -510,7 +467,7 @@ export function FreestyleUnitReviewCardView({
 
   useEffect(() => {
     const liveCard = cardRef.current
-    if (!active && commitHoldRef.current === 0) return
+    if (!active) return
     if (recapOnly) return
     if (!liveCard.unit_id || effectiveRevision == null || !cardUnitKey) {
       rateBridgeRef.current.onStaleDrop(liveCard.id)
@@ -585,7 +542,9 @@ export function FreestyleUnitReviewCardView({
           const left = loadGenerationRef.current !== generation || !activeRef.current || !mountedRef.current
           if (left) {
             const nextUnit = value.units.find((item) => item.id === liveCard.unit_id)
-            if (commitHoldRef.current > 0 && nextUnit?.encounter) {
+            // A score is still on the wire for this glance: keep it so leave-close
+            // can lock it once the outbox settles.
+            if (freestyleRatingSaves().isBusy(roundId, liveCard.id) && nextUnit?.encounter) {
               sessionRef.current = value
               unitRef.current = nextUnit
               if (mountedRef.current && activeRef.current) setSession(value)
@@ -656,7 +615,6 @@ export function FreestyleUnitReviewCardView({
     return () => {
       // Unmount cleanup runs after the mountedRef effect, which is declared
       // later. A leaked timer would POST into the next card.
-      if (commitHoldRef.current > 0) return
       if (!mountedRef.current) {
         window.clearTimeout(timer)
         if (glanceTimerRef.current === timer) glanceTimerRef.current = null
@@ -711,12 +669,11 @@ export function FreestyleUnitReviewCardView({
     mountedRef.current = true
     return () => {
       mountedRef.current = false
-      if (commitHoldRef.current > 0) return
       if (glanceTimerRef.current != null) {
         window.clearTimeout(glanceTimerRef.current)
         glanceTimerRef.current = null
       }
-      mailboxRef.current = { ...emptyMailbox(), latest: mailboxRef.current.latest + 1 }
+      // A save still on the wire keeps going in the outbox; close waits for it.
       void enqueueFreestyleSessionTask(() => closeCurrentEncounterRef.current())
     }
   }, [])
@@ -724,307 +681,6 @@ export function FreestyleUnitReviewCardView({
   function rememberOperation(id: string | null) {
     lastOperationIdRef.current = id
     if (mountedRef.current) setLastOperationId(id)
-  }
-
-  function holdEncounter() {
-    rateHoldRef.current += 1
-  }
-
-  function releaseEncounter() {
-    rateHoldRef.current = Math.max(0, rateHoldRef.current - 1)
-    if (rateHoldRef.current === 0 && !busyRef.current && !activeRef.current) {
-      void enqueueFreestyleSessionTask(() => closeCurrentEncounterRef.current())
-    }
-  }
-
-  function paintCleared() {
-    optimisticRatingRef.current = null
-    saveFailedRef.current = false
-    if (mountedRef.current) {
-      setIntentRating(null)
-      setRatingSave(null)
-    }
-    const currentSession = sessionRef.current
-    const currentUnit = unitRef.current
-    const currentEncounter = currentUnit?.encounter
-    const cardId = cardRef.current.id
-    if (currentSession && currentUnit && currentEncounter) {
-      const nextEncounter = {
-        ...currentEncounter,
-        selected_rating: null,
-        passed: null,
-        retry_after_cards: 0,
-        effective_operation_id: null,
-      }
-      const nextUnit: ReviewUnitDto = { ...currentUnit, final_rating: null, encounter: nextEncounter }
-      const nextSession = updateSessionUnit(currentSession, nextUnit)
-      sessionRef.current = nextSession
-      unitRef.current = nextUnit
-      if (mountedRef.current) setSession(nextSession)
-      rateBridgeRef.current.onEncounterChange(
-        cardId,
-        encounterState(currentSession.id, nextUnit.revision, nextEncounter),
-      )
-    }
-    rateBridgeRef.current.onBranchComplete(cardId, { cleared: true })
-    if (mountedRef.current) setUndoVisible(false)
-  }
-
-  function rollbackRating(generation: number) {
-    const baseline = baselinesRef.current.get(generation)
-    const cardId = cardRef.current.id
-    if (!baseline) {
-      optimisticRatingRef.current = null
-      if (mountedRef.current) {
-        setIntentRating(null)
-        setRatingSave(null)
-      }
-      rateBridgeRef.current.onBranchComplete(cardId, { cleared: true })
-      return
-    }
-    const nextUnit = baseline.units.find((item) => item.id === cardRef.current.unit_id) ?? null
-    sessionRef.current = baseline
-    unitRef.current = nextUnit
-    if (mountedRef.current) setSession(baseline)
-    const previous = asUnitRating(nextUnit?.encounter?.selected_rating)
-    optimisticRatingRef.current = previous
-    if (mountedRef.current) {
-      setIntentRating(previous)
-      setRatingSave(null)
-    }
-    if (nextUnit?.encounter) {
-      rateBridgeRef.current.onEncounterChange(
-        cardId,
-        encounterState(baseline.id, nextUnit.revision, nextUnit.encounter),
-      )
-    }
-    if (previous == null) {
-      rateBridgeRef.current.onBranchComplete(cardId, { cleared: true })
-    } else {
-      rateBridgeRef.current.onBranchComplete(cardId, {
-        restudy: !ratingPassed(previous),
-        rating: previous,
-        retryAfterCards: nextUnit?.encounter?.retry_after_cards ?? 0,
-      })
-    }
-  }
-
-  async function postRating(ticket: RateTicket) {
-    const currentUnit = unitRef.current
-    if (!currentUnit && !roundIdRef.current) return null
-    const payload = {
-      operation_id: ticket.operationId,
-      expected_version: planVersionRef.current,
-      intent_sequence: ticket.intentSequence ?? ticket.generation,
-      card_id: ticket.cardId,
-      occurrence_id: ticket.occurrenceId,
-      encounter_id: ticket.encounterId,
-      rating: ticket.rating,
-      study_session_id: ticket.sessionId,
-      unit_id: ticket.unitId,
-      unit_revision: ticket.unitRevision,
-    }
-    let unitResult: Awaited<ReturnType<typeof rateReviewUnitApi>> | null
-    let nextPlanVersion = planVersionRef.current
-    if (roundIdRef.current) {
-      const response = await rateFreestyleRoundUnitApi(roundIdRef.current, payload)
-      rateBridgeRef.current.onRoundSync?.(response.round)
-      nextPlanVersion = Number(response.round?.plan_version ?? response.round?.version ?? nextPlanVersion)
-      planVersionRef.current = nextPlanVersion
-      unitResult = response.item as Awaited<ReturnType<typeof rateReviewUnitApi>>
-    } else {
-      unitResult = await rateReviewUnitApi(
-        ticket.sessionId,
-        currentUnit,
-        ticket.encounterId,
-        ticket.rating,
-        ticket.operationId,
-        currentUnit.encounter?.round_id,
-      )
-    }
-    return { unitResult, nextPlanVersion }
-  }
-
-  function settleRating(
-    unitResult: Awaited<ReturnType<typeof rateReviewUnitApi>>,
-    ticket: RateTicket,
-    nextPlanVersion: number,
-  ) {
-    const currentSession = sessionRef.current
-    const currentUnit = unitRef.current
-    const currentEncounter = currentUnit?.encounter
-    if (!currentSession || !currentUnit || !currentEncounter) return
-    if (String(unitResult.unit?.id || '') !== ticket.unitId) {
-      if (mountedRef.current) setActionError('评分身份不匹配，未应用到这张卡。')
-      rollbackRating(ticket.generation)
-      return
-    }
-    const nextEncounter = adoptRatedEncounter(currentEncounter, unitResult.encounter)
-    const nextUnit: ReviewUnitDto = {
-      ...currentUnit,
-      ...unitResult.unit,
-      title: unitResult.unit.title || currentUnit.title,
-      session_status: unitResult.session_status,
-      final_rating: unitResult.rating,
-      encounter: nextEncounter,
-    }
-    const nextSessionId = unitResult.study_session_id || ticket.sessionId
-    const nextSession = updateSessionUnit(
-      currentSession.id === nextSessionId ? currentSession : { ...currentSession, id: nextSessionId },
-      nextUnit,
-    )
-    const newerIntent = optimisticRatingRef.current != null
-      && optimisticRatingRef.current !== ticket.rating
-    sessionRef.current = nextSession
-    unitRef.current = nextUnit
-    if (mountedRef.current) setSession(nextSession)
-    rememberOperation(unitResult.operation_id)
-    rateBridgeRef.current.onEncounterChange(
-      ticket.cardId,
-      encounterState(nextSessionId, nextUnit.revision, nextEncounter),
-    )
-    if (
-      currentEncounter.passed !== unitResult.passed
-      || currentEncounter.retry_after_cards !== unitResult.retry_after_cards
-      || currentEncounter.selected_rating !== unitResult.rating
-    ) {
-      rateBridgeRef.current.onBranchComplete(ticket.cardId, {
-        restudy: !unitResult.passed,
-        rating: unitResult.rating,
-        retryAfterCards: unitResult.retry_after_cards,
-      })
-    }
-    // A newer tap can still be waiting in the serialized commit chain rather
-    // than the mailbox. Keep this acknowledgement, but never overwrite that tap
-    // or emit its advance callback before the newer request is saved.
-    if (newerIntent) return
-    const settledRating = asUnitRating(nextEncounter.selected_rating)
-    optimisticRatingRef.current = settledRating
-    saveFailedRef.current = false
-    if (mountedRef.current) {
-      setIntentRating(settledRating)
-      setRatingSave(null)
-    }
-    rateBridgeRef.current.signalRating(unitResult.rating, unitResult.passed)
-    if (mountedRef.current) revealUndo()
-    rateBridgeRef.current.onRatingSettled?.(ticket.cardId, unitResult.passed, unitResult.rating, {
-      occurrenceId: ticket.occurrenceId || ticket.cardId,
-      encounterId: ticket.encounterId,
-      planVersion: nextPlanVersion,
-    })
-  }
-
-  function confirmedSession(
-    unitResult: Awaited<ReturnType<typeof rateReviewUnitApi>>,
-    ticket: RateTicket,
-  ): UnitReviewSessionDto | null {
-    const base = baselinesRef.current.get(ticket.generation) ?? sessionRef.current
-    const baseUnit = base?.units.find((item) => item.id === ticket.unitId) ?? null
-    const baseEncounter = baseUnit?.encounter
-    if (!base || !baseUnit || !baseEncounter) return null
-    if (String(unitResult.unit?.id || '') !== ticket.unitId) return null
-    const nextEncounter = adoptRatedEncounter(baseEncounter, unitResult.encounter)
-    const nextUnit: ReviewUnitDto = {
-      ...baseUnit,
-      ...unitResult.unit,
-      title: unitResult.unit.title || baseUnit.title,
-      session_status: unitResult.session_status,
-      final_rating: unitResult.rating,
-      encounter: nextEncounter,
-    }
-    const nextSessionId = unitResult.study_session_id || ticket.sessionId
-    return updateSessionUnit(
-      base.id === nextSessionId ? base : { ...base, id: nextSessionId },
-      nextUnit,
-    )
-  }
-
-  async function dispatchRating(ticket: RateTicket) {
-    holdEncounter()
-    try {
-      const posted = await postRating(ticket)
-      const current = isCurrentIntent(mailboxRef.current, ticket.generation)
-      const follow = noteInflightDone(mailboxRef.current, ticket.generation)
-      mailboxRef.current = follow.box
-      if (follow.undo) {
-        baselinesRef.current.delete(ticket.generation)
-        if (posted?.unitResult?.operation_id) {
-          rememberOperation(posted.unitResult.operation_id)
-          await undoRating({ clearAll: true })
-        }
-        return
-      }
-      if (posted?.unitResult && !current) {
-        const confirmed = confirmedSession(posted.unitResult, ticket)
-        const confirmedUnit = confirmed?.units.find((item) => item.id === ticket.unitId)
-        if (confirmed && confirmedUnit?.encounter) {
-          // Preserve every acknowledgement as the saved baseline while a newer
-          // selection remains local intent. Its eventual failure must not erase
-          // the earlier successful save or turn it into the unsaved newer grade.
-          sessionRef.current = confirmed
-          unitRef.current = confirmedUnit
-          if (mountedRef.current) setSession(confirmed)
-          rememberOperation(posted.unitResult.operation_id)
-          rateBridgeRef.current.onEncounterChange(
-            ticket.cardId,
-            encounterState(confirmed.id, confirmedUnit.revision, confirmedUnit.encounter),
-          )
-          rateBridgeRef.current.onBranchComplete(ticket.cardId, {
-            restudy: !posted.unitResult.passed,
-            rating: posted.unitResult.rating,
-            retryAfterCards: posted.unitResult.retry_after_cards,
-          })
-          if (follow.send) baselinesRef.current.set(follow.send.generation, confirmed)
-        }
-      }
-      if (follow.send && posted?.unitResult) {
-        const revision = posted.unitResult.unit?.revision
-        if (typeof revision === 'number') follow.send.unitRevision = revision
-      }
-      if (!posted?.unitResult) {
-        if (current) markSaveFailed('评分没有保存：没有拿到后台的评分结果（页面没有这张卡的单元或回合，或后台把这次评分当作重复请求忽略了）', ticket.generation)
-      } else if (current) {
-        saveFailedRef.current = false
-        settleRating(posted.unitResult, ticket, posted.nextPlanVersion)
-      }
-      baselinesRef.current.delete(ticket.generation)
-      if (follow.send) await dispatchRating(follow.send)
-    } catch (error) {
-      const current = isCurrentIntent(mailboxRef.current, ticket.generation)
-      const follow = noteInflightDone(mailboxRef.current, ticket.generation)
-      mailboxRef.current = isStaleUnitError(error) ? emptyMailbox() : follow.box
-      const diagnostic = formatUnitDiagnostic({
-        error,
-        card: cardRef.current,
-        roundId: roundIdRef.current,
-        operationId: ticket.operationId,
-        stage: isStaleUnitError(error) ? '评分后卡片已过期' : '提交评分',
-      })
-      if (isStaleUnitError(error)) {
-        baselinesRef.current.delete(ticket.generation)
-        optimisticRatingRef.current = null
-        if (mountedRef.current) {
-          setActionError(`${diagnostic}\n已检测到内容版本变化，正在自动更新复习安排。`)
-        }
-        rateBridgeRef.current.onSaveFailed(diagnostic)
-        rateBridgeRef.current.onStaleDrop(ticket.cardId, { force: isPermanentUnitAbsence(error) })
-        return
-      }
-      if (current && !follow.undo) markSaveFailed(diagnostic, ticket.generation)
-      baselinesRef.current.delete(ticket.generation)
-      if (follow.send) await dispatchRating(follow.send)
-    } finally {
-      releaseEncounter()
-    }
-  }
-
-  function markSaveFailed(detail: string | undefined, generation: number) {
-    if (detail) recordSessionRecorderUiAction('error', '评分没有保存', detail)
-    // An unsaved grade must not stay lit, nor keep the progress bar lit.
-    rollbackRating(generation)
-    saveFailedRef.current = false
-    if (mountedRef.current) setActionError(RATING_SAVE_FAILED_COPY)
-    rateBridgeRef.current.onSaveFailed(RATING_SAVE_FAILED_COPY)
   }
 
   function requestGlanceNow() {
@@ -1037,243 +693,194 @@ export function FreestyleUnitReviewCardView({
     setGlanceKick((value) => value + 1)
   }
 
-  function paintLocalIntent(rating: UnitRating) {
-    optimisticRatingRef.current = rating
-    saveFailedRef.current = false
-    if (mountedRef.current) {
-      setRatingSave({ rating, status: 'saving' })
-      setActionError(null)
+  /**
+   * Local view of an acknowledged rating. Round progress (completion, retry
+   * insertion, the rail) is the page ledger's job and happens even when this
+   * card is not mounted.
+   */
+  function adoptAcknowledgedRating(event: Extract<RatingSaveEvent, { type: 'acked' }>) {
+    const { item, target, job } = event
+    const currentSession = sessionRef.current
+    const currentUnit = unitRef.current
+    const currentEncounter = currentUnit?.encounter
+    if (item && currentSession && currentUnit && currentEncounter && currentUnit.id === target.unitId) {
+      const nextEncounter = adoptRatedEncounter(currentEncounter, item.encounter)
+      const nextUnit: ReviewUnitDto = {
+        ...currentUnit,
+        ...item.unit,
+        title: item.unit.title || currentUnit.title,
+        session_status: item.session_status,
+        final_rating: item.rating,
+        encounter: nextEncounter,
+      }
+      const nextSessionId = item.study_session_id || target.sessionId || currentSession.id
+      const nextSession = updateSessionUnit(
+        currentSession.id === nextSessionId ? currentSession : { ...currentSession, id: nextSessionId },
+        nextUnit,
+      )
+      sessionRef.current = nextSession
+      unitRef.current = nextUnit
+      setSession(nextSession)
     }
-    // A tap is local intent, not a recorded practice result. Only the successful
-    // response can update round counts, retry planning, palace completion, or
-    // play the success feedback (see settleRating).
+    // A superseded acknowledgement is only the saved baseline; the newer tap owns the bar.
+    if (!event.current) return
+    const rating = asUnitRating(item?.rating) ?? job.rating
+    const passed = item?.passed ?? ratingPassed(rating)
+    rememberOperation(item?.operation_id || job.operationId)
+    setIntentRating(rating)
+    setActionError(null)
+    rateBridgeRef.current.signalRating(rating, passed)
+    if (activeRef.current) revealUndo()
   }
 
-  async function ensureAndDispatch(rating: UnitRating) {
-    if (optimisticRatingRef.current !== rating) return
+  function adoptUndoneRating(event: Extract<RatingSaveEvent, { type: 'undone' }>) {
+    const { result } = event
     const currentSession = sessionRef.current
-    const currentUnit = currentSession?.units.find((item) => item.id === cardRef.current.unit_id) ?? unitRef.current
+    const currentUnit = unitRef.current
+    if (currentSession && currentUnit) {
+      const nextUnit: ReviewUnitDto = {
+        ...currentUnit,
+        ...result.unit,
+        title: result.unit.title || currentUnit.title,
+        session_status: result.session_status,
+        final_rating: result.encounter.selected_rating,
+        encounter: result.encounter,
+      }
+      const nextSession = updateSessionUnit(currentSession, nextUnit)
+      sessionRef.current = nextSession
+      unitRef.current = nextUnit
+      setSession(nextSession)
+    }
+    cardFeedback.playUndo(event.undoneRating)
+    const remaining = asUnitRating(result.encounter.selected_rating)
+    setIntentRating(remaining)
+    setActionError(null)
+    rememberOperation(result.encounter.effective_operation_id)
+    if (remaining == null) {
+      if (undoTimerRef.current != null) {
+        window.clearTimeout(undoTimerRef.current)
+        undoTimerRef.current = null
+      }
+      setUndoVisible(false)
+    }
+  }
+
+  useRatingSaveEvents((event) => {
+    if (event.roundId !== roundIdRef.current || event.cardId !== cardRef.current.id) return
+    if (event.type === 'acked') {
+      adoptAcknowledgedRating(event)
+    } else if (event.type === 'undone') {
+      adoptUndoneRating(event)
+    } else if (event.type === 'undoFailed') {
+      setActionError(formatUnitDiagnostic({
+        error: event.error,
+        card: cardRef.current,
+        roundId: roundIdRef.current,
+        operationId: event.operationId,
+        stage: '取消评分',
+      }))
+    } else if (event.type === 'failed' && event.current && event.failure === 'stale') {
+      const diagnostic = formatUnitDiagnostic({
+        error: event.error,
+        card: cardRef.current,
+        roundId: roundIdRef.current,
+        operationId: event.job.operationId,
+        stage: '评分后卡片已过期',
+      })
+      setActionError(`${diagnostic}\n已检测到内容版本变化，正在自动更新复习安排。`)
+    }
+  })
+
+  /** The glance this tap names: the open live one, or the queue encounter the server opens inside the write. */
+  function ratingTarget(): RatingTarget | null {
+    const liveCard = cardRef.current
+    const currentSession = sessionRef.current
+    const currentUnit = currentSession?.units.find((item) => item.id === liveCard.unit_id) ?? unitRef.current
     const currentEncounter = currentUnit?.encounter ?? null
-    let target: { encounterId: string; unitId: string; sessionId: string; unitRevision: number }
     if (currentSession && currentUnit && currentEncounter?.status === 'open') {
-      target = {
+      return {
         encounterId: currentEncounter.id,
         unitId: currentUnit.id,
         sessionId: currentSession.id,
         unitRevision: currentUnit.revision,
       }
-    } else {
-      // The map may still be loading. The server opens the glance for this
-      // encounter inside the rating write, so the tap never waits on the load.
-      const unitId = cardRef.current.unit_id
-      const identity = unitId
-        ? ensureEncounterRef.current(cardRef.current.id, effectiveRevision, true)
-        : null
-      if (!unitId || !identity?.encounterId) {
-        markSaveFailed(`评分前没有拿到这张卡的复习记录（单元：${unitId || '无'}，卡片：${cardRef.current.id}，回合：${roundIdRef.current || '无'}）`, mailboxRef.current.latest + 1)
-        return
-      }
-      requestGlanceNow()
-      target = {
-        encounterId: identity.encounterId,
-        unitId,
-        sessionId: identity.sessionId ?? '',
-        unitRevision: identity.unitRevision,
-      }
     }
-    const generation = mailboxRef.current.latest + 1
-    const inflightGeneration = mailboxRef.current.inflight?.generation
-    const baseline = (inflightGeneration != null
-      ? baselinesRef.current.get(inflightGeneration)
-      : null) ?? currentSession
-    if (baseline) baselinesRef.current.set(generation, baseline)
-    const decision = acceptRating(mailboxRef.current, {
-      rating,
-      operationId: operationId(),
-      intentSequence: generation,
-      cardId: cardRef.current.id,
-      occurrenceId: cardRef.current.occurrence_kind === 'retry' ? cardRef.current.id : '',
-      ...target,
-    })
-    mailboxRef.current = decision.box
-    if (decision.sendNow) await dispatchRating(decision.ticket)
+    const unitId = liveCard.unit_id
+    const identity = unitId ? ensureEncounterRef.current(liveCard.id, effectiveRevision, true) : null
+    if (!unitId || !identity?.encounterId) return null
+    // The map may still be loading. The server opens the glance for this
+    // encounter inside the rating write, so the tap never waits on the load.
+    requestGlanceNow()
+    return {
+      encounterId: identity.encounterId,
+      unitId,
+      sessionId: identity.sessionId ?? '',
+      unitRevision: identity.unitRevision,
+    }
   }
 
-  function enqueueCommit(rating: UnitRating) {
-    holdEncounter()
-    commitHoldRef.current += 1
-    const job = async () => {
-      try {
-        await ensureAndDispatch(rating)
-      } finally {
-        commitHoldRef.current = Math.max(0, commitHoldRef.current - 1)
-        releaseEncounter()
-      }
-    }
-    // An already-open glance must post in this turn. Chaining on a resolved
-    // promise would defer the write until a microtask, after the tap returns.
-    if (commitIdleRef.current) {
-      commitIdleRef.current = false
-      const run = job()
-      commitChainRef.current = run.then(() => {
-        commitIdleRef.current = true
-      }, () => {
-        commitIdleRef.current = true
-      })
+  function submitRating(rating: UnitRating) {
+    const liveCard = cardRef.current
+    const target = ratingTarget()
+    if (!target) {
+      setActionError(`评分前没有拿到这张卡的复习记录（单元：${liveCard.unit_id || '无'}，卡片：${liveCard.id}，回合：${roundIdRef.current || '无'}）`)
       return
     }
-    const run = commitChainRef.current.then(job, job)
-    commitChainRef.current = run.then(() => undefined, () => undefined)
+    setActionError(null)
+    ratingStore.submit({
+      roundId: roundIdRef.current,
+      cardId: liveCard.id,
+      occurrenceId: liveCard.occurrence_kind === 'retry' ? liveCard.id : '',
+      rating,
+      planVersion: planVersionRef.current,
+      target,
+    })
   }
 
-  async function rate(rating: UnitRating) {
+  function rate(rating: UnitRating) {
     if (readOnly) {
       setActionError('历史记录为只读，不能评分。')
       return
     }
-    const currentEncounter = unitRef.current?.encounter ?? null
-    if (currentEncounter?.rating_editable === false) return
-    const liveSelected = optimisticRatingRef.current ?? ratingOnThisAppearance(currentEncounter)
-    if (liveSelected === rating && !saveFailedRef.current) {
-      // The tap is not lit while it saves, so a repeat tap is not a "cancel".
-      if (mailboxRef.current.inflight) return
-      await undoRating({ clearAll: true })
-      return
-    }
-    const recorded = asUnitRating(lastRating) ?? asUnitRating(encounterRef.current?.selectedRating)
-    if (
-      !saveFailedRef.current
-      && optimisticRatingRef.current == null
-      && ratingOnThisAppearance(currentEncounter) == null
-      && recorded === rating
-    ) {
+    if (unitRef.current?.encounter?.rating_editable === false) {
+      setActionError(SUPERSEDED_RATING_COPY)
       return
     }
     if (!cardRef.current.unit_id) {
       setActionError('这张卡不能评分。')
       return
     }
-    paintLocalIntent(rating)
-    enqueueCommit(rating)
+    const entry = ratingStore.getEntry(roundIdRef.current, cardRef.current.id)
+    const confirmed = intentRating ?? ratingOnThisAppearance(unitRef.current?.encounter ?? null)
+    // Tapping the acknowledged grade again clears it. A 未保存 grade retries
+    // instead, and a pending tap is never a "cancel" because it is not lit.
+    if (
+      entry?.status !== 'failed'
+      && entry?.status !== 'saving'
+      && confirmed === rating
+    ) {
+      undoRating({ clearAll: true })
+      return
+    }
+    submitRating(rating)
   }
 
-  const rateFromSheetRef = useRef(rate)
-  rateFromSheetRef.current = rate
-  const handledSheetRating = useRef('')
-  useEffect(() => {
-    if (!active || requestedRating == null) return
-    const key = `${card.id}:${requestedRating}`
-    if (handledSheetRating.current === key) return
-    handledSheetRating.current = key
-    onRequestedRatingHandled?.()
-    void rateFromSheetRef.current(requestedRating)
-  }, [active, card.id, onRequestedRatingHandled, requestedRating])
-
-  async function undoRating(options?: { clearAll?: boolean }) {
+  function undoRating(options?: { clearAll?: boolean }) {
     if (readOnly) {
       setActionError('历史记录为只读，不能撤销评分。')
       return
     }
-    if (unitRef.current?.encounter?.rating_editable === false) return
-    // The grade is still on the wire. Drop it locally now; the reply undoes
-    // itself once the server returns an operation id.
-    if (mailboxRef.current.inflight) {
-      mailboxRef.current = requestUndo(mailboxRef.current)
-      paintCleared()
+    if (unitRef.current?.encounter?.rating_editable === false) {
+      setActionError(SUPERSEDED_RATING_COPY)
       return
     }
-    if (optimisticRatingRef.current != null && !lastOperationIdRef.current && !unitRef.current?.encounter?.effective_operation_id) {
-      paintCleared()
-      return
-    }
-    const currentSession = sessionRef.current ?? session
-    const currentUnit = unitRef.current ?? unit
-    const knownOperationId = lastOperationIdRef.current ?? currentUnit?.encounter?.effective_operation_id
-    if (!knownOperationId || !currentSession || !currentUnit || busyRef.current) {
-      setActionError(busyRef.current ? '操作正在提交，请稍候。' : '暂无可撤销的评分。')
-      return
-    }
-    setActionError(null)
-    setBusy(true)
-    busyRef.current = true
-    const undoneRating = currentUnit.encounter?.selected_rating ?? null
-    try {
-      let workingSession = currentSession
-      let workingUnit = currentUnit
-      let workingOperationId: string | null = knownOperationId
-      let lastResult: Awaited<ReturnType<typeof undoReviewUnitRatingApi>> | null = null
-      const seen = new Set<string>()
-      while (workingOperationId && !seen.has(workingOperationId)) {
-        seen.add(workingOperationId)
-        const result = await undoReviewUnitRatingApi(workingOperationId, roundIdRef.current)
-        lastResult = result
-        workingUnit = {
-          ...workingUnit,
-          ...result.unit,
-          title: result.unit.title || workingUnit.title,
-          session_status: result.session_status,
-          final_rating: result.encounter.selected_rating,
-          encounter: result.encounter,
-        }
-        workingSession = updateSessionUnit(workingSession, workingUnit)
-        workingOperationId = result.encounter.effective_operation_id
-        if (!options?.clearAll || result.encounter.selected_rating == null) break
-      }
-      if (!lastResult) return
-      cardFeedback.playUndo(undoneRating as UnitRating | null)
-      sessionRef.current = workingSession
-      unitRef.current = workingUnit
-      const undoneSelection = asUnitRating(lastResult.encounter.selected_rating)
-      optimisticRatingRef.current = undoneSelection
-      saveFailedRef.current = false
-      if (mountedRef.current) {
-        setIntentRating(undoneSelection)
-        setRatingSave(null)
-        setSession(workingSession)
-      }
-      rememberOperation(lastResult.encounter.effective_operation_id)
-      const cardId = cardRef.current.id
-      rateBridgeRef.current.onEncounterChange(
-        cardId,
-        encounterState(workingSession.id, workingUnit.revision, lastResult.encounter),
-      )
-      const settledIds = lastSettledCardIdsRef.current.length ? lastSettledCardIdsRef.current : [cardId]
-      if (lastResult.encounter.selected_rating == null) {
-        if (undoTimerRef.current != null) {
-          window.clearTimeout(undoTimerRef.current)
-          undoTimerRef.current = null
-        }
-        if (mountedRef.current) setUndoVisible(false)
-        lastSettledCardIdsRef.current = []
-        if (rateBridgeRef.current.onBatchCardsSettled && settledIds.length > 1) {
-          rateBridgeRef.current.onBatchCardsSettled(settledIds.map((settledId) => ({ cardId: settledId, cleared: true })))
-        } else {
-          rateBridgeRef.current.onBranchComplete(cardId, { cleared: true })
-        }
-      } else {
-        rateBridgeRef.current.onBranchComplete(cardId, {
-          restudy: !lastResult.encounter.passed,
-          rating: lastResult.encounter.selected_rating ?? undefined,
-          retryAfterCards: lastResult.encounter.retry_after_cards,
-        })
-      }
-    } catch (error) {
-      const diagnostic = formatUnitDiagnostic({
-        error,
-        card: cardRef.current,
-        roundId: roundIdRef.current,
-        operationId: knownOperationId,
-        stage: options?.clearAll ? '取消评分' : '撤销评分',
-      })
-      if (mountedRef.current) setActionError(diagnostic)
-      rateBridgeRef.current.onSaveFailed(diagnostic)
-    } finally {
-      busyRef.current = false
-      if (mountedRef.current) setBusy(false)
-      if (rateHoldRef.current === 0 && !activeRef.current) {
-        void enqueueFreestyleSessionTask(() => closeCurrentEncounterRef.current())
-      }
-    }
+    const accepted = ratingStore.requestUndo({
+      roundId: roundIdRef.current,
+      cardId: cardRef.current.id,
+      operationId: lastOperationIdRef.current ?? unitRef.current?.encounter?.effective_operation_id ?? null,
+      clearAll: Boolean(options?.clearAll),
+    })
+    setActionError(accepted ? null : '暂无可撤销的评分。')
   }
 
   const reviewReady = Boolean(editorState && session && unit && unit.encounter)
@@ -1285,8 +892,11 @@ export function FreestyleUnitReviewCardView({
     && currentEncounter?.status === 'closed'
     && appearanceRating == null
     && asUnitRating(currentEncounter.selected_rating) != null
-  // A failed save must not keep the tapped grade lit as chosen.
-  const selectedRating = ratingSave?.status === 'failed' ? appearanceRating : intentRating ?? appearanceRating
+  // Lit only from acknowledged state. A pending or 未保存 tap is never shown as chosen.
+  const selectedRating = intentRating ?? appearanceRating
+  const pendingRating = saveEntry?.status === 'saving' && saveEntry.pendingKind === 'rate' ? saveEntry.rating : null
+  const pendingClear = saveEntry?.status === 'saving' && saveEntry.pendingKind === 'undo'
+  const failedRating = saveEntry?.status === 'failed' ? saveEntry.rating : null
   const recordedRating = appearanceRating != null || previousClosed
     ? null
     : asUnitRating(lastRating) ?? (encounter?.status === 'closed' ? null : asUnitRating(encounter?.selectedRating))
@@ -1343,8 +953,8 @@ export function FreestyleUnitReviewCardView({
           flipLabel={flipLabel}
           flipTitle={flipTitle}
           showUndo={Boolean(undoVisible && lastOperationId && !locked)}
-          undoDisabled={busy}
-          onUndo={() => void undoRating()}
+          undoDisabled={pendingClear}
+          onUndo={() => undoRating()}
         />
         {flipSource ? (
           <div
@@ -1431,21 +1041,22 @@ export function FreestyleUnitReviewCardView({
           <FreestyleRatingBar
             ratingEffects={currentEncounter?.rating_effects ?? []}
             selectedRating={selectedRating}
-            pendingRating={showSavingRating}
-            failedRating={ratingSave?.status === 'failed' ? ratingSave.rating : null}
+            pendingRating={pendingRating}
+            pendingClear={pendingClear}
+            failedRating={failedRating}
             recordedRating={recordedRating}
             retryAfterCards={retryAfterCards}
-            busy={busy}
+            busy={false}
             locked={locked}
             reviewReady={reviewReady}
             hasEncounter={Boolean(currentEncounter)}
             canRateWithoutPlan={canRateWithoutPlan}
             actionError={actionError}
             blockedHint={blockedHint}
-            disabledReason={superseded ? '已有后续练习，这次评分仅供回看；请到最近一次练习修改。' : null}
+            disabledReason={superseded ? SUPERSEDED_RATING_COPY : null}
             assistantCopy={loadError}
             shortcutsActive={active && !inlineEditing}
-            onRate={(rating) => void rate(rating)}
+            onRate={rate}
             onRemoveFromQueue={
               readOnly || !onRemoveFromQueue
                 ? undefined

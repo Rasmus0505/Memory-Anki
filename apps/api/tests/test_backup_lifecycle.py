@@ -2,7 +2,6 @@
 import json
 import os
 import sqlite3
-from datetime import timedelta
 
 import pytest
 
@@ -226,18 +225,24 @@ def test_daily_full_backup_exists_ignores_rolling_only(backup_env):
     assert backup_lifecycle._daily_full_backup_exists() is True
 
 
-def test_periodic_and_shutdown_use_rolling(backup_env, monkeypatch):
-    monkeypatch.setattr(backup_lifecycle, "AUTO_ROLLING_BACKUP_INTERVAL", timedelta(seconds=0))
-    periodic = backup_lifecycle.maybe_create_periodic_backup()
-    shutdown = backup_lifecycle.create_shutdown_backup()
-
-    assert periodic is not None
-    assert periodic.parent == backup_env["rolling"]
-    assert shutdown is not None
-    assert shutdown.parent == backup_env["rolling"]
+def test_edits_never_write_a_backup(backup_env):
+    assert backup_lifecycle.request_rolling_backup("rolling-editor-save") is False
+    assert backup_lifecycle.maybe_create_rolling_backup("rolling-create-palace") is None
+    assert not any(backup_env["rolling"].iterdir())
     assert not any(backup_env["full"].iterdir())
 
 
+def test_startup_backup_runs_once_per_local_day(backup_env):
+    first = backup_lifecycle.start_startup_backups(delay_seconds=0)
+    first.join(10)
+
+    rolling = list(backup_env["rolling"].iterdir())
+    assert len(rolling) == 1
+    assert not any(backup_env["full"].iterdir())
+
+    second = backup_lifecycle.start_startup_backups(delay_seconds=0)
+    second.join(10)
+    assert len(list(backup_env["rolling"].iterdir())) == 1
 def test_backups_route_lists_tmp_backups(backup_env, make_client):
     backup_lifecycle.create_full_backup("unit-test")
     client = make_client(backups_router)
@@ -268,34 +273,6 @@ def test_create_backup_route_writes_rolling(backup_env, make_client):
     assert items[0]["kind"] == "rolling"
     assert items[0]["reason"] == "manual"
     assert not any(backup_env["full"].iterdir())
-
-
-def test_request_rolling_backup_is_single_flight(backup_env, monkeypatch):
-    import threading
-
-    started = threading.Event()
-    release = threading.Event()
-    calls: list[str] = []
-
-    def slow_backup(reason, minimum_interval, *, wait_seconds=None):
-        calls.append(reason)
-        started.set()
-        release.wait(5)
-        return None
-
-    monkeypatch.setattr(backup_lifecycle, "_create_rolling_backup_if_due", slow_backup)
-    assert backup_lifecycle.request_rolling_backup("a") is True
-    assert started.wait(5)
-    assert backup_lifecycle.request_rolling_backup("b") is False
-    assert backup_lifecycle.maybe_create_rolling_backup("c") is None
-    release.set()
-    for _ in range(100):
-        if not backup_lifecycle._ROLLING_REQUEST_RUNNING:
-            break
-        threading.Event().wait(0.05)
-    assert calls == ["a"]
-    assert backup_lifecycle.request_rolling_backup("d") is True
-    threading.Event().wait(0.2)
 
 
 def test_stale_staging_is_not_a_backup_and_is_cleaned(backup_env):
@@ -358,12 +335,21 @@ def test_online_backup_gives_up_after_duration_cap(backup_env, monkeypatch):
         storage_backup._sqlite_online_backup(db, backup_env["app_home"] / "out.db")
 
 
-def test_bounded_shutdown_backup_stops_waiting(backup_env, monkeypatch):
-    import threading
+def test_daily_check_route_schedules_the_startup_check(backup_env, make_client, monkeypatch):
+    calls: list[str] = []
+    monkeypatch.setattr(backups_router, "start_startup_backups", lambda: calls.append("ran"))
+    client = make_client(backups_router)
 
-    release = threading.Event()
-    monkeypatch.setattr(
-        backup_lifecycle, "create_shutdown_backup", lambda: release.wait(5) and None
-    )
-    assert backup_lifecycle.run_shutdown_backup_bounded(0.05) is False
-    release.set()
+    response = client.post("/api/v1/backups/daily-check", json={})
+
+    assert response.status_code == 200
+    assert calls == ["ran"]
+
+
+def test_daily_check_is_race_free_when_two_triggers_overlap(backup_env):
+    first = backup_lifecycle.ensure_daily_backup()
+    second = backup_lifecycle.ensure_daily_backup()
+
+    assert first is not None
+    assert second is None
+    assert len(list(backup_env["rolling"].iterdir())) == 1

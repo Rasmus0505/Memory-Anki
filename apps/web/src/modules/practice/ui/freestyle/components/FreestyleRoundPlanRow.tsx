@@ -1,6 +1,6 @@
 import { memo } from 'react'
 import type { UnitRating } from '@/modules/practice/public'
-import { Check, ChevronDown, CornerDownRight, GripVertical } from 'lucide-react'
+import { Check, ChevronDown, CornerDownRight, GripVertical, LoaderCircle } from 'lucide-react'
 import type {
   FreestyleRoundPlanCard,
   FreestyleRoundPlanCardStatus,
@@ -17,6 +17,7 @@ import {
   markedNodePathParts,
   markedNodePathTexts,
 } from '@/modules/practice/ui/freestyle/model/markedNodePathLabel'
+import type { RatingSaveEntry } from '@/modules/practice/ui/freestyle/model/ratingSaveStore'
 import { cn } from '@/shared/lib/utils'
 
 const STATUS_LABELS: Record<FreestyleRoundPlanCardStatus, string> = {
@@ -168,6 +169,60 @@ export interface RoundPlanRowProps {
   onDraggingId: (id: string | null) => void
   onRate: (cardId: string, rating: UnitRating) => void
   onRemove?: (cardId: string) => void
+  /** This card's background save: 保存中 / 已保存 / 未保存. */
+  saveState?: RatingSaveEntry | null
+}
+
+function RowSaveChip({
+  cardId,
+  label,
+  saveState,
+  onRate,
+}: {
+  cardId: string
+  label: string
+  saveState: RatingSaveEntry | null | undefined
+  onRate: (cardId: string, rating: UnitRating) => void
+}) {
+  if (!saveState) return null
+  if (saveState.status === 'saving') {
+    return (
+      <span
+        data-testid={`round-plan-save-${cardId}`}
+        data-save="saving"
+        className="inline-flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground"
+      >
+        <LoaderCircle className="size-3 animate-spin" aria-hidden />保存中
+      </span>
+    )
+  }
+  if (saveState.status === 'failed' && saveState.rating != null) {
+    const rating = saveState.rating
+    return (
+      <button
+        type="button"
+        data-testid={`round-plan-save-${cardId}`}
+        data-save="failed"
+        className="shrink-0 rounded-full border border-rate-again/50 px-2 py-0.5 text-[11px] font-medium text-rate-again hover:bg-rate-again/10"
+        aria-label={`${label}未保存，点此重试`}
+        onClick={() => onRate(cardId, rating)}
+      >
+        未保存 · 重试
+      </button>
+    )
+  }
+  if (saveState.status === 'saved' && saveState.ackedRating != null) {
+    return (
+      <span
+        data-testid={`round-plan-save-${cardId}`}
+        data-save="saved"
+        className="shrink-0 text-[11px] text-rate-good"
+      >
+        已保存
+      </span>
+    )
+  }
+  return null
 }
 
 function RoundPlanRowView({
@@ -186,6 +241,7 @@ function RoundPlanRowView({
   onDraggingId,
   onRate,
   onRemove,
+  saveState = null,
 }: RoundPlanRowProps) {
   const { cardId, status, label } = model
   const canDrag = status !== 'completed' && status !== 'excluded'
@@ -343,6 +399,7 @@ function RoundPlanRowView({
             来源 {entry.sourceCardId} · {entry.retryAfterCards}张后
           </span>
         ) : null}
+        <RowSaveChip cardId={cardId} label={label} saveState={saveState} onRate={onRate} />
         {model.rateable ? (
           <div
             className="flex w-full items-center gap-1.5 sm:w-auto sm:gap-1"
@@ -359,23 +416,35 @@ function RoundPlanRowView({
                 移除
               </button>
             ) : null}
-            {[1, 2, 3, 4].map((rating) => (
-              <button
-                key={rating}
-                type="button"
-                className={cn(
-                  'inline-flex h-11 flex-1 items-center justify-center rounded-lg border text-sm font-semibold transition-colors sm:h-7 sm:w-7 sm:flex-none sm:rounded-md sm:text-[11px]',
-                  entry.lastRating === rating
-                    ? 'border-primary bg-primary text-primary-foreground'
-                    : 'border-border/70 text-muted-foreground hover:border-primary/60 hover:text-primary',
-                )}
-                aria-label={`${label}评分${rating}`}
-                aria-pressed={entry.lastRating === rating}
-                onClick={() => onRate(cardId, rating as UnitRating)}
-              >
-                {rating}
-              </button>
-            ))}
+            {[1, 2, 3, 4].map((rating) => {
+              // Lit only from the acknowledged ledger; a pending tap only spins.
+              const pending = saveState?.status === 'saving'
+                && saveState.pendingKind === 'rate'
+                && saveState.rating === rating
+              const failed = saveState?.status === 'failed' && saveState.rating === rating
+              return (
+                <button
+                  key={rating}
+                  type="button"
+                  className={cn(
+                    'relative inline-flex h-11 flex-1 items-center justify-center rounded-lg border text-sm font-semibold transition-colors sm:h-7 sm:w-7 sm:flex-none sm:rounded-md sm:text-[11px]',
+                    entry.lastRating === rating
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : failed
+                        ? 'border-rate-again/60 text-rate-again'
+                        : 'border-border/70 text-muted-foreground hover:border-primary/60 hover:text-primary',
+                  )}
+                  aria-label={`${label}评分${rating}`}
+                  aria-pressed={entry.lastRating === rating}
+                  aria-busy={pending || undefined}
+                  data-pending={pending ? 'true' : undefined}
+                  data-failed={failed ? 'true' : undefined}
+                  onClick={() => onRate(cardId, rating as UnitRating)}
+                >
+                  {rating}
+                </button>
+              )
+            })}
           </div>
         ) : null}
         {status === 'completed' ? <Check className="size-4 shrink-0 text-rate-good" /> : null}

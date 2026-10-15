@@ -1,5 +1,5 @@
 import { Suspense, useDeferredValue, useEffect, useMemo, useState } from 'react'
-import { Brain, Layers2, Plus, Search } from 'lucide-react'
+import { Brain, Plus, Search } from 'lucide-react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { globalSearchApi } from '@/modules/search/public'
 import {
@@ -46,7 +46,6 @@ export function GlobalCommandPalette() {
   const actions = useMemo(
     () => [
       { label: '开始随心复习', shortcut: '', icon: Brain, run: () => navigate('/freestyle') },
-      { label: '打开随心 2', shortcut: '', icon: Layers2, run: () => navigate('/freestyle-2') },
       { label: '新建宫殿', shortcut: 'Ctrl+N', icon: Plus, run: () => navigate('/palaces/new') },
       { label: '搜索宫殿', shortcut: '/', icon: Search, run: () => navigate('/palaces/list?focusSearch=true') },
     ],

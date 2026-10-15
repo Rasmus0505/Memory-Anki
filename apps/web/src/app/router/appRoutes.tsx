@@ -13,8 +13,6 @@ export const preloadPalaceListPage = () => import('@/pages/library/PalaceListPag
 export const preloadPalaceShelfPage = () => import('@/pages/library/PalaceLibraryPage')
 /** Immersive freestyle card feed — default /freestyle entry. */
 export const preloadFreestylePage = () => import('@/pages/today/ImmersiveFreestylePage')
-/** Second immersive freestyle workspace — route /freestyle-2. */
-export const preloadFreestyleSecondaryPage = () => import('@/pages/today/ImmersiveFreestyleSecondaryPage')
 export const preloadKnowledgePage = () => import('@/pages/library/KnowledgeLibraryPage')
 export const preloadExamPage = () => import('@/pages/exam/ExamWarRoomPage')
 export const preloadProgressPage = () => import('@/pages/progress/ProgressPage')
@@ -37,7 +35,6 @@ const DashboardPage = lazyWithRetry(preloadDashboardPage)
 const PalaceListPage = lazyWithRetry(preloadPalaceListPage)
 const PalaceShelfPage = lazyWithRetry(preloadPalaceShelfPage)
 const FreestylePage = lazyWithRetry(preloadFreestylePage)
-const FreestyleSecondaryPage = lazyWithRetry(preloadFreestyleSecondaryPage)
 const ExamPage = lazyWithRetry(preloadExamPage)
 const ProgressPage = lazyWithRetry(preloadProgressPage)
 const EnglishWorkspacePage = lazyWithRetry(preloadEnglishWorkspacePage)
@@ -107,7 +104,8 @@ function AppRouteTable({ location }: { location: Location }) {
           {/* Retired growth page: old bookmarks and remembered insight URLs land on the insight hub. */}
           <Route path="/growth" element={<Navigate to="/dashboard" replace />} />
           <Route path="/freestyle" element={<FreestylePage />} />
-          <Route path="/freestyle-2" element={<FreestyleSecondaryPage />} />
+          {/* Retired 随心 2: merged into 随心; old bookmarks land on the single feed. */}
+          <Route path="/freestyle-2" element={<Navigate to="/freestyle" replace />} />
           {/* Retired 今日工作台: keep bookmarks on the insight hub, not /freestyle. */}
           <Route path="/today" element={<Navigate to="/dashboard" replace />} />
           <Route path="/palaces" element={<PalaceShelfPage />} />

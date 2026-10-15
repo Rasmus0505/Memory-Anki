@@ -5,6 +5,8 @@ import { DEFAULT_QUEUE_STATE } from '@/modules/practice/domain/queueState'
 import { createRoundPlan } from '@/modules/practice/domain/roundPlan'
 import { rememberUnitPreview } from '../model/freestyleUnitPreviewCache'
 import { FreestyleRoundSheet } from './FreestyleRoundSheet'
+import { buildPlanRowModel, RoundPlanRow } from './FreestyleRoundPlanRow'
+import type { RatingSaveEntry } from '../model/ratingSaveStore'
 
 vi.mock('../model/freestyleUnitPreviewCache', async () => {
   const actual = await vi.importActual<typeof import('../model/freestyleUnitPreviewCache')>(
@@ -409,14 +411,58 @@ describe('FreestyleRoundSheet', () => {
     expect(screen.getByTitle('古希腊的教育阶段-古典时期')).toBeTruthy()
   })
 
-  it('rates from the row and can remove the card from this round', () => {
+  it('rates from the row without jumping and can remove the card from this round', () => {
     const onRateCard = vi.fn()
     const onRemoveCard = vi.fn()
-    renderSheet({ onRateCard, onRemoveCard })
-    fireEvent.click(screen.getByRole('button', { name: 'one评分3' }))
+    const { onJump, onOpenChange } = renderSheet({ onRateCard, onRemoveCard })
+    fireEvent.click(screen.getByRole('button', { name: 'two评分3' }))
     fireEvent.click(screen.getByRole('button', { name: 'one移除本队列' }))
-    expect(onRateCard).toHaveBeenCalledWith('one', 3)
+    expect(onRateCard).toHaveBeenCalledWith('two', 3)
     expect(onRemoveCard).toHaveBeenCalledWith('one')
+    // The sheet stays open and the feed does not move.
+    expect(onJump).not.toHaveBeenCalled()
+    expect(onOpenChange).not.toHaveBeenCalled()
+  })
+
+  it('shows a row save as 保存中 / 未保存 and retries 未保存 with the same grade on tap', () => {
+    const cards = [card('one')]
+    const plan = createRoundPlan('round-1', cards, config)
+    const entry = plan.cardsById.one
+    const model = buildPlanRowModel({ entry, liveCard: cards[0], status: 'pending', isCurrent: false, pathTexts: ['one'] })
+    const onRate = vi.fn()
+    const save = (status: RatingSaveEntry['status']): RatingSaveEntry => ({
+      key: 'round-1::one', roundId: 'round-1', cardId: 'one', rating: 2, operationId: 'op-1', sequence: 1,
+      status, pendingKind: status === 'saving' ? 'rate' : null, failure: status === 'failed' ? 'timeout' : null,
+      detail: null, target: null, ackedRating: null, ackedOperationId: null,
+    })
+    const props = {
+      entry, model, showChrome: false, isSelected: false, draggingId: null, dragOverId: null,
+      previousId: null, nextId: null, onSelect: vi.fn(), onJump: vi.fn(), onMove: vi.fn(),
+      onDragOverId: vi.fn(), onDraggingId: vi.fn(), onRate,
+    }
+    const { rerender } = render(<RoundPlanRow {...props} saveState={save('saving')} />)
+    expect(screen.getByTestId('round-plan-save-one').textContent).toContain('保存中')
+    // Pending is a spinner, never the chosen look.
+    expect(screen.getByRole('button', { name: 'one评分2' }).getAttribute('aria-pressed')).toBe('false')
+    expect(screen.getByRole('button', { name: 'one评分2' }).getAttribute('aria-busy')).toBe('true')
+    rerender(<RoundPlanRow {...props} saveState={save('failed')} />)
+    fireEvent.click(screen.getByRole('button', { name: 'one未保存，点此重试' }))
+    expect(onRate).toHaveBeenCalledWith('one', 2)
+    expect(props.onJump).not.toHaveBeenCalled()
+  })
+
+  it('multi-select 评分 rates each selected card once and reports the counts', () => {
+    const onRateCards = vi.fn(() => ({ queued: 1, unchanged: 0, skipped: 1 }))
+    const { onJump } = renderSheet({ onRateCards })
+    fireEvent.click(screen.getByRole('checkbox', { name: '选择one' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: '选择two' }))
+    fireEvent.click(screen.getByRole('button', { name: '已选评分2' }))
+    expect(onRateCards).toHaveBeenCalledTimes(1)
+    expect(onRateCards).toHaveBeenCalledWith(['one', 'two'], 2)
+    expect(onJump).not.toHaveBeenCalled()
+    const status = screen.getByTestId('round-plan-batch-rating-status').textContent
+    expect(status).toContain('评分 2')
+    expect(status).toContain('跳过 1')
   })
 
   it('toggles a row when the row body is clicked and shows the batch bar while rows are selected', () => {

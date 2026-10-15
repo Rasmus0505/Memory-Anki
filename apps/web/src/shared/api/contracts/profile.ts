@@ -326,8 +326,6 @@ export interface ClientPreferences {
   palace_shelf_view_settings: Record<string, unknown> | null
   /** Immersive freestyle queue settings; shared across PWA and desktop via backend. */
   freestyle_feed_config: Record<string, unknown> | null
-  /** Secondary immersive workspace (`/freestyle-2`) queue settings. Independent of primary. */
-  freestyle_feed_config_secondary: Record<string, unknown> | null
   /** Immersive freestyle display preferences; shared across PWA and desktop via backend. */
   freestyle_display_settings?: Record<string, unknown> | null
   /** Saved mind-map card mark-color labels + last used color. */

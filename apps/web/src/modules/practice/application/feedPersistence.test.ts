@@ -1,13 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { DEFAULT_FREESTYLE_FEED_CONFIG, FREESTYLE_FEED_CONFIG_STORAGE_KEY } from '../domain/feedConfig'
-import { FREESTYLE_WORKSPACE_PRIMARY, FREESTYLE_WORKSPACE_SECONDARY } from '../domain/freestyleWorkspace'
+import { DEFAULT_FREESTYLE_FEED_CONFIG } from '../domain/feedConfig'
+import { FREESTYLE_WORKSPACE_PRIMARY, type FreestyleWorkspaceId } from '../domain/freestyleWorkspace'
 import { DEFAULT_QUEUE_STATE, FREESTYLE_QUEUE_STATE_STORAGE_KEY } from '../domain/queueState'
 import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
 import {
-  FREESTYLE_PEER_ROUND_EVENT,
-  FREESTYLE_SECONDARY_FEED_CONFIG_STORAGE_KEY,
-  FREESTYLE_SECONDARY_QUEUE_STATE_STORAGE_KEY,
-  emitFreestylePeerRound,
   isQueueStateFromPreviousDay,
   readFreestyleFeedConfig,
   readQueueState,
@@ -80,30 +76,6 @@ describe('saveQueueState', () => {
     expect(setItem).toHaveBeenCalledTimes(2)
   })
 
-  it('compacts the secondary queue key when that workspace exceeds quota', () => {
-    window.localStorage.setItem(FREESTYLE_QUEUE_STATE_STORAGE_KEY, JSON.stringify({
-      ...DEFAULT_QUEUE_STATE,
-      currentCardId: 'primary-card',
-    }))
-    const originalSetItem = Storage.prototype.setItem
-    const setItem = vi.spyOn(Storage.prototype, 'setItem')
-      .mockImplementationOnce(() => { throw quotaError() })
-      .mockImplementation((key, value) => originalSetItem.call(window.localStorage, key, value))
-
-    const saved = saveQueueState({
-      ...DEFAULT_QUEUE_STATE,
-      currentCardId: 'secondary-card',
-      roundPlan: compactablePlan,
-    }, FREESTYLE_WORKSPACE_SECONDARY)
-
-    expect(saved.roundPlan).toBeNull()
-    expect(JSON.parse(window.localStorage.getItem(FREESTYLE_SECONDARY_QUEUE_STATE_STORAGE_KEY) || '{}')).toEqual(
-      expect.objectContaining({ currentCardId: 'secondary-card', roundPlan: null }),
-    )
-    expect(JSON.parse(window.localStorage.getItem(FREESTYLE_QUEUE_STATE_STORAGE_KEY) || '{}').currentCardId).toBe('primary-card')
-    expect(setItem).toHaveBeenCalledTimes(2)
-  })
-
   it('resets the temporary round if the compact write still exceeds quota', () => {
     const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw quotaError() })
     const saved = saveQueueState({
@@ -154,23 +126,6 @@ describe('per-workspace feed config and queue drafts', () => {
     resetClientPreferenceCacheForTest()
   })
 
-  it('keeps primary and secondary feed configs from clobbering each other', () => {
-    saveFreestyleFeedConfig({
-      ...DEFAULT_FREESTYLE_FEED_CONFIG,
-      seed: 11,
-    })
-    saveFreestyleFeedConfig({
-      ...DEFAULT_FREESTYLE_FEED_CONFIG,
-      seed: 22,
-    }, FREESTYLE_WORKSPACE_SECONDARY)
-
-    expect(readFreestyleFeedConfig().seed).toBe(11)
-    expect(readFreestyleFeedConfig()).not.toHaveProperty('queue_length')
-    expect(readFreestyleFeedConfig(FREESTYLE_WORKSPACE_PRIMARY).seed).toBe(11)
-    expect(readFreestyleFeedConfig(FREESTYLE_WORKSPACE_SECONDARY).seed).toBe(22)
-    expect(readFreestyleFeedConfig(FREESTYLE_WORKSPACE_SECONDARY)).not.toHaveProperty('queue_length')
-  })
-
   it('does not write the global freestyle selection for a palace review', () => {
     saveFreestyleFeedConfig({
       ...DEFAULT_FREESTYLE_FEED_CONFIG,
@@ -185,41 +140,6 @@ describe('per-workspace feed config and queue drafts', () => {
     expect(readFreestyleFeedConfig().seed).toBe(11)
     expect(readFreestyleFeedConfig()).not.toHaveProperty('queue_length')
     expect(readFreestyleFeedConfig('p23').seed).toBe(11)
-  })
-
-  it('reads unsynced localStorage drafts from matching workspace keys', () => {
-    window.localStorage.setItem(FREESTYLE_FEED_CONFIG_STORAGE_KEY, JSON.stringify({
-      ...DEFAULT_FREESTYLE_FEED_CONFIG,
-      seed: 31,
-    }))
-    window.localStorage.setItem(FREESTYLE_SECONDARY_FEED_CONFIG_STORAGE_KEY, JSON.stringify({
-      ...DEFAULT_FREESTYLE_FEED_CONFIG,
-      seed: 32,
-    }))
-
-    expect(readFreestyleFeedConfig().seed).toBe(31)
-    expect(readFreestyleFeedConfig(FREESTYLE_WORKSPACE_SECONDARY).seed).toBe(32)
-  })
-
-  it('keeps primary and secondary queue drafts on separate storage keys', () => {
-    saveQueueState({
-      ...DEFAULT_QUEUE_STATE,
-      currentCardId: 'primary-card',
-      completedIds: ['p-done'],
-    })
-    saveQueueState({
-      ...DEFAULT_QUEUE_STATE,
-      currentCardId: 'secondary-card',
-      completedIds: ['s-done'],
-    }, FREESTYLE_WORKSPACE_SECONDARY)
-
-    expect(readQueueState().currentCardId).toBe('primary-card')
-    expect(readQueueState().completedIds).toEqual(['p-done'])
-    expect(readQueueState(FREESTYLE_WORKSPACE_PRIMARY).currentCardId).toBe('primary-card')
-    expect(readQueueState(FREESTYLE_WORKSPACE_SECONDARY).currentCardId).toBe('secondary-card')
-    expect(readQueueState(FREESTYLE_WORKSPACE_SECONDARY).completedIds).toEqual(['s-done'])
-    expect(JSON.parse(window.localStorage.getItem(FREESTYLE_QUEUE_STATE_STORAGE_KEY) || '{}').currentCardId).toBe('primary-card')
-    expect(JSON.parse(window.localStorage.getItem(FREESTYLE_SECONDARY_QUEUE_STATE_STORAGE_KEY) || '{}').currentCardId).toBe('secondary-card')
   })
 
   it('keeps a palace review queue draft off the primary key', () => {
@@ -237,15 +157,10 @@ describe('per-workspace feed config and queue drafts', () => {
     expect(JSON.parse(window.localStorage.getItem(FREESTYLE_QUEUE_STATE_STORAGE_KEY) || '{}').currentCardId).toBe('primary-card')
   })
 
-  it('emits a peer-round event for the workspace that just mutated', () => {
-    const events: unknown[] = []
-    const listener = (event: Event) => {
-      events.push(event instanceof CustomEvent ? event.detail : null)
-    }
-    window.addEventListener(FREESTYLE_PEER_ROUND_EVENT, listener)
-    emitFreestylePeerRound(FREESTYLE_WORKSPACE_SECONDARY)
-    window.removeEventListener(FREESTYLE_PEER_ROUND_EVENT, listener)
+  it('folds a stale secondary workspace id into the single 随心 storage slot', () => {
+    saveFreestyleFeedConfig({ ...DEFAULT_FREESTYLE_FEED_CONFIG, seed: 41 }, 'secondary' as unknown as FreestyleWorkspaceId)
 
-    expect(events).toEqual([{ workspace: FREESTYLE_WORKSPACE_SECONDARY }])
+    expect(readFreestyleFeedConfig(FREESTYLE_WORKSPACE_PRIMARY).seed).toBe(41)
   })
+
 })

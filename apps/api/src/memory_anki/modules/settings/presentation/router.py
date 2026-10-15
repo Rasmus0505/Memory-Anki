@@ -74,7 +74,6 @@ CLIENT_PREFERENCE_GROUPS = {
     "palace_list_view_settings",
     "palace_shelf_view_settings",
     "freestyle_feed_config",
-    "freestyle_feed_config_secondary",
     "freestyle_display_settings",
     "mark_color_labels",
     "flip_card_reveal_config",

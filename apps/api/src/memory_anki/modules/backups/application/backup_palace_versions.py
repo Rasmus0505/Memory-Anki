@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import copy
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from memory_anki.core.time import utc_now_naive
@@ -14,6 +15,9 @@ from memory_anki.infrastructure.db._tables.palaces import (
 )
 
 MAX_VERSION_COUNT = 50
+# 历史版本只保留最近一周；超出的在每次启动的每日备份之后清理。
+VERSION_RETENTION = timedelta(days=7)
+PRUNE_BATCH_SIZE = 500
 EDITOR_SNAPSHOT_INTERVAL = timedelta(minutes=5)
 MILESTONE_TRIGGER_REASONS = {
     "before-version-restore",
@@ -186,6 +190,40 @@ def trim_old_versions(session: Session, palace_id: int) -> None:
     versions = list_versions_query(session, palace_id).all()
     for version in versions[MAX_VERSION_COUNT:]:
         session.delete(version)
+
+
+def prune_expired_palace_versions(
+    session: Session,
+    *,
+    now: datetime | None = None,
+    retention: timedelta = VERSION_RETENTION,
+    batch_size: int = PRUNE_BATCH_SIZE,
+) -> int:
+    """Delete versions older than the retention window, in short batches.
+
+    Every palace keeps its newest version even when that one is past the window,
+    so no palace loses its last restore point. Each batch is its own transaction,
+    so a long prune never holds the single SQLite writer lock for long.
+    """
+    cutoff = (now or utc_now_naive()) - retention
+    newest_ids = [
+        row[0]
+        for row in session.query(func.max(PalaceVersion.id)).group_by(PalaceVersion.palace_id).all()
+    ]
+    total = 0
+    while True:
+        ids = [
+            row[0]
+            for row in session.query(PalaceVersion.id)
+            .filter(PalaceVersion.created_at < cutoff, PalaceVersion.id.not_in(newest_ids))
+            .limit(batch_size)
+            .all()
+        ]
+        if not ids:
+            return total
+        session.query(PalaceVersion).filter(PalaceVersion.id.in_(ids)).delete(synchronize_session=False)
+        session.commit()
+        total += len(ids)
 
 
 def list_palace_versions(session: Session, palace_id: int) -> list[dict]:
