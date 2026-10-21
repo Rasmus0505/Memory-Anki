@@ -23,16 +23,13 @@ The repository is a local-first Windows product used on two devices. SQLite, fil
 | Mind-map document rules | `modules/content/domain/mindmap-document-entity` | `modules/mindmap_document` |
 | Generic mind-map rendering | `shared/ui/mindmap-canvas` (canvas itself lazy-loads `@xyflow`) | — |
 | Mind-map editing runtime | `modules/content/ui/mindmap-editor` | aggregate-specific editor services |
-| Article / mind-map dual view ([使用指南](../article-workspace-guide.md), [验证记录](./article-workspace-validation.md)) | `modules/content/ui/mindmap-editor/article`, pure `articleDocument` | canonical `editor_doc`; see [mindmap.md](./mindmap.md) |
-| Portable article files | `content/application/articleTransfer`, article transfer UI | scoped content transfer + quiz public contract; [article-transfer.md](./article-transfer.md) |
-| Reading cursor | content article hook/API; device view remains browser-local | content Config CAS, separate from document revisions; [article-reading-cursor.md](./article-reading-cursor.md) |
 | Palace aggregate | `modules/content` (`domain/palace-entity`, palace-catalog/palace-edit UI) | `modules/content` |
 | Review scheduling/execution | `modules/memory` + `modules/practice/ui/review` | `modules/memory` |
 | AI runtime selection/calls | `modules/settings/domain/ai-runtime-entity` | `platform.application.AiRuntimeProvider`; settings supplies the adapter |
 | Background jobs | `shared/background-tasks` | target shared job lease/handler infrastructure |
 | Client preferences | `modules/settings/domain/preferences-entity` | settings/profile preference endpoint |
 | Route metadata (nav/history/fallback) | `shared/routing/routeManifest.ts` (single source) | — |
-| Feedback runtime (cue → recipe → sound, haptics, CSS jelly, DOM flourish) | `shared/fx` — see [fx-director.md](./fx-director.md). Callers use `cue()` from `@/shared/fx` only; no WebGL effects | — |
+| Feedback runtime (cue → recipe → sound, haptics, CSS jelly, DOM flourish) | `shared/fx` — see [fx-director.md](./fx-director.md). Callers use `cue()` from `@/shared/fx` only; no particle or WebGL effects | — |
 | Learning progress (`/progress`, hierarchy / distribution / question coverage) | `modules/dashboard` — see [dashboard-read-model.md](./dashboard-read-model.md) | `modules/dashboard` composed through content/memory/quiz public read capabilities |
 | Growth meta (XP, levels, quests, stamps; backend read projection only, no frontend module or page) | — (no frontend owner; `growth_state` is unused by the UI) — see [progression.md](./progression.md) | `modules/progression` (read-only projection) |
 | Ambient room layer (tint, grain, pointer light) | `shared/ambient` (pure, data-free); `app/shell/useAmbientTone` feeds it dashboard/exam data | — |

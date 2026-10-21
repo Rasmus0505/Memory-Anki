@@ -23,7 +23,6 @@ library-backed:
   and node/edge runtime is `@xyflow/react`, and the code is the domain layer on
   top. The canvas files import only `@xyflow/react` symbols from outside the repo
   — no second geometry engine.
-- **Article/rich text** uses TipTap, not a homemade contenteditable.
 
 So the correct posture is surgical, not a rewrite. Below are the places that
 genuinely duplicate existing work, ranked by value.

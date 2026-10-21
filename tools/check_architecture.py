@@ -801,14 +801,16 @@ FX_PRIVATE_PREFIXES = ("@/shared/fx/core", "@/shared/fx/recipes")
 
 
 def check_fx_director_boundary(errors: list[str]) -> None:
-    """Feedback goes through `cue()`: callers import `@/shared/fx`, never its internals."""
+    """Feedback goes through `cue()`: callers import `@/shared/fx`, never its internals or canvas-confetti."""
     for path in iter_files(WEB_SRC, (".ts", ".tsx")):
         relative = path.relative_to(WEB_SRC).as_posix()
         if relative.startswith("shared/fx/") or is_frontend_test_file(relative):
             continue
         content = path.read_text(encoding="utf-8")
         for specifier in iter_frontend_import_specifiers(content):
-            if specifier.startswith(FX_PRIVATE_PREFIXES):
+            if specifier == "canvas-confetti":
+                errors.append(f"{relative}: canvas-confetti is banned; feedback goes through cue() from @/shared/fx")
+            elif specifier.startswith(FX_PRIVATE_PREFIXES):
                 errors.append(
                     f"{relative}: import `{specifier}` bypasses the fx director; "
                     "use cue()/anchors from @/shared/fx"
@@ -5957,34 +5959,6 @@ def check_learning_progress_read_only(errors: list[str]) -> None:
             errors.append(f"{page.relative_to(REPO_ROOT)}: progress page must compose the module public surface, not HTTP.")
 
 
-def check_article_reading_cursor_boundary(errors: list[str]) -> None:
-    """Reading position must never cross into document persistence or repair on GET."""
-    service = API_SRC / "modules/content/application/article_reading.py"
-    store = API_SRC / "modules/content/infrastructure/article_reading_store.py"
-    bridge = WEB_SRC / "modules/content/api/articleReadingApi.ts"
-    hook = WEB_SRC / "modules/content/ui/mindmap-editor/article/useArticleReadingProgress.ts"
-    for path in (service, store, bridge, hook):
-        if not path.exists():
-            errors.append(f"{path}: article reading cursor boundary is required.")
-            continue
-        source = path.read_text(encoding="utf-8")
-        for forbidden in ("save_palace_editor_state", "savePalaceEditor", "invalidateQueries", "editor_doc ="):
-            if forbidden in source:
-                errors.append(f"{path}: reading cursor must not mutate or invalidate editor documents ({forbidden}).")
-    if service.exists():
-        tree = ast.parse(service.read_text(encoding="utf-8"))
-        for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef) and node.name == "get_article_reading":
-                if any(isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute)
-                       and call.func.attr in {"commit", "flush", "compare_and_set", "add", "delete", "execute"}
-                       for call in ast.walk(node)):
-                    errors.append(f"{service}: article reading GET must be read-only.")
-    if store.exists() and 'article.reading.' not in store.read_text(encoding="utf-8"):
-        errors.append(f"{store}: article reading requires its separate Config namespace.")
-    if bridge.exists() and 'persistence: false' not in bridge.read_text(encoding="utf-8"):
-        errors.append(f"{bridge}: stale cursor writes must not enter automatic offline replay.")
-
-
 # Pre-existing staged-then-read / loop-autoflush sites found when the
 # `database is locked` hygiene guard was introduced (2026-10-07). Each is a real
 # instance of the same defect class, but they sit in startup and admin paths rather
@@ -6285,19 +6259,8 @@ def _loop_scoped_stage_then_read(
     return findings
 
 
-def check_article_workspace_boundary(errors: list[str]) -> None:
-    domain = WEB_SRC / "modules/content/domain/mindmap-document-entity/model/articleDocument.ts"
-    if domain.exists():
-        source = domain.read_text(encoding="utf-8")
-        for forbidden in ("from 'react'", "@tiptap/", "window.", "fetch("):
-            if forbidden in source:
-                errors.append(f"{domain}: article document rules must remain framework-free ({forbidden}).")
-    transfer_root = API_SRC / "modules/content/application"
-    for path in transfer_root.glob("article*.py"):
-        source = path.read_text(encoding="utf-8")
-        for forbidden in ("full_transfer", "build_full_archive", "import_full_archive", "modules.quiz.application"):
-            if forbidden in source:
-                errors.append(f"{path}: scoped article transfer must use public quiz contracts and never whole-library replacement.")
+def check_rich_document_renderer_boundary(errors: list[str]) -> None:
+    """Generic rich-text renderer (still used for mind-map node bodies) stays business-free."""
     renderer = WEB_SRC / "shared/ui/rich-document/RichDocument.tsx"
     if renderer.exists() and "@/modules/" in renderer.read_text(encoding="utf-8"):
         errors.append(f"{renderer}: generic rich document renderer must not depend on business modules.")
@@ -6603,7 +6566,7 @@ def check_session_recorder_boundary(errors: list[str]) -> None:
 
 def main() -> int:
     errors: list[str] = []
-    check_article_workspace_boundary(errors)
+    check_rich_document_renderer_boundary(errors)
     check_learning_progress_read_only(errors)
     check_retired_palace_knowledge_binding(errors)
     check_context_dependency_map(errors)
@@ -6694,7 +6657,6 @@ def main() -> int:
     check_mutation_replay_helper_boundary(errors)
     check_mutation_replay_adoption(errors)
     check_tool_personal_paths(errors)
-    check_article_reading_cursor_boundary(errors)
     check_db_write_lock_hygiene(errors)
 
     if errors:
