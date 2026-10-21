@@ -977,6 +977,82 @@ def test_compress_completed_skips_weak_rated_source_with_live_retry():
     assert retry_id in kept["presented_ids"]
 
 
+def test_compress_completed_keeps_a_weak_group_when_its_retry_was_rated_weak():
+    plan = leave_card(
+        _rate(
+            plan_from_cards(
+                [_card("weak", unit_id="unit-weak"), _card("todo", unit_id="unit-todo")]
+            ),
+            "weak",
+            1,
+            "enc-fail",
+        ),
+        "weak",
+    )
+    retry_id = _inserted(plan, "weak")["occurrence_id"]
+
+    weak_again = _rate(
+        plan,
+        retry_id,
+        2,
+        "enc-retry-fail",
+        occurrence_id=retry_id,
+        unit_id="unit-weak",
+    )
+    assert compressible_ids(weak_again) == []
+    left = leave_card(weak_again, retry_id)
+    assert compressible_ids(left) == []
+    assert retry_id in compress_completed(left)["presented_ids"]
+    assert _inserted(left, "weak")["retry_attempt"] == 2
+
+
+def test_compress_completed_takes_a_weak_group_once_its_retry_passed():
+    plan = leave_card(
+        _rate(
+            plan_from_cards(
+                [_card("weak", unit_id="unit-weak"), _card("todo", unit_id="unit-todo")]
+            ),
+            "weak",
+            1,
+            "enc-fail",
+        ),
+        "weak",
+    )
+    retry_id = _inserted(plan, "weak")["occurrence_id"]
+
+    passed = _rate(
+        plan,
+        retry_id,
+        3,
+        "enc-retry-pass",
+        occurrence_id=retry_id,
+        unit_id="unit-weak",
+    )
+    assert "weak" in compressible_ids(passed)
+    assert retry_id in compressible_ids(passed)
+    compressed = compress_completed(passed)
+    assert "weak" not in compressed["presented_ids"]
+    assert retry_id not in compressed["presented_ids"]
+    assert compressed["presented_ids"] == ["todo"]
+
+
+def test_compress_completed_keeps_a_weak_group_whose_retry_is_still_blank():
+    plan = leave_card(
+        _rate(
+            plan_from_cards(
+                [_card("weak", unit_id="unit-weak"), _card("todo", unit_id="unit-todo")]
+            ),
+            "weak",
+            2,
+            "enc-fail",
+        ),
+        "weak",
+    )
+    retry_id = _inserted(plan, "weak")["occurrence_id"]
+    assert compressible_ids(plan) == []
+    assert retry_id in compress_completed(plan)["presented_ids"]
+
+
 def test_compress_completed_takes_the_source_when_its_retry_passed():
     plan = leave_card(
         _rate(
