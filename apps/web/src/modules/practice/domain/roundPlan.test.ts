@@ -529,6 +529,99 @@ describe('round plan reducer', () => {
     })).toEqual(['a', retry.id])
   })
 
+  it('keeps a weak group while its 困难 retry is still live', () => {
+    const cards = [card('a', 1), card('b', 1)]
+    const retry = createRetryOccurrence(cards[0], 'round-1', 1, 3)
+    const withRetry = createRoundPlan('round-1', [...cards, retry], config)
+    const stamped = updateRoundPlanCard(
+      updateRoundPlanCard(withRetry, 'a', { status: 'retry', lastRating: 1 }),
+      retry.id,
+      { status: 'retry', occurrenceKind: 'retry', sourceCardId: 'a', lastRating: 2 },
+    )
+    expect(compressibleRoundPlanIds(stamped, {
+      completedIds: [],
+      encounters: {
+        a: {
+          encounterId: 'enc-a',
+          unitRevision: 1,
+          status: 'closed',
+          sessionId: null,
+          selectedRating: 1,
+          passed: false,
+          retryAfterCards: 3,
+        },
+        [retry.id]: {
+          encounterId: 'enc-retry',
+          unitRevision: 1,
+          status: 'closed',
+          sessionId: null,
+          selectedRating: 2,
+          passed: false,
+          retryAfterCards: 3,
+        },
+      },
+    })).toEqual([])
+  })
+
+  it('keeps a weak group after its retry was left with a weak score', () => {
+    const cards = [card('a', 1), card('b', 1)]
+    const retry = createRetryOccurrence(cards[0], 'round-1', 2, 3)
+    const withRetry = createRoundPlan('round-1', [...cards, retry], config)
+    const stamped = updateRoundPlanCard(
+      updateRoundPlanCard(withRetry, 'a', { status: 'retry', lastRating: 1 }),
+      retry.id,
+      { status: 'retry', occurrenceKind: 'retry', sourceCardId: 'a', retryAttempt: 2, lastRating: null },
+    )
+    expect(compressibleRoundPlanIds(stamped, {
+      completedIds: [],
+      encounters: {
+        a: {
+          encounterId: 'enc-a',
+          unitRevision: 1,
+          status: 'closed',
+          sessionId: null,
+          selectedRating: 1,
+          passed: false,
+          retryAfterCards: 3,
+        },
+      },
+    })).toEqual([])
+  })
+
+  it('compresses a weak group once its retry passed', () => {
+    const cards = [card('a', 1), card('b', 1)]
+    const retry = createRetryOccurrence(cards[0], 'round-1', 1, 3)
+    const withRetry = createRoundPlan('round-1', [...cards, retry], config)
+    const stamped = updateRoundPlanCard(
+      updateRoundPlanCard(withRetry, 'a', { status: 'retry', lastRating: 1 }),
+      retry.id,
+      { status: 'retry', occurrenceKind: 'retry', sourceCardId: 'a', lastRating: 3 },
+    )
+    expect(compressibleRoundPlanIds(stamped, {
+      completedIds: [],
+      encounters: {
+        a: {
+          encounterId: 'enc-a',
+          unitRevision: 1,
+          status: 'closed',
+          sessionId: null,
+          selectedRating: 1,
+          passed: false,
+          retryAfterCards: 3,
+        },
+        [retry.id]: {
+          encounterId: 'enc-retry',
+          unitRevision: 1,
+          status: 'closed',
+          sessionId: null,
+          selectedRating: 3,
+          passed: true,
+          retryAfterCards: 3,
+        },
+      },
+    })).toEqual(['a', retry.id])
+  })
+
   it('treats a live retry as settled when its source was compressed', () => {
     const compressed = settledIdSet(['a'])
     expect(cardSettledOut({ id: 'a-retry', source_card_id: 'a' }, compressed)).toBe(true)

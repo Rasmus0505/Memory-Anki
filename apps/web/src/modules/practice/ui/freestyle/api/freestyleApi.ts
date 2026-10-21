@@ -317,3 +317,46 @@ export function rateFreestyleRoundUnitApi(
     },
   )
 }
+
+/** A 未保存 rating shared through the server: the grade and the request that failed to save. */
+export interface FreestyleRatingIntentItem {
+  card_id: string
+  operation_id: string
+  rating: number
+  failure: string
+  payload: Record<string, unknown>
+  updated_at: string | null
+}
+
+export interface FreestyleRatingIntentBody {
+  operation_id: string
+  rating: number
+  failure: string
+  payload: Record<string, unknown>
+}
+
+export function listFreestyleRatingIntentsApi(roundId: string) {
+  return request<{ items: FreestyleRatingIntentItem[] }>(
+    `/freestyle/rounds/${encodeURIComponent(roundId)}/rating-intents`,
+    { persistence: false },
+  )
+}
+
+export function putFreestyleRatingIntentApi(
+  roundId: string,
+  cardId: string,
+  body: FreestyleRatingIntentBody,
+) {
+  return request<{ item: FreestyleRatingIntentItem }>(
+    `/freestyle/rounds/${encodeURIComponent(roundId)}/rating-intents/${encodeURIComponent(cardId)}`,
+    { method: 'PUT', body: JSON.stringify(body), persistence: false },
+  )
+}
+
+/** Removes the intent only while it still belongs to this operation id. */
+export function clearFreestyleRatingIntentApi(roundId: string, cardId: string, operationId: string) {
+  return request<{ cleared: boolean }>(
+    `/freestyle/rounds/${encodeURIComponent(roundId)}/rating-intents/${encodeURIComponent(cardId)}?operation_id=${encodeURIComponent(operationId)}`,
+    { method: 'DELETE', persistence: false },
+  )
+}

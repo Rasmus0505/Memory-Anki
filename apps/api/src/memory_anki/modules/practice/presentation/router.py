@@ -20,6 +20,11 @@ from memory_anki.modules.practice.application.queue_service import (
     build_freestyle_queue,
     build_tomorrow_due_summary,
 )
+from memory_anki.modules.practice.application.rating_intents import (
+    clear_rating_intent,
+    list_rating_intents,
+    put_rating_intent,
+)
 from memory_anki.modules.practice.application.round_overlay_service import (
     drop_overlay_quiz_for_palaces,
     ensure_overlay_quiz,
@@ -43,6 +48,7 @@ from memory_anki.modules.practice.domain.schemas import (
     FreestyleQuestionAttemptCreate,
     FreestyleQuestionExplanationCreate,
     FreestyleQueueBuildRequest,
+    FreestyleRatingIntentRequest,
     FreestyleRoundActionRequest,
     FreestyleRoundActiveRequest,
     FreestyleRoundRatingRequest,
@@ -286,6 +292,54 @@ def api_freestyle_round_action(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/freestyle/rounds/{round_id}/rating-intents")
+def api_list_rating_intents(
+    round_id: str,
+    session: Session = Depends(session_dep),
+):
+    return {"items": list_rating_intents(session, round_id=round_id)}
+
+
+@router.put("/freestyle/rounds/{round_id}/rating-intents/{card_id}")
+def api_put_rating_intent(
+    round_id: str,
+    card_id: str,
+    data: FreestyleRatingIntentRequest,
+    session: Session = Depends(session_dep),
+):
+    try:
+        return {
+            "item": put_rating_intent(
+                session,
+                round_id=round_id,
+                card_id=card_id,
+                operation_id=data.operation_id,
+                rating=data.rating,
+                failure=data.failure,
+                payload=data.payload,
+            )
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/freestyle/rounds/{round_id}/rating-intents/{card_id}")
+def api_clear_rating_intent(
+    round_id: str,
+    card_id: str,
+    operation_id: str = Query(..., min_length=1, max_length=128),
+    session: Session = Depends(session_dep),
+):
+    return {
+        "cleared": clear_rating_intent(
+            session,
+            round_id=round_id,
+            card_id=card_id,
+            operation_id=operation_id,
+        )
+    }
 
 
 @router.post("/freestyle/rounds/{round_id}/ratings")

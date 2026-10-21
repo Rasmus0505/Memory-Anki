@@ -338,3 +338,27 @@ class AiModelCatalog(Base):
         default=utc_now_naive,
         onupdate=utc_now_naive,
     )
+
+
+class FreestyleRatingIntent(Base):
+    """A rating the learner chose that the server has not acknowledged (未保存).
+
+    Written when a save fails and cleared when the same operation finally lands.
+    It lives on the server, not in one browser, so every device that opens the
+    round sees the same 未保存 grade and can retry it. Keyed by round + card: a
+    newer tap replaces the older intent.
+    """
+
+    __tablename__ = "freestyle_rating_intents"
+    __table_args__ = (
+        Index("ix_freestyle_rating_intents_round", "round_id"),
+    )
+
+    round_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    card_id: Mapped[str] = mapped_column(String(256), primary_key=True)
+    operation_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    rating: Mapped[int] = mapped_column(Integer, nullable=False)
+    failure: Mapped[str] = mapped_column(String(32), nullable=False, default="")
+    # The full rating request, so any device can resend it with the same operation id.
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)

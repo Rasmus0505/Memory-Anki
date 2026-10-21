@@ -129,9 +129,32 @@ export interface RatingPostResponse {
   round: FreestyleRoundStatePayload | null | undefined
 }
 
+/** A 未保存 rating as stored on the server: the grade and the request that failed. */
+export interface RatingIntentRecord {
+  operation_id: string
+  rating: UnitRating
+  failure: string
+  payload: Record<string, unknown>
+}
+
+/** An intent handed back by the server (or by this browser's local mirror) for one card. */
+export interface HydratedRatingIntent {
+  card_id: string
+  operation_id: string
+  rating: number
+  failure: string
+  payload: Record<string, unknown>
+  /** False for a failure this browser has not yet managed to upload. */
+  confirmed?: boolean
+}
+
 export interface RatingSaveDeps {
   post: (roundId: string, payload: FreestyleRoundRatingRequest) => Promise<RatingPostResponse>
   undo: (operationId: string, roundId: string) => Promise<UndoneUnitResult>
+  /** Keep a 未保存 rating so another device or a reload can see and retry it. */
+  persistIntent?: (roundId: string, cardId: string, intent: RatingIntentRecord) => Promise<unknown>
+  /** The rating landed: remove its 未保存 record, but only for this operation id. */
+  clearIntent?: (roundId: string, cardId: string, operationId: string) => Promise<unknown>
   close?: (target: RatingTarget, job: RatingJob) => Promise<unknown>
   isStaleError?: (error: unknown) => boolean
   newOperationId: () => string
@@ -200,6 +223,20 @@ interface Lane {
   idle: Array<() => void>
 }
 
+function targetFromPayload(payload: Record<string, unknown>): RatingTarget | null {
+  const encounterId = typeof payload.encounter_id === 'string' ? payload.encounter_id : ''
+  const sessionId = typeof payload.study_session_id === 'string' ? payload.study_session_id : ''
+  const unitId = typeof payload.unit_id === 'string' ? payload.unit_id : ''
+  const unitRevision = Number(payload.unit_revision)
+  if (!encounterId || !sessionId || !unitId || !Number.isInteger(unitRevision)) return null
+  return { encounterId, unitId, sessionId, unitRevision }
+}
+
+function asFailure(value: unknown): RatingSaveFailure {
+  const known: RatingSaveFailure[] = ['timeout', 'network', 'conflict', 'identity', 'stale', 'no_result', 'prepare']
+  return known.includes(value as RatingSaveFailure) ? (value as RatingSaveFailure) : 'network'
+}
+
 export class RatingSaveStore {
   private entries = new Map<string, RatingSaveEntry>()
   private lanes = new Map<string, Lane>()
@@ -210,6 +247,8 @@ export class RatingSaveStore {
   private sequence = 0
   private roundCache = new Map<string, { version: number; entries: Record<string, RatingSaveEntry> }>()
   private changeVersion = 0
+  /** Keys whose 未保存 record the server is known to hold. */
+  private serverIntents = new Set<string>()
 
   private readonly deps: RatingSaveDeps
 
@@ -591,6 +630,7 @@ export class RatingSaveStore {
       // Superseded by a newer tap: still the saved baseline until that one lands.
       this.setEntry({ ...entry, ackedRating, ackedOperationId })
     }
+    this.clearIntent(key, job)
     this.emit({
       type: 'acked',
       roundId: job.roundId,
@@ -608,6 +648,114 @@ export class RatingSaveStore {
     }
   }
 
+  /**
+   * Put this card's 未保存 grade on the shared record. Fire and forget: a failed upload
+   * leaves the local mirror holding it, and the next sync uploads it again.
+   */
+  private persistIntent(key: string, job: RatingJob, failure: RatingSaveFailure, target: RatingTarget | null) {
+    const persist = this.deps.persistIntent
+    if (!persist || !job.roundId) return
+    const payload: Record<string, unknown> = {
+      operation_id: job.operationId,
+      rating: job.rating,
+      card_id: job.cardId,
+      occurrence_id: job.occurrenceId,
+      expected_version: this.expectedVersion(job),
+      intent_sequence: job.sequence,
+    }
+    if (target) {
+      payload.encounter_id = target.encounterId
+      payload.study_session_id = target.sessionId
+      payload.unit_id = target.unitId
+      payload.unit_revision = target.unitRevision
+    }
+    const record: RatingIntentRecord = {
+      operation_id: job.operationId,
+      rating: job.rating,
+      failure,
+      payload,
+    }
+    void Promise.resolve()
+      .then(() => persist(job.roundId, job.cardId, record))
+      .then(() => {
+        this.serverIntents.add(key)
+      }, () => undefined)
+  }
+
+  /** Clear by operation id: a newer 未保存 record for the same card is never touched. */
+  private clearIntent(key: string, job: RatingJob) {
+    const clear = this.deps.clearIntent
+    if (!clear || !job.roundId) return
+    this.serverIntents.delete(key)
+    void Promise.resolve()
+      .then(() => clear(job.roundId, job.cardId, job.operationId))
+      .catch(() => undefined)
+  }
+
+  /** Mark an intent this browser uploaded after the fact as confirmed on the server. */
+  confirmIntent(roundId: string, cardId: string) {
+    this.serverIntents.add(ratingSaveKey(roundId, cardId))
+  }
+
+  /**
+   * Show the round's 未保存 grades from the server (or the local mirror) and make them
+   * retryable with their original operation id. A live save keeps priority. A failed
+   * entry this browser knew the server held, but which is no longer listed, was saved
+   * or cleared on another device, so it is dropped.
+   */
+  hydrateIntents(
+    roundId: string,
+    items: HydratedRatingIntent[],
+    prepareFor: (cardId: string) => (() => Promise<RatingTarget>) | null,
+  ) {
+    const listed = new Set<string>()
+    for (const item of items) {
+      const rating = asRating(item.rating)
+      if (!rating || !item.card_id) continue
+      const key = ratingSaveKey(roundId, item.card_id)
+      const current = this.entries.get(key)
+      if (current?.status === 'saving') continue
+      listed.add(key)
+      const payload = item.payload ?? {}
+      const target = targetFromPayload(payload)
+      this.requests.set(key, {
+        roundId,
+        cardId: item.card_id,
+        occurrenceId: typeof payload.occurrence_id === 'string' ? payload.occurrence_id : '',
+        rating,
+        planVersion: Number(payload.expected_version) || 0,
+        target,
+        prepare: target ? null : prepareFor(item.card_id),
+        closeAfterAck: false,
+      })
+      if (item.confirmed !== false) this.serverIntents.add(key)
+      this.setEntry({
+        key,
+        roundId,
+        cardId: item.card_id,
+        rating,
+        operationId: item.operation_id,
+        sequence: current?.sequence ?? 0,
+        status: 'failed',
+        pendingKind: null,
+        failure: asFailure(item.failure),
+        detail: null,
+        target: target ?? current?.target ?? null,
+        ackedRating: current?.ackedRating ?? null,
+        ackedOperationId: current?.ackedOperationId ?? null,
+      })
+    }
+    for (const key of [...this.serverIntents]) {
+      if (!key.startsWith(`${roundId}::`) || listed.has(key)) continue
+      this.serverIntents.delete(key)
+      if (this.entries.get(key)?.status === 'failed') {
+        this.entries.delete(key)
+        this.requests.delete(key)
+      }
+    }
+    this.changed()
+  }
+
   private fail(key: string, job: RatingJob, failure: RatingSaveFailure, error: unknown) {
     const entry = this.entries.get(key)
     const current = entry?.operationId === job.operationId
@@ -615,6 +763,7 @@ export class RatingSaveStore {
     // or a retry of the same operation now owns the entry: the late error adds nothing.
     if (current && (entry?.status !== 'saving' || entry.sequence !== job.sequence)) return
     if (current && entry) {
+      const target = job.target ?? entry.target
       this.setEntry({
         ...entry,
         status: 'failed',
@@ -622,8 +771,9 @@ export class RatingSaveStore {
         rating: job.rating,
         failure,
         detail: error instanceof Error ? error.message : String(error ?? ''),
-        target: job.target ?? entry.target,
+        target,
       })
+      this.persistIntent(key, job, failure, target)
     }
     this.emit({ type: 'failed', roundId: job.roundId, cardId: job.cardId, job, failure, error, current })
   }

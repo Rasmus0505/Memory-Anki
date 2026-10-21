@@ -121,3 +121,14 @@ class FreestyleRoundRatingRequest(BaseModel):
     unit_id: str
     unit_revision: int
     palace_batch: dict[str, Any] | None = None
+
+
+class FreestyleRatingIntentRequest(BaseModel):
+    """A 未保存 rating: the grade the learner chose and the request that failed to save."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    operation_id: str = Field(min_length=1, max_length=128)
+    rating: int = Field(ge=1, le=4)
+    failure: str = Field(default="", max_length=32)
+    payload: dict[str, Any] = Field(default_factory=dict)

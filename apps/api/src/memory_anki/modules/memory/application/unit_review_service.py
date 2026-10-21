@@ -8,6 +8,7 @@ from datetime import date, datetime
 from typing import Any
 
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from memory_anki.core.time import local_calendar_day_of, to_api_datetime, utc_now_naive
@@ -570,7 +571,22 @@ def open_unit_review_encounter(
             status=ENCOUNTER_OPEN,
         )
     )
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError:
+        # Two starts for the same unit raced past the `existing` check above (the
+        # card glance and a rating's own prepare do this). The partial unique index
+        # keeps exactly one open encounter; the loser hands back the winner's glance
+        # instead of failing the card with a 500.
+        session.rollback()
+        winner = (
+            session.query(ReviewUnitEncounter)
+            .filter_by(study_session_id=study.id, unit_id=state.id, status=ENCOUNTER_OPEN)
+            .one_or_none()
+        )
+        if winner is None:
+            raise
+        return get_unit_review_session(session, study.id)
     return get_unit_review_session(session, study.id)
 
 

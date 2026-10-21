@@ -19,11 +19,25 @@ function cardPassedThisRound(
   return ratingPassed(plan.cardsById[id]?.lastRating)
 }
 
+/**
+ * A 重练 is done only by a pass or an explicit completion. A weak 重练
+ * (忘记/困难) stays live and comes back, so it never counts as answered, even
+ * after the learner moved on and its attempt number bumped.
+ */
+function retryAnswered(
+  entry: FreestyleRoundPlanCard,
+  plan: FreestyleRoundPlanState,
+  completedIds: Iterable<string>,
+  encounters: Record<string, FreestyleUnitEncounterState>,
+): boolean {
+  return cardPassedThisRound(entry.cardId, plan, completedIds, encounters)
+}
+
 function sourceIdOf(entry: FreestyleRoundPlanCard) {
   return entry.occurrenceKind === 'retry' ? (entry.sourceCardId || entry.cardId) : entry.cardId
 }
 
-function sourceHasUnfinishedRetry(
+function sourceHasUnansweredRetry(
   plan: FreestyleRoundPlanState,
   sourceId: string,
   completedIds: Iterable<string>,
@@ -33,7 +47,7 @@ function sourceHasUnfinishedRetry(
     if (entry.occurrenceKind !== 'retry') return false
     if ((entry.sourceCardId || entry.cardId) !== sourceId) return false
     if (entry.status === 'excluded') return false
-    return !cardPassedThisRound(entry.cardId, plan, completedIds, encounters)
+    return !retryAnswered(entry, plan, completedIds, encounters)
   })
 }
 
@@ -54,11 +68,10 @@ function groupMembers(plan: FreestyleRoundPlanState, sourceId: string): string[]
 }
 
 /**
- * Cards the learner can 小结算. A pass is rating 3 or 4, or an encounter
- * already marked passed. When the source or any of its 重练 has passed and
- * no retry is still unfinished, the whole group leaves together — a weak
- * first try does not stay behind a passed retry. Weak groups with a live
- * retry stay. Already compressed or excluded cards stay out.
+ * Cards the learner can 小结算. A group settles when its source passed, or
+ * when one of its 重练 was answered (a pass, or a 忘记/困难 the learner already
+ * moved past). A group whose 重练 nobody has answered yet stays. Already
+ * compressed or excluded cards stay out.
  */
 export function compressibleRoundPlanIds(
   plan: FreestyleRoundPlanState | null,
@@ -86,10 +99,15 @@ export function compressibleRoundPlanIds(
     const sourceId = entry ? sourceIdOf(entry) : id
     if (seenSources.has(sourceId)) continue
     seenSources.add(sourceId)
-    if (sourceHasUnfinishedRetry(plan, sourceId, completedIds, encounters)) continue
+    if (sourceHasUnansweredRetry(plan, sourceId, completedIds, encounters)) continue
     const members = groupMembers(plan, sourceId)
     if (!members.includes(id)) members.push(id)
-    if (!members.some((member) => cardPassedThisRound(member, plan, completedIds, encounters))) continue
+    const settled = members.some((member) => {
+      if (cardPassedThisRound(member, plan, completedIds, encounters)) return true
+      const memberEntry = plan.cardsById[member]
+      return memberEntry?.occurrenceKind === 'retry' && retryAnswered(memberEntry, plan, completedIds, encounters)
+    })
+    if (!settled) continue
     for (const member of members) {
       if (compressed.has(member) || ids.includes(member)) continue
       if (plan.cardsById[member]?.status === 'excluded') continue

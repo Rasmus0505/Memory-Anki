@@ -923,3 +923,55 @@ def test_rating_still_rejects_stale_revision_without_adoption(db_session):
             rating=3,
             round_id="round-2026-07-27",
         )
+
+
+def test_freestyle_start_that_loses_the_open_glance_race_returns_the_winner(db_session, test_engine):
+    """Two starts for one unit can both pass the `existing` check; the partial unique
+    index admits one open glance. The loser must hand back the winner's glance instead
+    of failing the card with a 500 (seen in production as UNIQUE on
+    review_unit_encounters open index)."""
+    from sqlalchemy import event
+    from sqlalchemy.orm import sessionmaker
+
+    from memory_anki.modules.memory.application.unit_review_service import ENCOUNTER_OPEN
+
+    state = _seed_review_unit(db_session)
+    fired: list[str] = []
+
+    def _competitor_wins_first(session, _flush_context, _instances):
+        if fired:
+            return
+        pending = [obj for obj in session.new if isinstance(obj, ReviewUnitEncounter)]
+        if not pending:
+            return
+        fired.append("yes")
+        racing = pending[0]
+        with sessionmaker(bind=test_engine)() as other:
+            other.add(
+                ReviewUnitEncounter(
+                    id="encounter-winner",
+                    study_session_id=racing.study_session_id,
+                    unit_id=racing.unit_id,
+                    unit_revision=racing.unit_revision,
+                    round_id=racing.round_id,
+                    sequence=7,
+                    baseline_state_json=racing.baseline_state_json,
+                    status=ENCOUNTER_OPEN,
+                )
+            )
+            other.commit()
+
+    event.listen(db_session, "before_flush", _competitor_wins_first)
+    try:
+        resumed = _start(db_session, state, "encounter-loser")
+    finally:
+        event.remove(db_session, "before_flush", _competitor_wins_first)
+
+    assert fired, "the race was not reached; the test no longer exercises the insert path"
+    assert resumed["units"][0]["encounter"]["id"] == "encounter-winner"
+    open_rows = (
+        db_session.query(ReviewUnitEncounter)
+        .filter_by(unit_id=state.id, status=ENCOUNTER_OPEN)
+        .all()
+    )
+    assert [row.id for row in open_rows] == ["encounter-winner"]

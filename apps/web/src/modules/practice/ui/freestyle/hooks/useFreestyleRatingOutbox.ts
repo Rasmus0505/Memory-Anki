@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import type {
   FreestyleUnitEncounterState,
   UnitRating,
@@ -8,6 +8,7 @@ import { isMindMapBranchCard } from '@/modules/practice/ui/freestyle/model/frees
 import {
   freestyleRatingSaves,
   prepareRatingTarget,
+  syncRatingIntents,
 } from '@/modules/practice/ui/freestyle/model/ratingSaveRuntime'
 import type { RatingTarget } from '@/modules/practice/ui/freestyle/model/ratingSaveStore'
 import type { RatingLedgerHandlers } from '@/modules/practice/ui/freestyle/model/ratingSaveLedger'
@@ -89,6 +90,34 @@ export function useFreestyleRatingOutbox(input: {
   })
 
   const failedCount = useRatingSaveFailedCount(input.roundId)
+
+  // 未保存 grades are shared through the server: load them when the round opens and
+  // again when this window regains focus, so a failure on another device shows here.
+  useEffect(() => {
+    const roundId = input.roundId
+    if (!roundId) return
+    const prepareFor = (cardId: string) => {
+      const card = latest.current.cards.find((item) => item.id === cardId)
+      if (!card || !isMindMapBranchCard(card) || !card.unit_id || card.unit_revision == null) return null
+      return () => {
+        const encounter = latest.current.ensureUnitEncounter(card.id, card.unit_revision!, true)
+        return prepareRatingTarget(card, encounter, roundId)
+      }
+    }
+    const refresh = () => {
+      void syncRatingIntents(roundId, prepareFor)
+    }
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refresh()
+    }
+    refresh()
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [input.roundId])
 
   /**
    * Rate cards in the background, each through the same per-card path a tap on
