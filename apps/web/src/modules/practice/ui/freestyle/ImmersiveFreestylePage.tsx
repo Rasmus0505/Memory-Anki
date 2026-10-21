@@ -28,7 +28,6 @@ import { FreestyleHudOverflow } from '@/modules/practice/ui/freestyle/components
 import { FreestyleHud } from '@/modules/practice/ui/freestyle/FreestyleHud'
 import { FreestylePageDialogs } from '@/modules/practice/ui/freestyle/FreestylePageDialogs'
 import { FreestyleCardArea } from '@/modules/practice/ui/freestyle/FreestyleCardArea'
-import { beginFlipXpSession } from '@/modules/practice/ui/freestyle/model/freestyleFlipXp'
 import { FreestyleStudySettlement } from '@/modules/practice/ui/freestyle/FreestyleStudySettlement'
 import { FreestyleNewUnitsBanner } from '@/modules/practice/ui/freestyle/components/FreestyleNewUnitsBanner'
 import {
@@ -102,7 +101,6 @@ export default function ImmersiveFreestylePage({
   /** Shelf review locks this page to one palace and must not enter /freestyle. */
   lockedPalaceId?: number | null
 } = {}) {
-  useEffect(() => { beginFlipXpSession() }, [])
   const palaceLocked = typeof lockedPalaceId === 'number' && lockedPalaceId > 0
   const slot = palaceLocked
     ? palaceReviewWorkspaceId(lockedPalaceId)

@@ -6,7 +6,6 @@ import type { FreestyleSaveOutcome } from '@/modules/practice/ui/freestyle/model
 import { settlementQuizClearCopy } from '@/modules/practice/ui/freestyle/model/overlayQuizClearance'
 import { formatPalaceUnit } from '@/modules/practice/ui/freestyle/model/formatPalaceUnit'
 import { FreestyleSaveStatus } from './FreestyleSaveStatus'
-import { FreestyleXpSettlement } from './FreestyleXpSettlement'
 import { cn } from '@/shared/lib/utils'
 
 type QuizChoice = 'pending' | 'confirming' | 'clearing' | 'cleared' | 'kept'
@@ -134,7 +133,6 @@ export function FreestyleRoundSettlement({
 
   return (
     <div data-testid="freestyle-round-complete" className="mx-auto flex w-full max-w-2xl flex-col px-1 py-4">
-      <FreestyleXpSettlement completion={completion} />
       <div className="relative rounded-[1.75rem] border border-stage-line-strong bg-stage-raised/95 p-5 text-stage-ink shadow-[0_24px_80px_-16px_rgb(0_0_0/0.7)] sm:p-7">
         <button
           type="button"

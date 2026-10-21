@@ -591,38 +591,6 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(onUserZoomChange).toHaveBeenCalledWith(0.84)
   })
 
-  it('hides the 思维导图/文章 switch on the PWA and keeps it on desktop', async () => {
-    const card = buildCard('unit-document-view-switch')
-    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!))
-    const originalMatchMedia = window.matchMedia
-
-    try {
-      Object.defineProperty(window, 'matchMedia', {
-        configurable: true,
-        value: vi.fn((query: string) => ({
-          matches: query === '(display-mode: standalone)',
-          addEventListener: vi.fn(),
-          removeEventListener: vi.fn(),
-        })),
-      })
-      renderCard(card)
-      await screen.findByTestId('flip-card-mind-map-panel')
-      expect(capturedPanelProps).toMatchObject({ hideDocumentViewSwitch: true })
-    } finally {
-      Object.defineProperty(window, 'matchMedia', {
-        configurable: true,
-        value: originalMatchMedia,
-      })
-    }
-
-    // Desktop (no standalone display, Electron UA) keeps the switch.
-    document.body.innerHTML = ''
-    capturedPanelProps = null
-    renderCard(card)
-    await screen.findByTestId('flip-card-mind-map-panel')
-    expect(capturedPanelProps).toMatchObject({ hideDocumentViewSwitch: false })
-  })
-
   it('lets a cached preview flip locally and preserves that progress when the live session lands', async () => {
     writeFlipCardRevealSettings({ granularity: 'single', stage: 'direct' })
     const card = buildCard('unit-preview-flip')
@@ -712,7 +680,7 @@ describe('FreestyleUnitReviewCardView', () => {
     }
   })
 
-  it('posts a rating without waiting for the glance and lights it only once saved', async () => {
+  it('posts a rating without waiting for the glance and lights it at once while the save is on the wire', async () => {
     const card = buildCard('unit-rate-before-session')
     let resolveSession: (value: UnitReviewSessionDto) => void = () => undefined
     apiMocks.startFreestyleUnitReviewSessionApi.mockReturnValue(
@@ -727,7 +695,7 @@ describe('FreestyleUnitReviewCardView', () => {
     expect((button as HTMLButtonElement).disabled).toBe(false)
     fireEvent.click(button)
 
-    expect(button.getAttribute('aria-pressed')).toBe('false')
+    expect(button.getAttribute('aria-pressed')).toBe('true')
     expect(screen.getByTestId('freestyle-rating-saving-line')).toBeTruthy()
     expect(onRatingSettled).not.toHaveBeenCalled()
     await waitFor(() => expect(apiMocks.rateFreestyleRoundUnitApi).toHaveBeenCalled())
@@ -1943,12 +1911,11 @@ describe('FreestyleUnitReviewCardView', () => {
     fireEvent.click(screen.getByRole('button', { name: /记得：1天后复习/ }))
 
     const button = screen.getByTestId('freestyle-rating-button-3')
-    // Saving is quiet: the tap is not lit as chosen until the server confirms.
-    expect(button.getAttribute('aria-pressed')).toBe('false')
+    // Local-first: the tap is lit at once while the save is still on the wire.
+    expect(button.getAttribute('aria-pressed')).toBe('true')
     expect(button.hasAttribute('disabled')).toBe(false)
     expect(screen.getByTestId('freestyle-rating-saving-line').textContent).toContain('保存中')
     expect(screen.getByTestId('freestyle-rating-pending-3')).toBeTruthy()
-    expect(screen.queryByText(/已选/)).toBeNull()
     expect(onBranchComplete).not.toHaveBeenCalled()
 
     await act(async () => {
@@ -1997,7 +1964,7 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(screen.queryByTestId('freestyle-rating-unsaved-line')).toBeNull()
   })
 
-  it('keeps a second grade quiet and posts it after the first reply', async () => {
+  it('lights the newest grade at once and posts it after the first reply', async () => {
     const card = buildCard('unit-queued-rate')
     const session = buildSession(card.unit_id!)
     apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(session)
@@ -2012,9 +1979,10 @@ describe('FreestyleUnitReviewCardView', () => {
 
     await screen.findByTestId('flip-card-mind-map-panel')
     fireEvent.click(screen.getByTestId('freestyle-rating-button-3'))
-    expect(screen.getByTestId('freestyle-rating-button-3').getAttribute('aria-pressed')).toBe('false')
+    expect(screen.getByTestId('freestyle-rating-button-3').getAttribute('aria-pressed')).toBe('true')
     fireEvent.click(screen.getByTestId('freestyle-rating-button-4'))
-    expect(screen.getByTestId('freestyle-rating-button-4').getAttribute('aria-pressed')).toBe('false')
+    expect(screen.getByTestId('freestyle-rating-button-4').getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByTestId('freestyle-rating-button-3').getAttribute('aria-pressed')).toBe('false')
     expect(screen.getByTestId('freestyle-rating-button-4').hasAttribute('disabled')).toBe(false)
     expect(apiMocks.rateReviewUnitApi).toHaveBeenCalledTimes(1)
 
@@ -2057,7 +2025,9 @@ describe('FreestyleUnitReviewCardView', () => {
       selectedRating: 3,
     }))
     expect(onRatingSettled).not.toHaveBeenCalled()
-    expect(screen.getByTestId('freestyle-rating-button-4').getAttribute('aria-pressed')).toBe('false')
+    // The newer 轻松 is still saving, so it is the lit grade; the acknowledged 记得 is not.
+    expect(screen.getByTestId('freestyle-rating-button-4').getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByTestId('freestyle-rating-button-3').getAttribute('aria-pressed')).toBe('false')
     await act(async () => pending[1].reject())
     await waitFor(() => expect(onSaveFailed).toHaveBeenCalled())
     expect(onBranchComplete).toHaveBeenLastCalledWith(card.id, {
@@ -2631,5 +2601,27 @@ describe('FreestyleUnitReviewCardView', () => {
     })
     expect(onSaveFailed).not.toHaveBeenCalled()
     expect(onBranchComplete).toHaveBeenCalledWith(card.id, expect.objectContaining({ restudy: false, rating: 3 }))
+  })
+})
+
+describe('进入编辑 while the glance is still opening', () => {
+  it('queues the edit tap and enters edit once the live glance arrives', async () => {
+    const card = buildCard('unit-edit-pending')
+    // Preview only: the unit has no open encounter yet, so the flip panel is not live.
+    previewCacheMocks.useUnitPreview.mockReturnValue(buildSession(card.unit_id!, 3, null as never))
+    let resolveSession!: (value: UnitReviewSessionDto) => void
+    apiMocks.startFreestyleUnitReviewSessionApi.mockReturnValue(
+      new Promise<UnitReviewSessionDto>((resolve) => { resolveSession = resolve }),
+    )
+    renderCard(card)
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    const editAction = () => (capturedPanelProps?.toolbarExtensions as {
+      moreActions?: Array<{ label: string; onClick: () => void }>
+    }).moreActions?.find((item) => item.label === '进入编辑')
+    act(() => editAction()!.onClick())
+
+    resolveSession(buildSession(card.unit_id!))
+    await waitFor(() => expect(capturedPanelProps?.displayMode).toBe('edit'))
   })
 })

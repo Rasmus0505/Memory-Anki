@@ -189,9 +189,9 @@ scene, locally — never `dispatchGlobalFeedback`.
 
 Clicking a progress-rail tick jumps the feed to that card when it is still live (`navigateToIndex` on the matching card id). A tick whose card has left the feed, the HUD count, and an empty rail still open the bottom “本轮安排” sheet. A header toggle switches 「按宫殿」 (group stable plan entries by palace) and 「按进度」 (the same entries in progress-rail segment order, still split into the leftover and today blocks). Both views support
 jump, drag (desktop) or up/down (touch), batch exclude/restore, and reset-round. The toolbar
-「结算已完成单元」 opens a 小结算 page first. That overlay covers the feed pager, so it keeps a visible 「退出」 that cancels without compressing, and the page scrolls so 「取消结算」 and 「确认结算」 stay reachable on a short PWA viewport. Confirming it (`compress_completed`) drops passed cards (记得/轻松, no live 重练) from
-the swipe feed, 本轮安排, and the HUD rail so the denominator shrinks, and stores that page as `partial_settlements` on the round plan. Cancelling leaves the cards in the feed. Weak-rated sources
-and unfinished retries stay. This is not 排除: excluded ticks remain on the rail; compressed
+「结算已完成单元」 opens a 小结算 page first. That overlay covers the feed pager, so it keeps a visible 「退出」 that cancels without compressing, and the page scrolls so 「取消结算」 and 「确认结算」 stay reachable on a short PWA viewport. Confirming it (`compress_completed`) drops settled groups (a source that passed, or a 重练 that passed or was explicitly completed; a live 重练 still weak or blank keeps its whole group in the round, so the 3张后重练 comes back) from
+the swipe feed, 本轮安排, and the HUD rail so the denominator shrinks, and stores that page as `partial_settlements` on the round plan. Cancelling leaves the cards in the feed. A group whose 重练 nobody has answered yet
+stays. This is not 排除: excluded ticks remain on the rail; compressed
 ids (`compressed_ids`) do not. Unfinished work stays in this round. Ratings stay committed;
 swipe-back cannot reopen a compressed card in this round. A silent rebuild / `append_today_cards`
 must not put compressed identities back, and must keep `partial_settlements`. Overlay 做题 is not asked on 小结算. The closing 大结算 includes each confirmed 小结算 (counts and subject lines) because those cards have left the feed; round clock time is not added twice. If that compress
@@ -401,8 +401,8 @@ both framework-free and unit-tested.
   Freestyle feedback respects `scenes.review` and the `learningSounds` channel.
 - A weak rating is information, never a loss. `忘记`/`困难` never use
   `quiz_result_incorrect`; they use a neutral acknowledgement and a slate breath. There is
-  no streak that can break. Freestyle's own game-feel feedback (the XP bar, flip bursts) is
-  `cue()`-driven and does not double-signal quiz cards, which keep their existing shared-path feedback.
+  no streak that can break, and freestyle adds no combo counter, milestone, or confetti of
+  its own — quiz cards keep their existing shared-path feedback and are not double-signalled.
 - Reveal audio is rate-limited (90ms) so fast flipping stays information rather than texture.
   A rate is never rate-limited.
 

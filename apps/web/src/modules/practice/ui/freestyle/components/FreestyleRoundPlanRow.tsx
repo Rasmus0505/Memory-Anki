@@ -18,6 +18,7 @@ import {
   markedNodePathTexts,
 } from '@/modules/practice/ui/freestyle/model/markedNodePathLabel'
 import type { RatingSaveEntry } from '@/modules/practice/ui/freestyle/model/ratingSaveStore'
+import { FREESTYLE_RATINGS } from './FreestyleRatingBar'
 import { cn } from '@/shared/lib/utils'
 
 const STATUS_LABELS: Record<FreestyleRoundPlanCardStatus, string> = {
@@ -198,6 +199,7 @@ function RowSaveChip({
   }
   if (saveState.status === 'failed' && saveState.rating != null) {
     const rating = saveState.rating
+    const chosen = FREESTYLE_RATINGS.find((item) => item.value === rating)?.label ?? ''
     return (
       <button
         type="button"
@@ -207,7 +209,7 @@ function RowSaveChip({
         aria-label={`${label}未保存，点此重试`}
         onClick={() => onRate(cardId, rating)}
       >
-        未保存 · 重试
+        未保存{chosen ? `（你选的：${chosen}）` : ''} · 重试
       </button>
     )
   }

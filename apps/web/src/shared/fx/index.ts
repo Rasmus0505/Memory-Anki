@@ -1,7 +1,6 @@
 // Side-effect imports register every recipe before the first cue fires.
 import './recipes/learning'
 import './recipes/map'
-import './recipes/xp'
 
 export { cue, type FxCueMap, type FxCueName, type FxCueOptions } from './core/director'
 export { openPlayback, retireOwner, skipOwner, resumeOwner, roundFxOwner, pendingPlaybackCount, type FxPlayback } from './core/owner'

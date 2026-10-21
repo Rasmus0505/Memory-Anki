@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   type PalaceReviewUnitChangeHighlight,
 } from '@/modules/practice/ui/review/components/PalaceReviewUnitsPanel'
+import { toast } from '@/shared/feedback/toast'
 import { PalaceLadderProgress } from '@/modules/practice/ui/review/components/PalaceLadderProgress'
 import { useRevealSession, type RevealState } from '@/modules/memory/public'
 import { isWeakerRevealMap } from '@/modules/session/public'
@@ -27,8 +28,6 @@ import type {
 import { countUnitFlipProgress, unitFlipTargetUids } from '@/modules/practice/ui/freestyle/model/unitFlipProgress'
 import { useFreestyleFlowFeedback } from '@/modules/practice/ui/freestyle/hooks/useFreestyleFlowFeedback'
 import { useFreestyleEnterRevealFollow } from './useFreestyleEnterRevealFollow'
-import { useRecallCueFocus } from '../hooks/useRecallCueFocus'
-import { FreestyleRecallCueBubble } from './FreestyleRecallCueBubble'
 import {
   recordSessionRecorderUiAction,
   summarizeRevealMapChange,
@@ -42,7 +41,6 @@ import {
   type EditorDoc,
 } from '@/shared/lib/mindmap-split-marks/splitMarks'
 import { computeRevealCollapsedNodeIdsFromParentMap } from '@/shared/ui/mindmap-canvas/mindMapCollapse'
-import { detectClientSource } from '@/shared/lib/clientSource'
 import {
   FlipCardMindMapPanel,
   persistPalaceEditor,
@@ -108,6 +106,8 @@ export function FreestyleUnitReviewFlipPanel({
   const editEditorStateRef = useRef(editorState)
   const displayModeRef = useRef<'review' | 'edit'>('review')
   const isEditMode = displayMode === 'edit'
+  // A 进入编辑 tap received while this panel is still a read-only preview.
+  const pendingEditRef = useRef(false)
   editEditorStateRef.current = editEditorState
   displayModeRef.current = displayMode
 
@@ -149,18 +149,6 @@ export function FreestyleUnitReviewFlipPanel({
   }, [editEditorState, isEditMode, reveal.revealMap])
 
   const { root } = reveal
-  const mapHostRef = useRef<HTMLDivElement | null>(null)
-  const recallAllowedIds = useMemo(() => (allowedRevealNodeIds ? new Set(allowedRevealNodeIds) : null), [allowedRevealNodeIds])
-  // Recall cue: a bubble beside the hidden card the learner is looking at, after a pause. Live card only.
-  const recallEnabled = active && !isEditMode
-  const recallCue = useRecallCueFocus({
-    hostRef: mapHostRef,
-    root,
-    revealMap: reveal.revealMap,
-    allowedNodeIds: recallAllowedIds,
-    enabled: recallEnabled,
-    cardKey: card.id,
-  })
   const { signalReveal } = useFreestyleFlowFeedback()
 
   const lastNotifiedRevealKeyRef = useRef('')
@@ -499,7 +487,15 @@ export function FreestyleUnitReviewFlipPanel({
   }, [onRevealMapChange])
 
   const handleToggleMode = useCallback(() => {
-    if (!active) return
+    if (!active) {
+      // Still a read-only preview: the live glance is opening. Keep the edit tap
+      // and apply it when the glance arrives, instead of silently dropping it.
+      if (!isEditMode && !pendingEditRef.current) {
+        pendingEditRef.current = true
+        toast.message('图还在打开，打开后自动进入编辑')
+      }
+      return
+    }
     const currentReveal = revealApiRef.current.revealMap
     const flipProgress = countUnitFlipProgress(currentReveal, flipTargetUids)
     const flipDetail = `翻卡 ${flipProgress.revealed}/${flipProgress.total}`
@@ -537,6 +533,16 @@ export function FreestyleUnitReviewFlipPanel({
     onRevealMapChange,
     restoreRevealSnapshot,
   ])
+
+  useEffect(() => {
+    if (!active) {
+      pendingEditRef.current = false
+      return
+    }
+    if (!pendingEditRef.current) return
+    pendingEditRef.current = false
+    handleToggleMode()
+  }, [active, handleToggleMode])
 
   const handleEditorStateChange = useCallback((nextState: MindMapEditorState) => {
     persistGenerationRef.current += 1
@@ -612,9 +618,6 @@ export function FreestyleUnitReviewFlipPanel({
     displayModeRef, editRevealSnapshotRef, setPermanentMarkMode, setDisplayMode,
     setModeSyncVersion, handleEditorStateChange,
   })
-  // 随心 on the phone is a card-flip surface: the 思维导图/文章 switch would take
-  // over a narrow screen with no way back, so it stays desktop-only here.
-  const hideDocumentViewSwitch = useMemo(() => detectClientSource() === 'pwa', [])
 
   return (
     <>
@@ -625,14 +628,12 @@ export function FreestyleUnitReviewFlipPanel({
         quietStatus={quietStatus ?? ''}
       />
 
-      <div ref={mapHostRef} className="contents">
       <FlipCardMindMapPanel
         viewMemoryScope={`palace:${session.palace_id}`}
         fullscreen={fullscreen}
         displayMode={displayMode}
         sessionKind="review"
         chromeDensity="compact"
-        hideDocumentViewSwitch={hideDocumentViewSwitch}
         hidePresentationOverflowActions
         hostFullscreenControl
         modeSyncVersion={modeSyncVersion}
@@ -714,15 +715,6 @@ export function FreestyleUnitReviewFlipPanel({
         className="min-h-0 flex-1"
         surfaceClassName="h-full min-h-0"
       />
-      </div>
-      {recallEnabled ? (
-        <FreestyleRecallCueBubble
-          hostRef={mapHostRef}
-          view={recallCue.view}
-          onStep={recallCue.step}
-          ownerKey={`card:${card.id}`}
-        />
-      ) : null}
       <FreestyleUnitReviewFlipDialogs
         nodeQuizOpen={nodeQuizOpen}
         setNodeQuizOpen={setNodeQuizOpen}

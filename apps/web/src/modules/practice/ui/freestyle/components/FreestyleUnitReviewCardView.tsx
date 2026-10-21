@@ -66,7 +66,6 @@ import { FreestyleRatingBar } from './FreestyleRatingBar'
 import { useFreestyleCardFeedback } from './useFreestyleCardFeedback'
 import { FreestyleUnitReviewFlipPanel } from './FreestyleUnitReviewFlipPanel'
 import { FreestyleUnitReviewIdentityRow, FreestyleUnitReviewPlaceholder } from './FreestyleUnitReviewChrome'
-import { useFreestyleFlipXp } from './FreestyleXpBar'
 
 export {
   ratingEffectLabel,
@@ -189,10 +188,9 @@ export function FreestyleUnitReviewCardView({
   const mountedRef = useRef(true)
   const urgentGlanceRef = useRef(false)
   // Saves live in the round-scoped rating outbox, not in this component: leaving
-  // the card, the page or the module does not cancel them. A grade shows as
-  // selected only once the server acknowledges it (intentRating is set from
-  // acknowledgements only). Until then the bar shows a quiet 保存中 hint, and a
-  // failure shows 未保存 with one-tap retry.
+  // the card, the page or the module does not cancel them. A tapped grade lights
+  // at once while its save is on the wire (quiet 保存中 hint); a failure shows
+  // 未保存 with one-tap retry and is no longer lit.
   const ratingStore = freestyleRatingSaves()
   const saveEntry = useRatingSaveEntry(roundId, card.id)
   const [intentRating, setIntentRating] = useState<UnitRating | null>(null)
@@ -893,9 +891,10 @@ export function FreestyleUnitReviewCardView({
     && currentEncounter?.status === 'closed'
     && appearanceRating == null
     && asUnitRating(currentEncounter.selected_rating) != null
-  // Lit only from acknowledged state. A pending or 未保存 tap is never shown as chosen.
-  const selectedRating = intentRating ?? appearanceRating
+  // Light the tap at once: a grade on the wire is shown as chosen right away (local-first).
+  // A failed save drops back to 未保存 and is no longer lit.
   const pendingRating = saveEntry?.status === 'saving' && saveEntry.pendingKind === 'rate' ? saveEntry.rating : null
+  const selectedRating = pendingRating ?? intentRating ?? appearanceRating
   const pendingClear = saveEntry?.status === 'saving' && saveEntry.pendingKind === 'undo'
   const failedRating = saveEntry?.status === 'failed' ? saveEntry.rating : null
   const recordedRating = appearanceRating != null || previousClosed
@@ -910,8 +909,6 @@ export function FreestyleUnitReviewCardView({
   const flipTone = activeFlipProgress
     ? flipProgressTone(activeFlipProgress.revealed, activeFlipProgress.total)
     : null
-  // The XP meter is game feel only; it reads its own store, never the flip counter above.
-  const flipXp = useFreestyleFlipXp()
   const flipLabel = activeFlipProgress
     ? flipProgressLabel(activeFlipProgress.revealed, activeFlipProgress.total)
     : null
@@ -955,7 +952,6 @@ export function FreestyleUnitReviewCardView({
           flipTone={flipTone}
           flipLabel={flipLabel}
           flipTitle={flipTitle}
-          xp={flipXp}
           showUndo={Boolean(undoVisible && lastOperationId && !locked)}
           undoDisabled={pendingClear}
           onUndo={() => undoRating()}
