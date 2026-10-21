@@ -19,7 +19,7 @@ import {
   stopSessionRecording,
   updateSelectedSessionRecorderNotes,
 } from './sessionRecorderStore'
-import { SESSION_RECORDER_MAX_HISTORY } from './sessionRecorderTypes'
+import { SESSION_RECORDER_MAX_EVENTS, SESSION_RECORDER_MAX_HISTORY } from './sessionRecorderTypes'
 
 function makeDoc(nodes: Array<{ uid: string; text: string; children?: unknown[] }>) {
   return {
@@ -58,6 +58,20 @@ describe('session recorder store', () => {
     expect(state.history[0]?.routes).toContain('/dashboard')
     expect(state.history[0]?.reportText).toContain('请根据以下操作记录排查错误。')
     expect(state.history[0]?.reportText).toContain('/dashboard')
+  })
+
+  it('keeps the newest actions when a long recording passes the event cap', () => {
+    startSessionRecording()
+    for (let index = 0; index < SESSION_RECORDER_MAX_EVENTS + 30; index += 1) {
+      recordSessionRecorderUiAction('menu', `翻卡${index}`)
+    }
+    recordSessionRecorderUiAction('menu', '结算已完成单元')
+    stopSessionRecording()
+
+    const events = getSessionRecorderState().history[0]?.events ?? []
+    expect(events.at(-2)?.action).toBe('结算已完成单元')
+    expect(events.some((event) => event.action === '翻卡0')).toBe(false)
+    expect(events.length).toBeLessThanOrEqual(SESSION_RECORDER_MAX_EVENTS + 1)
   })
 
   it('caps history at 20 sessions', () => {

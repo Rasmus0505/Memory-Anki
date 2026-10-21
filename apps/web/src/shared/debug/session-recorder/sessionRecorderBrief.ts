@@ -11,6 +11,12 @@ export const DIAGNOSIS_MAX_WINDOW_MS = 5 * 60 * 1000
 export const DIAGNOSIS_RECENT_MAX = 400
 const CLICK_FOLLOW_MS = 4_000
 const VIEW_CLICK_LEAD_MS = 1_500
+const RECENT_ACTION_LIMIT = 20
+/**
+ * Round-level moves a learner must be able to find afterwards. They stay in the
+ * brief even when a long run of flips pushes them out of the recent actions.
+ */
+const KEY_ACTION_PATTERN = /结算|再来一轮|开始下一轮|结束本次学习|保存配置|重建本轮|移除本队列/
 
 export function diagnosisWindowMs(minutes: number) {
   return minutes * 60 * 1000
@@ -23,6 +29,20 @@ const SECTION_LABEL: Record<NavSectionKey, string> = {
   knowledge: '创建',
   review: '洞察',
   progress: '进度',
+}
+
+/** Round actions share one URL; the body's `action` says which one it was. */
+const ROUND_ACTION_LABEL: Record<string, string> = {
+  compress_completed: '结算已完成单元',
+  exclude: '移除这张卡',
+  restore: '恢复这张卡',
+  complete: '标记这张卡已完成',
+  uncomplete: '取消完成',
+  skip: '跳过这张卡',
+  bind_cards: '整理本轮卡片',
+  set_encounter: '记下这张卡的进度',
+  set_cursor: '翻到这张卡',
+  leave_card: '离开这张卡',
 }
 
 const STEP_RULES: Array<{ method?: string; test: RegExp; label: string }> = [
@@ -90,7 +110,8 @@ export function describeRecorderPage(pathname: string) {
   return '这个页面'
 }
 
-export function humanizeApiStep(method: string, path: string) {
+export function humanizeApiStep(method: string, path: string, action?: string) {
+  if (action && ROUND_ACTION_LABEL[action]) return ROUND_ACTION_LABEL[action]
   const normalized = method.toUpperCase()
   const rule = STEP_RULES.find((item) => (
     (!item.method || item.method === normalized) && item.test.test(path)
@@ -132,7 +153,7 @@ export function plainFailureReason(message: string, status: number | null) {
 }
 
 export function describeRequestStep(outcome: RequestOutcome) {
-  const action = humanizeApiStep(outcome.method, outcome.path)
+  const action = humanizeApiStep(outcome.method, outcome.path, outcome.action)
   if (outcome.ok) return { action, detail: '成功' }
   const reason = plainFailureReason(outcome.message, outcome.status)
   const retry = outcome.queuedRetry ? '软件已留下稍后重试。' : ''
@@ -141,14 +162,28 @@ export function describeRequestStep(outcome: RequestOutcome) {
   return { action, detail: `没有成功：${reason}。${retry}［${technical}］`.trim() }
 }
 
-export function readRecorderFocus(root: ParentNode): RecorderFocus | null {
-  const node = root.querySelector('[data-recorder-current="true"]')
+function focusFromElement(node: Element | null): RecorderFocus | null {
   if (!(node instanceof HTMLElement)) return null
   const place = (node.getAttribute('data-recorder-place') || '').trim()
   const title = (node.getAttribute('data-recorder-title') || '').trim()
   const excerpt = truncateRecorderText(node.getAttribute('data-recorder-excerpt') || '', 80)
   if (!place && !title && !excerpt) return null
   return { place, title, excerpt }
+}
+
+/** The card the page marks as current (quiz question, review card, freestyle card). */
+export function readRecorderFocus(root: ParentNode): RecorderFocus | null {
+  return focusFromElement(root.querySelector('[data-recorder-current="true"]'))
+}
+
+/**
+ * The focus declared by the clicked element or its nearest marked ancestor (for
+ * example one mind-map node). Read at click time, before the app has selected
+ * that node, so it names what was clicked rather than the previous selection.
+ */
+export function readClickedRecorderFocus(target: EventTarget | null): RecorderFocus | null {
+  if (!(target instanceof Element)) return null
+  return focusFromElement(target.closest('[data-recorder-focus="true"]'))
 }
 
 function clock(iso: string) {
@@ -165,6 +200,16 @@ function actionLine(event: SessionRecorderEvent) {
     return `改了导图：${truncateRecorderText(event.detail || event.action, 60)}`
   }
   return [event.action, event.detail].filter(Boolean).join(' ')
+}
+
+function isKeyAction(event: SessionRecorderEvent) {
+  return KEY_ACTION_PATTERN.test(`${event.action}${event.detail}`)
+}
+
+/** The recent actions, plus any key action from earlier in the window. */
+function pickShownActions(actions: SessionRecorderEvent[]) {
+  const recent = new Set(actions.slice(-RECENT_ACTION_LIMIT))
+  return actions.filter((event) => recent.has(event) || isKeyAction(event))
 }
 
 /** The nearest click at or before `at`, within `windowMs`. */
@@ -255,7 +300,9 @@ export function buildDiagnosisBrief(input: {
     const failed = step.detail.startsWith('没有成功')
     const click = nearbyClick(events, step)
     if (!failed && !click) return []
-    if (shown.size >= 8) return []
+    // A settlement's save is shown even when eight other outcomes already are.
+    const keyStep = Boolean(click && isKeyAction(click))
+    if (shown.size >= 8 && !keyStep) return []
     shown.add(step)
     return [stepSentence(step, click)]
   })
@@ -273,6 +320,19 @@ export function buildDiagnosisBrief(input: {
   }
   if (outcomeLines.length === 0) outcomeLines.push('没有看到保存或提交。')
 
+  const shownActions = pickShownActions(actions)
+  const omittedActions = actions.length - shownActions.length
+  const actionLines = actions.length === 0
+    ? ['- 这段时间没有点击，也没有换页面或切换卡片。']
+    : [
+      ...(omittedActions > 0 ? [`- 还有 ${omittedActions} 条较早的动作没列出`] : []),
+      ...shownActions.map((event) => {
+        const when = clock(event.at)
+        const text = event.kind === 'view' ? viewSentence(events, event) : actionLine(event)
+        return `- ${[when, text].filter(Boolean).join(' ')}`
+      }),
+    ]
+
   const lines = [
     `最近 ${Math.round(windowMs / 60_000)} 分钟`,
     '',
@@ -281,13 +341,7 @@ export function buildDiagnosisBrief(input: {
     ...focusLines(input.focus),
     '',
     '我做了这些',
-    ...(actions.length === 0
-      ? ['- 这段时间没有点击，也没有换页面或切换卡片。']
-      : actions.slice(-20).map((event) => {
-        const when = clock(event.at)
-        const text = event.kind === 'view' ? viewSentence(events, event) : actionLine(event)
-        return `- ${[when, text].filter(Boolean).join(' ')}`
-      })),
+    ...actionLines,
     '',
     '点完之后',
     ...outcomeLines.map((line) => `- ${line}`),

@@ -1,4 +1,4 @@
-import { noteApiStep } from '@/shared/api/requestOutcome'
+import { bodyActionName, noteApiStep } from '@/shared/api/requestOutcome'
 import { logAppError } from '@/shared/logs/model/appLogs'
 import {
   buildRequestError,
@@ -495,7 +495,16 @@ export async function request<T>(url: string, options?: PersistedRequestInit): P
   const method = options?.method || 'GET'
   const startedAt = Date.now()
   const note = (ok: boolean, status: number | null, message: string, queuedRetry: boolean) => {
-    noteApiStep({ method, url: requestUrl, ok, status, message, queuedRetry, startedAt })
+    noteApiStep({
+      method,
+      url: requestUrl,
+      ok,
+      status,
+      message,
+      queuedRetry,
+      startedAt,
+      action: bodyActionName(requestUrl, options?.body),
+    })
   }
   const { persistence: rawPersistence, timeoutMs, ...fetchOptions } = options ?? {}
   const isWrite = method.toUpperCase() !== 'GET'

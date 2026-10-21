@@ -10,6 +10,7 @@ import {
   describeRequestStep,
   diagnosisWindowMs,
   filterRecentEvents,
+  readClickedRecorderFocus,
   readRecorderFocus,
   redactRecorderSecrets,
   describeRecorderPage,
@@ -36,7 +37,6 @@ let logsUnsub: (() => void) | null = null
 let outcomeUnsub: (() => void) | null = null
 let captureInstalled = false
 let seenLogIds = new Set<string>()
-let truncated = false
 let recentEvents: SessionRecorderEvent[] = []
 // Snapshot taken at the last interactive click, so the copy reflects what the user was looking at then, not now.
 let lastClick: { at: string; clickText: string; pageLabel: string; focus: RecorderFocus | null } | null = null
@@ -161,36 +161,35 @@ function appendToCurrentSession(kind: SessionRecorderEventKind, action: string, 
       return
     }
   }
-  if (state.current.events.length >= SESSION_RECORDER_MAX_EVENTS) {
-    if (!truncated) {
-      truncated = true
-      state = {
-        ...state,
-        current: {
-          ...state.current,
-          events: [
-            ...state.current.events,
-            {
-              at: nowIso(),
-              kind: 'session',
-              action: '事件过多',
-              detail: `已截断到 ${SESSION_RECORDER_MAX_EVENTS} 条`,
-            },
-          ],
-        },
-      }
-      notify()
-    }
-    return
-  }
   state = {
     ...state,
     current: {
       ...state.current,
-      events: [...state.current.events, { at: nowIso(), kind, action, detail }],
+      events: capRecorderEvents([...state.current.events, { at: nowIso(), kind, action, detail }]),
     },
   }
   notify()
+}
+
+const OMITTED_EVENTS_ACTION = '较早的动作已省略'
+
+/**
+ * Keep the newest events. A long session loses its oldest actions behind one
+ * marker; it must not lose the settlement or rating the learner just made.
+ */
+function capRecorderEvents(events: SessionRecorderEvent[]) {
+  if (events.length <= SESSION_RECORDER_MAX_EVENTS) return events
+  const hasMarker = events[0]?.kind === 'session' && events[0]?.action === OMITTED_EVENTS_ACTION
+  const body = hasMarker ? events.slice(1) : events
+  const marker: SessionRecorderEvent = hasMarker
+    ? events[0]
+    : {
+      at: body[0]?.at ?? nowIso(),
+      kind: 'session',
+      action: OMITTED_EVENTS_ACTION,
+      detail: `只保留最近 ${SESSION_RECORDER_MAX_EVENTS} 条`,
+    }
+  return [marker, ...body.slice(-(SESSION_RECORDER_MAX_EVENTS - 1))]
 }
 
 function appendEvent(kind: SessionRecorderEventKind, action: string, detail = '') {
@@ -210,7 +209,7 @@ function onWindowClick(event: Event) {
     at: nowIso(),
     clickText: described.detail || described.action,
     pageLabel: describeRecorderPage(typeof window === 'undefined' ? '' : window.location.pathname),
-    focus: typeof document === 'undefined' ? null : readRecorderFocus(document),
+    focus: readClickedRecorderFocus(event.target) ?? (typeof document === 'undefined' ? null : readRecorderFocus(document)),
   }
   appendEvent('click', described.action, described.detail)
 }
@@ -229,7 +228,6 @@ function ingestLog(entry: AppLogEntry) {
 export function ensureSessionRecorderCapture() {
   if (captureInstalled) return
   captureInstalled = true
-  truncated = false
   seenLogIds = new Set(readAppLogs().map((entry) => entry.id))
   if (typeof window !== 'undefined') {
     window.addEventListener('click', onWindowClick, true)
@@ -483,7 +481,6 @@ export function pinLiveBriefToHistory() {
 
 export function resetSessionRecorderForTest() {
   uninstallCapture()
-  truncated = false
   seenLogIds = new Set()
   recentEvents = []
   if (typeof window !== 'undefined') {

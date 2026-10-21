@@ -6,6 +6,8 @@ export interface RequestOutcome {
   message: string
   queuedRetry: boolean
   elapsedMs: number
+  /** The `action` field of a JSON body, e.g. a round action such as `compress_completed`. */
+  action?: string
 }
 
 type OutcomeListener = (outcome: RequestOutcome) => void
@@ -56,6 +58,7 @@ export function noteApiStep(input: {
   message: string
   queuedRetry: boolean
   startedAt: number
+  action?: string
 }) {
   publishRequestOutcome({
     method: input.method,
@@ -65,5 +68,22 @@ export function noteApiStep(input: {
     message: input.message,
     queuedRetry: input.queuedRetry,
     elapsedMs: Date.now() - input.startedAt,
+    action: input.action,
   })
+}
+
+/**
+ * The `action` name of a round action body (`…/rounds/{id}/actions`). Other
+ * requests are not parsed, so large editor saves never pay for this.
+ */
+export function bodyActionName(url: string, body: unknown): string | undefined {
+  if (typeof body !== 'string' || !/\/actions(?:\?|$)/.test(url)) return undefined
+  try {
+    const parsed: unknown = JSON.parse(body)
+    if (!parsed || typeof parsed !== 'object') return undefined
+    const action = (parsed as { action?: unknown }).action
+    return typeof action === 'string' && action ? action : undefined
+  } catch {
+    return undefined
+  }
 }
