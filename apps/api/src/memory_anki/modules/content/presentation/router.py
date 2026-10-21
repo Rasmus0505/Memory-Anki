@@ -6,12 +6,6 @@ from memory_anki.modules.backups.api import maybe_create_rolling_backup
 from memory_anki.modules.content.application.editor_state_service import (
     save_palace_editor_state,
 )
-from memory_anki.modules.content.presentation.article_package_router import (
-    router as article_package_router,
-)
-from memory_anki.modules.content.presentation.article_reading_router import (
-    router as article_reading_router,
-)
 from memory_anki.modules.content.presentation.attachment_router import (
     router as attachment_router,
 )
@@ -49,5 +43,3 @@ router.include_router(editor_router)
 router.include_router(segment_router)
 router.include_router(version_router)
 router.include_router(attachment_router)
-router.include_router(article_reading_router)
-router.include_router(article_package_router)

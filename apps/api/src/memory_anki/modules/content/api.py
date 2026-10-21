@@ -1,6 +1,5 @@
 """Public palace context facade for cross-context composition."""
 
-from .application.article_package_segments import list_article_package_segments
 from .application.chapter_binding_commands import update_palace_chapter_binding
 from .application.import_export_service import (
     export_json,
@@ -32,7 +31,6 @@ from .application.tree_structure import (
 )
 
 __all__ = [
-    "list_article_package_segments",
     "read_learning_progress_catalog",
     "ancestor_path",
     "build_review_preview_payload",
