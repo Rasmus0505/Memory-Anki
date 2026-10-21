@@ -54,6 +54,9 @@ export type FreestyleQuizMasteryBucket = 'unseen' | 'weak' | 'reinforce' | 'stab
  */
 export type FreestyleQuizScope = 'cross_palace_random' | 'single_palace_random'
 
+/** 刷题出题顺序：未学过的先出，或整体随机。 */
+export type FreestyleQuizOrder = 'new_first' | 'random'
+
 /** Toolbar 做题 overlay membership: due questions vs all questions in the saved palace range. */
 export type FreestyleOverlayQuestionRange = 'due' | 'all'
 
@@ -106,6 +109,7 @@ export interface FreestyleQuizStreamConfig extends FreestyleStreamScope {
   question_type: FreestyleQuestionTypeFilter
   mastery_buckets: FreestyleQuizMasteryBucket[]
   quiz_scope: FreestyleQuizScope
+  order: FreestyleQuizOrder
   overlay_question_range: FreestyleOverlayQuestionRange
   weak_priority: boolean
 }

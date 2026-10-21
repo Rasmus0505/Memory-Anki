@@ -710,19 +710,17 @@ def test_new_placement_new_first_is_the_default_map_order():
     assert _placement_order() == ["N1", "N2", "R1", "R2", "R3", "R4"]
 
 
-def test_new_placement_review_first_puts_reviews_before_new():
-    assert _placement_order(new_placement="review_first") == ["R1", "R2", "R3", "R4", "N1", "N2"]
+def test_quiz_order_new_first_moves_unseen_questions_ahead_and_keeps_group_order():
+    from memory_anki.modules.practice.domain.queue_builder import order_quiz_side_by_new_first
 
-
-def test_new_placement_ratio_interleaves_one_new_per_n_reviews():
-    assert _placement_order(new_placement="ratio", review_new_ratio=2) == [
-        "R1",
-        "R2",
-        "N1",
-        "R3",
-        "R4",
-        "N2",
+    side = [
+        {"id": "q1", "mastery_label": "weak"},
+        {"id": "q2", "mastery_label": "unseen"},
+        {"id": "q3", "mastery_label": ""},
+        {"id": "q4", "mastery_label": "stable"},
     ]
+    assert [c["id"] for c in order_quiz_side_by_new_first(side, "new_first")] == ["q2", "q3", "q1", "q4"]
+    assert [c["id"] for c in order_quiz_side_by_new_first(side, "random")] == ["q1", "q2", "q3", "q4"]
 
 
 def test_arrange_ratio_appends_leftover_new_after_reviews_run_out():
@@ -810,17 +808,22 @@ def test_sanitize_new_config_keys_default_and_fall_back_on_invalid_values():
     valid = sanitize_feed_config(
         {"due_order": "palace_topology", "new_placement": "ratio", "review_new_ratio": "2"}
     )
-    assert valid["due_order"] == "palace_topology"
-    assert valid["new_placement"] == "ratio"
+    assert valid["due_order"] == "most_overdue"
+    assert valid["new_placement"] == "new_first"
     assert valid["review_new_ratio"] == 2
 
 
-def test_new_config_keys_are_echoed_and_part_of_the_queue_signature():
-    config = sanitize_feed_config({"new_placement": "review_first"})
-    assert config["new_placement"] == "review_first"
-    assert queue_construction_signature({}) != queue_construction_signature(
+def test_order_keys_are_pinned_so_stored_values_cannot_change_the_queue():
+    config = sanitize_feed_config({"new_placement": "review_first", "due_order": "palace_topology"})
+    assert config["new_placement"] == "new_first"
+    assert config["due_order"] == "most_overdue"
+    assert queue_construction_signature({}) == queue_construction_signature(
         {"new_placement": "review_first"}
     )
+
+
+def test_quiz_order_is_part_of_the_queue_signature():
     assert queue_construction_signature({}) != queue_construction_signature(
-        {"due_order": "least_recently_reviewed"}
+        {"streams": {"quiz": {"order": "random"}}}
     )
+    assert sanitize_feed_config({"streams": {"quiz": {"order": "bogus"}}})["streams"]["quiz"]["order"] == "new_first"

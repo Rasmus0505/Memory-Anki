@@ -24,6 +24,7 @@ from memory_anki.modules.memory.api import (
     rate_palace_due_units,
     rate_review_unit,
     reconcile_palace_units,
+    remove_unit_permanently,
     rerate_unit_rating,
     rerate_unit_ratings,
     start_freestyle_unit_review_session,
@@ -146,6 +147,20 @@ def patch_unit_schedule(
     except (TypeError, ValueError) as exc:
         session.rollback()
         raise _bad_request(ValueError(str(exc))) from exc
+
+
+@router.post("/review/units/{unit_id}/remove-permanently")
+def remove_unit_permanently_route(
+    unit_id: str,
+    session: Session = Depends(session_dep),
+):
+    try:
+        item = remove_unit_permanently(session, unit_id)
+        session.commit()
+        return {"item": item}
+    except ValueError as exc:
+        session.rollback()
+        raise _bad_request(exc) from exc
 
 
 @router.post("/review/palaces/{palace_id}/schedule-batches/{batch_id}/undo")

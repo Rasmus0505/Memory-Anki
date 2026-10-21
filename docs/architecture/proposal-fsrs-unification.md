@@ -82,8 +82,8 @@ real bug it prevents:
 | --- | --- |
 | `MIN_PASSED_STAGE = 1` — a pass must land ≥1 day out | Crediting a pass at stage 0 left the unit due *today*, so the next queue build re-served it: it looked "done" yet never left the queue. |
 | `schedule_locked` / `schedule_changed=False` — reviewing ahead of due date records the review but does not advance the ladder | Filler cards are served when the due set is short. Without this, intervals climbed on zero forgetting evidence: the more diligently the queue was cleared, the more filler appeared and the faster it drifted. |
-| 困难 (2) is retry work, keeping the unit due today | It must behave the same for due cards and ahead-of-date filler. |
-| 忘记 (1) keeps `LAPSE_RETENTION = 0.5` of earned position | Forgetting a 365-day unit should cost months, not the entire ~475-day climb back. |
+| 困难 (2) is retry work, keeping the unit due today, and demotes at most one step per calendar day (`ReviewUnitState.hard_penalized_on`) | It must behave the same for due cards and ahead-of-date filler. Repeated 困难 on the same day's retry cards must not keep stepping the unit down. |
+| 忘记 (1) drops the unit to the 忘记 level (stage 0) | Latest product decision (2026-10-21): forgetting is the heavy penalty and is not capped by the once-per-day 困难 rule. This supersedes the earlier proportional `LAPSE_RETENTION` rule. |
 | Deterministic fuzz (`blake2b` of `fuzz_key:stage`) | Same-day cohorts otherwise come due together forever. It is deterministic so a rating *preview* and the committed due date can never disagree. |
 
 FSRS provides its own fuzzing and its own lapse handling, so these become

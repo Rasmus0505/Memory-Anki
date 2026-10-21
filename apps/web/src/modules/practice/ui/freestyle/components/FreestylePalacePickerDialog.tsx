@@ -82,6 +82,10 @@ function PalaceRow({
   )
 }
 
+function flattenPalaces(chapter: FreestylePalaceScopeChapter): FreestylePalaceScopeChapter['palaces'] {
+  return [...chapter.palaces, ...chapter.children.flatMap(flattenPalaces)]
+}
+
 function ChapterRow({
   chapter,
   selectedIds,
@@ -95,6 +99,20 @@ function ChapterRow({
 }) {
   const [expanded, setExpanded] = useState(true)
   const state = getFreestyleChapterSelection(chapter.palaceIds, selectedIds)
+  // A chapter holding a single palace is the same choice as that palace: show one row, not two.
+  if (chapter.palaceIds.length === 1) {
+    const sole = chapter.palaces[0] ?? chapter.children.flatMap(flattenPalaces)[0]
+    if (sole) {
+      return (
+        <PalaceRow
+          palace={sole}
+          checked={selectedIds.includes(sole.id)}
+          onToggle={onToggle}
+          indentPx={8 + level * 18 + 32}
+        />
+      )
+    }
+  }
   return (
     <div className="space-y-1">
       <div className="flex min-h-10 items-center gap-2 rounded-lg px-2 py-1 hover:bg-muted/50" style={{ paddingLeft: `${8 + level * 18}px` }}>

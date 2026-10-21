@@ -1,6 +1,6 @@
-"""Ladder transition rules: hard retries, proportional lapses, spread, invariants.
+"""Ladder transition rules: hard retries, lapses to 忘记 level, spread, invariants.
 
-These pin the 2026-08 scheduling fixes. The ladder itself (stage count and
+These pin the scheduling rules (忘记 resets to stage 0; 困难 demotes once per day). The ladder itself (stage count and
 nominal intervals) is deliberately unchanged — `unit_ladder_progress` ships
 `INTERVAL_DAYS` to the toolbar strip and indexes a histogram by stage.
 """
@@ -14,7 +14,6 @@ from memory_anki.modules.memory.application.unit_scheduler import (
     MIN_PASSED_STAGE,
     assert_schedulable_due,
     clamp_schedulable_due,
-    lapse_stage,
     latest_schedulable_due,
     rate_unit,
     scheduled_interval_days,
@@ -86,12 +85,8 @@ def test_hard_after_a_prior_failure_retries_again_with_stage_penalty():
     assert result.due_date == TODAY
 
 
-def test_forgetting_a_mature_unit_keeps_proportional_credit():
-    """忘记 used to hard-reset to stage 0, costing ~475 days of rebuilding."""
-    assert lapse_stage(9, True) == 4
-    assert lapse_stage(5, True) == 2
-    assert lapse_stage(1, True) == 0
-
+def test_forgetting_a_mature_unit_drops_to_the_forgot_level():
+    """忘记 always lands on the 忘记 level (stage 0), whatever stage it was at."""
     lapsed = rate_unit(
         stage_index=9,
         has_passed=True,
@@ -102,9 +97,10 @@ def test_forgetting_a_mature_unit_keeps_proportional_credit():
     assert lapsed.passed is False
     assert lapsed.due_date == TODAY
     assert lapsed.retry_after_cards == 3
-    assert lapsed.stage_index == 4
+    assert lapsed.stage_index == 0
+    assert lapsed.hard_penalty_applied is False
 
-    # Relearning in the same encounter books a proportional interval, not 1 day.
+    # Relearning from stage 0 in the same encounter books the first-step interval.
     relearned = rate_unit(
         stage_index=lapsed.stage_index,
         has_passed=True,
@@ -112,12 +108,60 @@ def test_forgetting_a_mature_unit_keeps_proportional_credit():
         had_failure_in_encounter=True,
         today=TODAY,
     )
-    assert (relearned.due_date - TODAY).days == INTERVAL_DAYS[4] == 14
+    assert relearned.stage_index == MIN_PASSED_STAGE
+    assert (relearned.due_date - TODAY).days == INTERVAL_DAYS[MIN_PASSED_STAGE] == 1
 
 
-def test_forgetting_a_never_passed_unit_returns_to_first_learning():
-    assert lapse_stage(0, False) == 0
-    assert lapse_stage(4, False) == 0
+def test_forgetting_ignores_the_once_per_day_hard_marker():
+    """A 忘记 after a 困难 the same day still drops to the 忘记 level."""
+    lapsed = rate_unit(
+        stage_index=4,
+        has_passed=True,
+        rating=1,
+        had_failure_in_encounter=True,
+        today=TODAY,
+        hard_penalized_today=True,
+    )
+    assert lapsed.stage_index == 0
+
+
+def test_hard_demotes_only_once_per_day():
+    """Repeated 困难 on the same day's retry cards must not keep stepping down."""
+    first = rate_unit(
+        stage_index=5,
+        has_passed=True,
+        rating=2,
+        had_failure_in_encounter=False,
+        today=TODAY,
+    )
+    assert first.stage_index == 4
+    assert first.hard_penalty_applied is True
+
+    again = rate_unit(
+        stage_index=first.stage_index,
+        has_passed=True,
+        rating=2,
+        had_failure_in_encounter=True,
+        today=TODAY,
+        hard_penalized_today=True,
+    )
+    assert again.stage_index == 4
+    assert again.hard_penalty_applied is False
+    assert again.passed is False
+    assert again.retry_after_cards == 3
+    assert again.due_date == TODAY
+
+
+def test_hard_on_a_never_passed_unit_stays_at_first_learning():
+    result = rate_unit(
+        stage_index=0,
+        has_passed=False,
+        rating=2,
+        had_failure_in_encounter=True,
+        today=TODAY,
+        hard_penalized_today=True,
+    )
+    assert (result.stage_index, result.hard_penalty_applied) == (0, False)
 
 
 def test_a_pass_never_schedules_zero_days():
@@ -185,7 +229,7 @@ def test_forget_still_lapses_when_the_schedule_is_locked():
     assert result.passed is False
     assert result.schedule_changed is True
     assert result.due_date == TODAY
-    assert result.stage_index == 2
+    assert result.stage_index == 0
 
 
 def test_hard_on_a_locked_fill_unit_still_retries_and_changes_schedule():

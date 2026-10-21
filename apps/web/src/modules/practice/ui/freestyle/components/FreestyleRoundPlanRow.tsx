@@ -30,7 +30,7 @@ const STATUS_LABELS: Record<FreestyleRoundPlanCardStatus, string> = {
   stale: '需重建',
 }
 
-export type RoundPlanView = 'palace' | 'progress'
+export type RoundPlanView = 'palace' | 'subject' | 'progress'
 
 /** Everything a row paints that does not depend on the selection or drag state. */
 export interface PlanRowModel {

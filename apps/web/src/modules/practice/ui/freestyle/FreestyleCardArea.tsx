@@ -46,6 +46,7 @@ export function FreestyleCardArea({
   onEncounterChange,
   onStaleDrop,
   onRemoveFromQueue,
+  onRemovePermanently,
   onRebuildRound,
   onRevisionAdopted,
   onCardSaveFailed,
@@ -97,6 +98,7 @@ export function FreestyleCardArea({
   onEncounterChange: FeedProps['onEncounterChange']
   onStaleDrop: FeedProps['onStaleDrop']
   onRemoveFromQueue: FeedProps['onRemoveFromQueue']
+  onRemovePermanently: FeedProps['onRemovePermanently']
   onRebuildRound: FeedProps['onRebuildRound']
   onRevisionAdopted: FeedProps['onRevisionAdopted']
   onCardSaveFailed: (message: string, cardId: string) => void
@@ -174,6 +176,7 @@ export function FreestyleCardArea({
               onEncounterChange={onEncounterChange}
               onStaleDrop={onStaleDrop}
               onRemoveFromQueue={onRemoveFromQueue}
+              onRemovePermanently={onRemovePermanently}
               onRebuildRound={onRebuildRound}
               onRevisionAdopted={onRevisionAdopted}
               onSaveFailed={(message) => onCardSaveFailed(message, card.id)}

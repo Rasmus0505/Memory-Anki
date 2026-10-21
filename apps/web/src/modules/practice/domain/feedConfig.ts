@@ -1,9 +1,7 @@
 import type {
   FreestyleBoundQuizPlacement,
-  FreestyleDueOrder,
   FreestyleDuePolicy,
   FreestyleFeedConfig,
-  FreestyleNewPlacement,
   FreestyleReviewNewRatio,
   FreestyleMixMode,
   FreestyleMixRatio,
@@ -11,6 +9,7 @@ import type {
   FreestylePalaceStreamConfig,
   FreestyleQuestionTypeFilter,
   FreestyleQuizMasteryBucket,
+  FreestyleQuizOrder,
   FreestyleOverlayQuestionRange,
   FreestyleQuizScope,
   FreestyleStreamScope,
@@ -116,6 +115,7 @@ export const DEFAULT_FREESTYLE_FEED_CONFIG: FreestyleFeedConfig = {
       quiz_scope: 'cross_palace_random',
       overlay_question_range: 'all',
       weak_priority: true,
+      order: 'new_first',
     },
     english: {
       specific_palace_ids: [],
@@ -221,21 +221,7 @@ function asMixMode(value: unknown): FreestyleMixMode | null {
     : null
 }
 
-const FREESTYLE_DUE_ORDERS: readonly FreestyleDueOrder[] = ['most_overdue', 'least_recently_reviewed', 'palace_topology']
-const FREESTYLE_NEW_PLACEMENTS: readonly FreestyleNewPlacement[] = ['new_first', 'review_first', 'ratio']
 const FREESTYLE_REVIEW_NEW_RATIOS: readonly FreestyleReviewNewRatio[] = [1, 2, 4]
-
-function asDueOrder(value: unknown): FreestyleDueOrder {
-  return FREESTYLE_DUE_ORDERS.includes(value as FreestyleDueOrder)
-    ? (value as FreestyleDueOrder)
-    : DEFAULT_FREESTYLE_FEED_CONFIG.due_order
-}
-
-function asNewPlacement(value: unknown): FreestyleNewPlacement {
-  return FREESTYLE_NEW_PLACEMENTS.includes(value as FreestyleNewPlacement)
-    ? (value as FreestyleNewPlacement)
-    : DEFAULT_FREESTYLE_FEED_CONFIG.new_placement
-}
 
 function asReviewNewRatio(value: unknown): FreestyleReviewNewRatio {
   const number = Number(value)
@@ -252,6 +238,10 @@ function asBoundPlacement(value: unknown): FreestyleBoundQuizPlacement {
   return FREESTYLE_BOUND_QUIZ_PLACEMENTS.includes(value as FreestyleBoundQuizPlacement)
     ? (value as FreestyleBoundQuizPlacement)
     : DEFAULT_FREESTYLE_FEED_CONFIG.bound_quiz_placement
+}
+
+function asQuizOrder(value: unknown): FreestyleQuizOrder {
+  return value === 'random' ? 'random' : 'new_first'
 }
 
 function asQuizScope(value: unknown): FreestyleQuizScope {
@@ -472,6 +462,7 @@ export function queueConstructionSignature(value: unknown): string {
     mastery_buckets: config.streams.quiz.mastery_buckets,
     weak_priority: config.streams.quiz.weak_priority,
     question_type: config.streams.quiz.question_type,
+    quiz_order: config.streams.quiz.order,
   })
 }
 
@@ -570,6 +561,7 @@ export function sanitizeFreestyleFeedConfig(value: unknown): FreestyleFeedConfig
       rawQuiz.overlay_question_range ?? raw.overlay_question_range,
     ),
     weak_priority: asBoolean(rawQuiz.weak_priority ?? raw.weak_quiz_priority, true),
+    order: asQuizOrder(rawQuiz.order),
   }
 
   const hasExplicitNewMode = Object.prototype.hasOwnProperty.call(raw, 'training_mode')
@@ -650,8 +642,8 @@ export function sanitizeFreestyleFeedConfig(value: unknown): FreestyleFeedConfig
     } as FreestyleTrainingStreams,
     mix,
     seed: asInt(raw.seed, 17, 1, 2_147_483_647),
-    due_order: asDueOrder(raw.due_order),
-    new_placement: asNewPlacement(raw.new_placement),
+    due_order: DEFAULT_FREESTYLE_FEED_CONFIG.due_order,
+    new_placement: DEFAULT_FREESTYLE_FEED_CONFIG.new_placement,
     review_new_ratio: asReviewNewRatio(raw.review_new_ratio),
     content: {
       mindmap_branch: hasMemory || hasEnglish,

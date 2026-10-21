@@ -160,10 +160,14 @@ def project_palace_review_summaries(
         state_by_palace.setdefault(row.palace_id, []).append(row)
 
     definitions_by_palace: dict[int, list[UnitDefinition]] = {}
+    marked_palace_ids: set[int] = set()
     for pid, _palace in palace_map.items():
         try:
             _, defs = resolve_unit_definitions(session, pid)
             definitions_by_palace[pid] = defs
+            _, marked = resolve_unit_definitions(session, pid, include_permanently_removed=True)
+            if marked:
+                marked_palace_ids.add(pid)
         except ValueError:
             definitions_by_palace[pid] = []
 
@@ -188,7 +192,9 @@ def project_palace_review_summaries(
 
         states_for_p = state_by_palace.get(pid, [])
         defs = definitions_by_palace.get(pid, [])
-        result[pid] = _build_projection(states_for_p, defs, pid, palace)
+        result[pid] = _build_projection(
+            states_for_p, defs, pid, palace, marked=pid in marked_palace_ids
+        )
     return result
 
 
@@ -197,17 +203,19 @@ def _build_projection(
     definitions: list[UnitDefinition],
     palace_id: int,
     palace: Palace,
+    *,
+    marked: bool,
 ) -> dict[str, Any]:
     if not definitions:
         return {
             "palace_id": palace_id,
             "title": palace.title or "",
-            "mark_required": True,
+            "mark_required": not marked,
             "permanent_mark_count": 0,
             "unit_count": 0,
             "due_unit_count": 0,
             "next_review_date": None,
-            "review_status": "marking_required",
+            "review_status": "scheduled" if marked else "marking_required",
             "units": [],
             "has_due_review": False,
             "next_review_at": None,

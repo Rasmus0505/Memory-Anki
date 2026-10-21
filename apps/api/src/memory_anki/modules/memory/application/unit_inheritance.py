@@ -75,7 +75,10 @@ def inheritance_candidates(session: Session, palace_id: int) -> list[Inheritance
     """
     rows = (
         session.query(ReviewUnitState)
-        .filter(ReviewUnitState.palace_id == palace_id)
+        .filter(
+            ReviewUnitState.palace_id == palace_id,
+            ReviewUnitState.permanently_removed.is_(False),
+        )
         .order_by(ReviewUnitState.updated_at.asc(), ReviewUnitState.id.asc())
         .all()
     )

@@ -10,6 +10,7 @@ import {
   getFreestyleChapterSelection,
   getFreestylePalaceGroupSelection,
   normalizeFreestylePalaceSelection,
+  restrictFreestyleSubjectsToPalaces,
   toggleFreestylePalaceGroup,
 } from './freestyle-palace-scope'
 
@@ -95,6 +96,25 @@ describe('freestyle palace scope model', () => {
     expect(getFreestyleChapterSelection(root.palaceIds, [40])).toBe('indeterminate')
   })
 
+  it('keeps parent chapter ids after restricting to a palace set when palaces live only in child chapters', () => {
+    const subjects = buildFreestylePalaceScopeSubjects(grouped(), [{
+      subject: { id: 1, name: '教育学' },
+      chapters: [{
+        id: 9,
+        name: '第一章',
+        parent_id: null,
+        children: [{ id: 10, name: '第一节', parent_id: 9, children: [] }],
+      }],
+    }])
+    const restricted = restrictFreestyleSubjectsToPalaces(subjects, [40, 41, 42])
+    const root = restricted[0].chapters[0]
+    expect(root.palaces).toEqual([])
+    expect(root.palaceIds).toEqual([40, 41])
+    expect(root.children[0].palaceIds).toEqual([40, 41])
+    expect(getFreestyleChapterSelection(root.palaceIds, [40, 41])).toBe('checked')
+    expect(allFreestylePalaceIdsFromSubjects(restricted)).toEqual([40, 41, 42])
+  })
+
   it('supports selecting and clearing the complete subject scope', () => {
     const subjects = buildFreestylePalaceScopeSubjects(grouped())
     expect(allFreestylePalaceIdsFromSubjects(subjects)).toEqual([40, 41, 42])
@@ -166,5 +186,31 @@ describe('freestyle palace scope model', () => {
       subject_ids: [2],
     })
     expect(filterSubjectsForStream(subjects, { subject_ids: [2], subject_scope: 'all' }).map((item) => item.title)).toEqual(['教育学'])
+  })
+})
+
+describe('buildFreestylePalaceScopeSubjects chapter pruning', () => {
+  it('omits subject-tree chapters that have no palace in the freestyle sequence', () => {
+    const data = {
+      subjects: [{
+        subject: { id: 1, name: '中国教育史' },
+        chapter_groups: [{
+          source_chapter: { id: 2, name: '第二章 儒学' },
+          palaces: [{ id: 10, title: '儒学宫殿', chapters: [] }],
+        }],
+        ungrouped_palaces: [],
+      }],
+    } as unknown as PalaceGroupedListResponse
+    const trees = [{
+      subject: { id: 1, name: '中国教育史' },
+      chapters: [
+        { id: 2, name: '第二章 儒学' },
+        { id: 3, name: '第三章 读经做官' },
+        { id: 4, name: '第四章', children: [{ id: 5, name: '第四章第一节' }] },
+      ],
+    }]
+    const subjects = buildFreestylePalaceScopeSubjects(data, trees)
+    expect(subjects[0].chapters.map((chapter) => chapter.id)).toEqual([2])
+    expect(allFreestylePalaceIdsFromSubjects(subjects)).toEqual([10])
   })
 })

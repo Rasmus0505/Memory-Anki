@@ -131,8 +131,54 @@ describe('FreestyleRoundConfigDialog', () => {
     expect(onSaveConfig).toHaveBeenCalledWith(expect.objectContaining({
       streams: expect.objectContaining({
         memory_palace: expect.objectContaining({ specific_palace_ids: [11] }),
+        quiz: expect.objectContaining({ specific_palace_ids: [11] }),
       }),
     }), 'keep-overlap')
+  })
+
+  it('keeps quiz scope and order separate from palace scope, and drops the fixed order selects', async () => {
+    renderDialog()
+
+    await screen.findByRole('button', { name: '保存配置并重排' })
+    expect(screen.getAllByRole('button', { name: '选择宫殿' })).toHaveLength(2)
+    expect(screen.getByRole('radiogroup', { name: '刷题出题顺序' })).toBeTruthy()
+    expect(screen.queryByRole('combobox', { name: '排序' })).toBeNull()
+    expect(screen.queryByText('排序与新学')).toBeNull()
+  })
+
+  it('limits the quiz palace picker to the round palaces only', async () => {
+    vi.mocked(getPalacesGroupedApi).mockResolvedValue({
+      subjects: [
+        {
+          subject: { id: 1, name: '教育学', color: null },
+          chapter_groups: [],
+          ungrouped_palaces: [{ id: 11, title: 'Palace A', resolved_title: 'Palace A', chapters: [] }],
+        },
+        {
+          subject: { id: 2, name: '英语', color: null },
+          chapter_groups: [],
+          ungrouped_palaces: [{ id: 22, title: 'English', resolved_title: 'English', chapters: [] }],
+        },
+      ],
+    } as never)
+    renderDialog()
+
+    const [palaceButton] = await screen.findAllByRole('button', { name: '选择宫殿' })
+    fireEvent.click(palaceButton)
+    fireEvent.click(await screen.findByRole('checkbox', { name: '选择宫殿Palace A' }))
+    fireEvent.click(screen.getByRole('button', { name: '确认选择' }))
+
+    fireEvent.click((await screen.findAllByRole('button', { name: '选择宫殿' }))[1])
+    expect(await screen.findByRole('checkbox', { name: '选择宫殿Palace A' })).toBeTruthy()
+    expect(screen.queryByRole('checkbox', { name: '选择宫殿English' })).toBeNull()
+  })
+
+  it('summarizes what the round will produce', async () => {
+    renderDialog()
+
+    const summary = await screen.findByTestId('freestyle-config-summary')
+    expect(within(summary).getByText('记忆宫殿 + 刷题（按比例穿插）')).toBeTruthy()
+    expect(within(summary).getByText('先学没学过的单元，再按拖延最久优先复习')).toBeTruthy()
   })
 
   it('lets the user pick subjects from chips instead of an English training mode', async () => {
@@ -152,15 +198,15 @@ describe('FreestyleRoundConfigDialog', () => {
     } as never)
     const { onSaveConfig } = renderDialog()
 
-    const subjectGroup = await screen.findByRole('group', { name: '学科' })
-    fireEvent.click(await within(subjectGroup).findByRole('button', { name: '英语' }))
+    const [palaceSubjectGroup] = await screen.findAllByRole('group', { name: '学科' })
+    fireEvent.click(await within(palaceSubjectGroup).findByRole('button', { name: '英语' }))
     fireEvent.click(screen.getByRole('button', { name: '保存配置并重排' }))
     fireEvent.click(await screen.findByRole('button', { name: '保留，继续这一轮' }))
 
     expect(onSaveConfig.mock.calls[0][0]).toMatchObject({
       streams: {
         memory_palace: { subject_ids: [2], specific_palace_ids: [] },
-        quiz: { subject_ids: [2] },
+        quiz: { subject_ids: [2], specific_palace_ids: [] },
       },
     })
     expect(onSaveConfig.mock.calls[0][0].training_mode).not.toBe('english')

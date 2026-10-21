@@ -76,6 +76,17 @@ describe('FreestyleRoundSheet', () => {
     expect(screen.getByText('本轮 2 张')).toBeTruthy()
   })
 
+  it('groups the round by subject and collapses each subject', () => {
+    renderSheet({ subjectByPalaceId: new Map([[1, { id: 7, name: '教育学' }]]) })
+
+    fireEvent.click(screen.getByRole('button', { name: '按学科' }))
+    expect(screen.getByText('教育学')).toBeTruthy()
+    expect(screen.getByText('宫殿 A')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: '折叠教育学' }))
+    expect(screen.queryByText('宫殿 A')).toBeNull()
+  })
+
   it('supports batch exclusion', () => {
     const { onExclude } = renderSheet()
 
@@ -141,6 +152,7 @@ describe('FreestyleRoundSheet', () => {
       },
       labelToday: '2026-09-18',
     })
+    fireEvent.click(screen.getByRole('button', { name: '按宫殿' }))
 
     expect(screen.getByTestId('round-plan-cohort-2026-09-17').textContent).toContain('昨天')
     expect(screen.getByTestId('round-plan-cohort-2026-09-18').textContent).toContain('今天')
@@ -226,6 +238,7 @@ describe('FreestyleRoundSheet', () => {
       cards,
       roundPlan: createRoundPlan('round-1', cards, config),
     })
+    fireEvent.click(screen.getByRole('button', { name: '按宫殿' }))
 
     const rowOrder = () => screen.getAllByTestId(/^round-plan-card-/).map((node) => node.getAttribute('data-testid'))
     expect(screen.getByRole('button', { name: '按宫殿' }).getAttribute('aria-pressed')).toBe('true')

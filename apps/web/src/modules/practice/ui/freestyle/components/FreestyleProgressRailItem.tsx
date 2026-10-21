@@ -204,7 +204,7 @@ export function ProgressRailItem({
                 nodeEnterClass,
                 viewing ? 'size-5 text-[10px] ring-2 ring-stage-ink' : 'size-3.5 text-[9px]',
                 oneShotClass,
-                retryNodeToneClass(segment.tone, segment.isNew),
+                retryNodeToneClass(segment.tone, segment.isNew, segment.isQuiz),
               )}
             >
               {retryAttemptGlyph(segment)}
@@ -237,7 +237,7 @@ export function ProgressRailItem({
                 nodeEnterClass,
                 progressSegmentShapeClass(segment.tone, viewing),
                 oneShotClass,
-                retryNodeToneClass(segment.tone, segment.isNew),
+                retryNodeToneClass(segment.tone, segment.isNew, segment.isQuiz),
               )}
             />
           </span>
@@ -270,7 +270,7 @@ export function ProgressRailItem({
               'progress-bar relative w-full overflow-hidden rounded-[1px]',
               progressSegmentShapeClass(segment.tone, viewing),
               // While the sweep runs the base stays faint; the overlay carries the solid fill.
-              progressSegmentAccentClass(segment.isNew, fillSweep ? 'pending' : segment.tone),
+              progressSegmentAccentClass(segment.isNew, fillSweep ? 'pending' : segment.tone, segment.isQuiz),
               // Playhead 走「入场 -> 呼吸」两段，同时只挂一个。
               playheadClass,
               oneShotClass,
@@ -281,7 +281,7 @@ export function ProgressRailItem({
                 aria-hidden
                 className={cn(
                   'progress-fill-sweep absolute inset-0 rounded-[inherit]',
-                  progressSegmentAccentClass(segment.isNew, 'done'),
+                  progressSegmentAccentClass(segment.isNew, 'done', segment.isQuiz),
                 )}
               />
             ) : null}

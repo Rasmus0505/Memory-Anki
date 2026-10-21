@@ -41,6 +41,7 @@ export function FreestyleFeedCard({
   onEncounterChange,
   onStaleDrop,
   onRemoveFromQueue,
+  onRemovePermanently,
   onRebuildRound,
   onRevisionAdopted,
   onSaveFailed,
@@ -78,6 +79,7 @@ export function FreestyleFeedCard({
   onEncounterChange: UnitProps['onEncounterChange']
   onStaleDrop: UnitProps['onStaleDrop']
   onRemoveFromQueue: UnitProps['onRemoveFromQueue']
+  onRemovePermanently: UnitProps['onRemovePermanently']
   onRebuildRound: UnitProps['onRebuildRound']
   onRevisionAdopted: UnitProps['onRevisionAdopted']
   onSaveFailed: UnitProps['onSaveFailed']
@@ -133,6 +135,7 @@ export function FreestyleFeedCard({
                   onEncounterChange={onEncounterChange}
                   onStaleDrop={onStaleDrop}
                   onRemoveFromQueue={onRemoveFromQueue}
+                  onRemovePermanently={onRemovePermanently}
                   onRebuildRound={onRebuildRound}
                   onRevisionAdopted={onRevisionAdopted}
                   onSaveFailed={onSaveFailed}

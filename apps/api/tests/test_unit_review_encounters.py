@@ -792,17 +792,18 @@ def test_retry_slot_new_attempt_stacks_penalty_but_correction_does_not(db_sessio
             occurrence_id="same-slot", retry_attempt=attempt,
         )
         _rate(db_session, retry, state, f"retry-{attempt}", f"hard-{attempt}", 2)
-        assert state.stage_index == 6 - attempt
+        # 困难 demotes once per day; repeated retries on the same day hold the stage.
+        assert state.stage_index == 6
     corrected = _rate(db_session, retry, state, "retry-2", "correct-last", 3)
     assert corrected["amended"] is True
-    assert state.stage_index == 5
+    assert state.stage_index == 6
     item = db_session.query(ReviewSessionUnit).filter_by(study_session_id=retry["id"]).one()
     assert item.retry_count == 2
     assert item.hard_count == 2
     assert db_session.get(ReviewUnitRatingOperation, "hard-2").replaced_at is not None
     assert db_session.get(ReviewUnitRatingOperation, "hard-1").replaced_at is None
     undo_unit_rating(db_session, "correct-last")
-    assert state.stage_index == 4
+    assert state.stage_index == 6
     assert item.retry_count == 3
 
 

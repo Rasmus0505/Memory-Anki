@@ -147,6 +147,13 @@ the progress rail fills, the palace can clear, and the unit is not unfinished. I
 not write a 1–4 rating and does not change stage, interval, or due date. A later round
 can arrange the unit again while it is still due. Restore puts the card back in this round.
 
+永久移除 is the sibling button right of 移除本队列 (same two-press confirm, no rating). It calls
+`POST /review/units/{unit_id}/remove-permanently`, which sets `review_unit_states.permanently_removed`
+and `active = false`. `resolve_unit_definitions` filters that unit identity (anchor + kind) out, so
+reconcile, the queue, and inheritance never schedule it again, even after its marks are deleted and
+re-added. The card is then dropped from this round. A palace whose units are all removed reads as
+`scheduled`, not `marking_required`.
+
 `palace_order` only controls **queue construction**
 (finish one palace’s cards before listing the next, or interleave). 上一张 / 下一张 / finger
 paging never auto-rate and never block crossing a palace boundary; unrated units stay unfinished

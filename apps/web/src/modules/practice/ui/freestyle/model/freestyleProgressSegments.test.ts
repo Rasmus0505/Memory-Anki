@@ -28,6 +28,7 @@ import {
   retryChromeClass,
   retryNodeLabel,
   retryNodeToneClass,
+  progressSegmentAccentClass,
   segmentTone,
   visualPlanStatus,
 } from './freestyleProgressSegments'
@@ -655,6 +656,14 @@ describe('retryNodeLabel', () => {
         retryAttempt: 1,
       }),
     ).toBe('重练第 1 次')
+  })
+
+  it('paints quiz question ticks green and leaves unit ticks blue or amber', () => {
+    expect(progressSegmentAccentClass(true, 'done', true)).toBe('bg-rate-good')
+    expect(progressSegmentAccentClass(false, 'pending', true)).toBe('bg-rate-good/25')
+    expect(progressSegmentAccentClass(true, 'done')).toBe('bg-[hsl(214_84%_62%)]')
+    expect(progressSegmentAccentClass(false, 'done')).toBe('bg-rate-hard')
+    expect(retryNodeToneClass('done', false, true)).toBe('bg-rate-good text-stage')
   })
 
   it('keeps unfinished retry faint and completed retry solid', () => {

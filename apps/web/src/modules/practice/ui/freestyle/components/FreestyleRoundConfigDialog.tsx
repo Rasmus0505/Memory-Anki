@@ -7,6 +7,7 @@ import {
   buildFreestylePalaceScopeSubjects,
   filterSubjectsForStream,
   normalizeFreestylePalaceSelection,
+  restrictFreestyleSubjectsToPalaces,
   type FreestylePalaceScopeSubject,
 } from '@/modules/practice/ui/freestyle/model/freestyle-palace-scope'
 import {
@@ -15,11 +16,8 @@ import {
   type FreestyleConfigSaveChoice,
 } from '@/modules/practice/ui/freestyle/model/overlapProgressChoice'
 import { FreestylePalacePickerDialog } from './FreestylePalacePickerDialog'
-import { FreestyleTrainingConfigForm } from './FreestyleTrainingConfigForm'
-import type {
-  FreestyleFeedConfig,
-  FreestyleTrainingStream,
-} from '@/shared/api/contracts'
+import { FreestyleTrainingConfigForm, summarizeRoundConfig, type StreamKey } from './FreestyleTrainingConfigForm'
+import type { FreestyleFeedConfig } from '@/shared/api/contracts'
 import { Button } from '@/shared/components/ui/button'
 import {
   Dialog,
@@ -56,7 +54,7 @@ export function FreestyleRoundConfigDialog({
   const [draft, setDraft] = useState(() => sanitizeFreestyleFeedConfig(config))
   const [pendingSave, setPendingSave] = useState<FreestyleFeedConfig | null>(null)
   const [scopeSubjects, setScopeSubjects] = useState<FreestylePalaceScopeSubject[]>([])
-  const [pickerStream, setPickerStream] = useState<FreestyleTrainingStream | null>(null)
+  const [pickerStream, setPickerStream] = useState<StreamKey | null>(null)
 
   useEffect(() => {
     if (!open) {
@@ -122,18 +120,26 @@ export function FreestyleRoundConfigDialog({
     setPendingSave(null)
   }
 
-  const pickerSubjects = pickerStream
-    ? filterSubjectsForStream(scopeSubjects, draft.streams[pickerStream])
-    : scopeSubjects
+  // The round's palaces: what the memory palace stream covers. Quiz only picks from these.
+  const memoryStream = draft.streams.memory_palace
+  const roundPalaceIds = memoryStream.specific_palace_ids.length
+    ? memoryStream.specific_palace_ids
+    : allFreestylePalaceIdsFromSubjects(filterSubjectsForStream(scopeSubjects, memoryStream))
+  const roundSubjects = restrictFreestyleSubjectsToPalaces(scopeSubjects, roundPalaceIds)
+  const pickerSubjects = pickerStream === 'quiz'
+    ? roundSubjects
+    : filterSubjectsForStream(scopeSubjects, memoryStream)
+  const pickerStreamConfig = pickerStream ? draft.streams[pickerStream] : null
   const pickerValue = (() => {
-    if (!pickerStream) return []
-    const stream = draft.streams[pickerStream]
-    if (stream.specific_palace_ids.length) return stream.specific_palace_ids
-    if (stream.subject_ids.length || stream.subject_scope !== 'all') {
+    if (!pickerStreamConfig) return []
+    if (pickerStreamConfig.specific_palace_ids.length) return pickerStreamConfig.specific_palace_ids
+    if (pickerStream === 'quiz') return roundPalaceIds
+    if (pickerStreamConfig.subject_ids.length || pickerStreamConfig.subject_scope !== 'all') {
       return allFreestylePalaceIdsFromSubjects(pickerSubjects)
     }
     return []
   })()
+  const summaryRows = summarizeRoundConfig(draft, scopeSubjects)
 
   return (
     <>
@@ -141,7 +147,7 @@ export function FreestyleRoundConfigDialog({
         <DialogContent
           floatingId="freestyle-round-config"
           data-testid="freestyle-round-config-dialog"
-          className="flex max-h-[min(70dvh,100dvh-2rem)] w-[min(34rem,calc(100vw-1rem))] min-w-0 flex-col overflow-hidden rounded-2xl border-border/70 bg-background p-0 shadow-2xl"
+          className="flex max-h-[min(88dvh,100dvh-1.5rem)] w-[min(56rem,calc(100vw-1rem))] min-w-0 flex-col overflow-hidden rounded-2xl border-border/70 bg-background p-0 shadow-2xl"
         >
           <DialogHeader>
             <div className="min-w-0">
@@ -156,6 +162,19 @@ export function FreestyleRoundConfigDialog({
             </div>
             <DialogClose onClick={() => onOpenChange(false)} />
           </DialogHeader>
+
+          <dl
+            data-testid="freestyle-config-summary"
+            aria-label="本轮将这样出题"
+            className="grid shrink-0 grid-cols-1 gap-x-4 gap-y-1.5 border-b border-border/60 bg-muted/30 px-4 py-3 text-sm sm:grid-cols-[auto_1fr] sm:px-5"
+          >
+            {summaryRows.map((row) => (
+              <div key={row.label} className="contents">
+                <dt className="font-medium text-muted-foreground sm:text-right">{row.label}</dt>
+                <dd className="min-w-0 text-foreground">{row.value}</dd>
+              </div>
+            ))}
+          </dl>
 
           <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
             <FreestyleTrainingConfigForm
@@ -227,21 +246,21 @@ export function FreestyleRoundConfigDialog({
         value={pickerValue}
         onOpenChange={(next) => { if (!next) setPickerStream(null) }}
         onConfirm={(ids) => {
-          if (!pickerStream) return
-          const stream = draft.streams[pickerStream]
-          const filtered = filterSubjectsForStream(scopeSubjects, stream)
-          const normalized = normalizeFreestylePalaceSelection(stream, ids, filtered)
-          const next = sanitizeFreestyleFeedConfig({
-            ...draft,
-            streams: {
-              ...draft.streams,
-              [pickerStream]: {
-                ...stream,
-                specific_palace_ids: normalized.specific_palace_ids,
-              },
-            },
-          })
-          setDraft(next)
+          if (!pickerStream || !pickerStreamConfig) return
+          const normalized = normalizeFreestylePalaceSelection(pickerStreamConfig, ids, pickerSubjects)
+          const palaceIds = normalized.specific_palace_ids
+          // Changing the round's palaces resets quiz to the same palaces; quiz can then narrow inside them.
+          const streams = pickerStream === 'memory_palace'
+            ? {
+                ...draft.streams,
+                memory_palace: { ...memoryStream, specific_palace_ids: palaceIds },
+                quiz: { ...draft.streams.quiz, specific_palace_ids: palaceIds },
+              }
+            : {
+                ...draft.streams,
+                quiz: { ...pickerStreamConfig, specific_palace_ids: palaceIds },
+              }
+          setDraft(sanitizeFreestyleFeedConfig({ ...draft, streams }))
           setPickerStream(null)
         }}
       />

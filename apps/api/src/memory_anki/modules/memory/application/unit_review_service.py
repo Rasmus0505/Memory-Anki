@@ -29,6 +29,7 @@ from .unit_review_projection import (
     get_palace_unit_projection,
     json_load_list,
     list_due_units,
+    remove_unit_permanently,
     resolve_unit_definitions,
     undo_content_schedule_batch,
     unit_payload,
@@ -362,6 +363,9 @@ def _state_snapshot(state: ReviewUnitState, item: ReviewSessionUnit) -> dict[str
             "has_passed": state.has_passed,
             "due_date": state.due_date.isoformat(),
             "last_passed_at": to_api_datetime(state.last_passed_at),
+            "hard_penalized_on": state.hard_penalized_on.isoformat()
+            if state.hard_penalized_on
+            else None,
         },
         "item": {
             "status": item.status,
@@ -391,6 +395,8 @@ def _restore_snapshot(
         if state_data.get("last_passed_at")
         else None
     )
+    penalized_on = state_data.get("hard_penalized_on")
+    state.hard_penalized_on = date.fromisoformat(str(penalized_on)) if penalized_on else None
     item.status = str(item_data["status"])
     item.retry_count = int(item_data["retry_count"])
     item.hard_count = int(item_data["hard_count"])
@@ -423,6 +429,7 @@ def _rating_effects(
     # Pin "today" once so every button in one preview shares a reference day and
     # the reported gap cannot drift across a midnight boundary mid-render.
     today = date.today()
+    hard_penalized_today = state_data.get("hard_penalized_on") == today.isoformat()
     try:
         baseline_due = date.fromisoformat(str(state_data["due_date"]))
     except (TypeError, ValueError):
@@ -439,6 +446,7 @@ def _rating_effects(
             fuzz_key=fuzz_key,
             schedule_locked=schedule_locked,
             locked_due_date=locked_due_date,
+            hard_penalized_today=hard_penalized_today,
         )
         # Nominal ladder interval names the landing stage ("14天级"); the actual
         # gap carries day-level fuzz and is what a passing rating really books.
@@ -942,10 +950,13 @@ def _apply_rating_from_snapshot(
         today=today,
         schedule_locked=schedule_locked,
         locked_due_date=locked_due_date,
+        hard_penalized_today=state.hard_penalized_on == today,
     )
     now = utc_now_naive()
     state.stage_index = result.stage_index
     state.due_date = result.due_date
+    if result.hard_penalty_applied:
+        state.hard_penalized_on = today
     if result.passed:
         state.has_passed = True
         state.last_passed_at = now
@@ -2050,6 +2061,7 @@ def get_unit_review_completion(session: Session, study_session_id: str) -> dict[
 
 __all__ = [
     "adjust_unit_schedule",
+    "remove_unit_permanently",
     "cancel_unrated_unit_review_encounter",
     "complete_unit_review_session",
     "close_unit_review_encounter",

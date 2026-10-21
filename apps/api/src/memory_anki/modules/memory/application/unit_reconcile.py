@@ -117,9 +117,12 @@ def reconcile_palace_units(session: Session, palace_id: int) -> dict[str, Any]:
             )
         invalidated = _invalidate_active_sessions(session, palace_id) if old_states else 0
         session.flush()
+        _, marked_definitions = resolve_unit_definitions(
+            session, palace_id, include_permanently_removed=True
+        )
         return {
             "palace_id": palace_id,
-            "mark_required": True,
+            "mark_required": not marked_definitions,
             "unit_count": 0,
             "changed": bool(old_states),
             "invalidated_session_count": invalidated,

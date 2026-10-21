@@ -569,6 +569,23 @@ export async function cancelUnratedUnitReviewEncounterApi(
   return response.item
 }
 
+export async function removeReviewUnitPermanentlyApi(unitId: string) {
+  const response = await request<{ item: { unit_id: string } }>(
+    `/review/units/${encodeURIComponent(unitId)}/remove-permanently`,
+    {
+      method: 'POST',
+      persistence: {
+        resourceKey: `review-unit-remove-permanently:${unitId}`,
+        description: 'Remove review unit permanently',
+        replayMode: 'auto',
+      },
+    },
+  )
+  emitAppEvent(APP_EVENT_NAMES.palaceCatalogInvalidated)
+  emitAppEvent(APP_EVENT_NAMES.reviewStateChanged)
+  return response.item
+}
+
 export async function undoReviewUnitRatingApi(operationId: string, roundId?: string) {
   const response = await request<{ item: UndoUnitRatingResultDto }>(`/review/ratings/${operationId}/undo`, {
     method: 'POST',

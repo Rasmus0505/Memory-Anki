@@ -26,6 +26,7 @@ from .feed_config import (
     PALACE_ORDER_INTERLEAVE,
     PALACE_ORDER_SEQUENTIAL,
     QUIZ_MASTERY_BUCKETS,
+    QUIZ_ORDER_NEW_FIRST,
     QUIZ_SCOPE_CROSS,
     QUIZ_SCOPE_SINGLE,
 )
@@ -173,6 +174,19 @@ def review_unit_id_from_card_id(card_id: object) -> str:
 
 def quiz_key(quiz: QuizCandidate) -> str:
     return f"quiz_question:{quiz.question_id}"
+
+
+def order_quiz_side_by_new_first(
+    quiz_side: Sequence[dict[str, Any]],
+    quiz_order: str,
+) -> list[dict[str, Any]]:
+    if quiz_order != QUIZ_ORDER_NEW_FIRST:
+        return list(quiz_side)
+    # Stable partition: unseen questions first, each group keeps its seeded draw order.
+    return sorted(
+        quiz_side,
+        key=lambda card: 0 if card.get("mastery_label") in (None, "", "unseen") else 1,
+    )
 
 
 def sort_quiz_candidates(
@@ -509,6 +523,7 @@ def assemble_queue(
     quiz_scope = str(config.get("quiz_scope") or QUIZ_SCOPE_CROSS)
     if quiz_scope not in {QUIZ_SCOPE_CROSS, QUIZ_SCOPE_SINGLE}:
         quiz_scope = QUIZ_SCOPE_CROSS
+    quiz_order = str(config.get("quiz_order") or QUIZ_ORDER_NEW_FIRST)
     # Combine mindmap streams for interleave against quiz (legacy fallback).
     map_stream_weight = max(mindmap_weight, 0)
     if map_stream_weight <= 0:
@@ -684,11 +699,14 @@ def assemble_queue(
             review_new_ratio,
         )
         # Quiz draw order is controlled by quiz_scope (cross vs single palace).
-        quiz_side = order_quiz_stream_by_scope(
-            quiz_by_palace,
-            palace_ids,
-            quiz_scope=quiz_scope,
-            seed=seed + (0 if phase == "due" else 11),
+        quiz_side = order_quiz_side_by_new_first(
+            order_quiz_stream_by_scope(
+                quiz_by_palace,
+                palace_ids,
+                quiz_scope=quiz_scope,
+                seed=seed + (0 if phase == "due" else 11),
+            ),
+            quiz_order,
         )
         if mix_mode != MIX_MODE_QUIZ_ONLY and map_side:
             weight = max(1, mix_ratio_mindmap)

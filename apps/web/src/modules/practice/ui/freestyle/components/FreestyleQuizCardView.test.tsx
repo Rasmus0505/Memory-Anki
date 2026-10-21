@@ -80,8 +80,8 @@ describe('FreestyleQuizCardView', () => {
   it('answers the active question with number and letter keys', () => {
     const { onStateChange, onChoiceResolve } = renderCard()
 
-    fireEvent.keyDown(window, { key: '2' })
-    fireEvent.keyDown(window, { key: 'C' })
+    fireEvent.keyDown(window, { key: '2', code: 'Digit2' })
+    fireEvent.keyDown(window, { key: 'C', code: 'KeyC' })
 
     expect(onStateChange).toHaveBeenCalledTimes(2)
     expect(onStateChange.mock.calls[0]?.[0]({})).toMatchObject({
@@ -101,26 +101,48 @@ describe('FreestyleQuizCardView', () => {
   it('moves through choices with vertical arrows and confirms with Enter', () => {
     const { onChoiceResolve } = renderCard()
 
-    fireEvent.keyDown(window, { key: 'ArrowDown' })
-    fireEvent.keyDown(window, { key: 'ArrowDown' })
-    fireEvent.keyDown(window, { key: 'Enter' })
+    fireEvent.keyDown(window, { key: 'ArrowDown', code: 'ArrowDown' })
+    fireEvent.keyDown(window, { key: 'ArrowDown', code: 'ArrowDown' })
+    fireEvent.keyDown(window, { key: 'Enter', code: 'Enter' })
 
     expect(onChoiceResolve).toHaveBeenCalledWith('C', true)
   })
 
+  it('turns to the next card with Enter once the answer is on screen', () => {
+    const onRequestNext = vi.fn()
+    const onChoiceResolve = vi.fn()
+    render(
+      <FreestyleQuizCardView
+        card={card}
+        state={{ selectedOptionId: 'C', resolved: true, correct: true }}
+        answeredBefore={false}
+        active
+        onStateChange={vi.fn()}
+        onChoiceResolve={onChoiceResolve}
+        onShortAnswerSubmit={vi.fn()}
+        onRequestNext={onRequestNext}
+      />,
+    )
+
+    fireEvent.keyDown(window, { key: 'Enter', code: 'Enter' })
+
+    expect(onRequestNext).toHaveBeenCalledTimes(1)
+    expect(onChoiceResolve).not.toHaveBeenCalled()
+  })
+
   it('does not answer inactive, resolved, or text-entry states', () => {
     const inactive = renderCard({}, false)
-    fireEvent.keyDown(window, { key: '1' })
+    fireEvent.keyDown(window, { key: '1', code: 'Digit1' })
     expect(inactive.onChoiceResolve).not.toHaveBeenCalled()
 
     const resolved = renderCard({ resolved: true, selectedOptionId: 'A' })
-    fireEvent.keyDown(window, { key: '1' })
+    fireEvent.keyDown(window, { key: '1', code: 'Digit1' })
     expect(resolved.onChoiceResolve).not.toHaveBeenCalled()
 
     const active = renderCard()
     const input = document.createElement('input')
     document.body.appendChild(input)
-    fireEvent.keyDown(input, { key: '1' })
+    fireEvent.keyDown(input, { key: '1', code: 'Digit1' })
     input.remove()
     expect(active.onChoiceResolve).not.toHaveBeenCalled()
   })
@@ -128,8 +150,8 @@ describe('FreestyleQuizCardView', () => {
   it('does not use number keys after switching to subjective recall', () => {
     const { onChoiceResolve } = renderCard()
     fireEvent.click(screen.getByRole('button', { name: '主观' }))
-    fireEvent.keyDown(window, { key: '1' })
-    fireEvent.keyDown(window, { key: 'A' })
+    fireEvent.keyDown(window, { key: '1', code: 'Digit1' })
+    fireEvent.keyDown(window, { key: 'A', code: 'KeyA' })
     expect(onChoiceResolve).not.toHaveBeenCalled()
     expect(screen.getByPlaceholderText('先写下你的答案，再点击提交')).toBeTruthy()
   })
@@ -150,7 +172,7 @@ describe('FreestyleQuizCardView', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '主观' }))
     expect(document.activeElement?.hasAttribute('data-quiz-shortcut-surface')).toBe(true)
-    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'Enter' })
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'Enter', code: 'Enter' })
     expect(onShortAnswerSubmit).toHaveBeenCalledTimes(1)
   })
 
@@ -173,7 +195,7 @@ describe('FreestyleQuizCardView', () => {
 
     view.rerender(<FreestyleQuizCardView {...props} active />)
     expect(document.activeElement?.hasAttribute('data-quiz-shortcut-surface')).toBe(true)
-    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'Enter' })
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'Enter', code: 'Enter' })
     expect(onChoiceResolve).toHaveBeenCalledWith('A', false)
     leftover.remove()
   })

@@ -2,9 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import {
   isQuizChoiceAttemptClosed,
   isQuizChoiceShortcutActive,
+  isQuizShortcutRecording,
+  isShortcutPressed,
   QuizAttemptStatsBadge,
   QuizQuestionInteraction,
   QuizQuestionStem,
+  readQuizShortcuts,
+  resolveQuizShortcutAction,
   useQuizAnswerMode,
   type QuizRuntimeState,
 } from '@/modules/quiz/public'
@@ -12,14 +16,18 @@ import {
   QUESTION_TYPE_ACCENT,
   QUESTION_TYPE_DISPLAY,
 } from '@/modules/practice/ui/freestyle/model/freestyle-labels'
-import {
-  getFreestyleChoiceIndex,
-  isFreestyleShortcutBlocked,
-} from '@/modules/practice/ui/freestyle/model/freestyleKeyboard'
+import { isFreestyleShortcutBlocked } from '@/modules/practice/ui/freestyle/model/freestyleKeyboard'
 import type { FreestyleQuizCard } from '@/shared/api/contracts'
 import { Badge } from '@/shared/components/ui/badge'
 import { cn } from '@/shared/lib/utils'
 import { cue } from '@/shared/fx'
+
+function focusedOptionIndex(target: EventTarget | null) {
+  const option = target instanceof HTMLElement ? target.closest<HTMLElement>('[data-quiz-option-index]') : null
+  if (!option) return null
+  const index = Number(option.dataset.quizOptionIndex)
+  return Number.isFinite(index) ? index : null
+}
 
 export function FreestyleQuizCardView({
   card,
@@ -69,17 +77,54 @@ export function FreestyleQuizCardView({
     cue(isCorrect ? 'answer.correct' : 'answer.wrong', { paper })
   }, [active, card.question.id, isCorrect, isResolved])
 
+  // Same key map and precedence as the palace quiz dialog (useQuizAnsweringShortcuts):
+  // choice keys submit, and once the answer is on screen the submit key turns the page.
+  // ←/→ and the feed's vertical paging stay with the feed.
   useEffect(() => {
-    if (!active || !isQuizChoiceShortcutActive(card.question.question_type, answerMode)) return
+    if (!active) return
+    const choiceActive = isQuizChoiceShortcutActive(card.question.question_type, answerMode)
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.defaultPrevented || isFreestyleShortcutBlocked(event.target)) return
-      if (isQuizChoiceAttemptClosed(state)) return
+      const target = event.target
+      // Enter on a focused control (for example the 下一题 button) belongs to that control.
+      if (
+        event.key === 'Enter'
+        && focusedOptionIndex(target) == null
+        && target instanceof HTMLElement
+        && target.closest('button, [role="button"], a')
+      ) {
+        return
+      }
+      const shortcuts = readQuizShortcuts()
 
-      if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+      if (isResolved) {
+        if (!onRequestNext || event.repeat || !isShortcutPressed(event, shortcuts.submit_choice)) return
+        event.preventDefault()
+        onRequestNext()
+        return
+      }
+      if (!choiceActive) return
+
+      const match = resolveQuizShortcutAction(event, shortcuts, {
+        questionCount: 0,
+        optionCount: card.question.options.length,
+        choiceShortcutsActive: true,
+        attemptClosed: isQuizChoiceAttemptClosed(state),
+        answerRevealed: false,
+        hasNextQuestion: false,
+        repeat: event.repeat,
+        editable: false,
+        recording: isQuizShortcutRecording(),
+        enterOnUnrelatedControl: false,
+      })
+      if (!match) return
+
+      if (match.id === 'next_option' || match.id === 'previous_option') {
         const optionCount = card.question.options.length
         if (optionCount === 0) return
         event.preventDefault()
-        const delta = event.key === 'ArrowDown' ? 1 : -1
+        if (!match.run) return
+        const delta = match.id === 'next_option' ? 1 : -1
         const nextIndex = (keyboardOptionIndex + delta + optionCount) % optionCount
         setKeyboardOptionIndex(nextIndex)
         cardRef.current
@@ -88,25 +133,15 @@ export function FreestyleQuizCardView({
         return
       }
 
-      if (event.key === 'Enter') {
-        const option = card.question.options[keyboardOptionIndex]
-        if (!option) return
-        event.preventDefault()
-        const correct = option.id === (card.question.answer_payload.correct_option_id || '')
-        onStateChange((current) => ({
-          ...current,
-          selectedOptionId: option.id,
-          resolved: true,
-          correct,
-        }))
-        onChoiceResolve(option.id, correct)
-        return
-      }
-
-      const optionIndex = getFreestyleChoiceIndex(event.key)
+      // Mark and delete have no freestyle equivalent; leave those keys to the feed.
+      if (match.id !== 'submit_choice' && !match.id.startsWith('select_option_')) return
+      const optionIndex = match.id === 'submit_choice'
+        ? (focusedOptionIndex(target) ?? keyboardOptionIndex)
+        : match.optionIndex
       const option = optionIndex == null ? undefined : card.question.options[optionIndex]
       if (!option) return
       event.preventDefault()
+      if (!match.run) return
       const correct = option.id === (card.question.answer_payload.correct_option_id || '')
       onStateChange((current) => ({
         ...current,
@@ -122,8 +157,10 @@ export function FreestyleQuizCardView({
     active,
     answerMode,
     card.question,
+    isResolved,
     keyboardOptionIndex,
     onChoiceResolve,
+    onRequestNext,
     onStateChange,
     state,
   ])

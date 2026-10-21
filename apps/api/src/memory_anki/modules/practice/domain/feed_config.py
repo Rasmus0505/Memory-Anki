@@ -126,6 +126,10 @@ QUIZ_SCOPES = {
     QUIZ_SCOPE_SINGLE,
 }
 
+QUIZ_ORDER_NEW_FIRST = "new_first"
+QUIZ_ORDER_RANDOM = "random"
+QUIZ_ORDERS = {QUIZ_ORDER_NEW_FIRST, QUIZ_ORDER_RANDOM}
+
 OVERLAY_QUESTION_RANGES = {
     OVERLAY_QUESTION_RANGE_DUE,
     OVERLAY_QUESTION_RANGE_ALL,
@@ -264,6 +268,13 @@ def _as_quiz_scope(value: Any) -> str:
     return QUIZ_SCOPE_CROSS
 
 
+def _as_quiz_order(value: Any) -> str:
+    key = str(value or "").strip()
+    if key in QUIZ_ORDERS:
+        return key
+    return QUIZ_ORDER_NEW_FIRST
+
+
 def _as_overlay_question_range(value: Any) -> str:
     key = str(value or "").strip()
     if key in OVERLAY_QUESTION_RANGES:
@@ -304,14 +315,14 @@ def _as_overlay_rating_inherit(value: Any) -> str:
     return DEFAULT_OVERLAY_RATING_INHERIT
 
 
-def _as_due_order(value: Any) -> str:
-    key = str(value or "").strip()
-    return key if key in DUE_ORDERS else DEFAULT_DUE_ORDER
+def _as_due_order(_value: Any) -> str:
+    # Fixed product rule: review most-overdue first; stored values are ignored.
+    return DEFAULT_DUE_ORDER
 
 
-def _as_new_placement(value: Any) -> str:
-    key = str(value or "").strip()
-    return key if key in NEW_PLACEMENTS else DEFAULT_NEW_PLACEMENT
+def _as_new_placement(_value: Any) -> str:
+    # Fixed product rule: unseen units come before due reviews.
+    return DEFAULT_NEW_PLACEMENT
 
 
 def _as_review_new_ratio(value: Any) -> int:
@@ -534,6 +545,7 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
             raw_quiz.get("mastery_buckets", data.get("quiz_mastery_buckets")),
         ),
         "quiz_scope": _as_quiz_scope(raw_quiz.get("quiz_scope", data.get("quiz_scope"))),
+        "order": _as_quiz_order(raw_quiz.get("order")),
         "overlay_question_range": _as_overlay_question_range(
             raw_quiz.get("overlay_question_range", data.get("overlay_question_range")),
         ),
@@ -629,6 +641,7 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
         "unit_order": map_unit_order,
         "quiz_mastery_buckets": quiz["mastery_buckets"],
         "quiz_scope": quiz["quiz_scope"],
+        "quiz_order": quiz["order"],
         "overlay_question_range": quiz["overlay_question_range"],
         "specific_palace_ids": legacy_specific_ids,
         "subject_scope": legacy_scope,
@@ -672,6 +685,7 @@ def queue_construction_signature(raw: Any) -> str:
             "palace_order": memory["palace_order"],
             "unit_order": memory["unit_order"],
             "quiz_scope": quiz["quiz_scope"],
+            "quiz_order": quiz["order"],
             "overlay_question_range": quiz["overlay_question_range"],
             "mastery_buckets": quiz["mastery_buckets"],
             "weak_priority": quiz["weak_priority"],

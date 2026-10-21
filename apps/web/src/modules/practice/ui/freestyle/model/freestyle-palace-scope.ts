@@ -131,6 +131,17 @@ function chapterFromTree(
   }
 }
 
+/** Drop a chapter (and its sub-chapters) when no palace under it is in the sequence. */
+function pruneChaptersWithoutPalaces(chapter: FreestylePalaceScopeChapter): FreestylePalaceScopeChapter | null {
+  if (!chapter.palaceIds.length) return null
+  return {
+    ...chapter,
+    children: chapter.children
+      .map(pruneChaptersWithoutPalaces)
+      .filter((child): child is FreestylePalaceScopeChapter => child != null),
+  }
+}
+
 export function buildFreestylePalaceScopeSubjects(
   data: PalaceGroupedListResponse | null,
   trees: FreestyleSubjectTree[] = [],
@@ -177,13 +188,17 @@ export function buildFreestylePalaceScopeSubjects(
           name: group.source_chapter.name,
           parent_id: group.source_chapter.parent_id,
         }, palacesByChapter, displayPalacesByChapter))
-    const groupedIds = new Set(chapters.flatMap((chapter) => chapter.palaceIds))
+    // Chapters from the subject tree with no palace in the freestyle sequence are not selectable scope.
+    const chaptersWithPalaces = chapters
+      .map(pruneChaptersWithoutPalaces)
+      .filter((chapter): chapter is FreestylePalaceScopeChapter => chapter != null)
+    const groupedIds = new Set(chaptersWithPalaces.flatMap((chapter) => chapter.palaceIds))
     const ungroupedPalaces = subjectPalaces.filter((palace) => !groupedIds.has(palace.id))
     return {
       key: `subject:${subjectId ?? 'ungrouped'}`,
       id: subjectId,
       title: bucket.subject?.name ?? '未分类学科',
-      chapters,
+      chapters: chaptersWithPalaces,
       ungrouped: createGroup(`${subjectId ?? 'ungrouped'}:ungrouped`, '未归类宫殿', ungroupedPalaces),
     }
   }).filter((subject) => subject.chapters.length > 0 || Boolean(subject.ungrouped))
@@ -359,4 +374,38 @@ export function getFreestyleChapterSelection(
   selectedIds: number[],
 ): 'checked' | 'indeterminate' | 'unchecked' {
   return getFreestylePalaceGroupSelection(palaceIds, selectedIds)
+}
+
+function restrictChapter(chapter: FreestylePalaceScopeChapter, allowed: Set<number>): FreestylePalaceScopeChapter | null {
+  const palaces = chapter.palaces.filter((palace) => allowed.has(palace.id))
+  const children = chapter.children
+    .map((child) => restrictChapter(child, allowed))
+    .filter((child): child is FreestylePalaceScopeChapter => child != null)
+  if (!palaces.length && !children.length) return null
+  // Same rule as chapterFromTree: a parent's ids include every descendant palace, not just its own.
+  const palaceIds = Array.from(new Set([
+    ...palaces.map((palace) => palace.id),
+    ...children.flatMap((child) => child.palaceIds),
+  ]))
+  return { ...chapter, palaces, palaceIds, children }
+}
+
+/** Keep only the given palaces in a subject tree, dropping chapters and subjects left empty. */
+export function restrictFreestyleSubjectsToPalaces(
+  subjects: FreestylePalaceScopeSubject[],
+  palaceIds: number[],
+): FreestylePalaceScopeSubject[] {
+  const allowed = new Set(palaceIds)
+  return subjects
+    .map((subject) => {
+      const chapters = subject.chapters
+        .map((chapter) => restrictChapter(chapter, allowed))
+        .filter((chapter): chapter is FreestylePalaceScopeChapter => chapter != null)
+      const palaces = (subject.ungrouped?.palaces ?? []).filter((palace) => allowed.has(palace.id))
+      const ungrouped = palaces.length
+        ? { ...subject.ungrouped!, palaces, palaceIds: palaces.map((palace) => palace.id) }
+        : null
+      return { ...subject, chapters, ungrouped }
+    })
+    .filter((subject) => subject.chapters.length > 0 || subject.ungrouped != null)
 }

@@ -94,11 +94,35 @@ def _digest(values: list[str] | tuple[str, ...]) -> str:
 def resolve_unit_definitions(
     session: Session,
     palace_id: int,
+    *,
+    include_permanently_removed: bool = False,
 ) -> tuple[dict[str, Any], list[UnitDefinition]]:
     palace = session.get(Palace, palace_id)
     if palace is None or palace.deleted_at is not None or palace.archived:
         raise ValueError(f"palace not found: {palace_id}")
-    return _definitions_for_palace(palace)
+    tree, definitions = _definitions_for_palace(palace)
+    if include_permanently_removed:
+        return tree, definitions
+    removed = _permanently_removed_keys(session, palace_id)
+    if removed:
+        definitions = [
+            item
+            for item in definitions
+            if _active_unit_key(item.anchor_uid, item.unit_kind) not in removed
+        ]
+    return tree, definitions
+
+
+def _permanently_removed_keys(session: Session, palace_id: int) -> set[tuple[str, str]]:
+    rows = (
+        session.query(ReviewUnitState.anchor_uid, ReviewUnitState.unit_kind)
+        .filter(
+            ReviewUnitState.palace_id == palace_id,
+            ReviewUnitState.permanently_removed.is_(True),
+        )
+        .all()
+    )
+    return {_active_unit_key(anchor_uid, unit_kind) for anchor_uid, unit_kind in rows}
 
 
 _DocumentProjection = tuple[str | None, dict[str, dict[str, Any]], tuple[UnitDefinition, ...]]
@@ -309,6 +333,44 @@ def adjust_unit_schedule(
     return result
 
 
+def remove_unit_permanently(session: Session, unit_id: str) -> dict[str, Any]:
+    """Stop scheduling one review unit for good. Its row and history stay.
+
+    The flag is keyed on the unit's identity (anchor + kind), so
+    ``resolve_unit_definitions`` drops it and reconcile never re-creates it,
+    even if its marks are deleted and added back. Repeating the call is a no-op.
+    """
+    target_unit_id = str(unit_id or "").strip()
+    row = session.get(ReviewUnitState, target_unit_id)
+    if row is None or (not row.active and not row.permanently_removed):
+        raise ValueError(f"review unit not found: {unit_id}")
+
+    before = _schedule_snapshot_from_row(row)
+    invalidated = 0
+    if not row.permanently_removed:
+        row.permanently_removed = True
+        row.active = False
+        row.revision += 1
+        invalidated = _invalidate_active_sessions(session, row.palace_id)
+        session.flush()
+
+    palace = get_palace_unit_projection(session, row.palace_id)
+    return {
+        "unit_id": row.id,
+        "before": before,
+        "invalidated_session_count": invalidated,
+        "palace": {
+            "palace_id": palace["palace_id"],
+            "title": palace.get("title") or "",
+            "unit_count": palace.get("unit_count"),
+            "due_unit_count": palace.get("due_unit_count"),
+            "next_review_date": palace.get("next_review_date"),
+            "review_status": palace.get("review_status"),
+            "mark_required": palace.get("mark_required"),
+        },
+    }
+
+
 def undo_content_schedule_batch(
     session: Session,
     batch_id: str,
@@ -461,6 +523,9 @@ def get_palace_unit_projection(
             reconcile_palace_units(session, palace_id)
             tree, definitions = resolve_unit_definitions(session, palace_id)
             states = _active_states(session, palace_id)
+    _, marked_definitions = resolve_unit_definitions(
+        session, palace_id, include_permanently_removed=True
+    )
     definition_by_key = {
         _active_unit_key(item.anchor_uid, item.unit_kind): item for item in definitions
     }
@@ -470,7 +535,7 @@ def get_palace_unit_projection(
     return {
         "palace_id": palace_id,
         "title": tree.get("title") or "",
-        "mark_required": not definitions,
+        "mark_required": not marked_definitions,
         "permanent_mark_count": sum(
             1
             for node in (tree.get("nodes") or {}).values()
@@ -480,7 +545,9 @@ def get_palace_unit_projection(
         "due_unit_count": len(due),
         "next_review_date": next_due.isoformat() if next_due else None,
         "review_status": (
-            "marking_required" if not definitions else ("due" if due else "scheduled")
+            "marking_required"
+            if not marked_definitions
+            else ("due" if due else "scheduled")
         ),
         "units": [
             unit_payload(

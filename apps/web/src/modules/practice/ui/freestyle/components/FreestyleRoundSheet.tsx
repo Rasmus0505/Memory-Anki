@@ -64,6 +64,17 @@ export interface PlanBatchRatingResult {
 }
 
 
+function groupEntriesByPalace(entries: FreestyleRoundPlanCard[]) {
+  const result = new Map<number, FreestyleRoundPlanCard[]>()
+  entries.forEach((entry) => {
+    const id = palaceIdFromEntry(entry)
+    const bucket = result.get(id) ?? []
+    bucket.push(entry)
+    result.set(id, bucket)
+  })
+  return [...result.entries()]
+}
+
 /**
  * In-round pace: open from the HUD count (or an off-feed tick), glance, jump or reorder, close.
  * Configuration lives behind 「调整配置」 because it is a between-rounds decision —
@@ -75,6 +86,7 @@ export function FreestyleRoundSheet({
   currentIndex,
   queueState,
   roundPlan,
+  subjectByPalaceId,
   onOpenChange,
   onJump,
   onExclude,
@@ -92,6 +104,7 @@ export function FreestyleRoundSheet({
   currentIndex: number
   queueState: FreestyleSkipState
   roundPlan: FreestyleRoundPlanState | null
+  subjectByPalaceId?: ReadonlyMap<number, { id: number; name: string }>
   onOpenChange: (open: boolean) => void
   onJump: (cardId: string) => void
   onExclude: (cardIds: string[]) => void
@@ -115,7 +128,8 @@ export function FreestyleRoundSheet({
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [dragOverId, setDragOverId] = useState<string | null>(null)
   const [collapsedPalaces, setCollapsedPalaces] = useState<Set<number>>(new Set())
-  const [viewMode, setViewMode] = useState<RoundPlanView>('palace')
+  const [collapsedSubjects, setCollapsedSubjects] = useState<Set<string>>(new Set())
+  const [viewMode, setViewMode] = useState<RoundPlanView>('subject')
   const saveEntries = useRatingSaveEntries(queueState.roundId)
   const [batchRating, setBatchRating] = useState<{
     rating: UnitRating
@@ -158,18 +172,8 @@ export function FreestyleRoundSheet({
     return planRows.filter((entry) => !shown.has(entry.cardId) && entry.status === 'excluded')
   }, [planRows, workingRows])
   const sections = useMemo(() => {
-    const groupPalace = (entries: FreestyleRoundPlanCard[]) => {
-      const result = new Map<number, FreestyleRoundPlanCard[]>()
-      entries.forEach((entry) => {
-        const id = palaceIdFromEntry(entry)
-        const bucket = result.get(id) ?? []
-        bucket.push(entry)
-        result.set(id, bucket)
-      })
-      return [...result.entries()]
-    }
     const distinct = new Set(workingRows.map((entry) => entry.enteredOn || ''))
-    if (distinct.size <= 1) return [{ key: 'all', title: '', groups: groupPalace(workingRows) }]
+    if (distinct.size <= 1) return [{ key: 'all', title: '', groups: groupEntriesByPalace(workingRows) }]
     const order: string[] = []
     const buckets = new Map<string, FreestyleRoundPlanCard[]>()
     workingRows.forEach((entry) => {
@@ -182,9 +186,32 @@ export function FreestyleRoundSheet({
     return order.map((day) => ({
       key: day || 'undated',
       title: day ? dayCohortLabel(day, spokenToday) : '更早留下的',
-      groups: groupPalace(buckets.get(day) ?? []),
+      groups: groupEntriesByPalace(buckets.get(day) ?? []),
     }))
   }, [workingRows, spokenToday])
+  const subjectSections = useMemo(() => {
+    const order: string[] = []
+    const buckets = new Map<string, { title: string; entries: FreestyleRoundPlanCard[] }>()
+    workingRows.forEach((entry) => {
+      const subject = subjectByPalaceId?.get(palaceIdFromEntry(entry))
+      const key = subject ? `subject:${subject.id}` : 'subject:none'
+      const bucket = buckets.get(key)
+      if (bucket) {
+        bucket.entries.push(entry)
+        return
+      }
+      order.push(key)
+      buckets.set(key, { title: subject?.name ?? '未分类学科', entries: [entry] })
+    })
+    return order.map((key) => {
+      const bucket = buckets.get(key)
+      return {
+        key,
+        title: bucket?.title ?? '',
+        groups: groupEntriesByPalace(bucket?.entries ?? []),
+      }
+    })
+  }, [subjectByPalaceId, workingRows])
   const currentCardId = cards[currentIndex]?.id ?? queueState.currentCardId
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds])
   const fillStatus = useCallback((entry: FreestyleRoundPlanCard): FreestyleRoundPlanCardStatus => {
@@ -317,13 +344,18 @@ export function FreestyleRoundSheet({
       return progressSections.flatMap((section) => section.entries.map((entry) => entry.cardId))
     }
     const ids: string[] = []
-    sections.forEach((section) => section.groups.forEach(([palaceId, entries]) => {
+    const palaceGroups = viewMode === 'subject'
+      ? subjectSections.flatMap((subject) => (collapsedSubjects.has(subject.key) ? [] : subject.groups))
+      : sections.flatMap((section) => section.groups)
+    palaceGroups.forEach(([palaceId, entries]) => {
       if (collapsedPalaces.has(palaceId)) return
-      entries.forEach((entry) => ids.push(entry.cardId))
-    }))
+      entries.forEach((entry) => {
+        if (entry.kind !== 'quiz_question') ids.push(entry.cardId)
+      })
+    })
     excludedOffFeed.forEach((entry) => ids.push(entry.cardId))
     return ids
-  }, [collapsedPalaces, excludedOffFeed, progressSections, sections, viewMode])
+  }, [collapsedPalaces, collapsedSubjects, excludedOffFeed, progressSections, sections, subjectSections, viewMode])
 
   const moveRow = useCallback((sourceId: string, targetId: string) => {
     if (sourceId === targetId || !roundPlan) return
@@ -429,6 +461,89 @@ export function FreestyleRoundSheet({
     )
   }
 
+  const renderPalaceGroup = (palaceId: number, entries: FreestyleRoundPlanCard[]) => {
+    const collapsed = collapsedPalaces.has(palaceId)
+    const title = entries.find((entry) => entry.palaceTitle)?.palaceTitle
+      || (palaceId ? `宫殿 ${palaceId}` : '未归属宫殿')
+    // Quiz questions are not listed one per row; they are summarized as a count badge on the palace.
+    const quizEntries = entries.filter((entry) => entry.kind === 'quiz_question')
+    const rowEntries = entries.filter((entry) => entry.kind !== 'quiz_question')
+    return (
+      <section key={palaceId} className="rounded-xl border border-border/70 bg-card/30">
+        <div className="flex items-center gap-2 border-b border-border/60 px-3 py-2">
+          <button
+            type="button"
+            className="inline-flex size-7 items-center justify-center rounded-md hover:bg-muted"
+            aria-label={collapsed ? `展开${title}` : `折叠${title}`}
+            onClick={() => setCollapsedPalaces((current) => {
+              const next = new Set(current)
+              if (next.has(palaceId)) next.delete(palaceId)
+              else next.add(palaceId)
+              return next
+            })}
+          >
+            {collapsed ? <ChevronRight className="size-4" /> : <ChevronDown className="size-4" />}
+          </button>
+          <span
+            aria-hidden
+            className={cn('h-5 w-1 shrink-0 rounded-full', palaceIdentityClass(palaceId))}
+          />
+          <div className="flex min-w-0 flex-1 items-center gap-1.5">
+            <span className="truncate text-sm font-semibold">{title}</span>
+            {quizEntries.length ? (
+              <span
+                data-testid={`round-plan-quiz-count-${palaceId}`}
+                className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[11px] leading-none text-muted-foreground"
+              >
+                题 {quizEntries.length}
+              </span>
+            ) : null}
+          </div>
+          <span className="text-xs text-muted-foreground">
+            {entries.filter((entry) => fillStatus(entry) === 'completed').length}/{entries.length}
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-xs"
+            aria-label={`全选${title}`}
+            onClick={() => selectPalaceRows(entries)}
+          >
+            全选
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-xs"
+            aria-label={`反选${title}`}
+            onClick={() => invertPalaceRows(entries)}
+          >
+            反选
+          </Button>
+        </div>
+        {!collapsed ? (
+          <div className="divide-y divide-border/50">
+            {rowEntries.map((entry) => renderPlanRow(entry, orderIds, false))}
+          </div>
+        ) : null}
+      </section>
+    )
+  }
+  const excludedBlock = excludedOffFeed.length ? (
+    <section className="rounded-xl border border-border/70 bg-card/30">
+      <div className="border-b border-border/60 px-3 py-2 text-sm font-semibold">已排除</div>
+      <div className="divide-y divide-border/50">
+        {excludedOffFeed.map((entry) => renderPlanRow(
+          entry,
+          excludedOffFeed.map((item) => item.cardId),
+          false,
+        ))}
+      </div>
+    </section>
+  ) : null
+
   return (
     <Sheet
       open={open}
@@ -456,6 +571,7 @@ export function FreestyleRoundSheet({
             >
               {([
                 ['palace', '按宫殿'],
+                ['subject', '按学科'],
                 ['progress', '按进度'],
               ] as const).map(([mode, label]) => (
                 <button
@@ -512,6 +628,42 @@ export function FreestyleRoundSheet({
             </div>
           ) : null}
           <div className="space-y-4" data-testid="round-plan-list" data-mode={viewMode}>
+            {viewMode === 'subject' ? (
+              <>
+                {subjectSections.map((subject) => {
+                  const collapsed = collapsedSubjects.has(subject.key)
+                  const entries = subject.groups.flatMap(([, group]) => group)
+                  const completed = entries.filter((entry) => fillStatus(entry) === 'completed').length
+                  return (
+                    <section key={subject.key} className="rounded-xl border border-border/70 bg-card/20">
+                      <div className="flex items-center gap-2 border-b border-border/60 px-3 py-2">
+                        <button
+                          type="button"
+                          className="inline-flex size-7 items-center justify-center rounded-md hover:bg-muted"
+                          aria-label={collapsed ? `展开${subject.title}` : `折叠${subject.title}`}
+                          onClick={() => setCollapsedSubjects((current) => {
+                            const next = new Set(current)
+                            if (next.has(subject.key)) next.delete(subject.key)
+                            else next.add(subject.key)
+                            return next
+                          })}
+                        >
+                          {collapsed ? <ChevronRight className="size-4" /> : <ChevronDown className="size-4" />}
+                        </button>
+                        <div className="min-w-0 flex-1 truncate text-sm font-semibold">{subject.title}</div>
+                        <span className="text-xs text-muted-foreground">{completed}/{entries.length}</span>
+                      </div>
+                      {!collapsed ? (
+                        <div className="space-y-3 p-2">
+                          {subject.groups.map(([palaceId, group]) => renderPalaceGroup(palaceId, group))}
+                        </div>
+                      ) : null}
+                    </section>
+                  )
+                })}
+                {excludedBlock}
+              </>
+            ) : null}
             {viewMode === 'palace' ? (
               <>
             {sections.map((section) => (
@@ -524,79 +676,13 @@ export function FreestyleRoundSheet({
                     {section.title}
                   </div>
                 ) : null}
-                {section.groups.map(([palaceId, entries]) => {
-                  const collapsed = collapsedPalaces.has(palaceId)
-                  const title = entries.find((entry) => entry.palaceTitle)?.palaceTitle
-                    || (palaceId ? `宫殿 ${palaceId}` : '未归属宫殿')
-                  return (
-                    <section key={palaceId} className="rounded-xl border border-border/70 bg-card/30">
-                      <div className="flex items-center gap-2 border-b border-border/60 px-3 py-2">
-                        <button
-                          type="button"
-                          className="inline-flex size-7 items-center justify-center rounded-md hover:bg-muted"
-                          aria-label={collapsed ? `展开${title}` : `折叠${title}`}
-                          onClick={() => setCollapsedPalaces((current) => {
-                            const next = new Set(current)
-                            if (next.has(palaceId)) next.delete(palaceId)
-                            else next.add(palaceId)
-                            return next
-                          })}
-                        >
-                          {collapsed ? <ChevronRight className="size-4" /> : <ChevronDown className="size-4" />}
-                        </button>
-                        <span
-                          aria-hidden
-                          className={cn('h-5 w-1 shrink-0 rounded-full', palaceIdentityClass(palaceId))}
-                        />
-                        <div className="min-w-0 flex-1 truncate text-sm font-semibold">{title}</div>
-                        <span className="text-xs text-muted-foreground">
-                          {entries.filter((entry) => fillStatus(entry) === 'completed').length}/{entries.length}
-                        </span>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 px-2 text-xs"
-                          aria-label={`全选${title}`}
-                          onClick={() => selectPalaceRows(entries)}
-                        >
-                          全选
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 px-2 text-xs"
-                          aria-label={`反选${title}`}
-                          onClick={() => invertPalaceRows(entries)}
-                        >
-                          反选
-                        </Button>
-                      </div>
-                      {!collapsed ? (
-                        <div className="divide-y divide-border/50">
-                          {entries.map((entry) => renderPlanRow(entry, orderIds, false))}
-                        </div>
-                      ) : null}
-                    </section>
-                  )
-                })}
+                {section.groups.map(([palaceId, entries]) => renderPalaceGroup(palaceId, entries))}
               </div>
             ))}
-            {excludedOffFeed.length ? (
-              <section className="rounded-xl border border-border/70 bg-card/30">
-                <div className="border-b border-border/60 px-3 py-2 text-sm font-semibold">已排除</div>
-                <div className="divide-y divide-border/50">
-                  {excludedOffFeed.map((entry) => renderPlanRow(
-                    entry,
-                    excludedOffFeed.map((item) => item.cardId),
-                    false,
-                  ))}
-                </div>
-              </section>
-            ) : null}
+            {excludedBlock}
               </>
-            ) : progressSections.map((section) => {
+            ) : null}
+            {viewMode === 'progress' ? progressSections.map((section) => {
               const neighborIds = section.entries.map((entry) => entry.cardId)
               return (
                 <div key={section.key} className="space-y-1">
@@ -613,7 +699,7 @@ export function FreestyleRoundSheet({
                   </div>
                 </div>
               )
-            })}
+            }) : null}
           </div>
         </div>
 

@@ -83,6 +83,7 @@ import {
 import type { FreestyleCard, FreestyleFeedConfig, FreestyleQuizCard, FreestyleRoundSummary } from '@/shared/api/contracts'
 import { TooltipProvider } from '@/shared/components/ui/tooltip'
 import { toast } from '@/shared/feedback/toast'
+import { removeReviewUnitPermanentlyApi } from '@/modules/practice/ui/review/api'
 import {
   palaceEditorVisitGeneration,
   waitForPalaceEditorLeave,
@@ -753,6 +754,16 @@ export default function ImmersiveFreestylePage({
     (cardId: string) => excludePlanCards([cardId]),
     [excludePlanCards],
   )
+  const removeCardPermanently = useCallback(async (cardId: string, unitId: string) => {
+    try {
+      await removeReviewUnitPermanentlyApi(unitId)
+    } catch {
+      toast.error('没能永久移除，请再试一次')
+      return
+    }
+    excludePlanCards([cardId])
+    toast.success('已永久移除，以后不再安排复习')
+  }, [excludePlanCards])
 
   // Stable overflow tree: recreating DropdownMenuTrigger every parent render
   // under TooltipProvider loops Radix composeRefs (Vite Maximum update depth).
@@ -867,6 +878,7 @@ export default function ImmersiveFreestylePage({
           currentIndex={currentIndex}
           queueState={queueState}
           roundPlan={roundPlan}
+          subjectByPalaceId={subjectByPalaceId}
           loading={loading}
           onJumpPlanCard={handlePlanJump}
           onExcludePlanCards={excludePlanCards}
@@ -958,6 +970,7 @@ export default function ImmersiveFreestylePage({
           onEncounterChange={updateUnitEncounter}
           onStaleDrop={handleStaleDrop}
           onRemoveFromQueue={removeCardFromQueue}
+          onRemovePermanently={removeCardPermanently}
           onRebuildRound={reshuffleQueue}
           onRevisionAdopted={adoptLiveUnitRevision}
           onCardSaveFailed={handleCardSaveFailed}

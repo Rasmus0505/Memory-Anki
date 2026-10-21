@@ -207,14 +207,14 @@ describe('freestyle order and new-placement keys', () => {
     expect(config.review_new_ratio).toBe(4)
   })
 
-  it('keeps valid values and falls back to defaults for invalid ones', () => {
+  it('pins order to most_overdue and new_first regardless of stored values', () => {
     const config = sanitizeFreestyleFeedConfig({
       due_order: 'palace_topology',
       new_placement: 'ratio',
       review_new_ratio: 2,
     })
-    expect(config.due_order).toBe('palace_topology')
-    expect(config.new_placement).toBe('ratio')
+    expect(config.due_order).toBe('most_overdue')
+    expect(config.new_placement).toBe('new_first')
     expect(config.review_new_ratio).toBe(2)
 
     const fallback = sanitizeFreestyleFeedConfig({

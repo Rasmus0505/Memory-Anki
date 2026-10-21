@@ -42,6 +42,8 @@ export interface FreestyleProgressSegment {
   enteredOn?: string
   /** Unit has never passed (新学, blue). Otherwise it is a review (复习, amber). */
   isNew?: boolean
+  /** Quiz question tick (题目, green). Overrides the new/review hue. */
+  isQuiz?: boolean
 }
 
 /**
@@ -63,21 +65,38 @@ const RAIL_ACCENT_CLASS: Record<'new' | 'review', Record<FreestyleSegmentTone, s
   },
 }
 
-/** Fill class for one rail tick: blue when the unit is new, amber when it is a review. */
+/** Quiz question tick: green, so it reads apart from the blue/amber unit ticks. */
+const QUIZ_ACCENT_CLASS: Record<FreestyleSegmentTone, string> = {
+  pending: 'bg-rate-good/25',
+  retry: 'bg-rate-good/60',
+  current: 'bg-[hsl(145_60%_72%)]',
+  done: 'bg-rate-good',
+}
+
+/**
+ * Fill class for one rail tick: green for a quiz question, blue when the unit
+ * is new, amber when it is a review.
+ */
 export function progressSegmentAccentClass(
   isNew: boolean | undefined,
   tone: FreestyleSegmentTone,
+  isQuiz = false,
 ): string {
+  if (isQuiz) return QUIZ_ACCENT_CLASS[tone]
   return RAIL_ACCENT_CLASS[isNew ? 'new' : 'review'][tone]
 }
 
 /**
- * Retry occurrence circle: same new/review colour as its source tick.
+ * Retry occurrence circle: same colour as its source tick.
  * Unfinished is faint, completed is solid.
  * Viewing size is separate (`progressSegmentShapeClass` / node size).
  */
-export function retryNodeToneClass(tone: FreestyleSegmentTone, isNew = false): string {
-  const fill = progressSegmentAccentClass(isNew, tone === 'done' ? 'done' : 'pending')
+export function retryNodeToneClass(
+  tone: FreestyleSegmentTone,
+  isNew = false,
+  isQuiz = false,
+): string {
+  const fill = progressSegmentAccentClass(isNew, tone === 'done' ? 'done' : 'pending', isQuiz)
   return tone === 'done' ? `${fill} text-stage` : `${fill} text-stage-ink`
 }
 
@@ -87,6 +106,13 @@ function isNewUnit(
 ): boolean {
   if (entries.some((entry) => entry?.isNew === true)) return true
   return Boolean(card && 'is_new' in card && card.is_new === true)
+}
+
+function isQuizTick(
+  card: FreestyleCard | undefined,
+  entry: { kind?: string } | undefined,
+): boolean {
+  return card?.type === 'quiz_question' || entry?.kind === 'quiz_question'
 }
 
 /** Card badge / 本轮安排 row chrome for a retry occurrence. */
@@ -668,11 +694,14 @@ export function buildFreestyleProgressSummary(
 
   // A retry takes its source's newness, so the whole family of one unit shares one hue.
   for (const segment of segments) {
+    const live = liveById.get(segment.cardId)
+    const entry = roundPlan?.cardsById[segment.cardId]
     segment.isNew = isNewUnit(
-      liveById.get(segment.cardId),
-      roundPlan?.cardsById[segment.cardId],
+      live,
+      entry,
       roundPlan?.cardsById[segment.sourceCardId || segment.cardId],
     )
+    segment.isQuiz = isQuizTick(live, entry)
   }
 
   const unfinishedPalaces = new Set(

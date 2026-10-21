@@ -60,7 +60,12 @@ class ReviewUnitState(Base):
         Integer, nullable=False, default=0, server_default="0"
     )
     last_passed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Calendar day on which a 困难 already spent this unit's one-step demotion.
+    hard_penalized_on: Mapped[date | None] = mapped_column(Date, nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    permanently_removed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("0")
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=utc_now_naive
     )

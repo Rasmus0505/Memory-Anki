@@ -25,6 +25,8 @@ import { FreestyleComboChip } from './LazyFreestyleMotion'
 
 export type FreestyleRatingTone = 'again' | 'hard' | 'good' | 'easy'
 
+type RemoveIntent = 'round' | 'permanent'
+
 export const FREESTYLE_RATINGS: Array<{
   value: UnitRating
   label: string
@@ -60,6 +62,7 @@ export function FreestyleRatingBar({
   onRatingScopeChange,
   onRate,
   onRemoveFromQueue,
+  onRemovePermanently,
   onDismissError,
 }: {
   ratingEffects: UnitRatingEffectDto[]
@@ -100,28 +103,32 @@ export function FreestyleRatingBar({
    * press calls this. No schedule write.
    */
   onRemoveFromQueue?: () => void
+  /** Stop scheduling this unit for good. Two presses, like 移除本队列. */
+  onRemovePermanently?: () => void
   onDismissError?: () => void
 }) {
   // Confirmed fill only. In-flight uses 正在保存 so a failed POST cannot look like
   // a kept score, and a late response cannot light the wrong button.
-  const [removeArmed, setRemoveArmed] = useState(false)
-  const removeArmedRef = useRef(false)
+  const [removeArmed, setRemoveArmed] = useState<RemoveIntent | null>(null)
+  const removeArmedRef = useRef<RemoveIntent | null>(null)
   const disarmRemove = useCallback(() => {
-    removeArmedRef.current = false
-    setRemoveArmed(false)
+    removeArmedRef.current = null
+    setRemoveArmed(null)
   }, [])
-  const requestRemove = useCallback(() => {
-    if (!onRemoveFromQueue || busy) return
-    if (!removeArmedRef.current) {
-      removeArmedRef.current = true
-      setRemoveArmed(true)
+  const requestRemove = useCallback((intent: RemoveIntent) => {
+    const handler = intent === 'round' ? onRemoveFromQueue : onRemovePermanently
+    if (!handler || busy) return
+    if (removeArmedRef.current !== intent) {
+      removeArmedRef.current = intent
+      setRemoveArmed(intent)
       return
     }
     disarmRemove()
-    onRemoveFromQueue()
-  }, [busy, disarmRemove, onRemoveFromQueue])
+    handler()
+  }, [busy, disarmRemove, onRemoveFromQueue, onRemovePermanently])
   const shownRating = removeArmed ? null : (selectedRating ?? recordedRating)
   const showingRecorded = !removeArmed && pendingRating == null && selectedRating == null && recordedRating != null
+  const removeColumns = (onRemoveFromQueue ? 1 : 0) + (onRemovePermanently ? 1 : 0)
   const selectedEffect = ratingEffects.find((effect) => effect.rating === shownRating)
   const palaceMode = ratingScope === 'palace'
 
@@ -154,7 +161,7 @@ export function FreestyleRatingBar({
       if (event.defaultPrevented || isFreestyleShortcutBlocked(event.target)) return
       if (onRemoveFromQueue && isFreestyleRemoveFromQueueShortcut(event.key)) {
         event.preventDefault()
-        if (!busy) requestRemove()
+        requestRemove('round')
         return
       }
       if (locked) return
@@ -207,7 +214,9 @@ export function FreestyleRatingBar({
             data-testid="freestyle-rating-effect-line"
             className="mb-1.5 flex items-center gap-1.5 rounded-lg bg-stage-line px-2.5 py-1 text-[11px] font-medium text-stage-ink sm:text-xs"
           >
-            <span className="min-w-0 truncate">再点确认移除 · 本轮不再安排</span>
+            <span className="min-w-0 truncate">
+              {removeArmed === 'permanent' ? '再点确认永久移除 · 不再安排复习' : '再点确认移除 · 本轮不再安排'}
+            </span>
           </div>
         ) : failedRating != null ? (
           <div
@@ -313,30 +322,61 @@ export function FreestyleRatingBar({
             })}
           </div>
         ) : null}
-        <div className={cn('grid gap-1 sm:gap-1.5', onRemoveFromQueue ? 'grid-cols-5' : 'grid-cols-4')}>
+        <div
+          className={cn(
+            'grid gap-1 sm:gap-1.5',
+            removeColumns === 2 ? 'grid-cols-6' : removeColumns === 1 ? 'grid-cols-5' : 'grid-cols-4',
+          )}
+        >
           {onRemoveFromQueue ? (
             <button
               data-testid="freestyle-rating-button-remove"
               type="button"
               disabled={busy}
-              aria-pressed={removeArmed}
+              aria-pressed={removeArmed === 'round'}
               aria-label={
-                removeArmed
+                removeArmed === 'round'
                   ? '移除本队列：本轮不再安排复习，不改复习进度。再点确认移除'
                   : '移除本队列：本轮不再安排复习，不改复习进度'
               }
-              title={removeArmed ? '再点确认，本轮不再安排，不改复习进度' : '本轮不再安排这张卡，不改复习进度'}
+              title={removeArmed === 'round' ? '再点确认，本轮不再安排，不改复习进度' : '本轮不再安排这张卡，不改复习进度'}
               data-tone="neutral"
-              data-selected={removeArmed ? 'true' : undefined}
+              data-selected={removeArmed === 'round' ? 'true' : undefined}
               className={cn(
                 'freestyle-rate-button relative flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-xl border px-0.5 py-1.5 text-center disabled:pointer-events-none disabled:opacity-55 sm:min-h-12 sm:rounded-2xl sm:px-1',
-                removeArmed && 'disabled:opacity-100',
+                removeArmed === 'round' && 'disabled:opacity-100',
               )}
-              onClick={requestRemove}
+              onClick={() => requestRemove('round')}
             >
               <span className="max-w-full text-[10px] font-semibold leading-tight sm:text-xs">移除本队列</span>
               <span className="max-w-full truncate text-[10px] font-normal leading-none opacity-75 sm:text-[11px]">
-                {removeArmed ? '再点确认' : '本轮结束'}
+                {removeArmed === 'round' ? '再点确认' : '本轮结束'}
+              </span>
+            </button>
+          ) : null}
+          {onRemovePermanently ? (
+            <button
+              data-testid="freestyle-rating-button-remove-permanent"
+              type="button"
+              disabled={busy}
+              aria-pressed={removeArmed === 'permanent'}
+              aria-label={
+                removeArmed === 'permanent'
+                  ? '永久移除：以后不再安排复习。再点确认永久移除'
+                  : '永久移除：以后不再安排复习'
+              }
+              title={removeArmed === 'permanent' ? '再点确认，此单元以后不再安排复习' : '此单元以后不再安排复习，历史记录保留'}
+              data-tone="neutral"
+              data-selected={removeArmed === 'permanent' ? 'true' : undefined}
+              className={cn(
+                'freestyle-rate-button relative flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-xl border px-0.5 py-1.5 text-center disabled:pointer-events-none disabled:opacity-55 sm:min-h-12 sm:rounded-2xl sm:px-1',
+                removeArmed === 'permanent' && 'disabled:opacity-100',
+              )}
+              onClick={() => requestRemove('permanent')}
+            >
+              <span className="max-w-full text-[10px] font-semibold leading-tight sm:text-xs">永久移除</span>
+              <span className="max-w-full truncate text-[10px] font-normal leading-none opacity-75 sm:text-[11px]">
+                {removeArmed === 'permanent' ? '再点确认' : '不再复习'}
               </span>
             </button>
           ) : null}

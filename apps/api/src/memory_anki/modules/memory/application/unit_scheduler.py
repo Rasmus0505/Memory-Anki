@@ -18,11 +18,6 @@ RETRY_AFTER_CARDS = 3
 # the very next queue build -- the unit looked "done" yet never left the queue.
 MIN_PASSED_STAGE = 1
 
-# A lapse keeps part of the ladder position it had earned rather than resetting
-# to first-learning. Forgetting a 365-day unit should cost months, not the whole
-# ~475-day climb back up.
-LAPSE_RETENTION = 0.5
-
 # Same-day cohorts otherwise stay in lockstep forever: 50 units learned together
 # come due together at every stage. Offsets are deterministic per
 # (fuzz_key, stage) so a rating preview and the committed due date can never
@@ -37,6 +32,8 @@ class UnitScheduleResult:
     due_date: date
     passed: bool
     retry_after_cards: int
+    # True when this rating spent the unit's once-per-day 困难 demotion.
+    hard_penalty_applied: bool = False
     # False when the rating was recorded but the ladder position and due date were
     # deliberately left alone (see ``schedule_locked``). The UI must say so out
     # loud, because a silently ignored rating is exactly the kind of invisible
@@ -62,19 +59,6 @@ def clamp_stage(stage_index: int) -> int:
 def interval_days(stage_index: int) -> int:
     """Nominal ladder interval for a stage, ignoring any per-unit spread."""
     return INTERVAL_DAYS[clamp_stage(stage_index)]
-
-
-def lapse_stage(stage_index: int, has_passed: bool) -> int:
-    """Landing stage after 忘记.
-
-    Units that never passed return to first-learning. Units that had earned a
-    position keep a fraction of it, so the next interval stays proportional to
-    demonstrated strength instead of collapsing to one day.
-    """
-    current = clamp_stage(stage_index)
-    if not has_passed:
-        return 0
-    return clamp_stage(int(current * LAPSE_RETENTION))
 
 
 def _fuzz_offset(interval: int, seed: str) -> int:
@@ -131,35 +115,44 @@ def rate_unit(
     fuzz_key: str | None = None,
     schedule_locked: bool = False,
     locked_due_date: date | None = None,
+    hard_penalized_today: bool = False,
 ) -> UnitScheduleResult:
     current_day = today or date.today()
     current_stage = clamp_stage(stage_index)
     normalized = normalize_rating(rating)
 
-    # 忘记 is a failing grade: relearn today, landing proportional to the
-    # strength already earned. A lapse is honest evidence whether or not the unit
-    # was due, so it is applied even while the schedule is locked -- only the
-    # promoting direction needs protection.
+    # 忘记 is a failing grade and drops the unit to the 忘记 level (stage 0):
+    # relearn today from the bottom. A lapse is honest evidence whether or not
+    # the unit was due, so it is applied even while the schedule is locked --
+    # only the promoting direction needs protection.
     if normalized == 1:
         return UnitScheduleResult(
-            lapse_stage(current_stage, has_passed),
+            0,
             current_day,
             False,
             RETRY_AFTER_CARDS,
         )
 
     # 困难 is also retry work. It keeps the unit due today so the learner gets
-    # another chance after a short queue gap, while preserving the one-step
-    # penalty for a unit that had already earned a ladder position. Handle this
-    # before the schedule lock so ahead-of-date filler cards follow the same
-    # retry contract as due cards.
+    # another chance after a short queue gap. The one-step demotion is spent at
+    # most once per calendar day: repeated 困难 on the same day's retry cards
+    # keeps the stage it already dropped to. Handle this before the schedule
+    # lock so ahead-of-date filler cards follow the same retry contract as due
+    # cards.
     if normalized == 2:
-        penalized_stage = max(0, current_stage - 1) if has_passed else 0
+        if not has_passed:
+            penalized_stage = 0
+        elif hard_penalized_today:
+            penalized_stage = current_stage
+        else:
+            penalized_stage = max(0, current_stage - 1)
+        applied = has_passed and not hard_penalized_today and penalized_stage < current_stage
         return UnitScheduleResult(
             penalized_stage,
             current_day,
             False,
             RETRY_AFTER_CARDS,
+            hard_penalty_applied=applied,
         )
 
     # Reviewing a unit ahead of its due date proves nothing about retention over
@@ -216,7 +209,6 @@ __all__ = [
     "FUZZ_MIN_INTERVAL_DAYS",
     "FUZZ_RATIO",
     "INTERVAL_DAYS",
-    "LAPSE_RETENTION",
     "MIN_PASSED_STAGE",
     "RATING_LABELS",
     "RETRY_AFTER_CARDS",
@@ -226,7 +218,6 @@ __all__ = [
     "clamp_schedulable_due",
     "interval_days",
     "latest_schedulable_due",
-    "lapse_stage",
     "normalize_rating",
     "rate_unit",
     "scheduled_interval_days",

@@ -375,3 +375,53 @@ describe('hintMode', () => {
     expect(onRate).toHaveBeenCalledWith(3)
   })
 })
+
+describe('永久移除', () => {
+  it('sits between 移除本队列 and the four ratings and says it stops future review', () => {
+    renderBar({ onRemoveFromQueue: vi.fn(), onRemovePermanently: vi.fn() })
+
+    const round = screen.getByTestId('freestyle-rating-button-remove')
+    const permanent = screen.getByTestId('freestyle-rating-button-remove-permanent')
+    const forgot = screen.getByTestId('freestyle-rating-button-1')
+    expect(round.compareDocumentPosition(permanent) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(permanent.compareDocumentPosition(forgot) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(permanent.textContent).toContain('永久移除')
+    expect(permanent.textContent).toContain('不再复习')
+  })
+
+  it('removes permanently only on the second press and never rates', () => {
+    const onRemoveFromQueue = vi.fn()
+    const onRemovePermanently = vi.fn()
+    const { onRate } = renderBar({ onRemoveFromQueue, onRemovePermanently, selectedRating: 3 })
+
+    const permanent = screen.getByTestId('freestyle-rating-button-remove-permanent')
+    fireEvent.click(permanent)
+    expect(onRemovePermanently).not.toHaveBeenCalled()
+    expect(permanent.getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByTestId('freestyle-rating-effect-line').textContent).toContain('再点确认永久移除')
+
+    fireEvent.click(permanent)
+    expect(onRemovePermanently).toHaveBeenCalledTimes(1)
+    expect(onRemoveFromQueue).not.toHaveBeenCalled()
+    expect(onRate).not.toHaveBeenCalled()
+  })
+
+  it('switching from 移除本队列 to 永久移除 re-arms instead of confirming the first', () => {
+    const onRemoveFromQueue = vi.fn()
+    const onRemovePermanently = vi.fn()
+    renderBar({ onRemoveFromQueue, onRemovePermanently })
+
+    fireEvent.click(screen.getByTestId('freestyle-rating-button-remove'))
+    fireEvent.click(screen.getByTestId('freestyle-rating-button-remove-permanent'))
+    expect(onRemoveFromQueue).not.toHaveBeenCalled()
+    expect(onRemovePermanently).not.toHaveBeenCalled()
+    expect(screen.getByTestId('freestyle-rating-button-remove-permanent').getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByTestId('freestyle-rating-button-remove').getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('is absent when the card cannot be removed permanently', () => {
+    renderBar({ onRemoveFromQueue: vi.fn() })
+    expect(screen.queryByTestId('freestyle-rating-button-remove-permanent')).toBeNull()
+    expect(screen.getByTestId('freestyle-rating-button-remove')).toBeTruthy()
+  })
+})

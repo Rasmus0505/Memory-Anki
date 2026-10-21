@@ -251,6 +251,7 @@ def build_freestyle_queue(
             "question_type": raw.get("question_type") or "all",
             "quiz_mastery_buckets": raw.get("mastery_buckets") or config.get("quiz_mastery_buckets"),
             "quiz_scope": raw.get("quiz_scope") or "cross_palace_random",
+            "quiz_order": raw.get("order") or "new_first",
             "weak_quiz_priority": raw.get("weak_priority", True),
         }
 

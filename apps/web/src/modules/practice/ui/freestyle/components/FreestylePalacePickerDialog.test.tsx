@@ -81,8 +81,9 @@ describe('FreestylePalacePickerDialog', () => {
   it('toggles a chapter by clicking its title', () => {
     render(<FreestylePalacePickerDialog open subjects={subjects} value={[11]} onOpenChange={vi.fn()} onConfirm={vi.fn()} />)
 
-    fireEvent.click(screen.getByText('第9章现代欧美教育思想'))
-    expect(checkbox('选择章节第9章现代欧美教育思想').checked).toBe(false)
+    // Single-palace chapter collapses to one palace row, so there is no separate chapter checkbox.
+    expect(screen.queryByLabelText('选择章节第9章现代欧美教育思想')).toBeNull()
+    fireEvent.click(screen.getByText('第二节进步教育运动'))
     expect(checkbox('选择宫殿第二节进步教育运动').checked).toBe(false)
   })
 

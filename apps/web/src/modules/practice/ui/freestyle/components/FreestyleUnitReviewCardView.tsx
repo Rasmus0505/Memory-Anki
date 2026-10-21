@@ -98,6 +98,7 @@ export function FreestyleUnitReviewCardView({
   onEncounterChange,
   onStaleDrop,
   onRemoveFromQueue,
+  onRemovePermanently,
   onRebuildRound,
   onRevisionAdopted,
   onSaveFailed,
@@ -144,6 +145,8 @@ export function FreestyleUnitReviewCardView({
   onStaleDrop: (cardId: string, options?: { force?: boolean }) => void
   /** Drop this card from the current round. Does not write a review rating. */
   onRemoveFromQueue?: (cardId: string) => void
+  /** Stop scheduling this card's unit for good, and drop the card from this round. */
+  onRemovePermanently?: (cardId: string, unitId: string) => void
   /** Rebuild this round's queue without treating the card as stale. */
   onRebuildRound?: () => void
   onRevisionAdopted?: (cardId: string, unitId: string, revision: number) => void
@@ -1063,6 +1066,14 @@ export function FreestyleUnitReviewCardView({
                 : () => {
                     cardFeedback.playRemove()
                     onRemoveFromQueue(card.id)
+                  }
+            }
+            onRemovePermanently={
+              readOnly || !onRemovePermanently
+                ? undefined
+                : () => {
+                    cardFeedback.playRemove()
+                    onRemovePermanently(card.id, card.unit_id)
                   }
             }
             onDismissError={() => setActionError(null)}
