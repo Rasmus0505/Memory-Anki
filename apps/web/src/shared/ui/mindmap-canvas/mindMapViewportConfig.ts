@@ -11,6 +11,11 @@ export const MINDMAP_FIT_MIN_ZOOM = 0.12
 export const MINDMAP_FIT_MAX_ZOOM = 1.35
 export const MINDMAP_MOBILE_FIT_MIN_ZOOM = 0.18
 export const MINDMAP_MOBILE_FIT_MAX_ZOOM = 1.15
+/**
+ * Phone editing (not guided): whole-tree fit may not shrink below a readable size.
+ * A wide tree then opens on part of the map and the user pans to the rest.
+ */
+export const MINDMAP_MOBILE_EDIT_FIT_MIN_ZOOM = 0.85
 export const MINDMAP_FIT_PADDING = 0.04
 export const MINDMAP_FOCUS_FIT_PADDING = 0.03
 export const MINDMAP_BRANCH_FIT_PADDING = 0.06

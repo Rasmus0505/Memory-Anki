@@ -51,6 +51,7 @@ import {
   normalizeMindMapManualZoom,
   MINDMAP_MOBILE_FIT_MAX_ZOOM,
   MINDMAP_MOBILE_FIT_MIN_ZOOM,
+  MINDMAP_MOBILE_EDIT_FIT_MIN_ZOOM,
   MINDMAP_REVEAL_INTO_VIEW_DURATION_MS,
   MINDMAP_REVEAL_INTO_VIEW_PADDING_PX,
   MINDMAP_WHEEL_PAN_OWED_GRACE_MS,
@@ -177,6 +178,17 @@ export function useMindMapViewport({
       readonly &&
       canvasSize.width > 0 &&
       canvasSize.width < 768)
+  // Phone editing keeps the one-finger camera; only its whole-tree fit floor changes.
+  const mobileReadableFitActive =
+    !mobileGuidedActive &&
+    mobileViewPolicy === 'auto' &&
+    canvasSize.width > 0 &&
+    canvasSize.width < 768
+  const fitMinZoom = mobileGuidedActive
+    ? MINDMAP_MOBILE_FIT_MIN_ZOOM
+    : mobileReadableFitActive
+      ? MINDMAP_MOBILE_EDIT_FIT_MIN_ZOOM
+      : MINDMAP_FIT_MIN_ZOOM
   // `auto` keeps the phone camera; only explicit `guided` yields one-finger drag.
   // Freestyle uses `auto` so the map stays pannable; the feed pager changes cards.
   const yieldOneFingerPan = mobileViewPolicy === 'guided'
@@ -478,12 +490,12 @@ export function useMindMapViewport({
           duration,
           padding: mobileGuidedActive ? MINDMAP_MOBILE_GUIDED_FIT_PADDING : focusMode ? MINDMAP_FOCUS_FIT_PADDING : MINDMAP_FIT_PADDING,
           includeHiddenNodes: false,
-          minZoom: mobileGuidedActive ? MINDMAP_MOBILE_FIT_MIN_ZOOM : MINDMAP_FIT_MIN_ZOOM,
+          minZoom: fitMinZoom,
           maxZoom: mobileGuidedActive ? MINDMAP_MOBILE_FIT_MAX_ZOOM : MINDMAP_FIT_MAX_ZOOM,
         }), duration, onSettled ? () => onSettled() : undefined)
       })
     },
-    [fitView, focusMode, isCanvasReady, mobileGuidedActive, runExplicitViewportChange],
+    [fitView, focusMode, fitMinZoom, isCanvasReady, mobileGuidedActive, runExplicitViewportChange],
   )
 
   const fitNodesInView = useCallback(
@@ -531,12 +543,13 @@ export function useMindMapViewport({
           duration,
           padding: mobileGuidedActive ? MINDMAP_MOBILE_GUIDED_BRANCH_FIT_PADDING : MINDMAP_BRANCH_FIT_PADDING,
           includeHiddenNodes: false,
-          minZoom: mobileGuidedActive ? MINDMAP_MOBILE_FIT_MIN_ZOOM : MINDMAP_FIT_MIN_ZOOM,
+          minZoom: fitMinZoom,
           maxZoom: mobileGuidedActive ? MINDMAP_MOBILE_FIT_MAX_ZOOM : MINDMAP_FIT_MAX_ZOOM,
         }), duration)
       })
     },
     [
+      fitMinZoom,
       fitView,
       graphNodes,
       isCanvasReady,
@@ -756,7 +769,7 @@ export function useMindMapViewport({
           duration: 0,
           padding: mobileGuidedActive ? MINDMAP_MOBILE_GUIDED_FIT_PADDING : focusMode ? MINDMAP_FOCUS_FIT_PADDING : MINDMAP_FIT_PADDING,
           includeHiddenNodes: false,
-          minZoom: mobileGuidedActive ? MINDMAP_MOBILE_FIT_MIN_ZOOM : MINDMAP_FIT_MIN_ZOOM,
+          minZoom: fitMinZoom,
           maxZoom: mobileGuidedActive ? MINDMAP_MOBILE_FIT_MAX_ZOOM : MINDMAP_FIT_MAX_ZOOM,
         }),
         0,
@@ -767,6 +780,7 @@ export function useMindMapViewport({
     })
   }, [
     centerNodeInCanvas,
+    fitMinZoom,
     fitView,
     focusMode,
     isCanvasReady,

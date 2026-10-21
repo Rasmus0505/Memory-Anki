@@ -81,10 +81,10 @@ test('fills the iOS PWA visual viewport and exits through the canvas control', a
     window as Window & { __mindMapNativeFullscreenRequests?: number }
   ).__mindMapNativeFullscreenRequests ?? 0)).toBe(0)
 
-  // Narrow screens default to article; its exit must work without revealing the hidden canvas.
-  const article = frame.getByTestId('article-workspace')
-  await expect(article).toBeVisible()
-  await article.getByTitle('退出全屏', { exact: true }).click()
+  // The map is the only view now; its own 退出全屏 control must exit without leaving the frame.
+  const exitControl = frame.getByTitle('退出全屏', { exact: true })
+  await expect(exitControl).toBeVisible()
+  await exitControl.click()
   await expect(frame).toHaveAttribute('data-presentation-mode', 'embedded')
   await expect(frame).toHaveAttribute('data-fullscreen', 'false')
 })

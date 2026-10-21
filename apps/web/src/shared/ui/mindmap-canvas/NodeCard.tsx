@@ -40,6 +40,7 @@ import {
   buildNodeCardTextClassNames,
   nodeProgressBackgroundImage,
   resolveNodeRawText,
+  richDocumentPlainText,
   type NodeCardData,
 } from './nodeCardModel'
 import { noteCardEditStarted } from './cardEditGesture'
@@ -58,6 +59,10 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   const isRichNode = Boolean(metadata.richText) || hasHighlightMarkup(rawNodeText)
   const displayHtml = isRichNode ? sanitizeMindMapRichHtml(rawNodeText) : ''
   const plainLabel = stripMindMapHtml(nodeData.label) || nodeData.label || ''
+  // Recorder focus: a click on this node names it in the diagnosis brief.
+  const recorderPlace = depth === 0 ? '思维导图中心' : `第 ${depth + 1} 层`
+  const recorderTitle = stripMindMapHtml(rawNodeText).slice(0, 80)
+  const recorderExcerpt = metadata.articleBody ? richDocumentPlainText(metadata.articleBody) : ''
   const [localEdit, setLocalEdit] = useState(false)
   const [editText, setEditText] = useState(rawNodeText)
   const [imeComposing, setImeComposing] = useState(false)
@@ -551,6 +556,10 @@ function MindMapNodeCard({ data, id }: NodeProps) {
       onPointerUp={longPress.finishPointerInteraction}
       onPointerCancel={longPress.finishPointerInteraction}
       data-mindmap-node-id={id}
+      data-recorder-focus="true"
+      data-recorder-place={recorderPlace}
+      data-recorder-title={recorderTitle}
+      data-recorder-excerpt={recorderExcerpt}
       data-node-mode={nodeMode}
       className={[
         'mindmap-node-shell group relative',

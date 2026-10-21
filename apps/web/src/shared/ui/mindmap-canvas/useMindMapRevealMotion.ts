@@ -27,8 +27,6 @@ const REBOUND_SHARE = 0.4
 /** React Flow mounts new nodes (and their edges, after measuring) a few frames later. */
 const MOUNT_WAIT_MS = 1200
 const PERSPECTIVE = 'perspective(680px)'
-/** Sparks thrown off a flipped card: few and small, so the warm light wave stays the lead. */
-const FLIP_SPARK_COUNT = 8
 
 export type RevealPhase = 'hidden' | 'revealed' | 'other'
 
@@ -233,29 +231,6 @@ function flipCard(card: HTMLElement, delay: number, playback: FxPlayback) {
     ],
     { duration: FLIP_MS + 180, delay, fill: 'both', easing: 'ease-out' },
   ), sheen)
-  // Light wave: a warm bloom swells behind the turn, then sparks leave the card's centre.
-  const glow = fxElement('mindmap-flip-glow', card)
-  removeWhenDone(glow.animate(
-    [
-      { opacity: 0, transform: 'scale(0.6)' },
-      { opacity: 0.9, transform: 'scale(1.1)', offset: FLIP_TURN },
-      { opacity: 0, transform: 'scale(1.6)' },
-    ],
-    { duration: FLIP_MS + 160, delay, fill: 'both', easing: 'ease-out' },
-  ), glow)
-  for (let index = 0; index < FLIP_SPARK_COUNT; index += 1) {
-    const spark = fxElement('mindmap-flip-spark', card)
-    const angle = (Math.PI * 2 * index) / FLIP_SPARK_COUNT + (Math.random() - 0.5) * 0.5
-    const distance = 24 + Math.random() * 22
-    removeWhenDone(spark.animate(
-      [
-        { opacity: 0, transform: 'translate(-50%, -50%) scale(0.4)' },
-        { opacity: 1, offset: 0.2 },
-        { opacity: 0, transform: `translate(calc(-50% + ${Math.cos(angle) * distance}px), calc(-50% + ${Math.sin(angle) * distance}px)) scale(1)` },
-      ],
-      { duration: 520, delay: delay + FLIP_MS * FLIP_TURN, fill: 'both', easing: 'cubic-bezier(.2,.7,.3,1)' },
-    ), spark)
-  }
   landCard(card, delay + FLIP_MS * 0.7, playback)
 }
 

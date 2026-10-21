@@ -496,32 +496,6 @@
   background-image: linear-gradient(100deg, hsl(26 60% 38% / 0.55) 30%, hsl(38 100% 56%) 50%, hsl(26 60% 38% / 0.55) 70%);
 }
 
-/* Light wave behind a turning card (style A: warm amber, no hard edge). */
-.mindmap-flip-glow {
-  position: absolute;
-  inset: -14px;
-  z-index: 4;
-  border-radius: 50%;
-  pointer-events: none;
-  background: radial-gradient(closest-side, hsl(40 100% 78% / 0.75), hsl(32 92% 66% / 0.35) 60%, transparent);
-  filter: blur(4px);
-}
-
-/* Sparks thrown from the card centre during the turn; positioned by the WAAPI transform. */
-.mindmap-flip-spark {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  z-index: 7;
-  width: 5px;
-  height: 5px;
-  margin: 0;
-  border-radius: 50%;
-  pointer-events: none;
-  background: hsl(38 96% 58%);
-  box-shadow: 0 0 6px hsl(40 100% 70% / 0.9);
-}
-
 /* Flip FX layers are injected by useMindMapRevealMotion and removed when done. */
 .mindmap-flip-cover {
   position: absolute;

@@ -436,10 +436,6 @@ export function usePalaceEditorDocument({
     editorState,
     setEditorState,
     readCurrentState,
-    adoptArticleTransferState: (state: MindMapEditorState) => {
-      adoptExternalState(state, { protectFromStaleLoads: true, releaseAfterMs: 4000 })
-      setReplaceSyncVersion((value) => value + 1)
-    },
     isLoadError,
     isSaving,
     hasUnsavedChanges,

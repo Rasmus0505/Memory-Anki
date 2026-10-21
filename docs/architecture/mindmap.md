@@ -94,14 +94,11 @@ schemaVersion, document, editorPreferences, localPreferences, language, revision
 - **编辑滚动备份在响应后后台执行**，保存事务先提交并返回；备份失败只记录日志，不影响已成功的编辑保存。启动、周期和关机备份仍保留。
 - **关页**时 `visibilitychange` / `pagehide` 刷新草稿；若无在飞请求则立刻 flush。失败请求仍走既有 `mutationQueue`。
 
-## 文章视图
+## 节点正文（articleBody）
 
-- `MindMapEditorSurface` 内组合文章与画布，共用 `useMindMapEditHistory`、完整规范文档和宿主保存回调。切换不创建第二份持久化文章。
-- `articleDocument` 纯规则将标题/列表节点投影成文章块，`data.articleBody` 是受限富文本 JSON，正文段落与图片、公式、表格属于节点。旧 text/note 不破坏性迁移；`shared/ui/rich-document` 只负责通用安全渲染。
-- 文章输入由 Tiptap 承载，文档命令拥有 UID、子树移动和关联；删除仍通过宿主 guard，分支范围仍保存完整文档。阅读模式使用轻量渲染，仅活动编辑块挂载编辑器。
-- 导图与文章共用 capability 动作和题目入口。宿主回忆 conceal 状态必须遮挡正文，文章揭晓委托宿主，不私自写学习事实。
-- 视图选择保存浏览器本地，阅读锚点通过独立 cursor API 保存，见 [article-reading-cursor.md](./article-reading-cursor.md)。跨电脑仍遵守单写入设备限制。
-- 文章文件转换、四种导入与附件/题目恢复见 [article-transfer.md](./article-transfer.md)。完整包不是整库备份恢复。
+- `data.articleBody` 是节点正文的受限富文本 JSON（段落、图片、公式、表格），属于用户持久内容，继续在导图节点上展示；字段名不改，旧数据不迁移。
+- `shared/ui/rich-document` 只负责通用安全渲染，不依赖业务模块。
+- 独立的“文章”视图、文章阅读游标 API 与文章文件导入导出已移除，相关代码和文档不再维护；已存数据保留。
 
 ## 新增能力流程
 

@@ -336,7 +336,6 @@ export function usePalaceEditPage() {
     saveStatus: documentState.saveStatus,
     flushSave: documentState.flushSave,
     readCurrentDocumentState: documentState.readCurrentState,
-    adoptArticleTransferState: documentState.adoptArticleTransferState,
     flushSaveWithReconcile: documentState.flushSaveWithReconcile,
     armNextSaveOverride: documentState.armNextSaveOverride,
     pendingConflict: documentState.pendingConflict,

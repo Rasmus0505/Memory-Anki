@@ -101,11 +101,6 @@ export interface FlipCardMindMapPanelProps extends FlipCardSurfaceExtensions {
   hostFullscreenControl?: boolean
   /** Host chrome after canvas tools (e.g. palace ladder progress). */
   toolbarCenterContent?: ReactNode
-  /**
-   * Hosts with their own reading surface (freestyle on PWA) hide the
-   * 思维导图/文章 switch and stay on the map view.
-   */
-  hideDocumentViewSwitch?: boolean
   /** When true, hide 网页内全屏 / 系统全屏 / 清屏 from the overflow menu only (features stay available). */
   hidePresentationOverflowActions?: boolean
   /**
@@ -178,7 +173,6 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   freestyleAutoAdvance,
   hostFullscreenControl = false,
   toolbarCenterContent,
-  hideDocumentViewSwitch = false,
   hidePresentationOverflowActions = false,
   chromeDensity = 'default',
   onToggleFullscreen,
@@ -587,7 +581,6 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
           textActionLabel,
         })}
         toolbarCenterContent={toolbarCenterContent}
-        hideDocumentViewSwitch={hideDocumentViewSwitch}
         syncOnPropChange
         syncIntent="soft"
         preserveViewOnSync={framePreserveViewOnSync}

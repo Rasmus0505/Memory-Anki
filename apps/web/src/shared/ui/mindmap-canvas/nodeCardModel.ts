@@ -203,6 +203,17 @@ export function resolveNodeRawText(nodeData: NodeCardData) {
   return nodeData.label || ''
 }
 
+/** Plain text of a rich document tree (`{ text, content: [...] }`), for recorder excerpts. */
+export function richDocumentPlainText(node: unknown): string {
+  if (!node || typeof node !== 'object') return ''
+  const record = node as { text?: unknown; content?: unknown }
+  const own = typeof record.text === 'string' ? record.text : ''
+  const children = Array.isArray(record.content)
+    ? record.content.map((child) => richDocumentPlainText(child)).join(' ')
+    : ''
+  return `${own} ${children}`.replace(/\s+/g, ' ').trim()
+}
+
 export function getMouseFeedbackPoint(event?: { clientX?: number; clientY?: number }) {
   return event && typeof event.clientX === 'number' && typeof event.clientY === 'number'
     ? {

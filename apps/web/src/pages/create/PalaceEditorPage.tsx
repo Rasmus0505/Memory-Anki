@@ -6,9 +6,6 @@ import { MindMapDocumentConflictDialog } from '@/shared/components/mindmap-docum
 import { MindMapSplitLayout } from '@/shared/components/layout/MindMapSplitLayout'
 import {
   MindMapEditorSurface,
-  ArticleTransferDialog,
-  useArticleTransfer,
-  normalizeMindMapDocument,
   type MindMapEditorSurfaceHandle,
   type MindMapPageToolbarProps,
 } from '@/modules/content/public'
@@ -121,33 +118,6 @@ export default function PalaceEdit() {
     page.selectedNodes?.[0]?.uid ||
     (page.selectedNodes?.[0]?.rawData?.uid as string | undefined) ||
     (page.selectedNodes?.[0]?.rawData?.data as Record<string, unknown> | undefined)?.uid as string | undefined
-  const articleTransfer = useArticleTransfer({
-    ownerId: `palace:${page.palaceId ?? 'new'}`,
-    active: isActive,
-    pendingConflict: Boolean(page.pendingConflict),
-    selectedUid: selectedNodeUid,
-    flushSave: page.flushSave,
-    readHost: () => {
-      const state = page.readCurrentDocumentState()
-      if (!state.editorState || state.pendingConflict || state.entityId !== page.palaceId) return null
-      return {
-        ownerId: `palace:${state.entityId}`, palaceId: state.entityId,
-        revision: state.revision || null, dirty: state.dirty,
-        document: normalizeMindMapDocument(state.editorState.editor_doc),
-      }
-    },
-    onApplied: async (result, captured) => {
-      if (result.palace_id !== captured.palaceId) {
-        navigate(`/palaces/${result.palace_id}/edit`)
-        return
-      }
-      page.adoptArticleTransferState({
-        editor_doc: result.editor_doc, editor_fingerprint: result.editor_fingerprint,
-        editor_config: result.snapshot.editorPreferences,
-        editor_local_config: result.snapshot.localPreferences, lang: result.snapshot.language,
-      })
-    },
-  })
   const importEntityKey = useMemo(
     () => (page.palaceId ? `palace_${page.palaceId}` : null),
     [page.palaceId],
@@ -346,12 +316,6 @@ export default function PalaceEdit() {
       : null,
     moreActions: [
       {
-        label: '文章导入 / 导出',
-        onClick: () => articleTransfer.setOpen(true),
-        disabled: articleTransfer.busy || Boolean(page.pendingConflict),
-        opensOverlay: true,
-      },
-      {
         label: '恢复点',
         onClick: () => { void page.handleOpenVersions() },
         opensOverlay: true,
@@ -427,7 +391,6 @@ export default function PalaceEdit() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
       <MindMapDocumentConflictDialog pendingConflict={page.pendingConflict} resolveConflict={page.resolveConflict} />
-      <ArticleTransferDialog transfer={articleTransfer} />
       {mindMapFileTransfer.input}
       <PalaceMemoryLookupDialog
         open={memoryLookupOpen}
@@ -551,7 +514,7 @@ export default function PalaceEdit() {
                           ref={mindMapFrameRef}
                           // Keep one mind-map host mounted across build/learn so fullscreen and ReactFlow survive.
                           displayMode={recallModeActive ? 'review' : 'edit'}
-                          editorReadonly={Boolean(page.pendingConflict) || articleTransfer.busy}
+                          editorReadonly={Boolean(page.pendingConflict)}
                           fullscreen={page.mindMapFullscreen}
                           sessionKind="practice"
                           modeSyncVersion={page.replaceSyncVersion + mindMapImport.importAppliedSyncVersion}
@@ -586,7 +549,7 @@ export default function PalaceEdit() {
                           confirmDeleteNodes={quizBindingsHost.confirmDeleteNodes}
                           focusRequestNodeUid={page.modeFocusRequestNodeUid}
                           focusRequestNonce={page.modeFocusRequestNonce}
-                          onEditorStateChange={(state) => { if (!articleTransfer.busy) page.handleMindMapEditorStateChange(state) }}
+                          onEditorStateChange={(state) => page.handleMindMapEditorStateChange(state)}
                           onNodeActive={handleMindMapNodeActive}
                           onNodeClick={page.handleInlinePracticeNodeClick}
                           onNodeContextMenu={page.handleInlinePracticeNodeContextMenu}
