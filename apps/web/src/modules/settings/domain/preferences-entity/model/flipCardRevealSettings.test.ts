@@ -26,11 +26,19 @@ describe('flipCardRevealSettings', () => {
       granularity: 'single',
       stage: 'direct',
       editScope: 'unit',
+      enterRevealFollow: true,
     })
     expect(sanitizeFlipCardRevealConfig({ editScope: 'palace' })).toEqual({
       granularity: 'level',
       stage: 'two-step',
       editScope: 'palace',
+      enterRevealFollow: true,
+    })
+    expect(sanitizeFlipCardRevealConfig({ enterRevealFollow: false })).toEqual({
+      granularity: 'level',
+      stage: 'two-step',
+      editScope: 'unit',
+      enterRevealFollow: false,
     })
   })
 
@@ -39,15 +47,18 @@ describe('flipCardRevealSettings', () => {
       granularity: 'single',
       stage: 'direct',
       editScope: 'palace',
+      enterRevealFollow: false,
     })).toEqual({
       granularity: 'single',
       stage: 'direct',
       editScope: 'palace',
+      enterRevealFollow: false,
     })
     expect(readFlipCardRevealSettings()).toEqual({
       granularity: 'single',
       stage: 'direct',
       editScope: 'palace',
+      enterRevealFollow: false,
     })
     expect(window.localStorage.getItem(FLIP_CARD_REVEAL_SETTINGS_STORAGE_KEY)).toBeNull()
     expect(resetFlipCardRevealSettings()).toEqual(DEFAULT_FLIP_CARD_REVEAL_CONFIG)
@@ -68,6 +79,7 @@ describe('flipCardRevealSettings', () => {
       granularity: 'single',
       stage: 'direct',
       editScope: 'unit',
+      enterRevealFollow: true,
     })
   })
 })

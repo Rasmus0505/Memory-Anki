@@ -12,7 +12,7 @@ import {
   FreestyleUnitReviewStatusBanner,
   type FreestyleEditorSaveState,
 } from './FreestyleUnitReviewFlipCanvas'
-import { useFreestyleUnitReviewNodeQuiz } from './freestyleUnitReviewFlipToolbar'
+import { buildPermanentMarkToolbarAction, useFreestyleUnitReviewNodeQuiz } from './freestyleUnitReviewFlipToolbar'
 import { useFreestyleTextToMindMap } from './useFreestyleTextToMindMap'
 import type {
   FreestyleReviewUnitCard,
@@ -240,6 +240,7 @@ export function FreestyleUnitReviewFlipPanel({
     unitTitle: unit.title || '',
     anchorUid: unit.anchor_uid || '',
     revealApiRef,
+    followEnabled: flipCardRevealSettings.settings.enterRevealFollow !== false,
   })
 
   // While reviewing, external/session replacement wins. During edit, the local
@@ -613,8 +614,7 @@ export function FreestyleUnitReviewFlipPanel({
   const textToMindMap = useFreestyleTextToMindMap({
     palaceId: session.palace_id, card, sessionTitle: session.title || '', isEditMode,
     editorState, editEditorState, handleToggleMode, setReviewUnitsPanelOpen,
-    permanentMarkMode, permanentMarkHighlightsLength: permanentMarkHighlights.length,
-    handleTogglePermanentMarkMode, savingEdit, onRevealMapChange, revealApiRef,
+    onRevealMapChange, revealApiRef,
     displayModeRef, editRevealSnapshotRef, setPermanentMarkMode, setDisplayMode,
     setModeSyncVersion, handleEditorStateChange,
   })
@@ -680,6 +680,12 @@ export function FreestyleUnitReviewFlipPanel({
         }
         toolbarExtensions={{
           moreActions: textToMindMap.moreActions,
+          permanentMarkAction: isEditMode
+            ? buildPermanentMarkToolbarAction({
+                active: permanentMarkMode, markedCount: permanentMarkHighlights.length,
+                disabled: !permanentMarkMode && savingEdit, onToggle: handleTogglePermanentMarkMode,
+              })
+            : null,
           quizAction: onOpenScopeQuiz
             ? { label: '做题', onClick: onOpenScopeQuiz, opensOverlay: true }
             : null,

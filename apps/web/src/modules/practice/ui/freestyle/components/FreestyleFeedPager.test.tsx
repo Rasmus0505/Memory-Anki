@@ -64,4 +64,16 @@ describe('FreestyleFeedPager', () => {
 
     expect((screen.getByRole('button', { name: '完成' }) as HTMLButtonElement).disabled).toBe(true)
   })
+
+  it('releases the pager focus after paging so Enter flips the new card', () => {
+    const props = renderPager()
+    const next = screen.getByRole('button', { name: '下一张' }) as HTMLButtonElement
+    next.focus()
+    expect(document.activeElement).toBe(next)
+
+    fireEvent.click(next)
+
+    expect(props.onNext).toHaveBeenCalledTimes(1)
+    expect(document.activeElement).not.toBe(next)
+  })
 })

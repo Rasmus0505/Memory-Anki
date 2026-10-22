@@ -15,10 +15,6 @@ interface UseFreestyleTextToMindMapOptions {
   editEditorState: MindMapEditorState
   handleToggleMode: () => void
   setReviewUnitsPanelOpen: (open: boolean) => void
-  permanentMarkMode: boolean
-  permanentMarkHighlightsLength: number
-  handleTogglePermanentMarkMode: () => void
-  savingEdit: boolean
   onRevealMapChange?: (revealMap: Record<string, string>) => void
   revealApiRef: { readonly current: { revealMap: Record<string, RevealState> } }
   displayModeRef: MutableRefObject<'review' | 'edit'>
@@ -38,10 +34,6 @@ export function useFreestyleTextToMindMap({
   editEditorState,
   handleToggleMode,
   setReviewUnitsPanelOpen,
-  permanentMarkMode,
-  permanentMarkHighlightsLength,
-  handleTogglePermanentMarkMode,
-  savingEdit,
   onRevealMapChange,
   revealApiRef,
   displayModeRef,
@@ -95,10 +87,6 @@ export function useFreestyleTextToMindMap({
     isEditMode,
     handleToggleMode,
     setReviewUnitsPanelOpen,
-    permanentMarkMode,
-    permanentMarkHighlightsLength,
-    handleTogglePermanentMarkMode,
-    savingEdit,
     onTextToMindMap: openTextToMindMap,
   })
 

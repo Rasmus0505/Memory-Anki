@@ -25,4 +25,23 @@ describe('FlipCardRevealSettingsDialog', () => {
       editScope: 'palace',
     })
   })
+
+  it('lets the learner turn Enter flip camera tracking off', () => {
+    const onChange = vi.fn()
+    render(
+      <FlipCardRevealSettingsDialog
+        open
+        onOpenChange={vi.fn()}
+        value={DEFAULT_FLIP_CARD_REVEAL_CONFIG}
+        onChange={onChange}
+        freestyleFlipMode={{ value: 'free', onChange: vi.fn() }}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('switch', { name: 'Enter 翻卡镜头追踪' }))
+    expect(onChange).toHaveBeenCalledWith({
+      ...DEFAULT_FLIP_CARD_REVEAL_CONFIG,
+      enterRevealFollow: false,
+    })
+  })
 })

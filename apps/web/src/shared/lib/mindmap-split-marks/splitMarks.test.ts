@@ -6,6 +6,7 @@ import {
   collectRootUid,
   derivePermanentMarkLevels,
   deriveSplitMarkLevels,
+  permanentMarkToggleLabel,
   togglePermanentMarkInDoc,
   type EditorDoc,
 } from '@/shared/lib/mindmap-split-marks/splitMarks'
@@ -68,6 +69,13 @@ describe('splitMarks levels', () => {
     const cleared = togglePermanentMarkInDoc(toggled.doc, 'b')
     expect(cleared.marked).toBe(false)
     expect(collectPermanentMarkUids(cleared.doc)).toEqual(['a'])
+  })
+
+  it('keeps the toolbar toggle copy stable with and without marks', () => {
+    expect(permanentMarkToggleLabel(false, 0)).toBe('永久标记')
+    expect(permanentMarkToggleLabel(false, 2)).toBe('永久标记（已标 2）')
+    expect(permanentMarkToggleLabel(true, 0)).toBe('退出永久标记')
+    expect(permanentMarkToggleLabel(true, 2)).toBe('退出永久标记（已标 2）')
   })
 
   it('accepts editor_doc JSON strings (unit-review session shape)', () => {

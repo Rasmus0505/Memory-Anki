@@ -43,6 +43,7 @@ import {
   collectPermanentMarkUids,
   colorForPermanentLevel,
   derivePermanentMarkLevels,
+  permanentMarkToggleLabel,
   togglePermanentMarkInDoc,
   type EditorDoc,
 } from '@/shared/lib/mindmap-split-marks/splitMarks'
@@ -288,6 +289,7 @@ export default function PalaceEdit() {
     | 'searchControl'
     | 'focusAction'
     | 'moreActions'
+    | 'permanentMarkAction'
     | 'importMindMapAction'
   > = {
     embedded: true,
@@ -314,19 +316,17 @@ export default function PalaceEdit() {
           onClick: () => mindMapFrameRef.current?.focusNode(selectedNodeUid),
         }
       : null,
+    // Edit-mode mode switch: a dedicated toolbar button, not an ⋯ item.
+    permanentMarkAction: {
+      label: permanentMarkToggleLabel(permanentMarkMode, permanentMarkHighlights.length),
+      active: permanentMarkMode,
+      onClick: handleTogglePermanentMarkMode,
+    },
     moreActions: [
       {
         label: '恢复点',
         onClick: () => { void page.handleOpenVersions() },
         opensOverlay: true,
-      },
-      {
-        label: permanentMarkMode
-          ? `退出永久标记${permanentMarkHighlights.length ? `（已标 ${permanentMarkHighlights.length}）` : ''}`
-          : permanentMarkHighlights.length
-            ? `永久标记（已标 ${permanentMarkHighlights.length}）`
-            : '永久标记',
-        onClick: handleTogglePermanentMarkMode,
       },
       {
         label: '复习进度',

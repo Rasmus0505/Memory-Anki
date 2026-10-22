@@ -38,6 +38,7 @@ type FlipCardToolbarExtensions = Pick<
   | 'importTextAction'
   | 'englishAction'
   | 'textAction'
+  | 'permanentMarkAction'
   | 'quizAction'
 >
 

@@ -770,10 +770,13 @@ describe('FreestyleUnitReviewCardView', () => {
     ).toEqual(['unit-node', 'other-unit'])
     const editMore = capturedPanelProps?.toolbarExtensions as {
       moreActions?: Array<{ label: string; onClick: () => void }>
+      permanentMarkAction?: { label: string; active?: boolean; onClick: () => void }
     }
     const labels = (editMore?.moreActions ?? []).map((item) => item.label)
     expect(labels).toContain('返回学习')
-    expect(labels).toContain('永久标记')
+    // 永久标记 is a dedicated toolbar button, not an ⋯ item.
+    expect(labels).not.toContain('永久标记')
+    expect(editMore?.permanentMarkAction).toMatchObject({ label: '永久标记', active: false })
     expect(labels).toContain('复习进度')
     expect(labels).toContain('复制导图')
     expect(labels).toContain('文字转脑图')
@@ -1108,9 +1111,9 @@ describe('FreestyleUnitReviewCardView', () => {
     await waitFor(() => expect(capturedPanelProps?.displayMode).toBe('edit'))
 
     const editMore = capturedPanelProps?.toolbarExtensions as {
-      moreActions?: Array<{ label: string; onClick: () => void }>
+      permanentMarkAction?: { label: string; onClick: () => void }
     }
-    act(() => editMore?.moreActions?.find((item) => item.label === '永久标记')!.onClick())
+    act(() => editMore?.permanentMarkAction!.onClick())
     const onEditNodeClick = capturedPanelProps?.onEditNodeClick as (
       nodes: MindMapSelection[],
     ) => void
@@ -1134,11 +1137,11 @@ describe('FreestyleUnitReviewCardView', () => {
 
     const callCount = persistMocks.persistPalaceEditor.mock.calls.length
     const markMore = capturedPanelProps?.toolbarExtensions as {
-      moreActions?: Array<{ label: string; onClick: () => void }>
+      permanentMarkAction?: { label: string; active?: boolean; onClick: () => void }
     }
-    const exitMark = markMore?.moreActions?.find((item) => item.label.startsWith('退出永久标记'))
-    expect(exitMark).toBeTruthy()
-    act(() => exitMark!.onClick())
+    expect(markMore?.permanentMarkAction?.active).toBe(true)
+    expect(markMore?.permanentMarkAction?.label.startsWith('退出永久标记')).toBe(true)
+    act(() => markMore!.permanentMarkAction!.onClick())
     await act(async () => {
       await Promise.resolve()
     })
@@ -1499,6 +1502,34 @@ describe('FreestyleUnitReviewCardView', () => {
         }
       }).editor_doc.root.children[0]?.children[0]?.data.text,
     ).toBe('待回忆')
+  })
+
+  it('flips on Enter without moving the camera when camera tracking is off', async () => {
+    writeFlipCardRevealSettings({
+      granularity: 'level',
+      stage: 'two-step',
+      enterRevealFollow: false,
+    })
+    const card = buildCard('unit-enter-no-follow')
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!))
+    renderCard(card)
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    const revealTarget = new KeyboardEvent('keydown', {
+      key: 'Enter',
+      bubbles: true,
+      cancelable: true,
+    })
+    act(() => window.dispatchEvent(revealTarget))
+    expect(revealTarget.defaultPrevented).toBe(true)
+    expect(capturedPanelProps?.revealFollowNonce ?? 0).toBe(0)
+    expect(capturedPanelProps?.revealFollowNodeIds).toEqual([])
+    flushRevealFrame()
+    expect(
+      (capturedPanelProps?.visibleEditorState as {
+        editor_doc: { root: { children: Array<{ data: { text: string } }> } }
+      }).editor_doc.root.children[0]?.data.text,
+    ).toBe('当前单元')
   })
 
   it('no longer treats Shift as a hide-to-root shortcut', async () => {

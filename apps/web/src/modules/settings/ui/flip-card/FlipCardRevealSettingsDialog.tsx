@@ -93,7 +93,7 @@ export function FlipCardRevealSettingsDialog({
       >
         <DialogHeader>
           <DialogTitle>翻卡设置</DialogTitle>
-          <DialogDescription>点击揭示、双击空白画布进入编辑，以及评分后是否翻页。</DialogDescription>
+          <DialogDescription>点击揭示、Enter 翻卡、双击空白画布进入编辑，以及评分后是否翻页。</DialogDescription>
         </DialogHeader>
 
         <DialogBody className="space-y-4">
@@ -133,6 +133,18 @@ export function FlipCardRevealSettingsDialog({
                     { value: 'free', label: '随心模式' },
                     { value: 'focused', label: '专线模式' },
                   ]}
+                />
+              </SettingRow>
+            ) : null}
+            {freestyleFlipMode ? (
+              <SettingRow
+                label="Enter 翻卡镜头追踪"
+                hint="翻出的卡片自动移入视野；关闭后视角保持不动"
+              >
+                <Switch
+                  checked={value.enterRevealFollow !== false}
+                  onCheckedChange={(checked) => onChange({ ...value, enterRevealFollow: checked })}
+                  aria-label="Enter 翻卡镜头追踪"
                 />
               </SettingRow>
             ) : null}

@@ -7,6 +7,7 @@ import {
   Eye,
   FolderTree,
   Languages,
+  MapPin,
   MoreHorizontal,
   PenLine,  Search,
   Target,
@@ -203,6 +204,8 @@ export interface MindMapPageToolbarProps {
   englishAction?: MindMapToolbarToggleAction | null
   /** Dedicated text-selection toggle for review/practice hosts. */
   textAction?: MindMapToolbarToggleAction | null
+  /** Dedicated permanent-mark mode toggle for edit hosts. Not buried in ⋯. */
+  permanentMarkAction?: MindMapToolbarToggleAction | null
   quizAction?: MindMapToolbarAction | null
   immersiveAction?: MindMapToolbarToggleAction | null
   nativeFullscreenAction?: MindMapToolbarToggleAction | null
@@ -222,14 +225,15 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
   const {
     compact = false, embedded = false, className, taskControl = null, searchControl = null, focusAction = null, fitAction = null, ratingAction = null,
     moreActions = [], segmentControl = null, modeControl = null, modeToggle = null, importMindMapAction = null,
-    importTextAction = null, englishAction = null, textAction = null, quizAction = null,
+    importTextAction = null, englishAction = null, textAction = null, permanentMarkAction = null, quizAction = null,
     immersiveAction = null, nativeFullscreenAction = null, clearUiAction = null,
   } = props
   // englishAction stays a dedicated icon toggle immediately left of 文字模式.
   // quizAction is the first primary icon; do not also bury it in ⋯ (avoids duplicate "做题").
   const legacyActions = [importMindMapAction, importTextAction].filter(Boolean) as MindMapToolbarAction[]
   const overflowActions = [...moreActions, ...legacyActions, immersiveAction, nativeFullscreenAction, clearUiAction].filter(Boolean) as OverflowAction[]
-  // moreActions alone must open the ⋯ menu (freestyle: 进入编辑 / 永久标记 live only there).
+  // moreActions alone must open the ⋯ menu (freestyle: 进入编辑 lives there).
+  // Toggles that shape the edit session (英语 / 文字 / 永久标记) stay dedicated buttons.
   const modern = Boolean(
     taskControl || searchControl || focusAction || fitAction || ratingAction || moreActions.length > 0,
   )
@@ -328,6 +332,21 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
           >
             <TextSelect className="sm:hidden" aria-hidden />
             <span className="max-sm:hidden">{textAction.label}</span>
+          </Button>
+        ) : null}
+        {permanentMarkAction ? (
+          <Button
+            type="button"
+            variant={permanentMarkAction.active ? 'default' : 'outline'}
+            disabled={permanentMarkAction.disabled}
+            aria-pressed={Boolean(permanentMarkAction.active)}
+            aria-label={permanentMarkAction.label}
+            title={permanentMarkAction.label}
+            onClick={permanentMarkAction.onClick}
+            className={COMPACT_TOGGLE_CLASS}
+          >
+            <MapPin className="size-4" aria-hidden />
+            <span className="max-sm:hidden">{permanentMarkAction.label}</span>
           </Button>
         ) : null}
         {!modern ? legacyActions.map((action) => <Button key={action.label} type="button" variant="outline" disabled={action.disabled} onClick={action.onClick}>{action.label}</Button>) : null}

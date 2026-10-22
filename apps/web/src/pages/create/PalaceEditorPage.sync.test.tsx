@@ -57,6 +57,35 @@ describe('usePalaceEditPage sync behavior', () => {
     expect(screen.getByText('mindmap-edit-editable-plain-preserve-import-sync')).toBeTruthy()
   })
 
+  it('exposes 永久标记 as a dedicated toolbar button instead of an ⋯ item', async () => {
+    vi.spyOn(palaceApi, 'getPalaceEditorApi').mockResolvedValue({
+      palace: {
+        id: 101,
+        title: '测试宫殿',
+        description: '',
+        created_at: null,
+        attachments: [],
+        chapters: [],
+      },
+      editor_doc: { root: { data: { text: '测试宫殿', uid: 'root-1' }, children: [] } },
+      editor_config: {},
+      editor_local_config: {},
+      lang: 'zh',
+    } as never)
+
+    renderPalaceEditPage()
+
+    const mark = await screen.findByRole('button', { name: '永久标记' })
+    expect(mark.getAttribute('aria-pressed')).toBe('false')
+    // Dedicated button only: the old ⋯ entry must not leave a duplicate behind.
+    expect(screen.getAllByRole('button', { name: '永久标记' })).toHaveLength(1)
+
+    fireEvent.click(mark)
+
+    const active = await screen.findByRole('button', { name: '退出永久标记' })
+    expect(active.getAttribute('aria-pressed')).toBe('true')
+  })
+
   it('keeps the same mind map host instance when saving meta and only uses soft sync props', async () => {
     vi.spyOn(palaceApi, 'getPalaceEditorApi').mockResolvedValue({
       palace: {

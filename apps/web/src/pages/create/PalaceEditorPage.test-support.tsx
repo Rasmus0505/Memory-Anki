@@ -201,6 +201,7 @@ vi.mock('@/modules/content/ui/mindmap-editor', async (importOriginal) => ({
     importMindMapAction,
     importTextAction,
     englishAction,
+    permanentMarkAction,
     immersiveAction,
     nativeFullscreenAction,
     clearUiAction,
@@ -269,6 +270,15 @@ vi.mock('@/modules/content/ui/mindmap-editor', async (importOriginal) => ({
       {importMindMapAction ? <button type="button" onClick={importMindMapAction.onClick}>{importMindMapAction.label}</button> : null}
       {importTextAction ? <button type="button" onClick={importTextAction.onClick}>{importTextAction.label}</button> : null}
       {englishAction ? <button type="button" onClick={englishAction.onClick}>{englishAction.label}</button> : null}
+      {permanentMarkAction ? (
+        <button
+          type="button"
+          aria-pressed={Boolean(permanentMarkAction.active)}
+          onClick={permanentMarkAction.onClick}
+        >
+          {permanentMarkAction.label}
+        </button>
+      ) : null}
       {immersiveAction ? <button type="button" onClick={immersiveAction.onClick}>{immersiveAction.label}</button> : null}
       {nativeFullscreenAction ? <button type="button" onClick={nativeFullscreenAction.onClick}>{nativeFullscreenAction.label}</button> : null}
       {clearUiAction ? <button type="button" onClick={clearUiAction.onClick}>{clearUiAction.label}</button> : null}

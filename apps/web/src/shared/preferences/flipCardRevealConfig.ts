@@ -7,12 +7,18 @@ export interface FlipCardRevealConfig {
   stage: RevealStage
   /** Double-click blank canvas edit: current unit spine or the whole palace. */
   editScope?: FlipCardEditScope
+  /**
+   * Enter flip pans the canvas to the cards that step just revealed. Keyboard-only
+   * study needs it on; turning it off keeps the viewport wherever the learner left it.
+   */
+  enterRevealFollow?: boolean
 }
 
 export const DEFAULT_FLIP_CARD_REVEAL_CONFIG: FlipCardRevealConfig = {
   granularity: 'level',
   stage: 'two-step',
   editScope: 'unit',
+  enterRevealFollow: true,
 }
 
 export function sanitizeFlipCardRevealConfig(value: unknown): FlipCardRevealConfig {
@@ -23,5 +29,6 @@ export function sanitizeFlipCardRevealConfig(value: unknown): FlipCardRevealConf
     granularity: raw.granularity === 'single' ? 'single' : 'level',
     stage: raw.stage === 'direct' ? 'direct' : 'two-step',
     editScope: raw.editScope === 'palace' ? 'palace' : 'unit',
+    enterRevealFollow: raw.enterRevealFollow !== false,
   }
 }

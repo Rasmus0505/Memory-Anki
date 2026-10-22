@@ -18,6 +18,7 @@ type ToolbarExtensions = Pick<
   | 'importTextAction'
   | 'englishAction'
   | 'textAction'
+  | 'permanentMarkAction'
   | 'quizAction'
 >
 

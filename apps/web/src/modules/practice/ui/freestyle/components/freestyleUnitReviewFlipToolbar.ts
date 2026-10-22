@@ -3,6 +3,27 @@ import { copyMindMapToClipboard, exportMindMapToFile } from '@/modules/content/p
 import { usePalaceQuizNodeBindings } from '@/modules/quiz/public'
 import type { FreestyleReviewUnitCard, MindMapEditorState } from '@/shared/api/contracts'
 import { toast } from '@/shared/feedback/toast'
+import { permanentMarkToggleLabel } from '@/shared/lib/mindmap-split-marks/splitMarks'
+
+/** Edit-mode 永久标记 switch for the mind-map toolbar (not the ⋯ menu). */
+export function buildPermanentMarkToolbarAction({
+  active,
+  markedCount,
+  disabled,
+  onToggle,
+}: {
+  active: boolean
+  markedCount: number
+  disabled?: boolean
+  onToggle: () => void
+}) {
+  return {
+    label: permanentMarkToggleLabel(active, markedCount),
+    active,
+    disabled,
+    onClick: onToggle,
+  }
+}
 
 export function useFreestyleUnitReviewNodeQuiz({
   palaceId,
@@ -70,10 +91,6 @@ export function useFreestyleUnitReviewMoreActions({
   isEditMode,
   handleToggleMode,
   setReviewUnitsPanelOpen,
-  permanentMarkMode,
-  permanentMarkHighlightsLength,
-  handleTogglePermanentMarkMode,
-  savingEdit,
   onTextToMindMap,
 }: {
   card: FreestyleReviewUnitCard
@@ -82,10 +99,6 @@ export function useFreestyleUnitReviewMoreActions({
   isEditMode: boolean
   handleToggleMode: () => void
   setReviewUnitsPanelOpen: (open: boolean) => void
-  permanentMarkMode: boolean
-  permanentMarkHighlightsLength: number
-  handleTogglePermanentMarkMode: () => void
-  savingEdit: boolean
   onTextToMindMap: () => void
 }) {
   return useMemo(() => {
@@ -133,30 +146,14 @@ export function useFreestyleUnitReviewMoreActions({
       },
       disabled: !editorState?.editor_doc,
     })
-    if (isEditMode) {
-      actions.push({
-        label: permanentMarkMode
-          ? `退出永久标记${permanentMarkHighlightsLength ? `（已标 ${permanentMarkHighlightsLength}）` : ''}`
-          : permanentMarkHighlightsLength
-            ? `永久标记（已标 ${permanentMarkHighlightsLength}）`
-            : '永久标记',
-        onClick: handleTogglePermanentMarkMode,
-        disabled: permanentMarkMode ? false : savingEdit,
-        separatorBefore: true,
-      })
-    }
     return actions
   }, [
     card.palace_id,
     card.palace_title,
     editorState,
     handleToggleMode,
-    handleTogglePermanentMarkMode,
     isEditMode,
     onTextToMindMap,
-    permanentMarkHighlightsLength,
-    permanentMarkMode,
-    savingEdit,
     sessionTitle,
     setReviewUnitsPanelOpen,
   ])

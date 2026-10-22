@@ -89,6 +89,27 @@ describe('MindMapPageToolbar', () => {
     expect(onText).toHaveBeenCalledTimes(1)
   })
 
+  it('renders 永久标记 as a dedicated toggle outside the ⋯ menu', async () => {
+    const onMark = vi.fn()
+    render(
+      <MindMapPageToolbar
+        textAction={{ label: '文字', onClick: vi.fn() }}
+        permanentMarkAction={{ label: '永久标记（已标 2）', active: true, onClick: onMark }}
+        moreActions={[{ label: '进入编辑', onClick: vi.fn() }]}
+      />,
+    )
+
+    const mark = screen.getByRole('button', { name: '永久标记（已标 2）' })
+    expect(mark.getAttribute('aria-pressed')).toBe('true')
+    expect(mark.textContent).toContain('永久标记（已标 2）')
+    fireEvent.click(mark)
+    expect(onMark).toHaveBeenCalledTimes(1)
+
+    fireEvent.keyDown(screen.getByRole('button', { name: '更多脑图操作' }), { key: 'Enter' })
+    await screen.findByRole('menuitem', { name: '进入编辑' })
+    expect(screen.queryByRole('menuitem', { name: '永久标记（已标 2）' })).toBeNull()
+  })
+
   it('opens ⋯ from moreActions alone and keeps 做题 as the first primary button', async () => {
     const onEdit = vi.fn()
     const onQuiz = vi.fn()

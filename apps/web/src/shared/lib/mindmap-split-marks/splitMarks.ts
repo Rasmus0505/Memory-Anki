@@ -42,6 +42,16 @@ export type EditorDoc = {
 export type SplitMarkChipTone = 'warning' | 'info' | 'success' | 'danger' | 'neutral'
 
 /**
+ * Toolbar label for the permanent-mark toggle. Freestyle edit mode and the
+ * palace editor both expose this as a dedicated toolbar button, so the copy
+ * lives here instead of drifting between the two hosts.
+ */
+export function permanentMarkToggleLabel(active: boolean, markedCount: number): string {
+  const countSuffix = markedCount > 0 ? `（已标 ${markedCount}）` : ''
+  return active ? `退出永久标记${countSuffix}` : `永久标记${countSuffix}`
+}
+
+/**
  * Unit-review / freestyle sessions historically returned editor_doc as a raw JSON
  * string. Permanent-mark helpers need an object with `.root`; coerce here so L1/L2
  * chips and click-to-toggle still work when a host forgets to parse.

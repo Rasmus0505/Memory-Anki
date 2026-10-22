@@ -1,3 +1,4 @@
+import type { MouseEvent } from 'react'
 import { Check, ChevronDown, ChevronUp } from 'lucide-react'
 import { FX_ANCHORS } from '@/shared/fx'
 
@@ -23,6 +24,13 @@ export function FreestyleFeedPager({
   onNext: () => void
   onComplete: () => void
 }) {
+  // Paging is a one-shot: release focus so the next Enter flips the card that
+  // owns the screen instead of paging again (the next unit may still be loading).
+  const activateAndRelease = (action: () => void) => (event: MouseEvent<HTMLButtonElement>) => {
+    event.currentTarget.blur()
+    action()
+  }
+
   return (
     <div className="pointer-events-none absolute right-3 top-1/2 z-30 -translate-y-1/2">
       <div
@@ -36,7 +44,7 @@ export function FreestyleFeedPager({
           title={previousTitle}
           aria-label="上一张"
           disabled={!canGoPrevious}
-          onClick={onPrevious}
+          onClick={activateAndRelease(onPrevious)}
         >
           <ChevronUp className="size-5 sm:size-4" />
         </button>
@@ -46,7 +54,7 @@ export function FreestyleFeedPager({
           title="下一张"
           aria-label="下一张"
           disabled={!canGoNext}
-          onClick={onNext}
+          onClick={activateAndRelease(onNext)}
         >
           <ChevronDown className="size-5 sm:size-4" />
         </button>
@@ -56,7 +64,7 @@ export function FreestyleFeedPager({
           title={completeTitle}
           aria-label="完成"
           disabled={!canComplete}
-          onClick={onComplete}
+          onClick={activateAndRelease(onComplete)}
         >
           <Check className="size-5 sm:size-4" />
         </button>
