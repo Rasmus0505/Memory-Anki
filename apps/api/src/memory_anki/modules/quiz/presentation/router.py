@@ -427,10 +427,16 @@ def api_record_choice_attempt(
     if existing_response is not None:
         return existing_response
     try:
+        raw_ids = data.get("selected_option_ids")
+        selected: str | list[str]
+        if isinstance(raw_ids, list):
+            selected = [str(item) for item in raw_ids]
+        else:
+            selected = str(data.get("selected_option_id") or "")
         return record_choice_attempt_command(
             s,
             question_id,
-            str(data.get("selected_option_id") or ""),
+            selected,
             uow=SqlAlchemyUnitOfWork(s),
             before_commit=mutation.save,
         )

@@ -61,6 +61,7 @@ export interface PalaceQuizOcrSource {
 
 export interface PalaceQuizAnswerPayload {
   correct_option_id?: string
+  correct_option_ids?: string[]
   reference_answer?: string
   correct_answer?: boolean
   false_explanation?: string

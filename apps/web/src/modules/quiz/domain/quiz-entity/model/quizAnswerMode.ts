@@ -29,18 +29,35 @@ export function isQuizChoiceAttemptClosed(
   state:
     | {
         selectedOptionId?: string | null
+        selectedOptionIds?: string[] | null
         resolved?: boolean
         shortAnswerSubmitted?: boolean
       }
     | undefined,
 ) {
-  return Boolean(state?.selectedOptionId)
+  return Boolean(state?.selectedOptionId) || Boolean(state?.resolved && state?.selectedOptionIds?.length)
+}
+
+export function toggleQuizOptionSelection(selected: string[] | undefined, optionId: string) {
+  const picked = selected || []
+  return picked.includes(optionId)
+    ? picked.filter((item) => item !== optionId)
+    : [...picked, optionId].sort()
 }
 
 export function mcqReferenceAnswer(question: {
   options?: Array<{ id: string; text: string }>
-  answer_payload?: { correct_option_id?: string }
+  answer_payload?: { correct_option_id?: string; correct_option_ids?: string[] }
 }) {
+  const multiIds = (question.answer_payload?.correct_option_ids || []).map((item) => String(item).trim()).filter(Boolean)
+  if (multiIds.length > 1) {
+    return multiIds
+      .map((id) => {
+        const option = (question.options || []).find((item) => item.id === id)
+        return option?.text?.trim() ? `${id}. ${option.text.trim()}` : id
+      })
+      .join('；')
+  }
   const correctId = String(question.answer_payload?.correct_option_id || '').trim()
   const option = (question.options || []).find((item) => item.id === correctId)
   const text = option?.text?.trim() || ''
@@ -69,8 +86,10 @@ export function quizDisplayStem(
 export function mcqSubjectiveReferenceAnswer(question: {
   stem?: string
   options?: Array<{ id: string; text: string }>
-  answer_payload?: { correct_option_id?: string }
+  answer_payload?: { correct_option_id?: string; correct_option_ids?: string[] }
 }) {
+  const multiIds = (question.answer_payload?.correct_option_ids || []).filter(Boolean)
+  if (multiIds.length > 1) return `正确答案：${multiIds.join('')}`
   return rewriteMcqForSubjective({
     stem: question.stem,
     options: question.options,
@@ -80,13 +99,19 @@ export function mcqSubjectiveReferenceAnswer(question: {
 
 export function mcqRevealOptions(question: {
   options?: Array<{ id: string; text: string }>
-  answer_payload?: { correct_option_id?: string }
+  answer_payload?: { correct_option_id?: string; correct_option_ids?: string[] }
 }) {
+  const correctIds = new Set(
+    (question.answer_payload?.correct_option_ids || [])
+      .map((item) => String(item).trim())
+      .filter(Boolean),
+  )
   const correctId = String(question.answer_payload?.correct_option_id || '').trim()
+  if (correctIds.size === 0 && correctId) correctIds.add(correctId)
   return (question.options || []).map((item) => ({
     id: item.id,
     text: item.text,
-    correct: Boolean(correctId) && item.id === correctId,
+    correct: correctIds.has(item.id),
   }))
 }
 

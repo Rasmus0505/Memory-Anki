@@ -79,6 +79,20 @@ def normalize_multiple_choice_answer(
     *,
     options: list[dict[str, str]],
 ) -> dict[str, Any]:
+    raw_ids = payload.get("correct_option_ids")
+    if isinstance(raw_ids, list):
+        option_ids = [str(item).strip() for item in raw_ids if str(item).strip()]
+        if len(option_ids) < 2:
+            raise PalaceQuizValidationError("多选题至少需要 2 个正确选项。")
+        if len(set(option_ids)) != len(option_ids):
+            raise PalaceQuizValidationError("多选题正确选项不能重复。")
+        known = {item["id"] for item in options}
+        missing = [item for item in option_ids if item not in known]
+        if missing:
+            raise PalaceQuizValidationError("多选题正确选项必须出现在选项列表中。")
+        ordered = [item["id"] for item in options if item["id"] in set(option_ids)]
+        return {"correct_option_id": ordered[0], "correct_option_ids": ordered}
+
     correct_option_id = str(payload.get("correct_option_id") or "").strip()
     if len(options) < 2:
         raise PalaceQuizValidationError("选择题至少需要 2 个选项。")
@@ -260,6 +274,8 @@ def build_question_answer_payload_input(payload: dict[str, Any]) -> dict[str, An
         answer_payload_input = {}
     if "correct_option_id" in payload and "correct_option_id" not in answer_payload_input:
         answer_payload_input["correct_option_id"] = payload.get("correct_option_id")
+    if "correct_option_ids" in payload and "correct_option_ids" not in answer_payload_input:
+        answer_payload_input["correct_option_ids"] = payload.get("correct_option_ids")
     if "reference_answer" in payload and "reference_answer" not in answer_payload_input:
         answer_payload_input["reference_answer"] = payload.get("reference_answer")
     for key in _LEGACY_ANSWER_PAYLOAD_KEYS:

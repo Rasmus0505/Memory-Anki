@@ -41,7 +41,7 @@ export function useQuizAttemptOrchestration({
   emitFeedback: (event: QuizFeedbackEvent, options?: QuizFeedbackOptions) => void
   onChoiceStart?: (options: {
     question: PalaceQuizQuestion
-    optionId: string
+    optionId: string | string[]
     correct: boolean
   }) => void
   emitChoiceStatErrorFeedback?: boolean
@@ -49,12 +49,16 @@ export function useQuizAttemptOrchestration({
   shouldToastAttemptError?: (questionId: number) => boolean
 }) {
   const handleChoiceSelect = useCallback(
-    (question: PalaceQuizQuestion, optionId: string, correctOverride?: boolean) => {
+    (question: PalaceQuizQuestion, optionId: string | string[], correctOverride?: boolean) => {
       const currentState = adapter.readQuestionState(question.id)
       // Skip a second choice record. Subjective recall sets resolved without a
       // selected option, and freestyle may resolve the choice in the same click.
       if (isQuizChoiceAttemptClosed(currentState) && correctOverride === undefined) return
-      const correct = correctOverride ?? question.answer_payload.correct_option_id === optionId
+      const correct = correctOverride ?? (Array.isArray(optionId)
+        ? optionId.length > 0 &&
+          optionId.every((item) => (question.answer_payload.correct_option_ids || []).includes(item)) &&
+          optionId.length === (question.answer_payload.correct_option_ids || []).length
+        : question.answer_payload.correct_option_id === optionId)
       onChoiceStart?.({ question, optionId, correct })
       adapter.applyUpdatedQuestion(withOptimisticQuizAttempt(question, correct))
       void recordPalaceQuizChoiceAttemptApi(question.id, optionId)

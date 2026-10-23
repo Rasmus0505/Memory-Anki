@@ -190,7 +190,7 @@ def commit_recorded_choice_attempt(
     session: Session,
     *,
     row: PalaceQuizQuestion,
-    selected_option_id: str,
+    selected_option_id: str | list[str],
     is_correct: bool,
     commit: bool = True,
 ) -> dict[str, object]:
@@ -200,9 +200,15 @@ def commit_recorded_choice_attempt(
         session.refresh(row)
     else:
         session.flush()
+    selected_ids = (
+        [str(item) for item in selected_option_id]
+        if isinstance(selected_option_id, list)
+        else [str(selected_option_id)]
+    )
     return {
         "question": serialize_question(row),
-        "selected_option_id": selected_option_id,
+        "selected_option_id": selected_ids[0],
+        "selected_option_ids": selected_ids,
         "is_correct": is_correct,
     }
 

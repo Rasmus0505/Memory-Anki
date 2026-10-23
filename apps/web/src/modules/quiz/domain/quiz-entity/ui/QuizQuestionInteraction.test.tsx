@@ -88,6 +88,34 @@ describe('QuizQuestionInteraction', () => {
     expect(screen.getByText('再调整一下')).toBeTruthy()
   })
 
+  it('supports multi-select choice questions with set-equality grading', () => {
+    const { rerenderWithLatestState } = renderInteraction({
+      question_type: 'multiple_choice',
+      stem: '下列属于细胞结构的有？',
+      options: [
+        { id: 'A', text: '细胞膜' },
+        { id: 'B', text: '细胞核' },
+        { id: 'C', text: '细胞壁' },
+        { id: 'D', text: '核糖体' },
+      ],
+      answer_payload: { correct_option_id: 'A', correct_option_ids: ['A', 'B', 'D'] },
+      analysis: '细胞膜、细胞核和核糖体都属于细胞结构。',
+      source_meta: MANUAL_SOURCE,
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /A\. 细胞膜/ }))
+    rerenderWithLatestState()
+    fireEvent.click(screen.getByRole('button', { name: /B\. 细胞核/ }))
+    rerenderWithLatestState()
+    fireEvent.click(screen.getByRole('button', { name: /D\. 核糖体/ }))
+    rerenderWithLatestState()
+    fireEvent.click(screen.getByRole('button', { name: '提交答案' }))
+    rerenderWithLatestState()
+
+    expect(screen.getByText('回答正确')).toBeTruthy()
+    expect(screen.getByText('正确答案：ABD')).toBeTruthy()
+  })
+
   it('supports fill_blank questions and validates all blanks together', () => {
     const { rerenderWithLatestState } = renderInteraction({
       question_type: 'fill_blank',

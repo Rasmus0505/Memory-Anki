@@ -43,7 +43,7 @@ export function FreestyleQuizCardView({
   state: QuizRuntimeState | undefined
   answeredBefore: boolean
   onStateChange: (updater: (current: QuizRuntimeState) => QuizRuntimeState) => void
-  onChoiceResolve: (optionId: string, isCorrect: boolean) => void
+  onChoiceResolve: (optionId: string | string[], isCorrect: boolean) => void
   onShortAnswerSubmit: () => void
   /** Immersive feed: explicit next after reading analysis. */
   onRequestNext?: () => void
@@ -142,6 +142,28 @@ export function FreestyleQuizCardView({
       if (!option) return
       event.preventDefault()
       if (!match.run) return
+      const correctIds = (card.question.answer_payload.correct_option_ids || []).map(String)
+      if (correctIds.length > 1) {
+        if (match.id.startsWith('select_option_')) {
+          onStateChange((current) => {
+            const picked = current.selectedOptionIds || []
+            return {
+              ...current,
+              selectedOptionIds: picked.includes(option.id)
+                ? picked.filter((item) => item !== option.id)
+                : [...picked, option.id].sort(),
+            }
+          })
+          return
+        }
+        const picked = state?.selectedOptionIds || []
+        if (picked.length === 0) return
+        const correct =
+          picked.length === correctIds.length && picked.every((item) => correctIds.includes(item))
+        onStateChange((current) => ({ ...current, resolved: true, correct }))
+        onChoiceResolve(picked, correct)
+        return
+      }
       const correct = option.id === (card.question.answer_payload.correct_option_id || '')
       onStateChange((current) => ({
         ...current,

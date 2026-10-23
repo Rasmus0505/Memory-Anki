@@ -1286,5 +1286,40 @@ class PalaceQuizRouteTests(RouterTestCase):
         self.assertEqual(matched, [])
 
 
+    def test_multiple_choice_accepts_multiple_correct_options_and_grades_set_equality(self):
+        create_response = self.client.post(
+            "/api/v1/palaces/2/quiz-questions",
+            json={
+                "question_type": "multiple_choice",
+                "stem": "下列属于细胞结构的有？",
+                "options": [
+                    {"id": "A", "text": "细胞膜"},
+                    {"id": "B", "text": "细胞核"},
+                    {"id": "C", "text": "细胞壁"},
+                    {"id": "D", "text": "核糖体"},
+                ],
+                "correct_option_ids": ["A", "B", "D"],
+            },
+        )
+        self.assertEqual(create_response.status_code, 200)
+        created = create_response.json()["item"]
+        self.assertEqual(created["answer_payload"]["correct_option_ids"], ["A", "B", "D"])
+
+        wrong_response = self.client.post(
+            f"/api/v1/palace-quiz-questions/{created['id']}/choice-attempts",
+            json={"selected_option_ids": ["A", "B"]},
+        )
+        self.assertEqual(wrong_response.status_code, 200)
+        self.assertFalse(wrong_response.json()["is_correct"])
+
+        correct_response = self.client.post(
+            f"/api/v1/palace-quiz-questions/{created['id']}/choice-attempts",
+            json={"selected_option_ids": ["D", "A", "B"]},
+        )
+        self.assertEqual(correct_response.status_code, 200)
+        self.assertTrue(correct_response.json()["is_correct"])
+        self.assertEqual(correct_response.json()["selected_option_ids"], ["D", "A", "B"])
+
+
 if __name__ == "__main__":
     unittest.main()

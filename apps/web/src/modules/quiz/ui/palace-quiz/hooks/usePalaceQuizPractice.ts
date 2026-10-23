@@ -59,11 +59,11 @@ export function usePalaceQuizPractice({
     emitFeedback: emitQuizFeedback,
     emitChoiceStatErrorFeedback: true,
     onChoiceStart: ({ optionId }) => {
-      emitQuizFeedback('quiz_answer_select', { label: optionId, audioScope: 'local' })
+      emitQuizFeedback('quiz_answer_select', { label: Array.isArray(optionId) ? optionId.join('') : optionId, audioScope: 'local' })
     },
   })
 
-  const handleChoiceSelect = (question: PalaceQuizQuestion, optionId: string) => {
+  const handleChoiceSelect = (question: PalaceQuizQuestion, optionId: string | string[]) => {
     orchestration.handleChoiceSelect(question, optionId)
   }
 

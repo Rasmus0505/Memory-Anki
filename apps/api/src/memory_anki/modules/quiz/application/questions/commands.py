@@ -409,19 +409,25 @@ def purge_trash_questions(session: Session) -> int:
 def record_choice_attempt(
     session: Session,
     question_id: int,
-    selected_option_id: str,
+    selected_option_id: str | list[str],
     *,
     commit: bool = True,
 ) -> dict[str, object]:
     question = get_question_or_raise(session, question_id)
     if question.question_type != QUESTION_TYPE_MULTIPLE_CHOICE:
         raise PalaceQuizValidationError("只有选择题可以累计对错统计。")
-    normalized_selected_option_id = str(selected_option_id or "").strip()
-    if not normalized_selected_option_id:
+    if isinstance(selected_option_id, list):
+        selected_ids = [str(item or "").strip() for item in selected_option_id if str(item or "").strip()]
+    else:
+        selected_ids = [str(selected_option_id or "").strip()] if str(selected_option_id or "").strip() else []
+    if not selected_ids:
         raise PalaceQuizValidationError("请选择一个选项。")
     answer_payload = json_load(question.answer_payload_json, {})
-    correct_option_id = str(answer_payload.get("correct_option_id") or "").strip()
-    is_correct = normalized_selected_option_id == correct_option_id
+    correct_ids = answer_payload.get("correct_option_ids")
+    if not isinstance(correct_ids, list) or not correct_ids:
+        correct_ids = [str(answer_payload.get("correct_option_id") or "").strip()]
+    correct_ids = [str(item) for item in correct_ids if str(item).strip()]
+    is_correct = set(selected_ids) == set(correct_ids)
     question.attempt_count += 1
     if is_correct:
         question.correct_count += 1
@@ -434,7 +440,10 @@ def record_choice_attempt(
             "palace_id": question.palace_id,
             "chapter_id": question.classified_chapter_id or question.source_chapter_id,
             "scene": "palace_quiz",
-            "answer_payload": {"selected_option_id": normalized_selected_option_id},
+            "answer_payload": {
+                "selected_option_id": selected_ids[0],
+                "selected_option_ids": selected_ids,
+            },
             "is_correct": is_correct,
         },
         commit=False,
@@ -442,7 +451,7 @@ def record_choice_attempt(
     return commit_recorded_choice_attempt(
         session,
         row=question,
-        selected_option_id=normalized_selected_option_id,
+        selected_option_id=selected_ids,
         is_correct=is_correct,
         commit=commit,
     )

@@ -10,6 +10,12 @@ export function buildAttemptAnswerPayload(
     if (state.shortAnswerSubmitted || (state.shortAnswerText && !state.selectedOptionId)) {
       return { user_answer: state.shortAnswerText || '' }
     }
+    if (state.selectedOptionIds?.length) {
+      return {
+        selected_option_id: state.selectedOptionIds[0],
+        selected_option_ids: state.selectedOptionIds,
+      }
+    }
     return { selected_option_id: state.selectedOptionId || '' }
   }
   if (question.question_type === 'true_false') {

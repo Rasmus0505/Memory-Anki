@@ -262,17 +262,24 @@ export function setPalaceQuizQuestionMarkedApi(questionId: number, marked: boole
 
 export function recordPalaceQuizChoiceAttemptApi(
   questionId: number,
-  selectedOptionId: string,
+  selectedOptionId: string | string[],
 ) {
+  const selectedIds = Array.isArray(selectedOptionId) ? selectedOptionId : [selectedOptionId]
+  const resourceKeyPart = selectedIds.join('')
   return request<{
     question: PalaceQuizQuestion
     selected_option_id: string
+    selected_option_ids?: string[]
     is_correct: boolean
   }>(`/palace-quiz-questions/${questionId}/choice-attempts`, {
     method: 'POST',
-    body: JSON.stringify({ selected_option_id: selectedOptionId }),
+    body: JSON.stringify(
+      Array.isArray(selectedOptionId)
+        ? { selected_option_ids: selectedIds }
+        : { selected_option_id: selectedOptionId },
+    ),
     persistence: {
-      resourceKey: `palace-quiz-question:${questionId}:attempt:${selectedOptionId}`,
+      resourceKey: `palace-quiz-question:${questionId}:attempt:${resourceKeyPart}`,
       description: '累计选择题作答统计',
       replayMode: 'manual',
     },

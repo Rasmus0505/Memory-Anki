@@ -73,7 +73,7 @@ def batch_create_chapter_questions_command(
 def record_choice_attempt_command(
     session: Session,
     question_id: int,
-    selected_option_id: str,
+    selected_option_id: str | list[str],
     *,
     uow: UnitOfWork,
     before_commit: ResponseCallback | None = None,

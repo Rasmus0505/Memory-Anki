@@ -80,7 +80,7 @@ export function QuizQuestionInteraction({
   /** Window-level Enter/Space submit. Off in list views that mount many questions. */
   captureShortcuts?: boolean
   onStateChange: (updater: (current: QuizRuntimeState) => QuizRuntimeState) => void
-  onChoiceResolve?: (optionId: string, isCorrect: boolean) => void
+  onChoiceResolve?: (optionId: string | string[], isCorrect: boolean) => void
   onShortAnswerSubmit?: () => void
   mark?: {
     marked: boolean
@@ -128,6 +128,81 @@ export function QuizQuestionInteraction({
     }
 
   if (question.question_type === 'multiple_choice') {
+    const correctOptionIds = (question.answer_payload.correct_option_ids || []).map(String)
+    if (correctOptionIds.length > 1) {
+      const selectedIds = currentState.selectedOptionIds || []
+      const choiceAnswered = isQuizChoiceAttemptClosed(currentState)
+      const toggle = (optionId: string) => {
+        if (choiceAnswered) return
+        onStateChange((current) => {
+          const picked = current.selectedOptionIds || []
+          return {
+            ...current,
+            selectedOptionIds: picked.includes(optionId)
+              ? picked.filter((item) => item !== optionId)
+              : [...picked, optionId].sort(),
+          }
+        })
+      }
+      const submit = () => {
+        if (choiceAnswered || selectedIds.length === 0) return
+        const correct =
+          selectedIds.length === correctOptionIds.length &&
+          selectedIds.every((item) => correctOptionIds.includes(item))
+        onStateChange((current) => ({ ...current, resolved: true, correct }))
+        onChoiceResolve?.(selectedIds, correct)
+      }
+      return (
+        <div className={cn('grid', compact ? 'gap-2' : 'gap-3')} data-quiz-question-interaction="multi-choice">
+          {modeToggle}
+          {(question.options || []).map((option, index) => {
+            const selected = selectedIds.includes(option.id)
+            const correct = correctOptionIds.includes(option.id)
+            return (
+              <button
+                key={option.id}
+                type="button"
+                data-quiz-option-index={index}
+                disabled={choiceAnswered}
+                onClick={() => toggle(option.id)}
+                className={cn(
+                  'border text-left text-sm transition-colors',
+                  compact ? 'rounded-xl px-3 py-2' : 'rounded-lg px-4 py-3',
+                  choiceAnswered && correct && 'border-success/30 bg-success/5 text-success',
+                  choiceAnswered && selected && !correct && 'border-destructive/30 bg-destructive/5 text-destructive',
+                  choiceAnswered && !selected && !correct && 'border-border/70 bg-background/60 text-muted-foreground',
+                  !choiceAnswered && selected && 'border-primary/40 bg-primary/10',
+                  !choiceAnswered && !selected && 'border-border/70 bg-background/80 hover:border-primary/40 hover:bg-primary/5',
+                )}
+              >
+                <span className="font-medium">{option.id}.</span> {option.text}
+                {selected && !choiceAnswered ? <span className="ml-2 text-xs text-primary">已选</span> : null}
+              </button>
+            )
+          })}
+          {!choiceAnswered ? (
+            <Button type="button" size={compact ? 'sm' : 'default'} disabled={selectedIds.length === 0} onClick={submit}>
+              提交答案
+            </Button>
+          ) : (
+            <div
+              className={cn(
+                'border border-border/70 bg-background/70',
+                compact ? 'rounded-xl px-3 py-3' : 'rounded-lg px-4 py-4',
+              )}
+            >
+              <div className="text-sm font-medium">{currentState.correct ? '回答正确' : '回答错误'}</div>
+              <div className={cn('text-sm text-muted-foreground', compact ? 'mt-1.5' : 'mt-2')}>
+                正确答案：{correctOptionIds.join('')}
+              </div>
+              <div className={cn('text-sm', compact ? 'mt-2' : 'mt-3')}>
+                解析：{question.analysis || '暂无解析'}
+              </div>
+            </div>
+          )}
+        </div>
+      )
+    }
     const correctOptionId = question.answer_payload.correct_option_id || ''
     const choiceAnswered = isQuizChoiceAttemptClosed(currentState)
     return (

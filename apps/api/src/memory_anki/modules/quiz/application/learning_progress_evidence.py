@@ -19,6 +19,8 @@ def _submitted_answer(state: dict[str, Any]) -> bool:
         return True
     if str(state.get("selectedOptionId") or "").strip() or isinstance(state.get("trueFalseAnswer"), bool):
         return True
+    if isinstance(state.get("selectedOptionIds"), list) and state.get("selectedOptionIds"):
+        return True
     blanks = state.get("blankInputs")
     if isinstance(blanks, dict) and any(str(value or "").strip() for value in blanks.values()):
         return True

@@ -4,6 +4,7 @@ export interface QuizRuntimeState {
   resolved?: boolean
   correct?: boolean
   selectedOptionId?: string
+  selectedOptionIds?: string[]
   trueFalseAnswer?: boolean
   blankInputs?: Record<string, string>
   submittedBlankIds?: string[]

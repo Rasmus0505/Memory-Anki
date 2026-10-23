@@ -143,7 +143,7 @@ interface QuizQuestionCardProps {
   question: PalaceQuizQuestion
   state: QuizRuntimeState | undefined
   compact?: boolean
-  onChoiceSelect: (question: PalaceQuizQuestion, optionId: string) => void
+  onChoiceSelect: (question: PalaceQuizQuestion, optionId: string | string[]) => void
   onStateChange: (
     questionId: number,
     updater: (current: QuizRuntimeState) => QuizRuntimeState,

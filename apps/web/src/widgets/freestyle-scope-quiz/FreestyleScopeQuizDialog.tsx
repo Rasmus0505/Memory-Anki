@@ -18,6 +18,7 @@ import { QuizQuestionRoundRatingBadge } from '@/widgets/quiz-round-rating'
 import { useOverlayProgressPersistence } from './useOverlayProgressPersistence'
 import { useOverlayQuizClear } from './useOverlayQuizClear'
 import { useOverlayRatingRefresh } from './useOverlayRatingRefresh'
+import { useOverlayChoiceSelect } from './useOverlayChoiceSelect'
 import { getPalaceQuizQuestionsByIdsApi } from '@/modules/quiz/domain/quiz-entity/api'
 import {
   beginQuizQuestionMarkRequest,
@@ -378,7 +379,7 @@ export function FreestyleScopeQuizDialog({
   })
 
   const handleChoiceResolve = useCallback(
-    (optionId: string, isCorrect: boolean) => {
+    (optionId: string | string[], isCorrect: boolean) => {
       if (!current) return
       orchestration.handleChoiceSelect(current, optionId, isCorrect)
     },
@@ -438,12 +439,14 @@ export function FreestyleScopeQuizDialog({
     setKeyboardOptionIndex(0)
   }, [current?.id])
 
+  const selectOption = useOverlayChoiceSelect(current, updateLocalState, handleChoiceResolve)
+
   useQuizAnsweringShortcuts({
     enabled: open && !configOpen && current != null,
     questionCount: questions.length,
     optionCount: current?.options.length ?? 0,
     choiceShortcutsActive: current != null && isQuizChoiceShortcutActive(current.question_type, answerMode),
-    attemptClosed: isQuizChoiceAttemptClosed({ selectedOptionId: currentState.selectedOptionId }),
+    attemptClosed: isQuizChoiceAttemptClosed({ selectedOptionId: currentState.selectedOptionId, selectedOptionIds: currentState.selectedOptionIds }),
     answerRevealed: Boolean(currentState.resolved),
     hasNextQuestion: index < questions.length - 1,
     keyboardOptionIndex,
@@ -451,19 +454,7 @@ export function FreestyleScopeQuizDialog({
     interactionRootRef: questionInteractionRef,
     onPreviousQuestion: () => goToIndex(Math.max(0, index - 1)),
     onNextQuestion: () => goToIndex(Math.min(Math.max(questions.length - 1, 0), index + 1)),
-    onSelectOption: (optionIndex) => {
-      if (!current) return
-      const option = current.options[optionIndex]
-      if (!option) return
-      const correct = option.id === (current.answer_payload.correct_option_id || '')
-      updateLocalState(current.id, (state) => ({
-        ...state,
-        selectedOptionId: option.id,
-        resolved: true,
-        correct,
-      }))
-      handleChoiceResolve(option.id, correct)
-    },
+    onSelectOption: selectOption,
     onToggleMark: () => {
       if (!current) return
       void handleToggleMark(!current.marked)

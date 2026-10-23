@@ -88,7 +88,7 @@ export function FreestyleFeedCard({
   onLiveRevealMapChange: UnitProps['onLiveRevealMapChange']
   onOpenScopeQuiz: UnitProps['onOpenScopeQuiz']
   onQuestionStateChange: (questionId: number, updater: Parameters<QuizProps['onStateChange']>[0]) => void
-  onChoiceResolve: (card: FreestyleQuizCard, optionId: string, isCorrect: boolean) => void
+  onChoiceResolve: (card: FreestyleQuizCard, optionId: string | string[], isCorrect: boolean) => void
   onShortAnswerSubmit: (card: FreestyleQuizCard) => void
   onNavigateToIndex: (index: number) => void
 }) {
