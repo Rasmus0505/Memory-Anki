@@ -73,6 +73,8 @@ export interface MindMapEditorSurfaceProps {
   /** Reports manual user zoom changes without coupling the canvas to host persistence. */
   onUserZoomChange?: (zoom: number) => void
   className?: string
+  /** The host paints the outer card; the canvas skips its own border/rounding/shadow. */
+  flushCanvas?: boolean
   /** Generic frame chrome key; hosts map product modes (edit/review/practice/rating). */
   sceneChrome?: 'default' | 'edit' | 'review' | 'practice' | 'rating'
   /**

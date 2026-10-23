@@ -238,10 +238,26 @@ export function useMindMapViewport({
       lastAppliedPreferredZoomRef.current = null
       return
     }
+    // Mobile guided review fits the visible tree at <= MINDMAP_MOBILE_FIT_MAX_ZOOM.
+    // The shared manual zoom (desktop can be 1.4) would override that fit and park
+    // the whole map far outside a phone-sized canvas — one lonely root card over
+    // a blank sheet. The phone camera owns its zoom.
+    if (mobileGuidedActive) return
+    // Before the first measurement a readonly `auto` canvas is most likely a phone
+    // (the fit below will own the camera anyway); applying the desktop zoom first
+    // only produces a one-frame zoom flash.
+    if (readonly && mobileViewPolicy === 'auto' && canvasSize.width === 0) return
     if (lastAppliedPreferredZoomRef.current === normalizedPreferredZoom) return
     lastAppliedPreferredZoomRef.current = normalizedPreferredZoom
     syncPreferredZoom(normalizedPreferredZoom)
-  }, [normalizedPreferredZoom, syncPreferredZoom])
+  }, [
+    canvasSize.width,
+    mobileGuidedActive,
+    mobileViewPolicy,
+    normalizedPreferredZoom,
+    readonly,
+    syncPreferredZoom,
+  ])
 
   /**
    * True freeze: re-assert the locked {x,y,zoom} when React Flow drifts during
@@ -255,6 +271,14 @@ export function useMindMapViewport({
     if (sceneRecenterLockRef.current || pendingSceneRecenterNodeIdRef.current) return
     const current = currentViewport ?? getViewport()
     const preserved = preservedViewportRef.current
+    // On a phone the guided fit owns the camera. A pristine camera there is just
+    // the initial/default zoom (often a desktop 1.4), and freezing it here would
+    // undo the fit - one lonely root card over a blank sheet. Leave it to the fit
+    // until the learner actually moves the map. Before the first measurement a
+    // readonly `auto` canvas is about to be fitted too, so it counts as a phone.
+    const mobileFitOwnsCamera =
+      mobileGuidedActive || (readonly && mobileViewPolicy === 'auto' && canvasSize.width === 0)
+    if (mobileFitOwnsCamera && isPristineMindMapViewport(preserved, preferredZoomInput)) return
     if (
       Math.abs(current.x - preserved.x) < 0.01 &&
       Math.abs(current.y - preserved.y) < 0.01 &&
@@ -301,7 +325,17 @@ export function useMindMapViewport({
         explicitViewportChangeRef.current = false
       })
     })
-  }, [commitControlledViewport, getViewport, preserveViewport, setViewport])
+  }, [
+    canvasSize.width,
+    commitControlledViewport,
+    getViewport,
+    mobileGuidedActive,
+    mobileViewPolicy,
+    preserveViewport,
+    preferredZoomInput,
+    readonly,
+    setViewport,
+  ])
 
   const handleMoveStart = useCallback<OnMove>((event, viewport) => {
     // Keep the existing auto-fit behavior for hosts that do not preserve a
@@ -773,7 +807,7 @@ export function useMindMapViewport({
           maxZoom: mobileGuidedActive ? MINDMAP_MOBILE_FIT_MAX_ZOOM : MINDMAP_FIT_MAX_ZOOM,
         }),
         0,
-        normalizedPreferredZoom === undefined
+        normalizedPreferredZoom === undefined || mobileGuidedActive
           ? undefined
           : () => syncPreferredZoom(normalizedPreferredZoom),
       )

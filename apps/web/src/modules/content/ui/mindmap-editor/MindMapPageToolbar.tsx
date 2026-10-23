@@ -239,9 +239,10 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
   )
 
   return (
-    <div className={cn(embedded ? 'flex shrink-0 flex-nowrap items-center gap-2' : 'rounded-2xl border border-border/70 bg-background/90 p-3', !embedded && (compact ? 'space-y-2.5' : 'space-y-3'), className)}>
-      {/* Standalone toolbars wrap on phones (search + view controls would otherwise overflow 390px); the embedded flip-card strip stays on one line. */}
-      <div className={cn('flex items-center gap-2', embedded ? 'flex-nowrap' : 'flex-wrap')}>
+    <div className={cn(embedded ? 'flex min-w-0 shrink-0 flex-wrap items-center gap-1.5 sm:flex-nowrap sm:gap-2' : 'rounded-2xl border border-border/70 bg-background/90 p-3', !embedded && (compact ? 'space-y-2.5' : 'space-y-3'), className)}>
+      {/* Phones wrap the embedded flip-card strip instead of hiding scrollable
+          tools; from sm up it stays one line beside the canvas tools. */}
+      <div className={cn('flex min-w-0 items-center gap-1.5 sm:gap-2', embedded ? 'flex-wrap sm:flex-nowrap' : 'flex-wrap')}>
         {quizAction ? (
           <Button
             type="button"
@@ -267,19 +268,49 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
           </div>
         ) : null}
         {searchControl ? (
-          <div className="relative min-w-55 flex-1 sm:max-w-sm">
-            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={searchControl.value}
-              readOnly={searchControl.readOnly}
-              onChange={(event) => searchControl.onChange(event.target.value)}
-              onFocus={() => searchControl.onFocus?.()}
-              onClick={() => searchControl.onClick?.()}
-              placeholder={searchControl.placeholder ?? '搜索标题和备注'}
-              className="min-h-10 pl-9 pr-12"
-            />
-            {searchControl.value ? <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">{searchControl.resultCount ?? 0}</span> : null}
-          </div>
+          searchControl.readOnly ? (
+            <>
+              {/* A read-only search is just a launcher for the global lookup:
+                  on a phone an icon says the same thing without the input's width. */}
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                aria-label={searchControl.placeholder ?? '搜索'}
+                title={searchControl.placeholder ?? '搜索'}
+                onClick={() => (searchControl.onClick ?? searchControl.onFocus)?.()}
+                className="max-sm:size-8 sm:hidden"
+              >
+                <Search aria-hidden />
+              </Button>
+              <div className="relative hidden min-w-55 flex-1 sm:block sm:max-w-sm">
+                <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={searchControl.value}
+                  readOnly
+                  onChange={(event) => searchControl.onChange(event.target.value)}
+                  onFocus={() => searchControl.onFocus?.()}
+                  onClick={() => searchControl.onClick?.()}
+                  placeholder={searchControl.placeholder ?? '搜索标题和备注'}
+                  className="min-h-10 pl-9 pr-12"
+                />
+                {searchControl.value ? <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">{searchControl.resultCount ?? 0}</span> : null}
+              </div>
+            </>
+          ) : (
+            <div className="relative min-w-0 flex-1 basis-full sm:basis-auto sm:min-w-55 sm:max-w-sm">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={searchControl.value}
+                onChange={(event) => searchControl.onChange(event.target.value)}
+                onFocus={() => searchControl.onFocus?.()}
+                onClick={() => searchControl.onClick?.()}
+                placeholder={searchControl.placeholder ?? '搜索标题和备注'}
+                className="min-h-10 pl-9 pr-12"
+              />
+              {searchControl.value ? <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">{searchControl.resultCount ?? 0}</span> : null}
+            </div>
+          )
         ) : null}
         {focusAction ? <Button type="button" variant="outline" onClick={focusAction.onClick} disabled={focusAction.disabled}><Target className="size-4" />{focusAction.label}</Button> : null}
         {fitAction ? <Button type="button" variant="outline" onClick={fitAction.onClick} disabled={fitAction.disabled}>{fitAction.label}</Button> : null}

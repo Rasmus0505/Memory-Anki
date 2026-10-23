@@ -77,6 +77,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   contentChangeViewportPolicy,
   preferredZoom, onUserZoomChange,
   className,
+  flushCanvas = false,
   sceneChrome = 'default',
   sceneTransitionKey = null,
   toolbarContent,
@@ -619,7 +620,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
         focusMode={nativeFullscreenActive}
         presentationMode={delegateFullscreenToHost ? (immersiveModeActive ? 'viewport' : 'embedded') : fullscreen.mode}
         showSystemFullscreenControl={showSystemFullscreenControl}
-        showToolbar={!uiCleared} toolbarContent={toolbarContent} toolbarCenterContent={toolbarCenterContent}
+        showToolbar={!uiCleared} flushChrome={flushCanvas} toolbarContent={toolbarContent} toolbarCenterContent={toolbarCenterContent}
         mobileViewPolicy={mobileViewPolicy}
         nodeClickViewportPolicy={resolvedNodeClickViewportPolicy}
         contentChangeViewportPolicy={resolvedContentChangeViewportPolicy}
@@ -636,7 +637,11 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
         onDeleteNodeOnly={handleDeleteNodeOnly} onDeleteNodesOnly={handleDeleteNodesOnly}
         onHighlightNodes={handleHighlightNodes} onMarkColorNodes={handleMarkColorNodes}
         onToggleQuestionCards={handleToggleQuestionCards} onEdit={handleEditNode}
-        canUndo={canUndo} canRedo={canRedo} onUndo={undoEditorDoc} onRedo={redoEditorDoc}
+        canUndo={canUndo} canRedo={canRedo}
+        // Read-only review has no edit history; passing the handlers anyway
+        // renders two permanently disabled buttons in the flip-card toolbar.
+        onUndo={canEdit ? undoEditorDoc : undefined}
+        onRedo={canEdit ? redoEditorDoc : undefined}
         onRelocate={handleRelocateNodes} onExtractSelection={handleExtractSelection}
         onReorderSibling={handleReorderSibling}
         onMoveUp={handleMoveUp} onMoveDown={handleMoveDown}

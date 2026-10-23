@@ -100,13 +100,15 @@ export function MindMapCanvasToolbar({
   const handleWebpageToggle = onToggleWebpageFullscreen ?? onToggleFocusMode
 
   return (
-    <div className="flex h-10 shrink-0 flex-nowrap items-center gap-1 overflow-x-auto border-b border-border bg-background px-2 py-1.5 sm:gap-2 sm:px-3">
+    <div className="flex min-h-10 shrink-0 flex-wrap items-center gap-1 border-b border-border bg-background px-2 py-1.5 sm:h-10 sm:flex-nowrap sm:gap-2 sm:overflow-x-auto sm:px-3">
       {leadingContent}
       {leadingContent ? <div className="h-5 w-px shrink-0 bg-border" /> : null}
+      {/* Recovery tool for a blank canvas, not a per-card action: phones keep it
+          out of the always-visible row so the row never scrolls a tool off screen. */}
       <button
         type="button"
         onClick={onRefreshHost}
-        className={plainToolbarButtonClass()}
+        className={plainToolbarButtonClass('max-sm:hidden')}
         title="刷新脑图"
       >
         <RefreshCw className="size-4" />
@@ -190,7 +192,9 @@ export function MindMapCanvasToolbar({
         {webpageActive ? <Shrink className="size-4" /> : <Expand className="size-4" />}
       </button>
       {showHistoryControls ? <div className="mx-1 h-5 w-px shrink-0 bg-border" /> : null}
-      {onUndo ? (
+      {/* Read-only review has no history to offer; rendering two permanently
+          disabled buttons was pure noise in the flip-card toolbar. */}
+      {showHistoryControls && onUndo ? (
         <button
           type="button"
           onClick={onUndo}
@@ -201,7 +205,7 @@ export function MindMapCanvasToolbar({
           <Undo2 className="size-4" />
         </button>
       ) : null}
-      {onRedo ? (
+      {showHistoryControls && onRedo ? (
         <button
           type="button"
           onClick={onRedo}

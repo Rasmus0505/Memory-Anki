@@ -32,8 +32,10 @@ export function FreestyleUnitReviewIdentityRow({
   onUndo: () => void
 }) {
   return (
-    <div className="relative z-10 flex min-w-0 shrink-0 items-center gap-1.5 p-2 pr-[7rem] sm:p-2.5 sm:pr-2.5">
-      <div className="flex min-w-0 items-center gap-1.5 rounded-full border border-paper-line bg-paper-card/95 px-2.5 py-1 shadow-soft">
+    // Full-width header band, not a floating pill: the flip card is one sheet,
+    // and a second rounded chip above the canvas read as a separate card.
+    <div className="relative z-10 flex min-h-11 min-w-0 shrink-0 items-center gap-2 border-b border-paper-line/85 bg-paper-card/95 px-3 py-1.5 pr-[7rem] sm:min-h-12 sm:gap-2.5 sm:px-3.5 sm:pr-3.5">
+      <div className="flex min-w-0 flex-1 items-center gap-1.5">
         <span
           className="relative size-2 shrink-0 rounded-full bg-primary shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-primary)_22%,transparent)]"
           title="永久标记"

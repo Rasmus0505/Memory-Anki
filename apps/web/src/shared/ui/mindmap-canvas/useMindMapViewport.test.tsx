@@ -27,7 +27,43 @@ vi.mock('@xyflow/react', () => ({
   useReactFlow: () => reactFlowMock,
 }))
 
+function phoneCanvasHost() {
+  const host = document.createElement('div')
+  Object.defineProperties(host, {
+    clientWidth: { configurable: true, value: 375 },
+    clientHeight: { configurable: true, value: 700 },
+  })
+  return { current: host }
+}
+
 describe('useMindMapViewport preferred zoom', () => {
+  beforeEach(() => {
+    reactFlowMock.fitView.mockClear()
+    reactFlowMock.setCenter.mockClear()
+  })
+
+  it('does not apply a desktop manual zoom to mobile guided review', async () => {
+    reactFlowMock.fitView.mockClear()
+    const onControlledViewportChange = vi.fn()
+    const props = buildProps({
+      canvasRef: phoneCanvasHost(),
+      controlledViewport: { x: 4, y: 18, zoom: 1.4 },
+      onControlledViewportChange,
+      readonly: true,
+      mobileViewPolicy: 'auto',
+      preferredZoom: 1.4,
+      graphNodes: [graphNode('root', null)],
+      nodes: [flowNode('root', 0, 0)],
+    })
+    renderHook((nextProps) => useMindMapViewport(nextProps), { initialProps: props })
+
+    await waitFor(() => expect(reactFlowMock.fitView).toHaveBeenCalled())
+    // The phone camera is the fit's: the shared 1.4 preference must never reach it.
+    expect(onControlledViewportChange).not.toHaveBeenCalledWith(
+      expect.objectContaining({ zoom: 1.4 }),
+    )
+  })
+
   it('applies an external preference to zoom only and keeps the local pan', () => {
     const onControlledViewportChange = vi.fn()
     const props = buildProps({ preferredZoom: 0.86, onControlledViewportChange })

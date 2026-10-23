@@ -109,6 +109,8 @@ export interface MindMapCanvasProps {
   canMoveDown?: (nodeId: string) => boolean
   readonly?: boolean
   showToolbar?: boolean
+  /** Host paints the outer card: drop the canvas' own border, rounding and shadow. */
+  flushChrome?: boolean
   toolbarContent?: ReactNode
   /** Product host chrome after canvas tools (e.g. ladder progress). */
   toolbarCenterContent?: ReactNode
@@ -268,6 +270,7 @@ function MindMapCanvasInner({
   onToggleWebpageFullscreen,
   onToggleFocusMode,
   showToolbar = true,
+  flushChrome = false,
   className,
   onAutoRecover,
   onHostRefresh,
@@ -362,7 +365,11 @@ function MindMapCanvasInner({
       data-interaction-mode={props.editingNodeId ? 'editing' : props.selectedNodeId ? 'selected' : 'idle'}
       data-testid="mindmap-canvas-frame"
       className={cn(
-        'relative flex h-full min-h-[520px] min-w-0 flex-col overflow-hidden rounded-2xl border border-paper-line bg-paper shadow-[inset_0_1px_0_color-mix(in_srgb,white_90%,transparent),0_18px_44px_-12px_color-mix(in_srgb,var(--color-paper-ink)_16%,transparent)]',
+        // A host that already paints the card (freestyle flip card) asks for flush
+        // chrome: a second rounded, bordered sheet inside it reads as two cards.
+        flushChrome
+          ? 'relative flex h-full min-h-[520px] min-w-0 flex-col overflow-hidden rounded-none border-0 bg-transparent shadow-none'
+          : 'relative flex h-full min-h-[520px] min-w-0 flex-col overflow-hidden rounded-2xl border border-paper-line bg-paper shadow-[inset_0_1px_0_color-mix(in_srgb,white_90%,transparent),0_18px_44px_-12px_color-mix(in_srgb,var(--color-paper-ink)_16%,transparent)]',
         className,
       )}
     >

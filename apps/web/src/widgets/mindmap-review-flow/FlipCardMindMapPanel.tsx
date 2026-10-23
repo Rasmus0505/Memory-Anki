@@ -586,6 +586,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
         syncIntent="soft"
         preserveViewOnSync={framePreserveViewOnSync}
         syncReason={isEditMode ? null : 'review_flip'}
+        flushCanvas
         externalSyncKey={frameExternalSyncKey}
         forceSyncKey={frameForceSyncKey}
         forceSyncIntent={frameForceSyncIntent}
