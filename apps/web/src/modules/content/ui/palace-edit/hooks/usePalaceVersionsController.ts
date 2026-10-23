@@ -102,7 +102,8 @@ export function usePalaceVersionsController({
     if (isSaving) {
       return { variant: 'secondary', label: '自动保存脑图中' }
     }
-    return { variant: 'secondary', label: '宿主桥已连接' }
+    // "宿主桥已连接" described the plumbing, not the learner's state.
+    return { variant: 'secondary', label: '已保存' }
   }, [editorStateLoaded, isSaving, palaceId, saveError])
 
   return {

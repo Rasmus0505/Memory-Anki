@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import PalaceShelfPage from '@/modules/content/ui/palace-catalog/PalaceShelfPage'
 import { PALACE_SHELF_VIEW_SETTINGS_KEY } from '@/modules/settings/public'
@@ -20,7 +21,10 @@ vi.mock('react-router-dom', () => ({
 vi.mock('sonner', () => ({
   toast: {
     success: vi.fn(),
+    info: vi.fn(),
+    warning: vi.fn(),
     error: vi.fn(),
+    message: vi.fn(),
   },
 }))
 
@@ -185,6 +189,17 @@ function buildGroupedResponse() {
   }
 }
 
+// Shelf cards embed the subject memory ladder, which fetches through
+// react-query; the real app mounts a QueryClientProvider at the root.
+function renderShelfPage() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <PalaceShelfPage />
+    </QueryClientProvider>,
+  )
+}
+
 describe('PalaceShelfPage', () => {
   beforeEach(() => {
     navigate.mockReset()
@@ -199,7 +214,7 @@ describe('PalaceShelfPage', () => {
   })
 
   it('renders subject shelf cards and navigates by subject id', async () => {
-    render(<PalaceShelfPage />)
+    renderShelfPage()
 
     const title = await screen.findByText('中国近代史')
     expect(getPalacesGroupedApi).not.toHaveBeenCalled()
@@ -224,7 +239,7 @@ describe('PalaceShelfPage', () => {
       ],
     })
 
-    render(<PalaceShelfPage />)
+    renderShelfPage()
 
     const title = await screen.findByText('未分类')
     fireEvent.click(title.closest('button') as HTMLButtonElement)
@@ -236,7 +251,7 @@ describe('PalaceShelfPage', () => {
     getPalaceSubjectShelfApi.mockResolvedValue({ items: [] })
     getPalacesGroupedApi.mockResolvedValue({ groups: [], ungrouped: [], subjects: [] })
 
-    render(<PalaceShelfPage />)
+    renderShelfPage()
 
     fireEvent.change(screen.getByPlaceholderText('搜索学科或宫殿...'), { target: { value: '历史' } })
     await waitFor(() => {
@@ -245,7 +260,7 @@ describe('PalaceShelfPage', () => {
   })
 
   it('uses double layout by default and applies custom shelf view settings', async () => {
-    render(<PalaceShelfPage />)
+    renderShelfPage()
 
     await screen.findByText('中国近代史')
     expect(screen.getByTestId('shelf-grid').dataset.layoutMode).toBe('double')
@@ -258,7 +273,7 @@ describe('PalaceShelfPage', () => {
   })
 
   it('switches to expanded mode and applies expanded layout settings', async () => {
-    render(<PalaceShelfPage />)
+    renderShelfPage()
 
     await screen.findByText('中国近代史')
     expect(getPalacesGroupedApi).not.toHaveBeenCalled()
@@ -281,7 +296,7 @@ describe('PalaceShelfPage', () => {
 
 
   it('refreshes shelf and expanded palace data when the catalog is invalidated', async () => {
-    render(<PalaceShelfPage />)
+    renderShelfPage()
 
     await screen.findByText('中国近代史')
     fireEvent.click(screen.getByRole('button', { name: '章节目录' }))
@@ -296,7 +311,7 @@ describe('PalaceShelfPage', () => {
   })
 
   it('reveals delete inside the overflow menu in expanded mode', async () => {
-    render(<PalaceShelfPage />)
+    renderShelfPage()
 
     await screen.findByText('中国近代史')
     fireEvent.click(screen.getByRole('button', { name: '章节目录' }))

@@ -70,7 +70,11 @@ export default function Knowledge() {
   const [mindMapFullscreen, setMindMapFullscreen] = useState(false)
   const [mindMapNativeFullscreen, setMindMapNativeFullscreen] = useState(false)
   const [mindMapUiCleared, setMindMapUiCleared] = useState(false)
-  const [sidePanelCollapsed, setSidePanelCollapsed] = useState(false)
+  // Phones open on the canvas: the subject drawer covers most of a phone screen,
+  // and the rail toggle is one tap away when the learner wants to switch books.
+  const [sidePanelCollapsed, setSidePanelCollapsed] = useState(() => (
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches
+  ))
 
   const selectedNodeUid =
     selectedNodes?.[0]?.uid ||
@@ -304,7 +308,9 @@ export default function Knowledge() {
     if (selectedSubjectId && !isSubjectEditorReady) return <Badge variant="secondary">加载中</Badge>
     if (!editorState) return <Badge variant="secondary">加载中</Badge>
     if (isSaving) return <Badge variant="secondary">自动保存中</Badge>
-    return <Badge variant="secondary">已接入 mind-map 宿主模式</Badge>
+    // "已接入 mind-map 宿主模式" was implementation jargon, not a status a
+    // learner can act on. The editor has nothing to report = everything saved.
+    return <Badge variant="secondary">已保存</Badge>
   }
 
   const handleImmersiveToolbarToggle = async () => {

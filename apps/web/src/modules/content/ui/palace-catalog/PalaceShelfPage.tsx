@@ -1,5 +1,5 @@
 import { ExamStarPicker, useExamOverview } from '@/modules/exam/public'
-import { BookOpen, ChevronRight, FolderTree, LayoutGrid, LibraryBig, List, Plus, Rows3, Search, WrapText } from 'lucide-react'
+import { BookOpen, ChevronRight, FolderTree, LayoutGrid, LibraryBig, List, Plus, Rows3, Search, WrapText, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useRouteResidency } from '@/shared/routing/RouteResidency'
@@ -29,6 +29,7 @@ import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
 import { EmptyState, ErrorState } from '@/shared/components/state-placeholders'
+import { PalaceViewSheet } from './components/palace-list/PalaceViewSheet'
 import { PalaceShelfSkeleton } from './components/PalaceShelfSkeleton'
 import { usePalaceListCardActions } from '@/modules/content/ui/palace-catalog/components/palace-list/usePalaceListCardActions'
 import { useLocalStorageState } from '@/shared/lib/localStorage'
@@ -121,6 +122,93 @@ function renderShelfStatusSummary(item: PalaceSubjectShelfItem) {
         </span>
       ))}
     </div>
+  )
+}
+
+/**
+ * The shelf is self-explanatory once you've used it; on a phone this paragraph
+ * cost three lines above the shelves, so it starts folded away.
+ */
+function ShelfHint() {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="rounded-2xl border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground sm:px-4 sm:py-3 sm:text-sm">
+      <button
+        type="button"
+        className="flex w-full items-center justify-between gap-2 sm:hidden"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span className="font-medium text-foreground">书架怎么用</span>
+        <ChevronRight
+          className={cn('size-4 shrink-0 transition-transform', open && 'rotate-90')}
+          aria-hidden
+        />
+      </button>
+      <p className={open ? 'mt-1.5 block leading-relaxed' : 'hidden sm:block'}>
+        一科一本书：点击封面进入该书宫殿列表。左上角后退只会在「知识」分区内按层级返回（书架 → 书内列表 → 宫殿），不会跨到英语或随心。
+      </p>
+    </div>
+  )
+}
+
+type ShelfViewSetter = (
+  updater: PalaceShelfViewSettings | ((current: PalaceShelfViewSettings) => PalaceShelfViewSettings),
+) => void
+
+function shelfViewSummary(settings: PalaceShelfViewSettings) {
+  const display = settings.displayMode === 'expanded' ? '目录' : '封面'
+  const layoutMode = settings.displayMode === 'expanded'
+    ? settings.expandedLayoutMode
+    : settings.layoutMode
+  const layoutLabel = (settings.displayMode === 'expanded' ? expandedLayoutOptions : shelfLayoutOptions)
+    .find((option) => option.value === layoutMode)?.label ?? ''
+  const densityLabel = shelfDensityOptions.find((option) => option.value === settings.densityMode)?.label ?? ''
+  return [display, layoutLabel, densityLabel].filter(Boolean).join(' · ')
+}
+
+function ShelfViewSheet({ settings, onChange }: {
+  settings: PalaceShelfViewSettings
+  onChange: ShelfViewSetter
+}) {
+  const isExpanded = settings.displayMode === 'expanded'
+  const layoutOptions = isExpanded ? expandedLayoutOptions : shelfLayoutOptions
+  const layoutMode = isExpanded ? settings.expandedLayoutMode : settings.layoutMode
+  return (
+    <PalaceViewSheet
+      title="书架视图"
+      summary={shelfViewSummary(settings)}
+      triggerTestId="shelf-view-sheet-trigger"
+      display={{
+        label: '显示',
+        options: [
+          { value: 'shelf', label: '书架封面' },
+          { value: 'expanded', label: '章节目录' },
+        ],
+        value: settings.displayMode,
+        onChange: (value) =>
+          onChange((current) => ({ ...current, displayMode: value as PalaceShelfViewSettings['displayMode'] })),
+      }}
+      layout={{
+        label: '布局',
+        options: layoutOptions,
+        value: layoutMode,
+        onChange: (value) =>
+          onChange((current) =>
+            current.displayMode === 'expanded'
+              ? { ...current, expandedLayoutMode: value as PalaceListLayoutMode }
+              : { ...current, layoutMode: value as PalaceShelfLayoutMode },
+          ),
+      }}
+      density={{
+        label: '密度',
+        options: shelfDensityOptions,
+        value: settings.densityMode,
+        onChange: (value) =>
+          onChange((current) => ({ ...current, densityMode: value as PalaceShelfDensityMode })),
+      }}
+      onReset={() => onChange(DEFAULT_PALACE_SHELF_VIEW_SETTINGS)}
+    />
   )
 }
 
@@ -262,10 +350,11 @@ export default function PalaceShelfPage() {
   )
 
   return (
-    <PageContainer wide className="gap-8">
+    <PageContainer wide className="gap-4 sm:gap-8">
       <PageHeader
         title="学科书架"
         description="一科一书：点击封面进入该学科的宫殿列表。常见科目如中国教育史、外国教育史、英语会各自成册。"
+        hideDescriptionOnMobile
         actions={
           <div className="flex flex-wrap gap-2">
             <Link to="/knowledge">
@@ -285,27 +374,37 @@ export default function PalaceShelfPage() {
       />
 
       <Card>
-        <CardContent className="p-4">
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="min-w-45 flex-1">
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="搜索学科或宫殿..."
-                  value={search}
-                  onChange={(event) =>
-                    setSearchParams((params) => {
-                      if (event.target.value) params.set('search', event.target.value)
-                      else params.delete('search')
-                      return params
-                    })
-                  }
-                  className="pl-9"
-                />
-              </div>
+        <CardContent className="p-3 sm:p-4">
+          <div className="flex items-center gap-2 sm:flex-wrap sm:items-end sm:gap-3">
+            <div className="relative min-w-0 flex-1 sm:min-w-45">
+              <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="搜索学科或宫殿..."
+                value={search}
+                onChange={(event) =>
+                  setSearchParams((params) => {
+                    if (event.target.value) params.set('search', event.target.value)
+                    else params.delete('search')
+                    return params
+                  })
+                }
+                className="pl-9 pr-9"
+              />
+              {search ? (
+                <button
+                  type="button"
+                  aria-label="清除搜索"
+                  title="清除搜索"
+                  onClick={() => setSearchParams({})}
+                  className="absolute right-1.5 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
+                >
+                  <X className="size-4" />
+                </button>
+              ) : null}
             </div>
+            <ShelfViewSheet settings={viewSettings} onChange={setViewSettings} />
             <div
-              className="flex flex-wrap items-center gap-2"
+              className="hidden flex-wrap items-center gap-2 sm:flex"
               data-testid="shelf-view-toolbar"
               data-display-mode={viewSettings.displayMode}
             >
@@ -386,19 +485,16 @@ export default function PalaceShelfPage() {
                 恢复默认
               </Button>
             </div>
-            {search ? (
-              <Button variant="ghost" size="sm" onClick={() => setSearchParams({})}>
-                清除搜索
-              </Button>
-            ) : null}
           </div>
         </CardContent>
       </Card>
 
-      <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground sm:text-sm">
         <Badge variant="secondary">{categorizedCount} 个学科书架</Badge>
         <Badge variant="outline">{items.find((item) => item.subject == null) ? '含未分类' : '全部已分类'}</Badge>
-        <Badge variant="outline">
+        {/* Phones keep the live view summary in the 视图 sheet; repeating two
+            badges plus the mode badge here only pushed the shelves down. */}
+        <Badge variant="outline" className="max-sm:hidden">
           {viewSettings.displayMode === 'shelf' ? '封面模式' : '目录模式'}
         </Badge>
       </div>
@@ -422,9 +518,7 @@ export default function PalaceShelfPage() {
           </Button>
         </div>
       ) : (
-        <div className="rounded-2xl border border-border/60 bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
-          一科一本书：点击封面进入该书宫殿列表。左上角后退只会在「知识」分区内按层级返回（书架 → 书内列表 → 宫殿），不会跨到英语或随心。
-        </div>
+        <ShelfHint />
       )}
 
       {loadError ? (

@@ -33,7 +33,13 @@ function PaneSwitch<T extends string>({ panes, value, onChange, label }: {
   label: string
 }) {
   return (
-    <div role="group" aria-label={label} className="inline-flex h-9 items-center rounded-lg bg-muted p-1 lg:hidden">
+    // Phones: the switch is the page's only navigation, so it takes the full
+    // row instead of hugging the right edge under the title.
+    <div
+      role="group"
+      aria-label={label}
+      className="inline-flex h-9 items-center rounded-lg bg-muted p-1 max-sm:flex max-sm:w-full lg:hidden"
+    >
       {panes.map((pane) => (
         <button
           key={pane.value}
@@ -41,7 +47,7 @@ function PaneSwitch<T extends string>({ panes, value, onChange, label }: {
           aria-pressed={value === pane.value}
           onClick={() => onChange(pane.value)}
           className={cn(
-            'rounded-md px-2.5 py-1 text-sm font-medium text-muted-foreground transition-all',
+            'rounded-md px-2.5 py-1 text-sm font-medium text-muted-foreground transition-all max-sm:flex-1',
             value === pane.value && 'bg-background text-foreground shadow',
           )}
         >
@@ -95,10 +101,10 @@ export default function Dashboard() {
       {snapshotStatus === 'pending' && isLoading && (
         <p className="text-xs text-muted-foreground" role="status">正在准备最新学习概览。</p>
       )}
-      <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2">
+      <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1.5 sm:gap-y-2">
         {/* 窄屏左上角浮着全局返回按钮、右上角是录制浮标：标题独占一行并让出两侧。 */}
-        <h1 className="basis-full pl-22 pr-12 text-2xl font-semibold leading-9 tracking-tight lg:basis-auto lg:p-0">仪表盘</h1>
-        <div className="ml-auto">
+        <h1 className="basis-full pl-22 pr-12 text-xl font-semibold leading-7 tracking-tight sm:text-2xl sm:leading-9 lg:basis-auto lg:p-0">仪表盘</h1>
+        <div className="w-full sm:ml-auto sm:w-auto">
           <PaneSwitch<OverviewPane> panes={OVERVIEW_PANES} value={overviewPane} onChange={setOverviewPane} label="概览分区" />
         </div>
       </div>

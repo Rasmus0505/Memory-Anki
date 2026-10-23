@@ -13,7 +13,9 @@ export function PageContainer({
   return (
     <div
       className={cn(
-        'mx-auto flex w-full flex-col gap-6',
+        // Phones get a tighter rhythm: every page stacked 24px gaps between
+        // sections, which spent a third of the first screen on whitespace.
+        'mx-auto flex w-full flex-col gap-4 sm:gap-6',
         wide ? 'max-w-7xl' : 'max-w-5xl',
         className,
       )}

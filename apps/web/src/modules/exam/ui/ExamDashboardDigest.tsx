@@ -115,7 +115,9 @@ export function ExamRecentBlock({ overview, className }: ExamDigestBlockProps) {
 export function ExamWeakBlock({ overview, className }: ExamDigestBlockProps) {
   return (
     <Block question="哪里最薄弱" className={className}>
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      {/* Windows draws an overlay scrollbar over the last column; keep the
+          counts clear of it instead of letting "0/5" sit under the thumb. */}
+      <div className="min-h-0 flex-1 overflow-y-auto pr-2">
         <ExamWeakList rows={overview.weak.slice(0, 8)} />
       </div>
     </Block>

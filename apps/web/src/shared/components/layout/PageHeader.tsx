@@ -10,6 +10,11 @@ interface PageHeaderProps {
   compact?: boolean
   /** Collapse the title bar to a thin rail so a mind map can fill the page. */
   collapsible?: boolean
+  /**
+   * Long instructional copy is a desktop luxury: on a phone it can eat the
+   * whole first screen before any content. Keep it from sm up only.
+   */
+  hideDescriptionOnMobile?: boolean
 }
 
 export function PageHeader({
@@ -19,6 +24,7 @@ export function PageHeader({
   actions,
   compact = false,
   collapsible = false,
+  hideDescriptionOnMobile = false,
 }: PageHeaderProps) {
   const [collapsed, setCollapsed] = useState(false)
 
@@ -67,7 +73,14 @@ export function PageHeader({
             {title}
           </h1>
           {description && !compact ? (
-            <p className="mt-2 max-w-3xl text-sm text-muted-foreground sm:text-[15px]">{description}</p>
+            <p
+              className={cn(
+                'mt-2 max-w-3xl text-sm text-muted-foreground sm:text-[15px]',
+                hideDescriptionOnMobile && 'max-sm:hidden',
+              )}
+            >
+              {description}
+            </p>
           ) : null}
         </div>
       </div>

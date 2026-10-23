@@ -10,7 +10,10 @@ import { resetMindMapEditorDraftStoreForTest } from '@/shared/persistence/mindma
 vi.mock('sonner', () => ({
   toast: {
     success: vi.fn(),
+    info: vi.fn(),
+    warning: vi.fn(),
     error: vi.fn(),
+    message: vi.fn(),
   },
 }))
 
