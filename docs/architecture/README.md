@@ -142,7 +142,7 @@ unchecked.
 
 The five idempotent Study Session HTTP writes are composed by `sessions.application.study_session_commands`. Each command asks legacy persistence primitives to flush without committing, stores the mutation response through the platform adapter, and commits once through `UnitOfWork`. Sessions therefore has no dependency on the retired Persistence context.
 
-English course/task HTTP wrappers are owned by `apps/web/src/modules/english` (via its `public.ts`); pages must not recreate a parallel english API layer.
+English course HTTP wrappers are owned by `apps/web/src/modules/english` (via its `public.ts`); pages must not recreate a parallel english API layer. Listening courses are built by local subtitle import (`POST /english/import`): the backend parses SRT/VTT/ASS, merges broken cue fragments into sentences, aligns an optional Chinese track by timeline, and stores normalized tokens. No ASR or translation AI runs in this path. The dictation stage (`ui/english-dictation`) owns whole-word judgment, per-letter colouring, keyboard shortcuts, three layouts, and the draggable blur mask; its pure state model lives in `domain/english-dictation/model.ts`. Playback defaults to single-sentence mode and can switch to continuous (`F3`): single pauses at each cue end, continuous follows the playhead across cues without pausing. Boundary checks use a light 30 ms timer rather than per-frame callbacks, the mask switches to an opaque fill while the video plays (blur returns when paused), and `/english/courses/{id}/media` implements HTTP byte ranges so the player can seek to cue timestamps without downloading the whole file first.
 
 Frontend AI scenario/model selection and per-run overrides are owned by `modules/settings/domain/ai-runtime-entity`; business modules consume it through `modules/settings/public` and must not recreate an `ai-config` feature.
 
@@ -190,7 +190,7 @@ The concentrated architecture replacement has started with the two failure-prone
 - Quiz learning loop: docs/architecture/quiz-learning-loop.md
 - Unified training evidence boundary: `docs/architecture/unified-training-evidence.md`
 
-Historical notes for removed in-app AI and PDF features (code gone, database tables kept): `batch-generation-workspace.md`, `ai-learning-workbench.md`, `ai-run-workspace.md`, `english-reading-gap-loop.md`. English keeps listening (`/english/listening`), cloze reading (`/english/cloze`), and word lookup. Manual JSON import (“文字转脑图”) remains.
+Historical notes for removed in-app AI and PDF features (code gone, database tables kept): `batch-generation-workspace.md`, `ai-learning-workbench.md`, `ai-run-workspace.md`, `english-reading-gap-loop.md`. English keeps local-subtitle listening dictation (`/english/listening`), cloze reading (`/english/cloze`), and word lookup. Manual JSON import (“文字转脑图”) remains.
 
 ## Review Settlement Boundary
 

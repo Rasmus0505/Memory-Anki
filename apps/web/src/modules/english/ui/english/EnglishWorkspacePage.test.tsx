@@ -1,47 +1,21 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter, Route, Routes, useParams } from 'react-router-dom'
-import type {
-  EnglishGenerationLogResponse,
-  EnglishGenerationTask,
-  EnglishWorkspaceResponse,
-} from '@/shared/api/contracts'
+import type { EnglishCourseSummary, EnglishWorkspaceResponse } from '@/shared/api/contracts'
 import EnglishWorkspacePage from '@/modules/english/ui/english/EnglishWorkspacePage'
 
 const mocks = vi.hoisted(() => ({
-  clearEnglishCurrentTaskApiMock: vi.fn(),
   deleteEnglishCourseApiMock: vi.fn(),
-  getEnglishTaskGenerationLogApiMock: vi.fn(),
   getEnglishWorkspaceApiMock: vi.fn(),
-  retryEnglishCurrentTaskApiMock: vi.fn(),
-  subscribeEnglishTaskStreamMock: vi.fn(),
+  importEnglishCourseApiMock: vi.fn(),
   toastErrorMock: vi.fn(),
   toastSuccessMock: vi.fn(),
-  uploadEnglishVideoApiMock: vi.fn(),
-  latestStreamHandlers: null as {
-    onDone?: (payload: { task: EnglishGenerationTask }) => void
-    onError?: (payload: { task?: EnglishGenerationTask; error: string }) => void
-    onLog?: (payload: { event: EnglishGenerationLogResponse['events'][number] }) => void
-    onStatus?: (payload: { task: EnglishGenerationTask }) => void
-  } | null,
 }))
 
 vi.mock('@/modules/english/domain/english-entity/api', () => ({
-  clearEnglishCurrentTaskApi: mocks.clearEnglishCurrentTaskApiMock,
   deleteEnglishCourseApi: mocks.deleteEnglishCourseApiMock,
-  getEnglishTaskGenerationLogApi: mocks.getEnglishTaskGenerationLogApiMock,
   getEnglishWorkspaceApi: mocks.getEnglishWorkspaceApiMock,
-  retryEnglishCurrentTaskApi: mocks.retryEnglishCurrentTaskApiMock,
-  subscribeEnglishTaskStream: (taskId: string, handlers: NonNullable<typeof mocks.latestStreamHandlers>) => {
-    mocks.subscribeEnglishTaskStreamMock(taskId, handlers)
-    mocks.latestStreamHandlers = handlers
-    return () => undefined
-  },
-  uploadEnglishVideoApi: mocks.uploadEnglishVideoApiMock,
-}))
-
-vi.mock('@/modules/english/ui/english/components/EnglishGenerationLogDialog', () => ({
-  EnglishGenerationLogDialog: () => null,
+  importEnglishCourseApi: mocks.importEnglishCourseApiMock,
 }))
 
 vi.mock('sonner', () => ({
@@ -51,21 +25,18 @@ vi.mock('sonner', () => ({
   },
 }))
 
-function buildTask(overrides: Partial<EnglishGenerationTask> = {}): EnglishGenerationTask {
+function buildCourse(overrides: Partial<EnglishCourseSummary> = {}): EnglishCourseSummary {
   return {
-    id: 'task-1',
-    status: 'running',
-    stage: 'transcribe',
-    progressPercent: 42,
-    message: '正在转写音频',
-    sourceFilename: 'lesson.mp4',
-    fileSize: 12_345_678,
-    errorMessage: '',
-    courseId: null,
-    createdAt: null,
-    updatedAt: null,
-    startedAt: null,
-    completedAt: null,
+    id: 7,
+    title: 'The Quiet Ocean',
+    originalFilename: 'ocean.mp4',
+    sentenceCount: 12,
+    completedSentenceCount: 3,
+    durationSeconds: 180,
+    status: 'unfinished',
+    currentSentenceIndex: 3,
+    updatedAt: '2026-10-20T10:00:00',
+    createdAt: '2026-10-01T10:00:00',
     ...overrides,
   }
 }
@@ -73,32 +44,24 @@ function buildTask(overrides: Partial<EnglishGenerationTask> = {}): EnglishGener
 function buildWorkspace(overrides: Partial<EnglishWorkspaceResponse> = {}): EnglishWorkspaceResponse {
   return {
     currentTask: null,
-    continueCourse: {
-      id: 7,
-      title: '继续课程',
-      originalFilename: 'continue.mp4',
-      sentenceCount: 12,
-      durationSeconds: 180,
-      status: 'unfinished',
-      currentSentenceIndex: 3,
-      updatedAt: null,
-      createdAt: null,
-    },
-    recentCourses: [],
+    continueCourse: buildCourse(),
+    recentCourses: [
+      buildCourse(),
+      buildCourse({
+        id: 8,
+        title: 'Night Train',
+        status: 'completed',
+        currentSentenceIndex: 9,
+        sentenceCount: 9,
+        completedSentenceCount: 9,
+      }),
+    ],
     stats: {
       total_courses: 2,
       unfinished_courses: 1,
       completed_courses: 1,
     },
     ...overrides,
-  }
-}
-
-function buildTaskLog(task: EnglishGenerationTask): EnglishGenerationLogResponse {
-  return {
-    task,
-    events: [],
-    aiLogs: [],
   }
 }
 
@@ -120,119 +83,149 @@ function renderPage() {
 
 describe('EnglishWorkspacePage', () => {
   beforeEach(() => {
-    mocks.clearEnglishCurrentTaskApiMock.mockReset()
     mocks.deleteEnglishCourseApiMock.mockReset()
-    mocks.getEnglishTaskGenerationLogApiMock.mockReset()
     mocks.getEnglishWorkspaceApiMock.mockReset()
-    mocks.retryEnglishCurrentTaskApiMock.mockReset()
-    mocks.subscribeEnglishTaskStreamMock.mockReset()
+    mocks.importEnglishCourseApiMock.mockReset()
     mocks.toastErrorMock.mockReset()
     mocks.toastSuccessMock.mockReset()
-    mocks.uploadEnglishVideoApiMock.mockReset()
-    mocks.latestStreamHandlers = null
     window.confirm = vi.fn(() => true)
   })
 
-  it('keeps the english zone nav visible on the listening workspace', async () => {
+  it('renders the dark listening library with continue card and history', async () => {
     mocks.getEnglishWorkspaceApiMock.mockResolvedValue(buildWorkspace())
 
     renderPage()
 
-    expect(await screen.findByTestId('english-zone-nav')).toBeTruthy()
-    expect(screen.getByTestId('english-zone-listening')).toBeTruthy()
-    expect(screen.queryByTestId('english-zone-reading')).toBeNull()
-    expect(screen.getByTestId('listening-course-history')).toBeTruthy()
-  })
-
-  it('prioritizes the current task view and hides upload actions while generation is active', async () => {
-    const task = buildTask()
-    mocks.getEnglishWorkspaceApiMock.mockResolvedValue(buildWorkspace({ currentTask: task }))
-    mocks.getEnglishTaskGenerationLogApiMock.mockResolvedValue(buildTaskLog(task))
-
-    renderPage()
-
-    expect(await screen.findByText('生成任务')).toBeTruthy()
-    expect(screen.getByText('lesson.mp4')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: '上传并生成' })).toBeNull()
-    // Zone routing bar must remain while generation is active.
+    expect(await screen.findByTestId('english-dictation-library')).toBeTruthy()
     expect(screen.getByTestId('english-zone-nav')).toBeTruthy()
+    expect(screen.getByTestId('english-continue-card')).toBeTruthy()
+    expect(screen.getAllByText('The Quiet Ocean').length).toBeGreaterThan(0)
+    expect(screen.getByText('Night Train')).toBeTruthy()
+    expect(screen.getByText('片库')).toBeTruthy()
   })
 
-  it('navigates straight into the generated course when the task completes', async () => {
-    const task = buildTask()
-    mocks.getEnglishWorkspaceApiMock
-      .mockResolvedValueOnce(buildWorkspace({ currentTask: task }))
-      .mockResolvedValue(buildWorkspace())
-    mocks.getEnglishTaskGenerationLogApiMock.mockResolvedValue(buildTaskLog(task))
+  it('does not claim the shelf is empty when every course is completed', async () => {
+    mocks.getEnglishWorkspaceApiMock.mockResolvedValue(
+      buildWorkspace({
+        continueCourse: null,
+        recentCourses: [
+          buildCourse({
+            id: 8,
+            title: 'Night Train',
+            status: 'completed',
+            currentSentenceIndex: 9,
+            sentenceCount: 9,
+            completedSentenceCount: 9,
+          }),
+        ],
+      }),
+    )
 
     renderPage()
 
-    await screen.findByText('生成任务')
+    expect(await screen.findByText('手头的课程都完成了')).toBeTruthy()
+    expect(screen.getByText('Night Train')).toBeTruthy()
+    expect(screen.queryByText('片库还是空的')).toBeNull()
+  })
 
-    await act(async () => {
-      mocks.latestStreamHandlers?.onDone?.({
-        task: buildTask({
-          status: 'completed',
-          stage: 'completed',
-          progressPercent: 100,
-          message: '课程已生成',
-          courseId: 9,
-        }),
+  it('filters the shelf by status and search query', async () => {
+    mocks.getEnglishWorkspaceApiMock.mockResolvedValue(buildWorkspace())
+
+    renderPage()
+    await screen.findAllByText('The Quiet Ocean')
+
+    fireEvent.click(screen.getByRole('tab', { name: '已完成' }))
+    let grid = screen.getByTestId('english-course-grid')
+    expect(within(grid).queryByText('The Quiet Ocean')).toBeNull()
+    expect(within(grid).getByText('Night Train')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('tab', { name: '全部' }))
+    fireEvent.change(screen.getByLabelText('搜索课程'), { target: { value: 'ocean' } })
+    grid = screen.getByTestId('english-course-grid')
+    expect(within(grid).getByText('The Quiet Ocean')).toBeTruthy()
+    expect(within(grid).queryByText('Night Train')).toBeNull()
+  })
+
+  it('imports a video with subtitles and navigates into the new course', async () => {
+    mocks.getEnglishWorkspaceApiMock.mockResolvedValue(buildWorkspace())
+    mocks.importEnglishCourseApiMock.mockResolvedValue({
+      course: buildCourse({ id: 21, title: 'New Lesson' }),
+      matchedTranslationCount: 2,
+    })
+
+    renderPage()
+    await screen.findAllByText('The Quiet Ocean')
+
+    fireEvent.click(screen.getByRole('button', { name: '导入课程' }))
+    expect(screen.getByRole('dialog', { name: '导入英语课程' })).toBeTruthy()
+
+    const video = new File(['video'], 'new-lesson.mp4', { type: 'video/mp4' })
+    const english = new File(['1\n00:00:00,000 --> 00:00:01,000\nHello.\n'], 'new.en.srt', {
+      type: 'text/plain',
+    })
+    const chinese = new File(['1\n00:00:00,000 --> 00:00:01,000\n你好。\n'], 'new.zh.srt', {
+      type: 'text/plain',
+    })
+
+    fireEvent.change(document.querySelector('#ed-import-video') as HTMLInputElement, {
+      target: { files: [video] },
+    })
+    fireEvent.change(document.querySelector('#ed-import-english') as HTMLInputElement, {
+      target: { files: [english] },
+    })
+    fireEvent.change(document.querySelector('#ed-import-chinese') as HTMLInputElement, {
+      target: { files: [chinese] },
+    })
+
+    const titleInput = screen.getByPlaceholderText('默认使用视频文件名') as HTMLInputElement
+    await waitFor(() => {
+      expect(titleInput.value).toBe('new lesson')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /导入并开始/ }))
+
+    await waitFor(() => {
+      expect(mocks.importEnglishCourseApiMock).toHaveBeenCalledWith({
+        videoFile: video,
+        englishSubtitle: english,
+        chineseSubtitle: chinese,
+        title: 'new lesson',
       })
     })
-
-    await waitFor(() => {
-      expect(screen.getByTestId('course-route').textContent).toBe('course:9')
-    })
-    expect(mocks.toastSuccessMock).toHaveBeenCalledWith('英语课程已生成，正在进入课程。', undefined)
+    expect((await screen.findByTestId('course-route')).textContent).toBe('course:21')
+    expect(mocks.toastSuccessMock).toHaveBeenCalled()
   })
 
-  it('keeps retry and clear actions available for failed tasks', async () => {
-    const failedTask = buildTask({
-      status: 'failed',
-      stage: 'failed',
-      progressPercent: 100,
-      message: '生成失败',
-      errorMessage: 'mock failure',
-    })
-    mocks.getEnglishWorkspaceApiMock.mockResolvedValue(buildWorkspace({ currentTask: failedTask }))
-    mocks.getEnglishTaskGenerationLogApiMock.mockResolvedValue(buildTaskLog(failedTask))
-    mocks.retryEnglishCurrentTaskApiMock.mockResolvedValue({ task: buildTask({ status: 'queued', stage: 'queued' }) })
-    mocks.clearEnglishCurrentTaskApiMock.mockResolvedValue({ ok: true })
+  it('shows an import error from the API without leaving the dialog', async () => {
+    mocks.getEnglishWorkspaceApiMock.mockResolvedValue(buildWorkspace())
+    mocks.importEnglishCourseApiMock.mockRejectedValue(new Error('字幕文件中没有解析到可用句子。'))
 
     renderPage()
-
-    expect(await screen.findByRole('button', { name: '重试' })).toBeTruthy()
-
-    fireEvent.click(screen.getByRole('button', { name: '重试' }))
-    await waitFor(() => {
-      expect(mocks.retryEnglishCurrentTaskApiMock).toHaveBeenCalled()
+    await screen.findAllByText('The Quiet Ocean')
+    fireEvent.click(screen.getByRole('button', { name: '导入课程' }))
+    fireEvent.change(document.querySelector('#ed-import-video') as HTMLInputElement, {
+      target: { files: [new File(['v'], 'lesson.mp4', { type: 'video/mp4' })] },
     })
-
-    fireEvent.click(screen.getByRole('button', { name: '清除' }))
-    expect(window.confirm).toHaveBeenCalledWith(
-      '确定清除当前英语生成任务吗？此操作不可撤销，当前任务状态和生成日志会从工作台移除。',
-    )
-    await waitFor(() => {
-      expect(mocks.clearEnglishCurrentTaskApiMock).toHaveBeenCalled()
+    fireEvent.change(document.querySelector('#ed-import-english') as HTMLInputElement, {
+      target: { files: [new File(['s'], 'lesson.srt', { type: 'text/plain' })] },
     })
+    fireEvent.click(screen.getByRole('button', { name: /导入并开始/ }))
+
+    expect(await screen.findByText('字幕文件中没有解析到可用句子。')).toBeTruthy()
+    expect(screen.getByRole('dialog', { name: '导入英语课程' })).toBeTruthy()
   })
 
-  it('shows restart interruption copy for interrupted failed tasks', async () => {
-    const interruptedTask = buildTask({
-      status: 'failed',
-      stage: 'interrupted',
-      progressPercent: 45,
-      message: '生成因服务重启被中断，可点击重试继续。',
-      errorMessage: '服务重启导致任务中断。',
-    })
-    mocks.getEnglishWorkspaceApiMock.mockResolvedValue(buildWorkspace({ currentTask: interruptedTask }))
-    mocks.getEnglishTaskGenerationLogApiMock.mockResolvedValue(buildTaskLog(interruptedTask))
+  it('deletes a course after confirmation', async () => {
+    mocks.getEnglishWorkspaceApiMock.mockResolvedValue(buildWorkspace())
+    mocks.deleteEnglishCourseApiMock.mockResolvedValue({ ok: true })
 
     renderPage()
+    await screen.findAllByText('The Quiet Ocean')
 
-    expect(await screen.findByText('生成被服务重启中断')).toBeTruthy()
-    expect(screen.getByText('点击重试将复用已完成的转写结果，不会重复计费。')).toBeTruthy()
-    expect(screen.getByRole('button', { name: '重试' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '删除课程 The Quiet Ocean' }))
+    expect(window.confirm).toHaveBeenCalled()
+    await waitFor(() => {
+      expect(mocks.deleteEnglishCourseApiMock).toHaveBeenCalledWith(7)
+    })
   })
 })

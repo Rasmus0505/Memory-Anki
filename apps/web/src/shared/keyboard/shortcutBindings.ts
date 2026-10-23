@@ -54,6 +54,18 @@ const SHORTCUT_KEY_LABELS: Record<string, string> = {
   pagedown: 'PageDown',
   backspace: 'Backspace',
   delete: 'Delete',
+  backquote: '`',
+  '`': '`',
+  quote: "'",
+  semicolon: ';',
+  comma: ',',
+  period: '.',
+  slash: '/',
+  backslash: '\\',
+  minus: '-',
+  equal: '=',
+  bracketleft: '[',
+  bracketright: ']',
 }
 
 const DEFAULT_CAPTURE_MESSAGES: Required<ShortcutCaptureMessages> = {
@@ -105,6 +117,17 @@ function inferShortcutCodeFromKey(key: string) {
   if (normalizedKey === 'pagedown') return 'PageDown'
   if (normalizedKey === 'backspace') return 'Backspace'
   if (normalizedKey === 'delete') return 'Delete'
+  if (normalizedKey === '`') return 'Backquote'
+  if (normalizedKey === "'") return 'Quote'
+  if (normalizedKey === ';') return 'Semicolon'
+  if (normalizedKey === ',') return 'Comma'
+  if (normalizedKey === '.') return 'Period'
+  if (normalizedKey === '/') return 'Slash'
+  if (normalizedKey === '\\') return 'Backslash'
+  if (normalizedKey === '-') return 'Minus'
+  if (normalizedKey === '=') return 'Equal'
+  if (normalizedKey === '[') return 'BracketLeft'
+  if (normalizedKey === ']') return 'BracketRight'
   if (isFunctionShortcutKey(normalizedKey)) return normalizedKey.toUpperCase()
   if (/^[a-z]$/.test(normalizedKey)) return `Key${normalizedKey.toUpperCase()}`
   if (/^\d$/.test(normalizedKey)) return `Digit${normalizedKey}`
@@ -151,6 +174,16 @@ export interface ShortcutAllowOptions {
    * learning shortcuts must leave it off so Backspace keeps deleting text.
    */
   allowBareDeleteKeys?: boolean
+  /**
+   * Bare Escape. Only scenes that own the whole keyboard should enable this;
+   * dialogs still rely on Escape to close.
+   */
+  allowEscape?: boolean
+  /**
+   * Additional bare printable keys a scene can safely reserve (e.g. Backquote
+   * for a mask toggle). Letters/digits are governed by the options above.
+   */
+  allowedBarePrintableKeys?: readonly string[]
 }
 
 export function isShortcutBindingAllowed(
@@ -163,6 +196,7 @@ export function isShortcutBindingAllowed(
   const hasModifier = Boolean(binding.shift || binding.ctrl || binding.alt || binding.meta)
   if (!key || MODIFIER_ONLY_KEYS.has(key)) return false
   if (RESERVED_SHORTCUT_KEYS.has(key)) {
+    if (key === 'escape') return Boolean(options.allowEscape && !hasModifier)
     return Boolean(
       options.allowBareDeleteKeys
       && !hasModifier
@@ -172,6 +206,7 @@ export function isShortcutBindingAllowed(
   // Bare single letters (A–Z) are allowed for flip-card and similar non-typing scenes.
   if (!hasModifier && isBareLetterShortcutKey(key)) return options.allowBareLetters !== false
   if (!hasModifier && isBareDigitShortcutKey(key)) return options.allowBareDigits === true
+  if (!hasModifier && (options.allowedBarePrintableKeys || []).includes(key)) return true
   if (!hasModifier && isPrintableShortcutKey(key)) return false
   if (!hasModifier && !isAllowedBareShortcut(binding)) return false
   return true
@@ -247,29 +282,37 @@ export function captureShortcutFromKeyboardEvent(
     return { value: null, error: resolvedMessages.modifierOnly }
   }
   if (RESERVED_SHORTCUT_KEYS.has(key)) {
-    if (key === 'escape') return { value: null, error: resolvedMessages.escapeReserved }
-    if (key === 'tab') return { value: null, error: resolvedMessages.tabReserved }
-    const bareDeleteAllowed = Boolean(
-      options.allowBareDeleteKeys
-      && !hasModifier
-      && (key === 'backspace' || key === 'delete'),
-    )
-    if (!bareDeleteAllowed) {
-      return {
-        value: null,
-        error: resolvedMessages.reservedKey(
-          getShortcutLabel({ code, key, shift: false, ctrl: false, alt: false, meta: false }),
-        ),
+    if (key === 'escape') {
+      if (!options.allowEscape || hasModifier) {
+        return { value: null, error: resolvedMessages.escapeReserved }
+      }
+    } else if (key === 'tab') {
+      return { value: null, error: resolvedMessages.tabReserved }
+    } else {
+      const bareDeleteAllowed = Boolean(
+        options.allowBareDeleteKeys
+        && !hasModifier
+        && (key === 'backspace' || key === 'delete'),
+      )
+      if (!bareDeleteAllowed) {
+        return {
+          value: null,
+          error: resolvedMessages.reservedKey(
+            getShortcutLabel({ code, key, shift: false, ctrl: false, alt: false, meta: false }),
+          ),
+        }
       }
     }
   }
   const bareLetterAllowed = options.allowBareLetters !== false
   const bareDigitAllowed = options.allowBareDigits === true
+  const barePrintableAllowed = (options.allowedBarePrintableKeys || []).includes(key)
   if (
     !hasModifier &&
     isPrintableShortcutKey(key) &&
     !(isBareLetterShortcutKey(key) && bareLetterAllowed) &&
-    !(isBareDigitShortcutKey(key) && bareDigitAllowed)
+    !(isBareDigitShortcutKey(key) && bareDigitAllowed) &&
+    !barePrintableAllowed
   ) {
     return { value: null, error: resolvedMessages.barePrintable(key) }
   }

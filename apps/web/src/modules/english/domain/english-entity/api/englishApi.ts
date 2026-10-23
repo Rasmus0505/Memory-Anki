@@ -3,6 +3,7 @@ import { API_BASE, request, uploadWithFormData } from '@/shared/api/http'
 import { logAppError } from '@/shared/logs/model/appLogs'
 import type {
   EnglishCourseDetail,
+  EnglishCourseImportResponse,
   EnglishGenerationLogEvent,
   EnglishGenerationLogResponse,
   EnglishCourseProgress,
@@ -127,6 +128,27 @@ export async function uploadEnglishVideoApi(
       description: '上传英语视频',
     },
   )
+}
+
+export async function importEnglishCourseApi(payload: {
+  videoFile: File
+  englishSubtitle: File
+  chineseSubtitle?: File | null
+  title?: string
+}) {
+  const formData = new FormData()
+  formData.append('video_file', payload.videoFile)
+  formData.append('english_subtitle', payload.englishSubtitle)
+  if (payload.chineseSubtitle) {
+    formData.append('chinese_subtitle', payload.chineseSubtitle)
+  }
+  if (payload.title?.trim()) {
+    formData.append('title', payload.title.trim())
+  }
+  return uploadWithFormData<EnglishCourseImportResponse>('/english/import', formData, {
+    resourceKey: `english:import:${payload.videoFile.name || 'video'}:${payload.englishSubtitle.name || 'subtitle'}`,
+    description: '导入英语课程',
+  })
 }
 
 export function retryEnglishCurrentTaskApi() {

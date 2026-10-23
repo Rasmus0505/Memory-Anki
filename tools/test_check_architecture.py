@@ -4057,6 +4057,12 @@ def test_question_practice_has_no_lifecycle_gate(tmp_path: Path, monkeypatch) ->
     assert any("removed AI entry must stay deleted" in error for error in errors)
 
 
+def test_english_dictation_local_import_surface_is_clean() -> None:
+    errors: list[str] = []
+    check_architecture.check_english_dictation_local_import(errors)
+    assert errors == []
+
+
 def test_freestyle_scope_quiz_overlay_requires_inline_english_and_no_zoom_chrome(
     tmp_path: Path, monkeypatch
 ) -> None:

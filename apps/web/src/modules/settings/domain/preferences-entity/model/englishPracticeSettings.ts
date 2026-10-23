@@ -17,14 +17,29 @@ export type EnglishShortcutActionId =
   | 'replay_sentence'
   | 'previous_sentence'
   | 'next_sentence'
-  | 'reveal_word'
   | 'reveal_letter'
-  | 'toggle_single_loop'
-  | 'toggle_auto_replay'
+  | 'reveal_word'
+  | 'toggle_translation'
+  | 'toggle_mask'
+  | 'cycle_layout'
   | 'toggle_sound'
+  | 'speed_up'
+  | 'speed_down'
+  | 'reset_sentence'
+  | 'pause_session'
+  | 'toggle_playback_mode'
+  | 'open_shortcuts'
 
 export type ShortcutActionId = EnglishShortcutActionId
 export type EnglishPracticeShortcutMap = Record<EnglishShortcutActionId, ShortcutBinding | null>
+export type EnglishDictationLayout = 'theater' | 'classic' | 'immersive'
+export type EnglishPlaybackMode = 'single' | 'continuous'
+
+export interface EnglishMaskSettings {
+  enabled: boolean
+  blur: number
+  opacity: number
+}
 
 export interface EnglishPracticeSettings {
   shortcuts: EnglishPracticeShortcutMap
@@ -39,39 +54,75 @@ export interface EnglishPracticeSettings {
     autoReplayOnPass: boolean
     singleSentenceLoopEnabled: boolean
   }
+  playback: {
+    mode: EnglishPlaybackMode
+  }
+  stage: {
+    layout: EnglishDictationLayout
+    playbackSpeed: number
+    showFilmstrip: boolean
+    mask: EnglishMaskSettings
+  }
 }
 
 export interface EnglishShortcutActionDefinition {
   id: EnglishShortcutActionId
   label: string
+  group: 'playback' | 'typing' | 'view' | 'system'
 }
 
-export const ENGLISH_PRACTICE_SETTINGS_STORAGE_KEY = 'memory-anki-english-practice-settings-v2'
+export const ENGLISH_PRACTICE_SETTINGS_STORAGE_KEY = 'memory-anki-english-practice-settings-v3'
 export const ENGLISH_PRACTICE_SETTINGS_UPDATED_EVENT = 'memory-anki-english-practice-settings-change'
 
 export const ENGLISH_SHORTCUT_ACTIONS: EnglishShortcutActionDefinition[] = [
-  { id: 'replay_sentence', label: '重播当前句' },
-  { id: 'previous_sentence', label: '上一句' },
-  { id: 'next_sentence', label: '下一句' },
-  { id: 'reveal_word', label: '揭示当前词' },
-  { id: 'reveal_letter', label: '揭示一个字母' },
-  { id: 'toggle_single_loop', label: '开关单句循环' },
-  { id: 'toggle_auto_replay', label: '开关答后重播' },
-  { id: 'toggle_sound', label: '开关声音' },
+  { id: 'replay_sentence', label: '重播本句', group: 'playback' },
+  { id: 'previous_sentence', label: '上一句', group: 'playback' },
+  { id: 'next_sentence', label: '下一句', group: 'playback' },
+  { id: 'pause_session', label: '暂停 / 继续', group: 'playback' },
+  { id: 'toggle_playback_mode', label: '单句 / 连播', group: 'playback' },
+  { id: 'reveal_letter', label: '揭示一个字母', group: 'typing' },
+  { id: 'reveal_word', label: '揭示当前单词', group: 'typing' },
+  { id: 'reset_sentence', label: '清空重输本句', group: 'typing' },
+  { id: 'toggle_translation', label: '显示 / 隐藏译文', group: 'view' },
+  { id: 'toggle_mask', label: '遮挡板开关', group: 'view' },
+  { id: 'cycle_layout', label: '切换布局', group: 'view' },
+  { id: 'speed_up', label: '加快播放', group: 'view' },
+  { id: 'speed_down', label: '减慢播放', group: 'view' },
+  { id: 'toggle_sound', label: '声音开关', group: 'system' },
+  { id: 'open_shortcuts', label: '快捷键面板', group: 'system' },
 ]
 
+function binding(code: string, key: string): ShortcutBinding {
+  return { code, key, shift: false, ctrl: false, alt: false, meta: false }
+}
+
 export const DEFAULT_ENGLISH_SHORTCUTS: EnglishPracticeShortcutMap = {
-  replay_sentence: { code: 'Space', key: 'space', shift: true, ctrl: false, alt: false, meta: false },
-  previous_sentence: { code: 'ArrowLeft', key: 'arrowleft', shift: true, ctrl: false, alt: false, meta: false },
-  next_sentence: { code: 'ArrowRight', key: 'arrowright', shift: true, ctrl: false, alt: false, meta: false },
-  reveal_word: { code: 'Enter', key: 'enter', shift: true, ctrl: false, alt: false, meta: false },
-  reveal_letter: { code: 'ArrowUp', key: 'arrowup', shift: true, ctrl: false, alt: false, meta: false },
-  toggle_single_loop: { code: 'KeyL', key: 'l', shift: true, ctrl: false, alt: false, meta: false },
-  toggle_auto_replay: { code: 'KeyR', key: 'r', shift: true, ctrl: false, alt: false, meta: false },
-  toggle_sound: { code: 'KeyM', key: 'm', shift: true, ctrl: false, alt: false, meta: false },
+  replay_sentence: binding('Space', 'space'),
+  previous_sentence: binding('ArrowLeft', 'arrowleft'),
+  next_sentence: binding('ArrowRight', 'arrowright'),
+  pause_session: binding('Escape', 'escape'),
+  toggle_playback_mode: binding('F3', 'f3'),
+  reveal_letter: binding('ArrowUp', 'arrowup'),
+  reveal_word: binding('ArrowDown', 'arrowdown'),
+  reset_sentence: binding('Home', 'home'),
+  toggle_translation: binding('Enter', 'enter'),
+  toggle_mask: binding('Backquote', '`'),
+  cycle_layout: binding('F2', 'f2'),
+  speed_up: binding('PageUp', 'pageup'),
+  speed_down: binding('PageDown', 'pagedown'),
+  toggle_sound: binding('F8', 'f8'),
+  open_shortcuts: binding('F1', 'f1'),
 }
 
 export const DEFAULT_SHORTCUTS = DEFAULT_ENGLISH_SHORTCUTS
+
+export const ENGLISH_DICTATION_SHORTCUT_OPTIONS = {
+  allowBareLetters: false,
+  allowBareDigits: false,
+  allowBareDeleteKeys: true,
+  allowEscape: true,
+  allowedBarePrintableKeys: ['`', '\\', '-', '='],
+} as const
 
 export const DEFAULT_ENGLISH_PRACTICE_SETTINGS: EnglishPracticeSettings = {
   shortcuts: DEFAULT_ENGLISH_SHORTCUTS,
@@ -80,11 +131,24 @@ export const DEFAULT_ENGLISH_PRACTICE_SETTINGS: EnglishPracticeSettings = {
     masterVolume: 0.5,
   },
   flow: {
-    autoAdvanceOnPass: true,
+    autoAdvanceOnPass: false,
   },
   replay: {
-    autoReplayOnPass: true,
+    autoReplayOnPass: false,
     singleSentenceLoopEnabled: false,
+  },
+  playback: {
+    mode: 'single',
+  },
+  stage: {
+    layout: 'theater',
+    playbackSpeed: 1,
+    showFilmstrip: true,
+    mask: {
+      enabled: false,
+      blur: 18,
+      opacity: 72,
+    },
   },
 }
 
@@ -92,11 +156,22 @@ export function captureShortcutFromKeyboardEvent(event: KeyboardEvent) {
   return captureKeyboardShortcut(
     event,
     {
-      reservedKey: (label) => `${label} 会影响输入，不建议设置为学习快捷键。`,
-      barePrintable: (key) => `「${key.toUpperCase()}」是答题输入键，容易误触。请改用 Shift、Ctrl、Alt 或 Meta 组合。`,
+      reservedKey: (label) => `${label} 会影响输入或删除，不建议设置为学习快捷键。`,
+      barePrintable: (key) => `「${key.toUpperCase()}」是答题输入键，容易误触。请改用方向键、功能键或组合键。`,
     },
-    // 英语练习是打字场景：裸字母是答题输入键，必须拒绝（翻卡场景才允许）。
-    { allowBareLetters: false },
+    ENGLISH_DICTATION_SHORTCUT_OPTIONS,
+  )
+}
+
+function isLegacyResetBinding(value: unknown) {
+  const binding = normalizeShortcutBindingValue(value)
+  return Boolean(
+    binding
+      && binding.key === 'delete'
+      && !binding.shift
+      && !binding.ctrl
+      && !binding.alt
+      && !binding.meta,
   )
 }
 
@@ -105,12 +180,21 @@ export function sanitizeEnglishShortcutMap(rawShortcutMap: unknown): EnglishPrac
     rawShortcutMap && typeof rawShortcutMap === 'object'
       ? (rawShortcutMap as Partial<Record<EnglishShortcutActionId, unknown>>)
       : {}
+  // v2 settings only knew modifier-based actions. Treat them as absent so the
+  // new no-modifier defaults apply instead of half-migrating into a hybrid map.
+  const hasNewScheme = 'toggle_mask' in raw || 'cycle_layout' in raw || 'open_shortcuts' in raw
+  const source = hasNewScheme ? raw : {}
   const occupied = new Set<string>()
   const nextShortcutMap = {} as EnglishPracticeShortcutMap
 
   for (const action of ENGLISH_SHORTCUT_ACTIONS) {
-    const requested = normalizeShortcutBindingValue(raw[action.id] ?? DEFAULT_ENGLISH_SHORTCUTS[action.id])
-    if (!requested || !isShortcutBindingAllowed(requested, { allowBareLetters: false })) {
+    const rawRequested = source[action.id] ?? DEFAULT_ENGLISH_SHORTCUTS[action.id]
+    const requested = normalizeShortcutBindingValue(
+      action.id === 'reset_sentence' && isLegacyResetBinding(rawRequested)
+        ? DEFAULT_ENGLISH_SHORTCUTS.reset_sentence
+        : rawRequested,
+    )
+    if (!requested || !isShortcutBindingAllowed(requested, ENGLISH_DICTATION_SHORTCUT_OPTIONS)) {
       nextShortcutMap[action.id] = null
       continue
     }
@@ -138,11 +222,26 @@ function sanitizeNumber(value: unknown, fallback: number, min: number, max: numb
   return fallback
 }
 
+function sanitizeLayout(value: unknown): EnglishDictationLayout {
+  return value === 'classic' || value === 'immersive' || value === 'theater'
+    ? value
+    : DEFAULT_ENGLISH_PRACTICE_SETTINGS.stage.layout
+}
+
+function sanitizePlaybackMode(value: unknown): EnglishPlaybackMode {
+  return value === 'continuous' || value === 'single'
+    ? value
+    : DEFAULT_ENGLISH_PRACTICE_SETTINGS.playback.mode
+}
+
 export function sanitizeEnglishPracticeSettings(value: unknown): EnglishPracticeSettings {
   const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
   const rawSound = raw.sound && typeof raw.sound === 'object' ? (raw.sound as Record<string, unknown>) : {}
   const rawFlow = raw.flow && typeof raw.flow === 'object' ? (raw.flow as Record<string, unknown>) : {}
   const rawReplay = raw.replay && typeof raw.replay === 'object' ? (raw.replay as Record<string, unknown>) : {}
+  const rawPlayback = raw.playback && typeof raw.playback === 'object' ? (raw.playback as Record<string, unknown>) : {}
+  const rawStage = raw.stage && typeof raw.stage === 'object' ? (raw.stage as Record<string, unknown>) : {}
+  const rawMask = rawStage.mask && typeof rawStage.mask === 'object' ? (rawStage.mask as Record<string, unknown>) : {}
   return {
     shortcuts: sanitizeEnglishShortcutMap(raw.shortcuts),
     sound: {
@@ -169,6 +268,40 @@ export function sanitizeEnglishPracticeSettings(value: unknown): EnglishPractice
         rawReplay.singleSentenceLoopEnabled,
         DEFAULT_ENGLISH_PRACTICE_SETTINGS.replay.singleSentenceLoopEnabled,
       ),
+    },
+    playback: {
+      mode: sanitizePlaybackMode(rawPlayback.mode),
+    },
+    stage: {
+      layout: sanitizeLayout(rawStage.layout),
+      playbackSpeed: sanitizeNumber(
+        rawStage.playbackSpeed,
+        DEFAULT_ENGLISH_PRACTICE_SETTINGS.stage.playbackSpeed,
+        0.5,
+        2,
+      ),
+      showFilmstrip: sanitizeBoolean(
+        rawStage.showFilmstrip,
+        DEFAULT_ENGLISH_PRACTICE_SETTINGS.stage.showFilmstrip,
+      ),
+      mask: {
+        enabled: sanitizeBoolean(
+          rawMask.enabled,
+          DEFAULT_ENGLISH_PRACTICE_SETTINGS.stage.mask.enabled,
+        ),
+        blur: sanitizeNumber(
+          rawMask.blur,
+          DEFAULT_ENGLISH_PRACTICE_SETTINGS.stage.mask.blur,
+          0,
+          40,
+        ),
+        opacity: sanitizeNumber(
+          rawMask.opacity,
+          DEFAULT_ENGLISH_PRACTICE_SETTINGS.stage.mask.opacity,
+          20,
+          100,
+        ),
+      },
     },
   }
 }

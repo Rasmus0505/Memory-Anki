@@ -93,7 +93,9 @@ def update_course_progress(
     safe_index = max(0, min(int(current_sentence_index), max(course.sentence_count, 0)))
     progress.current_sentence_index = safe_index
     progress.completed_sentence_indexes_json = json.dumps(normalized_indexes, ensure_ascii=False)
-    progress.is_completed = bool(course.sentence_count > 0 and safe_index >= course.sentence_count)
+    progress.is_completed = bool(
+        course.sentence_count > 0 and len(normalized_indexes) >= course.sentence_count
+    )
     progress.updated_at = utc_now_naive()
     session.commit()
     session.refresh(progress)
@@ -131,7 +133,10 @@ def delete_course(session: Session, course_id: int) -> None:
     course = session.query(EnglishCourse).filter_by(id=course_id).first()
     if course is None:
         return
-    media_path = resolve_course_media_path(course)
+    try:
+        media_path = resolve_course_media_path(course)
+    except EnglishCourseError:
+        media_path = None
     course_path = media_path.parent if media_path else None
     session.query(StudySession).filter(StudySession.english_course_id == course_id).update(
         {
@@ -243,11 +248,23 @@ def serialize_course_summary(course: EnglishCourse) -> dict[str, Any]:
     progress = course.progress
     status = "completed" if progress and progress.is_completed else "unfinished"
     current_sentence_index = int(progress.current_sentence_index or 0) if progress else 0
+    completed_sentence_count = 0
+    if progress is not None:
+        try:
+            completed_sentence_count = len(
+                normalize_completed_indexes(
+                    json.loads(progress.completed_sentence_indexes_json or "[]"),
+                    sentence_count=int(course.sentence_count or 0),
+                )
+            )
+        except (TypeError, ValueError):
+            completed_sentence_count = 0
     return {
         "id": course.id,
         "title": course.title,
         "originalFilename": course.original_filename,
         "sentenceCount": int(course.sentence_count or 0),
+        "completedSentenceCount": completed_sentence_count,
         "durationSeconds": int(course.duration_seconds or 0),
         "status": status,
         "currentSentenceIndex": current_sentence_index,

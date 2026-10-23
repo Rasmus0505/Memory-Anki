@@ -1,41 +1,38 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import type {
-  EnglishCourseDetail,
-  EnglishCourseProgress,
-  EnglishSentenceCheckResponse,
-} from '@/shared/api/contracts'
+import type { EnglishCourseDetail, EnglishCourseProgress } from '@/shared/api/contracts'
+import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
 import EnglishCoursePage from '@/modules/english/ui/english/EnglishCoursePage'
 
 const mocks = vi.hoisted(() => ({
   getEnglishCourseApiMock: vi.fn(),
-  checkEnglishSentenceApiMock: vi.fn(),
   updateEnglishCourseProgressApiMock: vi.fn(),
   toastErrorMock: vi.fn(),
-  mediaPlayMock: vi.fn().mockResolvedValue(undefined),
-  mediaPauseMock: vi.fn(),
+  playMock: vi.fn().mockResolvedValue(undefined),
+  pauseMock: vi.fn(),
+  sound: {
+    playKeySound: vi.fn(),
+    playWrongSound: vi.fn(),
+    playCorrectSound: vi.fn(),
+    playSentenceComplete: vi.fn(),
+  },
 }))
 
 vi.mock('@/modules/english/domain/english-entity/api', () => ({
   buildEnglishCourseMediaUrl: (courseId: number) => `/media/${courseId}.mp4`,
-  checkEnglishSentenceApi: mocks.checkEnglishSentenceApiMock,
   getEnglishCourseApi: mocks.getEnglishCourseApiMock,
   updateEnglishCourseProgressApi: mocks.updateEnglishCourseProgressApiMock,
 }))
 
 vi.mock('@/modules/english/ui/english/useEnglishTypingFeedbackSounds', () => ({
-  useEnglishTypingFeedbackSounds: () => ({
-    playKeySound: vi.fn(),
-    playWrongSound: vi.fn(),
-    playCorrectSound: vi.fn(),
-    playSentenceComplete: vi.fn(),
-  }),
+  useEnglishTypingFeedbackSounds: () => mocks.sound,
 }))
 
 vi.mock('sonner', () => ({
   toast: {
     error: mocks.toastErrorMock,
+    success: vi.fn(),
   },
 }))
 
@@ -52,9 +49,10 @@ function buildProgress(overrides: Partial<EnglishCourseProgress> = {}): EnglishC
 function buildCourse(overrides: Partial<EnglishCourseDetail> = {}): EnglishCourseDetail {
   return {
     id: 1,
-    title: '测试英语课',
+    title: 'Test Course',
     originalFilename: 'test.mp4',
     sentenceCount: 2,
+    completedSentenceCount: 0,
     durationSeconds: 8,
     status: 'unfinished',
     currentSentenceIndex: 0,
@@ -86,402 +84,327 @@ function buildCourse(overrides: Partial<EnglishCourseDetail> = {}): EnglishCours
   }
 }
 
-function buildPassedCheckResponse(): EnglishSentenceCheckResponse {
-  return {
-    passed: true,
-    tokenResults: [
-      { input: 'hello', correct: true, missing: false, unexpected: false },
-      { input: 'world', correct: true, missing: false, unexpected: false },
-    ],
-    normalizedInput: ['hello', 'world'],
-    tokenCount: 2,
-  }
-}
-
-function createDeferred<T>() {
-  let resolve!: (value: T) => void
-  let reject!: (reason?: unknown) => void
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res
-    reject = rej
-  })
-  return { promise, resolve, reject }
-}
-
 function renderPage() {
   return render(
-    <>
-      <div data-testid="outside-space">outside</div>
-      <MemoryRouter initialEntries={['/english/1']}>
-        <Routes>
-          <Route path="/english/:id" element={<EnglishCoursePage />} />
-        </Routes>
-      </MemoryRouter>
-    </>,
+    <MemoryRouter initialEntries={['/english/1']}>
+      <Routes>
+        <Route path="/english/:id" element={<EnglishCoursePage />} />
+      </Routes>
+    </MemoryRouter>,
   )
 }
 
-function getVideoElement() {
-  const video = document.querySelector('video')
+function press(key: string, code = '') {
+  fireEvent.keyDown(window, { key, code: code || key })
+}
+
+async function loadCourse(course: EnglishCourseDetail = buildCourse()) {
+  mocks.getEnglishCourseApiMock.mockResolvedValue(course)
+  renderPage()
+  expect(await screen.findByText(course.title)).toBeTruthy()
+  const video = document.querySelector('video') as HTMLVideoElement
   expect(video).toBeTruthy()
-  return video as HTMLVideoElement
+  Object.defineProperty(video, 'currentTime', {
+    configurable: true,
+    writable: true,
+    value: 0,
+  })
+  fireEvent.loadedMetadata(video)
+  await waitFor(() => {
+    expect(mocks.playMock).toHaveBeenCalled()
+  })
+  return video
 }
 
-async function typeLetters(input: HTMLElement, letters: string) {
-  for (const letter of letters) {
-    await act(async () => {
-      fireEvent.keyDown(input, { key: letter })
-    })
+function typeWord(word: string) {
+  for (const char of word) {
+    press(char)
   }
-}
-
-async function advancePlayback(video: HTMLVideoElement, currentTime: number) {
-  await act(async () => {
-    Object.defineProperty(video, 'currentTime', {
-      configurable: true,
-      writable: true,
-      value: currentTime,
-    })
-    fireEvent.timeUpdate(video)
-  })
-}
-
-async function finishInitialPreview(currentTime = 1.05) {
-  const input = (await screen.findByTestId('english-typing-input')) as HTMLInputElement
-  const video = getVideoElement()
-  await waitFor(() => {
-    expect(mocks.mediaPlayMock).toHaveBeenCalled()
-  })
-  await act(async () => {
-    Object.defineProperty(video, 'currentTime', {
-      configurable: true,
-      writable: true,
-      value: currentTime,
-    })
-    fireEvent.ended(video)
-  })
-  await waitFor(() => {
-    expect(mocks.mediaPauseMock).toHaveBeenCalled()
-    expect(document.activeElement).toBe(input)
-  })
-  return { input, video }
 }
 
 describe('EnglishCoursePage', () => {
   beforeEach(() => {
     vi.useRealTimers()
     window.localStorage.clear()
+    resetClientPreferenceCacheForTest()
     mocks.getEnglishCourseApiMock.mockReset()
-    mocks.checkEnglishSentenceApiMock.mockReset()
     mocks.updateEnglishCourseProgressApiMock.mockReset()
+    mocks.updateEnglishCourseProgressApiMock.mockResolvedValue(buildProgress())
     mocks.toastErrorMock.mockReset()
-    mocks.mediaPlayMock.mockReset()
-    mocks.mediaPlayMock.mockResolvedValue(undefined)
-    mocks.mediaPauseMock.mockReset()
-    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback: FrameRequestCallback) => {
-      callback(0)
-      return 1
-    })
-    vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => undefined)
+    mocks.playMock.mockReset()
+    mocks.playMock.mockResolvedValue(undefined)
+    mocks.pauseMock.mockReset()
+    Object.values(mocks.sound).forEach((mock) => mock.mockReset())
     Object.defineProperty(HTMLMediaElement.prototype, 'play', {
       configurable: true,
       writable: true,
-      value: mocks.mediaPlayMock,
+      value: mocks.playMock,
     })
     Object.defineProperty(HTMLMediaElement.prototype, 'pause', {
       configurable: true,
       writable: true,
-      value: mocks.mediaPauseMock,
+      value: mocks.pauseMock,
     })
   })
 
-  it('auto plays the sentence once, pauses, and focuses the typing input', async () => {
-    mocks.getEnglishCourseApiMock.mockResolvedValue(buildCourse())
+  it('renders the theatre stage and autoplays the first sentence', async () => {
+    await loadCourse()
 
-    renderPage()
-
-    expect(await screen.findByText('测试英语课')).toBeTruthy()
-    expect(mocks.mediaPlayMock).toHaveBeenCalledTimes(1)
-
-    const { input } = await finishInitialPreview()
-    expect(document.activeElement).toBe(input)
+    expect(screen.getByTestId('english-course-workbench').className).toContain('ed-page--theater')
+    expect(screen.getByText('SENTENCE 01')).toBeTruthy()
+    expect(screen.getByText('Test Course')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '播放模式：单句' })).toBeTruthy()
+    expect(screen.getByTestId('english-word-0').getAttribute('data-active-word')).toBe('true')
+    expect(mocks.playMock).toHaveBeenCalledTimes(1)
   })
 
-  it('shows the current translation immediately after local completion before server validation returns', async () => {
-    const deferredCheck = createDeferred<EnglishSentenceCheckResponse>()
-    mocks.getEnglishCourseApiMock.mockResolvedValue(buildCourse())
-    mocks.checkEnglishSentenceApiMock.mockReturnValue(deferredCheck.promise)
-    mocks.updateEnglishCourseProgressApiMock.mockResolvedValue(
-      buildProgress({
-        currentSentenceIndex: 1,
-        completedSentenceIndexes: [0],
+  it('resumes at the saved sentence position', async () => {
+    await loadCourse(
+      buildCourse({
+        progress: buildProgress({ currentSentenceIndex: 1, completedSentenceIndexes: [0] }),
       }),
     )
 
-    renderPage()
-
-    const { input } = await finishInitialPreview()
-    const translationCard = screen.getByTestId('english-course-inline-translation')
-
-    await typeLetters(input, 'helloworld')
-
-    await waitFor(() => {
-      expect(mocks.checkEnglishSentenceApiMock).toHaveBeenCalledWith(1, {
-        sentenceIndex: 0,
-        inputText: 'hello world',
-      })
-    })
-    expect(within(translationCard).getByText('当前句译文')).toBeTruthy()
-    expect(within(translationCard).getByText('你好 世界')).toBeTruthy()
-
-    deferredCheck.resolve(buildPassedCheckResponse())
-    await waitFor(() => {
-      expect(mocks.updateEnglishCourseProgressApiMock).toHaveBeenCalled()
-    })
-  })
-
-  it('treats shortcut-based reveal completion the same as manual typing', async () => {
-    mocks.getEnglishCourseApiMock.mockResolvedValue(buildCourse())
-    mocks.checkEnglishSentenceApiMock.mockResolvedValue(buildPassedCheckResponse())
-    mocks.updateEnglishCourseProgressApiMock.mockResolvedValue(
-      buildProgress({
-        currentSentenceIndex: 1,
-        completedSentenceIndexes: [0],
-      }),
-    )
-
-    renderPage()
-
-    const { input } = await finishInitialPreview()
-    const translationCard = screen.getByTestId('english-course-inline-translation')
-
-    fireEvent.keyDown(input, { key: 'Enter', code: 'Enter', shiftKey: true })
-    fireEvent.keyDown(input, { key: 'Enter', code: 'Enter', shiftKey: true })
-
-    await waitFor(() => {
-      expect(mocks.checkEnglishSentenceApiMock).toHaveBeenCalledWith(1, {
-        sentenceIndex: 0,
-        inputText: 'hello world',
-      })
-    })
-    expect(within(translationCard).getByText('你好 世界')).toBeTruthy()
-  })
-
-  it('stays on the completed sentence when auto replay and auto advance are both off', async () => {
-    window.localStorage.setItem(
-      'memory-anki-english-practice-settings-v2',
-      JSON.stringify({
-        flow: { autoAdvanceOnPass: false },
-        replay: { autoReplayOnPass: false, singleSentenceLoopEnabled: false },
-        sound: { enabled: false, masterVolume: 0 },
-      }),
-    )
-    mocks.getEnglishCourseApiMock.mockResolvedValue(buildCourse())
-    mocks.checkEnglishSentenceApiMock.mockResolvedValue(buildPassedCheckResponse())
-    mocks.updateEnglishCourseProgressApiMock.mockResolvedValue(
-      buildProgress({
-        currentSentenceIndex: 1,
-        completedSentenceIndexes: [0],
-      }),
-    )
-
-    renderPage()
-
-    const { input } = await finishInitialPreview()
-    mocks.mediaPlayMock.mockClear()
-
-    await typeLetters(input, 'helloworld')
-
-    expect(await screen.findByText('本句完成。可重播或进入下一句。')).toBeTruthy()
-    expect(screen.getByText('Sentence 1 / 2')).toBeTruthy()
-    expect(mocks.mediaPlayMock).not.toHaveBeenCalled()
-    expect(screen.getByTestId('english-word-0').getAttribute('data-status')).toBe('correct')
-  })
-
-  it('renders a caret on the active empty letter slot', async () => {
-    mocks.getEnglishCourseApiMock.mockResolvedValue(buildCourse())
-    renderPage()
-    await finishInitialPreview()
-
-    const activeWord = screen.getByTestId('english-word-0')
-    expect(activeWord.getAttribute('data-active-word')).toBe('true')
-    expect(activeWord.querySelector('[data-caret="true"]')).toBeTruthy()
-  })
-
-  it('chain plays the current sentence into the next sentence and pauses at the end of the next sentence', async () => {
-    mocks.getEnglishCourseApiMock.mockResolvedValue(buildCourse())
-    mocks.checkEnglishSentenceApiMock.mockResolvedValue(buildPassedCheckResponse())
-    mocks.updateEnglishCourseProgressApiMock.mockResolvedValue(
-      buildProgress({
-        currentSentenceIndex: 1,
-        completedSentenceIndexes: [0],
-      }),
-    )
-
-    renderPage()
-
-    const { input, video } = await finishInitialPreview(2.21)
-    mocks.mediaPlayMock.mockClear()
-    mocks.mediaPauseMock.mockClear()
-
-    await typeLetters(input, 'helloworld')
-
-    const translationCard = screen.getByTestId('english-course-inline-translation')
-    expect(await within(translationCard).findByText('你好 世界')).toBeTruthy()
-    await waitFor(() => {
-      expect(mocks.mediaPlayMock).toHaveBeenCalledTimes(1)
-    })
-
-    await advancePlayback(video, 1.11)
-    await waitFor(() => {
-      expect(screen.getByText('Sentence 2 / 2')).toBeTruthy()
-    })
-    expect(within(translationCard).getByText('上一句译文')).toBeTruthy()
-    expect(within(translationCard).getByText('你好 世界')).toBeTruthy()
+    expect(screen.getByText('SENTENCE 02')).toBeTruthy()
     expect(screen.getByTestId('english-word-2')).toBeTruthy()
-
-    await advancePlayback(video, 2.21)
-    await waitFor(() => {
-      expect(mocks.mediaPauseMock).toHaveBeenCalled()
-    })
-    expect(screen.getByText('Sentence 2 / 2')).toBeTruthy()
-    expect(within(translationCard).getByText('你好 世界')).toBeTruthy()
   })
 
-  it('replays only the final sentence after completion and then shows the completed view', async () => {
-    mocks.getEnglishCourseApiMock.mockResolvedValue(
-      buildCourse({
-        progress: buildProgress({
-          currentSentenceIndex: 1,
-          completedSentenceIndexes: [0],
-        }),
-      }),
-    )
-    mocks.checkEnglishSentenceApiMock.mockResolvedValue({
-      passed: true,
-      tokenResults: [
-        { input: 'how', correct: true, missing: false, unexpected: false },
-        { input: 'are', correct: true, missing: false, unexpected: false },
-        { input: 'you', correct: true, missing: false, unexpected: false },
-      ],
-      normalizedInput: ['how', 'are', 'you'],
-      tokenCount: 3,
-    })
-    mocks.updateEnglishCourseProgressApiMock.mockResolvedValue(
-      buildProgress({
-        currentSentenceIndex: 2,
-        completedSentenceIndexes: [0, 1],
-        completed: true,
-      }),
-    )
+  it('toggles between single-sentence and continuous playback', async () => {
+    await loadCourse()
+    expect(screen.getByRole('button', { name: '播放模式：单句' })).toBeTruthy()
 
-    renderPage()
-
-    expect(await screen.findByText('Sentence 2 / 2')).toBeTruthy()
-    const translationCard = screen.getByTestId('english-course-inline-translation')
-    expect(within(translationCard).getByText('上一句译文')).toBeTruthy()
-    expect(within(translationCard).getByText('你好 世界')).toBeTruthy()
-
-    const { input, video } = await finishInitialPreview()
-    mocks.mediaPlayMock.mockClear()
-
-    await typeLetters(input, 'howareyou')
-
-    expect(await within(translationCard).findByText('你好吗')).toBeTruthy()
+    press('F3', 'F3')
     await waitFor(() => {
-      expect(mocks.mediaPlayMock).toHaveBeenCalledTimes(1)
+      expect(screen.getByRole('button', { name: '播放模式：连播' })).toBeTruthy()
     })
 
-    await advancePlayback(video, 2.21)
-
+    press('F3', 'F3')
     await waitFor(() => {
-      expect(screen.getByText('课程已完成')).toBeTruthy()
+      expect(screen.getByRole('button', { name: '播放模式：单句' })).toBeTruthy()
     })
   })
 
-  it('rolls back to the failed sentence if server validation rejects after the next sentence has appeared', async () => {
-    const deferredCheck = createDeferred<EnglishSentenceCheckResponse>()
-    mocks.getEnglishCourseApiMock.mockResolvedValue(buildCourse())
-    mocks.checkEnglishSentenceApiMock.mockReturnValue(deferredCheck.promise)
-
-    renderPage()
-
-    const { input, video } = await finishInitialPreview()
-    await typeLetters(input, 'helloworld')
-
-    await advancePlayback(video, 1.11)
-    expect(screen.getByText('Sentence 2 / 2')).toBeTruthy()
-
-    deferredCheck.resolve({
-      passed: false,
-      tokenResults: [
-        { input: 'hello', correct: true, missing: false, unexpected: false },
-        { input: 'wrld', correct: false, missing: false, unexpected: false },
-      ],
-      normalizedInput: ['hello', 'wrld'],
-      tokenCount: 2,
-    })
+  it('stops at the current sentence end in single mode', async () => {
+    await loadCourse()
+    const video = document.querySelector('video') as HTMLVideoElement
+    fireEvent.play(video)
+    video.currentTime = 1.05
 
     await waitFor(() => {
-      expect(screen.getByText('Sentence 1 / 2')).toBeTruthy()
+      expect(mocks.pauseMock).toHaveBeenCalled()
     })
-    expect(await screen.findByText('本句本地已完整显示，但最终校验未通过，请重新拼写这一句。')).toBeTruthy()
-    expect(mocks.updateEnglishCourseProgressApiMock).not.toHaveBeenCalled()
-    expect(within(screen.getByTestId('english-course-inline-translation')).getByText('翻译区')).toBeTruthy()
+    expect(screen.getByText('SENTENCE 01')).toBeTruthy()
   })
 
-  it('uses the fixed dense layout for long sentences', async () => {
-    mocks.getEnglishCourseApiMock.mockResolvedValue(
-      buildCourse({
-        sentences: [
-          {
-            id: 201,
-            index: 0,
-            textEn: 'international collaboration requires carefully coordinated communication across departments',
-            textZh: '跨部门协作需要非常细致的沟通协调。',
-            startMs: 0,
-            endMs: 1600,
-            tokens: [
-              'international',
-              'collaboration',
-              'requires',
-              'carefully',
-              'coordinated',
-              'communication',
-              'across',
-              'departments',
-            ],
-          },
-        ],
-        sentenceCount: 1,
-      }),
-    )
+  it('keeps playing across sentence boundaries in continuous mode', async () => {
+    await loadCourse()
+    press('F3', 'F3')
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '播放模式：连播' })).toBeTruthy()
+    })
 
-    renderPage()
+    const video = document.querySelector('video') as HTMLVideoElement
+    fireEvent.play(video)
+    video.currentTime = 1.05
 
-    await screen.findByText('测试英语课')
-
-    expect(screen.getByTestId('english-course-workbench').className).toContain('overflow-hidden')
-    expect(screen.getByTestId('english-course-main-panel').dataset.density).toBe('dense')
-    expect(screen.getByTestId('english-word-rail').dataset.density).toBe('dense')
-    expect(screen.queryByTestId('english-course-helper-content')).toBeNull()
+    await waitFor(() => {
+      expect(screen.getByText('SENTENCE 02')).toBeTruthy()
+    })
+    expect(mocks.pauseMock).not.toHaveBeenCalled()
   })
 
-  it('falls back to the first unfinished sentence when progress index is out of range', async () => {
-    mocks.getEnglishCourseApiMock.mockResolvedValue(
-      buildCourse({
-        progress: buildProgress({
-          currentSentenceIndex: 99,
-          completedSentenceIndexes: [0],
-        }),
-      }),
+  it('colours letters as they are typed and judges a whole word', async () => {
+    await loadCourse()
+
+    typeWord('hexx')
+    const word = screen.getByTestId('english-word-0')
+    const states = Array.from(word.querySelectorAll('[data-letter-state]')).map((node) =>
+      node.getAttribute('data-letter-state'),
     )
+    expect(states).toEqual(['correct', 'correct', 'wrong', 'wrong', 'caret'])
+    expect(word.getAttribute('data-status')).toBe('active')
+    expect(mocks.sound.playKeySound).toHaveBeenCalledTimes(4)
 
-    renderPage()
+    press('Backspace', 'Backspace')
+    press('Backspace', 'Backspace')
+    typeWord('llo')
+    await waitFor(() => {
+      expect(screen.getByTestId('english-word-0').getAttribute('data-status')).toBe('correct')
+    })
+    expect(mocks.sound.playKeySound).toHaveBeenCalledTimes(7)
+    expect(screen.getByTestId('english-word-1').getAttribute('data-active-word')).toBe('true')
+    expect(mocks.sound.playCorrectSound).toHaveBeenCalled()
+  })
 
-    expect(await screen.findByText('测试英语课')).toBeTruthy()
-    expect(screen.getByText('Sentence 2 / 2')).toBeTruthy()
-    expect(screen.getByText('当前句拼写')).toBeTruthy()
-    expect(screen.getByTestId('english-typing-input')).toBeTruthy()
+  it('plays the error sound, shakes, and clears a wrong full word', async () => {
+    await loadCourse()
+
+    typeWord('helox')
+    expect(screen.getByTestId('english-word-0').getAttribute('data-status')).toBe('wrong')
+    expect(mocks.sound.playWrongSound).toHaveBeenCalled()
+
+    await waitFor(
+      () => {
+        expect(screen.getByTestId('english-word-0').getAttribute('data-status')).toBe('active')
+        expect(screen.getByTestId('english-word-0').querySelectorAll('.ed-letter__ink')).toHaveLength(0)
+      },
+      { timeout: 1800 },
+    )
+  })
+
+  it('completes a sentence, shows translation, and persists progress', async () => {
+    await loadCourse()
+
+    typeWord('hello')
+    typeWord('world')
+
+    await waitFor(() => {
+      expect(mocks.updateEnglishCourseProgressApiMock).toHaveBeenCalledWith(1, {
+        currentSentenceIndex: 1,
+        completedSentenceIndexes: [0],
+      })
+    })
+    expect(mocks.sound.playSentenceComplete).toHaveBeenCalled()
+    const translation = screen.getByTestId('english-course-inline-translation')
+    expect(translation.textContent).toContain('你好 世界')
+    expect(screen.getByText('SENTENCE 01')).toBeTruthy()
+
+    press('Enter', 'Enter')
+    await waitFor(() => {
+      expect(screen.getByTestId('english-course-inline-translation').textContent).toContain('译文已隐藏')
+    })
+  })
+
+  it('reveals one letter and one whole word with the default shortcuts', async () => {
+    await loadCourse()
+
+    press('ArrowUp', 'ArrowUp')
+    await waitFor(() => {
+      const firstLetter = screen
+        .getByTestId('english-word-0')
+        .querySelector('[data-letter-state="hinted"]')
+      expect(firstLetter).toBeTruthy()
+      expect(firstLetter?.textContent).toBe('h')
+    })
+
+    press('ArrowDown', 'ArrowDown')
+    await waitFor(() => {
+      expect(screen.getByTestId('english-word-0').getAttribute('data-status')).toBe('correct')
+      expect(screen.getByTestId('english-word-1').getAttribute('data-active-word')).toBe('true')
+    })
+
+    press('ArrowDown', 'ArrowDown')
+    press('ArrowDown', 'ArrowDown')
+    press('ArrowDown', 'ArrowDown')
+    await waitFor(() => {
+      expect(screen.getByTestId('english-course-inline-translation').textContent).toContain('你好 世界')
+    })
+  })
+
+  it('does not leave a stuck wrong word when navigating before the auto-clear', async () => {
+    await loadCourse()
+
+    typeWord('helox')
+    expect(screen.getByTestId('english-word-0').getAttribute('data-status')).toBe('wrong')
+    press('ArrowRight', 'ArrowRight')
+    await waitFor(() => expect(screen.getByText('SENTENCE 02')).toBeTruthy())
+    press('ArrowLeft', 'ArrowLeft')
+    await waitFor(() => {
+      expect(screen.getByText('SENTENCE 01')).toBeTruthy()
+      expect(screen.getByTestId('english-word-0').getAttribute('data-status')).toBe('active')
+      expect(screen.getByTestId('english-word-0').querySelectorAll('.ed-letter__ink')).toHaveLength(0)
+    })
+  })
+
+  it('navigates sentences with the arrow shortcuts and replays with Space', async () => {
+    await loadCourse()
+
+    press('ArrowRight', 'ArrowRight')
+    await waitFor(() => {
+      expect(screen.getByText('SENTENCE 02')).toBeTruthy()
+    })
+    expect(mocks.playMock).toHaveBeenCalled()
+
+    press('ArrowLeft', 'ArrowLeft')
+    await waitFor(() => {
+      expect(screen.getByText('SENTENCE 01')).toBeTruthy()
+    })
+
+    mocks.playMock.mockClear()
+    press(' ', 'Space')
+    await waitFor(() => {
+      expect(mocks.playMock).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  it('toggles the mask, cycles layouts, and opens the settings panel', async () => {
+    await loadCourse()
+
+    expect(screen.queryByTestId('english-dictation-mask')).toBeNull()
+    press('`', 'Backquote')
+    expect(await screen.findByTestId('english-dictation-mask')).toBeTruthy()
+    press('`', 'Backquote')
+    await waitFor(() => {
+      expect(screen.queryByTestId('english-dictation-mask')).toBeNull()
+    })
+
+    press('F2', 'F2')
+    await waitFor(() => {
+      expect(screen.getByTestId('english-course-workbench').className).toContain('ed-page--classic')
+    })
+
+    press('F1', 'F1')
+    expect(await screen.findByRole('dialog', { name: '快捷键与练习设置' })).toBeTruthy()
+    press('Escape', 'Escape')
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: '快捷键与练习设置' })).toBeNull()
+    })
+  })
+
+  it('shows a completion summary and restarts the round', async () => {
+    await loadCourse()
+
+    typeWord('hello')
+    typeWord('world')
+    press('ArrowRight', 'ArrowRight')
+    await waitFor(() => expect(screen.getByText('SENTENCE 02')).toBeTruthy())
+    typeWord('how')
+    typeWord('are')
+    typeWord('you')
+
+    expect(await screen.findByText('CURTAIN CALL', {}, { timeout: 2500 })).toBeTruthy()
+    expect(screen.getAllByText('Test Course').length).toBeGreaterThan(0)
+
+    press('Enter', 'Enter')
+    await waitFor(() => {
+      expect(screen.queryByText('CURTAIN CALL')).toBeNull()
+      expect(screen.getByText('SENTENCE 01')).toBeTruthy()
+    })
+  })
+
+  it('clears a completed sentence for retyping with Home', async () => {
+    await loadCourse()
+    typeWord('hello')
+    typeWord('world')
+    await waitFor(() => {
+      expect(screen.getByTestId('english-word-0').getAttribute('data-status')).toBe('correct')
+    })
+
+    press('Home', 'Home')
+    await waitFor(() => {
+      expect(screen.getByTestId('english-word-0').getAttribute('data-active-word')).toBe('true')
+      expect(screen.getByTestId('english-word-0').getAttribute('data-status')).toBe('active')
+    })
+
+    typeWord('hello')
+    typeWord('world')
+    await waitFor(() => {
+      expect(screen.getByTestId('english-word-0').getAttribute('data-status')).toBe('correct')
+    })
+    press('Backspace', 'Backspace')
+    await waitFor(() => {
+      expect(screen.getByTestId('english-word-0').getAttribute('data-active-word')).toBe('true')
+      expect(screen.getByTestId('english-word-0').getAttribute('data-status')).toBe('active')
+    })
   })
 })

@@ -4,7 +4,11 @@ import tempfile
 from pathlib import Path
 
 from memory_anki.core.concurrency_limits import concurrency_slot
-from memory_anki.infrastructure.db._tables.english import EnglishCourse, EnglishGenerationTask
+from memory_anki.infrastructure.db._tables.english import (
+    EnglishCourse,
+    EnglishCourseProgress,
+    EnglishGenerationTask,
+)
 from memory_anki.modules.english.application import course_service, task_service
 from memory_anki.modules.english.application.asr_normalization import prepare_sentences_from_asr
 from memory_anki.modules.english.domain.errors import EnglishCourseError
@@ -192,6 +196,7 @@ class EnglishRouteTests(RouterTestCase):
         self.assertEqual(detail.status_code, 200)
         detail_payload = detail.json()
         self.assertEqual(detail_payload["sentenceCount"], 2)
+        self.assertEqual(detail_payload["completedSentenceCount"], 0)
         self.assertEqual(detail_payload["progress"]["currentSentenceIndex"], 0)
         self.assertEqual(len(detail_payload["sentences"]), 2)
         self.assertNotIn("vocabulary", detail_payload["sentences"][0])
@@ -230,6 +235,112 @@ class EnglishRouteTests(RouterTestCase):
         )
         self.assertEqual(check.status_code, 200)
         self.assertTrue(check.json()["passed"])
+
+    def test_completion_follows_completed_sentences_when_browsing_back(self):
+        course_id = 1
+        with self.SessionLocal() as session:
+            session.add(
+                EnglishCourse(
+                    id=course_id,
+                    title="Completed course",
+                    original_filename="lesson.mp4",
+                    media_filename="source.mp4",
+                    media_relative_path="course-1/source.mp4",
+                    media_mime_type="video/mp4",
+                    duration_seconds=10,
+                    sentence_count=2,
+                )
+            )
+            session.add(
+                EnglishCourseProgress(
+                    course_id=course_id,
+                    current_sentence_index=2,
+                    completed_sentence_indexes_json="[0, 1]",
+                    is_completed=True,
+                )
+            )
+            session.commit()
+
+        browsed = self.client.put(
+            f"/api/v1/english/courses/{course_id}/progress",
+            json={"currentSentenceIndex": 0, "completedSentenceIndexes": [0, 1]},
+        )
+        self.assertEqual(browsed.status_code, 200)
+        self.assertTrue(browsed.json()["completed"])
+        detail = self.client.get(f"/api/v1/english/courses/{course_id}")
+        self.assertEqual(detail.json()["status"], "completed")
+
+    def test_delete_course_with_missing_media_still_removes_the_row(self):
+        with self.SessionLocal() as session:
+            session.add(
+                EnglishCourse(
+                    id=9,
+                    title="Missing media",
+                    original_filename="gone.mp4",
+                    media_filename="source.mp4",
+                    media_relative_path="course-9/source.mp4",
+                    media_mime_type="video/mp4",
+                    sentence_count=0,
+                )
+            )
+            session.commit()
+
+        response = self.client.delete("/api/v1/english/courses/9")
+        self.assertEqual(response.status_code, 200)
+        with self.SessionLocal() as session:
+            self.assertIsNone(session.query(EnglishCourse).filter_by(id=9).first())
+
+    def test_course_media_supports_byte_ranges_for_video_seeking(self):
+        course_dir = self.media_dir / "course-11"
+        course_dir.mkdir(parents=True)
+        (course_dir / "source.mp4").write_bytes(b"0123456789abcdef")
+        with self.SessionLocal() as session:
+            session.add(
+                EnglishCourse(
+                    id=11,
+                    title="Range course",
+                    original_filename="range.mp4",
+                    media_filename="source.mp4",
+                    media_relative_path="course-11/source.mp4",
+                    media_mime_type="video/mp4",
+                    duration_seconds=10,
+                    sentence_count=1,
+                )
+            )
+            session.commit()
+
+        full = self.client.get("/api/v1/english/courses/11/media")
+        self.assertEqual(full.status_code, 200)
+        self.assertEqual(full.content, b"0123456789abcdef")
+        self.assertEqual(full.headers["accept-ranges"], "bytes")
+
+        partial = self.client.get(
+            "/api/v1/english/courses/11/media",
+            headers={"Range": "bytes=4-7"},
+        )
+        self.assertEqual(partial.status_code, 206)
+        self.assertEqual(partial.content, b"4567")
+        self.assertEqual(partial.headers["content-range"], "bytes 4-7/16")
+        self.assertEqual(partial.headers["content-length"], "4")
+
+        suffix = self.client.get(
+            "/api/v1/english/courses/11/media",
+            headers={"Range": "bytes=-4"},
+        )
+        self.assertEqual(suffix.status_code, 206)
+        self.assertEqual(suffix.content, b"cdef")
+
+        invalid = self.client.get(
+            "/api/v1/english/courses/11/media",
+            headers={"Range": "bytes=99-100"},
+        )
+        self.assertEqual(invalid.status_code, 416)
+        self.assertEqual(invalid.headers["content-range"], "bytes */16")
+
+        head = self.client.head("/api/v1/english/courses/11/media")
+        self.assertEqual(head.status_code, 200)
+        self.assertEqual(head.headers["content-length"], "16")
+        self.assertEqual(head.headers["accept-ranges"], "bytes")
 
     def test_course_list_does_not_repair_duration_until_explicit_maintenance(self):
         course_dir = self.media_dir / "course-1"

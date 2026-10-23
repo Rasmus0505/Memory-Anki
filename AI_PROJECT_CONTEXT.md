@@ -195,7 +195,7 @@ modules/<feature>/
 | `produce` | JSON、Markdown、整库导入导出 |
 | `settings` | AI 模型注册表、提示词、复习设置 |
 | `dashboard` | 聚合页面数据 |
-| `english` | 英语听力课程、语音识别与翻译 |
+| `english` | 英语听写课程、本地字幕导入与句级拼写（无内置 ASR/翻译） |
 | `english_lookup` | 词典查词与翻译引擎 |
 | `exam` | 考试日期、星级权重、导图抽查 |
 | `backups` | 启停备份、版本快照、恢复 |

@@ -23,6 +23,7 @@ export interface EnglishCourseSummary {
   title: string
   originalFilename: string
   sentenceCount: number
+  completedSentenceCount: number
   durationSeconds: number
   status: 'unfinished' | 'completed'
   currentSentenceIndex: number
@@ -54,6 +55,10 @@ export interface EnglishWorkspaceResponse {
   continueCourse: EnglishCourseSummary | null
   recentCourses: EnglishCourseSummary[]
   stats: DashboardResponse['english_stats']
+}
+export interface EnglishCourseImportResponse {
+  course: EnglishCourseSummary
+  matchedTranslationCount: number
 }
 export interface EnglishSentenceCheckResponse {
   passed: boolean

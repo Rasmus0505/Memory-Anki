@@ -224,9 +224,6 @@ BASELINE_OVERSIZED_FILES = {
     "apps/web/src/modules/practice/domain/queueState.ts",
     "apps/web/src/modules/practice/ui/freestyle/components/FreestyleUnitReviewCardView.tsx",
     "apps/web/src/modules/practice/ui/freestyle/hooks/useImmersiveQueue.ts",
-    # Existing oversized English integration page; tracked separately from
-    # the freestyle architecture work.
-    "apps/web/src/modules/english/ui/english/EnglishCoursePage.tsx",
     "apps/web/src/widgets/palace-memory-lookup/PalaceMemoryLookupDialog.tsx",
     "apps/web/src/modules/memory/domain/review-entity/model/review-flow-tree.ts",
     # Pre-existing oversized integration harness; split tracked separately from feature work.
@@ -5703,6 +5700,80 @@ def check_english_reading_gap_loop(errors: list[str]) -> None:
             )
 
 
+def check_english_dictation_local_import(errors: list[str]) -> None:
+    """Listening dictation must stay local-subtitle-first and keyboard-first."""
+    import_service = (
+        API_SRC / "modules" / "english" / "application" / "subtitle_import.py"
+    )
+    router = API_SRC / "modules" / "english" / "presentation" / "router.py"
+    model = (
+        WEB_SRC
+        / "modules"
+        / "english"
+        / "domain"
+        / "english-dictation"
+        / "model.ts"
+    )
+    page = (
+        WEB_SRC
+        / "modules"
+        / "english"
+        / "ui"
+        / "english-dictation"
+        / "EnglishDictationPage.tsx"
+    )
+    for path in (import_service, router, model, page):
+        if not path.exists():
+            errors.append(
+                f"{path.relative_to(REPO_ROOT).as_posix()}: dictation local-import surface is missing."
+            )
+    if import_service.exists():
+        source = import_service.read_text(encoding="utf-8", errors="ignore")
+        for forbidden in (
+            "EnglishAiDependencies",
+            "dashscope",
+            "get_english_runtime",
+            "transcribe(",
+            "translate_sentences(",
+        ):
+            if forbidden in source:
+                errors.append(
+                    f"{import_service.relative_to(REPO_ROOT).as_posix()}: local subtitle import "
+                    f"must not call ASR/translation AI (`{forbidden}`)."
+                )
+    if router.exists():
+        source = router.read_text(encoding="utf-8", errors="ignore")
+        if '@router.post("/english/import")' not in source:
+            errors.append(
+                f"{router.relative_to(REPO_ROOT).as_posix()}: POST /english/import is required for local course import."
+            )
+        if "content-range" not in source or "accept-ranges" not in source:
+            errors.append(
+                f"{router.relative_to(REPO_ROOT).as_posix()}: course media must keep HTTP byte-range support for cue seeking."
+            )
+    if model.exists():
+        source = model.read_text(encoding="utf-8", errors="ignore")
+        if re.search(r"from ['\"]react", source):
+            errors.append(
+                f"{model.relative_to(REPO_ROOT).as_posix()}: dictation state model must stay framework-free."
+            )
+        for marker in ("typeDictationChar", "revealDictationWord", "revealWholeDictationSession"):
+            if marker not in source:
+                errors.append(
+                    f"{model.relative_to(REPO_ROOT).as_posix()}: dictation model missing `{marker}`."
+                )
+    if page.exists():
+        source = page.read_text(encoding="utf-8", errors="ignore")
+        if "isShortcutPressed" not in source and "useDictationPlayback" not in source:
+            errors.append(
+                f"{page.relative_to(REPO_ROOT).as_posix()}: dictation page must route keyboard shortcuts."
+            )
+        if "english-reading" in source:
+            errors.append(
+                f"{page.relative_to(REPO_ROOT).as_posix()}: dictation page must use english-lookup, not english-reading."
+            )
+
+
 def check_quiz_shortcut_primitive(errors: list[str]) -> None:
     """Shared do-question shortcuts, with ArrowUp toggling mark once per press."""
     model = WEB_SRC / "modules" / "quiz" / "domain" / "quiz-entity" / "model" / "quizShortcuts.ts"
@@ -6621,6 +6692,7 @@ def main() -> int:
     check_review_application_boundary(errors)
     check_unit_review_boundary(errors)
     check_english_reading_gap_loop(errors)
+    check_english_dictation_local_import(errors)
     check_removed_ai_entries_stay_deleted(errors)
     check_palace_review_public_facade(errors)
     check_palace_read_side_purity(errors)

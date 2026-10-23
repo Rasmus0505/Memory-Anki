@@ -83,11 +83,18 @@ export const REGISTERED_STORAGE_KEYS = defineStorageRegistry([
     purpose: 'Legacy keyboard shortcut preference before backend preference migration.',
   },
   {
-    id: 'clientPreference.englishPracticeSettings',
+    id: 'clientPreference.englishPracticeSettingsV2',
     key: 'memory-anki-english-practice-settings-v2',
     area: 'localStorage',
     owner: 'entities/preferences',
-    purpose: 'Legacy English practice preference before backend preference migration.',
+    purpose: 'Legacy English practice preference before the no-modifier dictation scheme.',
+  },
+  {
+    id: 'clientPreference.englishPracticeSettings',
+    key: 'memory-anki-english-practice-settings-v3',
+    area: 'localStorage',
+    owner: 'entities/preferences',
+    purpose: 'English dictation shortcuts, layout, and mask defaults before backend preference migration.',
   },
   {
     id: 'clientPreference.reviewFeedbackSettings',
