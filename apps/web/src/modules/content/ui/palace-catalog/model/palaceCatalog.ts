@@ -132,6 +132,33 @@ export function filterGroupedPalacesBySearch(
   }
 }
 
+/**
+ * 只保留给定宫殿 id 的内容（记忆档位筛选）。章节与学科空了就一起收起，
+ * 但章节的 `question_total` 保持原书总额，筛选不改变进度口径。
+ */
+export function filterGroupedPalacesByPalaceIds(
+  data: PalaceGroupedListResponse,
+  palaceIds: ReadonlySet<number>,
+): PalaceGroupedListResponse {
+  const keep = <T extends { id: number }>(palace: T) => palaceIds.has(palace.id)
+  return {
+    ...data,
+    groups: data.groups
+      .map((group) => ({ ...group, palaces: group.palaces.filter(keep) }))
+      .filter((group) => group.palaces.length > 0),
+    ungrouped: data.ungrouped.filter(keep),
+    subjects: data.subjects
+      .map((subject) => ({
+        ...subject,
+        chapter_groups: subject.chapter_groups
+          .map((group) => ({ ...group, palaces: group.palaces.filter(keep) }))
+          .filter((group) => group.palaces.length > 0),
+        ungrouped_palaces: subject.ungrouped_palaces.filter(keep),
+      }))
+      .filter((subject) => subject.chapter_groups.length > 0 || subject.ungrouped_palaces.length > 0),
+  }
+}
+
 export function getPalaceCatalogScopeTitle(
   data: PalaceGroupedListResponse,
   scope: Pick<PalaceCatalogScope, 'selectedSubjectId' | 'showUncategorizedOnly'>,

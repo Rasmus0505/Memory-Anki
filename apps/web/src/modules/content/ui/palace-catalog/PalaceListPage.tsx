@@ -29,7 +29,12 @@ import {
 import { Button } from '@/shared/components/ui/button'
 import { PageHeader } from '@/shared/components/layout/PageHeader'
 import { PageContainer } from '@/shared/components/layout/PageLayout'
-import { SubjectMemoryLadder } from '@/modules/practice/public'
+import {
+  SubjectMemoryLadder,
+  stageLabel,
+  useSubjectMemoryLadder,
+  type SubjectMemoryLadderKey,
+} from '@/modules/practice/public'
 import { ErrorState } from '@/shared/components/state-placeholders'
 import { useLocalStorageState } from '@/shared/lib/localStorage'
 import { onAppEvent } from '@/shared/events/appEvents'
@@ -40,6 +45,7 @@ import {
   buildPalaceCatalogGroupedQueryKey,
   buildPalaceCatalogQuery,
   createEmptyPalaceGroupedListResponse,
+  filterGroupedPalacesByPalaceIds,
   filterGroupedPalacesBySearch,
   filterGroupedPalacesByScope,
   flattenGroupedPalaces,
@@ -95,6 +101,26 @@ export default function PalaceList() {
     () => buildPalaceCatalogQuery({ search: '', selectedSubjectId }),
     [selectedSubjectId],
   )
+  const subjectKey = useMemo<SubjectMemoryLadderKey | null>(() => {
+    if (showUncategorizedOnly) return 'unassigned'
+    if (!selectedSubjectId) return null
+    if (!/^\d+$/.test(selectedSubjectId)) return 'unassigned'
+    const subjectId = Number(selectedSubjectId)
+    return Number.isSafeInteger(subjectId) && subjectId > 0 ? subjectId : null
+  }, [selectedSubjectId, showUncategorizedOnly])
+  const memoryLadder = useSubjectMemoryLadder(subjectKey)
+  // 档位筛选是这本书内的临时视图，换学科时自动回到“全部”。
+  const [stageFilter, setStageFilter] = useState<number | null>(null)
+  useEffect(() => {
+    setStageFilter(null)
+  }, [subjectKey])
+  const activeStage = stageFilter == null
+    ? null
+    : memoryLadder.stages.find((item) => item.stage_index === stageFilter) ?? null
+  const stagePalaceIds = useMemo(
+    () => (activeStage ? new Set(activeStage.palaces.map((palace) => palace.palace_id)) : null),
+    [activeStage],
+  )
 
   const palaceCatalogQuery = useQuery({
     queryKey: buildPalaceCatalogGroupedQueryKey(catalogQueryParams),
@@ -124,7 +150,11 @@ export default function PalaceList() {
     return result.data ?? createEmptyPalaceGroupedListResponse()
   }, [palaceCatalogQuery, queryClient])
 
-  const allPalaces = useMemo(() => flattenGroupedPalaces(groupedData), [groupedData])
+  const visibleGroupedData = useMemo(
+    () => (stagePalaceIds ? filterGroupedPalacesByPalaceIds(groupedData, stagePalaceIds) : groupedData),
+    [groupedData, stagePalaceIds],
+  )
+  const allPalaces = useMemo(() => flattenGroupedPalaces(visibleGroupedData), [visibleGroupedData])
 
   const currentSubjectTitle = useMemo(() => {
     return getPalaceCatalogScopeTitle(groupedData, {
@@ -218,12 +248,12 @@ export default function PalaceList() {
         compact
       />
 
-      {(selectedSubjectId || showUncategorizedOnly) && (
+      {subjectKey != null && (
         <SubjectMemoryLadder
-          subjectKey={showUncategorizedOnly || !/^\d+$/.test(selectedSubjectId ?? '')
-            ? 'unassigned'
-            : Number(selectedSubjectId)}
+          subjectKey={subjectKey}
           variant="full"
+          selectedStageIndex={stageFilter}
+          onStageSelect={setStageFilter}
         />
       )}
 
@@ -257,28 +287,72 @@ export default function PalaceList() {
           }
         />
       ) : (
-        <PalaceListSections
-          groupedData={groupedData}
-          hasPalaces={allPalaces.length > 0}
-          viewSettings={viewSettings}
-          collapsedChapters={collapsedChapters}
-          onToggleChapter={(chapterId) =>
-            setCollapsedChapters((current) => {
-              const next = new Set(current)
-              if (next.has(chapterId)) next.delete(chapterId)
-              else next.add(chapterId)
-              return next
-            })
-          }
-          renderPalaceCard={renderPalaceCard}
-          emptyTitle={search ? '没有匹配的记忆宫殿' : '这个书架还没有宫殿'}
-          emptyDescription={
-            search
-              ? '换一个关键词，或清除搜索后查看全部宫殿。'
-              : '新建一个宫殿，或回到学科书架选择其他分类。'
-          }
-          emptyActionLabel="新建宫殿"
-        />
+        <>
+          {activeStage && activeStage.palace_count > 0 ? (
+            <div
+              className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-info/25 bg-info/5 px-4 py-2.5 text-sm"
+              data-testid="stage-filter-banner"
+            >
+              <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
+                <span className="rounded-full bg-info/15 px-2.5 py-0.5 text-xs font-semibold text-foreground">
+                  {stageLabel(activeStage.interval_days)}
+                </span>
+                <span>
+                  下方只显示这一档的 <strong className="text-foreground">{activeStage.palace_count}</strong> 座宫殿
+                  · {activeStage.unit_count} 个记忆单元
+                </span>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="shrink-0 rounded-xl"
+                onClick={() => setStageFilter(null)}
+              >
+                查看全部
+              </Button>
+            </div>
+          ) : null}
+          <PalaceListSections
+            groupedData={visibleGroupedData}
+            hasPalaces={allPalaces.length > 0}
+            viewSettings={viewSettings}
+            collapsedChapters={collapsedChapters}
+            onToggleChapter={(chapterId) =>
+              setCollapsedChapters((current) => {
+                const next = new Set(current)
+                if (next.has(chapterId)) next.delete(chapterId)
+                else next.add(chapterId)
+                return next
+              })
+            }
+            renderPalaceCard={renderPalaceCard}
+            emptyTitle={
+              activeStage
+                ? (search ? '这一档里没有匹配的宫殿' : `「${stageLabel(activeStage.interval_days)}」档位没有宫殿`)
+                : search
+                  ? '没有匹配的记忆宫殿'
+                  : '这个书架还没有宫殿'
+            }
+            emptyDescription={
+              activeStage
+                ? (search
+                    ? '换一个关键词，或查看全部宫殿。'
+                    : '这一档暂时没有宫殿；换一个档位，或查看全部宫殿。')
+                : search
+                  ? '换一个关键词，或清除搜索后查看全部宫殿。'
+                  : '新建一个宫殿，或回到学科书架选择其他分类。'
+            }
+            emptyActionLabel="新建宫殿"
+            emptyAction={
+              activeStage ? (
+                <Button type="button" variant="outline" size="sm" onClick={() => setStageFilter(null)}>
+                  查看全部宫殿
+                </Button>
+              ) : undefined
+            }
+          />
+        </>
       )}
 
     </PageContainer>

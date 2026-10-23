@@ -20,7 +20,10 @@ vi.mock('react-router-dom', () => ({
 vi.mock('sonner', () => ({
   toast: {
     success: vi.fn(),
+    info: vi.fn(),
+    warning: vi.fn(),
     error: vi.fn(),
+    message: vi.fn(),
   },
 }))
 
@@ -52,6 +55,47 @@ vi.mock('@/modules/content/domain/palace-segment-entity/api', () => ({
 vi.mock('@/modules/settings/public', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/modules/settings/public')>()),
   getClientPreferencesApi: vi.fn(async () => ({ items: {} })),
+}))
+
+const subjectLadder = vi.hoisted(() => {
+  const days = [0, 1, 3, 7, 14, 30, 60, 120, 240, 365]
+  return {
+    ladder: days,
+    generated_at: '2026-05-11T00:00:00',
+    subjects: [
+      {
+        subject_id: 1,
+        name: '中国近代史',
+        color: '#6366f1',
+        palace_count: 1,
+        stages: days.map((interval, index) => {
+          const palaces = index === 1
+            ? [{
+                palace_id: 1,
+                title: '第四节 收回教育权运动与教会教育的变革',
+                due_date: '2026-05-18',
+                overdue: false,
+                due_today: false,
+                unit_count: 1,
+              }]
+            : []
+          return {
+            stage_index: index,
+            interval_days: interval,
+            palace_count: palaces.length,
+            unit_count: palaces.length,
+            overdue_palace_count: 0,
+            palaces,
+          }
+        }),
+      },
+    ],
+  }
+})
+
+vi.mock('@/modules/practice/ui/review/components/subject-memory-ladder/api', () => ({
+  SUBJECT_MEMORY_LADDER_QUERY_KEY: ['review', 'subject-ladder'],
+  getSubjectMemoryLadderApi: vi.fn(async () => subjectLadder),
 }))
 
 const duePalace = {
@@ -209,6 +253,30 @@ describe('PalaceListPage', () => {
     expect(screen.queryByText(/预计 1分 40秒/)).toBeNull()
     expect(screen.getByRole('button', { name: '立即复习' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '做题' })).toBeTruthy()
+  })
+
+  it('filters the chapter list by the selected memory stage instead of listing palaces in the ladder', async () => {
+    renderPalaceListPage()
+
+    expect(await screen.findByText('第四节 收回教育权运动与教会教育的变革')).toBeTruthy()
+    fireEvent.click(screen.getByRole('radio', { name: /刚学/ }))
+
+    expect(await screen.findByText('「刚学」档位没有宫殿')).toBeTruthy()
+    expect(screen.queryByText('第四节 收回教育权运动与教会教育的变革')).toBeNull()
+    expect(screen.queryByTestId('stage-filter-banner')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '查看全部宫殿' }))
+    expect(await screen.findByText('第四节 收回教育权运动与教会教育的变革')).toBeTruthy()
+  })
+
+  it('keeps only the palaces of a populated stage', async () => {
+    renderPalaceListPage()
+
+    expect(await screen.findByText('第四节 收回教育权运动与教会教育的变革')).toBeTruthy()
+    fireEvent.click(screen.getByRole('radio', { name: /1天/ }))
+
+    expect(await screen.findByTestId('stage-filter-banner')).toBeTruthy()
+    expect(screen.getByText('第四节 收回教育权运动与教会教育的变革')).toBeTruthy()
   })
 
   it('refreshes palace cards when the catalog invalidation event fires', async () => {

@@ -148,7 +148,15 @@ export * from './ui/review/api'
 export * from './ui/review/components/PracticeCompletionDialog'
 export * from './ui/review/components/PalaceReviewUnitsPanel'
 export * from './ui/review/components/PalaceLadderProgress'
-export { SubjectMemoryLadder, subjectKeyFromProgressId } from './ui/review/components/subject-memory-ladder'
+export {
+  SubjectMemoryLadder,
+  stageLabel,
+  subjectKeyFromProgressId,
+  useSubjectMemoryLadder,
+  type SubjectMemoryLadderKey,
+  type SubjectMemoryLadderStage,
+  type SubjectMemoryLadderSubject,
+} from './ui/review/components/subject-memory-ladder'
 export * from './ui/review/hooks/useReviewCompletionCoordinator'
 export * from './ui/review/hooks/useReviewFlowSession'
 export * from './ui/review/model/mind-map-review-flow'

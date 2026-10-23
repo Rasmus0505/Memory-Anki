@@ -3,6 +3,7 @@ import type { PalaceGroupedItem, PalaceGroupedListResponse } from '@/shared/api/
 import {
   buildPalaceCatalogQuery,
   createEmptyPalaceGroupedListResponse,
+  filterGroupedPalacesByPalaceIds,
   filterGroupedPalacesBySearch,
   filterGroupedPalacesByScope,
   flattenGroupedPalaces,
@@ -134,5 +135,23 @@ describe('palaceCatalog model', () => {
     expect(flattenGroupedPalaces(filterGroupedPalacesBySearch(data, '维新')).map((item) => item.id)).toEqual([102])
     expect(flattenGroupedPalaces(filterGroupedPalacesBySearch(data, '教会')).map((item) => item.id)).toEqual([103])
     expect(flattenGroupedPalaces(filterGroupedPalacesBySearch(data, '标题')).map((item) => item.id)).toEqual([101])
+  })
+
+  it('keeps only the selected memory-stage palaces and collapses empty chapters', () => {
+    const data = groupedResponse()
+    data.subjects[0].chapter_groups[0].palaces = [palace(101, 'A'), palace(103, 'D')]
+    data.subjects[0].chapter_groups[0].question_total = 76
+    data.subjects[1].ungrouped_palaces = [palace(201, 'C')]
+
+    const scoped = filterGroupedPalacesByPalaceIds(data, new Set([103]))
+
+    expect(flattenGroupedPalaces(scoped).map((item) => item.id)).toEqual([103])
+    expect(scoped.subjects).toHaveLength(1)
+    expect(scoped.subjects[0].chapter_groups[0].question_total).toBe(76)
+    expect(scoped.subjects[0].ungrouped_palaces).toEqual([])
+  })
+
+  it('returns no subjects when the stage has no palace', () => {
+    expect(filterGroupedPalacesByPalaceIds(groupedResponse(), new Set()).subjects).toEqual([])
   })
 })

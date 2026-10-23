@@ -47,15 +47,6 @@ export function formatReviewDate(value: string, overdue: boolean, dueToday: bool
   return overdue ? `逾期 · ${shown}` : shown
 }
 
-export function defaultStageIndex(stages: readonly SubjectMemoryLadderStage[]): number {
-  const overdue = stages.find((stage) => stage.overdue_palace_count > 0)
-  if (overdue) return overdue.stage_index
-  return stages.reduce(
-    (best, stage) => (stage.palace_count > best.palace_count ? stage : best),
-    stages[0] ?? { stage_index: 0, palace_count: 0 },
-  ).stage_index
-}
-
 export function nodeScale(count: number, max: number): number {
   if (count <= 0 || max <= 0) return 0.42
   return 0.48 + 0.52 * (count / max)

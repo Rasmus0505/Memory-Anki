@@ -30,6 +30,8 @@ interface PalaceListSectionsProps<TPalace extends PalaceGroupedItem | PalaceGrou
   emptyTitle?: string
   emptyDescription?: string
   emptyActionLabel?: string
+  /** 覆盖默认的“创建宫殿”按钮（例如档位筛选无结果时改成“查看全部”）。 */
+  emptyAction?: ReactNode
 }
 
 type SubjectGroup = PalaceGroupedListResponse['subjects'][number] | PalaceGroupedSummaryListResponse['subjects'][number]
@@ -54,6 +56,7 @@ export function PalaceListSections<TPalace extends PalaceGroupedItem | PalaceGro
   emptyTitle = '还没有记忆宫殿',
   emptyDescription = '创建你的第一个记忆宫殿，开始构建知识网络。',
   emptyActionLabel = '创建第一个宫殿',
+  emptyAction,
 }: PalaceListSectionsProps<TPalace>) {
   return (
     <div
@@ -141,12 +144,14 @@ export function PalaceListSections<TPalace extends PalaceGroupedItem | PalaceGro
               title={emptyTitle}
               description={emptyDescription}
               action={
-                <Link to="/palaces/new">
-                  <Button variant="outline" size="sm">
-                    <Plus className="mr-2 size-4" />
-                    {emptyActionLabel}
-                  </Button>
-                </Link>
+                emptyAction ?? (
+                  <Link to="/palaces/new">
+                    <Button variant="outline" size="sm">
+                      <Plus className="mr-2 size-4" />
+                      {emptyActionLabel}
+                    </Button>
+                  </Link>
+                )
               }
             />
           </CardContent>
