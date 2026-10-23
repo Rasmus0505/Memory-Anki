@@ -1,9 +1,9 @@
 """Read current, topology-matching review evidence in a bounded batch."""
-from datetime import date
 from typing import Any
 
 from sqlalchemy.orm import Session
 
+from memory_anki.core.time import local_day
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.unit_reviews import (
     ReviewUnitRatingOperation,
@@ -32,7 +32,7 @@ def read_learning_progress_evidence(session: Session) -> dict[int, dict[str, set
         for unit in units:
             definitions[(palace.id, unit.anchor_uid, unit.unit_kind)] = unit
     result: dict[int, dict[str, set[str]]] = {}
-    today = date.today()
+    today = local_day()
     for state in states:
         definition = definitions.get((state.palace_id, state.anchor_uid, state.unit_kind))
         if definition is None or (

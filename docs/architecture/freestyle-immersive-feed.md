@@ -59,7 +59,7 @@ card, completion/exclusion, and retry `occurrence` rows (`occurrence_kind`, sour
 The server plan is the only authority for retry order, current card, completion, and retry
 counts. PWA, desktop, and a restart of the same device restore that plan. Browser `localStorage`
 keeps display preferences and an offline draft only — it must not decide restudy order.
-An unfinished round survives local midnight, a page refresh, a saved-config hydrate,
+An unfinished round survives the study-day rollover (03:00 local, see `review-boundary.md`), a page refresh, a saved-config hydrate,
 and device switches. A fully handled round keeps its `round_id` and presented order on
 silent rebuilds and `get_or_create` — it must not mint or append brand-new due
 identities that would flip the closing settlement slot off. The next `round_id` is
@@ -603,4 +603,4 @@ Settlement time is round-scoped and survives a restart or the next day. It is th
 
 Leaving the settlement slot cancels that visit and does not end the round. The card’s 「取消结算」 and the right-side 「上一张」 both return to the previous card. The learning clock pauses on every settlement surface: the closing slot, finish-study summary, and partial settlement. After leaving those surfaces, later card dwell and 做题 still accumulate on the same `learning_time`.
 
-The summary separates 本轮累计 from 本轮今日. The backend projects today's union of recorded intervals against the product timezone's calendar boundaries at read time, without a second persisted counter. The frontend adds only uncovered pending/in-flight/current intervals and refreshes the server date window at midnight. Historical scalar time without dated evidence stays in the round total and is explicitly labelled as unattributed; it must not be silently assigned to today. Stored round interval history is not truncated to the per-request upload batch limit.
+The summary separates 本轮累计 from 本轮今日. The backend projects today's union of recorded intervals against the product timezone's calendar boundaries at read time, without a second persisted counter. The frontend adds only uncovered pending/in-flight/current intervals and refreshes the server date window at the study-day rollover (03:00 local). Historical scalar time without dated evidence stays in the round total and is explicitly labelled as unattributed; it must not be silently assigned to today. Stored round interval history is not truncated to the per-request upload batch limit.

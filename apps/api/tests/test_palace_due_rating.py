@@ -1,8 +1,9 @@
 import json
-from datetime import date, timedelta
+from datetime import timedelta
 
 import pytest
 
+from memory_anki.core.time import local_day
 from memory_anki.infrastructure.db._tables.misc import StudySession
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.unit_reviews import (
@@ -109,11 +110,11 @@ def test_palace_due_rating_does_not_batch_first_learning_siblings(db_session):
     assert result["current"]["passed"] is True
     db_session.refresh(current)
     assert current.has_passed is True
-    assert current.due_date > date.today()
+    assert current.due_date > local_day()
     for unit in siblings:
         db_session.refresh(unit)
         assert unit.has_passed is False
-        assert unit.due_date == date.today()
+        assert unit.due_date == local_day()
     assert result["remaining_due_count"] == len(siblings)
     current_study = db_session.get(StudySession, opened["id"])
     assert current_study.status == "active"
@@ -164,7 +165,7 @@ def test_palace_due_rating_batches_mature_due_siblings(db_session):
         round_id="round-palace",
     )
     db_session.refresh(mature)
-    mature.due_date = date.today()
+    mature.due_date = local_day()
     db_session.commit()
     opened = _open(db_session, current, "enc-current")
 
@@ -182,7 +183,7 @@ def test_palace_due_rating_batches_mature_due_siblings(db_session):
     db_session.refresh(mature)
     assert current.has_passed is True
     assert mature.has_passed is True
-    assert mature.due_date > date.today()
+    assert mature.due_date > local_day()
     for unit in units[2:]:
         db_session.refresh(unit)
         assert unit.has_passed is False
@@ -229,7 +230,7 @@ def test_palace_due_rating_includes_current_fill_without_moving_it(db_session):
     palace, units = _seed_palace(db_session)
     current = units[0]
     siblings = units[1:]
-    current.due_date = date.today() + timedelta(days=5)
+    current.due_date = local_day() + timedelta(days=5)
     db_session.commit()
     opened = _open(db_session, current, "enc-fill", allow_not_due=True)
 
@@ -245,11 +246,11 @@ def test_palace_due_rating_includes_current_fill_without_moving_it(db_session):
     assert current.id in result["rated_unit_ids"]
     assert result["current"]["schedule_changed"] is False
     db_session.refresh(current)
-    assert current.due_date == date.today() + timedelta(days=5)
+    assert current.due_date == local_day() + timedelta(days=5)
     for unit in siblings:
         db_session.refresh(unit)
         assert unit.has_passed is False
-        assert unit.due_date == date.today()
+        assert unit.due_date == local_day()
 
 
 def test_palace_due_rating_again_keeps_units_due(db_session):
@@ -272,7 +273,7 @@ def test_palace_due_rating_again_keeps_units_due(db_session):
     assert result["current"]["retry_after_cards"] == 3
     for unit in units:
         db_session.refresh(unit)
-        assert unit.due_date == date.today()
+        assert unit.due_date == local_day()
         if unit.id != current.id:
             assert unit.has_passed is False
 
@@ -350,14 +351,14 @@ def test_palace_due_rating_rejects_stale_current_revision(db_session):
     for unit in units:
         db_session.refresh(unit)
         assert unit.has_passed is False
-        assert unit.due_date <= date.today()
+        assert unit.due_date <= local_day()
 
 
 def test_palace_due_rating_skips_explicit_first_learning_includes(db_session):
     palace, units = _seed_palace(db_session)
     current = units[0]
     fill = units[1]
-    fill.due_date = date.today() + timedelta(days=9)
+    fill.due_date = local_day() + timedelta(days=9)
     db_session.commit()
     opened = _open(db_session, current, "enc-include")
 
@@ -374,14 +375,14 @@ def test_palace_due_rating_skips_explicit_first_learning_includes(db_session):
     assert fill.id not in result["rated_unit_ids"]
     db_session.refresh(fill)
     assert fill.has_passed is False
-    assert fill.due_date == date.today() + timedelta(days=9)
+    assert fill.due_date == local_day() + timedelta(days=9)
 
 
 def test_palace_due_rating_does_not_move_non_due_siblings(db_session):
     palace, units = _seed_palace(db_session)
     current = units[0]
     future = units[1]
-    future.due_date = date.today() + timedelta(days=9)
+    future.due_date = local_day() + timedelta(days=9)
     db_session.commit()
     opened = _open(db_session, current, "enc-future")
 
@@ -396,7 +397,7 @@ def test_palace_due_rating_does_not_move_non_due_siblings(db_session):
 
     assert future.id not in result["rated_unit_ids"]
     db_session.refresh(future)
-    assert future.due_date == date.today() + timedelta(days=9)
+    assert future.due_date == local_day() + timedelta(days=9)
     assert future.has_passed is False
 
 
@@ -428,4 +429,4 @@ def test_palace_real_retry_keeps_all_siblings_failure_history(db_session):
     assert all(unit.stage_index == 6 for unit in units)
     assert all(op.replaced_at is None for op in db_session.query(ReviewUnitRatingOperation).filter_by(batch_id='batch-hard'))
     undo_unit_rating(db_session, 'batch-pass', 'round-palace')
-    assert all(unit.stage_index == 6 and unit.due_date == date.today() for unit in units)
+    assert all(unit.stage_index == 6 and unit.due_date == local_day() for unit in units)

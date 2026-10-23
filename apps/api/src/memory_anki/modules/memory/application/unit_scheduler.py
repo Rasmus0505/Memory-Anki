@@ -6,6 +6,8 @@ import hashlib
 from dataclasses import dataclass
 from datetime import date, timedelta
 
+from memory_anki.core.time import local_day
+
 # Stage 0 is the initial-learning state. A successful first "remember" moves
 # to stage 1, whose one-day interval guarantees a review on the next day.
 INTERVAL_DAYS: tuple[int, ...] = (0, 1, 3, 7, 14, 30, 60, 120, 240, 365)
@@ -117,7 +119,7 @@ def rate_unit(
     locked_due_date: date | None = None,
     hard_penalized_today: bool = False,
 ) -> UnitScheduleResult:
-    current_day = today or date.today()
+    current_day = today or local_day()
     current_stage = clamp_stage(stage_index)
     normalized = normalize_rating(rating)
 

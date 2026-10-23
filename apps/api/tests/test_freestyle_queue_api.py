@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import json
-from datetime import date
 
+from memory_anki.core.time import local_day
 from memory_anki.infrastructure.db._tables.knowledge import Subject
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitState
@@ -403,7 +403,7 @@ def _due_row(palace_id: int, unit_id: str) -> ReviewUnitState:
         revision=1,
         stage_index=0,
         has_passed=False,
-        due_date=date.today(),
+        due_date=local_day(),
         active=True,
     )
 
@@ -427,7 +427,7 @@ def test_same_day_due_units_follow_topology_order(session_factory):
             revision=1,
             stage_index=2,
             has_passed=True,
-            due_date=date.today(),
+            due_date=local_day(),
             topology_order=1,
             active=True,
         )
@@ -444,14 +444,14 @@ def test_same_day_due_units_follow_topology_order(session_factory):
             revision=1,
             stage_index=2,
             has_passed=True,
-            due_date=date.today(),
+            due_date=local_day(),
             topology_order=0,
             active=True,
         )
     )
     session.commit()
     palace_id = palace.id
-    rows = list_trusted_due_units_for_queue(session, date.today(), [palace_id])
+    rows = list_trusted_due_units_for_queue(session, local_day(), [palace_id])
     session.close()
     assert [row["id"] for row in rows] == ["unit-residual", "unit-branch"]
     assert rows[0]["unit_kind"] == "residual"
@@ -482,7 +482,7 @@ def test_queue_reads_pass_state_and_palace_unit_totals(session_factory):
                 revision=1,
                 stage_index=0,
                 has_passed=False,
-                due_date=date.today(),
+                due_date=local_day(),
                 active=True,
             ),
             ReviewUnitState(
@@ -496,7 +496,7 @@ def test_queue_reads_pass_state_and_palace_unit_totals(session_factory):
                 revision=1,
                 stage_index=1,
                 has_passed=True,
-                due_date=date.today(),
+                due_date=local_day(),
                 active=True,
             ),
             ReviewUnitState(
@@ -510,7 +510,7 @@ def test_queue_reads_pass_state_and_palace_unit_totals(session_factory):
                 revision=1,
                 stage_index=1,
                 has_passed=True,
-                due_date=date.today() + timedelta(days=3),
+                due_date=local_day() + timedelta(days=3),
                 active=True,
             ),
             ReviewUnitState(
@@ -524,14 +524,14 @@ def test_queue_reads_pass_state_and_palace_unit_totals(session_factory):
                 revision=1,
                 stage_index=0,
                 has_passed=False,
-                due_date=date.today(),
+                due_date=local_day(),
                 active=False,
             ),
         ]
     )
     session.commit()
     palace_id = palace.id
-    rows = {row["id"]: row for row in list_trusted_due_units_for_queue(session, date.today(), [palace_id])}
+    rows = {row["id"]: row for row in list_trusted_due_units_for_queue(session, local_day(), [palace_id])}
     totals = count_active_units_by_palace(session, [palace_id])
     session.close()
 
@@ -549,11 +549,11 @@ def test_tomorrow_due_counts_only_active_units_on_live_palaces(session_factory, 
     archived = Palace(title="归档宫殿", editor_doc="{}", archived=True, group_sort_order=1)
     session.add_all([live, archived])
     session.flush()
-    tomorrow = date.today() + timedelta(days=1)
+    tomorrow = local_day() + timedelta(days=1)
     specs = [
         (live.id, "tomorrow-a", tomorrow, True),
         (live.id, "tomorrow-b", tomorrow, True),
-        (live.id, "today", date.today(), True),
+        (live.id, "today", local_day(), True),
         (live.id, "day-after", tomorrow + timedelta(days=1), True),
         (live.id, "tomorrow-inactive", tomorrow, False),
         (archived.id, "tomorrow-archived", tomorrow, True),

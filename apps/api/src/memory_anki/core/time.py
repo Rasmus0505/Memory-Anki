@@ -10,6 +10,10 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 logger = logging.getLogger(__name__)
 
 LOCAL_TZ_ENV = "MEMORY_ANKI_LOCAL_TZ"
+STUDY_DAY_START_HOUR_ENV = "MEMORY_ANKI_DAY_START_HOUR"
+# A study day starts at 03:00 local time, not 00:00. Studying at 00:30 belongs
+# to the evening that just ended, so the due queue must not roll forward yet.
+DEFAULT_STUDY_DAY_START_HOUR = 3
 # Matches a trailing ``Z`` or ``±HH:MM`` / ``±HHMM`` offset on an ISO datetime.
 _HAS_OFFSET_PATTERN = re.compile(r"(?:Z|[+-]\d{2}:?\d{2})$", re.IGNORECASE)
 
@@ -132,15 +136,55 @@ def resolve_local_timezone() -> tzinfo:
     return timezone(timedelta(hours=8))
 
 
+def study_day_start_hour() -> int:
+    """Local hour (0-23) at which a new study day begins.
+
+    The learner studies past midnight; a 03:00 rollover keeps the small hours
+    attached to the evening's day, so ``忘记`` / ``困难`` retries and the due
+    queue keep speaking about the same day the session started on.
+    ``MEMORY_ANKI_DAY_START_HOUR`` overrides the default; invalid values fall
+    back to 03:00 like an invalid zone falls back to Beijing time.
+    """
+    configured = os.environ.get(STUDY_DAY_START_HOUR_ENV, "").strip()
+    if configured:
+        try:
+            hour = int(configured)
+        except ValueError:
+            hour = -1
+        if 0 <= hour <= 23:
+            return hour
+        logger.warning(
+            "Ignoring invalid %s=%r; falling back to %02d:00.",
+            STUDY_DAY_START_HOUR_ENV,
+            configured,
+            DEFAULT_STUDY_DAY_START_HOUR,
+        )
+    return DEFAULT_STUDY_DAY_START_HOUR
+
+
+def study_day_of(value: datetime, tz: tzinfo | None = None) -> date:
+    """Study day of an instant stored as UTC-naive or aware.
+
+    The study day is the local calendar date shifted back by
+    :func:`study_day_start_hour`; between midnight and that hour the answer is
+    still the previous calendar day.
+    """
+    zone = tz or resolve_local_timezone()
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    local = value.astimezone(zone)
+    return (local - timedelta(hours=study_day_start_hour())).date()
+
+
 def local_day(tz_name: str | None = None) -> date:
-    """Calendar day in the request zone, or the product calendar zone when absent."""
+    """Current study day in the request zone, or the product zone when absent."""
     if not tz_name:
-        return datetime.now(resolve_local_timezone()).date()
+        return study_day_of(utc_now(), resolve_local_timezone())
     try:
         zone = ZoneInfo(tz_name)
     except (ZoneInfoNotFoundError, ValueError) as exc:
         raise ValueError(f"invalid timezone: {tz_name}") from exc
-    return datetime.now(zone).date()
+    return study_day_of(utc_now(), zone)
 
 
 def _parse_configured_zone(value: str) -> tzinfo | None:
@@ -166,26 +210,26 @@ def _parse_configured_zone(value: str) -> tzinfo | None:
 
 
 def local_calendar_day_of(value: datetime, tz: tzinfo | None = None) -> date:
-    """Local calendar day of an instant stored as UTC-naive or aware."""
-    zone = tz or resolve_local_timezone()
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=UTC)
-    return value.astimezone(zone).date()
+    """Study day of an instant. See :func:`study_day_of`."""
+    return study_day_of(value, tz)
 
 
 def local_calendar_day_bounds_as_utc_naive(
     day: date | None = None,
     tz: tzinfo | None = None,
 ) -> tuple[datetime, datetime]:
-    """Half-open [local midnight, next local midnight) as UTC-naive.
+    """Half-open [study day start, next study day start) as UTC-naive.
 
+    With the default 03:00 rollover the window for day ``D`` is
+    ``[D 03:00, D+1 03:00)`` local time, so 00:15 belongs to the previous day.
     The zone is resolved explicitly rather than inherited from the raw process
     clock, so every caller shares one calendar rule.
     """
-    target = day or date.today()
     zone = tz or resolve_local_timezone()
-    start_local = datetime.combine(target, time.min, tzinfo=zone)
-    end_local = datetime.combine(target + timedelta(days=1), time.min, tzinfo=zone)
+    start_hour = study_day_start_hour()
+    target = day or study_day_of(utc_now(), zone)
+    start_local = datetime.combine(target, time(hour=start_hour), tzinfo=zone)
+    end_local = datetime.combine(target + timedelta(days=1), time(hour=start_hour), tzinfo=zone)
     return (
         start_local.astimezone(UTC).replace(tzinfo=None),
         end_local.astimezone(UTC).replace(tzinfo=None),
@@ -193,7 +237,7 @@ def local_calendar_day_bounds_as_utc_naive(
 
 
 def local_calendar_day_start_as_utc_naive(day: date | None = None) -> datetime:
-    """Local midnight of ``day`` as UTC-naive (for comparing with utc_now_naive rows).
+    """Start of study day ``day`` as UTC-naive (for comparing with utc_now_naive rows).
 
     Kept as a thin wrapper so existing callers share the resolved zone instead of
     relying on the process clock that ``astimezone()`` would otherwise use.
@@ -202,16 +246,21 @@ def local_calendar_day_start_as_utc_naive(day: date | None = None) -> datetime:
 
 
 __all__ = [
+    "DEFAULT_STUDY_DAY_START_HOUR",
     "LOCAL_TZ_ENV",
+    "STUDY_DAY_START_HOUR_ENV",
     "ensure_utc_naive",
     "iso_utc_now",
     "iso_utc_now_naive",
     "local_calendar_day_bounds_as_utc_naive",
     "local_calendar_day_of",
     "local_calendar_day_start_as_utc_naive",
+    "local_day",
     "parse_api_datetime",
     "parse_client_datetime",
     "resolve_local_timezone",
+    "study_day_of",
+    "study_day_start_hour",
     "to_api_datetime",
     "utc_now",
     "utc_now_naive",

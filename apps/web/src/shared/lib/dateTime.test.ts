@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  beijingStudyDay,
   formatLocalDateTimeInputFromDate,
   formatUtcApiDateTime,
   parseApiDateTime,
@@ -37,5 +38,14 @@ describe('dateTime timezone contract', () => {
       const shown = parseApiDateTime(formatUtcApiDateTime(parsed))
       expect(formatLocalDateTimeInputFromDate(shown)).toBe(input)
     }
+  })
+
+  it('rolls the study day over at 03:00 Beijing, not at midnight', () => {
+    // 16:15Z = 00:15 Beijing on Oct 23 — still the Oct 22 study day.
+    expect(beijingStudyDay(new Date('2026-10-22T16:15:00Z'))).toBe('2026-10-22')
+    // 18:59Z = 02:59 Beijing on Oct 23 — still Oct 22.
+    expect(beijingStudyDay(new Date('2026-10-22T18:59:00Z'))).toBe('2026-10-22')
+    // 19:00Z = 03:00 Beijing on Oct 23 — the Oct 23 study day starts.
+    expect(beijingStudyDay(new Date('2026-10-22T19:00:00Z'))).toBe('2026-10-23')
   })
 })

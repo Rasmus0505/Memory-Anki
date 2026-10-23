@@ -151,18 +151,22 @@ def test_yesterday_recap_uses_local_day_window_and_weak_ratio(make_client, sessi
     with session_factory() as session:
         recap = _palace(session, "recap")
         boundary = _palace(session, "boundary")
+        after_rollover = _palace(session, "after-rollover")
         weak_unit = _units(session, recap)[0]
         edge_unit = _units(session, boundary)[0]
+        late_unit = _units(session, after_rollover)[0]
         _seed_ratings(
             session,
             [
                 (weak_unit, 1, datetime(2026, 10, 11, 4, 0)),
                 (weak_unit, 1, datetime(2026, 10, 11, 5, 0)),
                 (weak_unit, 3, datetime(2026, 10, 11, 6, 0)),
-                # Shanghai 23:30 on Oct 11 is still yesterday.
+                # Shanghai 23:30 and 00:30 both belong to the Oct 11 study day:
+                # the day rolls over at 03:00, not at midnight.
                 (edge_unit, 1, datetime(2026, 10, 11, 15, 30)),
-                # Shanghai 00:30 on Oct 12 is today, not yesterday.
-                (edge_unit, 3, datetime(2026, 10, 11, 16, 30)),
+                (edge_unit, 1, datetime(2026, 10, 11, 16, 30)),
+                # Shanghai 03:30 on Oct 12 is the Oct 12 study day, not yesterday.
+                (late_unit, 1, datetime(2026, 10, 11, 19, 30)),
             ],
         )
         edge_unit_id = edge_unit.id

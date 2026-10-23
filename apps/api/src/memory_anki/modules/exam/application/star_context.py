@@ -8,6 +8,7 @@ from datetime import date
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from memory_anki.core.time import local_day
 from memory_anki.infrastructure.db._tables.knowledge import Chapter, Subject
 from memory_anki.infrastructure.db._tables.palaces import (
     Palace,
@@ -153,7 +154,7 @@ def palace_priority_scores(
     *,
     today: date | None = None,
 ) -> dict[int, float]:
-    on = today or date.today()
+    on = today or local_day()
     contexts = load_palace_contexts(session, palace_ids)
     shares, subject_count = subject_shares(session)
     return {

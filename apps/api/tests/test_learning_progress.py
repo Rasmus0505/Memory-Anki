@@ -1,10 +1,10 @@
 """Progress reads use hermetic databases and never repair or flush state."""
 import json
-from datetime import date, timedelta
+from datetime import timedelta
 
 from sqlalchemy import event
 
-from memory_anki.core.time import utc_now_naive
+from memory_anki.core.time import local_day, utc_now_naive
 from memory_anki.infrastructure.db._tables.knowledge import Chapter, Subject
 from memory_anki.infrastructure.db._tables.palaces import (
     FreestyleQuizAttempt,
@@ -95,7 +95,7 @@ def test_real_hierarchy_dedup_evidence_and_clear(session_factory):
         reconcile_palace_units(session, pid)
         for state in session.query(ReviewUnitState).all():
             state.has_passed = True
-            state.due_date = date.today() - timedelta(days=1)
+            state.due_date = local_day() - timedelta(days=1)
         session.commit()
         result = build_learning_progress(session)
         # Cleared round state still counts because the question retains attempt history.

@@ -19,11 +19,11 @@ These tests pin the two invariants that stop it coming back:
 from __future__ import annotations
 
 import json
-from datetime import date
 
 import pytest
 from sqlalchemy import event
 
+from memory_anki.core.time import local_day
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitState
 from memory_anki.modules.memory.api import list_due_units, reconcile_palace_units
@@ -63,7 +63,7 @@ def _seed(session, *, stage_index: int = 3) -> ReviewUnitState:
     unit = session.query(ReviewUnitState).filter_by(palace_id=palace.id, active=True).one()
     unit.stage_index = stage_index
     unit.has_passed = True
-    unit.due_date = date.today()
+    unit.due_date = local_day()
     unit.revision += 1
     session.commit()
     return unit

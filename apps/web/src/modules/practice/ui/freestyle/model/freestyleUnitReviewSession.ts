@@ -11,7 +11,7 @@ import type {
   MindMapEditorState,
 } from '@/shared/api/contracts'
 import { coerceEditorDoc } from '@/shared/lib/mindmap-split-marks/splitMarks'
-import { beijingCalendarDay, parseApiDateTime } from '@/shared/lib/dateTime'
+import { beijingStudyDay, parseApiDateTime } from '@/shared/lib/dateTime'
 
 const inFlightSessionLoads = new Map<string, Promise<UnitReviewSessionDto>>()
 const SESSION_LOAD_TIMEOUT_MS = 30_000
@@ -145,7 +145,7 @@ export function ratingOnThisAppearance(
   if (encounter.status !== 'closed') return rating
   const closed = parseApiDateTime(encounter.closed_at)
   if (Number.isNaN(closed.getTime())) return null
-  return beijingCalendarDay(closed) === beijingCalendarDay(now) ? rating : null
+  return beijingStudyDay(closed) === beijingStudyDay(now) ? rating : null
 }
 
 export function encounterState(

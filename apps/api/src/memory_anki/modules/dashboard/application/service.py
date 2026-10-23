@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import timedelta
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload, selectinload
 
+from memory_anki.core.time import local_day
 from memory_anki.infrastructure.db._tables.knowledge import Chapter
 from memory_anki.infrastructure.db._tables.palaces import Palace, Peg
 from memory_anki.modules.content.public.queries import build_today_new_palace_outline
@@ -76,7 +77,7 @@ def build_dashboard_payload(session: Session) -> dict:
                 "due_date": item.get("due_date"),
                 "interval_days": item.get("interval_days"),
                 "node_count": len(item.get("node_uids") or []),
-                "overdue": str(item.get("due_date") or "") < date.today().isoformat(),
+                "overdue": str(item.get("due_date") or "") < local_day().isoformat(),
             }
         )
 
@@ -109,7 +110,7 @@ def _palace_summary(palace: Palace, *, peg_count: int = 0) -> dict:
 def build_weekly_report_payload(session: Session, *, offset_weeks: int = 1) -> dict:
     """Summarize one calendar week of study (default: previous week). offset_weeks=0 is current week."""
     safe_offset = max(0, min(int(offset_weeks or 0), 52))
-    today = date.today()
+    today = local_day()
     current_week_start_date = today - timedelta(days=today.weekday())
     week_start_date = current_week_start_date - timedelta(days=7 * safe_offset)
     week_end_date = week_start_date + timedelta(days=7)

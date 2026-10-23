@@ -1,6 +1,7 @@
 import json
-from datetime import date, datetime
+from datetime import datetime
 
+from memory_anki.core.time import local_day
 from memory_anki.infrastructure.db._tables.knowledge import Subject
 from memory_anki.infrastructure.db._tables.misc import FreestyleRoundState, StudySession
 from memory_anki.infrastructure.db._tables.palaces import (
@@ -70,7 +71,7 @@ def _seed_unit(db_session, *, palace_id: int, node_uids: list[str], unit_id: str
             revision=1,
             stage_index=1,
             has_passed=True,
-            due_date=date.today(),
+            due_date=local_day(),
         )
     )
     return unit_id
@@ -882,12 +883,12 @@ def test_question_node_ratings_resolve_through_the_rounds_own_units(db_session) 
     inside = ReviewUnitState(
         id="unit-inside", palace_id=palace.id, anchor_uid="n1", unit_kind="mark",
         node_uids_json=json.dumps(["n1", "n2"]), membership_hash="h", content_hash="c",
-        revision=1, stage_index=1, has_passed=True, due_date=date.today(),
+        revision=1, stage_index=1, has_passed=True, due_date=local_day(),
     )
     outsider = ReviewUnitState(
         id="unit-outsider", palace_id=other.id, anchor_uid="n9", unit_kind="mark",
         node_uids_json=json.dumps(["n9"]), membership_hash="h", content_hash="c",
-        revision=1, stage_index=1, has_passed=True, due_date=date.today(),
+        revision=1, stage_index=1, has_passed=True, due_date=local_day(),
     )
     db_session.add_all([inside, outsider])
     q_a = PalaceQuizQuestion(palace_id=palace.id, stem="绑 n1")
@@ -933,7 +934,7 @@ def test_question_without_a_round_rating_shows_no_score(db_session) -> None:
     unit = ReviewUnitState(
         id="unit-unrated", palace_id=palace.id, anchor_uid="n1", unit_kind="mark",
         node_uids_json=json.dumps(["n1"]), membership_hash="h", content_hash="c",
-        revision=1, stage_index=0, has_passed=False, due_date=date.today(),
+        revision=1, stage_index=0, has_passed=False, due_date=local_day(),
     )
     db_session.add(unit)
     question = PalaceQuizQuestion(palace_id=palace.id, stem="题")
@@ -1003,12 +1004,12 @@ def test_pending_badge_only_for_waiting_unscored_questions(db_session) -> None:
     scored = ReviewUnitState(
         id="unit-scored", palace_id=palace.id, anchor_uid="a", unit_kind="mark",
         node_uids_json=json.dumps(["a"]), membership_hash="h", content_hash="c",
-        revision=1, stage_index=0, has_passed=False, due_date=date.today(),
+        revision=1, stage_index=0, has_passed=False, due_date=local_day(),
     )
     waiting = ReviewUnitState(
         id="unit-wait", palace_id=palace.id, anchor_uid="b", unit_kind="mark",
         node_uids_json=json.dumps(["b"]), membership_hash="h", content_hash="c",
-        revision=1, stage_index=0, has_passed=False, due_date=date.today(),
+        revision=1, stage_index=0, has_passed=False, due_date=local_day(),
     )
     db_session.add_all([scored, waiting])
     scored_q = PalaceQuizQuestion(palace_id=palace.id, stem="已评分")
@@ -1346,7 +1347,7 @@ def test_round_unit_ratings_read_the_encounter_table_not_the_plan_cache(db_sessi
     unit = ReviewUnitState(
         id="unit-rate", palace_id=palace.id, anchor_uid="n1", unit_kind="mark",
         node_uids_json=json.dumps(["n1"]), membership_hash="h", content_hash="c",
-        revision=1, stage_index=1, has_passed=True, due_date=date.today(),
+        revision=1, stage_index=1, has_passed=True, due_date=local_day(),
     )
     db_session.add(unit)
     db_session.commit()
@@ -1439,7 +1440,7 @@ def _seed_ancestor_question(db_session):
                 revision=1,
                 stage_index=1,
                 has_passed=True,
-                due_date=date.today(),
+                due_date=local_day(),
             )
         )
     question = PalaceQuizQuestion(palace_id=palace.id, stem="标志国民教育制度正式形成")

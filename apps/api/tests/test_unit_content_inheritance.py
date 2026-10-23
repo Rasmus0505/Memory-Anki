@@ -5,6 +5,7 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
+from memory_anki.core.time import local_day
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitState
 from memory_anki.modules.memory.api import reconcile_palace_units
@@ -37,14 +38,14 @@ def seed(session, doc):
 
 def schedule(row, stage, days):
     row.stage_index = stage
-    row.due_date = date.today() + timedelta(days=days)
+    row.due_date = local_day() + timedelta(days=days)
     row.has_passed = True
     row.last_passed_at = datetime(2026, 1, 2)
 
 
 def assert_schedule(row, stage, days):
     assert (row.stage_index, row.due_date, row.has_passed) == (
-        stage, date.today() + timedelta(days=days), True,
+        stage, local_day() + timedelta(days=days), True,
     )
 
 
@@ -127,7 +128,7 @@ def test_new_content_without_ancestor_evidence_starts_initial_learning(db_sessio
     palace.editor_doc = document(node("old", mark=True), node("new", mark=True), mark=False)
     reconcile_palace_units(db_session, palace.id)
     new = rows(db_session, palace)[("new", "mark")]
-    assert (new.stage_index, new.due_date, new.has_passed) == (0, date.today(), False)
+    assert (new.stage_index, new.due_date, new.has_passed) == (0, local_day(), False)
 
 
 def test_content_edit_preserves_identity_schedule_and_last_pass(db_session):

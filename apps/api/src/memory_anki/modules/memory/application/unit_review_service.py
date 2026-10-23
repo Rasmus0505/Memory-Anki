@@ -11,7 +11,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from memory_anki.core.time import local_calendar_day_of, to_api_datetime, utc_now_naive
+from memory_anki.core.time import local_calendar_day_of, local_day, to_api_datetime, utc_now_naive
 from memory_anki.infrastructure.db._tables.misc import StudySession
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.unit_reviews import (
@@ -428,7 +428,7 @@ def _rating_effects(
     had_prior_failure = int(item_data["retry_count"]) > 0
     # Pin "today" once so every button in one preview shares a reference day and
     # the reported gap cannot drift across a midnight boundary mid-render.
-    today = date.today()
+    today = local_day()
     hard_penalized_today = state_data.get("hard_penalized_on") == today.isoformat()
     try:
         baseline_due = date.fromisoformat(str(state_data["due_date"]))
@@ -807,7 +807,7 @@ def start_freestyle_unit_review_session(
         study = _finish_stale_passed_freestyle_session(session, study, state.id)
 
     if study is None:
-        if state.due_date > date.today() and not not_due_ok:
+        if state.due_date > local_day() and not not_due_ok:
             raise ValueError("review unit is not due")
         created = start_unit_review_session(
             session,
@@ -852,7 +852,7 @@ def start_freestyle_unit_review_session(
     if previous_rated is not None:
         baseline = json.loads(previous_rated.baseline_state_json)
         baseline["amend_source_id"] = previous_rated.id
-    elif latest_rated is not None and _effective_rating_day(session, latest_rated) == date.today():
+    elif latest_rated is not None and _effective_rating_day(session, latest_rated) == local_day():
         # A freestyle session is a viewing/time owner, not the retry history.
         # Moving past another card may have abandoned it; carry failed attempts
         # into the new session without rolling the schedule back.
@@ -937,7 +937,7 @@ def _apply_rating_from_snapshot(
     rating: int,
 ) -> Any:
     _restore_snapshot(state, item, snapshot)
-    today = date.today()
+    today = local_day()
     schedule_locked, locked_due_date = _schedule_lock_from_due(state.due_date, today)
     result = rate_unit(
         stage_index=state.stage_index,
@@ -1013,7 +1013,7 @@ def _same_day_attempt_source(
             bool(identity)
             and json.loads(candidate.baseline_state_json).get("attempt_identity") == identity
         )
-        if matches and _effective_rating_day(session, candidate) == date.today():
+        if matches and _effective_rating_day(session, candidate) == local_day():
             return candidate
     return None
 
@@ -1183,7 +1183,7 @@ def _create_one_unit_freestyle_session(
     allow_not_due: bool,
 ) -> tuple[StudySession, ReviewSessionUnit]:
     """Open a sibling freestyle session without releasing the current card."""
-    if state.due_date > date.today() and not allow_not_due:
+    if state.due_date > local_day() and not allow_not_due:
         raise ValueError("review unit is not due")
     palace = session.get(Palace, state.palace_id)
     now = utc_now_naive()
@@ -1244,7 +1244,7 @@ def _due_states_for_palace(session: Session, palace_id: int) -> list[ReviewUnitS
         .filter(
             ReviewUnitState.palace_id == palace_id,
             ReviewUnitState.active.is_(True),
-            ReviewUnitState.due_date <= date.today(),
+            ReviewUnitState.due_date <= local_day(),
         )
         .order_by(ReviewUnitState.due_date.asc(), ReviewUnitState.id.asc())
         .all()
@@ -1271,7 +1271,7 @@ def _remaining_due_count(session: Session, palace_id: int) -> int:
         .filter(
             ReviewUnitState.palace_id == palace_id,
             ReviewUnitState.active.is_(True),
-            ReviewUnitState.due_date <= date.today(),
+            ReviewUnitState.due_date <= local_day(),
         )
         .scalar()
         or 0
@@ -1708,7 +1708,7 @@ def rate_palace_due_units(
         )
         if (
             original is not None
-            and _effective_rating_day(session, original) == date.today()
+            and _effective_rating_day(session, original) == local_day()
             and (not real_retry or sibling_identity == batch_identity)
         ):
             study = session.get(StudySession, original.study_session_id)
@@ -1734,7 +1734,7 @@ def rate_palace_due_units(
         study, item = _create_one_unit_freestyle_session(
             session,
             state,
-            allow_not_due=state.due_date > date.today(),
+            allow_not_due=state.due_date > local_day(),
         )
         encounter = _create_open_encounter(
             session,
@@ -1747,7 +1747,7 @@ def rate_palace_due_units(
         sibling_baseline = json.loads(encounter.baseline_state_json)
         if batch_identity:
             sibling_baseline["attempt_identity"] = batch_identity
-        if original is not None and _effective_rating_day(session, original) == date.today():
+        if original is not None and _effective_rating_day(session, original) == local_day():
             previous_item = _session_item(session, original.study_session_id, state.id)
             for key in ("retry_count", "hard_count", "again_count"):
                 sibling_baseline["item"][key] = getattr(previous_item, key)

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import json
-from datetime import date, timedelta
+from datetime import timedelta
 
+from memory_anki.core.time import local_day
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.unit_reviews import (
     ReviewUnitScheduleBatch,
@@ -53,7 +54,7 @@ def _seed(session, *, stage_index: int = 3) -> ReviewUnitState:
     unit = session.query(ReviewUnitState).filter_by(palace_id=palace.id, active=True).one()
     unit.stage_index = stage_index
     unit.has_passed = True
-    unit.due_date = date.today() + timedelta(days=30)
+    unit.due_date = local_day() + timedelta(days=30)
     unit.revision += 1
     session.commit()
     return unit
@@ -99,7 +100,7 @@ def _legacy_demotion_batch(session, unit):
         "has_passed": unit.has_passed,
     }
     unit.stage_index = max(0, unit.stage_index - 1)
-    unit.due_date = date.today()
+    unit.due_date = local_day()
     batch = ReviewUnitScheduleBatch(
         id=uuid4().hex, palace_id=unit.palace_id, reason="content_reconcile",
         entries_json=json.dumps([{"unit_id": unit.id, "before": before}]),
@@ -225,8 +226,8 @@ def test_sibling_marks_keep_their_own_schedules_without_a_cohort(db_session):
         ("mark", "B1"),
         ("mark", "B2"),
     }
-    early = date.today() + timedelta(days=10)
-    late = date.today() + timedelta(days=40)
+    early = local_day() + timedelta(days=10)
+    late = local_day() + timedelta(days=40)
     marks["B1"].stage_index = 4
     marks["B1"].has_passed = True
     marks["B1"].due_date = late
@@ -254,7 +255,7 @@ def test_legacy_cohort_row_is_retired_and_marks_keep_their_schedules(db_session)
     db_session.commit()
 
     marks = {row.anchor_uid: row for row in _active_rows(db_session, palace.id)}
-    late = date.today() + timedelta(days=40)
+    late = local_day() + timedelta(days=40)
     marks["B1"].stage_index = 5
     marks["B1"].has_passed = True
     marks["B1"].due_date = late
@@ -271,7 +272,7 @@ def test_legacy_cohort_row_is_retired_and_marks_keep_their_schedules(db_session)
             revision=1,
             stage_index=0,
             has_passed=False,
-            due_date=date.today(),
+            due_date=local_day(),
             topology_order=0,
             active=True,
         )
@@ -296,7 +297,7 @@ def test_list_due_units_reconciles_content_hash_lag_without_leave(db_session):
     assert palace is not None
 
     # Make unit due today, then mutate editor_doc without reconcile (kill mid-edit).
-    unit.due_date = date.today()
+    unit.due_date = local_day()
     unit.stage_index = 3
     hash_before = unit.content_hash
     stage_before = unit.stage_index
@@ -317,7 +318,7 @@ def test_list_due_units_reconciles_content_hash_lag_without_leave(db_session):
     assert unit is not None
     assert unit.content_hash != hash_before
     assert unit.stage_index == stage_before
-    assert unit.due_date == date.today()
+    assert unit.due_date == local_day()
 
     matched = [item for item in items if item["id"] == unit.id]
     assert len(matched) == 1
@@ -332,7 +333,7 @@ def test_get_palace_unit_projection_reconciles_hash_lag_for_freestyle(db_session
     unit = _seed(db_session, stage_index=4)
     palace = db_session.get(Palace, unit.palace_id)
     assert palace is not None
-    assert unit.due_date > date.today()
+    assert unit.due_date > local_day()
     hash_before = unit.content_hash
     stage_before = unit.stage_index
 
@@ -359,7 +360,7 @@ def test_adjust_unit_schedule_updates_fields_without_content_hash(db_session):
     content_hash = unit.content_hash
     membership_hash = unit.membership_hash
     revision = unit.revision
-    target_due = date.today() + timedelta(days=14)
+    target_due = local_day() + timedelta(days=14)
 
     result = adjust_unit_schedule(
         db_session,
@@ -457,7 +458,7 @@ def test_adjust_and_undo_schedule_http_endpoints(session_factory, make_client):
         json={
             "operation_id": "http-adjust-1",
             "stage_index": 1,
-            "due_date": date.today().isoformat(),
+            "due_date": local_day().isoformat(),
             "has_passed": False,
             "reason": "manual_adjust",
         },
@@ -465,7 +466,7 @@ def test_adjust_and_undo_schedule_http_endpoints(session_factory, make_client):
     assert adjusted.status_code == 200
     body = adjusted.json()["item"]
     assert body["unit"]["stage_index"] == 1
-    assert body["unit"]["due_date"] == date.today().isoformat()
+    assert body["unit"]["due_date"] == local_day().isoformat()
     assert body["unit"]["has_passed"] is False
     assert body["operation_id"] == "http-adjust-1"
 
@@ -535,7 +536,7 @@ def test_adjust_and_undo_schedule_http_endpoints(session_factory, make_client):
         assert unit is not None
         # Undo restores the schedule present immediately before reconciliation.
         assert unit.stage_index == 6
-        assert unit.due_date.isoformat() == date.today().isoformat()
+        assert unit.due_date.isoformat() == local_day().isoformat()
         assert unit.has_passed is False
         assert before_stage == 4
         assert before_due
@@ -597,7 +598,7 @@ def _earned_palace(session, doc: str, *, stage: int = 6, days: int = 60):
     session.commit()
     reconcile_palace_units(session, palace.id)
     session.commit()
-    due = date.today() + timedelta(days=days)
+    due = local_day() + timedelta(days=days)
     for row in session.query(ReviewUnitState).filter_by(palace_id=palace.id, active=True):
         row.stage_index = stage
         row.has_passed = True

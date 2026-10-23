@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from sqlalchemy import text
 
+from memory_anki.core.time import local_day
 from memory_anki.infrastructure.db._tables.knowledge import Chapter, Subject
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.modules.content.application.editor_state_service import (
@@ -321,7 +322,7 @@ class PalaceEditorReconcileGateTests(RouterTestCase):
         }
 
     def _seed_unit(self, session, *, stage_index: int = 3, due_date=None):
-        from datetime import date, timedelta
+        from datetime import timedelta
 
         from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitState
 
@@ -346,13 +347,12 @@ class PalaceEditorReconcileGateTests(RouterTestCase):
         )
         unit.stage_index = stage_index
         unit.has_passed = True
-        unit.due_date = due_date or (date.today() + timedelta(days=14))
+        unit.due_date = due_date or (local_day() + timedelta(days=14))
         unit.revision += 1
         session.commit()
         return palace, unit
 
     def test_autosave_text_change_skips_reconcile_and_keeps_stage(self):
-        from datetime import date
 
         from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitState
 
@@ -378,10 +378,9 @@ class PalaceEditorReconcileGateTests(RouterTestCase):
             self.assertEqual(unit.stage_index, stage_before)
             self.assertEqual(unit.due_date, due_before)
             self.assertEqual(unit.content_hash, content_hash_before)
-            self.assertGreater(unit.due_date, date.today())
+            self.assertGreater(unit.due_date, local_day())
 
     def test_reconcile_flag_or_editor_leave_preserves_schedule_and_returns_changes(self):
-        from datetime import date
 
         from memory_anki.infrastructure.db._tables.unit_reviews import (
             ReviewUnitScheduleBatch,
@@ -417,7 +416,7 @@ class PalaceEditorReconcileGateTests(RouterTestCase):
 
             # Explicit reconciliation also preserves the earned schedule.
             unit.stage_index = 2
-            unit.due_date = date.today().replace(year=date.today().year + 1)
+            unit.due_date = local_day().replace(year=local_day().year + 1)
             session.commit()
             flagged = save_palace_editor_state(
                 session,
@@ -432,7 +431,7 @@ class PalaceEditorReconcileGateTests(RouterTestCase):
             unit = session.get(ReviewUnitState, unit.id)
             assert unit is not None
             self.assertEqual(unit.stage_index, 2)
-            self.assertEqual(unit.due_date, date.today().replace(year=date.today().year + 1))
+            self.assertEqual(unit.due_date, local_day().replace(year=local_day().year + 1))
             self.assertTrue((flagged.get("unit_reconcile") or {}).get("changes"))
 
     def test_mark_toggle_on_plain_autosave_defers_membership_reconcile(self):

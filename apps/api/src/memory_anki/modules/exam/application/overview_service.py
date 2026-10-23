@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from sqlalchemy.orm import Session
 
+from memory_anki.core.time import local_day, study_day_of
 from memory_anki.infrastructure.db._tables.knowledge import Chapter, Subject
 from memory_anki.infrastructure.db._tables.palaces import QuizAttemptEvent
 from memory_anki.infrastructure.db._tables.unit_reviews import (
@@ -37,8 +38,8 @@ WEAK_LIMIT = 8
 def _local_date(value: datetime | None) -> date | None:
     if value is None:
         return None
-    # Stored rows are UTC-naive; convert to local wall-clock date.
-    return value.replace(tzinfo=UTC).astimezone().date()
+    # Stored rows are UTC-naive; group by the learner's study day (03:00 rollover).
+    return study_day_of(value)
 
 
 def _was_unlearned(before_state_json: str) -> bool:
@@ -117,7 +118,7 @@ def _ratio(part: float, whole: float) -> float:
 
 
 def build_exam_overview(session: Session, *, today: date | None = None) -> dict[str, Any]:
-    on = today or date.today()
+    on = today or local_day()
     settings = get_exam_settings(session)
     exam_date = date.fromisoformat(settings["exam_date"]) if settings.get("exam_date") else None
     days_left = (exam_date - on).days if exam_date else None

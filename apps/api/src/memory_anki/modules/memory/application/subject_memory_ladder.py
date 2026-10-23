@@ -15,7 +15,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from memory_anki.core.time import to_api_datetime, utc_now_naive
+from memory_anki.core.time import local_day, to_api_datetime, utc_now_naive
 from memory_anki.infrastructure.db._tables.knowledge import Subject
 from memory_anki.infrastructure.db._tables.palaces import Palace, palace_subject_table
 from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitState
@@ -72,7 +72,7 @@ def get_subject_memory_ladder(
     today: date | None = None,
 ) -> dict[str, Any]:
     """Map active units to subject stages without writing schedule state."""
-    today = today or date.today()
+    today = today or local_day()
     with session.no_autoflush:
         subjects = (
             session.query(Subject)

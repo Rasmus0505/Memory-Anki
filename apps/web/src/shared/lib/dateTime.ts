@@ -107,6 +107,19 @@ export function beijingCalendarDay(value: Date = new Date()): string {
   return `${year}-${month}-${day}`
 }
 
+/**
+ * Hour a new study day starts in Beijing time. Must match the backend's
+ * `MEMORY_ANKI_DAY_START_HOUR` default (03:00): studying at 00:30 still belongs
+ * to the evening that just ended, so the queue must not roll over at midnight.
+ */
+export const STUDY_DAY_START_HOUR = 3
+
+/** Study day of an instant — the Beijing calendar date at the 03:00 rollover. */
+export function beijingStudyDay(value: Date = new Date()): string {
+  if (Number.isNaN(value.getTime())) return ''
+  return beijingCalendarDay(new Date(value.getTime() - STUDY_DAY_START_HOUR * 3_600_000))
+}
+
 export function formatLocalDateKey(value: Date): string {
   const year = value.getFullYear()
   const month = `${value.getMonth() + 1}`.padStart(2, '0')

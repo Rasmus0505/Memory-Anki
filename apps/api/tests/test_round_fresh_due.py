@@ -1,7 +1,7 @@
 import json
-from datetime import date, timedelta
+from datetime import timedelta
 
-from memory_anki.core.time import utc_now_naive
+from memory_anki.core.time import local_day, utc_now_naive
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitRatingOperation
 from memory_anki.modules.memory.application.unit_review_service import (
@@ -108,7 +108,7 @@ def test_previous_visit_score_is_stripped_when_the_card_is_due_again(db_session)
     _rate_and_close(db_session, state, 3, "op-old")
     operation = db_session.get(ReviewUnitRatingOperation, "op-old")
     operation.created_at = utc_now_naive() - timedelta(days=2)
-    state.due_date = date.today()
+    state.due_date = local_day()
     db_session.commit()
     persisted = _plan(state.id)
 
@@ -125,7 +125,7 @@ def test_today_hard_rating_stays_visible(db_session):
     state = _seed(db_session)
     _rate_and_close(db_session, state, 2, "op-hard")
     db_session.commit()
-    assert state.due_date == date.today()
+    assert state.due_date == local_day()
 
     served = project_served_plan(db_session, _plan(state.id))
 
@@ -137,7 +137,7 @@ def test_future_due_card_keeps_its_score(db_session):
     state = _seed(db_session)
     _rate_and_close(db_session, state, 3, "op-pass")
     db_session.commit()
-    assert state.due_date > date.today()
+    assert state.due_date > local_day()
 
     served = project_served_plan(db_session, _plan(state.id))
 
@@ -150,7 +150,7 @@ def test_excluded_due_card_is_not_released(db_session):
     _rate_and_close(db_session, state, 3, "op-hidden")
     operation = db_session.get(ReviewUnitRatingOperation, "op-hidden")
     operation.created_at = utc_now_naive() - timedelta(days=2)
-    state.due_date = date.today()
+    state.due_date = local_day()
     db_session.commit()
     plan = _plan(state.id)
     plan["excluded_ids"] = ["card-a"]

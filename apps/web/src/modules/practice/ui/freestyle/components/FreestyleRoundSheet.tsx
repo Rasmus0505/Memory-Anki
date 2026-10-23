@@ -28,7 +28,7 @@ import {
   visualPlanStatus,
   type FreestyleProgressSegment,
 } from '@/modules/practice/ui/freestyle/model/freestyleProgressSegments'
-import { formatLocalDateKey } from '@/shared/lib/dateTime'
+import { beijingStudyDay } from '@/shared/lib/dateTime'
 import { Button } from '@/shared/components/ui/button'
 import {
   Sheet,
@@ -121,7 +121,7 @@ export function FreestyleRoundSheet({
   /** Day the section titles speak from. Defaults to the learner's today. */
   labelToday?: string
 }) {
-  const spokenToday = labelToday || formatLocalDateKey(new Date())
+  const spokenToday = labelToday || beijingStudyDay()
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   /** Last row the learner clicked; the anchor for shift-click ranges. */
   const lastClickedIdRef = useRef<string | null>(null)

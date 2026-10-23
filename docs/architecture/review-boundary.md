@@ -61,7 +61,7 @@ Reviews must not import Practice. Practice must not create a second schedule, co
 - Closing a `困难` or `忘记` encounter preserves its penalty in the next encounter. A later `记得` settles at that penalized level; a later `轻松` recovers only one level.
 - Rating requires `study_session_id`, `unit_id`, `unit_revision`, `encounter_id`, stable `operation_id`, and `rating`. The operation is idempotent and supports LIFO single-step undo while the encounter remains open.
 - Freestyle may rate a palace's remaining due units in one Reviews command (`rate_palace_due_units`). That command still writes one unit rating per member. It is not a palace-level schedule, not a node rating, and not the retired subtree/bulk-fill path. Already-rated units in the current round are left alone unless they are the open current encounter (which may amend). Sibling units close at zero observed seconds. Undo of the current open encounter undoes the whole batch.
-- Due dates are local natural-day dates; presentation converts them to local midnight only at API boundaries.
+- Due dates are local study-day dates. A study day starts at 03:00 local time (`MEMORY_ANKI_DAY_START_HOUR`, default `3`), not midnight, so work done at 00:30 still belongs to the evening that just ended. Presentation converts a study day to its 03:00 local boundary only at API boundaries.
 - Content and mark editing do not independently penalize scheduling. Existing content keeps its stage/date; splits, new content and merges follow the topology inheritance rules above.
 
 ## Session Invariants

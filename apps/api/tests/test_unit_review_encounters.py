@@ -1,9 +1,9 @@
 import json
-from datetime import date, timedelta
+from datetime import timedelta
 
 import pytest
 
-from memory_anki.core.time import utc_now_naive
+from memory_anki.core.time import local_day, utc_now_naive
 from memory_anki.infrastructure.db._tables.misc import StudySession
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.unit_reviews import (
@@ -116,7 +116,7 @@ def test_freestyle_start_restores_active_session_and_open_encounter(db_session):
 
 def test_freestyle_fill_session_can_explicitly_open_a_not_due_unit(db_session):
     state = _seed_review_unit(db_session)
-    state.due_date = date.today() + timedelta(days=3)
+    state.due_date = local_day() + timedelta(days=3)
     db_session.commit()
 
     with pytest.raises(ValueError, match="not due"):
@@ -310,7 +310,7 @@ def test_closed_pass_locks_rating_and_future_unit_cannot_restart(db_session):
 
     assert closed["session_status"] == "completed"
     assert state.stage_index == 1
-    assert state.due_date == date.today() + timedelta(days=1)
+    assert state.due_date == local_day() + timedelta(days=1)
     with pytest.raises(ValueError, match="not due"):
         start_freestyle_unit_review_session(
             db_session,
@@ -397,7 +397,7 @@ def test_previous_day_rating_does_not_amend_a_new_due_cycle(db_session):
     )
     operation = db_session.get(ReviewUnitRatingOperation, "rating-old")
     operation.created_at = utc_now_naive() - timedelta(days=2)
-    state.due_date = date.today()
+    state.due_date = local_day()
     state.stage_index = 1
     state.has_passed = True
     db_session.commit()
@@ -633,8 +633,8 @@ def test_failed_close_keeps_session_and_next_encounter_retains_penalty(db_sessio
 
     assert remembered["passed"] is True
     assert remembered["unit"]["stage_index"] == 1
-    assert remembered["unit"]["due_date"] == (date.today() + timedelta(days=1)).isoformat()
-    assert remembered["unit"]["due_date"] == (date.today() + timedelta(days=1)).isoformat()
+    assert remembered["unit"]["due_date"] == (local_day() + timedelta(days=1)).isoformat()
+    assert remembered["unit"]["due_date"] == (local_day() + timedelta(days=1)).isoformat()
 
 
 def test_review_http_contract_carries_encounter_identity(session_factory, make_client):
@@ -721,7 +721,7 @@ def test_real_retry_preserves_failure_and_preview_matches_commit(
     state = _seed_review_unit(db_session)
     state.stage_index = 7
     state.has_passed = True
-    state.due_date = date.today() + timedelta(days=14 if early else 0)
+    state.due_date = local_day() + timedelta(days=14 if early else 0)
     db_session.commit()
     first = start_freestyle_unit_review_session(
         db_session, unit_id=state.id, unit_revision=state.revision,
@@ -747,7 +747,7 @@ def test_real_retry_preserves_failure_and_preview_matches_commit(
     passed = _rate(db_session, retry, state, "real-retry", "real-pass", passing_rating)
     expected = rate_unit(
         stage_index=lowered, has_passed=True, rating=passing_rating,
-        had_failure_in_encounter=True, today=date.today(), fuzz_key=state.id,
+        had_failure_in_encounter=True, today=local_day(), fuzz_key=state.id,
     )
     assert state.stage_index == expected.stage_index
     assert state.due_date == expected.due_date
@@ -774,7 +774,7 @@ def test_real_retry_preserves_failure_and_preview_matches_commit(
     assert state.stage_index == expected.stage_index
     undo_unit_rating(db_session, "real-pass")
     assert state.stage_index == lowered
-    assert state.due_date == date.today()
+    assert state.due_date == local_day()
     assert item.retry_count == 1
 
 

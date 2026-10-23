@@ -8,8 +8,8 @@ questions, because the config had since been narrowed. See
 docs/incidents/0002-quiz-scope-two-owners.md.
 """
 
-from datetime import date
 
+from memory_anki.core.time import local_day
 from memory_anki.infrastructure.db._tables.knowledge import Subject
 from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceQuizQuestion
 from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitState
@@ -124,7 +124,7 @@ def test_round_losing_a_palace_parks_its_overlay_progress(db_session):
         db_session.add(ReviewUnitState(
             id=f"unit-{palace.id}", palace_id=palace.id, anchor_uid="root",
             unit_kind="isolation", node_uids_json='["root"]',
-            membership_hash="membership", content_hash="content", due_date=date.today(),
+            membership_hash="membership", content_hash="content", due_date=local_day(),
         ))
     db_session.commit()
     config = _config()

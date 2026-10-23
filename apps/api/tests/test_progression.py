@@ -4,7 +4,7 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
-from memory_anki.core.time import utc_now_naive
+from memory_anki.core.time import local_day, utc_now_naive
 from memory_anki.infrastructure.db._tables.misc import StudySession
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.unit_reviews import (
@@ -118,7 +118,7 @@ def _seed_rating(session, *, grade: int, created_at: datetime, sequence: int):
         session.add(
             ReviewUnitState(
                 id="u-1", palace_id=palace.id, anchor_uid="a", unit_kind="branch", node_uids_json="[\"a\"]",
-                membership_hash="m", content_hash="c", stage_index=1, has_passed=True, due_date=date.today(),
+                membership_hash="m", content_hash="c", stage_index=1, has_passed=True, due_date=local_day(),
             )
         )
         session.flush()

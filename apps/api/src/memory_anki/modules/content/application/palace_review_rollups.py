@@ -5,6 +5,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from memory_anki.core.time import study_day_of
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.modules.memory.api import read_palace_due_signals
 
@@ -22,7 +23,7 @@ def _review_datetime_is_later_today(dt: Any, now: datetime) -> bool:
         now = now.replace(tzinfo=None) if now.tzinfo else now
     if dt <= now:
         return False
-    return dt.date() == now.date()
+    return study_day_of(dt) == study_day_of(now)
 
 
 def _due_flags_from_signal(signal: dict[str, Any], now: datetime) -> dict[str, int]:

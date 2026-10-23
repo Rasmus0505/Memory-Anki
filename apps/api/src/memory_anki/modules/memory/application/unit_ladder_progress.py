@@ -8,7 +8,7 @@ from typing import Any, Literal
 
 from sqlalchemy.orm import Session
 
-from memory_anki.core.time import local_calendar_day_start_as_utc_naive, to_api_datetime
+from memory_anki.core.time import local_calendar_day_start_as_utc_naive, local_day, to_api_datetime
 from memory_anki.infrastructure.db._tables.misc import StudySession
 from memory_anki.infrastructure.db._tables.palaces import FreestyleQuizAttempt
 from memory_anki.infrastructure.db._tables.unit_reviews import (
@@ -51,7 +51,7 @@ def resolve_range_start(range_key: str, *, today: date | None = None) -> datetim
         raise ValueError("range must be today, last3days, week, or all")
     if key == "all":
         return None
-    day = today or date.today()
+    day = today or local_day()
     if key == "today":
         return local_calendar_day_start_as_utc_naive(day)
     if key == "last3days":

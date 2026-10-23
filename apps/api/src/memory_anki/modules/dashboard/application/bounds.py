@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 
-from memory_anki.core.time import local_calendar_day_bounds_as_utc_naive, resolve_local_timezone
+from memory_anki.core.time import local_calendar_day_bounds_as_utc_naive, local_day
 
 
 def _today_local() -> date:
-    return datetime.now(resolve_local_timezone()).date()
+    """The current study day (03:00 rollover), not the raw calendar date."""
+    return local_day()
 
 
 def today_bounds() -> tuple[datetime, datetime]:

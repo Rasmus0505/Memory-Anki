@@ -16,7 +16,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/shared/components/ui/tooltip'
-import { formatLocalDateKey } from '@/shared/lib/dateTime'
+import { beijingStudyDay } from '@/shared/lib/dateTime'
 import { cn } from '@/shared/lib/utils'
 import { prefersReducedMotion } from '@/shared/lib/prefersReducedMotion'
 import { FX_ANCHORS } from '@/shared/fx'
@@ -133,7 +133,7 @@ export function FreestyleProgressRail({
   /** Wall-clock day the labels speak from. Tests pass a fixed day. */
   today?: string
 }) {
-  const labelToday = today || formatLocalDateKey(new Date())
+  const labelToday = today || beijingStudyDay()
   const canJump = Boolean(onJump) && summary.total > 0 && summary.segments.length > 0
   const daySpan = roundDaySpan(summary.segments.map((segment) => segment.enteredOn), labelToday)
   const railLabel = daySpan > 1

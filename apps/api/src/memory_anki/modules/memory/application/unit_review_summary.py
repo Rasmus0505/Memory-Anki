@@ -8,7 +8,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from memory_anki.core.time import local_calendar_day_start_as_utc_naive, to_api_datetime
+from memory_anki.core.time import local_calendar_day_start_as_utc_naive, local_day, to_api_datetime
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.unit_reviews import (
     ReviewUnitRatingOperation,
@@ -104,7 +104,7 @@ def read_palace_due_signals(
             )
             .all()
         )
-    today = date.today()
+    today = local_day()
     has_due: dict[int, bool] = {}
     next_due: dict[int, date] = {}
     due_counts: dict[int, int] = {}
@@ -224,7 +224,7 @@ def _build_projection(
         _active_unit_key(item.anchor_uid, item.unit_kind): item for item in definitions
     }
     states = _states_in_topology_order(states, definitions)
-    due = [row for row in states if row.due_date <= date.today()]
+    due = [row for row in states if row.due_date <= local_day()]
     next_due = min((row.due_date for row in states), default=None)
     next_review_date = next_due.isoformat() if next_due else None
     return {

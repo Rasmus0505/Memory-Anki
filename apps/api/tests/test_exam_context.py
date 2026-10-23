@@ -2,6 +2,7 @@
 
 from datetime import date, datetime, timedelta
 
+from memory_anki.core.time import local_day
 from memory_anki.infrastructure.db._tables.knowledge import Chapter, Subject
 from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceQuizQuestion
 from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitState
@@ -106,7 +107,7 @@ def _seed(session):
             content_hash="c",
             stage_index=3,
             has_passed=True,
-            due_date=date.today(),
+            due_date=local_day(),
             last_passed_at=datetime.now() - timedelta(days=7),
         )
     )
@@ -135,7 +136,7 @@ def test_exam_routes_edit_stars_settings_and_build_overview(make_client, db_sess
     assert client.put("/api/v1/exam/palaces/999999/stars", json={"stars": 2}).status_code == 404
     assert client.put(f"/api/v1/exam/subjects/{subject.id}/share", json={"share": 150}).json()["exam_share"] == 100
 
-    exam_day = (date.today() + timedelta(days=30)).isoformat()
+    exam_day = (local_day() + timedelta(days=30)).isoformat()
     saved = client.put("/api/v1/exam/settings", json={"exam_name": "考研", "exam_date": exam_day, "subject_ids": [subject.id]})
     assert saved.json()["exam_date"] == exam_day
     assert client.put("/api/v1/exam/settings", json={"exam_date": "not-a-date"}).status_code == 400

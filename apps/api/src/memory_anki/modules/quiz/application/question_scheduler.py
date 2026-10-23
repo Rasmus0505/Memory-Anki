@@ -13,6 +13,8 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
+from memory_anki.core.time import local_day
+
 DUE_KIND_DUE = "due"
 DUE_KIND_OTHER = "other"
 OVERLAY_QUESTION_RANGE_DUE = "due"
@@ -48,7 +50,7 @@ def parse_due_on(value: Any) -> date | None:
 
 
 def schedule_due_kind(due_on: date | None, *, today: date | None = None) -> str:
-    current = today or date.today()
+    current = today or local_day()
     if due_on is not None and due_on <= current:
         return DUE_KIND_DUE
     return DUE_KIND_OTHER

@@ -10,7 +10,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from memory_anki.core.time import utc_now_naive
+from memory_anki.core.time import local_day, utc_now_naive
 from memory_anki.infrastructure.db._tables.misc import StudySession
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.unit_reviews import (
@@ -236,7 +236,7 @@ def repair_absurd_due_dates(session: Session, *, today: date | None = None) -> i
     rows are included so the next mark cannot inherit the parked date.
     Revision stays put: the queue card id is the unit id plus revision.
     """
-    current = today or date.today()
+    current = today or local_day()
     limit = latest_schedulable_due(current)
     rows = (
         session.query(ReviewUnitState)
@@ -286,7 +286,7 @@ def adjust_unit_schedule(
     if stage_index is not None:
         row.stage_index = clamp_stage(int(stage_index))
     if due_date is not None:
-        row.due_date = assert_schedulable_due(_parse_due_date(due_date), today=date.today())
+        row.due_date = assert_schedulable_due(_parse_due_date(due_date), today=local_day())
     if has_passed is not None:
         row.has_passed = bool(has_passed)
     row.revision += 1
@@ -411,7 +411,7 @@ def undo_content_schedule_batch(
         row.stage_index = clamp_stage(int(before.get("stage_index") or 0))
         row.due_date = clamp_schedulable_due(
             _parse_due_date(before.get("due_date")),
-            today=date.today(),
+            today=local_day(),
         )
         row.has_passed = bool(before.get("has_passed"))
         row.revision += 1
@@ -458,7 +458,7 @@ def unit_payload(
         "interval_days": INTERVAL_DAYS[row.stage_index],
         "has_passed": row.has_passed,
         "due_date": row.due_date.isoformat(),
-        "due": row.due_date <= date.today(),
+        "due": row.due_date <= local_day(),
         "active": row.active,
     }
 
@@ -530,7 +530,7 @@ def get_palace_unit_projection(
         _active_unit_key(item.anchor_uid, item.unit_kind): item for item in definitions
     }
     states = _states_in_topology_order(states, definitions)
-    due = [row for row in states if row.due_date <= date.today()]
+    due = [row for row in states if row.due_date <= local_day()]
     next_due = min((row.due_date for row in states), default=None)
     return {
         "palace_id": palace_id,
@@ -565,7 +565,7 @@ def _query_due_unit_rows(
 ) -> list[ReviewUnitState]:
     query = session.query(ReviewUnitState).filter(
         ReviewUnitState.active.is_(True),
-        ReviewUnitState.due_date <= date.today(),
+        ReviewUnitState.due_date <= local_day(),
     )
     if palace_id is not None:
         query = query.filter(ReviewUnitState.palace_id == palace_id)
@@ -736,7 +736,7 @@ def list_due_review_unit_ids(
     ids = [str(item).strip() for item in unit_ids if str(item).strip()]
     if not ids:
         return set()
-    on = today or date.today()
+    on = today or local_day()
     found: set[str] = set()
     chunk = 400
     for start in range(0, len(ids), chunk):

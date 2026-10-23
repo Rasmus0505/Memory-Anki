@@ -7,6 +7,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from memory_anki.core.time import local_day, study_day_of
 from memory_anki.infrastructure.db._tables.palaces import QuizAttemptEvent
 from memory_anki.infrastructure.db._tables.unit_reviews import (
     ReviewUnitEncounter,
@@ -48,7 +49,7 @@ def load_evidence(session: Session, stars: dict[int, int]) -> tuple[list[RatingE
                 unit_id=str(row.unit_id),
                 rating=int(row.rating),
                 passed=bool(row.passed),
-                day=at.date(),
+                day=study_day_of(row.created_at),
                 hour=at.hour,
                 stars=stars.get(int(row.palace_id), 1),
                 round_id=str(row.round_id) if row.round_id else None,
@@ -69,7 +70,7 @@ def load_evidence(session: Session, stars: dict[int, int]) -> tuple[list[RatingE
             QuizEvent(
                 question_id=int(question_id) if question_id is not None else None,
                 correct=bool(is_correct),
-                day=at.date(),
+                day=study_day_of(row.created_at),
                 stars=stars.get(int(palace_id), 1) if palace_id is not None else 1,
             )
         )
@@ -120,7 +121,7 @@ def serialize(progression: Progression) -> dict[str, Any]:
 
 
 def build_progression_overview(session: Session, *, today: date | None = None) -> dict[str, Any]:
-    on = today or date.today()
+    on = today or local_day()
     starmap = build_memory_snapshot(session, today=on)
     stars = {int(row["id"]): int(row["stars"]) for row in starmap["palaces"]}
     progression = project(*load_evidence(session, stars), today=on)

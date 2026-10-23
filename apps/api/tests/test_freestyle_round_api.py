@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import datetime
 
+from memory_anki.core.time import local_day
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitState
 from memory_anki.infrastructure.db.deps import session_dep
@@ -513,7 +514,7 @@ def _review_state(palace_id: int, unit_id: str, *, active: bool = True) -> Revie
         revision=1,
         stage_index=0,
         has_passed=False,
-        due_date=date.today(),
+        due_date=local_day(),
         active=active,
     )
 
@@ -663,7 +664,7 @@ def test_exclude_leaves_the_review_schedule_unchanged(session_factory, make_clie
     unit = _review_state(palace.id, "removed-unit")
     unit.stage_index = 3
     unit.has_passed = True
-    unit.due_date = date.today()
+    unit.due_date = local_day()
     session.add(unit)
     session.commit()
     palace_id = palace.id
@@ -693,7 +694,7 @@ def test_exclude_leaves_the_review_schedule_unchanged(session_factory, make_clie
     check = session_factory()
     stored = check.get(ReviewUnitState, "removed-unit")
     assert stored is not None
-    assert stored.due_date == date.today()
+    assert stored.due_date == local_day()
     assert stored.stage_index == 3
     assert stored.has_passed is True
     check.close()

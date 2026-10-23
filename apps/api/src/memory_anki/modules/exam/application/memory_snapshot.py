@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from memory_anki.core.time import local_day
 from memory_anki.infrastructure.db._tables.knowledge import Chapter, Subject
 from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitState
 
@@ -16,7 +17,7 @@ from .star_context import load_palace_contexts
 
 
 def build_memory_snapshot(session: Session, *, today: date | None = None) -> dict[str, Any]:
-    on = today or date.today()
+    on = today or local_day()
     contexts = load_palace_contexts(session)
     due: dict[int, int] = {
         int(palace_id): int(count)

@@ -13,11 +13,13 @@ import pytest
 
 from memory_anki.core.time import (
     LOCAL_TZ_ENV,
+    STUDY_DAY_START_HOUR_ENV,
     local_calendar_day_bounds_as_utc_naive,
     local_calendar_day_of,
     local_calendar_day_start_as_utc_naive,
     parse_client_datetime,
     resolve_local_timezone,
+    study_day_of,
 )
 from memory_anki.modules.dashboard.application import bounds as time_bounds
 
@@ -63,9 +65,25 @@ def test_invalid_zone_falls_back_instead_of_raising(zone_env):
 def test_day_bounds_follow_the_configured_zone(zone_env):
     zone_env("+08:00")
     start, end = local_calendar_day_bounds_as_utc_naive(date(2026, 10, 7))
-    # 2026-10-07 00:00 +08:00 == 2026-10-06 16:00 UTC
-    assert start == datetime(2026, 10, 6, 16, 0)
-    assert end == datetime(2026, 10, 7, 16, 0)
+    # A study day starts at 03:00 +08:00 == 2026-10-06 19:00 UTC.
+    assert start == datetime(2026, 10, 6, 19, 0)
+    assert end == datetime(2026, 10, 7, 19, 0)
+
+
+def test_study_day_rolls_over_at_three_not_midnight(zone_env):
+    zone_env("+08:00")
+    # 00:15 and 02:59 local still belong to the previous study day.
+    assert study_day_of(datetime(2026, 10, 6, 16, 15)) == date(2026, 10, 6)
+    assert study_day_of(datetime(2026, 10, 6, 18, 59)) == date(2026, 10, 6)
+    # 03:00 local starts the next study day.
+    assert study_day_of(datetime(2026, 10, 6, 19, 0)) == date(2026, 10, 7)
+
+
+def test_study_day_start_hour_can_be_disabled(zone_env, monkeypatch):
+    zone_env("+08:00")
+    monkeypatch.setenv(STUDY_DAY_START_HOUR_ENV, "0")
+    # With a midnight rollover the same 00:15 local instant is the new day.
+    assert study_day_of(datetime(2026, 10, 6, 16, 15)) == date(2026, 10, 7)
 
 
 def test_same_instant_maps_to_different_local_day_per_zone(zone_env):
@@ -87,8 +105,8 @@ def test_day_start_is_consistent_with_day_bounds(zone_env):
 def test_time_bounds_use_the_configured_zone(zone_env):
     zone_env("+08:00")
     start, end = time_bounds.date_range_bounds(date(2026, 10, 1), date(2026, 10, 7))
-    assert start == datetime(2026, 9, 30, 16, 0)
-    assert end == datetime(2026, 10, 7, 16, 0)
+    assert start == datetime(2026, 9, 30, 19, 0)
+    assert end == datetime(2026, 10, 7, 19, 0)
 
 
 def test_reading_a_day_is_stable_regardless_of_process_zone(zone_env):

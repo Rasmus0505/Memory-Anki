@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import timedelta
 
 from sqlalchemy.orm import Session
 
-from memory_anki.core.time import local_calendar_day_of, local_calendar_day_start_as_utc_naive
+from memory_anki.core.time import (
+    local_calendar_day_of,
+    local_calendar_day_start_as_utc_naive,
+    local_day,
+)
 from memory_anki.modules.memory.public.queries import count_rating_days
 
 MAX_HEATMAP_DAYS = 366
@@ -15,7 +19,7 @@ DEFAULT_HEATMAP_DAYS = 182
 
 def build_heatmap_payload(session: Session, days: int = DEFAULT_HEATMAP_DAYS) -> dict:
     days = max(7, min(int(days), MAX_HEATMAP_DAYS))
-    today = date.today()
+    today = local_day()
     start = today - timedelta(days=days - 1)
     start_dt = local_calendar_day_start_as_utc_naive(start)
     end_dt = local_calendar_day_start_as_utc_naive(today + timedelta(days=1))
