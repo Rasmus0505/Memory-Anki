@@ -32,11 +32,13 @@ export function FreestyleFeedPager({
   }
 
   return (
-    <div className="pointer-events-none absolute right-3 top-1/2 z-30 -translate-y-1/2">
+    // Phones: a short horizontal strip above the rating dock. The old mid-right
+    // vertical column sat on top of the mind map (and its nodes) all session.
+    <div className="pointer-events-none absolute bottom-[calc(env(safe-area-inset-bottom,0px)+5.15rem)] right-2 z-30 sm:bottom-auto sm:right-3 sm:top-1/2 sm:-translate-y-1/2">
       <div
         data-testid="freestyle-feed-pager"
         data-fx-anchor={FX_ANCHORS.feedPager}
-        className="freestyle-stage-glass pointer-events-auto flex flex-col gap-1 rounded-2xl border border-stage-line-strong p-1.5"
+        className="freestyle-stage-glass pointer-events-auto flex flex-row gap-1 rounded-2xl border border-stage-line-strong p-1 sm:flex-col sm:p-1.5"
       >
         <button
           type="button"

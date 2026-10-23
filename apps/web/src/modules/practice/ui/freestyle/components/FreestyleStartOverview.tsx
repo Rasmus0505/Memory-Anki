@@ -9,6 +9,8 @@ interface FreestyleStartOverviewProps {
   onStart: () => void
   onRetry?: () => void
   startDisabled?: boolean
+  /** The dismissible 昨日回顾 card is already above this panel. */
+  hideYesterday?: boolean
 }
 
 const startButtonClass =
@@ -21,6 +23,7 @@ export function FreestyleStartOverview({
   onStart,
   onRetry,
   startDisabled = false,
+  hideYesterday = false,
 }: FreestyleStartOverviewProps) {
   if (error) {
     return (
@@ -72,7 +75,7 @@ export function FreestyleStartOverview({
         />
       </div>
 
-      {yesterday ? (
+      {yesterday && !hideYesterday ? (
         <div className="flex flex-col gap-2 border-t border-stage-line pt-4">
           <p className="text-xs font-medium text-ink-stage-muted">昨天的回顾</p>
           <p className="text-sm text-ink-stage">

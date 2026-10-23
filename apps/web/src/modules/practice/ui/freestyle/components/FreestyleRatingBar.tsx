@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { LoaderCircle } from 'lucide-react'
+import { LoaderCircle, MoreHorizontal } from 'lucide-react'
 import type {
   FreestyleRatingScope,
   UnitRating,
@@ -110,6 +110,9 @@ export function FreestyleRatingBar({
   // Confirmed fill only. In-flight uses 正在保存 so a failed POST cannot look like
   // a kept score, and a late response cannot light the wrong button.
   const [removeArmed, setRemoveArmed] = useState<RemoveIntent | null>(null)
+  /** Phones keep the low-frequency remove actions behind a tray so the four
+   *  grades keep real 44px+ targets; desktop shows them inline as before. */
+  const [removeTrayOpen, setRemoveTrayOpen] = useState(false)
   const removeArmedRef = useRef<RemoveIntent | null>(null)
   const disarmRemove = useCallback(() => {
     removeArmedRef.current = null
@@ -121,6 +124,7 @@ export function FreestyleRatingBar({
     if (removeArmedRef.current !== intent) {
       removeArmedRef.current = intent
       setRemoveArmed(intent)
+      setRemoveTrayOpen(true)
       return
     }
     disarmRemove()
@@ -322,10 +326,28 @@ export function FreestyleRatingBar({
             })}
           </div>
         ) : null}
+        {removeColumns > 0 ? (
+          <div className="mb-1 flex justify-end sm:hidden">
+            <button
+              type="button"
+              data-testid="freestyle-remove-tray-toggle"
+              aria-expanded={removeTrayOpen}
+              aria-controls="freestyle-remove-tray"
+              className="inline-flex h-6 items-center gap-1 rounded-full px-2 text-[10px] font-medium text-stage-faint hover:bg-stage-line hover:text-stage-ink"
+              onClick={() => setRemoveTrayOpen((open) => !open)}
+            >
+              <MoreHorizontal className="size-3.5" aria-hidden />
+              {removeTrayOpen ? '收起移除' : '移除这张…'}
+            </button>
+          </div>
+        ) : null}
         <div
+          id="freestyle-remove-tray"
           className={cn(
             'grid gap-1 sm:gap-1.5',
-            removeColumns === 2 ? 'grid-cols-6' : removeColumns === 1 ? 'grid-cols-5' : 'grid-cols-4',
+            // Four grades own the phone row; removals drop to a tray row below.
+            'max-sm:grid-cols-4',
+            removeColumns === 2 ? 'sm:grid-cols-6' : removeColumns === 1 ? 'sm:grid-cols-5' : 'sm:grid-cols-4',
           )}
         >
           {onRemoveFromQueue ? (
@@ -344,6 +366,9 @@ export function FreestyleRatingBar({
               data-selected={removeArmed === 'round' ? 'true' : undefined}
               className={cn(
                 'freestyle-rate-button relative flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-xl border px-0.5 py-1.5 text-center disabled:pointer-events-none disabled:opacity-55 sm:min-h-12 sm:rounded-2xl sm:px-1',
+                // Phone tray row: two half-width buttons under the four grades.
+                'max-sm:col-span-2 max-sm:col-start-1 max-sm:row-start-2 max-sm:min-h-10 max-sm:flex-row max-sm:gap-1.5',
+                !removeTrayOpen && 'max-sm:hidden',
                 removeArmed === 'round' && 'disabled:opacity-100',
               )}
               onClick={() => requestRemove('round')}
@@ -370,6 +395,8 @@ export function FreestyleRatingBar({
               data-selected={removeArmed === 'permanent' ? 'true' : undefined}
               className={cn(
                 'freestyle-rate-button relative flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-xl border px-0.5 py-1.5 text-center disabled:pointer-events-none disabled:opacity-55 sm:min-h-12 sm:rounded-2xl sm:px-1',
+                'max-sm:col-span-2 max-sm:col-start-3 max-sm:row-start-2 max-sm:min-h-10 max-sm:flex-row max-sm:gap-1.5',
+                !removeTrayOpen && 'max-sm:hidden',
                 removeArmed === 'permanent' && 'disabled:opacity-100',
               )}
               onClick={() => requestRemove('permanent')}

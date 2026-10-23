@@ -94,6 +94,12 @@ import { useRouteResidency } from '@/shared/routing/RouteResidency'
 
 const FREESTYLE_STALE_TOAST_ID = 'freestyle-stale-card'
 
+const startOverviewDateFormatter = new Intl.DateTimeFormat('zh-CN', {
+  month: 'long',
+  day: 'numeric',
+  weekday: 'short',
+})
+
 export default function ImmersiveFreestylePage({
   workspace = FREESTYLE_WORKSPACE_PRIMARY,
   lockedPalaceId = null,
@@ -1031,6 +1037,14 @@ export default function ImmersiveFreestylePage({
             className="absolute inset-0 z-[60] flex flex-col justify-center overflow-y-auto overscroll-contain bg-stage/95 px-3 py-6 backdrop-blur-sm"
           >
             <div className="mx-auto flex w-full max-w-md flex-col gap-3">
+              {/* A title anchors the gate: without it the two cards floated
+                  mid-screen over an empty stage with nothing saying what this is. */}
+              <div className="flex items-baseline justify-between gap-2 px-1">
+                <h2 className="text-sm font-semibold tracking-tight text-ink-stage">今天的学习</h2>
+                <span className="text-[11px] text-ink-stage-muted">
+                  {startOverviewDateFormatter.format(new Date())}
+                </span>
+              </div>
               {dayRecapOpen && freestyleOverview.overview ? (
                 <FreestyleDayRecap
                   yesterday={freestyleOverview.overview.yesterday}
@@ -1046,6 +1060,7 @@ export default function ImmersiveFreestylePage({
                 error={freestyleOverview.error}
                 onStart={() => setStartOverviewOpen(false)}
                 onRetry={() => { void freestyleOverview.reload() }}
+                hideYesterday={dayRecapOpen && Boolean(freestyleOverview.overview)}
               />
             </div>
           </div>
