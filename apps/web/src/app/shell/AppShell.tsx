@@ -2,6 +2,7 @@ import { memo, useEffect, useRef, useState, type PropsWithChildren } from 'react
 import {
   ChevronRight,
   ClipboardList,
+  Ellipsis,
   PanelLeftClose,
   PanelLeftOpen,
   Settings,
@@ -26,6 +27,14 @@ import { ShellProvider, useShellContext } from '@/shared/components/layout/Shell
 import { useClientPreferenceBootstrap } from '@/app/providers/useClientPreferenceBootstrap'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/shared/components/ui/sheet'
 import { AppLogDrawer } from '@/shared/logs/components/AppLogDrawer'
 import { SESSION_RECORDER_ANCHOR_ATTR, SessionRecorderHost } from '@/shared/debug/session-recorder'
 import { useRunningTaskCountBySection, type BackgroundTaskSection } from '@/shared/background-tasks/backgroundTaskRegistry'
@@ -331,37 +340,130 @@ function MobileNavItem({
   )
 }
 
+/**
+ * Phone tab bar: four study destinations plus 更多. Seven equal tabs left each
+ * one ~50px wide with 11px labels - readable, but crowded and easy to mistap.
+ * Everything stays reachable; the secondary flows just live one tap deeper.
+ */
+const MOBILE_PRIMARY_SECTION_KEYS = ['freestyle', 'palaces', 'english', 'progress'] as const
+
+const mobileOverflowSections = navSections.filter(
+  (section) => !(MOBILE_PRIMARY_SECTION_KEYS as readonly string[]).includes(section.key),
+)
+
+function MobileMoreSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="bottom"
+        className="rounded-t-3xl p-0 pb-[max(env(safe-area-inset-bottom),1rem)]"
+        aria-label="更多入口"
+      >
+        <SheetHeader className="border-b border-border/70 px-5 pb-3 pr-14 pt-5">
+          <SheetTitle>更多</SheetTitle>
+          <SheetDescription>创建、洞察与设置都从这里进入。</SheetDescription>
+        </SheetHeader>
+        <nav className="flex flex-col gap-1 px-3 py-3" aria-label="更多入口列表">
+          {mobileOverflowSections.map((section) => {
+            const Icon = section.icon
+            const description = section.key === 'knowledge'
+              ? '新建宫殿、知识树与编辑'
+              : section.key === 'review'
+                ? '考试倒计时、薄弱点与学习动态'
+                : ''
+            return (
+              <SheetClose asChild key={section.key}>
+                <NavLink
+                  to={section.to}
+                  onTouchStart={() => warmNavSection(section)}
+                  className="flex min-h-14 items-center gap-3 rounded-xl px-3 text-left transition-colors hover:bg-secondary/70 active:bg-secondary"
+                >
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary-strong">
+                    <Icon className="size-4" aria-hidden />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium">{section.label}</span>
+                    {description ? (
+                      <span className="block truncate text-xs text-muted-foreground">{description}</span>
+                    ) : null}
+                  </span>
+                  <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                </NavLink>
+              </SheetClose>
+            )
+          })}
+          <SheetClose asChild>
+            <NavLink
+              to="/profile"
+              onTouchStart={() => void preloadProfilePage()}
+              className="flex min-h-14 items-center gap-3 rounded-xl px-3 text-left transition-colors hover:bg-secondary/70 active:bg-secondary"
+            >
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary-strong">
+                <Settings className="size-4" aria-hidden />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-medium">设置</span>
+                <span className="block truncate text-xs text-muted-foreground">偏好、数据与备份</span>
+              </span>
+              <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+            </NavLink>
+          </SheetClose>
+        </nav>
+      </SheetContent>
+    </Sheet>
+  )
+}
+
 function MobileBottomNav({ layoutMode }: { layoutMode: AppLayoutMode }) {
   const { pathname } = useLocation()
+  const [moreOpen, setMoreOpen] = useState(false)
 
   useRememberNavSectionVisit()
 
   // Freestyle owns full-screen chrome; section switch lives in the freestyle HUD menu.
   if (layoutMode === 'immersive') return null
 
+  const primarySections = navSections.filter((section) => (
+    MOBILE_PRIMARY_SECTION_KEYS as readonly string[]
+  ).includes(section.key))
+  const overflowActive = mobileOverflowSections.some((section) => section.matches(pathname))
+    || pathname === '/profile' || pathname.startsWith('/profile/')
+
   return (
-    <nav
-      className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border/70 bg-card/96 px-2 pb-[max(env(safe-area-inset-bottom),0.35rem)] pt-1.5 shadow-[0_-10px_34px_color-mix(in_srgb,var(--color-foreground)_12%,transparent)] backdrop-blur-md md:hidden"
-      aria-label="移动端主导航"
-    >
-      {navSections.map((section) => (
-        <MobileNavItem
-          key={section.key}
-          to={resolveNavSectionTarget(section, section.matches(pathname))}
-          label={section.label}
-          icon={section.icon}
-          isActive={section.matches(pathname)}
-          onWarm={() => warmNavSection(section)}
-        />
-      ))}
-      <MobileNavItem
-        to="/profile"
-        label="设置"
-        icon={Settings}
-        isActive={pathname === '/profile' || pathname.startsWith('/profile/')}
-        onWarm={() => void preloadProfilePage()}
-      />
-    </nav>
+    <>
+      <nav
+        className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border/70 bg-card/96 px-2 pb-[max(env(safe-area-inset-bottom),0.35rem)] pt-1.5 shadow-[0_-10px_34px_color-mix(in_srgb,var(--color-foreground)_12%,transparent)] backdrop-blur-md md:hidden"
+        aria-label="移动端主导航"
+      >
+        {primarySections.map((section) => (
+          <MobileNavItem
+            key={section.key}
+            to={resolveNavSectionTarget(section, section.matches(pathname))}
+            label={section.label}
+            icon={section.icon}
+            isActive={section.matches(pathname)}
+            onWarm={() => warmNavSection(section)}
+          />
+        ))}
+        <button
+          type="button"
+          onClick={() => setMoreOpen(true)}
+          aria-haspopup="dialog"
+          aria-expanded={moreOpen}
+          className={cn(
+            'flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-[11px] font-medium transition-colors',
+            overflowActive
+              ? 'ma-tab-active bg-primary-soft text-primary-strong'
+              : 'text-muted-foreground hover:bg-secondary/70 hover:text-foreground',
+          )}
+          data-testid="mobile-nav-more"
+        >
+          <Ellipsis className="size-4" aria-hidden />
+          <span className="max-w-full truncate">更多</span>
+        </button>
+      </nav>
+      <MobileMoreSheet open={moreOpen} onOpenChange={setMoreOpen} />
+    </>
   )
 }
 

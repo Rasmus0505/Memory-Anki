@@ -249,14 +249,21 @@ describe('AppShell', () => {
 
     const mobileNav = screen.getByRole('navigation', { name: '移动端主导航' })
     expect(mobileNav.className).toContain('md:hidden')
-    expect(mobileNav.querySelectorAll('a')).toHaveLength(7)
-    expect(mobileNav.querySelector('a[href="/profile"]')?.textContent).toContain('设置')
+    // Four study destinations plus 更多: seven equal tabs were too narrow on a phone.
+    expect(mobileNav.querySelectorAll('a')).toHaveLength(4)
     expect(mobileNav.querySelector('a[href="/progress"]')).toBeTruthy()
     expect(mobileNav.querySelector('a[href="/palaces"]')?.className).toContain('bg-primary')
     expect(mobileNav.querySelector('a[href="/freestyle"]')).toBeTruthy()
     expect(mobileNav.querySelector('a[href="/freestyle-2"]')).toBeNull()
     expect(mobileNav.querySelector('a[href="/english/listening"]')).toBeTruthy()
-    expect(mobileNav.querySelector('a[href="/dashboard"]')).toBeTruthy()
+    expect(mobileNav.querySelector('a[href="/dashboard"]')).toBeNull()
+
+    // Everything else stays one tap away behind 更多.
+    fireEvent.click(screen.getByTestId('mobile-nav-more'))
+    const moreNav = screen.getByRole('navigation', { name: '更多入口列表' })
+    expect(moreNav.querySelector('a[href="/dashboard"]')?.textContent).toContain('洞察')
+    expect(moreNav.querySelector('a[href="/palaces/new"]')?.textContent).toContain('创建')
+    expect(moreNav.querySelector('a[href="/profile"]')?.textContent).toContain('设置')
   })
 
   it('rejects stale cross-section history targets in mobile navigation', () => {
@@ -280,8 +287,9 @@ describe('AppShell', () => {
     )
 
     const mobileNav = screen.getByRole('navigation', { name: '移动端主导航' })
+    // A stale create-page URL must not be reused as the 知识 target.
     expect(mobileNav.querySelector('a[href="/palaces"]')?.textContent).toContain('知识')
-    expect(mobileNav.querySelector('a[href="/palaces/new"]')?.textContent).toContain('创建')
+    expect(mobileNav.querySelector('a[href="/palaces/new"]')).toBeNull()
   })
 
   it('renders the main learning-loop sections and keeps today active', async () => {
@@ -420,9 +428,10 @@ describe('AppShell', () => {
     await screen.findAllByText(/Stable abcdef12/)
     expect(screen.getByText('/palaces/30/edit?miniPalaceId=5&miniPalaceMode=edit#mindmap')).toBeTruthy()
 
-    // While still in 创建, the nav link points at the section root for a second-click reset.
-    const mobileNav = screen.getByRole('navigation', { name: '移动端主导航' })
-    expect(mobileNav.querySelector('a[href="/palaces/new"]')?.textContent).toContain('创建')
+    // While still in 创建, the sidebar link points at the section root for a
+    // second-click reset. The phone bar carries 创建 behind 更多 instead.
+    const createLink = screen.getAllByRole('link', { name: '创建' })[0]
+    expect(createLink.getAttribute('href')).toBe('/palaces/new')
 
     fireEvent.click(screen.getAllByRole('link', { name: '随心' })[0]!)
     await waitFor(() => {

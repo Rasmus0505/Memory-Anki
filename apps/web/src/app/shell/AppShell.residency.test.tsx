@@ -110,7 +110,7 @@ describe('AppShell residency navigation memory', () => {
       'persisted freestyle state',
     )
     // While active on a deep create route, the nav link points at the section root.
+    // 创建 lives in the desktop sidebar (and the phone 更多 sheet), so one link.
     expect(screen.getAllByRole('link', { name: '创建' })[0]?.getAttribute('href')).toBe('/palaces/new')
-    expect(screen.getAllByRole('link', { name: '创建' })[1]?.getAttribute('href')).toBe('/palaces/new')
   })
 })
