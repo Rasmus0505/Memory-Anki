@@ -226,4 +226,45 @@ describe('MindMapImportDrawer', () => {
     expect(screen.queryByTestId('mindmap-import-preview-frame')).toBeNull()
     expect(screen.getByText('荷马时期')).toBeTruthy()
   })
+
+  it('docks itself to the right edge in sidebar mode instead of rendering unpositioned', () => {
+    render(<MindMapImportDrawer {...buildProps()} />)
+
+    const floatingPanel = screen.getByTestId('mindmap-import-dialog-content')
+    expect(floatingPanel.className).not.toContain('fixed')
+
+    fireEvent.click(screen.getByRole('button', { name: '侧边栏' }))
+
+    // `layout="unstyled"` ships no positioning, so the dock must carry `fixed`
+    // itself; without it the panel lands in normal flow at the end of <body>.
+    const dockedPanel = screen.getByTestId('mindmap-import-dialog-content')
+    expect(dockedPanel.className).toContain('fixed')
+    expect(dockedPanel.className).toContain('right-0')
+    expect(dockedPanel.className).toContain('flex')
+    expect(dockedPanel.className).toContain('z-[241]')
+  })
+
+  it('keeps the sidebar dock above the caller z-index classes', () => {
+    render(<MindMapImportDrawer {...buildProps({ className: 'z-[120]', overlayClassName: 'z-[110]' })} />)
+
+    fireEvent.click(screen.getByRole('button', { name: '侧边栏' }))
+
+    const dockedPanel = screen.getByTestId('mindmap-import-dialog-content')
+    // z-110/z-120 sit under the fullscreen mind-map host (z-230) and would hide
+    // the dock again; tailwind-merge must keep only the dock's layer.
+    expect(dockedPanel.className).toContain('z-[241]')
+    expect(dockedPanel.className).not.toContain('z-[120]')
+    expect(dockedPanel.className).not.toContain('z-[110]')
+  })
+
+  it('remembers the sidebar choice across remounts', () => {
+    const first = render(<MindMapImportDrawer {...buildProps()} />)
+    fireEvent.click(screen.getByRole('button', { name: '侧边栏' }))
+    first.unmount()
+
+    render(<MindMapImportDrawer {...buildProps()} />)
+
+    expect(screen.getByTestId('mindmap-import-dialog-content').className).toContain('fixed')
+    expect(screen.getByRole('button', { name: '悬浮窗' })).toBeTruthy()
+  })
 })

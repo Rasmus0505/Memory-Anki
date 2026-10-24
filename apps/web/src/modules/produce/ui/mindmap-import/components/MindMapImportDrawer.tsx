@@ -26,6 +26,28 @@ import {
 } from '@/shared/components/ui/dialog'
 import { cn } from '@/shared/lib/utils'
 
+const LAYOUT_MODE_STORAGE_KEY = 'memory-anki-mindmap-import-layout'
+
+type ImportDrawerLayoutMode = 'floating' | 'sidebar'
+
+/** Remember 悬浮窗/侧边栏 so reopening keeps the shape the user picked. */
+function readStoredLayoutMode(): ImportDrawerLayoutMode {
+  if (typeof window === 'undefined') return 'floating'
+  try {
+    return window.localStorage.getItem(LAYOUT_MODE_STORAGE_KEY) === 'sidebar' ? 'sidebar' : 'floating'
+  } catch {
+    return 'floating'
+  }
+}
+
+function writeStoredLayoutMode(mode: ImportDrawerLayoutMode) {
+  try {
+    window.localStorage.setItem(LAYOUT_MODE_STORAGE_KEY, mode)
+  } catch {
+    // 本地偏好写入失败不应影响弹窗使用。
+  }
+}
+
 export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
   const {
     open,
@@ -36,7 +58,14 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
     overlayClassName,
   } = props
 
-  const [layoutMode, setLayoutMode] = useState<'floating' | 'sidebar'>('floating')
+  const [layoutMode, setLayoutMode] = useState<ImportDrawerLayoutMode>(readStoredLayoutMode)
+  const toggleLayoutMode = () => {
+    setLayoutMode((current) => {
+      const next: ImportDrawerLayoutMode = current === 'floating' ? 'sidebar' : 'floating'
+      writeStoredLayoutMode(next)
+      return next
+    })
+  }
   const [previewFrameVersion, setPreviewFrameVersion] = useState(0)
   const previewSectionRef = useRef<HTMLElement | null>(null)
   const lastAutoScrollKeyRef = useRef('')
@@ -119,11 +148,18 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
         layout={layoutMode === 'sidebar' ? 'unstyled' : 'centered'}
         className={cn(
           layoutMode === 'sidebar'
-            ? 'ml-auto mr-0 h-[calc(100dvh-32px)] max-w-155 rounded-none rounded-l-3xl border-l bg-card/98 p-0 shadow-floating'
+            ? 'h-[100dvh] max-w-none rounded-none border-0 bg-card/98 p-0 shadow-floating'
             : 'h-[min(92vh,980px)] max-w-[min(92vw,1440px)] rounded-lg border bg-card/98 p-0 shadow-floating',
           'overflow-hidden overscroll-contain',
           className,
           overlayClassName,
+          // The sidebar dock owns its own placement. `layout="unstyled"` means
+          // DialogContent ships no positioning of its own, so without `fixed`
+          // the panel renders in normal flow at the end of <body> — off-screen,
+          // which reads as "the button did nothing". These classes come last so
+          // they also beat the callers' z-index classes (z-[110]/z-[120] sit
+          // under the fullscreen mind-map host at z-230).
+          layoutMode === 'sidebar' && 'fixed right-0 top-0 z-[241] flex w-full flex-col sm:right-4 sm:top-4 sm:h-[calc(100dvh-32px)] sm:w-[620px] sm:max-w-[calc(100vw-32px)] sm:rounded-l-3xl sm:border-l sm:border-border',
         )}
       >
         <DialogHeader>
@@ -137,7 +173,7 @@ export function MindMapImportDrawer(props: MindMapImportDrawerProps) {
                 variant="outline"
                 size="sm"
                 className="min-h-11 sm:h-8 sm:min-h-8"
-                onClick={() => setLayoutMode((current) => (current === 'floating' ? 'sidebar' : 'floating'))}
+                onClick={toggleLayoutMode}
                 title={layoutMode === 'floating' ? '切换为右侧边栏' : '切换为中间悬浮窗'}
               >
                 {layoutMode === 'floating' ? (
