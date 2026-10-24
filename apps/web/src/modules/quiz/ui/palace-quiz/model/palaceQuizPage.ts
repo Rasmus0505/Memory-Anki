@@ -43,6 +43,7 @@ const QUESTION_SOURCE_LABELS: Record<string, string> = {
   image_single: '单图生成',
   text_files: '文本生成',
   mindmap_review: '脑图复习生成',
+  ai_chapter_generated: 'AI生成',
 }
 
 const QUESTION_TYPE_LABELS = {
