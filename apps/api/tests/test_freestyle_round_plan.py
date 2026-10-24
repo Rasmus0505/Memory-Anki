@@ -1151,6 +1151,85 @@ def test_new_day_reopens_a_due_again_card_and_cancels_its_retry():
     assert "done" in seen
 
 
+def test_new_day_reopens_a_due_again_card_whose_revision_moved_on():
+    """A unit re-entered at a newer revision is the same review work.
+
+    Matching the card id alone left it compressed for the rest of the round:
+    ``…:r1`` can never equal the ``…:r2`` the queue now returns.
+    """
+    plan = _rate(
+        plan_from_cards(
+            [
+                _card("review_unit:unit-done:r1", unit_id="unit-done", revision=1),
+                _card("review_unit:unit-todo:r1", unit_id="unit-todo", revision=1),
+            ],
+            today="2026-10-08",
+        ),
+        "review_unit:unit-done:r1",
+        3,
+        "enc-pass",
+    )
+    plan = compress_completed(plan)
+    appended = append_today_cards(
+        plan,
+        [
+            _card("review_unit:unit-done:r2", unit_id="unit-done", revision=2),
+            _card("review_unit:unit-todo:r2", unit_id="unit-todo", revision=2),
+        ],
+        today="2026-10-09",
+    )
+    assert "review_unit:unit-done:r2" in appended["presented_ids"]
+    assert "review_unit:unit-done:r2" not in appended["compressed_ids"]
+    assert "review_unit:unit-done:r2" not in appended["completed_ids"]
+
+
+def test_new_day_reopens_from_the_server_due_set_with_no_incoming_cards():
+    """The client hides yesterday's finished cards, so the day advance must not
+    depend on them appearing in the rebuilt candidate list."""
+    plan = _rate(
+        plan_from_cards(
+            [_card("done", unit_id="unit-done"), _card("todo", unit_id="unit-todo")],
+            today="2026-10-08",
+        ),
+        "done",
+        3,
+        "enc-pass",
+    )
+    plan = compress_completed(plan)
+    appended = append_today_cards(
+        plan,
+        [],
+        today="2026-10-09",
+        due_unit_ids=["unit-done"],
+    )
+    assert "done" in appended["presented_ids"]
+    assert "done" not in appended["compressed_ids"]
+    assert "done" not in appended["completed_ids"]
+
+
+def test_replan_keeps_a_reopened_card_the_candidate_list_omitted():
+    plan = _rate(
+        plan_from_cards(
+            [_card("done", unit_id="unit-done"), _card("todo", unit_id="unit-todo")],
+            today="2026-10-08",
+        ),
+        "done",
+        3,
+        "enc-pass",
+    )
+    plan = compress_completed(plan)
+    replanned = replan_remaining(
+        plan,
+        [],
+        today="2026-10-09",
+        due_unit_ids=["unit-done"],
+    )
+    card_ids = [card["card_id"] for card in replanned["original_cards"]]
+    assert "done" in card_ids
+    assert "done" in replanned["presented_ids"]
+    assert "done" not in replanned["compressed_ids"]
+
+
 def test_new_day_does_not_restore_an_excluded_card_or_a_card_that_is_not_due():
     plan = exclude_card(
         compress_completed(

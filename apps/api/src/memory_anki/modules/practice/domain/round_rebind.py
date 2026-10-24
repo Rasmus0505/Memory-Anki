@@ -35,11 +35,12 @@ def rebind_plan_cards(
     today: str = "",
     reorder_unstarted: bool = False,
     drop_missing_unstarted: bool = False,
+    due_unit_ids: Sequence[str] = (),
 ) -> Plan:
     """Compatibility dispatcher. Prefer append_today_cards / replan_remaining."""
     if reorder_unstarted or drop_missing_unstarted:
-        return replan_remaining(plan, cards, today=today)
-    return append_today_cards(plan, cards, today=today)
+        return replan_remaining(plan, cards, today=today, due_unit_ids=due_unit_ids)
+    return append_today_cards(plan, cards, today=today, due_unit_ids=due_unit_ids)
 
 
 def repair_retries_parked_before_source(plan: Plan) -> None:
@@ -190,6 +191,7 @@ def append_today_cards(
     cards: Sequence[Mapping[str, Any]],
     *,
     today: str = "",
+    due_unit_ids: Sequence[str] = (),
 ) -> Plan:
     """Natural due rebuild: freeze leftover order, append newly seen identities."""
     next_plan = normalize_plan(plan)
@@ -200,7 +202,7 @@ def append_today_cards(
         next_plan["today"] = stamp
     incoming = snapshot_cards(cards, today=stamp)
     if day_advanced:
-        _reopen_due_again(next_plan, incoming)
+        _reopen_due_again(next_plan, incoming, due_unit_ids=due_unit_ids)
     _merge_incoming(
         next_plan,
         incoming,
@@ -240,6 +242,7 @@ def replan_remaining(
     cards: Sequence[Mapping[str, Any]],
     *,
     today: str = "",
+    due_unit_ids: Sequence[str] = (),
 ) -> Plan:
     """Config save: keep handled ticks, rebuild unstarted, park live retries near the split."""
     next_plan = normalize_plan(plan)
@@ -249,10 +252,16 @@ def replan_remaining(
     if stamp:
         next_plan["today"] = stamp
     incoming = snapshot_cards(cards, today=stamp)
-    if day_advanced:
-        _reopen_due_again(next_plan, incoming)
+    reopened = (
+        _reopen_due_again(next_plan, incoming, due_unit_ids=due_unit_ids)
+        if day_advanced
+        else set()
+    )
     keep_old = set(next_plan["completed_ids"]) | set(next_plan["excluded_ids"])
     keep_old.update(live_retry_sources(next_plan))
+    # A reopened card is due again; a scope change must not drop it just because
+    # the client's rebuilt candidate list still filtered it out.
+    keep_old.update(reopened)
     previous_presented = list(next_plan["presented_ids"])
     mapping = _merge_incoming(
         next_plan,
@@ -262,6 +271,9 @@ def replan_remaining(
         stamp_new=True,
     )
     previous_presented = _rewrite_ids(previous_presented, mapping)
+    # A reopened card is due again today. It keeps its place on the rail even
+    # when the rebuilt candidate list no longer mentions it.
+    reopened_presented = set(_rewrite_ids(sorted(reopened), mapping))
     source_ids = {item["card_id"] for item in next_plan["original_cards"]}
     excluded = set(next_plan["excluded_ids"])
     completed = set(next_plan["completed_ids"])
@@ -275,7 +287,11 @@ def replan_remaining(
             continue
         if source_id not in source_ids:
             continue
-        if source_id in completed or source_id in retry_sources:
+        if (
+            source_id in completed
+            or source_id in retry_sources
+            or source_id in reopened_presented
+        ):
             prefix.append(source_id)
             seen.add(source_id)
     incoming_ids = [item["card_id"] for item in incoming]
@@ -324,34 +340,54 @@ def replan_remaining(
     return next_plan
 
 
-def _reopen_due_again(plan: Plan, incoming: Sequence[Mapping[str, Any]]) -> None:
+def _reopen_due_again(
+    plan: Plan,
+    incoming: Sequence[Mapping[str, Any]],
+    *,
+    due_unit_ids: Sequence[str] = (),
+) -> set[str]:
     """Put cards that are due again back into today's queue.
 
     Only runs after the calendar day advances. A removal stays removed.
     Inserted or completed retries are cancelled, or the source still looks
     finished after it leaves ``completed_ids``.
+
+    Matching is by knowledge-point identity, not by card id: a unit whose
+    revision moved on (``…:r1`` -> ``…:r2``) is still the same review work, and
+    a card id that can never match would stay compressed for the rest of the
+    round. ``due_unit_ids`` is the server's own due set for this plan's units,
+    because the client rebuilds its candidate list from the round ledger and
+    still hides yesterday's finished cards — exactly the ones due again today.
     """
-    due_ids = {_text(item.get("card_id")) for item in incoming}
-    due_ids.discard("")
-    if not due_ids:
-        return
+    due_keys = {_match_key(item) for item in incoming}
+    due_keys.update(
+        f"unit:{unit}" for unit in (_text(item) for item in due_unit_ids) if unit
+    )
+    if not due_keys:
+        return set()
     excluded = set(plan["excluded_ids"])
+    excluded_units = _blocked_unit_ids(plan, excluded)
     finished = {OCCURRENCE_INSERTED, OCCURRENCE_COMPLETED}
     reopen = {
-        card_id
-        for card_id in due_ids
-        if card_id not in excluded
+        _text(card.get("card_id"))
+        for card in plan["original_cards"]
+        if _text(card.get("card_id"))
+        and _text(card.get("card_id")) not in excluded
+        and _match_key(card) in due_keys
+        and (_text(card.get("unit_id")) or _review_unit_id(card.get("card_id")))
+        not in excluded_units
         and (
-            card_id in plan["completed_ids"]
-            or card_id in plan["compressed_ids"]
+            _text(card.get("card_id")) in plan["completed_ids"]
+            or _text(card.get("card_id")) in plan["compressed_ids"]
             or any(
-                _text(item.get("source_card_id")) == card_id and item.get("status") in finished
+                _text(item.get("source_card_id")) == _text(card.get("card_id"))
+                and item.get("status") in finished
                 for item in plan["occurrences"]
             )
         )
     }
     if not reopen:
-        return
+        return set()
     drop_ids = set(reopen)
     for item in plan["occurrences"]:
         if _text(item.get("source_card_id")) not in reopen:
@@ -370,6 +406,13 @@ def _reopen_due_again(plan: Plan, incoming: Sequence[Mapping[str, Any]]) -> None
         plan["presented_ids"] = [
             item for item in plan["presented_ids"] if item not in (drop_ids - reopen)
         ]
+    # Compression takes a settled card off the rail. A card that is due again is
+    # live work, so it goes back on even when no incoming card re-adds it.
+    for card in plan["original_cards"]:
+        card_id = _text(card.get("card_id"))
+        if card_id in reopen and card_id not in plan["presented_ids"]:
+            plan["presented_ids"].append(card_id)
+    return reopen
 
 
 def _blocked_unit_ids(plan: Mapping[str, Any], blocked_ids: set[str]) -> set[str]:

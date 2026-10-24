@@ -315,6 +315,21 @@ def get_or_create_active_round(
         today = _local_today()
         plan_day = str(next_plan.get("today") or "")[:10]
         same_day = plan_day in {"", today}
+        day_advanced = bool(plan_day and plan_day < today)
+        # A round that outlives a study day must re-admit the units that are due
+        # again today. The client rebuilds its candidates from the round ledger,
+        # which still hides yesterday's finished cards — exactly the ones due
+        # again — so the server supplies its own due set for this plan's units
+        # instead of trusting the incoming list.
+        due_again = (
+            list_due_review_unit_ids(session, _plan_unit_ids(next_plan), today=local_day())
+            if day_advanced
+            else set()
+        )
+        before_handled = (
+            tuple(next_plan.get("completed_ids") or []),
+            tuple(next_plan.get("compressed_ids") or []),
+        )
         # Fully handled rounds freeze on get_or_create: silent post-complete
         # rebuilds must not mint or append leftover due into the live feed, or
         # the closing settlement slot disappears. /rounds/start advances.
@@ -324,17 +339,25 @@ def get_or_create_active_round(
                     return _serve(session, row, conflict=True)
             return _serve(session, row)
         if persist_config:
-            next_plan = replan_remaining(next_plan, cards, today=today)
+            next_plan = replan_remaining(
+                next_plan, cards, today=today, due_unit_ids=sorted(due_again)
+            )
             next_plan = normalize_plan(next_plan)
-        elif cards:
-            next_plan = append_today_cards(next_plan, cards, today=today)
+        elif cards or due_again:
+            next_plan = append_today_cards(
+                next_plan, cards, today=today, due_unit_ids=sorted(due_again)
+            )
             next_plan = normalize_plan(next_plan)
         # A client may resend a card whose palace was deleted. Drop it again
         # after append/replan so it cannot come back as a live retry or a new row.
         next_plan = _without_undue_units(session, _without_vanished_units(session, next_plan))
         dropped = [item["card_id"] for item in next_plan.get("original_cards") or []] != before_ids
         presented_changed = list(next_plan.get("presented_ids") or []) != before_presented
-        if cards or persist_config or dropped or presented_changed:
+        handled_changed = before_handled != (
+            tuple(next_plan.get("completed_ids") or []),
+            tuple(next_plan.get("compressed_ids") or []),
+        )
+        if cards or persist_config or dropped or presented_changed or handled_changed:
             changed = _apply_plan(
                 row,
                 next_plan,
