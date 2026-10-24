@@ -22,6 +22,7 @@ from .application.unit_review_queue_read import (
 from .application.unit_review_service import (
     adjust_unit_schedule,
     cancel_unrated_unit_review_encounter,
+    clamp_due_dates_for_sprint,
     close_unit_review_encounter,
     complete_unit_review_session,
     get_palace_unit_projection,
@@ -66,6 +67,7 @@ __all__ = [
     "RATING_LABELS",
     "VALID_RATINGS",
     "adjust_unit_schedule",
+    "clamp_due_dates_for_sprint",
     "remove_unit_permanently",
     "cancel_unrated_unit_review_encounter",
     "close_unit_review_encounter",

@@ -319,3 +319,137 @@ def test_fuzz_never_produces_a_non_positive_interval():
     for stage in range(1, len(INTERVAL_DAYS)):
         for index in range(200):
             assert scheduled_interval_days(stage, fuzz_key=f"u{index}") >= 1
+
+
+# --- Sprint horizon -----------------------------------------------------------
+# A fixed exam date bounds the booking: nothing may be scheduled after the exam,
+# overshooting intervals are pulled into the last week, and the ladder itself
+# (landing stage, nominal interval, toolbar histogram) is untouched.
+
+from datetime import timedelta  # noqa: E402
+
+from memory_anki.core.exam_horizon import resolve_sprint_horizon  # noqa: E402
+
+EXAM = date(2026, 12, 20)
+SPRINT_TODAY = date(2026, 10, 23)  # 58 days out
+
+
+def _horizon(today: date = SPRINT_TODAY):
+    return resolve_sprint_horizon(exam_date=EXAM.isoformat(), sprint_mode=True, today=today)
+
+
+def test_sprint_horizon_is_off_without_the_switch():
+    assert resolve_sprint_horizon(exam_date=EXAM.isoformat(), sprint_mode=False, today=TODAY) is None
+
+
+def test_sprint_horizon_is_off_without_an_exam_date():
+    assert resolve_sprint_horizon(exam_date=None, sprint_mode=True, today=TODAY) is None
+
+
+def test_sprint_horizon_stops_on_exam_day():
+    """On the exam day the horizon would pull everything onto "yesterday"."""
+    assert resolve_sprint_horizon(exam_date=EXAM.isoformat(), sprint_mode=True, today=EXAM) is None
+
+
+def test_sprint_never_books_past_the_exam():
+    horizon = _horizon()
+    for interval in (1, 3, 7, 14, 30, 60, 120, 240, 365):
+        assert horizon.schedule(interval, today=SPRINT_TODAY) <= horizon.last_due, interval
+
+
+def test_sprint_leaves_a_fitting_interval_alone():
+    """The ladder decides the cadence; the horizon only bounds it."""
+    horizon = _horizon()
+    for interval in (1, 3, 7, 14):
+        assert horizon.schedule(interval, today=SPRINT_TODAY) == SPRINT_TODAY + timedelta(days=interval)
+
+
+def test_sprint_pulls_overshooting_reviews_into_the_last_week():
+    horizon = _horizon()
+    pulled = horizon.schedule(365, today=SPRINT_TODAY, seed="unit-1")
+    assert horizon.last_due - timedelta(days=6) <= pulled <= horizon.last_due
+
+
+def test_sprint_spreads_the_pulled_cohort():
+    """A mature cohort must not all arrive on the eve of the exam."""
+    horizon = _horizon()
+    days = {
+        horizon.schedule(365, today=SPRINT_TODAY, seed=f"unit-{index}")
+        for index in range(40)
+    }
+    assert len(days) >= 4, "pulled reviews collapsed onto too few days"
+
+
+def test_sprint_books_normally_when_no_room_is_left():
+    """Reviewed two days before the exam: there is nothing left to pull into."""
+    horizon = _horizon(date(2026, 12, 18))
+    assert horizon.schedule(30, today=date(2026, 12, 18), seed="unit-1") == date(2027, 1, 17)
+
+
+def test_pass_under_sprint_books_before_the_exam():
+    horizon = _horizon()
+    result = rate_unit(
+        stage_index=6,
+        has_passed=True,
+        rating=3,
+        had_failure_in_encounter=False,
+        today=SPRINT_TODAY,
+        fuzz_key="unit-1",
+        horizon=horizon,
+    )
+    assert result.passed is True
+    assert result.due_date <= horizon.last_due
+
+
+def test_sprint_does_not_change_the_landing_stage():
+    """The cap moves the booked date only; the stage still names the grade."""
+    horizon = _horizon()
+    plain = rate_unit(
+        stage_index=5, has_passed=True, rating=3,
+        had_failure_in_encounter=False, today=SPRINT_TODAY, fuzz_key="unit-1",
+    )
+    bounded = rate_unit(
+        stage_index=5, has_passed=True, rating=3,
+        had_failure_in_encounter=False, today=SPRINT_TODAY, fuzz_key="unit-1",
+        horizon=horizon,
+    )
+    assert bounded.stage_index == plain.stage_index == 6
+    assert plain.due_date > horizon.last_due
+    assert bounded.due_date <= horizon.last_due
+
+
+def test_locked_ahead_of_date_card_keeps_its_booked_date():
+    """A fill card proves nothing about retention, so sprint mode must not move it.
+
+    Its post-exam date is pulled by ``clamp_due_dates_for_sprint`` instead, which
+    is the one write path allowed to touch a booked due date.
+    """
+    horizon = _horizon()
+    booked = date(2027, 2, 18)
+    result = rate_unit(
+        stage_index=5,
+        has_passed=True,
+        rating=3,
+        had_failure_in_encounter=False,
+        today=SPRINT_TODAY,
+        schedule_locked=True,
+        locked_due_date=booked,
+        horizon=horizon,
+    )
+    assert result.schedule_changed is False
+    assert result.due_date == booked
+
+
+def test_failed_ratings_still_retry_today_under_sprint():
+    horizon = _horizon()
+    for rating in (1, 2):
+        result = rate_unit(
+            stage_index=6,
+            has_passed=True,
+            rating=rating,
+            had_failure_in_encounter=False,
+            today=SPRINT_TODAY,
+            horizon=horizon,
+        )
+        assert result.due_date == SPRINT_TODAY
+        assert result.passed is False

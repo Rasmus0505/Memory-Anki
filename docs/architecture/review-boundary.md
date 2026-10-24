@@ -30,7 +30,7 @@ Reviews must not import Practice. Practice must not create a second schedule, co
 - Marking the root means the whole palace is one unit until deeper marks cut regions from it.
 - Isolation units still partition every non-root node: each belongs to exactly one palace, mark, or residual unit.
 - Each permanent mark is its own unit, and no node is reviewed under two units. Sibling marks never share a unit: under A with marked B1 and B2 and unmarked B3, the units are A→B1 with its subtree, A→B2 with its subtree, and the residual A→B3 with its subtree.
-- Unit order is depth-first: each marked child's isolation unit comes before that child's own walk. The root isolation unit stays first when the root itself is marked. The residual unit stays last. Structured review keeps that order after the due date; random order still shuffles.
+- Unit order is depth-first: each marked child's isolation unit comes before that child's own walk. The root isolation unit stays first when the root itself is marked. The residual unit stays last. `unit_order: structured` keeps that order inside the palace — the due date never moves a unit ahead of an earlier chapter — and `random` shuffles it. 新学优先 still hoists never-passed units above review units; the structure order holds inside each of those two groups.
 - A new or resized unit inherits the lowest stage and earliest due date among units whose current membership overlaps it, including itself. It does not start a separate ladder rule. Content edits preserve each containing unit's earned stage and due date; only a real rating changes its memory assessment.
 - The retired `cohort` kind (migration 0071) is deactivated, not deleted, and its earned progress does not transfer. Each remaining unit keeps only its own stage and due date.
 - Progress carries over any permanent-mark change; a mark edit never restarts a unit at first-learning. Inheritance candidates include inactive rows, because deleting the final mark only deactivates unit rows and leaves their earned stage and due date stored. A region with no live owner (every mark removed, then re-added) reactivates its original row, keeping unit id and rating history; a region still covered by active units mints a fresh row and inherits by node overlap.
@@ -53,6 +53,26 @@ Reviews must not import Practice. Practice must not create a second schedule, co
 
 ## Scheduling Invariants
 
+### The due set is one whole
+
+- A study day's due set is never batched. Every active unit in scope with `due_date <= 学习日`
+  enters the queue and the round plan together: `list_trusted_due_units_for_queue` filters by date
+  only, `build_freestyle_queue` returns the whole remaining list, and no step holds cards back to
+  release them later in the day. There is no daily review quota, no backlog release, and no
+  per-round slice; a "first 8 cards" `study_window` is a first-paint prefix of the same order, not
+  an admission rule, and the HUD denominator already counts the whole set.
+- A due card can be absent only because this round records it as handled (completed, compressed,
+  excluded, or permanently removed). A card that becomes due again on a later study day is reopened
+  by the day-advance rebuild (`_reopen_due_again`), matched by unit identity — not card id. A round
+  that has become fully handled freezes until the next round (closing settlement), so a unit that
+  falls due later the same day waits for that round: a round-end rule, not a batching rule.
+- Ordering (新学优先, 按知识结构) decides position, never admission. 新学优先 is a fixed product
+  rule, re-confirmed on 2026-10-23: every never-passed unit in scope comes before every due review,
+  and `sanitize_feed_config` ignores any stored `new_placement` instead of honouring it. Do not
+  "balance" the two pools; the HUD and the round plan still hold both. New learning is a separate
+  pool: 「今日新学已完成」 fires when the round has no unpassed new unit left and never gates due
+  reviews.
+
 - The only interval ladder is `0 (initial learning), 1, 3, 7, 14, 30, 60, 120, 240, 365` local calendar days. A unit that has never passed occupies the initial-learning stage; its first `记得` always schedules the one-day stage for tomorrow.
 - `记得` advances one level and `轻松` advances two. Every `困难` rating is retry work: it keeps the unit due today, returns after at most three other units, and lowers an already-earned ladder position by one step (never-passed units stay in first-learning). `忘记` lapses: never-passed units return to first-learning, previously passed units keep about half their ladder position. Only `记得` and `轻松` pass the unit.
 - Failing grades (`忘记` and `困难`) remain immediately due and return after at most three other units. There is no per-round retry cap, and this rule also applies to ahead-of-date fill cards.
@@ -62,6 +82,13 @@ Reviews must not import Practice. Practice must not create a second schedule, co
 - Rating requires `study_session_id`, `unit_id`, `unit_revision`, `encounter_id`, stable `operation_id`, and `rating`. The operation is idempotent and supports LIFO single-step undo while the encounter remains open.
 - Freestyle may rate a palace's remaining due units in one Reviews command (`rate_palace_due_units`). That command still writes one unit rating per member. It is not a palace-level schedule, not a node rating, and not the retired subtree/bulk-fill path. Already-rated units in the current round are left alone unless they are the open current encounter (which may amend). Sibling units close at zero observed seconds. Undo of the current open encounter undoes the whole batch.
 - Due dates are local study-day dates. A study day starts at 03:00 local time (`MEMORY_ANKI_DAY_START_HOUR`, default `3`), not midnight, so work done at 00:30 still belongs to the evening that just ended. Presentation converts a study day to its 03:00 local boundary only at API boundaries.
+- Sprint mode bounds the booked date without touching the ladder: `rate_unit(horizon=...)` calls
+  `SprintHorizon.schedule(interval, seed=<unit id>)`, which books a fitting gap unchanged, pulls an
+  overshooting one into the last week before the exam (spread per unit), and books normally when no
+  room is left. The horizon is resolved once per request and cached on `session.info`, so a preview
+  and the commit it precedes can never disagree. The landing stage still names the grade, so the
+  toolbar ladder and `${n}天级` labels keep their meaning. Failed grades still retry today. A locked
+  ahead-of-date card keeps its booked date; only `clamp_due_dates_for_sprint` moves it.
 - Content and mark editing do not independently penalize scheduling. Existing content keeps its stage/date; splits, new content and merges follow the topology inheritance rules above.
 
 ## Session Invariants

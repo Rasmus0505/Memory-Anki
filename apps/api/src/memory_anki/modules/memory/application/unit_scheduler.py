@@ -6,6 +6,7 @@ import hashlib
 from dataclasses import dataclass
 from datetime import date, timedelta
 
+from memory_anki.core.exam_horizon import SprintHorizon
 from memory_anki.core.time import local_day
 
 # Stage 0 is the initial-learning state. A successful first "remember" moves
@@ -118,6 +119,7 @@ def rate_unit(
     schedule_locked: bool = False,
     locked_due_date: date | None = None,
     hard_penalized_today: bool = False,
+    horizon: SprintHorizon | None = None,
 ) -> UnitScheduleResult:
     current_day = today or local_day()
     current_stage = clamp_stage(stage_index)
@@ -165,7 +167,7 @@ def rate_unit(
     if schedule_locked:
         return UnitScheduleResult(
             current_stage,
-            locked_due_date or current_day,
+            (locked_due_date or current_day),
             True,
             0,
             schedule_changed=False,
@@ -187,9 +189,15 @@ def rate_unit(
 
     passed_stage = max(MIN_PASSED_STAGE, clamp_stage(passed_stage))
     interval = scheduled_interval_days(passed_stage, fuzz_key=fuzz_key)
+    due = current_day + timedelta(days=interval)
+    if horizon is not None:
+        # Sprint mode only bounds the booking: without it this unit would be
+        # scheduled after the exam and never reviewed again. The landing stage
+        # (and its nominal interval) is untouched -- only the booked date moves.
+        due = horizon.schedule(interval, today=current_day, seed=fuzz_key)
     return UnitScheduleResult(
         passed_stage,
-        current_day + timedelta(days=interval),
+        due,
         True,
         0,
     )

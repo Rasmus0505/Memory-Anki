@@ -8,14 +8,13 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from memory_anki.core.exam_horizon import EXAM_SETTINGS_KEY
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.knowledge import Chapter, Subject
 from memory_anki.infrastructure.db._tables.misc import Config
 from memory_anki.infrastructure.db._tables.palaces import Palace
 
 from ..domain.stars import clamp_stars, normalize_source
-
-EXAM_SETTINGS_KEY = "exam_settings"
 
 
 class ExamNotFoundError(LookupError):
@@ -46,6 +45,9 @@ def get_exam_settings(session: Session) -> dict[str, Any]:
         "exam_name": str(payload.get("exam_name") or ""),
         "exam_date": payload.get("exam_date") or None,
         "subject_ids": [v for v in subject_ids if v > 0],
+        # Sprint mode caps every interval at ~20% of the remaining horizon so a
+        # unit is not booked past the exam and never seen again. Off by default.
+        "sprint_mode": bool(payload.get("sprint_mode", False)),
     }
 
 
@@ -55,6 +57,8 @@ def save_exam_settings(session: Session, data: dict[str, Any]) -> dict[str, Any]
         current["exam_name"] = str(data.get("exam_name") or "").strip()[:80]
     if "exam_date" in data:
         current["exam_date"] = _parse_date(data.get("exam_date"))
+    if "sprint_mode" in data:
+        current["sprint_mode"] = bool(data.get("sprint_mode"))
     if "subject_ids" in data:
         ids = {int(v) for v in data.get("subject_ids") or [] if str(v).isdigit()}
         known = {sid for (sid,) in session.query(Subject.id).filter(Subject.id.in_(ids))} if ids else set()

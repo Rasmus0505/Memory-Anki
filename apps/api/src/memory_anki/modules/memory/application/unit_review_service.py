@@ -2,17 +2,24 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from memory_anki.core.exam_horizon import (
+    EXAM_SETTINGS_KEY,
+    SprintHorizon,
+    read_exam_settings,
+    resolve_sprint_horizon,
+)
 from memory_anki.core.time import local_calendar_day_of, local_day, to_api_datetime, utc_now_naive
-from memory_anki.infrastructure.db._tables.misc import StudySession
+from memory_anki.infrastructure.db._tables.misc import Config, StudySession
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.unit_reviews import (
     ReviewSessionUnit,
@@ -318,7 +325,11 @@ def get_unit_review_session(
         )
         if requested_encounter is not None and requested_encounter.unit_id == state.id:
             encounter = requested_encounter
-        encounter_payload = _encounter_payload(encounter) if encounter is not None else None
+        encounter_payload = (
+            _encounter_payload(encounter, horizon=_sprint_horizon(session))
+            if encounter is not None
+            else None
+        )
         if encounter is not None and encounter_payload is not None:
             encounter_payload["rating_editable"] = not _has_later_attempt(session, encounter)
         payload.update(
@@ -416,10 +427,76 @@ def _schedule_lock_from_due(due_date: date, today: date) -> tuple[bool, date]:
     return due_date > today, due_date
 
 
+_SPRINT_HORIZON_KEY = "memory_anki_sprint_horizon"
+
+
+def _sprint_horizon(session: Session, today: date | None = None) -> SprintHorizon | None:
+    """Exam-horizon interval cap for this request, resolved once per session.
+
+    Cached on ``session.info`` so the four rating buttons a preview renders and
+    the rating the learner actually commits cannot disagree about the horizon.
+    """
+    if _SPRINT_HORIZON_KEY in session.info:
+        return session.info[_SPRINT_HORIZON_KEY]
+    row = session.query(Config).filter(Config.key == EXAM_SETTINGS_KEY).one_or_none()
+    settings = read_exam_settings(row.value if row is not None else None)
+    horizon = resolve_sprint_horizon(
+        exam_date=settings.get("exam_date"),
+        sprint_mode=bool(settings.get("sprint_mode")),
+        today=today or local_day(),
+    )
+    session.info[_SPRINT_HORIZON_KEY] = horizon
+    return horizon
+
+
+def _spread_offset(unit_id: str, span_days: int) -> int:
+    """Deterministic 0..span_days offset so a pulled backlog never lands on one day."""
+    if span_days <= 0:
+        return 0
+    digest = hashlib.blake2b(unit_id.encode("utf-8"), digest_size=8).digest()
+    return int.from_bytes(digest, "big") % (span_days + 1)
+
+
+def clamp_due_dates_for_sprint(
+    session: Session,
+    *,
+    today: date | None = None,
+) -> dict[str, int]:
+    """Pull due dates booked past the exam back inside the sprint horizon.
+
+    Enabling sprint mode only constrains future ratings. Units already booked
+    after the exam would otherwise never be reviewed again, so they are pulled
+    into the last week before it — late enough to stay honest about how long the
+    unit was really held, early enough to be seen once more. Spread is keyed on
+    the unit id so the whole backlog does not arrive on a single day.
+    """
+    current = today or local_day()
+    horizon = _sprint_horizon(session, current)
+    if horizon is None:
+        return {"clamped": 0, "exam_date": 0}
+    floor = current + timedelta(days=1)
+    limit = horizon.last_due
+    if limit <= current:
+        return {"clamped": 0, "exam_date": horizon.days_left}
+    span = min(6, max(0, (limit - floor).days))
+    rows = (
+        session.query(ReviewUnitState)
+        .filter(ReviewUnitState.active.is_(True))
+        .filter(ReviewUnitState.due_date > limit)
+        .all()
+    )
+    for state in rows:
+        state.due_date = max(floor, limit - timedelta(days=_spread_offset(state.id, span)))
+    if rows:
+        session.commit()
+    return {"clamped": len(rows), "exam_date": horizon.days_left}
+
+
 def _rating_effects(
     snapshot: dict[str, Any],
     *,
     fuzz_key: str | None = None,
+    horizon: SprintHorizon | None = None,
 ) -> list[dict[str, Any]]:
     state_data = snapshot["state"]
     item_data = snapshot["item"]
@@ -447,6 +524,7 @@ def _rating_effects(
             schedule_locked=schedule_locked,
             locked_due_date=locked_due_date,
             hard_penalized_today=hard_penalized_today,
+            horizon=horizon,
         )
         # Nominal ladder interval names the landing stage ("14天级"); the actual
         # gap carries day-level fuzz and is what a passing rating really books.
@@ -479,7 +557,11 @@ def _rating_effects(
     return effects
 
 
-def _encounter_payload(encounter: ReviewUnitEncounter) -> dict[str, Any]:
+def _encounter_payload(
+    encounter: ReviewUnitEncounter,
+    *,
+    horizon: SprintHorizon | None = None,
+) -> dict[str, Any]:
     snapshot = json.loads(encounter.baseline_state_json)
     return {
         "id": encounter.id,
@@ -493,7 +575,11 @@ def _encounter_payload(encounter: ReviewUnitEncounter) -> dict[str, Any]:
         "closed_at": to_api_datetime(encounter.closed_at),
         # Same fuzz key as the commit path (unit id), so the previewed due date is
         # the one actually booked instead of an unfuzzed approximation.
-        "rating_effects": _rating_effects(snapshot, fuzz_key=encounter.unit_id),
+        "rating_effects": _rating_effects(
+            snapshot,
+            fuzz_key=encounter.unit_id,
+            horizon=horizon,
+        ),
     }
 
 
@@ -935,6 +1021,8 @@ def _apply_rating_from_snapshot(
     item: ReviewSessionUnit,
     snapshot: dict[str, Any],
     rating: int,
+    *,
+    horizon: SprintHorizon | None = None,
 ) -> Any:
     _restore_snapshot(state, item, snapshot)
     today = local_day()
@@ -951,6 +1039,7 @@ def _apply_rating_from_snapshot(
         schedule_locked=schedule_locked,
         locked_due_date=locked_due_date,
         hard_penalized_today=state.hard_penalized_on == today,
+        horizon=horizon,
     )
     now = utc_now_naive()
     state.stage_index = result.stage_index
@@ -1114,7 +1203,9 @@ def _rate_open_encounter(
     previous_id = source.effective_operation_id or encounter.effective_operation_id
     previous = session.get(ReviewUnitRatingOperation, previous_id) if previous_id else None
     before = json.loads(source.baseline_state_json)
-    result = _apply_rating_from_snapshot(state, item, before, rating)
+    result = _apply_rating_from_snapshot(
+        state, item, before, rating, horizon=_sprint_horizon(session)
+    )
     now = utc_now_naive()
     if previous is not None:
         previous.replaced_at = now
@@ -1134,7 +1225,7 @@ def _rate_open_encounter(
         "rating_label": RATING_LABELS[rating],
         "session_status": item.status,
         "schedule_changed": result.schedule_changed,
-        "encounter": _encounter_payload(encounter),
+        "encounter": _encounter_payload(encounter, horizon=_sprint_horizon(session)),
     }
     session.add(
         ReviewUnitRatingOperation(
@@ -1810,7 +1901,9 @@ def _undo_one_rating_operation(
         else None
     )
     if encounter.status == ENCOUNTER_OPEN and previous is not None and previous.undone_at is None:
-        result = _apply_rating_from_snapshot(state, item, snapshot, previous.rating)
+        result = _apply_rating_from_snapshot(
+            state, item, snapshot, previous.rating, horizon=_sprint_horizon(session)
+        )
         previous.replaced_at = None
         encounter.effective_operation_id = previous.id
         encounter.selected_rating = previous.rating
@@ -1836,7 +1929,7 @@ def _undo_one_rating_operation(
         "operation_id": operation.id,
         "unit": unit_payload(state),
         "session_status": item.status,
-        "encounter": _encounter_payload(encounter),
+        "encounter": _encounter_payload(encounter, horizon=_sprint_horizon(session)),
     }
 
 
@@ -1938,7 +2031,7 @@ def close_unit_review_encounter(
         )
         return {
             "operation_id": encounter.close_operation_id or close_operation_id,
-            "encounter": _encounter_payload(encounter),
+            "encounter": _encounter_payload(encounter, horizon=_sprint_horizon(session)),
             "passed": bool(encounter.passed),
             "retry_after_cards": encounter.retry_after_cards,
             "session_status": study.status,
@@ -1956,7 +2049,7 @@ def close_unit_review_encounter(
     session.commit()
     return {
         "operation_id": close_operation_id,
-        "encounter": _encounter_payload(encounter),
+        "encounter": _encounter_payload(encounter, horizon=_sprint_horizon(session)),
         "passed": bool(encounter.passed),
         "retry_after_cards": encounter.retry_after_cards,
         "session_status": study.status,
