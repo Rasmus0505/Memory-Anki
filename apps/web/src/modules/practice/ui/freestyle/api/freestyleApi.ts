@@ -1,5 +1,6 @@
 import { retryWhileBusy } from '@/shared/api/busyRetry'
 import { request } from '@/shared/api/http'
+import { parseFreestyleOverview } from './freestyleOverviewParse'
 import type {
   CreateFreestyleAiExplanationPayload,
   CreateFreestyleQuizAttemptPayload,
@@ -16,7 +17,6 @@ import type {
   FreestyleOverlayQuizEnsureRequest,
   FreestyleOverlayQuizProgressRequest,
   FreestyleOverlayQuizSkipPalacesRequest,
-  FreestyleOverviewResponse,
   FreestyleRoundActionRequest,
   FreestyleRoundActiveRequest,
   FreestyleRoundRatingRequest,
@@ -65,7 +65,9 @@ export function getFreestyleOverviewApi(params: {
 }, options?: Pick<RequestInit, 'signal'>) {
   const searchParams = new URLSearchParams({ date: params.date, tz: params.tz })
   if (params.roundId) searchParams.set('round_id', params.roundId)
-  return request<FreestyleOverviewResponse>(`/freestyle/overview?${searchParams.toString()}`, options)
+  return request<unknown>(`/freestyle/overview?${searchParams.toString()}`, options).then(
+    parseFreestyleOverview,
+  )
 }
 
 function historySearchParams(params?: {
