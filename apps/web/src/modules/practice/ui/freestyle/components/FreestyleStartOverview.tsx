@@ -53,6 +53,9 @@ export function FreestyleStartOverview({
   const newPalaces = today ? today.new_palace_count : null
   const hasWork = (counts?.remaining ?? 0) > 0 || (dueUnits ?? 0) > 0 || (newUnits ?? 0) > 0
   const weakUnits = yesterday?.weak_units ?? []
+  // Already normalized at the API boundary; read the list defensively anyway so a
+  // shape change can only drop this glance strip, never the whole start page.
+  const milestoneDays = overview?.milestones?.groups ?? []
 
   return (
     <section
@@ -74,6 +77,27 @@ export function FreestyleStartOverview({
           tone={newUnits ? 'info' : 'default'}
         />
       </div>
+
+      {milestoneDays.length > 0 ? (
+        <div className="flex flex-col gap-2 border-t border-stage-line pt-4" aria-label="近期里程碑">
+          {milestoneDays.map((group) => (
+            <div key={group.date} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm text-ink-stage">
+              <span className="rounded-full bg-surface-stage px-2 py-0.5 text-xs font-semibold text-stage-glow tabular-nums">
+                {group.date.slice(5).replace('-', '/')}
+                <span className="ml-1 font-normal text-ink-stage-muted">
+                  {group.days_left === 0 ? '今天' : `${group.days_left} 天后`}
+                </span>
+              </span>
+              {group.items.map((item) => (
+                <span key={item.id} className="min-w-0">
+                  <span className="font-medium">{item.title}</span>
+                  {item.category ? <span className="ml-1 text-xs text-ink-stage-muted">{item.category}</span> : null}
+                </span>
+              ))}
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       {yesterday && !hideYesterday ? (
         <div className="flex flex-col gap-2 border-t border-stage-line pt-4">

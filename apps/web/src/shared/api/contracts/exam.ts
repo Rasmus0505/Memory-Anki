@@ -4,6 +4,8 @@ export interface ExamSettings {
   exam_name: string
   exam_date: string | null
   subject_ids: number[]
+  /** Cap every interval at ~20% of the remaining horizon so nothing is booked past the exam. */
+  sprint_mode: boolean
 }
 
 export interface ExamTotals {
@@ -86,4 +88,35 @@ export interface ExamStarsWriteResult {
   id: number
   exam_stars: number | null
   exam_stars_source: ExamStarSource | null
+}
+
+export type MilestoneStatus = 'done' | 'overdue' | 'due_soon' | 'upcoming'
+
+export interface StudyMilestone {
+  id: string
+  date: string
+  title: string
+  category: string
+  detail: string
+  notify_days_before: number
+  enabled: boolean
+  done: boolean
+  days_left: number
+  status: MilestoneStatus
+}
+
+export interface SprintState {
+  active: boolean
+  sprint_mode: boolean
+  exam_date: string | null
+  days_left: number | null
+  max_interval_days: number | null
+  last_due: string | null
+}
+
+export interface MilestoneBoard {
+  today: string
+  items: StudyMilestone[]
+  counts: { total: number; done: number; overdue: number; due_soon: number }
+  sprint: SprintState
 }

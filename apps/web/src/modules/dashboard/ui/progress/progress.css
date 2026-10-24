@@ -185,3 +185,39 @@
   .lp-matrix, .lp-comparison { padding-inline: 14px; }
   .lp-footer { flex-direction: column; gap: 4px; }
 }
+
+/* Sprint switch + study milestones (exam module panel on the progress page) */
+.ms-panel { margin-bottom: 22px; }
+.ms-summary { font-size: 11px; color: var(--color-muted-foreground); font-variant-numeric: tabular-nums; }
+.ms-summary em { font-style: normal; color: var(--lp-amber); }
+.ms-summary em.soon { color: var(--lp-green); }
+.ms-intro { margin: 8px 0 0; max-width: 760px; }
+.ms-sprint { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 16px; padding: 12px 14px; border: 1px dashed var(--lp-line); border-radius: 12px; }
+.ms-switch { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; }
+.ms-switch input { width: 16px; height: 16px; accent-color: var(--lp-green); }
+.ms-date-field { display: inline-flex; align-items: center; gap: 7px; font-size: 11px; color: var(--color-muted-foreground); }
+.ms-hint { font-size: 11px; color: var(--color-muted-foreground); }
+.ms-list { list-style: none; margin: 0; padding: 4px 22px 0; display: flex; flex-direction: column; gap: 6px; }
+.ms-row { display: grid; grid-template-columns: 132px minmax(0, 1fr) 88px 92px 132px 30px 30px; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 10px; }
+.ms-row:hover { background: var(--lp-green-soft); }
+.ms-row[data-status="overdue"] .ms-status { color: var(--lp-amber); font-weight: 700; }
+.ms-row[data-status="due_soon"] .ms-status { color: var(--lp-green); font-weight: 700; }
+.ms-row[data-status="done"] { opacity: .55; }
+.ms-row[data-status="done"] .ms-title { text-decoration: line-through; }
+.ms-date { font-size: 11px; padding: 6px 8px; }
+.ms-title, .ms-category { border: 1px solid transparent; background: transparent; border-radius: 7px; padding: 6px 8px; font-size: 12px; width: 100%; min-width: 0; }
+.ms-title { font-weight: 650; }
+.ms-title:hover, .ms-category:hover, .ms-title:focus, .ms-category:focus { border-color: var(--lp-line); background: var(--color-card); }
+.ms-notify { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; color: var(--color-muted-foreground); }
+.ms-notify input { width: 40px; border: 1px solid var(--lp-line); border-radius: 6px; padding: 4px 5px; font-size: 11px; background: var(--color-card); }
+.ms-status { font-size: 10px; color: var(--color-muted-foreground); }
+.ms-done { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; border: 1px solid var(--lp-line); color: transparent; }
+.ms-done[aria-pressed="true"] { background: var(--lp-green); border-color: var(--lp-green); color: #fff; }
+.ms-remove { color: var(--color-muted-foreground); }
+.ms-remove:hover { color: var(--lp-amber); }
+.ms-actions { display: flex; align-items: center; gap: 10px; padding: 14px 22px 18px; }
+@media (max-width: 900px) {
+  .ms-row { grid-template-columns: 1fr 1fr; row-gap: 6px; }
+  .ms-row .ms-title { grid-column: 1 / -1; }
+  .ms-status { grid-column: 1 / -1; }
+}

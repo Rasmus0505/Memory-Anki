@@ -6,6 +6,7 @@ import { indexProgress, progressRows, type ProgressFilter, type ProgressSort, ty
 import { ProgressOverview } from './ProgressOverview'
 import { ProgressExplorer, ProgressSearch } from './ProgressExplorer'
 import { ProgressDetails } from './ProgressDetails'
+import { MilestonePanel } from '@/modules/exam/public'
 import './progress.css'
 
 const VIEWS = [
@@ -67,6 +68,7 @@ export function LearningProgressPage() {
     {result.isPending && <div role="status" aria-label="正在加载学习进度"><div className="lp-overview lp-skeleton" style={{ height: 285 }} /><div className="lp-skeleton" style={{ height: 380 }} /><span className="sr-only">正在整理你的学习足迹…</span></div>}
     {result.data && metrics && <>
       <ProgressOverview metrics={metrics} name={name} palaceCount={palaceCount} />
+      <MilestonePanel />
       {result.data.roots.length === 0 ? <section className="lp-panel lp-empty"><BookOpen size={36} /><h2>你的学习全景，从第一座宫殿开始</h2><p>建立知识结构后，这里会逐层呈现记忆点和题目进度。现在不需要填满它，先从一个小单元开始。</p><Link className="lp-button lp-button-primary" to="/palaces">前往知识书架<ChevronRight size={14} /></Link></section> : <div className="lp-workspace">
         <section className="lp-panel" aria-label="知识进度浏览器">
           <div className="lp-explorer-header">

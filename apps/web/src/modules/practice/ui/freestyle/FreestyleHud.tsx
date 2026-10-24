@@ -1,6 +1,7 @@
 import type { ComponentProps, ReactNode } from 'react'
+import type { FreestyleMilestoneUpcoming } from '@/shared/api/contracts'
 import type { useExamOverview } from '@/modules/exam/public'
-import { ExamCountdownChip } from '@/modules/exam/public'
+import { SprintMilestoneStrip } from '@/modules/exam/public'
 import { FreestyleProgressRail } from '@/modules/practice/ui/freestyle/components/FreestyleProgressRail'
 import { FreestyleQuarterTag } from '@/modules/practice/ui/freestyle/components/FreestyleQuarterTag'
 import {
@@ -16,6 +17,7 @@ type ChannelHintProps = ComponentProps<typeof FreestyleChannelHint>
 
 export function FreestyleHud({
   examOverview,
+  milestones,
   progressSummary,
   scrollChannel,
   progressRailOverflow,
@@ -29,6 +31,7 @@ export function FreestyleHud({
   onRetryUnsavedRatings,
   palaceClearance,
   onDismissPalaceClearance,
+  settlementVisible = false,
   channelHintVisible,
   activeChannelAdjustment,
   channelState,
@@ -42,6 +45,7 @@ export function FreestyleHud({
   onOpenStaleConfig,
 }: {
   examOverview: ReturnType<typeof useExamOverview>['data']
+  milestones: FreestyleMilestoneUpcoming | null
   progressSummary: ProgressRailProps['summary']
   scrollChannel: ProgressRailProps['scrollChannel']
   progressRailOverflow: ReactNode
@@ -56,6 +60,8 @@ export function FreestyleHud({
   onRetryUnsavedRatings?: () => void
   palaceClearance: PalaceClearance | null
   onDismissPalaceClearance: () => void
+  /** The closing page reports the palace itself; card-level chips stay off it. */
+  settlementVisible?: boolean
   channelHintVisible: boolean
   activeChannelAdjustment: { hint: ChannelHintProps['hint']; actionLabel: ChannelHintProps['actionLabel'] } | null
   channelState: 'anxious' | 'bored'
@@ -71,7 +77,7 @@ export function FreestyleHud({
   return (
     <>
       <div className="pointer-events-none absolute inset-x-0 top-[calc(env(safe-area-inset-top,0px)+1.85rem)] z-30 flex justify-center gap-1.5 px-[5.75rem] sm:px-36">
-        {examOverview?.settings.exam_date ? <ExamCountdownChip overview={examOverview} className="pointer-events-auto max-w-full" /> : null}
+        <SprintMilestoneStrip overview={examOverview} milestones={milestones} className="max-w-full" />
       </div>
       <FreestyleProgressRail
         summary={progressSummary}
@@ -102,7 +108,9 @@ export function FreestyleHud({
         onDismissSaveError={onDismissSaveError}
       />
 
-      {palaceClearance ? (
+      {/* The closing page owns the top of the stage; a card-level clear chip
+          would sit on top of the summary it is already reporting. */}
+      {palaceClearance && !settlementVisible ? (
         <FreestylePalaceClearedBanner
           clearance={palaceClearance}
           onDismiss={onDismissPalaceClearance}
