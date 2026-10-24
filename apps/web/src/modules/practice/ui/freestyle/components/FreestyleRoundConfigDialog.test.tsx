@@ -178,7 +178,7 @@ describe('FreestyleRoundConfigDialog', () => {
 
     const summary = await screen.findByTestId('freestyle-config-summary')
     expect(within(summary).getByText('记忆宫殿 + 刷题（按比例穿插）')).toBeTruthy()
-    expect(within(summary).getByText('先学没学过的单元，再按拖延最久优先复习')).toBeTruthy()
+    expect(within(summary).getByText('先学没学过的单元，再复习到期单元；宫殿内按知识结构顺序出现')).toBeTruthy()
   })
 
   it('lets the user pick subjects from chips instead of an English training mode', async () => {

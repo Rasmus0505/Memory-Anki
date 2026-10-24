@@ -42,6 +42,7 @@ def _unit(
     palace_id: int = 1,
     unit_id: str | None = None,
     revision: int = 1,
+    topology_order: int = 0,
 ) -> ReviewUnitCandidate:
     return ReviewUnitCandidate(
         palace_id=palace_id,
@@ -50,6 +51,7 @@ def _unit(
         node_uids=node_uids,
         unit_id=unit_id or f"unit-{anchor_uid}",
         revision=revision,
+        topology_order=topology_order,
     )
 
 
@@ -466,8 +468,14 @@ def test_single_palace_quiz_scope_keeps_palace_blocks():
 
 def _palace_units(palace_id: int, anchors: tuple[str, ...]) -> list[ReviewUnitCandidate]:
     return [
-        _unit(anchor, (anchor,), palace_id=palace_id, unit_id=f"u-{palace_id}-{anchor}")
-        for anchor in anchors
+        _unit(
+            anchor,
+            (anchor,),
+            palace_id=palace_id,
+            unit_id=f"u-{palace_id}-{anchor}",
+            topology_order=index,
+        )
+        for index, anchor in enumerate(anchors)
     ]
 
 
@@ -609,6 +617,7 @@ def _due_unit(
     due: date,
     passed_at: datetime | None,
     palace_id: int = 1,
+    topology_order: int = 0,
 ) -> ReviewUnitCandidate:
     return ReviewUnitCandidate(
         palace_id=palace_id,
@@ -620,6 +629,7 @@ def _due_unit(
         due_date=due,
         last_passed_at=passed_at,
         has_passed=passed_at is not None,
+        topology_order=topology_order,
     )
 
 
@@ -635,43 +645,14 @@ def _unit_order(result) -> list[str]:
     return [card["unit_id"] for card in result.cards]
 
 
-def test_due_order_defaults_to_most_overdue_then_least_recently_passed():
-    a = _due_unit("A", due=date(2026, 10, 1), passed_at=datetime(2026, 10, 5))
-    b = _due_unit("B", due=date(2026, 9, 20), passed_at=datetime(2026, 10, 1))
-    c = _due_unit("C", due=date(2026, 9, 20), passed_at=None)
+def test_structured_order_follows_the_topology_not_the_due_date():
+    a = _due_unit("A", due=date(2026, 10, 1), passed_at=datetime(2026, 9, 2), topology_order=0)
+    b = _due_unit("B", due=date(2026, 9, 20), passed_at=datetime(2026, 9, 2), topology_order=1)
+    c = _due_unit("C", due=date(2026, 10, 1), passed_at=datetime(2026, 9, 2), topology_order=2)
 
     result = _assemble(units=[a, b, c], due_uids={"A", "B", "C"}, config=_map_config())
 
-    # Earliest due first; on the same due date the never-passed C goes before B.
-    assert _unit_order(result) == ["C", "B", "A"]
-
-
-def test_least_recently_reviewed_puts_never_passed_first():
-    p = _due_unit("P", due=date(2026, 9, 1), passed_at=datetime(2026, 10, 5))
-    q = _due_unit("Q", due=date(2026, 9, 30), passed_at=None)
-    r = _due_unit("R", due=date(2026, 9, 1), passed_at=datetime(2026, 9, 10))
-
-    result = _assemble(
-        units=[p, q, r],
-        due_uids={"P", "Q", "R"},
-        config=_map_config(due_order="least_recently_reviewed"),
-    )
-
-    assert _unit_order(result) == ["Q", "R", "P"]
-
-
-def test_palace_topology_keeps_input_order_within_a_palace():
-    # Input is the DB topology order; the most-overdue sort would reorder it.
-    a = _due_unit("A", due=date(2026, 10, 1), passed_at=None)
-    b = _due_unit("B", due=date(2026, 9, 1), passed_at=datetime(2026, 9, 2))
-    c = _due_unit("C", due=date(2026, 9, 15), passed_at=datetime(2026, 9, 16))
-
-    result = _assemble(
-        units=[a, b, c],
-        due_uids={"A", "B", "C"},
-        config=_map_config(due_order="palace_topology"),
-    )
-
+    # An overdue unit does not jump ahead of the map order.
     assert _unit_order(result) == ["A", "B", "C"]
 
 
@@ -690,8 +671,9 @@ def _placement_units() -> list[ReviewUnitCandidate]:
             anchor,
             due=date(2026, 9, 1),
             passed_at=datetime(2026, 9, 2) if passed else None,
+            topology_order=index,
         )
-        for anchor, passed in specs
+        for index, (anchor, passed) in enumerate(specs)
     ]
 
 
@@ -700,7 +682,7 @@ def _placement_order(**extra) -> list[str]:
     result = _assemble(
         units=units,
         due_uids={unit.anchor_uid for unit in units},
-        config=_map_config(due_order="palace_topology", **extra),
+        config=_map_config(**extra),
     )
     return _unit_order(result)
 
@@ -762,7 +744,6 @@ def test_bound_quiz_still_follows_its_anchor_when_new_cards_move_forward():
             "content": {"mindmap_branch": True, "anki_card": False, "quiz_question": True},
             "mix_mode": "sequential_map_quiz",
             "bound_quiz_placement": "follow_unit",
-            "due_order": "palace_topology",
             "new_placement": "new_first",
             "due_policy": "due_only",
             "queue_length": 20,
@@ -791,14 +772,12 @@ def test_phase_stats_count_new_and_review_due_map_units():
 
 def test_sanitize_new_config_keys_default_and_fall_back_on_invalid_values():
     defaults = sanitize_feed_config({})
-    assert defaults["due_order"] == "most_overdue"
     assert defaults["new_placement"] == "new_first"
     assert defaults["review_new_ratio"] == 4
 
     invalid = sanitize_feed_config(
-        {"due_order": "bogus", "new_placement": "sideways", "review_new_ratio": 3}
+        {"new_placement": "sideways", "review_new_ratio": 3}
     )
-    assert invalid["due_order"] == "most_overdue"
     assert invalid["new_placement"] == "new_first"
     assert invalid["review_new_ratio"] == 4
 
@@ -806,17 +785,15 @@ def test_sanitize_new_config_keys_default_and_fall_back_on_invalid_values():
     assert boolean_ratio["review_new_ratio"] == 4
 
     valid = sanitize_feed_config(
-        {"due_order": "palace_topology", "new_placement": "ratio", "review_new_ratio": "2"}
+        {"new_placement": "ratio", "review_new_ratio": "2"}
     )
-    assert valid["due_order"] == "most_overdue"
     assert valid["new_placement"] == "new_first"
     assert valid["review_new_ratio"] == 2
 
 
 def test_order_keys_are_pinned_so_stored_values_cannot_change_the_queue():
-    config = sanitize_feed_config({"new_placement": "review_first", "due_order": "palace_topology"})
+    config = sanitize_feed_config({"new_placement": "review_first"})
     assert config["new_placement"] == "new_first"
-    assert config["due_order"] == "most_overdue"
     assert queue_construction_signature({}) == queue_construction_signature(
         {"new_placement": "review_first"}
     )

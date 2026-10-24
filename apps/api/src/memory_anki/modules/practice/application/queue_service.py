@@ -13,7 +13,10 @@ from memory_anki.modules.content.public.queries import (
     list_active_palace_ids_by_subject_scope,
 )
 from memory_anki.modules.exam.api import palace_priority_scores, resolve_stars_for_palaces
-from memory_anki.modules.memory.public.commands import reconcile_palace_units
+from memory_anki.modules.memory.public.commands import (
+    clamp_due_dates_for_sprint,
+    reconcile_palace_units,
+)
 from memory_anki.modules.memory.public.queries import (
     count_active_units_by_palace,
     count_units_due_on,
@@ -110,6 +113,10 @@ def build_freestyle_queue(
     # Reconcile only those (a one-time backfill per palace), then read due units.
     for palace_id in list_palace_ids_without_units(session, all_selected_ids or None):
         reconcile_palace_units(session, palace_id)
+    # Sprint mode caps future ratings at the exam horizon; units already booked
+    # past it are pulled back here, on the write path that owns due reads, so the
+    # exam module never touches scheduling. A no-op when sprint mode is off.
+    clamp_due_dates_for_sprint(session)
     # Empty id list means every active palace. Row titles need the marked-node
     # path, so each due palace is projected once through the document cache.
     due_rows = list_trusted_due_units_for_queue(
@@ -122,16 +129,33 @@ def build_freestyle_queue(
     units_by_palace: dict[int, list[Any]] = {}
     due_by_palace: dict[int, set[str]] = {}
     nodes_by_palace: dict[int, dict[str, Any]] = {}
+    topology_by_palace: dict[int, dict[tuple[str, str], int]] = {}
+
+    def load_palace(palace_id: int) -> None:
+        if palace_id in nodes_by_palace:
+            return
+        try:
+            tree, definitions = resolve_unit_definitions(session, palace_id)
+            nodes = tree.get("nodes") if isinstance(tree, dict) else None
+            nodes_by_palace[palace_id] = nodes if isinstance(nodes, dict) else {}
+            # The document's depth-first unit order is the authority for
+            # 按知识结构. A stored row can lag behind an edit that has not
+            # reconciled yet, so the column alone cannot carry the promise.
+            topology_by_palace[palace_id] = {
+                (item.anchor_uid, item.unit_kind): index
+                for index, item in enumerate(definitions)
+            }
+        except ValueError:
+            nodes_by_palace[palace_id] = {}
+            topology_by_palace[palace_id] = {}
 
     def nodes_for(palace_id: int) -> dict[str, Any]:
-        if palace_id not in nodes_by_palace:
-            try:
-                tree, _definitions = resolve_unit_definitions(session, palace_id)
-                nodes = tree.get("nodes") if isinstance(tree, dict) else None
-                nodes_by_palace[palace_id] = nodes if isinstance(nodes, dict) else {}
-            except ValueError:
-                nodes_by_palace[palace_id] = {}
+        load_palace(palace_id)
         return nodes_by_palace[palace_id]
+
+    def topology_order_for(palace_id: int, anchor: str, unit_kind: str, stored: int) -> int:
+        load_palace(palace_id)
+        return topology_by_palace[palace_id].get((anchor, unit_kind), stored)
 
     for row in due_rows:
         palace_id = int(row["palace_id"])
@@ -159,6 +183,12 @@ def build_freestyle_queue(
                 due_date=row.get("due_date"),
                 last_passed_at=row.get("last_passed_at"),
                 has_passed=bool(row.get("has_passed")),
+                topology_order=topology_order_for(
+                    palace_id,
+                    anchor,
+                    str(row.get("unit_kind") or ""),
+                    int(row.get("topology_order") or 0),
+                ),
             )
         )
         due_by_palace.setdefault(palace_id, set()).update(node_uids)

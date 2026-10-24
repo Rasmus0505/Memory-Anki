@@ -67,17 +67,17 @@ describe('FreestyleConfigPreviewCard', () => {
     expect(bar.children[1]?.className).toContain('bg-warning')
   })
 
-  it('shows the order mode and new placement as plain chips', () => {
+  it('shows the unit order and new placement as plain chips', () => {
     render(
       <FreestyleConfigPreviewCard
         summary={summary}
         palaceTitleByCardId={{}}
-        orderMode="most_overdue"
+        unitOrder="structured"
         newPlacement="ratio"
         onStart={vi.fn()}
       />,
     )
-    expect(screen.getByText('拖延最久优先')).toBeTruthy()
+    expect(screen.getByText('宫殿内按知识结构')).toBeTruthy()
     expect(screen.getByText('按比例穿插')).toBeTruthy()
   })
 
@@ -86,7 +86,7 @@ describe('FreestyleConfigPreviewCard', () => {
       <FreestyleConfigPreviewCard
         summary={summary}
         palaceTitleByCardId={{}}
-        orderMode="least_recently_reviewed"
+        unitOrder="random"
         newPlacement="new_first"
         onStart={vi.fn()}
       />,

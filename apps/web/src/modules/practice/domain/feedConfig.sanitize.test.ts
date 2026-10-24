@@ -200,29 +200,28 @@ describe('freestyle feed config', () => {
 })
 
 describe('freestyle order and new-placement keys', () => {
-  it('defaults to most_overdue, new_first and a 4:1 review ratio', () => {
+  it('defaults to new_first and a 4:1 review ratio', () => {
     const config = sanitizeFreestyleFeedConfig({})
-    expect(config.due_order).toBe('most_overdue')
     expect(config.new_placement).toBe('new_first')
     expect(config.review_new_ratio).toBe(4)
   })
 
-  it('pins order to most_overdue and new_first regardless of stored values', () => {
+  it('keeps a stored due_order out of the config entirely', () => {
     const config = sanitizeFreestyleFeedConfig({
       due_order: 'palace_topology',
       new_placement: 'ratio',
       review_new_ratio: 2,
     })
-    expect(config.due_order).toBe('most_overdue')
+    expect(config).not.toHaveProperty('due_order')
     expect(config.new_placement).toBe('new_first')
     expect(config.review_new_ratio).toBe(2)
+  })
 
+  it('pins new_first and falls back on invalid values', () => {
     const fallback = sanitizeFreestyleFeedConfig({
-      due_order: 'random',
       new_placement: 'sometimes',
       review_new_ratio: 3,
     })
-    expect(fallback.due_order).toBe('most_overdue')
     expect(fallback.new_placement).toBe('new_first')
     expect(fallback.review_new_ratio).toBe(4)
   })

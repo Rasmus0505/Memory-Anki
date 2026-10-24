@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import type {
-  FreestyleDueOrder,
   FreestyleNewPlacement,
   FreestyleRoundSummary,
   FreestyleRoundSummaryItem,
+  FreestyleUnitOrder,
 } from '@/shared/api/contracts'
 import { Metric } from '@/shared/components/ui/metric'
 import { palaceIdentityClass } from '@/modules/practice/ui/freestyle/model/freestyleProgressSegments'
@@ -11,10 +11,9 @@ import { cn } from '@/shared/lib/utils'
 
 const ORDER_PREVIEW = 5
 
-export const PREVIEW_ORDER_LABELS: Record<FreestyleDueOrder, string> = {
-  most_overdue: '拖延最久优先',
-  least_recently_reviewed: '最久未复习优先',
-  palace_topology: '宫殿拓扑顺序',
+export const PREVIEW_UNIT_ORDER_LABELS: Record<FreestyleUnitOrder, string> = {
+  structured: '宫殿内按知识结构',
+  random: '宫殿内随机',
 }
 
 export const PREVIEW_PLACEMENT_LABELS: Record<FreestyleNewPlacement, string> = {
@@ -59,8 +58,8 @@ export function previewPalaceRows(
 interface FreestyleConfigPreviewCardProps {
   summary: FreestyleRoundSummary
   palaceTitleByCardId: Record<string, string>
-  /** Order mode of the config this round was built from. Omitted: no chip. */
-  orderMode?: FreestyleDueOrder | null
+  /** Palace-internal unit order of the config this round was built from. Omitted: no chip. */
+  unitOrder?: FreestyleUnitOrder | null
   /** New placement of the config this round was built from. Omitted: no chip. */
   newPlacement?: FreestyleNewPlacement | null
   onStart: () => void
@@ -69,7 +68,7 @@ interface FreestyleConfigPreviewCardProps {
 export function FreestyleConfigPreviewCard({
   summary,
   palaceTitleByCardId,
-  orderMode,
+  unitOrder,
   newPlacement,
   onStart,
 }: FreestyleConfigPreviewCardProps) {
@@ -95,11 +94,11 @@ export function FreestyleConfigPreviewCard({
         </p>
       </div>
 
-      {orderMode || newPlacement ? (
+      {unitOrder || newPlacement ? (
         <div className="flex flex-wrap gap-1.5" aria-label="本轮设置">
-          {orderMode ? (
+          {unitOrder ? (
             <span className="rounded-full border border-stage-line px-2.5 py-0.5 text-xs text-ink-stage-muted">
-              {PREVIEW_ORDER_LABELS[orderMode]}
+              {PREVIEW_UNIT_ORDER_LABELS[unitOrder]}
             </span>
           ) : null}
           {newPlacement ? (

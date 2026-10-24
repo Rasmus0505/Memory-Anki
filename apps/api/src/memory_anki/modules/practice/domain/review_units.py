@@ -26,6 +26,9 @@ class ReviewUnitCandidate:
     last_passed_at: datetime | None = None
     # False means NEW (never passed); drives new_placement in the due phase.
     has_passed: bool = False
+    # Depth-first position of the unit in the palace's knowledge structure.
+    # 按知识结构 sorts on this; lower comes first (parents before their marks).
+    topology_order: int = 0
 
     @property
     def node_count(self) -> int:

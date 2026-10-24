@@ -153,6 +153,7 @@ def list_trusted_due_units_for_queue(
             ReviewUnitState.has_passed,
             ReviewUnitState.due_date,
             ReviewUnitState.last_passed_at,
+            ReviewUnitState.topology_order,
             Palace.group_sort_order,
             Palace.title,
             Palace.manual_title,
@@ -193,6 +194,7 @@ def list_trusted_due_units_for_queue(
                 "has_passed": bool(row.has_passed),
                 "due_date": row.due_date,
                 "last_passed_at": row.last_passed_at,
+                "topology_order": int(row.topology_order or 0),
                 "title": title,
                 "group_sort_order": int(row.group_sort_order or 0),
             }

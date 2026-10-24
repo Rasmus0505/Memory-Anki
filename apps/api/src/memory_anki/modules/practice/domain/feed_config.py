@@ -17,17 +17,6 @@ PALACE_ORDER_INTERLEAVE = "interleave_palaces"
 # Serve palaces by star weight x forgetting degree x subject share, one palace at a time.
 PALACE_ORDER_EXAM_PRIORITY = "exam_priority"
 
-# How due mind-map units are ordered across the round.
-DUE_ORDER_MOST_OVERDUE = "most_overdue"
-DUE_ORDER_LEAST_RECENTLY_REVIEWED = "least_recently_reviewed"
-DUE_ORDER_PALACE_TOPOLOGY = "palace_topology"
-DUE_ORDERS = {
-    DUE_ORDER_MOST_OVERDUE,
-    DUE_ORDER_LEAST_RECENTLY_REVIEWED,
-    DUE_ORDER_PALACE_TOPOLOGY,
-}
-DEFAULT_DUE_ORDER = DUE_ORDER_MOST_OVERDUE
-
 # Where NEW mind-map units (has_passed is false) sit relative to REVIEW units.
 NEW_PLACEMENT_NEW_FIRST = "new_first"
 NEW_PLACEMENT_REVIEW_FIRST = "review_first"
@@ -313,11 +302,6 @@ def _as_overlay_rating_inherit(value: Any) -> str:
     if key in OVERLAY_RATING_INHERITS:
         return key
     return DEFAULT_OVERLAY_RATING_INHERIT
-
-
-def _as_due_order(_value: Any) -> str:
-    # Fixed product rule: review most-overdue first; stored values are ignored.
-    return DEFAULT_DUE_ORDER
 
 
 def _as_new_placement(_value: Any) -> str:
@@ -661,7 +645,6 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
         # Display only. Must stay out of queue_construction_signature: changing
         # how a blank score is shown must not rebuild the card queue.
         "overlay_rating_inherit": _as_overlay_rating_inherit(data.get("overlay_rating_inherit")),
-        "due_order": _as_due_order(data.get("due_order")),
         "new_placement": _as_new_placement(data.get("new_placement")),
         "review_new_ratio": _as_review_new_ratio(data.get("review_new_ratio")),
     }
@@ -690,7 +673,6 @@ def queue_construction_signature(raw: Any) -> str:
             "mastery_buckets": quiz["mastery_buckets"],
             "weak_priority": quiz["weak_priority"],
             "question_type": quiz["question_type"],
-            "due_order": config["due_order"],
             "new_placement": config["new_placement"],
             "review_new_ratio": config["review_new_ratio"],
         },
@@ -706,12 +688,8 @@ __all__ = [
     "BOUND_QUIZ_PLACEMENTS",
     "BOUND_QUIZ_STREAM",
     "DEFAULT_ANKI_WEIGHT",
-    "DEFAULT_DUE_ORDER",
     "DEFAULT_NEW_PLACEMENT",
     "DEFAULT_REVIEW_NEW_RATIO",
-    "DUE_ORDER_LEAST_RECENTLY_REVIEWED",
-    "DUE_ORDER_MOST_OVERDUE",
-    "DUE_ORDER_PALACE_TOPOLOGY",
     "NEW_PLACEMENT_NEW_FIRST",
     "NEW_PLACEMENT_RATIO",
     "NEW_PLACEMENT_REVIEW_FIRST",

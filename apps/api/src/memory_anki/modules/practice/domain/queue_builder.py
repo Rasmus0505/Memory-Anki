@@ -9,12 +9,9 @@ from typing import Any
 from .feed_config import (
     BOUND_QUIZ_FOLLOW_UNIT,
     BOUND_QUIZ_INTO_MIX,
-    DEFAULT_DUE_ORDER,
     DEFAULT_NEW_PLACEMENT,
     DEFAULT_QUIZ_MASTERY_BUCKETS,
     DEFAULT_REVIEW_NEW_RATIO,
-    DUE_ORDER_LEAST_RECENTLY_REVIEWED,
-    DUE_ORDER_PALACE_TOPOLOGY,
     MIX_MODE_MINDMAP_ONLY,
     MIX_MODE_QUIZ_ONLY,
     MIX_MODE_RANDOM,
@@ -83,48 +80,16 @@ def _unit_has_due(unit: ReviewUnitCandidate, due_uids: set[str]) -> bool:
     return _unit_due_count(unit, due_uids) > 0
 
 
-def _least_recently_passed_key(unit: ReviewUnitCandidate) -> tuple[int, float, str]:
-    """Never-passed units first, then the longest-ago passed unit."""
-    if unit.last_passed_at is None:
-        return (0, 0.0, unit.unit_id)
-    return (1, unit.last_passed_at.timestamp(), unit.unit_id)
-
-
-def _due_ordinal(unit: ReviewUnitCandidate) -> int:
-    return unit.due_date.toordinal() if unit.due_date is not None else 0
-
-
-def _most_overdue_key(unit: ReviewUnitCandidate) -> tuple[int, tuple[int, float, str]]:
-    return (_due_ordinal(unit), _least_recently_passed_key(unit))
-
-
-def _least_recently_reviewed_key(
-    unit: ReviewUnitCandidate,
-) -> tuple[int, float, int, str]:
-    """Never-passed first, then oldest last_passed_at; ties by due date, then id."""
-    if unit.last_passed_at is None:
-        return (0, 0.0, _due_ordinal(unit), unit.unit_id)
-    return (1, unit.last_passed_at.timestamp(), _due_ordinal(unit), unit.unit_id)
-
-
-def sort_due_phase_units(
+def sort_structured_units(
     units: Sequence[ReviewUnitCandidate],
-    due_by_palace: Mapping[int, set[str]],
-    *,
-    due_order: str = DEFAULT_DUE_ORDER,
 ) -> list[ReviewUnitCandidate]:
-    """Order due units for the round. Unknown due_order means most_overdue.
+    """Order due units by the palace's knowledge structure (depth-first topology).
 
-    - most_overdue: earliest due date first; ties to the least recently passed.
-    - least_recently_reviewed: never-passed first, then oldest last pass.
-    - palace_topology: keep the input order (DB topology order within a palace).
+    ``按知识结构`` promises that a palace's units appear top-to-bottom as the
+    mind map shows them. Due urgency is already expressed by which units are in
+    the round at all, so it must not reorder them here.
     """
-    del due_by_palace
-    if due_order == DUE_ORDER_PALACE_TOPOLOGY:
-        return list(units)
-    if due_order == DUE_ORDER_LEAST_RECENTLY_REVIEWED:
-        return sorted(units, key=_least_recently_reviewed_key)
-    return sorted(units, key=_most_overdue_key)
+    return sorted(units, key=lambda unit: unit.topology_order)
 
 
 def attach_questions_to_units(
@@ -531,7 +496,6 @@ def assemble_queue(
     if quiz_weight <= 0:
         quiz_weight = mix_ratio_quiz
     weak_priority = bool(config.get("weak_quiz_priority", True))
-    due_order = str(config.get("due_order") or DEFAULT_DUE_ORDER)
     new_placement = str(config.get("new_placement") or DEFAULT_NEW_PLACEMENT)
     review_new_ratio = int(config.get("review_new_ratio") or DEFAULT_REVIEW_NEW_RATIO)
 
@@ -555,11 +519,7 @@ def assemble_queue(
             for unit in units_by_palace.get(palace_id, ())
             if _unit_has_due(unit, due_by_palace.get(palace_id, set()))
         ]
-        due_units_by_palace[palace_id] = sort_due_phase_units(
-            due_units,
-            due_by_palace,
-            due_order=due_order,
-        )
+        due_units_by_palace[palace_id] = sort_structured_units(due_units)
         if unit_order == "random":
             due_units_by_palace[palace_id] = sorted(
                 due_units_by_palace[palace_id],
@@ -779,7 +739,7 @@ __all__ = [
     "order_quiz_stream_by_scope",
     "quiz_card_payload",
     "quiz_key",
-    "sort_due_phase_units",
+    "sort_structured_units",
     "sort_quiz_candidates",
     "review_unit_id_from_card_id",
     "unit_key",

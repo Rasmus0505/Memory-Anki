@@ -10,6 +10,21 @@ before loading question ids, since its snapshot may precede the just-saved picke
 `FreestyleFeedConfig` is the single queue configuration owner for the immersive page; the
 older `FreestyleConfig` settings path is compatibility-only and must not drive queue builds.
 
+## Start-Page Overview Payload
+
+`/freestyle/overview` is the first read of the page, so an unexpected shape in it must cost a
+strip of the page and never the page itself. It is parsed once at the API boundary
+(`api/freestyleOverviewParse.ts`, used by `getFreestyleOverviewApi`): numbers default to 0,
+lists to `[]`, unknown blocks to empty, and a round only exists when the payload has one.
+Renders then read the contract shape; the start-page 里程碑 strip additionally reads
+`milestones?.groups ?? []`.
+
+This exists because a half-updated pair white-screened 随心: the frontend read
+`milestones.groups.length` while the still-running API answered
+`milestones: { reminders: [] }`. A backend edit only takes effect after the shared service
+restarts (`python tools/pwa_server.py --stop` then `--build`); without that the old process
+keeps serving the old field names to a newly built frontend.
+
 ## Review Entry
 
 Shelf 「立即复习」 opens `/palaces/<id>/review` and reuses the freestyle feed. That route is a
@@ -106,7 +121,13 @@ is one sentence plus a hidden 复制给助手; it must not tell the learner to r
 A later due-list rebuild with the same construction knobs (`append_today_cards`) keeps every
 original card, including unstarted leftover work that dropped off today's due set, and appends
 newly seen identities with `entered_on` equal to the local calendar day so retry copies cannot
-clump into an orphan block of attempt-1 nodes. Saving feed config from 「保存配置并重排」 asks first. 保留继续这一轮：
+clump into an orphan block of attempt-1 nodes. When the study day advances, the rebuild first
+re-admits units that are due again (`_reopen_due_again`): a round that outlives midnight must not
+keep yesterday's 记得 cards compressed forever just because it already settled them, or the
+1-day stage silently stops being reviewed. Matching is by knowledge-point identity, not card id
+(a revision bump `…:r1` → `…:r2` is the same work), and the server resolves the due set for the
+plan's own units instead of trusting the incoming candidates — the client rebuilds those from the
+round ledger, which still hides exactly the cards that are due again. Saving feed config from 「保存配置并重排」 asks first. 保留继续这一轮：
 `replan_remaining` keeps completed ticks, drops unstarted work
 outside the new incoming set unless it still has a live retry, and only reorders what has not
 started. 不保留 persists that config and mints the next round through `startNextRound`
@@ -127,7 +148,10 @@ persisted and frozen; it does not append new due cards. Queue build reads active
 not parse every `editor_doc` on the critical path. Opening a unit still reconciles that
 palace. A cold start with no stored round may return a `study_window` prefix (`tail_pending`)
 so the learner can start; the client then silently loads the rest. The prefix is a prefix of
-the same ordered queue, not a reshuffle. When a round already exists, the first paint comes
+the same ordered queue, not a reshuffle. This is first paint, never a release schedule: every
+due card is already in the round plan and in the HUD denominator, and the tail is not held back
+until later in the day. There is no daily review quota, no backlog release, and no per-round
+slice — see 「The due set is one whole」 in `review-boundary.md`. When a round already exists, the first paint comes
 from the stored plan and loading must not cover the feed once cards exist. A weak `忘记` /
 `困难` rating does not move `current_card_id`; the source stays
 current until `leave_card`.
@@ -181,7 +205,9 @@ review map still pans the canvas. Wheel over a nested scroller that can still mo
 that direction scrolls that scroller. Ctrl/meta wheel stays a zoom gesture. The review map stays pannable (`mobileViewPolicy` defaults to
 `auto`); one-finger drag on the canvas pans the tree and is not yielded to the snap
 scroller. The right pager is the same three buttons on PWA and desktop: 上一张, 下一张,
-and 完成. 上一张 / 下一张 always page cards, including while the rating
+and 完成, in one vertical column on the right edge, vertically centred on the card. PWA
+does not move it to a strip above the rating dock. 上一张 / 下一张 always page cards,
+including while the rating
 scope is 宫殿; they must not disable themselves when the round has only one
 palace. There is no palace-skip control.
 
@@ -196,7 +222,7 @@ scene, locally — never `dispatchGlobalFeedback`.
 
 Clicking a progress-rail tick jumps the feed to that card when it is still live (`navigateToIndex` on the matching card id). A tick whose card has left the feed, the HUD count, and an empty rail still open the bottom “本轮安排” sheet. A header toggle switches 「按宫殿」 (group stable plan entries by palace) and 「按进度」 (the same entries in progress-rail segment order, still split into the leftover and today blocks). Both views support
 jump, drag (desktop) or up/down (touch), batch exclude/restore, and reset-round. The toolbar
-「结算已完成单元」 opens a 小结算 page first. That overlay covers the feed pager, so it keeps a visible 「退出」 that cancels without compressing, and the page scrolls so 「取消结算」 and 「确认结算」 stay reachable on a short PWA viewport. Confirming it (`compress_completed`) drops settled groups (a source that passed, or a 重练 that passed or was explicitly completed; a live 重练 still weak or blank keeps its whole group in the round, so the 3张后重练 comes back) from
+「结算已完成单元」 opens a 小结算 page first. That overlay covers the feed pager, so it keeps a visible 「退出」 that cancels without compressing, and the page scrolls so 「取消结算」 and 「确认结算」 stay reachable on a short PWA viewport. The right-side 完成 on a fully scored round skips that page and writes the same settlement directly. Confirming it (`compress_completed`) drops settled groups (a source that passed, or a 重练 that passed or was explicitly completed; a live 重练 still weak or blank keeps its whole group in the round, so the 3张后重练 comes back) from
 the swipe feed, 本轮安排, and the HUD rail so the denominator shrinks, and stores that page as `partial_settlements` on the round plan. Cancelling leaves the cards in the feed. A group whose 重练 nobody has answered yet
 stays. This is not 排除: excluded ticks remain on the rail; compressed
 ids (`compressed_ids`) do not. Unfinished work stays in this round. Ratings stay committed;
@@ -233,8 +259,12 @@ opens an empty amend glance so the learner can change it, but the HUD tick and r
 keep the last rating until they change or cancel it. An empty amend glance is not unrated.
 The viewing playhead is independent of that fill: the card on screen grows taller even after
 it is rated, and cancelling a rating un-lights the fill without dropping the playhead. The
-right-side pager has 完成, not 定位. When every presented card is scored it opens the
-closing settlement slot; otherwise it seeks the queue-order first **unscored** unit
+right-side pager has 完成, not 定位. When every presented card is scored the press is a
+real completion: it settles what this round rated with the same `compress_completed`
+ledger write as 「结算已完成单元」 (no 小结算 confirmation page), so those units leave the
+HUD rail, 本轮安排 and the swipe feed and only the closing settlement remains — the pager
+disappears with the last card, and 取消结算 is not offered because there is nothing to
+return to. An open round still seeks the queue-order first **unscored** unit
 (谁最早看谁). Pressing 完成 again while the viewport is already on an unscored unit walks
 to the **next** unscored unit in queue order and wraps at the end, so a single 完成 button
 cycles through every blank unit instead of sticking on the first. Scored means this
@@ -273,7 +303,10 @@ empty `subject_ids` still resolve by `Subject.name == "英语"`. When the UI wri
 `streams.memory_palace` builds marked palace review-unit cards. After the subject filter, the user
 can still pick a palace/chapter subset (`specific_palace_ids`), plus `due_first_then_expand`,
 `due_only`, or `all_content_due_weighted` selection, palace completion/interleaving order, and
-structured/random unit order. `streams.english` is kept only as a sanitized compatibility
+structured/random unit order. Structured order means the palace's own depth-first unit order
+(`topology_order`, resolved from the document so an unreconciled edit cannot scramble it);
+`new_placement: new_first` still hoists never-passed units, and the due date is not a sort key.
+`streams.english` is kept only as a sanitized compatibility
 projection; queue builds for new configs do not activate a third English stream.
 
 `streams.quiz` builds question cards independently from palace review scheduling. It uses the same
@@ -591,16 +624,22 @@ and clears the shared 已做. Changing subject or palace scope parks answered qu
 that left the filter instead of deleting them; they return when the palace is in scope again.
 Finishing one palace's ratings does not ask to clear overlay 已做; partial settlement does not ask either.
 The right-side 完成 control still seeks unscored work before opening the closing slot.
-The separate 结束本次学习 entry opens a summary even with unscored work or pending retries;
-it preserves the same round, remaining work and cursor, and never fabricates passing ratings.
-The summary distinguishes pending attempts (including retries), rated-but-not-passed content,
-and passed content. It asks once whether to clear overlay 已做 for every review palace
+The closing page is the only end-of-round surface: it has exactly two actions,
+「清空做题进度」 and 「结算」. 结算 calls `/rounds/start` with the saved config, which
+completes the active round and mints the next one, so it works whatever the round
+state was (weak scores, pending retries, unanswered units) and cannot dead-end.
+When the new round has no cards the page lands on 今天的学习 instead of an empty stage.
+The page asks once whether to clear overlay 已做 for every review palace
 actually involved in this round, not every palace merely selected in saved configuration. 保留 keeps
-the answered records so 做题 can still be reviewed. 清除 calls `/overlay-quiz/drop-palaces`
-with those palace ids and clears the SPA mirror for them.
+the answered records so 做题 can still be reviewed; 清空 (two presses) calls
+`/overlay-quiz/drop-palaces` with those palace ids and clears the SPA mirror for them.
+The closing page reports what the round earned — units rated, 已通过 / 新学 / 重练,
+palaces cleared today, palace progress — and keeps leftovers on one muted status line.
+Its 按学科看明细 and 下次复习 blocks are collapsed below the two actions so 结算 never
+sits under a long list, and the floating feed pager steps aside on this page.
 
 Settlement time is round-scoped and survives a restart or the next day. It is the time spent on the progress-bar queue: looking at a card, flipping, and recalling, including a leave of about three minutes. A longer absence is not backfilled. A visible window counts even when the page focus flag is false; the desktop shell reports its own window focus so a real switch away can stop after that grace. An empty round clock must not wipe the queue's card time. 「本次随心」 is unit dwell plus 做题 plus 查看宫殿. Looking at a card, flipping its nodes, and reading the back are unit dwell; flip is not added again. 「做题时间」 is only the quiz overlay, whether it was opened from the card corner badge or the toolbar. 查看宫殿 while a quiz is open stays in the round total and out of 做题时间. Seconds live on the round plan as `learning_time`. The first open of a round copies dwell segments since that round was created, then the page clock adds only later seconds so the same interval is not counted twice. Durations of at least one hour render as `H:MM:SS`; shorter times stay `M:SS`.
 
-Leaving the settlement slot cancels that visit and does not end the round. The card’s 「取消结算」 and the right-side 「上一张」 both return to the previous card. The learning clock pauses on every settlement surface: the closing slot, finish-study summary, and partial settlement. After leaving those surfaces, later card dwell and 做题 still accumulate on the same `learning_time`.
+Leaving the settlement slot cancels that visit and does not end the round. The card’s 「返回上一张」 returns to the previous card. A round that was settled by 完成 has no cards left, so that cancel action is not rendered. The learning clock pauses on every settlement surface: the closing slot and partial settlement. After leaving those surfaces, later card dwell and 做题 still accumulate on the same `learning_time`.
 
 The summary separates 本轮累计 from 本轮今日. The backend projects today's union of recorded intervals against the product timezone's calendar boundaries at read time, without a second persisted counter. The frontend adds only uncovered pending/in-flight/current intervals and refreshes the server date window at the study-day rollover (03:00 local). Historical scalar time without dated evidence stays in the round total and is explicitly labelled as unattributed; it must not be silently assigned to today. Stored round interval history is not truncated to the per-request upload batch limit.

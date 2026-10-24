@@ -223,7 +223,14 @@ export function summarizeRoundConfig(
       value: `本轮宫殿中 ${quiz.specific_palace_ids.length || streamPalaceCount(config.streams.memory_palace, subjects)} 座，${labelOf(quiz.question_type, QUESTION_TYPE_OPTIONS)}，${labelOf(quiz.order, QUIZ_ORDER_OPTIONS)}`,
     })
   }
-  rows.push({ label: '复习顺序', value: '先学没学过的单元，再按拖延最久优先复习' })
+  if (streams.includes('memory_palace')) {
+    const palace = config.streams.memory_palace
+    const unitOrderText = palace.unit_order === 'random' ? '随机打乱顺序' : '按知识结构顺序'
+    rows.push({
+      label: '复习顺序',
+      value: `先学没学过的单元，再复习到期单元；宫殿内${unitOrderText}出现`,
+    })
+  }
   return rows
 }
 
@@ -489,7 +496,7 @@ export function FreestyleTrainingConfigForm({
           ) : null}
         </Section>
 
-        <Section title="固定顺序" description="先学没学过的单元，再复习到期单元；复习按拖延最久优先（逾期天数最多的先）。这一规则不可调整。" />
+        <Section title="固定顺序" description="先学没学过的单元，再复习到期单元；宫殿内按你选择的顺序出现（按知识结构就是从脑图最上面往下，逾期不会插队）。这一规则不可调整。" />
 
         <details className="rounded-xl border border-border/60 bg-card/40 p-4">
           <summary className="cursor-pointer text-sm font-semibold">高级设置</summary>

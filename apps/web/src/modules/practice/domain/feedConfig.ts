@@ -131,7 +131,6 @@ export const DEFAULT_FREESTYLE_FEED_CONFIG: FreestyleFeedConfig = {
     ratios: { memory_palace: 2, quiz: 1, english: 1 },
   },
   seed: 17,
-  due_order: 'most_overdue',
   new_placement: 'new_first',
   review_new_ratio: 4,
   content: {
@@ -451,7 +450,6 @@ export function queueConstructionSignature(value: unknown): string {
     mixed_modes: config.mixed_modes,
     mix: config.mix,
     seed: config.seed,
-    due_order: config.due_order,
     new_placement: config.new_placement,
     review_new_ratio: config.review_new_ratio,
     palace_order: config.streams.memory_palace.palace_order,
@@ -642,7 +640,6 @@ export function sanitizeFreestyleFeedConfig(value: unknown): FreestyleFeedConfig
     } as FreestyleTrainingStreams,
     mix,
     seed: asInt(raw.seed, 17, 1, 2_147_483_647),
-    due_order: DEFAULT_FREESTYLE_FEED_CONFIG.due_order,
     new_placement: DEFAULT_FREESTYLE_FEED_CONFIG.new_placement,
     review_new_ratio: asReviewNewRatio(raw.review_new_ratio),
     content: {

@@ -457,6 +457,113 @@ def test_same_day_due_units_follow_topology_order(session_factory):
     assert rows[0]["unit_kind"] == "residual"
 
 
+def test_structured_queue_follows_the_document_when_stored_topology_is_stale(
+    session_factory,
+    make_client,
+):
+    session = session_factory()
+    palace = Palace(
+        title="学记",
+        editor_doc=json.dumps(
+            {
+                "root": {
+                    "data": {"uid": "root", "text": "学记", "permanentSplitMark": True},
+                    "children": [
+                        {
+                            "data": {
+                                "uid": "purpose",
+                                "text": "教育作用与目的",
+                                "permanentSplitMark": True,
+                            },
+                            "children": [],
+                        },
+                        {
+                            "data": {
+                                "uid": "system",
+                                "text": "教育制度",
+                                "permanentSplitMark": True,
+                            },
+                            "children": [],
+                        },
+                        {
+                            "data": {
+                                "uid": "principle",
+                                "text": "教学原则",
+                                "permanentSplitMark": True,
+                            },
+                            "children": [],
+                        },
+                        {
+                            "data": {
+                                "uid": "method",
+                                "text": "教学方法",
+                                "permanentSplitMark": True,
+                            },
+                            "children": [],
+                        },
+                        {
+                            "data": {
+                                "uid": "teacher",
+                                "text": "教师观",
+                                "permanentSplitMark": True,
+                            },
+                            "children": [],
+                        },
+                    ],
+                }
+            },
+            ensure_ascii=False,
+        ),
+    )
+    session.add(palace)
+    session.commit()
+    reconcile_palace_units(session, palace.id)
+    session.commit()
+    # A palace edited since its last reconcile carries stale topology_index
+    # values. Every unit lands on 0, which used to fall back to random UUIDs.
+    for row in session.query(ReviewUnitState).filter_by(palace_id=palace.id):
+        row.topology_order = 0
+    session.commit()
+    palace_id = palace.id
+    session.close()
+
+    freestyle_router.session_dep = session_dep
+    client = make_client(freestyle_router)
+    response = client.post(
+        "/api/v1/freestyle/queue/build",
+        json={
+            "operation_id": "op-structured-topology",
+            "config": {
+                "specific_palace_ids": [palace_id],
+                "content": {"mindmap_branch": True, "anki_card": False, "quiz_question": False},
+                "mix_mode": "mindmap_only",
+                "due_policy": "due_only",
+                "subject_scope": "all",
+                "streams": {
+                    "memory_palace": {
+                        "specific_palace_ids": [palace_id],
+                        "subject_scope": "all",
+                        "due_policy": "due_only",
+                        "palace_order": "finish_palace_then_next",
+                        "unit_order": "structured",
+                    }
+                },
+            },
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    # Marks cut one unit each; the root's own unit has no member nodes, so the
+    # five marked chapters are the whole round, in document order.
+    assert [card["anchor_uid"] for card in response.json()["cards"]] == [
+        "purpose",
+        "system",
+        "principle",
+        "method",
+        "teacher",
+    ]
+
+
 def test_queue_reads_pass_state_and_palace_unit_totals(session_factory):
     from datetime import timedelta
 
