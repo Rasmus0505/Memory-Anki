@@ -23,12 +23,10 @@ import {
 import type { FreestylePartialSettlementSnapshot } from '@/modules/practice/domain/partialSettlement'
 import { compressibleRoundPlanIds, createOperationId } from '@/modules/practice/public'
 import type { FreestyleConfigSaveChoice } from '@/modules/practice/ui/freestyle/model/overlapProgressChoice'
-import { overlayRoundReviewPalaceIds } from '@/modules/practice/ui/freestyle/model/overlayQuizRange'
 import { FreestyleHudOverflow } from '@/modules/practice/ui/freestyle/components/FreestyleHudChrome'
 import { FreestyleHud } from '@/modules/practice/ui/freestyle/FreestyleHud'
 import { FreestylePageDialogs } from '@/modules/practice/ui/freestyle/FreestylePageDialogs'
 import { FreestyleCardArea } from '@/modules/practice/ui/freestyle/FreestyleCardArea'
-import { FreestyleStudySettlement } from '@/modules/practice/ui/freestyle/FreestyleStudySettlement'
 import { FreestyleNewUnitsBanner } from '@/modules/practice/ui/freestyle/components/FreestyleNewUnitsBanner'
 import {
   advanceNewUnitsBanner,
@@ -135,8 +133,6 @@ export default function ImmersiveFreestylePage({
   const autoAdvanceTimerRef = useRef<number | null>(null)
   const [planOpen, setPlanOpen] = useState(false)
   const [partialSettlement, setPartialSettlement] = useState<FreestylePartialSettlementSnapshot | null>(null)
-  // A visit can end without completing the round. Ratings/queue remain authoritative.
-  const [studySettlementRoundId, setStudySettlementRoundId] = useState<string | null>(null)
   const [startOverviewOpen, setStartOverviewOpen] = useState(true)
   const [dayRecapOpen, setDayRecapOpen] = useState(() => isDayRecapPending(window.localStorage, new Date()))
   const [configOpen, setConfigOpen] = useState(false)
@@ -314,14 +310,13 @@ export default function ImmersiveFreestylePage({
     error,
   })
 
-  const studySettlementOpen = studySettlementRoundId === queueState.roundId
-  const settlementVisible = viewingCompleteSlot || studySettlementOpen || partialSettlement != null
-  const studySettlementSaveOutcome: FreestyleSaveOutcome = roundSave?.roundId === queueState.roundId
+  const settlementVisible = viewingCompleteSlot || partialSettlement != null
+  const settlementSaveOutcome: FreestyleSaveOutcome = roundSave?.roundId === queueState.roundId
     ? roundSave.outcome
     : 'unconfirmed'
   const dueTomorrowCount = useTomorrowDueCount(roundComplete)
   const settlementMeta: FreestyleSettlementMeta = {
-    saveOutcome: studySettlementSaveOutcome,
+    saveOutcome: settlementSaveOutcome,
     onRetrySave: () => { void retryRoundSave() },
     remainingBefore: freestyleOverview.baseline?.round?.counts.remaining_units ?? null,
     remainingAfter: freestyleOverview.overview?.round?.counts.remaining_units ?? null,
@@ -609,7 +604,6 @@ export default function ImmersiveFreestylePage({
     ],
   )
 
-
   const { data: examOverview } = useExamOverview()
 
   const roundCompletion = useMemo(
@@ -738,23 +732,6 @@ export default function ImmersiveFreestylePage({
       toast.error('同步失败，请确认手机连的是这台电脑')
     })
   }, [syncDesktopProgress])
-  const settlementOwnerRef = useRef(queueState.roundId)
-  settlementOwnerRef.current = queueState.roundId
-  const finishStudy = () => {
-    // Settlement stays on 随心; closing it returns to this round's closing slot.
-    setStudySettlementRoundId(queueState.roundId)
-    void freestyleOverview.reload()
-  }
-  const continueWithDueToday = async () => {
-    const owner = queueState.roundId
-    const result = await updateReviewQueue()
-    if (settlementOwnerRef.current !== owner) return
-    if (result.status === 'error') throw new Error('更新今天到期内容失败。')
-    if (result.status !== 'ok') return
-    announceQueueUpdate(result.message)
-    setStudySettlementRoundId(null)
-    if (viewingCompleteSlot) navigateToIndex(currentIndex, { skipHistory: true })
-  }
   const openScopeQuiz = useCallback(() => setScopeQuizOpen(true), [])
   const removeCardFromQueue = useCallback(
     (cardId: string) => excludePlanCards([cardId]),
@@ -803,14 +780,18 @@ export default function ImmersiveFreestylePage({
     (cardIds: string[], rating: UnitRating) => rateCards(cardIds, rating),
     [rateCards],
   )
-  const handleCompressCompleted = useCallback(() => {
+  // One snapshot builder serves both entry points: 结算已完成单元 previews it on
+  // the 小结算 page, and 完成 on a genuinely finished round settles it straight
+  // away (see handlePagerComplete).
+  const reloadOverview = freestyleOverview.reload
+  const buildCompletedSettlement = useCallback(() => {
     const ids = compressibleRoundPlanIds(roundPlan, {
       completedIds: queueState.completedIds,
       encounters: queueState.unitEncountersByCardId,
       liveCardIds: cards.map((card) => card.id),
     })
-    if (!ids.length) return
-    const snapshot = buildPartialSettlementSnapshot({
+    if (!ids.length) return null
+    return buildPartialSettlementSnapshot({
       id: createOperationId(),
       cardIds: ids,
       cards,
@@ -823,9 +804,60 @@ export default function ImmersiveFreestylePage({
         return Boolean(card && isQuizCard(card) && answeredQuestionIds.has(card.question.id))
       }).length,
     })
+  }, [answeredQuestionIds, cards, queueState.completedIds, queueState.unitEncountersByCardId, roundPlan, subjectByPalaceId])
+  const handleCompressCompleted = useCallback(() => {
+    const snapshot = buildCompletedSettlement()
     setPlanOpen(false)
     if (snapshot) setPartialSettlement(snapshot)
-  }, [answeredQuestionIds, cards, queueState.completedIds, queueState.unitEncountersByCardId, roundPlan, subjectByPalaceId])
+  }, [buildCompletedSettlement])
+  /**
+   * Settle what this round already rated. Same ledger write as 结算已完成单元
+   * (`compress_completed`) minus the confirmation page, so the progress rail,
+   * 本轮安排 and the swipe feed all lose those units.
+   */
+  const settleCompletedUnits = useCallback(() => {
+    const snapshot = buildCompletedSettlement()
+    if (!snapshot) return false
+    setPartialSettlement(null)
+    compressCompletedPlanCards(snapshot)
+    void reloadOverview()
+    return true
+  }, [buildCompletedSettlement, compressCompletedPlanCards, reloadOverview])
+  /**
+   * Right-side 完成. While the round is open it keeps the seek behaviour; once
+   * every presented unit is scored it is a real completion, so it settles the
+   * rated units and leaves only the closing settlement (nothing to page back to).
+   */
+  const handlePagerComplete = useCallback(() => {
+    if (roundComplete && settleCompletedUnits()) return
+    handleCompleteRound()
+  }, [handleCompleteRound, roundComplete, settleCompletedUnits])
+  /**
+   * 结算 on the closing page: end this round and open the next one. Nothing
+   * here waits on a compress or a quiz choice, so a round with weak scores or
+   * pending retries can always be closed instead of dead-ending. When the new
+   * round has nothing to show, the page lands on 今天的学习.
+   */
+  const pendingNextRoundRef = useRef(false)
+  const settleAndGoOn = useCallback(() => {
+    // Starting the next round is the settlement: `/rounds/start` completes the
+    // active round and mints a fresh one, so the old queue stops existing.
+    // Compressing the old plan here would only race that build.
+    setPartialSettlement(null)
+    pendingNextRoundRef.current = true
+    startNextRound(config)
+    void reloadOverview()
+  }, [config, reloadOverview, startNextRound])
+  useEffect(() => {
+    if (!pendingNextRoundRef.current || loading) return
+    if (cards.length > 0) {
+      pendingNextRoundRef.current = false
+      return
+    }
+    // Nothing left today: land on 今天的学习 instead of an empty stage.
+    pendingNextRoundRef.current = false
+    setStartOverviewOpen(true)
+  }, [cards.length, loading])
   const openConfigFromPlan = useCallback(() => {
     setPlanOpen(false)
     setConfigIntent('replan')
@@ -835,11 +867,6 @@ export default function ImmersiveFreestylePage({
     setConfigOpen(open)
     if (!open) setConfigIntent('replan')
   }, [])
-  const openAnotherRound = useCallback(() => {
-    setConfigIntent('nextRound')
-    setConfigOpen(true)
-  }, [])
-  const dismissStudySettlement = useCallback(() => setStudySettlementRoundId(null), [])
   const dismissPartialSettlement = useCallback(() => setPartialSettlement(null), [])
   const confirmPartialSettlement = useCallback((snapshot: FreestylePartialSettlementSnapshot) => {
     setPartialSettlement(null)
@@ -918,6 +945,7 @@ export default function ImmersiveFreestylePage({
 
         <FreestyleHud
           examOverview={examOverview}
+          milestones={freestyleOverview.overview?.milestones ?? null}
           progressSummary={progressSummary}
           scrollChannel={scrollChannel}
           progressRailOverflow={progressRailOverflow}
@@ -931,6 +959,7 @@ export default function ImmersiveFreestylePage({
           onRetryUnsavedRatings={retryUnsavedRatings}
           palaceClearance={palaceClearance}
           onDismissPalaceClearance={dismissPalaceClearance}
+          settlementVisible={settlementVisible}
           channelHintVisible={channelHintVisible}
           activeChannelAdjustment={activeChannelAdjustment}
           channelState={channelReading.state as 'anxious' | 'bored'}
@@ -992,26 +1021,12 @@ export default function ImmersiveFreestylePage({
           dueTomorrowCount={dueTomorrowCount}
           settlementMeta={settlementMeta}
           onClearQuizProgress={clearConfiguredOverlayQuiz}
-          onAnotherRound={openAnotherRound}
+          onSettle={settleAndGoOn}
           onCancelSettlement={navigatePrevious}
-          onFinishStudy={finishStudy}
-          onContinueWithDueToday={continueWithDueToday}
+          canCancelSettlement={cards.length > 0}
         />
 
-        {studySettlementOpen ? (
-          <FreestyleStudySettlement
-            roundId={queueState.roundId}
-            completion={roundCompletion}
-            quizPalaceCount={overlayRoundReviewPalaceIds(roundPlan).length}
-            onClearQuizProgress={clearConfiguredOverlayQuiz}
-            onCancelSettlement={dismissStudySettlement}
-            onAnotherRound={() => { dismissStudySettlement(); openAnotherRound() }}
-            onContinueWithDueToday={continueWithDueToday}
-            dueTomorrowCount={dueTomorrowCount}
-            settlementMeta={settlementMeta}
-          />
-        ) : null}
-        {previewSummary && !studySettlementOpen && !partialSettlement ? (
+        {previewSummary && !partialSettlement ? (
           <div
             data-testid="freestyle-config-preview-overlay"
             data-keyboard-shortcuts-suspended="true"
@@ -1020,7 +1035,7 @@ export default function ImmersiveFreestylePage({
             <div className="mx-auto w-full max-w-md">
               <FreestyleConfigPreviewCard
                 summary={previewSummary}
-                orderMode={config.due_order}
+                unitOrder={config.streams.memory_palace.unit_order}
                 newPlacement={config.new_placement}
                 palaceTitleByCardId={Object.fromEntries(
                   cards.map((card) => [card.id, (card as { palace_title?: string }).palace_title ?? '']),
@@ -1030,7 +1045,7 @@ export default function ImmersiveFreestylePage({
             </div>
           </div>
         ) : null}
-        {startOverviewOpen && !studySettlementOpen && !partialSettlement ? (
+        {startOverviewOpen && !partialSettlement ? (
           <div
             data-testid="freestyle-start-overview"
             data-keyboard-shortcuts-suspended="true"
@@ -1077,8 +1092,10 @@ export default function ImmersiveFreestylePage({
           <FreestyleEdgeHint edgeHint={edgeHint} roundComplete={roundComplete} />
         ) : null}
 
-        {/* Card paging stays on this pager so the review map can keep one-finger pan. */}
-        {!inlineEditing && !studySettlementOpen && !partialSettlement ? (
+        {/* Card paging stays on this pager so the review map can keep one-finger pan.
+            The closing page owns its own actions (取消结算 / 结算), so the pager
+            steps aside there instead of floating over the summary. */}
+        {!inlineEditing && !partialSettlement && !viewingCompleteSlot && cards.length > 0 ? (
           <FreestyleBottomActions
             cards={cards}
             viewingCompleteSlot={viewingCompleteSlot}
@@ -1091,7 +1108,7 @@ export default function ImmersiveFreestylePage({
             completeTitle={completeTitle}
             onPrevious={navigatePrevious}
             onNext={navigateNext}
-            onComplete={handleCompleteRound}
+            onComplete={handlePagerComplete}
           />
         ) : null}
       </div>

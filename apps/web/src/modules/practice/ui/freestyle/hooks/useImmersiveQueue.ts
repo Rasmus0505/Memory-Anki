@@ -413,6 +413,8 @@ export function useImmersiveQueue(
   const queueBuildOutcomeRef = useRef<{ id: string; status: 'ok' | 'error' } | null>(null)
   const updateReviewInFlightRef = useRef(false)
   const queueBuildControllerRef = useRef<AbortController | null>(null)
+  /** Set once the learner asks for an explicit round (结算 → next round). */
+  const explicitRoundRequestRef = useRef(false)
   const localQueueMutationRef = useRef(0)
   const liveHydrationRef = useRef<LiveHydrationEntry | null>(null)
   const desktopSyncRef = useRef(false)
@@ -1433,6 +1435,7 @@ export function useImmersiveQueue(
    * and mint the next round via startFreestyleRoundApi. Local domain mint helpers stay off-limits here.
    */
   const startNextRound = useCallback((nextConfig: FreestyleFeedConfig) => {
+    explicitRoundRequestRef.current = true
     const current = configRef.current
     const rawRequested = sanitizeFreestyleFeedConfig(nextConfig)
     const useSelectionScope = lockedPalaceId == null && shouldUseFreestyleSelectionScope(
@@ -2873,6 +2876,10 @@ export function useImmersiveQueue(
     const runInitialLoad = (reason: string) => {
       if (cancelled || didLoad) return
       didLoad = true
+      // A cold-open load lands on the 完成 seek target. If the learner already
+      // asked for an explicit round (结算 → next round), that load would
+      // supersede the minted round and put the old queue back.
+      if (explicitRoundRequestRef.current) return
       const next = scopeEntryConfig(readFreestyleFeedConfig(slot))
       if (!sameFeedConfig(next, configRef.current)) {
         configRef.current = next

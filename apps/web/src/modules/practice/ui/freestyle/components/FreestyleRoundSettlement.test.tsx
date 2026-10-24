@@ -32,7 +32,7 @@ function renderSettlement(overrides: Partial<Parameters<typeof FreestyleRoundSet
     roundKey: 'round-1',
     quizPalaceCount: 2,
     onClearQuizProgress: vi.fn(async () => undefined),
-    onAnotherRound: vi.fn(),
+    onSettle: vi.fn(),
     onCancelSettlement: vi.fn(),
     ...overrides,
   }
@@ -48,16 +48,16 @@ describe('FreestyleRoundSettlement next reviews', () => {
     due_date: '2026-10-14',
   }))
 
-  it('shows the first eight next reviews and expands to every item', () => {
+  it('shows the first six next reviews and expands to every item', () => {
     renderSettlement({ nextReviews: items as never })
     const list = screen.getByTestId('freestyle-round-next-reviews')
-    expect(list.querySelectorAll('li')).toHaveLength(8)
+    expect(list.querySelectorAll('li')).toHaveLength(6)
 
     fireEvent.click(screen.getByRole('button', { name: '展开全部 11 项' }))
     expect(list.querySelectorAll('li')).toHaveLength(11)
 
     fireEvent.click(screen.getByRole('button', { name: '收起' }))
-    expect(list.querySelectorAll('li')).toHaveLength(8)
+    expect(list.querySelectorAll('li')).toHaveLength(6)
   })
 })
 
@@ -70,45 +70,58 @@ describe('FreestyleRoundSettlement', () => {
     expect(screen.getByTestId('freestyle-round-status').textContent).toBe('还剩 2 项待下一轮')
   })
 
-  it('confirms before clearing quiz progress and then reports it cleared', async () => {
+  it('keeps exactly two actions: clear quiz progress and settle', () => {
+    renderSettlement()
+    const actions = screen.getByTestId('freestyle-round-settle').parentElement
+    expect(actions?.querySelectorAll('button')).toHaveLength(2)
+    expect(screen.getByTestId('freestyle-round-quiz-clear')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '再来一轮' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '结束并保留本轮' })).toBeNull()
+    expect(screen.queryByText(/加入今天到期内容/)).toBeNull()
+  })
+
+  it('settles even when the quiz choice was never made', () => {
+    const { onSettle } = renderSettlement()
+    const settle = screen.getByTestId('freestyle-round-settle') as HTMLButtonElement
+    expect(settle.disabled).toBe(false)
+    fireEvent.click(settle)
+    expect(onSettle).toHaveBeenCalledOnce()
+  })
+
+  it('settles without a quiz surface too, as the only action', () => {
+    const { onSettle } = renderSettlement({ quizPalaceCount: 0 })
+    expect(screen.queryByTestId('freestyle-round-quiz-clear')).toBeNull()
+    fireEvent.click(screen.getByTestId('freestyle-round-settle'))
+    expect(onSettle).toHaveBeenCalledOnce()
+  })
+
+  it('clears quiz progress on the second press and stays settlable', async () => {
     const clear = vi.fn(async () => undefined)
-    const { onAnotherRound } = renderSettlement({ onClearQuizProgress: clear })
+    const { onSettle } = renderSettlement({ onClearQuizProgress: clear })
 
-    fireEvent.click(screen.getByRole('button', { name: '清空做题进度' }))
+    const button = screen.getByTestId('freestyle-round-quiz-clear')
+    fireEvent.click(button)
     expect(clear).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByTestId('freestyle-round-quiz-clear-confirm'))
+    expect(button.textContent).toBe('再点确认清空')
 
-    await waitFor(() => expect(screen.getByRole('button', { name: '已清空' })).toBeTruthy())
+    fireEvent.click(button)
+    await waitFor(() => expect(button.textContent).toBe('已清空做题进度'))
     expect(clear).toHaveBeenCalledOnce()
     expect(screen.getByText('已清空做题进度，学习历史和复习安排保持不变。')).toBeTruthy()
-    const next = screen.getByRole('button', { name: '再来一轮' }) as HTMLButtonElement
-    expect(next.disabled).toBe(false)
-    fireEvent.click(next)
-    expect(onAnotherRound).toHaveBeenCalledOnce()
+
+    fireEvent.click(screen.getByTestId('freestyle-round-settle'))
+    expect(onSettle).toHaveBeenCalledOnce()
   })
 
-  it('keeps next round locked until the quiz choice is resolved', () => {
-    renderSettlement()
-    const next = screen.getByRole('button', { name: '再来一轮' }) as HTMLButtonElement
-    expect(next.disabled).toBe(true)
-    fireEvent.click(screen.getByTestId('freestyle-round-quiz-keep'))
-    expect(next.disabled).toBe(false)
-  })
-
-  it('hides the quiz actions and unlocks next round when no palace has quiz progress', () => {
-    renderSettlement({ quizPalaceCount: 0 })
-    expect(screen.queryByRole('button', { name: '清空做题进度' })).toBeNull()
-    expect((screen.getByRole('button', { name: '再来一轮' }) as HTMLButtonElement).disabled).toBe(false)
-  })
-
-  it('shows the error and stays locked when clearing fails', async () => {
+  it('stays armed-settlable and reports the error when clearing fails', async () => {
     const clear = vi.fn(async () => { throw new Error('clear failed') })
     renderSettlement({ onClearQuizProgress: clear })
-    fireEvent.click(screen.getByRole('button', { name: '清空做题进度' }))
-    fireEvent.click(screen.getByTestId('freestyle-round-quiz-clear-confirm'))
+    const button = screen.getByTestId('freestyle-round-quiz-clear')
+    fireEvent.click(button)
+    fireEvent.click(button)
     await waitFor(() => expect(screen.getByText('clear failed')).toBeTruthy())
-    expect(screen.getByRole('button', { name: '清空做题进度' })).toBeTruthy()
-    expect((screen.getByRole('button', { name: '再来一轮' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(button.textContent).toBe('清空做题进度')
+    expect((screen.getByTestId('freestyle-round-settle') as HTMLButtonElement).disabled).toBe(false)
   })
 
   it('discards a clear result that belongs to a previous round', async () => {
@@ -118,24 +131,49 @@ describe('FreestyleRoundSettlement', () => {
       completion,
       quizPalaceCount: 2,
       onClearQuizProgress: clear,
-      onAnotherRound: vi.fn(),
+      onSettle: vi.fn(),
       onCancelSettlement: vi.fn(),
     }
     const { rerender } = render(<FreestyleRoundSettlement {...props} roundKey="old" />)
-    fireEvent.click(screen.getByRole('button', { name: '清空做题进度' }))
-    fireEvent.click(screen.getByTestId('freestyle-round-quiz-clear-confirm'))
+    fireEvent.click(screen.getByTestId('freestyle-round-quiz-clear'))
+    fireEvent.click(screen.getByTestId('freestyle-round-quiz-clear'))
 
     rerender(<FreestyleRoundSettlement {...props} roundKey="new" />)
     await act(async () => resolve())
 
-    expect(screen.queryByRole('button', { name: '已清空' })).toBeNull()
-    expect((screen.getByRole('button', { name: '再来一轮' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByTestId('freestyle-round-quiz-clear').textContent).toBe('清空做题进度')
   })
 
   it('returns to the previous card from the top action', () => {
     const { onCancelSettlement } = renderSettlement()
     fireEvent.click(screen.getByRole('button', { name: '返回上一张' }))
     expect(onCancelSettlement).toHaveBeenCalledOnce()
+  })
+
+  it('drops the cancel action once the settled feed has no card to return to', () => {
+    renderSettlement({ showCancel: false })
+    expect(screen.queryByTestId('freestyle-round-cancel-settlement')).toBeNull()
+    expect(screen.queryByRole('button', { name: '返回上一张' })).toBeNull()
+    expect(screen.getByTestId('freestyle-round-complete')).toBeTruthy()
+  })
+
+  it('celebrates cleared palaces when a palace reached its full unit count', () => {
+    renderSettlement({ quizPalaceCount: 0 })
+    // 3 / 6 is not fully cleared.
+    expect(screen.queryByTestId('freestyle-round-cleared-palaces')).toBeNull()
+
+    renderSettlement({
+      quizPalaceCount: 0,
+      completion: {
+        ...completion,
+        bySubject: [{
+          ...completion.bySubject[0],
+          cardCount: 6,
+          palaces: [{ palaceId: 10, palaceTitle: '马原', cardCount: 6, totalUnits: 6 }],
+        }],
+      },
+    })
+    expect(screen.getByTestId('freestyle-round-cleared-palaces').textContent).toContain('1 个宫殿今日已清')
   })
 
   it('appends tomorrow due count to the status line when known', () => {

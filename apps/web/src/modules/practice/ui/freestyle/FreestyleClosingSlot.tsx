@@ -1,16 +1,14 @@
 import type { ComponentProps } from 'react'
 import { FreestyleRoundSettlement, type FreestyleSettlementMeta } from '@/modules/practice/ui/freestyle/components/FreestyleRoundSettlement'
-import { toast } from '@/shared/feedback/toast'
 
 export function FreestyleClosingSlot({
   roundId,
   completion,
   quizPalaceCount,
   onClearQuizProgress,
-  onAnotherRound,
+  onSettle,
   onCancelSettlement,
-  onFinishStudy,
-  onContinueWithDueToday,
+  canCancelSettlement = true,
   dueTomorrowCount,
   settlementMeta,
 }: {
@@ -18,10 +16,10 @@ export function FreestyleClosingSlot({
   completion: ComponentProps<typeof FreestyleRoundSettlement>['completion']
   quizPalaceCount: number
   onClearQuizProgress: ComponentProps<typeof FreestyleRoundSettlement>['onClearQuizProgress']
-  onAnotherRound: () => void
+  onSettle: () => void
   onCancelSettlement: () => void
-  onFinishStudy: () => void
-  onContinueWithDueToday: () => Promise<void>
+  /** False once the rated units are settled out of the feed — nowhere to return. */
+  canCancelSettlement?: boolean
   dueTomorrowCount: number | null
   settlementMeta: FreestyleSettlementMeta
 }) {
@@ -36,10 +34,9 @@ export function FreestyleClosingSlot({
           roundKey={roundId}
           quizPalaceCount={quizPalaceCount}
           onClearQuizProgress={onClearQuizProgress}
-          onAnotherRound={onAnotherRound}
+          onSettle={onSettle}
           onCancelSettlement={onCancelSettlement}
-          onFinishStudy={onFinishStudy}
-          onAddDueToday={() => { void onContinueWithDueToday().catch((error: unknown) => toast.error(error instanceof Error ? error.message : '更新今天到期内容失败。')) }}
+          showCancel={canCancelSettlement}
           dueTomorrowCount={dueTomorrowCount}
           {...settlementMeta}
         />

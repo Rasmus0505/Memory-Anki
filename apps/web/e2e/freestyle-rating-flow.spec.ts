@@ -283,16 +283,14 @@ test('lights a grade only once saved, queues the next tap, then opens a skippabl
 
   const next = page.getByRole('button', { name: '下一张' })
   const settlement = page.getByTestId('freestyle-round-complete')
-  await expect(settlement.getByText('本轮总结')).toBeVisible({ timeout: 2_000 }).catch(async () => {
-    await expect(next).toBeEnabled()
-    await next.evaluate((button: HTMLButtonElement) => button.click())
-  })
-  // 结算卡标题在改版后是「本轮总结」。宫殿清零文案在卡外横幅，不在这张卡里。
-  await expect(settlement.getByText('本轮总结')).toBeVisible()
+  await expect(next).toBeEnabled()
+  await next.evaluate((button: HTMLButtonElement) => button.click())
+  // 结算页只留两个动作：清空做题进度、结算。宫殿清零文案在卡外横幅，不在这张卡里。
+  await expect(settlement.getByText('本轮完成')).toBeVisible()
+  await expect(settlement.getByTestId('freestyle-round-quiz-clear')).toBeVisible()
+  await expect(settlement.getByTestId('freestyle-round-settle')).toBeVisible()
   await settlement.getByTestId('freestyle-round-skip-show').click()
-  await expect(settlement.getByText('本轮总结')).toBeVisible()
-  await settlement.getByTestId('freestyle-round-another').click()
-  await expect(page.getByTestId('freestyle-round-config-dialog')).toBeVisible()
+  await expect(settlement.getByText('本轮完成')).toBeVisible()
 })
 
 test('reports an unsaved grade at once without claiming completion, then retries the score', async ({ page }) => {

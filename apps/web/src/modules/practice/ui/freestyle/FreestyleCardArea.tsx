@@ -62,10 +62,9 @@ export function FreestyleCardArea({
   dueTomorrowCount,
   settlementMeta,
   onClearQuizProgress,
-  onAnotherRound,
+  onSettle,
   onCancelSettlement,
-  onFinishStudy,
-  onContinueWithDueToday,
+  canCancelSettlement,
 }: {
   scrollRef: RefObject<HTMLDivElement | null>
   onScroll: UIEventHandler<HTMLDivElement>
@@ -114,10 +113,10 @@ export function FreestyleCardArea({
   dueTomorrowCount: number | null
   settlementMeta: FreestyleSettlementMeta
   onClearQuizProgress: ClosingProps['onClearQuizProgress']
-  onAnotherRound: () => void
+  onSettle: ClosingProps['onSettle']
   onCancelSettlement: () => void
-  onFinishStudy: () => void
-  onContinueWithDueToday: () => Promise<void>
+  /** False once a settled round has no card left to return to. */
+  canCancelSettlement: boolean
 }) {
   const completedIds = queueState.completedIds
   const quizPalaceCount = overlayRoundReviewPalaceIds(roundPlan).length
@@ -225,10 +224,9 @@ export function FreestyleCardArea({
           dueTomorrowCount={dueTomorrowCount}
           settlementMeta={settlementMeta}
           onClearQuizProgress={onClearQuizProgress}
-          onAnotherRound={onAnotherRound}
+          onSettle={onSettle}
           onCancelSettlement={onCancelSettlement}
-          onFinishStudy={onFinishStudy}
-          onContinueWithDueToday={onContinueWithDueToday}
+          canCancelSettlement={canCancelSettlement}
         />
       ) : null}
     </div>

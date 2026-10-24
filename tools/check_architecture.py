@@ -1507,6 +1507,54 @@ def check_review_application_boundary(errors: list[str]) -> None:
                 break
 
 
+
+def check_exam_horizon_boundary(errors: list[str]) -> None:
+    """Sprint mode is a horizon parameter, not a second scheduler.
+
+    ``core/exam_horizon.py`` is shared by the exam settings writer and the review
+    scheduler, so it must stay framework-free and module-free; otherwise the two
+    modules would have to import each other. The exam module itself may read
+    review state through public queries but must never write scheduling.
+    """
+    horizon_path = API_SRC / "core" / "exam_horizon.py"
+    if not horizon_path.exists():
+        errors.append(
+            "apps/api/src/memory_anki/core/exam_horizon.py: the shared sprint horizon "
+            "must stay, or exam and memory would need a circular import."
+        )
+        return
+    forbidden_horizon_prefixes = (
+        "sqlalchemy",
+        "fastapi",
+        "memory_anki.infrastructure",
+        "memory_anki.modules",
+    )
+    tree = ast.parse(horizon_path.read_text(encoding="utf-8", errors="ignore").lstrip("﻿"))
+    for node in ast.walk(tree):
+        imported_module = imported_module_from_node(node)
+        if imported_module and imported_module.startswith(forbidden_horizon_prefixes):
+            errors.append(
+                "apps/api/src/memory_anki/core/exam_horizon.py: the sprint horizon must stay "
+                f"framework-free; it imported {imported_module}."
+            )
+            break
+
+    forbidden_exam_prefixes = (
+        "memory_anki.modules.memory.application",
+        "memory_anki.modules.memory.public.commands",
+    )
+    for path in iter_files(API_SRC / "modules" / "exam", (".py",)):
+        tree = ast.parse(path.read_text(encoding="utf-8", errors="ignore").lstrip("﻿"))
+        for node in ast.walk(tree):
+            imported_module = imported_module_from_node(node)
+            if imported_module and imported_module.startswith(forbidden_exam_prefixes):
+                errors.append(
+                    f"{path.relative_to(REPO_ROOT).as_posix()}: exam must not write review "
+                    "scheduling; only the horizon config is its to own."
+                )
+                break
+
+
 def check_palace_review_public_facade(errors: list[str]) -> None:
     palace_root = API_SRC / "modules" / "content"
     forbidden_prefix = "memory_anki.modules.memory.application"
@@ -3799,9 +3847,16 @@ def check_freestyle_viewing_playhead(errors: list[str]) -> None:
         )
     else:
         page_source = read_freestyle_composition(FREESTYLE_PAGE_COMPOSITION)
+        # 完成 is one button with two jobs: an open round seeks the earliest
+        # unscored unit, a fully scored round settles what it rated (the same
+        # `compress_completed` write as 结算已完成单元) instead of only scrolling
+        # to the summary. Both paths must stay wired.
         if (
             "resolveFreestyleCompleteSeek" not in page_source
-            or "onComplete={handleCompleteRound}" not in page_source
+            or "onComplete={handlePagerComplete}" not in page_source
+            or "settleCompletedUnits" not in page_source
+            or "compressCompletedPlanCards(snapshot)" not in page_source
+            or "handleCompleteRound()" not in page_source
         ):
             errors.append(
                 f"{page.relative_to(WEB_SRC).as_posix()}: "
@@ -3896,10 +3951,10 @@ def check_freestyle_complete_slot_reachable(errors: list[str]) -> None:
                 f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
                 "must document that the last unit still opens the closing slot for 调整配置."
             )
-        if "再来一轮" not in feed_source or "startFreestyleRoundApi" not in feed_source:
+        if "结算" not in feed_source or "/rounds/start" not in feed_source:
             errors.append(
                 f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
-                "must document settlement 再来一轮 minting via startFreestyleRoundApi."
+                "must document settlement 结算 minting the next round via /rounds/start."
             )
     complete_card = (
         WEB_SRC
@@ -3912,10 +3967,18 @@ def check_freestyle_complete_slot_reachable(errors: list[str]) -> None:
     )
     if complete_card.exists():
         complete_source = complete_card.read_text(encoding="utf-8", errors="ignore")
-        if "再来一轮" not in complete_source or "onAnotherRound" not in complete_source:
+        # The closing page has exactly two actions: clear quiz progress, settle.
+        # 结算 is the next round; the older 再来一轮 / 结束并保留本轮 pair is gone.
+        if (
+            "清空做题进度" not in complete_source
+            or "onClearQuizProgress" not in complete_source
+            or "onSettle" not in complete_source
+            or "再来一轮" in complete_source
+            or "结束并保留本轮" in complete_source
+        ):
             errors.append(
                 f"{complete_card.relative_to(REPO_ROOT).as_posix()}: "
-                "settlement must expose 再来一轮 via onAnotherRound."
+                "settlement offers only 清空做题进度 and 结算 (onClearQuizProgress / onSettle)."
             )
         if "返回上一张" not in complete_source or "onCancelSettlement" not in complete_source:
             errors.append(
@@ -6690,6 +6753,7 @@ def main() -> int:
     check_prompt_catalog_boundaries(errors)
     check_ai_run_workspace(errors)
     check_review_application_boundary(errors)
+    check_exam_horizon_boundary(errors)
     check_unit_review_boundary(errors)
     check_english_reading_gap_loop(errors)
     check_english_dictation_local_import(errors)

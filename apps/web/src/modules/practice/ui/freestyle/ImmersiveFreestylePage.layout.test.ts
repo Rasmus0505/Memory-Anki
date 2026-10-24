@@ -16,7 +16,6 @@ const source = [
   'FreestyleFeedCard.tsx',
   'FreestyleCardArea.tsx',
   'FreestyleClosingSlot.tsx',
-  'FreestyleStudySettlement.tsx',
   'FreestylePartialSettlement.tsx',
   'FreestyleEdgeHint.tsx',
   'FreestyleBottomActions.tsx',
@@ -47,8 +46,31 @@ describe('ImmersiveFreestylePage layout', () => {
   it('uses the right-side 完成 button to settle or walk unscored units', () => {
     expect(source).toContain('findUnscoredCompleteSeekIndices')
     expect(source).toContain('resolveFreestyleCompleteSeek')
-    expect(source).toContain('onComplete={handleCompleteRound}')
+    expect(source).toContain('onComplete={handlePagerComplete}')
     expect(source).toContain('viewingCardId')
+  })
+
+  it('settles the rated units when 完成 is a genuine completion, not a seek', () => {
+    const handler = source.slice(
+      source.indexOf('const handlePagerComplete'),
+      source.indexOf('const openConfigFromPlan'),
+    )
+    // Open round keeps the seek; a fully scored round settles instead.
+    expect(handler).toContain('roundComplete && settleCompletedUnits()')
+    expect(handler).toContain('handleCompleteRound()')
+    const settle = source.slice(
+      source.indexOf('const settleCompletedUnits'),
+      source.indexOf('const handlePagerComplete'),
+    )
+    // Same ledger write as 结算已完成单元, so the rail/plan/feed lose those units.
+    expect(settle).toContain('buildCompletedSettlement()')
+    expect(settle).toContain('compressCompletedPlanCards(snapshot)')
+    expect(settle).not.toContain('setPartialSettlement(snapshot)')
+  })
+
+  it('keeps the pager only while the feed still has cards to page', () => {
+    expect(source).toContain('!partialSettlement && !viewingCompleteSlot && cards.length > 0 ? (')
+    expect(source).toContain('canCancelSettlement={cards.length > 0}')
   })
 
   it('keeps a visible 退出 on 小结算 because the overlay covers the pager', () => {
@@ -59,31 +81,32 @@ describe('ImmersiveFreestylePage layout', () => {
 
   it('cancels settlement by leaving the slot', () => {
     expect(source).toContain('onCancelSettlement={navigatePrevious}')
-    expect(source).toContain('viewingCompleteSlot || studySettlementOpen || partialSettlement != null')
+    expect(source).toContain('viewingCompleteSlot || partialSettlement != null')
     expect(source).toContain('取消结算，返回上一张')
   })
 
-  it('ends a visit independently of queue completion and reuses the existing round', () => {
-    expect(source).not.toContain('data-testid="freestyle-finish-study"')
-    expect(source).toContain('data-testid="freestyle-study-settlement"')
-    expect(source).toContain('<FreestyleRoundSettlement')
-    expect(source).toContain('onFinishStudy={finishStudy}')
-    expect(source).toContain('data-keyboard-shortcuts-suspended="true"')
-    const finish = source.slice(source.indexOf('const finishStudy ='), source.indexOf('const continueWithDueToday ='))
-    expect(finish).toContain('setStudySettlementRoundId(queueState.roundId)')
-    expect(finish).not.toContain('navigate(')
-    expect(finish).not.toContain('completeCard')
-    expect(finish).not.toContain('startNextRound')
-    expect(source).toContain('const result = await updateReviewQueue()')
-  })
-
-  it('wires settlement 再来一轮 through nextRound config then startNextRound', () => {
-    expect(source).toContain('onAnotherRound=')
-    expect(source).toContain("setConfigIntent('nextRound')")
-    expect(source).toContain('startNextRound')
-    expect(source).toContain("mode={configIntent}")
+  it('settles the closing page through the same two-action contract', () => {
+    // The page no longer carries a second "结束本次学习" surface: 结算 is the end.
+    expect(source).not.toContain('FreestyleStudySettlement')
+    expect(source).not.toContain('studySettlementOpen')
+    expect(source).toContain('onSettle={settleAndGoOn}')
     expect(source).toContain('onClearQuizProgress={clearConfiguredOverlayQuiz}')
     expect(source).not.toContain('promptOverlayPalaceClear')
+  })
+
+  it('settles then starts the next round instead of offering 再来一轮', () => {
+    const settle = source.slice(
+      source.indexOf('const settleAndGoOn'),
+      source.indexOf('const openConfigFromPlan'),
+    )
+    // 结算 is the next round: /rounds/start completes the active round, so the
+    // old queue cannot survive it and no compress write has to race that build.
+    expect(settle).toContain('startNextRound(config)')
+    expect(settle).toContain('pendingNextRoundRef.current = true')
+    expect(source).not.toContain('onAnotherRound=')
+    expect(source).not.toContain("setConfigIntent('nextRound')")
+    // An empty next round lands on 今天的学习 rather than a blank stage.
+    expect(source).toContain('setStartOverviewOpen(true)')
   })
 
   it('does not page the feed from vertical arrows while a quiz dialog owns the keyboard', () => {

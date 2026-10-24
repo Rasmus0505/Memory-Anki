@@ -668,7 +668,7 @@ def test_freestyle_complete_slot_reachable_accepts_feed_slot_helpers(
         web_src / "modules" / "practice" / "ui" / "freestyle" / "ImmersiveFreestylePage.tsx",
         "clampFreestyleFeedIndex(index, cards.length, roundComplete)\n"
         "const viewingCompleteSlot = isFreestyleCompleteSlot(visualIndex, cards.length, roundComplete)\n"
-        "const settlementVisible = viewingCompleteSlot || studySettlementOpen || partialSettlement != null\n"
+        "const settlementVisible = viewingCompleteSlot || partialSettlement != null\n"
         "viewingCard: !settlementVisible && currentCard != null\n"
         "onCancelSettlement={navigatePrevious}\n",
     )
@@ -680,8 +680,8 @@ def test_freestyle_complete_slot_reachable_accepts_feed_slot_helpers(
     )
     write_file(
         tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
-        "open that closing slot so 再来一轮 and 调整配置 stay reachable.\n"
-        "settlement 再来一轮 mints via startFreestyleRoundApi.\n"
+        "open that closing slot so 调整配置 stays reachable.\n"
+        "settlement 结算 mints the next round via /rounds/start.\n"
         "取消结算 leaves the slot and later dwell still counts.\n",
     )
     write_file(
@@ -691,9 +691,9 @@ def test_freestyle_complete_slot_reachable_accepts_feed_slot_helpers(
         / "ui"
         / "freestyle"
         / "components"
-        / "FreestyleRoundCompleteCard.tsx",
-        "onAnotherRound()\n再来一轮\ntotalEffectiveSeconds\nbySubject\n"
-        "取消结算\nonCancelSettlement\n",
+        / "FreestyleRoundSettlement.tsx",
+        "清空做题进度\nonClearQuizProgress\nonSettle\ntotalEffectiveSeconds\nbySubject\n"
+        "返回上一张\nonCancelSettlement\n",
     )
     write_file(
         web_src
@@ -4163,7 +4163,8 @@ def test_freestyle_viewing_playhead_accepts_independent_tick(
     )
     write_file(
         web_src / "modules" / "practice" / "ui" / "freestyle" / "ImmersiveFreestylePage.tsx",
-        "resolveFreestyleCompleteSeek\nonComplete={handleCompleteRound}\n",
+        "resolveFreestyleCompleteSeek\nonComplete={handlePagerComplete}\n"
+        "settleCompletedUnits\ncompressCompletedPlanCards(snapshot)\nhandleCompleteRound()\n",
     )
     write_file(
         web_src / "modules" / "practice" / "ui" / "freestyle" / "components" / "FreestyleFeedPager.tsx",
@@ -4190,6 +4191,51 @@ def test_freestyle_viewing_playhead_accepts_independent_tick(
     check_architecture.check_freestyle_viewing_playhead(errors)
 
     assert errors == []
+
+
+def test_freestyle_complete_button_rejects_seek_only_wiring(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """完成 on a fully scored round must settle, not only scroll to the summary."""
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "model" / "freestyleProgressSegments.ts",
+        "viewing?: boolean\nif (viewing || tone === 'current') return 'h-3.5'\n",
+    )
+    # Seek-only: the button moves the viewport but never settles the rated units.
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "ImmersiveFreestylePage.tsx",
+        "resolveFreestyleCompleteSeek\nonComplete={handlePagerComplete}\nhandleCompleteRound()\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "components" / "FreestyleFeedPager.tsx",
+        'aria-label="完成"\nonComplete\n',
+    )
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "hooks" / "useImmersiveQueue.ts",
+        "action: 'uncomplete'\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "domain" / "queueState.ts",
+        "An empty amend glance keeps this-round rating\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "domain" / "round_uncomplete.py",
+        "def uncomplete_card():\n    return None\n",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
+        "The viewing playhead is independent. Clearing the rating also uncompletes that card in the round plan. Fill follows this-round last rating until the learner changes or cancels it. The right-side pager has 完成, not 定位.\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_freestyle_viewing_playhead(errors)
+
+    assert any("settle the round or seek the earliest unrated unit" in error for error in errors)
 
 
 def test_freestyle_round_sheet_views_reject_palace_only(
@@ -4886,3 +4932,60 @@ def test_db_write_lock_hygiene_rejects_imprecise_classifier(
     check_architecture.check_db_write_lock_hygiene(errors)
 
     assert any("must classify by lock message" in item for item in errors), errors
+
+
+def test_exam_horizon_boundary_accepts_a_pure_shared_module(tmp_path: Path, monkeypatch) -> None:
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    write_file(
+        api_src / "core" / "exam_horizon.py",
+        "from dataclasses import dataclass\n\n\n@dataclass(frozen=True)\nclass SprintHorizon:\n    pass\n",
+    )
+    write_file(
+        api_src / "modules" / "exam" / "application" / "settings_service.py",
+        "from memory_anki.modules.memory.public.queries import INTERVAL_DAYS\n",
+    )
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+
+    errors: list[str] = []
+    check_architecture.check_exam_horizon_boundary(errors)
+
+    assert errors == []
+
+
+def test_exam_horizon_boundary_rejects_a_framework_bound_horizon(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """The horizon is shared by two modules, so a Session import would force a cycle."""
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    write_file(
+        api_src / "core" / "exam_horizon.py",
+        "from sqlalchemy.orm import Session\n",
+    )
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+
+    errors: list[str] = []
+    check_architecture.check_exam_horizon_boundary(errors)
+
+    assert any("framework-free" in item for item in errors), errors
+
+
+def test_exam_horizon_boundary_rejects_exam_writing_scheduling(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Enabling sprint mode must not let the exam module write due dates itself."""
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    write_file(
+        api_src / "core" / "exam_horizon.py",
+        "SPRINT_INTERVAL_RATIO = 0.2\n",
+    )
+    write_file(
+        api_src / "modules" / "exam" / "application" / "settings_service.py",
+        "from memory_anki.modules.memory.public.commands import clamp_due_dates_for_sprint\n",
+    )
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+
+    errors: list[str] = []
+    check_architecture.check_exam_horizon_boundary(errors)
+
+    assert any("must not write review scheduling" in item for item in errors), errors

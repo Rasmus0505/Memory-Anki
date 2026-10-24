@@ -65,6 +65,28 @@ describe('FreestyleFeedPager', () => {
     expect((screen.getByRole('button', { name: '完成' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
+  it('sits on the right edge as a vertical column on phones, like desktop', () => {
+    const { container } = render(
+      <FreestyleFeedPager
+        canGoPrevious
+        canGoNext
+        canComplete
+        completeTitle="进入本轮结算"
+        onPrevious={vi.fn()}
+        onNext={vi.fn()}
+        onComplete={vi.fn()}
+      />,
+    )
+    const shell = container.firstElementChild as HTMLElement
+    // Right edge, vertically centred, never the old strip above the rating dock.
+    expect(shell.className).toContain('right-1')
+    expect(shell.className).toContain('top-1/2')
+    expect(shell.className).not.toContain('bottom-')
+    const group = screen.getByTestId('freestyle-feed-pager')
+    expect(group.className).toContain('flex-col')
+    expect(group.className).not.toContain('flex-row')
+  })
+
   it('releases the pager focus after paging so Enter flips the new card', () => {
     const props = renderPager()
     const next = screen.getByRole('button', { name: '下一张' }) as HTMLButtonElement
