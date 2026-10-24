@@ -102,13 +102,14 @@ describe('PalaceLadderProgress', () => {
     expect(screen.getByTestId('ladder-node-14').getAttribute('data-kind')).toBe('future')
   })
 
-  it('shows stage tooltip on node hover', async () => {
+  it('shows the interval band and the real gap on node hover', async () => {
     render(<PalaceLadderProgress palaceId={7} unitId="u1" />)
     await screen.findByTestId('ladder-node-7')
 
     fireEvent.mouseEnter(screen.getByTestId('ladder-node-7'))
     const tip = await screen.findByTestId('ladder-stage-tooltip')
-    expect(tip.textContent).toContain('7天阶段 · 当前')
+    expect(tip.textContent).toContain('间隔 7–13天 · 当前')
+    expect(tip.textContent).toContain('当前实际间隔 约 7 天后')
     expect(tip.textContent).toContain('单元：单元')
     expect(tip.textContent).toContain('下次复习：8月1日')
     expect(tip.textContent).toContain('全部记录：3 次')
@@ -122,19 +123,19 @@ describe('PalaceLadderProgress', () => {
 
     fireEvent.mouseEnter(screen.getByTestId('ladder-node-1'))
     const tip = await screen.findByTestId('ladder-stage-tooltip')
-    expect(tip.textContent).toContain('1天阶段 · 已走过')
-    expect(tip.textContent).toContain('无可用历史明细（可能由跨级或旧进度产生）')
+    expect(tip.textContent).toContain('间隔 1–2天 · 已走过')
+    expect(tip.textContent).toContain('无可用历史明细（可能由跨档或旧进度产生）')
     expect(tip.textContent).not.toContain('最近 —')
     expect(tip.textContent).not.toContain('耗时 0秒')
   })
 
   it('shows complete palace summary wording on track hover', async () => {
     render(<PalaceLadderProgress palaceId={7} unitId="u1" />)
-    const image = await screen.findByRole('img', { name: /复习阶梯/ })
+    const image = await screen.findByRole('img', { name: /复习间隔/ })
 
     fireEvent.mouseEnter(image.parentElement as HTMLElement)
     const tip = await screen.findByTestId('ladder-track-tooltip')
-    expect(tip.textContent).toContain('当前单元 · 7天阶段')
+    expect(tip.textContent).toContain('当前单元 · 当前间隔 约 7 天后')
     expect(tip.textContent).toContain('宫殿：2 个单元 · 1 个到期')
     expect(tip.textContent).toContain('全部记录：5 次 · 学习总时长 5分')
     expect(tip.textContent).toContain('评分：忘记 1 · 困难 1 · 记得 2 · 轻松 1')

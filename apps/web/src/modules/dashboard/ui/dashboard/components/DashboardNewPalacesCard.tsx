@@ -24,7 +24,10 @@ function flattenNewPalaces(
   data: Pick<DashboardResponse, 'today_new_palaces'>,
 ): FlatNewPalaceItem[] {
   const items: FlatNewPalaceItem[] = []
-  data.today_new_palaces.forEach((subjectGroup, subjectIndex) => {
+  // The response contract requires this list. If an old snapshot or a broken
+  // proxy omits it, degrade to "nothing new" instead of blanking the page.
+  const groups = data.today_new_palaces ?? []
+  groups.forEach((subjectGroup, subjectIndex) => {
     const subjectName = subjectGroup.subject?.name ?? null
     subjectGroup.chapter_groups.forEach((group) => {
       const chapterName = group.source_chapter?.name ?? '未关联章节'
@@ -66,7 +69,7 @@ export function DashboardNewPalacesCard({ data, className }: DashboardNewPalaces
     const start = (safePage - 1) * pageSize
     return flatItems.slice(start, start + pageSize)
   }, [flatItems, safePage, pageSize])
-  const showSubjectTitle = data.today_new_palaces.filter((item) => item.subject).length > 1
+  const showSubjectTitle = (data.today_new_palaces ?? []).filter((item) => item.subject).length > 1
 
   return (
     <Card className={cn('flex min-h-0 flex-col', className)}>

@@ -44,10 +44,7 @@ from memory_anki.modules.content.application.study_text_library_cache import (
 )
 from memory_anki.modules.content.presentation import router as palace_router
 from memory_anki.modules.dashboard.presentation import router as dashboard_router
-from memory_anki.modules.dashboard.presentation.router import (
-    start_dashboard_snapshot_worker,
-    stop_dashboard_snapshot_worker,
-)
+from memory_anki.modules.dashboard.presentation.router import request_dashboard_refresh
 from memory_anki.modules.english.presentation import router as english_router
 from memory_anki.modules.english_lookup.presentation import router as english_lookup_router
 from memory_anki.modules.exam.presentation import router as exam_router
@@ -128,6 +125,40 @@ def install_web_cache_headers(app: FastAPI) -> None:
     app.add_middleware(WebCacheHeadersMiddleware)
 
 
+class DashboardInvalidationMiddleware:
+    """Refresh the dashboard snapshot after a successful API mutation.
+
+    Without this the snapshot cache only expires on its five-second TTL, so a
+    review session followed by a dashboard visit could show pre-session counts.
+    The refresh stays in the dashboard context; this middleware only reports that
+    some write succeeded.
+    """
+
+    def __init__(self, app: ASGIApp):
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        method = str(scope.get("method") or "").upper()
+        path = str(scope.get("path") or "")
+        if method in {"GET", "HEAD", "OPTIONS"} or not path.startswith("/api/v1/"):
+            await self.app(scope, receive, send)
+            return
+
+        async def send_and_invalidate(message: Message) -> None:
+            if message["type"] == "http.response.start" and int(message.get("status") or 500) < 400:
+                request_dashboard_refresh()
+            await send(message)
+
+        await self.app(scope, receive, send_and_invalidate)
+
+
+def install_dashboard_invalidation(app: FastAPI) -> None:
+    app.add_middleware(DashboardInvalidationMiddleware)
+
+
 def _resolve_cors_origins() -> list[str]:
     """Default to local app/dev origins; append remote origins from the environment."""
     origins = [
@@ -165,11 +196,9 @@ async def lifespan(app: FastAPI):
     # API. Read requests defer stale projections, so the reconciler must run in
     # every serving mode or queued repairs never converge.
     start_reconcile_worker()
-    start_dashboard_snapshot_worker()
     try:
         yield
     finally:
-        stop_dashboard_snapshot_worker()
         stop_startup_backups()
         stop_mutation_response_purge_loop()
         if startup_mode == STARTUP_MODE_SERVE:
@@ -189,6 +218,7 @@ app.add_middleware(
 app.add_middleware(ApiTokenAuthMiddleware, token=MEMORY_ANKI_API_TOKEN)
 app.add_middleware(RequestLoggingMiddleware)
 install_web_cache_headers(app)
+install_dashboard_invalidation(app)
 
 ensure_runtime_dirs()
 app.mount("/api/attachments", StaticFiles(directory=str(ATTACHMENTS_DIR)), name="attachments")

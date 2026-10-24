@@ -96,7 +96,7 @@ describe('PalaceReviewUnitsPanel', () => {
     )
 
     expect(await screen.findByText('核心概念单元')).toBeTruthy()
-    expect(screen.getByText('7天级')).toBeTruthy()
+    expect(screen.getByText('间隔 7天')).toBeTruthy()
     expect(screen.getByText('到期')).toBeTruthy()
     expect(apiMocks.getPalaceReviewUnitsApi).toHaveBeenCalledWith(42)
   })
@@ -114,15 +114,21 @@ describe('PalaceReviewUnitsPanel', () => {
 
     await screen.findByText('核心概念单元')
     fireEvent.click(screen.getByText('核心概念单元'))
-    const stageSelect = await screen.findByDisplayValue('3 · 7天级')
-    fireEvent.change(stageSelect, { target: { value: '4' } })
+    const dueInput = await screen.findByDisplayValue('2026-08-01')
+    fireEvent.change(dueInput, { target: { value: '2026-08-10' } })
     fireEvent.click(screen.getByRole('button', { name: '保存进度' }))
 
     await waitFor(() => {
       expect(apiMocks.adjustUnitScheduleApi).toHaveBeenCalled()
     })
-    const [, payload] = apiMocks.adjustUnitScheduleApi.mock.calls[0] as [string, { stage_index: number; operation_id: string }]
-    expect(payload.stage_index).toBe(4)
+    const [, payload] = apiMocks.adjustUnitScheduleApi.mock.calls[0] as [
+      string,
+      { due_date: string; operation_id: string; stage_index?: number },
+    ]
+    // The panel no longer offers ladder levels: the due date is the only
+    // scheduling input, and FSRS owns the interval behind it.
+    expect(payload.stage_index).toBeUndefined()
+    expect(payload.due_date).toBe('2026-08-10')
     expect(payload.operation_id).toBeTruthy()
     await waitFor(() => expect(onScheduleChanged).toHaveBeenCalled())
   })

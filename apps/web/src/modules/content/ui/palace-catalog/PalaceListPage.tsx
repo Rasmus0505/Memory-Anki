@@ -109,7 +109,7 @@ export default function PalaceList() {
     return Number.isSafeInteger(subjectId) && subjectId > 0 ? subjectId : null
   }, [selectedSubjectId, showUncategorizedOnly])
   const memoryLadder = useSubjectMemoryLadder(subjectKey)
-  // 档位筛选是这本书内的临时视图，换学科时自动回到“全部”。
+  // 间隔段筛选是这本书内的临时视图，换学科时自动回到“全部”。
   const [stageFilter, setStageFilter] = useState<number | null>(null)
   useEffect(() => {
     setStageFilter(null)
@@ -329,7 +329,7 @@ export default function PalaceList() {
             renderPalaceCard={renderPalaceCard}
             emptyTitle={
               activeStage
-                ? (search ? '这一档里没有匹配的宫殿' : `「${stageLabel(activeStage.interval_days)}」档位没有宫殿`)
+                ? (search ? '这一段间隔里没有匹配的宫殿' : `「${stageLabel(activeStage.interval_days)}」间隔段没有宫殿`)
                 : search
                   ? '没有匹配的记忆宫殿'
                   : '这个书架还没有宫殿'
@@ -338,7 +338,7 @@ export default function PalaceList() {
               activeStage
                 ? (search
                     ? '换一个关键词，或查看全部宫殿。'
-                    : '这一档暂时没有宫殿；换一个档位，或查看全部宫殿。')
+                    : '这一段间隔暂时没有宫殿；换一段，或查看全部宫殿。')
                 : search
                   ? '换一个关键词，或清除搜索后查看全部宫殿。'
                   : '新建一个宫殿，或回到学科书架选择其他分类。'

@@ -6,11 +6,14 @@ import { expect, test, type Page, type Route } from './fixtures'
  * live study service.
  */
 
+// FSRS books every rating at a real interval; the fixture only needs plausible
+// numbers, so a first pass lands at 3 days (记得) or 7 days (轻松).
+// `target_stage_index` is the compat projection of `target_interval_days`.
 const EFFECTS = [
   { rating: 1, label: '忘记', passed: false, target_stage_index: 0, target_interval_days: 0, target_actual_interval_days: 0, target_due_date: '2026-07-27', retry_after_cards: 3, stage_action: 'reset' },
   { rating: 2, label: '困难', passed: false, target_stage_index: 0, target_interval_days: 0, target_actual_interval_days: 0, target_due_date: '2026-07-27', retry_after_cards: 3, stage_action: 'keep' },
-  { rating: 3, label: '记得', passed: true, target_stage_index: 1, target_interval_days: 1, target_actual_interval_days: 1, target_due_date: '2026-07-28', retry_after_cards: 0, stage_action: 'advance' },
-  { rating: 4, label: '轻松', passed: true, target_stage_index: 2, target_interval_days: 3, target_actual_interval_days: 3, target_due_date: '2026-07-30', retry_after_cards: 0, stage_action: 'advance' },
+  { rating: 3, label: '记得', passed: true, target_stage_index: 2, target_interval_days: 3, target_actual_interval_days: 3, target_due_date: '2026-07-30', retry_after_cards: 0, stage_action: 'advance' },
+  { rating: 4, label: '轻松', passed: true, target_stage_index: 3, target_interval_days: 7, target_actual_interval_days: 7, target_due_date: '2026-08-03', retry_after_cards: 0, stage_action: 'advance' },
 ]
 
 interface RateBody {
@@ -250,7 +253,7 @@ function holdRatings(page: Page) {
   return { held, installed }
 }
 
-test('lights a grade only once saved, queues the next tap, then opens a skippable round end', async ({ page }) => {
+test('lights a grade at once while saving, queues the next tap, then opens a skippable round end', async ({ page }) => {
   await installCardRoutes(page)
   const { held } = holdRatings(page)
   await page.goto('/freestyle')
@@ -261,16 +264,17 @@ test('lights a grade only once saved, queues the next tap, then opens a skippabl
   await expect(remember).toBeEnabled()
   await remember.evaluate((button: HTMLButtonElement) => button.click())
   await expect.poll(() => held.length).toBe(1)
-  // Not lit while the request is outstanding: only a quiet 保存中 hint.
-  await expect(remember).toHaveAttribute('aria-pressed', 'false')
+  // local-first：点下去立刻亮起，同时只显示安静的“保存中”，不声称已经保存。
+  await expect(remember).toHaveAttribute('aria-pressed', 'true')
   await expect(remember).toBeEnabled()
   await expect(page.getByTestId('freestyle-rating-saving-line')).toContainText('保存中')
   await expect(page.getByText(/已选记得/)).toHaveCount(0)
 
   // The 1–4 shortcut is the same rate path and stays live while the first
-  // request is still held; it queues behind it.
+  // request is still held. The newer intent is shown at once, but its request
+  // waits behind the first one on the card's serial lane.
   await page.keyboard.press('4')
-  await expect(easy).toHaveAttribute('aria-pressed', 'false')
+  await expect(easy).toHaveAttribute('aria-pressed', 'true')
   await expect(easy).toBeEnabled()
   expect(held.length).toBe(1)
 
@@ -285,11 +289,10 @@ test('lights a grade only once saved, queues the next tap, then opens a skippabl
   const settlement = page.getByTestId('freestyle-round-complete')
   await expect(next).toBeEnabled()
   await next.evaluate((button: HTMLButtonElement) => button.click())
-  // 结算页只留两个动作：清空做题进度、结算。宫殿清零文案在卡外横幅，不在这张卡里。
+  // 结算页只留结算与跳过；宫殿清零文案在卡外横幅，不在这张卡里。
   await expect(settlement.getByText('本轮完成')).toBeVisible()
-  await expect(settlement.getByTestId('freestyle-round-quiz-clear')).toBeVisible()
-  await expect(settlement.getByTestId('freestyle-round-settle')).toBeVisible()
-  await settlement.getByTestId('freestyle-round-skip-show').click()
+  await expect(settlement.getByRole('button', { name: '结算' })).toBeVisible()
+  await settlement.getByRole('button', { name: '跳过' }).click()
   await expect(settlement.getByText('本轮完成')).toBeVisible()
 })
 
@@ -303,12 +306,13 @@ test('reports an unsaved grade at once without claiming completion, then retries
   await expect(remember).toBeEnabled()
   await remember.evaluate((button: HTMLButtonElement) => button.click())
   await expect.poll(() => held.length).toBe(1)
-  await expect(remember).toHaveAttribute('aria-pressed', 'false')
+  // 点下去立刻亮起；失败后才回到未保存。
+  await expect(remember).toHaveAttribute('aria-pressed', 'true')
 
   const settlement = page.getByTestId('freestyle-round-complete')
   await expect(settlement).not.toBeVisible()
   held[0].release(400)
-  await expect(page.getByRole('alert').filter({ hasText: '这一次没有保存成功' })).toBeVisible()
+  await expect(page.getByTestId('freestyle-rating-unsaved-line')).toContainText('未保存记得')
   await expect(remember).toHaveAttribute('aria-pressed', 'false')
   await expect(page.getByTestId('freestyle-rating-effect-line')).toHaveCount(0)
   await expect(remember).toBeEnabled()
@@ -324,7 +328,7 @@ test('reports an unsaved grade at once without claiming completion, then retries
   const next = page.getByRole('button', { name: '下一张' })
   await expect(next).toBeEnabled()
   await next.evaluate((button: HTMLButtonElement) => button.click())
-  await expect(settlement.getByText('本轮总结')).toBeVisible()
+  await expect(settlement.getByText('本轮完成')).toBeVisible()
 })
 
 test('shows the start overview with today counts before any card loads', async ({ page }) => {
@@ -334,7 +338,7 @@ test('shows the start overview with today counts before any card loads', async (
       contentType: 'application/json',
       body: JSON.stringify({
         round: null,
-        today: { due_count: 4, overdue_count: 1, new_palace_count: 2 },
+        today: { due_count: 4, due_palace_count: 1, overdue_count: 1, new_unit_count: 0, new_palace_count: 2 },
         yesterday: {
           date: '2026-10-11',
           learned_units: 0,
@@ -350,5 +354,5 @@ test('shows the start overview with today counts before any card loads', async (
   const overview = page.getByRole('region', { name: '开始概览' })
   await expect(overview).toBeVisible()
   await expect(overview.getByText('待复习')).toBeVisible()
-  await expect(overview.getByText('4', { exact: true })).toBeVisible()
+  await expect(overview.getByText('1/4', { exact: true })).toBeVisible()
 })

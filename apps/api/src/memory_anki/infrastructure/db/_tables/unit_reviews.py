@@ -8,6 +8,7 @@ from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -53,9 +54,20 @@ class ReviewUnitState(Base):
     membership_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    # ``stage_index`` is retained as a display/compatibility projection of the
+    # FSRS interval. It no longer drives scheduling; see unit_scheduler.py.
     stage_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     has_passed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     due_date: Mapped[date] = mapped_column(Date, nullable=False)
+    # FSRS memory state. Nullable so the additive migration can land before the
+    # one-time history backfill; a NULL state is treated as a new card.
+    fsrs_stability: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fsrs_difficulty: Mapped[float | None] = mapped_column(Float, nullable=True)
+    fsrs_state: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    fsrs_step: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    fsrs_due_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    fsrs_last_review: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    fsrs_scheduler_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
     topology_order: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
     )

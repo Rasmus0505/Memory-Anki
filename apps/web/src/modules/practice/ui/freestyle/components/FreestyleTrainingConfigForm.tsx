@@ -55,17 +55,6 @@ const QUIZ_ORDER_OPTIONS: Array<{ value: FreestyleQuizOrder; label: string; hint
   { value: 'random', label: '随机', hint: '所有题目打乱顺序，不区分新旧。' },
 ]
 
-const QUESTION_TYPE_OPTIONS = [
-  { value: 'all', label: '全部题型' },
-  { value: 'multiple_choice', label: '选择题' },
-  { value: 'true_false', label: '判断题' },
-  { value: 'fill_blank', label: '填空题' },
-  { value: 'matching', label: '匹配题' },
-  { value: 'ordering', label: '排序题' },
-  { value: 'categorization', label: '分类题' },
-  { value: 'short_answer', label: '简答题' },
-] as const
-
 const MIX_STRATEGY_OPTIONS: Array<{ value: FreestyleFeedConfig['mix']['strategy']; label: string; hint: string }> = [
   { value: 'ratio', label: '按比例穿插', hint: '两类内容按下面的比例交替出现。' },
   { value: 'random', label: '全局随机', hint: '两类内容完全打乱，比例不生效。' },
@@ -220,7 +209,7 @@ export function summarizeRoundConfig(
     const quiz = config.streams.quiz
     rows.push({
       label: '题目',
-      value: `本轮宫殿中 ${quiz.specific_palace_ids.length || streamPalaceCount(config.streams.memory_palace, subjects)} 座，${labelOf(quiz.question_type, QUESTION_TYPE_OPTIONS)}，${labelOf(quiz.order, QUIZ_ORDER_OPTIONS)}`,
+      value: `本轮宫殿中 ${quiz.specific_palace_ids.length || streamPalaceCount(config.streams.memory_palace, subjects)} 座，${labelOf(quiz.order, QUIZ_ORDER_OPTIONS)}`,
     })
   }
   if (streams.includes('memory_palace')) {
@@ -429,13 +418,6 @@ export function FreestyleTrainingConfigForm({
             <div className="text-xs font-medium text-muted-foreground">题目范围（可跨所有学科和宫殿）</div>
             {renderScopeArea('quiz')}
           </div>
-          <Field label="题型">
-            <select className={FIELD_CLASS} value={value.question_type} onChange={(event) => onChange(updateStream(config, 'quiz', { question_type: event.target.value }))}>
-              {QUESTION_TYPE_OPTIONS.map((item) => (
-                <option key={item.value} value={item.value}>{item.label}</option>
-              ))}
-            </select>
-          </Field>
           <div className="space-y-1.5">
             <div className="text-xs font-medium text-muted-foreground">出题顺序</div>
             <OptionCards

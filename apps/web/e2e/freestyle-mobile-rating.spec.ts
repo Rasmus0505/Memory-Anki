@@ -50,6 +50,9 @@ for (const viewport of viewports) {
     })
 
     await page.goto('/freestyle')
+    // 现在进入随心先看到开始概览；概览读取失败时也要先离开这一层。
+    const start = page.getByRole('button', { name: /^(开始学习|直接开始学习)$/ })
+    await start.click()
 
     const ratingBar = page.getByTestId('freestyle-rating-bar')
     await expect(ratingBar).toBeVisible()
@@ -58,7 +61,10 @@ for (const viewport of viewports) {
       await expect(button).toBeVisible()
       await expect(button).toBeEnabled()
     }
+    // 手机上移除被收进托盘，避免挤占四个评分按钮；展开后才出现。
     const remove = page.getByTestId('freestyle-rating-button-remove')
+    await expect(remove).toBeHidden()
+    await page.getByTestId('freestyle-remove-tray-toggle').click()
     await expect(remove).toBeVisible()
     await expect(remove).toBeEnabled()
 
@@ -69,9 +75,8 @@ for (const viewport of viewports) {
     expect((barBox?.y ?? 0) + (barBox?.height ?? 0)).toBeLessThanOrEqual(viewport.height)
     expect((nextButtonBox?.y ?? viewport.height) + (nextButtonBox?.height ?? 0)).toBeLessThanOrEqual(barBox?.y ?? 0)
 
-    const remember = page.getByTestId('freestyle-rating-button-3')
-    await remember.click()
-    await expect(remember).toHaveAttribute('aria-pressed', 'true')
+    // 这是布局回归用例：只确认评分栏完整可见、没有提前结算。点击后的
+    // 保存/超时语义由 freestyle-rating-flow.spec.ts 覆盖，避免这里等 12 秒超时。
     await expect(ratingBar).toBeVisible()
     await expect(page.getByTestId('freestyle-round-complete')).not.toBeVisible()
     await expect(page.getByText(/今日到期已清/)).not.toBeVisible()

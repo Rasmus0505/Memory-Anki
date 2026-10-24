@@ -109,8 +109,8 @@ def test_ladder_progress_tracks_current_stage_and_pass_stats(db_session):
         operation_id="op-1",
         rating=3,
     )
-    # 记得 on first pass lands at the one-day stage.
-    assert state.stage_index == 1
+    # 记得 on a first pass books the FSRS initial good interval.
+    assert state.stage_index >= 1
 
     payload = get_palace_ladder_progress(
         db_session,
@@ -122,10 +122,11 @@ def test_ladder_progress_tracks_current_stage_and_pass_stats(db_session):
     assert payload["ladder"] == [0, 1, 3, 7, 14, 30, 60, 120, 240, 365]
     assert payload["scope"] == "unit"
     assert payload["current"]["unit_id"] == state.id
-    assert payload["current"]["stage_index"] == 1
-    assert payload["current"]["interval_days"] == 1
+    interval = payload["current"]["interval_days"]
+    assert interval >= 1
+    assert payload["current"]["stage_index"] == state.stage_index
     assert payload["palace"]["unit_count"] == 1
-    assert payload["palace"]["stage_histogram"][1] == 1
+    assert payload["palace"]["stage_histogram"][state.stage_index] == 1
     assert payload["unit_range_stats"]["total_reviews"] == 1
     assert payload["unit_range_stats"]["rating_share"]["remember"] == 1
     assert payload["unit_range_stats"]["per_stage"][0]["pass_count"] == 1
@@ -152,7 +153,8 @@ def test_ladder_progress_attributes_easy_jump_to_reviewed_stage(db_session):
         range_key="all",
     )
 
-    assert payload["current"]["stage_index"] == 2
+    assert payload["current"]["stage_index"] >= 2
+    # The pass is attributed to the interval band the unit was reviewed at.
     assert payload["unit_range_stats"]["per_stage"][0]["pass_count"] == 1
     assert payload["unit_range_stats"]["per_stage"][1]["pass_count"] == 0
     assert payload["unit_range_stats"]["per_stage"][2]["pass_count"] == 0
@@ -163,8 +165,8 @@ def test_ladder_progress_http_endpoint(session_factory, make_client, db_session)
 
     state = _seed_review_unit(db_session, title="HTTP 阶梯宫殿")
     _pass_once(db_session, state, encounter_id="enc-http", operation_id="op-http", rating=4)
-    # 轻松 on first pass skips to the three-day stage.
-    assert state.stage_index == 2
+    # 轻松 on a first pass books a longer FSRS interval than 记得.
+    assert state.stage_index >= 2
     palace_id = state.palace_id
     unit_id = state.id
 
@@ -175,9 +177,9 @@ def test_ladder_progress_http_endpoint(session_factory, make_client, db_session)
     )
     assert response.status_code == 200
     item = response.json()["item"]
-    assert item["current"]["stage_index"] == 2
+    assert item["current"]["stage_index"] == state.stage_index
     assert item["unit_range_stats"]["rating_share"]["easy"] == 1
-    assert item["palace"]["stage_histogram"][2] == 1
+    assert item["palace"]["stage_histogram"][state.stage_index] == 1
 
 
 def test_ladder_progress_rejects_bad_range(session_factory, make_client, db_session):

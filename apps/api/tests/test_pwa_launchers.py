@@ -938,8 +938,12 @@ def test_quality_gate_exposes_real_launcher_smoke_option():
 
     assert '"--launchers"' in quality_gate
     assert 'QualityStep("Windows launcher smoke"' in quality_gate
-    assert '"start-all.bat", "--smoke-test"' in launcher_smoke
-    assert '"start-all.bat", "--desktop"' in launcher_smoke
+    # The smoke harness runs the batch file through cmd.exe with an absolute
+    # path; assert the intent (this launcher, this flag), not the exact list
+    # formatting, which changes whenever the invocation is hardened.
+    assert "start-all.bat" in launcher_smoke
+    assert '"--smoke-test"' in launcher_smoke
+    assert '"--desktop"' in launcher_smoke
     assert "OPENAPI_URL" in launcher_smoke
     assert "_electron_pids" in launcher_smoke
 

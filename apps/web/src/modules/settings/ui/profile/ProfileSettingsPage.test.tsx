@@ -40,7 +40,7 @@ describe('ProfileSettingsPage', () => {
     vi.restoreAllMocks()
   })
 
-  it('shows the fixed unit ladder without legacy node scheduling settings', async () => {
+  it('explains FSRS scheduling instead of a fixed interval ladder', async () => {
     mockSettings()
 
     render(
@@ -49,9 +49,10 @@ describe('ProfileSettingsPage', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText('宫殿复习阶梯')).toBeTruthy()
-    expect(screen.getByLabelText('固定复习间隔').textContent).toContain('365 天')
-    expect(screen.queryByText(/FSRS/)).toBeNull()
+    expect(await screen.findByText('宫殿复习排期')).toBeTruthy()
+    expect(screen.getByText(/FSRS/)).toBeTruthy()
+    expect(screen.getByText(/真实间隔/)).toBeTruthy()
+    expect(screen.queryByText(/第几天/)).toBeNull()
     expect(screen.queryByText(/节点.*评分/)).toBeNull()
   })
 
@@ -78,7 +79,7 @@ describe('ProfileSettingsPage', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText('宫殿复习阶梯')).toBeTruthy()
+    expect(await screen.findByText('宫殿复习排期')).toBeTruthy()
     expect(screen.queryByText('目标保持率')).toBeNull()
     expect(screen.queryByLabelText('最大间隔（天）')).toBeNull()
     expect(screen.queryByLabelText('掌握跨度（天）')).toBeNull()

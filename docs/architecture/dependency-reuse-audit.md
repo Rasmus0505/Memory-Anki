@@ -29,6 +29,15 @@ genuinely duplicate existing work, ranked by value.
 
 ## 1. Domain scheduling: fixed ladder vs FSRS — the highest-value gap
 
+> 2026-10-24 status: **done.** `unit_fsrs_adapter.py` maps the four ratings onto
+> FSRS while preserving the product rules, `unit_scheduler.rate_unit` now wraps it,
+> and migration `0077` adds the per-unit FSRS columns. A one-time startup replay
+> recomputes every active unit from its real rating history (rescue backup
+> `pre-fsrs-switch`). The ladder survives only as the `stage_index` display
+> projection. The read-only comparison that justified the switch is
+> `deliverables/2026-10-24-FSRS影子适配基线.md`; the shadow recorder and its
+> tables are retired. See `review-boundary.md` and `proposal-fsrs-unification.md`.
+
 `apps/api/src/memory_anki/modules/memory/application/unit_scheduler.py` (207
 lines) implements a hand-written fixed-interval ladder:
 
@@ -183,9 +192,9 @@ layer (scheduling, layout) has grown large enough to deserve the same
 1. Finish and verify the in-flight storage-lock contention fix (already
    implemented in this session; see `storage-lock-contention.md`) — it is the
    user-visible pain and the prerequisite for the app feeling reliable.
-2. Scoped task: replace the scheduling ladder with FSRS behind the existing
-   `unit_scheduler` port, preserving the product rules and the legacy-interval
-   migration. Highest long-term product value.
+2. ~~Replace the scheduling ladder with FSRS behind the existing
+   `unit_scheduler` port.~~ Done 2026-10-24: FSRS is the production unit
+   scheduler and `stage_index` is only a display projection.
 3. Consolidate the duplicated deep-equal and id generation helpers.
 4. Evaluate a layout library for the tree positioning only, leaving drop-target
    geometry in place.

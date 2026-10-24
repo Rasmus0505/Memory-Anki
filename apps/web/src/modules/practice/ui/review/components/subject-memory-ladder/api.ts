@@ -5,7 +5,7 @@ import {
 } from './model'
 
 function fail(): never {
-  throw new Error('记忆档位数据格式不兼容，请刷新后重试。')
+  throw new Error('记忆间隔数据格式不兼容，请刷新后重试。')
 }
 
 function object(value: unknown): Record<string, unknown> {

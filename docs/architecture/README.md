@@ -102,6 +102,8 @@ Frontend lint is a zero-warning contract. The `apps/web` lint script runs ESLint
 - AI run workspace lifecycle: `docs/architecture/ai-run-workspace.md`
 - Prompt catalog boundary: `docs/architecture/prompt-catalog.md`
 - Review context boundary: `docs/architecture/review-boundary.md`
+- Review scheduling is FSRS (`memory/application/unit_fsrs_adapter.py`; `stage_index` is a display projection only): `docs/architecture/review-boundary.md`
+- Read-only historical comparison of the retired ladder vs FSRS: `python tools/review_fsrs_shadow.py`
 - Live study presence (PWA/desktop mirror): `docs/architecture/live-study-presence.md`
 - Read-model purity: `docs/architecture/read-models.md`
 - Dashboard composition boundary: `docs/architecture/dashboard-read-model.md`
@@ -161,6 +163,7 @@ the list cannot silently keep exempting a path that no longer needs it.
 - Resolve the `modules→widgets` boundary exceptions (practice/quiz importing `mindmap-review-flow` / `palace-memory-lookup` APIs) by sinking those APIs behind module publics.
 - Split the three oversized `shared/ui/mindmap-canvas` files (`layout.ts`, `NodeCard.tsx`, `useMindMapCanvasState.ts`).
 - Split `shared/components/ui/dialog.tsx` and the freestyle model test harnesses `freestyleProgressSegments.test.ts` / `roundCompletion.test.ts`; registered as temporary quality-gate exceptions until extracted.
+- 拆分本轮轮次计划与评分工作撑大的三个随心文件：`FreestyleRoundSheet.tsx`（拆成弹层子组件）、`freestyleProgressSegments.ts`（模型与摘要分离）、`ratingSaveStore.ts`（类型/纯函数与 store 分离）。目前登记为临时门禁例外；下一次随心重构应删掉这三条例外。
 - Optional: rename nav-section keys `'knowledge'`→`'create'`, `'review'`→`'insights'` (needs pageHistoryStore key migration).
 
 Completed and therefore no longer listed: `PalaceEditorPage.tsx` (689 lines),
@@ -172,9 +175,12 @@ Completed and therefore no longer listed: `PalaceEditorPage.tsx` (689 lines),
 
 `docs/architecture/domain-rules-not-replaced.md` records where an off-the-shelf
 library was evaluated and rejected, with the measured or code-level reason. Read it
-before "modernizing" `memory/application/unit_scheduler.py`, `core/time.py`,
+before "modernizing" `memory/application/unit_fsrs_adapter.py`, `core/time.py`,
 `quiz/application/manual_text_quiz_parser.py`, or the LLM client's retry handling —
 each carries a product rule that the obvious library does not express.
+(`unit_scheduler.py` itself is now a thin wrapper over the FSRS adapter; the
+product rules it used to own live in the adapter and are pinned by
+`test_unit_fsrs_adapter.py` / `test_unit_scheduler_rules.py`.)
 
 
 ## Runtime-owned workflows

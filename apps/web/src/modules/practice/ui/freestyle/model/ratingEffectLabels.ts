@@ -30,17 +30,9 @@ export function ratingEffectLabel(effect: UnitRatingEffectDto, retryAfterCards: 
   if (effect.passed) {
     return `${passedGapDays(effect)}天后复习 · ${localDateLabel(effect.target_due_date)}`
   }
-  const targetStage = effect.target_interval_days === 0
-    ? '首学阶段'
-    : `${effect.target_interval_days}天级`
-  // Drive the verb off stage_action, not the rating: 忘记 on a unit that already
-  // passed now keeps part of its position, so it lands lower rather than resetting.
-  const stage = effect.stage_action === 'reset'
-    ? `重置到${targetStage}`
-    : effect.stage_action === 'lower'
-      ? `降至${targetStage}`
-      : `保持${targetStage}`
-  return `${retryPositionLabel(retryAfterCards)} · ${stage}`
+  // FSRS has no ladder position to reset or demote; a failed grade is simply
+  // retry work scheduled for the same study day.
+  return `${retryPositionLabel(retryAfterCards)} · 今天再练`
 }
 
 /**

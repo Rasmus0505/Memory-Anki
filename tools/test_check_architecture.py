@@ -1143,11 +1143,7 @@ def test_identity_keyed_progress_rejects_private_ledgers(
     monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
     monkeypatch.setattr(check_architecture, "API_SRC", api_src)
     write_file(
-        api_src / "modules" / "practice" / "application" / "round_state_service.py",
-        "def apply_round_rating():\n    return None\n",
-    )
-    write_file(
-        api_src / "modules" / "practice" / "domain" / "peer_progress.py",
+        api_src / "modules" / "practice" / "domain" / "round_plan_values.py",
         "def progress_identity():\n    return ''\n",
     )
     write_file(
@@ -1158,15 +1154,18 @@ def test_identity_keyed_progress_rejects_private_ledgers(
         web_src / "modules" / "practice" / "ui" / "freestyle" / "hooks" / "useFreestyleQuizFlow.ts",
         "export function useFreestyleQuizFlow() {}\n",
     )
-    write_file(tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md", "two workspaces\n")
+    write_file(tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md", "unit ratings\n")
     write_file(tmp_path / "docs" / "architecture" / "unified-training-evidence.md", "quiz evidence\n")
 
     errors: list[str] = []
     check_architecture.check_identity_keyed_progress(errors)
 
-    assert any("other active rounds" in error for error in errors)
+    assert any("stable unit identity" in error for error in errors)
     assert any("private ledger" in error for error in errors)
     assert any("shared question progress" in error for error in errors)
+    assert any("identity-keyed unit ratings" in error for error in errors)
+    assert any("entries share question progress" in error for error in errors)
+    assert any("survive refresh" in error for error in errors)
 
 
 def test_identity_keyed_progress_rejects_false_sync_acknowledgment(
@@ -4314,7 +4313,7 @@ def test_backup_snapshot_policy_blocks_full_create_on_router(
     monkeypatch.setattr(check_architecture, "API_SRC", api_src)
     write_file(
         api_src / "modules" / "backups" / "application" / "backup_lifecycle.py",
-        "def ensure_daily_backup():\n    return create_rolling_backup(\"startup\")\n",
+        "def ensure_daily_backup():\n    return _write_rolling_backup_locked(\"startup\")\n",
     )
     write_file(
         api_src / "modules" / "backups" / "presentation" / "router.py",
@@ -4989,3 +4988,92 @@ def test_exam_horizon_boundary_rejects_exam_writing_scheduling(
     check_architecture.check_exam_horizon_boundary(errors)
 
     assert any("must not write review scheduling" in item for item in errors), errors
+
+
+def test_review_scheduler_boundary_rejects_fsrs_outside_the_adapter(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """One adapter owns the library seam, so product rules cannot drift apart."""
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    application = api_src / "modules" / "memory" / "application"
+    write_file(application / "unit_fsrs_adapter.py", "from fsrs import Scheduler\n")
+    write_file(
+        application / "unit_scheduler.py",
+        "from fsrs import Scheduler\nfrom .unit_fsrs_adapter import rate_unit_with_fsrs\n",
+    )
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+
+    errors: list[str] = []
+    check_architecture.check_review_scheduler_boundary(errors)
+
+    assert any(
+        "only unit_fsrs_adapter.py may import the fsrs library" in item for item in errors
+    ), errors
+
+
+def test_review_scheduler_boundary_rejects_a_scheduler_that_bypasses_the_adapter(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Re-implementing the ladder locally would split product rules in two."""
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    application = api_src / "modules" / "memory" / "application"
+    write_file(application / "unit_fsrs_adapter.py", "from fsrs import Scheduler\n")
+    write_file(
+        application / "unit_scheduler.py",
+        "INTERVAL_DAYS = (0, 1, 3)\n\ndef rate_unit():\n    return None\n",
+    )
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+
+    errors: list[str] = []
+    check_architecture.check_review_scheduler_boundary(errors)
+
+    assert any("must route through unit_fsrs_adapter" in item for item in errors), errors
+
+
+def test_review_scheduler_boundary_rejects_the_retired_shadow_recorder(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """The shadow compared against the ladder; with the ladder retired it is dead."""
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    application = api_src / "modules" / "memory" / "application"
+    write_file(application / "unit_fsrs_adapter.py", "from fsrs import Scheduler\n")
+    write_file(
+        application / "unit_scheduler.py",
+        "from .unit_fsrs_adapter import rate_unit_with_fsrs\n",
+    )
+    write_file(
+        application / "unit_review_service.py",
+        "from .unit_fsrs_shadow import record_shadow_rating\n",
+    )
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+
+    errors: list[str] = []
+    check_architecture.check_review_scheduler_boundary(errors)
+
+    assert any("shadow recorder is retired" in item for item in errors), errors
+
+
+def test_review_scheduler_boundary_accepts_the_production_wiring(
+    tmp_path: Path, monkeypatch
+) -> None:
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    application = api_src / "modules" / "memory" / "application"
+    write_file(application / "unit_fsrs_adapter.py", "from fsrs import Scheduler\n")
+    write_file(
+        application / "unit_scheduler.py",
+        "from .unit_fsrs_adapter import rate_unit_with_fsrs\n",
+    )
+    write_file(
+        application / "unit_review_service.py",
+        "from .unit_fsrs_adapter import FsrsUnitState\n",
+    )
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+
+    errors: list[str] = []
+    check_architecture.check_review_scheduler_boundary(errors)
+
+    assert errors == []

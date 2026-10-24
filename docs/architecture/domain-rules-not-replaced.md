@@ -29,37 +29,28 @@
 
 处理：不替换。本 worktree 保持 `HEAD` 的 77 行版本不动，等主工作区那份提交后再评估。
 
-## 2. `unit_scheduler.py` — 替换会改变用户可见文案，且被测试显式钉住
+## 2. `unit_scheduler.py` — 已被 FSRS 取代（2026-10-24）
 
-阶梯 `(0, 1, 3, 7, 14, 30, 60, 120, 240, 365)` **硬编码在 4 处，其中 3 处是前端 UI**：
+> 本节最初记录的是「为什么当时不替换固定阶梯」。结论已经执行：**FSRS 现在是唯一的
+> 生产排期器**。阶梯只剩 `stage_index` 这个兼容投影，界面改为显示每个单元的真实间隔。
+> 当前契约见 [review-boundary.md](./review-boundary.md)；当初的取舍记录见
+> [proposal-fsrs-unification.md](./proposal-fsrs-unification.md)。
 
-- `apps/api/.../memory/application/unit_scheduler.py:11` —— 权威定义
-- `apps/web/.../review/components/PalaceLadderProgress.tsx:25` —— `DEFAULT_LADDER`，渲染工具栏阶梯条
-- `apps/web/.../review/components/PalaceReviewUnitsPanel.tsx:19`
-- `apps/web/.../settings/ui/profile/ProfileSettingsPage.tsx:115`
+替换不是把旧规则丢掉，而是把它们留在适配器里：
 
-前端把它渲染成**面向用户的文案**（`modules/practice/ui/freestyle/model/ratingEffectLabels.ts:35`）：
-
-```ts
-: `${effect.target_interval_days}天级`     // 「14天级」
-```
-
-并且 `apps/api/tests/test_unit_scheduler_rules.py` 的第一条用例就是
-`test_ladder_shape_is_unchanged`，另有 `test_fuzz_is_deterministic_per_unit_so_preview_matches_commit`
-守住「预览与提交必须一致」。
-
-其余不可替换的理由（详见 `unit_scheduler.py` 内注释）：
-
-1. **`rate_unit` 是纯函数**，这正是 undo（`_undo_one_rating_operation`）与快照重放
-   （`_restore_snapshot`）成立的前提。FSRS 的 `Scheduler.review_card` 会改写 `Card`
-   内部状态，重放快照需要重建其完整记忆状态。
-2. **预览必须等于提交**。`fuzz_key` 在预览用 `encounter.unit_id`、提交用 `state.id`，
-   二者同值（已核对），配合 `blake2b` 确定性 fuzz 才能让按钮预告的日期与实际写入一致。
-   FSRS 的 fuzz 是随机的，无法在不 patch 的情况下保证一致。
-3. **`schedule_locked` 是 FSRS 无法表达的产品规则**：提前复习（填充卡）只记录、不推进阶梯。
-   缺了它，越勤快清队列、填充卡越多、间隔爬得越快。
-4. **持久化 schema 绑定**：`ReviewUnitState` 只有 `stage_index` / `has_passed` / `due_date`，
-   没有 stability / difficulty。换 FSRS 需要迁移全部既有单元。
+1. **`rate_unit` 仍是纯函数入口**，undo（`_undo_one_rating_operation`）与快照重放
+   （`_restore_snapshot`）依赖它。适配器只在内部构造 `Card` 并调用 `Scheduler`，
+   快照里额外存 FSRS 载荷；没有载荷的旧快照会清空列后按历史重放。
+2. **预览必须等于提交**。FSRS 自带的 fuzz 是随机的，适配器关闭它并复用同一套
+   `blake2b` 确定性偏移（按单元 id，7 天以上才生效）。
+3. **`schedule_locked` 仍由产品层实现**：提前复习（填充卡）只记录、不推进排期，
+   且这次通过根本不喂给 FSRS，避免填充卡把间隔越推越长。
+4. **schema 已迁移**：`ReviewUnitState` 增加了 `fsrs_stability` / `fsrs_difficulty` /
+   `fsrs_state` / `fsrs_step` / `fsrs_due_at` / `fsrs_last_review` /
+   `fsrs_scheduler_version`（迁移 `0077`），并由启动时的一次性回放按真实评分历史
+   重算所有活跃单元；撤回与改分仍然从快照与评分账本重建。
+5. **用户可见文案已改**：不再出现「N天级」，`ratingEffectLabels` 显示
+   `${n}天后复习`，进度条按真实间隔分段，单元面板直接使用 `due_date` 排期。
 
 ## 3. `manual_text_quiz_parser.py` — 换成 grammar 会拒绝它要抢救的输入
 

@@ -8,10 +8,12 @@ import {
 } from './model'
 
 describe('subject memory ladder model', () => {
-  it('names stages in learner language', () => {
-    expect(stageLabel(0)).toBe('刚学')
-    expect(stageLabel(14)).toBe('14天')
-    expect(stageLabel(365)).toBe('1年')
+  it('names interval bands as day ranges, never as levels', () => {
+    expect(stageLabel(0)).toBe('首学')
+    expect(stageLabel(1)).toBe('1–2天')
+    expect(stageLabel(14)).toBe('14–29天')
+    expect(stageLabel(240)).toBe('240–364天')
+    expect(stageLabel(365)).toBe('365天以上')
   })
 
   it('keeps an empty node visible but smaller than a full node', () => {

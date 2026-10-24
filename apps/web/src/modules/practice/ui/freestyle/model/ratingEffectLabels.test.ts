@@ -51,7 +51,7 @@ describe('ratingEffectLabel', () => {
     expect(ratingEffectLabel(legacy, 0)).toBe('1天后复习 · 7月28日')
   })
 
-  it('drives the verb off stage_action so a lapsed mature unit drops instead of resetting', () => {
+  it('never talks about ladder levels: a failed grade is same-day retry work', () => {
     const lapsed = effect({
       rating: 1,
       label: '忘记',
@@ -63,11 +63,11 @@ describe('ratingEffectLabel', () => {
       retry_after_cards: 3,
       stage_action: 'lower',
     })
-    expect(ratingEffectLabel(lapsed, 3)).toBe('3张后重练 · 降至14天级')
-    expect(ratingEffectLabel({ ...lapsed, stage_action: 'reset', target_interval_days: 0 }, 2))
-      .toBe('2张后重练 · 重置到首学阶段')
-    expect(ratingEffectLabel({ ...lapsed, stage_action: 'keep', target_interval_days: 0 }, 3))
-      .toBe('3张后重练 · 保持首学阶段')
+    expect(ratingEffectLabel(lapsed, 3)).toBe('3张后重练 · 今天再练')
+    for (const action of ['reset', 'keep', 'lower'] as const) {
+      expect(ratingEffectLabel({ ...lapsed, stage_action: action }, 2))
+        .toBe('2张后重练 · 今天再练')
+    }
   })
 })
 

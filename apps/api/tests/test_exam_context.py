@@ -169,7 +169,6 @@ def test_sprint_mode_caps_the_horizon_and_seeds_milestones(make_client, db_sessi
     assert board["sprint"]["active"] is True
     # The horizon bounds the booking: the last usable date is the exam eve, so the
     # longest gap is days_left - 1. The ladder still decides the cadence.
-    assert board["sprint"]["last_due"] == "2026-12-19"
     assert board["sprint"]["max_interval_days"] == 57
     assert board["sprint"]["last_due"] == (date.fromisoformat(exam_day) - timedelta(days=1)).isoformat()
     # The plan's checkpoints are seeded once, not on every read.

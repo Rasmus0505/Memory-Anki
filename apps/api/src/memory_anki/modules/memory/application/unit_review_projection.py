@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, time, timedelta
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -29,6 +29,7 @@ from .unit_reconcile_scheduler import schedule_reconcile
 from .unit_schedule_projection import (
     _parse_due_date,
     _schedule_snapshot_from_row,
+    unit_interval_days,
 )
 from .unit_schedule_projection import (
     _schedule_snapshot as _schedule_snapshot,
@@ -39,6 +40,7 @@ from .unit_scheduler import (
     clamp_schedulable_due,
     clamp_stage,
     latest_schedulable_due,
+    stage_from_legacy_interval_days,
 )
 
 
@@ -283,10 +285,20 @@ def adjust_unit_schedule(
         raise ValueError("at least one of stage_index, due_date, has_passed is required")
 
     before = _schedule_snapshot_from_row(row)
-    if stage_index is not None:
-        row.stage_index = clamp_stage(int(stage_index))
+    today = local_day()
     if due_date is not None:
-        row.due_date = assert_schedulable_due(_parse_due_date(due_date), today=local_day())
+        row.due_date = assert_schedulable_due(_parse_due_date(due_date), today=today)
+        row.stage_index = stage_from_legacy_interval_days(
+            max(0, (row.due_date - today).days)
+        )
+        row.fsrs_due_at = datetime.combine(row.due_date, time(4))
+    elif stage_index is not None:
+        # ``stage_index`` is now only a display bucket. If a caller still sends
+        # it, book the matching nominal interval so the queue and the label do
+        # not disagree; a due date is the authoritative field.
+        row.stage_index = clamp_stage(int(stage_index))
+        row.due_date = today + timedelta(days=INTERVAL_DAYS[row.stage_index])
+        row.fsrs_due_at = datetime.combine(row.due_date, time(4))
     if has_passed is not None:
         row.has_passed = bool(has_passed)
     row.revision += 1
@@ -455,7 +467,7 @@ def unit_payload(
         ),
         "revision": row.revision,
         "stage_index": row.stage_index,
-        "interval_days": INTERVAL_DAYS[row.stage_index],
+        "interval_days": unit_interval_days(row),
         "has_passed": row.has_passed,
         "due_date": row.due_date.isoformat(),
         "due": row.due_date <= local_day(),

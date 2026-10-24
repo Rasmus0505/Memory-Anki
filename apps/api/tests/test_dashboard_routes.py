@@ -63,6 +63,23 @@ def test_seeded_palace_with_permanent_mark_unit_shows_up(client, session_factory
     assert body["today_new_palace_count"] == 1
 
 
+def test_dashboard_cache_is_invalidated_after_a_write(client, session_factory, monkeypatch):
+    monkeypatch.setattr(dashboard_router, "_DASHBOARD_SNAPSHOT_TTL_SECONDS", 3600.0)
+    assert client.get("/api/v1/dashboard").json()["today_new_palace_count"] == 0
+
+    with session_factory() as session:
+        now = utc_now_naive()
+        session.add(Palace(title="Fresh", editor_doc=EDITOR_DOC, created_at=now, updated_at=now))
+        session.commit()
+
+    # 同一个五秒窗口内，普通读取仍复用快照；只有写请求的失效信号能让它重建。
+    assert client.get("/api/v1/dashboard").json()["today_new_palace_count"] == 0
+
+    dashboard_router.request_dashboard_refresh()
+
+    assert client.get("/api/v1/dashboard").json()["today_new_palace_count"] == 1
+
+
 def test_dashboard_payload_has_no_duration_fields(session_factory):
     from memory_anki.modules.dashboard.application.service import build_dashboard_payload
 

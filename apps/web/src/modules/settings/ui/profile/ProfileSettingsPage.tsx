@@ -108,16 +108,14 @@ export default function ProfileSettingsPage({
           <ThemeSettingsCard />
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">宫殿复习阶梯</CardTitle>
+              <CardTitle className="text-base">宫殿复习排期</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-2" aria-label="固定复习间隔">
-                {[0, 1, 3, 7, 14, 30, 60, 120, 240, 365].map((days) => (
-                  <span key={days} className="rounded-md border bg-muted px-2.5 py-1 text-sm tabular-nums">
-                    {days === 0 ? '首学' : `${days} 天`}
-                  </span>
-                ))}
-              </div>
+            <CardContent className="space-y-2 text-sm text-muted-foreground">
+              <p>
+                每个记忆单元按自己的记忆状态单独排期（FSRS），目标记忆率 90%，最长间隔一年。
+                界面显示的是每个单元的真实间隔。
+              </p>
+              <p>忘记或困难：当天再练；记得或轻松：至少排到明天，越稳的单元间隔越长。</p>
             </CardContent>
           </Card>
         </div>

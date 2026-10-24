@@ -64,7 +64,7 @@ export function MilestonePanel() {
       setStatus(
         next
           ? '冲刺模式已打开：复习间隔会被压到考前，原本排在考后的卡已经拉回来了。'
-          : '冲刺模式已关闭：恢复完整阶梯间隔。',
+          : '冲刺模式已关闭：恢复完整复习间隔。',
       )
     } catch (error) {
       setStatus(error instanceof Error ? error.message : '冲刺模式切换失败')
@@ -165,7 +165,7 @@ export function MilestonePanel() {
               ? `距离考试 ${sprint.days_left} 天 · 所有复习都会排在 ${sprint.last_due} 之前`
               : sprint?.sprint_mode
                 ? '已打开，但还没有考试日期，暂时不生效'
-                : '未开启：按完整阶梯排期'}
+                : '未开启：按记忆状态排期'}
           </span>
         </div>
       </div>

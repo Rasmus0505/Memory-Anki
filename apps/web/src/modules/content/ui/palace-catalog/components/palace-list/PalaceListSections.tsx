@@ -30,7 +30,7 @@ interface PalaceListSectionsProps<TPalace extends PalaceGroupedItem | PalaceGrou
   emptyTitle?: string
   emptyDescription?: string
   emptyActionLabel?: string
-  /** 覆盖默认的“创建宫殿”按钮（例如档位筛选无结果时改成“查看全部”）。 */
+  /** 覆盖默认的“创建宫殿”按钮（例如间隔段筛选无结果时改成“查看全部”）。 */
   emptyAction?: ReactNode
 }
 

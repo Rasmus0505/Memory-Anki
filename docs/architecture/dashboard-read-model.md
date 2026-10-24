@@ -16,6 +16,16 @@ The timing feature (study duration ledger, time records) has been removed. The D
 
 Dashboard currently still assembles a local SQL read projection over the shared legacy schema. A later migration may move those ORM-heavy projections behind owner-provided query ports, but no new private application dependency is allowed.
 
+## 快照读取方式
+
+产品选择是“宁可多等一会，也只显示最新结果”。因此 `GET /api/v1/dashboard` 的
+快照只用于合并同一瞬间的重复读取（5 秒窗口），不做“先显示旧结果、后台再更新”。
+任何成功的写请求都会通过 `request_dashboard_refresh()` 让缓存失效；下一次打开
+仪表盘会同步重建，响应始终满足 `DashboardResponse`。禁止返回只有 `pending`
+状态、没有聚合数据的响应，因为页面拿到响应后会立刻读取聚合字段。快照只存在
+进程内存里，不写磁盘：磁盘文件无法可靠判断是否早于最近一次写入，而且进程重启后
+第一次读取本来就应当同步重建。
+
 ## Learning progress (`/progress`)
 
 The independent sidebar destination is owned by `modules/dashboard`: its page composes the module public `LearningProgressPage`; the API adapter and query hook live in `api` and `application`, pure filtering/indexing lives in `domain`, and presentation lives in `ui/progress`. Navigation/history metadata has a distinct `progress` key. Scope, selected identity, view, search, filter, and sort live in the URL, so switching views does not discard the current range and returning from a palace restores context. Expansion is local to the mounted page. Views are hierarchy, leaf distribution, and question coverage; no historical trend or mastery score is synthesized.

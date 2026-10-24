@@ -52,6 +52,42 @@ def _seed_default_config_rows(session: Session) -> None:
             session.add(Config(key=key, value=value))
 
 
+def _run_review_scheduler_switch() -> None:
+    """Backfill FSRS unit state once, with a rescue snapshot before writing.
+
+    Hermetic Playwright runs seed their own fixtures and must not be rewritten
+    by a production data migration.
+    """
+    if os.environ.get("MEMORY_ANKI_E2E") == "1":
+        return
+    from memory_anki.modules.backups.application.backup_lifecycle import (
+        create_rescue_snapshot,
+    )
+    from memory_anki.modules.memory.application.review_scheduler_switch import (
+        backfill_fsrs_scheduler,
+    )
+    from memory_anki.modules.memory.application.unit_review_service import (
+        clamp_due_dates_for_sprint,
+    )
+
+    logger = __import__("logging").getLogger(__name__)
+    session = get_session()
+    try:
+        summary = backfill_fsrs_scheduler(session, backup=create_rescue_snapshot)
+        session.commit()
+        if summary["changed_due"] or summary["with_history"]:
+            clamp_result = clamp_due_dates_for_sprint(session)
+            logger.info("review scheduler switch: %s clamp=%s", summary, clamp_result)
+    except Exception:
+        # The backfill is idempotent and leaves the marker unset on failure, so a
+        # broken or half-migrated database must not stop the app from starting.
+        # The next startup retries it.
+        session.rollback()
+        logger.exception("review scheduler switch failed; will retry on next startup")
+    finally:
+        session.close()
+
+
 def run_prepare_runtime() -> StartupState:
     configure_logging()
     shared_state: dict[str, Any] = {}
@@ -60,6 +96,7 @@ def run_prepare_runtime() -> StartupState:
     # Alembic's fileConfig reconfigures the root logger while applying
     # migrations, so re-apply ours afterwards (see core.logging).
     configure_logging()
+    _run_review_scheduler_switch()
     session = get_session()
     try:
         prepare_english_runtime(session)
@@ -96,6 +133,7 @@ def initialize_service_runtime(app: FastAPI, *, mode: str | None = None) -> Star
     # Alembic's fileConfig reconfigures the root logger while applying
     # migrations, so re-apply ours afterwards (see core.logging).
     configure_logging()
+    _run_review_scheduler_switch()
     runtime_info = build_runtime_info(shared_state)
     if startup_mode == STARTUP_MODE_SERVE:
         started_state = record_runtime_start(

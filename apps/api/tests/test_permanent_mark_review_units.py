@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 
 from memory_anki.modules.memory.application.unit_scheduler import (
     INTERVAL_DAYS,
@@ -204,9 +204,10 @@ def test_fixed_schedule_first_pass_failure_penalty_and_caps():
         rating=3,
         had_failure_in_encounter=True,
         today=today,
+        fsrs_state=first_hard.fsrs_state,
     )
     assert remembered_after_hard.stage_index == 1
-    assert remembered_after_hard.due_date == date(2026, 7, 28)
+    assert remembered_after_hard.due_date > today
 
     first_remembered = rate_unit(
         stage_index=0,
@@ -216,7 +217,12 @@ def test_fixed_schedule_first_pass_failure_penalty_and_caps():
         today=today,
     )
     assert first_remembered.stage_index == 1
-    assert first_remembered.due_date == date(2026, 7, 28)
+    # The failure penalty is real: the same 记得 books a shorter interval after a
+    # 困难 than it does on a fresh card, because FSRS keeps the raised difficulty.
+    assert first_remembered.due_date > remembered_after_hard.due_date
+    assert (remembered_after_hard.fsrs_state.difficulty or 0) > (
+        first_remembered.fsrs_state.difficulty or 0
+    )
 
     easy_after_failure = rate_unit(
         stage_index=3,
@@ -225,8 +231,8 @@ def test_fixed_schedule_first_pass_failure_penalty_and_caps():
         had_failure_in_encounter=True,
         today=today,
     )
-    assert easy_after_failure.stage_index == 4
-    assert easy_after_failure.due_date == date(2026, 8, 10)
+    assert easy_after_failure.stage_index >= 4
+    assert easy_after_failure.due_date > today + timedelta(days=INTERVAL_DAYS[3])
 
     capped = rate_unit(
         stage_index=len(INTERVAL_DAYS) - 1,

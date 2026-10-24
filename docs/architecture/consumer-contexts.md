@@ -26,7 +26,7 @@ Each facade is intentionally narrow: recent English course continuation, quiz qu
 `POST /api/v1/freestyle/queue/build` composes a finite immersive queue:
 
 - **Palaces facade**: stable tree structure used only to render the complete palace and resolve context paths (`list_active_palace_tree_structures`).
-- **Reviews facade**: active permanent-mark units, stable membership, revision, stage, and due date (`get_palace_unit_projection`). Reviews owns all palace scheduling writes (rating, manual schedule adjust, undo content-demote batch, reconcile). UI may show a unit projection panel over this read model for schedule observability; it must not invent a second schedule store.
+- **Reviews facade**: active permanent-mark units, stable membership, revision, real interval, and due date (`get_palace_unit_projection`). Reviews owns all palace scheduling writes (rating, manual schedule adjust, undo content-demote batch, reconcile). UI may show a unit projection panel over this read model for schedule observability; it must not invent a second schedule store.
 - **Palace Quiz facade**: published questions, node bindings, mastery profiles (`list_published_questions_for_palaces`, `list_node_bindings_for_palaces`, `list_mastery_profiles_for_palaces` / `build_mastery_profile`).
 
 Practice does not split palace documents. It maps each Reviews projection to one revisioned queue card and uses the member UIDs only for highlighting and quiz binding. Queue requests carry `operation_id`; clients ignore stale responses. Stale encounter / revision after concurrent document or schedule writes is treated as rebuildable queue state, not a hard feed failure. A due unit always keeps its palace review card even when standalone Anki cards are generated from nodes inside that unit. Anki and quiz cards never carry review-unit rating identity.
@@ -35,7 +35,7 @@ Frontend ownership:
 
 - Domain/config/skip/refresh: `apps/web/src/modules/practice` via `public.ts`
 - Immersive page/widgets: `modules/practice/ui/freestyle` and its public facade
-- Primary nav includes **随心** (`/freestyle`). **随心 2** (`/freestyle-2`) remains a second immersive route, reachable from the HUD switcher and command palette, not the sidebar
+- Primary nav includes **随心** (`/freestyle`), the only immersive round. The former `/freestyle-2` was merged into it by migration 0072 and now redirects; do not reintroduce a second immersive route
 - Mind-map cards reuse `widgets/mindmap-review-flow`; quiz cards keep unified attempt evidence and do not map to palace unit scheduling
 
 ## Study Sessions
@@ -48,4 +48,4 @@ Settings metrics consume backup catalog data through `backups.api`. This keeps S
 
 ## Independent English FSRS
 
-English owns the shared FSRS runtime behind `english.api`. English Reading vocabulary consumes that narrow public capability; both tracks remain independent FSRS cards. They do not share palace review-unit state and must not call palace unit rating commands.
+English owns the shared FSRS runtime behind `english.api`. English Reading vocabulary consumes that narrow public capability; both tracks remain independent FSRS cards. They do not share palace review-unit state and must not call palace unit rating commands. Palace units have their own FSRS adapter inside `memory` (`unit_fsrs_adapter.py`) with its own fixed settings; it must not import the English runtime, and the English context must not call palace unit rating commands.

@@ -426,7 +426,16 @@ def test_palace_real_retry_keeps_all_siblings_failure_history(db_session):
         db_session, palace_id=palace.id, operation_id='batch-pass', rating=3,
         round_id='round-palace', current=_current(retry, current, 'batch-retry'),
     )
-    assert all(unit.stage_index == 6 for unit in units)
+    # A batch pass rates every sibling from the same failure state, so they share
+    # one FSRS card -- that is the invariant. The booked dates still spread by the
+    # deliberate per-unit 5% offset, which is what keeps a same-day cohort from
+    # coming due together forever.
+    assert all(unit.fsrs_stability is not None for unit in units)
+    assert len({unit.fsrs_stability for unit in units}) == 1
+    gaps = [(unit.due_date - local_day()).days for unit in units]
+    assert all(gap > 0 for gap in gaps)
+    assert max(gaps) - min(gaps) <= max(1, round(max(gaps) * 0.05)) * 2
+    assert len({unit.stage_index for unit in units}) == 1
     assert all(op.replaced_at is None for op in db_session.query(ReviewUnitRatingOperation).filter_by(batch_id='batch-hard'))
     undo_unit_rating(db_session, 'batch-pass', 'round-palace')
     assert all(unit.stage_index == 6 and unit.due_date == local_day() for unit in units)

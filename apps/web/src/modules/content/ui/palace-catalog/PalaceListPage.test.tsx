@@ -255,13 +255,13 @@ describe('PalaceListPage', () => {
     expect(screen.getByRole('button', { name: '做题' })).toBeTruthy()
   })
 
-  it('filters the chapter list by the selected memory stage instead of listing palaces in the ladder', async () => {
+  it('filters the chapter list by the selected interval band instead of listing palaces in the ladder', async () => {
     renderPalaceListPage()
 
     expect(await screen.findByText('第四节 收回教育权运动与教会教育的变革')).toBeTruthy()
-    fireEvent.click(screen.getByRole('radio', { name: /刚学/ }))
+    fireEvent.click(screen.getByRole('radio', { name: /首学/ }))
 
-    expect(await screen.findByText('「刚学」档位没有宫殿')).toBeTruthy()
+    expect(await screen.findByText('「首学」间隔段没有宫殿')).toBeTruthy()
     expect(screen.queryByText('第四节 收回教育权运动与教会教育的变革')).toBeNull()
     expect(screen.queryByTestId('stage-filter-banner')).toBeNull()
 
@@ -273,7 +273,7 @@ describe('PalaceListPage', () => {
     renderPalaceListPage()
 
     expect(await screen.findByText('第四节 收回教育权运动与教会教育的变革')).toBeTruthy()
-    fireEvent.click(screen.getByRole('radio', { name: /1天/ }))
+    fireEvent.click(screen.getByRole('radio', { name: /1–2天/ }))
 
     expect(await screen.findByTestId('stage-filter-banner')).toBeTruthy()
     expect(screen.getByText('第四节 收回教育权运动与教会教育的变革')).toBeTruthy()

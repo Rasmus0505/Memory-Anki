@@ -29,6 +29,12 @@ from memory_anki.infrastructure.db._tables.unit_reviews import (
 )
 from memory_anki.modules.mindmap_document.api import deserialize_editor_payload
 
+from .unit_fsrs_adapter import (
+    SCHEDULER_VERSION,
+    FsrsUnitState,
+    replay_history,
+    state_payload,
+)
 from .unit_reconcile import reconcile_palace_units
 from .unit_review_projection import (
     _active_unit_key,
@@ -41,7 +47,7 @@ from .unit_review_projection import (
     undo_content_schedule_batch,
     unit_payload,
 )
-from .unit_scheduler import INTERVAL_DAYS, RATING_LABELS, normalize_rating, rate_unit
+from .unit_scheduler import RATING_LABELS, normalize_rating, rate_unit
 
 SESSION_ACTIVE = "active"
 SESSION_COMPLETED = "completed"
@@ -56,7 +62,6 @@ ENCOUNTER_CLOSED = "closed"
 # Rated closed encounters are the only counted intervals; unrated glances are
 # cancelled on leave, so freestyle never keeps a session open across other cards.
 FREESTYLE_UNIT_REVIEW_SCENE = "freestyle_unit_review"
-
 
 def _normalize_unit_review_client_source(value: Any) -> str | None:
     """Normalize the client source recorded on review sessions."""
@@ -367,6 +372,109 @@ def get_unit_review_session(
     }
 
 
+def _fsrs_state_from_unit(state: ReviewUnitState) -> FsrsUnitState:
+    stored = FsrsUnitState(
+        stability=state.fsrs_stability,
+        difficulty=state.fsrs_difficulty,
+        fsrs_state=int(state.fsrs_state) if state.fsrs_state is not None else 1,
+        step=state.fsrs_step,
+        due_at=state.fsrs_due_at,
+        last_review=state.fsrs_last_review,
+    )
+    if stored.is_empty():
+        # Inheritance and pre-switch rows carry only the legacy projection.
+        # Seeding from it keeps a mature unit from looking brand new on its
+        # first FSRS rating (which would book a one-day interval).
+        return FsrsUnitState.from_legacy(
+            stage_index=state.stage_index,
+            has_passed=state.has_passed,
+            due_date=state.due_date,
+        )
+    return stored
+
+
+def _fsrs_state_from_snapshot(state_data: dict[str, Any]) -> FsrsUnitState | None:
+    raw = state_data.get("fsrs")
+    if not isinstance(raw, dict):
+        return None
+    due_at = raw.get("due_at")
+    last_review = raw.get("last_review")
+    return FsrsUnitState(
+        stability=raw.get("stability"),
+        difficulty=raw.get("difficulty"),
+        fsrs_state=int(raw.get("state") or 1),
+        step=raw.get("step"),
+        due_at=datetime.fromisoformat(str(due_at)) if due_at else None,
+        last_review=datetime.fromisoformat(str(last_review)) if last_review else None,
+    )
+
+
+def _apply_fsrs_state(
+    state: ReviewUnitState,
+    fsrs: FsrsUnitState | None,
+    *,
+    clear: bool = False,
+) -> None:
+    if fsrs is None:
+        if not clear:
+            return
+        state.fsrs_stability = None
+        state.fsrs_difficulty = None
+        state.fsrs_state = None
+        state.fsrs_step = None
+        state.fsrs_due_at = None
+        state.fsrs_last_review = None
+        state.fsrs_scheduler_version = None
+        return
+    state.fsrs_stability = fsrs.stability
+    state.fsrs_difficulty = fsrs.difficulty
+    state.fsrs_state = fsrs.fsrs_state
+    state.fsrs_step = fsrs.step
+    state.fsrs_due_at = fsrs.due_at
+    state.fsrs_last_review = fsrs.last_review
+    state.fsrs_scheduler_version = SCHEDULER_VERSION
+
+
+def _replay_fsrs_state(
+    session: Session,
+    state: ReviewUnitState,
+    *,
+    exclude_operation_ids: set[str] | None = None,
+) -> FsrsUnitState:
+    """Rebuild FSRS state from effective history for legacy snapshots.
+
+    Ratings recorded before the switch have no FSRS fields in their before/after
+    snapshots. Undo and amendment still have the operation ledger, so replaying
+    the remaining effective rows is the honest fallback. A unit whose entire
+    ledger predates the switch has nothing to replay, so it starts from the
+    legacy position the snapshot restored instead of being treated as brand new.
+    """
+    excluded = exclude_operation_ids or set()
+    operations = (
+        session.query(ReviewUnitRatingOperation)
+        .filter(
+            ReviewUnitRatingOperation.unit_id == state.id,
+            ReviewUnitRatingOperation.undone_at.is_(None),
+            ReviewUnitRatingOperation.replaced_at.is_(None),
+        )
+        .order_by(
+            ReviewUnitRatingOperation.created_at.asc(),
+            ReviewUnitRatingOperation.id.asc(),
+        )
+        .all()
+    )
+    if excluded:
+        operations = [operation for operation in operations if operation.id not in excluded]
+    replay = replay_history(operations, unit_id=state.id)
+    if replay.operations == 0:
+        return FsrsUnitState.from_legacy(
+            stage_index=state.stage_index,
+            has_passed=state.has_passed,
+            due_date=state.due_date,
+        )
+    return replay.state
+
+
 def _state_snapshot(state: ReviewUnitState, item: ReviewSessionUnit) -> dict[str, Any]:
     return {
         "state": {
@@ -377,6 +485,7 @@ def _state_snapshot(state: ReviewUnitState, item: ReviewSessionUnit) -> dict[str
             "hard_penalized_on": state.hard_penalized_on.isoformat()
             if state.hard_penalized_on
             else None,
+            "fsrs": state_payload(_fsrs_state_from_unit(state)),
         },
         "item": {
             "status": item.status,
@@ -408,6 +517,14 @@ def _restore_snapshot(
     )
     penalized_on = state_data.get("hard_penalized_on")
     state.hard_penalized_on = date.fromisoformat(str(penalized_on)) if penalized_on else None
+    snapshot_fsrs = _fsrs_state_from_snapshot(state_data)
+    if snapshot_fsrs is None:
+        # A pre-switch snapshot has no FSRS fields. Clear the live columns so the
+        # caller's fallback (replay or legacy seed) owns the rebuilt card instead
+        # of leaving the state of the operation being undone behind.
+        _apply_fsrs_state(state, None, clear=True)
+    else:
+        _apply_fsrs_state(state, snapshot_fsrs)
     item.status = str(item_data["status"])
     item.retry_count = int(item_data["retry_count"])
     item.hard_count = int(item_data["hard_count"])
@@ -512,6 +629,17 @@ def _rating_effects(
     except (TypeError, ValueError):
         baseline_due = today
     schedule_locked, locked_due_date = _schedule_lock_from_due(baseline_due, today)
+    snapshot_fsrs = _fsrs_state_from_snapshot(state_data)
+    fsrs_state = (
+        snapshot_fsrs
+        if snapshot_fsrs is not None and not snapshot_fsrs.is_empty()
+        else FsrsUnitState.from_legacy(
+            stage_index=stage_index,
+            has_passed=has_passed,
+            due_date=baseline_due,
+        )
+    )
+    baseline_interval = max(0, (baseline_due - today).days)
     effects: list[dict[str, Any]] = []
     for rating, label in RATING_LABELS.items():
         result = rate_unit(
@@ -525,21 +653,21 @@ def _rating_effects(
             locked_due_date=locked_due_date,
             hard_penalized_today=hard_penalized_today,
             horizon=horizon,
+            fsrs_state=fsrs_state,
         )
-        # Nominal ladder interval names the landing stage ("14天级"); the actual
-        # gap carries day-level fuzz and is what a passing rating really books.
-        target_interval = INTERVAL_DAYS[result.stage_index]
+        # FSRS returns the real booked gap. The old nominal-stage interval and
+        # stage action remain in the payload for compatibility, but the UI must
+        # read these real numbers, not the retired ladder table.
         actual_interval = max(0, (result.due_date - today).days)
-        if result.stage_index < stage_index:
-            # "reset" only when a unit truly falls back to first-learning; a
-            # partial lapse from stage 9 to 4 is a drop, not a reset.
-            stage_action = (
-                "reset" if result.stage_index == 0 and not result.passed else "lower"
-            )
-        elif result.stage_index == stage_index:
-            stage_action = "keep"
-        else:
+        target_interval = actual_interval
+        if not result.passed:
+            stage_action = "reset" if rating == 1 else ("lower" if result.hard_penalty_applied else "keep")
+        elif actual_interval > baseline_interval:
             stage_action = "advance"
+        elif actual_interval < baseline_interval:
+            stage_action = "lower"
+        else:
+            stage_action = "keep"
         effects.append(
             {
                 "rating": rating,
@@ -1017,16 +1145,28 @@ def cancel_unrated_unit_review_encounter(
 
 
 def _apply_rating_from_snapshot(
+    session: Session,
     state: ReviewUnitState,
     item: ReviewSessionUnit,
     snapshot: dict[str, Any],
     rating: int,
     *,
     horizon: SprintHorizon | None = None,
+    exclude_operation_ids: set[str] | None = None,
 ) -> Any:
     _restore_snapshot(state, item, snapshot)
     today = local_day()
     schedule_locked, locked_due_date = _schedule_lock_from_due(state.due_date, today)
+    fsrs_state = _fsrs_state_from_snapshot(snapshot["state"])
+    if fsrs_state is None:
+        # A snapshot recorded before the switch has no FSRS fields. Replaying
+        # the remaining effective ledger is exact; starting from an empty card
+        # would silently discard the unit's real history.
+        fsrs_state = _replay_fsrs_state(
+            session,
+            state,
+            exclude_operation_ids=exclude_operation_ids,
+        )
     result = rate_unit(
         stage_index=state.stage_index,
         has_passed=state.has_passed,
@@ -1040,8 +1180,10 @@ def _apply_rating_from_snapshot(
         locked_due_date=locked_due_date,
         hard_penalized_today=state.hard_penalized_on == today,
         horizon=horizon,
+        fsrs_state=fsrs_state,
     )
     now = utc_now_naive()
+    _apply_fsrs_state(state, result.fsrs_state)
     state.stage_index = result.stage_index
     state.due_date = result.due_date
     if result.hard_penalty_applied:
@@ -1204,7 +1346,13 @@ def _rate_open_encounter(
     previous = session.get(ReviewUnitRatingOperation, previous_id) if previous_id else None
     before = json.loads(source.baseline_state_json)
     result = _apply_rating_from_snapshot(
-        state, item, before, rating, horizon=_sprint_horizon(session)
+        session,
+        state,
+        item,
+        before,
+        rating,
+        horizon=_sprint_horizon(session),
+        exclude_operation_ids={previous.id} if previous is not None else None,
     )
     now = utc_now_naive()
     if previous is not None:
@@ -1902,7 +2050,13 @@ def _undo_one_rating_operation(
     )
     if encounter.status == ENCOUNTER_OPEN and previous is not None and previous.undone_at is None:
         result = _apply_rating_from_snapshot(
-            state, item, snapshot, previous.rating, horizon=_sprint_horizon(session)
+            session,
+            state,
+            item,
+            snapshot,
+            previous.rating,
+            horizon=_sprint_horizon(session),
+            exclude_operation_ids={previous.id},
         )
         previous.replaced_at = None
         encounter.effective_operation_id = previous.id
@@ -1910,7 +2064,12 @@ def _undo_one_rating_operation(
         encounter.passed = result.passed
         encounter.retry_after_cards = result.retry_after_cards
     else:
+        snapshot_has_fsrs = isinstance(snapshot.get("state", {}).get("fsrs"), dict)
         _restore_snapshot(state, item, snapshot)
+        if not snapshot_has_fsrs:
+            # Pre-switch snapshot: rebuild the FSRS card from the operations
+            # that are still effective after this undo.
+            _apply_fsrs_state(state, _replay_fsrs_state(session, state))
         if encounter.status == ENCOUNTER_OPEN or allow_closed:
             encounter.effective_operation_id = None
             encounter.selected_rating = None

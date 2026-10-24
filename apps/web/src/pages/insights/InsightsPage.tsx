@@ -63,7 +63,7 @@ function paneClass(active: boolean) {
 }
 
 export default function Dashboard() {
-  const { data, error: loadError, isLoading, snapshotStatus, reload: loadDashboard } = useDashboardOverview()
+  const { data, error: loadError, reload: loadDashboard } = useDashboardOverview()
   const [overviewPane, setOverviewPane] = useState<OverviewPane>('exam')
   const { data: examOverview, error: examError } = useExamOverview()
 
@@ -95,12 +95,6 @@ export default function Dashboard() {
 
   return (
     <PageContainer wide className="dashboard-fit gap-3">
-      {snapshotStatus === 'stale' && (
-        <p className="text-xs text-muted-foreground" role="status">显示最近一次概览，正在后台更新。</p>
-      )}
-      {snapshotStatus === 'pending' && isLoading && (
-        <p className="text-xs text-muted-foreground" role="status">正在准备最新学习概览。</p>
-      )}
       <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1.5 sm:gap-y-2">
         {/* 窄屏左上角浮着全局返回按钮、右上角是录制浮标：标题独占一行并让出两侧。 */}
         <h1 className="basis-full pl-22 pr-12 text-xl font-semibold leading-7 tracking-tight sm:text-2xl sm:leading-9 lg:basis-auto lg:p-0">仪表盘</h1>

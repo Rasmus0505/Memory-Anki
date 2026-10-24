@@ -133,7 +133,7 @@ export function filterGroupedPalacesBySearch(
 }
 
 /**
- * 只保留给定宫殿 id 的内容（记忆档位筛选）。章节与学科空了就一起收起，
+ * 只保留给定宫殿 id 的内容（记忆间隔段筛选）。章节与学科空了就一起收起，
  * 但章节的 `question_total` 保持原书总额，筛选不改变进度口径。
  */
 export function filterGroupedPalacesByPalaceIds(

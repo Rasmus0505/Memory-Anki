@@ -14,13 +14,11 @@ import {
   type ReconcilePalaceUnitsResultDto,
   type UnitScheduleSnapshotDto,
 } from '../api'
+import { INTERVAL_BAND_BOUNDS, intervalDaysLabel } from '../model/intervalBands'
 import { PalaceLadderProgress } from './PalaceLadderProgress'
 
-/** Ebbinghaus-style interval ladder used by unit review stages. */
-export const UNIT_INTERVAL_LADDER_DAYS = [0, 1, 3, 7, 14, 30, 60, 120, 240, 365] as const
-
-function intervalStageLabel(days: number) {
-  return days === 0 ? '首学' : `${days}天级`
+function intervalBadgeLabel(days: number) {
+  return days <= 0 ? '待首学' : `间隔 ${intervalDaysLabel(days)}`
 }
 
 export type PalaceReviewUnitChangeHighlight = {
@@ -49,7 +47,7 @@ function operationId() {
 }
 
 function schedulableDueMax(now = new Date()) {
-  const top = UNIT_INTERVAL_LADDER_DAYS[UNIT_INTERVAL_LADDER_DAYS.length - 1]
+  const top = INTERVAL_BAND_BOUNDS[INTERVAL_BAND_BOUNDS.length - 1]
   const span = Math.max(1, Math.round(top * 0.05))
   const limit = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   limit.setDate(limit.getDate() + top + span)
@@ -100,7 +98,6 @@ export function PalaceReviewUnitsPanel({
   const [error, setError] = useState<string | null>(null)
   const [projection, setProjection] = useState<PalaceUnitProjectionDto | null>(null)
   const [expandedUnitId, setExpandedUnitId] = useState<string | null>(null)
-  const [draftStage, setDraftStage] = useState<number>(0)
   const [draftDue, setDraftDue] = useState('')
   const [draftPassed, setDraftPassed] = useState(false)
   const [savingUnitId, setSavingUnitId] = useState<string | null>(null)
@@ -159,7 +156,6 @@ export function PalaceReviewUnitsPanel({
   const openEditor = useCallback((unit: UnitRow) => {
     setExpandedUnitId((current) => {
       if (current === unit.id) return null
-      setDraftStage(unit.stage_index)
       setDraftDue(unit.due_date)
       setDraftPassed(unit.has_passed)
       return unit.id
@@ -167,10 +163,9 @@ export function PalaceReviewUnitsPanel({
   }, [])
 
   const handleSaveUnit = useCallback(async (unit: UnitRow) => {
-    const stageChanged = draftStage !== unit.stage_index
     const dueChanged = draftDue !== unit.due_date
     const passedChanged = draftPassed !== unit.has_passed
-    if (!stageChanged && !dueChanged && !passedChanged) {
+    if (!dueChanged && !passedChanged) {
       toast.message('没有需要保存的修改')
       return
     }
@@ -178,7 +173,6 @@ export function PalaceReviewUnitsPanel({
     try {
       const result = await adjustUnitScheduleApi(unit.id, {
         operation_id: operationId(),
-        ...(stageChanged ? { stage_index: draftStage } : {}),
         ...(dueChanged ? { due_date: draftDue } : {}),
         ...(passedChanged ? { has_passed: draftPassed } : {}),
         reason: 'manual_adjust',
@@ -194,7 +188,6 @@ export function PalaceReviewUnitsPanel({
           unit_count: result.palace.unit_count,
         }
       })
-      setDraftStage(result.unit.stage_index)
       setDraftDue(result.unit.due_date)
       setDraftPassed(result.unit.has_passed)
       toast.success('已更新单元进度')
@@ -204,7 +197,7 @@ export function PalaceReviewUnitsPanel({
     } finally {
       setSavingUnitId(null)
     }
-  }, [draftDue, draftPassed, draftStage, onScheduleChanged])
+  }, [draftDue, draftPassed, onScheduleChanged])
 
   const handleReconcile = useCallback(async () => {
     if (!palaceId || reconciling) return
@@ -245,7 +238,7 @@ export function PalaceReviewUnitsPanel({
   const handleUndoBatch = useCallback(async () => {
     if (!palaceId || !effectiveUndoToken || undoing) return
     const confirmed = await appConfirm(
-      '将撤销最近一次内容变更对复习进度的影响（阶梯/到期等会回滚）。确定继续？',
+      '将撤销最近一次内容变更对复习进度的影响（间隔/到期等会回滚）。确定继续？',
       {
         title: '撤销内容对进度的影响',
         confirmText: '撤销',
@@ -425,7 +418,7 @@ export function PalaceReviewUnitsPanel({
                       <div className="truncate text-sm font-medium">{titleText}</div>
                       <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
                         <span className="rounded-full bg-muted px-2 py-0.5 font-medium text-foreground/80">
-                          {intervalStageLabel(unit.interval_days)}
+                          {intervalBadgeLabel(unit.interval_days)}
                         </span>
                         <span>到期 {formatDueLabel(unit.due_date)}</span>
                         {unit.due ? (
@@ -458,19 +451,12 @@ export function PalaceReviewUnitsPanel({
                     <div className="mt-3 space-y-3 border-t border-border pt-3">
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         <label className="block text-xs text-muted-foreground">
-                          阶梯级别
-                          <select
-                            className="mt-1 w-full rounded-lg border border-border bg-background px-2.5 py-2 text-sm text-foreground"
-                            value={draftStage}
-                            onChange={(event) => setDraftStage(Number(event.target.value))}
-                            disabled={saving}
-                          >
-                            {UNIT_INTERVAL_LADDER_DAYS.map((days, index) => (
-                              <option key={days} value={index}>
-                                {index} · {intervalStageLabel(days)}
-                              </option>
-                            ))}
-                          </select>
+                          下次复习间隔
+                          <div className="mt-1 rounded-lg border border-border bg-muted/40 px-2.5 py-2 text-sm text-foreground">
+                            {unit.interval_days > 0
+                              ? `${intervalDaysLabel(unit.interval_days)}（FSRS 按记忆状态自动排期）`
+                              : '待首学'}
+                          </div>
                         </label>
                         <label className="block text-xs text-muted-foreground">
                           到期日
@@ -494,7 +480,7 @@ export function PalaceReviewUnitsPanel({
                           disabled={saving}
                           className="size-3.5 rounded border-border"
                         />
-                        已通过本阶（has_passed）
+                        已经通过（has_passed）
                       </label>
                       <div className="flex justify-end gap-2">
                         <Button

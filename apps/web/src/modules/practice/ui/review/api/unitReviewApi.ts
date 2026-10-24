@@ -11,7 +11,7 @@ export interface UnitRatingEffectDto {
   label: string
   passed: boolean
   target_stage_index: number
-  /** Nominal ladder interval that names the landing stage ("14天级"). */
+  /** The real booked gap after this rating, in days. */
   target_interval_days: number
   /** Real gap to target_due_date, including per-unit spread. Optional so a
    * cached PWA client predating this field degrades instead of showing NaN. */
@@ -19,7 +19,7 @@ export interface UnitRatingEffectDto {
   target_due_date: string
   retry_after_cards: number
   stage_action: 'reset' | 'lower' | 'keep' | 'advance'
-  /** False when a fill / not-due pass was recorded without moving the ladder. */
+  /** False when a fill / not-due pass was recorded without moving the schedule. */
   schedule_changed?: boolean
 }
 
@@ -48,6 +48,7 @@ export interface ReviewUnitDto {
   node_uids: string[]
   revision: number
   stage_index: number
+  /** Real FSRS interval for this unit, not the retired ladder's nominal value. */
   interval_days: number
   has_passed: boolean
   due_date: string

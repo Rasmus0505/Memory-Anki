@@ -4,10 +4,18 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 
 from memory_anki.core.exam_horizon import SprintHorizon
 from memory_anki.core.time import local_day
+
+from .unit_fsrs_adapter import (
+    FsrsUnitState,
+    Scheduler,
+    build_unit_scheduler,
+    rate_unit_with_fsrs,
+    stage_for_interval,
+)
 
 # Stage 0 is the initial-learning state. A successful first "remember" moves
 # to stage 1, whose one-day interval guarantees a review on the next day.
@@ -31,17 +39,22 @@ FUZZ_RATIO = 0.05
 
 @dataclass(frozen=True)
 class UnitScheduleResult:
+    # ``stage_index`` is a display projection of the real FSRS interval. It no
+    # longer drives scheduling; callers should show the interval instead.
     stage_index: int
     due_date: date
     passed: bool
     retry_after_cards: int
     # True when this rating spent the unit's once-per-day 困难 demotion.
     hard_penalty_applied: bool = False
-    # False when the rating was recorded but the ladder position and due date were
-    # deliberately left alone (see ``schedule_locked``). The UI must say so out
-    # loud, because a silently ignored rating is exactly the kind of invisible
-    # rule this scheduler is meant to avoid.
+    # False when the rating was recorded but the schedule was deliberately left
+    # alone (see ``schedule_locked``). The UI must say so out loud, because a
+    # silently ignored rating is exactly the kind of invisible rule this
+    # scheduler is meant to avoid.
     schedule_changed: bool = True
+    # The FSRS card state after this rating. The service persists it on the unit;
+    # a locked pass or repeated same-day 困难 returns the pre-rating state.
+    fsrs_state: FsrsUnitState | None = None
 
 
 def normalize_rating(value: int | str) -> int:
@@ -120,99 +133,75 @@ def rate_unit(
     locked_due_date: date | None = None,
     hard_penalized_today: bool = False,
     horizon: SprintHorizon | None = None,
+    fsrs_state: FsrsUnitState | None = None,
+    scheduler: Scheduler | None = None,
 ) -> UnitScheduleResult:
+    """Rate one unit through the production FSRS scheduler.
+
+    ``had_failure_in_encounter`` is kept in the signature because every caller
+    passes it and it remains useful product context; FSRS learns the same fact
+    from the actual ``忘记``/``困难`` ratings already replayed into its state.
+    ``stage_index`` is only the old display position, used to keep the
+    compatibility projection sensible for failed grades.
+    """
     current_day = today or local_day()
-    current_stage = clamp_stage(stage_index)
     normalized = normalize_rating(rating)
-
-    # 忘记 is a failing grade and drops the unit to the 忘记 level (stage 0):
-    # relearn today from the bottom. A lapse is honest evidence whether or not
-    # the unit was due, so it is applied even while the schedule is locked --
-    # only the promoting direction needs protection.
-    if normalized == 1:
-        return UnitScheduleResult(
+    current_state = (
+        fsrs_state
+        if fsrs_state is not None and not fsrs_state.is_empty()
+        else FsrsUnitState.from_legacy(
+            stage_index=stage_index,
+            has_passed=has_passed,
+            due_date=locked_due_date or current_day,
+        )
+    )
+    result = rate_unit_with_fsrs(
+        current=current_state,
+        has_passed=has_passed,
+        rating=normalized,
+        today=current_day,
+        # A fixed midday UTC instant keeps preview and commit on the same study
+        # day even when the learner taps across the 03:00 rollover.
+        rated_at=datetime.combine(current_day, time(4), tzinfo=UTC),
+        schedule_locked=schedule_locked,
+        locked_due_date=locked_due_date,
+        hard_penalized_today=hard_penalized_today,
+        fuzz_key=fuzz_key,
+        horizon=horizon,
+        scheduler=scheduler or build_unit_scheduler(),
+    )
+    if not result.schedule_changed:
+        # A locked pass records the review but must not move the display
+        # projection either; the FSRS state itself is intentionally unchanged.
+        projected_stage = clamp_stage(stage_index)
+    elif normalized == 1:
+        projected_stage = 0
+    elif normalized == 2:
+        projected_stage = max(
             0,
-            current_day,
-            False,
-            RETRY_AFTER_CARDS,
+            clamp_stage(stage_index) - (1 if result.hard_penalty_applied else 0),
         )
-
-    # 困难 is also retry work. It keeps the unit due today so the learner gets
-    # another chance after a short queue gap. The one-step demotion is spent at
-    # most once per calendar day: repeated 困难 on the same day's retry cards
-    # keeps the stage it already dropped to. Handle this before the schedule
-    # lock so ahead-of-date filler cards follow the same retry contract as due
-    # cards.
-    if normalized == 2:
-        if not has_passed:
-            penalized_stage = 0
-        elif hard_penalized_today:
-            penalized_stage = current_stage
-        else:
-            penalized_stage = max(0, current_stage - 1)
-        applied = has_passed and not hard_penalized_today and penalized_stage < current_stage
-        return UnitScheduleResult(
-            penalized_stage,
-            current_day,
-            False,
-            RETRY_AFTER_CARDS,
-            hard_penalty_applied=applied,
-        )
-
-    # Reviewing a unit ahead of its due date proves nothing about retention over
-    # the interval it was given, so a pass records the review without moving the
-    # ladder. Without this, filler cards (served whenever the due set is short)
-    # let intervals climb on zero forgetting evidence -- the more diligently the
-    # queue is cleared, the more filler appears and the faster it drifts.
-    if schedule_locked:
-        return UnitScheduleResult(
-            current_stage,
-            (locked_due_date or current_day),
-            True,
-            0,
-            schedule_changed=False,
-        )
-
-    if not has_passed:
-        passed_stage = 1 if normalized == 3 else 2
-    elif had_failure_in_encounter:
-        # Relearning inside an encounter that already failed: a pass restores
-        # position but never advances beyond it.
-        if normalized == 3:
-            passed_stage = current_stage
-        else:
-            passed_stage = current_stage + 1
-    elif normalized == 3:
-        passed_stage = current_stage + 1
     else:
-        passed_stage = current_stage + 2
-
-    passed_stage = max(MIN_PASSED_STAGE, clamp_stage(passed_stage))
-    interval = scheduled_interval_days(passed_stage, fuzz_key=fuzz_key)
-    due = current_day + timedelta(days=interval)
-    if horizon is not None:
-        # Sprint mode only bounds the booking: without it this unit would be
-        # scheduled after the exam and never reviewed again. The landing stage
-        # (and its nominal interval) is untouched -- only the booked date moves.
-        due = horizon.schedule(interval, today=current_day, seed=fuzz_key)
+        # Use the raw FSRS interval, not the sprint-shortened product due, so
+        # the display does not pretend the memory model changed near an exam.
+        projected_stage = max(
+            MIN_PASSED_STAGE, stage_for_interval(result.raw_interval_days)
+        )
     return UnitScheduleResult(
-        passed_stage,
-        due,
-        True,
-        0,
+        projected_stage,
+        result.due_date,
+        result.passed,
+        result.retry_after_cards,
+        hard_penalty_applied=result.hard_penalty_applied,
+        schedule_changed=result.schedule_changed,
+        fsrs_state=result.state,
     )
 
 
 def stage_from_legacy_interval_days(value: float | int | None) -> int:
     if value is None:
         return 0
-    days = max(0.0, float(value))
-    selected = 0
-    for index, interval in enumerate(INTERVAL_DAYS):
-        if interval > days:
-            break
-        selected = index
-    return selected
+    return stage_for_interval(int(max(0.0, float(value))))
 
 
 __all__ = [

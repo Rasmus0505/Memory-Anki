@@ -12,6 +12,7 @@ from memory_anki.infrastructure.db._tables.unit_reviews import (
     ReviewUnitRatingOperation,
     ReviewUnitState,
 )
+from memory_anki.modules.memory.application.unit_fsrs_adapter import FsrsUnitState
 from memory_anki.modules.memory.application.unit_review_service import (
     adjust_unit_schedule,
     cancel_unrated_unit_review_encounter,
@@ -21,6 +22,20 @@ from memory_anki.modules.memory.application.unit_review_service import (
     start_freestyle_unit_review_session,
     undo_unit_rating,
 )
+
+
+def _fsrs_state(state: ReviewUnitState) -> FsrsUnitState | None:
+    """The persisted FSRS card, which is what the next rating actually starts from."""
+    if state.fsrs_stability is None and state.fsrs_state is None:
+        return None
+    return FsrsUnitState(
+        stability=state.fsrs_stability,
+        difficulty=state.fsrs_difficulty,
+        fsrs_state=state.fsrs_state,
+        step=state.fsrs_step,
+        due_at=state.fsrs_due_at,
+        last_review=state.fsrs_last_review,
+    )
 
 
 def _seed_review_unit(session) -> ReviewUnitState:
@@ -267,7 +282,9 @@ def test_one_encounter_amends_from_frozen_baseline_and_is_idempotent(db_session)
 
     assert remembered["unit"]["stage_index"] == 1
     assert easy["amended"] is True
-    assert easy["unit"]["stage_index"] == 2
+    # Amending from the frozen baseline re-runs FSRS: a 轻松 books a longer
+    # interval than the 记得 it replaces, wherever the display band lands.
+    assert easy["unit"]["interval_days"] > remembered["unit"]["interval_days"]
     assert duplicate == easy
 
     hard = _rate(db_session, review_session, state, "encounter-amend", "rating-hard", 2)
@@ -309,8 +326,8 @@ def test_closed_pass_locks_rating_and_future_unit_cannot_restart(db_session):
     )
 
     assert closed["session_status"] == "completed"
-    assert state.stage_index == 1
-    assert state.due_date == local_day() + timedelta(days=1)
+    assert state.stage_index >= 1
+    assert state.due_date > local_day()
     with pytest.raises(ValueError, match="not due"):
         start_freestyle_unit_review_session(
             db_session,
@@ -413,7 +430,7 @@ def test_previous_day_rating_does_not_amend_a_new_due_cycle(db_session):
     )
 
     assert again["amended"] is False
-    assert state.stage_index == 2
+    assert state.due_date > local_day()
 
 
 def test_start_reopens_passed_unit_when_session_still_active(db_session):
@@ -520,7 +537,7 @@ def test_rate_after_closed_session_overwrites_with_latest_rating(db_session):
     assert amended["amended"] is True
     assert amended["rating"] == 4
     assert amended["study_session_id"] != review_session["id"]
-    assert state.stage_index == 2
+    assert state.stage_index >= 2
     replayed = _rate(
         db_session,
         review_session,
@@ -632,9 +649,8 @@ def test_failed_close_keeps_session_and_next_encounter_retains_penalty(db_sessio
     )
 
     assert remembered["passed"] is True
-    assert remembered["unit"]["stage_index"] == 1
-    assert remembered["unit"]["due_date"] == (local_day() + timedelta(days=1)).isoformat()
-    assert remembered["unit"]["due_date"] == (local_day() + timedelta(days=1)).isoformat()
+    assert remembered["unit"]["stage_index"] >= 1
+    assert remembered["unit"]["due_date"] > local_day().isoformat()
 
 
 def test_review_http_contract_carries_encounter_identity(session_factory, make_client):
@@ -730,6 +746,7 @@ def test_real_retry_preserves_failure_and_preview_matches_commit(
     )
     failed = _rate(db_session, first, state, "real-source", "real-fail", first_rating)
     lowered = failed["unit"]["stage_index"]
+    fsrs_after_failure = _fsrs_state(state)
     close_unit_review_encounter(
         db_session, study_session_id=first["id"], unit_id=state.id,
         encounter_id="real-source", operation_id="real-close",
@@ -745,9 +762,12 @@ def test_real_retry_preserves_failure_and_preview_matches_commit(
     )
     effect = next(x for x in retry["units"][0]["encounter"]["rating_effects"] if x["rating"] == passing_rating)
     passed = _rate(db_session, retry, state, "real-retry", "real-pass", passing_rating)
+    # Replay from the FSRS card the failure stored (before this pass): the retry
+    # must land on exactly the date the preview promised.
     expected = rate_unit(
         stage_index=lowered, has_passed=True, rating=passing_rating,
         had_failure_in_encounter=True, today=local_day(), fuzz_key=state.id,
+        fsrs_state=fsrs_after_failure,
     )
     assert state.stage_index == expected.stage_index
     assert state.due_date == expected.due_date
@@ -796,7 +816,10 @@ def test_retry_slot_new_attempt_stacks_penalty_but_correction_does_not(db_sessio
         assert state.stage_index == 6
     corrected = _rate(db_session, retry, state, "retry-2", "correct-last", 3)
     assert corrected["amended"] is True
-    assert state.stage_index == 6
+    # Amending a same-day 困难 to 记得 is a pass now: FSRS books a real interval
+    # rather than holding the demoted display band.
+    assert state.has_passed is True
+    assert state.due_date > local_day()
     item = db_session.query(ReviewSessionUnit).filter_by(study_session_id=retry["id"]).one()
     assert item.retry_count == 2
     assert item.hard_count == 2
@@ -822,9 +845,11 @@ def test_same_attempt_revisit_correction_uses_preview_baseline(db_session):
     effect = next(x for x in revisit["units"][0]["encounter"]["rating_effects"] if x["rating"] == 3)
     corrected = _rate(db_session, revisit, state, "source-revisit", "source-corrected", 3)
     assert corrected["amended"] is True
-    assert state.stage_index == 8
-    assert effect["target_stage_index"] == 8
+    assert state.has_passed is True
+    assert state.due_date > local_day()
+    assert effect["target_stage_index"] == state.stage_index
     assert effect["target_due_date"] == state.due_date.isoformat()
+    assert effect["target_interval_days"] == (state.due_date - local_day()).days
     assert db_session.query(ReviewSessionUnit).one().retry_count == 0
     undo_unit_rating(db_session, "source-corrected")
     assert state.stage_index == 6

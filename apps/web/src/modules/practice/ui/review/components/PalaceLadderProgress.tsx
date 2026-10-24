@@ -6,6 +6,12 @@ import {
   type PalaceLadderProgressDto,
 } from '../api/unitReviewApi'
 import { cn } from '@/shared/lib/utils'
+import {
+  intervalBandIndex,
+  intervalBandLabel,
+  intervalDaysLabel,
+  intervalOutlookLabel,
+} from '../model/intervalBands'
 
 const RANGE_OPTIONS: Array<{ value: LadderProgressRange; label: string }> = [
   { value: 'all', label: '全部' },
@@ -65,14 +71,6 @@ function formatShortDate(iso: string | null | undefined): string {
   } catch {
     return '—'
   }
-}
-
-function stageLabel(intervalDays: number): string {
-  return intervalDays === 0 ? '首学阶段' : `${intervalDays}天阶段`
-}
-
-function compactStageLabel(intervalDays: number): string {
-  return intervalDays === 0 ? '首学' : `${intervalDays}天`
 }
 
 type NodeKind = 'past' | 'current' | 'future'
@@ -160,7 +158,7 @@ export function PalaceLadderProgress({
       setData(item)
       setError(null)
     } catch (err) {
-      setError(err instanceof Error ? err.message : '加载阶梯进度失败')
+      setError(err instanceof Error ? err.message : '加载复习间隔失败')
     }
   }, [palaceId, range, unitId])
 
@@ -168,7 +166,14 @@ export function PalaceLadderProgress({
     void load()
   }, [load, refreshKey])
 
-  const currentStage = data?.current?.stage_index ?? null
+  // The rail's buckets are the backend's stage histogram, so the highlighted
+  // node comes from the same projection. The real interval is shown as text
+  // (badge, tooltips): a failed unit sits at stage 0 even though its FSRS card
+  // still remembers a longer gap, and the rail must not disagree with the
+  // distribution it is drawn from.
+  const currentStage = data?.current
+    ? (data.current.stage_index ?? intervalBandIndex(data.current.interval_days))
+    : null
   const currentDue = Boolean(data?.current?.due)
   const ladder = useMemo(
     () => (data?.ladder?.length ? data.ladder : [...DEFAULT_LADDER]),
@@ -214,7 +219,6 @@ export function PalaceLadderProgress({
 
   const stageTooltip = useMemo(() => {
     if (hoverStage == null || !data) return null
-    const interval = ladder[hoverStage] ?? 0
     const kind = nodeKind(hoverStage, currentStage)
     const status =
       kind === 'past'
@@ -229,14 +233,18 @@ export function PalaceLadderProgress({
     const rangeLabel = RANGE_LABELS[range]
     const emptyText =
       range === 'all' && kind === 'past'
-        ? '无可用历史明细（可能由跨级或旧进度产生）'
+        ? '无可用历史明细（可能由跨档或旧进度产生）'
         : kind === 'future' && range === 'all'
-          ? '尚未到达本阶段'
+          ? '尚未到达这个间隔档'
           : `${rangeLabel}内无直接复习记录`
     return {
-      title: stageLabel(interval),
+      title: `间隔 ${intervalBandLabel(hoverStage, ladder)}`,
       status,
       unitTitle: data.current?.title || '未命名单元',
+      gapText:
+        kind === 'current' && data.current
+          ? `当前实际间隔 ${intervalOutlookLabel(data.current.interval_days)}`
+          : null,
       dueText:
         kind === 'current' && data.current?.due_date
           ? `下次复习：${formatShortDate(data.current.due_date)}${currentDue ? '（已到期）' : ''}`
@@ -256,7 +264,7 @@ export function PalaceLadderProgress({
     const distribution = ladder
       .map((days, index) => {
         const count = histogram[index] ?? 0
-        return count > 0 ? `${compactStageLabel(days)}×${count}` : null
+        return count > 0 ? `${intervalBandLabel(index, ladder)}×${count}` : null
       })
       .filter(Boolean)
       .join(' · ')
@@ -264,7 +272,7 @@ export function PalaceLadderProgress({
     const rangeLabel = RANGE_LABELS[range]
     return {
       current: data.current
-        ? stageLabel(data.current.interval_days)
+        ? `当前间隔 ${intervalOutlookLabel(data.current.interval_days)}`
         : '无当前单元',
       unitTitle: data.current?.title || '未命名单元',
       due: data.current?.due_date
@@ -272,9 +280,9 @@ export function PalaceLadderProgress({
         : null,
       palace: `宫殿：${data.palace.unit_count} 个单元 · ${data.palace.due_count} 个到期`
         + (data.palace.weakest_stage_index != null
-          ? ` · 最弱 ${stageLabel(ladder[data.palace.weakest_stage_index] ?? 1)}`
+          ? ` · 最短间隔 ${intervalBandLabel(data.palace.weakest_stage_index, ladder)}`
           : ''),
-      distribution: `等级分布：${distribution || '暂无分布'}`,
+      distribution: `间隔分布：${distribution || '暂无分布'}`,
       reviews: data.palace_range_stats.total_reviews > 0 || data.palace_range_stats.total_seconds > 0
         ? `${rangeLabel}：${data.palace_range_stats.total_reviews} 次 · 学习总时长 ${formatSeconds(data.palace_range_stats.total_seconds)}`
         : `${rangeLabel}：无复习明细`,
@@ -340,6 +348,9 @@ export function PalaceLadderProgress({
                   {stageTooltip.title} · {stageTooltip.status}
                 </div>
                 <div className="mt-1 text-muted-foreground">单元：{stageTooltip.unitTitle}</div>
+                {stageTooltip.gapText ? (
+                  <div className="text-muted-foreground">{stageTooltip.gapText}</div>
+                ) : null}
                 {stageTooltip.dueText ? (
                   <div className="text-muted-foreground">{stageTooltip.dueText}</div>
                 ) : null}
@@ -382,7 +393,7 @@ export function PalaceLadderProgress({
       : null
 
   const currentLabel = data?.current
-    ? stageLabel(data.current.interval_days)
+    ? `当前间隔 ${intervalOutlookLabel(data.current.interval_days)}`
     : null
 
   return (
@@ -423,8 +434,8 @@ export function PalaceLadderProgress({
           role="img"
           aria-label={
             data?.current
-              ? `复习阶梯 · 当前 ${stageLabel(data.current.interval_days)}`
-              : '复习阶梯'
+              ? `复习间隔 · 当前 ${intervalOutlookLabel(data.current.interval_days)}`
+              : '复习间隔'
           }
         >
           {/* Base rail */}
@@ -449,7 +460,7 @@ export function PalaceLadderProgress({
                 type="button"
                 data-testid={`ladder-node-${days}`}
                 data-kind={kind}
-                aria-label={stageLabel(days)}
+                aria-label={intervalBandLabel(index, ladder)}
                 aria-current={isCurrent ? 'step' : undefined}
                 className={cn(
                   'absolute top-1/2 box-border size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 transition-colors duration-100',
@@ -491,7 +502,7 @@ export function PalaceLadderProgress({
           )}
           title={currentDue ? `${currentLabel} · 已到期` : currentLabel}
         >
-          {compactStageLabel(data?.current?.interval_days ?? 0)}
+          {intervalDaysLabel(data?.current?.interval_days ?? 0)}
         </span>
       ) : null}
 

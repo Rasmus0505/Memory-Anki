@@ -89,7 +89,7 @@ describe('FreestyleRatingBar', () => {
     renderBar()
 
     expect(screen.getByRole('button', { name: '记得：1天后复习 · 7月28日' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: '忘记：3张后重练 · 重置到首学阶段' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '忘记：3张后重练 · 今天再练' })).toBeTruthy()
   })
 
   it('rates from the 1-4 shortcuts', () => {

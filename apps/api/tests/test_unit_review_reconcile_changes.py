@@ -375,18 +375,21 @@ def test_adjust_unit_schedule_updates_fields_without_content_hash(db_session):
 
     unit = db_session.get(ReviewUnitState, unit.id)
     assert unit is not None
-    assert unit.stage_index == 5
+    # The due date is authoritative; ``stage_index`` is a retired display bucket,
+    # so the stored band follows the booked 14-day interval instead of the stale
+    # stage number the caller also sent.
+    assert unit.stage_index == 4
     assert unit.due_date == target_due
     assert unit.has_passed is False
     assert unit.content_hash == content_hash
     assert unit.membership_hash == membership_hash
     assert unit.revision == revision + 1
     assert result["operation_id"] == "manual-op-1"
-    assert result["unit"]["stage_index"] == 5
-    assert result["unit"]["interval_days"] == INTERVAL_DAYS[5]
+    assert result["unit"]["stage_index"] == 4
+    assert result["unit"]["interval_days"] == 14
     assert result["palace"]["palace_id"] == unit.palace_id
     assert result["before"]["stage_index"] == 2
-    assert result["after"]["stage_index"] == 5
+    assert result["after"]["stage_index"] == 4
 
 
 def test_direct_schedule_adjustment_leaves_http_replay_to_adapter(db_session):
@@ -465,7 +468,8 @@ def test_adjust_and_undo_schedule_http_endpoints(session_factory, make_client):
     )
     assert adjusted.status_code == 200
     body = adjusted.json()["item"]
-    assert body["unit"]["stage_index"] == 1
+    # due_date wins over the retired stage number: due today is the learning band.
+    assert body["unit"]["stage_index"] == 0
     assert body["unit"]["due_date"] == local_day().isoformat()
     assert body["unit"]["has_passed"] is False
     assert body["operation_id"] == "http-adjust-1"
@@ -534,9 +538,10 @@ def test_adjust_and_undo_schedule_http_endpoints(session_factory, make_client):
     with session_factory() as session:
         unit = session.get(ReviewUnitState, unit_id)
         assert unit is not None
-        # Undo restores the schedule present immediately before reconciliation.
+        # Undo restores the schedule present immediately before the legacy
+        # demotion batch, which is the date the previous PATCH booked.
         assert unit.stage_index == 6
-        assert unit.due_date.isoformat() == local_day().isoformat()
+        assert unit.due_date == local_day() + timedelta(days=INTERVAL_DAYS[6])
         assert unit.has_passed is False
         assert before_stage == 4
         assert before_due

@@ -1,3 +1,5 @@
+import { INTERVAL_BAND_BOUNDS, intervalBandLabel } from '../../model/intervalBands'
+
 export const MEMORY_LADDER_STAGE_COUNT = 10
 
 export interface SubjectMemoryLadderPalace {
@@ -34,9 +36,15 @@ export interface SubjectMemoryLadderResponse {
 
 export type SubjectMemoryLadderKey = number | 'unassigned'
 
+/**
+ * Label for one interval bucket. The backend still reports the bucket as
+ * ``stage_index`` plus its lower bound; the UI must speak in day ranges, never
+ * in "N天级", because FSRS schedules the real gap per unit.
+ */
 export function stageLabel(intervalDays: number): string {
-  if (intervalDays <= 0) return '刚学'
-  if (intervalDays >= 365) return '1年'
+  const index = INTERVAL_BAND_BOUNDS.indexOf(intervalDays as (typeof INTERVAL_BAND_BOUNDS)[number])
+  if (index >= 0) return intervalBandLabel(index)
+  if (intervalDays <= 0) return '首学'
   return `${intervalDays}天`
 }
 

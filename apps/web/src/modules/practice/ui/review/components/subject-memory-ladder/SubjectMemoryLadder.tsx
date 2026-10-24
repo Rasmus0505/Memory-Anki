@@ -49,11 +49,11 @@ export interface SubjectMemoryLadderProps {
   subjectKey: SubjectMemoryLadderKey
   variant: 'thumb' | 'full'
   /**
-   * 受控的当前档位；`null` 表示“全部宫殿”。
+   * 受控的当前间隔段；`null` 表示“全部宫殿”。
    * 传了 `onStageSelect` 即进入受控模式，由外层决定筛选后的内容。
    */
   selectedStageIndex?: number | null
-  /** 点档位（含再点一次取消）时回调；返回 `null` 表示取消筛选。 */
+  /** 点间隔段（含再点一次取消）时回调；返回 `null` 表示取消筛选。 */
   onStageSelect?: (stageIndex: number | null) => void
 }
 
@@ -72,8 +72,8 @@ export function SubjectMemoryLadder({
   const max = Math.max(1, ...stages.map((item) => item.palace_count))
   const rack = data?.ladder ?? FALLBACK_LADDER
   const summary = useMemo(() => {
-    if (!subject) return '这一科还没有进入记忆档位的宫殿'
-    if (subject.palace_count === 0) return '这一科还没有进入记忆档位的宫殿'
+    if (!subject) return '这一科还没有进入记忆复习的宫殿'
+    if (subject.palace_count === 0) return '这一科还没有进入记忆复习的宫殿'
     const overdue = subject.stages.reduce((sum, item) => sum + item.overdue_palace_count, 0)
     return overdue > 0
       ? `${subject.palace_count} 座宫殿在档，${overdue} 座有逾期`
@@ -81,7 +81,7 @@ export function SubjectMemoryLadder({
   }, [subject])
 
   if (variant === 'thumb') {
-    return <Thumb stages={stages} label={isError ? '记忆档位暂时读不到' : summary} />
+    return <Thumb stages={stages} label={isError ? '记忆间隔暂时读不到' : summary} />
   }
 
   const commit = (next: number | null) => {
@@ -117,9 +117,9 @@ export function SubjectMemoryLadder({
   const earliest = stage?.palaces[0]
 
   return (
-    <section className="sml sml-full" aria-label="记忆档位">
+    <section className="sml sml-full" aria-label="记忆间隔">
       <div className="sml-full-head">
-        <span className="sml-kicker">记忆档位</span>
+        <span className="sml-kicker">记忆间隔</span>
         <div className="sml-head-right">
           <span className="sml-stage-name" data-active={stage != null}>
             {stage ? stageLabel(stage.interval_days) : '全部宫殿'}
@@ -128,7 +128,7 @@ export function SubjectMemoryLadder({
             <button
               type="button"
               className="sml-clear"
-              aria-label="取消档位选中，显示全部"
+              aria-label="取消间隔段选中，显示全部"
               onClick={() => commit(null)}
             >
               全部
@@ -139,17 +139,17 @@ export function SubjectMemoryLadder({
 
       {isError ? (
         <p className="sml-status" role="status">
-          记忆档位暂时读不到。
+          记忆间隔暂时读不到。
           <button type="button" className="sml-link" onClick={() => void refetch()}>重新加载</button>
         </p>
       ) : isPending ? (
-        <p className="sml-status" role="status">正在读取记忆档位…</p>
+        <p className="sml-status" role="status">正在读取记忆间隔…</p>
       ) : (
         <>
           <div
             className="sml-scale"
             role="radiogroup"
-            aria-label="记忆档位"
+            aria-label="记忆间隔"
             data-filtering={controlled}
           >
             <span
@@ -212,7 +212,7 @@ export function SubjectMemoryLadder({
                 className="sml-review"
                 onClick={() => navigate(reviewStagePath(stage.palaces.map((palace) => palace.palace_id)))}
               >
-                复习这一档
+                复习这一段
               </button>
             ) : null}
           </div>
@@ -220,10 +220,10 @@ export function SubjectMemoryLadder({
             {controlled
               ? stage
                 ? '筛选只影响下方显示；章节题目占比仍按整本书计算。'
-                : '点任意档位，下方章节只保留这一档的宫殿。'
+                : '点任意间隔段，下方章节只保留这一段的宫殿。'
               : stage
-                ? '再点一次同一个档位可以取消选中。'
-                : '点档位，查看这一档的宫殿数量和最近复习日期。'}
+                ? '再点一次同一个间隔段可以取消选中。'
+                : '点间隔段，查看这一段的宫殿数量和最近复习日期。'}
           </p>
         </>
       )}

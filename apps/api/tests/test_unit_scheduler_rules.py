@@ -1,8 +1,11 @@
-"""Ladder transition rules: hard retries, lapses to 忘记 level, spread, invariants.
+"""FSRS transition rules behind the product guard rails.
 
-These pin the scheduling rules (忘记 resets to stage 0; 困难 demotes once per day). The ladder itself (stage count and
-nominal intervals) is deliberately unchanged — `unit_ladder_progress` ships
-`INTERVAL_DAYS` to the toolbar strip and indexes a histogram by stage.
+FSRS owns the intervals; these tests pin the rules the product adds on top of it:
+忘记/困难 retry on the same study day, 困难 demotes the display projection only
+once per day, a pass always books at least one day out, locked fill cards do not
+move, and sprint mode only shortens. ``INTERVAL_DAYS`` survives as a display
+projection, so the old stage arithmetic is still asserted where it is the
+compatibility surface rather than the scheduler.
 """
 
 from datetime import date
@@ -23,8 +26,8 @@ TODAY = date(2026, 8, 7)
 TOP_STAGE = len(INTERVAL_DAYS) - 1
 
 
-def test_ladder_shape_is_unchanged():
-    """The toolbar histogram and `ladder` payload depend on this exact shape."""
+def test_ladder_shape_is_kept_for_legacy_rows():
+    """Old rows and stored snapshots still use these stage numbers."""
     assert INTERVAL_DAYS == (0, 1, 3, 7, 14, 30, 60, 120, 240, 365)
 
 
@@ -85,31 +88,50 @@ def test_hard_after_a_prior_failure_retries_again_with_stage_penalty():
     assert result.due_date == TODAY
 
 
-def test_forgetting_a_mature_unit_drops_to_the_forgot_level():
-    """忘记 always lands on the 忘记 level (stage 0), whatever stage it was at."""
+def test_forgetting_a_mature_unit_collapses_stability_and_retries_today():
+    """忘记 books a same-day retry and tells FSRS the memory was overestimated."""
+    learned = rate_unit(
+        stage_index=9,
+        has_passed=True,
+        rating=3,
+        had_failure_in_encounter=False,
+        today=TODAY,
+    )
+    assert learned.fsrs_state is not None
+    before_stability = learned.fsrs_state.stability or 0
+
     lapsed = rate_unit(
         stage_index=9,
         has_passed=True,
         rating=1,
         had_failure_in_encounter=False,
         today=TODAY,
+        fsrs_state=learned.fsrs_state,
     )
     assert lapsed.passed is False
     assert lapsed.due_date == TODAY
     assert lapsed.retry_after_cards == 3
     assert lapsed.stage_index == 0
     assert lapsed.hard_penalty_applied is False
+    assert lapsed.fsrs_state is not None
+    assert (lapsed.fsrs_state.stability or 0) < before_stability / 2
+    # FSRS raises difficulty on a lapse, so the next pass books a shorter
+    # interval than the memory state had before the failure.
+    assert (lapsed.fsrs_state.difficulty or 0) > (learned.fsrs_state.difficulty or 0)
 
-    # Relearning from stage 0 in the same encounter books the first-step interval.
     relearned = rate_unit(
         stage_index=lapsed.stage_index,
         has_passed=True,
         rating=3,
         had_failure_in_encounter=True,
         today=TODAY,
+        fsrs_state=lapsed.fsrs_state,
     )
-    assert relearned.stage_index == MIN_PASSED_STAGE
-    assert (relearned.due_date - TODAY).days == INTERVAL_DAYS[MIN_PASSED_STAGE] == 1
+    assert relearned.passed is True
+    gap = (relearned.due_date - TODAY).days
+    assert gap >= INTERVAL_DAYS[MIN_PASSED_STAGE]
+    assert gap < (learned.due_date - TODAY).days, "the lapse did not shorten the interval"
+    assert relearned.stage_index >= MIN_PASSED_STAGE
 
 
 def test_forgetting_ignores_the_once_per_day_hard_marker():
@@ -248,6 +270,26 @@ def test_hard_on_a_locked_fill_unit_still_retries_and_changes_schedule():
     assert result.schedule_changed is True
     assert result.stage_index == 4
     assert result.due_date == TODAY
+
+
+def test_a_row_without_fsrs_state_continues_from_its_legacy_position():
+    """Inherited and pre-switch rows have no FSRS checkpoint yet.
+
+    Passing an empty state must not make a mature unit look brand new: the
+    scheduler seeds from the row's stage/due date instead of booking one day.
+    """
+    from memory_anki.modules.memory.application.unit_fsrs_adapter import FsrsUnitState
+
+    result = rate_unit(
+        stage_index=9,
+        has_passed=True,
+        rating=3,
+        had_failure_in_encounter=False,
+        today=TODAY,
+        fsrs_state=FsrsUnitState(),
+    )
+    assert result.passed is True
+    assert (result.due_date - TODAY).days >= 300
 
 
 def test_without_a_fuzz_key_intervals_are_exactly_nominal():

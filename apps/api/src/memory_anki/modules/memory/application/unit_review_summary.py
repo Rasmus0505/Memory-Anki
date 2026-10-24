@@ -8,7 +8,12 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from memory_anki.core.time import local_calendar_day_start_as_utc_naive, local_day, to_api_datetime
+from memory_anki.core.time import (
+    local_calendar_day_start_as_utc_naive,
+    local_day,
+    to_api_datetime,
+    utc_now_naive,
+)
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.unit_reviews import (
     ReviewUnitRatingOperation,
@@ -263,7 +268,9 @@ def get_review_queue_summary(session: Session, **_: Any) -> dict[str, Any]:
 
 
 def get_unit_review_weekly_stats(session: Session) -> dict[str, Any]:
-    since = datetime.now() - timedelta(days=7)
+    # Rating rows store UTC-naive timestamps; using local wall time here shifted
+    # the seven-day window by the timezone offset (8h in Beijing).
+    since = utc_now_naive() - timedelta(days=7)
     operations = (
         session.query(ReviewUnitRatingOperation)
         .filter(

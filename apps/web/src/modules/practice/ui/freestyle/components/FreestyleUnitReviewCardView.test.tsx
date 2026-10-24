@@ -1739,7 +1739,7 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(retryPositionLabel(1)).toBe('1张后重练')
     expect(retryPositionLabel(2)).toBe('2张后重练')
     expect(retryPositionLabel(3)).toBe('3张后重练')
-    expect(ratingEffectLabel(effects[0], 2)).toBe('2张后重练 · 重置到首学阶段')
+    expect(ratingEffectLabel(effects[0], 2)).toBe('2张后重练 · 今天再练')
     expect(ratingEffectLabel(effects[2], 3)).toBe('1天后复习 · 7月28日')
   })
 
@@ -1773,9 +1773,7 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(ratingEffectLabel(legacy, 0)).toBe('1天后复习 · 7月28日')
   })
 
-  it('says a lapsed mature unit drops to a stage instead of resetting', () => {
-    // 忘记 on a unit that already passed keeps part of its ladder position, so the
-    // verb comes from stage_action; only a true stage-0 landing reads as 重置.
+  it('says a lapsed mature unit is retry work today, not a ladder demotion', () => {
     const lapsed: UnitRatingEffectDto = {
       rating: 1,
       label: '忘记',
@@ -1787,10 +1785,15 @@ describe('FreestyleUnitReviewCardView', () => {
       retry_after_cards: 3,
       stage_action: 'lower',
     }
-    expect(ratingEffectLabel(lapsed, 3)).toBe('3张后重练 · 降至14天级')
+    expect(ratingEffectLabel(lapsed, 3)).toBe('3张后重练 · 今天再练')
 
-    const heldAtLearning: UnitRatingEffectDto = { ...lapsed, target_stage_index: 0, target_interval_days: 0, stage_action: 'keep' }
-    expect(ratingEffectLabel(heldAtLearning, 3)).toBe('3张后重练 · 保持首学阶段')
+    const heldAtLearning: UnitRatingEffectDto = {
+      ...lapsed,
+      target_stage_index: 0,
+      target_interval_days: 0,
+      stage_action: 'keep',
+    }
+    expect(ratingEffectLabel(heldAtLearning, 3)).toBe('3张后重练 · 今天再练')
   })
 
   it('stays on the card and atomically amends another rating', async () => {

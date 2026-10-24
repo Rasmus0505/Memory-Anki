@@ -231,6 +231,12 @@ BASELINE_OVERSIZED_FILES = {
     # Pre-existing oversized hosts/harnesses (not introduced by english-lookup work).
     "apps/web/src/shared/ui/mindmap-canvas/useMindMapViewport.ts",
     "apps/web/src/modules/practice/ui/freestyle/components/FreestyleUnitReviewCardView.test.tsx",
+    # Round-plan/rating work grew these three past the limit in one catch-all
+    # commit. Split tracked as the next freestyle refactor: sheet subcomponents,
+    # progress model vs summary, rating types/helpers vs store.
+    "apps/web/src/modules/practice/ui/freestyle/components/FreestyleRoundSheet.tsx",
+    "apps/web/src/modules/practice/ui/freestyle/model/freestyleProgressSegments.ts",
+    "apps/web/src/modules/practice/ui/freestyle/model/ratingSaveStore.ts",
     # Existing shared UI/test harnesses; split tracked separately from this
     # architecture review so the quality gate remains focused on new violations.
     "apps/web/src/shared/components/ui/dialog.tsx",
@@ -1503,6 +1509,73 @@ def check_review_application_boundary(errors: list[str]) -> None:
                 errors.append(
                     f"{path.relative_to(REPO_ROOT).as_posix()}: memory application must "
                     "depend on pure document contracts or injected ports, not the palace context."
+                )
+                break
+
+
+def check_review_scheduler_boundary(errors: list[str]) -> None:
+    """FSRS is the only production scheduler, and one adapter owns the library.
+
+    ``unit_fsrs_adapter.py`` is the single seam to the ``fsrs`` package: it holds
+    the product rules (same-day failure retry, once-per-day \u56f0\u96be demotion, locked
+    reviews, sprint horizon) that the raw library does not know about. Every other
+    module, ``unit_scheduler.py`` included, must go through that adapter so a
+    future library upgrade cannot silently change product behaviour in one caller.
+    The retired shadow recorder must not come back as a second scheduler.
+    """
+    application_root = API_SRC / "modules" / "memory" / "application"
+    adapter_path = application_root / "unit_fsrs_adapter.py"
+    adapter_rel = adapter_path.relative_to(REPO_ROOT).as_posix()
+    if not adapter_path.exists():
+        errors.append(
+            f"{adapter_rel}: the FSRS adapter must exist; it is the only seam to the "
+            "scheduling library."
+        )
+        return
+
+    scheduler_path = application_root / "unit_scheduler.py"
+    if not scheduler_path.exists():
+        errors.append(
+            f"{scheduler_path.relative_to(REPO_ROOT).as_posix()}: the production "
+            "scheduler entry point must exist."
+        )
+    else:
+        scheduler_rel = scheduler_path.relative_to(REPO_ROOT).as_posix()
+        imported = {
+            tail
+            for node in ast.walk(
+                ast.parse(
+                    scheduler_path.read_text(encoding="utf-8", errors="ignore").lstrip("\ufeff")
+                )
+            )
+            if (tail := (imported_module_from_node(node) or "").rsplit(".", 1)[-1])
+        }
+        if "unit_fsrs_adapter" not in imported:
+            errors.append(
+                f"{scheduler_rel}: the production scheduler must route through "
+                "unit_fsrs_adapter; scheduling cannot be re-implemented locally."
+            )
+
+    # The English module runs its own FSRS runtime for dictation; this boundary is
+    # about the palace review scheduler, so only the memory module is held to it.
+    for path in iter_files(API_SRC / "modules" / "memory", (".py",)):
+        rel = path.relative_to(REPO_ROOT).as_posix()
+        if rel == adapter_rel:
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8", errors="ignore").lstrip("\ufeff"))
+        for node in ast.walk(tree):
+            imported_module = imported_module_from_node(node) or ""
+            tail = imported_module.rsplit(".", 1)[-1]
+            if imported_module == "fsrs" or imported_module.startswith("fsrs."):
+                errors.append(
+                    f"{rel}: only unit_fsrs_adapter.py may import the fsrs library; "
+                    "product scheduling rules live behind that adapter."
+                )
+                break
+            if tail == "unit_fsrs_shadow":
+                errors.append(
+                    f"{rel}: the FSRS shadow recorder is retired; FSRS is now the "
+                    "production scheduler and has nothing left to compare against."
                 )
                 break
 
@@ -6753,6 +6826,7 @@ def main() -> int:
     check_prompt_catalog_boundaries(errors)
     check_ai_run_workspace(errors)
     check_review_application_boundary(errors)
+    check_review_scheduler_boundary(errors)
     check_exam_horizon_boundary(errors)
     check_unit_review_boundary(errors)
     check_english_reading_gap_loop(errors)
