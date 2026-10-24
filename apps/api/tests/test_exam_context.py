@@ -152,3 +152,73 @@ def test_exam_routes_edit_stars_settings_and_build_overview(make_client, db_sess
     assert [row["stars"] for row in overview["stars"]] == [3, 2, 1]
     assert len(overview["retention"]["observed"]) == 30
     assert "主观题" in overview["star_rule"]["description"]
+
+
+def test_sprint_mode_caps_the_horizon_and_seeds_milestones(make_client, db_session):
+    client = make_client(exam_router)
+    exam_day = (local_day() + timedelta(days=58)).isoformat()
+
+    assert client.get("/api/v1/exam/settings").json()["sprint_mode"] is False
+    saved = client.put(
+        "/api/v1/exam/settings",
+        json={"exam_name": "考研", "exam_date": exam_day, "sprint_mode": True},
+    ).json()
+    assert saved["sprint_mode"] is True
+
+    board = client.get("/api/v1/exam/milestones").json()
+    assert board["sprint"]["active"] is True
+    # The horizon bounds the booking: the last usable date is the exam eve, so the
+    # longest gap is days_left - 1. The ladder still decides the cadence.
+    assert board["sprint"]["last_due"] == "2026-12-19"
+    assert board["sprint"]["max_interval_days"] == 57
+    assert board["sprint"]["last_due"] == (date.fromisoformat(exam_day) - timedelta(days=1)).isoformat()
+    # The plan's checkpoints are seeded once, not on every read.
+    assert board["counts"]["total"] == len(board["items"]) > 0
+    assert client.get("/api/v1/exam/milestones").json()["counts"]["total"] == board["counts"]["total"]
+
+    items = board["items"]
+    items[0]["done"] = True
+    items[0]["notify_days_before"] = 5
+    saved_board = client.put("/api/v1/exam/milestones", json={"items": items}).json()
+    assert saved_board["items"][0]["done"] is True
+    assert saved_board["items"][0]["notify_days_before"] == 5
+
+    assert client.put("/api/v1/exam/milestones", json={"items": [{"title": "无日期"}]}).status_code == 400
+
+    off = client.put("/api/v1/exam/settings", json={"sprint_mode": False}).json()
+    assert off["sprint_mode"] is False
+    assert client.get("/api/v1/exam/milestones").json()["sprint"]["active"] is False
+
+
+def test_milestones_remind_exactly_twice_and_never_move_schedule(db_session):
+    """Two in-app moments: the lead day, then the day itself. Overdue stays visible."""
+    from memory_anki.modules.exam.application.milestone_service import (
+        list_milestones,
+        milestone_upcoming,
+        save_milestones,
+    )
+
+    today = date(2026, 10, 23)
+    save_milestones(
+        db_session,
+        [
+            {"id": "a", "date": "2026-10-26", "title": "中教史", "notify_days_before": 3, "category": "333"},
+            {"id": "b", "date": "2026-10-23", "title": "今天到期", "notify_days_before": 3},
+            {"id": "c", "date": "2026-10-20", "title": "已经过期", "notify_days_before": 3},
+            {"id": "d", "date": "2026-11-19", "title": "还早", "notify_days_before": 3},
+        ],
+    )
+
+    board = list_milestones(db_session, today=today)
+    by_id = {row["id"]: row for row in board["items"]}
+    assert by_id["a"]["reminder"] == "lead"
+    assert by_id["b"]["reminder"] == "today"
+    assert by_id["c"]["reminder"] is None and by_id["c"]["status"] == "overdue"
+    assert by_id["d"]["reminder"] is None
+
+    # The start page shows the nearest two milestone DAYS, every item on each.
+    block = milestone_upcoming(db_session, today=today)
+    assert [group["date"] for group in block["groups"]] == ["2026-10-23", "2026-10-26"]
+    assert [item["id"] for item in block["groups"][0]["items"]] == ["b"]
+    assert [item["id"] for item in block["groups"][1]["items"]] == ["a"]
+    assert block["overdue_count"] == 1

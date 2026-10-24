@@ -22,6 +22,7 @@ from memory_anki.infrastructure.db._tables.unit_reviews import (
     ReviewUnitRatingOperation,
     ReviewUnitState,
 )
+from memory_anki.modules.exam.api import milestone_upcoming
 from memory_anki.modules.memory.api import INTERVAL_DAYS, resolve_unit_definitions
 from memory_anki.modules.practice.application.round_state_service import get_round
 
@@ -292,6 +293,7 @@ def build_freestyle_overview(
     payload = get_round(session, round_id) if round_id else None
     return {
         "round": _round_block(session, payload) if payload is not None else None,
+        "milestones": milestone_upcoming(session, today=day),
         "today": _today_block(session, day),
         "yesterday": _yesterday_block(session, day, zone),
         "next_reviews": _next_reviews_block(session, day),

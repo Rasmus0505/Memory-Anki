@@ -4,6 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.deps import session_dep
+from memory_anki.modules.exam.application.milestone_service import (
+    list_milestones,
+    save_milestones,
+    sprint_state,
+)
 from memory_anki.modules.exam.application.overview_service import build_exam_overview
 from memory_anki.modules.exam.application.settings_service import (
     ExamNotFoundError,
@@ -33,6 +38,20 @@ def api_save_exam_settings(data: dict[str, Any], s: Session = Depends(session_de
         return save_exam_settings(s, data)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/exam/milestones")
+def api_list_milestones(s: Session = Depends(session_dep)) -> dict[str, Any]:
+    return {**list_milestones(s), "sprint": sprint_state(s)}
+
+
+@router.put("/exam/milestones")
+def api_save_milestones(data: dict[str, Any], s: Session = Depends(session_dep)) -> dict[str, Any]:
+    try:
+        saved = save_milestones(s, data.get("items"))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {**saved, "sprint": sprint_state(s)}
 
 
 @router.put("/exam/chapters/{chapter_id}/stars")
