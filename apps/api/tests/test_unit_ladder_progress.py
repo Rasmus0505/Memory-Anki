@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 
-from memory_anki.core.time import local_calendar_day_start_as_utc_naive
+from memory_anki.core.time import local_calendar_day_start_as_utc_naive, local_day
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.unit_reviews import (
     ReviewUnitState,
 )
 from memory_anki.modules.memory.application.unit_ladder_progress import (
+    due_horizon_key,
     get_palace_ladder_progress,
     resolve_range_start,
 )
@@ -19,6 +20,9 @@ from memory_anki.modules.memory.application.unit_review_service import (
     rate_review_unit,
     reconcile_palace_units,
     start_freestyle_unit_review_session,
+)
+from memory_anki.modules.memory.application.unit_schedule_projection import (
+    unit_interval_days,
 )
 
 
@@ -100,6 +104,42 @@ def test_resolve_range_start_bounds(today=date(2026, 7, 29)):
     )
 
 
+def test_due_horizon_buckets_cover_the_whole_year():
+    today = date(2026, 10, 24)
+    assert due_horizon_key(today, today) == "today"
+    assert due_horizon_key(today - timedelta(days=5), today) == "today"
+    assert due_horizon_key(today + timedelta(days=1), today) == "d3"
+    assert due_horizon_key(today + timedelta(days=3), today) == "d3"
+    assert due_horizon_key(today + timedelta(days=4), today) == "week"
+    assert due_horizon_key(today + timedelta(days=7), today) == "week"
+    assert due_horizon_key(today + timedelta(days=8), today) == "month"
+    assert due_horizon_key(today + timedelta(days=30), today) == "month"
+    assert due_horizon_key(today + timedelta(days=31), today) == "later"
+
+
+def test_interval_days_is_the_booked_gap(db_session):
+    """The badge must describe the product's booking, not the FSRS card."""
+    state = _seed_review_unit(db_session, title="间隔口径宫殿")
+    today = local_day()
+    state.fsrs_last_review = datetime.combine(today, time(4))
+    state.due_date = today + timedelta(days=21)
+    assert unit_interval_days(state) == 21
+    # A failed grade books today even though the FSRS card keeps its own gap.
+    state.due_date = today
+    assert unit_interval_days(state) == 0
+
+
+def test_ladder_progress_reports_due_horizon(db_session):
+    state = _seed_review_unit(db_session, title="到期分布宫殿")
+    payload = get_palace_ladder_progress(db_session, state.palace_id, unit_id=state.id)
+
+    horizon = payload["palace"]["due_horizon"]
+    assert set(horizon) == {"today", "d3", "week", "month", "later"}
+    assert sum(horizon.values()) == payload["palace"]["unit_count"] == 1
+    assert payload["current"]["horizon"] in horizon
+    assert horizon[payload["current"]["horizon"]] == 1
+
+
 def test_ladder_progress_tracks_current_stage_and_pass_stats(db_session):
     state = _seed_review_unit(db_session)
     _pass_once(
@@ -123,7 +163,9 @@ def test_ladder_progress_tracks_current_stage_and_pass_stats(db_session):
     assert payload["scope"] == "unit"
     assert payload["current"]["unit_id"] == state.id
     interval = payload["current"]["interval_days"]
-    assert interval >= 1
+    # A first pass books the same-day re-check, so the booked gap is zero until
+    # that re-check graduates the unit to tomorrow.
+    assert interval == 0
     assert payload["current"]["stage_index"] == state.stage_index
     assert payload["palace"]["unit_count"] == 1
     assert payload["palace"]["stage_histogram"][state.stage_index] == 1

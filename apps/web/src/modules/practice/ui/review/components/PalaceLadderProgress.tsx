@@ -2,16 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   getPalaceLadderProgressApi,
+  type DueHorizonKey,
   type LadderProgressRange,
   type PalaceLadderProgressDto,
 } from '../api/unitReviewApi'
 import { cn } from '@/shared/lib/utils'
-import {
-  intervalBandIndex,
-  intervalBandLabel,
-  intervalDaysLabel,
-  intervalOutlookLabel,
-} from '../model/intervalBands'
+import { intervalBadgeLabel, intervalOutlookLabel } from '../model/intervalBands'
 
 const RANGE_OPTIONS: Array<{ value: LadderProgressRange; label: string }> = [
   { value: 'all', label: '全部' },
@@ -28,7 +24,6 @@ const RANGE_LABELS: Record<LadderProgressRange, string> = {
 
 const RANGE_STORAGE_KEY = 'memory-anki.ladder-progress.range'
 const TOOLTIP_Z = 10_000
-const DEFAULT_LADDER = [0, 1, 3, 7, 14, 30, 60, 120, 240, 365] as const
 const EMPTY_SUMMARY = {
   range: 'all' as LadderProgressRange,
   unit_count: 0,
@@ -36,6 +31,20 @@ const EMPTY_SUMMARY = {
   freestyle_rating_count: 0,
   quiz_count: 0,
 }
+
+type HorizonKey = DueHorizonKey
+
+/**
+ * Due-date horizons, not ladder levels. FSRS books each unit at its own real
+ * interval, so the useful shape of a palace is "how much work is due when".
+ */
+const HORIZONS: ReadonlyArray<{ key: HorizonKey; label: string; className: string }> = [
+  { key: 'today', label: '今天', className: 'border-amber-500/60 bg-amber-500/15 text-amber-200' },
+  { key: 'd3', label: '3天内', className: 'border-primary/50 bg-primary/15 text-primary' },
+  { key: 'week', label: '本周', className: 'border-primary/35 bg-primary/10 text-primary/90' },
+  { key: 'month', label: '本月', className: 'border-border bg-muted/60 text-muted-foreground' },
+  { key: 'later', label: '更远', className: 'border-border/60 bg-transparent text-muted-foreground/80' },
+]
 
 function readStoredRange(): LadderProgressRange {
   try {
@@ -73,15 +82,6 @@ function formatShortDate(iso: string | null | undefined): string {
   }
 }
 
-type NodeKind = 'past' | 'current' | 'future'
-
-function nodeKind(stageIndex: number, currentStage: number | null): NodeKind {
-  if (currentStage == null) return 'future'
-  if (stageIndex < currentStage) return 'past'
-  if (stageIndex === currentStage) return 'current'
-  return 'future'
-}
-
 type FloatingPos = { left: number; top: number }
 
 function positionBelow(el: HTMLElement, width = 260): FloatingPos {
@@ -113,7 +113,7 @@ export function PalaceLadderProgress({
   const [range, setRange] = useState<LadderProgressRange>(() => readStoredRange())
   const [data, setData] = useState<PalaceLadderProgressDto | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [hoverStage, setHoverStage] = useState<number | null>(null)
+  const [hoverHorizon, setHoverHorizon] = useState<HorizonKey | null>(null)
   const [hoverTrack, setHoverTrack] = useState(false)
   const [hoverSummary, setHoverSummary] = useState<'range' | 'palace' | null>(null)
   const [floatPos, setFloatPos] = useState<FloatingPos | null>(null)
@@ -129,7 +129,7 @@ export function PalaceLadderProgress({
 
   const hideFloating = useCallback(() => {
     clearHideTimer()
-    setHoverStage(null)
+    setHoverHorizon(null)
     setHoverTrack(false)
     setHoverSummary(null)
     setFloatPos(null)
@@ -139,7 +139,7 @@ export function PalaceLadderProgress({
     clearHideTimer()
     hideTimerRef.current = window.setTimeout(() => {
       hideTimerRef.current = null
-      setHoverStage(null)
+      setHoverHorizon(null)
       setHoverTrack(false)
       setHoverSummary(null)
       setFloatPos(null)
@@ -166,31 +166,19 @@ export function PalaceLadderProgress({
     void load()
   }, [load, refreshKey])
 
-  // The rail's buckets are the backend's stage histogram, so the highlighted
-  // node comes from the same projection. The real interval is shown as text
-  // (badge, tooltips): a failed unit sits at stage 0 even though its FSRS card
-  // still remembers a longer gap, and the rail must not disagree with the
-  // distribution it is drawn from.
-  const currentStage = data?.current
-    ? (data.current.stage_index ?? intervalBandIndex(data.current.interval_days))
-    : null
   const currentDue = Boolean(data?.current?.due)
-  const ladder = useMemo(
-    () => (data?.ladder?.length ? data.ladder : [...DEFAULT_LADDER]),
-    [data?.ladder],
+  const horizonCounts = data?.palace.due_horizon ?? null
+  const currentHorizon = (data?.current?.horizon ?? null) as HorizonKey | null
+  const totalUnits = useMemo(
+    () => (horizonCounts ? Object.values(horizonCounts).reduce((sum, n) => sum + n, 0) : 0),
+    [horizonCounts],
   )
-  const lastIndex = Math.max(1, ladder.length - 1)
-  const fillRatio =
-    currentStage == null ? 0 : Math.max(0, Math.min(1, currentStage / lastIndex))
 
   useEffect(() => {
-    if (hoverStage == null && !hoverTrack && !hoverSummary) return
+    if (hoverHorizon == null && !hoverTrack && !hoverSummary) return
     const reposition = () => {
-      if (hoverStage != null) {
-        const days = ladder[hoverStage]
-        const node = document.querySelector<HTMLElement>(
-          `[data-testid="ladder-node-${days}"]`,
-        )
+      if (hoverHorizon != null) {
+        const node = document.querySelector<HTMLElement>(`[data-testid="horizon-${hoverHorizon}"]`)
         if (node) setFloatPos(positionBelow(node))
         return
       }
@@ -206,7 +194,7 @@ export function PalaceLadderProgress({
       window.removeEventListener('scroll', reposition, true)
       window.removeEventListener('resize', reposition)
     }
-  }, [hoverStage, hoverSummary, hoverTrack, ladder])
+  }, [hoverHorizon, hoverSummary, hoverTrack])
 
   const handleRangeChange = (next: LadderProgressRange) => {
     setRange(next)
@@ -217,54 +205,30 @@ export function PalaceLadderProgress({
     }
   }
 
-  const stageTooltip = useMemo(() => {
-    if (hoverStage == null || !data) return null
-    const kind = nodeKind(hoverStage, currentStage)
-    const status =
-      kind === 'past'
-        ? '已走过'
-        : kind === 'current'
-          ? (currentDue ? '当前 · 已到期' : '当前')
-          : '未到达'
-    const stats = data.unit_range_stats.per_stage[hoverStage]
-    const passCount = stats?.pass_count ?? 0
-    const seconds = stats?.seconds ?? 0
-    const hasDetails = passCount > 0 || seconds > 0 || Boolean(stats?.last_at)
-    const rangeLabel = RANGE_LABELS[range]
-    const emptyText =
-      range === 'all' && kind === 'past'
-        ? '无可用历史明细（可能由跨档或旧进度产生）'
-        : kind === 'future' && range === 'all'
-          ? '尚未到达这个间隔档'
-          : `${rangeLabel}内无直接复习记录`
+  const horizonTooltip = useMemo(() => {
+    if (hoverHorizon == null || !data || !horizonCounts) return null
+    const definition = HORIZONS.find((item) => item.key === hoverHorizon)
+    if (!definition) return null
+    const count = horizonCounts[hoverHorizon] ?? 0
+    const share = totalUnits > 0 ? Math.round((count / totalUnits) * 100) : 0
     return {
-      title: `间隔 ${intervalBandLabel(hoverStage, ladder)}`,
-      status,
-      unitTitle: data.current?.title || '未命名单元',
-      gapText:
-        kind === 'current' && data.current
-          ? `当前实际间隔 ${intervalOutlookLabel(data.current.interval_days)}`
+      title: `${definition.label} · ${count} 个单元`,
+      lines: [
+        `占整宫 ${share}%`,
+        currentHorizon === hoverHorizon
+          ? `当前单元在这里${data.current?.due_date ? `（${formatShortDate(data.current.due_date)}）` : ''}`
           : null,
-      dueText:
-        kind === 'current' && data.current?.due_date
-          ? `下次复习：${formatShortDate(data.current.due_date)}${currentDue ? '（已到期）' : ''}`
-          : null,
-      rangeLabel,
-      passCount,
-      lastAt: formatShortDate(stats?.last_at),
-      seconds: formatSeconds(seconds),
-      hasDetails,
-      emptyText,
+        count === 0 ? '这段时间没有单元到期' : null,
+      ].filter((line): line is string => Boolean(line)),
     }
-  }, [currentDue, currentStage, data, hoverStage, ladder, range])
+  }, [currentHorizon, data, horizonCounts, hoverHorizon, totalUnits])
 
   const trackTooltip = useMemo(() => {
-    if (!hoverTrack || hoverStage != null || hoverSummary != null || !data) return null
-    const histogram = data.palace.stage_histogram || []
-    const distribution = ladder
-      .map((days, index) => {
-        const count = histogram[index] ?? 0
-        return count > 0 ? `${intervalBandLabel(index, ladder)}×${count}` : null
+    if (!hoverTrack || hoverHorizon != null || hoverSummary != null || !data) return null
+    const distribution = HORIZONS
+      .map((item) => {
+        const count = horizonCounts?.[item.key] ?? 0
+        return count > 0 ? `${item.label}×${count}` : null
       })
       .filter(Boolean)
       .join(' · ')
@@ -279,17 +243,17 @@ export function PalaceLadderProgress({
         ? `下次复习：${formatShortDate(data.current.due_date)}${data.current.due ? '（已到期）' : ''}`
         : null,
       palace: `宫殿：${data.palace.unit_count} 个单元 · ${data.palace.due_count} 个到期`
-        + (data.palace.weakest_stage_index != null
-          ? ` · 最短间隔 ${intervalBandLabel(data.palace.weakest_stage_index, ladder)}`
+        + (data.palace.next_review_date
+          ? ` · 最近到期 ${formatShortDate(data.palace.next_review_date)}`
           : ''),
-      distribution: `间隔分布：${distribution || '暂无分布'}`,
+      distribution: `到期分布：${distribution || '暂无分布'}`,
       reviews: data.palace_range_stats.total_reviews > 0 || data.palace_range_stats.total_seconds > 0
         ? `${rangeLabel}：${data.palace_range_stats.total_reviews} 次 · 学习总时长 ${formatSeconds(data.palace_range_stats.total_seconds)}`
         : `${rangeLabel}：无复习明细`,
       ratings: `评分：忘记 ${share.forgot} · 困难 ${share.hard} · 记得 ${share.remember} · 轻松 ${share.easy}`,
-      scope: data.scope === 'unit' ? '当前单元' : '整宫最弱',
+      scope: data.scope === 'unit' ? '当前单元' : '整宫最近到期',
     }
-  }, [data, hoverStage, hoverSummary, hoverTrack, ladder, range])
+  }, [data, horizonCounts, hoverHorizon, hoverSummary, hoverTrack, range])
 
   const summaryTooltip = useMemo(() => {
     if (!hoverSummary || !data) return null
@@ -302,9 +266,9 @@ export function PalaceLadderProgress({
     }
   }, [data, hoverSummary, range])
 
-  const openStage = (index: number, el: HTMLElement) => {
+  const openHorizon = (key: HorizonKey, el: HTMLElement) => {
     clearHideTimer()
-    setHoverStage(index)
+    setHoverHorizon(key)
     setHoverTrack(false)
     setHoverSummary(null)
     setFloatPos(positionBelow(el))
@@ -312,14 +276,15 @@ export function PalaceLadderProgress({
 
   const openTrack = (el: HTMLElement) => {
     clearHideTimer()
+    setHoverHorizon(null)
     setHoverTrack(true)
     setHoverSummary(null)
-    if (hoverStage == null) setFloatPos(positionBelow(el, 300))
+    setFloatPos(positionBelow(el, 300))
   }
 
   const openSummary = (scope: 'range' | 'palace', el: HTMLElement) => {
     clearHideTimer()
-    setHoverStage(null)
+    setHoverHorizon(null)
     setHoverTrack(false)
     setHoverSummary(scope)
     setFloatPos(positionBelow(el, 260))
@@ -328,11 +293,11 @@ export function PalaceLadderProgress({
   if (!palaceId) return null
 
   const floating =
-    floatPos && (stageTooltip || trackTooltip || summaryTooltip) && typeof document !== 'undefined'
+    floatPos && (horizonTooltip || trackTooltip || summaryTooltip) && typeof document !== 'undefined'
       ? createPortal(
           <div
             role="tooltip"
-            data-testid={stageTooltip ? 'ladder-stage-tooltip' : summaryTooltip ? 'ladder-summary-tooltip' : 'ladder-track-tooltip'}
+            data-testid={horizonTooltip ? 'ladder-horizon-tooltip' : summaryTooltip ? 'ladder-summary-tooltip' : 'ladder-track-tooltip'}
             className="pointer-events-none w-max max-w-70 rounded-lg border border-border bg-popover px-2.5 py-2 text-left text-[11px] text-popover-foreground shadow-xl"
             style={{
               position: 'fixed',
@@ -342,29 +307,12 @@ export function PalaceLadderProgress({
               zIndex: TOOLTIP_Z,
             }}
           >
-            {stageTooltip ? (
+            {horizonTooltip ? (
               <>
-                <div className="font-semibold">
-                  {stageTooltip.title} · {stageTooltip.status}
-                </div>
-                <div className="mt-1 text-muted-foreground">单元：{stageTooltip.unitTitle}</div>
-                {stageTooltip.gapText ? (
-                  <div className="text-muted-foreground">{stageTooltip.gapText}</div>
-                ) : null}
-                {stageTooltip.dueText ? (
-                  <div className="text-muted-foreground">{stageTooltip.dueText}</div>
-                ) : null}
-                {stageTooltip.hasDetails ? (
-                  <>
-                    <div className="text-muted-foreground">
-                      {stageTooltip.rangeLabel}：{stageTooltip.passCount} 次
-                    </div>
-                    <div className="text-muted-foreground">最近通过：{stageTooltip.lastAt}</div>
-                    <div className="text-muted-foreground">学习总时长：{stageTooltip.seconds}</div>
-                  </>
-                ) : (
-                  <div className="text-muted-foreground">{stageTooltip.emptyText}</div>
-                )}
+                <div className="font-semibold">{horizonTooltip.title}</div>
+                {horizonTooltip.lines.map((line) => (
+                  <div key={line} className="mt-1 text-muted-foreground">{line}</div>
+                ))}
               </>
             ) : summaryTooltip ? (
               <>
@@ -392,9 +340,10 @@ export function PalaceLadderProgress({
         )
       : null
 
-  const currentLabel = data?.current
-    ? `当前间隔 ${intervalOutlookLabel(data.current.interval_days)}`
-    : null
+  const currentLabel = data?.current ? intervalBadgeLabel(data.current.interval_days) : null
+  const distributionLabel = HORIZONS
+    .map((item) => `${item.label} ${horizonCounts?.[item.key] ?? 0}`)
+    .join(' · ')
 
   return (
     <div
@@ -425,71 +374,50 @@ export function PalaceLadderProgress({
       </div>
       <div
         ref={trackRef}
-        className="relative min-h-8 min-w-30 flex-1 overflow-visible px-1"
+        className="flex min-h-8 min-w-30 flex-1 items-center"
+        title={error ?? undefined}
         onMouseEnter={(event) => openTrack(event.currentTarget)}
         onMouseLeave={scheduleHide}
       >
         <div
-          className="relative h-8 w-full"
-          role="img"
-          aria-label={
-            data?.current
-              ? `复习间隔 · 当前 ${intervalOutlookLabel(data.current.interval_days)}`
-              : '复习间隔'
-          }
+          className="flex w-full items-center gap-1"
+          role="group"
+          aria-label={horizonCounts ? `到期分布 · ${distributionLabel}` : '到期分布'}
         >
-          {/* Base rail */}
-          <div className="pointer-events-none absolute inset-x-1 top-1/2 h-[3px] -translate-y-1/2 rounded-full bg-muted" />
-          {/* Progress fill to current stage */}
-          <div
-            className={cn(
-              'pointer-events-none absolute left-1 top-1/2 h-[3px] -translate-y-1/2 rounded-full',
-              currentDue ? 'bg-amber-500/80' : 'bg-primary/75',
-            )}
-            style={{ width: `calc((100% - 8px) * ${fillRatio})` }}
-          />
-
-          {ladder.map((days, index) => {
-            const kind = nodeKind(index, currentStage)
-            const isCurrent = kind === 'current'
-            const overdue = isCurrent && currentDue
-            const leftPct = (index / lastIndex) * 100
-            return (
-              <button
-                key={days}
-                type="button"
-                data-testid={`ladder-node-${days}`}
-                data-kind={kind}
-                aria-label={intervalBandLabel(index, ladder)}
-                aria-current={isCurrent ? 'step' : undefined}
-                className={cn(
-                  'absolute top-1/2 box-border size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 transition-colors duration-100',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
-                  kind === 'past' && 'border-primary/50 bg-primary/80',
-                  kind === 'current'
-                    && !overdue
-                    && 'z-[1] border-primary bg-primary',
-                  kind === 'current'
-                    && overdue
-                    && 'z-[1] border-amber-500 bg-amber-500',
-                  kind === 'future' && 'border-muted-foreground/35 bg-background',
-                  isCurrent && 'size-3.5',
-                )}
-                style={{ left: `${leftPct}%` }}
-                onMouseEnter={(event) => openStage(index, event.currentTarget)}
-                onMouseLeave={scheduleHide}
-                onFocus={(event) => openStage(index, event.currentTarget)}
-                onBlur={hideFloating}
-              />
-            )
-          })}
+          {horizonCounts == null ? (
+            <span className="text-[10px] text-muted-foreground">进度暂不可用</span>
+          ) : totalUnits === 0 ? (
+            <span className="text-[10px] text-muted-foreground">暂无单元</span>
+          ) : (
+            HORIZONS.map((item) => {
+              const count = horizonCounts[item.key] ?? 0
+              const isCurrent = currentHorizon === item.key
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  data-testid={`horizon-${item.key}`}
+                  data-current={isCurrent ? 'true' : undefined}
+                  aria-label={`${item.label} ${count} 个单元`}
+                  className={cn(
+                    'flex h-5 min-w-0 flex-1 items-center justify-center gap-1 rounded-full border px-1.5 text-[10px] tabular-nums transition-colors',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+                    item.className,
+                    isCurrent && 'ring-1 ring-inset ring-current font-semibold',
+                    count === 0 && 'opacity-45',
+                  )}
+                  onMouseEnter={(event) => openHorizon(item.key, event.currentTarget)}
+                  onMouseLeave={scheduleHide}
+                  onFocus={(event) => openHorizon(item.key, event.currentTarget)}
+                  onBlur={hideFloating}
+                >
+                  <span className="truncate">{item.label}</span>
+                  <span className="shrink-0">{count}</span>
+                </button>
+              )
+            })
+          )}
         </div>
-
-        {error && !data ? (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-[10px] text-muted-foreground">
-            进度暂不可用
-          </div>
-        ) : null}
       </div>
 
       {currentLabel ? (
@@ -502,7 +430,7 @@ export function PalaceLadderProgress({
           )}
           title={currentDue ? `${currentLabel} · 已到期` : currentLabel}
         >
-          {intervalDaysLabel(data?.current?.interval_days ?? 0)}
+          {currentLabel}
         </span>
       ) : null}
 

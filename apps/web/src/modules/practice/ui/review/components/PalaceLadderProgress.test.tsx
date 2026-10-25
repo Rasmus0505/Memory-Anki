@@ -24,12 +24,14 @@ function samplePayload(overrides: Record<string, unknown> = {}) {
       due_date: '2026-08-01',
       due: false,
       has_passed: true,
+      horizon: 'd3' as const,
     },
     palace: {
       unit_count: 2,
       due_count: 1,
       weakest_stage_index: 0,
       stage_histogram: [1, 0, 0, 1, 0, 0, 0, 0, 0, 0],
+      due_horizon: { today: 0, d3: 1, week: 0, month: 1, later: 0 },
       next_review_date: '2026-08-01',
       review_status: 'due',
       mark_required: false,
@@ -89,7 +91,7 @@ describe('PalaceLadderProgress', () => {
     }
   })
 
-  it('renders ladder nodes and marks the current stage', async () => {
+  it('shows a due-date distribution instead of ladder levels', async () => {
     render(<PalaceLadderProgress palaceId={7} unitId="u1" />)
 
     await screen.findByTestId('palace-ladder-progress')
@@ -97,46 +99,66 @@ describe('PalaceLadderProgress', () => {
       range: 'all',
       unitId: 'u1',
     })
-    expect(screen.getByTestId('ladder-node-7').getAttribute('data-kind')).toBe('current')
-    expect(screen.getByTestId('ladder-node-1').getAttribute('data-kind')).toBe('past')
-    expect(screen.getByTestId('ladder-node-14').getAttribute('data-kind')).toBe('future')
+    expect(screen.getByTestId('horizon-today').textContent).toBe('今天0')
+    expect(screen.getByTestId('horizon-d3').textContent).toBe('3天内1')
+    expect(screen.getByTestId('horizon-month').textContent).toBe('本月1')
+    // The current unit's own bucket is the one marked.
+    expect(screen.getByTestId('horizon-d3').getAttribute('data-current')).toBe('true')
+    expect(screen.getByTestId('horizon-today').getAttribute('data-current')).toBeNull()
   })
 
-  it('shows the interval band and the real gap on node hover', async () => {
+  it('labels the number as the booked interval, not a level', async () => {
     render(<PalaceLadderProgress palaceId={7} unitId="u1" />)
-    await screen.findByTestId('ladder-node-7')
-
-    fireEvent.mouseEnter(screen.getByTestId('ladder-node-7'))
-    const tip = await screen.findByTestId('ladder-stage-tooltip')
-    expect(tip.textContent).toContain('间隔 7–13天 · 当前')
-    expect(tip.textContent).toContain('当前实际间隔 约 7 天后')
-    expect(tip.textContent).toContain('单元：单元')
-    expect(tip.textContent).toContain('下次复习：8月1日')
-    expect(tip.textContent).toContain('全部记录：3 次')
-    expect(tip.textContent).toContain('最近通过：7月28日')
-    expect(tip.textContent).toContain('学习总时长：2分')
+    expect(await screen.findByText('间隔 7天')).toBeTruthy()
   })
 
-  it('explains missing history instead of showing misleading zero values', async () => {
+  it('marks the unit as due today when the booked gap is zero', async () => {
+    apiMocks.getPalaceLadderProgressApi.mockResolvedValue(
+      samplePayload({
+        current: {
+          ...samplePayload().current,
+          interval_days: 0,
+          has_passed: true,
+          due: true,
+          horizon: 'today',
+        },
+      }),
+    )
     render(<PalaceLadderProgress palaceId={7} unitId="u1" />)
-    await screen.findByTestId('ladder-node-1')
-
-    fireEvent.mouseEnter(screen.getByTestId('ladder-node-1'))
-    const tip = await screen.findByTestId('ladder-stage-tooltip')
-    expect(tip.textContent).toContain('间隔 1–2天 · 已走过')
-    expect(tip.textContent).toContain('无可用历史明细（可能由跨档或旧进度产生）')
-    expect(tip.textContent).not.toContain('最近 —')
-    expect(tip.textContent).not.toContain('耗时 0秒')
+    expect(await screen.findByText('今天到期')).toBeTruthy()
   })
 
-  it('shows complete palace summary wording on track hover', async () => {
+  it('explains a bucket on hover and says when the current unit is in it', async () => {
     render(<PalaceLadderProgress palaceId={7} unitId="u1" />)
-    const image = await screen.findByRole('img', { name: /复习间隔/ })
+    await screen.findByTestId('horizon-d3')
+
+    fireEvent.mouseEnter(screen.getByTestId('horizon-d3'))
+    const tip = await screen.findByTestId('ladder-horizon-tooltip')
+    expect(tip.textContent).toContain('3天内 · 1 个单元')
+    expect(tip.textContent).toContain('占整宫 50%')
+    expect(tip.textContent).toContain('当前单元在这里（8月1日）')
+  })
+
+  it('says a bucket is empty instead of leaving a silent zero', async () => {
+    render(<PalaceLadderProgress palaceId={7} unitId="u1" />)
+    await screen.findByTestId('horizon-week')
+
+    fireEvent.mouseEnter(screen.getByTestId('horizon-week'))
+    const tip = await screen.findByTestId('ladder-horizon-tooltip')
+    expect(tip.textContent).toContain('本周 · 0 个单元')
+    expect(tip.textContent).toContain('这段时间没有单元到期')
+  })
+
+  it('shows the palace distribution and the real gap on track hover', async () => {
+    render(<PalaceLadderProgress palaceId={7} unitId="u1" />)
+    const image = await screen.findByRole('group', { name: /到期分布/ })
 
     fireEvent.mouseEnter(image.parentElement as HTMLElement)
     const tip = await screen.findByTestId('ladder-track-tooltip')
     expect(tip.textContent).toContain('当前单元 · 当前间隔 约 7 天后')
-    expect(tip.textContent).toContain('宫殿：2 个单元 · 1 个到期')
+    expect(tip.textContent).toContain('下次复习：8月1日')
+    expect(tip.textContent).toContain('宫殿：2 个单元 · 1 个到期 · 最近到期 8月1日')
+    expect(tip.textContent).toContain('到期分布：3天内×1 · 本月×1')
     expect(tip.textContent).toContain('全部记录：5 次 · 学习总时长 5分')
     expect(tip.textContent).toContain('评分：忘记 1 · 困难 1 · 记得 2 · 轻松 1')
   })
@@ -157,6 +179,23 @@ describe('PalaceLadderProgress', () => {
     const palaceTip = await screen.findByTestId('ladder-summary-tooltip')
     expect(palaceTip.textContent).toContain('当前宫殿 · 全部学习情况')
     expect(palaceTip.textContent).toContain('学习总时长：10分')
+  })
+
+  it('says the palace has no units instead of drawing an empty strip', async () => {
+    apiMocks.getPalaceLadderProgressApi.mockResolvedValue(
+      samplePayload({
+        current: null,
+        palace: {
+          ...samplePayload().palace,
+          unit_count: 0,
+          due_count: 0,
+          due_horizon: { today: 0, d3: 0, week: 0, month: 0, later: 0 },
+        },
+        scope: 'palace',
+      }),
+    )
+    render(<PalaceLadderProgress palaceId={7} unitId="u1" />)
+    expect(await screen.findByText('暂无单元')).toBeTruthy()
   })
 
   it('refetches when range changes', async () => {

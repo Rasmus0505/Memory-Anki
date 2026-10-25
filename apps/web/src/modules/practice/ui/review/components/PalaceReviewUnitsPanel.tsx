@@ -17,8 +17,11 @@ import {
 import { INTERVAL_BAND_BOUNDS, intervalDaysLabel } from '../model/intervalBands'
 import { PalaceLadderProgress } from './PalaceLadderProgress'
 
-function intervalBadgeLabel(days: number) {
-  return days <= 0 ? '待首学' : `间隔 ${intervalDaysLabel(days)}`
+function intervalBadgeLabel(days: number, hasPassed: boolean) {
+  if (days > 0) return `间隔 ${intervalDaysLabel(days)}`
+  // A zero gap is "booked today": first learning when never passed, a retry
+  // when the unit already has history.
+  return hasPassed ? '今天重练' : '待首学'
 }
 
 export type PalaceReviewUnitChangeHighlight = {
@@ -418,7 +421,7 @@ export function PalaceReviewUnitsPanel({
                       <div className="truncate text-sm font-medium">{titleText}</div>
                       <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
                         <span className="rounded-full bg-muted px-2 py-0.5 font-medium text-foreground/80">
-                          {intervalBadgeLabel(unit.interval_days)}
+                          {intervalBadgeLabel(unit.interval_days, unit.has_passed)}
                         </span>
                         <span>到期 {formatDueLabel(unit.due_date)}</span>
                         {unit.due ? (
@@ -455,7 +458,9 @@ export function PalaceReviewUnitsPanel({
                           <div className="mt-1 rounded-lg border border-border bg-muted/40 px-2.5 py-2 text-sm text-foreground">
                             {unit.interval_days > 0
                               ? `${intervalDaysLabel(unit.interval_days)}（FSRS 按记忆状态自动排期）`
-                              : '待首学'}
+                              : unit.has_passed
+                                ? '今天重练（FSRS 会在下次评分时重排）'
+                                : '待首学'}
                           </div>
                         </label>
                         <label className="block text-xs text-muted-foreground">

@@ -21,6 +21,39 @@ from .unit_scheduler import INTERVAL_DAYS, clamp_stage
 LadderRange = Literal["today", "last3days", "week", "all"]
 VALID_RANGES = frozenset({"today", "last3days", "week", "all"})
 
+# Due-date horizons for the toolbar strip. FSRS books each unit at its own real
+# interval, so "how far away is the work" is the useful shape; the retired
+# ten-step ladder's position is not.
+DUE_HORIZONS: tuple[str, ...] = ("today", "d3", "week", "month", "later")
+
+
+def due_horizon_key(due_date: date, today: date) -> str:
+    days = (due_date - today).days
+    if days <= 0:
+        return "today"
+    if days <= 3:
+        return "d3"
+    if days <= 7:
+        return "week"
+    if days <= 30:
+        return "month"
+    return "later"
+
+
+def _parse_due(value: Any) -> date | None:
+    raw = str(value or "").strip()[:10]
+    if not raw:
+        return None
+    try:
+        return date.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
+def _horizon_for(value: Any, today: date) -> str | None:
+    due_value = _parse_due(value)
+    return due_horizon_key(due_value, today) if due_value is not None else None
+
 
 def _empty_stage_bucket(stage_index: int) -> dict[str, Any]:
     return {
@@ -193,6 +226,7 @@ def get_palace_ladder_progress(
 ) -> dict[str, Any]:
     """Current unit ladder + palace histogram + range-scoped review stats."""
     key = str(range_key or "all").strip().lower() or "all"
+    today = today or local_day()
     since = resolve_range_start(key, today=today)
 
     try:
@@ -202,12 +236,16 @@ def get_palace_ladder_progress(
 
     units = list(projection.get("units") or [])
     histogram = [0 for _ in INTERVAL_DAYS]
+    horizon_counts = {horizon: 0 for horizon in DUE_HORIZONS}
     weakest_stage: int | None = None
     for unit in units:
         stage = clamp_stage(int(unit.get("stage_index") or 0))
         histogram[stage] += 1
         if weakest_stage is None or stage < weakest_stage:
             weakest_stage = stage
+        due_value = _parse_due(unit.get("due_date"))
+        if due_value is not None:
+            horizon_counts[due_horizon_key(due_value, today)] += 1
 
     current = None
     scope = "palace"
@@ -222,6 +260,7 @@ def get_palace_ladder_progress(
                 "due_date": match.get("due_date"),
                 "due": bool(match.get("due")),
                 "has_passed": bool(match.get("has_passed")),
+                "horizon": _horizon_for(match.get("due_date"), today),
             }
             scope = "unit"
 
@@ -236,6 +275,7 @@ def get_palace_ladder_progress(
             "due_date": weakest.get("due_date"),
             "due": bool(weakest.get("due")),
             "has_passed": bool(weakest.get("has_passed")),
+            "horizon": _horizon_for(weakest.get("due_date"), today),
         }
         scope = "palace"
 
@@ -276,6 +316,7 @@ def get_palace_ladder_progress(
             "due_count": int(projection.get("due_unit_count") or 0),
             "weakest_stage_index": weakest_stage,
             "stage_histogram": histogram,
+            "due_horizon": horizon_counts,
             "next_review_date": projection.get("next_review_date"),
             "review_status": projection.get("review_status"),
             "mark_required": bool(projection.get("mark_required")),

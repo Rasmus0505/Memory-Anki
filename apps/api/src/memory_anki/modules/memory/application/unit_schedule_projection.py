@@ -5,20 +5,28 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
+from memory_anki.core.time import study_day_of
 from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitState
 
 from .unit_scheduler import INTERVAL_DAYS, clamp_stage
 
 
 def unit_interval_days(row: ReviewUnitState) -> int:
-    """The real FSRS interval, not the retired ladder's nominal value."""
-    if row.fsrs_last_review is not None and row.fsrs_due_at is not None:
-        days = (row.fsrs_due_at.date() - row.fsrs_last_review.date()).days
-        if days >= 1:
-            return days
-    if row.fsrs_stability:
-        return max(1, round(float(row.fsrs_stability)))
-    return INTERVAL_DAYS[clamp_stage(row.stage_index)]
+    """The interval this unit was actually booked at, in whole study days.
+
+    ``due_date`` is the product's booking, so the honest gap is
+    ``due_date - 上次评分的学习日``. Deriving it from the FSRS card instead
+    (``fsrs_due_at - fsrs_last_review``) disagrees with the visible due date
+    whenever a product rule overrides FSRS: a failed grade books today, and a
+    sprint clamp shortens the gap. A unit with no FSRS checkpoint yet (inherited
+    or never rated) falls back to the legacy projection.
+    """
+    if row.fsrs_last_review is not None:
+        reviewed_on = study_day_of(row.fsrs_last_review)
+        return max(0, (row.due_date - reviewed_on).days)
+    if row.stage_index > 0:
+        return INTERVAL_DAYS[clamp_stage(row.stage_index)]
+    return 0
 
 
 def _schedule_snapshot(
