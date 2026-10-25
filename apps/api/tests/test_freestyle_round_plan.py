@@ -370,7 +370,7 @@ def test_replan_keeps_a_rated_retry_on_the_rail():
 def test_a_new_same_day_step_does_not_cancel_the_rated_retry():
     """A first-pass re-check appended after the pass keeps the scored card."""
     # A unit failed on an earlier day starts the day with retries == 0, so the
-    # pass on its 重练 also books the 15-minute re-check.
+    # pass on its 重练 also books the 30-minute re-check.
     stepped, _cards, occ_id = _passed_retry_plan(
         available_at=datetime(2026, 10, 25, 10, 15),
         intraday_kind="step",

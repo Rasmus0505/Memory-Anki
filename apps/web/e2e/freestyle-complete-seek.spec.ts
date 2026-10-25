@@ -412,7 +412,7 @@ test('完成 on a fully scored round settles the rated units and clears the queu
   await expect.poll(() => routes.starts.length).toBe(1)
 })
 
-test('完成 never dead-ends while a 15 分钟回顾 is still owed', async ({ page }) => {
+test('完成 never dead-ends while a 30 分钟回顾 is still owed', async ({ page }) => {
   // The state the learner reported: every presented card scored, but two same-day
   // re-checks are still booked for later. The button used to disable itself here.
   const routes = await installRoutes(page, {

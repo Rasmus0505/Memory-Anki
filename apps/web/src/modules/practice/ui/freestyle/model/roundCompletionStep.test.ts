@@ -43,9 +43,9 @@ function encounter(
   }
 }
 
-describe('a blank 15 分钟回顾 after its source passed', () => {
+describe('a blank 30 分钟回顾 after its source passed', () => {
   // 2026-10-25 的真实一轮：56 张里 42 张已评、11 张是源卡通过后自动排的
-  // 「15 分钟后回顾」空白卡。源卡先通过（在 completed_ids 里），旧规则让每张
+  // 「30 分钟后回顾」空白卡。源卡先通过（在 completed_ids 里），旧规则让每张
   // 空白回顾卡都继承了源卡的完成状态：进度条把它们画成待评，完成按钮却认为
   // 已经没有未评分的卡，于是整轮卡死。
   const source = card('review_unit:step-source:r1')
