@@ -2,6 +2,7 @@ import { bodyActionName, noteApiStep } from '@/shared/api/requestOutcome'
 import { logAppError } from '@/shared/logs/model/appLogs'
 import {
   buildRequestError,
+  extractResponseCode,
   extractResponseMessage,
   getResponseRequestId,
 } from '@/shared/api/jsonResponse'
@@ -621,6 +622,7 @@ export async function request<T>(url: string, options?: PersistedRequestInit): P
         method,
         url: requestUrl,
         status: response.status,
+        code: extractResponseCode(body),
       })
     }
 

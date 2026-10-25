@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from memory_anki.modules.practice.domain.round_compress import (
     compress_completed,
     compressible_ids,
 )
 from memory_anki.modules.practice.domain.round_plan import (
+    append_bedtime_cards,
+    apply_bedtime_rating,
     apply_rating,
+    bedtime_card_ids,
     complete_card,
     exclude_card,
     leave_card,
@@ -20,6 +25,7 @@ from memory_anki.modules.practice.domain.round_plan import (
 )
 from memory_anki.modules.practice.domain.round_rebind import (
     append_today_cards,
+    drop_previous_day_bedtime,
     drop_undue_unstarted,
     drop_vanished_unstarted,
     rebind_plan_cards,
@@ -330,6 +336,74 @@ def test_passing_a_retry_keeps_that_occurrence_in_presented_ids():
     rebound = rebind_plan_cards(plan, cards)
     assert inserted["occurrence_id"] in rebound["presented_ids"]
     assert rebound["current_card_id"] == inserted["occurrence_id"]
+
+
+def _passed_retry_plan(**pass_kwargs) -> tuple[dict, list[dict], str]:
+    """a failed card, its published 重练, and that 重练 passed 记得."""
+    cards = [
+        _card("a", unit_id="unit-a"),
+        _card("b", unit_id="unit-b"),
+        _card("c", unit_id="unit-c"),
+        _card("d", unit_id="unit-d"),
+    ]
+    plan = leave_card(_rate(plan_from_cards(cards), "a", 1, "enc-fail"), "a")
+    inserted = [item for item in plan["occurrences"] if item["source_card_id"] == "a"][0]
+    occ_id = inserted["occurrence_id"]
+    plan = set_cursor(plan, occ_id)
+    plan = _rate(plan, occ_id, 3, "enc-pass", occurrence_id=occ_id, **pass_kwargs)
+    return plan, cards, occ_id
+
+
+def test_replan_keeps_a_rated_retry_on_the_rail():
+    """更新队列 / 重建本轮 must not delete the 重练 the learner just scored."""
+    plan, cards, occ_id = _passed_retry_plan()
+    assert occ_id in plan["presented_ids"]
+
+    replanned = replan_remaining(plan, cards, today="")
+
+    assert occ_id in replanned["presented_ids"]
+    assert occ_id in replanned["completed_ids"]
+    # History keeps its slot right behind the source, not at the queue tail.
+    assert replanned["presented_ids"].index(occ_id) == replanned["presented_ids"].index("a") + 1
+
+
+def test_a_new_same_day_step_does_not_cancel_the_rated_retry():
+    """A first-pass re-check appended after the pass keeps the scored card."""
+    # A unit failed on an earlier day starts the day with retries == 0, so the
+    # pass on its 重练 also books the 15-minute re-check.
+    stepped, _cards, occ_id = _passed_retry_plan(
+        available_at=datetime(2026, 10, 25, 10, 15),
+        intraday_kind="step",
+    )
+
+    by_id = {item["occurrence_id"]: item for item in stepped["occurrences"]}
+    assert by_id[occ_id]["status"] == "completed"
+    assert occ_id in stepped["presented_ids"]
+    assert occ_id in stepped["completed_ids"]
+    steps = [
+        item
+        for item in stepped["occurrences"]
+        if item["source_card_id"] == "a" and item.get("kind") == "step"
+    ]
+    assert len(steps) == 1
+    assert steps[0]["status"] == "pending"
+
+
+def test_answered_retry_survives_a_lost_encounter_cache():
+    """The occurrence's own pass grade protects it, not just the encounter cache."""
+    plan, _cards, occ_id = _passed_retry_plan()
+    plan["encounters"].pop(occ_id, None)
+    for item in plan["occurrences"]:
+        if item["occurrence_id"] == occ_id:
+            # Re-answered but not yet settled: an amend keeps the grade.
+            item["status"] = "inserted"
+
+    settled = _rate(plan, "a", 3, "enc-pass-source")
+
+    by_id = {item["occurrence_id"]: item for item in settled["occurrences"]}
+    assert by_id[occ_id]["status"] == "completed"
+    assert occ_id in settled["presented_ids"]
+    assert occ_id in settled["completed_ids"]
 
 
 def test_rebind_by_unit_id_keeps_ratings_and_retry_counts():
@@ -1301,3 +1375,58 @@ def test_retry_is_never_inserted_behind_the_cursor():
     retry_id = _inserted(plan, "c2")["occurrence_id"]
     presented = plan["presented_ids"]
     assert presented.index(retry_id) > presented.index("c9")
+
+
+def test_bedtime_append_moves_a_finished_card_to_the_end():
+    cards = [_card("a", unit_id="ua"), _card("b", unit_id="ub"), _card("c", unit_id="uc")]
+    plan = plan_from_cards(cards, today="2026-10-25")
+    plan = complete_card(plan, "a")
+    plan = exclude_card(plan, "b")
+
+    appended, added = append_bedtime_cards(
+        plan,
+        [{"card_id": "a", "unit_id": "ua", "kind": "mindmap_branch", "palace_id": 1, "bedtime": True}],
+        today="2026-10-25",
+    )
+
+    assert added == ["a"]
+    assert appended["presented_ids"][-1] == "a"
+    assert "a" not in appended["completed_ids"]
+    assert bedtime_card_ids(appended) == {"a"}
+    original = next(item for item in appended["original_cards"] if item["card_id"] == "a")
+    assert original["bedtime"] is True
+    # Excluded ids are untouched: they belong to other cards.
+    assert appended["excluded_ids"] == ["b"]
+
+
+def test_bedtime_rating_completes_without_a_reviews_encounter():
+    plan = plan_from_cards([_card("a", unit_id="ua")], today="2026-10-25")
+    plan, _ = append_bedtime_cards(
+        plan,
+        [{"card_id": "a", "unit_id": "ua", "kind": "mindmap_branch", "palace_id": 1, "bedtime": True}],
+        today="2026-10-25",
+    )
+
+    rated = apply_bedtime_rating(plan, card_id="a", rating=4, today="2026-10-25")
+
+    assert rated["bedtime_ratings"]["a"] == {"rating": 4, "rated_on": "2026-10-25"}
+    assert rated["completed_ids"] == ["a"]
+    assert rated["encounters"] == {}
+    assert rated["occurrences"] == []
+
+
+def test_previous_day_bedtime_does_not_survive_the_study_day():
+    plan = plan_from_cards([_card("a", unit_id="ua"), _card("b", unit_id="ub")], today="2026-10-24")
+    plan, _ = append_bedtime_cards(
+        plan,
+        [{"card_id": "b", "unit_id": "ub", "kind": "mindmap_branch", "palace_id": 1, "bedtime": True}],
+        today="2026-10-24",
+    )
+    plan = apply_bedtime_rating(plan, card_id="b", rating=3, today="2026-10-24")
+
+    next_day = drop_previous_day_bedtime(plan)
+
+    assert [item["card_id"] for item in next_day["original_cards"]] == ["a"]
+    assert "b" not in next_day["presented_ids"]
+    assert "b" not in next_day["completed_ids"]
+    assert next_day["bedtime_ratings"] == {}

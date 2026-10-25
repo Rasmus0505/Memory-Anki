@@ -178,7 +178,7 @@ def test_ladder_progress_tracks_current_stage_and_pass_stats(db_session):
     assert payload["palace_range_stats"]["total_reviews"] == 1
 
 
-def test_ladder_progress_attributes_easy_jump_to_reviewed_stage(db_session):
+def test_ladder_progress_attributes_a_first_pass_to_the_stage_it_was_reviewed_at(db_session):
     state = _seed_review_unit(db_session, title="跨级归档宫殿")
     _pass_once(
         db_session,
@@ -195,7 +195,10 @@ def test_ladder_progress_attributes_easy_jump_to_reviewed_stage(db_session):
         range_key="all",
     )
 
-    assert payload["current"]["stage_index"] >= 2
+    # The first pass only books the 30-minute re-check; the day-level jump is
+    # applied when that re-check passes.
+    assert payload["current"]["stage_index"] == 1
+    assert payload["current"]["interval_days"] == 0
     # The pass is attributed to the interval band the unit was reviewed at.
     assert payload["unit_range_stats"]["per_stage"][0]["pass_count"] == 1
     assert payload["unit_range_stats"]["per_stage"][1]["pass_count"] == 0
@@ -207,8 +210,8 @@ def test_ladder_progress_http_endpoint(session_factory, make_client, db_session)
 
     state = _seed_review_unit(db_session, title="HTTP 阶梯宫殿")
     _pass_once(db_session, state, encounter_id="enc-http", operation_id="op-http", rating=4)
-    # 轻松 on a first pass books a longer FSRS interval than 记得.
-    assert state.stage_index >= 2
+    # A first pass books the same-day re-check, so the display bucket is stage 1.
+    assert state.stage_index == 1
     palace_id = state.palace_id
     unit_id = state.id
 

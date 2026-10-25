@@ -88,6 +88,17 @@ describe('FreestyleFeedPager', () => {
     expect(group.className).not.toContain('flex-row')
   })
 
+  it('puts an extra action above the paging buttons in the same column', () => {
+    renderPager({ topSlot: <button type="button" aria-label="睡前复习">睡前复习</button> })
+
+    const action = screen.getByRole('button', { name: '睡前复习' })
+    const group = screen.getByTestId('freestyle-feed-pager')
+    expect(group.contains(action)).toBe(true)
+    // The moon sits above 上一张, not beside or below it.
+    const previous = screen.getByRole('button', { name: '上一张' })
+    expect(action.compareDocumentPosition(previous) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   it('releases the pager focus after paging so Enter flips the new card', () => {
     const props = renderPager()
     const next = screen.getByRole('button', { name: '下一张' }) as HTMLButtonElement

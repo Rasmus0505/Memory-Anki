@@ -16,6 +16,8 @@ import {
   retryPositionLabel,
 } from '@/modules/practice/ui/freestyle/model/ratingEffectLabels'
 import { isFreestyleShortcutBlocked } from '@/modules/practice/ui/freestyle/model/freestyleKeyboard'
+import { SUPERSEDED_RATING_COPY } from '@/modules/practice/ui/freestyle/model/freestyleRatingCopy'
+import type { RatingSaveFailure } from '@/modules/practice/ui/freestyle/model/ratingSaveStore'
 import {
   getFreestyleRatingShortcut,
   isFreestyleRemoveFromQueueShortcut,
@@ -47,6 +49,7 @@ export function FreestyleRatingBar({
   pendingRating = null,
   pendingClear = false,
   failedRating = null,
+  failedFailure = null,
   locked,
   reviewReady,
   hasEncounter,
@@ -78,6 +81,8 @@ export function FreestyleRatingBar({
   pendingClear?: boolean
   /** The rating whose save failed. Shown as 未保存, never as chosen; tapping it retries. */
   failedRating?: UnitRating | null
+  /** Why it failed. An attempt superseded by later practice can never be saved. */
+  failedFailure?: RatingSaveFailure | null
   locked: boolean
   reviewReady: boolean
   hasEncounter: boolean
@@ -221,6 +226,15 @@ export function FreestyleRatingBar({
             <span className="min-w-0 truncate">
               {removeArmed === 'permanent' ? '再点确认永久移除 · 不再安排复习' : '再点确认移除 · 本轮不再安排'}
             </span>
+          </div>
+        ) : failedRating != null && failedFailure === 'superseded' ? (
+          // 终态：服务端已经不接受这次改写了，重试按钮只会把人骗进同一个 400。
+          <div
+            data-testid="freestyle-rating-superseded-line"
+            role="status"
+            className="mb-1.5 flex items-center gap-1.5 rounded-lg border border-stage-line bg-stage-line/40 px-2.5 py-1 text-[11px] font-medium text-stage-ink sm:text-xs"
+          >
+            <span className="min-w-0 truncate">{SUPERSEDED_RATING_COPY}</span>
           </div>
         ) : failedRating != null ? (
           <div

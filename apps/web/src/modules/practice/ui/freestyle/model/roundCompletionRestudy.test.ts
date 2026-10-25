@@ -5,8 +5,10 @@ import {
   clampFreestyleFeedIndex,
   findEarliestCompleteSeekIndex,
   findEarliestUnhandledIndex,
+  findUnscoredCompleteSeekIndices,
   freestyleCanPageNext,
   isFreestyleRoundComplete,
+  resolveFreestyleCompleteSeek,
 } from './roundCompletion'
 import {
   createRetryOccurrence,
@@ -99,5 +101,55 @@ describe('yellow boundary hint never blocks completion', () => {
     expect(findEarliestCompleteSeekIndex(cards, {}, ['one'], null)).toBe(2)
     expect(findEarliestCompleteSeekIndex(cards, {}, ['one', 'two'], null)).toBeNull()
     expect(findEarliestUnhandledIndex(cards, {}, ['one', 'two'], null)).toBeNull()
+  })
+})
+
+describe('a passed 重练 closes its source', () => {
+  const retry = {
+    ...card('retry:round-1:two:1'),
+    source_card_id: 'two',
+    occurrence_kind: 'retry' as const,
+    retry_attempt: 1,
+  }
+  const cards = [card('one'), card('two'), retry]
+
+  it('is complete when the source score fell out of the local ledger', () => {
+    // 报告过的死锁：源卡的 困难 分数在本地账本里丢了，重练已经 记得。
+    // 逐卡评分视角会认为源卡还没评分，完成就停在那一张永远评不了分的卡上。
+    const encounters = {
+      one: encounter(),
+      [retry.id]: encounter({ selectedRating: 3, passed: true }),
+    }
+    const roundPlan = {
+      cardsById: {
+        one: { lastRating: 3, status: 'completed' },
+        two: { lastRating: null, status: 'retry' },
+        [retry.id]: { lastRating: 3, status: 'completed' },
+      },
+    } as never
+
+    expect(isFreestyleRoundComplete(cards, encounters, [], roundPlan)).toBe(true)
+    // 完成 既不再定位到那张改不了分的源卡，也不会因此禁用。
+    expect(findUnscoredCompleteSeekIndices(cards, encounters, [], roundPlan)).toEqual([])
+    expect(findEarliestCompleteSeekIndex(cards, encounters, [], roundPlan)).toBeNull()
+    expect(resolveFreestyleCompleteSeek({
+      roundComplete: true,
+      cardCount: cards.length,
+      earliestUnhandledIndex: null,
+      visualIndex: 1,
+      unscoredIndices: [],
+    })).toBe(cards.length)
+  })
+
+  it('still keeps the round open while the 重练 itself is blank', () => {
+    const roundPlan = {
+      cardsById: {
+        one: { lastRating: 3, status: 'completed' },
+        two: { lastRating: null, status: 'retry' },
+        [retry.id]: { lastRating: null, status: 'inserted' },
+      },
+    } as never
+    expect(isFreestyleRoundComplete(cards, {}, [], roundPlan)).toBe(false)
+    expect(findEarliestCompleteSeekIndex(cards, {}, [], roundPlan)).toBe(2)
   })
 })

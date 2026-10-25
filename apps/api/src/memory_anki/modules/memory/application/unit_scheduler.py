@@ -10,13 +10,17 @@ from memory_anki.core.exam_horizon import SprintHorizon
 from memory_anki.core.time import (
     local_calendar_day_start_as_utc_naive,
     local_day,
+    study_day_of,
     utc_now_naive,
 )
 
 from .unit_fsrs_adapter import (
+    MIN_PASSED_STAGE_INDEX,
     FsrsUnitState,
     Scheduler,
     build_unit_scheduler,
+    infer_early_step,
+    project_stage_index,
     rate_unit_with_fsrs,
     stage_for_interval,
 )
@@ -38,7 +42,7 @@ RETRY_AFTER_CARDS = 3
 # A pass must always land at least one day out. Stage 0 is the same-day learning
 # slot, so crediting a pass there would leave the unit due today and re-served by
 # the very next queue build -- the unit looked "done" yet never left the queue.
-MIN_PASSED_STAGE = 1
+MIN_PASSED_STAGE = MIN_PASSED_STAGE_INDEX
 
 # Same-day cohorts otherwise stay in lockstep forever: 50 units learned together
 # come due together at every stage. Offsets are deterministic per
@@ -72,6 +76,8 @@ class UnitScheduleResult:
     intraday_kind: str | None = None
     intraday_due_at: datetime | None = None
     intraday_exhausted: bool = False
+    # Fixed early-ladder counter to persist after this rating.
+    early_step: int | None = None
 
 
 def normalize_rating(value: int | str) -> int:
@@ -154,12 +160,21 @@ def rate_unit(
     scheduler: Scheduler | None = None,
     intraday: IntradayState | None = None,
     now: datetime | None = None,
+    booked_due_date: date | None = None,
+    early_step: int | None = None,
 ) -> UnitScheduleResult:
     """Rate one unit through the production FSRS scheduler.
 
-    FSRS decides the day; ``plan_intraday`` decides whether the unit may be
-    served again later the same day (a first-pass re-check, or a failed grade
-    whose wait grows 10m → 1h → 3h and stops after three retries).
+    The first four reviews are product-fixed: a 30-minute same-day re-check,
+    then day 2, day 3 and day 5. ``early_step`` is that counter. From the fifth
+    review onward FSRS decides the day. ``plan_intraday`` decides whether the
+    unit may be served again later the same day (a first-pass re-check, a retry
+    recovery, or a failed grade whose wait grows 10m → 1h → 3h and stops after
+    three retries).
+
+    ``booked_due_date`` is the due date the learner currently sees, before this
+    rating. When ``early_step`` is missing (a row written before the counter
+    existed), the position is inferred from that booked gap.
     """
     current_day = today or local_day()
     normalized = normalize_rating(rating)
@@ -169,9 +184,38 @@ def rate_unit(
         else FsrsUnitState.from_legacy(
             stage_index=stage_index,
             has_passed=has_passed,
-            due_date=locked_due_date or current_day,
+            due_date=locked_due_date or booked_due_date or current_day,
         )
     )
+    previous_interval_days: int | None = None
+    if booked_due_date is not None:
+        reviewed_on = (
+            study_day_of(current_state.last_review)
+            if current_state.last_review is not None
+            else None
+        )
+        previous_interval_days = (
+            max(0, (booked_due_date - reviewed_on).days) if reviewed_on else 0
+        )
+    # A row written before ``early_step`` existed has no counter. Infer its
+    # fixed position once from the booked gap (and the legacy stage, which still
+    # carries the interval for an inherited row with no FSRS checkpoint); every
+    # rating persists the value from here on. A brand-new card starts at 0.
+    effective_early_step = early_step
+    if effective_early_step is None:
+        if booked_due_date is None:
+            effective_early_step = None
+        elif has_passed:
+            booked_gap = (
+                previous_interval_days
+                if current_state.last_review is not None
+                else max(0, (booked_due_date - current_day).days)
+            )
+            effective_early_step = infer_early_step(
+                booked_gap_days=max(int(booked_gap or 0), interval_days(stage_index))
+            )
+        else:
+            effective_early_step = 0
     result = rate_unit_with_fsrs(
         current=current_state,
         has_passed=has_passed,
@@ -186,6 +230,9 @@ def rate_unit(
         fuzz_key=fuzz_key,
         horizon=horizon,
         scheduler=scheduler or build_unit_scheduler(),
+        previous_interval_days=previous_interval_days,
+        current_stage=clamp_stage(stage_index),
+        early_step=effective_early_step,
     )
     # The wall clock for same-day spacing. Callers that pin a historical study
     # day (tests, replay) must not be measured against the real clock, or every
@@ -212,19 +259,20 @@ def rate_unit(
         # A locked pass records the review but must not move the display
         # projection either; the FSRS state itself is intentionally unchanged.
         projected_stage = clamp_stage(stage_index)
-    elif normalized == 1:
-        projected_stage = 0
-    elif normalized == 2:
-        projected_stage = max(
-            0,
-            clamp_stage(stage_index) - (1 if result.hard_penalty_applied else 0),
-        )
     else:
-        # Use the raw FSRS interval, not the sprint-shortened product due, so
-        # the display does not pretend the memory model changed near an exam.
-        projected_stage = max(
-            MIN_PASSED_STAGE, stage_for_interval(result.raw_interval_days)
+        projected_stage = project_stage_index(
+            current_stage=stage_index,
+            rating=normalized,
+            result=result,
         )
+    # The ladder counter follows a real booking. A pass that only schedules the
+    # 30-minute re-check has not booked the day-level interval yet, and a locked
+    # ahead-of-date pass never moves the ladder at all.
+    persisted_step = (
+        effective_early_step
+        if not result.schedule_changed or intraday_plan.kind == "step"
+        else result.early_step
+    )
     return UnitScheduleResult(
         projected_stage,
         intraday_plan.due_date,
@@ -240,6 +288,7 @@ def rate_unit(
         intraday_kind=intraday_plan.kind,
         intraday_due_at=intraday_plan.due_at,
         intraday_exhausted=intraday_plan.exhausted,
+        early_step=persisted_step,
     )
 
 

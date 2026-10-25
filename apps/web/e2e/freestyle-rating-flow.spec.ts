@@ -296,7 +296,7 @@ test('lights a grade at once while saving, queues the next tap, then opens a ski
   await expect(settlement.getByText('本轮完成')).toBeVisible()
 })
 
-test('reports an unsaved grade at once without claiming completion, then retries the score', async ({ page }) => {
+test('keeps a failing save 保存中 through its quiet retries, then reports 未保存 and retries the score', async ({ page }) => {
   await installCardRoutes(page)
   const { held } = holdRatings(page)
   await page.goto('/freestyle')
@@ -306,12 +306,27 @@ test('reports an unsaved grade at once without claiming completion, then retries
   await expect(remember).toBeEnabled()
   await remember.evaluate((button: HTMLButtonElement) => button.click())
   await expect.poll(() => held.length).toBe(1)
-  // 点下去立刻亮起；失败后才回到未保存。
+  // 点下去立刻亮起；还没保存成功时只显示保存中。
   await expect(remember).toHaveAttribute('aria-pressed', 'true')
 
   const settlement = page.getByTestId('freestyle-round-complete')
   await expect(settlement).not.toBeVisible()
   held[0].release(400)
+
+  // 失败先静默重试：同一个操作 ID，卡片仍是保存中，还不报未保存。
+  await expect.poll(() => held.length).toBe(2)
+  expect(held[1].body.operation_id).toBe(held[0].body.operation_id)
+  expect(held[1].body.rating).toBe(3)
+  await expect(page.getByTestId('freestyle-rating-saving-line')).toContainText('保存中')
+  await expect(page.getByTestId('freestyle-rating-unsaved-line')).toHaveCount(0)
+  await expect(remember).toHaveAttribute('aria-pressed', 'true')
+
+  // 自动重试也失败：继续重试，直到一次机会都不剩才提示未保存。
+  held[1].release(400)
+  await expect.poll(() => held.length).toBe(3)
+  expect(held[2].body.operation_id).toBe(held[0].body.operation_id)
+  held[2].release(400)
+
   await expect(page.getByTestId('freestyle-rating-unsaved-line')).toContainText('未保存记得')
   await expect(remember).toHaveAttribute('aria-pressed', 'false')
   await expect(page.getByTestId('freestyle-rating-effect-line')).toHaveCount(0)
@@ -321,10 +336,11 @@ test('reports an unsaved grade at once without claiming completion, then retries
 
   // Retapping is a save retry, not undo, and must await a successful response.
   await remember.evaluate((button: HTMLButtonElement) => button.click())
-  await expect.poll(() => held.length).toBe(2)
-  expect(held[1].body.rating).toBe(3)
+  await expect.poll(() => held.length).toBe(4)
+  expect(held[3].body.rating).toBe(3)
+  expect(held[3].body.operation_id).toBe(held[0].body.operation_id)
   await expect(settlement).not.toBeVisible()
-  held[1].release()
+  held[3].release()
   const next = page.getByRole('button', { name: '下一张' })
   await expect(next).toBeEnabled()
   await next.evaluate((button: HTMLButtonElement) => button.click())

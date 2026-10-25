@@ -112,7 +112,7 @@ the first card or minting a fresh queue.
 A palace/subject scope change rebinds the same `round_id`: overlapping identities keep
 completed / excluded / retry marks; only unstarted work outside the new scope is dropped.
 Refresh must not mint a new `round_id` or drop completed cards from the HUD/feed, except cards
-the learner explicitly compressed with 「结算已完成单元」. A 结算 drops the source and every live retry of that source. A retry whose source id is in `compressedIds` leaves the rail, the sheet, and the swipe feed; it must not stay as a lit tick the learner cannot reach. Scoring alone never removes those ticks. Completed source
+the learner explicitly compressed with 「结算已完成单元」. A 结算 drops the source and every live retry of that source. A retry whose source id is in `compressedIds` leaves the rail, the sheet, and the swipe feed; it must not stay as a lit tick the learner cannot reach. Scoring alone never removes those ticks: a 重练 rated this round keeps its slot right behind its source through silent rebuilds, 更新队列, and 重建本轮 (`replan_remaining` re-adds completed occurrences of kept sources; `_collapse_retries` only collapses *live* duplicates and never cancels an answered one; `_settle_source` treats an occurrence's own pass grade as answered even when the encounter cache lost the entry). `cardsForServerPlan` also keeps a completed occurrence's card when the presented list no longer names it. Only 结算 (`compress_completed`), a cancelled occurrence, or the next study day's reopen takes it off — so swipe-back / 改分 still reach a card the learner just rated. Completed source
 cards stay in presented order so swipe-back / 上一张 can reopen them until that compress. A window that has lost its local plan adopts the workspace active round and must not mint a new `round_id` while that round exists. A quota miss may compact the stored snapshot, but the live session keeps the plan the learner is looking at. 做题 stays available while the map is still opening. The card must not say it is still preparing a score. Re-scoring a completed
 unit amends from that exact recall attempt's original baseline; it does not stack SRS.
 The identity includes round, source card, occurrence and retry attempt. A real retry starts
@@ -212,7 +212,9 @@ rating creates a retry occurrence that stays **pending** with an `available_at` 
 (10 minutes, then 1 hour, then 3 hours; at most three retries per study day). It is not on
 the rail until that instant passes; serving publishes it at the learner's cursor, so the
 cards rated in the meantime are the interleaving. A first-ever pass creates the same kind of
-pending occurrence, `kind: "step"`, for its 15-minute re-check. A pending occurrence is not
+pending occurrence, `kind: "step"`, for its 30-minute re-check; a 重练 that finally passes
+creates one too, so a recovery is re-checked before its day-level interval is booked. A
+pending occurrence is not
 served and does not mark its source finished; the round payload's `waiting` reports how many
 are owed and the earliest ready time. The feed shows a slim banner while cards remain and a
 waiting panel when nothing servable is left; a single scheduled read at `next_ready_at`
@@ -293,7 +295,9 @@ real completion: it settles what this round rated with the same `compress_comple
 ledger write as 「结算已完成单元」 (no 小结算 confirmation page), so those units leave the
 HUD rail, 本轮安排 and the swipe feed and only the closing settlement remains — the pager
 disappears with the last card, and 取消结算 is not offered because there is nothing to
-return to. An open round still seeks the queue-order first **unscored** unit
+return to. A waiting 回顾 does not make the button inert: that press opens the closing page
+instead of compressing (see below), so there is no state in which 完成 is disabled while a
+card is on screen. An open round still seeks the queue-order first **unscored** unit
 (谁最早看谁). Pressing 完成 again while the viewport is already on an unscored unit walks
 to the **next** unscored unit in queue order and wraps at the end, so a single 完成 button
 cycles through every blank unit instead of sticking on the first. Scored means this
@@ -302,8 +306,17 @@ alike — the rail fills solid). A weak score still opens settlement once nothin
 unscored remains — 完成 must not disable in that state. A scored 重练 is never the target; leave_card bumps
 `retry_attempt` and clears that occurrence's score so the next blank attempt is seekable.
 A weak source is scored, so 完成 does not reopen it — the blank 重练 is the work.
+A same-day 回顾 still owed (`waiting`) never disables 完成. The button has exactly two
+outcomes while the feed has cards: seek the next unscored occurrence, or open the closing
+settlement. With only waiting 回顾 left it opens the closing page without compressing (the
+server still holds those groups), and the page names what is still owed — 「还有 N 张稍后回顾」
+— so 结算 is an informed choice instead of an unreachable button.
 Rating the retry must not move the viewport onto the source or refit the map to the palace
-root. It does not bulk-complete leftover work.
+root. It does not bulk-complete leftover work. Dropping sibling retries (a 重练 pass settles
+the source, so older attempts of the same unit leave the feed) re-pins the card under the
+viewport by id: removing entries above it shifted every index and made the feed look like it
+auto-advanced. Clearing a 重练's own rating keeps that card blank in place — only 结算, a
+cancelled occurrence or the next study day removes it.
 
 ### unitProgressState is the only score kernel
 
@@ -314,6 +327,58 @@ clearance, and round completion must read this module. Do not reassemble
 `selectedRating` / `lastRating` / `completedIds` / source-fallback conditions at
 call sites — that is how seek and the rail forked. `lastRating` never inherits
 across source ↔ 重练 ids.
+
+`roundCompletion` layers one family rule on that kernel: a source whose 重练 passed
+is finished for round completion and for 完成's seek target even when its own weak
+score fell out of the local ledger, and a source whose blank 重练 is already in the
+feed is skipped in favour of that retry. Without the layer, 完成 landed on a source the
+server would only answer `superseded_attempt`, so the button disabled itself on a card
+that could never be graded again. 忘记/困难 still counts as scored.
+
+**The family rule runs source → retry, never retry → source.** A 重练/回顾 card answers
+only for itself: its own plan entry (`completed`), its own glance score, or its own pass.
+It must not inherit `completed_ids`, the plan's `completed` status, or `lastRating` from its
+source. Those are all true the moment the source passes, which is exactly when the 30-minute
+回顾 is scheduled — inheriting them made every blank 回顾 card look handled while the rail
+drew it pending, so 完成 had no target and disabled itself on a round that still had work.
+A `lastRating` copied onto the retry by restudy stamping is not its own score either; only
+its encounter counts, and a copied pass (`>= 3`) is weak evidence the old rule already
+accepted. Measured on one real round: 56 presented cards, 42 rated, 11 blank 回顾 cards —
+the whole button dead until this rule was split by card kind.
+
+An earlier attempt that a later real practice already superseded opens **read-only**
+instead of failing: `POST /review/units/{id}/sessions` still returns the session (the map
+needs it), the encounter carries `rating_editable: false` (the amend glance inherits that
+from its `amend_source_id`), and only the write — the 1–4 tap, correction and undo — answers
+400 `superseded_attempt`. The card locks with 「已有后续练习，这次评分仅供回看」, the outbox
+marks the failure terminal (no auto-retry, no 未保存 record, rail tick keeps the plan's fill),
+and a 400 at glance-open time is classified the same way.
+
+## 睡前复习 (bedtime review)
+
+A moon button sits above the right-side pager (the control column with 上一张 / 下一张 /
+完成). It opens the shared `ConfirmDialog`, which first reads
+`GET /freestyle/rounds/{round_id}/bedtime/candidates` and states how many cards will be
+appended and that the grades do not move the schedule. Confirming calls
+`POST /freestyle/rounds/{round_id}/bedtime`, appends the cards to the end of the current
+plan with `bedtime: true`, and jumps to the first new card. The button stays reachable on
+the closing page, where the pager itself steps aside.
+
+- **What is appended:** review units with a live rating operation in the current study day,
+  in the round's workspace (all palaces for 随心, one palace for `p<id>`), minus units this
+  round still owes (unrated or live retry) and units already in the bedtime set. Clicking
+  the moon again after rating more cards appends only the new ones; no card is added twice.
+- **Grading:** a bedtime card renders from the read-only unit preview (no session, no
+  encounter) and its map is reveal-only. Its rating bar is
+  `FreestyleBedtimeRatingBar`; the tap goes to
+  `POST /freestyle/rounds/{round_id}/bedtime/ratings`, which records
+  `plan["bedtime_ratings"][card_id]` and completes the card. No Reviews session, encounter,
+  or rating operation is written, so due dates and FSRS state cannot move; the normal
+  rating endpoint rejects a bedtime card outright.
+- **Rail and expiry:** bedtime ticks carry a moon above the bar. They are kept out of the
+  due-day filters (`drop_undue_unstarted`, `replan_remaining`) and are dropped by
+  `drop_previous_day_bedtime` when the round crosses the 03:00 study-day boundary. Cards
+  rated in the meantime keep their real ratings; the bedtime pass never replaces them.
 
 ## Training Directions and Subject Chips
 

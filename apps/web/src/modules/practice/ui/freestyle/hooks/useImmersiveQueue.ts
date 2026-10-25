@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import {
+  appendFreestyleBedtimeApi,
   applyFreestyleRoundActionApi,
   buildFreestyleQueueApi,
   dropFreestyleOverlayQuizPalacesApi,
   getActiveFreestyleRoundApi,
   getFreestyleRoundApi,
   getOrCreateFreestyleRoundApi,
+  rateFreestyleBedtimeCardApi,
   startFreestyleRoundApi,
 } from '@/modules/practice/ui/freestyle/api'
 import { coalesceHydrationLedger, commitHydratedRoundLedger } from '@/modules/practice/domain/hydrateRoundLedger'
@@ -1654,9 +1656,22 @@ export function useImmersiveQueue(
         if (plan && logicalCardId !== cardId) {
           plan = updateRoundPlanCard(plan, logicalCardId, { status: 'pending', lastRating: null })
         }
-        const clearedCards = removeRetryOccurrencesForSource(cardsRef.current, sourceCardId(cardsRef.current.find((card) => card.id === cardId)))
+        const clearedCard = cardsRef.current.find((card) => card.id === cardId)
+        // Clearing a 重练's own rating leaves that card blank; it is not 结算.
+        // Deleting it under the viewport was the "评分完卡片自己消失" jump.
+        const clearedCards = removeRetryOccurrencesForSource(
+          cardsRef.current,
+          sourceCardId(clearedCard),
+          isRetryOccurrence(clearedCard) ? cardId : undefined,
+        )
         cardsRef.current = clearedCards
         setCards(clearedCards)
+        // Removing sibling retries can shift every later index; keep the card
+        // the learner is looking at under the viewport by id, not by number.
+        const clearedPinIndex = clearedCards.findIndex((card) => card.id === preferViewportId)
+        if (clearedPinIndex >= 0 && clearedPinIndex !== currentIndexRef.current) {
+          applyCurrentIndex(clearedPinIndex, clearedCards)
+        }
         const incomplete = persistQueueState({
           ...markIncomplete(markIncomplete(queueStateRef.current, logicalCardId), cardId),
           roundPlan: plan,
@@ -1766,6 +1781,13 @@ export function useImmersiveQueue(
       if (graduatedCards.length !== cardsRef.current.length) {
         cardsRef.current = graduatedCards
         setCards(graduatedCards)
+        // Dropped sibling retries sat before the viewport when the round keeps
+        // several attempts of one unit: re-pin by id so the feed does not slide
+        // onto the next unit while the learner is still reading this one.
+        const graduatedPinIndex = graduatedCards.findIndex((card) => card.id === preferViewportId)
+        if (graduatedPinIndex >= 0 && graduatedPinIndex !== currentIndexRef.current) {
+          applyCurrentIndex(graduatedPinIndex, graduatedCards)
+        }
       }
       const currentPlan = queueStateRef.current.roundPlan
       let plan = currentPlan
@@ -1830,9 +1852,12 @@ export function useImmersiveQueue(
               plan = updateRoundPlanCard(plan, logicalCardId, { status: 'pending', lastRating: null })
             }
           }
+          const clearedCard = nextCards.find((card) => card.id === cardId)
           nextCards = removeRetryOccurrencesForSource(
             nextCards,
-            sourceCardId(nextCards.find((card) => card.id === cardId)),
+            sourceCardId(clearedCard),
+            // A 重练 keeps its card when its own score is cleared.
+            isRetryOccurrence(clearedCard) ? cardId : undefined,
           )
           nextState = markIncomplete(markIncomplete(nextState, logicalCardId), cardId)
           continue
@@ -2622,6 +2647,113 @@ export function useImmersiveQueue(
     persistQueueState({ ...queueStateRef.current, completedIds, roundPlan: plan })
   }, [persistQueueState])
 
+  /**
+   * 睡前复习: append today's newly rated cards to the end of the current queue.
+   * Returns the appended ids (empty when there is nothing new).
+   */
+  const appendBedtimeReview = useCallback(async (): Promise<string[]> => {
+    const roundId = queueStateRef.current.roundId
+    if (!roundId) throw new Error('当前没有进行中的回合')
+    const payload = await appendFreestyleBedtimeApi(roundId, {
+      operation_id: createOperationId(),
+      expected_version: serverPlanVersionRef.current,
+    })
+    const added = payload.added_card_ids
+    if (!added.length) {
+      serverPlanVersionRef.current = serverPlanVersion(payload.round)
+      setPlanVersion(serverPlanVersion(payload.round))
+      return []
+    }
+    const addedSet = new Set(added)
+    serverPlanVersionRef.current = serverPlanVersion(payload.round)
+    setPlanVersion(serverPlanVersion(payload.round))
+    const merged = [...cardsRef.current]
+    const known = new Set(merged.map((card) => card.id))
+    for (const card of payload.cards) {
+      if (!known.has(card.id)) {
+        merged.push(card)
+        known.add(card.id)
+      }
+    }
+    const confirmed = stripReviewHintCards(
+      insertReviewHintCards(cardsForServerPlan(merged, payload.round.plan, roundId)),
+    )
+    let nextState = queueStateRef.current
+    for (const cardId of added) nextState = clearUnitEncounterState(nextState, cardId)
+    nextState = {
+      ...nextState,
+      completedIds: nextState.completedIds.filter((id) => !addedSet.has(id)),
+    }
+    // A card may have been compressed before the learner asked for a bedtime
+    // pass. createRoundPlan skips compressed ids, so reopen them first.
+    const prior = nextState.roundPlan
+      ? {
+          ...nextState.roundPlan,
+          compressedIds: (nextState.roundPlan.compressedIds ?? []).filter(
+            (id) => !addedSet.has(id),
+          ),
+        }
+      : null
+    let plan = createRoundPlan(
+      roundId,
+      confirmed,
+      configRef.current,
+      undefined,
+      prior,
+    )
+    plan = applyServerCohorts(plan, payload.round.plan)
+    const bedtimeIds = new Set(
+      (payload.round.plan.original_cards || [])
+        .filter((item) => item.bedtime)
+        .map((item) => item.card_id),
+    )
+    for (const cardId of added) {
+      bedtimeIds.add(cardId)
+      plan = updateRoundPlanCard(plan, cardId, { status: 'pending', lastRating: null })
+    }
+    const withBedtime = confirmed.map((card) =>
+      card.type === 'mindmap_branch' && bedtimeIds.has(card.id)
+        ? { ...card, bedtime: true }
+        : card,
+    )
+    cardsRef.current = withBedtime
+    setCards(withBedtime)
+    persistQueueState({ ...nextState, roundPlan: plan })
+    notifyPeerRound()
+    const firstIndex = withBedtime.findIndex((card) => card.id === added[0])
+    if (firstIndex >= 0) applyCurrentIndex(firstIndex, withBedtime)
+    return added
+  }, [applyCurrentIndex, notifyPeerRound, persistQueueState])
+
+  /**
+   * Record one bedtime grade. Plan-only: no encounter, no scheduling write.
+   * The card is marked completed so the queue moves on.
+   */
+  const rateBedtimeCard = useCallback(
+    async (cardId: string, rating: number) => {
+      const roundId = queueStateRef.current.roundId
+      if (!roundId) throw new Error('当前没有进行中的回合')
+      const payload = await rateFreestyleBedtimeCardApi(roundId, {
+        operation_id: createOperationId(),
+        expected_version: serverPlanVersionRef.current,
+        card_id: cardId,
+        rating,
+      })
+      serverPlanVersionRef.current = serverPlanVersion(payload.round)
+      setPlanVersion(serverPlanVersion(payload.round))
+      const localPlan = queueStateRef.current.roundPlan
+      let plan = localPlan ? applyServerCohorts(localPlan, payload.round.plan) : localPlan
+      if (plan) {
+        plan = updateRoundPlanCard(plan, cardId, { status: 'completed', lastRating: rating })
+      }
+      const completedIds = [...new Set([...queueStateRef.current.completedIds, cardId])]
+      persistQueueState({ ...queueStateRef.current, completedIds, roundPlan: plan })
+      notifyPeerRound()
+      return payload.round
+    },
+    [notifyPeerRound, persistQueueState],
+  )
+
   const reshuffleQueueWithRestudyClear = useCallback(() => {
     pendingRestudyByIdRef.current.clear()
     syncPendingRestudyIds()
@@ -3055,6 +3187,8 @@ export function useImmersiveQueue(
     pendingRestudyCardIds,
     planVersion,
     adoptRoundVersion,
+    appendBedtimeReview,
+    rateBedtimeCard,
     hydrateLiveRound,
     clearConfiguredOverlayQuiz,
     queueFrozen,

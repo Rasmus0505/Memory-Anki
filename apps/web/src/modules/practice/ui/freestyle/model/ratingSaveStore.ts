@@ -12,9 +12,11 @@ import type {
  * Round-scoped rating outbox. Framework-free: no React, no API imports.
  *
  * One entry per `round + card`. A tap becomes `saving`, and only a server
- * acknowledgement makes it `saved`. A failure or a missing answer makes it
- * `failed` (未保存). A save is owned by this store, not by the card that asked
- * for it, so leaving the card, the page or the module does not cancel it.
+ * acknowledgement makes it `saved`. A failure is retried automatically inside a
+ * short window (the entry stays `saving`, so the tapped grade and the card never
+ * flicker); only a tap that fails every attempt becomes `failed` (未保存) and is
+ * reported. A save is owned by this store, not by the card that asked for it, so
+ * leaving the card, the page or the module does not cancel it.
  *
  * Each card has one serial lane: one request in flight, at most one newer
  * intent waiting (the latest tap wins). A retry of a failed save reuses the
@@ -22,11 +24,32 @@ import type {
  */
 
 /**
- * No answer within this budget: show 未保存 and free the lane. The request keeps
- * running up to the transport cap (`FREESTYLE_RATING_TRANSPORT_TIMEOUT_MS`), and a
- * late success still upgrades the item to saved without another tap.
+ * Budget of one attempt. With no answer inside it the attempt counts as failed,
+ * the lane is freed, and the tap is retried automatically (see the retry policy
+ * below). The request keeps running up to the transport cap
+ * (`FREESTYLE_RATING_TRANSPORT_TIMEOUT_MS`), and a late success still upgrades
+ * the item to saved without another tap.
  */
-export const RATING_SAVE_TIMEOUT_MS = 12_000
+export const RATING_SAVE_TIMEOUT_MS = 2_000
+
+/**
+ * Automatic retry policy for one tap, measured from its first attempt. A failed
+ * attempt does not surface 未保存: the entry stays `saving` (the tapped grade
+ * stays lit, the rail does not) and the same operation id is sent again, so the
+ * server de-duplicates it. Only a tap that is still unanswered after every
+ * retry inside this window becomes 未保存, and only then is the learner told.
+ */
+export const RATING_SAVE_RETRY_ATTEMPTS = 3
+export const RATING_SAVE_RETRY_DELAY_MS = 300
+export const RATING_SAVE_RETRY_WINDOW_MS = 5_000
+
+/** Failures worth another attempt. `stale`/`identity`/`conflict` cannot be fixed by resending. */
+const RETRYABLE_FAILURES: ReadonlySet<RatingSaveFailure> = new Set([
+  'network',
+  'timeout',
+  'no_result',
+  'prepare',
+])
 
 export type RatedUnitResult = Awaited<ReturnType<typeof rateReviewUnitApi>>
 export type UndoneUnitResult = Awaited<ReturnType<typeof undoReviewUnitRatingApi>>
@@ -40,6 +63,8 @@ export type RatingSaveFailure =
   | 'stale'
   | 'no_result'
   | 'prepare'
+  /** 这次尝试后面已经有更新的练习，服务端不再接受改写；重发没有任何意义。 */
+  | 'superseded'
 
 export interface RatingTarget {
   encounterId: string
@@ -67,6 +92,10 @@ export interface RatingJob extends RatingRequest {
   key: string
   operationId: string
   sequence: number
+  /** 1-based attempt of this tap; automatic retries share the operation id. */
+  attempt: number
+  /** When attempt 1 started. The retry window is measured from here. */
+  startedAt: number
 }
 
 export interface RatingSaveEntry {
@@ -157,10 +186,20 @@ export interface RatingSaveDeps {
   clearIntent?: (roundId: string, cardId: string, operationId: string) => Promise<unknown>
   close?: (target: RatingTarget, job: RatingJob) => Promise<unknown>
   isStaleError?: (error: unknown) => boolean
+  /** The server rejected this attempt as already superseded by later practice (terminal). */
+  isSupersededError?: (error: unknown) => boolean
   newOperationId: () => string
   setTimer: (callback: () => void, ms: number) => unknown
   clearTimer: (handle: unknown) => void
   timeoutMs?: number
+  /** Overrides for the automatic retry policy (`RATING_SAVE_RETRY_*`). */
+  autoRetry?: {
+    maxAttempts?: number
+    delayMs?: number
+    windowMs?: number
+  }
+  /** Clock used for the retry window. Tests drive it; production uses `Date.now`. */
+  now?: () => number
 }
 
 export type RatingResponseVerdict =
@@ -176,6 +215,25 @@ export function ratingPassed(rating: UnitRating): boolean {
 
 export function ratingSaveKey(roundId: string, cardId: string) {
   return `${roundId}::${cardId}`
+}
+
+/**
+ * Cards whose latest tap the server has never acknowledged and that hold no
+ * earlier acknowledged grade. Their score does not exist yet, so the progress
+ * rail must keep them unfilled — a plan echo from another device or an
+ * optimistic restudy must not light a grade that is not saved.
+ */
+export function unsavedRatingCardIds(
+  entries: Record<string, RatingSaveEntry>,
+): Set<string> {
+  const ids = new Set<string>()
+  for (const entry of Object.values(entries)) {
+    // A superseded attempt will never be saved: unfilling its tick forever would
+    // block 结算 and hide the score the unit really has.
+    if (entry.failure === 'superseded') continue
+    if (entry.status !== 'saved' && entry.ackedRating == null) ids.add(entry.cardId)
+  }
+  return ids
 }
 
 export function roundPlanVersionOf(round: Partial<FreestyleRoundStatePayload> | null | undefined) {
@@ -233,7 +291,7 @@ function targetFromPayload(payload: Record<string, unknown>): RatingTarget | nul
 }
 
 function asFailure(value: unknown): RatingSaveFailure {
-  const known: RatingSaveFailure[] = ['timeout', 'network', 'conflict', 'identity', 'stale', 'no_result', 'prepare']
+  const known: RatingSaveFailure[] = ['timeout', 'network', 'conflict', 'identity', 'stale', 'no_result', 'prepare', 'superseded']
   return known.includes(value as RatingSaveFailure) ? (value as RatingSaveFailure) : 'network'
 }
 
@@ -249,6 +307,8 @@ export class RatingSaveStore {
   private changeVersion = 0
   /** Keys whose 未保存 record the server is known to hold. */
   private serverIntents = new Set<string>()
+  /** A tap waiting for its automatic retry, keyed like the entry. */
+  private retryTimers = new Map<string, unknown>()
 
   private readonly deps: RatingSaveDeps
 
@@ -293,17 +353,23 @@ export class RatingSaveStore {
   failedCount = (roundId: string) => {
     let count = 0
     for (const entry of this.entries.values()) {
-      if (entry.roundId === roundId && entry.status === 'failed') count += 1
+      if (entry.roundId !== roundId || entry.status !== 'failed') continue
+      // 被后续练习取代的那条永远补不上：不要让它一直挂在「未保存」计数里。
+      if (entry.failure === 'superseded') continue
+      count += 1
     }
     return count
   }
 
   isBusy(roundId: string, cardId: string) {
-    const lane = this.lanes.get(ratingSaveKey(roundId, cardId))
-    return Boolean(lane?.inflight || lane?.queued)
+    const key = ratingSaveKey(roundId, cardId)
+    const lane = this.lanes.get(key)
+    // A tap waiting for its quiet retry is still on its way: leave-close must
+    // wait for it instead of cancelling the glance it is about to rate.
+    return Boolean(lane?.inflight || lane?.queued || this.retryTimers.has(key))
   }
 
-  /** Resolves once this card has nothing in flight or queued. */
+  /** Resolves once this card has nothing in flight, queued, or waiting for a quiet retry. */
   whenIdle(roundId: string, cardId: string): Promise<void> {
     if (!this.isBusy(roundId, cardId)) return Promise.resolve()
     const lane = this.lane(ratingSaveKey(roundId, cardId))
@@ -330,6 +396,8 @@ export class RatingSaveStore {
     ) {
       return previous
     }
+    // A newer tap owns this card from here on: a pending quiet retry is obsolete.
+    this.cancelRetry(key)
     const retry = previous?.status === 'failed' && previous.rating === request.rating
     const job: RatingJob = {
       ...request,
@@ -337,6 +405,8 @@ export class RatingSaveStore {
       operationId: retry && previous ? previous.operationId : this.deps.newOperationId(),
       sequence: ++this.sequence,
       target: request.target ?? (retry ? previous?.target : null) ?? null,
+      attempt: 1,
+      startedAt: this.now(),
     }
     this.requests.set(key, request)
     lane.undoAfter = null
@@ -368,6 +438,8 @@ export class RatingSaveStore {
     let count = 0
     for (const entry of [...this.entries.values()]) {
       if (entry.roundId !== roundId || entry.status !== 'failed' || entry.rating == null) continue
+      // Terminal: the server answered `superseded`, so a resend is the same 400.
+      if (entry.failure === 'superseded') continue
       const request = this.requests.get(entry.key)
       if (!request) continue
       this.submit({ ...request, rating: entry.rating })
@@ -391,7 +463,10 @@ export class RatingSaveStore {
       return true
     }
     const operationId = input.operationId || previous?.ackedOperationId
+    // Nothing to undo: keep a pending quiet retry alive, or the tap would sit 保存中 forever.
     if (!operationId) return false
+    // The learner is overriding this card: do not resend the tap they moved past.
+    this.cancelRetry(key)
     const task: LaneTask = {
       kind: 'undo',
       roundId: input.roundId,
@@ -403,6 +478,65 @@ export class RatingSaveStore {
     if (lane.inflight) lane.queued = task
     else this.run(key, task)
     return true
+  }
+
+  private now() {
+    return this.deps.now ? this.deps.now() : Date.now()
+  }
+
+  private retryPolicy() {
+    return {
+      maxAttempts: this.deps.autoRetry?.maxAttempts ?? RATING_SAVE_RETRY_ATTEMPTS,
+      delayMs: this.deps.autoRetry?.delayMs ?? RATING_SAVE_RETRY_DELAY_MS,
+      windowMs: this.deps.autoRetry?.windowMs ?? RATING_SAVE_RETRY_WINDOW_MS,
+    }
+  }
+
+  /** Is another attempt of this tap worth starting, inside its window? */
+  private canAutoRetry(key: string, job: RatingJob, failure: RatingSaveFailure) {
+    if (!RETRYABLE_FAILURES.has(failure)) return false
+    // A clear waiting on this rate needs an answer, not another attempt.
+    if (this.lane(key).undoAfter) return false
+    const policy = this.retryPolicy()
+    if (job.attempt >= policy.maxAttempts) return false
+    const elapsed = Math.max(0, this.now() - job.startedAt)
+    const attemptMs = this.deps.timeoutMs ?? RATING_SAVE_TIMEOUT_MS
+    // Only start it if that attempt can still finish inside the window: the
+    // learner is told 未保存 once the window is spent, not later.
+    return elapsed + policy.delayMs + attemptMs <= policy.windowMs
+  }
+
+  /**
+   * Resend this tap once more, quietly: the entry stays `saving` (its grade stays
+   * lit as 保存中) until an acknowledgement or the end of the window. Same
+   * operation id, so the server de-duplicates a request that already landed.
+   */
+  private scheduleRetry(key: string, job: RatingJob) {
+    this.cancelRetry(key)
+    const retry: RatingJob = { ...job, attempt: job.attempt + 1 }
+    const handle = this.deps.setTimer(() => {
+      if (this.retryTimers.get(key) === handle) this.retryTimers.delete(key)
+      const entry = this.entries.get(key)
+      // Saved meanwhile, superseded by a newer tap, or retried by hand: nothing to do.
+      if (
+        !entry
+        || entry.status !== 'saving'
+        || entry.operationId !== retry.operationId
+        || entry.sequence !== retry.sequence
+      ) return
+      // The attempt that failed may still be on the wire under a freed lane;
+      // never run two attempts of one tap side by side.
+      if (this.lane(key).inflight) return
+      this.run(key, { kind: 'rate', job: retry })
+    }, this.retryPolicy().delayMs)
+    this.retryTimers.set(key, handle)
+  }
+
+  private cancelRetry(key: string) {
+    const handle = this.retryTimers.get(key)
+    if (handle == null) return
+    this.retryTimers.delete(key)
+    this.deps.clearTimer(handle)
   }
 
   private lane(key: string): Lane {
@@ -477,6 +611,8 @@ export class RatingSaveStore {
       this.run(key, next)
       return
     }
+    // Another quiet attempt is coming: this card is still saving.
+    if (this.retryTimers.has(key)) return
     const waiters = lane.idle
     lane.idle = []
     waiters.forEach((resolve) => resolve())
@@ -513,7 +649,14 @@ export class RatingSaveStore {
         try {
           target = job.prepare ? await job.prepare() : null
         } catch (error) {
-          this.fail(key, job, 'prepare', error)
+          // Opening the glance is where a superseded earlier attempt answers now:
+          // the card is readable but not writable, and resending never helps.
+          this.fail(
+            key,
+            job,
+            (this.deps.isSupersededError?.(error) ?? false) ? 'superseded' : 'prepare',
+            error,
+          )
           return
         }
         if (!target) {
@@ -545,7 +688,14 @@ export class RatingSaveStore {
       }
     } catch (error) {
       const stale = this.deps.isStaleError?.(error) ?? false
-      this.fail(key, job, stale ? 'stale' : isTimeoutError(error) ? 'timeout' : 'network', error)
+      // 服务端说这次尝试已经被后来的练习取代：再发多少次都是同一个 400。
+      const superseded = this.deps.isSupersededError?.(error) ?? false
+      this.fail(
+        key,
+        job,
+        superseded ? 'superseded' : stale ? 'stale' : isTimeoutError(error) ? 'timeout' : 'network',
+        error,
+      )
     } finally {
       this.deps.clearTimer(timer)
       this.followUp(key, task)
@@ -613,6 +763,8 @@ export class RatingSaveStore {
     // A retry with the same operation id can answer after the original already did.
     const duplicate = entry?.status === 'saved' && entry.ackedOperationId === ackedOperationId
     const current = entry?.operationId === job.operationId && !duplicate
+    // A late answer for an attempt that already timed out needs no further retry.
+    if (current) this.cancelRetry(key)
     if (current && entry) {
       this.setEntry({
         ...entry,
@@ -762,6 +914,12 @@ export class RatingSaveStore {
     // Already saved (a retry landed first), already reported (the timeout fired),
     // or a retry of the same operation now owns the entry: the late error adds nothing.
     if (current && (entry?.status !== 'saving' || entry.sequence !== job.sequence)) return
+    // Still inside the window: keep the tap 保存中 and resend instead of reporting 未保存.
+    // The learner is only told once every automatic attempt has failed.
+    if (current && this.canAutoRetry(key, job, failure)) {
+      this.scheduleRetry(key, job)
+      return
+    }
     if (current && entry) {
       const target = job.target ?? entry.target
       this.setEntry({
@@ -773,7 +931,10 @@ export class RatingSaveStore {
         detail: error instanceof Error ? error.message : String(error ?? ''),
         target,
       })
-      this.persistIntent(key, job, failure, target)
+      // A superseded attempt can never be saved: keeping it as 未保存 would make
+      // every focus replay the same rejected write.
+      if (failure === 'superseded') this.clearIntent(key, job)
+      else this.persistIntent(key, job, failure, target)
     }
     this.emit({ type: 'failed', roundId: job.roundId, cardId: job.cardId, job, failure, error, current })
   }

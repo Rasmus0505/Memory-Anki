@@ -12,7 +12,7 @@ import {
   FreestyleUnitReviewStatusBanner,
   type FreestyleEditorSaveState,
 } from './FreestyleUnitReviewFlipCanvas'
-import { buildPermanentMarkToolbarAction, useFreestyleUnitReviewNodeQuiz } from './freestyleUnitReviewFlipToolbar'
+import { buildReviewToolbarExtensions, useFreestyleUnitReviewNodeQuiz } from './freestyleUnitReviewFlipToolbar'
 import { useFreestyleTextToMindMap } from './useFreestyleTextToMindMap'
 import type {
   FreestyleReviewUnitCard,
@@ -54,6 +54,7 @@ export function FreestyleUnitReviewFlipPanel({
   unit,
   editorState,
   active = true,
+  reviewOnly = false,
   fullscreen,
   onToggleFullscreen,
   freestyleFlipMode = 'free',
@@ -78,6 +79,8 @@ export function FreestyleUnitReviewFlipPanel({
   unit: ReviewUnitDto
   editorState: MindMapEditorState
   active?: boolean
+  /** 睡前复习: reveal-only map; no editing, permanent marks, or document writes. */
+  reviewOnly?: boolean
   fullscreen: boolean
   onToggleFullscreen: (active?: boolean) => void
   freestyleFlipMode?: FreestyleFlipMode
@@ -491,6 +494,7 @@ export function FreestyleUnitReviewFlipPanel({
   }, [onRevealMapChange])
 
   const handleToggleMode = useCallback(() => {
+    if (reviewOnly) return
     if (!active) {
       // Still a read-only preview: the live glance is opening. Keep the edit tap
       // and apply it when the glance arrives, instead of silently dropping it.
@@ -531,6 +535,7 @@ export function FreestyleUnitReviewFlipPanel({
     setModeSyncVersion((value) => value + 1)
   }, [
     active,
+    reviewOnly,
     flipTargetUids,
     isEditMode,
     onEditorStateSaved,
@@ -681,18 +686,11 @@ export function FreestyleUnitReviewFlipPanel({
             ? permanentMarkHighlights
             : undefined
         }
-        toolbarExtensions={{
-          moreActions: textToMindMap.moreActions,
-          permanentMarkAction: isEditMode
-            ? buildPermanentMarkToolbarAction({
-                active: permanentMarkMode, markedCount: permanentMarkHighlights.length,
-                disabled: !permanentMarkMode && savingEdit, onToggle: handleTogglePermanentMarkMode,
-              })
-            : null,
-          quizAction: onOpenScopeQuiz
-            ? { label: '做题', onClick: onOpenScopeQuiz, opensOverlay: true }
-            : null,
-        }}
+        toolbarExtensions={buildReviewToolbarExtensions({
+          reviewOnly, moreActions: textToMindMap.moreActions, isEditMode, permanentMarkMode,
+          markedCount: permanentMarkHighlights.length, savingEdit,
+          onTogglePermanentMarkMode: handleTogglePermanentMarkMode, onOpenScopeQuiz,
+        })}
         textActionLabel="文字"
         revealSettings={flipCardRevealSettings}
         freestyleFlipMode={onFreestyleFlipModeChange
@@ -717,7 +715,7 @@ export function FreestyleUnitReviewFlipPanel({
         onNodeHover={isEditMode ? undefined : reveal.handleNodeHover}
         revealFollowNodeIds={revealFollow.nodeIds}
         revealFollowNonce={revealFollow.nonce}
-        onPaneDoubleClick={handleToggleMode}
+        onPaneDoubleClick={reviewOnly ? undefined : handleToggleMode}
         preserveViewOnSync
         initialViewPolicy="preserve"
         sceneTransitionFallbackNodeId={unit.anchor_uid || null}

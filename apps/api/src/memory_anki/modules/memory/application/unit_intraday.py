@@ -24,10 +24,12 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Literal
 
-# A first-ever pass is a fragile memory: one short re-check, then the normal
-# FSRS interval. Fifteen minutes is long enough to need retrieval, short enough
-# to still be the same study block.
-STEP_DELAY = timedelta(minutes=15)
+# A first-ever pass is a fragile memory: one short re-check, then the fixed
+# day-level ladder. A 重练 card that finally passes gets the same single
+# re-check, so a recovery is never mistaken for a stable recall. Thirty minutes
+# is long enough to need retrieval, short enough to still be the same study
+# block. See docs/复习排期设计.md.
+STEP_DELAY = timedelta(minutes=30)
 
 # Failed grades. The third delay is the "today's last" pass; it is clamped so it
 # cannot cross the 03:00 study-day boundary.
@@ -117,23 +119,12 @@ def plan_intraday(
         )
 
     if passed:
-        first_pass = not was_passed and current.retries == 0 and not current.step_pending
-        if first_pass:
-            return IntradayPlan(
-                due_date=today,
-                due_at=_clamp(now + STEP_DELAY, day_deadline),
-                retries=0,
-                step_pending=True,
-                kind="step",
-                retry_delay=STEP_DELAY,
-                exhausted=False,
-            )
         if current.step_pending:
-            # The short re-check passed: this is the first real graduation, so
-            # book tomorrow. FSRS may already want two days because it saw two
-            # successful recalls, but a card learned today belongs to tomorrow.
+            # The 30-minute re-check passed: this is the first real booking.
+            # The day-level due date is the ladder's (or FSRS' for a mature
+            # card); never keep the unit in today's queue.
             return IntradayPlan(
-                due_date=today + timedelta(days=1),
+                due_date=max(fsrs_due_date, today + timedelta(days=1)),
                 due_at=None,
                 retries=0,
                 step_pending=False,
@@ -141,7 +132,21 @@ def plan_intraday(
                 retry_delay=None,
                 exhausted=False,
             )
-        # A recovery after a failure, or a mature card: FSRS owns the interval.
+        first_pass = not was_passed and current.retries == 0
+        if first_pass or current.retries > 0:
+            # A brand-new card and a 重练 card that finally passed both get one
+            # 30-minute re-check before the day-level interval is booked. A
+            # recovery is not evidence of a stable memory yet.
+            return IntradayPlan(
+                due_date=today,
+                due_at=_clamp(now + STEP_DELAY, day_deadline),
+                retries=current.retries,
+                step_pending=True,
+                kind="step",
+                retry_delay=STEP_DELAY,
+                exhausted=False,
+            )
+        # A normal pass on a card that already had its re-check: FSRS owns it.
         return IntradayPlan(
             due_date=max(fsrs_due_date, today + timedelta(days=1)),
             due_at=None,

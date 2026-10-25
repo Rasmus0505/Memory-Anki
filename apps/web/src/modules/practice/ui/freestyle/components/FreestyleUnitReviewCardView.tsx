@@ -63,6 +63,8 @@ import {
 } from '@/modules/practice/ui/freestyle/model/freestyleStaleRecovery'
 import { freestyleUnitLoadFailureCopy } from '@/modules/practice/ui/freestyle/model/freestyleUnitLoadRecovery'
 import { FreestyleRatingBar } from './FreestyleRatingBar'
+import { FreestyleBedtimeRatingBar } from './FreestyleBedtimeRatingBar'
+import { SUPERSEDED_RATING_COPY } from '@/modules/practice/ui/freestyle/model/freestyleRatingCopy'
 import { useFreestyleCardFeedback } from './useFreestyleCardFeedback'
 import { FreestyleUnitReviewFlipPanel } from './FreestyleUnitReviewFlipPanel'
 import { FreestyleUnitReviewIdentityRow, FreestyleUnitReviewPlaceholder } from './FreestyleUnitReviewChrome'
@@ -74,7 +76,6 @@ export {
 
 
 export const RATING_SAVE_FAILED_COPY = '这一次没有保存成功'
-const SUPERSEDED_RATING_COPY = '已有后续练习，这次评分仅供回看；请到最近一次练习修改。'
 
 async function abandonUnshownSession(value: UnitReviewSessionDto, unitId: string | null | undefined) {
   const encounter = value.units.find((item) => item.id === unitId)?.encounter
@@ -121,6 +122,7 @@ export function FreestyleUnitReviewCardView({
   planVersion = 0,
   onOpenScopeQuiz,
   lastRating = null,
+  onBedtimeRate,
 }: {
   card: FreestyleReviewUnitCard
   active: boolean
@@ -169,6 +171,11 @@ export function FreestyleUnitReviewCardView({
   palaceTarget?: PalaceRatingTarget | null
   liveRevealMap?: Record<string, string> | null
   onLiveRevealMapChange?: (revealMap: Record<string, string>) => void
+  /**
+   * 睡前复习: record a plan-only grade for an already-rated card. Never opens a
+   * Reviews encounter and never reschedules.
+   */
+  onBedtimeRate?: (cardId: string, rating: UnitRating) => Promise<unknown>
 }) {
   const [session, setSession] = useState<UnitReviewSessionDto | null>(null)
   const [savedEditorState, setSavedEditorState] = useState<MindMapEditorState | null>(null)
@@ -183,6 +190,8 @@ export function FreestyleUnitReviewCardView({
   /** Live Reviews revision when the queue card was built against an older freeze. */
   const [adoptedRevision, setAdoptedRevision] = useState<number | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [bedtimeBusy, setBedtimeBusy] = useState(false)
+  const [bedtimeError, setBedtimeError] = useState<string | null>(null)
   const [loadAttempt, setLoadAttempt] = useState(0)
   /** Undo surfaces only right after a rate, then collapses to give the map the room. */
   const [undoVisible, setUndoVisible] = useState(false)
@@ -471,6 +480,10 @@ export function FreestyleUnitReviewCardView({
     const liveCard = cardRef.current
     if (!active) return
     if (recapOnly) return
+    // 睡前复习 cards are already rated today. They render from the read-only
+    // preview and are scored through the plan-only endpoint; opening a Reviews
+    // glance would create an encounter and invite a scheduling write.
+    if (liveCard.bedtime) return
     if (!liveCard.unit_id || effectiveRevision == null || !cardUnitKey) {
       rateBridgeRef.current.onStaleDrop(liveCard.id)
       return
@@ -885,6 +898,23 @@ export function FreestyleUnitReviewCardView({
     setActionError(accepted ? null : '暂无可撤销的评分。')
   }
 
+  const handleBedtimeRate = useCallback(
+    async (rating: UnitRating) => {
+      if (!onBedtimeRate || bedtimeBusy) return
+      setBedtimeError(null)
+      setBedtimeBusy(true)
+      try {
+        await onBedtimeRate(cardRef.current.id, rating)
+        signalRating(rating, true)
+      } catch (error) {
+        setBedtimeError(error instanceof Error ? error.message : '睡前复习评分没有保存')
+      } finally {
+        setBedtimeBusy(false)
+      }
+    },
+    [bedtimeBusy, onBedtimeRate, signalRating],
+  )
+
   const reviewReady = Boolean(editorState && session && unit && unit.encounter)
   const currentEncounter = unit?.encounter ?? null
   const appearanceRating = readOnly
@@ -900,6 +930,7 @@ export function FreestyleUnitReviewCardView({
   const selectedRating = pendingRating ?? intentRating ?? appearanceRating
   const pendingClear = saveEntry?.status === 'saving' && saveEntry.pendingKind === 'undo'
   const failedRating = saveEntry?.status === 'failed' ? saveEntry.rating : null
+  const failedFailure = saveEntry?.status === 'failed' ? saveEntry.failure : null
   const recordedRating = appearanceRating != null || previousClosed
     ? null
     : asUnitRating(lastRating) ?? (encounter?.status === 'closed' ? null : asUnitRating(encounter?.selectedRating))
@@ -980,7 +1011,8 @@ export function FreestyleUnitReviewCardView({
             session={flipSource.session}
             unit={flipSource.unit}
             editorState={flipSource.editorState}
-            active={active && flipSource.live}
+            active={active && (flipSource.live || Boolean(card.bedtime))}
+            reviewOnly={Boolean(card.bedtime)}
             fullscreen={fullscreen}
             onToggleFullscreen={onToggleFullscreen}
             freestyleFlipMode={freestyleFlipMode}
@@ -1050,13 +1082,22 @@ export function FreestyleUnitReviewCardView({
           </div>
         ) : null}
 
-        {active && !inlineEditing && !recapOnly && (flipSource || !loadError || canRateWithoutPlan) ? (
+        {active && !inlineEditing && !recapOnly && card.bedtime ? (
+          <FreestyleBedtimeRatingBar
+            selectedRating={asUnitRating(lastRating)}
+            busy={bedtimeBusy}
+            error={bedtimeError}
+            onRate={handleBedtimeRate}
+            onDismissError={() => setBedtimeError(null)}
+          />
+        ) : active && !inlineEditing && !recapOnly && (flipSource || !loadError || canRateWithoutPlan) ? (
           <FreestyleRatingBar
             ratingEffects={currentEncounter?.rating_effects ?? []}
             selectedRating={selectedRating}
             pendingRating={pendingRating}
             pendingClear={pendingClear}
             failedRating={failedRating}
+            failedFailure={failedFailure}
             recordedRating={recordedRating}
             retryAfterCards={retryAfterCards}
             busy={false}

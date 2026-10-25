@@ -12,10 +12,11 @@ from typing import Any
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from memory_anki.core.time import utc_now_naive
+from memory_anki.core.time import local_calendar_day_bounds_as_utc_naive, utc_now_naive
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.unit_reviews import (
     ReviewUnitEncounter,
+    ReviewUnitRatingOperation,
     ReviewUnitState,
 )
 
@@ -27,6 +28,7 @@ __all__ = [
     "count_units_due_on",
     "list_round_unit_ratings",
     "list_trusted_due_units_for_queue",
+    "list_units_rated_on",
     "list_unit_node_members",
     "summarize_waiting_units",
 ]
@@ -189,29 +191,96 @@ def list_trusted_due_units_for_queue(
     ).all()
     result: list[dict[str, Any]] = []
     for row in rows:
-        manual = str(row.manual_title or "").strip()
-        title = manual or str(row.title or "")
-        anchor = str(row.anchor_uid or "")
-        node_uids = [uid for uid in json_load_list(row.node_uids_json) if uid]
-        if not node_uids and anchor:
-            node_uids = [anchor]
-        result.append(
-            {
-                "id": str(row.id),
-                "palace_id": int(row.palace_id),
-                "anchor_uid": anchor,
-                "unit_kind": str(row.unit_kind or ""),
-                "node_uids": node_uids,
-                "revision": int(row.revision or 1),
-                "has_passed": bool(row.has_passed),
-                "due_date": row.due_date,
-                "last_passed_at": row.last_passed_at,
-                "topology_order": int(row.topology_order or 0),
-                "title": title,
-                "group_sort_order": int(row.group_sort_order or 0),
-            }
-        )
+        result.append(_unit_row_payload(row))
     return result
+
+
+def _unit_row_payload(row: Any) -> dict[str, Any]:
+    manual = str(getattr(row, "manual_title", "") or "").strip()
+    title = manual or str(getattr(row, "title", "") or "")
+    anchor = str(row.anchor_uid or "")
+    node_uids = [uid for uid in json_load_list(row.node_uids_json) if uid]
+    if not node_uids and anchor:
+        node_uids = [anchor]
+    return {
+        "id": str(row.id),
+        "palace_id": int(row.palace_id),
+        "anchor_uid": anchor,
+        "unit_kind": str(row.unit_kind or ""),
+        "node_uids": node_uids,
+        "revision": int(row.revision or 1),
+        "has_passed": bool(row.has_passed),
+        "due_date": row.due_date,
+        "last_passed_at": row.last_passed_at,
+        "topology_order": int(row.topology_order or 0),
+        "title": title,
+        "group_sort_order": int(getattr(row, "group_sort_order", 0) or 0),
+    }
+
+
+def list_units_rated_on(
+    session: Session,
+    day: date,
+    palace_ids: list[int] | None = None,
+) -> list[dict[str, Any]]:
+    """Active units with a live rating operation on one study day.
+
+    This is the candidate source for 睡前复习: every unit the learner already
+    rated today, across rounds and workspaces. ``undone_at`` / ``replaced_at``
+    rows are amendments and corrections, so they are not evidence of study.
+    ``palace_ids is None`` means every live palace; an empty list means none.
+    """
+    if palace_ids is not None and not palace_ids:
+        return []
+    start, end = local_calendar_day_bounds_as_utc_naive(day)
+    rated_units = (
+        session.query(ReviewUnitRatingOperation.unit_id)
+        .filter(
+            ReviewUnitRatingOperation.created_at >= start,
+            ReviewUnitRatingOperation.created_at < end,
+            ReviewUnitRatingOperation.undone_at.is_(None),
+            ReviewUnitRatingOperation.replaced_at.is_(None),
+        )
+        .distinct()
+        .all()
+    )
+    unit_ids = sorted({str(row.unit_id) for row in rated_units if str(row.unit_id or "")})
+    if not unit_ids:
+        return []
+    query = (
+        session.query(
+            ReviewUnitState.id,
+            ReviewUnitState.palace_id,
+            ReviewUnitState.anchor_uid,
+            ReviewUnitState.unit_kind,
+            ReviewUnitState.node_uids_json,
+            ReviewUnitState.revision,
+            ReviewUnitState.has_passed,
+            ReviewUnitState.due_date,
+            ReviewUnitState.last_passed_at,
+            ReviewUnitState.topology_order,
+            Palace.group_sort_order,
+            Palace.title,
+            Palace.manual_title,
+        )
+        .join(Palace, Palace.id == ReviewUnitState.palace_id)
+        .filter(
+            ReviewUnitState.id.in_(unit_ids),
+            ReviewUnitState.active.is_(True),
+            ReviewUnitState.permanently_removed.is_(False),
+            Palace.deleted_at.is_(None),
+            Palace.archived.is_(False),
+        )
+    )
+    if palace_ids is not None:
+        query = query.filter(ReviewUnitState.palace_id.in_(list(palace_ids)))
+    rows = query.order_by(
+        Palace.group_sort_order.asc(),
+        Palace.id.asc(),
+        ReviewUnitState.topology_order.asc(),
+        ReviewUnitState.id.asc(),
+    ).all()
+    return [_unit_row_payload(row) for row in rows]
 
 
 def count_active_units_by_palace(

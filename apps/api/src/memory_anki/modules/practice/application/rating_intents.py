@@ -4,6 +4,10 @@ A save that failed is recorded here so it survives a reload and every device
 that opens the round can see and retry it. Writes are idempotent by operation id:
 clearing only removes the intent whose operation id matches, so a late success
 for an older tap never erases a newer 未保存 choice.
+
+An intent whose attempt a later real practice has superseded is dropped on read.
+It can never be written, so listing it would keep a card's rail tick unfilled and
+point 重试 at a guaranteed 400.
 """
 
 from __future__ import annotations
@@ -15,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.misc import FreestyleRatingIntent
+from memory_anki.modules.memory.api import rating_attempt_is_superseded
 
 MAX_PAYLOAD_BYTES = 8_192
 
@@ -41,7 +46,31 @@ def list_rating_intents(session: Session, *, round_id: str) -> list[dict[str, An
         .order_by(FreestyleRatingIntent.updated_at)
         .all()
     )
-    return [_to_dict(row) for row in rows]
+    items: list[dict[str, Any]] = []
+    dropped = False
+    for row in rows:
+        data = _to_dict(row)
+        payload = data["payload"]
+        try:
+            retry_attempt = int(payload.get("retry_attempt") or 0)
+        except (TypeError, ValueError):
+            retry_attempt = 0
+        if rating_attempt_is_superseded(
+            session,
+            round_id=round_id,
+            unit_id=str(payload.get("unit_id") or ""),
+            encounter_id=str(payload.get("encounter_id") or ""),
+            card_id=str(payload.get("card_id") or row.card_id),
+            occurrence_id=str(payload.get("occurrence_id") or ""),
+            retry_attempt=retry_attempt,
+        ):
+            session.delete(row)
+            dropped = True
+            continue
+        items.append(data)
+    if dropped:
+        session.commit()
+    return items
 
 
 def put_rating_intent(

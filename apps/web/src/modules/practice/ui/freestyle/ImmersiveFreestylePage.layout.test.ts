@@ -19,6 +19,8 @@ const source = [
   'FreestylePartialSettlement.tsx',
   'FreestyleEdgeHint.tsx',
   'FreestyleBottomActions.tsx',
+  'components/FreestyleFeedPager.tsx',
+  'components/FreestyleBedtimeButton.tsx',
   'hooks/useFreestyleFeedNavigation.ts',
   'components/FreestyleHudChrome.tsx',
 ].map(read).join('\n')
@@ -55,8 +57,12 @@ describe('ImmersiveFreestylePage layout', () => {
       source.indexOf('const handlePagerComplete'),
       source.indexOf('const openConfigFromPlan'),
     )
-    // Open round keeps the seek; a fully scored round settles instead.
-    expect(handler).toContain('roundComplete && settleCompletedUnits()')
+    // Open round keeps the seek; a fully scored round settles instead. A
+    // same-day 回顾 still owed opens the closing page without compressing:
+    // 完成 must never dead-end the learner.
+    expect(handler).toContain('if (roundComplete)')
+    expect(handler).toContain('settleCompletedUnits()')
+    expect(handler).toContain('waiting && waiting.count > 0')
     expect(handler).toContain('handleCompleteRound()')
     const settle = source.slice(
       source.indexOf('const settleCompletedUnits'),
@@ -66,6 +72,18 @@ describe('ImmersiveFreestylePage layout', () => {
     expect(settle).toContain('buildCompletedSettlement()')
     expect(settle).toContain('compressCompletedPlanCards(snapshot)')
     expect(settle).not.toContain('setPartialSettlement(snapshot)')
+  })
+
+  it('does not let a waiting 回顾 disable the round ending', () => {
+    const completion = source.slice(
+      source.indexOf('const roundComplete = isFreestyleRoundComplete'),
+      source.indexOf('const {', source.indexOf('const roundComplete = isFreestyleRoundComplete')),
+    )
+    expect(completion).toContain('isFreestyleRoundComplete')
+    expect(completion).not.toContain('waiting')
+    // What is still owed is named on the closing page instead of blocking it.
+    expect(source).toContain('pendingReviewCount')
+    expect(source).toContain('nextReviewAt')
   })
 
   it('keeps the pager only while the feed still has cards to page', () => {
@@ -141,5 +159,16 @@ describe('ImmersiveFreestylePage layout', () => {
     expect(handler).not.toContain('jumpFromProgressRail')
     expect(source).not.toContain('sheetRatingRequest')
     expect(source).toContain('onRateCards={handlePlanRateCards}')
+  })
+
+  it('places 睡前复习 above the right-side pager and confirms before appending', () => {
+    expect(source).toContain('FreestyleBedtimeButton')
+    expect(source).toContain('topSlot={')
+    expect(source).toContain('title="睡前复习"')
+    expect(source).toContain('getFreestyleBedtimeCandidatesApi')
+    expect(source).toContain('appendBedtimeReview')
+    expect(source).toContain('不会改动原来的复习安排')
+    // The closing page hides the pager; the moon must still be reachable there.
+    expect(source).toContain('viewingCompleteSlot && queueState.roundId')
   })
 })

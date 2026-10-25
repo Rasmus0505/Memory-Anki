@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Moon } from 'lucide-react'
 import {
   progressSegmentAccentClass,
   progressSegmentShapeClass,
@@ -253,12 +254,21 @@ export function ProgressRailItem({
           {...slotData}
           aria-label={hoverLabel}
           className={cn(
-            'progress-slot flex h-full items-end',
+            'progress-slot relative flex h-full items-end',
             compact ? 'min-w-0' : 'min-w-px',
             viewing ? 'flex-[1.8]' : 'flex-1',
             gapClass,
           )}
         >
+          {segment.bedtime ? (
+            <span
+              aria-hidden
+              data-testid="freestyle-progress-bedtime"
+              className="pointer-events-none absolute inset-x-0 top-0 flex justify-center text-stage-muted"
+            >
+              <Moon className="size-2.5" strokeWidth={2.4} />
+            </span>
+          ) : null}
           <span
             data-testid="freestyle-progress-segment" data-fx-anchor={viewing ? FX_ANCHORS.progressViewing : undefined}
             data-tone={segment.tone}

@@ -17,7 +17,9 @@ from sqlalchemy.orm import Session
 
 from memory_anki.core.time import resolve_local_timezone, study_day_of
 from memory_anki.infrastructure.db.deps import session_dep
+from memory_anki.modules.reminders.application.activity_probe import read_activity
 from memory_anki.modules.reminders.application.due_summary import read_due_snapshot
+from memory_anki.modules.reminders.application.presence import mark_seen as note_presence
 from memory_anki.modules.reminders.application.reminder_message import (
     compose,
     compose_test,
@@ -33,6 +35,7 @@ from memory_anki.modules.reminders.domain.schemas import (
     KIND_IDLE,
     KIND_READY,
     KINDS,
+    DueSnapshot,
     ReminderSettings,
 )
 from memory_anki.modules.reminders.infrastructure.bark_gateway import send_bark
@@ -57,6 +60,13 @@ def api_get_reminder_settings(s: Session = Depends(session_dep)):
 def api_update_reminder_settings(data: dict | None = None, s: Session = Depends(session_dep)):
     settings = update_settings(s, data if isinstance(data, dict) else {})
     return {"settings": _settings_payload(settings), "status": build_status(s)}
+
+
+@router.post("/reminders/activity")
+def api_note_activity():
+    """前端在真实交互时打的点。不打库、不记账，只更新内存里的"最后动作时间"。"""
+    moment = note_presence()
+    return {"ok": True, "at": moment.isoformat(timespec="seconds") + "Z"}
 
 
 @router.get("/reminders/status")
@@ -87,6 +97,8 @@ def api_send_test_reminder(s: Session = Depends(session_dep)):
 @router.post("/reminders/preview")
 def api_preview_reminder(data: dict | None = None, s: Session = Depends(session_dep)):
     """按类型发一条真实样例，用来核对文案。"""
+    scenario = str((data or {}).get("scenario") or "").strip()
+    demo = bool((data or {}).get("demo")) or bool(scenario)
     kind = str((data or {}).get("kind") or "").strip()
     if kind not in KINDS:
         raise HTTPException(status_code=400, detail=f"unknown reminder kind: {kind}")
@@ -97,12 +109,33 @@ def api_preview_reminder(data: dict | None = None, s: Session = Depends(session_
     zone = resolve_local_timezone()
     now_local = datetime.now(zone)
     now_utc = now_local.astimezone(UTC).replace(tzinfo=None)
-    snapshot = read_due_snapshot(
-        s,
-        study_day_of(now_local, zone),
-        now=now_utc,
-        include_streak=kind == KIND_HOURLY,
-    )
+    if demo:
+        # 演示用的一组"有欠账"数据：让设置页能看全文案，
+        # 而不必等到自己真的积压 19 天。不写库、不记账。
+        snapshot = DueSnapshot(
+            due_count=68,
+            ready_now_count=61,
+            completed_today=86,
+            completed_yesterday=60,
+            completed_last_hour=0,
+            streak_days=9,
+            # scenario="decay" 演示"没有积压、但记忆在流失"的另一种形态。
+            oldest_overdue_days=0 if scenario == "decay" else 5,
+            average_retention=0.62,
+            lowest_retention=0.41,
+            at_risk_units=17,
+            elapsed_hours_today=14,
+            active_hours_today=2,
+            hours_left_today=1.5,
+        )
+    else:
+        snapshot = read_due_snapshot(
+            s,
+            study_day_of(now_local, zone),
+            now=now_utc,
+            include_streak=kind == KIND_HOURLY,
+            quiet_start_hour=settings.quiet_start_hour,
+        )
     detail: dict[str, Any] = {}
     if kind == KIND_IDLE:
         detail = {
@@ -115,12 +148,22 @@ def api_preview_reminder(data: dict | None = None, s: Session = Depends(session_
             "new_ready": settings.ready_min_units,
             "ready_total": snapshot.ready_now_count,
         }
+    # 预览也要带上"距上次复习多久"，否则样例看起来比真实推送温柔。
+    activity = read_activity(
+        s, study_day_of(now_local, zone), now=now_utc
+    )
+    since_last_minutes = (
+        int((now_utc - activity.last_activity_at).total_seconds() // 60)
+        if activity.last_activity_at is not None
+        else 0
+    )
     message = compose(
         kind,
         settings,
         snapshot,
         detail,
         runtime_done_before=snapshot.completed_today,
+        since_last_minutes=since_last_minutes,
     )
     result = send_bark(
         settings.bark_key,

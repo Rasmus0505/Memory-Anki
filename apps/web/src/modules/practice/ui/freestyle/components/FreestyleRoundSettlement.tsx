@@ -12,6 +12,7 @@ import {
   useRoundCompleteCelebration,
 } from '@/modules/practice/ui/freestyle/components/freestyleRoundCelebration'
 import { FreestyleSaveStatus } from './FreestyleSaveStatus'
+import { readyLabel } from './FreestyleWaitingState'
 import { FX_ANCHORS } from '@/shared/fx'
 import { cn } from '@/shared/lib/utils'
 
@@ -155,6 +156,8 @@ export function FreestyleRoundSettlement({
   cancelLabel = '返回上一张',
   showCancel = true,
   settleLabel = '结算',
+  pendingReviewCount = 0,
+  nextReviewAt = null,
 }: {
   completion: FreestyleRoundCompletion
   roundKey: string
@@ -176,6 +179,14 @@ export function FreestyleRoundSettlement({
   /** False when the settled feed has no card to return to. */
   showCancel?: boolean
   settleLabel?: string
+  /**
+   * Same-day 回顾 still owed today. Entering this page with work waiting is
+   * allowed (完成 must never dead-end), so the trade-off is named here instead
+   * of hidden: 结算 ends the round and those re-checks with it.
+   */
+  pendingReviewCount?: number
+  /** When the earliest owed card becomes servable (UTC instant from the server). */
+  nextReviewAt?: string | null
 }) {
   const reducedMotion = usePrefersReducedMotion()
   const subjects = useMemo(() => completion.bySubject, [completion.bySubject])
@@ -331,6 +342,17 @@ export function FreestyleRoundSettlement({
           <p className="mt-3 text-center text-[11px] leading-5 text-stage-muted">已清空做题进度，学习历史和复习安排保持不变。</p>
         ) : null}
         {clearError ? <p className="mt-2 text-center text-xs text-rate-again">{clearError}</p> : null}
+
+        {pendingReviewCount > 0 ? (
+          <p
+            data-testid="freestyle-round-pending-reviews"
+            className="mt-3 text-center text-[11px] leading-5 text-stage-muted"
+          >
+            还有 {pendingReviewCount} 张稍后回顾
+            {nextReviewAt ? `（最早 ${readyLabel(nextReviewAt)} 到点）` : ''}
+            ；可以返回上一张等它们，结算后今天不再安排。
+          </p>
+        ) : null}
 
         {/* Exactly two moves: keep progress (the default) or clear it, then settle. */}
         <div className="mt-4 grid grid-cols-2 gap-2 sm:gap-3">

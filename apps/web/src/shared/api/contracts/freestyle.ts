@@ -1,4 +1,5 @@
 import type { PalaceQuizQuestion, PalaceQuizQuestionType } from './quiz'
+import type { FreestyleRoundOccurrence } from './freestyle-round'
 
 export type FreestyleRange =
   | 'all'
@@ -248,6 +249,11 @@ export interface FreestyleReviewUnitCard extends FreestylePalaceCardBase {
   presentation?: 'palace'
   unit_id: string
   unit_revision: number
+  /**
+   * A 睡前复习 appearance: the unit was already rated today. Its grade is
+   * recorded on the round plan only and never moves the review schedule.
+   */
+  bedtime?: boolean
 }
 
 export type FreestyleMindMapBranchCard = FreestyleReviewUnitCard
@@ -373,8 +379,6 @@ export interface FreestyleFeedResponse {
   generated_at: string
 }
 
-export type FreestyleRoundOccurrenceStatus = 'pending' | 'inserted' | 'completed' | 'cancelled'
-
 export interface FreestyleRoundOriginalCard {
   card_id: string
   unit_id: string
@@ -385,21 +389,14 @@ export interface FreestyleRoundOriginalCard {
   label: string
   entered_on?: string
   is_new?: boolean
+  /** Appended by 睡前复习; its plan-only grade never reschedules. */
+  bedtime?: boolean
 }
 
-export interface FreestyleRoundOccurrence {
-  occurrence_id: string
-  source_card_id: string
-  source_unit_id: string
-  retry_attempt: number
-  rating: number | null
-  insert_target_index: number
-  status: FreestyleRoundOccurrenceStatus
-  encounter_id: string
-  entered_on?: string
-  available_at?: string | null
-  kind?: 'retry' | 'step'
-}
+export type {
+  FreestyleRoundOccurrence,
+  FreestyleRoundOccurrenceStatus,
+} from './freestyle-round'
 
 export interface FreestyleRoundPlanPayload {
   original_cards: FreestyleRoundOriginalCard[]
@@ -424,6 +421,8 @@ export interface FreestyleRoundPlanPayload {
     /** Concrete 1–4 score. Absent means completion without a displayed rating. */
     rating?: number | null
   }>
+  /** Plan-only 睡前复习 grades, keyed by card id. */
+  bedtime_ratings?: Record<string, { rating: number; rated_on?: string }>
   overlay_quiz?: FreestyleOverlayQuizState
 }
 

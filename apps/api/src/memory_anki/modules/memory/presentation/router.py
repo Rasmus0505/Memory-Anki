@@ -11,6 +11,7 @@ from memory_anki.modules.memory.api import (
     cancel_unrated_unit_review_encounter,
     close_unit_review_encounter,
     complete_unit_review_session,
+    domain_error_detail,
     get_palace_ladder_progress,
     get_palace_unit_projection,
     get_subject_memory_ladder,
@@ -38,8 +39,8 @@ from memory_anki.platform.persistence import SqlAlchemyMutationResponseStore
 router = APIRouter(tags=["review"])
 
 
-def _bad_request(exc: ValueError) -> HTTPException:
-    return HTTPException(status_code=400, detail=str(exc))
+def _bad_request(exc: Exception) -> HTTPException:
+    return HTTPException(status_code=400, detail=domain_error_detail(exc))
 
 
 @router.get("/review/queue")
@@ -146,7 +147,9 @@ def patch_unit_schedule(
         return response
     except (TypeError, ValueError) as exc:
         session.rollback()
-        raise _bad_request(ValueError(str(exc))) from exc
+        # Pass the original through: rewrapping it as a plain ValueError would
+        # drop the subclass that carries the client-facing error code.
+        raise _bad_request(exc) from exc
 
 
 @router.post("/review/units/{unit_id}/remove-permanently")
@@ -227,7 +230,9 @@ def start_freestyle_session(
         }
     except (TypeError, ValueError) as exc:
         session.rollback()
-        raise _bad_request(ValueError(str(exc))) from exc
+        # Pass the original through: rewrapping it as a plain ValueError would
+        # drop the subclass that carries the client-facing error code.
+        raise _bad_request(exc) from exc
 
 
 @router.post("/review/session/{study_session_id}/units/{unit_id}/encounters")
@@ -250,7 +255,9 @@ def open_encounter(
         }
     except (TypeError, ValueError) as exc:
         session.rollback()
-        raise _bad_request(ValueError(str(exc))) from exc
+        # Pass the original through: rewrapping it as a plain ValueError would
+        # drop the subclass that carries the client-facing error code.
+        raise _bad_request(exc) from exc
 
 
 @router.get("/review/units/{unit_id}/preview")
@@ -305,7 +312,9 @@ def rate_palace_due(
         }
     except (TypeError, ValueError) as exc:
         session.rollback()
-        raise _bad_request(ValueError(str(exc))) from exc
+        # Pass the original through: rewrapping it as a plain ValueError would
+        # drop the subclass that carries the client-facing error code.
+        raise _bad_request(exc) from exc
 
 
 @router.post("/review/session/{study_session_id}/units/{unit_id}/ratings")
@@ -333,7 +342,9 @@ def rate_unit(
         }
     except (TypeError, ValueError) as exc:
         session.rollback()
-        raise _bad_request(ValueError(str(exc))) from exc
+        # Pass the original through: rewrapping it as a plain ValueError would
+        # drop the subclass that carries the client-facing error code.
+        raise _bad_request(exc) from exc
 
 
 @router.post(
@@ -404,7 +415,9 @@ def rerate_unit(unit_id: str, data: dict, session: Session = Depends(session_dep
         }
     except (TypeError, ValueError) as exc:
         session.rollback()
-        raise _bad_request(ValueError(str(exc))) from exc
+        # Pass the original through: rewrapping it as a plain ValueError would
+        # drop the subclass that carries the client-facing error code.
+        raise _bad_request(exc) from exc
 
 
 @router.post("/review/palaces/{palace_id}/unit-ratings/rerate")
@@ -427,7 +440,9 @@ def rerate_palace_unit_ratings(palace_id: int, data: dict, session: Session = De
         }
     except (TypeError, ValueError) as exc:
         session.rollback()
-        raise _bad_request(ValueError(str(exc))) from exc
+        # Pass the original through: rewrapping it as a plain ValueError would
+        # drop the subclass that carries the client-facing error code.
+        raise _bad_request(exc) from exc
 
 
 @router.post("/review/ratings/{operation_id}/undo")

@@ -385,3 +385,29 @@ describe('shared api http token headers', () => {
     }
   })
 })
+
+describe('shared api http error codes', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('keeps the backend detail code so a terminal rejection is not retried as a network blip', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({
+        detail: { code: 'superseded_attempt', message: '已有后续真实练习，不能修改或撤销较早的评分' },
+      }),
+      { status: 400, headers: { 'content-type': 'application/json' } },
+    ))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const error = await request('/review/units/unit-1/sessions', {
+      method: 'POST',
+      body: JSON.stringify({}),
+      persistence: false,
+    }).catch((reason: unknown) => reason) as Error & { status?: number; detailCode?: string }
+
+    expect(error.status).toBe(400)
+    expect(error.detailCode).toBe('superseded_attempt')
+    expect(error.message).toContain('已有后续真实练习')
+  })
+})

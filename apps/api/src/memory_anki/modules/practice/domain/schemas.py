@@ -72,6 +72,18 @@ class FreestyleRoundActionRequest(BaseModel):
     partial_settlement: dict[str, Any] | None = None
 
 
+class FreestyleBedtimeAppendRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    operation_id: str
+    expected_version: int = 0
+
+
+class FreestyleBedtimeRatingRequest(FreestyleBedtimeAppendRequest):
+    card_id: str
+    rating: int
+
+
 class FreestyleOverlayQuizEnsureRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

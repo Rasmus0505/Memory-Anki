@@ -36,6 +36,9 @@ class InheritanceSource:
     due_date: date
     has_passed: bool
     last_passed_at: datetime | None
+    # Fixed early-ladder position. Carried with the schedule so a split or a
+    # restored mark does not replay a review the learner already did.
+    early_step: int | None = None
 
     @classmethod
     def from_row(cls, row: ReviewUnitState) -> InheritanceSource:
@@ -44,6 +47,7 @@ class InheritanceSource:
             node_uids=frozenset(_json_load_list(row.node_uids_json)), active=row.active,
             stage_index=row.stage_index, due_date=row.due_date,
             has_passed=row.has_passed, last_passed_at=row.last_passed_at,
+            early_step=row.early_step,
         )
 
 
@@ -193,6 +197,19 @@ def inheritance_vote(
     )
 
 
+def inherited_early_step(sources: list[InheritanceSource]) -> int | None:
+    """The fixed-ladder counter of the weakest contributing unit.
+
+    ``inheritance_vote`` already chooses the lowest stage / earliest due; the
+    counter must follow that same unit, or a merged region would keep a stronger
+    position than its schedule says. ``None`` means "let the scheduler infer it".
+    """
+    if not sources:
+        return None
+    weakest = min(sources, key=lambda row: (row.stage_index, row.due_date))
+    return weakest.early_step
+
+
 def find_resurrectable(
     candidates: list[InheritanceSource],
     *,
@@ -219,6 +236,7 @@ __all__ = [
     "find_resurrectable",
     "inheritance_candidates",
     "inheritance_vote",
+    "inherited_early_step",
     "overlapping_sources",
     "region_is_live",
     "same_identity_sources",

@@ -428,7 +428,7 @@ export default function ProfileRemindersPage() {
           <CardContent className="pt-0">
             <Row
               title="停下来就叫你"
-              description="评分或编辑脑图停下超过设定时长后提醒，之后按间隔重复，直到你重新动手。"
+              description="评分、编辑脑图、或者只是点屏幕都算动作；停下来超过设定时长后才提醒，之后按间隔重复，直到你重新动手。"
             >
               <Switch
                 aria-label="启用闲置拉回"

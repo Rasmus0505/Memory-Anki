@@ -554,7 +554,11 @@ def test_rate_after_closed_session_overwrites_with_latest_rating(db_session):
     assert amended["amended"] is True
     assert amended["rating"] == 4
     assert amended["study_session_id"] != review_session["id"]
-    assert state.stage_index >= 2
+    # 轻松 replaces the grade inside the same encounter and books the last
+    # fixed step (two days) instead of 记得's one day.
+    assert state.due_date == local_day() + timedelta(days=2)
+    assert state.intraday_step_pending is False
+    assert state.stage_index >= 1
     replayed = _rate(
         db_session,
         review_session,
@@ -671,7 +675,10 @@ def test_failed_close_keeps_session_and_next_encounter_retains_penalty(db_sessio
 
     assert remembered["passed"] is True
     assert remembered["unit"]["stage_index"] >= 1
-    assert remembered["unit"]["due_date"] > local_day().isoformat()
+    # 重练通过 → 30 分钟后再过一遍，然后才排到明天。
+    assert remembered["intraday_kind"] == "step"
+    assert remembered["retry_after_minutes"] == 30
+    assert remembered["unit"]["due_date"] == local_day().isoformat()
 
 
 def test_review_http_contract_carries_encounter_identity(session_factory, make_client):
@@ -799,6 +806,12 @@ def test_real_retry_preserves_failure_and_preview_matches_commit(
         had_failure_in_encounter=True, today=local_day(), fuzz_key=state.id,
         fsrs_state=fsrs_after_failure,
         intraday=intraday_after_failure,
+        # The commit path books from the due date the learner sees; after a
+        # failure that is today, which puts the recovery on the fixed early
+        # ladder (one day) instead of an FSRS estimate. The counter decides
+        # whether the recovery is still inside that ladder.
+        booked_due_date=local_day(),
+        early_step=state.early_step,
     )
     assert state.stage_index == expected.stage_index
     assert state.due_date == expected.due_date
@@ -817,10 +830,30 @@ def test_real_retry_preserves_failure_and_preview_matches_commit(
     assert historical['units'][0]['encounter']['rating_editable'] is False
     with pytest.raises(ValueError, match="后续真实练习"):
         undo_unit_rating(db_session, "real-fail")
+    # Swipe-back still opens the older card (the map needs a session), but the
+    # glance is a read-only echo; only the write is refused.
+    close_unit_review_encounter(
+        db_session, study_session_id=retry["id"], unit_id=state.id,
+        encounter_id="real-retry", operation_id="real-retry-close",
+    )
+    revisit = start_freestyle_unit_review_session(
+        db_session, unit_id=state.id, unit_revision=state.revision,
+        encounter_id="source-revisit", round_id="real-round", card_id="source",
+    )
+    revisit_encounter = revisit["units"][0]["encounter"]
+    assert revisit_encounter["id"] == "source-revisit"
+    assert revisit_encounter["rating_editable"] is False
     with pytest.raises(ValueError, match="后续真实练习"):
-        start_freestyle_unit_review_session(
-            db_session, unit_id=state.id, unit_revision=state.revision,
-            encounter_id="source-revisit", round_id="real-round", card_id="source",
+        rate_review_unit(
+            db_session,
+            study_session_id=revisit["id"],
+            unit_id=state.id,
+            unit_revision=state.revision,
+            encounter_id="source-revisit",
+            operation_id="source-revisit-rate",
+            rating=4,
+            round_id="real-round",
+            card_id="source",
         )
     assert state.stage_index == expected.stage_index
     undo_unit_rating(db_session, "real-pass")
@@ -847,10 +880,11 @@ def test_retry_slot_new_attempt_stacks_penalty_but_correction_does_not(db_sessio
         assert state.stage_index == 6
     corrected = _rate(db_session, retry, state, "retry-2", "correct-last", 3)
     assert corrected["amended"] is True
-    # Amending a same-day 困难 to 记得 is a pass now: FSRS books a real interval
-    # rather than holding the demoted display band.
+    # Amending a same-day 困难 to 记得 is a pass now; it gets one 30-minute
+    # re-check before the day-level interval is booked.
     assert state.has_passed is True
-    assert state.due_date > local_day()
+    assert state.due_date == local_day()
+    assert state.intraday_step_pending is True
     item = db_session.query(ReviewSessionUnit).filter_by(study_session_id=retry["id"]).one()
     assert item.retry_count == 2
     assert item.hard_count == 2
@@ -877,7 +911,9 @@ def test_same_attempt_revisit_correction_uses_preview_baseline(db_session):
     corrected = _rate(db_session, revisit, state, "source-revisit", "source-corrected", 3)
     assert corrected["amended"] is True
     assert state.has_passed is True
-    assert state.due_date > local_day()
+    # A pass after today's 困难 gets the 30-minute re-check before booking.
+    assert state.due_date == local_day()
+    assert state.intraday_step_pending is True
     assert effect["target_stage_index"] == state.stage_index
     assert effect["target_due_date"] == state.due_date.isoformat()
     assert effect["target_interval_days"] == (state.due_date - local_day()).days
@@ -1032,3 +1068,70 @@ def test_freestyle_start_that_loses_the_open_glance_race_returns_the_winner(db_s
         .all()
     )
     assert [row.id for row in open_rows] == ["encounter-winner"]
+
+
+def test_reopening_a_superseded_attempt_opens_a_read_only_glance(session_factory, make_client):
+    """A card the learner already rated, then re-practiced, reopens for reading only.
+
+    The feed keeps answered cards so swipe-back can review them, and the map only
+    renders from a session start. A 400 here left the card blank and its tap stuck
+    on 未保存 forever, so the glance opens and reports `rating_editable: false`;
+    the write is still refused with the machine-readable code the client stops on.
+    """
+    from memory_anki.modules.memory.presentation import router as review_router
+
+    with session_factory() as session:
+        state = _seed_review_unit(session)
+        unit_id = state.id
+        revision = state.revision
+        first = _start(session, state, "sup-source", card_id="source")
+        _rate(session, first, state, "sup-source", "sup-fail", 2)
+        close_unit_review_encounter(
+            session,
+            study_session_id=first["id"],
+            unit_id=unit_id,
+            encounter_id="sup-source",
+            operation_id="sup-close",
+        )
+        later = _start(session, state, "sup-later", card_id="later-slot")
+        _rate(session, later, state, "sup-later", "sup-pass", 3)
+        close_unit_review_encounter(
+            session,
+            study_session_id=later["id"],
+            unit_id=unit_id,
+            encounter_id="sup-later",
+            operation_id="sup-later-close",
+        )
+
+    client = make_client(review_router)
+    response = client.post(
+        f"/api/v1/review/units/{unit_id}/sessions",
+        json={
+            "unit_revision": revision,
+            "round_id": "round-2026-07-27",
+            "encounter_id": "sup-revisit",
+            "card_id": "source",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()["item"]
+    unit = next(item for item in payload["units"] if item["id"] == unit_id)
+    assert unit["encounter"]["id"] == "sup-revisit"
+    assert unit["encounter"]["rating_editable"] is False
+
+    blocked = client.post(
+        f"/api/v1/review/session/{payload['id']}/units/{unit_id}/ratings",
+        json={
+            "unit_revision": revision,
+            "encounter_id": "sup-revisit",
+            "operation_id": "sup-revisit-rating",
+            "rating": 3,
+            "round_id": "round-2026-07-27",
+        },
+    )
+    assert blocked.status_code == 400, blocked.text
+    detail = blocked.json()["detail"]
+    assert detail["code"] == "superseded_attempt"
+    assert "后续真实练习" in detail["message"]
+

@@ -252,6 +252,17 @@ class DueSnapshot:
     completed_yesterday: int = 0
     completed_last_hour: int = 0
     streak_days: int = 0
+    # 到期队列里最老的一张已经等了几天。逾期天数是最有说服力的紧迫信号：
+    # 它直接对应遗忘曲线，而"还剩多少张"只是一个数字。
+    oldest_overdue_days: int = 0
+    # 记忆保留率（0–1）。None = 没有可计算的 FSRS 状态。
+    average_retention: float | None = None
+    lowest_retention: float | None = None
+    at_risk_units: int = 0
+    # 今天的时间账本：已经过去多久、真正在复习的有几个整点、还剩多久。
+    elapsed_hours_today: float = 0.0
+    active_hours_today: int = 0
+    hours_left_today: float = 0.0
 
 
 @dataclass(frozen=True)

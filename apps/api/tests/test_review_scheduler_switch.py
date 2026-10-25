@@ -165,3 +165,62 @@ def test_units_without_history_are_left_at_their_legacy_position(db_session):
     # A never-rated unit is a brand-new card and stays due on its booked day.
     assert state.fsrs_scheduler_version is None
     assert state.stage_index == 5
+
+
+def test_mature_units_keep_their_earned_booking(db_session):
+    """A second policy replay must not re-inflate a mature card.
+
+    Only units still inside the fixed early ladder are replayed; a mature unit
+    is stamped with the new policy version so the next startup skips it, and its
+    card and due date stay exactly as earned.
+    """
+    from memory_anki.core.time import utc_now_naive
+
+    state = _seed_unit(db_session)
+    _rate_once(db_session, state, encounter="enc-mature", operation="op-mature")
+    db_session.refresh(state)
+    state.fsrs_last_review = utc_now_naive() - timedelta(days=30)
+    state.due_date = local_day() + timedelta(days=14)
+    state.fsrs_scheduler_version = "fsrs-6.3.1"
+    earned_due = state.due_date
+    earned_stability = state.fsrs_stability
+    db_session.commit()
+
+    summary = backfill_fsrs_scheduler(db_session)
+    db_session.commit()
+
+    assert summary["with_history"] == 0
+    assert summary["kept_mature"] == 1
+    db_session.refresh(state)
+    assert state.due_date == earned_due
+    assert state.fsrs_stability == earned_stability
+    assert state.fsrs_scheduler_version == SCHEDULER_VERSION
+
+
+def test_early_unit_gets_its_ladder_counter_without_moving_the_booking(db_session):
+    """A policy change stamps the fixed-ladder position and keeps the promised date.
+
+    The old repair re-derived a young unit's due date from its last rating. The
+    counter now records where the unit is in the fixed rhythm, so the learner
+    keeps the date already booked and only the *next* rating follows the new
+    gaps.
+    """
+    from memory_anki.core.time import utc_now_naive
+
+    state = _seed_unit(db_session)
+    _rate_once(db_session, state, encounter="enc-early", operation="op-early")
+    db_session.refresh(state)
+    state.fsrs_last_review = utc_now_naive()
+    state.stage_index = 2
+    state.due_date = local_day() + timedelta(days=3)
+    state.fsrs_scheduler_version = "fsrs-6.3.1"
+    db_session.commit()
+
+    summary = backfill_fsrs_scheduler(db_session)
+    db_session.commit()
+
+    assert summary["stamped_early"] == 1
+    db_session.refresh(state)
+    assert state.due_date == local_day() + timedelta(days=3)
+    assert state.early_step == 2
+    assert state.fsrs_scheduler_version == SCHEDULER_VERSION

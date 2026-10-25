@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from memory_anki.modules.reminders.application import reminder_loop
+from memory_anki.modules.reminders.application import presence, reminder_loop
 from memory_anki.modules.reminders.application.activity_probe import ActivitySnapshot
 from memory_anki.modules.reminders.application.reminder_settings import update_settings
 from memory_anki.modules.reminders.domain.schemas import DueSnapshot
@@ -47,6 +47,14 @@ class World:
         self.activity = ActivitySnapshot(last_activity_at=utc, started_today=True)
 
 
+@pytest.fixture(autouse=True)
+def _clean_presence():
+    """心跳是进程级全局状态：不清掉，前面模块打的点会让闲置测试永远不触发。"""
+    presence.reset()
+    yield
+    presence.reset()
+
+
 @pytest.fixture()
 def world(session_factory, monkeypatch) -> World:
     def fake_get_session():
@@ -56,6 +64,7 @@ def world(session_factory, monkeypatch) -> World:
     state = World()
     monkeypatch.setattr(reminder_loop, "read_due_snapshot", lambda *a, **k: state.snapshot)
     monkeypatch.setattr(reminder_loop, "read_activity", lambda *a, **k: state.activity)
+    monkeypatch.setattr(reminder_loop, "last_ui_seen", lambda: None)
     return state
 
 
@@ -342,3 +351,28 @@ def test_time_before_threshold_does_not_nag(world, session_factory) -> None:
     world.worked_until(at(9, 0))
     assert reminder_loop.run_reminder_tick(at(9, 59), _Sender())["sent"] is False
     world.worked_until(at(9, 0) - timedelta(minutes=1))
+
+
+def test_a_tap_on_the_phone_counts_as_activity(world, session_factory, monkeypatch) -> None:
+    """只认评分和保存脑图的话，在手机上翻卡看书会被判成"没动"。"""
+    _idle_only(session_factory)
+    world.worked_until(at(9, 0))
+    # 10:20 在手机上点过（心跳），10:30 检查：才停了 10 分钟，不该催。
+    monkeypatch.setattr(
+        reminder_loop,
+        "last_ui_seen",
+        lambda: at(10, 20).astimezone(UTC).replace(tzinfo=None),
+    )
+    assert reminder_loop.run_reminder_tick(at(10, 30), _Sender())["sent"] is False
+
+
+def test_an_old_heartbeat_still_lets_the_reminder_fire(world, session_factory, monkeypatch) -> None:
+    _idle_only(session_factory)
+    world.worked_until(at(8, 0))
+    monkeypatch.setattr(
+        reminder_loop,
+        "last_ui_seen",
+        lambda: at(8, 30).astimezone(UTC).replace(tzinfo=None),
+    )
+    # 最后一次交互是 8:30，到 10:30 已经停了 2 小时。
+    assert reminder_loop.run_reminder_tick(at(10, 30), _Sender())["sent"] is True

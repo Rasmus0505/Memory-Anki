@@ -6,6 +6,11 @@ from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import Any
 
+from .round_plan_bedtime import (  # noqa: F401 - compatibility re-exports
+    append_bedtime_cards,
+    apply_bedtime_rating,
+    bedtime_card_ids,
+)
 from .round_plan_normalization import (  # noqa: F401 - compatibility re-exports
     _collapse_retries,
     _sync_index,
@@ -611,8 +616,12 @@ def _settle_source(
             # A pass on the source cancels an unanswered retry. If the learner
             # is currently answering that retry, keep its own answered glance
             # in the history and let the normal settlement mark it complete.
+            # A passed occurrence is answered even when the encounter cache has
+            # lost its entry (rebind / day rollover): the occurrence's own pass
+            # grade is enough, so rating a 重练 never deletes it under the learner.
             own_encounter = plan["encounters"].get(item["occurrence_id"], {})
-            if item["occurrence_id"] == keep_id or own_encounter.get("status") in {"passed", "failed"}:
+            answered = _int(item.get("rating")) in PASS_RATINGS
+            if item["occurrence_id"] == keep_id or own_encounter.get("status") in {"passed", "failed"} or answered:
                 item["status"] = OCCURRENCE_COMPLETED
                 _append_unique(plan["completed_ids"], item["occurrence_id"])
             else:

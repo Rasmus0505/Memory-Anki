@@ -1,7 +1,6 @@
 import {
   cardPalaceId,
   cardUnitId,
-  findEarliestUnratedIndex,
   unscoredOccurrenceIndices,
   isRetryOccurrence,
   reviewUnitIdFromCardId,
@@ -92,9 +91,29 @@ function isHandled(
 ) {
   const completed = new Set(Array.from(completedIds, String))
   const sourceId = sourceIdOf(card)
-  const entry = roundPlan?.cardsById[card.id] ?? roundPlan?.cardsById[sourceId]
+  /**
+   * A blank 重练/回顾 is its own work. Its source passed before it existed, so
+   * inheriting the source's status here made every inserted step card look
+   * handled: the rail drew it pending, and 完成 had no target to seek (the
+   * button disabled itself in the exact state the learner was looking at).
+   * Only a source card may close through its family; a retry card answers for
+   * itself — its own score, its own completed plan entry.
+   */
+  const retryCard = isLiveRetry(card, roundPlan)
+  const entry = roundPlan?.cardsById[card.id]
+    ?? (retryCard ? undefined : roundPlan?.cardsById[sourceId])
   if (entry?.status === 'excluded') return true
-  if (completed.has(card.id) || completed.has(sourceId)) return true
+  if (completed.has(card.id)) return true
+  if (retryCard) {
+    if (entry?.status === 'completed') return true
+    const retryEncounter = encountersByCardId[card.id]
+    // Any own glance score counts (weak included): it is a score for this
+    // occurrence. A plan `lastRating` is weaker evidence — stamping copies the
+    // parent's weak grade onto the retry, which is not a score for the retry.
+    if (retryEncounter?.selectedRating != null || encounterPassed(retryEncounter)) return true
+    return (planLastRating(roundPlan, card.id) ?? 0) >= 3
+  }
+  if (completed.has(sourceId)) return true
   if (entry?.status === 'completed') return true
   const encounter = encountersByCardId[card.id]
   const ownLast = planLastRating(roundPlan, card.id)
@@ -275,6 +294,11 @@ export function buildFreestyleRoundCompletion(
  * can open. 忘记/困难 count: once nothing unscored remains, 完成 must enter
  * settlement instead of disabling. A blank 重练 still in the feed keeps the
  * round open. An empty feed is not a finished round.
+ *
+ * Uses the same family rule as 完成's seek target: a source whose 重练 passed is
+ * handled even when its own weak score was lost from the local ledger. The plain
+ * unscored list is occurrence-local, so it left 完成 disabled on the one card the
+ * learner could not score again.
  */
 export function isFreestyleRoundComplete(
   cards: FreestyleCard[],
@@ -287,13 +311,43 @@ export function isFreestyleRoundComplete(
     // Mid-round compress can empty the feed after every remaining card passed.
     return Boolean(roundPlan?.compressedIds?.length)
   }
-  return findEarliestUnratedIndex(
-    cards,
-    completedIds,
+  const hidden = new Set(Array.from(hiddenIds, (id) => String(id)))
+  const visible = hidden.size
+    ? cards.filter((card) => !hidden.has(String(card.id || '')))
+    : cards
+  const completed = new Set(Array.from(completedIds, String))
+  return !visible.some((card) => needsThisRoundScore(
+    card,
+    visible,
     encountersByCardId,
+    completed,
     roundPlan,
-    hiddenIds,
-  ) == null
+  ))
+}
+
+/**
+ * Still work for this round: no own this-round score and no family pass.
+ *
+ * Deliberately weaker than `findEarliestUnhandledIndex`, which only stops at a
+ * *pass*: 忘记/困难 is scored and must not hold the closing slot back. And
+ * deliberately stronger than the occurrence-local unscored list: a source whose
+ * 重练 passed is finished, even when its own weak score fell out of the local
+ * ledger — that card can never be rated again, so 完成 must not stop on it.
+ * The same holds for a source whose blank 重练 is already in the feed: that
+ * retry is the target, not the source behind it.
+ */
+function needsThisRoundScore(
+  card: FreestyleCard,
+  cards: ReadonlyArray<FreestyleCard>,
+  encountersByCardId: Record<string, FreestyleUnitEncounterState>,
+  completed: ReadonlySet<string>,
+  roundPlan: FreestyleRoundPlanState | null,
+): boolean {
+  const id = String(card.id || '').trim()
+  if (!id || isReviewHintId(id)) return false
+  if (isHandled(card, encountersByCardId, completed, cards, roundPlan)) return false
+  if (hasUnfinishedFamilyRetry(cards, card, encountersByCardId, completed, roundPlan)) return false
+  return !isOccurrenceScored(id, { completedIds: completed, encounters: encountersByCardId, roundPlan })
 }
 
 function isPassedOccurrence(
@@ -419,7 +473,8 @@ export function findEarliestUnhandledIndex(
 /**
  * Right-side 完成 while the round is still open: queue-order first unscored
  * card (谁最早看谁). A scored 重练 is never the target — the next blank
- * attempt is, once leave clears its score.
+ * attempt is, once leave clears its score. A source closed by a passed 重练 is
+ * never the target either: its grade can no longer be written.
  */
 export function findEarliestCompleteSeekIndex(
   cards: ReadonlyArray<FreestyleCard>,
@@ -428,16 +483,20 @@ export function findEarliestCompleteSeekIndex(
   roundPlan: FreestyleRoundPlanState | null = null,
   hiddenIds: Iterable<string> = [],
 ): number | null {
-  return findEarliestUnratedIndex(
+  return findUnscoredCompleteSeekIndices(
     cards,
-    completedIds,
     encountersByCardId,
+    completedIds,
     roundPlan,
     hiddenIds,
-  )
+  )[0] ?? null
 }
 
-/** Queue-order indexes 完成 can still land on. 移除本队列 is not in this list. */
+/**
+ * Queue-order indexes 完成 can still land on. 移除本队列 is not in this list.
+ * A card whose family already passed (its 重练 scored) is not a target either:
+ * that source cannot be rated again, so seeking it dead-ends the button.
+ */
 export function findUnscoredCompleteSeekIndices(
   cards: ReadonlyArray<FreestyleCard>,
   encountersByCardId: Record<string, FreestyleUnitEncounterState>,
@@ -445,12 +504,16 @@ export function findUnscoredCompleteSeekIndices(
   roundPlan: FreestyleRoundPlanState | null = null,
   hiddenIds: Iterable<string> = [],
 ): number[] {
+  const completed = new Set(Array.from(completedIds, String))
   return unscoredOccurrenceIndices({
     cards,
-    completedIds,
+    completedIds: completed,
     encounters: encountersByCardId,
     roundPlan,
     hiddenIds,
+  }).filter((index) => {
+    const card = cards[index]
+    return Boolean(card) && needsThisRoundScore(card, cards, encountersByCardId, completed, roundPlan)
   })
 }
 
@@ -466,7 +529,7 @@ export function resolveFreestyleOpenFeedIndex(
   roundPlan: FreestyleRoundPlanState | null = null,
 ): number {
   if (cards.length === 0) return 0
-  const seek = findEarliestUnratedIndex(cards, completedIds, encountersByCardId, roundPlan)
+  const seek = findEarliestCompleteSeekIndex(cards, encountersByCardId, completedIds, roundPlan)
   return seek == null ? cards.length : seek
 }
 

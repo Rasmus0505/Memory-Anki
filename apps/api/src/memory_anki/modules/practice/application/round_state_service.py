@@ -30,6 +30,7 @@ from memory_anki.modules.practice.domain.round_compress import compress_complete
 from memory_anki.modules.practice.domain.round_plan import (
     apply_rating,
     assert_rating_identity,
+    bedtime_card_ids,
     complete_card,
     exclude_card,
     leave_card,
@@ -551,6 +552,10 @@ def rate_freestyle_round_unit(
         raise ValueError("freestyle round not found")
     if _operation_seen(session, row, op_id):
         return {"item": None, "round": _serve(session, row, duplicate=True)}
+    if _text(card_id) in bedtime_card_ids(_plan_of(row)):
+        # A bedtime pass must never reach the scheduling ledger. The client uses
+        # the plan-only endpoint; this guard makes that impossible to bypass.
+        raise ValueError("睡前复习只记录评分，不改变复习安排")
     # Ratings last-write-wins: a stale expected_version still applies so PWA
     # and desktop cannot 409 each other after one side already scored.
     # Wrong card / occurrence / encounter / unit never last-writes.

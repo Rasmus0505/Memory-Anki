@@ -26,7 +26,7 @@ def _plan(**overrides):
         rating=3,
         was_passed=True,
         schedule_locked=False,
-        fsrs_due_date=TODAY + timedelta(days=30),
+        fsrs_due_date=TODAY + timedelta(days=1),
         day_deadline=DEADLINE,
     )
     kwargs.update(overrides)
@@ -55,10 +55,40 @@ def test_a_step_that_passes_graduates_to_tomorrow():
 
 
 def test_a_mature_pass_does_not_get_a_step():
-    plan = _plan(was_passed=True)
+    plan = _plan(was_passed=True, fsrs_due_date=TODAY + timedelta(days=30))
 
     assert plan.kind is None
     assert plan.due_date == TODAY + timedelta(days=30)
+
+
+def test_a_retry_that_passes_gets_one_thirty_minute_recheck():
+    """重练卡独立规则：被评为记得后，30 分钟后再过一遍。"""
+    retry = IntradayState(day=TODAY, retries=2)
+
+    plan = _plan(state=retry, was_passed=True)
+
+    assert STEP_DELAY == timedelta(minutes=30)
+    assert plan.kind == "step"
+    assert plan.due_at == NOW + timedelta(minutes=30)
+    assert plan.step_pending is True
+    # The day's retry budget is preserved so a failed re-check continues the
+    # same ladder instead of restarting it.
+    assert plan.retries == 2
+
+
+def test_a_retry_recheck_graduates_to_the_adapter_booking():
+    waiting = IntradayState(day=TODAY, retries=2, due_at=NOW + STEP_DELAY, step_pending=True)
+
+    plan = _plan(
+        state=waiting,
+        was_passed=True,
+        fsrs_due_date=TODAY + timedelta(days=5),
+        now=NOW + STEP_DELAY,
+    )
+
+    assert plan.kind is None
+    assert plan.step_pending is False
+    assert plan.due_date == TODAY + timedelta(days=5)
 
 
 def test_a_locked_filler_pass_leaves_the_ladder_alone():

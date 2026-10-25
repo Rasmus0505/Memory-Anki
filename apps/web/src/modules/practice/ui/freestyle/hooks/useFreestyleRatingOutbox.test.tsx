@@ -154,20 +154,29 @@ describe('useFreestyleRatingOutbox', () => {
     expect(handlers.encounterChange.mock.calls.every((call) => call[0] === 'b')).toBe(true)
   })
 
-  it('counts 未保存 items and retries them with their original operation ids', async () => {
-    mocks.rateFreestyleRoundUnitApi.mockRejectedValueOnce(new Error('503'))
+  it('counts 未保存 items only after its automatic retries, then retries them by hand', async () => {
+    mocks.rateFreestyleRoundUnitApi.mockRejectedValue(new Error('503'))
     const { view, handlers } = setup()
     act(() => {
       view.result.current.rateCards(['a'], 4)
     })
-    await waitFor(() => expect(view.result.current.failedCount).toBe(1))
+    // Quiet retries first: no 未保存, no card diagnostic, until the window is spent.
+    await waitFor(() => expect(mocks.rateFreestyleRoundUnitApi.mock.calls.length).toBe(2), { timeout: 3_000 })
+    expect(view.result.current.failedCount).toBe(0)
+    expect(handlers.cardSaveFailed).not.toHaveBeenCalled()
+    await waitFor(() => expect(view.result.current.failedCount).toBe(1), { timeout: 3_000 })
+    expect(handlers.cardSaveFailed).toHaveBeenCalledTimes(1)
     expect(handlers.cardSaveFailed).toHaveBeenCalledWith(expect.any(String), 'a')
+    const attempts = mocks.rateFreestyleRoundUnitApi.mock.calls.map((call) => call[1])
+    // Every automatic attempt resends the same operation id: the server de-duplicates it.
+    expect(new Set(attempts.map((payload) => payload.operation_id)).size).toBe(1)
+
+    const { card_id: cardId, rating, operation_id: operationId } = attempts[0]
+    mocks.rateFreestyleRoundUnitApi.mockImplementation(async () => ack(cardId, rating, operationId))
     act(() => {
       view.result.current.retryUnsaved()
     })
     await waitFor(() => expect(view.result.current.failedCount).toBe(0))
-    const ids = mocks.rateFreestyleRoundUnitApi.mock.calls.map((call) => call[1].operation_id)
-    expect(ids).toHaveLength(2)
-    expect(ids[1]).toBe(ids[0])
+    expect(mocks.rateFreestyleRoundUnitApi.mock.calls.at(-1)?.[1].operation_id).toBe(operationId)
   })
 })

@@ -25,6 +25,61 @@ export function buildPermanentMarkToolbarAction({
   }
 }
 
+type ReviewMoreAction = {
+  label: string
+  onClick: () => void
+  disabled?: boolean
+  separatorBefore?: boolean
+  opensOverlay?: boolean
+}
+
+/**
+ * Toolbar actions for the review map. A 睡前复习 card is reveal-only: its edit
+ * entry, permanent-mark switch, and text-to-map import would write the palace
+ * document during a pass that must not change anything.
+ */
+export function buildReviewToolbarExtensions({
+  reviewOnly,
+  moreActions,
+  isEditMode,
+  permanentMarkMode,
+  markedCount,
+  savingEdit,
+  onTogglePermanentMarkMode,
+  onOpenScopeQuiz,
+}: {
+  reviewOnly: boolean
+  moreActions: ReviewMoreAction[]
+  isEditMode: boolean
+  permanentMarkMode: boolean
+  markedCount: number
+  savingEdit: boolean
+  onTogglePermanentMarkMode: () => void
+  onOpenScopeQuiz?: () => void
+}) {
+  return {
+    moreActions: reviewOnly
+      ? moreActions.filter(
+          (action) =>
+            action.label !== '进入编辑'
+            && action.label !== '返回学习'
+            && action.label !== '文字转脑图',
+        )
+      : moreActions,
+    permanentMarkAction: isEditMode
+      ? buildPermanentMarkToolbarAction({
+          active: permanentMarkMode,
+          markedCount,
+          disabled: !permanentMarkMode && savingEdit,
+          onToggle: onTogglePermanentMarkMode,
+        })
+      : null,
+    quizAction: onOpenScopeQuiz
+      ? { label: '做题', onClick: onOpenScopeQuiz, opensOverlay: true as const }
+      : null,
+  }
+}
+
 export function useFreestyleUnitReviewNodeQuiz({
   palaceId,
   editorDoc,

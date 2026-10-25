@@ -345,6 +345,7 @@ function renderCard(
     onRatingSettled?: (cardId: string, passed: boolean, rating: number, meta?: unknown) => void
     onOpenScopeQuiz?: () => void
     onRemoveFromQueue?: (cardId: string) => void
+    onBedtimeRate?: (cardId: string, rating: UnitRating) => Promise<unknown>
   } = {},
 ) {
   const callbacks = {
@@ -362,6 +363,7 @@ function renderCard(
     onRatingScopeChange: vi.fn(),
     onRoundSync: vi.fn(),
     onOpenScopeQuiz: options.onOpenScopeQuiz,
+    onBedtimeRate: options.onBedtimeRate,
   }
   const props: CardProps = {
     card,
@@ -375,6 +377,7 @@ function renderCard(
     preferredZoom: options.preferredZoom,
     palaceTarget: options.palaceTarget,
     ...(options.onUserZoomChange ? { onUserZoomChange: options.onUserZoomChange } : {}),
+    ...(options.onBedtimeRate ? { onBedtimeRate: options.onBedtimeRate } : {}),
     onEnsureEncounter: callbacks.onEnsureEncounter,
     onEncounterChange: callbacks.onEncounterChange,
     onStaleDrop: callbacks.onStaleDrop,
@@ -452,7 +455,9 @@ describe('FreestyleUnitReviewCardView', () => {
     window.cancelAnimationFrame = vi.fn()
     Object.values(apiMocks).forEach((mock) => mock.mockReset())
     resetFreestyleSessionLaneForTests()
-    resetFreestyleRatingSavesForTests()
+    // One attempt: a failure spec asserts what the card shows after the save is
+    // given up on. The quiet retry loop has its own spec below.
+    resetFreestyleRatingSavesForTests({ autoRetry: { maxAttempts: 1 } })
     previewCacheMocks.useUnitPreview.mockReset()
     previewCacheMocks.useUnitPreview.mockReturnValue(null)
     previewCacheMocks.useSharedPalacePreview.mockReset()
@@ -2005,6 +2010,40 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(screen.queryByTestId('freestyle-rating-unsaved-line')).toBeNull()
   })
 
+  it('keeps the tapped grade 保存中 and retries quietly before anything says 未保存', async () => {
+    // Production retry policy for this spec: a failed attempt is resent shortly after.
+    resetFreestyleRatingSavesForTests()
+    const card = buildCard('unit-quiet-retry')
+    const session = buildSession(card.unit_id!)
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(session)
+    apiMocks.rateReviewUnitApi
+      .mockRejectedValueOnce(new Error('storage busy'))
+      .mockImplementation(
+        async (_sessionId, _unit, _encounterId, rating, operationId) =>
+          ratingResult(session, rating, operationId),
+      )
+    const { onBranchComplete, onSaveFailed } = renderCard(card)
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    fireEvent.click(screen.getByTestId('freestyle-rating-button-3'))
+
+    await waitFor(() => expect(apiMocks.rateFreestyleRoundUnitApi).toHaveBeenCalledTimes(2))
+    // Nothing was given up on: no 未保存 line, no diagnostic, the tap stays lit.
+    expect(onSaveFailed).not.toHaveBeenCalled()
+    expect(screen.getByTestId('freestyle-rating-button-3').getAttribute('aria-pressed')).toBe('true')
+    expect(screen.queryByTestId('freestyle-rating-unsaved-line')).toBeNull()
+    const operationIds = apiMocks.rateFreestyleRoundUnitApi.mock.calls.map(
+      (call) => (call[1] as { operation_id: string }).operation_id,
+    )
+    expect(operationIds[1]).toBe(operationIds[0])
+
+    await waitFor(() => expect(onBranchComplete).toHaveBeenCalledWith(card.id, {
+      restudy: false, rating: 3, retryAfterCards: 0,
+    }))
+    expect(screen.getByTestId('freestyle-rating-button-3').getAttribute('aria-pressed')).toBe('true')
+    expect(screen.queryByTestId('freestyle-rating-saving-line')).toBeNull()
+  })
+
   it('lights the newest grade at once and posts it after the first reply', async () => {
     const card = buildCard('unit-queued-rate')
     const session = buildSession(card.unit_id!)
@@ -2664,5 +2703,55 @@ describe('进入编辑 while the glance is still opening', () => {
 
     resolveSession(buildSession(card.unit_id!))
     await waitFor(() => expect(capturedPanelProps?.displayMode).toBe('edit'))
+  })
+})
+
+describe('睡前复习 card', () => {
+  beforeEach(() => {
+    capturedPanelProps = null
+    Object.values(apiMocks).forEach((mock) => mock.mockReset())
+    resetFreestyleSessionLaneForTests()
+    resetFreestyleRatingSavesForTests()
+    previewCacheMocks.useUnitPreview.mockReset()
+    previewCacheMocks.useSharedPalacePreview.mockReset()
+    previewCacheMocks.useSharedPalacePreview.mockReturnValue(null)
+    previewCacheMocks.rememberUnitPreview.mockReset()
+    apiMocks.cancelUnratedUnitReviewEncounterApi.mockResolvedValue({ abandoned: false })
+  })
+
+  it('renders from the read-only preview and records the grade without a session', async () => {
+    const card: FreestyleReviewUnitCard = { ...buildCard('unit-bedtime'), bedtime: true }
+    previewCacheMocks.useUnitPreview.mockReturnValue(buildSession('unit-bedtime'))
+    const onBedtimeRate = vi.fn().mockResolvedValue(undefined)
+
+    renderCard(card, { onBedtimeRate, lastRating: 3 })
+
+    expect(await screen.findByTestId('freestyle-bedtime-rating-bar')).toBeTruthy()
+    expect(screen.getByTestId('freestyle-bedtime-note').textContent).toContain('不改动复习安排')
+    expect(screen.getByTestId('freestyle-bedtime-rating-button-3').getAttribute('data-selected')).toBe('true')
+    // No Reviews glance: the card is already rated today.
+    expect(apiMocks.startFreestyleUnitReviewSessionApi).not.toHaveBeenCalled()
+    expect(apiMocks.getUnitReviewSessionApi).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByTestId('freestyle-bedtime-rating-button-2'))
+
+    await waitFor(() => expect(onBedtimeRate).toHaveBeenCalledWith(card.id, 2))
+    // It must never reach the normal rating path.
+    expect(apiMocks.rateFreestyleRoundUnitApi).not.toHaveBeenCalled()
+    expect(apiMocks.rateReviewUnitApi).not.toHaveBeenCalled()
+  })
+
+  it('keeps the map reveal-only: no edit action and no document write', async () => {
+    const card: FreestyleReviewUnitCard = { ...buildCard('unit-bedtime-edit'), bedtime: true }
+    previewCacheMocks.useUnitPreview.mockReturnValue(buildSession('unit-bedtime-edit'))
+
+    renderCard(card, { onBedtimeRate: vi.fn().mockResolvedValue(undefined) })
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    const actions = (capturedPanelProps?.toolbarExtensions as {
+      moreActions?: Array<{ label: string }>
+    }).moreActions ?? []
+    expect(actions.some((item) => item.label === '进入编辑')).toBe(false)
+    expect(capturedPanelProps?.onPaneDoubleClick).toBeUndefined()
   })
 })

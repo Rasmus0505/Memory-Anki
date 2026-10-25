@@ -2,13 +2,14 @@
 
 替代旧的 supervisor 系统，用最简单的方式启动 Memory Anki：
   1. 后端：uvicorn (FastAPI) 监听 8012，纯 API（不挂载前端静态）。
-  2. 前端：vite dev 监听 5173，关闭 HMR，/api 经 vite proxy 转发到 8012。
+  2. 前端：vite dev 监听 5173，源码热更新被拦截、/api 经 vite proxy 转发到 8012。
 
 设计原则（满足用户需求）：
   - 启动快速：vite dev 不做全量构建，几秒即就绪。
   - 启动完整：后端先健康检查通过，前端再启动并开浏览器。
-  - 手动刷新更新：vite hmr=false + manualRefreshGuard（vite.config.ts 已配置），
-    改 .tsx 后用户 F5 才看到更新，不会被自动刷新打断使用。
+  - 手动刷新更新：manualRefreshGuard（vite.config.ts）拦掉源码热更新消息，
+    改 .tsx 后用户 F5 才看到更新，不会被自动刷新打断使用；但依赖重新预构建
+    时的整页刷新必须放行，否则同一页面会跑起两份 React。
   - 改后端：重跑 start.bat 即重启 uvicorn 生效。
 
 本脚本刻意自包含，不 import 任何 supervisor 模块，以便 supervisor 被删除后仍可用。

@@ -99,6 +99,7 @@ def empty_plan() -> Plan:
         "partial_settlements": [],
         "occurrences": [],
         "encounters": {},
+        "bedtime_ratings": {},
         "today": "",
     }
 
@@ -129,6 +130,10 @@ def snapshot_cards(cards: Sequence[Mapping[str, Any]] | None, *, today: str = ""
                 "label": label or card_id,
                 "entered_on": _day(card.get("entered_on")) or stamp,
                 "is_new": bool(card.get("is_new")),
+                # A bedtime card is a second pass over content already rated
+                # today. Its rating is recorded on the plan only and never
+                # reaches the scheduling ledger.
+                "bedtime": bool(card.get("bedtime")),
             }
         )
     return result
@@ -166,6 +171,7 @@ def normalize_plan(plan: Mapping[str, Any] | None) -> Plan:
                 "label": _text(item.get("label")) or card_id,
                 "entered_on": _day(item.get("entered_on")),
                 "is_new": bool(item.get("is_new")),
+                "bedtime": bool(item.get("bedtime")),
             }
         )
     occurrences = []
@@ -215,6 +221,19 @@ def normalize_plan(plan: Mapping[str, Any] | None) -> Plan:
             if rating in {1, 2, 3, 4}:
                 encounter["rating"] = rating
             encounters[card_id] = encounter
+    bedtime_ratings: dict[str, dict[str, Any]] = {}
+    raw_bedtime_ratings = raw.get("bedtime_ratings") or {}
+    if isinstance(raw_bedtime_ratings, Mapping):
+        for key, value in raw_bedtime_ratings.items():
+            card_id = _text(key)
+            raw_rating = value.get("rating") if isinstance(value, Mapping) else value
+            rating = _int(raw_rating)
+            if not card_id or rating not in {1, 2, 3, 4}:
+                continue
+            bedtime_ratings[card_id] = {
+                "rating": rating,
+                "rated_on": _day(value.get("rated_on")) if isinstance(value, Mapping) else "",
+            }
     normalized: Plan = {
         "original_cards": original,
         "presented_ids": _unique(raw.get("presented_ids") or [item["card_id"] for item in original]),
@@ -226,6 +245,7 @@ def normalize_plan(plan: Mapping[str, Any] | None) -> Plan:
         "partial_settlements": _partial_settlements(raw.get("partial_settlements")),
         "occurrences": occurrences,
         "encounters": encounters,
+        "bedtime_ratings": bedtime_ratings,
         "today": _day(raw.get("today")),
         "overlay_quiz": normalize_overlay_quiz(raw.get("overlay_quiz") if isinstance(raw.get("overlay_quiz"), Mapping) else None),
     }
@@ -273,6 +293,11 @@ def _collapse_retries(plan: Plan) -> None:
         for extra in items:
             extra_id = _text(extra.get("occurrence_id"))
             if extra is keep or not extra_id:
+                continue
+            if extra["status"] == OCCURRENCE_COMPLETED:
+                # One *live* retry per source, but an answered one is history:
+                # rating a 重练 must not cancel the card the learner just scored
+                # when a newer attempt appears. 结算 compresses the group.
                 continue
             extra["status"] = OCCURRENCE_CANCELLED
             drop_ids.add(extra_id)

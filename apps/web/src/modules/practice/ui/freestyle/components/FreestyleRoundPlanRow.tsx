@@ -18,6 +18,7 @@ import {
   markedNodePathTexts,
 } from '@/modules/practice/ui/freestyle/model/markedNodePathLabel'
 import type { RatingSaveEntry } from '@/modules/practice/ui/freestyle/model/ratingSaveStore'
+import { SUPERSEDED_RATING_COPY } from '@/modules/practice/ui/freestyle/model/freestyleRatingCopy'
 import { FREESTYLE_RATINGS } from './FreestyleRatingBar'
 import { cn } from '@/shared/lib/utils'
 
@@ -200,6 +201,19 @@ function RowSaveChip({
   if (saveState.status === 'failed' && saveState.rating != null) {
     const rating = saveState.rating
     const chosen = FREESTYLE_RATINGS.find((item) => item.value === rating)?.label ?? ''
+    if (saveState.failure === 'superseded') {
+      // 终态：服务端已有更新的练习，这一行重试只会重复同一个 400。
+      return (
+        <span
+          data-testid={`round-plan-save-${cardId}`}
+          data-save="superseded"
+          title={SUPERSEDED_RATING_COPY}
+          className="shrink-0 text-[11px] text-muted-foreground"
+        >
+          已有后续练习
+        </span>
+      )
+    }
     return (
       <button
         type="button"

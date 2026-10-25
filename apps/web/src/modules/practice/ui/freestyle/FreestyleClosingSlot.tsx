@@ -11,6 +11,8 @@ export function FreestyleClosingSlot({
   canCancelSettlement = true,
   dueTomorrowCount,
   settlementMeta,
+  pendingReviewCount = 0,
+  nextReviewAt = null,
 }: {
   roundId: string
   completion: ComponentProps<typeof FreestyleRoundSettlement>['completion']
@@ -22,6 +24,9 @@ export function FreestyleClosingSlot({
   canCancelSettlement?: boolean
   dueTomorrowCount: number | null
   settlementMeta: FreestyleSettlementMeta
+  /** Same-day 回顾 still owed. Named on the page so 结算 is an informed choice. */
+  pendingReviewCount?: number
+  nextReviewAt?: string | null
 }) {
   return (
     <div className="fs-page relative box-border flex h-full min-h-0 shrink-0 flex-col snap-start snap-always p-0">
@@ -38,6 +43,8 @@ export function FreestyleClosingSlot({
           onCancelSettlement={onCancelSettlement}
           showCancel={canCancelSettlement}
           dueTomorrowCount={dueTomorrowCount}
+          pendingReviewCount={pendingReviewCount}
+          nextReviewAt={nextReviewAt}
           {...settlementMeta}
         />
       </div>

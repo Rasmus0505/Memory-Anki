@@ -9,6 +9,8 @@ export interface RequestErrorContext {
   method?: string
   url?: string
   status?: number
+  /** The backend's machine-readable code (`detail.code`), when it sent one. */
+  code?: string
 }
 
 function formatRequestErrorMessage(message: string, requestId: string, context?: RequestErrorContext) {
@@ -29,11 +31,13 @@ export function buildRequestError(message: string, requestId: string, context?: 
     status?: number
     method?: string
     url?: string
+    detailCode?: string
   }
   error.requestId = requestId || undefined
   error.status = context?.status
   error.method = context?.method
   error.url = context?.url
+  error.detailCode = context?.code
   return error
 }
 
@@ -84,6 +88,25 @@ export function extractResponseMessage(
   return normalized
 }
 
+/**
+ * The backend's machine-readable error code (`detail.code`). A few rejections
+ * are terminal — resending the same request can never succeed — and the caller
+ * has to tell them apart from a transport failure that is worth retrying.
+ */
+export function extractResponseCode(body: string): string | undefined {
+  const normalized = body.trim()
+  if (!normalized) return undefined
+  try {
+    const parsed = JSON.parse(normalized) as { detail?: unknown }
+    const detail = parsed.detail
+    if (!detail || typeof detail !== 'object' || !('code' in detail)) return undefined
+    const code = (detail as { code?: unknown }).code
+    return typeof code === 'string' && code.trim() ? code : undefined
+  } catch {
+    return undefined
+  }
+}
+
 export interface ReadJsonResponseOptions {
   feature: string
   httpStage?: string
@@ -122,6 +145,7 @@ export async function readJsonResponse<T>(
     throw buildRequestError(message, requestId, {
       feature: options.feature,
       status: response.status,
+      code: extractResponseCode(body),
     })
   }
 
@@ -148,6 +172,7 @@ export async function readJsonResponse<T>(
     throw buildRequestError(message, requestId, {
       feature: options.feature,
       status: response.status,
+      code: extractResponseCode(body),
     })
   }
 }

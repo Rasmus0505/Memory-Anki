@@ -159,6 +159,9 @@ def drop_undue_unstarted(
             or card_id in excluded
             or card_id in retry_sources
             or card_id in open_cards
+            # A bedtime card was already rated today, so it is never "due"; it
+            # belongs to this round by the learner's explicit request.
+            or bool(item.get("bedtime"))
         )
         if undue and not protected:
             dropped.add(card_id)
@@ -185,6 +188,35 @@ def drop_undue_unstarted(
     return next_plan
 
 
+def drop_previous_day_bedtime(plan: Mapping[str, Any]) -> Plan:
+    """Bedtime is the evening's second pass; it never carries into a new day."""
+    next_plan = normalize_plan(plan)
+    ids = {
+        item["card_id"] for item in next_plan["original_cards"] if item.get("bedtime")
+    }
+    if not ids:
+        return next_plan
+    next_plan["original_cards"] = [
+        item for item in next_plan["original_cards"] if not item.get("bedtime")
+    ]
+    for key in ("presented_ids", "completed_ids", "excluded_ids", "compressed_ids"):
+        next_plan[key] = [item for item in next_plan[key] if item not in ids]
+    next_plan["encounters"] = {
+        key: value for key, value in next_plan["encounters"].items() if key not in ids
+    }
+    next_plan["bedtime_ratings"] = {
+        key: value for key, value in next_plan["bedtime_ratings"].items() if key not in ids
+    }
+    next_plan["occurrences"] = [
+        occ
+        for occ in next_plan["occurrences"]
+        if _text(occ.get("source_card_id")) not in ids
+        and _text(occ.get("occurrence_id")) not in ids
+    ]
+    _repair_current(next_plan)
+    return next_plan
+
+
 def append_today_cards(
     plan: Mapping[str, Any],
     cards: Sequence[Mapping[str, Any]],
@@ -201,6 +233,7 @@ def append_today_cards(
         next_plan["today"] = stamp
     incoming = snapshot_cards(cards, today=stamp)
     if day_advanced:
+        next_plan = drop_previous_day_bedtime(next_plan)
         _reopen_due_again(next_plan, incoming, due_unit_ids=due_unit_ids)
     _merge_incoming(
         next_plan,
@@ -251,6 +284,8 @@ def replan_remaining(
     if stamp:
         next_plan["today"] = stamp
     incoming = snapshot_cards(cards, today=stamp)
+    if day_advanced:
+        next_plan = drop_previous_day_bedtime(next_plan)
     reopened = (
         _reopen_due_again(next_plan, incoming, due_unit_ids=due_unit_ids)
         if day_advanced
@@ -258,6 +293,11 @@ def replan_remaining(
     )
     keep_old = set(next_plan["completed_ids"]) | set(next_plan["excluded_ids"])
     keep_old.update(live_retry_sources(next_plan))
+    # Bedtime cards are only in this plan because the learner appended them;
+    # a config change must not silently drop the second pass.
+    keep_old.update(
+        item["card_id"] for item in next_plan["original_cards"] if item.get("bedtime")
+    )
     # A reopened card is due again; a scope change must not drop it just because
     # the client's rebuilt candidate list still filtered it out.
     keep_old.update(reopened)
@@ -278,8 +318,26 @@ def replan_remaining(
     completed = set(next_plan["completed_ids"])
     compressed = set(next_plan["compressed_ids"])
     retry_sources = live_retry_sources(next_plan)
+    # A retry the learner already rated this round is history, not scheduling:
+    # it keeps its slot right after its source until 结算 compresses the group.
+    # Rebuilding presented_ids from scratch used to drop it, so 更新队列 /
+    # 重建本轮 made a just-rated 重练卡 disappear mid-round.
+    answered_retries: dict[str, list[str]] = {}
+    for occ in next_plan["occurrences"]:
+        if occ["status"] != OCCURRENCE_COMPLETED:
+            continue
+        occ_id = _text(occ.get("occurrence_id"))
+        source_id = _text(occ.get("source_card_id"))
+        if not occ_id or not source_id:
+            continue
+        if source_id in excluded or source_id in compressed:
+            continue
+        answered_retries.setdefault(source_id, []).append(occ_id)
     prefix: list[str] = []
     seen: set[str] = set()
+    bedtime_ids = {
+        item["card_id"] for item in next_plan["original_cards"] if item.get("bedtime")
+    }
     for card_id in previous_presented:
         source_id = _source_id_of(next_plan, card_id)
         if not source_id or source_id in seen or source_id in excluded or source_id in compressed:
@@ -290,9 +348,15 @@ def replan_remaining(
             source_id in completed
             or source_id in retry_sources
             or source_id in reopened_presented
+            or source_id in bedtime_ids
         ):
             prefix.append(source_id)
             seen.add(source_id)
+            for occ_id in answered_retries.get(source_id, []):
+                if occ_id in seen:
+                    continue
+                prefix.append(occ_id)
+                seen.add(occ_id)
     incoming_ids = [item["card_id"] for item in incoming]
     incoming_units = {
         item["card_id"]: _text(item.get("unit_id")) or _review_unit_id(item.get("card_id"))

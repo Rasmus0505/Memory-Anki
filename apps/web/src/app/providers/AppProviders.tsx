@@ -4,6 +4,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
 import { QuizLauncherProvider } from '@/widgets/quiz-launcher'
 import { GlobalErrorBoundary } from '@/app/providers/GlobalErrorBoundary'
+import { useReminderActivityBeacon } from '@/app/providers/useReminderActivityBeacon'
 import { createAppQueryClient } from '@/shared/api/queryClient'
 import { GlobalFeedbackProvider } from '@/shared/feedback/GlobalFeedbackProvider'
 import { cleanupExpiredAppLogs, logAppError } from '@/shared/logs/model/appLogs'
@@ -19,6 +20,7 @@ const queryClient = createAppQueryClient()
 
 export function AppProviders({ children }: PropsWithChildren) {
   useMutationQueueAutoSync()
+  useReminderActivityBeacon()
 
   useEffect(() => startQuizPracticeProgressSync(), [])
 

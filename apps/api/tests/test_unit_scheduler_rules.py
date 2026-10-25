@@ -10,6 +10,12 @@ compatibility surface rather than the scheduler.
 
 from datetime import date, timedelta
 
+from memory_anki.modules.memory.application.unit_fsrs_adapter import (
+    EARLY_LADDER_STEPS,
+    FsrsUnitState,
+    growth_cap_days,
+    replay_history,
+)
 from memory_anki.modules.memory.application.unit_scheduler import (
     FUZZ_MIN_INTERVAL_DAYS,
     FUZZ_RATIO,
@@ -211,16 +217,19 @@ def test_a_first_pass_gets_one_same_day_step_then_books_tomorrow():
 
     # The re-check passes: tomorrow, never later than that.
     graduated = rate_unit(
-        stage_index=3,
+        stage_index=1,
         has_passed=True,
         rating=3,
         had_failure_in_encounter=False,
         today=TODAY,
         intraday=IntradayState(day=TODAY, step_pending=True),
+        booked_due_date=TODAY,
+        early_step=0,
     )
     assert graduated.passed is True
     assert graduated.due_date == TODAY + timedelta(days=1)
     assert graduated.intraday_kind is None
+    assert graduated.early_step == 1
 
 
 def test_a_mature_pass_still_books_at_least_one_day():
@@ -525,3 +534,318 @@ def test_failed_ratings_still_retry_today_under_sprint():
         )
         assert result.due_date == SPRINT_TODAY
         assert result.passed is False
+
+
+# --- Fixed early ladder -----------------------------------------------------
+# The first three day-level bookings are product-fixed: tomorrow, two days, three
+# days. FSRS takes over from the review that comes back after those three days,
+# under the young-unit growth ceiling (never more than double the booked gap).
+# The ladder keys off the *booked* gap, because a 困难 raises FSRS stability
+# while the product still treats it as retry work.
+
+EARLY_TODAY = date(2026, 8, 7)
+
+
+def _early_state(*, stability: float = 1.3359, last_review: date = date(2026, 8, 6)):
+    from datetime import datetime
+
+    return FsrsUnitState(
+        stability=stability,
+        difficulty=5.1023,
+        fsrs_state=2,
+        step=None,
+        due_at=datetime(2026, 8, 7, 4),
+        last_review=datetime.combine(last_review, datetime.min.time()).replace(hour=4),
+    )
+
+
+def test_early_ladder_walks_one_one_two_days():
+    """Fixed reviews land on day 2, day 3 and day 5 (gaps 1, 1, 2)."""
+    for early_step, expected in ((0, 1), (1, 1), (2, 2)):
+        result = rate_unit(
+            stage_index=min(early_step + 1, 9),
+            has_passed=True,
+            rating=3,
+            had_failure_in_encounter=False,
+            today=EARLY_TODAY,
+            fsrs_state=_early_state(last_review=EARLY_TODAY - timedelta(days=1)),
+            booked_due_date=EARLY_TODAY,
+            early_step=early_step,
+        )
+        assert result.due_date == EARLY_TODAY + timedelta(days=expected), early_step
+        assert result.early_step == early_step + 1
+        # `stage_index` is a coarse compatibility bucket (0/1/3/7…), so a
+        # two-day booking still projects to stage 1; the due date is the truth.
+        assert result.stage_index >= 1
+
+
+def test_easy_jumps_to_the_last_fixed_step():
+    result = rate_unit(
+        stage_index=1,
+        has_passed=True,
+        rating=4,
+        had_failure_in_encounter=False,
+        today=EARLY_TODAY,
+        fsrs_state=_early_state(last_review=EARLY_TODAY - timedelta(days=1)),
+        booked_due_date=EARLY_TODAY,
+        early_step=0,
+    )
+    assert result.due_date == EARLY_TODAY + timedelta(days=2)
+    assert result.early_step == EARLY_LADDER_STEPS
+
+
+def test_forgetting_restarts_the_fixed_ladder():
+    result = rate_unit(
+        stage_index=2,
+        has_passed=True,
+        rating=1,
+        had_failure_in_encounter=False,
+        today=EARLY_TODAY,
+        fsrs_state=_early_state(last_review=EARLY_TODAY - timedelta(days=1)),
+        booked_due_date=EARLY_TODAY,
+        early_step=2,
+    )
+    assert result.due_date == EARLY_TODAY
+    assert result.early_step == 0
+
+
+def test_new_card_walks_the_fixed_four_reviews_then_fsrs():
+    """30 分钟 → 第2天 → 第3天 → 第5天 → FSRS，按学习当天计数。"""
+    from memory_anki.modules.memory.application.unit_intraday import IntradayState
+
+    learned = EARLY_TODAY
+    first = rate_unit(
+        stage_index=0,
+        has_passed=False,
+        rating=3,
+        had_failure_in_encounter=False,
+        today=learned,
+        booked_due_date=learned,
+    )
+    assert first.due_date == learned
+    assert first.intraday_kind == "step"
+    assert first.retry_after_minutes == 30
+    assert first.early_step == 0
+
+    recheck = rate_unit(
+        stage_index=first.stage_index,
+        has_passed=True,
+        rating=3,
+        had_failure_in_encounter=False,
+        today=learned,
+        intraday=IntradayState(day=learned, step_pending=True),
+        booked_due_date=learned,
+        early_step=first.early_step,
+        fsrs_state=first.fsrs_state,
+    )
+    assert recheck.due_date == learned + timedelta(days=1)
+    assert recheck.early_step == 1
+
+    review_2 = rate_unit(
+        stage_index=recheck.stage_index,
+        has_passed=True,
+        rating=3,
+        had_failure_in_encounter=False,
+        today=learned + timedelta(days=1),
+        booked_due_date=learned + timedelta(days=1),
+        early_step=recheck.early_step,
+        fsrs_state=recheck.fsrs_state,
+    )
+    assert review_2.due_date == learned + timedelta(days=2)
+    assert review_2.early_step == 2
+
+    review_3 = rate_unit(
+        stage_index=review_2.stage_index,
+        has_passed=True,
+        rating=3,
+        had_failure_in_encounter=False,
+        today=learned + timedelta(days=2),
+        booked_due_date=learned + timedelta(days=2),
+        early_step=review_2.early_step,
+        fsrs_state=review_2.fsrs_state,
+    )
+    assert review_3.due_date == learned + timedelta(days=4)
+    assert review_3.early_step == 3
+
+    review_4 = rate_unit(
+        stage_index=review_3.stage_index,
+        has_passed=True,
+        rating=3,
+        had_failure_in_encounter=False,
+        today=learned + timedelta(days=4),
+        booked_due_date=learned + timedelta(days=4),
+        early_step=review_3.early_step,
+        fsrs_state=review_3.fsrs_state,
+    )
+    # The fifth booking is FSRS' own (still under the 2x young-unit ceiling).
+    assert (review_4.due_date - (learned + timedelta(days=4))).days >= 1
+    assert review_4.early_step == EARLY_LADDER_STEPS
+
+
+def test_fsrs_takes_over_after_the_fixed_four_reviews():
+    result = rate_unit(
+        stage_index=3,
+        has_passed=True,
+        rating=3,
+        had_failure_in_encounter=False,
+        today=EARLY_TODAY,
+        fsrs_state=_early_state(stability=19.8, last_review=EARLY_TODAY - timedelta(days=3)),
+        booked_due_date=EARLY_TODAY,
+    )
+    # FSRS wants about 20 days; the young-unit ceiling books twice the last gap.
+    assert result.due_date == EARLY_TODAY + timedelta(days=6)
+
+
+def test_growth_ceiling_shape():
+    """Double the booked gap, at least three days, only while the unit is young."""
+    assert growth_cap_days(previous_interval_days=None) is None
+    assert growth_cap_days(previous_interval_days=0) is None
+    assert growth_cap_days(previous_interval_days=1) == 3
+    assert growth_cap_days(previous_interval_days=3) == 6
+    assert growth_cap_days(previous_interval_days=12) == 24
+    assert growth_cap_days(previous_interval_days=30) is None
+
+
+def test_hard_on_an_early_unit_then_retry_gets_a_30_minute_recheck():
+    """The 太学 case: 困难 must not push a one-day unit three days out.
+
+    A 重练 that passes is not stable evidence yet; it gets the same 30-minute
+    re-check as a first pass before the day-level interval is booked.
+    """
+    from memory_anki.modules.memory.application.unit_intraday import IntradayState
+
+    hard = rate_unit(
+        stage_index=1,
+        has_passed=True,
+        rating=2,
+        had_failure_in_encounter=False,
+        today=EARLY_TODAY,
+        fsrs_state=_early_state(),
+        booked_due_date=EARLY_TODAY,
+    )
+    assert hard.due_date == EARLY_TODAY
+    assert hard.stage_index == 0
+    assert hard.fsrs_state is not None
+    assert hard.early_step == 0
+
+    retry = rate_unit(
+        stage_index=hard.stage_index,
+        has_passed=True,
+        rating=3,
+        had_failure_in_encounter=True,
+        today=EARLY_TODAY,
+        fsrs_state=hard.fsrs_state,
+        booked_due_date=EARLY_TODAY,
+        early_step=hard.early_step,
+        intraday=IntradayState(day=EARLY_TODAY, retries=1),
+    )
+    assert retry.due_date == EARLY_TODAY
+    assert retry.intraday_kind == "step"
+    assert retry.retry_after_minutes == 30
+    # The deferred booking must not advance the ladder yet.
+    assert retry.early_step == 0
+
+    recheck = rate_unit(
+        stage_index=retry.stage_index,
+        has_passed=True,
+        rating=3,
+        had_failure_in_encounter=False,
+        today=EARLY_TODAY,
+        fsrs_state=retry.fsrs_state,
+        booked_due_date=EARLY_TODAY,
+        early_step=retry.early_step,
+        intraday=IntradayState(day=EARLY_TODAY, retries=1, step_pending=True),
+    )
+    assert recheck.due_date == EARLY_TODAY + timedelta(days=1)
+    assert recheck.early_step == 1
+    assert recheck.stage_index == 1
+
+
+def test_mature_hard_recovery_still_lets_fsrs_book():
+    """成熟单元的『困难』重练通过后先 30 分钟复查，再交给 FSRS 排期。"""
+    from memory_anki.modules.memory.application.unit_intraday import IntradayState
+
+    hard = rate_unit(
+        stage_index=5,
+        has_passed=True,
+        rating=2,
+        had_failure_in_encounter=False,
+        today=EARLY_TODAY,
+        fsrs_state=_early_state(stability=14.0, last_review=date(2026, 7, 1)),
+        booked_due_date=EARLY_TODAY,
+    )
+    assert hard.due_date == EARLY_TODAY
+    assert hard.stage_index == 4
+    assert hard.early_step == 3
+
+    retry = rate_unit(
+        stage_index=hard.stage_index,
+        has_passed=True,
+        rating=3,
+        had_failure_in_encounter=True,
+        today=EARLY_TODAY,
+        fsrs_state=hard.fsrs_state,
+        booked_due_date=EARLY_TODAY,
+        early_step=hard.early_step,
+        intraday=IntradayState(day=EARLY_TODAY, retries=1),
+    )
+    assert retry.intraday_kind == "step"
+    assert retry.due_date == EARLY_TODAY
+
+    recheck = rate_unit(
+        stage_index=retry.stage_index,
+        has_passed=True,
+        rating=3,
+        had_failure_in_encounter=False,
+        today=EARLY_TODAY,
+        fsrs_state=retry.fsrs_state,
+        booked_due_date=EARLY_TODAY,
+        early_step=retry.early_step,
+        intraday=IntradayState(day=EARLY_TODAY, retries=1, step_pending=True),
+    )
+    assert (recheck.due_date - EARLY_TODAY).days > 1
+
+
+def _op(*, day, rating, stage, has_passed, due, fsrs=None, hard_on=None):
+    import json
+    from datetime import datetime
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        created_at=datetime(day.year, day.month, day.day, 4),
+        rating=rating,
+        before_state_json=json.dumps(
+            {
+                "state": {
+                    "stage_index": stage,
+                    "has_passed": has_passed,
+                    "due_date": due.isoformat(),
+                    "hard_penalized_on": hard_on,
+                    "fsrs": fsrs or {},
+                }
+            }
+        ),
+    )
+
+
+def test_replay_reproduces_the_early_ladder_and_the_hard_recovery():
+    """The one-time replay must land where a live rating would."""
+    day0 = date(2026, 10, 24)
+    day1 = date(2026, 10, 25)
+    empty_fsrs = {
+        "stability": None,
+        "difficulty": None,
+        "state": 1,
+        "step": 0,
+        "due_at": None,
+        "last_review": None,
+    }
+    operations = [
+        _op(day=day0, rating=3, stage=0, has_passed=False, due=day0, fsrs=empty_fsrs),
+        _op(day=day1, rating=2, stage=1, has_passed=True, due=day1),
+        _op(day=day1, rating=3, stage=0, has_passed=True, due=day1, hard_on=day1.isoformat()),
+    ]
+    replay = replay_history(operations, unit_id="unit-early")
+    assert replay.due_date == day1 + timedelta(days=1)
+    assert replay.stage_index == 1
+    assert replay.has_passed is True

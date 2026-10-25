@@ -80,12 +80,32 @@ Reviews must not import Practice. Practice must not create a second schedule, co
   pool: 「今日新学已完成」 fires when the round has no unpassed new unit left and never gates due
   reviews.
 
-- FSRS is the scheduler. Each unit owns one card in `review_unit_states`
+- FSRS is the scheduler from the fifth review onward. Each unit owns one card in
+  `review_unit_states`
   (`fsrs_stability`, `fsrs_difficulty`, `fsrs_state`, `fsrs_step`, `fsrs_due_at`,
   `fsrs_last_review`, and the `fsrs_scheduler_version` that wrote them). A pass
   books the interval FSRS computes for that card at a 90% target retention
   (`desired_retention=0.9`), capped at 365 days, plus the product's stable
   per-unit 5% spread. A never-reviewed card starts empty and is due immediately.
+- The first four reviews are fixed, not FSRS estimates: review #1 is a 30-minute
+  same-day re-check (`unit_intraday.STEP_DELAY`), then review #2 lands on day 2,
+  #3 on day 3 and #4 on day 5 — booked gaps `(1, 1, 2)`
+  (`EARLY_LADDER_INTERVALS`). The review that returns after day 5 is the first
+  one FSRS books. The gaps repeat, so the position is the persisted
+  `early_step` counter (completed day-level fixed reviews, 0..3), never the
+  previous booked gap alone; a row written before the counter existed is
+  inferred once from its booked gap. The ladder keys off the **booked** position,
+  never FSRS stability: `困难` is a successful recall to FSRS (it raises
+  stability, 1.3 → 3.3 days on a first review) while the product still treats it
+  as retry work. `轻松` takes the last fixed step directly; a unit that already
+  handed over to FSRS keeps the finished marker, so a mature lapse stays on the
+  FSRS path instead of restarting the fixed ladder.
+- After the fixed ladder, a young unit's interval may not grow faster than
+  double the booked gap while that gap is below 30 days (`growth_cap_days`).
+  FSRS wants ~20 days right after the day-5 review; the ceiling books 4, and
+  the sequence is 2 → 4 → 8 → 16 → 32. FSRS still decides from 30 days up, and
+  a shorter FSRS answer is never lengthened. A retry day (gap 0) is not capped:
+  its base is the same-day failure, not an earned interval.
 - `stage_index` is a compatibility projection of the real interval
   (`stage_for_interval` = nearest lower legacy bound of
   `0, 1, 3, 7, 14, 30, 60, 120, 240, 365`). It is written for old clients and
@@ -101,9 +121,11 @@ Reviews must not import Practice. Practice must not create a second schedule, co
   unit due today and waits 10 minutes, then 1 hour, then 3 hours ("today's
   last"). A unit gets at most three retries; the next failure books tomorrow.
   Only `记得` and `轻松` pass.
-- A first-ever pass books one short re-check (15 minutes) instead of tomorrow;
-  the re-check passing graduates the unit to the next study day. A mature pass
-  books the FSRS interval (at least one day). An ahead-of-date filler pass
+- A first-ever pass books one short re-check (30 minutes) instead of tomorrow;
+  the re-check passing graduates the unit to day 2. A 重练 that finally passes
+  gets the same single 30-minute re-check before the day-level interval is
+  booked: a recovery is not yet evidence of a stable memory. A mature normal
+  pass books the FSRS interval (at least one day). An ahead-of-date filler pass
   records without moving either.
 - A waiting unit is still due today but is not servable: the queue and the
   palace batch exclude it (`intraday_due_at > now`), and the round plan keeps
@@ -130,6 +152,7 @@ Reviews must not import Practice. Practice must not create a second schedule, co
   card, and the old "recover only one level" rule is exactly what its stability
   and difficulty now express.
 - Rating requires `study_session_id`, `unit_id`, `unit_revision`, `encounter_id`, stable `operation_id`, and `rating`. The operation is idempotent and supports LIFO single-step undo while the encounter remains open.
+- A later real attempt freezes every earlier one. `_has_later_attempt` decides two things at once: the rating write and undo raise `LaterAttemptExistsError` (HTTP 400 `superseded_attempt`, a terminal code for the client), while the glance itself still opens. `start_freestyle_unit_review_session` no longer asserts here — the feed keeps answered cards so swipe-back can read them, and the map only renders from a session start — and `get_unit_review_session` reports `rating_editable: false`, checked on the amend glance's `amend_source_id` too, because a glance minted seconds ago has no later attempt of its own. A 400 at glance-open left the card blank and its tap stuck on 未保存.
 - Freestyle may rate a palace's remaining due units in one Reviews command (`rate_palace_due_units`). That command still writes one unit rating per member. It is not a palace-level schedule, not a node rating, and not the retired subtree/bulk-fill path. Already-rated units in the current round are left alone unless they are the open current encounter (which may amend). Sibling units close at zero observed seconds. Undo of the current open encounter undoes the whole batch.
 - Due dates are local study-day dates. A study day starts at 03:00 local time (`MEMORY_ANKI_DAY_START_HOUR`, default `3`), not midnight, so work done at 00:30 still belongs to the evening that just ended. Presentation converts a study day to its 03:00 local boundary only at API boundaries.
 - Sprint mode bounds the booked date without touching the memory state:
@@ -143,6 +166,31 @@ Reviews must not import Practice. Practice must not create a second schedule, co
 - Content and mark editing do not independently penalize scheduling. Existing content keeps its
   due date and FSRS state; splits, new content and merges follow the topology inheritance rules
   above.
+
+### 睡前复习 (bedtime review)
+
+- 睡前复习 is a second pass over **today's already-rated units**. It never mints a
+  round and never writes a schedule: `POST /freestyle/rounds/{round_id}/bedtime`
+  appends the cards to the end of the current plan with `bedtime: true`, and
+  `POST /freestyle/rounds/{round_id}/bedtime/ratings` records the grade in
+  `plan["bedtime_ratings"]` and marks the card completed. No Reviews session,
+  encounter, or rating operation is created, so neither the due date nor the
+  FSRS card can move. The normal rating endpoint rejects a bedtime card, so the
+  scheduling path cannot be reached by accident.
+- Candidates are live `review_unit_rating_operations` on the current study day
+  (`undone_at`/`replaced_at` rows excluded), scoped to the round's workspace
+  (all palaces for 随心, one palace for `p<id>`). Units the round still owes today
+  -- an unrated card or a live retry occurrence -- are not appended: their real
+  rating is what they need. Units already in the bedtime set are never appended
+  twice, so clicking the moon again after rating more cards appends only the new
+  ones.
+- Bedtime cards are protected from the due-day filters (`drop_undue_unstarted`,
+  `replan_remaining`) because they are, by definition, not due. They live only
+  for their study day: `drop_previous_day_bedtime` clears them (and their
+  plan-only grades) when the round advances past 03:00.
+- The frontend draws them from the read-only unit preview, never from a live
+  glance; the map is reveal-only (no edit, permanent-mark, or document write),
+  and the rail marks them with a moon.
 
 ### Scheduler ownership and migration
 
@@ -158,11 +206,21 @@ Reviews must not import Practice. Practice must not create a second schedule, co
 - The switch is a one-time replay, not a fresh start: migration `0077` only adds nullable columns,
   and `backfill_fsrs_scheduler` replays every active unit's effective rating ledger
   (`undone_at IS NULL`, `replaced_at IS NULL`) through the production adapter, writing the card and
-  the recomputed due date. A `Config(key="review_fsrs_backfill")` marker records the scheduler
-  version; a crash leaves it unset and the next startup resumes. The first write takes a rescue
-  backup (`pre-fsrs-switch`). Units with no rating history are left untouched — they keep their
-  stored due date and have no FSRS checkpoint, which the adapter seeds from the legacy projection on
-  their first rating.
+  the recomputed due date. A `Config(key="review_fsrs_backfill")` marker records the whole
+  scheduling policy (`SCHEDULER_VERSION = fsrs-<lib>+<policy>`), so changing a product rule re-runs
+  the repair instead of leaving units booked under the retired policy. The first write takes a
+  rescue backup (`pre-fsrs-switch`). Units with no rating history are left untouched — they keep
+  their stored due date and have no FSRS checkpoint, which the adapter seeds from the legacy
+  projection on their first rating.
+- A policy migration stamps the fixed-ladder counter and the scheduler version;
+  it does **not** move a due date the learner was already promised. Migration
+  `0080` adds the nullable `early_step`; `backfill_fsrs_scheduler` infers it from
+  each unit's booked gap (1 day → 0, 2 → 1, 3 → 2, further → finished) and leaves
+  the booking alone, so a mature unit keeps its earned card and date and a young
+  unit simply follows the new gaps from its next rating. Rows with no FSRS
+  checkpoint are still replayed, because on those the ledger is the only state
+  there is; a rating snapshot records `early_step` so undo restores the exact
+  ladder position.
 - Undo and amend stay exact after the switch: each rating snapshot stores the FSRS payload, and when
   a snapshot or ledger window has no FSRS state the adapter seeds from the recorded legacy position
   rather than pretending the unit is new. An inherited or pre-switch row with no FSRS checkpoint is

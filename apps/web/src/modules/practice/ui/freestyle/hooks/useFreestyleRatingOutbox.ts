@@ -17,6 +17,7 @@ import {
   useRatingSaveLedger,
 } from '@/modules/practice/ui/freestyle/hooks/useFreestyleRatingSaves'
 import { isPermanentUnitAbsence } from '@/modules/practice/ui/freestyle/model/freestyleStaleRecovery'
+import { SUPERSEDED_RATING_TOAST_COPY } from '@/modules/practice/ui/freestyle/model/freestyleRatingCopy'
 import { recordSessionRecorderUiAction } from '@/shared/debug/session-recorder'
 
 export const RATING_NOT_SAVED_COPY = '这一次没有保存成功'
@@ -82,7 +83,11 @@ export function useFreestyleRatingOutbox(input: {
         '评分没有保存',
         `卡片：${event.cardId} · 回合：${event.roundId} · 操作 ID：${event.job.operationId} · ${event.failure} · ${detail}`,
       )
-      latest.current.cardSaveFailed(RATING_NOT_SAVED_COPY, event.cardId)
+      // 终态：不是掉网，是这次尝试已经被后面的练习取代；重试永远不会成功。
+      latest.current.cardSaveFailed(
+        event.failure === 'superseded' ? SUPERSEDED_RATING_TOAST_COPY : RATING_NOT_SAVED_COPY,
+        event.cardId,
+      )
     },
     staleDrop: (cardId, error) => {
       latest.current.staleDrop(cardId, isPermanentUnitAbsence(error) ? { force: true } : undefined)

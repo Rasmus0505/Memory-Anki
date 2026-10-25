@@ -33,6 +33,8 @@ function harness(extra: Partial<RatingSaveDeps> = {}) {
     setTimer: () => 0,
     clearTimer: () => undefined,
     timeoutMs: 60_000,
+    // These specs are about the intent record, not the retry loop.
+    autoRetry: { maxAttempts: 1 },
     ...extra,
   })
   return { store, posts }

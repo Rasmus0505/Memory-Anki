@@ -24,6 +24,7 @@ import {
   RATING_SAVE_TIMEOUT_MS,
   RatingSaveStore,
   type HydratedRatingIntent,
+  type RatingSaveDeps,
   type RatingTarget,
 } from '@/modules/practice/ui/freestyle/model/ratingSaveStore'
 
@@ -32,10 +33,21 @@ import {
  * and route changes, so a save that is on the wire still completes and its
  * result is waiting when the learner comes back.
  */
+/** 服务端错误码：这次尝试后面已有更新的练习，改写/撤销永远不会成功。 */
+export const SUPERSEDED_RATING_ERROR_CODE = 'superseded_attempt'
+
+function isSupersededAttemptError(error: unknown): boolean {
+  return (error as { detailCode?: string } | null | undefined)?.detailCode
+    === SUPERSEDED_RATING_ERROR_CODE
+}
+
 let store: RatingSaveStore | null = null
+/** Test override for the automatic retry policy; `undefined` keeps production values. */
+let testAutoRetry: RatingSaveDeps['autoRetry'] | undefined
 
 function createStore() {
   return new RatingSaveStore({
+    autoRetry: testAutoRetry,
     post: async (roundId, payload) => {
       if (roundId) return rateFreestyleRoundUnitApi(roundId, payload)
       // No round yet: the plain unit write still records the score.
@@ -70,6 +82,7 @@ function createStore() {
       job.roundId || undefined,
     ),
     isStaleError: isStaleUnitError,
+    isSupersededError: isSupersededAttemptError,
     newOperationId: operationId,
     setTimer: (callback, ms) => window.setTimeout(callback, ms),
     clearTimer: (handle) => window.clearTimeout(handle as number),
@@ -82,8 +95,16 @@ export function freestyleRatingSaves(): RatingSaveStore {
   return store
 }
 
-export function resetFreestyleRatingSavesForTests() {
+/**
+ * Drop the window's outbox between tests. `autoRetry` lets a component spec turn
+ * the quiet retry loop off (`{ maxAttempts: 1 }`) or drive its own policy, so a
+ * failure test does not have to wait out the production window.
+ */
+export function resetFreestyleRatingSavesForTests(options: {
+  autoRetry?: RatingSaveDeps['autoRetry']
+} = {}) {
   store = null
+  testAutoRetry = options.autoRetry
 }
 
 /**

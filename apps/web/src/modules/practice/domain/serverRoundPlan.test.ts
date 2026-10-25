@@ -474,6 +474,41 @@ describe('server round plan hydrate', () => {
     expect(hydrated.map((card) => card.id)).toEqual(['a', 'b', 'c', localRetry.id, 'd'])
   })
 
+  it('keeps a rated 重练 in the feed even when presented_ids no longer names it', () => {
+    const source = branch('a')
+    const localRetry = createRetryOccurrence(source, 'round-1', 1, 0, 'retry:round-1:a-unit:1')
+    const plan: FreestyleRoundPlanPayload = {
+      original_cards: [],
+      presented_ids: ['a', 'b', 'c'],
+      current_card_id: 'a',
+      current_index: 0,
+      completed_ids: ['a', localRetry.id],
+      excluded_ids: [],
+      occurrences: [{
+        occurrence_id: localRetry.id,
+        source_card_id: 'a',
+        source_unit_id: 'a-unit',
+        retry_attempt: 1,
+        rating: 3,
+        insert_target_index: 1,
+        status: 'completed',
+        encounter_id: 'enc-pass',
+      }],
+      encounters: {},
+    }
+    const hydrated = cardsForServerPlan([source, localRetry, branch('b'), branch('c')], plan, 'round-1')
+    // Scoring alone never removes the card the learner just rated.
+    expect(hydrated.map((card) => card.id)).toEqual(['a', localRetry.id, 'b', 'c'])
+
+    const cancelled: FreestyleRoundPlanPayload = {
+      ...plan,
+      completed_ids: ['a'],
+      occurrences: [{ ...plan.occurrences![0], status: 'cancelled' }],
+    }
+    expect(cardsForServerPlan([source, localRetry, branch('b'), branch('c')], cancelled, 'round-1')
+      .map((card) => card.id)).toEqual(['a', 'b', 'c'])
+  })
+
   it('uses the server occurrence id and does not append extra local retries', () => {
     const source = branch('review_unit:u1:r1')
     source.unit_id = 'u1'

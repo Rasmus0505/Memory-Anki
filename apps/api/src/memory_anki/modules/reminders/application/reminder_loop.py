@@ -20,6 +20,7 @@ from memory_anki.core.time import resolve_local_timezone, study_day_of
 from memory_anki.infrastructure.db._tables._base import get_session
 from memory_anki.modules.reminders.application.activity_probe import read_activity
 from memory_anki.modules.reminders.application.due_summary import read_due_snapshot
+from memory_anki.modules.reminders.application.presence import last_seen as last_ui_seen
 from memory_anki.modules.reminders.application.reminder_message import compose
 from memory_anki.modules.reminders.application.reminder_policy import (
     Candidate,
@@ -67,11 +68,21 @@ def _state_for(session, study_day, key: str) -> DeliveryState:
 
 
 def _load_snapshot(
-    session, study_day, now_utc: datetime, cache: dict[bool, DueSnapshot], *, streak: bool
+    session,
+    study_day,
+    now_utc: datetime,
+    cache: dict[bool, DueSnapshot],
+    *,
+    streak: bool,
+    settings,
 ) -> DueSnapshot:
     if streak not in cache:
         cache[streak] = read_due_snapshot(
-            session, study_day, now=now_utc, include_streak=streak
+            session,
+            study_day,
+            now=now_utc,
+            include_streak=streak,
+            quiet_start_hour=settings.quiet_start_hour,
         )
     return cache[streak]
 
@@ -98,6 +109,13 @@ def run_reminder_tick(
         runtime = read_runtime(session).for_day(study_day.isoformat())
 
         activity = read_activity(session, study_day, now=now_utc)
+        # 前端心跳（点击/按键/触摸）也算动作：只认评分和保存脑图的话，
+        # 你在手机上翻卡看书会被判成"没动"。
+        seen = last_ui_seen()
+        if seen is not None and (
+            activity.last_activity_at is None or seen > activity.last_activity_at
+        ):
+            activity = replace(activity, last_activity_at=seen, started_today=True)
         if activity.last_activity_at != runtime.last_activity_at:
             # 又动过了：闲置轮次从头计。
             runtime = replace(
@@ -120,7 +138,7 @@ def run_reminder_tick(
                 decision = evaluate(
                     slot,
                     settings,
-                    _load_snapshot(session, study_day, now_utc, cache, streak=False),
+                    _load_snapshot(session, study_day, now_utc, cache, streak=False, settings=settings),
                     state,
                     now_utc,
                 )
@@ -133,7 +151,7 @@ def run_reminder_tick(
 
         if settings.ready_enabled:
             ready_now = _load_snapshot(
-                session, study_day, now_utc, cache, streak=False
+                session, study_day, now_utc, cache, streak=False, settings=settings
             ).ready_now_count
             baseline = ready_now if runtime.ready_baseline is None else runtime.ready_baseline
             # 学过之后基线跟着降，否则"今天再也涨不回来"。
@@ -203,6 +221,12 @@ def run_reminder_tick(
             now_utc,
             cache,
             streak=winner.kind == KIND_HOURLY,
+            settings=settings,
+        )
+        since_last_minutes = (
+            int((now_utc - activity.last_activity_at).total_seconds() // 60)
+            if activity.last_activity_at is not None
+            else 0
         )
         message = compose(
             winner.kind,
@@ -210,6 +234,7 @@ def run_reminder_tick(
             snapshot,
             winner.detail,
             runtime_done_before=runtime.last_hour_done,
+            since_last_minutes=since_last_minutes,
         )
         result = (send or send_bark)(
             settings.bark_key,

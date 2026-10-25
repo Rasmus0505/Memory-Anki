@@ -332,12 +332,12 @@ def get_unit_review_session(
         if requested_encounter is not None and requested_encounter.unit_id == state.id:
             encounter = requested_encounter
         encounter_payload = (
-            _encounter_payload(encounter, horizon=_sprint_horizon(session))
+            _encounter_payload(encounter, horizon=_sprint_horizon(session), live_state=state)
             if encounter is not None
             else None
         )
         if encounter is not None and encounter_payload is not None:
-            encounter_payload["rating_editable"] = not _has_later_attempt(session, encounter)
+            encounter_payload["rating_editable"] = _rating_editable(session, encounter)
         payload.update(
             {
                 "node_uids": json_load_list(item.node_uids_json),
@@ -527,6 +527,7 @@ def _state_snapshot(state: ReviewUnitState, item: ReviewSessionUnit) -> dict[str
             else None,
             "fsrs": state_payload(_fsrs_state_from_unit(state)),
             "intraday": _intraday_payload(_intraday_from_unit(state)),
+            "early_step": state.early_step,
         },
         "item": {
             "status": item.status,
@@ -558,6 +559,10 @@ def _restore_snapshot(
     )
     penalized_on = state_data.get("hard_penalized_on")
     state.hard_penalized_on = date.fromisoformat(str(penalized_on)) if penalized_on else None
+    raw_step = state_data.get("early_step")
+    # Absent in pre-0080 snapshots: leave it None so the scheduler infers the
+    # position from the booked gap instead of restarting a young unit at zero.
+    state.early_step = int(raw_step) if raw_step not in (None, "") else None
     snapshot_fsrs = _fsrs_state_from_snapshot(state_data)
     if snapshot_fsrs is None:
         # A pre-switch snapshot has no FSRS fields. Clear the live columns so the
@@ -722,6 +727,12 @@ def _rating_effects(
             fsrs_state=fsrs_state,
             intraday=baseline_intraday,
             now=preview_at,
+            booked_due_date=baseline_due,
+            early_step=(
+                int(state_data["early_step"])
+                if state_data.get("early_step") not in (None, "")
+                else None
+            ),
         )
         # FSRS returns the real booked gap. The old nominal-stage interval and
         # stage action remain in the payload for compatibility, but the UI must
@@ -763,8 +774,18 @@ def _encounter_payload(
     encounter: ReviewUnitEncounter,
     *,
     horizon: SprintHorizon | None = None,
+    live_state: ReviewUnitState | None = None,
 ) -> dict[str, Any]:
     snapshot = json.loads(encounter.baseline_state_json)
+    if live_state is not None and encounter.selected_rating is None:
+        # An unrated glance is previewed against the unit as it is *now*. The
+        # frozen baseline predates any failure this unit already served today,
+        # and the commit path rates from the live same-day ladder; previewing
+        # the stale baseline would promise a different date than the tap books.
+        state_data = snapshot.get("state")
+        if isinstance(state_data, dict):
+            state_data["intraday"] = _intraday_payload(_intraday_from_unit(live_state))
+            state_data["early_step"] = live_state.early_step
     return {
         "id": encounter.id,
         "round_id": encounter.round_id,
@@ -1027,8 +1048,12 @@ def start_freestyle_unit_review_session(
     latest_rated = _latest_rated_round_encounter(
         session, unit_id=state.id, round_id=requested_round_id,
     )
-    if previous_rated is not None:
-        _assert_no_later_attempt(session, previous_rated)
+    # An attempt the learner already re-practiced still opens: the feed keeps
+    # answered cards so swipe-back can read them, and the map needs this session
+    # to render. Such a glance is a read-only echo — ``get_unit_review_session``
+    # marks it ``rating_editable: false`` and every write path
+    # (``_rate_open_encounter`` / undo) still refuses it. A 400 here instead left
+    # the card blank, its tap stuck on 未保存 and the round unable to finish.
     not_due_ok = bool(allow_not_due or previous_rated is not None)
 
     # Drop competing freestyle sessions from other units / clients before opening
@@ -1270,10 +1295,13 @@ def _apply_rating_from_snapshot(
         fsrs_state=fsrs_state,
         intraday=_intraday_from_unit(state),
         now=now,
+        booked_due_date=state.due_date,
+        early_step=state.early_step,
     )
     _apply_fsrs_state(state, result.fsrs_state)
     if result.intraday is not None:
         _apply_intraday(state, result.intraday)
+    state.early_step = result.early_step
     state.stage_index = result.stage_index
     state.due_date = result.due_date
     if result.hard_penalty_applied:
@@ -1381,10 +1409,71 @@ def _has_later_attempt(session: Session, encounter: ReviewUnitEncounter) -> bool
     return False
 
 
+class LaterAttemptExistsError(ValueError):
+    """一次评分想改写/撤销的尝试，后面已经有更新的真实练习。
+
+    对客户端是终态：同样的 operation 再发多少次都不会成功。路由层把它翻成
+    ``superseded_attempt`` 错误码，前端据此停止重试并提示去最近一次练习修改。
+    """
+
+
+def _rating_editable(session: Session, encounter: ReviewUnitEncounter) -> bool:
+    """Can this glance's grade still be written?
+
+    A glance opened to amend an earlier attempt carries that attempt as its
+    ``amend_source_id``. The later practice may not be newer than *this* glance
+    (an amend glance is minted seconds ago), so the source attempt has to be
+    asked too or a locked card would look editable.
+    """
+    if _has_later_attempt(session, encounter):
+        return False
+    baseline = json.loads(encounter.baseline_state_json)
+    source_id = str(baseline.get("amend_source_id") or "").strip()
+    if not source_id:
+        return True
+    source = session.get(ReviewUnitEncounter, source_id)
+    return source is None or not _has_later_attempt(session, source)
+
+
+def rating_attempt_is_superseded(
+    session: Session,
+    *,
+    round_id: str,
+    unit_id: str,
+    encounter_id: str = "",
+    card_id: str = "",
+    occurrence_id: str = "",
+    retry_attempt: int = 0,
+) -> bool:
+    """True when this attempt can never be rated again (a later practice exists).
+
+    The 未保存 outbox asks before offering a retry: replaying such an intent can
+    only answer ``superseded_attempt``. The stored encounter id may be a glance
+    the server never created (its start was refused), so the attempt identity the
+    client sent is the fallback.
+    """
+    attempted = str(unit_id or "").strip()
+    if not attempted:
+        return False
+    requested_id = str(encounter_id or "").strip()
+    encounter = session.get(ReviewUnitEncounter, requested_id) if requested_id else None
+    if encounter is not None and encounter.unit_id != attempted:
+        encounter = None
+    if encounter is None:
+        encounter = _same_day_attempt_source(
+            session,
+            unit_id=attempted,
+            round_id=str(round_id or "").strip(),
+            identity=_attempt_identity(card_id, occurrence_id, retry_attempt),
+            encounter_id=requested_id,
+        )
+    return encounter is not None and _has_later_attempt(session, encounter)
+
+
 def _assert_no_later_attempt(session: Session, encounter: ReviewUnitEncounter) -> None:
     """An old correction must never roll back a subsequently practiced attempt."""
     if _has_later_attempt(session, encounter):
-        raise ValueError("已有后续真实练习，不能修改或撤销较早的评分；请修改最近一次练习的评分")
+        raise LaterAttemptExistsError("已有后续真实练习，不能修改或撤销较早的评分；请修改最近一次练习的评分")
 
 
 def _closed_rating_is_today(
@@ -1475,7 +1564,9 @@ def _rate_open_encounter(
         "rating_label": RATING_LABELS[rating],
         "session_status": item.status,
         "schedule_changed": result.schedule_changed,
-        "encounter": _encounter_payload(encounter, horizon=_sprint_horizon(session)),
+        "encounter": _encounter_payload(
+            encounter, horizon=_sprint_horizon(session), live_state=state
+        ),
     }
     session.add(
         ReviewUnitRatingOperation(
@@ -2199,7 +2290,9 @@ def _undo_one_rating_operation(
         "operation_id": operation.id,
         "unit": unit_payload(state),
         "session_status": item.status,
-        "encounter": _encounter_payload(encounter, horizon=_sprint_horizon(session)),
+        "encounter": _encounter_payload(
+            encounter, horizon=_sprint_horizon(session), live_state=state
+        ),
     }
 
 

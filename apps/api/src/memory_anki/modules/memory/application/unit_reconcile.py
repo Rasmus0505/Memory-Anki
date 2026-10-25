@@ -28,6 +28,7 @@ from .unit_inheritance import (
     find_resurrectable,
     inheritance_candidates,
     inheritance_vote,
+    inherited_early_step,
     region_is_live,
     sources_for_members,
 )
@@ -157,15 +158,16 @@ def reconcile_palace_units(session: Session, palace_id: int) -> dict[str, Any]:
             if sources and all(row.last_passed_at is not None for row in sources)
             else None
         )
+        inherited_step = inherited_early_step(sources)
         inheritance_plans.append((
             definition, current, live_region, inherited_stage, inherited_due,
-            inherited_passed, inherited_last_passed,
+            inherited_passed, inherited_last_passed, inherited_step,
         ))
 
     # Resolve and validate every source before touching any persisted unit.
     for index, plan in enumerate(inheritance_plans):
         (definition, current, live_region, inherited_stage, inherited_due,
-         inherited_passed, inherited_last_passed) = plan
+         inherited_passed, inherited_last_passed, inherited_step) = plan
         if current is None:
             # No active unit owns this identity. Either the region is still
             # represented by other active units (a resized unit, a split) and
@@ -191,6 +193,7 @@ def reconcile_palace_units(session: Session, palace_id: int) -> dict[str, Any]:
                 resurrect.stage_index = inherited_stage
                 resurrect.has_passed = inherited_passed
                 resurrect.due_date = inherited_due
+                resurrect.early_step = inherited_step
                 resurrect.node_uids_json = json.dumps(
                     definition.node_uids, ensure_ascii=False
                 )
@@ -223,6 +226,7 @@ def reconcile_palace_units(session: Session, palace_id: int) -> dict[str, Any]:
                 stage_index=inherited_stage,
                 has_passed=inherited_passed,
                 due_date=inherited_due,
+                early_step=inherited_step,
                 last_passed_at=inherited_last_passed,
                 topology_order=index,
                 active=True,
@@ -252,6 +256,7 @@ def reconcile_palace_units(session: Session, palace_id: int) -> dict[str, Any]:
                 current.stage_index = inherited_stage
                 current.has_passed = inherited_passed
                 current.due_date = inherited_due
+                current.early_step = inherited_step
                 action = "membership_updated"
             elif content_changed:
                 # Editing is not recall evidence. Keep the earned schedule intact.

@@ -432,7 +432,9 @@ def test_palace_real_retry_keeps_all_siblings_failure_history(db_session):
     # sibling due today with a same-day wait. They must not be rated before it.
     db_session.refresh(current)
     assert current.has_passed is True
-    assert current.due_date > local_day()
+    # The pass gets the 30-minute re-check before the day-level booking.
+    assert current.due_date == local_day()
+    assert current.intraday_step_pending is True
     for unit in units[1:]:
         db_session.refresh(unit)
         assert unit.due_date == local_day()

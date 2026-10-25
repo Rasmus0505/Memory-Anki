@@ -21,8 +21,16 @@ const manualRefreshGuardScript = String.raw`
     window.__memoryAnkiManualRefreshGuardInstalled__ = true
 
     const OriginalWebSocket = window.WebSocket
-    const suppressedTypes = new Set(['update', 'full-reload'])
+    const suppressedTypes = new Set(['update'])
     const suppressedCustomEvents = new Set(['vite:ws:disconnect'])
+    // 依赖重新预构建时 Vite 发的是 { path: "*" } 且不带 triggeredBy。这条刷新
+    // 必须放行：预构建会换掉 deps 的 ?v=hash，页面却还留着旧 hash 的模块；下次
+    // 懒加载路由用新 hash 再 import 一次 react，就有两份 React（Invalid hook
+    // call / useContext of null）。源码改动引起的整页刷新带 triggeredBy，
+    // 仍然按手动刷新处理。
+    const DEP_REBUILD_RELOAD_PATH = '*'
+    const isDependencyRebuildReload = (payload) =>
+      payload.path === DEP_REBUILD_RELOAD_PATH && !payload.triggeredBy
 
     function isViteHmrSocket(protocols) {
       if (Array.isArray(protocols)) return protocols.includes('vite-hmr')
@@ -33,10 +41,11 @@ const manualRefreshGuardScript = String.raw`
       if (typeof data !== 'string') return false
       try {
         const payload = JSON.parse(data)
+        if (!payload) return false
+        if (payload.type === 'full-reload') return !isDependencyRebuildReload(payload)
         return Boolean(
-          payload &&
-            (suppressedTypes.has(payload.type) ||
-              (payload.type === 'custom' && suppressedCustomEvents.has(payload.event))),
+          suppressedTypes.has(payload.type) ||
+            (payload.type === 'custom' && suppressedCustomEvents.has(payload.event)),
         )
       } catch {
         return false
@@ -317,7 +326,12 @@ export default defineConfig({
     },
   },
   server: {
-    hmr: false,
+    // 通道必须留着（不能写 hmr: false）：依赖重新预构建时 Vite 只能通过这条
+    // 通道发 full-reload 让页面换掉整张模块图。通道一关，页面会继续用旧
+    // ?v=hash 的 deps，懒加载路由再 import 一次 react，就出现两份 React
+    // （Invalid hook call）。源码热更新仍由 memory-anki-manual-refresh-guard
+    // 拦下来，保持“改代码要手动刷新才生效”。
+    hmr: true,
     // E2E must never reach the live service on 8012 (real synced data).
     proxy: process.env.MEMORY_ANKI_E2E === '1'
       ? {}

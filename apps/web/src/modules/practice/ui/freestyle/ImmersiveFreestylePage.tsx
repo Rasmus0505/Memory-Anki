@@ -29,6 +29,9 @@ import { FreestyleWaitingBanner } from '@/modules/practice/ui/freestyle/componen
 import { FreestylePageDialogs } from '@/modules/practice/ui/freestyle/FreestylePageDialogs'
 import { FreestyleCardArea } from '@/modules/practice/ui/freestyle/FreestyleCardArea'
 import { FreestyleNewUnitsBanner } from '@/modules/practice/ui/freestyle/components/FreestyleNewUnitsBanner'
+import { FreestyleBedtimeButton } from '@/modules/practice/ui/freestyle/components/FreestyleBedtimeButton'
+import { getFreestyleBedtimeCandidatesApi } from '@/modules/practice/ui/freestyle/api'
+import { ConfirmDialog } from '@/shared/components/ui/confirm-dialog'
 import {
   advanceNewUnitsBanner,
   countPendingNewUnits,
@@ -59,6 +62,8 @@ import { useFreestyleFullscreen } from '@/modules/practice/ui/freestyle/hooks/us
 import { useFreestyleDisplayPrefs } from '@/modules/practice/ui/freestyle/hooks/useFreestyleDisplayPrefs'
 import { useFreestyleSubjectMap } from '@/modules/practice/ui/freestyle/hooks/useFreestyleSubjectMap'
 import { useFreestyleRatingOutbox } from '@/modules/practice/ui/freestyle/hooks/useFreestyleRatingOutbox'
+import { useRatingSaveEntries } from '@/modules/practice/ui/freestyle/hooks/useFreestyleRatingSaves'
+import { unsavedRatingCardIds } from '@/modules/practice/ui/freestyle/model/ratingSaveStore'
 import { resetFreestyleCombo } from '@/modules/practice/ui/freestyle/model/freestyleComboStore'
 import { parseFreestyleEntryPalaceId, parseFreestyleEntryPalaceIds } from '@/modules/practice/ui/freestyle/model/freestyle-entry-scope'
 import {
@@ -146,6 +151,9 @@ export default function ImmersiveFreestylePage({
   const [saveError, setSaveError] = useState('')
   const { promptForAiOptions } = useAiRunConfigDialog()
   const [inlineEditing, setInlineEditing] = useState(false)
+  const [bedtimeOpen, setBedtimeOpen] = useState(false)
+  const [bedtimeCount, setBedtimeCount] = useState<number | null>(null)
+  const [bedtimeBusy, setBedtimeBusy] = useState(false)
   const { flipMode, mindmapZoom, updateFlipMode, updateMindmapZoom } = useFreestyleDisplayPrefs()
   const { freestyleFullscreen, toggleFreestyleFullscreen } = useFreestyleFullscreen()
   const subjectByPalaceId = useFreestyleSubjectMap()
@@ -186,6 +194,8 @@ export default function ImmersiveFreestylePage({
     pendingRestudyCardIds,
     planVersion,
     adoptRoundVersion,
+    appendBedtimeReview,
+    rateBedtimeCard,
     hydrateLiveRound,
     clearConfiguredOverlayQuiz,
     queueFrozen,
@@ -233,19 +243,58 @@ export default function ImmersiveFreestylePage({
   ])
 
   queueRef.current = cards
+  const openBedtimeDialog = useCallback(async () => {
+    const roundId = queueState.roundId
+    if (!roundId) return
+    setBedtimeOpen(true)
+    setBedtimeCount(null)
+    setBedtimeBusy(true)
+    try {
+      const result = await getFreestyleBedtimeCandidatesApi(roundId)
+      setBedtimeCount(result.count)
+    } catch {
+      setBedtimeOpen(false)
+      toast.error('读不到今天的已评分卡片，请稍后再试。')
+    } finally {
+      setBedtimeBusy(false)
+    }
+  }, [queueState.roundId])
+  const confirmBedtimeReview = useCallback(async () => {
+    setBedtimeBusy(true)
+    try {
+      const added = await appendBedtimeReview()
+      setBedtimeOpen(false)
+      if (added.length) toast.success(`已加入 ${added.length} 张睡前复习卡`)
+    } catch {
+      toast.error('加入睡前复习失败，请稍后再试。')
+    } finally {
+      setBedtimeBusy(false)
+    }
+  }, [appendBedtimeReview])
+  const bedtimeDescription = bedtimeCount == null
+    ? '正在读今天的学习记录…'
+    : bedtimeCount === 0
+      ? '今天还没有新的已评分卡片。先学一会儿，再回来点月亮。'
+      : `${bedtimeCount} 张今天已评分的卡会追加到当前队列末尾。睡前复习的评分只用来过一遍，不会改动原来的复习安排。`
   const { signalPageTurn } = useFreestyleFlowFeedback()
   const signalPageTurnWithDust = useCallback((direction: 'forward' | 'backward') => {
     signalPageTurn(direction)
     cue('page.turn', {})
   }, [signalPageTurn])
   const currentCard = cards[currentIndex] ?? null
+  /**
+   * Everything the feed presents has a this-round score. A same-day 回顾 still
+   * owed (`waiting`) is not a reason to refuse the ending: the pager must never
+   * dead-end. The closing page names what is still owed, and 结算 ends the round
+   * by minting the next one, exactly like a round that had nothing pending.
+   */
   const roundComplete = isFreestyleRoundComplete(
     cards,
     queueState.unitEncountersByCardId,
     queueState.completedIds,
     roundPlan,
     queueState.hiddenIds,
-  ) && !(waiting && waiting.count > 0)
+  )
   const {
     scrollRef,
     visualIndex,
@@ -587,6 +636,13 @@ export default function ImmersiveFreestylePage({
     acknowledgeQuizCard(card)
   }, [acknowledgeQuizCard, cards, currentIndex, progress.questionStates])
 
+  // A grade the outbox has not acknowledged is not a score yet: the rail must
+  // not fill for it, even if a plan echo elsewhere already spells it out.
+  const ratingSaveEntries = useRatingSaveEntries(queueState.roundId)
+  const unsavedRatingIds = useMemo(
+    () => unsavedRatingCardIds(ratingSaveEntries),
+    [ratingSaveEntries],
+  )
   const progressSummary = useMemo(
     () => buildFreestyleProgressSummary(
       cards,
@@ -595,6 +651,7 @@ export default function ImmersiveFreestylePage({
       queueState.hiddenIds,
       viewingCardId,
       queueState.unitEncountersByCardId,
+      unsavedRatingIds,
     ),
     [
       cards,
@@ -602,6 +659,7 @@ export default function ImmersiveFreestylePage({
       queueState.hiddenIds,
       queueState.unitEncountersByCardId,
       roundPlan,
+      unsavedRatingIds,
       viewingCardId,
     ],
   )
@@ -829,11 +887,17 @@ export default function ImmersiveFreestylePage({
    * Right-side 完成. While the round is open it keeps the seek behaviour; once
    * every presented unit is scored it is a real completion, so it settles the
    * rated units and leaves only the closing settlement (nothing to page back to).
+   * A same-day 回顾 still waiting is opened, not compressed: the server still
+   * holds those groups, and the closing page tells the learner what is owed.
    */
   const handlePagerComplete = useCallback(() => {
-    if (roundComplete && settleCompletedUnits()) return
+    if (roundComplete) {
+      if (!(waiting && waiting.count > 0) && settleCompletedUnits()) return
+      handleCompleteRound()
+      return
+    }
     handleCompleteRound()
-  }, [handleCompleteRound, roundComplete, settleCompletedUnits])
+  }, [handleCompleteRound, roundComplete, settleCompletedUnits, waiting])
   /**
    * 结算 on the closing page: end this round and open the next one. Nothing
    * here waits on a compress or a quiz choice, so a round with weak scores or
@@ -1027,6 +1091,7 @@ export default function ImmersiveFreestylePage({
           onReconcileUnits={reconcileUnitsFor}
           onLiveRevealMapChange={applyLiveRevealMap}
           onOpenScopeQuiz={openScopeQuiz}
+          onBedtimeRate={rateBedtimeCard}
           onQuestionStateChange={updateQuestionState}
           onChoiceResolve={onChoiceResolve}
           onShortAnswerSubmit={onShortAnswerSubmit}
@@ -1120,11 +1185,40 @@ export default function ImmersiveFreestylePage({
             pendingRestudyCardIds={pendingRestudyCardIds}
             canCompleteRound={canCompleteRound}
             completeTitle={completeTitle}
+            topSlot={
+              <FreestyleBedtimeButton
+                onClick={() => void openBedtimeDialog()}
+                busy={bedtimeBusy}
+              />
+            }
             onPrevious={navigatePrevious}
             onNext={navigateNext}
             onComplete={handlePagerComplete}
           />
         ) : null}
+
+        {/* The closing page hides the pager, but 睡前复习 is exactly what a
+            finished evening needs: keep the moon reachable on that page. */}
+        {!inlineEditing && !partialSettlement && viewingCompleteSlot && queueState.roundId ? (
+          <div className="pointer-events-none absolute right-1 top-[calc(50%+var(--fs-hud-half,2.25rem))] z-30 -translate-y-1/2 sm:right-3">
+            <div className="freestyle-stage-glass pointer-events-auto flex flex-col rounded-2xl border border-stage-line-strong p-1 sm:p-1.5">
+              <FreestyleBedtimeButton
+                onClick={() => void openBedtimeDialog()}
+                busy={bedtimeBusy}
+              />
+            </div>
+          </div>
+        ) : null}
+        <ConfirmDialog
+          open={bedtimeOpen}
+          onOpenChange={setBedtimeOpen}
+          title="睡前复习"
+          description={bedtimeDescription}
+          confirmText="开始睡前复习"
+          confirmDisabled={bedtimeBusy || bedtimeCount == null || bedtimeCount === 0}
+          onConfirm={() => { void confirmBedtimeReview() }}
+          onCancel={() => setBedtimeOpen(false)}
+        />
       </div>
     </TooltipProvider>
   )

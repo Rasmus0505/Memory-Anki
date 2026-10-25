@@ -5,6 +5,8 @@ import type {
   CreateFreestyleAiExplanationPayload,
   CreateFreestyleQuizAttemptPayload,
   FreestyleAiExplanationRecord,
+  FreestyleBedtimeAppendResponse,
+  FreestyleBedtimeCandidatesResponse,
   FreestyleContentType,
   FreestyleFeedResponse,
   FreestyleHistoryMode,
@@ -173,6 +175,63 @@ export function getFreestyleRoundApi(roundId: string, options?: Pick<RequestInit
     ...options,
     persistence: false,
   })
+}
+
+/** How many of today's rated cards are not in the bedtime queue yet. */
+export function getFreestyleBedtimeCandidatesApi(
+  roundId: string,
+  options?: Pick<RequestInit, 'signal'>,
+) {
+  return request<FreestyleBedtimeCandidatesResponse>(
+    `/freestyle/rounds/${encodeURIComponent(roundId)}/bedtime/candidates`,
+    { ...options, persistence: false },
+  )
+}
+
+/** Append today's newly rated cards to the end of the current round. */
+export function appendFreestyleBedtimeApi(
+  roundId: string,
+  payload: { operation_id: string; expected_version: number },
+) {
+  return request<FreestyleBedtimeAppendResponse>(
+    `/freestyle/rounds/${encodeURIComponent(roundId)}/bedtime`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      persistence: {
+        resourceKey: `freestyle-bedtime-append:${payload.operation_id}`,
+        description: '追加睡前复习',
+        replayMode: 'auto',
+      },
+    },
+  )
+}
+
+/**
+ * Record one bedtime grade. Plan-only: the server never writes the Reviews
+ * ledger, so the unit's due date and FSRS card stay untouched.
+ */
+export function rateFreestyleBedtimeCardApi(
+  roundId: string,
+  payload: {
+    operation_id: string
+    expected_version: number
+    card_id: string
+    rating: number
+  },
+) {
+  return request<{ round: FreestyleRoundStatePayload }>(
+    `/freestyle/rounds/${encodeURIComponent(roundId)}/bedtime/ratings`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      persistence: {
+        resourceKey: `freestyle-bedtime-rating:${payload.operation_id}`,
+        description: '记录睡前复习评分',
+        replayMode: 'auto',
+      },
+    },
+  )
 }
 
 /**

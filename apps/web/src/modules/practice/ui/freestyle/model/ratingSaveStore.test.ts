@@ -3,6 +3,7 @@ import type { FreestyleRoundStatePayload } from '@/shared/api/contracts'
 import {
   classifyRatingResponse,
   RatingSaveStore,
+  unsavedRatingCardIds,
   type RatingPostResponse,
   type RatingSaveDeps,
   type RatingSaveEvent,
@@ -66,9 +67,10 @@ function deferred<T>(): Deferred<T> {
 }
 
 /** A store whose network and clock are driven by the test. */
-function harness() {
+function harness(options: { autoRetry?: RatingSaveDeps['autoRetry']; extras?: Partial<RatingSaveDeps> } = {}) {
   const posts: Array<{ roundId: string; payload: Parameters<RatingSaveDeps['post']>[1]; reply: Deferred<RatingPostResponse> }> = []
-  const timers: Array<{ callback: () => void; cleared: boolean }> = []
+  const timers: Array<{ callback: () => void; ms: number; cleared: boolean }> = []
+  let clock = 0
   let ids = 0
   const undo = vi.fn<RatingSaveDeps['undo']>()
   const close = vi.fn<NonNullable<RatingSaveDeps['close']>>(() => Promise.resolve(null))
@@ -81,8 +83,8 @@ function harness() {
     undo,
     close,
     newOperationId: () => `op-${++ids}`,
-    setTimer: (callback) => {
-      const timer = { callback, cleared: false }
+    setTimer: (callback, ms) => {
+      const timer = { callback, ms, cleared: false }
       timers.push(timer)
       return timer
     },
@@ -90,11 +92,16 @@ function harness() {
       ;(handle as { cleared: boolean }).cleared = true
     },
     timeoutMs: 1_000,
+    now: () => clock,
+    autoRetry: { delayMs: 100, windowMs: 5_000, ...(options.autoRetry ?? {}) },
+    ...(options.extras ?? {}),
   })
   const events: RatingSaveEvent[] = []
   store.listen((event) => events.push(event))
+  /** Let every timer scheduled so far fire, moving the clock the way the browser would. */
   const fireTimeouts = () => timers.filter((timer) => !timer.cleared).forEach((timer) => {
     timer.cleared = true
+    clock += timer.ms
     timer.callback()
   })
   return { store, posts, events, undo, close, fireTimeouts }
@@ -160,8 +167,8 @@ describe('RatingSaveStore', () => {
     expect(events.some((event) => event.type === 'failed')).toBe(false)
   })
 
-  it('shows a timeout as 未保存 and upgrades it when the late answer succeeds', async () => {
-    const { store, posts, fireTimeouts } = harness()
+  it('reports a timeout as 未保存 once its retries are spent, and a late answer still saves it', async () => {
+    const { store, posts, fireTimeouts } = harness({ autoRetry: { maxAttempts: 1 } })
     rate(store)
     fireTimeouts()
     expect(store.getEntry('round-1', 'card-1')).toMatchObject({ status: 'failed', failure: 'timeout' })
@@ -173,8 +180,112 @@ describe('RatingSaveStore', () => {
     expect(store.failedCount('round-1')).toBe(0)
   })
 
-  it('retries a failed save with the same operation id', async () => {
+  it('keeps a timed-out tap 保存中 and resends it quietly with the same operation id', async () => {
+    const { store, posts, events, fireTimeouts } = harness()
+    rate(store)
+    fireTimeouts()
+    // Reported to nobody yet: the grade stays on the card as 保存中, the rail stays unfilled.
+    expect(store.getEntry('round-1', 'card-1')).toMatchObject({ status: 'saving', failure: null })
+    expect(store.failedCount('round-1')).toBe(0)
+    expect(events.some((event) => event.type === 'failed')).toBe(false)
+    fireTimeouts()
+    expect(posts).toHaveLength(2)
+    expect(posts[1].payload.operation_id).toBe(posts[0].payload.operation_id)
+    posts[1].reply.resolve({ item: item(3, 'op-1'), round: round() })
+    await flush()
+    expect(store.getEntry('round-1', 'card-1')).toMatchObject({ status: 'saved', ackedRating: 3 })
+  })
+
+  it('retries a rejected save within the window and only then reports 未保存', async () => {
+    const { store, posts, events, fireTimeouts } = harness({ autoRetry: { maxAttempts: 3 } })
+    rate(store)
+    for (const index of [0, 1]) {
+      posts[index].reply.reject(new Error('503'))
+      await flush()
+      expect(events.some((event) => event.type === 'failed')).toBe(false)
+      expect(store.getEntry('round-1', 'card-1')?.status).toBe('saving')
+      fireTimeouts()
+    }
+    expect(posts).toHaveLength(3)
+    posts[2].reply.reject(new Error('503'))
+    await flush()
+    expect(store.getEntry('round-1', 'card-1')).toMatchObject({ status: 'failed', failure: 'network' })
+    expect(events.filter((event) => event.type === 'failed')).toHaveLength(1)
+    expect(new Set(posts.map((post) => post.payload.operation_id)).size).toBe(1)
+  })
+
+  it('stops retrying when the window cannot fit another attempt', async () => {
+    const { store, posts, fireTimeouts } = harness({ autoRetry: { windowMs: 2_000 } })
+    rate(store)
+    // 1000ms timeout + 100ms delay + 1000ms of the next attempt no longer fits 2s.
+    fireTimeouts()
+    expect(store.getEntry('round-1', 'card-1')).toMatchObject({ status: 'failed', failure: 'timeout' })
+    expect(posts).toHaveLength(1)
+  })
+
+  it('does not retry a failure another attempt cannot fix', async () => {
     const { store, posts } = harness()
+    rate(store)
+    posts[0].reply.resolve({ item: item(3, 'op-1', 'other-unit'), round: round() })
+    await flush()
+    expect(store.getEntry('round-1', 'card-1')).toMatchObject({ status: 'failed', failure: 'identity' })
+    expect(posts).toHaveLength(1)
+  })
+
+  it('drops a pending automatic retry when a newer tap owns the card', async () => {
+    const { store, posts, fireTimeouts } = harness()
+    rate(store, 'card-1', 3)
+    posts[0].reply.reject(new Error('down'))
+    await flush()
+    expect(store.getEntry('round-1', 'card-1')?.status).toBe('saving')
+    rate(store, 'card-1', 4)
+    expect(posts).toHaveLength(2)
+    fireTimeouts()
+    expect(posts).toHaveLength(2)
+    expect(posts[1].payload.rating).toBe(4)
+  })
+
+  it('keeps a pending automatic retry when there is no acknowledged grade to clear', async () => {
+    const { store, posts, fireTimeouts } = harness()
+    rate(store)
+    posts[0].reply.reject(new Error('down'))
+    await flush()
+    expect(store.requestUndo({ roundId: 'round-1', cardId: 'card-1', clearAll: true })).toBe(false)
+    fireTimeouts()
+    expect(posts).toHaveLength(2)
+    expect(posts[1].payload.operation_id).toBe(posts[0].payload.operation_id)
+  })
+
+  it('stays busy through a quiet retry, so leave-close waits for the resend', async () => {
+    const { store, posts, fireTimeouts } = harness()
+    rate(store)
+    posts[0].reply.reject(new Error('down'))
+    await flush()
+    // The lane is free, but the card is still saving: the glance must not be cancelled.
+    expect(store.isBusy('round-1', 'card-1')).toBe(true)
+    let idle = false
+    void store.whenIdle('round-1', 'card-1').then(() => { idle = true })
+    fireTimeouts()
+    expect(idle).toBe(false)
+    posts[1].reply.resolve({ item: item(3, 'op-1'), round: round() })
+    await flush()
+    expect(idle).toBe(true)
+    expect(store.isBusy('round-1', 'card-1')).toBe(false)
+  })
+
+  it('does not resend after a late acknowledgement', async () => {
+    const { store, posts, fireTimeouts } = harness()
+    rate(store)
+    fireTimeouts()
+    posts[0].reply.resolve({ item: item(3, 'op-1'), round: round() })
+    await flush()
+    fireTimeouts()
+    expect(posts).toHaveLength(1)
+    expect(store.getEntry('round-1', 'card-1')?.status).toBe('saved')
+  })
+
+  it('retries a 未保存 card by hand with the same operation id', async () => {
+    const { store, posts, fireTimeouts } = harness({ autoRetry: { maxAttempts: 1 } })
     rate(store)
     posts[0].reply.reject(new Error('503'))
     await flush()
@@ -185,10 +296,12 @@ describe('RatingSaveStore', () => {
     posts[1].reply.resolve({ item: null, round: round({ duplicate: true }) })
     await flush()
     expect(store.getEntry('round-1', 'card-1')?.status).toBe('saved')
+    fireTimeouts()
+    expect(posts).toHaveLength(2)
   })
 
   it('retries every 未保存 item of a round from the HUD', async () => {
-    const { store, posts } = harness()
+    const { store, posts } = harness({ autoRetry: { maxAttempts: 1 } })
     rate(store, 'a')
     rate(store, 'b')
     posts[0].reply.reject(new Error('down'))
@@ -339,11 +452,97 @@ describe('applyRatingSaveEvent', () => {
 
   it('reports only the current failure, and drops a stale card', () => {
     const ledger = handlers()
-    const job = { key: 'k', roundId: 'round-1', cardId: 'card-1', occurrenceId: '', rating: 3 as const, planVersion: 1, operationId: 'op', sequence: 1 }
+    const job = {
+      key: 'k', roundId: 'round-1', cardId: 'card-1', occurrenceId: '', rating: 3 as const,
+      planVersion: 1, operationId: 'op', sequence: 1, attempt: 1, startedAt: 0,
+    }
     applyRatingSaveEvent({ type: 'failed', roundId: 'round-1', cardId: 'card-1', job, failure: 'network', error: new Error('x'), current: false }, ledger)
     expect(ledger.saveFailed).not.toHaveBeenCalled()
     applyRatingSaveEvent({ type: 'failed', roundId: 'round-1', cardId: 'card-1', job, failure: 'stale', error: new Error('not due'), current: true }, ledger)
     expect(ledger.staleDrop).toHaveBeenCalledWith('card-1', expect.any(Error))
     expect(ledger.saveFailed).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('superseded attempts', () => {
+  function supersededError() {
+    return Object.assign(new Error('已有后续真实练习，不能修改或撤销较早的评分'), {
+      status: 400,
+      detailCode: 'superseded_attempt',
+    })
+  }
+
+  it('never retries a write the server rejected as superseded', async () => {
+    const persistIntent = vi.fn(() => Promise.resolve(null))
+    const clearIntent = vi.fn(() => Promise.resolve(null))
+    const h = harness({
+      extras: {
+        persistIntent,
+        clearIntent,
+        isSupersededError: (error) => (error as { detailCode?: string }).detailCode === 'superseded_attempt',
+      },
+    })
+
+    rate(h.store)
+    await flush()
+    expect(h.posts).toHaveLength(1)
+    h.posts[0].reply.reject(supersededError())
+    await flush()
+    h.fireTimeouts()
+    await flush()
+
+    // 再发一次也只会得到同一个 400：不自动重试、不写「未保存」记录。
+    expect(h.posts).toHaveLength(1)
+    expect(persistIntent).not.toHaveBeenCalled()
+    expect(clearIntent).toHaveBeenCalledTimes(1)
+    const entry = h.store.getEntry('round-1', 'card-1')
+    expect(entry?.status).toBe('failed')
+    expect(entry?.failure).toBe('superseded')
+    // 补不上的那条不能一直挂在 HUD 的「未保存」计数上。
+    expect(h.store.failedCount('round-1')).toBe(0)
+  })
+
+  it('still retries the same transport failure when it is not superseded', async () => {
+    const h = harness({
+      extras: { isSupersededError: () => false },
+    })
+
+    rate(h.store)
+    await flush()
+    h.posts[0].reply.reject(Object.assign(new Error('network'), { status: 502 }))
+    await flush()
+    h.fireTimeouts()
+    await flush()
+
+    expect(h.posts).toHaveLength(2)
+  })
+
+  it('treats a superseded glance start as terminal instead of a retryable prepare failure', async () => {
+    // 打开 glance 时服务端才回答「已有后续练习」：重发永远同一个 400。
+    const persistIntent = vi.fn(() => Promise.resolve(null))
+    const clearIntent = vi.fn(() => Promise.resolve(null))
+    const prepare = vi.fn(() => Promise.reject(supersededError()))
+    const h = harness({
+      extras: {
+        persistIntent,
+        clearIntent,
+        isSupersededError: (error) => (error as { detailCode?: string }).detailCode === 'superseded_attempt',
+      },
+    })
+
+    rate(h.store, 'card-1', 3, { target: null, prepare })
+    await flush()
+    h.fireTimeouts()
+    await flush()
+
+    expect(prepare).toHaveBeenCalledTimes(1)
+    const entry = h.store.getEntry('round-1', 'card-1')
+    expect(entry?.failure).toBe('superseded')
+    expect(h.store.failedCount('round-1')).toBe(0)
+    // 「未保存」记录不写、旧记录清掉：HUD 与进度条不再等一个补不上的评分。
+    expect(persistIntent).not.toHaveBeenCalled()
+    expect(clearIntent).toHaveBeenCalledTimes(1)
+    expect(unsavedRatingCardIds(h.store.getRoundEntries('round-1'))).toEqual(new Set())
+    expect(h.store.retryFailed('round-1')).toBe(0)
   })
 })

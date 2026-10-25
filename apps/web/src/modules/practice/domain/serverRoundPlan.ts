@@ -110,6 +110,7 @@ export function cardFromOriginalSnapshot(
     node_count: 0,
     unit_id: unitId,
     unit_revision: revision,
+    ...(item.bedtime ? { bedtime: true } : {}),
   }
 }
 
@@ -131,6 +132,13 @@ export function cardsForServerPlan(
   const originalById = new Map(
     (plan.original_cards || []).map((item) => [item.card_id, item] as const),
   )
+  /** Cards appended by 睡前复习: the rail marks them and their grade never reschedules. */
+  const bedtimeIds = new Set(
+    (plan.original_cards || [])
+      .filter((item) => item.bedtime)
+      .map((item) => String(item.card_id || '').trim())
+      .filter(Boolean),
+  )
   const ordered: FreestyleCard[] = []
   const seen = new Set<string>()
   const retrySources = new Set<string>()
@@ -138,6 +146,17 @@ export function cardsForServerPlan(
     (plan.excluded_ids || []).map((id) => String(id || '').trim()).filter(Boolean),
   )
   const skippedIds = new Set([...excludedIds, ...(plan.compressed_ids || []).map((id) => String(id || '').trim()).filter(Boolean)])
+  /**
+   * A 重练 the learner already rated this round is history, not scheduling: it
+   * stays in the feed so swipe-back / 改分 can still reach it. Only 结算
+   * (compressed) or a cancelled occurrence takes it off.
+   */
+  const answeredOccurrenceIds = new Set(
+    (plan.occurrences || [])
+      .filter((item) => String(item?.status || '').trim() === 'completed')
+      .map((item) => String(item?.occurrence_id || '').trim())
+      .filter(Boolean),
+  )
   const excludedUnits = new Set<string>()
   for (const id of excludedIds) {
     const fromId = reviewUnitIdFromCardId(id)
@@ -161,6 +180,11 @@ export function cardsForServerPlan(
       retrySources.add(source)
     }
     seen.add(card.id)
+    if (card.type === 'mindmap_branch') {
+      const bedtime = bedtimeIds.has(card.id) || bedtimeIds.has(sourceCardId(card) || '')
+      ordered.push(bedtime ? { ...card, bedtime: true } : { ...card, bedtime: false })
+      return
+    }
     ordered.push(card)
   }
 
@@ -239,7 +263,12 @@ export function cardsForServerPlan(
     const status = occurrenceStatusBySource.get(source)
     // Missing: the rating has not echoed yet. Pending: leave_card has not
     // inserted it. Cancelled or already placed copies must not come back.
-    if (status !== undefined && status !== 'pending') continue
+    // A completed occurrence is a rated 重练 and stays as this-round history.
+    if (
+      status !== undefined
+      && status !== 'pending'
+      && !answeredOccurrenceIds.has(String(card.id || '').trim())
+    ) continue
     const localIndex = cards.indexOf(card)
     let predecessorId = ''
     for (let index = localIndex - 1; index >= 0; index -= 1) {

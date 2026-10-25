@@ -54,6 +54,7 @@ import {
   usePalaceDocumentVersion,
 } from '@/modules/practice/ui/freestyle/model/freestyleUnitPreviewCache'
 import { useRatingSaveEntries } from '@/modules/practice/ui/freestyle/hooks/useFreestyleRatingSaves'
+import { unsavedRatingCardIds } from '@/modules/practice/ui/freestyle/model/ratingSaveStore'
 import { cn } from '@/shared/lib/utils'
 
 /** What a 多选 评分 sent: queued per card, already at that grade, or not rateable. */
@@ -214,7 +215,10 @@ export function FreestyleRoundSheet({
   }, [subjectByPalaceId, workingRows])
   const currentCardId = cards[currentIndex]?.id ?? queueState.currentCardId
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds])
+  const unsavedRatingIds = useMemo(() => unsavedRatingCardIds(saveEntries), [saveEntries])
   const fillStatus = useCallback((entry: FreestyleRoundPlanCard): FreestyleRoundPlanCardStatus => {
+    // Not saved is not done: a row must not read 已过 while its own chip says 未保存.
+    if (unsavedRatingIds.has(entry.cardId)) return 'active'
     const liveCard = liveById.get(entry.cardId)
     const planStatus = liveCard
       ? planCardStatus(liveCard, roundPlan, queueState.completedIds, queueState.hiddenIds, currentCardId)
@@ -236,6 +240,7 @@ export function FreestyleRoundSheet({
     queueState.hiddenIds,
     queueState.unitEncountersByCardId,
     roundPlan,
+    unsavedRatingIds,
   ])
   const compressibleIds = useMemo(
     () => compressibleRoundPlanIds(roundPlan, {
@@ -253,6 +258,7 @@ export function FreestyleRoundSheet({
       queueState.hiddenIds,
       currentCardId ?? null,
       queueState.unitEncountersByCardId,
+      unsavedRatingIds,
     ),
     [
       cards,
@@ -261,6 +267,7 @@ export function FreestyleRoundSheet({
       queueState.hiddenIds,
       queueState.unitEncountersByCardId,
       roundPlan,
+      unsavedRatingIds,
     ],
   )
   const segmentById = useMemo(() => {

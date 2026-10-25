@@ -1,4 +1,4 @@
-import type { MouseEvent } from 'react'
+import type { MouseEvent, ReactNode } from 'react'
 import { Check, ChevronDown, ChevronUp } from 'lucide-react'
 import { FX_ANCHORS } from '@/shared/fx'
 
@@ -11,6 +11,7 @@ export function FreestyleFeedPager({
   canComplete,
   completeTitle,
   previousTitle = '上一张：返回上一个单元',
+  topSlot = null,
   onPrevious,
   onNext,
   onComplete,
@@ -20,6 +21,8 @@ export function FreestyleFeedPager({
   canComplete: boolean
   completeTitle: string
   previousTitle?: string
+  /** Extra action above the paging buttons, inside the same glass column. */
+  topSlot?: ReactNode
   onPrevious: () => void
   onNext: () => void
   onComplete: () => void
@@ -42,6 +45,12 @@ export function FreestyleFeedPager({
         data-fx-anchor={FX_ANCHORS.feedPager}
         className="freestyle-stage-glass pointer-events-auto flex flex-col gap-1 rounded-2xl border border-stage-line-strong p-1 sm:p-1.5"
       >
+        {topSlot ? (
+          <>
+            {topSlot}
+            <span aria-hidden className="mx-1 h-px bg-stage-line" />
+          </>
+        ) : null}
         <button
           type="button"
           className={pagerButtonClass}

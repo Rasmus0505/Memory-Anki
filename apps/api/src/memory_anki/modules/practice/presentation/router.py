@@ -4,6 +4,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.deps import session_dep
+from memory_anki.modules.memory.api import domain_error_detail
+from memory_anki.modules.practice.application.bedtime_round_service import (
+    append_bedtime_review,
+    bedtime_candidates,
+    rate_bedtime_card,
+)
 from memory_anki.modules.practice.application.feed_service import (
     FREESTYLE_RANGE_ALL,
     build_freestyle_feed,
@@ -41,6 +47,8 @@ from memory_anki.modules.practice.application.round_state_service import (
     start_new_round,
 )
 from memory_anki.modules.practice.domain.schemas import (
+    FreestyleBedtimeAppendRequest,
+    FreestyleBedtimeRatingRequest,
     FreestyleOverlayQuizDropPalacesRequest,
     FreestyleOverlayQuizEnsureRequest,
     FreestyleOverlayQuizProgressRequest,
@@ -365,7 +373,54 @@ def api_freestyle_round_rating(
             palace_batch=data.palace_batch,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=domain_error_detail(exc)) from exc
+
+
+@router.get("/freestyle/rounds/{round_id}/bedtime/candidates")
+def api_freestyle_bedtime_candidates(
+    round_id: str,
+    session: Session = Depends(session_dep),
+):
+    try:
+        return bedtime_candidates(session, round_id=round_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=domain_error_detail(exc)) from exc
+
+
+@router.post("/freestyle/rounds/{round_id}/bedtime")
+def api_freestyle_bedtime_append(
+    round_id: str,
+    data: FreestyleBedtimeAppendRequest,
+    session: Session = Depends(session_dep),
+):
+    try:
+        return append_bedtime_review(
+            session,
+            round_id=round_id,
+            operation_id=data.operation_id,
+            expected_version=data.expected_version,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=domain_error_detail(exc)) from exc
+
+
+@router.post("/freestyle/rounds/{round_id}/bedtime/ratings")
+def api_freestyle_bedtime_rating(
+    round_id: str,
+    data: FreestyleBedtimeRatingRequest,
+    session: Session = Depends(session_dep),
+):
+    try:
+        return rate_bedtime_card(
+            session,
+            round_id=round_id,
+            operation_id=data.operation_id,
+            expected_version=data.expected_version,
+            card_id=data.card_id,
+            rating=data.rating,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=domain_error_detail(exc)) from exc
 
 
 @router.post("/freestyle/question-attempts")

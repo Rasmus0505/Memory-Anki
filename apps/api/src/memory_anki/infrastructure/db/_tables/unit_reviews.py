@@ -68,6 +68,11 @@ class ReviewUnitState(Base):
     fsrs_due_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     fsrs_last_review: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     fsrs_scheduler_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Fixed early-ladder position: how many day-level fixed reviews the unit has
+    # completed (0..3). The first four reviews are product-fixed (30 minutes,
+    # then day 2, day 3, day 5); from ``EARLY_LADDER_STEPS`` onward FSRS books.
+    # NULL means "not recorded yet" and is inferred from the booked gap.
+    early_step: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Same-day spacing on top of FSRS. ``intraday_due_at`` is "not before this
     # instant" (UTC-naive); the other columns are the ladder's memory for the
     # current study day, reset when ``intraday_day`` changes. See unit_intraday.py.

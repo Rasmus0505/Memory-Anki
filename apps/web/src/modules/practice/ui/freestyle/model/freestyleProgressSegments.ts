@@ -21,6 +21,8 @@ import { palaceAccentToneClass } from '@/modules/practice/ui/freestyle/model/fre
 
 export type FreestyleSegmentTone = 'done' | 'retry' | 'current' | 'pending'
 
+const EMPTY_UNSAVED_IDS: ReadonlySet<string> = new Set()
+
 export interface FreestyleProgressSegment {
   cardId: string
   tone: FreestyleSegmentTone
@@ -44,6 +46,8 @@ export interface FreestyleProgressSegment {
   isNew?: boolean
   /** Quiz question tick (题目, green). Overrides the new/review hue. */
   isQuiz?: boolean
+  /** 睡前复习 tick: marked with a moon; its grade never reschedules. */
+  bedtime?: boolean
 }
 
 /**
@@ -542,6 +546,19 @@ export function progressSegmentHoverLabel(
   return [place, titled, segmentStatusLabel(segment), day].filter(Boolean).join(' · ')
 }
 
+/**
+ * Fill for one rail tick. A card whose rating was never acknowledged is never
+ * filled, whatever the plan echo says: the learner only sees a solid tick for a
+ * score the server holds (see `unsavedRatingCardIds`).
+ */
+function progressTone(
+  status: FreestyleRoundPlanCardStatus,
+  unsaved: boolean,
+): FreestyleSegmentTone | null {
+  if (unsaved && status !== 'excluded') return 'pending'
+  return segmentTone(status)
+}
+
 export function buildFreestyleProgressSummary(
   cards: FreestyleCard[],
   roundPlan: FreestyleRoundPlanState | null,
@@ -549,6 +566,8 @@ export function buildFreestyleProgressSummary(
   hiddenIds: string[],
   currentCardId: string | null,
   encounters: Record<string, FreestyleUnitEncounterState> = {},
+  /** Ratings tapped but not yet saved: unfilled until the outbox acknowledges them. */
+  unsavedCardIds: ReadonlySet<string> = EMPTY_UNSAVED_IDS,
 ): FreestyleProgressSummary {
   const completed = new Set(completedIds.map(String))
   const hidden = new Set(hiddenIds.map(String))
@@ -578,6 +597,7 @@ export function buildFreestyleProgressSummary(
         palaceDone: false,
         viewing: currentCardId === id,
         removed: true,
+        bedtime: card?.type === 'mindmap_branch' && card.bedtime === true,
         kind: retryKind ? 'retry' : 'source',
         enteredOn: planEntry.enteredOn,
         sourceLabel: card
@@ -605,7 +625,8 @@ export function buildFreestyleProgressSummary(
       const encounter = encounters[id]
       const scored = isOccurrenceScored(id, { completedIds, encounters, roundPlan })
       const status = visualPlanStatus(planEntry.status, encounter, planEntry.status, scored)
-      const tone = segmentTone(status)
+      const unsaved = unsavedCardIds.has(id)
+      const tone = progressTone(status, unsaved)
       if (!tone) continue
       segments.push({
         cardId: id,
@@ -630,7 +651,7 @@ export function buildFreestyleProgressSummary(
       })
       if (retryKind) retryInserted += 1
       else baseItems.push({ id, sourceId })
-      if (tone === 'done' || completed.has(id) || completed.has(sourceId) || scored) {
+      if (!unsaved && (tone === 'done' || completed.has(id) || completed.has(sourceId) || scored)) {
         passedSources.add(sourceId || id)
       }
       continue
@@ -646,7 +667,8 @@ export function buildFreestyleProgressSummary(
         planEntry?.status,
         scored,
       )
-      const tone = segmentTone(status)
+      const unsaved = unsavedCardIds.has(card.id)
+      const tone = progressTone(status, unsaved)
       if (!tone) continue
       const waitingRetry = !retryKind && planEntry?.status === 'retry'
       segments.push({
@@ -655,6 +677,7 @@ export function buildFreestyleProgressSummary(
         palaceId: cardPalaceId(card),
         palaceDone: false,
         viewing: currentCardId === card.id,
+        bedtime: card.type === 'mindmap_branch' && card.bedtime === true,
         kind: retryKind ? 'retry' : 'source',
         enteredOn: planEntry?.enteredOn,
         sourceLabel: progressCardLabel(card, cards, roundPlan),
@@ -677,9 +700,12 @@ export function buildFreestyleProgressSummary(
         baseItems.push({ id: card.id, sourceId })
       }
       if (
-        tone === 'done'
-        || completed.has(card.id)
-        || completed.has(sourceId)
+        !unsaved
+        && (
+          tone === 'done'
+          || completed.has(card.id)
+          || completed.has(sourceId)
+        )
       ) {
         passedSources.add(sourceId || card.id)
       }

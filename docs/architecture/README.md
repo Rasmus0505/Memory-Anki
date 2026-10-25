@@ -103,7 +103,8 @@ Frontend lint is a zero-warning contract. The `apps/web` lint script runs ESLint
 - AI run workspace lifecycle: `docs/architecture/ai-run-workspace.md`
 - Prompt catalog boundary: `docs/architecture/prompt-catalog.md`
 - Review context boundary: `docs/architecture/review-boundary.md`
-- Review scheduling is FSRS (`memory/application/unit_fsrs_adapter.py`; `stage_index` is a display projection only): `docs/architecture/review-boundary.md`
+- Review scheduling: fixed four reviews (30 minutes → day 2 → day 3 → day 5) then FSRS, with 睡前复习 appending today's rated cards as plan-only passes (`memory/application/unit_fsrs_adapter.py`, `practice/application/bedtime_*`; `stage_index` is a display projection only): `docs/architecture/review-boundary.md`
+- 面向产品体验的排期说明（天级 / 分钟级间隔、参数位置）：`docs/复习排期设计.md`
 - Read-only historical comparison of the retired ladder vs FSRS: `python tools/review_fsrs_shadow.py`
 - Live study presence (PWA/desktop mirror): `docs/architecture/live-study-presence.md`
 - Read-model purity: `docs/architecture/read-models.md`

@@ -3,6 +3,10 @@
 from .application.learning_progress_evidence import read_learning_progress_evidence
 from .application.subject_memory_ladder import get_subject_memory_ladder
 from .application.unit_ladder_progress import get_palace_ladder_progress
+from .application.unit_retention_read import (
+    RetentionSummary,
+    summarize_due_retention,
+)
 from .application.unit_review_preview import get_unit_review_preview
 from .application.unit_review_projection import (
     list_active_review_unit_ids,
@@ -18,9 +22,11 @@ from .application.unit_review_queue_read import (
     list_round_unit_ratings,
     list_trusted_due_units_for_queue,
     list_unit_node_members,
+    list_units_rated_on,
     summarize_waiting_units,
 )
 from .application.unit_review_service import (
+    LaterAttemptExistsError,
     adjust_unit_schedule,
     cancel_unrated_unit_review_encounter,
     clamp_due_dates_for_sprint,
@@ -34,6 +40,7 @@ from .application.unit_review_service import (
     open_unit_review_encounter,
     rate_palace_due_units,
     rate_review_unit,
+    rating_attempt_is_superseded,
     reconcile_palace_units,
     remove_unit_permanently,
     rerate_unit_rating,
@@ -60,7 +67,22 @@ from .application.unit_scheduler import (
     normalize_rating,
 )
 
+
+def domain_error_detail(exc: Exception) -> str | dict:
+    """Turn a rating-domain rejection into the HTTP ``detail`` the client sees.
+
+    A rating that targets an attempt already superseded by later practice can
+    never succeed on retry. Without a code the client only sees "400", keeps the
+    tap as 未保存 and replays it on every focus.
+    """
+    if isinstance(exc, LaterAttemptExistsError):
+        return {"code": "superseded_attempt", "message": str(exc)}
+    return str(exc)
+
+
 __all__ = [
+    "LaterAttemptExistsError",
+    "domain_error_detail",
     "read_learning_progress_evidence",
     "get_unit_review_preview",
     "warm_unit_projection_cache",
@@ -79,6 +101,8 @@ __all__ = [
     "get_palace_review_summary",
     "get_review_queue_summary",
     "count_rating_days",
+    "RetentionSummary",
+    "summarize_due_retention",
     "count_unit_review_ratings",
     "get_unit_review_weekly_stats",
     "get_unit_review_completion",
@@ -90,6 +114,7 @@ __all__ = [
     "count_active_units_by_palace",
     "count_units_due_on",
     "list_trusted_due_units_for_queue",
+    "list_units_rated_on",
     "summarize_waiting_units",
     "list_unit_node_members",
     "list_palace_unit_pass_states",
@@ -99,6 +124,7 @@ __all__ = [
     "open_unit_review_encounter",
     "rate_palace_due_units",
     "rate_review_unit",
+    "rating_attempt_is_superseded",
     "rerate_unit_rating",
     "rerate_unit_ratings",
     "reconcile_palace_units",

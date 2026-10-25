@@ -209,8 +209,23 @@ def test_fixed_schedule_first_pass_failure_penalty_and_caps():
         intraday=IntradayState(day=today, retries=1),
     )
     assert remembered_after_hard.stage_index == 1
-    # A recovery after today's failure graduates to tomorrow.
-    assert remembered_after_hard.due_date == today + timedelta(days=1)
+    # 重练通过后先过一遍 30 分钟复查；复查通过才排到明天。
+    assert remembered_after_hard.due_date == today
+    assert remembered_after_hard.intraday_kind == "step"
+    assert remembered_after_hard.retry_after_minutes == 30
+
+    rechecked = rate_unit(
+        stage_index=remembered_after_hard.stage_index,
+        has_passed=True,
+        rating=3,
+        had_failure_in_encounter=False,
+        today=today,
+        fsrs_state=remembered_after_hard.fsrs_state,
+        intraday=IntradayState(day=today, retries=1, step_pending=True),
+        booked_due_date=today,
+        early_step=remembered_after_hard.early_step,
+    )
+    assert rechecked.due_date == today + timedelta(days=1)
 
     first_remembered = rate_unit(
         stage_index=0,

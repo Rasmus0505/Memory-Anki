@@ -56,6 +56,7 @@ export function FreestyleCardArea({
   onReconcileUnits,
   onLiveRevealMapChange,
   onOpenScopeQuiz,
+  onBedtimeRate,
   onQuestionStateChange,
   onChoiceResolve,
   onShortAnswerSubmit,
@@ -108,6 +109,7 @@ export function FreestyleCardArea({
   onReconcileUnits: (cardId: string) => void
   onLiveRevealMapChange: FeedProps['onLiveRevealMapChange']
   onOpenScopeQuiz: FeedProps['onOpenScopeQuiz']
+  onBedtimeRate: FeedProps['onBedtimeRate']
   onQuestionStateChange: FeedProps['onQuestionStateChange']
   onChoiceResolve: FeedProps['onChoiceResolve']
   onShortAnswerSubmit: FeedProps['onShortAnswerSubmit']
@@ -186,6 +188,7 @@ export function FreestyleCardArea({
               onUnitsReconciled={() => onReconcileUnits(card.id)}
               onLiveRevealMapChange={onLiveRevealMapChange}
               onOpenScopeQuiz={onOpenScopeQuiz}
+              onBedtimeRate={onBedtimeRate}
               onQuestionStateChange={onQuestionStateChange}
               onChoiceResolve={onChoiceResolve}
               onShortAnswerSubmit={onShortAnswerSubmit}
@@ -232,6 +235,8 @@ export function FreestyleCardArea({
           quizPalaceCount={quizPalaceCount}
           dueTomorrowCount={dueTomorrowCount}
           settlementMeta={settlementMeta}
+          pendingReviewCount={waiting?.count ?? 0}
+          nextReviewAt={waiting?.next_ready_at ?? null}
           onClearQuizProgress={onClearQuizProgress}
           onSettle={onSettle}
           onCancelSettlement={onCancelSettlement}

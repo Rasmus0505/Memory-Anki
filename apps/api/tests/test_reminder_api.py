@@ -101,9 +101,19 @@ def test_preview_sends_a_sample_of_the_requested_kind(client, monkeypatch) -> No
         assert response.json()["kind"] == kind
     assert len(sent) == 5
     titles = " ".join(title for title, _ in sent)
-    assert "到期" in titles and "还在吗" in titles and "整点" not in titles
+    assert "到期" in titles and "没动了" in titles and "整点" not in titles
 
 
 def test_preview_rejects_an_unknown_kind(client) -> None:
     response = client.post("/api/v1/reminders/preview", json={"kind": "shout"})
     assert response.status_code == 400
+
+
+def test_activity_beacon_marks_presence(client) -> None:
+    from memory_anki.modules.reminders.application import presence
+
+    presence.reset()
+    response = client.post("/api/v1/reminders/activity")
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+    assert presence.last_seen() is not None

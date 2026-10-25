@@ -68,6 +68,8 @@ export interface ConfirmDialogProps {
   tone?: 'default' | 'danger'
   confirmText?: string
   cancelText?: string
+  /** The action is not available yet (loading / nothing to apply). */
+  confirmDisabled?: boolean
   onConfirm: () => void
   onCancel?: () => void
 }
@@ -88,6 +90,7 @@ export function ConfirmDialog({
   tone = 'default',
   confirmText = '确认',
   cancelText = '取消',
+  confirmDisabled = false,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -121,7 +124,11 @@ export function ConfirmDialog({
           <Button variant="outline" onClick={() => handleOpenChange(false)}>
             {cancelText}
           </Button>
-          <Button variant={tone === 'danger' ? 'destructive' : 'default'} onClick={handleConfirm}>
+          <Button
+            variant={tone === 'danger' ? 'destructive' : 'default'}
+            disabled={confirmDisabled}
+            onClick={handleConfirm}
+          >
             {confirmText}
           </Button>
         </DialogFooter>

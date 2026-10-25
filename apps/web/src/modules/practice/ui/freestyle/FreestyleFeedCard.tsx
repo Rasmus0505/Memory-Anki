@@ -49,6 +49,7 @@ export function FreestyleFeedCard({
   onUnitsReconciled,
   onLiveRevealMapChange,
   onOpenScopeQuiz,
+  onBedtimeRate,
   onQuestionStateChange,
   onChoiceResolve,
   onShortAnswerSubmit,
@@ -87,6 +88,7 @@ export function FreestyleFeedCard({
   onUnitsReconciled: UnitProps['onUnitsReconciled']
   onLiveRevealMapChange: UnitProps['onLiveRevealMapChange']
   onOpenScopeQuiz: UnitProps['onOpenScopeQuiz']
+  onBedtimeRate: UnitProps['onBedtimeRate']
   onQuestionStateChange: (questionId: number, updater: Parameters<QuizProps['onStateChange']>[0]) => void
   onChoiceResolve: (card: FreestyleQuizCard, optionId: string | string[], isCorrect: boolean) => void
   onShortAnswerSubmit: (card: FreestyleQuizCard) => void
@@ -145,6 +147,7 @@ export function FreestyleFeedCard({
                   liveRevealMap={index === currentIndex ? liveRevealMap : null}
                   onLiveRevealMapChange={onLiveRevealMapChange}
                   onOpenScopeQuiz={onOpenScopeQuiz}
+                  onBedtimeRate={onBedtimeRate}
                 />
               ) : (
                 <StaleUnitReviewCard
