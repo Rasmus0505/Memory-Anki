@@ -364,17 +364,22 @@ appended and that the grades do not move the schedule. Confirming calls
 plan with `bedtime: true`, and jumps to the first new card. The button stays reachable on
 the closing page, where the pager itself steps aside.
 
-- **What is appended:** review units with a live rating operation in the current study day,
-  in the round's workspace (all palaces for 随心, one palace for `p<id>`), minus units this
-  round still owes (unrated or live retry) and units already in the bedtime set. Clicking
-  the moon again after rating more cards appends only the new ones; no card is added twice.
-- **Grading:** a bedtime card renders from the read-only unit preview (no session, no
-  encounter) and its map is reveal-only. Its rating bar is
+- **What is appended:** one card per **palace** with at least one live rating
+  operation in the current study day, in the round's workspace (all palaces for
+  随心, one palace for `p<id>`). The palace is the bedtime unit — the map covers
+  every node and one grade covers the whole palace; it is never cut into
+  permanent-mark slices. A palace already carrying a bedtime card is never
+  appended again, so rating more units inside it does not queue a second pass.
+  The card id is `bedtime:palace:<palace id>:<study day>`; its `unit_id` is a
+  real rated unit used only as the read-only preview handle.
+- **Grading:** a bedtime card renders from the read-only unit preview (no
+  session, no encounter) with `palace_pass`; its reveal scope is every node of
+  the palace and its map is reveal-only. Its rating bar is
   `FreestyleBedtimeRatingBar`; the tap goes to
   `POST /freestyle/rounds/{round_id}/bedtime/ratings`, which records
-  `plan["bedtime_ratings"][card_id]` and completes the card. No Reviews session, encounter,
-  or rating operation is written, so due dates and FSRS state cannot move; the normal
-  rating endpoint rejects a bedtime card outright.
+  `plan["bedtime_ratings"][card_id]` and completes the card. No Reviews session,
+  encounter, or rating operation is written, so due dates and FSRS state cannot
+  move; the normal rating endpoint rejects a bedtime card outright.
 - **Rail and expiry:** bedtime ticks carry a moon above the bar. They are kept out of the
   due-day filters (`drop_undue_unstarted`, `replan_remaining`) and are dropped by
   `drop_previous_day_bedtime` when the round crosses the 03:00 study-day boundary. Cards

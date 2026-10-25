@@ -14,12 +14,15 @@ export function FreestyleBedtimeRatingBar({
   selectedRating,
   busy = false,
   error = null,
+  palacePass = false,
   onRate,
   onDismissError,
 }: {
   selectedRating: UnitRating | null
   busy?: boolean
   error?: string | null
+  /** Whole-palace pass: one grade for the palace, not for a permanent-mark slice. */
+  palacePass?: boolean
   onRate: (rating: UnitRating) => void
   onDismissError?: () => void
 }) {
@@ -34,7 +37,9 @@ export function FreestyleBedtimeRatingBar({
           className="mb-1.5 flex items-center gap-1.5 rounded-lg bg-stage-line px-2.5 py-1 text-[11px] font-medium text-stage-ink sm:text-xs"
         >
           <Moon className="size-3 shrink-0" aria-hidden />
-          <span className="min-w-0 truncate">睡前复习 · 这次评分只记录，不改动复习安排</span>
+          <span className="min-w-0 truncate">
+            睡前复习{palacePass ? ' · 整座宫殿' : ''} · 这次评分只记录，不改动复习安排
+          </span>
           {busy ? <LoaderCircle className="size-3 shrink-0 animate-spin" aria-hidden /> : null}
         </div>
         {error ? (

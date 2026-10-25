@@ -134,6 +134,7 @@ def snapshot_cards(cards: Sequence[Mapping[str, Any]] | None, *, today: str = ""
                 # today. Its rating is recorded on the plan only and never
                 # reaches the scheduling ledger.
                 "bedtime": bool(card.get("bedtime")),
+                "palace_pass": bool(card.get("palace_pass")),
             }
         )
     return result
@@ -172,6 +173,7 @@ def normalize_plan(plan: Mapping[str, Any] | None) -> Plan:
                 "entered_on": _day(item.get("entered_on")),
                 "is_new": bool(item.get("is_new")),
                 "bedtime": bool(item.get("bedtime")),
+                "palace_pass": bool(item.get("palace_pass")),
             }
         )
     occurrences = []

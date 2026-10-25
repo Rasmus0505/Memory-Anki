@@ -55,6 +55,7 @@ export function FreestyleUnitReviewFlipPanel({
   editorState,
   active = true,
   reviewOnly = false,
+  scopeNodeUids,
   fullscreen,
   onToggleFullscreen,
   freestyleFlipMode = 'free',
@@ -81,6 +82,7 @@ export function FreestyleUnitReviewFlipPanel({
   active?: boolean
   /** 睡前复习: reveal-only map; no editing, permanent marks, or document writes. */
   reviewOnly?: boolean
+  scopeNodeUids?: string[]
   fullscreen: boolean
   onToggleFullscreen: (active?: boolean) => void
   freestyleFlipMode?: FreestyleFlipMode
@@ -118,8 +120,8 @@ export function FreestyleUnitReviewFlipPanel({
   displayModeRef.current = displayMode
 
   const flipTargetUids = useMemo(
-    () => unitFlipTargetUids(unit.node_uids, unit.anchor_uid),
-    [unit.anchor_uid, unit.node_uids],
+    () => (scopeNodeUids?.length ? Array.from(new Set(scopeNodeUids)) : unitFlipTargetUids(unit.node_uids, unit.anchor_uid)),
+    [scopeNodeUids, unit.anchor_uid, unit.node_uids],
   )
   const allowedRevealNodeIds = useMemo(() => {
     if (freestyleFlipMode !== 'focused') return undefined
@@ -702,8 +704,8 @@ export function FreestyleUnitReviewFlipPanel({
         preferredZoom={preferredZoom}
         onUserZoomChange={onUserZoomChange}
         toolbarCenterContent={
-          // Neighbour previews skip it: each fetch is ~1s under load and they raced the active card.
-          ladderEnabled ? (
+          // Neighbour previews skip it (~1s fetch); a bedtime palace pass has no unit interval.
+          ladderEnabled && !reviewOnly ? (
             <PalaceLadderProgress
               palaceId={session.palace_id}
               unitId={unit.id}

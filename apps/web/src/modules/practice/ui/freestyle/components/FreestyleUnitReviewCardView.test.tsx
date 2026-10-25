@@ -2719,16 +2719,30 @@ describe('睡前复习 card', () => {
     apiMocks.cancelUnratedUnitReviewEncounterApi.mockResolvedValue({ abandoned: false })
   })
 
-  it('renders from the read-only preview and records the grade without a session', async () => {
-    const card: FreestyleReviewUnitCard = { ...buildCard('unit-bedtime'), bedtime: true }
+  it('renders a whole-palace pass from the read-only preview and records one grade', async () => {
+    const card: FreestyleReviewUnitCard = {
+      ...buildCard('unit-bedtime'),
+      bedtime: true,
+      palace_pass: true,
+      node_uids: ['unit-node', 'unit-child', 'other-unit', 'other-child'],
+      node_count: 4,
+    }
     previewCacheMocks.useUnitPreview.mockReturnValue(buildSession('unit-bedtime'))
     const onBedtimeRate = vi.fn().mockResolvedValue(undefined)
 
     renderCard(card, { onBedtimeRate, lastRating: 3 })
 
     expect(await screen.findByTestId('freestyle-bedtime-rating-bar')).toBeTruthy()
+    expect(screen.getByTestId('freestyle-bedtime-note').textContent).toContain('整座宫殿')
     expect(screen.getByTestId('freestyle-bedtime-note').textContent).toContain('不改动复习安排')
     expect(screen.getByTestId('freestyle-bedtime-rating-button-3').getAttribute('data-selected')).toBe('true')
+    // The whole palace is the reveal scope, not the representative unit slice.
+    expect(capturedPanelProps?.activeUnitNodeUids).toEqual([
+      'unit-node',
+      'unit-child',
+      'other-unit',
+      'other-child',
+    ])
     // No Reviews glance: the card is already rated today.
     expect(apiMocks.startFreestyleUnitReviewSessionApi).not.toHaveBeenCalled()
     expect(apiMocks.getUnitReviewSessionApi).not.toHaveBeenCalled()

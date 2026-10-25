@@ -249,11 +249,9 @@ export interface FreestyleReviewUnitCard extends FreestylePalaceCardBase {
   presentation?: 'palace'
   unit_id: string
   unit_revision: number
-  /**
-   * A 睡前复习 appearance: the unit was already rated today. Its grade is
-   * recorded on the round plan only and never moves the review schedule.
-   */
+  /** 睡前复习: whole-palace pass; its plan-only grade never reschedules. */
   bedtime?: boolean
+  palace_pass?: boolean
 }
 
 export type FreestyleMindMapBranchCard = FreestyleReviewUnitCard
@@ -389,8 +387,9 @@ export interface FreestyleRoundOriginalCard {
   label: string
   entered_on?: string
   is_new?: boolean
-  /** Appended by 睡前复习; its plan-only grade never reschedules. */
+  /** 睡前复习: whole-palace pass; its plan-only grade never reschedules. */
   bedtime?: boolean
+  palace_pass?: boolean
 }
 
 export type {

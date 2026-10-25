@@ -938,7 +938,9 @@ export function FreestyleUnitReviewCardView({
   const canRateWithoutPlan = !readOnly && !superseded && !recapOnly && Boolean(card.unit_id)
   const locked = readOnly || superseded
   const titleText = stripMindMapHtml(
-    unit?.title || card.palace_title || `宫殿 ${card.palace_id}`,
+    card.palace_pass
+      ? (card.palace_title || unit?.title || `宫殿 ${card.palace_id}`)
+      : (unit?.title || card.palace_title || `宫殿 ${card.palace_id}`),
   )
   const flipTone = activeFlipProgress
     ? flipProgressTone(activeFlipProgress.revealed, activeFlipProgress.total)
@@ -1013,6 +1015,7 @@ export function FreestyleUnitReviewCardView({
             editorState={flipSource.editorState}
             active={active && (flipSource.live || Boolean(card.bedtime))}
             reviewOnly={Boolean(card.bedtime)}
+            scopeNodeUids={card.palace_pass ? card.node_uids : undefined}
             fullscreen={fullscreen}
             onToggleFullscreen={onToggleFullscreen}
             freestyleFlipMode={freestyleFlipMode}
@@ -1087,6 +1090,7 @@ export function FreestyleUnitReviewCardView({
             selectedRating={asUnitRating(lastRating)}
             busy={bedtimeBusy}
             error={bedtimeError}
+            palacePass={Boolean(card.palace_pass)}
             onRate={handleBedtimeRate}
             onDismissError={() => setBedtimeError(null)}
           />

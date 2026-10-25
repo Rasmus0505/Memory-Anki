@@ -37,6 +37,7 @@ describe('睡前复习 plan hydrate', () => {
           palace_title: 'Palace 1',
           label: 'A',
           bedtime: true,
+          palace_pass: true,
         },
         {
           card_id: 'b',
@@ -60,7 +61,10 @@ describe('睡前复习 plan hydrate', () => {
     const hydrated = cardsForServerPlan([a, b], plan, 'round-1')
     const bedtimeOf = (card: FreestyleCard | undefined) =>
       card?.type === 'mindmap_branch' ? card.bedtime : undefined
+    const palacePassOf = (card: FreestyleCard | undefined) =>
+      card?.type === 'mindmap_branch' ? card.palace_pass : undefined
     expect(bedtimeOf(hydrated.find((card) => card.id === 'a'))).toBe(true)
+    expect(palacePassOf(hydrated.find((card) => card.id === 'a'))).toBe(true)
     expect(bedtimeOf(hydrated.find((card) => card.id === 'b'))).toBe(false)
 
     // A bedtime card whose live payload was already dropped is rebuilt from the

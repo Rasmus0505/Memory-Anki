@@ -111,6 +111,7 @@ export function cardFromOriginalSnapshot(
     unit_id: unitId,
     unit_revision: revision,
     ...(item.bedtime ? { bedtime: true } : {}),
+    ...(item.palace_pass ? { palace_pass: true } : {}),
   }
 }
 
@@ -136,6 +137,12 @@ export function cardsForServerPlan(
   const bedtimeIds = new Set(
     (plan.original_cards || [])
       .filter((item) => item.bedtime)
+      .map((item) => String(item.card_id || '').trim())
+      .filter(Boolean),
+  )
+  const palacePassIds = new Set(
+    (plan.original_cards || [])
+      .filter((item) => item.palace_pass)
       .map((item) => String(item.card_id || '').trim())
       .filter(Boolean),
   )
@@ -181,8 +188,10 @@ export function cardsForServerPlan(
     }
     seen.add(card.id)
     if (card.type === 'mindmap_branch') {
-      const bedtime = bedtimeIds.has(card.id) || bedtimeIds.has(sourceCardId(card) || '')
-      ordered.push(bedtime ? { ...card, bedtime: true } : { ...card, bedtime: false })
+      const source = sourceCardId(card) || ''
+      const bedtime = bedtimeIds.has(card.id) || bedtimeIds.has(source)
+      const palacePass = palacePassIds.has(card.id) || palacePassIds.has(source)
+      ordered.push({ ...card, bedtime, palace_pass: palacePass })
       return
     }
     ordered.push(card)

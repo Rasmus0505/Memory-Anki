@@ -169,28 +169,31 @@ Reviews must not import Practice. Practice must not create a second schedule, co
 
 ### 睡前复习 (bedtime review)
 
-- 睡前复习 is a second pass over **today's already-rated units**. It never mints a
-  round and never writes a schedule: `POST /freestyle/rounds/{round_id}/bedtime`
-  appends the cards to the end of the current plan with `bedtime: true`, and
+- 睡前复习 is a second pass over **today's studied palaces**. It reviews one
+  whole palace as one unit — not each permanent-mark slice — and never mints a
+  round or writes a schedule: `POST /freestyle/rounds/{round_id}/bedtime`
+  appends one card per palace (id `bedtime:palace:<id>:<study day>`) to the end
+  of the current plan with `bedtime: true` / `palace_pass: true`, and
   `POST /freestyle/rounds/{round_id}/bedtime/ratings` records the grade in
   `plan["bedtime_ratings"]` and marks the card completed. No Reviews session,
   encounter, or rating operation is created, so neither the due date nor the
   FSRS card can move. The normal rating endpoint rejects a bedtime card, so the
   scheduling path cannot be reached by accident.
-- Candidates are live `review_unit_rating_operations` on the current study day
-  (`undone_at`/`replaced_at` rows excluded), scoped to the round's workspace
-  (all palaces for 随心, one palace for `p<id>`). Units the round still owes today
-  -- an unrated card or a live retry occurrence -- are not appended: their real
-  rating is what they need. Units already in the bedtime set are never appended
-  twice, so clicking the moon again after rating more cards appends only the new
-  ones.
+- Candidates are palaces with at least one live `review_unit_rating_operation`
+  on the current study day (`undone_at`/`replaced_at` rows excluded), scoped to
+  the round's workspace (all palaces for 随心, one palace for `p<id>`). A palace
+  already carrying a bedtime card is never appended again, so rating more units
+  inside it does not queue a second pass; only a palace that gets its first
+  rating today is new. The card's `unit_id` is a real rated unit used only as
+  the read-only preview handle; the whole-palace map covers every node and the
+  grade never targets that unit.
 - Bedtime cards are protected from the due-day filters (`drop_undue_unstarted`,
   `replan_remaining`) because they are, by definition, not due. They live only
   for their study day: `drop_previous_day_bedtime` clears them (and their
   plan-only grades) when the round advances past 03:00.
 - The frontend draws them from the read-only unit preview, never from a live
   glance; the map is reveal-only (no edit, permanent-mark, or document write),
-  and the rail marks them with a moon.
+  its reveal scope is every node of the palace, and the rail marks it with a moon.
 
 ### Scheduler ownership and migration
 

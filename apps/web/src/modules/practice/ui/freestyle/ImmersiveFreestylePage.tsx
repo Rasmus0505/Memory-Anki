@@ -264,7 +264,7 @@ export default function ImmersiveFreestylePage({
     try {
       const added = await appendBedtimeReview()
       setBedtimeOpen(false)
-      if (added.length) toast.success(`已加入 ${added.length} 张睡前复习卡`)
+      if (added.length) toast.success(`已加入 ${added.length} 座宫殿的睡前复习`)
     } catch {
       toast.error('加入睡前复习失败，请稍后再试。')
     } finally {
@@ -274,8 +274,8 @@ export default function ImmersiveFreestylePage({
   const bedtimeDescription = bedtimeCount == null
     ? '正在读今天的学习记录…'
     : bedtimeCount === 0
-      ? '今天还没有新的已评分卡片。先学一会儿，再回来点月亮。'
-      : `${bedtimeCount} 张今天已评分的卡会追加到当前队列末尾。睡前复习的评分只用来过一遍，不会改动原来的复习安排。`
+      ? '今天还没有新的已评分宫殿。先学一会儿，再回来点月亮。'
+      : `${bedtimeCount} 座今天学过的宫殿会追加到当前队列末尾（整座宫殿算一次复习）。睡前复习的评分只用来过一遍，不会改动原来的复习安排。`
   const { signalPageTurn } = useFreestyleFlowFeedback()
   const signalPageTurnWithDust = useCallback((direction: 'forward' | 'backward') => {
     signalPageTurn(direction)
