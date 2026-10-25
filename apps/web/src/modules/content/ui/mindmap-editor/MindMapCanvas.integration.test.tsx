@@ -267,6 +267,30 @@ describe('MindMapCanvas recovery', () => {
     expect(frame.className).not.toContain('min-h-[520px]')
   })
 
+  it('draws a host slot between the toolbar and the canvas, never over it', () => {
+    render(
+      <MindMapCanvas
+        graphData={graphData}
+        selectedNodeId={null}
+        onNodeSelect={vi.fn()}
+        onAddChild={vi.fn()}
+        onAddSibling={vi.fn()}
+        onDelete={vi.fn()}
+        toolbarContent={<button type="button" data-testid="probe-toolbar">工具</button>}
+        belowToolbarSlot={<div data-testid="probe-title-row">标题行</div>}
+      />,
+    )
+
+    const toolbar = screen.getByTestId('probe-toolbar')
+    const titleRow = screen.getByTestId('probe-title-row')
+    const viewport = screen.getByTestId('mindmap-canvas-viewport-host')
+    expect(toolbar.compareDocumentPosition(titleRow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(titleRow.compareDocumentPosition(viewport) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    // The title row takes layout height; it is not an overlay on the map.
+    expect(titleRow.parentElement).toBe(viewport.parentElement)
+    expect(titleRow.className).not.toContain('absolute')
+  })
+
   it('keeps the min-height fallback when the host does not override it', () => {
     render(
       <MindMapCanvas

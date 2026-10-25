@@ -114,6 +114,11 @@ export interface MindMapCanvasProps {
   toolbarContent?: ReactNode
   /** Product host chrome after canvas tools (e.g. ladder progress). */
   toolbarCenterContent?: ReactNode
+  /**
+   * Host content between the canvas toolbar and the canvas itself. Freestyle
+   * draws its unit title row here: the toolbar owns the sheet's top edge.
+   */
+  belowToolbarSlot?: ReactNode
   onNodeActivate?: (nodeId: string) => void
   onPaneDoubleClick?: () => void
   onPaneLongPress?: () => void
@@ -397,6 +402,8 @@ function MindMapCanvasInner({
           onRedo={props.onRedo}
         />
       ) : null}
+
+      {props.belowToolbarSlot}
 
       <div ref={state.canvasRef} className="min-h-0 flex-1" data-testid="mindmap-canvas-viewport-host">
         {state.isCanvasReady ? (

@@ -102,6 +102,11 @@ export interface FlipCardMindMapPanelProps extends FlipCardSurfaceExtensions {
   hostFullscreenControl?: boolean
   /** Host chrome after canvas tools (e.g. palace ladder progress). */
   toolbarCenterContent?: ReactNode
+  /**
+   * Host row rendered between the map toolbar and the canvas. Freestyle puts the
+   * unit title here so the toolbar, not the title, owns the sheet's top edge.
+   */
+  belowToolbarSlot?: ReactNode
   /** When true, hide 网页内全屏 / 系统全屏 / 清屏 from the overflow menu only (features stay available). */
   hidePresentationOverflowActions?: boolean
   /**
@@ -174,6 +179,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   freestyleAutoAdvance,
   hostFullscreenControl = false,
   toolbarCenterContent,
+  belowToolbarSlot,
   hidePresentationOverflowActions = false,
   chromeDensity = 'default',
   onToggleFullscreen,
@@ -582,6 +588,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
           textActionLabel,
         })}
         toolbarCenterContent={toolbarCenterContent}
+        belowToolbarSlot={belowToolbarSlot}
         syncOnPropChange
         syncIntent="soft"
         preserveViewOnSync={framePreserveViewOnSync}

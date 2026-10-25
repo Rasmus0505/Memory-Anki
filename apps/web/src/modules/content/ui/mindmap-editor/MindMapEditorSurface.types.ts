@@ -85,6 +85,8 @@ export interface MindMapEditorSurfaceProps {
   toolbarContent?: ReactNode
   /** Injected after canvas tool icons; hosts own product UI. */
   toolbarCenterContent?: ReactNode
+  /** Host content between the canvas toolbar and the canvas (e.g. unit title row). */
+  belowToolbarSlot?: ReactNode
   segments?: MindMapHostSegmentSummary[]
   activeSegmentId?: number | null
   segmentColorMode?: 'all' | 'active-only' | 'all-with-active-emphasis'

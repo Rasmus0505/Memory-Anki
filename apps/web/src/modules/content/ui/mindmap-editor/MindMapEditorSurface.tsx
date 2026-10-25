@@ -82,6 +82,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   sceneTransitionKey = null,
   toolbarContent,
   toolbarCenterContent,
+  belowToolbarSlot,
   segments = EMPTY_SEGMENTS,
   activeSegmentId = null,
   segmentColorMode = 'all',
@@ -621,6 +622,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
         presentationMode={delegateFullscreenToHost ? (immersiveModeActive ? 'viewport' : 'embedded') : fullscreen.mode}
         showSystemFullscreenControl={showSystemFullscreenControl}
         showToolbar={!uiCleared} flushChrome={flushCanvas} toolbarContent={toolbarContent} toolbarCenterContent={toolbarCenterContent}
+        belowToolbarSlot={belowToolbarSlot}
         mobileViewPolicy={mobileViewPolicy}
         nodeClickViewportPolicy={resolvedNodeClickViewportPolicy}
         contentChangeViewportPolicy={resolvedContentChangeViewportPolicy}
