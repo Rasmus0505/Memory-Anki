@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   type PalaceReviewUnitChangeHighlight,
 } from '@/modules/practice/ui/review/components/PalaceReviewUnitsPanel'
@@ -70,6 +70,7 @@ export function FreestyleUnitReviewFlipPanel({
   syncedRevealMap = null,
   onRevealMapChange,
   onOpenScopeQuiz,
+  belowToolbarSlot = null,
   roundId = null,
 }: {
   card: FreestyleReviewUnitCard
@@ -93,6 +94,8 @@ export function FreestyleUnitReviewFlipPanel({
   syncedRevealMap?: Record<string, string> | null
   onRevealMapChange?: (revealMap: Record<string, string>) => void
   onOpenScopeQuiz?: () => void
+  /** Unit identity row, drawn under the map toolbar (the toolbar owns the sheet edge). */
+  belowToolbarSlot?: ReactNode
   /** The 随心 round, so 关联题目 can badge each question with its this-round rating. */
   roundId?: string | null
 }) {
@@ -718,6 +721,7 @@ export function FreestyleUnitReviewFlipPanel({
         preserveViewOnSync
         initialViewPolicy="preserve"
         sceneTransitionFallbackNodeId={unit.anchor_uid || null}
+        belowToolbarSlot={belowToolbarSlot}
         className="min-h-0 flex-1"
         surfaceClassName="h-full min-h-0"
       />

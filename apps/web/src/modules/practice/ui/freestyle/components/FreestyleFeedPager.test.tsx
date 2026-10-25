@@ -78,9 +78,10 @@ describe('FreestyleFeedPager', () => {
       />,
     )
     const shell = container.firstElementChild as HTMLElement
-    // Right edge, vertically centred, never the old strip above the rating dock.
+    // Right edge, centred on the card area (not the stage, which is taller by the
+    // header), never the old strip above the rating dock.
     expect(shell.className).toContain('right-1')
-    expect(shell.className).toContain('top-1/2')
+    expect(shell.className).toContain('top-[calc(50%+var(--fs-hud-half,2.25rem))]')
     expect(shell.className).not.toContain('bottom-')
     const group = screen.getByTestId('freestyle-feed-pager')
     expect(group.className).toContain('flex-col')

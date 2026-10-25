@@ -922,9 +922,27 @@ export function FreestyleUnitReviewCardView({
   const unitTypeHue = card.is_new === true ? 'var(--color-memory-new)' : 'var(--color-memory-medium)'
   const unitScored = encounter?.selectedRating != null
 
+  // The sheet reads toolbar → title → map. A live map owns the top edge, so the
+  // title row is handed to the panel and drawn under the toolbar; the loading
+  // placeholder has no toolbar, so it keeps the row at the top of the sheet.
+  const identityRow = (
+    <FreestyleUnitReviewIdentityRow
+      titleText={titleText}
+      phase={card.phase}
+      flipTone={flipTone}
+      flipLabel={flipLabel}
+      flipTitle={flipTitle}
+      showUndo={Boolean(undoVisible && lastOperationId && !locked)}
+      undoDisabled={pendingClear}
+      onUndo={() => undoRating()}
+    />
+  )
+
   return (
     <section ref={sectionRef} className="flex h-full min-h-0 flex-col" aria-label="永久标记复习单元">
-      {/* One canvas. Title and rating float; a second paper sheet must not show under the map. */}
+      {/* One sheet. The map toolbar owns its top edge, the unit title row sits under
+          the toolbar, and the rating dock floats over the bottom. A second paper
+          sheet must not show under the map. */}
       <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.4rem] border border-stage-line-strong bg-[var(--memory-anki-mindmap-canvas)] shadow-[inset_0_1px_0_color-mix(in_srgb,white_90%,transparent),0_24px_60px_-18px_color-mix(in_srgb,black_65%,transparent)] sm:rounded-3xl">
         {/* Type channel: blue for a first study, amber for a review. Completion is opacity: rated = solid, not rated = faint. */}
         <span
@@ -949,16 +967,7 @@ export function FreestyleUnitReviewCardView({
             )}
           />
         ) : null}
-        <FreestyleUnitReviewIdentityRow
-          titleText={titleText}
-          phase={card.phase}
-          flipTone={flipTone}
-          flipLabel={flipLabel}
-          flipTitle={flipTitle}
-          showUndo={Boolean(undoVisible && lastOperationId && !locked)}
-          undoDisabled={pendingClear}
-          onUndo={() => undoRating()}
-        />
+        {flipSource ? null : identityRow}
         {flipSource ? (
           <div
             data-testid="freestyle-unit-review-map-shell"
@@ -992,6 +1001,7 @@ export function FreestyleUnitReviewCardView({
             onEditorStateSaved={flipSource.live ? setSavedEditorState : undefined}
             onUnitsReconciled={flipSource.live ? onUnitsReconciled : undefined}
             onRevealProgressChange={flipSource.live ? handleRevealProgressChange : undefined}
+            belowToolbarSlot={identityRow}
             roundId={flipSource.live ? roundId : null}
             syncedRevealMap={flipSource.live ? liveRevealMap : null}
             onRevealMapChange={flipSource.live ? onLiveRevealMapChange : undefined}

@@ -6,8 +6,11 @@ export function FreestyleQuarterTag({ segments }: { segments: FreestyleProgressS
   const quarterTag = useProgressRailFeedback(segments)
   if (!quarterTag) return null
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-[calc(env(safe-area-inset-top,0px)+2rem)] z-30" aria-hidden>
-      <span key={quarterTag.nonce} className="freestyle-quarter-tag">
+    <div className="pointer-events-none absolute inset-x-0 top-[calc(var(--fs-hud-h,4.5rem)+0.25rem)] z-30 flex justify-center" aria-hidden>
+      <span
+        key={quarterTag.nonce}
+        className="freestyle-quarter-tag rounded-full border border-stage-line bg-stage-overlay px-2.5 py-1 text-[11px] font-semibold text-stage-glow shadow-sm"
+      >
         {quarterTag.label}
       </span>
     </div>

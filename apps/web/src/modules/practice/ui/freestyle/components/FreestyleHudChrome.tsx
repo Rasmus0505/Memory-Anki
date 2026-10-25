@@ -18,7 +18,7 @@ const FREESTYLE_SECTION_LINKS = [
 ] as const
 
 const hudActionClass =
-  'ma-pressable inline-flex size-10 shrink-0 items-center justify-center rounded-full text-stage-ink hover:bg-stage-line hover:text-stage-glow active:bg-stage-line-strong sm:size-9'
+  'ma-pressable inline-flex size-7 shrink-0 items-center justify-center rounded-full text-stage-muted hover:bg-stage-line hover:text-stage-glow active:bg-stage-line-strong sm:size-8'
 
 /** Stable subtree: the page memoizes it so Radix composeRefs never loops. */
 export function FreestyleHudOverflow({
@@ -47,12 +47,12 @@ export function FreestyleHudOverflow({
         aria-label="本轮安排"
         onClick={onOpenPlan}
       >
-        <ListChecks className="size-4" />
+        <ListChecks className="size-3.5" />
       </button>
       <DropdownMenu modal={false} defaultOpen={menuDefaultOpen}>
         <DropdownMenuTrigger asChild>
           <button type="button" className={hudActionClass} title="更多" aria-label="更多">
-            <MoreHorizontal className="size-4" />
+            <MoreHorizontal className="size-3.5" />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="min-w-44">
@@ -106,7 +106,7 @@ export function FreestyleTopNotices({
 }) {
   if (!channelAppliedHint && !saveError) return null
   return (
-    <div className="pointer-events-none absolute left-1/2 top-[4.25rem] z-30 flex max-w-[min(24rem,calc(100%-1.5rem))] -translate-x-1/2 flex-col items-center gap-2">
+    <div className="pointer-events-none absolute left-1/2 top-[calc(var(--fs-hud-h,4.5rem)+0.5rem)] z-30 flex max-w-[min(24rem,calc(100%-1.5rem))] -translate-x-1/2 flex-col items-center gap-2">
       {channelAppliedHint ? (
         <button
           type="button"
@@ -147,7 +147,7 @@ export function FreestyleStaleRecoveryPanel({
       data-testid="freestyle-stale-recovery"
       role="region"
       aria-label="队列恢复"
-      className="pointer-events-none absolute inset-x-0 top-16 bottom-24 z-[19] flex items-center justify-center px-4 pr-16"
+      className="pointer-events-none absolute inset-x-0 top-[calc(var(--fs-hud-h,4.5rem)+0.5rem)] bottom-24 z-[19] flex items-center justify-center px-4 pr-16"
     >
       <div className="freestyle-stage-glass animate-in fade-in-0 zoom-in-95 pointer-events-auto flex max-w-[min(22rem,100%)] flex-col gap-3 rounded-2xl border border-stage-glow/30 px-4 py-3.5 text-sm text-stage-ink">
         <p>多张卡片已在其他设备复习，或内容刚被改过</p>

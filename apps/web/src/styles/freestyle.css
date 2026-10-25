@@ -587,7 +587,7 @@
   animation: fs-edge-hint-in 420ms var(--ease-spring) both;
 }
 
-.fs-edge-hint[data-edge='top'] { top: calc(env(safe-area-inset-top, 0px) + 3.25rem); }
+.fs-edge-hint[data-edge='top'] { top: calc(var(--fs-hud-h, 4.5rem) + 0.75rem); }
 .fs-edge-hint[data-edge='bottom'] { bottom: calc(env(safe-area-inset-bottom, 0px) + 7.5rem); }
 
 @keyframes fs-edge-hint-in {

@@ -10,6 +10,31 @@ before loading question ids, since its snapshot may precede the just-saved picke
 `FreestyleFeedConfig` is the single queue configuration owner for the immersive page; the
 older `FreestyleConfig` settings path is compatibility-only and must not drive queue builds.
 
+## Stage Header and the Sheet's Top Edge
+
+The immersive page owns one in-flow header above the feed (`FreestyleHud`), never a stack of
+floating pills. It is: a 20px progress hairline (`FreestyleProgressRail`, which keeps the
+segment/retry/day-cut data and the finger-follow glider), one row with the current palace and
+the round count (`29/55`, still a button to 本轮安排) plus the two overflow actions, and one
+truncated milestone line (countdown + the nearest day; tapping opens every group). Nothing in
+the header is absolutely positioned over the card.
+
+The header measures itself with a `ResizeObserver` and publishes `--fs-hud-h` on the stage root.
+Every overlay that sits under it (top notices, unsaved-ratings pill, palace-cleared and
+new-units banners, stale recovery, quarter tag, `.fs-edge-hint[data-edge='top']`) reads that
+variable instead of a hard-coded `rem`. `FreestyleFeedCard` carries no reserved top padding:
+the card's sheet starts exactly at the header's bottom edge. On phones both header rows keep a
+`pr-11` lane for the draggable session-recorder widget in the top-right corner; without it the
+recorder covers 更多.
+
+Inside the sheet the order is toolbar → unit title row → map. The map toolbar
+(`MindMapCanvasToolbar` via `MindMapPageToolbar`) owns the sheet's top edge; the unit identity
+row is rendered through `belowToolbarSlot`, which is threaded through `MindMapCanvas` →
+`MindMapEditorSurface` → `FlipCardMindMapPanel` → `FreestyleUnitReviewFlipPanel` and takes layout
+height (it is not an overlay). The row therefore gets the full width and no longer reserves the
+old `7rem` band that used to exist for the floating HUD. Loading and error placeholders still
+draw the identity row at the top of the sheet, because they have no toolbar.
+
 ## Start-Page Overview Payload
 
 `/freestyle/overview` is the first read of the page, so an unexpected shape in it must cost a
@@ -183,12 +208,16 @@ re-added. The card is then dropped from this round. A palace whose units are all
 paging never auto-rate and never block crossing a palace boundary; unrated units stay unfinished
 so the learner can skip ahead and come back. Retry work still cannot mark a palace “cleared”.
 The leftover `isSequentialPalaceBlocked` helper is not a navigation latch. A 忘记/困难
-rating inserts its retry immediately, after exactly three other
-already-presented cards in **the same leftover/today segment** (palace cards, quiz cards, and
-other retry occurrences all count). If fewer than three remain in that segment, the occurrence
-is appended to the **segment tail**. It must not borrow cards from the other segment to fill
-the gap. The top progress rail grows a faint amber retry node at that slot in the same
-update, and the HUD denominator includes it. The viewport stays on the source — no
+rating creates a retry occurrence that stays **pending** with an `available_at` instant
+(10 minutes, then 1 hour, then 3 hours; at most three retries per study day). It is not on
+the rail until that instant passes; serving publishes it at the learner's cursor, so the
+cards rated in the meantime are the interleaving. A first-ever pass creates the same kind of
+pending occurrence, `kind: "step"`, for its 15-minute re-check. A pending occurrence is not
+served and does not mark its source finished; the round payload's `waiting` reports how many
+are owed and the earliest ready time. The feed shows a slim banner while cards remain and a
+waiting panel when nothing servable is left; a single scheduled read at `next_ready_at`
+publishes the card (manual 「现在刷新」 does the same). There is no fixed three-card offset
+any more. The viewport stays on the source — no
 auto-advance — including when nothing remains after the source, so 下一张 / 定位 /
 settlement cannot deadlock. Failing the retry card itself does not move that card until
 leave. A later due-list rebuild appends newly seen identities as the

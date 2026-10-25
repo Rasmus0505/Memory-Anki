@@ -8,9 +8,10 @@ import { FX_ANCHORS } from '@/shared/fx'
 type FlipTone = NonNullable<ReturnType<typeof flipProgressTone>>
 
 /**
- * Identity row sits in flow above the map chrome. It used to be absolutely
- * positioned over the canvas toolbar, which on phone hid 英语/文字模式 entirely.
- * Right padding reserves the page-level HUD pill's band (timer + plan + ⋯).
+ * Identity row sits in flow inside the map sheet, directly under the canvas
+ * toolbar. The map toolbar owns the sheet's top edge; this row gets the full
+ * width (the page HUD is a flow header above the card, so nothing floats over
+ * it any more — the old 7rem right reserve is gone).
  */
 export function FreestyleUnitReviewIdentityRow({
   titleText,
@@ -34,7 +35,7 @@ export function FreestyleUnitReviewIdentityRow({
   return (
     // Full-width header band, not a floating pill: the flip card is one sheet,
     // and a second rounded chip above the canvas read as a separate card.
-    <div className="relative z-10 flex min-h-11 min-w-0 shrink-0 items-center gap-2 border-b border-paper-line/85 bg-paper-card/95 px-3 py-1.5 pr-[7rem] sm:min-h-12 sm:gap-2.5 sm:px-3.5 sm:pr-3.5">
+    <div className="relative z-10 flex min-h-10 min-w-0 shrink-0 items-center gap-2 border-b border-paper-line/85 bg-paper-card/95 px-3 py-1.5 sm:min-h-11 sm:gap-2.5 sm:px-4">
       <div className="flex min-w-0 flex-1 items-center gap-1.5">
         <span
           className="relative size-2 shrink-0 rounded-full bg-primary shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-primary)_22%,transparent)]"

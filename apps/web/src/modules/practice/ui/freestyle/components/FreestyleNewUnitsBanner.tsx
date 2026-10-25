@@ -24,7 +24,7 @@ export function FreestyleNewUnitsBanner({ onDismiss }: { onDismiss: () => void }
     <div
       data-testid="freestyle-new-units-finished"
       role="status"
-      className="pointer-events-none absolute inset-x-3 top-[4.75rem] z-30 sm:inset-x-4 sm:top-20"
+      className="pointer-events-none absolute inset-x-3 top-[calc(var(--fs-hud-h,4.5rem)+0.5rem)] z-30 sm:inset-x-4"
     >
       <button
         ref={buttonRef}

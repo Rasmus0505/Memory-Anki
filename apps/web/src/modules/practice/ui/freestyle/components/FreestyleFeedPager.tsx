@@ -32,10 +32,11 @@ export function FreestyleFeedPager({
   }
 
   return (
-    // Right edge on PWA and desktop alike: one vertical column, vertically
-    // centred on the card. Phones keep the same column so the controls sit where
-    // the learner's thumb already is instead of adding a second strip over the dock.
-    <div className="pointer-events-none absolute right-1 top-1/2 z-30 -translate-y-1/2 sm:right-3">
+    // Right edge on PWA and desktop alike: one vertical column, centred on the
+    // card area (the stage header sits above it, so plain 50% would ride high).
+    // Phones keep the same column so the controls sit where the learner's thumb
+    // already is instead of adding a second strip over the dock.
+    <div className="pointer-events-none absolute right-1 top-[calc(50%+var(--fs-hud-half,2.25rem))] z-30 -translate-y-1/2 sm:right-3">
       <div
         data-testid="freestyle-feed-pager"
         data-fx-anchor={FX_ANCHORS.feedPager}

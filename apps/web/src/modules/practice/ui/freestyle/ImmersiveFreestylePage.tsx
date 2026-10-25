@@ -25,6 +25,7 @@ import { compressibleRoundPlanIds, createOperationId } from '@/modules/practice/
 import type { FreestyleConfigSaveChoice } from '@/modules/practice/ui/freestyle/model/overlapProgressChoice'
 import { FreestyleHudOverflow } from '@/modules/practice/ui/freestyle/components/FreestyleHudChrome'
 import { FreestyleHud } from '@/modules/practice/ui/freestyle/FreestyleHud'
+import { FreestyleWaitingBanner } from '@/modules/practice/ui/freestyle/components/FreestyleWaitingBanner'
 import { FreestylePageDialogs } from '@/modules/practice/ui/freestyle/FreestylePageDialogs'
 import { FreestyleCardArea } from '@/modules/practice/ui/freestyle/FreestyleCardArea'
 import { FreestyleNewUnitsBanner } from '@/modules/practice/ui/freestyle/components/FreestyleNewUnitsBanner'
@@ -155,6 +156,7 @@ export default function ImmersiveFreestylePage({
     queueState,
     roundMeta,
     roundPlan,
+    waiting,
     cards,
     currentIndex,
     goToIndex,
@@ -243,7 +245,7 @@ export default function ImmersiveFreestylePage({
     queueState.completedIds,
     roundPlan,
     queueState.hiddenIds,
-  )
+  ) && !(waiting && waiting.count > 0)
   const {
     scrollRef,
     visualIndex,
@@ -939,13 +941,10 @@ export default function ImmersiveFreestylePage({
           currentCard={currentCard}
         />
 
-        {newUnitsBannerVisible ? (
-          <FreestyleNewUnitsBanner onDismiss={dismissNewUnitsBanner} />
-        ) : null}
-
         <FreestyleHud
           examOverview={examOverview}
           milestones={freestyleOverview.overview?.milestones ?? null}
+          palaceTitle={(currentCard as { palace_title?: string } | null)?.palace_title ?? ''}
           progressSummary={progressSummary}
           scrollChannel={scrollChannel}
           progressRailOverflow={progressRailOverflow}
@@ -973,6 +972,20 @@ export default function ImmersiveFreestylePage({
           onOpenStaleConfig={handleOpenStaleConfig}
         />
 
+        {/* In-flow strips sit under the header and above the card. The header must
+            stay at the very top: it is the only thing that may claim the notch. */}
+        {newUnitsBannerVisible ? (
+          <FreestyleNewUnitsBanner onDismiss={dismissNewUnitsBanner} />
+        ) : null}
+
+        {waiting && waiting.count > 0 ? (
+          <FreestyleWaitingBanner
+            count={waiting.count}
+            readyAt={waiting.next_ready_at}
+            onRefresh={refreshQueue}
+          />
+        ) : null}
+
         <FreestyleCardArea
           scrollRef={scrollRef}
           onScroll={handleScroll}
@@ -983,6 +996,7 @@ export default function ImmersiveFreestylePage({
           isActive={isActive}
           settlementVisible={settlementVisible}
           roundComplete={roundComplete}
+          waiting={waiting}
           loading={loading}
           error={error}
           config={config}

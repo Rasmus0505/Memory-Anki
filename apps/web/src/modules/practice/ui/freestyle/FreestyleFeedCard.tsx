@@ -99,8 +99,9 @@ export function FreestyleFeedCard({
       style={{ '--fs-ambient': cardAmbientHsl(card) } as CSSProperties}
     >
       {/* Depth stack layer (styles/freestyle.css): scroll-driven rise-in and
-          recede. Keeps the 6px progress rail band on the dark shell for PWA. */}
-      <div className="fs-depth flex min-h-0 flex-1 flex-col pt-[calc(env(safe-area-inset-top,0px)+4.75rem)]">
+          recede. The page header is in flow above the feed, so the sheet needs
+          no reserved top padding of its own. */}
+      <div className="fs-depth flex min-h-0 flex-1 flex-col">
       <FreestyleRatingReaction active={active}>
         <div
           className="relative flex min-h-0 flex-1 flex-col"

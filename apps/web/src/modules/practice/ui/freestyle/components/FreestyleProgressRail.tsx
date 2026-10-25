@@ -120,6 +120,8 @@ export function FreestyleProgressRail({
   workspaceSwitcher,
   scrollChannel,
   today,
+  titleSlot,
+  milestoneSlot,
 }: {
   summary: FreestyleProgressSummary
   onOpenPlan: () => void
@@ -132,6 +134,10 @@ export function FreestyleProgressRail({
   scrollChannel?: FreestyleScrollChannel
   /** Wall-clock day the labels speak from. Tests pass a fixed day. */
   today?: string
+  /** Where-am-I label (the current palace), left of the round count. */
+  titleSlot?: ReactNode
+  /** One-line countdown/milestone row under the count. Never wraps over the card. */
+  milestoneSlot?: ReactNode
 }) {
   const labelToday = today || beijingStudyDay()
   const canJump = Boolean(onJump) && summary.total > 0 && summary.segments.length > 0
@@ -400,7 +406,7 @@ export function FreestyleProgressRail({
   }, [scrollChannel])
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-0 z-20">
+    <div className="pointer-events-none relative z-20">
       {/* Round progress: one segment per card, so restudy re-insertion is visible.
           TooltipProvider lives on ImmersiveFreestylePage — nesting another here
           loops Radix DropdownMenuTrigger refs under Vite. */}
@@ -411,7 +417,9 @@ export function FreestyleProgressRail({
         role={canJump ? 'group' : 'img'}
         aria-label={railLabel}
         className={cn(
-          'pointer-events-auto relative flex h-7 w-full min-w-0 cursor-pointer items-end overflow-hidden bg-stage/60 px-0 pb-1 pt-[max(0px,env(safe-area-inset-top,0px))]',
+          // A hairline on the header's top edge, not a band: 20px keeps the
+          // 14px playhead, its ring and the retry circles unclipped.
+          'pointer-events-auto relative flex h-5 w-full min-w-0 cursor-pointer items-end overflow-hidden px-0',
           compact ? 'gap-0' : 'gap-px',
           roundGlow && 'progress-round-glow',
         )}
@@ -471,14 +479,22 @@ export function FreestyleProgressRail({
         ))}
       </div>
 
-      <div className="flex items-start justify-between gap-1 px-2 pt-1 sm:px-3">
-        <div className="mt-0.5 flex min-w-0 max-w-[72%] items-center gap-1">
+      {/* Row 1: where am I, how far through the round, and the two actions. The
+          old 40px pill floated over the card; here it is one band in flow, so the
+          sheet below never has anything on top of it. pr-11 on phones keeps the
+          actions out of the session-recorder lane in the top-right corner (a
+          fixed 36px widget, 8px from the edge). */}
+      <div className="flex items-center justify-between gap-2 px-2.5 pr-11 pt-1 sm:px-3 sm:pr-3">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5">
           {workspaceSwitcher}
+          {titleSlot}
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
           {hudText ? (
             <button
               type="button"
               data-testid="freestyle-progress-hud"
-              className="pointer-events-auto truncate rounded-full px-2 py-1 text-left text-[11px] font-medium tabular-nums text-stage-ink/88 transition-colors hover:text-stage-glow"
+              className="pointer-events-auto max-w-[9rem] truncate rounded-full px-1.5 py-0.5 text-left text-xs font-semibold tabular-nums text-stage-ink transition-colors hover:text-stage-glow"
               aria-label={daySpan > 1 ? `${hudText}，这一轮跨了 ${daySpan} 天，打开本轮安排` : `${hudText}，打开本轮安排`}
               onClick={onOpenPlan}
             >
@@ -488,13 +504,19 @@ export function FreestyleProgressRail({
               ) : null}
             </button>
           ) : null}
+          {overflow ? (
+            <div className="pointer-events-auto flex items-center gap-0.5">{overflow}</div>
+          ) : null}
         </div>
-        {overflow ? (
-          <div className="pointer-events-auto flex items-center gap-0.5 rounded-full border border-stage-line bg-stage-overlay px-1 py-0.5 shadow-[0_10px_30px_-8px_rgb(0_0_0/0.55)]">
-            {overflow}
-          </div>
-        ) : null}
       </div>
+
+      {/* Row 2: one line only. The countdown used to wrap into three lines and
+          float over the card's title row; here it truncates in place. */}
+      {milestoneSlot ? (
+        <div className="min-w-0 px-2.5 pb-1 pr-11 pt-0.5 sm:px-3 sm:pr-3">{milestoneSlot}</div>
+      ) : (
+        <div className="pb-1" />
+      )}
     </div>
   )
 }

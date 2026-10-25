@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { MindMapSelection } from '@/modules/content/public'
 import type {
@@ -116,7 +117,13 @@ vi.mock('@/widgets/node-bound-quiz', () => ({
 vi.mock('@/widgets/mindmap-review-flow', () => ({
   FlipCardMindMapPanel: (props: Record<string, unknown>) => {
     capturedPanelProps = props
-    return <div data-testid="flip-card-mind-map-panel" />
+    // The real panel draws the unit identity row under its toolbar, so the mock
+    // must render the slot too or the header disappears from the tree.
+    return (
+      <div data-testid="flip-card-mind-map-panel">
+        {props.belowToolbarSlot as ReactNode}
+      </div>
+    )
   },
 }))
 

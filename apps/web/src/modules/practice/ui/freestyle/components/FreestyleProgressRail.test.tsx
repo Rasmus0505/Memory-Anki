@@ -56,7 +56,25 @@ describe('FreestyleProgressRail', () => {
     expect(segments[0].className).toContain(progressSegmentShapeClass('done'))
     expect(segments[2].className).toContain(progressSegmentShapeClass('current', true))
     expect(segments[3].className).toContain(progressSegmentShapeClass('pending'))
-    expect(screen.getByTestId('freestyle-progress-rail').className).toContain('h-7')
+    // A hairline on the stage header's top edge, still tall enough for the
+    // 14px playhead + ring and the 20px retry circle.
+    expect(screen.getByTestId('freestyle-progress-rail').className).toContain('h-5')
+  })
+
+  it('hosts the stage header slots: where-you-are above, one milestone line below', () => {
+    renderRail({
+      titleSlot: <span data-testid="probe-title">中国教育史</span>,
+      milestoneSlot: <span data-testid="probe-milestone">距考试 57 天</span>,
+    })
+
+    const title = screen.getByTestId('probe-title')
+    const score = screen.getByTestId('freestyle-progress-hud')
+    const milestone = screen.getByTestId('probe-milestone')
+    // Title and count share row 1; the milestone line is its own row, never
+    // wrapped into the card.
+    expect(title.compareDocumentPosition(score) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(score.compareDocumentPosition(milestone) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByTestId('freestyle-progress-rail').getAttribute('class')).not.toContain('absolute')
   })
 
   it('colors segments only by new (blue) or review (amber), never by palace', () => {
