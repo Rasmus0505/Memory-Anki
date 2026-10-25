@@ -24,7 +24,12 @@ const EFFECTS = [
 const UNITS = ['e2e-a', 'e2e-b', 'e2e-c', 'e2e-d']
 const ROUND_ID = 'round-e2e-seek'
 
-function queueBody(request: { operation_id: string; round_id?: string; config: unknown }) {
+const NEXT_READY_AT = '2026-10-25T12:13:32.633397'
+
+function queueBody(
+  request: { operation_id: string; round_id?: string; config: unknown },
+  waiting = 0,
+) {
   return {
     operation_id: request.operation_id,
     round_id: request.round_id,
@@ -43,7 +48,13 @@ function queueBody(request: { operation_id: string; round_id?: string; config: u
       unit_revision: 1,
     })),
     phase_stats: { candidate_count: UNITS.length, scheduled_count: UNITS.length, queue_limit: 20 },
-    round_meta: { candidate_count: UNITS.length, scheduled_count: UNITS.length, queue_limit: 20, limit_reached: false },
+    round_meta: {
+      candidate_count: UNITS.length,
+      scheduled_count: UNITS.length,
+      queue_limit: 20,
+      limit_reached: false,
+      ...(waiting > 0 ? { waiting_count: waiting, next_ready_at: NEXT_READY_AT } : {}),
+    },
     counts: { mindmap_branch: UNITS.length, anki_card: 0, quiz_question: 0, total: UNITS.length },
   }
 }
@@ -103,6 +114,8 @@ async function installRoutes(
     rateable?: boolean
     /** Allow 结算 to open the next round; otherwise /start is rejected. */
     startable?: boolean
+    /** Same-day 回顾 still owed: the round has no servable card left to rate. */
+    waiting?: number
   } = {},
 ) {
   let persisted: FreestyleRoundStatePayload | null = null
@@ -160,6 +173,9 @@ async function installRoutes(
             occurrences: [], encounters: {}, partial_settlements: [],
           },
         }
+      }
+      if (options.waiting) {
+        persisted.waiting = { count: options.waiting, next_ready_at: NEXT_READY_AT }
       }
       activeRoundIds.push(persisted.round_id)
       return reply(route, persisted)
@@ -221,7 +237,10 @@ async function installRoutes(
       round_id: string
       config: unknown
     }
-    await route.fulfill({ contentType: 'application/json', body: JSON.stringify(queueBody(request)) })
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify(queueBody(request, options.waiting ?? 0)),
+    })
   })
   await page.route('**/api/v1/review/units/*/sessions', async (route: Route) => {
     const segments = new URL(route.request().url()).pathname.split('/')
@@ -391,4 +410,33 @@ test('完成 on a fully scored round settles the rated units and clears the queu
   await expect(settlement.getByRole('button', { name: '再来一轮' })).toHaveCount(0)
   await settlement.getByTestId('freestyle-round-settle').click()
   await expect.poll(() => routes.starts.length).toBe(1)
+})
+
+test('完成 never dead-ends while a 15 分钟回顾 is still owed', async ({ page }) => {
+  // The state the learner reported: every presented card scored, but two same-day
+  // re-checks are still booked for later. The button used to disable itself here.
+  const routes = await installRoutes(page, {
+    completedCount: UNITS.length - 1,
+    rateable: true,
+    startable: true,
+    waiting: 2,
+  })
+  await page.goto('/freestyle')
+  await startFromOverview(page)
+
+  await expect.poll(() => readVisualIndex(page)).toBe(UNITS.length - 1)
+  const remember = page.getByTestId('freestyle-rating-button-3')
+  await expect(remember).toBeEnabled()
+  await remember.evaluate((button: HTMLButtonElement) => button.click())
+  await expect(remember).toHaveAttribute('aria-pressed', 'true')
+
+  const complete = page.getByTestId('freestyle-feed-pager').getByRole('button', { name: '完成' })
+  await expect(complete).toBeEnabled()
+  await complete.click()
+
+  // It opens the closing page instead of compressing groups the server still
+  // holds, and names what is still owed so 结算 is an informed choice.
+  await expect(page.getByTestId('freestyle-round-complete')).toBeVisible()
+  await expect(page.getByTestId('freestyle-round-pending-reviews')).toContainText('还有 2 张稍后回顾')
+  expect(routes.actions).not.toContain('compress_completed')
 })
