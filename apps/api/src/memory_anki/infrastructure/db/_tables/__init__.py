@@ -12,6 +12,7 @@ from . import (  # noqa: F401
     english_reading,
     knowledge,
     misc,
+    notifications,
     palaces,
     quiz_generation,
     quiz_practice,

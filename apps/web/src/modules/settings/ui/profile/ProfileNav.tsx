@@ -1,10 +1,11 @@
 import { Fragment } from 'react'
-import { Bot, HardDriveDownload, Settings, Sparkles } from 'lucide-react'
+import { BellRing, Bot, HardDriveDownload, Settings, Sparkles } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
 import { cn } from '@/shared/lib/utils'
 
 const ITEMS = [
   { href: '/profile', label: '复习与偏好', icon: Settings },
+  { href: '/profile/reminders', label: '复习提醒', icon: BellRing },
   { href: '/profile/feedback', label: '反馈中心', icon: Sparkles },
   { href: '/profile/ai', label: 'AI 管理', icon: Bot },
   { href: '/profile/backups', label: '数据与备份', icon: HardDriveDownload },
@@ -15,11 +16,13 @@ export function ProfileNav() {
 
   return (
     <nav className="flex flex-wrap gap-2 rounded-lg border border-border/70 bg-card/70 p-2 lg:flex-col">
-      {ITEMS.map(({ href, label, icon: Icon }, index) => {
+      {ITEMS.map(({ href, label, icon: Icon }) => {
         const active = href === '/profile' ? pathname === href : pathname.startsWith(href)
         return (
           <Fragment key={href}>
-            {index === 3 ? <div className="hidden border-t border-border/70 lg:block" /> : null}
+            {href === '/profile/backups' ? (
+              <div className="hidden border-t border-border/70 lg:block" />
+            ) : null}
             <Link
               to={href}
               className={cn(

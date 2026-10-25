@@ -74,6 +74,10 @@
         "status": "migrated",
         "publicEntry": "memory_anki.modules.quiz.api"
       },
+      "reminders": {
+        "status": "migrated",
+        "publicEntry": "memory_anki.modules.reminders.api"
+      },
       "search": {
         "status": "migrated"
       },
@@ -176,6 +180,9 @@
         "backups",
         "content",
         "mindmap_document"
+      ],
+      "reminders": [
+        "memory"
       ],
       "search": [
         "content"

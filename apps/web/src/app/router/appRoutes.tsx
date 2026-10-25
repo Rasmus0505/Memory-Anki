@@ -47,6 +47,9 @@ const PalaceQuizPage = lazyWithRetry(preloadPalaceQuizPage)
 const PalaceReviewPage = lazyWithRetry(preloadPalaceReviewPage)
 const ProfilePage = lazyWithRetry(preloadProfilePage)
 const ProfileFeedbackPage = lazyWithRetry(() => import('@/pages/settings/FeedbackSettingsPage'))
+const ProfileRemindersPage = lazyWithRetry(
+  () => import('@/pages/settings/RemindersSettingsPage'),
+)
 const ProfileAiPage = lazyWithRetry(() => import('@/pages/settings/AiSettingsPage'))
 const ProfileBackupsPage = lazyWithRetry(
   () => import('@/pages/settings/BackupSettingsPage'),
@@ -124,6 +127,7 @@ function AppRouteTable({ location }: { location: Location }) {
           <Route path="/knowledge" element={<KnowledgePage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/profile/feedback" element={<ProfileFeedbackPage />} />
+          <Route path="/profile/reminders" element={<ProfileRemindersPage />} />
           <Route path="/profile/ai" element={<ProfileAiPage />} />
           <Route path="/profile/backups" element={<ProfileBackupsPage />} />
           {import.meta.env.DEV ? <Route path="/dev/tokens" element={<DevTokensPage />} /> : null}

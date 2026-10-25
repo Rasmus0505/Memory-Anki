@@ -57,6 +57,11 @@ from memory_anki.modules.practice.presentation import router as freestyle_router
 from memory_anki.modules.produce.presentation import import_router
 from memory_anki.modules.progression.presentation import router as progression_router
 from memory_anki.modules.quiz.presentation import router as palace_quiz_router
+from memory_anki.modules.reminders.application.reminder_loop import (
+    start_reminder_loop,
+    stop_reminder_loop,
+)
+from memory_anki.modules.reminders.presentation import router as reminders_router
 from memory_anki.modules.search.presentation import router as search_router
 from memory_anki.modules.session.presentation import router as sessions_router
 from memory_anki.modules.settings.presentation import router as settings_router
@@ -185,6 +190,9 @@ async def lifespan(app: FastAPI):
     # process serves in healthcheck mode, and it is the process that stays open all day.
     start_mutation_response_purge_loop()
     start_startup_backups()
+    # 提醒同样要在每个模式下运行：常驻一整天的可能正是 healthcheck 模式的那个进程，
+    # 而"到点发手机通知"只能由这个进程做。
+    start_reminder_loop()
     if startup_mode == STARTUP_MODE_SERVE:
         runtime_activity_handle = start_runtime_activity_heartbeat(
             channel=str(startup_state.runtime_info.get("channel") or "production"),
@@ -199,6 +207,7 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        stop_reminder_loop()
         stop_startup_backups()
         stop_mutation_response_purge_loop()
         if startup_mode == STARTUP_MODE_SERVE:
@@ -237,6 +246,7 @@ app.include_router(freestyle_router.router, prefix="/api/v1")
 app.include_router(dashboard_router.router, prefix="/api/v1")
 app.include_router(exam_router.router, prefix="/api/v1")
 app.include_router(progression_router.router, prefix="/api/v1")
+app.include_router(reminders_router.router, prefix="/api/v1")
 app.include_router(search_router.router, prefix="/api/v1")
 
 if WEB_DIST_DIR and WEB_DIST_DIR.exists():

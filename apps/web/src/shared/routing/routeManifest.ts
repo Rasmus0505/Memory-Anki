@@ -69,6 +69,7 @@ export const EXACT_ROUTES: ExactRouteEntry[] = [
   { path: '/english/cloze', nav: 'english', history: 'english', historyKey: 'english:cloze', commandLabel: '英语完形' },
   { path: '/profile', nav: null, history: 'profile', historyKey: 'profile:overview', commandLabel: '设置' },
   { path: '/profile/feedback', nav: null, history: 'profile', historyKey: 'profile:feedback' },
+  { path: '/profile/reminders', nav: null, history: 'profile', historyKey: 'profile:reminders' },
   { path: '/profile/ai', nav: null, history: 'profile', historyKey: 'profile:ai' },
   { path: '/profile/backups', nav: null, history: 'profile', historyKey: 'profile:backups' },
 ]

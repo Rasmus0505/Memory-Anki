@@ -25,6 +25,7 @@ The repository is a local-first Windows product used on two devices. SQLite, fil
 | Mind-map editing runtime | `modules/content/ui/mindmap-editor` | aggregate-specific editor services |
 | Palace aggregate | `modules/content` (`domain/palace-entity`, palace-catalog/palace-edit UI) | `modules/content` |
 | Review scheduling/execution | `modules/memory` + `modules/practice/ui/review` | `modules/memory` |
+| Review reminders (Bark push, scheduled delivery log) | `modules/settings` (`ProfileRemindersPage`) | `modules/reminders` |
 | AI runtime selection/calls | `modules/settings/domain/ai-runtime-entity` | `platform.application.AiRuntimeProvider`; settings supplies the adapter |
 | Background jobs | `shared/background-tasks` | target shared job lease/handler infrastructure |
 | Client preferences | `modules/settings/domain/preferences-entity` | settings/profile preference endpoint |
