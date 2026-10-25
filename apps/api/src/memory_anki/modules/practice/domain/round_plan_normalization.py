@@ -179,6 +179,9 @@ def normalize_plan(plan: Mapping[str, Any] | None) -> Plan:
         if status not in {OCCURRENCE_PENDING, OCCURRENCE_INSERTED, OCCURRENCE_COMPLETED, OCCURRENCE_CANCELLED}:
             status = OCCURRENCE_PENDING
         rating = item.get("rating")
+        kind = _text(item.get("kind"))
+        if kind not in {"retry", "step"}:
+            kind = "retry"
         occurrences.append(
             {
                 "occurrence_id": occurrence_id,
@@ -190,6 +193,10 @@ def normalize_plan(plan: Mapping[str, Any] | None) -> Plan:
                 "status": status,
                 "encounter_id": _text(item.get("encounter_id")),
                 "entered_on": _day(item.get("entered_on")),
+                # Same-day spacing: the earliest instant this occurrence may be
+                # served, and whether it is a retry or a first-pass re-check.
+                "available_at": _text(item.get("available_at")) or None,
+                "kind": kind,
             }
         )
     encounters: dict[str, dict[str, Any]] = {}

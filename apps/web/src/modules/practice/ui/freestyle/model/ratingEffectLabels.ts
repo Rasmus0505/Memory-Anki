@@ -23,15 +23,32 @@ function passedGapDays(effect: UnitRatingEffectDto) {
   return effect.target_actual_interval_days ?? effect.target_interval_days
 }
 
+function retryGapLabel(minutes: number | null | undefined) {
+  if (minutes == null || minutes <= 0) return null
+  if (minutes >= 60) {
+    const hours = Math.round((minutes / 60) * 10) / 10
+    return `${hours} 小时后`
+  }
+  return `${Math.round(minutes)} 分钟后`
+}
+
 export function ratingEffectLabel(effect: UnitRatingEffectDto, retryAfterCards: number) {
   if (effect.passed && effect.schedule_changed === false) {
     return `记下，不改期 · ${localDateLabel(effect.target_due_date)}`
   }
   if (effect.passed) {
+    if (effect.intraday_kind === 'step') {
+      const gap = retryGapLabel(effect.retry_after_minutes)
+      return gap ? `${gap}回顾一次 · 今天` : '今天再回顾一次'
+    }
     return `${passedGapDays(effect)}天后复习 · ${localDateLabel(effect.target_due_date)}`
   }
-  // FSRS has no ladder position to reset or demote; a failed grade is simply
-  // retry work scheduled for the same study day.
+  if (effect.intraday_exhausted) {
+    return '今天已重练 3 次 · 明天再练'
+  }
+  const gap = retryGapLabel(effect.retry_after_minutes)
+  if (gap) return `${gap}重练 · 今天`
+  // Legacy clients/plans without a same-day wait still show the card offset.
   return `${retryPositionLabel(retryAfterCards)} · 今天再练`
 }
 
@@ -43,7 +60,16 @@ export function ratingEffectLabel(effect: UnitRatingEffectDto, retryAfterCards: 
 /** Floating "where it went" tag shown for a moment after a rating lands. */
 export function ratingDestinationLabel(effect: UnitRatingEffectDto, retryAfterCards: number) {
   if (effect.passed && effect.schedule_changed === false) return '已记下'
-  if (effect.passed) return `${passedGapDays(effect)}天后见`
+  if (effect.passed) {
+    if (effect.intraday_kind === 'step') {
+      const gap = retryGapLabel(effect.retry_after_minutes)
+      return gap ? `${gap}回顾` : '稍后回顾'
+    }
+    return `${passedGapDays(effect)}天后见`
+  }
+  if (effect.intraday_exhausted) return '明天见'
+  const gap = retryGapLabel(effect.retry_after_minutes)
+  if (gap) return `${gap}见`
   const count = clampRetryGap(retryAfterCards)
   return count === 0 ? '马上再来' : `${count}张后再见`
 }
@@ -53,7 +79,16 @@ export function compactRatingEffectLabel(
   retryAfterCards: number,
 ) {
   if (effect.passed && effect.schedule_changed === false) return '不改期'
-  if (effect.passed) return `${passedGapDays(effect)}天后`
+  if (effect.passed) {
+    if (effect.intraday_kind === 'step') {
+      const gap = retryGapLabel(effect.retry_after_minutes)
+      return gap ? gap.replace(' 后', '') : '回顾'
+    }
+    return `${passedGapDays(effect)}天后`
+  }
+  if (effect.intraday_exhausted) return '明天'
+  const gap = retryGapLabel(effect.retry_after_minutes)
+  if (gap) return gap.replace(' 后', '')
   const count = clampRetryGap(retryAfterCards)
   return count === 0 ? '立即重练' : `${count}张后`
 }

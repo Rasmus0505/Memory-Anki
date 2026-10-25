@@ -10,7 +10,6 @@ from .round_plan import (
     OCCURRENCE_COMPLETED,
     OCCURRENCE_INSERTED,
     OCCURRENCE_PENDING,
-    RETRY_GAP,
     Plan,
     _day,
     _find_occurrence,
@@ -325,15 +324,17 @@ def replan_remaining(
         retry_seen.add(occ_id)
         if stamp:
             occ["entered_on"] = stamp
+        if occ.get("available_at"):
+            # A timed same-day retry stays off the rail until its wait passes.
+            continue
         occ["status"] = OCCURRENCE_INSERTED
         retry_ids.append(occ_id)
-    gap = min(RETRY_GAP, len(suffix))
-    presented = prefix + suffix[:gap] + retry_ids + suffix[gap:]
+    presented = prefix + retry_ids + suffix
     next_plan["presented_ids"] = presented
     for offset, occ_id in enumerate(retry_ids):
         occ = _find_occurrence(next_plan, occ_id)
         if occ is not None:
-            occ["insert_target_index"] = len(prefix) + gap + offset
+            occ["insert_target_index"] = len(prefix) + offset
     known = _known_presented_ids(next_plan)
     next_plan["presented_ids"] = [item for item in next_plan["presented_ids"] if item in known]
     _repair_current(next_plan)

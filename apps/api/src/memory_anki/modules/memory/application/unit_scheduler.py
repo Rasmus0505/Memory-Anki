@@ -7,7 +7,11 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 
 from memory_anki.core.exam_horizon import SprintHorizon
-from memory_anki.core.time import local_day
+from memory_anki.core.time import (
+    local_calendar_day_start_as_utc_naive,
+    local_day,
+    utc_now_naive,
+)
 
 from .unit_fsrs_adapter import (
     FsrsUnitState,
@@ -15,6 +19,13 @@ from .unit_fsrs_adapter import (
     build_unit_scheduler,
     rate_unit_with_fsrs,
     stage_for_interval,
+)
+from .unit_intraday import (
+    DAY_END_MARGIN,
+    IntradayState,
+    apply_plan,
+    minutes_until,
+    plan_intraday,
 )
 
 # Stage 0 is the initial-learning state. A successful first "remember" moves
@@ -55,6 +66,12 @@ class UnitScheduleResult:
     # The FSRS card state after this rating. The service persists it on the unit;
     # a locked pass or repeated same-day 困难 returns the pre-rating state.
     fsrs_state: FsrsUnitState | None = None
+    # Same-day spacing: the state to persist and the wait the UI should show.
+    intraday: IntradayState | None = None
+    retry_after_minutes: int | None = None
+    intraday_kind: str | None = None
+    intraday_due_at: datetime | None = None
+    intraday_exhausted: bool = False
 
 
 def normalize_rating(value: int | str) -> int:
@@ -135,14 +152,14 @@ def rate_unit(
     horizon: SprintHorizon | None = None,
     fsrs_state: FsrsUnitState | None = None,
     scheduler: Scheduler | None = None,
+    intraday: IntradayState | None = None,
+    now: datetime | None = None,
 ) -> UnitScheduleResult:
     """Rate one unit through the production FSRS scheduler.
 
-    ``had_failure_in_encounter`` is kept in the signature because every caller
-    passes it and it remains useful product context; FSRS learns the same fact
-    from the actual ``忘记``/``困难`` ratings already replayed into its state.
-    ``stage_index`` is only the old display position, used to keep the
-    compatibility projection sensible for failed grades.
+    FSRS decides the day; ``plan_intraday`` decides whether the unit may be
+    served again later the same day (a first-pass re-check, or a failed grade
+    whose wait grows 10m → 1h → 3h and stops after three retries).
     """
     current_day = today or local_day()
     normalized = normalize_rating(rating)
@@ -170,6 +187,27 @@ def rate_unit(
         horizon=horizon,
         scheduler=scheduler or build_unit_scheduler(),
     )
+    # The wall clock for same-day spacing. Callers that pin a historical study
+    # day (tests, replay) must not be measured against the real clock, or every
+    # wait would already be in the past.
+    opened_at = now or (
+        utc_now_naive()
+        if current_day == local_day()
+        else datetime.combine(current_day, time(4))
+    )
+    intraday_plan = plan_intraday(
+        state=intraday or IntradayState.empty(),
+        today=current_day,
+        now=opened_at,
+        rating=normalized,
+        was_passed=has_passed,
+        schedule_locked=schedule_locked,
+        fsrs_due_date=result.due_date,
+        day_deadline=(
+            local_calendar_day_start_as_utc_naive(current_day + timedelta(days=1))
+            - DAY_END_MARGIN
+        ),
+    )
     if not result.schedule_changed:
         # A locked pass records the review but must not move the display
         # projection either; the FSRS state itself is intentionally unchanged.
@@ -189,12 +227,19 @@ def rate_unit(
         )
     return UnitScheduleResult(
         projected_stage,
-        result.due_date,
+        intraday_plan.due_date,
         result.passed,
         result.retry_after_cards,
         hard_penalty_applied=result.hard_penalty_applied,
         schedule_changed=result.schedule_changed,
         fsrs_state=result.state,
+        intraday=apply_plan(
+            intraday or IntradayState.empty(), intraday_plan, today=current_day
+        ),
+        retry_after_minutes=minutes_until(intraday_plan.due_at, opened_at),
+        intraday_kind=intraday_plan.kind,
+        intraday_due_at=intraday_plan.due_at,
+        intraday_exhausted=intraday_plan.exhausted,
     )
 
 

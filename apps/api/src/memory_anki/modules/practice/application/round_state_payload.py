@@ -7,11 +7,16 @@ from typing import Any, overload
 
 from memory_anki.core.time import (
     to_api_datetime,
+    utc_now_naive,
 )
 from memory_anki.infrastructure.db._tables.misc import FreestyleRoundState
 from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitState
 from memory_anki.modules.practice.application.round_fresh_due import project_served_plan
 from memory_anki.modules.practice.domain.round_plan import normalize_plan
+from memory_anki.modules.practice.domain.round_plan_intraday import (
+    plan_waiting,
+    publish_ready_retries,
+)
 from memory_anki.modules.practice.domain.workspace import normalize_workspace
 
 _SUMMARY_CHUNK = 400
@@ -138,8 +143,13 @@ def _serve(session: Any, row: FreestyleRoundState | None, **kwargs: Any) -> dict
     if not isinstance(plan, dict):
         return payload
     served = dict(payload)
-    served["plan"] = project_served_plan(session, plan)
-    served["summary"] = _unfinished_summary(session, served["plan"])
+    served_plan = project_served_plan(session, plan)
+    # Same-day steps/retries appear on the rail only once their wait has passed.
+    # This is a read-time projection; the persisted plan keeps them pending.
+    served_plan = publish_ready_retries(served_plan, now=utc_now_naive())
+    served["plan"] = served_plan
+    served["waiting"] = plan_waiting(served_plan)
+    served["summary"] = _unfinished_summary(session, served_plan)
     return served
 
 

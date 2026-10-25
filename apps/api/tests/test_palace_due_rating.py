@@ -1,5 +1,5 @@
 import json
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 
 import pytest
 
@@ -110,12 +110,14 @@ def test_palace_due_rating_does_not_batch_first_learning_siblings(db_session):
     assert result["current"]["passed"] is True
     db_session.refresh(current)
     assert current.has_passed is True
-    assert current.due_date > local_day()
+    # A first pass books the same-day re-check, not a future date.
+    assert current.due_date == local_day()
     for unit in siblings:
         db_session.refresh(unit)
         assert unit.has_passed is False
         assert unit.due_date == local_day()
-    assert result["remaining_due_count"] == len(siblings)
+    # The passed card still owes its same-day re-check, so it stays counted.
+    assert result["remaining_due_count"] == len(units)
     current_study = db_session.get(StudySession, opened["id"])
     assert current_study.status == "active"
     assert db_session.get(ReviewUnitEncounter, "enc-current").status == "open"
@@ -153,19 +155,19 @@ def test_palace_due_rating_batches_mature_due_siblings(db_session):
     palace, units = _seed_palace(db_session)
     current = units[0]
     mature = units[1]
-    opened_mature = _open(db_session, mature, "enc-mature")
-    rate_review_unit(
-        db_session,
-        study_session_id=opened_mature["id"],
-        unit_id=mature.id,
-        unit_revision=mature.revision,
-        encounter_id="enc-mature",
-        operation_id="rate-mature",
-        rating=3,
-        round_id="round-palace",
-    )
-    db_session.refresh(mature)
+    # A mature unit: passed days ago, due today, no same-day step waiting.
+    mature.has_passed = True
+    mature.stage_index = 2
+    mature.fsrs_stability = 5.0
+    mature.fsrs_difficulty = 5.0
+    mature.fsrs_state = 2
+    mature.fsrs_last_review = datetime.combine(local_day() - timedelta(days=5), time(4))
+    mature.fsrs_due_at = datetime.combine(local_day(), time(4))
     mature.due_date = local_day()
+    mature.intraday_due_at = None
+    mature.intraday_day = None
+    mature.intraday_retries = 0
+    mature.intraday_step_pending = False
     db_session.commit()
     opened = _open(db_session, current, "enc-current")
 
@@ -426,16 +428,16 @@ def test_palace_real_retry_keeps_all_siblings_failure_history(db_session):
         db_session, palace_id=palace.id, operation_id='batch-pass', rating=3,
         round_id='round-palace', current=_current(retry, current, 'batch-retry'),
     )
-    # A batch pass rates every sibling from the same failure state, so they share
-    # one FSRS card -- that is the invariant. The booked dates still spread by the
-    # deliberate per-unit 5% offset, which is what keeps a same-day cohort from
-    # coming due together forever.
-    assert all(unit.fsrs_stability is not None for unit in units)
-    assert len({unit.fsrs_stability for unit in units}) == 1
-    gaps = [(unit.due_date - local_day()).days for unit in units]
-    assert all(gap > 0 for gap in gaps)
-    assert max(gaps) - min(gaps) <= max(1, round(max(gaps) * 0.05)) * 2
-    assert len({unit.stage_index for unit in units}) == 1
+    # The pass graduated the current card, but the failed batch left every
+    # sibling due today with a same-day wait. They must not be rated before it.
+    db_session.refresh(current)
+    assert current.has_passed is True
+    assert current.due_date > local_day()
+    for unit in units[1:]:
+        db_session.refresh(unit)
+        assert unit.due_date == local_day()
+        assert unit.intraday_due_at is not None
+        assert unit.fsrs_stability is not None
     assert all(op.replaced_at is None for op in db_session.query(ReviewUnitRatingOperation).filter_by(batch_id='batch-hard'))
     undo_unit_rating(db_session, 'batch-pass', 'round-palace')
     assert all(unit.stage_index == 6 and unit.due_date == local_day() for unit in units)

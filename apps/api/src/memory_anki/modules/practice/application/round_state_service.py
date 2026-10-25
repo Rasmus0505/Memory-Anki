@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -493,6 +494,9 @@ def apply_round_rating(
     rating: int,
     unit_id: str | None = None,
     unit_revision: int | None = None,
+    available_at: datetime | None = None,
+    intraday_kind: str | None = None,
+    intraday_exhausted: bool = False,
 ) -> dict[str, Any]:
     op_id = _require_operation_id(operation_id)
     row = _row_by_id(session, round_id)
@@ -513,6 +517,9 @@ def apply_round_rating(
         unit_id=unit_id or "",
         round_id=row.round_id,
         unit_revision=unit_revision,
+        available_at=available_at,
+        intraday_kind=intraday_kind,
+        intraday_exhausted=intraday_exhausted,
     )
     changed = _apply_plan(row, plan, operation_id=op_id)
     if not changed:
@@ -621,8 +628,26 @@ def rate_freestyle_round_unit(
         rating=rating,
         unit_id=unit_id,
         unit_revision=unit_revision,
+        available_at=_parse_available_at(item),
+        intraday_kind=_text_optional(item, "intraday_kind"),
+        intraday_exhausted=bool((item or {}).get("intraday_exhausted")),
     )
     return {"item": item, "round": payload}
+
+
+def _parse_available_at(item: dict[str, Any] | None) -> datetime | None:
+    raw = str((item or {}).get("intraday_due_at") or "").strip()
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
+def _text_optional(item: dict[str, Any] | None, key: str) -> str | None:
+    value = str((item or {}).get(key) or "").strip()
+    return value or None
 
 
 def _operation_seen(session: Session, row: FreestyleRoundState, operation_id: str) -> bool:

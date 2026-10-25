@@ -136,6 +136,9 @@ def test_today_hard_rating_stays_visible(db_session):
 def test_future_due_card_keeps_its_score(db_session):
     state = _seed(db_session)
     _rate_and_close(db_session, state, 3, "op-pass")
+    # The first pass books a same-day re-check; push the unit out to make it a
+    # future-due card, which is the case this projection is about.
+    state.due_date = local_day() + timedelta(days=5)
     db_session.commit()
     assert state.due_date > local_day()
 

@@ -6,12 +6,13 @@ that palace; this read returns the stored active rows.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
+from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.unit_reviews import (
     ReviewUnitEncounter,
@@ -27,6 +28,7 @@ __all__ = [
     "list_round_unit_ratings",
     "list_trusted_due_units_for_queue",
     "list_unit_node_members",
+    "summarize_waiting_units",
 ]
 
 
@@ -135,13 +137,19 @@ def list_trusted_due_units_for_queue(
     session: Session,
     today: date,
     palace_ids: list[int] | None = None,
+    *,
+    now: datetime | None = None,
 ) -> list[dict[str, Any]]:
     """Active due units for queue build, without parsing editor_doc.
 
     ``palace_ids is None`` means every active palace. An empty list means none.
+    A unit whose intra-day step has not arrived yet is still due today, but it is
+    not servable: the queue excludes it until ``intraday_due_at`` passes, so a
+    short session cannot re-serve a failed card immediately.
     """
     if palace_ids is not None and not palace_ids:
         return []
+    moment = now or utc_now_naive()
     query = (
         session.query(
             ReviewUnitState.id,
@@ -162,6 +170,10 @@ def list_trusted_due_units_for_queue(
         .filter(
             ReviewUnitState.active.is_(True),
             ReviewUnitState.due_date <= today,
+            or_(
+                ReviewUnitState.intraday_due_at.is_(None),
+                ReviewUnitState.intraday_due_at <= moment,
+            ),
             Palace.deleted_at.is_(None),
             Palace.archived.is_(False),
         )
@@ -262,3 +274,44 @@ def list_palace_unit_pass_states(session: Session, palace_id: int) -> list[dict[
         }
         for row in rows
     ]
+
+
+def summarize_waiting_units(
+    session: Session,
+    today: date,
+    palace_ids: list[int] | None = None,
+    *,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Units that are due today but booked for a later instant (same-day steps).
+
+    The queue omits them; the round shows "N 张稍后" and refreshes at
+    ``next_ready_at`` instead of pretending the day is done.
+    """
+    from memory_anki.core.time import to_api_datetime
+
+    if palace_ids is not None and not palace_ids:
+        return {"count": 0, "next_ready_at": None}
+    moment = now or utc_now_naive()
+    query = (
+        session.query(
+            func.count(ReviewUnitState.id),
+            func.min(ReviewUnitState.intraday_due_at),
+        )
+        .join(Palace, Palace.id == ReviewUnitState.palace_id)
+        .filter(
+            ReviewUnitState.active.is_(True),
+            ReviewUnitState.due_date <= today,
+            ReviewUnitState.intraday_due_at.is_not(None),
+            ReviewUnitState.intraday_due_at > moment,
+            Palace.deleted_at.is_(None),
+            Palace.archived.is_(False),
+        )
+    )
+    if palace_ids is not None:
+        query = query.filter(ReviewUnitState.palace_id.in_(list(palace_ids)))
+    count, next_at = query.one()
+    return {
+        "count": int(count or 0),
+        "next_ready_at": to_api_datetime(next_at) if next_at is not None else None,
+    }

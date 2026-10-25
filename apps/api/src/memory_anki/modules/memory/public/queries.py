@@ -27,6 +27,7 @@ from memory_anki.modules.memory.api import (
     read_learning_progress_evidence,
     read_palace_due_signals,
     resolve_unit_definitions,
+    summarize_waiting_units,
 )
 
 __all__ = [
@@ -50,6 +51,7 @@ __all__ = [
     "count_active_units_by_palace",
     "count_units_due_on",
     "list_trusted_due_units_for_queue",
+    "summarize_waiting_units",
     "list_unit_node_members",
     "list_round_unit_ratings",
     "normalize_rating",

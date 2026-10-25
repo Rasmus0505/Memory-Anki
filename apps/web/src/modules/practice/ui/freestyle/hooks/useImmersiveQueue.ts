@@ -374,6 +374,25 @@ export type StaleDropResult = StaleDropDecision & {
   dropped: boolean
 }
 
+/** Same-day work the queue build knows is still owed but not yet servable. */
+function waitingMetaOf(rawMeta: unknown): {
+  waiting_count: number
+  next_ready_at: string | null
+} {
+  const meta = (rawMeta ?? {}) as { waiting_count?: unknown; next_ready_at?: unknown }
+  return {
+    waiting_count: Number(meta.waiting_count) || 0,
+    next_ready_at: typeof meta.next_ready_at === 'string' ? meta.next_ready_at : null,
+  }
+}
+
+function waitingFromMeta(rawMeta: unknown): { count: number; next_ready_at: string | null } | null {
+  const meta = waitingMetaOf(rawMeta)
+  return meta.waiting_count > 0
+    ? { count: meta.waiting_count, next_ready_at: meta.next_ready_at }
+    : null
+}
+
 export function useImmersiveQueue(
   entryPalaceId: number | readonly number[] | null = null,
   workspace: FreestyleWorkspaceId | PalaceReviewWorkspaceId = FREESTYLE_WORKSPACE_PRIMARY,
@@ -408,6 +427,8 @@ export function useImmersiveQueue(
     scheduled_count: 0,
     limit_reached: false,
     palace_leftover_due: {} as Record<string, number>,
+    waiting_count: 0,
+    next_ready_at: null as string | null,
   })
   const operationIdRef = useRef<string>('')
   const queueBuildOutcomeRef = useRef<{ id: string; status: 'ok' | 'error' } | null>(null)
@@ -445,6 +466,8 @@ export function useImmersiveQueue(
   const [staleCircuitOpen, setStaleCircuitOpen] = useState(false)
   const [staleRecoveryCardId, setStaleRecoveryCardId] = useState<string | null>(null)
   const serverPlanVersionRef = useRef(0)
+  // Same-day work the server still owes today but has not published yet.
+  const [roundWaiting, setRoundWaiting] = useState<{ count: number; next_ready_at: string | null } | null>(null)
   const [roundSave, setRoundSave] = useState<{ roundId: string; outcome: FreestyleSaveOutcome; seq: number } | null>(null)
   const roundSaveSeqRef = useRef(0)
   const [roundSummary, setRoundSummary] = useState<{ roundId: string; summary: FreestyleRoundSummary; seq: number } | null>(null)
@@ -930,6 +953,7 @@ export function useImmersiveQueue(
           limit_reached: Boolean(rawMeta.limit_reached),
           palace_leftover_due: asLeftoverDue(rawMeta.palace_leftover_due),
           palace_unit_totals: asLeftoverDue(rawMeta.palace_unit_totals),
+          ...waitingMetaOf(rawMeta),
         }
         const builtCards = nextCards
         // Do not persist this ordering plan. A mismatched round id would publish
@@ -1065,6 +1089,11 @@ export function useImmersiveQueue(
         setCards(nextCards)
         setPhaseStats(response.phase_stats || {})
         setRoundMeta(incomingMeta)
+        setRoundWaiting(
+          incomingMeta.waiting_count > 0
+            ? { count: incomingMeta.waiting_count, next_ready_at: incomingMeta.next_ready_at }
+            : null,
+        )
         const resolved = resolveRebuildIndex({
           nextCards,
           preferCardId,
@@ -1267,6 +1296,7 @@ export function useImmersiveQueue(
     void buildQueue(config, { preserveCompleted: true, reason: 'manual_refresh' })
   }, [buildQueue, config, resetStaleRecovery])
 
+
   /**
    * HUD 「同步进度」. Read the computer's workspace round and drop local-only
    * scores. Does not mint a round_id, append cards, or call /rounds/start.
@@ -1406,7 +1436,9 @@ export function useImmersiveQueue(
           scheduled_count: nextCards.length,
           limit_reached: Boolean(rawMeta.limit_reached),
           palace_leftover_due: asLeftoverDue(rawMeta.palace_leftover_due),
+          ...waitingMetaOf(rawMeta),
         })
+        setRoundWaiting(waitingFromMeta(rawMeta))
       }
       if (landingId) {
         const index = nextCards.findIndex((card) => card.id === landingId)
@@ -2010,6 +2042,7 @@ export function useImmersiveQueue(
     }).then((round) => {
       if (queueStateRef.current.roundId !== roundId) return
       if (round.conflict) return
+      setRoundWaiting(round.waiting ?? null)
       serverPlanVersionRef.current = serverPlanVersion(round)
       setPlanVersion(serverPlanVersion(round))
       notifyPeerRound()
@@ -2564,8 +2597,10 @@ export function useImmersiveQueue(
     version?: number
     round_id?: string
     plan?: FreestyleRoundStatePayload['plan']
+    waiting?: { count: number; next_ready_at: string | null }
   } | null | undefined) => {
     if (round?.round_id && round.round_id !== queueStateRef.current.roundId) return
+    if (round) setRoundWaiting(round.waiting ?? null)
     const version = serverPlanVersion(round)
     if (version <= serverPlanVersionRef.current) return
     serverPlanVersionRef.current = version
@@ -2624,6 +2659,7 @@ export function useImmersiveQueue(
       }
       if (!round?.plan) return
       const adoptedRoundId = round.round_id || roundId
+      setRoundWaiting(round.waiting ?? null)
       serverPlanVersionRef.current = serverPlanVersion(round)
       setPlanVersion(serverPlanVersion(round))
       // The yellow hint never enters createRoundPlan — plan math stays on the
@@ -2854,7 +2890,9 @@ export function useImmersiveQueue(
         scheduled_count: nextCards.length,
         limit_reached: Boolean(rawMeta?.limit_reached),
         palace_leftover_due: asLeftoverDue(rawMeta?.palace_leftover_due),
+        ...waitingMetaOf(rawMeta),
       })
+      setRoundWaiting(waitingFromMeta(rawMeta))
       applyCurrentIndex(nextIndex >= 0 ? nextIndex : 0, nextCards)
       setLoading(false)
       setQueueFrozen(false)
@@ -2943,6 +2981,21 @@ export function useImmersiveQueue(
     }
   }, [hydrateFromServerRound, lockedPalaceId, slot])
 
+  /**
+   * A same-day step/retry is only served once its wait passes. Nothing else in
+   * the feed polls, so schedule exactly one round read at the earliest ready
+   * time (plus a small buffer for clock skew). Every new wait replaces it.
+   */
+  useEffect(() => {
+    const readyAt = roundWaiting?.next_ready_at
+    if (!readyAt || !roundWaiting?.count) return
+    const readyMs = Date.parse(readyAt)
+    if (!Number.isFinite(readyMs)) return
+    const delay = Math.min(Math.max(readyMs - Date.now() + 1500, 1000), 60 * 60 * 1000)
+    const handle = window.setTimeout(() => { void hydrateFromServerRound(false) }, delay)
+    return () => window.clearTimeout(handle)
+  }, [hydrateFromServerRound, roundWaiting?.count, roundWaiting?.next_ready_at])
+
   const workspacePath = lockedPalaceId != null
     ? `/palaces/${lockedPalaceId}/review`
     : freestyleWorkspacePath(normalizeFreestyleWorkspaceId(slot))
@@ -3010,5 +3063,6 @@ export function useImmersiveQueue(
     roundSave,
     roundSummary,
     retryRoundSave,
+    waiting: roundWaiting,
   }
 }

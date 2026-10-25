@@ -68,6 +68,17 @@ class ReviewUnitState(Base):
     fsrs_due_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     fsrs_last_review: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     fsrs_scheduler_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Same-day spacing on top of FSRS. ``intraday_due_at`` is "not before this
+    # instant" (UTC-naive); the other columns are the ladder's memory for the
+    # current study day, reset when ``intraday_day`` changes. See unit_intraday.py.
+    intraday_due_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    intraday_day: Mapped[date | None] = mapped_column(Date, nullable=True)
+    intraday_retries: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default=text("0")
+    )
+    intraday_step_pending: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("0")
+    )
     topology_order: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
     )

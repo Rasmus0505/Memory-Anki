@@ -10,7 +10,6 @@ from memory_anki.modules.practice.domain.round_plan import (
     apply_rating,
     complete_card,
     exclude_card,
-    insert_retry_after_gap,
     leave_card,
     next_unfinished_id,
     normalize_plan,
@@ -97,13 +96,14 @@ def test_forget_and_hard_insert_retry_immediately():
     assert hard_occ["rating"] == 2
     assert forget_occ["occurrence_id"] == occurrence_id_for(ROUND_ID, "unit-a", 1)
     assert hard_occ["occurrence_id"] == occurrence_id_for(ROUND_ID, "unit-a", 1)
-    assert forgotten["presented_ids"] == ["a", "b", forget_occ["occurrence_id"]]
-    assert hard["presented_ids"] == ["a", "b", hard_occ["occurrence_id"]]
+    # Without a wait, the retry is published at the cursor: right after "a".
+    assert forgotten["presented_ids"] == ["a", forget_occ["occurrence_id"], "b"]
+    assert hard["presented_ids"] == ["a", hard_occ["occurrence_id"], "b"]
     assert forgotten["current_card_id"] == "a"
     assert hard["current_card_id"] == "a"
 
 
-def test_rating_inserts_after_exactly_three_presented_cards_including_quiz_and_retries():
+def test_rating_publishes_the_retry_at_the_cursor():
     cards = [
         _card("x", unit_id="unit-x"),
         _card("y", unit_id="unit-y"),
@@ -115,26 +115,24 @@ def test_rating_inserts_after_exactly_three_presented_cards_including_quiz_and_r
     plan = plan_from_cards(cards)
     plan = _rate(plan, "x", 1, "enc-x")
     retry_x = [item["occurrence_id"] for item in plan["occurrences"] if item["source_card_id"] == "x"][0]
-    assert plan["presented_ids"] == ["x", "y", "z", "a", retry_x, "quiz-1", "b"]
+    assert plan["presented_ids"] == ["x", retry_x, "y", "z", "a", "quiz-1", "b"]
     assert plan["current_card_id"] == "x"
     assert leave_card(plan, "x")["presented_ids"] == plan["presented_ids"]
 
     plan = _rate(plan, "a", 2, "enc-a")
     retry_a = [item["occurrence_id"] for item in plan["occurrences"] if item["source_card_id"] == "a"][0]
     presented = plan["presented_ids"]
-    gap = presented[presented.index("a") + 1 : presented.index(retry_a)]
-    assert gap == [retry_x, "quiz-1", "b"]
-    assert retry_x in gap
-    assert "quiz-1" in gap
+    assert presented.index(retry_a) == presented.index("a") + 1
+    assert retry_x in presented
 
 
-def test_not_enough_cards_appends_retry_to_end():
+def test_a_short_queue_still_puts_the_retry_after_the_current_card():
     plan = plan_from_cards([_card("a", unit_id="unit-a"), _card("b", unit_id="unit-b")])
     plan = _rate(plan, "a", 1, "enc-a")
     retry_a = plan["occurrences"][0]["occurrence_id"]
-    assert plan["presented_ids"] == ["a", "b", retry_a]
+    assert plan["presented_ids"] == ["a", retry_a, "b"]
     assert plan["occurrences"][0]["status"] == "inserted"
-    assert plan["occurrences"][0]["insert_target_index"] == 2
+    assert plan["occurrences"][0]["insert_target_index"] == 1
     assert plan["current_card_id"] == "a"
     assert leave_card(plan, "a")["presented_ids"] == plan["presented_ids"]
 
@@ -146,7 +144,7 @@ def test_consecutive_source_failures_do_not_bump_attempt_before_the_retry_is_lef
     plan = _rate(plan, "a", 1, "enc-1")
     inserted = _inserted(plan, "a")
     assert inserted["retry_attempt"] == 1
-    assert plan["presented_ids"] == ["a", "b", "c", "d", inserted["occurrence_id"], "e"]
+    assert plan["presented_ids"] == ["a", inserted["occurrence_id"], "b", "c", "d", "e"]
     plan = _rate(plan, "a", 1, "enc-2")
     live = [
         item
@@ -195,7 +193,7 @@ def test_failing_a_retry_keeps_one_slot_and_leave_repositions_it():
     ]
     plan = leave_card(_rate(plan_from_cards(cards), "a", 1, "enc-1"), "a")
     retry_id = plan["occurrences"][0]["occurrence_id"]
-    assert plan["presented_ids"] == ["a", "b", "c", "d", retry_id, "e", "f"]
+    assert plan["presented_ids"] == ["a", retry_id, "b", "c", "d", "e", "f"]
 
     plan = set_cursor(plan, retry_id)
     plan = _rate(plan, retry_id, 1, "enc-2", occurrence_id=retry_id)
@@ -219,7 +217,7 @@ def test_failing_a_retry_keeps_one_slot_and_leave_repositions_it():
     # Next attempt is a blank glance — score must not stick to the bumped slot.
     assert plan["occurrences"][0]["rating"] is None
     assert retry_id not in plan["encounters"]
-    assert presented == ["a", "b", "c", "d", "e", "f", retry_id]
+    assert presented == ["a", retry_id, "b", "c", "d", "e", "f"]
 
 
 def test_normalize_collapses_duplicate_live_retries():
@@ -442,17 +440,17 @@ def test_history_lookback_does_not_move_cursor_or_insert():
     plan = _rate(plan, "a", 1, "enc-a")
     occ_id = plan["occurrences"][0]["occurrence_id"]
     assert plan["occurrences"][0]["status"] == "inserted"
-    assert plan["presented_ids"] == ["a", "b", "c", "d", occ_id]
+    assert plan["presented_ids"] == ["a", occ_id, "b", "c", "d"]
     assert plan["current_card_id"] == "a"
     looked = set_cursor(plan, "c", commit=False)
     assert looked["current_card_id"] == "a"
     assert looked["current_index"] == 0
-    assert looked["presented_ids"] == ["a", "b", "c", "d", occ_id]
+    assert looked["presented_ids"] == ["a", occ_id, "b", "c", "d"]
     assert looked["occurrences"][0]["status"] == "inserted"
     committed = set_cursor(plan, "c", commit=True)
     assert committed["current_card_id"] == "c"
     assert committed["occurrences"][0]["status"] == "inserted"
-    assert committed["presented_ids"] == ["a", "b", "c", "d", occ_id]
+    assert committed["presented_ids"] == ["a", occ_id, "b", "c", "d"]
 
 
 def test_rebind_reattaches_retries_when_source_card_was_dropped():
@@ -593,24 +591,13 @@ def test_current_missing_or_completed_picks_next_unfinished():
     assert completed["current_card_id"] == "b"
 
 
-def test_insert_retry_after_gap_uses_all_presented_ids():
-    plan = plan_from_cards(
-        [_card("a"), _card("quiz", kind="quiz_question"), _card("b"), _card("c"), _card("d")]
-    )
-    plan = _rate(plan, "a", 1, "enc-a")
-    occ_id = plan["occurrences"][0]["occurrence_id"]
-    inserted = insert_retry_after_gap(plan, occ_id, 0)
-    assert inserted["presented_ids"][4] == occ_id
-    assert inserted["presented_ids"][:4] == ["a", "quiz", "b", "c"]
-
-
 def test_retry_stays_in_leftover_when_today_cards_append():
     yesterday = "2026-09-17"
     today = "2026-09-18"
     plan = plan_from_cards([_card("a", unit_id="unit-a"), _card("b", unit_id="unit-b")], today=yesterday)
     plan = leave_card(_rate(plan, "a", 2, "enc-a"), "a")
     retry_a = plan["occurrences"][0]["occurrence_id"]
-    assert plan["presented_ids"] == ["a", "b", retry_a]
+    assert plan["presented_ids"] == ["a", retry_a, "b"]
 
     rebound = append_today_cards(
         plan,
@@ -618,7 +605,7 @@ def test_retry_stays_in_leftover_when_today_cards_append():
         today=today,
     )
     presented = rebound["presented_ids"]
-    assert presented[:3] == ["a", "b", retry_a]
+    assert presented[:3] == ["a", retry_a, "b"]
     assert presented[3:] == [f"c{index}" for index in range(1, 11)]
     entered = {item["card_id"]: item["entered_on"] for item in rebound["original_cards"]}
     assert entered["a"] == yesterday
@@ -644,7 +631,7 @@ def test_retry_insert_does_not_borrow_today_segment():
     )
     plan = leave_card(_rate(plan, "a", 2, "enc-a"), "a")
     retry_a = plan["occurrences"][0]["occurrence_id"]
-    assert plan["presented_ids"][:3] == ["a", "b", retry_a]
+    assert plan["presented_ids"][:3] == ["a", retry_a, "b"]
     assert plan["presented_ids"][3:] == ["c1", "c2", "c3"]
 
 
@@ -669,7 +656,7 @@ def test_replan_remaining_parks_retries_near_new_queue_start():
         today=today,
     )
     presented = rebound["presented_ids"]
-    assert presented == ["a", "b", "n1", "n2", "n3", retry_a, "n4"]
+    assert presented == ["a", "b", retry_a, "n1", "n2", "n3", "n4"]
     assert "c" not in [item["card_id"] for item in rebound["original_cards"]]
 
 

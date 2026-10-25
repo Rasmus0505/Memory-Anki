@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from datetime import datetime
 from typing import Any
 
 from .round_plan_normalization import (  # noqa: F401 - compatibility re-exports
@@ -27,13 +28,16 @@ from .round_plan_values import (  # noqa: F401 - re-exported for sibling rules
     _unique,
 )
 
-RETRY_GAP = 3
 FAIL_RATINGS = {1, 2}
 PASS_RATINGS = {3, 4}
 OCCURRENCE_PENDING = "pending"
 OCCURRENCE_INSERTED = "inserted"
 OCCURRENCE_COMPLETED = "completed"
 OCCURRENCE_CANCELLED = "cancelled"
+OCCURRENCE_KINDS = {"retry", "step"}
+# A published retry is already due; it does not need a card offset, because the
+# wait itself is the spacing. Keep one constant so old call sites stay uniform.
+PUBLISH_GAP = 0
 
 Plan = dict[str, Any]
 
@@ -74,7 +78,14 @@ def assert_rating_identity(
 
 
 def plan_is_fully_handled(plan: Mapping[str, Any] | None) -> bool:
-    return next_unfinished_id(plan or {}) is None
+    normalized = normalize_plan(plan)
+    if next_unfinished_id(normalized) is not None:
+        return False
+    # A pending same-day step/retry is work the learner still owes today, even
+    # though nothing is servable right now.
+    return not any(
+        item["status"] == OCCURRENCE_PENDING for item in normalized["occurrences"]
+    )
 
 
 def apply_rating(
@@ -87,7 +98,17 @@ def apply_rating(
     unit_id: str = "",
     round_id: str = "",
     unit_revision: int | None = None,
+    available_at: datetime | None = None,
+    intraday_kind: str | None = None,
+    intraday_exhausted: bool = False,
 ) -> Plan:
+    """Apply one rating to the round.
+
+    ``available_at`` is the instant the next same-day appearance may be served
+    (a first-pass re-check or a failed grade's wait). A pending occurrence is not
+    on the rail until that instant passes, and ``intraday_exhausted`` means the
+    unit has used its retries today: no occurrence is created at all.
+    """
     next_plan = normalize_plan(plan)
     rated_id, occ_id, encounter = _text(card_id), _text(occurrence_id), _text(encounter_id)
     rating_value = _int(rating)
@@ -120,9 +141,24 @@ def apply_rating(
             source_id,
             keep_occurrence_id=_text(occ.get("occurrence_id")) if occ is not None else "",
         )
+        if intraday_kind == "step" and available_at is not None:
+            from .round_plan_intraday import append_step_occurrence
+
+            append_step_occurrence(
+                next_plan,
+                source_id=source_id,
+                source_unit_id=source_unit_id,
+                round_id=round_id,
+                available_at=available_at,
+            )
         return next_plan
 
     _unsettle_source(next_plan, source_id)
+    if intraday_exhausted:
+        # No retry left today: cancel any waiting slot and let the unit come
+        # back tomorrow. The source is marked handled for this round.
+        _settle_source(next_plan, source_id)
+        return next_plan
     _fail_source(
         next_plan,
         source_id=source_id,
@@ -131,6 +167,8 @@ def apply_rating(
         rating=rating_value,
         round_id=round_id,
         occ=occ,
+        available_at=available_at,
+        kind=intraday_kind or "retry",
     )
     return next_plan
 
@@ -172,17 +210,6 @@ def leave_card(plan: Mapping[str, Any], card_id: str) -> Plan:
     ]
     for item in pending:
         _insert_retry_inplace(next_plan, item["occurrence_id"], anchor_index)
-    _sync_index(next_plan)
-    return next_plan
-
-
-def insert_retry_after_gap(
-    plan: Mapping[str, Any],
-    occurrence_id: str,
-    source_index: int,
-) -> Plan:
-    next_plan = normalize_plan(plan)
-    _insert_retry_inplace(next_plan, occurrence_id, source_index)
     _sync_index(next_plan)
     return next_plan
 
@@ -487,12 +514,17 @@ def _fail_source(
     rating: int,
     round_id: str,
     occ: dict[str, Any] | None,
+    available_at: datetime | None = None,
+    kind: str = "retry",
 ) -> None:
+    next_available = available_at.isoformat() if available_at else None
     rows = [item for item in plan["occurrences"] if item["source_card_id"] == source_id]
     same = [item for item in plan["occurrences"] if item["encounter_id"] == encounter_id and item["status"] != OCCURRENCE_CANCELLED]
     if same:
         for item in same:
             item["rating"] = rating
+            item["available_at"] = next_available
+            item["kind"] = kind
             _revive_occurrence(plan, item)
         _collapse_retries(plan)
         _publish_pending_retries(plan, source_id)
@@ -506,6 +538,8 @@ def _fail_source(
     if keep is not None:
         keep["rating"] = rating
         keep["encounter_id"] = encounter_id
+        keep["available_at"] = next_available
+        keep["kind"] = kind
         if keep["status"] == OCCURRENCE_PENDING:
             keep["retry_attempt"] = int(keep["retry_attempt"] or 0) + 1
             keep["occurrence_id"] = occurrence_id_for(round_id, keep["source_unit_id"] or source_unit_id or source_id, keep["retry_attempt"])
@@ -527,6 +561,8 @@ def _fail_source(
         "status": OCCURRENCE_PENDING,
         "encounter_id": encounter_id,
         "entered_on": _cohort_of(plan, source_id),
+        "available_at": next_available,
+        "kind": kind,
     })
     _collapse_retries(plan)
     _publish_pending_retries(plan, source_id)
@@ -548,6 +584,9 @@ def _publish_pending_retries(plan: Plan, source_id: str) -> None:
         if _text(item.get("source_card_id")) != source_id:
             continue
         if item.get("status") != OCCURRENCE_PENDING:
+            continue
+        if item.get("available_at"):
+            # Time-spaced: stays off the rail until publish_ready_retries runs.
             continue
         _insert_retry_inplace(plan, _text(item.get("occurrence_id")), anchor)
     if held_current and _text(held_current) in plan["presented_ids"]:
@@ -616,7 +655,7 @@ def _reposition_retry_inplace(plan: Plan, occurrence_id: str, vacated_index: int
         occ["entered_on"] = cohort
     segment_end = _segment_end(plan, presented, old, cohort)
     remaining_in_segment = max(0, segment_end - old - 1)
-    insert_at = old + min(RETRY_GAP, remaining_in_segment)
+    insert_at = old + min(PUBLISH_GAP, remaining_in_segment)
     presented = [item for item in presented if item != occ_id]
     insert_at = max(0, min(insert_at, len(presented)))
     presented.insert(insert_at, occ_id)
@@ -647,7 +686,7 @@ def _insert_retry_inplace(plan: Plan, occurrence_id: str, source_index: int) -> 
         if not occ.get("entered_on") and cohort:
             occ["entered_on"] = cohort
         segment_end = _segment_end(plan, presented, anchor, cohort)
-        insert_at = min(anchor + 1 + RETRY_GAP, segment_end)
+        insert_at = min(anchor + 1 + PUBLISH_GAP, segment_end)
         presented.insert(insert_at, occ_id)
     plan["presented_ids"] = presented
     occ["status"] = OCCURRENCE_INSERTED
@@ -669,7 +708,7 @@ def _predicted_insert_index(plan: Plan, source_id: str) -> int:
         anchor = presented.index(current) if current and current in presented else 0
     cohort = _cohort_of(plan, source_id)
     segment_end = _segment_end(plan, presented, anchor, cohort)
-    return min(anchor + 1 + RETRY_GAP, segment_end)
+    return min(anchor + 1 + PUBLISH_GAP, segment_end)
 
 
 def _source_id_of(plan: Plan, card_id: str) -> str:
@@ -703,6 +742,12 @@ def _is_unfinished(plan: Plan, card_id: str) -> bool:
     occ = _find_occurrence(plan, card_id)
     if occ is not None:
         return occ["status"] == OCCURRENCE_INSERTED
+    if any(
+        item["source_card_id"] == card_id and item["status"] == OCCURRENCE_PENDING
+        for item in plan["occurrences"]
+    ):
+        # Waiting for its same-day re-check or retry: not served now, not done.
+        return False
     live = {OCCURRENCE_INSERTED, OCCURRENCE_COMPLETED}
     return not any(item["source_card_id"] == card_id and item["status"] in live for item in plan["occurrences"])
 

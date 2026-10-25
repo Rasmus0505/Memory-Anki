@@ -8,7 +8,7 @@ projection, so the old stage arithmetic is still asserted where it is the
 compatibility surface rather than the scheduler.
 """
 
-from datetime import date
+from datetime import date, timedelta
 
 from memory_anki.modules.memory.application.unit_scheduler import (
     FUZZ_MIN_INTERVAL_DAYS,
@@ -186,25 +186,56 @@ def test_hard_on_a_never_passed_unit_stays_at_first_learning():
     assert (result.stage_index, result.hard_penalty_applied) == (0, False)
 
 
-def test_a_pass_never_schedules_zero_days():
-    """Root cause of the "passed but still due today" queue residue."""
-    violations = []
+def test_a_first_pass_gets_one_same_day_step_then_books_tomorrow():
+    """A card learned today is re-checked once, then belongs to tomorrow.
+
+    The old rule booked a first pass at least one day out and never looked at it
+    again until then; that is the fragile-memory case the same-day step targets.
+    """
+    from memory_anki.modules.memory.application.unit_intraday import IntradayState
+
     for stage in range(len(INTERVAL_DAYS)):
-        for has_passed in (True, False):
-            for prior_failure in (True, False):
-                for rating in (1, 2, 3, 4):
-                    result = rate_unit(
-                        stage_index=stage,
-                        has_passed=has_passed,
-                        rating=rating,
-                        had_failure_in_encounter=prior_failure,
-                        today=TODAY,
-                    )
-                    if result.passed and (result.due_date - TODAY).days < 1:
-                        violations.append((stage, has_passed, prior_failure, rating))
-                    if result.passed:
-                        assert result.stage_index >= MIN_PASSED_STAGE
-    assert violations == []
+        for rating in (3, 4):
+            first = rate_unit(
+                stage_index=stage,
+                has_passed=False,
+                rating=rating,
+                had_failure_in_encounter=False,
+                today=TODAY,
+            )
+            assert first.passed is True
+            assert first.due_date == TODAY
+            assert first.intraday_kind == "step"
+            assert first.retry_after_minutes is not None
+            assert first.stage_index >= MIN_PASSED_STAGE
+
+    # The re-check passes: tomorrow, never later than that.
+    graduated = rate_unit(
+        stage_index=3,
+        has_passed=True,
+        rating=3,
+        had_failure_in_encounter=False,
+        today=TODAY,
+        intraday=IntradayState(day=TODAY, step_pending=True),
+    )
+    assert graduated.passed is True
+    assert graduated.due_date == TODAY + timedelta(days=1)
+    assert graduated.intraday_kind is None
+
+
+def test_a_mature_pass_still_books_at_least_one_day():
+    for stage in range(len(INTERVAL_DAYS)):
+        for rating in (3, 4):
+            result = rate_unit(
+                stage_index=stage,
+                has_passed=True,
+                rating=rating,
+                had_failure_in_encounter=False,
+                today=TODAY,
+            )
+            assert result.passed is True
+            assert (result.due_date - TODAY).days >= 1
+            assert result.stage_index >= MIN_PASSED_STAGE
 
 
 def test_top_stage_stays_capped():
@@ -368,7 +399,6 @@ def test_fuzz_never_produces_a_non_positive_interval():
 # overshooting intervals are pulled into the last week, and the ladder itself
 # (landing stage, nominal interval, toolbar histogram) is untouched.
 
-from datetime import timedelta  # noqa: E402
 
 from memory_anki.core.exam_horizon import resolve_sprint_horizon  # noqa: E402
 

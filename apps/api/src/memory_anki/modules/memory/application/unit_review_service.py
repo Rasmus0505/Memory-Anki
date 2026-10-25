@@ -8,7 +8,7 @@ import uuid
 from datetime import date, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -35,6 +35,7 @@ from .unit_fsrs_adapter import (
     replay_history,
     state_payload,
 )
+from .unit_intraday import IntradayState
 from .unit_reconcile import reconcile_palace_units
 from .unit_review_projection import (
     _active_unit_key,
@@ -475,6 +476,45 @@ def _replay_fsrs_state(
     return replay.state
 
 
+def _intraday_from_unit(state: ReviewUnitState) -> IntradayState:
+    return IntradayState(
+        day=state.intraday_day,
+        due_at=state.intraday_due_at,
+        retries=int(state.intraday_retries or 0),
+        step_pending=bool(state.intraday_step_pending),
+    )
+
+
+def _intraday_payload(intraday: IntradayState) -> dict[str, Any]:
+    return {
+        "day": intraday.day.isoformat() if intraday.day else None,
+        "due_at": intraday.due_at.isoformat() if intraday.due_at else None,
+        "retries": intraday.retries,
+        "step_pending": intraday.step_pending,
+    }
+
+
+def _intraday_from_snapshot(state_data: dict[str, Any]) -> IntradayState | None:
+    raw = state_data.get("intraday")
+    if not isinstance(raw, dict):
+        return None
+    due_at = raw.get("due_at")
+    day = raw.get("day")
+    return IntradayState(
+        day=date.fromisoformat(str(day)) if day else None,
+        due_at=datetime.fromisoformat(str(due_at)) if due_at else None,
+        retries=int(raw.get("retries") or 0),
+        step_pending=bool(raw.get("step_pending")),
+    )
+
+
+def _apply_intraday(state: ReviewUnitState, intraday: IntradayState) -> None:
+    state.intraday_due_at = intraday.due_at
+    state.intraday_day = intraday.day
+    state.intraday_retries = intraday.retries
+    state.intraday_step_pending = intraday.step_pending
+
+
 def _state_snapshot(state: ReviewUnitState, item: ReviewSessionUnit) -> dict[str, Any]:
     return {
         "state": {
@@ -486,6 +526,7 @@ def _state_snapshot(state: ReviewUnitState, item: ReviewSessionUnit) -> dict[str
             if state.hard_penalized_on
             else None,
             "fsrs": state_payload(_fsrs_state_from_unit(state)),
+            "intraday": _intraday_payload(_intraday_from_unit(state)),
         },
         "item": {
             "status": item.status,
@@ -525,6 +566,12 @@ def _restore_snapshot(
         _apply_fsrs_state(state, None, clear=True)
     else:
         _apply_fsrs_state(state, snapshot_fsrs)
+    snapshot_intraday = _intraday_from_snapshot(state_data)
+    if snapshot_intraday is None:
+        # Pre-0078 snapshots never had a same-day ladder.
+        _apply_intraday(state, IntradayState.empty())
+    else:
+        _apply_intraday(state, snapshot_intraday)
     item.status = str(item_data["status"])
     item.retry_count = int(item_data["retry_count"])
     item.hard_count = int(item_data["hard_count"])
@@ -539,8 +586,19 @@ def _restore_snapshot(
     )
 
 
-def _schedule_lock_from_due(due_date: date, today: date) -> tuple[bool, date]:
-    """A unit reviewed ahead of its booked day must not climb the ladder."""
+def _schedule_lock_from_due(
+    due_date: date,
+    today: date,
+    *,
+    intraday_due_at: datetime | None = None,
+    now: datetime | None = None,
+) -> tuple[bool, date]:
+    """A unit reviewed ahead of its booked day is locked.
+
+    A same-day wait is enforced by the queue and the palace batch, not by this
+    flag: if the learner deliberately opens the card and rates it early, that is
+    a real attempt and should count.
+    """
     return due_date > today, due_date
 
 
@@ -628,7 +686,15 @@ def _rating_effects(
         baseline_due = date.fromisoformat(str(state_data["due_date"]))
     except (TypeError, ValueError):
         baseline_due = today
-    schedule_locked, locked_due_date = _schedule_lock_from_due(baseline_due, today)
+    baseline_intraday = _intraday_from_snapshot(state_data) or IntradayState.empty()
+    # One instant for every button, so the four previews share a reference.
+    preview_at = utc_now_naive()
+    schedule_locked, locked_due_date = _schedule_lock_from_due(
+        baseline_due,
+        today,
+        intraday_due_at=baseline_intraday.due_at,
+        now=preview_at,
+    )
     snapshot_fsrs = _fsrs_state_from_snapshot(state_data)
     fsrs_state = (
         snapshot_fsrs
@@ -654,6 +720,8 @@ def _rating_effects(
             hard_penalized_today=hard_penalized_today,
             horizon=horizon,
             fsrs_state=fsrs_state,
+            intraday=baseline_intraday,
+            now=preview_at,
         )
         # FSRS returns the real booked gap. The old nominal-stage interval and
         # stage action remain in the payload for compatibility, but the UI must
@@ -678,6 +746,12 @@ def _rating_effects(
                 "target_actual_interval_days": actual_interval,
                 "target_due_date": result.due_date.isoformat(),
                 "retry_after_cards": result.retry_after_cards,
+                "retry_after_minutes": result.retry_after_minutes,
+                "intraday_kind": result.intraday_kind,
+                "intraday_due_at": result.intraday_due_at.isoformat()
+                if result.intraday_due_at
+                else None,
+                "intraday_exhausted": result.intraday_exhausted,
                 "stage_action": stage_action,
                 "schedule_changed": result.schedule_changed,
             }
@@ -1153,10 +1227,23 @@ def _apply_rating_from_snapshot(
     *,
     horizon: SprintHorizon | None = None,
     exclude_operation_ids: set[str] | None = None,
+    intraday_baseline: IntradayState | None = None,
 ) -> Any:
     _restore_snapshot(state, item, snapshot)
+    if intraday_baseline is not None:
+        # A fresh attempt (a retry or a new step) rates from the unit's current
+        # same-day ladder. The attempt's baseline snapshot may predate the
+        # failure that scheduled this retry; rewinding the ladder would turn the
+        # retry into a first pass.
+        _apply_intraday(state, intraday_baseline)
     today = local_day()
-    schedule_locked, locked_due_date = _schedule_lock_from_due(state.due_date, today)
+    now = utc_now_naive()
+    schedule_locked, locked_due_date = _schedule_lock_from_due(
+        state.due_date,
+        today,
+        intraday_due_at=state.intraday_due_at,
+        now=now,
+    )
     fsrs_state = _fsrs_state_from_snapshot(snapshot["state"])
     if fsrs_state is None:
         # A snapshot recorded before the switch has no FSRS fields. Replaying
@@ -1181,9 +1268,12 @@ def _apply_rating_from_snapshot(
         hard_penalized_today=state.hard_penalized_on == today,
         horizon=horizon,
         fsrs_state=fsrs_state,
+        intraday=_intraday_from_unit(state),
+        now=now,
     )
-    now = utc_now_naive()
     _apply_fsrs_state(state, result.fsrs_state)
+    if result.intraday is not None:
+        _apply_intraday(state, result.intraday)
     state.stage_index = result.stage_index
     state.due_date = result.due_date
     if result.hard_penalty_applied:
@@ -1345,6 +1435,11 @@ def _rate_open_encounter(
     previous_id = source.effective_operation_id or encounter.effective_operation_id
     previous = session.get(ReviewUnitRatingOperation, previous_id) if previous_id else None
     before = json.loads(source.baseline_state_json)
+    # Only a correction inside the same encounter rewinds the same-day ladder.
+    # A retry (or a correction of an earlier encounter's rating) must start from
+    # where the unit actually is now, or the wait it just served is forgotten.
+    correcting_same_encounter = own_previous is not None and source is encounter
+    live_intraday = None if correcting_same_encounter else _intraday_from_unit(state)
     result = _apply_rating_from_snapshot(
         session,
         state,
@@ -1353,6 +1448,7 @@ def _rate_open_encounter(
         rating,
         horizon=_sprint_horizon(session),
         exclude_operation_ids={previous.id} if previous is not None else None,
+        intraday_baseline=live_intraday,
     )
     now = utc_now_naive()
     if previous is not None:
@@ -1369,6 +1465,12 @@ def _rate_open_encounter(
         "unit": unit_payload(state),
         "passed": result.passed,
         "retry_after_cards": result.retry_after_cards,
+        "retry_after_minutes": result.retry_after_minutes,
+        "intraday_kind": result.intraday_kind,
+        "intraday_due_at": result.intraday_due_at.isoformat()
+        if result.intraday_due_at
+        else None,
+        "intraday_exhausted": result.intraday_exhausted,
         "rating": rating,
         "rating_label": RATING_LABELS[rating],
         "session_status": item.status,
@@ -1478,12 +1580,19 @@ def _create_open_encounter(
 
 
 def _due_states_for_palace(session: Session, palace_id: int) -> list[ReviewUnitState]:
+    # A unit waiting for its same-day step/retry is still due today, but a
+    # palace batch must not rate it early: that would skip the spacing.
+    moment = utc_now_naive()
     return (
         session.query(ReviewUnitState)
         .filter(
             ReviewUnitState.palace_id == palace_id,
             ReviewUnitState.active.is_(True),
             ReviewUnitState.due_date <= local_day(),
+            or_(
+                ReviewUnitState.intraday_due_at.is_(None),
+                ReviewUnitState.intraday_due_at <= moment,
+            ),
         )
         .order_by(ReviewUnitState.due_date.asc(), ReviewUnitState.id.asc())
         .all()
@@ -1505,6 +1614,8 @@ def _round_rated_unit_ids(session: Session, palace_id: int, round_id: str) -> se
 
 
 def _remaining_due_count(session: Session, palace_id: int) -> int:
+    # Everything still owed today, including a unit waiting for its same-day
+    # re-check: it is due, just not servable this minute.
     return (
         session.query(func.count(ReviewUnitState.id))
         .filter(

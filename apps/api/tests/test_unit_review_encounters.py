@@ -13,6 +13,7 @@ from memory_anki.infrastructure.db._tables.unit_reviews import (
     ReviewUnitState,
 )
 from memory_anki.modules.memory.application.unit_fsrs_adapter import FsrsUnitState
+from memory_anki.modules.memory.application.unit_intraday import IntradayState
 from memory_anki.modules.memory.application.unit_review_service import (
     adjust_unit_schedule,
     cancel_unrated_unit_review_encounter,
@@ -277,14 +278,18 @@ def test_one_encounter_amends_from_frozen_baseline_and_is_idempotent(db_session)
     review_session = _start(db_session, state, "encounter-amend")
 
     remembered = _rate(db_session, review_session, state, "encounter-amend", "rating-remembered", 3)
+    remembered_stability = _fsrs_state(state).stability
     easy = _rate(db_session, review_session, state, "encounter-amend", "rating-easy", 4)
     duplicate = _rate(db_session, review_session, state, "encounter-amend", "rating-easy", 4)
 
     assert remembered["unit"]["stage_index"] == 1
     assert easy["amended"] is True
-    # Amending from the frozen baseline re-runs FSRS: a 轻松 books a longer
-    # interval than the 记得 it replaces, wherever the display band lands.
-    assert easy["unit"]["interval_days"] > remembered["unit"]["interval_days"]
+    # Both ratings are the same-day re-check, so the displayed day gap is zero
+    # for each. The memory model still distinguishes them: 轻松 leaves a more
+    # stable card than the 记得 it replaces.
+    assert remembered["intraday_kind"] == "step"
+    assert easy["intraday_kind"] == "step"
+    assert _fsrs_state(state).stability > remembered_stability
     assert duplicate == easy
 
     hard = _rate(db_session, review_session, state, "encounter-amend", "rating-hard", 2)
@@ -327,7 +332,14 @@ def test_closed_pass_locks_rating_and_future_unit_cannot_restart(db_session):
 
     assert closed["session_status"] == "completed"
     assert state.stage_index >= 1
-    assert state.due_date > local_day()
+    # The first pass books a same-day re-check, so the unit is still due today.
+    assert state.due_date == local_day()
+    assert state.intraday_step_pending is True
+    # Once the wait elapses and the re-check passes, the unit is tomorrow's.
+    state.due_date = local_day() + timedelta(days=1)
+    state.intraday_step_pending = False
+    state.intraday_due_at = None
+    db_session.commit()
     with pytest.raises(ValueError, match="not due"):
         start_freestyle_unit_review_session(
             db_session,
@@ -417,6 +429,11 @@ def test_previous_day_rating_does_not_amend_a_new_due_cycle(db_session):
     state.due_date = local_day()
     state.stage_index = 1
     state.has_passed = True
+    # A new due cycle starts with no same-day ladder left over from the pass.
+    state.intraday_due_at = None
+    state.intraday_day = None
+    state.intraday_retries = 0
+    state.intraday_step_pending = False
     db_session.commit()
 
     again = _rate(
@@ -626,6 +643,7 @@ def test_failed_close_keeps_session_and_next_encounter_retains_penalty(db_sessio
     state = _seed_review_unit(db_session)
     first = _start(db_session, state, "encounter-hard")
     _rate(db_session, first, state, "encounter-hard", "rating-hard", 2)
+    assert state.intraday_retries == 1, (state.intraday_retries, state.intraday_step_pending)
     closed = close_unit_review_encounter(
         db_session,
         study_session_id=first["id"],
@@ -636,6 +654,9 @@ def test_failed_close_keeps_session_and_next_encounter_retains_penalty(db_sessio
     assert closed["passed"] is False
     assert closed["session_status"] == "active"
 
+    # The retry is served after its wait, not immediately.
+    state.intraday_due_at = utc_now_naive() - timedelta(minutes=1)
+    db_session.commit()
     second = _start(db_session, state, "encounter-retry")
     assert second["id"] == first["id"]
     assert second["units"][0]["encounter"]["sequence"] == 1
@@ -747,6 +768,15 @@ def test_real_retry_preserves_failure_and_preview_matches_commit(
     failed = _rate(db_session, first, state, "real-source", "real-fail", first_rating)
     lowered = failed["unit"]["stage_index"]
     fsrs_after_failure = _fsrs_state(state)
+    # The same-day wait is real: simulate it elapsing before the retry is served.
+    state.intraday_due_at = utc_now_naive() - timedelta(minutes=1)
+    db_session.commit()
+    intraday_after_failure = IntradayState(
+        day=local_day(),
+        due_at=state.intraday_due_at,
+        retries=int(state.intraday_retries or 0),
+        step_pending=False,
+    )
     close_unit_review_encounter(
         db_session, study_session_id=first["id"], unit_id=state.id,
         encounter_id="real-source", operation_id="real-close",
@@ -768,6 +798,7 @@ def test_real_retry_preserves_failure_and_preview_matches_commit(
         stage_index=lowered, has_passed=True, rating=passing_rating,
         had_failure_in_encounter=True, today=local_day(), fuzz_key=state.id,
         fsrs_state=fsrs_after_failure,
+        intraday=intraday_after_failure,
     )
     assert state.stage_index == expected.stage_index
     assert state.due_date == expected.due_date

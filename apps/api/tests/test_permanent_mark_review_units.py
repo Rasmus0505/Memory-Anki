@@ -1,5 +1,6 @@
 from datetime import date, timedelta
 
+from memory_anki.modules.memory.application.unit_intraday import IntradayState
 from memory_anki.modules.memory.application.unit_scheduler import (
     INTERVAL_DAYS,
     rate_unit,
@@ -205,9 +206,11 @@ def test_fixed_schedule_first_pass_failure_penalty_and_caps():
         had_failure_in_encounter=True,
         today=today,
         fsrs_state=first_hard.fsrs_state,
+        intraday=IntradayState(day=today, retries=1),
     )
     assert remembered_after_hard.stage_index == 1
-    assert remembered_after_hard.due_date > today
+    # A recovery after today's failure graduates to tomorrow.
+    assert remembered_after_hard.due_date == today + timedelta(days=1)
 
     first_remembered = rate_unit(
         stage_index=0,
@@ -217,9 +220,10 @@ def test_fixed_schedule_first_pass_failure_penalty_and_caps():
         today=today,
     )
     assert first_remembered.stage_index == 1
-    # The failure penalty is real: the same 记得 books a shorter interval after a
-    # 困难 than it does on a fresh card, because FSRS keeps the raised difficulty.
-    assert first_remembered.due_date > remembered_after_hard.due_date
+    # A first pass is the same-day re-check; the penalty is in the memory model:
+    # the 困难 raised difficulty, so the recovery card is harder than a fresh pass.
+    assert first_remembered.due_date == today
+    assert first_remembered.intraday_kind == "step"
     assert (remembered_after_hard.fsrs_state.difficulty or 0) > (
         first_remembered.fsrs_state.difficulty or 0
     )

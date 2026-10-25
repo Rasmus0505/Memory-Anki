@@ -385,7 +385,7 @@ def test_uncomplete_action_clears_completed_ids(make_client):
     assert undone.json()["plan"]["completed_ids"] == []
 
 
-def test_rating_then_leave_inserts_at_plus_three(make_client):
+def test_rating_then_leave_publishes_the_retry_at_the_cursor(make_client):
     client = _client(make_client)
     created = _create(
         client,
@@ -415,8 +415,8 @@ def test_rating_then_leave_inserts_at_plus_three(make_client):
     assert plan["occurrences"]
     occ_id = plan["occurrences"][0]["occurrence_id"]
     assert plan["occurrences"][0]["status"] == "inserted"
-    assert plan["presented_ids"] == ["a", "quiz-1", "b", "c", occ_id, "d"]
-    assert plan["presented_ids"].index(occ_id) == 4
+    assert plan["presented_ids"] == ["a", occ_id, "quiz-1", "b", "c", "d"]
+    assert plan["presented_ids"].index(occ_id) == 1
     assert plan["current_card_id"] == "a"
 
     left = client.post(
@@ -432,7 +432,7 @@ def test_rating_then_leave_inserts_at_plus_three(make_client):
     after = left.json()
     assert after["plan"]["occurrences"][0]["occurrence_id"] == occ_id
     assert after["plan"]["occurrences"][0]["status"] == "inserted"
-    assert after["plan"]["presented_ids"] == ["a", "quiz-1", "b", "c", occ_id, "d"]
+    assert after["plan"]["presented_ids"] == ["a", occ_id, "quiz-1", "b", "c", "d"]
     assert after["plan"]["current_card_id"] == "a"
 
 

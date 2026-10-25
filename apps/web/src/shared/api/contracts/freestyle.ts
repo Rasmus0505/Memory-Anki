@@ -397,6 +397,8 @@ export interface FreestyleRoundOccurrence {
   status: FreestyleRoundOccurrenceStatus
   encounter_id: string
   entered_on?: string
+  available_at?: string | null
+  kind?: 'retry' | 'step'
 }
 
 export interface FreestyleRoundPlanPayload {
@@ -496,6 +498,7 @@ export interface FreestyleRoundStatePayload {
   updated_at: string | null
   conflict: boolean
   duplicate: boolean
+  waiting?: { count: number; next_ready_at: string | null }
   workspace?: 'primary' | `p${number}`
   /**
    * Deliberately absent: `cleared_review_palace_ids`.

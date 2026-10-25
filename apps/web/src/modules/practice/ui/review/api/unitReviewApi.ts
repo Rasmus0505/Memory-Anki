@@ -18,6 +18,13 @@ export interface UnitRatingEffectDto {
   target_actual_interval_days?: number
   target_due_date: string
   retry_after_cards: number
+  /** Same-day wait before the next appearance; null when nothing waits today. */
+  retry_after_minutes?: number | null
+  /** "retry" for a failed grade, "step" for a first-pass re-check. */
+  intraday_kind?: 'retry' | 'step' | null
+  intraday_due_at?: string | null
+  /** True when the day's retries are used up and the unit moved to tomorrow. */
+  intraday_exhausted?: boolean
   stage_action: 'reset' | 'lower' | 'keep' | 'advance'
   /** False when a fill / not-due pass was recorded without moving the schedule. */
   schedule_changed?: boolean
@@ -249,6 +256,9 @@ export interface LadderLearningSummaryDto {
   quiz_count: number
 }
 
+/** Due-date buckets shown in the toolbar strip; ordered nearest-first. */
+export type DueHorizonKey = 'today' | 'd3' | 'week' | 'month' | 'later'
+
 export interface PalaceLadderProgressDto {
   palace_id: number
   title: string
@@ -262,12 +272,16 @@ export interface PalaceLadderProgressDto {
     due_date: string | null
     due: boolean
     has_passed: boolean
+    /** Due-horizon bucket of this unit, computed against the server study day. */
+    horizon?: DueHorizonKey | null
   } | null
   palace: {
     unit_count: number
     due_count: number
     weakest_stage_index: number | null
     stage_histogram: number[]
+    /** Active units per due-date horizon; the toolbar's distribution strip. */
+    due_horizon?: Record<DueHorizonKey, number>
     next_review_date: string | null
     review_status: string
     mark_required: boolean

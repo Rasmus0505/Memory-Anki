@@ -23,6 +23,7 @@ from memory_anki.modules.memory.public.queries import (
     list_palace_ids_without_units,
     list_trusted_due_units_for_queue,
     resolve_unit_definitions,
+    summarize_waiting_units,
 )
 from memory_anki.modules.quiz.public.queries import (
     list_node_bindings_for_palaces,
@@ -124,6 +125,10 @@ def build_freestyle_queue(
         today,
         all_selected_ids or None,
     )
+    # Due today but booked for a later instant (a first-pass re-check or a failed
+    # grade's expanding wait). They are not in the queue; the round must know
+    # they exist so it doesn't claim the day is finished.
+    waiting = summarize_waiting_units(session, today, all_selected_ids or None)
 
     palace_meta: dict[int, dict[str, Any]] = {}
     units_by_palace: dict[int, list[Any]] = {}
@@ -354,6 +359,8 @@ def build_freestyle_queue(
         ),
         "training_mode": training_mode,
         "active_streams": ",".join(active_streams),
+        "waiting_count": waiting["count"],
+        "next_ready_at": waiting["next_ready_at"],
     }
     for stream_name, result in stream_results.items():
         phase_stats[f"{stream_name}_candidate_count"] = int(result.phase_stats.get("candidate_count") or 0)
@@ -380,6 +387,8 @@ def build_freestyle_queue(
             "tail_pending": tail_pending,
             "palace_leftover_due": palace_leftover_due,
             "palace_unit_totals": palace_unit_totals,
+            "waiting_count": waiting["count"],
+            "next_ready_at": waiting["next_ready_at"],
         },
         "counts": {
             "mindmap_branch": sum(1 for card in limited if card.get("type") == "mindmap_branch"),

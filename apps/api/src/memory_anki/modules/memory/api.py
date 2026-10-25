@@ -18,6 +18,7 @@ from .application.unit_review_queue_read import (
     list_round_unit_ratings,
     list_trusted_due_units_for_queue,
     list_unit_node_members,
+    summarize_waiting_units,
 )
 from .application.unit_review_service import (
     adjust_unit_schedule,
@@ -89,6 +90,7 @@ __all__ = [
     "count_active_units_by_palace",
     "count_units_due_on",
     "list_trusted_due_units_for_queue",
+    "summarize_waiting_units",
     "list_unit_node_members",
     "list_palace_unit_pass_states",
     "list_latest_unit_ratings",

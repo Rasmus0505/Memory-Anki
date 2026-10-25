@@ -14,6 +14,12 @@ practice         -> consumes reviews.api unit projections and the shared rating 
 
 `GET /api/v1/review/subject-ladder` is a read-only map of active units onto ten display bands of real interval days (`0, 1, 3, 7, 14, 30, 60, 120, 240, 365` lower bounds; the first band is 首学). It does not reconcile, write due dates, or invent a second scheduler. A palace is listed in every band where it already has an active unit; the shown review time is the earliest due date among those units. The shelf shows only the shape, and the subject palace list and progress page can scrub a band and open the existing palace review or a one-round freestyle lock for exactly those palaces. The band is a grouping of FSRS intervals, never a scheduling position.
 
+The mind-map toolbar strip (`GET /api/v1/review/palaces/{id}/ladder-progress`) shows a
+**due-date distribution** — 今天 / 3天内 / 本周 / 本月 / 更远 — plus the current unit's booked
+gap ("间隔 7天", or "今天到期"). It is not a ladder position: `stage_histogram` stays in the
+payload for compatibility, but the strip no longer draws it. A zero gap means the product booked
+the unit today (first learning, a failed grade, or a retry), not that it has no history.
+
 The review scheduling and encounter API remains owned by `memory` and is consumed by
 freestyle cards. The frontend review UI lives in `apps/web/src/modules/practice/ui/freestyle`.
 The palace shelf opens `/palaces/<id>/review`, which reuses that UI for one palace and keeps a
@@ -85,17 +91,26 @@ Reviews must not import Practice. Practice must not create a second schedule, co
   `0, 1, 3, 7, 14, 30, 60, 120, 240, 365`). It is written for old clients and
   stored snapshots; nothing schedules from it. The UI shows each unit's real
   interval ("约 43 天后") and groups units into day-range bands, never levels.
-- Learning steps are disabled (`LEARNING_STEPS = ()`, `RELEARNING_STEPS = ()`).
-  The product works in whole study days and re-serves failed units from its own
-  retry queue, so FSRS' minute-level steps would only make the card state
-  disagree with the booked day.
+- FSRS' own learning steps stay empty (`LEARNING_STEPS = ()`): the product's
+  same-day ladder (`unit_intraday.py`) owns sub-day spacing, so the library's
+  minute steps would only disagree with it. The ladder is wall-clock, not a card
+  count, so a short session cannot re-serve a card immediately and a long one
+  cannot leave it for hours.
 - `记得` (Good) and `轻松` (Easy) pass the unit. `忘记` (Again) and `困难`
   (Hard) are retry work: FSRS records the evidence, while the product keeps the
-  unit due today and returns it after at most three other units. Only `记得` and
-  `轻松` pass.
-- A pass always books at least one day out (`MIN_PASSED_INTERVAL_DAYS = 1`), even
-  if the model returns the same day, so a "passed" unit can never be re-served
-  by the next queue build.
+  unit due today and waits 10 minutes, then 1 hour, then 3 hours ("today's
+  last"). A unit gets at most three retries; the next failure books tomorrow.
+  Only `记得` and `轻松` pass.
+- A first-ever pass books one short re-check (15 minutes) instead of tomorrow;
+  the re-check passing graduates the unit to the next study day. A mature pass
+  books the FSRS interval (at least one day). An ahead-of-date filler pass
+  records without moving either.
+- A waiting unit is still due today but is not servable: the queue and the
+  palace batch exclude it (`intraday_due_at > now`), and the round plan keeps
+  its occurrence `pending` with `available_at`. Serving publishes it once the
+  wait has passed; the round payload reports `waiting` (count + earliest ready
+  time) so a round is never reported finished while work is owed. Manual
+  early rating is allowed and counts; only the queue is time-gated.
 - `困难` still lowers the display band at most once per study day
   (`ReviewUnitState.hard_penalized_on`), and a repeated same-day `困难` is not fed
   to FSRS at all: retry taps are not new evidence. Never-passed units stay in

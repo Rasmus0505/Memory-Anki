@@ -3,6 +3,7 @@ import type { useImmersiveQueue } from '@/modules/practice/ui/freestyle/hooks/us
 import { FreestyleEmptyState, FreestyleFeedErrorState, FreestyleLoadingState } from '@/modules/practice/ui/freestyle/components/FreestyleFeedStates'
 import { FreestyleFeedCard } from '@/modules/practice/ui/freestyle/FreestyleFeedCard'
 import { FreestyleClosingSlot } from '@/modules/practice/ui/freestyle/FreestyleClosingSlot'
+import { FreestyleWaitingState } from '@/modules/practice/ui/freestyle/components/FreestyleWaitingState'
 import type { FreestyleSettlementMeta } from '@/modules/practice/ui/freestyle/components/FreestyleRoundSettlement'
 import { overlayRoundReviewPalaceIds } from '@/modules/practice/ui/freestyle/model/overlayQuizRange'
 import { isOccurrenceScored } from '@/modules/practice/domain/unitProgressState'
@@ -24,6 +25,7 @@ export function FreestyleCardArea({
   isActive,
   settlementVisible,
   roundComplete,
+  waiting,
   loading,
   error,
   config,
@@ -75,6 +77,7 @@ export function FreestyleCardArea({
   isActive: boolean
   settlementVisible: boolean
   roundComplete: boolean
+  waiting?: { count: number; next_ready_at: string | null } | null
   loading: boolean
   error: string | null | undefined
   config: Queue['config']
@@ -202,6 +205,12 @@ export function FreestyleCardArea({
             await navigator.clipboard.writeText(error)
             toast.success('已复制诊断信息')
           }}
+        />
+      ) : waiting && waiting.count > 0 ? (
+        <FreestyleWaitingState
+          count={waiting.count}
+          readyAt={waiting.next_ready_at}
+          onRefresh={onRefreshQueue}
         />
       ) : roundComplete ? null : (
         <FreestyleEmptyState
