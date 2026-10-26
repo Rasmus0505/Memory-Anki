@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.exc import StaleDataError
 
 from memory_anki.infrastructure.db.deps import session_dep
 from memory_anki.modules.memory.api import domain_error_detail
@@ -37,6 +38,7 @@ from memory_anki.modules.practice.application.round_overlay_service import (
     progress_overlay_quiz,
     read_round_question_badge,
     set_overlay_skipped_palaces,
+    shuffle_overlay_quiz,
 )
 from memory_anki.modules.practice.application.round_state_service import (
     apply_round_action,
@@ -52,6 +54,7 @@ from memory_anki.modules.practice.domain.schemas import (
     FreestyleOverlayQuizDropPalacesRequest,
     FreestyleOverlayQuizEnsureRequest,
     FreestyleOverlayQuizProgressRequest,
+    FreestyleOverlayQuizShuffleRequest,
     FreestyleOverlayQuizSkipPalacesRequest,
     FreestyleQuestionAttemptCreate,
     FreestyleQuestionExplanationCreate,
@@ -242,6 +245,23 @@ def api_freestyle_overlay_quiz_progress(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@router.post("/freestyle/rounds/{round_id}/overlay-quiz/shuffle")
+def api_freestyle_overlay_quiz_shuffle(
+    round_id: str,
+    data: FreestyleOverlayQuizShuffleRequest,
+    session: Session = Depends(session_dep),
+):
+    try:
+        return shuffle_overlay_quiz(
+            session,
+            round_id=round_id,
+            operation_id=data.operation_id,
+            expected_version=data.expected_version,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.post("/freestyle/rounds/{round_id}/overlay-quiz/skip-palaces")
 def api_freestyle_overlay_quiz_skip_palaces(
     round_id: str,
@@ -356,24 +376,41 @@ def api_freestyle_round_rating(
     data: FreestyleRoundRatingRequest,
     session: Session = Depends(session_dep),
 ):
-    try:
-        return rate_freestyle_round_unit(
-            session,
-            round_id=round_id,
-            operation_id=data.operation_id,
-            expected_version=data.expected_version,
-            card_id=data.card_id,
-            occurrence_id=data.occurrence_id,
-            encounter_id=data.encounter_id,
-            rating=data.rating,
-            intent_sequence=data.intent_sequence,
-            study_session_id=data.study_session_id,
-            unit_id=data.unit_id,
-            unit_revision=data.unit_revision,
-            palace_batch=data.palace_batch,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=domain_error_detail(exc)) from exc
+    # Two writers can race the same glance: the rating reopens the unit session
+    # (and may delete a revision-drifted encounter) while a queued rebuild or an
+    # outbox retry touches the same row. The loser then flushed an UPDATE against
+    # a row the winner deleted and escaped as StaleDataError → HTTP 500, so the
+    # learner saw 评分失败 and had to tap again. The operation id makes a replay
+    # idempotent: roll back and run once more against fresh committed state.
+    for attempt in range(2):
+        try:
+            return rate_freestyle_round_unit(
+                session,
+                round_id=round_id,
+                operation_id=data.operation_id,
+                expected_version=data.expected_version,
+                card_id=data.card_id,
+                occurrence_id=data.occurrence_id,
+                encounter_id=data.encounter_id,
+                rating=data.rating,
+                intent_sequence=data.intent_sequence,
+                study_session_id=data.study_session_id,
+                unit_id=data.unit_id,
+                unit_revision=data.unit_revision,
+                palace_batch=data.palace_batch,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=domain_error_detail(exc)) from exc
+        except StaleDataError as error:
+            session.rollback()
+            if attempt == 0:
+                continue
+            raise HTTPException(
+                status_code=409,
+                detail=domain_error_detail(
+                    ValueError("评分正在被另一个请求保存，请再试一次")
+                ),
+            ) from error
 
 
 @router.get("/freestyle/rounds/{round_id}/bedtime/candidates")

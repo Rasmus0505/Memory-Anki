@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { BookOpen, LoaderCircle, RotateCcw, Settings2, Trash2 } from 'lucide-react'
+import { LoaderCircle, Settings2, Trash2 } from 'lucide-react'
 import { createOperationId } from '@/modules/practice/application/feedPersistence'
 import { freestylePalaceScopeSignature } from '@/modules/practice/domain/feedConfig'
 import {
@@ -13,9 +13,11 @@ import {
   overlayScopeSummary,
 } from '@/modules/practice/ui/freestyle/model/overlayQuizRange'
 import { OverlayQuizSetupPanel, type OverlayQuizSetupChoice } from './OverlayQuizSetupPanel'
+import { FreestyleScopeQuizHeaderActions } from './FreestyleScopeQuizHeaderActions'
 import { OverlayQuizScopeLeftNotice } from './OverlayQuizScopeList'
 import { QuizQuestionRoundRatingBadge } from '@/widgets/quiz-round-rating'
 import { useOverlayProgressPersistence } from './useOverlayProgressPersistence'
+import { useOverlayQuizShuffle } from './useOverlayQuizShuffle'
 import { useOverlayQuizClear } from './useOverlayQuizClear'
 import { useOverlayRatingRefresh } from './useOverlayRatingRefresh'
 import { useOverlayChoiceSelect } from './useOverlayChoiceSelect'
@@ -72,7 +74,10 @@ import {
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import { isBusyResponseError } from '@/shared/api/busyRetry'
 import { toast } from '@/shared/feedback/toast'
-import { PalaceMemoryLookupDialog } from '@/widgets/palace-memory-lookup'
+import {
+  PalaceMemoryLookupDialog,
+  useCopyPalaceMindMapOutline,
+} from '@/widgets/palace-memory-lookup'
 import { QuizProgressClearDialog } from '@/widgets/quiz-progress-clear/QuizProgressClearDialog'
 
 export function FreestyleScopeQuizDialog({
@@ -100,6 +105,7 @@ export function FreestyleScopeQuizDialog({
   const { promptForAiOptions, aiRunConfigDialog } = useAiRunConfigDialog()
   const { mode: answerMode } = useQuizAnswerMode()
   const fontScale = useQuizDialogFontScale(open)
+  const { copying: copyingOutline, copyOutline } = useCopyPalaceMindMapOutline()
   const [configOpen, setConfigOpen] = useState(!setupDone)
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState('')
@@ -253,7 +259,7 @@ export function FreestyleScopeQuizDialog({
 
   // Debounce, conflict retry and the pagehide/visibility flush live in the hook;
   // the dialog keeps owning what the current index and question states are.
-  const { persistProgress } = useOverlayProgressPersistence({
+  const { persistProgress, flushProgressNow } = useOverlayProgressPersistence({
     roundIdRef,
     planVersionRef,
     indexRef,
@@ -261,6 +267,20 @@ export function FreestyleScopeQuizDialog({
     open,
     onRoundSync,
     setOverlay,
+  })
+
+  // 打乱题库 is a round write: flush pending answers first so the server keeps
+  // exactly the questions the learner has already answered in place.
+  const hasOpenQuestion = questions.some(
+    (question) => !questionStates[question.id]?.resolved,
+  )
+  const { shuffling, shuffle: shuffleQuestions } = useOverlayQuizShuffle({
+    roundId,
+    planVersionRef,
+    adoptRound,
+    loadQuestions,
+    flushProgressNow,
+    hasOpenQuestions: hasOpenQuestion,
   })
 
   const current = questions[index] ?? null
@@ -524,32 +544,17 @@ export function FreestyleScopeQuizDialog({
                 <DialogTitle className="text-base">做题</DialogTitle>
               </div>
               {!showConfig ? (
-                <div className="flex shrink-0 items-center gap-2">
-                  {lookupPalaceId != null ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      aria-label="查看宫殿"
-                      title="查看宫殿和思维导图"
-                      onClick={() => setPalaceLookupOpen(true)}
-                    >
-                      <BookOpen className="size-4" />
-                      查看宫殿
-                    </Button>
-                  ) : null}
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    aria-label="清除进度"
-                    title="清除当前题、指定宫殿或全部题的已答记录"
-                    onClick={() => setClearProgressOpen(true)}
-                  >
-                    <RotateCcw className="size-4" />
-                    清除进度
-                  </Button>
-                </div>
+                <FreestyleScopeQuizHeaderActions
+                  copyPalaceId={questionPalaceId ?? lookupPalaceId}
+                  lookupPalaceId={lookupPalaceId}
+                  copyingOutline={copyingOutline}
+                  onCopyOutline={(palaceId) => void copyOutline(palaceId)}
+                  onOpenPalace={() => setPalaceLookupOpen(true)}
+                  canShuffle={!loading && questions.length > 1}
+                  shuffling={shuffling}
+                  onShuffle={() => void shuffleQuestions()}
+                  onOpenClearProgress={() => setClearProgressOpen(true)}
+                />
               ) : null}
             </div>
             {singleQuestionLabel || headerDetail ? (

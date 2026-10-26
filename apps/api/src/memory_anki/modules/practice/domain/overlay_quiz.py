@@ -244,6 +244,7 @@ def empty_overlay_quiz() -> OverlayQuiz:
         "scope_signature": "",
         "quiz_scope": QUIZ_SCOPE_CROSS,
         "seed": 0,
+        "shuffle_nonce": 0,
         "question_ids": [],
         "current_index": 0,
         "completed_ids": [],
@@ -423,6 +424,8 @@ def normalize_overlay_quiz(raw: Mapping[str, Any] | None) -> OverlayQuiz:
         "scope_signature": str(data.get("scope_signature") or ""),
         "quiz_scope": quiz_scope,
         "seed": max(0, _as_int(data.get("seed"), 0)),
+        # Bumped by 打乱题库 so each click derives a fresh, reproducible order.
+        "shuffle_nonce": max(0, _as_int(data.get("shuffle_nonce"), 0)),
         "question_ids": question_ids,
         "current_index": current_index,
         "completed_ids": completed_ids,
@@ -549,6 +552,9 @@ def merge_overlay_quiz(
             "scope_signature": str(scope_signature or ""),
             "quiz_scope": quiz_scope if quiz_scope in QUIZ_SCOPES else QUIZ_SCOPE_CROSS,
             "seed": max(0, int(seed)),
+            # Keep the shuffle counter across a membership rebuild: only the
+            # order resets there, not the learner's 打乱 history.
+            "shuffle_nonce": previous["shuffle_nonce"],
             "question_ids": merged_ids,
             "current_index": current_index,
             "completed_ids": in_scope_completed,

@@ -3,6 +3,7 @@
 // source order, so importing the widget first would bind the real modules.
 import {
   deletePalaceQuizQuestionApiMock,
+  getPalaceEditorApiMock,
   getPalaceQuizQuestionsApiMock,
   getPalaceQuizQuestionsByIdsApiMock,
   primeQuestionMocks,
@@ -159,6 +160,66 @@ describe('NodeBoundQuizDialog', () => {
     )
 
     expect(screen.queryByRole('button', { name: '查看宫殿' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '复制导图' })).toBeNull()
+  })
+
+  it('copies the palace mind map as a plain-text outline for an AI chat', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.assign(navigator, { clipboard: { writeText } })
+    const toastMock = await import('@/shared/feedback/toast')
+    render(
+      <NodeBoundQuizDialog
+        open
+        onOpenChange={() => {}}
+        palaceId={1}
+        nodeUid="node-1"
+        questionIds={[42]}
+        onQuestionCompleted={() => {}}
+      />,
+    )
+
+    await screen.findByText('下列哪一项是细胞膜的主要成分？')
+    fireEvent.click(screen.getByRole('button', { name: '复制导图' }))
+
+    await vi.waitFor(() => {
+      expect(getPalaceEditorApiMock).toHaveBeenCalledWith(1)
+      expect(writeText).toHaveBeenCalled()
+    })
+    const copied = writeText.mock.calls.at(-1)?.[0] as string
+    expect(copied).toBe([
+      '- 第一节新教育运动',
+      '  - 新教育运动',
+      '    备注：19世纪末欧美',
+      '    - 第斯多惠',
+    ].join('\n'))
+    // Hierarchy only: an AI chat needs no JSON export of the mind map.
+    expect(copied).not.toContain('{')
+    expect(toastMock.toast.success).toHaveBeenCalledWith('已复制导图，可粘贴给 AI 作为作答背景。')
+  })
+
+  it('reports a copy failure without leaving the outline button busy', async () => {
+    const writeText = vi.fn().mockRejectedValue(new Error('剪贴板被拒绝。'))
+    Object.assign(navigator, { clipboard: { writeText } })
+    const toastMock = await import('@/shared/feedback/toast')
+    render(
+      <NodeBoundQuizDialog
+        open
+        onOpenChange={() => {}}
+        palaceId={1}
+        nodeUid="node-1"
+        questionIds={[42]}
+        onQuestionCompleted={() => {}}
+      />,
+    )
+
+    await screen.findByText('下列哪一项是细胞膜的主要成分？')
+    const copyButton = screen.getByRole('button', { name: '复制导图' })
+    fireEvent.click(copyButton)
+
+    await vi.waitFor(() => {
+      expect(toastMock.toast.error).toHaveBeenCalledWith('剪贴板被拒绝。')
+    })
+    expect((copyButton as HTMLButtonElement).disabled).toBe(false)
   })
 
   it('puts 清除进度 to the right of 查看宫殿 and clears the current answers', async () => {

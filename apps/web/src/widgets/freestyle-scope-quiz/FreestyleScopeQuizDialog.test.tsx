@@ -1,5 +1,6 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { getPalaceEditorApi } from '@/modules/content/public'
 import { clearQuizSessionProgress, readQuizSessionState } from '@/modules/quiz/public'
 import {
   ensureFreestyleOverlayQuizApi,
@@ -23,6 +24,7 @@ vi.mock('@/modules/practice/public', () => ({
 vi.mock('@/modules/practice/ui/freestyle/api', () => ({
   ensureFreestyleOverlayQuizApi: vi.fn(),
   progressFreestyleOverlayQuizApi: vi.fn(),
+  shuffleFreestyleOverlayQuizApi: vi.fn(),
 }))
 
 vi.mock('@/modules/quiz/domain/quiz-entity/api', () => ({
@@ -39,6 +41,7 @@ vi.mock('@/modules/settings/public', () => ({
 }))
 
 vi.mock('@/modules/content/public', () => ({
+  getPalaceEditorApi: vi.fn(),
   getPalacesGroupedApi: vi.fn(async () => ({
     groups: [],
     ungrouped: [{ id: 7, title: '第一节', resolved_title: '第一节新教育运动' }],
@@ -88,6 +91,7 @@ const progressFreestyleOverlayQuizApiMock = vi.mocked(progressFreestyleOverlayQu
 const getPalaceQuizQuestionsByIdsApiMock = vi.mocked(getPalaceQuizQuestionsByIdsApi)
 const listQuestionNodeBindingsApiMock = vi.mocked(listQuestionNodeBindingsApi)
 const deletePalaceQuizQuestionApiMock = vi.mocked(deletePalaceQuizQuestionApi)
+const getPalaceEditorApiMock = vi.mocked(getPalaceEditorApi)
 
 describe('FreestyleScopeQuizDialog', () => {
   beforeEach(() => {
@@ -259,6 +263,74 @@ describe('FreestyleScopeQuizDialog', () => {
       expect(lookup.getAttribute('data-palace-id')).toBe('7')
       expect(lookup.getAttribute('data-focus-node')).toBe('bound-9')
     })
+  })
+  it('copies the question palace mind map as a plain-text outline', async () => {
+    ensureFreestyleOverlayQuizApiMock.mockResolvedValue({
+      round_id: 'round-1',
+      plan_version: 1,
+      plan: {
+        overlay_quiz: {
+          question_ids: [42],
+          current_index: 0,
+          completed_ids: [],
+          states: {},
+          quiz_scope: 'cross_palace_random',
+          seed: 1,
+          scope_signature: 'sig',
+          limit_reached: false,
+          candidate_count: 1,
+        },
+      },
+    } as never)
+    getPalaceQuizQuestionsByIdsApiMock.mockResolvedValue({
+      items: [
+        {
+          id: 42,
+          palace_id: 7,
+          sort_order: 0,
+          correct_count: 16,
+          incorrect_count: 13,
+          attempt_count: 29,
+          question_type: 'multiple_choice',
+          stem: '本题绑定节点',
+          options: [{ id: 'A', text: 'A' }],
+          answer_payload: { correct_option_id: 'A' },
+          analysis: '',
+          source_meta: {},
+          created_at: null,
+          updated_at: null,
+        },
+      ],
+      item_count: 1,
+    } as never)
+    getPalaceEditorApiMock.mockResolvedValue({
+      palace: { id: 7, title: '第一节新教育运动' },
+      editor_doc: {
+        root: {
+          data: { text: '第一节新教育运动' },
+          children: [{ data: { text: '新教育运动', note: '19世纪末欧美' }, children: [] }],
+        },
+      },
+      editor_config: {},
+      editor_local_config: {},
+      lang: 'zh',
+    } as never)
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.assign(navigator, { clipboard: { writeText } })
+
+    renderScopeQuizDialog()
+
+    fireEvent.click(await screen.findByRole('button', { name: '复制导图' }))
+
+    await waitFor(() => {
+      expect(getPalaceEditorApiMock).toHaveBeenCalledWith(7)
+      expect(writeText).toHaveBeenCalled()
+    })
+    expect(writeText.mock.calls.at(-1)?.[0]).toBe([
+      '- 第一节新教育运动',
+      '  - 新教育运动',
+      '    备注：19世纪末欧美',
+    ].join('\n'))
   })
   it('shows historical attempt stats left of the question type badge', async () => {
     ensureFreestyleOverlayQuizApiMock.mockResolvedValue({

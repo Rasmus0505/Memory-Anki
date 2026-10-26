@@ -32,6 +32,9 @@ from memory_anki.modules.practice.domain.overlay_quiz import (
     normalize_overlay_quiz,
     set_overlay_palaces_skipped,
 )
+from memory_anki.modules.practice.domain.overlay_quiz_shuffle import (
+    shuffle_overlay_question_order,
+)
 from memory_anki.modules.practice.domain.round_plan import (
     removed_review_palace_ids,
     review_palace_ids,
@@ -203,6 +206,39 @@ def progress_overlay_quiz(
         completed_ids=list(completed_ids or []),
         states=states if isinstance(states, dict) else {},
     )
+    op_id = _require_operation_id(operation_id)
+    changed = _apply_plan(row, plan, operation_id=op_id)
+    if not changed:
+        row.last_operation_id = op_id
+    if not _commit_operation(session, row, op_id):
+        return _serve(session, row, conflict=True)
+    return _serve(session, row)
+
+
+def shuffle_overlay_quiz(
+    session: Session,
+    *,
+    round_id: str,
+    operation_id: str,
+    expected_version: int,
+) -> dict[str, Any]:
+    """打乱题库: shuffle the unfinished questions, answered ones keep their slot.
+
+    Writes only the overlay's order and ``current_index``; answered states,
+    scope, exclusions and the round's scheduling are untouched. The order is
+    stored on the round, so a reopened window keeps it until the next click.
+    """
+    row, early = _begin_round_write(
+        session,
+        round_id=round_id,
+        operation_id=operation_id,
+        expected_version=expected_version,
+    )
+    if early is not None:
+        return early
+    assert row is not None
+    plan = _plan_of(row)
+    plan["overlay_quiz"] = shuffle_overlay_question_order(plan.get("overlay_quiz"))
     op_id = _require_operation_id(operation_id)
     changed = _apply_plan(row, plan, operation_id=op_id)
     if not changed:

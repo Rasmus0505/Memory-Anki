@@ -102,6 +102,13 @@ class FreestyleOverlayQuizProgressRequest(BaseModel):
     states: dict[str, Any] = Field(default_factory=dict)
 
 
+class FreestyleOverlayQuizShuffleRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    operation_id: str
+    expected_version: int
+
+
 class FreestyleOverlayQuizDropPalacesRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

@@ -23,6 +23,7 @@ from memory_anki.modules.practice.application.round_overlay_service import (
     ensure_overlay_quiz,
     progress_overlay_quiz,
     read_round_question_badge,
+    shuffle_overlay_quiz,
 )
 from memory_anki.modules.practice.application.round_state_service import (
     apply_round_action,
@@ -43,6 +44,9 @@ from memory_anki.modules.practice.domain.overlay_quiz import (
     overlay_quiz_scope_signature,
     pick_question_node_rating,
     set_overlay_palaces_skipped,
+)
+from memory_anki.modules.practice.domain.overlay_quiz_shuffle import (
+    shuffle_overlay_question_order,
 )
 from memory_anki.modules.practice.domain.round_compress import compress_completed
 from memory_anki.modules.practice.domain.round_plan import (
@@ -1614,3 +1618,123 @@ def test_rating_display_choice_does_not_rebuild_or_reset_progress(db_session) ->
     assert queue_construction_signature({"overlay_rating_inherit": "blank"}) == (
         queue_construction_signature({"overlay_rating_inherit": "lowest_reviewed"})
     )
+
+
+def test_shuffle_overlay_question_order_keeps_answered_slots() -> None:
+    """打乱题库 only reorders the questions still open on the bar."""
+    overlay = normalize_overlay_quiz(
+        {
+            "seed": 3,
+            "question_ids": [1, 2, 3, 4, 5, 6],
+            "completed_ids": [2, 5],
+            "states": {"2": {"resolved": True}, "5": {"resolved": True}},
+        }
+    )
+    shuffled = shuffle_overlay_question_order(overlay)
+    assert shuffled["question_ids"][1] == 2
+    assert shuffled["question_ids"][4] == 5
+    assert set(shuffled["question_ids"]) == {1, 2, 3, 4, 5, 6}
+    assert set(shuffled["question_ids"][index] for index in (0, 2, 3, 5)) == {1, 3, 4, 6}
+    # The first open slot is where the learner resumes.
+    assert shuffled["current_index"] == 0
+    assert shuffled["completed_ids"] == [2, 5]
+    assert shuffled["shuffle_nonce"] == 1
+
+
+def test_shuffle_overlay_question_order_bumps_nonce_for_a_new_order() -> None:
+    overlay = normalize_overlay_quiz(
+        {"seed": 7, "question_ids": [11, 12, 13, 14, 15], "completed_ids": [], "states": {}}
+    )
+    first = shuffle_overlay_question_order(overlay)
+    second = shuffle_overlay_question_order(first)
+    assert first["shuffle_nonce"] == 1
+    assert second["shuffle_nonce"] == 2
+    assert first["question_ids"] != overlay["question_ids"]
+    assert second["question_ids"] != first["question_ids"]
+    assert second["current_index"] == 0
+    assert normalize_overlay_quiz(first)["shuffle_nonce"] == 1
+
+
+def test_shuffle_overlay_question_order_all_answered_restarts_at_top() -> None:
+    """22/22 answered must still give a fresh walk, not a no-op."""
+    ids = [21, 22, 23, 24]
+    overlay = normalize_overlay_quiz(
+        {
+            "seed": 4,
+            "question_ids": ids,
+            "completed_ids": ids,
+            "states": {str(qid): {"resolved": True} for qid in ids},
+        }
+    )
+    shuffled = shuffle_overlay_question_order(overlay)
+    assert sorted(shuffled["question_ids"]) == ids
+    assert shuffled["question_ids"] != ids
+    assert shuffled["current_index"] == 0
+    assert shuffled["completed_ids"] == ids
+    assert shuffled["states"] == overlay["states"]
+
+
+def test_shuffle_overlay_quiz_persists_order_across_ensure(db_session, monkeypatch) -> None:
+    """Closing and reopening 做题 keeps the shuffled order on the round."""
+    monkeypatch.setattr(
+        "memory_anki.modules.practice.application.round_overlay_service.build_overlay_question_pack",
+        lambda session, config, **_kwargs: {
+            "question_ids": [101, 102, 103, 104],
+            "quiz_scope": "cross_palace_random",
+            "seed": 5,
+            "scope_signature": "shuffle",
+            "limit_reached": False,
+            "candidate_count": 4,
+            "question_palace_ids": {"101": 10, "102": 10, "103": 10, "104": 10},
+        },
+    )
+    created = get_or_create_active_round(
+        db_session,
+        scope_key="shuffle",
+        config={},
+        cards=_cards("a", "b"),
+        operation_id="op-create",
+        round_id="round-shuffle",
+    )
+    ensured = ensure_overlay_quiz(
+        db_session,
+        round_id=created["round_id"],
+        operation_id="op-ensure",
+        expected_version=created["version"],
+        config={},
+    )
+    assert ensured["plan"]["overlay_quiz"]["question_ids"] == [101, 102, 103, 104]
+    answered = progress_overlay_quiz(
+        db_session,
+        round_id=ensured["round_id"],
+        operation_id="op-answer",
+        expected_version=ensured["version"],
+        current_index=0,
+        completed_ids=[101],
+        states={"101": {"resolved": True}},
+    )
+    shuffled = shuffle_overlay_quiz(
+        db_session,
+        round_id=answered["round_id"],
+        operation_id="op-shuffle",
+        expected_version=answered["version"],
+    )
+    overlay = shuffled["plan"]["overlay_quiz"]
+    order = overlay["question_ids"]
+    assert order[0] == 101
+    assert sorted(order) == [101, 102, 103, 104]
+    assert order != [101, 102, 103, 104]
+    assert overlay["current_index"] == 1
+    assert overlay["shuffle_nonce"] == 1
+    assert shuffled["version"] > answered["version"]
+
+    reensured = ensure_overlay_quiz(
+        db_session,
+        round_id=shuffled["round_id"],
+        operation_id="op-ensure-again",
+        expected_version=shuffled["version"],
+        config={},
+    )
+    assert reensured["plan"]["overlay_quiz"]["question_ids"] == order
+    assert reensured["plan"]["overlay_quiz"]["current_index"] == 1
+    assert reensured["plan"]["overlay_quiz"]["shuffle_nonce"] == 1

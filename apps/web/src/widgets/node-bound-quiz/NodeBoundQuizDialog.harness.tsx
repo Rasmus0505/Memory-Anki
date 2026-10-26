@@ -20,6 +20,7 @@ export const listPalaceQuizNodeBindingsApiMock = vi.fn()
 export const recordPalaceQuizChoiceAttemptApiMock = vi.fn()
 export const setPalaceQuizQuestionMarkedApiMock = vi.fn()
 export const deletePalaceQuizQuestionApiMock = vi.fn()
+export const getPalaceEditorApiMock = vi.fn()
 
 // These mock factories read the mock fns declared above. Vitest hoists the
 // `vi.mock` calls above the imports in a spec, but a factory body only runs when
@@ -63,6 +64,7 @@ vi.mock('@/shared/feedback/globalFeedbackModel', () => ({
 }))
 
 vi.mock('@/modules/content/public', () => ({
+  getPalaceEditorApi: (...args: unknown[]) => getPalaceEditorApiMock(...args),
   getPalacesGroupedApi: vi.fn(async () => ({
     groups: [],
     ungrouped: [],
@@ -149,8 +151,26 @@ export const shortAnswerQuestion = {
   answer_payload: { reference_answer: '磷脂双分子层。' },
 }
 
+/** The palace mind map 复制导图 copies for the sample questions. */
+export const samplePalaceEditorResponse = {
+  palace: { id: 1, title: '第一节新教育运动' },
+  editor_doc: {
+    root: {
+      data: { text: '第一节新教育运动', uid: 'root' },
+      children: [{
+        data: { text: '新教育运动', uid: 'node-1', note: '19世纪末欧美' },
+        children: [{ data: { text: '第斯多惠', uid: 'node-2' }, children: [] }],
+      }],
+    },
+  },
+  editor_config: {},
+  editor_local_config: {},
+  lang: 'zh',
+}
+
 /** The resolved question set every spec starts from. */
 export function primeQuestionMocks() {
+  getPalaceEditorApiMock.mockResolvedValue(samplePalaceEditorResponse)
   getPalaceQuizQuestionsByIdsApiMock.mockResolvedValue({
     items: [sampleQuestion, secondQuestion],
     item_count: 2,

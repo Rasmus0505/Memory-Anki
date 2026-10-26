@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { BookOpen, Keyboard, LoaderCircle, RotateCcw, Trash2 } from 'lucide-react'
+import { Keyboard, LoaderCircle, Trash2 } from 'lucide-react'
 import { useAiRunConfigDialog } from '@/modules/settings/public'
 import {
   deletePalaceQuizQuestionApi,
@@ -31,12 +31,17 @@ import {
   readQuizSessionState,
   removeQuizSessionQuestions,
   writeQuizSessionState,
+  applyQuizShuffleOrder,
+  readQuizShuffleOrder,
+  saveQuizShuffleOrder,
+  shuffleQuizQuestionsForPractice,
   type QuizRuntimeState,
 } from '@/modules/quiz/public'
 import { ownerPalaceLabel } from '@/modules/quiz/ui/palace-quiz/model/quizNodeBindingAggregation'
 import { QuizQuestionRoundRating } from '@/widgets/quiz-round-rating'
 import { useQuizSessionProgressMirror } from './useQuizSessionProgressMirror'
 import { NodeBoundQuizFooter } from './NodeBoundQuizFooter'
+import { NodeBoundQuizHeaderActions } from './NodeBoundQuizHeaderActions'
 import { getQuestionTypeLabel } from '@/modules/quiz/ui/palace-quiz/model/palaceQuizPage'
 import { sortPalaceQuizQuestions } from '@/modules/quiz/ui/palace-quiz/model/questionBankOrder'
 import { firstIncompleteQuestionIndex } from '@/modules/quiz/ui/palace-quiz/model/quizNodeBindingAggregation'
@@ -56,6 +61,7 @@ import { toast } from '@/shared/feedback/toast'
 import {
   PalaceMemoryLookupDialog,
   collectMemoryLookupFocusNodeUids,
+  useCopyPalaceMindMapOutline,
 } from '@/widgets/palace-memory-lookup'
 import { QuizProgressClearDialog, type QuizProgressClearChoice } from '@/widgets/quiz-progress-clear/QuizProgressClearDialog'
 
@@ -99,6 +105,7 @@ export function NodeBoundQuizDialog({
   const { promptForAiOptions, aiRunConfigDialog } = useAiRunConfigDialog()
   const { mode: answerMode } = useQuizAnswerMode()
   const fontScale = useQuizDialogFontScale(open)
+  const { copying: copyingOutline, copyOutline } = useCopyPalaceMindMapOutline()
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState('')
   const [questions, setQuestions] = useState<PalaceQuizQuestion[]>([])
@@ -179,11 +186,15 @@ export function NodeBoundQuizDialog({
           for (const item of palaceQuestions.items || []) byId.set(item.id, item)
         }
         for (const item of questionOutcome.items) byId.set(item.id, item)
-        const ordered = sortPalaceQuizQuestions(
-          activeIds
-            .map((id) => byId.get(id))
-            .filter((item): item is PalaceQuizQuestion => Boolean(item))
-            .filter((item) => !removedQuestionIdsRef.current.has(item.id)),
+        const ordered = applyQuizShuffleOrder(
+          sortPalaceQuizQuestions(
+            activeIds
+              .map((id) => byId.get(id))
+              .filter((item): item is PalaceQuizQuestion => Boolean(item))
+              .filter((item) => !removedQuestionIdsRef.current.has(item.id)),
+          ),
+          // 打乱题库 is remembered per palace+node so reopening keeps it.
+          readQuizShuffleOrder({ palaceId, nodeUid }),
         )
         questionsRef.current = ordered
         setQuestions(ordered)
@@ -372,6 +383,30 @@ export function NodeBoundQuizDialog({
     toast.success('已清除全部题目的做题进度。')
   }, [dropLocalAnswers, index, palaceId])
 
+  /**
+   * 打乱题库: shuffle only the questions still open, keep answered slots, and
+   * remember the order so reopening the window does not undo it.
+   */
+  const handleShuffleQuestions = useCallback(() => {
+    const loaded = questionsRef.current
+    if (loaded.length < 2) return
+    const answered = new Set(
+      loaded
+        .filter((question) => questionStates[question.id]?.resolved)
+        .map((question) => question.id),
+    )
+    const next = shuffleQuizQuestionsForPractice(loaded, answered)
+    questionsRef.current = next
+    setQuestions(next)
+    saveQuizShuffleOrder({ palaceId, nodeUid }, next.map((question) => question.id))
+    setIndex(firstIncompleteQuestionIndex(next.map((question) => question.id), answered))
+    toast.success(
+      answered.size >= next.length
+        ? '题目都答过了，已整份打乱，从第 1 题开始。'
+        : '已打乱题库，从第一道还没答的题开始。',
+    )
+  }, [nodeUid, palaceId, questionStates])
+
   const handleChoiceResolve = useCallback(
     (optionId: string, isCorrect: boolean) => {
       if (!current) return
@@ -533,32 +568,15 @@ export function NodeBoundQuizDialog({
                 </Button>
                 <DialogTitle className="text-base">关联题目</DialogTitle>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
-                {palaceId != null ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    aria-label="查看宫殿"
-                    title="查看宫殿和思维导图"
-                    onClick={() => setPalaceLookupOpen(true)}
-                  >
-                    <BookOpen className="size-4" />
-                    查看宫殿
-                  </Button>
-                ) : null}
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  aria-label="清除进度"
-                  title="清除当前题、指定宫殿或全部题的已答记录"
-                  onClick={() => setClearProgressOpen(true)}
-                >
-                  <RotateCcw className="size-4" />
-                  清除进度
-                </Button>
-              </div>
+              <NodeBoundQuizHeaderActions
+                palaceId={palaceId}
+                copyingOutline={copyingOutline}
+                onCopyOutline={(targetPalaceId) => void copyOutline(targetPalaceId)}
+                onOpenPalace={() => setPalaceLookupOpen(true)}
+                canShuffle={!shortcutsOpen && questions.length > 1}
+                onShuffle={handleShuffleQuestions}
+                onOpenClearProgress={() => setClearProgressOpen(true)}
+              />
             </div>
             {singleQuestionLabel || headerDetail ? (
               <DialogDescription className="text-xs leading-relaxed text-muted-foreground">

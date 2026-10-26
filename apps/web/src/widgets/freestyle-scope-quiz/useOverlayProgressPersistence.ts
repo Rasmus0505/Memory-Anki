@@ -161,14 +161,16 @@ export function useOverlayProgressPersistence({
 
   writeProgressNowRef.current = writeProgressNow
 
-  const flushProgressNow = useCallback(() => {
+  /** Resolves once a pending write has landed, so callers that need the server
+   * up to date (打乱题库) do not race their own debounce. */
+  const flushProgressNow = useCallback(async () => {
     if (persistTimerRef.current != null) {
       window.clearTimeout(persistTimerRef.current)
       persistTimerRef.current = null
     }
     clearRetryTimer()
     if (!dirtyProgressRef.current) return
-    void writeProgressNow(indexRef.current, questionStatesRef.current)
+    await writeProgressNow(indexRef.current, questionStatesRef.current)
   }, [clearRetryTimer, indexRef, questionStatesRef, writeProgressNow])
 
   const persistProgress = useCallback((
@@ -189,14 +191,16 @@ export function useOverlayProgressPersistence({
 
   useEffect(() => {
     if (!open) return
-    const onPageHide = () => flushProgressNow()
+    const onPageHide = () => {
+      void flushProgressNow()
+    }
     const onVisibility = () => {
-      if (document.visibilityState === 'hidden') flushProgressNow()
+      if (document.visibilityState === 'hidden') void flushProgressNow()
     }
     window.addEventListener('pagehide', onPageHide)
     document.addEventListener('visibilitychange', onVisibility)
     return () => {
-      flushProgressNow()
+      void flushProgressNow()
       window.removeEventListener('pagehide', onPageHide)
       document.removeEventListener('visibilitychange', onVisibility)
     }
