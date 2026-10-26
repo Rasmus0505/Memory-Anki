@@ -6,6 +6,7 @@ import json
 from typing import Any, overload
 
 from memory_anki.core.time import (
+    parse_api_datetime,
     to_api_datetime,
     utc_now_naive,
 )
@@ -147,9 +148,25 @@ def _serve(session: Any, row: FreestyleRoundState | None, **kwargs: Any) -> dict
     # Same-day steps/retries appear on the rail only once their wait has passed.
     # This is a read-time projection; the persisted plan keeps them pending.
     served_plan = publish_ready_retries(served_plan, now=utc_now_naive())
+    _api_plan_instants(served_plan)
+    waiting = plan_waiting(served_plan)
+    waiting["next_ready_at"] = _api_instant(waiting.get("next_ready_at"))
     served["plan"] = served_plan
-    served["waiting"] = plan_waiting(served_plan)
+    served["waiting"] = waiting
     served["summary"] = _unfinished_summary(session, served_plan)
     return served
+
+
+def _api_instant(raw: Any) -> str | None:
+    """Stored instants are naive UTC. The browser must never read them as local."""
+    parsed = parse_api_datetime(raw)
+    return to_api_datetime(parsed) if parsed is not None else None
+
+
+def _api_plan_instants(plan: dict[str, Any]) -> None:
+    """Rewrite response-plan occurrence waits with an explicit UTC offset."""
+    for item in plan.get("occurrences") or []:
+        if isinstance(item, dict) and item.get("available_at"):
+            item["available_at"] = _api_instant(item["available_at"])
 
 

@@ -72,11 +72,16 @@ def operation_already_applied(
     op_id = str(operation_id or "").strip()
     if not op_id:
         return False
-    if row.last_operation_id == op_id:
-        return True
+    # The round row is expired whenever the caller committed earlier in this
+    # request (a rating reopens a unit session). Reading that expired attribute
+    # autoflushes the caller's staged changes — which includes rows another
+    # request already deleted — and escaped as StaleDataError → HTTP 500. Leave
+    # the entire lookup inside `no_autoflush`, not just the receipt query.
     with session.no_autoflush:
+        if row.last_operation_id == op_id:
+            return True
         existing = session.get(FreestyleRoundOperationReceipt, op_id)
-    return existing is not None and existing.round_id == row.round_id
+        return existing is not None and existing.round_id == row.round_id
 
 
 def lookup_operation_receipt(

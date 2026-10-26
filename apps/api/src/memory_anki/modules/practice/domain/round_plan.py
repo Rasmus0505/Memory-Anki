@@ -115,7 +115,11 @@ def apply_rating(
     unit has used its retries today: no occurrence is created at all.
     """
     next_plan = normalize_plan(plan)
-    rated_id, occ_id, encounter = _text(card_id), _text(occurrence_id), _text(encounter_id)
+    from .round_rebind import canonical_rated_card
+
+    rated_id = canonical_rated_card(next_plan, _text(card_id),
+                                    unit_id=_text(unit_id), unit_revision=unit_revision)
+    occ_id, encounter = _text(occurrence_id), _text(encounter_id)
     rating_value = _int(rating)
     if rating_value not in FAIL_RATINGS | PASS_RATINGS:
         raise ValueError("rating must be 1-4")
@@ -127,6 +131,19 @@ def apply_rating(
         unit_id=unit_id,
     )
     occ = _find_occurrence(next_plan, occ_id) or _find_occurrence(next_plan, rated_id)
+    # Same-day steps/retries are published to the feed at read time
+    # (`publish_ready_retries`), while the persisted plan keeps them pending.
+    # The learner is looking at — and rating — the published card, so persist
+    # that publication first. Settling it as an uninserted occurrence marked it
+    # cancelled with the score still on it and left it out of `presented_ids`:
+    # the next rebuild deleted the card under the learner and the feed slid on.
+    if occ is not None and occ["status"] == OCCURRENCE_PENDING:
+        _insert_retry_inplace(
+            next_plan,
+            _text(occ.get("occurrence_id")),
+            _cursor_index(next_plan, next_plan["presented_ids"]),
+        )
+        occ = _find_occurrence(next_plan, occ_id) or _find_occurrence(next_plan, rated_id) or occ
     source_id = _text(occ.get("source_card_id") if occ else rated_id) or rated_id
     original = _original_card(next_plan, source_id)
     source_unit_id = _text(unit_id) or _text((original or {}).get("unit_id")) or (
@@ -226,11 +243,10 @@ def set_cursor(plan: Mapping[str, Any], card_id: str, *, commit: bool = True) ->
     target = _text(card_id)
     if not target:
         return next_plan
-    known = set(next_plan["presented_ids"])
-    known.update(item["card_id"] for item in next_plan["original_cards"])
-    known.update(item["occurrence_id"] for item in next_plan["occurrences"])
-    if target not in known:
-        raise ValueError("card is not in this round")
+    from .round_rebind import resolve_cursor_target
+    target = resolve_cursor_target(next_plan, target)
+    if not target:
+        return next_plan
     next_plan["current_card_id"] = target
     _sync_index(next_plan)
     return next_plan

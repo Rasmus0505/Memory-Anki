@@ -1430,3 +1430,146 @@ def test_previous_day_bedtime_does_not_survive_the_study_day():
     assert "b" not in next_day["presented_ids"]
     assert "b" not in next_day["completed_ids"]
     assert next_day["bedtime_ratings"] == {}
+
+
+def test_rating_a_step_that_was_only_published_at_read_time_completes_it():
+    """The persisted plan keeps a same-day step pending; the feed shows it.
+
+    Rating that card used to settle it as an uninserted occurrence: cancelled,
+    score kept, never in presented_ids. The next rebuild deleted the card under
+    the learner and the feed moved on. Reproduced on a real round (2026-10-25
+    21:48): every step rated that evening ended `cancelled` with its 1–4 still on
+    it.
+    """
+    cards = [
+        _card("a", unit_id="unit-a"),
+        _card("b", unit_id="unit-b"),
+        _card("c", unit_id="unit-c"),
+    ]
+    plan = _rate(
+        plan_from_cards(cards),
+        "a",
+        3,
+        "enc-a",
+        available_at=datetime(2026, 10, 25, 12, 0),
+        intraday_kind="step",
+    )
+    step = [item for item in plan["occurrences"] if item["source_card_id"] == "a"][0]
+    step_id = step["occurrence_id"]
+    assert step["status"] == "pending"
+    assert step_id not in plan["presented_ids"]
+
+    # The learner rates the card the served plan published.
+    plan = set_cursor(plan, "a")
+    plan = _rate(
+        plan,
+        step_id,
+        3,
+        "enc-step",
+        occurrence_id=step_id,
+        available_at=datetime(2026, 10, 25, 12, 30),
+        intraday_kind="step",
+    )
+    rated = [item for item in plan["occurrences"] if item["occurrence_id"] == step_id][0]
+    assert rated["status"] == "completed"
+    assert rated["rating"] == 3
+    assert step_id in plan["presented_ids"]
+    assert step_id in plan["completed_ids"]
+    # Its next 30-minute re-check is already booked, not lost.
+    assert any(
+        item["source_card_id"] == "a" and item["status"] == "pending"
+        for item in plan["occurrences"]
+    )
+    # A rebuild keeps the rated card on the rail instead of deleting it.
+    rebound = rebind_plan_cards(plan, cards)
+    assert step_id in rebound["presented_ids"]
+
+
+def test_a_weak_rating_on_that_step_keeps_it_live_instead_of_cancelling_it():
+    cards = [_card("a", unit_id="unit-a"), _card("b", unit_id="unit-b")]
+    plan = _rate(
+        plan_from_cards(cards),
+        "a",
+        3,
+        "enc-a",
+        available_at=datetime(2026, 10, 25, 12, 0),
+        intraday_kind="step",
+    )
+    step = [item for item in plan["occurrences"] if item["source_card_id"] == "a"][0]
+    step_id = step["occurrence_id"]
+    plan = _rate(
+        plan,
+        step_id,
+        2,
+        "enc-weak",
+        occurrence_id=step_id,
+        available_at=datetime(2026, 10, 25, 12, 20),
+        intraday_kind="step",
+    )
+    rated = [item for item in plan["occurrences"] if item["occurrence_id"] == step_id][0]
+    # Weak is still live work, not a dead slot: it comes back after its wait.
+    assert rated["status"] in {"inserted", "pending"}
+    if rated["status"] == "inserted":
+        assert step_id in plan["presented_ids"]
+
+
+def test_rating_a_rebuilt_revision_moves_the_plan_card_onto_it():
+    # 双击编辑保存 bumps the unit revision while the round plan keeps r1. The feed
+    # rates the rebuilt r4 id before the next build rebinds it. Settling that
+    # unknown id used to add a completed phantom and leave r1 unfinished, so the
+    # rail and 完成 kept offering an already rated unit.
+    old = "review_unit:unit-a:r1"
+    cards = [_card(old, unit_id="unit-a", revision=1), _card("review_unit:unit-b:r1", unit_id="unit-b")]
+    plan = plan_from_cards(cards)
+
+    rated = _rate(
+        plan,
+        "review_unit:unit-a:r4",
+        3,
+        "enc-r4",
+        unit_id="unit-a",
+        unit_revision=4,
+    )
+
+    assert "review_unit:unit-a:r4" in rated["completed_ids"]
+    assert old not in rated["completed_ids"]
+    assert "review_unit:unit-a:r4" in rated["presented_ids"]
+    assert old not in rated["presented_ids"]
+    source = [card for card in rated["original_cards"] if card["unit_id"] == "unit-a"][0]
+    assert source["card_id"] == "review_unit:unit-a:r4"
+    assert source["unit_revision"] == 4
+
+
+def test_a_weak_rating_on_a_rebuilt_revision_books_the_retry_on_the_new_card():
+    old = "review_unit:unit-a:r1"
+    cards = [_card(old, unit_id="unit-a"), _card("review_unit:unit-b:r1", unit_id="unit-b")]
+    plan = plan_from_cards(cards)
+
+    rated = _rate(
+        plan,
+        "review_unit:unit-a:r3",
+        2,
+        "enc-r3",
+        unit_id="unit-a",
+        unit_revision=3,
+        available_at=datetime(2026, 10, 26, 14, 10),
+    )
+
+    occurrence = _pending(rated, "review_unit:unit-a:r3")
+    assert occurrence["source_unit_id"] == "unit-a"
+    assert occurrence["available_at"] == "2026-10-26T14:10:00"
+    # The old id must not linger as an unfinished rail row.
+    assert all(card["card_id"] != old for card in rated["original_cards"])
+
+
+def test_cursor_accepts_a_rebuilt_revision_and_leaves_an_unknown_unit_alone():
+    old = "review_unit:unit-a:r1"
+    cards = [_card(old, unit_id="unit-a"), _card("review_unit:unit-b:r1", unit_id="unit-b")]
+    plan = plan_from_cards(cards)
+    plan = set_cursor(plan, old)
+
+    moved = set_cursor(plan, "review_unit:unit-a:r2")
+    assert moved["current_card_id"] == old
+
+    untouched = set_cursor(plan, "review_unit:unit-gone:r9")
+    assert untouched["current_card_id"] == old

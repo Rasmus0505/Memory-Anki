@@ -8,7 +8,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from memory_anki.core.time import local_day, utc_now_naive
+from memory_anki.core.time import local_day, parse_api_datetime, utc_now_naive
 from memory_anki.infrastructure.db._tables.misc import (
     FreestyleRoundState,
 )
@@ -641,13 +641,11 @@ def rate_freestyle_round_unit(
 
 
 def _parse_available_at(item: dict[str, Any] | None) -> datetime | None:
+    """The rating response carries an offset-aware instant; storage is naive UTC."""
     raw = str((item or {}).get("intraday_due_at") or "").strip()
     if not raw:
         return None
-    try:
-        return datetime.fromisoformat(raw)
-    except ValueError:
-        return None
+    return parse_api_datetime(raw)
 
 
 def _text_optional(item: dict[str, Any] | None, key: str) -> str | None:

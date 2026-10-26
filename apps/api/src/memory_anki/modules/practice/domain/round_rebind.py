@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -14,12 +15,14 @@ from .round_plan import (
     _day,
     _find_occurrence,
     _insert_retry_inplace,
+    _int,
     _known_presented_ids,
     _match_key,
     _repair_current,
     _review_unit_id,
     _rewrite_ids,
     _source_id_of,
+    _sync_index,
     _text,
     live_retry_sources,
     normalize_plan,
@@ -583,3 +586,106 @@ def _merge_incoming(
         mapping.get(key, key): dict(value) for key, value in plan["encounters"].items()
     }
     return mapping
+
+
+def _review_revision(card_id: str) -> int:
+    match = re.search(r":r(\d+)$", _text(card_id))
+    return int(match.group(1)) if match else 0
+
+
+def canonical_rated_card(
+    plan: Plan,
+    rated_id: str,
+    *,
+    unit_id: str = "",
+    unit_revision: int | None = None,
+) -> str:
+    """Move this plan's card for the unit onto the id the feed just rated.
+
+    A content edit bumps ``review_unit:<unit>:rN`` while the round plan still
+    holds the older revision. The feed can rate the new id before a rebuild
+    rebinds it; settling that unknown id added a phantom completed row and left
+    the plan's own card unfinished, so the rail and 完成 kept offering a unit
+    that was already scored. Rebind once here, the same way ``_merge_incoming``
+    does on the next build.
+    """
+    target = _text(rated_id)
+    if not target:
+        return target
+    if _find_occurrence(plan, target) is not None:
+        return target
+    known = {item["card_id"] for item in plan["original_cards"]}
+    if target in known:
+        return target
+    if not target.startswith("review_unit:"):
+        return target
+    unit = _text(unit_id) or _review_unit_id(target)
+    if not unit:
+        return target
+    original = next(
+        (
+            item
+            for item in plan["original_cards"]
+            if _text(item.get("unit_id")) == unit
+            and not _text(item.get("card_id")).startswith("retry:")
+        ),
+        None,
+    )
+    old = _text((original or {}).get("card_id"))
+    if original is None or not old or old == target:
+        return target
+    if _review_revision(old) > _review_revision(target):
+        # The plan already carries a newer revision than the card that was
+        # tapped. Settle the plan's own row instead of walking it backwards.
+        return old
+    mapping = {old: target}
+    plan["presented_ids"] = _rewrite_ids(plan["presented_ids"], mapping)
+    plan["completed_ids"] = _rewrite_ids(plan["completed_ids"], mapping)
+    plan["excluded_ids"] = _rewrite_ids(plan["excluded_ids"], mapping)
+    plan["compressed_ids"] = _rewrite_ids(plan["compressed_ids"], mapping)
+    plan["partial_settlements"] = [
+        {**item, "card_ids": _rewrite_ids(item.get("card_ids") or [], mapping)}
+        for item in plan.get("partial_settlements") or []
+        if isinstance(item, Mapping)
+    ]
+    if _text(plan.get("current_card_id")) == old:
+        plan["current_card_id"] = target
+    for occurrence in plan["occurrences"]:
+        if _text(occurrence.get("source_card_id")) == old:
+            occurrence["source_card_id"] = target
+    if old in plan["encounters"]:
+        plan["encounters"][target] = plan["encounters"].pop(old)
+    original["card_id"] = target
+    if unit_revision is not None and _int(unit_revision) > 0:
+        original["unit_revision"] = _int(unit_revision)
+    _sync_index(plan)
+    return target
+
+
+def resolve_cursor_target(plan: Plan, target: str) -> str:
+    """Where a cosmetic round cursor may land, or ``""`` to leave it unchanged.
+
+    A content edit bumps ``review_unit:<unit>:rN`` before the next build rebinds
+    the plan. The new card is the same work: move the cursor onto the plan's row
+    for that unit. A cursor for a unit this round does not know is ignored; it
+    used to 400 as "card is not in this round" on every rebuild race.
+    """
+    wanted = _text(target)
+    known = set(plan["presented_ids"])
+    known.update(item["card_id"] for item in plan["original_cards"])
+    known.update(item["occurrence_id"] for item in plan["occurrences"])
+    if not wanted or wanted in known:
+        return wanted
+    unit = _review_unit_id(wanted)
+    if not unit:
+        raise ValueError("card is not in this round")
+    canonical = next(
+        (
+            _text(item.get("card_id"))
+            for item in plan["original_cards"]
+            if _text(item.get("unit_id")) == unit
+            and not _text(item.get("card_id")).startswith("retry:")
+        ),
+        "",
+    )
+    return canonical if canonical and canonical in known else ""

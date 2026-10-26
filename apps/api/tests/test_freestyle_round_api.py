@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+import json
+from datetime import datetime, timedelta
 
-from memory_anki.core.time import local_day
+from memory_anki.core.time import local_day, utc_now_naive
+from memory_anki.infrastructure.db._tables.misc import FreestyleRoundState
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitState
 from memory_anki.infrastructure.db.deps import session_dep
@@ -721,3 +723,48 @@ def test_get_active_round_reads_without_creating_or_appending(make_client):
     assert again.json()["version"] == body["version"]
     assert again.json()["plan"]["presented_ids"] == ["a", "b"]
     assert again.json()["plan"]["original_cards"] == body["plan"]["original_cards"]
+
+
+def test_served_wait_instants_carry_a_utc_offset(session_factory, make_client):
+    """Waits are stored naive UTC; the browser must receive an explicit offset.
+
+    The feed parsed a naive ``next_ready_at`` as local wall time, so in UTC+8 a
+    10-minute wait counted down from eight hours in the past and the banner
+    claimed the card was already due while the server still withheld it.
+    """
+    client = _client(make_client)
+    created = _create(
+        client,
+        operation_id="op-wait-offset",
+        cards=_cards("a", "b"),
+        round_id="round-wait-offset",
+    )
+
+    ready_at = utc_now_naive() + timedelta(minutes=10)
+    session = session_factory()
+    row = (
+        session.query(FreestyleRoundState)
+        .filter_by(round_id=created["round_id"])
+        .one()
+    )
+    plan = json.loads(row.plan_json)
+    plan["occurrences"].append(
+        {
+            "occurrence_id": "retry:round-wait-offset:a:1",
+            "source_card_id": "a",
+            "retry_attempt": 1,
+            "status": "pending",
+            "available_at": ready_at.isoformat(),
+            "kind": "retry",
+        }
+    )
+    row.plan_json = json.dumps(plan)
+    session.commit()
+    session.close()
+
+    body = client.get("/api/v1/freestyle/rounds/active").json()
+    assert body["waiting"]["count"] == 1
+    assert body["waiting"]["next_ready_at"].endswith("+00:00")
+    occurrence = body["plan"]["occurrences"][0]
+    assert occurrence["status"] == "pending"
+    assert occurrence["available_at"].endswith("+00:00")

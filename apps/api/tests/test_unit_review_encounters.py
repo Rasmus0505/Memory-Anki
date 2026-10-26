@@ -16,6 +16,7 @@ from memory_anki.modules.memory.application.unit_fsrs_adapter import FsrsUnitSta
 from memory_anki.modules.memory.application.unit_intraday import IntradayState
 from memory_anki.modules.memory.application.unit_review_service import (
     adjust_unit_schedule,
+    attempt_identity_matches,
     cancel_unrated_unit_review_encounter,
     close_unit_review_encounter,
     rate_review_unit,
@@ -959,6 +960,49 @@ def test_freestyle_rating_adopts_live_revision_after_topology_edit(db_session):
     assert rated["encounter"]["round_id"] == "round-2026-07-27"
 
 
+def test_freestyle_rating_accepts_the_rebuilt_card_id_of_the_same_attempt(db_session):
+    # 进入编辑 → 修改 → 返回学习 bumps the unit revision. The glance then reopens
+    # at the live revision with the card id the learner still had (r1), while the
+    # rebuilt feed taps the same unit as r4. The attempt identity compared the raw
+    # card ids and rejected that tap with "rating attempt identity mismatch"; the
+    # learner had to rate a second time. The attempt is the unit, not its revision.
+    state = _seed_review_unit(db_session)
+    old_card = f"review_unit:{state.id}:r{state.revision}"
+    opened = _start(db_session, state, "encounter-revision-identity", card_id=old_card)
+    old_revision = int(state.revision)
+    adjust_unit_schedule(
+        db_session,
+        unit_id=state.id,
+        operation_id="inline-edit-during-card",
+        stage_index=state.stage_index,
+    )
+    db_session.commit()
+    db_session.refresh(state)
+    new_card = f"review_unit:{state.id}:r{state.revision}"
+    assert new_card != old_card
+
+    # The card's session reload after the edit still names the old card.
+    _start(db_session, state, "encounter-revision-identity", card_id=old_card)
+
+    rated = rate_review_unit(
+        db_session,
+        study_session_id=opened["id"],
+        unit_id=state.id,
+        unit_revision=old_revision,
+        encounter_id="encounter-revision-identity",
+        operation_id="rate-after-inline-edit",
+        rating=3,
+        round_id="round-2026-07-27",
+        card_id=new_card,
+        adopt_live_revision=True,
+    )
+
+    assert rated["encounter"]["selected_rating"] == 3
+    operation = db_session.get(ReviewUnitRatingOperation, "rate-after-inline-edit")
+    assert operation is not None
+    assert operation.unit_revision == int(state.revision)
+
+
 def test_freestyle_start_follows_successor_after_structural_retire(db_session):
     # Reconcile retires a unit and may create its successor under a new id with the
     # same palace + anchor. A card still holding the retired id must start the
@@ -1135,3 +1179,18 @@ def test_reopening_a_superseded_attempt_opens_a_read_only_glance(session_factory
     assert detail["code"] == "superseded_attempt"
     assert "后续真实练习" in detail["message"]
 
+
+def test_attempt_identity_ignores_revision_and_retry_counter_drift():
+    # Same review work at a new content revision, and the same retry occurrence
+    # after the plan advanced its counter: both are the attempt the learner is
+    # looking at. Different units / occurrences stay different attempts.
+    source = {"card_id": "review_unit:u:r1", "occurrence_id": "", "retry_attempt": 0}
+    assert attempt_identity_matches(source, {**source, "card_id": "review_unit:u:r9"})
+    assert not attempt_identity_matches(source, {**source, "card_id": "review_unit:v:r1"})
+
+    retry = {"card_id": "retry:r:abc", "occurrence_id": "retry:r:abc", "retry_attempt": 1}
+    # A new retry attempt is a different attempt, even on the same source.
+    assert not attempt_identity_matches(retry, {**retry, "retry_attempt": 2})
+    assert not attempt_identity_matches(retry, {
+        **retry, "card_id": "retry:r:def", "occurrence_id": "retry:r:def",
+    })

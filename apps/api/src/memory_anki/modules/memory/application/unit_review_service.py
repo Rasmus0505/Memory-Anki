@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import uuid
 from datetime import date, datetime, timedelta
 from typing import Any
@@ -759,9 +760,7 @@ def _rating_effects(
                 "retry_after_cards": result.retry_after_cards,
                 "retry_after_minutes": result.retry_after_minutes,
                 "intraday_kind": result.intraday_kind,
-                "intraday_due_at": result.intraday_due_at.isoformat()
-                if result.intraday_due_at
-                else None,
+                "intraday_due_at": to_api_datetime(result.intraday_due_at),
                 "intraday_exhausted": result.intraday_exhausted,
                 "stage_action": stage_action,
                 "schedule_changed": result.schedule_changed,
@@ -1324,11 +1323,41 @@ def _apply_rating_from_snapshot(
     return result
 
 
+_REVIEW_CARD_REVISION = re.compile(r"^(review_unit:[^:]+):r\d+$")
+
+
+def _identity_card_key(value: Any) -> str:
+    """An attempt's card identity ignores the content revision.
+
+    ``review_unit:<unit>:rN`` names the same review work at every revision. An
+    inline edit legitimately bumps N while the glance is open (the server adopts
+    the live revision), so comparing the raw id rejected the learner's next tap
+    with "rating attempt identity mismatch" — the first tap after 返回学习 failed
+    and only a second one (after a reload) landed.
+    """
+    text = str(value or "").strip()
+    match = _REVIEW_CARD_REVISION.match(text)
+    return match.group(1) if match else text
+
+
+def attempt_identity_matches(stored: Any, current: Any) -> bool:
+    left = stored if isinstance(stored, dict) else {}
+    right = current if isinstance(current, dict) else {}
+    if not left or not right:
+        return left == right
+    return (
+        _identity_card_key(left.get("card_id")) == _identity_card_key(right.get("card_id"))
+        and str(left.get("occurrence_id") or "").strip()
+        == str(right.get("occurrence_id") or "").strip()
+        and int(left.get("retry_attempt") or 0) == int(right.get("retry_attempt") or 0)
+    )
+
+
 def _attempt_identity(card_id: str, occurrence_id: str, retry_attempt: int) -> dict[str, Any]:
     if not card_id and not occurrence_id:
         return {}
     return {
-        "card_id": str(card_id or occurrence_id).strip(),
+        "card_id": _identity_card_key(card_id or occurrence_id),
         "occurrence_id": str(occurrence_id or "").strip(),
         "retry_attempt": int(retry_attempt) if occurrence_id else 0,
     }
@@ -1360,7 +1389,10 @@ def _same_day_attempt_source(
     for candidate in candidates:
         matches = candidate.id == encounter_id or (
             bool(identity)
-            and json.loads(candidate.baseline_state_json).get("attempt_identity") == identity
+            and attempt_identity_matches(
+                json.loads(candidate.baseline_state_json).get("attempt_identity"),
+                identity,
+            )
         )
         if matches and _effective_rating_day(session, candidate) == local_day():
             return candidate
@@ -1556,9 +1588,7 @@ def _rate_open_encounter(
         "retry_after_cards": result.retry_after_cards,
         "retry_after_minutes": result.retry_after_minutes,
         "intraday_kind": result.intraday_kind,
-        "intraday_due_at": result.intraday_due_at.isoformat()
-        if result.intraday_due_at
-        else None,
+        "intraday_due_at": to_api_datetime(result.intraday_due_at),
         "intraday_exhausted": result.intraday_exhausted,
         "rating": rating,
         "rating_label": RATING_LABELS[rating],
@@ -1804,9 +1834,11 @@ def _ensure_open_freestyle_rating_target(
         identity = _attempt_identity(card_id, occurrence_id, retry_attempt)
         snapshot = json.loads(encounter.baseline_state_json)
         stored_identity = snapshot.get("attempt_identity")
-        if identity and stored_identity and identity != stored_identity:
+        if identity and stored_identity and not attempt_identity_matches(stored_identity, identity):
             raise ValueError("rating attempt identity mismatch")
-        if identity and not stored_identity:
+        if identity and identity != stored_identity:
+            # A revision bump is the same attempt; keep the stored identity in
+            # step with the live card id so the next tap compares equal.
             snapshot["attempt_identity"] = identity
             encounter.baseline_state_json = json.dumps(snapshot, ensure_ascii=False)
         return study, state, _session_item(session, study.id, state.id), encounter
