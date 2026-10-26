@@ -19,7 +19,14 @@ export interface RatingLedgerHandlers {
   encounterChange: (cardId: string, encounter: FreestyleUnitEncounterState) => void
   branchComplete: (
     cardId: string,
-    options: { restudy?: boolean; cleared?: boolean; rating?: number; retryAfterCards?: number },
+    options: {
+      restudy?: boolean
+      cleared?: boolean
+      rating?: number
+      retryAfterCards?: number
+      retryAvailableAt?: string | null
+      retryExhausted?: boolean
+    },
   ) => void
   ratingSettled?: (
     cardId: string,
@@ -75,6 +82,12 @@ export function applyRatingSaveEvent(event: RatingSaveEvent, handlers: RatingLed
           restudy: next.passed !== true,
           rating: next.selectedRating ?? undefined,
           retryAfterCards: event.item ? next.retryAfterCards : undefined,
+          // The ack carries the wait the server just booked. Without it the
+          // badge would fall back to "稍后重练" until the next round read.
+          ...(event.item?.intraday_due_at
+            ? { retryAvailableAt: event.item.intraday_due_at }
+            : {}),
+          ...(event.item?.intraday_exhausted === true ? { retryExhausted: true } : {}),
         })
       }
       const settled = asRating(next.selectedRating)

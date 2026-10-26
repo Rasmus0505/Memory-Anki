@@ -62,6 +62,10 @@ import { useFreestyleFullscreen } from '@/modules/practice/ui/freestyle/hooks/us
 import { useFreestyleDisplayPrefs } from '@/modules/practice/ui/freestyle/hooks/useFreestyleDisplayPrefs'
 import { useFreestyleSubjectMap } from '@/modules/practice/ui/freestyle/hooks/useFreestyleSubjectMap'
 import { useFreestyleRatingOutbox } from '@/modules/practice/ui/freestyle/hooks/useFreestyleRatingOutbox'
+import {
+  resolveFreestyleAutoAdvanceTarget,
+  useFreestyleAutoAdvance,
+} from '@/modules/practice/ui/freestyle/hooks/useFreestyleAutoAdvance'
 import { useRatingSaveEntries } from '@/modules/practice/ui/freestyle/hooks/useFreestyleRatingSaves'
 import { unsavedRatingCardIds } from '@/modules/practice/ui/freestyle/model/ratingSaveStore'
 import { resetFreestyleCombo } from '@/modules/practice/ui/freestyle/model/freestyleComboStore'
@@ -72,7 +76,7 @@ import {
 } from '@/modules/practice/ui/freestyle/model/freestyle-cards'
 import { useFreestyleChromeTheme } from '@/modules/practice/ui/freestyle/hooks/useFreestyleChromeTheme'
 import { useFreestyleWakeLock } from '@/modules/practice/ui/freestyle/hooks/useFreestyleWakeLock'
-import { useAiRunConfigDialog } from '@/modules/settings/public'
+import { useAiRunConfigDialog, useFlipCardRevealSettings } from '@/modules/settings/public'
 import {
   FREESTYLE_WORKSPACE_PRIMARY,
   isPalaceReviewWorkspace,
@@ -136,7 +140,7 @@ export default function ImmersiveFreestylePage({
   const reducedMotion = usePrefersReducedMotion()
   const queueRef = useRef<FreestyleCard[]>([])
   const acknowledgedCardIdsRef = useRef<Set<string>>(new Set())
-  const autoAdvanceTimerRef = useRef<number | null>(null)
+  const flipCardRevealSettings = useFlipCardRevealSettings()
   const [planOpen, setPlanOpen] = useState(false)
   const [partialSettlement, setPartialSettlement] = useState<FreestylePartialSettlementSnapshot | null>(null)
   const [startOverviewOpen, setStartOverviewOpen] = useState(true)
@@ -311,6 +315,7 @@ export default function ImmersiveFreestylePage({
     canCompleteRound,
     completeTitle,
     handleCompleteRound,
+    unscoredIndices,
     scrollChannel,
     edgeHint,
   } = useFreestyleFeedNavigation({
@@ -330,6 +335,24 @@ export default function ImmersiveFreestylePage({
     startupVisualIndex,
     onStartupVisualApplied: clearStartupVisualIndex,
     onPageTurn: isActive ? signalPageTurnWithDust : undefined,
+  })
+  /**
+   * 翻卡设置 → 评分后自动翻页: after a rating settles on the card under the viewport,
+   * jump to the earliest unit still unscored this round (not merely the neighbour).
+   * Off by default; manual paging stays the rule.
+   */
+  const autoAdvanceTargetRef = useRef({ unscoredIndices, cardCount: cards.length, roundComplete })
+  autoAdvanceTargetRef.current = { unscoredIndices, cardCount: cards.length, roundComplete }
+  const resolveAutoAdvanceTarget = useCallback(
+    () => resolveFreestyleAutoAdvanceTarget(autoAdvanceTargetRef.current),
+    [],
+  )
+  const { scheduleAutoAdvance, cancelAutoAdvance } = useFreestyleAutoAdvance({
+    // Leaving the route must not let a pending turn move the queue underneath the learner.
+    enabled: isActive && flipCardRevealSettings.settings.autoAdvanceOnRate === true,
+    viewingCardId,
+    resolveTargetIndex: resolveAutoAdvanceTarget,
+    navigateToIndex,
   })
   const {
     recordChannelSample,
@@ -438,7 +461,7 @@ export default function ImmersiveFreestylePage({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only reset on new round
   }, [queueState.roundId])
 
-  const { liveRevealMap, applyLiveRevealMap } = useFreestyleLiveSync({
+  useFreestyleLiveSync({
     fullPath,
     // Live mirror is keyed by one palace. Multi-palace entry stays local.
     entryPalaceId: typeof entryPalaceId === 'number' ? entryPalaceId : null,
@@ -475,15 +498,18 @@ export default function ImmersiveFreestylePage({
     [acknowledgeCard],
   )
 
-  const cancelAutoAdvance = useCallback(() => {
-    if (autoAdvanceTimerRef.current != null) {
-      window.clearTimeout(autoAdvanceTimerRef.current)
-      autoAdvanceTimerRef.current = null
-    }
-  }, [])
-
   const handleBranchComplete = useCallback(
-    (cardId: string, options?: { restudy?: boolean; cleared?: boolean; rating?: number; retryAfterCards?: number }) => {
+    (
+      cardId: string,
+      options?: {
+        restudy?: boolean
+        cleared?: boolean
+        rating?: number
+        retryAfterCards?: number
+        retryAvailableAt?: string | null
+        retryExhausted?: boolean
+      },
+    ) => {
       // A previous failed mutation must not disable the rest of this round.
       // The card-level diagnostic remains visible until dismissed, while a
       // subsequent successful settlement clears the transient banner.
@@ -497,29 +523,26 @@ export default function ImmersiveFreestylePage({
   )
 
   /**
-   * Opt-in auto-advance. Passing rates only: a weak rate leaves the learner on the
-   * card they still need to look at (and triggers a silent restudy rebuild, which
-   * must not race a page turn). The delay lets the undo chip register before leaving.
+   * A settled (saved) rating feeds the challenge–skill channel first. If 翻卡设置
+   * has 评分后自动翻页 on, it then hands a page turn to the auto-advance timer; the
+   * turn only fires while that card is still under the viewport, and the undo window
+   * lets a mistap be corrected before the feed moves.
    */
   const handleRatingSettled = useCallback(
     (
       cardId: string,
-      _passed: boolean,
+      passed: boolean,
       rating: UnitRating,
       _meta?: { occurrenceId?: string; encounterId?: string; planVersion?: number },
     ) => {
-      // Feed the challenge–skill channel first: it must see every rate, including the
-      // weak ones that never reach the auto-advance path below.
       recordChannelSample(cardId, rating)
+      // 忘记/困难 keeps the learner on the source card: its retry is booked for
+      // later (10 分钟 → 1 小时 → 3 小时), so there is no next card to turn to.
+      if (passed) scheduleAutoAdvance(cardId)
+      else cancelAutoAdvance()
     },
-    [recordChannelSample],
+    [cancelAutoAdvance, recordChannelSample, scheduleAutoAdvance],
   )
-
-  useEffect(() => {
-    return () => {
-      cancelAutoAdvance()
-    }
-  }, [cancelAutoAdvance])
 
   const handleStaleDrop = useCallback(
     (cardId: string, options?: { force?: boolean }) => {
@@ -1075,7 +1098,6 @@ export default function ImmersiveFreestylePage({
           planVersion={planVersion}
           answeredQuestionIds={answeredQuestionIds}
           questionStates={progress.questionStates}
-          liveRevealMap={liveRevealMap}
           onToggleFullscreen={toggleFreestyleFullscreen}
           onFlipModeChange={updateFlipMode}
           onMindmapZoomChange={updateMindmapZoom}
@@ -1089,7 +1111,6 @@ export default function ImmersiveFreestylePage({
           onCardSaveFailed={handleCardSaveFailed}
           onEditingChange={setInlineEditing}
           onReconcileUnits={reconcileUnitsFor}
-          onLiveRevealMapChange={applyLiveRevealMap}
           onOpenScopeQuiz={openScopeQuiz}
           onBedtimeRate={rateBedtimeCard}
           onQuestionStateChange={updateQuestionState}

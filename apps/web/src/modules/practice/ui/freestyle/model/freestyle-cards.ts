@@ -24,6 +24,20 @@ export function isMindMapBranchCard(
   return card?.type === 'mindmap_branch'
 }
 
+/**
+ * React key for one feed row. A content edit bumps the card's ``:rN`` revision,
+ * and the rebuilt feed then carries the same unit under a new id. Keying the row
+ * by the raw id unmounted the card the learner was reading — the map came back
+ * folded to its root and the viewport flickered. A retry occurrence and a quiz
+ * are distinct work, so those keep their own id.
+ */
+export function freestyleFeedCardKey(card: FreestyleCard): string {
+  if (isQuizCard(card) || isActionCard(card)) return card.id
+  if (!isMindMapBranchCard(card) || !card.unit_id) return card.id
+  if (card.occurrence_kind === 'retry') return card.id
+  return `unit:${card.unit_id}`
+}
+
 export function stringListsEqual(left: string[], right: string[]) {
   if (left.length !== right.length) return false
   return left.every((item, index) => item === right[index])

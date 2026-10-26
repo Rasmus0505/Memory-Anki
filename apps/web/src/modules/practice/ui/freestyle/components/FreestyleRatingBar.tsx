@@ -13,7 +13,6 @@ import {
   compactRatingEffectLabel,
   ratingDestinationLabel,
   ratingEffectLabel,
-  retryPositionLabel,
 } from '@/modules/practice/ui/freestyle/model/ratingEffectLabels'
 import { isFreestyleShortcutBlocked } from '@/modules/practice/ui/freestyle/model/freestyleKeyboard'
 import { SUPERSEDED_RATING_COPY } from '@/modules/practice/ui/freestyle/model/freestyleRatingCopy'
@@ -44,7 +43,6 @@ export function FreestyleRatingBar({
   ratingEffects,
   selectedRating,
   recordedRating = null,
-  retryAfterCards,
   busy,
   pendingRating = null,
   pendingClear = false,
@@ -72,7 +70,6 @@ export function FreestyleRatingBar({
   selectedRating: UnitRating | null
   /** This-round last rating while the amend glance is still empty. */
   recordedRating?: UnitRating | null
-  retryAfterCards: number
   /** Disables only 移除本队列 and the scope tabs. A pending save never freezes the ratings. */
   busy: boolean
   /** The rating being saved right now. Only a subtle 保存中 hint; never lit as chosen. */
@@ -153,7 +150,7 @@ export function FreestyleRatingBar({
     if (effect && activeRating != null) {
       setFlyTag((current) => ({
         rating: activeRating,
-        text: ratingDestinationLabel(effect, retryAfterCards),
+        text: ratingDestinationLabel(effect),
         seq: (current?.seq ?? 0) + 1,
       }))
     }
@@ -263,7 +260,7 @@ export function FreestyleRatingBar({
             <span className="min-w-0 truncate">
               {palaceMode
                 ? palaceRatingEffectLine(selectedEffect.label, palaceDueCount)
-                : `已选${selectedEffect.label} · ${ratingEffectLabel(selectedEffect, retryAfterCards)}`}
+                : `已选${selectedEffect.label} · ${ratingEffectLabel(selectedEffect)}`}
             </span>
             {locked ? (
               <span className="shrink-0 text-stage-faint">已锁定</span>
@@ -431,12 +428,12 @@ export function FreestyleRatingBar({
                 : 'fail'
               : null
             const earlyHint = canRateWithoutPlan
-              ? item.value >= 3 ? '记下' : retryPositionLabel(retryAfterCards)
+              ? item.value >= 3 ? '记下' : '今天再练'
               : null
             const hint = effect
               ? palaceMode && palaceKind
                 ? palaceRatingEffectLine(effect.label, palaceDueCount)
-                : ratingEffectLabel(effect, retryAfterCards)
+                : ratingEffectLabel(effect)
               : hintMode
                 ? '继续'
                 : earlyHint
@@ -444,7 +441,7 @@ export function FreestyleRatingBar({
             const preview = effect
               ? palaceMode && palaceKind
                 ? palaceRatingPreviewLabel(palaceDueCount, palaceKind)
-                : compactRatingEffectLabel(effect, retryAfterCards)
+                : compactRatingEffectLabel(effect)
               : earlyHint
             const selected = shownRating === item.value
             const pending = pendingRating === item.value

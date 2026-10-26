@@ -406,7 +406,7 @@ describe('server round plan hydrate', () => {
     })
   })
 
-  it('keeps an optimistic last-card retry while the server occurrence is still pending', () => {
+  it('withholds a last-card retry the server still has pending', () => {
     const earlier = [branch('c1'), branch('c2'), branch('c3'), branch('c4')]
     const source = branch('source')
     const localRetry = createRetryOccurrence(source, 'round-1', 1, 0)
@@ -440,11 +440,13 @@ describe('server round plan hydrate', () => {
     }
     expect(planIsFullyHandled(plan)).toBe(false)
     expect(nextUnfinishedPlanCardId(plan)).toBe('source')
+    // The 10-minute wait is not over, so neither the server nor a stale local
+    // copy may put the card back on the rail.
     const hydrated = cardsForServerPlan([...earlier, source, localRetry], plan, 'round-1')
-    expect(hydrated.map((card) => card.id)).toEqual(['c1', 'c2', 'c3', 'c4', 'source', localRetry.id])
+    expect(hydrated.map((card) => card.id)).toEqual(['c1', 'c2', 'c3', 'c4', 'source'])
   })
 
-  it('keeps a pending optimistic retry in its local gap instead of the tail', () => {
+  it('drops a pending local retry that has not reached its wait', () => {
     const source = branch('a')
     const localRetry = createRetryOccurrence(source, 'round-1', 1, 2)
     const plan: FreestyleRoundPlanPayload = {
@@ -471,7 +473,7 @@ describe('server round plan hydrate', () => {
       plan,
       'round-1',
     )
-    expect(hydrated.map((card) => card.id)).toEqual(['a', 'b', 'c', localRetry.id, 'd'])
+    expect(hydrated.map((card) => card.id)).toEqual(['a', 'b', 'c', 'd'])
   })
 
   it('keeps a rated 重练 in the feed even when presented_ids no longer names it', () => {

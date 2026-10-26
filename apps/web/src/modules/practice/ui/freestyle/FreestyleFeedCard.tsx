@@ -8,7 +8,6 @@ import { StaleUnitReviewCard } from '@/modules/practice/ui/freestyle/StaleUnitRe
 import { examStarsOf } from '@/modules/practice/ui/freestyle/freestylePageHelpers'
 import { cardAmbientHsl } from '@/modules/practice/ui/freestyle/model/freestyleProgressSegments'
 import { isMindMapBranchCard, isQuizCard } from '@/modules/practice/ui/freestyle/model/freestyle-cards'
-import { RESTUDY_MAX_INTERVENING } from '@/modules/practice/public'
 import { isReviewHintCard, type FreestyleCard, type FreestyleQuizCard } from '@/shared/api/contracts'
 import { ExamStarBadge } from '@/modules/exam/public'
 
@@ -33,7 +32,6 @@ export function FreestyleFeedCard({
   completed,
   questionState,
   answeredBefore,
-  liveRevealMap,
   onFlipModeChange,
   onMindmapZoomChange,
   onToggleFullscreen,
@@ -47,7 +45,6 @@ export function FreestyleFeedCard({
   onSaveFailed,
   onEditingChange,
   onUnitsReconciled,
-  onLiveRevealMapChange,
   onOpenScopeQuiz,
   onBedtimeRate,
   onQuestionStateChange,
@@ -68,11 +65,15 @@ export function FreestyleFeedCard({
   roundId: string
   planVersion: UnitProps['planVersion']
   encounter: UnitProps['encounter']
-  planEntry: { status?: string; retryAfterCards?: number; lastRating?: UnitProps['lastRating'] } | undefined
+  planEntry: {
+    status?: string
+    retryAfterCards?: number
+    retryAvailableAt?: string
+    lastRating?: UnitProps['lastRating']
+  } | undefined
   completed: boolean
   questionState: QuizProps['state']
   answeredBefore: boolean
-  liveRevealMap: UnitProps['liveRevealMap']
   onFlipModeChange: UnitProps['onFreestyleFlipModeChange']
   onMindmapZoomChange: UnitProps['onUserZoomChange']
   onToggleFullscreen: UnitProps['onToggleFullscreen']
@@ -86,7 +87,6 @@ export function FreestyleFeedCard({
   onSaveFailed: UnitProps['onSaveFailed']
   onEditingChange: UnitProps['onEditingChange']
   onUnitsReconciled: UnitProps['onUnitsReconciled']
-  onLiveRevealMapChange: UnitProps['onLiveRevealMapChange']
   onOpenScopeQuiz: UnitProps['onOpenScopeQuiz']
   onBedtimeRate: UnitProps['onBedtimeRate']
   onQuestionStateChange: (questionId: number, updater: Parameters<QuizProps['onStateChange']>[0]) => void
@@ -125,12 +125,10 @@ export function FreestyleFeedCard({
                   planVersion={planVersion}
                   encounter={encounter}
                   lastRating={planEntry?.lastRating ?? null}
-                  retryAfterCards={RESTUDY_MAX_INTERVENING}
                   fullscreen={freestyleFullscreen && index === currentIndex}
                   onToggleFullscreen={onToggleFullscreen}
                   freestyleFlipMode={flipMode}
                   onFreestyleFlipModeChange={onFlipModeChange}
-                  autoAdvance={false}
                   preferredZoom={mindmapZoom}
                   onUserZoomChange={onMindmapZoomChange}
                   blockedHint={null}
@@ -144,8 +142,6 @@ export function FreestyleFeedCard({
                   onSaveFailed={onSaveFailed}
                   onEditingChange={index === currentIndex ? onEditingChange : undefined}
                   onUnitsReconciled={onUnitsReconciled}
-                  liveRevealMap={index === currentIndex ? liveRevealMap : null}
-                  onLiveRevealMapChange={onLiveRevealMapChange}
                   onOpenScopeQuiz={onOpenScopeQuiz}
                   onBedtimeRate={onBedtimeRate}
                 />
@@ -187,7 +183,8 @@ export function FreestyleFeedCard({
       </FreestyleRatingReaction>
       <FreestyleRetryCornerBadge
         card={card}
-        retryAfterCards={planEntry?.status === 'retry' ? planEntry.retryAfterCards : undefined}
+        retryScheduled={planEntry?.status === 'retry'}
+        retryAvailableAt={planEntry?.retryAvailableAt}
         completed={completed}
       />
       </div>

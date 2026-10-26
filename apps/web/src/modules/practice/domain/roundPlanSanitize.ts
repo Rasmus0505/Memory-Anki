@@ -63,6 +63,7 @@ function asCards(value: unknown) {
       attemptCount: Math.max(0, Math.round(Number(item.attemptCount) || 0)),
       updatedAt: Number.isFinite(Number(item.updatedAt)) ? Number(item.updatedAt) : 0,
       enteredOn: asString(item.enteredOn) || undefined,
+      retryAvailableAt: asString(item.retryAvailableAt) || undefined,
       ...(item.isNew === true ? { isNew: true } : {}),
     }
   })

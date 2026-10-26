@@ -95,6 +95,36 @@ describe('freestyle queue skip rules', () => {
     expect(merged.map((card) => card.id)).toEqual(['quiz:1', 'quiz:2', 'quiz:3', 'quiz:4'])
   })
 
+  it('drops a blank retry the server withholds, keeping only rated history', () => {
+    // A 忘记/困难 retry is pending until its 10-minute wait passes. A local copy
+    // from before that must not survive the silent rebuild, or the feed serves
+    // the card early; a copy the learner already rated stays for swipe-back.
+    const pendingRetry = {
+      id: 'retry:round-1:a-unit:1',
+      type: 'mindmap_branch',
+      source_card_id: 'branch:a',
+      occurrence_kind: 'retry',
+    } as FreestyleCard
+    const answeredRetry = {
+      id: 'retry:round-1:b-unit:1',
+      type: 'mindmap_branch',
+      source_card_id: 'branch:b',
+      occurrence_kind: 'retry',
+    } as FreestyleCard
+    const previous = [
+      { id: 'branch:a', type: 'mindmap_branch' },
+      pendingRetry,
+      { id: 'branch:b', type: 'mindmap_branch' },
+      answeredRetry,
+    ] as FreestyleCard[]
+    const incoming = [
+      { id: 'branch:a', type: 'mindmap_branch' },
+      { id: 'branch:b', type: 'mindmap_branch' },
+    ] as FreestyleCard[]
+    const merged = mergeQueuePreservingHistory(previous, incoming, [answeredRetry.id])
+    expect(merged.map((card) => card.id)).toEqual(['branch:a', 'branch:b', answeredRetry.id])
+  })
+
   it('keeps a mid-queue settled unit in place so scroll does not land on the next card', () => {
     // User is on branch B (index 1). Completing B must not prepend it to the front:
     // that used to leave scrollTop on index 1 while B moved to 0 �?visual auto-advance.

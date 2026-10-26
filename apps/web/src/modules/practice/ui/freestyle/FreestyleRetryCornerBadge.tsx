@@ -1,25 +1,32 @@
 import type { FreestyleCard } from '@/shared/api/contracts'
 import { cn } from '@/shared/lib/utils'
 import { retryChromeClass } from '@/modules/practice/ui/freestyle/model/freestyleProgressSegments'
+import { useWaitCountdown } from '@/modules/practice/ui/freestyle/model/freestyleWaitCopy'
 
 export function FreestyleRetryCornerBadge({
   card,
-  retryAfterCards,
+  retryScheduled,
+  retryAvailableAt,
   completed,
 }: {
   card: FreestyleCard
-  retryAfterCards?: number
+  /** The source's 忘记/困难 booked a retry that has not been answered yet. */
+  retryScheduled?: boolean
+  /** Server instant the retry comes back; null/undefined while unknown. */
+  retryAvailableAt?: string | null
   completed: boolean
 }) {
   const isRetry = card.occurrence_kind === 'retry'
-  const isSourceRetry = !isRetry && retryAfterCards != null
-  if (!isRetry && !isSourceRetry) return null
+  // Hooks stay unconditional; a retry card itself has no wait to count.
+  const { label: waitLabel } = useWaitCountdown(isRetry ? null : retryAvailableAt)
+  if (!isRetry && !retryScheduled) return null
   const done = isRetry && completed
   const label = isRetry
     ? (done
       ? `重练第 ${Math.max(1, card.retry_attempt ?? 1)} 次 · 已过`
       : `重练第 ${Math.max(1, card.retry_attempt ?? 1)} 次`)
-    : `${Math.max(0, retryAfterCards ?? 3)} 张后重练`
+    // Never promise a card offset: the retry waits for its server instant.
+    : waitLabel
   return (
     <div
       data-testid="freestyle-retry-corner-badge"

@@ -7,7 +7,10 @@ import { FreestyleWaitingState } from '@/modules/practice/ui/freestyle/component
 import type { FreestyleSettlementMeta } from '@/modules/practice/ui/freestyle/components/FreestyleRoundSettlement'
 import { overlayRoundReviewPalaceIds } from '@/modules/practice/ui/freestyle/model/overlayQuizRange'
 import { isOccurrenceScored } from '@/modules/practice/domain/unitProgressState'
-import { isQuizCard } from '@/modules/practice/ui/freestyle/model/freestyle-cards'
+import {
+  freestyleFeedCardKey,
+  isQuizCard,
+} from '@/modules/practice/ui/freestyle/model/freestyle-cards'
 import type { FreestyleCard } from '@/shared/api/contracts'
 import { toast } from '@/shared/feedback/toast'
 
@@ -40,7 +43,6 @@ export function FreestyleCardArea({
   planVersion,
   answeredQuestionIds,
   questionStates,
-  liveRevealMap,
   onToggleFullscreen,
   onFlipModeChange,
   onMindmapZoomChange,
@@ -54,7 +56,6 @@ export function FreestyleCardArea({
   onCardSaveFailed,
   onEditingChange,
   onReconcileUnits,
-  onLiveRevealMapChange,
   onOpenScopeQuiz,
   onBedtimeRate,
   onQuestionStateChange,
@@ -93,7 +94,6 @@ export function FreestyleCardArea({
   planVersion: Queue['planVersion']
   answeredQuestionIds: ReadonlySet<number>
   questionStates: Record<number, FeedProps['questionState']>
-  liveRevealMap: FeedProps['liveRevealMap']
   onToggleFullscreen: FeedProps['onToggleFullscreen']
   onFlipModeChange: FeedProps['onFlipModeChange']
   onMindmapZoomChange: FeedProps['onMindmapZoomChange']
@@ -107,7 +107,6 @@ export function FreestyleCardArea({
   onCardSaveFailed: (message: string, cardId: string) => void
   onEditingChange: FeedProps['onEditingChange']
   onReconcileUnits: (cardId: string) => void
-  onLiveRevealMapChange: FeedProps['onLiveRevealMapChange']
   onOpenScopeQuiz: FeedProps['onOpenScopeQuiz']
   onBedtimeRate: FeedProps['onBedtimeRate']
   onQuestionStateChange: FeedProps['onQuestionStateChange']
@@ -138,10 +137,11 @@ export function FreestyleCardArea({
       {cards.length > 0 ? (
         cards.map((card, index) => {
           const planEntry = roundPlan?.cardsById[card.id]
+          const rowKey = freestyleFeedCardKey(card)
           if (!mounted.has(index)) {
             return (
               <div
-                key={card.id}
+                key={rowKey}
                 className="h-full min-h-0 shrink-0 snap-start snap-always"
                 aria-hidden
               />
@@ -150,7 +150,7 @@ export function FreestyleCardArea({
           const encounter = queueState.unitEncountersByCardId[card.id]
           return (
             <FreestyleFeedCard
-              key={card.id}
+              key={rowKey}
               card={card}
               index={index}
               currentIndex={currentIndex}
@@ -172,7 +172,6 @@ export function FreestyleCardArea({
               })}
               questionState={isQuizCard(card) ? questionStates[card.question.id] : undefined}
               answeredBefore={isQuizCard(card) && answeredQuestionIds.has(card.question.id)}
-              liveRevealMap={liveRevealMap}
               onFlipModeChange={onFlipModeChange}
               onMindmapZoomChange={onMindmapZoomChange}
               onToggleFullscreen={onToggleFullscreen}
@@ -186,7 +185,6 @@ export function FreestyleCardArea({
               onSaveFailed={(message) => onCardSaveFailed(message, card.id)}
               onEditingChange={onEditingChange}
               onUnitsReconciled={() => onReconcileUnits(card.id)}
-              onLiveRevealMapChange={onLiveRevealMapChange}
               onOpenScopeQuiz={onOpenScopeQuiz}
               onBedtimeRate={onBedtimeRate}
               onQuestionStateChange={onQuestionStateChange}

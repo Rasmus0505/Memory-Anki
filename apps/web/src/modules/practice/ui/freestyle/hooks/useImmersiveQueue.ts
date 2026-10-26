@@ -23,6 +23,7 @@ import {
   type FreestyleSaveOutcome,
 } from '@/modules/practice/ui/freestyle/model/freestyleSettlementModel'
 import { ensureStudyTextLibrary } from '@/shared/study-text/studyTextLibrary'
+import { parseApiDateTime } from '@/shared/lib/dateTime'
 import {
   mergePartialSettlementLists,
   toServerPartialSettlement,
@@ -447,10 +448,10 @@ export function useImmersiveQueue(
   const configRef = useRef(config)
   const currentIndexRef = useRef(0)
   /**
-   * Weak-rated units whose retry is not on the rail yet. A source 忘记/困难
-   * inserts immediately. Failing the retry card itself stays here until leave,
-   * so that card is not pulled out from under the viewport.
-   * Value is the index at settle time (anchor for max-gap insert).
+   * Retired. A 忘记/困难 retry is booked by the server with an `available_at`
+   * instant and published by the round read; the feed must not insert a local
+   * copy (that served the card after ~3 cards and bypassed the 10-minute wait).
+   * Nothing writes this map since 2026-10-26 — the remaining reads are inert.
    */
   const pendingRestudyByIdRef = useRef<Map<string, PendingRestudy>>(new Map())
   const [pendingRestudyCardIds, setPendingRestudyCardIds] = useState<string[]>([])
@@ -470,6 +471,11 @@ export function useImmersiveQueue(
   const serverPlanVersionRef = useRef(0)
   // Same-day work the server still owes today but has not published yet.
   const [roundWaiting, setRoundWaiting] = useState<{ count: number; next_ready_at: string | null } | null>(null)
+  // Bumped by the scheduled read below. A read can land a moment before the
+  // server agrees the card is due (clock skew, a cancelled fetch); without a
+  // new value the effect would not reschedule and the banner would sit on a
+  // stale time until something else changed.
+  const [waitProbe, setWaitProbe] = useState(0)
   const [roundSave, setRoundSave] = useState<{ roundId: string; outcome: FreestyleSaveOutcome; seq: number } | null>(null)
   const roundSaveSeqRef = useRef(0)
   const [roundSummary, setRoundSummary] = useState<{ roundId: string; summary: FreestyleRoundSummary; seq: number } | null>(null)
@@ -1626,12 +1632,24 @@ export function useImmersiveQueue(
    *
    * When ``restudy`` is true (忘记/困难 still on this unit), skip completedIds so
    * the round cannot end until the unit is rated 记得/轻松. Never auto-advance.
-   * A source rating inserts the retry immediately (same max-gap slot) so the
-   * progress rail grows before the learner leaves. Failing the retry card
-   * itself waits for leave, so the card under the viewport is not moved.
+   * The retry card itself is **not** inserted locally: the server books it with
+   * an ``available_at`` instant (10 分钟 → 1 小时 → 3 小时) and publishes it when
+   * due. A local copy would serve it after ~3 cards and bypass that wait.
    */
   const completeCard = useCallback(
-    (cardId: string, options?: { restudy?: boolean; cleared?: boolean; rating?: number; retryAfterCards?: number }) => {
+    (
+      cardId: string,
+      options?: {
+        restudy?: boolean
+        cleared?: boolean
+        rating?: number
+        retryAfterCards?: number
+        /** Earliest instant the server will publish the retry (ISO UTC). */
+        retryAvailableAt?: string | null
+        /** Today's three retries are used up: the unit is booked for tomorrow. */
+        retryExhausted?: boolean
+      },
+    ) => {
       const logicalCardId = sourceCardId(cardsRef.current.find((card) => card.id === cardId)) || cardId
       // Only pin when the learner is still on this card. A late settle must
       // update this card's ledger without yanking the viewport to another card.
@@ -1651,10 +1669,10 @@ export function useImmersiveQueue(
         pendingRestudyByIdRef.current.delete(cardId)
         syncPendingRestudyIds()
         let plan = queueStateRef.current.roundPlan
-          ? updateRoundPlanCard(queueStateRef.current.roundPlan, cardId, { status: 'pending', lastRating: null })
+          ? updateRoundPlanCard(queueStateRef.current.roundPlan, cardId, { status: 'pending', lastRating: null, retryAvailableAt: undefined })
           : null
         if (plan && logicalCardId !== cardId) {
-          plan = updateRoundPlanCard(plan, logicalCardId, { status: 'pending', lastRating: null })
+          plan = updateRoundPlanCard(plan, logicalCardId, { status: 'pending', lastRating: null, retryAvailableAt: undefined })
         }
         const clearedCard = cardsRef.current.find((card) => card.id === cardId)
         // Clearing a 重练's own rating leaves that card blank; it is not 结算.
@@ -1710,65 +1728,38 @@ export function useImmersiveQueue(
         })
         return
       }
-      if (options?.restudy) {
+      if (options?.restudy && !options.retryExhausted) {
         const currentPlan = queueStateRef.current.roundPlan
-        const ratedCard = cardsRef.current.find((card) => card.id === cardId)
-        const repositionOnLeave = isRetryOccurrence(ratedCard)
         const attempt = nextRetryAttempt(cardsRef.current, cardId, currentPlan?.cardsById)
         const remainingOthers = Math.max(0, cardsRef.current.length - (settledIndex >= 0 ? settledIndex : 0) - 1)
         const retryAfterCards = restudyInterveningGap(
           remainingOthers,
           options.retryAfterCards ?? RESTUDY_MAX_INTERVENING,
         )
-        const anchorIndex = settledIndex >= 0 ? settledIndex : currentIndexRef.current
-        pendingRestudyByIdRef.current.set(cardId, {
-          anchorIndex,
-          attempt,
-          retryAfterCards,
-          rating: options.rating,
-        })
-        let feed = cardsRef.current
-        if (!repositionOnLeave) {
-          const liveAnchor = feed.findIndex((card) => card.id === cardId)
-          feed = insertPendingRetryCopy(
-            feed,
-            cardId,
-            {
-              anchorIndex: liveAnchor >= 0 ? liveAnchor : anchorIndex,
-              attempt,
-              retryAfterCards,
-              rating: options.rating,
-            },
-            queueStateRef.current.roundId,
-            currentPlan,
-          )
-          if (feed !== cardsRef.current) {
-            pendingRestudyByIdRef.current.delete(cardId)
-            cardsRef.current = feed
-            setCards(feed)
-            const pinIndex = feed.findIndex((card) => card.id === preferViewportId)
-            if (pinIndex >= 0) applyCurrentIndex(pinIndex, feed)
-          }
-        }
-        syncPendingRestudyIds()
+        // The retry stays pending on the server until `available_at`. Stamping
+        // the wait is what lets the source card count down honestly; inserting
+        // a local copy would put the card back after ~3 cards instead.
         const plan = stampRestudyPlan(
           currentPlan,
-          feed,
+          cardsRef.current,
           queueStateRef.current.roundId,
           configRef.current,
-          [{ cardId, rating: options.rating, retryAfterCards, attempt }],
+          [{
+            cardId,
+            rating: options.rating,
+            retryAfterCards,
+            attempt,
+            availableAt: options.retryAvailableAt ?? undefined,
+          }],
         )
-        const incomplete = persistQueueState({
+        persistQueueState({
           ...markIncomplete(queueStateRef.current, logicalCardId),
           roundPlan: plan,
         })
-        void buildQueue(configRef.current, {
-          preserveCompleted: true,
-          completedIds: incomplete.completedIds,
-          silent: true,
-          preferCardId: preferViewportId,
-          restudyCardId: pendingRestudyByIdRef.current.has(cardId) ? cardId : undefined,
-        })
+        // No rebuild: the retry is booked server-side with `available_at`, and
+        // the scheduled read publishes it when due. Rebuilding here replaced the
+        // card list under the learner on every 困难/忘记 — the flicker, the rail
+        // recount and the remounted map (flip progress reset to the root).
         return
       }
       // Graduated: clear any pending restudy bookkeeping for this unit.
@@ -1795,6 +1786,7 @@ export function useImmersiveQueue(
             status: 'completed',
             lastRating: options?.rating ?? currentPlan.cardsById[cardId]?.lastRating ?? null,
             retryAfterCards: 0,
+            retryAvailableAt: undefined,
             attemptCount: (currentPlan.cardsById[cardId]?.attemptCount ?? 0) + 1,
           })
         : null
@@ -1806,25 +1798,30 @@ export function useImmersiveQueue(
           attemptCount: (plan.cardsById[logicalCardId]?.attemptCount ?? 0) + 1,
         })
       }
-      const next = persistQueueState({
+      persistQueueState({
         ...markCompleted(markCompleted(queueStateRef.current, logicalCardId), cardId),
         roundPlan: plan,
       })
-      // Silent rebuild refreshes unit due projections so later cards cannot open stale revisions.
-      // preferCardId + order-preserving merge keep the finished unit in place.
-      void buildQueue(configRef.current, {
-        preserveCompleted: true,
-        completedIds: next.completedIds,
-        silent: true,
-        preferCardId: preferViewportId,
-      })
+      // No rebuild on a pass either. The acknowledged rating already adopts the
+      // server plan (`adoptRoundVersion`); a rebuild only re-hydrated the same
+      // cards, re-indexed them, and could rebind a content revision under the
+      // viewport (map remount, rail jump). Later due work arrives through the
+      // scheduled read / next open, not through every tap.
     },
     [applyCurrentIndex, buildQueue, notifyPeerRound, persistQueueState, syncPendingRestudyIds, saveRoundAction],
   )
 
   const completeCardBatch = useCallback(
     (
-      entries: Array<{ cardId: string; restudy?: boolean; cleared?: boolean; rating?: number; retryAfterCards?: number }>,
+      entries: Array<{
+        cardId: string
+        restudy?: boolean
+        cleared?: boolean
+        rating?: number
+        retryAfterCards?: number
+        retryAvailableAt?: string | null
+        retryExhausted?: boolean
+      }>,
       preferCardId?: string,
     ) => {
       if (entries.length === 0) return
@@ -1840,16 +1837,22 @@ export function useImmersiveQueue(
       let nextCards = cardsRef.current
       let nextState = queueStateRef.current
       let plan = nextState.roundPlan
-      const restudyStamps: Array<{ cardId: string; rating?: number; retryAfterCards: number; attempt: number }> = []
+      const restudyStamps: Array<{
+        cardId: string
+        rating?: number
+        retryAfterCards: number
+        attempt: number
+        availableAt?: string
+      }> = []
       for (const options of entries) {
         const cardId = options.cardId
         const logicalCardId = sourceCardId(nextCards.find((card) => card.id === cardId)) || cardId
         if (options.cleared) {
           pendingRestudyByIdRef.current.delete(cardId)
           if (plan) {
-            plan = updateRoundPlanCard(plan, cardId, { status: 'pending', lastRating: null })
+            plan = updateRoundPlanCard(plan, cardId, { status: 'pending', lastRating: null, retryAvailableAt: undefined })
             if (logicalCardId !== cardId) {
-              plan = updateRoundPlanCard(plan, logicalCardId, { status: 'pending', lastRating: null })
+              plan = updateRoundPlanCard(plan, logicalCardId, { status: 'pending', lastRating: null, retryAvailableAt: undefined })
             }
           }
           const clearedCard = nextCards.find((card) => card.id === cardId)
@@ -1862,9 +1865,7 @@ export function useImmersiveQueue(
           nextState = markIncomplete(markIncomplete(nextState, logicalCardId), cardId)
           continue
         }
-        if (options.restudy) {
-          const ratedCard = nextCards.find((card) => card.id === cardId)
-          const repositionOnLeave = isRetryOccurrence(ratedCard)
+        if (options.restudy && !options.retryExhausted) {
           const cardIndex = nextCards.findIndex((card) => card.id === cardId)
           const attempt = nextRetryAttempt(nextCards, cardId, plan?.cardsById)
           const remainingOthers = Math.max(
@@ -1875,27 +1876,15 @@ export function useImmersiveQueue(
             remainingOthers,
             options.retryAfterCards ?? RESTUDY_MAX_INTERVENING,
           )
-          const anchorIndex = cardIndex >= 0 ? cardIndex : settledIndex >= 0 ? settledIndex : currentIndexRef.current
-          pendingRestudyByIdRef.current.set(cardId, {
-            anchorIndex,
-            attempt,
-            retryAfterCards,
+          // No local retry copy: the server publishes it once `available_at`
+          // passes, so the feed can keep practising other cards meanwhile.
+          restudyStamps.push({
+            cardId,
             rating: options.rating,
+            retryAfterCards,
+            attempt,
+            availableAt: options.retryAvailableAt ?? undefined,
           })
-          if (!repositionOnLeave) {
-            const inserted = insertPendingRetryCopy(
-              nextCards,
-              cardId,
-              { anchorIndex, attempt, retryAfterCards, rating: options.rating },
-              queueStateRef.current.roundId,
-              plan,
-            )
-            if (inserted !== nextCards) {
-              nextCards = inserted
-              pendingRestudyByIdRef.current.delete(cardId)
-            }
-          }
-          restudyStamps.push({ cardId, rating: options.rating, retryAfterCards, attempt })
           nextState = markIncomplete(nextState, logicalCardId)
           continue
         }
@@ -1906,6 +1895,7 @@ export function useImmersiveQueue(
             status: 'completed',
             lastRating: options.rating ?? plan.cardsById[cardId]?.lastRating ?? null,
             retryAfterCards: 0,
+            retryAvailableAt: undefined,
             attemptCount: (plan.cardsById[cardId]?.attemptCount ?? 0) + 1,
           })
           if (logicalCardId !== cardId) {
@@ -1913,6 +1903,7 @@ export function useImmersiveQueue(
               status: 'completed',
               lastRating: options.rating ?? plan.cardsById[logicalCardId]?.lastRating ?? null,
               retryAfterCards: 0,
+              retryAvailableAt: undefined,
               attemptCount: (plan.cardsById[logicalCardId]?.attemptCount ?? 0) + 1,
             })
           }
@@ -1950,7 +1941,9 @@ export function useImmersiveQueue(
         })
       }
       if (clearedLogicalIds.length === 0) {
-        rebuild()
+        // Ratings only: the local ledger plus the ack's adopted plan is the
+        // whole update. A background rebuild here reshuffled the feed and the
+        // rail for 本轮安排 ratings too.
         return
       }
       const roundId = queueStateRef.current.roundId
@@ -2634,9 +2627,25 @@ export function useImmersiveQueue(
     const localPlan = queueStateRef.current.roundPlan
     if (!serverPlan || !localPlan) return
     const known = new Set(Object.keys(localPlan.cardsById))
+    // The server may have rebound the unit onto a new revision before this
+    // client rebuilt. Match that completed id onto the local row by unit, or
+    // the acknowledgement would silently drop and the rail showed a rated card
+    // as still owed.
+    const localIdByUnit = new Map<string, string>()
+    for (const [id, entry] of Object.entries(localPlan.cardsById)) {
+      if (entry.occurrenceKind === 'retry') continue
+      const unit = reviewUnitIdFromCardId(id)
+      if (unit && !localIdByUnit.has(unit)) localIdByUnit.set(unit, id)
+    }
+    const reboundServerId = (raw: string) => {
+      if (known.has(raw)) return raw
+      if (raw.startsWith('retry:')) return ''
+      const unit = reviewUnitIdFromCardId(raw)
+      return (unit && localIdByUnit.get(unit)) || ''
+    }
     const serverCompleted = (Array.isArray(serverPlan.completed_ids) ? serverPlan.completed_ids : [])
-      .map((id) => String(id || '').trim())
-      .filter((id) => known.has(id))
+      .map((id) => reboundServerId(String(id || '').trim()))
+      .filter(Boolean)
     const localCompleted = queueStateRef.current.completedIds
     const completedIds = [...new Set([...localCompleted, ...serverCompleted])]
     const plan = applyServerRatingsToRoundPlan(
@@ -2709,7 +2718,7 @@ export function useImmersiveQueue(
     )
     for (const cardId of added) {
       bedtimeIds.add(cardId)
-      plan = updateRoundPlanCard(plan, cardId, { status: 'pending', lastRating: null })
+      plan = updateRoundPlanCard(plan, cardId, { status: 'pending', lastRating: null, retryAvailableAt: undefined })
     }
     const withBedtime = confirmed.map((card) =>
       card.type === 'mindmap_branch' && bedtimeIds.has(card.id)
@@ -3117,16 +3126,27 @@ export function useImmersiveQueue(
    * A same-day step/retry is only served once its wait passes. Nothing else in
    * the feed polls, so schedule exactly one round read at the earliest ready
    * time (plus a small buffer for clock skew). Every new wait replaces it.
+   *
+   * Once the instant has passed but the read still reports the same wait, probe
+   * again slowly instead of leaving a stale time on screen forever.
    */
   useEffect(() => {
     const readyAt = roundWaiting?.next_ready_at
     if (!readyAt || !roundWaiting?.count) return
-    const readyMs = Date.parse(readyAt)
+    // Naive API instants are UTC; parsing them as local time shifted the
+    // scheduled read by the UTC offset (and the banner's countdown with it).
+    const readyMs = parseApiDateTime(readyAt).getTime()
     if (!Number.isFinite(readyMs)) return
-    const delay = Math.min(Math.max(readyMs - Date.now() + 1500, 1000), 60 * 60 * 1000)
-    const handle = window.setTimeout(() => { void hydrateFromServerRound(false) }, delay)
+    const remaining = readyMs - Date.now()
+    const delay = remaining <= 0
+      ? 30_000
+      : Math.min(Math.max(remaining + 1500, 1000), 60 * 60 * 1000)
+    const handle = window.setTimeout(() => {
+      setWaitProbe((probe) => probe + 1)
+      void hydrateFromServerRound(false)
+    }, delay)
     return () => window.clearTimeout(handle)
-  }, [hydrateFromServerRound, roundWaiting?.count, roundWaiting?.next_ready_at])
+  }, [hydrateFromServerRound, roundWaiting?.count, roundWaiting?.next_ready_at, waitProbe])
 
   const workspacePath = lockedPalaceId != null
     ? `/palaces/${lockedPalaceId}/review`

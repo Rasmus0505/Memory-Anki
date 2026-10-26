@@ -87,6 +87,13 @@ export interface UnitRatingResultDto {
   unit: ReviewUnitDto
   passed: boolean
   retry_after_cards: number
+  /** Same-day wait booked by this rating, for the retry card. */
+  retry_after_minutes?: number | null
+  intraday_kind?: 'retry' | 'step' | null
+  /** Earliest instant the server will publish the retry (ISO with offset). */
+  intraday_due_at?: string | null
+  /** True when today's retries are used up: the unit is booked for tomorrow. */
+  intraday_exhausted?: boolean
   rating: UnitRating
   rating_label: string
   session_status: ReviewUnitDto['session_status']

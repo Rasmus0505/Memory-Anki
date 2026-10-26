@@ -638,7 +638,15 @@ export function mergeQueuePreservingHistory(
   previous.forEach((card) => {
     if (used.has(card.id)) return
     if (isRetryOccurrence(card)) {
-      take(card)
+      // Keep a 重练 only while the server still serves it, or when this round
+      // already rated it (history / swipe-back). A pending retry waits for its
+      // `available_at`, so re-taking it here would serve the 10-minute wait early.
+      const live = incomingById.get(card.id)
+      if (live) {
+        take(live)
+        return
+      }
+      if (completed.has(card.id)) take(card)
       return
     }
     const unitId = stableUnitId(card)

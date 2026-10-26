@@ -741,6 +741,8 @@ export function useFreestyleFeedNavigation({
     canCompleteRound,
     completeTitle,
     handleCompleteRound,
+    /** Queue-order indexes still waiting for a this-round score (完成 / 自动翻页 target). */
+    unscoredIndices,
     scrollChannel,
     edgeHint,
   }

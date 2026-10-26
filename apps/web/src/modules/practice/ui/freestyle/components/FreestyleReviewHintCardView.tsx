@@ -34,7 +34,6 @@ export function FreestyleReviewHintCardView({
         hintMode
         ratingEffects={[]}
         selectedRating={null}
-        retryAfterCards={0}
         busy={false}
         locked={false}
         reviewReady

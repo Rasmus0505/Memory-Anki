@@ -3,7 +3,6 @@ import type { UnitRatingEffectDto } from '@/modules/practice/ui/review/api/unitR
 import {
   compactRatingEffectLabel,
   ratingEffectLabel,
-  retryPositionLabel,
 } from './ratingEffectLabels'
 
 function effect(overrides: Partial<UnitRatingEffectDto> = {}): UnitRatingEffectDto {
@@ -21,19 +20,6 @@ function effect(overrides: Partial<UnitRatingEffectDto> = {}): UnitRatingEffectD
   }
 }
 
-describe('retryPositionLabel', () => {
-  it('names every reachable retry gap', () => {
-    expect(retryPositionLabel(0)).toBe('立即重练')
-    expect(retryPositionLabel(1)).toBe('1张后重练')
-    expect(retryPositionLabel(3)).toBe('3张后重练')
-  })
-
-  it('clamps out-of-range gaps to the queue window', () => {
-    expect(retryPositionLabel(-2)).toBe('立即重练')
-    expect(retryPositionLabel(9)).toBe('3张后重练')
-  })
-})
-
 describe('ratingEffectLabel', () => {
   it('reports the real booked gap when a due date carries per-unit spread', () => {
     const spread = effect({
@@ -43,12 +29,12 @@ describe('ratingEffectLabel', () => {
       target_due_date: '2027-07-25',
       stage_action: 'keep',
     })
-    expect(ratingEffectLabel(spread, 0)).toBe('362天后复习 · 7月25日')
+    expect(ratingEffectLabel(spread)).toBe('362天后复习 · 7月25日')
   })
 
   it('falls back to the nominal interval when a cached client lacks the spread field', () => {
     const legacy = effect({ target_actual_interval_days: undefined })
-    expect(ratingEffectLabel(legacy, 0)).toBe('1天后复习 · 7月28日')
+    expect(ratingEffectLabel(legacy)).toBe('1天后复习 · 7月28日')
   })
 
   it('never talks about ladder levels: a failed grade is same-day retry work', () => {
@@ -63,32 +49,49 @@ describe('ratingEffectLabel', () => {
       retry_after_cards: 3,
       stage_action: 'lower',
     })
-    expect(ratingEffectLabel(lapsed, 3)).toBe('3张后重练 · 今天再练')
+    // No booked minutes in the payload: say 今天再练, never promise a card offset.
+    expect(ratingEffectLabel(lapsed)).toBe('今天再练')
     for (const action of ['reset', 'keep', 'lower'] as const) {
-      expect(ratingEffectLabel({ ...lapsed, stage_action: action }, 2))
-        .toBe('2张后重练 · 今天再练')
+      expect(ratingEffectLabel({ ...lapsed, stage_action: action })).toBe('今天再练')
     }
+  })
+
+  it('shows the real same-day wait the server booked', () => {
+    const lapsed = effect({
+      rating: 1,
+      label: '忘记',
+      passed: false,
+      retry_after_minutes: 10,
+      intraday_kind: 'retry',
+    })
+    expect(ratingEffectLabel(lapsed)).toBe('10 分钟后重练 · 今天')
+    expect(ratingEffectLabel({ ...lapsed, retry_after_minutes: 60 }))
+      .toBe('1 小时后重练 · 今天')
+  })
+
+  it('books tomorrow once the day’s retries are used up', () => {
+    const spent = effect({ rating: 2, passed: false, intraday_exhausted: true })
+    expect(ratingEffectLabel(spent)).toBe('今天已重练 3 次 · 明天再练')
   })
 })
 
 describe('compactRatingEffectLabel', () => {
   it('keeps only the timing so it fits a quarter-width button', () => {
-    expect(compactRatingEffectLabel(effect(), 0)).toBe('1天后')
+    expect(compactRatingEffectLabel(effect())).toBe('1天后')
     expect(compactRatingEffectLabel(
       effect({ target_interval_days: 365, target_actual_interval_days: 362 }),
-      0,
     )).toBe('362天后')
   })
 
   it('says a locked fill pass will not move the due date', () => {
     const locked = effect({ schedule_changed: false, target_due_date: '2026-09-01' })
-    expect(ratingEffectLabel(locked, 0)).toBe('记下，不改期 · 9月1日')
-    expect(compactRatingEffectLabel(locked, 0)).toBe('不改期')
+    expect(ratingEffectLabel(locked)).toBe('记下，不改期 · 9月1日')
+    expect(compactRatingEffectLabel(locked)).toBe('不改期')
   })
 
-  it('shows the retry position for failing ratings', () => {
-    const failing = effect({ passed: false, retry_after_cards: 3 })
-    expect(compactRatingEffectLabel(failing, 3)).toBe('3张后')
-    expect(compactRatingEffectLabel(failing, 0)).toBe('立即重练')
+  it('shows the wait for failing ratings, not a card position', () => {
+    const failing = effect({ passed: false, retry_after_minutes: 10 })
+    expect(compactRatingEffectLabel(failing)).toBe('10 分钟后')
+    expect(compactRatingEffectLabel(effect({ passed: false }))).toBe('稍后')
   })
 })

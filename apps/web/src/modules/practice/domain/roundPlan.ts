@@ -25,6 +25,13 @@ export interface FreestyleRoundPlanCard {
   status: FreestyleRoundPlanCardStatus
   lastRating: number | null
   retryAfterCards: number
+  /**
+   * Earliest instant the server will publish this source's retry (ISO UTC).
+   * A 忘记/困难 books 10 minutes, then 1 hour, then 3 hours; the retry card is
+   * withheld until then, so the badge counts down instead of promising a
+   * card-count offset.
+   */
+  retryAvailableAt?: string
   attemptCount: number
   updatedAt: number
   enteredOn?: string
@@ -313,6 +320,8 @@ export interface RestudyPlanStamp {
   rating?: number | null
   retryAfterCards: number
   attempt: number
+  /** Server-booked instant for the retry, if the ack carried it. */
+  availableAt?: string
 }
 
 /**
@@ -343,6 +352,9 @@ export function stampRestudyPlan(
       status: 'retry' as const,
       retryAfterCards: entry.retryAfterCards,
       attemptCount: entry.attempt,
+      // A replay / legacy ack carries no instant: keep whatever the server
+      // plan already stamped rather than clearing a real wait.
+      ...(entry.availableAt ? { retryAvailableAt: entry.availableAt } : {}),
     }
     if (next.cardsById[cardId]) {
       next = updateRoundPlanCard(next, cardId, {
@@ -482,19 +494,74 @@ export function excludeRoundPlanCards(
   return next
 }
 
+function cardRevisionOf(cardId: string): number {
+  const match = /:r(\d+)$/.exec(cardId)
+  return match ? Number(match[1]) : 0
+}
+
+/**
+ * The plan row a card id belongs to.
+ *
+ * A content edit bumps ``review_unit:<unit>:rN`` while the plan keeps the older
+ * revision until the next rebuild rebinds it. Updating by the new id was a no-op
+ * (`cardsById[newId]` absent), so the row stayed unscored after a 记得/困难: the
+ * rail kept offering a rated card while 完成 sought it again.
+ */
+function planCardKeyFor(
+  cardsById: Record<string, FreestyleRoundPlanCard>,
+  cardId: string,
+): string {
+  if (cardsById[cardId]) return cardId
+  const unit = reviewUnitIdFromCardId(cardId)
+  if (!unit) return cardId
+  for (const [id, card] of Object.entries(cardsById)) {
+    if (card.occurrenceKind === 'retry') continue
+    if (reviewUnitIdFromCardId(id) === unit) return id
+  }
+  return cardId
+}
+
 export function updateRoundPlanCard(
   plan: FreestyleRoundPlanState,
   cardId: string,
   patch: Partial<Omit<FreestyleRoundPlanCard, 'cardId'>>,
   now = Date.now(),
 ) {
-  const current = plan.cardsById[cardId]
+  const existingKey = planCardKeyFor(plan.cardsById, cardId)
+  const current = plan.cardsById[existingKey]
   if (!current) return plan
+  // Move the row onto the newer revision the feed is showing. Never walk it
+  // backwards: a retry occurrence's stored source id can still predate an edit.
+  const rekey = existingKey !== cardId && cardRevisionOf(cardId) > cardRevisionOf(existingKey)
+  if (rekey) {
+    const { [existingKey]: moved, ...rest } = plan.cardsById
+    const rekeyIds = (ids: string[] | undefined) =>
+      ids?.map((id) => (id === existingKey ? cardId : id))
+    return {
+      ...plan,
+      orderIds: rekeyIds(plan.orderIds) ?? plan.orderIds,
+      compressedIds: rekeyIds(plan.compressedIds),
+      partialSettlements: plan.partialSettlements?.map((item) => ({
+        ...item,
+        cardIds: rekeyIds(item.cardIds) ?? item.cardIds,
+      })),
+      cardsById: {
+        ...rest,
+        [cardId]: {
+          ...moved,
+          cardId,
+          sourceCardId: moved.sourceCardId === existingKey ? cardId : moved.sourceCardId,
+          ...patch,
+          updatedAt: now,
+        },
+      },
+    }
+  }
   return {
     ...plan,
     cardsById: {
       ...plan.cardsById,
-      [cardId]: { ...current, ...patch, updatedAt: now },
+      [existingKey]: { ...current, ...patch, updatedAt: now },
     },
   }
 }

@@ -13,6 +13,8 @@ const effects: UnitRatingEffectDto[] = [
     target_actual_interval_days: 0,
     target_due_date: '2026-07-27',
     retry_after_cards: 3,
+    retry_after_minutes: 10,
+    intraday_kind: 'retry',
     stage_action: 'reset',
   },
   {
@@ -24,6 +26,8 @@ const effects: UnitRatingEffectDto[] = [
     target_actual_interval_days: 0,
     target_due_date: '2026-07-27',
     retry_after_cards: 3,
+    retry_after_minutes: 10,
+    intraday_kind: 'retry',
     stage_action: 'keep',
   },
   {
@@ -55,7 +59,6 @@ function renderBar(overrides: Partial<Parameters<typeof FreestyleRatingBar>[0]> 
   const props = {
     ratingEffects: effects,
     selectedRating: null,
-    retryAfterCards: 3,
     busy: false,
     locked: false,
     reviewReady: true,
@@ -76,20 +79,24 @@ describe('FreestyleRatingBar', () => {
     // Touch has no hover, so the preview cannot live in `title` alone.
     expect(screen.getByTestId('freestyle-rating-button-3').textContent).toBe('记得1天后')
     expect(screen.getByTestId('freestyle-rating-button-4').textContent).toBe('轻松3天后')
-    expect(screen.getByTestId('freestyle-rating-button-1').textContent).toBe('忘记3张后')
+    expect(screen.getByTestId('freestyle-rating-button-1').textContent).toBe('忘记10 分钟后')
   })
 
-  it('shows 立即重练 rather than a card count when the retry lands next', () => {
-    renderBar({ retryAfterCards: 0 })
+  it('says 今天再练 instead of a card count when the payload has no wait', () => {
+    renderBar({
+      ratingEffects: effects.map((effect) => (
+        effect.passed ? effect : { ...effect, retry_after_minutes: null }
+      )),
+    })
 
-    expect(screen.getByTestId('freestyle-rating-button-2').textContent).toBe('困难立即重练')
+    expect(screen.getByTestId('freestyle-rating-button-2').textContent).toBe('困难稍后')
   })
 
   it('keeps the full sentence in the accessible name', () => {
     renderBar()
 
     expect(screen.getByRole('button', { name: '记得：1天后复习 · 7月28日' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: '忘记：3张后重练 · 今天再练' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '忘记：10 分钟后重练 · 今天' })).toBeTruthy()
   })
 
   it('rates from the 1-4 shortcuts', () => {

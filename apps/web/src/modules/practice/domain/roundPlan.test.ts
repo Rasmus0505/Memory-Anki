@@ -159,6 +159,26 @@ describe('round plan reducer', () => {
     expect(sanitizedRetry).toHaveLength(1)
   })
 
+  it('persists the server retry instant across a sanitize round-trip', () => {
+    // The badge counts down from this field; a whitelist that dropped it would
+    // silently fall back to "稍后重练" after every queue save.
+    const cards = [card('a', 1)]
+    const plan = createRoundPlan('round-1', cards, config)
+    const withWait = {
+      ...plan,
+      cardsById: {
+        ...plan.cardsById,
+        a: {
+          ...plan.cardsById.a,
+          status: 'retry' as const,
+          retryAvailableAt: '2026-10-25T12:30:00+00:00',
+        },
+      },
+    }
+    const sanitized = sanitizeRoundPlan(JSON.parse(JSON.stringify(withWait)))
+    expect(sanitized?.cardsById.a.retryAvailableAt).toBe('2026-10-25T12:30:00+00:00')
+  })
+
   it('repairs a retry row that was persisted with 0张后', () => {
     const cards = [card('a', 1), card('b', 1), card('c', 1)]
     const retry = createRetryOccurrence(cards[0], 'round-1', 1, 0)
@@ -250,6 +270,27 @@ describe('round plan reducer', () => {
     )
     expect(rebuilt.orderIds).toEqual(['a1', 'b1', 'a2', 'b2'])
     expect(rebuilt.cardsById.a1.status).toBe('completed')
+  })
+
+  it('moves a rated unit row onto the rebuilt revision id', () => {
+    // 双击编辑保存 bumps the revision; the feed rates the new id before a
+    // rebuild rebinds the plan. The old row must not linger as an unscored card
+    // next to a completed one (the rail counted both).
+    const oldId = 'review_unit:unit-a:r1'
+    const first = createRoundPlan('round-1', [card(oldId, 1), card('b', 1)], config)
+    const rated = updateRoundPlanCard(first, 'review_unit:unit-a:r4', {
+      status: 'completed',
+      lastRating: 3,
+    })
+
+    expect(rated.cardsById['review_unit:unit-a:r4']).toMatchObject({
+      cardId: 'review_unit:unit-a:r4',
+      status: 'completed',
+      lastRating: 3,
+    })
+    expect(rated.cardsById[oldId]).toBeUndefined()
+    expect(rated.orderIds).toContain('review_unit:unit-a:r4')
+    expect(rated.orderIds).not.toContain(oldId)
   })
 
   it('keeps stable order and metadata across queue rebuilds', () => {

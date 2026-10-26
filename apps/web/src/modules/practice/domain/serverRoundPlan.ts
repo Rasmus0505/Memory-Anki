@@ -24,12 +24,53 @@ export { retainLocalRoundLedger, type RetainedRoundLedger } from './roundLedgerR
 export function retryOccurrenceId(roundId: string, sourceId: string, attempt: number) {
   return `retry:${roundId}:${sourceId}:${attempt}`
 }
+/**
+ * Paint the server's same-day retry booking onto the source row.
+ *
+ * A 忘记/困难 occurrence stays `pending` with an `available_at` instant until
+ * its wait passes; the card itself is not served before then. The feed shows
+ * that instant on the source badge, so a reload / another device keeps the
+ * countdown instead of inventing a card-count offset. Published, rated or
+ * cancelled occurrences clear it.
+ */
+export function applyServerRetryWaits(
+  plan: FreestyleRoundPlanState,
+  server: FreestyleRoundPlanPayload | null | undefined,
+): FreestyleRoundPlanState {
+  if (!server?.occurrences?.length) return plan
+  const waitBySource = new Map<string, string>()
+  const published = new Set<string>()
+  for (const occ of server.occurrences) {
+    const sourceId = String(occ.source_card_id || '').trim()
+    if (!sourceId) continue
+    const status = String(occ.status || '').trim()
+    const availableAt = String(occ.available_at || '').trim()
+    if (status === 'pending' && availableAt) {
+      waitBySource.set(sourceId, availableAt)
+    } else if (status !== 'pending') {
+      published.add(sourceId)
+    }
+  }
+  let cardsById = plan.cardsById
+  for (const [id, item] of Object.entries(plan.cardsById)) {
+    if (item.occurrenceKind === 'retry') continue
+    // A source can hold an answered attempt plus a new pending one; the
+    // pending wait is the live booking and wins.
+    const next = waitBySource.get(id) ?? (published.has(id) ? undefined : item.retryAvailableAt)
+    if ((item.retryAvailableAt || '') === (next || '')) continue
+    if (cardsById === plan.cardsById) cardsById = { ...plan.cardsById }
+    cardsById[id] = { ...item, retryAvailableAt: next }
+  }
+  return cardsById === plan.cardsById ? plan : { ...plan, cardsById }
+}
+
 /** Stamp leftover/today cohorts from the server plan onto the HUD round plan. */
 export function applyServerCohorts(
   plan: FreestyleRoundPlanState,
   server: FreestyleRoundPlanPayload | null | undefined,
 ): FreestyleRoundPlanState {
   if (!server) return plan
+  plan = applyServerRetryWaits(plan, server)
   const sourceEntered = new Map(
     (server.original_cards || []).map((item) => [item.card_id, String(item.entered_on || '').trim()]),
   )
@@ -216,6 +257,12 @@ export function cardsForServerPlan(
       continue
     }
     const occurrence = (plan.occurrences || []).find((item) => item.occurrence_id === id)
+    const occurrenceStatus = String(occurrence?.status || '').trim()
+    if (occurrence && occurrenceStatus === 'pending') {
+      // Not due yet: the server publishes it only once `available_at` passes.
+      continue
+    }
+    if (occurrence && occurrenceStatus === 'cancelled') continue
     const sourceId = occurrence?.source_card_id || parseRetrySourceId(id)
     const source = (sourceId ? byId.get(sourceId) || bySource.get(sourceId) : undefined)
       || (occurrence?.source_unit_id ? byUnit.get(occurrence.source_unit_id) : undefined)
@@ -270,14 +317,13 @@ export function cardsForServerPlan(
     const source = sourceCardId(card) || ''
     if (!source || retrySources.has(source)) continue
     const status = occurrenceStatusBySource.get(source)
-    // Missing: the rating has not echoed yet. Pending: leave_card has not
-    // inserted it. Cancelled or already placed copies must not come back.
-    // A completed occurrence is a rated 重练 and stays as this-round history.
-    if (
-      status !== undefined
-      && status !== 'pending'
-      && !answeredOccurrenceIds.has(String(card.id || '').trim())
-    ) continue
+    const answered = answeredOccurrenceIds.has(String(card.id || '').trim())
+    // Missing: the rating has not echoed yet. Pending: still waiting for
+    // `available_at` — a stale local copy must not serve it early. Cancelled
+    // or already placed copies must not come back. A completed occurrence is a
+    // rated 重练 and stays as this-round history.
+    if (status === 'pending' && !answered) continue
+    if (status !== undefined && status !== 'inserted' && status !== 'pending' && !answered) continue
     const localIndex = cards.indexOf(card)
     let predecessorId = ''
     for (let index = localIndex - 1; index >= 0; index -= 1) {
@@ -635,7 +681,8 @@ export function applyServerRatingsToRoundPlan(
     if (!current || current.lastRating == null || current.occurrenceKind !== 'retry') continue
     next = updateRoundPlanCard(next, occId, { lastRating: null })
   }
-  return next
+  // A published / rated retry answers the booking; a pending one keeps it.
+  return applyServerRetryWaits(next, server)
 }
 
 function parseRetrySourceId(occurrenceId: string) {

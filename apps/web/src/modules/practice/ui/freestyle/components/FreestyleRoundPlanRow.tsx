@@ -412,7 +412,7 @@ function RoundPlanRowView({
         </button>
         {entry.occurrenceKind === 'retry' && !model.retryDone ? (
           <span className="shrink-0 text-[11px] text-rate-hard">
-            来源 {entry.sourceCardId} · {entry.retryAfterCards}张后
+            来源 {entry.sourceCardId} · 今日重练
           </span>
         ) : null}
         <RowSaveChip cardId={cardId} label={label} saveState={saveState} onRate={onRate} />
