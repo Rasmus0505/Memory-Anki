@@ -218,10 +218,38 @@ pending occurrence is not
 served and does not mark its source finished; the round payload's `waiting` reports how many
 are owed and the earliest ready time. The feed shows a slim banner while cards remain and a
 waiting panel when nothing servable is left; a single scheduled read at `next_ready_at`
-publishes the card (manual 「现在刷新」 does the same). There is no fixed three-card offset
-any more. The viewport stays on the source — no
+publishes the card (manual 「现在刷新」 does the same). Before that instant the server cannot
+release the cards, so the banner counts down instead of offering a press that would change
+nothing, and the panel's button stays disabled; at `next_ready_at` the refresh becomes
+available. If a scheduled read lands while the server still reports the same wait (clock
+skew), it probes again after 30 s rather than leaving a stale time on screen. **That
+publication is persisted by the
+rating, not by the read.** The served plan inserts a ready occurrence at the cursor; the row
+on disk still says `pending`. A rating of that card must therefore insert it before settling
+(`apply_rating` → `_insert_retry_inplace`): settling it as an uninserted occurrence marked it
+`cancelled` with the learner's 1–4 still on it and left it out of `presented_ids`, so the
+next rebuild deleted the card under them and the feed slid onto the next unit. Measured on a
+real round (2026-10-25 evening): every step rated that night sat `cancelled` with its rating
+kept — the "重练卡评完就消失、还自动翻页" report. There is no fixed three-card offset
+any more: the frontend does not insert a retry copy at all. A 忘记/困难 rating only stamps
+`retryAvailableAt` (the occurrence's `available_at`) onto the source's round-plan row, and
+the corner badge counts that instant down; the card itself appears when the scheduled read
+publishes the occurrence. Serving the local copy after ~3 cards (and letting it be rated
+before the 10 minutes) was the "说十分钟、实际固定三张" report. The viewport stays on the source — no
 auto-advance — including when nothing remains after the source, so 下一张 / 定位 /
-settlement cannot deadlock. Failing the retry card itself does not move that card until
+settlement cannot deadlock. Settling a rating does **not** rebuild the queue either: the
+rating response is merged into the local ledger (`adoptRoundVersion`) and the scheduled read
+publishes a due retry. Rebuilding on every tap replaced the card list under the learner — the
+reported flicker, progress-rail recount and remounted map — and raced the rating write. A
+rebuild is reserved for due reads, config changes, explicit 更新队列 and a stale revision
+adopt.
+The round's card identity is stable while a content edit bumps `review_unit:<unit>:rN`: the
+feed keeps the round id, the card view keys the mounted map by unit + attempt + round (a
+revision bump or an encounter renewal on the same attempt keeps the learner's flipped
+branches), and the server's attempt identity compares the unit, not the revision. Rating with
+the rebuilt id before the next build rebinds it moves the plan row onto that id
+(`canonical_rated_card`) instead of leaving a phantom completed id next to an unfinished one.
+Failing the retry card itself does not move that card until
 leave. A later due-list rebuild appends newly seen identities as the
 today segment and must not move an already-inserted leftover retry. `leave_card` confirmation
 pins the card now under the viewport and must not yank back to the source. The source card
@@ -253,7 +281,7 @@ scene, locally — never `dispatchGlobalFeedback`.
 
 Clicking a progress-rail tick jumps the feed to that card when it is still live (`navigateToIndex` on the matching card id). A tick whose card has left the feed, the HUD count, and an empty rail still open the bottom “本轮安排” sheet. A header toggle switches 「按宫殿」 (group stable plan entries by palace) and 「按进度」 (the same entries in progress-rail segment order, still split into the leftover and today blocks). Both views support
 jump, drag (desktop) or up/down (touch), batch exclude/restore, and reset-round. The toolbar
-「结算已完成单元」 opens a 小结算 page first. That overlay covers the feed pager, so it keeps a visible 「退出」 that cancels without compressing, and the page scrolls so 「取消结算」 and 「确认结算」 stay reachable on a short PWA viewport. The right-side 完成 on a fully scored round skips that page and writes the same settlement directly. Confirming it (`compress_completed`) drops settled groups (a source that passed, or a 重练 that passed or was explicitly completed; a live 重练 still weak or blank keeps its whole group in the round, so the 3张后重练 comes back) from
+「结算已完成单元」 opens a 小结算 page first. That overlay covers the feed pager, so it keeps a visible 「退出」 that cancels without compressing, and the page scrolls so 「取消结算」 and 「确认结算」 stay reachable on a short PWA viewport. The right-side 完成 on a fully scored round skips that page and writes the same settlement directly. Confirming it (`compress_completed`) drops settled groups (a source that passed, or a 重练 that passed or was explicitly completed; a live 重练 still weak or blank keeps its whole group in the round, so the 重练 comes back when its wait is due) from
 the swipe feed, 本轮安排, and the HUD rail so the denominator shrinks, and stores that page as `partial_settlements` on the round plan. Cancelling leaves the cards in the feed. A group whose 重练 nobody has answered yet
 stays. This is not 排除: excluded ticks remain on the rail; compressed
 ids (`compressed_ids`) do not. Unfinished work stays in this round. Ratings stay committed;
@@ -504,7 +532,7 @@ construction settings must not reshuffle.
 
 ## Permanent Marks
 
-Freestyle inline edit scope is configured in 翻卡设置 (`editScope`). `unit` (default) projects the palace-root → unit spine plus that unit's subtree and hides siblings; `palace` shows the full document. `savePalaceEditor` still writes the full palace document. Entering edit expands the tree only as far as the current flip progress: a branch opens when a card inside it has been flipped out (`placeholder` / `revealed` in the `revealMap`), and branches the learner has not reached stay folded, for both edit scopes. So the edit view is the flip progress plus editable structure, never the whole palace dumped open. After that the host's own fold seed governs the canvas, and a manual expand/collapse gesture still holds until the next mode switch. Editing or deleting a card must not re-apply the flip-progress seed; those writes use the same fold reconcile as the ordinary palace editor. Edit keeps the same `revealMap` / flip progress and re-centers the previous viewport-center card (or the unit anchor if that card is gone); it does not fit the whole tree. Switching edit ↔ review keeps the same `revealMap` / flip progress. Double-click / double-tap on empty canvas toggles edit and review. Node click, node double-click, and node long-press stay on reveal / text-edit / menus. The overflow menu still toggles the same modes. Edit mode hides the rating bar, feed pager, and bottom inset so they do not cover the map. Enter reveal follow: Enter on the active review card advances the unit anchor and, when a card flipped out by that step is clipped, pans the minimum distance to bring the most clipped of those cards fully into view. Zoom stays put. A later Enter interrupts the pan. Mouse clicks and A/S bulk flips do not move the camera. Camera tracking is configurable in 翻卡设置 (`enterRevealFollow`, default on): with it off Enter still flips the same cards and the viewport stays where the learner left it. Paging controls release keyboard focus when they activate (the next unit may still be loading), so Enter belongs to the card and flips instead of paging again.
+Freestyle inline edit scope is configured in 翻卡设置 (`editScope`). `unit` (default) projects the palace-root → unit spine plus that unit's subtree and hides siblings; `palace` shows the full document. `savePalaceEditor` still writes the full palace document. Entering edit expands the tree only as far as the current flip progress: a branch opens when a card inside it has been flipped out (`placeholder` / `revealed` in the `revealMap`), and branches the learner has not reached stay folded, for both edit scopes. So the edit view is the flip progress plus editable structure, never the whole palace dumped open. After that the host's own fold seed governs the canvas, and a manual expand/collapse gesture still holds until the next mode switch. Editing or deleting a card must not re-apply the flip-progress seed; those writes use the same fold reconcile as the ordinary palace editor. Edit keeps the same `revealMap` / flip progress and re-centers the previous viewport-center card (or the unit anchor if that card is gone); it does not fit the whole tree. Switching edit ↔ review keeps the same `revealMap` / flip progress. Flip progress belongs to the mounted card visit, not to storage: it is never written to localStorage or restored from live presence, and a new round (or a remounted card) starts with every branch folded, so the flip-derived edit folds cannot be inherited from an earlier visit either. Double-click / double-tap on empty canvas toggles edit and review. Node click, node double-click, and node long-press stay on reveal / text-edit / menus. The overflow menu still toggles the same modes. Edit mode hides the rating bar, feed pager, and bottom inset so they do not cover the map. Enter reveal follow: Enter on the active review card advances the unit anchor and, when a card flipped out by that step is clipped, pans the minimum distance to bring the most clipped of those cards fully into view. Zoom stays put. A later Enter interrupts the pan. Mouse clicks and A/S bulk flips do not move the camera. Camera tracking is configurable in 翻卡设置 (`enterRevealFollow`, default on): with it off Enter still flips the same cards and the viewport stays where the learner left it. Paging controls release keyboard focus when they activate (the next unit may still be loading), so Enter belongs to the card and flips instead of paging again.
 
 In edit mode the 永久标记 mode switch is a dedicated toolbar toggle (pin icon plus the 已标 count) that sits after 文字 and outside the ⋯ menu; the palace editor exposes the same toggle. Permanent marks are edited in the palace document and each complete toggle saves immediately as a plain document write. The active freestyle card never sends `mark_change`, `return_to_review`, or `reconcile_units`, and it never calls `onUnitsReconciled` / `buildQueue` for an edit or mode switch. Schedule reconcile is sent once as same-document `editor_leave` only after the edited card becomes inactive or unmounts; only that leave reconcile may refresh the queue. Explicit 重建本轮 keeps its existing behavior.
 
