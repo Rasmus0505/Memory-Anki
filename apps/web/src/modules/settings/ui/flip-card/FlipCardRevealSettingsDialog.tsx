@@ -16,11 +16,6 @@ export interface FlipCardRevealSettingsDialogProps {
     value: FreestyleFlipMode
     onChange: (value: FreestyleFlipMode) => void
   }
-  /** Freestyle-only: advance after a passing rate. Formal review leaves this unset. */
-  freestyleAutoAdvance?: {
-    value: boolean
-    onChange: (value: boolean) => void
-  }
 }
 
 function SettingRow({
@@ -82,7 +77,6 @@ export function FlipCardRevealSettingsDialog({
   value,
   onChange,
   freestyleFlipMode,
-  freestyleAutoAdvance,
 }: FlipCardRevealSettingsDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -148,6 +142,18 @@ export function FlipCardRevealSettingsDialog({
                 />
               </SettingRow>
             ) : null}
+            {freestyleFlipMode ? (
+              <SettingRow
+                label="评分后自动翻页"
+                hint="评分保存后自动翻到最早还没评分的单元，留一点撤销时间；关闭则手动翻"
+              >
+                <Switch
+                  checked={value.autoAdvanceOnRate === true}
+                  onCheckedChange={(checked) => onChange({ ...value, autoAdvanceOnRate: checked })}
+                  aria-label="评分后自动翻页"
+                />
+              </SettingRow>
+            ) : null}
             <SettingRow label="进入编辑" hint="双击空白画布时的编辑范围">
               <BinaryToggle<FlipCardEditScope>
                 value={value.editScope === 'palace' ? 'palace' : 'unit'}
@@ -160,24 +166,6 @@ export function FlipCardRevealSettingsDialog({
               />
             </SettingRow>
           </section>
-
-          {freestyleAutoAdvance ? (
-            <section className="border-t border-border/60 pt-3">
-              <label className="flex cursor-pointer items-start justify-between gap-4">
-                <span className="min-w-0">
-                  <span className="block text-[13px] font-medium leading-5">记得 / 轻松后自动前进</span>
-                  <span className="mt-0.5 block text-[11px] leading-4 text-muted-foreground">
-                    留出撤销时间后翻页；忘记 / 困难停在原卡
-                  </span>
-                </span>
-                <Switch
-                  checked={freestyleAutoAdvance.value}
-                  onCheckedChange={freestyleAutoAdvance.onChange}
-                  aria-label="评分后自动进下一张"
-                />
-              </label>
-            </section>
-          ) : null}
         </DialogBody>
 
         <DialogFooter>

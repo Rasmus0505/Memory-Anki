@@ -27,19 +27,32 @@ describe('flipCardRevealSettings', () => {
       stage: 'direct',
       editScope: 'unit',
       enterRevealFollow: true,
+      autoAdvanceOnRate: false,
     })
     expect(sanitizeFlipCardRevealConfig({ editScope: 'palace' })).toEqual({
       granularity: 'level',
       stage: 'two-step',
       editScope: 'palace',
       enterRevealFollow: true,
+      autoAdvanceOnRate: false,
     })
     expect(sanitizeFlipCardRevealConfig({ enterRevealFollow: false })).toEqual({
       granularity: 'level',
       stage: 'two-step',
       editScope: 'unit',
       enterRevealFollow: false,
+      autoAdvanceOnRate: false,
     })
+    expect(sanitizeFlipCardRevealConfig({ autoAdvanceOnRate: true })).toEqual({
+      granularity: 'level',
+      stage: 'two-step',
+      editScope: 'unit',
+      enterRevealFollow: true,
+      autoAdvanceOnRate: true,
+    })
+    expect(sanitizeFlipCardRevealConfig({ autoAdvanceOnRate: 'yes' })).toEqual(
+      DEFAULT_FLIP_CARD_REVEAL_CONFIG,
+    )
   })
 
   it('writes sanitized settings and resets to the grouped default', () => {
@@ -48,17 +61,20 @@ describe('flipCardRevealSettings', () => {
       stage: 'direct',
       editScope: 'palace',
       enterRevealFollow: false,
+      autoAdvanceOnRate: true,
     })).toEqual({
       granularity: 'single',
       stage: 'direct',
       editScope: 'palace',
       enterRevealFollow: false,
+      autoAdvanceOnRate: true,
     })
     expect(readFlipCardRevealSettings()).toEqual({
       granularity: 'single',
       stage: 'direct',
       editScope: 'palace',
       enterRevealFollow: false,
+      autoAdvanceOnRate: true,
     })
     expect(window.localStorage.getItem(FLIP_CARD_REVEAL_SETTINGS_STORAGE_KEY)).toBeNull()
     expect(resetFlipCardRevealSettings()).toEqual(DEFAULT_FLIP_CARD_REVEAL_CONFIG)
@@ -80,6 +96,7 @@ describe('flipCardRevealSettings', () => {
       stage: 'direct',
       editScope: 'unit',
       enterRevealFollow: true,
+      autoAdvanceOnRate: false,
     })
   })
 })

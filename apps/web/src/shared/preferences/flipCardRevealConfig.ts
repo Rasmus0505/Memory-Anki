@@ -12,6 +12,12 @@ export interface FlipCardRevealConfig {
    * study needs it on; turning it off keeps the viewport wherever the learner left it.
    */
   enterRevealFollow?: boolean
+  /**
+   * Opt-in hands-free paging: once a rating settles on the card under the viewport,
+   * turn to the next unit after a short undo window. Off by default — manual paging
+   * stays the rule unless the learner asks for it (随心评分 dock only).
+   */
+  autoAdvanceOnRate?: boolean
 }
 
 export const DEFAULT_FLIP_CARD_REVEAL_CONFIG: FlipCardRevealConfig = {
@@ -19,6 +25,7 @@ export const DEFAULT_FLIP_CARD_REVEAL_CONFIG: FlipCardRevealConfig = {
   stage: 'two-step',
   editScope: 'unit',
   enterRevealFollow: true,
+  autoAdvanceOnRate: false,
 }
 
 export function sanitizeFlipCardRevealConfig(value: unknown): FlipCardRevealConfig {
@@ -30,5 +37,6 @@ export function sanitizeFlipCardRevealConfig(value: unknown): FlipCardRevealConf
     stage: raw.stage === 'direct' ? 'direct' : 'two-step',
     editScope: raw.editScope === 'palace' ? 'palace' : 'unit',
     enterRevealFollow: raw.enterRevealFollow !== false,
+    autoAdvanceOnRate: raw.autoAdvanceOnRate === true,
   }
 }

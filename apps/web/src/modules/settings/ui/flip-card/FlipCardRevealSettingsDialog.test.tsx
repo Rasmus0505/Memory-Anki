@@ -44,4 +44,36 @@ describe('FlipCardRevealSettingsDialog', () => {
       enterRevealFollow: false,
     })
   })
+
+  it('lets the learner turn on paging to the next unit after a rating', () => {
+    const onChange = vi.fn()
+    render(
+      <FlipCardRevealSettingsDialog
+        open
+        onOpenChange={vi.fn()}
+        value={DEFAULT_FLIP_CARD_REVEAL_CONFIG}
+        onChange={onChange}
+        freestyleFlipMode={{ value: 'free', onChange: vi.fn() }}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('switch', { name: '评分后自动翻页' }))
+    expect(onChange).toHaveBeenCalledWith({
+      ...DEFAULT_FLIP_CARD_REVEAL_CONFIG,
+      autoAdvanceOnRate: true,
+    })
+  })
+
+  it('keeps the rating auto-paging switch out of formal palace review', () => {
+    render(
+      <FlipCardRevealSettingsDialog
+        open
+        onOpenChange={vi.fn()}
+        value={DEFAULT_FLIP_CARD_REVEAL_CONFIG}
+        onChange={vi.fn()}
+      />,
+    )
+
+    expect(screen.queryByRole('switch', { name: '评分后自动翻页' })).toBeNull()
+  })
 })
