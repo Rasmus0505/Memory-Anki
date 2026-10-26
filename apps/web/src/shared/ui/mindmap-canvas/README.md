@@ -10,7 +10,7 @@ Generic React Flow renderer.
 
 ## Large-map navigation
 
-- Branch collapse is canvas-local (not persisted on the document). Nodes with children show a fold control; collapsed cards keep a descendant count badge.
+- Branch collapse is canvas-local (not persisted on the document). Nodes with children show a fold control; collapsed cards keep a descendant count badge. A host whose page stays mounted (`collapseResetKey`, e.g. the page activation stamp) drops manual folds and re-seeds the default depth when the learner re-enters, so an editor never reopens with last visit's expansion.
 - Maps with >= 36 nodes auto-collapse branches at depth >= 1 on open (root + first level stay expanded). Practice/review (practiceModeActive) forces fully expanded.
 - Toolbar: refresh, fit whole tree, fit current branch, expand selected subtree, expand all, collapse deep. Double-click a node fold control expands that whole subtree. Min zoom is 0.12; onlyRenderVisibleElements for medium/large graphs.
 - Intentionally not in this canvas: MiniMap, search jump, outline dual-pane (hosts may compose those separately).

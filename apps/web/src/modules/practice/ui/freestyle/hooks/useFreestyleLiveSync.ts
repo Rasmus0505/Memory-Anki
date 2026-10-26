@@ -1,29 +1,13 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef } from 'react'
 import type { useImmersiveQueue } from '@/modules/practice/ui/freestyle/hooks/useImmersiveQueue'
 import type { useFreestyleQuizFlow } from '@/modules/practice/ui/freestyle/hooks/useFreestyleQuizFlow'
 import { useFreestyleLiveMirror } from '@/modules/practice/ui/freestyle/hooks/useFreestyleLiveMirror'
 import type { FreestyleLiveRating, FreestyleLiveView } from '@/modules/practice/ui/freestyle/model/freestyleLiveView'
-import {
-  readFreestyleRevealMap,
-  writeFreestyleRevealMap,
-} from '@/modules/practice/ui/freestyle/model/freestyleRevealCache'
 import { isQuizCard } from '@/modules/practice/ui/freestyle/model/freestyle-cards'
 import type { QuizRuntimeState } from '@/modules/quiz/public'
 
 type ImmersiveQueue = ReturnType<typeof useImmersiveQueue>
 type QuizFlow = ReturnType<typeof useFreestyleQuizFlow>
-
-/** Node uid → reveal state. Small maps, so a key walk beats serialising both sides. */
-function sameRevealMap(
-  left: Record<string, string> | null,
-  right: Record<string, string> | null,
-) {
-  if (left === right) return true
-  if (!left || !right) return !left && !right
-  const leftKeys = Object.keys(left)
-  if (leftKeys.length !== Object.keys(right).length) return false
-  return leftKeys.every((key) => left[key] === right[key])
-}
 
 /** Shares rating evidence while routes, card positions, and reveal UI stay local. */
 export function useFreestyleLiveSync({
@@ -68,30 +52,6 @@ export function useFreestyleLiveSync({
   const queueStateRef = useRef(queueState)
   queueStateRef.current = queueState
 
-  const currentCardId = currentCard?.id ?? null
-  const revealCacheKey = currentCardId
-  /**
-   * The reveal map for the card under the viewport.
-   *
-   * This used to be seeded by calling setState *during render*, which makes React
-   * throw away the in-progress render and immediately re-run the whole freestyle
-   * page on every card change — the visible hitch when flipping.
-   *
-   * `liveRevealMap` is now only an override written by a peer device. The value
-   * shown is derived, so a flip costs no extra render pass.
-   */
-  const memoizedRevealMap = useMemo(
-    () => (revealCacheKey ? readFreestyleRevealMap(revealCacheKey) : null),
-    [revealCacheKey],
-  )
-  const [remoteRevealMap, setRemoteRevealMap] = useState<{
-    cardId: string
-    map: Record<string, string> | null
-  } | null>(null)
-  const liveRevealMap = remoteRevealMap?.cardId === revealCacheKey
-    ? remoteRevealMap.map
-    : memoizedRevealMap
-
   const applyLiveViewport = useCallback((viewport: {
     currentCardId: string | null
     visualIndex: number
@@ -129,14 +89,6 @@ export function useFreestyleLiveSync({
       JSON.stringify(current) === JSON.stringify(state) ? current : state
     ))
   }, [updateQuestionState])
-  const applyLiveRevealMap = useCallback((map: Record<string, string> | null) => {
-    if (!revealCacheKey) return
-    if (map) writeFreestyleRevealMap(revealCacheKey, map)
-    setRemoteRevealMap((current) => {
-      if (current?.cardId === revealCacheKey && sameRevealMap(current.map, map)) return current
-      return { cardId: revealCacheKey, map }
-    })
-  }, [revealCacheKey])
   const liveRating = useMemo<FreestyleLiveRating | null>(() => {
     const settled = Object.entries(queueState.unitEncountersByCardId).flatMap(([cardId, encounter]) => {
       if (encounter.selectedRating == null) return []
@@ -217,15 +169,13 @@ export function useFreestyleLiveSync({
     questionState: currentCard && isQuizCard(currentCard)
       ? progress.questionStates[currentCard.question.id]
       : undefined,
-    revealMap: liveRevealMap,
+    // Reveal UI is device-local: never publish or restore a flip ladder.
+    revealMap: null,
     rating: liveRating,
     applyViewport: applyLiveViewport,
     requestRoundSync,
     applyQuestionState: applyLiveQuestionState,
-    applyRevealMap: applyLiveRevealMap,
     applyRating: applyLiveRating,
     isActive,
   })
-
-  return { liveRevealMap, applyLiveRevealMap }
 }

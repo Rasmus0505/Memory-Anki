@@ -45,6 +45,8 @@ export interface MindMapEditorSurfaceProps {
    * editor fold reconcile and must not re-apply this set.
    */
   revealCollapsedNodeIds?: ReadonlySet<string> | null
+  /** Changing this forgets manual folds and re-seeds the default expansion. */
+  collapseResetKey?: string | number | null
   /** Keep palace-root → branch spine + subtree in the canvas; persist still uses the full doc. */
   scopeBranchUid?: string | null
   /** Host English interaction mode: clickable words + long-press selection (no flip). */

@@ -942,4 +942,76 @@ describe('MindMapCanvas recovery', () => {
     await waitFor(() => expect(screen.getByTestId('node-child')).toBeTruthy())
     expect(reactFlowMockState.fitView).not.toHaveBeenCalled()
   })
+
+  it('re-seeds the default folds when the host reports a re-entry', async () => {
+    // Large enough for the automatic fold seed; every branch starts folded.
+    const branchCount = 40
+    const largeGraphData: GraphData = {
+      nodes: [
+        ...graphData.nodes,
+        ...Array.from({ length: branchCount }, (_, index) => ({
+          id: `branch-${index}`,
+          type: 'peg' as const,
+          label: `Branch ${index}`,
+          originalId: index + 2,
+          parentId: 'root',
+          metadata: { depth: 1, layoutRole: 'branch' as const },
+        })),
+        ...Array.from({ length: branchCount }, (_, index) => ({
+          id: `branch-${index}-leaf`,
+          type: 'peg' as const,
+          label: `Leaf ${index}`,
+          originalId: index + branchCount + 2,
+          parentId: `branch-${index}`,
+          metadata: { depth: 2, layoutRole: 'leaf' as const },
+        })),
+      ],
+      edges: [
+        ...Array.from({ length: branchCount }, (_, index) => ({
+          id: `root-branch-${index}`,
+          source: 'root',
+          target: `branch-${index}`,
+          type: 'parent-child' as const,
+        })),
+        ...Array.from({ length: branchCount }, (_, index) => ({
+          id: `branch-${index}-leaf`,
+          source: `branch-${index}`,
+          target: `branch-${index}-leaf`,
+          type: 'parent-child' as const,
+        })),
+      ],
+    }
+    const props = {
+      selectedNodeId: null as string | null,
+      onNodeSelect: vi.fn(),
+      onAddChild: vi.fn(),
+      onAddSibling: vi.fn(),
+      onDelete: vi.fn(),
+      mobileViewPolicy: 'map' as const,
+      nodeClickViewportPolicy: 'preserve' as const,
+      contentChangeViewportPolicy: 'preserve' as const,
+      collapseResetKey: 1,
+    }
+    const { rerender } = render(<MindMapCanvas graphData={largeGraphData} {...props} />)
+
+    await waitFor(() => expect(screen.getByTestId('node-branch-0')).toBeTruthy())
+    expect(screen.queryByTestId('node-branch-0-leaf')).toBeNull()
+
+    const toggle = screen
+      .getByTestId('node-branch-0')
+      .querySelector<HTMLButtonElement>('[data-mindmap-collapse-toggle]')
+    expect(toggle).toBeTruthy()
+    fireEvent.click(toggle!)
+
+    await waitFor(() => expect(screen.getByTestId('node-branch-0-leaf')).toBeTruthy())
+
+    // Same activation keeps the learner's manual expansion…
+    rerender(<MindMapCanvas graphData={largeGraphData} {...props} />)
+    await act(async () => {})
+    expect(screen.getByTestId('node-branch-0-leaf')).toBeTruthy()
+
+    // …a re-entry drops it and opens at the default depth again.
+    rerender(<MindMapCanvas graphData={largeGraphData} {...props} collapseResetKey={2} />)
+    await waitFor(() => expect(screen.queryByTestId('node-branch-0-leaf')).toBeNull())
+  })
 })

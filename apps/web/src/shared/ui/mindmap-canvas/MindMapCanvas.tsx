@@ -136,6 +136,12 @@ export interface MindMapCanvasProps {
    * unflipped branches stay folded. It is not re-applied while edit stays open.
    */
   revealCollapsedNodeIds?: ReadonlySet<string> | null
+  /**
+   * Host re-entry identity (e.g. the page activation stamp). When it changes the
+   * canvas forgets manual folds and re-seeds the default expansion, so a resident
+   * editor page reopened later does not inherit last visit's expanded depth.
+   */
+  collapseResetKey?: string | number | null
   /** Spine / unit-root ids that cannot be deleted, given siblings, or dragged out. */
   lockedStructureNodeIds?: readonly string[]
   /** Locked ids that may still receive a child (the scoped unit root). */

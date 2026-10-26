@@ -93,11 +93,6 @@ export interface FlipCardMindMapPanelProps extends FlipCardSurfaceExtensions {
     value: 'free' | 'focused'
     onChange: (value: 'free' | 'focused') => void
   }
-  /** Freestyle-only auto-advance toggle; formal palace review leaves this unset. */
-  freestyleAutoAdvance?: {
-    value: boolean
-    onChange: (value: boolean) => void
-  }
   /** Delegate canvas fullscreen buttons to the enclosing freestyle page. */
   hostFullscreenControl?: boolean
   /** Host chrome after canvas tools (e.g. palace ladder progress). */
@@ -162,6 +157,8 @@ export interface FlipCardMindMapPanelProps extends FlipCardSurfaceExtensions {
    * the canvas folds; they do not re-apply this set.
    */
   revealCollapsedNodeIds?: ReadonlySet<string> | null
+  /** Changing this forgets manual folds and re-seeds the default expansion. */
+  collapseResetKey?: string | number | null
 }
 
 export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipCardMindMapPanelProps>(function FlipCardMindMapPanel({
@@ -176,7 +173,6 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   toolbarExtensions,
   revealSettings: revealSettingsControl,
   freestyleFlipMode,
-  freestyleAutoAdvance,
   hostFullscreenControl = false,
   toolbarCenterContent,
   belowToolbarSlot,
@@ -239,6 +235,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   scopeBranchUid = null,
   forceExpanded = false,
   revealCollapsedNodeIds = null,
+  collapseResetKey = null,
 }: FlipCardMindMapPanelProps, forwardedRef) {
   const resolvedPresentationStrategy = presentationStrategy
     ?? (detectClientSource() === 'pwa' ? 'viewport-only' : 'native-preferred')
@@ -560,6 +557,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
         practiceModeActive={!isEditMode}
         forceExpanded={isEditMode && forceExpanded}
         revealCollapsedNodeIds={isEditMode ? revealCollapsedNodeIds : null}
+        collapseResetKey={collapseResetKey}
         scopeBranchUid={isEditMode ? scopeBranchUid : null}
         englishInteractionActive={englishModeActive}
         onEnglishWordClick={englishModeActive ? handleEnglishWordClick : undefined}
@@ -662,7 +660,6 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
           value={revealSettingsControl?.settings ?? DEFAULT_FLIP_CARD_REVEAL_CONFIG}
           onChange={revealSettingsControl?.updateSettings ?? (() => undefined)}
           freestyleFlipMode={freestyleFlipMode}
-          freestyleAutoAdvance={freestyleAutoAdvance}
         />
       ) : null}
     </div>

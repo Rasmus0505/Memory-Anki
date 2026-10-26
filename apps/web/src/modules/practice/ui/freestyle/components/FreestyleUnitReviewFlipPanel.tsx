@@ -5,7 +5,6 @@ import {
 import { toast } from '@/shared/feedback/toast'
 import { PalaceLadderProgress } from '@/modules/practice/ui/review/components/PalaceLadderProgress'
 import { useRevealSession, type RevealState } from '@/modules/memory/public'
-import { isWeakerRevealMap } from '@/modules/session/public'
 import { useFlipCardRevealSettings } from '@/modules/settings/public'
 import {
   FreestyleUnitReviewFlipDialogs,
@@ -60,8 +59,6 @@ export function FreestyleUnitReviewFlipPanel({
   onToggleFullscreen,
   freestyleFlipMode = 'free',
   onFreestyleFlipModeChange,
-  autoAdvance = false,
-  onAutoAdvanceChange,
   preferredZoom,
   onUserZoomChange,
   onEditingChange,
@@ -69,8 +66,6 @@ export function FreestyleUnitReviewFlipPanel({
   onEditorStateSaved,
   onUnitsReconciled,
   onRevealProgressChange,
-  syncedRevealMap = null,
-  onRevealMapChange,
   onOpenScopeQuiz,
   belowToolbarSlot = null,
   roundId = null,
@@ -87,8 +82,6 @@ export function FreestyleUnitReviewFlipPanel({
   onToggleFullscreen: (active?: boolean) => void
   freestyleFlipMode?: FreestyleFlipMode
   onFreestyleFlipModeChange?: (value: FreestyleFlipMode) => void
-  autoAdvance?: boolean
-  onAutoAdvanceChange?: (value: boolean) => void
   preferredZoom?: number
   onUserZoomChange?: (zoom: number) => void
   onEditingChange?: (editing: boolean) => void
@@ -96,8 +89,6 @@ export function FreestyleUnitReviewFlipPanel({
   onUnitsReconciled?: () => void
   onRevealProgressChange?: (progress: { revealed: number; total: number }) => void
   onEditorStateSaved?: (state: MindMapEditorState) => void
-  syncedRevealMap?: Record<string, string> | null
-  onRevealMapChange?: (revealMap: Record<string, string>) => void
   onOpenScopeQuiz?: () => void
   /** Unit identity row, drawn under the map toolbar (the toolbar owns the sheet edge). */
   belowToolbarSlot?: ReactNode
@@ -144,7 +135,6 @@ export function FreestyleUnitReviewFlipPanel({
     revealConfig: flipCardRevealSettings.settings,
     pendingAdvancePolicy: 'latest-only',
     allowedNodeIds: allowedRevealNodeIds,
-    syncedRevealMap: syncedRevealMap as Record<string, RevealState> | null,
   })
   const editRevealCollapsedNodeIds = useMemo(() => {
     if (!isEditMode) return null
@@ -159,30 +149,12 @@ export function FreestyleUnitReviewFlipPanel({
   const { root } = reveal
   const { signalReveal } = useFreestyleFlowFeedback()
 
-  const lastNotifiedRevealKeyRef = useRef('')
   // Header chip: this unit's membership only (not whole-palace node count).
   useEffect(() => {
     onRevealProgressChange?.(
       countUnitFlipProgress(reveal.revealMap, flipTargetUids),
     )
-    const key = JSON.stringify(reveal.revealMap)
-    if (key === lastNotifiedRevealKeyRef.current) return
-    if (
-      lastNotifiedRevealKeyRef.current === ''
-      && syncedRevealMap
-      && isWeakerRevealMap(reveal.revealMap, syncedRevealMap)
-    ) {
-      return
-    }
-    lastNotifiedRevealKeyRef.current = key
-    onRevealMapChange?.(reveal.revealMap)
-  }, [
-    flipTargetUids,
-    onRevealMapChange,
-    onRevealProgressChange,
-    reveal.revealMap,
-    syncedRevealMap,
-  ])
+  }, [flipTargetUids, onRevealProgressChange, reveal.revealMap])
 
   /**
    * Immediate confirmation for the flip itself — the highest-frequency action in
@@ -492,8 +464,7 @@ export function FreestyleUnitReviewFlipPanel({
   const restoreRevealSnapshot = useCallback((map: Record<string, RevealState> | null) => {
     if (!map) return
     revealApiRef.current.setRevealMap(map)
-    onRevealMapChange?.(map)
-  }, [onRevealMapChange])
+  }, [])
 
   const handleToggleMode = useCallback(() => {
     if (reviewOnly) return
@@ -511,7 +482,6 @@ export function FreestyleUnitReviewFlipPanel({
     const flipDetail = `翻卡 ${flipProgress.revealed}/${flipProgress.total}`
     if (!isEditMode) {
       editRevealSnapshotRef.current = { ...currentReveal }
-      onRevealMapChange?.(currentReveal)
       recordSessionRecorderUiAction('mindmap', '进入编辑', flipDetail)
       setEditEditorState(editBaselineRef.current)
       setPermanentMarkMode(false)
@@ -541,7 +511,6 @@ export function FreestyleUnitReviewFlipPanel({
     flipTargetUids,
     isEditMode,
     onEditorStateSaved,
-    onRevealMapChange,
     restoreRevealSnapshot,
   ])
 
@@ -624,7 +593,7 @@ export function FreestyleUnitReviewFlipPanel({
   const textToMindMap = useFreestyleTextToMindMap({
     palaceId: session.palace_id, card, sessionTitle: session.title || '', isEditMode,
     editorState, editEditorState, handleToggleMode, setReviewUnitsPanelOpen,
-    onRevealMapChange, revealApiRef,
+    revealApiRef,
     displayModeRef, editRevealSnapshotRef, setPermanentMarkMode, setDisplayMode,
     setModeSyncVersion, handleEditorStateChange,
   })
@@ -697,9 +666,6 @@ export function FreestyleUnitReviewFlipPanel({
         revealSettings={flipCardRevealSettings}
         freestyleFlipMode={onFreestyleFlipModeChange
           ? { value: freestyleFlipMode, onChange: onFreestyleFlipModeChange }
-          : undefined}
-        freestyleAutoAdvance={onAutoAdvanceChange
-          ? { value: autoAdvance, onChange: onAutoAdvanceChange }
           : undefined}
         preferredZoom={preferredZoom}
         onUserZoomChange={onUserZoomChange}

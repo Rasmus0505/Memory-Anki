@@ -1124,6 +1124,39 @@ def check_live_study_presence(errors: list[str]) -> None:
             "apps/web/src/modules/practice/ui/freestyle/ImmersiveFreestylePage.tsx: useFreestyleLiveMirror is a permanent wiring."
         )
 
+    # Flip progress is a device-local card-visit state. Persisting it (the retired
+    # per-card reveal-map cache) made a later visit reopen already flipped.
+    freestyle_dir = web_src / "modules" / "practice" / "ui" / "freestyle"
+    if freestyle_dir.exists():
+        persisted_reveal = sorted(
+            path.relative_to(REPO_ROOT).as_posix()
+            for path in freestyle_dir.rglob("*")
+            if path.is_file()
+            and path.suffix in {".ts", ".tsx"}
+            and ".test." not in path.name
+            and "memory-anki.freestyle.reveal-map" in path.read_text(
+                encoding="utf-8", errors="ignore"
+            )
+        )
+        if persisted_reveal:
+            errors.append(
+                "Freestyle flip progress is per card visit and must not be persisted: "
+                + ", ".join(persisted_reveal)
+            )
+
+    # The palace editor page stays mounted between visits; it must re-seed the
+    # default branch folds on re-entry instead of remembering last visit's expansion.
+    palace_editor = web_src / "pages" / "create" / "PalaceEditorPage.tsx"
+    palace_editor_source = (
+        palace_editor.read_text(encoding="utf-8", errors="ignore")
+        if palace_editor.exists()
+        else ""
+    )
+    if "collapseResetKey={becameActiveAt}" not in palace_editor_source:
+        errors.append(
+            "apps/web/src/pages/create/PalaceEditorPage.tsx: reopening the editor must re-seed the default branch folds (collapseResetKey={becameActiveAt})."
+        )
+
     provider = web_src / "modules" / "session" / "ui" / "live-presence" / "LiveStudyPresenceProvider.tsx"
     provider_source = provider.read_text(encoding="utf-8", errors="ignore") if provider.exists() else ""
     if "hello" not in provider_source:

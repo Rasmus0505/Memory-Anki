@@ -61,6 +61,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   practiceModeActive = false,
   forceExpanded = false,
   revealCollapsedNodeIds = null,
+  collapseResetKey = null,
   scopeBranchUid = null,
   immersiveModeActive = false,
   englishInteractionActive = false,
@@ -612,6 +613,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
         selectEditingText={interaction.mode === 'editing' && Boolean(interaction.selectAllOnStart)}
         readonly={!canEdit} practiceModeActive={practiceModeActive} forceExpanded={forceExpanded}
         revealCollapsedNodeIds={revealCollapsedNodeIds}
+        collapseResetKey={collapseResetKey}
         lockedStructureNodeIds={branchScope?.pathUids}
         allowAddChildNodeIds={branchScope ? [branchScope.branchUid] : undefined}
         sceneTransitionFit={initialViewPolicy === 'reset'}

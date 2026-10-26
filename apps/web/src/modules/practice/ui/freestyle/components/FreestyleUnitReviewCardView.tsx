@@ -71,7 +71,6 @@ import { FreestyleUnitReviewIdentityRow, FreestyleUnitReviewPlaceholder } from '
 
 export {
   ratingEffectLabel,
-  retryPositionLabel,
 } from '@/modules/practice/ui/freestyle/model/ratingEffectLabels'
 
 
@@ -94,7 +93,6 @@ export function FreestyleUnitReviewCardView({
   readOnly,
   roundId,
   encounter,
-  retryAfterCards,
   onEnsureEncounter,
   onEncounterChange,
   onStaleDrop,
@@ -109,16 +107,12 @@ export function FreestyleUnitReviewCardView({
   onToggleFullscreen = () => undefined,
   freestyleFlipMode = 'free',
   onFreestyleFlipModeChange,
-  autoAdvance = false,
-  onAutoAdvanceChange,
   preferredZoom,
   onUserZoomChange,
   blockedHint = null,
   ratingScope: _ratingScope = 'unit',
   onRatingScopeChange: _onRatingScopeChange,
   palaceTarget: _palaceTarget = null,
-  liveRevealMap = null,
-  onLiveRevealMapChange,
   planVersion = 0,
   onOpenScopeQuiz,
   lastRating = null,
@@ -135,7 +129,6 @@ export function FreestyleUnitReviewCardView({
   encounter?: FreestyleUnitEncounterState
   /** This-round last rating, shown while the amend glance is still empty. */
   lastRating?: number | null
-  retryAfterCards: number
   /** Why 「下一组」 is blocked, shown inline instead of a toast. */
   blockedHint?: string | null
   onEnsureEncounter: (
@@ -161,16 +154,12 @@ export function FreestyleUnitReviewCardView({
   onToggleFullscreen?: (active?: boolean) => void
   freestyleFlipMode?: FreestyleFlipMode
   onFreestyleFlipModeChange?: (value: FreestyleFlipMode) => void
-  autoAdvance?: boolean
-  onAutoAdvanceChange?: (value: boolean) => void
   /** Shared manual zoom across all currently mounted freestyle maps. */
   preferredZoom?: number
   onUserZoomChange?: (zoom: number) => void
   ratingScope?: FreestyleRatingScope
   onRatingScopeChange?: (scope: FreestyleRatingScope) => void
   palaceTarget?: PalaceRatingTarget | null
-  liveRevealMap?: Record<string, string> | null
-  onLiveRevealMapChange?: (revealMap: Record<string, string>) => void
   /**
    * 睡前复习: record a plan-only grade for an already-rated card. Never opens a
    * Reviews encounter and never reschedules.
@@ -289,20 +278,14 @@ export function FreestyleUnitReviewCardView({
     : !recapOnly && !staleRecovery && preview && previewUnit && previewEditorState
       ? { live: false, session: preview, unit: previewUnit, editorState: previewEditorState }
       : null
-  // One FlipPanel across preview → live; only a genuine encounter renewal (restudy after
-  // a fail) remounts it, so the landed card never blanks while its session arrives.
-  const liveEncounterId = flipSource?.live ? flipSource.unit.encounter?.id ?? null : null
-  const [flipIdentity, setFlipIdentity] = useState<{ encounterId: string | null; generation: number }>({
-    encounterId: null,
-    generation: 0,
-  })
-  if (liveEncounterId && liveEncounterId !== flipIdentity.encounterId) {
-    setFlipIdentity({
-      encounterId: liveEncounterId,
-      generation: flipIdentity.encounterId ? flipIdentity.generation + 1 : flipIdentity.generation,
-    })
-  }
-  // A freshly mounted unit card must not inherit a previous card's saved-doc override.
+  // One FlipPanel across preview → live. An encounter renewal on the same card
+  // (rating reopen, revision adopt) must NOT remount it: the learner's flipped
+  // branches and camera belong to the visit. A 重练 arrives as its own card id,
+  // so a genuinely new attempt still mounts folded.
+  // A freshly mounted unit card must not inherit a previous card's saved-doc
+  // override. Keyed by the unit/attempt, not by the card id: an inline edit
+  // bumps the id's revision, and resetting there threw away the document the
+  // learner had just saved.
   useEffect(() => {
     setSavedEditorState(null)
     setStaleRecovery(false)
@@ -311,7 +294,7 @@ export function FreestyleUnitReviewCardView({
     setLoadErrorTitle(null)
     setLoadErrorHint(null)
     setIntentRating(null)
-  }, [card.id, roundId])
+  }, [card.unit_id, card.occurrence_kind, roundId])
 
   const revealUndo = useCallback(() => {
     if (undoTimerRef.current != null) window.clearTimeout(undoTimerRef.current)
@@ -1008,7 +991,10 @@ export function FreestyleUnitReviewCardView({
             className="fs-unit-arrive flex min-h-0 flex-1 flex-col"
           >
           <FreestyleUnitReviewFlipPanel
-            key={`${card.id}:${flipIdentity.generation}`}
+            // A new round starts folded: never inherit the previous round's flip ladder.
+            // Same round + same attempt = same map, even when a rating reopens the
+            // encounter or an edit bumps the card's revision.
+            key={`${card.unit_id ?? card.id}:${card.occurrence_kind ?? 'source'}:${roundId}`}
             card={card}
             session={flipSource.session}
             unit={flipSource.unit}
@@ -1020,12 +1006,10 @@ export function FreestyleUnitReviewCardView({
             onToggleFullscreen={onToggleFullscreen}
             freestyleFlipMode={freestyleFlipMode}
             onFreestyleFlipModeChange={flipSource.live ? onFreestyleFlipModeChange : undefined}
-            autoAdvance={autoAdvance}
-            onAutoAdvanceChange={flipSource.live ? onAutoAdvanceChange : undefined}
             preferredZoom={preferredZoom}
             onUserZoomChange={flipSource.live ? onUserZoomChange : undefined}
-            // A preview must never report editing/reveal/save state: it would clobber the
-            // active card's inline edit and push a fake reveal map to live sync.
+            // A preview must never report editing/save state: it would clobber the
+            // active card's inline edit.
             onEditingChange={flipSource.live
               ? (editing) => {
                   setInlineEditing(editing)
@@ -1038,8 +1022,6 @@ export function FreestyleUnitReviewCardView({
             onRevealProgressChange={flipSource.live ? handleRevealProgressChange : undefined}
             belowToolbarSlot={identityRow}
             roundId={flipSource.live ? roundId : null}
-            syncedRevealMap={flipSource.live ? liveRevealMap : null}
-            onRevealMapChange={flipSource.live ? onLiveRevealMapChange : undefined}
             // 做题 is the round overlay, not this card's glance. A preview map is
             // already on screen while the score session is still opening; hiding
             // the button until that write finishes is what made 做题 look gone.
@@ -1103,7 +1085,6 @@ export function FreestyleUnitReviewCardView({
             failedRating={failedRating}
             failedFailure={failedFailure}
             recordedRating={recordedRating}
-            retryAfterCards={retryAfterCards}
             busy={false}
             locked={locked}
             reviewReady={reviewReady}

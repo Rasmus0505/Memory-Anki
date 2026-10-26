@@ -3180,6 +3180,35 @@ def test_live_study_presence_rejects_sqlite_and_missing_sw_bypass(
     assert any("BaseHTTPMiddleware" in error for error in errors)
 
 
+def test_live_study_presence_rejects_persisted_flip_ladder_and_fold_memory(
+    tmp_path: Path, monkeypatch
+) -> None:
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    web_root = tmp_path / "apps" / "web"
+    web_src = web_root / "src"
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "model" / "freestyleRevealCache.ts",
+        "const STORAGE_KEY = 'memory-anki.freestyle.reveal-map.v1'\n",
+    )
+    write_file(
+        web_src / "pages" / "create" / "PalaceEditorPage.tsx",
+        "<FlipCardMindMapPanel />\n",
+    )
+    context_map = tmp_path / "docs" / "architecture" / "context-map.yaml"
+    write_file(context_map, json.dumps({"runtime": {"ports": {}}}))
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    monkeypatch.setattr(check_architecture, "WEB_ROOT", web_root)
+    monkeypatch.setattr(check_architecture, "CONTEXT_MAP_PATH", context_map)
+    monkeypatch.setattr(check_architecture, "FREESTYLE_UI", None)
+
+    errors: list[str] = []
+    check_architecture.check_live_study_presence(errors)
+
+    assert any("must not be persisted" in error for error in errors)
+    assert any("collapseResetKey={becameActiveAt}" in error for error in errors)
+
+
 def test_freestyle_scope_quiz_overlay_rejects_training_mode_switch(
     tmp_path: Path, monkeypatch
 ) -> None:

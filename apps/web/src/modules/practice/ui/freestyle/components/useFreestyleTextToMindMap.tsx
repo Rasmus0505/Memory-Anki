@@ -15,7 +15,6 @@ interface UseFreestyleTextToMindMapOptions {
   editEditorState: MindMapEditorState
   handleToggleMode: () => void
   setReviewUnitsPanelOpen: (open: boolean) => void
-  onRevealMapChange?: (revealMap: Record<string, string>) => void
   revealApiRef: { readonly current: { revealMap: Record<string, RevealState> } }
   displayModeRef: MutableRefObject<'review' | 'edit'>
   editRevealSnapshotRef: MutableRefObject<Record<string, RevealState> | null>
@@ -34,7 +33,6 @@ export function useFreestyleTextToMindMap({
   editEditorState,
   handleToggleMode,
   setReviewUnitsPanelOpen,
-  onRevealMapChange,
   revealApiRef,
   displayModeRef,
   editRevealSnapshotRef,
@@ -52,7 +50,6 @@ export function useFreestyleTextToMindMap({
   const applyImportedEditorState = useCallback((nextState: MindMapEditorState) => {
     if (displayModeRef.current !== 'edit') {
       editRevealSnapshotRef.current = { ...revealApiRef.current.revealMap }
-      onRevealMapChange?.(revealApiRef.current.revealMap)
       setPermanentMarkMode(false)
       setDisplayMode('edit')
       setModeSyncVersion((value) => value + 1)
@@ -62,7 +59,6 @@ export function useFreestyleTextToMindMap({
     displayModeRef,
     editRevealSnapshotRef,
     handleEditorStateChange,
-    onRevealMapChange,
     revealApiRef,
     setDisplayMode,
     setModeSyncVersion,

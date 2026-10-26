@@ -13,7 +13,6 @@ import {
   FreestyleUnitReviewCardView,
   RATING_SAVE_FAILED_COPY,
   ratingEffectLabel,
-  retryPositionLabel,
 } from './FreestyleUnitReviewCardView'
 import { useRatingSaveLedger } from '@/modules/practice/ui/freestyle/hooks/useFreestyleRatingSaves'
 import { resetFreestyleRatingSavesForTests } from '@/modules/practice/ui/freestyle/model/ratingSaveRuntime'
@@ -161,6 +160,8 @@ const effects: UnitRatingEffectDto[] = [
     target_actual_interval_days: 0,
     target_due_date: '2026-07-27',
     retry_after_cards: 3,
+    retry_after_minutes: 10,
+    intraday_kind: 'retry',
     stage_action: 'reset',
   },
   {
@@ -172,6 +173,8 @@ const effects: UnitRatingEffectDto[] = [
     target_actual_interval_days: 0,
     target_due_date: '2026-07-27',
     retry_after_cards: 3,
+    retry_after_minutes: 10,
+    intraday_kind: 'retry',
     stage_action: 'keep',
   },
   {
@@ -372,7 +375,6 @@ function renderCard(
     roundId: options.roundId ?? 'round-1',
     encounter: options.encounter ?? queueEncounter(),
     lastRating: options.lastRating,
-    retryAfterCards: 3,
     ratingScope: options.ratingScope,
     preferredZoom: options.preferredZoom,
     palaceTarget: options.palaceTarget,
@@ -1631,7 +1633,7 @@ describe('FreestyleUnitReviewCardView', () => {
     const view = renderCard(retryCard)
 
     await screen.findByTestId('flip-card-mind-map-panel')
-    fireEvent.click(screen.getByRole('button', { name: /困难：3张后重练/ }))
+    fireEvent.click(screen.getByRole('button', { name: /困难：10 分钟后重练/ }))
     await waitFor(() => expect(apiMocks.rateFreestyleRoundUnitApi).toHaveBeenCalledTimes(1))
     expect(apiMocks.startFreestyleUnitReviewSessionApi).toHaveBeenCalledTimes(1)
     await screen.findByText(/已选困难/)
@@ -1716,7 +1718,10 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(screen.getByText(/已选记得/)).toBeTruthy()
   })
 
-  it('starts a retry encounter from the root instead of the prior reveal state', async () => {
+  it('keeps the flipped map when the same card reopens a fresh encounter', async () => {
+    // A rating (or a revision adopt) closes and reopens the glance under the
+    // learner. Remounting the panel there folded every branch back to the root —
+    // the "评完分脑图自己收起来了" report.
     const card = buildCard('unit-retry-fresh-reveal')
     const firstSession = buildSession(card.unit_id!)
     const retryEncounter = queueEncounter({ encounterId: 'encounter-2' })
@@ -1734,6 +1739,11 @@ describe('FreestyleUnitReviewCardView', () => {
     const onNodeClick = capturedPanelProps?.onNodeClick as (nodes: MindMapSelection[]) => void
     act(() => onNodeClick([selection('root', '完整宫殿')]))
     flushRevealFrame()
+    const revealedBefore = (
+      capturedPanelProps?.visibleEditorState as { editor_doc: { root: { children: unknown[] } } }
+    ).editor_doc.root.children.length
+    expect(revealedBefore).toBeGreaterThan(0)
+
     view.rerenderCard({
       encounter: retryEncounter,
       onEnsureEncounter: vi.fn(() => retryEncounter),
@@ -1742,17 +1752,16 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(
       (capturedPanelProps?.visibleEditorState as {
         editor_doc: { root: { children: unknown[] } }
-      }).editor_doc.root.children,
-    ).toHaveLength(0)
+      }).editor_doc.root.children.length,
+    ).toBe(revealedBefore)
   })
 
-  it('shows concrete effects for all retry queue sizes', () => {
-    expect(retryPositionLabel(0)).toBe('立即重练')
-    expect(retryPositionLabel(1)).toBe('1张后重练')
-    expect(retryPositionLabel(2)).toBe('2张后重练')
-    expect(retryPositionLabel(3)).toBe('3张后重练')
-    expect(ratingEffectLabel(effects[0], 2)).toBe('2张后重练 · 今天再练')
-    expect(ratingEffectLabel(effects[2], 3)).toBe('1天后复习 · 7月28日')
+  it('shows the booked wait rather than a retry queue position', () => {
+    expect(ratingEffectLabel(effects[0])).toBe('10 分钟后重练 · 今天')
+    expect(ratingEffectLabel(effects[1])).toBe('10 分钟后重练 · 今天')
+    expect(ratingEffectLabel(effects[2])).toBe('1天后复习 · 7月28日')
+    expect(ratingEffectLabel({ ...effects[0], retry_after_minutes: null }))
+      .toBe('今天再练')
   })
 
   it('reports the real booked gap when a due date carries per-unit spread', () => {
@@ -1768,7 +1777,7 @@ describe('FreestyleUnitReviewCardView', () => {
       retry_after_cards: 0,
       stage_action: 'keep',
     }
-    expect(ratingEffectLabel(spread, 0)).toBe('362天后复习 · 7月25日')
+    expect(ratingEffectLabel(spread)).toBe('362天后复习 · 7月25日')
   })
 
   it('falls back to the nominal interval when a cached client lacks the spread field', () => {
@@ -1782,7 +1791,7 @@ describe('FreestyleUnitReviewCardView', () => {
       retry_after_cards: 0,
       stage_action: 'advance',
     }
-    expect(ratingEffectLabel(legacy, 0)).toBe('1天后复习 · 7月28日')
+    expect(ratingEffectLabel(legacy)).toBe('1天后复习 · 7月28日')
   })
 
   it('says a lapsed mature unit is retry work today, not a ladder demotion', () => {
@@ -1797,7 +1806,7 @@ describe('FreestyleUnitReviewCardView', () => {
       retry_after_cards: 3,
       stage_action: 'lower',
     }
-    expect(ratingEffectLabel(lapsed, 3)).toBe('3张后重练 · 今天再练')
+    expect(ratingEffectLabel(lapsed)).toBe('今天再练')
 
     const heldAtLearning: UnitRatingEffectDto = {
       ...lapsed,
@@ -1805,7 +1814,7 @@ describe('FreestyleUnitReviewCardView', () => {
       target_interval_days: 0,
       stage_action: 'keep',
     }
-    expect(ratingEffectLabel(heldAtLearning, 3)).toBe('3张后重练 · 今天再练')
+    expect(ratingEffectLabel(heldAtLearning)).toBe('今天再练')
   })
 
   it('stays on the card and atomically amends another rating', async () => {
@@ -2339,7 +2348,7 @@ describe('FreestyleUnitReviewCardView', () => {
     const view = renderCard(card)
 
     await screen.findByTestId('flip-card-mind-map-panel')
-    fireEvent.click(screen.getByRole('button', { name: /困难：3张后重练/ }))
+    fireEvent.click(screen.getByRole('button', { name: /困难：10 分钟后重练/ }))
     await waitFor(() => expect(apiMocks.rateReviewUnitApi).toHaveBeenCalledTimes(1))
     expect(apiMocks.closeUnitReviewEncounterApi).not.toHaveBeenCalled()
     expect(view.onRoundSync).toHaveBeenCalledWith(expect.objectContaining({ plan_version: 1 }))

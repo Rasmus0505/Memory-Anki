@@ -198,6 +198,7 @@ export function useMindMapCanvasState(
     practiceModeActive = false,
     forceExpanded = false,
     revealCollapsedNodeIds = null,
+    collapseResetKey = null,
     lockedStructureNodeIds,
     allowAddChildNodeIds,
     sceneTransitionFit = false,
@@ -371,6 +372,36 @@ export function useMindMapCanvasState(
     if (!transition.collapsed) return
     setCollapsedNodeIds(transition.collapsed)
   }, [forceExpanded, graphData.nodes, practiceModeActive, revealCollapsedNodeIds])
+
+  /**
+   * Re-entry fold reset. The router keeps recently visited pages mounted, so
+   * without this the editor came back carrying the previous visit's manual
+   * expansion. Re-seed the entry folds exactly like a fresh mount: the default
+   * depth, or the flip-progress seed when edit was entered from a card.
+   */
+  const collapseResetKeyRef = useRef(collapseResetKey)
+  useEffect(() => {
+    if (collapseResetKeyRef.current === collapseResetKey) return
+    collapseResetKeyRef.current = collapseResetKey
+    const transition = resolveCollapseTransition({
+      previousCollapsed: new Set(),
+      previousSignature: '',
+      nodes: graphData.nodes,
+      knownNodeIds: new Set(),
+      practiceModeActive,
+      forceExpanded,
+      revealCollapsedNodeIds,
+    })
+    collapsedSignatureRef.current = transition.signature
+    knownCollapseNodeIdsRef.current = transition.knownNodeIds
+    setCollapsedNodeIds(transition.collapsed ?? new Set())
+  }, [
+    collapseResetKey,
+    forceExpanded,
+    graphData.nodes,
+    practiceModeActive,
+    revealCollapsedNodeIds,
+  ])
 
   // Expand ancestors when host selects a node that would otherwise be hidden.
   useEffect(() => {

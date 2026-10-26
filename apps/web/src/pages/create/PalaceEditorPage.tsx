@@ -527,6 +527,9 @@ export default function PalaceEdit() {
                           visibleEditorSyncKey={page.practiceVisibleEditorSyncKey}
                           hostForceSyncKey={`edit:${page.replaceSyncVersion}:${mindMapImport.importAppliedSyncVersion}`}
                           hostExternalSyncKey={mindMapImport.importExternalSyncKey}
+                          // Reopening the editor starts from the default fold depth; the
+                          // resident page must not carry last visit's manual expansion.
+                          collapseResetKey={becameActiveAt}
                           // Keep camera continuity across build/learn/recall; canvas re-anchors the center card.
                           preserveViewOnSync
                           initialViewPolicy="preserve"
