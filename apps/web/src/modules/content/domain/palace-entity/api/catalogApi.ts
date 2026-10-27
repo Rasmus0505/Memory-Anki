@@ -65,13 +65,22 @@ export function getPalacesApi(params?: Record<string, string>) {
   return request<PalaceListItem[]>(`/palaces${q}`)
 }
 
-export function getPalacesGroupedApi(params?: Record<string, string>) {
+/**
+ * `fresh` skips the boot snapshot and any warmed promise. Use it when the
+ * caller must see a binding/title change that just landed (the palace
+ * directory tree after a drag), not the catalog cached at startup.
+ */
+export function getPalacesGroupedApi(
+  params?: Record<string, string>,
+  options?: { fresh?: boolean },
+) {
   const q = buildQueryString(params)
   const cacheKey = `grouped:${q}`
   const load = () =>
     consumeWarmedPalaceGet(cacheKey, () =>
       request<PalaceGroupedListResponse>(`/palaces/grouped${q}`),
     )
+  if (options?.fresh) return request<PalaceGroupedListResponse>(`/palaces/grouped${q}`)
   if (!isDefaultCatalogQuery(params)) return load()
   const cached = peekGroupedPalaces()
   if (cached) return Promise.resolve(cached)

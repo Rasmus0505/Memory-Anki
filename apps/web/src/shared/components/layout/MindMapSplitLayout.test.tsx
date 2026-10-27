@@ -6,15 +6,18 @@ import { MindMapSplitLayout } from './MindMapSplitLayout'
 function Harness({
   side = 'start' as const,
   hidden = false,
+  railMode,
 }: {
   side?: 'start' | 'end'
   hidden?: boolean
+  railMode?: 'always' | 'below-lg' | 'never'
 }) {
   const [collapsed, setCollapsed] = useState(false)
   return (
     <MindMapSplitLayout
       side={side}
       hidden={hidden}
+      railMode={railMode}
       collapsed={collapsed}
       onCollapsedChange={setCollapsed}
       sidePanel={<div>绑定面板</div>}
@@ -42,6 +45,13 @@ describe('MindMapSplitLayout', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '收起右侧栏' }))
     expect(screen.getByRole('button', { name: '展开右侧栏' })).toBeTruthy()
+  })
+
+  it('can keep the rail for narrow viewports only when the host owns the toggle', () => {
+    render(<Harness railMode="below-lg" />)
+
+    const toggle = screen.getByRole('button', { name: '收起侧栏' })
+    expect(toggle.parentElement?.className).toContain('lg:hidden')
   })
 
   it('hides the rail in immersive mode so only the mind map remains', () => {

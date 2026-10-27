@@ -191,16 +191,8 @@ vi.mock('@/widgets/quiz-launcher', () => ({
   }),
 }))
 
-vi.mock('@/modules/content/ui/palace-edit/components/PalaceAttachmentPanel', () => ({
-  PalaceAttachmentPanel: () => <div>attachments</div>,
-}))
-
 vi.mock('@/modules/content/ui/palace-edit/components/PalaceChapterPanel', () => ({
   PalaceChapterPanel: () => <div>chapters</div>,
-}))
-
-vi.mock('@/modules/content/ui/palace-edit/components/PalaceMetaPanel', () => ({
-  PalaceMetaPanel: () => <div>meta</div>,
 }))
 
 vi.mock('@/modules/content/ui/palace-edit/components/PalaceSegmentsPanel', () => ({

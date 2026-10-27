@@ -6,11 +6,11 @@ import type { ImportApplyContext } from '@/shared/api/contracts/imports'
 import type { MindMapFeedbackEvent, MindMapFeedbackFxPayload } from '@/shared/feedback/feedbackEvents'
 import { useRouteResidency } from '@/shared/routing/RouteResidency'
 import { usePalaceEditorDocument } from '@/modules/content/ui/palace-edit/hooks/usePalaceEditorDocument'
-import { usePalaceMetaController } from '@/modules/content/ui/palace-edit/hooks/usePalaceMetaController'
 import { usePalacePracticeMode } from '@/modules/content/ui/palace-edit/hooks/usePalacePracticeMode'
 import { usePalaceVersionsController } from '@/modules/content/ui/palace-edit/hooks/usePalaceVersionsController'
 import type { StatusBadgeState } from '@/modules/content/ui/palace-edit/model/palace-edit-types'
 import { getEnglishContinueCourseApi } from '@/modules/english/public'
+import { appConfirm } from '@/shared/components/ui/native-dialog'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import { useMemoryAnkiShortcuts } from '@/modules/settings/public'
 import {
@@ -52,10 +52,6 @@ export function usePalaceEditPage() {
   const palaceTitle = palace?.title || '未命名宫殿'
   const selectedNode = selectedNodes[0] ?? null
   const selectedNodeUid = selectedNode?.uid ? String(selectedNode.uid) : null
-  const meta = usePalaceMetaController({
-    palace,
-    reload: documentState.reload,
-  })
 
   const handlePracticeCurrentNodeUid = useCallback((uid: string | null) => {
     selectedNodeUidRef.current = uid
@@ -70,7 +66,7 @@ export function usePalaceEditPage() {
   const practice = usePalacePracticeMode({
     palaceId,
     editorState: documentState.editorState,
-    title: meta.title || palaceTitle,
+    title: palaceTitle,
     currentNodeUid: selectedNodeUid,
     onCurrentNodeUid: handlePracticeCurrentNodeUid,
     studyRoute: fullPath,
@@ -172,15 +168,15 @@ export function usePalaceEditPage() {
 
   const shortcutHandlers = useMemo(
     () => ({
-      hide_child_cards_practice: handleShortcutHideChildCards,
+      hide_child_cards: handleShortcutHideChildCards,
     }),
     [handleShortcutHideChildCards],
   )
 
   useMemoryAnkiShortcuts(
-    practice.editorMode === 'edit' ? 'edit' : 'practice',
+    'flip',
     shortcutHandlers,
-    Boolean(documentState.editorState),
+    practice.editorMode !== 'edit' && Boolean(documentState.editorState),
   )
 
   const handleCreateBlankPalace = useCallback(async (options: { title: string; subjectIds: number[] }) => {
@@ -194,6 +190,36 @@ export function usePalaceEditPage() {
       toast.error(error instanceof Error ? error.message : '创建宫殿失败，请稍后重试。')
     }
   }, [documentState, id, navigate, palaceId])
+
+  /**
+   * In-place palace switch from the directory tree. The session already flushes
+   * the previous owner when `entityId` changes, but awaiting the flush here keeps
+   * a slow save from landing after the canvas has already moved on.
+   */
+  const openPalace = useCallback(async (nextPalaceId: number) => {
+    if (!Number.isFinite(nextPalaceId) || nextPalaceId <= 0) return
+    if (nextPalaceId === palaceId) return
+    const current = documentStateRef.current
+    if (current?.pendingConflict) {
+      toast.warning('请先解决当前宫殿的文档冲突，再切换宫殿。')
+      return
+    }
+    if (current && (current.hasUnsavedChanges || current.isSaving)) {
+      try {
+        await current.flushSaveWithReconcile('editor_leave', { reconcileUnits: true })
+      } catch {
+        // A failed flush still leaves the local draft; ask before discarding the view.
+      }
+      if (documentStateRef.current?.hasUnsavedChanges) {
+        const proceed = await appConfirm('当前宫殿还有未保存的修改，切换后可能丢失。仍要切换吗？', {
+          title: '切换宫殿',
+          tone: 'danger',
+        })
+        if (!proceed) return
+      }
+    }
+    navigate(`/palaces/${nextPalaceId}/edit`)
+  }, [navigate, palaceId])
 
   useEffect(() => {
     if (isActive) return
@@ -219,15 +245,26 @@ export function usePalaceEditPage() {
   }, [documentState.hasUnsavedChanges, documentState.isSaving])
 
   useEffect(() => {
+    const closingPalaceId = palaceId
     return () => {
       if (hardUnloadRef.current) return
-      if (!palaceId) return
+      if (!closingPalaceId) return
+      const state = documentStateRef.current
+      // An in-place palace switch may already have moved the session to the new
+      // owner; flushing then would write the old document onto the new palace.
+      if (!state || state.readCurrentState().entityId !== closingPalaceId) return
       // Soft route leave (SPA navigation): palace-only reconcile flush.
       // Capture-phase leave arming covers tab hide/pagehide via the shared session flush.
       trackPalaceEditorLeave(
-        documentStateRef.current?.flushSaveWithReconcile('editor_leave', { reconcileUnits: true }),
+        state.flushSaveWithReconcile('editor_leave', { reconcileUnits: true }),
       )
     }
+  }, [palaceId])
+
+  useEffect(() => {
+    setSelectedNodes([])
+    selectedNodeUidRef.current = null
+    setFeedbackFxSignal(null)
   }, [palaceId])
 
   useEffect(() => {
@@ -297,10 +334,8 @@ export function usePalaceEditPage() {
     palaceId,
     palace,
     reload: documentState.reload,
-    title: meta.title,
-    setTitle: meta.setTitle,
-    createdAt: meta.createdAt,
-    setCreatedAt: meta.setCreatedAt,
+    title: palaceTitle,
+    openPalace,
     editorMode: practice.editorMode,
     enterPreview: practice.enterPreview,
     versionOpen: versions.versionOpen,
@@ -345,10 +380,6 @@ export function usePalaceEditPage() {
     isCreatingDraft: documentState.isCreatingDraft,
     handleCreateBlankPalace,
     handleMindMapEditorStateChange,
-    handleSaveMeta: meta.handleSaveMeta,
-    handleEstablishCreatedAt: meta.handleEstablishCreatedAt,
-    handleAttachmentUpload: meta.handleAttachmentUpload,
-    handleAttachmentDelete: meta.handleAttachmentDelete,
     enterInlinePractice,
     exitInlinePractice,
     toggleInlinePractice,

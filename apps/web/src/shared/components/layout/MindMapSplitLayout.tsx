@@ -8,6 +8,12 @@ import {
 import { cn } from '@/shared/lib/utils'
 
 export type MindMapSplitSide = 'start' | 'end'
+/**
+ * Where the collapse rail is rendered. `below-lg` keeps the rail on narrow
+ * viewports only, so a host whose collapse control lives elsewhere (the app
+ * sidebar) does not reserve a whole column for a second button.
+ */
+export type MindMapSplitRailMode = 'always' | 'below-lg' | 'never'
 
 export interface MindMapSplitLayoutProps {
   side?: MindMapSplitSide
@@ -21,6 +27,7 @@ export interface MindMapSplitLayoutProps {
   sideClassName?: string
   collapseLabel?: string
   expandLabel?: string
+  railMode?: MindMapSplitRailMode
 }
 
 /**
@@ -39,6 +46,7 @@ export function MindMapSplitLayout({
   sideClassName,
   collapseLabel,
   expandLabel,
+  railMode = 'always',
 }: MindMapSplitLayoutProps) {
   const isStart = side === 'start'
   const resolvedCollapseLabel = collapseLabel ?? (isStart ? '收起侧栏' : '收起右侧栏')
@@ -93,6 +101,8 @@ export function MindMapSplitLayout({
       className={cn(
         'flex w-10 shrink-0 flex-col items-center border-border/80 py-2',
         isStart ? 'border-r' : 'border-l',
+        railMode === 'below-lg' && 'lg:hidden',
+        railMode === 'never' && 'hidden',
       )}
     >
       {toggle}

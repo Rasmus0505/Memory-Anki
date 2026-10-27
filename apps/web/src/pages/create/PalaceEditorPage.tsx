@@ -13,25 +13,27 @@ import { Button } from '@/shared/components/ui/button'
 import { Badge } from '@/shared/components/ui/badge'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { cn } from '@/shared/lib/utils'
-import { PalaceAttachmentPanel } from '@/modules/content/public'
-import { PalaceMetaPanel } from '@/modules/content/public'
+import { PalaceDirectoryTree } from '@/modules/content/public'
+import {
+  getPalaceApi,
+  invalidatePalaceCatalogCache,
+  updatePalaceKnowledgeBindingApi,
+} from '@/modules/content/public'
 import { PalaceTemplateDialog } from '@/modules/content/public'
 import { PalaceVersionDialog } from './PalaceVersionDialog'
 import { usePalaceMindMapFileTransfer } from '@/modules/content/public'
 import { MindMapImportDrawer, readClipboardTextForMindMapImport, useMindMapImport } from '@/modules/produce/public'
 import { usePalaceEditPage } from '@/modules/content/public'
 import { PalaceCreateSetup } from './PalaceCreateSetup'
-import {
-  PalaceKnowledgeBindingCard,
-  PalaceKnowledgeWorkspaceProvider,
-  PalaceSubjectMindMapCard,
-} from './PalaceMindMapWorkspace'
+import { useShellContext } from '@/shared/components/layout/ShellContext'
 import { useQuizLauncher } from '@/widgets/quiz-launcher'
 import { PalaceMemoryLookupDialog } from '@/widgets/palace-memory-lookup'
 import { useRouteResidency } from '@/shared/routing/RouteResidency'
 import { useMindMapExperience } from '@/modules/content/public'
 import { createPalaceTemplateApi } from '@/modules/content/public'
-import { appPrompt } from '@/shared/components/ui/native-dialog'
+import { appConfirm, appPrompt } from '@/shared/components/ui/native-dialog'
+import { generateLocalId } from '@/shared/lib/ids'
+import { forgetPreparedCatalog } from '@/shared/study-text/studyTextLibrary'
 import { toast } from '@/shared/feedback/toast'
 import { PalaceEditorSkeleton } from './PalaceEditorSkeleton'
 import { FlipCardMindMapPanel } from '@/widgets/mindmap-review-flow'
@@ -100,11 +102,23 @@ export default function PalaceEdit() {
   const [mindMapNativeFullscreen, setMindMapNativeFullscreen] = useState(false)
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false)
   const [memoryLookupOpen, setMemoryLookupOpen] = useState(false)
-  const [activeMindMapKey, setActiveMindMapKey] = useState('palace')
   const [templateSaving, setTemplateSaving] = useState(false)
   const [permanentMarkMode, setPermanentMarkMode] = useState(false)
   const [reviewUnitsPanelOpen, setReviewUnitsPanelOpen] = useState(false)
-  const [sidePanelCollapsed, setSidePanelCollapsed] = useState(() => typeof window !== 'undefined' && Boolean(window.matchMedia?.('(max-width: 767px)').matches))
+  // One collapse control lives on the app sidebar; the editor's directory panel
+  // follows the same state so a single click clears both. Tests render the page
+  // without a shell provider, so keep a local fallback with identical semantics.
+  const shell = useShellContext()
+  const isNarrowViewport = () => (
+    typeof window !== 'undefined' && Boolean(window.matchMedia?.('(max-width: 767px)').matches)
+  )
+  const [localSidePanelCollapsed, setLocalSidePanelCollapsed] = useState(isNarrowViewport)
+  const sidePanelCollapsed = shell ? shell.sidebarCollapsed : localSidePanelCollapsed
+  const setSidePanelCollapsed = shell ? shell.setSidebarCollapsed : setLocalSidePanelCollapsed
+  useEffect(() => {
+    if (shell || !isNarrowViewport()) return
+    setLocalSidePanelCollapsed(true)
+  }, [shell])
 
   // Re-read on every residency activation: keep-alive can remount search without
   // remounting this component, so a bare [] would miss later ?mode=permanent-mark.
@@ -225,6 +239,69 @@ export default function PalaceEdit() {
       return next
     })
   }, [page, permanentMarkHighlights.length])
+
+  /**
+   * Directory drag-and-drop is the only manual chapter binding now, so it owns
+   * the full "move" semantics: the palace keeps only the target chapter and
+   * subject. Moving across subjects replaces the old subject links, which is why
+   * that case asks first.
+   */
+  const handleBindPalace = useCallback(async (
+    palaceId: number,
+    chapterId: number | null,
+    subjectId: number | null,
+  ) => {
+    if (chapterId == null) return
+    try {
+      const rebindingCurrent = palaceId === page.palaceId
+      if (rebindingCurrent) {
+        const current = page.readCurrentDocumentState()
+        if (current?.pendingConflict) {
+          toast.warning('请先解决当前宫殿的文档冲突，再移动宫殿。')
+          return
+        }
+        // Rebinding the open palace reloads its document. Flush first so a
+        // just-typed node is not thrown away by that reload.
+        if (current && (current.dirty || page.saveStatus === 'saving')) {
+          try {
+            await page.flushSaveWithReconcile('editor_leave', { reconcileUnits: true })
+          } catch {
+            // The prompt below asks before discarding anything.
+          }
+          if (page.readCurrentDocumentState()?.dirty) {
+            const proceed = await appConfirm(
+              '当前宫殿还有未保存的修改，移动后可能丢失。仍要移动吗？',
+              { title: '移动宫殿', tone: 'danger' },
+            )
+            if (!proceed) return
+          }
+        }
+      }
+      const detail = await getPalaceApi(palaceId)
+      const existingSubjectIds = (detail.subjects ?? []).map((item) => item.id)
+      if (subjectId != null && existingSubjectIds.length && !existingSubjectIds.includes(subjectId)) {
+        const confirmed = await appConfirm(
+          `「${detail.title}」将移动到另一个学科，它原有的学科关联会被替换。继续吗？`,
+          { title: '移动宫殿', tone: 'danger' },
+        )
+        if (!confirmed) return
+      }
+      await updatePalaceKnowledgeBindingApi(palaceId, {
+        subject_ids: subjectId != null ? [subjectId] : existingSubjectIds,
+        chapter_ids: [chapterId],
+        primary_chapter_id: chapterId,
+        base_revision: detail.binding_revision ?? 0,
+        operation_id: generateLocalId(),
+      })
+      forgetPreparedCatalog()
+      invalidatePalaceCatalogCache()
+      if (palaceId === page.palaceId) await page.reload()
+      toast.success('已移动宫殿')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '移动宫殿失败，请稍后重试。')
+      invalidatePalaceCatalogCache()
+    }
+  }, [page])
 
   const recallModeActive = page.editorMode === 'recall'
   const showTemplateCreateAction = useMemo(() => {
@@ -453,132 +530,109 @@ export default function PalaceEdit() {
       ) : null}
 
       {page.palace ? (
-        <PalaceKnowledgeWorkspaceProvider
-          palace={page.palace}
-          activeKey={activeMindMapKey}
-          nodeProgressByNodeUid={quizBindingsHost.nodeProgressByNodeUid}
-          onActiveKeyChange={setActiveMindMapKey}
-          onReload={page.reload}
+        <MindMapSplitLayout
+          collapsed={sidePanelCollapsed}
+          onCollapsedChange={setSidePanelCollapsed}
+          hidden={page.mindMapFullscreen}
+          railMode={shell ? 'below-lg' : 'always'}
+          collapseLabel="收起宫殿目录"
+          expandLabel="展开宫殿目录"
+          sidePanel={(
+            <PalaceDirectoryTree
+              currentPalaceId={page.palaceId}
+              onOpenPalace={(palaceId) => { void page.openPalace(palaceId) }}
+              onBindPalace={handleBindPalace}
+            />
+          )}
         >
-          <MindMapSplitLayout
-            collapsed={sidePanelCollapsed}
-            onCollapsedChange={setSidePanelCollapsed}
-            hidden={page.mindMapFullscreen}
-            collapseLabel="收起学科与绑定"
-            expandLabel="展开学科与绑定"
-            sidePanel={(
-              <div className="space-y-3 p-0.5">
-                <PalaceKnowledgeBindingCard />
-                <PalaceMetaPanel
-                  palace={page.palace}
-                  title={page.title}
-                  createdAt={page.createdAt}
-                  onTitleChange={page.setTitle}
-                  onCreatedAtChange={page.setCreatedAt}
-                  onSave={page.handleSaveMeta}
-                  onEstablishCreatedAt={page.handleEstablishCreatedAt}
-                />
-                <PalaceAttachmentPanel
-                  palace={page.palace}
-                  onUpload={page.handleAttachmentUpload}
-                  onDelete={page.handleAttachmentDelete}
-                />
-              </div>
-            )}
-          >
-            <section className="flex min-h-0 flex-1 flex-col">
-              {activeMindMapKey === 'palace' ? (
-                <Card
-                  className={cn(
-                    'flex min-h-0 flex-1 flex-col border-border/70 bg-card/92',
-                    page.mindMapFullscreen &&
-                      'fixed inset-0 z-[90] min-h-0 rounded-none bg-card/96 shadow-2xl',
-                  )}
-                >
-                  <CardContent
-                    className={cn(
-                      'flex min-h-0 flex-1 flex-col p-0',
-                      page.mindMapFullscreen && 'h-full',
-                    )}
-                  >
-                    {activeFrameEditorState ? (
-                      <div className="flex h-full min-h-0 flex-col gap-2">
-                        {mindMapExperience.task === 'learn' ? (
-                          <div className="grid grid-cols-1 shrink-0 gap-2 rounded-xl border bg-muted/15 p-3 sm:grid-cols-2 lg:grid-cols-3">
-                            <button type="button" className="rounded-xl border bg-background p-3 text-left hover:border-primary" onClick={() => page.enterInlinePractice()}><div className="font-medium">主动回忆</div><div className="mt-1 text-xs text-muted-foreground">连续揭示并回忆整张脑图</div></button>
-                            <button type="button" className="rounded-xl border bg-background p-3 text-left hover:border-primary" onClick={() => navigate(`/freestyle?palaceId=${page.palaceId}`)}><div className="font-medium">开始随心复习</div><div className="mt-1 text-xs text-muted-foreground">在随心模式中复习当前宫殿</div></button>
-                            <button type="button" className="rounded-xl border bg-background p-3 text-left hover:border-primary" onClick={handleOpenQuizPage}><div className="font-medium">做题训练</div><div className="mt-1 text-xs text-muted-foreground">基于当前宫殿进入题目训练</div></button>
-                          </div>
-                        ) : null}
-                        <FlipCardMindMapPanel
-                          ref={mindMapFrameRef}
-                          // Keep one mind-map host mounted across build/learn so fullscreen and ReactFlow survive.
-                          displayMode={recallModeActive ? 'review' : 'edit'}
-                          editorReadonly={Boolean(page.pendingConflict)}
-                          fullscreen={page.mindMapFullscreen}
-                          sessionKind="practice"
-                          modeSyncVersion={page.replaceSyncVersion + mindMapImport.importAppliedSyncVersion}
-                          viewMemoryScope={page.palaceId ? `palace-edit:${page.palaceId}` : null}
-                          toolbarExtensions={mindMapToolbarExtensions}
-                          revealSettings={page.flipCardRevealSettings}
-                          hidePresentationOverflowActions
-                          visibleEditorState={activeFrameEditorState}
-                          editableEditorState={page.editorState}
-                          visibleEditorSyncKey={page.practiceVisibleEditorSyncKey}
-                          hostForceSyncKey={`edit:${page.replaceSyncVersion}:${mindMapImport.importAppliedSyncVersion}`}
-                          hostExternalSyncKey={mindMapImport.importExternalSyncKey}
-                          // Reopening the editor starts from the default fold depth; the
-                          // resident page must not carry last visit's manual expansion.
-                          collapseResetKey={becameActiveAt}
-                          // Keep camera continuity across build/learn/recall; canvas re-anchors the center card.
-                          preserveViewOnSync
-                          initialViewPolicy="preserve"
-                          forceSyncIntent="soft"
-                          reviewFxSignal={page.reviewFxSignal}
-                          feedbackFxSignal={page.feedbackFxSignal}
-                          statusChipsByNodeUid={
-                            permanentMarkMode || permanentMarkHighlights.length
-                              ? permanentMarkChips
-                              : undefined
-                          }
-                          highlightedNodeUids={
-                            permanentMarkHighlights.length
-                              ? permanentMarkHighlights
-                              : mindMapExperience.highlightedNodeUids
-                          }
-                          countBadgeByNodeUid={quizBindingsHost.countBadgeByNodeUid}
-                          nodeProgressByNodeUid={quizBindingsHost.nodeProgressByNodeUid}
-                          onCountBadgeClick={quizBindingsHost.openNodeQuiz}
-                          confirmDeleteNodes={quizBindingsHost.confirmDeleteNodes}
-                          focusRequestNodeUid={page.modeFocusRequestNodeUid}
-                          focusRequestNonce={page.modeFocusRequestNonce}
-                          onEditorStateChange={(state) => page.handleMindMapEditorStateChange(state)}
-                          onNodeActive={handleMindMapNodeActive}
-                          onNodeClick={page.handleInlinePracticeNodeClick}
-                          onNodeContextMenu={page.handleInlinePracticeNodeContextMenu}
-                          onEditNodeClick={
-                            permanentMarkMode && !recallModeActive
-                              ? handlePermanentMarkClick
-                              : undefined
-                          }
-                          onNativeFullscreenChange={setMindMapNativeFullscreen}
-                          onToggleFullscreen={page.toggleMindMapFullscreen}
-                          onUiClearedChange={setMindMapUiCleared}
-                          className="flex min-h-0 flex-1 flex-col"
-                          surfaceClassName="h-full min-h-0 w-full flex-1"
-                        />
-                      </div>
-                    ) : (
-                      <PalaceEditorSkeleton />
-                    )}
-                  </CardContent>
-                </Card>
-              ) : (
-                <PalaceSubjectMindMapCard />
+          <section className="flex min-h-0 flex-1 flex-col">
+            <Card
+              className={cn(
+                'flex min-h-0 flex-1 flex-col border-border/70 bg-card/92',
+                page.mindMapFullscreen &&
+                  'fixed inset-0 z-[90] min-h-0 rounded-none bg-card/96 shadow-2xl',
               )}
-            </section>
-          </MindMapSplitLayout>
-        </PalaceKnowledgeWorkspaceProvider>
+            >
+              <CardContent
+                className={cn(
+                  'flex min-h-0 flex-1 flex-col p-0',
+                  page.mindMapFullscreen && 'h-full',
+                )}
+              >
+                {activeFrameEditorState ? (
+                  <div className="flex h-full min-h-0 flex-col gap-2">
+                    {mindMapExperience.task === 'learn' ? (
+                      <div className="grid grid-cols-1 shrink-0 gap-2 rounded-xl border bg-muted/15 p-3 sm:grid-cols-2 lg:grid-cols-3">
+                        <button type="button" className="rounded-xl border bg-background p-3 text-left hover:border-primary" onClick={() => page.enterInlinePractice()}><div className="font-medium">主动回忆</div><div className="mt-1 text-xs text-muted-foreground">连续揭示并回忆整张脑图</div></button>
+                        <button type="button" className="rounded-xl border bg-background p-3 text-left hover:border-primary" onClick={() => navigate(`/freestyle?palaceId=${page.palaceId}`)}><div className="font-medium">开始随心复习</div><div className="mt-1 text-xs text-muted-foreground">在随心模式中复习当前宫殿</div></button>
+                        <button type="button" className="rounded-xl border bg-background p-3 text-left hover:border-primary" onClick={handleOpenQuizPage}><div className="font-medium">做题训练</div><div className="mt-1 text-xs text-muted-foreground">基于当前宫殿进入题目训练</div></button>
+                      </div>
+                    ) : null}
+                    <FlipCardMindMapPanel
+                      ref={mindMapFrameRef}
+                      // Keep one mind-map host mounted across build/learn so fullscreen and ReactFlow survive.
+                      displayMode={recallModeActive ? 'review' : 'edit'}
+                      editorReadonly={Boolean(page.pendingConflict)}
+                      fullscreen={page.mindMapFullscreen}
+                      sessionKind="practice"
+                      modeSyncVersion={page.replaceSyncVersion + mindMapImport.importAppliedSyncVersion}
+                      viewMemoryScope={page.palaceId ? `palace-edit:${page.palaceId}` : null}
+                      toolbarExtensions={mindMapToolbarExtensions}
+                      revealSettings={page.flipCardRevealSettings}
+                      hidePresentationOverflowActions
+                      visibleEditorState={activeFrameEditorState}
+                      editableEditorState={page.editorState}
+                      visibleEditorSyncKey={page.practiceVisibleEditorSyncKey}
+                      hostForceSyncKey={`edit:${page.replaceSyncVersion}:${mindMapImport.importAppliedSyncVersion}`}
+                      hostExternalSyncKey={mindMapImport.importExternalSyncKey}
+                      // Reopening the editor starts from the default fold depth; the
+                      // resident page must not carry last visit's manual expansion.
+                      collapseResetKey={becameActiveAt}
+                      // Keep camera continuity across build/learn/recall; canvas re-anchors the center card.
+                      preserveViewOnSync
+                      initialViewPolicy="preserve"
+                      forceSyncIntent="soft"
+                      reviewFxSignal={page.reviewFxSignal}
+                      feedbackFxSignal={page.feedbackFxSignal}
+                      statusChipsByNodeUid={
+                        permanentMarkMode || permanentMarkHighlights.length
+                          ? permanentMarkChips
+                          : undefined
+                      }
+                      highlightedNodeUids={
+                        permanentMarkHighlights.length
+                          ? permanentMarkHighlights
+                          : mindMapExperience.highlightedNodeUids
+                      }
+                      countBadgeByNodeUid={quizBindingsHost.countBadgeByNodeUid}
+                      nodeProgressByNodeUid={quizBindingsHost.nodeProgressByNodeUid}
+                      onCountBadgeClick={quizBindingsHost.openNodeQuiz}
+                      confirmDeleteNodes={quizBindingsHost.confirmDeleteNodes}
+                      focusRequestNodeUid={page.modeFocusRequestNodeUid}
+                      focusRequestNonce={page.modeFocusRequestNonce}
+                      onEditorStateChange={(state) => page.handleMindMapEditorStateChange(state)}
+                      onNodeActive={handleMindMapNodeActive}
+                      onNodeClick={page.handleInlinePracticeNodeClick}
+                      onNodeContextMenu={page.handleInlinePracticeNodeContextMenu}
+                      onEditNodeClick={
+                        permanentMarkMode && !recallModeActive
+                          ? handlePermanentMarkClick
+                          : undefined
+                      }
+                      onNativeFullscreenChange={setMindMapNativeFullscreen}
+                      onToggleFullscreen={page.toggleMindMapFullscreen}
+                      onUiClearedChange={setMindMapUiCleared}
+                      className="flex min-h-0 flex-1 flex-col"
+                      surfaceClassName="h-full min-h-0 w-full flex-1"
+                    />
+                  </div>
+                ) : (
+                  <PalaceEditorSkeleton />
+                )}
+              </CardContent>
+            </Card>
+          </section>
+        </MindMapSplitLayout>
       ) : null}
 
       <MindMapImportDrawer

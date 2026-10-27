@@ -169,9 +169,14 @@ the list cannot silently keep exempting a path that no longer needs it.
 - Optional: rename nav-section keys `'knowledge'`→`'create'`, `'review'`→`'insights'` (needs pageHistoryStore key migration).
 
 Completed and therefore no longer listed: `PalaceEditorPage.tsx` (689 lines),
-`PalaceMindMapWorkspace.tsx` (728), the `GlobalTimerProvider*` /
-`TimerAutomationDialog` / `useTimedSession*` session hosts, and
-`PalaceQuizGenerationPanel.tsx` (deleted).
+the `GlobalTimerProvider*` / `TimerAutomationDialog` / `useTimedSession*` session
+hosts, and `PalaceQuizGenerationPanel.tsx` (deleted). `PalaceMindMapWorkspace.tsx`
+(728 lines) and `PalaceChapterBindingDialog.tsx` were deleted with the palace
+editor's directory-tree rewrite: the editor's left column is now
+`modules/content/ui/palace-edit/components/PalaceDirectoryTree.tsx` (subject →
+chapter → palace, click to switch palace in place, drag a palace onto a chapter
+to rebind it), and `PalaceMetaPanel` / `PalaceAttachmentPanel` /
+`usePalaceMetaController` went with the binding form.
 
 ## Hand-written code that is deliberately kept
 

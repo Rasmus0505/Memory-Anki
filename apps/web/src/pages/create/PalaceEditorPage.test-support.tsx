@@ -9,6 +9,7 @@ import {
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { vi } from 'vitest'
 import PalaceEditPage from '@/pages/create/PalaceEditorPage'
+import { ShellProvider } from '@/shared/components/layout/ShellContext'
 import * as appLogs from '@/shared/logs/model/appLogs'
 import * as knowledgeApi from '@/modules/content/domain/knowledge-entity/api'
 import * as palaceApi from '@/modules/content/domain/palace-entity/api'
@@ -288,32 +289,8 @@ vi.mock('@/modules/content/ui/mindmap-editor', async (importOriginal) => ({
   ),
 }))
 
-vi.mock('@/modules/content/ui/palace-edit/components/PalaceAttachmentPanel', () => ({
-  PalaceAttachmentPanel: () => <div>attachments</div>,
-}))
-
 vi.mock('@/modules/content/ui/palace-edit/components/PalaceChapterPanel', () => ({
   PalaceChapterPanel: () => <div>chapters</div>,
-}))
-
-vi.mock('@/modules/content/ui/palace-edit/components/PalaceMetaPanel', () => ({
-  PalaceMetaPanel: ({
-    onSave,
-    onEstablishCreatedAt,
-  }: {
-    onSave?: () => void
-    onEstablishCreatedAt?: () => void
-  }) => (
-    <div>
-      <div>meta</div>
-      <button type="button" onClick={onSave}>
-        保存元信息
-      </button>
-      <button type="button" onClick={onEstablishCreatedAt}>
-        建立创建时间
-      </button>
-    </div>
-  ),
 }))
 
 vi.mock('@/modules/content/ui/palace-edit/components/PalaceSegmentsPanel', () => ({
@@ -403,6 +380,18 @@ export function renderPalaceEditPage(initialEntry = '/palaces/101/edit') {
   )
 }
 
+export function renderPalaceEditPageWithShell(sidebarCollapsed: boolean) {
+  return testingLibraryRender(
+    <ShellProvider value={{ sidebarCollapsed, setSidebarCollapsed: () => {} }}>
+      <MemoryRouter initialEntries={['/palaces/101/edit']}>
+        <Routes>
+          <Route path="/palaces/:id/edit" element={<PalaceEditPage />} />
+        </Routes>
+      </MemoryRouter>
+    </ShellProvider>,
+  )
+}
+
 export function renderPalaceEditPageStrict() {
   return testingLibraryRender(
     <StrictMode>
@@ -423,6 +412,7 @@ export function setupPalaceEditPageTestDefaults() {
   vi.spyOn(window, 'confirm').mockReturnValue(true)
   vi.spyOn(knowledgeApi, 'getSubjectsApi').mockResolvedValue([{ id: 1, name: '测试学科', color: '#6366f1', sort_order: 0 }])
   vi.spyOn(knowledgeApi, 'getSubjectTreeApi').mockResolvedValue({ chapters: [], subject: null } as never)
+  vi.spyOn(palaceApi, 'getPalacesGroupedApi').mockResolvedValue({ groups: [], ungrouped: [], subjects: [] } as never)
   vi.spyOn(palaceApi, 'getPracticeSessionProgressApi').mockResolvedValue({ progress: null } as never)
   vi.spyOn(palaceApi, 'savePracticeSessionProgressApi').mockResolvedValue({ progress: {} } as never)
   vi.spyOn(palaceApi, 'clearPracticeSessionProgressApi').mockResolvedValue({ ok: true } as never)
