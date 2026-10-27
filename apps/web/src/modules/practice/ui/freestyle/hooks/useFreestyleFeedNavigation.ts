@@ -12,24 +12,28 @@ import {
 } from 'react'
 import {
   canPopViewHistory,
-  popViewHistory,
   pushViewHistory,
   visibleMountIndices,
 } from '@/modules/practice/public'
+import {
+  previousViewTarget,
+  viewHistoryAfterMove,
+} from '@/modules/practice/ui/freestyle/model/feedViewHistory'
 import type { useImmersiveQueue } from '@/modules/practice/ui/freestyle/hooks/useImmersiveQueue'
 import {
   clampFreestyleFeedIndex,
   findUnscoredCompleteSeekIndices,
   freestyleFeedSlotCount,
   isFreestyleCompleteSlot,
-  resolveFreestyleCompleteSeek,
 } from '@/modules/practice/ui/freestyle/model/roundCompletion'
+import { resolveFreestyleCompleteAction } from '@/modules/practice/ui/freestyle/model/feedCompletion'
 import {
   getFreestyleFeedPageDirection,
-  getFreestyleQuestionDirection,
   isFreestyleShortcutBlocked,
   shouldSwallowFreestyleFeedPageKey,
 } from '@/modules/practice/ui/freestyle/model/freestyleKeyboard'
+import { useFreestyleFeedKeyboard } from '@/modules/practice/ui/freestyle/hooks/useFreestyleFeedKeyboard'
+import { resolveFlipCardPageDirection } from '@/modules/settings/public'
 import type { FreestyleCard } from '@/shared/api/contracts'
 import { animateScrollTop } from '@/modules/practice/ui/freestyle/model/freestyleAnimatedScroll'
 import {
@@ -105,6 +109,8 @@ export function useFreestyleFeedNavigation({
   const indexChangeFromScrollRef = useRef(false)
   /** True while the user is actively dragging/wheeling the feed. */
   const userScrollingRef = useRef(false)
+  /** Re-arms the settle timer when a gesture lands inside a programmatic window. */
+  const rescheduleSettleRef = useRef<(() => void) | null>(null)
   const scrollIdleTimerRef = useRef<number | null>(null)
   /** Touch/pen pointers currently down. A settle during the drag announces the wrong card. */
   const touchPointersRef = useRef(0)
@@ -124,7 +130,7 @@ export function useFreestyleFeedNavigation({
   const refreshCanGoPrevious = useCallback(
     (index = currentIndex, list = cards) => {
       const currentId = list[index]?.id ?? null
-      const hasHistory = canPopViewHistory(viewHistoryRef.current, list, currentId)
+      const hasHistory = canPopViewHistory(viewHistoryRef.current, list, currentId, index)
       const hasIndexPrev = index > 0 && list.length > 0
       setCanGoPrevious(hasHistory || hasIndexPrev)
     },
@@ -134,6 +140,13 @@ export function useFreestyleFeedNavigation({
   useEffect(() => {
     refreshCanGoPrevious(visualIndex)
   }, [refreshCanGoPrevious, visualIndex])
+
+  // A settled round can empty the feed; the next round must not inherit the
+  // previous round's back stack (unit ids are reused across rounds).
+  useEffect(() => {
+    if (cards.length > 0) return
+    viewHistoryRef.current = []
+  }, [cards.length])
 
   useEffect(() => {
     if (userScrollingRef.current) return
@@ -239,6 +252,18 @@ export function useFreestyleFeedNavigation({
 
   useEffect(() => () => cancelScrollAnimationRef.current?.(), [])
 
+  const recordHistoryMove = useCallback((next: number, fromScroll: boolean, skipHistory?: boolean) => {
+    viewHistoryRef.current = viewHistoryAfterMove({
+      history: viewHistoryRef.current,
+      cards,
+      currentIndex,
+      visualIndex: visualIndexRef.current,
+      next,
+      fromScroll,
+      skipHistory,
+    })
+  }, [cards, currentIndex])
+
   /**
    * Navigate the feed index. Programmatic scroll only when `scroll` is true
    * (keyboard / 上一张 / 下一张 / 下个宫殿). Finger/wheel scroll only updates index —
@@ -261,12 +286,7 @@ export function useFreestyleFeedNavigation({
       const fromScroll = options?.scroll === false
       if (isFreestyleCompleteSlot(next, cards.length, roundComplete)) {
         setReadOnlyHistoryCardId(null)
-        if (!options?.skipHistory && next > currentIndex) {
-          const leavingId = cards[currentIndex]?.id
-          if (leavingId) {
-            viewHistoryRef.current = pushViewHistory(viewHistoryRef.current, leavingId)
-          }
-        }
+        recordHistoryMove(next, fromScroll, options?.skipHistory)
         if (fromScroll) {
           indexChangeFromScrollRef.current = true
         } else {
@@ -283,12 +303,7 @@ export function useFreestyleFeedNavigation({
         indexChangeFromScrollRef.current = true
         // Finger/wheel leave still needs history so 「上一张」works after restudy
         // reorders the feed (next unit can land at index 0).
-        if (!options?.skipHistory && next > currentIndex) {
-          const leavingId = cards[currentIndex]?.id
-          if (leavingId) {
-            viewHistoryRef.current = pushViewHistory(viewHistoryRef.current, leavingId)
-          }
-        }
+        recordHistoryMove(next, true, options?.skipHistory)
         goToIndex(next, { reorderRestudy: options?.reorderRestudy === true ? true : false })
         visualIndexRef.current = next
         setVisualIndex(next)
@@ -304,12 +319,7 @@ export function useFreestyleFeedNavigation({
         refreshCanGoPrevious(next)
         return
       }
-      if (!options?.skipHistory && next > currentIndex) {
-        const leavingId = cards[currentIndex]?.id
-        if (leavingId) {
-          viewHistoryRef.current = pushViewHistory(viewHistoryRef.current, leavingId)
-        }
-      }
+      recordHistoryMove(next, false, options?.skipHistory)
       requestedScrollIndexRef.current = next
       const applied = goToIndex(next, {
         reorderRestudy: options?.reorderRestudy !== false,
@@ -322,7 +332,7 @@ export function useFreestyleFeedNavigation({
     },
     // getIncompleteUnitSummary is intentionally absent: the hint moved onto the card
     // (see sequentialBlockedHint), so this callback no longer reads it.
-    [cards, currentIndex, goToIndex, refreshCanGoPrevious, roundComplete, scrollToIndex],
+    [cards, currentIndex, goToIndex, recordHistoryMove, refreshCanGoPrevious, roundComplete, scrollToIndex],
   )
 
   /**
@@ -336,8 +346,18 @@ export function useFreestyleFeedNavigation({
       return
     }
     const list = cards
-    const currentId = list[currentIndex]?.id ?? null
-    const popped = popViewHistory(viewHistoryRef.current, list, currentId)
+    // The page on screen, not a cursor that a settling gesture has not caught up
+    // with yet: popping must never skip the card the learner is looking at.
+    const visual = visualIndexRef.current
+    const currentId = (visual >= 0 && visual < list.length ? list[visual]?.id : null)
+      ?? list[currentIndex]?.id
+      ?? null
+    const popped = previousViewTarget({
+      history: viewHistoryRef.current,
+      cards: list,
+      currentCardId: currentId,
+      beforeIndex: visual,
+    })
     if (popped) {
       viewHistoryRef.current = popped.history
       const targetIndex = list.findIndex((card) => card.id === popped.targetId)
@@ -394,21 +414,8 @@ export function useFreestyleFeedNavigation({
     scrollToIndex(currentIndex)
   }, [currentIndex, scrollToIndex])
 
-  useEffect(() => {
-    const handleQuestionNavigation = (event: globalThis.KeyboardEvent) => {
-      if (event.defaultPrevented || isFreestyleShortcutBlocked(event.target)) return
-      const direction = getFreestyleQuestionDirection(event.key)
-      if (!direction) return
-      event.preventDefault()
-      if (direction === 'previous') {
-        navigatePrevious()
-        return
-      }
-      navigateNext()
-    }
-    window.addEventListener('keydown', handleQuestionNavigation, true)
-    return () => window.removeEventListener('keydown', handleQuestionNavigation, true)
-  }, [navigateNext, navigatePrevious])
+  // Window-level paging so 上一张/下一张 also work when focus is not in the scroller.
+  const feedShortcuts = useFreestyleFeedKeyboard({ navigateNext, navigatePrevious })
 
   /**
    * After finger/wheel inertia ends: apply deferred restudy placement, then pin
@@ -416,7 +423,12 @@ export function useFreestyleFeedNavigation({
    */
   const flushScrollSettled = useCallback(() => {
     userScrollingRef.current = false
-    if (programmaticScrollRef.current) return
+    // A gesture that began inside the 50ms programmatic window must not be
+    // swallowed: re-check once that flag has been released.
+    if (programmaticScrollRef.current) {
+      rescheduleSettleRef.current?.()
+      return
+    }
     const visual = visualIndexRef.current
     const listLength = queueRef.current.length
     if (isFreestyleCompleteSlot(visual, listLength, roundCompleteRef.current)) {
@@ -485,6 +497,7 @@ export function useFreestyleFeedNavigation({
     }, 90)
   }, [flushScrollSettled])
   settleWhileTouchingRef.current = scheduleScrollSettle
+  rescheduleSettleRef.current = scheduleScrollSettle
 
   useFreestyleWheelPaging(scrollRef, `${loading}:${cards.length}`, navigateNext, navigatePrevious)
 
@@ -493,6 +506,9 @@ export function useFreestyleFeedNavigation({
     if (!node) return
     const onPointerDown = (event: PointerEvent) => {
       if (event.pointerType !== 'touch' && event.pointerType !== 'pen') return
+      // The finger owns the feed from here: an animated flight's 50ms release
+      // window must not swallow the first scroll frames of a new gesture.
+      programmaticScrollRef.current = false
       touchPointersRef.current += 1
     }
     const onPointerUp = (event: PointerEvent) => {
@@ -664,7 +680,9 @@ export function useFreestyleFeedNavigation({
       // The quiz dialog is a React child of this feed (portaled in the DOM), so its
       // ArrowUp/ArrowDown retarget here. A focused control inside the scroller can
       // also snap the card underneath via the browser's default arrow scroll.
-      const direction = getFreestyleFeedPageDirection(event.key)
+      const direction =
+        resolveFlipCardPageDirection(event.nativeEvent, feedShortcuts)
+        ?? getFreestyleFeedPageDirection(event.key)
       if (event.defaultPrevented || isFreestyleShortcutBlocked(event.target)) {
         if (direction && shouldSwallowFreestyleFeedPageKey(event.target, event.currentTarget)) {
           event.preventDefault()
@@ -683,7 +701,7 @@ export function useFreestyleFeedNavigation({
       if (direction === 'previous') navigatePrevious()
       else navigateNext()
     },
-    [navigateNext, navigatePrevious],
+    [feedShortcuts, navigateNext, navigatePrevious],
   )
 
   const viewingCardId = viewingCompleteSlot ? null : (cards[visualIndex]?.id ?? null)
@@ -695,31 +713,12 @@ export function useFreestyleFeedNavigation({
       roundPlan,
       queueState.hiddenIds,
     ),
-    [
-      cards,
-      queueState.completedIds,
-      queueState.hiddenIds,
-      queueState.unitEncountersByCardId,
-      roundPlan,
-    ],
+    [cards, queueState.completedIds, queueState.hiddenIds, queueState.unitEncountersByCardId, roundPlan],
   )
-  const completeSeekIndex = useMemo(
-    () => resolveFreestyleCompleteSeek({
-      roundComplete,
-      cardCount: cards.length,
-      earliestUnhandledIndex: unscoredIndices[0] ?? null,
-      visualIndex,
-      unscoredIndices,
-    }),
+  const { seekIndex: completeSeekIndex, canComplete: canCompleteRound, title: completeTitle } = useMemo(
+    () => resolveFreestyleCompleteAction({ roundComplete, cardCount: cards.length, visualIndex, unscoredIndices }),
     [cards.length, roundComplete, unscoredIndices, visualIndex],
   )
-  const canCompleteRound = completeSeekIndex != null
-  const onUnscoredCard = unscoredIndices.includes(visualIndex)
-  const completeTitle = roundComplete
-    ? '进入本轮结算'
-    : onUnscoredCard && unscoredIndices.length > 1
-      ? '定位到下一张还没评分的单元'
-      : '定位到最早还没评分的单元'
   const handleCompleteRound = useCallback(() => {
     if (completeSeekIndex == null) return
     navigateToIndex(completeSeekIndex, { skipHistory: true })

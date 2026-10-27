@@ -531,6 +531,32 @@ export function removeRetryOccurrencesForSource(
   })
 }
 
+/**
+ * Drop a source's unfinished 重练 pages once the source itself passed, but keep
+ * every 重练 the learner already rated this round.
+ *
+ * An answered 重练 is this-round history: `cardsForServerPlan` keeps it in the
+ * feed (and the progress rail keeps its tick) until 结算. Deleting the page here
+ * made one swipe move the rail two ticks and let the page reappear on the next
+ * hydration — the feed and the rail stopped describing the same list.
+ */
+export function removeUnansweredRetryOccurrences(
+  cards: FreestyleCard[],
+  sourceId: string,
+  keepCardId: string | undefined,
+  answeredIds: Iterable<string>,
+) {
+  const id = String(sourceId || '').trim()
+  if (!id) return cards
+  const keep = String(keepCardId || '').trim()
+  const answered = new Set(Array.from(answeredIds, (value) => String(value)))
+  return cards.filter((card) => {
+    if (!(isRetryOccurrence(card) && sourceCardId(card) === id)) return true
+    if (keep && card.id === keep) return true
+    return answered.has(String(card.id || ''))
+  })
+}
+
 export function hideCards(state: FreestyleSkipState, cardIds: Iterable<string>): FreestyleSkipState {
   const ids = new Set(Array.from(cardIds, (id) => String(id || '').trim()).filter(Boolean))
   if (!ids.size) return state
@@ -1120,16 +1146,24 @@ export function popViewHistory(
   history: readonly string[],
   cards: ReadonlyArray<{ id: string }>,
   currentCardId?: string | null,
+  /** Ignore entries at this index or later: 「上一张」 must never walk forward. */
+  beforeIndex?: number | null,
 ): { history: string[]; targetId: string } | null {
   if (!history.length) return null
-  const present = new Set(cards.map((card) => card.id))
+  const positions = new Map<string, number>()
+  cards.forEach((card, index) => {
+    if (!positions.has(card.id)) positions.set(card.id, index)
+  })
   const current = currentCardId ? String(currentCardId).trim() : ''
+  const limit = typeof beforeIndex === 'number' ? beforeIndex : null
   const next = history.slice()
   while (next.length > 0) {
     const id = next.pop()
     if (!id) continue
-    if (!present.has(id)) continue
+    const at = positions.get(id)
+    if (at == null) continue
     if (current && id === current) continue
+    if (limit != null && at >= limit) continue
     return { history: next, targetId: id }
   }
   return null
@@ -1140,8 +1174,9 @@ export function canPopViewHistory(
   history: readonly string[],
   cards: ReadonlyArray<{ id: string }>,
   currentCardId?: string | null,
+  beforeIndex?: number | null,
 ): boolean {
-  return popViewHistory(history, cards, currentCardId) != null
+  return popViewHistory(history, cards, currentCardId, beforeIndex) != null
 }
 
 export function visibleMountIndices(currentIndex: number, total: number) {

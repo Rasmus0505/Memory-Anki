@@ -47,7 +47,9 @@ describe('ImmersiveFreestylePage layout', () => {
 
   it('uses the right-side 完成 button to settle or walk unscored units', () => {
     expect(source).toContain('findUnscoredCompleteSeekIndices')
-    expect(source).toContain('resolveFreestyleCompleteSeek')
+    // The action wrapper calls resolveFreestyleCompleteSeek and adds the tooltip
+    // copy, so the page composes one decision instead of recomputing it inline.
+    expect(source).toContain('resolveFreestyleCompleteAction')
     expect(source).toContain('onComplete={handlePagerComplete}')
     expect(source).toContain('viewingCardId')
   })

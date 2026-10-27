@@ -67,6 +67,7 @@ export {
   restudyInterveningGap,
   isImmediateRestudyGap,
   removeRetryOccurrencesForSource,
+  removeUnansweredRetryOccurrences,
   deferPalace,
   filterMutedPalaces,
   findNextPalaceIndex,

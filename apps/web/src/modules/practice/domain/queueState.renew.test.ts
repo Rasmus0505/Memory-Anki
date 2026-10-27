@@ -5,6 +5,7 @@ import {
   rebindCompletedIdsByUnit,
   rebindUnitEncountersByUnitId,
   removeRetryOccurrencesForSource,
+  removeUnansweredRetryOccurrences,
   resolveRebuildIndex,
   shouldRenewFreestyleEncounter,
   type FreestyleUnitEncounterState,
@@ -144,6 +145,28 @@ describe('removeRetryOccurrencesForSource', () => {
       'a',
       first.id,
     ])
+  })
+})
+
+describe('removeUnansweredRetryOccurrences', () => {
+  it('drops only the blank retries once the source passed', () => {
+    const source = sourceCard('a', 'unit-a')
+    const answered = createRetryOccurrence(source, 'round-1', 1, 3)
+    const blank = createRetryOccurrence(source, 'round-1', 2, 3)
+    const cards = [source, answered, blank]
+    expect(
+      removeUnansweredRetryOccurrences(cards, 'a', source.id, [answered.id]).map((card) => card.id),
+    ).toEqual(['a', answered.id])
+  })
+
+  it('keeps every answered retry when the source itself is the one just rated', () => {
+    const source = sourceCard('a', 'unit-a')
+    const first = createRetryOccurrence(source, 'round-1', 1, 3)
+    const second = createRetryOccurrence(source, 'round-1', 2, 3)
+    expect(
+      removeUnansweredRetryOccurrences([source, first, second], 'a', source.id, [first.id, second.id])
+        .map((card) => card.id),
+    ).toEqual(['a', first.id, second.id])
   })
 })
 

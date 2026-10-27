@@ -407,7 +407,7 @@ export interface FreestyleRoundPlanPayload {
   compressed_ids?: string[]
   /** Cards this round put back. A stale local hide or score must not cover them. */
   restored_ids?: string[]
-  /** Due again with no rating today. Appear with an empty selection; do not un-hide. */
+  /** Due again with no rating for this appearance (incl. a reopened retry): start blank; do not un-hide. */
   fresh_due_ids?: string[]
   /** Confirmed 小结算 pages. The closing 大结算 reads these after cards leave the feed. */
   partial_settlements?: unknown[]

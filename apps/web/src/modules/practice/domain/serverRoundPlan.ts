@@ -528,6 +528,10 @@ function asUnitRating(value: unknown): 1 | 2 | 3 | 4 | null {
 /**
  * Occurrence `rating` is the parent score that scheduled the 重练 until this
  * glance has its own encounter. That score must not prefill the retry rating.
+ *
+ * Matching the encounter id, not just its presence, keeps a previous attempt's
+ * encounter from vouching for a slot the parent has since re-scheduled. A retry
+ * that is due again serves blank until the learner rates this glance.
  */
 export function retryGlanceOwnsRating(
   plan: FreestyleRoundPlanPayload | null | undefined,
@@ -535,7 +539,12 @@ export function retryGlanceOwnsRating(
 ): boolean {
   const id = String(occurrenceId || '').trim()
   if (!id || !plan?.encounters) return false
-  return Boolean(plan.encounters[id])
+  const occurrence = (plan.occurrences || [])
+    .find((item) => String(item?.occurrence_id || '').trim() === id)
+  const encounter = plan.encounters[id]
+  const own = String(occurrence?.encounter_id || '').trim()
+  if (!own || !encounter) return false
+  return own === String(encounter.encounter_id || '').trim()
 }
 
 /**

@@ -3,6 +3,7 @@ import type { FreestyleRoundPlanPayload } from '@/shared/api/contracts'
 
 import { DEFAULT_FREESTYLE_FEED_CONFIG } from './feedConfig'
 import { coalesceHydrationLedger, commitHydratedRoundLedger } from './hydrateRoundLedger'
+import { createRetryOccurrence } from './queueState'
 import { createRoundPlan, updateRoundPlanCard } from './roundPlan'
 import { findEarliestUnscoredIndex } from './unitProgressState'
 import type { FreestyleReviewUnitCard } from '@/shared/api/contracts'
@@ -371,6 +372,52 @@ describe('commitHydratedRoundLedger', () => {
     expect(result.plan.cardsById.today).toMatchObject({ status: 'completed', lastRating: 2 })
     expect(result.plan.cardsById.hidden?.status).toBe('excluded')
     expect(result.hiddenIds).toContain('hidden')
+  })
+
+  it('drops a rated 重练 previous score when the server reopens that slot', () => {
+    const source = branch('a')
+    const other = branch('b')
+    const retry = createRetryOccurrence(source, 'round-1', 1, 3, 'retry:round-1:a-unit:1')
+    const cards = [source, other, retry]
+    let localPlan = createRoundPlan('round-1', cards, DEFAULT_FREESTYLE_FEED_CONFIG)
+    localPlan = { ...localPlan, today: '2026-10-27' }
+    localPlan = updateRoundPlanCard(localPlan, retry.id, { status: 'completed', lastRating: 2 })
+    const result = commitHydratedRoundLedger({
+      localPlan,
+      localCompletedIds: [retry.id],
+      localHiddenIds: [],
+      localEncounters: {
+        [retry.id]: { ...encounter('retry', 2), encounterId: 'enc-retry-1' },
+      },
+      adoptedRoundId: 'round-1',
+      cards,
+      config: DEFAULT_FREESTYLE_FEED_CONFIG,
+      meta: { candidate_count: 3, scheduled_count: 3, limit_reached: false },
+      serverPlan: serverPlan({
+        today: '2026-10-27',
+        presented_ids: ['a', 'b', retry.id],
+        current_card_id: 'b',
+        current_index: 1,
+        occurrences: [{
+          occurrence_id: retry.id,
+          source_card_id: 'a',
+          source_unit_id: 'a-unit',
+          retry_attempt: 2,
+          rating: null,
+          insert_target_index: 2,
+          status: 'inserted',
+          encounter_id: '',
+          entered_on: '2026-10-27',
+          available_at: '2026-10-27T13:11:00',
+          kind: 'retry',
+        }],
+        encounters: {},
+        // The served plan marks this as a fresh, unrated appearance.
+        fresh_due_ids: [retry.id],
+      }),
+    })
+    expect(result.plan.cardsById[retry.id]).toMatchObject({ status: 'pending', lastRating: null })
+    expect(result.encounters[retry.id]).toBeUndefined()
   })
 
   it('keeps a removal the user just confirmed over a restored card', () => {

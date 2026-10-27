@@ -443,6 +443,14 @@ describe('freestyle queue skip rules', () => {
     expect(popped?.targetId).toBe('unit-a')
     expect(popped?.history).toEqual([])
 
+    // 上一张 never walks forward: entries at or after the viewport are skipped.
+    const back = ['unit-c', 'unit-a']
+    // Back from unit-a (index 2): unit-c is the page above, unit-a itself is not.
+    expect(popViewHistory(back, cards, 'unit-a', 2)?.targetId).toBe('unit-c')
+    // Back from unit-c (index 1): unit-c sits on the viewport, unit-a is ahead.
+    expect(popViewHistory(back, cards, 'unit-c', 1)).toBeNull()
+    expect(canPopViewHistory(back, cards, 'unit-c', 1)).toBe(false)
+
     // Missing / current ids are skipped.
     expect(popViewHistory(['gone', 'unit-b'], cards, 'unit-b')).toBeNull()
     expect(canPopViewHistory([], cards, 'unit-b')).toBe(false)

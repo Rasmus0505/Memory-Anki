@@ -73,7 +73,7 @@ import {
   resolveLeaveConfirmViewportId,
   restudyInterveningGap,
   RESTUDY_MAX_INTERVENING,
-  removeRetryOccurrencesForSource,
+  removeUnansweredRetryOccurrences,
   restoreExplicitlySelectedCards,
   sourceCardId,
   cardUnitId,
@@ -285,6 +285,22 @@ type LiveHydrationEntry = {
   key: string
   controller: AbortController
   promise: Promise<void>
+}
+
+/**
+ * Every card the round already holds a score for: a completed plan row, a
+ * stamped `lastRating`, or an id in the completed ledger. Used to tell this-round
+ * history apart from a blank 重练 when a source passes.
+ */
+function answeredIdsOf(
+  completedIds: Iterable<string>,
+  roundPlan: FreestyleRoundPlanState | null | undefined,
+): Set<string> {
+  const answered = new Set(Array.from(completedIds, (id) => String(id)))
+  for (const [id, entry] of Object.entries(roundPlan?.cardsById ?? {})) {
+    if (entry.status === 'completed' || entry.lastRating != null) answered.add(id)
+  }
+  return answered
 }
 
 function insertPendingRetryCopy(
@@ -1677,10 +1693,13 @@ export function useImmersiveQueue(
         const clearedCard = cardsRef.current.find((card) => card.id === cardId)
         // Clearing a 重练's own rating leaves that card blank; it is not 结算.
         // Deleting it under the viewport was the "评分完卡片自己消失" jump.
-        const clearedCards = removeRetryOccurrencesForSource(
+        // A sibling 重练 that already has this-round score is history and keeps
+        // its page (and its rail tick) — only the blank booking dies here.
+        const clearedCards = removeUnansweredRetryOccurrences(
           cardsRef.current,
           sourceCardId(clearedCard),
           isRetryOccurrence(clearedCard) ? cardId : undefined,
+          answeredIdsOf(queueStateRef.current.completedIds, queueStateRef.current.roundPlan),
         )
         cardsRef.current = clearedCards
         setCards(clearedCards)
@@ -1741,7 +1760,9 @@ export function useImmersiveQueue(
         // a local copy would put the card back after ~3 cards instead.
         const plan = stampRestudyPlan(
           currentPlan,
-          cardsRef.current,
+          // The yellow boundary hint is not work: it must never enter the plan
+          // order that the rail and 本轮安排 read.
+          stripReviewHintCards(cardsRef.current),
           queueStateRef.current.roundId,
           configRef.current,
           [{
@@ -1767,8 +1788,15 @@ export function useImmersiveQueue(
       syncPendingRestudyIds()
       const graduatedSourceId = sourceCardId(cardsRef.current.find((card) => card.id === cardId)) || cardId
       // Keep the just-rated retry under the viewport. Dropping it makes the
-      // next card slide into the same index and looks like auto-advance.
-      const graduatedCards = removeRetryOccurrencesForSource(cardsRef.current, graduatedSourceId, cardId)
+      // next card slide into the same index and looks like auto-advance. A 重练
+      // that was already rated stays too: it is this-round history, and its page
+      // must keep matching its tick on the progress rail until 结算.
+      const graduatedCards = removeUnansweredRetryOccurrences(
+        cardsRef.current,
+        graduatedSourceId,
+        cardId,
+        answeredIdsOf(queueStateRef.current.completedIds, queueStateRef.current.roundPlan),
+      )
       if (graduatedCards.length !== cardsRef.current.length) {
         cardsRef.current = graduatedCards
         setCards(graduatedCards)
@@ -1837,6 +1865,9 @@ export function useImmersiveQueue(
       let nextCards = cardsRef.current
       let nextState = queueStateRef.current
       let plan = nextState.roundPlan
+      // Taken before the loop clears anything: an undo keeps sibling 重练 that
+      // already scored this round, so their pages and rail ticks stay put.
+      const answeredBefore = answeredIdsOf(nextState.completedIds, plan)
       const restudyStamps: Array<{
         cardId: string
         rating?: number
@@ -1856,11 +1887,12 @@ export function useImmersiveQueue(
             }
           }
           const clearedCard = nextCards.find((card) => card.id === cardId)
-          nextCards = removeRetryOccurrencesForSource(
+          nextCards = removeUnansweredRetryOccurrences(
             nextCards,
             sourceCardId(clearedCard),
             // A 重练 keeps its card when its own score is cleared.
             isRetryOccurrence(clearedCard) ? cardId : undefined,
+            answeredBefore,
           )
           nextState = markIncomplete(markIncomplete(nextState, logicalCardId), cardId)
           continue
@@ -1889,7 +1921,12 @@ export function useImmersiveQueue(
           continue
         }
         pendingRestudyByIdRef.current.delete(cardId)
-        nextCards = removeRetryOccurrencesForSource(nextCards, logicalCardId, cardId)
+        nextCards = removeUnansweredRetryOccurrences(
+          nextCards,
+          logicalCardId,
+          cardId,
+          answeredIdsOf(nextState.completedIds, plan),
+        )
         if (plan) {
           plan = updateRoundPlanCard(plan, cardId, {
             status: 'completed',
@@ -1914,7 +1951,7 @@ export function useImmersiveQueue(
       if (restudyStamps.length > 0) {
         plan = stampRestudyPlan(
           plan,
-          nextCards,
+          stripReviewHintCards(nextCards),
           queueStateRef.current.roundId,
           configRef.current,
           restudyStamps,
@@ -2171,8 +2208,17 @@ export function useImmersiveQueue(
       })
       cardsRef.current = filtered
       setCards(filtered)
+      // Dropping a card above the viewport shifts every later index; keep the
+      // card the learner is looking at, by id. Only when that card itself was
+      // the stale one does the successor slide up into its slot.
+      const viewingId = previous[currentIndexRef.current]?.id ?? null
+      const keptIndex = viewingId && viewingId !== cardId
+        ? filtered.findIndex((card) => card.id === viewingId)
+        : -1
       applyCurrentIndex(
-        Math.min(currentIndexRef.current, Math.max(0, filtered.length - 1)),
+        keptIndex >= 0
+          ? keptIndex
+          : Math.min(index >= 0 ? index : currentIndexRef.current, Math.max(0, filtered.length - 1)),
         filtered,
       )
       scheduleStaleRebuild(preferCardId)
@@ -2851,8 +2897,18 @@ export function useImmersiveQueue(
         roundPlan: retained.plan,
       })
       const feedWasEmpty = cardsRef.current.length === 0
+      const viewingId = cardsRef.current[currentIndexRef.current]?.id ?? null
       cardsRef.current = nextCards
       setCards(nextCards)
+      // A retry that is due again moves from history to the slot after the
+      // current card. Pin the learner's card by id so that shift does not
+      // silently slide the viewport onto the next unit.
+      const pinnedIndex = viewingId
+        ? nextCards.findIndex((card) => card.id === viewingId)
+        : -1
+      if (pinnedIndex >= 0 && pinnedIndex !== currentIndexRef.current) {
+        applyCurrentIndex(pinnedIndex, nextCards)
+      }
       const currentId = nextCards[currentIndexRef.current]?.id
       const handled = new Set([...retained.completedIds, ...retained.hiddenIds])
       if (feedWasEmpty && nextCards.length > 0) {
