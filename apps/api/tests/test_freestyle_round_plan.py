@@ -23,6 +23,10 @@ from memory_anki.modules.practice.domain.round_plan import (
     plan_is_fully_handled,
     set_cursor,
 )
+from memory_anki.modules.practice.domain.round_plan_intraday import (
+    plan_waiting,
+    publish_ready_retries,
+)
 from memory_anki.modules.practice.domain.round_rebind import (
     append_today_cards,
     drop_previous_day_bedtime,
@@ -1511,6 +1515,207 @@ def test_a_weak_rating_on_that_step_keeps_it_live_instead_of_cancelling_it():
     assert rated["status"] in {"inserted", "pending"}
     if rated["status"] == "inserted":
         assert step_id in plan["presented_ids"]
+
+
+def test_a_waiting_retry_publishes_right_after_the_current_card():
+    cards = [_card(f"c{index}", unit_id=f"unit-c{index}") for index in range(1, 6)]
+    cards.insert(0, _card("a", unit_id="unit-a"))
+    plan = plan_from_cards(cards)
+    plan = _rate(
+        plan,
+        "a",
+        2,
+        "enc-a",
+        available_at=datetime(2026, 10, 27, 12, 10),
+    )
+    retry_id = _pending(plan, "a")["occurrence_id"]
+    # The learner keeps studying: the cursor is now c3, not the source.
+    plan = set_cursor(plan, "c3")
+    served = publish_ready_retries(plan, now=datetime(2026, 10, 27, 12, 11))
+    presented = served["presented_ids"]
+    assert presented[presented.index("c3") + 1] == retry_id
+    assert served["current_card_id"] == "c3"
+    # A retry starts blank: the parent's 困难 only scheduled this glance, and
+    # the occurrence owns no encounter of its own.
+    assert retry_id not in served["encounters"]
+
+
+def test_publishing_a_waiting_retry_consumes_the_wait_only_once():
+    cards = [_card(f"c{index}", unit_id=f"unit-c{index}") for index in range(1, 6)]
+    cards.insert(0, _card("a", unit_id="unit-a"))
+    plan = plan_from_cards(cards)
+    plan = _rate(
+        plan,
+        "a",
+        2,
+        "enc-a",
+        available_at=datetime(2026, 10, 27, 12, 10),
+    )
+    retry_id = _pending(plan, "a")["occurrence_id"]
+    assert plan_waiting(plan)["count"] == 1
+    plan = set_cursor(plan, "c3")
+    served = publish_ready_retries(plan, now=datetime(2026, 10, 27, 12, 11))
+
+    # The wait is spent: the card is on the rail and the round is no longer
+    # waiting for it, even though its inherited 困难 rating is still visible to
+    # the projection until this glance is rated.
+    assert plan_waiting(served)["count"] == 0
+    retry = [item for item in served["occurrences"] if item["occurrence_id"] == retry_id][0]
+    assert retry["retry_attempt"] == 1
+    assert retry["available_at"] is None
+
+    # A second read must not reopen the same slot and bump its attempt again.
+    again = publish_ready_retries(served, now=datetime(2026, 10, 27, 12, 12))
+    retry = [item for item in again["occurrences"] if item["occurrence_id"] == retry_id][0]
+    assert retry["retry_attempt"] == 1
+    assert retry["available_at"] is None
+    assert retry_id not in again.get("fresh_due_ids", [])
+    assert again["presented_ids"].index(retry_id) == served["presented_ids"].index(retry_id)
+
+
+def test_a_replan_keeps_a_failed_retry_visible_while_its_wait_runs():
+    cards = [_card(f"c{index}", unit_id=f"unit-c{index}") for index in range(1, 6)]
+    plan = plan_from_cards(cards)
+    plan = _rate(plan, "c1", 2, "enc-c1", available_at=datetime(2026, 10, 27, 12, 10))
+    retry_id = _pending(plan, "c1")["occurrence_id"]
+    plan = set_cursor(plan, "c2")
+    plan = publish_ready_retries(plan, now=datetime(2026, 10, 27, 12, 11))
+    plan = set_cursor(plan, retry_id)
+    plan = _rate(
+        plan,
+        retry_id,
+        2,
+        "enc-retry",
+        occurrence_id=retry_id,
+        unit_id="unit-c1",
+        available_at=datetime(2026, 10, 27, 13, 11),
+    )
+    assert retry_id in plan["presented_ids"]
+
+    # 更新队列 / 重建本轮 while the retry waits: the page is still history on
+    # the rail, not a scheduling row that can be rebuilt away.
+    replanned = replan_remaining(plan, cards, today="2026-10-27")
+    assert retry_id in replanned["presented_ids"]
+    retry = [item for item in replanned["occurrences"] if item["occurrence_id"] == retry_id][0]
+    assert retry["rating"] == 2
+    assert retry["available_at"] is not None
+
+
+def test_a_retry_failed_again_waits_and_then_reopens_blank_after_the_cursor():
+    cards = [_card(f"c{index}", unit_id=f"unit-c{index}") for index in range(1, 6)]
+    cards.insert(0, _card("a", unit_id="unit-a"))
+    plan = plan_from_cards(cards)
+    plan = _rate(plan, "a", 2, "enc-a", available_at=datetime(2026, 10, 27, 12, 10))
+    retry_id = _pending(plan, "a")["occurrence_id"]
+    plan = set_cursor(plan, "c2")
+    plan = publish_ready_retries(plan, now=datetime(2026, 10, 27, 12, 11))
+
+    # The learner rates that retry 困难 again; its next attempt waits an hour.
+    plan = set_cursor(plan, retry_id)
+    plan = _rate(
+        plan,
+        retry_id,
+        2,
+        "enc-retry",
+        occurrence_id=retry_id,
+        unit_id="unit-a",
+        available_at=datetime(2026, 10, 27, 13, 11),
+    )
+    retry = [item for item in plan["occurrences"] if item["occurrence_id"] == retry_id][0]
+    assert retry["status"] == "inserted"
+    assert retry["retry_attempt"] == 1  # this glance's own score, not a new attempt yet
+    assert retry["rating"] == 2
+    # The rated card is still owed work, so the round reports the wait.
+    assert plan_waiting(plan)["count"] == 1
+    assert plan_waiting(plan)["next_ready_at"].startswith("2026-10-27T13:11")
+
+    # The wait passes while the learner is on c4: the retry comes back blank,
+    # one slot after the current card and with a fresh attempt number.
+    plan = set_cursor(plan, "c4")
+    served = publish_ready_retries(plan, now=datetime(2026, 10, 27, 13, 12))
+    reopened = [item for item in served["occurrences"] if item["occurrence_id"] == retry_id][0]
+    assert reopened["status"] == "inserted"
+    assert reopened["rating"] is None
+    assert reopened["encounter_id"] == ""
+    assert reopened["retry_attempt"] == 2
+    assert retry_id not in served["encounters"]
+    assert retry_id in served["fresh_due_ids"]
+    assert served["presented_ids"][served["presented_ids"].index("c4") + 1] == retry_id
+    assert plan_waiting(served)["count"] == 0
+
+    # Rating the reopened glance persists the bumped attempt on that same slot.
+    plan = _rate(
+        served,
+        retry_id,
+        1,
+        "enc-retry-2",
+        occurrence_id=retry_id,
+        unit_id="unit-a",
+        available_at=datetime(2026, 10, 27, 14, 12),
+    )
+    rated = [item for item in plan["occurrences"] if item["occurrence_id"] == retry_id][0]
+    assert rated["retry_attempt"] == 2
+    assert rated["rating"] == 1
+    assert rated["status"] == "inserted"
+
+
+def test_the_parents_new_failure_never_leaves_its_score_on_the_retry_slot():
+    cards = [_card("a", unit_id="unit-a"), _card("b", unit_id="unit-b"), _card("c", unit_id="unit-c")]
+    plan = plan_from_cards(cards)
+    plan = _rate(plan, "a", 2, "enc-a-1", available_at=datetime(2026, 10, 27, 12, 10))
+    retry_id = _pending(plan, "a")["occurrence_id"]
+    plan = set_cursor(plan, "a")
+    plan = publish_ready_retries(plan, now=datetime(2026, 10, 27, 12, 11))
+    plan = set_cursor(plan, retry_id)
+    plan = _rate(
+        plan,
+        retry_id,
+        2,
+        "enc-retry-1",
+        occurrence_id=retry_id,
+        unit_id="unit-a",
+        available_at=datetime(2026, 10, 27, 13, 11),
+    )
+
+    # The parent is re-rated with a new glance while the retry slot still holds
+    # that earlier encounter. Its new weak score schedules the slot; it must not
+    # read as the retry's own score.
+    plan = _rate(plan, "a", 2, "enc-a-2", available_at=datetime(2026, 10, 27, 12, 30))
+    slot = [item for item in plan["occurrences"] if item["occurrence_id"] == retry_id][0]
+    assert retry_id not in plan["encounters"]
+    assert slot["retry_attempt"] == 2
+    assert slot["rating"] == 2
+    plan = set_cursor(plan, "b")
+    served = publish_ready_retries(plan, now=datetime(2026, 10, 27, 12, 31))
+    reopened = [item for item in served["occurrences"] if item["occurrence_id"] == retry_id][0]
+    assert reopened["rating"] is None
+    assert reopened["encounter_id"] == ""
+    assert served["presented_ids"][served["presented_ids"].index("b") + 1] == retry_id
+
+
+def test_a_due_retry_stays_under_the_viewport_when_the_learner_is_on_it():
+    cards = [_card("a", unit_id="unit-a"), _card("b", unit_id="unit-b")]
+    plan = plan_from_cards(cards)
+    plan = _rate(plan, "a", 2, "enc-a", available_at=datetime(2026, 10, 27, 12, 10))
+    retry_id = _pending(plan, "a")["occurrence_id"]
+    plan = set_cursor(plan, "a")
+    plan = publish_ready_retries(plan, now=datetime(2026, 10, 27, 12, 11))
+    plan = _rate(
+        plan,
+        retry_id,
+        1,
+        "enc-retry",
+        occurrence_id=retry_id,
+        unit_id="unit-a",
+        available_at=datetime(2026, 10, 27, 12, 20),
+    )
+    plan = set_cursor(plan, retry_id)
+    served = publish_ready_retries(plan, now=datetime(2026, 10, 27, 12, 21))
+    reopened = [item for item in served["occurrences"] if item["occurrence_id"] == retry_id][0]
+    assert reopened["status"] == "inserted"
+    assert reopened["rating"] is None
+    assert served["current_card_id"] == retry_id
+    assert served["presented_ids"].index(retry_id) == plan["presented_ids"].index(retry_id)
 
 
 def test_rating_a_rebuilt_revision_moves_the_plan_card_onto_it():

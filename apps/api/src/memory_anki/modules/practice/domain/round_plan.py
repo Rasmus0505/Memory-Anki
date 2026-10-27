@@ -150,6 +150,13 @@ def apply_rating(
         _text(occ.get("source_unit_id")) if occ else ""
     )
     revision = _int(unit_revision) if unit_revision is not None else _int((original or {}).get("unit_revision"))
+    from .round_plan_fail import _fail_source, _occurrence_owns_score
+
+    # Read this before `_set_encounter` overwrites the slot: an occurrence owns
+    # a score only when its stored encounter id matches the encounter entry, so
+    # a parent's scheduling score can never look like the retry's own glance.
+    previous_encounter = _text(occ.get("encounter_id")) if occ is not None else ""
+    previous_owned = _occurrence_owns_score(next_plan, occ) if occ is not None else False
     _set_encounter(next_plan, rated_id or source_id, encounter, revision, rating_value)
     # Score stays on the rated occurrence. Do not copy a 重练 glance onto the
     # source id — each occurrence keeps its own this-round score.
@@ -191,6 +198,10 @@ def apply_rating(
         occ=occ,
         available_at=available_at,
         kind=intraday_kind or "retry",
+        rated_card_id=rated_id,
+        rated_new_glance=bool(
+            previous_owned and previous_encounter and previous_encounter != encounter
+        ),
     )
     return next_plan
 
@@ -526,95 +537,6 @@ def _repair_current(plan: Plan) -> None:
     _sync_index(plan)
 
 
-def _fail_source(
-    plan: Plan,
-    *,
-    source_id: str,
-    source_unit_id: str,
-    encounter_id: str,
-    rating: int,
-    round_id: str,
-    occ: dict[str, Any] | None,
-    available_at: datetime | None = None,
-    kind: str = "retry",
-) -> None:
-    next_available = available_at.isoformat() if available_at else None
-    rows = [item for item in plan["occurrences"] if item["source_card_id"] == source_id]
-    same = [item for item in plan["occurrences"] if item["encounter_id"] == encounter_id and item["status"] != OCCURRENCE_CANCELLED]
-    if same:
-        for item in same:
-            item["rating"] = rating
-            item["available_at"] = next_available
-            item["kind"] = kind
-            _revive_occurrence(plan, item)
-        _collapse_retries(plan)
-        _publish_pending_retries(plan, source_id)
-        return
-    live = [item for item in rows if item["status"] in {OCCURRENCE_PENDING, OCCURRENCE_INSERTED}]
-    completed = [item for item in rows if item["status"] == OCCURRENCE_COMPLETED]
-    keep = occ if occ is not None and occ in live else (live[0] if live else None)
-    if keep is None and completed:
-        keep = occ if occ is not None and occ in completed else max(completed, key=lambda item: int(item.get("retry_attempt") or 0))
-        _revive_occurrence(plan, keep)
-    if keep is not None:
-        keep["rating"] = rating
-        keep["encounter_id"] = encounter_id
-        keep["available_at"] = next_available
-        keep["kind"] = kind
-        if keep["status"] == OCCURRENCE_PENDING:
-            keep["retry_attempt"] = int(keep["retry_attempt"] or 0) + 1
-            keep["occurrence_id"] = occurrence_id_for(round_id, keep["source_unit_id"] or source_unit_id or source_id, keep["retry_attempt"])
-            keep["insert_target_index"] = _predicted_insert_index(plan, source_id)
-        elif keep["status"] != OCCURRENCE_INSERTED:
-            keep["retry_attempt"] = int(keep["retry_attempt"] or 0) + 1
-        _collapse_retries(plan)
-        _publish_pending_retries(plan, source_id)
-        return
-    attempt = _max_attempt(plan, source_id) + 1
-    source_key = source_unit_id or source_id
-    plan["occurrences"].append({
-        "occurrence_id": occurrence_id_for(round_id, source_key, attempt),
-        "source_card_id": source_id,
-        "source_unit_id": source_unit_id,
-        "retry_attempt": attempt,
-        "rating": rating,
-        "insert_target_index": _predicted_insert_index(plan, source_id),
-        "status": OCCURRENCE_PENDING,
-        "encounter_id": encounter_id,
-        "entered_on": _cohort_of(plan, source_id),
-        "available_at": next_available,
-        "kind": kind,
-    })
-    _collapse_retries(plan)
-    _publish_pending_retries(plan, source_id)
-
-
-def _publish_pending_retries(plan: Plan, source_id: str) -> None:
-    """Put a weak rating's retry on the rail now. Do not move ``current_card_id``."""
-    source_id = _text(source_id)
-    if not source_id:
-        return
-    held_current = plan.get("current_card_id")
-    presented = plan["presented_ids"]
-    if source_id in presented:
-        anchor = presented.index(source_id)
-    else:
-        current = _text(plan.get("current_card_id"))
-        anchor = presented.index(current) if current and current in presented else int(plan.get("current_index") or 0)
-    for item in list(plan["occurrences"]):
-        if _text(item.get("source_card_id")) != source_id:
-            continue
-        if item.get("status") != OCCURRENCE_PENDING:
-            continue
-        if item.get("available_at"):
-            # Time-spaced: stays off the rail until publish_ready_retries runs.
-            continue
-        _insert_retry_inplace(plan, _text(item.get("occurrence_id")), anchor)
-    if held_current and _text(held_current) in plan["presented_ids"]:
-        plan["current_card_id"] = held_current
-    _sync_index(plan)
-
-
 def _settle_source(
     plan: Plan,
     source_id: str,
@@ -654,15 +576,6 @@ def _unsettle_source(plan: Plan, source_id: str) -> None:
     if not target:
         return
     plan["completed_ids"] = [item for item in plan["completed_ids"] if item != target]
-
-
-def _revive_occurrence(plan: Plan, occ: Mapping[str, Any]) -> None:
-    item = occ if isinstance(occ, dict) else None
-    if item is None or item.get("status") != OCCURRENCE_COMPLETED:
-        return
-    occ_id = _text(item.get("occurrence_id"))
-    item["status"] = OCCURRENCE_INSERTED if occ_id in plan["presented_ids"] else OCCURRENCE_PENDING
-    plan["completed_ids"] = [entry for entry in plan["completed_ids"] if entry != occ_id]
 
 
 def _reposition_retry_inplace(plan: Plan, occurrence_id: str, vacated_index: int) -> None:
@@ -716,6 +629,9 @@ def _insert_retry_inplace(plan: Plan, occurrence_id: str, source_index: int) -> 
     plan["presented_ids"] = presented
     occ["status"] = OCCURRENCE_INSERTED
     occ["insert_target_index"] = insert_at
+    # Serving the occurrence consumes its wait. Keeping the elapsed instant would
+    # let the next read treat it as a rated history row and reopen it again.
+    occ["available_at"] = None
 
 
 def _cursor_index(plan: Plan, presented: Sequence[str]) -> int:

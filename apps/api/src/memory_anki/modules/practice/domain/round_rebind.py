@@ -7,6 +7,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from .round_plan import (
+    FAIL_RATINGS,
     OCCURRENCE_CANCELLED,
     OCCURRENCE_COMPLETED,
     OCCURRENCE_INSERTED,
@@ -391,8 +392,13 @@ def replan_remaining(
         retry_seen.add(occ_id)
         if stamp:
             occ["entered_on"] = stamp
-        if occ.get("available_at"):
-            # A timed same-day retry stays off the rail until its wait passes.
+        if occ.get("available_at") and not (
+            occ["status"] == OCCURRENCE_INSERTED and _int(occ.get("rating")) in FAIL_RATINGS
+        ):
+            # A never-served timed retry stays off the rail until its wait
+            # passes. A retry the learner already rated 忘记/困难 is different:
+            # it is visible history until that same wait reopens it, so a
+            # replan must not delete the page under the learner.
             continue
         occ["status"] = OCCURRENCE_INSERTED
         retry_ids.append(occ_id)
