@@ -199,6 +199,15 @@ export function useReviewFlowSession({
     [reveal.completed, reveal.handleNodeContextMenu],
   )
 
+  /** 收卡 shortcut: returns true when the card actually folded back. */
+  const handleNodeRetract = React.useCallback(
+    (nodes: MindMapSelection[]) => {
+      if (reveal.completed) return false
+      return reveal.retractTarget(nodes)
+    },
+    [reveal.completed, reveal.retractTarget],
+  )
+
   const handleNodeHover = React.useCallback(
     (nodes: MindMapSelection[]) => {
       if (reveal.completed) return
@@ -253,6 +262,7 @@ export function useReviewFlowSession({
     setFullscreen,
     handleNodeClick,
     handleNodeContextMenu,
+    handleNodeRetract,
     handleNodeHover,
     handleBulkRevealSubtree,
     handleBulkRevealDirectChildren,

@@ -26,7 +26,7 @@ import type {
 } from '@/modules/practice/public'
 import { countUnitFlipProgress, unitFlipTargetUids } from '@/modules/practice/ui/freestyle/model/unitFlipProgress'
 import { useFreestyleFlowFeedback } from '@/modules/practice/ui/freestyle/hooks/useFreestyleFlowFeedback'
-import { useFreestyleEnterRevealFollow } from './useFreestyleEnterRevealFollow'
+import { useFreestyleFlipCardShortcuts } from './useFreestyleFlipCardShortcuts'
 import {
   recordSessionRecorderUiAction,
   summarizeRevealMapChange,
@@ -213,7 +213,7 @@ export function FreestyleUnitReviewFlipPanel({
   const lastRevealRecordKeyRef = useRef('')
   const revealApiRef = useRef(reveal)
   revealApiRef.current = reveal
-  const revealFollow = useFreestyleEnterRevealFollow({
+  const revealFollow = useFreestyleFlipCardShortcuts({
     active,
     isEditMode,
     palaceTitle: card.palace_title || '',

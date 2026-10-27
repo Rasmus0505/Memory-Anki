@@ -258,7 +258,11 @@ export function isShortcutPressed(event: KeyboardEvent, shortcutValue: unknown) 
   if (!binding) return false
   const eventCode = normalizeShortcutCodeValue(event.code)
   const eventKey = normalizeShortcutKeyValue(event.key)
-  const matchesKey = binding.code ? binding.code === eventCode : binding.key === eventKey
+  // Synthetic/assistive keydowns may carry no `code`; fall back to `key` then,
+  // so Enter still flips instead of silently missing the binding.
+  const matchesKey = binding.code
+    ? (eventCode ? binding.code === eventCode : binding.key === eventKey)
+    : binding.key === eventKey
   if (!matchesKey) return false
   return (
     binding.shift === Boolean(event.shiftKey) &&

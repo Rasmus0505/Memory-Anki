@@ -1518,6 +1518,46 @@ describe('FreestyleUnitReviewCardView', () => {
     ).toBe('待回忆')
   })
 
+  it('retracts the flipped unit back to 待回忆 on Backspace', async () => {
+    const card = buildCard('unit-backspace-retract')
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!))
+    renderCard(card)
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    for (const key of ['Enter', 'Enter']) {
+      const reveal = new KeyboardEvent('keydown', {
+        key,
+        bubbles: true,
+        cancelable: true,
+      })
+      act(() => window.dispatchEvent(reveal))
+      flushRevealFrame()
+    }
+    expect(
+      (capturedPanelProps?.visibleEditorState as {
+        editor_doc: {
+          root: { children: Array<{ children: Array<{ data: { text: string } }> }> }
+        }
+      }).editor_doc.root.children[0]?.children[0]?.data.text,
+    ).toBe('待回忆')
+
+    const retract = new KeyboardEvent('keydown', {
+      key: 'Backspace',
+      bubbles: true,
+      cancelable: true,
+    })
+    act(() => window.dispatchEvent(retract))
+    expect(retract.defaultPrevented).toBe(true)
+    flushRevealFrame()
+    const retractedAnchor = (capturedPanelProps?.visibleEditorState as {
+      editor_doc: {
+        root: { children: Array<{ data: { text: string }; children?: unknown[] }> }
+      }
+    }).editor_doc.root.children[0]
+    expect(retractedAnchor?.data.text).toBe('待回忆')
+    expect(retractedAnchor?.children ?? []).toEqual([])
+  })
+
   it('flips on Enter without moving the camera when camera tracking is off', async () => {
     writeFlipCardRevealSettings({
       granularity: 'level',

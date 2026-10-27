@@ -5,7 +5,6 @@ import type { MindMapReviewFlowProps } from "@/modules/practice/public";
 import { usePalaceQuizNodeBindings } from "@/modules/quiz/public";
 import { NodeBoundQuizDialog } from "@/widgets/node-bound-quiz";
 import { ComboMilestoneBurst, CompletionCelebration } from "@/shared/components/celebration";
-import { FlipCardShortcutsDialog } from "@/modules/settings/public";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
@@ -47,13 +46,10 @@ export function MindMapReviewFlow({
   const compact = chromeDensity === "compact";
   const hostFrame = chromeFrame === "host";
   const effectiveVolume = getReviewFeedbackEffectiveVolume(review.flow.feedback.settings);
-  const [flipShortcutsOpen, setFlipShortcutsOpen] = React.useState(false);
   const [nodeQuizOpen, setNodeQuizOpen] = React.useState(false);
   const [nodeQuizNodeUid, setNodeQuizNodeUid] = React.useState<string | null>(null);
   const [nodeQuizQuestionIds, setNodeQuizQuestionIds] = React.useState<number[]>([]);
   const [nodeQuizInitialIndex, setNodeQuizInitialIndex] = React.useState(0);
-  const flipShortcutScene =
-    props.sessionKind === "review" ? ("review" as const) : ("practice" as const);
   // Badge counts must use the full palace mindmap (not the flip-reveal visible
   // subtree). Otherwise parent badges grow as children are revealed.
   // Full palace doc for badges (editEditorState). Never use flip-reveal visible
@@ -122,14 +118,7 @@ export function MindMapReviewFlow({
       onNodeContextMenu={review.flow.handleNodeContextMenu}
       onNodeHover={review.flow.handleNodeHover}
       toolbarExtensions={{
-        moreActions: [
-          ...(props.extraMoreActions ?? []),
-          {
-            label: "翻卡快捷键",
-            onClick: () => setFlipShortcutsOpen(true),
-            opensOverlay: true,
-          },
-        ],
+        moreActions: props.extraMoreActions ?? [],
       }}
       revealSettings={review.flow.flipCardRevealSettings}
       countBadgeByNodeUid={quizNodeBindings.countBadgeByNodeUid}
@@ -425,12 +414,6 @@ export function MindMapReviewFlow({
           setNodeQuizQuestionIds((ids) => ids.filter((id) => id !== questionId));
           void quizNodeBindings.refresh();
         }}
-      />
-
-      <FlipCardShortcutsDialog
-        open={flipShortcutsOpen}
-        onOpenChange={setFlipShortcutsOpen}
-        scene={flipShortcutScene}
       />
 
     </div>

@@ -14,16 +14,10 @@ export function isFreestyleShortcutBlocked(target: EventTarget | null) {
   return Boolean(target.closest('[role="dialog"], [role="menu"], [data-radix-popper-content-wrapper]'))
 }
 
-export function getFreestyleQuestionDirection(key: string): FreestyleQuestionDirection | null {
-  if (key === 'ArrowLeft') return 'previous'
-  if (key === 'ArrowRight') return 'next'
-  return null
-}
-
 /** Vertical feed paging. Callers must skip this while a quiz dialog owns the keyboard. */
 export function getFreestyleFeedPageDirection(key: string): FreestyleQuestionDirection | null {
-  if (key === 'ArrowDown' || key === 'PageDown' || key === ' ') return 'next'
-  if (key === 'ArrowUp' || key === 'PageUp') return 'previous'
+  if (key === 'PageDown' || key === ' ') return 'next'
+  if (key === 'PageUp') return 'previous'
   return null
 }
 

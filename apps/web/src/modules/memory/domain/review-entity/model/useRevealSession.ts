@@ -20,6 +20,7 @@ import {
   hideRevealStateBranch,
   parseEditorDoc,
   pourCheckpointRevealState,
+  retractRevealStateBranch,
   DEFAULT_FLIP_CARD_REVEAL_CONFIG,
   type BulkRevealScope,
   type FlipCardRevealConfig,
@@ -363,6 +364,31 @@ export function useRevealSession({
     applyTargetRevealFrom(revealMapRef.current, nodes)
   }, [applyTargetRevealFrom])
 
+  const clearPendingRevealActions = React.useCallback(() => {
+    revealActionQueueRef.current = []
+    if (revealActionFrameRef.current !== null && typeof window !== 'undefined') {
+      window.cancelAnimationFrame(revealActionFrameRef.current)
+    }
+    revealActionFrameRef.current = null
+  }, [])
+
+  /**
+   * 收卡: bring the target card back to its prompt and fold its subtree. Pending
+   * flips are dropped first, so an Enter pressed a frame earlier cannot reopen
+   * the card after the retract.
+   */
+  const retractTarget = React.useCallback((nodes: MindMapSelection[]) => {
+    const nodeId = buildSelectionNodeId(nodes[0] ?? null)
+    if (!nodeId) return false
+    clearPendingRevealActions()
+    clearLockedBulkTarget()
+    const next = retractRevealStateBranch(nodeId, nodeMap, revealMapRef.current)
+    if (next === revealMapRef.current) return false
+    revealMapRef.current = next
+    setRevealMap(next)
+    return true
+  }, [clearLockedBulkTarget, clearPendingRevealActions, nodeMap])
+
   const handleNodeContextMenu = React.useCallback((nodes: MindMapSelection[]) => {
     const nodeId = buildSelectionNodeId(nodes[0] ?? null)
     if (!nodeId) return
@@ -509,6 +535,7 @@ export function useRevealSession({
     handleNodeClick,
     handleTargetNodeClick,
     applyTargetRevealFrom,
+    retractTarget,
     handleNodeContextMenu,
     handleNodeHover,
     handleBulkReveal,

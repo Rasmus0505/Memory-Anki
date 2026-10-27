@@ -9,6 +9,7 @@ import {
   flattenNodes,
   hideRevealStateBranch,
   parseEditorDoc,
+  retractRevealStateBranch,
 } from './review-flow-tree'
 
 describe('review-flow-tree visible editor state', () => {
@@ -528,6 +529,40 @@ describe('review-flow-tree visible editor state', () => {
     expect(afterRecover.a).toBe('placeholder')
     expect(afterRecover.b).toBe('placeholder')
     expect(afterRecover.c).toBe('placeholder')
+  })
+
+  it('retracts a card back to its prompt and folds every descendant', () => {
+    const sourceDoc: MindMapDoc = {
+      root: {
+        data: { text: 'Root', uid: 'root' },
+        children: [
+          {
+            data: { text: 'A', uid: 'a' },
+            children: [{ data: { text: 'A1', uid: 'a1' }, children: [] }],
+          },
+          { data: { text: 'B', uid: 'b' }, children: [] },
+        ],
+      },
+    }
+    const root = buildReviewTree(sourceDoc, 'Root')
+    const nodeMap = flattenNodes(root)
+    const revealed = {
+      root: 'revealed' as const,
+      a: 'revealed' as const,
+      a1: 'revealed' as const,
+      b: 'placeholder' as const,
+    }
+
+    const retracted = retractRevealStateBranch('a', nodeMap, revealed)
+    expect(retracted).toEqual({
+      root: 'revealed',
+      a: 'placeholder',
+      a1: 'hidden',
+      b: 'placeholder',
+    })
+    // 收卡 is repeatable: a hidden card has nothing to fold.
+    expect(retractRevealStateBranch('a', nodeMap, retracted)).toEqual(retracted)
+    expect(retractRevealStateBranch('missing', nodeMap, revealed)).toBe(revealed)
   })
 
   it('bulk flips all descendants in two phases without resetting revealed cards', () => {

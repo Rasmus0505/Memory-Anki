@@ -3,6 +3,10 @@ import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { describe, expect, it } from 'vitest'
 import {
+  DEFAULT_MEMORY_ANKI_SHORTCUTS,
+  resolveFlipCardPageDirection,
+} from '@/modules/settings/public'
+import {
   getFreestyleFeedPageDirection,
   isFreestyleShortcutBlocked,
   shouldSwallowFreestyleFeedPageKey,
@@ -16,7 +20,9 @@ function FeedWithQuizDialog() {
       data-pages={pages}
       tabIndex={-1}
       onKeyDown={(event) => {
-        const direction = getFreestyleFeedPageDirection(event.key)
+        const direction =
+          resolveFlipCardPageDirection(event.nativeEvent, DEFAULT_MEMORY_ANKI_SHORTCUTS)
+          ?? getFreestyleFeedPageDirection(event.key)
         if (event.defaultPrevented || isFreestyleShortcutBlocked(event.target)) {
           if (direction && shouldSwallowFreestyleFeedPageKey(event.target, event.currentTarget)) {
             event.preventDefault()

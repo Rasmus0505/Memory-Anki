@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { Keyboard, SlidersHorizontal } from 'lucide-react'
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
 import { ToggleGroup, ToggleGroupItem } from '@/shared/components/ui/toggle-group'
 import { Button } from '@/shared/components/ui/button'
@@ -6,6 +7,9 @@ import { Switch } from '@/shared/components/ui/switch'
 import { cn } from '@/shared/lib/utils'
 import type { FlipCardEditScope, FlipCardRevealConfig, RevealGranularity, RevealStage } from '@/shared/preferences/flipCardRevealConfig'
 import type { FreestyleFlipMode } from '@/modules/practice/public'
+import { FlipCardShortcutSettings } from '@/modules/settings/ui/shortcuts/FlipCardShortcutSettings'
+
+type FlipCardSettingsPage = 'reveal' | 'shortcuts'
 
 export interface FlipCardRevealSettingsDialogProps {
   open: boolean
@@ -78,6 +82,17 @@ export function FlipCardRevealSettingsDialog({
   onChange,
   freestyleFlipMode,
 }: FlipCardRevealSettingsDialogProps) {
+  const [page, setPage] = useState<FlipCardSettingsPage>('reveal')
+
+  useEffect(() => {
+    if (open) setPage('reveal')
+  }, [open])
+
+  const pages: Array<{ key: FlipCardSettingsPage; label: string; icon: typeof Keyboard }> = [
+    { key: 'reveal', label: '翻卡', icon: SlidersHorizontal },
+    { key: 'shortcuts', label: '快捷键', icon: Keyboard },
+  ]
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -87,9 +102,39 @@ export function FlipCardRevealSettingsDialog({
       >
         <DialogHeader>
           <DialogTitle>翻卡设置</DialogTitle>
-          <DialogDescription>点击揭示、Enter 翻卡、双击空白画布进入编辑，以及评分后是否翻页。</DialogDescription>
+          <DialogDescription>
+            {page === 'shortcuts'
+              ? '配置翻卡、收卡、批量翻卡和随心页翻页键。'
+              : '点击揭示、Enter 翻卡、双击空白画布进入编辑，以及评分后是否翻页。'}
+          </DialogDescription>
         </DialogHeader>
 
+        <div className="flex gap-1 border-b px-5" role="tablist" aria-label="翻卡设置页面">
+          {pages.map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={page === key}
+              onClick={() => setPage(key)}
+              className={cn(
+                '-mb-px flex items-center gap-2 border-b-2 px-3 py-2 text-[13px] font-medium transition-colors',
+                page === key
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground',
+              )}
+            >
+              <Icon className="size-3.5" />
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {page === 'shortcuts' ? (
+          <DialogBody className="space-y-4">
+            <FlipCardShortcutSettings />
+          </DialogBody>
+        ) : (
         <DialogBody className="space-y-4">
           <section className="space-y-3">
             <SettingRow label="翻卡颗粒度">
@@ -167,6 +212,7 @@ export function FlipCardRevealSettingsDialog({
             </SettingRow>
           </section>
         </DialogBody>
+        )}
 
         <DialogFooter>
           <Button type="button" size="sm" variant="outline" onClick={() => onOpenChange(false)}>

@@ -51,9 +51,13 @@ export {
   MEMORY_ANKI_SHORTCUTS_STORAGE_KEY,
   MEMORY_ANKI_SHORTCUTS_UPDATED_EVENT,
   MEMORY_ANKI_SHORTCUT_ACTIONS,
+  MEMORY_ANKI_SHORTCUT_ALLOW_OPTIONS,
   readMemoryAnkiShortcuts,
   resetMemoryAnkiShortcuts,
+  RESERVED_FLIP_SHORTCUT_CODES,
+  resolveFlipCardPageDirection,
   sanitizeMemoryAnkiShortcutMap,
+  useMemoryAnkiShortcutMap,
   useMemoryAnkiShortcuts,
   writeMemoryAnkiShortcuts,
   type MemoryAnkiShortcutActionDefinition,
@@ -62,6 +66,6 @@ export {
   type MemoryAnkiShortcutMap,
   type ShortcutScene,
 } from './domain/preferences-entity/model/memoryAnkiShortcuts'
-export * from './ui/shortcuts/FlipCardShortcutsDialog'
+export * from './ui/shortcuts/FlipCardShortcutSettings'
 export * from './ui/shortcuts/MemoryAnkiShortcutsSettings'
 export * from './ui/flip-card/FlipCardRevealSettingsDialog'

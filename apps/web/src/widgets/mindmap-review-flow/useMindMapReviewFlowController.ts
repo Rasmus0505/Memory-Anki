@@ -7,10 +7,19 @@ import type { MindMapSelection } from "@/modules/content/public";
 import type { MindMapEditorState } from "@/shared/api/contracts";
 import { normalizeMindMapDocument as normalizeEditorDocTree } from '@/modules/content/public'
 import { isEditableKeyboardTarget } from "@/shared/keyboard/keyboardTargets";
+import { useRouteResidency } from "@/shared/routing/RouteResidency";
 import { cn } from "@/shared/lib/utils";
 import type { MindMapReviewFlowProps } from "@/modules/practice/public";
 
 const EMPTY_CHECKPOINT_NODE_UIDS: string[] = [];
+
+/** A focused button/link owns Enter and Backspace; the card must not steal them. */
+function isKeyboardControlTarget(event: KeyboardEvent) {
+  return (
+    event.target instanceof Element
+    && Boolean(event.target.closest('button, a, [role="button"], [role="menuitem"]'))
+  );
+}
 
 /** True when a modal dialog should block flip/rating shortcuts (not every role=dialog in the tree). */
 function isBlockingDialogOpen(eventTarget?: EventTarget | null) {
@@ -171,31 +180,50 @@ export function useMindMapReviewFlowController({
     return Boolean(handleBulkRevealDirectChildrenRef.current(selectedNodeUidRef.current));
   }, []);
 
-  const shortcutScene =
-    isInlineEditMode ? "edit" : sessionKind === "review" ? "review" : "practice";
+  const handleShortcutFlipCurrent = React.useCallback(
+    (event: KeyboardEvent): boolean => {
+      if (isKeyboardControlTarget(event)) return false;
+      if (isInlineEditMode || isCheckpointMode || flow.completed) return false;
+      if (isBlockingDialogOpen()) return false;
+      if (activeNodes.length === 0) return false;
+      flow.handleNodeClick(activeNodes);
+      return true;
+    },
+    [activeNodes, flow, isCheckpointMode, isInlineEditMode],
+  );
+
+  const handleShortcutRetractCurrent = React.useCallback(
+    (event: KeyboardEvent): boolean => {
+      if (isKeyboardControlTarget(event)) return false;
+      if (isInlineEditMode || flow.completed) return false;
+      if (isBlockingDialogOpen()) return false;
+      if (activeNodes.length === 0) return false;
+      return flow.handleNodeRetract(activeNodes);
+    },
+    [activeNodes, flow, isInlineEditMode],
+  );
 
   const shortcutHandlers = React.useMemo(() => {
-    if (shortcutScene === "edit") return {};
-    if (shortcutScene === "review") {
-      return {
-        hide_child_cards_review: handleShortcutHideChildCards,
-        flip_subtree_cards_review: handleShortcutFlipSubtree,
-        flip_direct_child_cards_review: handleShortcutFlipDirectChildren,
-      };
-    }
+    if (isInlineEditMode) return {};
     return {
-      hide_child_cards_practice: handleShortcutHideChildCards,
-      flip_subtree_cards_practice: handleShortcutFlipSubtree,
-      flip_direct_child_cards_practice: handleShortcutFlipDirectChildren,
+      flip_current_card: handleShortcutFlipCurrent,
+      retract_current_card: handleShortcutRetractCurrent,
+      hide_child_cards: handleShortcutHideChildCards,
+      flip_subtree_cards: handleShortcutFlipSubtree,
+      flip_direct_child_cards: handleShortcutFlipDirectChildren,
     };
   }, [
+    handleShortcutFlipCurrent,
     handleShortcutFlipDirectChildren,
     handleShortcutFlipSubtree,
     handleShortcutHideChildCards,
-    shortcutScene,
+    handleShortcutRetractCurrent,
+    isInlineEditMode,
   ]);
 
-  useMemoryAnkiShortcuts(shortcutScene, shortcutHandlers, true);
+  // A resident page must not flip cards while the learner is on another route.
+  const { isActive: routeActive } = useRouteResidency();
+  useMemoryAnkiShortcuts("flip", shortcutHandlers, routeActive);
 
   const handleShortcutAdvanceReview = React.useCallback(() => {
     if (

@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import {
   getFreestyleChoiceIndex,
   getFreestyleFeedPageDirection,
-  getFreestyleQuestionDirection,
   isFreestyleOverlayOpen,
   isFreestyleShortcutBlocked,
   shouldSwallowFreestyleFeedPageKey,
@@ -18,15 +17,13 @@ describe('freestyle keyboard shortcuts', () => {
     expect(getFreestyleChoiceIndex('e')).toBeNull()
   })
 
-  it('maps left and right arrows to question navigation', () => {
-    expect(getFreestyleQuestionDirection('ArrowLeft')).toBe('previous')
-    expect(getFreestyleQuestionDirection('ArrowRight')).toBe('next')
-    expect(getFreestyleQuestionDirection('ArrowUp')).toBeNull()
-  })
-
-  it('maps vertical arrows to feed paging only when no quiz dialog owns the keyboard', () => {
-    expect(getFreestyleFeedPageDirection('ArrowUp')).toBe('previous')
-    expect(getFreestyleFeedPageDirection('ArrowDown')).toBe('next')
+  it('keeps PageUp/PageDown and Space as fixed feed paging keys', () => {
+    expect(getFreestyleFeedPageDirection('PageUp')).toBe('previous')
+    expect(getFreestyleFeedPageDirection('PageDown')).toBe('next')
+    expect(getFreestyleFeedPageDirection(' ')).toBe('next')
+    // Arrows come from the configurable 翻卡快捷键 map, not this helper.
+    expect(getFreestyleFeedPageDirection('ArrowUp')).toBeNull()
+    expect(getFreestyleFeedPageDirection('ArrowDown')).toBeNull()
     expect(getFreestyleFeedPageDirection('ArrowLeft')).toBeNull()
     const scope = document.createElement('div')
     scope.dataset.keyboardShortcutsSuspended = 'true'

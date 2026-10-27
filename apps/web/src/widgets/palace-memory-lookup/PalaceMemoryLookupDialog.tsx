@@ -350,18 +350,23 @@ export function PalaceMemoryLookupDialog({
 
   const flipShortcutHandlers = useMemo(
     () => ({
-      flip_subtree_cards_practice: (): boolean => {
+      flip_subtree_cards: (): boolean => {
         if (previewMode !== 'flip') return false
         return Boolean(revealSession.handleBulkRevealSubtree(null))
       },
-      flip_direct_child_cards_practice: (): boolean => {
+      flip_direct_child_cards: (): boolean => {
         if (previewMode !== 'flip') return false
         return Boolean(revealSession.handleBulkRevealDirectChildren(null))
       },
     }),
     [previewMode, revealSession],
   )
-  useMemoryAnkiShortcuts('practice', flipShortcutHandlers, open && previewMode === 'flip')
+  useMemoryAnkiShortcuts(
+    'flip',
+    flipShortcutHandlers,
+    open && previewMode === 'flip',
+    { allowOverlayTarget: true },
+  )
 
   useEffect(() => () => {
     if (fullscreenExitGuardTimerRef.current != null) {
