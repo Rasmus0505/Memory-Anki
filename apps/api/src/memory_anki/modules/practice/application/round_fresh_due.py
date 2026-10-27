@@ -123,6 +123,16 @@ def project_served_plan(
     fresh = fresh_due_card_ids(session, plan, today=today)
     served = dict(plan)
     if not fresh:
+        # Read-time publishing may reopen/insert occurrences and drop their
+        # encounter entries; the response must not alias the persisted rows.
+        served["occurrences"] = [
+            dict(occ) if isinstance(occ, dict) else occ
+            for occ in plan.get("occurrences") or []
+        ]
+        served["encounters"] = {
+            key: dict(value) if isinstance(value, dict) else value
+            for key, value in (plan.get("encounters") or {}).items()
+        }
         served.pop("fresh_due_ids", None)
         return served
     fresh_set = set(fresh)
@@ -143,7 +153,10 @@ def project_served_plan(
             cleaned["rating"] = None
             occurrences.append(cleaned)
         else:
-            occurrences.append(occ)
+            # The response is a projection: read-time publishing mutates these
+            # rows (status / attempt / wait), so they must not alias the
+            # persisted plan's dicts.
+            occurrences.append(dict(occ))
     served["encounters"] = encounters
     served["occurrences"] = occurrences
     served["completed_ids"] = [

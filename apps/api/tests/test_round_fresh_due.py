@@ -133,6 +133,20 @@ def test_today_hard_rating_stays_visible(db_session):
     assert served["encounters"]["card-a"]["rating"] == 3
 
 
+def test_served_plan_does_not_share_occurrence_rows_with_the_persisted_plan(db_session):
+    state = _seed(db_session)
+    _rate_and_close(db_session, state, 3, "op-copy")
+    db_session.commit()
+    persisted = _plan(state.id)
+
+    served = project_served_plan(db_session, persisted)
+    served["occurrences"][0]["status"] = "cancelled"
+    served["occurrences"][0]["available_at"] = "2026-10-11T13:00:00"
+
+    assert persisted["occurrences"][0]["status"] == "completed"
+    assert "available_at" not in persisted["occurrences"][0]
+
+
 def test_future_due_card_keeps_its_score(db_session):
     state = _seed(db_session)
     _rate_and_close(db_session, state, 3, "op-pass")
