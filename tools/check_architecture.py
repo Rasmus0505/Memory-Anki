@@ -2195,7 +2195,12 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
                 f"{queue_hook.relative_to(REPO_ROOT).as_posix()}: "
                 "server hydrate must restore completed ticks onto the local plan."
             )
-        if "removeRetryOccurrencesForSource(cardsRef.current, graduatedSourceId, cardId)" not in hook_source:
+        # A pass drops the source's blank 重练 pages but must keep the one just
+        # rated (and every already-answered 重练) under the viewport.
+        if not re.search(
+            r"removeUnansweredRetryOccurrences\(\s*cardsRef\.current,\s*graduatedSourceId,\s*cardId,",
+            hook_source,
+        ):
             errors.append(
                 f"{queue_hook.relative_to(REPO_ROOT).as_posix()}: "
                 "a passing rate must leave the current retry occurrence in the viewport."
@@ -3183,11 +3188,11 @@ def check_enter_reveal_viewport_follow(errors: list[str]) -> None:
     viewport = WEB_SRC / "shared" / "ui" / "mindmap-canvas" / "useMindMapViewport.ts"
     flip_panel = WEB_SRC / "widgets" / "mindmap-review-flow" / "FlipCardMindMapPanel.tsx"
     doc = REPO_ROOT / "docs" / "architecture" / "mindmap.md"
-    follow = panel.parent / "useFreestyleEnterRevealFollow.ts"
+    follow = panel.parent / "useFreestyleFlipCardShortcuts.ts"
     if panel.exists():
         source = panel.read_text(encoding="utf-8", errors="ignore")
         relative = panel.relative_to(REPO_ROOT).as_posix()
-        if "useFreestyleEnterRevealFollow" not in source or "revealFollowNodeIds" not in source:
+        if "useFreestyleFlipCardShortcuts" not in source or "revealFollowNodeIds" not in source:
             errors.append(
                 f"{relative}: Enter reveal follow must plan the flipped cards and request a reveal pan."
             )
@@ -3958,7 +3963,10 @@ def check_freestyle_viewing_playhead(errors: list[str]) -> None:
         # `compress_completed` write as 结算已完成单元) instead of only scrolling
         # to the summary. Both paths must stay wired.
         if (
-            "resolveFreestyleCompleteSeek" not in page_source
+            not (
+                "resolveFreestyleCompleteSeek" in page_source
+                or "resolveFreestyleCompleteAction" in page_source
+            )
             or "onComplete={handlePagerComplete}" not in page_source
             or "settleCompletedUnits" not in page_source
             or "compressCompletedPlanCards(snapshot)" not in page_source
@@ -5943,6 +5951,102 @@ def check_english_dictation_local_import(errors: list[str]) -> None:
             )
 
 
+def check_flip_card_shortcut_settings(errors: list[str]) -> None:
+    """翻卡设置 owns one shortcut page; 随心 and formal review share its map."""
+    model = (
+        WEB_SRC
+        / "modules"
+        / "settings"
+        / "domain"
+        / "preferences-entity"
+        / "model"
+        / "memoryAnkiShortcuts.ts"
+    )
+    dialogue = (
+        WEB_SRC / "modules" / "settings" / "ui" / "flip-card" / "FlipCardRevealSettingsDialog.tsx"
+    )
+    page = (
+        WEB_SRC / "modules" / "settings" / "ui" / "shortcuts" / "FlipCardShortcutSettings.tsx"
+    )
+    freestyle_hook = (
+        WEB_SRC
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "components"
+        / "useFreestyleFlipCardShortcuts.ts"
+    )
+    feed_hook = (
+        WEB_SRC / "modules" / "practice" / "ui" / "freestyle" / "hooks" / "useFreestyleFeedKeyboard.ts"
+    )
+    panel = (
+        WEB_SRC
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "components"
+        / "FreestyleUnitReviewFlipPanel.tsx"
+    )
+    doc = REPO_ROOT / "docs" / "architecture" / "freestyle-immersive-feed.md"
+    for path, label in (
+        (model, "flip shortcut model"),
+        (dialogue, "翻卡设置 dialog"),
+        (page, "shortcut page"),
+        (freestyle_hook, "freestyle flip shortcut hook"),
+        (feed_hook, "freestyle feed keyboard hook"),
+        (panel, "freestyle flip panel"),
+    ):
+        if not path.exists():
+            errors.append(f"{path.relative_to(REPO_ROOT).as_posix()}: {label} is required.")
+            return
+    model_source = model.read_text(encoding="utf-8", errors="ignore")
+    for token in (
+        "flip_current_card",
+        "retract_current_card",
+        "page_previous_card",
+        "page_next_card",
+        "allowBareDeleteKeys",
+    ):
+        if token not in model_source:
+            errors.append(f"{model.relative_to(REPO_ROOT).as_posix()}: must define `{token}`.")
+    dialogue_source = dialogue.read_text(encoding="utf-8", errors="ignore")
+    for token in ("FlipCardShortcutSettings", "快捷键"):
+        if token not in dialogue_source:
+            errors.append(
+                f"{dialogue.relative_to(REPO_ROOT).as_posix()}: "
+                f"翻卡设置 must expose the shortcut page (`{token}`)."
+            )
+    page_source = page.read_text(encoding="utf-8", errors="ignore")
+    for token in ("captureShortcutFromKeyboardEvent", "writeMemoryAnkiShortcuts"):
+        if token not in page_source:
+            errors.append(f"{page.relative_to(REPO_ROOT).as_posix()}: must use `{token}`.")
+    freestyle_source = freestyle_hook.read_text(encoding="utf-8", errors="ignore")
+    for token in ("useMemoryAnkiShortcuts(", "'flip'", "retractTarget", "flip_current_card"):
+        if token not in freestyle_source:
+            errors.append(
+                f"{freestyle_hook.relative_to(REPO_ROOT).as_posix()}: must keep `{token}`."
+            )
+    panel_source = panel.read_text(encoding="utf-8", errors="ignore")
+    if "useFreestyleFlipCardShortcuts" not in panel_source:
+        errors.append(
+            f"{panel.relative_to(REPO_ROOT).as_posix()}: must wire the shared flip shortcut hook."
+        )
+    feed_source = feed_hook.read_text(encoding="utf-8", errors="ignore")
+    for token in ("resolveFlipCardPageDirection", "useMemoryAnkiShortcutMap"):
+        if token not in feed_source:
+            errors.append(
+                f"{feed_hook.relative_to(REPO_ROOT).as_posix()}: must page from the configured map (`{token}`)."
+            )
+    doc_source = doc.read_text(encoding="utf-8", errors="ignore") if doc.exists() else ""
+    for token in ("快捷键", "收卡"):
+        if token not in doc_source:
+            errors.append(
+                f"{doc.relative_to(REPO_ROOT).as_posix()}: must document the flip shortcut page and 收卡."
+            )
+
+
 def check_quiz_shortcut_primitive(errors: list[str]) -> None:
     """Shared do-question shortcuts, with ArrowUp toggling mark once per press."""
     model = WEB_SRC / "modules" / "quiz" / "domain" / "quiz-entity" / "model" / "quizShortcuts.ts"
@@ -6693,7 +6797,6 @@ def check_mindmap_surface_fill(errors: list[str]) -> None:
     doc = REPO_ROOT / "docs" / "architecture" / "mindmap.md"
     page_surfaces = (
         WEB_SRC / "pages" / "create" / "PalaceEditorPage.tsx",
-        WEB_SRC / "pages" / "create" / "PalaceMindMapWorkspace.tsx",
         WEB_SRC / "pages" / "library" / "KnowledgeLibraryPage.tsx",
         WEB_SRC / "app" / "router" / "PalaceViewPage.tsx",
     )
@@ -6848,6 +6951,7 @@ def main() -> int:
     check_quiz_font_scale_primitive(errors)
     check_window_layout_memory(errors)
     check_quiz_shortcut_primitive(errors)
+    check_flip_card_shortcut_settings(errors)
     check_quiz_question_marks(errors)
     check_quiz_node_count_badges(errors)
     check_quiz_create_requires_node_binding(errors)

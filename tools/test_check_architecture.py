@@ -180,7 +180,11 @@ def test_freestyle_facade_requires_round_plan_public_surface(
         web_src / "modules" / "practice" / "ui" / "freestyle" / "hooks" / "useImmersiveQueue.ts",
         "rebuildKeepingProgress\n"
         "syncCompletedIdsToRoundPlan\n"
-        "removeRetryOccurrencesForSource(cardsRef.current, graduatedSourceId, cardId)\n"
+        "removeUnansweredRetryOccurrences(\n"
+        "  cardsRef.current,\n"
+        "  graduatedSourceId,\n"
+        "  cardId,\n"
+        ")\n"
         "startFreestyleRoundApi\n"
         "forceStart\n"
         "studyWindow\n",
@@ -862,10 +866,10 @@ def test_enter_reveal_follow_accepts_wired_hosts(tmp_path: Path, monkeypatch) ->
     monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
     write_file(
         web_src / "modules" / "practice" / "ui" / "freestyle" / "components" / "FreestyleUnitReviewFlipPanel.tsx",
-        "useFreestyleEnterRevealFollow()\nrevealFollowNodeIds={revealFollow.nodeIds}\n",
+        "useFreestyleFlipCardShortcuts()\nrevealFollowNodeIds={revealFollow.nodeIds}\n",
     )
     write_file(
-        web_src / "modules" / "practice" / "ui" / "freestyle" / "components" / "useFreestyleEnterRevealFollow.ts",
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "components" / "useFreestyleFlipCardShortcuts.ts",
         "applyTargetRevealFrom(baseMap, [targetSelection])\n",
     )
     write_file(
@@ -883,6 +887,84 @@ def test_enter_reveal_follow_accepts_wired_hosts(tmp_path: Path, monkeypatch) ->
     check_architecture.check_enter_reveal_viewport_follow(errors)
 
     assert errors == []
+
+
+def _write_flip_shortcut_fixture(tmp_path: Path, model_source: str) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    write_file(
+        web_src
+        / "modules"
+        / "settings"
+        / "domain"
+        / "preferences-entity"
+        / "model"
+        / "memoryAnkiShortcuts.ts",
+        model_source,
+    )
+    write_file(
+        web_src / "modules" / "settings" / "ui" / "flip-card" / "FlipCardRevealSettingsDialog.tsx",
+        "<FlipCardShortcutSettings />\n快捷键\n",
+    )
+    write_file(
+        web_src / "modules" / "settings" / "ui" / "shortcuts" / "FlipCardShortcutSettings.tsx",
+        "captureShortcutFromKeyboardEvent\nwriteMemoryAnkiShortcuts\n",
+    )
+    write_file(
+        web_src
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "components"
+        / "useFreestyleFlipCardShortcuts.ts",
+        "useMemoryAnkiShortcuts('flip', handlers)\nretractTarget\nflip_current_card\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "hooks" / "useFreestyleFeedKeyboard.ts",
+        "resolveFlipCardPageDirection\nuseMemoryAnkiShortcutMap\n",
+    )
+    write_file(
+        web_src
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "components"
+        / "FreestyleUnitReviewFlipPanel.tsx",
+        "useFreestyleFlipCardShortcuts\n",
+    )
+    write_file(
+        tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
+        "翻卡设置 快捷键 收卡\n",
+    )
+
+
+def test_flip_card_shortcut_settings_accepts_shared_page(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", tmp_path / "apps" / "web" / "src")
+    _write_flip_shortcut_fixture(
+        tmp_path,
+        "flip_current_card\nretract_current_card\npage_previous_card\npage_next_card\nallowBareDeleteKeys\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_flip_card_shortcut_settings(errors)
+
+    assert errors == []
+
+
+def test_flip_card_shortcut_settings_requires_retract(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", tmp_path / "apps" / "web" / "src")
+    _write_flip_shortcut_fixture(
+        tmp_path,
+        "flip_current_card\npage_previous_card\npage_next_card\nallowBareDeleteKeys\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_flip_card_shortcut_settings(errors)
+
+    assert any("retract_current_card" in error for error in errors)
 
 
 def test_freestyle_inline_edit_scope_requires_config_and_settings(
@@ -4745,7 +4827,6 @@ def test_mindmap_surface_fill_rejects_a_capped_card(tmp_path: Path, monkeypatch)
     write_file(tmp_path / "docs" / "architecture" / "mindmap.md", "# mind map\n")
     for rel in (
         "pages/create/PalaceEditorPage.tsx",
-        "pages/create/PalaceMindMapWorkspace.tsx",
         "pages/library/KnowledgeLibraryPage.tsx",
         "app/router/PalaceViewPage.tsx",
     ):

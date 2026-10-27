@@ -10,7 +10,15 @@
  * 次改动无关。需要 React 渲染的测试用例待 testing-library 适配 React 19
  * 后恢复；不依赖 React 渲染的纯函数/集成测试照常工作。
  */
+import { configure } from '@testing-library/react'
+
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
+// The full suite shares a synced disk and runs many workers; a screen update
+// that takes ~100ms alone can cross the 1s findBy/waitFor default there. Keep
+// the per-test budget (15s) as the real failure boundary instead. A genuine
+// never-rendered element still fails, just later.
+configure({ asyncUtilTimeout: 3000 })
 
 // jsdom 没有 ResizeObserver；radix 的 Slider/useSize 等组件在挂载时需要它。
 if (typeof globalThis.ResizeObserver === 'undefined') {
