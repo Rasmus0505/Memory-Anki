@@ -153,6 +153,14 @@ export function useMindMapViewport({
   const viewportEpochRef = useRef(0)
   const wheelEndTimerRef = useRef<number | null>(null)
   const userGestureStartZoomRef = useRef<number | null>(null)
+  /**
+   * Zoom the camera reported while a user gesture owned it. React Flow does not
+   * always bracket a wheel/pinch with one start, and its end can arrive after the
+   * wheel bridge timer has closed the gesture — relying on the start camera alone
+   * then sees "no zoom change" and drops the learner's preference. What actually
+   * matters is that the camera zoom moved under a user gesture.
+   */
+  const userGestureZoomRef = useRef<number | null>(null)
   const explicitViewportTimeoutRef = useRef<number | null>(null)
   const controlledViewportRef = useRef<Viewport>(controlledViewport)
   const lastAppliedPreferredZoomRef = useRef<number | null>(null)
@@ -238,21 +246,20 @@ export function useMindMapViewport({
       lastAppliedPreferredZoomRef.current = null
       return
     }
-    // Mobile guided review fits the visible tree at <= MINDMAP_MOBILE_FIT_MAX_ZOOM.
-    // The shared manual zoom (desktop can be 1.4) would override that fit and park
-    // the whole map far outside a phone-sized canvas — one lonely root card over
-    // a blank sheet. The phone camera owns its zoom.
-    if (mobileGuidedActive) return
+    // A guided host yields one-finger pan to a parent scroller and its fit owns the
+    // camera; none of them pass a preferred zoom. Freestyle passes a device-scoped
+    // value (desktop and phone keep separate slots), so a narrow canvas may apply
+    // the learner's own phone zoom without a desktop 1.4 leaking onto a phone.
+    if (mobileViewPolicy === 'guided') return
     // Before the first measurement a readonly `auto` canvas is most likely a phone
-    // (the fit below will own the camera anyway); applying the desktop zoom first
-    // only produces a one-frame zoom flash.
+    // (the fit below will own the camera anyway); applying the zoom first only
+    // produces a one-frame zoom flash.
     if (readonly && mobileViewPolicy === 'auto' && canvasSize.width === 0) return
     if (lastAppliedPreferredZoomRef.current === normalizedPreferredZoom) return
     lastAppliedPreferredZoomRef.current = normalizedPreferredZoom
     syncPreferredZoom(normalizedPreferredZoom)
   }, [
     canvasSize.width,
-    mobileGuidedActive,
     mobileViewPolicy,
     normalizedPreferredZoom,
     readonly,
@@ -350,8 +357,15 @@ export function useMindMapViewport({
         explicitViewportTimeoutRef.current = null
       }
       explicitViewportChangeRef.current = false
+      // A ctrl/pinch wheel starts once, then React Flow reports the already-zoomed
+      // camera with a second move-start. Overwriting the gesture's start zoom with
+      // that report made move-end see "no zoom change" and silently drop the
+      // learner's zoom preference. Keep the first start of the gesture.
+      const gestureAlreadyActive = manualViewportGestureRef.current
       manualViewportGestureRef.current = true
-      userGestureStartZoomRef.current = viewport.zoom
+      if (!gestureAlreadyActive) {
+        userGestureStartZoomRef.current = viewport.zoom
+      }
       // panOnScroll's first event is start-only and already carries the post-delta camera.
       // Controlled mode paints only what we commit, so dropping this frame snaps the wheel back.
       if ('type' in event && event.type === 'wheel') {
@@ -386,6 +400,12 @@ export function useMindMapViewport({
     // the bridge window has closed. The owed deadline keeps that report attached
     // to its own gesture instead of discarding it as drift.
     const wheelPan = performance.now() < Math.max(wheelPanUntilRef.current, wheelPanOwedUntilRef.current)
+    if (
+      (manualViewportGestureRef.current || wheelPan)
+      && Math.abs(viewport.zoom - controlledViewportRef.current.zoom) >= 0.0001
+    ) {
+      userGestureZoomRef.current = viewport.zoom
+    }
     if (!preserveViewport || manualViewportGestureRef.current || wheelPan) {
       if (wheelPan && restoreViewportFrameRef.current !== null) {
         cancelAnimationFrame(restoreViewportFrameRef.current)
@@ -409,6 +429,9 @@ export function useMindMapViewport({
       manualViewportGestureRef.current = true
     }
     if (manualViewportGestureRef.current) {
+      if (Math.abs(viewport.zoom - controlledViewportRef.current.zoom) >= 0.0001) {
+        userGestureZoomRef.current = viewport.zoom
+      }
       preservedViewportRef.current = viewport
       commitControlledViewport(viewport)
       return
@@ -447,11 +470,15 @@ export function useMindMapViewport({
   )
 
   const handleMoveEnd = useCallback<OnMove>((event, viewport) => {
-    if (!preserveViewport) return
+    if (!preserveViewport) {
+      userGestureZoomRef.current = null
+      return
+    }
     if (wheelReportIsStale(viewport)) return
     if (explicitViewportChangeRef.current) {
       manualViewportGestureRef.current = false
       userGestureStartZoomRef.current = null
+      userGestureZoomRef.current = null
       return
     }
     if (event) {
@@ -462,7 +489,15 @@ export function useMindMapViewport({
     }
     const userGestureCompleted = manualViewportGestureRef.current
     const gestureStartZoom = userGestureStartZoomRef.current
-    const resting = snapRestingViewport(viewport)
+    // A camera report already showed the zoom moving under this gesture; that is
+    // the authoritative signal when the end arrives after the wheel bookkeeping.
+    // The end itself can carry a pre-gesture camera (controlled-viewport
+    // re-application), so settle on what the learner actually zoomed to.
+    const observedGestureZoom = userGestureZoomRef.current
+    const settledZoom = observedGestureZoom ?? viewport.zoom
+    const resting = snapRestingViewport(
+      Math.abs(settledZoom - viewport.zoom) >= 0.0001 ? { ...viewport, zoom: settledZoom } : viewport,
+    )
     if (resting !== viewport) {
       void setViewport(resting, { duration: 0 })
     }
@@ -474,16 +509,26 @@ export function useMindMapViewport({
     }
     manualViewportGestureRef.current = false
     userGestureStartZoomRef.current = null
+    userGestureZoomRef.current = null
     if (
       userGestureCompleted &&
-      (gestureStartZoom === null || Math.abs(viewport.zoom - gestureStartZoom) >= 0.0001)
+      (
+        observedGestureZoom !== null
+        || gestureStartZoom === null
+        || Math.abs(settledZoom - gestureStartZoom) >= 0.0001
+      )
     ) {
-      notifyUserZoomChange(viewport.zoom)
+      notifyUserZoomChange(settledZoom)
     }
   }, [commitControlledViewport, notifyUserZoomChange, preserveViewport, restorePreservedViewport, setViewport, wheelReportIsStale])
 
   const runExplicitViewportChange = useCallback(
     (change: () => void, duration: number, onSettled?: (viewport: Viewport) => void) => {
+      // A programmatic camera command (fit / center / zoom) owns the camera now:
+      // whatever pointer gesture happened to be armed must not claim its zoom.
+      manualViewportGestureRef.current = false
+      userGestureStartZoomRef.current = null
+      userGestureZoomRef.current = null
       explicitViewportChangeRef.current = true
       if (explicitViewportTimeoutRef.current !== null) {
         window.clearTimeout(explicitViewportTimeoutRef.current)
@@ -807,7 +852,7 @@ export function useMindMapViewport({
           maxZoom: mobileGuidedActive ? MINDMAP_MOBILE_FIT_MAX_ZOOM : MINDMAP_FIT_MAX_ZOOM,
         }),
         0,
-        normalizedPreferredZoom === undefined || mobileGuidedActive
+        normalizedPreferredZoom === undefined || mobileViewPolicy === 'guided'
           ? undefined
           : () => syncPreferredZoom(normalizedPreferredZoom),
       )
@@ -819,6 +864,7 @@ export function useMindMapViewport({
     focusMode,
     isCanvasReady,
     mobileGuidedActive,
+    mobileViewPolicy,
     nodes,
     normalizedPreferredZoom,
     preferredZoomInput,

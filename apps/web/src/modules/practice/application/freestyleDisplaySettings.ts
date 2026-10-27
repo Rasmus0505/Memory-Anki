@@ -22,8 +22,14 @@ export interface FreestyleDisplaySettings {
   auto_advance: boolean
   /** Section vs whole-palace due rating. Defaults to the current unit only. */
   rating_scope: FreestyleRatingScope
-  /** Shared manual mind-map zoom for all freestyle palaces. Exactly 1 stays crisp. */
+  /** Shared manual mind-map zoom for desktop-width freestyle palaces. Exactly 1 stays crisp. */
   mindmap_zoom: number
+  /**
+   * Phone-width manual zoom, kept apart from {@link mindmap_zoom} so a desktop
+   * 1.4 never parks a phone map off-screen. `null` means the learner has not
+   * zoomed on a phone yet, so every card keeps the phone fit.
+   */
+  mindmap_zoom_phone: number | null
 }
 
 /** Previous default. scale(0.99) blurs node text; reads of that value become 1. */
@@ -35,6 +41,7 @@ export const DEFAULT_FREESTYLE_DISPLAY_SETTINGS: FreestyleDisplaySettings = {
   auto_advance: false,
   rating_scope: 'unit',
   mindmap_zoom: 1,
+  mindmap_zoom_phone: null,
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -45,12 +52,21 @@ function isFreestyleDisplaySettings(value: unknown): value is FreestyleDisplaySe
   return isRecord(value) && typeof value.rating_mode === 'boolean'
 }
 
+function clampMindmapZoom(value: number) {
+  if (Math.abs(value - LEGACY_SOFT_MINDMAP_ZOOM) < 0.0001) return 1
+  return Math.min(FREESTYLE_MINDMAP_MAX_ZOOM, Math.max(FREESTYLE_MINDMAP_MIN_ZOOM, value))
+}
+
 function sanitizeMindmapZoom(value: unknown): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return DEFAULT_FREESTYLE_DISPLAY_SETTINGS.mindmap_zoom
   }
-  if (Math.abs(value - LEGACY_SOFT_MINDMAP_ZOOM) < 0.0001) return 1
-  return Math.min(FREESTYLE_MINDMAP_MAX_ZOOM, Math.max(FREESTYLE_MINDMAP_MIN_ZOOM, value))
+  return clampMindmapZoom(value)
+}
+
+function sanitizePhoneMindmapZoom(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null
+  return clampMindmapZoom(value)
 }
 
 export function sanitizeFreestyleDisplaySettings(value: unknown): FreestyleDisplaySettings {
@@ -67,6 +83,7 @@ export function sanitizeFreestyleDisplaySettings(value: unknown): FreestyleDispl
       : DEFAULT_FREESTYLE_DISPLAY_SETTINGS.auto_advance,
     rating_scope: raw.rating_scope === 'palace' ? 'palace' : 'unit',
     mindmap_zoom: sanitizeMindmapZoom(raw.mindmap_zoom),
+    mindmap_zoom_phone: sanitizePhoneMindmapZoom(raw.mindmap_zoom_phone),
   }
 }
 

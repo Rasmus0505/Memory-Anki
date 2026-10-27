@@ -72,6 +72,27 @@ describe('MindMapCanvasToolbar', () => {
     expect(onCollapseDeepBranches).toHaveBeenCalledTimes(1)
   })
 
+  it('keeps 刷新脑图 reachable on phones, where the row wraps instead of scrolling', () => {
+    render(
+      <MindMapCanvasToolbar
+        focusMode={false}
+        canUndo={false}
+        canRedo={false}
+        showHistoryControls={false}
+        leadingContent={<button type="button">学习组</button>}
+        onRefreshHost={vi.fn()}
+        onFitWholeTree={vi.fn()}
+        onToggleFocusMode={vi.fn()}
+      />,
+    )
+
+    const refresh = screen.getByTitle('刷新脑图')
+    // A tool hidden under sm is an invisible tool on the PWA.
+    expect(refresh.className).not.toContain('max-sm:hidden')
+    const toolbar = screen.getByRole('button', { name: '学习组' }).parentElement
+    expect(toolbar?.className).toContain('flex-wrap')
+  })
+
   it('does not render zoom in/out buttons; pinch and wheel still persist elsewhere', () => {
     render(
       <MindMapCanvasToolbar

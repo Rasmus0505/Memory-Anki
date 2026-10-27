@@ -22,6 +22,7 @@ describe('freestyle display settings', () => {
       auto_advance: false,
       rating_scope: 'unit',
       mindmap_zoom: 1,
+      mindmap_zoom_phone: null,
     })
     expect(sanitizeFreestyleDisplaySettings({ rating_mode: true, flip_mode: 'focused' })).toEqual({
       rating_mode: true,
@@ -29,6 +30,7 @@ describe('freestyle display settings', () => {
       auto_advance: false,
       rating_scope: 'unit',
       mindmap_zoom: 1,
+      mindmap_zoom_phone: null,
     })
   })
 
@@ -51,6 +53,7 @@ describe('freestyle display settings', () => {
       auto_advance: true,
       rating_scope: 'unit',
       mindmap_zoom: 1,
+      mindmap_zoom_phone: null,
     })
   })
 
@@ -76,5 +79,15 @@ describe('freestyle display settings', () => {
 
   it('promotes the legacy 0.99 default to 1 so node text stays crisp', () => {
     expect(sanitizeFreestyleDisplaySettings({ mindmap_zoom: 0.99 }).mindmap_zoom).toBe(1)
+  })
+
+  it('keeps a separate phone zoom, unset until the learner zooms there', () => {
+    // A desktop 1.4 must never become the phone's zoom.
+    expect(sanitizeFreestyleDisplaySettings({ mindmap_zoom: 1.4 }).mindmap_zoom_phone).toBeNull()
+    expect(sanitizeFreestyleDisplaySettings({ mindmap_zoom_phone: 0.8 }).mindmap_zoom_phone).toBe(0.8)
+    expect(sanitizeFreestyleDisplaySettings({ mindmap_zoom_phone: 0.01 }).mindmap_zoom_phone).toBe(0.12)
+    expect(sanitizeFreestyleDisplaySettings({ mindmap_zoom_phone: 2 }).mindmap_zoom_phone).toBe(1.4)
+    expect(sanitizeFreestyleDisplaySettings({ mindmap_zoom_phone: '0.8' }).mindmap_zoom_phone).toBeNull()
+    expect(sanitizeFreestyleDisplaySettings({ mindmap_zoom_phone: Number.NaN }).mindmap_zoom_phone).toBeNull()
   })
 })

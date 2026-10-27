@@ -103,12 +103,12 @@ export function MindMapCanvasToolbar({
     <div className="flex min-h-10 shrink-0 flex-wrap items-center gap-1 border-b border-border bg-background px-2 py-1.5 sm:h-10 sm:flex-nowrap sm:gap-2 sm:overflow-x-auto sm:px-3">
       {leadingContent}
       {leadingContent ? <div className="h-5 w-px shrink-0 bg-border" /> : null}
-      {/* Recovery tool for a blank canvas, not a per-card action: phones keep it
-          out of the always-visible row so the row never scrolls a tool off screen. */}
+      {/* Recovery tool for a blank canvas. Phones keep it too: a stranded PWA has
+          no other way back, and the row wraps instead of scrolling a tool off. */}
       <button
         type="button"
         onClick={onRefreshHost}
-        className={plainToolbarButtonClass('max-sm:hidden')}
+        className={plainToolbarButtonClass()}
         title="刷新脑图"
       >
         <RefreshCw className="size-4" />

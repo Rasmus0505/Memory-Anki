@@ -42,23 +42,61 @@ describe('useMindMapViewport preferred zoom', () => {
     reactFlowMock.setCenter.mockClear()
   })
 
-  it('does not apply a desktop manual zoom to mobile guided review', async () => {
+  it('applies the host phone zoom on a narrow read-only review canvas', () => {
+    // Freestyle keeps a separate phone zoom, so a narrow review canvas may apply
+    // the learner's own value; the per-card fit must not throw it away.
+    const onControlledViewportChange = vi.fn()
+    const props = buildProps({
+      canvasRef: phoneCanvasHost(),
+      controlledViewport: { x: 4, y: 18, zoom: 0.5 },
+      onControlledViewportChange,
+      readonly: true,
+      mobileViewPolicy: 'auto',
+      preferredZoom: 0.9,
+      graphNodes: [graphNode('root', null)],
+      nodes: [flowNode('root', 0, 0)],
+    })
+    renderHook((nextProps) => useMindMapViewport(nextProps), { initialProps: props })
+
+    expect(onControlledViewportChange).toHaveBeenCalledWith({ x: 4, y: 18, zoom: 0.9 })
+  })
+
+  it('leaves the phone fit in charge when the host has no phone zoom yet', async () => {
     reactFlowMock.fitView.mockClear()
     const onControlledViewportChange = vi.fn()
     const props = buildProps({
       canvasRef: phoneCanvasHost(),
-      controlledViewport: { x: 4, y: 18, zoom: 1.4 },
+      // No host preference: the canvas starts on its default camera.
+      controlledViewport: { x: 4, y: 18, zoom: 1 },
       onControlledViewportChange,
       readonly: true,
       mobileViewPolicy: 'auto',
-      preferredZoom: 1.4,
       graphNodes: [graphNode('root', null)],
       nodes: [flowNode('root', 0, 0)],
     })
     renderHook((nextProps) => useMindMapViewport(nextProps), { initialProps: props })
 
     await waitFor(() => expect(reactFlowMock.fitView).toHaveBeenCalled())
-    // The phone camera is the fit's: the shared 1.4 preference must never reach it.
+    // Only the fit writes the camera; no host zoom is forced back.
+    expect(onControlledViewportChange).not.toHaveBeenCalledWith(
+      expect.objectContaining({ zoom: 1 }),
+    )
+  })
+
+  it('keeps the guided host fit in charge of a preferred zoom', () => {
+    const onControlledViewportChange = vi.fn()
+    const props = buildProps({
+      canvasRef: phoneCanvasHost(),
+      controlledViewport: { x: 4, y: 18, zoom: 0.5 },
+      onControlledViewportChange,
+      readonly: true,
+      mobileViewPolicy: 'guided',
+      preferredZoom: 1.4,
+      graphNodes: [graphNode('root', null)],
+      nodes: [flowNode('root', 0, 0)],
+    })
+    renderHook((nextProps) => useMindMapViewport(nextProps), { initialProps: props })
+
     expect(onControlledViewportChange).not.toHaveBeenCalledWith(
       expect.objectContaining({ zoom: 1.4 }),
     )
@@ -201,6 +239,106 @@ describe('useMindMapViewport preferred zoom', () => {
       result.current.handleMoveEnd(null, { ...gestureEnd, zoom: 0.91 })
     })
     expect(onUserZoomChange).not.toHaveBeenCalled()
+  })
+
+  it('keeps a wheel zoom gesture start so a second start with the zoomed camera still reports', () => {
+    // React Flow's pan-on-scroll ctrl/pinch path reports the wheel gesture start
+    // twice: first with the pre-zoom camera, then with the already-zoomed one.
+    // Letting the second report overwrite the gesture start made move-end see no
+    // zoom change, so the freestyle shared zoom preference never advanced.
+    const onUserZoomChange = vi.fn()
+    const props = buildProps({
+      onUserZoomChange,
+      controlledViewport: { x: 4, y: 18, zoom: 1 },
+    })
+    const { result } = renderHook((nextProps) => useMindMapViewport(nextProps), {
+      initialProps: props,
+    })
+    const wheel = new WheelEvent('wheel', { ctrlKey: true })
+
+    act(() => {
+      result.current.handleMoveStart(wheel, { x: 4, y: 18, zoom: 1 })
+      result.current.handleMoveStart(wheel, { x: 4, y: 18, zoom: 1.18 })
+      result.current.handleMoveEnd(wheel, { x: 4, y: 18, zoom: 1.18 })
+    })
+
+    expect(onUserZoomChange).toHaveBeenCalledTimes(1)
+    expect(onUserZoomChange).toHaveBeenCalledWith(1.18)
+  })
+
+  it('reports a ctrl-wheel zoom whose start report already carries the zoomed camera', () => {
+    const canvas = document.createElement('div')
+    document.body.appendChild(canvas)
+    const onUserZoomChange = vi.fn()
+    const props = buildProps({
+      canvasRef: { current: canvas },
+      onUserZoomChange,
+      controlledViewport: { x: 4, y: 18, zoom: 1 },
+    })
+    const { result } = renderHook((nextProps) => useMindMapViewport(nextProps), {
+      initialProps: props,
+    })
+
+    // The capture handler arms the wheel gesture before React Flow reports it.
+    act(() => {
+      canvas.dispatchEvent(new WheelEvent('wheel', {
+        deltaY: -100,
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      }))
+    })
+    act(() => {
+      result.current.handleMoveStart(new WheelEvent('wheel', { ctrlKey: true }), { x: 4, y: 18, zoom: 1.18 })
+      result.current.handleMoveEnd(new WheelEvent('wheel', { ctrlKey: true }), { x: 4, y: 18, zoom: 1.18 })
+    })
+
+    expect(onUserZoomChange).toHaveBeenCalledWith(1.18)
+    document.body.removeChild(canvas)
+  })
+
+  it('reports a zoom observed during a wheel gesture whose end lands after the wheel timer', () => {
+    // Pan-on-scroll closes the wheel gesture after ~280ms, but React Flow's d3
+    // wheel-end can land later. The end then re-reads the already-zoomed camera as
+    // the "start", so only the report observed during the gesture proves the user
+    // zoomed.
+    vi.useFakeTimers()
+    const canvas = document.createElement('div')
+    document.body.appendChild(canvas)
+    const onUserZoomChange = vi.fn()
+    const props = buildProps({
+      canvasRef: { current: canvas },
+      onUserZoomChange,
+      controlledViewport: { x: 4, y: 18, zoom: 1 },
+    })
+    const { result } = renderHook((nextProps) => useMindMapViewport(nextProps), {
+      initialProps: props,
+    })
+
+    act(() => {
+      canvas.dispatchEvent(new WheelEvent('wheel', {
+        deltaY: -100,
+        ctrlKey: true,
+        bubbles: true,
+        cancelable: true,
+      }))
+    })
+    act(() => {
+      result.current.handleViewportChange({ x: 4, y: 18, zoom: 1.3 })
+    })
+    act(() => {
+      vi.advanceTimersByTime(300)
+    })
+    act(() => {
+      result.current.handleMoveEnd(
+        new WheelEvent('wheel', { ctrlKey: true }),
+        { x: 4, y: 18, zoom: 1.3 },
+      )
+    })
+
+    expect(onUserZoomChange).toHaveBeenCalledWith(1.3)
+    vi.useRealTimers()
+    document.body.removeChild(canvas)
   })
 
   it('reports explicit zoom controls immediately without treating them as a camera command', () => {
