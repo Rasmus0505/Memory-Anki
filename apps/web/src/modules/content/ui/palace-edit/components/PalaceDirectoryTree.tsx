@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { ChevronRight, FileText, LoaderCircle, Plus, Search } from 'lucide-react'
 import { Input } from '@/shared/components/ui/input'
@@ -10,17 +10,25 @@ import {
   type DirectoryChapterNode,
   type DirectoryPalaceNode,
   type DirectorySubjectNode,
+  type PalaceDirectoryTree as PalaceDirectoryTreeModel,
 } from '../model/palaceDirectoryTree'
 
 const PALACE_DRAG_TYPE = 'application/x-memory-anki-palace'
 const INDENT_STEP = 14
 const BASE_INDENT = 6
 
-export interface PalaceDirectoryTreeProps {
+export interface PalaceDirectoryTreeViewProps {
+  tree: PalaceDirectoryTreeModel
   currentPalaceId: number | null
-  onOpenPalace: (palaceId: number) => void
-  /** Resolve a drop: `chapterId === null` means the 「未分类」 bucket. */
-  onBindPalace: (palaceId: number, chapterId: number | null, subjectId: number | null) => void
+  loading?: boolean
+  error?: string | null
+  onSelectPalace: (palaceId: number) => void
+  /** Enables drag-to-rebind; without it rows are select-only. */
+  onBindPalace?: (palaceId: number, chapterId: number | null, subjectId: number | null) => void
+  showHeader?: boolean
+  showSearch?: boolean
+  searchPlaceholder?: string
+  emptyState?: ReactNode
   className?: string
 }
 
@@ -31,13 +39,24 @@ function readDraggedPalaceId(event: DragEvent) {
   return Number.isFinite(palaceId) && palaceId > 0 ? palaceId : null
 }
 
-export function PalaceDirectoryTree({
+/**
+ * Pure tree rendering for 「学科 → 章节 → 宫殿」. Data loading and the host's
+ * selection semantics stay outside so the editor panel and the lookup dialog
+ * can share exactly one visual language.
+ */
+export function PalaceDirectoryTreeView({
+  tree,
   currentPalaceId,
-  onOpenPalace,
+  loading = false,
+  error = null,
+  onSelectPalace,
   onBindPalace,
+  showHeader = true,
+  showSearch = true,
+  searchPlaceholder = '搜索宫殿',
+  emptyState,
   className,
-}: PalaceDirectoryTreeProps) {
-  const { tree, loading, error } = usePalaceDirectoryTree()
+}: PalaceDirectoryTreeViewProps) {
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
   const [keyword, setKeyword] = useState('')
   const [dragOverKey, setDragOverKey] = useState<string | null>(null)
@@ -82,6 +101,7 @@ export function PalaceDirectoryTree({
     chapterId: number | null,
     subjectId: number | null,
   ) => {
+    if (!onBindPalace) return
     event.preventDefault()
     setDragOverKey(null)
     const palaceId = readDraggedPalaceId(event)
@@ -91,6 +111,7 @@ export function PalaceDirectoryTree({
 
   const dropTargetProps = (key: string, chapterId: number | null, subjectId: number | null) => ({
     onDragOver: (event: DragEvent) => {
+      if (!onBindPalace) return
       if (!event.dataTransfer.types.includes(PALACE_DRAG_TYPE)) return
       event.preventDefault()
       event.dataTransfer.dropEffect = 'move'
@@ -110,13 +131,15 @@ export function PalaceDirectoryTree({
         aria-current={active ? 'page' : undefined}
         aria-label={palace.title}
         title={palace.title}
-        draggable
-        onDragStart={(event) => {
-          event.dataTransfer.setData(PALACE_DRAG_TYPE, String(palace.id))
-          event.dataTransfer.setData('text/plain', String(palace.id))
-          event.dataTransfer.effectAllowed = 'move'
-        }}
-        onClick={() => onOpenPalace(palace.id)}
+        draggable={Boolean(onBindPalace)}
+        onDragStart={onBindPalace
+          ? (event) => {
+            event.dataTransfer.setData(PALACE_DRAG_TYPE, String(palace.id))
+            event.dataTransfer.setData('text/plain', String(palace.id))
+            event.dataTransfer.effectAllowed = 'move'
+          }
+          : undefined}
+        onClick={() => onSelectPalace(palace.id)}
         className={cn(
           'group flex w-full items-center gap-1.5 rounded-md py-1 pr-1.5 text-left text-[13px] transition-colors',
           active
@@ -255,27 +278,31 @@ export function PalaceDirectoryTree({
 
   return (
     <div className={cn('flex h-full min-h-0 w-full flex-col gap-2 p-3', className)}>
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium tracking-wide text-muted-foreground">记忆宫殿</span>
-        <Link
-          to="/palaces/new"
-          aria-label="新建宫殿"
-          title="新建宫殿"
-          className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
-          <Plus className="size-3.5" aria-hidden />
-        </Link>
-      </div>
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-2.5 top-2 size-3.5 text-muted-foreground" aria-hidden />
-        <Input
-          value={keyword}
-          onChange={(event) => setKeyword(event.target.value)}
-          placeholder="搜索宫殿"
-          aria-label="搜索宫殿"
-          className="h-8 pl-8 text-[13px]"
-        />
-      </div>
+      {showHeader ? (
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-medium tracking-wide text-muted-foreground">记忆宫殿</span>
+          <Link
+            to="/palaces/new"
+            aria-label="新建宫殿"
+            title="新建宫殿"
+            className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <Plus className="size-3.5" aria-hidden />
+          </Link>
+        </div>
+      ) : null}
+      {showSearch ? (
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-2 size-3.5 text-muted-foreground" aria-hidden />
+          <Input
+            value={keyword}
+            onChange={(event) => setKeyword(event.target.value)}
+            placeholder={searchPlaceholder}
+            aria-label={searchPlaceholder}
+            className="h-8 pl-8 text-[13px]"
+          />
+        </div>
+      ) : null}
       <div aria-label="宫殿目录" className="min-h-0 flex-1 overflow-y-auto">
         {loading && !hasAnySubject && !hasRootUngrouped ? (
           <div className="flex items-center gap-2 px-1 py-3 text-[13px] text-muted-foreground">
@@ -288,9 +315,9 @@ export function PalaceDirectoryTree({
         ) : null}
         {!loading && !error && !hasAnySubject && !hasRootUngrouped ? (
           <p className="px-1 py-3 text-[13px] text-muted-foreground">
-            {keyword.trim()
+            {searching
               ? '没有匹配的宫殿。'
-              : <>还没有学科。<Link to="/knowledge" className="text-primary hover:underline">去知识库建立学科</Link></>}
+              : emptyState ?? <>还没有学科。<Link to="/knowledge" className="text-primary hover:underline">去知识库建立学科</Link></>}
           </p>
         ) : null}
         {filtered.subjects.map((subject) => renderSubject(subject, 0))}
@@ -299,5 +326,34 @@ export function PalaceDirectoryTree({
           : null}
       </div>
     </div>
+  )
+}
+
+export interface PalaceDirectoryTreeProps {
+  currentPalaceId: number | null
+  onOpenPalace: (palaceId: number) => void
+  /** Resolve a drop: `chapterId === null` means the 「未分类」 bucket. */
+  onBindPalace: (palaceId: number, chapterId: number | null, subjectId: number | null) => void
+  className?: string
+}
+
+/** Editor-side panel: loads the directory and binds it to the editor's actions. */
+export function PalaceDirectoryTree({
+  currentPalaceId,
+  onOpenPalace,
+  onBindPalace,
+  className,
+}: PalaceDirectoryTreeProps) {
+  const { tree, loading, error } = usePalaceDirectoryTree()
+  return (
+    <PalaceDirectoryTreeView
+      tree={tree}
+      currentPalaceId={currentPalaceId}
+      loading={loading}
+      error={error}
+      onSelectPalace={onOpenPalace}
+      onBindPalace={onBindPalace}
+      className={className}
+    />
   )
 }

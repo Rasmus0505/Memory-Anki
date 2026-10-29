@@ -18,7 +18,10 @@ import {
   X,
 } from 'lucide-react'
 import { getPalaceEditorApi, getPalacesGroupedApi } from '@/modules/content/public'
-import { useMemoryAnkiShortcuts } from '@/modules/settings/public'
+import {
+  PalaceDirectoryTreeView,
+  usePalaceDirectoryTree,
+} from '@/modules/content/public'
 import { useRevealSession } from '@/modules/memory/public'
 import { buildInitialRevealState } from '@/modules/memory/public'
 import { useReviewFeedback } from '@/modules/memory/public'
@@ -170,6 +173,9 @@ export function PalaceMemoryLookupDialog({
   }, [onOpenChange])
 
   const palaces = useMemo(() => flattenPalaces(groupedData), [groupedData])
+  // Browsing with no query shows the same 学科 › 章节 › 宫殿 tree as the editor;
+  // typing switches the left column to the node-text search results.
+  const directory = usePalaceDirectoryTree({ enabled: open })
   const selectedPalace = palaces.find((palace) => palace.id === selectedPalaceId) ?? null
   const requestedFocusNodeUids = useMemo(
     () => normalizeMemoryLookupFocusNodeUids([
@@ -347,26 +353,6 @@ export function PalaceMemoryLookupDialog({
     setRevealMap(buildInitialRevealState(revealRoot))
     setRedNodeIds(new Set<string>())
   }, [revealRoot, setRedNodeIds, setRevealMap])
-
-  const flipShortcutHandlers = useMemo(
-    () => ({
-      flip_subtree_cards: (): boolean => {
-        if (previewMode !== 'flip') return false
-        return Boolean(revealSession.handleBulkRevealSubtree(null))
-      },
-      flip_direct_child_cards: (): boolean => {
-        if (previewMode !== 'flip') return false
-        return Boolean(revealSession.handleBulkRevealDirectChildren(null))
-      },
-    }),
-    [previewMode, revealSession],
-  )
-  useMemoryAnkiShortcuts(
-    'flip',
-    flipShortcutHandlers,
-    open && previewMode === 'flip',
-    { allowOverlayTarget: true },
-  )
 
   useEffect(() => () => {
     if (fullscreenExitGuardTimerRef.current != null) {
@@ -1066,7 +1052,19 @@ export function PalaceMemoryLookupDialog({
                   {renderSearchInput()}
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto p-2">
-                  {renderPalaceList()}
+                  {submittedSearch ? renderPalaceList() : (
+                    <PalaceDirectoryTreeView
+                      tree={directory.tree}
+                      currentPalaceId={selectedPalaceId}
+                      loading={directory.loading}
+                      error={directory.error}
+                      onSelectPalace={setSelectedPalaceId}
+                      showHeader={false}
+                      showSearch={false}
+                      emptyState="没有找到记忆宫殿。"
+                      className="p-1"
+                    />
+                  )}
                 </div>
               </div>
             )}

@@ -1014,4 +1014,43 @@ describe('MindMapCanvas recovery', () => {
     rerender(<MindMapCanvas graphData={largeGraphData} {...props} collapseResetKey={2} />)
     await waitFor(() => expect(screen.queryByTestId('node-branch-0-leaf')).toBeNull())
   })
+
+  it('turns an emptied card into a 单独删除 instead of restoring its text', async () => {
+    render(<ControlledMindMapEditorSurface />)
+    const child = await screen.findByRole('button', { name: '知识点' })
+    fireEvent.doubleClick(child)
+    const editor = await screen.findByRole('textbox', { name: '编辑节点文本' })
+    expect(editor.textContent).toBe('知识点')
+
+    // Ctrl+A → Ctrl+X: the browser removes the selection, then fires input.
+    editor.textContent = ''
+    fireEvent.input(editor)
+    // Leaving the card commits the empty text.
+    fireEvent.click(screen.getByRole('button', { name: '宫殿' }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('textbox', { name: '编辑节点文本' })).toBeNull()
+    })
+    // The cleared card is gone — the original text must not come back.
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: '知识点' })).toBeNull()
+      expect(screen.getByRole('button', { name: '宫殿' })).toBeTruthy()
+    })
+  })
+
+  it('keeps the root text when the palace frame is emptied', async () => {
+    render(<ControlledMindMapEditorSurface />)
+    const root = await screen.findByRole('button', { name: '宫殿' })
+    fireEvent.doubleClick(root)
+    const editor = await screen.findByRole('textbox', { name: '编辑节点文本' })
+    editor.textContent = ''
+    fireEvent.input(editor)
+    fireEvent.click(screen.getByRole('button', { name: '知识点' }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('textbox', { name: '编辑节点文本' })).toBeNull()
+      // The root is the palace frame: it cannot be emptied.
+      expect(screen.getByRole('button', { name: '宫殿' })).toBeTruthy()
+    })
+  })
 })

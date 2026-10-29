@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
+  resetClientPreferenceCacheForTest,
+  setClientPreference,
+} from '@/shared/preferences/clientPreferences'
+import {
   applyQuizShuffleOrder,
+  quizShuffleSetStorageKey,
   quizShuffleStorageKey,
   readQuizShuffleOrder,
   saveQuizShuffleOrder,
@@ -53,17 +58,32 @@ describe('quiz shuffle order storage', () => {
 
   beforeEach(() => {
     window.localStorage.clear()
+    resetClientPreferenceCacheForTest()
   })
 
   it('keys the order by palace and node', () => {
     expect(quizShuffleStorageKey(source)).toBe('7:node-a')
     expect(quizShuffleStorageKey({ palaceId: 7, nodeUid: null })).toBe('7:palace')
+    expect(quizShuffleSetStorageKey(source, [3, 1, 2])).toBe('7:set:1,2,3')
   })
 
   it('round-trips the saved order', () => {
     saveQuizShuffleOrder(source, [3, 1, 2])
     expect(readQuizShuffleOrder(source)).toEqual([3, 1, 2])
     expect(readQuizShuffleOrder({ palaceId: 7, nodeUid: 'node-b' })).toEqual([])
+  })
+
+  it('reads the order from the shared preference, not this browser', () => {
+    // Another surface (desktop window / the other device) already shuffled.
+    void setClientPreference('quiz_shuffle_orders', { '7:node-a': [5, 4, 3, 2, 1] })
+    expect(window.localStorage.getItem('memory-anki.quiz.shuffle-order.v1')).toBeNull()
+    expect(readQuizShuffleOrder(source)).toEqual([5, 4, 3, 2, 1])
+  })
+
+  it('reuses the order for the same questions opened from another entry point', () => {
+    saveQuizShuffleOrder(source, [3, 1, 2])
+    expect(readQuizShuffleOrder({ palaceId: 7, nodeUid: 'node-b' }, [1, 2, 3])).toEqual([3, 1, 2])
+    expect(readQuizShuffleOrder({ palaceId: 7, nodeUid: 'node-b' }, [1, 2, 3, 4])).toEqual([])
   })
 
   it('ignores corrupt storage instead of throwing', () => {

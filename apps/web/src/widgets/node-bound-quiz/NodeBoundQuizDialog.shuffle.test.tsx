@@ -55,7 +55,9 @@ describe('NodeBoundQuizDialog 打乱题库', () => {
     expect(stored['1:node-1']).toEqual([42, 41, 43])
 
     view.unmount()
-    // Reopening rebuilds the list from the opener's ids and must keep the order.
+    // The order is a shared preference, so it must not depend on this browser's
+    // storage: wiping localStorage must still reopen in the shuffled order.
+    window.localStorage.clear()
     renderDialog({ questionIds: [42, 43, 41] })
     expect(await screen.findByText('下列哪一项是细胞膜的主要成分？')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '下一题' }))

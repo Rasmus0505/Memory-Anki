@@ -6,7 +6,6 @@ import { useMemoryAnkiShortcuts } from "@/modules/settings/public";
 import type { MindMapSelection } from "@/modules/content/public";
 import type { MindMapEditorState } from "@/shared/api/contracts";
 import { normalizeMindMapDocument as normalizeEditorDocTree } from '@/modules/content/public'
-import { isEditableKeyboardTarget } from "@/shared/keyboard/keyboardTargets";
 import { useRouteResidency } from "@/shared/routing/RouteResidency";
 import { cn } from "@/shared/lib/utils";
 import type { MindMapReviewFlowProps } from "@/modules/practice/public";
@@ -149,37 +148,6 @@ export function useMindMapReviewFlowController({
     return true;
   }, [activeNodes, flow, isInlineEditMode]);
 
-  // Refs keep A/S handlers current without rebinding window listeners every render.
-  // Do not gate on React hover state: it lags behind hoveredNodeIdRef and is cleared
-  // by mouseleave when reveal re-renders nodes between the two bulk-flip phases.
-  const selectedNodeUidRef = React.useRef(selectedNodeUid);
-  selectedNodeUidRef.current = selectedNodeUid;
-  const isInlineEditModeRef = React.useRef(isInlineEditMode);
-  isInlineEditModeRef.current = isInlineEditMode;
-  const flowCompletedRef = React.useRef(flow.completed);
-  flowCompletedRef.current = flow.completed;
-  const handleBulkRevealSubtreeRef = React.useRef(flow.handleBulkRevealSubtree);
-  handleBulkRevealSubtreeRef.current = flow.handleBulkRevealSubtree;
-  const handleBulkRevealDirectChildrenRef = React.useRef(flow.handleBulkRevealDirectChildren);
-  handleBulkRevealDirectChildrenRef.current = flow.handleBulkRevealDirectChildren;
-
-  const handleShortcutFlipSubtree = React.useCallback((): boolean => {
-    if (isInlineEditModeRef.current || flowCompletedRef.current) {
-      return false;
-    }
-    if (isBlockingDialogOpen()) return false;
-    // Live hover / sticky / locked bulk / selection resolved inside handleBulkReveal*.
-    return Boolean(handleBulkRevealSubtreeRef.current(selectedNodeUidRef.current));
-  }, []);
-
-  const handleShortcutFlipDirectChildren = React.useCallback((): boolean => {
-    if (isInlineEditModeRef.current || flowCompletedRef.current) {
-      return false;
-    }
-    if (isBlockingDialogOpen()) return false;
-    return Boolean(handleBulkRevealDirectChildrenRef.current(selectedNodeUidRef.current));
-  }, []);
-
   const handleShortcutFlipCurrent = React.useCallback(
     (event: KeyboardEvent): boolean => {
       if (isKeyboardControlTarget(event)) return false;
@@ -209,13 +177,9 @@ export function useMindMapReviewFlowController({
       flip_current_card: handleShortcutFlipCurrent,
       retract_current_card: handleShortcutRetractCurrent,
       hide_child_cards: handleShortcutHideChildCards,
-      flip_subtree_cards: handleShortcutFlipSubtree,
-      flip_direct_child_cards: handleShortcutFlipDirectChildren,
     };
   }, [
     handleShortcutFlipCurrent,
-    handleShortcutFlipDirectChildren,
-    handleShortcutFlipSubtree,
     handleShortcutHideChildCards,
     handleShortcutRetractCurrent,
     isInlineEditMode,
@@ -242,36 +206,9 @@ export function useMindMapReviewFlowController({
     isInlineEditMode,
   ]);
 
-  const handleSpacePourRef = React.useRef(flow.handleSpacePour)
-  handleSpacePourRef.current = flow.handleSpacePour
-
-  React.useEffect(() => {
-    if (isInlineEditMode || !isCheckpointMode) return
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || (event.key !== ' ' && event.code !== 'Space')) return
-      if (isEditableKeyboardTarget(event.target)) return
-      event.preventDefault()
-      event.stopPropagation()
-      handleSpacePourRef.current()
-    }
-    window.addEventListener('keydown', onKeyDown, true)
-    return () => window.removeEventListener('keydown', onKeyDown, true)
-  }, [isCheckpointMode, isInlineEditMode])
-
-  React.useEffect(() => {
-    if (isInlineEditMode || isCheckpointMode) return
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return
-      if (event.key !== ' ' && event.code !== 'Space') return
-      if (isEditableKeyboardTarget(event.target)) return
-      event.preventDefault()
-      event.stopPropagation()
-      handleShortcutAdvanceReview()
-    }
-    window.addEventListener('keydown', onKeyDown, true)
-    return () => window.removeEventListener('keydown', onKeyDown, true)
-  }, [handleShortcutAdvanceReview, isCheckpointMode, isInlineEditMode])
-
+  // Space is deliberately not a shortcut here: a card can be in inline edit, and a
+  // keypress meant for typing must never advance (翻卡) the card underneath. The
+  // flip map owns Enter/Backspace; nothing else binds the space bar.
   const handleFullscreenToggle = React.useCallback(
     (active?: boolean) => {
       if (typeof active === "boolean") {

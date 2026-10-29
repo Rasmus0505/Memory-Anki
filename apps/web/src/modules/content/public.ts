@@ -15,6 +15,7 @@ export const PalaceListPage = lazy(() => import('./ui/palace-catalog/PalaceListP
 export const PalaceShelfPage = lazy(() => import('./ui/palace-catalog/PalaceShelfPage'))
 export { buildPalaceParentQuestionTotals, usePalaceParentQuestionTotal } from './ui/palace-catalog/usePalaceParentQuestionTotal'
 export * from './ui/palace-edit/components/PalaceDirectoryTree'
+export * from './ui/palace-edit/hooks/usePalaceDirectoryTree'
 export * from './ui/palace-edit/components/PalaceTemplateDialog'
 export * from './ui/palace-edit/hooks/usePalaceEditPage'
 export { usePalacePracticeMode } from './ui/palace-edit/hooks/usePalacePracticeMode'

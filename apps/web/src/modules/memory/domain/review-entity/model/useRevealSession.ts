@@ -149,13 +149,13 @@ export function useRevealSession({
   /** Live hover (cleared on mouseleave). */
   const hoveredNodeIdRef = React.useRef<string | null>(null)
   /**
-   * Last non-null hover for A/S bulk flip. Survives mouseleave caused by
+   * Last non-null hover for a bulk flip. Survives mouseleave caused by
    * reveal re-renders so the second phase press still has an anchor.
    * Cleared only on session reset (not on transient leave).
    */
   const stickyBulkTargetNodeIdRef = React.useRef<string | null>(null)
   /**
-   * Locked bulk anchor while a two-phase A/S flip is incomplete.
+   * Locked bulk anchor while a two-phase bulk flip is incomplete.
    * Survives layout shifts that put the pointer over newly revealed children
    * (live hover would otherwise steal the target and make phase-2 a no-op).
    */
@@ -333,7 +333,7 @@ export function useRevealSession({
   const handleNodeClick = React.useCallback((nodes: MindMapSelection[]) => {
     const nodeId = buildSelectionNodeId(nodes[0] ?? null)
     if (!nodeId) return
-    // Explicit click = new intent; drop incomplete A/S lock so the next bulk can retarget.
+    // Explicit click = new intent; drop an incomplete bulk lock so the next bulk can retarget.
     clearLockedBulkTarget()
     // Due and non-due both advance/expand one step at a time (same flip ops as freestyle).
     enqueueRevealAction({ type: 'advance', nodeId })
@@ -373,7 +373,8 @@ export function useRevealSession({
   }, [])
 
   /**
-   * 收卡: bring the target card back to its prompt and fold its subtree. Pending
+   * 收卡: fold the target's subtree and take the card back to the state the
+   * reveal stage gives it (待回忆 prompt in 两阶段, hidden in 直接显示). Pending
    * flips are dropped first, so an Enter pressed a frame earlier cannot reopen
    * the card after the retract.
    */
@@ -382,12 +383,12 @@ export function useRevealSession({
     if (!nodeId) return false
     clearPendingRevealActions()
     clearLockedBulkTarget()
-    const next = retractRevealStateBranch(nodeId, nodeMap, revealMapRef.current)
+    const next = retractRevealStateBranch(nodeId, nodeMap, revealMapRef.current, revealOptions)
     if (next === revealMapRef.current) return false
     revealMapRef.current = next
     setRevealMap(next)
     return true
-  }, [clearLockedBulkTarget, clearPendingRevealActions, nodeMap])
+  }, [clearLockedBulkTarget, clearPendingRevealActions, nodeMap, revealOptions])
 
   const handleNodeContextMenu = React.useCallback((nodes: MindMapSelection[]) => {
     const nodeId = buildSelectionNodeId(nodes[0] ?? null)
@@ -411,7 +412,7 @@ export function useRevealSession({
    * Bulk two-phase flip under hover, with selection then sticky-hover fallbacks.
    * Priority while a bulk is incomplete:
    *   locked bulk target → live hover → selection fallback → sticky last hover.
-   * Lock survives layout re-enter onto newly revealed children so A/S phase-2 works.
+   * Lock survives layout re-enter onto newly revealed children so phase-2 works.
    * @returns true when a bulk action was enqueued.
    */
   const handleBulkReveal = React.useCallback(

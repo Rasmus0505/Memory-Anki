@@ -344,6 +344,11 @@ export interface ClientPreferences {
   growth_state?: Record<string, unknown> | null
   /** English II cloze words the reader marked or dismissed. */
   english_cloze_marks?: { marked?: string[]; dismissed?: string[] } | null
+  /**
+   * 「打乱题库」order for the 关联题目 window, keyed by palace+node (and by the
+   * question set). Shared across devices so a shuffle sticks everywhere.
+   */
+  quiz_shuffle_orders?: Record<string, number[]> | null
 }
 export interface ClientPreferencesResponse {
   items: ClientPreferences

@@ -412,24 +412,30 @@ function MindMapNodeCard({ data, id }: NodeProps) {
     optimisticEditPendingRef.current = false
     const input = inputRef.current
     const committed = input ? serializeContentEditable(input) : editValue
-    const trimmed = committed.trim()
-    if (trimmed) {
+    // Emptiness is about what the learner can see: a leftover highlight wrapper
+    // (`<div><span data-emphasis></span></div>`) is an empty card too.
+    if (stripMindMapHtml(committed).trim()) {
       dispatchGlobalFeedback('text_commit', {
         point: getElementFeedbackPoint(inputRef.current),
         origin: 'keyboard',
       })
-      nodeData.onFinishEdit?.(id, trimmed)
-    } else {
+      nodeData.onFinishEdit?.(id, committed.trim())
+    } else if (stripMindMapHtml(editValue).trim()) {
       // Empty editor after a failed seed must not cancel when we still have draft text.
-      const fallback = (editValue || resolveNodeRawText(nodeData)).trim()
-      if (fallback) {
-        nodeData.onFinishEdit?.(id, fallback)
-      } else {
-        nodeData.onCancelEdit?.(id)
-      }
+      nodeData.onFinishEdit?.(id, editValue.trim())
+    } else if (isRoot || !stripMindMapHtml(resolveNodeRawText(nodeData)).trim()) {
+      // The root is the palace frame, and a card that was already blank has
+      // nothing to clear: both keep the cancel path instead of a delete.
+      nodeData.onCancelEdit?.(id)
+      setEditText(resolveNodeRawText(nodeData))
+    } else {
+      // Emptied on purpose (Ctrl+A → Ctrl+X, or deleting everything): report the
+      // empty text so the host can remove this card instead of silently restoring
+      // the original — which is what made a cut look like it never happened.
+      nodeData.onFinishEdit?.(id, '')
     }
     setLocalEdit(false)
-  }, [editValue, extract, focusEditorCaret, id, nodeData])
+  }, [editValue, extract, focusEditorCaret, id, isRoot, nodeData])
 
   const handleToggleHighlight = useCallback(() => {
     const input = inputRef.current
@@ -658,6 +664,10 @@ function MindMapNodeCard({ data, id }: NodeProps) {
             onBlur={commitEdit}
             aria-label="编辑节点文本"
             data-node-mode="editing"
+            // Page-level shortcut owners (flip map, feed pager, camera keys) read
+            // this: while the editor is open, the caret may have lost DOM focus but
+            // the key still belongs to the card being edited.
+            data-mindmap-editor-active="true"
             className={[
               'nodrag nopan nowheel mindmap-node-editor block w-full min-w-0 outline-none',
               editorTextCls,

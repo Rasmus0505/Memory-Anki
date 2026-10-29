@@ -4,7 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PalaceGroupedListResponse } from '@/shared/api/contracts'
 import { getPalacesGroupedApi } from '@/modules/content/domain/palace-entity/api'
 import { getSubjectsApi, getSubjectTreeApi } from '@/modules/content/domain/knowledge-entity/api'
-import { PalaceDirectoryTree } from './PalaceDirectoryTree'
+import { PalaceDirectoryTree, PalaceDirectoryTreeView } from './PalaceDirectoryTree'
+import type { PalaceDirectoryTree as PalaceDirectoryTreeModel } from '../model/palaceDirectoryTree'
 
 vi.mock('@/modules/content/domain/palace-entity/api', () => ({
   getPalacesGroupedApi: vi.fn(),
@@ -174,5 +175,48 @@ describe('PalaceDirectoryTree', () => {
     expect(
       await screen.findByRole('button', { name: '第二节 汉代的学校教育制度' }),
     ).toBeTruthy()
+  })
+})
+
+const staticTree: PalaceDirectoryTreeModel = {
+  subjects: [
+    {
+      kind: 'subject', id: 1, name: '中国教育史', color: '#6366f1', sortOrder: 0, ungrouped: [],
+      chapters: [
+        {
+          kind: 'chapter', id: 10, name: '第二节 汉代', subjectId: 1, sortOrder: 0, children: [],
+          palaces: [
+            { kind: 'palace', id: 11, title: '汉代的学校', chapterId: 10, subjectId: 1, sortOrder: 0 },
+          ],
+        },
+      ],
+    },
+  ],
+  ungrouped: [],
+}
+
+describe('PalaceDirectoryTreeView', () => {
+  it('drops the header, search and drag handles for a host that only browses', async () => {
+    const onSelectPalace = vi.fn()
+    render(
+      <MemoryRouter>
+        <PalaceDirectoryTreeView
+          tree={staticTree}
+          currentPalaceId={11}
+          onSelectPalace={onSelectPalace}
+          showHeader={false}
+          showSearch={false}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(screen.queryByText('记忆宫殿')).toBeNull()
+    expect(screen.queryByLabelText('搜索宫殿')).toBeNull()
+
+    const row = await screen.findByRole('button', { name: '汉代的学校' })
+    expect(row.getAttribute('draggable')).toBe('false')
+
+    fireEvent.click(row)
+    expect(onSelectPalace).toHaveBeenCalledWith(11)
   })
 })

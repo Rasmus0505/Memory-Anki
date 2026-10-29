@@ -279,13 +279,13 @@ export function MindMapReviewFlow({
                           <Badge
                             variant="outline"
                             className="cursor-help"
-                            title="Space：推进当前选中节点的揭示；1-5：在结算弹窗中选择反馈"
+                            title="点击节点推进揭示；1-5：在结算弹窗中选择反馈"
                           >
-                            Space / 1-5
+                            点击 / 1-5
                           </Badge>
                         </TooltipTrigger>
                         <TooltipContent>
-                          Space 推进当前选中节点；结算弹窗中可用数字键选择反馈。
+                          点击节点推进当前选中节点；结算弹窗中可用数字键选择反馈。
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>

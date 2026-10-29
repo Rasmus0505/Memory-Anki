@@ -565,6 +565,43 @@ describe('review-flow-tree visible editor state', () => {
     expect(retractRevealStateBranch('missing', nodeMap, revealed)).toBe(revealed)
   })
 
+  it('收卡 follows 直接显示 by folding the card away instead of leaving a prompt', () => {
+    const sourceDoc: MindMapDoc = {
+      root: {
+        data: { text: 'Root', uid: 'root' },
+        children: [
+          {
+            data: { text: 'A', uid: 'a' },
+            children: [{ data: { text: 'A1', uid: 'a1' }, children: [] }],
+          },
+          { data: { text: 'B', uid: 'b' }, children: [] },
+        ],
+      },
+    }
+    const root = buildReviewTree(sourceDoc, 'Root')
+    const nodeMap = flattenNodes(root)
+    const revealed = {
+      root: 'revealed' as const,
+      a: 'revealed' as const,
+      a1: 'revealed' as const,
+      b: 'hidden' as const,
+    }
+
+    const retracted = retractRevealStateBranch('a', nodeMap, revealed, {
+      revealStage: 'direct',
+    })
+    expect(retracted).toEqual({
+      root: 'revealed',
+      a: 'hidden',
+      a1: 'hidden',
+      b: 'hidden',
+    })
+    // Nothing left to fold: the key must not be swallowed a second time.
+    expect(retractRevealStateBranch('a', nodeMap, retracted, { revealStage: 'direct' })).toBe(
+      retracted,
+    )
+  })
+
   it('bulk flips all descendants in two phases without resetting revealed cards', () => {
     const sourceDoc: MindMapDoc = {
       root: {

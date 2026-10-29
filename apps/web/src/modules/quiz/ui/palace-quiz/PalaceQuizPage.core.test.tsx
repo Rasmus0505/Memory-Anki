@@ -141,9 +141,11 @@ describe('PalaceQuizPage core flows', () => {
     expect(await screen.findByText('只读脑图预览')).toBeTruthy()
     const firstFocusNonce = Number(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-focus-nonce'))
 
-    const secondPalaceButton = screen.getByText('遗传学宫殿').closest('button')
-    expect(secondPalaceButton).toBeTruthy()
-    fireEvent.click(secondPalaceButton!)
+    // The left column is the 学科 › 章节 › 宫殿 directory now: a palace row only
+    // exists once its chapter is open.
+    fireEvent.click(await screen.findByRole('button', { name: '展开第四章' }))
+    const secondPalaceButton = await screen.findByRole('button', { name: '遗传学宫殿' })
+    fireEvent.click(secondPalaceButton)
     await waitFor(() => {
       expect(getPalaceEditorApiMock).toHaveBeenCalledWith(2)
     })

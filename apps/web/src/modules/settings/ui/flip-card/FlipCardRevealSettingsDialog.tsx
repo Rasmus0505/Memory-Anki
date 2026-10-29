@@ -148,7 +148,7 @@ export function FlipCardRevealSettingsDialog({
                 ]}
               />
             </SettingRow>
-            <SettingRow label="揭示方式" hint="两阶段会先出待回忆占位符">
+            <SettingRow label="揭示方式" hint="两阶段先出待回忆占位符，收卡也回待回忆；直接显示一次出内容，收卡整张收起">
               <BinaryToggle<RevealStage>
                 value={value.stage}
                 onChange={(stage) => onChange({ ...value, stage })}

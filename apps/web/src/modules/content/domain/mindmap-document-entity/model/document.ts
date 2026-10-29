@@ -282,6 +282,27 @@ export function addMindMapChildWithResult(document: MindMapDocumentInput, parent
   return { document: nextDocument, nodeUid }
 }
 
+/**
+ * Insert a card *between* `parentUid` and the children it already has: the new card
+ * becomes the parent's only child and adopts every existing child, so what used to
+ * be 子级 steps down to 孙级. On a leaf this is just `addMindMapChildWithResult`.
+ */
+export function insertMindMapChildLayerWithResult(
+  document: MindMapDocumentInput,
+  parentUid: string,
+): MindMapDocumentCreateResult {
+  let nodeUid: string | null = null
+  const nextDocument = updateDocument(document, (draft) => {
+    const found = findNode(draft.root, parentUid)
+    if (!found) return
+    const created = makeNode('新知识点')
+    created.children = Array.isArray(found.node.children) ? found.node.children : []
+    nodeUid = getMindMapNodeUid(created, '')
+    found.node.children = [created]
+  })
+  return { document: nextDocument, nodeUid }
+}
+
 export function addMindMapSibling(document: MindMapDocumentInput, nodeUid: string) {
   return addMindMapSiblingWithResult(document, nodeUid).document
 }

@@ -21,6 +21,14 @@ export function stripMindMapHtml(value: unknown): string {
     .trim()
 }
 
+/**
+ * True when nothing would be visible: empty, whitespace, or markup left behind
+ * after a cut (`<div><span data-emphasis="highlight"></span></div>`).
+ */
+export function isBlankMindMapText(value: unknown): boolean {
+  return stripMindMapHtml(value) === ''
+}
+
 export function hasHighlightMarkup(value: unknown): boolean {
   if (typeof value !== 'string') return false
   return (

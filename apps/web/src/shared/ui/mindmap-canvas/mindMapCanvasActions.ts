@@ -34,6 +34,8 @@ interface BuildNodeActionsInput {
   buildCustomNodeActions?: (nodeId: string) => ContextMenuAction[]
   readonly: boolean
   onAddChild: (parentId: string) => void
+  /** Insert a card between `nodeId` and its children (old children become grandchildren). */
+  onInsertChildLayer?: (nodeId: string) => void
   onAddSibling: (nodeId: string) => void
   onDelete: (nodeId: string) => void
   onDeleteNodes?: (nodeIds: string[]) => void
@@ -80,6 +82,7 @@ export function buildNodeActions({
   buildCustomNodeActions,
   readonly,
   onAddChild,
+  onInsertChildLayer,
   onAddSibling,
   onDelete,
   onDeleteNodes,
@@ -127,6 +130,22 @@ export function buildNodeActions({
               origin: 'node',
             })
             onAddChild(nodeId)
+          },
+        } satisfies ContextMenuAction]
+      : []),
+    // Root (palace frame / scoped unit root) is not a knowledge point: wrapping it
+    // would push every top-level branch a level deeper for no content reason.
+    ...(!multiTarget && !isRoot && allowAddChild && onInsertChildLayer
+      ? [{
+          label: '插入子知识点（原内容降一级）',
+          icon: BetweenHorizontalStart,
+          onClick: () => {
+            if (readonly) return
+            dispatchGlobalFeedback('node_create', {
+              point: { x: ctxMenu.x, y: ctxMenu.y },
+              origin: 'node',
+            })
+            onInsertChildLayer(nodeId)
           },
         } satisfies ContextMenuAction]
       : []),

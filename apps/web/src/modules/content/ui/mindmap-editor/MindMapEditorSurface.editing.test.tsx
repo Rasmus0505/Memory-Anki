@@ -20,6 +20,9 @@ vi.mock('@/shared/ui/mindmap-canvas', async () => {
         data-selected-node={props.selectedNodeId ?? ''}
         data-can-undo={props.canUndo ? 'yes' : 'no'}
         data-can-redo={props.canRedo ? 'yes' : 'no'}
+        data-graph={props.graphData.nodes
+          .map((node: { id: string; parentId?: string | null }) => `${node.id}>${node.parentId ?? ''}`)
+          .join(',')}
       >
         {props.graphData.nodes.map((node: { id: string }) => (
           <button
@@ -32,8 +35,17 @@ vi.mock('@/shared/ui/mindmap-canvas', async () => {
           </button>
         ))}
         <button type="button" onClick={() => props.onAddChild('child')}>新增 child 子级</button>
+        <button type="button" onClick={() => props.onInsertChildLayer?.('child')}>插入 child 子层</button>
         {props.editingNodeId ? (
-          <button type="button" onClick={() => props.onEdit(props.editingNodeId, '首次命名')}>提交首次命名</button>
+          <>
+            <button type="button" onClick={() => props.onEdit(props.editingNodeId, '首次命名')}>提交首次命名</button>
+            <button
+              type="button"
+              onClick={() => props.onEditingDraftChange(props.editingNodeId, 'Child edited')}
+            >
+              输入草稿
+            </button>
+          </>
         ) : null}
       </div>
     ),
@@ -97,6 +109,46 @@ describe('MindMapEditorSurface editing workflow', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('editing-canvas').getAttribute('data-node-count')).toBe('3')
+    })
+  })
+
+  it('inserts an intermediate card whose child is the old grandchild', async () => {
+    render(<ControlledFrame />)
+    fireEvent.click(screen.getByRole('button', { name: '插入 child 子层' }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('editing-canvas').getAttribute('data-node-count')).toBe('4')
+    })
+    const canvas = screen.getByTestId('editing-canvas')
+    const newCardId = canvas.getAttribute('data-editing-node') ?? ''
+    expect(newCardId).not.toBe('')
+    const parents = new Map(
+      (canvas.getAttribute('data-graph') ?? '')
+        .split(',')
+        .map((pair) => pair.split('>') as [string, string]),
+    )
+    expect(parents.get(newCardId)).toBe('child')
+    expect(parents.get('grandchild')).toBe(newCardId)
+  })
+
+  it('shows the edited card’s live word count in the bottom-right statistics', async () => {
+    render(<ControlledFrame />)
+    // Root + Child + Grandchild: three English words, 4 + 5 + 10 characters.
+    expect(screen.getByTestId('mindmap-text-stats').textContent).toBe('3 字·19 字符')
+
+    const childButton = screen.getByRole('button', { name: '选择 child' })
+    fireEvent.click(childButton)
+    fireEvent.keyDown(childButton, { key: 'Enter' })
+
+    expect(screen.getByTestId('mindmap-text-stats-card').textContent).toBe('本卡 1 字')
+
+    fireEvent.click(screen.getByRole('button', { name: '输入草稿' }))
+    expect(screen.getByTestId('mindmap-text-stats-card').textContent).toBe('本卡 2 字')
+    expect(screen.getByTestId('mindmap-text-stats').textContent).toBe('本卡 2 字·全图 4 字·25 字符')
+
+    fireEvent.click(screen.getByRole('button', { name: '提交首次命名' }))
+    await waitFor(() => {
+      expect(screen.queryByTestId('mindmap-text-stats-card')).toBeNull()
     })
   })
 

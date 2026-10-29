@@ -85,7 +85,9 @@ describe('FlipCardRevealSettingsDialog', () => {
 
     expect(screen.getByText('收卡')).toBeTruthy()
     expect(screen.getByText('上一张')).toBeTruthy()
-    expect(screen.getAllByRole('button', { name: '录制' })).toHaveLength(7)
+    // 批量翻卡 lost its keyboard entry to the W/A/S/D view pan.
+    expect(screen.queryByText('翻开下方全部子卡')).toBeNull()
+    expect(screen.getAllByRole('button', { name: '录制' })).toHaveLength(5)
   })
 
   it('records a new 收卡 key and writes it immediately', () => {

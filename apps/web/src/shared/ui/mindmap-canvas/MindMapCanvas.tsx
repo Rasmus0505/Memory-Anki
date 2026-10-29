@@ -27,6 +27,7 @@ import {
   normalizeMindMapManualZoom,
 } from './mindMapViewportConfig'
 import { useMindMapCanvasState } from './useMindMapCanvasState'
+import { useMindMapViewPanKeys } from './useMindMapViewPanKeys'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import { cn } from '@/shared/lib/utils'
 import { logAppError } from '@/shared/logs/model/appLogs'
@@ -62,6 +63,11 @@ export interface MindMapCanvasProps {
   onEditingDraftChange?: (nodeId: string, text: string) => void
   onKeyDownCapture?: (event: KeyboardEvent<HTMLDivElement>) => void
   onAddChild: (parentId: string) => void
+  /**
+   * Insert a card between `nodeId` and its current children, pushing what were
+   * 子级 down to 孙级. Hosts that cannot offer it leave it out (no menu row).
+   */
+  onInsertChildLayer?: (nodeId: string) => void
   onAddSibling: (nodeId: string) => void
   onDelete: (nodeId: string) => void
   /** Multi-select context-menu delete (Delete key already uses the same handler). */
@@ -155,6 +161,11 @@ export interface MindMapCanvasProps {
   onEnglishWordClick?: (word: string, event: import('react').MouseEvent<HTMLElement>) => void
   /** Host text-selection mode: native copy; no card click, select, or double-tap zoom. */
   textSelectionModeActive?: boolean
+  /**
+   * Study-surface keyboard pan: hold W/A/S/D to move the camera. Only the surface
+   * that owns those keys may enable it, so editors keep their own key contract.
+   */
+  keyboardViewPan?: boolean
   mobileViewPolicy?: MindMapMobileViewPolicy
   nodeClickViewportPolicy?: MindMapNodeClickViewportPolicy
   contentChangeViewportPolicy?: MindMapContentChangeViewportPolicy
@@ -294,6 +305,13 @@ function MindMapCanvasInner({
     toolbarVisible: showToolbar,
     onHostRefresh,
     hostRefreshEpoch,
+  })
+  // W/A/S/D pan the camera on a study card. The host opts in per surface (the 随心
+  // review card), so the editor keeps its own key contract.
+  useMindMapViewPanKeys({
+    enabled: Boolean(props.keyboardViewPan),
+    panBy: state.panViewportBy,
+    endPan: state.endViewportPan,
   })
   const expectedNodeCount = props.graphData.nodes.length
   const [canvasReadyTimedOut, setCanvasReadyTimedOut] = useState(false)

@@ -547,6 +547,7 @@ export function FreestyleScopeQuizDialog({
                 <FreestyleScopeQuizHeaderActions
                   copyPalaceId={questionPalaceId ?? lookupPalaceId}
                   lookupPalaceId={lookupPalaceId}
+                  questions={questions}
                   copyingOutline={copyingOutline}
                   onCopyOutline={(palaceId) => void copyOutline(palaceId)}
                   onOpenPalace={() => setPalaceLookupOpen(true)}

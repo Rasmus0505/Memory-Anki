@@ -186,15 +186,17 @@ export function NodeBoundQuizDialog({
           for (const item of palaceQuestions.items || []) byId.set(item.id, item)
         }
         for (const item of questionOutcome.items) byId.set(item.id, item)
+        const natural = sortPalaceQuizQuestions(
+          activeIds
+            .map((id) => byId.get(id))
+            .filter((item): item is PalaceQuizQuestion => Boolean(item))
+            .filter((item) => !removedQuestionIdsRef.current.has(item.id)),
+        )
         const ordered = applyQuizShuffleOrder(
-          sortPalaceQuizQuestions(
-            activeIds
-              .map((id) => byId.get(id))
-              .filter((item): item is PalaceQuizQuestion => Boolean(item))
-              .filter((item) => !removedQuestionIdsRef.current.has(item.id)),
-          ),
-          // 打乱题库 is remembered per palace+node so reopening keeps it.
-          readQuizShuffleOrder({ palaceId, nodeUid }),
+          natural,
+          // 打乱题库 is a shared preference (palace+node, then the same question
+          // set from another entry point), so reopening never reshuffles it.
+          readQuizShuffleOrder({ palaceId, nodeUid }, natural.map((item) => item.id)),
         )
         questionsRef.current = ordered
         setQuestions(ordered)
@@ -570,6 +572,7 @@ export function NodeBoundQuizDialog({
               </div>
               <NodeBoundQuizHeaderActions
                 palaceId={palaceId}
+                questions={questions}
                 copyingOutline={copyingOutline}
                 onCopyOutline={(targetPalaceId) => void copyOutline(targetPalaceId)}
                 onOpenPalace={() => setPalaceLookupOpen(true)}

@@ -54,6 +54,11 @@ export interface MindMapEditorSurfaceProps {
   onEnglishWordClick?: (word: string, event: import('react').MouseEvent<HTMLElement>) => void
   /** Host text-selection mode: keep node text selectable and disable touch actions. */
   textSelectionModeActive?: boolean
+  /**
+   * Study-surface keyboard pan (W/A/S/D move the camera). Only the surface that
+   * owns those keys enables it; editors and pickers leave it off.
+   */
+  keyboardViewPan?: boolean
   viewMemoryScope?: string | null
   immersiveModeActive?: boolean
   presentationStrategy?: MindMapPresentationStrategy

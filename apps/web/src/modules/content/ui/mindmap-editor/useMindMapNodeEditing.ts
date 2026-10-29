@@ -1,7 +1,14 @@
 import { useCallback, type MutableRefObject } from 'react'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import type { MindMapSelection } from '@/modules/content/domain/mindmap-document-entity'
-import { buildSelectionFromDoc, editEditorDocNode, getEditorDocStoredText } from './documentGraphProjection'
+import { isBlankMindMapText } from '@/shared/lib/mindmapRichText'
+import {
+  buildSelectionFromDoc,
+  deleteEditorDocNodeOnly,
+  editEditorDocNode,
+  getEditorDocStoredText,
+  isEditorDocRootNode,
+} from './documentGraphProjection'
 import {
   selectedInteraction,
   type MindMapInteractionState,
@@ -47,6 +54,18 @@ export function useMindMapNodeEditing({
       else commitEditorDoc(nextEditorDoc)
     } else if (current.createdFromDoc) {
       commitEditorDocFrom(current.createdFromDoc, getCurrentEditorDoc())
+    } else if (isBlankMindMapText(text)) {
+      // The learner emptied the card and left it that way (Ctrl+A → Ctrl+X, then
+      // switching cards): remove this card and promote its children. Restoring the
+      // original text here would make the cut look undone. Root keeps its text, and
+      // a card that was already blank has nothing to clear.
+      const currentEditorDoc = getCurrentEditorDoc()
+      if (
+        !isEditorDocRootNode(currentEditorDoc, current.nodeId)
+        && !isBlankMindMapText(getEditorDocStoredText(currentEditorDoc, current.nodeId))
+      ) {
+        commitEditorDoc(deleteEditorDocNodeOnly(currentEditorDoc, current.nodeId))
+      }
     }
     replaceInteraction(selectedInteraction(current.nodeId))
   }, [

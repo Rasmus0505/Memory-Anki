@@ -17,10 +17,12 @@ describe('freestyle keyboard shortcuts', () => {
     expect(getFreestyleChoiceIndex('e')).toBeNull()
   })
 
-  it('keeps PageUp/PageDown and Space as fixed feed paging keys', () => {
+  it('keeps PageUp/PageDown as fixed feed paging keys and never binds Space', () => {
     expect(getFreestyleFeedPageDirection('PageUp')).toBe('previous')
     expect(getFreestyleFeedPageDirection('PageDown')).toBe('next')
-    expect(getFreestyleFeedPageDirection(' ')).toBe('next')
+    // Space belongs to typing (a card can be in inline edit), so it pages nothing.
+    expect(getFreestyleFeedPageDirection(' ')).toBeNull()
+    expect(getFreestyleFeedPageDirection('Spacebar')).toBeNull()
     // Arrows come from the configurable 翻卡快捷键 map, not this helper.
     expect(getFreestyleFeedPageDirection('ArrowUp')).toBeNull()
     expect(getFreestyleFeedPageDirection('ArrowDown')).toBeNull()
@@ -35,6 +37,24 @@ describe('freestyle keyboard shortcuts', () => {
       expect(direction).toBeNull()
     } finally {
       scope.remove()
+    }
+  })
+
+  it('blocks every learning shortcut while a card editor is open', () => {
+    const editor = document.createElement('div')
+    editor.setAttribute('contenteditable', 'true')
+    editor.setAttribute('data-mindmap-editor-active', 'true')
+    const card = document.createElement('button')
+    document.body.append(editor, card)
+    try {
+      // Focus may sit on the card shell (toolbar/layout stole it) while the edit
+      // session is still open: the card behind the editor must not page or flip.
+      expect(isFreestyleShortcutBlocked(card)).toBe(true)
+      expect(isFreestyleShortcutBlocked(document.body)).toBe(true)
+      expect(isFreestyleOverlayOpen()).toBe(true)
+    } finally {
+      editor.remove()
+      card.remove()
     }
   })
 

@@ -611,6 +611,7 @@ export function FreestyleUnitReviewFlipPanel({
         viewMemoryScope={`palace:${session.palace_id}`}
         fullscreen={fullscreen}
         displayMode={displayMode}
+        keyboardViewPan={active}
         sessionKind="review"
         chromeDensity="compact"
         hidePresentationOverflowActions

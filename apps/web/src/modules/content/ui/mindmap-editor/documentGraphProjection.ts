@@ -10,6 +10,7 @@ import {
   addMindMapChildWithResult,
   addMindMapSibling,
   addMindMapSiblingWithResult,
+  insertMindMapChildLayerWithResult,
   canMoveMindMapNode,
   collectMindMapBranchScope,
   collectMindMapSubtreeUids,
@@ -218,6 +219,21 @@ export const moveEditorDocNode = moveMindMapNode
 export const canMoveEditorDocNode = canMoveMindMapNode
 export type { MindMapRelocateMode as EditorDocRelocateMode }
 
+/**
+ * The root card is the palace frame, not a knowledge point: it has no parent and
+ * must always keep some text, so clearing it falls back to keeping the original.
+ */
+export function isEditorDocRootNode(
+  editorDoc: MindMapEditorState['editor_doc'],
+  nodeUid: string,
+): boolean {
+  if (!nodeUid) return false
+  const doc = editorDoc && typeof editorDoc === 'object' ? (editorDoc as MindMapDoc) : null
+  const root = doc?.root
+  if (!root) return false
+  return getMindMapNodeUid(root, 'root') === nodeUid
+}
+
 export function extractEditorDocSelectionWithResult(
   editorDoc: MindMapEditorState['editor_doc'],
   sourceUid: string,
@@ -239,6 +255,14 @@ export function addEditorDocChildWithResult(
   parentUid: string,
 ): EditorDocCreateResult {
   const result = addMindMapChildWithResult(editorDoc, parentUid)
+  return { editorDoc: result.document as MindMapDoc, nodeUid: result.nodeUid }
+}
+
+export function insertEditorDocChildLayerWithResult(
+  editorDoc: MindMapEditorState['editor_doc'],
+  parentUid: string,
+): EditorDocCreateResult {
+  const result = insertMindMapChildLayerWithResult(editorDoc, parentUid)
   return { editorDoc: result.document as MindMapDoc, nodeUid: result.nodeUid }
 }
 

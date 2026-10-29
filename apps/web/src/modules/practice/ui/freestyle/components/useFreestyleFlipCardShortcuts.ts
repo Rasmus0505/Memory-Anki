@@ -14,8 +14,6 @@ export interface FreestyleFlipRevealApi {
     nodes: MindMapSelection[],
   ) => { nextRevealMap: Record<string, RevealState>; changedIds: readonly string[] } | null
   retractTarget: (nodes: MindMapSelection[]) => boolean
-  handleBulkRevealSubtree: (fallbackNodeId?: string | null) => boolean
-  handleBulkRevealDirectChildren: (fallbackNodeId?: string | null) => boolean
   handleNodeContextMenu: (nodes: MindMapSelection[]) => void
 }
 
@@ -48,8 +46,8 @@ export interface FreestyleFlipFollowState {
 
 /**
  * Flip-card shortcuts for the 随心 card: 翻卡 (anchor reveal + optional camera
- * follow), 收卡, A/S bulk flips and Shift+H hide. Bindings come from the shared
- * flip shortcut map (翻卡设置 → 快捷键).
+ * follow), 收卡 and Shift+H hide. Bindings come from the shared flip shortcut
+ * map (翻卡设置 → 快捷键). W/A/S/D belong to the canvas view pan, never here.
  */
 export function useFreestyleFlipCardShortcuts({
   active,
@@ -112,10 +110,6 @@ export function useFreestyleFlipCardShortcuts({
         if (isKeyboardControlTarget(event)) return false
         return revealApiRef.current.retractTarget([targetSelection()])
       },
-      flip_subtree_cards: () =>
-        revealApiRef.current.handleBulkRevealSubtree(trimmedAnchor || null),
-      flip_direct_child_cards: () =>
-        revealApiRef.current.handleBulkRevealDirectChildren(trimmedAnchor || null),
       hide_child_cards: () => {
         revealApiRef.current.handleNodeContextMenu([targetSelection()])
         return true

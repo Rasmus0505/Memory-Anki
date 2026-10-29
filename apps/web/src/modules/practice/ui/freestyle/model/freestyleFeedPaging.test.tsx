@@ -12,7 +12,7 @@ import {
   shouldSwallowFreestyleFeedPageKey,
 } from './freestyleKeyboard'
 
-function FeedWithQuizDialog() {
+function FeedSurface({ withQuizDialog = false }: { withQuizDialog?: boolean }) {
   const [pages, setPages] = useState(0)
   return (
     <div
@@ -37,17 +37,54 @@ function FeedWithQuizDialog() {
       }}
     >
       <button type="button">卡片</button>
-      {createPortal(
-        <div role="dialog" data-keyboard-shortcuts-suspended="true">
-          <button type="button">做题</button>
-        </div>,
-        document.body,
-      )}
+      {withQuizDialog
+        ? createPortal(
+            <div role="dialog" data-keyboard-shortcuts-suspended="true">
+              <button type="button">做题</button>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   )
 }
 
+function FeedWithQuizDialog() {
+  return <FeedSurface withQuizDialog />
+}
+
 describe('freestyle feed paging under a quiz dialog', () => {
+  it('never turns the card on Space, and PageDown still pages', () => {
+    render(<FeedSurface />)
+    const feed = screen.getByTestId('feed')
+    feed.focus()
+    // Space is the character typed inside a card editor; it must not page.
+    fireEvent.keyDown(feed, { key: ' ', code: 'Space' })
+    expect(screen.getByTestId('feed').dataset.pages).toBe('0')
+    // PageDown is still the fixed page key.
+    fireEvent.keyDown(feed, { key: 'PageDown', code: 'PageDown' })
+    expect(screen.getByTestId('feed').dataset.pages).toBe('1')
+  })
+
+  it('does not page while a card editor is open even if focus left the editor', () => {
+    render(<FeedWithQuizDialog />)
+    const editor = document.createElement('div')
+    editor.setAttribute('contenteditable', 'true')
+    editor.setAttribute('data-mindmap-editor-active', 'true')
+    document.body.appendChild(editor)
+    try {
+      // Focus sits on the feed (the caret was pulled out of the editor) while the
+      // edit session is still open: page keys must not turn the card.
+      const feed = screen.getByTestId('feed')
+      feed.focus()
+      fireEvent.keyDown(feed, { key: 'PageDown', code: 'PageDown' })
+      fireEvent.keyDown(feed, { key: 'ArrowDown', code: 'ArrowDown' })
+      expect(screen.getByTestId('feed').dataset.pages).toBe('0')
+    } finally {
+      editor.remove()
+    }
+  })
+
   it('does not turn the card when ArrowUp or ArrowDown is pressed in the dialog', () => {
     render(<FeedWithQuizDialog />)
     const quiz = screen.getByRole('button', { name: '做题' })

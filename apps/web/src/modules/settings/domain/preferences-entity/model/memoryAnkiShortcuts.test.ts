@@ -30,25 +30,31 @@ describe('memoryAnkiShortcuts', () => {
     expect(DEFAULT_MEMORY_ANKI_SHORTCUTS.retract_current_card?.code).toBe('Backspace')
     expect(DEFAULT_MEMORY_ANKI_SHORTCUTS.page_next_card?.code).toBe('ArrowDown')
     expect(DEFAULT_MEMORY_ANKI_SHORTCUTS.page_previous_card?.code).toBe('ArrowUp')
-    expect(DEFAULT_MEMORY_ANKI_SHORTCUTS.flip_subtree_cards).toEqual({
-      code: 'KeyA',
-      key: 'a',
-      shift: false,
+    expect(DEFAULT_MEMORY_ANKI_SHORTCUTS.hide_child_cards).toEqual({
+      code: 'KeyH',
+      key: 'h',
+      shift: true,
       ctrl: false,
       alt: false,
       meta: false,
     })
-    expect(DEFAULT_MEMORY_ANKI_SHORTCUTS.flip_direct_child_cards?.code).toBe('KeyS')
   })
 
-  it('keeps the bare Backspace 收卡 binding and bare letters through sanitize', () => {
+  it('keeps the bare Backspace 收卡 binding and Shift+H through sanitize', () => {
     const sanitized = sanitizeMemoryAnkiShortcutMap(
       readMemoryAnkiShortcuts(),
     )
     expect(sanitized.retract_current_card?.code).toBe('Backspace')
-    expect(sanitized.flip_subtree_cards?.code).toBe('KeyA')
-    expect(sanitized.flip_direct_child_cards?.code).toBe('KeyS')
     expect(sanitized.hide_child_cards?.code).toBe('KeyH')
+  })
+
+  it('reserves W/A/S/D for the mind-map view pan so no flip action can take them', () => {
+    const keyA = { code: 'KeyA', key: 'a', shift: false, ctrl: false, alt: false, meta: false }
+    const sanitized = sanitizeMemoryAnkiShortcutMap({
+      ...DEFAULT_MEMORY_ANKI_SHORTCUTS,
+      flip_current_card: keyA,
+    })
+    expect(sanitized.flip_current_card).toBeNull()
   })
 
   it('treats an explicit null as a cleared binding, not a missing default', () => {
@@ -68,22 +74,22 @@ describe('memoryAnkiShortcuts', () => {
     const sanitized = sanitizeMemoryAnkiShortcutMap({
       ...DEFAULT_MEMORY_ANKI_SHORTCUTS,
       flip_current_card: space,
-      flip_subtree_cards: pageDown,
+      hide_child_cards: pageDown,
       // Fixed page aliases are already built in, but a stored page binding is harmless.
       page_previous_card: { code: 'ArrowLeft', key: 'arrowleft', shift: false, ctrl: false, alt: false, meta: false },
     })
     expect(sanitized.flip_current_card).toBeNull()
-    expect(sanitized.flip_subtree_cards).toBeNull()
+    expect(sanitized.hide_child_cards).toBeNull()
     expect(sanitized.page_previous_card?.code).toBe('ArrowLeft')
   })
 
   it('drops duplicate bindings so one key cannot run two actions', () => {
     const sanitized = sanitizeMemoryAnkiShortcutMap({
       ...DEFAULT_MEMORY_ANKI_SHORTCUTS,
-      flip_subtree_cards: { code: 'Enter', key: 'enter', shift: false, ctrl: false, alt: false, meta: false },
+      hide_child_cards: { code: 'Enter', key: 'enter', shift: false, ctrl: false, alt: false, meta: false },
     })
     expect(sanitized.flip_current_card?.code).toBe('Enter')
-    expect(sanitized.flip_subtree_cards).toBeNull()
+    expect(sanitized.hide_child_cards).toBeNull()
   })
 
   it('resolves configured page keys before the fixed left/right arrows', () => {
@@ -135,7 +141,7 @@ describe('memoryAnkiShortcuts', () => {
       ({ handler }) =>
         useMemoryAnkiShortcuts(
           'flip',
-          { flip_subtree_cards: handler },
+          { hide_child_cards: handler },
           true,
         ),
       { initialProps: { handler: first } },
@@ -143,7 +149,7 @@ describe('memoryAnkiShortcuts', () => {
 
     act(() => {
       window.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'a', code: 'KeyA', bubbles: true, cancelable: true }),
+        new KeyboardEvent('keydown', { key: 'h', code: 'KeyH', shiftKey: true, bubbles: true, cancelable: true }),
       )
     })
     expect(first).toHaveBeenCalledTimes(1)
@@ -153,7 +159,7 @@ describe('memoryAnkiShortcuts', () => {
 
     act(() => {
       window.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'a', code: 'KeyA', bubbles: true, cancelable: true }),
+        new KeyboardEvent('keydown', { key: 'h', code: 'KeyH', shiftKey: true, bubbles: true, cancelable: true }),
       )
     })
     expect(first).toHaveBeenCalledTimes(1)
@@ -176,14 +182,15 @@ describe('memoryAnkiShortcuts', () => {
   it('does not preventDefault when handler returns false', () => {
     const handler = vi.fn(() => false)
     renderHook(() =>
-      useMemoryAnkiShortcuts('flip', { flip_subtree_cards: handler }, true),
+      useMemoryAnkiShortcuts('flip', { hide_child_cards: handler }, true),
     )
 
     let event!: KeyboardEvent
     act(() => {
       event = new KeyboardEvent('keydown', {
-        key: 'a',
-        code: 'KeyA',
+        key: 'h',
+        code: 'KeyH',
+        shiftKey: true,
         bubbles: true,
         cancelable: true,
       })
@@ -196,14 +203,15 @@ describe('memoryAnkiShortcuts', () => {
   it('prevents default when handler runs successfully', () => {
     const handler = vi.fn(() => true)
     renderHook(() =>
-      useMemoryAnkiShortcuts('flip', { flip_subtree_cards: handler }, true),
+      useMemoryAnkiShortcuts('flip', { hide_child_cards: handler }, true),
     )
 
     let event!: KeyboardEvent
     act(() => {
       event = new KeyboardEvent('keydown', {
-        key: 'a',
-        code: 'KeyA',
+        key: 'h',
+        code: 'KeyH',
+        shiftKey: true,
         bubbles: true,
         cancelable: true,
       })
@@ -211,6 +219,27 @@ describe('memoryAnkiShortcuts', () => {
     })
     expect(handler).toHaveBeenCalledTimes(1)
     expect(event.defaultPrevented).toBe(true)
+  })
+
+  it('suspends the flip map while a card editor is open', () => {
+    const handler = vi.fn(() => true)
+    renderHook(() => useMemoryAnkiShortcuts('flip', { flip_current_card: handler }, true))
+    const editor = document.createElement('div')
+    editor.setAttribute('contenteditable', 'true')
+    editor.setAttribute('data-mindmap-editor-active', 'true')
+    document.body.appendChild(editor)
+
+    try {
+      // Focus already left the editor (toolbar/layout), the session is still open.
+      act(() => {
+        window.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true }),
+        )
+      })
+      expect(handler).not.toHaveBeenCalled()
+    } finally {
+      editor.remove()
+    }
   })
 
   it('lets the dialog owner opt in without re-opening shortcuts behind it', () => {
@@ -261,7 +290,7 @@ describe('memoryAnkiShortcuts', () => {
     try {
       const handler = vi.fn()
       renderHook(() =>
-        useMemoryAnkiShortcuts('flip', { flip_subtree_cards: handler }, true),
+        useMemoryAnkiShortcuts('flip', { hide_child_cards: handler }, true),
       )
 
       act(() => {

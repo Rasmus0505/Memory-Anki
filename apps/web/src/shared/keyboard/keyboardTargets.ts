@@ -33,9 +33,23 @@ export function isKeyboardOverlayTarget(
   return Boolean(element.closest('[role="dialog"]'))
 }
 
-/** Modal quiz interactions must own keys before page-level learning shortcuts. */
+/**
+ * Set by an open mind-map card editor (`NodeCard`). The caret can lose DOM focus
+ * while the session is still editing — toolbar teardown, React Flow layout, a
+ * click on the card padding — so "is the event target editable?" is not enough:
+ * a stray Space / Enter / arrow would flip, rate or page the card underneath.
+ */
+export const MINDMAP_CARD_EDITOR_OPEN_SELECTOR = '[data-mindmap-editor-active="true"]'
+
+/**
+ * Modal quiz interactions and an open card editor must own keys before
+ * page-level learning shortcuts.
+ */
 export function isKeyboardShortcutSuspended() {
-  return typeof document !== 'undefined'
-    ? Boolean(document.querySelector('[data-keyboard-shortcuts-suspended="true"]'))
-    : false
+  if (typeof document === 'undefined') return false
+  return Boolean(
+    document.querySelector(
+      `[data-keyboard-shortcuts-suspended="true"], ${MINDMAP_CARD_EDITOR_OPEN_SELECTOR}`,
+    ),
+  )
 }

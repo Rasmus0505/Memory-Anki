@@ -44,6 +44,7 @@ type FlipCardToolbarExtensions = Pick<
 
 type FlipCardSurfaceExtensions = Pick<
   MindMapEditorSurfaceProps,
+  | 'keyboardViewPan'
   | 'segments'
   | 'activeSegmentId'
   | 'segmentColorMode'
@@ -236,6 +237,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   forceExpanded = false,
   revealCollapsedNodeIds = null,
   collapseResetKey = null,
+  keyboardViewPan = false,
 }: FlipCardMindMapPanelProps, forwardedRef) {
   const resolvedPresentationStrategy = presentationStrategy
     ?? (detectClientSource() === 'pwa' ? 'viewport-only' : 'native-preferred')
@@ -562,6 +564,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
         englishInteractionActive={englishModeActive}
         onEnglishWordClick={englishModeActive ? handleEnglishWordClick : undefined}
         textSelectionModeActive={!isEditMode && textModeActive}
+        keyboardViewPan={!isEditMode && keyboardViewPan && !textModeActive && !englishModeActive}
         sceneChrome={sceneChrome}
         sceneTransitionKey={frameSceneTransitionKey}
         viewMemoryScope={viewMemoryScope}

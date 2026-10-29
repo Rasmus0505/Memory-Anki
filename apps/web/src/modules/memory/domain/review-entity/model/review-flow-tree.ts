@@ -395,16 +395,22 @@ function resolveFocusNodeIds(
   return sanitizeCheckpointNodeIds(root, options.focusNodeIds ?? [])
 }
 
-/** First appearance state for a card that is being stepped out of `hidden`. */
+/**
+ * First appearance state for a card that is being stepped out of `hidden`.
+ * 直接显示 has no first phase at all: the card opens with its content, so this
+ * must agree with `advanceRevealStateForNodeClick` even on the bulk path.
+ */
 function firstAppearStateForChild(
   child: ReviewMindMapNode,
   focusIds: string[],
+  options: RevealFlowOptions = {},
 ): RevealState {
+  if (options.revealStage === 'direct') return 'revealed'
   if (focusIds.length > 0 && !focusIds.includes(child.id)) return 'revealed'
   return 'placeholder'
 }
 
-/** True when A/S bulk flip still has work under `nodeId` for the given scope. */
+/** True when a bulk flip still has work under `nodeId` for the given scope. */
 export function hasPendingBulkReveal(
   nodeId: string,
   nodeMap: Map<string, ReviewMindMapNode>,
@@ -455,7 +461,7 @@ export function advanceBulkRevealState(
     const next = { ...revealMap }
     for (const target of targets) {
       if ((next[target.id] ?? 'hidden') !== 'hidden') continue
-      next[target.id] = firstAppearStateForChild(target, focusIds)
+      next[target.id] = firstAppearStateForChild(target, focusIds, options)
     }
     return next
   }
@@ -634,22 +640,34 @@ export function advanceRevealStateForNodeClick(
 }
 
 /**
- * 收卡: put the target back to its prompt and fold everything below it.
- * The card itself stays visible as 待回忆 (a hidden target is not a retract),
- * so the learner can flip it again with the same key that opened it.
+ * 收卡: fold everything below the target and take the target card back to the
+ * state it had before it was flipped — the reveal stage decides which one:
+ *
+ * - 两阶段: back to the 待回忆 prompt, visible, ready for the next flip.
+ * - 直接显示: back to hidden. That mode never shows a prompt placeholder, so
+ *   leaving one behind would make 收卡 read as a two-stage behaviour the
+ *   learner never asked for.
+ *
  * Returns the same map when there is nothing to retract.
  */
 export function retractRevealStateBranch(
   nodeId: string,
   nodeMap: Map<string, ReviewMindMapNode>,
   revealMap: Record<string, RevealState>,
+  options: RevealFlowOptions = {},
 ): Record<string, RevealState> {
   const target = nodeMap.get(nodeId)
   if (!target) return revealMap
   const state = revealMap[nodeId] ?? 'hidden'
   if (state === 'hidden') return revealMap
+  const foldedState: RevealState = options.revealStage === 'direct' ? 'hidden' : 'placeholder'
+  const descendants = collectBulkRevealTargets(nodeId, nodeMap, 'subtree')
+  const alreadyFolded =
+    state === foldedState
+    && descendants.every((node) => (revealMap[node.id] ?? 'hidden') === 'hidden')
+  if (alreadyFolded) return revealMap
   const next = { ...revealMap }
-  if (state === 'revealed') next[nodeId] = 'placeholder'
+  next[nodeId] = foldedState
   const walk = (node: ReviewMindMapNode) => {
     for (const child of node.children) {
       next[child.id] = 'hidden'

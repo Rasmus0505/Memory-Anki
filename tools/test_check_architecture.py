@@ -2372,6 +2372,42 @@ def test_quiz_font_scale_primitive_must_live_in_quiz_entity(
     assert any("quiz font-scale primitive is required" in item for item in errors)
 
 
+def test_quiz_shuffle_order_must_be_a_shared_preference(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    # Browser storage alone is exactly the bug: the order reset on the other
+    # surface. The gate must reject a localStorage-only model.
+    write_file(
+        web_src
+        / "modules"
+        / "quiz"
+        / "domain"
+        / "quiz-entity"
+        / "model"
+        / "quizShuffleOrder.ts",
+        "const STORAGE_KEY = 'memory-anki.quiz.shuffle-order.v1'\n"
+        "export function saveQuizShuffleOrder() { localStorage.setItem(STORAGE_KEY, '[]') }\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_quiz_shuffle_order_persistence(errors)
+
+    assert any("quiz_shuffle_orders" in item for item in errors)
+    assert any("quizShuffleSetStorageKey" in item for item in errors)
+    assert any("client preferences must persist quiz_shuffle_orders" in item for item in errors)
+
+
+def test_quiz_shuffle_order_check_passes_on_the_repository() -> None:
+    errors: list[str] = []
+
+    check_architecture.check_quiz_shuffle_order_persistence(errors)
+
+    assert errors == []
+
+
 def test_quiz_answer_mode_primitive_must_live_in_quiz_entity(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -5185,5 +5221,58 @@ def test_review_scheduler_boundary_accepts_the_production_wiring(
 
     errors: list[str] = []
     check_architecture.check_review_scheduler_boundary(errors)
+
+    assert errors == []
+def test_card_editor_owns_keys_rejects_missing_marker_duplicate_reader_and_space_paging(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    write_file(
+        web_src / "shared" / "ui" / "mindmap-canvas" / "NodeCard.tsx",
+        'role="textbox"\ncontentEditable\n',
+    )
+    write_file(
+        web_src / "shared" / "keyboard" / "keyboardTargets.ts",
+        "export function isKeyboardShortcutSuspended() { return false }\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "model" / "feedPager.ts",
+        "const editing = document.querySelector('[data-mindmap-editor-active]')\n",
+    )
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "model" / "freestyleKeyboard.ts",
+        "export function page(key: string) { return key === ' ' ? 'next' : null }\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_card_editor_owns_keys(errors)
+
+    assert any("data-mindmap-editor-active" in item and "NodeCard" in item for item in errors)
+    assert any("isKeyboardShortcutSuspended" in item for item in errors)
+    assert any("feedPager.ts" in item for item in errors)
+    assert any("Space is a typed character" in item for item in errors)
+
+
+def test_card_editor_owns_keys_accepts_marker_and_shared_suspension(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    write_file(
+        web_src / "shared" / "ui" / "mindmap-canvas" / "NodeCard.tsx",
+        'role="textbox"\ncontentEditable\ndata-mindmap-editor-active="true"\n',
+    )
+    write_file(
+        web_src / "shared" / "keyboard" / "keyboardTargets.ts",
+        'const CARD = \'[data-mindmap-editor-active="true"]\'\n',
+    )
+    write_file(
+        web_src / "modules" / "practice" / "ui" / "freestyle" / "model" / "freestyleKeyboard.ts",
+        "export function page(key: string) { return key === 'PageDown' ? 'next' : null }\n",
+    )
+
+    errors: list[str] = []
+    check_architecture.check_card_editor_owns_keys(errors)
 
     assert errors == []

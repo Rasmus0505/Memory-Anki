@@ -23,12 +23,16 @@ import {
   deleteEditorDocNodesOnly,
   editEditorDocNode,
   extractEditorDocSelectionWithResult,
+  getEditorDocStoredText,
   highlightEditorDocNodes,
+  insertEditorDocChildLayerWithResult,
+  isEditorDocRootNode,
   moveEditorDocNode,
   relocateEditorDocNodes,
   setEditorDocMarkColors,
   setEditorDocQuestionCards,
 } from './documentGraphProjection'
+import { isBlankMindMapText } from '@/shared/lib/mindmapRichText'
 import { setLastUsedMarkColor } from '@/shared/preferences/markColorLabels'
 import {
   selectedInteraction,
@@ -98,6 +102,33 @@ export function useMindMapEditorDocActions(deps: {
       onNodeActive?.(buildSelectionFromDoc(result.editorDoc, nodeId))
     },
     [branchScope, commitEditorDoc, getCurrentEditorDoc, onNodeActive, replaceInteraction],
+  )
+
+  /**
+   * New card between the selected node and its existing children: the selected
+   * node keeps only the new card, and everything that was 子级 steps down to 孙级.
+   * Same editing hand-off as 添加子知识点 so the card can be named right away.
+   */
+  const handleInsertChildLayer = useCallback(
+    (nodeId: string) => {
+      if (!canAddMindMapBranchChild(branchScope, nodeId)) return
+      const baseEditorDoc = getCurrentEditorDoc()
+      const result = insertEditorDocChildLayerWithResult(baseEditorDoc, nodeId)
+      if (!result.nodeUid || !stageEditorDoc(result.editorDoc)) return
+      const selection = buildSelectionFromDoc(result.editorDoc, result.nodeUid)
+      const text = selection[0]?.text || '新知识点'
+      replaceInteraction({
+        mode: 'editing',
+        nodeId: result.nodeUid,
+        originalText: text,
+        draftText: text,
+        selectAllOnStart: true,
+        createdFromDoc: baseEditorDoc,
+        returnNodeId: nodeId,
+      })
+      onNodeActive?.(selection)
+    },
+    [branchScope, getCurrentEditorDoc, onNodeActive, replaceInteraction, stageEditorDoc],
   )
 
   const handleAddSibling = useCallback(
@@ -314,21 +345,58 @@ export function useMindMapEditorDocActions(deps: {
   const handleEditNode = useCallback(
     (nodeId: string, text: string, currentInteraction: MindMapInteractionState) => {
       const trimmed = text.trim()
-      if (trimmed) {
-        const nextEditorDoc = editEditorDocNode(getCurrentEditorDoc(), nodeId, trimmed)
+      // A highlight wrapper left behind by a cut is not text: judge by what is visible.
+      if (isBlankMindMapText(trimmed)) {
+        // The learner emptied the card (Ctrl+A → Ctrl+X, or deleting everything).
+        // Honouring it is the whole point: silently restoring the original text is
+        // what made a cut look like it never happened.
         if (
           currentInteraction.mode === 'editing' &&
           currentInteraction.nodeId === nodeId &&
           currentInteraction.createdFromDoc
         ) {
-          commitEditorDocFrom(currentInteraction.createdFromDoc, nextEditorDoc)
-        } else {
-          commitEditorDoc(nextEditorDoc)
+          // Abandoning a card that was created in this session is a cancel, not a 删除.
+          stageEditorDoc(currentInteraction.createdFromDoc)
+          const returnNodeId = currentInteraction.returnNodeId ?? null
+          replaceInteraction(returnNodeId ? selectedInteraction(returnNodeId) : { mode: 'idle' })
+          onNodeActive?.(buildSelectionFromDoc(currentInteraction.createdFromDoc, returnNodeId))
+          return
         }
+        const currentEditorDoc = getCurrentEditorDoc()
+        if (
+          isEditorDocRootNode(currentEditorDoc, nodeId)
+          // A card that was already blank has nothing to clear: keep the cancel path.
+          || isBlankMindMapText(getEditorDocStoredText(currentEditorDoc, nodeId))
+        ) {
+          replaceInteraction(selectedInteraction(nodeId))
+          return
+        }
+        replaceInteraction(selectedInteraction(nodeId))
+        // Children step up, one card goes away, undoable — same as 单独删除.
+        void handleDeleteNodeOnly(nodeId)
+        return
+      }
+      const nextEditorDoc = editEditorDocNode(getCurrentEditorDoc(), nodeId, trimmed)
+      if (
+        currentInteraction.mode === 'editing' &&
+        currentInteraction.nodeId === nodeId &&
+        currentInteraction.createdFromDoc
+      ) {
+        commitEditorDocFrom(currentInteraction.createdFromDoc, nextEditorDoc)
+      } else {
+        commitEditorDoc(nextEditorDoc)
       }
       replaceInteraction(selectedInteraction(nodeId))
     },
-    [commitEditorDoc, commitEditorDocFrom, getCurrentEditorDoc, replaceInteraction],
+    [
+      commitEditorDoc,
+      commitEditorDocFrom,
+      getCurrentEditorDoc,
+      handleDeleteNodeOnly,
+      onNodeActive,
+      replaceInteraction,
+      stageEditorDoc,
+    ],
   )
 
   const handleRelocateNodes = useCallback(
@@ -423,6 +491,7 @@ export function useMindMapEditorDocActions(deps: {
     handleAddChild,
     handleAddChildWithoutFocus,
     handleAddSibling,
+    handleInsertChildLayer,
     handleDeleteNode,
     handleDeleteNodes,
     handleDeleteNodeOnly,

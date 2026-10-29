@@ -22,8 +22,6 @@ import { cn } from '@/shared/lib/utils'
 const FLIP_ACTION_IDS: MemoryAnkiShortcutActionId[] = [
   'flip_current_card',
   'retract_current_card',
-  'flip_subtree_cards',
-  'flip_direct_child_cards',
   'hide_child_cards',
 ]
 const PAGE_ACTION_IDS: MemoryAnkiShortcutActionId[] = [
@@ -90,7 +88,7 @@ export function FlipCardShortcutSettings({ className }: FlipCardShortcutSettings
         return
       }
       if (RESERVED_KEY_CODES.has(captured.value.code)) {
-        setCaptureError('空格 / ← / → / PageUp / PageDown 保留给随心页翻页，请换一个按键。')
+        setCaptureError('PageUp / PageDown / ← / → 保留给随心页翻页，空格保留给卡片内输入，W / A / S / D 保留给移动视图，请换一个按键。')
         return
       }
       const signature = getShortcutSignature(captured.value)
@@ -176,7 +174,7 @@ export function FlipCardShortcutSettings({ className }: FlipCardShortcutSettings
     <div className={cn('flex flex-col gap-4', className)}>
       <Alert variant="info">
         <AlertDescription>
-          录制时直接按下目标按键即可，支持单独字母键（如 A / S）和 Backspace；输入框、弹窗和录制中不会触发业务快捷键。改动即时生效。
+          录制时直接按下目标按键即可，支持单独字母键和 Backspace；输入框、弹窗和录制中不会触发业务快捷键。改动即时生效。
         </AlertDescription>
       </Alert>
 
@@ -189,7 +187,7 @@ export function FlipCardShortcutSettings({ className }: FlipCardShortcutSettings
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs text-muted-foreground">
-          固定键：PageUp / PageDown / 空格 翻页，← / → 也可翻页。
+          固定键：PageUp / PageDown 翻页，← / → 也可翻页；空格不再翻页，留给卡片内输入；W / A / S / D 移动脑图视图（长按连续平移）。
         </p>
         <Button
           type="button"

@@ -12,8 +12,6 @@ function buildApi(overrides: Partial<FreestyleFlipRevealApi> = {}): FreestyleFli
     revealMap: {} as Record<string, RevealState>,
     applyTargetRevealFrom: vi.fn(() => ({ nextRevealMap: {}, changedIds: ['unit-node'] })),
     retractTarget: vi.fn(() => true),
-    handleBulkRevealSubtree: vi.fn(() => true),
-    handleBulkRevealDirectChildren: vi.fn(() => true),
     handleNodeContextMenu: vi.fn(),
     ...overrides,
   }

@@ -10,6 +10,7 @@ import {
   getMindMapNodeText,
   getMindMapMarkColor,
   highlightMindMapNodes,
+  insertMindMapChildLayerWithResult,
   setMindMapMarkColors,
   isMindMapQuestionCard,
   normalizeMindMapDocument,
@@ -53,6 +54,37 @@ describe('mind-map document entity', () => {
     expect(sibling.nodeUid).toBeTruthy()
     expect(countMindMapSubtree(deleted, 'cell')).toBe(0)
     expect(document.root.children).toHaveLength(4)
+  })
+
+  it('inserts a child layer so existing children become grandchildren', () => {
+    const result = insertMindMapChildLayerWithResult(document, 'cell')
+    expect(result.nodeUid).toBeTruthy()
+    const cell = result.document.root.children!.find((node) => node.data?.uid === 'cell')!
+    // The selected node keeps exactly one child: the new card.
+    expect(cell.children!.map((node) => node.data?.uid)).toEqual([result.nodeUid])
+    const wrapper = cell.children![0]
+    expect(getMindMapNodeText(wrapper)).toBe('新知识点')
+    // Every previous child moved down one level, with its own subtree intact.
+    expect(wrapper.children!.map((node) => node.data?.uid)).toEqual(['mito'])
+    expect(wrapper.children![0].children).toEqual([])
+    // Immutability: the source document is untouched.
+    expect(document.root.children![0].children!.map((node) => node.data?.uid)).toEqual(['mito'])
+    // Sibling order and counts elsewhere are unaffected.
+    expect(result.document.root.children!.map((node) => node.data?.uid)).toEqual(['cell', 'empty', 'dup1', 'dup2'])
+    expect(countMindMapSubtree(result.document, result.nodeUid!)).toBe(2)
+  })
+
+  it('treats the layer insert on a leaf as a plain new child', () => {
+    const result = insertMindMapChildLayerWithResult(document, 'dup1')
+    const dup1 = result.document.root.children!.find((node) => node.data?.uid === 'dup1')!
+    expect(dup1.children!.map((node) => node.data?.uid)).toEqual([result.nodeUid])
+    expect(dup1.children![0].children).toEqual([])
+  })
+
+  it('leaves the document alone when the parent uid is unknown', () => {
+    const result = insertMindMapChildLayerWithResult(document, 'missing')
+    expect(result.nodeUid).toBeNull()
+    expect(result.document.root.children!.map((node) => node.data?.uid)).toEqual(['cell', 'empty', 'dup1', 'dup2'])
   })
 
   it('cuts a live text selection into a new child card', () => {

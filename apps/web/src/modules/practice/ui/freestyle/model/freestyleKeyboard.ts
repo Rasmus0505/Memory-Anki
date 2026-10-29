@@ -1,22 +1,29 @@
+import { isKeyboardShortcutSuspended } from '@/shared/keyboard/keyboardTargets'
+
 const TEXT_ENTRY_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT'])
 
 export type FreestyleQuestionDirection = 'previous' | 'next'
 
+/**
+ * True when some other owner must keep the key: a modal, a menu, a text field,
+ * or an open card editor. The card editor check is page-level (`contentEditable`
+ * focus can be lost while the edit session stays open), not target-level.
+ */
 export function isFreestyleShortcutBlocked(target: EventTarget | null) {
-  if (
-    typeof document !== 'undefined' &&
-    document.querySelector('[data-keyboard-shortcuts-suspended="true"]')
-  ) {
-    return true
-  }
+  if (isKeyboardShortcutSuspended()) return true
   if (!(target instanceof HTMLElement)) return false
   if (target.isContentEditable || TEXT_ENTRY_TAGS.has(target.tagName)) return true
   return Boolean(target.closest('[role="dialog"], [role="menu"], [data-radix-popper-content-wrapper]'))
 }
 
-/** Vertical feed paging. Callers must skip this while a quiz dialog owns the keyboard. */
+/**
+ * Vertical feed paging. PageUp/PageDown only: Space is deliberately unbound —
+ * a card can be in inline edit, and a space bar that pages the feed while the
+ * caret sits in a card was turning cards away from under the learner.
+ * Callers must still skip this while a quiz dialog or a card editor owns keys.
+ */
 export function getFreestyleFeedPageDirection(key: string): FreestyleQuestionDirection | null {
-  if (key === 'PageDown' || key === ' ') return 'next'
+  if (key === 'PageDown') return 'next'
   if (key === 'PageUp') return 'previous'
   return null
 }
@@ -49,13 +56,13 @@ export function getFreestyleChoiceIndex(key: string): number | null {
 }
 
 /**
- * True while a modal owns the screen (linked-question window, config, history…).
- * Auto-advance must not turn the feed underneath one: the learner would close the
- * dialog onto a different card than the one they were working on.
+ * True while a modal owns the screen (linked-question window, config, history…)
+ * or a card editor is open. Auto-advance must not turn the feed underneath one:
+ * the learner would close the dialog / finish the edit onto a different card than
+ * the one they were working on.
  */
 export function isFreestyleOverlayOpen() {
-  if (typeof document === 'undefined') return false
-  return Boolean(
-    document.querySelector('[data-keyboard-shortcuts-suspended="true"], [role="dialog"]'),
+  return isKeyboardShortcutSuspended() || Boolean(
+    typeof document !== 'undefined' && document.querySelector('[role="dialog"]'),
   )
 }

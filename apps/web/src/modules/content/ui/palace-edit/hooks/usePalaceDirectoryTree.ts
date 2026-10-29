@@ -18,14 +18,21 @@ export interface UsePalaceDirectoryTreeResult {
   refresh: () => Promise<void>
 }
 
+export interface UsePalaceDirectoryTreeOptions {
+  /** Skip fetching while the host is closed; the tree loads on first open. */
+  enabled?: boolean
+}
+
 /**
  * Loads the three reads that together describe 「学科 → 章节 → 宫殿」 and merges
  * them into one tree. A chapter tree that fails to load degrades to an empty
  * chapter list for that subject instead of hiding the whole directory.
  */
-export function usePalaceDirectoryTree(): UsePalaceDirectoryTreeResult {
+export function usePalaceDirectoryTree({
+  enabled = true,
+}: UsePalaceDirectoryTreeOptions = {}): UsePalaceDirectoryTreeResult {
   const [tree, setTree] = useState<PalaceDirectoryTree>(EMPTY_TREE)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(enabled)
   const [error, setError] = useState<string | null>(null)
   const requestIdRef = useRef(0)
 
@@ -57,15 +64,16 @@ export function usePalaceDirectoryTree(): UsePalaceDirectoryTreeResult {
   }, [])
 
   useEffect(() => {
+    if (!enabled) return
     void load()
-  }, [load])
+  }, [enabled, load])
 
   // Palace bindings and titles change from other surfaces too (knowledge page,
   // dragging here). The catalog event is the existing invalidation contract.
-  useEffect(
-    () => onAppEvent(PALACE_CATALOG_INVALIDATED_EVENT, () => { void load() }),
-    [load],
-  )
+  useEffect(() => {
+    if (!enabled) return
+    return onAppEvent(PALACE_CATALOG_INVALIDATED_EVENT, () => { void load() })
+  }, [enabled, load])
 
   return { tree, loading, error, refresh: load }
 }

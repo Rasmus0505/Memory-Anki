@@ -30,6 +30,8 @@ import {
 } from './MindMapEditorSurface.types'
 import { useMindMapEditHistory } from './useMindMapEditHistory'
 import { useMindMapNodeEditing } from './useMindMapNodeEditing'
+import { MindMapTextStats, useMindMapTextStats } from './MindMapTextStats'
+import { MindMapEditingStatsStore } from './mindMapEditingStatsStore'
 import { useMindMapEditorDocActions } from './useMindMapEditorDocActions'
 import { useMindMapFullscreen } from './useMindMapFullscreen'
 import { useMindMapSurfaceViewCommands } from './useMindMapSurfaceViewCommands'
@@ -67,6 +69,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   englishInteractionActive = false,
   onEnglishWordClick,
   textSelectionModeActive = false,
+  keyboardViewPan = false,
   presentationStrategy = detectClientSource() === 'pwa' ? 'viewport-only' : 'native-preferred',
   externalSyncKey = null,
   forceSyncKey = null,
@@ -158,6 +161,11 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   )
   const editingNodeId = interaction.mode === 'editing' ? interaction.nodeId : null
   const editingDraft = interaction.mode === 'editing' ? interaction.draftText : null
+  // 编辑按键只进 interactionRef（见 useMindMapNodeEditing），这里用外部 store
+  // 把实时字数喂给右下角统计，避免逐键重建编辑面。
+  const editingStatsStoreRef = useRef<MindMapEditingStatsStore | null>(null)
+  if (!editingStatsStoreRef.current) editingStatsStoreRef.current = new MindMapEditingStatsStore()
+  const editingStatsStore = editingStatsStoreRef.current
   const [uiCleared, setUiCleared] = useState(false)
   const pendingKeyboardFocusNodeIdRef = useRef<string | null>(null)
   const editorDoc = editorState.editor_doc
@@ -170,6 +178,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
     () => normalizeEditorDocTree(editorDoc),
     [editorDoc],
   )
+  const textStats = useMindMapTextStats(normalizedEditorDoc)
   const normalizedEditorState = useMemo<MindMapEditorState>(
     () => ({
       editor_doc: normalizedEditorDoc,
@@ -264,6 +273,13 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
     onUiClearedChangeRef.current?.(uiCleared)
   }, [uiCleared])
 
+  // 进入/退出编辑会话时把那张卡的已提交文本交给统计；键盘输入不经过 state，
+  // 后续按键由 handleEditingDraftChange 逐次写入同一个 store。
+  useEffect(() => {
+    if (editingNodeId) editingStatsStore.publish(editingNodeId, editingDraft ?? '')
+    else editingStatsStore.clear()
+  }, [editingDraft, editingNodeId, editingStatsStore])
+
   const publishEditorDoc = useCallback(
     (nextEditorDoc: MindMapEditorState['editor_doc']) => {
       if (readonly) return
@@ -342,6 +358,13 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
       stageEditorDoc,
       onNodeActive,
     })
+  const handleEditingDraftChange = useCallback(
+    (nodeId: string, draftText: string) => {
+      updateEditingDraft(nodeId, draftText)
+      editingStatsStore.publish(nodeId, draftText)
+    },
+    [editingStatsStore, updateEditingDraft],
+  )
 
   const selectNode = useCallback(
     (nodeId: string | null, options?: { additive?: boolean }) => {
@@ -498,6 +521,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
     handleAddChild,
     handleAddChildWithoutFocus,
     handleAddSibling,
+    handleInsertChildLayer,
     handleDeleteNode,
     handleDeleteNodes,
     handleDeleteNodeOnly,
@@ -620,6 +644,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
         sceneTransitionFallbackNodeId={sceneTransitionFallbackNodeId}
         englishInteractionActive={englishInteractionActive} onEnglishWordClick={onEnglishWordClick}
         textSelectionModeActive={textSelectionModeActive}
+        keyboardViewPan={keyboardViewPan}
         focusMode={nativeFullscreenActive}
         presentationMode={delegateFullscreenToHost ? (immersiveModeActive ? 'viewport' : 'embedded') : fullscreen.mode}
         showSystemFullscreenControl={showSystemFullscreenControl}
@@ -631,12 +656,13 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
         preferredZoom={preferredZoom} onUserZoomChange={onUserZoomChange}
         sceneTransitionKey={resolvedSceneTransitionKey} viewCommand={viewCommand} recoveryKey={canvasRecoveryKey}
         onNodeSelect={selectNode} onEditingNodeChange={handleEditingNodeChange}
-        onEditingDraftChange={updateEditingDraft} onKeyDownCapture={handleCanvasKeyDown}
+        onEditingDraftChange={handleEditingDraftChange} onKeyDownCapture={handleCanvasKeyDown}
         onNodeActivate={activateNode} onPaneDoubleClick={onPaneDoubleClick} onPaneLongPress={onPaneLongPress}
         onNodeContextAction={contextNode} onNodeHover={hoverNode} onCountBadgeClick={onCountBadgeClick}
         buildNodeActions={buildNodeActions} buildSelectionToolbarActions={buildSelectionToolbarActions}
         selectionToolbarPreferPosition={selectionToolbarPreferPosition}
-        onAddChild={handleAddChild} onAddSibling={handleAddSibling}
+        onAddChild={handleAddChild} onInsertChildLayer={handleInsertChildLayer}
+        onAddSibling={handleAddSibling}
         onDelete={handleDeleteNode} onDeleteNodes={handleDeleteNodes}
         onDeleteNodeOnly={handleDeleteNodeOnly} onDeleteNodesOnly={handleDeleteNodesOnly}
         onHighlightNodes={handleHighlightNodes} onMarkColorNodes={handleMarkColorNodes}
@@ -672,6 +698,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
         </span>
       ) : null}
       <div className="h-full w-full">{canvas}</div>
+      {uiCleared ? null : <MindMapTextStats stats={textStats} editingStore={editingStatsStore} />}
       {frameOverlay}
     </div>
   )

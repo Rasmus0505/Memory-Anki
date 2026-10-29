@@ -319,53 +319,6 @@ describe("MindMapReviewFlow modes", () => {
 
   });
 
-  it("uses Space to advance the currently selected review node without firing inside inputs", async () => {
-    renderInRouter(
-      <MindMapReviewFlow
-        title="Root"
-        palaceId={1}
-        sessionKind="practice"
-        reviewEditorState={editorState}
-        onComplete={vi.fn()}
-      />,
-    );
-
-    expect(screen.getByText("Space / 1-5")).toBeTruthy();
-    expect(getVisibleTextsFromLatestFrame()).toEqual({
-      root: "Root",
-      child: null,
-      grandchild: null,
-    });
-
-    await act(async () => {
-      getLatestMindMapEditorSurfaceProps()?.onNodeActive?.([{ uid: "root", text: "Root" }]);
-    });
-    await act(async () => {
-      fireEvent.keyDown(window, { key: " ", code: "Space" });
-    });
-
-    expect(getVisibleTextsFromLatestFrame()).toEqual({
-      root: "Root",
-      child: "待回忆",
-      grandchild: null,
-    });
-    const input = document.createElement("input");
-    document.body.appendChild(input);
-    try {
-      await act(async () => {
-        fireEvent.keyDown(input, { key: " ", code: "Space" });
-      });
-    } finally {
-      input.remove();
-    }
-
-    expect(getVisibleTextsFromLatestFrame()).toEqual({
-      root: "Root",
-      child: "待回忆",
-      grandchild: null,
-    });
-  });
-
   it("keeps readonly left-click flip flow working after host fullscreen toggles", async () => {
     renderInRouter(
       <MindMapReviewFlow
@@ -415,7 +368,7 @@ describe("MindMapReviewFlow modes", () => {
     });
   });
 
-  it("runs dedicated segment-checkpoint mode through the shared flow and requires hover before space pour", async () => {
+  it("runs dedicated segment-checkpoint mode through the shared flow", async () => {
     const miniEditorState = {
       editor_doc: {
         root: {
@@ -458,16 +411,6 @@ describe("MindMapReviewFlow modes", () => {
     });
 
     await act(async () => {
-      window.dispatchEvent(new KeyboardEvent("keydown", { key: " ", code: "Space", bubbles: true }));
-    });
-
-    expect(getVisibleTextsFromLatestFrame()).toEqual({
-      root: "Root",
-      child: "待回忆",
-      grandchild: null,
-    });
-
-    await act(async () => {
       getLatestMindMapEditorSurfaceProps()?.onNodeClick?.([{ uid: "root", text: "Root" }]);
     });
     expect(getVisibleTextsFromLatestFrame()).toEqual({
@@ -476,17 +419,30 @@ describe("MindMapReviewFlow modes", () => {
       grandchild: null,
     });
 
+    // Space is not a review key any more: the space bar belongs to whatever the
+    // learner is typing in a card editor, so it must never advance the reveal.
     await act(async () => {
-      getLatestMindMapEditorSurfaceProps()?.onNodeHover?.([{ uid: "child", text: "Child" }]);
       window.dispatchEvent(new KeyboardEvent("keydown", { key: " ", code: "Space", bubbles: true }));
     });
+    expect(getVisibleTextsFromLatestFrame()).toEqual({
+      root: "Root",
+      child: "Child",
+      grandchild: null,
+    });
 
-    expect(getLatestMindMapEditorSurfaceProps()?.reviewFxSignal).toEqual(
-      expect.objectContaining({
-        type: "card_reveal",
-        relatedNodeUids: ["grandchild"],
-      }),
-    );
+    // A click on the selected node still advances the ladder one step at a time.
+    await act(async () => {
+      getLatestMindMapEditorSurfaceProps()?.onNodeClick?.([{ uid: "child", text: "Child" }]);
+    });
+    expect(getVisibleTextsFromLatestFrame()).toEqual({
+      root: "Root",
+      child: "Child",
+      grandchild: "待回忆",
+    });
+
+    await act(async () => {
+      getLatestMindMapEditorSurfaceProps()?.onNodeClick?.([{ uid: "child", text: "Child" }]);
+    });
     expect(getVisibleTextsFromLatestFrame()).toEqual({
       root: "Root",
       child: "Child",

@@ -22,7 +22,9 @@ export { getShortcutLabel, getShortcutSignature, isShortcutPressed, normalizeSho
 
 /**
  * Flip-card keyboard map. One scene covers every flip surface (随心页 and formal
- * 复习/练习), so a learner configures Enter/Backspace/A/S once instead of per mode.
+ * 复习/练习), so a learner configures Enter/Backspace once instead of per mode.
+ * W/A/S/D are not in this map: the 随心 mind map owns them as fixed view-port
+ * pan keys (`useMindMapViewPanKeys`), so no flip action may capture them.
  */
 export type ShortcutScene = 'flip'
 export type MemoryAnkiShortcutActionId =
@@ -30,8 +32,6 @@ export type MemoryAnkiShortcutActionId =
   | 'retract_current_card'
   | 'page_previous_card'
   | 'page_next_card'
-  | 'flip_subtree_cards'
-  | 'flip_direct_child_cards'
   | 'hide_child_cards'
 
 export interface MemoryAnkiShortcutActionDefinition {
@@ -79,69 +79,62 @@ function binding(
   }
 }
 
-const BARE_KEY_A = binding('KeyA', 'a')
-const BARE_KEY_S = binding('KeyS', 's')
+const BARE_KEY_H = binding('KeyH', 'h', { shift: true })
 
 export const MEMORY_ANKI_SHORTCUT_ACTIONS: MemoryAnkiShortcutActionDefinition[] = [
   {
     id: 'flip_current_card',
     scene: 'flip',
     label: '翻卡',
-    description: '翻开当前正在学习的卡：先出待回忆占位，再按一次出内容。',
+    description: '翻开当前正在学习的卡；揭示方式决定先出待回忆占位符还是直接出内容。',
     defaultBinding: binding('Enter', 'enter'),
   },
   {
     id: 'retract_current_card',
     scene: 'flip',
     label: '收卡',
-    description: '把当前卡收回成待回忆，并折起它下面翻开的子卡；可以再按翻卡重新来。',
+    description: '收回当前卡并折起它下面翻开的子卡：两阶段回到待回忆，直接显示则整张收起；可以再按翻卡重新来。',
     defaultBinding: binding('Backspace', 'backspace'),
   },
   {
     id: 'page_previous_card',
     scene: 'flip',
     label: '上一张',
-    description: '随心页翻到上一张卡。← 也是固定翻页键；PageUp / 空格同样可用。',
+    description: '随心页翻到上一张卡。← 也是固定翻页键；PageUp 同样可用。',
     defaultBinding: binding('ArrowUp', 'arrowup'),
   },
   {
     id: 'page_next_card',
     scene: 'flip',
     label: '下一张',
-    description: '随心页翻到下一张卡。→ 也是固定翻页键；PageDown / 空格同样可用。',
+    description: '随心页翻到下一张卡。→ 也是固定翻页键；PageDown 同样可用。',
     defaultBinding: binding('ArrowDown', 'arrowdown'),
-  },
-  {
-    id: 'flip_subtree_cards',
-    scene: 'flip',
-    label: '翻开下方全部子卡',
-    description: '悬停卡片上：第一次翻出全部后代占位符，再按一次翻出内容。无悬停时用当前卡。',
-    defaultBinding: BARE_KEY_A,
-  },
-  {
-    id: 'flip_direct_child_cards',
-    scene: 'flip',
-    label: '翻开下方一级子卡',
-    description: '悬停卡片上：第一次翻出一级子卡占位符，再按一次翻出内容。无悬停时用当前卡。',
-    defaultBinding: BARE_KEY_S,
   },
   {
     id: 'hide_child_cards',
     scene: 'flip',
     label: '隐藏/取消子级知识点显示',
     description: '对当前选中的知识点执行右键同款隐藏子级操作。',
-    defaultBinding: binding('KeyH', 'h', { shift: true }),
+    defaultBinding: BARE_KEY_H,
   },
 ]
 
 /**
- * Keys the 随心 feed always owns. A flip action must never capture them: the
- * page-turn contract is fixed even when the configurable map is rebound.
+ * Keys the 随心 canvas always owns. A flip action must never capture them: the
+ * page-turn and view-pan contracts are fixed even when the map is rebound.
+ *
+ * Space is in the list without being a page key any more. It is the character a
+ * learner types inside a card editor, so no flip action may take it; the feed
+ * pages on PageUp / PageDown and ← / → only.
  */
 export const RESERVED_FLIP_SHORTCUT_CODES = [
   'Space',
   'PageUp',
   'PageDown',
+  'KeyW',
+  'KeyA',
+  'KeyS',
+  'KeyD',
   'ArrowLeft',
   'ArrowRight',
 ] as const
@@ -190,7 +183,7 @@ export function sanitizeMemoryAnkiShortcutMap(rawShortcutMap: unknown): MemoryAn
     const pageAction = action.id === 'page_previous_card' || action.id === 'page_next_card'
     if (!pageAction && RESERVED_FLIP_SHORTCUT_CODE_SET.has(requested.code)) {
       // A stored map from an older build (or hand-edited storage) must not let
-      // 翻卡 steal Space / PageUp / PageDown / ← / → from the feed.
+      // 翻卡 steal Space (typing) / PageUp / PageDown / ← / → (feed paging).
       nextShortcutMap[action.id] = null
       continue
     }
@@ -243,7 +236,8 @@ export function useMemoryAnkiShortcutMap() {
 
 /**
  * Page direction for the 随心 feed: the configured 上一张/下一张 binding first,
- * then the fixed ←/→ keys. PageUp/PageDown/Space stay with the feed itself.
+ * then the fixed ←/→ keys. PageUp/PageDown stay with the feed itself; Space is
+ * not a page key (it belongs to whatever text the learner is typing).
  */
 export function resolveFlipCardPageDirection(
   event: KeyboardEvent,

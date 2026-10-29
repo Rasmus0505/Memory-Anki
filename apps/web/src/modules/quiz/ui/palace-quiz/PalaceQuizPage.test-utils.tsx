@@ -412,6 +412,15 @@ export function setupPalaceQuizPageTest() {
           },
         ],
       },
+      // Palace 2's primary chapter: the directory tree places a palace under its
+      // chapter, so the chapter tree and `/palaces/grouped` must agree.
+      {
+        id: 2,
+        name: '第四章',
+        subject_id: 2,
+        parent_id: null,
+        children: [],
+      },
     ],
   })
   promptForAiOptionsMock.mockResolvedValue({})

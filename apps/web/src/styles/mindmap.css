@@ -624,3 +624,60 @@
     display: none;
   }
 }
+
+/*
+ * 正文统计（Obsidian 状态栏口径：字数 · 字符数）。
+ *
+ * 它是浮在画布右下角的一枚小胶囊，不占布局、不抢指针：画布这一页不接受
+ * 第二条底栏（见 foundation.css 的「画布就是这一页」），所以背景只用纸面
+ * 半透明色，压在卡片上也读得清。编辑某张卡时前面追加「本卡 N 字」。
+ */
+.memory-anki-mindmap-text-stats {
+  position: absolute;
+  z-index: 6;
+  right: 0.65rem;
+  bottom: calc(0.55rem + env(safe-area-inset-bottom, 0px));
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.14rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, var(--color-paper-line) 62%, transparent);
+  background: color-mix(in oklab, var(--color-paper-card) 76%, transparent);
+  color: var(--color-paper-muted);
+  font-size: 0.68rem;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 1px 2px hsl(24 40% 20% / 0.06);
+}
+
+.memory-anki-mindmap-text-stats-sep {
+  opacity: 0.55;
+}
+
+/*
+ * 复习 / 练习 / 评分场景的底边整条被评分条占着（全宽、z-index 更高，frame 又
+ * 开了 isolation，靠层级压不上去），统计行整体抬到评分条上方。编辑场景里
+ * 宿主会收起评分条，保持默认贴底。
+ */
+.memory-anki-mindmap-scene-review > .memory-anki-mindmap-text-stats,
+.memory-anki-mindmap-scene-practice > .memory-anki-mindmap-text-stats,
+.memory-anki-mindmap-scene-rating > .memory-anki-mindmap-text-stats {
+  /* 评分条含“已选效果”提示行时桌面端约 6.9rem 高，留出一指余量；放到左下，
+     让开评分条右上方的连击 chip 与右侧翻页条。 */
+  right: auto;
+  left: 0.65rem;
+  bottom: calc(7.25rem + env(safe-area-inset-bottom, 0px));
+}
+
+@media (max-width: 639px) {
+  .memory-anki-mindmap-text-stats {
+    right: 0.5rem;
+    font-size: 0.62rem;
+  }
+}

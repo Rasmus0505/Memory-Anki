@@ -173,6 +173,40 @@ describe('mind map node context actions', () => {
     )
   })
 
+  it('offers insert-child-layer right after add-child for a single node', () => {
+    const onInsertChildLayer = vi.fn()
+    const actions = buildActions({ onInsertChildLayer })
+
+    expect(actions.map((action) => action.label)).toEqual([
+      '添加子知识点 (Tab)',
+      '插入子知识点（原内容降一级）',
+      '添加同级知识点 (Shift+Enter)',
+      '上移',
+      '下移',
+      '编辑文字 (Enter / F2)',
+      '标记重点',
+      '单独删除（保留子级）',
+      '删除整条分支（3 张卡片）',
+    ])
+
+    actions.find((action) => action.label === '插入子知识点（原内容降一级）')?.onClick()
+    expect(onInsertChildLayer).toHaveBeenCalledWith('child')
+  })
+
+  it('hides insert-child-layer on the root and for multi-select', () => {
+    const onInsertChildLayer = vi.fn()
+
+    const rootActions = buildActions({ onInsertChildLayer, isRootNode: () => true })
+    expect(rootActions.some((action) => action.label.startsWith('插入子知识点'))).toBe(false)
+
+    const multiActions = buildActions({
+      ctxMenu: { x: 12, y: 18, nodeId: 'child-a', targetNodeIds: ['child-a', 'child-b'] },
+      onInsertChildLayer,
+    })
+    expect(multiActions.some((action) => action.label.startsWith('插入子知识点'))).toBe(false)
+    expect(onInsertChildLayer).not.toHaveBeenCalled()
+  })
+
   it('excludes root from multi-select delete targets', () => {
     const onDeleteNodes = vi.fn()
     const onDelete = vi.fn()

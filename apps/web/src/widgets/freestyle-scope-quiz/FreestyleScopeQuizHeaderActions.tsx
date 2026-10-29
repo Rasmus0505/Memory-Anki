@@ -1,4 +1,6 @@
-import { BookOpen, Copy, LoaderCircle, RotateCcw, Shuffle } from 'lucide-react'
+import { BookOpen, Copy, FileText, LoaderCircle, RotateCcw, Shuffle } from 'lucide-react'
+import { useCopyQuizQuestionsText } from '@/modules/quiz/public'
+import type { PalaceQuizQuestion } from '@/shared/api/contracts'
 import { Button } from '@/shared/components/ui/button'
 
 /**
@@ -8,6 +10,7 @@ import { Button } from '@/shared/components/ui/button'
 export function FreestyleScopeQuizHeaderActions({
   copyPalaceId,
   lookupPalaceId,
+  questions,
   copyingOutline,
   onCopyOutline,
   onOpenPalace,
@@ -20,6 +23,8 @@ export function FreestyleScopeQuizHeaderActions({
   copyPalaceId: number | null
   /** Palace 查看宫殿 opens (may be a bound palace override). */
   lookupPalaceId: number | null
+  /** 复制题目 copies every question loaded in this window. */
+  questions: readonly PalaceQuizQuestion[]
   copyingOutline: boolean
   onCopyOutline: (palaceId: number) => void
   onOpenPalace: () => void
@@ -29,6 +34,7 @@ export function FreestyleScopeQuizHeaderActions({
   onShuffle: () => void
   onOpenClearProgress: () => void
 }) {
+  const { copying: copyingQuestions, copyQuestions } = useCopyQuizQuestionsText()
   return (
     <div className="flex shrink-0 items-center gap-2">
       {copyPalaceId != null ? (
@@ -47,6 +53,24 @@ export function FreestyleScopeQuizHeaderActions({
             <Copy className="size-4" />
           )}
           <span className="hidden sm:inline">复制导图</span>
+        </Button>
+      ) : null}
+      {questions.length > 0 ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          aria-label="复制题目"
+          title="复制本窗口全部题目的题干、选项、答案与解析"
+          disabled={copyingQuestions}
+          onClick={() => void copyQuestions(questions)}
+        >
+          {copyingQuestions ? (
+            <LoaderCircle className="size-4 animate-spin" />
+          ) : (
+            <FileText className="size-4" />
+          )}
+          <span className="hidden sm:inline">复制题目</span>
         </Button>
       ) : null}
       {lookupPalaceId != null ? (
