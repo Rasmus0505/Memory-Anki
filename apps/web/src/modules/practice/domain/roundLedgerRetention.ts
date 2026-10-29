@@ -119,7 +119,7 @@ export function retainLocalRoundLedger(input: {
       status: 'closed',
       sessionId: hydrated?.sessionId ?? localEncounter.sessionId ?? null,
       selectedRating,
-      passed: localEncounter.passed ?? selectedRating >= 3,
+      passed: localEncounter.passed ?? selectedRating >= 2,
       retryAfterCards: hydrated?.retryAfterCards ?? localEncounter.retryAfterCards ?? 0,
     }
   }

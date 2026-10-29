@@ -34,22 +34,31 @@ def _rate(
     has_passed: bool = True,
     locked: bool = False,
     locked_due: date | None = None,
-    hard_today: bool = False,
     fuzz_key: str | None = None,
     horizon=None,
+    early_step: int | None = 1,
+    previous_interval_days: int | None = 10,
+    step_pending: bool = False,
+    lapse_original_days: int | None = None,
+    lapse_started_on: date | None = None,
+    today: date = TODAY,
 ):
     return rate_unit_with_fsrs(
         current=current or _mature_state(),
         has_passed=has_passed,
         rating=rating,
-        today=TODAY,
+        today=today,
         rated_at=RATED_AT,
         schedule_locked=locked,
         locked_due_date=locked_due,
-        hard_penalized_today=hard_today,
         fuzz_key=fuzz_key,
         horizon=horizon,
         scheduler=SCHEDULER,
+        early_step=early_step,
+        previous_interval_days=previous_interval_days,
+        step_pending=step_pending,
+        lapse_original_days=lapse_original_days,
+        lapse_started_on=lapse_started_on,
     )
 
 
@@ -75,22 +84,22 @@ def test_forgetting_retries_today_and_records_fsrs_again():
     assert result.state.stability != before.stability
 
 
-def test_hard_retries_today_and_demotes_only_once():
-    first = _rate(rating=2)
-    assert first.passed is False
-    assert first.due_date == TODAY
-    assert first.hard_penalty_applied is True
-    assert first.state.stability is not None
+def test_hard_is_a_pass_that_never_lengthens_the_interval():
+    result = _rate(rating=2, previous_interval_days=10)
 
-    second = _rate(
-        current=first.state,
-        rating=2,
-        hard_today=True,
-    )
-    assert second.due_date == TODAY
-    assert second.hard_penalty_applied is False
-    assert second.fsrs_applied is False
-    assert second.state == first.state
+    assert result.passed is True
+    assert result.due_date <= TODAY + timedelta(days=10)
+    assert result.due_date >= TODAY + timedelta(days=8)
+    assert result.retry_after_cards == 0
+    assert result.fsrs_applied is True
+    assert result.guardrail_applied is True
+
+
+def test_hard_on_a_retry_day_falls_back_to_one_day():
+    result = _rate(rating=2, previous_interval_days=0)
+
+    assert result.passed is True
+    assert result.due_date == TODAY + timedelta(days=1)
 
 
 def test_locked_pass_records_no_schedule_change():
@@ -139,6 +148,7 @@ def test_sprint_horizon_bounds_a_long_fsrs_interval():
         rating=3,
         fuzz_key="unit-horizon",
         horizon=horizon,
+        previous_interval_days=300,
     )
 
     assert result.passed is True
@@ -152,6 +162,7 @@ def test_deterministic_fuzz_scatters_a_cohort_within_bounds():
             current=_mature_state(stability=100.0),
             rating=3,
             fuzz_key=f"unit-{index}",
+            previous_interval_days=100,
         ).due_date
         for index in range(40)
     }
@@ -162,22 +173,26 @@ def test_deterministic_fuzz_scatters_a_cohort_within_bounds():
             current=_mature_state(stability=100.0),
             rating=3,
             fuzz_key="unit-same",
+            previous_interval_days=100,
         ).due_date
         for _ in range(3)
     ]
     assert len(set(same_key)) == 1
 
 
-def test_failed_grades_stay_today_even_with_a_horizon():
+def test_forgetting_stays_today_even_with_a_horizon():
     horizon = resolve_sprint_horizon(
         exam_date="2026-11-23",
         sprint_mode=True,
         today=TODAY,
     )
-    for rating in (1, 2):
-        result = _rate(rating=rating, horizon=horizon)
-        assert result.due_date == TODAY
-        assert result.passed is False
+    result = _rate(rating=1, horizon=horizon)
+    assert result.due_date == TODAY
+    assert result.passed is False
+
+    hard = _rate(rating=2, horizon=horizon)
+    assert hard.passed is True
+    assert hard.due_date > TODAY
 
 
 def test_shadow_scheduler_is_deterministic_by_default():
@@ -209,7 +224,131 @@ def test_legacy_seed_keeps_a_mature_unit_mature():
         has_passed=True,
         due_date=TODAY,
     )
-    result = _rate(current=seeded, rating=3)
+    result = _rate(current=seeded, rating=3, previous_interval_days=365)
 
     assert result.passed is True
     assert result.interval_days >= 300
+
+
+def test_anchor_first_pass_books_tomorrow_and_stays_anchored():
+    result = _rate(
+        current=FsrsUnitState.empty(),
+        rating=3,
+        has_passed=False,
+        early_step=0,
+        previous_interval_days=0,
+    )
+
+    assert result.passed is True
+    assert result.due_date == TODAY + timedelta(days=1)
+    assert result.early_step == 0
+    assert result.anchor_applied is True
+
+
+def test_anchor_first_pass_easy_skips_to_three_days():
+    result = _rate(
+        current=FsrsUnitState.empty(),
+        rating=4,
+        has_passed=False,
+        early_step=0,
+        previous_interval_days=0,
+    )
+
+    assert result.due_date == TODAY + timedelta(days=3)
+    assert result.early_step == 1
+
+
+def test_anchor_overnight_remember_graduates_with_three_days():
+    result = _rate(rating=3, has_passed=True, early_step=0, previous_interval_days=1)
+
+    assert result.due_date == TODAY + timedelta(days=3)
+    assert result.early_step == 1
+
+
+def test_anchor_overnight_easy_graduates_with_five_days():
+    result = _rate(rating=4, has_passed=True, early_step=0, previous_interval_days=1)
+
+    assert result.due_date == TODAY + timedelta(days=5)
+    assert result.early_step == 1
+
+
+def test_anchor_overnight_hard_asks_for_one_more_overnight():
+    result = _rate(rating=2, has_passed=True, early_step=0, previous_interval_days=1)
+
+    assert result.passed is True
+    assert result.due_date == TODAY + timedelta(days=1)
+    assert result.early_step == 0
+
+
+def test_remember_is_capped_at_two_and_a_half_times_below_ten_days():
+    result = _rate(
+        current=_mature_state(stability=50.0),
+        rating=3,
+        previous_interval_days=3,
+    )
+
+    assert result.interval_days == 7
+    assert result.guardrail_applied is True
+
+
+def test_easy_is_capped_at_three_and_a_half_times_below_ten_days():
+    result = _rate(
+        current=_mature_state(stability=50.0),
+        rating=4,
+        previous_interval_days=3,
+    )
+
+    assert result.interval_days == 10
+
+
+def test_the_cap_lifts_from_ten_days():
+    result = _rate(
+        current=_mature_state(stability=50.0),
+        rating=3,
+        previous_interval_days=10,
+    )
+
+    assert result.interval_days > 25
+    assert result.guardrail_applied is False
+
+
+def test_a_mature_forget_remembers_the_earned_interval():
+    result = _rate(rating=1, previous_interval_days=60)
+
+    assert result.due_date == TODAY
+    assert result.lapse_original_days == 60
+    assert result.lapse_started_on == TODAY
+
+
+def test_a_young_forget_does_not_enter_lapse_recovery():
+    result = _rate(rating=1, previous_interval_days=5)
+
+    assert result.lapse_original_days is None
+
+
+def test_the_confirmation_after_a_lapse_restores_thirty_percent():
+    result = _rate(
+        current=_mature_state(stability=2.0),
+        rating=3,
+        previous_interval_days=1,
+        lapse_original_days=60,
+        lapse_started_on=TODAY - timedelta(days=1),
+    )
+
+    assert result.interval_days == 18
+    assert result.lapse_original_days is None
+    assert result.lapse_started_on is None
+    assert result.guardrail_applied is True
+
+
+def test_the_confirmation_same_day_does_not_restore_yet():
+    result = _rate(
+        current=_mature_state(stability=2.0),
+        rating=3,
+        previous_interval_days=0,
+        lapse_original_days=60,
+        lapse_started_on=TODAY,
+    )
+
+    assert result.lapse_original_days == 60
+    assert result.interval_days != 18

@@ -1550,8 +1550,9 @@ def check_review_scheduler_boundary(errors: list[str]) -> None:
     """FSRS is the only production scheduler, and one adapter owns the library.
 
     ``unit_fsrs_adapter.py`` is the single seam to the ``fsrs`` package: it holds
-    the product rules (same-day failure retry, once-per-day \u56f0\u96be demotion, locked
-    reviews, sprint horizon) that the raw library does not know about. Every other
+    the product rules (the two-checkpoint anchor, \u56f0\u96be as a pass that never
+    lengthens, the young-card caps, lapse recovery, locked reviews, sprint
+    horizon) that the raw library does not know about. Every other
     module, ``unit_scheduler.py`` included, must go through that adapter so a
     future library upgrade cannot silently change product behaviour in one caller.
     The retired shadow recorder must not come back as a second scheduler.
@@ -3235,6 +3236,67 @@ def check_enter_reveal_viewport_follow(errors: list[str]) -> None:
         )
 
 
+CARD_EDITOR_MARKER = "data-mindmap-editor-active"
+SHORTCUT_OWNER_MODULE = "shared/keyboard/keyboardTargets.ts"
+
+
+def check_card_editor_owns_keys(errors: list[str]) -> None:
+    """An open mind-map card editor owns the keyboard, checked in one place.
+
+    The caret can lose DOM focus while the edit session is still open (toolbar
+    teardown, React Flow layout, a click on the card padding), so "is the event
+    target editable?" is not enough: Space / Enter / arrows would flip, rate or
+    page the card underneath. NodeCard marks the open editor, the shared keyboard
+    module reads it, and no other module may re-implement that read.
+    """
+    node_card = WEB_SRC / "shared" / "ui" / "mindmap-canvas" / "NodeCard.tsx"
+    marked = node_card.exists() and (
+        f'{CARD_EDITOR_MARKER}="true"' in node_card.read_text(encoding="utf-8", errors="ignore")
+    )
+    if not marked:
+        errors.append(
+            f"{node_card.relative_to(WEB_SRC).as_posix()}: the open card editor must carry "
+            f'`{CARD_EDITOR_MARKER}="true"` so page-level shortcuts stay suspended while editing.'
+        )
+
+    owner = WEB_SRC / "shared" / "keyboard" / "keyboardTargets.ts"
+    owner_source = owner.read_text(encoding="utf-8", errors="ignore") if owner.exists() else ""
+    if CARD_EDITOR_MARKER not in owner_source:
+        errors.append(
+            "shared/keyboard/keyboardTargets.ts: isKeyboardShortcutSuspended() must treat an "
+            "open card editor as a suspended shortcut owner."
+        )
+
+    marker_selector = f"[{CARD_EDITOR_MARKER}"
+    for path in iter_files(WEB_SRC, (".ts", ".tsx")):
+        relative = path.relative_to(WEB_SRC).as_posix()
+        if relative == SHORTCUT_OWNER_MODULE or is_frontend_test_file(relative):
+            continue
+        if marker_selector in path.read_text(encoding="utf-8", errors="ignore"):
+            errors.append(
+                f"{relative}: read the open-card-editor state through "
+                "isKeyboardShortcutSuspended() / isFreestyleShortcutBlocked(), "
+                "not the attribute selector directly."
+            )
+
+    paging = (
+        WEB_SRC
+        / "modules"
+        / "practice"
+        / "ui"
+        / "freestyle"
+        / "model"
+        / "freestyleKeyboard.ts"
+    )
+    if paging.exists():
+        paging_source = paging.read_text(encoding="utf-8", errors="ignore")
+        if "key === ' '" in paging_source or "code === 'Space'" in paging_source:
+            errors.append(
+                f"{paging.relative_to(WEB_SRC).as_posix()}: Space is a typed character, never a "
+                "feed page key; PageUp/PageDown and ← / → page the feed."
+            )
+
+
 def check_freestyle_canvas_pan(errors: list[str]) -> None:
     """Review maps stay pannable; the feed pager changes cards, not one-finger yield."""
     panel = (
@@ -4786,6 +4848,76 @@ def check_quiz_font_scale_primitive(errors: list[str]) -> None:
                 f"{host.relative_to(REPO_ROOT).as_posix()}: "
                 "must not own a separate wheel zoom listener."
             )
+
+
+def check_quiz_shuffle_order_persistence(errors: list[str]) -> None:
+    """「打乱题库」order must be a shared preference, not browser-local state.
+
+    The dialog is rebuilt from the opener's ids on every open, so the order has to
+    be stored somewhere durable. Keeping it in localStorage alone made one shuffle
+    look fresh again on the other surface (desktop window / PWA run on different
+    origins) or the other device, so it must travel as a client preference and
+    fall back to the question set when another entry point opens the same cards.
+    """
+    model = (
+        WEB_SRC
+        / "modules"
+        / "quiz"
+        / "domain"
+        / "quiz-entity"
+        / "model"
+        / "quizShuffleOrder.ts"
+    )
+    boundary = REPO_ROOT / "docs" / "architecture" / "quiz-frontend-boundary.md"
+    router = (
+        REPO_ROOT
+        / "apps"
+        / "api"
+        / "src"
+        / "memory_anki"
+        / "modules"
+        / "settings"
+        / "presentation"
+        / "router.py"
+    )
+    contract = WEB_SRC / "shared" / "api" / "contracts" / "profile.ts"
+
+    if not model.exists():
+        errors.append(
+            f"{model.relative_to(REPO_ROOT).as_posix()}: quiz shuffle-order model is required."
+        )
+    else:
+        model_source = model.read_text(encoding="utf-8", errors="ignore")
+        for token in ("quiz_shuffle_orders", "saveClientPreference"):
+            if token not in model_source:
+                errors.append(
+                    f"{model.relative_to(REPO_ROOT).as_posix()}: "
+                    f"must persist the shuffle order through `{token}`."
+                )
+        if "quizShuffleSetStorageKey" not in model_source:
+            errors.append(
+                f"{model.relative_to(REPO_ROOT).as_posix()}: "
+                "must also expose `quizShuffleSetStorageKey`, so another entry point "
+                "for the same cards reuses the order."
+            )
+    router_source = router.read_text(encoding="utf-8", errors="ignore") if router.exists() else ""
+    if '"quiz_shuffle_orders"' not in router_source:
+        errors.append(
+            f"{router.relative_to(REPO_ROOT).as_posix()}: "
+            "client preferences must persist quiz_shuffle_orders."
+        )
+    contract_source = contract.read_text(encoding="utf-8", errors="ignore") if contract.exists() else ""
+    if "quiz_shuffle_orders" not in contract_source:
+        errors.append(
+            f"{contract.relative_to(REPO_ROOT).as_posix()}: "
+            "client preference contract must include quiz_shuffle_orders."
+        )
+    boundary_text = boundary.read_text(encoding="utf-8", errors="ignore") if boundary.exists() else ""
+    if "quiz_shuffle_orders" not in boundary_text:
+        errors.append(
+            f"{boundary.relative_to(REPO_ROOT).as_posix()}: "
+            "must document the shared 打乱题库 order."
+        )
 
 
 def check_quiz_question_marks(errors: list[str]) -> None:
@@ -6949,6 +7081,7 @@ def main() -> int:
     check_palace_memory_lookup_binding_center(errors)
     check_quiz_answer_mode_primitive(errors)
     check_quiz_font_scale_primitive(errors)
+    check_quiz_shuffle_order_persistence(errors)
     check_window_layout_memory(errors)
     check_quiz_shortcut_primitive(errors)
     check_flip_card_shortcut_settings(errors)
@@ -6982,6 +7115,7 @@ def main() -> int:
     check_freestyle_return_save_ux(errors)
     check_freestyle_inline_edit_scope(errors)
     check_freestyle_canvas_pan(errors)
+    check_card_editor_owns_keys(errors)
     check_wheel_scroll_does_not_snap_back(errors)
     check_enter_reveal_viewport_follow(errors)
     check_freestyle_settled_retry_leaves(errors)

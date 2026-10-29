@@ -11,7 +11,7 @@ import { expect, test, type Page, type Route } from './fixtures'
 // `target_stage_index` is the compat projection of `target_interval_days`.
 const EFFECTS = [
   { rating: 1, label: '忘记', passed: false, target_stage_index: 0, target_interval_days: 0, target_actual_interval_days: 0, target_due_date: '2026-07-27', retry_after_cards: 3, stage_action: 'reset' },
-  { rating: 2, label: '困难', passed: false, target_stage_index: 0, target_interval_days: 0, target_actual_interval_days: 0, target_due_date: '2026-07-27', retry_after_cards: 3, stage_action: 'keep' },
+  { rating: 2, label: '困难', passed: true, target_stage_index: 1, target_interval_days: 2, target_actual_interval_days: 2, target_due_date: '2026-07-29', retry_after_cards: 0, stage_action: 'lower' },
   { rating: 3, label: '记得', passed: true, target_stage_index: 2, target_interval_days: 3, target_actual_interval_days: 3, target_due_date: '2026-07-30', retry_after_cards: 0, stage_action: 'advance' },
   { rating: 4, label: '轻松', passed: true, target_stage_index: 3, target_interval_days: 7, target_actual_interval_days: 7, target_due_date: '2026-08-03', retry_after_cards: 0, stage_action: 'advance' },
 ]

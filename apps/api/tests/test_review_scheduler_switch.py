@@ -197,13 +197,14 @@ def test_mature_units_keep_their_earned_booking(db_session):
     assert state.fsrs_scheduler_version == SCHEDULER_VERSION
 
 
-def test_early_unit_gets_its_ladder_counter_without_moving_the_booking(db_session):
-    """A policy change stamps the fixed-ladder position and keeps the promised date.
+def test_early_unit_gets_its_anchor_counter_without_moving_the_booking(db_session):
+    """A policy change stamps the anchor position and keeps the promised date.
 
-    The old repair re-derived a young unit's due date from its last rating. The
-    counter now records where the unit is in the fixed rhythm, so the learner
-    keeps the date already booked and only the *next* rating follows the new
-    gaps.
+    The retired four-step counter is inferred from the booked gap, then mapped
+    onto the two-checkpoint anchor: any completed day-level fixed review has
+    already passed the overnight check, so the unit graduates to FSRS. The
+    learner keeps the date already booked; only the next rating follows the new
+    rules.
     """
     from memory_anki.core.time import utc_now_naive
 
@@ -222,5 +223,5 @@ def test_early_unit_gets_its_ladder_counter_without_moving_the_booking(db_sessio
     assert summary["stamped_early"] == 1
     db_session.refresh(state)
     assert state.due_date == local_day() + timedelta(days=3)
-    assert state.early_step == 2
+    assert state.early_step == 1
     assert state.fsrs_scheduler_version == SCHEDULER_VERSION

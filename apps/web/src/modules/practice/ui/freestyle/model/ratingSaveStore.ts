@@ -210,7 +210,7 @@ export type RatingResponseVerdict =
 
 /** Local pass rule: 记得 / 轻松 pass, 忘记 / 困难 do not. */
 export function ratingPassed(rating: UnitRating): boolean {
-  return rating >= 3
+  return rating >= 2
 }
 
 export function ratingSaveKey(roundId: string, cardId: string) {

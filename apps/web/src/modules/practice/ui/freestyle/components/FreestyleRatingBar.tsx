@@ -274,7 +274,7 @@ export function FreestyleRatingBar({
         {blockedHint ? (
           <div
             data-testid="freestyle-sequential-hint"
-            /* The gate explanation is two clauses ("还有 N 个单元未评分" + what 忘记/困难 do);
+            /* The gate explanation is two clauses ("还有 N 个单元未评分" + what 忘记 does);
                truncating it at phone width cut the half that says why. */
             className="mb-1.5 line-clamp-2 rounded-lg border border-rate-hard/30 bg-rate-hard/10 px-2.5 py-1 text-[11px] leading-snug text-stage-ink"
           >
@@ -428,7 +428,7 @@ export function FreestyleRatingBar({
                 : 'fail'
               : null
             const earlyHint = canRateWithoutPlan
-              ? item.value >= 3 ? '记下' : '今天再练'
+              ? item.value >= 2 ? '记下' : '今天再练'
               : null
             const hint = effect
               ? palaceMode && palaceKind

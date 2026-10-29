@@ -180,7 +180,7 @@ describe('areAllOccurrencesPassed', () => {
     expect(areAllOccurrencesPassed({
       cards: [card('a'), card('b')],
       completedIds: [],
-      encounters: { a: enc(3), b: enc(2) },
+      encounters: { a: enc(3), b: enc(1) },
       roundPlan: null,
     })).toBe(false)
   })

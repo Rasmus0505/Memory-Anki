@@ -254,7 +254,7 @@ describe('server round plan hydrate', () => {
         source_card_id: 'b',
         source_unit_id: 'b-unit',
         retry_attempt: 1,
-        rating: 2,
+        rating: 1,
         insert_target_index: 2,
         status: 'inserted',
         encounter_id: 'enc-b',
@@ -266,7 +266,7 @@ describe('server round plan hydrate', () => {
     }
     const merged = mergeServerPlanIntoLocalEncounters({}, plan, 'round-1')
     expect(merged.a).toMatchObject({ selectedRating: null, passed: true, status: 'closed' })
-    expect(merged.b).toMatchObject({ selectedRating: 2, passed: false, status: 'closed' })
+    expect(merged.b).toMatchObject({ selectedRating: 1, passed: false, status: 'closed' })
     expect(merged['retry:round-1:b-unit:1']).toBeUndefined()
     // Local draft wins when it already has a rating.
     expect(mergeServerPlanIntoLocalEncounters({
@@ -291,7 +291,7 @@ describe('server round plan hydrate', () => {
       plan,
     )
     expect(hud.cardsById.a.lastRating).toBeNull()
-    expect(hud.cardsById.b.lastRating).toBe(2)
+    expect(hud.cardsById.b.lastRating).toBe(1)
   })
 
   it('lights the same unit rating stored on the encounter', () => {
@@ -531,7 +531,7 @@ describe('server round plan hydrate', () => {
         source_card_id: 'review_unit:u1:r1',
         source_unit_id: 'u1',
         retry_attempt: 1,
-        rating: 2,
+        rating: 1,
         insert_target_index: 2,
         status: 'inserted',
         encounter_id: '',
@@ -597,7 +597,7 @@ describe('server round plan hydrate', () => {
         source_card_id: 'a',
         source_unit_id: 'a-unit',
         retry_attempt: 1,
-        rating: 2,
+        rating: 1,
         insert_target_index: 2,
         status: 'inserted',
         encounter_id: '',

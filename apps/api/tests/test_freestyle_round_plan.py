@@ -93,23 +93,22 @@ def _inserted(plan, source_card_id: str) -> dict:
     return matches[-1]
 
 
-def test_forget_and_hard_insert_retry_immediately():
+def test_forget_inserts_a_retry_and_hard_settles_as_a_pass():
+    """困难 is a pass on the current policy: it books ahead, never re-serves."""
     cards = [_card("a", unit_id="unit-a"), _card("b", unit_id="unit-b")]
     forgotten = _rate(plan_from_cards(cards), "a", 1, "enc-forget")
     hard = _rate(plan_from_cards(cards), "a", 2, "enc-hard")
 
     forget_occ = _inserted(forgotten, "a")
-    hard_occ = _inserted(hard, "a")
     assert forget_occ["retry_attempt"] == 1
-    assert hard_occ["retry_attempt"] == 1
     assert forget_occ["rating"] == 1
-    assert hard_occ["rating"] == 2
     assert forget_occ["occurrence_id"] == occurrence_id_for(ROUND_ID, "unit-a", 1)
-    assert hard_occ["occurrence_id"] == occurrence_id_for(ROUND_ID, "unit-a", 1)
     # Without a wait, the retry is published at the cursor: right after "a".
     assert forgotten["presented_ids"] == ["a", forget_occ["occurrence_id"], "b"]
-    assert hard["presented_ids"] == ["a", hard_occ["occurrence_id"], "b"]
     assert forgotten["current_card_id"] == "a"
+
+    assert not [item for item in hard["occurrences"] if item["source_card_id"] == "a"]
+    assert hard["presented_ids"] == ["a", "b"]
     assert hard["current_card_id"] == "a"
 
 
@@ -129,7 +128,7 @@ def test_rating_publishes_the_retry_at_the_cursor():
     assert plan["current_card_id"] == "x"
     assert leave_card(plan, "x")["presented_ids"] == plan["presented_ids"]
 
-    plan = _rate(plan, "a", 2, "enc-a")
+    plan = _rate(plan, "a", 1, "enc-a")
     retry_a = [item["occurrence_id"] for item in plan["occurrences"] if item["source_card_id"] == "a"][0]
     presented = plan["presented_ids"]
     assert presented.index(retry_a) == presented.index("a") + 1
@@ -169,7 +168,7 @@ def test_consecutive_source_failures_do_not_bump_attempt_before_the_retry_is_lef
 
     plan = set_cursor(plan, inserted["occurrence_id"])
     held = list(plan["presented_ids"])
-    plan = _rate(plan, inserted["occurrence_id"], 2, "enc-3", occurrence_id=inserted["occurrence_id"])
+    plan = _rate(plan, inserted["occurrence_id"], 1, "enc-3", occurrence_id=inserted["occurrence_id"])
     live = [
         item
         for item in plan["occurrences"]
@@ -256,12 +255,12 @@ def test_normalize_collapses_duplicate_live_retries():
 
 def test_same_encounter_amend_does_not_increment():
     plan = plan_from_cards([_card("a", unit_id="unit-a"), _card("b")])
+    plan = _rate(plan, "a", 3, "enc-same")
     plan = _rate(plan, "a", 1, "enc-same")
-    plan = _rate(plan, "a", 2, "enc-same")
     pending = [item for item in plan["occurrences"] if item["source_card_id"] == "a"]
     assert len(pending) == 1
     assert pending[0]["retry_attempt"] == 1
-    assert pending[0]["rating"] == 2
+    assert pending[0]["rating"] == 1
     assert pending[0]["occurrence_id"] == occurrence_id_for(ROUND_ID, "unit-a", 1)
 
 
@@ -278,7 +277,7 @@ def test_fail_after_pass_removes_source_from_completed():
 
 def test_passing_source_cancels_unanswered_retry_occurrence():
     cards = [_card("a", unit_id="unit-a"), _card("b"), _card("c"), _card("d"), _card("e")]
-    plan = leave_card(_rate(plan_from_cards(cards), "a", 2, "enc-hard"), "a")
+    plan = leave_card(_rate(plan_from_cards(cards), "a", 1, "enc-hard"), "a")
     inserted = _inserted(plan, "a")
 
     plan = _rate(plan, "a", 3, "enc-corrected")
@@ -296,7 +295,7 @@ def test_pass_settles_source_and_unfinished_occurrences():
     plan = leave_card(_rate(plan, "a", 1, "enc-fail"), "a")
     inserted = [item for item in plan["occurrences"] if item["source_card_id"] == "a"][0]
     assert inserted["status"] == "inserted"
-    plan = _rate(plan, inserted["occurrence_id"], 2, "enc-retry", occurrence_id=inserted["occurrence_id"])
+    plan = _rate(plan, inserted["occurrence_id"], 1, "enc-retry", occurrence_id=inserted["occurrence_id"])
     live = [
         item
         for item in plan["occurrences"]
@@ -673,7 +672,7 @@ def test_retry_stays_in_leftover_when_today_cards_append():
     yesterday = "2026-09-17"
     today = "2026-09-18"
     plan = plan_from_cards([_card("a", unit_id="unit-a"), _card("b", unit_id="unit-b")], today=yesterday)
-    plan = leave_card(_rate(plan, "a", 2, "enc-a"), "a")
+    plan = leave_card(_rate(plan, "a", 1, "enc-a"), "a")
     retry_a = plan["occurrences"][0]["occurrence_id"]
     assert plan["presented_ids"] == ["a", retry_a, "b"]
 
@@ -707,7 +706,7 @@ def test_retry_insert_does_not_borrow_today_segment():
         ],
         today=today,
     )
-    plan = leave_card(_rate(plan, "a", 2, "enc-a"), "a")
+    plan = leave_card(_rate(plan, "a", 1, "enc-a"), "a")
     retry_a = plan["occurrences"][0]["occurrence_id"]
     assert plan["presented_ids"][:3] == ["a", retry_a, "b"]
     assert plan["presented_ids"][3:] == ["c1", "c2", "c3"]
@@ -828,10 +827,10 @@ def test_plan_is_fully_handled_after_every_source_passes():
     assert plan_is_fully_handled(unfinished) is False
 
 
-def test_last_card_forget_or_hard_stays_unfinished_until_retry_follows_source():
+def test_last_card_forget_stays_unfinished_until_retry_follows_source():
     ids = ["c1", "c2", "c3", "c4", "source"]
     cards = [_card(card_id, unit_id=f"unit-{card_id}") for card_id in ids]
-    for rating, encounter in ((1, "enc-forget"), (2, "enc-hard")):
+    for rating, encounter in ((1, "enc-forget"),):
         plan = plan_from_cards(cards, today="2026-09-22")
         for card_id in ids[:-1]:
             plan = _rate(plan, card_id, 3, f"pass-{card_id}-{encounter}")
@@ -855,7 +854,7 @@ def test_last_card_forget_or_hard_stays_unfinished_until_retry_follows_source():
 def test_retry_parked_before_source_moves_behind_source_on_leave_and_append():
     ids = ["c1", "c2", "c3", "c4", "source"]
     cards = [_card(card_id, unit_id=f"unit-{card_id}") for card_id in ids]
-    plan = _rate(plan_from_cards(cards, today="2026-09-22"), "source", 2, "enc-hard")
+    plan = _rate(plan_from_cards(cards, today="2026-09-22"), "source", 1, "enc-hard")
     occ = plan["occurrences"][0]
     retry_id = occ["occurrence_id"]
     parked = dict(plan)
@@ -901,7 +900,7 @@ def test_drop_vanished_unstarted_drops_retry_of_a_gone_unit():
         _card("weak", unit_id="gone-unit"),
         _card("other", unit_id="also-gone"),
     ]
-    plan = leave_card(_rate(plan_from_cards(cards), "weak", 2, "enc-weak"), "weak")
+    plan = leave_card(_rate(plan_from_cards(cards), "weak", 1, "enc-weak"), "weak")
     dropped = drop_vanished_unstarted(plan, set())
     assert dropped["original_cards"] == []
     assert dropped["occurrences"] == []
@@ -914,7 +913,7 @@ def test_drop_vanished_unstarted_removes_retry_of_a_completed_gone_unit():
         _card("done", unit_id="gone-unit"),
         _card("next", unit_id="live-unit"),
     ]
-    plan = leave_card(_rate(plan_from_cards(cards), "done", 2, "enc-done"), "done")
+    plan = leave_card(_rate(plan_from_cards(cards), "done", 1, "enc-done"), "done")
     plan = complete_card(plan, "done")
     plan["current_card_id"] = plan["occurrences"][0]["occurrence_id"]
     dropped = drop_vanished_unstarted(plan, {"live-unit"})
@@ -930,7 +929,7 @@ def test_drop_vanished_unstarted_keeps_retry_whose_unit_is_still_live():
         _card("weak", unit_id="live-unit"),
         _card("other", unit_id="gone-unit"),
     ]
-    plan = leave_card(_rate(plan_from_cards(cards), "weak", 2, "enc-weak"), "weak")
+    plan = leave_card(_rate(plan_from_cards(cards), "weak", 1, "enc-weak"), "weak")
     dropped = drop_vanished_unstarted(plan, {"live-unit"})
     assert [item["card_id"] for item in dropped["original_cards"]] == ["weak"]
     assert dropped["occurrences"][0]["source_card_id"] == "weak"
@@ -1059,7 +1058,7 @@ def test_compress_completed_keeps_a_weak_group_when_its_retry_was_rated_weak():
     weak_again = _rate(
         plan,
         retry_id,
-        2,
+        1,
         "enc-retry-fail",
         occurrence_id=retry_id,
         unit_id="unit-weak",
@@ -1108,7 +1107,7 @@ def test_compress_completed_keeps_a_weak_group_whose_retry_is_still_blank():
                 [_card("weak", unit_id="unit-weak"), _card("todo", unit_id="unit-todo")]
             ),
             "weak",
-            2,
+            1,
             "enc-fail",
         ),
         "weak",
@@ -1504,7 +1503,7 @@ def test_a_weak_rating_on_that_step_keeps_it_live_instead_of_cancelling_it():
     plan = _rate(
         plan,
         step_id,
-        2,
+        1,
         "enc-weak",
         occurrence_id=step_id,
         available_at=datetime(2026, 10, 25, 12, 20),
@@ -1524,7 +1523,7 @@ def test_a_waiting_retry_publishes_right_after_the_current_card():
     plan = _rate(
         plan,
         "a",
-        2,
+        1,
         "enc-a",
         available_at=datetime(2026, 10, 27, 12, 10),
     )
@@ -1535,7 +1534,7 @@ def test_a_waiting_retry_publishes_right_after_the_current_card():
     presented = served["presented_ids"]
     assert presented[presented.index("c3") + 1] == retry_id
     assert served["current_card_id"] == "c3"
-    # A retry starts blank: the parent's 困难 only scheduled this glance, and
+    # A retry starts blank: the parent's 忘记 only scheduled this glance, and
     # the occurrence owns no encounter of its own.
     assert retry_id not in served["encounters"]
 
@@ -1547,7 +1546,7 @@ def test_publishing_a_waiting_retry_consumes_the_wait_only_once():
     plan = _rate(
         plan,
         "a",
-        2,
+        1,
         "enc-a",
         available_at=datetime(2026, 10, 27, 12, 10),
     )
@@ -1557,7 +1556,7 @@ def test_publishing_a_waiting_retry_consumes_the_wait_only_once():
     served = publish_ready_retries(plan, now=datetime(2026, 10, 27, 12, 11))
 
     # The wait is spent: the card is on the rail and the round is no longer
-    # waiting for it, even though its inherited 困难 rating is still visible to
+    # waiting for it, even though its inherited 忘记 rating is still visible to
     # the projection until this glance is rated.
     assert plan_waiting(served)["count"] == 0
     retry = [item for item in served["occurrences"] if item["occurrence_id"] == retry_id][0]
@@ -1576,7 +1575,7 @@ def test_publishing_a_waiting_retry_consumes_the_wait_only_once():
 def test_a_replan_keeps_a_failed_retry_visible_while_its_wait_runs():
     cards = [_card(f"c{index}", unit_id=f"unit-c{index}") for index in range(1, 6)]
     plan = plan_from_cards(cards)
-    plan = _rate(plan, "c1", 2, "enc-c1", available_at=datetime(2026, 10, 27, 12, 10))
+    plan = _rate(plan, "c1", 1, "enc-c1", available_at=datetime(2026, 10, 27, 12, 10))
     retry_id = _pending(plan, "c1")["occurrence_id"]
     plan = set_cursor(plan, "c2")
     plan = publish_ready_retries(plan, now=datetime(2026, 10, 27, 12, 11))
@@ -1584,7 +1583,7 @@ def test_a_replan_keeps_a_failed_retry_visible_while_its_wait_runs():
     plan = _rate(
         plan,
         retry_id,
-        2,
+        1,
         "enc-retry",
         occurrence_id=retry_id,
         unit_id="unit-c1",
@@ -1597,7 +1596,7 @@ def test_a_replan_keeps_a_failed_retry_visible_while_its_wait_runs():
     replanned = replan_remaining(plan, cards, today="2026-10-27")
     assert retry_id in replanned["presented_ids"]
     retry = [item for item in replanned["occurrences"] if item["occurrence_id"] == retry_id][0]
-    assert retry["rating"] == 2
+    assert retry["rating"] == 1
     assert retry["available_at"] is not None
 
 
@@ -1605,17 +1604,17 @@ def test_a_retry_failed_again_waits_and_then_reopens_blank_after_the_cursor():
     cards = [_card(f"c{index}", unit_id=f"unit-c{index}") for index in range(1, 6)]
     cards.insert(0, _card("a", unit_id="unit-a"))
     plan = plan_from_cards(cards)
-    plan = _rate(plan, "a", 2, "enc-a", available_at=datetime(2026, 10, 27, 12, 10))
+    plan = _rate(plan, "a", 1, "enc-a", available_at=datetime(2026, 10, 27, 12, 10))
     retry_id = _pending(plan, "a")["occurrence_id"]
     plan = set_cursor(plan, "c2")
     plan = publish_ready_retries(plan, now=datetime(2026, 10, 27, 12, 11))
 
-    # The learner rates that retry 困难 again; its next attempt waits an hour.
+    # The learner rates that retry 忘记 again; its next attempt waits an hour.
     plan = set_cursor(plan, retry_id)
     plan = _rate(
         plan,
         retry_id,
-        2,
+        1,
         "enc-retry",
         occurrence_id=retry_id,
         unit_id="unit-a",
@@ -1624,7 +1623,7 @@ def test_a_retry_failed_again_waits_and_then_reopens_blank_after_the_cursor():
     retry = [item for item in plan["occurrences"] if item["occurrence_id"] == retry_id][0]
     assert retry["status"] == "inserted"
     assert retry["retry_attempt"] == 1  # this glance's own score, not a new attempt yet
-    assert retry["rating"] == 2
+    assert retry["rating"] == 1
     # The rated card is still owed work, so the round reports the wait.
     assert plan_waiting(plan)["count"] == 1
     assert plan_waiting(plan)["next_ready_at"].startswith("2026-10-27T13:11")
@@ -1662,7 +1661,7 @@ def test_a_retry_failed_again_waits_and_then_reopens_blank_after_the_cursor():
 def test_the_parents_new_failure_never_leaves_its_score_on_the_retry_slot():
     cards = [_card("a", unit_id="unit-a"), _card("b", unit_id="unit-b"), _card("c", unit_id="unit-c")]
     plan = plan_from_cards(cards)
-    plan = _rate(plan, "a", 2, "enc-a-1", available_at=datetime(2026, 10, 27, 12, 10))
+    plan = _rate(plan, "a", 1, "enc-a-1", available_at=datetime(2026, 10, 27, 12, 10))
     retry_id = _pending(plan, "a")["occurrence_id"]
     plan = set_cursor(plan, "a")
     plan = publish_ready_retries(plan, now=datetime(2026, 10, 27, 12, 11))
@@ -1670,7 +1669,7 @@ def test_the_parents_new_failure_never_leaves_its_score_on_the_retry_slot():
     plan = _rate(
         plan,
         retry_id,
-        2,
+        1,
         "enc-retry-1",
         occurrence_id=retry_id,
         unit_id="unit-a",
@@ -1680,11 +1679,11 @@ def test_the_parents_new_failure_never_leaves_its_score_on_the_retry_slot():
     # The parent is re-rated with a new glance while the retry slot still holds
     # that earlier encounter. Its new weak score schedules the slot; it must not
     # read as the retry's own score.
-    plan = _rate(plan, "a", 2, "enc-a-2", available_at=datetime(2026, 10, 27, 12, 30))
+    plan = _rate(plan, "a", 1, "enc-a-2", available_at=datetime(2026, 10, 27, 12, 30))
     slot = [item for item in plan["occurrences"] if item["occurrence_id"] == retry_id][0]
     assert retry_id not in plan["encounters"]
     assert slot["retry_attempt"] == 2
-    assert slot["rating"] == 2
+    assert slot["rating"] == 1
     plan = set_cursor(plan, "b")
     served = publish_ready_retries(plan, now=datetime(2026, 10, 27, 12, 31))
     reopened = [item for item in served["occurrences"] if item["occurrence_id"] == retry_id][0]
@@ -1696,7 +1695,7 @@ def test_the_parents_new_failure_never_leaves_its_score_on_the_retry_slot():
 def test_a_due_retry_stays_under_the_viewport_when_the_learner_is_on_it():
     cards = [_card("a", unit_id="unit-a"), _card("b", unit_id="unit-b")]
     plan = plan_from_cards(cards)
-    plan = _rate(plan, "a", 2, "enc-a", available_at=datetime(2026, 10, 27, 12, 10))
+    plan = _rate(plan, "a", 1, "enc-a", available_at=datetime(2026, 10, 27, 12, 10))
     retry_id = _pending(plan, "a")["occurrence_id"]
     plan = set_cursor(plan, "a")
     plan = publish_ready_retries(plan, now=datetime(2026, 10, 27, 12, 11))
@@ -1753,7 +1752,7 @@ def test_a_weak_rating_on_a_rebuilt_revision_books_the_retry_on_the_new_card():
     rated = _rate(
         plan,
         "review_unit:unit-a:r3",
-        2,
+        1,
         "enc-r3",
         unit_id="unit-a",
         unit_revision=3,

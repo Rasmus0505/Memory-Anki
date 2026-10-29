@@ -915,8 +915,9 @@ export function placeRestudyCardWithMaxGap(
 }
 
 /**
- * True when this formal pass still has 忘记/困难 scores that need another restudy
- * pass before leaving the immediate unit-retry loop.
+ * True when this formal pass still has a 忘记 score that needs another restudy
+ * pass before leaving the immediate unit-retry loop. 困难 is a pass: it books a
+ * shorter interval instead of re-serving the card today.
  */
 export function needsRestudyAfterRatings(
   ratingCounts:
@@ -925,10 +926,7 @@ export function needsRestudyAfterRatings(
     | undefined,
 ): boolean {
   if (!ratingCounts) return false
-  const weak =
-    Number(ratingCounts['忘记'] ?? ratingCounts.forgot ?? 0) +
-    Number(ratingCounts['困难'] ?? ratingCounts.hard ?? 0)
-  return weak > 0
+  return Number(ratingCounts['忘记'] ?? ratingCounts.forgot ?? 0) > 0
 }
 
 /**

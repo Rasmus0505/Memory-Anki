@@ -60,7 +60,7 @@ export function isOccurrencePassed(
 ): boolean {
   const id = idOf(cardId)
   const rating = occurrenceScore(cardId, input)
-  if (rating != null) return rating >= 3
+  if (rating != null) return rating >= 2
   return Boolean(id && new Set(Array.from(input.completedIds, idOf)).has(id))
 }
 

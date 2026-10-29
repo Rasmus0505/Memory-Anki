@@ -8,10 +8,15 @@ a long one leaves it for hours, and a new card is never re-checked at all.
 This module adds a small product-level ladder on top of FSRS:
 
 - a first-ever pass (and only that) is re-checked once after a short delay;
-- a failed grade returns after 10 minutes, then an hour, then once more near the
-  end of the study day;
+- ``忘记`` returns after 10 minutes, then an hour, then once more near the end of
+  the study day;
 - a unit gets at most ``MAX_RETRIES_PER_DAY`` retries, after which it is booked
-  for tomorrow instead of being re-served all evening.
+  for tomorrow instead of being re-served all evening;
+- a retry that finally passes books tomorrow directly: the overnight check is
+  the confirmation, so no second same-day re-check is stacked on top.
+
+``困难`` is a *pass* on the current policy: it books a shortened day-level
+interval (``unit_fsrs_adapter``) and never produces a same-day retry.
 
 Delays are wall-clock, not card counts, so the spacing holds whether the learner
 rates quickly or leaves the page open. The FSRS interval itself is untouched:
@@ -24,15 +29,13 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from typing import Literal
 
-# A first-ever pass is a fragile memory: one short re-check, then the fixed
-# day-level ladder. A 重练 card that finally passes gets the same single
-# re-check, so a recovery is never mistaken for a stable recall. Thirty minutes
-# is long enough to need retrieval, short enough to still be the same study
-# block. See docs/复习排期设计.md.
-STEP_DELAY = timedelta(minutes=30)
+# A first-ever pass is a fragile memory: one short re-check, then the overnight
+# check the next day. Twenty minutes is long enough to need retrieval, short
+# enough to still be the same study block. See docs/复习排期设计.md.
+STEP_DELAY = timedelta(minutes=20)
 
-# Failed grades. The third delay is the "today's last" pass; it is clamped so it
-# cannot cross the 03:00 study-day boundary.
+# Failed grades (``忘记`` only). The third delay is the "today's last" pass; it is
+# clamped so it cannot cross the 03:00 study-day boundary.
 RETRY_DELAYS: tuple[timedelta, ...] = (
     timedelta(minutes=10),
     timedelta(minutes=60),
@@ -42,6 +45,8 @@ MAX_RETRIES_PER_DAY = len(RETRY_DELAYS)
 
 # Keep the last intra-day retry comfortably inside the study day.
 DAY_END_MARGIN = timedelta(minutes=15)
+
+FAIL_RATING = 1
 
 
 @dataclass(frozen=True)
@@ -98,13 +103,14 @@ def plan_intraday(
 ) -> IntradayPlan:
     """Project one rating onto the intra-day ladder.
 
-    ``fsrs_due_date`` is what FSRS would book (at least one day out for a pass,
-    today for a failure). ``schedule_locked`` marks an ahead-of-date filler pass:
-    it records the review without touching the schedule, so it also gets no
-    intra-day step.
+    ``fsrs_due_date`` is what the day-level scheduler would book (at least one
+    day out for a pass, today for a failure). ``schedule_locked`` marks an
+    ahead-of-date filler pass: it records the review without touching the
+    schedule, so it also gets no intra-day step. ``was_passed`` is the unit's
+    state before this rating, so ``False`` plus a pass is the very first pass.
     """
     current = state.for_day(today)
-    passed = int(rating) >= 3
+    passed = int(rating) >= 2
 
     if passed and schedule_locked:
         # Filler reviews prove nothing; keep today's ladder exactly as it was.
@@ -120,8 +126,8 @@ def plan_intraday(
 
     if passed:
         if current.step_pending:
-            # The 30-minute re-check passed: this is the first real booking.
-            # The day-level due date is the ladder's (or FSRS' for a mature
+            # The 20-minute re-check passed: this is the first real booking.
+            # The day-level due date is the anchor's (or FSRS' for a mature
             # card); never keep the unit in today's queue.
             return IntradayPlan(
                 due_date=max(fsrs_due_date, today + timedelta(days=1)),
@@ -133,10 +139,9 @@ def plan_intraday(
                 exhausted=False,
             )
         first_pass = not was_passed and current.retries == 0
-        if first_pass or current.retries > 0:
-            # A brand-new card and a 重练 card that finally passed both get one
-            # 30-minute re-check before the day-level interval is booked. A
-            # recovery is not evidence of a stable memory yet.
+        if first_pass and int(rating) < 4:
+            # A brand-new card gets one short re-check before the day-level
+            # interval is booked. 轻松 skips it and books three days out.
             return IntradayPlan(
                 due_date=today,
                 due_at=_clamp(now + STEP_DELAY, day_deadline),
@@ -144,6 +149,19 @@ def plan_intraday(
                 step_pending=True,
                 kind="step",
                 retry_delay=STEP_DELAY,
+                exhausted=False,
+            )
+        if current.retries > 0:
+            # A 忘记 retry finally passed. The overnight check tomorrow is the
+            # confirmation; stacking a same-day re-check on it would make one
+            # failure cost two visits for no extra evidence.
+            return IntradayPlan(
+                due_date=today + timedelta(days=1),
+                due_at=None,
+                retries=0,
+                step_pending=False,
+                kind=None,
+                retry_delay=None,
                 exhausted=False,
             )
         # A normal pass on a card that already had its re-check: FSRS owns it.
@@ -162,7 +180,7 @@ def plan_intraday(
         # Three failed retries is enough for one day. Book tomorrow so the unit
         # stops dominating today's queue; FSRS already holds the lapse evidence.
         return IntradayPlan(
-            due_date=max(fsrs_due_date, today + timedelta(days=1)),
+            due_date=today + timedelta(days=1),
             due_at=None,
             retries=0,
             step_pending=False,
@@ -176,7 +194,7 @@ def plan_intraday(
     if due_at <= now:
         # The study day is nearly over; there is no room left for another pass.
         return IntradayPlan(
-            due_date=max(fsrs_due_date, today + timedelta(days=1)),
+            due_date=today + timedelta(days=1),
             due_at=None,
             retries=retries,
             step_pending=False,

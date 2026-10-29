@@ -27,8 +27,10 @@ from memory_anki.infrastructure.db._tables.unit_reviews import (
 )
 
 from .unit_fsrs_adapter import (
+    ANCHOR_GRADUATED_STEP,
     SCHEDULER_VERSION,
     infer_early_step,
+    migrate_legacy_early_step,
     replay_history,
 )
 
@@ -122,9 +124,15 @@ def backfill_fsrs_scheduler(
             continue
         if unit.fsrs_last_review is not None:
             booked_gap = max(0, (unit.due_date - study_day_of(unit.fsrs_last_review)).days)
-            inferred = infer_early_step(booked_gap_days=booked_gap)
+            # The booked gap was recorded under the retired four-step ladder, so
+            # it is inferred with that ladder's table and then mapped onto the
+            # current two-checkpoint anchor. Any completed day-level fixed
+            # review has passed the overnight check and belongs to FSRS.
+            inferred = migrate_legacy_early_step(
+                infer_early_step(booked_gap_days=booked_gap)
+            )
             stats.stamped_early += 1
-            if inferred is not None and inferred >= 3:
+            if inferred is not None and inferred >= ANCHOR_GRADUATED_STEP:
                 stats.kept_mature += 1
             if dry_run:
                 continue

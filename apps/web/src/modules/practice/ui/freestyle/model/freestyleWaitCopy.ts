@@ -4,8 +4,8 @@ import { parseApiDateTime } from '@/shared/lib/dateTime'
 /**
  * Copy for a server-booked wait.
  *
- * Same-day steps/retries are withheld until `available_at`: 10 minutes, then
- * 1 hour, then 3 hours for 忘记/困难, 30 minutes for a first-pass re-check. The
+ * Same-day steps/retries are withheld until `available_at`: 20 minutes for a
+ * first-pass re-check; 10 minutes, then 1 hour, then 3 hours for 忘记. The
  * API may still hand back naive (offset-less) UTC strings, so every reader goes
  * through `parseApiDateTime`; parsing them as local wall time used to shift the
  * countdown by the UTC offset.

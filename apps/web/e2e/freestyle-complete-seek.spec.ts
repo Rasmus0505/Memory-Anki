@@ -16,7 +16,7 @@ import type {
 // compat projection of `target_interval_days`.
 const EFFECTS = [
   { rating: 1, label: '忘记', passed: false, target_stage_index: 0, target_interval_days: 0, target_actual_interval_days: 0, target_due_date: '2026-07-27', retry_after_cards: 3, stage_action: 'reset' },
-  { rating: 2, label: '困难', passed: false, target_stage_index: 0, target_interval_days: 0, target_actual_interval_days: 0, target_due_date: '2026-07-27', retry_after_cards: 3, stage_action: 'keep' },
+  { rating: 2, label: '困难', passed: true, target_stage_index: 1, target_interval_days: 2, target_actual_interval_days: 2, target_due_date: '2026-07-29', retry_after_cards: 0, stage_action: 'lower' },
   { rating: 3, label: '记得', passed: true, target_stage_index: 2, target_interval_days: 3, target_actual_interval_days: 3, target_due_date: '2026-07-30', retry_after_cards: 0, stage_action: 'advance' },
   { rating: 4, label: '轻松', passed: true, target_stage_index: 3, target_interval_days: 7, target_actual_interval_days: 7, target_due_date: '2026-08-03', retry_after_cards: 0, stage_action: 'advance' },
 ]
@@ -412,7 +412,7 @@ test('完成 on a fully scored round settles the rated units and clears the queu
   await expect.poll(() => routes.starts.length).toBe(1)
 })
 
-test('完成 never dead-ends while a 30 分钟回顾 is still owed', async ({ page }) => {
+test('完成 never dead-ends while a 20 分钟回顾 is still owed', async ({ page }) => {
   // The state the learner reported: every presented card scored, but two same-day
   // re-checks are still booked for later. The button used to disable itself here.
   const routes = await installRoutes(page, {

@@ -574,7 +574,7 @@ export function mergeServerPlanIntoLocalEncounters(
     if (existing?.selectedRating != null) return
     const selectedRating = patch.selectedRating ?? existing?.selectedRating ?? null
     const passed = patch.passed ?? existing?.passed ?? (
-      selectedRating == null ? null : selectedRating >= 3
+      selectedRating == null ? null : selectedRating >= 2
     )
     next[id] = {
       encounterId: patch.encounterId || existing?.encounterId || id,
@@ -600,7 +600,7 @@ export function mergeServerPlanIntoLocalEncounters(
       writeGap(sourceId, {
         encounterId,
         selectedRating: rating,
-        passed: rating >= 3,
+        passed: rating >= 2,
       })
     }
     // Parent 忘记/困难 must not prefill the retry rating. Only this glance's
@@ -609,7 +609,7 @@ export function mergeServerPlanIntoLocalEncounters(
       writeGap(occId, {
         encounterId,
         selectedRating: rating,
-        passed: rating >= 3,
+        passed: rating >= 2,
       })
     }
   }

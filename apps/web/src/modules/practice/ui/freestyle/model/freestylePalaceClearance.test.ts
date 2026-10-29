@@ -95,7 +95,7 @@ describe('isPalaceRoundCleared', () => {
       cards,
       palaceId: 1,
       plan: createRoundPlan('r', cards, DEFAULT_FREESTYLE_FEED_CONFIG),
-      encountersByCardId: { a: { selectedRating: 2, passed: false } as never },
+      encountersByCardId: { a: { selectedRating: 1, passed: false } as never },
       completedIds: [],
     })).toBe(false)
     expect(isPalaceRoundCleared({
@@ -103,7 +103,7 @@ describe('isPalaceRoundCleared', () => {
       palaceId: 1,
       plan: createRoundPlan('r', cards, DEFAULT_FREESTYLE_FEED_CONFIG),
       encountersByCardId: {
-        a: { selectedRating: 2, passed: false } as never,
+        a: { selectedRating: 1, passed: false } as never,
         [retry.id]: { selectedRating: 3, passed: true } as never,
       },
       completedIds: [],

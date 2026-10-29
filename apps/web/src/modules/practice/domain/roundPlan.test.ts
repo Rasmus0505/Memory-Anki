@@ -570,14 +570,14 @@ describe('round plan reducer', () => {
     })).toEqual(['a', retry.id])
   })
 
-  it('keeps a weak group while its 困难 retry is still live', () => {
+  it('keeps a weak group while its 忘记 retry is still live', () => {
     const cards = [card('a', 1), card('b', 1)]
     const retry = createRetryOccurrence(cards[0], 'round-1', 1, 3)
     const withRetry = createRoundPlan('round-1', [...cards, retry], config)
     const stamped = updateRoundPlanCard(
       updateRoundPlanCard(withRetry, 'a', { status: 'retry', lastRating: 1 }),
       retry.id,
-      { status: 'retry', occurrenceKind: 'retry', sourceCardId: 'a', lastRating: 2 },
+      { status: 'retry', occurrenceKind: 'retry', sourceCardId: 'a', lastRating: 1 },
     )
     expect(compressibleRoundPlanIds(stamped, {
       completedIds: [],
@@ -596,7 +596,7 @@ describe('round plan reducer', () => {
           unitRevision: 1,
           status: 'closed',
           sessionId: null,
-          selectedRating: 2,
+          selectedRating: 1,
           passed: false,
           retryAfterCards: 3,
         },

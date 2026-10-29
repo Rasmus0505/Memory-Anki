@@ -60,7 +60,7 @@ function sourceIdOf(card: FreestyleCard) {
 
 function encounterPassed(encounter: FreestyleUnitEncounterState | undefined) {
   const rating = Number(encounter?.selectedRating)
-  return encounter?.passed === true || (encounter?.passed == null && rating >= 3)
+  return encounter?.passed === true || (encounter?.passed == null && rating >= 2)
 }
 
 function cardIsNew(card: FreestyleCard, roundPlan: FreestyleRoundPlanState | null) {
@@ -111,14 +111,14 @@ function isHandled(
     // occurrence. A plan `lastRating` is weaker evidence — stamping copies the
     // parent's weak grade onto the retry, which is not a score for the retry.
     if (retryEncounter?.selectedRating != null || encounterPassed(retryEncounter)) return true
-    return (planLastRating(roundPlan, card.id) ?? 0) >= 3
+    return (planLastRating(roundPlan, card.id) ?? 0) >= 2
   }
   if (completed.has(sourceId)) return true
   if (entry?.status === 'completed') return true
   const encounter = encountersByCardId[card.id]
   const ownLast = planLastRating(roundPlan, card.id)
   const sourceLast = planLastRating(roundPlan, sourceId)
-  if (encounterPassed(encounter) || (ownLast != null && ownLast >= 3) || (sourceLast != null && sourceLast >= 3)) {
+  if (encounterPassed(encounter) || (ownLast != null && ownLast >= 2) || (sourceLast != null && sourceLast >= 2)) {
     return true
   }
   // A weak or still-unrated source is not done while its 重练 is unfinished.
@@ -359,7 +359,7 @@ function isPassedOccurrence(
   if (completed.has(card.id)) return true
   if (encounterPassed(encountersByCardId[card.id])) return true
   const last = planLastRating(roundPlan, card.id)
-  return last != null && last >= 3
+  return last != null && last >= 2
 }
 
 function parseRetrySourceId(occurrenceId: string) {

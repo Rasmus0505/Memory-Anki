@@ -56,7 +56,7 @@ describe('buildFreestyleRoundCompletion', () => {
   it('keeps restored weak ratings unresolved and excludes removed work from success counts', () => {
     const roundPlan = {
       cardsById: {
-        weak: { lastRating: 2, status: 'retry' },
+        weak: { lastRating: 1, status: 'retry' },
         passed: { lastRating: 3, status: 'completed' },
         removed: { lastRating: null, status: 'excluded' },
       },
@@ -281,7 +281,7 @@ describe('isFreestyleRoundComplete', () => {
     // instead of disabling.
     expect(isFreestyleRoundComplete(cards, {
       one: encounter(),
-      two: encounter({ selectedRating: 2, passed: false }),
+      two: encounter({ selectedRating: 1, passed: false }),
     })).toBe(true)
 
     const retry = {
@@ -292,11 +292,11 @@ describe('isFreestyleRoundComplete', () => {
     }
     expect(isFreestyleRoundComplete([cards[0], cards[1], retry], {
       one: encounter(),
-      two: encounter({ selectedRating: 2, passed: false }),
+      two: encounter({ selectedRating: 1, passed: false }),
     })).toBe(false)
     expect(isFreestyleRoundComplete([cards[0], cards[1], retry], {
       one: encounter(),
-      two: encounter({ selectedRating: 2, passed: false }),
+      two: encounter({ selectedRating: 1, passed: false }),
       [retry.id]: encounter({ selectedRating: 3, passed: true }),
     })).toBe(true)
   })
@@ -397,7 +397,7 @@ describe('findEarliestUnhandledIndex', () => {
       [card('one'), card('two'), retry],
       {
         one: encounter(),
-        two: encounter({ selectedRating: 2, passed: false }),
+        two: encounter({ selectedRating: 1, passed: false }),
       },
     )).toBe(2)
   })
@@ -406,7 +406,7 @@ describe('findEarliestUnhandledIndex', () => {
     const cards = [card('one'), card('two')]
     expect(findEarliestUnhandledIndex(cards, {
       one: encounter(),
-      two: encounter({ selectedRating: 2, passed: false }),
+      two: encounter({ selectedRating: 1, passed: false }),
     })).toBe(1)
   })
 
@@ -469,7 +469,7 @@ describe('findEarliestUnhandledIndex', () => {
       [card('one'), source, retry],
       {
         one: encounter(),
-        [source.id]: encounter({ selectedRating: 2, passed: false }),
+        [source.id]: encounter({ selectedRating: 1, passed: false }),
       },
     )).toBe(2)
   })
@@ -483,13 +483,13 @@ describe('findEarliestUnhandledIndex', () => {
     }
     const roundPlan = {
       cardsById: {
-        two: { lastRating: 2, status: 'retry', sourceCardId: 'two' },
-        [retry.id]: { lastRating: 2, status: 'retry', occurrenceKind: 'retry', sourceCardId: 'two' },
+        two: { lastRating: 1, status: 'retry', sourceCardId: 'two' },
+        [retry.id]: { lastRating: 1, status: 'retry', occurrenceKind: 'retry', sourceCardId: 'two' },
       },
     } as never
     expect(findEarliestUnhandledIndex(
       [card('one'), card('two'), retry],
-      { one: encounter(), two: encounter({ selectedRating: 2, passed: false }) },
+      { one: encounter(), two: encounter({ selectedRating: 1, passed: false }) },
       [],
       roundPlan,
     )).toBe(2)
@@ -512,8 +512,8 @@ describe('findEarliestUnhandledIndex', () => {
       [card('one'), card('two'), first, second],
       {
         one: encounter(),
-        two: encounter({ selectedRating: 2, passed: false }),
-        [first.id]: encounter({ selectedRating: 2, passed: false }),
+        two: encounter({ selectedRating: 1, passed: false }),
+        [first.id]: encounter({ selectedRating: 1, passed: false }),
       },
     )).toBe(3)
   })
@@ -532,8 +532,8 @@ describe('findEarliestCompleteSeekIndex', () => {
       [card('one'), card('two'), retry, card('four')],
       {
         one: encounter({ selectedRating: 3, passed: true }),
-        two: encounter({ selectedRating: 2, passed: false }),
-        [retry.id]: encounter({ selectedRating: 2, passed: false }),
+        two: encounter({ selectedRating: 1, passed: false }),
+        [retry.id]: encounter({ selectedRating: 1, passed: false }),
       },
     )).toBe(3)
   })
@@ -550,7 +550,7 @@ describe('findEarliestCompleteSeekIndex', () => {
       {
         one: encounter({ selectedRating: 3, passed: true }),
         two: encounter({ selectedRating: 3, passed: true }),
-        [retry.id]: encounter({ selectedRating: 2, passed: false }),
+        [retry.id]: encounter({ selectedRating: 1, passed: false }),
       },
     )).toBeNull()
   })
@@ -577,7 +577,7 @@ describe('findEarliestCompleteSeekIndex', () => {
       [card('one'), card('two'), retry],
       {
         one: encounter({ selectedRating: 3, passed: true }),
-        two: encounter({ selectedRating: 2, passed: false }),
+        two: encounter({ selectedRating: 1, passed: false }),
       },
     )).toBe(2)
   })
@@ -620,7 +620,7 @@ describe('resolveFreestyleOpenFeedIndex', () => {
       [card('one'), card('two'), card('three')],
       {
         one: encounter({ selectedRating: 3, passed: true }),
-        two: encounter({ selectedRating: 2, passed: false }),
+        two: encounter({ selectedRating: 1, passed: false }),
       },
     )).toBe(2)
   })

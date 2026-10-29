@@ -20,6 +20,7 @@ from .unit_fsrs_adapter import (
     Scheduler,
     build_unit_scheduler,
     infer_early_step,
+    migrate_legacy_early_step,
     project_stage_index,
     rate_unit_with_fsrs,
     stage_for_interval,
@@ -60,7 +61,8 @@ class UnitScheduleResult:
     due_date: date
     passed: bool
     retry_after_cards: int
-    # True when this rating spent the unit's once-per-day 困难 demotion.
+    # Retained for API compatibility. ``困难`` is a pass on the current policy,
+    # so this is always False.
     hard_penalty_applied: bool = False
     # False when the rating was recorded but the schedule was deliberately left
     # alone (see ``schedule_locked``). The UI must say so out loud, because a
@@ -68,7 +70,7 @@ class UnitScheduleResult:
     # scheduler is meant to avoid.
     schedule_changed: bool = True
     # The FSRS card state after this rating. The service persists it on the unit;
-    # a locked pass or repeated same-day 困难 returns the pre-rating state.
+    # a locked pass returns the pre-rating state.
     fsrs_state: FsrsUnitState | None = None
     # Same-day spacing: the state to persist and the wait the UI should show.
     intraday: IntradayState | None = None
@@ -76,8 +78,12 @@ class UnitScheduleResult:
     intraday_kind: str | None = None
     intraday_due_at: datetime | None = None
     intraday_exhausted: bool = False
-    # Fixed early-ladder counter to persist after this rating.
+    # Anchor counter to persist: 0 = still anchored, 1 = FSRS owns the interval.
     early_step: int | None = None
+    # A mature lapse keeps the interval it had earned until the overnight
+    # confirmation passes; the service persists both fields on the unit.
+    lapse_original_days: int | None = None
+    lapse_started_on: date | None = None
 
 
 def normalize_rating(value: int | str) -> int:
@@ -162,20 +168,23 @@ def rate_unit(
     now: datetime | None = None,
     booked_due_date: date | None = None,
     early_step: int | None = None,
+    lapse_original_days: int | None = None,
+    lapse_started_on: date | None = None,
 ) -> UnitScheduleResult:
     """Rate one unit through the production FSRS scheduler.
 
-    The first four reviews are product-fixed: a 30-minute same-day re-check,
-    then day 2, day 3 and day 5. ``early_step`` is that counter. From the fifth
-    review onward FSRS decides the day. ``plan_intraday`` decides whether the
-    unit may be served again later the same day (a first-pass re-check, a retry
-    recovery, or a failed grade whose wait grows 10m → 1h → 3h and stops after
-    three retries).
+    A new card's first two checkpoints are product-fixed: a 20-minute same-day
+    re-check, then the overnight check on day 2. ``early_step`` is that counter
+    (0 = anchored, 1 = FSRS owns the interval). ``plan_intraday`` decides whether
+    the unit may be served again later the same day: a first-pass re-check, or a
+    failed grade whose wait grows 10m → 1h → 3h and stops after three retries.
 
     ``booked_due_date`` is the due date the learner currently sees, before this
     rating. When ``early_step`` is missing (a row written before the counter
-    existed), the position is inferred from that booked gap.
+    existed), the legacy position is inferred from that booked gap and mapped
+    onto the current policy.
     """
+    _ = had_failure_in_encounter
     current_day = today or local_day()
     normalized = normalize_rating(rating)
     current_state = (
@@ -198,9 +207,9 @@ def rate_unit(
             max(0, (booked_due_date - reviewed_on).days) if reviewed_on else 0
         )
     # A row written before ``early_step`` existed has no counter. Infer its
-    # fixed position once from the booked gap (and the legacy stage, which still
-    # carries the interval for an inherited row with no FSRS checkpoint); every
-    # rating persists the value from here on. A brand-new card starts at 0.
+    # legacy four-step position once from the booked gap, then map it onto the
+    # two-checkpoint anchor (any completed day-level review has already passed
+    # the overnight check). A brand-new card starts anchored.
     effective_early_step = early_step
     if effective_early_step is None:
         if booked_due_date is None:
@@ -211,11 +220,22 @@ def rate_unit(
                 if current_state.last_review is not None
                 else max(0, (booked_due_date - current_day).days)
             )
-            effective_early_step = infer_early_step(
-                booked_gap_days=max(int(booked_gap or 0), interval_days(stage_index))
+            effective_early_step = migrate_legacy_early_step(
+                infer_early_step(
+                    booked_gap_days=max(int(booked_gap or 0), interval_days(stage_index))
+                )
             )
         else:
             effective_early_step = 0
+    intraday_state = intraday or IntradayState.empty()
+    # Wall clock for same-day spacing. Callers that pin a historical study
+    # day (tests, replay) must not be measured against the real clock, or every
+    # wait would already be in the past.
+    opened_at = now or (
+        utc_now_naive()
+        if current_day == local_day()
+        else datetime.combine(current_day, time(4))
+    )
     result = rate_unit_with_fsrs(
         current=current_state,
         has_passed=has_passed,
@@ -233,17 +253,12 @@ def rate_unit(
         previous_interval_days=previous_interval_days,
         current_stage=clamp_stage(stage_index),
         early_step=effective_early_step,
-    )
-    # The wall clock for same-day spacing. Callers that pin a historical study
-    # day (tests, replay) must not be measured against the real clock, or every
-    # wait would already be in the past.
-    opened_at = now or (
-        utc_now_naive()
-        if current_day == local_day()
-        else datetime.combine(current_day, time(4))
+        step_pending=intraday_state.step_pending,
+        lapse_original_days=lapse_original_days,
+        lapse_started_on=lapse_started_on,
     )
     intraday_plan = plan_intraday(
-        state=intraday or IntradayState.empty(),
+        state=intraday_state,
         today=current_day,
         now=opened_at,
         rating=normalized,
@@ -265,9 +280,9 @@ def rate_unit(
             rating=normalized,
             result=result,
         )
-    # The ladder counter follows a real booking. A pass that only schedules the
-    # 30-minute re-check has not booked the day-level interval yet, and a locked
-    # ahead-of-date pass never moves the ladder at all.
+    # The anchor counter follows a real booking. A pass that only schedules the
+    # 20-minute re-check has not booked the day-level interval yet, and a locked
+    # ahead-of-date pass never moves the counter at all.
     persisted_step = (
         effective_early_step
         if not result.schedule_changed or intraday_plan.kind == "step"
@@ -281,14 +296,14 @@ def rate_unit(
         hard_penalty_applied=result.hard_penalty_applied,
         schedule_changed=result.schedule_changed,
         fsrs_state=result.state,
-        intraday=apply_plan(
-            intraday or IntradayState.empty(), intraday_plan, today=current_day
-        ),
+        intraday=apply_plan(intraday_state, intraday_plan, today=current_day),
         retry_after_minutes=minutes_until(intraday_plan.due_at, opened_at),
         intraday_kind=intraday_plan.kind,
         intraday_due_at=intraday_plan.due_at,
         intraday_exhausted=intraday_plan.exhausted,
         early_step=persisted_step,
+        lapse_original_days=result.lapse_original_days,
+        lapse_started_on=result.lapse_started_on,
     )
 
 

@@ -80,32 +80,33 @@ Reviews must not import Practice. Practice must not create a second schedule, co
   pool: 「今日新学已完成」 fires when the round has no unpassed new unit left and never gates due
   reviews.
 
-- FSRS is the scheduler from the fifth review onward. Each unit owns one card in
+- FSRS owns each unit's interval once its anchor phase ends. Each unit owns one card in
   `review_unit_states`
   (`fsrs_stability`, `fsrs_difficulty`, `fsrs_state`, `fsrs_step`, `fsrs_due_at`,
   `fsrs_last_review`, and the `fsrs_scheduler_version` that wrote them). A pass
   books the interval FSRS computes for that card at a 90% target retention
   (`desired_retention=0.9`), capped at 365 days, plus the product's stable
   per-unit 5% spread. A never-reviewed card starts empty and is due immediately.
-- The first four reviews are fixed, not FSRS estimates: review #1 is a 30-minute
-  same-day re-check (`unit_intraday.STEP_DELAY`), then review #2 lands on day 2,
-  #3 on day 3 and #4 on day 5 — booked gaps `(1, 1, 2)`
-  (`EARLY_LADDER_INTERVALS`). The review that returns after day 5 is the first
-  one FSRS books. The gaps repeat, so the position is the persisted
-  `early_step` counter (completed day-level fixed reviews, 0..3), never the
-  previous booked gap alone; a row written before the counter existed is
-  inferred once from its booked gap. The ladder keys off the **booked** position,
-  never FSRS stability: `困难` is a successful recall to FSRS (it raises
-  stability, 1.3 → 3.3 days on a first review) while the product still treats it
-  as retry work. `轻松` takes the last fixed step directly; a unit that already
-  handed over to FSRS keeps the finished marker, so a mature lapse stays on the
-  FSRS path instead of restarting the fixed ladder.
-- After the fixed ladder, a young unit's interval may not grow faster than
-  double the booked gap while that gap is below 30 days (`growth_cap_days`).
-  FSRS wants ~20 days right after the day-5 review; the ceiling books 4, and
-  the sequence is 2 → 4 → 8 → 16 → 32. FSRS still decides from 30 days up, and
-  a shorter FSRS answer is never lengthened. A retry day (gap 0) is not capped:
-  its base is the same-day failure, not an earned interval.
+- A new card has exactly two product-fixed checkpoints (the anchor phase):
+  a 20-minute same-day re-check (`unit_intraday.STEP_DELAY`) and the overnight
+  check on day 2. The persisted `early_step` counter is `0` while the card is
+  anchored and `1` once the overnight check passed; a row written before the
+  counter existed is inferred once from its booked gap (the retired 0..3
+  four-step counter maps `>=1` to graduated). Outcomes at the overnight check:
+  `记得` books +3 days and graduates, `轻松` books +5 days and graduates,
+  `困难` books +1 day and stays anchored for one more overnight, `忘记` retries
+  today and re-runs the check. `轻松` on the first pass skips both checkpoints and
+  books +3 days. A retry that finally passes books tomorrow directly; the
+  overnight check is its confirmation, so no second same-day re-check is
+  stacked on top.
+- Once FSRS owns the interval, three guardrails keep it honest. `困难` is a pass
+  that may never lengthen: the booked gap is clamped to `0.8p..p` of the
+  previous gap (`p` = the gap the learner actually saw). `记得` and `轻松` are
+  capped below ten days at 2.5x and 3.5x respectively; from ten days up the cap
+  is lifted and FSRS decides alone (a shorter FSRS answer is never lengthened).
+  A mature lapse keeps the pre-lapse gap and restores 25% / 30% / 35% of it on the
+  first pass after the lapse day, clearing the state (`lapse_original_interval_days`,
+  `lapse_started_on`).
 - `stage_index` is a compatibility projection of the real interval
   (`stage_for_interval` = nearest lower legacy bound of
   `0, 1, 3, 7, 14, 30, 60, 120, 240, 365`). It is written for old clients and
@@ -116,16 +117,13 @@ Reviews must not import Practice. Practice must not create a second schedule, co
   minute steps would only disagree with it. The ladder is wall-clock, not a card
   count, so a short session cannot re-serve a card immediately and a long one
   cannot leave it for hours.
-- `记得` (Good) and `轻松` (Easy) pass the unit. `忘记` (Again) and `困难`
-  (Hard) are retry work: FSRS records the evidence, while the product keeps the
-  unit due today and waits 10 minutes, then 1 hour, then 3 hours ("today's
-  last"). A unit gets at most three retries; the next failure books tomorrow.
-  Only `记得` and `轻松` pass.
-- A first-ever pass books one short re-check (30 minutes) instead of tomorrow;
-  the re-check passing graduates the unit to day 2. A 重练 that finally passes
-  gets the same single 30-minute re-check before the day-level interval is
-  booked: a recovery is not yet evidence of a stable memory. A mature normal
-  pass books the FSRS interval (at least one day). An ahead-of-date filler pass
+- Only `忘记` (Again) fails. It keeps the unit due today and waits 10 minutes,
+  then 1 hour, then 3 hours ("today's last"); a unit gets at most three retries
+  and the next failure books tomorrow. `记得` (Good), `轻松` (Easy) and `困难`
+  (Hard) all pass — 困难 books a shorter interval rather than re-serving the card.
+- A first-ever pass books one short re-check (20 minutes) instead of tomorrow;
+  the re-check passing books the overnight check on day 2. A mature normal pass
+  books the FSRS interval (at least one day). An ahead-of-date filler pass
   records without moving either.
 - A waiting unit is still due today but is not servable: the queue and the
   palace batch exclude it (`intraday_due_at > now`), and the round plan keeps
@@ -133,10 +131,8 @@ Reviews must not import Practice. Practice must not create a second schedule, co
   wait has passed; the round payload reports `waiting` (count + earliest ready
   time) so a round is never reported finished while work is owed. Manual
   early rating is allowed and counts; only the queue is time-gated.
-- `困难` still lowers the display band at most once per study day
-  (`ReviewUnitState.hard_penalized_on`), and a repeated same-day `困难` is not fed
-  to FSRS at all: retry taps are not new evidence. Never-passed units stay in
-  first learning.
+- `hard_penalized_on` is retired: `困难` is a pass and always fed to FSRS. Its
+  column stays for old rows and snapshots but is no longer written.
 - A unit reviewed ahead of its booked due date (freestyle fill cards) records a
   passing grade without moving the schedule; that pass is not fed to FSRS, so a
   filler review cannot inflate a later interval. `忘记` is still recorded and
@@ -147,10 +143,10 @@ Reviews must not import Practice. Practice must not create a second schedule, co
   the FSRS payload — so the replaced choice has no scheduling effect. A
   pre-switch snapshot without an FSRS payload clears the columns and lets the
   replay rebuild the card instead of leaving the undone operation's state behind.
-- A `困难` or `忘记` encounter needs no separate carry-over: FSRS already has that
-  failure on the card, so the later `记得` or `轻松` simply rates the penalized
-  card, and the old "recover only one level" rule is exactly what its stability
-  and difficulty now express.
+- A `忘记` encounter needs no separate carry-over: FSRS already has that failure
+  on the card, so the later pass simply rates the penalized card. The guardrails
+  (`困难` band, young-card cap, lapse recovery) are applied to the booked gap,
+  not to FSRS' raw answer.
 - Rating requires `study_session_id`, `unit_id`, `unit_revision`, `encounter_id`, stable `operation_id`, and `rating`. The operation is idempotent and supports LIFO single-step undo while the encounter remains open.
 - A later real attempt freezes every earlier one. `_has_later_attempt` decides two things at once: the rating write and undo raise `LaterAttemptExistsError` (HTTP 400 `superseded_attempt`, a terminal code for the client), while the glance itself still opens. `start_freestyle_unit_review_session` no longer asserts here — the feed keeps answered cards so swipe-back can read them, and the map only renders from a session start — and `get_unit_review_session` reports `rating_editable: false`, checked on the amend glance's `amend_source_id` too, because a glance minted seconds ago has no later attempt of its own. A 400 at glance-open left the card blank and its tap stuck on 未保存.
 - Freestyle may rate a palace's remaining due units in one Reviews command (`rate_palace_due_units`). That command still writes one unit rating per member. It is not a palace-level schedule, not a node rating, and not the retired subtree/bulk-fill path. Already-rated units in the current round are left alone unless they are the open current encounter (which may amend). Sibling units close at zero observed seconds. Undo of the current open encounter undoes the whole batch.
@@ -215,15 +211,15 @@ Reviews must not import Practice. Practice must not create a second schedule, co
   rescue backup (`pre-fsrs-switch`). Units with no rating history are left untouched — they keep
   their stored due date and have no FSRS checkpoint, which the adapter seeds from the legacy
   projection on their first rating.
-- A policy migration stamps the fixed-ladder counter and the scheduler version;
-  it does **not** move a due date the learner was already promised. Migration
-  `0080` adds the nullable `early_step`; `backfill_fsrs_scheduler` infers it from
-  each unit's booked gap (1 day → 0, 2 → 1, 3 → 2, further → finished) and leaves
-  the booking alone, so a mature unit keeps its earned card and date and a young
-  unit simply follows the new gaps from its next rating. Rows with no FSRS
-  checkpoint are still replayed, because on those the ledger is the only state
-  there is; a rating snapshot records `early_step` so undo restores the exact
-  ladder position.
+- A policy migration stamps the anchor counter and the scheduler version; it
+  does **not** move a due date the learner was already promised. Migrations
+  `0080` (nullable `early_step`) and `0081` (the lapse-recovery pair) are
+  additive; `backfill_fsrs_scheduler` infers the retired counter from each
+  unit's booked gap and maps it onto the anchor (`0 → 0`, `1/2/3 → 1`, since any
+  completed day-level fixed review already passed the overnight check), then
+  leaves the booking alone. Rows with no FSRS checkpoint are still replayed,
+  because on those the ledger is the only state there is; a rating snapshot
+  records `early_step` and both lapse fields so undo restores the exact position.
 - Undo and amend stay exact after the switch: each rating snapshot stores the FSRS payload, and when
   a snapshot or ledger window has no FSRS state the adapter seeds from the recorded legacy position
   rather than pretending the unit is new. An inherited or pre-switch row with no FSRS checkpoint is
@@ -238,7 +234,8 @@ Reviews must not import Practice. Practice must not create a second schedule, co
 - A formal session freezes all due units for one palace, including member UIDs and revisions.
 - Rating never auto-opens nodes, scrolls the map, or switches the current unit.
   Freestyle `auto_advance` is opt-in and may advance only after a passing `记得` / `轻松`
-  once card id, encounter id, and plan version still match; `忘记` / `困难` never auto-advance.
+  once card id, encounter id, and plan version still match; `忘记` never auto-advances (它当天重练),
+  while `困难` is a pass and may advance.
   Practice persists the authoritative round plan (retry occurrences, cursor, completion) in
   SQLite; Reviews still owns the schedule. A successful freestyle rating updates that plan in the
   same practice use case (`round_id`, `encounter_id`, `operation_id`) so a later queue rebuild

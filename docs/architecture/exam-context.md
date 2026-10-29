@@ -16,8 +16,8 @@ Read-only exam layer: star weights, countdown, forgetting estimate, war room.
 
 ## Forgetting estimate
 
-`R(t) = 0.9 ^ (t / S)`, `S` = ladder interval of the unit's stage, `t` = days since last pass; unlearned units recall 0.
-It never changes scheduling. The fixed ladder in `memory/application/unit_scheduler.py` stays the only scheduler.
+`R(t) = 0.9 ^ (t / S)`, `S` = the interval projected from the unit's `stage_index` (a compatibility projection of the real FSRS interval), `t` = days since last pass; unlearned units recall 0.
+It never changes scheduling. The FSRS adapter in `memory/application/unit_fsrs_adapter.py` stays the only scheduler.
 
 ## Consumers
 

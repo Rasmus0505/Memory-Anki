@@ -1,4 +1,4 @@
-"""Same-day spacing: short step for new learning, expanding retries, hard cap."""
+"""Same-day spacing: one 20-minute re-check, 忘记-only retries, hard cap."""
 
 from __future__ import annotations
 
@@ -33,13 +33,29 @@ def _plan(**overrides):
     return plan_intraday(**kwargs)
 
 
-def test_a_first_pass_gets_one_short_recheck_today():
+def test_a_first_pass_gets_one_twenty_minute_recheck_today():
     plan = _plan(was_passed=False)
 
+    assert STEP_DELAY == timedelta(minutes=20)
     assert plan.kind == "step"
     assert plan.due_date == TODAY
     assert plan.due_at == NOW + STEP_DELAY
     assert plan.step_pending is True
+
+
+def test_a_first_pass_rated_hard_still_gets_the_recheck():
+    plan = _plan(was_passed=False, rating=2)
+
+    assert plan.kind == "step"
+    assert plan.step_pending is True
+
+
+def test_a_first_pass_rated_easy_skips_the_recheck_and_books_three_days():
+    plan = _plan(was_passed=False, rating=4, fsrs_due_date=TODAY + timedelta(days=3))
+
+    assert plan.kind is None
+    assert plan.step_pending is False
+    assert plan.due_date == TODAY + timedelta(days=3)
 
 
 def test_a_step_that_passes_graduates_to_tomorrow():
@@ -54,6 +70,21 @@ def test_a_step_that_passes_graduates_to_tomorrow():
     assert plan.due_date == TODAY + timedelta(days=1)
 
 
+def test_a_step_that_passes_easy_books_the_anchor_gap():
+    waiting = IntradayState(day=TODAY, due_at=NOW + STEP_DELAY, step_pending=True)
+
+    plan = _plan(
+        state=waiting,
+        was_passed=False,
+        rating=4,
+        fsrs_due_date=TODAY + timedelta(days=3),
+        now=NOW + STEP_DELAY,
+    )
+
+    assert plan.kind is None
+    assert plan.due_date == TODAY + timedelta(days=3)
+
+
 def test_a_mature_pass_does_not_get_a_step():
     plan = _plan(was_passed=True, fsrs_due_date=TODAY + timedelta(days=30))
 
@@ -61,34 +92,26 @@ def test_a_mature_pass_does_not_get_a_step():
     assert plan.due_date == TODAY + timedelta(days=30)
 
 
-def test_a_retry_that_passes_gets_one_thirty_minute_recheck():
-    """重练卡独立规则：被评为记得后，30 分钟后再过一遍。"""
+def test_a_retry_that_passes_books_tomorrow_without_another_recheck():
+    """重练通过后不再叠一次复查：明天的隔夜检验就是确认。"""
     retry = IntradayState(day=TODAY, retries=2)
 
-    plan = _plan(state=retry, was_passed=True)
-
-    assert STEP_DELAY == timedelta(minutes=30)
-    assert plan.kind == "step"
-    assert plan.due_at == NOW + timedelta(minutes=30)
-    assert plan.step_pending is True
-    # The day's retry budget is preserved so a failed re-check continues the
-    # same ladder instead of restarting it.
-    assert plan.retries == 2
-
-
-def test_a_retry_recheck_graduates_to_the_adapter_booking():
-    waiting = IntradayState(day=TODAY, retries=2, due_at=NOW + STEP_DELAY, step_pending=True)
-
-    plan = _plan(
-        state=waiting,
-        was_passed=True,
-        fsrs_due_date=TODAY + timedelta(days=5),
-        now=NOW + STEP_DELAY,
-    )
+    plan = _plan(state=retry, was_passed=True, fsrs_due_date=TODAY + timedelta(days=18))
 
     assert plan.kind is None
     assert plan.step_pending is False
-    assert plan.due_date == TODAY + timedelta(days=5)
+    assert plan.due_at is None
+    assert plan.retries == 0
+    # The overnight confirmation, not the FSRS/guardrail answer, owns the day.
+    assert plan.due_date == TOMORROW
+
+
+def test_hard_is_a_pass_and_never_inserts_a_retry():
+    plan = _plan(rating=2, was_passed=True, fsrs_due_date=TODAY + timedelta(days=3))
+
+    assert plan.kind is None
+    assert plan.due_at is None
+    assert plan.due_date == TODAY + timedelta(days=3)
 
 
 def test_a_locked_filler_pass_leaves_the_ladder_alone():
@@ -101,12 +124,12 @@ def test_a_locked_filler_pass_leaves_the_ladder_alone():
     assert plan.due_at is None
 
 
-def test_failures_expand_ten_minutes_then_an_hour_then_three_hours():
+def test_forgetting_expands_ten_minutes_then_an_hour_then_three_hours():
     second_now = NOW + timedelta(minutes=10)
     third_now = NOW + timedelta(minutes=70)
-    first = _plan(rating=2, was_passed=True)
-    second = _plan(rating=2, state=IntradayState(day=TODAY, retries=1), now=second_now)
-    third = _plan(rating=2, state=IntradayState(day=TODAY, retries=2), now=third_now)
+    first = _plan(rating=1, was_passed=True)
+    second = _plan(rating=1, state=IntradayState(day=TODAY, retries=1), now=second_now)
+    third = _plan(rating=1, state=IntradayState(day=TODAY, retries=2), now=third_now)
 
     assert first.due_at == NOW + timedelta(minutes=10)
     assert second.due_at == second_now + timedelta(minutes=60)
@@ -114,41 +137,40 @@ def test_failures_expand_ten_minutes_then_an_hour_then_three_hours():
     assert [first.retries, second.retries, third.retries] == [1, 2, 3]
 
 
-def test_the_fourth_failure_books_tomorrow_and_stops_the_day():
+def test_the_fourth_forget_books_tomorrow_and_stops_the_day():
     state = IntradayState(day=TODAY, retries=MAX_RETRIES_PER_DAY)
 
     plan = _plan(rating=1, state=state)
 
     assert plan.exhausted is True
     assert plan.due_at is None
-    assert plan.due_date >= TOMORROW
+    assert plan.due_date == TOMORROW
     assert plan.retries == 0
 
 
 def test_a_retry_is_clamped_inside_the_study_day():
     late = datetime(2026, 10, 26, 2, 0)  # 10:00 Beijing, still the 25th's study day
 
-    plan = _plan(rating=2, state=IntradayState(day=TODAY, retries=2), now=late)
+    plan = _plan(rating=1, state=IntradayState(day=TODAY, retries=2), now=late)
 
     assert plan.due_at == DEADLINE
     assert plan.exhausted is False
 
 
 def test_no_room_left_in_the_day_books_tomorrow():
-    # 02:30 is inside the study day, but the three-hour delay has no room and
-    # the deadline has already passed for a 180-minute step.
+    # 02:50 is inside the study day, but the three-hour delay has no room.
     near_end = datetime(2026, 10, 26, 2, 50)
 
-    plan = _plan(rating=2, state=IntradayState(day=TODAY, retries=0), now=near_end)
+    plan = _plan(rating=1, state=IntradayState(day=TODAY, retries=0), now=near_end)
 
     assert plan.exhausted is True
-    assert plan.due_date >= TOMORROW
+    assert plan.due_date == TOMORROW
 
 
 def test_a_new_study_day_resets_the_ladder():
     yesterday = IntradayState(day=TODAY - timedelta(days=1), retries=2, step_pending=True)
 
-    plan = _plan(state=yesterday, was_passed=True, rating=2)
+    plan = _plan(state=yesterday, was_passed=True, rating=1)
 
     assert plan.retries == 1
     assert plan.step_pending is False

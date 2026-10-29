@@ -415,10 +415,10 @@ def test_palace_real_retry_keeps_all_siblings_failure_history(db_session):
         encounter_id='batch-source', round_id='round-palace', card_id='source',
     )
     rate_palace_due_units(
-        db_session, palace_id=palace.id, operation_id='batch-hard', rating=2,
+        db_session, palace_id=palace.id, operation_id='batch-hard', rating=1,
         round_id='round-palace', current=_current(first, current, 'batch-source'),
     )
-    assert all(unit.stage_index == 6 for unit in units)
+    assert all(unit.stage_index == 0 for unit in units)
     retry = start_freestyle_unit_review_session(
         db_session, unit_id=current.id, unit_revision=current.revision,
         encounter_id='batch-retry', round_id='round-palace', card_id='retry',
@@ -432,9 +432,9 @@ def test_palace_real_retry_keeps_all_siblings_failure_history(db_session):
     # sibling due today with a same-day wait. They must not be rated before it.
     db_session.refresh(current)
     assert current.has_passed is True
-    # The pass gets the 30-minute re-check before the day-level booking.
-    assert current.due_date == local_day()
-    assert current.intraday_step_pending is True
+    # The retry pass books tomorrow directly: the overnight check confirms.
+    assert current.due_date == local_day() + timedelta(days=1)
+    assert current.intraday_step_pending is False
     for unit in units[1:]:
         db_session.refresh(unit)
         assert unit.due_date == local_day()
@@ -442,4 +442,4 @@ def test_palace_real_retry_keeps_all_siblings_failure_history(db_session):
         assert unit.fsrs_stability is not None
     assert all(op.replaced_at is None for op in db_session.query(ReviewUnitRatingOperation).filter_by(batch_id='batch-hard'))
     undo_unit_rating(db_session, 'batch-pass', 'round-palace')
-    assert all(unit.stage_index == 6 and unit.due_date == local_day() for unit in units)
+    assert all(unit.stage_index == 0 and unit.due_date == local_day() for unit in units)

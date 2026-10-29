@@ -33,8 +33,10 @@ from .round_plan_values import (  # noqa: F401 - re-exported for sibling rules
     _unique,
 )
 
-FAIL_RATINGS = {1, 2}
-PASS_RATINGS = {3, 4}
+# 困难 is a pass on the current scheduling policy (it shortens the next
+# interval instead of re-serving the card today), so only 忘记 retries same-day.
+FAIL_RATINGS = {1}
+PASS_RATINGS = {2, 3, 4}
 OCCURRENCE_PENDING = "pending"
 OCCURRENCE_INSERTED = "inserted"
 OCCURRENCE_COMPLETED = "completed"

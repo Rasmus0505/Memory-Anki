@@ -188,44 +188,49 @@ def test_same_depth_marks_under_different_parents_stay_apart():
     assert len(memberships) == len(set(memberships))
 
 
-def test_fixed_schedule_first_pass_failure_penalty_and_caps():
+def test_anchor_phase_first_pass_failure_and_caps():
     today = date(2026, 7, 27)
-    first_hard = rate_unit(
+    first_forget = rate_unit(
         stage_index=0,
         has_passed=False,
-        rating=2,
+        rating=1,
         had_failure_in_encounter=False,
         today=today,
     )
-    assert (first_hard.stage_index, first_hard.due_date, first_hard.passed) == (0, today, False)
+    assert (first_forget.stage_index, first_forget.due_date, first_forget.passed) == (
+        0,
+        today,
+        False,
+    )
+    assert first_forget.intraday_kind == "retry"
+    assert first_forget.retry_after_minutes == 10
 
-    remembered_after_hard = rate_unit(
-        stage_index=first_hard.stage_index,
+    remembered_after_forget = rate_unit(
+        stage_index=first_forget.stage_index,
         has_passed=False,
         rating=3,
         had_failure_in_encounter=True,
         today=today,
-        fsrs_state=first_hard.fsrs_state,
+        fsrs_state=first_forget.fsrs_state,
         intraday=IntradayState(day=today, retries=1),
     )
-    assert remembered_after_hard.stage_index == 1
-    # 重练通过后先过一遍 30 分钟复查；复查通过才排到明天。
-    assert remembered_after_hard.due_date == today
-    assert remembered_after_hard.intraday_kind == "step"
-    assert remembered_after_hard.retry_after_minutes == 30
+    # 重练通过后直接排明天；隔夜检验才是确认，不再叠一次复查。
+    assert remembered_after_forget.due_date == today + timedelta(days=1)
+    assert remembered_after_forget.intraday_kind is None
+    assert remembered_after_forget.retry_after_minutes is None
 
-    rechecked = rate_unit(
-        stage_index=remembered_after_hard.stage_index,
+    overnight = rate_unit(
+        stage_index=remembered_after_forget.stage_index,
         has_passed=True,
         rating=3,
         had_failure_in_encounter=False,
-        today=today,
-        fsrs_state=remembered_after_hard.fsrs_state,
-        intraday=IntradayState(day=today, retries=1, step_pending=True),
-        booked_due_date=today,
-        early_step=remembered_after_hard.early_step,
+        today=today + timedelta(days=1),
+        fsrs_state=remembered_after_forget.fsrs_state,
+        booked_due_date=today + timedelta(days=1),
+        early_step=remembered_after_forget.early_step,
     )
-    assert rechecked.due_date == today + timedelta(days=1)
+    assert overnight.due_date == today + timedelta(days=4)
+    assert overnight.early_step == 1
 
     first_remembered = rate_unit(
         stage_index=0,
@@ -236,10 +241,10 @@ def test_fixed_schedule_first_pass_failure_penalty_and_caps():
     )
     assert first_remembered.stage_index == 1
     # A first pass is the same-day re-check; the penalty is in the memory model:
-    # the 困难 raised difficulty, so the recovery card is harder than a fresh pass.
+    # the 忘记 raised difficulty, so the recovery card is harder than a fresh pass.
     assert first_remembered.due_date == today
     assert first_remembered.intraday_kind == "step"
-    assert (remembered_after_hard.fsrs_state.difficulty or 0) > (
+    assert (remembered_after_forget.fsrs_state.difficulty or 0) > (
         first_remembered.fsrs_state.difficulty or 0
     )
 
@@ -250,7 +255,6 @@ def test_fixed_schedule_first_pass_failure_penalty_and_caps():
         had_failure_in_encounter=True,
         today=today,
     )
-    assert easy_after_failure.stage_index >= 4
     assert easy_after_failure.due_date > today + timedelta(days=INTERVAL_DAYS[3])
 
     capped = rate_unit(

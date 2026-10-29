@@ -221,7 +221,7 @@ def test_freestyle_start_reopens_after_content_invalidation(db_session):
 def test_retry_glance_does_not_inherit_the_open_parent_rating(db_session):
     state = _seed_review_unit(db_session)
     first = _start(db_session, state, "encounter-source")
-    _rate(db_session, first, state, "encounter-source", "rating-hard", 2)
+    _rate(db_session, first, state, "encounter-source", "rating-hard", 1)
 
     retry = _start(
         db_session, state, "encounter-retry",
@@ -234,7 +234,7 @@ def test_retry_glance_does_not_inherit_the_open_parent_rating(db_session):
 
     parent = db_session.get(ReviewUnitEncounter, "encounter-source")
     assert parent.status == "closed"
-    assert parent.selected_rating == 2
+    assert parent.selected_rating == 1
     parent.created_at = utc_now_naive() - timedelta(seconds=30)
     db_session.commit()
 
@@ -251,7 +251,7 @@ def test_retry_glance_does_not_inherit_the_open_parent_rating(db_session):
 def test_retry_glance_same_rating_keeps_this_encounter(db_session):
     state = _seed_review_unit(db_session)
     first = _start(db_session, state, "encounter-source")
-    _rate(db_session, first, state, "encounter-source", "rating-hard", 2)
+    _rate(db_session, first, state, "encounter-source", "rating-hard", 1)
     closed = close_unit_review_encounter(
         db_session,
         study_session_id=first["id"],
@@ -266,11 +266,11 @@ def test_retry_glance_same_rating_keeps_this_encounter(db_session):
         card_id="retry-card", occurrence_id="retry-card", retry_attempt=1,
     )
     assert retry["units"][0]["encounter"]["id"] == "encounter-retry"
-    rated = _rate(db_session, retry, state, "encounter-retry", "rating-retry-hard", 2)
+    rated = _rate(db_session, retry, state, "encounter-retry", "rating-retry-hard", 1)
 
     assert rated["encounter"]["id"] == "encounter-retry"
     assert rated["encounter_id"] == "encounter-retry"
-    assert rated["rating"] == 2
+    assert rated["rating"] == 1
     assert rated["passed"] is False
 
 
@@ -285,15 +285,16 @@ def test_one_encounter_amends_from_frozen_baseline_and_is_idempotent(db_session)
 
     assert remembered["unit"]["stage_index"] == 1
     assert easy["amended"] is True
-    # Both ratings are the same-day re-check, so the displayed day gap is zero
-    # for each. The memory model still distinguishes them: 轻松 leaves a more
-    # stable card than the 记得 it replaces.
+    # 记得 on a first pass books the same-day re-check; 轻松 skips it and books
+    # three days, so only the remembered glance carries a step. The memory
+    # model still distinguishes them: 轻松 leaves a more stable card.
     assert remembered["intraday_kind"] == "step"
-    assert easy["intraday_kind"] == "step"
+    assert easy["intraday_kind"] is None
+    assert easy["unit"]["stage_index"] == 2
     assert _fsrs_state(state).stability > remembered_stability
     assert duplicate == easy
 
-    hard = _rate(db_session, review_session, state, "encounter-amend", "rating-hard", 2)
+    hard = _rate(db_session, review_session, state, "encounter-amend", "rating-hard", 1)
     corrected = _rate(db_session, review_session, state, "encounter-amend", "rating-corrected", 3)
     item = db_session.query(ReviewSessionUnit).one()
 
@@ -379,7 +380,7 @@ def test_today_closed_rating_can_be_undone(db_session):
     state = _seed_review_unit(db_session)
     before = state.due_date
     review_session = _start(db_session, state, "encounter-hard")
-    _rate(db_session, review_session, state, "encounter-hard", "rating-hard", 2)
+    _rate(db_session, review_session, state, "encounter-hard", "rating-hard", 1)
     close_unit_review_encounter(
         db_session,
         study_session_id=review_session["id"],
@@ -555,9 +556,9 @@ def test_rate_after_closed_session_overwrites_with_latest_rating(db_session):
     assert amended["amended"] is True
     assert amended["rating"] == 4
     assert amended["study_session_id"] != review_session["id"]
-    # 轻松 replaces the grade inside the same encounter and books the last
-    # fixed step (two days) instead of 记得's one day.
-    assert state.due_date == local_day() + timedelta(days=2)
+    # 轻松 replaces the grade inside the same encounter and skips the same-day
+    # re-check, booking three days instead of 记得's one-day step.
+    assert state.due_date == local_day() + timedelta(days=3)
     assert state.intraday_step_pending is False
     assert state.stage_index >= 1
     replayed = _rate(
@@ -647,7 +648,7 @@ def test_freestyle_complete_preserves_client_source_in_summary(db_session):
 def test_failed_close_keeps_session_and_next_encounter_retains_penalty(db_session):
     state = _seed_review_unit(db_session)
     first = _start(db_session, state, "encounter-hard")
-    _rate(db_session, first, state, "encounter-hard", "rating-hard", 2)
+    _rate(db_session, first, state, "encounter-hard", "rating-hard", 1)
     assert state.intraday_retries == 1, (state.intraday_retries, state.intraday_step_pending)
     closed = close_unit_review_encounter(
         db_session,
@@ -676,10 +677,10 @@ def test_failed_close_keeps_session_and_next_encounter_retains_penalty(db_sessio
 
     assert remembered["passed"] is True
     assert remembered["unit"]["stage_index"] >= 1
-    # 重练通过 → 30 分钟后再过一遍，然后才排到明天。
-    assert remembered["intraday_kind"] == "step"
-    assert remembered["retry_after_minutes"] == 30
-    assert remembered["unit"]["due_date"] == local_day().isoformat()
+    # 重练通过 → 直接排明天，由隔夜检验确认；不再叠一次 20 分钟复查。
+    assert remembered["intraday_kind"] is None
+    assert remembered["retry_after_minutes"] is None
+    assert remembered["unit"]["due_date"] == (local_day() + timedelta(days=1)).isoformat()
 
 
 def test_review_http_contract_carries_encounter_identity(session_factory, make_client):
@@ -756,7 +757,7 @@ def test_review_http_contract_carries_encounter_identity(session_factory, make_c
 
 
 @pytest.mark.parametrize("early", [False, True])
-@pytest.mark.parametrize("first_rating", [1, 2])
+@pytest.mark.parametrize("first_rating", [1])
 @pytest.mark.parametrize("passing_rating", [3, 4])
 def test_real_retry_preserves_failure_and_preview_matches_commit(
     db_session, early, first_rating, passing_rating,
@@ -823,7 +824,7 @@ def test_real_retry_preserves_failure_and_preview_matches_commit(
     assert db_session.get(ReviewUnitRatingOperation, "real-pass").replaces_operation_id is None
     item = db_session.query(ReviewSessionUnit).filter_by(study_session_id=retry["id"]).one()
     assert item.retry_count == 1
-    assert (item.again_count, item.hard_count) == (int(first_rating == 1), int(first_rating == 2))
+    assert (item.again_count, item.hard_count) == (1, 0)
     from memory_anki.modules.memory.application.unit_review_service import get_unit_review_session
 
     historical = get_unit_review_session(db_session, first['id'], encounter_id='real-source')
@@ -863,36 +864,36 @@ def test_real_retry_preserves_failure_and_preview_matches_commit(
     assert item.retry_count == 1
 
 
-def test_retry_slot_new_attempt_stacks_penalty_but_correction_does_not(db_session):
+def test_retry_slot_repeated_failures_and_correction(db_session):
     state = _seed_review_unit(db_session)
     state.stage_index = 7
     state.has_passed = True
     db_session.commit()
     first = _start(db_session, state, "source")
-    _rate(db_session, first, state, "source", "source-hard", 2)
-    assert state.stage_index == 6
+    _rate(db_session, first, state, "source", "source-forget", 1)
+    assert state.stage_index == 0
     for attempt in (1, 2):
         retry = _start(
             db_session, state, f"retry-{attempt}", card_id="same-slot",
             occurrence_id="same-slot", retry_attempt=attempt,
         )
-        _rate(db_session, retry, state, f"retry-{attempt}", f"hard-{attempt}", 2)
-        # 困难 demotes once per day; repeated retries on the same day hold the stage.
-        assert state.stage_index == 6
+        _rate(db_session, retry, state, f"retry-{attempt}", f"forget-{attempt}", 1)
+        # 忘记 is the only failing grade; repeated retries hold the unit at 0.
+        assert state.stage_index == 0
     corrected = _rate(db_session, retry, state, "retry-2", "correct-last", 3)
     assert corrected["amended"] is True
-    # Amending a same-day 困难 to 记得 is a pass now; it gets one 30-minute
-    # re-check before the day-level interval is booked.
+    # A retry that finally passes books tomorrow directly: the overnight check
+    # is the confirmation, and no same-day re-check is stacked on top.
     assert state.has_passed is True
-    assert state.due_date == local_day()
-    assert state.intraday_step_pending is True
+    assert state.due_date == local_day() + timedelta(days=1)
+    assert state.intraday_step_pending is False
     item = db_session.query(ReviewSessionUnit).filter_by(study_session_id=retry["id"]).one()
     assert item.retry_count == 2
-    assert item.hard_count == 2
-    assert db_session.get(ReviewUnitRatingOperation, "hard-2").replaced_at is not None
-    assert db_session.get(ReviewUnitRatingOperation, "hard-1").replaced_at is None
+    assert (item.again_count, item.hard_count) == (2, 0)
+    assert db_session.get(ReviewUnitRatingOperation, "forget-2").replaced_at is not None
+    assert db_session.get(ReviewUnitRatingOperation, "forget-1").replaced_at is None
     undo_unit_rating(db_session, "correct-last")
-    assert state.stage_index == 6
+    assert state.stage_index == 0
     assert item.retry_count == 3
 
 
@@ -902,7 +903,7 @@ def test_same_attempt_revisit_correction_uses_preview_baseline(db_session):
     state.has_passed = True
     db_session.commit()
     first = _start(db_session, state, "source")
-    _rate(db_session, first, state, "source", "source-hard", 2)
+    _rate(db_session, first, state, "source", "source-forget", 1)
     close_unit_review_encounter(
         db_session, study_session_id=first["id"], unit_id=state.id,
         encounter_id="source", operation_id="source-close",
@@ -912,15 +913,16 @@ def test_same_attempt_revisit_correction_uses_preview_baseline(db_session):
     corrected = _rate(db_session, revisit, state, "source-revisit", "source-corrected", 3)
     assert corrected["amended"] is True
     assert state.has_passed is True
-    # A pass after today's 困难 gets the 30-minute re-check before booking.
-    assert state.due_date == local_day()
-    assert state.intraday_step_pending is True
+    # A pass after today's 忘记 books tomorrow directly (the overnight
+    # confirmation), with no extra same-day re-check.
+    assert state.due_date == local_day() + timedelta(days=1)
+    assert state.intraday_step_pending is False
     assert effect["target_stage_index"] == state.stage_index
     assert effect["target_due_date"] == state.due_date.isoformat()
     assert effect["target_interval_days"] == (state.due_date - local_day()).days
     assert db_session.query(ReviewSessionUnit).one().retry_count == 0
     undo_unit_rating(db_session, "source-corrected")
-    assert state.stage_index == 6
+    assert state.stage_index == 0
     assert db_session.query(ReviewSessionUnit).one().retry_count == 1
 
 

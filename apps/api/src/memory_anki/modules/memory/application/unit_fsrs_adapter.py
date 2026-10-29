@@ -2,14 +2,28 @@
 
 This is the only module in ``modules/memory`` that may import ``fsrs``. It maps
 the four product ratings onto FSRS while preserving the rules that are not
-scheduling math: a pass always lands at least one day out, an ahead-of-date pass
-records the review without moving the schedule, a second ``困难`` on the same day
-does not count twice, a failed grade retries today, and the exam sprint horizon
-only shortens a booked gap.
+scheduling math: only ``忘记`` fails, a pass always lands at least one day out,
+an ahead-of-date pass records the review without moving the schedule, the young
+card's anchor phase is product-fixed, and the exam sprint horizon only shortens
+a booked gap.
 
 FSRS owns ``review_unit_states.due_date`` and the ``fsrs_*`` columns.
 ``stage_index`` survives only as a display/compat projection of the real
 interval; nothing schedules from it.
+
+Policy (``SCHEDULER_POLICY_VERSION`` ``anchor2-bands-1``):
+
+- **Anchor phase** (``early_step == 0``, new cards only): the first pass gets one
+  20-minute re-check (``unit_intraday``), then the overnight check on day 2.
+  ``记得`` on the overnight check books +3 days and hands the card to FSRS;
+  ``轻松`` books +5 days (or +3 straight from the first pass, skipping the
+  re-check); ``困难`` only asks for one more overnight (+1 day); ``忘记`` retries
+  the same day and re-runs the overnight check.
+- **FSRS phase** (``early_step >= 1``): FSRS books, inside three guardrails —
+  ``困难`` may never lengthen an interval (0.8x–1.0x the previous gap),
+  ``记得``/``轻松`` are capped below 10 days (2.5x / 3.5x), and a lapse on a
+  mature card recovers at a fraction of the pre-lapse interval once the
+  overnight confirmation passes.
 """
 
 from __future__ import annotations
@@ -27,9 +41,7 @@ from fsrs import Card, Rating, Scheduler, State
 from memory_anki.core.exam_horizon import SprintHorizon
 from memory_anki.core.time import ensure_utc_naive, study_day_of
 
-# These mirror the product constants in unit_scheduler. They are duplicated here
-# on purpose: the adapter is allowed to be imported without the ladder module,
-# and a test can pin the two implementations to the same behaviour.
+# A pass always lands at least one day out.
 MIN_PASSED_INTERVAL_DAYS = 1
 RETRY_AFTER_CARDS = 3
 FUZZ_MIN_INTERVAL_DAYS = 7
@@ -44,43 +56,44 @@ LEARNING_STEPS: tuple[timedelta, ...] = ()
 RELEARNING_STEPS: tuple[timedelta, ...] = ()
 
 # Legacy ladder bounds, kept only as the compat projection for API consumers
-# that still read `stage_index`. FSRS owns scheduling; nothing sorts or books
-# from these values. The UI groups real intervals by its own day-range bands.
+# that still read `stage_index`. Nothing sorts or books from these values.
 LEGACY_STAGE_INTERVALS: tuple[int, ...] = (0, 1, 3, 7, 14, 30, 60, 120, 240, 365)
 
-# The first four reviews are product-fixed, not FSRS estimates. A young card
-# carries too little evidence for a stability estimate, and one `困难` can
-# multiply it several-fold (1.3 -> 3.3 days on the first review): the learner
-# then sees a unit they called hard moved *further* out. The fixed rhythm is
-# review #1 after 30 minutes (``unit_intraday.STEP_DELAY``, same day), then
-# day 2 (+1), day 3 (+1) and day 5 (+2) from the learning day. The review after
-# day 5 is the first one FSRS may book itself.
-#
-# ``EARLY_LADDER_INTERVALS`` holds the *booked gap* after each fixed day-level
-# review. The gaps repeat (one day twice), so the position comes from the
-# persisted ``early_step`` counter -- never from the previous gap alone.
-EARLY_LADDER_INTERVALS: tuple[int, ...] = (1, 1, 2)
-EARLY_LADDER_STEPS = len(EARLY_LADDER_INTERVALS)
-EARLY_LADDER_MAX_DAYS = max(EARLY_LADDER_INTERVALS)
-# ``early_step`` counts completed day-level fixed reviews. At this value the
-# fixed phase is over and FSRS owns the interval.
-EARLY_LADDER_MAX_STEP = EARLY_LADDER_STEPS
-# Kept for callers that used the old stage bound; it now means the same thing
-# as :data:`EARLY_LADDER_MAX_STEP`.
-EARLY_LADDER_MAX_STAGE = EARLY_LADDER_MAX_STEP
+# --- Anchor phase -----------------------------------------------------------
+# The first two checkpoints of a new card, product-fixed because a young card
+# carries too little evidence for a stability estimate: (a) a same-day re-check
+# after the first pass, (b) the overnight check on day 2. After the overnight
+# check the card belongs to FSRS — there is no third fixed review.
+ANCHOR_PHASE_STEP = 0
+ANCHOR_GRADUATED_STEP = 1
+# Closing the same-day re-check books tomorrow; that +1 IS the overnight check.
+ANCHOR_STEP_DAYS = 1
+# Overnight check outcomes: 记得 hands over with +3 days, 轻松 with +5 days.
+ANCHOR_PASS_DAYS = 3
+ANCHOR_EASY_DAYS = 5
+# 困难 on the overnight check is a pass, but only buys one more overnight.
+ANCHOR_HARD_DAYS = 1
+# 轻松 on the very first pass skips the re-check and books +3 days.
+ANCHOR_FIRST_EASY_DAYS = 3
+# Kept for callers that used the retired four-step builder.
+ANCHOR_STEPS = 2
 # `stage_index` starts at 1 for a passed unit (a pass never books today).
 MIN_PASSED_STAGE_INDEX = 1
 
-# Even after the fixed early ladder, a young unit's interval may not grow faster
-# than this per review: FSRS already wants 20 days right after the 3-day review,
-# and one overestimate compounds into months. Doubling is the classic Anki ease
-# shape and keeps the early rhythm legible; a shorter FSRS answer still wins
-# (this is a ceiling, not a target). Above 30 days FSRS decides alone. A retry
-# day (previous gap 0) is not capped: its base is the same-day failure, not the
-# interval the unit had earned.
-GROWTH_CAP_MAX_PREVIOUS_DAYS = 30
-GROWTH_CAP_RATIO = 2
-GROWTH_CAP_MIN_DAYS = 3
+# --- FSRS-phase guardrails --------------------------------------------------
+# 困难 means "recalled, but effortfully". It must never push the card further
+# out than the interval it already earned: 0.8x–1.0x the previous gap.
+HARD_RATIO_MIN = 0.8
+HARD_RATIO_MAX = 1.0
+# Below ten days a young card may not leap too far in one step. This is a
+# ceiling only — a shorter FSRS answer still wins.
+GOOD_CAP_RATIO = 2.5
+EASY_CAP_RATIO = 3.5
+CAP_MAX_PREVIOUS_DAYS = 10
+# A lapse on a mature card keeps a fraction of the interval it had earned once
+# the overnight confirmation passes (Ebbinghaus' relearning savings).
+LAPSE_MIN_PREVIOUS_DAYS = 14
+LAPSE_RECOVERY_RATIO: dict[int, float] = {2: 0.25, 3: 0.30, 4: 0.35}
 
 FSRS_RATINGS: dict[int, Rating] = {
     1: Rating.Again,
@@ -95,10 +108,10 @@ except PackageNotFoundError:  # packaged builds may omit distribution metadata
     _FSRS_DISTRIBUTION_VERSION = "unknown"
 
 # The stored version names the whole scheduling policy, not just the library, so
-# changing a product rule (the fixed early ladder) re-runs the one-time replay
-# instead of leaving units booked under the retired policy.
+# changing a product rule (the anchor phase, a guardrail) re-runs the one-time
+# replay instead of leaving units booked under the retired policy.
 FSRS_ENGINE_VERSION = f"fsrs-{_FSRS_DISTRIBUTION_VERSION}"
-SCHEDULER_POLICY_VERSION = "early-ladder-3"
+SCHEDULER_POLICY_VERSION = "anchor2-bands-1"
 SCHEDULER_VERSION = f"{FSRS_ENGINE_VERSION}+{SCHEDULER_POLICY_VERSION}"
 
 
@@ -173,15 +186,22 @@ class FsrsScheduleResult:
     raw_due_date: date | None
     raw_interval_days: int
     interval_days: int
-    # True when the booked gap came from the fixed early ladder rather than
-    # FSRS' interval. The audit fields above still carry FSRS' own answer.
+    # True when the booked gap came from the anchor phase rather than FSRS'
+    # interval. The audit fields above still carry FSRS' own answer.
     early_ladder_applied: bool = False
-    # True when FSRS wanted more days than the young-unit growth ceiling.
+    anchor_applied: bool = False
+    # True when a guardrail (困难 band, young-card cap, lapse recovery) replaced
+    # FSRS' own answer.
     growth_cap_applied: bool = False
-    # The fixed-ladder counter after this rating (None when FSRS owns the unit).
+    guardrail_applied: bool = False
+    # The anchor counter after this rating (0 = still anchored, 1 = FSRS owns).
     # ``unit_scheduler`` deliberately keeps the pre-rating value when the pass
     # only creates a same-day re-check, because that booking is not final yet.
     early_step: int | None = None
+    # A mature lapse keeps the pre-lapse interval until the overnight
+    # confirmation passes; both columns persist on the unit.
+    lapse_original_days: int | None = None
+    lapse_started_on: date | None = None
 
 
 @dataclass(frozen=True)
@@ -217,14 +237,11 @@ def stage_for_interval(interval_days: int) -> int:
 
 
 def infer_early_step(*, booked_gap_days: int | None) -> int | None:
-    """Best-effort position for a unit rated before the counter was stored.
+    """Best-effort *legacy* position for a unit rated before the counter existed.
 
-    The migration runs at startup, so this is a safety net for a row that
-    slipped through (or a unit rated under the previous 1/2/3-day policy).
-    Under that policy a booked gap of 1 meant "the 30-minute re-check passed",
-    2 meant two day-level reviews, and 3 meant three; anything at 4+ was
-    already FSRS' own booking. ``None`` means the caller has no booking to read
-    and the unit should be treated as a pure FSRS card.
+    Returns the retired 0..3 four-step value. Callers on the current policy pass
+    it through :func:`migrate_legacy_early_step` — a unit that already completed
+    any day-level fixed review has passed its overnight check and graduates.
     """
     if booked_gap_days is None:
         return None
@@ -235,92 +252,90 @@ def infer_early_step(*, booked_gap_days: int | None) -> int | None:
         return 1
     if gap == 3:
         return 2
-    return EARLY_LADDER_MAX_STEP
+    return 3
 
 
-def early_ladder_interval(*, rating: int, early_step: int | None) -> int | None:
-    """The fixed early interval for this pass, or None when FSRS decides.
+def migrate_legacy_early_step(value: int | None) -> int | None:
+    """Map the retired 0..3 anchor counter onto 0 (anchored) / 1 (graduated)."""
+    if value is None:
+        return None
+    return ANCHOR_GRADUATED_STEP if int(value) >= 1 else ANCHOR_PHASE_STEP
 
-    ``early_step`` is the number of fixed day-level reviews already completed
-    (0..``EARLY_LADDER_STEPS``). It is persisted on the unit precisely because
-    the ladder gaps repeat: the previous booked gap cannot tell the second
-    one-day step from the first. ``None`` means the caller cannot tell, and the
-    safe answer is "let FSRS book".
+
+def anchor_interval_days(
+    *, rating: int, step_pending: bool, was_passed: bool
+) -> int:
+    """The fixed gap after one anchor-phase pass (rating >= 2).
+
+    ``step_pending`` is the 20-minute re-check the learner is closing;
+    ``was_passed`` is the unit's state before this rating, so ``False`` means
+    this is the very first pass. The first pass books the day-level gap only
+    after the re-check, and 轻松 skips both the re-check and the overnight check.
     """
-    if early_step is None:
-        return None
-    step = max(0, int(early_step))
-    if step >= EARLY_LADDER_STEPS:
-        return None
+    if step_pending or not was_passed:
+        return ANCHOR_FIRST_EASY_DAYS if int(rating) >= 4 else ANCHOR_STEP_DAYS
     if int(rating) >= 4:
-        # 轻松 takes the last fixed step, never skips past it.
-        return EARLY_LADDER_INTERVALS[-1]
-    return EARLY_LADDER_INTERVALS[step]
-
-
-def next_early_step(*, rating: int, early_step: int | None) -> int | None:
-    """The counter after this rating.
-
-    A pass advances one fixed review (轻松 jumps to the end); 困难 demotes one
-    step and 忘记 restarts the fixed sequence -- but only while the unit is
-    still inside it. A unit that already handed over to FSRS keeps the finished
-    marker, so a mature lapse stays on the FSRS path instead of restarting the
-    fixed ladder.
-    """
-    if early_step is None:
-        return None
-    step = max(0, int(early_step))
-    if step >= EARLY_LADDER_STEPS:
-        return EARLY_LADDER_MAX_STEP
-    if int(rating) >= 4:
-        return EARLY_LADDER_MAX_STEP
+        return ANCHOR_EASY_DAYS
     if int(rating) >= 3:
-        return min(EARLY_LADDER_STEPS, step + 1)
-    if int(rating) == 2:
-        return max(0, step - 1)
-    return 0
+        return ANCHOR_PASS_DAYS
+    return ANCHOR_HARD_DAYS
 
 
-def growth_cap_days(*, previous_interval_days: int | None) -> int | None:
-    """Ceiling for the next booking after the fixed early ladder, or None.
+def next_anchor_step(
+    *, rating: int, early_step: int | None, step_pending: bool, was_passed: bool
+) -> int | None:
+    """The anchor counter after one rating.
 
-    ``previous_interval_days`` is the gap the unit was actually booked at. A
-    retry day (zero gap) has no usable base and is left to FSRS; from 30 days up
-    the unit is mature and FSRS decides alone.
+    Graduation happens only on a pass that actually crosses the overnight
+    boundary: 记得/轻松 on the overnight check, or 轻松 on the first pass (which
+    skips the whole anchor phase). 困难 on the overnight check asks for one more
+    day and stays anchored; 忘记 restarts the overnight check.
+    """
+    if early_step is None:
+        # No counter recorded: the caller (the scheduler or the backfill) owns
+        # the legacy inference, so do not invent a position here.
+        return None
+    step = int(early_step)
+    if step >= ANCHOR_GRADUATED_STEP:
+        return ANCHOR_GRADUATED_STEP
+    if int(rating) <= 1:
+        return ANCHOR_PHASE_STEP
+    if step_pending or not was_passed:
+        return ANCHOR_GRADUATED_STEP if int(rating) >= 4 else ANCHOR_PHASE_STEP
+    return ANCHOR_GRADUATED_STEP if int(rating) >= 3 else ANCHOR_PHASE_STEP
+
+
+def hard_band_days(*, previous_interval_days: int | None) -> tuple[int, int] | None:
+    """The 困难 band as ``(min_days, max_days)`` for the previous booked gap.
+
+    ``困难`` may shorten or keep the gap, never lengthen it. A retry day
+    (previous gap 0) has no usable base and falls back to one day.
     """
     if previous_interval_days is None:
         return None
     previous = int(previous_interval_days)
-    if previous <= 0 or previous >= GROWTH_CAP_MAX_PREVIOUS_DAYS:
-        return None
-    return max(GROWTH_CAP_MIN_DAYS, previous * GROWTH_CAP_RATIO)
+    if previous <= 0:
+        return (1, 1)
+    low = max(1, round(previous * HARD_RATIO_MIN))
+    high = max(low, previous)
+    return (low, high)
 
 
-def reschedule_early_unit(
-    *,
-    rating: int,
-    operation_day: date,
-    due_before: date | None,
-    early_step_before: int | None,
-) -> tuple[date, int] | None:
-    """What the current policy would book for a unit's *last* effective rating.
+def young_cap_days(*, rating: int, previous_interval_days: int | None) -> int | None:
+    """Ceiling for a 记得/轻松 pass below ten days, or None when uncapped."""
+    if previous_interval_days is None:
+        return None
+    previous = int(previous_interval_days)
+    if previous <= 0 or previous >= CAP_MAX_PREVIOUS_DAYS:
+        return None
+    ratio = EASY_CAP_RATIO if int(rating) >= 4 else GOOD_CAP_RATIO
+    return max(1, int(previous * ratio))
 
-    Kept for callers that re-derive a young unit's booking without replaying the
-    whole ledger. Returns ``(due_date, stage_index)`` or None when the last
-    rating did not move the schedule (a failed grade retries today; an
-    ahead-of-date pass is locked; a mature last rating belongs to FSRS).
-    """
-    if int(rating) < 3:
-        return None
-    if due_before is not None and due_before > operation_day:
-        return None
-    interval = early_ladder_interval(
-        rating=int(rating),
-        early_step=early_step_before,
-    )
-    if interval is None:
-        return None
-    return operation_day + timedelta(days=interval), stage_for_interval(interval)
+
+def lapse_recovery_days(*, rating: int, original_interval_days: int) -> int:
+    """The restored gap after a mature lapse's overnight confirmation."""
+    ratio = LAPSE_RECOVERY_RATIO.get(int(rating), LAPSE_RECOVERY_RATIO[3])
+    return max(1, round(max(0, int(original_interval_days)) * ratio))
 
 
 def project_stage_index(
@@ -335,14 +350,12 @@ def project_stage_index(
         return stage
     if int(rating) == 1:
         return 0
-    if int(rating) == 2:
-        return max(0, stage - (1 if result.hard_penalty_applied else 0))
-    # A product override (fixed ladder or growth ceiling) is the real booking,
-    # so the display band must follow it; a sprint-shortened gap still shows
-    # FSRS' own interval.
+    # A horizon/fuzz clamp only moves the booked date; the band still names the
+    # grade FSRS earned. A product override (anchor gap, guardrail) is the real
+    # booking, so the band follows that instead.
     interval = (
         result.interval_days
-        if result.early_ladder_applied or result.growth_cap_applied
+        if result.anchor_applied or result.guardrail_applied
         else result.raw_interval_days
     )
     return max(MIN_PASSED_STAGE_INDEX, stage_for_interval(interval))
@@ -376,18 +389,18 @@ def should_apply_fsrs(
     rating: int,
     *,
     schedule_locked: bool,
-    hard_penalized_today: bool,
+    hard_penalized_today: bool = False,
 ) -> bool:
     """Whether this rating is evidence FSRS should see.
 
     A pass on an ahead-of-date filler card is recorded by the product but does
-    not move the schedule, so it must not advance the FSRS card either. A second
-    ``困难`` on the same day is retry work without a second demotion. Failed
-    grades stay honest even when the card was early.
+    not move the schedule, so it must not advance the FSRS card either. Failed
+    grades stay honest even when the card was early. ``hard_penalized_today`` is
+    accepted for compatibility with the retired once-per-day 困难 rule and no
+    longer changes anything: 困难 is a pass now.
     """
-    if rating >= 3 and schedule_locked:
-        return False
-    if rating == 2 and hard_penalized_today:
+    _ = hard_penalized_today
+    if rating >= 2 and schedule_locked:
         return False
     return True
 
@@ -436,23 +449,26 @@ def rate_unit_with_fsrs(
     rated_at: datetime,
     schedule_locked: bool,
     locked_due_date: date | None,
-    hard_penalized_today: bool,
+    hard_penalized_today: bool = False,
     fuzz_key: str | None = None,
     horizon: SprintHorizon | None = None,
     scheduler: Scheduler | None = None,
     previous_interval_days: int | None = None,
     current_stage: int | None = None,
     early_step: int | None = None,
+    step_pending: bool = False,
+    lapse_original_days: int | None = None,
+    lapse_started_on: date | None = None,
 ) -> FsrsScheduleResult:
     """Project one rating through FSRS plus the product rules.
 
     ``today`` is the study day. ``rated_at`` is the UTC instant of the rating;
     it becomes the FSRS review timestamp, while the returned due date is a local
     study day so the product can book and display it without timezone drift.
-    ``early_step`` is the unit's fixed-ladder counter; together with the rating
-    it selects the fixed early interval. ``previous_interval_days`` /
-    ``current_stage`` remain for callers that only know a booked position and
-    for the growth ceiling.
+    ``early_step`` is the anchor counter (0 = anchored, 1 = FSRS owns).
+    ``step_pending`` marks the 20-minute re-check being closed.
+    ``lapse_*`` carry a mature card's pre-lapse interval until the overnight
+    confirmation passes.
     """
     normalized = int(rating)
     if normalized not in FSRS_RATINGS:
@@ -475,48 +491,84 @@ def rate_unit_with_fsrs(
         raw_due_date = study_day_of(reviewed.due)
         raw_interval_days = max(0, (raw_due_date - today).days)
 
-    passed = normalized >= 3
+    passed = normalized >= 2
     schedule_changed = not (passed and schedule_locked)
-    hard_penalty_applied = normalized == 2 and has_passed and not hard_penalized_today
+    hard_penalty_applied = False
     horizon_applied = False
     fuzz_applied = False
-    next_step = next_early_step(rating=normalized, early_step=early_step)
-    early_interval = (
-        early_ladder_interval(rating=normalized, early_step=early_step)
-        if passed and not schedule_locked
-        else None
+    previous = max(0, int(previous_interval_days or 0))
+    # ``None`` means "no counter recorded" — the scheduler infers a position
+    # before calling. A direct caller with no counter gets the FSRS path, which
+    # is the honest default for a card whose history we cannot place.
+    anchored = early_step is not None and int(early_step) < ANCHOR_GRADUATED_STEP
+    next_step = next_anchor_step(
+        rating=normalized,
+        early_step=early_step,
+        step_pending=step_pending,
+        was_passed=has_passed,
     )
-    growth_cap = (
-        growth_cap_days(previous_interval_days=previous_interval_days)
-        if passed and not schedule_locked and early_interval is None
-        else None
-    )
-    early_ladder_applied = False
-    growth_cap_applied = False
+    next_lapse_original = lapse_original_days
+    next_lapse_started = lapse_started_on
+    anchor_applied = False
+    guardrail_applied = False
 
     if not passed:
-        # 忘记 / 困难 are retry work. The FSRS state still records the evidence,
-        # but the product contract keeps the unit due today.
+        # 忘记 is the only failed grade: retry work today. A mature unit keeps a
+        # memory of the interval it had earned, so the recovery after the
+        # overnight confirmation is not a crawl back from one day.
         due = today
         interval = 0
+        if not anchored and previous >= LAPSE_MIN_PREVIOUS_DAYS:
+            if next_lapse_original is None:
+                next_lapse_original = previous
+                next_lapse_started = today
     elif schedule_locked:
         # A pass on an early card proves nothing about the booked interval.
         due = locked_due_date or today
         interval = max(0, (due - today).days)
+    elif anchored:
+        interval = anchor_interval_days(
+            rating=normalized,
+            step_pending=step_pending,
+            was_passed=has_passed,
+        )
+        anchor_applied = True
+        due = today + timedelta(days=interval)
     else:
-        if early_interval is not None:
-            interval = early_interval
-            early_ladder_applied = True
+        if (
+            next_lapse_original is not None
+            and next_lapse_started is not None
+            and today > next_lapse_started
+        ):
+            # The overnight confirmation passed: restore a fraction of the gap
+            # the card had before the lapse, then clear the state.
+            interval = lapse_recovery_days(
+                rating=normalized, original_interval_days=next_lapse_original
+            )
+            next_lapse_original = None
+            next_lapse_started = None
+            guardrail_applied = True
         else:
             interval = max(MIN_PASSED_INTERVAL_DAYS, raw_interval_days)
-            if fuzz_key and interval >= FUZZ_MIN_INTERVAL_DAYS:
-                offset = _fuzz_offset(interval, f"{fuzz_key}:fsrs")
-                if offset:
-                    interval = max(1, interval + offset)
-                    fuzz_applied = True
-            if growth_cap is not None and interval > growth_cap:
-                interval = growth_cap
-                growth_cap_applied = True
+            if normalized == 2:
+                band = hard_band_days(previous_interval_days=previous)
+                if band is not None:
+                    low, high = band
+                    guarded = min(max(interval, low), high)
+                    guardrail_applied = guarded != interval
+                    interval = guarded
+            else:
+                cap = young_cap_days(
+                    rating=normalized, previous_interval_days=previous
+                )
+                if cap is not None and interval > cap:
+                    interval = cap
+                    guardrail_applied = True
+        if fuzz_key and interval >= FUZZ_MIN_INTERVAL_DAYS:
+            offset = _fuzz_offset(interval, f"{fuzz_key}:fsrs")
+            if offset:
+                interval = max(1, interval + offset)
+                fuzz_applied = True
         due = today + timedelta(days=interval)
         if horizon is not None:
             bounded = horizon.schedule(interval, today=today, seed=fuzz_key)
@@ -538,9 +590,13 @@ def rate_unit_with_fsrs(
         raw_due_date=raw_due_date,
         raw_interval_days=raw_interval_days,
         interval_days=interval,
-        early_ladder_applied=early_ladder_applied,
-        growth_cap_applied=growth_cap_applied,
+        early_ladder_applied=anchor_applied,
+        anchor_applied=anchor_applied,
+        growth_cap_applied=guardrail_applied,
+        guardrail_applied=guardrail_applied,
         early_step=next_step,
+        lapse_original_days=next_lapse_original,
+        lapse_started_on=next_lapse_started,
     )
 
 
@@ -553,10 +609,10 @@ def replay_history(
     """Replay effective rating operations into the production FSRS state.
 
     Used by the one-time switch backfill and by undo when an old snapshot has no
-    FSRS fields. Product rules (locked passes, same-day repeated 困难, retry
-    grades) are applied by :func:`rate_unit_with_fsrs` exactly as they are for a
-    live rating, so the result is the same state the learner would have built up
-    had FSRS been the scheduler all along.
+    FSRS fields. Product rules (locked passes, retry grades, the anchor phase,
+    the guardrails) are applied by :func:`rate_unit_with_fsrs` exactly as they
+    are for a live rating, so the result is the same state the learner would
+    have built up had FSRS been the scheduler all along.
     """
     active_scheduler = scheduler or build_shadow_scheduler()
     state = FsrsUnitState.empty()
@@ -568,6 +624,8 @@ def replay_history(
     previous_interval_days: int | None = 0
     previous_operation_day: date | None = None
     early_step: int | None = None
+    lapse_original: int | None = None
+    lapse_started: date | None = None
     for operation in operations:
         before = _before_state(operation.before_state_json)
         operation_day = study_day_of(_aware(operation.created_at))
@@ -593,25 +651,30 @@ def replay_history(
                 previous_interval_days = LEGACY_STAGE_INTERVALS[stage_index]
                 recorded_step = before.get("early_step")
                 early_step = (
-                    int(str(recorded_step))
+                    migrate_legacy_early_step(int(str(recorded_step)))
                     if recorded_step not in (None, "")
-                    else infer_early_step(booked_gap_days=previous_interval_days)
+                    else migrate_legacy_early_step(
+                        infer_early_step(booked_gap_days=previous_interval_days)
+                    )
                 )
             else:
                 previous_interval_days = 0
-                early_step = 0
+                early_step = ANCHOR_PHASE_STEP
+            recorded_lapse = before.get("lapse_original_days")
+            lapse_original = (
+                int(str(recorded_lapse)) if recorded_lapse not in (None, "") else None
+            )
+            lapse_started = _parse_date(before.get("lapse_started_on"))
         # What the unit was booked at before this rating, taken from the
         # recorded due date rather than from this replay's own projection: the
-        # early-ladder decision must match what the learner actually saw.
+        # anchor decision must match what the learner actually saw.
         if due_before is not None and previous_operation_day is not None:
             previous_interval_days = max(0, (due_before - previous_operation_day).days)
         schedule_locked = due_before is not None and due_before > operation_day
-        hard_penalized_today = (
-            str(before.get("hard_penalized_on") or "")[:10]
-            == operation_day.isoformat()
-        )
         if early_step is None and previous_operation_day is not None:
-            early_step = infer_early_step(booked_gap_days=previous_interval_days)
+            early_step = migrate_legacy_early_step(
+                infer_early_step(booked_gap_days=previous_interval_days)
+            )
         try:
             result = rate_unit_with_fsrs(
                 current=state,
@@ -621,12 +684,13 @@ def replay_history(
                 rated_at=_aware(operation.created_at),
                 schedule_locked=schedule_locked,
                 locked_due_date=due_before if schedule_locked else None,
-                hard_penalized_today=hard_penalized_today,
                 fuzz_key=unit_id,
                 scheduler=active_scheduler,
                 previous_interval_days=previous_interval_days,
                 current_stage=stage_index,
                 early_step=early_step,
+                lapse_original_days=lapse_original,
+                lapse_started_on=lapse_started,
             )
         except (TypeError, ValueError):
             skipped += 1
@@ -635,6 +699,8 @@ def replay_history(
         due_date = result.due_date
         has_passed = bool(before.get("has_passed")) or result.passed
         early_step = result.early_step
+        lapse_original = result.lapse_original_days
+        lapse_started = result.lapse_started_on
         # The same projection the live rating persists, so a replay cannot put
         # a unit in a different display band than earning it live would.
         stage_index = project_stage_index(
@@ -686,20 +752,27 @@ def _fuzz_offset(interval: int, seed: str) -> int:
 
 
 __all__ = [
+    "ANCHOR_EASY_DAYS",
+    "ANCHOR_FIRST_EASY_DAYS",
+    "ANCHOR_GRADUATED_STEP",
+    "ANCHOR_HARD_DAYS",
+    "ANCHOR_PASS_DAYS",
+    "ANCHOR_PHASE_STEP",
+    "ANCHOR_STEPS",
+    "ANCHOR_STEP_DAYS",
+    "CAP_MAX_PREVIOUS_DAYS",
     "DEFAULT_RETENTION",
-    "EARLY_LADDER_INTERVALS",
-    "EARLY_LADDER_MAX_DAYS",
-    "EARLY_LADDER_MAX_STAGE",
-    "EARLY_LADDER_MAX_STEP",
-    "EARLY_LADDER_STEPS",
+    "EASY_CAP_RATIO",
     "FSRS_ENGINE_VERSION",
     "FSRS_RATINGS",
     "FsrsScheduleResult",
     "FsrsUnitState",
-    "GROWTH_CAP_MAX_PREVIOUS_DAYS",
-    "GROWTH_CAP_MIN_DAYS",
-    "GROWTH_CAP_RATIO",
+    "GOOD_CAP_RATIO",
+    "HARD_RATIO_MAX",
+    "HARD_RATIO_MIN",
     "HistoryOperation",
+    "LAPSE_MIN_PREVIOUS_DAYS",
+    "LAPSE_RECOVERY_RATIO",
     "LEGACY_STAGE_INTERVALS",
     "MAXIMUM_INTERVAL_DAYS",
     "MIN_PASSED_STAGE_INDEX",
@@ -707,19 +780,21 @@ __all__ = [
     "SCHEDULER_POLICY_VERSION",
     "SCHEDULER_VERSION",
     "Scheduler",
+    "anchor_interval_days",
     "build_shadow_scheduler",
     "build_unit_scheduler",
     "card_from_state",
-    "early_ladder_interval",
-    "growth_cap_days",
+    "hard_band_days",
     "infer_early_step",
-    "next_early_step",
+    "lapse_recovery_days",
+    "migrate_legacy_early_step",
+    "next_anchor_step",
     "project_stage_index",
     "rate_unit_with_fsrs",
     "replay_history",
-    "reschedule_early_unit",
     "should_apply_fsrs",
     "stage_for_interval",
     "state_from_card",
     "state_payload",
+    "young_cap_days",
 ]

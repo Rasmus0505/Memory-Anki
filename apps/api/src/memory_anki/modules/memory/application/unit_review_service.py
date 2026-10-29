@@ -529,6 +529,10 @@ def _state_snapshot(state: ReviewUnitState, item: ReviewSessionUnit) -> dict[str
             "fsrs": state_payload(_fsrs_state_from_unit(state)),
             "intraday": _intraday_payload(_intraday_from_unit(state)),
             "early_step": state.early_step,
+            "lapse_original_days": state.lapse_original_interval_days,
+            "lapse_started_on": (
+                state.lapse_started_on.isoformat() if state.lapse_started_on else None
+            ),
         },
         "item": {
             "status": item.status,
@@ -564,6 +568,14 @@ def _restore_snapshot(
     # Absent in pre-0080 snapshots: leave it None so the scheduler infers the
     # position from the booked gap instead of restarting a young unit at zero.
     state.early_step = int(raw_step) if raw_step not in (None, "") else None
+    raw_lapse_days = state_data.get("lapse_original_days")
+    state.lapse_original_interval_days = (
+        int(raw_lapse_days) if raw_lapse_days not in (None, "") else None
+    )
+    raw_lapse_on = str(state_data.get("lapse_started_on") or "").strip()[:10]
+    state.lapse_started_on = (
+        date.fromisoformat(raw_lapse_on) if raw_lapse_on else None
+    )
     snapshot_fsrs = _fsrs_state_from_snapshot(state_data)
     if snapshot_fsrs is None:
         # A pre-switch snapshot has no FSRS fields. Clear the live columns so the
@@ -734,6 +746,16 @@ def _rating_effects(
                 if state_data.get("early_step") not in (None, "")
                 else None
             ),
+            lapse_original_days=(
+                int(state_data["lapse_original_days"])
+                if state_data.get("lapse_original_days") not in (None, "")
+                else None
+            ),
+            lapse_started_on=(
+                date.fromisoformat(str(state_data["lapse_started_on"])[:10])
+                if state_data.get("lapse_started_on")
+                else None
+            ),
         )
         # FSRS returns the real booked gap. The old nominal-stage interval and
         # stage action remain in the payload for compatibility, but the UI must
@@ -785,6 +807,12 @@ def _encounter_payload(
         if isinstance(state_data, dict):
             state_data["intraday"] = _intraday_payload(_intraday_from_unit(live_state))
             state_data["early_step"] = live_state.early_step
+            state_data["lapse_original_days"] = live_state.lapse_original_interval_days
+            state_data["lapse_started_on"] = (
+                live_state.lapse_started_on.isoformat()
+                if live_state.lapse_started_on
+                else None
+            )
     return {
         "id": encounter.id,
         "round_id": encounter.round_id,
@@ -1296,6 +1324,8 @@ def _apply_rating_from_snapshot(
         now=now,
         booked_due_date=state.due_date,
         early_step=state.early_step,
+        lapse_original_days=state.lapse_original_interval_days,
+        lapse_started_on=state.lapse_started_on,
     )
     _apply_fsrs_state(state, result.fsrs_state)
     if result.intraday is not None:
@@ -1303,6 +1333,8 @@ def _apply_rating_from_snapshot(
     state.early_step = result.early_step
     state.stage_index = result.stage_index
     state.due_date = result.due_date
+    state.lapse_original_interval_days = result.lapse_original_days
+    state.lapse_started_on = result.lapse_started_on
     if result.hard_penalty_applied:
         state.hard_penalized_on = today
     if result.passed:

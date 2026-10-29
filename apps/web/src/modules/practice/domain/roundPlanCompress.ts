@@ -3,7 +3,7 @@ import type { FreestyleUnitEncounterState } from './queueState'
 
 function ratingPassed(value: unknown): boolean {
   const rating = Math.round(Number(value))
-  return rating === 3 || rating === 4
+  return rating >= 2
 }
 
 function cardPassedThisRound(
