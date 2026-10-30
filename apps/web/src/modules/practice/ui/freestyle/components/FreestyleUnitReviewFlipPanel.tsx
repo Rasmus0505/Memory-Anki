@@ -677,6 +677,8 @@ export function FreestyleUnitReviewFlipPanel({
               palaceId={session.palace_id}
               unitId={unit.id}
               refreshKey={`${unit.id}:${unit.stage_index}:${unit.due_date}:${unit.encounter?.id ?? ''}`}
+              adjustable
+              onScheduleAdjusted={() => onUnitsReconciled?.()}
             />
           ) : null
         }

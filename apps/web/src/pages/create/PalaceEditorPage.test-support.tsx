@@ -14,6 +14,32 @@ import * as appLogs from '@/shared/logs/model/appLogs'
 import * as knowledgeApi from '@/modules/content/domain/knowledge-entity/api'
 import * as palaceApi from '@/modules/content/domain/palace-entity/api'
 
+const reviewUnitApiMocks = vi.hoisted(() => ({
+  getPalaceReviewUnitsApi: vi.fn(async (palaceId: number) => ({
+    palace_id: palaceId,
+    title: '',
+    mark_required: false,
+    unit_count: 0,
+    due_unit_count: 0,
+    next_review_date: null,
+    review_status: 'empty',
+    units: [],
+  })),
+}))
+
+vi.mock('@/modules/practice/ui/review/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/modules/practice/ui/review/api')>()),
+  // The editor reads this for its 单元评分 entry and the mark-chip summary.
+  // Tests that care queue their own projection with `queueReviewUnits`.
+  getPalaceReviewUnitsApi: (...args: [number]) =>
+    reviewUnitApiMocks.getPalaceReviewUnitsApi(...args),
+}))
+
+/** One-shot projection for the next 单元评分 lookup in a test. */
+export function queueReviewUnits(payload: unknown) {
+  reviewUnitApiMocks.getPalaceReviewUnitsApi.mockResolvedValueOnce(payload as never)
+}
+
 vi.mock('sonner', () => ({
   toast: {
     success: vi.fn(),
@@ -375,6 +401,7 @@ export function renderPalaceEditPage(initialEntry = '/palaces/101/edit') {
       <Routes>
         <Route path="/palaces/new" element={<PalaceEditPage />} />
         <Route path="/palaces/:id/edit" element={<PalaceEditPage />} />
+        <Route path="/palaces/:id/units" element={<div>unit-rating-page</div>} />
       </Routes>
     </MemoryRouter>,
   )

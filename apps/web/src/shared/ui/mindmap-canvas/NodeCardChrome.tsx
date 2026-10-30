@@ -17,11 +17,13 @@ export function NodeCardStatusChrome({
   isRoot,
   nodeId,
   onCountBadgeClick,
+  onStatusChipClick,
 }: {
   visual: MindMapNodeVisual
   isRoot: boolean
   nodeId: string
   onCountBadgeClick?: (nodeId: string, kind?: 'objective' | 'subjective') => void
+  onStatusChipClick?: (nodeId: string, chipText: string) => void
 }) {
   const badges = cornerCountBadges(visual)
   const countBadges = visual.progress
@@ -33,20 +35,44 @@ export function NodeCardStatusChrome({
         <div
           className="pointer-events-none absolute left-1/2 z-30 flex max-w-full -translate-x-1/2 items-center justify-center gap-0.5"
           style={{ top: '-1.35rem' }}
-          aria-hidden="true"
+          aria-hidden={onStatusChipClick ? undefined : true}
         >
-          {visual.statusChips.map((chip, index) => (
-            <span
-              key={`${chip.text}-${chip.style}-${index}`}
-              title={chip.text}
-              className={[
-                'max-w-[5.5rem] truncate rounded-full border px-1.5 py-0 text-[10px] font-medium leading-4 shadow-sm',
-                statusChipClassName(chip.tone, chip.style),
-              ].join(' ')}
-            >
-              {chip.text}
-            </span>
-          ))}
+          {visual.statusChips.map((chip, index) => {
+            const chipClassName = [
+              'max-w-[5.5rem] truncate rounded-full border px-1.5 py-0 text-[10px] font-medium leading-4 shadow-sm',
+              statusChipClassName(chip.tone, chip.style),
+            ].join(' ')
+            if (!onStatusChipClick) {
+              return (
+                <span
+                  key={`${chip.text}-${chip.style}-${index}`}
+                  title={chip.text}
+                  className={chipClassName}
+                >
+                  {chip.text}
+                </span>
+              )
+            }
+            return (
+              <button
+                key={`${chip.text}-${chip.style}-${index}`}
+                type="button"
+                title={chip.text}
+                aria-label={chip.text}
+                className={`${chipClassName} pointer-events-auto cursor-pointer hover:brightness-110`}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  // A mark chip must open its unit summary, never toggle the mark
+                  // as a side effect of the card click underneath it.
+                  event.stopPropagation()
+                  event.preventDefault()
+                  onStatusChipClick(nodeId, chip.text)
+                }}
+              >
+                {chip.text}
+              </button>
+            )
+          })}
         </div>
       ) : visual.badge && !isRoot ? (
         <span

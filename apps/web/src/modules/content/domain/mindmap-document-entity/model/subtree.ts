@@ -2,6 +2,7 @@ import {
   getMindMapNodeUid,
   normalizeMindMapDocument,
   type MindMapDocumentInput,
+  type MindMapDocumentV1,
   type MindMapNode,
 } from './document'
 
@@ -41,6 +42,41 @@ export function collectMindMapSubtreeUids(
   }
   walk(normalizeMindMapDocument(document).root, [], false)
   return collected
+}
+
+/**
+ * The document narrowed to one review unit: its member nodes plus the ancestor
+ * spine that reaches them. Sibling branches are removed; the root always stays
+ * as the layout anchor.
+ *
+ * An empty member set — or a set that matches no node, e.g. a stale unit whose
+ * membership just changed — returns the whole document. A rating view must
+ * never blank its canvas because of a cache race.
+ */
+export function filterMindMapDocumentToNodeUids(
+  documentInput: MindMapDocumentInput,
+  nodeUids: readonly string[],
+): MindMapDocumentV1 {
+  const document = normalizeMindMapDocument(documentInput)
+  const keep = new Set(
+    nodeUids.map((uid) => String(uid ?? '').trim()).filter(Boolean),
+  )
+  if (keep.size === 0) return document
+  let matched = 0
+  const prune = (node: MindMapNode, isRoot: boolean): boolean => {
+    const uid = getMindMapNodeUid(node, '')
+    const keptChildren: MindMapNode[] = []
+    const children = Array.isArray(node.children) ? node.children : []
+    for (const child of children) {
+      if (prune(child, false)) keptChildren.push(child)
+    }
+    node.children = keptChildren
+    const isMember = Boolean(uid) && keep.has(uid)
+    if (isMember) matched += 1
+    return isRoot || isMember || keptChildren.length > 0
+  }
+  prune(document.root, true)
+  return matched === 0 ? normalizeMindMapDocument(documentInput) : document
 }
 
 function pathUidsTo(root: MindMapNode | undefined, targetUid: string): string[] | null {

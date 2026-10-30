@@ -1673,7 +1673,7 @@ describe('FreestyleUnitReviewCardView', () => {
     const view = renderCard(retryCard)
 
     await screen.findByTestId('flip-card-mind-map-panel')
-    fireEvent.click(screen.getByRole('button', { name: /困难：10 分钟后重练/ }))
+    fireEvent.click(screen.getByRole('button', { name: /困难：首学 → 今天 · 10 分钟后重练/ }))
     await waitFor(() => expect(apiMocks.rateFreestyleRoundUnitApi).toHaveBeenCalledTimes(1))
     expect(apiMocks.startFreestyleUnitReviewSessionApi).toHaveBeenCalledTimes(1)
     await screen.findByText(/已选困难/)
@@ -1730,7 +1730,7 @@ describe('FreestyleUnitReviewCardView', () => {
     ).editor_doc.root.children.length
     expect(revealedBefore).toBeGreaterThan(0)
 
-    fireEvent.click(screen.getByRole('button', { name: /记得：1天后复习/ }))
+    fireEvent.click(screen.getByRole('button', { name: /记得：首学 → 1天 · 7月28日/ }))
     await waitFor(() => expect(apiMocks.rateFreestyleRoundUnitApi).toHaveBeenCalledTimes(1))
     expect(apiMocks.startFreestyleUnitReviewSessionApi).toHaveBeenCalledTimes(1)
     await screen.findByText(/已选记得/)
@@ -1868,11 +1868,11 @@ describe('FreestyleUnitReviewCardView', () => {
     const { onBranchComplete } = renderCard(card)
 
     await screen.findByTestId('flip-card-mind-map-panel')
-    fireEvent.click(screen.getByRole('button', { name: /记得：1天后复习/ }))
-    await screen.findByText('已选记得 · 1天后复习 · 7月28日')
+    fireEvent.click(screen.getByRole('button', { name: /记得：首学 → 1天 · 7月28日/ }))
+    await screen.findByText('已选记得 · 首学 → 1天 · 7月28日')
 
-    fireEvent.click(screen.getByRole('button', { name: /轻松：3天后复习/ }))
-    await screen.findByText('已选轻松 · 3天后复习 · 7月30日')
+    fireEvent.click(screen.getByRole('button', { name: /轻松：首学 → 3天 · 7月30日/ }))
+    await screen.findByText('已选轻松 · 首学 → 3天 · 7月30日')
     expect(apiMocks.rateReviewUnitApi).toHaveBeenCalledTimes(2)
     expect(apiMocks.undoReviewUnitRatingApi).not.toHaveBeenCalled()
     expect(onBranchComplete).toHaveBeenLastCalledWith(card.id, {
@@ -1895,9 +1895,9 @@ describe('FreestyleUnitReviewCardView', () => {
     const { onBranchComplete } = renderCard(card)
 
     await screen.findByTestId('flip-card-mind-map-panel')
-    const remembered = screen.getByRole('button', { name: /记得：1天后复习/ })
+    const remembered = screen.getByRole('button', { name: /记得：首学 → 1天 · 7月28日/ })
     fireEvent.click(remembered)
-    await screen.findByText('已选记得 · 1天后复习 · 7月28日')
+    await screen.findByText('已选记得 · 首学 → 1天 · 7月28日')
     fireEvent.click(screen.getByRole('button', { name: /记得：.*再点取消评分/ }))
     await waitFor(() => expect(apiMocks.undoReviewUnitRatingApi).toHaveBeenCalledTimes(1))
     expect(apiMocks.rateReviewUnitApi).toHaveBeenCalledTimes(1)
@@ -1919,10 +1919,10 @@ describe('FreestyleUnitReviewCardView', () => {
     const { onBranchComplete } = renderCard(card)
 
     await screen.findByTestId('flip-card-mind-map-panel')
-    fireEvent.click(screen.getByRole('button', { name: /记得：1天后复习/ }))
-    await screen.findByText('已选记得 · 1天后复习 · 7月28日')
-    fireEvent.click(screen.getByRole('button', { name: /轻松：3天后复习/ }))
-    await screen.findByText('已选轻松 · 3天后复习 · 7月30日')
+    fireEvent.click(screen.getByRole('button', { name: /记得：首学 → 1天 · 7月28日/ }))
+    await screen.findByText('已选记得 · 首学 → 1天 · 7月28日')
+    fireEvent.click(screen.getByRole('button', { name: /轻松：首学 → 3天 · 7月30日/ }))
+    await screen.findByText('已选轻松 · 首学 → 3天 · 7月30日')
     fireEvent.click(screen.getByRole('button', { name: /轻松：.*再点取消评分/ }))
 
     await waitFor(() => expect(apiMocks.undoReviewUnitRatingApi).toHaveBeenCalledTimes(2))
@@ -1944,8 +1944,8 @@ describe('FreestyleUnitReviewCardView', () => {
     const { onEncounterChange, onSaveFailed } = renderCard(card)
 
     await screen.findByTestId('flip-card-mind-map-panel')
-    fireEvent.click(screen.getByRole('button', { name: /记得：1天后复习/ }))
-    await screen.findByText('已选记得 · 1天后复习 · 7月28日')
+    fireEvent.click(screen.getByRole('button', { name: /记得：首学 → 1天 · 7月28日/ }))
+    await screen.findByText('已选记得 · 首学 → 1天 · 7月28日')
     expect(onSaveFailed).not.toHaveBeenCalled()
     expect(onEncounterChange).toHaveBeenCalledWith(
       card.id,
@@ -1977,7 +1977,7 @@ describe('FreestyleUnitReviewCardView', () => {
 
     await screen.findByTestId('flip-card-mind-map-panel')
     fireEvent.click(screen.getByTestId('freestyle-rating-button-3'))
-    await screen.findByText('已选记得 · 1天后复习 · 7月28日')
+    await screen.findByText('已选记得 · 首学 → 1天 · 7月28日')
     expect(apiMocks.ratePalaceDueUnitsApi).not.toHaveBeenCalled()
     expect(apiMocks.rateFreestyleRoundUnitApi).toHaveBeenCalledTimes(1)
     expect(apiMocks.rateFreestyleRoundUnitApi.mock.calls[0][1].palace_batch).toBeUndefined()
@@ -2003,7 +2003,7 @@ describe('FreestyleUnitReviewCardView', () => {
     const { onBranchComplete } = renderCard(card)
 
     await screen.findByTestId('flip-card-mind-map-panel')
-    fireEvent.click(screen.getByRole('button', { name: /记得：1天后复习/ }))
+    fireEvent.click(screen.getByRole('button', { name: /记得：首学 → 1天 · 7月28日/ }))
 
     const button = screen.getByTestId('freestyle-rating-button-3')
     // Local-first: the tap is lit at once while the save is still on the wire.
@@ -2019,7 +2019,7 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(onBranchComplete).toHaveBeenCalledWith(card.id, {
       restudy: false, rating: 3, retryAfterCards: 0,
     })
-    expect(screen.getByText('已选记得 · 1天后复习 · 7月28日')).toBeTruthy()
+    expect(screen.getByText('已选记得 · 首学 → 1天 · 7月28日')).toBeTruthy()
     expect(button.getAttribute('aria-pressed')).toBe('true')
     expect(screen.queryByTestId('freestyle-rating-saving-line')).toBeNull()
     expect(button.hasAttribute('disabled')).toBe(false)
@@ -2122,7 +2122,7 @@ describe('FreestyleUnitReviewCardView', () => {
     await act(async () => {
       pending.shift()?.()
     })
-    expect(screen.getByText('已选轻松 · 3天后复习 · 7月30日')).toBeTruthy()
+    expect(screen.getByText('已选轻松 · 首学 → 3天 · 7月30日')).toBeTruthy()
   })
 
   it('keeps an earlier acknowledged grade when the newer selected grade fails', async () => {
@@ -2291,7 +2291,7 @@ describe('FreestyleUnitReviewCardView', () => {
     try {
       renderCard(card)
       await screen.findByTestId('flip-card-mind-map-panel')
-      fireEvent.click(screen.getByRole('button', { name: /记得：1天后复习/ }))
+      fireEvent.click(screen.getByRole('button', { name: /记得：首学 → 1天 · 7月28日/ }))
       await waitFor(() => expect(apiMocks.rateReviewUnitApi).toHaveBeenCalledTimes(1))
 
       const breath = await screen.findByTestId('freestyle-flow-breath')
@@ -2332,7 +2332,7 @@ describe('FreestyleUnitReviewCardView', () => {
 
     renderCard(card, { onRatingSettled })
     await screen.findByTestId('flip-card-mind-map-panel')
-    fireEvent.click(screen.getByRole('button', { name: /记得：1天后复习/ }))
+    fireEvent.click(screen.getByRole('button', { name: /记得：首学 → 1天 · 7月28日/ }))
 
     await waitFor(() => expect(onRatingSettled).toHaveBeenCalledWith(
       card.id,
@@ -2358,7 +2358,7 @@ describe('FreestyleUnitReviewCardView', () => {
     renderCard(card, { roundId: 'round-stale' })
 
     await screen.findByTestId('flip-card-mind-map-panel')
-    fireEvent.click(screen.getByRole('button', { name: /记得：1天后复习/ }))
+    fireEvent.click(screen.getByRole('button', { name: /记得：首学 → 1天 · 7月28日/ }))
 
     await waitFor(() => expect(apiMocks.rateReviewUnitApi).toHaveBeenCalledTimes(1))
   })
@@ -2388,7 +2388,7 @@ describe('FreestyleUnitReviewCardView', () => {
     const view = renderCard(card)
 
     await screen.findByTestId('flip-card-mind-map-panel')
-    fireEvent.click(screen.getByRole('button', { name: /困难：10 分钟后重练/ }))
+    fireEvent.click(screen.getByRole('button', { name: /困难：首学 → 今天 · 10 分钟后重练/ }))
     await waitFor(() => expect(apiMocks.rateReviewUnitApi).toHaveBeenCalledTimes(1))
     expect(apiMocks.closeUnitReviewEncounterApi).not.toHaveBeenCalled()
     expect(view.onRoundSync).toHaveBeenCalledWith(expect.objectContaining({ plan_version: 1 }))
@@ -2426,7 +2426,7 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(apiMocks.getUnitReviewSessionApi).toHaveBeenCalledWith(`session:${card.unit_id}`, historical.encounterId)
     expect(apiMocks.startFreestyleUnitReviewSessionApi).not.toHaveBeenCalled()
     expect(
-      (screen.getByRole('button', { name: /记得：1天后复习/ }) as HTMLButtonElement).disabled,
+      (screen.getByRole('button', { name: /记得：首学 → 1天 · 7月28日/ }) as HTMLButtonElement).disabled,
     ).toBe(true)
   })
 
@@ -2439,8 +2439,8 @@ describe('FreestyleUnitReviewCardView', () => {
     })))
     renderCard(card, { readOnly: false, encounter: historical })
     await screen.findByText('已有后续练习，这次评分仅供回看；请到最近一次练习修改。')
-    expect((screen.getByRole('button', { name: /记得：1天后复习/ }) as HTMLButtonElement).disabled).toBe(true)
-    fireEvent.click(screen.getByRole('button', { name: /记得：1天后复习/ }))
+    expect((screen.getByRole('button', { name: /记得：首学 → 1天 · 7月28日/ }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: /记得：首学 → 1天 · 7月28日/ }))
     expect(apiMocks.rateReviewUnitApi).not.toHaveBeenCalled()
     expect(apiMocks.undoReviewUnitRatingApi).not.toHaveBeenCalled()
   })
@@ -2465,7 +2465,7 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(apiMocks.getUnitReviewSessionApi).not.toHaveBeenCalled()
     await screen.findByTestId('flip-card-mind-map-panel')
     expect(
-      (screen.getByRole('button', { name: /轻松：3天后复习/ }) as HTMLButtonElement).disabled,
+      (screen.getByRole('button', { name: /轻松：首学 → 3天 · 7月30日/ }) as HTMLButtonElement).disabled,
     ).toBe(false)
   })
 
@@ -2498,7 +2498,7 @@ describe('FreestyleUnitReviewCardView', () => {
     await screen.findByText(/已选记得/)
     expect(screen.getByText('上次评分')).toBeTruthy()
     // No silent drop: confirming the last score saves it on this glance.
-    fireEvent.click(screen.getByRole('button', { name: /记得：1天后复习/ }))
+    fireEvent.click(screen.getByRole('button', { name: /记得：首学 → 1天 · 7月28日/ }))
     expect(apiMocks.undoReviewUnitRatingApi).not.toHaveBeenCalled()
     await waitFor(() => expect(apiMocks.rateReviewUnitApi).toHaveBeenCalledTimes(1))
     expect(apiMocks.rateReviewUnitApi.mock.calls[0][3]).toBe(3)

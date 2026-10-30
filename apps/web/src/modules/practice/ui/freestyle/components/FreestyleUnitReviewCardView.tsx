@@ -1080,6 +1080,7 @@ export function FreestyleUnitReviewCardView({
           <FreestyleRatingBar
             ratingEffects={currentEncounter?.rating_effects ?? []}
             selectedRating={selectedRating}
+            currentIntervalDays={unit?.interval_days ?? null}
             pendingRating={pendingRating}
             pendingClear={pendingClear}
             failedRating={failedRating}

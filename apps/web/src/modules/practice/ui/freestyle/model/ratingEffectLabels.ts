@@ -24,54 +24,128 @@ function retryGapLabel(minutes: number | null | undefined) {
 }
 
 /**
- * The second line of a rating button. Same-day work is booked by wall clock
- * (10 分钟 → 1 小时 → 3 小时 for 忘记/困难), never by a card offset, so when the
- * payload carries no gap the copy stays honest ("今天再练") instead of promising
- * a position in the queue.
+ * The interval the card was booked at, as the first half of "7天 → 17天".
+ * Null when the caller has no unit loaded; the label then keeps the old copy.
  */
-export function ratingEffectLabel(effect: UnitRatingEffectDto) {
+function intervalBeforeLabel(currentIntervalDays: number | null | undefined) {
+  if (currentIntervalDays == null || !Number.isFinite(currentIntervalDays)) return null
+  const days = Math.max(0, Math.round(currentIntervalDays))
+  return days === 0 ? '首学' : `${days}天`
+}
+
+/**
+ * One branch order for every renderer, so the button face and the effect strip
+ * can never describe two different bookings.
+ */
+type EffectTiming =
+  | { kind: 'recorded'; dueDate: string }
+  | { kind: 'step'; gap: string | null }
+  | { kind: 'pass'; gapDays: number; dueDate: string }
+  | { kind: 'exhausted' }
+  | { kind: 'retry'; gap: string | null }
+
+function effectTiming(effect: UnitRatingEffectDto): EffectTiming {
   if (effect.passed && effect.schedule_changed === false) {
-    return `记下，不改期 · ${localDateLabel(effect.target_due_date)}`
+    return { kind: 'recorded', dueDate: localDateLabel(effect.target_due_date) }
   }
   if (effect.passed) {
     if (effect.intraday_kind === 'step') {
-      const gap = retryGapLabel(effect.retry_after_minutes)
-      return gap ? `${gap}回顾一次 · 今天` : '今天再回顾一次'
+      return { kind: 'step', gap: retryGapLabel(effect.retry_after_minutes) }
     }
-    return `${passedGapDays(effect)}天后复习 · ${localDateLabel(effect.target_due_date)}`
+    return {
+      kind: 'pass',
+      gapDays: passedGapDays(effect),
+      dueDate: localDateLabel(effect.target_due_date),
+    }
   }
-  if (effect.intraday_exhausted) {
-    return '今天已重练 3 次 · 明天再练'
+  if (effect.intraday_exhausted) return { kind: 'exhausted' }
+  return { kind: 'retry', gap: retryGapLabel(effect.retry_after_minutes) }
+}
+
+/** The consequence as one sentence: effect strip, aria-label and title. */
+export function ratingEffectLabel(
+  effect: UnitRatingEffectDto,
+  currentIntervalDays?: number | null,
+) {
+  const timing = effectTiming(effect)
+  const before = intervalBeforeLabel(currentIntervalDays)
+  switch (timing.kind) {
+    case 'recorded':
+      return `记下，不改期 · ${timing.dueDate}`
+    case 'step':
+      return timing.gap ? `${timing.gap}回顾一次 · 今天` : '今天再回顾一次'
+    case 'pass':
+      return before
+        ? `${before} → ${timing.gapDays}天 · ${timing.dueDate}`
+        : `${timing.gapDays}天后复习 · ${timing.dueDate}`
+    case 'exhausted':
+      return '今天已重练 3 次 · 明天再练'
+    case 'retry':
+      if (before) {
+        return timing.gap ? `${before} → 今天 · ${timing.gap}重练` : `${before} → 今天`
+      }
+      return timing.gap ? `${timing.gap}重练 · 今天` : '今天再练'
   }
-  const gap = retryGapLabel(effect.retry_after_minutes)
-  return gap ? `${gap}重练 · 今天` : '今天再练'
+}
+
+export interface RatingEffectLines {
+  /** What this tap does to the card: the action plus the size of the gap. */
+  primary: string
+  /** When it lands. Null when the payload books no date at all. */
+  secondary: string | null
+}
+
+/**
+ * The same consequence split into two short lines for a quarter-width key.
+ *
+ * A phone key is ~73px of text at 10px type, and "3天后复习 · 10月30日" is ~96px,
+ * so the face stacks instead of truncating the date away. Only the face drops
+ * 「一次」 from the 20-minute re-check; the strip and accessible name keep it.
+ */
+export function ratingEffectLines(
+  effect: UnitRatingEffectDto,
+  currentIntervalDays?: number | null,
+): RatingEffectLines {
+  const timing = effectTiming(effect)
+  const before = intervalBeforeLabel(currentIntervalDays)
+  switch (timing.kind) {
+    case 'recorded':
+      return { primary: '记下，不改期', secondary: timing.dueDate }
+    case 'step':
+      return timing.gap
+        ? { primary: `${timing.gap}回顾`, secondary: '今天' }
+        : { primary: '稍后回顾', secondary: null }
+    case 'pass':
+      return before
+        ? { primary: `${before} → ${timing.gapDays}天`, secondary: timing.dueDate }
+        : { primary: `${timing.gapDays}天后复习`, secondary: timing.dueDate }
+    case 'exhausted':
+      return { primary: '今天已重练 3 次', secondary: '明天再练' }
+    case 'retry':
+      if (before) {
+        return timing.gap
+          ? { primary: `${before} → 今天`, secondary: `${timing.gap}重练` }
+          : { primary: `${before} → 今天`, secondary: null }
+      }
+      return timing.gap
+        ? { primary: `${timing.gap}重练`, secondary: '今天' }
+        : { primary: '今天再练', secondary: null }
+  }
 }
 
 /** Floating "where it went" tag shown for a moment after a rating lands. */
 export function ratingDestinationLabel(effect: UnitRatingEffectDto) {
-  if (effect.passed && effect.schedule_changed === false) return '已记下'
-  if (effect.passed) {
-    if (effect.intraday_kind === 'step') {
-      const gap = retryGapLabel(effect.retry_after_minutes)
-      return gap ? `${gap}回顾` : '稍后回顾'
-    }
-    return `${passedGapDays(effect)}天后见`
+  const timing = effectTiming(effect)
+  switch (timing.kind) {
+    case 'recorded':
+      return '已记下'
+    case 'step':
+      return timing.gap ? `${timing.gap}回顾` : '稍后回顾'
+    case 'pass':
+      return `${timing.gapDays}天后见`
+    case 'exhausted':
+      return '明天见'
+    case 'retry':
+      return timing.gap ? `${timing.gap}见` : '稍后见'
   }
-  if (effect.intraday_exhausted) return '明天见'
-  const gap = retryGapLabel(effect.retry_after_minutes)
-  return gap ? `${gap}见` : '稍后见'
-}
-
-export function compactRatingEffectLabel(effect: UnitRatingEffectDto) {
-  if (effect.passed && effect.schedule_changed === false) return '不改期'
-  if (effect.passed) {
-    if (effect.intraday_kind === 'step') {
-      const gap = retryGapLabel(effect.retry_after_minutes)
-      return gap ? gap.replace(' 后', '') : '回顾'
-    }
-    return `${passedGapDays(effect)}天后`
-  }
-  if (effect.intraday_exhausted) return '明天'
-  const gap = retryGapLabel(effect.retry_after_minutes)
-  return gap ? gap.replace(' 后', '') : '稍后'
 }

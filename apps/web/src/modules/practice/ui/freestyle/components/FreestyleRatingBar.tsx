@@ -10,9 +10,10 @@ import {
   palaceRatingPreviewLabel,
 } from '@/modules/practice/ui/freestyle/model/freestylePalaceRating'
 import {
-  compactRatingEffectLabel,
   ratingDestinationLabel,
   ratingEffectLabel,
+  ratingEffectLines,
+  type RatingEffectLines,
 } from '@/modules/practice/ui/freestyle/model/ratingEffectLabels'
 import { isFreestyleShortcutBlocked } from '@/modules/practice/ui/freestyle/model/freestyleKeyboard'
 import { SUPERSEDED_RATING_COPY } from '@/modules/practice/ui/freestyle/model/freestyleRatingCopy'
@@ -42,6 +43,7 @@ export const FREESTYLE_RATINGS: Array<{
 export function FreestyleRatingBar({
   ratingEffects,
   selectedRating,
+  currentIntervalDays = null,
   recordedRating = null,
   busy,
   pendingRating = null,
@@ -68,6 +70,8 @@ export function FreestyleRatingBar({
 }: {
   ratingEffects: UnitRatingEffectDto[]
   selectedRating: UnitRating | null
+  /** The unit's booked gap, so a button reads "7天 → 17天". Null hides the arrow. */
+  currentIntervalDays?: number | null
   /** This-round last rating while the amend glance is still empty. */
   recordedRating?: UnitRating | null
   /** Disables only 移除本队列 and the scope tabs. A pending save never freezes the ratings. */
@@ -260,7 +264,7 @@ export function FreestyleRatingBar({
             <span className="min-w-0 truncate">
               {palaceMode
                 ? palaceRatingEffectLine(selectedEffect.label, palaceDueCount)
-                : `已选${selectedEffect.label} · ${ratingEffectLabel(selectedEffect)}`}
+                : `已选${selectedEffect.label} · ${ratingEffectLabel(selectedEffect, currentIntervalDays)}`}
             </span>
             {locked ? (
               <span className="shrink-0 text-stage-faint">已锁定</span>
@@ -427,22 +431,27 @@ export function FreestyleRatingBar({
                   : 'pass'
                 : 'fail'
               : null
-            const earlyHint = canRateWithoutPlan
-              ? item.value >= 2 ? '记下' : '今天再练'
-              : null
+            // No real prediction yet: say the true thing, never a design label.
+            const earlyHint = canRateWithoutPlan ? '计算中…' : null
+            const fallbackHint = hintMode
+              ? '继续'
+              : earlyHint ?? (reviewReady ? '计划不可用' : '这张还不能评分')
             const hint = effect
               ? palaceMode && palaceKind
                 ? palaceRatingEffectLine(effect.label, palaceDueCount)
-                : ratingEffectLabel(effect)
-              : hintMode
-                ? '继续'
-                : earlyHint
-                  ?? (reviewReady ? '计划不可用' : '这张还不能评分')
-            const preview = effect
+                : ratingEffectLabel(effect, currentIntervalDays)
+              : fallbackHint
+            /**
+             * Where this tap books the card: the pending action on one line,
+             * the date under it. Stacked rather than truncated — a quarter-width
+             * phone button cannot fit "3天后复习 · 10月30日" on one line, and the
+             * date is the half the learner actually checks.
+             */
+            const preview: RatingEffectLines = effect
               ? palaceMode && palaceKind
-                ? palaceRatingPreviewLabel(palaceDueCount, palaceKind)
-                : compactRatingEffectLabel(effect)
-              : earlyHint
+                ? { primary: palaceRatingPreviewLabel(palaceDueCount, palaceKind), secondary: null }
+                : ratingEffectLines(effect, currentIntervalDays)
+              : { primary: fallbackHint, secondary: null }
             const selected = shownRating === item.value
             const pending = pendingRating === item.value
             const failed = failedRating === item.value
@@ -491,12 +500,28 @@ export function FreestyleRatingBar({
                   <span className="freestyle-rate-pip" aria-hidden />
                   {item.label}
                 </span>
-                {/* Touch has no hover: the schedule consequence must be readable pre-tap. */}
-                {preview ? (
-                  <span className="max-w-full truncate text-[10px] font-normal leading-none opacity-75 sm:text-[11px]">
-                    {preview}
+                {/* Touch has no hover: the booked consequence must be readable pre-tap.
+                    Two short lines, never one truncated sentence — a phone key holds
+                    ~73px of text, and "3天后复习 · 10月30日" is ~96px. The reserved
+                    min-height keeps all four labels on one baseline when a grade has
+                    no date to show. */}
+                <span className="flex min-h-[1.375rem] min-w-0 max-w-full flex-col items-center justify-start gap-0.5 text-[10px] leading-none sm:min-h-[1.5rem] sm:text-[11px]">
+                  <span
+                    data-testid={`freestyle-rating-preview-${item.value}`}
+                    className="max-w-full truncate font-medium tracking-tight"
+                  >
+                    {preview.primary}
                   </span>
-                ) : null}
+                  {preview.secondary ? (
+                    <span
+                      data-testid={`freestyle-rating-preview-secondary-${item.value}`}
+                      className="max-w-full truncate font-normal opacity-80"
+                    >
+                      {preview.secondary}
+                    </span>
+                  ) : null}
+                </span>
+
                 {flyTag?.rating === item.value ? (
                   <span
                     key={flyTag.seq}

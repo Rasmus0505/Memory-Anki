@@ -99,6 +99,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   countBadgeByNodeUid,
   nodeProgressByNodeUid,
   onCountBadgeClick,
+  onStatusChipClick,
   focusRequestNodeUid = null,
   focusRequestNonce = 0,
   revealFollowNodeIds = EMPTY_UIDS,
@@ -659,6 +660,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
         onEditingDraftChange={handleEditingDraftChange} onKeyDownCapture={handleCanvasKeyDown}
         onNodeActivate={activateNode} onPaneDoubleClick={onPaneDoubleClick} onPaneLongPress={onPaneLongPress}
         onNodeContextAction={contextNode} onNodeHover={hoverNode} onCountBadgeClick={onCountBadgeClick}
+        onStatusChipClick={onStatusChipClick}
         buildNodeActions={buildNodeActions} buildSelectionToolbarActions={buildSelectionToolbarActions}
         selectionToolbarPreferPosition={selectionToolbarPreferPosition}
         onAddChild={handleAddChild} onInsertChildLayer={handleInsertChildLayer}

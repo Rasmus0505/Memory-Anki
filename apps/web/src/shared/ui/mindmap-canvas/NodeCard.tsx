@@ -678,6 +678,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
             isRoot={isRoot}
             nodeId={id}
             onCountBadgeClick={nodeData.onCountBadgeClick}
+            onStatusChipClick={nodeData.onStatusChipClick}
           />
           {extract.showExtractHandle ? (
             <button
@@ -705,6 +706,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
             isRoot={isRoot}
             nodeId={id}
             onCountBadgeClick={nodeData.onCountBadgeClick}
+            onStatusChipClick={nodeData.onStatusChipClick}
           />
           {Number(metadata.childCount ?? 0) > 0 && nodeData.onToggleCollapse ? (
             <NodeCardCollapseToggle

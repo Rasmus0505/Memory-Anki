@@ -20,6 +20,7 @@ export const preloadEnglishWorkspacePage = () => import('@/pages/library/English
 export const preloadEnglishCoursePage = () => import('@/pages/library/EnglishCoursePage')
 export const preloadEnglishClozePage = () => import('@/pages/library/EnglishClozePage')
 export const preloadPalaceEditPage = () => import('@/pages/create/PalaceEditorPage')
+export const preloadPalaceUnitRatingPage = () => import('@/pages/create/PalaceUnitRatingPage')
 export const preloadPalaceQuizPage = () => import('@/pages/create/QuizWorkspacePage')
 export const preloadPalaceReviewPage = () => import('@/pages/library/PalaceReviewPage')
 export const preloadProfilePage = () => import('@/pages/settings/SettingsOverviewPage')
@@ -42,6 +43,7 @@ const EnglishCoursePage = lazyWithRetry(preloadEnglishCoursePage)
 const EnglishClozePage = lazyWithRetry(preloadEnglishClozePage)
 
 const PalaceEditPage = lazyWithRetry(preloadPalaceEditPage)
+const PalaceUnitRatingPage = lazyWithRetry(preloadPalaceUnitRatingPage)
 const PalaceViewPage = lazyWithRetry(preloadPalaceViewPage)
 const PalaceQuizPage = lazyWithRetry(preloadPalaceQuizPage)
 const PalaceReviewPage = lazyWithRetry(preloadPalaceReviewPage)
@@ -124,6 +126,7 @@ function AppRouteTable({ location }: { location: Location }) {
           <Route path="/palaces/:id/review" element={<PalaceReviewPage />} />
           <Route path="/palaces/:id/quiz" element={<PalaceQuizPage />} />
           <Route path="/palaces/:id/edit" element={<PalaceEditPage />} />
+          <Route path="/palaces/:id/units" element={<PalaceUnitRatingPage />} />
           <Route path="/knowledge" element={<KnowledgePage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/profile/feedback" element={<ProfileFeedbackPage />} />

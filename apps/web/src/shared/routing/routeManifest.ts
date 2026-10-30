@@ -88,6 +88,12 @@ export const DYNAMIC_ROUTES: DynamicRouteEntry[] = [
     historyKey: (match) => `palace:edit:${match[1]}`,
   },
   {
+    pattern: /^\/palaces\/(\d+)\/units$/,
+    nav: 'knowledge',
+    history: 'palaces',
+    historyKey: (match) => `palace:units:${match[1]}`,
+  },
+  {
     pattern: /^\/palaces\/(\d+)\/review$/,
     nav: 'palaces',
     history: 'palaces',

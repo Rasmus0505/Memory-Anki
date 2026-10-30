@@ -138,6 +138,12 @@ Reviews must not import Practice. Practice must not create a second schedule, co
   filler review cannot inflate a later interval. `忘记` is still recorded and
   still retries today, because a lapse is honest evidence. Preview and commit
   share this `schedule_locked` rule.
+- The palace editor's 单元评分 page and its mark-chip summary are readers plus the same
+  rating command: a due unit starts a one-unit `freestyle_unit_review` session with a
+  synthetic `round_id`/`encounter_id`, then `rate_review_unit`. No second rating writer
+  exists, and a not-yet-due unit is not rated there — its due date moves through
+  `adjust_unit_schedule` instead, which is still a due-date-only write (no FSRS evidence,
+  `revision += 1`, active sessions invalidated).
 - One encounter has one effective rating. Before leaving, another rating
   atomically replaces it from the frozen pre-encounter baseline — which includes
   the FSRS payload — so the replaced choice has no scheduling effect. A

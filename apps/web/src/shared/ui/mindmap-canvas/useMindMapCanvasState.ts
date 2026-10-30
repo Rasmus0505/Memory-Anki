@@ -648,6 +648,7 @@ export function useMindMapCanvasState(
       onFinishEdit: handleFinishEditAndClose,
       onMeasure: viewport.handleNodeMeasure,
       onCountBadgeClick: props.onCountBadgeClick,
+      onStatusChipClick: props.onStatusChipClick,
       onToggleCollapse: practiceModeActive ? undefined : handleToggleCollapse,
       onExpandSubtree: practiceModeActive ? undefined : expandSubtree,
       onExtractSelection: onExtractSelection ? handleExtractSelection : undefined,

@@ -79,8 +79,10 @@ export function FreestyleBedtimeRatingBar({
                   <span className="freestyle-rate-pip" aria-hidden />
                   {item.label}
                 </span>
+                {/* The note above already says this pass is recorded only; the
+                    button repeats the part the learner checks: no date moves. */}
                 <span className="max-w-full truncate text-[10px] font-normal leading-none opacity-75 sm:text-[11px]">
-                  {selected ? '已记下' : '记下'}
+                  不改期
                 </span>
               </button>
             )

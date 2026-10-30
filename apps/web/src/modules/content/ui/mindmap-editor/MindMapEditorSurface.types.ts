@@ -111,6 +111,8 @@ export interface MindMapEditorSurfaceProps {
   /** Bottom progress strip per node: subtree question share plus the 第一次学 / 复习 type colour. */
   nodeProgressByNodeUid?: Record<string, MindMapNodeProgress>
   onCountBadgeClick?: (nodeUid: string, kind?: MindMapCountBadge['kind']) => void
+  /** Click on a host status chip (e.g. a permanent mark) without selecting the node. */
+  onStatusChipClick?: (nodeUid: string, chipText: string) => void
   focusRequestNodeUid?: string | null
   focusRequestNonce?: number
   /**

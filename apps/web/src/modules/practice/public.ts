@@ -146,9 +146,12 @@ export {
 // Immersive feed page is lazy so shell-level imports of this barrel do not load the whole freestyle graph.
 export const ImmersiveFreestylePage = lazy(() => import('./ui/freestyle/ImmersiveFreestylePage'))
 export * from './ui/review/api'
+export * from './ui/review/model/intervalBands'
+export { FreestyleRatingBar } from './ui/freestyle/components/FreestyleRatingBar'
 export * from './ui/review/components/PracticeCompletionDialog'
 export * from './ui/review/components/PalaceReviewUnitsPanel'
 export * from './ui/review/components/PalaceLadderProgress'
+export * from './ui/review/components/PalaceUnitRatingEntry'
 export {
   SubjectMemoryLadder,
   stageLabel,

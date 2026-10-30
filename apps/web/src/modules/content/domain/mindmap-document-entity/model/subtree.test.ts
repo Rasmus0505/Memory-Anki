@@ -6,6 +6,7 @@ import {
   canRelocateMindMapBranchNodes,
   collectMindMapBranchScope,
   collectMindMapSubtreeUids,
+  filterMindMapDocumentToNodeUids,
 } from './subtree'
 
 describe('buildSubtreeUidMap', () => {
@@ -100,5 +101,69 @@ describe('collectMindMapBranchScope', () => {
     expect(canRelocateMindMapBranchNodes(scope, ['leaf-a'], 'branch', 'inside')).toBe(true)
     expect(canRelocateMindMapBranchNodes(scope, ['leaf-a'], 'branch', 'after')).toBe(false)
     expect(canRelocateMindMapBranchNodes(scope, ['branch'], 'parent', 'inside')).toBe(false)
+  })
+})
+
+describe('filterMindMapDocumentToNodeUids', () => {
+  const doc = {
+    root: {
+      data: { uid: 'root', text: '根' },
+      children: [
+        {
+          data: { uid: 'a', text: 'A' },
+          children: [
+            { data: { uid: 'a1', text: 'A1' } },
+            { data: { uid: 'a2', text: 'A2' } },
+          ],
+        },
+        {
+          data: { uid: 'b', text: 'B' },
+          children: [{ data: { uid: 'b1', text: 'B1' } }],
+        },
+      ],
+    },
+  }
+
+  function uids(node: { data?: { uid?: string }; children?: unknown[] }): string[] {
+    const own = String(node.data?.uid ?? '')
+    const kids = (node.children ?? []) as Array<{ data?: { uid?: string }; children?: unknown[] }>
+    return [own, ...kids.flatMap((child) => uids(child))]
+  }
+
+  it('keeps members and the ancestor spine, dropping sibling branches', () => {
+    const filtered = filterMindMapDocumentToNodeUids(doc, ['a1'])
+
+    expect(uids(filtered.root)).toEqual(['root', 'a', 'a1'])
+  })
+
+  it('keeps every member when a unit spans several branches', () => {
+    const filtered = filterMindMapDocumentToNodeUids(doc, ['a2', 'b1'])
+
+    expect(uids(filtered.root)).toEqual(['root', 'a', 'a2', 'b', 'b1'])
+  })
+
+  it('returns the whole document for an empty or unmatched member set', () => {
+    expect(uids(filterMindMapDocumentToNodeUids(doc, []).root)).toEqual([
+      'root',
+      'a',
+      'a1',
+      'a2',
+      'b',
+      'b1',
+    ])
+    expect(uids(filterMindMapDocumentToNodeUids(doc, ['missing']).root)).toEqual([
+      'root',
+      'a',
+      'a1',
+      'a2',
+      'b',
+      'b1',
+    ])
+  })
+
+  it('does not mutate the caller document', () => {
+    filterMindMapDocumentToNodeUids(doc, ['a1'])
+
+    expect(uids(doc.root)).toEqual(['root', 'a', 'a1', 'a2', 'b', 'b1'])
   })
 })

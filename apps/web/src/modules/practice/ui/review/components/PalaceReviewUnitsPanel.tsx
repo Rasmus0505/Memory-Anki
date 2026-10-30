@@ -14,7 +14,8 @@ import {
   type ReconcilePalaceUnitsResultDto,
   type UnitScheduleSnapshotDto,
 } from '../api'
-import { INTERVAL_BAND_BOUNDS, intervalDaysLabel } from '../model/intervalBands'
+import { intervalDaysLabel } from '../model/intervalBands'
+import { schedulableDueMax } from '../model/scheduleLimits'
 import { PalaceLadderProgress } from './PalaceLadderProgress'
 
 function intervalBadgeLabel(days: number, hasPassed: boolean) {
@@ -47,16 +48,6 @@ type UnitRow = PalaceUnitProjectionDto['units'][number]
 
 function operationId() {
   return crypto.randomUUID?.() ?? `unit-schedule-${Date.now()}-${Math.random().toString(36).slice(2)}`
-}
-
-function schedulableDueMax(now = new Date()) {
-  const top = INTERVAL_BAND_BOUNDS[INTERVAL_BAND_BOUNDS.length - 1]
-  const span = Math.max(1, Math.round(top * 0.05))
-  const limit = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  limit.setDate(limit.getDate() + top + span)
-  const month = String(limit.getMonth() + 1).padStart(2, '0')
-  const day = String(limit.getDate()).padStart(2, '0')
-  return `${limit.getFullYear()}-${month}-${day}`
 }
 
 function queueAbsenceNote(units: UnitRow[]) {

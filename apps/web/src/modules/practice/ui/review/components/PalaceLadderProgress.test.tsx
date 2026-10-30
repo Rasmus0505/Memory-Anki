@@ -4,10 +4,12 @@ import { PalaceLadderProgress } from './PalaceLadderProgress'
 
 const apiMocks = vi.hoisted(() => ({
   getPalaceLadderProgressApi: vi.fn(),
+  adjustUnitScheduleApi: vi.fn(),
 }))
 
 vi.mock('../api/unitReviewApi', () => ({
   getPalaceLadderProgressApi: (...args: unknown[]) => apiMocks.getPalaceLadderProgressApi(...args),
+  adjustUnitScheduleApi: (...args: unknown[]) => apiMocks.adjustUnitScheduleApi(...args),
 }))
 
 function samplePayload(overrides: Record<string, unknown> = {}) {
@@ -212,5 +214,45 @@ describe('PalaceLadderProgress', () => {
         unitId: 'u1',
       })
     })
+  })
+})
+
+describe('manual schedule adjustment', () => {
+  beforeEach(() => {
+    apiMocks.getPalaceLadderProgressApi.mockReset()
+    apiMocks.adjustUnitScheduleApi.mockReset()
+  })
+
+  it('opens from the current badge and writes a due date', async () => {
+    apiMocks.getPalaceLadderProgressApi.mockResolvedValue(samplePayload())
+    apiMocks.adjustUnitScheduleApi.mockResolvedValue({} as never)
+    const onScheduleAdjusted = vi.fn()
+
+    render(
+      <PalaceLadderProgress
+        palaceId={7}
+        unitId="u1"
+        adjustable
+        onScheduleAdjusted={onScheduleAdjusted}
+      />,
+    )
+
+    const badge = await screen.findByTestId('ladder-current-adjust')
+    fireEvent.click(badge)
+    expect(await screen.findByText('调整复习进度')).toBeTruthy()
+
+    fireEvent.click(screen.getByTestId('schedule-preset-3'))
+    await waitFor(() => expect(apiMocks.adjustUnitScheduleApi).toHaveBeenCalledTimes(1))
+    expect(apiMocks.adjustUnitScheduleApi.mock.calls[0][0]).toBe('u1')
+    expect(onScheduleAdjusted).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves the badge inert when the strip is not adjustable', async () => {
+    apiMocks.getPalaceLadderProgressApi.mockResolvedValue(samplePayload())
+
+    render(<PalaceLadderProgress palaceId={7} unitId="u1" />)
+
+    await screen.findByText(/间隔 7天/)
+    expect(screen.queryByTestId('ladder-current-adjust')).toBeNull()
   })
 })

@@ -37,7 +37,13 @@ import { forgetPreparedCatalog } from '@/shared/study-text/studyTextLibrary'
 import { toast } from '@/shared/feedback/toast'
 import { PalaceEditorSkeleton } from './PalaceEditorSkeleton'
 import { FlipCardMindMapPanel } from '@/widgets/mindmap-review-flow'
-import { PalaceReviewUnitsPanel } from '@/modules/practice/public'
+import {
+  PalaceReviewUnitsPanel,
+  PalaceUnitRatingEntry,
+  UnitSummaryDialog,
+  usePalaceReviewUnits,
+  usePalaceUnitSummary,
+} from '@/modules/practice/public'
 import { usePalaceEditorQuizBindings } from './usePalaceEditorQuizBindings'
 import type { MindMapSelection } from '@/modules/content/public'
 import {
@@ -129,6 +135,8 @@ export default function PalaceEdit() {
     }
   }, [becameActiveAt, isActive])
 
+  const reviewUnits = usePalaceReviewUnits(page.palaceId)
+
   const selectedNodeUid =
     page.selectedNodes?.[0]?.uid ||
     (page.selectedNodes?.[0]?.rawData?.uid as string | undefined) ||
@@ -197,6 +205,8 @@ export default function PalaceEdit() {
     () => Object.keys(permanentMarkChips),
     [permanentMarkChips],
   )
+
+  const unitSummary = usePalaceUnitSummary(reviewUnits, permanentMarkHighlights)
 
   const handlePermanentMarkClick = useCallback(
     (nodes: MindMapSelection[]) => {
@@ -538,11 +548,24 @@ export default function PalaceEdit() {
           collapseLabel="收起宫殿目录"
           expandLabel="展开宫殿目录"
           sidePanel={(
-            <PalaceDirectoryTree
-              currentPalaceId={page.palaceId}
-              onOpenPalace={(palaceId) => { void page.openPalace(palaceId) }}
-              onBindPalace={handleBindPalace}
-            />
+            <div className="flex h-full min-h-0 flex-col">
+              <div className="border-b border-border/60 p-2">
+                <PalaceUnitRatingEntry
+                  units={reviewUnits.units}
+                  loading={reviewUnits.loading}
+                  requested={reviewUnits.requested}
+                  onLoad={() => { void reviewUnits.load() }}
+                  onOpen={() => navigate(`/palaces/${page.palaceId}/units`)}
+                />
+              </div>
+              <div className="min-h-0 flex-1">
+                <PalaceDirectoryTree
+                  currentPalaceId={page.palaceId}
+                  onOpenPalace={(palaceId) => { void page.openPalace(palaceId) }}
+                  onBindPalace={handleBindPalace}
+                />
+              </div>
+            </div>
           )}
         >
           <section className="flex min-h-0 flex-1 flex-col">
@@ -607,6 +630,7 @@ export default function PalaceEdit() {
                       countBadgeByNodeUid={quizBindingsHost.countBadgeByNodeUid}
                       nodeProgressByNodeUid={quizBindingsHost.nodeProgressByNodeUid}
                       onCountBadgeClick={quizBindingsHost.openNodeQuiz}
+                      onStatusChipClick={unitSummary.onChipClick}
                       confirmDeleteNodes={quizBindingsHost.confirmDeleteNodes}
                       focusRequestNodeUid={page.modeFocusRequestNodeUid}
                       focusRequestNonce={page.modeFocusRequestNonce}
@@ -705,6 +729,17 @@ export default function PalaceEdit() {
           onClose={() => setReviewUnitsPanelOpen(false)}
         />
       ) : null}
+
+      <UnitSummaryDialog
+        open={Boolean(unitSummary.uid)}
+        unit={unitSummary.unit}
+        loading={reviewUnits.loading}
+        onClose={unitSummary.clear}
+        onRate={(unitId) => {
+          unitSummary.clear()
+          navigate(`/palaces/${page.palaceId}/units?unit=${encodeURIComponent(unitId)}`)
+        }}
+      />
 
     </div>
   )

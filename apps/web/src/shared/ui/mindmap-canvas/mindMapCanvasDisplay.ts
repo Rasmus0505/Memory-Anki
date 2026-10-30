@@ -27,6 +27,7 @@ interface BuildDisplayNodesInput {
   onFinishEdit: (nodeId: string, text: string) => void
   onMeasure: (nodeId: string, size: NodeSize) => void
   onCountBadgeClick?: (nodeId: string, kind?: 'objective' | 'subjective') => void
+  onStatusChipClick?: (nodeId: string, chipText: string) => void
   onToggleCollapse?: (nodeId: string) => void
   onExpandSubtree?: (nodeId: string) => void
   onExtractSelection?: (payload: {
@@ -74,6 +75,7 @@ export function buildDisplayNodes({
   onFinishEdit,
   onMeasure,
   onCountBadgeClick,
+  onStatusChipClick,
   onToggleCollapse,
   onExpandSubtree,
   onExtractSelection,
@@ -162,6 +164,7 @@ export function buildDisplayNodes({
       onFinishEdit,
       onMeasure,
       onCountBadgeClick,
+      onStatusChipClick,
       onToggleCollapse,
       onExpandSubtree,
       onExtractSelection,

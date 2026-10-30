@@ -77,9 +77,26 @@ describe('FreestyleRatingBar', () => {
     renderBar()
 
     // Touch has no hover, so the preview cannot live in `title` alone.
-    expect(screen.getByTestId('freestyle-rating-button-3').textContent).toBe('记得1天后')
-    expect(screen.getByTestId('freestyle-rating-button-4').textContent).toBe('轻松3天后')
-    expect(screen.getByTestId('freestyle-rating-button-1').textContent).toBe('忘记10 分钟后')
+    expect(screen.getByTestId('freestyle-rating-button-3').textContent).toBe('记得1天后复习7月28日')
+    expect(screen.getByTestId('freestyle-rating-button-4').textContent).toBe('轻松3天后复习7月30日')
+    expect(screen.getByTestId('freestyle-rating-button-1').textContent).toBe('忘记10 分钟后重练今天')
+
+    // Action on one line, the date under it: a stacked pair, not one long sentence.
+    expect(screen.getByTestId('freestyle-rating-preview-3').textContent).toBe('1天后复习')
+    expect(screen.getByTestId('freestyle-rating-preview-secondary-3').textContent).toBe('7月28日')
+    expect(screen.getByTestId('freestyle-rating-preview-1').textContent).toBe('10 分钟后重练')
+    expect(screen.getByTestId('freestyle-rating-preview-secondary-1').textContent).toBe('今天')
+  })
+
+  it('leaves the date line off when the payload books no date', () => {
+    renderBar({
+      ratingEffects: effects.map((effect) => (
+        effect.passed ? effect : { ...effect, retry_after_minutes: null }
+      )),
+    })
+
+    expect(screen.getByTestId('freestyle-rating-preview-2').textContent).toBe('今天再练')
+    expect(screen.queryByTestId('freestyle-rating-preview-secondary-2')).toBeNull()
   })
 
   it('says 今天再练 instead of a card count when the payload has no wait', () => {
@@ -89,7 +106,7 @@ describe('FreestyleRatingBar', () => {
       )),
     })
 
-    expect(screen.getByTestId('freestyle-rating-button-2').textContent).toBe('困难稍后')
+    expect(screen.getByTestId('freestyle-rating-button-2').textContent).toBe('困难今天再练')
   })
 
   it('keeps the full sentence in the accessible name', () => {
@@ -196,7 +213,10 @@ describe('FreestyleRatingBar', () => {
 
     const button = screen.getByTestId('freestyle-rating-button-3') as HTMLButtonElement
     expect(button.disabled).toBe(false)
-    expect(button.getAttribute('aria-label')).toContain('记下')
+    // No prediction yet: the button says so instead of promising a destination.
+    expect(button.getAttribute('aria-label')).toContain('计算中…')
+    expect(screen.getByTestId('freestyle-rating-preview-3').textContent).toBe('计算中…')
+    expect(screen.queryByTestId('freestyle-rating-preview-secondary-3')).toBeNull()
     fireEvent.click(button)
     expect(onRate).toHaveBeenCalledWith(3)
   })
@@ -215,6 +235,22 @@ describe('FreestyleRatingBar', () => {
     renderBar({ blockedHint: '还有 5 个单元未评分' })
 
     expect(screen.getByTestId('freestyle-sequential-hint').textContent).toBe('还有 5 个单元未评分')
+  })
+
+  it('drops 一次 from the 20-minute re-check key but keeps it in the sentence', () => {
+    renderBar({
+      ratingEffects: effects.map((effect) => (
+        effect.rating === 3
+          ? { ...effect, intraday_kind: 'step' as const, retry_after_minutes: 20 }
+          : effect
+      )),
+    })
+
+    // A quarter-width key cannot hold "20 分钟后回顾一次"; the date still shows.
+    expect(screen.getByTestId('freestyle-rating-preview-3').textContent).toBe('20 分钟后回顾')
+    expect(screen.getByTestId('freestyle-rating-preview-secondary-3').textContent).toBe('今天')
+    expect(screen.getByTestId('freestyle-rating-button-3').getAttribute('aria-label'))
+      .toContain('20 分钟后回顾一次 · 今天')
   })
 
   it('switches the preview to a palace count instead of one unit interval', () => {
@@ -284,7 +320,7 @@ describe('FreestyleRatingBar', () => {
       renderBar({ pendingRating: 3, busy: true })
 
       // The schedule preview is the whole readable label; a spinner must not join it.
-      expect(screen.getByTestId('freestyle-rating-button-3').textContent).toBe('记得1天后')
+      expect(screen.getByTestId('freestyle-rating-button-3').textContent).toBe('记得1天后复习7月28日')
     })
   })
 })

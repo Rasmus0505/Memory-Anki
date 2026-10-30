@@ -2,12 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   getPalaceLadderProgressApi,
+  type AdjustUnitScheduleResultDto,
   type DueHorizonKey,
   type LadderProgressRange,
   type PalaceLadderProgressDto,
 } from '../api/unitReviewApi'
 import { cn } from '@/shared/lib/utils'
 import { intervalBadgeLabel, intervalOutlookLabel } from '../model/intervalBands'
+import { UnitScheduleAdjustPopover } from './UnitScheduleAdjustPopover'
 
 const RANGE_OPTIONS: Array<{ value: LadderProgressRange; label: string }> = [
   { value: 'all', label: '全部' },
@@ -102,6 +104,10 @@ export type PalaceLadderProgressProps = {
   unitId?: string | null
   className?: string
   refreshKey?: string | number | null
+  /** Make the current-interval badge open the manual schedule override. */
+  adjustable?: boolean
+  /** Fired after a manual due-date change; hosts rebuild/open the card. */
+  onScheduleAdjusted?: (result: AdjustUnitScheduleResultDto) => void
 }
 
 export function PalaceLadderProgress({
@@ -109,6 +115,8 @@ export function PalaceLadderProgress({
   unitId = null,
   className,
   refreshKey = null,
+  adjustable = false,
+  onScheduleAdjusted,
 }: PalaceLadderProgressProps) {
   const [range, setRange] = useState<LadderProgressRange>(() => readStoredRange())
   const [data, setData] = useState<PalaceLadderProgressDto | null>(null)
@@ -117,6 +125,7 @@ export function PalaceLadderProgress({
   const [hoverTrack, setHoverTrack] = useState(false)
   const [hoverSummary, setHoverSummary] = useState<'range' | 'palace' | null>(null)
   const [floatPos, setFloatPos] = useState<FloatingPos | null>(null)
+  const [adjustOpen, setAdjustOpen] = useState(false)
   const trackRef = useRef<HTMLDivElement | null>(null)
   const hideTimerRef = useRef<number | null>(null)
 
@@ -421,17 +430,49 @@ export function PalaceLadderProgress({
       </div>
 
       {currentLabel ? (
-        <span
-          className={cn(
-            'hidden shrink-0 rounded-md px-1.5 py-0.5 font-mono text-[11px] tabular-nums sm:inline',
-            currentDue
-              ? 'bg-amber-500/15 text-amber-200'
-              : 'bg-primary/10 text-primary',
-          )}
-          title={currentDue ? `${currentLabel} · 已到期` : currentLabel}
-        >
-          {currentLabel}
-        </span>
+        adjustable && data?.current ? (
+          <UnitScheduleAdjustPopover
+            unitId={data.current.unit_id}
+            dueDate={data.current.due_date}
+            open={adjustOpen}
+            onOpenChange={(next) => {
+              if (next) hideFloating()
+              setAdjustOpen(next)
+            }}
+            onAdjusted={(result) => {
+              void load()
+              onScheduleAdjusted?.(result)
+            }}
+          >
+            <button
+              type="button"
+              data-testid="ladder-current-adjust"
+              aria-label={`${currentDue ? '今天到期' : currentLabel}，点击调整复习进度`}
+              title="点击调整复习进度"
+              className={cn(
+                'hidden shrink-0 rounded-md px-1.5 py-0.5 font-mono text-[11px] tabular-nums transition-colors sm:inline',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+                currentDue
+                  ? 'bg-amber-500/15 text-amber-200 hover:bg-amber-500/25'
+                  : 'bg-primary/10 text-primary hover:bg-primary/20',
+              )}
+            >
+              {currentLabel}
+            </button>
+          </UnitScheduleAdjustPopover>
+        ) : (
+          <span
+            className={cn(
+              'hidden shrink-0 rounded-md px-1.5 py-0.5 font-mono text-[11px] tabular-nums sm:inline',
+              currentDue
+                ? 'bg-amber-500/15 text-amber-200'
+                : 'bg-primary/10 text-primary',
+            )}
+            title={currentDue ? `${currentLabel} · 已到期` : currentLabel}
+          >
+            {currentLabel}
+          </span>
+        )
       ) : null}
 
       <label className="sr-only" htmlFor={`ladder-range-${palaceId}`}>

@@ -131,6 +131,7 @@ export interface MindMapCanvasProps {
   onNodeContextAction?: (nodeId: string) => void
   onNodeHover?: (nodeId: string | null) => void
   onCountBadgeClick?: (nodeId: string, kind?: 'objective' | 'subjective') => void
+  onStatusChipClick?: (nodeId: string, chipText: string) => void
   buildNodeActions?: (nodeId: string) => ContextMenuAction[]
   buildSelectionToolbarActions?: (nodeId: string) => import('./selectionToolbar').SelectionToolbarAction[]
   selectionToolbarPreferPosition?: import('./selectionToolbar').SelectionToolbarPreferPosition
