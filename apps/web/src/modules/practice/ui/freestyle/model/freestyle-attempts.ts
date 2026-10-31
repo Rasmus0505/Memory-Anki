@@ -43,6 +43,7 @@ export function buildAttemptHistoryPayload(
   card: FreestyleQuizCard,
   state: QuizRuntimeState,
   mode: FreestyleMode,
+  durationMs?: number | null,
 ) {
   return {
     question_id: card.question.id,
@@ -61,5 +62,6 @@ export function buildAttemptHistoryPayload(
     stem_snapshot: card.question.stem,
     answer_payload: buildAttemptAnswerPayload(card.question, state),
     is_correct: typeof state.correct === 'boolean' ? state.correct : null,
+    duration_ms: durationMs ?? null,
   }
 }
