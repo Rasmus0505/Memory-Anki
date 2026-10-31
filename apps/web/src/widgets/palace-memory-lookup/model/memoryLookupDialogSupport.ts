@@ -352,8 +352,19 @@ export function resolveMemoryLookupPalaceId(
   )
 }
 
+function narrowViewportNow() {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false
+  return window.matchMedia('(max-width: 1023px)').matches
+}
+
+/**
+ * Phones must take the full-screen dialog on the *first* render. Starting at
+ * `false` mounted the desktop floating panel for one frame, then swapped it for
+ * the mobile sheet — a visible flash and a double Radix modal mount every time
+ * 查看宫殿 opened.
+ */
 export function useMemoryLookupNarrowViewport() {
-  const [matches, setMatches] = useState(false)
+  const [matches, setMatches] = useState(narrowViewportNow)
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return

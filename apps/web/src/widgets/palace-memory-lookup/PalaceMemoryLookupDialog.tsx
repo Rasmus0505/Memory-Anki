@@ -8,6 +8,7 @@ import {
 } from 'react'
 import {
   BookOpen,
+  ChevronDown,
   Expand,
   LoaderCircle,
   Pin,
@@ -133,6 +134,8 @@ export function PalaceMemoryLookupDialog({
   const [previewMode, setPreviewMode] = useState<MemoryLookupPreviewMode>('view')
   const [rootFocusNonce, setRootFocusNonce] = useState(0)
   const [listCollapsed, setListCollapsed] = useState(() => readMemoryLookupChrome().listCollapsed)
+  /** Phone sheet: the palace picker folds into one row so the map gets the screen. */
+  const [mobilePickerOpen, setMobilePickerOpen] = useState(false)
   const pinnedRef = useRef(pinned)
   const listCollapsedRef = useRef(listCollapsed)
   pinnedRef.current = pinned
@@ -367,6 +370,15 @@ export function PalaceMemoryLookupDialog({
       return current ?? currentPalaceId
     })
   }, [currentPalaceId, followCurrentPalace, open])
+
+  // Fold the picker once a palace is known. Keyed on whether one is chosen, not
+  // on its id: the id arrives after the sheet opens, so keying on `open` alone
+  // left the picker expanded on a palace that was already selected.
+  const hasSelectedPalace = selectedPalaceId != null
+  useEffect(() => {
+    if (!open) return
+    setMobilePickerOpen(!hasSelectedPalace)
+  }, [hasSelectedPalace, open])
 
   const persistLayout = useCallback(
     (
@@ -652,7 +664,8 @@ export function PalaceMemoryLookupDialog({
       />
     </div>
   )
-  const renderPalaceList = () => {
+  /** `afterPick` lets the phone sheet fold the picker away once a palace is chosen. */
+  const renderPalaceList = (afterPick?: () => void) => {
     if (listLoading && palaces.length === 0) {
       return (
         <div className="flex h-28 items-center justify-center gap-2 text-sm text-muted-foreground">
@@ -690,7 +703,10 @@ export function PalaceMemoryLookupDialog({
                   ? 'bg-primary text-primary-foreground shadow-sm'
                   : 'hover:bg-secondary',
               )}
-              onClick={() => setSelectedPalaceId(palace.id)}
+              onClick={() => {
+                setSelectedPalaceId(palace.id)
+                afterPick?.()
+              }}
             >
               <div className="flex min-w-0 items-center gap-2">
                 <BookOpen className="size-4 shrink-0" />
@@ -902,16 +918,42 @@ export function PalaceMemoryLookupDialog({
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="shrink-0 border-b border-border/70 p-3">
-            {renderSearchInput('h-10')}
-          </div>
-          <div className="max-h-40 shrink-0 overflow-y-auto border-b border-border/70 p-2">
-            {renderPalaceList()}
+          {/* One row until the learner asks for the picker: search + a 160px list
+              above the map left the brain map under half the screen on a phone. */}
+          <div className="shrink-0 border-b border-border/70">
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 py-2.5 pl-4 pr-14 text-left"
+              aria-expanded={mobilePickerOpen}
+              onClick={() => setMobilePickerOpen((value) => !value)}
+            >
+              <BookOpen className="size-4 shrink-0 text-primary" />
+              <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                {selectedPalace ? getPalaceTitle(selectedPalace) : '选择宫殿'}
+              </span>
+              <span className="shrink-0 text-xs text-muted-foreground">
+                {mobilePickerOpen ? '收起' : '换宫殿'}
+              </span>
+              <ChevronDown
+                className={cn(
+                  'size-4 shrink-0 text-muted-foreground transition-transform',
+                  mobilePickerOpen && 'rotate-180',
+                )}
+              />
+            </button>
+            {mobilePickerOpen ? (
+              <>
+                <div className="px-3 pb-2">{renderSearchInput('h-10')}</div>
+                <div className="max-h-40 overflow-y-auto border-t border-border/70 p-2">
+                  {renderPalaceList(() => setMobilePickerOpen(false))}
+                </div>
+              </>
+            ) : null}
           </div>
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-3 pb-[max(env(safe-area-inset-bottom),0.75rem)]">
             <div className="mb-3 flex min-h-10 shrink-0 items-center justify-between gap-3">
               <div className="min-w-0">
-                <div className="truncate text-sm font-semibold">{previewHeading}</div>
+                <span className="sr-only">{previewHeading}</span>
                 <div className={cn(
                   'truncate text-xs text-muted-foreground',
                   previewMode === 'edit' && editDocument.saveStatus === 'error' && 'text-destructive',
