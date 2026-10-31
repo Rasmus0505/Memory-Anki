@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, type RefObject } from 'react'
 import type { UnitRating } from '@/modules/practice/public'
 import { readFreestyleCombo } from '@/modules/practice/ui/freestyle/model/freestyleComboStore'
-import { cue, useFxOwner } from '@/shared/fx'
+import { cue, showMicroBubble, useFxOwner } from '@/shared/fx'
 import { MINDMAP_CARD_LANDED_EVENT } from '@/shared/ui/mindmap-canvas/useMindMapRevealMotion'
 
 /** Bulk reveals land dozens of cards at once; relay at most one cue per window. */
@@ -40,14 +40,37 @@ export function useFreestyleCardFeedback(args: {
   }, [sectionRef])
 
   const lastProgressRef = useRef<{ key: string; revealed: number } | null>(null)
+  const progressStartRef = useRef<{ key: string; at: number } | null>(null)
   useEffect(() => {
     if (revealed == null || total == null) return
     const previous = lastProgressRef.current
     lastProgressRef.current = { key: progressKey, revealed }
+    if (progressStartRef.current?.key !== progressKey) {
+      progressStartRef.current = { key: progressKey, at: performance.now() }
+    }
     const completedNow = previous?.key === progressKey && previous.revealed < total && revealed >= total && total > 0
     const section = sectionRef.current
     if (!completedNow || !owner || !section) return
     cue('unit.complete', { scope: section, combo: readFreestyleCombo().combo }, { owner })
+
+    // The one moment the whole unit is on screen. Anchor to the progress badge,
+    // which sits in the identity row under the map toolbar; the top-layer pill
+    // stays above the canvas instead of being clipped by the sheet.
+    const anchor = section.querySelector('[data-testid="flip-progress-badge"]') ?? section
+    const startedAt = progressStartRef.current?.at ?? performance.now()
+    const seconds = Math.max(1, Math.round((performance.now() - startedAt) / 1000))
+    showMicroBubble(anchor, {
+      icon: '✨',
+      parts: [
+        { text: `${total}`, strong: true },
+        { text: ' 节点已全览' },
+        { text: ` · ${seconds}s`, muted: true },
+      ],
+      tone: 'good',
+      zone: `unit-clear:${progressKey}`,
+      placement: 'below',
+      duration: 1150,
+    })
   }, [owner, progressKey, revealed, sectionRef, total])
 
   const playUndo = useCallback((rating: UnitRating | null | undefined) => {

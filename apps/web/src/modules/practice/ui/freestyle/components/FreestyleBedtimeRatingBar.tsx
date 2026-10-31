@@ -1,6 +1,7 @@
 import { LoaderCircle, Moon } from 'lucide-react'
 import type { UnitRating } from '@/modules/practice/public'
 import { cn } from '@/shared/lib/utils'
+import { showRatingBubble } from './ratingBubble'
 import { FREESTYLE_RATINGS } from './FreestyleRatingBar'
 
 /**
@@ -16,6 +17,7 @@ export function FreestyleBedtimeRatingBar({
   error = null,
   palacePass = false,
   onRate,
+  getRatingDurationMs,
   onDismissError,
 }: {
   selectedRating: UnitRating | null
@@ -24,6 +26,7 @@ export function FreestyleBedtimeRatingBar({
   /** Whole-palace pass: one grade for the palace, not for a permanent-mark slice. */
   palacePass?: boolean
   onRate: (rating: UnitRating) => void
+  getRatingDurationMs?: () => number | null
   onDismissError?: () => void
 }) {
   return (
@@ -73,7 +76,14 @@ export function FreestyleBedtimeRatingBar({
                   'freestyle-rate-button relative flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-xl border px-1 py-1.5 text-center disabled:pointer-events-none sm:min-h-12 sm:rounded-2xl sm:px-2',
                   selected ? 'disabled:opacity-100' : 'disabled:opacity-55',
                 )}
-                onClick={() => onRate(item.value)}
+                onClick={(event) => {
+                  showRatingBubble(event.currentTarget, {
+                    rating: item.value,
+                    durationMs: getRatingDurationMs?.() ?? null,
+                    bedtime: true,
+                  })
+                  onRate(item.value)
+                }}
               >
                 <span className="freestyle-rate-label inline-flex items-center gap-1 text-xs font-semibold leading-none sm:text-sm">
                   <span className="freestyle-rate-pip" aria-hidden />

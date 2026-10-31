@@ -242,33 +242,6 @@
   .freestyle-rate-button[data-key]::before { display: none; }
 }
 
-/* "3天后见": floats up out of the pressed key and fades. */
-.freestyle-rate-fly {
-  position: absolute;
-  left: 50%;
-  bottom: 100%;
-  z-index: 5;
-  padding: 0.2rem 0.55rem;
-  border: 1px solid color-mix(in oklab, var(--tone) 60%, transparent);
-  border-radius: 999px;
-  background: color-mix(in oklab, var(--tone) 30%, var(--color-stage-overlay));
-  color: var(--color-stage-ink);
-  font-size: 11px;
-  font-weight: 700;
-  white-space: nowrap;
-  pointer-events: none;
-  box-shadow: 0 8px 20px -8px color-mix(in oklab, var(--tone) 80%, transparent);
-  animation: freestyle-rate-fly 1150ms var(--ease-out-expo) both;
-}
-
-@keyframes freestyle-rate-fly {
-  0% { opacity: 0; transform: translate(-50%, 10px) scale(0.6); }
-  18% { opacity: 1; transform: translate(-50%, -6px) scale(1.08); }
-  30% { transform: translate(-50%, -10px) scale(1); }
-  75% { opacity: 1; transform: translate(-50%, -22px) scale(1); }
-  100% { opacity: 0; transform: translate(-50%, -34px) scale(0.94); }
-}
-
 .freestyle-rate-pip {
   display: inline-block;
   width: 0.375rem;
@@ -405,7 +378,6 @@
     animation: none;
   }
   .freestyle-rate-button[data-selected='true'] { transform: none; }
-  .freestyle-rate-fly { display: none; }
 }
 
 /* ---------- Page turn: depth stack ----------

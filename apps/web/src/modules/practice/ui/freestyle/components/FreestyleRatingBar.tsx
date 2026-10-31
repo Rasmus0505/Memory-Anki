@@ -10,7 +10,6 @@ import {
   palaceRatingPreviewLabel,
 } from '@/modules/practice/ui/freestyle/model/freestylePalaceRating'
 import {
-  ratingDestinationLabel,
   ratingEffectLabel,
   ratingEffectLines,
   type RatingEffectLines,
@@ -23,6 +22,7 @@ import {
   isFreestyleRemoveFromQueueShortcut,
 } from '@/modules/practice/ui/freestyle/model/freestyleRatingShortcut'
 import { cn } from '@/shared/lib/utils'
+import { showRatingBubble } from './ratingBubble'
 import { FreestyleComboChip } from './LazyFreestyleMotion'
 
 export type FreestyleRatingTone = 'again' | 'hard' | 'good' | 'easy'
@@ -64,6 +64,7 @@ export function FreestyleRatingBar({
   hintMode = false,
   onRatingScopeChange,
   onRate,
+  getRatingDurationMs,
   onRemoveFromQueue,
   onRemovePermanently,
   onDismissError,
@@ -104,6 +105,8 @@ export function FreestyleRatingBar({
   hintMode?: boolean
   onRatingScopeChange?: (scope: FreestyleRatingScope) => void
   onRate: (rating: UnitRating) => void
+  /** Milliseconds since this card became the visible review unit. */
+  getRatingDurationMs?: () => number | null
   /**
    * Drop this card from the current round only. First press arms it; the second
    * press calls this. No schedule write.
@@ -142,23 +145,7 @@ export function FreestyleRatingBar({
   const selectedEffect = ratingEffects.find((effect) => effect.rating === shownRating)
   const palaceMode = ratingScope === 'palace'
 
-  // Adjust-state-during-render: a new pick (not a restored one on mount) floats a destination tag.
-  const activeRating = selectedRating
-  const [prevActiveRating, setPrevActiveRating] = useState(activeRating)
-  const [flyTag, setFlyTag] = useState<{ rating: UnitRating; text: string; seq: number } | null>(null)
-  if (prevActiveRating !== activeRating) {
-    setPrevActiveRating(activeRating)
-    const effect = activeRating != null && !hintMode
-      ? ratingEffects.find((value) => value.rating === activeRating)
-      : undefined
-    if (effect && activeRating != null) {
-      setFlyTag((current) => ({
-        rating: activeRating,
-        text: ratingDestinationLabel(effect),
-        seq: (current?.seq ?? 0) + 1,
-      }))
-    }
-  }
+  const ratingBarRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
     if (pendingRating != null) disarmRemove()
@@ -179,14 +166,46 @@ export function FreestyleRatingBar({
       if (rating == null) return
       event.preventDefault()
       disarmRemove()
+      const durationMs = getRatingDurationMs?.() ?? null
+      const anchor = ratingBarRef.current?.querySelector(
+        `[data-testid="freestyle-rating-button-${rating}"]`,
+      ) ?? null
+      if (!(shownRating === rating && !showingRecorded)) {
+        showRatingBubble(anchor, {
+          rating,
+          durationMs,
+          effect: ratingEffects.find((value) => value.rating === rating) ?? null,
+          currentIntervalDays,
+          palaceMode,
+          palaceDueCount,
+          hintMode,
+        })
+      }
       onRate(rating)
     }
     window.addEventListener('keydown', handleKeyDown, true)
     return () => window.removeEventListener('keydown', handleKeyDown, true)
-  }, [busy, disarmRemove, locked, onRate, onRemoveFromQueue, requestRemove, shortcutsActive])
+  }, [
+    busy,
+    currentIntervalDays,
+    disarmRemove,
+    getRatingDurationMs,
+    hintMode,
+    locked,
+    onRate,
+    onRemoveFromQueue,
+    palaceDueCount,
+    palaceMode,
+    ratingEffects,
+    requestRemove,
+    shortcutsActive,
+    showingRecorded,
+    shownRating,
+  ])
 
   return (
     <footer
+      ref={ratingBarRef}
       data-testid="freestyle-rating-bar"
       className={cn(
         // Phone: float over map bottom so the map keeps full height.
@@ -484,8 +503,21 @@ export function FreestyleRatingBar({
                   // learner's own selection the faintest thing on the bar.
                   selected ? 'disabled:opacity-100' : 'disabled:opacity-55',
                 )}
-                onClick={() => {
+                onClick={(event) => {
                   disarmRemove()
+                  // A second tap on the lit grade clears it; there is no new
+                  // interval to announce, so do not float a jump pill.
+                  if (!(selected && !locked && !showingRecorded)) {
+                    showRatingBubble(event.currentTarget, {
+                      rating: item.value,
+                      durationMs: getRatingDurationMs?.() ?? null,
+                      effect,
+                      currentIntervalDays,
+                      palaceMode,
+                      palaceDueCount,
+                      hintMode,
+                    })
+                  }
                   onRate(item.value)
                 }}
               >
@@ -522,16 +554,6 @@ export function FreestyleRatingBar({
                   ) : null}
                 </span>
 
-                {flyTag?.rating === item.value ? (
-                  <span
-                    key={flyTag.seq}
-                    className="freestyle-rate-fly"
-                    aria-hidden
-                    onAnimationEnd={() => setFlyTag(null)}
-                  >
-                    {flyTag.text}
-                  </span>
-                ) : null}
               </button>
             )
           })}

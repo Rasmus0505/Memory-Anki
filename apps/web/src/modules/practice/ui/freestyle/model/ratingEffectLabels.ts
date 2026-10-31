@@ -132,20 +132,3 @@ export function ratingEffectLines(
         : { primary: '今天再练', secondary: null }
   }
 }
-
-/** Floating "where it went" tag shown for a moment after a rating lands. */
-export function ratingDestinationLabel(effect: UnitRatingEffectDto) {
-  const timing = effectTiming(effect)
-  switch (timing.kind) {
-    case 'recorded':
-      return '已记下'
-    case 'step':
-      return timing.gap ? `${timing.gap}回顾` : '稍后回顾'
-    case 'pass':
-      return `${timing.gapDays}天后见`
-    case 'exhausted':
-      return '明天见'
-    case 'retry':
-      return timing.gap ? `${timing.gap}见` : '稍后见'
-  }
-}
