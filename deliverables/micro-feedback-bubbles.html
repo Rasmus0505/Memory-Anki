@@ -1,0 +1,1590 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Memory Anki · 微反馈气泡 — 原版 vs 优化后</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --sans: ui-sans-serif, -apple-system, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
+
+    --page: #08090d;
+    --topbar: rgba(8, 9, 13, .72);
+    --page-glow:
+      radial-gradient(1100px 560px at 16% -12%, rgba(99, 102, 241, .16), transparent 62%),
+      radial-gradient(900px 480px at 102% 2%, rgba(16, 185, 129, .075), transparent 58%);
+    --surface: #0f1117;
+    --surface-2: #13161d;
+    --line: rgba(255, 255, 255, .075);
+    --line-strong: rgba(255, 255, 255, .135);
+    --text: #e9edf5;
+    --text-2: #9aa3b5;
+    --text-3: #656d80;
+    --accent: #8aa4ff;
+    --seg-on: rgba(255, 255, 255, .075);
+    --bubble-shadow: 0 4px 14px rgba(0, 0, 0, .32), inset 0 1px 0 rgba(255, 255, 255, .16);
+    --pane-shadow: 0 26px 70px rgba(0, 0, 0, .34);
+  }
+
+  [data-theme="light"] {
+    color-scheme: light;
+    --page: #f4f5f9;
+    --topbar: rgba(244, 245, 249, .82);
+    --page-glow:
+      radial-gradient(1100px 560px at 16% -12%, rgba(99, 102, 241, .10), transparent 62%),
+      radial-gradient(900px 480px at 102% 2%, rgba(16, 185, 129, .06), transparent 58%);
+    --surface: #ffffff;
+    --surface-2: #fbfbfe;
+    --line: rgba(15, 23, 42, .08);
+    --line-strong: rgba(15, 23, 42, .15);
+    --text: #141a26;
+    --text-2: #5b6478;
+    --text-3: #8b93a5;
+    --accent: #4f6bed;
+    --seg-on: #ffffff;
+    --bubble-shadow: 0 4px 16px rgba(15, 23, 42, .12), inset 0 1px 0 rgba(255, 255, 255, .9);
+    --pane-shadow: 0 22px 60px rgba(15, 23, 42, .10);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { min-height: 100%; }
+
+  body {
+    margin: 0;
+    font-family: var(--sans);
+    font-size: 14px;
+    color: var(--text);
+    background-color: var(--page);
+    background-image: var(--page-glow);
+    background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  button { font-family: inherit; }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* ---------- top bar ---------- */
+
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 13px 28px;
+    border-bottom: 1px solid var(--line);
+    background: var(--topbar);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+
+  .brand { display: flex; align-items: center; gap: 11px; min-width: 0; }
+
+  .logo {
+    position: relative;
+    width: 26px;
+    height: 26px;
+    flex: none;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #8aa4ff, #c084fc);
+    box-shadow: 0 0 20px rgba(138, 164, 255, .35);
+  }
+  .logo::after {
+    content: "";
+    position: absolute;
+    inset: 8px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, .88);
+  }
+
+  .brand-name { font-size: 13px; font-weight: 650; letter-spacing: .01em; white-space: nowrap; }
+  .brand-sub {
+    display: block;
+    margin-top: 2px;
+    font-size: 10.5px;
+    color: var(--text-3);
+    letter-spacing: .03em;
+    white-space: nowrap;
+  }
+
+  .tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+
+  .seg {
+    display: inline-flex;
+    padding: 2px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .02);
+  }
+
+  .seg button {
+    padding: 7px 12px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-2);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1;
+    cursor: pointer;
+    transition: color .16s, background .16s, box-shadow .16s;
+    white-space: nowrap;
+  }
+  .seg button:hover { color: var(--text); }
+  .seg button.is-on {
+    background: var(--seg-on);
+    color: var(--text);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .07), 0 1px 3px rgba(0, 0, 0, .18);
+  }
+  [data-theme="light"] .seg button.is-on { box-shadow: 0 1px 4px rgba(15, 23, 42, .12); }
+
+  /* ---------- stage ---------- */
+
+  .lede {
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 22px 28px 16px;
+    color: var(--text-2);
+    font-size: 12.5px;
+    letter-spacing: .01em;
+  }
+  .lede b { color: var(--text); font-weight: 600; }
+
+  .stage {
+    display: grid;
+    gap: 18px;
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 0 28px 34px;
+    align-items: start;
+  }
+  .stage[data-mode="compare"] { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .stage[data-mode="baseline"],
+  .stage[data-mode="optimized"] { grid-template-columns: minmax(0, 700px); justify-content: center; }
+  .stage[data-mode="baseline"] .pane--optimized,
+  .stage[data-mode="optimized"] .pane--baseline { display: none; }
+
+  @media (max-width: 1000px) {
+    .stage[data-mode="compare"] { grid-template-columns: minmax(0, 1fr); }
+  }
+
+  .pane {
+    min-width: 0;
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, .025), transparent 140px), var(--surface);
+    box-shadow: var(--pane-shadow);
+    overflow: hidden;
+  }
+  [data-theme="light"] .pane { background: var(--surface); }
+
+  .pane-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 11px 15px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(255, 255, 255, .015);
+  }
+
+  .pane-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: .01em;
+  }
+
+  .pane-note { font-size: 11px; color: var(--text-3); }
+
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 8px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    color: var(--text-2);
+    font-size: 10.5px;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: .02em;
+  }
+  .tag--live {
+    color: #c7d2fe;
+    border-color: rgba(138, 164, 255, .32);
+    background: rgba(138, 164, 255, .09);
+  }
+  .tag--live::before {
+    content: "";
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+  }
+  [data-theme="light"] .tag--live { color: #3730a3; background: rgba(79, 107, 237, .08); }
+
+  .pane-tip {
+    padding: 8px 15px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(138, 164, 255, .035);
+    color: var(--text-3);
+    font-size: 11px;
+    line-height: 1.5;
+  }
+
+  .demo-row { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .demo-label { margin-right: 2px; color: var(--text-3); font-size: 10.5px; letter-spacing: .02em; }
+  .demo-btn {
+    padding: 5px 8px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-2);
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1;
+    cursor: pointer;
+    transition: color .16s, border-color .16s, background .16s;
+  }
+  .demo-btn:hover {
+    color: var(--text);
+    border-color: var(--line-strong);
+    background: rgba(255, 255, 255, .03);
+  }
+
+  /* ---------- mock app ---------- */
+
+  .mock {
+    display: grid;
+    gap: 14px;
+    padding: 15px;
+  }
+
+  .app-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 1px 2px 0;
+  }
+  .crumb { color: var(--text-3); font-size: 12px; letter-spacing: .02em; }
+  .queue {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    color: var(--text-2);
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .queue-num {
+    display: inline-block;
+    min-width: 1.25em;
+    text-align: right;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 15px;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+  }
+
+  .quiz {
+    padding: 16px 16px 14px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--surface-2);
+    transition: opacity .16s ease, transform .16s ease;
+  }
+  .quiz.is-swapping { opacity: 0; transform: translateY(-3px); }
+
+  .quiz-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .quiz-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--text-2);
+    font-size: 12px;
+    letter-spacing: .01em;
+  }
+  .meta-nums {
+    color: var(--text-3);
+    font-family: var(--mono);
+    font-size: 10.5px;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: .01em;
+  }
+
+  .streak {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px 3px 7px;
+    border: 1px solid rgba(245, 158, 11, .26);
+    border-radius: 999px;
+    background: linear-gradient(180deg, rgba(245, 158, 11, .13), rgba(245, 158, 11, .05));
+    color: #f6d9a8;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .01em;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    transition: opacity .2s, box-shadow .3s;
+  }
+  .streak .flame { font-size: 10.5px; opacity: .9; }
+  .streak-n {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .streak.is-cold { opacity: .55; }
+  .streak.is-bump { animation: ma-streak-bump 420ms cubic-bezier(.22, 1, .36, 1); }
+  .streak.is-milestone {
+    box-shadow: 0 0 0 1px rgba(251, 191, 36, .22), 0 0 18px rgba(251, 191, 36, .20);
+  }
+  [data-theme="light"] .streak {
+    color: #92400e;
+    background: linear-gradient(180deg, rgba(245, 158, 11, .12), rgba(245, 158, 11, .04));
+    border-color: rgba(245, 158, 11, .30);
+  }
+  .pane--baseline .streak {
+    padding: 0;
+    border-color: transparent;
+    background: none;
+    color: var(--text-3);
+    font-weight: 500;
+    opacity: .8;
+  }
+  .pane--baseline .streak .flame { display: none; }
+
+  .stem {
+    margin: 0 0 14px;
+    color: var(--text);
+    font-size: 14.5px;
+    line-height: 1.75;
+    letter-spacing: .01em;
+  }
+
+  .options { display: grid; gap: 8px; }
+
+  .opt {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 11px 12px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, .015);
+    color: var(--text);
+    font-size: 13.5px;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color .18s, background .18s, transform .18s;
+  }
+  .opt:hover { border-color: var(--line-strong); background: rgba(255, 255, 255, .035); }
+  .opt:disabled { cursor: default; }
+  .opt:disabled:hover { border-color: var(--line); background: rgba(255, 255, 255, .015); }
+
+  .opt-letter {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    flex: none;
+    border: 1px solid var(--line-strong);
+    border-radius: 50%;
+    color: var(--text-2);
+    font-family: var(--mono);
+    font-size: 11.5px;
+    font-weight: 600;
+    transition: background .18s, border-color .18s, color .18s;
+  }
+  .opt-text { flex: 1; min-width: 0; }
+  .opt-mark { margin-left: auto; color: var(--text-3); font-size: 12px; font-weight: 600; }
+
+  .opt.is-correct { border-color: rgba(52, 211, 153, .48); background: rgba(16, 185, 129, .08); }
+  .opt.is-correct .opt-letter {
+    border-color: rgba(52, 211, 153, .66);
+    background: rgba(16, 185, 129, .18);
+    color: #a7f3d0;
+  }
+  .opt.is-correct .opt-mark { color: #34d399; }
+
+  .opt.is-wrong { border-color: rgba(251, 113, 133, .48); background: rgba(244, 63, 94, .07); animation: ma-shake 260ms ease-in-out; }
+  .opt.is-wrong .opt-letter {
+    border-color: rgba(251, 113, 133, .66);
+    background: rgba(244, 63, 94, .16);
+    color: #fecdd3;
+  }
+  .opt.is-wrong .opt-mark { color: #fb7185; }
+
+  [data-theme="light"] .opt.is-correct { background: rgba(16, 185, 129, .07); }
+  [data-theme="light"] .opt.is-wrong { background: rgba(244, 63, 94, .06); }
+
+  .pane--baseline .opt { transition: none; }
+  .pane--baseline .quiz { transition: none; }
+
+  .explain {
+    margin: 10px 0 0;
+    padding: 9px 11px;
+    border: 1px solid rgba(138, 164, 255, .14);
+    border-radius: 10px;
+    background: rgba(138, 164, 255, .06);
+    color: var(--text-2);
+    font-size: 12px;
+    line-height: 1.65;
+  }
+  [data-theme="light"] .explain { background: rgba(79, 107, 237, .05); border-color: rgba(79, 107, 237, .15); }
+
+  /* ---------- review unit ---------- */
+
+  .unit-card {
+    padding: 14px 16px 16px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--surface-2);
+  }
+
+  .unit-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .unit-title { font-size: 13px; font-weight: 600; letter-spacing: .01em; }
+  .unit-sub { margin-top: 4px; color: var(--text-3); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+  .unit-progress { color: var(--text-2); font-family: var(--mono); font-size: 11px; font-weight: 600; }
+
+  .unit-chip {
+    flex: none;
+    padding: 4px 8px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    color: var(--text-2);
+    font-family: var(--mono);
+    font-size: 10.5px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .mindmap { padding: 2px 0 4px; }
+  .mm, .mm ul { margin: 0; padding: 0; list-style: none; }
+  .mm { color: var(--text-2); font-size: 12.5px; }
+  .mm ul {
+    margin-left: 13px;
+    padding-left: 13px;
+    border-left: 1px solid var(--line);
+  }
+  .mm ul[hidden] { display: none; }
+  .mm-node { position: relative; }
+  .mm ul > .mm-node::before {
+    content: "";
+    position: absolute;
+    left: -13px;
+    top: 15px;
+    width: 10px;
+    height: 1px;
+    background: var(--line);
+  }
+
+  .mm-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
+    margin: 2px 0;
+    padding: 3px 7px;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    line-height: 1.45;
+    text-align: left;
+    cursor: pointer;
+    transition: background .16s, color .16s, border-color .16s;
+  }
+  .mm-btn:hover { background: rgba(138, 164, 255, .09); color: var(--text); }
+  .mm-btn[aria-expanded] { border-color: transparent; }
+  .mm-btn[aria-expanded="false"] {
+    border-color: rgba(138, 164, 255, .26);
+    border-style: dashed;
+    color: var(--accent);
+  }
+  .mm-btn:not([aria-expanded])::before {
+    content: "";
+    width: 3px;
+    height: 3px;
+    flex: none;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: .35;
+  }
+
+  .mm-caret {
+    width: 5px;
+    height: 5px;
+    flex: none;
+    margin-right: 1px;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: rotate(-45deg);
+    opacity: .55;
+    transition: transform .18s ease;
+  }
+  .mm-btn[aria-expanded="true"] .mm-caret { transform: rotate(45deg); }
+
+  .mm-dot {
+    width: 5px;
+    height: 5px;
+    flex: none;
+    border-radius: 50%;
+    background: #fbbf24;
+    box-shadow: 0 0 0 3px rgba(251, 191, 36, .12);
+  }
+  .mm-dot--blue {
+    background: #60a5fa;
+    box-shadow: 0 0 0 3px rgba(96, 165, 250, .12);
+  }
+
+  .rating {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 14px;
+  }
+
+  .rate {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    padding: 9px 4px 8px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, .02);
+    color: var(--text-2);
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform .12s ease, border-color .18s, background .18s, color .18s;
+  }
+  .rate:hover { color: var(--text); border-color: var(--line-strong); }
+  .rate:active,
+  .rate.is-pressed { transform: scale(.95); }
+  .rate kbd {
+    padding: 2px 4px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, .02);
+    color: var(--text-3);
+    font-family: var(--mono);
+    font-size: 9.5px;
+    font-weight: 500;
+    line-height: 1;
+  }
+  .rate--again:hover { border-color: rgba(251, 113, 133, .44); color: #fda4af; }
+  .rate--hard:hover { border-color: rgba(251, 191, 36, .44); color: #fcd34d; }
+  .rate--good:hover { border-color: rgba(52, 211, 153, .44); color: #6ee7b7; }
+  .rate--easy:hover { border-color: rgba(192, 132, 252, .44); color: #d8b4fe; }
+  [data-theme="light"] .rate--again:hover { color: #be123c; }
+  [data-theme="light"] .rate--hard:hover { color: #b45309; }
+  [data-theme="light"] .rate--good:hover { color: #047857; }
+  [data-theme="light"] .rate--easy:hover { color: #7e22ce; }
+
+  /* ---------- micro-feedback bubbles ---------- */
+
+  .ma-bubble-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    pointer-events: none;
+  }
+
+  .ma-micro-bubble {
+    position: fixed;
+    z-index: 99999;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border: 1px solid transparent;
+    border-radius: 9999px;
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: .01em;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+    white-space: nowrap;
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-select: none;
+    backdrop-filter: blur(8px) saturate(1.4);
+    -webkit-backdrop-filter: blur(8px) saturate(1.4);
+    box-shadow: var(--bubble-shadow);
+    transform-origin: center bottom;
+    will-change: transform, opacity;
+    animation: ma-bubble-float 1050ms cubic-bezier(.22, 1, .36, 1) forwards;
+  }
+
+  .ma-micro-bubble .ico {
+    display: inline-flex;
+    font-size: 11px;
+    line-height: 1;
+    transform: translateY(-.5px);
+  }
+  .ma-micro-bubble b {
+    font-family: var(--mono);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+  }
+  .ma-micro-bubble .mut { font-weight: 500; opacity: .74; }
+  .ma-micro-bubble .arrow { margin: 0 1px; opacity: .5; }
+
+  .ma-bubble--fast  { background: rgba(88, 28, 135, .86);  border-color: rgba(192, 132, 252, .55); color: #F3E8FF; }
+  .ma-bubble--good  { background: rgba(6, 78, 59, .88);    border-color: rgba(52, 211, 153, .55);  color: #D1FAE5; }
+  .ma-bubble--warn  { background: rgba(120, 53, 15, .88);  border-color: rgba(251, 191, 36, .55);  color: #FEF3C7; }
+  .ma-bubble--error { background: rgba(136, 19, 55, .88);  border-color: rgba(251, 113, 133, .55); color: #FFE4E6; }
+
+  [data-theme="light"] .ma-bubble--fast  { background: rgba(250, 245, 255, .93); border-color: rgba(147, 51, 234, .34); color: #6B21A8; }
+  [data-theme="light"] .ma-bubble--good  { background: rgba(240, 253, 247, .94); border-color: rgba(5, 150, 105, .32);  color: #065F46; }
+  [data-theme="light"] .ma-bubble--warn  { background: rgba(255, 251, 235, .94); border-color: rgba(217, 119, 6, .34);  color: #92400E; }
+  [data-theme="light"] .ma-bubble--error { background: rgba(255, 241, 243, .94); border-color: rgba(225, 29, 72, .30);  color: #9F1239; }
+
+  .ma-micro-bubble.is-retiring { animation: ma-bubble-retire 180ms ease-out forwards; }
+
+  @keyframes ma-bubble-float {
+    0%   { opacity: 0; transform: translate(-50%, 4px) scale(.85); }
+    18%  { opacity: 1; transform: translate(-50%, -8px) scale(1); }
+    78%  { opacity: 1; transform: translate(-50%, -12px) scale(1); }
+    100% { opacity: 0; transform: translate(-50%, -20px) scale(.96); }
+  }
+
+  @keyframes ma-bubble-retire {
+    0%   { opacity: 1; transform: translate(-50%, -12px) scale(1); }
+    100% { opacity: 0; transform: translate(-50%, -26px) scale(.94); }
+  }
+
+  @keyframes ma-streak-bump {
+    0% { transform: scale(1); }
+    35% { transform: scale(1.08); }
+    100% { transform: scale(1); }
+  }
+
+  @keyframes ma-queue-roll {
+    0% { transform: translateY(-65%); opacity: 0; filter: blur(.5px); }
+    55% { transform: translateY(6%); opacity: 1; filter: blur(0); }
+    100% { transform: translateY(0); opacity: 1; }
+  }
+  .queue-num.is-rolling { animation: ma-queue-roll 380ms cubic-bezier(.22, 1, .36, 1); }
+
+  @keyframes ma-shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-3px); }
+    55% { transform: translateX(3px); }
+    80% { transform: translateX(-1px); }
+  }
+
+  /* the deliberately crude baseline tooltip */
+  .raw-tip {
+    position: fixed;
+    z-index: 99998;
+    padding: 8px 11px;
+    border-radius: 6px;
+    background: #1d2129;
+    color: #fff;
+    font-family: var(--sans);
+    font-size: 13px;
+    line-height: 1.3;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, .35);
+    pointer-events: auto;
+    user-select: none;
+  }
+
+  /* ---------- notes ---------- */
+
+  .notes { max-width: 1440px; margin: 0 auto; padding: 0 28px 56px; }
+  .notes details {
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--surface);
+  }
+  .notes summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 18px;
+    color: var(--text-2);
+    font-size: 12.5px;
+    font-weight: 500;
+    cursor: pointer;
+    list-style: none;
+  }
+  .notes summary::-webkit-details-marker { display: none; }
+  .notes summary::before {
+    content: "+";
+    color: var(--text-3);
+    font-family: var(--mono);
+    font-size: 13px;
+  }
+  .notes details[open] summary::before { content: "−"; }
+  .notes summary span { margin-left: auto; color: var(--text-3); font-size: 10.5px; letter-spacing: .02em; }
+
+  .note-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+    padding: 0 18px 18px;
+  }
+  .note {
+    padding: 13px 14px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, .015);
+  }
+  .note h4 { margin: 0 0 6px; color: var(--text); font-size: 12px; font-weight: 600; }
+  .note p { margin: 0; color: var(--text-2); font-size: 11.5px; line-height: 1.8; }
+  .note code {
+    padding: 1px 4px;
+    border-radius: 4px;
+    background: rgba(138, 164, 255, .1);
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 10.5px;
+  }
+  .notes-meta {
+    margin-top: 14px;
+    color: var(--text-3);
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: .02em;
+    text-align: center;
+  }
+
+  @media (max-width: 900px) {
+    .note-grid { grid-template-columns: 1fr; }
+    .topbar { padding: 12px 16px; }
+    .lede, .stage, .notes { padding-left: 16px; padding-right: 16px; }
+    .brand-sub { display: none; }
+    .stem { font-size: 14px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ma-micro-bubble { animation: ma-bubble-quiet 900ms linear forwards; }
+    .ma-micro-bubble.is-retiring { animation: ma-bubble-retire 120ms linear forwards; }
+    .quiz, .opt, .rate, .streak, .queue-num { transition: none !important; }
+    .opt.is-wrong, .streak.is-bump, .queue-num.is-rolling { animation: none !important; }
+  }
+
+  @keyframes ma-bubble-quiet {
+    0% { opacity: 0; transform: translate(-50%, 0); }
+    12% { opacity: 1; }
+    82% { opacity: 1; }
+    100% { opacity: 0; transform: translate(-50%, 0); }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo" aria-hidden="true"></span>
+    <div>
+      <span class="brand-name">Memory Anki</span>
+      <span class="brand-sub">Micro-Feedback Bubbles · 原版 vs 优化后</span>
+    </div>
+  </div>
+  <div class="tools">
+    <div class="seg" id="mode-seg" role="group" aria-label="对比模式">
+      <button type="button" data-mode="compare" class="is-on">并排对比</button>
+      <button type="button" data-mode="baseline">原版</button>
+      <button type="button" data-mode="optimized">优化后</button>
+    </div>
+    <div class="seg" id="theme-seg" role="group" aria-label="主题">
+      <button type="button" data-theme-btn="dark" class="is-on">深色</button>
+      <button type="button" data-theme-btn="light">浅色</button>
+    </div>
+  </div>
+</header>
+
+<p class="lede">同一套做题 / 复习界面，两种反馈层：<b>原版</b>是现状，<b>优化后</b>是微反馈气泡。两边都可以直接点，也可以切换深浅色。</p>
+
+<main class="stage" id="stage" data-mode="compare">
+
+  <section class="pane pane--baseline">
+    <div class="pane-head">
+      <div class="pane-title"><span class="tag">原版</span> 普通提示</div>
+      <div class="pane-note">只有对错 · 无节奏信息 · 会挡点击</div>
+    </div>
+    <div class="mock" data-pane="baseline"></div>
+  </section>
+
+  <section class="pane pane--optimized">
+    <div class="pane-head">
+      <div class="pane-title"><span class="tag tag--live">优化后</span> 微反馈气泡</div>
+      <div class="demo-row" aria-label="四档气泡预览">
+        <span class="demo-label">预览</span>
+        <button type="button" class="demo-btn" data-preview="fast">⚡ 极速</button>
+        <button type="button" class="demo-btn" data-preview="good">✓ 正常</button>
+        <button type="button" class="demo-btn" data-preview="warn">⏳ 超时</button>
+        <button type="button" class="demo-btn" data-preview="error">✕ 错选</button>
+      </div>
+    </div>
+    <div class="pane-tip">点选项 / 评分 / 导图节点试试；气泡不抢焦点、不挡点击，卡片切走后仍会飘完自己的 1 秒。</div>
+    <div class="mock" data-pane="optimized"></div>
+  </section>
+
+</main>
+
+<footer class="notes">
+  <details>
+    <summary>设计注记 · 三个实现问题 <span>估算公式 · 连对胶囊 · 深浅色自适应</span></summary>
+    <div class="note-grid">
+      <div class="note">
+        <h4>后端没返回新间隔，怎么显示 +N 天</h4>
+        <p>用旧间隔乘一个系数先估：忘记 = 今日重练；困难 ×<code>0.75</code>；记得 ×<code>2.75</code>；轻松 ×<code>7</code>，再按考前截断。示例 4d → 3d / 11d / 28d，与设计稿样例完全一致。拿到真实的 <code>scheduled_days</code> 或 <code>due_date</code> 后直接覆盖，估算只负责「按下按钮那一瞬间」有数可显示。</p>
+      </div>
+      <div class="note">
+        <h4>连对胶囊怎么才克制</h4>
+        <p>11px、单色、无渐变字，只留火焰 + 数字 + 「连对」；数字强制等宽。普通连对只做 420ms 的轻微回弹，不常驻发光；只有 5 / 10 / 20 这类里程碑给一次 900ms 外发光，然后立刻归于安静。断连时整体降到 55% 不透明度，不弹红、不打断。</p>
+      </div>
+      <div class="note">
+        <h4>深浅色怎么自适应</h4>
+        <p>四种语义只定义一组 <code>--bg / --bd / --fg</code>：深色用低明度玻璃（α .86–.88），浅色用高明度玻璃（α .92–.94）配深一档的文字色。毛玻璃参数不变（<code>blur(8px) saturate(1.4)</code>），只换底色、描边和阴影；气泡出现后切换主题也会立即跟着变。</p>
+      </div>
+    </div>
+    <div class="notes-meta">1050ms 生命周期 · 180ms 同域互斥淡出 · pointer-events:none · tabular-nums · prefers-reduced-motion 降级</div>
+  </details>
+</footer>
+
+<script>
+(() => {
+  'use strict';
+
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+  /* ------------------------------------------------------------------ */
+  /* demo data                                                           */
+  /* ------------------------------------------------------------------ */
+
+  const QUESTIONS = [
+    {
+      stem: '明代在城乡广泛设立了一种对儿童进行教育的机构，通过这种机构对儿童进行道德教化与基本识字教育。这种教育机构是（　）',
+      options: [
+        { text: '书馆' },
+        { text: '精舍' },
+        { text: '社学', correct: true },
+        { text: '私塾' },
+      ],
+      explain: '社学设于城乡，属明代地方教化机构；精舍、书院多为讲学之所。',
+      correctCount: 3,
+    },
+    {
+      stem: '北宋第一次兴学运动（庆历兴学）发生在哪位皇帝在位期间？',
+      options: [
+        { text: '宋仁宗', correct: true },
+        { text: '宋神宗' },
+        { text: '宋徽宗' },
+        { text: '宋真宗' },
+      ],
+      explain: '庆历兴学始于庆历四年（1044），时值宋仁宗在位，由范仲淹主持。',
+      correctCount: 1,
+    },
+    {
+      stem: '王安石熙宁兴学中，为整顿太学而推行的制度是（　）',
+      options: [
+        { text: '三舍法', correct: true },
+        { text: '察举制' },
+        { text: '九品中正制' },
+        { text: '科举制' },
+      ],
+      explain: '熙宁四年（1071）推行三舍法，将太学生分为外舍、内舍、上舍三级。',
+      correctCount: 2,
+    },
+  ];
+
+  const MOCK_HTML = `
+    <div class="app-bar">
+      <span class="crumb">复习 · 中国教育史</span>
+      <span class="queue"><span class="queue-label">今日待复习</span><span class="queue-num" data-queue>18</span></span>
+    </div>
+
+    <article class="quiz">
+      <header class="quiz-head">
+        <span class="quiz-meta">冬青｜333选择题<span class="meta-nums">17年 · 311</span></span>
+        <span class="streak" data-streak><span class="flame">🔥</span><span class="streak-n" data-streak-n>5</span><span class="streak-t">连对</span></span>
+      </header>
+      <p class="stem" data-stem></p>
+      <div class="options" data-options>
+        <button type="button" class="opt" data-i="0"><span class="opt-letter">A</span><span class="opt-text"></span><span class="opt-mark"></span></button>
+        <button type="button" class="opt" data-i="1"><span class="opt-letter">B</span><span class="opt-text"></span><span class="opt-mark"></span></button>
+        <button type="button" class="opt" data-i="2"><span class="opt-letter">C</span><span class="opt-text"></span><span class="opt-mark"></span></button>
+        <button type="button" class="opt" data-i="3"><span class="opt-letter">D</span><span class="opt-text"></span><span class="opt-mark"></span></button>
+      </div>
+      <p class="explain" data-explain hidden></p>
+    </article>
+
+    <article class="unit-card">
+      <header class="unit-head">
+        <div>
+          <div class="unit-title">复习单元 · 北宋三次兴学与官学制度</div>
+          <div class="unit-sub">导图节点 <b class="unit-progress" data-progress>10/16</b> 已展开</div>
+        </div>
+        <span class="unit-chip" data-interval-chip>间隔 4d</span>
+      </header>
+      <div class="mindmap" data-mindmap>
+        <ul class="mm">
+          <li class="mm-node">
+            <button type="button" class="mm-btn" aria-expanded="true"><span class="mm-caret"></span>北宋三次兴学</button>
+            <ul>
+              <li class="mm-node">
+                <button type="button" class="mm-btn" aria-expanded="true" data-annotation="4"><span class="mm-caret"></span>庆历兴学（范仲淹）<i class="mm-dot"></i></button>
+                <ul>
+                  <li class="mm-node"><button type="button" class="mm-btn">州县立学，整顿太学</button></li>
+                  <li class="mm-node"><button type="button" class="mm-btn">改革科举内容</button></li>
+                </ul>
+              </li>
+              <li class="mm-node">
+                <button type="button" class="mm-btn" aria-expanded="false" data-annotation="7"><span class="mm-caret"></span>熙宁兴学（王安石）<i class="mm-dot"></i></button>
+                <ul hidden>
+                  <li class="mm-node"><button type="button" class="mm-btn">改革科举，罢诗赋</button></li>
+                  <li class="mm-node"><button type="button" class="mm-btn">恢复与扩建太学</button></li>
+                </ul>
+              </li>
+              <li class="mm-node">
+                <button type="button" class="mm-btn" aria-expanded="true"><span class="mm-caret"></span>崇宁兴学（蔡京）</button>
+                <ul>
+                  <li class="mm-node"><button type="button" class="mm-btn">新建辟雍<i class="mm-dot mm-dot--blue"></i></button></li>
+                  <li class="mm-node"><button type="button" class="mm-btn">恢复医学，创立算学、书学、画学</button></li>
+                  <li class="mm-node">
+                    <button type="button" class="mm-btn" aria-expanded="false"><span class="mm-caret"></span>官学制度细节</button>
+                    <ul hidden>
+                      <li class="mm-node"><button type="button" class="mm-btn">罢科举，改由学校取士</button></li>
+                      <li class="mm-node"><button type="button" class="mm-btn">地方设提举学事司</button></li>
+                    </ul>
+                  </li>
+                </ul>
+              </li>
+              <li class="mm-node">
+                <button type="button" class="mm-btn" aria-expanded="false"><span class="mm-caret"></span>科举与学校的关系</button>
+                <ul hidden>
+                  <li class="mm-node"><button type="button" class="mm-btn">取士权归学校</button></li>
+                  <li class="mm-node"><button type="button" class="mm-btn">科举仍存，规模缩减</button></li>
+                </ul>
+              </li>
+            </ul>
+          </li>
+        </ul>
+      </div>
+      <div class="rating" data-rating>
+        <button type="button" class="rate rate--again" data-rate="again"><span class="rate-l">忘记</span><kbd>1</kbd></button>
+        <button type="button" class="rate rate--hard" data-rate="hard"><span class="rate-l">困难</span><kbd>2</kbd></button>
+        <button type="button" class="rate rate--good" data-rate="good"><span class="rate-l">记得</span><kbd>3</kbd></button>
+        <button type="button" class="rate rate--easy" data-rate="easy"><span class="rate-l">轻松</span><kbd>4</kbd></button>
+      </div>
+    </article>
+  `;
+
+  /* ------------------------------------------------------------------ */
+  /* chrome: mode + theme                                                */
+  /* ------------------------------------------------------------------ */
+
+  const stage = $('#stage');
+
+  $('#mode-seg').addEventListener('click', (event) => {
+    const btn = event.target.closest('button[data-mode]');
+    if (!btn) return;
+    stage.dataset.mode = btn.dataset.mode;
+    $$('#mode-seg button').forEach((b) => b.classList.toggle('is-on', b === btn));
+  });
+
+  $('#theme-seg').addEventListener('click', (event) => {
+    const btn = event.target.closest('button[data-theme-btn]');
+    if (!btn) return;
+    document.documentElement.dataset.theme = btn.dataset.themeBtn;
+    $$('#theme-seg button').forEach((b) => b.classList.toggle('is-on', b === btn));
+  });
+
+  /* ------------------------------------------------------------------ */
+  /* timing: pause while the tab is hidden                               */
+  /* ------------------------------------------------------------------ */
+
+  let hiddenAccum = 0;
+  let hiddenSince = 0;
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      hiddenSince = performance.now();
+    } else if (hiddenSince) {
+      hiddenAccum += performance.now() - hiddenSince;
+      hiddenSince = 0;
+    }
+  });
+
+  function elapsedSec(start, hiddenBase) {
+    const now = performance.now();
+    const current = hiddenSince ? now - hiddenSince : 0;
+    const hidden = Math.max(0, hiddenAccum - (hiddenBase || 0)) + current;
+    return Math.max(0, (now - start - hidden) / 1000);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* bubble engine                                                       */
+  /* ------------------------------------------------------------------ */
+
+  const layer = document.createElement('div');
+  layer.className = 'ma-bubble-layer';
+  document.body.appendChild(layer);
+
+  const zoneMap = new Map();
+
+  function spawnBubble(anchor, options = {}) {
+    if (!anchor || !anchor.isConnected) return null;
+
+    const {
+      html = '',
+      tone = 'good',
+      zone = 'global',
+      placement = 'above',
+      offset = 10,
+      duration = 1050,
+    } = options;
+
+    const el = document.createElement('div');
+    el.className = `ma-micro-bubble ma-bubble--${tone}`;
+    el.setAttribute('role', 'status');
+    el.innerHTML = html;
+    el.style.animationDuration = `${duration}ms`;
+    el.style.visibility = 'hidden';
+    el.style.animationPlayState = 'paused';
+    layer.appendChild(el);
+
+    const previous = zoneMap.get(zone);
+    if (previous && previous !== el && previous.isConnected) {
+      previous.style.animationDuration = '180ms';
+      previous.classList.add('is-retiring');
+    }
+
+    const rect = anchor.getBoundingClientRect();
+    const width = el.offsetWidth;
+    const height = el.offsetHeight;
+
+    let centerX;
+    let top;
+
+    if (placement === 'below') {
+      centerX = rect.left + rect.width / 2;
+      top = rect.bottom + 14;
+    } else {
+      let bottom;
+      if (placement === 'right-top' && window.innerWidth >= 720) {
+        centerX = rect.right - 70;
+        bottom = rect.top - 6;
+      } else {
+        centerX = rect.left + rect.width / 2;
+        bottom = rect.top - offset;
+      }
+      top = bottom - height;
+    }
+
+    centerX = Math.max(width / 2 + 8, Math.min(window.innerWidth - width / 2 - 8, centerX));
+    top = Math.max(8, Math.min(window.innerHeight - height - 8, top));
+
+    el.style.left = `${centerX}px`;
+    el.style.top = `${top}px`;
+    el.style.visibility = '';
+    el.style.animationPlayState = '';
+
+    zoneMap.set(zone, el);
+
+    const cleanup = () => {
+      if (zoneMap.get(zone) === el) zoneMap.delete(zone);
+      el.remove();
+    };
+
+    // Fallback: never leave a bubble behind if animationend is missed
+    // (reduced motion, throttled background tabs, forced animations off).
+    const failSafe = window.setTimeout(cleanup, duration + 600);
+
+    el.addEventListener('animationend', (event) => {
+      if (event.animationName !== 'ma-bubble-float' &&
+          event.animationName !== 'ma-bubble-quiet' &&
+          event.animationName !== 'ma-bubble-retire') return;
+      window.clearTimeout(failSafe);
+      cleanup();
+    });
+
+    while (layer.children.length > 8) {
+      layer.firstElementChild.remove();
+    }
+
+    return el;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* shared rendering helpers                                            */
+  /* ------------------------------------------------------------------ */
+
+  const RATING_TONE = { again: 'error', hard: 'warn', good: 'good', easy: 'fast' };
+
+  function renderQuestion(root, index) {
+    const question = QUESTIONS[index];
+    $('[data-stem]', root).textContent = question.stem;
+
+    $$('.opt', root).forEach((btn, i) => {
+      const option = question.options[i];
+      btn.dataset.correct = String(Boolean(option.correct));
+      btn.classList.remove('is-correct', 'is-wrong');
+      btn.disabled = false;
+      $('.opt-text', btn).textContent = option.text;
+      $('.opt-mark', btn).textContent = '';
+    });
+
+    const explain = $('[data-explain]', root);
+    explain.hidden = true;
+    explain.textContent = question.explain;
+  }
+
+  function markOptions(root, clicked, correct) {
+    $$('.opt', root).forEach((btn) => {
+      const isRight = btn.dataset.correct === 'true';
+      btn.disabled = true;
+      btn.classList.toggle('is-correct', isRight);
+      if (btn === clicked && !correct) btn.classList.add('is-wrong');
+      $('.opt-mark', btn).textContent = isRight ? '✓' : (btn === clicked ? '✕' : '');
+    });
+  }
+
+  function applyStreak(root, state, animated) {
+    const streak = $('[data-streak]', root);
+    $('[data-streak-n]', root).textContent = state.streak;
+    streak.classList.toggle('is-cold', state.streak === 0);
+
+    if (!animated) return;
+
+    streak.classList.remove('is-bump');
+    void streak.offsetWidth;
+    streak.classList.add('is-bump');
+
+    if ([5, 10, 20, 30].includes(state.streak)) {
+      streak.classList.add('is-milestone');
+      window.setTimeout(() => streak.classList.remove('is-milestone'), 900);
+    }
+  }
+
+  function updateProgress(root) {
+    const mindmap = $('[data-mindmap]', root);
+    const nodes = $$('.mm-node', mindmap);
+    const visible = nodes.filter((node) => !node.closest('[hidden]')).length;
+    $('[data-progress]', root).textContent = `${visible}/${nodes.length}`;
+    return visible === nodes.length;
+  }
+
+  function resetMindmap(root) {
+    const mindmap = $('[data-mindmap]', root);
+    const initial = root._state && root._state.mindmapInitial;
+
+    $$('.mm-btn[aria-expanded]', mindmap).forEach((btn) => {
+      const open = initial ? initial.get(btn) : true;
+      btn.setAttribute('aria-expanded', String(open));
+      const list = btn.parentElement.querySelector(':scope > ul');
+      if (!list) return;
+      if (open) list.removeAttribute('hidden');
+      else list.setAttribute('hidden', '');
+    });
+
+    updateProgress(root);
+    if (root._state) root._state.unitCleared = false;
+  }
+
+  function initMindmap(root, state, optimized) {
+    const mindmap = $('[data-mindmap]', root);
+
+    state.mindmapInitial = new Map(
+      $$('.mm-btn[aria-expanded]', mindmap).map((btn) => [
+        btn,
+        btn.getAttribute('aria-expanded') === 'true',
+      ])
+    );
+    state.totalNodes = $$('.mm-node', mindmap).length;
+
+    updateProgress(root);
+
+    mindmap.addEventListener('click', (event) => {
+      const btn = event.target.closest('.mm-btn');
+      if (!btn) return;
+
+      const list = btn.parentElement.querySelector(':scope > ul');
+      if (!list) return;
+
+      const opening = list.hasAttribute('hidden');
+      if (opening) list.removeAttribute('hidden');
+      else list.setAttribute('hidden', '');
+      btn.setAttribute('aria-expanded', String(opening));
+
+      if (!optimized) {
+        updateProgress(root);
+        return;
+      }
+
+      if (!opening) {
+        updateProgress(root);
+        return;
+      }
+
+      if (btn.dataset.annotation) {
+        spawnBubble(btn, {
+          html: `<span class="ico">🎯</span>绑有 <b>${btn.dataset.annotation}</b> 道真题`,
+          tone: 'good',
+          zone: `mm-badge-${root.dataset.pane}`,
+          placement: 'right-top',
+          offset: 4,
+          duration: 900,
+        });
+      }
+
+      const complete = updateProgress(root);
+      if (complete && !state.unitCleared) {
+        state.unitCleared = true;
+        const seconds = Math.round(elapsedSec(state.unitStart, state.hiddenBase));
+        spawnBubble(btn, {
+          html: `<span class="ico">✨</span><b>${state.totalNodes}</b> 节点已全览<span class="mut"> · ${seconds}s</span>`,
+          tone: 'good',
+          zone: `mm-clear-${root.dataset.pane}`,
+          placement: 'above',
+          offset: 12,
+          duration: 1150,
+        });
+      }
+    });
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* copy                                                                */
+  /* ------------------------------------------------------------------ */
+
+  function quizBubble(seconds, correct, correctCount, previousSeconds) {
+    const time = `<b>${seconds.toFixed(1)}s</b>`;
+
+    if (!correct) {
+      return { tone: 'error', html: `<span class="ico">✕</span>${time}<span class="mut">· 错选干扰项</span>` };
+    }
+
+    if (seconds < 3.5) {
+      if (correctCount >= 2) {
+        return { tone: 'fast', html: `<span class="ico">⚡</span>${time}<span class="mut">· 肌肉记忆预警</span>` };
+      }
+      return { tone: 'good', html: `<span class="ico">⚡</span>${time}<span class="mut">· 秒选</span>` };
+    }
+
+    if (seconds <= 10) {
+      let tail = '<span class="mut">· 提取稳健</span>';
+      if (previousSeconds != null && Math.abs(previousSeconds - seconds) >= 0.3) {
+        const faster = seconds < previousSeconds;
+        const delta = Math.abs(previousSeconds - seconds).toFixed(1);
+        tail += `<span class="mut"> · ${faster ? '快' : '慢'} ${delta}s</span>`;
+      }
+      return { tone: 'good', html: `<span class="ico">✓</span>${time}${tail}` };
+    }
+
+    return { tone: 'warn', html: `<span class="ico">⏳</span>${time}<span class="mut">· 检索吃力</span>` };
+  }
+
+  function estimateNext(days, rating) {
+    if (rating === 'again') return { days: 0, capped: false };
+    const factor = { hard: 0.75, good: 2.75, easy: 7 }[rating];
+    const raw = days * factor;
+    return {
+      days: Math.min(180, Math.max(1, Math.round(raw))),
+      capped: raw > 180,
+    };
+  }
+
+  function ratingBubble(rating, seconds, oldDays, nextDays, capped) {
+    const time = `<b>${seconds.toFixed(1)}s</b>`;
+    const arrow = '<span class="arrow">→</span>';
+
+    if (rating === 'again') {
+      return `<span class="ico">↺</span>${time}<span class="mut">· 今日重练 (1/3)</span>`;
+    }
+    if (rating === 'hard') {
+      return `<span class="ico">🔨</span>${time}<span class="mut">· 间隔</span><b>${oldDays}d</b>${arrow}<b>${nextDays}d</b>`;
+    }
+    if (rating === 'good') {
+      return `<span class="ico">🛡️</span>${time}<span class="mut">· 间隔</span><b>${oldDays}d</b>${arrow}<b>${nextDays}d</b><span class="mut">(+${nextDays - oldDays}d)</span>`;
+    }
+    return `<span class="ico">🚀</span>${time}<span class="mut">· 直推</span><b>${nextDays}d</b><span class="mut">后</span>${capped ? '<span class="mut"> · 考前收口</span>' : ''}`;
+  }
+
+  function previewBubble(root, kind) {
+    const presets = {
+      fast: ['fast', '⚡', '1.6s', '肌肉记忆预警'],
+      good: ['good', '✓', '4.8s', '提取稳健'],
+      warn: ['warn', '⏳', '14.2s', '检索吃力'],
+      error: ['error', '✕', '3.2s', '错选干扰项'],
+    };
+    const preset = presets[kind];
+    if (!preset) return;
+    const [tone, icon, time, label] = preset;
+    const target = $('.opt[data-correct="true"]', root) || $('.opt', root);
+
+    spawnBubble(target, {
+      html: `<span class="ico">${icon}</span><b>${time}</b><span class="mut">· ${label}</span>`,
+      tone,
+      zone: `preview-${root.dataset.pane}`,
+      placement: 'right-top',
+      offset: 6,
+    });
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* optimized pane                                                      */
+  /* ------------------------------------------------------------------ */
+
+  function rollQueue(root, value) {
+    const el = $('[data-queue]', root);
+    el.textContent = value;
+    el.classList.remove('is-rolling');
+    void el.offsetWidth;
+    el.classList.add('is-rolling');
+  }
+
+  function initOptimized(root) {
+    const now = performance.now();
+
+    const state = root._state = {
+      questionIndex: 0,
+      answered: false,
+      queue: 18,
+      streak: 5,
+      interval: 4,
+      qStart: now,
+      hiddenBase: hiddenAccum,
+      unitStart: now,
+      unitCleared: false,
+      ratingLock: false,
+      lastSeconds: {},
+    };
+
+    renderQuestion(root, 0);
+    applyStreak(root, state, false);
+    $('[data-interval-chip]', root).textContent = '间隔 4d';
+    initMindmap(root, state, true);
+
+    $$('.opt', root).forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (state.answered) return;
+        state.answered = true;
+
+        const question = QUESTIONS[state.questionIndex];
+        const seconds = elapsedSec(state.qStart, state.hiddenBase);
+        const correct = btn.dataset.correct === 'true';
+
+        markOptions(root, btn, correct);
+
+        state.streak = correct ? state.streak + 1 : 0;
+        applyStreak(root, state, true);
+
+        const previous = state.lastSeconds[state.questionIndex];
+        const bubble = quizBubble(seconds, correct, question.correctCount, previous);
+
+        spawnBubble(btn, {
+          html: bubble.html,
+          tone: bubble.tone,
+          zone: `quiz-${root.dataset.pane}`,
+          placement: 'right-top',
+          offset: 6,
+        });
+
+        state.lastSeconds[state.questionIndex] = seconds;
+        $('[data-explain]', root).hidden = false;
+      });
+    });
+
+    $$('[data-rate]', root).forEach((btn) => {
+      btn.addEventListener('click', () => rate(root, btn, state));
+    });
+
+    root._preview = (kind) => previewBubble(root, kind);
+  }
+
+  function rate(root, btn, state) {
+    if (state.ratingLock) return;
+    state.ratingLock = true;
+
+    const rating = btn.dataset.rate;
+    const seconds = elapsedSec(state.unitStart, state.hiddenBase);
+    const oldDays = state.interval;
+    const estimate = estimateNext(oldDays, rating);
+    const nextDays = estimate.days;
+
+    btn.classList.add('is-pressed');
+    window.setTimeout(() => btn.classList.remove('is-pressed'), 170);
+
+    spawnBubble(btn, {
+      html: ratingBubble(rating, seconds, oldDays, nextDays, estimate.capped),
+      tone: RATING_TONE[rating],
+      zone: `rating-${root.dataset.pane}`,
+      placement: 'above',
+      offset: 10,
+    });
+
+    state.interval = nextDays > 0 ? nextDays : oldDays;
+
+    if (state.queue > 0) {
+      state.queue -= 1;
+      rollQueue(root, state.queue);
+
+      const remainingMinutes = Math.max(1, Math.round(state.queue * 1.3));
+      spawnBubble($('[data-queue]', root), {
+        html: `<span class="ico">↓</span><b>-1</b><span class="mut">· 剩余约 ${remainingMinutes}min</span>`,
+        tone: 'good',
+        zone: `queue-${root.dataset.pane}`,
+        placement: 'below',
+        duration: 1000,
+      });
+    }
+
+    window.setTimeout(() => {
+      nextQuestion(root, state);
+      state.ratingLock = false;
+    }, 220);
+  }
+
+  function nextQuestion(root, state) {
+    const quiz = $('.quiz', root);
+    quiz.classList.add('is-swapping');
+
+    window.setTimeout(() => {
+      state.questionIndex = (state.questionIndex + 1) % QUESTIONS.length;
+      state.answered = false;
+
+      renderQuestion(root, state.questionIndex);
+      quiz.classList.remove('is-swapping');
+
+      state.qStart = performance.now();
+      state.hiddenBase = hiddenAccum;
+      state.unitStart = performance.now();
+
+      resetMindmap(root);
+      $('[data-interval-chip]', root).textContent = `间隔 ${state.interval}d`;
+    }, 150);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* baseline pane                                                       */
+  /* ------------------------------------------------------------------ */
+
+  function showRawTip(x, y, text) {
+    const previous = document.querySelector('.raw-tip');
+    if (previous) previous.remove();
+
+    const tip = document.createElement('div');
+    tip.className = 'raw-tip';
+    tip.textContent = text;
+    tip.style.left = `${Math.min(x + 14, window.innerWidth - 190)}px`;
+    tip.style.top = `${Math.min(y + 18, window.innerHeight - 62)}px`;
+    document.body.appendChild(tip);
+
+    window.setTimeout(() => tip.remove(), 2400);
+  }
+
+  function initBaseline(root) {
+    const state = root._state = {
+      questionIndex: 0,
+      answered: false,
+      queue: 18,
+      streak: 5,
+    };
+
+    renderQuestion(root, 0);
+    $('[data-streak-n]', root).textContent = state.streak;
+    initMindmap(root, state, false);
+
+    $$('.opt', root).forEach((btn) => {
+      btn.addEventListener('click', (event) => {
+        if (state.answered) return;
+        state.answered = true;
+
+        const correct = btn.dataset.correct === 'true';
+        markOptions(root, btn, correct);
+
+        state.streak = correct ? state.streak + 1 : 0;
+        $('[data-streak-n]', root).textContent = state.streak;
+
+        showRawTip(
+          event.clientX,
+          event.clientY,
+          correct ? '✓ 回答正确' : '✗ 回答错误'
+        );
+
+        $('[data-explain]', root).hidden = false;
+      });
+    });
+
+    $$('[data-rate]', root).forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (state.queue === 0) return;
+        state.queue -= 1;
+        $('[data-queue]', root).textContent = state.queue;
+
+        state.questionIndex = (state.questionIndex + 1) % QUESTIONS.length;
+        state.answered = false;
+        renderQuestion(root, state.questionIndex);
+        resetMindmap(root);
+      });
+    });
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* mount                                                               */
+  /* ------------------------------------------------------------------ */
+
+  $$('.mock').forEach((mock) => {
+    mock.innerHTML = MOCK_HTML;
+    if (mock.dataset.pane === 'optimized') initOptimized(mock);
+    else initBaseline(mock);
+  });
+
+  $$('[data-preview]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const mock = btn.closest('.pane').querySelector('.mock');
+      if (mock && mock._preview) mock._preview(btn.dataset.preview);
+    });
+  });
+})();
+</script>
+</body>
+</html>

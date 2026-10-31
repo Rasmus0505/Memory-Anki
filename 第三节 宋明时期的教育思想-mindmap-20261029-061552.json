@@ -1,0 +1,2399 @@
+{
+  "format": "memory-anki-mindmap",
+  "version": 1,
+  "exportedAt": "2026-10-28T22:15:52.355Z",
+  "source": {
+    "title": "第三节 宋明时期的教育思想"
+  },
+  "document": {
+    "root": {
+      "data": {
+        "text": "第三节 宋明时期的教育思想",
+        "memoryAnkiRootKind": "palace",
+        "uid": "palace-root"
+      },
+      "children": [
+        {
+          "data": {
+            "text": "朱熹",
+            "note": "",
+            "uid": "2ba86fbbd7d6444494ca6c0a33d8299a",
+            "memoryAnkiId": 12182,
+            "memoryAnkiNodeType": "peg"
+          },
+          "children": [
+            {
+              "data": {
+                "text": "《四书章句集注》",
+                "note": "",
+                "uid": "8fa2d8d7bee34578860a72868cecc44c",
+                "memoryAnkiId": 12185,
+                "memoryAnkiNodeType": "peg"
+              },
+              "children": [
+                {
+                  "data": {
+                    "text": "四书为《大学》《中庸》《论语》《孟子》",
+                    "note": "",
+                    "uid": "new-a8820b3e6348",
+                    "memoryAnkiId": 82321,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": []
+                },
+                {
+                  "data": {
+                    "text": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">元朝定为科举主要考查内容 [高频考点]</span></div>",
+                    "note": "",
+                    "uid": "new-daccab524243",
+                    "richText": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">元朝定为科举主要考查内容 [高频考点]</span></div>",
+                    "memoryAnkiId": 71601,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": []
+                }
+              ]
+            },
+            {
+              "data": {
+                "text": "“明天理，灭人欲”与教育作用",
+                "note": "",
+                "uid": "5cf1efcd5d904195aeff0cc12baa3c47",
+                "memoryAnkiId": 12186,
+                "memoryAnkiNodeType": "peg"
+              },
+              "children": [
+                {
+                  "data": {
+                    "text": "人性论",
+                    "note": "",
+                    "uid": "cb5d815c52fa4a3f9bf2940f575961d2",
+                    "memoryAnkiId": 12097,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": [
+                    {
+                      "data": {
+                        "text": "人性即“理”",
+                        "note": "",
+                        "uid": "fb442d04b1954aa098c1fbb34ba0ec2f",
+                        "memoryAnkiId": 12190,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": [
+                        {
+                          "data": {
+                            "text": "仁义礼智等封建伦理道德规范",
+                            "note": "",
+                            "uid": "new-24a7b477da07",
+                            "memoryAnkiId": 82324,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "理是完美存在",
+                            "note": "",
+                            "uid": "new-eccf0065f72e",
+                            "memoryAnkiId": 71602,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "吸收张载、程颢观点",
+                            "note": "",
+                            "uid": "new-20b8aed4b74c",
+                            "memoryAnkiId": 71603,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "data": {
+                        "text": "天命之性",
+                        "note": "",
+                        "uid": "f813461191694ba2b6d6b847c5e393dd",
+                        "memoryAnkiId": 12191,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": [
+                        {
+                          "data": {
+                            "text": "又称天地之性、义理之性、道心",
+                            "note": "",
+                            "uid": "new-7500e357d68d",
+                            "memoryAnkiId": 82325,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "专指理言",
+                            "note": "",
+                            "uid": "new-554d6c09c1d1",
+                            "memoryAnkiId": 82326,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "禀受天理而成",
+                            "note": "",
+                            "uid": "new-5399bb1d3151",
+                            "memoryAnkiId": 82327,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "浑厚至善，完美无缺",
+                            "note": "",
+                            "uid": "new-d3a4fc9b7349",
+                            "memoryAnkiId": 82328,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "data": {
+                        "text": "气质之性",
+                        "note": "",
+                        "uid": "d8e7ba945a794114a1444f0a38713405",
+                        "memoryAnkiId": 53330,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": [
+                        {
+                          "data": {
+                            "text": "又称人心",
+                            "note": "",
+                            "uid": "new-ca4a9e818eef",
+                            "memoryAnkiId": 82329,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "禀受理与气，杂然相存",
+                            "note": "",
+                            "uid": "new-3e72f8ec2d57",
+                            "memoryAnkiId": 82330,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "气有清明、浑浊",
+                            "note": "",
+                            "uid": "d0095a0eeba6419fb5a4fa5a081a9cc0",
+                            "memoryAnkiId": 53331,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "故有善有恶",
+                            "note": "",
+                            "uid": "new-b5853ec39a89",
+                            "memoryAnkiId": 82331,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "data": {
+                    "text": "教育作用",
+                    "note": "",
+                    "uid": "8683fff553044ff29b5f125ec1a72262",
+                    "memoryAnkiId": 12101,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": [
+                    {
+                      "data": {
+                        "text": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">变化气质 [高频考点]</span></div>",
+                        "note": "",
+                        "uid": "dd162bca287a4dbb9f0a5c66774161bb",
+                        "richText": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">变化气质 [高频考点]</span></div>",
+                        "memoryAnkiId": 53332,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    },
+                    {
+                      "data": {
+                        "text": "途径 [解题关键]",
+                        "note": "",
+                        "uid": "1056da59f55b4bc0b54de20ff35cb97a",
+                        "memoryAnkiId": 12194,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": [
+                        {
+                          "data": {
+                            "text": "灭人欲",
+                            "note": "",
+                            "uid": "new-374f0ab99771",
+                            "memoryAnkiId": 82332,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "向外明理",
+                            "note": "",
+                            "uid": "new-2a29d3a2a972",
+                            "memoryAnkiId": 82333,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "data": {
+                        "text": "天理与人欲对立",
+                        "note": "",
+                        "uid": "new-7bbf61f2970c",
+                        "memoryAnkiId": 71604,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": [
+                        {
+                          "data": {
+                            "text": "天理存则人欲亡",
+                            "note": "",
+                            "uid": "new-b0bfa698cde6",
+                            "memoryAnkiId": 82334,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "人欲胜则天理灭",
+                            "note": "",
+                            "uid": "new-e26fe9588e53",
+                            "memoryAnkiId": 71605,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "data": {
+                        "text": "根本任务",
+                        "note": "",
+                        "uid": "new-4aa3c3221476",
+                        "memoryAnkiId": 82335,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": [
+                        {
+                          "data": {
+                            "text": "明天理，灭人欲",
+                            "note": "",
+                            "uid": "new-41b160c5f18e",
+                            "memoryAnkiId": 82336,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "明明德",
+                            "note": "",
+                            "uid": "new-f1a13bd11875",
+                            "memoryAnkiId": 82337,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "data": {
+                    "text": "教育目的",
+                    "note": "",
+                    "uid": "cb983845b7c54233b59ac1195a7e42eb",
+                    "memoryAnkiId": 12105,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": [
+                    {
+                      "data": {
+                        "text": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">明人伦 [高频考点]</span></div>",
+                        "note": "",
+                        "uid": "e6f2ae1150c842c987f471d1f0414e1d",
+                        "richText": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">明人伦 [高频考点]</span></div>",
+                        "memoryAnkiId": 53333,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    },
+                    {
+                      "data": {
+                        "text": "克服气质之偏 [解题关键]",
+                        "note": "",
+                        "uid": "832787daf63947b382617af6362f9c6d",
+                        "memoryAnkiId": 12197,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    },
+                    {
+                      "data": {
+                        "text": "革尽物欲之蔽",
+                        "note": "",
+                        "uid": "new-6867b542b5d9",
+                        "memoryAnkiId": 82338,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    },
+                    {
+                      "data": {
+                        "text": "恢复善性",
+                        "note": "",
+                        "uid": "new-00a7357b3334",
+                        "memoryAnkiId": 82339,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    },
+                    {
+                      "data": {
+                        "text": "五伦",
+                        "note": "",
+                        "uid": "03eedb51593f49d0aa90d36c3ffc4433",
+                        "memoryAnkiId": 12198,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": [
+                        {
+                          "data": {
+                            "text": "父子有亲，君臣有义，夫妇有别，长幼有序，朋友有信",
+                            "note": "",
+                            "uid": "new-575f5d2ed92e",
+                            "memoryAnkiId": 82340,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "data": {
+                        "text": "白鹿洞揭示列为教之目",
+                        "note": "",
+                        "uid": "new-cf15c8edb507",
+                        "memoryAnkiId": 71606,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    },
+                    {
+                      "data": {
+                        "text": "抨击以科举为目的的学校教育",
+                        "note": "",
+                        "uid": "new-069947915920",
+                        "memoryAnkiId": 71607,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "data": {
+                "text": "论“小学”和“大学”教育",
+                "note": "",
+                "uid": "8a9ebb43ba114be88b6f3eabad24381e",
+                "memoryAnkiId": 12203,
+                "memoryAnkiNodeType": "peg"
+              },
+              "children": [
+                {
+                  "data": {
+                    "text": "小学教育 [解题关键]",
+                    "note": "",
+                    "uid": "36f11cbc4bb842de8e0aab0b9fdf0cac",
+                    "memoryAnkiId": 12205,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": [
+                    {
+                      "data": {
+                        "text": "时间",
+                        "note": "",
+                        "uid": "97bbad3b656b491fa5a4f96d55bacf05",
+                        "memoryAnkiId": 53334,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": [
+                        {
+                          "data": {
+                            "text": "8—15岁",
+                            "note": "",
+                            "uid": "new-9b904291800b",
+                            "memoryAnkiId": 71608,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "data": {
+                        "text": "任务",
+                        "note": "",
+                        "uid": "e28e40f0da7a4b55ac559cd7d6160e29",
+                        "memoryAnkiId": 12211,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": [
+                        {
+                          "data": {
+                            "text": "培养圣贤坯璞",
+                            "note": "",
+                            "uid": "new-55a4ab03d9b3",
+                            "memoryAnkiId": 71609,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "重视打好基础",
+                            "note": "",
+                            "uid": "new-8e0179f15a6e",
+                            "memoryAnkiId": 82341,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "data": {
+                        "text": "内容",
+                        "note": "",
+                        "uid": "f5bb77efe04e4703bd64d8a82891071e",
+                        "memoryAnkiId": 53335,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": [
+                        {
+                          "data": {
+                            "text": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">教事 [解题关键]</span></div>",
+                            "note": "",
+                            "uid": "1fd80f9ac90f493ba04d7591d20fa610",
+                            "richText": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">教事 [解题关键]</span></div>",
+                            "memoryAnkiId": 12110,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "洒扫、应对、进退之节",
+                            "note": "",
+                            "uid": "new-e81b4de8004b",
+                            "memoryAnkiId": 82342,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "爱亲、敬长、隆师、亲友之道",
+                            "note": "",
+                            "uid": "new-5a65917e8406",
+                            "memoryAnkiId": 82343,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "data": {
+                        "text": "方法 [解题关键]",
+                        "note": "",
+                        "uid": "eaa8bf139a844aee8026719f4017a48d",
+                        "memoryAnkiId": 12215,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": [
+                        {
+                          "data": {
+                            "text": "先入为主，及早施教",
+                            "note": "",
+                            "uid": "new-56f69f2a456b",
+                            "memoryAnkiId": 71610,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "形象生动，激发兴趣",
+                            "note": "",
+                            "uid": "30a1a15aa66b461f9bfc23877dbeeacc",
+                            "memoryAnkiId": 12216,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "首创《须知》《学则》 [解题关键]",
+                            "note": "",
+                            "uid": "69b03f46d51642b2a8fe24577a9beeca",
+                            "memoryAnkiId": 12217,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": [
+                            {
+                              "data": {
+                                "text": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">培养儿童道德行为习惯 [解题关键]</span></div>",
+                                "note": "",
+                                "uid": "new-b0b2ff0105c0",
+                                "richText": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">培养儿童道德行为习惯 [解题关键]</span></div>",
+                                "memoryAnkiId": 71615,
+                                "memoryAnkiNodeType": "peg"
+                              },
+                              "children": []
+                            },
+                            {
+                              "data": {
+                                "text": "《童蒙须知》为著名蒙学教材",
+                                "note": "",
+                                "uid": "new-d09cc51ced41",
+                                "memoryAnkiId": 71616,
+                                "memoryAnkiNodeType": "peg"
+                              },
+                              "children": []
+                            }
+                          ]
+                        },
+                        {
+                          "data": {
+                            "text": "读书“心到、口到、眼到”",
+                            "note": "",
+                            "uid": "new-d92df52bb4b7",
+                            "memoryAnkiId": 82344,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "data": {
+                    "text": "大学教育",
+                    "note": "",
+                    "uid": "3ea0499c50e5449786f06613ba37fc7b",
+                    "memoryAnkiId": 12218,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": [
+                    {
+                      "data": {
+                        "text": "时间",
+                        "note": "",
+                        "uid": "74aab8826f7844bba42347d50ac40e45",
+                        "memoryAnkiId": 53336,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": [
+                        {
+                          "data": {
+                            "text": "15岁以后",
+                            "note": "",
+                            "uid": "new-158d80ace218",
+                            "memoryAnkiId": 71617,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "data": {
+                        "text": "任务",
+                        "note": "",
+                        "uid": "08c6ba2c9aa0446aaa747b0871a1dcc7",
+                        "memoryAnkiId": 12223,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": [
+                        {
+                          "data": {
+                            "text": "在坯璞基础上“加光饰”",
+                            "note": "",
+                            "uid": "new-c092996d69df",
+                            "memoryAnkiId": 71618,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "培养对国家有用人才",
+                            "note": "",
+                            "uid": "new-e82ed278452b",
+                            "memoryAnkiId": 82345,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "data": {
+                        "text": "内容",
+                        "note": "",
+                        "uid": "1f6439d954664d509b98205122591c25",
+                        "memoryAnkiId": 53337,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": [
+                        {
+                          "data": {
+                            "text": "教理",
+                            "note": "",
+                            "uid": "61696424835445d59be163fe3f951c10",
+                            "memoryAnkiId": 12114,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "探究事物之所以然",
+                            "note": "",
+                            "uid": "new-84ead7ae226d",
+                            "memoryAnkiId": 82346,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "了解事物背后的伦理道德",
+                            "note": "",
+                            "uid": "new-d5a6f5cab956",
+                            "memoryAnkiId": 82347,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "data": {
+                        "text": "方法",
+                        "note": "",
+                        "uid": "455b87707b1c43429db9f6e17d0bffba",
+                        "memoryAnkiId": 53338,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": [
+                        {
+                          "data": {
+                            "text": "重视自学",
+                            "note": "",
+                            "uid": "new-55584e9dc095",
+                            "memoryAnkiId": 71619,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "提倡不同学术观点相互交流",
+                            "note": "",
+                            "uid": "f53f9773ebfb4b84ba09df75bd8ff6f6",
+                            "memoryAnkiId": 53339,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "data": {
+                "text": "朱子读书法 [高频考点]",
+                "note": "",
+                "uid": "384946798d6e4edaba6687da0abaffb4",
+                "memoryAnkiId": 12235,
+                "memoryAnkiNodeType": "peg"
+              },
+              "children": [
+                {
+                  "data": {
+                    "text": "理论基础 [解题关键]",
+                    "note": "",
+                    "uid": "9b89b19e11ae4652b05538fea6a8dc45",
+                    "memoryAnkiId": 12237,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": [
+                    {
+                      "data": {
+                        "text": "为学之道，莫先于穷理",
+                        "note": "",
+                        "uid": "new-69e9d2472d51",
+                        "memoryAnkiId": 82348,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    },
+                    {
+                      "data": {
+                        "text": "穷理之要，必在于读书",
+                        "note": "",
+                        "uid": "new-8a863c62b02f",
+                        "memoryAnkiId": 82349,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    },
+                    {
+                      "data": {
+                        "text": "弟子概括为“朱子读书法”",
+                        "note": "",
+                        "uid": "new-bde6e7a55590",
+                        "memoryAnkiId": 71631,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "data": {
+                    "text": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">循序渐进 [解题关键]</span></div>",
+                    "note": "",
+                    "uid": "ca9fb75f97fe41e6a3244a8811b39fb7",
+                    "richText": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">循序渐进 [解题关键]</span></div>",
+                    "memoryAnkiId": 12239,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": [
+                    {
+                      "data": {
+                        "text": "按一定次序，不可颠倒",
+                        "note": "",
+                        "uid": "new-046a3bce3eba",
+                        "memoryAnkiId": 71632,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    },
+                    {
+                      "data": {
+                        "text": "按实际能力安排",
+                        "note": "",
+                        "uid": "new-e95e615d1267",
+                        "memoryAnkiId": 71633,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    },
+                    {
+                      "data": {
+                        "text": "打好基础，不可囫囵吞枣",
+                        "note": "",
+                        "uid": "new-79c810efa17d",
+                        "memoryAnkiId": 71634,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "data": {
+                    "text": "熟读精思",
+                    "note": "",
+                    "uid": "66ea0f01ca934622b91a69f79bc09e50",
+                    "memoryAnkiId": 12241,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": [
+                    {
+                      "data": {
+                        "text": "熟读成诵",
+                        "note": "",
+                        "uid": "new-ac40727abc47",
+                        "memoryAnkiId": 71635,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    },
+                    {
+                      "data": {
+                        "text": "精于思考",
+                        "note": "",
+                        "uid": "new-f75424a73a4a",
+                        "memoryAnkiId": 82350,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    },
+                    {
+                      "data": {
+                        "text": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">无疑→有疑→解疑 [解题关键]</span></div>",
+                        "note": "",
+                        "uid": "new-bd5fb5615d78",
+                        "richText": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">无疑→有疑→解疑 [解题关键]</span></div>",
+                        "memoryAnkiId": 71636,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "data": {
+                    "text": "虚心涵泳 [解题关键]",
+                    "note": "",
+                    "uid": "f3acb9e808b34eef90e36e0b1827a74e",
+                    "memoryAnkiId": 12243,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": [
+                    {
+                      "data": {
+                        "text": "虚心",
+                        "note": "",
+                        "uid": "new-afc256903cae",
+                        "memoryAnkiId": 71637,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": [
+                        {
+                          "data": {
+                            "text": "虚怀若谷，静心思考",
+                            "note": "",
+                            "uid": "new-f367ccc3f788",
+                            "memoryAnkiId": 82351,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "data": {
+                        "text": "涵泳",
+                        "note": "",
+                        "uid": "new-cf1019852219",
+                        "memoryAnkiId": 71638,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": [
+                        {
+                          "data": {
+                            "text": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">反复咀嚼，细心玩味 [解题关键]</span></div>",
+                            "note": "",
+                            "uid": "new-ad80afb6640d",
+                            "richText": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">反复咀嚼，细心玩味 [解题关键]</span></div>",
+                            "memoryAnkiId": 82352,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "data": {
+                    "text": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">切己体察 [高频考点]</span></div>",
+                    "note": "",
+                    "uid": "d5c590749b334993b8ecb960e728f166",
+                    "richText": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">切己体察 [高频考点]</span></div>",
+                    "memoryAnkiId": 53345,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": [
+                    {
+                      "data": {
+                        "text": "不停留于书本",
+                        "note": "",
+                        "uid": "new-2c8ac640a1ab",
+                        "memoryAnkiId": 71639,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    },
+                    {
+                      "data": {
+                        "text": "见之于行动，身体力行",
+                        "note": "",
+                        "uid": "new-38da449e59e2",
+                        "memoryAnkiId": 82353,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "data": {
+                    "text": "着紧用力",
+                    "note": "",
+                    "uid": "34010717a14f4f56a3026218b17fe396",
+                    "memoryAnkiId": 12247,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": [
+                    {
+                      "data": {
+                        "text": "抓紧时间，发愤忘食",
+                        "note": "",
+                        "uid": "new-a620d8911771",
+                        "memoryAnkiId": 71640,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    },
+                    {
+                      "data": {
+                        "text": "抖擞精神，反对松松垮垮",
+                        "note": "",
+                        "uid": "new-b766b57174b4",
+                        "memoryAnkiId": 71641,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "data": {
+                    "text": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">居敬持志 [解题关键]</span></div>",
+                    "note": "",
+                    "uid": "0f207a701bd04e0cbd7d5336ee9171a7",
+                    "richText": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">居敬持志 [解题关键]</span></div>",
+                    "memoryAnkiId": 12249,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": [
+                    {
+                      "data": {
+                        "text": "居敬 [解题关键]",
+                        "note": "",
+                        "uid": "new-7923cf7800da",
+                        "memoryAnkiId": 71642,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": [
+                        {
+                          "data": {
+                            "text": "精神专一，注意力集中 [易错点]",
+                            "note": "",
+                            "uid": "new-eb0d3499b616",
+                            "memoryAnkiId": 82354,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "data": {
+                        "text": "持志",
+                        "note": "",
+                        "uid": "new-29ae96921130",
+                        "memoryAnkiId": 71643,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": [
+                        {
+                          "data": {
+                            "text": "远大志向",
+                            "note": "",
+                            "uid": "new-0090a3ea23d7",
+                            "memoryAnkiId": 82355,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "顽强毅力长期坚持",
+                            "note": "",
+                            "uid": "new-aebb3504c6af",
+                            "memoryAnkiId": 82356,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "data": {
+                    "text": "评价",
+                    "note": "",
+                    "uid": "d4473392083344bf80335d893764284b",
+                    "memoryAnkiId": 12250,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": [
+                    {
+                      "data": {
+                        "text": "对今天读书有借鉴意义",
+                        "note": "",
+                        "uid": "new-5446f8b2430e",
+                        "memoryAnkiId": 82357,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    },
+                    {
+                      "data": {
+                        "text": "缺陷",
+                        "note": "",
+                        "uid": "new-7f97895930bf",
+                        "memoryAnkiId": 71644,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": [
+                        {
+                          "data": {
+                            "text": "所读多为“圣贤之书”",
+                            "note": "",
+                            "uid": "new-371d9831135a",
+                            "memoryAnkiId": 82358,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "强调书本知识",
+                            "note": "",
+                            "uid": "new-9768434f5fd9",
+                            "memoryAnkiId": 82359,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "忽视与实际知识的联系",
+                            "note": "",
+                            "uid": "new-004c7dc4739b",
+                            "memoryAnkiId": 82360,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "data": {
+                        "text": "易错点 [易错点]",
+                        "note": "",
+                        "uid": "new-7c8353016209",
+                        "memoryAnkiId": 82361,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": [
+                        {
+                          "data": {
+                            "text": "切己体察指联系自身实际",
+                            "note": "",
+                            "uid": "new-e6d0eeffc822",
+                            "memoryAnkiId": 82362,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "评价指忽视实用知识",
+                            "note": "",
+                            "uid": "new-42189901abc1",
+                            "memoryAnkiId": 82363,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "二者不矛盾",
+                            "note": "",
+                            "uid": "new-752f4f33bfdb",
+                            "memoryAnkiId": 82364,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "data": {
+            "text": "王守仁",
+            "note": "",
+            "uid": "80f4f6846e0d4e84a8076907fb83d4c3",
+            "memoryAnkiId": 12255,
+            "memoryAnkiNodeType": "peg"
+          },
+          "children": [
+            {
+              "data": {
+                "text": "生平",
+                "note": "",
+                "uid": "new-5436bafcc8e4",
+                "memoryAnkiId": 82365,
+                "memoryAnkiNodeType": "peg"
+              },
+              "children": [
+                {
+                  "data": {
+                    "text": "号阳明",
+                    "note": "",
+                    "uid": "new-908f196e0a2d",
+                    "memoryAnkiId": 82366,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": []
+                },
+                {
+                  "data": {
+                    "text": "阳明心学创始人",
+                    "note": "",
+                    "uid": "new-6ae816506e79",
+                    "memoryAnkiId": 82367,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": []
+                },
+                {
+                  "data": {
+                    "text": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">与王夫之非一人 [易错点]</span></div>",
+                    "note": "",
+                    "uid": "new-12b64e3c44ef",
+                    "richText": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">与王夫之非一人 [易错点]</span></div>",
+                    "memoryAnkiId": 82368,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": []
+                }
+              ]
+            },
+            {
+              "data": {
+                "text": "“致良知”与教育作用 [高频考点]",
+                "note": "",
+                "uid": "d392b7eb728346a1a3748172c4e966fa",
+                "memoryAnkiId": 12135,
+                "memoryAnkiNodeType": "peg"
+              },
+              "children": [
+                {
+                  "data": {
+                    "text": "“致良知”来源",
+                    "note": "",
+                    "uid": "new-e4381be1547b",
+                    "memoryAnkiId": 82369,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": [
+                    {
+                      "data": {
+                        "text": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">致知出自《大学》 [解题关键]</span></div>",
+                        "note": "",
+                        "uid": "new-97c61fb63847",
+                        "richText": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">致知出自《大学》 [解题关键]</span></div>",
+                        "memoryAnkiId": 82370,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    },
+                    {
+                      "data": {
+                        "text": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">良知出自《孟子》 [解题关键]</span></div>",
+                        "note": "",
+                        "uid": "new-90f8b5eee52c",
+                        "richText": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">良知出自《孟子》 [解题关键]</span></div>",
+                        "memoryAnkiId": 82371,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "data": {
+                    "text": "良知的特点",
+                    "note": "",
+                    "uid": "51303d8d585c4fd2a827b027dbba3e92",
+                    "memoryAnkiId": 12259,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": [
+                    {
+                      "data": {
+                        "text": "与生俱来，不学自能，不教自会",
+                        "note": "",
+                        "uid": "99f5cbbdb53a44e08247849df223ad89",
+                        "memoryAnkiId": 12261,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    },
+                    {
+                      "data": {
+                        "text": "为人人所具有，不分圣愚",
+                        "note": "",
+                        "uid": "2a635b7fc2fd486b9ed3aed666ee6231",
+                        "memoryAnkiId": 12262,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    },
+                    {
+                      "data": {
+                        "text": "不会泯灭",
+                        "note": "",
+                        "uid": "9c1ceade7b2c45f08be77b4f7d114550",
+                        "memoryAnkiId": 12263,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    },
+                    {
+                      "data": {
+                        "text": "易受昏蔽",
+                        "note": "",
+                        "uid": "59e54dc3caee4357a851461bf1d2ab2d",
+                        "memoryAnkiId": 12264,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "data": {
+                    "text": "教育作用",
+                    "note": "",
+                    "uid": "856ef792971c4abcb15ff2318a1b8fa4",
+                    "memoryAnkiId": 12137,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": [
+                    {
+                      "data": {
+                        "text": "学以去其昏蔽",
+                        "note": "",
+                        "uid": "65109c201f2d4d8bb5f797aa949a7104",
+                        "memoryAnkiId": 12267,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": [
+                        {
+                          "data": {
+                            "text": "物欲引诱使良知昏蔽",
+                            "note": "",
+                            "uid": "new-dd660e1ad294",
+                            "memoryAnkiId": 71645,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "教育在于去其昏蔽",
+                            "note": "",
+                            "uid": "new-c7da7ebfc328",
+                            "memoryAnkiId": 71646,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "data": {
+                        "text": "明其心",
+                        "note": "",
+                        "uid": "749f509ef854410581e098350c0312c4",
+                        "memoryAnkiId": 12268,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": [
+                        {
+                          "data": {
+                            "text": "激发本心良知",
+                            "note": "",
+                            "uid": "new-eecb335bc2b8",
+                            "memoryAnkiId": 71647,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "教育在于明其心",
+                            "note": "",
+                            "uid": "new-c1e7b324b694",
+                            "memoryAnkiId": 71648,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "data": {
+                        "text": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">存天理，灭人欲 [高频考点]</span></div>",
+                        "note": "",
+                        "uid": "f134ee9245ff49dcb39dcfdb0ca751b0",
+                        "richText": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">存天理，灭人欲 [高频考点]</span></div>",
+                        "memoryAnkiId": 12269,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": [
+                        {
+                          "data": {
+                            "text": "与去昏蔽、明其心实质相同",
+                            "note": "",
+                            "uid": "new-3707e14231cf",
+                            "memoryAnkiId": 71649,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "为学只求日减，不求日增",
+                            "note": "",
+                            "uid": "new-dcdf21ab45e3",
+                            "memoryAnkiId": 71650,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "减一分人欲，复一分天理",
+                            "note": "",
+                            "uid": "d8a63b77ac454ffe91658a2a1c8eda40",
+                            "memoryAnkiId": 53346,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "data": {
+                        "text": "知行合一",
+                        "note": "",
+                        "uid": "new-35358730ac9b",
+                        "memoryAnkiId": 82372,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": [
+                        {
+                          "data": {
+                            "text": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">学孝必躬行孝道 [解题关键]</span></div>",
+                            "note": "",
+                            "uid": "new-e3b86dc5d95b",
+                            "richText": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">学孝必躬行孝道 [解题关键]</span></div>",
+                            "memoryAnkiId": 82373,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "data": {
+                "text": "“随人分限所及”的教育原则",
+                "note": "",
+                "uid": "bf7eb861d0924fcbabbe5a393d307d93",
+                "memoryAnkiId": 12274,
+                "memoryAnkiNodeType": "peg"
+              },
+              "children": [
+                {
+                  "data": {
+                    "text": "含义",
+                    "note": "",
+                    "uid": "e7805694a08341f8b431dd96cbf3313f",
+                    "memoryAnkiId": 12275,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": [
+                    {
+                      "data": {
+                        "text": "考虑儿童身心发展特点",
+                        "note": "",
+                        "uid": "new-31b140a26a58",
+                        "memoryAnkiId": 82374,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    },
+                    {
+                      "data": {
+                        "text": "根据学习特点和能力施教",
+                        "note": "",
+                        "uid": "new-4846ac8f9992",
+                        "memoryAnkiId": 82375,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "data": {
+                    "text": "体现",
+                    "note": "",
+                    "uid": "new-5c66c5c8555b",
+                    "memoryAnkiId": 71651,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": [
+                    {
+                      "data": {
+                        "text": "量力性原则",
+                        "note": "",
+                        "uid": "new-f00a2d743352",
+                        "memoryAnkiId": 82376,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    },
+                    {
+                      "data": {
+                        "text": "循序渐进",
+                        "note": "",
+                        "uid": "new-0e88bd8ed009",
+                        "memoryAnkiId": 82377,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    },
+                    {
+                      "data": {
+                        "text": "因材施教",
+                        "note": "",
+                        "uid": "new-585fb44afda3",
+                        "memoryAnkiId": 82378,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    },
+                    {
+                      "data": {
+                        "text": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">不含启发诱导 [易错点]</span></div>",
+                        "note": "",
+                        "uid": "new-ea0597c60041",
+                        "richText": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">不含启发诱导 [易错点]</span></div>",
+                        "memoryAnkiId": 82379,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "data": {
+                    "text": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">首次提出量力性者为墨子 [易错点]</span></div>",
+                    "note": "",
+                    "uid": "new-ec08d5a81665",
+                    "richText": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">首次提出量力性者为墨子 [易错点]</span></div>",
+                    "memoryAnkiId": 82380,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": []
+                }
+              ]
+            },
+            {
+              "data": {
+                "text": "教育内容",
+                "note": "",
+                "uid": "96ee496ef4004e42b953b89fa1cb8540",
+                "memoryAnkiId": 12146,
+                "memoryAnkiNodeType": "peg"
+              },
+              "children": [
+                {
+                  "data": {
+                    "text": "儒家经典 [解题关键]",
+                    "note": "",
+                    "uid": "d83273df4a18433e9517c87efb6edd49",
+                    "memoryAnkiId": 12279,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": [
+                    {
+                      "data": {
+                        "text": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">六经为“吾心之记籍” [解题关键]</span></div>",
+                        "note": "",
+                        "uid": "new-44fbbf968424",
+                        "richText": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">六经为“吾心之记籍” [解题关键]</span></div>",
+                        "memoryAnkiId": 82381,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    },
+                    {
+                      "data": {
+                        "text": "非为讲学记诵",
+                        "note": "",
+                        "uid": "new-abaefb9d6885",
+                        "memoryAnkiId": 71652,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    },
+                    {
+                      "data": {
+                        "text": "帮助明吾心之常道",
+                        "note": "",
+                        "uid": "new-5056844b1417",
+                        "memoryAnkiId": 82382,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    },
+                    {
+                      "data": {
+                        "text": "反对只重文义辞章",
+                        "note": "",
+                        "uid": "new-bb4c8d4406fd",
+                        "memoryAnkiId": 71653,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "data": {
+                "text": "论道德教育",
+                "note": "",
+                "uid": "8436b7b07e054ef68bc4806edfb14ee7",
+                "memoryAnkiId": 12280,
+                "memoryAnkiNodeType": "peg"
+              },
+              "children": [
+                {
+                  "data": {
+                    "text": "目的",
+                    "note": "",
+                    "uid": "cfbbcbf4aca04af5adc15f3b614aa7eb",
+                    "memoryAnkiId": 53348,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": [
+                    {
+                      "data": {
+                        "text": "明人伦",
+                        "note": "",
+                        "uid": "new-b0300d263ace",
+                        "memoryAnkiId": 71654,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    },
+                    {
+                      "data": {
+                        "text": "培养封建道德伦理",
+                        "note": "",
+                        "uid": "eb153b64cd1e415d9fac7327178a977d",
+                        "memoryAnkiId": 12285,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    },
+                    {
+                      "data": {
+                        "text": "人伦即五伦",
+                        "note": "",
+                        "uid": "new-471947a95e9b",
+                        "memoryAnkiId": 71656,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "data": {
+                    "text": "方法",
+                    "note": "",
+                    "uid": "b37fa9606ac94cedab8944d8e586c844",
+                    "memoryAnkiId": 12286,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": [
+                    {
+                      "data": {
+                        "text": "静处体悟",
+                        "note": "",
+                        "uid": "6c4a945b256942d8ba2ebc97c6a24301",
+                        "memoryAnkiId": 12289,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": [
+                        {
+                          "data": {
+                            "text": "早年方法",
+                            "note": "",
+                            "uid": "new-d7aeb3a5fc6f",
+                            "memoryAnkiId": 71657,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "去蔽明心",
+                            "note": "",
+                            "uid": "new-fe3a295333b6",
+                            "memoryAnkiId": 71658,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "data": {
+                        "text": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">事上磨炼 [解题关键]</span></div>",
+                        "note": "",
+                        "uid": "ac169c83f4b94b60a4de057320e6ecbf",
+                        "richText": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">事上磨炼 [解题关键]</span></div>",
+                        "memoryAnkiId": 12291,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": [
+                        {
+                          "data": {
+                            "text": "晚年方法",
+                            "note": "",
+                            "uid": "new-ff0660e669d1",
+                            "memoryAnkiId": 71659,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">“事”指人事 [解题关键]</span></div>",
+                            "note": "",
+                            "uid": "new-6e3bd7692289",
+                            "richText": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">“事”指人事 [解题关键]</span></div>",
+                            "memoryAnkiId": 71660,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "data": {
+                        "text": "省察克治 [解题关键]",
+                        "note": "",
+                        "uid": "8f5e22dffa2e43d2961342785fed9471",
+                        "memoryAnkiId": 12293,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": [
+                        {
+                          "data": {
+                            "text": "自我反省检察",
+                            "note": "",
+                            "uid": "new-9e996c15052c",
+                            "memoryAnkiId": 71661,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "自觉克制私欲",
+                            "note": "",
+                            "uid": "new-d9629f687751",
+                            "memoryAnkiId": 82383,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "继承发展内省克己",
+                            "note": "",
+                            "uid": "new-2f43dfa20f23",
+                            "memoryAnkiId": 71662,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "data": {
+                        "text": "贵于改过",
+                        "note": "",
+                        "uid": "97517fee4b984fa69914b67492d27bdb",
+                        "memoryAnkiId": 12295,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": [
+                        {
+                          "data": {
+                            "text": "人总会犯错",
+                            "note": "",
+                            "uid": "new-9f1ab876957b",
+                            "memoryAnkiId": 71663,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "悔悟不等于改过",
+                            "note": "",
+                            "uid": "new-0f70e7062643",
+                            "memoryAnkiId": 71664,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "data": {
+                "text": "论儿童教育 [高频考点]",
+                "note": "",
+                "uid": "634767467d4f476b88142db8154ece89",
+                "memoryAnkiId": 12303,
+                "memoryAnkiNodeType": "peg"
+              },
+              "children": [
+                {
+                  "data": {
+                    "text": "批判传统儿童教育",
+                    "note": "",
+                    "uid": "357b03655bec4d7e9ff0e33e4d3bc542",
+                    "memoryAnkiId": 53349,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": [
+                    {
+                      "data": {
+                        "text": "不顾儿童身心特点",
+                        "note": "",
+                        "uid": "new-d7a0e8f18522",
+                        "memoryAnkiId": 71665,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    },
+                    {
+                      "data": {
+                        "text": "把儿童当作“小大人”",
+                        "note": "",
+                        "uid": "new-a57e6ddd5ecf",
+                        "memoryAnkiId": 82384,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "data": {
+                    "text": "顺应儿童性情",
+                    "note": "",
+                    "uid": "de1a27c86ed346c4ada05c056ddab850",
+                    "memoryAnkiId": 12304,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": [
+                    {
+                      "data": {
+                        "text": "乐嬉游而惮拘检",
+                        "note": "",
+                        "uid": "new-7645494c6aba",
+                        "memoryAnkiId": 71666,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    },
+                    {
+                      "data": {
+                        "text": "如草木始萌芽",
+                        "note": "",
+                        "uid": "new-2435c3527f4e",
+                        "memoryAnkiId": 82385,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    },
+                    {
+                      "data": {
+                        "text": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">“趋向鼓舞”“中心喜悦” [高频考点]</span></div>",
+                        "note": "",
+                        "uid": "new-1b4f6a09f072",
+                        "richText": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">“趋向鼓舞”“中心喜悦” [高频考点]</span></div>",
+                        "memoryAnkiId": 71667,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    }
+                  ]
+                },
+                {
+                  "data": {
+                    "text": "教育内容 [高频考点]",
+                    "note": "",
+                    "uid": "db8725c6a37c4f228412f1d6321c91e8",
+                    "memoryAnkiId": 12305,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": [
+                    {
+                      "data": {
+                        "text": "歌诗",
+                        "note": "",
+                        "uid": "f8a7fbfe050c447e998f551141a956f6",
+                        "memoryAnkiId": 12308,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": [
+                        {
+                          "data": {
+                            "text": "激发意志",
+                            "note": "",
+                            "uid": "new-77a2c88f51c3",
+                            "memoryAnkiId": 71668,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "情感正当宣泄",
+                            "note": "",
+                            "uid": "new-1d1d9980e9b0",
+                            "memoryAnkiId": 82386,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "消除忧闷烦恼",
+                            "note": "",
+                            "uid": "new-71c24a6ce984",
+                            "memoryAnkiId": 82387,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">精神宣畅，心气和平 [解题关键]</span></div>",
+                            "note": "",
+                            "uid": "new-12cf669db45a",
+                            "richText": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">精神宣畅，心气和平 [解题关键]</span></div>",
+                            "memoryAnkiId": 82388,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "data": {
+                        "text": "习礼",
+                        "note": "",
+                        "uid": "18506eea3a484b9cac79fe8b5755c88a",
+                        "memoryAnkiId": 12310,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": [
+                        {
+                          "data": {
+                            "text": "养成威严仪容和礼仪",
+                            "note": "",
+                            "uid": "new-8be8b3fcd9a3",
+                            "memoryAnkiId": 71669,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "培养道德观念和理想",
+                            "note": "",
+                            "uid": "new-ca00b8eb1990",
+                            "memoryAnkiId": 82389,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "data": {
+                        "text": "读书",
+                        "note": "",
+                        "uid": "ebac0d1449d74d89a0d66b3100d26213",
+                        "memoryAnkiId": 12312,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": [
+                        {
+                          "data": {
+                            "text": "增长知识",
+                            "note": "",
+                            "uid": "new-140e0a422a6a",
+                            "memoryAnkiId": 71670,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "开发智力",
+                            "note": "",
+                            "uid": "new-f4869ccb5ebe",
+                            "memoryAnkiId": 82390,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        },
+                        {
+                          "data": {
+                            "text": "培养道德观念",
+                            "note": "",
+                            "uid": "new-d7d9e34f3241",
+                            "memoryAnkiId": 82391,
+                            "memoryAnkiNodeType": "peg"
+                          },
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "data": {
+                    "text": "随人分限，量力施教 [高频考点]",
+                    "note": "",
+                    "uid": "cc99734df23a49dc9691d0ad244dee48",
+                    "memoryAnkiId": 12313,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": [
+                    {
+                      "data": {
+                        "text": "按接受能力施教",
+                        "note": "",
+                        "uid": "946303f3c07847599b948e14bc83d84e",
+                        "memoryAnkiId": 12314,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    },
+                    {
+                      "data": {
+                        "text": "概括为“随人分限所及”",
+                        "note": "",
+                        "uid": "new-3709719f6392",
+                        "memoryAnkiId": 71671,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    },
+                    {
+                      "data": {
+                        "text": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">“授书不在徒多，但贵精熟” [高频考点]</span></div>",
+                        "note": "",
+                        "uid": "e7770c3ce1734a63b5051c057298fd84",
+                        "richText": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">“授书不在徒多，但贵精熟” [高频考点]</span></div>",
+                        "memoryAnkiId": 53350,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    },
+                    {
+                      "data": {
+                        "text": "教学应留有余地",
+                        "note": "",
+                        "uid": "04c5f21a77a348cd9b6d8b159e67d30c",
+                        "memoryAnkiId": 53351,
+                        "memoryAnkiNodeType": "peg"
+                      },
+                      "children": []
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "data": {
+            "text": "丹丹攻略",
+            "note": "",
+            "uid": "1aa691a282a74dfcbdcaa698683513f1",
+            "memoryAnkiId": 53352,
+            "memoryAnkiNodeType": "peg"
+          },
+          "children": [
+            {
+              "data": {
+                "text": "朱熹人性论比喻",
+                "note": "",
+                "uid": "cb35137da4e5473b917d126867b809a0",
+                "memoryAnkiId": 53353,
+                "memoryAnkiNodeType": "peg"
+              },
+              "children": [
+                {
+                  "data": {
+                    "text": "天命之性如美丽宝珠",
+                    "note": "",
+                    "uid": "new-f8e2b11e0478",
+                    "memoryAnkiId": 82392,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": []
+                },
+                {
+                  "data": {
+                    "text": "气质之性有善有恶",
+                    "note": "",
+                    "uid": "new-642672ced95f",
+                    "memoryAnkiId": 82393,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": []
+                },
+                {
+                  "data": {
+                    "text": "浊水与清水之喻",
+                    "note": "",
+                    "uid": "new-7af34f812c74",
+                    "memoryAnkiId": 82394,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": []
+                },
+                {
+                  "data": {
+                    "text": "教育即变化气质",
+                    "note": "",
+                    "uid": "new-0ab998fc8a98",
+                    "memoryAnkiId": 82395,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": []
+                }
+              ]
+            },
+            {
+              "data": {
+                "text": "朱熹小学与大学辨析",
+                "note": "",
+                "uid": "14994b1ec6b847d7a278a4421716505c",
+                "memoryAnkiId": 53354,
+                "memoryAnkiNodeType": "peg"
+              },
+              "children": [
+                {
+                  "data": {
+                    "text": "不同于现代小学、大学",
+                    "note": "",
+                    "uid": "new-ac7f9f27c8f0",
+                    "memoryAnkiId": 82396,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": []
+                },
+                {
+                  "data": {
+                    "text": "无义务教育、高等教育概念",
+                    "note": "",
+                    "uid": "new-49dbc4d867f3",
+                    "memoryAnkiId": 82397,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": []
+                },
+                {
+                  "data": {
+                    "text": "小学教事，大学教理",
+                    "note": "",
+                    "uid": "new-0086d52387b5",
+                    "memoryAnkiId": 82398,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": []
+                }
+              ]
+            },
+            {
+              "data": {
+                "text": "朱子读书法评价",
+                "note": "",
+                "uid": "0d1739aa2b61447e84ff7d752715b7c9",
+                "memoryAnkiId": 53356,
+                "memoryAnkiNodeType": "peg"
+              },
+              "children": [
+                {
+                  "data": {
+                    "text": "切己体察针对自身实际",
+                    "note": "",
+                    "uid": "new-c51a0b84e503",
+                    "memoryAnkiId": 82399,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": []
+                },
+                {
+                  "data": {
+                    "text": "忽视实用知识",
+                    "note": "",
+                    "uid": "new-2f2b6ed82a63",
+                    "memoryAnkiId": 82400,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": []
+                },
+                {
+                  "data": {
+                    "text": "二者不矛盾",
+                    "note": "",
+                    "uid": "new-b542585eb2da",
+                    "memoryAnkiId": 82401,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": []
+                }
+              ]
+            },
+            {
+              "data": {
+                "text": "王守仁良知",
+                "note": "",
+                "uid": "cce43f9f1dfc4115a20020ae2926917e",
+                "memoryAnkiId": 53357,
+                "memoryAnkiNodeType": "peg"
+              },
+              "children": [
+                {
+                  "data": {
+                    "text": "近于孟子性善论",
+                    "note": "",
+                    "uid": "new-42006a50e7f1",
+                    "memoryAnkiId": 82402,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": []
+                },
+                {
+                  "data": {
+                    "text": "教育发明本心",
+                    "note": "",
+                    "uid": "new-ac1d4be62ea7",
+                    "memoryAnkiId": 82403,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": []
+                },
+                {
+                  "data": {
+                    "text": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">“存天理”内发、“明天理”外求 [易错点]</span></div>",
+                    "note": "",
+                    "uid": "new-b134b5debce5",
+                    "richText": "<div><span data-emphasis=\"highlight\" style=\"background-color:#fef08c;color:inherit\">“存天理”内发、“明天理”外求 [易错点]</span></div>",
+                    "memoryAnkiId": 82404,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": []
+                },
+                {
+                  "data": {
+                    "text": "王守仁不同于王夫之",
+                    "note": "",
+                    "uid": "new-f522eae79100",
+                    "memoryAnkiId": 82405,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": []
+                }
+              ]
+            },
+            {
+              "data": {
+                "text": "量力性首次提出者",
+                "note": "",
+                "uid": "new-8b889bb37b08",
+                "memoryAnkiId": 82406,
+                "memoryAnkiNodeType": "peg"
+              },
+              "children": [
+                {
+                  "data": {
+                    "text": "墨子",
+                    "note": "",
+                    "uid": "ae8f6d9999a24585b67ce773324e176e",
+                    "memoryAnkiId": 53358,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": []
+                }
+              ]
+            },
+            {
+              "data": {
+                "text": "静处体悟与事上磨炼",
+                "note": "",
+                "uid": "cf5c0e4711f04508ae5719a7545e47b6",
+                "memoryAnkiId": 53359,
+                "memoryAnkiNodeType": "peg"
+              },
+              "children": [
+                {
+                  "data": {
+                    "text": "早年与晚年之别",
+                    "note": "",
+                    "uid": "new-9a46598db131",
+                    "memoryAnkiId": 82407,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": []
+                },
+                {
+                  "data": {
+                    "text": "静坐易生弊病",
+                    "note": "",
+                    "uid": "new-5a62384517b0",
+                    "memoryAnkiId": 82408,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": []
+                },
+                {
+                  "data": {
+                    "text": "强调知行合一",
+                    "note": "",
+                    "uid": "new-006bc460e9b3",
+                    "memoryAnkiId": 82409,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": []
+                }
+              ]
+            },
+            {
+              "data": {
+                "text": "“讽”的含义",
+                "note": "",
+                "uid": "c35ce96628734434b4a7ddf40ac21ccc",
+                "memoryAnkiId": 53360,
+                "memoryAnkiNodeType": "peg"
+              },
+              "children": [
+                {
+                  "data": {
+                    "text": "劝诫、劝告",
+                    "note": "",
+                    "uid": "new-c6303f97d6f3",
+                    "memoryAnkiId": 82410,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": []
+                },
+                {
+                  "data": {
+                    "text": "非讽刺",
+                    "note": "",
+                    "uid": "new-82a71b2582d2",
+                    "memoryAnkiId": 82411,
+                    "memoryAnkiNodeType": "peg"
+                  },
+                  "children": []
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "theme": {
+      "template": "avocado",
+      "config": {}
+    },
+    "layout": "logicalStructure",
+    "config": {},
+    "view": null,
+    "schemaVersion": 1
+  }
+}

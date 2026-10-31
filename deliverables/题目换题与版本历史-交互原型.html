@@ -1,0 +1,1128 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>题目换题与版本历史 · 交互原型</title>
+<style>
+  :root {
+    --paper: #f4efe4;
+    --paper-2: #ece4d4;
+    --card: #fffdf8;
+    --card-soft: #faf6ec;
+    --ink: #2f2a24;
+    --ink-soft: #554d42;
+    --muted: #857b6d;
+    --line: #ded4c2;
+    --line-strong: #cbbcA4;
+    --primary: #7a5c3e;
+    --primary-strong: #5f452e;
+    --gold: #8a6420;
+    --gold-bg: #f8eed6;
+    --gold-line: #e4cd97;
+    --violet: #5b4a86;
+    --violet-bg: #efeaf9;
+    --violet-line: #d2c7ea;
+    --rose: #a43f4b;
+    --rose-bg: #fae9eb;
+    --rose-line: #eec4c9;
+    --green: #3f6f52;
+    --green-bg: #eaf3ec;
+    --green-line: #c3ddcb;
+    --shadow: 0 18px 50px rgba(73, 58, 38, .12), 0 2px 8px rgba(73, 58, 38, .06);
+    --radius: 18px;
+    --sans: "Inter", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+    --serif: "Noto Serif SC", "Songti SC", "STSong", "SimSun", Georgia, serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    color: var(--ink);
+    font-family: var(--sans);
+    background:
+      radial-gradient(1100px 500px at 12% -10%, rgba(255,255,255,.75), transparent 60%),
+      radial-gradient(900px 420px at 100% 0%, rgba(226,207,170,.35), transparent 55%),
+      repeating-linear-gradient(0deg, rgba(120,100,70,.022) 0 1px, transparent 1px 4px),
+      var(--paper);
+    -webkit-font-smoothing: antialiased;
+  }
+  button, input, textarea { font: inherit; }
+  button { cursor: pointer; }
+  [hidden] { display: none !important; }
+
+  .topbar {
+    position: sticky; top: 0; z-index: 30;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    padding: 12px clamp(16px, 4vw, 40px);
+    background: rgba(244, 239, 228, .86);
+    border-bottom: 1px solid rgba(203, 188, 164, .55);
+    backdrop-filter: blur(12px);
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: .02em; }
+  .brand-mark {
+    display: inline-grid; place-items: center; width: 30px; height: 30px;
+    border-radius: 10px; background: var(--ink); color: #f8f1e2;
+    font-family: var(--serif); font-size: 15px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12);
+  }
+  .top-hint { color: var(--muted); font-size: 12px; }
+
+  .stage {
+    width: min(1180px, calc(100% - 32px));
+    margin: 28px auto 64px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: 24px;
+    align-items: start;
+  }
+
+  .panel {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 24px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .panel-head {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--line);
+    background: linear-gradient(180deg, rgba(255,255,255,.7), rgba(250,246,236,.55));
+  }
+  .crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+  .crumbs b { color: var(--ink-soft); font-weight: 600; }
+  .crumb-dot { opacity: .45; }
+  .batch-bar { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    min-height: 36px; padding: 8px 13px;
+    border: 1px solid var(--line-strong); border-radius: 11px;
+    background: var(--card); color: var(--ink-soft);
+    font-size: 13px; font-weight: 600; line-height: 1.2;
+    transition: transform .12s ease, background .15s ease, border-color .15s ease, box-shadow .15s ease;
+  }
+  .btn:hover { background: var(--card-soft); border-color: #b9a888; transform: translateY(-1px); }
+  .btn:active { transform: translateY(0); }
+  .btn:disabled { opacity: .48; cursor: not-allowed; transform: none; }
+  .btn.primary {
+    background: linear-gradient(180deg, #8a6847, var(--primary));
+    border-color: var(--primary-strong); color: #fffaf1;
+    box-shadow: 0 6px 16px rgba(122, 92, 62, .2);
+  }
+  .btn.primary:hover { background: linear-gradient(180deg, #916f4d, #6d5037); }
+  .btn.violet { color: #fff; border-color: #55437f; background: linear-gradient(180deg, #705da0, #5b4a86); }
+  .btn.danger { color: var(--rose); border-color: var(--rose-line); background: var(--rose-bg); }
+  .btn.ghost { border-color: transparent; background: transparent; }
+
+  .question-card { padding: clamp(18px, 3vw, 30px); }
+  .question-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 9px; border-radius: 999px;
+    border: 1px solid var(--line); background: var(--card-soft);
+    font-size: 12px; font-weight: 650; line-height: 1.3; white-space: nowrap;
+  }
+  .badge.type { color: var(--ink-soft); }
+  .badge.original { color: var(--gold); background: var(--gold-bg); border-color: var(--gold-line); }
+  .badge.variant { color: var(--violet); background: var(--violet-bg); border-color: var(--violet-line); }
+  .badge.pending { color: var(--rose); background: var(--rose-bg); border-color: var(--rose-line); }
+  .badge.done { color: var(--green); background: var(--green-bg); border-color: var(--green-line); }
+  .badge.muted { color: var(--muted); }
+
+  .mutation-bar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 7px;
+    margin-top: 12px; padding: 9px 11px;
+    border: 1px dashed var(--line-strong); border-radius: 13px;
+    background: rgba(250,246,236,.68);
+  }
+  .mutation-label { margin-right: 2px; color: var(--muted); font-size: 11px; letter-spacing: .08em; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    min-height: 31px; padding: 5px 10px;
+    border: 1px solid var(--line-strong); border-radius: 9px;
+    background: var(--card); color: var(--ink-soft);
+    font-size: 12px; font-weight: 650;
+    transition: background .15s ease, border-color .15s ease, transform .12s ease;
+  }
+  .chip:hover { background: var(--card-soft); transform: translateY(-1px); }
+  .chip.pending { color: var(--rose); background: var(--rose-bg); border-color: var(--rose-line); }
+  .chip.original-action { color: var(--gold); background: var(--gold-bg); border-color: var(--gold-line); }
+  .chip.history { color: var(--violet); background: var(--violet-bg); border-color: var(--violet-line); }
+
+  .stem {
+    margin: 20px 0 18px;
+    font-family: var(--serif);
+    font-size: clamp(20px, 2.5vw, 26px);
+    line-height: 1.75; letter-spacing: .01em;
+  }
+  .stem .source-tag { color: var(--muted); font-size: .62em; font-family: var(--sans); font-weight: 600; letter-spacing: .04em; }
+  .options { display: grid; gap: 9px; }
+  .option {
+    display: flex; gap: 10px; align-items: flex-start;
+    padding: 12px 14px; border: 1px solid var(--line); border-radius: 13px;
+    background: rgba(255,255,255,.55); font-size: 15px; line-height: 1.6;
+    transition: border-color .15s ease, background .15s ease, transform .12s ease;
+  }
+  .option:hover { border-color: #c4ae8a; background: #fffaf0; transform: translateY(-1px); }
+  .option .letter {
+    display: inline-grid; place-items: center; flex: 0 0 24px;
+    width: 24px; height: 24px; margin-top: 1px;
+    border-radius: 8px; background: var(--paper-2); color: var(--ink-soft);
+    font-size: 12px; font-weight: 800;
+  }
+  .option.correct { border-color: var(--green-line); background: var(--green-bg); }
+  .option.correct .letter { background: var(--green); color: #fff; }
+  .option.wrong { border-color: var(--rose-line); background: var(--rose-bg); }
+  .answer-box {
+    margin-top: 18px; padding: 14px 15px;
+    border: 1px solid var(--green-line); border-radius: 13px;
+    background: var(--green-bg); font-size: 13.5px; line-height: 1.7;
+  }
+  .answer-box b { color: var(--green); }
+  .answer-box .analysis { margin-top: 7px; color: var(--ink-soft); }
+  .question-foot {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px;
+    margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--line);
+    color: var(--muted); font-size: 12.5px;
+  }
+  .foot-actions { display: flex; gap: 8px; }
+
+  .demo-controls {
+    position: sticky; top: 76px;
+    padding: 18px;
+    border: 1px dashed #bda97f; border-radius: 18px;
+    background: rgba(255, 250, 235, .78);
+    box-shadow: 0 10px 30px rgba(80, 62, 38, .07);
+  }
+  .demo-controls h2 { margin: 0 0 6px; font-family: var(--serif); font-size: 17px; }
+  .demo-controls p { margin: 10px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.7; }
+  .demo-controls .btn { width: 100%; margin-top: 8px; justify-content: flex-start; }
+  .rule-box {
+    margin-top: 12px; padding: 11px 12px;
+    border-radius: 11px; background: rgba(255,255,255,.7);
+    border: 1px solid var(--line);
+    font-size: 12px; color: var(--ink-soft); line-height: 1.7;
+  }
+  .rule-box b { color: var(--rose); }
+  .stat-line { display: flex; gap: 14px; margin-top: 10px; color: var(--muted); font-size: 11.5px; }
+  .stat-line b { display: block; color: var(--ink-soft); font-size: 16px; font-family: var(--serif); }
+
+  .toast {
+    position: fixed; z-index: 80; top: 82px; right: 24px;
+    width: min(420px, calc(100vw - 32px));
+    padding: 13px 15px 13px 14px;
+    border-radius: 14px;
+    background: rgba(47, 42, 36, .96); color: #fffaf0;
+    box-shadow: 0 16px 40px rgba(30, 24, 18, .34);
+    font-size: 13px; line-height: 1.55;
+    opacity: 0; transform: translateY(-8px) scale(.98);
+    transition: opacity .2s ease, transform .2s ease;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateY(0) scale(1); }
+  .toast .toast-title { font-weight: 750; }
+  .toast .toast-sub { margin-top: 3px; color: rgba(255,250,240,.7); font-size: 12px; }
+  .toast.amber { background: rgba(91, 62, 30, .97); }
+  .toast.violet { background: rgba(61, 49, 91, .97); }
+  .toast.green { background: rgba(43, 76, 55, .97); }
+
+  .overlay {
+    position: fixed; inset: 0; z-index: 50;
+    display: flex; align-items: center; justify-content: center;
+    padding: 22px;
+    background: rgba(43, 36, 28, .38);
+    backdrop-filter: blur(5px);
+    animation: fadeIn .18s ease;
+  }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes rise { from { opacity: 0; transform: translateY(12px) scale(.985); } to { opacity: 1; transform: none; } }
+  .modal {
+    width: min(760px, 100%); max-height: min(84vh, 900px);
+    display: flex; flex-direction: column;
+    border: 1px solid var(--line); border-radius: 20px;
+    background: var(--card); box-shadow: 0 30px 80px rgba(37, 29, 20, .32);
+    animation: rise .22s ease; overflow: hidden;
+  }
+  .modal-head {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 14px;
+    padding: 18px 20px 14px; border-bottom: 1px solid var(--line);
+    background: linear-gradient(180deg, #fffdf8, #faf5e9);
+  }
+  .modal-head h3 { margin: 0; font-family: var(--serif); font-size: 18px; }
+  .modal-head p { margin: 5px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+  .modal-close {
+    flex: 0 0 auto; width: 32px; height: 32px; border-radius: 9px;
+    border: 1px solid var(--line); background: var(--card); color: var(--muted);
+    font-size: 16px;
+  }
+  .modal-close:hover { background: var(--card-soft); color: var(--ink); }
+  .modal-body { padding: 18px 20px; overflow: auto; }
+  .modal-foot {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px;
+    padding: 14px 20px; border-top: 1px solid var(--line); background: #fbf7ee;
+  }
+  .modal-foot .spacer { margin-right: auto; color: var(--muted); font-size: 12px; }
+
+  .drawer {
+    width: min(560px, 100%); height: 100%; max-height: none;
+    margin-left: auto; border-radius: 20px 0 0 20px;
+    animation: slideIn .24s ease;
+  }
+  @keyframes slideIn { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
+  .overlay.drawer-overlay { justify-content: flex-end; padding: 0; }
+
+  .history-item {
+    display: grid; gap: 10px;
+    padding: 14px; margin-bottom: 12px;
+    border: 1px solid var(--line); border-radius: 15px;
+    background: rgba(255,255,255,.55);
+  }
+  .history-item.original { border-color: var(--gold-line); background: linear-gradient(180deg, #fffaf0, var(--gold-bg)); box-shadow: inset 0 0 0 1px rgba(228,205,151,.35); }
+  .history-item.active { border-color: var(--green-line); box-shadow: 0 0 0 3px rgba(63,111,82,.08); }
+  .history-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+  .history-title { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; font-weight: 750; }
+  .history-time { color: var(--muted); font-size: 11px; }
+  .history-stem { font-family: var(--serif); font-size: 14.5px; line-height: 1.7; }
+  .history-options { display: grid; gap: 4px; color: var(--ink-soft); font-size: 12.5px; line-height: 1.6; }
+  .history-analysis { padding: 9px 10px; border-radius: 9px; background: rgba(244,239,228,.7); color: var(--muted); font-size: 12px; line-height: 1.65; }
+  .history-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+  .tag-truth { color: var(--gold); background: #fff7e3; border: 1px solid var(--gold-line); border-radius: 999px; padding: 2px 8px; font-size: 10.5px; font-weight: 700; }
+
+  .prompt-box {
+    width: 100%; min-height: 430px; resize: vertical;
+    padding: 14px; border: 1px solid var(--line); border-radius: 13px;
+    background: #2f2a24; color: #f6ecd9;
+    font-family: "Cascadia Code", "Consolas", "Noto Sans Mono", monospace;
+    font-size: 12px; line-height: 1.7;
+  }
+  .import-box {
+    width: 100%; min-height: 220px; resize: vertical;
+    padding: 12px; border: 1px solid var(--line); border-radius: 13px;
+    background: #fffdf7; color: var(--ink);
+    font-family: "Cascadia Code", "Consolas", "Noto Sans Mono", monospace;
+    font-size: 12px; line-height: 1.65;
+  }
+  .preview-list { display: grid; gap: 8px; margin-top: 14px; }
+  .preview-row {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 10px 12px; border: 1px solid var(--line); border-radius: 11px;
+    background: rgba(255,255,255,.55); font-size: 12.5px;
+  }
+  .preview-row.ok { border-color: var(--green-line); background: var(--green-bg); }
+  .preview-row.bad { border-color: var(--rose-line); background: var(--rose-bg); }
+  .preview-row .why { color: var(--muted); font-size: 11.5px; }
+  .preview-id { font-weight: 750; }
+  .preview-count { margin-top: 12px; color: var(--ink-soft); font-size: 12.5px; }
+  .preview-count b { color: var(--green); }
+
+  .settings-grid { display: grid; gap: 14px; }
+  .setting-row {
+    display: grid; grid-template-columns: 1fr 120px; gap: 12px; align-items: center;
+    padding: 13px 14px; border: 1px solid var(--line); border-radius: 13px;
+    background: rgba(255,255,255,.55);
+  }
+  .setting-row label { font-size: 13.5px; font-weight: 650; }
+  .setting-row small { display: block; margin-top: 3px; color: var(--muted); font-size: 11.5px; font-weight: 400; line-height: 1.5; }
+  .setting-row input {
+    width: 100%; height: 38px; padding: 0 10px;
+    border: 1px solid var(--line-strong); border-radius: 9px;
+    background: #fffdf7; color: var(--ink); font-weight: 700; text-align: center;
+  }
+  .setting-row .unit { position: relative; }
+  .setting-row .unit span {
+    position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+    color: var(--muted); font-size: 12px; pointer-events: none;
+  }
+  .setting-row .unit input { padding-right: 30px; text-align: left; }
+
+  .footer-note {
+    margin-top: 26px; padding: 14px 16px;
+    border-radius: 13px; border: 1px solid var(--line);
+    background: rgba(255,255,255,.45);
+    color: var(--muted); font-size: 12px; line-height: 1.75;
+  }
+  .footer-note b { color: var(--ink-soft); }
+
+  @media (max-width: 920px) {
+    .stage { grid-template-columns: 1fr; }
+    .demo-controls { position: static; order: 2; }
+  }
+  @media (max-width: 560px) {
+    .topbar { align-items: flex-start; }
+    .top-hint { display: none; }
+    .panel { border-radius: 18px; }
+    .panel-head { padding: 14px; }
+    .question-card { padding: 16px; }
+    .batch-bar { width: 100%; }
+    .batch-bar .btn { flex: 1 1 auto; }
+    .stem { font-size: 20px; margin-top: 16px; }
+    .setting-row { grid-template-columns: 1fr; }
+    .overlay { padding: 10px; }
+    .drawer { border-radius: 16px; }
+    .toast { top: 70px; right: 10px; }
+  }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark">墨</span> Memory Anki · 题目换题与版本历史</div>
+    <div class="top-hint">交互原型 · 不会写入真实数据</div>
+  </header>
+
+  <main class="stage">
+    <section class="panel" aria-label="做题面板">
+      <div class="panel-head">
+        <div class="crumbs">
+          <span>中教史</span><span class="crumb-dot">/</span>
+          <b>第三章 学校教育制度</b><span class="crumb-dot">/</span>
+          <span>第三节 书院与私学</span>
+        </div>
+        <div class="batch-bar">
+          <button class="btn primary" id="copyPromptBtn">📋 一键复制待换题 + Prompt (<span id="markedCount">2</span>道)</button>
+          <button class="btn" id="importBtn">📥 导入 AI 替换题 JSON</button>
+        </div>
+      </div>
+
+      <div class="question-card">
+        <div class="question-meta">
+          <span class="badge type">选择题</span>
+          <span class="badge" id="versionBadge">🏛️ 原真题</span>
+          <span class="badge pending" id="pendingBadge" hidden>🔥 待换题</span>
+          <span class="badge muted">答对 5 次 / 答错 0 次</span>
+          <span class="badge muted">已做过</span>
+        </div>
+
+        <div class="mutation-bar">
+          <span class="mutation-label">换题工作流</span>
+          <button class="chip" id="markBtn">🎯 标记换题</button>
+          <button class="chip original-action" id="restoreBtn" hidden>↺ 恢复真题</button>
+          <button class="chip history" id="historyBtn">🕒 历史版本 (<span id="versionCount">2</span>)</button>
+          <span class="mutation-label" id="ruleSummary" style="margin-left:auto">自动检测：累计 3 次 · 连对 3 次 · &lt;5s</span>
+        </div>
+
+        <h1 class="stem" id="stem"></h1>
+        <div class="options" id="options"></div>
+        <div class="answer-box" id="answerBox"></div>
+
+        <div class="question-foot">
+          <span id="progressText">第 1 / 12 题 · 本范围待换 2 道</span>
+          <span class="foot-actions">
+            <button class="btn ghost" disabled>上一题</button>
+            <button class="btn">下一题</button>
+          </span>
+        </div>
+      </div>
+    </section>
+
+    <aside class="demo-controls">
+      <h2>原型控制</h2>
+      <p>按顺序体验：先模拟“肌肉记忆”自动标记，再切换 AI 变体，最后打开历史版本或导入新题。</p>
+      <button class="btn" id="simulateBtn">⚡ 模拟连续 3 次快速答对</button>
+      <button class="btn violet" id="switchVariantBtn">🧬 切换为 AI 变体 v1</button>
+      <button class="btn" id="settingsBtn">⚙️ 自动检测设置</button>
+      <div class="rule-box" id="ruleBox">
+        当前规则：累计作答 <b id="ruleAttempts">3</b> 次、连续答对 <b id="ruleStreak">3</b> 次、本次耗时 <b id="ruleSeconds">5</b> 秒以内，且本题尚未标记时自动标记。
+      </div>
+      <div class="stat-line">
+        <span>累计<b id="statAttempts">5</b></span>
+        <span>连对<b id="statStreak">0</b></span>
+        <span>最近耗时<b id="statDuration">—</b></span>
+      </div>
+    </aside>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite">
+    <div class="toast-title" id="toastTitle"></div>
+    <div class="toast-sub" id="toastSub"></div>
+  </div>
+
+  <!-- 历史版本抽屉 -->
+  <div class="overlay drawer-overlay" id="historyOverlay" hidden>
+    <div class="modal drawer" role="dialog" aria-modal="true" aria-labelledby="historyTitle">
+      <div class="modal-head">
+        <div>
+          <h3 id="historyTitle">题目版本历史</h3>
+          <p>原始真题始终保留；AI 变体可随时切换或删除，删除变体不会影响原题。</p>
+        </div>
+        <button class="modal-close" data-close="historyOverlay" aria-label="关闭">×</button>
+      </div>
+      <div class="modal-body" id="historyList"></div>
+      <div class="modal-foot">
+        <span class="spacer">当前显示：<b id="historyActiveLabel">原真题</b></span>
+        <button class="btn" data-close="historyOverlay">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Prompt 预览 -->
+  <div class="overlay" id="promptOverlay" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="promptTitle">
+      <div class="modal-head">
+        <div>
+          <h3 id="promptTitle">待换题 Prompt 预览</h3>
+          <p>已按当前范围筛选「待换题」，并拼接每道题绑定的导图节点、路径、备注与子节点上下文。</p>
+        </div>
+        <button class="modal-close" data-close="promptOverlay" aria-label="关闭">×</button>
+      </div>
+      <div class="modal-body">
+        <textarea class="prompt-box" id="promptText" readonly></textarea>
+      </div>
+      <div class="modal-foot">
+        <span class="spacer" id="promptCountLabel">共 2 道待换题</span>
+        <button class="btn" data-close="promptOverlay">关闭</button>
+        <button class="btn primary" id="copyPromptConfirm">复制到剪贴板</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 导入 JSON -->
+  <div class="overlay" id="importOverlay" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="importTitle">
+      <div class="modal-head">
+        <div>
+          <h3 id="importTitle">导入 AI 替换题 JSON</h3>
+          <p>先解析预览；格式错误、题目不存在或版本已变化的条目会跳过，其余正常入库。</p>
+        </div>
+        <button class="modal-close" data-close="importOverlay" aria-label="关闭">×</button>
+      </div>
+      <div class="modal-body">
+        <textarea class="import-box" id="importText" spellcheck="false"></textarea>
+        <div style="display:flex; gap:8px; margin-top:10px">
+          <button class="btn" id="parseImportBtn">解析预览</button>
+          <button class="btn ghost" id="resetImportBtn">恢复示例</button>
+        </div>
+        <div class="preview-list" id="importPreview"></div>
+        <div class="preview-count" id="importSummary"></div>
+      </div>
+      <div class="modal-foot">
+        <span class="spacer">导入后会自动切换到最新变体，并清除「待换题」标记。</span>
+        <button class="btn" data-close="importOverlay">取消</button>
+        <button class="btn primary" id="confirmImportBtn" disabled>确认替换并入库</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 自动检测设置 -->
+  <div class="overlay" id="settingsOverlay" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" style="max-width:620px">
+      <div class="modal-head">
+        <div>
+          <h3 id="settingsTitle">自动检测「肌肉记忆题」</h3>
+          <p>答对时同时满足三个条件，才会自动标记为待换题；已标记的题不会重复提示。</p>
+        </div>
+        <button class="modal-close" data-close="settingsOverlay" aria-label="关闭">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="settings-grid">
+          <div class="setting-row">
+            <div><label for="setAttempts">累计作答次数</label><small>这道题历史上被作答过的总次数达到该值。</small></div>
+            <div class="unit"><input id="setAttempts" type="number" min="1" max="99" value="3" /><span>次</span></div>
+          </div>
+          <div class="setting-row">
+            <div><label for="setStreak">连续答对次数</label><small>最近连续答对的次数达到该值；答错会归零。</small></div>
+            <div class="unit"><input id="setStreak" type="number" min="1" max="99" value="3" /><span>次</span></div>
+          </div>
+          <div class="setting-row">
+            <div><label for="setSeconds">本次作答耗时</label><small>从看到题目到提交答案的时间小于该值。</small></div>
+            <div class="unit"><input id="setSeconds" type="number" min="1" max="120" step="0.5" value="5" /><span>秒</span></div>
+          </div>
+        </div>
+        <div class="footer-note" style="margin-top:16px">
+          <b>说明：</b>自动检测只负责“提醒你该换题”，不会自动删除原题或改变复习排期。换题后连续答对次数归零，重新开始检验新变体。
+        </div>
+      </div>
+      <div class="modal-foot">
+        <span class="spacer">设置保存在本机后端，两台设备共用。</span>
+        <button class="btn" data-close="settingsOverlay">取消</button>
+        <button class="btn primary" id="saveSettingsBtn">保存设置</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+
+  const ORIGINAL = {
+    id: 1024,
+    versionId: 'original',
+    label: '🏛️ 原真题',
+    kind: 'original',
+    stem: '【333·中教史·第三章】「书院」作为中国古代一种重要的教育组织形式，最早兴盛于（  ）',
+    options: [
+      { id: 'A', text: '汉代' },
+      { id: 'B', text: '唐代' },
+      { id: 'C', text: '宋代' },
+      { id: 'D', text: '明代' }
+    ],
+    answer: 'C',
+    analysis: '书院萌芽于唐代，但作为一种制度化的教育组织形式真正兴盛是在宋代。北宋三次兴学与民间讲学共同推动了白鹿洞、岳麓、应天府等书院的兴起。A 汉代以太学、郡国学为主；B 唐代书院尚属萌芽；D 明代书院虽继续发展，但不是“最早兴盛”。'
+  };
+
+  const V1 = {
+    id: 1024,
+    versionId: 'v1',
+    label: '🧬 AI 变体 · v1',
+    kind: 'variant',
+    createdAt: '2026-10-30 21:14',
+    stem: '【AI变体】北宋三次兴学中，范仲淹主持的庆历兴学，其核心措施是（  ）',
+    options: [
+      { id: 'A', text: '创设太学三舍法' },
+      { id: 'B', text: '令州县立学，推广州学与县学' },
+      { id: 'C', text: '废除科举取士' },
+      { id: 'D', text: '只在中央设立国子监' }
+    ],
+    answer: 'B',
+    analysis: '庆历兴学由范仲淹主持，核心之一是“令州县立学”，使州学、县学在地方推广。A 三舍法是王安石熙宁兴学的措施；C 科举并未废除；D 国子监早已存在，不是庆历兴学的核心。'
+  };
+
+  const V2 = {
+    id: 1024,
+    versionId: 'v2',
+    label: '🧬 AI 变体 · v2',
+    kind: 'variant',
+    createdAt: '2026-10-31 08:42',
+    stem: '【AI变体】下列关于北宋「州学」的表述，正确的一项是（  ）',
+    options: [
+      { id: 'A', text: '州学是中央官学，由国子监直接管理' },
+      { id: 'B', text: '州学由地方政府出资兴办，主要教授儒家经典' },
+      { id: 'C', text: '州学只招收宗室子弟，不面向普通士人' },
+      { id: 'D', text: '州学在宋代被书院完全取代' }
+    ],
+    answer: 'B',
+    analysis: '北宋庆历兴学令州县立学，州学由地方政府出资兴办，承担儒家经典教育与科举人才输送。A 混淆了中央官学与地方官学；C 州学面向普通士人；D 书院与州学并行发展，并非完全取代。'
+  };
+
+  const SECOND_QUESTION = {
+    id: 1088,
+    baseVersionId: 'original',
+    question_type: 'multiple_choice',
+    stem: '【333·中教史·第四章】北宋「三次兴学」中，首次明确令州县立学的是（  ）',
+    options: [
+      { id: 'A', text: '庆历兴学' },
+      { id: 'B', text: '熙宁兴学' },
+      { id: 'C', text: '崇宁兴学' },
+      { id: 'D', text: '绍圣兴学' }
+    ],
+    answer_payload: { correct_option_id: 'A' },
+    analysis: '庆历兴学由范仲淹主持，令州县立学；熙宁兴学以王安石三舍法为标志；崇宁兴学继续推广地方学校。',
+    bound_nodes: [
+      {
+        palace: '中教史·第四章 宋元时期的教育',
+        path: ['第四章 宋元时期的教育', '第二节 北宋三次兴学', '庆历兴学'],
+        node: '庆历兴学',
+        note: '易错：三次兴学的主持人、核心措施和顺序容易张冠李戴。',
+        children: ['范仲淹', '令州县立学', '改革科举']
+      }
+    ]
+  };
+
+  const state = {
+    activeVersionId: 'original',
+    needsMutation: false,
+    variants: [V1, V2],
+    markedIds: [1088],
+    attempts: 5,
+    streak: 0,
+    lastDurationMs: null,
+    settings: { attempts: 3, streak: 3, seconds: 5 },
+    lastImport: null
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const byVersion = (versionId) => versionId === 'original'
+    ? ORIGINAL
+    : state.variants.find((item) => item.versionId === versionId) || ORIGINAL;
+
+  function escapeHtml(value) {
+    return String(value)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+  }
+
+  function currentQuestion() {
+    return byVersion(state.activeVersionId);
+  }
+
+  function isMarked(id) {
+    return state.markedIds.includes(id);
+  }
+
+  function setMarked(id, marked) {
+    const next = new Set(state.markedIds);
+    if (marked) next.add(id); else next.delete(id);
+    state.markedIds = Array.from(next);
+    updateChrome();
+  }
+
+  function formatDuration(ms) {
+    if (ms == null) return '—';
+    return (ms / 1000).toFixed(1) + 's';
+  }
+
+  function toast(title, sub, tone) {
+    const el = $('toast');
+    el.className = 'toast show ' + (tone || '');
+    $('toastTitle').textContent = title;
+    $('toastSub').textContent = sub || '';
+    clearTimeout(toast._timer);
+    toast._timer = setTimeout(() => { el.className = 'toast ' + (tone || ''); }, 2500);
+  }
+
+  function renderQuestion() {
+    const q = currentQuestion();
+    $('stem').innerHTML = escapeHtml(q.stem);
+    $('options').innerHTML = q.options.map((option) => {
+      const correct = option.id === q.answer;
+      return '<div class="option' + (correct ? ' correct' : '') + '">' +
+        '<span class="letter">' + escapeHtml(option.id) + '</span>' +
+        '<span>' + escapeHtml(option.text) + (correct ? ' <span style="color:var(--green);font-size:11px;font-weight:700">正确答案</span>' : '') + '</span>' +
+      '</div>';
+    }).join('');
+    $('answerBox').innerHTML = '<b>答案：' + escapeHtml(q.answer) + '</b>' +
+      '<div class="analysis">解析：' + escapeHtml(q.analysis) + '</div>';
+    updateChrome();
+  }
+
+  function updateChrome() {
+    const q = currentQuestion();
+    const marked = isMarked(1024);
+    const versionBadge = $('versionBadge');
+    if (q.kind === 'original') {
+      versionBadge.className = 'badge original';
+      versionBadge.textContent = '🏛️ 原真题';
+    } else {
+      versionBadge.className = 'badge variant';
+      versionBadge.textContent = '🧬 AI 变体 · ' + q.versionId;
+    }
+    $('pendingBadge').hidden = !marked;
+    $('restoreBtn').hidden = q.kind === 'original';
+    $('markBtn').className = 'chip' + (marked ? ' pending' : '');
+    $('markBtn').textContent = marked ? '🔥 待换题' : '🎯 标记换题';
+    $('versionCount').textContent = String(state.variants.length);
+    $('markedCount').textContent = String(state.markedIds.length);
+    $('progressText').textContent = '第 1 / 12 题 · 本范围待换 ' + state.markedIds.length + ' 道';
+    $('statAttempts').textContent = String(state.attempts);
+    $('statStreak').textContent = String(state.streak);
+    $('statDuration').textContent = formatDuration(state.lastDurationMs);
+    $('ruleSummary').textContent = '自动检测：累计 ' + state.settings.attempts + ' 次 · 连对 ' + state.settings.streak + ' 次 · <' + state.settings.seconds + 's';
+    $('ruleAttempts').textContent = String(state.settings.attempts);
+    $('ruleStreak').textContent = String(state.settings.streak);
+    $('ruleSeconds').textContent = String(state.settings.seconds);
+  }
+
+  function openOverlay(id) {
+    $(id).hidden = false;
+    document.body.style.overflow = 'hidden';
+  }
+  function closeOverlay(id) {
+    $(id).hidden = true;
+    if (!document.querySelector('.overlay:not([hidden])')) document.body.style.overflow = '';
+  }
+
+  // ---- history ----
+  function renderHistory() {
+    const items = [ORIGINAL, ...state.variants.slice().sort((a, b) => b.versionId.localeCompare(a.versionId, undefined, { numeric: true }))];
+    $('historyList').innerHTML = items.map((item) => {
+      const active = item.versionId === state.activeVersionId;
+      const original = item.kind === 'original';
+      return '<div class="history-item ' + (original ? 'original ' : '') + (active ? 'active' : '') + '">' +
+        '<div class="history-top">' +
+          '<div class="history-title">' +
+            '<span class="badge ' + (original ? 'original' : 'variant') + '">' + escapeHtml(item.label) + '</span>' +
+            (original ? '<span class="tag-truth">真题保真</span>' : '<span class="history-time">' + escapeHtml(item.createdAt || '') + '</span>') +
+            (active ? '<span class="badge done">✅ 当前使用中</span>' : '') +
+          '</div>' +
+        '</div>' +
+        '<div class="history-stem">' + escapeHtml(item.stem) + '</div>' +
+        '<div class="history-options">' + item.options.map((option) =>
+          '<span>' + escapeHtml(option.id) + '. ' + escapeHtml(option.text) + (option.id === item.answer ? '（正确）' : '') + '</span>'
+        ).join('') + '</div>' +
+        '<div class="history-analysis">答案：' + escapeHtml(item.answer) + ' · 解析：' + escapeHtml(item.analysis) + '</div>' +
+        '<div class="history-actions">' +
+          (active
+            ? '<button class="btn" disabled>✅ 当前使用中</button>'
+            : '<button class="btn primary" data-activate="' + escapeHtml(item.versionId) + '">设为当前显示</button>') +
+          (!original ? '<button class="btn danger" data-delete="' + escapeHtml(item.versionId) + '">🗑️ 删除此变体</button>' : '') +
+        '</div>' +
+      '</div>';
+    }).join('');
+    $('historyActiveLabel').textContent = currentQuestion().kind === 'original' ? '原真题' : ('AI 变体 · ' + currentQuestion().versionId);
+  }
+
+  // ---- prompt ----
+  function promptDataForQuestion() {
+    const q = currentQuestion();
+    const base = q.kind === 'original' ? 'original' : q.versionId;
+    return {
+      question_id: 1024,
+      base_version_id: base,
+      question_type: 'multiple_choice',
+      stem: q.stem,
+      options: q.options,
+      answer_payload: { correct_option_id: q.answer },
+      analysis: q.analysis,
+      bound_nodes: [
+        {
+          palace: '中教史·第三章 学校教育制度',
+          path: ['第三章 学校教育制度', '第三节 书院与私学', '书院'],
+          node: '书院',
+          note: '易错：书院萌芽于唐、兴盛于宋；不要把“最早”与“兴盛”混为一谈。',
+          children: ['白鹿洞书院', '岳麓书院', '应天府书院']
+        }
+      ]
+    };
+  }
+
+  function promptQuestions() {
+    const questions = [];
+    if (isMarked(1024)) questions.push(promptDataForQuestion());
+    if (isMarked(1088)) questions.push(SECOND_QUESTION);
+    return questions;
+  }
+
+  function buildPrompt() {
+    const header = [
+      '你现在是一位资深的考研 333 教育综合与专业课命题专家。下面这些题我已经做过多次，形成了“看题干前半句或记住选项位置就秒选”的肌肉记忆，失去了诊断价值。',
+      '',
+      '请结合每道题附带的【原题、原解析】及【bound_nodes（绑定导图节点上下文）】，为每道题生成 1 道全新的高质量变体题，用于替换原题的展现形式。',
+      '',
+      '【核心命题准则（决定题目质量，务必严格执行）】',
+      '',
+      '1. 锚定核心考点与「错绑节点豁免」：',
+      '   - 优先提取 bound_nodes 中的知识点、易错提示（note）和子节点（children）来设计题目与干扰项。',
+      '   - 【重要豁免】：如果发现某道题的 bound_nodes 内容与原题干/原解析的考点明显不相关（属于历史错绑，例如原题考“庆历兴学”，绑定节点却是“书院”），请直接忽略 bound_nodes，严格围绕【原题与原解析的核心考点】及同章节考纲常识进行变形！',
+      '   - 严禁超纲与幻觉：所有人物、制度、著作、定义必须符合 333 教育综合 / 考研政治权威教材标准，严禁生造不存在的史实或概念。',
+      '',
+      '2. 彻底打破肌肉记忆（3 种强制变形模具，按原题类型三选一）：',
+      '   - 【模具 A：针对史实/人物/制度题 —— 改为“张冠李戴·四维综合辨析”】',
+      '     不要再单问“某次兴学的措施是什么”或“首次立学的是谁”。请改为：“关于[该章节核心主题，如北宋三次兴学/某教育家思想]的叙述，下列匹配/表述正确（或错误）的是（ ）”，在 A/B/C/D 四个选项中分别放入同章节不同人物/时期的措施并进行交叉错位（张冠李戴，如把王安石的“三舍法”嫁接给范仲淹，把胡瑗的“苏湖教法”说成明代制度），逼迫做题者必须逐一审视全部 4 个选项才能作答！',
+      '   - 【模具 B：针对概念/分类/定义题 —— 改为“逆向情境匹配”或“判断变式”】',
+      '     原题若是“给例子选概念”，新题请改为“给出四个不同情境/表述与概念的对应关系，选出对应完全正确的一项”；或者换用同层级的兄弟概念设问（如原题考“庆历兴学”，新题改为考原题干扰项中的“熙宁兴学”或“崇宁兴学”的核心创举）。',
+      '   - 【模具 C：针对简答/论述题（非选择题）—— 改为“侧重点追问与对比设问”】',
+      '     保持考点不变，改变提问切入角（如原题问“简述庆历兴学的内容”，新题改为“对比庆历兴学与熙宁兴学在太学改革与科举调整上的异同，并简述庆历兴学的主要措施”），答案依然沿用并覆盖原参考答案的核心采分点。',
+      '',
+      '3. 高质量干扰项铁律（拒绝一眼假的弱智选项）：',
+      '   - 严禁编写带有“只、全部、彻底废除、毫无作用”等绝对化词汇的凑数干扰项（如“只在中央设国子监”）。',
+      '   - 所有错误选项必须是真实存在的同章节兄弟概念（用张冠李戴、时间先后颠倒、主次颠倒、因果倒置来设陷）。',
+      '   - 正确答案的位置（A/B/C/D）必须与原题的正确答案位置不同！',
+      '',
+      '4. 来源标签与幂等规则：',
+      '   - 若原题 stem 开头带有 【...】 来源标签（如 【333·中教史·第四章】），请原样保留在最前面，并在其后紧跟一个 【AI变体】 标签。',
+      '   - 如果原题 stem 中已经包含 【AI变体】 字样，请保留原有的 【AI变体】，绝对不要重复叠加成 【AI变体】【AI变体】。若原题无任何标签，则直接在开头加上 【AI变体】。',
+      '',
+      '5. 结构与字段映射规范（防导入报错）：',
+      '   - 无论输入数据中使用的是 question_id 还是 id，输出时一律统一命名为 "question_id"。',
+      '   - 无论输入数据中使用的是 base_version_id 还是 baseVersionId，输出时一律统一命名为 "base_version_id"，且其值必须原样照抄输入值（如 "v1" 或 "original"）。',
+      '   - 必须保持与原题完全相同的 question_type 和 answer_payload 内部键结构（单选为 {"correct_option_id": "X"}，多选为 {"correct_option_ids": ["X", "Y"]}，简答为 {"reference_answer": "..."}）。',
+      '   - analysis 解析必须结构化：先明确指出正确答案的核心依据，再按 A/B/C/D 顺序逐一拆解每个干扰项具体错在何处（谁的措施、哪个朝代、怎么改才对）。',
+      '',
+      '【输出格式要求】',
+      '只输出一个合法的、可直接被 JSON.parse() 解析的 JSON 数组！严禁输出任何开场白、结束语、解释文字或 ```json 代码块包裹符号。数组每项格式严格如下：',
+      '[',
+      '  {',
+      '    "question_id": 1024,',
+      '    "base_version_id": "original",',
+      '    "question_type": "multiple_choice",',
+      '    "stem": "新题干",',
+      '    "options": [',
+      '      {"id": "A", "text": "选项内容（不含A.前缀）"},',
+      '      {"id": "B", "text": "选项内容"},',
+      '      {"id": "C", "text": "选项内容"},',
+      '      {"id": "D", "text": "选项内容"}',
+      '    ],',
+      '    "answer_payload": {"correct_option_id": "A"},',
+      '    "analysis": "解析内容：先说明正确依据，再按 A/B/C/D 逐一说明干扰项错在哪里"',
+      '  }',
+      ']',
+      '',
+      '以下是需要你变形替换的题目数据：',
+      ''
+    ].join('\n');
+    return header + JSON.stringify(promptQuestions(), null, 2);
+  }
+
+  // ---- import ----
+  const SAMPLE_IMPORT = [
+    {
+      question_id: 1024,
+      base_version_id: 'original',
+      question_type: 'multiple_choice',
+      stem: '【AI变体】书院在宋代兴盛，与其直接相关的一项是（  ）',
+      options: [
+        { id: 'A', text: '宋代地方官学完全废弛' },
+        { id: 'B', text: '科举取士规模扩大，士人讲学与备考需求增加' },
+        { id: 'C', text: '中央政府禁止民间讲学' },
+        { id: 'D', text: '书院只讲授佛学经典' }
+      ],
+      answer_payload: { correct_option_id: 'B' },
+      analysis: '宋代科举规模扩大，士人备考与讲学需求增加，书院由此兴盛。A 地方官学并未完全废弛；C 与书院兴盛的史实相反；D 书院以儒家经典为主。'
+    },
+    {
+      question_id: 9999,
+      base_version_id: 'original',
+      question_type: 'multiple_choice',
+      stem: '这是一道不存在的题目，用来演示导入预览的跳过逻辑。',
+      options: [
+        { id: 'A', text: '选项 A' },
+        { id: 'B', text: '选项 B' }
+      ],
+      answer_payload: { correct_option_id: 'A' },
+      analysis: '题目 id 不存在。'
+    }
+  ];
+
+  function importSampleText() {
+    const sample = JSON.parse(JSON.stringify(SAMPLE_IMPORT));
+    sample.forEach((item) => {
+      if (item.question_id === 1024) item.base_version_id = state.activeVersionId;
+    });
+    return JSON.stringify(sample, null, 2);
+  }
+
+  function parseImportItems() {
+    let parsed;
+    try {
+      parsed = JSON.parse($('importText').value);
+    } catch (error) {
+      return { error: 'JSON 解析失败：' + error.message, items: [] };
+    }
+    if (!Array.isArray(parsed)) return { error: '顶层必须是 JSON 数组。', items: [] };
+    return { error: '', items: parsed };
+  }
+
+  function normalizeItem(raw) {
+    if (!raw || typeof raw !== 'object') return { status: 'bad', reason: '不是对象' };
+    const id = Number(raw.question_id);
+    if (!Number.isInteger(id) || id <= 0) return { status: 'bad', reason: 'question_id 不合法' };
+    if (id !== 1024 && id !== 1088) return { status: 'bad', reason: '题目不存在或已删除，将跳过' };
+    if (raw.base_version_id && id === 1024 && raw.base_version_id !== state.activeVersionId) {
+      return { status: 'bad', reason: 'base_version_id 已变化，将跳过' };
+    }
+    if (!raw.stem || typeof raw.stem !== 'string') return { status: 'bad', reason: '缺少题干' };
+    if (!raw.analysis || typeof raw.analysis !== 'string') return { status: 'bad', reason: '缺少解析' };
+    if (!Array.isArray(raw.options) || raw.options.length < 2) return { status: 'bad', reason: '选项不足' };
+    const payload = raw.answer_payload || {};
+    const answer = payload.correct_option_id || (Array.isArray(payload.correct_option_ids) ? payload.correct_option_ids[0] : '');
+    if (!answer) return { status: 'bad', reason: '缺少正确答案' };
+    if (!raw.options.some((option) => option && option.id === answer)) return { status: 'bad', reason: '正确答案不在选项中' };
+    return { status: 'ok', reason: '可导入', questionId: id };
+  }
+
+  function renderImportPreview() {
+    const parsed = parseImportItems();
+    const list = $('importPreview');
+    const summary = $('importSummary');
+    const confirm = $('confirmImportBtn');
+    if (parsed.error) {
+      list.innerHTML = '<div class="preview-row bad"><span class="preview-id">无法解析</span><span class="why">' + escapeHtml(parsed.error) + '</span></div>';
+      summary.textContent = '';
+      confirm.disabled = true;
+      state.lastImport = null;
+      return;
+    }
+    const rows = parsed.items.map((item, index) => ({ item, result: normalizeItem(item), index }));
+    list.innerHTML = rows.map(({ item, result, index }) => {
+      const ok = result.status === 'ok';
+      const id = item && item.question_id != null ? item.question_id : '—';
+      const stem = item && typeof item.stem === 'string' ? item.stem.slice(0, 42) : '（无题干）';
+      return '<div class="preview-row ' + (ok ? 'ok' : 'bad') + '">' +
+        '<div><span class="preview-id">#' + (index + 1) + ' · 题目 ' + escapeHtml(id) + '</span>' +
+        '<div class="why">' + escapeHtml(stem) + (stem.length >= 42 ? '…' : '') + '</div></div>' +
+        '<div><span class="badge ' + (ok ? 'done' : 'pending') + '">' + (ok ? '✅ 可导入' : '⚠️ ' + escapeHtml(result.reason)) + '</span></div>' +
+      '</div>';
+    }).join('');
+    const okRows = rows.filter((row) => row.result.status === 'ok');
+    summary.innerHTML = '校验结果：<b>' + okRows.length + '</b> 道可导入，' + (rows.length - okRows.length) + ' 道将跳过。';
+    confirm.disabled = okRows.length === 0;
+    confirm.textContent = okRows.length > 0 ? '确认替换并入库 (' + okRows.length + ' 道)' : '没有可导入的题目';
+    state.lastImport = { rows, okRows };
+  }
+
+  function applyImport() {
+    if (!state.lastImport) return;
+    const okRows = state.lastImport.okRows.slice();
+    if (okRows.length === 0) return;
+    const maxVersion = state.variants.reduce(
+      (max, item) => Math.max(max, Number(String(item.versionId).replace(/\D/g, '')) || 0),
+      0,
+    );
+    let nextNumber = maxVersion + 1;
+    let applied = 0;
+    for (const row of okRows) {
+      const raw = row.item;
+      const questionId = row.result.questionId;
+      if (questionId === 1088) {
+        applied += 1;
+        continue;
+      }
+      if (questionId !== 1024) continue;
+      const versionId = 'v' + nextNumber++;
+      const variant = {
+        id: 1024,
+        versionId,
+        label: '🧬 AI 变体 · ' + versionId,
+        kind: 'variant',
+        createdAt: '刚刚',
+        stem: raw.stem,
+        options: raw.options.map((option) => ({ id: String(option.id), text: String(option.text) })),
+        answer: raw.answer_payload.correct_option_id || raw.answer_payload.correct_option_ids[0],
+        analysis: raw.analysis
+      };
+      state.variants.push(variant);
+      state.activeVersionId = variant.versionId;
+      state.needsMutation = false;
+      state.streak = 0;
+      state.lastDurationMs = null;
+      setMarked(1024, false);
+      applied += 1;
+    }
+    renderQuestion();
+    closeOverlay('importOverlay');
+    toast('🎉 成功替换 ' + applied + ' 道题目！', '原真题已安全归档至历史版本，可随时一键恢复。', 'green');
+  }
+
+  // ---- wiring ----
+  $('markBtn').addEventListener('click', () => {
+    const marked = !isMarked(1024);
+    setMarked(1024, marked);
+    toast(marked ? '🔥 已标记为「待换题」' : '已取消「待换题」标记', marked ? '下一道出现前，可随时复制 Prompt 交给外部 AI 换题。' : '这道题不会被复制进待换题 Prompt。', marked ? 'amber' : '');
+  });
+
+  $('restoreBtn').addEventListener('click', () => {
+    state.activeVersionId = 'original';
+    renderQuestion();
+    toast('↺ 已恢复原始真题', 'AI 变体仍保留在历史版本中，可随时切回。', 'violet');
+  });
+
+  $('historyBtn').addEventListener('click', () => {
+    renderHistory();
+    openOverlay('historyOverlay');
+  });
+
+  $('historyList').addEventListener('click', (event) => {
+    const activate = event.target.closest('[data-activate]');
+    if (activate) {
+      state.activeVersionId = activate.dataset.activate;
+      renderQuestion();
+      renderHistory();
+      toast('已切换显示版本', '当前显示：' + (state.activeVersionId === 'original' ? '原真题' : 'AI 变体 · ' + state.activeVersionId), 'violet');
+      return;
+    }
+    const remove = event.target.closest('[data-delete]');
+    if (remove) {
+      const versionId = remove.dataset.delete;
+      state.variants = state.variants.filter((item) => item.versionId !== versionId);
+      if (state.activeVersionId === versionId) state.activeVersionId = 'original';
+      renderQuestion();
+      renderHistory();
+      toast('已删除变体 ' + versionId, '原始真题不受影响。');
+    }
+  });
+
+  $('copyPromptBtn').addEventListener('click', () => {
+    if (state.markedIds.length === 0) {
+      toast('当前范围没有待换题', '先用「🎯 标记换题」标记几道题，再复制 Prompt。', 'amber');
+      return;
+    }
+    $('promptText').value = buildPrompt();
+    $('promptCountLabel').textContent = '共 ' + state.markedIds.length + ' 道待换题';
+    openOverlay('promptOverlay');
+  });
+
+  $('copyPromptConfirm').addEventListener('click', async () => {
+    const text = $('promptText').value;
+    try {
+      await navigator.clipboard.writeText(text);
+      toast('✅ 已复制 ' + state.markedIds.length + ' 道待换题及完整提示词', '请直接粘贴给外部 AI。', 'green');
+    } catch (error) {
+      $('promptText').select();
+      document.execCommand('copy');
+      toast('✅ 已复制提示词', '如果浏览器未授权剪贴板，已自动选中文本，可手动复制。', 'green');
+    }
+    closeOverlay('promptOverlay');
+  });
+
+  $('importBtn').addEventListener('click', () => {
+    $('importText').value = importSampleText();
+    $('importPreview').innerHTML = '';
+    $('importSummary').textContent = '';
+    $('confirmImportBtn').disabled = true;
+    $('confirmImportBtn').textContent = '确认替换并入库';
+    state.lastImport = null;
+    openOverlay('importOverlay');
+    renderImportPreview();
+  });
+
+  $('parseImportBtn').addEventListener('click', renderImportPreview);
+  $('resetImportBtn').addEventListener('click', () => {
+    $('importText').value = importSampleText();
+    renderImportPreview();
+  });
+  $('confirmImportBtn').addEventListener('click', applyImport);
+
+  $('simulateBtn').addEventListener('click', () => {
+    if (isMarked(1024)) {
+      toast('🔥 这道题已经标记为「待换题」', '换题后连续答对次数会归零，重新开始检验。', 'amber');
+      return;
+    }
+    const durationMs = Math.max(800, state.settings.seconds * 1000 - 800);
+    state.attempts = Math.max(state.attempts, state.settings.attempts);
+    state.streak = state.settings.streak;
+    state.lastDurationMs = durationMs;
+    setMarked(1024, true);
+    updateChrome();
+    toast('⚡ 检测到肌肉记忆（连续答对且耗时 <' + state.settings.seconds + 's）', '已自动标记为「待换题」。累计 ' + state.attempts + ' 次 · 连对 ' + state.streak + ' 次 · 本次 ' + formatDuration(durationMs), 'amber');
+  });
+
+  $('switchVariantBtn').addEventListener('click', () => {
+    if (state.variants.length === 0) {
+      toast('还没有 AI 变体', '先通过「导入 AI 替换题 JSON」生成一个变体。', 'amber');
+      return;
+    }
+    const next = state.activeVersionId === 'v1' ? 'v2' : 'v1';
+    const target = state.variants.find((item) => item.versionId === next) || state.variants[0];
+    state.activeVersionId = target.versionId;
+    renderQuestion();
+    toast('🧬 已切换到 AI 变体 · ' + target.versionId, '徽章变为紫色；点「↺ 恢复真题」可立刻回到原题。', 'violet');
+  });
+
+  $('settingsBtn').addEventListener('click', () => {
+    $('setAttempts').value = String(state.settings.attempts);
+    $('setStreak').value = String(state.settings.streak);
+    $('setSeconds').value = String(state.settings.seconds);
+    openOverlay('settingsOverlay');
+  });
+
+  $('saveSettingsBtn').addEventListener('click', () => {
+    const attempts = Math.max(1, Math.min(99, Number($('setAttempts').value) || 3));
+    const streak = Math.max(1, Math.min(99, Number($('setStreak').value) || 3));
+    const seconds = Math.max(1, Math.min(120, Number($('setSeconds').value) || 5));
+    state.settings = { attempts, streak, seconds };
+    updateChrome();
+    closeOverlay('settingsOverlay');
+    toast('设置已保存', '自动检测规则：累计 ' + attempts + ' 次 · 连对 ' + streak + ' 次 · <' + seconds + 's', 'green');
+  });
+
+  document.addEventListener('click', (event) => {
+    const closeId = event.target.getAttribute && event.target.getAttribute('data-close');
+    if (closeId) closeOverlay(closeId);
+    if (event.target.classList && event.target.classList.contains('overlay')) {
+      closeOverlay(event.target.id);
+    }
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    const open = document.querySelector('.overlay:not([hidden])');
+    if (open) closeOverlay(open.id);
+  });
+
+  renderQuestion();
+  renderHistory();
+})();
+</script>
+</body>
+</html>
