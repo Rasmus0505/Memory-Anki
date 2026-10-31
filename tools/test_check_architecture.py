@@ -3327,6 +3327,16 @@ def test_live_study_presence_rejects_persisted_flip_ladder_and_fold_memory(
     assert any("collapseResetKey={becameActiveAt}" in error for error in errors)
 
 
+def test_wrong_units_require_round_membership_boundaries(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "API_SRC", tmp_path / "api")
+    errors: list[str] = []
+    check_architecture.check_round_wrong_units(errors)
+    assert any("list_node_bindings_for_palaces" in error for error in errors)
+    assert any("list_unit_node_members" in error for error in errors)
+    assert any("wrong_unit_ids" in error for error in errors)
+
+
 def test_freestyle_scope_quiz_overlay_rejects_training_mode_switch(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -5276,3 +5286,43 @@ def test_card_editor_owns_keys_accepts_marker_and_shared_suspension(
     check_architecture.check_card_editor_owns_keys(errors)
 
     assert errors == []
+
+
+def test_micro_bubble_layer_requires_the_top_layer(tmp_path: Path, monkeypatch) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    write_file(
+        web_src / "shared" / "fx" / "core" / "microBubble.css",
+        ".ma-micro-bubble-layer {\n  position: fixed;\n  z-index: 10000;\n  pointer-events: none;\n}\n",
+    )
+    write_file(
+        web_src / "modules" / "quiz" / "domain" / "quiz-entity" / "ui" / "answerDurationBubble.ts",
+        "import { showMicroBubble } from '@/shared/fx'\n",
+    )
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_micro_bubble_layer(errors)
+
+    assert errors == []
+
+
+def test_micro_bubble_layer_rejects_a_click_blocking_dialog_layer(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    write_file(
+        web_src / "shared" / "fx" / "core" / "microBubble.css",
+        ".ma-micro-bubble-layer {\n  position: fixed;\n  z-index: 240;\n  pointer-events: auto;\n}\n",
+    )
+    write_file(
+        web_src / "modules" / "quiz" / "domain" / "quiz-entity" / "ui" / "answerDurationBubble.ts",
+        "document.body.appendChild(document.createElement('div'))\n",
+    )
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_micro_bubble_layer(errors)
+
+    assert any("z-index: 10000" in error for error in errors)
+    assert any("pointer-events: none" in error for error in errors)
+    assert any("showMicroBubble" in error for error in errors)

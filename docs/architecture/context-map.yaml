@@ -179,7 +179,8 @@
       "quiz": [
         "backups",
         "content",
-        "mindmap_document"
+        "mindmap_document",
+        "settings"
       ],
       "reminders": [
         "memory"

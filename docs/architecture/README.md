@@ -117,6 +117,7 @@ Frontend lint is a zero-warning contract. The `apps/web` lint script runs ESLint
 - Freestyle immersive feed: `docs/architecture/freestyle-immersive-feed.md`
 - Backup context boundary: `docs/architecture/backup-boundary.md`
 - Quiz frontend boundary: `docs/architecture/quiz-frontend-boundary.md`
+- Question variants and muscle-memory marking: `docs/architecture/question-variants.md`
 - Knowledge context boundary: `docs/architecture/knowledge-boundary.md`
 - Product terminology (宫殿 / 章节 / 复习单元 / 题 and number formats): `docs/architecture/terminology.md`
 - Single architecture ledger: `docs/architecture/context-map.yaml`
@@ -164,6 +165,7 @@ the list cannot silently keep exempting a path that no longer needs it.
 - Sink the `shared/hooks/timedSession*` family + `SessionTimerBar` into `modules/session` (currently listed as explicit `shared→modules` ESLint boundary exceptions).
 - Resolve the `modules→widgets` boundary exceptions (practice/quiz importing `mindmap-review-flow` / `palace-memory-lookup` APIs) by sinking those APIs behind module publics.
 - Split the three oversized `shared/ui/mindmap-canvas` files (`layout.ts`, `NodeCard.tsx`, `useMindMapCanvasState.ts`).
+- Extract the shared question meta row (stats / type / variant control / rating / marked) from `NodeBoundQuizDialog` and `FreestyleScopeQuizDialog`; both are temporarily over the 750-line gate after the question-variant workflow.
 - Split `shared/components/ui/dialog.tsx` and the freestyle model test harnesses `freestyleProgressSegments.test.ts` / `roundCompletion.test.ts`; registered as temporary quality-gate exceptions until extracted.
 - 拆分本轮轮次计划与评分工作撑大的三个随心文件：`FreestyleRoundSheet.tsx`（拆成弹层子组件）、`freestyleProgressSegments.ts`（模型与摘要分离）、`ratingSaveStore.ts`（类型/纯函数与 store 分离）。目前登记为临时门禁例外；下一次随心重构应删掉这三条例外。
 - Optional: rename nav-section keys `'knowledge'`→`'create'`, `'review'`→`'insights'` (needs pageHistoryStore key migration).

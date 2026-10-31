@@ -245,6 +245,10 @@ BASELINE_OVERSIZED_FILES = {
     # Session write validation grew with revision/operation race protection;
     # keep the existing service boundary tracked while the next extraction is
     # scheduled.
+    # The 待换题 variant control grew both answering overlays past the limit;
+    # extract the shared question meta row next.
+    "apps/web/src/widgets/node-bound-quiz/NodeBoundQuizDialog.tsx",
+    "apps/web/src/widgets/freestyle-scope-quiz/FreestyleScopeQuizDialog.tsx",
 }
 
 MAX_WEB_FILE_LINES = 750
@@ -818,6 +822,34 @@ def check_fx_director_boundary(errors: list[str]) -> None:
                     f"{relative}: import `{specifier}` bypasses the fx director; "
                     "use cue()/anchors from @/shared/fx"
                 )
+
+
+def check_micro_bubble_layer(errors: list[str]) -> None:
+    """Transient feedback pills must stay on the fx top layer, above dialogs."""
+    css = WEB_SRC / "shared" / "fx" / "core" / "microBubble.css"
+    if not css.exists():
+        errors.append(
+            "shared/fx/core/microBubble.css is missing; micro-feedback pills need the fixed top layer."
+        )
+        return
+    source = css.read_text(encoding="utf-8", errors="ignore")
+    layer = re.search(r"\.ma-micro-bubble-layer\s*\{(?P<body>[^}]*)\}", source)
+    body = layer.group("body") if layer else ""
+    if "z-index: 10000" not in body:
+        errors.append(
+            "microBubble.css: .ma-micro-bubble-layer must keep z-index: 10000 so it paints above "
+            "the quiz dialog (240/241/255)."
+        )
+    if "pointer-events: none" not in body:
+        errors.append(
+            "microBubble.css: .ma-micro-bubble-layer must keep pointer-events: none; a pill may never block a click."
+        )
+    answer = WEB_SRC / "modules" / "quiz" / "domain" / "quiz-entity" / "ui" / "answerDurationBubble.ts"
+    if answer.exists() and "@/shared/fx" not in answer.read_text(encoding="utf-8", errors="ignore"):
+        errors.append(
+            "answerDurationBubble.ts must render through @/shared/fx showMicroBubble; "
+            "a body-level pill with its own z-index is what ended up under the question."
+        )
 
 
 def check_sound_voice_default(errors: list[str]) -> None:
@@ -2269,6 +2301,19 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
                 f"{progress_segments.relative_to(REPO_ROOT).as_posix()}: "
                 "the HUD rail must walk roundPlan.orderIds so omitted completed ticks still render."
             )
+
+
+def check_round_wrong_units(errors: list[str]) -> None:
+    service = API_SRC / "modules" / "practice" / "application" / "round_overlay_service.py"
+    normalization = API_SRC / "modules" / "practice" / "domain" / "round_plan_normalization.py"
+    for path, markers in (
+        (service, ("list_node_bindings_for_palaces", "list_unit_node_members", "wrong_unit_ids")),
+        (normalization, ("wrong_unit_ids",)),
+    ):
+        source = path.read_text(encoding="utf-8") if path.exists() else ""
+        for marker in markers:
+            if marker not in source:
+                errors.append(f"{path.relative_to(REPO_ROOT).as_posix()}: round wrong units require `{marker}`.")
 
 
 def check_freestyle_scope_quiz_overlay(errors: list[str]) -> None:
@@ -7062,6 +7107,7 @@ def main() -> int:
     check_removed_shared_api_modules(errors)
     check_visual_layer_purity(errors)
     check_fx_director_boundary(errors)
+    check_micro_bubble_layer(errors)
     check_e2e_hermetic(errors)
     check_sound_voice_default(errors)
     check_theme_pack_registry(errors)
@@ -7109,6 +7155,7 @@ def main() -> int:
     check_consumer_context_public_facades(errors)
     check_freestyle_queue_facade_surface(errors)
     check_freestyle_scope_quiz_overlay(errors)
+    check_round_wrong_units(errors)
     check_question_practice_has_no_lifecycle_gate(errors)
     check_freestyle_knowledge_entry_scope(errors)
     check_identity_keyed_progress(errors)
