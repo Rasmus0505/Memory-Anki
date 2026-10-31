@@ -6,9 +6,20 @@ from memory_anki.infrastructure.db._tables.palaces import PalaceQuizQuestion
 
 from ..question_contracts import json_load
 from ..question_scheduler import schedule_due_kind
+from ..question_variants import (
+    ACTIVE_VERSION_ORIGINAL,
+    effective_content,
+    json_variants,
+    original_content,
+    resolved_active_version_id,
+)
 
 
 def serialize_question_content(question: PalaceQuizQuestion) -> dict[str, object]:
+    content = effective_content(question)
+    active_version_id = resolved_active_version_id(question)
+    original = original_content(question)
+    variant_activated_at = getattr(question, "variant_activated_at", None)
     return {
         "id": question.id,
         "palace_id": question.palace_id,
@@ -16,11 +27,11 @@ def serialize_question_content(question: PalaceQuizQuestion) -> dict[str, object
         "source_chapter_id": question.source_chapter_id,
         "classified_chapter_id": question.classified_chapter_id,
         "origin_question_id": question.origin_question_id,
-        "question_type": question.question_type,
-        "stem": question.stem,
-        "options": json_load(question.options_json, []),
-        "answer_payload": json_load(question.answer_payload_json, {}),
-        "analysis": question.analysis,
+        "question_type": content["question_type"],
+        "stem": content["stem"],
+        "options": content["options"],
+        "answer_payload": content["answer_payload"],
+        "analysis": content["analysis"],
         "source_meta": json_load(question.source_meta_json, {}),
         "lifecycle_status": question.lifecycle_status,
         "evidence": json_load(question.evidence_json, []),
@@ -42,6 +53,26 @@ def serialize_question_content(question: PalaceQuizQuestion) -> dict[str, object
         "schedule_passed": bool(getattr(question, "schedule_passed", False)),
         "schedule_due_kind": schedule_due_kind(question.schedule_due_on),
         "marked": bool(getattr(question, "marked", False)),
+        "needs_mutation": bool(getattr(question, "needs_mutation", False)),
+        "active_version_id": active_version_id,
+        "variant_count": len(json_variants(question)),
+        "variant_activated_at": (
+            variant_activated_at.isoformat() if variant_activated_at else None
+        ),
+        "mutation_attempt_count": int(
+            getattr(question, "mutation_attempt_count", 0) or 0
+        ),
+        "consecutive_correct_count": int(
+            getattr(question, "consecutive_correct_count", 0) or 0
+        ),
+        "last_answer_duration_ms": getattr(question, "last_answer_duration_ms", None),
+        # The management editor must keep editing the original fields even
+        # while a variant is displayed. Only present when a variant is active.
+        "original_content": (
+            original
+            if active_version_id != ACTIVE_VERSION_ORIGINAL
+            else None
+        ),
         "created_at": question.created_at.isoformat() if question.created_at else None,
         "updated_at": question.updated_at.isoformat() if question.updated_at else None,
     }

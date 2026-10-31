@@ -165,6 +165,11 @@ DEFAULTS = {
     "relearning_steps": "10m,1h",
     "enable_fuzzing": "false",
     "daily_new_limit": "20",
+    # Muscle-memory auto-mark thresholds. Kept as strings because the runtime
+    # settings table is a string key/value store.
+    "quiz_mutation_min_attempts": "3",
+    "quiz_mutation_min_consecutive_correct": "3",
+    "quiz_mutation_max_duration_ms": "5000",
     "mindmap_ai_split_api_key": "",
     "mindmap_ai_split_base_url": "",
     "mindmap_ai_split_model": DASHSCOPE_TEXT_MODEL,

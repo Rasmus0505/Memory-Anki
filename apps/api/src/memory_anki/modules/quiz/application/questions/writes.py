@@ -192,6 +192,8 @@ def commit_recorded_choice_attempt(
     row: PalaceQuizQuestion,
     selected_option_id: str | list[str],
     is_correct: bool,
+    auto_marked: bool = False,
+    auto_mark_threshold_ms: int | None = None,
     commit: bool = True,
 ) -> dict[str, object]:
     row.updated_at = utc_now_naive()
@@ -210,6 +212,8 @@ def commit_recorded_choice_attempt(
         "selected_option_id": selected_ids[0],
         "selected_option_ids": selected_ids,
         "is_correct": is_correct,
+        "auto_marked": auto_marked,
+        "auto_mark_threshold_ms": auto_mark_threshold_ms,
     }
 
 

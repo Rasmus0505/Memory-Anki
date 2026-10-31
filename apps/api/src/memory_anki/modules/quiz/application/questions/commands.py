@@ -8,11 +8,13 @@ from sqlalchemy.orm import Session
 
 from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.palaces import Palace, PalaceQuizQuestion, PalaceSegment
+from memory_anki.modules.quiz.application.auto_mark import apply_attempt_effect
 from memory_anki.modules.quiz.application.learning_loop import record_attempt_event
 from memory_anki.modules.quiz.application.node_binding import (
     ensure_create_question_node_bindings,
     extract_payload_node_uids,
 )
+from memory_anki.modules.quiz.application.question_variants import effective_content
 
 from ..question_contracts import PalaceQuizNotFoundError
 from .dedup import find_duplicate_question
@@ -411,6 +413,8 @@ def record_choice_attempt(
     question_id: int,
     selected_option_id: str | list[str],
     *,
+    duration_ms: int | None = None,
+    update_mutation_stats: bool = True,
     commit: bool = True,
 ) -> dict[str, object]:
     question = get_question_or_raise(session, question_id)
@@ -422,7 +426,9 @@ def record_choice_attempt(
         selected_ids = [str(selected_option_id or "").strip()] if str(selected_option_id or "").strip() else []
     if not selected_ids:
         raise PalaceQuizValidationError("请选择一个选项。")
-    answer_payload = json_load(question.answer_payload_json, {})
+    answer_payload = effective_content(question)["answer_payload"]
+    if not isinstance(answer_payload, dict):
+        answer_payload = {}
     correct_ids = answer_payload.get("correct_option_ids")
     if not isinstance(correct_ids, list) or not correct_ids:
         correct_ids = [str(answer_payload.get("correct_option_id") or "").strip()]
@@ -445,14 +451,28 @@ def record_choice_attempt(
                 "selected_option_ids": selected_ids,
             },
             "is_correct": is_correct,
+            "duration_ms": duration_ms,
         },
         commit=False,
     )
+    auto_marked = False
+    auto_mark_threshold_ms: int | None = None
+    if update_mutation_stats:
+        effect = apply_attempt_effect(
+            session,
+            question,
+            is_correct=is_correct,
+            duration_ms=duration_ms,
+        )
+        auto_marked = effect.auto_marked
+        auto_mark_threshold_ms = effect.auto_mark_threshold_ms
     return commit_recorded_choice_attempt(
         session,
         row=question,
         selected_option_id=selected_ids,
         is_correct=is_correct,
+        auto_marked=auto_marked,
+        auto_mark_threshold_ms=auto_mark_threshold_ms,
         commit=commit,
     )
 
@@ -510,6 +530,9 @@ def reset_question_attempts(session: Session, question_ids: list[int]) -> int:
         row.attempt_count = 0
         row.correct_count = 0
         row.incorrect_count = 0
+        row.mutation_attempt_count = 0
+        row.consecutive_correct_count = 0
+        row.last_answer_duration_ms = None
         row.updated_at = now
     session.commit()
     return len(rows)

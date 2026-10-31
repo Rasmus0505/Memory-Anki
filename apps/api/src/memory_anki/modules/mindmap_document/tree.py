@@ -27,12 +27,20 @@ def build_document_tree(editor_doc: Any) -> tuple[str | None, dict[str, dict[str
         return None, {}
     nodes: dict[str, dict[str, Any]] = {}
 
-    def walk(raw: dict[str, Any], parent_uid: str | None, fallback: str) -> str:
+    def walk(
+        raw: dict[str, Any],
+        parent_uid: str | None,
+        fallback: str,
+        ancestor_path: list[dict[str, str]],
+        depth: int,
+    ) -> str:
         value = raw.get("data")
         data = value if isinstance(value, dict) else {}
         uid = str(data.get("uid") or data.get("memoryAnkiId") or fallback).strip()
+        text = str(data.get("text") or "").strip()
+        path = [*ancestor_path, {"uid": uid, "text": text}]
         children = [
-            walk(child, uid, f"{fallback}-{index}")
+            walk(child, uid, f"{fallback}-{index}", path, depth + 1)
             for index, child in enumerate(raw.get("children") or [])
             if isinstance(child, dict)
         ]
@@ -40,14 +48,21 @@ def build_document_tree(editor_doc: Any) -> tuple[str | None, dict[str, dict[str
             "uid": uid,
             "parent_uid": parent_uid,
             "children": children,
-            "text": str(data.get("text") or "").strip(),
+            "text": text,
+            "note": str(data.get("note") or "").strip(),
+            "node_type": str(
+                data.get("memoryAnkiNodeType") or data.get("type") or ""
+            ).strip(),
+            "root_kind": str(data.get("memoryAnkiRootKind") or "").strip(),
+            "depth": depth,
+            "ancestor_path": path,
             "content_fingerprint": _fingerprint(data),
             "permanent_split_mark": data.get("permanentSplitMark") is True
             or data.get("permanent_split_mark") is True,
         }
         return uid
 
-    root_uid = walk(root, None, "root")
+    root_uid = walk(root, None, "root", [], 0)
     return root_uid, nodes
 
 

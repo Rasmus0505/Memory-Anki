@@ -23,6 +23,7 @@ class FreestyleQuestionAttemptCreate(FreestyleQuestionBase):
     mode: str | None = None
     answer_payload: Any = None
     is_correct: bool | None = None
+    duration_ms: int | None = None
 
 
 class FreestyleQuestionExplanationCreate(FreestyleQuestionBase):
@@ -100,6 +101,8 @@ class FreestyleOverlayQuizProgressRequest(BaseModel):
     current_index: int = 0
     completed_ids: list[int] = Field(default_factory=list)
     states: dict[str, Any] = Field(default_factory=dict)
+    wrong_question_ids: list[int] = Field(default_factory=list)
+    auto_prioritize_wrong_palaces: bool = False
 
 
 class FreestyleOverlayQuizShuffleRequest(BaseModel):

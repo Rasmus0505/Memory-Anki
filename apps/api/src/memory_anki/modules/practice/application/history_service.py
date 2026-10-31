@@ -12,7 +12,8 @@ from memory_anki.infrastructure.db._tables.palaces import (
     FreestyleQuizAttempt,
     PalaceQuizQuestion,
 )
-from memory_anki.modules.quiz.public.commands import record_attempt_event
+from memory_anki.modules.quiz.public.commands import apply_attempt_effect, record_attempt_event
+from memory_anki.modules.quiz.public.queries import serialize_question
 
 FREESTYLE_HISTORY_MODES = {"today", "free"}
 AI_EXPLANATION_OPERATIONS = {
@@ -41,6 +42,14 @@ def _int_or_none(value: Any) -> int | None:
     except (TypeError, ValueError):
         return None
     return number if number > 0 else None
+
+
+def _duration_or_none(value: Any) -> int | None:
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return None
+    return max(0, number)
 
 
 def _text(value: Any, limit: int | None = None) -> str:
@@ -166,9 +175,19 @@ def create_question_attempt(session: Session, payload: dict[str, Any]) -> dict[s
         },
         commit=False,
     )
+    effect = apply_attempt_effect(
+        session,
+        question,
+        is_correct=row.is_correct if isinstance(row.is_correct, bool) else None,
+        duration_ms=_duration_or_none(payload.get("duration_ms")),
+    )
     session.commit()
     session.refresh(row)
-    return _attempt_row_payload(row)
+    response = _attempt_row_payload(row)
+    response["auto_marked"] = effect.auto_marked
+    response["auto_mark_threshold_ms"] = effect.auto_mark_threshold_ms
+    response["question"] = serialize_question(question)
+    return response
 
 
 def list_question_attempts(

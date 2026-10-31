@@ -421,6 +421,21 @@ class PalaceQuizQuestion(Base):
     schedule_due_on: Mapped[date | None] = mapped_column(Date, nullable=True)
     schedule_passed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     marked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # AI variant workflow. ``active_variant_id`` is ``original`` or a version id
+    # stored in ``variant_history_json``. The question row always keeps the
+    # original content; variants never overwrite it.
+    needs_mutation: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    active_variant_id: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="original"
+    )
+    variant_history_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    mutation_attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    consecutive_correct_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+    last_answer_duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    variant_activated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    mutation_marked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utc_now_naive)
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime,
@@ -506,6 +521,9 @@ class QuizAttemptEvent(Base):
     chapter_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("chapters.id", ondelete="SET NULL"), nullable=True)
     scene: Mapped[str] = mapped_column(String(40), nullable=False, default="quiz")
     question_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    # ``original`` / ``v1`` / ``v2``. Nullable for events recorded before the
+    # AI-variant workflow existed.
+    question_version_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     answer_payload_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     is_correct: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)

@@ -9,6 +9,10 @@ from memory_anki.core.time import utc_now_naive
 from memory_anki.infrastructure.db._tables.palaces import PalaceQuizQuestion, QuizAttemptEvent
 from memory_anki.modules.quiz.application.question_contracts import json_dump, json_load
 from memory_anki.modules.quiz.application.question_schema import serialize_question
+from memory_anki.modules.quiz.application.question_variants import (
+    ACTIVE_VERSION_ORIGINAL,
+    resolved_active_version_id,
+)
 
 
 def record_attempt_event(
@@ -26,6 +30,11 @@ def record_attempt_event(
         scene=str(payload.get("scene") or "quiz")[:40],
         question_version=int(
             question.version_number if question else payload.get("question_version") or 1
+        ),
+        question_version_id=(
+            resolved_active_version_id(question)
+            if question is not None
+            else str(payload.get("question_version_id") or ACTIVE_VERSION_ORIGINAL)
         ),
         answer_payload_json=json_dump(payload.get("answer_payload"), default={}),
         is_correct=payload.get("is_correct")
@@ -52,6 +61,7 @@ def serialize_attempt_event(row: QuizAttemptEvent) -> dict[str, Any]:
         "chapter_id": row.chapter_id,
         "scene": row.scene,
         "question_version": row.question_version,
+        "question_version_id": row.question_version_id,
         "answer_payload": json_load(row.answer_payload_json, {}),
         "is_correct": row.is_correct,
         "duration_ms": row.duration_ms,

@@ -21,5 +21,14 @@ No formal review session lifecycle
 - 多选题：`answer_payload.correct_option_ids`（≥2 个，按选项顺序）；作答提交 `selected_option_ids`，按集合完全一致判对。
 - 前端 `QuizQuestionInteraction` 检测到 `correct_option_ids` 时渲染多选切换 + 提交按钮，提交前 `isQuizChoiceAttemptClosed` 保持未关闭。
 
+## AI variant workflow
+
+The question row always keeps the original content. AI variants live in
+`variant_history_json`; `active_variant_id` selects what practice shows.
+`needs_mutation` is the learner's 待换题 flag and is separate from `marked`.
+The muscle-memory rule reads its three thresholds through the public
+`memory_anki.modules.settings.api.read_quiz_mutation_settings` facade. See
+`docs/architecture/question-variants.md`.
+
 ## Cross-module rule
 Import only `memory_anki.modules.quiz.public`. Never import another module's application/infrastructure/presentation.

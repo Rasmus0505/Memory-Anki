@@ -30,6 +30,16 @@ from memory_anki.modules.quiz.application.question_mutation_commands import (
     record_choice_attempt_command,
 )
 from memory_anki.modules.quiz.application.question_schema import serialize_question_rows
+from memory_anki.modules.quiz.application.question_variant_commands import (
+    activate_variant,
+    delete_variant,
+    import_variants,
+    list_versions,
+    set_mutation_mark,
+)
+from memory_anki.modules.quiz.application.question_variant_prompt import (
+    build_mutation_prompt,
+)
 from memory_anki.modules.quiz.application.questions.queries import list_question_rows_by_ids
 from memory_anki.modules.quiz.application.service import (
     PalaceQuizNotFoundError,
@@ -415,6 +425,88 @@ def api_set_palace_quiz_question_mark(
         _raise_http_error(exc)
 
 
+@router.post("/palace-quiz-questions/{question_id}/mutation-mark")
+def api_set_palace_quiz_question_mutation_mark(
+    question_id: int,
+    data: dict,
+    s: Session = Depends(session_dep),
+):
+    try:
+        raw_needs_mutation = data.get("needs_mutation") if isinstance(data, dict) else None
+        if not isinstance(raw_needs_mutation, bool):
+            raise PalaceQuizValidationError("needs_mutation must be true or false")
+        item = set_mutation_mark(s, question_id, raw_needs_mutation)
+        return {"item": item}
+    except Exception as exc:  # pragma: no cover - centralized HTTP mapping
+        _raise_http_error(exc)
+
+
+@router.get("/palace-quiz-questions/{question_id}/versions")
+def api_list_palace_quiz_question_versions(
+    question_id: int,
+    s: Session = Depends(session_dep),
+):
+    try:
+        return list_versions(s, question_id)
+    except Exception as exc:  # pragma: no cover - centralized HTTP mapping
+        _raise_http_error(exc)
+
+
+@router.post("/palace-quiz-questions/{question_id}/active-variant")
+def api_activate_palace_quiz_question_variant(
+    question_id: int,
+    data: dict,
+    s: Session = Depends(session_dep),
+):
+    try:
+        version_id = str(data.get("version_id") or "") if isinstance(data, dict) else ""
+        item = activate_variant(s, question_id, version_id)
+        return {"item": item}
+    except Exception as exc:  # pragma: no cover - centralized HTTP mapping
+        _raise_http_error(exc)
+
+
+@router.delete("/palace-quiz-questions/{question_id}/variants/{version_id}")
+def api_delete_palace_quiz_question_variant(
+    question_id: int,
+    version_id: str,
+    s: Session = Depends(session_dep),
+):
+    try:
+        item = delete_variant(s, question_id, version_id)
+        return {"item": item}
+    except Exception as exc:  # pragma: no cover - centralized HTTP mapping
+        _raise_http_error(exc)
+
+
+@router.post("/palace-quiz-question-variants/import")
+def api_import_palace_quiz_question_variants(
+    data: dict,
+    s: Session = Depends(session_dep),
+):
+    try:
+        items = data.get("items") if isinstance(data, dict) else None
+        dry_run = bool(data.get("dry_run")) if isinstance(data, dict) else False
+        if not isinstance(items, list):
+            raise PalaceQuizValidationError("导入时至少需要一道题目。")
+        return import_variants(s, items, dry_run=dry_run)
+    except Exception as exc:  # pragma: no cover - centralized HTTP mapping
+        _raise_http_error(exc)
+
+
+@router.post("/palace-quiz-mutation-prompt")
+def api_build_palace_quiz_mutation_prompt(
+    data: dict,
+    s: Session = Depends(session_dep),
+):
+    raw_ids = data.get("question_ids") if isinstance(data, dict) else None
+    question_ids = raw_ids if isinstance(raw_ids, list) else []
+    try:
+        return build_mutation_prompt(s, question_ids)
+    except Exception as exc:  # pragma: no cover - centralized HTTP mapping
+        _raise_http_error(exc)
+
+
 @router.post("/palace-quiz-questions/{question_id}/choice-attempts")
 def api_record_choice_attempt(
     question_id: int,
@@ -433,10 +525,22 @@ def api_record_choice_attempt(
             selected = [str(item) for item in raw_ids]
         else:
             selected = str(data.get("selected_option_id") or "")
+        raw_duration = data.get("duration_ms")
+        duration_ms = (
+            max(0, int(raw_duration))
+            if isinstance(raw_duration, int | float) and not isinstance(raw_duration, bool)
+            else None
+        )
+        raw_update_stats = data.get("update_mutation_stats", True)
+        update_mutation_stats = (
+            raw_update_stats if isinstance(raw_update_stats, bool) else True
+        )
         return record_choice_attempt_command(
             s,
             question_id,
             selected,
+            duration_ms=duration_ms,
+            update_mutation_stats=update_mutation_stats,
             uow=SqlAlchemyUnitOfWork(s),
             before_commit=mutation.save,
         )

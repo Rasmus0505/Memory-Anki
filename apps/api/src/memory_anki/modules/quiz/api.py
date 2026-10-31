@@ -1,5 +1,6 @@
 """Public Palace Quiz read contracts."""
 
+from .application.auto_mark import apply_attempt_effect
 from .application.freestyle_projection import (
     list_mastery_profiles_for_palaces,
     list_node_bindings_for_palaces,
@@ -23,6 +24,7 @@ from .application.questions.commands import set_question_marked
 
 __all__ = [
     "read_learning_progress_quiz",
+    "apply_attempt_effect",
     "build_mastery_profile",
     "list_mastery_profiles_for_palaces",
     "list_node_bindings_for_palaces",

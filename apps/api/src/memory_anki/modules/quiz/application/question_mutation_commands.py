@@ -75,11 +75,18 @@ def record_choice_attempt_command(
     question_id: int,
     selected_option_id: str | list[str],
     *,
+    duration_ms: int | None = None,
+    update_mutation_stats: bool = True,
     uow: UnitOfWork,
     before_commit: ResponseCallback | None = None,
 ) -> dict[str, Any]:
     response = record_choice_attempt(
-        session, question_id, selected_option_id, commit=False
+        session,
+        question_id,
+        selected_option_id,
+        duration_ms=duration_ms,
+        update_mutation_stats=update_mutation_stats,
+        commit=False,
     )
     _commit_response(response, uow=uow, before_commit=before_commit)
     return response

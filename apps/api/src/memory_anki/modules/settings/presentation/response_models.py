@@ -42,3 +42,6 @@ class SettingsResponse(BaseModel):
     maximum_interval: str | None = None
     daily_new_limit: str | None = None
     enable_fuzzing: str | None = None
+    quiz_mutation_min_attempts: str | None = None
+    quiz_mutation_min_consecutive_correct: str | None = None
+    quiz_mutation_max_duration_ms: str | None = None

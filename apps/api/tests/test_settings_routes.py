@@ -105,6 +105,18 @@ class TestClientPreferences:
             "review_feedback_settings"
         ] == {"a": 1}
 
+    def test_wrong_priority_boolean_roundtrip(self, client):
+        for enabled in (True, False):
+            response = client.put(
+                "/api/v1/profile/client-preferences",
+                json={"freestyle_wrong_priority": enabled},
+            )
+            assert response.status_code == 200
+            assert response.json()["items"]["freestyle_wrong_priority"] is enabled
+            assert client.get("/api/v1/profile/client-preferences").json()["items"][
+                "freestyle_wrong_priority"
+            ] is enabled
+
     def test_freestyle_display_settings_roundtrip(self, client):
         response = client.put(
             "/api/v1/profile/client-preferences",

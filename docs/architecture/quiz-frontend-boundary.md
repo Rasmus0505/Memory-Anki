@@ -20,6 +20,34 @@ Do-question shortcuts live in the Quiz entity: `quizShortcuts`, `QuizShortcutSet
 
 Answer-dialog font scale lives in the Quiz entity: `quizFontScale`, `useQuizDialogFontScale`, `QuizFontScaleBody`, `QuizFontScaleHint`, and the `quiz_font_scale` client preference. The node-bound dialog and the freestyle 做题 dialog share one percent (70–180, step 10, default 100). Ctrl+wheel upward enlarges and Ctrl+0 restores 100%; the hook owns that gesture (`passive: false` so the browser does not zoom the page) and shows the percent briefly. Hosts apply `QuizFontScaleBody` only to the 题目正文 (stem, options, inputs, analysis). The header, question-number rail, badges, and footer stay at the default size. Hosts must not attach their own wheel listener or store a second scale.
 
+## Answer timing feedback
+
+`showAnswerDurationBubble` (`modules/quiz/domain/quiz-entity/ui/answerDurationBubble.ts`)
+appends a self-dismissing duration pill to `document.body` next to the clicked
+option or submit button. It is intentionally outside the question component:
+advancing to the next question must not unmount it. It fades on its own after
+about 1.5 seconds and respects `prefers-reduced-motion`. Freestyle review rating
+bars (the normal bar and the bedtime bar) reuse the same helper, so a rating tap
+shows the time spent on that review unit without being tied to the card's
+lifetime.
+
+Answer-result sound and haptic belong to the tap that gives the answer, not to the
+attempt write. `useQuizAttemptOrchestration` plays them before it posts the attempt
+when the host passes `resultFeedbackMode: 'immediate'`; the freestyle feed announces
+from `useFreestyleQuizFlow.updateQuestionState`, because a passive effect only runs
+after the whole feed re-renders and a fast page turn left the cue a beat behind. Only
+the attempt record, the authoritative question refresh and the 自动标记 toast may wait
+for the server, and a resolution that reached the feed without passing through that
+funnel is still announced by the progress effect, once. `FreestyleQuizCardView`'s
+`answer.correct` / `answer.wrong` cue is keyed to a live resolve on that card, not to
+`active`: the feed's visual index moves as soon as a page turn starts, so gating on it
+swallowed the cue for an answer tapped on a still-settling card.
+
+The two answering overlays use `QUIZ_ANSWERING_DIALOG_CLASS` (58rem wide,
+86vh tall). The 待换题 batch bar sits on its own full-width row below
+`DialogHeader`; it must not be placed in `DialogHeader`'s right-side action
+cluster, where it would overlap the title and the existing 复制/查看 actions.
+
 ## Application Quiz Launcher
 
 The global quiz launcher is mounted by `AppProviders` and coordinates Palace metadata, AI configuration, background generation tasks, navigation, and Palace Quiz generation. It belongs to `widgets/quiz-launcher`, while question generation and interaction stay in `modules/quiz`. Palace View, Palace Edit, and Review flows consume the widget context without importing quiz internals.

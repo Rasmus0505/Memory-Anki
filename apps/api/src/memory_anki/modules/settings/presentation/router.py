@@ -65,6 +65,7 @@ FSRS_SETTINGS_KEYS = {
 }
 
 CLIENT_PREFERENCE_GROUPS = {
+    "freestyle_wrong_priority",
     "memory_anki_shortcuts",
     "review_feedback_settings",
     "english_practice_settings",
