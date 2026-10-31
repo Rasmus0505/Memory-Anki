@@ -32,6 +32,7 @@ export function FreestyleFeedCard({
   completed,
   questionState,
   answeredBefore,
+  wrongThisRound = false,
   onFlipModeChange,
   onMindmapZoomChange,
   onToggleFullscreen,
@@ -50,6 +51,10 @@ export function FreestyleFeedCard({
   onQuestionStateChange,
   onChoiceResolve,
   onShortAnswerSubmit,
+  onQuestionUpdated,
+  onAnswerReset,
+  onShown,
+  getDurationMs,
   onNavigateToIndex,
 }: {
   card: FreestyleCard
@@ -74,6 +79,7 @@ export function FreestyleFeedCard({
   completed: boolean
   questionState: QuizProps['state']
   answeredBefore: boolean
+  wrongThisRound?: boolean
   onFlipModeChange: UnitProps['onFreestyleFlipModeChange']
   onMindmapZoomChange: UnitProps['onUserZoomChange']
   onToggleFullscreen: UnitProps['onToggleFullscreen']
@@ -92,6 +98,10 @@ export function FreestyleFeedCard({
   onQuestionStateChange: (questionId: number, updater: Parameters<QuizProps['onStateChange']>[0]) => void
   onChoiceResolve: (card: FreestyleQuizCard, optionId: string | string[], isCorrect: boolean) => void
   onShortAnswerSubmit: (card: FreestyleQuizCard) => void
+  onQuestionUpdated?: QuizProps['onQuestionUpdated']
+  onAnswerReset?: QuizProps['onAnswerReset']
+  onShown?: QuizProps['onShown']
+  getDurationMs?: QuizProps['getDurationMs']
   onNavigateToIndex: (index: number) => void
 }) {
   const active = isActive && index === currentIndex && index === visualIndex && !settlementVisible
@@ -118,6 +128,7 @@ export function FreestyleFeedCard({
               card.unit_id && card.unit_revision != null ? (
                 <FreestyleUnitReviewCardView
                   card={card}
+                  wrongThisRound={wrongThisRound}
                   active={active}
                   nearViewport={isActive && Math.abs(index - visualIndex) <= 1}
                   readOnly={readOnlyHistoryCardId === card.id}
@@ -162,6 +173,10 @@ export function FreestyleFeedCard({
               onShortAnswerSubmit={() => {
                 onShortAnswerSubmit(card)
               }}
+              onQuestionUpdated={onQuestionUpdated}
+              onAnswerReset={onAnswerReset}
+              onShown={onShown}
+              getDurationMs={getDurationMs}
               onRequestNext={() => {
                 onNavigateToIndex(index + 1)
               }}

@@ -1,7 +1,9 @@
+import { useEffect } from 'react'
 import { RotateCcw } from 'lucide-react'
 import {
   QuizQuestionInteraction,
   QuizQuestionStem,
+  QuizQuestionVariantControl,
   type QuizRuntimeState,
 } from '@/modules/quiz/domain/quiz-entity'
 import {
@@ -16,6 +18,7 @@ import type {
 } from '@/shared/api/contracts'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
+import { QuizComboChip } from './QuizComboChip'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
 import { cn } from '@/shared/lib/utils'
 
@@ -152,6 +155,12 @@ interface QuizQuestionCardProps {
   onReset: (questionId: number) => void
   onEdit: (question: PalaceQuizQuestion) => void
   onToggleMark?: (question: PalaceQuizQuestion, marked: boolean) => void
+  onQuestionUpdated?: (question: PalaceQuizQuestion) => void
+  onAnswerReset?: (questionId: number) => void
+  onShown?: (questionId: number) => void
+  getDurationMs?: (questionId: number) => number | null
+  /** Streak owner for the 连对 chip (one palace bank); null hides it. */
+  comboScopeKey?: string | null
 }
 
 export function QuizQuestionCard({
@@ -164,7 +173,16 @@ export function QuizQuestionCard({
   onReset,
   onEdit,
   onToggleMark,
+  onQuestionUpdated,
+  onAnswerReset,
+  onShown,
+  getDurationMs,
+  comboScopeKey = null,
 }: QuizQuestionCardProps) {
+  useEffect(() => {
+    onShown?.(question.id)
+  }, [question.id, onShown])
+
   return (
     <Card className="border-border/70 bg-card/92">
       <CardHeader
@@ -188,20 +206,29 @@ export function QuizQuestionCard({
                 答对 {question.correct_count} 次 / 答错 {question.incorrect_count} 次
               </span>
             ) : null}
+            <QuizQuestionVariantControl
+              question={question}
+              onQuestionUpdated={onQuestionUpdated}
+              onAnswerReset={onAnswerReset}
+              compact={compact}
+            />
           </div>
           <CardTitle className={cn(compact ? 'text-sm leading-6' : 'text-base leading-7')}>
             <QuizQuestionStem question={question} />
           </CardTitle>
         </div>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className={compact ? 'h-8 px-2.5' : ''}
-          onClick={() => onEdit(question)}
-        >
-          编辑
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          <QuizComboChip scopeKey={comboScopeKey ?? null} />
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className={compact ? 'h-8 px-2.5' : ''}
+            onClick={() => onEdit(question)}
+          >
+            编辑
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className={cn(compact ? 'space-y-3 px-4 pb-4 pt-0' : 'space-y-4')}>
         <QuizQuestionInteraction
@@ -212,6 +239,8 @@ export function QuizQuestionCard({
           onStateChange={(updater) => onStateChange(question.id, updater)}
           onChoiceResolve={(optionId) => onChoiceSelect(question, optionId)}
           onShortAnswerSubmit={() => onShortAnswerSubmit(question.id)}
+          getDurationMs={getDurationMs}
+          comboScopeKey={comboScopeKey}
           mark={
             onToggleMark
               ? {

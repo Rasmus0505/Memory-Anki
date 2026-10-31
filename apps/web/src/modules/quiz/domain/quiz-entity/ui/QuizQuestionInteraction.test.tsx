@@ -7,6 +7,7 @@ import {
 import type { PalaceQuizQuestionDraft } from '@/shared/api/contracts'
 import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
 import { saveQuizAnswerMode } from '@/modules/quiz/domain/quiz-entity/model/quizAnswerModeSettings'
+import { clearMicroBubbles } from '@/shared/fx'
 
 function renderInteraction(question: PalaceQuizQuestionDraft, initialState: QuizRuntimeState = {}) {
   let latestState: QuizRuntimeState = initialState
@@ -58,6 +59,7 @@ describe('QuizQuestionInteraction', () => {
 
   afterEach(() => {
     saveQuizAnswerMode('choice')
+    clearMicroBubbles()
   })
 
   it('supports true_false questions with corrective feedback', () => {

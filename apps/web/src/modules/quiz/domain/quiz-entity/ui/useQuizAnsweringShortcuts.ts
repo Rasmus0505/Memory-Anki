@@ -175,10 +175,28 @@ export function useQuizAnsweringShortcuts({
           ?.focus()
         return
       }
+      if (match.id === 'submit_choice') {
+        const submitButton = current.interactionRootRef.current?.querySelector<HTMLButtonElement>(
+          '[data-quiz-submit="true"]',
+        )
+        if (submitButton && !submitButton.disabled) {
+          submitButton.click()
+          return
+        }
+      }
       const optionIndex = match.id === 'submit_choice'
         ? (focusedOptionIndex(target) ?? current.keyboardOptionIndex)
         : match.optionIndex
       if (optionIndex == null || optionIndex < 0 || optionIndex >= current.optionCount) return
+      const optionButton = current.interactionRootRef.current?.querySelector<HTMLButtonElement>(
+        `[data-quiz-option-index="${optionIndex}"]`,
+      )
+      if (optionButton && !optionButton.disabled) {
+        // Route keyboard selection through the same DOM action as a pointer click.
+        // This keeps answer bubbles, combo recording, and choice resolution in one place.
+        optionButton.click()
+        return
+      }
       current.onSelectOption(optionIndex)
     }
     window.addEventListener('keydown', onKeyDown, true)

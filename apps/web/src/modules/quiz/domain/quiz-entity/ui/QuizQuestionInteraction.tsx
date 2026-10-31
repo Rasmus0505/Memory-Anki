@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from 'react'
+import { useCallback, useLayoutEffect, useRef } from 'react'
 import type { PalaceQuizQuestion, PalaceQuizQuestionDraft } from '@/shared/api/contracts'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
@@ -19,8 +19,12 @@ import {
   ShortAnswerBlock,
 } from '@/modules/quiz/domain/quiz-entity/ui/QuizShortAnswerBlock'
 import { QuizQuestionMarkToggle } from '@/modules/quiz/domain/quiz-entity/ui/QuizQuestionMarkToggle'
+import {
+  showAnswerDurationBubble,
+  type AnswerDurationBubbleOptions,
+} from '@/modules/quiz/domain/quiz-entity/ui/answerDurationBubble'
 import { useQuizAnswerMode } from '@/modules/quiz/domain/quiz-entity/ui/useQuizAnswerMode'
-
+import { recordQuizAnswer } from '@/modules/quiz/domain/quiz-entity/model/quizComboStore'
 
 function normalizeText(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, '')
@@ -73,6 +77,8 @@ export function QuizQuestionInteraction({
   onChoiceResolve,
   onShortAnswerSubmit,
   mark,
+  getDurationMs,
+  comboScopeKey,
 }: {
   question: PalaceQuizQuestion | PalaceQuizQuestionDraft
   state: QuizRuntimeState | undefined
@@ -87,9 +93,34 @@ export function QuizQuestionInteraction({
     disabled?: boolean
     onToggle: (marked: boolean) => void
   }
+  /** Milliseconds from the question becoming visible to this attempt. */
+  getDurationMs?: (questionId: number) => number | null
+  /** Streak owner for the 连对 chip; answers still resolve without it. */
+  comboScopeKey?: string | null
 }) {
   const currentState = state || {}
+  const questionId =
+    'id' in question && typeof question.id === 'number' ? question.id : null
+  // Drafts have no attempt stats; only a saved question can warn about a streak.
+  const consecutiveCorrect =
+    'consecutive_correct_count' in question ? question.consecutive_correct_count : undefined
+  const previousDurationMs =
+    'last_answer_duration_ms' in question ? question.last_answer_duration_ms : null
   const { mode, updateMode } = useQuizAnswerMode()
+  const showDuration = useCallback(
+    (anchor: Element | null, options?: AnswerDurationBubbleOptions) => {
+      if (questionId == null) return
+      showAnswerDurationBubble(anchor, getDurationMs?.(questionId) ?? null, options)
+    },
+    [getDurationMs, questionId],
+  )
+  const answerFeedback = useCallback(
+    (correct: boolean, placement: NonNullable<AnswerDurationBubbleOptions['placement']>) => {
+      if (comboScopeKey) recordQuizAnswer(comboScopeKey, correct)
+      return { correct, consecutiveCorrect, previousDurationMs, placement }
+    },
+    [comboScopeKey, consecutiveCorrect, previousDurationMs],
+  )
   const surfaceRef = useRef<HTMLDivElement | null>(null)
   const restoreKey = quizInteractionRestoreKey(question, mode)
   const modeToggle = canSwitchQuizAnswerMode(question.question_type) ? (
@@ -123,6 +154,7 @@ export function QuizQuestionInteraction({
           extraAction={markControl}
           onStateChange={onStateChange}
           onShortAnswerSubmit={onShortAnswerSubmit}
+          onSubmitted={showDuration}
         />
       )
     }
@@ -145,12 +177,13 @@ export function QuizQuestionInteraction({
         })
       }
       const submit = () => {
-        if (choiceAnswered || selectedIds.length === 0) return
+        if (choiceAnswered || selectedIds.length === 0) return false
         const correct =
           selectedIds.length === correctOptionIds.length &&
           selectedIds.every((item) => correctOptionIds.includes(item))
         onStateChange((current) => ({ ...current, resolved: true, correct }))
         onChoiceResolve?.(selectedIds, correct)
+        return correct
       }
       return (
         <div className={cn('grid', compact ? 'gap-2' : 'gap-3')} data-quiz-question-interaction="multi-choice">
@@ -181,7 +214,17 @@ export function QuizQuestionInteraction({
             )
           })}
           {!choiceAnswered ? (
-            <Button type="button" size={compact ? 'sm' : 'default'} disabled={selectedIds.length === 0} onClick={submit}>
+            <Button
+              type="button"
+              size={compact ? 'sm' : 'default'}
+              disabled={selectedIds.length === 0}
+              data-quiz-submit="true"
+              onClick={(event) => {
+                const correct = submit()
+                if (correct === false) return
+                showDuration(event.currentTarget, answerFeedback(correct, 'above'))
+              }}
+            >
               提交答案
             </Button>
           ) : (
@@ -217,7 +260,7 @@ export function QuizQuestionInteraction({
               type="button"
               data-quiz-option-index={index}
               disabled={choiceAnswered}
-              onClick={() => {
+              onClick={(event) => {
                 if (choiceAnswered) return
                 onStateChange((current) => ({
                   ...current,
@@ -226,6 +269,7 @@ export function QuizQuestionInteraction({
                   correct,
                 }))
                 onChoiceResolve?.(option.id, correct)
+                showDuration(event.currentTarget, answerFeedback(correct, 'left-top'))
               }}
               className={cn(
                 'border text-left text-sm transition-colors',
@@ -273,14 +317,16 @@ export function QuizQuestionInteraction({
               key={String(value)}
               type="button"
               disabled={resolved}
-              onClick={() =>
+              onClick={(event) => {
+                const correct = value === correctAnswer
                 onStateChange((current) => ({
                   ...current,
                   trueFalseAnswer: value,
                   resolved: true,
-                  correct: value === correctAnswer,
+                  correct,
                 }))
-              }
+                showDuration(event.currentTarget, answerFeedback(correct, 'left-top'))
+              }}
               className={cn(
                 'rounded-lg border px-4 py-4 text-base font-semibold',
                 resolved && value === correctAnswer && 'border-success/30 bg-success/5 text-success',
@@ -319,6 +365,7 @@ export function QuizQuestionInteraction({
         resolved: true,
         correct: allCorrect,
       }))
+      return allCorrect
     }
     return (
       <div className="space-y-3">
@@ -361,7 +408,13 @@ export function QuizQuestionInteraction({
             </div>
           )
         })}
-        <Button type="button" onClick={submitAll}>
+        <Button
+          type="button"
+          onClick={(event) => {
+            const correct = submitAll()
+            showDuration(event.currentTarget, answerFeedback(correct, 'above'))
+          }}
+        >
           提交全部
         </Button>
         {renderResolvedFeedback(currentState.resolved ? currentState.correct : undefined, question.analysis, compact)}
@@ -427,15 +480,17 @@ export function QuizQuestionInteraction({
         </div>
         <Button
           type="button"
-          onClick={() =>
+          onClick={(event) => {
+            const correct = pairs.every(
+              (pair) => (matchingPairs[pair.left_id] || null) === pair.right_id,
+            )
             onStateChange((current) => ({
               ...current,
               resolved: true,
-              correct: pairs.every(
-                (pair) => (current.matchingPairs || {})[pair.left_id] === pair.right_id,
-              ),
+              correct,
             }))
-          }
+            showDuration(event.currentTarget, answerFeedback(correct, 'above'))
+          }}
         >
           提交连线
         </Button>
@@ -505,15 +560,17 @@ export function QuizQuestionInteraction({
         ))}
         <Button
           type="button"
-          onClick={() =>
+          onClick={(event) => {
+            const correct =
+              JSON.stringify(orderIds) ===
+              JSON.stringify(question.answer_payload.correct_order_ids || [])
             onStateChange((current) => ({
               ...current,
               resolved: true,
-              correct:
-                JSON.stringify(orderIds) ===
-                JSON.stringify(question.answer_payload.correct_order_ids || []),
+              correct,
             }))
-          }
+            showDuration(event.currentTarget, answerFeedback(correct, 'above'))
+          }}
         >
           提交排序
         </Button>
@@ -619,16 +676,17 @@ export function QuizQuestionInteraction({
         </div>
         <Button
           type="button"
-          onClick={() =>
+          onClick={(event) => {
+            const correct = items.every(
+              (item) => assignments[item.id] === item.category_id,
+            )
             onStateChange((current) => ({
               ...current,
               resolved: true,
-              correct: items.every(
-                (item) =>
-                  (current.categorizationAssignments || {})[item.id] === item.category_id,
-              ),
+              correct,
             }))
-          }
+            showDuration(event.currentTarget, answerFeedback(correct, 'above'))
+          }}
         >
           提交归类
         </Button>
@@ -662,6 +720,7 @@ export function QuizQuestionInteraction({
       extraAction={markControl}
       onStateChange={onStateChange}
       onShortAnswerSubmit={onShortAnswerSubmit}
+      onSubmitted={showDuration}
     />
     )
   }

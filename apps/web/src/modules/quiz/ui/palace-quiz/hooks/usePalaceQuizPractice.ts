@@ -8,6 +8,7 @@ export function usePalaceQuizPractice({
   setQuestions,
   promptForAiOptions,
   emitQuizFeedback,
+  getDurationMs,
 }: {
   palaceId?: number | null
   setQuestions: React.Dispatch<React.SetStateAction<PalaceQuizQuestion[]>>
@@ -20,6 +21,7 @@ export function usePalaceQuizPractice({
     event: Parameters<typeof dispatchGlobalFeedback>[0],
     options?: Parameters<typeof dispatchGlobalFeedback>[1],
   ) => void
+  getDurationMs?: (questionId: number) => number | null
 }) {
   const session = useQuizSessionProgress()
 
@@ -61,6 +63,7 @@ export function usePalaceQuizPractice({
     onChoiceStart: ({ optionId }) => {
       emitQuizFeedback('quiz_answer_select', { label: Array.isArray(optionId) ? optionId.join('') : optionId, audioScope: 'local' })
     },
+    getDurationMs,
   })
 
   const handleChoiceSelect = (question: PalaceQuizQuestion, optionId: string | string[]) => {

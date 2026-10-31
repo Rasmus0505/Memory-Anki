@@ -41,6 +41,7 @@ export function FreestyleCardArea({
   queueState,
   roundPlan,
   planVersion,
+  wrongUnitIds,
   answeredQuestionIds,
   questionStates,
   onToggleFullscreen,
@@ -61,6 +62,10 @@ export function FreestyleCardArea({
   onQuestionStateChange,
   onChoiceResolve,
   onShortAnswerSubmit,
+  onQuestionUpdated,
+  onAnswerReset,
+  onShown,
+  getDurationMs,
   onNavigateToIndex,
   roundCompletion,
   dueTomorrowCount,
@@ -92,6 +97,7 @@ export function FreestyleCardArea({
   queueState: Queue['queueState']
   roundPlan: Queue['roundPlan']
   planVersion: Queue['planVersion']
+  wrongUnitIds: readonly string[]
   answeredQuestionIds: ReadonlySet<number>
   questionStates: Record<number, FeedProps['questionState']>
   onToggleFullscreen: FeedProps['onToggleFullscreen']
@@ -112,6 +118,10 @@ export function FreestyleCardArea({
   onQuestionStateChange: FeedProps['onQuestionStateChange']
   onChoiceResolve: FeedProps['onChoiceResolve']
   onShortAnswerSubmit: FeedProps['onShortAnswerSubmit']
+  onQuestionUpdated?: FeedProps['onQuestionUpdated']
+  onAnswerReset?: FeedProps['onAnswerReset']
+  onShown?: FeedProps['onShown']
+  getDurationMs?: FeedProps['getDurationMs']
   onNavigateToIndex: FeedProps['onNavigateToIndex']
   roundCompletion: ClosingProps['completion']
   dueTomorrowCount: number | null
@@ -172,6 +182,7 @@ export function FreestyleCardArea({
               })}
               questionState={isQuizCard(card) ? questionStates[card.question.id] : undefined}
               answeredBefore={isQuizCard(card) && answeredQuestionIds.has(card.question.id)}
+              wrongThisRound={card.type === 'mindmap_branch' && !!card.unit_id && wrongUnitIds.includes(card.unit_id)}
               onFlipModeChange={onFlipModeChange}
               onMindmapZoomChange={onMindmapZoomChange}
               onToggleFullscreen={onToggleFullscreen}
@@ -190,6 +201,10 @@ export function FreestyleCardArea({
               onQuestionStateChange={onQuestionStateChange}
               onChoiceResolve={onChoiceResolve}
               onShortAnswerSubmit={onShortAnswerSubmit}
+              onQuestionUpdated={onQuestionUpdated}
+              onAnswerReset={onAnswerReset}
+              onShown={onShown}
+              getDurationMs={getDurationMs}
               onNavigateToIndex={onNavigateToIndex}
             />
           )

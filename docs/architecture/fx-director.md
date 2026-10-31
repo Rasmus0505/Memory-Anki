@@ -2,7 +2,7 @@
 
 `apps/web/src/shared/fx` 是唯一的反馈入口。业务代码说**发生了什么**，recipe 决定**怎么反馈**。
 
-当前只有三类反馈通道：**声音**、**震动（haptics）**、**CSS 果冻动效（jelly）**，外加 DOM 小动效（bump / flash / charge）。
+当前只有三类反馈通道：**声音**、**震动（haptics）**、**CSS 果冻动效（jelly）**，外加 DOM 小动效（bump / flash / charge / 微反馈气泡）。
 粒子系统、WebGL/Canvas 特效、FX Lab 页面均已移除，不要再引入。
 
 ```text
@@ -23,6 +23,7 @@ caller ──cue('grade.commit', payload, { owner })──▶ director ──▶
 | `core/anchors.ts` | 具名锚点（`data-fx-anchor`），供需要定位的反馈使用。不使用测试 id。 |
 | `core/domFlourish.ts` | `bumpElement` / `chargeElement` / `flashElement`。 |
 | `core/jelly.ts` | `jellyOn(el, 'pop' \| 'press' \| 'wobble')`：挂上 CSS 类，动画样式在 `apps/web/src/styles/jelly.css`，且只在 `prefers-reduced-motion: no-preference` 下生效。 |
+| `core/microBubble.ts` | `showMicroBubble(anchor, { tone, parts, zone, placement })`：答题耗时、评分间隔、单元清盘等瞬态胶囊。挂 body（或原生全屏宿主）的固定顶层，`z-index: 10000` 高于 dialog 的 240/241/255；`pointer-events: none`，同 zone 新气泡让旧气泡 180ms 加速淡出。文案由纯函数生成并有单测。 |
 | `recipes/learning.ts` | 学习场景 cue：评分、翻卡落定、单元完成、撤销、移除、重试、进度四分之一、答对/答错、区域清空、翻页、轮次完成。 |
 | `recipes/map.ts` | 思维导图场景 cue（如 `audio.pops` 分层弹跳）。 |
 
@@ -34,6 +35,7 @@ caller ──cue('grade.commit', payload, { owner })──▶ director ──▶
 4. `shared/fx` 不得导入 `modules/`、`pages/`、`widgets/`、`app/`，也不得导入 `@/shared/theme`（`check_visual_layer_purity`、`check_theme_pack_registry`）。
 5. 减弱动效（`prefers-reduced-motion: reduce`）时：`resolveFxGate` 关闭动效基础位，果冻动效不生效，声音与震动按各自设置降级。
 6. 带延迟的步骤必须挂在 `FxPlayback` owner 上，不得裸用 `setTimeout`。
+7. 瞬态微反馈气泡只从 `@/shared/fx` 调用 `showMicroBubble`。不要把它渲染进卡片、评分 dock 或 dialog 内部：祖先的 `transform`、`overflow: hidden` 和 z-index 会把气泡裁掉或压到题目下面。气泡必须保持 `pointer-events: none`，并在 `prefers-reduced-motion: reduce` 下退化为原地淡入淡出。
 
 ## 新增一个反馈
 

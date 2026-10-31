@@ -7,9 +7,20 @@ import { cn } from '@/shared/lib/utils'
  * Stable answering-panel size. Height is fixed while the floating layout has
  * not remembered one, so revealing an answer scrolls inside instead of growing
  * the panel and recentering it. A remembered resize still wins via inline height.
+ *
+ * Phones take the whole height the centered wrapper allows (it already owns the
+ * 1rem gutter): at 86vh the header, the 换题 row, the number rail and the footer
+ * together left the stem and its options only a third of the screen. From `sm`
+ * up the old floating cap applies unchanged.
+ */
+/**
+ * Phone: the sheet is vertically centred, so its top edge equals the inset it leaves
+ * on both sides. `max(safe-area, 0.5rem)` keeps the header (配置, 查看宫殿, 关闭 ×)
+ * below the status bar / Dynamic Island; the old fixed 1rem gap put them under it.
+ * Written out in full so Tailwind can extract every class.
  */
 export const QUIZ_ANSWERING_DIALOG_CLASS =
-  'h-[min(82vh,100dvh-2rem)] max-h-[min(92vh,100dvh-1rem)] w-[min(46rem,calc(100vw-1rem))] max-w-none p-0'
+  'h-[calc(100dvh-2*max(env(safe-area-inset-top,0px),env(safe-area-inset-bottom,0px),0.5rem))] max-h-[calc(100dvh-2*max(env(safe-area-inset-top,0px),env(safe-area-inset-bottom,0px),0.5rem))] w-[min(58rem,calc(100vw-1rem))] max-w-none p-0 sm:h-[min(86vh,100dvh-2rem)] sm:max-h-[min(92vh,100dvh-1rem)]'
 
 /** Scrolls the stem and the revealed answer. The question-number rail stays outside. */
 export const QUIZ_ANSWERING_SCROLL_CLASS =

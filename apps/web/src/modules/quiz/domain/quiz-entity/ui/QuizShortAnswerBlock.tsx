@@ -151,6 +151,7 @@ export function ShortAnswerBlock({
   extraAction,
   onStateChange,
   onShortAnswerSubmit,
+  onSubmitted,
 }: {
   question: PalaceQuizQuestion | PalaceQuizQuestionDraft
   state: QuizRuntimeState | undefined
@@ -161,6 +162,7 @@ export function ShortAnswerBlock({
   extraAction?: ReactNode
   onStateChange: (updater: (current: QuizRuntimeState) => QuizRuntimeState) => void
   onShortAnswerSubmit?: () => void
+  onSubmitted?: (anchor: Element | null) => void
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null)
   const currentState = state || {}
@@ -172,17 +174,21 @@ export function ShortAnswerBlock({
   submittedRef.current = submitted
   const answerText = currentState.shortAnswerText || ''
 
-  const submit = useCallback(() => {
-    if (submittedRef.current) return
-    submittedRef.current = true
-    onStateChange((current) => ({
-      ...current,
-      resolved: true,
-      shortAnswerSubmitted: true,
-      shortAnswerFeedback: null,
-    }))
-    onShortAnswerSubmit?.()
-  }, [onShortAnswerSubmit, onStateChange])
+  const submit = useCallback(
+    (anchor?: Element | null) => {
+      if (submittedRef.current) return
+      submittedRef.current = true
+      onStateChange((current) => ({
+        ...current,
+        resolved: true,
+        shortAnswerSubmitted: true,
+        shortAnswerFeedback: null,
+      }))
+      onShortAnswerSubmit?.()
+      onSubmitted?.(anchor ?? rootRef.current)
+    },
+    [onShortAnswerSubmit, onStateChange, onSubmitted],
+  )
 
   const revealOptions =
     question.question_type === 'multiple_choice' ? mcqRevealOptions(question) : []
@@ -202,7 +208,7 @@ export function ShortAnswerBlock({
       const target = event.target
       if (!(target instanceof HTMLElement)) {
         event.preventDefault()
-        submit()
+        submit(rootRef.current)
         return
       }
       if (target.isContentEditable || TEXT_ENTRY_TAGS.has(target.tagName)) return
@@ -212,7 +218,7 @@ export function ShortAnswerBlock({
         if (otherInteraction) return
       }
       event.preventDefault()
-      submit()
+      submit(rootRef.current)
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
@@ -235,19 +241,23 @@ export function ShortAnswerBlock({
           if (event.nativeEvent.isComposing) return
           if (event.key === 'Enter' && !event.shiftKey && !event.altKey) {
             event.preventDefault()
-            submit()
+            submit(rootRef.current)
             return
           }
           if (event.key === ' ' && !answerText.trim()) {
             event.preventDefault()
-            submit()
+            submit(rootRef.current)
           }
         }}
         rows={compact ? 4 : 5}
         placeholder="先写下你的答案，再点击提交"
       />
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" onClick={submit} disabled={submitted}>
+        <Button
+          type="button"
+          onClick={(event) => submit(event.currentTarget)}
+          disabled={submitted}
+        >
           提交答案
         </Button>
         {extraAction}

@@ -1,4 +1,4 @@
-import { fireEvent, render } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { useRef } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { useQuizAnsweringShortcuts } from './useQuizAnsweringShortcuts'
@@ -38,7 +38,14 @@ function Harness({
     onToggleMark,
     onDeleteQuestion,
   })
-  return <div ref={interactionRootRef} data-quiz-shortcut-surface="" tabIndex={-1} />
+  return (
+    <div ref={interactionRootRef} data-quiz-shortcut-surface="" tabIndex={-1}>
+      <button type="button" data-quiz-option-index="0">A</button>
+      <button type="button" data-quiz-option-index="1">B</button>
+      <button type="button" data-quiz-option-index="2">C</button>
+      <button type="button" data-quiz-option-index="3">D</button>
+    </div>
+  )
 }
 
 describe('useQuizAnsweringShortcuts', () => {
@@ -114,6 +121,19 @@ describe('useQuizAnsweringShortcuts', () => {
     )
     fireEvent.keyDown(window, { key: 'Enter', code: 'Enter' })
     expect(onNextQuestion).not.toHaveBeenCalled()
+  })
+
+  it('clicks the focused option so keyboard answers use the option action', () => {
+    const onSelectOption = vi.fn()
+    render(<Harness onToggleMark={() => {}} onSelectOption={onSelectOption} />)
+    const option = screen.getByRole('button', { name: 'A' })
+    const clicked = vi.fn()
+    option.addEventListener('click', clicked)
+
+    fireEvent.keyDown(window, { key: '1', code: 'Digit1' })
+
+    expect(clicked).toHaveBeenCalledTimes(1)
+    expect(onSelectOption).not.toHaveBeenCalled()
   })
 
   it('does not answer while typing', () => {

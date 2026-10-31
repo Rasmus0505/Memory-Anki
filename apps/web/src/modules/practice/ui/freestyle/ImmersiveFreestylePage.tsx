@@ -54,6 +54,7 @@ import { cue } from '@/shared/fx'
 import { useImmersiveQueue } from '@/modules/practice/ui/freestyle/hooks/useImmersiveQueue'
 import { usePrefersReducedMotion } from '@/modules/practice/ui/freestyle/hooks/usePrefersReducedMotion'
 import { useFreestyleQuizFlow } from '@/modules/practice/ui/freestyle/hooks/useFreestyleQuizFlow'
+import { useQuizDwellMs } from '@/modules/quiz/public'
 import { useFreestyleFeedNavigation } from '@/modules/practice/ui/freestyle/hooks/useFreestyleFeedNavigation'
 import { useFreestyleLiveSync } from '@/modules/practice/ui/freestyle/hooks/useFreestyleLiveSync'
 import { useFreestyleChallengeChannel } from '@/modules/practice/ui/freestyle/hooks/useFreestyleChallengeChannel'
@@ -170,6 +171,7 @@ export default function ImmersiveFreestylePage({
     roundPlan,
     waiting,
     cards,
+    setCards,
     currentIndex,
     goToIndex,
     flushDeferredRestudy,
@@ -197,6 +199,7 @@ export default function ImmersiveFreestylePage({
     buildQueue,
     pendingRestudyCardIds,
     planVersion,
+    wrongUnitIds,
     adoptRoundVersion,
     appendBedtimeReview,
     rateBedtimeCard,
@@ -435,9 +438,23 @@ export default function ImmersiveFreestylePage({
     }
   }, [])
 
+  const dwell = useQuizDwellMs()
+  const updateFeedQuestion = useCallback(
+    (question: FreestyleQuizCard['question']) => {
+      setCards((current) =>
+        current.map((card) =>
+          isQuizCard(card) && card.question.id === question.id
+            ? { ...card, question }
+            : card,
+        ),
+      )
+    },
+    [setCards],
+  )
   const {
     progress,
     updateQuestionState,
+    resetQuestionAnswer,
     handleChoiceResolve,
     handleShortAnswerSubmit,
     answeredQuestionIds,
@@ -448,9 +465,8 @@ export default function ImmersiveFreestylePage({
     promptForAiOptions,
     // Avoid restoring prior choice states that disable options on reappearance.
     freshAttemptStates: true,
-    updateFeedQuestion: () => {
-      // Question payload updates are optional for immersive queue cards.
-    },
+    updateFeedQuestion,
+    getDurationMs: dwell.elapsedMs,
   })
 
   // New round / reshuffle clears completed bookkeeping; reset local ack set too.
@@ -675,6 +691,7 @@ export default function ImmersiveFreestylePage({
       viewingCardId,
       queueState.unitEncountersByCardId,
       unsavedRatingIds,
+      wrongUnitIds,
     ),
     [
       cards,
@@ -684,6 +701,7 @@ export default function ImmersiveFreestylePage({
       roundPlan,
       unsavedRatingIds,
       viewingCardId,
+      wrongUnitIds,
     ],
   )
 
@@ -1020,6 +1038,7 @@ export default function ImmersiveFreestylePage({
           scopeQuizOpen={scopeQuizOpen}
           onScopeQuizOpenChange={setScopeQuizOpen}
           planVersion={planVersion}
+          wrongUnitIds={wrongUnitIds}
           slot={slot}
           onSetConfigAndPersist={setConfigAndPersist}
           onRoundSync={adoptRoundVersion}
@@ -1096,6 +1115,7 @@ export default function ImmersiveFreestylePage({
           queueState={queueState}
           roundPlan={roundPlan}
           planVersion={planVersion}
+          wrongUnitIds={wrongUnitIds}
           answeredQuestionIds={answeredQuestionIds}
           questionStates={progress.questionStates}
           onToggleFullscreen={toggleFreestyleFullscreen}
@@ -1116,6 +1136,10 @@ export default function ImmersiveFreestylePage({
           onQuestionStateChange={updateQuestionState}
           onChoiceResolve={onChoiceResolve}
           onShortAnswerSubmit={onShortAnswerSubmit}
+          onQuestionUpdated={updateFeedQuestion}
+          onAnswerReset={resetQuestionAnswer}
+          onShown={dwell.restart}
+          getDurationMs={dwell.elapsedMs}
           onNavigateToIndex={navigateToIndex}
           roundCompletion={roundCompletion}
           dueTomorrowCount={dueTomorrowCount}

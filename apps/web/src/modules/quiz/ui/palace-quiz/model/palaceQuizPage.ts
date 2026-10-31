@@ -84,12 +84,15 @@ export function buildEmptyQuestionForm(): QuestionFormState {
 }
 
 export function buildQuestionFormFromQuestion(question: PalaceQuizQuestion): QuestionFormState {
+  // While an AI variant is displayed, the editor must still edit the original
+  // row; otherwise saving would overwrite the original with the variant.
+  const content = question.original_content ?? question
   return {
-    question_type: question.question_type,
-    stem: question.stem,
+    question_type: content.question_type,
+    stem: content.stem,
     options:
-      question.question_type === 'multiple_choice'
-        ? (question.options || []).map((option) => ({
+      content.question_type === 'multiple_choice'
+        ? (content.options || []).map((option) => ({
             id: option.id,
             text: option.text,
           }))
@@ -97,9 +100,9 @@ export function buildQuestionFormFromQuestion(question: PalaceQuizQuestion): Que
             { id: 'A', text: '' },
             { id: 'B', text: '' },
           ],
-    correct_option_id: question.answer_payload.correct_option_id || 'A',
-    reference_answer: question.answer_payload.reference_answer || '',
-    analysis: question.analysis || '',
+    correct_option_id: content.answer_payload.correct_option_id || 'A',
+    reference_answer: content.answer_payload.reference_answer || '',
+    analysis: content.analysis || '',
     source_meta: question.source_meta || buildManualSourceMeta(),
   }
 }

@@ -20,6 +20,10 @@ export function PalaceQuizPracticePanel({
   onStateChange,
   onShortAnswerSubmit,
   onToggleMark,
+  onQuestionUpdated,
+  onAnswerReset,
+  onShown,
+  getDurationMs,
   onReset,
   onResetVisibleAttempts,
   onEdit,
@@ -29,6 +33,7 @@ export function PalaceQuizPracticePanel({
   resetAttemptsLoading,
   onViewKnowledge,
   palaceTitle = '',
+  comboScopeKey = null,
 }: {
   questions: PalaceQuizQuestion[]
   miniPalaces: PalaceSegmentSummary[]
@@ -43,6 +48,10 @@ export function PalaceQuizPracticePanel({
   onStateChange: (questionId: number, updater: (current: QuizRuntimeState) => QuizRuntimeState) => void
   onShortAnswerSubmit: (questionId: number) => void
   onToggleMark?: (question: PalaceQuizQuestion, marked: boolean) => void
+  onQuestionUpdated?: (question: PalaceQuizQuestion) => void
+  onAnswerReset?: (questionId: number) => void
+  onShown?: (questionId: number) => void
+  getDurationMs?: (questionId: number) => number | null
   onReset: (questionId: number) => void
   onResetVisibleAttempts: () => void
   onEdit: (question: PalaceQuizQuestion) => void
@@ -52,6 +61,7 @@ export function PalaceQuizPracticePanel({
   resetAttemptsLoading: boolean
   onViewKnowledge?: (question: PalaceQuizQuestion) => void
   palaceTitle?: string
+  comboScopeKey?: string | null
 }) {
   return (
     <div className="space-y-4">
@@ -179,6 +189,11 @@ export function PalaceQuizPracticePanel({
             onReset={onReset}
             onEdit={onEdit}
             onToggleMark={onToggleMark}
+            onQuestionUpdated={onQuestionUpdated}
+            onAnswerReset={onAnswerReset}
+            onShown={onShown}
+            getDurationMs={getDurationMs}
+            comboScopeKey={comboScopeKey}
           />
         </div>
       ) : (
@@ -202,6 +217,11 @@ export function PalaceQuizPracticePanel({
                 onReset={onReset}
                 onEdit={onEdit}
                 onToggleMark={onToggleMark}
+                onQuestionUpdated={onQuestionUpdated}
+                onAnswerReset={onAnswerReset}
+                onShown={onShown}
+                getDurationMs={getDurationMs}
+                comboScopeKey={null}
               />
             </div>
           ))}

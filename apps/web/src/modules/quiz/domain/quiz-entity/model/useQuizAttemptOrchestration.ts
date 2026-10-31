@@ -2,6 +2,7 @@ import { useCallback } from 'react'
 import { recordPalaceQuizChoiceAttemptApi, requestPalaceShortAnswerFeedbackApi } from '@/modules/quiz/domain/quiz-entity/api'
 import { isQuizChoiceAttemptClosed } from '@/modules/quiz/domain/quiz-entity/model/quizAnswerMode'
 import { withOptimisticQuizAttempt } from '@/modules/quiz/domain/quiz-entity/model/quizAttemptStats'
+import { showQuizMutationMarkedToast } from '@/modules/quiz/domain/quiz-entity/model/quizMutationFeedback'
 import { emitQuizResultFeedback } from '@/modules/quiz/domain/quiz-entity/model/quizResultFeedback'
 import type { QuizRuntimeState } from '@/modules/quiz/domain/quiz-entity/model/quizRuntime'
 import type { AiRuntimeOptions, PalaceQuizQuestion } from '@/shared/api/contracts'
@@ -29,6 +30,9 @@ export function useQuizAttemptOrchestration({
   onChoiceStart,
   emitChoiceStatErrorFeedback = false,
   shouldToastAttemptError,
+  getDurationMs,
+  updateMutationStats = true,
+  applyQuestionUpdates = true,
 }: {
   adapter: QuizAttemptStateAdapter
   promptForAiOptions: (options: {
@@ -47,6 +51,18 @@ export function useQuizAttemptOrchestration({
   emitChoiceStatErrorFeedback?: boolean
   /** Return false to swallow a stat-refresh failure, e.g. the question was just deleted. */
   shouldToastAttemptError?: (questionId: number) => boolean
+  /** Milliseconds from the question becoming visible to this attempt. */
+  getDurationMs?: (questionId: number) => number | null
+  /**
+   * False when another write owns the muscle-memory counters, e.g. the
+   * freestyle history record applies them after its own attempt row.
+   */
+  updateMutationStats?: boolean
+  /**
+   * False when the caller applies a later authoritative question response
+   * itself; avoids a stale choice response overwriting the history update.
+   */
+  applyQuestionUpdates?: boolean
 }) {
   const handleChoiceSelect = useCallback(
     (question: PalaceQuizQuestion, optionId: string | string[], correctOverride?: boolean) => {
@@ -61,16 +77,28 @@ export function useQuizAttemptOrchestration({
         : question.answer_payload.correct_option_id === optionId)
       onChoiceStart?.({ question, optionId, correct })
       adapter.applyUpdatedQuestion(withOptimisticQuizAttempt(question, correct))
-      void recordPalaceQuizChoiceAttemptApi(question.id, optionId)
+      // The learner's answer is final the moment they pick it, so the result cue
+      // belongs to that tap — never to the write. A contended SQLite lock (or the
+      // mutation queue behind it) could hold the POST for a second and the cue then
+      // landed while the next question was already on screen. Only the attempt
+      // record itself still waits for the server.
+      if (resultFeedbackMode === 'immediate') {
+        emitQuizResultFeedback({ correct })
+        emitFeedback('quiz_result_reveal', {
+          label: correct ? '揭晓' : '答案',
+          screenPulse: null,
+          audioScope: 'local',
+        })
+      }
+      void recordPalaceQuizChoiceAttemptApi(question.id, optionId, {
+        durationMs: getDurationMs?.(question.id) ?? null,
+        updateMutationStats,
+      })
         .then((response) => {
-          adapter.applyUpdatedQuestion(response.question)
-          if (resultFeedbackMode !== 'immediate') return
-          emitQuizResultFeedback({ correct })
-          emitFeedback('quiz_result_reveal', {
-            label: correct ? '揭晓' : '答案',
-            screenPulse: null,
-            audioScope: 'local',
-          })
+          if (applyQuestionUpdates) adapter.applyUpdatedQuestion(response.question)
+          if (response.auto_marked) {
+            showQuizMutationMarkedToast(response.auto_mark_threshold_ms)
+          }
         })
         .catch((error) => {
           if (shouldToastAttemptError && !shouldToastAttemptError(question.id)) return
@@ -84,9 +112,12 @@ export function useQuizAttemptOrchestration({
       adapter,
       emitChoiceStatErrorFeedback,
       emitFeedback,
+      getDurationMs,
       onChoiceStart,
       resultFeedbackMode,
       shouldToastAttemptError,
+      updateMutationStats,
+      applyQuestionUpdates,
     ],
   )
 
