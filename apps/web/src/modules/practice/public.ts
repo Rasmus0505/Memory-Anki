@@ -150,7 +150,7 @@ export * from './ui/review/model/intervalBands'
 export { FreestyleRatingBar } from './ui/freestyle/components/FreestyleRatingBar'
 export * from './ui/review/components/PracticeCompletionDialog'
 export * from './ui/review/components/PalaceReviewUnitsPanel'
-export * from './ui/review/components/PalaceLadderProgress'
+export * from './ui/review/components/ReviewLevelBar'
 export * from './ui/review/components/PalaceUnitRatingEntry'
 export {
   SubjectMemoryLadder,

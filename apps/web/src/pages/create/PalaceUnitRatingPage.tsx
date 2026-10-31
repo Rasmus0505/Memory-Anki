@@ -12,7 +12,7 @@ import {
   getUnitReviewPreviewApi,
   intervalBadgeLabel,
   intervalOutlookLabel,
-  PalaceLadderProgress,
+  ReviewLevelBar,
   rateReviewUnitApi,
   startFreestyleUnitReviewSessionApi,
   type PalaceUnitProjectionDto,
@@ -81,8 +81,8 @@ export default function PalaceUnitRatingPage() {
   const [projection, setProjection] = useState<PalaceUnitProjectionDto | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(searchParams.get('unit'))
-  const [preview, setPreview] = useState<UnitReviewSessionDto | null>(null)
-  const [previewError, setPreviewError] = useState<string | null>(null)
+  const [palaceDoc, setPalaceDoc] = useState<unknown>(null)
+  const [palaceDocError, setPalaceDocError] = useState<string | null>(null)
   const [session, setSession] = useState<UnitReviewSessionDto | null>(null)
   const [encounter, setEncounter] = useState<UnitReviewEncounterDto | null>(null)
   const [selectedRating, setSelectedRating] = useState<UnitRating | null>(null)
@@ -95,6 +95,18 @@ export default function PalaceUnitRatingPage() {
 
   const units = projection?.units ?? []
   const selectedUnit = units.find((unit) => unit.id === selectedId) ?? null
+  const selectedUnitId = selectedUnit?.id ?? null
+  const unitShownAtRef = useRef<number | null>(null)
+  useEffect(() => {
+    unitShownAtRef.current = selectedUnitId == null ? null : Date.now()
+  }, [selectedUnitId])
+  const getRatingDurationMs = useCallback(
+    () =>
+      unitShownAtRef.current == null
+        ? null
+        : Math.max(0, Date.now() - unitShownAtRef.current),
+    [],
+  )
 
   const loadProjection = useCallback(async () => {
     if (!Number.isFinite(palaceId) || palaceId <= 0) return
@@ -115,26 +127,24 @@ export default function PalaceUnitRatingPage() {
     void loadProjection()
   }, [loadProjection, refreshTick])
 
-  // The unit's map: a read-only preview, filtered to this unit's scope.
+  // The palace document is identical for every unit, so fetch it once through
+  // the first unit's preview and re-filter on each switch. Keeping the map
+  // mounted is what stops a unit click from reloading and refitting the view.
   useEffect(() => {
-    if (!selectedId) {
-      setPreview(null)
-      return
-    }
+    if (!selectedId || palaceDoc) return
     const controller = new AbortController()
-    setPreview(null)
-    setPreviewError(null)
+    setPalaceDocError(null)
     void getUnitReviewPreviewApi(selectedId, { signal: controller.signal })
       .then((item) => {
-        if (!controller.signal.aborted) setPreview(item)
+        if (!controller.signal.aborted) setPalaceDoc(item.palace?.editor_doc ?? null)
       })
       .catch((caught) => {
         if (!controller.signal.aborted) {
-          setPreviewError(caught instanceof Error ? caught.message : '加载单元内容失败')
+          setPalaceDocError(caught instanceof Error ? caught.message : '加载单元内容失败')
         }
       })
     return () => controller.abort()
-  }, [selectedId])
+  }, [selectedId, palaceDoc])
 
   const releaseActive = useCallback(async () => {
     const active = activeRef.current
@@ -250,11 +260,16 @@ export default function PalaceUnitRatingPage() {
     [pendingRating, selectedRating, selectedUnit, session],
   )
 
+  // Depend on the member ids, not the unit object: a rating replaces that
+  // object and must not re-filter (and re-layout) an unchanged document.
+  const selectedNodeUidsKey = selectedUnit?.node_uids.join('|') ?? ''
   const scopeDoc = useMemo(() => {
-    const doc = preview?.palace?.editor_doc ?? null
-    if (!doc || !selectedUnit) return null
-    return filterMindMapDocumentToNodeUids(doc as MindMapDocumentInput, selectedUnit.node_uids)
-  }, [preview, selectedUnit])
+    if (!palaceDoc || !selectedNodeUidsKey) return null
+    return filterMindMapDocumentToNodeUids(
+      palaceDoc as MindMapDocumentInput,
+      selectedNodeUidsKey.split('|'),
+    )
+  }, [palaceDoc, selectedNodeUidsKey])
 
   const editorState = useMemo(
     () =>
@@ -350,46 +365,55 @@ export default function PalaceUnitRatingPage() {
           expandLabel="展开单元列表"
           sidePanel={unitsPanel}
         >
-          <section className="flex min-h-0 flex-1 flex-col">
-            <div className="flex items-center gap-3 border-b border-border/70 px-3 py-2">
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium">
-                  {selectedUnit?.title ?? '选择一个复习单元'}
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  {selectedUnit
-                    ? `${intervalOutlookLabel(selectedUnit.interval_days)} · 下次到期 ${dateLabel(
-                        selectedUnit.due_date,
-                      )} · ${selectedUnit.node_uids.length} 个节点`
-                    : '左侧列表里选一个单元'}
-                </div>
-              </div>
-              {selectedUnit ? (
-                <PalaceLadderProgress
-                  palaceId={palaceId}
-                  unitId={selectedUnit.id}
-                  refreshKey={`${refreshTick}:${selectedUnit.id}:${selectedUnit.stage_index}:${selectedUnit.due_date}`}
-                  adjustable
-                  onScheduleAdjusted={handleScheduleAdjusted}
-                />
-              ) : null}
-            </div>
-
+          <section
+            data-testid="unit-rating-sheet"
+            className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[1.4rem] border border-border/70 bg-card/92"
+          >
             <div className="relative min-h-0 flex-1">
               {editorState ? (
                 <MindMapEditorSurface
                   editorState={editorState}
                   readonly
                   forceExpanded
-                  sceneChrome="rating"
+                  flushCanvas
+                  preserveViewOnSync
+                  initialViewPolicy="preserve"
+                  sceneChrome="review"
                   outlinedNodeUids={selectedUnit?.node_uids ?? []}
                   onEditorStateChange={() => {}}
                   className="h-full min-h-0"
+                  toolbarCenterContent={
+                    selectedUnit ? (
+                      <ReviewLevelBar
+                        unitId={selectedUnit.id}
+                        stageIndex={selectedUnit.stage_index}
+                        intervalDays={selectedUnit.interval_days}
+                        dueDate={selectedUnit.due_date}
+                        due={selectedUnit.due}
+                        adjustable
+                        onScheduleAdjusted={handleScheduleAdjusted}
+                      />
+                    ) : null
+                  }
+                  belowToolbarSlot={
+                    <div className="flex min-h-10 shrink-0 items-center gap-2 border-b border-border/60 px-3">
+                      <div className="min-w-0 flex-1 truncate text-sm font-medium">
+                        {selectedUnit?.title ?? '选择一个复习单元'}
+                      </div>
+                      <div className="shrink-0 text-[11px] text-muted-foreground">
+                        {selectedUnit
+                          ? `${intervalOutlookLabel(selectedUnit.interval_days)} · 下次到期 ${dateLabel(
+                              selectedUnit.due_date,
+                            )} · ${selectedUnit.node_uids.length} 个节点`
+                          : ''}
+                      </div>
+                    </div>
+                  }
                 />
               ) : (
                 <div className="flex h-full items-center justify-center p-6 text-sm text-muted-foreground">
-                  {previewError ? (
-                    <span className="text-destructive">无法加载单元内容：{previewError}</span>
+                  {palaceDocError ? (
+                    <span className="text-destructive">无法加载单元内容：{palaceDocError}</span>
                   ) : selectedUnit ? (
                     <span className="inline-flex items-center gap-2">
                       <LoaderCircle className="size-4 animate-spin" aria-hidden />
@@ -402,29 +426,28 @@ export default function PalaceUnitRatingPage() {
               )}
             </div>
 
-            <div className="border-t border-border/70 p-2">
-              <FreestyleRatingBar
-                ratingEffects={encounter?.rating_effects ?? []}
-                selectedRating={selectedRating}
-                currentIntervalDays={selectedUnit?.interval_days ?? null}
-                pendingRating={pendingRating}
-                busy={false}
-                locked={false}
-                reviewReady={Boolean(encounter)}
-                hasEncounter={Boolean(encounter)}
-                shortcutsActive={false}
-                actionError={actionError}
-                disabledReason={
-                  !selectedUnit
-                    ? '先选择一个复习单元'
-                    : !selectedUnit.due
-                      ? `这张卡 ${dateLabel(selectedUnit.due_date)} 才到期 · 可在上方进度条调整进度`
-                      : null
-                }
-                onRate={(rating) => void rate(rating)}
-                onDismissError={() => setActionError(null)}
-              />
-            </div>
+            <FreestyleRatingBar
+              ratingEffects={encounter?.rating_effects ?? []}
+              selectedRating={selectedRating}
+              currentIntervalDays={selectedUnit?.interval_days ?? null}
+              pendingRating={pendingRating}
+              busy={false}
+              locked={false}
+              reviewReady={Boolean(encounter)}
+              hasEncounter={Boolean(encounter)}
+              shortcutsActive={false}
+              actionError={actionError}
+              disabledReason={
+                !selectedUnit
+                  ? '先选择一个复习单元'
+                  : !selectedUnit.due
+                    ? `这张卡 ${dateLabel(selectedUnit.due_date)} 才到期 · 可在上方进度条调整进度`
+                    : null
+              }
+              onRate={(rating) => void rate(rating)}
+              getRatingDurationMs={getRatingDurationMs}
+              onDismissError={() => setActionError(null)}
+            />
           </section>
         </MindMapSplitLayout>
       )}

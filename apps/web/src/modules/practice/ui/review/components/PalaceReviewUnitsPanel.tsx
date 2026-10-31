@@ -16,7 +16,7 @@ import {
 } from '../api'
 import { intervalDaysLabel } from '../model/intervalBands'
 import { schedulableDueMax } from '../model/scheduleLimits'
-import { PalaceLadderProgress } from './PalaceLadderProgress'
+import { ReviewLevelBar } from './ReviewLevelBar'
 
 function intervalBadgeLabel(days: number, hasPassed: boolean) {
   if (days > 0) return `间隔 ${intervalDaysLabel(days)}`
@@ -439,7 +439,15 @@ export function PalaceReviewUnitsPanel({
                       <ChevronDown className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                     )}
                   </button>
-                  <PalaceLadderProgress palaceId={palaceId} unitId={unit.id} className="mt-2" />
+                  <ReviewLevelBar
+                    unitId={unit.id}
+                    stageIndex={unit.stage_index}
+                    intervalDays={unit.interval_days}
+                    dueDate={unit.due_date}
+                    due={unit.due}
+                    compact
+                    className="mt-2"
+                  />
 
                   {expanded ? (
                     <div className="mt-3 space-y-3 border-t border-border pt-3">

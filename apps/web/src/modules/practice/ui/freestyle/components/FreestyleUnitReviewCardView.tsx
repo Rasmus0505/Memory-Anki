@@ -117,6 +117,7 @@ export function FreestyleUnitReviewCardView({
   onOpenScopeQuiz,
   lastRating = null,
   onBedtimeRate,
+  wrongThisRound = false,
 }: {
   card: FreestyleReviewUnitCard
   active: boolean
@@ -125,6 +126,7 @@ export function FreestyleUnitReviewCardView({
   readOnly: boolean
   roundId: string
   planVersion?: number
+  wrongThisRound?: boolean
   onOpenScopeQuiz?: () => void
   encounter?: FreestyleUnitEncounterState
   /** This-round last rating, shown while the amend glance is still empty. */
@@ -186,8 +188,19 @@ export function FreestyleUnitReviewCardView({
   const [undoVisible, setUndoVisible] = useState(false)
   const undoTimerRef = useRef<number | null>(null)
   const activeRef = useRef(active)
+  const activeSinceRef = useRef<number | null>(null)
   const mountedRef = useRef(true)
   const urgentGlanceRef = useRef(false)
+  useEffect(() => {
+    activeSinceRef.current = active ? Date.now() : null
+  }, [active, card.id])
+  const getRatingDurationMs = useCallback(
+    () =>
+      activeSinceRef.current == null
+        ? null
+        : Math.max(0, Date.now() - activeSinceRef.current),
+    [],
+  )
   // Saves live in the round-scoped rating outbox, not in this component: leaving
   // the card, the page or the module does not cancel them. A tapped grade lights
   // at once while its save is on the wire (quiet 保存中 hint); a failure shows
@@ -996,6 +1009,7 @@ export function FreestyleUnitReviewCardView({
             // encounter or an edit bumps the card's revision.
             key={`${card.unit_id ?? card.id}:${card.occurrence_kind ?? 'source'}:${roundId}`}
             card={card}
+            wrongThisRound={wrongThisRound}
             session={flipSource.session}
             unit={flipSource.unit}
             editorState={flipSource.editorState}
@@ -1074,6 +1088,7 @@ export function FreestyleUnitReviewCardView({
             error={bedtimeError}
             palacePass={Boolean(card.palace_pass)}
             onRate={handleBedtimeRate}
+            getRatingDurationMs={getRatingDurationMs}
             onDismissError={() => setBedtimeError(null)}
           />
         ) : active && !inlineEditing && !recapOnly && (flipSource || !loadError || canRateWithoutPlan) ? (
@@ -1097,6 +1112,7 @@ export function FreestyleUnitReviewCardView({
             assistantCopy={loadError}
             shortcutsActive={active && !inlineEditing}
             onRate={rate}
+            getRatingDurationMs={getRatingDurationMs}
             onRemoveFromQueue={
               readOnly || !onRemoveFromQueue
                 ? undefined

@@ -3,7 +3,7 @@ import {
   type PalaceReviewUnitChangeHighlight,
 } from '@/modules/practice/ui/review/components/PalaceReviewUnitsPanel'
 import { toast } from '@/shared/feedback/toast'
-import { PalaceLadderProgress } from '@/modules/practice/ui/review/components/PalaceLadderProgress'
+import { ReviewLevelBar } from '@/modules/practice/ui/review/components/ReviewLevelBar'
 import { useRevealSession, type RevealState } from '@/modules/memory/public'
 import { useFlipCardRevealSettings } from '@/modules/settings/public'
 import {
@@ -69,6 +69,7 @@ export function FreestyleUnitReviewFlipPanel({
   onOpenScopeQuiz,
   belowToolbarSlot = null,
   roundId = null,
+  wrongThisRound = false,
 }: {
   card: FreestyleReviewUnitCard
   session: UnitReviewSessionDto
@@ -94,6 +95,7 @@ export function FreestyleUnitReviewFlipPanel({
   belowToolbarSlot?: ReactNode
   /** The 随心 round, so 关联题目 can badge each question with its this-round rating. */
   roundId?: string | null
+  wrongThisRound?: boolean
 }) {
   const flipCardRevealSettings = useFlipCardRevealSettings()
   // Sticky: once this card has been the active one, keep its ladder so swiping back
@@ -673,10 +675,13 @@ export function FreestyleUnitReviewFlipPanel({
         toolbarCenterContent={
           // Neighbour previews skip it (~1s fetch); a bedtime palace pass has no unit interval.
           ladderEnabled && !reviewOnly ? (
-            <PalaceLadderProgress
-              palaceId={session.palace_id}
+            <ReviewLevelBar
+              wrongThisRound={wrongThisRound}
               unitId={unit.id}
-              refreshKey={`${unit.id}:${unit.stage_index}:${unit.due_date}:${unit.encounter?.id ?? ''}`}
+              stageIndex={unit.stage_index}
+              intervalDays={unit.interval_days}
+              dueDate={unit.due_date}
+              due={unit.due}
               adjustable
               onScheduleAdjusted={() => onUnitsReconciled?.()}
             />

@@ -11,7 +11,6 @@ vi.mock('@/modules/content/ui/mindmap-editor', async (importOriginal) => ({
 const apiMocks = vi.hoisted(() => ({
   getPalaceReviewUnitsApi: vi.fn(),
   getUnitReviewPreviewApi: vi.fn(),
-  getPalaceLadderProgressApi: vi.fn(),
   startFreestyleUnitReviewSessionApi: vi.fn(),
   rateReviewUnitApi: vi.fn(),
   closeUnitReviewEncounterApi: vi.fn(),
@@ -173,46 +172,6 @@ beforeEach(() => {
   Object.values(apiMocks).forEach((mock) => mock.mockReset())
   apiMocks.getPalaceReviewUnitsApi.mockResolvedValue(projection())
   apiMocks.getUnitReviewPreviewApi.mockResolvedValue(sessionFor(dueUnit, false))
-  apiMocks.getPalaceLadderProgressApi.mockResolvedValue({
-    palace_id: 1,
-    title: '测试宫殿',
-    ladder: [0, 1, 3, 7, 14, 30, 60, 120, 240, 365],
-    scope: 'unit',
-    current: {
-      unit_id: dueUnit.id,
-      title: dueUnit.title,
-      stage_index: 3,
-      interval_days: 7,
-      due_date: dueUnit.due_date,
-      due: true,
-      has_passed: true,
-      horizon: 'today',
-    },
-    palace: {
-      unit_count: 2,
-      due_count: 1,
-      weakest_stage_index: 0,
-      stage_histogram: [0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
-      due_horizon: { today: 1, d3: 0, week: 0, month: 1, later: 0 },
-      next_review_date: '2026-10-30',
-      review_status: 'due',
-      mark_required: false,
-    },
-    unit_range_stats: {
-      range: 'all',
-      per_stage: [],
-      total_reviews: 0,
-      rating_share: { forgot: 0, hard: 0, remember: 0, easy: 0 },
-    },
-    palace_range_stats: {
-      range: 'all',
-      per_stage: [],
-      total_reviews: 0,
-      rating_share: { forgot: 0, hard: 0, remember: 0, easy: 0 },
-    },
-    selected_range_summary: {},
-    palace_all_time_summary: {},
-  })
   apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(
     sessionFor(dueUnit, true) as never,
   )
@@ -273,6 +232,21 @@ describe('PalaceUnitRatingPage', () => {
     const reason = await screen.findByText(/11月13日 才到期 · 可在上方进度条调整进度/)
     expect(reason).toBeTruthy()
     expect(screen.getByRole('button', { name: /记得：/ }).hasAttribute('disabled')).toBe(true)
+  })
+
+  it('keeps the map mounted and reuses the palace document when switching units', async () => {
+    renderPage('/palaces/1/units?unit=unit-due')
+
+    expect(await screen.findByTestId('unit-canvas')).toBeTruthy()
+    await waitFor(() =>
+      expect(apiMocks.getUnitReviewPreviewApi).toHaveBeenCalledTimes(1),
+    )
+
+    fireEvent.click(screen.getByTestId('unit-rating-row-unit-future'))
+
+    expect(screen.getByTestId('unit-canvas')).toBeTruthy()
+    // The document is per palace, not per unit: switching never refetches it.
+    expect(apiMocks.getUnitReviewPreviewApi).toHaveBeenCalledTimes(1)
   })
 
   it('closes the open encounter when the learner switches units', async () => {

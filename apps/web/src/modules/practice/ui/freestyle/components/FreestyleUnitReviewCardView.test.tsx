@@ -86,6 +86,7 @@ vi.mock('@/modules/practice/ui/review/components/PalaceReviewUnitsPanel', () => 
 }))
 
 vi.mock('@/modules/quiz/public', () => ({
+  showAnswerDurationBubble: vi.fn(),
   usePalaceQuizNodeBindings: () => ({
     countBadgeByNodeUid: quizBindingMocks.countBadgeByNodeUid,
     getOpenQuestionIds: quizBindingMocks.getOpenQuestionIds,
