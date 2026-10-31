@@ -5,7 +5,11 @@ import { HardDriveDownload, Keyboard, RefreshCw, Settings, Save } from 'lucide-r
 
 import { toast } from '@/shared/feedback/toast'
 import { ProfileLayout } from '@/modules/settings/ui/profile/ProfileLayout'
-import { getClientPreferencesApi } from '@/modules/settings/domain/preferences-entity/api'
+import {
+  getClientPreferencesApi,
+  getReviewSettingsApi,
+  updateReviewSettingsApi,
+} from '@/modules/settings/domain/preferences-entity/api'
 
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
@@ -27,6 +31,12 @@ export default function ProfileSettingsPage({
   const [pwaResetting, setPwaResetting] = useState(false)
   const [appHome, setAppHome] = useState('')
   const [savingAppHome, setSavingAppHome] = useState(false)
+  const [mutationSettings, setMutationSettings] = useState({
+    attempts: '3',
+    streak: '3',
+    seconds: '5',
+  })
+  const [mutationSettingsSaving, setMutationSettingsSaving] = useState(false)
 
   useEffect(() => {
     void getClientPreferencesApi()
@@ -36,8 +46,55 @@ export default function ProfileSettingsPage({
   }, [])
 
   useEffect(() => {
+    void getReviewSettingsApi()
+      .then((settings) => {
+        setMutationSettings({
+          attempts: settings.quiz_mutation_min_attempts || '3',
+          streak: settings.quiz_mutation_min_consecutive_correct || '3',
+          seconds: String(
+            Number(settings.quiz_mutation_max_duration_ms || 5000) / 1000,
+          ),
+        })
+      })
+      .catch(() => undefined)
+  }, [])
+
+  useEffect(() => {
     void getRuntimeInfoApi().then((info) => setAppHome(info.app_home ?? '')).catch(() => undefined)
   }, [])
+
+  const handleSaveMutationSettings = async () => {
+    const attempts = Math.max(
+      1,
+      Math.min(99, Math.round(Number(mutationSettings.attempts) || 3)),
+    )
+    const streak = Math.max(
+      1,
+      Math.min(99, Math.round(Number(mutationSettings.streak) || 3)),
+    )
+    const seconds = Math.max(
+      1,
+      Math.min(120, Number(mutationSettings.seconds) || 5),
+    )
+    setMutationSettingsSaving(true)
+    try {
+      await updateReviewSettingsApi({
+        quiz_mutation_min_attempts: String(attempts),
+        quiz_mutation_min_consecutive_correct: String(streak),
+        quiz_mutation_max_duration_ms: String(Math.round(seconds * 1000)),
+      })
+      setMutationSettings({
+        attempts: String(attempts),
+        streak: String(streak),
+        seconds: String(seconds),
+      })
+      toast.success('待换题自动检测规则已保存。')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '保存待换题检测规则失败。')
+    } finally {
+      setMutationSettingsSaving(false)
+    }
+  }
 
   const handleSaveAppHome = async () => {
     if (!appHome.trim()) return
@@ -119,6 +176,88 @@ export default function ProfileSettingsPage({
                 新卡只有两个固定节点：当天 20 分钟复查一次，第二天隔夜检验一次，之后交给算法。
                 忘记：当天再练；困难：算通过，但下一次间隔会被压短；记得或轻松：至少排到明天。
               </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">待换题自动检测</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                答对时同时满足三个条件，且这道题还没有被标记为「待换题」，才会自动标记。
+                这条规则只负责提醒，不改变复习排期。
+              </p>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <label className="space-y-1.5 text-sm">
+                  <span className="font-medium">累计作答次数</span>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      min={1}
+                      max={99}
+                      value={mutationSettings.attempts}
+                      onChange={(event) =>
+                        setMutationSettings((current) => ({
+                          ...current,
+                          attempts: event.target.value,
+                        }))
+                      }
+                    />
+                    <span className="text-xs text-muted-foreground">次</span>
+                  </div>
+                </label>
+                <label className="space-y-1.5 text-sm">
+                  <span className="font-medium">连续答对次数</span>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      min={1}
+                      max={99}
+                      value={mutationSettings.streak}
+                      onChange={(event) =>
+                        setMutationSettings((current) => ({
+                          ...current,
+                          streak: event.target.value,
+                        }))
+                      }
+                    />
+                    <span className="text-xs text-muted-foreground">次</span>
+                  </div>
+                </label>
+                <label className="space-y-1.5 text-sm">
+                  <span className="font-medium">本次作答耗时</span>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      min={1}
+                      max={120}
+                      step={0.5}
+                      value={mutationSettings.seconds}
+                      onChange={(event) =>
+                        setMutationSettings((current) => ({
+                          ...current,
+                          seconds: event.target.value,
+                        }))
+                      }
+                    />
+                    <span className="text-xs text-muted-foreground">秒内</span>
+                  </div>
+                </label>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button
+                  type="button"
+                  onClick={() => void handleSaveMutationSettings()}
+                  loading={mutationSettingsSaving}
+                  loadingText="保存中"
+                >
+                  <Save className="size-4" />
+                  保存检测规则
+                </Button>
+                <span className="text-xs text-muted-foreground">
+                  默认 3 次 / 3 次 / 5 秒；设置保存在本机后端，两台设备共用。
+                </span>
+              </div>
             </CardContent>
           </Card>
         </div>

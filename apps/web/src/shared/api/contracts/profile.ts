@@ -26,6 +26,10 @@ export interface ReviewSettings {
   enable_fuzzing?: string
   /** Daily new-card release limit (string number). */
   daily_new_limit?: string
+  /** Muscle-memory auto-mark thresholds (string numbers). */
+  quiz_mutation_min_attempts?: string
+  quiz_mutation_min_consecutive_correct?: string
+  quiz_mutation_max_duration_ms?: string
   mindmap_ai_split_api_key: string
   mindmap_ai_split_base_url: string
   mindmap_ai_split_model: string
@@ -318,6 +322,7 @@ export interface FullImportResponse {
   restored_attachments?: number
 }
 export interface ClientPreferences {
+  freestyle_wrong_priority?: boolean | null
   memory_anki_shortcuts: Record<string, unknown> | null
   review_feedback_settings: Record<string, unknown> | null
   english_practice_settings: Record<string, unknown> | null

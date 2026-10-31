@@ -111,6 +111,14 @@ export interface PalaceQuizQuestionDraft {
   source_meta: PalaceQuizSourceMeta
 }
 
+export interface PalaceQuizQuestionContent {
+  question_type: PalaceQuizQuestionType
+  stem: string
+  options: PalaceQuizOption[]
+  answer_payload: PalaceQuizAnswerPayload
+  analysis: string
+}
+
 export interface PalaceQuizQuestion extends PalaceQuizQuestionDraft {
   id: number
   palace_id: number | null
@@ -127,6 +135,19 @@ export interface PalaceQuizQuestion extends PalaceQuizQuestionDraft {
   schedule_due_kind?: 'due' | 'other'
   /** Learner flag. Does not schedule review. */
   marked?: boolean
+  /** AI-variant workflow: question needs an external rewrite. */
+  needs_mutation?: boolean
+  /** "original" or a version id in the question's variant history. */
+  active_version_id?: string
+  /** Number of stored AI variants. */
+  variant_count?: number
+  variant_activated_at?: string | null
+  /** Attempts counted toward the auto-mark rule (one per canonical answer). */
+  mutation_attempt_count?: number
+  consecutive_correct_count?: number
+  last_answer_duration_ms?: number | null
+  /** Present only while a variant is displayed; editing must use these fields. */
+  original_content?: PalaceQuizQuestionContent | null
   lifecycle_status?: PalaceQuizLifecycleStatus
   evidence?: PalaceQuizEvidenceRef[]
   knowledge_tags?: string[]
@@ -144,6 +165,64 @@ export interface QuizTrashItem extends PalaceQuizQuestion {
   deleted_at: string | null
   palace_title: string
   palace_deleted: boolean
+}
+
+export interface PalaceQuizQuestionVariant extends PalaceQuizQuestionContent {
+  version_id: string
+  created_at: string | null
+  base_version_id?: string
+  source?: string
+}
+
+export interface PalaceQuizQuestionVersions {
+  question_id: number
+  active_version_id: string
+  needs_mutation: boolean
+  original: PalaceQuizQuestionVariant
+  versions: PalaceQuizQuestionVariant[]
+  mutation_attempt_count: number
+  consecutive_correct_count: number
+  last_answer_duration_ms: number | null
+  variant_activated_at: string | null
+}
+
+export interface PalaceQuizVariantImportItem {
+  question_id?: number | string
+  id?: number | string
+  base_version_id?: string
+  baseVersionId?: string
+  question_type?: string
+  type?: string
+  stem: string
+  options?: Array<PalaceQuizOption | string>
+  answer_payload?: PalaceQuizAnswerPayload
+  answer?: string | string[] | boolean
+  correct?: string | string[] | boolean
+  analysis: string
+}
+
+export interface PalaceQuizVariantImportResultRow {
+  question_id: number | null
+  status: 'imported' | 'skipped'
+  version_id?: string
+  question_type?: string
+  stem?: string
+  code?: string
+  reason?: string
+}
+
+export interface PalaceQuizVariantImportResult {
+  dry_run: boolean
+  imported_count: number
+  skipped_count: number
+  items: PalaceQuizQuestion[]
+  results: PalaceQuizVariantImportResultRow[]
+}
+
+export interface PalaceQuizMutationPromptResult {
+  text: string
+  question_count: number
+  skipped_count: number
 }
 
 export interface PalaceQuizSegmentGroupPreview {

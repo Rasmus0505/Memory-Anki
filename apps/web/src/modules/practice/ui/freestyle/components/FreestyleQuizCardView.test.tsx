@@ -5,6 +5,13 @@ import { saveQuizAnswerMode } from '@/modules/quiz/public'
 import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
 import { FreestyleQuizCardView } from './FreestyleQuizCardView'
 
+const cueMock = vi.hoisted(() => vi.fn())
+
+vi.mock('@/shared/fx', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/shared/fx')>()
+  return { ...actual, cue: cueMock }
+})
+
 const card = {
   id: 'quiz:1',
   type: 'quiz_question',
@@ -68,6 +75,35 @@ describe('FreestyleQuizCardView', () => {
 
   afterEach(() => {
     saveQuizAnswerMode('choice')
+  })
+
+  /**
+   * The feed's visual index moves the moment a page turn starts, so the answer a
+   * learner taps on a still-settling card used to lose its cue entirely.
+   */
+  it('plays the answer cue even when the card is no longer the active page', () => {
+    cueMock.mockClear()
+    const props = {
+      card,
+      answeredBefore: false,
+      active: false,
+      onStateChange: vi.fn(),
+      onChoiceResolve: vi.fn(),
+      onShortAnswerSubmit: vi.fn(),
+    }
+    const view = render(<FreestyleQuizCardView {...props} state={{}} />)
+    cueMock.mockClear()
+    view.rerender(
+      <FreestyleQuizCardView
+        {...props}
+        state={{ selectedOptionId: 'C', resolved: true, correct: true }}
+      />,
+    )
+
+    expect(cueMock).toHaveBeenCalledWith(
+      'answer.correct',
+      expect.objectContaining({ paper: expect.anything() }),
+    )
   })
 
   it('shows historical attempt stats left of the question type badge', () => {

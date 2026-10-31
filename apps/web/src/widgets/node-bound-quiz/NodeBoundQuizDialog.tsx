@@ -19,10 +19,13 @@ import {
   QuizQuestionIndexPager,
   QuizFontScaleBody,
   QuizFontScaleHint,
+  QuizMutationWorkflowStrip,
   QuizQuestionInteraction,
   QuizQuestionStem,
+  QuizQuestionVariantControl,
   QuizShortcutSettingsSection,
   useQuizAnswerMode,
+  useQuizDwellMs,
   useQuizAnsweringShortcuts,
   useQuizAttemptOrchestration,
   useQuizDialogFontScale,
@@ -258,6 +261,15 @@ export function NodeBoundQuizDialog({
   }, [open, palaceId, questionIdsKey, nodeUid])
 
   const current = questions[index] ?? null
+  const currentId = current?.id ?? null
+  const dwell = useQuizDwellMs()
+  const { restart } = dwell
+  // Each visit starts a fresh clock: leaving the question and coming back is a
+  // new look, not a continuation of the first one.
+  useEffect(() => {
+    if (!open || currentId == null) return
+    restart(currentId)
+  }, [open, currentId, restart])
   useLayoutEffect(() => {
     const node = answerScrollRef.current
     if (node) node.scrollTop = 0
@@ -324,6 +336,7 @@ export function NodeBoundQuizDialog({
       markCompleted(question.id)
     },
     shouldToastAttemptError,
+    getDurationMs: dwell.elapsedMs,
   })
 
   const currentBinding = current ? bindingByQuestion.get(current.id) : undefined
@@ -355,6 +368,26 @@ export function NodeBoundQuizDialog({
       return changed ? next : prev
     })
   }, [])
+
+  const resetAnswers = useCallback(
+    (ids: readonly number[]) => {
+      removeQuizSessionQuestions(ids)
+      dropLocalAnswers(ids)
+    },
+    [dropLocalAnswers],
+  )
+
+  const handleImportedQuestions = useCallback(
+    (items: PalaceQuizQuestion[]) => {
+      if (items.length === 0) return
+      const updatedById = new Map(items.map((item) => [item.id, item]))
+      setQuestions((currentQuestions) =>
+        currentQuestions.map((item) => updatedById.get(item.id) ?? item),
+      )
+      resetAnswers(items.map((item) => item.id))
+    },
+    [resetAnswers],
+  )
 
   const handleClearChoice = useCallback((choice: QuizProgressClearChoice) => {
     const loaded = questionsRef.current
@@ -555,7 +588,7 @@ export function NodeBoundQuizDialog({
         >
           <QuizFontScaleHint percent={fontScale.percent} visible={fontScale.hintVisible} />
           <DialogHeader>
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-2">
                 <Button
                   type="button"
@@ -594,6 +627,13 @@ export function NodeBoundQuizDialog({
               </DialogDescription>
             ) : null}
           </DialogHeader>
+
+          {!shortcutsOpen && !loading && questions.length > 0 ? (
+            <QuizMutationWorkflowStrip
+              questions={questions}
+              onImported={handleImportedQuestions}
+            />
+          ) : null}
 
           {/* min-h-0 + flex-1: the old fixed 70vh left dead space inside a resized
               floating window and double-clipped against the panel's own max-height. */}
@@ -638,6 +678,12 @@ export function NodeBoundQuizDialog({
                       attemptCount={current.attempt_count}
                     />
                     <Badge variant="outline">{getQuestionTypeLabel(current.question_type)}</Badge>
+                    <QuizQuestionVariantControl
+                      question={current}
+                      onQuestionUpdated={(question) => adapter.applyUpdatedQuestion(question)}
+                      onAnswerReset={(questionId) => resetAnswers([questionId])}
+                      compact
+                    />
                     <QuizQuestionRoundRating
                       roundId={roundId}
                       questionId={current.id}
@@ -680,6 +726,8 @@ export function NodeBoundQuizDialog({
                         orchestration.handleShortAnswerSubmit(current.id)
                         markCompleted(current.id)
                       }}
+                      getDurationMs={dwell.elapsedMs}
+                      comboScopeKey={`node-bound:${palaceId ?? 'unknown'}:${nodeUid ?? 'all'}`}
                       mark={{
                         marked: Boolean(current.marked),
                         onToggle: (marked) => void handleToggleMark(marked),

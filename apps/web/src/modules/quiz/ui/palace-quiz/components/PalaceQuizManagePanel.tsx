@@ -14,6 +14,10 @@ import type {
 } from '@/shared/api/contracts'
 import { getPalaceQuizOcrSourcesApi } from '@/modules/quiz/domain/quiz-entity/api'
 import {
+  QuizMutationBatchBar,
+  QuizQuestionVariantControl,
+} from '@/modules/quiz/domain/quiz-entity'
+import {
   canManuallyEditQuestion,
   getQuestionOwnershipLabel,
   getQuestionTypeLabel,
@@ -46,6 +50,8 @@ export function PalaceQuizManagePanel({
   onDeleteQuestion,
   onSaveQuestion,
   onResetForm,
+  onQuestionUpdated,
+  onImported,
 }: {
   palaceId: number | null
   questions: PalaceQuizQuestion[]
@@ -70,11 +76,19 @@ export function PalaceQuizManagePanel({
   onDeleteQuestion: (questionId: number) => Promise<void>
   onSaveQuestion: () => Promise<void>
   onResetForm: () => void
+  onQuestionUpdated?: (question: PalaceQuizQuestion) => void
+  onImported?: (items: PalaceQuizQuestion[]) => void
 }) {
   const [ocrSources, setOcrSources] = useState<PalaceQuizOcrSource[]>([])
   const [ocrLoading, setOcrLoading] = useState(false)
   const [ocrError, setOcrError] = useState('')
   const [expandedOcrId, setExpandedOcrId] = useState<number | null>(null)
+  const editingQuestion =
+    editingQuestionId != null
+      ? questions.find((question) => question.id === editingQuestionId) ?? null
+      : null
+  const editingOriginalWhileVariant =
+    editingQuestion != null && (editingQuestion.active_version_id || 'original') !== 'original'
 
   const loadOcrSources = useCallback(async () => {
     if (!palaceId) return
@@ -105,6 +119,10 @@ export function PalaceQuizManagePanel({
         <CardHeader className="flex flex-row items-center justify-between gap-3">
           <CardTitle className="text-base">题库列表</CardTitle>
           <div className="flex flex-wrap items-center gap-2">
+            <QuizMutationBatchBar
+              questions={filteredQuestions}
+              onImported={onImported}
+            />
             <Button
               type="button"
               size="sm"
@@ -226,6 +244,11 @@ export function PalaceQuizManagePanel({
                           >
                             {getQuestionOwnershipLabel(question)}
                           </Badge>
+                          <QuizQuestionVariantControl
+                            question={question}
+                            onQuestionUpdated={onQuestionUpdated}
+                            compact
+                          />
                         </div>
                         <div className="line-clamp-3 text-sm font-medium leading-6">
                           {question.stem}
@@ -284,6 +307,11 @@ export function PalaceQuizManagePanel({
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+          {editingOriginalWhileVariant ? (
+            <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-900 dark:border-amber-700 dark:bg-amber-950/30 dark:text-amber-200">
+              当前显示的是 AI 变体；这里编辑的是原始真题内容。保存后原始真题会更新，变体仍保留在历史版本中。
+            </p>
+          ) : null}
           <div className="grid gap-2">
             <span className="text-sm font-medium">题型</span>
             <select

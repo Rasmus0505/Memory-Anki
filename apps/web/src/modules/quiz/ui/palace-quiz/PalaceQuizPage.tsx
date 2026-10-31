@@ -22,6 +22,7 @@ import {
   beginQuizQuestionMarkRequest,
   commitQuizQuestionMark,
   isCurrentQuizQuestionMarkRequest,
+  useQuizDwellMs,
 } from '@/modules/quiz/domain/quiz-entity'
 import type { PalaceQuizQuestion, QuizNodeBindingEdge } from '@/shared/api/contracts'
 import { usePalaceQuizManagement } from '@/modules/quiz/ui/palace-quiz/hooks/usePalaceQuizManagement'
@@ -81,11 +82,13 @@ export default function PalaceQuizPage() {
     questions,
     segmentIds: miniPalaces.map((item) => item.id),
   })
+  const dwell = useQuizDwellMs()
   const practice = usePalaceQuizPractice({
     palaceId,
     setQuestions,
     promptForAiOptions,
     emitQuizFeedback,
+    getDurationMs: dwell.elapsedMs,
   })
   const management = usePalaceQuizManagement({
     palaceId,
@@ -407,6 +410,14 @@ export default function PalaceQuizPage() {
           onStateChange={practice.updateQuestionState}
           onShortAnswerSubmit={practice.handleShortAnswerSubmit}
           onToggleMark={(question, marked) => void handleToggleMark(question, marked)}
+          onQuestionUpdated={(question) =>
+            setQuestions((current) =>
+              current.map((item) => (item.id === question.id ? question : item)),
+            )
+          }
+          onAnswerReset={practice.handleResetQuestionState}
+          onShown={dwell.restart}
+          getDurationMs={dwell.elapsedMs}
           onReset={practice.handleResetQuestionState}
           onResetVisibleAttempts={() => setResetAttemptsDialogOpen(true)}
           onEdit={handleOpenQuestionEditor}
@@ -418,6 +429,7 @@ export default function PalaceQuizPage() {
             void handleViewKnowledge(question)
           }}
           palaceTitle={palace?.title || ''}
+          comboScopeKey={`palace-quiz:${palaceId}`}
         />
       ) : null}
 
@@ -446,6 +458,15 @@ export default function PalaceQuizPage() {
           onDeleteQuestion={management.handleDeleteQuestion}
           onSaveQuestion={management.handleSaveQuestion}
           onResetForm={management.resetEditingState}
+          onQuestionUpdated={(question) =>
+            setQuestions((current) =>
+              current.map((item) => (item.id === question.id ? question : item)),
+            )
+          }
+          onImported={(items) => {
+            practice.removeQuestionStates(items.map((item) => item.id))
+            void refreshQuestions()
+          }}
         />
       ) : null}
     </div>

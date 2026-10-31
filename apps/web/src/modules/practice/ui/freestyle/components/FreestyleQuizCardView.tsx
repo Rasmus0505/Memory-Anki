@@ -7,6 +7,7 @@ import {
   QuizAttemptStatsBadge,
   QuizQuestionInteraction,
   QuizQuestionStem,
+  QuizQuestionVariantControl,
   readQuizShortcuts,
   resolveQuizShortcutAction,
   useQuizAnswerMode,
@@ -17,7 +18,7 @@ import {
   QUESTION_TYPE_DISPLAY,
 } from '@/modules/practice/ui/freestyle/model/freestyle-labels'
 import { isFreestyleShortcutBlocked } from '@/modules/practice/ui/freestyle/model/freestyleKeyboard'
-import type { FreestyleQuizCard } from '@/shared/api/contracts'
+import type { FreestyleQuizCard, PalaceQuizQuestion } from '@/shared/api/contracts'
 import { Badge } from '@/shared/components/ui/badge'
 import { cn } from '@/shared/lib/utils'
 import { cue } from '@/shared/fx'
@@ -37,6 +38,10 @@ export function FreestyleQuizCardView({
   onChoiceResolve,
   onShortAnswerSubmit,
   onRequestNext,
+  onQuestionUpdated,
+  onAnswerReset,
+  onShown,
+  getDurationMs,
   active = false,
 }: {
   card: FreestyleQuizCard
@@ -47,6 +52,10 @@ export function FreestyleQuizCardView({
   onShortAnswerSubmit: () => void
   /** Immersive feed: explicit next after reading analysis. */
   onRequestNext?: () => void
+  onQuestionUpdated?: (question: PalaceQuizQuestion) => void
+  onAnswerReset?: (questionId: number) => void
+  onShown?: (questionId: number) => void
+  getDurationMs?: (questionId: number) => number | null
   /** Only the card currently under the feed viewport owns choice shortcuts. */
   active?: boolean
 }) {
@@ -66,16 +75,22 @@ export function FreestyleQuizCardView({
     setKeyboardOptionIndex(0)
   }, [card.question.id])
 
+  useEffect(() => {
+    if (active) onShown?.(card.question.id)
+  }, [active, card.question.id, onShown])
+
   // Only a live resolve on this question reacts; a card restored as answered stays still.
+  // Not gated on `active`: the feed's visual index moves as soon as a page turn starts,
+  // so tapping on a still-settling card used to swallow the cue entirely.
   const resolvedSeenRef = useRef<{ questionId: FreestyleQuizCard['question']['id']; resolved: boolean } | null>(null)
   useEffect(() => {
     const previous = resolvedSeenRef.current
     resolvedSeenRef.current = { questionId: card.question.id, resolved: isResolved }
     const justResolved = previous?.questionId === card.question.id && !previous.resolved && isResolved
     const paper = paperRef.current
-    if (!justResolved || !active || !paper) return
+    if (!justResolved || !paper) return
     cue(isCorrect ? 'answer.correct' : 'answer.wrong', { paper })
-  }, [active, card.question.id, isCorrect, isResolved])
+  }, [card.question.id, isCorrect, isResolved])
 
   // Same key map and precedence as the palace quiz dialog (useQuizAnsweringShortcuts):
   // choice keys submit, and once the answer is on screen the submit key turns the page.
@@ -247,6 +262,14 @@ export function FreestyleQuizCardView({
             {answeredBefore ? '已做过' : '新题'}
           </Badge>
         </div>
+        <div className="mt-2">
+          <QuizQuestionVariantControl
+            question={card.question}
+            onQuestionUpdated={onQuestionUpdated}
+            onAnswerReset={onAnswerReset}
+            compact
+          />
+        </div>
         <div className="mt-5 text-xl font-semibold leading-[1.7] tracking-[0.01em] text-paper-ink sm:text-2xl">
           <QuizQuestionStem question={card.question} />
         </div>
@@ -259,6 +282,7 @@ export function FreestyleQuizCardView({
             onStateChange={onStateChange}
             onChoiceResolve={onChoiceResolve}
             onShortAnswerSubmit={onShortAnswerSubmit}
+            getDurationMs={getDurationMs}
           />
         </div>
         {isResolved && onRequestNext ? (

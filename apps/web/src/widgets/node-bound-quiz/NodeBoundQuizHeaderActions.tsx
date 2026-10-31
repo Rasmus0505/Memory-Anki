@@ -33,7 +33,7 @@ export function NodeBoundQuizHeaderActions({
 }) {
   const { copying: copyingQuestions, copyQuestions } = useCopyQuizQuestionsText()
   return (
-    <div className="flex shrink-0 items-center gap-2">
+    <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
       {palaceId != null ? (
         <>
           <Button

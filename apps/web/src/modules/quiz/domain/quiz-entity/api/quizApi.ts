@@ -260,9 +260,111 @@ export function setPalaceQuizQuestionMarkedApi(questionId: number, marked: boole
   })
 }
 
+export function setPalaceQuizQuestionMutationMarkApi(
+  questionId: number,
+  needsMutation: boolean,
+) {
+  return request<{ item: PalaceQuizQuestion }>(
+    `/palace-quiz-questions/${questionId}/mutation-mark`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ needs_mutation: needsMutation }),
+      persistence: {
+        resourceKey: `palace-quiz-question:${questionId}:mutation-mark`,
+        coalesceKey: `palace-quiz-question:${questionId}:mutation-mark`,
+        description: needsMutation ? '标记待换题' : '取消待换题标记',
+        replayMode: 'auto',
+      },
+    },
+  ).then((saved) => {
+    if (saved.item) rememberPalaceQuestion(saved.item)
+    return saved
+  })
+}
+
+export function getPalaceQuizQuestionVersionsApi(questionId: number) {
+  return request<import('@/shared/api/contracts').PalaceQuizQuestionVersions>(
+    `/palace-quiz-questions/${questionId}/versions`,
+  )
+}
+
+export function activatePalaceQuizQuestionVariantApi(
+  questionId: number,
+  versionId: string,
+) {
+  return request<{ item: PalaceQuizQuestion }>(
+    `/palace-quiz-questions/${questionId}/active-variant`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ version_id: versionId }),
+      persistence: {
+        resourceKey: `palace-quiz-question:${questionId}:active-variant`,
+        coalesceKey: `palace-quiz-question:${questionId}:active-variant`,
+        description: '切换题目显示版本',
+        replayMode: 'auto',
+      },
+    },
+  ).then((saved) => {
+    if (saved.item) rememberPalaceQuestion(saved.item)
+    return saved
+  })
+}
+
+export function deletePalaceQuizQuestionVariantApi(
+  questionId: number,
+  versionId: string,
+) {
+  return request<{ item: PalaceQuizQuestion }>(
+    `/palace-quiz-questions/${questionId}/variants/${encodeURIComponent(versionId)}`,
+    {
+      method: 'DELETE',
+      persistence: {
+        resourceKey: `palace-quiz-question:${questionId}:variant:${versionId}:delete`,
+        description: '删除 AI 变体',
+        replayMode: 'manual',
+      },
+    },
+  ).then((saved) => {
+    if (saved.item) rememberPalaceQuestion(saved.item)
+    return saved
+  })
+}
+
+export function buildPalaceQuizMutationPromptApi(questionIds: number[]) {
+  return request<import('@/shared/api/contracts').PalaceQuizMutationPromptResult>(
+    '/palace-quiz-mutation-prompt',
+    {
+      method: 'POST',
+      body: JSON.stringify({ question_ids: questionIds }),
+    },
+  )
+}
+
+export function importPalaceQuizQuestionVariantsApi(
+  items: import('@/shared/api/contracts').PalaceQuizVariantImportItem[],
+  options?: { dryRun?: boolean },
+) {
+  return request<import('@/shared/api/contracts').PalaceQuizVariantImportResult>(
+    '/palace-quiz-question-variants/import',
+    {
+      method: 'POST',
+      body: JSON.stringify({ items, dry_run: options?.dryRun === true }),
+      persistence: {
+        resourceKey: `palace-quiz-question-variants:import:${Date.now()}`,
+        description: options?.dryRun ? '预览 AI 变体导入' : '导入 AI 变体',
+        replayMode: 'manual',
+      },
+    },
+  ).then((result) => {
+    for (const question of result.items) rememberPalaceQuestion(question)
+    return result
+  })
+}
+
 export function recordPalaceQuizChoiceAttemptApi(
   questionId: number,
   selectedOptionId: string | string[],
+  options?: { durationMs?: number | null; updateMutationStats?: boolean },
 ) {
   const selectedIds = Array.isArray(selectedOptionId) ? selectedOptionId : [selectedOptionId]
   const resourceKeyPart = selectedIds.join('')
@@ -271,18 +373,27 @@ export function recordPalaceQuizChoiceAttemptApi(
     selected_option_id: string
     selected_option_ids?: string[]
     is_correct: boolean
+    auto_marked?: boolean
+    auto_mark_threshold_ms?: number | null
   }>(`/palace-quiz-questions/${questionId}/choice-attempts`, {
     method: 'POST',
-    body: JSON.stringify(
-      Array.isArray(selectedOptionId)
+    body: JSON.stringify({
+      ...(Array.isArray(selectedOptionId)
         ? { selected_option_ids: selectedIds }
-        : { selected_option_id: selectedOptionId },
-    ),
+        : { selected_option_id: selectedOptionId }),
+      ...(typeof options?.durationMs === 'number'
+        ? { duration_ms: Math.max(0, Math.round(options.durationMs)) }
+        : {}),
+      ...(options?.updateMutationStats === false ? { update_mutation_stats: false } : {}),
+    }),
     persistence: {
       resourceKey: `palace-quiz-question:${questionId}:attempt:${resourceKeyPart}`,
       description: '累计选择题作答统计',
       replayMode: 'manual',
     },
+  }).then((response) => {
+    if (response.question) rememberPalaceQuestion(response.question)
+    return response
   })
 }
 
