@@ -37,6 +37,106 @@ from memory_anki.modules.practice.application.round_state_service import (
 )
 
 
+def test_overlay_wrong_ledger_and_prioritization(db_session, monkeypatch):
+    from memory_anki.modules.practice.application import round_overlay_service as service
+    from memory_anki.modules.practice.domain.round_plan import plan_from_cards
+
+    cards = [
+        {"id": "current", "type": "mindmap_branch", "palace_id": 1, "unit_id": "u1"},
+        {"id": "done", "type": "mindmap_branch", "palace_id": 1, "unit_id": "u2"},
+        {"id": "other", "type": "mindmap_branch", "palace_id": 1, "unit_id": "u3"},
+        {"id": "target", "type": "mindmap_branch", "palace_id": 2, "unit_id": "u4"},
+    ]
+    plan = plan_from_cards(cards)
+    plan["completed_ids"] = ["done"]
+    plan["overlay_quiz"] = {"question_ids": [11], "question_palace_ids": {"11": 2}}
+    row = FreestyleRoundState(round_id="wrong-test", scope_key="wrong-test", version=1,
+                              plan_json=json.dumps(plan), config_json="{}", current_card_id="current")
+    db_session.add(row)
+    db_session.commit()
+    monkeypatch.setattr(service, "_serve", lambda session, row, **kw: _payload(row, **kw))
+    monkeypatch.setattr(service, "list_node_bindings_for_palaces", lambda session, palace_ids: [
+        {"question_id": 11, "node_uid": "node-4"},
+    ])
+    monkeypatch.setattr(service, "list_unit_node_members", lambda session, unit_ids: {
+        "u4": ["node-4"],
+    })
+
+    def progress(operation_id, version, states, prioritize=False):
+        return service.progress_overlay_quiz(
+            db_session, round_id="wrong-test", operation_id=operation_id,
+            expected_version=version, states=states,
+            auto_prioritize_wrong_palaces=prioritize,
+        )
+
+    wrong = {"11": {"resolved": True, "correct": False}}
+    first = progress("wrong", 1, wrong)
+    assert first["plan"]["wrong_unit_ids"] == ["u4"]
+    assert first["plan"]["presented_ids"] == ["current", "done", "other", "target"]
+    correct = progress("correct", first["version"], {"11": {"resolved": True, "correct": True}})
+    assert correct["plan"]["wrong_unit_ids"] == ["u4"]
+    cleared = progress("clear", correct["version"], {})
+    assert cleared["plan"]["wrong_unit_ids"] == ["u4"]
+    # No new mistake: turning the switch on alone must still hoist the palace
+    # of this round's existing wrong unit.
+    reordered = progress("wrong-again", cleared["version"], {}, True)
+    assert reordered["plan"]["presented_ids"] == ["current", "done", "target", "other"]
+    assert reordered["plan"]["current_card_id"] == "current"
+    assert reordered["plan"]["completed_ids"] == ["done"]
+    duplicate = progress("wrong-again", cleared["version"], {}, True)
+    assert duplicate["duplicate"] is True
+    stale = progress("stale", cleared["version"], {})
+    assert stale["conflict"] is True
+    db_session.expire_all()
+    saved = json.loads(db_session.get(FreestyleRoundState, "wrong-test").plan_json)
+    assert saved["wrong_unit_ids"] == ["u4"]
+    assert saved["presented_ids"] == ["current", "done", "target", "other"]
+
+
+def test_overlay_explicit_wrong_ids_survive_correct_state_and_filter_scope(
+    db_session, make_client, monkeypatch
+):
+    from memory_anki.infrastructure.db.deps import session_dep
+    from memory_anki.modules.practice.application import round_overlay_service as service
+    from memory_anki.modules.practice.domain.round_plan import plan_from_cards
+    from memory_anki.modules.practice.presentation import router
+
+    plan = plan_from_cards([
+        {"id": "current", "type": "mindmap_branch", "palace_id": 1, "unit_id": "u1"},
+        {"id": "other", "type": "mindmap_branch", "palace_id": 1, "unit_id": "u2"},
+        {"id": "target", "type": "mindmap_branch", "palace_id": 2, "unit_id": "u3"},
+    ])
+    plan["overlay_quiz"] = {"question_ids": [11], "question_palace_ids": {"11": 2}}
+    db_session.add(FreestyleRoundState(
+        round_id="explicit-wrong", scope_key="explicit-wrong", version=1,
+        plan_json=json.dumps(plan), config_json="{}", current_card_id="current",
+    ))
+    db_session.commit()
+    monkeypatch.setattr(service, "_serve", lambda session, row, **kw: _payload(row, **kw))
+    monkeypatch.setattr(service, "list_node_bindings_for_palaces", lambda session, palace_ids: [
+        {"question_id": 11, "node_uid": "node-3"},
+        {"question_id": 999, "node_uid": "node-2"},
+    ])
+    monkeypatch.setattr(service, "list_unit_node_members", lambda session, unit_ids: {
+        "u2": ["node-2"], "u3": ["node-3"],
+    })
+    router.session_dep = session_dep
+    client = make_client(router)
+    response = client.post("/api/v1/freestyle/rounds/explicit-wrong/overlay-quiz/progress", json={
+        "operation_id": "explicit-wrong-op", "expected_version": 1,
+        "states": {"11": {"resolved": True, "correct": True}},
+        "wrong_question_ids": [11, 999], "auto_prioritize_wrong_palaces": True,
+    })
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["plan"]["wrong_unit_ids"] == ["u3"]
+    assert result["plan"]["presented_ids"] == ["current", "target", "other"]
+    assert result["plan"]["overlay_quiz"]["states"]["11"]["correct"] is True
+    db_session.expire_all()
+    saved = json.loads(db_session.get(FreestyleRoundState, "explicit-wrong").plan_json)
+    assert saved["wrong_unit_ids"] == ["u3"]
+
+
 def _config() -> dict:
     return {
         "training_mode": "memory_palace",

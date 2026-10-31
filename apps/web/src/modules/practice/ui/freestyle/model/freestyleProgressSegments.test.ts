@@ -679,6 +679,12 @@ describe('retryNodeLabel', () => {
     ).toBe('重练第 1 次')
   })
 
+  it('paints a wrong unit red until settlement', () => {
+    expect(progressSegmentAccentClass(false, 'done', false, true)).toBe('bg-rose-500')
+    expect(progressSegmentAccentClass(true, 'pending', false, true)).toBe('bg-rose-500/25')
+    expect(retryNodeToneClass('done', false, false, true)).toBe('bg-rose-500 text-stage')
+  })
+
   it('paints quiz question ticks green and leaves unit ticks blue or amber', () => {
     expect(progressSegmentAccentClass(true, 'done', true)).toBe('bg-rate-good')
     expect(progressSegmentAccentClass(false, 'pending', true)).toBe('bg-rate-good/25')

@@ -46,6 +46,29 @@ function renderRail(overrides: Partial<Parameters<typeof FreestyleProgressRail>[
 }
 
 describe('FreestyleProgressRail', () => {
+  it('paints a unit with a this-round wrong answer red', () => {
+    renderRail({
+      summary: summary({
+        segments: [
+          {
+            cardId: 'wrong-one',
+            tone: 'pending',
+            palaceId: 1,
+            palaceDone: false,
+            kind: 'source',
+            sourceLabel: 'wrong-one',
+            wrong: true,
+          },
+        ],
+        total: 1,
+      }),
+    })
+
+    const segment = screen.getByTestId('freestyle-progress-segment')
+    expect(segment.getAttribute('data-wrong')).toBe('true')
+    expect(segment.className).toContain(progressSegmentAccentClass(false, 'pending', false, true))
+  })
+
   it('draws one segment per card so restudy re-insertion stays visible', () => {
     renderRail()
 
@@ -77,7 +100,7 @@ describe('FreestyleProgressRail', () => {
     expect(screen.getByTestId('freestyle-progress-rail').getAttribute('class')).not.toContain('absolute')
   })
 
-  it('colors segments only by new (blue) or review (amber), never by palace', () => {
+  it('colors segments by type hue (blue/amber) when no wrong answer is attached', () => {
     renderRail({
       summary: summary({
         segments: [

@@ -195,6 +195,7 @@ export function ProgressRailItem({
               data-testid="freestyle-progress-retry-node"
               data-count-visible="true"
               data-tone={segment.tone}
+            data-wrong={segment.wrong ? 'true' : undefined}
               data-viewing={viewing ? 'true' : 'false'}
               data-palace-id={palaceId}
               data-palace-done={segment.palaceDone ? 'true' : 'false'}
@@ -205,7 +206,7 @@ export function ProgressRailItem({
                 nodeEnterClass,
                 viewing ? 'size-5 text-[10px] ring-2 ring-stage-ink' : 'size-3.5 text-[9px]',
                 oneShotClass,
-                retryNodeToneClass(segment.tone, segment.isNew, segment.isQuiz),
+                retryNodeToneClass(segment.tone, segment.isNew, segment.isQuiz, segment.wrong),
               )}
             >
               {retryAttemptGlyph(segment)}
@@ -229,6 +230,7 @@ export function ProgressRailItem({
               data-testid="freestyle-progress-retry-node"
               data-count-visible="false"
               data-tone={segment.tone}
+            data-wrong={segment.wrong ? 'true' : undefined}
               data-viewing={viewing ? 'true' : 'false'}
               data-palace-id={palaceId}
               data-palace-done={segment.palaceDone ? 'true' : 'false'}
@@ -238,7 +240,7 @@ export function ProgressRailItem({
                 nodeEnterClass,
                 progressSegmentShapeClass(segment.tone, viewing),
                 oneShotClass,
-                retryNodeToneClass(segment.tone, segment.isNew, segment.isQuiz),
+                retryNodeToneClass(segment.tone, segment.isNew, segment.isQuiz, segment.wrong),
               )}
             />
           </span>
@@ -272,6 +274,7 @@ export function ProgressRailItem({
           <span
             data-testid="freestyle-progress-segment" data-fx-anchor={viewing ? FX_ANCHORS.progressViewing : undefined}
             data-tone={segment.tone}
+            data-wrong={segment.wrong ? 'true' : undefined}
             data-viewing={viewing ? 'true' : 'false'}
             data-palace-id={palaceId}
             data-palace-done={segment.palaceDone ? 'true' : 'false'}
@@ -280,7 +283,7 @@ export function ProgressRailItem({
               'progress-bar relative w-full overflow-hidden rounded-[1px]',
               progressSegmentShapeClass(segment.tone, viewing),
               // While the sweep runs the base stays faint; the overlay carries the solid fill.
-              progressSegmentAccentClass(segment.isNew, fillSweep ? 'pending' : segment.tone, segment.isQuiz),
+              progressSegmentAccentClass(segment.isNew, fillSweep ? 'pending' : segment.tone, segment.isQuiz, segment.wrong),
               // Playhead 走「入场 -> 呼吸」两段，同时只挂一个。
               playheadClass,
               oneShotClass,
@@ -291,7 +294,7 @@ export function ProgressRailItem({
                 aria-hidden
                 className={cn(
                   'progress-fill-sweep absolute inset-0 rounded-[inherit]',
-                  progressSegmentAccentClass(segment.isNew, 'done', segment.isQuiz),
+                  progressSegmentAccentClass(segment.isNew, 'done', segment.isQuiz, segment.wrong),
                 )}
               />
             ) : null}

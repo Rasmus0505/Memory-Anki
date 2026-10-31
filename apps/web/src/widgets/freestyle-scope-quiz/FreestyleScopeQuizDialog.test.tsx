@@ -43,6 +43,14 @@ describe('FreestyleScopeQuizDialog', () => {
     } as never)
   })
 
+  it('toggles wrong-palace priority from the quiz header', async () => {
+    renderScopeQuizDialog()
+    const toggle = await screen.findByRole('button', { name: '错题宫殿优先' })
+    const before = toggle.getAttribute('aria-pressed')
+    fireEvent.click(toggle)
+    expect(toggle.getAttribute('aria-pressed')).not.toBe(before)
+  })
+
   it('shows a calm retry instead of the write-lock diagnostic when ensure is busy', async () => {
     const busy = Object.assign(new Error('数据正在写入中，请稍候重试。\n操作：同步随心做题会话'), { status: 503 })
     ensureFreestyleOverlayQuizApiMock.mockRejectedValue(busy)

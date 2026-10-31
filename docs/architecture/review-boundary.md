@@ -29,6 +29,8 @@ feedback-preview route must not return.
 
 Reviews must not import Practice. Practice must not create a second schedule, copy unit progress, or reinterpret permanent marks. Editing must not block on schedule arrangement.
 
+The freestyle quiz overlay records wrong unit identities on the active round plan using quiz bindings and review-unit membership. Its optional wrong-palace priority changes only the remaining round order, never review schedules. A new round starts without these marks; clearing quiz answers does not erase them.
+
 ## Topology Invariants
 
 - A palace with no permanent mark has no review units and is excluded from formal, Today, and freestyle review queues.
@@ -143,7 +145,9 @@ Reviews must not import Practice. Practice must not create a second schedule, co
   synthetic `round_id`/`encounter_id`, then `rate_review_unit`. No second rating writer
   exists, and a not-yet-due unit is not rated there — its due date moves through
   `adjust_unit_schedule` instead, which is still a due-date-only write (no FSRS evidence,
-  `revision += 1`, active sessions invalidated).
+  `revision += 1`, active sessions invalidated). The shared review-level bar snaps to the
+  ten `INTERVAL_DAYS` bands and commits `stage_index` (plus `has_passed` = level > 0), so a
+  manual move never pretends a review happened.
 - One encounter has one effective rating. Before leaving, another rating
   atomically replaces it from the frozen pre-encounter baseline — which includes
   the FSRS payload — so the replaced choice has no scheduling effect. A

@@ -31,16 +31,20 @@ import {
   QuizAttemptStatsBadge,
   QUIZ_ANSWERING_DIALOG_CLASS,
   QUIZ_ANSWERING_SCROLL_CLASS,
+  QuizMutationWorkflowStrip,
   QuizQuestionIndexPager,
   QuizFontScaleBody,
   QuizFontScaleHint,
   QuizQuestionInteraction,
   QuizQuestionStem,
+  QuizQuestionVariantControl,
   useQuizAnswerMode,
   useQuizAnsweringShortcuts,
   useQuizAttemptOrchestration,
   useQuizDialogFontScale,
+  useQuizDwellMs,
   readQuizSessionState,
+  removeQuizSessionQuestions,
   subscribeQuizSessionProgress,
   writeQuizSessionState,
   type QuizRuntimeState,
@@ -74,6 +78,7 @@ import {
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import { isBusyResponseError } from '@/shared/api/busyRetry'
 import { toast } from '@/shared/feedback/toast'
+import { CLIENT_PREFERENCES_UPDATED_EVENT, getCachedClientPreference, saveClientPreference } from '@/shared/preferences/clientPreferences'
 import {
   PalaceMemoryLookupDialog,
   useCopyPalaceMindMapOutline,
@@ -85,6 +90,7 @@ export function FreestyleScopeQuizDialog({
   onOpenChange,
   roundId,
   planVersion,
+  wrongUnitIds = [],
   storedConfig,
   setupDone,
   roundReviewPalaceCount,
@@ -95,6 +101,7 @@ export function FreestyleScopeQuizDialog({
   onOpenChange: (open: boolean) => void
   roundId: string
   planVersion: number
+  wrongUnitIds?: readonly string[]
   storedConfig: FreestyleFeedConfig
   setupDone: boolean
   /** Round-scoped palace count for the settlement copy, not the 做题 pool. */
@@ -117,6 +124,18 @@ export function FreestyleScopeQuizDialog({
   const [questions, setQuestions] = useState<PalaceQuizQuestion[]>([])
   const [index, setIndex] = useState(0)
   const [questionStates, setQuestionStates] = useState<Record<number, QuizRuntimeState>>({})
+  const readWrongPriority = () => getCachedClientPreference('freestyle_wrong_priority', false, (value): value is boolean => typeof value === 'boolean')
+  const [prioritizeWrong, setPrioritizeWrong] = useState(readWrongPriority)
+  const prioritizeWrongRef = useRef(prioritizeWrong)
+  prioritizeWrongRef.current = prioritizeWrong
+  useEffect(() => {
+    const update = (event: Event) => {
+      const value = (event as CustomEvent<{ freestyle_wrong_priority?: boolean | null }>).detail?.freestyle_wrong_priority
+      setPrioritizeWrong(typeof value === 'boolean' ? value : readWrongPriority())
+    }
+    window.addEventListener(CLIENT_PREFERENCES_UPDATED_EVENT, update)
+    return () => window.removeEventListener(CLIENT_PREFERENCES_UPDATED_EVENT, update)
+  }, [])
   const [keyboardOptionIndex, setKeyboardOptionIndex] = useState(0)
   const [palaceLookupOpen, setPalaceLookupOpen] = useState(false)
   // 「本轮最低」 chip opens the rating view; 「查看宫殿」 keeps the full map.
@@ -259,7 +278,8 @@ export function FreestyleScopeQuizDialog({
 
   // Debounce, conflict retry and the pagehide/visibility flush live in the hook;
   // the dialog keeps owning what the current index and question states are.
-  const { persistProgress, flushProgressNow } = useOverlayProgressPersistence({
+  const { persistProgress, prioritizeNow, flushProgressNow } = useOverlayProgressPersistence({
+    prioritizeWrongRef,
     roundIdRef,
     planVersionRef,
     indexRef,
@@ -284,6 +304,15 @@ export function FreestyleScopeQuizDialog({
   })
 
   const current = questions[index] ?? null
+  const currentId = current?.id ?? null
+  const dwell = useQuizDwellMs()
+  const { restart } = dwell
+  // Each visit starts a fresh clock: leaving the question and coming back is a
+  // new look, not a continuation of the first one.
+  useEffect(() => {
+    if (!open || currentId == null) return
+    restart(currentId)
+  }, [open, currentId, restart])
   useLayoutEffect(() => {
     const node = answerScrollRef.current
     if (node) node.scrollTop = 0
@@ -360,6 +389,39 @@ export function FreestyleScopeQuizDialog({
     [index, persistProgress],
   )
 
+  const resetLocalAnswer = useCallback(
+    (questionId: number) => {
+      removeQuizSessionQuestions([questionId])
+      setQuestionStates((currentStates) => {
+        if (currentStates[questionId] == null) return currentStates
+        const next = { ...currentStates }
+        delete next[questionId]
+        persistProgress(index, next)
+        return next
+      })
+    },
+    [index, persistProgress],
+  )
+
+  const handleImportedQuestions = useCallback(
+    (items: PalaceQuizQuestion[]) => {
+      if (items.length === 0) return
+      const updatedById = new Map(items.map((item) => [item.id, item]))
+      setQuestions((currentQuestions) =>
+        currentQuestions.map((item) => updatedById.get(item.id) ?? item),
+      )
+      const ids = items.map((item) => item.id)
+      removeQuizSessionQuestions(ids)
+      setQuestionStates((currentStates) => {
+        const next = { ...currentStates }
+        for (const questionId of ids) delete next[questionId]
+        persistProgress(index, next)
+        return next
+      })
+    },
+    [index, persistProgress],
+  )
+
   const goToIndex = useCallback((nextIndex: number) => {
     setIndex(nextIndex)
     persistProgress(nextIndex, questionStates)
@@ -396,6 +458,7 @@ export function FreestyleScopeQuizDialog({
     resultFeedbackMode: 'immediate',
     emitFeedback: dispatchGlobalFeedback,
     shouldToastAttemptError,
+    getDurationMs: dwell.elapsedMs,
   })
 
   const handleChoiceResolve = useCallback(
@@ -526,7 +589,7 @@ export function FreestyleScopeQuizDialog({
         >
           <QuizFontScaleHint percent={fontScale.percent} visible={fontScale.hintVisible} />
           <DialogHeader>
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-2">
                 {setupDone ? (
                   <Button
@@ -538,10 +601,11 @@ export function FreestyleScopeQuizDialog({
                     onClick={() => setConfigOpen((value) => !value)}
                   >
                     <Settings2 className="size-4" />
-                    配置
+                    <span className="hidden sm:inline">配置</span>
                   </Button>
                 ) : null}
-                <DialogTitle className="text-base">做题</DialogTitle>
+                {/* Phone: the title is redundant with the sheet and costs a header slot. */}
+                <DialogTitle className="sr-only text-base sm:not-sr-only">做题</DialogTitle>
               </div>
               {!showConfig ? (
                 <FreestyleScopeQuizHeaderActions
@@ -555,6 +619,24 @@ export function FreestyleScopeQuizDialog({
                   shuffling={shuffling}
                   onShuffle={() => void shuffleQuestions()}
                   onOpenClearProgress={() => setClearProgressOpen(true)}
+                  prioritizeWrong={prioritizeWrong}
+                  onPrioritizeWrongChange={(enabled) => {
+                    setPrioritizeWrong(enabled)
+                    prioritizeWrongRef.current = enabled
+                    void saveClientPreference('freestyle_wrong_priority', enabled).then((result) => {
+                      if (!result.persisted) toast.error('错题优先开关未保存，请稍后重试。')
+                    })
+                    // Only reorder once the overlay is loaded: an empty local
+                    // state must never overwrite the round's saved answers.
+                    if (!enabled) return
+                    if (wrongUnitIds.length === 0) {
+                      toast.info('错题优先已开启：本轮还没有答错的题')
+                    } else if (overlay) {
+                      void prioritizeNow()
+                    } else {
+                      toast.info('错题优先已开启')
+                    }
+                  }}
                 />
               ) : null}
             </div>
@@ -575,6 +657,13 @@ export function FreestyleScopeQuizDialog({
               onDismiss={() => setScopeNotice('')}
             />
           </DialogHeader>
+
+          {!showConfig && !loading && questions.length > 0 ? (
+            <QuizMutationWorkflowStrip
+              questions={questions}
+              onImported={handleImportedQuestions}
+            />
+          ) : null}
 
           <div className="flex min-h-0 flex-1 flex-col">
             {!showConfig && current ? (
@@ -640,6 +729,12 @@ export function FreestyleScopeQuizDialog({
                       attemptCount={current.attempt_count}
                     />
                     <Badge variant="outline">{getQuestionTypeLabel(current.question_type)}</Badge>
+                    <QuizQuestionVariantControl
+                      question={current}
+                      onQuestionUpdated={(question) => adapter.applyUpdatedQuestion(question)}
+                      onAnswerReset={resetLocalAnswer}
+                      compact
+                    />
                     <QuizQuestionRoundRatingBadge
                       rating={currentRating}
                       pending={currentPending}
@@ -690,6 +785,8 @@ export function FreestyleScopeQuizDialog({
                       onStateChange={(updater) => updateLocalState(current.id, updater)}
                       onChoiceResolve={handleChoiceResolve}
                       onShortAnswerSubmit={() => orchestration.handleShortAnswerSubmit(current.id)}
+                      getDurationMs={dwell.elapsedMs}
+                      comboScopeKey={`freestyle-overlay:${roundId}`}
                       mark={{
                         marked: Boolean(current.marked),
                         onToggle: (marked) => void handleToggleMark(marked),

@@ -1,5 +1,6 @@
 import {
   cardPalaceId,
+  cardUnitId,
   isRetryOccurrence,
   reviewUnitIdFromCardId,
   sourceCardId,
@@ -48,10 +49,13 @@ export interface FreestyleProgressSegment {
   isQuiz?: boolean
   /** 睡前复习 tick: marked with a moon; its grade never reschedules. */
   bedtime?: boolean
+  /** A question bound to this unit was answered wrong this round. Red until settlement. */
+  wrong?: boolean
 }
 
 /**
- * Rail colour is only ever one of two hues: 新学 blue or 复习 amber.
+ * Rail colour is the unit's type hue: 新学 blue or 复习 amber. A quiz tick is
+ * green, and a unit whose bound question was answered wrong this round is red.
  * Palace identity is not on the rail any more. Tone is fill strength.
  */
 const RAIL_ACCENT_CLASS: Record<'new' | 'review', Record<FreestyleSegmentTone, string>> = {
@@ -77,15 +81,26 @@ const QUIZ_ACCENT_CLASS: Record<FreestyleSegmentTone, string> = {
   done: 'bg-rate-good',
 }
 
+/** Wrong this round: red overrides the new/review hue. */
+const WRONG_ACCENT_CLASS: Record<FreestyleSegmentTone, string> = {
+  pending: 'bg-rose-500/25',
+  retry: 'bg-rose-500/60',
+  current: 'bg-rose-400',
+  done: 'bg-rose-500',
+}
+
 /**
  * Fill class for one rail tick: green for a quiz question, blue when the unit
- * is new, amber when it is a review.
+ * is new, amber when it is a review. A unit whose question was answered wrong
+ * this round is red instead.
  */
 export function progressSegmentAccentClass(
   isNew: boolean | undefined,
   tone: FreestyleSegmentTone,
   isQuiz = false,
+  isWrong = false,
 ): string {
+  if (isWrong) return WRONG_ACCENT_CLASS[tone]
   if (isQuiz) return QUIZ_ACCENT_CLASS[tone]
   return RAIL_ACCENT_CLASS[isNew ? 'new' : 'review'][tone]
 }
@@ -99,8 +114,9 @@ export function retryNodeToneClass(
   tone: FreestyleSegmentTone,
   isNew = false,
   isQuiz = false,
+  isWrong = false,
 ): string {
-  const fill = progressSegmentAccentClass(isNew, tone === 'done' ? 'done' : 'pending', isQuiz)
+  const fill = progressSegmentAccentClass(isNew, tone === 'done' ? 'done' : 'pending', isQuiz, isWrong)
   return tone === 'done' ? `${fill} text-stage` : `${fill} text-stage-ink`
 }
 
@@ -568,6 +584,8 @@ export function buildFreestyleProgressSummary(
   encounters: Record<string, FreestyleUnitEncounterState> = {},
   /** Ratings tapped but not yet saved: unfilled until the outbox acknowledges them. */
   unsavedCardIds: ReadonlySet<string> = EMPTY_UNSAVED_IDS,
+  /** Review units whose bound question was answered wrong this round. */
+  wrongUnitIds: readonly string[] = [],
 ): FreestyleProgressSummary {
   const completed = new Set(completedIds.map(String))
   const hidden = new Set(hiddenIds.map(String))
@@ -717,6 +735,15 @@ export function buildFreestyleProgressSummary(
   retryInserted = segments.filter((segment) => segment.kind === 'retry').length
 
   markDayCohortBoundaries(segments)
+
+  const wrongUnits = new Set(wrongUnitIds)
+  for (const segment of segments) {
+    const live = liveById.get(segment.cardId)
+    const unit = cardUnitId(live)
+      || reviewUnitIdFromCardId(segment.cardId)
+      || reviewUnitIdFromCardId(segment.sourceCardId || '')
+    segment.wrong = Boolean(unit && wrongUnits.has(unit))
+  }
 
   // A retry takes its source's newness, so the whole family of one unit shares one hue.
   for (const segment of segments) {

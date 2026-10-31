@@ -1005,6 +1005,59 @@ def test_freestyle_rating_accepts_the_rebuilt_card_id_of_the_same_attempt(db_ses
     assert operation.unit_revision == int(state.revision)
 
 
+def test_freestyle_rating_accepts_the_base_card_after_a_retry_occurrence_was_replanned(db_session):
+    # The plan can cancel a pending 重练 occurrence and put the unit back on the
+    # rail as its base card. The glance opened for the retry stayed live, so the
+    # learner's tap named review_unit:<unit>:rN while the glance held
+    # retry:<round>:<unit>:1. The strict comparison rejected every tap with
+    # "rating attempt identity mismatch" — 未保存 could never be saved. Both ids
+    # name the same unit's unrated work in the same round.
+    state = _seed_review_unit(db_session)
+    retry_id = f"retry:round-2026-07-27:{state.id}:1"
+    opened = _start(
+        db_session, state, "encounter-retry-identity",
+        card_id=retry_id, occurrence_id=retry_id, retry_attempt=1,
+    )
+    base_card = f"review_unit:{state.id}:r{state.revision}"
+
+    rated = rate_review_unit(
+        db_session,
+        study_session_id=opened["id"],
+        unit_id=state.id,
+        unit_revision=state.revision,
+        encounter_id="encounter-retry-identity",
+        operation_id="rate-base-card-after-replanned-retry",
+        rating=3,
+        round_id="round-2026-07-27",
+        card_id=base_card,
+    )
+
+    assert rated["encounter"]["selected_rating"] == 3
+    encounter = db_session.get(ReviewUnitEncounter, "encounter-retry-identity")
+    assert json.loads(encounter.baseline_state_json)["attempt_identity"]["card_id"] == (
+        f"review_unit:{state.id}"
+    )
+
+
+def test_freestyle_rating_still_rejects_another_units_attempt(db_session):
+    state = _seed_review_unit(db_session)
+    opened = _start(db_session, state, "encounter-foreign-identity",
+                    card_id=f"review_unit:{state.id}:r{state.revision}")
+
+    with pytest.raises(ValueError, match="rating attempt identity mismatch"):
+        rate_review_unit(
+            db_session,
+            study_session_id=opened["id"],
+            unit_id=state.id,
+            unit_revision=state.revision,
+            encounter_id="encounter-foreign-identity",
+            operation_id="rate-foreign-attempt",
+            rating=3,
+            round_id="round-2026-07-27",
+            card_id="review_unit:a-different-unit:r1",
+        )
+
+
 def test_freestyle_start_follows_successor_after_structural_retire(db_session):
     # Reconcile retires a unit and may create its successor under a new id with the
     # same palace + anchor. A card still holding the retired id must start the

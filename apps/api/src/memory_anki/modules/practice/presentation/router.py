@@ -240,6 +240,8 @@ def api_freestyle_overlay_quiz_progress(
             current_index=data.current_index,
             completed_ids=list(data.completed_ids or []),
             states=data.states,
+            wrong_question_ids=data.wrong_question_ids,
+            auto_prioritize_wrong_palaces=data.auto_prioritize_wrong_palaces,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

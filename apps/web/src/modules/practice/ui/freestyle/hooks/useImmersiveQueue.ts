@@ -24,6 +24,7 @@ import {
 } from '@/modules/practice/ui/freestyle/model/freestyleSettlementModel'
 import { ensureStudyTextLibrary } from '@/shared/study-text/studyTextLibrary'
 import { parseApiDateTime } from '@/shared/lib/dateTime'
+import { toast } from '@/shared/feedback/toast'
 import {
   mergePartialSettlementLists,
   toServerPartialSettlement,
@@ -543,6 +544,7 @@ export function useImmersiveQueue(
   /** Restores in flight. A stale server exclude list must not hide these again. */
   const pendingReleaseIdsRef = useRef(new Set<string>())
   const [planVersion, setPlanVersion] = useState(0)
+  const [wrongUnitIds, setWrongUnitIds] = useState<string[]>([])
   const [queueFrozen, setQueueFrozen] = useState(false)
   /**
    * One-shot visual index for cold open. A card target is applied through
@@ -1011,6 +1013,7 @@ export function useImmersiveQueue(
             })
             if (operationIdRef.current !== operationId) return
           }
+          setWrongUnitIds(round.plan.wrong_unit_ids ?? [])
           const version = serverPlanVersion(round)
           serverPlanVersionRef.current = version
           setPlanVersion(version)
@@ -1399,6 +1402,7 @@ export function useImmersiveQueue(
         seen.add(card.id)
         merged.push(card)
       }
+      setWrongUnitIds(remotePlan.wrong_unit_ids ?? [])
       const plannedCards = cardsForServerPlan(merged, remotePlan, adoptedRoundId)
       const remoteVersion = serverPlanVersion(round)
       const retained = commitHydratedRoundLedger({
@@ -2666,7 +2670,9 @@ export function useImmersiveQueue(
     if (round?.round_id && round.round_id !== queueStateRef.current.roundId) return
     if (round) setRoundWaiting(round.waiting ?? null)
     const version = serverPlanVersion(round)
-    if (version <= serverPlanVersionRef.current) return
+    if (version < serverPlanVersionRef.current) return
+    if (round?.plan) setWrongUnitIds(round.plan.wrong_unit_ids ?? [])
+    if (version === serverPlanVersionRef.current) return
     serverPlanVersionRef.current = version
     setPlanVersion(version)
     const serverPlan = round?.plan
@@ -2694,13 +2700,35 @@ export function useImmersiveQueue(
       .filter(Boolean)
     const localCompleted = queueStateRef.current.completedIds
     const completedIds = [...new Set([...localCompleted, ...serverCompleted])]
-    const plan = applyServerRatingsToRoundPlan(
+    const ratedPlan = applyServerRatingsToRoundPlan(
       applyCompletedIdsToRoundPlan(localPlan, serverCompleted),
       serverPlan,
     )
-    if (plan === localPlan && completedIds.length === localCompleted.length) return
-    persistQueueState({ ...queueStateRef.current, completedIds, roundPlan: plan })
-  }, [persistQueueState])
+    const serverOrder = (serverPlan.presented_ids ?? []).map(reboundServerId).filter(Boolean)
+    const orderedPlan = serverOrder.length ? reorderRoundPlan(ratedPlan, serverOrder) : ratedPlan
+    const orderChanged = orderedPlan.orderIds.join('\u0000') !== localPlan.orderIds.join('\u0000')
+    if (orderChanged) {
+      const beforeIndex = new Map(localPlan.orderIds.map((id, index) => [id, index]))
+      const movedUnits = new Set<string>()
+      orderedPlan.orderIds.forEach((id, index) => {
+        const before = beforeIndex.get(id)
+        if (before == null || index >= before) return
+        const unit = reviewUnitIdFromCardId(id)
+        if (unit) movedUnits.add(unit)
+      })
+      if (movedUnits.size > 0) {
+        toast.info(`错题优先：已把 ${movedUnits.size} 个复习单元提到前面`)
+      }
+      const currentId = cardsRef.current[currentIndexRef.current]?.id
+      const nextCards = insertReviewHintCards(applyRoundPlanOrder(cardsRef.current, orderedPlan))
+      cardsRef.current = nextCards
+      setCards(nextCards)
+      const nextIndex = nextCards.findIndex((card) => card.id === currentId)
+      if (nextIndex >= 0) applyCurrentIndex(nextIndex, nextCards)
+    }
+    if (!orderChanged && ratedPlan === localPlan && completedIds.length === localCompleted.length) return
+    persistQueueState({ ...queueStateRef.current, completedIds, roundPlan: orderedPlan })
+  }, [applyCurrentIndex, persistQueueState])
 
   /**
    * 睡前复习: append today's newly rated cards to the end of the current queue.
@@ -3016,6 +3044,7 @@ export function useImmersiveQueue(
           })
         : [...cardsById.values()]
       const adoptedRoundId = round.round_id || roundId
+      setWrongUnitIds(round.plan.wrong_unit_ids ?? [])
       const plannedCards = cardsForServerPlan(rebuiltInput, round.plan, adoptedRoundId)
         .filter((card) => queueCardIds.length === 0 || queueCardIds.includes(card.id))
       if (
@@ -3263,6 +3292,7 @@ export function useImmersiveQueue(
     pendingRestudyCardIds,
     planVersion,
     adoptRoundVersion,
+    wrongUnitIds,
     appendBedtimeReview,
     rateBedtimeCard,
     hydrateLiveRound,

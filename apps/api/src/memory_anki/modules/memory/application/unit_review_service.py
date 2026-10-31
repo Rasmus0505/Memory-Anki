@@ -1356,6 +1356,9 @@ def _apply_rating_from_snapshot(
 
 
 _REVIEW_CARD_REVISION = re.compile(r"^(review_unit:[^:]+):r\d+$")
+# ``retry:<round>:<source key>:<attempt>``; the source key is the unit id for a
+# review-unit retry, so its middle section is what names the unit.
+_RETRY_CARD_ID = re.compile(r"^retry:[^:]+:(.+):\d+$")
 
 
 def _identity_card_key(value: Any) -> str:
@@ -1370,6 +1373,32 @@ def _identity_card_key(value: Any) -> str:
     text = str(value or "").strip()
     match = _REVIEW_CARD_REVISION.match(text)
     return match.group(1) if match else text
+
+
+def _identity_unit(value: Any) -> str:
+    """The review unit an attempt card id belongs to, or "" when it names none.
+
+    Both presentations of one unit's work — the base card ``review_unit:<unit>:rN``
+    and its retry occurrence ``retry:<round>:<unit>:<attempt>`` — answer the same
+    unit, which is what makes them interchangeable for an open glance.
+    """
+    text = _identity_card_key(value)
+    if not text:
+        return ""
+    match = _RETRY_CARD_ID.match(text)
+    if match:
+        source = _identity_card_key(match.group(1))
+        return source[len("review_unit:"):] if source.startswith("review_unit:") else source
+    return text[len("review_unit:"):] if text.startswith("review_unit:") else ""
+
+
+def _same_unit_identity(unit_id: str, stored: Any, current: Any) -> bool:
+    unit = str(unit_id or "").strip()
+    left = stored if isinstance(stored, dict) else {}
+    right = current if isinstance(current, dict) else {}
+    if not unit or not left or not right:
+        return False
+    return _identity_unit(left.get("card_id")) == unit and _identity_unit(right.get("card_id")) == unit
 
 
 def attempt_identity_matches(stored: Any, current: Any) -> bool:
@@ -1867,7 +1896,15 @@ def _ensure_open_freestyle_rating_target(
         snapshot = json.loads(encounter.baseline_state_json)
         stored_identity = snapshot.get("attempt_identity")
         if identity and stored_identity and not attempt_identity_matches(stored_identity, identity):
-            raise ValueError("rating attempt identity mismatch")
+            # The round can replace a unit's card under the learner: a pending
+            # retry occurrence the plan cancelled and re-presented as the unit's
+            # base card, or the other way round. The glance was opened for the
+            # card that was on screen then; nothing has been rated on it yet, so
+            # it is the same open work under a new card id. Rejecting it made the
+            # card permanently unsaveable — every retry resent the same two
+            # identities and answered 400 "rating attempt identity mismatch".
+            if not _same_unit_identity(state.id, stored_identity, identity):
+                raise ValueError("rating attempt identity mismatch")
         if identity and identity != stored_identity:
             # A revision bump is the same attempt; keep the stored identity in
             # step with the live card id so the next tap compares equal.

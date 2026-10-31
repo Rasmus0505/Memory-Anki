@@ -7,7 +7,10 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables.misc import FreestyleRoundState
-from memory_anki.modules.memory.public.queries import list_round_unit_ratings
+from memory_anki.modules.memory.public.queries import (
+    list_round_unit_ratings,
+    list_unit_node_members,
+)
 from memory_anki.modules.practice.application.overlay_quiz_service import (
     build_overlay_question_pack,
     classify_round_question_badges,
@@ -36,11 +39,14 @@ from memory_anki.modules.practice.domain.overlay_quiz_shuffle import (
     shuffle_overlay_question_order,
 )
 from memory_anki.modules.practice.domain.round_plan import (
+    _is_unfinished,
+    _sync_index,
     removed_review_palace_ids,
     review_palace_ids,
     review_unit_ids,
     waiting_review_unit_ids,
 )
+from memory_anki.modules.quiz.public.queries import list_node_bindings_for_palaces
 
 
 def _rating_inherit_mode(stored: dict[str, Any], incoming: dict[str, Any] | None) -> str:
@@ -189,6 +195,8 @@ def progress_overlay_quiz(
     current_index: int = 0,
     completed_ids: list[int] | None = None,
     states: dict[str, Any] | None = None,
+    wrong_question_ids: list[int] | None = None,
+    auto_prioritize_wrong_palaces: bool = False,
 ) -> dict[str, Any]:
     row, early = _begin_round_write(
         session,
@@ -200,12 +208,80 @@ def progress_overlay_quiz(
         return early
     assert row is not None
     plan = _plan_of(row)
+    previous = normalize_overlay_quiz(plan.get("overlay_quiz"))
     plan["overlay_quiz"] = apply_overlay_progress(
         plan.get("overlay_quiz"),
         current_index=current_index,
         completed_ids=list(completed_ids or []),
         states=states if isinstance(states, dict) else {},
     )
+    overlay = plan["overlay_quiz"]
+    wrong = {
+        qid for qid, state in overlay["states"].items()
+        if state.get("resolved") is True and state.get("correct") is False
+        and not (
+            previous["states"].get(qid, {}).get("resolved") is True
+            and previous["states"].get(qid, {}).get("correct") is False
+        )
+    }
+    allowed = set(overlay["question_ids"])
+    wrong.update(str(qid) for qid in (wrong_question_ids or []) if qid in allowed)
+    marked = set(plan["wrong_unit_ids"])
+    if wrong:
+        palace_ids = {
+            overlay["question_palace_ids"][qid]
+            for qid in wrong if qid in overlay["question_palace_ids"]
+        }
+        bindings = list_node_bindings_for_palaces(session, palace_ids=sorted(palace_ids)) if palace_ids else []
+        nodes = {
+            str(binding.get("node_uid") or "") for binding in bindings
+            if str(binding.get("question_id") or "") in wrong
+        }
+        members = list_unit_node_members(session, review_unit_ids(plan)) if nodes else {}
+        for unit_id, unit_nodes in members.items():
+            if any(str(node) in nodes for node in unit_nodes) and unit_id not in marked:
+                plan["wrong_unit_ids"].append(unit_id)
+                marked.add(unit_id)
+    # Turning the switch on must act on this round's existing wrong answers too,
+    # not only the next new mistake. Resolve their palaces from the plan's own
+    # unit membership so a reopened dialog can reorder immediately.
+    if auto_prioritize_wrong_palaces:
+        unit_palace = {
+            str(card.get("unit_id")): card.get("palace_id")
+            for card in plan["original_cards"]
+            if card.get("unit_id") and card.get("palace_id")
+        }
+        palace_ids = {
+            int(unit_palace[unit_id])
+            for unit_id in plan["wrong_unit_ids"]
+            if unit_id in unit_palace
+        }
+        if wrong:
+            palace_ids.update(
+                overlay["question_palace_ids"][qid]
+                for qid in wrong if qid in overlay["question_palace_ids"]
+            )
+        if palace_ids:
+            cards = {card["card_id"]: card for card in plan["original_cards"]}
+            occurrences = {occ["occurrence_id"]: occ for occ in plan["occurrences"]}
+            presented = plan["presented_ids"]
+            current = plan.get("current_card_id")
+            anchor = presented.index(current) if current in presented else -1
+            slots = [
+                i for i, card_id in enumerate(presented)
+                if i > anchor and _is_unfinished(plan, card_id)
+            ]
+            movable = [presented[i] for i in slots]
+
+            def is_target(card_id: str) -> bool:
+                occurrence = occurrences.get(card_id)
+                card = cards.get(occurrence["source_card_id"] if occurrence else card_id, {})
+                return card.get("kind") == "mindmap_branch" and card.get("palace_id") in palace_ids
+
+            ordered = [item for item in movable if is_target(item)] + [item for item in movable if not is_target(item)]
+            for index, card_id in zip(slots, ordered, strict=True):
+                presented[index] = card_id
+            _sync_index(plan)
     op_id = _require_operation_id(operation_id)
     changed = _apply_plan(row, plan, operation_id=op_id)
     if not changed:

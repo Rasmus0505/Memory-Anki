@@ -398,6 +398,7 @@ export type {
 } from './freestyle-round'
 
 export interface FreestyleRoundPlanPayload {
+  wrong_unit_ids?: string[]
   original_cards: FreestyleRoundOriginalCard[]
   presented_ids: string[]
   current_card_id: string | null
@@ -424,7 +425,6 @@ export interface FreestyleRoundPlanPayload {
   bedtime_ratings?: Record<string, { rating: number; rated_on?: string }>
   overlay_quiz?: FreestyleOverlayQuizState
 }
-
 // The 做题 scope report types live in `freestyleOverlayScope.ts`: one owner, one
 // incident history, and this file's size budget.
 export type {
@@ -563,13 +563,7 @@ export interface FreestyleOverlayQuizEnsureRequest {
   config?: FreestyleFeedConfig
 }
 
-export interface FreestyleOverlayQuizProgressRequest {
-  operation_id: string
-  expected_version: number
-  current_index: number
-  completed_ids: number[]
-  states: Record<string, Record<string, unknown>>
-}
+export type { FreestyleOverlayQuizProgressRequest } from './freestyleOverlayProgress'
 
 export interface FreestyleOverlayQuizDropPalacesRequest {
   operation_id: string
@@ -664,6 +658,7 @@ export interface FreestyleQuizAttemptRecord {
   answer_payload: Record<string, unknown>
   is_correct: boolean | null
   created_at: string | null
+  auto_marked?: boolean; auto_mark_threshold_ms?: number | null; question?: PalaceQuizQuestion
 }
 
 export interface FreestyleAiExplanationRecord {
@@ -730,6 +725,7 @@ export interface CreateFreestyleQuizAttemptPayload {
   stem_snapshot: string
   answer_payload: Record<string, unknown>
   is_correct?: boolean | null
+  duration_ms?: number | null
 }
 
 export interface CreateFreestyleAiExplanationPayload {

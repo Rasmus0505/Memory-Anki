@@ -40,6 +40,7 @@ function isBriefDisconnect(message: string) {
 interface OverlayProgressPersistenceInput {
   /** Null until a round exists; no write happens without one. */
   roundIdRef: { current: string | null }
+  prioritizeWrongRef: { current: boolean }
   planVersionRef: { current: number }
   indexRef: { current: number }
   questionStatesRef: { current: Record<number, QuizRuntimeState> }
@@ -51,6 +52,7 @@ interface OverlayProgressPersistenceInput {
 
 export function useOverlayProgressPersistence({
   roundIdRef,
+  prioritizeWrongRef,
   planVersionRef,
   indexRef,
   questionStatesRef,
@@ -70,6 +72,9 @@ export function useOverlayProgressPersistence({
    * write so an idle dialog does not re-post unchanged progress.
    */
   const dirtyProgressRef = useRef(false)
+  const pendingWrongRef = useRef(new Map<number, number>())
+  const progressGenerationRef = useRef(0)
+  const pendingRoundRef = useRef(roundIdRef.current)
 
   const clearRetryTimer = useCallback(() => {
     if (retryTimerRef.current != null) {
@@ -103,6 +108,8 @@ export function useOverlayProgressPersistence({
   ) => {
     const activeRoundId = roundIdRef.current
     if (!activeRoundId || !dirtyProgressRef.current) return
+    const generation = progressGenerationRef.current
+    const wrongQuestions = [...pendingWrongRef.current.entries()]
     const completedIds = Object.entries(nextStates)
       .filter(([, state]) => state.resolved)
       .map(([id]) => Number(id))
@@ -114,12 +121,20 @@ export function useOverlayProgressPersistence({
     const postProgress = async (allowRetry: boolean) => {
       const round = await progressFreestyleOverlayQuizApi(activeRoundId, {
         operation_id: createOperationId(),
+        auto_prioritize_wrong_palaces: prioritizeWrongRef.current,
+        wrong_question_ids: wrongQuestions.map(([id]) => id),
         expected_version: planVersionRef.current,
         current_index: nextIndex,
         completed_ids: completedIds,
         states,
       })
-      dirtyProgressRef.current = false
+      if (roundIdRef.current !== activeRoundId) return
+      if (!round.conflict) {
+        for (const [id, sequence] of wrongQuestions) {
+          if (pendingWrongRef.current.get(id) === sequence) pendingWrongRef.current.delete(id)
+        }
+        dirtyProgressRef.current = progressGenerationRef.current !== generation
+      }
       retryAttemptRef.current = 0
       toldDisconnectRef.current = false
       clearRetryTimer()
@@ -157,7 +172,7 @@ export function useOverlayProgressPersistence({
       }
       toast.error(message)
     }
-  }, [clearRetryTimer, onRoundSync, planVersionRef, roundIdRef, scheduleNetworkRetry, setOverlay])
+  }, [clearRetryTimer, onRoundSync, planVersionRef, prioritizeWrongRef, roundIdRef, scheduleNetworkRetry, setOverlay])
 
   writeProgressNowRef.current = writeProgressNow
 
@@ -173,11 +188,30 @@ export function useOverlayProgressPersistence({
     await writeProgressNow(indexRef.current, questionStatesRef.current)
   }, [clearRetryTimer, indexRef, questionStatesRef, writeProgressNow])
 
+  /** Force one progress write so turning 错题优先 on reorders this round's
+   * existing wrong palaces immediately, before the next answer. */
+  const prioritizeNow = useCallback(async () => {
+    if (!roundIdRef.current) return
+    dirtyProgressRef.current = true
+    clearRetryTimer()
+    await writeProgressNow(indexRef.current, questionStatesRef.current)
+  }, [clearRetryTimer, indexRef, questionStatesRef, roundIdRef, writeProgressNow])
+
   const persistProgress = useCallback((
     nextIndex: number,
     nextStates: Record<number, QuizRuntimeState>,
   ) => {
     if (!roundIdRef.current) return
+    if (pendingRoundRef.current !== roundIdRef.current) {
+      pendingRoundRef.current = roundIdRef.current
+      pendingWrongRef.current.clear()
+    }
+    progressGenerationRef.current += 1
+    for (const [id, state] of Object.entries(nextStates)) {
+      if (state.resolved && state.correct === false && questionStatesRef.current[Number(id)]?.correct !== false) {
+        pendingWrongRef.current.set(Number(id), progressGenerationRef.current)
+      }
+    }
     dirtyProgressRef.current = true
     clearRetryTimer()
     indexRef.current = nextIndex
@@ -208,6 +242,7 @@ export function useOverlayProgressPersistence({
 
   return {
     persistProgress,
+    prioritizeNow,
     flushProgressNow,
   }
 }

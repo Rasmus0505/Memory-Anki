@@ -41,6 +41,7 @@ export function FreestylePageDialogs({
   scopeQuizOpen,
   onScopeQuizOpenChange,
   planVersion,
+  wrongUnitIds,
   slot,
   onSetConfigAndPersist,
   onRoundSync,
@@ -74,6 +75,7 @@ export function FreestylePageDialogs({
   scopeQuizOpen: boolean
   onScopeQuizOpenChange: ScopeQuizProps['onOpenChange']
   planVersion: ScopeQuizProps['planVersion']
+  wrongUnitIds: readonly string[]
   slot: FreestyleWorkspaceId | PalaceReviewWorkspaceId
   onSetConfigAndPersist: ImmersiveQueue['setConfigAndPersist']
   onRoundSync: ScopeQuizProps['onRoundSync']
@@ -115,6 +117,7 @@ export function FreestylePageDialogs({
         onOpenChange={onScopeQuizOpenChange}
         roundId={queueState.roundId}
         planVersion={planVersion}
+        wrongUnitIds={wrongUnitIds}
         storedConfig={readFreestyleFeedConfig(slot)}
         setupDone={Boolean(readFreestyleFeedConfig(slot).overlay_quiz_setup_done)}
         roundReviewPalaceCount={overlayRoundReviewPalaceIds(roundPlan).length}

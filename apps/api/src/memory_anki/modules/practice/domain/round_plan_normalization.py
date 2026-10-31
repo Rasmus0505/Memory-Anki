@@ -100,6 +100,7 @@ def empty_plan() -> Plan:
         "occurrences": [],
         "encounters": {},
         "bedtime_ratings": {},
+        "wrong_unit_ids": [],
         "today": "",
     }
 
@@ -248,6 +249,7 @@ def normalize_plan(plan: Mapping[str, Any] | None) -> Plan:
         "occurrences": occurrences,
         "encounters": encounters,
         "bedtime_ratings": bedtime_ratings,
+        "wrong_unit_ids": _unique(raw.get("wrong_unit_ids") or []),
         "today": _day(raw.get("today")),
         "overlay_quiz": normalize_overlay_quiz(raw.get("overlay_quiz") if isinstance(raw.get("overlay_quiz"), Mapping) else None),
     }
