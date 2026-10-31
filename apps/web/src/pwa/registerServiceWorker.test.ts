@@ -2,16 +2,19 @@ import { describe, expect, it } from 'vitest'
 import { shouldAutoReloadForControllerChange } from './registerServiceWorker'
 
 describe('registerServiceWorker controllerchange policy', () => {
-  it('auto-reloads inactive PWA routes so the new worker takes control', () => {
+  // Regression: the old "reload after 30s without touching the screen" rule
+  // fired while the learner was reading 查看宫殿 — the page flashed back to 随心.
+  // A ready update must never reload a page the learner is looking at.
+  it('never reloads the page that is on screen', () => {
     expect(
       shouldAutoReloadForControllerChange({
         pathname: '/freestyle',
         userInteracted: false,
       }),
-    ).toBe(true)
+    ).toBe(false)
   })
 
-  it('does not interrupt an active learning session', () => {
+  it('never reloads an active learning session either', () => {
     expect(
       shouldAutoReloadForControllerChange({
         pathname: '/freestyle',
@@ -20,12 +23,12 @@ describe('registerServiceWorker controllerchange policy', () => {
     ).toBe(false)
   })
 
-  it('treats the full desktop app as the PWA surface', () => {
+  it('applies to every route, not only 随心', () => {
     expect(
       shouldAutoReloadForControllerChange({
         pathname: '/palaces',
         userInteracted: false,
       }),
-    ).toBe(true)
+    ).toBe(false)
   })
 })

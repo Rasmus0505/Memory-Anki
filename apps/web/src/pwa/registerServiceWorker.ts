@@ -1,19 +1,12 @@
 import { toast } from '@/shared/feedback/toast'
 
 const PWA_CONTROLLER_RELOAD_KEY = 'memory-anki-pwa-controller-reload'
-const USER_IDLE_MS = 30_000
 const RELEASE_CHECK_MS = 60_000
-let lastInteractionAt = 0
 let updateReady = false
 let reloadScheduled = false
 
 function isDesktopClient() { return window.memoryAnkiDesktopTimer?.isDesktop === true }
 function requestSkipWaiting(worker: ServiceWorker | null) { worker?.postMessage({ type: 'SKIP_WAITING' }) }
-function isUserActive(now = Date.now()) { return document.visibilityState === 'visible' && now - lastInteractionAt < USER_IDLE_MS }
-
-export function shouldAutoReloadForControllerChange({ userInteracted }: { pathname?: string; userInteracted: boolean }) {
-  return !userInteracted
-}
 
 function reloadOnce() {
   if (reloadScheduled) return
@@ -25,27 +18,32 @@ function reloadOnce() {
   window.location.reload()
 }
 
-function applyReadyUpdateWhenIdle() {
-  if (!updateReady || isUserActive()) return
-  reloadOnce()
+/**
+ * A ready update never reloads the page on its own.
+ *
+ * Reloading in place throws away everything the learner is holding: the open
+ * quiz, the half-rated card, the palace map they are reading. Because "idle"
+ * (no touch for 30s) looked exactly like reading a palace, the old policy could
+ * reload the moment the user opened 查看宫殿 and stopped touching the screen —
+ * the page flashed back to 随心. The new release is picked up by the next launch
+ * of the installed app (a fresh document gets the new worker's shell), or when
+ * the learner taps 立即刷新 on the update notice.
+ */
+export function shouldAutoReloadForControllerChange(_input: {
+  pathname?: string
+  userInteracted: boolean
+}): boolean {
+  return false
 }
 
 function announceReadyUpdate() {
+  if (updateReady) return
   updateReady = true
-  if (!isUserActive()) { reloadOnce(); return }
   toast.info('新版本已准备好', {
-    description: '当前操作不会被打断；停止操作 30 秒后自动刷新。',
+    description: '当前学习不会被打断；下次打开应用时生效，也可以点「立即刷新」。',
     duration: Infinity,
     action: { label: '立即刷新', onClick: reloadOnce },
   })
-}
-
-function installActivityTracking() {
-  const markActivity = () => { lastInteractionAt = Date.now() }
-  window.addEventListener('pointerdown', markActivity, { passive: true })
-  window.addEventListener('touchstart', markActivity, { passive: true })
-  window.addEventListener('keydown', markActivity)
-  window.setInterval(applyReadyUpdateWhenIdle, 5_000)
 }
 
 async function checkRelease(registration: ServiceWorkerRegistration) {
@@ -67,7 +65,6 @@ export function registerServiceWorker() {
     return
   }
 
-  installActivityTracking()
   navigator.serviceWorker.addEventListener('controllerchange', announceReadyUpdate)
 
   window.addEventListener('load', () => {
@@ -87,7 +84,7 @@ export function registerServiceWorker() {
       }, RELEASE_CHECK_MS)
       window.addEventListener('online', runCheck)
       document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') { runCheck(); applyReadyUpdateWhenIdle() }
+        if (document.visibilityState === 'visible') runCheck()
       })
     }).catch((error) => console.info('[memory-anki] PWA service worker registration skipped.', error))
   })

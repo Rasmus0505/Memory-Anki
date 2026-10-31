@@ -277,7 +277,7 @@ describe('PWA service worker contract', () => {
     expect(registration).toContain("if (document.visibilityState === 'visible') runCheck()")
   })
 
-  it('lets newly installed PWA workers take control without interrupting an active session', () => {
+  it('lets newly installed PWA workers take control without reloading the open page', () => {
     const sw = readFileSync(publicSwPath, 'utf8')
     const registration = readFileSync(registerServiceWorkerPath, 'utf8')
 
@@ -285,7 +285,9 @@ describe('PWA service worker contract', () => {
     expect(registration).toContain("register('/sw.js', { updateViaCache: 'none' })")
     expect(registration).toContain('registration.update()')
     expect(registration).toContain('controllerchange')
-    expect(registration).toContain('lastInteractionAt')
+    // A ready update only offers 立即刷新; it must never reload by itself.
+    expect(registration).not.toContain('applyReadyUpdateWhenIdle')
+    expect(registration).not.toContain('lastInteractionAt')
     expect(registration).toContain("fetch('/release.json', { cache: 'no-store' })")
     expect(registration).toContain('isDesktopClient()')
     expect(registration).toContain('window.location.reload()')
