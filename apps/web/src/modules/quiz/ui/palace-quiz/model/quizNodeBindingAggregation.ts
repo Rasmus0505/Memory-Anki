@@ -10,6 +10,11 @@ export type BoundQuestionFacts = {
   marked: boolean
 }
 
+export type CountBadgeOptions = {
+  directBindings?: ReadonlyMap<string, ReadonlySet<number>>
+  wrongQuestionIds?: ReadonlySet<number>
+}
+
 /** Subjective corner badge counts short-answer items only. Other types stay objective. */
 export function isSubjectiveQuestionType(questionType: string | null | undefined): boolean {
   return String(questionType || '').trim() === 'short_answer'
@@ -128,7 +133,7 @@ export function buildRemainingCountByNodeUid(
 
 export type NodeQuizCountBadge = {
   text: string
-  tone: 'success' | 'info' | 'rose'
+  tone: 'success' | 'info' | 'rose' | 'danger'
   title: string
   kind: 'objective' | 'subjective'
 }
@@ -137,15 +142,18 @@ function countBadge(
   kind: NodeQuizCountBadge['kind'],
   count: number,
   hasMarked: boolean,
+  hasWrong: boolean,
 ): NodeQuizCountBadge | null {
   if (count <= 0) return null
   const label = kind === 'objective' ? '客观' : '主观'
   return {
     text: String(count),
-    tone: hasMarked ? 'rose' : kind === 'objective' ? 'success' : 'info',
-    title: hasMarked
-      ? `${label} ${count} 道，含标记题（含子树）`
-      : `${label} ${count} 道（含子树）`,
+    tone: hasWrong ? 'danger' : hasMarked ? 'rose' : kind === 'objective' ? 'success' : 'info',
+    title: hasWrong
+      ? `${label} ${count} 道，含本轮错题（直接绑定）`
+      : hasMarked
+        ? `${label} ${count} 道，含标记题（含子树）`
+        : `${label} ${count} 道（含子树）`,
     kind,
   }
 }
@@ -159,6 +167,7 @@ function countBadge(
 export function buildCountBadgeByNodeUid(
   subtreeQuestions: Map<string, Set<number>>,
   facts: ReadonlyMap<number, BoundQuestionFacts> = new Map(),
+  options: CountBadgeOptions = {},
 ): Record<string, NodeQuizCountBadge[]> {
   const map: Record<string, NodeQuizCountBadge[]> = {}
   for (const [uid, questionIds] of subtreeQuestions) {
@@ -167,20 +176,26 @@ export function buildCountBadgeByNodeUid(
     let subjectiveCount = 0
     let objectiveMarked = false
     let subjectiveMarked = false
+    let objectiveWrong = false
+    let subjectiveWrong = false
+    const directQuestionIds = options.directBindings?.get(uid) ?? new Set<number>()
     for (const questionId of questionIds) {
       const fact = facts.get(questionId)
       const subjective = isSubjectiveQuestionType(fact?.questionType)
+      const wrong = directQuestionIds.has(questionId) && options.wrongQuestionIds?.has(questionId) === true
       if (subjective) {
         subjectiveCount += 1
         if (fact?.marked) subjectiveMarked = true
+        if (wrong) subjectiveWrong = true
       } else {
         objectiveCount += 1
         if (fact?.marked) objectiveMarked = true
+        if (wrong) objectiveWrong = true
       }
     }
     const badges = [
-      countBadge('subjective', subjectiveCount, subjectiveMarked),
-      countBadge('objective', objectiveCount, objectiveMarked),
+      countBadge('subjective', subjectiveCount, subjectiveMarked, subjectiveWrong),
+      countBadge('objective', objectiveCount, objectiveMarked, objectiveWrong),
     ].filter((badge): badge is NodeQuizCountBadge => badge != null)
     if (badges.length > 0) map[uid] = badges
   }

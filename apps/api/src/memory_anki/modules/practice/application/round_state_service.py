@@ -15,6 +15,7 @@ from memory_anki.infrastructure.db._tables.misc import (
 from memory_anki.modules.memory.api import (
     list_active_review_unit_ids,
     list_due_review_unit_ids,
+    list_unit_node_members,
     rate_palace_due_units,
     rate_review_unit,
 )
@@ -23,6 +24,7 @@ from memory_anki.modules.practice.domain.feed_config import (
     sanitize_feed_config,
 )
 from memory_anki.modules.practice.domain.overlay_quiz import (
+    clear_overlay_wrong_states,
     empty_overlay_quiz,
     normalize_overlay_quiz,
 )
@@ -50,6 +52,7 @@ from memory_anki.modules.practice.domain.round_rebind import (
 )
 from memory_anki.modules.practice.domain.round_uncomplete import uncomplete_card
 from memory_anki.modules.practice.domain.workspace import normalize_workspace
+from memory_anki.modules.quiz.public.queries import list_node_bindings_for_palaces
 
 from .round_commit import commit_operation
 from .round_read_lookups import (
@@ -422,6 +425,59 @@ def start_new_round(
     return _serve(session, row)
 
 
+def _settled_unit_ids(
+    plan: dict[str, Any],
+    *,
+    card_ids: list[str],
+    explicit_unit_ids: list[str],
+) -> set[str]:
+    normalized = normalize_plan(plan)
+    original = {str(card.get("card_id")): card for card in normalized.get("original_cards") or []}
+    occurrences = {str(item.get("occurrence_id")): item for item in normalized.get("occurrences") or []}
+    units = {str(item).strip() for item in explicit_unit_ids if str(item).strip()}
+    for card_id in card_ids:
+        key = str(card_id or "").strip()
+        card = original.get(key)
+        if card is None and key in occurrences:
+            card = original.get(str(occurrences[key].get("source_card_id") or ""))
+        unit_id = str((card or {}).get("unit_id") or "").strip()
+        if unit_id:
+            units.add(unit_id)
+    return units
+
+
+def _clear_settled_overlay_wrong_states(
+    session: Session,
+    plan: dict[str, Any],
+    *,
+    card_ids: list[str],
+    explicit_unit_ids: list[str],
+) -> dict[str, Any]:
+    unit_ids = _settled_unit_ids(plan, card_ids=card_ids, explicit_unit_ids=explicit_unit_ids)
+    if not unit_ids:
+        return plan
+    members = list_unit_node_members(session, sorted(unit_ids))
+    node_uids = {uid for values in members.values() for uid in values}
+    if not node_uids:
+        return plan
+    palace_ids = {
+        int(card.get("palace_id"))
+        for card in plan.get("original_cards") or []
+        if str(card.get("unit_id") or "").strip() in unit_ids and card.get("palace_id")
+    }
+    bindings = list_node_bindings_for_palaces(session, palace_ids=sorted(palace_ids))
+    question_ids = {
+        int(binding["question_id"])
+        for binding in bindings
+        if str(binding.get("node_uid") or "") in node_uids
+        and str(binding.get("question_id") or "").isdigit()
+    }
+    if not question_ids:
+        return plan
+    overlay = plan.get("overlay_quiz")
+    return {**plan, "overlay_quiz": clear_overlay_wrong_states(overlay, question_ids)}
+
+
 def apply_round_action(
     session: Session,
     *,
@@ -469,7 +525,26 @@ def apply_round_action(
     elif name == "compress_completed":
         raw_settlement = fields.get("partial_settlement")
         settlement = raw_settlement if isinstance(raw_settlement, dict) else None
+        before_compressed = set(str(item) for item in plan.get("compressed_ids") or [])
         plan = compress_completed(plan, settlement)
+        newly_compressed = [
+            str(item) for item in plan.get("compressed_ids") or []
+            if str(item) not in before_compressed
+        ]
+        explicit_card_ids = [
+            str(item) for item in (settlement or {}).get("card_ids") or []
+            if str(item).strip()
+        ]
+        explicit_unit_ids = [
+            str(item) for item in (settlement or {}).get("settled_unit_ids") or []
+            if str(item).strip()
+        ]
+        plan = _clear_settled_overlay_wrong_states(
+            session,
+            plan,
+            card_ids=newly_compressed or explicit_card_ids,
+            explicit_unit_ids=explicit_unit_ids,
+        )
     elif name == "bind_cards":
         plan = append_today_cards(plan, cards, today=_local_today())
         plan = normalize_plan(plan)

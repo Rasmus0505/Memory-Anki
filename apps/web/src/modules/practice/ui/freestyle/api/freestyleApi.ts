@@ -23,6 +23,7 @@ import type {
   FreestyleRoundActionRequest,
   FreestyleRoundActiveRequest,
   FreestyleRoundRatingRequest,
+  ActiveFreestyleOverlayWrongQuestionsResponse,
   FreestyleRoundQuestionRatingsResponse,
   FreestyleRoundStatePayload,
   WrongQuestionsResponse,
@@ -241,6 +242,17 @@ export function rateFreestyleBedtimeCardApi(
  * Read-only: opening a question window must not write the round. `persistence:
  * false` keeps it out of the offline replay queue for the same reason.
  */
+export function getActiveFreestyleOverlayWrongQuestionsApi(
+  workspace = 'primary',
+  options?: Pick<RequestInit, 'signal'>,
+) {
+  const params = new URLSearchParams({ workspace })
+  return request<ActiveFreestyleOverlayWrongQuestionsResponse>(
+    `/freestyle/rounds/active/overlay-wrong-questions?${params.toString()}`,
+    { ...options, persistence: false },
+  )
+}
+
 export function getFreestyleRoundQuestionRatingsApi(
   roundId: string,
   options?: Pick<RequestInit, 'signal'>,

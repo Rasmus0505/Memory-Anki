@@ -94,6 +94,22 @@ describe('quizNodeBindingAggregation', () => {
     expect(firstIncompleteQuestionIndex([1, 2], new Set([1, 2]))).toBe(0)
   })
 
+  it('turns only directly bound wrong question sides danger', () => {
+    const bindings = [
+      { question_id: 1, node_uid: 'child-a', question_type: 'multiple_choice', marked: true },
+      { question_id: 2, node_uid: 'child-b', question_type: 'short_answer', marked: false },
+    ]
+    const direct = buildDirectBindingMap(bindings)
+    const subtree = buildSubtreeQuestionMap(doc, direct)
+    const badges = buildCountBadgeByNodeUid(subtree, buildBoundQuestionFacts(bindings), {
+      directBindings: direct,
+      wrongQuestionIds: new Set([1]),
+    })
+    expect(badges['child-a']).toMatchObject([{ kind: 'objective', tone: 'danger' }])
+    expect(badges.parent?.find((badge) => badge.kind === 'objective')?.tone).toBe('rose')
+    expect(badges['child-b']?.[0].tone).toBe('info')
+  })
+
   it('turns only the subjective badge rose when a short-answer question is marked', () => {
     const bindings = [
       { question_id: 1, node_uid: 'child-a', question_type: 'multiple_choice', marked: false },

@@ -2659,6 +2659,9 @@ export function useImmersiveQueue(
    * Newer versions only, current round only. The plan's completed ticks and
    * this-round ratings are stamped onto the local plan so the rail and HUD move
    * with the server; local un-acknowledged work is never removed here.
+   *
+   * `announceOrder: false` adopts the new order silently — the 做题 window that
+   * asked for the reorder announces its own result (including palace count).
    */
   const adoptRoundVersion = useCallback((round: {
     plan_version?: number
@@ -2666,7 +2669,7 @@ export function useImmersiveQueue(
     round_id?: string
     plan?: FreestyleRoundStatePayload['plan']
     waiting?: { count: number; next_ready_at: string | null }
-  } | null | undefined) => {
+  } | null | undefined, options?: { announceOrder?: boolean }) => {
     if (round?.round_id && round.round_id !== queueStateRef.current.roundId) return
     if (round) setRoundWaiting(round.waiting ?? null)
     const version = serverPlanVersion(round)
@@ -2716,7 +2719,7 @@ export function useImmersiveQueue(
         const unit = reviewUnitIdFromCardId(id)
         if (unit) movedUnits.add(unit)
       })
-      if (movedUnits.size > 0) {
+      if (movedUnits.size > 0 && options?.announceOrder !== false) {
         toast.info(`错题优先：已把 ${movedUnits.size} 个复习单元提到前面`)
       }
       const currentId = cardsRef.current[currentIndexRef.current]?.id

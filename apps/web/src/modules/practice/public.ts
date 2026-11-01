@@ -22,6 +22,10 @@ export {
   type PalaceReviewWorkspaceId,
 } from './domain/freestyleWorkspace'
 export {
+  getActiveFreestyleOverlayWrongQuestionsApi,
+} from './ui/freestyle/api/freestyleApi'
+export { startFreestyleOverlayWrongStateSync } from './application/freestyleOverlayWrongSync'
+export {
   createOperationId,
   emitFreestylePeerRound,
   FREESTYLE_FEED_CONFIG_UPDATED_EVENT,

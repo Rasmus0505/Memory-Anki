@@ -55,8 +55,8 @@ export function FreestyleScopeQuizHeaderActions({
   return (
     <div className="flex min-w-0 items-center justify-end gap-2">
       <Button type="button" size="sm" variant={prioritizeWrong ? 'default' : 'outline'}
-        aria-label="错题宫殿优先" aria-pressed={prioritizeWrong}
-        title="答错后将该宫殿本轮待复习单元排到前面"
+        aria-label="错题优先" aria-pressed={prioritizeWrong}
+        title="答错后只把这道题对应的复习单元排到前面，同一宫殿的其他单元不动"
         onClick={() => onPrioritizeWrongChange(!prioritizeWrong)}>
         <ArrowUpToLine className="size-4" />
         <span className="hidden sm:inline">错题优先</span>

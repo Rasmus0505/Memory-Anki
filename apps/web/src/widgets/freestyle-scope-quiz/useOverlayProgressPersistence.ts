@@ -9,6 +9,7 @@ import type {
   FreestyleRoundStatePayload,
 } from '@/shared/api/contracts'
 import { overlayFromRound } from './overlayQuizHydrate'
+import { replaceFreestyleOverlayWrongStateFromOverlay } from '@/shared/freestyle-round/freestyleOverlayWrongState'
 
 /**
  * Debounced overlay-quiz progress persistence.
@@ -46,8 +47,20 @@ interface OverlayProgressPersistenceInput {
   questionStatesRef: { current: Record<number, QuizRuntimeState> }
   /** Mirrors the active dialog `open` prop; the flush listener follows it. */
   open: boolean
-  onRoundSync: (round: FreestyleRoundStatePayload) => void
+  /**
+   * `announceOrder: false` keeps the feed from also announcing a reorder this
+   * window already reported (错题优先 toggle). The order still updates.
+   */
+  onRoundSync: (
+    round: FreestyleRoundStatePayload,
+    options?: { announceOrder?: boolean },
+  ) => void
   setOverlay: (state: FreestyleOverlayQuizState | null) => void
+}
+
+interface WriteOptions {
+  retryOnConflict?: boolean
+  announceOrder?: boolean
 }
 
 export function useOverlayProgressPersistence({
@@ -65,8 +78,12 @@ export function useOverlayProgressPersistence({
   const retryAttemptRef = useRef(0)
   const toldDisconnectRef = useRef(false)
   const writeProgressNowRef = useRef<
-    (nextIndex: number, nextStates: Record<number, QuizRuntimeState>) => Promise<void>
-  >(async () => {})
+    (
+      nextIndex: number,
+      nextStates: Record<number, QuizRuntimeState>,
+      options?: WriteOptions,
+    ) => Promise<FreestyleRoundStatePayload | null>
+  >(async () => null)
   /**
    * Set when the local state has moved ahead of the server. Guards the no-op
    * write so an idle dialog does not re-post unchanged progress.
@@ -104,10 +121,10 @@ export function useOverlayProgressPersistence({
   const writeProgressNow = useCallback(async (
     nextIndex: number,
     nextStates: Record<number, QuizRuntimeState>,
-    { retryOnConflict = true }: { retryOnConflict?: boolean } = {},
-  ) => {
+    { retryOnConflict = true, announceOrder = true }: WriteOptions = {},
+  ): Promise<FreestyleRoundStatePayload | null> => {
     const activeRoundId = roundIdRef.current
-    if (!activeRoundId || !dirtyProgressRef.current) return
+    if (!activeRoundId || !dirtyProgressRef.current) return null
     const generation = progressGenerationRef.current
     const wrongQuestions = [...pendingWrongRef.current.entries()]
     const completedIds = Object.entries(nextStates)
@@ -118,7 +135,9 @@ export function useOverlayProgressPersistence({
     for (const [id, state] of Object.entries(nextStates)) {
       states[id] = { ...state }
     }
-    const postProgress = async (allowRetry: boolean) => {
+    const postProgress = async (
+      allowRetry: boolean,
+    ): Promise<FreestyleRoundStatePayload | null> => {
       const round = await progressFreestyleOverlayQuizApi(activeRoundId, {
         operation_id: createOperationId(),
         auto_prioritize_wrong_palaces: prioritizeWrongRef.current,
@@ -138,7 +157,13 @@ export function useOverlayProgressPersistence({
       retryAttemptRef.current = 0
       toldDisconnectRef.current = false
       clearRetryTimer()
-      onRoundSync(round)
+      onRoundSync(round, { announceOrder })
+      replaceFreestyleOverlayWrongStateFromOverlay({
+        workspace: round.workspace,
+        roundId: round.round_id,
+        planVersion: round.plan_version ?? round.version,
+        overlay: round.plan?.overlay_quiz,
+      })
       if (typeof round.plan_version === 'number' && round.plan_version > 0) {
         planVersionRef.current = round.plan_version
       } else if (typeof round.version === 'number' && round.version > 0) {
@@ -150,15 +175,16 @@ export function useOverlayProgressPersistence({
       // once against the version we just adopted instead of dropping the write.
       if (round.conflict && allowRetry) {
         dirtyProgressRef.current = true
-        await postProgress(false)
+        return postProgress(false)
       }
+      return round
     }
     try {
-      await postProgress(retryOnConflict)
+      return await postProgress(retryOnConflict)
     } catch (error) {
       const message = error instanceof Error ? error.message : '保存做题进度失败。'
       // The question was deleted elsewhere; there is nothing to save for it.
-      if (message.includes('题目不存在')) return
+      if (message.includes('题目不存在')) return null
       // A brief local disconnect is not "please relaunch". Keep the write dirty
       // and retry. The long launcher essay must not pop in the corner.
       // A busy database is the same kind of pause as a brief disconnect: the
@@ -168,9 +194,10 @@ export function useOverlayProgressPersistence({
       if (isBriefDisconnect(message) || isBusyResponseError(error) || message.includes('数据正在写入中')) {
         dirtyProgressRef.current = true
         scheduleNetworkRetry()
-        return
+        return null
       }
       toast.error(message)
+      return null
     }
   }, [clearRetryTimer, onRoundSync, planVersionRef, prioritizeWrongRef, roundIdRef, scheduleNetworkRetry, setOverlay])
 
@@ -188,13 +215,19 @@ export function useOverlayProgressPersistence({
     await writeProgressNow(indexRef.current, questionStatesRef.current)
   }, [clearRetryTimer, indexRef, questionStatesRef, writeProgressNow])
 
-  /** Force one progress write so turning 错题优先 on reorders this round's
-   * existing wrong palaces immediately, before the next answer. */
+  /**
+   * Force one progress write so turning 错题优先 on hoists this round's existing
+   * wrong answers' review units immediately, before the next answer.
+   *
+   * Resolves with the server round (its `wrong_priority` says how many units
+   * and palaces moved), so the caller can confirm the switch did something.
+   * The feed's own order toast stays quiet: this window reports it instead.
+   */
   const prioritizeNow = useCallback(async () => {
-    if (!roundIdRef.current) return
+    if (!roundIdRef.current) return null
     dirtyProgressRef.current = true
     clearRetryTimer()
-    await writeProgressNow(indexRef.current, questionStatesRef.current)
+    return writeProgressNow(indexRef.current, questionStatesRef.current, { announceOrder: false })
   }, [clearRetryTimer, indexRef, questionStatesRef, roundIdRef, writeProgressNow])
 
   const persistProgress = useCallback((

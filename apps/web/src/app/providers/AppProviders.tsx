@@ -15,6 +15,7 @@ import { NativeDialogProvider } from '@/shared/components/ui/native-dialog'
 import { PageHistoryCoordinator } from '@/shared/page-history/PageHistoryCoordinator'
 import { PalaceCatalogQueryInvalidationBridge } from '@/modules/content/public'
 import { startQuizPracticeProgressSync } from '@/modules/quiz/public'
+import { startFreestyleOverlayWrongStateSync } from '@/modules/practice/public'
 
 const queryClient = createAppQueryClient()
 
@@ -23,6 +24,7 @@ export function AppProviders({ children }: PropsWithChildren) {
   useReminderActivityBeacon()
 
   useEffect(() => startQuizPracticeProgressSync(), [])
+  useEffect(() => startFreestyleOverlayWrongStateSync(), [])
 
   useEffect(() => {
     cleanupExpiredAppLogs()

@@ -1,4 +1,4 @@
-"""Round overlay-quiz writes. Questions are limited to this round's review palaces."""
+"""Round overlay-quiz writes. Questions follow this round's review units (or its palaces in the wide range)."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from memory_anki.modules.practice.application.overlay_quiz_service import (
     build_overlay_question_pack,
     classify_round_question_badges,
 )
+from memory_anki.modules.practice.application.round_read_lookups import latest_active_round
 from memory_anki.modules.practice.application.round_state_service import (
     _apply_plan,
     _begin_round_write,
@@ -30,6 +31,7 @@ from memory_anki.modules.practice.domain.feed_config import (
 )
 from memory_anki.modules.practice.domain.overlay_quiz import (
     apply_overlay_progress,
+    current_wrong_overlay_question_ids,
     drop_overlay_for_palaces,
     merge_overlay_quiz,
     normalize_overlay_quiz,
@@ -64,6 +66,24 @@ def _rating_inherit_mode(stored: dict[str, Any], incoming: dict[str, Any] | None
         source = {**incoming, "overlay_rating_inherit": stored["overlay_rating_inherit"]}
     mode = sanitize_feed_config(source).get("overlay_rating_inherit")
     return str(mode or OVERLAY_RATING_INHERIT_LOWEST)
+
+
+def read_active_overlay_wrong_questions(
+    session: Session,
+    *,
+    workspace: str = "primary",
+) -> dict[str, Any] | None:
+    """Read the active round's current 做题 wrong-question snapshot."""
+    row = latest_active_round(session, workspace)
+    if row is None:
+        return None
+    plan = _plan_of(row)
+    return {
+        "workspace": str(getattr(row, "workspace", workspace) or workspace),
+        "round_id": row.round_id,
+        "plan_version": int(row.version or 0),
+        "wrong_question_ids": current_wrong_overlay_question_ids(plan.get("overlay_quiz")),
+    }
 
 
 def read_round_question_badge(
@@ -120,8 +140,9 @@ def _overlay_pack(
     return build_overlay_question_pack(
         session,
         config,
-        # The round's own review set IS the 做题 scope: the saved config must not
-        # narrow it a second time (see overlay_quiz_service docstring).
+        # The round's own review set is the outer 做题 boundary: the saved config
+        # must not widen it. `unit_ids` narrows the default range to the scheduled
+        # units and their root paths (see overlay_quiz_service docstring).
         palace_ids=review_palace_ids(plan),
         # ...minus palaces whose every card the learner took out with 移除本队列.
         # Their questions leave with them. A palace with one card still queued
@@ -243,52 +264,70 @@ def progress_overlay_quiz(
                 plan["wrong_unit_ids"].append(unit_id)
                 marked.add(unit_id)
     # Turning the switch on must act on this round's existing wrong answers too,
-    # not only the next new mistake. Resolve their palaces from the plan's own
-    # unit membership so a reopened dialog can reorder immediately.
+    # not only the next new mistake.
+    #
+    # The unit is the boundary: a wrong question hoists the review units its
+    # bound nodes belong to, and nothing else. Hoisting every unit of the
+    # palace(s) those units live in pulled in knowledge points the learner never
+    # got wrong, so a single mistake in one palace reordered that palace's whole
+    # remaining queue.
+    #
+    # The wire field still says `wrong_palaces`; renaming it would 422 a cached
+    # PWA build that keeps sending the old name.
+    wrong_priority: dict[str, int] | None = None
     if auto_prioritize_wrong_palaces:
-        unit_palace = {
-            str(card.get("unit_id")): card.get("palace_id")
-            for card in plan["original_cards"]
-            if card.get("unit_id") and card.get("palace_id")
+        target_units = {
+            str(unit_id).strip() for unit_id in plan["wrong_unit_ids"] if str(unit_id).strip()
         }
-        palace_ids = {
-            int(unit_palace[unit_id])
-            for unit_id in plan["wrong_unit_ids"]
-            if unit_id in unit_palace
-        }
-        if wrong:
-            palace_ids.update(
-                overlay["question_palace_ids"][qid]
-                for qid in wrong if qid in overlay["question_palace_ids"]
+        cards = {card["card_id"]: card for card in plan["original_cards"]}
+        occurrences = {occ["occurrence_id"]: occ for occ in plan["occurrences"]}
+        presented = plan["presented_ids"]
+        current = plan.get("current_card_id")
+        anchor = presented.index(current) if current in presented else -1
+        slots = [
+            i for i, card_id in enumerate(presented)
+            if i > anchor and _is_unfinished(plan, card_id)
+        ]
+        movable = [presented[i] for i in slots]
+
+        def source_card(card_id: str) -> dict[str, Any]:
+            occurrence = occurrences.get(card_id)
+            return cards.get(occurrence["source_card_id"] if occurrence else card_id, {})
+
+        def is_target(card_id: str) -> bool:
+            card = source_card(card_id)
+            return (
+                card.get("kind") == "mindmap_branch"
+                and str(card.get("unit_id") or "") in target_units
             )
-        if palace_ids:
-            cards = {card["card_id"]: card for card in plan["original_cards"]}
-            occurrences = {occ["occurrence_id"]: occ for occ in plan["occurrences"]}
-            presented = plan["presented_ids"]
-            current = plan.get("current_card_id")
-            anchor = presented.index(current) if current in presented else -1
-            slots = [
-                i for i, card_id in enumerate(presented)
-                if i > anchor and _is_unfinished(plan, card_id)
-            ]
-            movable = [presented[i] for i in slots]
 
-            def is_target(card_id: str) -> bool:
-                occurrence = occurrences.get(card_id)
-                card = cards.get(occurrence["source_card_id"] if occurrence else card_id, {})
-                return card.get("kind") == "mindmap_branch" and card.get("palace_id") in palace_ids
-
-            ordered = [item for item in movable if is_target(item)] + [item for item in movable if not is_target(item)]
-            for index, card_id in zip(slots, ordered, strict=True):
-                presented[index] = card_id
-            _sync_index(plan)
+        hoisted = [card_id for card_id in movable if is_target(card_id)]
+        ordered = hoisted + [card_id for card_id in movable if not is_target(card_id)]
+        for index, card_id in zip(slots, ordered, strict=True):
+            presented[index] = card_id
+        _sync_index(plan)
+        # What the learner actually sees move: still-unfinished units of the
+        # wrong questions, counted per unit and per palace so the 做题 window can
+        # say whether the switch did anything.
+        hoisted_cards = [source_card(card_id) for card_id in hoisted]
+        wrong_priority = {
+            "unit_count": len({
+                str(card.get("unit_id") or "") for card in hoisted_cards
+            } - {""}),
+            "palace_count": len({
+                int(card["palace_id"]) for card in hoisted_cards if card.get("palace_id")
+            }),
+        }
     op_id = _require_operation_id(operation_id)
     changed = _apply_plan(row, plan, operation_id=op_id)
     if not changed:
         row.last_operation_id = op_id
     if not _commit_operation(session, row, op_id):
         return _serve(session, row, conflict=True)
-    return _serve(session, row)
+    payload = _serve(session, row)
+    if payload is not None and wrong_priority is not None:
+        payload["wrong_priority"] = wrong_priority
+    return payload
 
 
 def shuffle_overlay_quiz(

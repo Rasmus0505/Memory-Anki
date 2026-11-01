@@ -36,6 +36,7 @@ from memory_anki.modules.practice.application.round_overlay_service import (
     drop_overlay_quiz_for_palaces,
     ensure_overlay_quiz,
     progress_overlay_quiz,
+    read_active_overlay_wrong_questions,
     read_round_question_badge,
     set_overlay_skipped_palaces,
     shuffle_overlay_quiz,
@@ -175,6 +176,17 @@ def api_freestyle_round_start(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/freestyle/rounds/active/overlay-wrong-questions")
+def api_freestyle_active_overlay_wrong_questions(
+    workspace: str = Query("primary"),
+    session: Session = Depends(session_dep),
+):
+    payload = read_active_overlay_wrong_questions(session, workspace=workspace)
+    if payload is None:
+        raise HTTPException(status_code=404, detail="freestyle round not found")
+    return payload
 
 
 @router.get("/freestyle/rounds/{round_id}")

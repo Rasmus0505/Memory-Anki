@@ -2,6 +2,13 @@
 
 export type FreestyleRoundOccurrenceStatus = 'pending' | 'inserted' | 'completed' | 'cancelled'
 
+export interface ActiveFreestyleOverlayWrongQuestionsResponse {
+  workspace: 'primary' | `p${number}`
+  round_id: string
+  plan_version: number
+  wrong_question_ids: number[]
+}
+
 export interface FreestyleRoundOccurrence {
   occurrence_id: string
   source_card_id: string
