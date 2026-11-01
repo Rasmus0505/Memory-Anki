@@ -116,6 +116,13 @@ export interface MindMapEditorSurfaceProps {
   focusRequestNodeUid?: string | null
   focusRequestNonce?: number
   /**
+   * One-shot first camera for a freshly mounted surface: center this card on the
+   * first measured canvas instead of fitting the whole tree. Used by 查看宫殿 so
+   * a large palace opens already on the bound card, without a fly-in that mounts
+   * every card along the way.
+   */
+  initialFocusNodeUid?: string | null
+  /**
    * Minimal pan that brings these cards fully into view. Does not select or
    * recenter. Hosts use it for Enter reveal follow.
    */

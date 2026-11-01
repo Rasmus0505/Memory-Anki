@@ -5,9 +5,7 @@ import { useAiRunConfigDialog } from '@/modules/settings/public'
 import { PalaceQuizManagePanel } from '@/modules/quiz/ui/palace-quiz/components/PalaceQuizManagePanel'
 import {
   PalaceMemoryLookupDialog,
-  collectMemoryLookupFocusNodeUids,
-  pickMemoryLookupBinding,
-  resolveMemoryLookupPalaceId,
+  useQuestionLookupFocus,
 } from '@/widgets/palace-memory-lookup'
 import {
   QuizKnowledgeDigressionDialog,
@@ -56,8 +54,6 @@ export default function PalaceQuizPage() {
       : null
   const [activeTab, setActiveTab] = useState<PalaceQuizTabKey>(() => readInitialTab(searchParams))
   const [memoryLookupOpen, setMemoryLookupOpen] = useState(false)
-  const [lookupFocusNodeUids, setLookupFocusNodeUids] = useState<string[]>([])
-  const [lookupPalaceIdOverride, setLookupPalaceIdOverride] = useState<number | null>(null)
   const [resetAttemptsDialogOpen, setResetAttemptsDialogOpen] = useState(false)
   const [resetAttemptsLoading, setResetAttemptsLoading] = useState(false)
   const [knowledgePickerOpen, setKnowledgePickerOpen] = useState(false)
@@ -113,34 +109,8 @@ export default function PalaceQuizPage() {
     }, { replace: true })
   }, [activeTab, searchParams, setSearchParams])
 
-  useEffect(() => {
-    const currentQuestion = browser.currentQuestion
-    if (!memoryLookupOpen || !currentQuestion) {
-      if (!memoryLookupOpen) {
-        setLookupFocusNodeUids([])
-        setLookupPalaceIdOverride(null)
-      }
-      return
-    }
-    const fallbackPalaceId = currentQuestion.palace_id ?? palaceId
-    let cancelled = false
-    void listQuestionNodeBindingsApi(currentQuestion.id)
-      .then((response) => {
-        if (cancelled) return
-        const items = response.items || []
-        const binding = pickMemoryLookupBinding(items, fallbackPalaceId)
-        setLookupFocusNodeUids(collectMemoryLookupFocusNodeUids(items, fallbackPalaceId))
-        setLookupPalaceIdOverride(resolveMemoryLookupPalaceId(binding, fallbackPalaceId))
-      })
-      .catch(() => {
-        if (cancelled) return
-        setLookupFocusNodeUids([])
-        setLookupPalaceIdOverride(fallbackPalaceId)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [browser.currentQuestion, memoryLookupOpen, palaceId])
+  const { focusNodeUids: lookupFocusNodeUids, palaceIdOverride: lookupPalaceIdOverride, pending: lookupFocusPending } =
+    useQuestionLookupFocus(browser.currentQuestion, true, palaceId)
 
   const lookupPalaceId = lookupPalaceIdOverride ?? palaceId
 
@@ -328,12 +298,14 @@ export default function PalaceQuizPage() {
       />
       {palaceId ? (
         <PalaceMemoryLookupDialog
+          key={memoryLookupOpen ? `view-lookup-${browser.currentQuestion?.id ?? 'none'}` : 'view-lookup-closed'}
           open={memoryLookupOpen}
           onOpenChange={setMemoryLookupOpen}
           currentPalaceId={lookupPalaceId}
           followCurrentPalace
           focusNodeUid={lookupFocusNodeUids[0] ?? null}
           focusNodeUids={lookupFocusNodeUids}
+          focusPending={lookupFocusPending}
         />
       ) : null}
       <QuizKnowledgeEdgePicker
@@ -428,7 +400,6 @@ export default function PalaceQuizPage() {
           onViewKnowledge={(question) => {
             void handleViewKnowledge(question)
           }}
-          palaceTitle={palace?.title || ''}
           comboScopeKey={`palace-quiz:${palaceId}`}
         />
       ) : null}

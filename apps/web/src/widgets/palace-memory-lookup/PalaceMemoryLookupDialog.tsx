@@ -13,7 +13,6 @@ import {
   LoaderCircle,
   Pin,
   PinOff,
-  RotateCcw,
   Search,
   Shrink,
   X,
@@ -23,9 +22,7 @@ import {
   PalaceDirectoryTreeView,
   usePalaceDirectoryTree,
 } from '@/modules/content/public'
-import { useRevealSession } from '@/modules/memory/public'
-import { buildInitialRevealState } from '@/modules/memory/public'
-import { useReviewFeedback } from '@/modules/memory/public'
+import { usePalaceQuizNodeBindings } from '@/modules/quiz/public'
 import type {
   MindMapEditorState,
   PalaceGroupedListResponse,
@@ -59,7 +56,6 @@ import { cn } from '@/shared/lib/utils'
 import { MindMapSplitLayout } from '@/shared/components/layout/MindMapSplitLayout'
 import {
   buildEditorState,
-  buildMemoryLookupKeywordDisplayState,
   createEmptyGroupedData,
   describeMemoryLookupPreview,
   findMemoryLookupKeywordHits,
@@ -72,7 +68,6 @@ import {
   shouldBlockMemoryLookupClose,
   splitLookupHint,
   useMemoryLookupNarrowViewport,
-  type MemoryLookupPreviewMode,
 } from '@/widgets/palace-memory-lookup/model/memoryLookupDialogSupport'
 import { useMemoryLookupEditDocument } from '@/widgets/palace-memory-lookup/model/memoryLookupEditSession'
 import {
@@ -99,6 +94,7 @@ export function PalaceMemoryLookupDialog({
   followCurrentPalace = false,
   focusNodeUid = null,
   focusNodeUids = null,
+  focusPending = false,
   focusAncestorNodeUid = null,
   ratingMode = false,
 }: {
@@ -110,6 +106,12 @@ export function PalaceMemoryLookupDialog({
   focusNodeUid?: string | null
   /** All bound node UIDs; the deepest one in the loaded tree becomes the camera center. */
   focusNodeUids?: readonly string[] | null
+  /**
+   * The host is still reading this question's bindings. Hold the map until the
+   * target is known so it opens already centered instead of fitting the whole
+   * palace and then flying across it.
+   */
+  focusPending?: boolean
   /** When opening from a card, prefer the deepest bound node under this ancestor. */
   focusAncestorNodeUid?: string | null
   /**
@@ -125,13 +127,12 @@ export function PalaceMemoryLookupDialog({
   const [listError, setListError] = useState('')
   const [selectedPalaceId, setSelectedPalaceId] = useState<number | null>(currentPalaceId ?? null)
   const [previewTitle, setPreviewTitle] = useState('')
-  const [previewState, setPreviewState] = useState<MindMapEditorState | null>(null)
+  const [loadedPreviewState, setPreviewState] = useState<MindMapEditorState | null>(null)
   const [loadedPalaceId, setLoadedPalaceId] = useState<number | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [previewError, setPreviewError] = useState('')
   const [layout, setLayout] = useState<MemoryLookupLayout>(() => readMemoryLookupLayout())
   const [pinned, setPinned] = useState(() => readMemoryLookupChrome().pinned)
-  const [previewMode, setPreviewMode] = useState<MemoryLookupPreviewMode>('view')
   const [rootFocusNonce, setRootFocusNonce] = useState(0)
   const [listCollapsed, setListCollapsed] = useState(() => readMemoryLookupChrome().listCollapsed)
   /** Phone sheet: the palace picker folds into one row so the map gets the screen. */
@@ -180,6 +181,12 @@ export function PalaceMemoryLookupDialog({
   // typing switches the left column to the node-text search results.
   const directory = usePalaceDirectoryTree({ enabled: open })
   const selectedPalace = palaces.find((palace) => palace.id === selectedPalaceId) ?? null
+  // Paint only the document of the selected palace. Without this, switching to
+  // another question's palace mounted the previous palace for a frame, fitted
+  // it, then replaced it — the visible flash and stutter on every 查看宫殿.
+  const previewState = loadedPalaceId != null && loadedPalaceId === selectedPalaceId
+    ? loadedPreviewState
+    : null
   const requestedFocusNodeUids = useMemo(
     () => normalizeMemoryLookupFocusNodeUids([
       ...(focusNodeUids ?? []),
@@ -215,19 +222,19 @@ export function PalaceMemoryLookupDialog({
     () => (centeredOnBinding || centeredOnSearch) && focusTargetUid ? [focusTargetUid] : [],
     [centeredOnBinding, centeredOnSearch, focusTargetUid],
   )
-  const editSource = loadedPalaceId === selectedPalaceId ? previewState : null
+  const editSource = previewState
   const editDocument = useMemoryLookupEditDocument(selectedPalaceId, editSource)
   const browsingEditorState = editDocument.editorState ?? previewState
-  // Keyword marks are display-only: edit and flip modes keep the stored document.
-  const viewEditorState = useMemo(
-    () => (previewMode === 'view'
-      ? buildMemoryLookupKeywordDisplayState(browsingEditorState, submittedSearch)
-      : browsingEditorState),
-    [browsingEditorState, previewMode, submittedSearch],
-  )
+  // The lookup is the normal editor, so it carries the same per-node question
+  // count badges as the palace editor.
+  const quizBindings = usePalaceQuizNodeBindings({
+    palaceId: selectedPalaceId,
+    editorDoc: browsingEditorState?.editor_doc ?? null,
+    enabled: open && selectedPalaceId != null,
+  })
   const ratingEditorState = useMemo(
-    () => (ratingMode && viewEditorState ? buildRatingEditorState(viewEditorState) : viewEditorState),
-    [ratingMode, viewEditorState],
+    () => (ratingMode && browsingEditorState ? buildRatingEditorState(browsingEditorState) : browsingEditorState),
+    [browsingEditorState, ratingMode],
   )
   const [ratingUnitByNode, setRatingUnitByNode] = useState<Record<string, string>>({})
   const [ratingsByUnit, setRatingsByUnit] = useState<Record<string, PalaceUnitRatingDto>>({})
@@ -332,30 +339,10 @@ export function PalaceMemoryLookupDialog({
   }, [ratingRows])
   const flushEditDocument = editDocument.flush
   useEffect(() => {
-    if (open && previewMode === 'edit') return
+    // Editing is the default and only mode: flush only when the lookup closes.
+    if (open) return
     void flushEditDocument()
-  }, [flushEditDocument, open, previewMode])
-  const revealSession = useRevealSession({
-    title: selectedPalace ? getPalaceTitle(selectedPalace) : previewTitle || '宫殿脑图',
-    editorState: browsingEditorState,
-  })
-  const revealRoot = revealSession.root
-  const setRevealMap = revealSession.setRevealMap
-  const setRedNodeIds = revealSession.setRedNodeIds
-  const feedback = useReviewFeedback({
-    root: revealRoot,
-    revealMap: revealSession.revealMap,
-    revealedNonRootCount: revealSession.revealedNonRootCount,
-    totalNodeCount: revealSession.totalNodeCount,
-  })
-  const flipEditorState = revealSession.visibleEditorState
-  const enterFlipMode = useCallback(() => {
-    setPreviewMode('flip')
-    // Progressive flip only: root revealed, descendants hidden → 待回忆 → content.
-    // Never open the whole tree on entry (that showed every path at once).
-    setRevealMap(buildInitialRevealState(revealRoot))
-    setRedNodeIds(new Set<string>())
-  }, [revealRoot, setRedNodeIds, setRevealMap])
+  }, [flushEditDocument, open])
 
   useEffect(() => () => {
     if (fullscreenExitGuardTimerRef.current != null) {
@@ -639,14 +626,12 @@ export function PalaceMemoryLookupDialog({
 
   const previewHeading = selectedPalace ? getPalaceTitle(selectedPalace) : previewTitle || '宫殿脑图'
   const previewCaption = describeMemoryLookupPreview({
-    mode: previewMode,
     centeredOnBinding,
     centeredOnSearch,
     saveStatus: editDocument.saveStatus,
     saveError: editDocument.saveError,
   })
   const compactPreviewCaption = describeMemoryLookupPreview({
-    mode: previewMode,
     centeredOnBinding,
     centeredOnSearch,
     compact: true,
@@ -759,56 +744,10 @@ export function PalaceMemoryLookupDialog({
       </div>
     )
   }
-  const renderPreviewControls = (compact = false) => (
-    <div className={cn('flex shrink-0 flex-wrap items-center justify-end gap-2', compact && 'gap-1.5')}>
-      <div className="inline-flex rounded-full border border-border/70 bg-muted/45 p-1">
-        <Button
-          type="button"
-          size="sm"
-          variant={previewMode === 'view' ? 'default' : 'ghost'}
-          className={cn('h-7 rounded-full px-3 text-xs', compact && 'px-2')}
-          onClick={() => setPreviewMode('view')}
-        >
-          查看模式
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant={previewMode === 'flip' ? 'default' : 'ghost'}
-          className={cn('h-7 rounded-full px-3 text-xs', compact && 'px-2')}
-          onClick={enterFlipMode}
-        >
-          翻卡模式
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant={previewMode === 'edit' ? 'default' : 'ghost'}
-          className={cn('h-7 rounded-full px-3 text-xs', compact && 'px-2')}
-          onClick={() => setPreviewMode('edit')}
-        >
-          编辑模式
-        </Button>
-      </div>
-      {previewMode === 'flip' ? (
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className={cn('h-8', compact && 'px-2 text-xs')}
-          disabled={!previewState}
-          onClick={revealSession.reset}
-        >
-          <RotateCcw className="size-4" />
-          重新开始
-        </Button>
-      ) : null}
-    </div>
-  )
   const renderMindMapContent = () => (
     <>
     <div className="min-h-0 flex-1 overflow-hidden rounded-xl border border-border/70 bg-[var(--memory-anki-mindmap-canvas)]">
-      {previewLoading ? (
+      {previewLoading || focusPending ? (
         <div className="flex h-full min-h-45 items-center justify-center gap-2 text-sm text-muted-foreground">
           <LoaderCircle className="size-4 animate-spin" />
           正在加载脑图...
@@ -820,56 +759,35 @@ export function PalaceMemoryLookupDialog({
           </div>
         </div>
       ) : previewState ? (
-        previewMode === 'flip' && flipEditorState ? (
-          <MindMapEditorSurface
-            key={`quiz-memory-lookup-${selectedPalaceId}-flip-${palaceRootUid || 'root'}`}
-            editorState={flipEditorState}
-            readonly
-            practiceModeActive
-            forceExpanded
-            presentationStrategy={'viewport-only'}
-            mobileViewPolicy="map"
-            onFullscreenChange={handleMindMapFullscreenChange}
-            syncOnPropChange
-            syncIntent="replace"
-            syncReason="review_flip"
-            externalSyncKey={revealSession.visibleEditorSyncKey}
-            preserveViewOnSync
-            initialViewPolicy="reset"
-            onEditorStateChange={() => {}}
-            onNodeClick={revealSession.handleNodeClick}
-            onNodeContextMenu={revealSession.handleNodeContextMenu}
-            onNodeHover={revealSession.handleNodeHover}
-            reviewFxSignal={feedback.reviewFxSignal}
-            className="h-full min-h-0 w-full border-0"
-          />
-        ) : (
-          <MindMapEditorSurface
-            key={`quiz-memory-lookup-${selectedPalaceId}-view-${palaceRootUid || 'root'}`}
-            editorState={ratingMode ? ratingEditorState : viewEditorState}
-            readonly={ratingMode || previewMode !== 'edit'}
-            forceExpanded
-            presentationStrategy={'viewport-only'}
-            mobileViewPolicy="map"
-            sceneChrome={previewMode === 'edit' ? 'edit' : 'default'}
-            sceneTransitionKey={`memory-lookup-browse:${selectedPalaceId ?? 'none'}`}
-            onFullscreenChange={handleMindMapFullscreenChange}
-            focusRequestNodeUid={focusTargetUid}
-            focusRequestNonce={rootFocusNonce}
-            highlightedNodeUids={highlightedNodeUids}
-            initialViewPolicy="reset"
-            preserveViewOnSync
-            sceneTransitionFallbackNodeId={focusTargetUid}
-            onEditorStateChange={
-              previewMode === 'edit'
-                ? editDocument.handleEditorStateChange
-                : ignoreLookupEditorChange
-            }
-            masteryByNodeUid={ratingMastery}
-            onNodeClick={ratingMode ? handleRatingNodeClick : undefined}
-            className="h-full min-h-0 w-full border-0"
-          />
-        )
+        <MindMapEditorSurface
+          key={`quiz-memory-lookup-${selectedPalaceId}-edit-${palaceRootUid || 'root'}`}
+          editorState={ratingMode ? ratingEditorState : browsingEditorState}
+          readonly={ratingMode}
+          // Normal edit-mode folds: the bound branch stays open, the rest can be
+          // expanded on demand. Force-expanding a large palace mounted the whole
+          // tree and blocked the main thread for seconds when the lookup opened.
+          forceExpanded={ratingMode}
+          presentationStrategy={'viewport-only'}
+          mobileViewPolicy="map"
+          sceneChrome={ratingMode ? 'default' : 'edit'}
+          sceneTransitionKey={`memory-lookup-browse:${selectedPalaceId ?? 'none'}`}
+          onFullscreenChange={handleMindMapFullscreenChange}
+          focusRequestNodeUid={focusTargetUid}
+          focusRequestNonce={rootFocusNonce}
+          initialFocusNodeUid={centeredOnBinding ? focusTargetUid : null}
+          highlightedNodeUids={highlightedNodeUids}
+          initialViewPolicy="reset"
+          preserveViewOnSync
+          sceneTransitionFallbackNodeId={focusTargetUid}
+          countBadgeByNodeUid={ratingMode ? undefined : quizBindings.countBadgeByNodeUid}
+          nodeProgressByNodeUid={ratingMode ? undefined : quizBindings.nodeProgressByNodeUid}
+          onEditorStateChange={
+            ratingMode ? ignoreLookupEditorChange : editDocument.handleEditorStateChange
+          }
+          masteryByNodeUid={ratingMastery}
+          onNodeClick={ratingMode ? handleRatingNodeClick : undefined}
+          className="h-full min-h-0 w-full border-0"
+        />
       ) : (
         <div className="flex h-full min-h-45 items-center justify-center text-sm text-muted-foreground">
           请选择一个记忆宫殿。
@@ -956,12 +874,11 @@ export function PalaceMemoryLookupDialog({
                 <span className="sr-only">{previewHeading}</span>
                 <div className={cn(
                   'truncate text-xs text-muted-foreground',
-                  previewMode === 'edit' && editDocument.saveStatus === 'error' && 'text-destructive',
+                  editDocument.saveStatus === 'error' && 'text-destructive',
                 )}>
                   {compactPreviewCaption}
                 </div>
               </div>
-              {ratingMode ? null : renderPreviewControls(true)}
             </div>
             {renderMindMapContent()}
           </div>
@@ -1024,7 +941,7 @@ export function PalaceMemoryLookupDialog({
       }} modal={false}>
         <DialogContent
           layout="unstyled"
-          className="fixed z-[241] rounded-lg border border-border/80 bg-card/98 shadow-2xl backdrop-blur"
+          className="fixed z-[241] rounded-lg border border-border/80 bg-card/98 shadow-2xl"
         style={{
           left: layout.x,
           top: layout.y,
@@ -1040,7 +957,7 @@ export function PalaceMemoryLookupDialog({
             <div className="min-w-0 space-y-1">
               <DialogTitle className="text-base">查看记忆宫殿</DialogTitle>
               <DialogDescription className="text-xs">
-                做题时快速查看宫殿内容，关闭后继续当前题目。
+                做题时可直接查看和修改宫殿内容，关闭后继续当前题目。改动会自动保存。
               </DialogDescription>
             </div>
             <div className="flex shrink-0 items-center gap-1" data-memory-lookup-control="true">
@@ -1119,12 +1036,11 @@ export function PalaceMemoryLookupDialog({
                   </div>
                   <div className={cn(
                     'text-xs text-muted-foreground',
-                    previewMode === 'edit' && editDocument.saveStatus === 'error' && 'text-destructive',
+                    editDocument.saveStatus === 'error' && 'text-destructive',
                   )}>
                     {previewCaption}
                   </div>
                 </div>
-                {ratingMode ? null : renderPreviewControls()}
               </div>
 
               {renderMindMapContent()}

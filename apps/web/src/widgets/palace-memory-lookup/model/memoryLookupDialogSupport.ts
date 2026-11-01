@@ -7,7 +7,6 @@ import type {
 } from '@/shared/api/contracts'
 import { stripMindMapHtml } from '@/shared/lib/mindmapRichText'
 
-
 export function shouldBlockMemoryLookupClose(input: {
   nextOpen: boolean
   pinned: boolean
@@ -16,35 +15,29 @@ export function shouldBlockMemoryLookupClose(input: {
   return !input.nextOpen && (input.pinned || input.mindMapFullscreenActive)
 }
 
-export type MemoryLookupPreviewMode = 'view' | 'flip' | 'edit'
-
 export type MemoryLookupEditSaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
+/**
+ * The lookup is the normal palace editor (no view/flip modes), so the caption
+ * only reports what the first camera did and whether edits are saved.
+ */
 export function describeMemoryLookupPreview(input: {
-  mode: MemoryLookupPreviewMode
   centeredOnBinding: boolean
   centeredOnSearch?: boolean
   compact?: boolean
   saveStatus?: MemoryLookupEditSaveStatus
   saveError?: string
 }) {
-  if (input.mode === 'flip') {
-    return input.compact
-      ? '翻卡模式'
-      : '翻卡模式：点击已显示知识点展开下一层知识点，点击“待回忆”翻开内容。'
+  if (input.saveStatus === 'saving') {
+    return input.compact ? '正在保存修改…' : '正在保存修改。'
   }
-  if (input.mode === 'edit') {
-    if (input.saveStatus === 'saving') return '编辑模式：正在保存修改。'
-    if (input.saveStatus === 'error') {
-      const detail = input.saveError?.trim()
-      return detail ? `编辑模式：保存失败。${detail}` : '编辑模式：保存失败。'
-    }
-    return '编辑模式：直接修改节点，改动会自动保存。'
+  if (input.saveStatus === 'error') {
+    const detail = input.saveError?.trim()
+    return detail ? `保存失败。${detail}` : '保存失败。'
   }
-  if (input.centeredOnSearch) return '只读脑图预览 · 搜索命中已置于中央'
-  return input.centeredOnBinding
-    ? '只读脑图预览 · 绑定节点已置于中央'
-    : '只读脑图预览'
+  if (input.centeredOnSearch) return '搜索命中已置于中央 · 改动会自动保存'
+  if (input.centeredOnBinding) return '绑定节点已置于中央 · 改动会自动保存'
+  return input.compact ? '改动会自动保存' : '直接修改节点，改动会自动保存。'
 }
 
 export function createEmptyGroupedData(): PalaceGroupedListResponse {
@@ -238,61 +231,6 @@ export function findMemoryLookupKeywordHits(
     nodeUids,
     focusNodeUid: nodeUids.find((uid) => uid !== rootUid) ?? null,
   }
-}
-
-const KEYWORD_MARK_CLASS = 'rounded-sm bg-primary/30 px-0.5'
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-/**
- * Wrap keyword occurrences in the visible text of stored node markup.
- * Tags and entities are skipped so the markup stays valid.
- */
-export function markMemoryLookupKeywordInStoredText(storedText: string, keyword: string): string {
-  const needle = keyword.trim()
-  if (!needle) return storedText
-  const pattern = new RegExp(escapeRegExp(needle), 'giu')
-  return storedText
-    .split(/(<[^>]+>|&#?\w+;)/)
-    .map((part, index) => (
-      index % 2 === 1
-        ? part
-        : part.replace(pattern, (match) => `<mark class="${KEYWORD_MARK_CLASS}">${match}</mark>`)
-    ))
-    .join('')
-}
-
-/**
- * Display-only copy of the palace with the keyword marked on every hit node.
- * Returns the input state unchanged when nothing matches, so the surface keeps its identity.
- */
-export function buildMemoryLookupKeywordDisplayState(
-  editorState: MindMapEditorState | null,
-  query: string,
-): MindMapEditorState | null {
-  if (!editorState) return null
-  const { nodeUids } = findMemoryLookupKeywordHits(editorState, query)
-  if (nodeUids.length === 0) return editorState
-  const hitUids = new Set(nodeUids)
-  const doc: unknown = JSON.parse(JSON.stringify(editorState.editor_doc))
-  const visit = (node: unknown) => {
-    if (!node || typeof node !== 'object') return
-    const uid = editorNodeUid(node)
-    const data = (node as { data?: Record<string, unknown> }).data
-    if (uid && hitUids.has(uid) && data && typeof data.text === 'string') {
-      const marked = markMemoryLookupKeywordInStoredText(data.text, query)
-      if (marked !== data.text) {
-        data.text = marked
-        data.richText = true
-      }
-    }
-    const children = (node as { children?: unknown }).children
-    if (Array.isArray(children)) children.forEach(visit)
-  }
-  visit(editorDocRoot(doc))
-  return { ...editorState, editor_doc: doc as MindMapEditorState['editor_doc'] }
 }
 
 export interface MemoryLookupBindingLike {

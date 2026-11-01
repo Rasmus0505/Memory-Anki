@@ -39,18 +39,21 @@ describe('PalaceQuizPage core flows', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '查看记忆宫殿' }))
 
-    expect(await screen.findByText('做题时快速查看宫殿内容，关闭后继续当前题目。')).toBeTruthy()
+    expect(
+      await screen.findByText('做题时可直接查看和修改宫殿内容，关闭后继续当前题目。改动会自动保存。'),
+    ).toBeTruthy()
     await waitFor(() => {
       expect(getPalacesGroupedApiMock).toHaveBeenCalled()
       expect(getPalaceEditorApiMock).toHaveBeenCalledWith(1)
     })
+    // 默认就是编辑模式：没有模式切换，地图可编辑。
     expect((await screen.findByTestId('memory-lookup-mindmap')).getAttribute('data-readonly')).toBe(
-      'true',
+      'false',
     )
-    expect(screen.getByRole('button', { name: '查看模式' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: '翻卡模式' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: '编辑模式' })).toBeTruthy()
-    expect(screen.getByText('只读脑图预览')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '查看模式' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '翻卡模式' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '编辑模式' })).toBeNull()
+    expect(screen.getByText('直接修改节点，改动会自动保存。')).toBeTruthy()
     await waitFor(() => {
       expect(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-root-uid')).toBe(
         'root-1',
@@ -60,7 +63,7 @@ describe('PalaceQuizPage core flows', () => {
       expect.objectContaining({
         focusRequestNodeUid: 'root-1',
         focusRequestNonce: expect.any(Number),
-        forceExpanded: true,
+        forceExpanded: false,
         mobileViewPolicy: 'map',
       }),
     )
@@ -69,76 +72,12 @@ describe('PalaceQuizPage core flows', () => {
       'root-1',
     )
 
-    fireEvent.click(screen.getByRole('button', { name: '翻卡模式' }))
-    expect(screen.getByText(/翻卡模式：点击已显示知识点展开下一层知识点/)).toBeTruthy()
-    expect(screen.getByRole('button', { name: /重新开始/ })).toBeTruthy()
-    await waitFor(() => {
-      expect(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-practice-mode')).toBe(
-        'true',
-      )
-      expect(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-sync-reason')).toBe(
-        'review_flip',
-      )
-    })
-    // 渐进翻卡：进入时只显示根节点，后代保持隐藏 → 待回忆 → 翻开。
-    expect(screen.queryByText('细胞核知识点')).toBeNull()
-    expect(screen.queryByText('染色体线索')).toBeNull()
-
-    fireEvent.click(screen.getByTestId('memory-node-root-1'))
-    expect(await screen.findByText('待回忆')).toBeTruthy()
-    fireEvent.click(screen.getByTestId('memory-node-child-1'))
-    expect(await screen.findByText('细胞核知识点')).toBeTruthy()
-
-    // 再点已翻开的节点，下一层以“待回忆”出现，翻开后触发 card_reveal 反馈。
-    fireEvent.click(screen.getByTestId('memory-node-child-1'))
-    expect(await screen.findByText('待回忆')).toBeTruthy()
-    fireEvent.click(screen.getByTestId('memory-node-grandchild-1'))
-    await waitFor(() => {
-      expect(screen.getByText('染色体线索')).toBeTruthy()
-      expect(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-review-fx')).toBe(
-        'card_reveal',
-      )
-    })
-
-    // 右键收起分支：仅隐藏后代，当前节点保留。
-    fireEvent.contextMenu(screen.getByTestId('memory-node-child-1'))
-    await waitFor(() => {
-      expect(screen.queryByText('染色体线索')).toBeNull()
-    })
-    expect(screen.getByText('细胞核知识点')).toBeTruthy()
-
-    fireEvent.click(screen.getByRole('button', { name: '查看模式' }))
-    await waitFor(() => {
-      expect(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-practice-mode')).toBe(
-        'false',
-      )
-    })
-
-    fireEvent.click(screen.getByRole('button', { name: '编辑模式' }))
-    expect(screen.getByText('编辑模式：直接修改节点，改动会自动保存。')).toBeTruthy()
-    await waitFor(() => {
-      expect(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-readonly')).toBe(
-        'false',
-      )
-    })
-    expect(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-doc-root-uid')).toBe(
-      'root-1',
-    )
-    fireEvent.click(screen.getByRole('button', { name: '查看模式' }))
-    await waitFor(() => {
-      expect(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-readonly')).toBe(
-        'true',
-      )
-    })
-    expect(screen.getByText('只读脑图预览')).toBeTruthy()
-
     fireEvent.click(screen.getByRole('button', { name: '缩小为胶囊' }))
     expect(await screen.findByRole('button', { name: '打开记忆宫殿查看' })).toBeTruthy()
-    expect(screen.queryByText('只读脑图预览')).toBeNull()
     expect(screen.getByText('细胞的控制中心是？')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: '打开记忆宫殿查看' }))
-    expect(await screen.findByText('只读脑图预览')).toBeTruthy()
+    expect(await screen.findByText('直接修改节点，改动会自动保存。')).toBeTruthy()
     const firstFocusNonce = Number(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-focus-nonce'))
 
     // The left column is the 学科 › 章节 › 宫殿 directory now: a palace row only
@@ -172,7 +111,7 @@ describe('PalaceQuizPage core flows', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '查看记忆宫殿' }))
 
-    expect(await screen.findByText('做题时快速查看宫殿内容，关闭后继续当前题目。')).toBeTruthy()
+    expect(await screen.findByText('做题时可直接查看和修改宫殿内容，关闭后继续当前题目。改动会自动保存。')).toBeTruthy()
     await waitFor(() => {
       expect(listQuestionNodeBindingsApiMock).toHaveBeenCalledWith(11)
       expect(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-doc-root-uid')).toBe(
@@ -185,10 +124,11 @@ describe('PalaceQuizPage core flows', () => {
     expect(mindMapFramePropsMock).toHaveBeenCalledWith(
       expect.objectContaining({
         focusRequestNodeUid: 'child-1',
-        forceExpanded: true,
+        initialFocusNodeUid: 'child-1',
+        forceExpanded: false,
       }),
     )
-    expect(screen.getByText('只读脑图预览 · 绑定节点已置于中央')).toBeTruthy()
+    expect(screen.getByText('绑定节点已置于中央 · 改动会自动保存')).toBeTruthy()
     expect(screen.getByTestId('memory-node-root-1')).toBeTruthy()
     expect(screen.getByTestId('memory-node-child-1')).toBeTruthy()
     expect(screen.getByTestId('memory-node-grandchild-1')).toBeTruthy()
@@ -220,10 +160,11 @@ describe('PalaceQuizPage core flows', () => {
     expect(mindMapFramePropsMock).toHaveBeenCalledWith(
       expect.objectContaining({
         focusRequestNodeUid: 'grandchild-1',
+        initialFocusNodeUid: 'grandchild-1',
         highlightedNodeUids: ['grandchild-1'],
       }),
     )
-    expect(screen.getByText('只读脑图预览 · 绑定节点已置于中央')).toBeTruthy()
+    expect(screen.getByText('绑定节点已置于中央 · 改动会自动保存')).toBeTruthy()
     expect(screen.getByTestId('memory-node-root-1')).toBeTruthy()
     expect(screen.getByTestId('memory-node-grandchild-1')).toBeTruthy()
   })
@@ -251,12 +192,12 @@ describe('PalaceQuizPage core flows', () => {
     fireEvent.click(screen.getByRole('button', { name: '查看记忆宫殿' }))
 
     expect(await screen.findByRole('button', { name: '关闭记忆宫殿查看' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: '查看模式' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: '编辑模式' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '查看模式' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '编辑模式' })).toBeNull()
     expect(screen.queryByRole('button', { name: '从右下角调整记忆宫殿查看大小' })).toBeNull()
     await waitFor(() => {
       expect(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-readonly')).toBe(
-        'true',
+        'false',
       )
       expect(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-doc-root-uid')).toBe(
         'root-1',
@@ -265,7 +206,7 @@ describe('PalaceQuizPage core flows', () => {
         'child-1',
       )
     })
-    expect(screen.getByText('只读脑图预览 · 绑定节点已置于中央')).toBeTruthy()
+    expect(screen.getByText('绑定节点已置于中央 · 改动会自动保存')).toBeTruthy()
     expect(screen.getByTestId('memory-node-root-1')).toBeTruthy()
     expect(screen.getByTestId('memory-node-child-1')).toBeTruthy()
   })

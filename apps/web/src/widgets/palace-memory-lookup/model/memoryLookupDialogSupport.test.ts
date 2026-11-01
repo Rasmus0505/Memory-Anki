@@ -1,11 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import {
-  buildMemoryLookupKeywordDisplayState,
   collectMemoryLookupFocusNodeUids,
   describeMemoryLookupPreview,
   findMemoryLookupKeywordHits,
-  markMemoryLookupKeywordInStoredText,
   pickMemoryLookupBinding,
   resolveMemoryLookupFocusNodeUid,
   resolveMemoryLookupPalaceId,
@@ -40,27 +38,27 @@ function editorStateWithTree(
 }
 
 describe('memory lookup preview caption', () => {
-  it('describes view, flip, and edit without clipping the palace', () => {
+  it('reports the edit session and the bound-card camera without modes', () => {
     expect(describeMemoryLookupPreview({
-      mode: 'view',
       centeredOnBinding: true,
-    })).toBe('只读脑图预览 · 绑定节点已置于中央')
+    })).toBe('绑定节点已置于中央 · 改动会自动保存')
     expect(describeMemoryLookupPreview({
-      mode: 'flip',
-      centeredOnBinding: false,
-      compact: true,
-    })).toBe('翻卡模式')
-    expect(describeMemoryLookupPreview({
-      mode: 'edit',
       centeredOnBinding: false,
       saveStatus: 'saving',
-    })).toBe('编辑模式：正在保存修改。')
+    })).toBe('正在保存修改。')
     expect(describeMemoryLookupPreview({
-      mode: 'edit',
+      centeredOnBinding: false,
+      saveStatus: 'saving',
+      compact: true,
+    })).toBe('正在保存修改…')
+    expect(describeMemoryLookupPreview({
       centeredOnBinding: false,
       saveStatus: 'error',
       saveError: '版本冲突',
-    })).toBe('编辑模式：保存失败。版本冲突')
+    })).toBe('保存失败。版本冲突')
+    expect(describeMemoryLookupPreview({
+      centeredOnBinding: false,
+    })).toBe('直接修改节点，改动会自动保存。')
   })
 })
 
@@ -255,38 +253,9 @@ describe('lookup keyword center and mark', () => {
     expect(findMemoryLookupKeywordHits(null, '完全')).toEqual({ nodeUids: [], focusNodeUid: null })
   })
 
-  it('marks the keyword inside tags-free and tagged node text without touching tags or entities', () => {
-    expect(markMemoryLookupKeywordInStoredText('完全中学', '完全中学')).toBe(
-      '<mark class="rounded-sm bg-primary/30 px-0.5">完全中学</mark>',
-    )
-    expect(
-      markMemoryLookupKeywordInStoredText('<span data-emphasis="highlight">完全中学</span>的', '完全'),
-    ).toBe('<span data-emphasis="highlight"><mark class="rounded-sm bg-primary/30 px-0.5">完全</mark>中学</span>的')
-    expect(markMemoryLookupKeywordInStoredText('a&amp;b', 'amp')).toBe('a&amp;b')
-    expect(markMemoryLookupKeywordInStoredText('a.b', '.')).toBe(
-      'a<mark class="rounded-sm bg-primary/30 px-0.5">.</mark>b',
-    )
-  })
-
-  it('builds a display copy that marks hits and leaves the stored document untouched', () => {
-    const display = buildMemoryLookupKeywordDisplayState(state, '完全中学')
-    const marked = (display?.editor_doc as { root: { children: Array<{ data: Record<string, unknown> }> } }).root.children[0]
-    expect(marked.data.text).toContain('<mark class="rounded-sm bg-primary/30 px-0.5">完全中学</mark>')
-    expect(marked.data.richText).toBe(true)
-    expect((state.editor_doc as typeof doc).root.children[0].data.text).toBe(
-      '改组后的<span data-emphasis="highlight">完全中学</span>',
-    )
-    expect(display).not.toBe(state)
-  })
-
-  it('returns the same state when nothing matches so the surface keeps its identity', () => {
-    expect(buildMemoryLookupKeywordDisplayState(state, '不存在')).toBe(state)
-    expect(buildMemoryLookupKeywordDisplayState(null, '完全')).toBeNull()
-  })
-
   it('names the search centre in the caption', () => {
     expect(
-      describeMemoryLookupPreview({ mode: 'view', centeredOnBinding: false, centeredOnSearch: true }),
-    ).toBe('只读脑图预览 · 搜索命中已置于中央')
+      describeMemoryLookupPreview({ centeredOnBinding: false, centeredOnSearch: true }),
+    ).toBe('搜索命中已置于中央 · 改动会自动保存')
   })
 })

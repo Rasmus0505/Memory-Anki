@@ -209,6 +209,24 @@ describe('mindMapCollapse', () => {
     expect(next.has('new-c')).toBe(false)
   })
 
+  it('keeps a newly inserted wrapper open around an existing branch', () => {
+    const base = largeDeepTree(AUTO_COLLAPSE_MIN_NODES + 5)
+    const knownNodeIds = new Set(base.map((item) => item.id))
+    const anchor = base.find(
+      (item) => item.id !== 'root' && item.parentId !== 'root' && base.some((child) => child.parentId === item.id),
+    )!.id
+    const existingChild = base.find((item) => item.parentId === anchor)!.id
+    const inserted = [
+      ...base.filter((item) => item.id !== existingChild),
+      node('inserted-wrapper', anchor),
+      node(existingChild, 'inserted-wrapper'),
+    ]
+
+    const next = reconcileCollapsedNodeIds(new Set(), inserted, { knownNodeIds })
+
+    expect(next.has('inserted-wrapper')).toBe(false)
+  })
+
   it('toggle and expand-ancestors work together', () => {
     const nodes = sampleTree()
     let collapsed = new Set(['l1a', 'l2a'])

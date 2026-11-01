@@ -769,6 +769,7 @@ export function NodeBoundQuizDialog({
         onConfirm={handleClearChoice}
       />
       <PalaceMemoryLookupDialog
+        key={palaceLookupOpen ? `view-lookup-${current?.id ?? 'none'}` : 'view-lookup-closed'}
         open={palaceLookupOpen}
         onOpenChange={setPalaceLookupOpen}
         currentPalaceId={palaceId}

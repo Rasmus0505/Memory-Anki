@@ -480,6 +480,7 @@ export default function PalaceEdit() {
       <MindMapDocumentConflictDialog pendingConflict={page.pendingConflict} resolveConflict={page.resolveConflict} />
       {mindMapFileTransfer.input}
       <PalaceMemoryLookupDialog
+        key={memoryLookupOpen ? 'palace-lookup' : 'palace-lookup-closed'}
         open={memoryLookupOpen}
         onOpenChange={setMemoryLookupOpen}
         currentPalaceId={page.palaceId}

@@ -32,7 +32,6 @@ export function PalaceQuizPracticePanel({
   onNavigateFeedback,
   resetAttemptsLoading,
   onViewKnowledge,
-  palaceTitle = '',
   comboScopeKey = null,
 }: {
   questions: PalaceQuizQuestion[]
@@ -60,7 +59,6 @@ export function PalaceQuizPracticePanel({
   onNavigateFeedback: (direction: 'prev' | 'next') => void
   resetAttemptsLoading: boolean
   onViewKnowledge?: (question: PalaceQuizQuestion) => void
-  palaceTitle?: string
   comboScopeKey?: string | null
 }) {
   return (
@@ -141,9 +139,8 @@ export function PalaceQuizPracticePanel({
         <div
           className="space-y-4"
           data-recorder-current="true"
-          data-recorder-place={[palaceTitle, currentQuestion.source_chapter?.name || currentQuestion.classified_chapter?.name].filter(Boolean).join(' / ') || '这道题'}
-          data-recorder-title={currentQuestion.stem}
-          data-recorder-excerpt={currentQuestion.stem}
+          data-recorder-context="quiz"
+          data-recorder-count={filteredQuestions.length}
         >
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/70 bg-card/90 px-4 py-3 text-sm">
             <div>

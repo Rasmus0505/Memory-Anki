@@ -135,6 +135,10 @@ export function reconcileCollapsedNodeIds(
     if (!knownNodeIds && previous.size === 0) continue
     const children = childrenByParent.get(node.id)
     if (!children?.length) continue
+    // A structural insert can create a new parent around children that were
+    // already visible. Keep that wrapper open so the existing branch does not
+    // suddenly disappear after the edit.
+    if (knownNodeIds && children.some((childId) => knownNodeIds.has(childId))) continue
     const depth = depthById.get(node.id) ?? 0
     if (depth >= maxExpandedDepth) next.add(node.id)
   }

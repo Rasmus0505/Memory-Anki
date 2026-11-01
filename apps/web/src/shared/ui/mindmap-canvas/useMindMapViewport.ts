@@ -77,6 +77,12 @@ interface UseMindMapViewportInput {
   sceneTransitionFit?: boolean
   /** Host fallback when the previous center card is absent from the next graph. */
   sceneTransitionFallbackNodeId?: string | null
+  /**
+   * One-shot first camera: center this card on the first measured canvas instead
+   * of fitting the whole graph. Host knows the target before the map mounts
+   * (查看宫殿 bound card), so no whole-tree fit or camera flight is needed.
+   */
+  initialFocusNodeId?: string | null
   viewCommand: MindMapCanvasViewCommand | null
   /** Host 刷新脑图 epoch — fit once after remount so blank off-screen maps recover. */
   hostRefreshEpoch?: number
@@ -96,6 +102,20 @@ function snapRestingViewport(viewport: Viewport): Viewport {
   return { ...viewport, x, y }
 }
 
+/** How long the first camera keeps correcting as the freshly mounted layout settles. */
+const INITIAL_FOCUS_SETTLE_MS = 1500
+
+/**
+ * React Flow's controlled-viewport sync reports a plain `{sync: true}` object as
+ * the move source, and it fires right after mount. Treating it as a user pan
+ * armed the manual-gesture lock, which made the initial bound-card centering
+ * silently bail out. Only real DOM events are learner gestures.
+ */
+function isUserCameraGesture(event: unknown): boolean {
+  return typeof Event !== 'undefined' && event instanceof Event
+}
+
+
 export function useMindMapViewport({
   canvasRef,
   controlledViewport,
@@ -111,6 +131,7 @@ export function useMindMapViewport({
   sceneTransitionKey = null,
   sceneTransitionFit = false,
   sceneTransitionFallbackNodeId = null,
+  initialFocusNodeId = null,
   viewCommand,
   hostRefreshEpoch = 0,
   preferredZoom: preferredZoomInput,
@@ -176,6 +197,15 @@ export function useMindMapViewport({
   const previousParentByIdRef = useRef<Map<string, string | null>>(new Map())
   const handledHostRefreshEpochRef = useRef(0)
   const hasHandledFirstCanvasSizeRef = useRef(false)
+  /** Mount-time camera target; only the first value is used. */
+  const initialFocusNodeIdRef = useRef(initialFocusNodeId)
+  const initialFocusCenteredAtRef = useRef<number | null>(null)
+  /**
+   * Initial focus must wait for React Flow to finish mounting its viewport.
+   * Applying it in the same commit ran before the viewport's own initialization,
+   * which then overwrote the camera with the default `{x:4,y:18,zoom:1}`.
+   */
+  const initialFocusPendingRef = useRef(false)
   /** Invalidates a scheduled first-size fitView when a host center command arrives. */
   const cameraCommandEpochRef = useRef(0)
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 })
@@ -351,7 +381,7 @@ export function useMindMapViewport({
     if (!preserveViewport) return
     // RF passes a DOM event for pointer/wheel pans; programmatic moves use null/undefined.
     // Also accept WheelEvent-like objects so panOnScroll does not get yanked by restore.
-    if (event) {
+    if (isUserCameraGesture(event)) {
       if (explicitViewportTimeoutRef.current !== null) {
         window.clearTimeout(explicitViewportTimeoutRef.current)
         explicitViewportTimeoutRef.current = null
@@ -422,7 +452,7 @@ export function useMindMapViewport({
     if (wheelReportIsStale(viewport)) return
     if (explicitViewportChangeRef.current) return
     // Wheel pan sometimes skips a solid moveStart; treat any event-backed move as manual.
-    if (event) {
+    if (isUserCameraGesture(event)) {
       if (!manualViewportGestureRef.current) {
         userGestureStartZoomRef.current = controlledViewportRef.current.zoom
       }
@@ -481,7 +511,7 @@ export function useMindMapViewport({
       userGestureZoomRef.current = null
       return
     }
-    if (event) {
+    if (isUserCameraGesture(event)) {
       if (!manualViewportGestureRef.current) {
         userGestureStartZoomRef.current = controlledViewportRef.current.zoom
       }
@@ -643,19 +673,48 @@ export function useMindMapViewport({
     (nodeId: string | null | undefined, duration = 240) => {
       if (!nodeId || !isCanvasReady) return
       const target = nodes.find((node) => node.id === nodeId)
-      if (!target) return
-      const size = getResolvedNodeSize(target, undefined, measuredNodeSizesRef.current)
+      if (!target) {
+        return
+      }
+      // Prefer the rendered card so the camera lands on its real middle:
+      // NodeCard sizes itself from its own text, which can be narrower than the
+      // layout estimate and leave the card visibly off-center.
+      const host = canvasRef.current
+      const shell = host
+        ? Array.from(host.querySelectorAll<HTMLElement>('[data-mindmap-node-id]'))
+          .find((element) => element.dataset.mindmapNodeId === nodeId)
+        : null
+      if (host && shell) {
+        const rect = shell.getBoundingClientRect()
+        const point = screenToFlowPosition({
+          x: rect.left + rect.width / 2,
+          y: rect.top + rect.height / 2,
+        })
+        runExplicitViewportChange(() => void setCenter(point.x, point.y, {
+          duration,
+          zoom: mobileGuidedActive ? MINDMAP_MOBILE_FIT_MAX_ZOOM : getViewport().zoom,
+        }), duration)
+        return
+      }
+      const measured = measuredNodeSizesRef.current.get(target.id)
+      const size = measured && measured.width > 0 && measured.height > 0
+        ? { width: Math.ceil(measured.width), height: Math.ceil(measured.height) }
+        : getResolvedNodeSize(target, undefined, measuredNodeSizesRef.current)
       runExplicitViewportChange(() => void setCenter(
         target.position.x + size.width / 2,
         target.position.y + size.height / 2,
         {
           duration,
           // Keep the user's zoom across scene switches; only mobile guided overrides it.
-          zoom: mobileGuidedActive ? MINDMAP_MOBILE_FIT_MAX_ZOOM : undefined,
+          // React Flow defaults an omitted zoom to maxZoom, which jumped the map to
+          // 1.4 on the first center instead of leaving it at the learner's zoom.
+          zoom: mobileGuidedActive
+            ? MINDMAP_MOBILE_FIT_MAX_ZOOM
+            : controlledViewportRef.current.zoom,
         },
       ), duration)
     },
-    [isCanvasReady, measuredNodeSizesRef, mobileGuidedActive, nodes, runExplicitViewportChange, setCenter],
+    [canvasRef, getViewport, isCanvasReady, measuredNodeSizesRef, mobileGuidedActive, nodes, runExplicitViewportChange, screenToFlowPosition, setCenter],
   )
 
   const revealNodesIntoView = useCallback((nodeIds: readonly string[]) => {
@@ -810,6 +869,22 @@ export function useMindMapViewport({
     sceneTransitionFallbackNodeId,
   ])
 
+  // The first center lands on an estimated card size; the layout then settles as
+  // cards measure and can nudge the bound card off middle. Re-center while that
+  // settles, but never fight a learner who already grabbed the camera.
+  useLayoutEffect(() => {
+    const centeredAt = initialFocusCenteredAtRef.current
+    if (centeredAt == null || !isCanvasReady) return
+    if (performance.now() - centeredAt > INITIAL_FOCUS_SETTLE_MS) {
+      initialFocusCenteredAtRef.current = null
+      return
+    }
+    if (manualViewportGestureRef.current) return
+    const nodeId = initialFocusNodeIdRef.current
+    if (!nodeId || !nodes.some((node) => node.id === nodeId)) return
+    centerNodeInCanvas(nodeId, 0)
+  }, [centerNodeInCanvas, isCanvasReady, layoutFingerprint, nodes])
+
   // First positive canvas size: fit a still-default camera so the tree is not a
   // tiny origin square. Keep a user/restored camera after remount or pan/zoom.
   // A pending center viewCommand owns the first camera — do not fit the whole
@@ -819,6 +894,16 @@ export function useMindMapViewport({
     if (hasHandledFirstCanvasSizeRef.current) return
     if (manualViewportGestureRef.current) {
       hasHandledFirstCanvasSizeRef.current = true
+      return
+    }
+    const initialFocusId = initialFocusNodeIdRef.current
+    if (initialFocusId && nodes.some((node) => node.id === initialFocusId)) {
+      // The host already knows the card to open on (查看宫殿 bound card): land on
+      // it directly. Fitting the whole palace first would mount the entire tree
+      // only to fly away from it — the stutter this branch exists to remove.
+      hasHandledFirstCanvasSizeRef.current = true
+      cameraCommandEpochRef.current += 1
+      initialFocusPendingRef.current = true
       return
     }
     if (!isPristineMindMapViewport(controlledViewportRef.current, preferredZoomInput)) {
@@ -873,6 +958,50 @@ export function useMindMapViewport({
     syncPreferredZoom,
     viewCommand,
   ])
+
+  // React Flow initializes its viewport while it mounts. A center applied before
+  // that initialization is silently dropped, which is how the bound card ended up
+  // off-center on the default {x:4,y:18,zoom:1} camera in the built app. Land on
+  // the card and verify against its rendered box; retry a few frames until React
+  // Flow accepts the camera (or the learner takes over).
+  useEffect(() => {
+    if (!initialFocusPendingRef.current || !isCanvasReady) return
+    const nodeId = initialFocusNodeIdRef.current
+    if (!nodeId || !nodes.some((node) => node.id === nodeId)) return
+    let frame = 0
+    let attempts = 0
+    const isCentered = () => {
+      const host = canvasRef.current
+      if (!host) return false
+      const shell = Array.from(host.querySelectorAll<HTMLElement>('[data-mindmap-node-id]'))
+        .find((element) => element.dataset.mindmapNodeId === nodeId)
+      if (!shell) return false
+      const rect = shell.getBoundingClientRect()
+      const hostRect = host.getBoundingClientRect()
+      return (
+        Math.abs(rect.left + rect.width / 2 - (hostRect.left + hostRect.width / 2)) <= 3
+        && Math.abs(rect.top + rect.height / 2 - (hostRect.top + hostRect.height / 2)) <= 3
+      )
+    }
+    const attempt = () => {
+      if (!initialFocusPendingRef.current) return
+      if (manualViewportGestureRef.current) {
+        initialFocusPendingRef.current = false
+        return
+      }
+      cameraCommandEpochRef.current += 1
+      centerNodeInCanvas(nodeId, 0)
+      attempts += 1
+      if (isCentered() || attempts >= 60) {
+        initialFocusPendingRef.current = false
+        initialFocusCenteredAtRef.current = performance.now()
+        return
+      }
+      frame = requestAnimationFrame(attempt)
+    }
+    frame = requestAnimationFrame(attempt)
+    return () => window.cancelAnimationFrame(frame)
+  }, [canvasRef, centerNodeInCanvas, isCanvasReady, nodes])
 
   useLayoutEffect(() => {
     // Structure / graph payload changes re-layout nodes; keep the locked camera.

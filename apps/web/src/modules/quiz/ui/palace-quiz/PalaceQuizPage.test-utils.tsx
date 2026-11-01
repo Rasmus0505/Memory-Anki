@@ -39,6 +39,7 @@ function collectMindMapNodes(root: any): Array<{ uid: string; text: string }> {
 }
 
 vi.mock('@/modules/content/domain/palace-entity/api', () => ({
+  PALACE_CATALOG_INVALIDATED_EVENT: 'memory-anki:palace-catalog-invalidated',
   getPalaceApi: (...args: unknown[]) => getPalaceApiMock(...args),
   getPalacesGroupedApi: (...args: unknown[]) => getPalacesGroupedApiMock(...args),
   getPalaceEditorApi: (...args: unknown[]) => getPalaceEditorApiMock(...args),
@@ -115,6 +116,8 @@ vi.mock('@/modules/quiz/domain/quiz-entity/api', () => ({
     resetPalaceQuizQuestionAttemptsApiMock(...args),
   listQuestionNodeBindingsApi: (...args: unknown[]) =>
     listQuestionNodeBindingsApiMock(...args),
+  listPalaceQuizNodeBindingsApi: vi.fn(async () => ({ items: [] })),
+  listPalaceUnitPassStatesApi: vi.fn(async () => ({ items: [] })),
   requestPalaceShortAnswerFeedbackApi: (...args: unknown[]) =>
     requestPalaceShortAnswerFeedbackApiMock(...args),
 }))

@@ -11,6 +11,8 @@ import {
 interface UseMindMapSurfaceViewCommandsOptions {
   focusRequestNodeUid: string | null
   focusRequestNonce: number
+  /** Card the mount camera already centered; the first request for it is a no-op. */
+  initialFocusNodeUid?: string | null
   revealFollowNodeIds: readonly string[]
   revealFollowNonce: number
   interactionRef: MutableRefObject<MindMapInteractionState>
@@ -23,6 +25,7 @@ interface UseMindMapSurfaceViewCommandsOptions {
 export function useMindMapSurfaceViewCommands({
   focusRequestNodeUid,
   focusRequestNonce,
+  initialFocusNodeUid = null,
   revealFollowNodeIds,
   revealFollowNonce,
   interactionRef,
@@ -35,6 +38,8 @@ export function useMindMapSurfaceViewCommands({
   const viewCommandNonceRef = useRef(0)
   const handledFocusRequestNonceRef = useRef(0)
   const handledRevealFollowNonceRef = useRef(0)
+  /** The mount camera already centered this card; do not animate to it again. */
+  const initialFocusHandledRef = useRef(initialFocusNodeUid)
 
   const requestFocusNode = useCallback(
     (nodeUid: string | null) => {
@@ -43,6 +48,12 @@ export function useMindMapSurfaceViewCommands({
       replaceInteraction(nodeUid ? selectedInteraction(nodeUid) : { mode: 'idle' })
       onNodeActiveRef.current?.(buildSelectionFromDoc(getCurrentEditorDoc(), nodeUid))
       if (!nodeUid) return
+      if (initialFocusHandledRef.current === nodeUid) {
+        // The first-size camera already landed on this card; a second center
+        // would animate zero distance and keep the camera locked for 220ms.
+        initialFocusHandledRef.current = null
+        return
+      }
       viewCommandNonceRef.current += 1
       setViewCommand({
         type: 'center',

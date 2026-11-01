@@ -157,6 +157,13 @@ export interface MindMapCanvasProps {
   sceneTransitionFit?: boolean
   /** Host fallback card when the previous center node is missing after a scene switch. */
   sceneTransitionFallbackNodeId?: string | null
+  /**
+   * One-shot first camera: center this card on the first measured canvas instead
+   * of fitting the whole graph. A host that already knows its target (e.g. the
+   * bound card in 查看宫殿) uses it to skip the whole-tree fit and the camera
+   * flight that follows it.
+   */
+  initialFocusNodeId?: string | null
   /** Host English interaction mode: clickable words + long-press selection (no flip). */
   englishInteractionActive?: boolean
   onEnglishWordClick?: (word: string, event: import('react').MouseEvent<HTMLElement>) => void

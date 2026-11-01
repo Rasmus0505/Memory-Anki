@@ -102,6 +102,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   onStatusChipClick,
   focusRequestNodeUid = null,
   focusRequestNonce = 0,
+  initialFocusNodeUid = null,
   revealFollowNodeIds = EMPTY_UIDS,
   revealFollowNonce = 0,
   reviewFxSignal = null,
@@ -426,6 +427,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   const { viewCommand, requestFocusNode, requestFitView } = useMindMapSurfaceViewCommands({
     focusRequestNodeUid,
     focusRequestNonce,
+    initialFocusNodeUid,
     revealFollowNodeIds,
     revealFollowNonce,
     interactionRef,
@@ -643,6 +645,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
         allowAddChildNodeIds={branchScope ? [branchScope.branchUid] : undefined}
         sceneTransitionFit={initialViewPolicy === 'reset'}
         sceneTransitionFallbackNodeId={sceneTransitionFallbackNodeId}
+        initialFocusNodeId={initialFocusNodeUid}
         englishInteractionActive={englishInteractionActive} onEnglishWordClick={onEnglishWordClick}
         textSelectionModeActive={textSelectionModeActive}
         keyboardViewPan={keyboardViewPan}

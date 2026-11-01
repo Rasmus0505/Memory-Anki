@@ -204,6 +204,7 @@ export function useMindMapCanvasState(
     allowAddChildNodeIds,
     sceneTransitionFit = false,
     sceneTransitionFallbackNodeId = null,
+    initialFocusNodeId = null,
     englishInteractionActive = false,
     textSelectionModeActive = false,
     onEnglishWordClick,
@@ -239,16 +240,28 @@ export function useMindMapCanvasState(
     if (!lockedStructureUidSet.has(nodeId)) return true
     return allowAddChildUidSet.has(nodeId)
   }, [allowAddChildUidSet, lockedStructureUidSet])
+  // A host-provided first camera target must be visible when the first layout
+  // runs, or the initial center has nothing to land on and the branch stays
+  // folded. Keep its ancestors open in every fold seed below.
+  const revealInitialFocusAncestors = useCallback(
+    (collapsed: Set<string> | null | undefined) => {
+      if (!collapsed || !initialFocusNodeId) return collapsed ?? null
+      return expandAncestorsForNode(graphData.nodes, collapsed, initialFocusNodeId)
+    },
+    [graphData.nodes, initialFocusNodeId],
+  )
   const [collapsedNodeIds, setCollapsedNodeIds] = useState<Set<string>>(() =>
-    resolveCollapseTransition({
-      previousCollapsed: new Set(),
-      previousSignature: '',
-      nodes: graphData.nodes,
-      knownNodeIds: new Set(),
-      practiceModeActive,
-      forceExpanded,
-      revealCollapsedNodeIds,
-    }).collapsed ?? new Set(),
+    revealInitialFocusAncestors(
+      resolveCollapseTransition({
+        previousCollapsed: new Set(),
+        previousSignature: '',
+        nodes: graphData.nodes,
+        knownNodeIds: new Set(),
+        practiceModeActive,
+        forceExpanded,
+        revealCollapsedNodeIds,
+      }).collapsed ?? new Set(),
+    ) ?? new Set(),
   )
   const collapsedNodeIdsRef = useRef(collapsedNodeIds)
   collapsedNodeIdsRef.current = collapsedNodeIds
@@ -344,6 +357,7 @@ export function useMindMapCanvasState(
     sceneTransitionKey,
     sceneTransitionFit,
     sceneTransitionFallbackNodeId,
+    initialFocusNodeId,
     viewCommand,
     hostRefreshEpoch,
     setNodeSizeVersion,
@@ -371,8 +385,8 @@ export function useMindMapCanvasState(
     collapsedSignatureRef.current = transition.signature
     knownCollapseNodeIdsRef.current = transition.knownNodeIds
     if (!transition.collapsed) return
-    setCollapsedNodeIds(transition.collapsed)
-  }, [forceExpanded, graphData.nodes, practiceModeActive, revealCollapsedNodeIds])
+    setCollapsedNodeIds(revealInitialFocusAncestors(transition.collapsed) ?? new Set())
+  }, [forceExpanded, graphData.nodes, practiceModeActive, revealCollapsedNodeIds, revealInitialFocusAncestors])
 
   /**
    * Re-entry fold reset. The router keeps recently visited pages mounted, so
@@ -395,13 +409,14 @@ export function useMindMapCanvasState(
     })
     collapsedSignatureRef.current = transition.signature
     knownCollapseNodeIdsRef.current = transition.knownNodeIds
-    setCollapsedNodeIds(transition.collapsed ?? new Set())
+    setCollapsedNodeIds(revealInitialFocusAncestors(transition.collapsed ?? new Set()) ?? new Set())
   }, [
     collapseResetKey,
     forceExpanded,
     graphData.nodes,
     practiceModeActive,
     revealCollapsedNodeIds,
+    revealInitialFocusAncestors,
   ])
 
   // Expand ancestors when host selects a node that would otherwise be hidden.

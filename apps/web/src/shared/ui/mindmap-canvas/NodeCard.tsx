@@ -40,7 +40,6 @@ import {
   buildNodeCardTextClassNames,
   nodeProgressBackgroundImage,
   resolveNodeRawText,
-  richDocumentPlainText,
   type NodeCardData,
 } from './nodeCardModel'
 import { noteCardEditStarted } from './cardEditGesture'
@@ -59,10 +58,6 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   const isRichNode = Boolean(metadata.richText) || hasHighlightMarkup(rawNodeText)
   const displayHtml = isRichNode ? sanitizeMindMapRichHtml(rawNodeText) : ''
   const plainLabel = stripMindMapHtml(nodeData.label) || nodeData.label || ''
-  // Recorder focus: a click on this node names it in the diagnosis brief.
-  const recorderPlace = depth === 0 ? '思维导图中心' : `第 ${depth + 1} 层`
-  const recorderTitle = stripMindMapHtml(rawNodeText).slice(0, 80)
-  const recorderExcerpt = metadata.articleBody ? richDocumentPlainText(metadata.articleBody) : ''
   const [localEdit, setLocalEdit] = useState(false)
   const [editText, setEditText] = useState(rawNodeText)
   const [imeComposing, setImeComposing] = useState(false)
@@ -563,16 +558,17 @@ function MindMapNodeCard({ data, id }: NodeProps) {
       onPointerCancel={longPress.finishPointerInteraction}
       data-mindmap-node-id={id}
       data-recorder-focus="true"
-      data-recorder-place={recorderPlace}
-      data-recorder-title={recorderTitle}
-      data-recorder-excerpt={recorderExcerpt}
+      data-recorder-context="mindmap"
       data-node-mode={nodeMode}
       className={[
         'mindmap-node-shell group relative',
         canStructureDrag ? 'mindmap-node-drag-surface cursor-grab active:cursor-grabbing' : '',
         previewShifted ? 'translate-y-2' : '',
         previewGhost ? 'opacity-35 scale-[0.97]' : '',
-        visual.highlighted ? 'ring-4 ring-warning/45 rounded-2xl' : '',
+        // Bound card in 查看宫殿 / keyword hit: unmistakable even on a busy map.
+        visual.highlighted
+          ? 'rounded-2xl ring-[3px] ring-warning/75 shadow-[0_0_0_4px_rgba(245,158,11,0.16),0_0_22px_rgba(245,158,11,0.25)]'
+          : '',
         visual.muted && !previewGhost ? 'opacity-60' : '',
       ].filter(Boolean).join(' ')}
       style={{

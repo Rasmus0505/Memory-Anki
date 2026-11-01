@@ -434,7 +434,7 @@ describe('useMindMapViewport scene transition', () => {
     expect(reactFlowMock.setCenter).toHaveBeenCalledWith(
       450,
       420,
-      expect.objectContaining({ duration: 180, zoom: undefined }),
+      expect.objectContaining({ duration: 180, zoom: 0.5 }),
     )
     expect(reactFlowMock.fitView).not.toHaveBeenCalled()
   })
@@ -503,7 +503,7 @@ describe('useMindMapViewport scene transition', () => {
     expect(reactFlowMock.setCenter).toHaveBeenCalledWith(
       250,
       220,
-      expect.objectContaining({ duration: 180, zoom: undefined }),
+      expect.objectContaining({ duration: 180, zoom: 0.5 }),
     )
     expect(reactFlowMock.fitView).not.toHaveBeenCalled()
   })
@@ -582,5 +582,37 @@ describe('useMindMapViewport fit padding', () => {
       padding: MINDMAP_BRANCH_FIT_PADDING,
       maxZoom: MINDMAP_FIT_MAX_ZOOM,
     }))
+  })
+})
+
+describe('useMindMapViewport initial focus', () => {
+  beforeEach(() => {
+    reactFlowMock.fitView.mockClear()
+    reactFlowMock.setCenter.mockClear()
+  })
+
+  it('lands on the host card on the first canvas instead of fitting the palace', async () => {
+    const props = buildProps({
+      canvasRef: canvasHost(),
+      // Pristine camera: the first canvas would otherwise fit the whole tree.
+      controlledViewport: { x: 4, y: 18, zoom: 1 },
+      graphNodes: [graphNode('root', null), graphNode('bound', 'root')],
+      nodes: [flowNode('root', 0, 0), flowNode('bound', 300, 400)],
+      initialFocusNodeId: 'bound',
+    })
+    const { result } = renderHook((nextProps) => useMindMapViewport(nextProps), {
+      initialProps: props,
+    })
+
+    await waitFor(() => expect(result.current.isCanvasReady).toBe(true))
+    await waitFor(() => expect(reactFlowMock.setCenter).toHaveBeenCalled())
+    const [centerX, centerY, options] = reactFlowMock.setCenter.mock.calls[0]!
+    // The card's own center, not the graph center / default pristine camera.
+    expect(centerX).toBeGreaterThan(300)
+    expect(centerX).toBeLessThan(400)
+    expect(centerY).toBeGreaterThan(400)
+    expect(centerY).toBeLessThan(440)
+    expect(options).toMatchObject({ duration: 0 })
+    expect(reactFlowMock.fitView).not.toHaveBeenCalled()
   })
 })
