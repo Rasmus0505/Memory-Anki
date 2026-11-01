@@ -1,5 +1,6 @@
 import { SlidersHorizontal, type List } from 'lucide-react'
 import { Button } from '@/shared/components/ui/button'
+import { MOBILE_SHEET_BOTTOM_CLASS } from '@/shared/components/ui/mobile-sheet'
 import {
   Sheet,
   SheetContent,
@@ -109,7 +110,7 @@ export function PalaceViewSheet({
       </SheetTrigger>
       <SheetContent
         side="bottom"
-        className="max-h-[85dvh] overflow-y-auto rounded-t-3xl p-0 pb-[max(env(safe-area-inset-bottom),1rem)]"
+        className={cn(MOBILE_SHEET_BOTTOM_CLASS, 'overflow-y-auto rounded-t-3xl')}
       >
         <SheetHeader className="border-b border-border/70 px-5 pb-3 pr-14 pt-5">
           <SheetTitle>{title}</SheetTitle>
