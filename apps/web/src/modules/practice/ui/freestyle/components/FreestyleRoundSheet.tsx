@@ -29,6 +29,7 @@ import {
   visualPlanStatus,
   type FreestyleProgressSegment,
 } from '@/modules/practice/ui/freestyle/model/freestyleProgressSegments'
+import { MOBILE_SHEET_BOTTOM_CLASS } from '@/shared/components/ui/mobile-sheet'
 import { applyServerRoundProgress } from '@/modules/practice/ui/freestyle/model/freestyleProgressFromServer'
 import { beijingStudyDay } from '@/shared/lib/dateTime'
 import { Button } from '@/shared/components/ui/button'
@@ -591,7 +592,7 @@ export function FreestyleRoundSheet({
       <SheetContent
         side="bottom"
         data-testid="freestyle-round-sheet"
-        className="flex max-h-[min(70dvh,100dvh-2rem)] flex-col gap-0 rounded-t-2xl p-0"
+        className={cn(MOBILE_SHEET_BOTTOM_CLASS, 'gap-0 rounded-t-2xl sm:max-h-[min(70dvh,100dvh-2rem)]')}
       >
         <SheetHeader className="shrink-0 space-y-1 border-b border-border/60 px-4 py-3 pr-12 text-left sm:px-5 sm:pr-14">
           <div className="flex flex-wrap items-center justify-between gap-2">

@@ -10,6 +10,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from '@/shared/components/ui/dialog'
+import { MobileSheetHeader } from '@/shared/components/ui/mobile-sheet'
 import { cn } from '@/shared/lib/utils'
 
 /**
@@ -93,7 +94,7 @@ export function QuizKnowledgeDigressionDialog({
           'fixed inset-0 z-[250] flex h-[100dvh] w-screen max-w-none flex-col overflow-hidden rounded-none border-0 bg-card p-0 shadow-2xl',
         )}
       >
-        <div className="flex shrink-0 items-center gap-3 border-b border-border/70 bg-card/95 px-3 pb-3 pt-[max(env(safe-area-inset-top),0.75rem)] backdrop-blur">
+        <MobileSheetHeader className="bg-card/95 gap-3 px-3 backdrop-blur">
           <Button
             type="button"
             size="lg"
@@ -109,7 +110,7 @@ export function QuizKnowledgeDigressionDialog({
               {edge?.node_text || nodeUid || '只读导图 · 关闭后继续做题'}
             </DialogDescription>
           </div>
-        </div>
+        </MobileSheetHeader>
 
         <div className="min-h-0 flex-1 overflow-hidden bg-[var(--memory-anki-mindmap-canvas)]">
           {loading ? (

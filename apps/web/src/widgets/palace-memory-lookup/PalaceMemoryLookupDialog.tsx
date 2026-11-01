@@ -42,6 +42,7 @@ import {
 } from '@/widgets/palace-memory-lookup/model/memoryLookupLayout'
 import { MindMapEditorSurface } from '@/modules/content/public'
 import { Button } from '@/shared/components/ui/button'
+import { MobileSheetHeader } from '@/shared/components/ui/mobile-sheet'
 import {
   Dialog,
   DialogContent,
@@ -816,7 +817,7 @@ export function PalaceMemoryLookupDialog({
         layout="unstyled"
         className="fixed inset-0 z-[241] flex h-[100dvh] w-screen max-w-none flex-col overflow-hidden rounded-none border-0 bg-card shadow-2xl lg:hidden"
       >
-        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border/70 px-4 pb-3 pt-[max(env(safe-area-inset-top),0.75rem)]">
+        <MobileSheetHeader>
           <div className="min-w-0">
             <DialogTitle className="truncate text-base">查看记忆宫殿</DialogTitle>
             <DialogDescription className="truncate text-xs">
@@ -833,7 +834,7 @@ export function PalaceMemoryLookupDialog({
           >
             <X className="size-5" />
           </Button>
-        </div>
+        </MobileSheetHeader>
 
         <div className="flex min-h-0 flex-1 flex-col">
           {/* One row until the learner asks for the picker: search + a 160px list
