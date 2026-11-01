@@ -687,6 +687,60 @@ def check_oversized_baseline_is_current(errors: list[str]) -> None:
             )
 
 
+def check_eslint_boundary_exceptions(errors: list[str]) -> None:
+    """Keep the frontend's explicit boundary-exception list honest.
+
+    `apps/web/eslint.config.js` turns the layer-boundary rule off for a hand-written
+    list of files. That list rotted silently for the same reason the oversized
+    baseline did: ESLint happily applies an override for a path that no longer
+    exists, so a deleted or renamed file left a permanent hole that the next file
+    at that path would inherit. The list lives in JSON so both ESLint and this
+    check read one source.
+    """
+    ledger = WEB_SRC.parent / "boundary-exceptions.json"
+    if not ledger.exists():
+        errors.append(
+            "apps/web/boundary-exceptions.json is missing; the boundary-exception "
+            "list must stay machine-readable so stale entries can be rejected."
+        )
+        return
+    try:
+        payload = json.loads(ledger.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        errors.append(f"apps/web/boundary-exceptions.json is not valid JSON: {exc}")
+        return
+    files = payload.get("files") if isinstance(payload, dict) else None
+    if not isinstance(files, list):
+        errors.append("apps/web/boundary-exceptions.json: `files` must be a list.")
+        return
+    seen: set[str] = set()
+    for raw in files:
+        if not isinstance(raw, str) or not raw.strip():
+            errors.append(
+                "apps/web/boundary-exceptions.json: every entry must be a non-empty path."
+            )
+            continue
+        relative = raw.strip()
+        if relative in seen:
+            errors.append(
+                f"apps/web/boundary-exceptions.json: duplicate entry {relative!r}."
+            )
+            continue
+        seen.add(relative)
+        if not relative.startswith("src/"):
+            errors.append(
+                f"apps/web/boundary-exceptions.json: {relative!r} must be relative to "
+                "apps/web and start with 'src/'."
+            )
+            continue
+        if not (WEB_SRC.parent / relative).is_file():
+            errors.append(
+                f"{relative}: listed in apps/web/boundary-exceptions.json but no longer "
+                "exists; remove the stale entry so a future file at that path is not "
+                "silently exempt from the layer boundary."
+            )
+
+
 def check_router_residency(errors: list[str]) -> None:
     router_dir = WEB_SRC / "app" / "router"
     for path in router_dir.rglob("*"):
@@ -5810,16 +5864,23 @@ def check_unified_training_evidence(errors: list[str]) -> None:
         errors.append(
             f"{nav_path.relative_to(REPO_ROOT)}: settings/profile must not return as a primary learning destination."
         )
-    for relative in (
-        "app/router/appRoutes.tsx",
-        "shared/routing/routeManifest.ts",
-    ):
-        path = WEB_SRC / relative
-        source = path.read_text(encoding="utf-8", errors="ignore") if path.exists() else ""
-        if "/freestyle-2" not in source:
-            errors.append(
-                f"{path.relative_to(REPO_ROOT).as_posix()}: must register `/freestyle-2` as a second immersive workspace."
-            )
+    # 随心 2 was merged into the single /freestyle feed; the old bookmark must
+    # keep resolving there. Registering it as a second immersive workspace is
+    # exactly what must not come back.
+    app_routes = WEB_SRC / "app" / "router" / "appRoutes.tsx"
+    route_manifest = WEB_SRC / "shared" / "routing" / "routeManifest.ts"
+    routes_source = app_routes.read_text(encoding="utf-8", errors="ignore") if app_routes.exists() else ""
+    if '<Route path="/freestyle-2" element={<Navigate to="/freestyle"' not in routes_source:
+        errors.append(
+            f"{app_routes.relative_to(REPO_ROOT).as_posix()}: `/freestyle-2` must stay a redirect to the single `/freestyle` feed, never a second immersive workspace."
+        )
+    manifest_source = (
+        route_manifest.read_text(encoding="utf-8", errors="ignore") if route_manifest.exists() else ""
+    )
+    if "path: '/freestyle-2'" not in manifest_source:
+        errors.append(
+            f"{route_manifest.relative_to(REPO_ROOT).as_posix()}: keep the retired `/freestyle-2` bookmark entry so old links resolve to 随心."
+        )
     round_state = API_SRC / "modules" / "practice" / "application" / "round_state_service.py"
     round_state_source = (
         round_state.read_text(encoding="utf-8", errors="ignore") if round_state.exists() else ""
@@ -7304,6 +7365,7 @@ def main() -> int:
     check_unified_training_evidence(errors)
     check_file_sizes(errors)
     check_oversized_baseline_is_current(errors)
+    check_eslint_boundary_exceptions(errors)
     check_router_residency(errors)
     check_shared_local_storage_facade(errors)
     check_db_pool_budget(errors)

@@ -33,7 +33,10 @@ def write_unified_training_fixture(root: Path, *, labels: tuple[str, ...]) -> tu
         web_src / "app" / "shell" / "navSections.ts",
         "\n".join(f"label: '{label}'" for label in labels) + "\n",
     )
-    write_file(web_src / "app" / "router" / "appRoutes.tsx", 'path="/freestyle-2"\n')
+    write_file(
+        web_src / "app" / "router" / "appRoutes.tsx",
+        '<Route path="/freestyle-2" element={<Navigate to="/freestyle" replace />} />\n',
+    )
     write_file(
         web_src / "shared" / "routing" / "routeManifest.ts",
         "path: '/freestyle-2'\n",
@@ -5492,3 +5495,67 @@ def test_session_recorder_privacy_guard_accepts_metadata_only_recording(
     check_architecture.check_session_recorder_boundary(errors)
 
     assert errors == []
+
+
+def test_eslint_boundary_exceptions_reject_stale_paths(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_root = tmp_path / "apps" / "web"
+    web_src = web_root / "src"
+    write_file(web_src / "modules" / "kept.ts", "export {}\n")
+    write_file(
+        web_root / "boundary-exceptions.json",
+        json.dumps({"files": ["src/modules/kept.ts", "src/modules/deleted.ts"]}),
+    )
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_eslint_boundary_exceptions(errors)
+
+    assert any("src/modules/deleted.ts" in error for error in errors)
+    assert not any("src/modules/kept.ts" in error for error in errors)
+
+
+def test_eslint_boundary_exceptions_accept_a_current_list(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_root = tmp_path / "apps" / "web"
+    web_src = web_root / "src"
+    write_file(web_src / "shared" / "kept.ts", "export {}\n")
+    write_file(
+        web_root / "boundary-exceptions.json",
+        json.dumps({"files": ["src/shared/kept.ts"]}),
+    )
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_eslint_boundary_exceptions(errors)
+
+    assert errors == []
+
+
+def test_eslint_boundary_exceptions_reject_duplicates_and_absolute_paths(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_root = tmp_path / "apps" / "web"
+    web_src = web_root / "src"
+    write_file(web_src / "shared" / "kept.ts", "export {}\n")
+    write_file(
+        web_root / "boundary-exceptions.json",
+        json.dumps(
+            {
+                "files": [
+                    "src/shared/kept.ts",
+                    "src/shared/kept.ts",
+                    "apps/web/src/shared/kept.ts",
+                ]
+            }
+        ),
+    )
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_eslint_boundary_exceptions(errors)
+
+    assert any("duplicate entry" in error for error in errors)
+    assert any("must be relative to apps/web" in error for error in errors)
