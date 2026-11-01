@@ -35,7 +35,7 @@ The repository is a local-first Windows product used on two devices. SQLite, fil
 | Growth meta (XP, levels, quests, stamps; backend read projection only, no frontend module or page) | — (no frontend owner; `growth_state` is unused by the UI) — see [progression.md](./progression.md) | `modules/progression` (read-only projection) |
 | Ambient room layer (tint, grain, pointer light) | `shared/ambient` (pure, data-free); `app/shell/useAmbientTone` feeds it dashboard/exam data | — |
 | Interface sounds | `shared/feedback/uiSounds` (delegated listener, gated by `uiSoundEnabled` + `soundEnabled`; silent inside `.freestyle-stage`); synth voices in `shared/feedback/mindmap-audio` — see [audio-soundscape.md](./audio-soundscape.md) | — |
-| Diagnosis brief (top-left 录制) | `shared/debug/session-recorder` subscribes to `shared/api/requestOutcome`; `shared/api` must not import the recorder | — |
+| 诊断简报（左上角「录制」） | `shared/debug/session-recorder` 订阅 `shared/api/requestOutcome`；`shared/api` 不得反向导入 recorder。自动采集只保存白名单元数据（固定动作/页面类别、HTTP 方法、有限状态码、失败类别、有界数量），不保存题目、答案、脑图标题或正文、原始错误、完整 URL、业务 ID、请求/响应体；用户手写说明单独保留。见 [session-recorder-privacy.md](./session-recorder-privacy.md) | — |
 
 ## Hard Invariants
 
@@ -48,6 +48,7 @@ The repository is a local-first Windows product used on two devices. SQLite, fil
 7. Cross-module dependencies use a public facade, a typed port, or an application event. Private repositories and application internals are not shared APIs.
 8. API inputs use explicit command/query models; compatibility envelopes are isolated and have a removal plan.
 9. Palace focus-practice is retired: runtime code must not recreate focus-node fields, routes, progress kinds, or UI actions.
+10. 诊断记录只保存白名单元数据：自动事件不得包含学习内容、自由文本、原始错误、完整 URL、业务 ID 或请求/响应体；旧版（v1）诊断历史在首次加载时删除而不迁移。见 [session-recorder-privacy.md](./session-recorder-privacy.md)。
 
 ## Target Dependency Map
 
@@ -204,6 +205,7 @@ The concentrated architecture replacement has started with the two failure-prone
 
 - Quiz learning loop: docs/architecture/quiz-learning-loop.md
 - Unified training evidence boundary: `docs/architecture/unified-training-evidence.md`
+- 诊断记录隐私边界：`docs/architecture/session-recorder-privacy.md`
 
 Historical notes for removed in-app AI and PDF features (code gone, database tables kept): `batch-generation-workspace.md`, `ai-learning-workbench.md`, `ai-run-workspace.md`, `english-reading-gap-loop.md`. English keeps local-subtitle listening dictation (`/english/listening`), cloze reading (`/english/cloze`), and word lookup. Manual JSON import (“文字转脑图”) remains.
 

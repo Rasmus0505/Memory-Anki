@@ -4,7 +4,6 @@ export {
   buildSessionRecorderCopyText,
   formatSessionRecorderClock,
   formatSessionRecorderReport,
-  truncateRecorderText,
 } from './sessionRecorderFormat'
 export {
   SESSION_RECORDER_ANCHOR_ATTR,

@@ -206,9 +206,8 @@ export function FreestyleQuizCardView({
     <div
       ref={cardRef}
       data-recorder-current={active ? 'true' : undefined}
-      data-recorder-place={active ? [palaceTitle, chapterName].filter(Boolean).join(' / ') : undefined}
-      data-recorder-title={active ? card.question.stem : undefined}
-      data-recorder-excerpt={active ? card.question.stem : undefined}
+      data-recorder-context={active ? 'freestyle' : undefined}
+      data-recorder-count={active ? 1 : undefined}
       className="mx-auto flex h-full w-full max-w-4xl flex-col justify-center py-2 sm:py-4"
     >
       <div

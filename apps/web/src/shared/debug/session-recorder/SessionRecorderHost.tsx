@@ -328,7 +328,7 @@ function SessionRecorderFloatingControl() {
         variant="outline"
         size="icon"
         aria-label="复制上一次点击的位置"
-        title="复制上一次点击时所在的位置（页面、标题、摘录），直接粘贴给 AI"
+        title="复制上一次点击时的页面和学习区域状态"
         onClick={() => void copyLastClickFocus()}
       >
         {focusCopyState === 'copied' ? <Check className="text-emerald-500" /> : focusCopyState === 'failed' ? <TriangleAlert className="text-amber-500" /> : <LocateFixed />}
@@ -385,8 +385,8 @@ export function SessionRecorderHost() {
   }, [])
 
   useEffect(() => {
-    recordSessionRecorderRoute(`${location.pathname}${location.search}${location.hash}`)
-  }, [location.hash, location.pathname, location.search])
+    recordSessionRecorderRoute(location.pathname)
+  }, [location.pathname])
 
   return (
     <>

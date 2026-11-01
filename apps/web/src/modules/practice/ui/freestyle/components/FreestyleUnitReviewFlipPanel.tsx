@@ -148,7 +148,6 @@ export function FreestyleUnitReviewFlipPanel({
     })
   }, [editEditorState, isEditMode, reveal.revealMap])
 
-  const { root } = reveal
   const { signalReveal } = useFreestyleFlowFeedback()
 
   // Header chip: this unit's membership only (not whole-palace node count).
@@ -257,13 +256,9 @@ export function FreestyleUnitReviewFlipPanel({
       : null
     lastRevealRecordKeyRef.current = key
     if (!previous) return
-    const detail = summarizeRevealMapChange(
-      previous,
-      reveal.revealMap,
-      (id) => reveal.nodeMap.get(id)?.text ?? '',
-    )
+    const detail = summarizeRevealMapChange(previous, reveal.revealMap)
     if (detail) recordSessionRecorderUiAction('mindmap', '翻卡', detail)
-  }, [isEditMode, reveal.nodeMap, reveal.revealMap])
+  }, [isEditMode, reveal.revealMap])
 
   const showQuietStatus = useCallback((message: string) => {
     if (quietStatusTimerRef.current != null) {
@@ -602,7 +597,7 @@ export function FreestyleUnitReviewFlipPanel({
 
   return (
     <>
-      {active ? <span hidden data-recorder-current="true" data-recorder-place={card.palace_title || session.title || ''} data-recorder-title={unit.title || ''} data-recorder-excerpt={root.text || unit.title || ''} /> : null}
+      {active ? <span hidden data-recorder-current="true" data-recorder-context="review" data-recorder-count={flipTargetUids.length} /> : null}
       <FreestyleUnitReviewStatusBanner
         saveState={saveState}
         onRetry={retrySave}

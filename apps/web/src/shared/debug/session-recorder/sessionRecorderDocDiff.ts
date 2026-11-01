@@ -1,8 +1,5 @@
-import { truncateRecorderText } from './sessionRecorderFormat'
-
 interface FlatNode {
   uid: string
-  title: string
   parent: string | null
 }
 
@@ -18,11 +15,6 @@ function parseDoc(value: unknown): { root?: unknown } | null {
   }
   if (typeof value === 'object') return value as { root?: unknown }
   return null
-}
-
-function nodeTitle(node: Record<string, unknown>) {
-  const data = node.data && typeof node.data === 'object' ? (node.data as Record<string, unknown>) : null
-  return truncateRecorderText(String(data?.text ?? data?.label ?? ''))
 }
 
 function nodeUid(node: Record<string, unknown>, fallback: string) {
@@ -42,7 +34,7 @@ function flattenEditorDoc(value: unknown) {
     if (!node || typeof node !== 'object') return
     const record = node as Record<string, unknown>
     const uid = nodeUid(record, fallback)
-    nodes.set(uid, { uid, title: nodeTitle(record), parent })
+    nodes.set(uid, { uid, parent })
     const children = Array.isArray(record.children) ? record.children : []
     children.forEach((child, index) => walk(child, uid, `${uid}-${index}`))
   }
@@ -51,91 +43,41 @@ function flattenEditorDoc(value: unknown) {
   return nodes
 }
 
-function shortSuffix(uid: string) {
-  const compact = uid.replace(/-/g, '')
-  return compact.slice(-4) || uid.slice(-4)
-}
-
-function titleCounts(nodes: Iterable<FlatNode>) {
-  const byUid = new Map<string, FlatNode>()
-  for (const node of nodes) byUid.set(node.uid, node)
-  const counts = new Map<string, number>()
-  for (const node of byUid.values()) {
-    const title = node.title || '未命名'
-    counts.set(title, (counts.get(title) ?? 0) + 1)
-  }
-  return counts
-}
-
-function formatNode(
-  node: FlatNode | undefined,
-  counts: Map<string, number>,
-  fallback = '根',
-) {
-  if (!node) return fallback
-  const title = node.title || '未命名'
-  if ((counts.get(title) ?? 0) > 1) return `「${title}」#${shortSuffix(node.uid)}`
-  return `「${title}」`
-}
-
 export function summarizeEditorDocChange(previous: unknown, next: unknown) {
   const before = flattenEditorDoc(previous)
   const after = flattenEditorDoc(next)
-  const counts = titleCounts([...before.values(), ...after.values()])
-  const parts: string[] = []
-
+  let added = 0
+  let removed = 0
+  let moved = 0
   for (const [uid, node] of after) {
-    if (!before.has(uid)) {
-      const parent = node.parent
-        ? ` 父=${formatNode(after.get(node.parent) ?? before.get(node.parent), counts)}`
-        : ''
-      parts.push(`新增 ${formatNode(node, counts)}${parent}`)
-    }
+    if (!before.has(uid)) added += 1
+    else if (before.get(uid)?.parent !== node.parent) moved += 1
   }
-  for (const [uid, node] of before) {
-    if (!after.has(uid)) {
-      parts.push(`删除 ${formatNode(node, counts)}`)
-    }
-  }
-  for (const [uid, node] of after) {
-    const prior = before.get(uid)
-    if (!prior) continue
-    if (prior.parent !== node.parent) {
-      parts.push(
-        `移动 ${formatNode(node, counts)} ${formatNode(before.get(prior.parent ?? ''), counts)} → ${formatNode(after.get(node.parent ?? ''), counts)}`,
-      )
-    } else if (prior.title !== node.title) {
-      parts.push(`改文本 「${prior.title || '未命名'}」→${formatNode(node, counts)}`)
-    }
-  }
-
-  if (parts.length === 0) return '文档已更新'
-  return parts.slice(0, 12).join('；')
-}
-
-function quotedTitles(titles: string[]) {
-  const shown = titles.slice(0, 3).map((title) => `「${truncateRecorderText(title || '未命名')}」`)
-  const extra = titles.length > 3 ? `等${titles.length}张` : ''
-  return `${shown.join('')}${extra}`
+  for (const uid of before.keys()) if (!after.has(uid)) removed += 1
+  const parts = [
+    added ? `新增节点 ${added}` : '',
+    removed ? `删除节点 ${removed}` : '',
+    moved ? `移动节点 ${moved}` : '',
+  ].filter(Boolean)
+  return parts.length ? parts.join('，') : '文档已更新'
 }
 
 export function summarizeRevealMapChange(
   previous: Record<string, string> | null | undefined,
   next: Record<string, string>,
-  titleOf: (id: string) => string,
 ) {
-  const opened: string[] = []
-  const closed: string[] = []
+  let opened = 0
+  let closed = 0
   const ids = new Set([...Object.keys(previous ?? {}), ...Object.keys(next)])
   for (const id of ids) {
     const was = previous?.[id] ?? 'hidden'
     const now = next[id] ?? 'hidden'
-    if (was !== 'revealed' && now === 'revealed') opened.push(titleOf(id))
-    if (was === 'revealed' && now !== 'revealed') closed.push(titleOf(id))
+    if (was !== 'revealed' && now === 'revealed') opened += 1
+    if (was === 'revealed' && now !== 'revealed') closed += 1
   }
   const parts = [
-    opened.length ? `翻开${quotedTitles(opened)}` : '',
-    closed.length ? `收起${quotedTitles(closed)}` : '',
+    opened ? `翻开 ${opened} 项` : '',
+    closed ? `收起 ${closed} 项` : '',
   ].filter(Boolean)
-  return parts.length ? parts.join('；') : null
+  return parts.length ? parts.join('，') : null
 }

@@ -1,4 +1,7 @@
-export const SESSION_RECORDER_HISTORY_KEY = 'memory-anki.session-recorder.history.v1'
+/** 当前仅保存不含学习内容的结构化诊断记录。 */
+export const SESSION_RECORDER_HISTORY_KEY = 'memory-anki.session-recorder.history.v2'
+export const SESSION_RECORDER_LEGACY_HISTORY_KEY = 'memory-anki.session-recorder.history.v1'
+export const SESSION_RECORDER_PRIVACY_MIGRATION_KEY = 'memory-anki.session-recorder.privacy-migration.v2'
 export const SESSION_RECORDER_MAX_HISTORY = 20
 export const SESSION_RECORDER_MAX_EVENTS = 500
 

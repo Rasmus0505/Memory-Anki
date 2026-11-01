@@ -162,9 +162,7 @@ export function useFreestyleFeedNavigation({
     visualIndexRef.current = currentIndex
     if (previous !== currentIndex) {
       recordSessionRecorderView(
-        roundComplete && currentIndex >= cards.length
-          ? '自动切到结算页'
-          : `自动切到第 ${currentIndex + 1} 张（共 ${cards.length} 张）`,
+        roundComplete && currentIndex >= cards.length ? '自动切到结算页' : '自动切换卡片',
       )
     }
   }, [cards.length, currentIndex, roundComplete])

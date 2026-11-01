@@ -159,7 +159,7 @@ function MindMapOverflowMenu({ actions }: { actions: OverflowAction[] }) {
                 )}
                 onClick={() => {
                   menu.runAction(() => {
-                    recordSessionRecorderUiAction('menu', '菜单', `「${action.label}」`)
+                    recordSessionRecorderUiAction('menu', '菜单操作')
                     action.onClick()
                   }, action.opensOverlay)
                 }}

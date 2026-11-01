@@ -12,14 +12,15 @@ import {
   filterRecentEvents,
   readClickedRecorderFocus,
   readRecorderFocus,
-  redactRecorderSecrets,
   describeRecorderPage,
   type RecorderFocus,
 } from './sessionRecorderBrief'
-import { buildSessionRecorderCopyText, formatSessionRecorderReport, truncateRecorderText } from './sessionRecorderFormat'
+import { buildSessionRecorderCopyText, formatSessionRecorderReport } from './sessionRecorderFormat'
 import {
   LIVE_BRIEF_ID,
   SESSION_RECORDER_HISTORY_KEY,
+  SESSION_RECORDER_LEGACY_HISTORY_KEY,
+  SESSION_RECORDER_PRIVACY_MIGRATION_KEY,
   SESSION_RECORDER_MAX_EVENTS,
   SESSION_RECORDER_MAX_HISTORY,
   type SessionRecorderEvent,
@@ -62,7 +63,18 @@ function generateId() {
 
 function currentRoute() {
   if (typeof window === 'undefined') return ''
-  return `${window.location.pathname}${window.location.search}${window.location.hash}`
+  return describeRecorderPage(window.location.pathname)
+}
+
+function migrateRecorderStorage() {
+  if (typeof window === 'undefined') return
+  try {
+    if (window.localStorage.getItem(SESSION_RECORDER_PRIVACY_MIGRATION_KEY) === 'v2') return
+    window.localStorage.removeItem(SESSION_RECORDER_LEGACY_HISTORY_KEY)
+    window.localStorage.setItem(SESSION_RECORDER_PRIVACY_MIGRATION_KEY, 'v2')
+  } catch {
+    // 存储不可用时保持内存空状态；下次加载会再次尝试清理旧记录。
+  }
 }
 
 function isSession(value: unknown): value is SessionRecorderSession {
@@ -80,6 +92,7 @@ function isSession(value: unknown): value is SessionRecorderSession {
 
 function loadHistory(): SessionRecorderSession[] {
   if (typeof window === 'undefined') return []
+  migrateRecorderStorage()
   try {
     const raw = window.localStorage.getItem(SESSION_RECORDER_HISTORY_KEY)
     if (!raw) return []
@@ -123,15 +136,39 @@ function mergeRepeatedDetail(previous: string, next: string) {
   return `${nextBase} ×${count}`
 }
 
+function safeAction(kind: SessionRecorderEventKind, action: string) {
+  const value = action.trim()
+  if (kind === 'view' && value.startsWith('自动切到')) return '自动切换卡片'
+  if (kind === 'route') return '路由变化'
+  if (kind === 'click') return value === '输入敏感字段' ? value : value === '点击输入框' ? value : '点击控件'
+  if (kind === 'menu') return value === '菜单' ? value : '菜单操作'
+  if (kind === 'mindmap') return ['右键节点', '点击画布空白', '单击节点', '拖拽结束', '翻卡', '进入编辑', '返回学习'].includes(value) ? value : '导图操作'
+  if (kind === 'doc') return '导图编辑'
+  if (kind === 'error') return '应用错误'
+  if (kind === 'ai') return 'AI操作'
+  return value || '状态变化'
+}
+
+function safeDetail(kind: SessionRecorderEventKind, detail: string) {
+  const value = detail.trim()
+  if (!value) return ''
+  if (kind === 'route') return describeRecorderPage(value)
+  if (kind === 'doc' && /^(新增节点|删除节点|移动节点|修改节点) \d+$/.test(value)) return value
+  if (kind === 'mindmap' && /^(翻开|收起) \d+ 项$/.test(value)) return value
+  if (kind === 'step' && /^(成功|没有成功：|稍后会自动重试)/.test(value)) return value.slice(0, 100)
+  if (kind === 'session' && /^只保留最近 \d+ 条$/.test(value)) return value
+  return ''
+}
+
+function normalizeEvent(kind: SessionRecorderEventKind, action: string, detail = ''): Pick<SessionRecorderEvent, 'kind' | 'action' | 'detail'> {
+  return { kind, action: safeAction(kind, action), detail: safeDetail(kind, detail) }
+}
+
 function remember(kind: SessionRecorderEventKind, action: string, detail = '') {
+  const normalized = normalizeEvent(kind, action, detail)
   recentEvents = filterRecentEvents([
     ...recentEvents,
-    {
-      at: nowIso(),
-      kind,
-      action,
-      detail: redactRecorderSecrets(truncateRecorderText(detail, 500)),
-    },
+    { at: nowIso(), ...normalized },
   ])
 }
 
@@ -147,9 +184,10 @@ function currentLiveReport(windowMs = diagnosisWindowMs(DIAGNOSIS_DEFAULT_WINDOW
 
 function appendToCurrentSession(kind: SessionRecorderEventKind, action: string, detail = '') {
   if (!state.recording || !state.current) return
+  const normalized = normalizeEvent(kind, action, detail)
   const last = state.current.events.at(-1)
-  if (last && last.kind === kind && last.action === action) {
-    const merged = mergeRepeatedDetail(last.detail, detail)
+  if (last && last.kind === normalized.kind && last.action === normalized.action) {
+    const merged = mergeRepeatedDetail(last.detail, normalized.detail)
     if (merged) {
       const events = state.current.events.slice(0, -1)
       events.push({ ...last, at: nowIso(), detail: merged })
@@ -165,7 +203,7 @@ function appendToCurrentSession(kind: SessionRecorderEventKind, action: string, 
     ...state,
     current: {
       ...state.current,
-      events: capRecorderEvents([...state.current.events, { at: nowIso(), kind, action, detail }]),
+      events: capRecorderEvents([...state.current.events, { at: nowIso(), ...normalized }]),
     },
   }
   notify()
@@ -207,11 +245,11 @@ function onWindowClick(event: Event) {
   if (!described) return
   lastClick = {
     at: nowIso(),
-    clickText: described.detail || described.action,
+    clickText: safeAction('click', described.action),
     pageLabel: describeRecorderPage(typeof window === 'undefined' ? '' : window.location.pathname),
     focus: readClickedRecorderFocus(event.target) ?? (typeof document === 'undefined' ? null : readRecorderFocus(document)),
   }
-  appendEvent('click', described.action, described.detail)
+  appendEvent('click', described.action)
 }
 
 function ingestLog(entry: AppLogEntry) {
@@ -219,10 +257,10 @@ function ingestLog(entry: AppLogEntry) {
   seenLogIds.add(entry.id)
   if (entry.kind === 'app_error' && entry.feature === 'API 请求') return
   if (entry.kind === 'app_error') {
-    appendEvent('error', entry.feature || '页面报错', entry.errorMessage)
+    appendEvent('error', '应用错误', entry.stage || '')
     return
   }
-  appendEvent('ai', entry.feature || 'AI', entry.stage || '完成')
+  appendEvent('ai', 'AI操作', entry.stage || '')
 }
 
 export function ensureSessionRecorderCapture() {
@@ -323,7 +361,7 @@ export function startSessionRecording() {
         at: startedAt,
         kind: 'session',
         action: '开始录制',
-        detail: route ? `页面 ${route}` : '',
+        detail: '',
       },
     ],
     notes: '',
@@ -378,17 +416,18 @@ export function stopSessionRecording() {
 }
 
 export function recordSessionRecorderRoute(path: string) {
-  if (!path) return
+  const route = describeRecorderPage(path)
+  if (!route) return
   const lastRoute = [...recentEvents].reverse().find((event) => event.kind === 'route')
-  if (lastRoute?.detail !== path) remember('route', '打开页面', path)
+  if (lastRoute?.detail !== route) remember('route', '路由变化', route)
   if (!state.recording || !state.current) return
   const last = state.current.routes.at(-1)
-  if (last === path) return
+  if (last === route) return
   state.current = {
     ...state.current,
-    routes: [...state.current.routes, path],
+    routes: [...state.current.routes, route],
   }
-  appendToCurrentSession('route', '路由', last ? `${last} → ${path}` : path)
+  appendToCurrentSession('route', '路由变化', route)
 }
 
 export function recordSessionRecorderUiAction(kind: SessionRecorderEventKind, action: string, detail = '') {
@@ -485,6 +524,8 @@ export function resetSessionRecorderForTest() {
   recentEvents = []
   if (typeof window !== 'undefined') {
     window.localStorage.removeItem(SESSION_RECORDER_HISTORY_KEY)
+    window.localStorage.removeItem(SESSION_RECORDER_LEGACY_HISTORY_KEY)
+    window.localStorage.removeItem(SESSION_RECORDER_PRIVACY_MIGRATION_KEY)
   }
   state = {
     recording: false,

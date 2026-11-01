@@ -89,8 +89,9 @@ describe('buildDiagnosisBrief', () => {
       windowMs: diagnosisWindowMs(2),
       now: NOW,
     })
-    expect(brief).toContain('点了「结算已完成 12」')
-    expect(brief).toContain('点了「确认结算」')
+    expect(brief).not.toContain('结算已完成 12')
+    expect(brief).not.toContain('确认结算')
+    expect(brief).toContain('点击')
   })
 
   it('says how many earlier actions were left out instead of dropping them silently', () => {
@@ -157,27 +158,22 @@ describe('buildDiagnosisBrief', () => {
       windowMs: diagnosisWindowMs(1),
       now: NOW,
     })
-    expect(brief).toMatch(/- \d{2}:\d{2}:\d{2} 点了/)
+    expect(brief).toMatch(/- \d{2}:\d{2}:\d{2} 完成/)
   })
 })
 
 describe('recorder focus at click time', () => {
-  it('names the clicked mind-map node instead of the previously selected card', () => {
+  it('reads only a fixed context and bounded count', () => {
     document.body.innerHTML = `
-      <div data-recorder-current="true" data-recorder-place="第 1 题" data-recorder-title="上一题" data-recorder-excerpt="旧内容"></div>
-      <div data-mindmap-node-id="n1" data-recorder-focus="true" data-recorder-place="第 2 层" data-recorder-title="评价：推动课程理论发展" data-recorder-excerpt="过分强调学科结构">
+      <div data-recorder-current="true" data-recorder-context="quiz" data-recorder-count="1"></div>
+      <div data-mindmap-node-id="n1" data-recorder-focus="true" data-recorder-context="mindmap" data-recorder-count="2">
         <button id="label">评价：推动课程理论发展</button>
       </div>`
     const label = document.getElementById('label')
 
-    expect(readClickedRecorderFocus(label)).toEqual({
-      place: '第 2 层',
-      title: '评价：推动课程理论发展',
-      excerpt: '过分强调学科结构',
-    })
-    // A click outside any marked node falls back to the page-level current card.
+    expect(readClickedRecorderFocus(label)).toEqual({ context: 'mindmap', count: 2 })
     expect(readClickedRecorderFocus(document.body)).toBeNull()
-    expect(readRecorderFocus(document)?.title).toBe('上一题')
+    expect(readRecorderFocus(document)).toEqual({ context: 'quiz', count: 1 })
   })
 
   it('returns null when the clicked element has no marked ancestor', () => {

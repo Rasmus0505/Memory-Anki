@@ -125,6 +125,27 @@ export const REGISTERED_STORAGE_KEYS = defineStorageRegistry([
     purpose: 'Legacy freestyle immersive feed config before backend preference migration.',
   },
   {
+    id: 'sessionRecorder.history',
+    key: 'memory-anki.session-recorder.history.v2',
+    area: 'localStorage',
+    owner: 'shared/debug/session-recorder',
+    purpose: '当前仅保存不含学习内容的结构化诊断历史。',
+  },
+  {
+    id: 'sessionRecorder.legacyHistory',
+    key: 'memory-anki.session-recorder.history.v1',
+    area: 'localStorage',
+    owner: 'shared/debug/session-recorder',
+    purpose: '旧版诊断历史；隐私迁移时只删除，不迁移。',
+  },
+  {
+    id: 'sessionRecorder.privacyMigration',
+    key: 'memory-anki.session-recorder.privacy-migration.v2',
+    area: 'localStorage',
+    owner: 'shared/debug/session-recorder',
+    purpose: '记录旧诊断历史已完成一次性清除。',
+  },
+  {
     id: 'pageHistory.device',
     key: 'memory-anki.page-history.device.v1',
     area: 'localStorage',

@@ -77,12 +77,7 @@ export function useFreestyleRatingOutbox(input: {
         latest.current.cardSaveFailed('取消评分没有成功，请再点一次。', event.cardId)
         return
       }
-      const detail = event.error instanceof Error ? event.error.message : String(event.error ?? '')
-      recordSessionRecorderUiAction(
-        'error',
-        '评分没有保存',
-        `卡片：${event.cardId} · 回合：${event.roundId} · 操作 ID：${event.job.operationId} · ${event.failure} · ${detail}`,
-      )
+      recordSessionRecorderUiAction('error', '应用错误')
       // 终态：不是掉网，是这次尝试已经被后面的练习取代；重试永远不会成功。
       latest.current.cardSaveFailed(
         event.failure === 'superseded' ? SUPERSEDED_RATING_TOAST_COPY : RATING_NOT_SAVED_COPY,

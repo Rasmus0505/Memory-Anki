@@ -1,6 +1,5 @@
 import type { RequestOutcome } from '@/shared/api/requestOutcome'
 import { resolveNavSection, type NavSectionKey } from '@/shared/routing/routeManifest'
-import { truncateRecorderText } from './sessionRecorderFormat'
 import type { SessionRecorderEvent } from './sessionRecorderTypes'
 
 export const DIAGNOSIS_WINDOW_OPTIONS_MINUTES = [1, 2, 5] as const
@@ -75,16 +74,13 @@ const STEP_RULES: Array<{ method?: string; test: RegExp; label: string }> = [
 ]
 
 export interface RecorderFocus {
-  place: string
-  title: string
-  excerpt: string
+  context: 'quiz' | 'freestyle' | 'mindmap' | 'review' | 'other'
+  count?: number
 }
 
-export function redactRecorderSecrets(value: string) {
-  return value
-    .replace(/sk-[A-Za-z0-9_-]{8,}/g, 'sk-…')
-    .replace(/\b(Bearer)\s+[A-Za-z0-9._~+/-]{8,}/gi, '$1 …')
-    .replace(/([?&](?:token|key|password|secret)=)[^&\s]+/gi, '$1…')
+/** 兼容旧调用方，但不再尝试从文本中“脱敏”后保存。 */
+export function redactRecorderSecrets(_value: string) {
+  return ''
 }
 
 export function filterRecentEvents(
@@ -124,51 +120,38 @@ export function humanizeApiStep(method: string, path: string, action?: string) {
 }
 
 export function plainFailureReason(message: string, status: number | null) {
-  const text = message.toLowerCase()
-  if (status === 409 || text.includes('冲突') || text.includes('conflict')) return '和另一处保存撞车了'
-  if (status === 401 || status === 403) return '没有权限'
-  if (status === 404) return '要找的内容不在了'
-  if (
-    text.includes('超时')
-    || text.includes('timeout')
-    || text.includes('aborterror')
-    || text.includes('timed out')
-  ) {
-    return '等太久，这一步没有完成'
+  switch (message) {
+    case 'conflict': return '和另一处保存撞车了'
+    case 'permission': return '没有权限'
+    case 'not_found': return '要找的内容不在了'
+    case 'timeout': return '等太久，这一步没有完成'
+    case 'network': return '连不上软件后台'
+    case 'server_error': return '软件后台暂时出错'
+    case 'invalid_request': return '提交的内容没有被接受'
+    case 'no_response': return '没有收到回应'
+    default: return status ? `没有成功（${status}）` : '没有成功'
   }
-  if (
-    text.includes('failed to fetch')
-    || text.includes('network')
-    || text.includes('网络请求失败')
-    || text.includes('连接')
-  ) {
-    return '连不上软件后台'
-  }
-  if (status != null && status >= 500) return '软件后台暂时出错'
-  if (status === 400 || status === 422) return '提交的内容没有被接受'
-  const firstLine = message.split('\n').map((line) => line.trim()).find(Boolean) || ''
-  const cleaned = firstLine.replace(/https?:\/\/\S+/g, '').replace(/\s+/g, ' ').trim()
-  if (!cleaned || cleaned.length > 60) return status ? `没有成功（${status}）` : '没有成功'
-  return cleaned
 }
 
 export function describeRequestStep(outcome: RequestOutcome) {
   const action = humanizeApiStep(outcome.method, outcome.path, outcome.action)
   if (outcome.ok) return { action, detail: '成功' }
   const reason = plainFailureReason(outcome.message, outcome.status)
-  const retry = outcome.queuedRetry ? '软件已留下稍后重试。' : ''
-  const message = outcome.message.replace(/https?:\/\/\S+/g, '').replace(/\s+/g, ' ').trim()
-  const technical = `${outcome.method} ${outcome.path} → ${outcome.status != null ? `HTTP ${outcome.status}` : '没有收到回应'}${message ? `：${message}` : ''}`
-  return { action, detail: `没有成功：${reason}。${retry}［${technical}］`.trim() }
+  const retry = outcome.queuedRetry ? '稍后会自动重试。' : ''
+  const status = outcome.status != null ? `HTTP ${outcome.status}` : '没有收到回应'
+  return { action, detail: `没有成功：${reason}（${status}）。${retry}`.trim() }
 }
 
 function focusFromElement(node: Element | null): RecorderFocus | null {
   if (!(node instanceof HTMLElement)) return null
-  const place = (node.getAttribute('data-recorder-place') || '').trim()
-  const title = (node.getAttribute('data-recorder-title') || '').trim()
-  const excerpt = truncateRecorderText(node.getAttribute('data-recorder-excerpt') || '', 80)
-  if (!place && !title && !excerpt) return null
-  return { place, title, excerpt }
+  const value = node.getAttribute('data-recorder-context')
+  if (value !== 'quiz' && value !== 'freestyle' && value !== 'mindmap' && value !== 'review') {
+    return value ? { context: 'other' } : null
+  }
+  const count = Number(node.getAttribute('data-recorder-count'))
+  return Number.isFinite(count) && count >= 0
+    ? { context: value, count: Math.round(count) }
+    : { context: value }
 }
 
 /** The card the page marks as current (quiz question, review card, freestyle card). */
@@ -194,11 +177,9 @@ function clock(iso: string) {
 }
 
 function actionLine(event: SessionRecorderEvent) {
-  if (event.kind === 'click' || event.kind === 'menu') return `点了${event.detail || event.action}`
-  if (event.kind === 'route') return `打开了${describeRecorderPage(event.detail || '')}`
-  if (event.kind === 'doc' || event.kind === 'mindmap') {
-    return `改了导图：${truncateRecorderText(event.detail || event.action, 60)}`
-  }
+  if (event.kind === 'click' || event.kind === 'menu') return event.action
+  if (event.kind === 'route') return `打开了${event.detail || '这个页面'}`
+  if (event.kind === 'doc' || event.kind === 'mindmap') return `导图操作：${event.action}${event.detail ? `（${event.detail}）` : ''}`
   return [event.action, event.detail].filter(Boolean).join(' ')
 }
 
@@ -247,13 +228,8 @@ function stepSentence(step: SessionRecorderEvent, click: SessionRecorderEvent | 
 }
 
 function focusLines(focus: RecorderFocus | null) {
-  return focus
-    ? [
-      `- 位置：${focus.place || '没有写位置'}`,
-      `- 标题：${focus.title || '没有写标题'}`,
-      `- 摘录：${focus.excerpt || '没有摘录'}`,
-    ]
-    : ['- 没有定位到当前这一题或这一张卡。']
+  if (!focus) return ['- 没有定位到当前学习区域。']
+  return [`- 学习区域：${focus.context}${focus.count == null ? '' : `（${focus.count} 项）`}`]
 }
 
 /** The page and focus captured at the last interactive click, as a short brief. */
@@ -266,9 +242,9 @@ export function buildLastClickFocusBrief(input: {
   if (!input) return '还没有点击过页面。'
   return [
     `上一次点击 ${clock(input.at)}`,
-    `点了${input.clickText}`,
+    `操作：${input.clickText}`,
     '',
-    '我当时在看',
+    '当时状态',
     `- 页面：${input.pageLabel || '这个页面'}`,
     ...focusLines(input.focus),
   ].join('\n')
@@ -347,7 +323,7 @@ export function buildDiagnosisBrief(input: {
     ...outcomeLines.map((line) => `- ${line}`),
   ]
   if (errors.length > 0) {
-    lines.push('', '页面上的报错', ...errors.slice(-3).map((event) => `- ${event.action}：${truncateRecorderText(event.detail, 80)}`))
+    lines.push('', '页面上的报错', ...errors.slice(-3).map((event) => `- ${event.action}${event.detail ? `：${event.detail}` : ''}`))
   }
   if (askedAi) lines.push('', '期间请过 AI。')
   return lines.join('\n')

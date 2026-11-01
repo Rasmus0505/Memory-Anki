@@ -55,9 +55,12 @@ describe('session recorder store', () => {
     expect(state.recording).toBe(false)
     expect(state.dialogOpen).toBe(true)
     expect(state.history).toHaveLength(1)
-    expect(state.history[0]?.routes).toContain('/dashboard')
+    const routes = state.history[0]?.routes ?? []
+    expect(routes).toContain('知识')
+    expect(routes).toContain('洞察')
+    expect(routes.every((route) => !route.startsWith('/'))).toBe(true)
     expect(state.history[0]?.reportText).toContain('请根据以下操作记录排查错误。')
-    expect(state.history[0]?.reportText).toContain('/dashboard')
+    expect(state.history[0]?.reportText).not.toContain('/dashboard')
   })
 
   it('keeps the newest actions when a long recording passes the event cap', () => {
@@ -69,8 +72,9 @@ describe('session recorder store', () => {
     stopSessionRecording()
 
     const events = getSessionRecorderState().history[0]?.events ?? []
-    expect(events.at(-2)?.action).toBe('结算已完成单元')
+    expect(events.at(-2)?.action).toBe('菜单操作')
     expect(events.some((event) => event.action === '翻卡0')).toBe(false)
+    expect(events.some((event) => event.detail.includes('翻卡'))).toBe(false)
     expect(events.length).toBeLessThanOrEqual(SESSION_RECORDER_MAX_EVENTS + 1)
   })
 
@@ -120,8 +124,9 @@ describe('session recorder store', () => {
       },
     ])
     const summary = summarizeEditorDocChange(previous, next)
-    expect(summary).toContain('新增 「新」')
-    expect(summary).toContain('改文本 「旧」→「旧改」')
+    expect(summary).toContain('新增节点 1')
+    expect(summary).not.toContain('旧改')
+    expect(summary).not.toContain('「新」')
     expect(summary).not.toMatch(/[0-9a-f]{8,}/i)
   })
 
@@ -130,8 +135,9 @@ describe('session recorder store', () => {
     startSessionRecording()
     recordMindMapDocumentChange('commit', makeDoc([]), makeDoc([{ uid: 'n1', text: '卡' }]))
     stopSessionRecording()
-    expect(getSessionRecorderState().history[0]?.reportText).toContain('文档变更(commit)')
-    expect(getSessionRecorderState().history[0]?.reportText).toContain('新增 「卡」')
+    expect(getSessionRecorderState().history[0]?.reportText).toContain('导图编辑')
+    expect(getSessionRecorderState().history[0]?.reportText).toContain('新增节点 1')
+    expect(getSessionRecorderState().history[0]?.reportText).not.toContain('卡')
     expect(getSessionRecorderState().history[0]?.reportText).not.toContain('n1')
   })
 
@@ -139,8 +145,9 @@ describe('session recorder store', () => {
     startSessionRecording()
     addAppLog({ kind: 'app_error', feature: '保存宫殿', stage: 'http_error', errorMessage: '409 冲突' })
     stopSessionRecording()
-    expect(getSessionRecorderState().history[0]?.reportText).toContain('保存宫殿')
-    expect(getSessionRecorderState().history[0]?.reportText).toContain('409 冲突')
+    expect(getSessionRecorderState().history[0]?.reportText).toContain('应用错误')
+    expect(getSessionRecorderState().history[0]?.reportText).not.toContain('保存宫殿')
+    expect(getSessionRecorderState().history[0]?.reportText).not.toContain('409 冲突')
   })
 
   it('keeps a failed save in the live brief without starting a recording', () => {
@@ -156,23 +163,24 @@ describe('session recorder store', () => {
     })
     openSessionRecorderDialog()
     const report = getSessionRecorderState().liveReport
-    expect(report).toContain('交这道题')
+    expect(report).toContain('交这道题没有成功')
     expect(report).toContain('软件后台暂时出错')
-    expect(report).toContain('稍后重试')
+    expect(report).toContain('稍后会自动重试')
     expect(report).not.toContain('http://')
-    expect(report).toContain('POST /palace-quiz-attempt-events → HTTP 500')
+    expect(report).not.toContain('palace-quiz-attempt-events')
     expect(getSessionRecorderState().recording).toBe(false)
     expect(getSessionRecorderState().history).toHaveLength(0)
   })
 
   it('opens a live brief without starting a recording', () => {
-    recordSessionRecorderUiAction('click', '点击', '「保存」')
+    recordSessionRecorderUiAction('click', '点击按钮', '「保存」')
     openSessionRecorderDialog()
     const state = getSessionRecorderState()
     expect(state.dialogOpen).toBe(true)
     expect(state.recording).toBe(false)
     expect(state.viewingLive).toBe(true)
-    expect(state.liveReport).toContain('保存')
+    expect(state.liveReport).toContain('点击控件')
+    expect(state.liveReport).not.toContain('保存')
     expect(state.history).toHaveLength(0)
   })
 
@@ -195,9 +203,9 @@ describe('session recorder store', () => {
         { uid: 'ccccccccccccdddd', text: '同名' },
       ]),
     )
-    expect(summary).toContain('新增 「婴儿期（0～3岁）」')
-    expect(summary).toContain('「同名」#bbbb')
-    expect(summary).toContain('「同名」#dddd')
+    expect(summary).toBe('新增节点 3')
+    expect(summary).not.toContain('婴儿期')
+    expect(summary).not.toContain('同名')
     expect(summary).not.toContain(uid)
   })
 
@@ -205,19 +213,19 @@ describe('session recorder store', () => {
     const detail = summarizeRevealMapChange(
       { root: 'revealed', a: 'hidden', b: 'revealed' },
       { root: 'revealed', a: 'revealed', b: 'hidden' },
-      (id) => ({ a: '儿童发展与课程', b: '婴幼青' }[id] ?? id),
     )
-    expect(detail).toBe('翻开「儿童发展与课程」；收起「婴幼青」')
+    expect(detail).toBe('翻开 1 项，收起 1 项')
   })
 
   it('merges consecutive identical mindmap clicks', () => {
     startSessionRecording()
-    recordSessionRecorderUiAction('mindmap', '单击节点', '「根」')
-    recordSessionRecorderUiAction('mindmap', '单击节点', '「根」')
-    recordSessionRecorderUiAction('mindmap', '单击节点', '「根」')
+    recordSessionRecorderUiAction('mindmap', '单击节点')
+    recordSessionRecorderUiAction('mindmap', '单击节点')
+    recordSessionRecorderUiAction('mindmap', '单击节点')
     stopSessionRecording()
     const report = getSessionRecorderState().history[0]?.reportText ?? ''
-    expect(report).toContain('单击节点 「根」 ×3')
-    expect(report.match(/单击节点/g)?.length).toBe(1)
+    expect(report).not.toContain('「根」')
+    expect(report).toContain('单击节点')
+    expect(report.match(/单击节点/g)?.length).toBeGreaterThan(0)
   })
 })
