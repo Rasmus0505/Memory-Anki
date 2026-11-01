@@ -1,0 +1,11 @@
+{
+  "note": "显式的存量越层例外清单。新文件不得加入；每个路径必须真实存在，由 tools/check_architecture.py 的 check_eslint_boundary_exceptions 校验。根治后删除条目，不要留下过期路径——否则同一路径日后可能被新文件继承豁免。",
+  "files": [
+    "src/modules/practice/ui/freestyle/components/FreestyleDialogsHost.tsx",
+    "src/modules/practice/ui/freestyle/components/freestyleBranchCardSupport.ts",
+    "src/modules/quiz/ui/palace-quiz/PalaceQuizPage.tsx",
+    "src/modules/settings/ui/profile/ProfileSettingsPage.tsx",
+    "src/shared/logs/components/AppLogDrawer.tsx",
+    "src/shared/preferences/clientPreferences.ts"
+  ]
+}

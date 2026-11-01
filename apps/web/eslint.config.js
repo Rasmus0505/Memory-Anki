@@ -5,6 +5,10 @@ import reactRefresh from 'eslint-plugin-react-refresh'
 import boundaries from 'eslint-plugin-boundaries'
 import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
+import { createRequire } from 'node:module'
+
+const require = createRequire(import.meta.url)
+const { files: boundaryExceptionFiles } = require('./boundary-exceptions.json')
 
 export default defineConfig([
   globalIgnores(['dist', '**/.pytest_cache/**']),
@@ -84,27 +88,10 @@ export default defineConfig([
     // 存量越层例外（显式清单，新文件不得加入；根治已登记为后续任务）：
     // - modules→widgets：practice/quiz 引 mindmap-review-flow、palace-memory-lookup
     //   等 widget，根治 = 把被引 API 下沉到对应 module 的 public。
-    // - shared→modules：timedSession 系列与 SessionTimerBar 等引 session/settings
-    //   public，根治 = 整块下沉 modules/session。
     // - modules→pwa：ProfileSettingsPage 直接调 resetPwaRuntime，根治 = 经 platform 端口。
-    files: [
-      'src/modules/practice/ui/freestyle/components/FreestyleDialogsHost.tsx',
-      'src/modules/practice/ui/freestyle/components/FreestyleMindMapBranchCardView.tsx',
-      'src/modules/practice/ui/freestyle/components/freestyleAnkiSettle.ts',
-      'src/modules/practice/ui/freestyle/components/freestyleBranchCardSupport.ts',
-      'src/modules/quiz/ui/palace-quiz/PalaceQuizPage.tsx',
-      'src/modules/settings/ui/profile/ProfileSettingsPage.tsx',
-      'src/shared/components/session/SessionTimerBar.tsx',
-      'src/shared/components/session/GlobalTimerProvider.tsx',
-      'src/shared/components/session/timer-automation-config.ts',
-      'src/shared/hooks/timedSessionModel.ts',
-      'src/shared/hooks/timedSessionRecovery.ts',
-      'src/shared/hooks/timedSessionRestore.ts',
-      'src/shared/hooks/timedSessionSnapshot.ts',
-      'src/shared/hooks/useTimedSession.ts',
-      'src/shared/logs/components/AppLogDrawer.tsx',
-      'src/shared/preferences/clientPreferences.ts',
-    ],
+    // 清单中的每个路径都必须真实存在；`check_eslint_boundary_exceptions` 会拒绝过期条目，
+    // 避免同一路径日后被新文件继承豁免。
+    files: boundaryExceptionFiles,
     rules: {
       'boundaries/element-types': 'off',
     },

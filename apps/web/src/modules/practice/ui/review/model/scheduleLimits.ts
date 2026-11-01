@@ -1,3 +1,4 @@
+import { beijingStudyDay } from '@/shared/lib/dateTime'
 import { INTERVAL_BAND_BOUNDS } from './intervalBands'
 
 /**
@@ -20,13 +21,20 @@ export function toIsoDate(value: Date) {
 }
 
 /**
- * The study day the server would use: it rolls over at 03:00, so 01:00 still
- * belongs to yesterday. Manual presets ("明天") must count from that day or an
- * after-midnight tap books a date the learner did not pick.
+ * The study day the server would use: it rolls over at 03:00 Beijing time, so
+ * 01:00 still belongs to yesterday. Manual presets ("明天") must count from that
+ * day or an after-midnight tap books a date the learner did not pick.
+ *
+ * The calendar parts come from `beijingStudyDay`, not from the browser's local
+ * timezone. A Windows install left on UTC otherwise disagrees with the server
+ * about "today" for eight hours a day, and the preset books the wrong date.
  */
 export function studyDayStart(now = new Date()) {
-  const anchor = new Date(now.getTime() - 3 * 60 * 60 * 1000)
-  return new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate())
+  const [year, month, day] = beijingStudyDay(now).split('-').map(Number)
+  if (!year || !month || !day) {
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  }
+  return new Date(year, month - 1, day)
 }
 
 export function isoDateFromStudyDay(daysFromToday: number, now = new Date()) {
