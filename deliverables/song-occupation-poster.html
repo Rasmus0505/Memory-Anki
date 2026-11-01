@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>宋职图鉴 · 从清明上河图中看北宋职业</title>
+<style>
+  html, body { margin: 0; background: #d9c8a6; }
+  body { display: flex; justify-content: center; padding: 16px 0; }
+  #poster { width: min(100vw, 1205px); height: auto; display: block; box-shadow: 0 4px 24px rgba(60, 40, 10, .25); }
+  text { font-family: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "SimSun", "STSong", serif; fill: #3d2a16; }
+  text.en { font-family: Georgia, "Times New Roman", serif; font-style: italic; fill: #6e5a3e; }
+  @media print { html, body { background: none; } body { padding: 0; } #poster { width: 1205px; box-shadow: none; } }
+</style>
+</head>
+<body>
+<svg id="poster" viewBox="0 0 1205 1680" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- 纸纹 -->
+    <filter id="paper" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7" result="n"/>
+      <feColorMatrix in="n" type="matrix" values="0 0 0 0 .45  0 0 0 0 .32  0 0 0 0 .15  0 0 0 .09 0"/>
+    </filter>
+    <!-- 斜线纹，用于画面填充 -->
+    <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <line x1="0" y1="0" x2="0" y2="6" stroke="#8b6b3e" stroke-width="1"/>
+    </pattern>
+    <clipPath id="mapclip">
+      <path d="M20 20 L60 8 L110 15 L150 40 L165 90 L155 140 L160 180 L120 197 L80 185 L40 190 L15 150 L25 110 L8 70 L12 40 Z"/>
+    </clipPath>
+  </defs>
+
+  <!-- 底色 -->
+  <rect width="1205" height="1680" fill="#f3e6cc"/>
+  <rect width="1205" height="1680" fill="#fff" filter="url(#paper)"/>
+
+  <!-- 地平线 -->
+  <rect x="0" y="445" width="1205" height="18" fill="url(#hatch)" opacity=".35"/>
+  <line x1="0" y1="445" x2="1205" y2="445" stroke="#3d2a16" stroke-width="2"/>
+
+  <g id="layer-scene"></g>
+  <g id="layer-mid"></g>
+  <g id="layer-ring"></g>
+  <g id="layer-bottom"></g>
+</svg>
+
+<script>
+(() => {
+  const svg = document.getElementById('poster');
+  const NS = 'http://www.w3.org/2000/svg';
+  const INK = '#3d2a16', BROWN = '#8b5a2b', GOLD = '#c9a13a', PURPLE = '#8c6fd6', CREAM = '#f3e6cc', PAPER2 = '#ead7b0';
+  const DOTS = [INK, '#7d6a52', GOLD, PURPLE, '#a88c5e'];
+  const rad = d => d * Math.PI / 180;
+
+  // ---------- 基础工具 ----------
+  function el(tag, attrs = {}, parent = svg) {
+    const n = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) if (v !== null && v !== undefined) n.setAttribute(k, v);
+    parent.appendChild(n);
+    return n;
+  }
+  function g(attrs = {}, parent = svg) { return el('g', attrs, parent); }
+  function text(str, x, y, o = {}) {
+    const t = el('text', {
+      x, y,
+      'font-size': o.size ?? 13,
+      'font-weight': o.bold ? 700 : null,
+      'text-anchor': o.anchor,
+      class: o.en ? 'en' : null,
+      fill: o.fill,
+      transform: o.rotate ? `rotate(${o.rotate} ${x} ${y})` : null,
+    }, o.parent ?? svg);
+    t.textContent = str;
+    return t;
+  }
+  // 竖排：逐字叠放
+  function vtext(str, x, y, o = {}) {
+    const size = o.size ?? 13, gap = o.gap ?? size * 1.15;
+    [...str].forEach((ch, i) => text(ch, x, y + i * gap, { ...o, anchor: 'middle' }));
+  }
+  // 按字数折行，返回行数
+  function wrap(str, x, y, width, o = {}) {
+    const size = o.size ?? 13, lh = o.lh ?? size * 1.6, per = Math.floor(width / size);
+    let line = '', row = 0;
+    for (const ch of str) {
+      line += ch;
+      if ([...line].length >= per) { text(line, x, y + row * lh, o); line = ''; row++; }
+    }
+    if (line) { text(line, x, y + row * lh, o); row++; }
+    return row;
+  }
+  function wedge(cx, cy, r1, r2, a1, a2) {
+    const p = (r, a) => [cx + r * Math.cos(rad(a)), cy + r * Math.sin(rad(a))];
+    const [x1, y1] = p(r2, a1), [x2, y2] = p(r2, a2), [x3, y3] = p(r1, a2), [x4, y4] = p(r1, a1);
+    const large = (a2 - a1) > 180 ? 1 : 0;
+    return `M${x1} ${y1} A${r2} ${r2} 0 ${large} 1 ${x2} ${y2} L${x3} ${y3} A${r1} ${r1} 0 ${large} 0 ${x4} ${y4} Z`;
+  }
+  // 文字沿圆周切线放置时的旋转角，保证不倒置
+  function readRot(a) {
+    let r = (((a + 90) % 360) + 360) % 360;
+    if (r > 90 && r <= 270) r += 180;
+    if (r > 180) r -= 360;
+    return r;
+  }
+  // 放射线 + 末端圆点（职业/行业的“棒棒糖”图）
+  function spikes(cx, cy, n, r0, lenMin, lenVar, seed, parent) {
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * 360 + (i % 2) * 1.5;
+      const len = lenMin + ((i * seed) % 13) / 12 * lenVar;
+      const d = 2.5 + ((i * 31 + seed) % 11) * 1.4;
+      const p = r => [cx + r * Math.cos(rad(a)), cy + r * Math.sin(rad(a))];
+      const [x1, y1] = p(r0), [x2, y2] = p(len), [x3, y3] = p(len + d * 0.6);
+      el('line', { x1, y1, x2, y2, stroke: INK, 'stroke-width': .8, opacity: .55 }, parent);
+      el('circle', { cx: x3, cy: y3, r: d, fill: DOTS[(i * 7 + seed) % DOTS.length] }, parent);
+    }
+  }
+  // 简笔人物（脚底在 x,y）
+  function person(x, y, s = 1, parent = svg) {
+    const t = g({ transform: `translate(${x} ${y}) scale(${s})`, fill: 'none', stroke: INK, 'stroke-width': 1.5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, parent);
+    el('circle', { cx: 0, cy: -38, r: 4.5, fill: INK, stroke: 'none' }, t);
+    el('path', { d: 'M0 -32 V-14 M-7 -26 H7 M-4 -14 L-6 0 M4 -14 L6 0' }, t);
+    return t;
+  }
+  // 简笔板车（车轮中心在 x,y）
+  function cart(x, y, s = 1, parent = svg) {
+    const t = g({ transform: `translate(${x} ${y}) scale(${s})`, fill: 'none', stroke: INK, 'stroke-width': 1.6, 'stroke-linejoin': 'round' }, parent);
+    el('path', { d: 'M-50 -30 H40 L52 -14 H-50 Z' }, t);
+    el('path', { d: 'M-50 -14 V-4 M40 -30 V-44 H58 M-40 -30 V-44 H40' }, t);
+    el('path', { d: 'M-40 -44 Q0 -62 40 -44' }, t);
+    el('circle', { cx: -26, cy: 0, r: 13 }, t);
+    el('circle', { cx: 26, cy: 0, r: 13 }, t);
+    el('path', { d: 'M-26 -13 V13 M-39 0 H-13 M26 -13 V13 M13 0 H39' }, t);
+    el('path', { d: 'M60 -22 L100 -14' }, t);
+    return t;
+  }
+  // 简笔牛（脚底在 x,y）
+  function ox(x, y, s = 1, parent = svg) {
+    const t = g({ transform: `translate(${x} ${y}) scale(${s})`, fill: 'none', stroke: INK, 'stroke-width': 1.5, 'stroke-linecap': 'round' }, parent);
+    el('ellipse', { cx: 0, cy: -18, rx: 22, ry: 12 }, t);
+    el('path', { d: 'M-18 -6 V0 M-10 -6 V0 M10 -6 V0 M18 -6 V0 M20 -22 L30 -34 M22 -18 Q34 -20 32 -30' }, t);
+    el('circle', { cx: 34, cy: -32, r: 5 }, t);
+    return t;
+  }
+  // 简笔船（船底中线在 x,y）
+  function boat(x, y, s = 1, parent = svg) {
+    const t = g({ transform: `translate(${x} ${y}) scale(${s})`, fill: 'none', stroke: INK, 'stroke-width': 1.6, 'stroke-linejoin': 'round' }, parent);
+    el('path', { d: 'M-90 0 H90 L70 26 H-70 Z' }, t);
+    el('path', { d: 'M0 0 V-150 M0 -150 L-6 -140' }, t);
+    el('path', { d: 'M4 -140 Q60 -100 70 -20 H4 Z' }, t);
+    el('path', { d: 'M-4 -120 Q-50 -80 -60 -10 H-4 Z' }, t);
+    return t;
+  }
+  // 标注：紫色圆点 + 引线 + 文字
+  function callout(x, y, label, lx, ly) {
+    el('line', { x1: x, y1: y, x2: lx, y2: ly, stroke: INK, 'stroke-width': .8 });
+    el('circle', { cx: x, cy: y, r: 13, fill: PURPLE, opacity: .85 });
+    text(label, lx + (lx < x ? -4 : 4), ly + 4, { size: 12, anchor: lx < x ? 'end' : 'start' });
+  }
+
+  // ---------- 1. 顶部：标题与三栏说明 ----------
+  const top = document.getElementById('layer-scene');
+  vtext('宋职图鉴', 62, 80, { size: 60, gap: 66, bold: true, anchor: 'middle' });
+  text('Song Dynasty · Official Title Catalogue', 104, 20, { en: true, size: 12, rotate: 90 });
+  vtext('从清明上河图中看北宋职业', 62, 318, { size: 24, gap: 27 });
+
+  text('宋代职业分析', 150, 38, { size: 22, bold: true });
+  text('Analysis of Occupations in the Song Dynasty', 150, 58, { en: true, size: 12 });
+  [
+    '【服务业高度发达：餐饮、娱乐、日常服务业繁多，反映城市消费型社会的形成。】',
+    '【产业链分工细密：如制瓷可分采土、练泥、拉坯、上釉、烧窑等不同工序的专门工匠。】',
+    '【商业驱动明显：大量职业围绕商品流通（运输、中介、零售）展开。】',
+    '【官营与私营并存：如酿酒、制盐、铸钱等需要行业官营工场，同时民间手工业遍布。】',
+    '【跨区域职业流动：商人、船工、脚夫等将成全国性市场网络的人力基础。】',
+  ].reduce((y, s) => y + wrap(s, 150, y, 520, { size: 11.5, lh: 18 }) * 18 + 4, 92);
+
+  text('行业交互', 700, 26, { size: 20, bold: true, anchor: 'middle' });
+  text('Industry interaction', 700, 44, { en: true, size: 12, anchor: 'middle' });
+
+  text('背景资料', 1185, 26, { size: 20, bold: true, anchor: 'end' });
+  text('Background information', 1185, 44, { en: true, size: 12, anchor: 'end' });
+  wrap('北宋时期（960-1127年），伴随着商品经济的空前繁荣与城市坊市制度的瓦解，中国社会迎来了一个职业结构高度复杂化与专门化的历史阶段。张择端的《清明上河图》作为中国绘画史上不朽的风俗画卷，以其高度的写实主义手法，生动再现了北宋都城汴京的市井生活风貌。画卷中描绘了数百位形态各异的人物，涉及运输、商贸、餐饮、医疗、服务等诸多行业，堪称一部“北宋职业百科全书”。',
+    800, 64, 380, { size: 11.5, lh: 17 });
+
+  // 顶部场景（简笔线稿代替手绘插画）
+  boat(290, 412, 1.3, top);
+  person(232, 412, .8, top); person(352, 412, .8, top);
+  ox(470, 430, 1.1, top);
+  cart(580, 430, 1.1, top);
+  person(530, 430, .9, top); person(640, 430, .9, top);
+  person(720, 430, .9, top); person(760, 430, .8, top); person(820, 430, .8, top);
+  cart(900, 430, 1.4, top);
+  ox(1010, 430, 1.2, top);
+  person(1090, 430, 1.1, top); person(1130, 430, 1, top);
+  // 水纹
+  for (let x = 0; x < 1205; x += 60) el('path', { d: `M${x} 455 q15 -5 30 0 t30 0`, fill: 'none', stroke: INK, 'stroke-width': .8, opacity: .5 }, top);
+
+  callout(352, 330, '船工', 430, 232);
+  callout(540, 380, '脚夫', 500, 240);
+  callout(705, 330, '车夫', 640, 228);
+  callout(900, 330, '酒保', 830, 232);
+  callout(1130, 340, '医者', 1080, 240);
+
+  // ---------- 2. 中部：职业图片 / 语录 / 印章 / 地图 ----------
+  const mid = document.getElementById('layer-mid');
+
+  // 左：酒肆（简笔）
+  for (let k = 0; k < 8; k++) el('rect', { x: 110 + k * 28.75, y: 470, width: 28.75, height: 24, fill: k % 2 ? PAPER2 : GOLD, stroke: INK, 'stroke-width': .8 }, mid);
+  el('path', { d: 'M110 494 q14.4 12 28.75 0 q14.4 12 28.75 0 q14.4 12 28.75 0 q14.4 12 28.75 0 q14.4 12 28.75 0 q14.4 12 28.75 0 q14.4 12 28.75 0 q14.4 12 28.75 0', fill: 'none', stroke: INK, 'stroke-width': .8 }, mid);
+  el('path', { d: 'M120 506 V800 M330 506 V800', stroke: INK, 'stroke-width': 1.6 }, mid);
+  el('rect', { x: 120, y: 640, width: 210, height: 14, fill: BROWN, stroke: INK, 'stroke-width': 1 }, mid);
+  el('path', { d: 'M130 654 V800 M320 654 V800', stroke: INK, 'stroke-width': 1.6 }, mid);
+  [150, 190, 230, 270, 300].forEach((x, i) => el('circle', { cx: x, cy: 626, r: 9 + (i % 2) * 3, fill: 'none', stroke: INK, 'stroke-width': 1.2 }, mid));
+  el('path', { d: 'M236 530 L300 530 L296 570 L240 570 Z', fill: 'url(#hatch)', stroke: INK, 'stroke-width': 1 }, mid);
+  person(190, 800, 1.3, mid);
+  person(270, 800, 1.15, mid);
+  person(150, 800, 1, mid);
+  callout(150, 720, '食客', 90, 760);
+  callout(300, 560, '店主', 350, 520);
+
+  // 中：语录板块
+  el('rect', { x: 360, y: 470, width: 320, height: 420, fill: PAPER2, opacity: .85 }, mid);
+  el('rect', { x: 360, y: 470, width: 320, height: 420, fill: 'url(#hatch)', opacity: .12 }, mid);
+  [
+    [650, '工匠四方来，器用天下足。', 14], [618, '——反映北宋手工业状况', 12],
+    [586, '舟船千百艘，连樯如栉比。', 14], [554, '——张择端《清明上河图》', 12],
+    [522, '小楼一夜听春雨', 14], [490, '深巷明朝卖杏花', 14], [458, '——陆游《临安春雨初霁》', 12],
+    [426, '箫鼓喧空，几家夜宴。', 14], [394, '市声嘈杂，千里人烟。', 14],
+  ].forEach(([x, s, size]) => vtext(s, x, 500, { size, gap: size * 1.35, anchor: 'middle', fill: INK }));
+
+  // 印章
+  el('rect', { x: 700, y: 500, width: 150, height: 190, fill: '#a8703f', rx: 2 }, mid);
+  el('rect', { x: 708, y: 508, width: 134, height: 174, fill: 'none', stroke: CREAM, 'stroke-width': 1.5, opacity: .8 }, mid);
+  vtext('宋職圖鑑', 775, 548, { size: 38, gap: 42, anchor: 'middle', fill: CREAM });
+
+  // 右：北宋地图
+  text('北宋地图', 1180, 488, { size: 22, bold: true, anchor: 'end' });
+  text('Map of the Northern Song Dynasty', 1180, 506, { en: true, size: 12, anchor: 'end' });
+  const mg = g({ transform: 'translate(1010 520)' }, mid);
+  el('path', { d: 'M20 20 L60 8 L110 15 L150 40 L165 90 L155 140 L160 180 L120 197 L80 185 L40 190 L15 150 L25 110 L8 70 L12 40 Z', fill: '#d8b98a', stroke: BROWN, 'stroke-width': 1.2 }, mg);
+  const mapDots = g({ 'clip-path': 'url(#mapclip)' }, mg);
+  for (let k = 0; k < 90; k++) el('circle', { cx: 10 + (k * 37) % 160, cy: 10 + (k * 53) % 190, r: 1.3 + (k % 3) * .5, fill: INK, opacity: .7 }, mapDots);
+  [[70, 60], [100, 110], [60, 140], [125, 150]].forEach(([x, y]) => el('circle', { cx: x, cy: y, r: 5, fill: PURPLE, opacity: .85 }, mg));
+
+  // ---------- 3. 大环形图：行业与职业 ----------
+  const ring = document.getElementById('layer-ring');
+  const CX = 800, CY = 1010;
+  const SECTORS = [
+    { n: '渔业', c: -150, inner: '#e6d3a6', band: '#d8bf8b', icon: 'fish' },
+    { n: '运输', c: -90, inner: '#e8c35c', band: '#e4b94f', icon: 'boat' },
+    { n: '商业', c: -30, inner: '#dcc597', band: '#d3b47c', icon: 'coin' },
+    { n: '娱乐与贸易', c: 30, inner: '#cfb27f', band: '#c49d64', icon: 'drum' },
+    { n: '手工业', c: 90, inner: '#e2cb9c', band: '#b8905a', icon: 'anvil' },
+    { n: '餐饮', c: 150, inner: '#d9bf8a', band: '#d0b07a', icon: 'bowl' },
+  ];
+  const ICONS = {
+    boat: '<path d="M-22 6 H22 L15 16 H-15 Z"/><path d="M0 6 V-22 L14 0 H0"/>',
+    coin: '<circle cx="-7" cy="-4" r="7"/><circle cx="7" cy="3" r="7"/><path d="M-16 12 H16"/>',
+    drum: '<ellipse cx="0" cy="0" rx="18" ry="7"/><path d="M-18 0 V10 A18 7 0 0 0 18 10 V0 M-8 -6 L-4 -2 M8 -6 L4 -2"/>',
+    anvil: '<path d="M-20 -8 H20 V-2 H8 L14 10 H-14 L-8 -2 H-20 Z"/>',
+    bowl: '<path d="M-18 0 H18 Q18 16 0 16 Q-18 16 -18 0 Z"/><path d="M-7 -6 Q-5 -12 -7 -18 M5 -6 Q7 -12 5 -18"/>',
+    fish: '<ellipse cx="-2" cy="0" rx="14" ry="8"/><path d="M12 0 L22 -8 V8 Z"/><circle cx="-8" cy="-2" r="1.5"/>',
+  };
+
+  // 外圈放射线（先画，后被扇形压住）
+  spikes(CX, CY, 72, 250, 262, 110, 3, ring);
+
+  SECTORS.forEach(s => {
+    const a1 = s.c - 30, a2 = s.c + 30;
+    el('path', { d: wedge(CX, CY, 62, 205, a1, a2), fill: s.inner, stroke: CREAM, 'stroke-width': 2 }, ring);
+    el('path', { d: wedge(CX, CY, 62, 205, a1, a2), fill: 'url(#hatch)', opacity: .3 }, ring);
+    el('path', { d: wedge(CX, CY, 205, 242, a1, a2), fill: s.band, stroke: CREAM, 'stroke-width': 2 }, ring);
+    const ix = CX + 138 * Math.cos(rad(s.c)), iy = CY + 138 * Math.sin(rad(s.c));
+    const ic = g({ transform: `translate(${ix} ${iy}) scale(1.5)`, fill: 'none', stroke: INK, 'stroke-width': 1.2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, ring);
+    ic.innerHTML = ICONS[s.icon];
+    const lx = CX + 217 * Math.cos(rad(s.c)), ly = CY + 217 * Math.sin(rad(s.c));
+    text(s.n, lx, ly, { size: 16, bold: true, anchor: 'middle', rotate: readRot(s.c) }, ring);
+  });
+
+  // 圆心：放射细线
+  el('circle', { cx: CX, cy: CY, r: 60, fill: CREAM, stroke: GOLD, 'stroke-width': 2 }, ring);
+  for (let i = 0; i < 120; i++) {
+    const a = rad(i * 3);
+    el('line', { x1: CX + 6 * Math.cos(a), y1: CY + 6 * Math.sin(a), x2: CX + 56 * Math.cos(a), y2: CY + 56 * Math.sin(a), stroke: BROWN, 'stroke-width': .5, opacity: .7 }, ring);
+  }
+
+  // ---------- 4. 顶部小环：行业交互 ----------
+  const tcx = 700, tcy = 130;
+  for (let i = 0; i < 12; i++) el('path', { d: wedge(tcx, tcy, 40, 60, i * 30, i * 30 + 30), fill: i % 2 ? BROWN : GOLD, stroke: CREAM, 'stroke-width': 1.5 }, svg);
+  spikes(tcx, tcy, 36, 66, 62, 12, 5);
+  el('circle', { cx: tcx, cy: tcy, r: 38, fill: CREAM, stroke: BROWN, 'stroke-width': 1.5 });
+
+  // ---------- 5. 下部：柱状图 / 时间点阵 / 摘要 ----------
+  const bot = document.getElementById('layer-bottom');
+
+  // 简笔桥与船（画在环形图左侧）
+  el('path', { d: 'M30 1080 Q290 880 540 1080 L540 1120 Q290 930 30 1120 Z', fill: 'url(#hatch)', stroke: INK, 'stroke-width': 2.2 }, bot);
+  el('path', { d: 'M40 1120 Q290 940 530 1120', fill: 'none', stroke: INK, 'stroke-width': 1 }, bot);
+  for (let x = 60; x < 530; x += 22) el('line', { x1: x, y1: 1120 - Math.abs(290 - x) * .18 + 10, x2: x + 6, y2: 1098 - Math.abs(290 - x) * .18, stroke: INK, 'stroke-width': .8 }, bot);
+  person(250, 1060, 2.2, bot);
+  boat(400, 1250, .72, bot);
+  [[125, 830, 28], [230, 820, 16], [330, 915, 16], [160, 1050, 12]].forEach(([x, y, r]) => el('circle', { cx: x, cy: y, r, fill: PURPLE, opacity: .85 }, bot));
+  el('circle', { cx: 540, cy: 1040, r: 28, fill: GOLD, opacity: .9 }, bot);
+
+  // 柱状图（商业经济 / 城市经济）
+  const BASE = 1530;
+  [1300, 1360, 1420, 1480].forEach(y => el('line', { x1: 40, y1: y, x2: 500, y2: y, stroke: INK, 'stroke-width': .5, 'stroke-dasharray': '3 4', opacity: .5 }, bot));
+  text('收益率', 40, 1292, { size: 12 }, bot);
+  for (let i = 0; i < 20; i++) {
+    const hA = 70 + (i * 67) % 140, hB = 40 + (i * 43) % 110;
+    el('rect', { x: 56 + i * 22, y: BASE - hA, width: 9, height: hA, fill: '#e0b85a' }, bot);
+    el('rect', { x: 66 + i * 22, y: BASE - hB, width: 9, height: hB, fill: '#b06a2b' }, bot);
+  }
+  el('line', { x1: 40, y1: BASE, x2: 500, y2: BASE, stroke: INK, 'stroke-width': 1 }, bot);
+  el('rect', { x: 515, y: 1488, width: 14, height: 14, fill: '#e0b85a' }, bot);
+  text('商业经济', 536, 1500, { size: 13 }, bot);
+  el('rect', { x: 515, y: 1512, width: 14, height: 14, fill: '#b06a2b' }, bot);
+  text('城市经济', 536, 1524, { size: 13 }, bot);
+
+  // 时间点阵
+  text('活动时辰', 1180, 1386, { size: 22, bold: true, anchor: 'end' }, bot);
+  text('The time of the event', 1180, 1404, { en: true, size: 12, anchor: 'end' }, bot);
+  el('line', { x1: 800, y1: 1390, x2: 1000, y2: 1395, stroke: INK, 'stroke-width': .8 }, bot);
+  ['0h', '3h', '6h', '9h', '12h', '15h', '18h', '21h'].forEach((h, i) => text(h, 830 + i * 46, 1424, { size: 10, anchor: 'middle' }, bot));
+  const ROWS = [
+    { n: '物流', y: 1443, c: GOLD }, { n: '娱乐与贸易', y: 1480, c: '#7d6a52' }, { n: '商业', y: 1517, c: '#5b4630' },
+    { n: '交通运输', y: 1555, c: PURPLE }, { n: '手工业', y: 1592, c: '#5b4630' }, { n: '渔业', y: 1628, c: '#9b8b5c' },
+  ];
+  ROWS.forEach((r, j) => {
+    el('line', { x1: 830, y1: r.y, x2: 1170, y2: r.y, stroke: '#c8b48c', 'stroke-width': .6 }, bot);
+    text(r.n, 748, r.y + 4, { size: 12 }, bot);
+    for (let k = 0; k < 14 + j * 2; k++) {
+      const x = 840 + ((k * 71 + j * 131) % 300), rr = 2 + ((k * 17 + j * 5) % 7) * 1.1;
+      el('circle', { cx: x, cy: r.y, r: rr, fill: r.c, opacity: .85 }, bot);
+    }
+  });
+
+  // 摘要
+  text('摘要', 40, 1562, { size: 22, bold: true }, bot);
+  text('Abstract', 100, 1562, { en: true, size: 15 }, bot);
+  text('职业与社会经济关系', 480, 1562, { size: 22, bold: true }, bot);
+  text('Occupation and Socioeconomic Relations', 480, 1582, { en: true, size: 12 }, bot);
+  wrap('《清明上河图》是北宋画家张择端的传世名作，以汴京（今开封）为背景，描绘了北宋中后期城市生活的繁荣景象。画中涵盖了众多职业，反映了当时社会的经济、文化与社会结构。本图选取画中职业的多样性进行可视化设计，梳理并呈现北宋时期的职业分布与行业之间的关联，为研究北宋社会经济结构提供直观的视觉资料，也为现代职业研究提供历史对比的视角。',
+    40, 1604, 660, { size: 12, lh: 18 }, bot);
+})();
+</script>
+</body>
+</html>
