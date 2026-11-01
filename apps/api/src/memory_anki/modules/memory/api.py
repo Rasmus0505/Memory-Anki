@@ -22,6 +22,7 @@ from .application.unit_review_queue_read import (
     list_round_unit_ratings,
     list_trusted_due_units_for_queue,
     list_unit_node_members,
+    list_unit_scheduling_nodes,
     list_units_rated_on,
     summarize_waiting_units,
 )
@@ -117,6 +118,7 @@ __all__ = [
     "list_units_rated_on",
     "summarize_waiting_units",
     "list_unit_node_members",
+    "list_unit_scheduling_nodes",
     "list_palace_unit_pass_states",
     "list_latest_unit_ratings",
     "list_round_unit_ratings",

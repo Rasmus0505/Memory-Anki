@@ -1,4 +1,5 @@
 import type {
+  FreestyleOverlayQuestionRange,
   FreestyleOverlayScopePalaces,
   FreestyleOverlayScopeReason,
   FreestyleQuizScope,
@@ -13,15 +14,18 @@ import type { FreestyleRoundPlanState } from '@/modules/practice/domain/roundPla
  * owner and returns `scope_palaces`; this module only turns stable reason codes
  * into Chinese copy and formats the summary line.
  *
- * The scope is the round's own review set. The saved 随心 config is **not**
- * applied a second time: if the config selects 20 palaces but this round
- * scheduled 10, 做题 draws from those 10. An earlier version filtered by config
- * here and reported 「不在当前随心范围」 for palaces the round had scheduled —
- * and when the config was narrowed afterwards the pool silently emptied.
+ * The scope is the round's scheduled review units plus each unit's root→anchor
+ * path, or the whole palace when the learner opts into that range. The saved
+ * 随心 config is **not** applied a second time: if the config selects 20 palaces
+ * but this round scheduled 10, 做题 draws from those 10. An earlier version
+ * filtered by config here and reported 「不在当前随心范围」 for palaces the round
+ * had scheduled — and when the config was narrowed afterwards the pool silently
+ * emptied.
  */
 
 export const OVERLAY_SCOPE_REASON_LABELS: Record<Exclude<FreestyleOverlayScopeReason, ''>, string> = {
   no_questions: '还没有题目',
+  unit_no_questions: '本轮单元没有题目',
   kinds_filtered: '题型未勾选',
   palace_removed: '已移除队列',
   palace_skipped: '已从做题删除',
@@ -122,6 +126,17 @@ export function overlayQuizScopeLabel(scope: FreestyleQuizScope): string {
   return scope === 'single_palace_random' ? '一个宫殿刷完再换' : '跨宫殿乱序'
 }
 
+export const OVERLAY_QUESTION_RANGE_LABELS: Record<FreestyleOverlayQuestionRange, string> = {
+  round_units: '本轮复习单元',
+  whole_palace: '整个宫殿',
+}
+
+export function overlayQuestionRangeHint(range: FreestyleOverlayQuestionRange): string {
+  return range === 'whole_palace'
+    ? '本轮涉及的宫殿里所有题都出，范围大、重复多。'
+    : '只出本轮复习单元和从根节点到它的整条路径上的题。'
+}
+
 /**
  * Palaces that stopped contributing questions between two scope reports.
  *
@@ -145,6 +160,6 @@ export function overlayScopeLeftPoolNotice(
 ): string {
   if (!left.length) return ''
   const names = left.map((row) => row.title).join('、')
-  if (left.length === 1) return `随心范围已更新：${names} 的题已移出本次做题。`
-  return `随心范围已更新：${names} 共 ${left.length} 座宫殿的题已移出本次做题。`
+  if (left.length === 1) return `做题范围已更新：${names} 的题已移出本次做题。`
+  return `做题范围已更新：${names} 共 ${left.length} 座宫殿的题已移出本次做题。`
 }

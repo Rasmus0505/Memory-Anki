@@ -45,8 +45,12 @@ BOUND_QUIZ_STREAM = "quiz_stream"
 QUIZ_SCOPE_CROSS = "cross_palace_random"
 QUIZ_SCOPE_SINGLE = "single_palace_random"
 
-OVERLAY_QUESTION_RANGE_DUE = "due"
-OVERLAY_QUESTION_RANGE_ALL = "all"
+# Toolbar 做题 pool membership. The default follows the round's own review
+# units; 整个宫殿 is the opt-in wide range. Legacy stored values ("all", "due")
+# sanitize to the default: the old due range is retired, and an old "all" must
+# not keep a learner on the wide pool after this rule changed.
+OVERLAY_QUESTION_RANGE_ROUND_UNITS = "round_units"
+OVERLAY_QUESTION_RANGE_WHOLE_PALACE = "whole_palace"
 
 OVERLAY_KIND_OBJECTIVE = "objective"
 OVERLAY_KIND_SUBJECTIVE = "subjective"
@@ -120,9 +124,10 @@ QUIZ_ORDER_RANDOM = "random"
 QUIZ_ORDERS = {QUIZ_ORDER_NEW_FIRST, QUIZ_ORDER_RANDOM}
 
 OVERLAY_QUESTION_RANGES = {
-    OVERLAY_QUESTION_RANGE_DUE,
-    OVERLAY_QUESTION_RANGE_ALL,
+    OVERLAY_QUESTION_RANGE_ROUND_UNITS,
+    OVERLAY_QUESTION_RANGE_WHOLE_PALACE,
 }
+DEFAULT_OVERLAY_QUESTION_RANGE = OVERLAY_QUESTION_RANGE_ROUND_UNITS
 
 OVERLAY_QUESTION_KINDS = {
     OVERLAY_KIND_OBJECTIVE,
@@ -268,7 +273,7 @@ def _as_overlay_question_range(value: Any) -> str:
     key = str(value or "").strip()
     if key in OVERLAY_QUESTION_RANGES:
         return key
-    return OVERLAY_QUESTION_RANGE_ALL
+    return DEFAULT_OVERLAY_QUESTION_RANGE
 
 
 def _as_overlay_question_kinds(value: Any) -> list[str]:
@@ -669,7 +674,9 @@ def queue_construction_signature(raw: Any) -> str:
             "unit_order": memory["unit_order"],
             "quiz_scope": quiz["quiz_scope"],
             "quiz_order": quiz["order"],
-            "overlay_question_range": quiz["overlay_question_range"],
+            # overlay_question_range is deliberately absent: it narrows the 做题
+            # pool only. Rebuilding the review card queue when the learner
+            # switches 本轮单元 / 整个宫殿 would reorder work they did not change.
             "mastery_buckets": quiz["mastery_buckets"],
             "weak_priority": quiz["weak_priority"],
             "question_type": quiz["question_type"],

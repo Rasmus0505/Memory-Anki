@@ -5,7 +5,10 @@ import {
   overlayScopeReasonLabel,
   overlayScopeSummary,
 } from '@/modules/practice/ui/freestyle/model/overlayQuizRange'
-import type { FreestyleOverlayScopePalaces } from '@/shared/api/contracts'
+import type {
+  FreestyleOverlayQuestionRange,
+  FreestyleOverlayScopePalaces,
+} from '@/shared/api/contracts'
 import { Button } from '@/shared/components/ui/button'
 import { cn } from '@/shared/lib/utils'
 
@@ -166,6 +169,12 @@ export function OverlayQuizScopeList({
           本轮重新安排它，题就会回来，已答记录也还在。
         </p>
       ) : null}
+      {blocked.some((row) => row.reason === 'unit_no_questions') ? (
+        <p className="mt-2 text-xs leading-5 text-muted-foreground">
+          标为「本轮单元没有题目」的宫殿本身有题，但本轮要复习的单元和从根节点到它的路径上还没有绑定题目。
+          可以切到「整个宫殿」，或到宫殿里给这些知识点绑定题目。
+        </p>
+      ) : null}
       {blocked.some((row) => row.reason === 'palace_skipped') ? (
         <p className="mt-2 text-xs leading-5 text-muted-foreground">
           标为「已从做题删除」的宫殿，只是不再出它的题；复习安排和评分都不受影响，选中后可以重置回来。
@@ -178,12 +187,17 @@ export function OverlayQuizScopeList({
 /** Summary line above the list. Same report, so the two can never disagree. */
 export function OverlayQuizScopeSummary({
   scopePalaces,
+  range,
 }: {
   scopePalaces: FreestyleOverlayScopePalaces | null
+  range?: FreestyleOverlayQuestionRange
 }) {
+  const scopeCopy = range === 'whole_palace'
+    ? '只出这些宫殿的题，不改复习安排。'
+    : '只出本轮复习单元和从根节点到它的路径上的题，不改复习安排。'
   return (
     <p className="text-sm text-muted-foreground">
-      {overlayScopeSummary(scopePalaces)}。只出这些宫殿的题，不会改训练方向。
+      {overlayScopeSummary(scopePalaces)}。{scopeCopy}
     </p>
   )
 }

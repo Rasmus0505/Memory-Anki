@@ -83,8 +83,8 @@ export const FREESTYLE_QUIZ_SCOPES: FreestyleQuizScope[] = [
 ]
 
 export const FREESTYLE_OVERLAY_QUESTION_RANGES: FreestyleOverlayQuestionRange[] = [
-  'due',
-  'all',
+  'round_units',
+  'whole_palace',
 ]
 
 /** Default: new + weak + reinforce (exclude already-stable). */
@@ -113,7 +113,7 @@ export const DEFAULT_FREESTYLE_FEED_CONFIG: FreestyleFeedConfig = {
       question_type: 'all',
       mastery_buckets: [...DEFAULT_QUIZ_MASTERY_BUCKETS],
       quiz_scope: 'cross_palace_random',
-      overlay_question_range: 'all',
+      overlay_question_range: 'round_units',
       weak_priority: true,
       order: 'new_first',
     },
@@ -159,7 +159,7 @@ export const DEFAULT_FREESTYLE_FEED_CONFIG: FreestyleFeedConfig = {
   question_type: 'all',
   weak_quiz_priority: true,
   overlay_quiz_setup_done: false,
-  overlay_question_range: 'all',
+  overlay_question_range: 'round_units',
   overlay_question_kinds: [...DEFAULT_OVERLAY_QUESTION_KINDS],
   overlay_type_order: 'interleave',
   overlay_type_palace_nesting: 'palace_then_type',
@@ -248,7 +248,9 @@ function asQuizScope(value: unknown): FreestyleQuizScope {
 }
 
 function asOverlayQuestionRange(value: unknown): FreestyleOverlayQuestionRange {
-  return value === 'due' ? 'due' : 'all'
+  // Old stored values ('all', 'due') and anything unknown fall to the new
+  // default: the round's own review units.
+  return value === 'whole_palace' ? 'whole_palace' : 'round_units'
 }
 
 function asSubjectScope(value: unknown): FreestyleSubjectScope {
@@ -456,7 +458,6 @@ export function queueConstructionSignature(value: unknown): string {
     unit_order: config.streams.memory_palace.unit_order,
     due_policy: config.streams.memory_palace.due_policy,
     quiz_scope: config.streams.quiz.quiz_scope,
-    overlay_question_range: config.streams.quiz.overlay_question_range,
     mastery_buckets: config.streams.quiz.mastery_buckets,
     weak_priority: config.streams.quiz.weak_priority,
     question_type: config.streams.quiz.question_type,

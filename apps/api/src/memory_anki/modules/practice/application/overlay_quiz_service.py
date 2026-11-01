@@ -24,30 +24,38 @@ from sqlalchemy.orm import Session
 
 from memory_anki.modules.content.public.queries import (
     list_node_parent_uids,
+    list_palace_node_paths,
     resolve_palace_titles,
 )
-from memory_anki.modules.memory.public.queries import list_unit_node_members
+from memory_anki.modules.memory.public.queries import (
+    list_unit_node_members,
+    list_unit_scheduling_nodes,
+)
 from memory_anki.modules.quiz.public.queries import (
     list_node_bindings_for_palaces,
     list_published_questions_for_palaces,
 )
 
 from ..domain.feed_config import (
+    OVERLAY_QUESTION_RANGE_WHOLE_PALACE,
     OVERLAY_RATING_INHERIT_BLANK,
     OVERLAY_RATING_INHERIT_LOWEST,
     sanitize_feed_config,
 )
 from ..domain.overlay_quiz import (
     QUESTION_RATING_NONE,
-    SCOPE_REASON_KINDS_FILTERED,
-    SCOPE_REASON_NO_QUESTIONS,
-    SCOPE_REASON_PALACE_REMOVED,
-    SCOPE_REASON_PALACE_SKIPPED,
-    build_scope_palaces,
     order_overlay_questions,
     overlay_question_kind,
     overlay_quiz_scope_signature,
     pick_question_node_rating,
+)
+from ..domain.overlay_scope import (
+    SCOPE_REASON_KINDS_FILTERED,
+    SCOPE_REASON_NO_QUESTIONS,
+    SCOPE_REASON_PALACE_REMOVED,
+    SCOPE_REASON_PALACE_SKIPPED,
+    SCOPE_REASON_UNIT_NO_QUESTIONS,
+    build_scope_palaces,
 )
 from ..domain.queue_builder import QuizCandidate, sort_quiz_candidates
 
@@ -87,6 +95,84 @@ def _round_node_units(
         for node_uid in members:
             node_unit.setdefault(str(node_uid), unit_id)
     return node_unit
+
+
+def _unit_scope_node_uids(
+    session: Session,
+    *,
+    unit_ids: list[str],
+    palace_ids: list[int],
+) -> tuple[dict[int, set[str]], dict[int, str]]:
+    """``palace_id`` → node uids a scheduled unit makes eligible, plus roots.
+
+    A unit contributes its own member nodes **and every ancestor from the
+    palace root down to its anchor**. The anchor is a permanent mark, often on a
+    level-2 node; the knowledge points above it were still reviewed as context,
+    so their questions belong to this round too. A sibling branch does not.
+
+    No permanent mark means no units, but every scheduled palace still has a
+    root; ``roots`` lets a question with no binding record fall back to it (the
+    product rule: every question has a node, and the root is on every unit path).
+    """
+    scheduled = {int(item) for item in palace_ids if int(item) > 0}
+    tree_by_palace = list_palace_node_paths(session, sorted(scheduled)) if scheduled else {}
+    scope: dict[int, set[str]] = {}
+    roots: dict[int, str] = {}
+    for palace_id, tree in tree_by_palace.items():
+        root_uid = str(tree.get("root_uid") or "")
+        if root_uid:
+            roots[palace_id] = root_uid
+    if not unit_ids or not scheduled:
+        return scope, roots
+    units = list_unit_scheduling_nodes(session, list(unit_ids))
+    for unit in units.values():
+        palace_id = int(unit.get("palace_id") or 0)
+        if palace_id not in scheduled:
+            continue
+        tree = tree_by_palace.get(palace_id) or {}
+        parents = tree.get("parents")
+        parent_by_uid = parents if isinstance(parents, dict) else {}
+        root_uid = str(tree.get("root_uid") or "")
+        anchor_uid = str(unit.get("anchor_uid") or "")
+        nodes = scope.setdefault(palace_id, set())
+        nodes.update(
+            str(uid) for uid in (unit.get("node_uids") or []) if str(uid).strip()
+        )
+        if root_uid:
+            nodes.add(root_uid)
+        current = anchor_uid
+        seen: set[str] = set()
+        while current and current not in seen:
+            seen.add(current)
+            nodes.add(current)
+            current = str(parent_by_uid.get(current) or "")
+        # A palace without a readable editor_doc still has the unit's own
+        # parentless anchor as the only known root. This keeps unbound
+        # questions attributable instead of silently dropping them.
+        if palace_id not in roots and anchor_uid and not parent_by_uid.get(anchor_uid):
+            roots[palace_id] = anchor_uid
+    return scope, roots
+
+
+def _question_in_unit_scope(
+    question_palace_id: int,
+    bound_node_uids: set[str],
+    scope_node_uids: dict[int, set[str]],
+    root_uids: dict[int, str],
+) -> bool:
+    """Is this question on a scheduled unit's root path (or in its region)?
+
+    ``bound_node_uids`` must already be narrowed to edges in the question's own
+    palace; a binding into another palace doesn't make the question part of
+    this palace's review unit.
+    """
+    scope = scope_node_uids.get(question_palace_id)
+    if not scope:
+        return False
+    if bound_node_uids:
+        return bool(bound_node_uids & scope)
+    root_uid = root_uids.get(question_palace_id)
+    return bool(root_uid and root_uid in scope)
 
 
 def _rating_inherit_mode(value: str | None) -> str:
@@ -272,6 +358,17 @@ def build_overlay_question_pack(
     presentation choices (draw order, 客观/主观 kinds) but never narrows which
     palaces contribute.
 
+    Two ranges:
+
+    - ``round_units`` (default): only questions bound to the round's scheduled
+      review units, plus every ancestor node from the palace root down to each
+      unit's anchor. A unit is a permanent-mark region; the path above it was
+      reviewed as context, so its questions are included, but a sibling branch
+      is not. A question with no binding record is treated as bound to its
+      palace root, whose questions every unit path includes.
+    - ``whole_palace``: every non-deleted question of the round's palaces (the
+      old behaviour), opt-in from the 出题范围 page.
+
     ``removed_palace_ids`` are palaces whose every card the learner took out of
     this round with 移除本队列. They leave the scope too: the learner explicitly
     removed them, so their questions must go with them. A palace with even one
@@ -280,11 +377,12 @@ def build_overlay_question_pack(
     ``skipped_palace_ids`` are palaces the learner deleted from 做题 only. Their
     questions leave the pool; their review cards and ratings are untouched.
 
-    ``unit_ids`` are the round's review units, used to resolve each question's
-    bound knowledge points to this round's rating. ``waiting_unit_ids`` are the
-    subset the progress bar has not finished yet; only those may be labelled
-    「本轮尚未复习」. ``round_ratings`` maps ``unit_id`` → this round's 1–4 rating
-    (lowest wins per unit); a unit absent from it simply has no rating this round.
+    ``unit_ids`` are the round's review units. They define the default range and
+    resolve each question's bound knowledge points to this round's rating.
+    ``waiting_unit_ids`` are the subset the progress bar has not finished yet;
+    only those may be labelled 「本轮尚未复习」. ``round_ratings`` maps
+    ``unit_id`` → this round's 1–4 rating (lowest wins per unit); a unit absent
+    from it simply has no rating this round.
     """
     config = sanitize_feed_config(config_raw or {})
     raw_streams = config.get("streams")
@@ -301,19 +399,61 @@ def build_overlay_question_pack(
         for palace_id in scheduled_palace_ids
         if palace_id not in removed_ids and palace_id not in skipped_ids
     ]
+    range_mode = str(config.get("overlay_question_range") or "")
+    unit_scope_active = range_mode != OVERLAY_QUESTION_RANGE_WHOLE_PALACE
+    scope_node_uids: dict[int, set[str]] = {}
+    root_uids: dict[int, str] = {}
+    bindings_by_question: dict[int, set[tuple[int, str]]] = {}
+    if unit_scope_active:
+        scope_node_uids, root_uids = _unit_scope_node_uids(
+            session,
+            unit_ids=list(unit_ids or []),
+            palace_ids=scheduled_palace_ids,
+        )
+        for row in list_node_bindings_for_palaces(
+            session, palace_ids=scheduled_palace_ids
+        ):
+            qid = int(row.get("question_id") or 0)
+            node_uid = str(row.get("node_uid") or "")
+            binding_palace_id = int(row.get("palace_id") or 0)
+            if qid <= 0 or not node_uid or binding_palace_id <= 0:
+                continue
+            bindings_by_question.setdefault(qid, set()).add((binding_palace_id, node_uid))
+
+    def question_is_eligible(question: dict[str, Any]) -> bool:
+        if not unit_scope_active:
+            return True
+        palace_id = int(question.get("palace_id") or 0)
+        qid = int(question.get("id") or 0)
+        own_bound_nodes = {
+            node_uid
+            for binding_palace_id, node_uid in bindings_by_question.get(qid, ())
+            if binding_palace_id == palace_id
+        }
+        return _question_in_unit_scope(
+            palace_id, own_bound_nodes, scope_node_uids, root_uids
+        )
+
     # One catalog read over every scheduled palace, then split it: the pool only
-    # draws from the palaces still in this round, while the report needs counts
-    # for removed ones too ("移除队列 · 有 18 题" is the actionable number).
+    # draws from the palaces still in this round and questions eligible in the
+    # active range; the report needs counts for removed ones too
+    # ("移除队列 · 有 18 题" is the actionable number).
     available_questions = list_published_questions_for_palaces(
         session,
-        palace_ids=scheduled_palace_ids or None,
+        palace_ids=scheduled_palace_ids,
         question_type="all",
     )
+    eligibility_by_question = {
+        int(question.get("id") or 0): question_is_eligible(question)
+        for question in available_questions
+        if int(question.get("id") or 0) > 0
+    }
     allowed_palace_ids = set(ordered_palace_ids)
     questions = [
         question
         for question in available_questions
         if int(question.get("palace_id") or 0) in allowed_palace_ids
+        and eligibility_by_question.get(int(question.get("id") or 0), False)
     ]
     quizzes: list[QuizCandidate] = []
     for question in questions:
@@ -332,13 +472,21 @@ def build_overlay_question_pack(
             )
         )
     # Counts per scheduled palace (removed ones included), independent of the
-    # 客观/主观 checkboxes: this is what the scope list reports per row.
+    # 客观/主观 checkboxes: this is what the scope list reports per row. The
+    # active range narrows these counts; the palace total is kept separately so
+    # the report can distinguish "no questions" from "none in this unit".
     per_palace: dict[int, dict[str, int]] = {}
+    all_per_palace: dict[int, dict[str, int]] = {}
     for question in available_questions:
         palace_id = int(question.get("palace_id") or 0)
+        qid = int(question.get("id") or 0)
         if palace_id <= 0:
             continue
         kind = overlay_question_kind(str(question.get("question_type") or ""))
+        all_counts = all_per_palace.setdefault(palace_id, {"objective": 0, "subjective": 0})
+        all_counts[kind] = all_counts.get(kind, 0) + 1
+        if not eligibility_by_question.get(qid, False):
+            continue
         counts = per_palace.setdefault(palace_id, {"objective": 0, "subjective": 0})
         counts[kind] = counts.get(kind, 0) + 1
     kind_counts = {"objective": 0, "subjective": 0}
@@ -393,9 +541,12 @@ def build_overlay_question_pack(
         removed_palace_ids=sorted(removed_ids),
         skipped_palace_ids=sorted(skipped_ids),
         no_questions_reason=SCOPE_REASON_NO_QUESTIONS,
+        unit_no_questions_reason=SCOPE_REASON_UNIT_NO_QUESTIONS,
         kinds_filtered_reason=SCOPE_REASON_KINDS_FILTERED,
         palace_removed_reason=SCOPE_REASON_PALACE_REMOVED,
         palace_skipped_reason=SCOPE_REASON_PALACE_SKIPPED,
+        all_counts_by_palace=all_per_palace,
+        unit_scope_active=unit_scope_active,
     )
     return {
         "question_ids": question_ids,

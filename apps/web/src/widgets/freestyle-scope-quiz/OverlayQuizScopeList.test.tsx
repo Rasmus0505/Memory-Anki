@@ -10,8 +10,9 @@ import type { FreestyleOverlayScopePalaces } from '@/shared/api/contracts'
 /**
  * The 做题 scope list renders the backend report verbatim.
  *
- * The scope is the round's own review set: the saved 随心 config must not narrow
- * it a second time, so there is no "excluded by config" reason any more. See
+ * The scope is the round's own review units and their root paths (or the whole
+ * palace when chosen): the saved 随心 config must not narrow it a second time,
+ * so there is no "excluded by config" reason any more. See
  * docs/incidents/0002-quiz-scope-two-owners.md.
  */
 function scope(): FreestyleOverlayScopePalaces {
@@ -109,6 +110,26 @@ describe('OverlayQuizScopeList', () => {
     expect(text).toContain('本轮重新安排它，题就会回来')
   })
 
+  it('explains when a palace has questions but none on this round unit', () => {
+    const report = scope()
+    render(
+      <OverlayQuizScopeList
+        scopePalaces={{
+          ...report,
+          in_pool_count: 1,
+          palaces: report.palaces.map((row) =>
+            row.palace_id === 23
+              ? { ...row, question_count: 0, objective: 0, in_pool: false, reason: 'unit_no_questions' as const }
+              : row,
+          ),
+        }}
+      />,
+    )
+    const text = screen.getByTestId('freestyle-scope-list').textContent ?? ''
+    expect(text).toContain('本轮单元没有题目')
+    expect(text).toContain('从根节点到它的路径')
+  })
+
   it('does not explain removal when nothing was removed', () => {
     render(<OverlayQuizScopeList scopePalaces={scope()} />)
     const text = screen.getByTestId('freestyle-scope-list').textContent ?? ''
@@ -131,6 +152,20 @@ describe('OverlayQuizScopeList', () => {
   it('names the palaces in the summary instead of only counting them', () => {
     render(<OverlayQuizScopeSummary scopePalaces={scope()} />)
     expect(screen.getByText(/本轮纳入复习的 3 座宫殿/).textContent).toContain('其中 2 座可做')
+  })
+
+  it('says the default range is the round unit and its root path', () => {
+    render(<OverlayQuizScopeSummary scopePalaces={scope()} range="round_units" />)
+    expect(screen.getByText(/本轮纳入复习的 3 座宫殿/).textContent).toContain(
+      '本轮复习单元和从根节点到它的路径',
+    )
+  })
+
+  it('says the wide range draws the whole palace', () => {
+    render(<OverlayQuizScopeSummary scopePalaces={scope()} range="whole_palace" />)
+    expect(screen.getByText(/本轮纳入复习的 3 座宫殿/).textContent).toContain(
+      '只出这些宫殿的题',
+    )
   })
 
   it('says every palace is unplayable when the pool is empty', () => {
@@ -198,7 +233,7 @@ describe('OverlayQuizScopeList selection', () => {
 describe('OverlayQuizScopeLeftNotice', () => {
   it('renders the named palaces and dismisses', () => {
     const onDismiss = vi.fn()
-    render(<OverlayQuizScopeLeftNotice notice="随心范围已更新：福禄培尔 的题已移出本次做题。" onDismiss={onDismiss} />)
+    render(<OverlayQuizScopeLeftNotice notice="做题范围已更新：福禄培尔 的题已移出本次做题。" onDismiss={onDismiss} />)
     expect(screen.getByTestId('freestyle-scope-left-notice').textContent).toContain('福禄培尔')
     fireEvent.click(screen.getByRole('button', { name: '知道了' }))
     expect(onDismiss).toHaveBeenCalledTimes(1)

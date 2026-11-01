@@ -32,7 +32,10 @@ from memory_anki.modules.practice.application.round_state_service import (
     start_new_round,
 )
 from memory_anki.modules.practice.domain import round_plan
-from memory_anki.modules.practice.domain.feed_config import queue_construction_signature
+from memory_anki.modules.practice.domain.feed_config import (
+    queue_construction_signature,
+    sanitize_feed_config,
+)
 from memory_anki.modules.practice.domain.overlay_quiz import (
     QUESTION_RATING_NONE,
     apply_overlay_progress,
@@ -84,6 +87,7 @@ def _seed_unit(db_session, *, palace_id: int, node_uids: list[str], unit_id: str
 def _removal_config() -> dict:
     return {
         "training_mode": "memory_palace",
+        "overlay_question_range": "whole_palace",
         "streams": {
             "memory_palace": {
                 "specific_palace_ids": [],
@@ -418,6 +422,7 @@ def test_overlay_pack_counts_kinds_and_filters_without_feed_question_type(db_ses
         db_session,
         {
             "question_type": "multiple_choice",
+            "overlay_question_range": "whole_palace",
             "overlay_question_kinds": ["subjective"],
             "overlay_type_order": "interleave",
             "streams": {"quiz": {"question_type": "multiple_choice", "quiz_scope": "cross_palace_random"}},
@@ -447,6 +452,7 @@ def test_overlay_pack_ignores_subject_palaces_outside_the_round(db_session) -> N
         db_session,
         {
             "training_mode": "memory_palace",
+            "overlay_question_range": "whole_palace",
             "streams": {
                 "quiz": {
                     "specific_palace_ids": [],
@@ -731,6 +737,7 @@ def test_scope_report_explains_why_a_scheduled_palace_has_no_questions(db_sessio
     db_session.commit()
     config = {
         "training_mode": "memory_palace",
+        "overlay_question_range": "whole_palace",
         "streams": {
             "memory_palace": {
                 "specific_palace_ids": [],
@@ -779,6 +786,7 @@ def test_scope_report_marks_kind_filtered_palaces(db_session) -> None:
     db_session.commit()
     config = {
         "training_mode": "memory_palace",
+        "overlay_question_range": "whole_palace",
         "overlay_question_kinds": ["objective"],
         "streams": {
             "memory_palace": {"specific_palace_ids": [], "subject_ids": [], "subject_scope": "all"},
@@ -803,6 +811,7 @@ def test_scope_report_keeps_reason_when_every_kind_is_unselected(db_session) -> 
     db_session.commit()
     config = {
         "training_mode": "memory_palace",
+        "overlay_question_range": "whole_palace",
         "overlay_question_kinds": ["objective"],
         "streams": {
             "memory_palace": {"specific_palace_ids": [], "subject_ids": [], "subject_scope": "all"},
@@ -826,6 +835,7 @@ def test_scope_report_survives_a_round_write(db_session) -> None:
     db_session.commit()
     config = {
         "training_mode": "memory_palace",
+        "overlay_question_range": "whole_palace",
         "streams": {
             "memory_palace": {"specific_palace_ids": [], "subject_ids": [], "subject_scope": "all"},
             "quiz": {"question_type": "all", "quiz_palace_scope": "cross_palace_random"},
@@ -1130,7 +1140,11 @@ def test_removed_palace_questions_leave_the_pool_and_say_why(db_session) -> None
     db_session.commit()
     pack = build_overlay_question_pack(
         db_session,
-        {"training_mode": "memory_palace", "streams": {"quiz": {"question_type": "all"}}},
+        {
+            "training_mode": "memory_palace",
+            "overlay_question_range": "whole_palace",
+            "streams": {"quiz": {"question_type": "all"}},
+        },
         palace_ids=[kept.id, removed.id],
         removed_palace_ids=[removed.id],
     )
@@ -1156,7 +1170,11 @@ def test_removal_reason_outranks_no_questions(db_session) -> None:
     db_session.commit()
     pack = build_overlay_question_pack(
         db_session,
-        {"training_mode": "memory_palace", "streams": {"quiz": {"question_type": "all"}}},
+        {
+            "training_mode": "memory_palace",
+            "overlay_question_range": "whole_palace",
+            "streams": {"quiz": {"question_type": "all"}},
+        },
         palace_ids=[palace.id],
         removed_palace_ids=[palace.id],
     )
@@ -1180,7 +1198,11 @@ def test_skipped_palace_leaves_the_pool_without_touching_the_round(db_session) -
     q_skipped = PalaceQuizQuestion(palace_id=skipped.id, stem="被删题")
     db_session.add_all([q_kept, q_skipped])
     db_session.commit()
-    config = {"training_mode": "memory_palace", "streams": {"quiz": {"question_type": "all"}}}
+    config = {
+        "training_mode": "memory_palace",
+        "overlay_question_range": "whole_palace",
+        "streams": {"quiz": {"question_type": "all"}},
+    }
     pack = build_overlay_question_pack(
         db_session,
         config,
@@ -1530,7 +1552,7 @@ def test_rating_display_choice_does_not_rebuild_or_reset_progress(db_session) ->
     created = get_or_create_active_round(
         db_session,
         scope_key="inherit-display",
-        config={"training_mode": "memory_palace"},
+        config={"training_mode": "memory_palace", "overlay_question_range": "whole_palace"},
         cards=cards,
         operation_id="create-inherit",
         round_id="round-inherit",
@@ -1569,7 +1591,7 @@ def test_rating_display_choice_does_not_rebuild_or_reset_progress(db_session) ->
         round_id=created["round_id"],
         operation_id="ensure-blank",
         expected_version=created["version"],
-        config={"training_mode": "memory_palace", "overlay_rating_inherit": "blank"},
+        config={"training_mode": "memory_palace", "overlay_question_range": "whole_palace", "overlay_rating_inherit": "blank"},
     )
     blank_overlay = blank["plan"]["overlay_quiz"]
     assert qid not in blank_overlay["question_node_ratings"]
@@ -1594,7 +1616,7 @@ def test_rating_display_choice_does_not_rebuild_or_reset_progress(db_session) ->
         round_id=answered["round_id"],
         operation_id="ensure-follow",
         expected_version=answered["version"],
-        config={"training_mode": "memory_palace", "overlay_rating_inherit": "lowest_reviewed"},
+        config={"training_mode": "memory_palace", "overlay_question_range": "whole_palace", "overlay_rating_inherit": "lowest_reviewed"},
     )
     overlay = followed["plan"]["overlay_quiz"]
     assert overlay["question_node_ratings"][qid] == 2
@@ -1610,7 +1632,7 @@ def test_rating_display_choice_does_not_rebuild_or_reset_progress(db_session) ->
         round_id=followed["round_id"],
         operation_id="ensure-omit",
         expected_version=followed["version"],
-        config={"training_mode": "memory_palace"},
+        config={"training_mode": "memory_palace", "overlay_question_range": "whole_palace"},
     )
     kept_row = db_session.get(FreestyleRoundState, kept["round_id"])
     assert kept_row is not None
@@ -1738,3 +1760,233 @@ def test_shuffle_overlay_quiz_persists_order_across_ensure(db_session, monkeypat
     assert reensured["plan"]["overlay_quiz"]["question_ids"] == order
     assert reensured["plan"]["overlay_quiz"]["current_index"] == 1
     assert reensured["plan"]["overlay_quiz"]["shuffle_nonce"] == 1
+
+
+def _seed_unit_scope_palace(db_session):
+    """A palace whose units carve a mark out of the middle of the tree.
+
+    root ─ section-a ─ { mark-a, sibling-a }
+         └ section-b ─ mark-b
+    """
+    editor = json.dumps(
+        {
+            "root": _mind_node(
+                "root",
+                "宫殿",
+                [
+                    _mind_node(
+                        "section-a",
+                        "第一节",
+                        [
+                            _mind_node("mark-a", "永久标记A"),
+                            _mind_node("sibling-a", "旁支A"),
+                        ],
+                    ),
+                    _mind_node("section-b", "第二节", [_mind_node("mark-b", "永久标记B")]),
+                ],
+            )
+        }
+    )
+    palace = Palace(title="单元路径", editor_doc=editor)
+    db_session.add(palace)
+    db_session.flush()
+    for unit_id, anchor, members in (
+        ("unit-mark-a", "mark-a", ["mark-a"]),
+        ("unit-mark-b", "mark-b", ["mark-b"]),
+        ("unit-residual", "root", ["section-a", "sibling-a", "section-b"]),
+    ):
+        db_session.add(
+            ReviewUnitState(
+                id=unit_id,
+                palace_id=palace.id,
+                anchor_uid=anchor,
+                unit_kind="mark" if anchor != "root" else "residual",
+                node_uids_json=json.dumps(members),
+                membership_hash="h",
+                content_hash="c",
+                revision=1,
+                stage_index=1,
+                has_passed=True,
+                due_date=local_day(),
+            )
+        )
+    questions = {}
+    for key, node_uid in (
+        ("root", "root"),
+        ("section_a", "section-a"),
+        ("mark_a", "mark-a"),
+        ("sibling_a", "sibling-a"),
+        ("section_b", "section-b"),
+        ("mark_b", "mark-b"),
+        ("unbound", None),
+    ):
+        question = PalaceQuizQuestion(palace_id=palace.id, stem=key)
+        db_session.add(question)
+        db_session.flush()
+        if node_uid:
+            db_session.add(
+                PalaceQuizQuestionNodeBinding(
+                    question_id=question.id, palace_id=palace.id, node_uid=node_uid
+                )
+            )
+        questions[key] = question
+    db_session.commit()
+    return palace, questions
+
+
+def test_overlay_pack_scopes_questions_to_round_unit_and_root_path(db_session) -> None:
+    """本轮复习单元: the unit's region plus its ancestors, not the siblings.
+
+    ``section-a`` belongs to the residual unit this round did not schedule, yet
+    it is on the root→mark-a path, so its question is included. The mark's own
+    sibling and the other branch are not.
+    """
+    palace, questions = _seed_unit_scope_palace(db_session)
+    pack = build_overlay_question_pack(
+        db_session,
+        {"training_mode": "memory_palace"},
+        palace_ids=[palace.id],
+        unit_ids=["unit-mark-a"],
+    )
+    assert set(pack["question_ids"]) == {
+        questions["root"].id,
+        questions["section_a"].id,
+        questions["mark_a"].id,
+        questions["unbound"].id,
+    }
+    row = pack["scope_palaces"]["palaces"][0]
+    assert row["in_pool"] is True
+    assert row["question_count"] == 4
+    assert row["reason"] == ""
+
+
+def test_overlay_whole_palace_range_keeps_every_question(db_session) -> None:
+    """整个宫殿 is the opt-in wide range; it restores the old pool."""
+    palace, questions = _seed_unit_scope_palace(db_session)
+    pack = build_overlay_question_pack(
+        db_session,
+        {"training_mode": "memory_palace", "overlay_question_range": "whole_palace"},
+        palace_ids=[palace.id],
+        unit_ids=["unit-mark-a"],
+    )
+    assert set(pack["question_ids"]) == {question.id for question in questions.values()}
+    assert pack["scope_palaces"]["palaces"][0]["question_count"] == len(questions)
+
+
+def test_overlay_scope_reports_unit_no_questions(db_session) -> None:
+    """A palace with questions but none on the round unit says so, not 还没有题目."""
+    editor = json.dumps(
+        {
+            "root": _mind_node(
+                "root2",
+                "宫殿",
+                [
+                    _mind_node(
+                        "section2",
+                        "第一节",
+                        [_mind_node("mark2", "标记"), _mind_node("sibling2", "旁支")],
+                    )
+                ],
+            )
+        }
+    )
+    palace = Palace(title="单元没题", editor_doc=editor)
+    db_session.add(palace)
+    db_session.flush()
+    db_session.add(
+        ReviewUnitState(
+            id="unit-mark2",
+            palace_id=palace.id,
+            anchor_uid="mark2",
+            unit_kind="mark",
+            node_uids_json=json.dumps(["mark2"]),
+            membership_hash="h",
+            content_hash="c",
+            revision=1,
+            stage_index=1,
+            has_passed=True,
+            due_date=local_day(),
+        )
+    )
+    question = PalaceQuizQuestion(palace_id=palace.id, stem="旁支题")
+    db_session.add(question)
+    db_session.flush()
+    db_session.add(
+        PalaceQuizQuestionNodeBinding(
+            question_id=question.id, palace_id=palace.id, node_uid="sibling2"
+        )
+    )
+    db_session.commit()
+    pack = build_overlay_question_pack(
+        db_session,
+        {"training_mode": "memory_palace"},
+        palace_ids=[palace.id],
+        unit_ids=["unit-mark2"],
+    )
+    assert pack["question_ids"] == []
+    row = pack["scope_palaces"]["palaces"][0]
+    assert row["in_pool"] is False
+    assert row["reason"] == "unit_no_questions"
+    assert row["question_count"] == 0
+
+
+def test_overlay_unit_scope_does_not_leak_between_palaces(db_session) -> None:
+    """Node uids are matched inside their own palace only."""
+    palace_a, _questions_a = _seed_unit_scope_palace(db_session)
+    editor_b = json.dumps(
+        {"root": _mind_node("root-b", "另一宫殿", [_mind_node("mark-b2", "标记B2")])}
+    )
+    palace_b = Palace(title="另一宫殿", editor_doc=editor_b)
+    db_session.add(palace_b)
+    db_session.flush()
+    db_session.add(
+        ReviewUnitState(
+            id="unit-mark-b2",
+            palace_id=palace_b.id,
+            anchor_uid="mark-b2",
+            unit_kind="mark",
+            node_uids_json=json.dumps(["mark-b2"]),
+            membership_hash="h",
+            content_hash="c",
+            revision=1,
+            stage_index=1,
+            has_passed=True,
+            due_date=local_day(),
+        )
+    )
+    # A stale binding in palace B names palace A's node uid. It must not enter
+    # through A's scope.
+    leaked = PalaceQuizQuestion(palace_id=palace_b.id, stem="跨宫殿串门")
+    db_session.add(leaked)
+    db_session.flush()
+    db_session.add(
+        PalaceQuizQuestionNodeBinding(
+            question_id=leaked.id, palace_id=palace_b.id, node_uid="mark-a"
+        )
+    )
+    db_session.commit()
+    pack = build_overlay_question_pack(
+        db_session,
+        {"training_mode": "memory_palace"},
+        palace_ids=[palace_a.id, palace_b.id],
+        unit_ids=["unit-mark-a", "unit-mark-b2"],
+    )
+    assert leaked.id not in pack["question_ids"]
+
+
+def test_overlay_question_range_defaults_to_round_units_and_stays_out_of_queue_signature() -> None:
+    """Old 'all'/'due' values must not keep a learner on the palace-wide pool."""
+    assert sanitize_feed_config({})["overlay_question_range"] == "round_units"
+    assert sanitize_feed_config({"overlay_question_range": "all"})["overlay_question_range"] == "round_units"
+    assert sanitize_feed_config({"overlay_question_range": "due"})["overlay_question_range"] == "round_units"
+    assert sanitize_feed_config({"overlay_question_range": "whole_palace"})["overlay_question_range"] == "whole_palace"
+    assert (
+        sanitize_feed_config({"streams": {"quiz": {"overlay_question_range": "whole_palace"}}})[
+            "overlay_question_range"
+        ]
+        == "whole_palace"
+    )
+    # Switching the 做题 range must not rebuild the review card queue.
+    assert queue_construction_signature({"overlay_question_range": "whole_palace"}) == (
+        queue_construction_signature({"overlay_question_range": "round_units"})
+    )

@@ -25,8 +25,8 @@ from memory_anki.modules.practice.application.round_state_service import (
 )
 
 
-def _config(ids=None, subject_ids=None, subject_scope="all"):
-    return {
+def _config(ids=None, subject_ids=None, subject_scope="all", range_mode=None):
+    config = {
         "training_mode": "memory_palace",
         "streams": {
             "memory_palace": {
@@ -36,6 +36,9 @@ def _config(ids=None, subject_ids=None, subject_scope="all"):
             },
         },
     }
+    if range_mode:
+        config["overlay_question_range"] = range_mode
+    return config
 
 
 def test_config_never_narrows_the_round_palace_set(db_session):
@@ -56,11 +59,11 @@ def test_config_never_narrows_the_round_palace_set(db_session):
     # Every shape of config narrowing, including one that excludes a scheduled
     # palace outright. None of them may drop that palace's questions.
     configs = [
-        _config([kept.id, not_scheduled.id]),
-        _config(subject_ids=[subject.id]),
-        _config(subject_scope="non_english"),
-        _config([kept.id], subject_ids=[subject.id, english.id]),
-        _config([not_scheduled.id]),
+        _config([kept.id, not_scheduled.id], range_mode="whole_palace"),
+        _config(subject_ids=[subject.id], range_mode="whole_palace"),
+        _config(subject_scope="non_english", range_mode="whole_palace"),
+        _config([kept.id], subject_ids=[subject.id, english.id], range_mode="whole_palace"),
+        _config([not_scheduled.id], range_mode="whole_palace"),
     ]
     for config in configs:
         pack = build_overlay_question_pack(
@@ -93,7 +96,7 @@ def test_scope_report_has_no_config_exclusion_reason(db_session):
     db_session.commit()
     pack = build_overlay_question_pack(
         db_session,
-        _config([scheduled.id]),
+        _config([scheduled.id], range_mode="whole_palace"),
         palace_ids=[scheduled.id, config_excluded.id],
     )
     scope = pack["scope_palaces"]

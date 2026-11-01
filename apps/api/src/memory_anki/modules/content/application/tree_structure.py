@@ -242,6 +242,37 @@ def list_node_parent_uids(session: Session, palace_ids: Sequence[int]) -> dict[s
     return parents
 
 
+def list_palace_node_paths(
+    session: Session,
+    palace_ids: Sequence[int],
+) -> dict[int, dict[str, Any]]:
+    """Per palace: its root uid and ``node_uid`` → ``parent_uid`` map.
+
+    The root is omitted from ``parents`` (it has no parent), so callers that
+    need to include the root must read ``root_uid``. Kept per palace, unlike
+    ``list_node_parent_uids``: a scope decision must not let a node uid from one
+    palace borrow another palace's ancestors.
+    """
+    ids = sorted({int(item) for item in palace_ids if int(item) > 0})
+    if not ids:
+        return {}
+    rows = session.query(Palace.id, Palace.editor_doc).filter(Palace.id.in_(ids)).all()
+    result: dict[int, dict[str, Any]] = {}
+    for palace_id, editor_doc in rows:
+        root_uid, nodes = build_tree_from_editor_doc(editor_doc)
+        parents: dict[str, str] = {}
+        for uid, node in nodes.items():
+            parent = str(node.get("parent_uid") or "").strip()
+            node_uid = str(uid or "").strip()
+            if node_uid and parent:
+                parents[node_uid] = parent
+        result[int(palace_id)] = {
+            "root_uid": str(root_uid or ""),
+            "parents": parents,
+        }
+    return result
+
+
 def resolve_palace_titles(session: Session, palace_ids: Sequence[int]) -> dict[int, str]:
     """Batch palace display titles through the one title rule.
 

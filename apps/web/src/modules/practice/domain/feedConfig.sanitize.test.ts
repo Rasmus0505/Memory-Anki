@@ -56,9 +56,13 @@ describe('freestyle feed config', () => {
   it('preserves overlay quiz setup as a permanent preference', () => {
     expect(sanitizeFreestyleFeedConfig(null).overlay_quiz_setup_done).toBe(false)
     expect(sanitizeFreestyleFeedConfig({ overlay_quiz_setup_done: true }).overlay_quiz_setup_done).toBe(true)
-    expect(sanitizeFreestyleFeedConfig(null).overlay_question_range).toBe('all')
-    expect(sanitizeFreestyleFeedConfig({ overlay_question_range: 'due' }).overlay_question_range).toBe('due')
-    expect(sanitizeFreestyleFeedConfig({ overlay_question_range: 'due' }).streams.quiz.overlay_question_range).toBe('due')
+    expect(sanitizeFreestyleFeedConfig(null).overlay_question_range).toBe('round_units')
+    expect(sanitizeFreestyleFeedConfig({ overlay_question_range: 'all' }).overlay_question_range).toBe('round_units')
+    expect(sanitizeFreestyleFeedConfig({ overlay_question_range: 'whole_palace' }).overlay_question_range).toBe('whole_palace')
+    expect(sanitizeFreestyleFeedConfig({ overlay_question_range: 'whole_palace' }).streams.quiz.overlay_question_range).toBe('whole_palace')
+    expect(queueConstructionSignature({ overlay_question_range: 'whole_palace' })).toBe(
+      queueConstructionSignature({ overlay_question_range: 'round_units' }),
+    )
     expect(sanitizeFreestyleFeedConfig(null).overlay_question_kinds).toEqual(['objective', 'subjective'])
     expect(sanitizeFreestyleFeedConfig(null).overlay_type_order).toBe('interleave')
     expect(sanitizeFreestyleFeedConfig(null).overlay_type_palace_nesting).toBe('palace_then_type')

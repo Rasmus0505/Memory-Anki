@@ -111,6 +111,7 @@ describe('overlayQuizRange', () => {
 
   it('has copy for every reason code and an empty default report', () => {
     expect(overlayScopeReasonLabel('no_questions')).toBe('还没有题目')
+    expect(overlayScopeReasonLabel('unit_no_questions')).toBe('本轮单元没有题目')
     expect(overlayScopeReasonLabel('kinds_filtered')).toBe('题型未勾选')
     expect(overlayScopeReasonLabel('')).toBe('')
     expect(overlayScopeSummary(emptyOverlayScopePalaces())).toBe('本轮还没有纳入复习的宫殿')
@@ -131,7 +132,7 @@ describe('overlayQuizRange', () => {
     const left = overlayScopeLeftPool(before, after)
     // Palace 3 was never playable, so this change did not remove it.
     expect(left.map((row) => row.palace_id)).toEqual([2])
-    expect(overlayScopeLeftPoolNotice(left)).toBe('随心范围已更新：福禄培尔 的题已移出本次做题。')
+    expect(overlayScopeLeftPoolNotice(left)).toBe('做题范围已更新：福禄培尔 的题已移出本次做题。')
   })
 
   it('stays silent when a round change removed nothing playable', () => {

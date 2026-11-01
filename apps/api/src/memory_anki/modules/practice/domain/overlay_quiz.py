@@ -25,105 +25,24 @@ from .feed_config import (
     QUIZ_SCOPE_SINGLE,
     QUIZ_SCOPES,
 )
+from .overlay_scope import (
+    SCOPE_REASON_KINDS_FILTERED,
+    SCOPE_REASON_NO_QUESTIONS,
+    SCOPE_REASON_PALACE_REMOVED,
+    SCOPE_REASON_PALACE_SKIPPED,
+    SCOPE_REASON_UNIT_NO_QUESTIONS,
+    build_scope_palaces,
+    empty_scope_palaces,
+)
 from .quiz_stream import deterministic_shuffle, order_quiz_stream_by_scope
 
 OverlayQuiz = dict[str, Any]
-
-# Why a palace this round scheduled is not contributing questions to 做题.
-SCOPE_REASON_NO_QUESTIONS = "no_questions"
-SCOPE_REASON_KINDS_FILTERED = "kinds_filtered"
-# The learner took every card of this palace out of the queue (移除本队列).
-SCOPE_REASON_PALACE_REMOVED = "palace_removed"
-# The learner deleted this palace from 做题 (its questions only). Review cards and
-# ratings are untouched, so the round's scheduling does not change.
-SCOPE_REASON_PALACE_SKIPPED = "palace_skipped"
 
 # Sentinel for "this round has not rated that knowledge point yet". The card
 # shows words, never a fabricated score. Kept as a value rather than an absent
 # key so the frontend can tell "not rated this round" from "question has no
 # bound knowledge point at all".
 QUESTION_RATING_NONE = 0
-
-
-def empty_scope_palaces() -> dict[str, Any]:
-    return {"scheduled_count": 0, "in_pool_count": 0, "question_count": 0, "palaces": []}
-
-
-def build_scope_palaces(
-    *,
-    scheduled_palace_ids: Sequence[int],
-    counts_by_palace: Mapping[int, Mapping[str, int]],
-    titles: Mapping[int, str],
-    in_pool_palace_ids: Sequence[int] = (),
-    removed_palace_ids: Sequence[int] = (),
-    skipped_palace_ids: Sequence[int] = (),
-    no_questions_reason: str = SCOPE_REASON_NO_QUESTIONS,
-    kinds_filtered_reason: str = SCOPE_REASON_KINDS_FILTERED,
-    palace_removed_reason: str = SCOPE_REASON_PALACE_REMOVED,
-    palace_skipped_reason: str = SCOPE_REASON_PALACE_SKIPPED,
-) -> dict[str, Any]:
-    """Authoritative per-palace 做题 scope report for the UI to render.
-
-    The dialog must show this instead of re-deriving membership from the round
-    plan and the config: two derivations of one scope let the header claim
-    "8 palaces" while the pool was empty, with nothing explaining why.
-
-    ``scheduled_palace_ids`` is the round's review set. There is deliberately no
-    "not in current config" reason: a palace this round scheduled stays in scope
-    even when today's 随心 config would no longer pick it. But a palace whose
-    cards were all 移除本队列 (``removed_palace_ids``) does leave — the learner
-    explicitly took it out of this round.
-
-    Reason priority is `palace_removed` → `no_questions` → `kinds_filtered`:
-    the most actionable, learner-caused explanation wins, so a removed palace
-    never reads as "no questions" when it actually has plenty.
-
-    Reasons are stable codes; the frontend owns their Chinese copy.
-    """
-    live = {int(item) for item in in_pool_palace_ids}
-    removed = {int(item) for item in removed_palace_ids}
-    skipped = {int(item) for item in skipped_palace_ids}
-    rows: list[dict[str, Any]] = []
-    total = 0
-    in_pool_count = 0
-    for raw_palace_id in scheduled_palace_ids:
-        palace_id = int(raw_palace_id)
-        counts = counts_by_palace.get(palace_id) or {}
-        objective = max(0, int(counts.get("objective") or 0))
-        subjective = max(0, int(counts.get("subjective") or 0))
-        question_count = objective + subjective
-        total += question_count
-        if palace_id in removed:
-            reason = palace_removed_reason
-        elif palace_id in skipped:
-            reason = palace_skipped_reason
-        elif question_count <= 0:
-            reason = no_questions_reason
-        elif palace_id not in live:
-            # In scope with questions, but every one is of an unselected kind.
-            reason = kinds_filtered_reason
-        else:
-            reason = ""
-        contributes = not reason
-        if contributes:
-            in_pool_count += 1
-        rows.append(
-            {
-                "palace_id": palace_id,
-                "title": str(titles.get(palace_id) or "") or f"宫殿 {palace_id}",
-                "question_count": question_count,
-                "objective": objective,
-                "subjective": subjective,
-                "in_pool": contributes,
-                "reason": reason,
-            }
-        )
-    return {
-        "scheduled_count": len(rows),
-        "in_pool_count": in_pool_count,
-        "question_count": total,
-        "palaces": rows,
-    }
 
 
 def pick_question_node_rating(
@@ -604,6 +523,62 @@ def inherit_overlay_completed(
     return normalize_overlay_quiz(current)
 
 
+def current_wrong_overlay_question_ids(
+    overlay: Mapping[str, Any] | None,
+) -> list[int]:
+    """Return questions currently answered wrong in the 做题 overlay.
+
+    The overlay state is authoritative for display. ``wrong_unit_ids`` belongs to
+    queue prioritization and intentionally cannot remove a question after a
+    correct retry.
+    """
+    current = normalize_overlay_quiz(overlay)
+    states = {**current["parked"]["states"], **current["states"]}
+    wrong = [
+        _as_int(question_id, 0)
+        for question_id, state in states.items()
+        if isinstance(state, Mapping)
+        and state.get("resolved") is True
+        and state.get("correct") is False
+        and _as_int(question_id, 0) > 0
+    ]
+    return sorted(set(wrong))
+
+
+def clear_overlay_wrong_states(
+    overlay: Mapping[str, Any] | None,
+    question_ids: Sequence[int] | set[int],
+) -> OverlayQuiz:
+    """Clear current wrong states for settled questions without marking them right."""
+    current = normalize_overlay_quiz(overlay)
+    targets = {_as_int(item, 0) for item in question_ids if _as_int(item, 0) > 0}
+    if not targets:
+        return current
+
+    def clear(states: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+        return {
+            str(question_id): dict(state)
+            for question_id, state in states.items()
+            if not (
+                _as_int(question_id, 0) in targets
+                and isinstance(state, Mapping)
+                and state.get("resolved") is True
+                and state.get("correct") is False
+            )
+        }
+
+    return normalize_overlay_quiz(
+        {
+            **current,
+            "states": clear(current["states"]),
+            "parked": {
+                **current["parked"],
+                "states": clear(current["parked"]["states"]),
+            },
+        }
+    )
+
+
 def apply_overlay_progress(
     overlay: Mapping[str, Any] | None,
     *,
@@ -777,7 +752,10 @@ __all__ = [
     "SCOPE_REASON_NO_QUESTIONS",
     "SCOPE_REASON_PALACE_REMOVED",
     "SCOPE_REASON_PALACE_SKIPPED",
+    "SCOPE_REASON_UNIT_NO_QUESTIONS",
     "apply_overlay_progress",
+    "clear_overlay_wrong_states",
+    "current_wrong_overlay_question_ids",
     "build_scope_palaces",
     "drop_overlay_for_palaces",
     "empty_kind_counts",

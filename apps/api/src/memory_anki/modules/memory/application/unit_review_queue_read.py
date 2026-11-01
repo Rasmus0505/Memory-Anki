@@ -30,6 +30,7 @@ __all__ = [
     "list_trusted_due_units_for_queue",
     "list_units_rated_on",
     "list_unit_node_members",
+    "list_unit_scheduling_nodes",
     "summarize_waiting_units",
 ]
 
@@ -105,6 +106,47 @@ def list_unit_node_members(
         members = [uid for uid in json_load_list(row.node_uids_json) if uid]
         if members:
             result[str(row.id)] = members
+    return result
+
+
+def list_unit_scheduling_nodes(
+    session: Session,
+    unit_ids: list[str],
+) -> dict[str, dict[str, Any]]:
+    """Palace, anchor and member nodes per review unit.
+
+    Unlike ``list_unit_node_members`` this keeps the anchor and does not drop a
+    unit whose member list is empty: a root-anchored unit with no residual
+    children still contributes its root path to 做题.
+
+    Read-only and storage-shaped; deleted/archived palaces are excluded for the
+    same reason as the member query.
+    """
+    wanted = [str(item).strip() for item in unit_ids if str(item).strip()]
+    if not wanted:
+        return {}
+    rows = (
+        session.query(
+            ReviewUnitState.id,
+            ReviewUnitState.palace_id,
+            ReviewUnitState.anchor_uid,
+            ReviewUnitState.node_uids_json,
+        )
+        .join(Palace, Palace.id == ReviewUnitState.palace_id)
+        .filter(
+            ReviewUnitState.id.in_(wanted),
+            Palace.deleted_at.is_(None),
+            Palace.archived.is_(False),
+        )
+        .all()
+    )
+    result: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        result[str(row.id)] = {
+            "palace_id": int(row.palace_id or 0),
+            "anchor_uid": str(row.anchor_uid or ""),
+            "node_uids": [uid for uid in json_load_list(row.node_uids_json) if uid],
+        }
     return result
 
 

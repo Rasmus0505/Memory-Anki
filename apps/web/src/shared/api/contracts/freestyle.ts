@@ -55,8 +55,8 @@ export type FreestyleQuizScope = 'cross_palace_random' | 'single_palace_random'
 /** 刷题出题顺序：未学过的先出，或整体随机。 */
 export type FreestyleQuizOrder = 'new_first' | 'random'
 
-/** Toolbar 做题 overlay membership: due questions vs all questions in the saved palace range. */
-export type FreestyleOverlayQuestionRange = 'due' | 'all'
+/** Toolbar 做题 pool: round units + their root paths (default), or the whole palace. */
+export type FreestyleOverlayQuestionRange = 'round_units' | 'whole_palace'
 
 /** Overlay 做题 groups: 客观 is every type except short_answer; 主观 is short_answer. */
 export type FreestyleOverlayQuestionKind = 'objective' | 'subjective'
@@ -277,6 +277,8 @@ export interface FreestylePalaceContext {
   id: number
   title: string
   resolved_title?: string
+  /** Learner curation star; the rail and HUD mark it. */
+  is_favorite?: boolean
   subject?: {
     id: number
     name: string
@@ -509,6 +511,8 @@ export interface FreestyleRoundStatePayload {
    */
   learning_backfill_applied?: boolean
   summary?: FreestyleRoundSummary
+  /** 错题优先 ran: review units it hoisted, and how many palaces they span. */
+  wrong_priority?: { unit_count: number; palace_count: number }
 }
 
 export interface FreestyleRoundSummary {

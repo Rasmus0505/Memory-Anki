@@ -14,11 +14,7 @@ from .application.palace_count_badges import (
     project_palace_quiz_count_badges,
 )
 from .application.question_contracts import sort_questions_for_bank_display
-from .application.question_scheduler import (
-    OVERLAY_QUESTION_RANGE_DUE,
-    normalize_overlay_question_range,
-    question_is_due,
-)
+from .application.question_scheduler import question_is_due
 from .application.question_schema import serialize_question
 from .application.questions.commands import set_question_marked
 
@@ -32,8 +28,6 @@ __all__ = [
     "list_study_text_bindings",
     "project_palace_question_sets",
     "project_palace_quiz_count_badges",
-    "normalize_overlay_question_range",
-    "OVERLAY_QUESTION_RANGE_DUE",
     "question_is_due",
     "record_attempt_event",
     "serialize_question",

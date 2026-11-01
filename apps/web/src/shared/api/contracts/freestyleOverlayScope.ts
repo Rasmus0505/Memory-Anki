@@ -11,6 +11,8 @@
 export type FreestyleOverlayScopeReason =
   | ''
   | 'no_questions'
+  /** The palace has questions, but none on this round's reviewed units/root paths. */
+  | 'unit_no_questions'
   | 'kinds_filtered'
   /** The learner took every card of this palace out with 移除本队列. */
   | 'palace_removed'
@@ -26,7 +28,11 @@ export type FreestyleOverlayScopeReason =
 export interface FreestyleOverlayScopePalace {
   palace_id: number
   title: string
-  /** Available questions in this palace, ignoring the kind filter. */
+  /**
+   * Questions available in this palace in the **active 做题 range**, ignoring
+   * the kind filter. 本轮复习单元 counts only the scheduled units and their
+   * root paths; 整个宫殿 counts every published question.
+   */
   question_count: number
   objective: number
   subjective: number
@@ -39,6 +45,7 @@ export interface FreestyleOverlayScopePalace {
 export interface FreestyleOverlayScopePalaces {
   scheduled_count: number
   in_pool_count: number
+  /** Playable questions only: blocked palaces are not summed into this. */
   question_count: number
   palaces: FreestyleOverlayScopePalace[]
 }
