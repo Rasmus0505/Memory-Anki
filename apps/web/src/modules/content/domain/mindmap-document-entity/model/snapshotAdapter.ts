@@ -27,7 +27,7 @@ export function readMindMapEditorSnapshot(response: LegacyEditorResponse): MindM
   }
 }
 
-export function snapshotToLegacyEditorState(snapshot: MindMapEditorSnapshot): MindMapEditorState {
+function snapshotToLegacyEditorState(snapshot: MindMapEditorSnapshot): MindMapEditorState {
   return {
     editor_doc: snapshot.document,
     editor_config: snapshot.editorPreferences,

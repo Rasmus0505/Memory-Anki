@@ -67,16 +67,6 @@ export function buildMindMapImportValidationFingerprint(
   }
 }
 
-export function uniqueStrings(values: Iterable<string>) {
-  return Array.from(new Set(Array.from(values).filter(Boolean)))
-}
-
-export function getEarlierDateTime(left: string | null, right: string | null) {
-  if (!left) return right
-  if (!right) return left
-  return new Date(left).getTime() <= new Date(right).getTime() ? left : right
-}
-
 export function buildImportExpectedNodeCount(editorDoc: MindMapEditorState['editor_doc']) {
   return countEditorDocNodes(editorDoc)
 }

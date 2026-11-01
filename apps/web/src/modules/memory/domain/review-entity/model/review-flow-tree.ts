@@ -213,16 +213,6 @@ export function buildInitialRevealState(
   return next
 }
 
-export function buildAllRevealedState(root: ReviewMindMapNode) {
-  const next: Record<string, RevealState> = {}
-  const walk = (node: ReviewMindMapNode) => {
-    next[node.id] = 'revealed'
-    node.children.forEach(walk)
-  }
-  walk(root)
-  return next
-}
-
 export function collectNodeIds(root: ReviewMindMapNode) {
   const ids: string[] = []
   const walk = (node: ReviewMindMapNode) => {
@@ -249,7 +239,7 @@ export function countRevealedInMap(map: Record<string, string> | null | undefine
 }
 
 /** Normalize a host-provided reveal scope without excluding the root node. */
-export function sanitizeAllowedNodeIds(
+function sanitizeAllowedNodeIds(
   root: ReviewMindMapNode,
   allowedNodeIds: Iterable<string>,
 ) {
@@ -270,7 +260,7 @@ function resolveAllowedNodeIds(
   return sanitizeAllowedNodeIds(root, options.allowedNodeIds)
 }
 
-export function hideNodeAndDescendants(
+function hideNodeAndDescendants(
   nodeId: string,
   nodeMap: Map<string, ReviewMindMapNode>,
   revealMap: Record<string, RevealState>,
@@ -297,16 +287,6 @@ export function sanitizeRedNodeIds(
 
 export function countNodes(node: ReviewMindMapNode): number {
   return 1 + node.children.reduce((sum, child) => sum + countNodes(child), 0)
-}
-
-export function findNextHiddenChild(
-  node: ReviewMindMapNode,
-  revealMap: Record<string, RevealState>,
-) {
-  return (
-    node.children.find((child) => (revealMap[child.id] ?? 'hidden') === 'hidden') ??
-    null
-  )
 }
 
 /**
@@ -692,22 +672,6 @@ export function hideRevealStateBranch(
   return hideNodeAndDescendants(nodeId, nodeMap, revealMap)
 }
 
-/**
- * Formal due-scope: true for cards that are not in the frozen due set
- * (including the palace root). Used for soft-dim / labeling only — flip and hide
- * remain available on every card (same as freestyle).
- */
-export function isNonFocusRevealTarget(
-  nodeId: string,
-  root: ReviewMindMapNode,
-  options: RevealFlowOptions = {},
-): boolean {
-  const focusIds = resolveFocusNodeIds(root, options)
-  if (focusIds.length === 0) return false
-  if (nodeId === root.id) return true
-  return !focusIds.includes(nodeId)
-}
-
 export function pourCheckpointRevealState(
   startNodeId: string,
   root: ReviewMindMapNode,
@@ -923,7 +887,7 @@ function hasYellowEmphasisMarkup(value: unknown): boolean {
   )
 }
 
-export function buildVisibleEditorDoc(
+function buildVisibleEditorDoc(
   source: MindMapDoc | null,
   revealMap: Record<string, RevealState>,
   nodeMap: Map<string, ReviewMindMapNode>,
@@ -1080,19 +1044,4 @@ export function buildVisibleEditorState(
     editor_local_config: structuredClone(editorState.editor_local_config ?? {}),
     lang: editorState.lang || 'zh',
   }
-}
-
-/**
- * Formal due-scope initial map: non-due nodes open, due nodes are flip targets,
- * and subtrees under unrevealed due nodes stay hidden until that due card is flipped.
- */
-export function buildFocusRevealState(
-  root: ReviewMindMapNode,
-  focusNodeIds: Iterable<string>,
-  nodeMap: Map<string, ReviewMindMapNode>,
-  previous: Record<string, RevealState> | null = null,
-) {
-  const focusState = buildCheckpointRevealState(root, focusNodeIds, previous)
-  void nodeMap
-  return focusState
 }

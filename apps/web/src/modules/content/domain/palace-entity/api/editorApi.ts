@@ -1,8 +1,6 @@
 import { request } from '@/shared/api/http'
 import { rememberPalaceEditor } from '@/shared/study-text/studyTextLibrary'
 import type {
-  MindMapAiSplitRequest,
-  MindMapAiSplitResponse,
   PalaceEditorSaveAckResponse,
   PalaceEditorResponse,
   PalaceEditorSavePayload,
@@ -60,13 +58,5 @@ export function savePalaceEditorWithOptionsApi(
   }).then((saved) => {
     if (saved && typeof saved === 'object' && 'editor_doc' in saved) rememberPalaceEditor(id, saved)
     return saved
-  })
-}
-
-export async function splitMindMapNodeApi(palaceId: number, data: MindMapAiSplitRequest) {
-  return request<MindMapAiSplitResponse>(`/palaces/${palaceId}/editor/ai-split`, {
-    method: 'POST',
-    body: JSON.stringify(data),
-    persistence: false,
   })
 }

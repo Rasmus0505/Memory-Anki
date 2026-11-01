@@ -64,9 +64,9 @@ export interface ReviewRewardProgressionOptions {
   milestoneSteps?: number[] | null
 }
 
-export const REVIEW_COMBO_MILESTONES = DEFAULT_REVIEW_MILESTONE_STEPS
+const REVIEW_COMBO_MILESTONES = DEFAULT_REVIEW_MILESTONE_STEPS
 
-export const REVIEW_MILESTONE_LABELS = ['起势', '热起来', '破墙', '攻区', '爆发'] as const
+const REVIEW_MILESTONE_LABELS = ['起势', '热起来', '破墙', '攻区', '爆发'] as const
 
 const REVIEW_SURPRISE_COPY_BY_MILESTONE = [
   '起势成功，继续爆裂揭示。',
@@ -235,7 +235,7 @@ export function deriveReviewFeedbackTransition({
   }
 }
 
-export function getNextComboMilestone(comboCount: number, milestoneSteps?: number[] | null) {
+function getNextComboMilestone(comboCount: number, milestoneSteps?: number[] | null) {
   return getReviewComboMilestones(milestoneSteps).find((value) => value > comboCount) ?? null
 }
 

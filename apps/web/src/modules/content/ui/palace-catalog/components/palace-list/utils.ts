@@ -1,32 +1,10 @@
 import { cn } from '@/shared/lib/utils'
 import { parseApiDateTime } from '@/shared/lib/dateTime'
-import type { PalaceSegmentSummary } from '@/shared/api/contracts'
 import type {
   PalaceListDensityMode,
   PalaceListLayoutMode,
 } from '@/modules/settings/public'
 
-
-export type ReviewButtonState = 'due_now' | 'due_later_today' | 'future' | 'unscheduled'
-
-export function resolveReviewButtonState(
-  hasDueReview: boolean,
-  value: string | null,
-): ReviewButtonState {
-  if (hasDueReview) return 'due_now'
-  if (!value) return 'unscheduled'
-  const target = parseApiDateTime(value)
-  if (Number.isNaN(target.getTime())) return 'unscheduled'
-  const now = new Date()
-  const sameDay =
-    target.getFullYear() === now.getFullYear() &&
-    target.getMonth() === now.getMonth() &&
-    target.getDate() === now.getDate()
-  if (target.getTime() <= now.getTime()) {
-    return sameDay ? 'due_later_today' : 'future'
-  }
-  return sameDay ? 'due_later_today' : 'future'
-}
 
 export function getListSectionWrapperClass(layoutMode: PalaceListLayoutMode) {
   // Every grid below pins `grid-cols-1` (minmax(0,1fr)) on phones. Without it the implicit
@@ -86,136 +64,6 @@ export function getPalaceIconClass(densityMode: PalaceListDensityMode) {
   return 'h-10 w-10 rounded-lg'
 }
 
-export function getSegmentListClass(densityMode: PalaceListDensityMode) {
-  if (densityMode === 'comfortable') return 'mt-3.5 space-y-3'
-  if (densityMode === 'compact') return 'mt-2.5 space-y-2'
-  return 'mt-3 space-y-2.5'
-}
-
-export function getSegmentCardClass(densityMode: PalaceListDensityMode) {
-  if (densityMode === 'comfortable') return 'rounded-2xl px-4 py-3.5'
-  if (densityMode === 'compact') return 'rounded-xl px-3 py-2'
-  return 'rounded-2xl px-3 py-3'
-}
-
-export function getReviewActionButtonClass(options: {
-  state: ReviewButtonState
-  /** Palace-level vs single-branch due entry; only affects due_now solid CTAs. */
-  entryMode?: 'none' | 'node' | 'palace' | null
-  disabled?: boolean
-  isSleepReview?: boolean
-  className?: string
-}) {
-  const { state, entryMode = null, disabled = false, isSleepReview = false, className } = options
-  const dueNowClass =
-    entryMode === 'node'
-      ? 'border-warning bg-warning text-white hover:bg-warning/80'
-      : 'border-success bg-success text-white hover:bg-success/80'
-  return cn(
-    'h-8 w-full rounded-md border text-xs font-medium transition-colors',
-    state === 'due_now' && dueNowClass,
-    state === 'due_later_today' &&
-      'border-warning/50 bg-warning/20 text-warning hover:bg-warning/30',
-    state === 'future' &&
-      'border-info/40 bg-info/10 text-info hover:bg-info/20',
-    isSleepReview && 'border-info bg-info text-white hover:bg-info/80',
-    disabled && 'border-border bg-muted/30 text-muted-foreground',
-    className,
-  )
-}
-
-export function formatRelativeReviewTime(value: string | null): string {
-  if (!value) return '未排入正式复习'
-  const target = parseApiDateTime(value)
-  if (Number.isNaN(target.getTime())) return '未排入正式复习'
-
-  const diffMs = target.getTime() - Date.now()
-  if (diffMs <= 0) return '开始复习'
-
-  const totalMinutes = Math.floor(diffMs / (1000 * 60))
-  const totalHours = Math.floor(diffMs / (1000 * 60 * 60))
-  const totalDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-
-  if (totalMinutes < 60) {
-    return `${Math.max(1, totalMinutes)}分钟后`
-  }
-
-  if (totalHours < 24) {
-    const hours = totalHours
-    const minutes = totalMinutes % 60
-    return minutes > 0 ? `${hours}小时${minutes}分钟后` : `${hours}小时后`
-  }
-
-  if (totalDays < 30) {
-    const days = totalDays
-    const hours = totalHours % 24
-    return hours > 0 ? `${days}天${hours}小时后` : `${days}天后`
-  }
-
-  const months = Math.floor(totalDays / 30)
-  const days = totalDays % 30
-  return days > 0 ? `${months}月${days}天后` : `${months}天后`
-}
-
-export function getReviewButtonState(value: string | null): ReviewButtonState {
-  if (!value) return 'unscheduled'
-  const target = parseApiDateTime(value)
-  if (Number.isNaN(target.getTime())) return 'unscheduled'
-  const now = new Date()
-  if (target.getTime() <= now.getTime()) return 'due_now'
-  const sameDay =
-    target.getFullYear() === now.getFullYear() &&
-    target.getMonth() === now.getMonth() &&
-    target.getDate() === now.getDate()
-  return sameDay ? 'due_later_today' : 'future'
-}
-
-export function getReviewActionLabel(
-  value: string | null,
-  options: {
-    state?: ReviewButtonState
-    loading?: boolean
-    isSleepReview?: boolean
-    unscheduledLabel?: string
-    /** Backend FSRS entry label, e.g. "节点复习 · 3" or "开始复习 · 5". */
-    entryLabel?: string | null
-    entryMode?: 'none' | 'node' | 'palace' | null
-  } = {},
-): string {
-  const {
-    state = getReviewButtonState(value),
-    loading = false,
-    isSleepReview = false,
-    unscheduledLabel = '未排入复习',
-    entryLabel = null,
-    entryMode = null,
-  } = options
-
-  if (loading) return '加载中...'
-  if (isSleepReview) return '睡前复习'
-  if (state === 'due_now') {
-    // Prefer short labels without legacy "· N" node counts.
-    if (entryMode === 'node') return '节点复习'
-    if (entryMode === 'palace') return '开始复习'
-    if (entryLabel && entryLabel.trim()) {
-      const cleaned = entryLabel.trim().replace(/\s*·\s*\d+\s*$/, '')
-      return cleaned || '开始复习'
-    }
-    return '开始复习'
-  }
-  if (state === 'unscheduled') return unscheduledLabel
-  if (state === 'due_later_today') {
-    const target = value ? parseApiDateTime(value) : null
-    if (target && !Number.isNaN(target.getTime()) && target.getTime() <= Date.now()) {
-      return '今日稍后'
-    }
-  }
-  return state === 'due_later_today' || state === 'future'
-    ? `提前复习 · ${formatRelativeReviewTime(value)}`
-    : formatRelativeReviewTime(value)
-}
-
-
 export function formatCreatedAt(value: string | null): string {
   if (!value) return '未知'
   const date = parseApiDateTime(value)
@@ -227,13 +75,4 @@ export function formatCreatedAt(value: string | null): string {
   })
     .format(date)
     .replace(/\//g, '-')
-}
-
-export function getSegmentDisplayName(segment: PalaceSegmentSummary, index: number): string {
-  if (segment.display_name) return segment.display_name
-  if (segment.is_virtual_default) return '第 1 学习组'
-  if (/^第\s*1\s*学习组$/.test(segment.name)) {
-    return `第 ${index + 1} 学习组`
-  }
-  return segment.name
 }

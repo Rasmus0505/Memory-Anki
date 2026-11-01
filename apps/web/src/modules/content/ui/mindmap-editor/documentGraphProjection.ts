@@ -6,9 +6,7 @@ import type {
   MindMapHostSegmentSummary,
 } from '@/shared/api/contracts'
 import {
-  addMindMapChild,
   addMindMapChildWithResult,
-  addMindMapSibling,
   addMindMapSiblingWithResult,
   insertMindMapChildLayerWithResult,
   canMoveMindMapNode,
@@ -30,9 +28,6 @@ import {
   isMindMapQuestionCard,
   normalizeMindMapDocument,
   parseMindMapDocument,
-  reparentMindMapNode,
-  reorderMindMapNode,
-  relocateMindMapNode,
   relocateMindMapNodes,
   deleteMindMapNodes,
   moveMindMapNode,
@@ -202,17 +197,12 @@ export const highlightEditorDocNodes = highlightMindMapNodes
 export const setEditorDocMarkColors = setMindMapMarkColors
 export const setEditorDocQuestionCards = setMindMapQuestionCards
 export const getEditorDocStoredText = getMindMapStoredTextByUid
-export const addEditorDocChild = addMindMapChild
-export const addEditorDocSibling = addMindMapSibling
 export const deleteEditorDocNode = deleteMindMapNode
 export const deleteEditorDocNodeOnly = deleteMindMapNodeOnly
 export const deleteEditorDocNodesOnly = deleteMindMapNodesOnly
 export const countEditorDocSubtree = countMindMapSubtree
 export const countEditorDocChildren = countMindMapChildren
 export const collectEditorDocSubtreeUids = collectMindMapSubtreeUids
-export const reparentEditorDocNode = reparentMindMapNode
-export const reorderEditorDocNode = reorderMindMapNode
-export const relocateEditorDocNode = relocateMindMapNode
 export const relocateEditorDocNodes = relocateMindMapNodes
 export const deleteEditorDocNodes = deleteMindMapNodes
 export const moveEditorDocNode = moveMindMapNode
