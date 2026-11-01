@@ -3618,6 +3618,75 @@ def test_removed_palace_must_take_its_questions_with_it(tmp_path: Path, monkeypa
     assert any("must keep `removed_review_palace_ids`" in error for error in errors)
 
 
+def test_overlay_pack_must_scope_by_round_units_and_root_path(tmp_path: Path, monkeypatch) -> None:
+    """A palace-only pack is the old wide pool the product replaced."""
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    write_file(
+        web_src / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx",
+        "const scopePalaces = overlay?.scope_palaces ?? null\\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "application" / "overlay_quiz_service.py",
+        "scope_palaces = build_scope_palaces(titles=resolve_palace_titles(session, ids))\n"
+        "order_overlay_questions()\noverlay_question_kind()\n"
+        "question_node_ratings = _resolve_question_node_ratings()\n"
+        "def build_round_question_ratings():\n    return {}\n"
+        "removed_palace_ids = _positive_ids(missing)\n"
+        "SCOPE_REASON_PALACE_REMOVED\n",
+    )
+    errors: list[str] = []
+    check_architecture.check_freestyle_scope_quiz_overlay(errors)
+    assert any("list_unit_scheduling_nodes" in error for error in errors)
+    assert any("OVERLAY_QUESTION_RANGE_WHOLE_PALACE" in error for error in errors)
+
+
+def test_overlay_range_must_stay_out_of_the_queue_signature(tmp_path: Path, monkeypatch) -> None:
+    """Switching 本轮单元 / 整个宫殿 must not rebuild the review card queue."""
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    write_file(
+        web_src / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx",
+        "const scopePalaces = overlay?.scope_palaces ?? null\\n",
+    )
+    write_file(
+        api_src / "modules" / "practice" / "domain" / "feed_config.py",
+        'OVERLAY_QUESTION_RANGE_ROUND_UNITS = "round_units"\n'
+        'OVERLAY_QUESTION_RANGE_WHOLE_PALACE = "whole_palace"\n'
+        'def queue_construction_signature(raw):\n'
+        '    return {"overlay_question_range": raw}\n',
+    )
+    errors: list[str] = []
+    check_architecture.check_freestyle_scope_quiz_overlay(errors)
+    assert any("queue_construction_signature must not include" in error for error in errors)
+
+
+def test_overlay_scope_contract_must_name_the_unit_reason(tmp_path: Path, monkeypatch) -> None:
+    """The UI needs a stable code for「本轮单元没有题目」."""
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    write_file(
+        web_src / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx",
+        "const scopePalaces = overlay?.scope_palaces ?? null\\n",
+    )
+    write_file(
+        web_src / "shared" / "api" / "contracts" / "freestyleOverlayScope.ts",
+        "export type FreestyleOverlayScopeReason = 'no_questions'\n",
+    )
+    errors: list[str] = []
+    check_architecture.check_freestyle_scope_quiz_overlay(errors)
+    assert any("unit_no_questions" in error for error in errors)
+
+
 def test_overlay_scope_report_guard_accepts_the_owned_shape(tmp_path: Path, monkeypatch) -> None:
     """The guard must not fire on the correct implementation."""
     web_src = tmp_path / "apps" / "web" / "src"
@@ -3632,7 +3701,9 @@ def test_overlay_scope_report_guard_accepts_the_owned_shape(tmp_path: Path, monk
         "question_node_ratings = _resolve_question_node_ratings()\n"
         "def build_round_question_ratings():\n    return {}\n"
         "removed_palace_ids = _positive_ids(missing)\n"
-        "SCOPE_REASON_PALACE_REMOVED\n",
+        "SCOPE_REASON_PALACE_REMOVED\n"
+        "list_unit_scheduling_nodes\nlist_palace_node_paths\n"
+        "OVERLAY_QUESTION_RANGE_WHOLE_PALACE\nSCOPE_REASON_UNIT_NO_QUESTIONS\n",
     )
     write_file(
         api_src / "modules" / "practice" / "application" / "round_overlay_service.py",
@@ -3656,7 +3727,7 @@ def test_overlay_scope_report_guard_accepts_the_owned_shape(tmp_path: Path, monk
     write_file(
         api_src / "modules" / "practice" / "application" / "round_state_service.py",
         "from .round_commit import commit_operation\n"
-        "from .round_overlay_service import review_palace_ids\n"
+        "from .round_overlay_service import review_palace_ids, review_unit_ids\n"
         "empty_overlay_quiz()\n"
         "def _commit_operation(session, row, op):\n"
         "    return commit_operation(session, row, op)\n",
@@ -3725,7 +3796,9 @@ def test_lost_round_write_race_must_not_escape_as_stale_data(tmp_path: Path, mon
         "question_node_ratings = _resolve_question_node_ratings()\n"
         "def build_round_question_ratings():\n    return {}\n"
         "removed_palace_ids = _positive_ids(missing)\n"
-        "SCOPE_REASON_PALACE_REMOVED\n",
+        "SCOPE_REASON_PALACE_REMOVED\n"
+        "list_unit_scheduling_nodes\nlist_palace_node_paths\n"
+        "OVERLAY_QUESTION_RANGE_WHOLE_PALACE\nSCOPE_REASON_UNIT_NO_QUESTIONS\n",
     )
     write_file(
         practice / "round_overlay_service.py",
@@ -3749,7 +3822,7 @@ def test_lost_round_write_race_must_not_escape_as_stale_data(tmp_path: Path, mon
     write_file(
         api_src / "modules" / "practice" / "application" / "round_state_service.py",
         "from .round_commit import commit_operation\n"
-        "from .round_overlay_service import review_palace_ids\n"
+        "from .round_overlay_service import review_palace_ids, review_unit_ids\n"
         "empty_overlay_quiz()\n"
         "def _commit_operation(session, row, op):\n"
         "    return commit_operation(session, row, op)\n",
@@ -3806,7 +3879,9 @@ def test_lost_race_guard_accepts_the_owned_shape(tmp_path: Path, monkeypatch) ->
         "question_node_ratings = _resolve_question_node_ratings()\n"
         "def build_round_question_ratings():\n    return {}\n"
         "removed_palace_ids = _positive_ids(missing)\n"
-        "SCOPE_REASON_PALACE_REMOVED\n",
+        "SCOPE_REASON_PALACE_REMOVED\n"
+        "list_unit_scheduling_nodes\nlist_palace_node_paths\n"
+        "OVERLAY_QUESTION_RANGE_WHOLE_PALACE\nSCOPE_REASON_UNIT_NO_QUESTIONS\n",
     )
     write_file(
         practice / "round_overlay_service.py",
@@ -3834,7 +3909,7 @@ def test_lost_race_guard_accepts_the_owned_shape(tmp_path: Path, monkeypatch) ->
     write_file(
         practice / "round_state_service.py",
         "from .round_commit import commit_operation\n"
-        "from .round_overlay_service import review_palace_ids\n"
+        "from .round_overlay_service import review_palace_ids, review_unit_ids\n"
         "empty_overlay_quiz()\n"
         "def _commit_operation(session, row, op):\n"
         "    return commit_operation(session, row, op)\n",
@@ -3897,7 +3972,9 @@ def test_both_quiz_windows_must_share_one_rating_badge(tmp_path: Path, monkeypat
         "question_node_ratings = _resolve_question_node_ratings()\n"
         "def build_round_question_ratings():\n    return {}\n"
         "removed_palace_ids = _positive_ids(missing)\n"
-        "SCOPE_REASON_PALACE_REMOVED\n",
+        "SCOPE_REASON_PALACE_REMOVED\n"
+        "list_unit_scheduling_nodes\nlist_palace_node_paths\n"
+        "OVERLAY_QUESTION_RANGE_WHOLE_PALACE\nSCOPE_REASON_UNIT_NO_QUESTIONS\n",
     )
     write_file(
         practice / "round_overlay_service.py",
@@ -3925,7 +4002,7 @@ def test_both_quiz_windows_must_share_one_rating_badge(tmp_path: Path, monkeypat
     write_file(
         practice / "round_state_service.py",
         "from .round_commit import commit_operation\n"
-        "from .round_overlay_service import review_palace_ids\n"
+        "from .round_overlay_service import review_palace_ids, review_unit_ids\n"
         "empty_overlay_quiz()\n"
         "def _commit_operation(session, row, op):\n"
         "    return commit_operation(session, row, op)\n",
@@ -3974,7 +4051,9 @@ def test_reading_round_ratings_must_not_write_the_round(tmp_path: Path, monkeypa
         "question_node_ratings = _resolve_question_node_ratings()\n"
         "def build_round_question_ratings():\n    return {}\n"
         "removed_palace_ids = _positive_ids(missing)\n"
-        "SCOPE_REASON_PALACE_REMOVED\n",
+        "SCOPE_REASON_PALACE_REMOVED\n"
+        "list_unit_scheduling_nodes\nlist_palace_node_paths\n"
+        "OVERLAY_QUESTION_RANGE_WHOLE_PALACE\nSCOPE_REASON_UNIT_NO_QUESTIONS\n",
     )
     # The read path writes the round instead of staying read-only.
     write_file(
@@ -3997,7 +4076,7 @@ def test_reading_round_ratings_must_not_write_the_round(tmp_path: Path, monkeypa
     write_file(
         practice / "round_state_service.py",
         "from .round_commit import commit_operation\n"
-        "from .round_overlay_service import review_palace_ids\n"
+        "from .round_overlay_service import review_palace_ids, review_unit_ids\n"
         "empty_overlay_quiz()\ncommit_operation\n",
     )
     write_file(
@@ -5326,3 +5405,90 @@ def test_micro_bubble_layer_rejects_a_click_blocking_dialog_layer(
     assert any("z-index: 10000" in error for error in errors)
     assert any("pointer-events: none" in error for error in errors)
     assert any("showMicroBubble" in error for error in errors)
+
+
+def _write_recorder_privacy_fixture(
+    root: Path,
+    *,
+    capture_source: str = "export function describeClickForRecorder() { return null }\n",
+    store_source: str = "export function record() { return null }\n",
+    types_source: str = (
+        "export const SESSION_RECORDER_HISTORY_KEY = 'memory-anki.session-recorder.history.v2'\n"
+        "export const SESSION_RECORDER_LEGACY_HISTORY_KEY = 'memory-anki.session-recorder.history.v1'\n"
+        "export const SESSION_RECORDER_PRIVACY_MIGRATION_KEY = "
+        "'memory-anki.session-recorder.privacy-migration.v2'\n"
+    ),
+    format_source: str = (
+        "const SAFE_ROUTE_LABELS = new Set()\n"
+        "const SAFE_ACTIONS = new Set()\n"
+        "function safeReportDetail() { return '' }\n"
+    ),
+    readme_source: str = "| 诊断简报 | `shared/debug/session-recorder` |\n"
+    "见 [session-recorder-privacy.md](./session-recorder-privacy.md)\n",
+    include_privacy_doc: bool = True,
+) -> Path:
+    web_src = root / "apps" / "web" / "src"
+    recorder = web_src / "shared" / "debug" / "session-recorder"
+    write_file(recorder / "sessionRecorderCapture.ts", capture_source)
+    write_file(recorder / "sessionRecorderStore.ts", store_source)
+    write_file(recorder / "sessionRecorderTypes.ts", types_source)
+    write_file(recorder / "sessionRecorderFormat.ts", format_source)
+    write_file(root / "docs" / "architecture" / "README.md", readme_source)
+    if include_privacy_doc:
+        write_file(
+            root / "docs" / "architecture" / "session-recorder-privacy.md",
+            "# 诊断记录隐私边界\n",
+        )
+    return web_src
+
+
+def test_session_recorder_privacy_guard_rejects_learning_content_and_raw_text(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = _write_recorder_privacy_fixture(
+        tmp_path,
+        capture_source="const title = node.textContent\n",
+        store_source="window.localStorage.clear()\n",
+        types_source="export const SESSION_RECORDER_HISTORY_KEY = 'v1'\n",
+        format_source="export function format() { return '' }\n",
+        readme_source="no recorder row\n",
+        include_privacy_doc=False,
+    )
+    write_file(
+        web_src / "modules" / "quiz" / "ui" / "LeakyPanel.tsx",
+        '<div data-recorder-title={question.stem} />\n',
+    )
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_session_recorder_boundary(errors)
+
+    assert any("data-recorder-title" in error for error in errors)
+    assert any("must not read rendered text" in error for error in errors)
+    assert any("localStorage.clear()" in error for error in errors)
+    assert any("privacy-migration.v2" in error for error in errors)
+    assert any("SAFE_ACTIONS" in error for error in errors)
+    assert any("diagnosis brief ownership row" in error for error in errors)
+    assert any("session-recorder-privacy.md: diagnosis privacy boundary document" in error for error in errors)
+
+
+def test_session_recorder_privacy_guard_accepts_metadata_only_recording(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = _write_recorder_privacy_fixture(tmp_path)
+    write_file(
+        web_src / "modules" / "quiz" / "ui" / "SafePanel.tsx",
+        '<div data-recorder-current="true" data-recorder-context="quiz" data-recorder-count={3} />\n',
+    )
+    write_file(
+        web_src / "shared" / "debug" / "session-recorder" / "sessionRecorderStore.test.ts",
+        "window.localStorage.clear()\nconst raw = node.textContent\n",
+    )
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_session_recorder_boundary(errors)
+
+    assert errors == []

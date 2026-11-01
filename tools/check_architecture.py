@@ -2347,6 +2347,33 @@ def check_freestyle_scope_quiz_overlay(errors: list[str]) -> None:
                 errors.append(
                     f"{contract.relative_to(REPO_ROOT).as_posix()}: must define `{marker}`."
                 )
+    scope_contract = WEB_SRC / "shared" / "api" / "contracts" / "freestyleOverlayScope.ts"
+    if scope_contract.exists():
+        scope_source = scope_contract.read_text(encoding="utf-8", errors="ignore")
+        if "unit_no_questions" not in scope_source:
+            errors.append(
+                f"{scope_contract.relative_to(REPO_ROOT).as_posix()}: "
+                "must expose the `unit_no_questions` scope reason so the UI can "
+                "explain a palace whose questions are outside the round's units."
+            )
+    feed_config = API_SRC / "modules" / "practice" / "domain" / "feed_config.py"
+    if feed_config.exists():
+        feed_source = feed_config.read_text(encoding="utf-8", errors="ignore")
+        for marker in (
+            "OVERLAY_QUESTION_RANGE_ROUND_UNITS",
+            "OVERLAY_QUESTION_RANGE_WHOLE_PALACE",
+        ):
+            if marker not in feed_source:
+                errors.append(
+                    f"{feed_config.relative_to(REPO_ROOT).as_posix()}: must define `{marker}`."
+                )
+        signature_at = feed_source.find("def queue_construction_signature")
+        if signature_at >= 0 and '"overlay_question_range"' in feed_source[signature_at:]:
+            errors.append(
+                f"{feed_config.relative_to(REPO_ROOT).as_posix()}: "
+                "queue_construction_signature must not include overlay_question_range; "
+                "switching the 做题 range must not rebuild the review card queue."
+            )
     router_path = API_SRC / "modules" / "practice" / "presentation" / "router.py"
     if router_path.exists():
         router_source = router_path.read_text(encoding="utf-8", errors="ignore")
@@ -2390,6 +2417,12 @@ def check_freestyle_scope_quiz_overlay(errors: list[str]) -> None:
                 f"{round_service.relative_to(REPO_ROOT).as_posix()}: "
                 "overlay ensure must limit questions to this round's review palaces."
             )
+        if "review_unit_ids" not in service_source:
+            errors.append(
+                f"{round_service.relative_to(REPO_ROOT).as_posix()}: "
+                "overlay ensure must pass the round's review units so 做题 scopes "
+                "questions to the units and their root paths."
+            )
     overlay_service = API_SRC / "modules" / "practice" / "application" / "overlay_quiz_service.py"
     if overlay_service.exists():
         overlay_pack_source = overlay_service.read_text(encoding="utf-8", errors="ignore")
@@ -2423,6 +2456,22 @@ def check_freestyle_scope_quiz_overlay(errors: list[str]) -> None:
                     f"{overlay_service.relative_to(REPO_ROOT).as_posix()}: "
                     f"overlay quiz must return the authoritative `{marker}` scope report "
                     "so the dialog renders membership instead of re-deriving it."
+                )
+        # Default 做题 membership is the round's scheduled review units plus the
+        # root→anchor path. A pack that only filters by palace ids is the old
+        # palace-wide pool the product replaced.
+        for marker in (
+            "list_unit_scheduling_nodes",
+            "list_palace_node_paths",
+            "OVERLAY_QUESTION_RANGE_WHOLE_PALACE",
+            "SCOPE_REASON_UNIT_NO_QUESTIONS",
+        ):
+            if marker not in overlay_pack_source:
+                errors.append(
+                    f"{overlay_service.relative_to(REPO_ROOT).as_posix()}: "
+                    f"overlay quiz must keep `{marker}`: the default pool is the "
+                    "round units plus their root path, with 整个宫殿 as the opt-in "
+                    "wide range and a distinct reason when the units have no questions."
                 )
         # The rating badge: question → bound node → round unit → this round's score.
         # `list_round_unit_ratings` is read by the sibling round_overlay_service
@@ -4965,6 +5014,80 @@ def check_quiz_shuffle_order_persistence(errors: list[str]) -> None:
         )
 
 
+def check_quiz_inline_edit(errors: list[str]) -> None:
+    """The 做题 window edits the current question in place, and says so safely.
+
+    Editing used to be reachable only from Palace Quiz → 题库管理, which meant
+    leaving the round to fix a typo found mid-session. The inline editor must:
+    live in the Quiz entity (one form, not one per overlay), write through
+    `updatePalaceQuizQuestionApi`, clear the answered state so 「已答对」 cannot
+    outlive the text it described, own the keyboard, and lock paging so a draft
+    is never thrown away by a stray 下一题.
+    """
+    entity_ui = WEB_SRC / "modules" / "quiz" / "domain" / "quiz-entity" / "ui"
+    entity_model = WEB_SRC / "modules" / "quiz" / "domain" / "quiz-entity" / "model"
+    form = entity_ui / "QuizQuestionEditForm.tsx"
+    model = entity_model / "quizQuestionForm.ts"
+    if not form.exists():
+        errors.append(f"{path_for_exception(form)}: inline question edit form is required.")
+        return
+    if not model.exists():
+        errors.append(f"{path_for_exception(model)}: shared question form model is required.")
+        return
+    form_source = form.read_text(encoding="utf-8", errors="ignore")
+    model_source = model.read_text(encoding="utf-8", errors="ignore")
+    if 'data-quiz-question-edit="true"' not in form_source:
+        errors.append(
+            f"{path_for_exception(form)}: the open editor must carry `data-quiz-question-edit=\"true\"`."
+        )
+    # Multi-select answers survive opening the editor; a single-answer field
+    # would silently drop the extra correct options on save.
+    if "correct_option_ids" not in form_source:
+        errors.append(f"{path_for_exception(form)}: must edit multiple correct options, not one.")
+    if "correct_option_ids" not in model_source:
+        errors.append(f"{path_for_exception(model)}: form model must carry correct_option_ids.")
+
+    hook = WEB_SRC / "widgets" / "freestyle-scope-quiz" / "useFreestyleQuestionEdit.ts"
+    if not hook.exists():
+        errors.append(f"{path_for_exception(hook)}: in-overlay question edit hook is required.")
+        return
+    hook_source = hook.read_text(encoding="utf-8", errors="ignore")
+    for marker in ("updatePalaceQuizQuestionApi", "resetLocalAnswer"):
+        if marker not in hook_source:
+            errors.append(
+                f"{path_for_exception(hook)}: saving must write the question and clear its answered state "
+                f"(`{marker}`)."
+            )
+
+    dialog = WEB_SRC / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx"
+    if not dialog.exists():
+        return
+    dialog_source = dialog.read_text(encoding="utf-8", errors="ignore")
+    for marker in (
+        "QuizQuestionEditForm",
+        "useFreestyleQuestionEdit",
+        "resetLocalAnswer",
+        "!editingQuestion",
+        "navigationLocked={editingQuestion}",
+    ):
+        if marker not in dialog_source:
+            errors.append(
+                f"{path_for_exception(dialog)}: must host the inline editor and respect it (`{marker}`)."
+            )
+
+    footer = WEB_SRC / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizFooter.tsx"
+    footer_source = footer.read_text(encoding="utf-8", errors="ignore") if footer.exists() else ""
+    if "navigationLocked" not in footer_source:
+        errors.append(f"{path_for_exception(footer)}: paging must lock while the inline editor is open.")
+
+    boundary = REPO_ROOT / "docs" / "architecture" / "quiz-frontend-boundary.md"
+    boundary_text = boundary.read_text(encoding="utf-8", errors="ignore") if boundary.exists() else ""
+    if "就地编辑" not in boundary_text:
+        errors.append(
+            f"{path_for_exception(boundary)}: must document in-place question editing in the 做题 window."
+        )
+
+
 def check_quiz_question_marks(errors: list[str]) -> None:
     """Quiz practice is marked or unmarked, and no longer writes a 4-level rating schedule."""
     rating_bar = (
@@ -7070,6 +7193,14 @@ def check_mindmap_edit_gesture(errors: list[str]) -> None:
         )
 
 
+RECORDER_FORBIDDEN_DOM_ATTRS = (
+    "data-recorder-title",
+    "data-recorder-excerpt",
+    "data-recorder-place",
+)
+RECORDER_PRIVACY_DOC = "docs/architecture/session-recorder-privacy.md"
+
+
 def check_session_recorder_boundary(errors: list[str]) -> None:
     api_root = WEB_SRC / "shared" / "api"
     if api_root.exists():
@@ -7079,9 +7210,81 @@ def check_session_recorder_boundary(errors: list[str]) -> None:
                 errors.append(
                     f"{path.relative_to(REPO_ROOT).as_posix()}: shared/api must not import session-recorder; publish outcomes and let the recorder subscribe."
                 )
+
+    # Automatic diagnosis keeps only structured metadata; learning content must
+    # never reach a recorder DOM attribute, even for a moment.
+    for path in iter_files(WEB_SRC, (".ts", ".tsx")):
+        if is_frontend_test_file(path.name):
+            continue
+        content = path.read_text(encoding="utf-8", errors="ignore")
+        for attr in RECORDER_FORBIDDEN_DOM_ATTRS:
+            if attr in content:
+                errors.append(
+                    f"{path.relative_to(REPO_ROOT).as_posix()}: `{attr}` carries learning content into "
+                    "the diagnosis recorder; use `data-recorder-context` and a bounded "
+                    "`data-recorder-count` instead."
+                )
+
+    recorder_root = WEB_SRC / "shared" / "debug" / "session-recorder"
+    if recorder_root.exists():
+        for path in sorted(recorder_root.rglob("*")):
+            if path.suffix not in (".ts", ".tsx") or not path.is_file():
+                continue
+            if is_frontend_test_file(path.name):
+                continue
+            relative = path.relative_to(REPO_ROOT).as_posix()
+            content = path.read_text(encoding="utf-8", errors="ignore")
+            if "textContent" in content or "innerText" in content:
+                errors.append(
+                    f"{relative}: the recorder must not read rendered text; record a fixed action "
+                    "category and a bounded count instead."
+                )
+            if "errorMessage" in content:
+                errors.append(
+                    f"{relative}: appLogs error text must not flow into the recorder; record a fixed "
+                    "failure category only."
+                )
+            if "localStorage.clear(" in content:
+                errors.append(
+                    f"{relative}: clear only the recorder's own keys; localStorage.clear() would wipe "
+                    "unrelated app state."
+                )
+        types_path = recorder_root / "sessionRecorderTypes.ts"
+        if types_path.exists():
+            types_source = types_path.read_text(encoding="utf-8", errors="ignore")
+            for key in (
+                "memory-anki.session-recorder.history.v2",
+                "memory-anki.session-recorder.history.v1",
+                "memory-anki.session-recorder.privacy-migration.v2",
+            ):
+                if key not in types_source:
+                    errors.append(
+                        f"{types_path.relative_to(REPO_ROOT).as_posix()}: `{key}` is missing; the privacy "
+                        "migration deletes v1 history once and must not silently regress to v1."
+                    )
+        format_path = recorder_root / "sessionRecorderFormat.ts"
+        if format_path.exists():
+            format_source = format_path.read_text(encoding="utf-8", errors="ignore")
+            for marker in ("SAFE_ROUTE_LABELS", "SAFE_ACTIONS", "safeReportDetail"):
+                if marker not in format_source:
+                    errors.append(
+                        f"{format_path.relative_to(REPO_ROOT).as_posix()}: `{marker}` is missing; the "
+                        "report and clipboard copy must re-apply the recorder allowlist."
+                    )
+
     readme = REPO_ROOT / "docs" / "architecture" / "README.md"
-    if "session-recorder" not in readme.read_text(encoding="utf-8"):
+    readme_source = (
+        readme.read_text(encoding="utf-8", errors="ignore") if readme.exists() else ""
+    )
+    if "session-recorder" not in readme_source:
         errors.append("docs/architecture/README.md: diagnosis brief ownership row is missing.")
+    if "session-recorder-privacy.md" not in readme_source:
+        errors.append(
+            "docs/architecture/README.md: link the diagnosis privacy boundary document."
+        )
+    if not (REPO_ROOT / RECORDER_PRIVACY_DOC).exists():
+        errors.append(f"{RECORDER_PRIVACY_DOC}: diagnosis privacy boundary document is missing.")
+
 
 
 def main() -> int:
@@ -7132,6 +7335,7 @@ def main() -> int:
     check_quiz_shortcut_primitive(errors)
     check_flip_card_shortcut_settings(errors)
     check_quiz_question_marks(errors)
+    check_quiz_inline_edit(errors)
     check_quiz_node_count_badges(errors)
     check_quiz_create_requires_node_binding(errors)
     check_quiz_bank_display_order(errors)
