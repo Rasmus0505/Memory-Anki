@@ -94,29 +94,15 @@ export function FreestyleHudOverflow({
 const noticeEnter = 'animate-in fade-in-0 slide-in-from-top-2'
 
 export function FreestyleTopNotices({
-  channelAppliedHint,
-  onDismissChannelApplied,
   saveError,
   onDismissSaveError,
 }: {
-  channelAppliedHint: string
-  onDismissChannelApplied: () => void
   saveError: string
   onDismissSaveError: () => void
 }) {
-  if (!channelAppliedHint && !saveError) return null
+  if (!saveError) return null
   return (
     <div className="pointer-events-none absolute left-1/2 top-[calc(var(--fs-hud-h,4.5rem)+0.5rem)] z-30 flex max-w-[min(24rem,calc(100%-1.5rem))] -translate-x-1/2 flex-col items-center gap-2">
-      {channelAppliedHint ? (
-        <button
-          type="button"
-          data-testid="freestyle-channel-applied"
-          className={cn(noticeEnter, 'freestyle-stage-glass pointer-events-auto rounded-2xl border border-stage-line-strong px-3 py-2 text-xs text-stage-ink')}
-          onClick={onDismissChannelApplied}
-        >
-          {channelAppliedHint}
-        </button>
-      ) : null}
       {saveError ? (
         <button
           type="button"
