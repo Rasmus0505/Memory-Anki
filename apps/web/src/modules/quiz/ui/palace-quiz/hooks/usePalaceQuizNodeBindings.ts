@@ -1,8 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  readFreestyleOverlayWrongState,
-  subscribeFreestyleOverlayWrongState,
-} from '@/shared/freestyle-round/freestyleOverlayWrongState'
+import { useFreestyleRoundWrongQuestions } from '@/modules/practice/public'
 import { listPalaceQuizNodeBindingsApi, listPalaceUnitPassStatesApi, palaceQuizNodeBindingsCacheKey, palaceUnitPassStatesCacheKey } from '@/modules/quiz/domain/quiz-entity/api'
 import { shareInFlightRequest } from '@/shared/api/inFlightRequest'
 import { subscribeQuizQuestionMarked } from '@/modules/quiz/domain/quiz-entity/model/quizQuestionMarkSync'
@@ -51,11 +48,7 @@ export function usePalaceQuizNodeBindings({
     () => readQuizSessionStates(),
   )
   const refreshGenerationRef = useRef(0)
-  const [wrongState, setWrongState] = useState(() => readFreestyleOverlayWrongState())
-
-  useEffect(() => subscribeFreestyleOverlayWrongState(() => {
-    setWrongState(readFreestyleOverlayWrongState())
-  }), [])
+  const wrongQuestionIds = useFreestyleRoundWrongQuestions()
 
   useEffect(() => {
     const listener = () => {
@@ -141,9 +134,9 @@ export function usePalaceQuizNodeBindings({
 
   const countBadgeByNodeUid = useMemo(
     () => buildCountBadgeByNodeUid(subtreeQuestions, questionFacts, {
-      wrongQuestionIds: wrongState.wrongQuestionIds,
+      wrongQuestionIds,
     }),
-    [questionFacts, subtreeQuestions, wrongState.wrongQuestionIds],
+    [questionFacts, subtreeQuestions, wrongQuestionIds],
   )
 
   const nodeProgressByNodeUid = useMemo(

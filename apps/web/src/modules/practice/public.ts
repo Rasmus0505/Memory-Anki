@@ -1,5 +1,10 @@
 import { lazy } from 'react'
 
+export { useFreestyleRoundWrongQuestions } from './application/useFreestyleRoundWrongQuestions'
+export {
+  readFreestyleOverlayWrongState as readFreestyleRoundWrongState,
+  subscribeFreestyleOverlayWrongState as subscribeFreestyleRoundWrongState,
+} from './application/freestyleRoundWrongState'
 export { canCompleteRound, clampTrainingIndex } from './domain/trainingRound'
 export { freestyleTrainingMachine } from './application/workflows/freestyleTrainingMachine'
 export {

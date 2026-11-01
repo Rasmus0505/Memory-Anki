@@ -3,7 +3,7 @@ import { palaceReviewWorkspaceId } from '@/modules/practice/domain/freestyleWork
 import {
   clearFreestyleOverlayWrongState,
   replaceFreestyleOverlayWrongState,
-} from '@/shared/freestyle-round/freestyleOverlayWrongState'
+} from './freestyleRoundWrongState'
 import { FREESTYLE_PEER_ROUND_EVENT } from './feedPersistence'
 import { onAppEvent } from '@/shared/events/appEvents'
 

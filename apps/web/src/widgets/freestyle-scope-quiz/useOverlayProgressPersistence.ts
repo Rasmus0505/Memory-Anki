@@ -9,7 +9,6 @@ import type {
   FreestyleRoundStatePayload,
 } from '@/shared/api/contracts'
 import { overlayFromRound } from './overlayQuizHydrate'
-import { replaceFreestyleOverlayWrongStateFromOverlay } from '@/shared/freestyle-round/freestyleOverlayWrongState'
 
 /**
  * Debounced overlay-quiz progress persistence.
@@ -158,13 +157,6 @@ export function useOverlayProgressPersistence({
       toldDisconnectRef.current = false
       clearRetryTimer()
       onRoundSync(round, { announceOrder })
-      replaceFreestyleOverlayWrongStateFromOverlay({
-        workspace: round.workspace,
-        roundId: round.round_id,
-        planVersion: round.plan_version ?? round.version,
-        wrongQuestionIds: round.plan?.wrong_question_ids,
-        overlay: round.plan?.overlay_quiz,
-      })
       if (typeof round.plan_version === 'number' && round.plan_version > 0) {
         planVersionRef.current = round.plan_version
       } else if (typeof round.version === 'number' && round.version > 0) {

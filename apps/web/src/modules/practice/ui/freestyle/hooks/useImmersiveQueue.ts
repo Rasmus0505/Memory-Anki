@@ -18,6 +18,7 @@ import {
   type QueuePlanUpdateCard,
 } from '@/modules/practice/ui/freestyle/model/queuePlanUpdate'
 import { deviceLocalCursor } from '@/modules/practice/domain/deviceLocalCursor'
+import { replaceFreestyleOverlayWrongState } from '@/modules/practice/application/freestyleRoundWrongState'
 import {
   judgeFreestyleSaveOutcome,
   type FreestyleSaveOutcome,
@@ -2667,11 +2668,26 @@ export function useImmersiveQueue(
     plan_version?: number
     version?: number
     round_id?: string
+    workspace?: FreestyleRoundStatePayload['workspace']
     plan?: FreestyleRoundStatePayload['plan']
     waiting?: { count: number; next_ready_at: string | null }
   } | null | undefined, options?: { announceOrder?: boolean }) => {
     if (round?.round_id && round.round_id !== queueStateRef.current.roundId) return
-    if (round) setRoundWaiting(round.waiting ?? null)
+    if (round) {
+      setRoundWaiting(round.waiting ?? null)
+      // The server is the only writer of the round's wrong-question set. A
+      // payload that omits the field (a rating echo, for example) must not clear
+      // what the learner has already answered wrong.
+      const wrongQuestionIds = round.plan?.wrong_question_ids
+      if (round.round_id && Array.isArray(wrongQuestionIds)) {
+        replaceFreestyleOverlayWrongState({
+          workspace: round.workspace,
+          roundId: round.round_id,
+          planVersion: round.plan_version ?? round.version ?? 0,
+          wrongQuestionIds,
+        })
+      }
+    }
     const version = serverPlanVersion(round)
     if (version < serverPlanVersionRef.current) return
     if (round?.plan) setWrongUnitIds(round.plan.wrong_unit_ids ?? [])

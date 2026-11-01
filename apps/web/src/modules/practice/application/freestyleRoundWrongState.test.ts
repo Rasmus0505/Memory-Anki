@@ -3,7 +3,7 @@ import {
   clearFreestyleOverlayWrongState,
   readFreestyleOverlayWrongState,
   replaceFreestyleOverlayWrongState,
-} from './freestyleOverlayWrongState'
+} from './freestyleRoundWrongState'
 
 describe('freestyle overlay wrong state', () => {
   beforeEach(() => clearFreestyleOverlayWrongState())
