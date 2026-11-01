@@ -17,6 +17,7 @@ import {
   queueWorkIdentity,
   type QueuePlanUpdateCard,
 } from '@/modules/practice/ui/freestyle/model/queuePlanUpdate'
+import type { FreestyleRoundProgress } from '@/shared/api/contracts/freestyle'
 import { deviceLocalCursor } from '@/modules/practice/domain/deviceLocalCursor'
 import { replaceFreestyleOverlayWrongState } from '@/modules/practice/application/freestyleRoundWrongState'
 import {
@@ -498,6 +499,9 @@ export function useImmersiveQueue(
   const roundSaveSeqRef = useRef(0)
   const [roundSummary, setRoundSummary] = useState<{ roundId: string; summary: FreestyleRoundSummary; seq: number } | null>(null)
   const roundSummarySeqRef = useRef(0)
+  // The server's progress projection, tagged with the round it describes so a
+  // previous round's counts can never leak onto a new one.
+  const [roundProgress, setRoundProgress] = useState<{ roundId: string; progress: FreestyleRoundProgress } | null>(null)
   const lastFailedSaveRef = useRef<{ roundId: string; body: Parameters<typeof applyFreestyleRoundActionApi>[1] } | null>(null)
   const saveRoundAction = useCallback((
     roundId: string,
@@ -2670,11 +2674,15 @@ export function useImmersiveQueue(
     round_id?: string
     workspace?: FreestyleRoundStatePayload['workspace']
     plan?: FreestyleRoundStatePayload['plan']
+    progress?: FreestyleRoundProgress
     waiting?: { count: number; next_ready_at: string | null }
   } | null | undefined, options?: { announceOrder?: boolean }) => {
     if (round?.round_id && round.round_id !== queueStateRef.current.roundId) return
     if (round) {
       setRoundWaiting(round.waiting ?? null)
+      if (round.progress && round.round_id) {
+        setRoundProgress({ roundId: round.round_id, progress: round.progress })
+      }
       // The server is the only writer of the round's wrong-question set. A
       // payload that omits the field (a rating echo, for example) must not clear
       // what the learner has already answered wrong.
@@ -3312,6 +3320,7 @@ export function useImmersiveQueue(
     planVersion,
     adoptRoundVersion,
     wrongUnitIds,
+    roundProgress,
     appendBedtimeReview,
     rateBedtimeCard,
     hydrateLiveRound,

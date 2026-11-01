@@ -23,6 +23,7 @@ export function FreestylePageDialogs({
   roundPlan,
   subjectByPalaceId,
   favoritePalaceIds,
+  serverProgress,
   loading,
   onJumpPlanCard,
   onExcludePlanCards,
@@ -58,6 +59,7 @@ export function FreestylePageDialogs({
   roundPlan: SheetProps['roundPlan']
   subjectByPalaceId: SheetProps['subjectByPalaceId']
   favoritePalaceIds: SheetProps['favoritePalaceIds']
+  serverProgress: SheetProps['serverProgress']
   loading: boolean
   onJumpPlanCard: SheetProps['onJump']
   onExcludePlanCards: SheetProps['onExclude']
@@ -96,6 +98,7 @@ export function FreestylePageDialogs({
         subjectByPalaceId={subjectByPalaceId}
         favoritePalaceIds={favoritePalaceIds}
         wrongUnitIds={wrongUnitIds}
+        serverProgress={serverProgress}
         onOpenChange={onPlanOpenChange}
         onJump={onJumpPlanCard}
         onExclude={onExcludePlanCards}

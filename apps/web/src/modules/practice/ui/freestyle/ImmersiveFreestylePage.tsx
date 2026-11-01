@@ -7,6 +7,7 @@ import {
 } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { buildFreestyleProgressSummary } from '@/modules/practice/ui/freestyle/model/freestyleProgressSegments'
+import { applyServerRoundProgress } from '@/modules/practice/ui/freestyle/model/freestyleProgressFromServer'
 import { useFreestyleFlowFeedback } from '@/modules/practice/ui/freestyle/hooks/useFreestyleFlowFeedback'
 import { preloadMindMapCanvas } from '@/shared/ui/mindmap-canvas'
 import {
@@ -201,6 +202,7 @@ export default function ImmersiveFreestylePage({
     pendingRestudyCardIds,
     planVersion,
     wrongUnitIds,
+    roundProgress,
     adoptRoundVersion,
     appendBedtimeReview,
     rateBedtimeCard,
@@ -666,7 +668,7 @@ export default function ImmersiveFreestylePage({
     () => unsavedRatingCardIds(ratingSaveEntries),
     [ratingSaveEntries],
   )
-  const progressSummary = useMemo(
+  const localProgressSummary = useMemo(
     () => buildFreestyleProgressSummary(
       cards,
       roundPlan,
@@ -687,6 +689,16 @@ export default function ImmersiveFreestylePage({
       viewingCardId,
       wrongUnitIds,
     ],
+  )
+
+  // The server owns the numbers and the wrong/waiting flags; the local summary
+  // only supplies the immediate tick fill until the next response lands.
+  const progressSummary = useMemo(
+    () => applyServerRoundProgress(
+      localProgressSummary,
+      roundProgress?.roundId === queueState.roundId ? roundProgress.progress : null,
+    ),
+    [localProgressSummary, queueState.roundId, roundProgress],
   )
 
   const { data: examOverview } = useExamOverview()
@@ -1003,6 +1015,7 @@ export default function ImmersiveFreestylePage({
           roundPlan={roundPlan}
           subjectByPalaceId={subjectByPalaceId}
           favoritePalaceIds={favoritePalaceIds}
+          serverProgress={roundProgress?.roundId === queueState.roundId ? roundProgress.progress : null}
           loading={loading}
           onJumpPlanCard={handlePlanJump}
           onExcludePlanCards={excludePlanCards}

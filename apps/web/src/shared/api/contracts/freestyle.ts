@@ -1,5 +1,8 @@
 import type { PalaceQuizQuestion, PalaceQuizQuestionType } from './quiz'
 import type { FreestyleRoundOccurrence } from './freestyle-round'
+import type { FreestyleRoundProgress } from './freestyle-round-progress'
+
+export * from './freestyle-round-progress'
 
 export type FreestyleRange =
   | 'all'
@@ -513,6 +516,8 @@ export interface FreestyleRoundStatePayload {
    */
   learning_backfill_applied?: boolean
   summary?: FreestyleRoundSummary
+  /** Server-computed progress projection; absent on older backends. */
+  progress?: FreestyleRoundProgress
   /** 错题优先 ran: review units it hoisted, and how many palaces they span. */
   wrong_priority?: { unit_count: number; palace_count: number }
 }

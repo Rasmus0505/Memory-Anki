@@ -20,7 +20,7 @@ import {
   type FreestyleRoundPlanState,
   isOccurrenceScored,
 } from '@/modules/practice/public'
-import type { FreestyleCard } from '@/shared/api/contracts'
+import type { FreestyleCard, FreestyleRoundProgress } from '@/shared/api/contracts'
 import {
   buildFreestyleProgressSummary,
   dayCohortLabel,
@@ -29,6 +29,7 @@ import {
   visualPlanStatus,
   type FreestyleProgressSegment,
 } from '@/modules/practice/ui/freestyle/model/freestyleProgressSegments'
+import { applyServerRoundProgress } from '@/modules/practice/ui/freestyle/model/freestyleProgressFromServer'
 import { beijingStudyDay } from '@/shared/lib/dateTime'
 import { Button } from '@/shared/components/ui/button'
 import {
@@ -91,6 +92,7 @@ export function FreestyleRoundSheet({
   subjectByPalaceId,
   favoritePalaceIds,
   wrongUnitIds,
+  serverProgress,
   onOpenChange,
   onJump,
   onExclude,
@@ -113,6 +115,8 @@ export function FreestyleRoundSheet({
   favoritePalaceIds?: ReadonlySet<number>
   /** Review units whose bound question was answered wrong this round (red ticks). */
   wrongUnitIds?: readonly string[]
+  /** Server progress projection; its numbers win over local re-counts. */
+  serverProgress?: FreestyleRoundProgress | null
   onOpenChange: (open: boolean) => void
   onJump: (cardId: string) => void
   onExclude: (cardIds: string[]) => void
@@ -257,7 +261,7 @@ export function FreestyleRoundSheet({
     }),
     [cards, queueState.completedIds, queueState.unitEncountersByCardId, roundPlan],
   )
-  const progressSummary = useMemo(
+  const localProgressSummary = useMemo(
     () => buildFreestyleProgressSummary(
       cards,
       roundPlan,
@@ -278,6 +282,11 @@ export function FreestyleRoundSheet({
       unsavedRatingIds,
       wrongUnitIds,
     ],
+  )
+
+  const progressSummary = useMemo(
+    () => applyServerRoundProgress(localProgressSummary, serverProgress),
+    [localProgressSummary, serverProgress],
   )
   const segmentById = useMemo(() => {
     const map = new Map<string, FreestyleProgressSegment>()
