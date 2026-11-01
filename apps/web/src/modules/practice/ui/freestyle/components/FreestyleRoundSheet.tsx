@@ -90,6 +90,7 @@ export function FreestyleRoundSheet({
   roundPlan,
   subjectByPalaceId,
   favoritePalaceIds,
+  wrongUnitIds,
   onOpenChange,
   onJump,
   onExclude,
@@ -110,6 +111,8 @@ export function FreestyleRoundSheet({
   subjectByPalaceId?: ReadonlyMap<number, { id: number; name: string }>
   /** Favorited palaces: their group headers carry a yellow star. */
   favoritePalaceIds?: ReadonlySet<number>
+  /** Review units whose bound question was answered wrong this round (red ticks). */
+  wrongUnitIds?: readonly string[]
   onOpenChange: (open: boolean) => void
   onJump: (cardId: string) => void
   onExclude: (cardIds: string[]) => void
@@ -263,6 +266,7 @@ export function FreestyleRoundSheet({
       currentCardId ?? null,
       queueState.unitEncountersByCardId,
       unsavedRatingIds,
+      wrongUnitIds,
     ),
     [
       cards,
@@ -272,6 +276,7 @@ export function FreestyleRoundSheet({
       queueState.unitEncountersByCardId,
       roundPlan,
       unsavedRatingIds,
+      wrongUnitIds,
     ],
   )
   const segmentById = useMemo(() => {

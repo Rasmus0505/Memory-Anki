@@ -95,6 +95,7 @@ export function FreestylePageDialogs({
         roundPlan={roundPlan}
         subjectByPalaceId={subjectByPalaceId}
         favoritePalaceIds={favoritePalaceIds}
+        wrongUnitIds={wrongUnitIds}
         onOpenChange={onPlanOpenChange}
         onJump={onJumpPlanCard}
         onExclude={onExcludePlanCards}
