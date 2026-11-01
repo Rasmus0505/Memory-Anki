@@ -101,12 +101,12 @@ describe('freestyle feed config', () => {
     expect(config.quiz_scope).toBe('single_palace_random')
   })
 
-  it('folds expand due_policy to due_only and keeps default mastery buckets', () => {
+  it('ignores the retired due_policy from stored configs', () => {
     const config = sanitizeFreestyleFeedConfig({
       due_policy: 'due_first_then_expand',
     })
-    expect(config.due_policy).toBe('due_only')
-    expect(config.streams.memory_palace.due_policy).toBe('due_only')
+    expect('due_policy' in config).toBe(false)
+    expect('due_policy' in config.streams.memory_palace).toBe(false)
     expect(config.quiz_mastery_buckets).toEqual(['unseen', 'weak', 'reinforce'])
   })
 
@@ -171,7 +171,6 @@ describe('freestyle feed config', () => {
       streams: {
         memory_palace: {
           subject_scope: 'english',
-          due_policy: 'due_only',
           unit_order: 'random',
         },
       },

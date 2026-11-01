@@ -1,6 +1,5 @@
 import type {
   FreestyleBoundQuizPlacement,
-  FreestyleDuePolicy,
   FreestyleFeedConfig,
   FreestyleReviewNewRatio,
   FreestyleMixMode,
@@ -102,7 +101,6 @@ export const DEFAULT_FREESTYLE_FEED_CONFIG: FreestyleFeedConfig = {
       specific_palace_ids: [],
       subject_scope: 'all',
       subject_ids: [],
-      due_policy: 'due_only',
       palace_order: 'finish_palace_then_next',
       unit_order: 'structured',
     },
@@ -121,7 +119,6 @@ export const DEFAULT_FREESTYLE_FEED_CONFIG: FreestyleFeedConfig = {
       specific_palace_ids: [],
       subject_scope: 'english',
       subject_ids: [],
-      due_policy: 'due_only',
       palace_order: 'finish_palace_then_next',
       unit_order: 'structured',
     },
@@ -150,7 +147,6 @@ export const DEFAULT_FREESTYLE_FEED_CONFIG: FreestyleFeedConfig = {
   },
   bound_quiz_placement: 'into_mix',
   palace_order: 'finish_palace_then_next',
-  due_policy: 'due_only',
   quiz_mastery_buckets: [...DEFAULT_QUIZ_MASTERY_BUCKETS],
   quiz_scope: 'cross_palace_random',
   specific_palace_ids: [],
@@ -192,10 +188,6 @@ function asIdList(value: unknown) {
 function asPalaceOrder(value: unknown): FreestylePalaceOrder {
   if (value === 'interleave_palaces' || value === 'exam_priority') return value
   return 'finish_palace_then_next'
-}
-
-function asDuePolicy(_value: unknown, _fallback: FreestyleDuePolicy = 'due_only'): FreestyleDuePolicy {
-  return 'due_only'
 }
 
 function asQuestionType(value: unknown): FreestyleQuestionTypeFilter {
@@ -304,7 +296,6 @@ function migrateEnglishTraining(
   if (trainingMode === 'english' || !hadMemory) {
     nextMemory = {
       ...nextMemory,
-      due_policy: english.due_policy,
       palace_order: english.palace_order,
       unit_order: english.unit_order,
       specific_palace_ids: nextMemory.specific_palace_ids.length
@@ -377,11 +368,7 @@ function sanitizeMixedModes(value: unknown, fallback: FreestyleTrainingStream[])
  * Multi-select mastery buckets. Empty / invalid -> default.
  * Legacy: when field missing, map due_policy expand modes to include stable.
  */
-function asQuizMasteryBuckets(
-  value: unknown,
-  duePolicy: FreestyleDuePolicy,
-  hasExplicitField: boolean,
-): FreestyleQuizMasteryBucket[] {
+function asQuizMasteryBuckets(value: unknown): FreestyleQuizMasteryBucket[] {
   if (Array.isArray(value)) {
     const seen = new Set<FreestyleQuizMasteryBucket>()
     const result: FreestyleQuizMasteryBucket[] = []
@@ -393,9 +380,6 @@ function asQuizMasteryBuckets(
       result.push(scope)
     })
     if (result.length > 0) return result
-  }
-  if (!hasExplicitField && (duePolicy === 'due_first_then_expand' || duePolicy === 'all_content_due_weighted')) {
-    return [...DEFAULT_QUIZ_MASTERY_BUCKETS, 'stable']
   }
   return [...DEFAULT_QUIZ_MASTERY_BUCKETS]
 }
@@ -452,13 +436,9 @@ export function queueConstructionSignature(value: unknown): string {
     mixed_modes: config.mixed_modes,
     mix: config.mix,
     seed: config.seed,
-    new_placement: config.new_placement,
-    review_new_ratio: config.review_new_ratio,
     palace_order: config.streams.memory_palace.palace_order,
     unit_order: config.streams.memory_palace.unit_order,
-    due_policy: config.streams.memory_palace.due_policy,
     quiz_scope: config.streams.quiz.quiz_scope,
-    mastery_buckets: config.streams.quiz.mastery_buckets,
     weak_priority: config.streams.quiz.weak_priority,
     question_type: config.streams.quiz.question_type,
     quiz_order: config.streams.quiz.order,
@@ -490,7 +470,6 @@ export function sanitizeFreestyleFeedConfig(value: unknown): FreestyleFeedConfig
     hasExplicitWeights: Object.prototype.hasOwnProperty.call(raw, 'weights'),
   })
   const legacyIds = asIdList(raw.specific_palace_ids)
-  const legacyDuePolicy = asDuePolicy(raw.due_policy, 'due_first_then_expand')
   const legacyPalaceOrder = asPalaceOrder(raw.palace_order)
   const rawStreams = raw.streams && typeof raw.streams === 'object'
     ? raw.streams as Record<string, unknown>
@@ -534,13 +513,11 @@ export function sanitizeFreestyleFeedConfig(value: unknown): FreestyleFeedConfig
 
   let memoryStream = {
     ...memoryScope,
-    due_policy: asDuePolicy(rawMemory.due_policy, legacyDuePolicy),
     palace_order: asPalaceOrder(rawMemory.palace_order ?? legacyPalaceOrder),
     unit_order: asUnitOrder(rawMemory.unit_order),
   }
   const englishStream = {
     ...englishScope,
-    due_policy: asDuePolicy(rawEnglish.due_policy, legacyDuePolicy),
     palace_order: asPalaceOrder(rawEnglish.palace_order ?? legacyPalaceOrder),
     unit_order: asUnitOrder(rawEnglish.unit_order),
   }
@@ -549,11 +526,6 @@ export function sanitizeFreestyleFeedConfig(value: unknown): FreestyleFeedConfig
     question_type: asQuestionType(rawQuiz.question_type ?? raw.question_type),
     mastery_buckets: asQuizMasteryBuckets(
       rawQuiz.mastery_buckets ?? raw.quiz_mastery_buckets,
-      memoryStream.due_policy,
-      hasExplicitNewConfig
-        || !Object.prototype.hasOwnProperty.call(raw, 'due_policy')
-        || Object.prototype.hasOwnProperty.call(rawQuiz, 'mastery_buckets')
-        || Object.prototype.hasOwnProperty.call(raw, 'quiz_mastery_buckets'),
     ),
     quiz_scope: asQuizScope(rawQuiz.quiz_scope ?? raw.quiz_scope),
     overlay_question_range: asOverlayQuestionRange(
@@ -623,7 +595,6 @@ export function sanitizeFreestyleFeedConfig(value: unknown): FreestyleFeedConfig
       : trainingMode === 'quiz'
         ? quizStream.subject_scope
         : 'all'
-  const legacyDue = hasMemory ? memoryStream.due_policy : englishStream.due_policy
   const legacyPalace = hasMemory ? memoryStream.palace_order : englishStream.palace_order
   const legacyQuestionType = quizStream.question_type
   const mixRatio: FreestyleMixRatio = {
@@ -657,7 +628,6 @@ export function sanitizeFreestyleFeedConfig(value: unknown): FreestyleFeedConfig
     mix_ratio: mixRatio,
     bound_quiz_placement: asBoundPlacement(raw.bound_quiz_placement),
     palace_order: legacyPalace,
-    due_policy: legacyDue,
     quiz_mastery_buckets: quizStream.mastery_buckets,
     quiz_scope: quizStream.quiz_scope,
     overlay_question_range: quizStream.overlay_question_range,

@@ -16,11 +16,6 @@ export type FreestyleContentType =
   | 'english'
   | 'english_reading'
 
-export type FreestyleDuePolicy =
-  | 'due_first_then_expand'
-  | 'due_only'
-  | 'all_content_due_weighted'
-
 /** Mutually exclusive freestyle progress buckets (multi-select). */
 export type FreestylePalaceOrder = 'finish_palace_then_next' | 'interleave_palaces' | 'exam_priority'
 
@@ -101,7 +96,6 @@ export interface FreestyleStreamScope {
 }
 
 export interface FreestylePalaceStreamConfig extends FreestyleStreamScope {
-  due_policy: FreestyleDuePolicy
   palace_order: FreestylePalaceOrder
   unit_order: FreestyleUnitOrder
 }
@@ -185,7 +179,6 @@ export interface FreestyleFeedConfig {
    * Which mind-map unit pool fills after due selection.
    * Quiz pool entry is controlled by quiz_mastery_buckets (not this field).
    */
-  due_policy: FreestyleDuePolicy
   /**
    * Which mastery labels may enter the quiz stream (multi-select).
    * Empty after sanitize is replaced by the default buckets.

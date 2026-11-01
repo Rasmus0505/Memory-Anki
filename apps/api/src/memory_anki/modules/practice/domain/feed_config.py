@@ -677,11 +677,8 @@ def queue_construction_signature(raw: Any) -> str:
             # overlay_question_range is deliberately absent: it narrows the 做题
             # pool only. Rebuilding the review card queue when the learner
             # switches 本轮单元 / 整个宫殿 would reorder work they did not change.
-            "mastery_buckets": quiz["mastery_buckets"],
             "weak_priority": quiz["weak_priority"],
             "question_type": quiz["question_type"],
-            "new_placement": config["new_placement"],
-            "review_new_ratio": config["review_new_ratio"],
         },
         sort_keys=True,
         ensure_ascii=True,
