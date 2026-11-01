@@ -18,6 +18,7 @@ from memory_anki.modules.practice.domain.round_plan_intraday import (
     plan_waiting,
     publish_ready_retries,
 )
+from memory_anki.modules.practice.domain.round_progress import project_round_progress
 from memory_anki.modules.practice.domain.workspace import normalize_workspace
 
 _SUMMARY_CHUNK = 400
@@ -154,6 +155,9 @@ def _serve(session: Any, row: FreestyleRoundState | None, **kwargs: Any) -> dict
     served["plan"] = served_plan
     served["waiting"] = waiting
     served["summary"] = _unfinished_summary(session, served_plan)
+    served["progress"] = project_round_progress(
+        served_plan, plan_version=payload.get("plan_version")
+    )
     return served
 
 
