@@ -43,9 +43,9 @@ describe('FreestyleScopeQuizDialog', () => {
     } as never)
   })
 
-  it('toggles wrong-palace priority from the quiz header', async () => {
+  it('toggles wrong-answer priority from the quiz header', async () => {
     renderScopeQuizDialog()
-    const toggle = await screen.findByRole('button', { name: '错题宫殿优先' })
+    const toggle = await screen.findByRole('button', { name: '错题优先' })
     const before = toggle.getAttribute('aria-pressed')
     fireEvent.click(toggle)
     expect(toggle.getAttribute('aria-pressed')).not.toBe(before)
@@ -77,7 +77,6 @@ describe('FreestyleScopeQuizDialog', () => {
     renderScopeQuizDialog({ setupDone: false, onConfirmSetup })
 
     expect(screen.getByTestId('freestyle-scope-quiz-dialog')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: /出题顺序/ }))
     expect(screen.getByRole('radio', { name: /跨宫殿乱序/ })).toBeTruthy()
     fireEvent.click(screen.getByRole('radio', { name: /一个宫殿刷完再换/ }))
     const start = await screen.findByRole('button', { name: '开始做题' })
@@ -85,12 +84,30 @@ describe('FreestyleScopeQuizDialog', () => {
     fireEvent.click(start)
     expect(onConfirmSetup).toHaveBeenCalledWith({
       quizScope: 'single_palace_random',
-      overlayQuestionRange: 'all',
+      overlayQuestionRange: 'round_units',
       overlayQuestionKinds: ['objective', 'subjective'],
       overlayTypeOrder: 'interleave',
       overlayTypePalaceNesting: 'palace_then_type',
       overlayRatingInherit: 'lowest_reviewed',
     })
+  })
+  it('switches the 做题 range between round units and the whole palace', async () => {
+    const onConfirmSetup = vi.fn()
+    renderScopeQuizDialog({ setupDone: false, onConfirmSetup })
+
+    fireEvent.click(screen.getByRole('radio', { name: /整个宫殿/ }))
+    await waitFor(() => expect(ensureFreestyleOverlayQuizApiMock).toHaveBeenCalledWith(
+      'round-1',
+      expect.objectContaining({
+        config: expect.objectContaining({ overlay_question_range: 'whole_palace' }),
+      }),
+    ))
+    const start = await screen.findByRole('button', { name: '开始做题' })
+    await waitFor(() => expect((start as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(start)
+    expect(onConfirmSetup).toHaveBeenCalledWith(
+      expect.objectContaining({ overlayQuestionRange: 'whole_palace' }),
+    )
   })
   it('shows kind checkboxes and nesting only for the selected combination', async () => {
     ensureFreestyleOverlayQuizApiMock.mockResolvedValue({
@@ -114,7 +131,6 @@ describe('FreestyleScopeQuizDialog', () => {
     const onConfirmSetup = vi.fn()
     renderScopeQuizDialog({ setupDone: false, onConfirmSetup })
 
-    fireEvent.click(screen.getByRole('button', { name: /出题顺序/ }))
     const objective = await screen.findByRole('checkbox', { name: '客观（4）' })
     const subjective = screen.getByRole('checkbox', { name: '主观（2）' })
     expect((objective as HTMLInputElement).checked).toBe(true)
@@ -134,7 +150,7 @@ describe('FreestyleScopeQuizDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: '开始做题' }))
     expect(onConfirmSetup).toHaveBeenCalledWith({
       quizScope: 'single_palace_random',
-      overlayQuestionRange: 'all',
+      overlayQuestionRange: 'round_units',
       overlayQuestionKinds: ['objective'],
       overlayTypeOrder: 'objective_then_subjective',
       overlayTypePalaceNesting: 'type_then_palace',

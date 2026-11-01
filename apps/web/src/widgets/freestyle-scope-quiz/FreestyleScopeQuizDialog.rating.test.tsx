@@ -96,7 +96,6 @@ describe('FreestyleScopeQuizDialog rating display', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /题目分数/ }))
     expect(screen.getByRole('radio', { name: /跟着已复习的最低分/ }).getAttribute('aria-checked')).toBe('true')
     fireEvent.click(screen.getByRole('radio', { name: /保持空白/ }))
     const start = await screen.findByRole('button', { name: '开始做题' })

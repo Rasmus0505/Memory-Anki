@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { LoaderCircle, Settings2, Trash2 } from 'lucide-react'
+import { LoaderCircle, Pencil, Settings2, Trash2 } from 'lucide-react'
 import { createOperationId } from '@/modules/practice/application/feedPersistence'
 import { freestylePalaceScopeSignature } from '@/modules/practice/domain/feedConfig'
 import {
@@ -24,6 +24,7 @@ import { useOverlayChoiceSelect } from './useOverlayChoiceSelect'
 import { getPalaceQuizQuestionsByIdsApi } from '@/modules/quiz/domain/quiz-entity/api'
 import {
   beginQuizQuestionMarkRequest,
+  canManuallyEditQuestion,
   commitQuizQuestionMark,
   isCurrentQuizQuestionMarkRequest,
   isQuizChoiceAttemptClosed,
@@ -32,6 +33,7 @@ import {
   QUIZ_ANSWERING_DIALOG_CLASS,
   QUIZ_ANSWERING_SCROLL_CLASS,
   QuizMutationWorkflowStrip,
+  QuizQuestionEditForm,
   QuizQuestionIndexPager,
   QuizFontScaleBody,
   QuizFontScaleHint,
@@ -55,9 +57,10 @@ import {
   resolveOverlayResumeIndex,
 } from './overlayQuizHydrate'
 import { useFreestyleQuestionTrash } from './useFreestyleQuestionTrash'
+import { useFreestyleQuestionEdit } from './useFreestyleQuestionEdit'
 import { useFreestylePalaceSkip } from './useFreestylePalaceSkip'
 import { FreestyleScopeQuizFooter } from './FreestyleScopeQuizFooter'
-import { useQuestionLookupFocus } from './useQuestionLookupFocus'
+import { useQuestionLookupFocus } from '@/widgets/palace-memory-lookup'
 import { useAiRunConfigDialog } from '@/modules/settings/public'
 import { getQuestionTypeLabel } from '@/modules/quiz/ui/palace-quiz/model/palaceQuizPage'
 import type {
@@ -107,7 +110,10 @@ export function FreestyleScopeQuizDialog({
   /** Round-scoped palace count for the settlement copy, not the 做题 pool. */
   roundReviewPalaceCount: number
   onConfirmSetup: (next: OverlayQuizSetupChoice) => void
-  onRoundSync: (round: FreestyleRoundStatePayload) => void
+  onRoundSync: (
+    round: FreestyleRoundStatePayload,
+    options?: { announceOrder?: boolean },
+  ) => void
 }) {
   const { promptForAiOptions, aiRunConfigDialog } = useAiRunConfigDialog()
   const { mode: answerMode } = useQuizAnswerMode()
@@ -318,6 +324,8 @@ export function FreestyleScopeQuizDialog({
     if (node) node.scrollTop = 0
   }, [current?.id])
   const currentState = current ? questionStates[current.id] ?? {} : {}
+  /** Only 选择题 / 简答题 have editable content; other kinds stay read-only. */
+  const canEditCurrent = current != null && canManuallyEditQuestion(current.question_type)
   const answeredCount = questions.filter((item) => questionStates[item.id]?.resolved).length
   // Weakest 1–4 this round. 「本轮尚未复习」 only when the bar still has the
   // point open. A finished or never-scheduled point hides the badge.
@@ -352,7 +360,7 @@ export function FreestyleScopeQuizDialog({
     adoptRound,
     loadQuestions,
   })
-  const { lookupFocusNodeUids, lookupPalaceIdOverride } = useQuestionLookupFocus(current, palaceLookupOpen)
+  const { focusNodeUids: lookupFocusNodeUids, palaceIdOverride: lookupPalaceIdOverride, pending: lookupFocusPending } = useQuestionLookupFocus(current, open)
   const lookupPalaceId = lookupPalaceIdOverride ?? questionPalaceId
 
   useOverlayRatingRefresh({ open, roundId, roundIdRef, setOverlay })
@@ -402,6 +410,19 @@ export function FreestyleScopeQuizDialog({
     },
     [index, persistProgress],
   )
+
+  // Editing happens here, in the window where the bad question was noticed.
+  // Saving rewrites the row and clears its answered state (see the hook).
+  const questionEdit = useFreestyleQuestionEdit({
+    current,
+    setQuestions,
+    resetLocalAnswer,
+  })
+  const { closeEditor: closeQuestionEditor, editing: editingQuestion } = questionEdit
+
+  useEffect(() => {
+    if (!open) closeQuestionEditor()
+  }, [closeQuestionEditor, open])
 
   const handleImportedQuestions = useCallback(
     (items: PalaceQuizQuestion[]) => {
@@ -525,7 +546,9 @@ export function FreestyleScopeQuizDialog({
   const selectOption = useOverlayChoiceSelect(current, updateLocalState, handleChoiceResolve)
 
   useQuizAnsweringShortcuts({
-    enabled: open && !configOpen && current != null,
+    // The open editor owns the keyboard: arrows and answer keys would otherwise
+    // page or answer the question underneath the text being rewritten.
+    enabled: open && !configOpen && current != null && !editingQuestion,
     questionCount: questions.length,
     optionCount: current?.options.length ?? 0,
     choiceShortcutsActive: current != null && isQuizChoiceShortcutActive(current.question_type, answerMode),
@@ -630,12 +653,30 @@ export function FreestyleScopeQuizDialog({
                     // state must never overwrite the round's saved answers.
                     if (!enabled) return
                     if (wrongUnitIds.length === 0) {
-                      toast.info('错题优先已开启：本轮还没有答错的题')
-                    } else if (overlay) {
-                      void prioritizeNow()
-                    } else {
-                      toast.info('错题优先已开启')
+                      toast.info('错题优先已开启：本轮还没有答错的题，答错后会把对应复习单元提前')
+                      return
                     }
+                    if (!overlay) {
+                      toast.info('错题优先已开启')
+                      return
+                    }
+                    // Say what changed. Turning the switch on used to reorder
+                    // silently, so there was no way to tell whether it took
+                    // effect. The server counts the units it hoisted and the
+                    // palaces they live in; only those units move now, not the
+                    // whole palace.
+                    void prioritizeNow().then((round) => {
+                      const summary = round?.wrong_priority
+                      if (!summary) return
+                      if (summary.unit_count === 0) {
+                        toast.info('错题优先已开启：答错的复习单元已完成，没有需要提前的')
+                        return
+                      }
+                      const palaces = summary.palace_count > 0
+                        ? `，涉及 ${summary.palace_count} 个宫殿`
+                        : ''
+                      toast.success(`错题优先：已把 ${summary.unit_count} 个复习单元提前${palaces}`)
+                    })
                   }}
                 />
               ) : null}
@@ -680,7 +721,11 @@ export function FreestyleScopeQuizDialog({
                     marked: Boolean(question?.marked),
                   }
                 }}
-                onSelect={goToIndex}
+                onSelect={(nextIndex) => {
+                  // Half-edited text must not be carried to another question.
+                  if (editingQuestion) return
+                  goToIndex(nextIndex)
+                }}
               />
             ) : null}
             <div ref={answerScrollRef} className={QUIZ_ANSWERING_SCROLL_CLASS}>
@@ -714,7 +759,7 @@ export function FreestyleScopeQuizDialog({
                 </Button>
               </div>
             ) : !current ? (
-              <div className="py-12 text-center text-sm text-muted-foreground">当前宫殿范围内没有题目</div>
+              <div className="py-12 text-center text-sm text-muted-foreground">当前做题范围内没有题目</div>
             ) : (
               <>
                 {overlay?.limit_reached ? (
@@ -749,13 +794,30 @@ export function FreestyleScopeQuizDialog({
                         {currentState.correct ? '已答对' : '已作答'}
                       </Badge>
                     ) : null}
+                    {canEditCurrent ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={editingQuestion ? 'default' : 'ghost'}
+                        aria-label={editingQuestion ? '退出编辑本题' : '编辑本题'}
+                        aria-pressed={editingQuestion}
+                        title="就在这个弹窗里改题干、选项、答案和解析，不跳转页面"
+                        className={editingQuestion ? 'ml-auto' : 'ml-auto text-muted-foreground'}
+                        onClick={editingQuestion ? closeQuestionEditor : questionEdit.openEditor}
+                      >
+                        <Pencil className="size-4" />
+                        <span className="hidden sm:inline">
+                          {editingQuestion ? '正在编辑' : '编辑'}
+                        </span>
+                      </Button>
+                    ) : null}
                     <Button
                       type="button"
                       size="sm"
                       variant="ghost"
                       aria-label="移除本宫殿本轮题目"
                       title="只从本轮随心做题移除这座宫殿的题，不影响复习评分"
-                      className="ml-auto text-muted-foreground"
+                      className={canEditCurrent ? 'text-muted-foreground' : 'ml-auto text-muted-foreground'}
                       onClick={palaceSkip.openSkipConfirm}
                     >
                       移除本宫殿
@@ -774,26 +836,36 @@ export function FreestyleScopeQuizDialog({
                     {palaceSkip.confirmDialog}
                   </div>
                 </div>
-                <QuizFontScaleBody percent={fontScale.percent}>
-                  <div className="text-base font-semibold leading-7 text-foreground">
-                    <QuizQuestionStem question={current} />
-                  </div>
-                  <div ref={questionInteractionRef}>
-                    <QuizQuestionInteraction
-                      question={current}
-                      state={currentState}
-                      onStateChange={(updater) => updateLocalState(current.id, updater)}
-                      onChoiceResolve={handleChoiceResolve}
-                      onShortAnswerSubmit={() => orchestration.handleShortAnswerSubmit(current.id)}
-                      getDurationMs={dwell.elapsedMs}
-                      comboScopeKey={`freestyle-overlay:${roundId}`}
-                      mark={{
-                        marked: Boolean(current.marked),
-                        onToggle: (marked) => void handleToggleMark(marked),
-                      }}
-                    />
-                  </div>
-                </QuizFontScaleBody>
+                {editingQuestion ? (
+                  <QuizQuestionEditForm
+                    key={current.id}
+                    question={current}
+                    saving={questionEdit.saving}
+                    onSave={questionEdit.save}
+                    onCancel={closeQuestionEditor}
+                  />
+                ) : (
+                  <QuizFontScaleBody percent={fontScale.percent}>
+                    <div className="text-base font-semibold leading-7 text-foreground">
+                      <QuizQuestionStem question={current} />
+                    </div>
+                    <div ref={questionInteractionRef}>
+                      <QuizQuestionInteraction
+                        question={current}
+                        state={currentState}
+                        onStateChange={(updater) => updateLocalState(current.id, updater)}
+                        onChoiceResolve={handleChoiceResolve}
+                        onShortAnswerSubmit={() => orchestration.handleShortAnswerSubmit(current.id)}
+                        getDurationMs={dwell.elapsedMs}
+                        comboScopeKey={`freestyle-overlay:${roundId}`}
+                        mark={{
+                          marked: Boolean(current.marked),
+                          onToggle: (marked) => void handleToggleMark(marked),
+                        }}
+                      />
+                    </div>
+                  </QuizFontScaleBody>
+                )}
               </>
             )}
             </div>
@@ -806,6 +878,7 @@ export function FreestyleScopeQuizDialog({
               index={index}
               currentState={currentState}
               scopeLabel={overlayQuizScopeLabel(storedConfig.streams.quiz.quiz_scope)}
+              navigationLocked={editingQuestion}
               goToIndex={goToIndex}
               onFinish={() => onOpenChange(false)}
             />
@@ -821,14 +894,17 @@ export function FreestyleScopeQuizDialog({
         onConfirm={handleClearChoice}
       />
       <PalaceMemoryLookupDialog
+        key={palaceLookupOpen ? `view-lookup-${current?.id ?? 'none'}` : 'view-lookup-closed'}
         open={palaceLookupOpen}
         onOpenChange={setPalaceLookupOpen}
         currentPalaceId={lookupPalaceId}
         followCurrentPalace
         focusNodeUid={lookupFocusNodeUids[0] ?? null}
         focusNodeUids={lookupFocusNodeUids}
+        focusPending={lookupFocusPending}
       />
       <PalaceMemoryLookupDialog
+        key={ratingLookupOpen ? 'rating-lookup' : 'rating-lookup-closed'}
         open={ratingLookupOpen}
         onOpenChange={setRatingLookupOpen}
         currentPalaceId={lookupPalaceId}

@@ -1,10 +1,23 @@
 import type {
   PalaceSegmentSummary,
   PalaceQuizQuestion,
-  PalaceQuizQuestionDraft,
   PalaceQuizQuestionType,
   PalaceQuizSourceMeta,
 } from '@/shared/api/contracts'
+
+// Question form state, its builders and `canManuallyEditQuestion` moved to the
+// Quiz entity so the do-question overlays edit through the same model. Kept
+// re-exported here for the Palace Quiz management card's existing imports.
+export {
+  buildDraftFromForm,
+  buildEmptyQuestionForm,
+  buildManualSourceMeta,
+  buildQuestionFormFromQuestion,
+  canManuallyEditQuestion,
+  questionCorrectOptionIds,
+  type QuizQuestionFormState,
+} from '@/modules/quiz/domain/quiz-entity/model/quizQuestionForm'
+export type { QuizQuestionFormState as QuestionFormState } from '@/modules/quiz/domain/quiz-entity/model/quizQuestionForm'
 
 export type PalaceQuizTabKey = 'practice' | 'manage' | 'generate'
 export type PalaceQuizViewMode = 'single' | 'list'
@@ -26,16 +39,6 @@ export interface PalaceQuizPageMeta {
   }>
 }
 
-export interface QuestionFormState {
-  question_type: PalaceQuizQuestionType
-  stem: string
-  options: Array<{ id: string; text: string }>
-  correct_option_id: string
-  reference_answer: string
-  analysis: string
-  source_meta: PalaceQuizSourceMeta
-}
-
 export const QUIZ_VIEW_MODE_STORAGE_KEY = 'memory_anki_palace_quiz_view_mode'
 
 const QUESTION_SOURCE_LABELS: Record<string, string> = {
@@ -55,99 +58,6 @@ const QUESTION_TYPE_LABELS = {
   ordering: '排序题',
   categorization: '归类题',
 } satisfies Record<PalaceQuizQuestionType, string>
-
-export function buildManualSourceMeta(): PalaceQuizSourceMeta {
-  return {
-    source_kind: 'manual',
-    page_numbers: null,
-    image_names: null,
-    extra_prompt: '',
-    ai_call_log_id: null,
-    generated_at: new Date().toISOString(),
-    generation_mode: 'manual',
-  }
-}
-
-export function buildEmptyQuestionForm(): QuestionFormState {
-  return {
-    question_type: 'multiple_choice',
-    stem: '',
-    options: [
-      { id: 'A', text: '' },
-      { id: 'B', text: '' },
-    ],
-    correct_option_id: 'A',
-    reference_answer: '',
-    analysis: '',
-    source_meta: buildManualSourceMeta(),
-  }
-}
-
-export function buildQuestionFormFromQuestion(question: PalaceQuizQuestion): QuestionFormState {
-  // While an AI variant is displayed, the editor must still edit the original
-  // row; otherwise saving would overwrite the original with the variant.
-  const content = question.original_content ?? question
-  return {
-    question_type: content.question_type,
-    stem: content.stem,
-    options:
-      content.question_type === 'multiple_choice'
-        ? (content.options || []).map((option) => ({
-            id: option.id,
-            text: option.text,
-          }))
-        : [
-            { id: 'A', text: '' },
-            { id: 'B', text: '' },
-          ],
-    correct_option_id: content.answer_payload.correct_option_id || 'A',
-    reference_answer: content.answer_payload.reference_answer || '',
-    analysis: content.analysis || '',
-    source_meta: question.source_meta || buildManualSourceMeta(),
-  }
-}
-
-export function buildDraftFromForm(form: QuestionFormState): PalaceQuizQuestionDraft {
-  const stem = form.stem.trim()
-  if (!stem) {
-    throw new Error('题干不能为空。')
-  }
-  if (form.question_type === 'multiple_choice') {
-    const options = form.options
-      .map((option, index) => ({
-        id: option.id || String.fromCharCode(65 + index),
-        text: option.text.trim(),
-      }))
-      .filter((option) => option.text)
-    if (options.length < 2) {
-      throw new Error('选择题至少需要 2 个选项。')
-    }
-    const correctOptionId = form.correct_option_id.trim()
-    if (!correctOptionId || !options.some((option) => option.id === correctOptionId)) {
-      throw new Error('请选择一个正确选项。')
-    }
-    return {
-      question_type: 'multiple_choice',
-      stem,
-      options,
-      answer_payload: { correct_option_id: correctOptionId },
-      analysis: form.analysis.trim(),
-      source_meta: form.source_meta,
-    }
-  }
-  const referenceAnswer = form.reference_answer.trim()
-  if (!referenceAnswer) {
-    throw new Error('简答题必须填写参考答案。')
-  }
-  return {
-    question_type: 'short_answer',
-    stem,
-    options: [],
-    answer_payload: { reference_answer: referenceAnswer },
-    analysis: form.analysis.trim(),
-    source_meta: form.source_meta,
-  }
-}
 
 export function readPersistedViewMode(): PalaceQuizViewMode {
   if (typeof window === 'undefined') return 'single'
@@ -177,8 +87,3 @@ export function getQuestionSourceLabel(sourceMeta?: PalaceQuizSourceMeta | null)
 export function getQuestionTypeLabel(questionType: PalaceQuizQuestionType) {
   return QUESTION_TYPE_LABELS[questionType]
 }
-
-export function canManuallyEditQuestion(questionType: PalaceQuizQuestionType) {
-  return questionType === 'multiple_choice' || questionType === 'short_answer'
-}
-

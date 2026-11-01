@@ -3,6 +3,7 @@ import { CheckCircle2, FileText, LoaderCircle, Plus, RefreshCw, Trash2 } from 'l
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
+import { Checkbox } from '@/shared/components/ui/checkbox'
 import { Input } from '@/shared/components/ui/input'
 import { Textarea } from '@/shared/components/ui/textarea'
 import { EmptyState } from '@/shared/components/state-placeholders'
@@ -355,6 +356,11 @@ export function PalaceQuizManagePanel({
                       onChange={(event) =>
                         setQuestionForm((current) => ({
                           ...current,
+                          // Renaming an option carries its 「正确」 mark along;
+                          // otherwise an edited question silently loses answer A.
+                          correct_option_ids: current.correct_option_ids.map((item) =>
+                            item === option.id ? event.target.value : item,
+                          ),
                           options: current.options.map((item, itemIndex) =>
                             itemIndex === index ? { ...item, id: event.target.value } : item,
                           ),
@@ -399,23 +405,39 @@ export function PalaceQuizManagePanel({
               </div>
 
               <div className="grid gap-2">
-                <span className="text-sm font-medium">正确答案</span>
-                <select
-                  className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-                  value={questionForm.correct_option_id}
-                  onChange={(event) =>
-                    setQuestionForm((current) => ({
-                      ...current,
-                      correct_option_id: event.target.value,
-                    }))
-                  }
-                >
-                  {questionForm.options.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.id}
-                    </option>
-                  ))}
-                </select>
+                <span className="text-sm font-medium">正确答案（多选题勾选多个）</span>
+                <div className="flex flex-wrap gap-x-4 gap-y-2">
+                  {questionForm.options.map((option) => {
+                    const checked = questionForm.correct_option_ids.includes(option.id)
+                    return (
+                      <label
+                        key={option.id}
+                        className="flex items-center gap-1.5 text-sm"
+                        title={option.text}
+                      >
+                        <Checkbox
+                          aria-label={`选项 ${option.id} 是正确答案`}
+                          checked={checked}
+                          onCheckedChange={(state) =>
+                            setQuestionForm((current) => {
+                              const next = state === true
+                                ? [...current.correct_option_ids.filter((item) => item !== option.id), option.id]
+                                : current.correct_option_ids.filter((item) => item !== option.id)
+                              const order = current.options.map((item) => item.id)
+                              return {
+                                ...current,
+                                correct_option_ids: next.sort(
+                                  (a, b) => order.indexOf(a) - order.indexOf(b),
+                                ),
+                              }
+                            })
+                          }
+                        />
+                        {option.id}
+                      </label>
+                    )
+                  })}
+                </div>
               </div>
             </>
           ) : (
