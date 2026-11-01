@@ -1,30 +1,30 @@
-# Batch Generation Workspace Boundary
+# 批量生成工作区边界
 
-> Removed. The batch-generation module, page, and route are gone. Database tables and on-disk runtime files stay. This note is historical.
+> 已移除。批量生成模块、页面和路由均已删除。数据库表和磁盘上的运行时文件保留。本说明为历史归档。
 
-The batch generation context owns persistent planning for whole-book and multi-PDF work. It stores uploaded asset metadata, book and section plans, generation-step snapshots, editable drafts, deterministic quality issues, and explicit publish plans.
+批量生成上下文拥有整本书和多 PDF 工作的持久化规划。它存储上传素材的元数据、书籍与分节计划、生成步骤快照、可编辑草稿、确定性质量问题以及显式发布计划。
 
-## Dependency Direction
+## 依赖方向
 
-- Presentation exposes workspace commands and snapshots.
-- `batch_generation.application` owns PDF planning, revision checks, stale-operation protection, draft validation, and publish-plan construction.
-- Palace and quiz content remain owned by their existing modules. Batch generation may hand off to their public facades or UI routes, but must not mutate their internal tables directly.
-- PDF files live below `APP_HOME/batch_generation`; database rows store only paths relative to `APP_HOME`.
+- 表现层暴露工作区命令和快照。
+- `batch_generation.application` 拥有 PDF 规划、修订检查、过期操作保护、草稿校验和发布计划构建。
+- 宫殿和测验内容仍归其现有模块所有。批量生成可以移交给它们的公共门面或 UI 路由，但不得直接修改其内部表。
+- PDF 文件位于 `APP_HOME/batch_generation` 下；数据库行仅存储相对于 `APP_HOME` 的路径。
 
-## Safety Rules
+## 安全规则
 
-- Every section carries a stable `operation_id` and revision. Editing a title, page range, output mode, or target invalidates downstream steps and rotates the operation identity.
-- Draft writes with stale operation identity are rejected.
-- Generated content remains isolated until an explicit publish plan has no unresolved quality or revision conflicts.
-- Palace replacement is represented as a versioned replace action; quiz replacement is represented as a question-level merge action.
+- 每个分节都携带稳定的 `operation_id` 和修订。编辑标题、页码范围、输出模式或目标会使下游步骤失效，并轮换操作标识。
+- 使用过期操作标识的草稿写入会被拒绝。
+- 在显式发布计划没有未解决的质量或修订冲突之前，生成内容保持隔离。
+- 宫殿替换表示为带版本的替换操作；测验替换表示为题目级合并操作。
 
-## First-Version Execution Boundary
+## 首版执行边界
 
-The first version provides complete planning, prompt-package inspection, draft persistence, quality checks, and publish-plan review. Actual AI execution and final content publication reuse the existing Palace editor/import and Quiz generation workspaces rather than duplicating those engines.
+首版提供完整规划、提示词包检查、草稿持久化、质量检查和发布计划审阅。实际的 AI 执行和最终内容发布复用现有的宫殿编辑器/导入和测验生成工作区，而不是复制这些引擎。
 
-## Workspace Lifecycle
+## 工作区生命周期
 
-- Leaving `/batch-generation` returns to the creation root without clearing the active workspace; reopening the batch workspace resumes the saved local workspace ID.
-- Deletion is explicit and destructive. The application removes workspace-owned plans, assets, sections, steps, drafts, quality issues, publish plans, and the workspace directory below `APP_HOME/batch_generation`.
-- Workspace deletion validates that the resolved asset directory remains directly below the batch-generation root and uses a temporary tombstone directory so a failed database transaction can restore the files.
-- Content already published into Palace, Knowledge, or Quiz ownership is not deleted with the batch workspace.
+- 离开 `/batch-generation` 会返回创建根页面而不清除活动工作区；重新打开批量工作区会恢复已保存的本地工作区 ID。
+- 删除是显式且破坏性的。应用会移除工作区拥有的计划、素材、分节、步骤、草稿、质量问题、发布计划，以及 `APP_HOME/batch_generation` 下的工作区目录。
+- 工作区删除会验证解析后的素材目录仍直接位于批量生成根目录下，并使用临时墓碑目录，以便数据库事务失败时可以恢复文件。
+- 已发布到宫殿、知识或测验归属中的内容不会随批量工作区一起删除。

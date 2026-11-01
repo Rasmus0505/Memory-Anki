@@ -1,8 +1,8 @@
-﻿# Mind-map Document
+﻿# 脑图文档
 
-Pure document-domain code for mind maps.
+脑图的纯文档领域代码。
 
-- Owns normalization, serialization, fingerprints, node identifiers, and legacy payload compatibility.
-- Must not import FastAPI, SQLAlchemy, database tables, palace, knowledge, backup, or learning modules.
-- Other backend modules import only `memory_anki.modules.mindmap_document.api`.
-- Palace and knowledge modules own ORM projection, persistence, conflict policy, and version creation.
+- 负责规范化、序列化、指纹、节点标识符和遗留负载兼容性。
+- 不得导入 FastAPI、SQLAlchemy、数据库表、palace、knowledge、backup 或学习模块。
+- 其他后端模块只导入 `memory_anki.modules.mindmap_document.api`。
+- 宫殿和知识模块负责 ORM 投影、持久化、冲突策略和版本创建。

@@ -1,65 +1,65 @@
-# Trusted Learning Loop Handoff
+# 可信学习闭环交接
 
-## Approved Preferences
+## 已批准的偏好
 
-- Prioritize reliable learning, honest evidence, and reduced supervision burden. Pause feature additions.
-- Devices share progress but keep their routes, current cards, and reveal UI.
-- Exclusion is round-local, survives refresh, and never changes mastery or scheduling.
-- Separate time investment, learning activity, and mastery evidence. Reports contain facts only.
-- Failed saves remain pending and visible; learning may continue.
-- Repair historical data only with evidence and a backup. Unknown evidence stays unknown.
-- AI owns technical acceptance. User confirms experience in three complete learning sessions.
-- Running-version updates require separate user confirmation.
+- 优先考虑可靠的学习、诚实的证据，并降低监督负担。暂停新增功能。
+- 设备之间共享进度，但各自保留自己的路由、当前卡片和翻卡 UI。
+- 排除是轮次局部的，刷新后仍然有效，且绝不改变掌握度或排期。
+- 将时间投入、学习活动和掌握度证据区分开。报告只包含事实。
+- 失败的保存保持待处理且可见；学习可以继续进行。
+- 只有在有证据和备份的情况下才修复历史数据。证据未知的仍保持未知。
+- AI 负责技术验收。用户在三个完整的学习会话中确认体验。
+- 运行中版本的更新需要用户单独确认。
 
-## Scope and Shared Work
+## 范围与共享工作
 
-The repository started with extensive uncommitted changes, including article views, ratings, bindings, quiz progress, dashboard progress, and audio. These were preserved. No commit was made. Git diff is not an ownership list for this task.
+仓库开始时存在大量未提交的改动，包括文章视图、评分、绑定、测验进度、仪表盘进度和音频。这些改动都被保留下来。没有进行任何提交。Git diff 不是本任务的所有权清单。
 
-Live frontend observed before validation: `20261006054001-81be7023b4`, built at `2026-10-06T05:40:03.345Z`, served by existing `127.0.0.1:8012`. No restart or live frontend replacement is authorized by this handoff.
+验证前观察到的活动前端：`20261006054001-81be7023b4`，构建于 `2026-10-06T05:40:03.345Z`，由现有的 `127.0.0.1:8012` 提供服务。本交接不授权重启或替换活动前端。
 
-## Evidence-Backed Repairs
+## 有证据支撑的修复
 
-1. Startup quiz synchronization incorrectly acknowledged the merged local snapshot, suppressing upload of offline answers. A regression reproduced the failure; hydration now acknowledges the server snapshot only.
-2. Local changes during an in-flight save could lose their next push. The synchronization loop now drains pending changes and preserves failed local state.
-3. Clear requests bundled unrelated scopes under one old timestamp. They now preserve each timestamp and scope.
-4. Backend delayed clears deleted newer answers. All/palace/question clears now delete only records at or before the clear timestamp.
-5. A clear and new answer in the same millisecond could discard the answer after reload. Local action timestamps are monotonically ordered.
-6. Remote clears removed completed states but left unfinished answers. Clear merges now cover all stored states.
-7. Shared quiz progress was pulled only once. Visible clients now refresh on focus, reconnect, visibility changes, and a 15-second interval; stopped owners remove timers/listeners.
-8. Global quiz-progress queue coalescing could replace different question batches. This coalescing key was removed; original timestamps make retries safe against stale writes.
-9. Unsynchronized quiz progress now produces a persistent factual warning, cleared after synchronization succeeds; unavailable reads are not reported as verified synchronization.
-10. Remote routes/card/reveal UI no longer force local navigation. Live presence, timer ownership and rating transport remain. Queue hydration prefers the local card; remote rating settlement also pins the local cursor. A different round is refreshed before applying its ratings.
-11. Manual schedule PATCH had no HTTP replay protection. Existing mutation-response storage now replays the original result, in the transaction, and rejects a receipt belonging to another unit/operation. No rating event is fabricated and no migration was added.
-12. Duplicate document UIDs could silently collapse coverage. The read-only catalog now exposes a structural-integrity note without changing source documents. A valid UID named `missing` is not treated as an error.
-13. Ledger summary/source/kind aggregates counted raw overlapping durations while trend used de-duplicated fragments. They now use the same deterministic fragments, preserving raw ledger facts.
-14. Dashboard monthly review duration included non-review activities. It now filters review records explicitly.
+1. 启动时的测验同步错误地确认了合并后的本地快照，从而抑制了离线答案的上传。回归测试复现了该故障；现在 hydration 只确认服务器快照。
+2. 保存在进行中时发生的本地改动可能会丢失其下一次推送。同步循环现在会排空待处理的改动，并保留失败的本地状态。
+3. 清除请求曾把不相关的作用域打包在同一个旧时间戳下。现在会保留每个时间戳和作用域。
+4. 后端延迟清除会删除更新的答案。现在全部/宫殿/题目清除只删除清除时间戳当时或之前的记录。
+5. 同一毫秒内的清除和新答案可能在重新加载后丢弃该答案。本地操作时间戳现在按单调递增排序。
+6. 远程清除移除了已完成状态，但留下了未完成的答案。现在清除合并覆盖所有已存储状态。
+7. 共享测验进度过去只会拉取一次。现在可见客户端会在获得焦点、重新连接、可见性变化以及每 15 秒的间隔时刷新；停止的 owner 会移除定时器/监听器。
+8. 全局测验进度队列的合并可能替换不同的题目批次。已移除此合并键；原始时间戳使重试能安全应对过期写入。
+9. 未同步的测验进度现在会生成一个持续的事实性警告，并在同步成功后清除；读取不可用不会被报告为已验证的同步。
+10. 远程路由/卡片/翻卡 UI 不再强制本地导航。实时在场、定时器归属和评分传输仍然保留。队列 hydration 优先使用本地卡片；远程评分结算也会钉住本地 cursor。不同的轮次会先刷新，再应用其评分。
+11. 手动排期 PATCH 没有 HTTP 重放保护。现有的变更响应存储现在会在事务内重放原始结果，并拒绝属于另一个 unit/operation 的收据。不会伪造任何评分事件，也没有添加迁移。
+12. 重复的文档 UID 可能会静默地使覆盖率坍缩。只读目录现在会公开一条结构完整性说明，而不更改源文档。名为 `missing` 的有效 UID 不会被当作错误。
+13. 台账的摘要/来源/种类聚合统计的是原始重叠时长，而趋势使用的是去重后的片段。现在它们使用相同的确定性片段，同时保留原始台账事实。
+14. 仪表盘的每月复习时长包含了非复习活动。现在会显式过滤复习记录。
 
-## Existing Protections Checked
+## 已检查的现有保护
 
-- Rating operation receipts and entity identity validation exist.
-- Exclusion does not mutate stage, due date or has_passed; persisted/local retained ledger protections exist.
-- Identity ratings are shared across entry points; round-local cursor/exclusion semantics remain separate.
-- Learning coverage already distinguishes reviewed from mastered; quiz attempts are question-owned.
-- Time records use a separate session read model; time is not a mastery metric.
+- 评分操作收据和实体身份校验已存在。
+- 排除不会改变 stage、到期日期或 has_passed；持久化/本地保留的台账保护已存在。
+- 身份评分在各入口之间共享；轮次局部的 cursor/排除语义仍然独立。
+- 学习覆盖率已经区分了已复习与已掌握；测验作答归题目所有。
+- 时间记录使用单独的会话读模型；时间不是掌握度指标。
 
-## Validation Boundary
+## 验证边界
 
-Use `MEMORY_ANKI_VALIDATION_OUT_DIR=dist-validation-trusted-loop` with `python tools/quality_gate.py --full` to build and preview validation output without replacing `apps/web/dist`. The isolated output option rejects absolute/traversal/live-dist targets. E2E uses fixtures, blocked service workers, no API proxy, and no existing-server reuse.
+使用 `MEMORY_ANKI_VALIDATION_OUT_DIR=dist-validation-trusted-loop` 搭配 `python tools/quality_gate.py --full` 来构建和预览验证输出，而无需替换 `apps/web/dist`。隔离输出选项会拒绝绝对路径/路径穿越/指向活动 dist 的目标。E2E 使用 fixtures、屏蔽的 service worker、不使用 API 代理，也不复用已有服务器。
 
-Final isolated quality gate passed: architecture 144 tests; data-integrity tooling 3 tests; backend 843 tests; ruff, mypy, import-linter; frontend lint, typecheck, Vitest; isolated frontend build; and Playwright 50 passed / 4 skipped across desktop Chromium, mobile Chromium, and mobile WebKit. The four skips are existing conditional tests. The WebKit freestyle rating flow now passes under the full parallel gate after making the sync warning pointer-transparent and making the settlement E2E assertion event-driven.
+最终隔离质量门禁通过：架构 144 个测试；数据完整性工具 3 个测试；后端 843 个测试；ruff、mypy、import-linter；前端 lint、typecheck、Vitest；隔离前端构建；以及 Playwright 在桌面 Chromium、移动 Chromium 和移动 WebKit 上 50 通过 / 4 跳过。四个跳过项是现有的条件测试。在将同步警告设为指针透明、并将结算 E2E 断言改为事件驱动之后，WebKit 随心评分流程现在可以在完整的并行门禁下通过。
 
-No `--launchers` run has occurred. It restarts the shared PWA service and starts Electron, so it requires the separately confirmed maintenance window. There has been no write to the real learning database, no historical score reconstruction, and no source-PDF-based binding repair.
+尚未执行 `--launchers` 运行。它会重启共享 PWA 服务并启动 Electron，因此需要单独确认的维护窗口。没有对真实学习数据库进行写入，没有重建历史分数，也没有基于源 PDF 的绑定修复。
 
-## Open Acceptance Items
+## 未完成的验收项
 
-- External Agent Mail hourly email automation is not established as owned by this repository. Facts-only preferences are recorded; its live task prompt has not been changed.
-- Historical has_passed can count as reviewed schedule-state evidence. The existing note labels it as rating-or-passed coverage, not mastery; historical missing operation evidence has not been reconstructed.
-- Real textbook/chapter/question bindings need source-based audit before any data repair. Malformed documents receive a warning, not invented replacement UIDs or guessed counts.
-- Computer-to-computer database synchronization happens outside the app and requires one writer at a time. Phone/desktop clients on the same backend are a different scenario; no new file-sync implementation is introduced.
-- Phone hardware/network behavior and three actual uninterrupted learning sessions remain unverified until user observation.
+- 外部 Agent Mail 的每小时邮件自动化尚未确立为本仓库所有。仅含事实的偏好已记录；其实时任务提示词尚未更改。
+- 历史的 has_passed 可以计为已复习的排期状态证据。现有说明将其标注为评分或通过覆盖率，而非掌握度；历史上缺失的操作证据尚未重建。
+- 真实的教材/章节/题目绑定在任何数据修复前需要基于来源的审计。格式错误的文档会收到警告，而不是编造的替换 UID 或猜测的计数。
+- 计算机之间的数据库同步发生在应用之外，并且同一时间只允许一个写入者。同一后端上的手机/桌面客户端是另一种场景；未引入新的文件同步实现。
+- 手机硬件/网络行为以及三次实际不中断的学习会话，在用户观察之前仍未验证。
 
-## Release and Learning Observation
+## 发布与学习观察
 
-Before release, notify the user of scope, migrations if any from shared work, backup, interruption, launcher smoke, and rollback boundary. Do not imply isolated verification is a live deployment.
+发布之前，向用户告知范围、共享工作中可能产生的迁移、备份、中断、启动器冒烟测试以及回滚边界。不要暗示隔离验证等同于实际部署。
 
-For each of three user learning sessions, record date, chapter, devices used, whether rating/removal persisted, whether unsaved state was visible, and whether a system issue caused checking/recovery/rework. No feedback is not a pass. Technical handoff and real-learning acceptance are separate states.
+对于三次用户学习会话中的每一次，记录日期、章节、使用的设备、评分/移除是否持久化、未保存状态是否可见，以及系统问题是否导致了检查/恢复/返工。没有反馈不等于通过。技术交接与真实学习验收是两种不同的状态。

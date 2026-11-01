@@ -1,23 +1,23 @@
-# Module: memory
+# 模块：memory
 
-## Status
-migrated — permanent-mark unit scheduling is the only palace review runtime.
+## 状态
+已迁移 —— 永久标记单元排期是唯一的宫殿复习运行时。
 
-## Owns
-- permanent-mark unit state and topology reconciliation
-- fixed-ladder scheduling and local-day due dates
-- review sessions, encounters, atomic amendments, close locking, and undo
+## 负责
+- 永久标记单元状态与拓扑对账
+- 固定阶梯排期与本地日到期日期
+- 复习会话、encounter、原子修订、关闭锁定和撤销
 
-## Retired
-- node ratings and node FSRS state
-- waves, calibration, aggregation, daily plans, and temporary marks
+## 已退役
+- 节点评分与节点 FSRS 状态
+- 波次、校准、聚合、每日计划和临时标记
 
-## Forbids
-Must not import palace application internals; read trees via content.public
+## 禁止
+不得导入宫殿应用内部实现；通过 content.public 读取树
 
-## Public surface
-- `public/commands.py` — write intents
-- `public/queries.py` — read intents
+## 公共接口
+- `public/commands.py` — 写意图
+- `public/queries.py` — 读意图
 
-## Cross-module rule
-Import only `memory_anki.modules.memory.public`. Never import another module's application/infrastructure/presentation.
+## 跨模块规则
+只导入 `memory_anki.modules.memory.public`。绝不要导入另一个模块的 application/infrastructure/presentation。

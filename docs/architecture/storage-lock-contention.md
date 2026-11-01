@@ -1,20 +1,20 @@
-# Storage write lock — removed (2026-10-11)
+# 存储写锁——已移除（2026-10-11）
 
-## What it was
-`core/runtime_storage_lock.py` provided `storage_write_lock`: one process-wide `threading.Lock` plus an OS file lock on `日志缓存/runtime-storage.lock`. SQLAlchemy took it on `before_flush` and released it on `after_flush`. Its only purpose was keeping backup, restore, full import and raw file copies from observing a half-written state.
+## 它曾是什么
+`core/runtime_storage_lock.py` 提供 `storage_write_lock`：一个进程级 `threading.Lock` 加上对 `日志缓存/runtime-storage.lock` 的 OS 文件锁。SQLAlchemy 在 `before_flush` 时获取它，在 `after_flush` 时释放。它唯一的用途是防止备份、恢复、完整导入和原始文件复制观察到写了一半的状态。
 
-## Why it was removed
-- SQLite (WAL, `busy_timeout`) already allows exactly one writer, so the lock added nothing for ordinary writes.
-- The data directory lives on a removable USB drive. Every acquisition opened, locked and closed the lock file there, and any single write that stalled on that drive (10–25 s) queued every other writer, including freestyle ratings, behind it. Past 2 s the request failed with `storage_busy` 503, so each rating could take many seconds or fail while its SQL took milliseconds.
-- Backup snapshots already use the SQLite online backup API and never needed the lock.
+## 为什么移除
+- SQLite（WAL、`busy_timeout`）本身已经只允许一个写入者，因此该锁对普通写入没有任何增益。
+- 数据目录位于可移动 USB 驱动器上。每次获取都会在那里打开、锁定并关闭锁文件，任何一次在该驱动器上卡住（10–25 秒）的写入都会把所有其他写入者（包括随心评分）排在它后面。超过 2 秒请求就会以 `storage_busy` 503 失败，因此每次评分都可能耗时数秒或失败，而其 SQL 只耗时毫秒。
+- 备份快照已经使用 SQLite 在线备份 API，从不需要该锁。
 
-## What replaced it
-Nothing. `StorageBusyError` and `handle_storage_busy` are gone. A transient SQLite `database is locked` is still reported as a retryable 503 + `Retry-After` by `handle_unexpected_error` (`infrastructure/db/lock_errors.py:is_sqlite_lock_error`).
+## 什么替代了它
+没有。`StorageBusyError` 和 `handle_storage_busy` 已删除。临时的 SQLite `database is locked` 仍会由 `handle_unexpected_error`（`infrastructure/db/lock_errors.py:is_sqlite_lock_error`）作为可重试的 503 + `Retry-After` 报告。
 
-## Trade-off accepted
-Restore (`restore_storage_backup`), full import (`import_full_archive`) and the raw-copy fallback no longer exclude concurrent study writes. Run them while no one is studying.
+## 接受的权衡
+恢复（`restore_storage_backup`）、完整导入（`import_full_archive`）和原始复制回退不再排除并发的学习写入。请在无人学习时运行它们。
 
-## Guard
-`tools/check_architecture.py:check_runtime_storage_lock` fails if `runtime_storage_lock` / `storage_write_lock` reappear under `apps/api/src`.
+## 护栏
+如果 `runtime_storage_lock` / `storage_write_lock` 在 `apps/api/src` 下重新出现，`tools/check_architecture.py:check_runtime_storage_lock` 会失败。
 
-Related: `database-locked-root-cause.md` (SQLite-level contention), `backup-boundary.md`.
+相关：`database-locked-root-cause.md`（SQLite 级争用）、`backup-boundary.md`。

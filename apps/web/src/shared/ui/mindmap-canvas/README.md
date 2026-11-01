@@ -1,16 +1,16 @@
-﻿# Mind-map Canvas
+﻿# 脑图画布
 
-Generic React Flow renderer.
+通用的 React Flow 渲染器。
 
-- Owns layout, viewport, drag/drop, node measurement, and generic visual rendering.
-- Receives `GraphData` and `MindMapNodeVisual`; it does not know palace, review, segment, or mastery semantics.
-- Must not import entities or features.
-- Structure drag preview is **target chrome only** (ghost source + drop placeholders). Layout recomputes after drop, not while the pointer is moving. On-card drop always becomes a child; sibling before/after is only offered in the vertical gap between cards.
-- Idle cards are structure-draggable without a prior select click; double-click still enters edit. Structure-drag audio is a single `drag_start` (no per-hover sounds).
+- 负责布局、视口、拖放、节点测量和通用可视化渲染。
+- 接收 `GraphData` 和 `MindMapNodeVisual`；它不了解宫殿、复习、分段或掌握度语义。
+- 不得导入 entities 或 features。
+- 结构拖拽预览**只显示目标装饰框**（源节点虚影 + 放置占位符）。布局在放下之后重新计算，而不是在指针移动时。落在卡片上总是成为子节点；同级前/后插入只在卡片之间的垂直间隙中提供。
+- 闲置卡片无需先点击选中即可进行结构拖拽；双击仍然进入编辑。结构拖拽音频是单次 `drag_start`（没有逐悬停音效）。
 
-## Large-map navigation
+## 大地图导航
 
-- Branch collapse is canvas-local (not persisted on the document). Nodes with children show a fold control; collapsed cards keep a descendant count badge. A host whose page stays mounted (`collapseResetKey`, e.g. the page activation stamp) drops manual folds and re-seeds the default depth when the learner re-enters, so an editor never reopens with last visit's expansion.
-- Maps with >= 36 nodes auto-collapse branches at depth >= 1 on open (root + first level stay expanded). Practice/review (practiceModeActive) forces fully expanded.
-- Toolbar: refresh, fit whole tree, fit current branch, expand selected subtree, expand all, collapse deep. Double-click a node fold control expands that whole subtree. Min zoom is 0.12; onlyRenderVisibleElements for medium/large graphs.
-- Intentionally not in this canvas: MiniMap, search jump, outline dual-pane (hosts may compose those separately).
+- 分支折叠是画布局部的（不持久化到文档上）。有子节点的节点会显示一个折叠控件；折叠的卡片保留一个后代数量徽标。页面保持挂载的宿主（`collapseResetKey`，例如页面激活戳）会在学习者重新进入时丢弃手动折叠并重新植入默认深度，因此编辑器绝不会以上次访问的展开状态重新打开。
+- >= 36 个节点的地图在打开时自动折叠深度 >= 1 的分支（根 + 第一层保持展开）。练习/复习（practiceModeActive）强制完全展开。
+- 工具栏：刷新、适配整棵树、适配当前分支、展开所选子树、全部展开、折叠深层。双击节点的折叠控件会展开整个子树。最小缩放为 0.12；中型/大型图使用 onlyRenderVisibleElements。
+- 有意不在此画布中：MiniMap、搜索跳转、大纲双栏（宿主可以单独组合这些）。

@@ -1,22 +1,22 @@
-# Module: practice
+# 模块：practice
 
-## Status
-active — consumer of memory, content, quiz, and session contracts.
+## 状态
+活跃 —— memory、content、quiz 和 session 契约的消费者。
 
-## Owns
-Immersive freestyle queue, formal review session UX orchestration
+## 负责
+沉浸式随心队列、正式复习会话 UX 编排
 
-## Migrates from
-- freestyle (queue/feed)
-- formal review orchestration (not scheduling math)
+## 迁移自
+- 随心（队列/信息流）
+- 正式复习编排（不涉及排期数学）
 
-## Forbids
-No direct ORM; compose content/memory/quiz/session public only
+## 禁止
+禁止直接使用 ORM；仅组合 content/memory/quiz/session 的公共接口
 
-Practice must not split permanent-mark topology, persist review progress, or attach unit identity to quiz/Anki cards.
+Practice 不得拆分永久标记拓扑、持久化复习进度，或将单元身份附加到测验/Anki 卡片上。
 
-## Public surface
-- `api.py` — queue facade for cross-context callers
+## 公共接口
+- `api.py` — 面向跨上下文调用者的队列门面
 
-## Cross-module rule
-Import only `memory_anki.modules.practice.api`. Never import another module's application/infrastructure/presentation.
+## 跨模块规则
+只导入 `memory_anki.modules.practice.api`。绝不要导入另一个模块的 application/infrastructure/presentation。

@@ -1,45 +1,58 @@
-# Palace Quiz Boundary
+# 宫殿测验边界
 
-Palace Quiz owns question generation, validation, grouping, persistence, and quiz feedback. It may reference Palace identities and read projections, but Palace implementation modules are not shared libraries.
 
-## Dependency Direction
+<!-- 架构检查不变量索引（机器校验用，请勿删除；正文为中文）
+at least one
+do not shrink
+marked
+multiple choice first
+rose fill
+short_answer
+主观
+取消标记
+客观
+-->
+
+宫殿测验负责题目生成、校验、分组、持久化和测验反馈。它可以引用宫殿标识和读取投影，但宫殿实现模块不是共享库。
+
+## 依赖方向
 
 ```text
-palace_quiz.application -> palaces.api
-palace_quiz.application -> mindmap_document.api
-palace_quiz.application -> platform.application AI contracts
-palace_quiz.application -> platform.application UnitOfWork
+quiz.application -> content.api
+quiz.application -> mindmap_document.api
+quiz.application -> platform.application AI contracts
+quiz.application -> platform.application UnitOfWork
 ```
 
-Generic model-response helpers such as multimodal image content encoding and balanced JSON-object extraction live in `platform.application.ai_content`. Generic mind-map traversal lives in `mindmap_document`. Palace-specific title, explicit chapter scope, and mini-palace node parsing are intentionally exported through `palaces.api`.
+通用模型响应辅助函数，例如多模态图像内容编码和平衡 JSON 对象提取，位于 `platform.application.ai_content`。通用脑图遍历位于 `mindmap_document`。宫殿特有的标题、显式章节范围和迷你宫殿节点解析有意通过 `content.api` 导出。
 
-The quiz application must never import `palaces.application`, `palaces.infrastructure`, or private mind-map document modules.
+测验应用绝不能导入 `content.application`、`content.infrastructure` 或私有脑图文档模块。
 
-## Mutation Boundary
+## 变更边界
 
-The four idempotent question mutations are composed by `palace_quiz.application.question_mutation_commands`. Presentation extracts the mutation identity from headers and constructs the platform SQLAlchemy adapters; the application command performs question, OCR-source, and mutation-response writes in one `UnitOfWork` transaction.
+四个幂等题目变更由 `palace_quiz.application.question_mutation_commands` 组合。表现层从请求头提取变更身份并构造平台 SQLAlchemy 适配器；应用命令在一个 `UnitOfWork` 事务中执行题目、OCR 来源和变更响应的写入。
 
-Low-level question and OCR write helpers may flush for command composition but must not commit when invoked by a mutation command. The command owns the single commit, so a failure while storing the mutation response rolls back every business write. Palace Quiz must not import the transitional `memory_anki.modules.persistence` context.
+底层题目与 OCR 写入辅助函数可以为命令组合执行 flush，但在由变更命令调用时不得提交。命令拥有唯一的提交，因此存储变更响应时发生失败会回滚所有业务写入。宫殿测验不得导入过渡性的 `memory_anki.modules.persistence` 上下文。
 
-## Question Bank Display Order
+## 题库显示顺序
 
-Palace Quiz practice, manage, aggregated lists, generation previews, and node-bound overlays present a bank as exam paper order: multiple choice first, then other objective types, then short answer. Within a type, `sort_order` then `id` stay stable. Freestyle quiz shuffle is a separate training draw and does not use this bank order.
+宫殿测验的练习、管理、聚合列表、生成预览和节点绑定叠加层都按试卷顺序呈现题库：先选择题，再其他客观题类型，最后简答题。同一类型内，依次按 `sort_order`、`id` 保持稳定。随心测验的洗牌是独立的训练抽取，不使用该题库顺序。
 
-The rank lives in `quiz.application.question_contracts` so listing, generation drafts, and frontend bank views share one rule.
+该排序位于 `quiz.application.question_contracts`，因此列表、生成草稿和前端题库视图共享同一条规则。
 
-## Quiz–Mindmap Node Binding（题库结合 / 双向关联）
+## 测验–脑图节点绑定（题库结合 / 双向关联）
 
-`quiz.application.node_binding` binds questions to mind-map node UIDs. A question keeps a **single owner palace**; each edge points at a **target** mind-map palace + `node_uid` (cross-palace allowed). Every new palace-owned question must have **at least one** binding (explicit `node_uids` when provided and valid, otherwise the palace root UID via `default-root-binding`); chapter-scoped creates with `palace_id=None` skip until a palace owner is assigned.
+`quiz.application.node_binding` 将题目绑定到脑图节点 UID。一道题保留**单一所属宫殿**；每条边指向一个**目标**脑图宫殿 + `node_uid`（允许跨宫殿）。每个新的宫殿所属题目必须有**至少一个**绑定（提供了有效显式 `node_uids` 时使用它们，否则通过 `default-root-binding` 使用宫殿根 UID）；`palace_id=None` 的章节范围创建会跳过，直到分配了宫殿所有者。
 
-- Storage: `palace_quiz_question_node_bindings`
-  - `palace_id` on the edge = **target** mindmap palace (node lives there)
-  - Unique: `(question_id, palace_id, node_uid)` so the same string uid on two palaces cannot collide
+- 存储：`palace_quiz_question_node_bindings`
+  - 边上的 `palace_id` = **目标**脑图宫殿（节点位于那里）
+  - 唯一约束：`(question_id, palace_id, node_uid)`，这样两个宫殿上的相同字符串 uid 不会冲突
   - `source` = `ai` | `manual`
-- Reverse list: `GET /palaces/{id}/quiz-node-bindings` returns every edge whose **target** is this palace, including foreign-owner questions, with `question_owner_palace_id` / titles / `is_cross_palace`.
-- Per-question list: `GET /palace-quiz-questions/{id}/node-bindings` for quiz → 知识点 digression.
-- Node search: `GET /quiz-node-search?q=` (global or scoped) for authoring.
-- Write paths: `POST .../preview` + `.../apply` (AI, human confirm), `POST .../mutate` (manual; optional `target_palace_id` on each add/remove), `POST .../auto-bind-text` (deterministic text-overlap backfill).
-- Merge modes (AI apply): `replace_all` (clear **this target palace’s AI edges**; manual kept) and `fill_unbound`.
-- Bidirectional UI:
-  - Map/review → `NodeBoundQuizDialog` overlay (owner labels 本宫 / 来自·他宫); each card shows up to two corner badges for the subtree union of bound questions (including cross-owner edges): **客观** (every type except `short_answer`, green) and **主观** (`short_answer`, sky). A side with zero questions is omitted. Counts are the full totals and do not shrink when a question is completed; session progress stays in the quiz progress UI. If that objective or subjective set contains a marked question, that badge uses a rose fill. Clicking a badge opens only that side's questions. Subject bookshelf palace cards reuse that same `NodeCountBadgeCluster` outside the card. The shelf count is the distinct non-deleted questions bound to the palace (the root-node total when every edge still points at a live node). Clicking a shelf badge opens that palace’s quiz page. Session 已做 is shared with Freestyle toolbar overlay and Palace Quiz practice. Refresh does not clear it. It is cleared by the palace quiz manual clear, or when the settlement page chooses to clear those palaces. Prev/next still keeps resolved states so the learner can review prior answers. Quiz practice uses 标记 / 取消标记 instead of 忘记/困难/记得/轻松. Marking writes `marked` and does not schedule review or auto-advance. A last stored 忘记 or 困难 rating (unpassed, with a due date) migrates to marked. Marked question numbers on the index rail use a rose fill.
-  - Quiz → multi-edge picker → `QuizKnowledgeDigressionDialog` full readonly target map + sticky **返回做题** (overlay; attempt draft stays in parent memory; PWA back closes digression first).
+- 反向列表：`GET /palaces/{id}/quiz-node-bindings` 返回**目标**为该宫殿的每条边，包括外部所有者题目，并带有 `question_owner_palace_id` / 标题 / `is_cross_palace`。
+- 逐题列表：`GET /palace-quiz-questions/{id}/node-bindings`，用于测验 → 知识点跳转。
+- 节点搜索：`GET /quiz-node-search?q=`（全局或限定范围），用于出题。
+- 写入路径：`POST .../preview` + `.../apply`（AI，人工确认）、`POST .../mutate`（手动；每次添加/移除可带可选 `target_palace_id`）、`POST .../auto-bind-text`（确定性的文本重叠回填）。
+- 合并模式（AI 应用）：`replace_all`（清除**该目标宫殿的 AI 边**；保留手动边）和 `fill_unbound`。
+- 双向 UI：
+  - 地图/复习 → `NodeBoundQuizDialog` 叠加层（所有者标签 本宫 / 来自·他宫）；每张卡片最多显示两个角标，表示已绑定题目的子树并集（包括跨所有者边）：**客观**（除 `short_answer` 外的所有类型，绿色）和**主观**（`short_answer`，天蓝色）。题目数为零的一侧省略。计数是完整总数，不会因完成某题而减少；会话进度保留在测验进度 UI 中。如果该客观或主观集合包含已标记的题目，该角标使用玫瑰色填充。点击角标只打开该侧的题目。学科复习书架宫殿卡片在卡片外复用同一个 `NodeCountBadgeCluster`。书架计数是绑定到该宫殿的去重未删除题目（当所有边仍指向活动节点时为根节点总数）。点击书架角标会打开该宫殿的测验页。Session 已做 与随心工具栏叠加层和宫殿测验练习共享。刷新不会清除它。它由宫殿测验的手动清除清除，或在结算页选择清除那些宫殿时清除。上一个/下一个仍保留已解决状态，方便学习者回看之前的答案。测验练习使用 标记 / 取消标记，而不是 忘记/困难/记得/轻松。标记会写入 `marked`，且不安排复习或自动前进。最后一次存储的 忘记 或 困难 评分（未通过，带到期日）会迁移为已标记。索引栏上已标记的题号使用玫瑰色填充。
+  - 测验 → 多边选择器 → `QuizKnowledgeDigressionDialog` 完整只读目标脑图 + 固定的**返回做题**（叠加层；尝试草稿保留在父级内存中；PWA 返回先关闭跳转）。

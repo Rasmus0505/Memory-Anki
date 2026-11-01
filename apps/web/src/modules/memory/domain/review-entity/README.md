@@ -1,7 +1,7 @@
-# Review Entity
+# 复习实体
 
-Framework-light Review state and contracts shared across review, palace practice, profile, and routing hosts.
+在复习、宫殿练习、个人资料和路由宿主之间共享的轻框架依赖 Review 状态与契约。
 
-- Owns review-flow data transforms, feedback state, reveal-session state, and Review route builders.
-- Must not import feature or page modules.
-- HTTP orchestration remains outside the entity until cache invalidation dependencies are separated into explicit ports.
+- 负责复习流程数据转换、反馈状态、翻卡会话状态和 Review 路由构建器。
+- 不得导入 feature 或 page 模块。
+- HTTP 编排保持在实体之外，直到缓存失效依赖被分离为显式端口。

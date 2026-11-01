@@ -190,12 +190,13 @@ modules/<feature>/
 | `session` | 学习会话进度 |
 | `knowledge` | 学科、章节、知识导入 |
 | `mindmap_document` | 思维导图文档规则与快照 |
-| `mindmap_learning` | 思维导图学习投影 |
 | `practice` | 随心训练 feed、轮次与卡片队列 |
+| `reminders` | 复习提醒设置、Bark 推送与定时投递日志 |
+| `progression` | 经验、等级、委托、印章的只读投影（前端不展示） |
 | `produce` | JSON、Markdown、整库导入导出 |
 | `settings` | AI 模型注册表、提示词、复习设置 |
 | `dashboard` | 聚合页面数据 |
-| `english` | 英语听写课程、本地字幕导入与句级拼写（无内置 ASR/翻译） |
+| `english` | 英语听写课程、本地字幕导入与句级拼写；听力课程生成会经 AI 运行时调用 ASR 与翻译（本地字幕导入路径不调用） |
 | `english_lookup` | 词典查词与翻译引擎 |
 | `exam` | 考试日期、星级权重、导图抽查 |
 | `backups` | 启停备份、版本快照、恢复 |
@@ -272,7 +273,7 @@ apps/web/src/
 - `modules/content/ui/mindmap-editor`：编辑器运行时、capability 组合和持久化 Adapter。
 - 宫殿、知识、复习模块：各自组合能力，不向通用画布增加业务条件。
 
-后端对应 `mindmap_document`、宫殿/知识各自的 `editor_*` 用例，以及独立的 `mindmap_learning`。不要重新使用旧 `modules/mindmap/application/editor_state_*` 路径。
+后端对应 `mindmap_document`、宫殿/知识各自的 `editor_*` 用例。`mindmap_learning` 已退役（见 `docs/architecture/context-map.yaml` 与 `docs/architecture/mindmap.md`），不要重建空模块。不要重新使用旧 `modules/mindmap/application/editor_state_*` 路径。
 
 ### 5.6 感官运行时入口
 

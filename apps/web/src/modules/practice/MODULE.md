@@ -1,14 +1,14 @@
-# Module: practice
+# 模块：practice
 
-## Status
-active — owns freestyle immersive feed + formal review composition surfaces (frontend)
+## 状态
+活跃 —— 拥有随心沉浸式信息流 + 正式复习组合表面（前端）
 
-## Owns
-Feed config, queue state, training round guards, immersive persistence, practice/review orchestration UI entry
+## 负责
+信息流配置、队列状态、训练轮次护栏、沉浸式持久化、练习/复习编排 UI 入口
 
-## Public entry
+## 公共入口
 public.ts
 
-## Rules
-- Other modules import only from public.ts
-- Domain is framework-free
+## 规则
+- 其他模块只从 public.ts 导入
+- 领域不依赖框架

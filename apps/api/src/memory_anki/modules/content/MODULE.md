@@ -1,22 +1,22 @@
-# Module: content
+# 模块：content
 
-## Status
-active — owns the current palace and knowledge document contracts.
+## 状态
+活跃 —— 拥有当前的宫殿和知识文档契约。
 
-## Owns
-Palace documents, knowledge tree, editor state, attachments
+## 负责
+宫殿文档、知识树、编辑器状态、附件
 
-## Migrates from
-- palaces (document/editor/tree/attachment)
+## 迁移自
+- palaces（文档/编辑器/树/附件）
 - knowledge
 - mindmap_document
 
-## Forbids
-Must not import memory/FSRS; no review scheduling
+## 禁止
+不得导入 memory/FSRS；不涉及复习排期
 
-## Public surface
-- `public/commands.py` — write intents
-- `public/queries.py` — read intents
+## 公共接口
+- `public/commands.py` — 写意图
+- `public/queries.py` — 读意图
 
-## Cross-module rule
-Import only `memory_anki.modules.content.public`. Never import another module's application/infrastructure/presentation.
+## 跨模块规则
+只导入 `memory_anki.modules.content.public`。绝不要导入另一个模块的 application/infrastructure/presentation。

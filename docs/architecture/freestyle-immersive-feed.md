@@ -1,818 +1,282 @@
-# Freestyle Immersive Feed
+# 随心沉浸式信息流
 
-Freestyle is a consumer of public learning projections. It does not own palace review scheduling.
-Toolbar 做题 draws from the round's scheduled review units — **not the subject union** and not
-`streams.quiz.specific_palace_ids`. By default each unit contributes its own node region plus the
-whole path from the palace root down to its permanent-mark anchor; 整个宫殿 is an opt-in wider
-range. Completed cards and live retries retained after a picker change do not add removed palaces
-to the question pool. Subject catalog lookups never widen the scheduled set. Out-of-scope answer
-progress stays parked and returns if the palace is selected again. An overlay ensure version
-conflict must be retried before loading question ids, since its snapshot may precede the
-just-saved picker scope.
-`FreestyleFeedConfig` is the single queue configuration owner for the immersive page; the
-older `FreestyleConfig` settings path is compatibility-only and must not drive queue builds.
 
-## Stage Header and the Sheet's Top Edge
+<!-- 架构检查不变量索引（机器校验用，请勿删除；正文为中文）
+/overlay-quiz/drop-palaces
+/rounds/start
+Clicking a progress-rail tick jumps
+Finishing one palace's ratings does not ask to clear overlay
+QuizQuestionRoundRating
+active unit review session required
+closing slot
+compress_completed
+compressed_ids
+currently selected rating again
+does not keep showing the full
+editScope
+every live retry of that source
+forceExcludedIds
+forceStart
+immediately left of **文字**
+keyed by `unit:{unit_id}`
+latest rating
+list_round_unit_ratings
+list_trusted_due_units_for_queue
+locking every
+must not mint a new `round_id`
+must not prefill the retry rating
+must not prefill the retry rating bar
+navigateToIndex
+not the subject union
+overlapping identities
+palace
+partial notch
+partial_settlements
+passed review unit cannot start another encounter
+plan_version
+removed_review_palace_ids
+review_palace_ids
+review_unit_ids
+right-side pager has 完成
+scope_palaces
+solid removal tick
+startFreestyleRoundApi
+startNextRound
+starts with a blank rating
+stays pannable
+tail_pending
+this-round last rating
+uncompletes that card
+unit_no_questions
+viewing playhead
+主观
+取消结算
+只看不评
+客观
+小结算
+已移出队列
+按宫殿
+按进度
+混合插入
+清空做题进度
+确认结算
+结算
+结算已完成单元
+调整配置
+返回上一张
+退出
+backend-authoritative
+faint palace-color fill
+faint amber fill
+not only the HUD rail
+queue-construction fields
+does not move 
+orphan block
+retry occurrence has its own encounter
+leaves that occurrence in the viewport
+must not remount the map at the root
+one live retry
+must not mint a second copy
+must not cover the feed once cards exist
+does not move `current_card_id`
+-->
 
-The immersive page owns one in-flow header above the feed (`FreestyleHud`), never a stack of
-floating pills. It is: a 20px progress hairline (`FreestyleProgressRail`, which keeps the
-segment/retry/day-cut data and the finger-follow glider), one row with the current palace and
-the round count (`29/55`, still a button to 本轮安排) plus the two overflow actions, and one
-truncated milestone line (countdown + the nearest day; tapping opens every group). Nothing in
-the header is absolutely positioned over the card.
+随心是公共学习投影的消费者，它不拥有宫殿复习排期。工具栏「做题」从本轮已排期的复习单元中取题——**不是学科并集**，也不是 `streams.quiz.specific_palace_ids`。默认情况下，每个单元贡献自身的节点区域，加上从宫殿根节点向下到其永久标记锚点的整条路径；「整个宫殿」是需主动开启的更宽范围。选择器变更后保留的已完成卡片和活跃重练，不会把已移除的宫殿加回题目池。学科目录查询永远不会扩大已排期集合。超出范围的答题进度会保持停泊，如果宫殿再次被选中则会恢复。叠加层 ensure 的版本冲突必须在加载题目 id 之前重试，因为它的快照可能早于刚刚保存的选择器范围。`FreestyleFeedConfig` 是沉浸式页面唯一的队列配置所有者；较旧的 `FreestyleConfig` 设置路径仅用于兼容，不得驱动队列构建。
 
-The header measures itself with a `ResizeObserver` and publishes `--fs-hud-h` on the stage root.
-Every overlay that sits under it (top notices, unsaved-ratings pill, palace-cleared and
-new-units banners, stale recovery, quarter tag, `.fs-edge-hint[data-edge='top']`) reads that
-variable instead of a hard-coded `rem`. `FreestyleFeedCard` carries no reserved top padding:
-the card's sheet starts exactly at the header's bottom edge. On phones both header rows keep a
-`pr-11` lane for the draggable session-recorder widget in the top-right corner; without it the
-recorder covers 更多.
+## 舞台页眉与卡面顶边
 
-Inside the sheet the order is toolbar → unit title row → map. The map toolbar
-(`MindMapCanvasToolbar` via `MindMapPageToolbar`) owns the sheet's top edge; the unit identity
-row is rendered through `belowToolbarSlot`, which is threaded through `MindMapCanvas` →
-`MindMapEditorSurface` → `FlipCardMindMapPanel` → `FreestyleUnitReviewFlipPanel` and takes layout
-height (it is not an overlay). The row therefore gets the full width and no longer reserves the
-old `7rem` band that used to exist for the floating HUD. Loading and error placeholders still
-draw the identity row at the top of the sheet, because they have no toolbar.
+沉浸式页面在信息流上方拥有一个文档流内的页眉（`FreestyleHud`），绝不是一个漂浮胶囊的堆叠。它由以下部分组成：一条 20px 的进度细线（`FreestyleProgressRail`，它保留了分段/重练/日期切分数据以及跟随手指的滑杆），一行包含当前宫殿和轮次数（`29/55`，仍然是打开「本轮安排」的按钮）以及两个溢出操作，和一行被截断的里程碑行（倒计时 + 最近的一天；点击会打开所有分组）。页眉中没有任何元素绝对定位覆盖在卡片之上。
 
-## Start-Page Overview Payload
+页眉用 `ResizeObserver` 测量自身，并在舞台根节点上发布 `--fs-hud-h`。位于其下方的每个叠加层（顶部通知、未保存评分的胶囊、宫殿已清空和新单元的横幅、过期恢复、quarter 标签、`.fs-edge-hint[data-edge='top']`）都读取该变量，而不是硬编码的 `rem`。`FreestyleFeedCard` 不保留顶部内边距：卡片的卡面恰好从页眉底边开始。在手机上，两行页眉都保留一条 `pr-11` 通道，供右上角可拖拽的会话录音器组件使用；没有它，录音器会盖住「更多」。
 
-`/freestyle/overview` is the first read of the page, so an unexpected shape in it must cost a
-strip of the page and never the page itself. It is parsed once at the API boundary
-(`api/freestyleOverviewParse.ts`, used by `getFreestyleOverviewApi`): numbers default to 0,
-lists to `[]`, unknown blocks to empty, and a round only exists when the payload has one.
-Renders then read the contract shape; the start-page 里程碑 strip additionally reads
-`milestones?.groups ?? []`.
+卡面内部的顺序是工具栏 → 单元标题行 → 脑图。脑图工具栏（通过 `MindMapPageToolbar` 的 `MindMapCanvasToolbar`）占据卡面的顶边；单元身份行通过 `belowToolbarSlot` 渲染，该插槽依次穿透 `MindMapCanvas` → `MindMapEditorSurface` → `FlipCardMindMapPanel` → `FreestyleUnitReviewFlipPanel`，并占用布局高度（它不是叠加层）。因此该行获得完整宽度，不再为以前浮动 HUD 保留的 `7rem` 区域。加载和错误占位符仍然在卡面顶部绘制身份行，因为它们没有工具栏。
 
-This exists because a half-updated pair white-screened 随心: the frontend read
-`milestones.groups.length` while the still-running API answered
-`milestones: { reminders: [] }`. A backend edit only takes effect after the shared service
-restarts (`python tools/pwa_server.py --stop` then `--build`); without that the old process
-keeps serving the old field names to a newly built frontend.
+## 开始页概览载荷
 
-## Review Entry
+`/freestyle/overview` 是页面的首次读取，因此其中意外的结构最多只能让页面损失一条内容，绝不能损失整个页面。它在 API 边界处只解析一次（`api/freestyleOverviewParse.ts`，由 `getFreestyleOverviewApi` 使用）：数字默认为 0，列表默认为 `[]`，未知块默认为空，且只有当载荷中确实存在轮次时，轮次才存在。之后渲染读取契约结构；开始页的「里程碑」条额外读取 `milestones?.groups ?? []`。
 
-Shelf 「立即复习」 opens `/palaces/<id>/review` and reuses the freestyle feed. That route is a
-knowledge-section page, not `/freestyle`, and it must not publish a followable
-live-study route. Its round workspace is `p<id>` (column width 20). It does not write
-the global 随心 selection. The round still applies a transient single-palace scope by locking every
-training stream to that palace. A saved 随心 palace/subject selection does not keep showing the full
-feed. Content/mix/queue settings are borrowed, the lock is not written back to stored prefs, and
-there is no separate formal page session before the queue loads. Editor 「开始随心复习」
-may still enter `/freestyle?palaceId=<id>` as an intentional 随心 launch. A memory-stage
-review may enter `/freestyle?palaceIds=<id,id>` and lock every stream to exactly those
-palaces for one round; saving still writes the stored 随心 selection, not that transient lock. There is no
-standalone `/review` frontend route or completion screen; unknown retired `/review...` paths fall
-back to `/freestyle`.
+之所以这样做，是因为一对半更新的前后端组合曾让随心白屏：前端读取 `milestones.groups.length`，而仍在运行的 API 返回 `milestones: { reminders: [] }`。后端修改只有在共享服务重启后才会生效（先 `python tools/pwa_server.py --stop`，再 `--build`）；否则旧进程会继续向新构建的前端提供旧字段名。
 
-## One immersive workspace
+## 复习入口
 
-随心 is the only immersive round. `/freestyle-2` (随心 2) was merged into it by migration
-`0072_merge_secondary_freestyle_workspace`: its active round and feed settings took over the
-primary slot, and a displaced primary round is kept as `status='archived'`, never deleted.
-Any stale `workspace=secondary` request normalizes to primary, and `/freestyle-2` redirects to
-`/freestyle`. Overlap identity is `unit:{unit_id}` / `quiz:{question_id}`. A 1–4 unit rating is
-keyed by `unit:{unit_id}` on the round's own card. A rating from palace review or a freestyle
-round is stored once on that unit and is not copied to any other round. A tap never moves the
-cursor. Completion without a
-stored rating still must not invent 记得. A fully handled round
-freezes on `get_or_create` so the closing settlement slot stays reachable; leftover due
-work advances only when the learner explicitly starts the next round via config confirm
-(`「再来一轮」` → `/rounds/start`). Page refresh, app restart, and HUD queue refresh must
-never mint a new `round_id`. The overflow action 「更新队列」 is separate: it replans this round from the latest due projection, keeps already-rated cards, and does not replace the ledger with the other computer's scores. The overflow action 「同步进度」 reads
-`GET /freestyle/rounds/active` and replaces the local ledger with that workspace
-round. It drops local-only scores so a phone draft cannot keep ratings the
-computer's round does not have, and it does not mint a `round_id`, append cards,
-or call `/rounds/start`. Stale recovery and the feed-error retry still keep the
-frozen round and must not drop server-known completions.
+复习书架上的「立即复习」打开 `/palaces/<id>/review`，并复用随心信息流。该路由是知识点章节页面，不是 `/freestyle`，并且不得发布可跟随的实时学习路由。它的轮次工作区是 `p<id>`（列宽 20）。它不写入全局随心选择。该轮次仍通过把每个训练流锁定到该宫殿来施加瞬时的单宫殿范围。已保存的随心宫殿/学科选择不会让它继续显示完整信息流。内容/混合/队列设置会被借用，该锁定不会写回已存储的偏好，且队列加载前不存在单独的正规页面会话。编辑器中的「开始随心复习」仍然可以进入 `/freestyle?palaceId=<id>`，作为有意的随心启动。记忆阶段复习可以进入 `/freestyle?palaceIds=<id,id>`，并在一轮内把每个流精确锁定到这些宫殿；保存时仍写入已存储的随心选择，而不是该瞬时锁定。不存在独立的 `/review` 前端路由或完成页；未知的已停用 `/review...` 路径回退到 `/freestyle`。
 
-## Round Plan State
+## 一个沉浸式工作区
 
-Practice owns the backend-authoritative round plan in SQLite (`freestyle_round_states`).
-Each round has a stable `round_id`, a config snapshot, a palace-scope signature, and a
-monotonic `plan_version`. The plan records original card order and card versions, the current
-card, completion/exclusion, and retry `occurrence` rows (`occurrence_kind`, source card,
-`retry_attempt`, insert target, status). Queue responses also expose `candidate_count`,
-`scheduled_count`, `queue_limit`, and `limit_reached`. Palace due units are not truncated;
-`queue_length` only caps quiz-only rounds.
+随性是唯一的沉浸式轮次。`/freestyle-2`（随心 2）已通过迁移 `0072_merge_secondary_freestyle_workspace` 合并进来：它活跃的轮次和信息流设置接管了主槽位，被挤出的主轮次保留为 `status='archived'`，绝不删除。任何过期的 `workspace=secondary` 请求都会归一化为主工作区，且 `/freestyle-2` 重定向到 `/freestyle`。重叠身份是 `unit:{unit_id}` / `quiz:{question_id}`。1–4 的单元评分以 `unit:{unit_id}` 为键，记录在轮次自己的卡片上。来自宫殿复习或随心轮次的评分只在该单元上存储一次，不会复制到任何其他轮次。一次点击永远不会移动 `cursor`。没有已存储评分的完成仍然不得凭空编造「记得」。完全处理完的轮次会在 `get_or_create` 上冻结，以便收尾结算槽位保持可达；剩余到期工作只有在学习者通过配置确认显式开始下一轮时才会推进（`「再来一轮」` → `/rounds/start`）。页面刷新、应用重启和 HUD 队列刷新绝不能铸造新的 `round_id`。溢出操作「更新队列」是独立的：它根据最新的到期投影重新规划本轮，保留已评分卡片，并且不会用另一台电脑的评分替换账本。溢出操作「同步进度」读取 `GET /freestyle/rounds/active`，并用该工作区轮次替换本地账本。它会丢弃仅存在于本地的评分，使手机草稿无法保留电脑端轮次没有的评分，并且不会铸造 `round_id`、追加卡片或调用 `/rounds/start`。过期恢复和信息流错误重试仍然保留已冻结的轮次，且不得丢弃服务器已知的完成记录。
 
-The server plan is the only authority for retry order, current card, completion, and retry
-counts. PWA, desktop, and a restart of the same device restore that plan. Browser `localStorage`
-keeps display preferences and an offline draft only — it must not decide restudy order.
-An unfinished round survives the study-day rollover (03:00 local, see `review-boundary.md`), a page refresh, a saved-config hydrate,
-and device switches. A fully handled round keeps its `round_id` and presented order on
-silent rebuilds and `get_or_create` — it must not mint or append brand-new due
-identities that would flip the closing settlement slot off. The next `round_id` is
-created only by `/rounds/start` after an explicit config confirm (`forceStart` from
-settlement 「再来一轮」 / 开始下一轮). Refresh, restart, open-after-settlement, and
-leftover-due detection must not call `/rounds/start`. Mid-round or post-settlement F5
-keeps the same `round_id`, restores `completed_ids`, and resumes the local draft /
-committed `current_card_id` (via `set_cursor` on settle) instead of jumping back to
-the first card or minting a fresh queue.
-A palace/subject scope change rebinds the same `round_id`: overlapping identities keep
-completed / excluded / retry marks; only unstarted work outside the new scope is dropped.
-Refresh must not mint a new `round_id` or drop completed cards from the HUD/feed, except cards
-the learner explicitly compressed with 「结算已完成单元」. A 结算 drops the source and every live retry of that source. A retry whose source id is in `compressedIds` leaves the rail, the sheet, and the swipe feed; it must not stay as a lit tick the learner cannot reach. Scoring alone never removes those ticks: a 重练 rated this round keeps its slot right behind its source through silent rebuilds, 更新队列, and 重建本轮 (`replan_remaining` re-adds completed occurrences of kept sources; `_collapse_retries` only collapses *live* duplicates and never cancels an answered one; `_settle_source` treats an occurrence's own pass grade as answered even when the encounter cache lost the entry). `cardsForServerPlan` also keeps a completed occurrence's card when the presented list no longer names it. Only 结算 (`compress_completed`), a cancelled occurrence, or the next study day's reopen takes it off — so swipe-back / 改分 still reach a card the learner just rated. Completed source
-cards stay in presented order so swipe-back / 上一张 can reopen them until that compress. A window that has lost its local plan adopts the workspace active round and must not mint a new `round_id` while that round exists. A quota miss may compact the stored snapshot, but the live session keeps the plan the learner is looking at. 做题 stays available while the map is still opening. The card must not say it is still preparing a score. Re-scoring a completed
-unit amends from that exact recall attempt's original baseline; it does not stack SRS.
-The identity includes round, source card, occurrence and retry attempt. A real retry starts
-from the current penalized schedule, never replaces the earlier failure, and replays only
-its own operation. A rating write after a glance was abandoned, completed, or cancelled
-reopens the same attempt and applies the latest rating; it must not return
-`active unit review session required`. Once a later real attempt has been rated, an older
-attempt is read-only: correction/undo must target the most recent attempt rather than
-silently rewrite the basis of later evidence. Tapping the currently selected rating again
-clears that latest editable attempt back to unrated; it does not erase earlier real retries.
-Swipe-back / 上一张 onto a completed (passed) unit must open an amend glance in the same
-round. If the previous study session is still `active` with a passed item and no open
-encounter, start finishes that session and opens a new one. It must not return
-`passed review unit cannot start another encounter`. Freestyle unit load failures that
-cannot be healed do not toast English API text; the card offers 重试 / 跳过这张 / 重建本轮 /
-只看不评. A slow session start must not replace a visible map, and it must not block
-scoring. The four ratings are pressable as soon as the card is on screen; the score paints
-immediately and the save follows. Immediate selection is only local intent: completed ids,
-passed counts, retry scheduling and cleared-due feedback update only after server acknowledgement.
-A failed save keeps the selected button with an explicit unsaved warning and asks for one more tap —
-it must not claim passing/completion, reload the card or make the learner re-read it. Fast flips and progress-rail
-jumps must not open a glance for cards that were only passed. A glance opens when the learner
-rates, or after they settle on a card. Returning to a card shows the score already recorded
-for this round without starting preparation over. A card's
-`POST /review/units/{id}/sessions` carries a 45s transport timeout
-(`SESSION_START_TIMEOUT_MS`) and is deliberately kept out of the mutation queue
-(`persistence: false`) because the UI re-issues the same encounter id, not a new glance.
-That budget sits above the server's 10s SQLite `busy_timeout`, so a lock wait can finish
-and be adopted instead of aborting at 15s and starting a second write. The visible failure
-is one sentence plus a hidden 复制给助手; it must not tell the learner to restart the app.
-A later due-list rebuild with the same construction knobs (`append_today_cards`) keeps every
-original card, including unstarted leftover work that dropped off today's due set, and appends
-newly seen identities with `entered_on` equal to the local calendar day so retry copies cannot
-clump into an orphan block of attempt-1 nodes. When the study day advances, the rebuild first
-re-admits units that are due again (`_reopen_due_again`): a round that outlives midnight must not
-keep yesterday's 记得 cards compressed forever just because it already settled them, or the
-1-day stage silently stops being reviewed. Matching is by knowledge-point identity, not card id
-(a revision bump `…:r1` → `…:r2` is the same work), and the server resolves the due set for the
-plan's own units instead of trusting the incoming candidates — the client rebuilds those from the
-round ledger, which still hides exactly the cards that are due again. Saving feed config from 「保存配置并重排」 asks first. 保留继续这一轮：
-`replan_remaining` keeps completed ticks, drops unstarted work
-outside the new incoming set unless it still has a live retry, and only reorders what has not
-started. 不保留 persists that config and mints the next round through `startNextRound`
-(`forceStart`), so completed, excluded, retry, and overlay 已做 do not carry over. Closing the
-reminder cancels the save. Palace-picker confirm and other in-feed config writes still replan
-without that reminder. Settlement 「开始下一轮」 already starts fresh and does not ask again.
-Changing palace/subject scope (`replan_remaining`) keeps completed ticks, drops unstarted work
-outside the new incoming set unless it still has a live retry, restamps remaining work as today,
-and parks live retries after at most three cards of the new remaining queue (or immediately after
-the completed prefix if fewer remain). Unstarted cards whose review unit is no longer openable
-(`drop_vanished_unstarted`) are removed on `get_or_create` without parsing `editor_doc`.
-A unit is not openable when it is inactive or its palace is deleted or archived, even
-if this round still has a live retry for it. A completed tick may stay in the round
-history, but its retry leaves too, because opening either one would only redraw a dead card. Completed ticks, excluded cards, and quiz
-cards stay. Units that still exist but are not due today stay. If that drop leaves the round fully handled, the plan is
-persisted and frozen; it does not append new due cards. Queue build reads active due
-`ReviewUnitState` rows (`list_trusted_due_units_for_queue`) and palace titles only — it does
-not parse every `editor_doc` on the critical path. Opening a unit still reconciles that
-palace. A cold start with no stored round may return a `study_window` prefix (`tail_pending`)
-so the learner can start; the client then silently loads the rest. The prefix is a prefix of
-the same ordered queue, not a reshuffle. This is first paint, never a release schedule: every
-due card is already in the round plan and in the HUD denominator, and the tail is not held back
-until later in the day. There is no daily review quota, no backlog release, and no per-round
-slice — see 「The due set is one whole」 in `review-boundary.md`. When a round already exists, the first paint comes
-from the stored plan and loading must not cover the feed once cards exist. A `忘记`
-rating does not move `current_card_id`; the source stays current until `leave_card`.
-`困难` is a pass and follows the normal advance rule.
+## 轮次计划状态
 
-Optimistic concurrency: writes carry `expected_version` and `operation_id`. A stale device that
-submits a lower version receives the latest plan with `conflict: true` and must not overwrite
-newer progress. Repeated terminal writes with the same `operation_id` return the accepted
-result.
+Practice 在 SQLite 中拥有后端权威的轮次计划（`freestyle_round_states`）。每个轮次都有一个稳定的 `round_id`、一个配置快照、一个宫殿范围签名，以及一个单调递增的 `plan_version`。计划记录原始卡片顺序和卡片版本、当前卡片、完成/排除状态，以及重练 `occurrence` 行（`occurrence_kind`、源卡片、`retry_attempt`、插入目标、状态）。队列响应还暴露 `candidate_count`、`scheduled_count`、`queue_limit` 和 `limit_reached`。宫殿的到期单元不会截断；`queue_length` 只限制纯做题轮次。
 
-The frontend reducer applies optimistic patches and hydrates from the server. Rebuilds keep
-completed, excluded, retry, and stale entries visible in the plan; a card that returns after a
-stale rebuild is rebound by stable `unit_id` to the latest `unit_revision` while ratings and
-retry counts stay. If the current card is missing or already completed, the next unfinished
-server-plan card becomes current. Drag still does not write the review schedule.
-A confirmed 移除本队列 ends this round's arrangement the same way 记得 or 轻松 does:
-the progress rail fills, the palace can clear, and the unit is not unfinished. It does
-not write a 1–4 rating and does not change stage, interval, or due date. A later round
-can arrange the unit again while it is still due. Restore puts the card back in this round.
+服务器计划是重练顺序、当前卡片、完成状态和重练计数的唯一权威。PWA、桌面端以及同一设备的重启都会恢复该计划。浏览器 `localStorage` 只保存显示偏好和离线草稿——它不得决定复习顺序。未完成的轮次可以挺过学习日翻转（本地 03:00，见 `review-boundary.md`）、页面刷新、已保存配置的注入，以及设备切换。完全处理完的轮次在静默重建和 `get_or_create` 时保留其 `round_id` 和呈现顺序——它不得铸造或追加全新的到期身份，从而把收尾结算槽位关掉。下一个 `round_id` 只会在显式配置确认后由 `/rounds/start` 创建（结算页的 `forceStart`，即「再来一轮」/「开始下一轮」）。刷新、重启、结算后打开以及剩余到期检测都不得调用 `/rounds/start`。轮次中途或结算后按 F5 会保持同一个 `round_id`，恢复 `completed_ids`，并继续本地草稿/已提交的 `current_card_id`（结算时通过 `set_cursor`），而不是跳回第一张卡片或铸造全新队列。宫殿/学科范围变更会重新绑定同一个 `round_id`：重叠身份保留已完成/已排除/重练标记；只有新范围之外尚未开始的工作会被丢弃。刷新不得铸造新的 `round_id`，也不得从 HUD/信息流中丢弃已完成卡片，除非是学习者用「结算已完成单元」显式压缩掉的卡片。一次结算会丢弃源卡片以及该源卡片的每个活跃重练。源 id 位于 `compressedIds` 中的重练会离开进度条、卡面和滑动信息流；它不得留成一个学习者无法触及的亮起刻度。仅评分永远不会移除这些刻度：本轮已评分的重练在静默重建、「更新队列」和「重建本轮」过程中都会保留紧跟在源卡片之后的槽位（`replan_remaining` 会重新添加保留源的已完成 `occurrence`；`_collapse_retries` 只折叠*活跃*重复项，绝不取消已回答的项；即使 `encounter` 缓存丢失了条目，`_settle_source` 也会把 `occurrence` 自身的通过评分视为已回答）。当呈现列表不再列出某个已完成 `occurrence` 的卡片时，`cardsForServerPlan` 也会保留该卡片。只有结算（`compress_completed`）、被取消的 `occurrence`，或下一个学习日的重新打开，才会将其移除——因此滑回/改分仍能触达学习者刚刚评过分的卡片。已完成的源卡片保持在呈现顺序中，因此滑回/「上一张」可以在该压缩发生之前重新打开它们。丢失本地计划的窗口会采用工作区的活跃轮次，并且在该轮次存在期间不得铸造新的 `round_id`。配额未命中可能会压缩已存储快照，但实时会话保留学习者正在查看的计划。脑图仍在打开时，「做题」依然可用。卡片不得声称它仍在准备评分。对已完成单元重新评分，会从该次回忆尝试的原始基线进行修正；它不会叠加 SRS。身份包含轮次、源卡片、`occurrence` 和重练尝试。真实重练从当前受惩罚的排期开始，绝不替换先前的失败，并且只重放自己的操作。在浏览被放弃、完成或取消之后写入评分，会重新打开同一个尝试并应用最新评分；它不得返回 `active unit review session required`。一旦后续的真实尝试已被评分，较早的尝试即为只读：更正/撤销必须指向最近的尝试，而不是静默重写后续证据的基础。再次点击当前已选中的评分，会把该最新可编辑尝试清除回未评分；它不会抹除更早的真实重练。滑回/「上一张」到已完成（通过）的单元，必须在同一轮次中打开修正浏览。如果上一个学习会话仍为 `active`、包含已通过项且没有打开的 `encounter`，则启动会结束该会话并打开一个新会话。它不得返回 `passed review unit cannot start another encounter`。无法修复的随心单元加载失败不会弹出英文 API 文本；卡片提供 重试 / 跳过这张 / 重建本轮 / 只看不评。缓慢的会话启动不得替换已可见的脑图，也不得阻塞评分。卡片一出现在屏幕上，四个评分即可按压；分数立即上屏，随后执行保存。立即选中只是本地意图：已完成 id、通过计数、重练排期和到期清空反馈，只有在服务器确认后才更新。保存失败会保留已选按钮并给出明确的未保存警告，要求再点一次——它不得声称通过/完成、重新加载卡片或让学习者重读。快速翻卡和进度条跳转不得为只是被翻过的卡片打开浏览。当学习者评分时，或在其停留在某张卡片上之后，才打开浏览。返回卡片时会显示本轮已记录的评分，而不会重新开始准备。卡片的 `POST /review/units/{id}/sessions` 带有 45 秒传输超时（`SESSION_START_TIMEOUT_MS`），并被有意排除在变更队列之外（`persistence: false`），因为 UI 重新发出的是同一个 `encounter` id，而不是新的浏览。该预算高于服务器 10 秒的 SQLite `busy_timeout`，因此锁等待可以完成并被采用，而不是在 15 秒时中止并开始第二次写入。可见的失败只有一句话，外加一个隐藏的「复制给助手」；它不得让学习者重启应用。之后使用相同构建参数（`append_today_cards`）的到期列表重建会保留每张原始卡片，包括从今日到期集合中掉出的未开始剩余工作，并按 `entered_on` 等于本地日历日追加新出现的身份，以免重练副本聚成一堆孤立的 attempt-1 节点。当学习日推进时，重建会先重新接纳再次到期的单元（`_reopen_due_again`）：跨过午夜的轮次不能仅仅因为昨天已经结算过「记得」卡片，就让它们永远保持压缩，否则 1 天阶段会悄悄停止被复习。匹配依据是知识点身份，而不是卡片 id（修订号从 `…:r1` → `…:r2` 属于同一份工作），并且服务器会为计划自身的单元解析到期集合，而不是信任传入的候选——客户端从轮次账本重建这些候选，而该账本仍然恰好隐藏那些再次到期的卡片。从「保存配置并重排」保存信息流配置时，会先询问。保留继续这一轮：`replan_remaining` 保留已完成刻度，丢弃新传入集合之外未开始的工作，除非它仍有活跃重练，并且只重排尚未开始的工作。不保留会持久化该配置，并通过 `startNextRound`（`forceStart`）铸造下一轮，因此已完成、已排除、重练和叠加层已做都不会延续。关闭提醒会取消保存。宫殿选择器确认和其他信息流内配置写入仍然会在没有该提醒的情况下重新规划。结算页的「开始下一轮」已经是全新开始，不会再次询问。更改宫殿/学科范围（`replan_remaining`）会保留已完成刻度，丢弃新传入集合之外未开始的工作，除非它仍有活跃重练，把剩余工作重新标记为今天，并将活跃重练停泊在新剩余队列至多三张卡片之后（如果剩余更少，则紧接在已完成前缀之后）。复习单元已不再可打开的未开始卡片（`drop_vanished_unstarted`）会在 `get_or_create` 时被移除，而无需解析 `editor_doc`。当单元处于非活跃状态，或其宫殿已被删除或归档时，该单元不可打开，即使本轮仍有针对它的活跃重练。已完成刻度可以留在轮次历史中，但它的重练也会离开，因为打开其中任何一个都只会重绘一张死卡。已完成刻度、已排除卡片和做题卡片保留。仍然存在但今天不到期的单元保留。如果该丢弃使轮次变成完全处理完，则计划会被持久化并冻结；它不会追加新的到期卡片。队列构建只读取活跃的到期 `ReviewUnitState` 行（`list_trusted_due_units_for_queue`）和宫殿标题——它不会在关键路径上解析每个 `editor_doc`。打开单元时仍会对该宫殿进行对账。没有已存储轮次的冷启动可能返回一个 `study_window` 前缀（`tail_pending`），以便学习者可以开始；客户端随后会静默加载其余部分。该前缀是同一有序队列的前缀，不是重新洗牌。这是首屏绘制，绝不是投放排期：每张到期卡片已经在本轮计划和 HUD 分母中，尾部也不会被扣留到当天晚些时候。没有每日复习配额，没有积压释放，也没有每轮切片——见 `review-boundary.md` 中的「The due set is one whole」。当轮次已经存在时，首屏绘制来自已存储计划，并且一旦卡片存在，加载不得覆盖信息流。`忘记`评分不会移动 `current_card_id`；源卡片保持为当前项，直到 `leave_card`。`困难`是通过，遵循正常推进规则。
 
-永久移除 is the sibling button right of 移除本队列 (same two-press confirm, no rating). It calls
-`POST /review/units/{unit_id}/remove-permanently`, which sets `review_unit_states.permanently_removed`
-and `active = false`. `resolve_unit_definitions` filters that unit identity (anchor + kind) out, so
-reconcile, the queue, and inheritance never schedule it again, even after its marks are deleted and
-re-added. The card is then dropped from this round. A palace whose units are all removed reads as
-`scheduled`, not `marking_required`.
+乐观并发：写入携带 `expected_version` 和 `operation_id`。提交较低版本的过期设备会收到带有 `conflict: true` 的最新计划，且不得覆盖较新的进度。使用同一 `operation_id` 重复的终态写入会返回已接受的结果。
 
-`palace_order` only controls **queue construction**
-(finish one palace’s cards before listing the next, or interleave). 上一张 / 下一张 / finger
-paging never auto-rate and never block crossing a palace boundary; unrated units stay unfinished
-so the learner can skip ahead and come back. Retry work still cannot mark a palace “cleared”.
-The leftover `isSequentialPalaceBlocked` helper is not a navigation latch. A 忘记
-rating creates a retry occurrence that stays **pending** with an `available_at` instant
-(10 minutes, then 1 hour, then 3 hours; at most three retries per study day). It is not on
-the rail until that instant passes; serving publishes it at the learner's cursor, so the
-cards rated in the meantime are the interleaving. A failed retry keeps its score on the rail
-as history until its next `available_at`; that read reopens the same occurrence blank and
-re-publishes it after the current card (`fresh_due_ids` tells the client to drop the previous
-score). A first-ever pass creates the same kind of
-pending occurrence, `kind: "step"`, for its 20-minute re-check (轻松 on a first pass skips
-it and books three days). A 重练 that finally passes books tomorrow directly: the overnight
-check is its confirmation, so no second same-day re-check is stacked on top. A
-pending occurrence is not
-served and does not mark its source finished; the round payload's `waiting` reports how many
-are owed and the earliest ready time. The feed shows a slim banner while cards remain and a
-waiting panel when nothing servable is left; a single scheduled read at `next_ready_at`
-publishes the card (manual 「现在刷新」 does the same). Before that instant the server cannot
-release the cards, so the banner counts down instead of offering a press that would change
-nothing, and the panel's button stays disabled; at `next_ready_at` the refresh becomes
-available. If a scheduled read lands while the server still reports the same wait (clock
-skew), it probes again after 30 s rather than leaving a stale time on screen. **That
-publication is persisted by the
-rating, not by the read.** The served plan inserts a ready occurrence at the cursor; the row
-on disk still says `pending`. A rating of that card must therefore insert it before settling
-(`apply_rating` → `_insert_retry_inplace`): settling it as an uninserted occurrence marked it
-`cancelled` with the learner's 1–4 still on it and left it out of `presented_ids`, so the
-next rebuild deleted the card under them and the feed slid onto the next unit. Measured on a
-real round (2026-10-25 evening): every step rated that night sat `cancelled` with its rating
-kept — the "重练卡评完就消失、还自动翻页" report. There is no fixed three-card offset
-any more: the frontend does not insert a retry copy at all. A 忘记 rating only stamps
-`retryAvailableAt` (the occurrence's `available_at`) onto the source's round-plan row, and
-the corner badge counts that instant down; the card itself appears when the scheduled read
-publishes the occurrence. Serving the local copy after ~3 cards (and letting it be rated
-before the 10 minutes) was the "说十分钟、实际固定三张" report. The viewport stays on the source — no
-auto-advance — including when nothing remains after the source, so 下一张 / 定位 /
-settlement cannot deadlock. Settling a rating does **not** rebuild the queue either: the
-rating response is merged into the local ledger (`adoptRoundVersion`) and the scheduled read
-publishes a due retry. Rebuilding on every tap replaced the card list under the learner — the
-reported flicker, progress-rail recount and remounted map — and raced the rating write. A
-rebuild is reserved for due reads, config changes, explicit 更新队列 and a stale revision
-adopt.
-The round's card identity is stable while a content edit bumps `review_unit:<unit>:rN`: the
-feed keeps the round id, the card view keys the mounted map by unit + attempt + round (a
-revision bump or an encounter renewal on the same attempt keeps the learner's flipped
-branches), and the server's attempt identity compares the unit, not the revision. Rating with
-the rebuilt id before the next build rebinds it moves the plan row onto that id
-(`canonical_rated_card`) instead of leaving a phantom completed id next to an unfinished one.
-Failing the retry card itself does not move that card until
-leave. A later due-list rebuild appends newly seen identities as the
-today segment and must not move an already-inserted leftover retry. `leave_card` confirmation
-pins the card now under the viewport and must not yank back to the source. The source card
-stays in place so swipe-back is geometric. Looking back at history cards does not move the
-committed cursor and does not insert retries. Finger paging
-commits `active` only after scroll settle so a mid-gesture index change cannot close one
-encounter and open another. A mouse wheel or trackpad over the feed pages one card per
-notch; trackpad inertia is coalesced so it cannot skip the queue. That wheel must not
-scroll the snap scroller natively — mandatory snap plus the settle pin would pull a
-partial notch back to the current page and the wheel would feel stuck. Wheel over the
-review map still pans the canvas. Wheel over a nested scroller that can still move in
-that direction scrolls that scroller. Ctrl/meta wheel stays a zoom gesture. The review map stays pannable (`mobileViewPolicy` defaults to
-`auto`); one-finger drag on the canvas pans the tree and is not yielded to the snap
-scroller. The right pager is the same three buttons on PWA and desktop: 上一张, 下一张,
-and 完成, in one vertical column on the right edge, vertically centred on the card. PWA
-does not move it to a strip above the rating dock. 上一张 / 下一张 always page cards,
-including while the rating
-scope is 宫殿; they must not disable themselves when the round has only one
-palace. There is no palace-skip control.
+前端 reducer 应用乐观补丁并从服务器注入状态。重建会让已完成、已排除、重练和过期条目在计划中保持可见；在过期重建后回归的卡片会按稳定的 `unit_id` 重新绑定到最新的 `unit_revision`，同时评分和重练计数保持不变。如果当前卡片缺失或已完成，则服务器计划中的下一张未完成卡片成为当前卡片。拖拽仍然不会写入复习排期。确认「移除本队列」会像「记得」或「轻松」一样结束本轮对该单元的排期：进度条填满、宫殿可以清空，且该单元不算未完成。它不写入 1–4 评分，也不改变阶段、间隔或到期日期。后续轮次可以在该单元仍到期时再次安排它。恢复会把卡片放回本轮。
 
-When every review-unit card of a palace in this round is handled (retries included; skip /
-exclude do not count), the current card shows a chapter banner. Copy is `《宫殿》今日安排已清`
-when that palace has no leftover due units outside the round, otherwise
-`《宫殿》本轮已清，今日还剩 N`. Queue `round_meta.palace_leftover_due` is the leftover due
-count per palace. The banner is not a snap page; the whole chip dismisses on tap
-(`点一下关闭`). Other top freestyle chips (yesterday unfinished round, channel-applied,
-save error) likewise dismiss on whole-chip click. Audio uses `all_clear_ready` on the review
-scene, locally — never `dispatchGlobalFeedback`.
+「永久移除」是「移除本队列」右侧的兄弟按钮（同样需要两次按压确认，不评分）。它调用 `POST /review/units/{unit_id}/remove-permanently`，设置 `review_unit_states.permanently_removed` 和 `active = false`。`resolve_unit_definitions` 会把该单元身份（锚点 + 类型）过滤掉，因此对账、队列和继承都不会再次安排它，即使其标记被删除后重新添加。随后该卡片会从本轮丢弃。所有单元都被移除的宫殿会读作 `scheduled`，而不是 `marking_required`。
 
-Clicking a progress-rail tick jumps the feed to that card when it is still live (`navigateToIndex` on the matching card id). A tick whose card has left the feed, the HUD count, and an empty rail still open the bottom “本轮安排” sheet. A header toggle switches 「按宫殿」 (group stable plan entries by palace) and 「按进度」 (the same entries in progress-rail segment order, still split into the leftover and today blocks). Both views support
-jump, drag (desktop) or up/down (touch), batch exclude/restore, and reset-round. The toolbar
-「结算已完成单元」 opens a 小结算 page first. That overlay covers the feed pager, so it keeps a visible 「退出」 that cancels without compressing, and the page scrolls so 「取消结算」 and 「确认结算」 stay reachable on a short PWA viewport. The right-side 完成 on a fully scored round skips that page and writes the same settlement directly. Confirming it (`compress_completed`) drops settled groups (a source that passed, or a 重练 that passed or was explicitly completed; a live 重练 still weak or blank keeps its whole group in the round, so the 重练 comes back when its wait is due) from
-the swipe feed, 本轮安排, and the HUD rail so the denominator shrinks, and stores that page as `partial_settlements` on the round plan. Cancelling leaves the cards in the feed. A group whose 重练 nobody has answered yet
-stays. This is not 排除: excluded ticks remain on the rail; compressed
-ids (`compressed_ids`) do not. Unfinished work stays in this round. Ratings stay committed;
-swipe-back cannot reopen a compressed card in this round. A silent rebuild / `append_today_cards`
-must not put compressed identities back, and must keep `partial_settlements`. Overlay 做题 is not asked on 小结算. The closing 大结算 includes each confirmed 小结算 (counts and subject lines) because those cards have left the feed; round clock time is not added twice. If that compress
-empties the feed, the closing settlement slot stays reachable. Configuration is a
-separate dialog. 「保存配置并重排」 asks whether to keep overlapping finished/excluded/retry
-progress. 保留 continues this round and only reorders unstarted work. 不保留 starts a new round. The HUD line is `当前位置/队列总长` (`position/total`): the denominator is the progress
-rail, including retry insertions and a confirmed 移除队列. That removal stays on the rail as a
-solid 已移出队列 tick (the same filled palace color as a scored card, not a faint tick and not a gap).
-`scheduledBase` still omits those removals and remains plan math, not the HUD denominator.
-Hydration unions server `excluded_ids` with local plan exclusions, and the exclude action retries
-on version conflict so a cursor update cannot erase it. A silent rebuild after 移除队列, including
-one that races 完成's cursor write, keeps this-round scores and the solid removal tick. Hydration
-reads that ledger after the network await and does not publish a draft plan first: a changed round
-id would otherwise look like a cancelled rating and wipe the ledger. The rebuild also keeps the
-ledger captured before the await, so a stale render or an all-pending draft cannot drop the
-removal or the other this-round scores. A just-confirmed removal is stamped again on that
-hydrate (`forceExcludedIds`). A newer revision of a removed
-unit stays one solid tick and is handled for 完成 seek. A queue removal is handled for 完成 seek.
-The rail stays one bar: palace color
-on each tick, leftover vs today split by a divider before the first source with
-`entered_on == today`. A unit keeps one live retry at a time; a later weak rating
-must not mint a second copy. Retry occurrences render as independent
-amber circular nodes whose number is this-round `retry_attempt`. Unfinished retry nodes use a
-faint amber fill; completed retry nodes use a solid amber fill. The card 重练 badge and
-「本轮安排」 retry rows use the same unfinished vs finished chrome, not only the HUD rail.
-`retryInserted` lengthens the
-rail without changing that denominator. 「本轮安排」 uses the same two blocks and must not
-drag a today card into leftover. Pending ticks use a faint palace-color fill and
-completed ticks use a solid fill of the same palace color so unfinished vs finished stays
-readable at a glance. Fill follows this-round last rating. Swipe-back onto a scored unit
-opens an empty amend glance so the learner can change it, but the HUD tick and rating bar
-keep the last rating until they change or cancel it. An empty amend glance is not unrated.
-The viewing playhead is independent of that fill: the card on screen grows taller even after
-it is rated, and cancelling a rating un-lights the fill without dropping the playhead. The
-right-side pager has 完成, not 定位. When every presented card is scored the press is a
-real completion: it settles what this round rated with the same `compress_completed`
-ledger write as 「结算已完成单元」 (no 小结算 confirmation page), so those units leave the
-HUD rail, 本轮安排 and the swipe feed and only the closing settlement remains — the pager
-disappears with the last card, and 取消结算 is not offered because there is nothing to
-return to. A waiting 回顾 does not make the button inert: that press opens the closing page
-instead of compressing (see below), so there is no state in which 完成 is disabled while a
-card is on screen. An open round still seeks the queue-order first **unscored** unit
-(谁最早看谁). Pressing 完成 again while the viewport is already on an unscored unit walks
-to the **next** unscored unit in queue order and wraps at the end, so a single 完成 button
-cycles through every blank unit instead of sticking on the first. Scored means this
-occurrence has a this-round score (忘记/困难/记得/轻松
-alike — the rail fills solid). A weak score still opens settlement once nothing
-unscored remains — 完成 must not disable in that state. A scored 重练 is never the target; leave_card bumps
-`retry_attempt` and clears that occurrence's score so the next blank attempt is seekable.
-A weak source is scored, so 完成 does not reopen it — the blank 重练 is the work.
-A same-day 回顾 still owed (`waiting`) never disables 完成. The button has exactly two
-outcomes while the feed has cards: seek the next unscored occurrence, or open the closing
-settlement. With only waiting 回顾 left it opens the closing page without compressing (the
-server still holds those groups), and the page names what is still owed — 「还有 N 张稍后回顾」
-— so 结算 is an informed choice instead of an unreachable button.
-Rating the retry must not move the viewport onto the source or refit the map to the palace
-root. It does not bulk-complete leftover work. Dropping sibling retries (a 重练 pass settles
-the source, so older attempts of the same unit leave the feed) re-pins the card under the
-viewport by id: removing entries above it shifted every index and made the feed look like it
-auto-advanced. Clearing a 重练's own rating keeps that card blank in place — only 结算, a
-cancelled occurrence or the next study day removes it.
+`palace_order` 只控制**队列构建**（先列完一个宫殿的卡片再列下一个，或交错排列）。「上一张」/「下一张」/手指翻页从不自动评分，也从不阻止跨越宫殿边界；未评分单元保持未完成，以便学习者可以向前跳过再回来。重练工作仍然不能让宫殿“清空”。遗留的 `isSequentialPalaceBlocked` 辅助函数不是导航锁存器。「忘记」评分会创建一个重练 `occurrence`，它在某个 `available_at` 时刻之前保持 **pending**（10 分钟，然后 1 小时，然后 3 小时；每个学习日至多重练三次）。在该时刻过去之前，它不会出现在进度条上；服务端会在学习者的 `cursor` 处发布它，因此其间评分的卡片就是交错内容。失败的重练会将其评分作为历史保留在进度条上，直到下一个 `available_at`；该次读取会以空白状态重新打开同一个 `occurrence`，并在当前卡片之后重新发布它（`fresh_due_ids` 告知客户端丢弃先前的评分）。首次通过会创建同类 pending `occurrence`，`kind: "step"`，用于其 20 分钟复查（首次通过时「轻松」会跳过它并预约三天后）。最终通过的重练会直接预约到明天：隔夜检查就是它的确认，因此不会在其上叠加当天的第二次复查。pending `occurrence` 不会被提供，也不会把其源卡片标记为完成；轮次载荷中的 `waiting` 报告还欠多少张以及最早就绪时间。信息流在有卡片剩余时显示一条细横幅，在没有可提供内容时显示等待面板；在 `next_ready_at` 的一次计划读取会发布卡片（手动「现在刷新」效果相同）。在该时刻之前，服务器无法释放卡片，因此横幅只显示倒计时，而不是提供一个不会产生任何变化的按压，面板按钮保持禁用；到 `next_ready_at` 时刷新变为可用。如果计划读取到达时服务器仍报告相同的等待（时钟偏差），它会在 30 秒后再次探测，而不是在屏幕上留下过期时间。**该发布是由评分持久化的，而不是由读取持久化的。** 提供的计划会在 `cursor` 处插入一个就绪 `occurrence`；磁盘上的行仍然写着 `pending`。因此，对该卡片的评分必须先将其插入再结算（`apply_rating` → `_insert_retry_inplace`）：把它当作未插入的 `occurrence` 结算，会将其标记为 `cancelled`，同时保留学习者的 1–4，并将其排除在 `presented_ids` 之外，于是下一次重建会删掉他们眼前的卡片，信息流滑到下一个单元。在真实轮次上测得（2026-10-25 晚间）：当晚评分的每个 step 都停在 `cancelled` 且评分被保留——即“重练卡评完就消失、还自动翻页”的报告。不再存在固定的三张卡片偏移：前端根本不插入重练副本。「忘记」评分只会把 `retryAvailableAt`（`occurrence` 的 `available_at`）盖到源卡片的轮次计划行上，角标对该时刻倒计时；卡片本身在计划读取发布该 `occurrence` 时出现。大约 3 张卡片后提供本地副本（并允许在 10 分钟前评分），就是“说十分钟、实际固定三张”的报告。视口停留在源卡片上——不自动前进——包括源卡片之后没有任何内容时也是如此，因此「下一张」/「定位」/结算不会死锁。结算评分也**不会**重建队列：评分响应被合并进本地账本（`adoptRoundVersion`），计划读取会发布到期的重练。每次点击都重建会替换学习者眼前的卡片列表——即被报告的闪烁、进度条重新计数和脑图重新挂载——并与评分写入竞争。重建只保留给到期读取、配置变更、显式「更新队列」和过期修订采用。轮次的卡片身份在内容编辑提升 `review_unit:<unit>:rN` 时保持稳定：信息流保留轮次 id，卡片视图按单元 + 尝试 + 轮次给挂载的脑图设键（修订号提升或同一尝试上的 `encounter` 续期都会保留学习者已翻开的枝干），服务器的尝试身份比较的是单元，而不是修订号。在下一次重建重新绑定它之前，用重建后的 id 评分，会把计划行移动到该 id 上（`canonical_rated_card`），而不是在未完成 id 旁边留下一个幽灵已完成 id。重练卡片本身失败，在 `leave` 之前不会移动该卡片。之后的到期列表重建会把新出现的身份追加为今天分段，且不得移动已插入的剩余重练。`leave_card` 确认会固定当前位于视口下方的卡片，不得拽回源卡片。源卡片留在原位，因此滑回是几何一致的。回看历史卡片不会移动已提交的 `cursor`，也不会插入重练。手指翻页只在滚动稳定后提交 `active`，因此手势中途的索引变化不会关闭一个 `encounter` 又打开另一个。信息流上方的鼠标滚轮或触控板每格翻一张卡片；触控板惯性会被合并，因此不会跳过队列。该滚轮不得原生滚动吸附滚动容器——强制吸附加上稳定固定会把未满一格拉回当前页，滚轮会感觉卡住。在复习脑图上的滚轮仍然平移画布。在仍能朝该方向移动的嵌套滚动器上的滚轮会滚动该滚动器。Ctrl/meta + 滚轮保持为缩放手势。复习脑图保持可平移（`mobileViewPolicy` 默认 `auto`）；画布上的单指拖拽平移树，不会让给吸附滚动器。右侧翻页器在 PWA 和桌面端都是同样的三个按钮：「上一张」、「下一张」和「完成」，位于右边缘的一列中，在卡片上垂直居中。PWA 不会把它移到评分坞上方的条带中。「上一张」/「下一张」始终翻卡片，包括评分范围为「宫殿」时；当轮次只有一个宫殿时，它们不得禁用自身。没有跳过宫殿的控件。
 
-### unitProgressState is the only score kernel
+当本轮中某个宫殿的每张复习单元卡片都被处理（包括重练；跳过/排除不算）时，当前卡片会显示章节横幅。当该宫殿在本轮之外没有剩余到期单元时，文案为 `《宫殿》今日安排已清`，否则为 `《宫殿》本轮已清，今日还剩 N`。队列的 `round_meta.palace_leftover_due` 是每个宫殿的剩余到期计数。该横幅不是吸附页；整个标签点击即关闭（`点一下关闭`）。其他顶部随心标签（昨日未完成轮次、通道已应用、保存错误）同样点击整个标签即关闭。音频在复习场景本地使用 `all_clear_ready`——绝不使用 `dispatchGlobalFeedback`。
 
-`apps/web/src/modules/practice/domain/unitProgressState.ts` owns occurrence-local
-this-round score (`occurrenceScore` / `isOccurrenceScored` / `isOccurrencePassed` /
-`findEarliestUnscoredIndex`). Progress-rail fill, the 完成 seek target, palace
-clearance, and round completion must read this module. Do not reassemble
-`selectedRating` / `lastRating` / `completedIds` / source-fallback conditions at
-call sites — that is how seek and the rail forked. `lastRating` never inherits
-across source ↔ 重练 ids.
+当进度条刻度对应的卡片仍然存在时，点击该刻度会让信息流跳到该卡片（在匹配的卡片 id 上调用 `navigateToIndex`）。卡片已离开信息流的刻度、HUD 计数以及空进度条，仍然会打开底部的“本轮安排”面板。页眉开关在「按宫殿」（按宫殿对稳定的计划条目分组）和「按进度」（同样的条目按进度条分段顺序排列，仍分为剩余和今天两个块）之间切换。两种视图都支持跳转、拖拽（桌面）或上移/下移（触屏）、批量排除/恢复以及重置轮次。工具栏的「结算已完成单元」会先打开一个「小结算」页面。该叠加层会盖住信息流翻页器，因此保留一个可见的「退出」用于取消而不压缩，并且页面可滚动，使「取消结算」和「确认结算」在较矮的 PWA 视口中仍可触及。在全部已评分的轮次上，右侧「完成」会跳过该页面并直接写入同样的结算。确认它（`compress_completed`）会从滑动信息流、「本轮安排」和 HUD 进度条中丢弃已结算分组（已通过的源，或已通过或已显式完成的重练；仍薄弱或空白的活跃重练会让整个分组留在本轮中，因此该重练在其等待到期时会回来），使分母缩小，并把该页面作为 `partial_settlements` 存储在轮次计划上。取消则让卡片留在信息流中。重练尚未被任何人回答的分组保留。这不是「排除」：已排除刻度仍留在进度条上；被压缩的 id（`compressed_ids`）则不会。未完成工作留在本轮。评分保持已提交；滑回不能在本轮重新打开已压缩卡片。静默重建/`append_today_cards` 不得把已压缩身份放回来，并且必须保留 `partial_settlements`。小结算不会询问叠加层已做。收尾的「大结算」包含每个已确认的小结算（计数和学科行），因为这些卡片已经离开信息流；轮次时钟时间不会重复累加。如果该压缩把信息流清空，收尾结算槽位仍然可达。配置是独立对话框。「保存配置并重排」会询问是否保留重叠的已完成/已排除/重练进度。「保留」继续本轮，只重排未开始的工作。「不保留」开始新轮次。HUD 行是 `当前位置/队列总长`（`position/total`）：分母是进度条，包括重练插入和已确认的「移除队列」。该移除会作为实心「已移出队列」刻度留在进度条上（与已评分卡片相同的填充宫殿色，不是淡刻度，也不是空隙）。`scheduledBase` 仍然不包含这些移除，仍是计划数学，而不是 HUD 分母。注入会把服务器 `excluded_ids` 与本地计划排除项合并，排除操作会在版本冲突时重试，因此 `cursor` 更新无法抹除它。「移除队列」之后的静默重建，包括与「完成」的 `cursor` 写入竞争的那种，都会保留本轮评分和实心移除刻度。注入在网络等待之后读取该账本，不会先发布草稿计划：否则轮次 id 变化会被看作评分被取消并抹掉账本。重建还会保留 await 之前捕获的账本，因此过期渲染或全 pending 草稿无法丢弃该移除或其他本轮评分。刚刚确认的移除会在该注入时再次盖章（`forceExcludedIds`）。被移除单元的较新修订仍是一个实心刻度，并在「完成」查找时被视为已处理。队列移除在「完成」查找时被视为已处理。进度条保持为一条：每个刻度显示宫殿色，剩余与今天由第一个 `entered_on == today` 的源之前的隔板分开。该隔板是明亮的那条，并在进度条有空间时带有「今天」字样；更早的每个刻度都画成弱化状态（`opacity-60`，屏幕上的卡片除外），因此结转的积压和今天的工作乍看即可分辨，而不是只在悬停时才能看出。一个单元同时只保留一个活跃重练；之后的薄弱评分不得铸造第二份副本。重练 `occurrence` 渲染为独立的琥珀色圆形节点，其数字是本轮的 `retry_attempt`。未完成重练节点使用淡琥珀色填充；已完成重练节点使用实心琥珀色填充。卡片上的重练徽标和「本轮安排」中的重练行也使用相同的未完成与已完成外观，而不仅是 HUD 进度条。`retryInserted` 会延长进度条，但不改变该分母。「本轮安排」使用同样的两个块，且不得把今天的卡片拖进剩余块。待处理刻度使用淡宫殿色填充，已完成刻度使用同一宫殿色的实心填充，使未完成与已完成乍看即可分辨。填充跟随本轮最后一次评分。滑回已评分单元会打开一个空的修正浏览，使学习者可以更改它，但 HUD 刻度和评分条会保留最后一次评分，直到他们更改或取消。空的修正浏览不等于未评分。查看播放头与该填充无关：屏幕上的卡片即使已评分也会变高，取消评分会让填充熄灭但不丢失播放头。右侧翻页器有「完成」，没有「定位」。当每张呈现的卡片都已评分时，按压就是真正的完成：它用与「结算已完成单元」相同的 `compress_completed` 账本写入来结算本轮所评内容（没有小结算确认页），因此这些单元会离开 HUD 进度条、「本轮安排」和滑动信息流，只剩收尾结算——翻页器随最后一张卡片消失，且不提供「取消结算」，因为已没有可返回的内容。等待中的「回顾」不会让按钮失效：该按压会打开收尾页而不是执行压缩（见下文），因此不存在屏幕上有卡片时「完成」被禁用的状态。未结束的轮次仍然查找队列顺序中第一个**未评分**的单元（谁最早看谁）。当视口已经位于未评分单元时再次按「完成」，会按队列顺序走到**下一个**未评分单元，并在末尾回绕，因此单个「完成」按钮会循环经过每个空白单元，而不是卡在第一个。已评分意味着该 `occurrence` 有本轮评分（忘记/困难/记得/轻松都算——进度条填充为实心）。一旦没有未评分内容，薄弱评分仍会打开结算——「完成」在该状态下不得禁用。已评分的重练永远不是目标；`leave_card` 会提升 `retry_attempt` 并清除该 `occurrence` 的评分，使下一次空白尝试可被查找。薄弱的源卡片已评分，因此「完成」不会重新打开它——空白重练才是要做的工作。仍欠着的当天「回顾」（`waiting`）永远不会禁用「完成」。当信息流中还有卡片时，按钮恰好只有两种结果：查找下一个未评分 `occurrence`，或打开收尾结算。当只剩等待中的回顾时，它会打开收尾页而不压缩（服务器仍持有这些分组），页面会说明还欠什么——「还有 N 张稍后回顾」——因此结算是知情选择，而不是不可达按钮。给重练评分不得把视口移到源卡片，也不得把脑图重新适配到宫殿根节点。它不会批量完成剩余工作。丢弃兄弟重练（重练通过会结算源卡片，因此同一单元较旧的尝试离开信息流）会按 id 重新固定视口下方的卡片：移除其上方条目会移动所有索引，让信息流看起来像自动前进了。清除重练自身的评分会让该卡片就地保持空白——只有结算、被取消的 `occurrence` 或下一个学习日才会移除它。
 
-`roundCompletion` layers one family rule on that kernel: a source whose 重练 passed
-is finished for round completion and for 完成's seek target even when its own weak
-score fell out of the local ledger, and a source whose blank 重练 is already in the
-feed is skipped in favour of that retry. Without the layer, 完成 landed on a source the
-server would only answer `superseded_attempt`, so the button disabled itself on a card
-that could never be graded again. 忘记/困难 still counts as scored.
+### unitProgressState 是唯一的评分内核
 
-**The family rule runs source → retry, never retry → source.** A 重练/回顾 card answers
-only for itself: its own plan entry (`completed`), its own glance score, or its own pass.
-It must not inherit `completed_ids`, the plan's `completed` status, or `lastRating` from its
-source. Those are all true the moment the source passes, which is exactly when the 30-minute
-回顾 is scheduled — inheriting them made every blank 回顾 card look handled while the rail
-drew it pending, so 完成 had no target and disabled itself on a round that still had work.
-A `lastRating` copied onto the retry by restudy stamping is not its own score either; only
-its encounter counts, and a copied pass (`>= 3`) is weak evidence the old rule already
-accepted. Measured on one real round: 56 presented cards, 42 rated, 11 blank 回顾 cards —
-the whole button dead until this rule was split by card kind.
+`apps/web/src/modules/practice/domain/unitProgressState.ts` 拥有 `occurrence` 局部的本轮评分（`occurrenceScore` / `isOccurrenceScored` / `isOccurrencePassed` / `findEarliestUnscoredIndex`）。进度条填充、「完成」查找目标、宫殿清空和轮次完成都必须读取该模块。不要在调用点重新拼装 `selectedRating` / `lastRating` / `completedIds` / 源回退条件——查找和进度条就是这样分叉的。`lastRating` 绝不会跨源 ↔ 重练 id 继承。
 
-An earlier attempt that a later real practice already superseded opens **read-only**
-instead of failing: `POST /review/units/{id}/sessions` still returns the session (the map
-needs it), the encounter carries `rating_editable: false` (the amend glance inherits that
-from its `amend_source_id`), and only the write — the 1–4 tap, correction and undo — answers
-400 `superseded_attempt`. The card locks with 「已有后续练习，这次评分仅供回看」, the outbox
-marks the failure terminal (no auto-retry, no 未保存 record, rail tick keeps the plan's fill),
-and a 400 at glance-open time is classified the same way.
+`roundCompletion` 在该内核之上叠加一条家族规则：重练已通过的源卡片，即使其自身的薄弱评分已从本地账本中掉出，在轮次完成和「完成」查找目标上也算完成；而空白重练已经出现在信息流中的源卡片会被跳过，转而选择该重练。没有这一层，「完成」会落在服务器只会回答 `superseded_attempt` 的源卡片上，于是按钮会在一张永远无法再评分的卡片上禁用自身。忘记/困难仍然算作已评分。
 
-## 睡前复习 (bedtime review)
+**家族规则的方向是源 → 重练，绝不是重练 → 源。** 重练/回顾卡片只为自己作答：它自己的计划条目（`completed`）、它自己的浏览评分，或它自己的通过。它不得从其源继承 `completed_ids`、计划的 `completed` 状态或 `lastRating`。这些在源通过的那一刻都为真，而那正是安排 30 分钟回顾的时候——继承它们会让每张空白回顾卡片看起来已处理，而进度条却把它画成待处理，于是「完成」没有目标，并在仍有工作的轮次上禁用自身。通过复习盖章复制到重练上的 `lastRating` 也不是它自己的评分；只有它的 `encounter` 才算数，而复制来的通过（`>= 3`）只是旧规则已经接受的薄弱证据。在一个真实轮次上测得：56 张呈现卡片、42 张已评分、11 张空白回顾卡片——在按卡片类型拆分该规则之前，整个按钮都是死的。
 
-A moon button sits above the right-side pager (the control column with 上一张 / 下一张 /
-完成). It opens the shared `ConfirmDialog`, which first reads
-`GET /freestyle/rounds/{round_id}/bedtime/candidates` and states how many cards will be
-appended and that the grades do not move the schedule. Confirming calls
-`POST /freestyle/rounds/{round_id}/bedtime`, appends the cards to the end of the current
-plan with `bedtime: true`, and jumps to the first new card. The button stays reachable on
-the closing page, where the pager itself steps aside.
+被后续真实练习取代的较早尝试会以**只读**方式打开，而不是失败：`POST /review/units/{id}/sessions` 仍返回会话（脑图需要它），`encounter` 携带 `rating_editable: false`（修正浏览从其 `amend_source_id` 继承该值），只有写入——1–4 点击、更正和撤销——会响应 400 `superseded_attempt`。卡片以「已有后续练习，这次评分仅供回看」锁定，发件箱把该失败标记为终态（不自动重试、不产生「未保存」记录，进度条刻度保留计划的填充），而浏览打开时的 400 也按同样方式分类。
 
-- **What is appended:** one card per **palace** with at least one live rating
-  operation in the current study day, in the round's workspace (all palaces for
-  随心, one palace for `p<id>`). The palace is the bedtime unit — the map covers
-  every node and one grade covers the whole palace; it is never cut into
-  permanent-mark slices. A palace already carrying a bedtime card is never
-  appended again, so rating more units inside it does not queue a second pass.
-  The card id is `bedtime:palace:<palace id>:<study day>`; its `unit_id` is a
-  real rated unit used only as the read-only preview handle.
-- **Grading:** a bedtime card renders from the read-only unit preview (no
-  session, no encounter) with `palace_pass`; its reveal scope is every node of
-  the palace and its map is reveal-only. Its rating bar is
-  `FreestyleBedtimeRatingBar`; the tap goes to
-  `POST /freestyle/rounds/{round_id}/bedtime/ratings`, which records
-  `plan["bedtime_ratings"][card_id]` and completes the card. No Reviews session,
-  encounter, or rating operation is written, so due dates and FSRS state cannot
-  move; the normal rating endpoint rejects a bedtime card outright.
-- **Rail and expiry:** bedtime ticks carry a moon above the bar. They are kept out of the
-  due-day filters (`drop_undue_unstarted`, `replan_remaining`) and are dropped by
-  `drop_previous_day_bedtime` when the round crosses the 03:00 study-day boundary. Cards
-  rated in the meantime keep their real ratings; the bedtime pass never replaces them.
+## 睡前复习（bedtime review）
 
-## Training Directions and Subject Chips
+右侧翻页器（包含「上一张」/「下一张」/「完成」的控制列）上方有一个月亮按钮。它打开共享的 `ConfirmDialog`，该对话框先读取 `GET /freestyle/rounds/{round_id}/bedtime/candidates`，并说明将追加多少张卡片，以及这些评分不会移动排期。确认会调用 `POST /freestyle/rounds/{round_id}/bedtime`，以 `bedtime: true` 把卡片追加到当前计划的末尾，并跳到第一张新卡片。该按钮在收尾页仍然可达，此时翻页器本身会让位。
 
-The user-facing configuration starts with one training direction: `memory_palace`, `quiz`, or
-`mixed`. English is a **subject chip**, not a training stream. Mixed mode combines memory-palace
-and quiz only; a selection that falls to one stream is normalized back to that single direction.
+- **追加什么：** 在当前学习日内至少有一次活跃评分操作的每个**宫殿**一张卡片，范围是本轮的工作区（随心为所有宫殿，`p<id>` 为一个宫殿）。宫殿就是睡前复习单位——脑图覆盖每个节点，一次评分覆盖整个宫殿；它绝不会被切成永久标记片段。已经带有睡前复习卡片的宫殿不会再次追加，因此在其内部评分更多单元不会排队第二轮。卡片 id 是 `bedtime:palace:<palace id>:<study day>`；它的 `unit_id` 是一个真实已评分单元，仅用作只读预览句柄。
+- **评分：** 睡前复习卡片从只读单元预览渲染（无会话、无 `encounter`），使用 `palace_pass`；其揭示范围是宫殿的每个节点，其脑图仅可揭示。其评分条是 `FreestyleBedtimeRatingBar`；点击会发送到 `POST /freestyle/rounds/{round_id}/bedtime/ratings`，它记录 `plan["bedtime_ratings"][card_id]` 并完成该卡片。不会写入任何 Reviews 会话、`encounter` 或评分操作，因此到期日期和 FSRS 状态无法移动；常规评分端点会直接拒绝睡前复习卡片。
+- **进度条与过期：** 睡前复习刻度在进度条上方带有一个月亮。它们被排除在到期日过滤器（`drop_undue_unstarted`、`replan_remaining`）之外，并在轮次跨过 03:00 学习日边界时由 `drop_previous_day_bedtime` 丢弃。其间评过分的卡片保留真实评分；睡前复习这一遍永远不会替换它们。
 
-Subject chips sit directly under the training direction. Multi-select and 全选 write
-`streams.*.subject_ids`. Empty `subject_ids` means all subjects (no subject filter). A non-empty
-list is the union of palaces belonging to those subjects. Selecting only 英语 is the old English
-palace mode; selecting 教育学+心理学 scopes both palace and quiz pools to those subjects.
-`subject_scope` remains a compatibility field for stored prefs: `'english'` / `'non_english'` with
-empty `subject_ids` still resolve by `Subject.name == "英语"`. When the UI writes `subject_ids`,
-`subject_scope` is `'all'` because the ids are the source of truth.
+## 训练方向与学科标签
 
-`streams.memory_palace` builds marked palace review-unit cards. After the subject filter, the user
-can still pick a palace/chapter subset (`specific_palace_ids`), plus `due_first_then_expand`,
-`due_only`, or `all_content_due_weighted` selection, palace completion/interleaving order, and
-structured/random unit order. Structured order means the palace's own depth-first unit order
-(`topology_order`, resolved from the document so an unreconciled edit cannot scramble it);
-`new_placement: new_first` still hoists never-passed units, and the due date is not a sort key.
-`streams.english` is kept only as a sanitized compatibility
-projection; queue builds for new configs do not activate a third English stream.
+面向用户的配置以一个训练方向开始：`memory_palace`、`quiz` 或 `mixed`。英语是一个**学科标签**，不是训练流。混合模式只组合记忆宫殿和做题；落到单个流的选择会归一化回该单一方向。
 
-`streams.quiz` builds question cards independently from palace review scheduling. It uses the same
-subject chips, then optional explicit palace scope, question type, mastery buckets,
-cross-palace/single-palace order, and weak-question priority. The mixed combiner merges the two
-stream results with a stable seed using `ratio`, global `random`, or `sequential` strategy.
-Ratio mode uses the stream weights in `mix.ratios`; sequential mode completes one selected stream
-before moving to the next. The combiner de-duplicates by stable card ID after all streams are
-built, so overlapping explicit scopes cannot show the same card twice. Candidate shortage is
-reported as the actual scheduled count: the queue never repeats cards or silently broadens a
-filter.
+学科标签直接位于训练方向下方。多选和「全选」写入 `streams.*.subject_ids`。空 `subject_ids` 表示所有学科（无学科过滤）。非空列表是这些学科所属宫殿的并集。只选择英语就是旧的英语宫殿模式；选择教育学+心理学会把宫殿池和做题池都限定到这些学科。`subject_scope` 仍是已存储偏好的兼容字段：`'english'` / `'non_english'` 在 `subject_ids` 为空时仍通过 `Subject.name == "英语"` 解析。当 UI 写入 `subject_ids` 时，`subject_scope` 为 `'all'`，因为 id 是事实来源。
 
-Sanitize folds stored `training_mode: 'english'` into `memory_palace` with an English subject
-filter, copies customized english-stream due/order fields onto memory_palace, and drops
-`'english'` from `mixed_modes` (adding `memory_palace` if needed). Mixed palace+english becomes
-one palace stream over all subjects. The v1 local configuration remains readable only for
-migration. `quiz_only` becomes `quiz`, a palace-only configuration becomes `memory_palace`, and
-palace-plus-question content becomes `mixed`. Legacy Anki front/back fields remain in source
-data and compatibility projections but are excluded from the new freestyle streams and queue.
-When a configuration is saved, the round plan preserves completed, excluded, and retry entries
-for overlapping identities (`unit:{unit_id}` / `quiz:{question_id}`); only unstarted entries
-are rebuilt against the new streams. The HUD progress rail is drawn from the round plan, not
-from the live due subset, so a restart that omits already-rated cards from `/queue/build`
-still shows those ticks. The queue-construction fields
-(`palace_order`, `unit_order`, due policy, mix, seed, queue length, quiz draw order) are
-compared on save: a change reorders unstarted work in the current round so 「多个宫殿轮流穿插」
-and 「随机单元顺序」 take effect without minting a new round. A silent content rebuild with the same
-construction settings must not reshuffle.
+`streams.memory_palace` 构建已标记的宫殿复习单元卡片。经过学科过滤后，用户仍可选择宫殿/章节子集（`specific_palace_ids`），以及 `due_first_then_expand`、`due_only` 或 `all_content_due_weighted` 选择、宫殿完成/交错顺序，以及结构化/随机单元顺序。结构化顺序指宫殿自身的深度优先单元顺序（`topology_order`，从文档解析，因此未对账的编辑无法打乱它）；`new_placement: new_first` 仍会把从未通过的单元提前，且到期日期不是排序键。`streams.english` 只作为净化后的兼容投影保留；新配置的队列构建不会激活第三个英语流。
 
-## Palace Review Cards
+`streams.quiz` 独立于宫殿复习排期构建题目卡片。它使用相同的学科标签，然后是可选的显式宫殿范围、题型、掌握度桶、跨宫殿/单宫殿顺序，以及薄弱题优先。混合组合器使用稳定种子按 `ratio`、全局 `random` 或 `sequential` 策略合并两个流的结果。比例模式使用 `mix.ratios` 中的流权重；顺序模式先完成一个选中的流再进入下一个。组合器在所有流构建完成后按稳定卡片 ID 去重，因此重叠的显式范围不会把同一张卡片显示两次。候选不足会按实际排期计数报告：队列从不重复卡片，也不会静默扩大过滤器。
 
-- Palace cards are built only from active due review units returned by Reviews.
-- Card identity carries stable `unit_id` plus `unit_revision`. A permanent-mark membership change may drop a vanished unit. A content-only update preserves the schedule and rebinds the same parent unit in the current round; it does not mint a new unfinished card.
-- The card displays the full palace for context while the frozen Reviews unit membership defines the rating scope.
-- Freestyle starts a one-unit `freestyle_unit_review` session and uses the same rating and undo commands as formal review. Tapping a successfully saved selected rating again undoes until the card is unrated; it must not post the same score. A selected rating whose save failed instead retries saving on the next tap. The transient 撤销 chip still undoes one step. Clearing the rating also uncompletes that card in the round plan so the HUD tick goes back to pending.
-- Freestyle always scores only the current review unit; an old palace-scope preference must not batch-score siblings or mark unseen sections as passed. The separate formal review `rate_palace_due_units` API remains available outside this freestyle card flow, with per-unit schedules and batch undo. Quiz cards never enter either palace-unit rating path.
-- A successfully saved `忘记` creates a retry occurrence (`困难` is a pass: it books a shorter
-  interval instead of re-serving the card). The server's
-  `apply_rating` books it with an `available_at` wait; the read-time projection
-  (`publish_ready_retries`) puts it into `presented_ids` when that instant passes, at the
-  learner's committed cursor — the slot **immediately after the card they are on**, never a
-  fixed three-card offset and never after the source. The frontend adopts that confirmed
-  result into the feed and round-plan order. An unsaved local tap never inserts retry work.
-  When nothing remains after the current card, the retry is appended after it; `current_card_id`
-  does not move, so pager / locate / settlement cannot deadlock on the last card.
-  `leave_card` on an already-inserted source is a no-op for placement. An inserted retry must
-  not freeze the round as fully handled and drop the confirmed 重练. A round whose sources and
-  retries are actually finished still freezes, and a silent rebuild still does not append
-  leftover due onto it. Confirmation pins the live viewport card, never the source just left.
-  There is no per-round cap. A unit keeps one live retry at a time; the amber node
-  number is this-round `retry_attempt` (第几次). Each new failed encounter increments
-  that same slot, including a fresh glance the parent's new weak rating schedules
-  (`_occurrence_owns_score` decides whether the slot's stored encounter is its own score;
-  a parent's scheduling score never counts as the retry's). A later `记得` / `轻松` settles
-  the source card and every unfinished occurrence together. The just-rated source card does
-  not move. `记得` / `轻松` / `困难` all finish the current encounter; only `忘记` leaves it in
-  same-day retry work.
-  A retry occurrence has its own encounter. A retry card starts with a blank rating.
-  The 忘记 that inserted it belongs to the parent card: that score downgrades
-  the parent and schedules the retry. It must not prefill the retry rating bar;
-  `retryGlanceOwnsRating` requires the stored `encounter_id` to match the encounter entry,
-  so a previous attempt's encounter can never vouch for a re-scheduled slot.
-  Silent rebuilds must not rebind that glance
-  onto the source by `unit_id`; a passing rate leaves that occurrence in the viewport
-  instead of deleting the card under the learner. Rating that glance keeps its encounter
-  and reveal state — it must not remount the map at the root. A retry that is rated
-  `忘记` **again** stays on the rail with that score until its next wait passes; then
-  `publish_ready_retries` reopens the same occurrence blank (rating and encounter cleared,
-  `retry_attempt + 1`, id stable), serves it right after the current card, and lists it in
-  `fresh_due_ids` so the client drops its local score/encounter. It must not mint a second
-  copy, and the round reports the wait in `waiting` while it is rated-but-not-due. If the
-  learner is looking at that very card when it reopens, it blanks in place instead of moving.
-  A rate is rejected unless `card_id + occurrence_id + encounter_id + unit_id` name one
-  consistent card. A retry card without `occurrence_id`, an occurrence from another unit,
-  or an encounter bound to another unit is a mismatch — last-write-wins never applies to
-  the wrong identity. The active card's rating bar remains pressable while its encounter
-  opens. A tapped score is selected immediately as local intent; posting waits for a valid
-  encounter. Only a successful response updates recorded progress, retry planning, and
-  palace completion. A failed POST retains the selected intent, shows that it was not saved,
-  and allows another tap to retry; it must not claim a completed round or cleared palace.
-  A late response updates that card's ledger only and must not yank the viewport.
-  Rating callbacks carry `card_id + occurrence_id + encounter_id + plan_version` and adopt the
-  returned `plan_version` so the next rate is not a stale conflict. Silent
-  rebuilds keep the current DOM card by id, never by the old index. By default Freestyle
-  stays on the card after a rating; an explicit auto-advance preference may move it after
-  a successfully recorded rating. Queue rebuilds freeze
-  the current page so index churn cannot look like the next card.
-- Freestyle palace streams are `due_only`. Expand/fill policies sanitize to due-only and do not
-  emit fill cards. Formal review may still use `allow_not_due` for non-freestyle callers.
-- The HUD progress line is `当前位置/队列总长`, including retry insertions. Mixed and quiz-only rounds become complete when every card is
-  rated or acknowledged; the closing card counts sources once and shows settlement overview
-  (passed / retry / quiz), **本次随心** total focus seconds (sum of closed+rated encounter
-  `effective_seconds`), and a subject accordion (first subject expanded) with palace rows
-  showing palace/card counts and focus time. Bottom CTA **再来一轮** opens config in
-  `nextRound` mode; confirm calls `startFreestyleRoundApi` (never local `startNewRound`)
-  and rebuilds a fresh queue. Mid-round 调整配置 stays on the HUD and still replans with
-  progress preserved. 下一张 / swipe from the last handled unit opens that closing slot.
-  The queue index stays on the last unit. Silent rebuild after the last 记得/简单 must not
-  mint or append leftover due into the feed, or the closing slot disappears before the
-  learner can open it.
-- Queue rebuilds exclude palaces without permanent marks.
-- Content edits bump `unit_revision` on the parent review unit. Freestyle adopts the live revision in place: the current card stays, remaining cards rebind by `unit_id`, and already-rated units keep this-round ratings. Starting a freestyle session with a stale revision opens a fresh encounter at the live revision instead of raising `review unit changed`. A newer revision must not appear as unfinished work in the same round; a new round with empty `completed_ids` may include the revised unit if its preserved schedule is due. Content edits alone never demote its review stage. Stale recovery (skip / rebuild / open config) is only for a vanished unit, a non-fill card that is not due (reviewed elsewhere), or an encounter that belongs to another unit. Consecutive those drops still trip the circuit breaker (three in a row, or three within ~2s). Practice freestyle must not hard-fail the feed on schedule/revision drift after concurrent edits.
+净化会把已存储的 `training_mode: 'english'` 折叠为带英语学科过滤的 `memory_palace`，把定制的英语流到期/顺序字段复制到 memory_palace，并从 `mixed_modes` 中丢弃 `'english'`（必要时添加 `memory_palace`）。混合的宫殿+英语会变成一个覆盖所有学科的宫殿流。v1 本地配置仅为迁移保持可读。`quiz_only` 变为 `quiz`，仅宫殿配置变为 `memory_palace`，宫殿加题目内容变为 `mixed`。遗留 Anki 正/反面字段仍保留在源数据和兼容投影中，但被排除在新的随心流和队列之外。保存配置时，轮次计划为重叠身份（`unit:{unit_id}` / `quiz:{question_id}`）保留已完成、已排除和重练条目；只有未开始条目会针对新流重建。HUD 进度条根据轮次计划绘制，而不是根据实时到期子集，因此重启后即使 `/queue/build` 省略已评分卡片，这些刻度仍会显示。队列构建字段（`palace_order`、`unit_order`、到期策略、混合、种子、队列长度、做题抽取顺序）在保存时进行比较：变更会重排本轮中未开始的工作，使「多个宫殿轮流穿插」和「随机单元顺序」无需铸造新轮次即可生效。使用相同构建设置的静默内容重建不得重新洗牌。
 
-## Permanent Marks
+## 宫殿复习卡片
 
-Freestyle inline edit scope is configured in 翻卡设置 (`editScope`). `unit` (default) projects the palace-root → unit spine plus that unit's subtree and hides siblings; `palace` shows the full document. `savePalaceEditor` still writes the full palace document. Entering edit expands the tree only as far as the current flip progress: a branch opens when a card inside it has been flipped out (`placeholder` / `revealed` in the `revealMap`), and branches the learner has not reached stay folded, for both edit scopes. So the edit view is the flip progress plus editable structure, never the whole palace dumped open. After that the host's own fold seed governs the canvas, and a manual expand/collapse gesture still holds until the next mode switch. Editing or deleting a card must not re-apply the flip-progress seed; those writes use the same fold reconcile as the ordinary palace editor. Clearing a card's whole text in edit (Ctrl+A → Ctrl+X, or deleting everything, then committing) deletes that one card and promotes its children (undoable), exactly like 单独删除 in the palace editor — it never restores the original text; the unit anchor keeps the same reveal state when it survives. Edit keeps the same `revealMap` / flip progress and re-centers the previous viewport-center card (or the unit anchor if that card is gone); it does not fit the whole tree. Switching edit ↔ review keeps the same `revealMap` / flip progress. Flip progress belongs to the mounted card visit, not to storage: it is never written to localStorage or restored from live presence, and a new round (or a remounted card) starts with every branch folded, so the flip-derived edit folds cannot be inherited from an earlier visit either. Double-click / double-tap on empty canvas toggles edit and review. Node click, node double-click, and node long-press stay on reveal / text-edit / menus. The overflow menu still toggles the same modes. Edit mode hides the rating bar, feed pager, and bottom inset so they do not cover the map. Enter reveal follow: Enter on the active review card advances the unit anchor and, when a card flipped out by that step is clipped, pans the minimum distance to bring the most clipped of those cards fully into view. Zoom stays put. A later Enter interrupts the pan. Mouse clicks do not move the camera. Camera tracking is configurable in 翻卡设置 (`enterRevealFollow`, default on): with it off Enter still flips the same cards and the viewport stays where the learner left it. Paging controls release keyboard focus when they activate (the next unit may still be loading), so Enter belongs to the card and flips instead of paging again.
+- 宫殿卡片只由 Reviews 返回的活跃到期复习单元构建。
+- 卡片身份携带稳定的 `unit_id` 以及 `unit_revision`。永久标记成员关系的变更可能丢弃已消失的单元。仅内容更新会保留排期，并在本轮重新绑定同一父单元；它不会铸造新的未完成卡片。
+- 卡片显示完整宫殿作为上下文，而冻结的 Reviews 单元成员关系定义评分范围。
+- 随心启动单单元 `freestyle_unit_review` 会话，并使用与正式复习相同的评分和撤销命令。再次点击已成功保存的选中评分会撤销，直到卡片回到未评分；它不得重复提交同一分数。保存失败的选中评分则会在下一次点击时重试保存。临时的「撤销」标签仍然撤销一步。清除评分还会在轮次计划中取消该卡片的完成状态，使 HUD 刻度回到待处理。
+- 随心始终只给当前复习单元评分；旧的宫殿范围偏好不得批量给兄弟单元评分或把未看过的章节标记为通过。独立的正式复习 `rate_palace_due_units` API 在此随心卡片流程之外仍然可用，具有按单元排期和批量撤销。做题卡片永远不会进入任一宫殿单元评分路径。
+- 成功保存的「忘记」会创建一个重练 `occurrence`（「困难」是通过：它预约更短间隔，而不是重新提供卡片）。服务器的 `apply_rating` 以 `available_at` 等待来预约它；读取时投影（`publish_ready_retries`）在该时刻过去后将其放入 `presented_ids`，位置在学习者已提交的 `cursor` 处——即**紧挨着他们当前所在卡片之后**的槽位，绝不是固定的三张卡片偏移，也绝不是在源卡片之后。前端将该已确认结果采用到信息流和轮次计划顺序中。未保存的本地点击绝不会插入重练工作。当当前卡片之后没有任何内容时，重练会追加在其后；`current_card_id` 不移动，因此翻页器/定位/结算不会在最后一张卡片上死锁。对已插入源卡片执行 `leave_card` 在位置上是一个无操作。已插入的重练不得让轮次冻结为完全处理完并丢弃已确认的重练。源卡片和重练实际上都已完成的轮次仍会冻结，静默重建仍不会把剩余到期内容追加到其上。确认固定的是实时视口卡片，绝不是刚刚离开的源卡片。没有每轮上限。一个单元同时只保留一个活跃重练；琥珀色节点数字是本轮的 `retry_attempt`（第几次）。每次新的失败 `encounter` 都会递增同一个槽位，包括父卡片新的薄弱评分所安排的全新浏览（`_occurrence_owns_score` 决定该槽位存储的 `encounter` 是否算作它自己的评分；父卡片的排期评分永远不会算作重练的评分）。之后的 `记得` / `轻松` 会一起结算源卡片和每个未完成 `occurrence`。刚评分的源卡片不会移动。`记得` / `轻松` / `困难` 都会结束当前 `encounter`；只有 `忘记` 会把它留在当天重练工作中。重练 `occurrence` 有自己的 `encounter`。重练卡片以空白评分开始。插入它的那次「忘记」属于父卡片：该评分降级父卡片并安排重练。它不得预填重练评分条；`retryGlanceOwnsRating` 要求存储的 `encounter_id` 与 `encounter` 条目匹配，因此先前尝试的 `encounter` 永远无法为重新安排的槽位作保。静默重建不得按 `unit_id` 把该浏览重新绑定到源卡片上；通过评分会让该 `occurrence` 留在视口中，而不是删掉学习者眼前的卡片。给该浏览评分会保留其 `encounter` 和揭示状态——不得在根节点重新挂载脑图。再次被评为「忘记」的重练会带着该评分留在进度条上，直到下一次等待过去；随后 `publish_ready_retries` 会以空白状态重新打开同一个 `occurrence`（评分和 `encounter` 清除，`retry_attempt + 1`，id 稳定），在当前卡片之后立即提供它，并将其列入 `fresh_due_ids`，以便客户端丢弃本地评分/`encounter`。它不得铸造第二份副本；当它已评分但未到期时，轮次会在 `waiting` 中报告该等待。如果重新打开时学习者正看着那张卡片，它会就地变空白，而不是移动。除非 `card_id + occurrence_id + encounter_id + unit_id` 指向同一张一致的卡片，否则评分会被拒绝。没有 `occurrence_id` 的重练卡片、来自另一单元的 `occurrence`，或绑定到另一单元的 `encounter`，都是不匹配——最后写入获胜永远不会适用于错误身份。活动卡片的评分条在其 `encounter` 打开期间保持可按。点击的分数会立即作为本地意图被选中；提交会等待有效的 `encounter`。只有成功响应才会更新已记录进度、重练排期和宫殿完成。失败的 POST 会保留选中意图，显示未保存，并允许再次点击重试；它不得声称轮次完成或宫殿清空。迟到的响应只更新该卡片的账本，且不得拽动视口。评分回调携带 `card_id + occurrence_id + encounter_id + plan_version`，并采用返回的 `plan_version`，使下一次评分不会成为过期冲突。静默重建按 id 保留当前 DOM 卡片，绝不按旧索引。默认情况下，随心在评分后停留在卡片上；显式的自动前进偏好可以在评分成功记录后移动它。队列重建会冻结当前页，使索引变动看起来不像下一张卡片。
+- 随心宫殿流是 `due_only`。扩展/填充策略会净化为仅到期，且不发出填充卡片。正式复习仍可为非随心调用方使用 `allow_not_due`。
+- HUD 进度行是 `当前位置/队列总长`，包括重练插入。混合和纯做题轮次在每张卡片都已评分或确认时变为完成；收尾卡片只统计一次源，并显示结算概览（通过/重练/做题）、**本次随心**总专注秒数（已关闭且已评分 `encounter` 的 `effective_seconds` 之和），以及一个学科手风琴（第一个学科展开），其宫殿行显示宫殿/卡片计数和专注时间。底部 CTA **再来一轮**以 `nextRound` 模式打开配置；确认会调用 `startFreestyleRoundApi`（绝不是本地 `startNewRound`）并重建全新队列。轮次中途的「调整配置」留在 HUD 上，并且仍会在保留进度的情况下重新规划。从最后一个已处理单元执行「下一张」/滑动会打开该收尾槽位。队列索引停留在最后一个单元。最后一次「记得/简单」之后的静默重建不得铸造或追加剩余到期内容到信息流，否则收尾槽位会在学习者能打开之前消失。
+- 队列重建会排除没有永久标记的宫殿。
+- 内容编辑会提升父复习单元的 `unit_revision`。随心就地采用实时修订：当前卡片保留，剩余卡片按 `unit_id` 重新绑定，已评分单元保留本轮评分。以过期修订启动随心会话，会在实时修订上打开新的 `encounter`，而不是抛出 `review unit changed`。较新修订不得在同一轮中显示为未完成工作；`completed_ids` 为空的新轮次可以在其保留排期到期时包含该修订单元。仅内容编辑永远不会降低其复习阶段。过期恢复（跳过/重建/打开配置）仅用于已消失的单元、不到期的非填充卡片（已在别处复习），或属于另一单元的 `encounter`。连续出现这些丢弃仍会触发断路器（连续三次，或约 2 秒内三次）。Practice 随心不得在并发编辑后的排期/修订漂移上硬性失败信息流。
 
-翻卡设置 has a second, independent page (快捷键) beside the reveal settings. It edits one shared flip shortcut map used by 随心 and formal 复习/练习: 翻卡 (Enter) reveals the current card/anchor, 收卡 (Backspace) folds every descendant and takes the card back to whatever the reveal stage says it is (待回忆 prompt in 两阶段, hidden in 直接显示, so 收卡 never introduces a placeholder that mode would not show); pending flips from the previous frame are dropped, so a fast Enter cannot reopen it. Shift+H hides child cards. W / A / S / D are fixed view keys, not part of the map: holding them pans the 随心 canvas (600px/s on animation frames, key direction = camera direction, released keys stop it, inputs/dialogs/modifier chords keep their letters) and no flip action may be bound to them. 上一张 / 下一张 default to ↑ / ↓ and page the 随心 feed even when focus is outside the snap scroller; PageUp / PageDown and ← / → stay fixed paging keys and cannot be captured by a flip action. Space is not a page key any more: it is the character a learner types in a card editor, so a space bar must never turn the feed. While a card editor is open (`data-mindmap-editor-active`), every page / flip / rating key is suspended even if the caret lost DOM focus — that is what made Space occasionally turn the card mid-edit. A focused button or link keeps Enter and Backspace for itself, and inputs, dialogs and recording states suspend the map. A surface that lives inside a dialog opts back in at its own hook call (`allowOverlayTarget`), while every page-level flip hook still ignores keys inside that dialog. The same page is shown in 偏好 → 快捷键, so both entry points edit and save the same bindings immediately.
+## 永久标记
 
-In edit mode the 永久标记 mode switch is a dedicated toolbar toggle (pin icon plus the 已标 count) that sits after 文字 and outside the ⋯ menu; the palace editor exposes the same toggle. Permanent marks are edited in the palace document and each complete toggle saves immediately as a plain document write. The active freestyle card never sends `mark_change`, `return_to_review`, or `reconcile_units`, and it never calls `onUnitsReconciled` / `buildQueue` for an edit or mode switch. Schedule reconcile is sent once as same-document `editor_leave` only after the edited card becomes inactive or unmounts; only that leave reconcile may refresh the queue. Explicit 重建本轮 keeps its existing behavior.
+随心内联编辑范围在「翻卡设置」中配置（`editScope`）。`unit`（默认）投影宫殿根 → 单元脊柱加上该单元的子树，并隐藏兄弟节点；`palace` 显示完整文档。`savePalaceEditor` 仍写入完整宫殿文档。进入编辑时，树的展开只到当前翻卡进度为止：当分支内有卡片被翻出（`revealMap` 中的 `placeholder` / `revealed`）时，该分支打开；学习者尚未到达的分支保持折叠，两种编辑范围皆如此。因此编辑视图是翻卡进度加上可编辑结构，绝不是把整个宫殿摊开。之后由宿主自身的折叠种子控制画布，手动展开/折叠手势仍会保持到下一次模式切换。编辑或删除卡片不得重新应用翻卡进度种子；这些写入使用与普通宫殿编辑器相同的折叠对账。在编辑中清空一张卡片的全部文本（Ctrl+A → Ctrl+X，或全部删除后提交）会删除该卡片并提升其子节点（可撤销），与宫殿编辑器中的「单独删除」完全一样——它绝不会恢复原文；单元锚点若存活则保持相同揭示状态。编辑保留相同的 `revealMap` / 翻卡进度，并重新居中先前的视口中心卡片（若该卡片已不在则为单元锚点）；它不会适配整棵树。在编辑 ↔ 复习之间切换会保留相同的 `revealMap` / 翻卡进度。翻卡进度属于已挂载卡片的本次访问，而不是存储：它绝不会写入 localStorage，也不会从实时存在恢复，并且新轮次（或重新挂载的卡片）会以所有分支折叠开始，因此由翻卡派生的编辑折叠也不能从较早访问继承。在空画布上双击/双触会切换编辑与复习。节点单击、节点双击和节点长按仍分别用于揭示/文本编辑/菜单。溢出菜单仍切换相同模式。编辑模式隐藏评分条、信息流翻页器和底部内边距，使它们不覆盖脑图。回车揭示跟随：在活动复习卡片上按回车会推进单元锚点，并且当该步骤翻出的卡片被裁切时，以最小距离平移，使其中被裁切最多的卡片完整进入视野。缩放保持不变。之后的回车会中断平移。鼠标点击不会移动相机。相机跟踪可在「翻卡设置」中配置（`enterRevealFollow`，默认开启）：关闭后回车仍翻同样的卡片，视口停留在学习者离开的位置。翻页控件激活时会释放键盘焦点（下一个单元可能仍在加载），因此回车归属于卡片并执行翻卡，而不是再次翻页。
 
-Every complete edit action (node add/delete/move, text commit, permanent-mark toggle, import apply) updates local state and starts a save immediately; there is no typing debounce. Requests for one palace are serialized, and while one request is in flight only the latest local document is retained for the next request. Returning with 双击 / 返回学习 adopts the local document synchronously and enters review without waiting for HTTP. Save state is visible as 保存中… / 已保存 / 保存失败，重试. A failed save never forces review back to edit and never replaces local content.
+「翻卡设置」在揭示设置旁边有第二个独立页面（「快捷键」）。它编辑随心与正式复习/练习共用的一张翻卡快捷键映射：「翻卡」（Enter）揭示当前卡片/锚点，「收卡」（Backspace）折叠所有后代并把卡片带回揭示阶段规定的状态（两阶段中为待回忆提示，直接显示中为隐藏，因此「收卡」绝不会引入该模式不会显示的占位符）；上一帧的待处理翻卡会被丢弃，因此快速回车无法重新打开它。Shift+H 隐藏子卡片。W / A / S / D 是固定视图键，不属于该映射：按住它们会平移随心画布（按动画帧 600px/s，按键方向 = 相机方向，松开按键即停止，输入框/对话框/修饰键组合保留其字母），且任何翻卡动作都不得绑定到它们。「上一张」/「下一张」默认是 ↑ / ↓，即使焦点在吸附滚动器之外也会翻动随心信息流；PageUp / PageDown 和 ← / → 保持为固定翻页键，不能被翻卡动作捕获。空格不再是翻页键：它是学习者在卡片编辑器中输入的字符，因此空格键绝不能翻动信息流。当卡片编辑器打开时（`data-mindmap-editor-active`），即使光标丢失 DOM 焦点，所有翻页/翻卡/评分键都会暂停——这正是空格偶尔在编辑中途翻动卡片的原因。获得焦点的按钮或链接会自行保留 Enter 和 Backspace，输入框、对话框和录音状态会暂停脑图。位于对话框内部的界面会在自己的 hook 调用处重新选择加入（`allowOverlayTarget`），而每个页面级翻卡 hook 仍忽略该对话框内的按键。同一页面显示在「偏好」→「快捷键」中，因此两个入口都会立即编辑并保存同一组绑定。
 
-A 409 first refreshes the service-side revision token and retries the latest local document once; the active device's local edit wins automatically and the conflict is recorded in app logs. A successful acknowledgement updates only the fingerprint/status and never rebuilds `editor_doc`, the reveal tree, the encounter, or the current queue position.
+在编辑模式中，「永久标记」模式开关是一个专用工具栏切换（图钉图标加上「已标」计数），位于「文字」之后、⋯ 菜单之外；宫殿编辑器暴露相同的切换。永久标记在宫殿文档中编辑，每次完整切换都会立即作为普通文档写入保存。活动随心卡片绝不会发送 `mark_change`、`return_to_review` 或 `reconcile_units`，也绝不会为编辑或模式切换调用 `onUnitsReconciled` / `buildQueue`。排期对账只在被编辑卡片变为非活跃或卸载之后，作为同文档 `editor_leave` 发送一次；只有该离开对账可以刷新队列。显式「重建本轮」保持其现有行为。
 
-Temporary marks do not exist. Practice must not persist, merge, clear, or schedule any alternative mark lifecycle.
+每个完整编辑动作（节点添加/删除/移动、文本提交、永久标记切换、导入应用）都会更新本地状态并立即开始保存；没有输入防抖。针对一个宫殿的请求会串行化，并且当一个请求进行中时，只为下一次请求保留最新的本地文档。通过双击/「返回学习」返回时，会同步采用本地文档并进入复习，不等待 HTTP。保存状态显示为「保存中…」/「已保存」/「保存失败，重试」。保存失败绝不会强制复习退回编辑，也绝不会替换本地内容。
 
-## Other Cards
+409 会先刷新服务端修订令牌，并重试最新本地文档一次；活动设备的本地编辑自动获胜，冲突记录在应用日志中。成功确认只更新指纹/状态，绝不重建 `editor_doc`、揭示树、`encounter` 或当前队列位置。
 
-Quiz, English Reading, and other standalone learning surfaces retain their own evidence. Their
-completion must not change a palace review unit. Anki front/back data remains in its palace as
-source content, but is no longer emitted by the freestyle streams or mixed queue.
+临时标记不存在。Practice 不得持久化、合并、清除或安排任何替代标记生命周期。
 
-Practice receives topology only through `memory.public.get_palace_unit_projection`. It must not import the mind-map split function, apply node-count limits, or derive due state from member nodes.
+## 其他卡片
 
-## Flow Feedback and the Challenge–Skill Channel
+做题和其他独立学习界面保留各自的证据。它们的完成不得改变宫殿复习单元。Anki 正/反面数据作为源内容保留在其宫殿中，但不再由随心流或混合队列发出。
 
-Freestyle feedback follows the feedback论 in 《心流》 rather than reward mechanics. The
-rules are enforced in `model/freestyleFlowFeedback.ts` and `model/freestyleChallengeChannel.ts`,
-both framework-free and unit-tested.
+Practice 只通过 `memory.public.get_palace_unit_projection` 接收拓扑。它不得导入脑图拆分函数、应用节点数限制，或从成员节点推导到期状态。
 
-- Every learner action gets an immediate answer. Reveal (flip) and unit rating were both
-  silent; reveal now sounds on the `review` scene — the same one formal review has always
-  used per reveal — and a rate adds one breath at the edge of its own card.
-- Reveal is counted off the whole `revealMap` in `FreestyleUnitReviewFlipPanel`, not off
-  the unit-scoped header progress. The default flip mode is `free`, where every palace node
-  is flippable, so a unit-scoped count would leave most flips silent.
-- Feedback stays peripheral. Nothing is drawn at screen center: `dispatchGlobalFeedback`
-  is deliberately not used for rating, because its burst lands mid-map and is gated only by
-  the global sound/animation switches, so it would still fire under the `focus` preset.
-  Freestyle feedback respects `scenes.review` and the `learningSounds` channel.
-- A weak rating is information, never a loss. `忘记`/`困难` never use
-  `quiz_result_incorrect`; they use a neutral acknowledgement and a slate breath. There is
-  no streak that can break, and freestyle adds no combo counter, milestone, or confetti of
-  its own — quiz cards keep their existing shared-path feedback and are not double-signalled.
-- Reveal audio is rate-limited (90ms) so fast flipping stays information rather than texture.
-  A rate is never rate-limited.
+## 流反馈与挑战–技能通道
 
-The challenge–skill channel reads the last `CHANNEL_WINDOW` distinct rated cards and
-reports `anxious` / `flow` / `bored` / `unknown`. A hint appears only at the two exits,
-never to confirm flow, and only when a correction exists; it is dismissible with a
-cooldown so a declined suggestion cannot return as an interruption.
+随心反馈遵循《心流》中的反馈论，而不是奖励机制。这些规则在 `model/freestyleFlowFeedback.ts` 和 `model/freestyleChallengeChannel.ts` 中强制执行，两者均不依赖框架并有单元测试。
 
-**In-feed corrections must never change palace scope.** A hint must not swap the palace
-filter under the card the learner is reading. Question mastery is not a lever. Anxious
-may only tighten palace `due_policy` to `due_only`; sanitized configs are already
-`due_only`, so that adjustment is a no-op. Bored does not change the feed. A real
-correction still rebuilds with `silent` + `preferCardId` so finished work and the
-learner's position survive. `freestylePalaceScopeUnchanged` guards scope and is
-asserted directly. Saving the round-plan dialog may change palace/subject scope;
-that rebinds the current round instead of minting a new one.
+- 每个学习者动作都会得到即时回应。揭示（翻卡）和单元评分以前都是静默的；现在揭示会在 `review` 场景发声——正式复习一直为每次揭示使用同一场景——评分会在自己的卡片边缘添加一次呼吸。
+- 揭示计数基于 `FreestyleUnitReviewFlipPanel` 中的整个 `revealMap`，而不是单元范围的页眉进度。默认翻卡模式是 `free`，其中每个宫殿节点都可翻，因此单元范围的计数会让大多数翻卡静默。
+- 反馈保持在外围。屏幕中心不绘制任何东西：评分有意不使用 `dispatchGlobalFeedback`，因为它的爆发落在脑图中间，且只受全局声音/动画开关控制，所以在 `focus` 预设下仍会触发。随心反馈遵循 `scenes.review` 和 `learningSounds` 通道。
+- 薄弱评分是信息，绝不是损失。`忘记`/`困难` 绝不使用 `quiz_result_incorrect`；它们使用中性确认和一次石板色呼吸。没有可断裂的连击，随心也不添加自己的连击计数器、里程碑或彩纸——做题卡片保留其现有的共享路径反馈，不会被双重信号。
+- 揭示音频有速率限制（90ms），使快速翻卡保持为信息而不是质感。评分永不限速。
 
-## Quiz pool config (feed settings)
+挑战–技能通道读取最近 `CHANNEL_WINDOW` 张不同的已评分卡片，并报告 `anxious` / `flow` / `bored` / `unknown`。提示只会在两个出口出现，绝不用于确认心流，且只在存在修正时出现；它可关闭并有冷却时间，因此被拒绝的建议不会作为打扰再次出现。
 
-Immersive queue config (`FreestyleFeedConfig` / `sanitize_feed_config`) owns quiz membership and draw order separately from palace due policy:
+**信息流内修正绝不能改变宫殿范围。** 提示不得在学习者正在阅读的卡片下方替换宫殿过滤器。题目掌握度不是杠杆。焦虑只允许把宫殿 `due_policy` 收紧为 `due_only`；净化后的配置已经是 `due_only`，因此该调整是无操作。无聊不会改变信息流。真正的修正仍会以 `silent` + `preferCardId` 重建，使已完成工作和学习者的位置得以保留。`freestylePalaceScopeUnchanged` 守护范围并被直接断言。保存轮次计划对话框可能改变宫殿/学科范围；这会重新绑定当前轮次，而不是铸造新轮次。
 
-| Field | Role |
+## 做题池配置（信息流设置）
+
+沉浸式队列配置（`FreestyleFeedConfig` / `sanitize_feed_config`）独立于宫殿到期策略，拥有做题成员关系和抽取顺序：
+
+| 字段 | 作用 |
 |---|---|
-| `quiz_scope` | `cross_palace_random` shuffles all in-pool quizzes across palaces; `single_palace_random` finishes one palace's quiz pool before the next. |
-| `mix_mode` + `mix_ratio` | Palace-side vs quiz interleave (e.g. 2:1). |
-| `bound_quiz_placement` | Default `into_mix` so node-bound quizzes count toward `mix_ratio`. `follow_unit` re-attaches after the owning branch and weakens ratio predictability. |
-| `due_policy` | Gates **mind-map unit** fill only. Quiz entry is not controlled by due_policy. |
-| `question_type` | Optional type filter. It does not drop questions by publish state or mastery. |
+| `quiz_scope` | `cross_palace_random` 打乱池内所有做题并跨宫殿；`single_palace_random` 先完成一个宫殿的做题池再进入下一个。 |
+| `mix_mode` + `mix_ratio` | 宫殿侧与做题的交错（例如 2:1）。 |
+| `bound_quiz_placement` | 默认 `into_mix`，使节点绑定的做题计入 `mix_ratio`。`follow_unit` 会在所属分支之后重新附加，并削弱比例可预测性。 |
+| `due_policy` | 遗留字段：后端已不再消费（`apps/api/src` 无此字段），前端恒为 `due_only`。它不控制脑图单元填充，也不改变做题进入；焦虑提示里的「只留到期的」因此当前是无操作。 |
+| `question_type` | 可选类型过滤。它不会按发布状态或掌握度丢弃题目。 |
 
-Settings UI keeps 题型 and 跨宫殿顺序. It does not offer 题目掌握度 or 薄弱题优先. Stored `quiz_mastery_buckets` and `weak_quiz_priority` are ignored for membership.
+设置 UI 保留「题型」和「跨宫殿顺序」。它不提供「题目掌握度」或「薄弱题优先」。已存储的 `quiz_mastery_buckets` 和 `weak_quiz_priority` 在成员关系上被忽略。
 
-## Toolbar 做题 overlay
+## 工具栏「做题」叠加层
 
-The immersive mind-map toolbar (freestyle only) leads with icon **做题**, then icon **英语**
-immediately left of **文字**. Canvas zoom in/out buttons are omitted; pinch and wheel still
-persist preferred zoom. That zoom is remembered when the feed moves to the next review unit
-(or back), so a unit never snaps back to the canvas default. Desktop and phone keep separate
-zoom slots (`mindmap_zoom` / `mindmap_zoom_phone`) because the values sync across devices
-through client preferences: a desktop 1.4 would otherwise park a phone map off-screen. The
-phone slot starts unset, so each unit keeps its readable fit until the learner zooms once on
-the phone. 做题 opens `widgets/freestyle-scope-quiz` over the current card. It does
-**not** change `training_mode` or rebuild the feed into quiz cards.
+沉浸式脑图工具栏（仅随心）以图标**做题**开头，然后图标**英语**紧挨在**文字**左侧。画布放大/缩小按钮被省略；捏合和滚轮仍会持久化首选缩放。当信息流移动到下一个复习单元（或返回）时，该缩放会被记住，因此单元绝不会突然回到画布默认值。桌面和手机保持独立的缩放槽位（`mindmap_zoom` / `mindmap_zoom_phone`），因为这些值会通过客户端偏好跨设备同步：否则桌面端的 1.4 会把手机脑图停到屏幕外。手机槽位初始未设置，因此每个单元在手机上首次缩放之前都保持可读的适配。「做题」在当前卡片上打开 `widgets/freestyle-scope-quiz`。它**不会**改变 `training_mode`，也不会把信息流重建为做题卡片。
 
-Question membership has two ranges, both owned by the pack below.
+题目成员关系有两个范围，都由下面的 pack 拥有。
 
-**本轮复习单元 (default).** The scope is the round's scheduled review units
-(`original_cards` with kind `mindmap_branch`) — not the subject union, and not
-`streams.quiz.specific_palace_ids`. For each unit the pool includes its own member nodes **and
-every ancestor from the palace root down to the unit's `anchor_uid`**. A permanent mark often
-sits on a level-2 node; the knowledge points above it were reviewed as context, so their bound
-questions belong to the round too. A sibling branch, a nested unit that was not scheduled, and
-the rest of the palace do not enter. A question with no binding record is treated as bound to
-its palace root — every unit path starts there — so it appears in every scheduled unit's pool.
-The rule is implemented in `_unit_scope_node_uids` and `_question_in_unit_scope`.
+**本轮复习单元（默认）。** 范围是本轮已排期的复习单元（kind 为 `mindmap_branch` 的 `original_cards`）——不是学科并集，也不是 `streams.quiz.specific_palace_ids`。对每个单元，池包含其自身成员节点**以及从宫殿根向下到该单元 `anchor_uid` 的每个祖先**。永久标记常常位于二级节点上；其上方的知识点作为上下文被复习，因此它们绑定的题目也属于本轮。兄弟分支、未排期的嵌套单元以及宫殿其余部分不会进入。没有绑定记录的题目会被视为绑定到其宫殿根——每条单元路径都从那里开始——因此它会出现在每个已排期单元的池中。该规则实现在 `_unit_scope_node_uids` 和 `_question_in_unit_scope` 中。
 
-**整个宫殿 (opt-in).** Every non-deleted question in the round's scheduled palaces, the old
-palace-wide behaviour. The learner switches it on the 出题范围 page.
+**整个宫殿（主动开启）。** 本轮已排期宫殿中每个未删除的题目，即旧的宫殿范围行为。学习者在「出题范围」页面切换它。
 
-Neither range uses `streams.quiz.question_type`. Every selected question is counted, including
-rows whose stored `lifecycle_status` is `candidate`, `rejected`, `temporary`, or `published`.
-客观 is every type except `short_answer`; 主观 is `short_answer`. The config shows a checkbox
-only for a group that exists in the active pool, with its count. At least one present group
-stays selected. Both selected defaults to 混合插入; 先客观后主观 and 先主观后客观 are the other
-choices. 宫殿优先 vs 题型优先 appears only when 一个宫殿刷完再换 and a sequential type order are
-both selected, and this round has more than one review palace. Unselected groups stay in
-`kind_counts` so they can be turned back on. Mastery buckets, weak priority, question due dates,
-and `DEFAULT_QUIZ_CARD_LIMIT` do not apply to this overlay. Palace draw order is
-`streams.quiz.quiz_scope`. Confirm sends the chosen range (`round_units` or `whole_palace`).
-The first open shows one setup page — range, draw order, score display, with 快捷键 collapsed —
-then sets `overlay_quiz_setup_done`; later opens skip setup. Config stays reachable from the
-dialog's top-left. Mark defaults to ArrowUp and toggles once per press. While the dialog is open,
-ArrowUp and ArrowDown must not page the feed underneath.
+两个范围都不使用 `streams.quiz.question_type`。每个选中的题目都会被计数，包括已存储 `lifecycle_status` 为 `candidate`、`rejected`、`temporary` 或 `published` 的行。「客观」是除 `short_answer` 之外的每种类型；「主观」是 `short_answer`。配置只为活跃池中存在的分组显示复选框及其计数。至少保持一个存在的分组被选中。两者都选中时默认为「混合插入」；「先客观后主观」和「先主观后客观」是其他选择。「宫殿优先」对「题型优先」只在同时选中「一个宫殿刷完再换」和顺序题型顺序，且本轮有不止一个复习宫殿时出现。未选中的分组保留在 `kind_counts` 中，以便重新开启。掌握度桶、薄弱优先、题目到期日期和 `DEFAULT_QUIZ_CARD_LIMIT` 不适用于该叠加层。宫殿抽取顺序是 `streams.quiz.quiz_scope`。确认会发送所选范围（`round_units` 或 `whole_palace`）。首次打开会显示一个设置页——范围、抽取顺序、评分显示，「快捷键」折叠——然后设置 `overlay_quiz_setup_done`；之后的打开会跳过设置。配置仍可从对话框左上角进入。标记默认是 ArrowUp，每次按压切换一次。对话框打开时，ArrowUp 和 ArrowDown 不得翻动下方信息流。
 
-### 做题 scope has exactly one owner
+### 做题范围恰好只有一个所有者
 
-`build_overlay_question_pack` (`practice/application/overlay_quiz_service.py`) owns **which
-questions 做题 covers**. Two ranges, one owner:
+`build_overlay_question_pack`（`practice/application/overlay_quiz_service.py`）拥有**做题覆盖哪些题目**。两个范围，一个所有者：
 
-- **本轮复习单元 (default):** the round's scheduled units, each with its whole root→anchor path.
-  The product statement is 「这座宫殿里 A、B、C 三个复习单元，本轮只排了 C，就只出 C 和它上面路径的题」.
-  A unit anchored on a level-2 permanent mark still brings the root and level-1 questions,
-  because those points were reviewed as context.
-- **整个宫殿:** every non-deleted question of the round's scheduled palaces, restored as an
-  opt-in from the 出题范围 page.
+- **本轮复习单元（默认）：** 本轮已排期的单元，每个都带有完整的根→锚点路径。产品表述是「这座宫殿里 A、B、C 三个复习单元，本轮只排了 C，就只出 C 和它上面路径的题」。锚定在二级永久标记上的单元仍会带上根和一级题目，因为这些点作为上下文被复习过。
+- **整个宫殿：** 本轮已排期宫殿中每个未删除的题目，作为「出题范围」页面中的主动开启项恢复。
 
-The saved 随心 config supplies presentation choices (draw order, 客观/主观 kinds, the range
-switch) but **must not** widen which palaces contribute. The round's palace set is still the
-outer boundary: if the config selects 20 palaces but this round scheduled 10, only those 10 can
-contribute. An earlier version applied the config a second time; on a real round that emptied
-the pool to 0 questions while the header still counted the round's 8 palaces.
+已保存的随心配置提供呈现选择（抽取顺序、客观/主观类型、范围开关），但**不得**扩大哪些宫殿贡献题目。轮次的宫殿集合仍是外部边界：如果配置选择了 20 个宫殿但本轮只排期了 10 个，则只有这 10 个可以贡献。较早的版本会第二次应用配置；在一个真实轮次上，这使池清空为 0 道题，而页眉仍统计本轮的 8 个宫殿。
 
-**One thing does leave either range: 移除本队列.** When *every* review card a palace had in this
-round is excluded, that palace's questions go with it — the learner explicitly took it out.
-A palace with even one card still queued is unaffected, and a palace whose cards were
-*completed* keeps its questions (finishing a palace leaves it available for extra practice).
-`removed_review_palace_ids` owns that judgement. Answered 做题 progress for such a palace
-parks rather than being deleted, and returns if the round arranges it again.
+**有一件事确实会离开任一范围：「移除本队列」。** 当一个宫殿本轮拥有的*每张*复习卡片都被排除时，该宫殿的题目也随之而去——学习者明确把它拿掉了。即使只有一张卡片仍在队列中的宫殿不受影响，而卡片被*完成*的宫殿保留其题目（完成一个宫殿会让它仍可用于额外练习）。`removed_review_palace_ids` 拥有该判断。此类宫殿的已答做题进度会停泊而不是被删除，如果轮次再次安排它则会恢复。
 
-The pack returns `scope_palaces` on the overlay: per scheduled palace its title, its
-available 客观/主观 counts **in the active range**, whether it currently contributes
-questions, and a stable reason code when it does not (`palace_removed` / `palace_skipped` /
-`no_questions` / `unit_no_questions` / `kinds_filtered`, in that priority so the most
-actionable, learner-caused explanation wins). `unit_no_questions` means the palace has
-questions, but none on this round's units or their root paths; `no_questions` means the
-palace has none at all. The report never re-derives membership in the UI. There is
-deliberately no "excluded by config" reason. Reason codes are data; the Chinese copy lives in
-`practice/ui/freestyle/model/overlayQuizRange.ts`.
+pack 在叠加层上返回 `scope_palaces`：每个已排期宫殿的标题、其在**活跃范围**中可用的客观/主观计数、它当前是否贡献题目，以及不贡献时的稳定原因码（`palace_removed` / `palace_skipped` / `no_questions` / `unit_no_questions` / `kinds_filtered`，按该优先级，使最可操作、由学习者导致的解释获胜）。`unit_no_questions` 表示宫殿有题目，但本轮单元或其根路径上没有；`no_questions` 表示宫殿完全没有题目。该报告绝不在 UI 中重新推导成员关系。有意不设“被配置排除”的原因。原因码是数据；中文文案位于 `practice/ui/freestyle/model/overlayQuizRange.ts`。
 
-The dialog renders that report and **must not re-derive membership** from the round plan plus
-the feed config. `check_architecture.check_freestyle_scope_quiz_overlay` rejects
-`overlayReviewPalaceIds`, a frontend re-application of the feed palace filter, a backend
-subject lookup inside the pack, a pack that stops returning the report, honouring removals, or
-scoping by the round's units and their root paths, and a bare `宫殿 <id>` label.
+对话框渲染该报告，且**不得从轮次计划加信息流配置重新推导成员关系**。`check_architecture.check_freestyle_scope_quiz_overlay` 会拒绝 `overlayReviewPalaceIds`、前端重新应用信息流宫殿过滤器、pack 内部的后端学科查询，以及一个不再返回报告、不再遵守移除或不再按轮次单元及其根路径限定范围的 pack，还有裸的 `宫殿 <id>` 标签。
 
-Two questions that look alike and are not:
+两个看起来相似但并不相同的问题：
 
-- “Which questions does the pool draw from” — the backend report: the round's units and their
-  root paths, or the whole scheduled palace set, minus removed/skipped palaces.
-- “Which palaces may settlement clear 做题 progress for” — `overlayRoundReviewPalaceIds`
-  plus `review_palace_ids`. This one deliberately **includes** removed palaces, because
-  settlement clears this round's own history and must still name a palace whose cards were
-  removed mid-round.
+- “池从哪些题目中抽取”——由后端报告决定：本轮单元及其根路径，或整个已排期宫殿集合，减去已移除/已跳过的宫殿。
+- “结算可以清除哪些宫殿的做题进度”——`overlayRoundReviewPalaceIds` 加上 `review_palace_ids`。这一个有意**包含**已移除宫殿，因为结算清除的是本轮自己的历史，必须仍能命名一个在轮次中途被移除卡片的宫殿。
 
-Switching the 做题 range must not rebuild the review card queue: `overlay_question_range` is
-deliberately absent from `queue_construction_signature` on both sides.
+切换做题范围不得重建复习卡片队列：`overlay_question_range` 在两侧都有意不出现在 `queue_construction_signature` 中。
 
-A 随心 config change still takes effect on the open dialog immediately (keyed on
-`freestylePalaceScopeSignature`), because a config save replans the round. Palace *parking*
-is driven by the round losing a palace, never by the config: answered progress for a palace
-the round drops is parked and returns if the round arranges it again.
+随心配置变更仍会立即作用于已打开对话框（以 `freestylePalaceScopeSignature` 为键），因为配置保存会重新规划轮次。宫殿*停泊*由轮次失去宫殿驱动，绝不由配置驱动：轮次丢弃的宫殿的已答进度会被停泊，如果轮次再次安排它则会恢复。
 
-### 做题 badge: the bound knowledge point's this-round rating
+### 做题徽标：绑定知识点在本轮的评分
 
-Each question shows, above its stem beside the 题型 badge, the **weakest** this-round rating
-among its bound knowledge points. 「本轮尚未复习」 is shown only when that point is still
-unfinished on the progress bar and has no 1–4 yet. A point the bar already drew as done
-(completed, excluded, or compressed), and a point this round never scheduled, hide the
-badge. Saying they were not reviewed would contradict the bar. An unrated question never
-shows a `0`, because "not reviewed yet" and "reviewed and forgotten" are different
-information. A failed fetch hides the badge rather than inventing the sentence.
+每道题在题干上方、题型徽标旁边，显示其绑定知识点中**最弱**的本轮评分。只有当该知识点在进度条上仍未完成且尚无 1–4 时，才显示「本轮尚未复习」。进度条已经画成完成（已完成、已排除或已压缩）的知识点，以及本轮从未排期的知识点，会隐藏该徽标。说它们未被复习会与进度条矛盾。未评分题目绝不显示 `0`，因为“尚未复习”和“已复习但遗忘”是不同的信息。获取失败会隐藏徽标，而不是编造该句子。
 
-**Both answering windows show it through one component.** `FreestyleScopeQuizDialog` (the
-toolbar 做题 overlay) and `NodeBoundQuizDialog` (关联题目) are separate dialogs with separate
-data sources, and badging only the first left the second blank — which is exactly what the
-learner reported. The badge lives in `widgets/quiz-round-rating/`:
+**两个答题窗口都通过同一个组件显示它。** `FreestyleScopeQuizDialog`（工具栏做题叠加层）和 `NodeBoundQuizDialog`（关联题目）是拥有独立数据源的独立对话框，只给第一个加徽标会让第二个空白——这正是学习者报告的问题。该徽标位于 `widgets/quiz-round-rating/`：
 
-- `QuizQuestionRoundRatingBadge` — pure presentation.
-- `QuizQuestionRoundRating` — the wired container: it fetches and resolves, so a window
-  cannot derive a score of its own. 关联题目 uses this. 做题 already holds the round's
-  ratings from the overlay payload, so it passes the score straight to the badge.
+- `QuizQuestionRoundRatingBadge` —— 纯展示。
+- `QuizQuestionRoundRating` —— 接线容器：它负责获取和解析，因此窗口无法自行推导评分。关联题目使用它。做题已经从叠加层载荷中持有本轮评分，因此直接把评分传给徽标。
 
-关联题目 renders the badge **only inside a 随心 round** (`roundId` present). Outside one there
-is no round to score against, and claiming 「本轮尚未复习」 about a round that does not exist
-would be worse than showing nothing. It reads the round through
-`GET /freestyle/rounds/{id}/question-ratings`, which is **read-only on purpose**: opening a
-question window must not write the round, or its version would move under the study loop and
-409 the next rating.
+关联题目**只在随心轮次内**渲染徽标（存在 `roundId`）。在轮次之外没有可用于评分的轮次，而对一个不存在的轮次声称「本轮尚未复习」会比什么都不显示更糟。它通过 `GET /freestyle/rounds/{id}/question-ratings` 读取轮次，该接口**有意只读**：打开题目窗口不得写入轮次，否则其版本会在学习循环下方移动，并使下一次评分返回 409。
 
-That endpoint covers **every question bound to the round's palaces**, wider than the default
-做题 pool (unit paths only). Measured on a real round: the palaces hold 235 questions while the
-kind-filtered pool holds 165, so reading a rating off the pool would leave the rest blank even
-when their knowledge points were rated. Both surfaces share one rule through
-`build_round_question_ratings` (`overlay_quiz_service.py`), so 「本轮最低 N」 cannot mean two
-different things depending on which window is open.
+该端点覆盖**绑定到本轮宫殿的每道题**，比默认做题池（仅单元路径）更宽。在一个真实轮次上测得：宫殿拥有 235 道题，而按类型过滤的池拥有 165 道，因此从池读取评分会让其余题目空白，即使其知识点已评分。两个界面通过 `build_round_question_ratings`（`overlay_quiz_service.py`）共享同一条规则，因此「本轮最低 N」不会因打开的是哪个窗口而有两种不同含义。
 
-Resolution chain: `question → bound node_uid → the round's review unit owning that node →
-this round's rating for that unit`. A direct 1–4 still wins. 「本轮尚未复习」 still wins
-when a bound unit is waiting on the bar. Only units in the round's own `review_unit_ids`
-are considered for that direct score, so a node owned elsewhere cannot borrow a rating
-into the queue.
+解析链：`question → bound node_uid → 拥有该节点的本轮复习单元 → 该单元的本轮评分`。直接的 1–4 仍然优先。当绑定单元在进度条上处于等待时，「本轮尚未复习」仍然优先。只有本轮自身 `review_unit_ids` 中的单元才会被考虑用于该直接评分，因此在别处拥有的节点无法把评分借进队列。
 
-When the question has no own 1–4 and is not pending, `overlay_rating_inherit` decides the
-blank case. `blank` hides the badge. `lowest_reviewed` (the default) shows the weakest
-1–4 among ancestor nodes whose own round unit was scored this round. A sibling's score
-does not count. If no ancestor was reviewed, the badge stays hidden. This is display
-only: the question stays on its own isolation unit and is not attached to the ancestor's
-card. The field is not part of `queue_construction_signature` or the overlay scope
-signature, so changing it does not rebuild the card queue or reset 做题 progress.
-Both windows read the same mode: the pack stamps `question_node_ratings` at ensure time,
-and `read_round_question_badge` applies the mode stored on the round (missing means the
-default).
+当题目没有自己的 1–4 且不是待处理时，`overlay_rating_inherit` 决定空白情况。`blank` 隐藏徽标。`lowest_reviewed`（默认）显示祖先节点中自身轮次单元本轮已评分的最弱 1–4。兄弟节点的评分不算数。如果没有祖先被复习，徽标保持隐藏。这仅用于显示：题目仍留在自己的隔离单元上，不会附加到祖先的卡片。该字段不属于 `queue_construction_signature` 或叠加层范围签名，因此更改它不会重建卡片队列，也不会重置做题进度。两个窗口读取同一模式：pack 在 ensure 时盖印 `question_node_ratings`，`read_round_question_badge` 应用存储在轮次上的模式（缺失即默认）。
 
-Ratings are read from `review_unit_encounters` (`list_round_unit_ratings`), **not** from the
-round plan's cached `encounters` map. The cache is not the authority: on a real round it held
-29 entries with only 3 carrying a `rating` field while the encounter table held all 29
-ratings, so trusting it would hide a score the learner had just given, or — under the old
-rule — print 「本轮尚未复习」 for a point already drawn done. Lowest wins when a unit was
-rated more than once. A completion with no score does not invent a 1–4, and it does not
-keep the "not reviewed" sentence once the bar has drawn the card done. The waiting set is
-`waiting_review_unit_ids`: source unfinished, or a live inserted retry of a finished source.
+评分从 `review_unit_encounters`（`list_round_unit_ratings`）读取，**而不是**从轮次计划缓存的 `encounters` 映射读取。缓存不是权威：在一个真实轮次上，它持有 29 个条目，其中只有 3 个带有 `rating` 字段，而 `encounter` 表持有全部 29 个评分，因此信任它会隐藏学习者刚刚给出的评分，或者——在旧规则下——为一个已经画成完成的知识点打印「本轮尚未复习」。当一个单元被多次评分时，最低者获胜。没有评分的完成不会编造 1–4，并且一旦进度条把卡片画成完成，它也不会保留“未复习”这句话。等待集合是 `waiting_review_unit_ids`：源未完成，或已完成源的活跃已插入重练。
 
-Tapping the badge opens 查看宫殿 focused on that knowledge point (the same dialog the card
-toolbar opens), so an unfamiliar question is one tap from its source text. The badge is a
-plain label when there is no palace to point at. It does not affect draw order: 出题顺序
-remains `streams.quiz.quiz_scope` plus the type-order settings.
+点击徽标会打开「查看宫殿」并聚焦到该知识点（卡片工具栏打开的同一对话框），因此不熟悉的题目只需一次点击即可到达其源文本。当没有可指向的宫殿时，徽标是普通标签。它不影响抽取顺序：出题顺序仍由 `streams.quiz.quiz_scope` 加上题型顺序设置决定。
 
-Mark / unmark replaces answer-then-rate. The toggle writes `marked` on the question and does not
-change `schedule_stage`, `schedule_due_on`, palace review units, or the current index. Marked
-numbers on the index rail are rose. Answering still shows right or wrong and the stored analysis.
-Already answered overlay progress stays answered; newly included question ids append as unstarted.
+标记/取消标记替代了先答题后评分。该切换在题目上写入 `marked`，不改变 `schedule_stage`、`schedule_due_on`、宫殿复习单元或当前索引。索引条上的已标记编号为玫瑰色。答题仍显示正确或错误以及存储的解析。已答的叠加层进度保持已答；新纳入的题目 id 作为未开始追加。
 
-Durable progress lives on the round plan as `overlay_quiz` (question ids, index, completed ids,
-runtime states, per-question palace ids, and `parked` out-of-scope progress). PWA reload, app
-restart, and next-day reopen restore answered content and the current index from that plan. The
-SPA `quizSessionProgress` is the shared question 已做. Refresh restores it from
-`quiz_practice_progress` and does not clear it. Toolbar 做题 still re-seeds any missing
-answers from `overlay_quiz` on ensure/hydrate. Starting a new round (`「再来一轮」` →
-config confirm → `/rounds/start`) is an explicit clear: it starts overlay 已做 empty
-and clears the shared 已做. Changing subject or palace scope parks answered questions
-that left the filter instead of deleting them; they return when the palace is in scope again.
-Finishing one palace's ratings does not ask to clear overlay 已做; partial settlement does not ask either.
-The right-side 完成 control still seeks unscored work before opening the closing slot.
-The closing page is the only end-of-round surface: it has exactly two actions,
-「清空做题进度」 and 「结算」. 结算 calls `/rounds/start` with the saved config, which
-completes the active round and mints the next one, so it works whatever the round
-state was (weak scores, pending retries, unanswered units) and cannot dead-end.
-When the new round has no cards the page lands on 今天的学习 instead of an empty stage.
-The page asks once whether to clear overlay 已做 for every review palace
-actually involved in this round, not every palace merely selected in saved configuration. 保留 keeps
-the answered records so 做题 can still be reviewed; 清空 (two presses) calls
-`/overlay-quiz/drop-palaces` with those palace ids and clears the SPA mirror for them.
-The closing page reports what the round earned — units rated, 已通过 / 新学 / 重练,
-palaces cleared today, palace progress — and keeps leftovers on one muted status line.
-Its 按学科看明细 and 下次复习 blocks are collapsed below the two actions so 结算 never
-sits under a long list, and the floating feed pager steps aside on this page.
+持久进度作为 `overlay_quiz` 存在于轮次计划上（题目 id、索引、已完成 id、运行时状态、每题宫殿 id，以及 `parked` 超范围进度）。PWA 重载、应用重启和次日重新打开会从该计划恢复已答内容和当前索引。SPA 的 `quizSessionProgress` 是共享的题目已做。刷新会从 `quiz_practice_progress` 恢复它，且不会清除它。工具栏「做题」仍会在 ensure/hydrate 时从 `overlay_quiz` 重新播种任何缺失答案。开始新轮次（`「再来一轮」` → 配置确认 → `/rounds/start`）是显式清除：它让叠加层已做从空开始，并清除共享已做。更改学科或宫殿范围会把离开过滤器的已答题目停泊而不是删除；当宫殿重新回到范围内时它们会恢复。完成一个宫殿的评分不会询问是否清除叠加层已做；部分结算也不会询问。右侧「完成」控件仍会在打开收尾槽位之前查找未评分工作。收尾页是唯一的轮次结束界面：它恰好有两个操作，「清空做题进度」和「结算」。「结算」用已保存配置调用 `/rounds/start`，完成活动轮次并铸造下一轮，因此无论轮次状态如何（薄弱评分、待处理重练、未答单元）都能工作，不会走进死胡同。当新轮次没有卡片时，页面落在「今天的学习」而不是空舞台。页面会询问一次，是否为本轮实际涉及的每个复习宫殿清除叠加层已做，而不是已保存配置中仅仅选中的每个宫殿。「保留」保留已答记录，以便做题仍可复习；「清空」（两次按压）用这些宫殿 id 调用 `/overlay-quiz/drop-palaces`，并清除它们的 SPA 镜像。收尾页报告本轮获得了什么——已评分单元、已通过/新学/重练、今日清空的宫殿、宫殿进度——并把剩余内容放在一条弱化状态行上。它的「按学科看明细」和「下次复习」块折叠在两个操作下方，因此「结算」永远不会位于长列表之下，并且浮动信息流翻页器在此页面让位。
 
-Settlement time is round-scoped and survives a restart or the next day. It is the time spent on the progress-bar queue: looking at a card, flipping, and recalling, including a leave of about three minutes. A longer absence is not backfilled. A visible window counts even when the page focus flag is false; the desktop shell reports its own window focus so a real switch away can stop after that grace. An empty round clock must not wipe the queue's card time. 「本次随心」 is unit dwell plus 做题 plus 查看宫殿. Looking at a card, flipping its nodes, and reading the back are unit dwell; flip is not added again. 「做题时间」 is only the quiz overlay, whether it was opened from the card corner badge or the toolbar. 查看宫殿 while a quiz is open stays in the round total and out of 做题时间. Seconds live on the round plan as `learning_time`. The first open of a round copies dwell segments since that round was created, then the page clock adds only later seconds so the same interval is not counted twice. Durations of at least one hour render as `H:MM:SS`; shorter times stay `M:SS`.
+结算时间是轮次范围的，能挺过重启或次日。它是花在进度条队列上的时间：看卡片、翻卡和回忆，包括约三分钟的离开。更长的缺席不会补算。即使页面焦点标志为 false，可见窗口也计入；桌面外壳报告自己的窗口焦点，因此真正切走可以在该宽限期后停止计时。空的轮次时钟不得抹掉队列的卡片时间。「本次随心」是单元停留时间加上做题加上查看宫殿。看卡片、翻动其节点和阅读背面都是单元停留；翻卡不会再次累加。「做题时间」只是做题叠加层，无论是从卡片角标还是工具栏打开。做题打开期间查看宫殿会计入轮次总计，但不计入做题时间。秒数作为 `learning_time` 存在于轮次计划上。轮次首次打开会复制自该轮次创建以来的停留分段，随后页面时钟只累加之后的秒数，使同一区间不会被重复计数。至少一小时的时长渲染为 `H:MM:SS`；更短的时间保持 `M:SS`。
 
-Leaving the settlement slot cancels that visit and does not end the round. The card’s 「返回上一张」 returns to the previous card. A round that was settled by 完成 has no cards left, so that cancel action is not rendered. The learning clock pauses on every settlement surface: the closing slot and partial settlement. After leaving those surfaces, later card dwell and 做题 still accumulate on the same `learning_time`.
+离开结算槽位会取消该次访问，但不会结束轮次。卡片的「返回上一张」返回上一张卡片。由「完成」结算的轮次没有剩余卡片，因此不会渲染该取消操作。学习时钟在每个结算界面暂停：收尾槽位和部分结算。离开这些界面后，之后的卡片停留和做题仍会累加到同一个 `learning_time`。
 
-The summary separates 本轮累计 from 本轮今日. The backend projects today's union of recorded intervals against the product timezone's calendar boundaries at read time, without a second persisted counter. The frontend adds only uncovered pending/in-flight/current intervals and refreshes the server date window at the study-day rollover (03:00 local). Historical scalar time without dated evidence stays in the round total and is explicitly labelled as unattributed; it must not be silently assigned to today. Stored round interval history is not truncated to the per-request upload batch limit.
+摘要把「本轮累计」与「本轮今日」分开。后端在读取时按产品时区的日历边界投影今天的已记录区间并集，而不使用第二个持久化计数器。前端只添加未覆盖的待处理/进行中/当前区间，并在学习日翻转（本地 03:00）时刷新服务器日期窗口。没有带日期证据的历史标量时间留在轮次总计中，并明确标记为未归属；它不得被静默分配给今天。已存储的轮次区间历史不会截断到每次请求的上传批次限制。

@@ -1,268 +1,109 @@
-# Review Unit Boundary
+# 复习单元边界
 
-Reviews owns the only scheduling state for palace mind maps. The scheduling atom is a permanent-mark isolation unit, never an individual node.
+Reviews 拥有宫殿脑图唯一的排期状态。排期原子是永久标记隔离单元，绝不是单个节点。
 
-## Ownership
+## 归属
 
 ```text
 mindmap_document -> projects editor documents and permanent-mark topology
-reviews projection -> reconciles unit identity, membership, revision, and due projections
-reviews session    -> owns encounters, ratings, amendments, close locking, and undo
+memory projection  -> reconciles unit identity, membership, revision, and due projections
+memory session     -> owns encounters, ratings, amendments, close locking, and undo
 content          -> saves palace documents; may save editor_doc without schedule reconcile
-practice         -> consumes reviews.api unit projections and the shared rating command
+practice         -> consumes memory.api unit projections and the shared rating command
 ```
 
-`GET /api/v1/review/subject-ladder` is a read-only map of active units onto ten display bands of real interval days (`0, 1, 3, 7, 14, 30, 60, 120, 240, 365` lower bounds; the first band is 首学). It does not reconcile, write due dates, or invent a second scheduler. A palace is listed in every band where it already has an active unit; the shown review time is the earliest due date among those units. The shelf shows only the shape, and the subject palace list and progress page can scrub a band and open the existing palace review or a one-round freestyle lock for exactly those palaces. The band is a grouping of FSRS intervals, never a scheduling position.
+`GET /api/v1/review/subject-ladder` 是一张只读映射，把活跃单元映射到十个真实间隔天数的显示档位（下界为 `0, 1, 3, 7, 14, 30, 60, 120, 240, 365`；第一档是首学）。它不对账、不写到期日，也不发明第二套调度器。宫殿会出现在它已经拥有活跃单元的每一档中；显示的复习时间是这些单元中最早的到期日。复习书架只展示分布形态，学科宫殿列表和进度页可以拖动某一档，并为恰好这些宫殿打开现有的宫殿复习或一次单轮随心锁定。档位是 FSRS 间隔的分组，绝不是排期位置。
 
-The mind-map toolbar strip (`GET /api/v1/review/palaces/{id}/ladder-progress`) shows a
-**due-date distribution** — 今天 / 3天内 / 本周 / 本月 / 更远 — plus the current unit's booked
-gap ("间隔 7天", or "今天到期"). It is not a ladder position: `stage_histogram` stays in the
-payload for compatibility, but the strip no longer draws it. A zero gap means the product booked
-the unit today (first learning, a failed grade, or a retry), not that it has no history.
+脑图工具栏条带（`GET /api/v1/review/palaces/{id}/ladder-progress`）显示**到期日分布**——今天 / 3天内 / 本周 / 本月 / 更远——加上当前单元已预订的间隔（“间隔 7天”，或“今天到期”）。它不是阶梯位置：`stage_histogram` 为兼容性保留在载荷中，但条带不再绘制它。零间隔意味着产品把该单元预订到了今天（首次学习、评分失败或重练），而不是它没有历史。
 
-The review scheduling and encounter API remains owned by `memory` and is consumed by
-freestyle cards. The frontend review UI lives in `apps/web/src/modules/practice/ui/freestyle`.
-The palace shelf opens `/palaces/<id>/review`, which reuses that UI for one palace and keeps a
-separate round from `/freestyle`. Content and mix settings stay. `/freestyle-2` is only a redirect
-to `/freestyle`; the retired standalone `/review` page, session page, completion page, and
-feedback-preview route must not return.
+复习排期与 encounter API 仍归 `memory` 所有，并由随心卡片消费。前端复习 UI 位于 `apps/web/src/modules/practice/ui/freestyle`。宫殿复习书架打开 `/palaces/<id>/review`，该页面针对单个宫殿复用这套 UI，并与 `/freestyle` 保持独立的轮次。内容与混合设置保留。`/freestyle-2` 只是到 `/freestyle` 的重定向；已退役的独立 `/review` 页面、会话页、完成页和反馈预览路由不得回归。
 
-Reviews must not import Practice. Practice must not create a second schedule, copy unit progress, or reinterpret permanent marks. Editing must not block on schedule arrangement.
+Reviews 不得导入 Practice。Practice 不得创建第二套排期、复制单元进度或重新解释永久标记。编辑不得因排期安排而阻塞。
 
-The freestyle quiz overlay records wrong unit identities on the active round plan using quiz bindings and review-unit membership. Its optional wrong-palace priority changes only the remaining round order, never review schedules. A new round starts without these marks; clearing quiz answers does not erase them.
+随心的测验叠加层利用测验绑定和复习单元成员关系，在当前活跃的轮次计划上记录错误单元身份。其可选的错误宫殿优先只改变剩余轮次顺序，绝不改变复习排期。新轮次开始时没有这些标记；清除测验答案不会抹掉它们。
 
-## Topology Invariants
+## 拓扑不变量
 
-- A palace with no permanent mark has no review units and is excluded from formal, Today, and freestyle review queues.
-- Water flows from the root through unmarked nodes. A permanent mark starts an isolated downstream unit; a deeper mark cuts another unit from it.
-- Nodes outside marked regions form one residual root-flow unit.
-- Marking the root means the whole palace is one unit until deeper marks cut regions from it.
-- Isolation units still partition every non-root node: each belongs to exactly one palace, mark, or residual unit.
-- Each permanent mark is its own unit, and no node is reviewed under two units. Sibling marks never share a unit: under A with marked B1 and B2 and unmarked B3, the units are A→B1 with its subtree, A→B2 with its subtree, and the residual A→B3 with its subtree.
-- Unit order is depth-first: each marked child's isolation unit comes before that child's own walk. The root isolation unit stays first when the root itself is marked. The residual unit stays last. `unit_order: structured` keeps that order inside the palace — the due date never moves a unit ahead of an earlier chapter — and `random` shuffles it. 新学优先 still hoists never-passed units above review units; the structure order holds inside each of those two groups.
-- A new or resized unit inherits the earliest due date among units whose current membership overlaps it, including itself, and with it the legacy projection that names that interval. It does not start a separate scheduling rule. Its FSRS card is seeded from that inherited position on the first rating, so a mature region never falls back to a one-day interval. Content edits preserve each containing unit's due date and FSRS state; only a real rating changes its memory assessment.
-- The retired `cohort` kind (migration 0071) is deactivated, not deleted, and its earned progress does not transfer. Each remaining unit keeps only its own due date and FSRS state.
-- Progress carries over any permanent-mark change; a mark edit never restarts a unit at first-learning. Inheritance candidates include inactive rows, because deleting the final mark only deactivates unit rows and leaves their earned due date and FSRS state stored. A region with no live owner (every mark removed, then re-added) reactivates its original row, keeping unit id and rating history; a region still covered by active units mints a fresh row and inherits by node overlap.
-- Identity for inheritance is membership, not `(anchor_uid, unit_kind)`: moving a mark one level down is the same studied region under a new anchor, and the learner's earned interval follows the content.
-- Retired rows stop speaking for a live region. Once any active unit overlaps the same members, inactive rows are excluded from the inheritance vote, so a superseded unit holding a stale earlier date cannot drag its successor down.
-- Mark edits do not move a due date. An inherited unit keeps its original due date and FSRS position; re-marking after a long gap makes the card due immediately rather than silently rebooking it.
-- Freestyle 「更新队列」 replans the open round from the latest due projection after marks, content, or due dates change. Already-rated cards stay, unrated cards are added or dropped, and the card under the viewport stays when it still exists. It does not adopt the other computer's scores or mint a new `round_id`; that other-computer adopt remains 「同步进度」. A palace-editor visit is remembered even if the learner passes through the shelf before returning. The return update runs only after that editor's leave reconcile settles, and it does not run while the current card is still being edited.
-- Permanent mark / membership changes reconcile at an edit-session boundary, not on every content save. Freestyle inline edit uses one same-document `editor_leave` after the edited card becomes inactive or unmounts; it never reconciles or rebuilds the queue while that card remains active. Other editor hosts may still use finished-mark, idle, or explicit return boundaries. Unchanged membership keeps its plan; split units inherit source progress; merges use the earliest due date among candidates.
-- Deleting the final mark deactivates every unit without deleting earned progress. Re-adding marks inherits retained membership progress; first learning applies only where no prior region or ancestor progress can be inherited.
-- New content inherits its nearest ancestor's isolation branch progress, walking upward if necessary; visual proximity and layout order never choose its schedule. New marks/splits inherit their original region. Merges take the earliest candidate due date from a frozen pre-reconcile snapshot so iteration order cannot change the result.
+- 没有永久标记的宫殿没有复习单元，会被排除在正式、今日和随心复习队列之外。
+- 水流从根节点穿过未标记节点。永久标记会开启一个隔离的下游单元；更深的标记会从中切出另一个单元。
+- 标记区域之外的节点构成一个残余的根流单元。
+- 标记根节点意味着整个宫殿是一个单元，直到更深的标记从中切出区域。
+- 隔离单元仍然划分每个非根节点：每个节点恰好属于一个宫殿、标记或残余单元。
+- 每个永久标记都是自己的单元，没有节点会在两个单元下被复习。同级标记从不共享单元：在 A 之下，B1、B2 被标记而 B3 未标记时，单元为 A→B1 及其子树、A→B2 及其子树，以及残余的 A→B3 及其子树。
+- 单元顺序是深度优先：每个被标记子节点的隔离单元排在该子节点自身遍历之前。当根节点本身被标记时，根隔离单元保持最前。残余单元保持最后。`unit_order: structured` 在宫殿内部保持这一顺序——到期日绝不会把某个单元移到更早章节之前——而 `random` 会将其打乱。新学优先仍会把从未通过的单元提升到复习单元之上；结构顺序在这两组内部各自保持。
+- 新建或调整大小的单元会继承当前成员与其重叠（包括自身）的单元中最早的到期日，并连同命名该间隔的旧版投影一起继承。它不会启动单独的排期规则。其 FSRS 卡片在首次评分时从继承来的位置播种，因此成熟区域绝不会回落到一天间隔。内容编辑保留每个所属单元的到期日和 FSRS 状态；只有真实评分才会改变其记忆评估。
+- 已退役的 `cohort` 类型（迁移 0071）被停用而非删除，其已获得的进度不会转移。每个保留的单元只保留自己的到期日和 FSRS 状态。
+- 进度会跨任何永久标记变更延续；标记编辑绝不会让单元重新从首次学习开始。继承候选包含非活跃行，因为删除最后一个标记只会停用单元行，并保留其已获得的到期日和 FSRS 状态。没有活跃所有者的区域（所有标记移除后重新添加）会重新激活其原始行，保留单元 id 和评分历史；仍被活跃单元覆盖的区域会新建一行，并按节点重叠继承。
+- 继承的身份依据是成员关系，而不是 `(anchor_uid, unit_kind)`：把标记下移一层，只是同一已学区域换了一个新锚点，学习者已获得的间隔会跟随内容。
+- 退役的行不再为活跃区域发声。一旦任何活跃单元与相同成员重叠，非活跃行就会被排除在继承投票之外，因此持有陈旧更早日期、已被取代的单元无法把它的后继拉低。
+- 标记编辑不会移动到期日。继承的单元保留其原到期日和 FSRS 位置；长时间间隔后重新标记会让卡片立即到期，而不是悄悄重新预订。
+- 随心的「更新队列」会在标记、内容或到期日变化后，根据最新的到期投影重新规划打开的轮次。已评分的卡片保留，未评分的卡片被加入或移除，视口下的卡片在仍然存在时保持不动。它不会采纳另一台电脑的评分，也不会生成新的 `round_id`；采纳另一台电脑的进度仍然是「同步进度」。即使学习者返回前经过复习书架，宫殿编辑器访问也会被记住。返回时的更新只在该编辑器的离开对账落定之后运行，且当前卡片仍在编辑时不会运行。
+- 永久标记/成员关系变更在编辑会话边界对账，而不是每次保存内容都进行。随心内联编辑在被编辑的卡片变为非活跃或卸载后，使用一次同文档的 `editor_leave`；当该卡片仍然活跃时，它绝不进行对账或重建队列。其他编辑器宿主仍可使用完成标记、空闲或显式返回边界。成员关系未变则保留其计划；拆分单元继承源进度；合并使用候选中最早的到期日。
+- 删除最后一个标记会停用每个单元，但不删除已获得的进度。重新添加标记会继承保留的成员进度；只有在无法继承先前区域或祖先进度的地方才适用首次学习。
+- 新内容继承其最近祖先的隔离分支进度，必要时向上行走；视觉邻近和布局顺序绝不决定其排期。新标记/拆分继承其原始区域。合并从冻结的对账前快照中取最早的候选到期日，因此迭代顺序不会改变结果。
 
-## Content Save vs Schedule Reconcile
+## 内容保存与排期对账
 
-- Content autosave may persist `editor_doc` without reconciling schedule — including mid-pass permanent-mark toggles. Document save and schedule arrangement are separate write paths; the editor must not wait on unit due/interval updates between continuous mark clicks.
-- Complete freestyle edit actions save immediately through one serialized, latest-wins request chain; there is no debounce. Freestyle sends reconcile only through same-document `editor_leave` after the active card leaves the editing session. Other hosts may run one batch on finished mark pass (`mark_change`), idle, return-to-review, or explicit `reconcile_units`. A boundary save must still run when the document was already autosaved (same-doc short-circuit). Keep-alive navigation is leave.
-- Content-only edits update affected unit content/revision at leave / idle / explicit reconcile without changing due date, memory state, or learned history. A content update is not a learning failure.
-- Freestyle return-to-review is local-first: the card adopts the local document and switches to review before HTTP, without a reconcile request. Save failures stay non-blocking in review with local content and an explicit retry. A stale 409 refreshes the revision token once and retries the local document automatically.
-- Reconcile returns unit-level before/after changes (identity, membership, revision, due date and its interval projection). Content changes report `content_updated` and create no schedule-demotion batch.
-- Manual schedule adjust and undo of historical content-demote batches remain Reviews write commands. Content must not invent a parallel schedule-write API.
+- 内容自动保存可以持久化 `editor_doc` 而不对账排期——包括一轮标记切换过程中的保存。文档保存与排期安排是分开的写入路径；编辑器在连续点击标记之间不得等待单元到期/间隔更新。
+- 完整的随心编辑操作通过一条串行、最后写入者胜出的请求链立即保存；没有防抖。随心只在活跃卡片离开编辑会话后，通过同文档的 `editor_leave` 发送对账。其他宿主可以在一轮标记完成（`mark_change`）、空闲、返回复习或显式 `reconcile_units` 时运行一次批处理。即使文档已经自动保存（同文档短路），边界保存仍必须运行。保活导航即离开。
+- 仅内容编辑会在离开/空闲/显式对账时更新受影响单元的内容/修订，但不改变到期日、记忆状态或学习历史。内容更新不是学习失败。
+- 随心返回复习是本地优先：卡片先采纳本地文档并切换到复习，然后才发 HTTP，且不发送对账请求。保存失败在复习中保持非阻塞，使用本地内容并提供显式重试。过期的 409 会刷新修订令牌一次，并自动重试本地文档。
+- 对账返回单元级的前后变更（身份、成员关系、修订、到期日及其间隔投影）。内容变更报告 `content_updated`，且不创建排期降级批次。
+- 手动调整排期和撤销历史内容降级批次仍然是 Reviews 的写命令。Content 不得发明并行的排期写入 API。
 
-## Scheduling Invariants
+## 排期不变量
 
-### The due set is one whole
+### 到期集合是一个整体
 
-- A study day's due set is never batched. Every active unit in scope with `due_date <= 学习日`
-  enters the queue and the round plan together: `list_trusted_due_units_for_queue` filters by date
-  only, `build_freestyle_queue` returns the whole remaining list, and no step holds cards back to
-  release them later in the day. There is no daily review quota, no backlog release, and no
-  per-round slice; a "first 8 cards" `study_window` is a first-paint prefix of the same order, not
-  an admission rule, and the HUD denominator already counts the whole set.
-- A due card can be absent only because this round records it as handled (completed, compressed,
-  excluded, or permanently removed). A card that becomes due again on a later study day is reopened
-  by the day-advance rebuild (`_reopen_due_again`), matched by unit identity — not card id. A round
-  that has become fully handled freezes until the next round (closing settlement), so a unit that
-  falls due later the same day waits for that round: a round-end rule, not a batching rule.
-- Ordering (新学优先, 按知识结构) decides position, never admission. 新学优先 is a fixed product
-  rule, re-confirmed on 2026-10-23: every never-passed unit in scope comes before every due review,
-  and `sanitize_feed_config` ignores any stored `new_placement` instead of honouring it. Do not
-  "balance" the two pools; the HUD and the round plan still hold both. New learning is a separate
-  pool: 「今日新学已完成」 fires when the round has no unpassed new unit left and never gates due
-  reviews.
+- 一个学习日的到期集合从不分批。作用域内所有 `due_date <= 学习日` 的活跃单元一起进入队列和轮次计划：`list_trusted_due_units_for_queue` 只按日期过滤，`build_freestyle_queue` 返回整个剩余列表，没有任何步骤会扣住卡片留到当天晚些时候再放出。没有每日复习配额，没有积压释放，也没有按轮切片；“前 8 张卡”的 `study_window` 是同一顺序的首屏前缀，不是准入规则，HUD 分母已经统计整个集合。
+- 到期卡片缺席的唯一原因，是本轮已将其记录为已处理（完成、压缩、排除或永久移除）。在后续学习日再次到期的卡片，由日期推进重建（`_reopen_due_again`）重新打开，按单元身份而非卡片 id 匹配。已经全部处理完的轮次会冻结到下一轮（结束结算），因此当天晚些时候到期的单元要等下一轮：这是轮次结束规则，不是分批规则。
+- 排序（新学优先、按知识结构）决定位置，绝不决定准入。新学优先是固定的产品规则，于 2026-10-23 再次确认：作用域内每个从未通过的单元都排在任何到期的复习之前，`sanitize_feed_config` 会忽略任何已存储的 `new_placement` 而不是遵从它。不要“平衡”这两个池；HUD 和轮次计划仍然同时包含两者。新学是独立的池：「今日新学已完成」在本轮没有剩余未通过的新单元时触发，且绝不门控到期复习。
 
-- FSRS owns each unit's interval once its anchor phase ends. Each unit owns one card in
-  `review_unit_states`
-  (`fsrs_stability`, `fsrs_difficulty`, `fsrs_state`, `fsrs_step`, `fsrs_due_at`,
-  `fsrs_last_review`, and the `fsrs_scheduler_version` that wrote them). A pass
-  books the interval FSRS computes for that card at a 90% target retention
-  (`desired_retention=0.9`), capped at 365 days, plus the product's stable
-  per-unit 5% spread. A never-reviewed card starts empty and is due immediately.
-- A new card has exactly two product-fixed checkpoints (the anchor phase):
-  a 20-minute same-day re-check (`unit_intraday.STEP_DELAY`) and the overnight
-  check on day 2. The persisted `early_step` counter is `0` while the card is
-  anchored and `1` once the overnight check passed; a row written before the
-  counter existed is inferred once from its booked gap (the retired 0..3
-  four-step counter maps `>=1` to graduated). Outcomes at the overnight check:
-  `记得` books +3 days and graduates, `轻松` books +5 days and graduates,
-  `困难` books +1 day and stays anchored for one more overnight, `忘记` retries
-  today and re-runs the check. `轻松` on the first pass skips both checkpoints and
-  books +3 days. A retry that finally passes books tomorrow directly; the
-  overnight check is its confirmation, so no second same-day re-check is
-  stacked on top.
-- Once FSRS owns the interval, three guardrails keep it honest. `困难` is a pass
-  that may never lengthen: the booked gap is clamped to `0.8p..p` of the
-  previous gap (`p` = the gap the learner actually saw). `记得` and `轻松` are
-  capped below ten days at 2.5x and 3.5x respectively; from ten days up the cap
-  is lifted and FSRS decides alone (a shorter FSRS answer is never lengthened).
-  A mature lapse keeps the pre-lapse gap and restores 25% / 30% / 35% of it on the
-  first pass after the lapse day, clearing the state (`lapse_original_interval_days`,
-  `lapse_started_on`).
-- `stage_index` is a compatibility projection of the real interval
-  (`stage_for_interval` = nearest lower legacy bound of
-  `0, 1, 3, 7, 14, 30, 60, 120, 240, 365`). It is written for old clients and
-  stored snapshots; nothing schedules from it. The UI shows each unit's real
-  interval ("约 43 天后") and groups units into day-range bands, never levels.
-- FSRS' own learning steps stay empty (`LEARNING_STEPS = ()`): the product's
-  same-day ladder (`unit_intraday.py`) owns sub-day spacing, so the library's
-  minute steps would only disagree with it. The ladder is wall-clock, not a card
-  count, so a short session cannot re-serve a card immediately and a long one
-  cannot leave it for hours.
-- Only `忘记` (Again) fails. It keeps the unit due today and waits 10 minutes,
-  then 1 hour, then 3 hours ("today's last"); a unit gets at most three retries
-  and the next failure books tomorrow. `记得` (Good), `轻松` (Easy) and `困难`
-  (Hard) all pass — 困难 books a shorter interval rather than re-serving the card.
-- A first-ever pass books one short re-check (20 minutes) instead of tomorrow;
-  the re-check passing books the overnight check on day 2. A mature normal pass
-  books the FSRS interval (at least one day). An ahead-of-date filler pass
-  records without moving either.
-- A waiting unit is still due today but is not servable: the queue and the
-  palace batch exclude it (`intraday_due_at > now`), and the round plan keeps
-  its occurrence `pending` with `available_at`. Serving publishes it once the
-  wait has passed; the round payload reports `waiting` (count + earliest ready
-  time) so a round is never reported finished while work is owed. Manual
-  early rating is allowed and counts; only the queue is time-gated.
-- `hard_penalized_on` is retired: `困难` is a pass and always fed to FSRS. Its
-  column stays for old rows and snapshots but is no longer written.
-- A unit reviewed ahead of its booked due date (freestyle fill cards) records a
-  passing grade without moving the schedule; that pass is not fed to FSRS, so a
-  filler review cannot inflate a later interval. `忘记` is still recorded and
-  still retries today, because a lapse is honest evidence. Preview and commit
-  share this `schedule_locked` rule.
-- The palace editor's 单元评分 page and its mark-chip summary are readers plus the same
-  rating command: a due unit starts a one-unit `freestyle_unit_review` session with a
-  synthetic `round_id`/`encounter_id`, then `rate_review_unit`. No second rating writer
-  exists, and a not-yet-due unit is not rated there — its due date moves through
-  `adjust_unit_schedule` instead, which is still a due-date-only write (no FSRS evidence,
-  `revision += 1`, active sessions invalidated). The shared review-level bar snaps to the
-  ten `INTERVAL_DAYS` bands and commits `stage_index` (plus `has_passed` = level > 0), so a
-  manual move never pretends a review happened.
-- One encounter has one effective rating. Before leaving, another rating
-  atomically replaces it from the frozen pre-encounter baseline — which includes
-  the FSRS payload — so the replaced choice has no scheduling effect. A
-  pre-switch snapshot without an FSRS payload clears the columns and lets the
-  replay rebuild the card instead of leaving the undone operation's state behind.
-- A `忘记` encounter needs no separate carry-over: FSRS already has that failure
-  on the card, so the later pass simply rates the penalized card. The guardrails
-  (`困难` band, young-card cap, lapse recovery) are applied to the booked gap,
-  not to FSRS' raw answer.
-- Rating requires `study_session_id`, `unit_id`, `unit_revision`, `encounter_id`, stable `operation_id`, and `rating`. The operation is idempotent and supports LIFO single-step undo while the encounter remains open.
-- A later real attempt freezes every earlier one. `_has_later_attempt` decides two things at once: the rating write and undo raise `LaterAttemptExistsError` (HTTP 400 `superseded_attempt`, a terminal code for the client), while the glance itself still opens. `start_freestyle_unit_review_session` no longer asserts here — the feed keeps answered cards so swipe-back can read them, and the map only renders from a session start — and `get_unit_review_session` reports `rating_editable: false`, checked on the amend glance's `amend_source_id` too, because a glance minted seconds ago has no later attempt of its own. A 400 at glance-open left the card blank and its tap stuck on 未保存.
-- Freestyle may rate a palace's remaining due units in one Reviews command (`rate_palace_due_units`). That command still writes one unit rating per member. It is not a palace-level schedule, not a node rating, and not the retired subtree/bulk-fill path. Already-rated units in the current round are left alone unless they are the open current encounter (which may amend). Sibling units close at zero observed seconds. Undo of the current open encounter undoes the whole batch.
-- Due dates are local study-day dates. A study day starts at 03:00 local time (`MEMORY_ANKI_DAY_START_HOUR`, default `3`), not midnight, so work done at 00:30 still belongs to the evening that just ended. Presentation converts a study day to its 03:00 local boundary only at API boundaries.
-- Sprint mode bounds the booked date without touching the memory state:
-  `rate_unit(horizon=...)` calls `SprintHorizon.schedule(interval, seed=<unit id>)`, which books a
-  fitting gap unchanged, pulls an overshooting one into the last week before the exam (spread per
-  unit), and books normally when no room is left. The horizon is resolved once per request and
-  cached on `session.info`, so a preview and the commit it precedes can never disagree. The booked
-  date is what the UI shows ("约 N 天后") — a shortened sprint interval is the real booking, not a
-  hidden override. Failed grades still retry today. A locked ahead-of-date card keeps its booked
-  date; only `clamp_due_dates_for_sprint` moves it.
-- Content and mark editing do not independently penalize scheduling. Existing content keeps its
-  due date and FSRS state; splits, new content and merges follow the topology inheritance rules
-  above.
+- 一旦单元的定锚期结束，FSRS 就拥有其间隔。每个单元在 `review_unit_states` 中拥有一张卡片（`fsrs_stability`、`fsrs_difficulty`、`fsrs_state`、`fsrs_step`、`fsrs_due_at`、`fsrs_last_review`，以及写入它们的 `fsrs_scheduler_version`）。一次通过会按该卡片以 90% 目标留存率（`desired_retention=0.9`）计算出的间隔来预订，上限 365 天，再加上产品稳定的每单元 5% 散布。从未复习过的卡片从空开始并立即到期。
+- 新卡片恰好有两个产品固定的检查点（定锚期）：当天 20 分钟复查（`unit_intraday.STEP_DELAY`）和第 2 天的隔夜检查。卡片处于定锚期时持久化的 `early_step` 计数器为 `0`，隔夜检查通过后为 `1`；在计数器存在之前写入的行会根据其预订间隔推断一次（已退役的 0..3 四步计数器把 `>=1` 映射为已毕业）。隔夜检查的结果：`记得` 预订 +3 天并毕业，`轻松` 预订 +5 天并毕业，`困难` 预订 +1 天并再定锚一个隔夜，`忘记` 当天重练并重新运行检查。首次通过时的 `轻松` 跳过两个检查点并预订 +3 天。最终通过的重练直接预订明天；隔夜检查就是它的确认，因此不会再叠加第二次当天复查。
+- 一旦 FSRS 拥有间隔，三道护栏会让它保持诚实。`困难` 是通过，但绝不能延长：预订间隔被夹在上一间隔的 `0.8p..p`（`p` = 学习者实际看到的间隔）。`记得` 和 `轻松` 在十天以下分别以 2.5 倍和 3.5 倍为上限；从十天起上限取消，由 FSRS 独自决定（FSRS 给出的更短答案绝不会被拉长）。成熟遗忘会保留遗忘前的间隔，并在遗忘日之后的首次通过时恢复其中的 25% / 30% / 35%，同时清除该状态（`lapse_original_interval_days`、`lapse_started_on`）。
+- `stage_index` 是真实间隔的兼容性投影（`stage_for_interval` = `0, 1, 3, 7, 14, 30, 60, 120, 240, 365` 中最近的更低旧版边界）。它为旧客户端和存储的快照而写入；没有任何调度依赖它。UI 显示每个单元的真实间隔（“约 43 天后”），并把单元分组到天数区间档位，绝不是等级。
+- FSRS 自己的学习步骤保持为空（`LEARNING_STEPS = ()`）：产品的当天阶梯（`unit_intraday.py`）负责亚日级间隔，因此库的分钟级步骤只会与之冲突。阶梯按墙钟时间而非卡片数量，所以短会话无法立即重新发放一张卡片，长会话也不会把它搁置数小时。
+- 只有 `忘记`（Again）失败。它让单元当天到期，并依次等待 10 分钟、1 小时、3 小时（“今日最后一次”）；一个单元最多重试三次，下一次失败则预订明天。`记得`（Good）、`轻松`（Easy）和 `困难`（Hard）都算通过——困难会预订更短间隔，而不是重新发放卡片。
+- 首次通过预订一次短复查（20 分钟）而不是明天；复查通过后预订第 2 天的隔夜检查。成熟单元的正常通过预订 FSRS 间隔（至少一天）。日期未到的填充通过只做记录，到期日和 FSRS 状态都不移动。
+- 等待中的单元当天仍然到期，但不可发放：队列和宫殿批处理会排除它（`intraday_due_at > now`），轮次计划则让其 occurrence 保持 `pending` 并带有 `available_at`。等待结束后发放会将其发布；轮次载荷报告 `waiting`（数量 + 最早就绪时间），因此只要还有欠下的工作，轮次就绝不会被报告为完成。允许手动提前评分且计分；只有队列受时间门控。
+- `hard_penalized_on` 已退役：`困难` 是通过，并且始终喂给 FSRS。其列仍为旧行和快照保留，但不再写入。
+- 在预订到期日之前被复习的单元（随心填充卡片）会记录一次通过评分，但不移动排期；该通过不会喂给 FSRS，因此填充复习不会抬高后续间隔。`忘记` 仍会被记录，并且当天仍会重练，因为遗忘是诚实的证据。预览和提交共享这条 `schedule_locked` 规则。
+- 宫殿编辑器的“单元评分”页面及其标记芯片摘要都是读取器加上同一个评分命令：到期单元会启动一个单单元的 `freestyle_unit_review` 会话，带有合成的 `round_id`/`encounter_id`，然后调用 `rate_review_unit`。不存在第二个评分写入器，尚未到期的单元不会在那里评分——它的到期日改为通过 `adjust_unit_schedule` 移动，这仍然只是到期日写入（没有 FSRS 证据，`revision += 1`，活跃会话失效）。共享的复习等级条会吸附到十个 `INTERVAL_DAYS` 档位并提交 `stage_index`（加上 `has_passed` = 等级 > 0），因此手动移动绝不会假装发生过一次复习。
+- 一个 encounter 只有一个生效评分。离开之前，另一次评分会从冻结的 encounter 前基线（包含 FSRS 载荷）原子地替换它，因此被替换的选择不产生排期影响。没有 FSRS 载荷的切换前快照会清空这些列，并让重放重建卡片，而不是留下已撤销操作的状态。
+- `忘记` encounter 不需要单独的结转：FSRS 已经在卡片上记下了那次失败，所以之后的通过只需对已受惩罚的卡片评分。护栏（`困难` 区间、年轻卡片上限、遗忘恢复）作用于预订间隔，而不是 FSRS 的原始答案。
+- 评分要求 `study_session_id`、`unit_id`、`unit_revision`、`encounter_id`、稳定的 `operation_id` 和 `rating`。该操作是幂等的，并在 encounter 保持打开时支持 LIFO 单步撤销。
+- 后续的真实尝试会冻结所有更早的尝试。`_has_later_attempt` 同时决定两件事：评分写入和撤销会抛出 `LaterAttemptExistsError`（HTTP 400 `superseded_attempt`，对客户端而言是终止性代码），而 glance 本身仍会打开。`start_freestyle_unit_review_session` 不再在此断言——信息流会保留已作答的卡片，以便滑回时读取，而脑图只从会话开始渲染——并且 `get_unit_review_session` 报告 `rating_editable: false`，在修改 glance 的 `amend_source_id` 上也会检查，因为几秒前刚创建的 glance 没有自己的后续尝试。glance 打开时出现 400 会让卡片空白，其点击卡在“未保存”。
+- 随心可以通过一个 Reviews 命令（`rate_palace_due_units`）为一个宫殿剩余的到期单元评分。该命令仍然为每个成员写入一条单元评分。它不是宫殿级排期，不是节点评分，也不是已退役的子树/批量填充路径。当前轮次中已评分的单元保持不动，除非它们是当前打开的 encounter（可以修改）。同级单元以零观察秒数关闭。对当前打开 encounter 的撤销会撤销整个批次。
+- 到期日是本地学习日日期。学习日从本地时间 03:00 开始（`MEMORY_ANKI_DAY_START_HOUR`，默认 `3`），而不是午夜，因此 00:30 完成的工作仍属于刚刚结束的那个晚上。展示层只在 API 边界把学习日转换为其 03:00 本地边界。
+- 冲刺模式在不触碰记忆状态的情况下约束预订日期：`rate_unit(horizon=...)` 调用 `SprintHorizon.schedule(interval, seed=<unit id>)`，它会原样预订合适的间隔，把超出的间隔拉入考试前的最后一周（按单元散布），没有空间时则正常预订。horizon 按请求解析一次并缓存在 `session.info` 上，因此预览与其随后的提交绝不会不一致。UI 显示的就是预订日期（“约 N 天后”）——被缩短的冲刺间隔是真实预订，不是隐藏的覆盖。失败评分仍然当天重练。已锁定且日期未到的卡片保留其预订日期；只有 `clamp_due_dates_for_sprint` 会移动它。
+- 内容和标记编辑不会独立地惩罚排期。现有内容保留其到期日和 FSRS 状态；拆分、新内容和合并遵循上面的拓扑继承规则。
 
-### 睡前复习 (bedtime review)
+### 睡前复习（bedtime review）
 
-- 睡前复习 is a second pass over **today's studied palaces**. It reviews one
-  whole palace as one unit — not each permanent-mark slice — and never mints a
-  round or writes a schedule: `POST /freestyle/rounds/{round_id}/bedtime`
-  appends one card per palace (id `bedtime:palace:<id>:<study day>`) to the end
-  of the current plan with `bedtime: true` / `palace_pass: true`, and
-  `POST /freestyle/rounds/{round_id}/bedtime/ratings` records the grade in
-  `plan["bedtime_ratings"]` and marks the card completed. No Reviews session,
-  encounter, or rating operation is created, so neither the due date nor the
-  FSRS card can move. The normal rating endpoint rejects a bedtime card, so the
-  scheduling path cannot be reached by accident.
-- Candidates are palaces with at least one live `review_unit_rating_operation`
-  on the current study day (`undone_at`/`replaced_at` rows excluded), scoped to
-  the round's workspace (all palaces for 随心, one palace for `p<id>`). A palace
-  already carrying a bedtime card is never appended again, so rating more units
-  inside it does not queue a second pass; only a palace that gets its first
-  rating today is new. The card's `unit_id` is a real rated unit used only as
-  the read-only preview handle; the whole-palace map covers every node and the
-  grade never targets that unit.
-- Bedtime cards are protected from the due-day filters (`drop_undue_unstarted`,
-  `replan_remaining`) because they are, by definition, not due. They live only
-  for their study day: `drop_previous_day_bedtime` clears them (and their
-  plan-only grades) when the round advances past 03:00.
-- The frontend draws them from the read-only unit preview, never from a live
-  glance; the map is reveal-only (no edit, permanent-mark, or document write),
-  its reveal scope is every node of the palace, and the rail marks it with a moon.
+- 睡前复习是对**今天已学宫殿**的第二遍检查。它把一个完整的宫殿作为一个单元复习——而不是每个永久标记切片——并且绝不生成轮次或写入排期：`POST /freestyle/rounds/{round_id}/bedtime` 会为每个宫殿向当前计划的末尾追加一张卡片（id 为 `bedtime:palace:<id>:<study day>`），带有 `bedtime: true` / `palace_pass: true`，而 `POST /freestyle/rounds/{round_id}/bedtime/ratings` 把评分记录在 `plan["bedtime_ratings"]` 中并将卡片标记为完成。不会创建 Reviews 会话、encounter 或评分操作，因此到期日和 FSRS 卡片都不会移动。普通评分端点会拒绝睡前卡片，因此排期路径不会被意外触达。
+- 候选是当前学习日至少有一个活跃 `review_unit_rating_operation` 的宫殿（排除 `undone_at`/`replaced_at` 行），作用域限定为轮次的工作区（随心为所有宫殿，`p<id>` 为一个宫殿）。已经带有睡前卡片的宫殿绝不会再次追加，因此在其中评分更多单元不会排入第二遍；只有今天获得首次评分的宫殿才是新的。卡片的 `unit_id` 是一个真实的已评分单元，仅用作只读预览句柄；整宫脑图覆盖每个节点，评分绝不针对该单元。
+- 睡前卡片不受到期日过滤器（`drop_undue_unstarted`、`replan_remaining`）影响，因为它们按定义就不到期。它们只存活于其学习日：当轮次推进超过 03:00 时，`drop_previous_day_bedtime` 会清除它们（以及它们仅存在于计划中的评分）。
+- 前端从只读单元预览绘制它们，绝不从实时 glance 绘制；脑图仅用于揭示（不编辑、不写永久标记、不写文档），其揭示范围为宫殿的每个节点，进度条用月亮标记它。
 
-### Scheduler ownership and migration
+### 调度器归属与迁移
 
-- `unit_fsrs_adapter.py` is the only module in `modules/memory` allowed to import `fsrs`, and
-  `unit_scheduler.rate_unit` is the production entry point that wraps it. `tools/check_architecture.py`
-  enforces both, and also rejects any import of the retired shadow recorder. `modules/english`'
-  `fsrs_runtime` owns its own scheduler and settings; the unit settings
-  (`desired_retention=0.9`, `maximum_interval=365`, fuzzing off) stay local to the adapter so the two
-  contexts cannot silently share limits.
-- FSRS' own fuzzing is off because it uses the process-wide `random` module and would make a preview
-  and its commit disagree. The adapter applies a deterministic blake2b spread keyed on the unit id
-  instead, from 7 days up.
-- The switch is a one-time replay, not a fresh start: migration `0077` only adds nullable columns,
-  and `backfill_fsrs_scheduler` replays every active unit's effective rating ledger
-  (`undone_at IS NULL`, `replaced_at IS NULL`) through the production adapter, writing the card and
-  the recomputed due date. A `Config(key="review_fsrs_backfill")` marker records the whole
-  scheduling policy (`SCHEDULER_VERSION = fsrs-<lib>+<policy>`), so changing a product rule re-runs
-  the repair instead of leaving units booked under the retired policy. The first write takes a
-  rescue backup (`pre-fsrs-switch`). Units with no rating history are left untouched — they keep
-  their stored due date and have no FSRS checkpoint, which the adapter seeds from the legacy
-  projection on their first rating.
-- A policy migration stamps the anchor counter and the scheduler version; it
-  does **not** move a due date the learner was already promised. Migrations
-  `0080` (nullable `early_step`) and `0081` (the lapse-recovery pair) are
-  additive; `backfill_fsrs_scheduler` infers the retired counter from each
-  unit's booked gap and maps it onto the anchor (`0 → 0`, `1/2/3 → 1`, since any
-  completed day-level fixed review already passed the overnight check), then
-  leaves the booking alone. Rows with no FSRS checkpoint are still replayed,
-  because on those the ledger is the only state there is; a rating snapshot
-  records `early_step` and both lapse fields so undo restores the exact position.
-- Undo and amend stay exact after the switch: each rating snapshot stores the FSRS payload, and when
-  a snapshot or ledger window has no FSRS state the adapter seeds from the recorded legacy position
-  rather than pretending the unit is new. An inherited or pre-switch row with no FSRS checkpoint is
-  seeded the same way, so a mature unit never collapses to a one-day interval.
-- The shadow ledgers (`review_unit_fsrs_shadow_states` / `_ratings`, migration `0076`) are retired
-  and no longer written. Nothing reads them; they are kept only as an audit trail of the comparison
-  that justified the switch, and `python tools/review_fsrs_shadow.py` remains a read-only report over
-  the real history. Dropping both tables changes no learner-visible schedule.
+- `unit_fsrs_adapter.py` 是 `modules/memory` 中唯一允许导入 `fsrs` 的模块，`unit_scheduler.rate_unit` 是包装它的生产入口。`tools/check_architecture.py` 强制执行这两点，并拒绝任何对已退役影子记录器的导入。`modules/english` 的 `fsrs_runtime` 拥有自己的调度器和设置；单元设置（`desired_retention=0.9`、`maximum_interval=365`、关闭模糊化）保留在适配器本地，因此两个上下文无法悄悄共享限制。
+- FSRS 自己的模糊化已关闭，因为它使用进程级 `random` 模块，会让预览与其提交不一致。适配器改为从 7 天起应用以单元 id 为键的确定性 blake2b 散布。
+- 这次切换是一次性重放，而不是全新开始：迁移 `0077` 只添加可空列，`backfill_fsrs_scheduler` 会把每个活跃单元的有效评分账本（`undone_at IS NULL`、`replaced_at IS NULL`）通过生产适配器重放，写入卡片和重新计算的到期日。`Config(key="review_fsrs_backfill")` 标记记录整个排期策略（`SCHEDULER_VERSION = fsrs-<lib>+<policy>`），因此更改产品规则会重新运行修复，而不是让单元继续按已退役策略预订。首次写入会做救援备份（`pre-fsrs-switch`）。没有评分历史的单元保持不动——它们保留已存储的到期日，也没有 FSRS 检查点，适配器会在其首次评分时从旧版投影播种。
+- 策略迁移会标记锚点计数器和调度器版本；它**不会**移动已经向学习者承诺的到期日。迁移 `0080`（可空 `early_step`）和 `0081`（遗忘恢复对）是增量式的；`backfill_fsrs_scheduler` 从每个单元的预订间隔推断已退役的计数器，并将其映射到锚点（`0 → 0`、`1/2/3 → 1`，因为任何已完成的日级固定复习都已通过隔夜检查），然后不动预订。没有 FSRS 检查点的行仍会被重放，因为对这些行而言账本是唯一存在的状态；评分快照会记录 `early_step` 和两个遗忘字段，以便撤销恢复精确位置。
+- 切换后撤销和修改保持精确：每个评分快照都存储 FSRS 载荷，当快照或账本窗口没有 FSRS 状态时，适配器会从记录的旧版位置播种，而不是假装该单元是新的。没有 FSRS 检查点的继承行或切换前行也以同样方式播种，因此成熟单元绝不会坍缩成一天间隔。
+- 影子账本（`review_unit_fsrs_shadow_states` / `_ratings`，迁移 `0076`）已退役，不再写入。没有任何东西读取它们；它们仅作为支持该切换的对比审计轨迹保留，`python tools/review_fsrs_shadow.py` 仍是针对真实历史的只读报告。删除这两张表不会改变任何学习者可见的排期。
 
-## Session Invariants
+## 会话不变量
 
-- A formal session freezes all due units for one palace, including member UIDs and revisions.
-- Rating never auto-opens nodes, scrolls the map, or switches the current unit.
-  Freestyle `auto_advance` is opt-in and may advance only after a passing `记得` / `轻松`
-  once card id, encounter id, and plan version still match; `忘记` never auto-advances (它当天重练),
-  while `困难` is a pass and may advance.
-  Practice persists the authoritative round plan (retry occurrences, cursor, completion) in
-  SQLite; Reviews still owns the schedule. A successful freestyle rating updates that plan in the
-  same practice use case (`round_id`, `encounter_id`, `operation_id`) so a later queue rebuild
-  cannot drop the retry. Reviews must not import Practice.
-- Leaving a card closes its encounter and locks the effective rating. Re-rendering or restoring the page resumes the same open encounter instead of opening another session.
-- Encounter duration is client-observed foreground activity: only the current open card, on the
-  live-study control lease holder, while the document is visible and the window is focused,
-  accrues seconds. Browser background, blur, suspension, lock-screen, card leave, controller
-  change, and wall-clock gaps are never inferred from `closed_at - created_at` and are never
-  backfilled; close persists the last confirmed foreground interval as `effective_seconds` and
-  session completion sums those values. If the client reports more seconds than the encounter
-  wall span, close clamps to that span — it does not 400. The rating is already committed;
-  failing leave would trap the learner on the card. Card switches close the old encounter
-  before opening the new one.
-- A session completes only after every frozen unit passes.
-- Quiz cards and standalone Anki cards never mutate palace unit scheduling.
+- 正式会话冻结一个宫殿的所有到期单元，包括成员 UID 和修订。
+- 评分绝不会自动打开节点、滚动脑图或切换当前单元。随心 `auto_advance` 是选择启用的，只有在卡片 id、encounter id 和计划版本仍然匹配时，一次通过的 `记得` / `轻松` 之后才可以前进；`忘记` 绝不自动前进（它当天重练），而 `困难` 是通过，可以前进。Practice 在 SQLite 中持久化权威轮次计划（重练 occurrence、cursor、完成状态）；Reviews 仍然拥有排期。成功的随心评分会在同一个 practice 用例中更新该计划（`round_id`、`encounter_id`、`operation_id`），因此之后的队列重建无法丢弃重练。Reviews 不得导入 Practice。
+- 离开卡片会关闭其 encounter 并锁定生效评分。重新渲染或恢复页面会恢复同一个打开的 encounter，而不是再开一个会话。
+- encounter 时长是客户端观察到的前台活动：只有当前打开的卡片，在实时学习控制租约持有者上，且文档可见、窗口聚焦时，才累计秒数。浏览器后台、失焦、挂起、锁屏、离开卡片、控制器变更和墙钟间隔都绝不从 `closed_at - created_at` 推断，也绝不回填；关闭会把最后确认的前台区间持久化为 `effective_seconds`，会话完成时对这些值求和。如果客户端报告的秒数超过 encounter 的墙钟跨度，关闭会夹到该跨度——不会返回 400。评分已经提交；让离开失败会把学习者困在卡片上。卡片切换会在打开新 encounter 之前关闭旧的。
+- 会话只有在每个冻结单元都通过后才完成。
+- 测验卡片和独立 Anki 卡片绝不会变更宫殿单元排期。
 
-## Retired Runtime
+## 已退役运行时
 
-Node ratings, subtree/bulk fill ratings, node undo, the retired FSRS previews, the fixed-ten-step ladder, the write-only FSRS shadow recorder, waves, calibration, daily plans, temporary marks, stability/health settlement, and review-log receipts are deleted. The shadow tables themselves stay as an audit trail but nothing writes or reads them. Migration `0049_permanent_mark_review_units` creates a complete SQLite backup before replacing their tables. Migration `0050_review_unit_encounters` adds stable per-appearance identity and backfills legacy unit operations as closed encounters. Migration `0054_encounter_effective_seconds` stores observed foreground duration on each encounter; legacy null values fail closed at zero rather than reconstructing wall-clock time. Migration `0077_review_unit_fsrs` adds the per-unit FSRS columns; the replay that fills them runs once at startup and takes its own rescue backup.
+节点评分、子树/批量填充评分、节点撤销、已退役的 FSRS 预览、固定十步阶梯、只写 FSRS 影子记录器、波次、校准、每日计划、临时标记、稳定性/健康结算和复习日志回执均已删除。影子表本身作为审计轨迹保留，但没有任何东西写入或读取它们。迁移 `0049_permanent_mark_review_units` 在替换其表之前创建完整的 SQLite 备份。迁移 `0050_review_unit_encounters` 添加稳定的每次出现身份，并将旧版单元操作回填为已关闭的 encounter。迁移 `0054_encounter_effective_seconds` 在每个 encounter 上存储观察到的前台时长；旧版 null 值以零失败关闭，而不是重建墙钟时间。迁移 `0077_review_unit_fsrs` 添加每单元 FSRS 列；填充它们的重放在启动时运行一次，并执行自己的救援备份。

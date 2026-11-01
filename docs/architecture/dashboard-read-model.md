@@ -1,20 +1,21 @@
-# Dashboard Read Model
+# 仪表盘读模型
 
-Dashboard is a composition context. It does not own palace, review, or study-session behavior and must not import those contexts' internal application modules.
+仪表盘是一个组合上下文。它不拥有宫殿、复习或学习会话行为，也不得导入这些上下文的内部应用模块。
 
-## Dependency Direction
+## 依赖方向
 
 ```text
-dashboard.application -> palaces.api
-dashboard.application -> reviews.api
-dashboard.application -> sessions.public.queries
+dashboard.application -> content.public.queries
+dashboard.application -> memory.public.queries
+dashboard.application -> quiz.public.queries
+dashboard.application -> english.api
 ```
 
-The public facades expose stable read capabilities while their owner contexts retain implementation freedom. New dashboard metrics should first be implemented by the owning context and exported intentionally through its facade.
+公共门面暴露稳定的读取能力，而所有者上下文保留实现自由。新的仪表盘指标应首先由所有者上下文实现，并通过其门面有意导出。
 
-The timing feature (study duration ledger, time records) has been removed. The Dashboard reports review ratings and English study counts only, taken from the owning contexts' public facades.
+计时功能（学习时长账本、时间记录）已被移除。仪表盘报告复习证据、做题进度、英语学习次数和宫殿/章节概览，全部来自所有者上下文的公共门面。
 
-Dashboard currently still assembles a local SQL read projection over the shared legacy schema. A later migration may move those ORM-heavy projections behind owner-provided query ports, but no new private application dependency is allowed.
+仪表盘目前仍会在共享的遗留 schema 之上组装本地 SQL 读取投影。后续迁移可能会把这些 ORM 较重的投影移到所有者提供的查询端口之后，但不允许新增私有应用依赖。
 
 ## 快照读取方式
 
@@ -26,19 +27,19 @@ Dashboard currently still assembles a local SQL read projection over the shared 
 进程内存里，不写磁盘：磁盘文件无法可靠判断是否早于最近一次写入，而且进程重启后
 第一次读取本来就应当同步重建。
 
-## Learning progress (`/progress`)
+## 学习进度（`/progress`）
 
-The independent sidebar destination is owned by `modules/dashboard`: its page composes the module public `LearningProgressPage`; the API adapter and query hook live in `api` and `application`, pure filtering/indexing lives in `domain`, and presentation lives in `ui/progress`. Navigation/history metadata has a distinct `progress` key. Scope, selected identity, view, search, filter, and sort live in the URL, so switching views does not discard the current range and returning from a palace restores context. Expansion is local to the mounted page. Views are hierarchy, leaf distribution, and question coverage; no historical trend or mastery score is synthesized.
+该独立的侧边栏目的地由 `modules/dashboard` 拥有：其页面组合模块公共的 `LearningProgressPage`；API 适配器和查询钩子位于 `api` 和 `application`，纯过滤/索引位于 `domain`，表现层位于 `ui/progress`。导航/历史元数据有独立的 `progress` 键。范围、选定身份、视图、搜索、过滤和排序都存放在 URL 中，因此切换视图不会丢弃当前范围，从宫殿返回时会恢复上下文。展开状态是挂载页面的局部状态。视图包括层级、叶子分布和题目覆盖；不会合成历史趋势或掌握度分数。
 
-`GET /api/v1/dashboard/learning-progress` is a read-only snapshot composed through content, memory, and quiz public capabilities (the dashboard → quiz edge is registered in the context map). It must not repair documents, create schedules, flush, commit, or mutate practice state. Snapshot queries are batched, not one HTTP request per palace. The frontend validates the snapshot at its API boundary; a failed refresh retains the previous snapshot with a visible stale-data notice.
+`GET /api/v1/dashboard/learning-progress` 是通过内容、记忆和测验公共能力组合而成的只读快照（仪表盘 → 测验的边已注册在上下文映射中）。它不得修复文档、创建排期、flush、提交或变更练习状态。快照查询是批量的，不是每个宫殿一个 HTTP 请求。前端在其 API 边界校验快照；刷新失败会保留上一个快照，并显示可见的过期数据提示。
 
-- Memory totals count current non-root **leaf nodes**; document branch headings remain navigation groups, not additional memory points. Empty palaces count zero. Actual document hierarchy is retained, without forcing missing chapter/unit levels.
-- Reviewed coverage is effective rating evidence of current review units intersected with current leaf identities. This is unit-derived coverage, not proof that each leaf is mastered.
-- Due coverage is an independent scheduling signal and is not added to reviewed coverage. Matrix amber takes display precedence; it does not mean forgotten.
-- Question totals and answered counts are distinct question identities at every aggregate level. Any persisted answer record counts: question attempt counters, quiz attempt events, freestyle attempt rows, or a saved current answer. Incorrect answers count. Repeating a question does not inflate coverage, and clearing the current practice round does not erase historical answer coverage.
-- Search and state filters affect visible rows only, not the range denominator. Hierarchy and comparison render 30 entries per page, matrix 96, preventing an expanded document from creating unbounded DOM.
-- Palace review/quiz actions explicitly open the whole owning palace, never claim an unsupported leaf-scoped training session. No data is edited by the progress page.
+- 记忆总数计的是当前非根**叶节点**；文档分支标题仍是导航分组，不是额外的记忆点。空宫殿计为零。保留实际文档层级，不强制补齐缺失的章节/单元层级。
+- 已复习覆盖是当前复习单元的有效评分证据与当前叶子身份的交集。这是由单元推导出的覆盖，不证明每个叶子都已掌握。
+- 到期覆盖是独立的排期信号，不会加到已复习覆盖中。矩阵琥珀色在显示上优先；它不代表已遗忘。
+- 题目总数和已作答计数在每个聚合层级都是去重的题目身份。任何持久化的作答记录都计入：题目尝试计数器、测验尝试事件、随心尝试行，或已保存的当前答案。错误答案也计入。重复做一道题不会虚增覆盖，清除当前练习轮次也不会抹去历史作答覆盖。
+- 搜索和状态过滤只影响可见行，不影响范围分母。层级和对比每页渲染 30 条，矩阵 96 条，防止展开的文档产生无界 DOM。
+- 宫殿的复习/测验操作会明确打开整个所属宫殿，绝不声称提供不受支持的叶子范围训练会话。进度页不编辑任何数据。
 
-The scoped generated OpenAPI types live in `shared/api/generated/learningProgress.ts`; a compile-time equality test reconciles the stable `contracts/learningProgress.ts` response with the generated backend schema. The complete application OpenAPI is not imported into runtime frontend code.
+限定范围的生成 OpenAPI 类型位于 `shared/api/generated/learningProgress.ts`；一个编译期相等性测试会核对稳定的 `contracts/learningProgress.ts` 响应与生成的后端 schema。完整的应用 OpenAPI 不会被导入运行时前端代码。
 
-Regression coverage includes API purity/aggregation tests, pure projection and contract decoder unit tests, route/history checks, and hermetic Playwright desktop/mobile tests with isolated sample data. Progress screenshots from those tests are fixture illustrations, not the user's learning records.
+回归覆盖包括 API 纯净性/聚合测试、纯投影和契约解码器单元测试、路由/历史检查，以及使用隔离样本数据的封闭式 Playwright 桌面/移动测试。这些测试中的进度截图是测试夹具插图，不是用户的学习记录。

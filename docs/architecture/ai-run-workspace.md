@@ -1,27 +1,27 @@
-# AI Run Workspace Boundary
+# AI 运行工作区边界
 
-> Removed with the in-app AI run workspace. English listening ASR/translation and the settings prompt catalog remain. This note is historical.
+> 随应用内 AI 运行工作区一并移除。英语听力 ASR/翻译和设置提示词目录保留。本说明为历史归档。
 
-All user-triggered AI work follows a preview, execute, and accept/apply lifecycle. The existing AI runtime and prompt catalog remain separate platform ports; the run workspace records user-visible workflow state and never owns provider secrets.
+所有用户触发的 AI 工作都遵循预览、执行和接受/应用的生命周期。现有的 AI 运行时和提示词目录仍是独立的平台端口；运行工作区记录用户可见的工作流状态，且绝不拥有提供方密钥。
 
-## Required lifecycle
+## 必需生命周期
 
-1. Preview the effective prompt, selected model, thinking mode, and included context before execution.
-2. Execute with stable `owner_id` and `operation_id`; persist the request snapshot, resolved public model metadata, result, and failure state.
-3. Present the result without mutating Palace, Mind Map, Quiz, English, or Knowledge entities.
-4. Require an explicit `accepted` or `applied` transition before a business facade writes generated content.
-5. Allow history loading for reruns, soft deletion, restore, and deliberate permanent purge.
+1. 在执行前预览有效提示词、所选模型、思考模式和包含的上下文。
+2. 使用稳定的 `owner_id` 和 `operation_id` 执行；持久化请求快照、解析后的公共模型元数据、结果和失败状态。
+3. 呈现结果而不修改宫殿、脑图、测验、英语或知识实体。
+4. 在业务门面写入生成内容之前，要求显式的 `accepted` 或 `applied` 转换。
+5. 允许加载历史以重新运行、软删除、恢复和有意永久清除。
 
-## Context selection
+## 上下文选择
 
-- Mind-map and quiz-bank content are explicit context selections, not hidden prompt concatenation.
-- Each selection records enabled state, source entity, source revision, rendered content, and truncation state.
-- Business contexts expose content through public facades or ports; the workspace must not query another context's tables.
-- Relevant contexts may default to enabled, but the user can disable them before execution and preview the actual payload.
+- 脑图和题库内容是显式的上下文选择，而不是隐藏的提示词拼接。
+- 每个选择记录启用状态、来源实体、来源修订、渲染内容和截断状态。
+- 业务上下文通过公共门面或端口暴露内容；工作区不得查询另一个上下文的表。
+- 相关上下文可以默认启用，但用户可以在执行前禁用它们并预览实际载荷。
 
-## Ownership
+## 归属
 
-- `ai_learning` currently hosts the persisted run-workspace lifecycle and remains framework-free below presentation.
-- `settings` owns model catalogs and prompt templates.
-- AI call logs own provider-call diagnostics; run records own preview, result, application, rerun, and deletion state.
-- Feature UIs may compose the shared workspace but must not auto-save an AI result immediately after generation.
+- `ai_learning` 目前承载持久化的运行工作区生命周期，并在表现层以下保持无框架依赖。
+- `settings` 拥有模型目录和提示词模板。
+- AI 调用日志拥有提供方调用诊断；运行记录拥有预览、结果、应用、重新运行和删除状态。
+- 功能 UI 可以组合共享工作区，但不得在生成后立即自动保存 AI 结果。

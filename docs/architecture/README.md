@@ -1,56 +1,56 @@
-# Memory Anki Architecture
+# Memory Anki 架构
 
-> Current ownership map. Historical target notes remain in [TARGET_VERTICAL_SLICE.md](./TARGET_VERTICAL_SLICE.md). Frontend `features/` and `entities/` have been migrated into `modules/*`; backend public imports go through each context's declared `public` / `api` entry.
+> 当前归属地图。历史目标说明保留在 [TARGET_VERTICAL_SLICE.md](./TARGET_VERTICAL_SLICE.md)。前端 `features/` 与 `entities/` 已迁移进 `modules/*`；后端公共导入经由各上下文声明的 `public` / `api` 入口。
 
 
-This directory is the current architectural source of truth. Product and runtime context lives in `AI_PROJECT_CONTEXT.md`; historical plans in `fable/` are not authoritative for current module ownership. Runtime files under `local_app_home` use three roots documented in [storage-roots.md](./storage-roots.md): `学习数据`, `学科附件`, `日志缓存`.
+本目录是当前架构的唯一事实来源。产品与运行时上下文位于 `AI_PROJECT_CONTEXT.md`；`fable/` 中的历史方案对当前模块归属不具权威性。`local_app_home` 下的运行时文件使用 [storage-roots.md](./storage-roots.md) 记录的三个根目录：`学习数据`、`学科附件`、`日志缓存`。
 
-## System Shape
+## 系统形态
 
 ```text
 apps/web: app -> pages/widgets -> modules (14, domain/application/ui/api + public.ts) -> shared/platform/pwa
 apps/api: presentation -> application/use cases -> domain + ports <- infrastructure
 ```
 
-Frontend runtime modules (`apps/web/src/modules/*`): `backup content dashboard exam english english-lookup memory mindmap practice produce quiz search session settings`. The legacy `features/` and `entities/` layers have been fully migrated into `modules/*` (entity packages live under `modules/<name>/domain/*-entity`). Layer direction is enforced by ESLint (`eslint-plugin-boundaries` with the TypeScript resolver); module `public.ts` discipline is enforced by `tools/check_architecture.py`.
+前端运行时模块（`apps/web/src/modules/*`）：`backup content dashboard exam english english-lookup memory mindmap practice produce quiz search session settings`。旧版 `features/` 与 `entities/` 层已完全迁移进 `modules/*`（实体包位于 `modules/<name>/domain/*-entity` 下）。层级方向由 ESLint（`eslint-plugin-boundaries` 配合 TypeScript resolver）强制；模块 `public.ts` 纪律由 `tools/check_architecture.py` 强制。
 
-The repository is a local-first Windows product used on two devices. SQLite, files, backups, PWA, and desktop clients share one local backend. Cross-device behavior must be deterministic because runtime data is synchronized outside Git.
+本仓库是供两台设备使用的本地优先 Windows 产品。SQLite、文件、备份、PWA 与桌面客户端共用同一个本地后端。跨设备行为必须是确定性的，因为运行时数据在 Git 之外同步。
 
-## Ownership
+## 归属
 
-| Capability | Frontend owner | Backend owner |
+| 能力 | 前端归属 | 后端归属 |
 |---|---|---|
-| Mind-map document rules | `modules/content/domain/mindmap-document-entity` | `modules/mindmap_document` |
-| Generic mind-map rendering | `shared/ui/mindmap-canvas` (canvas itself lazy-loads `@xyflow`) | — |
-| Mind-map editing runtime | `modules/content/ui/mindmap-editor` | aggregate-specific editor services |
-| Palace aggregate | `modules/content` (`domain/palace-entity`, palace-catalog/palace-edit UI) | `modules/content` |
-| Review scheduling/execution | `modules/memory` + `modules/practice/ui/review` | `modules/memory` |
-| Review reminders (Bark push, scheduled delivery log) | `modules/settings` (`ProfileRemindersPage`) | `modules/reminders` |
-| AI runtime selection/calls | `modules/settings/domain/ai-runtime-entity` | `platform.application.AiRuntimeProvider`; settings supplies the adapter |
-| Background jobs | `shared/background-tasks` | target shared job lease/handler infrastructure |
-| Client preferences | `modules/settings/domain/preferences-entity` | settings/profile preference endpoint |
-| Route metadata (nav/history/fallback) | `shared/routing/routeManifest.ts` (single source) | — |
-| Feedback runtime (cue → recipe → sound, haptics, CSS jelly, DOM flourish) | `shared/fx` — see [fx-director.md](./fx-director.md). Callers use `cue()` from `@/shared/fx` only; no particle or WebGL effects | — |
-| Learning progress (`/progress`, hierarchy / distribution / question coverage) | `modules/dashboard` — see [dashboard-read-model.md](./dashboard-read-model.md) | `modules/dashboard` composed through content/memory/quiz public read capabilities |
-| Growth meta (XP, levels, quests, stamps; backend read projection only, no frontend module or page) | — (no frontend owner; `growth_state` is unused by the UI) — see [progression.md](./progression.md) | `modules/progression` (read-only projection) |
-| Ambient room layer (tint, grain, pointer light) | `shared/ambient` (pure, data-free); `app/shell/useAmbientTone` feeds it dashboard/exam data | — |
-| Interface sounds | `shared/feedback/uiSounds` (delegated listener, gated by `uiSoundEnabled` + `soundEnabled`; silent inside `.freestyle-stage`); synth voices in `shared/feedback/mindmap-audio` — see [audio-soundscape.md](./audio-soundscape.md) | — |
+| 脑图文档规则 | `modules/content/domain/mindmap-document-entity` | `modules/mindmap_document` |
+| 通用脑图渲染 | `shared/ui/mindmap-canvas`（画布本身懒加载 `@xyflow`） | — |
+| 脑图编辑运行时 | `modules/content/ui/mindmap-editor` | 聚合专用的编辑器服务 |
+| 宫殿聚合 | `modules/content`（`domain/palace-entity`，palace-catalog/palace-edit UI） | `modules/content` |
+| 复习排期/执行 | `modules/memory` + `modules/practice/ui/review` | `modules/memory` |
+| 复习提醒（Bark 推送、定时投递日志） | `modules/settings`（`ProfileRemindersPage`） | `modules/reminders` |
+| AI 运行时选择/调用 | `modules/settings/domain/ai-runtime-entity` | `platform.application.AiRuntimeProvider`；由设置提供适配器 |
+| 后台任务 | `shared/background-tasks` | 目标共享任务租约/处理器基础设施 |
+| 客户端偏好 | `modules/settings/domain/preferences-entity` | 设置/个人资料偏好端点 |
+| 路由元数据（导航/历史/回退） | `shared/routing/routeManifest.ts`（单一来源） | — |
+| 反馈运行时（cue → recipe → 声音、触感、CSS jelly、DOM flourish） | `shared/fx` —— 见 [fx-director.md](./fx-director.md)。调用方只使用来自 `@/shared/fx` 的 `cue()`；不使用粒子或 WebGL 效果 | — |
+| 学习进度（`/progress`，层级 / 分布 / 题目覆盖） | `modules/dashboard` —— 见 [dashboard-read-model.md](./dashboard-read-model.md) | `modules/dashboard`，通过 content/memory/quiz 的公共读取能力组合 |
+| 成长元数据（XP、等级、任务、印章；仅后端读取投影，无前端模块或页面） | —（无前端归属；UI 未使用 `growth_state`）—— 见 [progression.md](./progression.md) | `modules/progression`（只读投影） |
+| 环境房间层（色调、颗粒、指针光） | `shared/ambient`（纯函数、无数据）；`app/shell/useAmbientTone` 向它提供 dashboard/exam 数据 | — |
+| 界面声音 | `shared/feedback/uiSounds`（委托监听器，由 `uiSoundEnabled` + `soundEnabled` 控制；在 `.freestyle-stage` 内静音）；合成音色位于 `shared/feedback/mindmap-audio` —— 见 [audio-soundscape.md](./audio-soundscape.md) | — |
 | 诊断简报（左上角「录制」） | `shared/debug/session-recorder` 订阅 `shared/api/requestOutcome`；`shared/api` 不得反向导入 recorder。自动采集只保存白名单元数据（固定动作/页面类别、HTTP 方法、有限状态码、失败类别、有界数量），不保存题目、答案、脑图标题或正文、原始错误、完整 URL、业务 ID、请求/响应体；用户手写说明单独保留。见 [session-recorder-privacy.md](./session-recorder-privacy.md) | — |
 
-## Hard Invariants
+## 硬性不变量
 
-1. Pure document/domain modules do not import React, FastAPI, SQLAlchemy, file paths, or business aggregates.
-2. Generic UI does not contain palace, review, mastery, segment, or other business fields; hosts translate them into visual capabilities.
-3. GET/read projections do not mutate or commit business state.
-4. Serializers do not repair aggregates. Repair and reconciliation are explicit commands or maintenance jobs.
-5. Entity-scoped async operations carry `ownerId` and `operationId`; stale completion, failure, retry, and conflict actions are ignored.
-6. Legacy normalization is deterministic across process restarts and devices. Never derive persisted IDs from memory addresses, random values, timestamps, or local paths.
-7. Cross-module dependencies use a public facade, a typed port, or an application event. Private repositories and application internals are not shared APIs.
-8. API inputs use explicit command/query models; compatibility envelopes are isolated and have a removal plan.
-9. Palace focus-practice is retired: runtime code must not recreate focus-node fields, routes, progress kinds, or UI actions.
+1. 纯文档/领域模块不导入 React、FastAPI、SQLAlchemy、文件路径或业务聚合。
+2. 通用 UI 不包含宫殿、复习、掌握度、分段或其他业务字段；由宿主将其转换为视觉能力。
+3. GET/读取投影不修改也不提交业务状态。
+4. 序列化器不修复聚合。修复与对账是显式命令或维护任务。
+5. 以实体为作用域的异步操作携带 `ownerId` 与 `operationId`；过期的完成、失败、重试与冲突动作会被忽略。
+6. 旧版规范化在进程重启与跨设备之间是确定性的。绝不从内存地址、随机值、时间戳或本地路径推导持久化 ID。
+7. 跨模块依赖使用公共门面、类型化端口或应用事件。私有仓储与应用内部实现不是共享 API。
+8. API 输入使用显式命令/查询模型；兼容信封被隔离并有移除计划。
+9. 宫殿聚焦练习已退役：运行时代码不得重建聚焦节点字段、路由、进度种类或 UI 动作。
 10. 诊断记录只保存白名单元数据：自动事件不得包含学习内容、自由文本、原始错误、完整 URL、业务 ID 或请求/响应体；旧版（v1）诊断历史在首次加载时删除而不迁移。见 [session-recorder-privacy.md](./session-recorder-privacy.md)。
 
-## Target Dependency Map
+## 目标依赖图
 
 ```mermaid
 graph LR
@@ -67,148 +67,116 @@ graph LR
   Infrastructure --> Domain
 ```
 
-Module-to-module production imports must go through the target module's `public.ts`; cross-module composition belongs in `pages` or `widgets`. Backend cross-context calls are allowed only when registered in the context map and imported through the target context's declared public `api` entry. Private application, infrastructure, and presentation modules are never cross-context APIs.
+模块到模块的生产导入必须经由目标模块的 `public.ts`；跨模块组合属于 `pages` 或 `widgets`。后端跨上下文调用只有在上下文映射中登记，并经由目标上下文声明的公共 `api` 入口导入时才被允许。私有的 application、infrastructure 与 presentation 模块永远不是跨上下文 API。
 
-`docs/architecture/context-map.yaml` is the single machine-readable architecture ledger. It inventories real backend contexts, frontend runtime modules, public dependency edges, ports, use cases, events, and `UnitOfWork` ownership. Placeholder target modules are forbidden: a module is registered only after a complete runtime slice exists. New dependency edges are rejected until intentionally designed and registered.
+`docs/architecture/context-map.yaml` 是唯一的机器可读架构账本。它盘点真实后端上下文、前端运行时模块、公共依赖边、端口、用例、事件与 `UnitOfWork` 归属。禁止占位式目标模块：只有完整的运行时切片存在之后，模块才会登记。新的依赖边在有意设计并登记之前会被拒绝。
 
-Application transaction ownership is explicit: presentation constructs infrastructure adapters, application use cases depend on `memory_anki.platform.application.UnitOfWork`, and only the adapter calls the concrete ORM transaction.
+应用事务归属是显式的：presentation 构造 infrastructure 适配器，application 用例依赖 `memory_anki.platform.application.UnitOfWork`，且只有适配器调用具体的 ORM 事务。
 
-Backend type boundaries are checked across the complete `memory_anki` package. Whole-module Mypy `ignore_errors` overrides are forbidden; unavoidable untyped third-party libraries may use only a narrowly scoped error-code ignore at the import site.
+后端类型边界在完整的 `memory_anki` 包范围内检查。禁止整模块的 Mypy `ignore_errors` 覆盖；无法避免的无类型第三方库只能在导入处使用范围极窄的错误码忽略。
 
-Frontend lint is a zero-warning contract. The `apps/web` lint script runs ESLint with `--max-warnings 0`; unused compatibility props and unresolved Hook dependency warnings must be fixed at their ownership boundary rather than suppressed.
+前端 lint 是零警告契约。`apps/web` 的 lint 脚本以 `--max-warnings 0` 运行 ESLint；未使用的兼容 props 与未解决的 Hook 依赖警告必须在其归属边界修复，而不是压制。
 
-## Migration Order
+## 迁移顺序
 
-1. **Protect correctness:** owner-safe async saves, deterministic IDs, mandatory revision checks, atomic delivery of the mind-map migration.
-2. **Separate reads from writes:** remove commits/reconciliation from GET handlers and serializers; introduce catalog/read projections.
-3. **Break dependency cycles:** extract review content ports, AI runtime ports, backup events, and background job leases.
-4. **Type the boundaries:** Pydantic request/response models, runtime frontend decoders, narrower mypy exceptions, stricter TypeScript by directory.
-5. **Control performance:** one policy load per review query, paginated catalog projections, batched ORM loads, single-pass mind-map projection/layout.
-6. **Retire compatibility:** remove legacy facades and architecture exceptions only after callers migrate and regression tests exist.
+1. **保护正确性：** 归属安全的异步保存、确定性 ID、强制修订检查、脑图迁移的原子交付。
+2. **读写分离：** 从 GET 处理器与序列化器中移除提交/对账；引入目录/读取投影。
+3. **打破依赖环：** 提取复习内容端口、AI 运行时端口、备份事件与后台任务租约。
+4. **为边界加类型：** Pydantic 请求/响应模型、运行时前端解码器、更窄的 mypy 例外、按目录收紧 TypeScript。
+5. **控制性能：** 每次复习查询只加载一次策略、分页目录投影、批量 ORM 加载、单遍脑图投影/布局。
+6. **退役兼容层：** 只有在调用方完成迁移且回归测试存在之后，才移除旧版门面与架构例外。
 
-## Sensory runtime
+## 感官运行时
 
-- `fx-director.md` — cue → recipe feedback runtime (sound, haptics, CSS jelly, DOM flourish; owner-scoped playback).
-- `theme-packs.md` — single `study` theme pack (`motion` and `themeColor` only).
-- `audio-soundscape.md` — procedural synth voices, `soundVoice` selection, `AudioContext` lifecycle/iOS unlock, mute scopes, per-scene volume gates.
+- `fx-director.md` —— cue → recipe 反馈运行时（声音、触感、CSS jelly、DOM flourish；按 owner 限定播放范围）。
+- `theme-packs.md` —— 单一 `study` 主题包（仅 `motion` 与 `themeColor`）。
+- `audio-soundscape.md` —— 程序化合成音色、`soundVoice` 选择、`AudioContext` 生命周期/iOS 解锁、静音范围、按场景的音量闸门。
 
-## Validation
+## 校验
 
-- Fast iteration: `python tools/quality_gate.py`
-- Full handoff: `python tools/quality_gate.py --full` (backend tests, frontend tests/build, and Playwright smoke)
-- Playwright is hermetic: specs import `test`/`expect` from `apps/web/e2e/fixtures.ts` (every `/api` call answers 503 unless the spec routes it), service workers are blocked, and `MEMORY_ANKI_E2E=1` removes the vite `/api` proxy so e2e can never write to the live 8012 service. `check_e2e_hermetic` enforces this.
-- Windows launcher smoke after runtime/startup-sensitive changes: `python tools/quality_gate.py --launchers` (really runs `start-all.bat --smoke-test` and `start-all.bat --desktop`, verifies API/Electron readiness, then restores the shared PWA service)
-- Mind-map architecture details: `docs/architecture/mindmap.md`
-- Hermetic Playwright E2E rules (503 API fallback, blocked SW, no preview proxy): `docs/architecture/e2e-testing-guide.md`
-- AI runtime boundary: `docs/architecture/ai-runtime.md`
-- AI run workspace lifecycle: `docs/architecture/ai-run-workspace.md`
-- Prompt catalog boundary: `docs/architecture/prompt-catalog.md`
-- Review context boundary: `docs/architecture/review-boundary.md`
-- Review scheduling: a two-checkpoint anchor (20-minute same-day re-check → day-2 overnight) then FSRS with three guardrails (困难 never lengthens, 记得/轻松 capped below 10 days, lapse recovery at 25–35%), with 睡前复习 appending today's rated cards as plan-only passes (`memory/application/unit_fsrs_adapter.py`, `practice/application/bedtime_*`; `stage_index` is a display projection only): `docs/architecture/review-boundary.md`
+- 快速迭代：`python tools/quality_gate.py`
+- 完整交接：`python tools/quality_gate.py --full`（后端测试、前端测试/构建与 Playwright 冒烟）
+- Playwright 是密封的：spec 从 `apps/web/e2e/fixtures.ts` 导入 `test`/`expect`（除非 spec 自行路由，否则每个 `/api` 调用都返回 503），Service Worker 被阻止，且 `MEMORY_ANKI_E2E=1` 会移除 vite 的 `/api` 代理，使 e2e 永远无法写入在线的 8012 服务。`check_e2e_hermetic` 强制这一点。
+- 运行时/启动敏感变更后的 Windows 启动器冒烟：`python tools/quality_gate.py --launchers`（真正运行 `start-all.bat --smoke-test` 与 `start-all.bat --desktop`，验证 API/Electron 就绪，然后恢复共享 PWA 服务）
+- 脑图架构细节：`docs/architecture/mindmap.md`
+- 密封 Playwright E2E 规则（503 API 回退、阻止 SW、无预览代理）：`docs/architecture/e2e-testing-guide.md`
+- AI 运行时边界：`docs/architecture/ai-runtime.md`
+- AI 运行工作区生命周期：`docs/architecture/ai-run-workspace.md`
+- 提示词目录边界：`docs/architecture/prompt-catalog.md`
+- 复习上下文边界：`docs/architecture/review-boundary.md`
+- 复习排期：两检查点的定锚期（当天 20 分钟复查 → 第 2 天过夜）之后交给 FSRS，并带三条护栏（困难永不延长，记得/轻松上限低于 10 天，遗忘恢复位于 25–35%），睡前复习把当天已评分的卡片作为仅计划的通过项追加（`memory/application/unit_fsrs_adapter.py`、`practice/application/bedtime_*`；`stage_index` 仅是显示投影）：`docs/architecture/review-boundary.md`
 - 面向产品体验的排期说明（天级 / 分钟级间隔、参数位置）：`docs/复习排期设计.md`
-- Read-only historical comparison of the retired ladder vs FSRS: `python tools/review_fsrs_shadow.py`
-- Live study presence (PWA/desktop mirror): `docs/architecture/live-study-presence.md`
-- Read-model purity: `docs/architecture/read-models.md`
-- Dashboard composition boundary: `docs/architecture/dashboard-read-model.md`
-- Exam stars, countdown and forgetting estimate: `docs/architecture/exam-context.md`
-- Feedback director (cue → recipe): `docs/architecture/fx-director.md`
-- Growth meta layer: `docs/architecture/progression.md`
-- Palace Quiz boundary: `docs/architecture/palace-quiz-boundary.md`
-- Consumer context boundaries: `docs/architecture/consumer-contexts.md`
-- Freestyle immersive feed: `docs/architecture/freestyle-immersive-feed.md`
-- Backup context boundary: `docs/architecture/backup-boundary.md`
-- Quiz frontend boundary: `docs/architecture/quiz-frontend-boundary.md`
-- Question variants and muscle-memory marking: `docs/architecture/question-variants.md`
-- Knowledge context boundary: `docs/architecture/knowledge-boundary.md`
-- Product terminology (宫殿 / 章节 / 复习单元 / 题 and number formats): `docs/architecture/terminology.md`
-- Single architecture ledger: `docs/architecture/context-map.yaml`
-- Temporary file-level exceptions: `docs/architecture/boundary-exceptions.json`
-## Mutation identity boundary
+- 退役阶梯与 FSRS 的只读历史对比：`python tools/review_fsrs_shadow.py`
+- 实时学习在场（PWA/桌面镜像）：`docs/architecture/live-study-presence.md`
+- 读取模型纯度：`docs/architecture/read-models.md`
+- 仪表盘组合边界：`docs/architecture/dashboard-read-model.md`
+- 考试星标、倒计时与遗忘估计：`docs/architecture/exam-context.md`
+- 反馈导演（cue → recipe）：`docs/architecture/fx-director.md`
+- 成长元数据层：`docs/architecture/progression.md`
+- 宫殿测验边界：`docs/architecture/palace-quiz-boundary.md`
+- 消费者上下文边界：`docs/architecture/consumer-contexts.md`
+- 随心沉浸式信息流：`docs/architecture/freestyle-immersive-feed.md`
+- 备份上下文边界：`docs/architecture/backup-boundary.md`
+- 测验前端边界：`docs/architecture/quiz-frontend-boundary.md`
+- 题目变体与肌肉记忆标记：`docs/architecture/question-variants.md`
+- 知识上下文边界：`docs/architecture/knowledge-boundary.md`
+- 产品术语（宫殿 / 章节 / 复习单元 / 题及编号格式）：`docs/architecture/terminology.md`
+- 单一架构账本：`docs/architecture/context-map.yaml`
+- 临时文件级例外：`docs/architecture/boundary-exceptions.json`
+## 变更标识边界
 
-Request mutation IDs are represented by the framework-free `platform.application.MutationIdentity` contract. Presentation extracts an identity from request headers and uses the platform SQLAlchemy response-store adapter. Palace no longer imports the retired Persistence context; mutation responses participate in the use case's existing `UnitOfWork` transaction.
+请求变更 ID 由无框架依赖的 `platform.application.MutationIdentity` 契约表示。Presentation 从请求头提取标识，并使用平台 SQLAlchemy 响应存储适配器。宫殿不再导入已退役的 Persistence 上下文；变更响应参与用例已有的 `UnitOfWork` 事务。
 
-`platform.application.MutationReplay` (via `open_mutation_replay`) is the shared
-replay-lookup handle for that boundary. It derives the identity from the request
-headers, binds it to a caller-constructed `MutationResponseStore`, and exposes
-`existing()` / `save(payload)`. It performs replay lookup and storage only: no
-commits (each caller keeps its own transaction ownership, because routers differ
-in when they commit and in whether a use case owns the transaction) and no
-response shaping (a replay returns the payload exactly as persisted). It is
-framework-free — it depends on the `MutationResponseStore` protocol, not on
-SQLAlchemy or FastAPI — so presentation constructs the adapter while the helper
-stays free of infrastructure imports.
+`platform.application.MutationReplay`（经由 `open_mutation_replay`）是该边界的共享重放查找句柄。它从请求头推导标识，将其绑定到调用方构造的 `MutationResponseStore`，并暴露 `existing()` / `save(payload)`。它只执行重放查找与存储：不提交（每个调用方保留自己的事务归属，因为各路由在何时提交以及用例是否拥有事务上各不相同），也不塑造响应（重放会原样返回已持久化的载荷）。它无框架依赖——依赖 `MutationResponseStore` 协议，而不依赖 SQLAlchemy 或 FastAPI——因此 presentation 构造适配器，而该辅助器保持不导入 infrastructure。
 
-Callers override `MutationReplay.identity` when a request may also carry an
-operation id in the body, and validate a replayed payload themselves when it must
-belong to a specific entity. `memory/presentation/router.py` (`patch_unit_schedule`)
-does both, so it keeps its own lookup rather than using the handle's stored payload
-unchecked.
+当请求还可能在请求体中携带操作 ID 时，调用方会覆盖 `MutationReplay.identity`；当重放载荷必须属于特定实体时，调用方会自行校验。`memory/presentation/router.py`（`patch_unit_schedule`）两者都做，因此它保留自己的查找，而不是不加检查地使用句柄存储的载荷。
 
-## Study session mutation commands
+## 学习会话变更命令
 
-The five idempotent Study Session HTTP writes are composed by `sessions.application.study_session_commands`. Each command asks legacy persistence primitives to flush without committing, stores the mutation response through the platform adapter, and commits once through `UnitOfWork`. Sessions therefore has no dependency on the retired Persistence context.
+五个幂等的学习会话 HTTP 写入由 `sessions.application.study_session_commands` 组合。每个命令都要求旧版持久化原语在不提交的情况下 flush，通过平台适配器存储变更响应，并通过 `UnitOfWork` 提交一次。因此 sessions 不依赖已退役的 Persistence 上下文。
 
-English course HTTP wrappers are owned by `apps/web/src/modules/english` (via its `public.ts`); pages must not recreate a parallel english API layer. Listening courses are built by local subtitle import (`POST /english/import`): the backend parses SRT/VTT/ASS, merges broken cue fragments into sentences, aligns an optional Chinese track by timeline, and stores normalized tokens. No ASR or translation AI runs in this path. The dictation stage (`ui/english-dictation`) owns whole-word judgment, per-letter colouring, keyboard shortcuts, three layouts, and the draggable blur mask; its pure state model lives in `domain/english-dictation/model.ts`. Playback defaults to single-sentence mode and can switch to continuous (`F3`): single pauses at each cue end, continuous follows the playhead across cues without pausing. Boundary checks use a light 30 ms timer rather than per-frame callbacks, the mask switches to an opaque fill while the video plays (blur returns when paused), and `/english/courses/{id}/media` implements HTTP byte ranges so the player can seek to cue timestamps without downloading the whole file first.
+英语课程 HTTP 包装器归 `apps/web/src/modules/english` 所有（通过其 `public.ts`）；页面不得重建一套并行的 english API 层。听力课程通过本地字幕导入（`POST /english/import`）构建：后端解析 SRT/VTT/ASS，把破碎的 cue 片段合并成句子，按时间线对齐可选的中文音轨，并存储规范化 token。此路径不运行 ASR 或翻译 AI。听写阶段（`ui/english-dictation`）负责整词判定、逐字母着色、键盘快捷键、三种布局与可拖拽模糊遮罩；其纯状态模型位于 `domain/english-dictation/model.ts`。播放默认单句模式，可切换为连续模式（`F3`）：单句模式在每个 cue 结束时暂停，连续模式跨 cue 跟随播放头而不暂停。边界检查使用轻量 30 ms 定时器而不是逐帧回调，视频播放时遮罩切换为不透明填充（暂停时恢复模糊），`/english/courses/{id}/media` 实现 HTTP 字节范围，使播放器无需先下载整个文件即可跳转到 cue 时间戳。
 
-Frontend AI scenario/model selection and per-run overrides are owned by `modules/settings/domain/ai-runtime-entity`; business modules consume it through `modules/settings/public` and must not recreate an `ai-config` feature.
+前端 AI 场景/模型选择与逐次运行覆盖归 `modules/settings/domain/ai-runtime-entity` 所有；业务模块通过 `modules/settings/public` 消费它，且不得重建 `ai-config` 功能。
 
-## Route metadata single source
+## 路由元数据单一来源
 
-`apps/web/src/shared/routing/routeManifest.ts` is the single source for route → nav-section / page-history-section / history-key / fallback-target mapping. `app/shell/navSections.ts` matchers, `shared/page-history/navigationSection.ts`, `shared/page-history/pageHistoryRoute.ts`, and the router 404 fallback all derive from it; the JSX `<Routes>` table stays hand-maintained and is reconciled by `src/shared/routing/routeManifest.test.ts`. Register new routes in the manifest first.
+`apps/web/src/shared/routing/routeManifest.ts` 是 路由 → 导航区 / 页面历史区 / 历史键 / 回退目标 映射的单一来源。`app/shell/navSections.ts` 的匹配器、`shared/page-history/navigationSection.ts`、`shared/page-history/pageHistoryRoute.ts` 以及路由器的 404 回退都从它派生；JSX `<Routes>` 表仍手工维护，并由 `src/shared/routing/routeManifest.test.ts` 对账。先在清单中登记新路由。
 
-## Registered follow-up refactors (not yet done)
+## 已登记的后继重构（尚未完成）
 
-Each entry must still be over its gate. `tools/check_architecture.py` runs
-`check_oversized_baseline_is_current`, so a follow-up that is finished (or whose file
-was deleted) fails the gate until its `BASELINE_OVERSIZED_FILES` entry is removed —
-the list cannot silently keep exempting a path that no longer needs it.
+每个条目仍必须处于其门禁阈值之上。`tools/check_architecture.py` 运行 `check_oversized_baseline_is_current`，因此已完成（或其文件已删除）的后继项会一直让门禁失败，直到其 `BASELINE_OVERSIZED_FILES` 条目被移除——该清单不能悄悄继续豁免一个已不再需要豁免的路径。
 
-- Sink the `shared/hooks/timedSession*` family + `SessionTimerBar` into `modules/session` (currently listed as explicit `shared→modules` ESLint boundary exceptions).
-- Resolve the `modules→widgets` boundary exceptions (practice/quiz importing `mindmap-review-flow` / `palace-memory-lookup` APIs) by sinking those APIs behind module publics.
-- Split the three oversized `shared/ui/mindmap-canvas` files (`layout.ts`, `NodeCard.tsx`, `useMindMapCanvasState.ts`).
-- Extract the shared question meta row (stats / type / variant control / rating / marked) from `NodeBoundQuizDialog` and `FreestyleScopeQuizDialog`; both are temporarily over the 750-line gate after the question-variant workflow.
-- Split `shared/components/ui/dialog.tsx` and the freestyle model test harnesses `freestyleProgressSegments.test.ts` / `roundCompletion.test.ts`; registered as temporary quality-gate exceptions until extracted.
+- 通过把相关 API 下沉到模块公共入口之后，解决 `modules→widgets` 边界例外（practice/quiz 导入 `mindmap-review-flow` / `palace-memory-lookup` API）。
+- 拆分 `shared/ui/mindmap-canvas` 的三个超大文件（`layout.ts`、`NodeCard.tsx`、`useMindMapCanvasState.ts`）。
+- 从 `NodeBoundQuizDialog` 与 `FreestyleScopeQuizDialog` 中提取共享的题目元信息行（统计 / 类型 / 变体控件 / 评分 / 标记）；在题目变体工作流之后，两者暂时超过 750 行门禁。
+- 拆分 `shared/components/ui/dialog.tsx` 以及随心模型测试装置 `freestyleProgressSegments.test.ts` / `roundCompletion.test.ts`；在拆分之前登记为临时质量门禁例外。
 - 拆分本轮轮次计划与评分工作撑大的三个随心文件：`FreestyleRoundSheet.tsx`（拆成弹层子组件）、`freestyleProgressSegments.ts`（模型与摘要分离）、`ratingSaveStore.ts`（类型/纯函数与 store 分离）。目前登记为临时门禁例外；下一次随心重构应删掉这三条例外。
-- Optional: rename nav-section keys `'knowledge'`→`'create'`, `'review'`→`'insights'` (needs pageHistoryStore key migration).
+- 可选：重命名导航区键 `'knowledge'`→`'create'`、`'review'`→`'insights'`（需要 pageHistoryStore 键迁移）。
 
-Completed and therefore no longer listed: `PalaceEditorPage.tsx` (689 lines),
-the `GlobalTimerProvider*` / `TimerAutomationDialog` / `useTimedSession*` session
-hosts, and `PalaceQuizGenerationPanel.tsx` (deleted). `PalaceMindMapWorkspace.tsx`
-(728 lines) and `PalaceChapterBindingDialog.tsx` were deleted with the palace
-editor's directory-tree rewrite: the editor's left column is now
-`modules/content/ui/palace-edit/components/PalaceDirectoryTree.tsx` (subject →
-chapter → palace, click to switch palace in place, drag a palace onto a chapter
-to rebind it), and `PalaceMetaPanel` / `PalaceAttachmentPanel` /
-`usePalaceMetaController` went with the binding form.
+已完成并因此不再列出：`PalaceEditorPage.tsx`（689 行）、`GlobalTimerProvider*` / `TimerAutomationDialog` / `useTimedSession*` 会话宿主，以及 `PalaceQuizGenerationPanel.tsx`（已删除）。`PalaceMindMapWorkspace.tsx`（728 行）与 `PalaceChapterBindingDialog.tsx` 随宫殿编辑器的目录树重写一并删除：编辑器左栏现在是 `modules/content/ui/palace-edit/components/PalaceDirectoryTree.tsx`（学科 → 章节 → 宫殿，点击就地切换宫殿，把宫殿拖到章节上即可重新绑定），`PalaceMetaPanel` / `PalaceAttachmentPanel` / `usePalaceMetaController` 随绑定表单一起移除。
 
-## Hand-written code that is deliberately kept
+## 刻意保留的手写代码
 
-`docs/architecture/domain-rules-not-replaced.md` records where an off-the-shelf
-library was evaluated and rejected, with the measured or code-level reason. Read it
-before "modernizing" `memory/application/unit_fsrs_adapter.py`, `core/time.py`,
-`quiz/application/manual_text_quiz_parser.py`, or the LLM client's retry handling —
-each carries a product rule that the obvious library does not express.
-(`unit_scheduler.py` itself is now a thin wrapper over the FSRS adapter; the
-product rules it used to own live in the adapter and are pinned by
-`test_unit_fsrs_adapter.py` / `test_unit_scheduler_rules.py`.)
+`docs/architecture/domain-rules-not-replaced.md` 记录了评估并拒绝现成库的地方，以及实测或代码层面的理由。在“现代化” `memory/application/unit_fsrs_adapter.py`、`core/time.py`、`quiz/application/manual_text_quiz_parser.py` 或 LLM 客户端的重试处理之前先读它——每一处都承载着显而易见的库无法表达的产品规则。（`unit_scheduler.py` 本身现在是 FSRS 适配器之上的薄包装；它过去拥有的产品规则位于适配器中，并由 `test_unit_fsrs_adapter.py` / `test_unit_scheduler_rules.py` 固定。）
 
 
-## Runtime-owned workflows
+## 运行时拥有的工作流
 
-The concentrated architecture replacement has started with the two failure-prone learning-loop slices. New business code lives under `apps/web/src/modules`, browser effects live under `apps/web/src/platform`, and XState is restricted to `application/workflows`.
+集中式架构替换已经从两个易出错的学习闭环切片开始。新的业务代码位于 `apps/web/src/modules` 下，浏览器副作用位于 `apps/web/src/platform` 下，XState 被限制在 `application/workflows` 中。
 
-- `freestyle`: `canCompleteRound` is a framework-free domain guard; `FreestyleTrainingMachine` rejects scroll-driven completion. Immersive feed config, skip/refresh rules, and queue identity live under `modules/practice`; backend queue build composes only the public `content`, `memory`, `quiz`, and `english` capabilities. One immersive route (`/freestyle`); the former `/freestyle-2` was merged into it by migration 0072 and now redirects. Shelf review opens `/palaces/<id>/review` and reuses the freestyle feed without entering `/freestyle`. The retired standalone `/review` pages are not registered.
-- `mindmap`: `MindMapPresentationMachine` owns embedded/fullscreen transitions; `PresentationPort` owns native fullscreen, viewport locking, Escape handling, and layout scheduling.
-- Cross-module imports must use the target module's `public.ts`.
-- Runtime ports, use cases, events, and frontend module ownership are embedded in `docs/architecture/context-map.yaml`; no parallel architecture catalogs are maintained.
-- Runtime modules under `apps/web/src/modules` are the production ownership map; do not move migrated logic back into pages as domain code. Empty future-facing module scaffolds are forbidden.
+- `freestyle`：`canCompleteRound` 是无框架依赖的领域守卫；`FreestyleTrainingMachine` 拒绝由滚动驱动的完成。沉浸式信息流配置、跳过/刷新规则与队列标识位于 `modules/practice` 下；后端队列构建只组合公共的 `content`、`memory`、`quiz` 与 `english` 能力。只有一个沉浸式路由（`/freestyle`）；原 `/freestyle-2` 已由迁移 0072 合并进来，现在会重定向。复习书架复习打开 `/palaces/<id>/review` 并复用随心信息流而不进入 `/freestyle`。已退役的独立 `/review` 页面未登记。
+- `mindmap`：`MindMapPresentationMachine` 拥有嵌入式/全屏切换；`PresentationPort` 拥有原生全屏、视口锁定、Escape 处理与布局调度。
+- 跨模块导入必须使用目标模块的 `public.ts`。
+- 运行时端口、用例、事件与前端模块归属内嵌在 `docs/architecture/context-map.yaml` 中；不维护并行的架构目录。
+- `apps/web/src/modules` 下的运行时模块是生产归属图；不要把已迁移的逻辑作为领域代码移回 pages。禁止空的面向未来的模块脚手架。
 
-- Quiz learning loop: docs/architecture/quiz-learning-loop.md
-- Unified training evidence boundary: `docs/architecture/unified-training-evidence.md`
+- 测验学习闭环：docs/architecture/quiz-learning-loop.md
+- 统一训练证据边界：`docs/architecture/unified-training-evidence.md`
 - 诊断记录隐私边界：`docs/architecture/session-recorder-privacy.md`
 
-Historical notes for removed in-app AI and PDF features (code gone, database tables kept): `batch-generation-workspace.md`, `ai-learning-workbench.md`, `ai-run-workspace.md`, `english-reading-gap-loop.md`. English keeps local-subtitle listening dictation (`/english/listening`), cloze reading (`/english/cloze`), and word lookup. Manual JSON import (“文字转脑图”) remains.
+已移除的应用内 AI 与 PDF 功能的历史说明（代码已删除，数据库表保留）：`batch-generation-workspace.md`、`ai-learning-workbench.md`、`ai-run-workspace.md`、`english-reading-gap-loop.md`。英语保留本地字幕听力听写（`/english/listening`）、完形阅读（`/english/cloze`）与单词查询。手动 JSON 导入（“文字转脑图”）仍然保留。
 
-## Review Settlement Boundary
+## 复习结算边界
 
-- Formal review settlement may notify temporary-mark lifecycle only through `memory_anki.modules.practice.api`; the memory context must not import practice application internals.
+- 正式复习结算只能通过 `memory_anki.modules.practice.api` 通知临时标记生命周期；memory 上下文不得导入 practice 的应用内部实现。

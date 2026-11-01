@@ -1,19 +1,19 @@
-# Module: session
+# 模块：session
 
-## Status
-active — owns the in-process live study room (presence).
+## 状态
+活跃 —— 拥有进程内实时自习室（在场）。
 
-## Owns
-The in-process live study room (presence, controller lease, SSE).
+## 负责
+进程内实时自习室（在场、控制器租约、SSE）。
 
-## Migrates from
+## 迁移自
 - sessions
 
-## Forbids
-No FSRS math
+## 禁止
+不涉及 FSRS 数学
 
-## Public surface
-- `api.py` / `public/__init__.py` — live study room commands and stream
+## 公共接口
+- `api.py` / `public/__init__.py` — 实时自习室命令与流
 
-## Cross-module rule
-Import only `memory_anki.modules.session.public`. Never import another module's application/infrastructure/presentation.
+## 跨模块规则
+只导入 `memory_anki.modules.session.public`。绝不要导入另一个模块的 application/infrastructure/presentation。

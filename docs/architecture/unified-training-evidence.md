@@ -1,27 +1,33 @@
-# Training Evidence Boundary
+# 训练证据边界
 
-## Product Boundary
 
-The primary navigation is exactly `随心`, `知识`, `英语`, `创建`, and `洞察`. Settings remain a system/profile surface.
+<!-- 架构检查不变量索引（机器校验用，请勿删除；正文为中文）
+private answer ledger
+refresh does not clear
+-->
 
-## Palace Review Evidence
+## 产品边界
 
-Palace review records one effective four-level rating per unit encounter: `1=忘记`, `2=困难`, `3=记得`, `4=轻松`. The operation stores stable session, unit revision, encounter, and operation identity together with before/after unit state. Before the learner leaves, an amended rating replaces the effective operation from the same frozen baseline. Undo is LIFO and only available while the encounter is open.
+主导航恰好是 `随心`、`知识`、`英语`、`创建` 和 `洞察`。设置仍属于系统/个人资料界面。
 
-There is no node recall evidence, inferred node rating, subtree rating inheritance, node mastery projection, or node FSRS state. Migration `0051_remove_node_review_history` removes the retired node event tables after creating a database backup.
+## 宫殿复习证据
 
-## Quiz Evidence
+宫殿复习按每个单元的每次 `encounter` 记录一个有效的四级评分：`1=忘记`、`2=困难`、`3=记得`、`4=轻松`。该操作存储稳定的会话、单元修订、`encounter` 和操作标识，以及变更前后的单元状态。在学习者离开之前，修改后的评分会从同一冻结基线替换有效操作。撤销是后进先出，且仅在 `encounter` 仍打开时可用。
 
-Quiz attempts remain question-owned evidence with correctness, answer payload, source, and stable question identity. Node bindings classify a question against palace content but never turn a quiz attempt into a palace unit rating. Mind-map toolbar practice, node-bound badges, the freestyle overlay, and freestyle quiz cards share that question identity: a score written from one entry is the same progress the others read. The entry must not keep a private answer ledger. Refresh does not clear 已做. It is cleared only when the learner manually clears it, or the settlement page chooses to clear it.
+不存在节点回忆证据、推断的节点评分、子树评分继承、节点掌握度投影或节点 FSRS 状态。迁移 `0051_remove_node_review_history` 在创建数据库备份后移除已停用的节点事件表。
 
-## Trusted Progress Delivery
+## 测验证据
 
-Question progress synchronization acknowledges only server-confirmed snapshots. Startup hydration must not mark unsent local answers as synchronized. Changes made during an in-flight save are drained after that request, and visible clients refresh shared progress on focus, reconnect, and a bounded polling interval. Different answer batches are not globally coalesced in the mutation queue.
+测验作答仍是归题目所有的证据，包含正确性、答案载荷、来源和稳定的题目标识。节点绑定按宫殿内容对题目分类，但绝不把测验作答变成宫殿单元评分。脑图工具栏练习、节点绑定徽标、随心叠加层和随心测验卡片共享该题目标识：从一个入口写入的分数就是其他入口读取的同一进度。入口不得维护私有的答案账本。刷新不会清除已做。只有在学习者手动清除，或结算页选择清除时才会清除。
 
-Clear commands retain their original timestamp and scope. A delayed clear cannot delete a newer answer; clear tombstones remove both completed and unfinished local states. Local action timestamps are monotonically ordered, including a clear followed by an answer within one millisecond. Failed saves retain the local copy and expose an unsynchronized warning rather than claiming successful delivery.
+## 可信进度交付
 
-Time investment, learning activity, and mastery evidence are separate facts. A question answer does not automatically rate a review unit, editing does not demonstrate recall, and unknown evidence must not be presented as a verified zero or as poor effort. User-facing reports contain facts without motivational judgments.
+题目进度同步仅确认服务器已确认的快照。启动水合不得把未发送的本地答案标记为已同步。在保存请求进行期间所做的更改会在该请求之后排空，可见客户端会在获得焦点、重新连接和有界轮询间隔时刷新共享进度。不同的答案批次不会在变更队列中全局合并。
 
-## Independent English Evidence
+清除命令保留其原始时间戳和范围。延迟的清除不能删除更新的答案；清除墓碑会同时移除已完成和未完成的本地状态。本地操作时间戳按单调顺序排列，包括在一毫秒内先清除后作答的情况。失败的保存会保留本地副本并显示未同步警告，而不是声称已成功交付。
 
-English topic patterns and English Reading vocabulary are independent FSRS cards. Their evidence and schedule do not read or mutate palace review-unit state.
+时间投入、学习活动和掌握度证据是不同的事实。题目作答不会自动给复习单元评分，编辑不能证明回忆，未知证据不得被呈现为已验证的零或努力不足。面向用户的报告只包含事实，不含激励性评判。
+
+## 独立的英语证据
+
+英语听力/听写练习与宫殿复习单元是独立的排期轨道。它们的证据和排期不读取也不修改宫殿复习单元状态。

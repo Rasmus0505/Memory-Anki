@@ -1,36 +1,36 @@
-# Palace Wave Review System Design
+# 宫殿波次复习系统设计
 
-**Date:** 2026-07-22  
-**Status:** Approved for implementation  
-**Architecture:** Write-time wave domain (ReviewWave as source of truth; StudySession as execution slice)
+**日期：** 2026-07-22  
+**状态：** 已批准实施  
+**架构：** 写入时波次领域（ReviewWave 作为事实来源；StudySession 作为执行切片）
 
-## Summary
+## 概要
 
-Split FSRS node memory computation from user-facing review tasks. FSRS owns `raw_due_at`; palace waves aggregate, freeze, pause/resume, reinforce, and present. Formal long-term waves use local calendar days; same-day reinforcement uses concrete UTC times.
+将 FSRS 节点记忆计算与面向用户的复习任务分离。FSRS 拥有 `raw_due_at`；宫殿波次负责聚合、冻结、暂停/恢复、强化和呈现。正式长期波次使用本地日历日；同日强化使用具体的 UTC 时间。
 
-## Decisions
+## 决策
 
-1. **Wave primary, session secondary:** One formal wave can span multiple StudySessions. Freeze scope lives on `ReviewWaveItem`, mirrored into session summary for compatibility.
-2. **Big-bang delivery:** Tables, domain, API, and frontend land together.
-3. **Compatibility:** `ReviewNodeState.due_at` remains the effective formal due used by existing queue fields; `raw_due_at` stores FSRS suggestion.
-4. **No auto-expand:** Starting freezes current due+overdue only; new dues require explicit merge on resume.
-5. **Weak ratings → reinforcement waves** (default 20m/60m), not formal short `due_at` caps.
-6. **First-learn / never-reviewed** tree nodes enter formal due immediately (new palaces are reviewable without calibration). **Content-changed** nodes stay out of formal due until relearned or calibrated.
+1. **波次为主，会话为辅：** 一个正式波次可以跨越多个 StudySession。冻结范围位于 `ReviewWaveItem` 上，并为兼容性镜像到会话摘要中。
+2. **大爆炸式交付：** 表、领域、API 和前端一起落地。
+3. **兼容性：** `ReviewNodeState.due_at` 仍是现有队列字段所使用的有效正式到期时间；`raw_due_at` 存储 FSRS 建议。
+4. **不自动扩展：** 开始时只冻结当前到期+逾期；新的到期需要恢复时显式合并。
+5. **弱评分 → 强化波次**（默认 20m/60m），而非正式的短 `due_at` 上限。
+6. **首次学习 / 从未复习** 的树节点立即进入正式到期（新宫殿无需校准即可复习）。**内容已变更** 的节点在重新学习或校准之前不进入正式到期。
 
-## Tables
+## 表
 
-- `review_waves`, `review_wave_items`
-- `review_calibration_operations`, `review_calibration_operation_items`
-- Extended `review_node_states` columns for dual dates, wave membership, practice/direct clocks, schedule_source
+- `review_waves`、`review_wave_items`
+- `review_calibration_operations`、`review_calibration_operation_items`
+- 扩展的 `review_node_states` 列，用于双日期、波次成员资格、练习/直接时钟、schedule_source
 
-## Key services
+## 关键服务
 
-- `wave_policy.py` — pure safety-window / date helpers
-- `wave_service.py` — adsorb, freeze, pause/resume/merge/complete, reinforcement
-- `calibration_service.py` — diagnose/preview/apply/undo
-- Formal review lifecycle wires waves; `rate_nodes` applies wave reassignment after FSRS writes
+- `wave_policy.py` — 纯安全窗口 / 日期辅助函数
+- `wave_service.py` — 吸附、冻结、暂停/恢复/合并/完成、强化
+- `calibration_service.py` — 诊断/预览/应用/撤销
+- 正式复习生命周期接入波次；`rate_nodes` 在 FSRS 写入后应用波次重新分配
 
-## Out of scope
+## 不在范围内
 
-- Cloud multi-user, separate mobile app
-- Deleting historical completion audit rows
+- 云端多用户、独立移动应用
+- 删除历史完成审计行

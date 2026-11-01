@@ -1,15 +1,15 @@
-# Module: memory
+# 模块：memory
 
-## Status
-migrated — client contracts for permanent-mark unit review.
+## 状态
+已迁移 —— 永久标记单元复习的客户端契约。
 
-## Owns
-Unit session DTOs, fixed-ladder rating commands, encounters, undo, and completion queries.
+## 负责
+单元会话 DTO、固定阶梯评分命令、encounter、撤销和完成查询。
 
-## Public entry
-`public.ts` — only cross-module import path.
+## 公共入口
+`public.ts` — 唯一的跨模块导入路径。
 
-## Rules
-- Do not import other modules' internal paths.
-- Domain code is framework-free (no React).
-- Palace node FSRS, waves, calibration, temporary marks, and node ratings must not return.
+## 规则
+- 不得导入其他模块的内部路径。
+- 领域代码不依赖框架（不使用 React）。
+- 宫殿节点 FSRS、波次、校准、临时标记和节点评分不得回归。

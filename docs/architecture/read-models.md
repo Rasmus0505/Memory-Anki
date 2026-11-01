@@ -1,57 +1,57 @@
-# Read Model Purity
+# 读模型纯净性
 
-Queries and serializers return projections of persisted state. They do not repair, normalize, unarchive, flush, or commit aggregates.
+查询和序列化器返回持久化状态的投影。它们不修复、规范化、取消归档、冲刷或提交聚合。
 
-## Palace Rules
+## 宫殿规则
 
-- `palace_json`, `palace_summary_json`, and palace grouping/shelf projections are read-only.
-- Inconsistent chapter bindings are represented through `binding_status`; they are not repaired during serialization.
-- Archived palaces are excluded by repository query predicates rather than being automatically unarchived.
-- Legacy bulk unarchive behavior lives only in `palace_maintenance.restore_all_archived_palaces` and must be invoked as an explicit maintenance command.
-- Chapter-binding reconciliation remains an explicit command used after relevant write operations or dedicated repair workflows.
+- `palace_json`、`palace_summary_json` 以及宫殿分组/书架投影都是只读的。
+- 不一致的章节绑定通过 `binding_status` 表示；它们不会在序列化期间被修复。
+- 已归档宫殿由仓库查询谓词排除，而不是被自动取消归档。
+- 旧版批量取消归档行为只存在于 `palace_maintenance.restore_all_archived_palaces` 中，必须作为显式维护命令调用。
+- 章节绑定对账仍然是显式命令，在相关写操作之后或专用修复流程中使用。
 
-These rules ensure GET requests are retry-safe, make cache behavior deterministic, and prevent serializers from owning transactions.
+这些规则确保 GET 请求可安全重试，使缓存行为确定，并防止序列化器拥有事务。
 
-## Palace Core Transactions
+## 宫殿核心事务
 
-Palace core CRUD commands receive `UnitOfWork`; `PalaceRepository` exposes persistence primitives but never commits or refreshes transactions. Palace creation stages the Palace, pegs, initial Review schedules, and idempotency response before one UoW commit. Failure in any pre-commit collaborator rolls back the complete creation.
+宫殿核心 CRUD 命令接收 `UnitOfWork`；`PalaceRepository` 暴露持久化原语，但从不提交或刷新事务。宫殿创建会在一次 UoW 提交之前暂存宫殿、peg、初始复习排期和幂等响应。任何提交前协作者失败都会回滚整个创建。
 
-## Segment and mini-palace transaction rules
+## 片段与迷你宫殿事务规则
 
-- Segment and mini-palace create/update/delete use cases receive the platform `UnitOfWork` port; application services never commit through SQLAlchemy `Session`.
-- Create routes persist the aggregate row and mutation-id response in one transaction. A failure while preparing the idempotency record rolls back the aggregate write.
-- Mini-palace list queries are projections only. They preserve stored node bindings and never clean, flush, commit, or refresh ORM state during GET handling. Any future cleanup must be exposed as an explicit maintenance command.
+- 片段和迷你宫殿的创建/更新/删除用例接收平台 `UnitOfWork` 端口；应用服务绝不通过 SQLAlchemy `Session` 提交。
+- 创建路由在一个事务中持久化聚合行和 mutation-id 响应。准备幂等记录时失败会回滚聚合写入。
+- 迷你宫殿列表查询只是投影。它们保留已存储的节点绑定，并且在 GET 处理期间绝不清理、冲刷、提交或刷新 ORM 状态。任何未来的清理都必须暴露为显式维护命令。
 
-## Attachment compensation boundary
+## 附件补偿边界
 
-Attachment commands coordinate SQL state with local files without pretending the filesystem is transactional:
+附件命令协调 SQL 状态与本地文件，而不假装文件系统是事务性的：
 
-- Upload writes the file first, then commits attachment metadata through `UnitOfWork`; any database failure rolls back and deletes the new file.
-- Delete first moves the file to a unique quarantine name, commits metadata deletion, and only then removes the quarantined file. A database failure rolls back and restores the original path.
-- Presentation injects the SQLAlchemy adapter. The application service depends only on the platform `UnitOfWork` port and owns compensation behavior.
+- 上传先写文件，然后通过 `UnitOfWork` 提交附件元数据；任何数据库失败都会回滚并删除新文件。
+- 删除先把文件移到唯一的隔离名称，提交元数据删除，然后才移除隔离文件。数据库失败会回滚并恢复原始路径。
+- 展示层注入 SQLAlchemy 适配器。应用服务只依赖平台 `UnitOfWork` 端口，并拥有补偿行为。
 
-## Palace creation paths
+## 宫殿创建路径
 
-Every route that creates a Palace must establish the same atomic minimum invariant: the Palace row, initial Review schedules, and mutation-id response either all commit or all roll back. Template instantiation therefore uses the same application-owned transaction pattern as core Palace creation instead of committing a Palace and triggering Review initialization afterward. Template CRUD and focus-node commands also receive the platform `UnitOfWork` port rather than committing through `Session`.
+每个创建宫殿的路由都必须建立相同的最小原子不变量：宫殿行、初始复习排期和 mutation-id 响应要么全部提交，要么全部回滚。因此模板实例化使用与核心宫殿创建相同的应用拥有事务模式，而不是先提交宫殿再触发复习初始化。模板 CRUD 和焦点节点命令也接收平台 `UnitOfWork` 端口，而不是通过 `Session` 提交。
 
-## Batch Palace imports
+## 批量宫殿导入
 
-JSON and Markdown imports are application-owned batch transactions. The import service returns the exact created Palace entities instead of forcing presentation to rediscover them using descending IDs. All Palace rows, nested Peg trees, initial Review schedules, and the mutation-id response commit together. Failure while initializing any imported Palace rolls back the entire batch.
+JSON 和 Markdown 导入是应用拥有的批量事务。导入服务返回确切创建的宫殿实体，而不是强迫展示层用降序 ID 重新发现它们。所有宫殿行、嵌套 Peg 树、初始复习排期和 mutation-id 响应一起提交。初始化任何导入宫殿时失败都会回滚整个批次。
 
-## Connection pool budget
+## 连接池预算
 
-The SQLite engine in `infrastructure/db/_tables/_base.py` sizes the pool and caps how long a request may wait for a connection. These caps nest inside the client transport budgets, and the *innermost* limit must always fire first:
+`infrastructure/db/_tables/_base.py` 中的 SQLite 引擎设置连接池大小，并限制请求等待连接的最长时间。这些上限嵌套在客户端传输预算之内，且**最内层**的限制必须始终最先触发：
 
-| Layer | Setting | Budget |
+| 层 | 设置 | 预算 |
 | --- | --- | --- |
-| Pool checkout | `DB_POOL_TIMEOUT_SECONDS` | 5s |
-| SQLite write lock | `SQLITE_LOCK_WAIT_SECONDS` | 10s |
-| Session-start POST | `SESSION_START_TIMEOUT_MS` | 15s |
-| Read request | `GET_REQUEST_TIMEOUT_MS` | 20s |
-| App-level session load | `SESSION_LOAD_TIMEOUT_MS` | 30s |
+| 连接池取出 | `DB_POOL_TIMEOUT_SECONDS` | 5 秒 |
+| SQLite 写锁 | `SQLITE_LOCK_WAIT_SECONDS` | 10 秒 |
+| 会话启动 POST | `SESSION_START_TIMEOUT_MS` | 15 秒 |
+| 读请求 | `GET_REQUEST_TIMEOUT_MS` | 20 秒 |
+| 应用级会话加载 | `SESSION_LOAD_TIMEOUT_MS` | 30 秒 |
 
-`pool_timeout` must be set explicitly. SQLAlchemy defaults it to 30s, which is slower than every client budget above: a saturated pool then parks requests past the point where the browser gave up, so a burst of `in 30xxx ms` 500s arrives *after* the user already saw a timeout, and any write that eventually succeeds has already diverged from the client. Failing checkout fast turns pool exhaustion into an actionable, retryable error instead.
+必须显式设置 `pool_timeout`。SQLAlchemy 默认是 30 秒，比上面每个客户端预算都慢：连接池饱和时会把请求停放超过浏览器放弃的时间点，因此一阵 `in 30xxx ms` 的 500 会在用户已经看到超时*之后*才到达，而任何最终成功的写入都已经与客户端分叉。让取出快速失败反而会把连接池耗尽变成可操作、可重试的错误。
 
-Pool capacity (`DB_POOL_SIZE` + `DB_MAX_OVERFLOW`) is a reader-concurrency budget. SQLite serialises writes itself via `busy_timeout` + WAL, so the pool does not need to throttle writers; it needs enough slots that a feed open — which fans out into review queue, several palace projections, ladder progress, quiz-node bindings, dashboard, and a session-start POST per card — does not starve unrelated requests.
+连接池容量（`DB_POOL_SIZE` + `DB_MAX_OVERFLOW`）是读取并发预算。SQLite 本身通过 `busy_timeout` + WAL 串行化写入，因此连接池不需要限制写入者；它需要足够的槽位，使一次信息流打开——会扇出到复习队列、多个宫殿投影、阶梯进度、测验节点绑定、仪表盘以及每张卡片一次会话启动 POST——不会饿死无关请求。
 
-Client-side, identical concurrent reads are collapsed through `shared/api/inFlightRequest.ts` so a page that mounts two consumers of the same endpoint (for example a freestyle card mounting both `useFreestyleUnitReviewNodeQuiz` and `useFreestyleTextToMindMap`) issues one request instead of two. Callers that mutate the resource must call `invalidateSharedRequest`; the entry is dropped as soon as the request settles, so this never serves stale data.
+客户端侧，相同的并发读取会通过 `shared/api/inFlightRequest.ts` 合并，因此挂载同一端点两个消费者的页面（例如一张随心卡片同时挂载 `useFreestyleUnitReviewNodeQuiz` 和 `useFreestyleTextToMindMap`）只会发出一个请求而不是两个。修改该资源的调用方必须调用 `invalidateSharedRequest`；请求一结束条目就会丢弃，因此这绝不会提供陈旧数据。

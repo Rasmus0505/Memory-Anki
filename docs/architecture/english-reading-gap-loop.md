@@ -1,25 +1,25 @@
-# English Reading Gap Loop
+# 英语阅读缺口闭环
 
-> Removed. English keeps listening (`/english/listening`, course pages) and `english_lookup`. Reading, CEFR, patterns, and vocab pages are gone. Database tables stay. This note is historical.
+> 已移除。英语保留听力（`/english/listening`、课程页面）和 `english_lookup`。阅读、CEFR、句型和词汇页面均已删除。数据库表保留。本说明为历史归档。
 
-English Reading owns immutable source/generated articles, anchored word or sentence targets, English-only explanations, generation runs, and target-to-article links.
+英语阅读拥有不可变的来源/生成文章、带锚点的单词或句子目标、纯英语解释、生成运行以及目标到文章的链接。
 
-## Learning Flow
+## 学习流程
 
 ```text
 source article -> anchored targets -> English explanation -> generated article -> optional second generation layer
 ```
 
-- Article content is immutable after creation; title changes do not change target offsets.
-- A target is valid only when its quote exactly matches the stored content range and checksum.
-- Generated articles may reach depth two. Depth-two articles remain readable and explainable but cannot generate descendants.
-- Yellow presentation means a target has at least one generated article link. CEFR difficulty colors and completion feedback are retired.
-- The manual profile CEFR is the only difficulty input. Reading behavior never mutates it.
+- 文章内容在创建后不可变；标题更改不会改变目标偏移。
+- 仅当目标的引文与存储的内容范围和校验和完全匹配时，该目标才有效。
+- 生成文章最多可达到第二层。第二层文章仍可阅读和解释，但不能生成后代。
+- 黄色呈现表示目标至少有一条生成文章链接。CEFR 难度颜色和完成反馈已停用。
+- 手动配置中的 CEFR 是唯一的难度输入。阅读行为绝不修改它。
 
-## Boundaries
+## 边界
 
-- `english_reading` owns article, target, explanation, generation-run, and link persistence.
-- AI calls use the platform AI runtime and settings-owned prompt catalog. Every entity-scoped generation carries an owner article and unique operation ID.
-- The legacy vocabulary and English topic-pattern contexts remain independent. The new reading loop does not write either context.
-- Consumers use `english_reading.api`; recent-article compatibility projections do not expose ORM rows.
-- Framework-free selection bounds, queue limits, and generation defaults are owned by `modules/english-reading` and exported only through its `public.ts`.
+- `english_reading` 拥有文章、目标、解释、生成运行和链接的持久化。
+- AI 调用使用平台 AI 运行时和设置所有的提示词目录。每次按实体划分的生成都携带所属文章和唯一操作 ID。
+- 遗留词汇和英语主题句型上下文保持独立。新的阅读闭环不写入任一上下文。
+- 消费方使用 `english_reading.api`；最近文章兼容投影不暴露 ORM 行。
+- 无框架依赖的选择边界、队列限制和生成默认值归 `modules/english-reading` 所有，并仅通过其 `public.ts` 导出。

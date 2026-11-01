@@ -1,23 +1,23 @@
-# Module: english
+# 模块：english
 
-## Status
-active — production module after FSD removal.
+## 状态
+活跃 —— FSD 移除后的生产模块。
 
-## Owns
-English course/patterns
+## 负责
+英语课程/句型
 
-## Public entry
-`public.ts` — only cross-module import path.
+## 公共入口
+`public.ts` — 唯一的跨模块导入路径。
 
-## Rules
-- Do not import other modules' internal paths.
-- Domain code is framework-free (no React).
-- Workflows (XState) live under application/workflows.
-- Listening dictation is local-subtitle-first: the backend parses SRT/VTT/ASS and
-  aligns an optional Chinese track; no ASR or translation AI belongs in this flow.
-- The pure spelling state model lives in `domain/english-dictation/model.ts`.
-  UI under `ui/english-dictation` only renders that model and forwards keys.
-- Playback has two modes: single cue (default, pause at each cue end) and
-  continuous (follow the playhead, pause only at the end). Keep boundary checks
-  off the per-frame path, and keep heavy backdrop filters off a playing video.
-- Media responses must keep byte-range support; sentence seeking depends on it.
+## 规则
+- 不得导入其他模块的内部路径。
+- 领域代码不依赖框架（不使用 React）。
+- 工作流（XState）放在 application/workflows 下。
+- 听力听写以本地字幕为先：后端解析 SRT/VTT/ASS 并对齐可选的中文字幕轨；
+  此流程中不包含任何 ASR 或翻译 AI。
+- 纯拼写状态模型位于 `domain/english-dictation/model.ts`。
+  `ui/english-dictation` 下的 UI 只渲染该模型并转发按键。
+- 播放有两种模式：单 cue（默认，在每个 cue 结束时暂停）和
+  连续（跟随播放头，仅在结束时暂停）。边界检查不要放在逐帧路径上，
+  也不要在视频播放时使用重型背景滤镜。
+- 媒体响应必须保留字节范围支持；句子跳转依赖于此。
