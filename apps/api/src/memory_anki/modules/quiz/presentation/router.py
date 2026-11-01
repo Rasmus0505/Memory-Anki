@@ -4,7 +4,6 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.deps import session_dep
-from memory_anki.modules.backups.api import maybe_create_rolling_backup
 from memory_anki.modules.quiz.application.learning_loop import (
     build_mastery_profile,
     record_attempt_event,
@@ -124,8 +123,6 @@ def api_list_palace_quiz_questions_by_ids(
 def api_dedupe_palace_quiz_questions(palace_id: int, s: Session = Depends(session_dep)):
     try:
         deduped_count = dedupe_palace_questions(s, palace_id)
-        if deduped_count:
-            maybe_create_rolling_backup("rolling-dedupe-palace-quiz-questions")
         return {"ok": True, "deduped_count": deduped_count}
     except Exception as exc:  # pragma: no cover - centralized HTTP mapping
         _raise_http_error(exc)
@@ -164,8 +161,6 @@ def api_list_chapter_quiz_questions(chapter_id: int, s: Session = Depends(sessio
 def api_dedupe_chapter_quiz_questions(chapter_id: int, s: Session = Depends(session_dep)):
     try:
         deduped_count = dedupe_chapter_questions(s, chapter_id)
-        if deduped_count:
-            maybe_create_rolling_backup("rolling-dedupe-chapter-quiz-questions")
         return {"ok": True, "deduped_count": deduped_count}
     except Exception as exc:  # pragma: no cover - centralized HTTP mapping
         _raise_http_error(exc)
@@ -190,7 +185,6 @@ def api_create_palace_quiz_question(
             uow=SqlAlchemyUnitOfWork(s),
             before_commit=mutation.save,
         )
-        maybe_create_rolling_backup("rolling-create-palace-quiz-question")
         return response
     except Exception as exc:  # pragma: no cover - centralized HTTP mapping
         _raise_http_error(exc)
@@ -215,7 +209,6 @@ def api_batch_create_palace_quiz_questions(
             uow=SqlAlchemyUnitOfWork(s),
             before_commit=mutation.save,
         )
-        maybe_create_rolling_backup("rolling-batch-create-palace-quiz-questions")
         return response
     except Exception as exc:  # pragma: no cover - centralized HTTP mapping
         _raise_http_error(exc)
@@ -240,7 +233,6 @@ def api_batch_create_chapter_quiz_questions(
             uow=SqlAlchemyUnitOfWork(s),
             before_commit=mutation.save,
         )
-        maybe_create_rolling_backup("rolling-batch-create-chapter-quiz-questions")
         return response
     except Exception as exc:  # pragma: no cover - centralized HTTP mapping
         _raise_http_error(exc)
@@ -254,7 +246,6 @@ def api_update_palace_quiz_question(
 ):
     try:
         item = update_question(s, question_id, data)
-        maybe_create_rolling_backup("rolling-update-palace-quiz-question")
         return {"item": item}
     except Exception as exc:  # pragma: no cover - centralized HTTP mapping
         _raise_http_error(exc)
@@ -264,7 +255,6 @@ def api_update_palace_quiz_question(
 def api_delete_palace_quiz_question(question_id: int, s: Session = Depends(session_dep)):
     try:
         delete_question(s, question_id)
-        maybe_create_rolling_backup("rolling-delete-palace-quiz-question")
         return {"ok": True}
     except Exception as exc:  # pragma: no cover - centralized HTTP mapping
         _raise_http_error(exc)
@@ -274,7 +264,6 @@ def api_delete_palace_quiz_question(question_id: int, s: Session = Depends(sessi
 def api_restore_palace_quiz_question(question_id: int, s: Session = Depends(session_dep)):
     try:
         item = restore_question(s, question_id)
-        maybe_create_rolling_backup("rolling-restore-palace-quiz-question")
         return {"item": item}
     except Exception as exc:  # pragma: no cover - centralized HTTP mapping
         _raise_http_error(exc)
@@ -284,7 +273,6 @@ def api_restore_palace_quiz_question(question_id: int, s: Session = Depends(sess
 def api_permanently_delete_palace_quiz_question(question_id: int, s: Session = Depends(session_dep)):
     try:
         permanent_delete_question(s, question_id)
-        maybe_create_rolling_backup("rolling-permanent-delete-palace-quiz-question")
         return {"ok": True}
     except Exception as exc:  # pragma: no cover - centralized HTTP mapping
         _raise_http_error(exc)
@@ -294,7 +282,6 @@ def api_permanently_delete_palace_quiz_question(question_id: int, s: Session = D
 def api_purge_palace_quiz_trash(s: Session = Depends(session_dep)):
     try:
         purged_count = purge_trash_questions(s)
-        maybe_create_rolling_backup("rolling-purge-palace-quiz-trash")
         return {"ok": True, "purged_count": purged_count}
     except Exception as exc:  # pragma: no cover - centralized HTTP mapping
         _raise_http_error(exc)
@@ -308,7 +295,6 @@ def api_batch_delete_palace_quiz_questions(data: dict, s: Session = Depends(sess
             s,
             question_ids if isinstance(question_ids, list) else [],
         )
-        maybe_create_rolling_backup("rolling-batch-delete-palace-quiz-questions")
         return {"ok": True, "deleted_count": deleted_count}
     except Exception as exc:  # pragma: no cover - centralized HTTP mapping
         _raise_http_error(exc)
@@ -348,7 +334,6 @@ def api_reset_palace_quiz_question_attempts(data: dict, s: Session = Depends(ses
             s,
             question_ids if isinstance(question_ids, list) else [],
         )
-        maybe_create_rolling_backup("rolling-reset-palace-quiz-question-attempts")
         return {"ok": True, "reset_count": reset_count}
     except Exception as exc:  # pragma: no cover - centralized HTTP mapping
         _raise_http_error(exc)

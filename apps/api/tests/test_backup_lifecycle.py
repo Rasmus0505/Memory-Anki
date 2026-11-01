@@ -225,9 +225,9 @@ def test_daily_full_backup_exists_ignores_rolling_only(backup_env):
     assert backup_lifecycle._daily_full_backup_exists() is True
 
 
-def test_edits_never_write_a_backup(backup_env):
-    assert backup_lifecycle.request_rolling_backup("rolling-editor-save") is False
-    assert backup_lifecycle.maybe_create_rolling_backup("rolling-create-palace") is None
+def test_edit_triggered_backup_api_is_retired(backup_env):
+    assert not hasattr(backup_lifecycle, "request_rolling_backup")
+    assert not hasattr(backup_lifecycle, "maybe_create_rolling_backup")
     assert not any(backup_env["rolling"].iterdir())
     assert not any(backup_env["full"].iterdir())
 

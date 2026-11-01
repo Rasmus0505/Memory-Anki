@@ -24,12 +24,6 @@ from memory_anki.platform.persistence import (
 router = APIRouter()
 
 
-def _maybe_create_rolling_backup(*args, **kwargs):
-    from memory_anki.modules.content.presentation import router as palace_router
-
-    return palace_router.maybe_create_rolling_backup(*args, **kwargs)
-
-
 @router.get("/palaces/{palace_id}/segments")
 def api_list_segments(palace_id: int, s: Session = Depends(session_dep)):
     palace = get_palace(s, palace_id)
@@ -66,7 +60,6 @@ def api_create_segment(
         uow=SqlAlchemyUnitOfWork(s),
         before_commit=prepare_atomic_response,
     )
-    _maybe_create_rolling_backup("rolling-create-palace-segment")
     return response
 
 
@@ -78,7 +71,6 @@ def api_update_segment(segment_id: int, data: dict, s: Session = Depends(session
     updated = update_palace_segment(
         s, segment, data, uow=SqlAlchemyUnitOfWork(s)
     )
-    _maybe_create_rolling_backup("rolling-update-palace-segment")
     return {"item": segment_summary_json(s, updated)}
 
 
@@ -88,5 +80,4 @@ def api_delete_segment(segment_id: int, s: Session = Depends(session_dep)):
     if not segment:
         raise_not_found()
     delete_palace_segment(s, segment, uow=SqlAlchemyUnitOfWork(s))
-    _maybe_create_rolling_backup("rolling-delete-palace-segment")
     return {"ok": True}

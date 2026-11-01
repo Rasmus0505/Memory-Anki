@@ -3,7 +3,6 @@
 from .application.backup_lifecycle import (
     create_rescue_snapshot,
     list_backups,
-    maybe_create_rolling_backup,
 )
 from .application.backup_palace_restore import restore_palace_version
 from .application.backup_palace_versions import (
@@ -38,6 +37,5 @@ __all__ = [
     "is_dangerous_structure_change",
     "list_backups",
     "list_palace_versions",
-    "maybe_create_rolling_backup",
     "restore_palace_version",
 ]

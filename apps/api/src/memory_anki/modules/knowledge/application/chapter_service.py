@@ -13,7 +13,6 @@ from memory_anki.infrastructure.db._tables.palaces import (
     PalaceQuizQuestion,
     chapter_palace_table,
 )
-from memory_anki.modules.backups.api import maybe_create_rolling_backup
 from memory_anki.modules.knowledge.application.editor_document_projection import (
     sync_subject_editor_doc_from_chapters,
 )
@@ -146,7 +145,6 @@ def create_chapter(
     if before_commit is not None:
         before_commit(result)
     uow.commit()
-    maybe_create_rolling_backup("rolling-create-chapter")
     return result
 
 
@@ -167,7 +165,6 @@ def update_chapter(
     _sync_subject_editor_doc(session, c.subject_id)
     uow.commit()
     uow.refresh(c)
-    maybe_create_rolling_backup("rolling-update-chapter")
     return chapter_json(c)
 
 
@@ -234,5 +231,4 @@ def delete_chapter(
     session.flush()
     _sync_subject_editor_doc(session, subject_id)
     uow.commit()
-    maybe_create_rolling_backup("rolling-delete-chapter")
     return {"ok": True}

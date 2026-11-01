@@ -96,15 +96,6 @@ def seed_version(session_factory, palace_id: int, title: str = "Versioned Palace
         return version.id
 
 
-@pytest.fixture(autouse=True)
-def _no_rolling_backup(monkeypatch):
-    monkeypatch.setattr(
-        palace_router,
-        "maybe_create_rolling_backup",
-        lambda *args, **kwargs: None,
-    )
-
-
 @pytest.fixture()
 def client(make_client):
     return make_client(palace_router, backups_router)

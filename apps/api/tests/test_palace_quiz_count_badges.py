@@ -88,8 +88,7 @@ def _find_palace(payload: dict, palace_id: int) -> dict | None:
     return None
 
 
-def test_grouped_catalog_stamps_quiz_count_badges(make_client, db_session, monkeypatch) -> None:
-    monkeypatch.setattr(palace_router, "maybe_create_rolling_backup", lambda *args, **kwargs: None)
+def test_grouped_catalog_stamps_quiz_count_badges(make_client, db_session) -> None:
     client = make_client(palace_router)
     created = client.post("/api/v1/palaces", json={"title": "书架宫殿", "description": "", "pegs": []})
     assert created.status_code == 200

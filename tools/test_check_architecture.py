@@ -5559,3 +5559,29 @@ def test_eslint_boundary_exceptions_reject_duplicates_and_absolute_paths(
 
     assert any("duplicate entry" in error for error in errors)
     assert any("must be relative to apps/web" in error for error in errors)
+
+
+def test_shared_round_state_ownership_rejects_the_retired_directory(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    write_file(web_src / "shared" / "freestyle-round" / "freestyleOverlayWrongState.ts", "export {}")
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_shared_round_state_ownership(errors)
+
+    assert any("shared/freestyle-round must not return" in error for error in errors)
+
+
+def test_shared_round_state_ownership_accepts_the_practice_port(
+    tmp_path: Path, monkeypatch
+) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    write_file(web_src / "modules" / "practice" / "application" / "freestyleRoundWrongState.ts", "export {}")
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+
+    errors: list[str] = []
+    check_architecture.check_shared_round_state_ownership(errors)
+
+    assert errors == []

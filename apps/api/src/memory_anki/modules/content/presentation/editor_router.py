@@ -1,7 +1,7 @@
 import logging
 import time
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db.deps import session_dep
@@ -23,23 +23,10 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-def _maybe_create_rolling_backup(*args, **kwargs):
-    from memory_anki.modules.content.presentation import router as palace_router
-
-    return palace_router.maybe_create_rolling_backup(*args, **kwargs)
-
-
 def _save_palace_editor_state(*args, **kwargs):
     from memory_anki.modules.content.presentation import router as palace_router
 
     return palace_router.save_palace_editor_state(*args, **kwargs)
-
-
-def _run_rolling_backup_after_response() -> None:
-    try:
-        _maybe_create_rolling_backup("rolling-editor-save")
-    except Exception:  # noqa: BLE001 - backup must not fail an already committed edit
-        logger.exception("rolling editor backup failed")
 
 
 @router.get("/palaces/{palace_id}/editor")
@@ -78,7 +65,6 @@ def api_get_editor(palace_id: int, s: Session = Depends(session_dep)):
 def api_update_editor(
     palace_id: int,
     data: dict,
-    background_tasks: BackgroundTasks,
     s: Session = Depends(session_dep),
 ):
     palace = get_palace(s, palace_id)
@@ -95,7 +81,6 @@ def api_update_editor(
         raise HTTPException(status_code=409, detail={"code": "mindmap_conflict", "message": str(exc), "remoteSnapshot": exc.current_snapshot}) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    background_tasks.add_task(_run_rolling_backup_after_response)
     saved = {
         "palace": palace_editor_meta_json(palace, s),
         **state,

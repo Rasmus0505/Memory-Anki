@@ -60,12 +60,6 @@ class PalaceFavoriteUpdateRequest(BaseModel):
     is_favorite: bool
 
 
-def _maybe_create_rolling_backup(*args, **kwargs):
-    from memory_anki.modules.content.presentation import router as palace_router
-
-    return palace_router.maybe_create_rolling_backup(*args, **kwargs)
-
-
 @router.get("/palaces/{palace_id}", response_model=PalaceDetailResponse)
 def api_get(palace_id: int, s: Session = Depends(session_dep)):
     p = get_palace(s, palace_id)
@@ -116,7 +110,6 @@ def api_create(
         uow=SqlAlchemyUnitOfWork(s),
         before_commit=prepare_atomic_side_effects,
     )
-    _maybe_create_rolling_backup("rolling-create-palace")
     return palace_json(palace, s)
 
 
@@ -170,7 +163,6 @@ def api_update(palace_id: int, data: PalaceUpdate, s: Session = Depends(session_
         data,
         uow=SqlAlchemyUnitOfWork(s),
     )
-    _maybe_create_rolling_backup("rolling-update-palace")
     return palace_json(updated, s)
 
 

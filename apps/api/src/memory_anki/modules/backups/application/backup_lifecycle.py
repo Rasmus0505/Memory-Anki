@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import shutil
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 from memory_anki.core.config import (
@@ -95,16 +95,6 @@ def _write_rolling_backup_locked(reason: str) -> Path:
     return folder
 
 
-def request_rolling_backup(reason: str = "rolling-edit") -> bool:
-    """Retired: edits never write a backup any more.
-
-    Kept as a no-op so the edit call sites stay harmless until they are removed.
-    The only automatic backup is the once-per-local-day startup snapshot.
-    """
-    logger.debug("edit-triggered backup %s ignored; daily startup backup only", reason)
-    return False
-
-
 def list_backups() -> list[dict]:
     results: list[dict] = []
     for kind, root in (
@@ -165,20 +155,6 @@ def restore_database_backup(backup_folder: str) -> Path:
     rescue = create_rescue_snapshot("before-db-restore")
     restore_storage_backup(source_dir)
     return rescue
-
-
-def maybe_create_interval_backup(reason: str, minimum_interval: timedelta) -> Path | None:
-    """兼容旧调用：按 rolling 目录最近一份的年龄决定是否再打轻量备份。"""
-    latest = _latest_backup_in(ROLLING_BACKUPS_DIR)
-    if latest and _backup_age(latest) < minimum_interval:
-        return None
-    return create_rolling_backup(reason)
-
-
-def maybe_create_rolling_backup(reason: str = "rolling-edit") -> Path | None:
-    """编辑触发的滚动备份：只排队，永远不在请求线程里做。"""
-    request_rolling_backup(reason)
-    return None
 
 
 def start_startup_backups(
@@ -307,11 +283,6 @@ def _daily_rolling_backup_exists() -> bool:
     )
 
 
-# 兼容旧测试/调用方名称
-def _daily_backup_exists() -> bool:
-    return _daily_full_backup_exists()
-
-
 def _is_backup_folder(child: Path) -> bool:
     # ``.backup-stage-*`` and other dot-folders are half-written staging, never a backup.
     return child.is_dir() and not child.name.startswith(".")
@@ -342,12 +313,3 @@ def _latest_backup_in(root: Path) -> Path | None:
     if not folders:
         return None
     return max(folders, key=lambda item: item.stat().st_mtime)
-
-
-def _latest_full_backup() -> Path | None:
-    return _latest_backup_in(FULL_BACKUPS_DIR)
-
-
-def _backup_age(folder: Path) -> timedelta:
-    modified_at = datetime.fromtimestamp(folder.stat().st_mtime)
-    return datetime.now() - modified_at

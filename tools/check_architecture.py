@@ -634,6 +634,24 @@ def check_forbidden_imports(errors: list[str]) -> None:
                     break
 
 
+def check_shared_round_state_ownership(errors: list[str]) -> None:
+    """Round-scoped business state belongs to practice, not `shared`.
+
+    `shared/freestyle-round` used to hold a mutable wrong-question store that the
+    practice application, the quiz module and a widget all wrote. That is exactly
+    the cross-layer back door the layer rules exist to prevent: whichever writer
+    ran last won, and a stale round could overwrite the one on screen. The port
+    is now `modules/practice/public` (read + subscribe only).
+    """
+    retired = WEB_SRC / "shared" / "freestyle-round"
+    if retired.exists():
+        errors.append(
+            "shared/freestyle-round must not return: round-scoped wrong-question "
+            "state is owned by modules/practice; other layers read it through "
+            "practice/public."
+        )
+
+
 def check_file_sizes(errors: list[str]) -> None:
     for path in iter_files(WEB_SRC, (".ts", ".tsx")):
         line_count = len(path.read_text(encoding="utf-8", errors="ignore").splitlines())
@@ -5651,14 +5669,6 @@ def check_mindmap_architecture(errors: list[str]) -> None:
                 f"{autosave_hook.relative_to(REPO_ROOT)}: mind-map autosave debounce must remain 800ms."
             )
 
-    editor_router = API_SRC / "modules" / "content" / "presentation" / "editor_router.py"
-    if editor_router.exists():
-        source = editor_router.read_text(encoding="utf-8", errors="ignore")
-        if "background_tasks.add_task(_run_rolling_backup_after_response)" not in source:
-            errors.append(
-                f"{editor_router.relative_to(REPO_ROOT)}: editor rolling backups must run after the save response."
-            )
-
     removed_paths = (
         WEB_SRC / "shared" / "components" / "mindmap",
         WEB_SRC / "shared" / "components" / "mindmap-host",
@@ -7368,6 +7378,7 @@ def main() -> int:
     check_eslint_boundary_exceptions(errors)
     check_router_residency(errors)
     check_shared_local_storage_facade(errors)
+    check_shared_round_state_ownership(errors)
     check_db_pool_budget(errors)
     check_removed_shared_api_modules(errors)
     check_visual_layer_purity(errors)

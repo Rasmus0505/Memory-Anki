@@ -17,9 +17,7 @@ from memory_anki.platform.application import MUTATION_ID_HEADER
 def test_create_palace_replay_returns_cached_response_without_duplicate_row(
     make_client,
     session_factory,
-    monkeypatch,
 ):
-    monkeypatch.setattr(palaces_router, "maybe_create_rolling_backup", lambda *args, **kwargs: None)
     client = make_client(palaces_router)
     headers = {MUTATION_ID_HEADER: "palace-create-0001"}
     payload = {"title": "Idempotent Palace", "description": "", "pegs": []}
@@ -43,7 +41,6 @@ def test_create_segment_rolls_back_when_idempotency_record_fails(
     session_factory,
     monkeypatch,
 ):
-    monkeypatch.setattr(palaces_router, "maybe_create_rolling_backup", lambda *args, **kwargs: None)
     client = make_client(palaces_router)
     palace_id = client.post(
         "/api/v1/palaces",

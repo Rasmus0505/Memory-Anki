@@ -6,7 +6,6 @@ from collections.abc import Callable
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables.knowledge import Subject
-from memory_anki.modules.backups.api import maybe_create_rolling_backup
 from memory_anki.modules.knowledge.application.chapter_service import chapter_json
 from memory_anki.modules.knowledge.application.editor_state_service import (
     get_subject_editor_state,
@@ -142,9 +141,7 @@ def save_subject_editor(
     subject = session.query(Subject).filter_by(id=subject_id).first()
     if not subject:
         return None
-    result = {
+    return {
         "subject": subject_json(subject),
         **save_subject_editor_state(session, subject, data, uow=uow),
     }
-    maybe_create_rolling_backup("rolling-subject-editor-save")
-    return result
