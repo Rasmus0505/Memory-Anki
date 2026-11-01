@@ -2,12 +2,14 @@ import { Fragment, type MouseEvent, type ReactNode, useEffect, useLayoutEffect, 
 import {
   dayCutHoverLabel,
   dayRemainingCount,
+  enteredBeforeToday,
   freestyleProgressRailFits,
   progressHudText,
   progressRailLabel,
   progressRailRetryCountVisible,
   progressSegmentHoverLabel,
   roundDaySpan,
+  todayStartIndex,
   type FreestyleProgressSegment,
   type FreestyleProgressSummary,
 } from '@/modules/practice/ui/freestyle/model/freestyleProgressSegments'
@@ -53,6 +55,8 @@ const INSERT_BATCH_LIMIT = 3
 const FOLLOW_BASE_WIDTH = 100
 /** A follow-driven arrival suppresses the comet only if the playhead catches up this fast. */
 const FOLLOW_ARRIVAL_WINDOW_MS = 700
+/** Below this much rail per tick the 「今天」 chip would sit on its neighbours. */
+const TODAY_LABEL_MIN_SLOT_PX = 16
 
 function easeOutCubic(t: number): number {
   return 1 - (1 - t) ** 3
@@ -83,9 +87,15 @@ function segmentHoverLabel(
 
 function DayCut({
   label,
+  today = false,
+  showLabel = false,
   onJump,
 }: {
   label: string
+  /** Today's cut is the one that matters: it also carries the 「今天」 chip. */
+  today?: boolean
+  /** Room for the chip: without it the divider still draws, only the word drops. */
+  showLabel?: boolean
   onJump: () => void
 }) {
   return (
@@ -94,6 +104,7 @@ function DayCut({
         <button
           type="button"
           data-testid="freestyle-progress-day-line"
+          data-today={today ? 'true' : undefined}
           aria-label={label}
           className="relative z-10 flex h-full w-3 shrink-0 items-stretch justify-center"
           onClick={(event) => {
@@ -103,8 +114,24 @@ function DayCut({
         >
           <span
             aria-hidden
-            className="progress-boundary-enter h-full w-[3px] rounded-full bg-stage-ink shadow-[0_0_0_1px_rgb(0_0_0/0.45)]"
+            className={cn(
+              'progress-boundary-enter h-full rounded-full',
+              today
+                ? 'w-[2px] bg-stage-glow shadow-[0_0_6px_1px_var(--color-stage-glow)]'
+                : 'w-[3px] bg-stage-ink shadow-[0_0_0_1px_rgb(0_0_0/0.45)]',
+            )}
           />
+          {/* Sits over the dimmed backlog to its left, so the word never covers
+              a tick the learner still has to do today. */}
+          {today && showLabel ? (
+            <span
+              aria-hidden
+              data-testid="freestyle-progress-today-label"
+              className="pointer-events-none absolute right-full top-0 mr-0.5 whitespace-nowrap rounded-[2px] bg-stage/90 px-0.5 text-[9px] font-semibold leading-3 text-stage-glow"
+            >
+              今天
+            </span>
+          ) : null}
         </button>
       </TooltipTrigger>
       <TooltipContent side="bottom">{label}</TooltipContent>
@@ -145,9 +172,13 @@ export function FreestyleProgressRail({
   const labelToday = today || beijingStudyDay()
   const canJump = Boolean(onJump) && summary.total > 0 && summary.segments.length > 0
   const daySpan = roundDaySpan(summary.segments.map((segment) => segment.enteredOn), labelToday)
-  const railLabel = daySpan > 1
-    ? `${progressRailLabel(summary, canJump)}这一轮跨了 ${daySpan} 天。`
-    : progressRailLabel(summary, canJump)
+  /** Where today's work starts on a round that was carried over from earlier days. */
+  const todayIndex = todayStartIndex(summary.segments, labelToday)
+  const railLabel = `${
+    daySpan > 1
+      ? `${progressRailLabel(summary, canJump)}这一轮跨了 ${daySpan} 天。`
+      : progressRailLabel(summary, canJump)
+  }${todayIndex > 0 ? `今天从第 ${todayIndex + 1} 张开始。` : ''}`
   const hudText = progressHudText(summary)
   const railRef = useRef<HTMLDivElement>(null)
   const gliderRef = useRef<HTMLSpanElement>(null)
@@ -303,6 +334,8 @@ export function FreestyleProgressRail({
     return () => observer.disconnect()
   }, [])
   const compact = railWidth > 0 && !freestyleProgressRailFits(summary.segments, railWidth)
+  const todayLabelFits = railWidth > 0
+    && railWidth / Math.max(1, segments.length) >= TODAY_LABEL_MIN_SLOT_PX
 
   // Rect cache: one layout read per invalidation, never per scroll frame.
   useLayoutEffect(() => {
@@ -448,20 +481,34 @@ export function FreestyleProgressRail({
               segment.palaceId != null && favoritePalaceIds?.has(segment.palaceId),
             )
             const baseHover = segmentHoverLabel(segment, index, segments, labelToday)
+            // Today's cut is drawn brighter and wears the word: the dimmed
+            // ticks to its left are the backlog, everything after is today's work.
+            const startsToday = index === todayIndex
+            const viewing = Boolean(segment.viewing || segment.tone === 'current')
+            const carriedOver = !viewing && enteredBeforeToday(segment, labelToday)
+            const cutLabel = dayCutHoverLabel(
+              segment.enteredOn,
+              labelToday,
+              dayRemainingCount(segments, segment.enteredOn || ''),
+            )
             return (
               <Fragment key={segment.cardId}>
-                {segment.cohortBoundary ? (
+                {startsToday ? (
                   <DayCut
-                    label={dayCutHoverLabel(
-                      segment.enteredOn,
-                      labelToday,
-                      dayRemainingCount(segments, segment.enteredOn || ''),
-                    )}
+                    label={cutLabel}
+                    today
+                    showLabel={todayLabelFits}
+                    onJump={() => onJump?.(segment.cardId)}
+                  />
+                ) : segment.cohortBoundary ? (
+                  <DayCut
+                    label={cutLabel}
                     onJump={() => onJump?.(segment.cardId)}
                   />
                 ) : null}
                 <ProgressRailItem
                   segment={segment}
+                  dimmed={carriedOver}
                   hoverLabel={palaceFavorite ? `收藏宫殿 · ${baseHover}` : baseHover}
                   palaceStaggerIndex={palaceStaggerIndex(segments, index)}
                   palaceFavorite={palaceFavorite}

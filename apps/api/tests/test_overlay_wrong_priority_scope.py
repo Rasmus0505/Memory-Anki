@@ -97,3 +97,80 @@ def test_prioritize_reports_nothing_when_the_bound_unit_is_already_done(db_sessi
     assert result["plan"]["wrong_unit_ids"] == ["u2"]
     assert result["plan"]["presented_ids"] == ["current", "done", "other"]
     assert result["wrong_priority"] == {"unit_count": 0, "palace_count": 0}
+
+
+def test_wrong_question_marker_survives_a_correct_retry(db_session, monkeypatch):
+    """错题红点保留到小结算：重答正确不抹掉本轮错题记录。"""
+    from memory_anki.modules.practice.application import round_overlay_service as service
+
+    cards = [{"id": "a", "type": "mindmap_branch", "palace_id": 1, "unit_id": "u1"}]
+    _seed(db_session, cards, {"question_ids": [11], "question_palace_ids": {"11": 1}})
+    monkeypatch.setattr(service, "_serve", lambda session, row, **kw: _payload(row, **kw))
+    monkeypatch.setattr(service, "list_node_bindings_for_palaces", lambda session, palace_ids: [
+        {"question_id": 11, "node_uid": "node-1"},
+    ])
+    monkeypatch.setattr(service, "list_unit_node_members", lambda session, unit_ids: {"u1": ["node-1"]})
+
+    wrong = _progress(db_session, states={"11": {"resolved": True, "correct": False}})
+    assert wrong["plan"]["wrong_question_ids"] == ["11"]
+
+    corrected = service.progress_overlay_quiz(
+        db_session,
+        round_id="unit-scope",
+        operation_id="op-2",
+        expected_version=2,
+        states={"11": {"resolved": True, "correct": True}},
+    )
+    assert corrected["plan"]["wrong_question_ids"] == ["11"]
+
+
+def test_small_settlement_clears_wrong_markers_for_settled_units(db_session, monkeypatch):
+    """小结算同时清掉节点角标与进度条的错误标记，未结算单元保持。"""
+    import json
+
+    from memory_anki.modules.practice.application import round_state_service as service
+    from memory_anki.modules.practice.domain.round_plan import plan_from_cards
+
+    cards = [
+        {"id": "a", "type": "mindmap_branch", "palace_id": 1, "unit_id": "u1"},
+        {"id": "b", "type": "mindmap_branch", "palace_id": 1, "unit_id": "u2"},
+    ]
+    plan = plan_from_cards(cards)
+    plan["completed_ids"] = ["a"]
+    plan["overlay_quiz"] = {
+        "question_ids": [11, 12],
+        "question_palace_ids": {"11": 1, "12": 1},
+        "states": {
+            "11": {"resolved": True, "correct": False},
+            "12": {"resolved": True, "correct": False},
+        },
+    }
+    plan["wrong_question_ids"] = ["11", "12"]
+    plan["wrong_unit_ids"] = ["u1", "u2"]
+    db_session.add(FreestyleRoundState(
+        round_id="settle",
+        scope_key="settle",
+        version=1,
+        plan_json=json.dumps(plan),
+        config_json="{}",
+        current_card_id="a",
+    ))
+    db_session.commit()
+    monkeypatch.setattr(service, "list_unit_node_members", lambda session, unit_ids: {"u1": ["node-1"]})
+    monkeypatch.setattr(service, "list_node_bindings_for_palaces", lambda session, palace_ids: [
+        {"question_id": 11, "node_uid": "node-1"},
+    ])
+
+    result = service.apply_round_action(
+        db_session,
+        round_id="settle",
+        action="compress_completed",
+        operation_id="settle-op",
+        expected_version=1,
+        partial_settlement={"id": "s1", "card_ids": ["a"]},
+    )
+
+    assert result["plan"]["wrong_question_ids"] == ["12"]
+    assert result["plan"]["wrong_unit_ids"] == ["u2"]
+    assert result["plan"]["overlay_quiz"]["states"] == {"12": {"resolved": True, "correct": False}}
+    assert result["status"] == "active"

@@ -74,6 +74,8 @@ export function replaceFreestyleOverlayWrongStateFromOverlay(input: {
   workspace?: string
   roundId: string
   planVersion: number
+  /** The round's durable wrong set: kept until 小结算, not erased by a retry. */
+  wrongQuestionIds?: readonly (string | number)[]
   overlay?: {
     states?: Record<string, Record<string, unknown>>
     parked?: { states?: Record<string, Record<string, unknown>> }
@@ -87,7 +89,7 @@ export function replaceFreestyleOverlayWrongStateFromOverlay(input: {
     workspace: input.workspace,
     roundId: input.roundId,
     planVersion: input.planVersion,
-    wrongQuestionIds: Object.entries(states)
+    wrongQuestionIds: input.wrongQuestionIds ?? Object.entries(states)
       .filter(([, value]) => value?.resolved === true && value?.correct === false)
       .map(([id]) => id),
   })

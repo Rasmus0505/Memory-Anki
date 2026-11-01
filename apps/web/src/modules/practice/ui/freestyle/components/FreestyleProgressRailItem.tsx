@@ -63,6 +63,7 @@ export function ProgressRailItem({
   showRetryCount,
   compact,
   inserted,
+  dimmed = false,
 }: {
   segment: FreestyleProgressSegment
   palaceGap: boolean
@@ -75,6 +76,8 @@ export function ProgressRailItem({
   compact: boolean
   /** A retry occurrence that just squeezed into an already-drawn rail. */
   inserted: boolean
+  /** Carried over from an earlier study day: drawn muted behind today's cut. */
+  dimmed?: boolean
 }) {
   const prevToneRef = useRef(segment.tone)
   const prevPalaceDoneRef = useRef(segment.palaceDone)
@@ -183,8 +186,11 @@ export function ProgressRailItem({
   const slotData = {
     'data-rail-slot': segment.cardId,
     'data-rail-palace': palaceId,
+    ...(dimmed ? { 'data-before-today': 'true' } : {}),
   }
   const gapClass = !compact && palaceGap ? 'ml-0.5' : null
+  /** Backlog is muted, not hidden: its shape still tells how much was carried over. */
+  const dimClass = dimmed ? 'opacity-60' : null
 
   if (segment.kind === 'retry' && showRetryCount) {
     return (
@@ -192,7 +198,7 @@ export function ProgressRailItem({
         <TooltipTrigger asChild>
           <span
             {...slotData}
-            className={cn('flex h-full shrink-0 items-end justify-center', gapClass, slotOpenClass)}
+            className={cn('flex h-full shrink-0 items-end justify-center', gapClass, slotOpenClass, dimClass)}
           >
             <span
               data-testid="freestyle-progress-retry-node"
@@ -227,7 +233,7 @@ export function ProgressRailItem({
           <span
             {...slotData}
             aria-label={hoverLabel}
-            className={cn('flex h-full min-w-0 flex-1 items-end', gapClass, slotOpenClass)}
+            className={cn('flex h-full min-w-0 flex-1 items-end', gapClass, slotOpenClass, dimClass)}
           >
             <span
               data-testid="freestyle-progress-retry-node"
@@ -263,6 +269,7 @@ export function ProgressRailItem({
             compact ? 'min-w-0' : 'min-w-px',
             viewing ? 'flex-[1.8]' : 'flex-1',
             gapClass,
+            dimClass,
           )}
         >
           {segment.bedtime || palaceFavorite ? (

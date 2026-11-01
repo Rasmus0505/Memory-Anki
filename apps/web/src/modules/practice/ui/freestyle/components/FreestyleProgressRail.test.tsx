@@ -252,6 +252,122 @@ describe('FreestyleProgressRail', () => {
     expect(screen.getByTestId('freestyle-progress-hud').textContent).toContain('跨了 3 天')
   })
 
+  it('mutes the carried-over backlog and marks where today starts', () => {
+    const width = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(900)
+    try {
+      renderRail({
+        today: '2026-09-18',
+        onJump: vi.fn(),
+        summary: summary({
+          segments: [
+            { cardId: 'one', tone: 'done', palaceId: 1, palaceDone: false, kind: 'source', enteredOn: '2026-09-16' },
+            { cardId: 'two', tone: 'pending', palaceId: 1, palaceDone: false, kind: 'source', enteredOn: '2026-09-17', cohortBoundary: true },
+            { cardId: 'three', tone: 'pending', palaceId: 2, palaceDone: false, kind: 'source', enteredOn: '2026-09-18', cohortBoundary: true },
+          ],
+          position: 3,
+          total: 3,
+        }),
+      })
+
+      const slots = screen
+        .getAllByTestId('freestyle-progress-segment')
+        .map((node) => node.closest('[data-rail-slot]'))
+      // Everything before today is one muted backlog, today stays at full strength.
+      expect(slots[0]?.className).toContain('opacity-60')
+      expect(slots[1]?.className).toContain('opacity-60')
+      expect(slots[2]?.className).not.toContain('opacity-60')
+      expect(slots[1]?.getAttribute('data-before-today')).toBe('true')
+      expect(slots[2]?.getAttribute('data-before-today')).toBeNull()
+
+      const lines = screen.getAllByTestId('freestyle-progress-day-line')
+      expect(lines).toHaveLength(2)
+      expect(lines[0].getAttribute('data-today')).toBeNull()
+      // Today's cut is the bright one, and it wears the word.
+      expect(lines[1].getAttribute('data-today')).toBe('true')
+      expect(lines[1].querySelector('span')?.className).toContain('bg-stage-glow')
+      expect(screen.getByTestId('freestyle-progress-today-label').textContent).toBe('今天')
+      expect(screen.getByTestId('freestyle-progress-rail').getAttribute('aria-label'))
+        .toContain('今天从第 3 张开始')
+    } finally {
+      width.mockRestore()
+    }
+  })
+
+  it('drops the today chip when the rail is too cramped to seat it', () => {
+    const width = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(40)
+    try {
+      renderRail({
+        today: '2026-09-18',
+        onJump: vi.fn(),
+        summary: summary({
+          segments: Array.from({ length: 12 }, (_, index) => ({
+            cardId: `card-${index}`,
+            tone: 'pending' as const,
+            palaceId: 1,
+            palaceDone: false,
+            kind: 'source' as const,
+            enteredOn: index < 6 ? '2026-09-17' : '2026-09-18',
+            cohortBoundary: index === 6,
+          })),
+          total: 12,
+          position: 1,
+        }),
+      })
+
+      const lines = screen.getAllByTestId('freestyle-progress-day-line')
+      expect(lines).toHaveLength(1)
+      expect(lines[0].getAttribute('data-today')).toBe('true')
+      expect(screen.queryByTestId('freestyle-progress-today-label')).toBeNull()
+    } finally {
+      width.mockRestore()
+    }
+  })
+
+  it('draws no today cut when the whole round entered today', () => {
+    renderRail({
+      today: '2026-09-18',
+      onJump: vi.fn(),
+      summary: summary({
+        segments: [
+          { cardId: 'one', tone: 'done', palaceId: 1, palaceDone: false, kind: 'source', enteredOn: '2026-09-18' },
+          { cardId: 'two', tone: 'pending', palaceId: 1, palaceDone: false, kind: 'source', enteredOn: '2026-09-18' },
+        ],
+        position: 2,
+        total: 2,
+      }),
+    })
+
+    expect(screen.queryAllByTestId('freestyle-progress-day-line')).toHaveLength(0)
+    const slots = screen
+      .getAllByTestId('freestyle-progress-segment')
+      .map((node) => node.closest('[data-rail-slot]'))
+    expect(slots.every((slot) => slot?.getAttribute('data-before-today') == null)).toBe(true)
+  })
+
+  it('keeps a carried-over playhead at full strength', () => {
+    renderRail({
+      today: '2026-09-18',
+      onJump: vi.fn(),
+      summary: summary({
+        segments: [
+          { cardId: 'one', tone: 'done', palaceId: 1, palaceDone: false, kind: 'source', enteredOn: '2026-09-17' },
+          { cardId: 'two', tone: 'pending', palaceId: 1, palaceDone: false, kind: 'source', enteredOn: '2026-09-17', viewing: true },
+          { cardId: 'three', tone: 'pending', palaceId: 2, palaceDone: false, kind: 'source', enteredOn: '2026-09-18', cohortBoundary: true },
+        ],
+        position: 2,
+        total: 3,
+      }),
+    })
+
+    const slots = screen
+      .getAllByTestId('freestyle-progress-segment')
+      .map((node) => node.closest('[data-rail-slot]'))
+    // The card on screen is never muted, even when it is yesterday's leftover.
+    expect(slots[1]?.className).not.toContain('opacity-60')
+    expect(slots[1]?.getAttribute('data-before-today')).toBeNull()
+    expect(slots[0]?.className).toContain('opacity-60')
+  })
+
   it('keeps day lines when the rail is too narrow for every tick', () => {
     const width = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(40)
     try {

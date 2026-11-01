@@ -94,20 +94,20 @@ describe('quizNodeBindingAggregation', () => {
     expect(firstIncompleteQuestionIndex([1, 2], new Set([1, 2]))).toBe(0)
   })
 
-  it('turns only directly bound wrong question sides danger', () => {
+  it('turns every ancestor carrying a wrong question danger, per question side', () => {
     const bindings = [
-      { question_id: 1, node_uid: 'child-a', question_type: 'multiple_choice', marked: true },
+      { question_id: 1, node_uid: 'child-a', question_type: 'multiple_choice', marked: false },
       { question_id: 2, node_uid: 'child-b', question_type: 'short_answer', marked: false },
     ]
     const direct = buildDirectBindingMap(bindings)
     const subtree = buildSubtreeQuestionMap(doc, direct)
     const badges = buildCountBadgeByNodeUid(subtree, buildBoundQuestionFacts(bindings), {
-      directBindings: direct,
-      wrongQuestionIds: new Set([1]),
+      wrongQuestionIds: new Set([2]),
     })
-    expect(badges['child-a']).toMatchObject([{ kind: 'objective', tone: 'danger' }])
-    expect(badges.parent?.find((badge) => badge.kind === 'objective')?.tone).toBe('rose')
-    expect(badges['child-b']?.[0].tone).toBe('info')
+    expect(badges['child-b']).toMatchObject([{ kind: 'subjective', tone: 'danger' }])
+    expect(badges.parent?.find((badge) => badge.kind === 'subjective')?.tone).toBe('danger')
+    expect(badges.parent?.find((badge) => badge.kind === 'objective')?.tone).toBe('success')
+    expect(badges['child-a']?.[0].tone).toBe('success')
   })
 
   it('turns only the subjective badge rose when a short-answer question is marked', () => {

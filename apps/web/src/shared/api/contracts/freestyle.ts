@@ -401,6 +401,8 @@ export type {
 
 export interface FreestyleRoundPlanPayload {
   wrong_unit_ids?: string[]
+  /** Questions answered wrong this round. Cleared by 小结算, not by a correct retry. */
+  wrong_question_ids?: string[]
   original_cards: FreestyleRoundOriginalCard[]
   presented_ids: string[]
   current_card_id: string | null

@@ -531,6 +531,41 @@ export function dayCutHoverLabel(
 }
 
 /**
+ * This tick entered the round on an earlier study day than `today`, so it is
+ * part of the backlog the learner carried into today.
+ */
+export function enteredBeforeToday(
+  segment: FreestyleProgressSegment,
+  today: string,
+): boolean {
+  const distance = daysBefore(segment.enteredOn, today)
+  return distance != null && distance > 0
+}
+
+/**
+ * Index of today's first source tick, when earlier days sit to its left.
+ * `-1` when today starts the round or no tick carries a day at all, so the
+ * rail never draws a divider that separates nothing.
+ *
+ * Retry insertions are skipped, exactly like `markDayCohortBoundaries`: they
+ * inherit their source's day and are not where a day begins.
+ */
+export function todayStartIndex(
+  segments: readonly FreestyleProgressSegment[],
+  today: string,
+): number {
+  if (!today) return -1
+  const index = segments.findIndex(
+    (segment) => segment.kind !== 'retry' && segment.enteredOn === today,
+  )
+  if (index <= 0) return -1
+  const carriedOver = segments
+    .slice(0, index)
+    .some((segment) => segment.kind !== 'retry' && enteredBeforeToday(segment, today))
+  return carriedOver ? index : -1
+}
+
+/**
  * A cut wherever the queue steps into another entry day.
  * Retry insertions keep their source day but do not punch a new cut into the middle of a day.
  */

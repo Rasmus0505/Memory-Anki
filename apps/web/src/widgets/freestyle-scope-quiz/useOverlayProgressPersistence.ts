@@ -162,6 +162,7 @@ export function useOverlayProgressPersistence({
         workspace: round.workspace,
         roundId: round.round_id,
         planVersion: round.plan_version ?? round.version,
+        wrongQuestionIds: round.plan?.wrong_question_ids,
         overlay: round.plan?.overlay_quiz,
       })
       if (typeof round.plan_version === 'number' && round.plan_version > 0) {

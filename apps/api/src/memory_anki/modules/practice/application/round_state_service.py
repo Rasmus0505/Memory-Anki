@@ -446,20 +446,30 @@ def _settled_unit_ids(
     return units
 
 
-def _clear_settled_overlay_wrong_states(
+def _settle_round_wrong_markers(
     session: Session,
     plan: dict[str, Any],
     *,
     card_ids: list[str],
     explicit_unit_ids: list[str],
 ) -> dict[str, Any]:
+    """Clear this round's wrong markers for the units a 小结算 just settled.
+
+    The progress rail's unit marker and the node badges read the same lifetime:
+    a settled unit is done, so both stop reporting it. Questions of units that
+    were not settled keep their marker, including after a correct retry.
+    """
     unit_ids = _settled_unit_ids(plan, card_ids=card_ids, explicit_unit_ids=explicit_unit_ids)
     if not unit_ids:
         return plan
+    next_plan = {
+        **plan,
+        "wrong_unit_ids": [item for item in plan["wrong_unit_ids"] if item not in unit_ids],
+    }
     members = list_unit_node_members(session, sorted(unit_ids))
     node_uids = {uid for values in members.values() for uid in values}
     if not node_uids:
-        return plan
+        return next_plan
     palace_ids = {
         int(card.get("palace_id"))
         for card in plan.get("original_cards") or []
@@ -473,9 +483,13 @@ def _clear_settled_overlay_wrong_states(
         and str(binding.get("question_id") or "").isdigit()
     }
     if not question_ids:
-        return plan
-    overlay = plan.get("overlay_quiz")
-    return {**plan, "overlay_quiz": clear_overlay_wrong_states(overlay, question_ids)}
+        return next_plan
+    next_plan["wrong_question_ids"] = [
+        item for item in plan["wrong_question_ids"]
+        if not (str(item).isdigit() and int(item) in question_ids)
+    ]
+    next_plan["overlay_quiz"] = clear_overlay_wrong_states(plan.get("overlay_quiz"), question_ids)
+    return next_plan
 
 
 def apply_round_action(
@@ -539,7 +553,7 @@ def apply_round_action(
             str(item) for item in (settlement or {}).get("settled_unit_ids") or []
             if str(item).strip()
         ]
-        plan = _clear_settled_overlay_wrong_states(
+        plan = _settle_round_wrong_markers(
             session,
             plan,
             card_ids=newly_compressed or explicit_card_ids,

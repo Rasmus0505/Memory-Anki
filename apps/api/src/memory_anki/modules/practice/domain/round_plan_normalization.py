@@ -101,6 +101,7 @@ def empty_plan() -> Plan:
         "encounters": {},
         "bedtime_ratings": {},
         "wrong_unit_ids": [],
+        "wrong_question_ids": [],
         "today": "",
     }
 
@@ -250,6 +251,9 @@ def normalize_plan(plan: Mapping[str, Any] | None) -> Plan:
         "encounters": encounters,
         "bedtime_ratings": bedtime_ratings,
         "wrong_unit_ids": _unique(raw.get("wrong_unit_ids") or []),
+        # A question stays wrong for this round until 小结算 clears it. Unlike the
+        # live overlay state, a later correct retry must not erase the marker.
+        "wrong_question_ids": _unique(raw.get("wrong_question_ids") or []),
         "today": _day(raw.get("today")),
         "overlay_quiz": normalize_overlay_quiz(raw.get("overlay_quiz") if isinstance(raw.get("overlay_quiz"), Mapping) else None),
     }

@@ -78,11 +78,16 @@ def read_active_overlay_wrong_questions(
     if row is None:
         return None
     plan = _plan_of(row)
+    # The plan set is the durable answer (it survives a correct retry until
+    # 小结算). Live overlay states are merged in so rounds written before the
+    # plan field existed still show their current mistakes.
+    wrong = {int(item) for item in plan.get("wrong_question_ids") or [] if str(item).isdigit()}
+    wrong.update(current_wrong_overlay_question_ids(plan.get("overlay_quiz")))
     return {
         "workspace": str(getattr(row, "workspace", workspace) or workspace),
         "round_id": row.round_id,
         "plan_version": int(row.version or 0),
-        "wrong_question_ids": current_wrong_overlay_question_ids(plan.get("overlay_quiz")),
+        "wrong_question_ids": sorted(wrong),
     }
 
 
@@ -237,6 +242,20 @@ def progress_overlay_quiz(
         states=states if isinstance(states, dict) else {},
     )
     overlay = plan["overlay_quiz"]
+    # Persist the round's wrong questions. A later correct retry must not erase
+    # this marker: it clears only at 小结算 (the settled units) or a new round,
+    # which is the same lifetime the progress rail's 错题 marker has.
+    answered_wrong = {
+        str(qid)
+        for source in (previous, overlay)
+        for qid, state in {**source["parked"]["states"], **source["states"]}.items()
+        if state.get("resolved") is True and state.get("correct") is False
+    }
+    known_wrong = set(plan["wrong_question_ids"])
+    for qid in sorted(answered_wrong):
+        if qid not in known_wrong:
+            plan["wrong_question_ids"].append(qid)
+            known_wrong.add(qid)
     wrong = {
         qid for qid, state in overlay["states"].items()
         if state.get("resolved") is True and state.get("correct") is False
@@ -423,7 +442,18 @@ def drop_overlay_quiz_for_palaces(
         return early
     assert row is not None
     plan = _plan_of(row)
+    dropped = {int(item) for item in palace_ids or []}
+    dropped_questions = {
+        int(question_id)
+        for question_id, palace_id in (normalize_overlay_quiz(plan.get("overlay_quiz")).get("question_palace_ids") or {}).items()
+        if int(palace_id) in dropped
+    }
     plan["overlay_quiz"] = drop_overlay_for_palaces(plan.get("overlay_quiz"), list(palace_ids or []))
+    if dropped_questions:
+        plan["wrong_question_ids"] = [
+            item for item in plan["wrong_question_ids"]
+            if not (str(item).isdigit() and int(item) in dropped_questions)
+        ]
     op_id = _require_operation_id(operation_id)
     changed = _apply_plan(row, plan, operation_id=op_id)
     if not changed:

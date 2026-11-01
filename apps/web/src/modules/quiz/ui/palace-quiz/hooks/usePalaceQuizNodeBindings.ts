@@ -139,14 +139,11 @@ export function usePalaceQuizNodeBindings({
 
   const questionFacts = useMemo(() => buildBoundQuestionFacts(bindings), [bindings])
 
-  const directBindings = useMemo(() => buildDirectBindingMap(bindings), [bindings])
-
   const countBadgeByNodeUid = useMemo(
     () => buildCountBadgeByNodeUid(subtreeQuestions, questionFacts, {
-      directBindings,
       wrongQuestionIds: wrongState.wrongQuestionIds,
     }),
-    [directBindings, questionFacts, subtreeQuestions, wrongState.wrongQuestionIds],
+    [questionFacts, subtreeQuestions, wrongState.wrongQuestionIds],
   )
 
   const nodeProgressByNodeUid = useMemo(

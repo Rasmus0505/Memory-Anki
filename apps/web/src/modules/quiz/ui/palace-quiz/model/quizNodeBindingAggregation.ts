@@ -11,7 +11,6 @@ export type BoundQuestionFacts = {
 }
 
 export type CountBadgeOptions = {
-  directBindings?: ReadonlyMap<string, ReadonlySet<number>>
   wrongQuestionIds?: ReadonlySet<number>
 }
 
@@ -150,7 +149,7 @@ function countBadge(
     text: String(count),
     tone: hasWrong ? 'danger' : hasMarked ? 'rose' : kind === 'objective' ? 'success' : 'info',
     title: hasWrong
-      ? `${label} ${count} 道，含本轮错题（直接绑定）`
+      ? `${label} ${count} 道，含本轮错题（含子树）`
       : hasMarked
         ? `${label} ${count} 道，含标记题（含子树）`
         : `${label} ${count} 道（含子树）`,
@@ -162,7 +161,9 @@ function countBadge(
  * Two corner badges per node: objective (green) then subjective (sky), left to right,
  * so the objective badge stays on the bottom-right corner. Counts are full subtree
  * totals and do not shrink when a question is completed. A badge turns rose when
- * that side contains a marked question. A side with zero questions is omitted.
+ * that side contains a marked question, and danger when a question of that side
+ * was answered wrong this round (any node on the branch, so ancestors show it).
+ * A side with zero questions is omitted.
  */
 export function buildCountBadgeByNodeUid(
   subtreeQuestions: Map<string, Set<number>>,
@@ -178,11 +179,10 @@ export function buildCountBadgeByNodeUid(
     let subjectiveMarked = false
     let objectiveWrong = false
     let subjectiveWrong = false
-    const directQuestionIds = options.directBindings?.get(uid) ?? new Set<number>()
     for (const questionId of questionIds) {
       const fact = facts.get(questionId)
       const subjective = isSubjectiveQuestionType(fact?.questionType)
-      const wrong = directQuestionIds.has(questionId) && options.wrongQuestionIds?.has(questionId) === true
+      const wrong = options.wrongQuestionIds?.has(questionId) === true
       if (subjective) {
         subjectiveCount += 1
         if (fact?.marked) subjectiveMarked = true
