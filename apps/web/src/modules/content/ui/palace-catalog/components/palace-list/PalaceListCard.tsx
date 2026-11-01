@@ -16,6 +16,7 @@ import {
   getPalaceCardContentClass,
   getPalaceIconClass,
 } from '@/modules/content/ui/palace-catalog/components/palace-list/utils'
+import { PalaceFavoriteButton } from '@/modules/content/ui/palace-favorite'
 
 interface PalaceListCardProps {
   palace: PalaceGroupedItem
@@ -172,6 +173,7 @@ export function PalaceListCard({
                 >
                   {renderHighlightedText(palaceTitle, searchQuery)}
                 </Link>
+                <PalaceFavoriteButton palaceId={palace.id} className="-my-1 size-9 sm:size-7" iconClassName="size-4 sm:size-3.5" />
                 {hasReviewStatus ? <ReviewActionButton
                   label={
                     unitReviewStatus === 'marking_required'

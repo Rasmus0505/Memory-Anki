@@ -119,6 +119,10 @@ def get_palace(session: Session, palace_id: int) -> Palace | None:
     return _repo(session).get_palace(palace_id)
 
 
+def list_favorite_palace_ids(session: Session) -> list[int]:
+    return _repo(session).list_favorite_palace_ids()
+
+
 def create_palace(
     session: Session,
     data: PalaceCreate,
@@ -183,6 +187,19 @@ def set_palace_archived(
     uow: UnitOfWork,
 ) -> Palace:
     palace.archived = archived
+    uow.commit()
+    uow.refresh(palace)
+    return palace
+
+
+def set_palace_favorite(
+    session: Session,
+    palace: Palace,
+    is_favorite: bool,
+    *,
+    uow: UnitOfWork,
+) -> Palace:
+    _repo(session).set_palace_favorite(palace, is_favorite)
     uow.commit()
     uow.refresh(palace)
     return palace

@@ -23,6 +23,8 @@ export interface PalaceListItem {
   title: string
   description: string
   archived?: boolean
+  /** Learner curation star (distinct from the 1-3 exam importance weight). */
+  is_favorite?: boolean
   created_at: string | null
   updated_at?: string | null
   next_review_at: string | null
@@ -72,6 +74,7 @@ export interface PalaceEditorMeta {
   title: string
   description: string
   archived?: boolean
+  is_favorite?: boolean
   created_at?: string | null
   updated_at?: string | null
   primary_chapter_id?: number | null
@@ -105,6 +108,7 @@ export interface PalaceGroupedSummaryItem {
   title: string
   description: string
   archived?: boolean
+  is_favorite?: boolean
   created_at: string | null
   updated_at?: string | null
   next_review_at: string | null

@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, type ComponentProps, type ReactNode } from 'react'
+import { Star } from 'lucide-react'
 import type { FreestyleMilestoneUpcoming } from '@/shared/api/contracts'
 import type { useExamOverview } from '@/modules/exam/public'
 import { SprintMilestoneStrip } from '@/modules/exam/public'
@@ -19,6 +20,8 @@ export function FreestyleHud({
   examOverview,
   milestones,
   palaceTitle = '',
+  palaceFavorite = false,
+  favoritePalaceIds,
   progressSummary,
   scrollChannel,
   progressRailOverflow,
@@ -49,6 +52,10 @@ export function FreestyleHud({
   milestones: FreestyleMilestoneUpcoming | null
   /** Palace of the card on screen: the header says where you are, the sheet says what. */
   palaceTitle?: string
+  /** That palace is favorited: a yellow star follows its name. */
+  palaceFavorite?: boolean
+  /** Favorited palaces: every rail unit of one is starred. */
+  favoritePalaceIds?: ReadonlySet<number>
   progressSummary: ProgressRailProps['summary']
   scrollChannel: ProgressRailProps['scrollChannel']
   progressRailOverflow: ReactNode
@@ -116,10 +123,18 @@ export function FreestyleHud({
           onOpenPlan={onOpenPlan}
           onJump={onJump}
           overflow={progressRailOverflow}
+          favoritePalaceIds={favoritePalaceIds}
           titleSlot={palaceTitle ? (
             <span className="flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-stage-ink/80">
               <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-stage-glow/85" />
               <span className="truncate">{palaceTitle}</span>
+              {palaceFavorite ? (
+                <Star
+                  aria-label="已收藏"
+                  data-testid="freestyle-favorite-palace"
+                  className="size-3 shrink-0 fill-current text-warning"
+                />
+              ) : null}
             </span>
           ) : null}
           milestoneSlot={(

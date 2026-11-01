@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { CalendarClock, ChevronDown, ChevronUp, LoaderCircle, RefreshCw, Undo2, X } from 'lucide-react'
+import { CalendarClock, ChevronDown, ChevronUp, LoaderCircle, RefreshCw, Star, Undo2, X } from 'lucide-react'
+import { useIsPalaceFavorite } from '@/modules/content/public'
 import { appConfirm } from '@/shared/components/ui/native-dialog'
 import { Button } from '@/shared/components/ui/button'
 import { toast } from '@/shared/feedback/toast'
@@ -100,6 +101,7 @@ export function PalaceReviewUnitsPanel({
   const [localUndoToken, setLocalUndoToken] = useState<string | null>(null)
   const [localChanges, setLocalChanges] = useState<PalaceReviewUnitChangeHighlight[]>([])
   const [changeSummary, setChangeSummary] = useState<string | null>(null)
+  const palaceFavorite = useIsPalaceFavorite(palaceId)
 
   const effectiveUndoToken = localUndoToken ?? undoTokenProp ?? null
   const highlightByUnitId = useMemo(() => {
@@ -294,7 +296,16 @@ export function PalaceReviewUnitsPanel({
             <div className="min-w-0">
               <div className="truncate text-sm font-semibold">本宫殿复习单元</div>
               <div className="truncate text-xs text-muted-foreground">
-                {title}
+                <span className="inline-flex max-w-full items-center gap-1">
+                  <span className="truncate">{title}</span>
+                  {palaceFavorite ? (
+                    <Star
+                      aria-label="已收藏"
+                      data-testid="review-panel-favorite-palace"
+                      className="size-3 shrink-0 fill-current text-warning"
+                    />
+                  ) : null}
+                </span>
                 {projection
                   ? ` · ${projection.unit_count} 单元 · 到期 ${projection.due_unit_count}`
                   : null}

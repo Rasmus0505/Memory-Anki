@@ -38,6 +38,15 @@ export interface DeleteResponse {
   ok: boolean
 }
 
+export interface PalaceFavoriteIdsResponse {
+  ids: number[]
+}
+
+export interface PalaceFavoriteUpdateResponse {
+  ok: boolean
+  is_favorite: boolean
+}
+
 export interface PalaceAttachmentUploadResponse {
   id: number
   filename: string
@@ -63,6 +72,24 @@ export function buildAttachmentUrl(attachmentId: number) {
 export function getPalacesApi(params?: Record<string, string>) {
   const q = buildQueryString(params)
   return request<PalaceListItem[]>(`/palaces${q}`)
+}
+
+/** Active favorited palace ids; the shelf and the freestyle rail read this set. */
+export function getFavoritePalaceIdsApi() {
+  return request<PalaceFavoriteIdsResponse>('/palaces/favorites')
+}
+
+export function setPalaceFavoriteApi(palaceId: number, isFavorite: boolean) {
+  return request<PalaceFavoriteUpdateResponse>(`/palaces/${palaceId}/favorite`, {
+    method: 'PUT',
+    body: JSON.stringify({ is_favorite: isFavorite }),
+    persistence: {
+      resourceKey: `palace:${palaceId}:favorite`,
+      coalesceKey: `palace:${palaceId}:favorite`,
+      description: isFavorite ? '收藏宫殿' : '取消收藏宫殿',
+      replayMode: 'auto',
+    },
+  })
 }
 
 /**

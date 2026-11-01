@@ -14,6 +14,7 @@ export * from './ui/mindmap-experience'
 export const PalaceListPage = lazy(() => import('./ui/palace-catalog/PalaceListPage'))
 export const PalaceShelfPage = lazy(() => import('./ui/palace-catalog/PalaceShelfPage'))
 export { buildPalaceParentQuestionTotals, usePalaceParentQuestionTotal } from './ui/palace-catalog/usePalaceParentQuestionTotal'
+export * from './ui/palace-favorite'
 export * from './ui/palace-edit/components/PalaceDirectoryTree'
 export * from './ui/palace-edit/hooks/usePalaceDirectoryTree'
 export * from './ui/palace-edit/components/PalaceTemplateDialog'

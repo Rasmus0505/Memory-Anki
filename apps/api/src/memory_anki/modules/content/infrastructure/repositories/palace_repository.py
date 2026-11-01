@@ -8,7 +8,7 @@ expresses intent (list / get / add / delete / sync-pegs).
 
 from __future__ import annotations
 
-from sqlalchemy import or_
+from sqlalchemy import or_, update
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from memory_anki.infrastructure.db._tables.knowledge import Chapter
@@ -134,6 +134,32 @@ class PalaceRepository:
             .options(*_detail_loader_options())
             .filter(Palace.id == palace_id, Palace.deleted_at.is_(None))
             .first()
+        )
+
+    def list_favorite_palace_ids(self) -> list[int]:
+        rows = (
+            self._session.query(Palace.id)
+            .filter(
+                Palace.deleted_at.is_(None),
+                Palace.archived.is_(False),
+                Palace.is_favorite.is_(True),
+            )
+            .order_by(Palace.id.asc())
+            .all()
+        )
+        return [int(row.id) for row in rows]
+
+    def set_palace_favorite(self, palace: Palace, is_favorite: bool) -> None:
+        """Flip the curation flag without touching ``updated_at``.
+
+        The catalog sorts by ``updated_at``; letting the column's ``onupdate``
+        fire would jump a favorited palace to the top of the bookshelf. The
+        explicit self-reference keeps the stored timestamp unchanged.
+        """
+        self._session.execute(
+            update(Palace)
+            .where(Palace.id == palace.id)
+            .values(is_favorite=bool(is_favorite), updated_at=Palace.updated_at)
         )
 
     def list_palaces_by_primary_chapter(self, chapter_id: int) -> list[Palace]:

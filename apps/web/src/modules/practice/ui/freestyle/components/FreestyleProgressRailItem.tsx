@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Moon } from 'lucide-react'
+import { Moon, Star } from 'lucide-react'
 import {
   progressSegmentAccentClass,
   progressSegmentShapeClass,
@@ -58,6 +58,7 @@ export function ProgressRailItem({
   segment,
   palaceGap,
   palaceStaggerIndex,
+  palaceFavorite = false,
   hoverLabel,
   showRetryCount,
   compact,
@@ -67,6 +68,8 @@ export function ProgressRailItem({
   palaceGap: boolean
   /** Ordinal within this palace's run of segments, used to stagger the clear pulse. */
   palaceStaggerIndex: number
+  /** This unit's palace is favorited: a yellow star rides above the tick. */
+  palaceFavorite?: boolean
   hoverLabel: string
   showRetryCount: boolean
   compact: boolean
@@ -262,13 +265,27 @@ export function ProgressRailItem({
             gapClass,
           )}
         >
-          {segment.bedtime ? (
+          {segment.bedtime || palaceFavorite ? (
             <span
               aria-hidden
-              data-testid="freestyle-progress-bedtime"
-              className="pointer-events-none absolute inset-x-0 top-0 flex justify-center text-stage-muted"
+              data-testid="freestyle-progress-marker"
+              className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-center gap-0.5"
             >
-              <Moon className="size-2.5" strokeWidth={2.4} />
+              {palaceFavorite ? (
+                <Star
+                  data-testid="freestyle-progress-favorite"
+                  className={cn(
+                    'shrink-0 fill-current text-warning',
+                    segment.bedtime ? 'size-2' : 'size-2.5',
+                  )}
+                  strokeWidth={2.2}
+                />
+              ) : null}
+              {segment.bedtime ? (
+                <span data-testid="freestyle-progress-bedtime" className="shrink-0 text-stage-muted">
+                  <Moon className="size-2.5" strokeWidth={2.4} />
+                </span>
+              ) : null}
             </span>
           ) : null}
           <span

@@ -69,8 +69,23 @@ describe('FreestyleProgressRail', () => {
     expect(segment.className).toContain(progressSegmentAccentClass(false, 'pending', false, true))
   })
 
-  it('draws one segment per card so restudy re-insertion stays visible', () => {
-    renderRail()
+  it('stars every unit tick of a favorited palace, and only that palace', () => {
+    renderRail({ favoritePalaceIds: new Set([1]) })
+
+    const stars = screen.getAllByTestId('freestyle-progress-favorite')
+    expect(stars).toHaveLength(2)
+    expect(stars.map((star) => star.closest('[data-rail-slot]')?.getAttribute('data-rail-palace')))
+      .toEqual(['1', '1'])
+    expect(screen.getAllByTestId('freestyle-progress-segment')).toHaveLength(4)
+  })
+
+  it('leaves the rail unstarred when no palace is favorited', () => {
+    renderRail({ favoritePalaceIds: new Set() })
+
+    expect(screen.queryAllByTestId('freestyle-progress-favorite')).toHaveLength(0)
+  })
+
+  it('draws one segment per card so restudy re-insertion stays visible', () => {    renderRail()
 
     const segments = screen.getAllByTestId('freestyle-progress-segment')
     expect(segments).toHaveLength(4)

@@ -14,6 +14,7 @@ from memory_anki.modules.content.application.palace_service import (
     list_catalog_palaces_by_subject,
     list_catalog_palaces_for_lookup,
     list_deleted_palaces,
+    list_favorite_palace_ids,
     list_palaces,
 )
 from memory_anki.modules.content.application.palace_template_service import (
@@ -29,7 +30,10 @@ from memory_anki.modules.content.application.title_sync_service import (
     build_subject_shelf_summary,
     get_explicit_chapter_ids_by_palace,
 )
-from memory_anki.modules.content.presentation.response_models import PalaceListResponse
+from memory_anki.modules.content.presentation.response_models import (
+    PalaceFavoriteIdsResponse,
+    PalaceListResponse,
+)
 from memory_anki.modules.quiz.public.queries import (
     project_palace_question_sets,
     project_palace_quiz_count_badges,
@@ -182,6 +186,16 @@ def _attach_search_hints(payload: dict, hints: dict[int, str]) -> dict:
         if hint:
             item["search_hint"] = hint
     return payload
+
+
+@router.get("/palaces/favorites", response_model=PalaceFavoriteIdsResponse)
+def api_list_favorites(s: Session = Depends(session_dep)):
+    """Active favorited palaces, for shelf cards and the freestyle rail stars.
+
+    Declared before ``/palaces/{palace_id}`` (core router) so the literal path
+    wins over the dynamic one.
+    """
+    return {"ids": list_favorite_palace_ids(s)}
 
 
 @router.get("/palaces/grouped")

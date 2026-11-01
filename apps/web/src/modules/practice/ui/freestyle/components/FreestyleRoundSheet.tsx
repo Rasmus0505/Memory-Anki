@@ -5,6 +5,7 @@ import {
   ChevronDown,
   ChevronRight,
   SlidersHorizontal,
+  Star,
   Undo2,
   X,
 } from 'lucide-react'
@@ -88,6 +89,7 @@ export function FreestyleRoundSheet({
   queueState,
   roundPlan,
   subjectByPalaceId,
+  favoritePalaceIds,
   onOpenChange,
   onJump,
   onExclude,
@@ -106,6 +108,8 @@ export function FreestyleRoundSheet({
   queueState: FreestyleSkipState
   roundPlan: FreestyleRoundPlanState | null
   subjectByPalaceId?: ReadonlyMap<number, { id: number; name: string }>
+  /** Favorited palaces: their group headers carry a yellow star. */
+  favoritePalaceIds?: ReadonlySet<number>
   onOpenChange: (open: boolean) => void
   onJump: (cardId: string) => void
   onExclude: (cardIds: string[]) => void
@@ -497,6 +501,13 @@ export function FreestyleRoundSheet({
           />
           <div className="flex min-w-0 flex-1 items-center gap-1.5">
             <span className="truncate text-sm font-semibold">{title}</span>
+            {palaceId > 0 && favoritePalaceIds?.has(palaceId) ? (
+              <Star
+                aria-label="已收藏"
+                data-testid="round-sheet-favorite-palace"
+                className="size-3.5 shrink-0 fill-current text-warning"
+              />
+            ) : null}
             {quizEntries.length ? (
               <span
                 data-testid={`round-plan-quiz-count-${palaceId}`}

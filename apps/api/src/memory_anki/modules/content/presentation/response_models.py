@@ -35,3 +35,12 @@ class DeleteOkResponse(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     ok: bool
+
+
+class PalaceFavoriteIdsResponse(BaseModel):
+    ids: list[int]
+
+
+class PalaceFavoriteUpdateResponse(BaseModel):
+    ok: bool
+    is_favorite: bool

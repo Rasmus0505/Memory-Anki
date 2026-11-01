@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import type { PalaceGroupedItem } from '@/shared/api/contracts'
-import { ChevronDown, ChevronRight, ListChecks, RotateCcw } from 'lucide-react'
+import { ChevronDown, ChevronRight, ListChecks, RotateCcw, Star } from 'lucide-react'
+import { useIsPalaceFavorite } from '@/modules/content/public'
 import type {
   FreestylePalaceScopeChapter,
   FreestylePalaceScopeSubject,
@@ -60,6 +61,7 @@ function PalaceRow({
   indentPx?: number
 }) {
   const title = palace.resolved_title || palace.title
+  const favorite = useIsPalaceFavorite(palace.id)
   return (
     <div
       className="flex min-h-9 cursor-pointer items-center gap-2 rounded-lg px-2 py-1 text-sm hover:bg-muted/50"
@@ -77,6 +79,13 @@ function PalaceRow({
       <span className="min-w-0 flex-1 truncate">
         <span className="mr-1.5 text-[11px] text-muted-foreground">宫殿</span>
         <span>{title}</span>
+        {favorite ? (
+          <Star
+            aria-label="已收藏"
+            data-testid="palace-picker-favorite"
+            className="ml-1 inline size-3 fill-current text-warning align-[-1px]"
+          />
+        ) : null}
       </span>
     </div>
   )

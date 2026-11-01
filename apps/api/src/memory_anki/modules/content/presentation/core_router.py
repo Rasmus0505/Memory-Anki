@@ -19,6 +19,7 @@ from memory_anki.modules.content.application.palace_service import (
     get_palace,
     restore_deleted_palace,
     set_palace_archived,
+    set_palace_favorite,
     update_palace,
 )
 from memory_anki.modules.content.application.peg_association_service import (
@@ -34,6 +35,7 @@ from memory_anki.modules.content.presentation.errors import raise_not_found
 from memory_anki.modules.content.presentation.response_models import (
     DeleteOkResponse,
     PalaceDetailResponse,
+    PalaceFavoriteUpdateResponse,
     PalaceSummaryResponse,
 )
 from memory_anki.modules.settings.api import SettingsAiRuntimeProvider, SettingsPromptCatalog
@@ -52,6 +54,10 @@ class PegAssociationSuggestionRequest(BaseModel):
     max_suggestions: int = Field(default=5, ge=1, le=MAX_SUGGESTIONS_LIMIT)
     use_ai: bool = True
     ai_options: dict[str, Any] | None = None
+
+
+class PalaceFavoriteUpdateRequest(BaseModel):
+    is_favorite: bool
 
 
 def _maybe_create_rolling_backup(*args, **kwargs):
@@ -198,4 +204,22 @@ def api_archive(palace_id: int, data: dict, s: Session = Depends(session_dep)):
         uow=SqlAlchemyUnitOfWork(s),
     )
     return {"ok": True, "archived": palace.archived}
+
+
+@router.put("/palaces/{palace_id}/favorite", response_model=PalaceFavoriteUpdateResponse)
+def api_set_favorite(
+    palace_id: int,
+    data: PalaceFavoriteUpdateRequest,
+    s: Session = Depends(session_dep),
+):
+    p = get_palace(s, palace_id)
+    if not p:
+        raise_not_found()
+    palace = set_palace_favorite(
+        s,
+        p,
+        data.is_favorite,
+        uow=SqlAlchemyUnitOfWork(s),
+    )
+    return {"ok": True, "is_favorite": palace.is_favorite}
 

@@ -122,6 +122,7 @@ export function FreestyleProgressRail({
   today,
   titleSlot,
   milestoneSlot,
+  favoritePalaceIds,
 }: {
   summary: FreestyleProgressSummary
   onOpenPlan: () => void
@@ -138,6 +139,8 @@ export function FreestyleProgressRail({
   titleSlot?: ReactNode
   /** One-line countdown/milestone row under the count. Never wraps over the card. */
   milestoneSlot?: ReactNode
+  /** Favorited palaces; every unit tick of one gets a yellow star. */
+  favoritePalaceIds?: ReadonlySet<number>
 }) {
   const labelToday = today || beijingStudyDay()
   const canJump = Boolean(onJump) && summary.total > 0 && summary.segments.length > 0
@@ -440,31 +443,38 @@ export function FreestyleProgressRail({
         {segments.length === 0 ? (
           <span className="ma-skeleton h-1.5 w-full rounded-[1px] [--color-muted:var(--color-stage-line)]" aria-hidden />
         ) : (
-          segments.map((segment, index) => (
-            <Fragment key={segment.cardId}>
-              {segment.cohortBoundary ? (
-                <DayCut
-                  label={dayCutHoverLabel(
-                    segment.enteredOn,
-                    labelToday,
-                    dayRemainingCount(segments, segment.enteredOn || ''),
-                  )}
-                  onJump={() => onJump?.(segment.cardId)}
+          segments.map((segment, index) => {
+            const palaceFavorite = Boolean(
+              segment.palaceId != null && favoritePalaceIds?.has(segment.palaceId),
+            )
+            const baseHover = segmentHoverLabel(segment, index, segments, labelToday)
+            return (
+              <Fragment key={segment.cardId}>
+                {segment.cohortBoundary ? (
+                  <DayCut
+                    label={dayCutHoverLabel(
+                      segment.enteredOn,
+                      labelToday,
+                      dayRemainingCount(segments, segment.enteredOn || ''),
+                    )}
+                    onJump={() => onJump?.(segment.cardId)}
+                  />
+                ) : null}
+                <ProgressRailItem
+                  segment={segment}
+                  hoverLabel={palaceFavorite ? `收藏宫殿 · ${baseHover}` : baseHover}
+                  palaceStaggerIndex={palaceStaggerIndex(segments, index)}
+                  palaceFavorite={palaceFavorite}
+                  palaceGap={
+                    index > 0 && segments[index - 1]?.palaceId !== segment.palaceId
+                  }
+                  showRetryCount={progressRailRetryCountVisible(segments, index, railWidth)}
+                  compact={compact}
+                  inserted={segment.kind === 'retry' && insertedIds.has(segment.cardId)}
                 />
-              ) : null}
-              <ProgressRailItem
-                segment={segment}
-                hoverLabel={segmentHoverLabel(segment, index, segments, labelToday)}
-                palaceStaggerIndex={palaceStaggerIndex(segments, index)}
-                palaceGap={
-                  index > 0 && segments[index - 1]?.palaceId !== segment.palaceId
-                }
-                showRetryCount={progressRailRetryCountVisible(segments, index, railWidth)}
-                compact={compact}
-                inserted={segment.kind === 'retry' && insertedIds.has(segment.cardId)}
-              />
-            </Fragment>
-          ))
+              </Fragment>
+            )
+          })
         )}
         <span ref={gliderRef} aria-hidden data-testid="freestyle-progress-glider" className="progress-glider" />
         {sheens.map((sheen) => (

@@ -100,6 +100,9 @@ class Palace(Base):
     review_mode: Mapped[str] = mapped_column(String(20), default="flashcard")
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
     mastered: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Learner curation, not content importance: stars the palace on the shelf and
+    # in the freestyle progress rail. Kept apart from ``exam_stars`` (1-3 weight).
+    is_favorite: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     exam_stars: Mapped[int | None] = mapped_column(Integer, nullable=True)
     exam_stars_source: Mapped[str | None] = mapped_column(String(16), nullable=True)
     editor_doc: Mapped[str] = mapped_column(Text, default="")

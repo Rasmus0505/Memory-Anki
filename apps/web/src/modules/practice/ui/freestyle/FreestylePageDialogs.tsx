@@ -22,6 +22,7 @@ export function FreestylePageDialogs({
   queueState,
   roundPlan,
   subjectByPalaceId,
+  favoritePalaceIds,
   loading,
   onJumpPlanCard,
   onExcludePlanCards,
@@ -56,6 +57,7 @@ export function FreestylePageDialogs({
   queueState: SheetProps['queueState']
   roundPlan: SheetProps['roundPlan']
   subjectByPalaceId: SheetProps['subjectByPalaceId']
+  favoritePalaceIds: SheetProps['favoritePalaceIds']
   loading: boolean
   onJumpPlanCard: SheetProps['onJump']
   onExcludePlanCards: SheetProps['onExclude']
@@ -92,6 +94,7 @@ export function FreestylePageDialogs({
         queueState={queueState}
         roundPlan={roundPlan}
         subjectByPalaceId={subjectByPalaceId}
+        favoritePalaceIds={favoritePalaceIds}
         onOpenChange={onPlanOpenChange}
         onJump={onJumpPlanCard}
         onExclude={onExcludePlanCards}

@@ -62,6 +62,7 @@ import { usePalaceClearanceWatch } from '@/modules/practice/ui/freestyle/hooks/u
 import { useFreestyleFullscreen } from '@/modules/practice/ui/freestyle/hooks/useFreestyleFullscreen'
 import { useFreestyleDisplayPrefs } from '@/modules/practice/ui/freestyle/hooks/useFreestyleDisplayPrefs'
 import { useFreestyleSubjectMap } from '@/modules/practice/ui/freestyle/hooks/useFreestyleSubjectMap'
+import { usePalaceFavoriteIds } from '@/modules/content/public'
 import { useFreestyleRatingOutbox } from '@/modules/practice/ui/freestyle/hooks/useFreestyleRatingOutbox'
 import {
   resolveFreestyleAutoAdvanceTarget,
@@ -162,6 +163,7 @@ export default function ImmersiveFreestylePage({
   const { flipMode, mindmapZoom, updateFlipMode, updateMindmapZoom } = useFreestyleDisplayPrefs()
   const { freestyleFullscreen, toggleFreestyleFullscreen } = useFreestyleFullscreen()
   const subjectByPalaceId = useFreestyleSubjectMap()
+  const favoritePalaceIds = usePalaceFavoriteIds()
 
   const {
     config,
@@ -289,6 +291,9 @@ export default function ImmersiveFreestylePage({
     cue('page.turn', {})
   }, [signalPageTurn])
   const currentCard = cards[currentIndex] ?? null
+  const currentPalaceId = currentCard?.type === 'mindmap_branch'
+    ? currentCard.palace_id
+    : currentCard?.palace_context?.id ?? null
   /**
    * Everything the feed presents has a this-round score. A same-day 回顾 still
    * owed (`waiting`) is not a reason to refuse the ending: the pager must never
@@ -1019,6 +1024,7 @@ export default function ImmersiveFreestylePage({
           queueState={queueState}
           roundPlan={roundPlan}
           subjectByPalaceId={subjectByPalaceId}
+          favoritePalaceIds={favoritePalaceIds}
           loading={loading}
           onJumpPlanCard={handlePlanJump}
           onExcludePlanCards={excludePlanCards}
@@ -1051,6 +1057,8 @@ export default function ImmersiveFreestylePage({
           examOverview={examOverview}
           milestones={freestyleOverview.overview?.milestones ?? null}
           palaceTitle={(currentCard as { palace_title?: string } | null)?.palace_title ?? ''}
+          palaceFavorite={currentPalaceId != null && favoritePalaceIds.has(currentPalaceId)}
+          favoritePalaceIds={favoritePalaceIds}
           progressSummary={progressSummary}
           scrollChannel={scrollChannel}
           progressRailOverflow={progressRailOverflow}

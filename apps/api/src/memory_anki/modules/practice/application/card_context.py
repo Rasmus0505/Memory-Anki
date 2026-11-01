@@ -42,6 +42,7 @@ def palace_context(palace: Palace) -> dict[str, Any]:
         "id": palace.id,
         "title": palace.title,
         "resolved_title": resolve_palace_title(palace),
+        "is_favorite": bool(getattr(palace, "is_favorite", False)),
         "subject": (
             {
                 "id": subject.id,
