@@ -341,6 +341,25 @@
           "feedConfig.test.ts"
         ]
       },
+      "practice.scopeOverlayQuiz": {
+        "owner": "practice",
+        "facades": [
+          "content.api",
+          "memory.api",
+          "quiz.api"
+        ],
+        "endpoint": "POST /api/v1/freestyle/rounds/{round_id}/overlay-quiz/ensure",
+        "invariants": [
+          "default pool is the round's scheduled review units plus each unit's root-to-anchor path",
+          "a question without a binding record counts as bound to its palace root",
+          "whole palace is opt-in via overlay_question_range",
+          "removed and skipped palaces leave the pool"
+        ],
+        "tests": [
+          "test_overlay_quiz.py",
+          "test_overlay_quiz_config_scope.py"
+        ]
+      },
       "practice.persistRoundPlan": {
         "owner": "practice",
         "facades": [

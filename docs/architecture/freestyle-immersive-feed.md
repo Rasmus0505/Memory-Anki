@@ -1,12 +1,14 @@
 # Freestyle Immersive Feed
 
 Freestyle is a consumer of public learning projections. It does not own palace review scheduling.
-Toolbar 做题 intersects the round's scheduled review palaces with the current memory-palace
-stream scope. Completed cards and live retries retained after a picker change do not add
-removed palaces to the question pool. Subject catalog lookups only narrow that scheduled
-set; they never add unscheduled palaces. Out-of-scope answer progress stays parked and
-returns if the palace is selected again. An overlay ensure version conflict must be retried
-before loading question ids, since its snapshot may precede the just-saved picker scope.
+Toolbar 做题 draws from the round's scheduled review units — **not the subject union** and not
+`streams.quiz.specific_palace_ids`. By default each unit contributes its own node region plus the
+whole path from the palace root down to its permanent-mark anchor; 整个宫殿 is an opt-in wider
+range. Completed cards and live retries retained after a picker change do not add removed palaces
+to the question pool. Subject catalog lookups never widen the scheduled set. Out-of-scope answer
+progress stays parked and returns if the palace is selected again. An overlay ensure version
+conflict must be retried before loading question ids, since its snapshot may precede the
+just-saved picker scope.
 `FreestyleFeedConfig` is the single queue configuration owner for the immersive page; the
 older `FreestyleConfig` settings path is compatibility-only and must not drive queue builds.
 
@@ -626,35 +628,55 @@ phone slot starts unset, so each unit keeps its readable fit until the learner z
 the phone. 做题 opens `widgets/freestyle-scope-quiz` over the current card. It does
 **not** change `training_mode` or rebuild the feed into quiz cards.
 
-Question membership is the palaces already scheduled as review units in this round
+Question membership has two ranges, both owned by the pack below.
+
+**本轮复习单元 (default).** The scope is the round's scheduled review units
 (`original_cards` with kind `mindmap_branch`) — not the subject union, and not
-`streams.quiz.specific_palace_ids` — narrowed by the current memory-palace stream
-scope. A subject-wide config still only contributes the palaces that this round actually put
-into review. Overlay membership does not use `streams.quiz.question_type`. Every non-deleted
-question in that round palace set is counted, including rows whose stored `lifecycle_status`
-is `candidate`, `rejected`, `temporary`, or `published`. 客观 is every type except
-`short_answer`; 主观 is `short_answer`. The config shows a checkbox only for a group that
-exists in this pool, with its count. At least one present group stays selected. Both selected
-defaults to 混合插入; 先客观后主观 and 先主观后客观 are the other choices. 宫殿优先 vs 题型优先
-appears only when 一个宫殿刷完再换 and a sequential type order are both selected, and
-this round has more than one review palace. Unselected groups stay in `kind_counts`
-so they can be turned back on. Mastery buckets, weak priority, question due dates, and
-`DEFAULT_QUIZ_CARD_LIMIT` do not apply to this overlay. Palace draw order is
-`streams.quiz.quiz_scope`. Confirm always sends `overlay_question_range: all`. The
-first open asks for palace order, then sets `overlay_quiz_setup_done`; later opens
-skip setup. Config stays reachable from the dialog’s top-left. That panel includes the shared 快捷键 section. Mark defaults to ArrowUp and toggles once per press. While the dialog is open, ArrowUp and ArrowDown must not page the feed underneath.
+`streams.quiz.specific_palace_ids`. For each unit the pool includes its own member nodes **and
+every ancestor from the palace root down to the unit's `anchor_uid`**. A permanent mark often
+sits on a level-2 node; the knowledge points above it were reviewed as context, so their bound
+questions belong to the round too. A sibling branch, a nested unit that was not scheduled, and
+the rest of the palace do not enter. A question with no binding record is treated as bound to
+its palace root — every unit path starts there — so it appears in every scheduled unit's pool.
+The rule is implemented in `_unit_scope_node_uids` and `_question_in_unit_scope`.
+
+**整个宫殿 (opt-in).** Every non-deleted question in the round's scheduled palaces, the old
+palace-wide behaviour. The learner switches it on the 出题范围 page.
+
+Neither range uses `streams.quiz.question_type`. Every selected question is counted, including
+rows whose stored `lifecycle_status` is `candidate`, `rejected`, `temporary`, or `published`.
+客观 is every type except `short_answer`; 主观 is `short_answer`. The config shows a checkbox
+only for a group that exists in the active pool, with its count. At least one present group
+stays selected. Both selected defaults to 混合插入; 先客观后主观 and 先主观后客观 are the other
+choices. 宫殿优先 vs 题型优先 appears only when 一个宫殿刷完再换 and a sequential type order are
+both selected, and this round has more than one review palace. Unselected groups stay in
+`kind_counts` so they can be turned back on. Mastery buckets, weak priority, question due dates,
+and `DEFAULT_QUIZ_CARD_LIMIT` do not apply to this overlay. Palace draw order is
+`streams.quiz.quiz_scope`. Confirm sends the chosen range (`round_units` or `whole_palace`).
+The first open shows one setup page — range, draw order, score display, with 快捷键 collapsed —
+then sets `overlay_quiz_setup_done`; later opens skip setup. Config stays reachable from the
+dialog's top-left. Mark defaults to ArrowUp and toggles once per press. While the dialog is open,
+ArrowUp and ArrowDown must not page the feed underneath.
 
 ### 做题 scope has exactly one owner
 
 `build_overlay_question_pack` (`practice/application/overlay_quiz_service.py`) owns **which
-palaces 做题 covers**, and the rule is: *the round's own review set is the whole scope.*
-The product statement is 「配置选了 20 座宫殿，但本轮只安排了 10 座，那就只出这 10 座的题」.
-The saved 随心 config supplies presentation choices (draw order, 客观/主观 kinds) but **must
-not** narrow which palaces contribute. An earlier version applied the config a second time;
-on a real round that emptied the pool to 0 questions while the header still counted the
-round's 8 palaces.
+questions 做题 covers**. Two ranges, one owner:
 
-**One thing does leave the scope: 移除本队列.** When *every* review card a palace had in this
+- **本轮复习单元 (default):** the round's scheduled units, each with its whole root→anchor path.
+  The product statement is 「这座宫殿里 A、B、C 三个复习单元，本轮只排了 C，就只出 C 和它上面路径的题」.
+  A unit anchored on a level-2 permanent mark still brings the root and level-1 questions,
+  because those points were reviewed as context.
+- **整个宫殿:** every non-deleted question of the round's scheduled palaces, restored as an
+  opt-in from the 出题范围 page.
+
+The saved 随心 config supplies presentation choices (draw order, 客观/主观 kinds, the range
+switch) but **must not** widen which palaces contribute. The round's palace set is still the
+outer boundary: if the config selects 20 palaces but this round scheduled 10, only those 10 can
+contribute. An earlier version applied the config a second time; on a real round that emptied
+the pool to 0 questions while the header still counted the round's 8 palaces.
+
+**One thing does leave either range: 移除本队列.** When *every* review card a palace had in this
 round is excluded, that palace's questions go with it — the learner explicitly took it out.
 A palace with even one card still queued is unaffected, and a palace whose cards were
 *completed* keeps its questions (finishing a palace leaves it available for extra practice).
@@ -662,26 +684,32 @@ A palace with even one card still queued is unaffected, and a palace whose cards
 parks rather than being deleted, and returns if the round arranges it again.
 
 The pack returns `scope_palaces` on the overlay: per scheduled palace its title, its
-available 客观/主观 counts, whether it currently contributes questions, and a stable reason
-code when it does not (`palace_removed` / `no_questions` / `kinds_filtered`, in that priority
-so the most actionable, learner-caused explanation wins). There is deliberately no
-"excluded by config" reason. Reason codes are data; the Chinese copy lives in
+available 客观/主观 counts **in the active range**, whether it currently contributes
+questions, and a stable reason code when it does not (`palace_removed` / `palace_skipped` /
+`no_questions` / `unit_no_questions` / `kinds_filtered`, in that priority so the most
+actionable, learner-caused explanation wins). `unit_no_questions` means the palace has
+questions, but none on this round's units or their root paths; `no_questions` means the
+palace has none at all. The report never re-derives membership in the UI. There is
+deliberately no "excluded by config" reason. Reason codes are data; the Chinese copy lives in
 `practice/ui/freestyle/model/overlayQuizRange.ts`.
 
 The dialog renders that report and **must not re-derive membership** from the round plan plus
 the feed config. `check_architecture.check_freestyle_scope_quiz_overlay` rejects
 `overlayReviewPalaceIds`, a frontend re-application of the feed palace filter, a backend
-subject lookup inside the pack, a pack that stops returning the report or honouring removals,
-and a bare `宫殿 <id>` label.
+subject lookup inside the pack, a pack that stops returning the report, honouring removals, or
+scoping by the round's units and their root paths, and a bare `宫殿 <id>` label.
 
 Two questions that look alike and are not:
 
-- “Which palaces does the pool draw from” — the backend report: the round's set minus
-  all-removed palaces.
+- “Which questions does the pool draw from” — the backend report: the round's units and their
+  root paths, or the whole scheduled palace set, minus removed/skipped palaces.
 - “Which palaces may settlement clear 做题 progress for” — `overlayRoundReviewPalaceIds`
   plus `review_palace_ids`. This one deliberately **includes** removed palaces, because
   settlement clears this round's own history and must still name a palace whose cards were
   removed mid-round.
+
+Switching the 做题 range must not rebuild the review card queue: `overlay_question_range` is
+deliberately absent from `queue_construction_signature` on both sides.
 
 A 随心 config change still takes effect on the open dialog immediately (keyed on
 `freestylePalaceScopeSignature`), because a config save replans the round. Palace *parking*
@@ -715,10 +743,10 @@ would be worse than showing nothing. It reads the round through
 question window must not write the round, or its version would move under the study loop and
 409 the next rating.
 
-That endpoint covers **every question bound to the round's palaces**, not just the 做题 pool.
-Measured on a real round: the palaces hold 235 questions while the kind-filtered pool holds
-165, so reading a rating off the pool would leave the rest blank even when their knowledge
-points were rated. Both surfaces share one rule through
+That endpoint covers **every question bound to the round's palaces**, wider than the default
+做题 pool (unit paths only). Measured on a real round: the palaces hold 235 questions while the
+kind-filtered pool holds 165, so reading a rating off the pool would leave the rest blank even
+when their knowledge points were rated. Both surfaces share one rule through
 `build_round_question_ratings` (`overlay_quiz_service.py`), so 「本轮最低 N」 cannot mean two
 different things depending on which window is open.
 
