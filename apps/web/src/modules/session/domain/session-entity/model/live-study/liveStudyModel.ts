@@ -5,7 +5,6 @@ export const LIVE_STUDY_SURFACES = [
   'palace_quiz',
   'mindmap_review',
   'english_course',
-  'english_reading',
 ] as const
 
 export type LiveStudySurface = (typeof LIVE_STUDY_SURFACES)[number]
@@ -49,7 +48,6 @@ const STUDY_FOLLOW_PATTERNS = [
   /^\/palaces\/\d+$/,
   /^\/palaces\/\d+\/quiz$/,
   /^\/english\/listening\/courses\/\d+$/,
-  /^\/english\/reading\/materials\/\d+$/,
 ]
 
 function pathnameOf(path: string) {
@@ -94,7 +92,6 @@ export function liveStudySurfaceFromPath(pathname: string): LiveStudySurface | n
   if (/^\/palaces\/\d+\/quiz$/.test(path)) return 'palace_quiz'
   if (/^\/palaces\/\d+$/.test(path)) return 'mindmap_review'
   if (/^\/english\/listening\/courses\/\d+$/.test(path)) return 'english_course'
-  if (/^\/english\/reading\/materials\/\d+$/.test(path)) return 'english_reading'
   return null
 }
 

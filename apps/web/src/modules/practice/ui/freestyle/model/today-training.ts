@@ -15,7 +15,6 @@ export type FreestyleMode = 'today' | 'free'
 export interface TodayTrainingConfig {
   roundSize: number
   includeEnglish: boolean
-  includeEnglishReading: boolean
   seed: number
 }
 
@@ -41,7 +40,6 @@ export const TODAY_TRAINING_ROUND_SIZE = 12
 export const DEFAULT_TODAY_TRAINING_CONFIG: TodayTrainingConfig = {
   roundSize: TODAY_TRAINING_ROUND_SIZE,
   includeEnglish: false,
-  includeEnglishReading: false,
   seed: 23,
 }
 
@@ -69,10 +67,6 @@ export function sanitizeTodayTrainingConfig(value: unknown): TodayTrainingConfig
     includeEnglish: sanitizeBoolean(
       raw.includeEnglish,
       DEFAULT_TODAY_TRAINING_CONFIG.includeEnglish,
-    ),
-    includeEnglishReading: sanitizeBoolean(
-      raw.includeEnglishReading,
-      DEFAULT_TODAY_TRAINING_CONFIG.includeEnglishReading,
     ),
     seed: sanitizeSeed(raw.seed),
   }
@@ -137,7 +131,6 @@ function isEnabledFillActionCard(
 ): card is FreestyleActionCard {
   if (!isActionCard(card)) return false
   if (card.content_type === 'english') return config.includeEnglish
-  if (card.content_type === 'english_reading') return config.includeEnglishReading
   return false
 }
 

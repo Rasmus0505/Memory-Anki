@@ -14,7 +14,6 @@ export type FreestyleContentType =
   | 'quiz_question'
   | 'review'
   | 'english'
-  | 'english_reading'
 
 /** Mutually exclusive freestyle progress buckets (multi-select). */
 export type FreestylePalaceOrder = 'finish_palace_then_next' | 'interleave_palaces' | 'exam_priority'
@@ -255,7 +254,6 @@ export type FreestyleMindMapBranchCard = FreestyleReviewUnitCard
 export type FreestyleActionKind =
   | 'review'
   | 'english'
-  | 'english_reading'
 
 export interface FreestyleChapterContext {
   id: number

@@ -65,7 +65,6 @@ export {
   rebindUnitEncountersByUnitId,
   sourceCardId,
   getFreestyleRatedCardIds,
-  findEarliestUnratedIndex,
   getFreestylePassedCardIds,
   isRetryOccurrence,
   createRetryOccurrence,

@@ -14,7 +14,6 @@ import type {
   PalaceQuizOcrSourceDraft,
   PalaceQuizQuestion,
   PalaceQuizQuestionDraft,
-  PalaceQuestionExplainResult,
   PalaceShortAnswerFeedback,
   QuizNodeBindingEdge,
 } from '@/shared/api/contracts'
@@ -37,10 +36,6 @@ export function getPalaceQuizQuestionsApi(palaceId: number) {
 
 export function getPalaceQuizOcrSourcesApi(palaceId: number) {
   return request<{ items: PalaceQuizOcrSource[] }>(`/palaces/${palaceId}/quiz-ocr-sources`)
-}
-
-export function getChapterQuizQuestionsApi(chapterId: number) {
-  return request<{ items: PalaceQuizQuestion[] }>(`/chapters/${chapterId}/quiz-questions`)
 }
 
 export function createPalaceQuizQuestionApi(
@@ -416,68 +411,6 @@ export function requestPalaceShortAnswerFeedbackApi(
   )
 }
 
-export function requestPalaceQuestionExplainApi(
-  questionId: number,
-  userQuestion: string,
-  aiOptions?: import('@/shared/api/contracts').AiRuntimeOptions,
-) {
-  return request<PalaceQuestionExplainResult>(
-    `/palace-quiz-questions/${questionId}/explain`,
-    {
-      method: 'POST',
-      body: JSON.stringify({ user_question: userQuestion, ai_options: aiOptions }),
-      persistence: {
-        resourceKey: `palace-quiz-question:${questionId}:explain`,
-        description: '生成题目 AI 讲解',
-        replayMode: 'manual',
-      },
-    },
-  )
-}
-
-export function getQuizReviewQueueApi(palaceId?: number | null) {
-  const query = palaceId ? `?palace_id=${palaceId}` : ''
-  return request<{ items: PalaceQuizQuestion[] }>(`/palace-quiz-questions/review-queue${query}`)
-}
-
-export function reviewQuizQuestionQualityApi(questionId: number) {
-  return request<{ review: { passed: boolean; score: number; issues: string[] }; question: PalaceQuizQuestion }>(
-    `/palace-quiz-questions/${questionId}/quality-review`,
-    { method: 'POST', body: JSON.stringify({}) },
-  )
-}
-
-export function transitionQuizQuestionLifecycleApi(
-  questionId: number,
-  status: 'temporary' | 'candidate' | 'published' | 'rejected',
-) {
-  return request<{ item: PalaceQuizQuestion }>(`/palace-quiz-questions/${questionId}/lifecycle`, {
-    method: 'POST',
-    body: JSON.stringify({ status }),
-    persistence: {
-      resourceKey: `palace-quiz-question:${questionId}:lifecycle:${status}`,
-      description: '更新题目审核状态',
-      replayMode: 'manual',
-    },
-  })
-}
-
-export function recordQuizAttemptEventApi(data: {
-  question_id: number
-  palace_id?: number | null
-  chapter_id?: number | null
-  scene: string
-  answer_payload: Record<string, unknown>
-  is_correct?: boolean | null
-  duration_ms?: number | null
-  hint_count?: number
-  retry_count?: number
-  confidence?: number | null
-  ai_score?: number | null
-}) {
-  return request('/palace-quiz-attempt-events', { method: 'POST', body: JSON.stringify(data) })
-}
-
 export function listPalaceQuizNodeBindingsApi(palaceId: number) {
   const cached = peekPalaceBindings(palaceId)
   if (cached) return Promise.resolve({ items: cached, item_count: cached.length })
@@ -538,30 +471,6 @@ export function getPalaceQuizQuestionsByIdsApi(questionIds: number[]) {
       body: JSON.stringify({ question_ids: questionIds }),
     },
   )
-}
-
-export function autoBindPalaceQuizNodeBindingsApi(
-  palaceId: number,
-  data?: { fill_unbound_only?: boolean; max_nodes_per_question?: number },
-) {
-  invalidateSharedRequest(palaceQuizNodeBindingsCacheKey(palaceId))
-  return request<{
-    palace_id: number
-    created_count: number
-    updated_count: number
-    removed_count: number
-    items: QuizNodeBindingEdge[]
-    item_count: number
-    proposed_count?: number
-  }>(`/palaces/${palaceId}/quiz-node-bindings/auto-bind-text`, {
-    method: 'POST',
-    body: JSON.stringify(data || {}),
-    persistence: {
-      resourceKey: `palace:${palaceId}:quiz-node-bindings:auto-bind-text`,
-      description: '文本重合自动绑定知识点',
-      replayMode: 'manual',
-    },
-  })
 }
 
 export function mutatePalaceQuizNodeBindingsApi(

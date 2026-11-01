@@ -2,19 +2,14 @@ import { retryWhileBusy } from '@/shared/api/busyRetry'
 import { request } from '@/shared/api/http'
 import { parseFreestyleOverview } from './freestyleOverviewParse'
 import type {
-  CreateFreestyleAiExplanationPayload,
   CreateFreestyleQuizAttemptPayload,
-  FreestyleAiExplanationRecord,
   FreestyleBedtimeAppendResponse,
   FreestyleBedtimeCandidatesResponse,
-  FreestyleContentType,
-  FreestyleFeedResponse,
   FreestyleHistoryMode,
   FreestyleHistorySummary,
   FreestyleQueueBuildRequest,
   FreestyleQueueBuildResponse,
   FreestyleQuizAttemptRecord,
-  FreestyleRange,
   FreestyleOverlayQuizDropPalacesRequest,
   FreestyleOverlayQuizEnsureRequest,
   FreestyleOverlayQuizProgressRequest,
@@ -26,24 +21,7 @@ import type {
   ActiveFreestyleOverlayWrongQuestionsResponse,
   FreestyleRoundQuestionRatingsResponse,
   FreestyleRoundStatePayload,
-  WrongQuestionsResponse,
 } from '@/shared/api/contracts'
-
-export function getFreestyleFeedApi(params: {
-  range: FreestyleRange
-  palaceIds?: number[]
-  contentTypes?: FreestyleContentType[]
-}) {
-  const searchParams = new URLSearchParams()
-  searchParams.set('range', params.range)
-  if (params.range === 'specific_palaces' && params.palaceIds?.length) {
-    searchParams.set('palace_ids', params.palaceIds.join(','))
-  }
-  if (params.contentTypes?.length) {
-    searchParams.set('content_types', params.contentTypes.join(','))
-  }
-  return request<FreestyleFeedResponse>(`/freestyle/feed?${searchParams.toString()}`)
-}
 
 export function buildFreestyleQueueApi(
   payload: Omit<FreestyleQueueBuildRequest, 'tz'>,
@@ -112,40 +90,12 @@ export function getFreestyleQuestionAttemptsApi(params?: {
   )
 }
 
-export function createFreestyleQuestionExplanationApi(
-  data: CreateFreestyleAiExplanationPayload,
-) {
-  return request<{ item: FreestyleAiExplanationRecord }>('/freestyle/question-explanations', {
-    method: 'POST',
-    body: JSON.stringify(data),
-    persistence: {
-      resourceKey: `freestyle:question-explanation:${data.question_id}:${Date.now()}`,
-      description: '保存随心 AI 讲解历史',
-      replayMode: 'manual',
-    },
-  })
-}
-
-export function getFreestyleQuestionExplanationsApi(params?: {
-  limit?: number
-  palaceId?: number | null
-  questionId?: number | null
-}) {
-  return request<{ items: FreestyleAiExplanationRecord[] }>(
-    `/freestyle/question-explanations${historySearchParams(params)}`,
-  )
-}
-
 export function getFreestyleHistorySummaryApi() {
   return request<FreestyleHistorySummary>('/freestyle/history-summary')
 }
 
 export function getFreestyleTomorrowDueApi(options?: Pick<RequestInit, 'signal'>) {
   return request<{ due_tomorrow_count: number }>('/freestyle/tomorrow-due', options)
-}
-
-export function getWrongQuestionsApi(limit = 200) {
-  return request<WrongQuestionsResponse>(`/palace-quiz-questions/wrong?limit=${limit}`)
 }
 
 export function getOrCreateFreestyleRoundApi(

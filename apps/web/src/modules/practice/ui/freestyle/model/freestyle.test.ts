@@ -70,12 +70,7 @@ function actionCard(
     id,
     type: 'action',
     content_type: contentType,
-    action_kind:
-      contentType === 'english'
-        ? 'english'
-        : contentType === 'english_reading'
-          ? 'english_reading'
-          : 'review',
+    action_kind: contentType === 'english' ? 'english' : 'review',
     title: id,
     subtitle: '',
     href: '/freestyle',
@@ -344,7 +339,6 @@ describe('today training queue model', () => {
       todayFeedContentTypes({
         ...DEFAULT_TODAY_TRAINING_CONFIG,
         includeEnglish: true,
-        includeEnglishReading: true,
       }).fill,
     ).toEqual(['quiz_question', 'english'])
   })
@@ -358,7 +352,6 @@ describe('today training queue model', () => {
     const savedToday = saveTodayTrainingConfig({
       ...DEFAULT_TODAY_TRAINING_CONFIG,
       includeEnglish: true,
-      includeEnglishReading: true,
       seed: 88,
     })
 

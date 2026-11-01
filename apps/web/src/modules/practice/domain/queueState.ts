@@ -1,7 +1,6 @@
 import type { FreestyleCard } from '@/shared/api/contracts'
 
 import {
-  findEarliestUnscoredIndex,
   passedOccurrenceIds,
   scoredOccurrenceIds,
 } from './unitProgressState'
@@ -414,20 +413,6 @@ export function getFreestyleRatedCardIds(
 }
 
 /**
- * Queue-order first card with no this-round score (谁最早看谁).
- * Weak ratings count as already scored.
- */
-export function findEarliestUnratedIndex(
-  cards: ReadonlyArray<FreestyleCard>,
-  completedIds: Iterable<string>,
-  encounters: Record<string, FreestyleUnitEncounterState> = {},
-  roundPlan: FreestyleRoundPlanState | null = null,
-  hiddenIds: Iterable<string> = [],
-): number | null {
-  return findEarliestUnscoredIndex({ cards, completedIds, encounters, roundPlan, hiddenIds })
-}
-
-/**
  * Cards that have actually passed this round (score >= 3 or completed ack).
  * Deliberately separate from rated ids: 忘记/困难 stays work in progress.
  */
@@ -444,7 +429,7 @@ export function isRetryOccurrence(card: FreestyleCard | null | undefined): boole
   return card?.occurrence_kind === 'retry' || Boolean(card?.source_card_id && card.source_card_id !== card.id)
 }
 
-export function retrySourceKey(card: FreestyleCard | null | undefined): string {
+function retrySourceKey(card: FreestyleCard | null | undefined): string {
   return cardUnitId(card) || sourceCardId(card)
 }
 

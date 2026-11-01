@@ -1,6 +1,5 @@
 import { request } from '@/shared/api/http'
 import { retryWhileBusy } from '@/shared/api/busyRetry'
-import { shareInFlightRequest } from '@/shared/api/inFlightRequest'
 import { APP_EVENT_NAMES, emitAppEvent } from '@/shared/events/appEvents'
 import { detectClientSource } from '@/shared/lib/clientSource'
 
@@ -222,101 +221,8 @@ export interface UndoContentScheduleBatchResultDto {
   invalidated_session_count: number
 }
 
-export async function getDueReviewUnitsApi() {
-  const response = await request<{ items: ReviewUnitDto[] }>('/review/queue')
-  return response.items
-}
-
 export async function getPalaceReviewUnitsApi(palaceId: number) {
   const response = await request<{ item: PalaceUnitProjectionDto }>(`/review/palaces/${palaceId}/units`)
-  return response.item
-}
-
-export type LadderProgressRange = 'today' | 'last3days' | 'week' | 'all'
-
-export interface LadderStageStatsDto {
-  stage_index: number
-  interval_days: number
-  pass_count: number
-  last_at: string | null
-  seconds: number
-}
-
-export interface LadderRangeStatsDto {
-  range: LadderProgressRange
-  per_stage: LadderStageStatsDto[]
-  total_reviews: number
-  total_seconds: number
-  rating_share: {
-    forgot: number
-    hard: number
-    remember: number
-    easy: number
-  }
-}
-
-export interface LadderLearningSummaryDto {
-  range: LadderProgressRange
-  unit_count: number
-  total_seconds: number
-  freestyle_rating_count: number
-  quiz_count: number
-}
-
-/** Due-date buckets shown in the toolbar strip; ordered nearest-first. */
-export type DueHorizonKey = 'today' | 'd3' | 'week' | 'month' | 'later'
-
-export interface PalaceLadderProgressDto {
-  palace_id: number
-  title: string
-  ladder: number[]
-  scope: 'unit' | 'palace'
-  current: {
-    unit_id: string
-    title: string
-    stage_index: number
-    interval_days: number
-    due_date: string | null
-    due: boolean
-    has_passed: boolean
-    /** Due-horizon bucket of this unit, computed against the server study day. */
-    horizon?: DueHorizonKey | null
-  } | null
-  palace: {
-    unit_count: number
-    due_count: number
-    weakest_stage_index: number | null
-    stage_histogram: number[]
-    /** Active units per due-date horizon; the toolbar's distribution strip. */
-    due_horizon?: Record<DueHorizonKey, number>
-    next_review_date: string | null
-    review_status: string
-    mark_required: boolean
-  }
-  unit_range_stats: LadderRangeStatsDto
-  palace_range_stats: LadderRangeStatsDto
-  selected_range_summary: LadderLearningSummaryDto
-  palace_all_time_summary: LadderLearningSummaryDto
-}
-
-export async function getPalaceLadderProgressApi(
-  palaceId: number,
-  options?: { range?: LadderProgressRange; unitId?: string | null },
-) {
-  const searchParams = new URLSearchParams()
-  searchParams.set('range', options?.range ?? 'all')
-  if (options?.unitId) searchParams.set('unit_id', options.unitId)
-  const query = searchParams.toString()
-  // Several cards and panels mount this widget for the same palace+range during a
-  // feed open; sharing the identical request keeps each duplicate from holding a
-  // pooled database connection at the same time.
-  const response = await shareInFlightRequest(
-    `palace:${palaceId}:ladder-progress:${query}`,
-    () =>
-      request<{ item: PalaceLadderProgressDto }>(
-        `/review/palaces/${palaceId}/ladder-progress?${query}`,
-      ),
-  )
   return response.item
 }
 
@@ -429,26 +335,6 @@ export async function startFreestyleUnitReviewSessionApi(
       persistence: false,
     }),
     { onRetry: options?.onBusyRetry },
-  )
-  return response.item
-}
-
-export async function openUnitReviewEncounterApi(
-  sessionId: string,
-  unit: Pick<ReviewUnitDto, 'id' | 'revision'>,
-  roundId: string,
-  encounterId: string,
-) {
-  const response = await request<{ item: UnitReviewSessionDto }>(
-    `/review/session/${sessionId}/units/${unit.id}/encounters`,
-    {
-      method: 'POST',
-      body: JSON.stringify({
-        unit_revision: unit.revision,
-        round_id: roundId,
-        encounter_id: encounterId,
-      }),
-    },
   )
   return response.item
 }

@@ -31,14 +31,14 @@ describe('remaining live-study surfaces', () => {
     expect(isFollowableStudyPath('/palaces/7/quiz')).toBe(true)
     expect(isFollowableStudyPath('/palaces/7')).toBe(true)
     expect(isFollowableStudyPath('/english/listening/courses/3')).toBe(true)
-    expect(isFollowableStudyPath('/english/reading/materials/9')).toBe(true)
+    expect(isFollowableStudyPath('/english/reading/materials/9')).toBe(false)
     expect(isFollowableStudyPath('/palaces/7/edit')).toBe(false)
     expect(isFollowableStudyPath('/palaces/23/review')).toBe(false)
     expect(isFollowableStudyPath('/profile')).toBe(false)
     expect(liveStudySurfaceFromPath('/palaces/7/quiz')).toBe('palace_quiz')
     expect(liveStudySurfaceFromPath('/palaces/7')).toBe('mindmap_review')
     expect(liveStudySurfaceFromPath('/english/listening/courses/3')).toBe('english_course')
-    expect(liveStudySurfaceFromPath('/english/reading/materials/9')).toBe('english_reading')
+    expect(liveStudySurfaceFromPath('/english/reading/materials/9')).toBeNull()
     expect(liveStudySurfaceFromPath('/palaces/7/edit')).toBeNull()
     expect(
       shouldFollowLiveRoute({

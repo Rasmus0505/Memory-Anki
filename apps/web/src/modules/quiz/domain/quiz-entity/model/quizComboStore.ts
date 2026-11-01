@@ -36,15 +36,6 @@ export function recordQuizAnswer(key: string | null, correct: boolean): QuizComb
   return snapshot
 }
 
-export function resetQuizCombo() {
-  snapshot = { key: null, combo: 0, nonce: snapshot.nonce + 1 }
-  emit()
-}
-
-export function readQuizCombo(key: string | null): number {
-  return snapshot.key === key ? snapshot.combo : 0
-}
-
 export function useQuizCombo(key: string | null): number {
   return useSyncExternalStore(
     subscribe,

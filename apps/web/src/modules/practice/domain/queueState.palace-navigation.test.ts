@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest'
 import {
   findPreviousPalaceIndex,
   getFreestylePassedCardIds,
-  findEarliestUnratedIndex,
   getFreestyleRatedCardIds,
   moveRemainingPalaceToTail,
   createRetryOccurrence,
 } from './queueState'
+import { findEarliestUnscoredIndex } from './unitProgressState'
 import type { FreestyleCard } from '@/shared/api/contracts'
 
 const cards = [
@@ -54,7 +54,7 @@ describe('freestyle palace navigation', () => {
     expect(rated).toContain(source.id)
     expect(rated).not.toContain(retry.id)
     expect(rated).not.toContain(cards[1].id)
-    expect(findEarliestUnratedIndex(list, [], encounters)).toBe(1)
+    expect(findEarliestUnscoredIndex({ cards: list, completedIds: [], encounters, roundPlan: null })).toBe(1)
   })
 
   it('keeps a this-round completed id rated when swipe-back opens an empty amend glance', () => {
@@ -69,7 +69,7 @@ describe('freestyle palace navigation', () => {
       retryAfterCards: 0,
     }
     expect(getFreestyleRatedCardIds(cards, ['a1'], { a1: emptyAmend })).toContain('a1')
-    expect(findEarliestUnratedIndex(cards, ['a1'], { a1: emptyAmend })).toBe(1)
+    expect(findEarliestUnscoredIndex({ cards, completedIds: ['a1'], encounters: { a1: emptyAmend }, roundPlan: null })).toBe(1)
     expect(getFreestylePassedCardIds(cards, ['a1'], { a1: emptyAmend })).toContain('a1')
   })
 
@@ -88,16 +88,16 @@ describe('freestyle palace navigation', () => {
       cardsById: { a1: { lastRating: 2 } },
     } as never
     expect(getFreestyleRatedCardIds(cards, [], { a1: emptyAmend }, roundPlan)).toContain('a1')
-    expect(findEarliestUnratedIndex(cards, [], { a1: emptyAmend }, roundPlan)).toBe(1)
+    expect(findEarliestUnscoredIndex({ cards, completedIds: [], encounters: { a1: emptyAmend }, roundPlan })).toBe(1)
   })
 
   it('seeks the first unrated card in round order, including skipped-ahead units', () => {
-    expect(findEarliestUnratedIndex(cards, ['a1'], {})).toBe(1)
-    expect(findEarliestUnratedIndex(cards, ['a1', 'a2', 'b1', 'b2'], {})).toBeNull()
-    expect(findEarliestUnratedIndex(
+    expect(findEarliestUnscoredIndex({ cards, completedIds: ['a1'], encounters: {}, roundPlan: null })).toBe(1)
+    expect(findEarliestUnscoredIndex({ cards, completedIds: ['a1', 'a2', 'b1', 'b2'], encounters: {}, roundPlan: null })).toBeNull()
+    expect(findEarliestUnscoredIndex({
       cards,
-      [],
-      {
+      completedIds: [],
+      encounters: {
         a2: {
           encounterId: 'encounter-2',
           roundId: 'round-1',
@@ -109,7 +109,8 @@ describe('freestyle palace navigation', () => {
           retryAfterCards: 0,
         },
       },
-    )).toBe(0)
+      roundPlan: null,
+    })).toBe(0)
   })
 
   it('does not treat a weak rating as passed until its retry passes', () => {

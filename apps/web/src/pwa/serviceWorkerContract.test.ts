@@ -358,7 +358,6 @@ describe('PWA service worker contract', () => {
         review: 0,
         practice: 0,
         english: 0,
-        english_reading: 0,
       },
       offline: true,
     })

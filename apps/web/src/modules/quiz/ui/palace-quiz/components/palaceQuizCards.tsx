@@ -120,28 +120,6 @@ export function QuestionSourceBadge({
   )
 }
 
-export function PreviewQuestionCard({
-  question,
-  index,
-}: {
-  question: PalaceQuizQuestionDraft
-  index: number
-}) {
-  return (
-    <div className="rounded-xl border border-border/70 bg-background/70 px-3 py-3">
-      <div className="mb-2 flex items-center gap-1.5">
-        <Badge variant="secondary">#{index + 1}</Badge>
-        <Badge variant="outline">{getQuestionTypeLabel(question.question_type)}</Badge>
-      </div>
-      <div className="text-sm font-medium leading-6">{question.stem}</div>
-      <PreviewQuestionAnswerSummary question={question} />
-      <div className="mt-2.5 text-sm text-muted-foreground">
-        解析：{question.analysis || '暂无解析'}
-      </div>
-    </div>
-  )
-}
-
 interface QuizQuestionCardProps {
   question: PalaceQuizQuestion
   state: QuizRuntimeState | undefined

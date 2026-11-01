@@ -41,7 +41,6 @@ export const FREESTYLE_CONTENT_TYPES: FreestyleContentType[] = [
   'quiz_question',
   'review',
   'english',
-  'english_reading',
 ]
 
 export const DEFAULT_FREESTYLE_CONFIG: FreestyleConfig = {
@@ -50,7 +49,6 @@ export const DEFAULT_FREESTYLE_CONFIG: FreestyleConfig = {
     quiz_question: true,
     review: true,
     english: true,
-    english_reading: true,
   },
   specificPalaceIds: [],
   orderMode: 'palace_complete_then_random',
@@ -250,9 +248,7 @@ function actionInterval(frequency: FreestyleActionFrequency) {
 }
 
 export function enabledContentTypes(config: FreestyleConfig): FreestyleContentType[] {
-  return FREESTYLE_CONTENT_TYPES.filter(
-    (type) => type !== 'english_reading' && config.contentTypes[type],
-  )
+  return FREESTYLE_CONTENT_TYPES.filter((type) => config.contentTypes[type])
 }
 
 function downgradeResolvedQuizCards<T extends FreestyleCard>(

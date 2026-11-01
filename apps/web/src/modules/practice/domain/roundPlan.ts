@@ -72,7 +72,7 @@ export function roundPlanConfigSignature(config: FreestyleFeedConfig) {
   }
 }
 
-export function shouldReorderUnstartedFreestylePlan(
+function shouldReorderUnstartedFreestylePlan(
   previousSignature: string | undefined,
   nextConfig: FreestyleFeedConfig,
 ) {
@@ -98,7 +98,7 @@ function lockedPlanIds(cardsById: Record<string, FreestyleRoundPlanCard>) {
   return locked
 }
 
-export function reorderUnstartedPlanIds(
+function reorderUnstartedPlanIds(
   previousOrder: string[],
   incomingIds: string[],
   cardsById: Record<string, FreestyleRoundPlanCard>,

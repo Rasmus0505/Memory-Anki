@@ -21,9 +21,6 @@ import { mergePartialSettlementLists } from './partialSettlement'
 
 export { retainLocalRoundLedger, type RetainedRoundLedger } from './roundLedgerRetention'
 
-export function retryOccurrenceId(roundId: string, sourceId: string, attempt: number) {
-  return `retry:${roundId}:${sourceId}:${attempt}`
-}
 /**
  * Paint the server's same-day retry booking onto the source row.
  *
@@ -126,7 +123,7 @@ export function planCardCohort(
 }
 
 /** Rebuild a review-unit card the live queue omitted because it is already done. */
-export function cardFromOriginalSnapshot(
+function cardFromOriginalSnapshot(
   item: FreestyleRoundOriginalCard | null | undefined,
 ): FreestyleCard | null {
   if (!item) return null

@@ -6,7 +6,7 @@ import {
   type FreestyleReviewHintCard,
 } from '@/shared/api/contracts'
 
-export function createReviewHintCard(): FreestyleReviewHintCard {
+function createReviewHintCard(): FreestyleReviewHintCard {
   return {
     id: FREESTYLE_REVIEW_HINT_ID,
     type: 'review_hint',
