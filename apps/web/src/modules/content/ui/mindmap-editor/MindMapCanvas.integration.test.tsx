@@ -15,6 +15,8 @@ const reactFlowMockState = vi.hoisted(() => ({
   zoomOut: vi.fn(),
   setViewport: vi.fn(),
   getViewport: vi.fn(),
+  /** The rendered-card centering path converts a screen point through this. */
+  screenToFlowPosition: vi.fn((point: { x: number; y: number }) => point),
   viewport: { x: 4, y: 18, zoom: 1 },
   reactFlowProps: null as Record<string, unknown> | null,
   nodes: [] as Array<{ id: string; data?: Record<string, unknown>; position?: { x: number; y: number } }>,
@@ -104,6 +106,7 @@ vi.mock('@xyflow/react', async () => {
       zoomOut: reactFlowMockState.zoomOut,
       getViewport: reactFlowMockState.getViewport,
       setViewport: reactFlowMockState.setViewport,
+      screenToFlowPosition: reactFlowMockState.screenToFlowPosition,
     }),
     useStore: (selector: (state: unknown) => unknown) =>
       selector({

@@ -9,12 +9,10 @@ import {
   FreestyleStaleRecoveryPanel,
   FreestyleTopNotices,
 } from '@/modules/practice/ui/freestyle/components/FreestyleHudChrome'
-import { FreestyleChannelHint } from '@/modules/practice/ui/freestyle/components/FreestyleChannelHint'
 import { FreestylePalaceClearedBanner } from '@/modules/practice/ui/freestyle/components/FreestylePalaceClearedBanner'
 
 type ProgressRailProps = ComponentProps<typeof FreestyleProgressRail>
 type PalaceClearance = ComponentProps<typeof FreestylePalaceClearedBanner>['clearance']
-type ChannelHintProps = ComponentProps<typeof FreestyleChannelHint>
 
 export function FreestyleHud({
   examOverview,
@@ -27,8 +25,6 @@ export function FreestyleHud({
   progressRailOverflow,
   onOpenPlan,
   onJump,
-  channelAppliedHint,
-  onDismissChannelApplied,
   saveError,
   onDismissSaveError,
   unsavedRatingCount = 0,
@@ -36,12 +32,6 @@ export function FreestyleHud({
   palaceClearance,
   onDismissPalaceClearance,
   settlementVisible = false,
-  channelHintVisible,
-  activeChannelAdjustment,
-  channelState,
-  channelBusy,
-  onApplyChannelAdjustment,
-  onDismissChannelHint,
   staleCircuitOpen,
   showStaleRecovery,
   onSkipStaleRecovery,
@@ -61,8 +51,6 @@ export function FreestyleHud({
   progressRailOverflow: ReactNode
   onOpenPlan: () => void
   onJump: ProgressRailProps['onJump']
-  channelAppliedHint: string
-  onDismissChannelApplied: () => void
   saveError: string
   onDismissSaveError: () => void
   /** Ratings of this round that are 未保存. Shown until zero; tapping retries them. */
@@ -72,12 +60,6 @@ export function FreestyleHud({
   onDismissPalaceClearance: () => void
   /** The closing page reports the palace itself; card-level chips stay off it. */
   settlementVisible?: boolean
-  channelHintVisible: boolean
-  activeChannelAdjustment: { hint: ChannelHintProps['hint']; actionLabel: ChannelHintProps['actionLabel'] } | null
-  channelState: 'anxious' | 'bored'
-  channelBusy: boolean
-  onApplyChannelAdjustment: ChannelHintProps['onApply']
-  onDismissChannelHint: ChannelHintProps['onDismiss']
   staleCircuitOpen: boolean
   showStaleRecovery: boolean
   onSkipStaleRecovery: () => void
@@ -158,8 +140,6 @@ export function FreestyleHud({
       ) : null}
 
       <FreestyleTopNotices
-        channelAppliedHint={channelAppliedHint}
-        onDismissChannelApplied={onDismissChannelApplied}
         saveError={saveError}
         onDismissSaveError={onDismissSaveError}
       />
@@ -170,17 +150,6 @@ export function FreestyleHud({
         <FreestylePalaceClearedBanner
           clearance={palaceClearance}
           onDismiss={onDismissPalaceClearance}
-        />
-      ) : null}
-
-      {channelHintVisible && activeChannelAdjustment ? (
-        <FreestyleChannelHint
-          state={channelState}
-          hint={activeChannelAdjustment.hint}
-          actionLabel={activeChannelAdjustment.actionLabel}
-          busy={channelBusy}
-          onApply={onApplyChannelAdjustment}
-          onDismiss={onDismissChannelHint}
         />
       ) : null}
 

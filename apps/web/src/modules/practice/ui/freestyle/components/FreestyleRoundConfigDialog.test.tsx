@@ -7,6 +7,9 @@ import { getPalacesGroupedApi } from '@/modules/content/public'
 vi.mock('@/modules/content/public', () => ({
   getPalacesGroupedApi: vi.fn(),
   getSubjectTreeApi: vi.fn().mockResolvedValue({ chapters: [] }),
+  // 宫殿收藏 is read by the picker's row badge; the config dialog does not
+  // exercise it, but the row still calls the hook.
+  useIsPalaceFavorite: () => false,
 }))
 
 const config = {

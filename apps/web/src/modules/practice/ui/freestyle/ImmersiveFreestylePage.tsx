@@ -57,7 +57,6 @@ import { useFreestyleQuizFlow } from '@/modules/practice/ui/freestyle/hooks/useF
 import { useQuizDwellMs } from '@/modules/quiz/public'
 import { useFreestyleFeedNavigation } from '@/modules/practice/ui/freestyle/hooks/useFreestyleFeedNavigation'
 import { useFreestyleLiveSync } from '@/modules/practice/ui/freestyle/hooks/useFreestyleLiveSync'
-import { useFreestyleChallengeChannel } from '@/modules/practice/ui/freestyle/hooks/useFreestyleChallengeChannel'
 import { usePalaceClearanceWatch } from '@/modules/practice/ui/freestyle/hooks/usePalaceClearanceWatch'
 import { useFreestyleFullscreen } from '@/modules/practice/ui/freestyle/hooks/useFreestyleFullscreen'
 import { useFreestyleDisplayPrefs } from '@/modules/practice/ui/freestyle/hooks/useFreestyleDisplayPrefs'
@@ -362,25 +361,6 @@ export default function ImmersiveFreestylePage({
     resolveTargetIndex: resolveAutoAdvanceTarget,
     navigateToIndex,
   })
-  const {
-    recordChannelSample,
-    channelReading,
-    activeChannelAdjustment,
-    channelHintVisible,
-    channelAdjusting,
-    channelAppliedHint,
-    setChannelAppliedHint,
-    suppressChannelHint,
-    handleApplyChannelAdjustment,
-  } = useFreestyleChallengeChannel({
-    config,
-    cardCount: cards.length,
-    currentCardId: currentCard?.id ?? null,
-    roundComplete,
-    loading,
-    error,
-    setConfigAndPersist,
-  })
   const { palaceClearance, setPalaceClearance } = usePalaceClearanceWatch({
     cards,
     currentIndex,
@@ -544,25 +524,24 @@ export default function ImmersiveFreestylePage({
   )
 
   /**
-   * A settled (saved) rating feeds the challenge–skill channel first. If 翻卡设置
-   * has 评分后自动翻页 on, it then hands a page turn to the auto-advance timer; the
-   * turn only fires while that card is still under the viewport, and the undo window
-   * lets a mistap be corrected before the feed moves.
+   * A settled (saved) rating hands a page turn to the auto-advance timer when
+   * 翻卡设置 has 评分后自动翻页 on. The turn only fires while that card is still
+   * under the viewport, and the undo window lets a mistap be corrected before
+   * the feed moves.
    */
   const handleRatingSettled = useCallback(
     (
       cardId: string,
       passed: boolean,
-      rating: UnitRating,
+      _rating: UnitRating,
       _meta?: { occurrenceId?: string; encounterId?: string; planVersion?: number },
     ) => {
-      recordChannelSample(cardId, rating)
       // 忘记/困难 keeps the learner on the source card: its retry is booked for
       // later (10 分钟 → 1 小时 → 3 小时), so there is no next card to turn to.
       if (passed) scheduleAutoAdvance(cardId)
       else cancelAutoAdvance()
     },
-    [cancelAutoAdvance, recordChannelSample, scheduleAutoAdvance],
+    [cancelAutoAdvance, scheduleAutoAdvance],
   )
 
   const handleStaleDrop = useCallback(
@@ -984,7 +963,6 @@ export default function ImmersiveFreestylePage({
     setPartialSettlement(null)
     compressCompletedPlanCards(snapshot)
   }, [compressCompletedPlanCards])
-  const dismissChannelApplied = useCallback(() => setChannelAppliedHint(''), [setChannelAppliedHint])
   const dismissSaveError = useCallback(() => setSaveError(''), [])
   const dismissPalaceClearance = useCallback(() => setPalaceClearance(null), [setPalaceClearance])
   const dismissNewUnitsBanner = useCallback(() => setNewUnitsBannerVisible(false), [])
@@ -1064,8 +1042,6 @@ export default function ImmersiveFreestylePage({
           progressRailOverflow={progressRailOverflow}
           onOpenPlan={openPlan}
           onJump={jumpFromProgressRail}
-          channelAppliedHint={channelAppliedHint}
-          onDismissChannelApplied={dismissChannelApplied}
           saveError={saveError}
           onDismissSaveError={dismissSaveError}
           unsavedRatingCount={unsavedRatingCount}
@@ -1073,12 +1049,6 @@ export default function ImmersiveFreestylePage({
           palaceClearance={palaceClearance}
           onDismissPalaceClearance={dismissPalaceClearance}
           settlementVisible={settlementVisible}
-          channelHintVisible={channelHintVisible}
-          activeChannelAdjustment={activeChannelAdjustment}
-          channelState={channelReading.state as 'anxious' | 'bored'}
-          channelBusy={channelAdjusting || loading}
-          onApplyChannelAdjustment={handleApplyChannelAdjustment}
-          onDismissChannelHint={suppressChannelHint}
           staleCircuitOpen={staleCircuitOpen}
           showStaleRecovery={currentCard?.id === staleRecoveryCardId}
           onSkipStaleRecovery={handleSkipStaleRecovery}
