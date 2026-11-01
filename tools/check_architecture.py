@@ -342,6 +342,24 @@ def iter_files(root: Path, suffixes: tuple[str, ...]):
             yield path
 
 
+# Architecture documents are written in Chinese; the gate must not pin prose.
+# Each documented invariant carries a stable kebab-case marker next to its
+# paragraph, e.g. `<!-- invariant: freestyle-backend-authoritative -->`.
+INVARIANT_MARKER = "<!-- invariant: {} -->"
+
+
+def invariant_marker(slug: str) -> str:
+    return INVARIANT_MARKER.format(slug)
+
+
+def has_invariant(document: str, slug: str) -> bool:
+    return invariant_marker(slug) in document
+
+
+def missing_invariants(document: str, slugs: tuple[str, ...]) -> list[str]:
+    return [slug for slug in slugs if not has_invariant(document, slug)]
+
+
 def load_boundary_exceptions() -> list[dict]:
     if not BOUNDARY_EXCEPTIONS_PATH.exists():
         return []
@@ -1899,6 +1917,55 @@ def check_palace_quiz_palace_boundary(errors: list[str]) -> None:
                 break
 
 
+ROUND_COMMAND_DOMAIN_FILES = (
+    "round_plan.py",
+    "round_plan_bedtime.py",
+    "round_plan_fail.py",
+    "round_plan_intraday.py",
+    "round_plan_normalization.py",
+    "round_plan_values.py",
+    "round_compress.py",
+    "round_rebind.py",
+    "round_uncomplete.py",
+    "round_commands.py",
+)
+
+
+def check_round_plan_mutation_boundary(errors: list[str]) -> None:
+    """Round-plan writes belong to the named transitions, not to callers.
+
+    The plan is a dict of about fifteen keys. When application code assigns into
+    it directly, the rule that wins depends on call order — which is how a card
+    could change under the learner's finger through a different door each time.
+    Transitions live in ``round_commands`` (which delegates to the rule modules);
+    everything else reads.
+    """
+    plan_keys = (
+        "presented_ids",
+        "completed_ids",
+        "excluded_ids",
+        "compressed_ids",
+        "current_card_id",
+        "current_index",
+        "occurrences",
+        "encounters",
+    )
+    pattern = re.compile(
+        r"\b(?:plan|next_plan|served_plan|current_plan)\s*\[\s*(['\"])("
+        + "|".join(plan_keys)
+        + r")\1\s*\]\s*="
+    )
+    for path in iter_files(API_SRC / "modules" / "practice", (".py",)):
+        if path.name in ROUND_COMMAND_DOMAIN_FILES:
+            continue
+        source = path.read_text(encoding="utf-8", errors="ignore")
+        if pattern.search(source):
+            errors.append(
+                f"{path.relative_to(REPO_ROOT).as_posix()}: round-plan keys must be "
+                "changed through practice.domain.round_commands, not assigned in place."
+            )
+
+
 def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
     """Immersive queue must compose public facades; branch split stays freestyle-owned."""
     queue_service = (
@@ -2064,41 +2131,39 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
     feed_doc = REPO_ROOT / "docs" / "architecture" / "freestyle-immersive-feed.md"
     if feed_doc.exists():
         feed_source = feed_doc.read_text(encoding="utf-8", errors="ignore")
-        if "remain client-local per device" in feed_source:
-            errors.append(
-                f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: round plan must not "
-                "remain client-local per device; the backend plan is authoritative."
-            )
-        for marker in (
-            "backend-authoritative",
-            "occurrence_kind",
-            "scheduledBase",
-            "faint palace-color fill",
-            "faint amber fill",
-            "not only the HUD rail",
-            "queue-construction fields",
-            "does not move `current_card_id`",
-            "orphan block",
-            "retry occurrence has its own encounter",
-            "leaves that occurrence in the viewport",
-            "must not remount the map at the root",
-            "one live retry",
-            "must not mint a second copy",
-            "append_today_cards",
-            "replan_remaining",
-            "entered_on",
-            "drop_vanished_unstarted",
-            "list_trusted_due_units_for_queue",
-            "tail_pending",
-            "must not cover the feed once cards exist",
-        ):
-            if marker not in feed_source and marker != "scheduledBase":
+        documented = (
+            "freestyle-backend-authoritative",
+            "freestyle-occurrence-kind",
+            "freestyle-hud-scheduled-base",
+            "freestyle-faint-palace-fill",
+            "freestyle-faint-amber-fill",
+            "freestyle-retry-node-not-only-hud",
+            "freestyle-queue-construction-fields",
+            "freestyle-forgot-keeps-current-card",
+            "freestyle-retry-entered-on-no-orphans",
+            "freestyle-retry-own-encounter",
+            "freestyle-retry-stays-in-viewport",
+            "freestyle-retry-no-root-remount",
+            "freestyle-one-live-retry",
+            "freestyle-retry-no-second-copy",
+            "freestyle-append-today-cards",
+            "freestyle-replan-remaining",
+            "freestyle-entered-on-day-split",
+            "freestyle-drop-vanished-unstarted",
+            "freestyle-list-trusted-due-units",
+            "freestyle-tail-pending-prefix",
+            "freestyle-hydration-not-cover-feed",
+        )
+        for slug in missing_invariants(feed_source, documented):
+            if slug == "freestyle-hud-scheduled-base":
                 errors.append(
-                    f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: must document `{marker}`."
+                    f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
+                    "HUD denominator must stay `scheduledBase`."
                 )
-            elif marker == "scheduledBase" and marker not in feed_source:
+            else:
                 errors.append(
-                    f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: HUD denominator must stay `scheduledBase`."
+                    f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
+                    f"must document invariant `{slug}`."
                 )
     round_service = API_SRC / "modules" / "practice" / "application" / "round_state_service.py"
     if not round_service.exists():
@@ -2353,12 +2418,12 @@ def check_freestyle_queue_facade_surface(errors: list[str]) -> None:
             )
     if feed_doc.exists():
         feed_source = feed_doc.read_text(encoding="utf-8", errors="ignore")
-        if "must not mint a new `round_id`" not in feed_source:
+        if not has_invariant(feed_source, "freestyle-refresh-no-new-round-id"):
             errors.append(
                 f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
                 "must document that refresh does not mint a new round_id."
             )
-        if "overlapping identities" not in feed_source:
+        if not has_invariant(feed_source, "freestyle-scope-change-overlapping-identities"):
             errors.append(
                 f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
                 "must document that a scope change keeps overlapping completed/retry marks."
@@ -2858,27 +2923,22 @@ def check_freestyle_scope_quiz_overlay(errors: list[str]) -> None:
     feed_doc = REPO_ROOT / "docs" / "architecture" / "freestyle-immersive-feed.md"
     if feed_doc.exists():
         feed_source = feed_doc.read_text(encoding="utf-8", errors="ignore")
-        if "puts **英语** in ⋯" in feed_source:
+        if not has_invariant(feed_source, "freestyle-english-nav-beside-text"):
             errors.append(
                 f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
-                "must not bury 英语 in the overflow menu."
+                "must document 英语 immediately left of 文字, not buried in the overflow menu."
             )
-        if "immediately left of **文字**" not in feed_source:
-            errors.append(
-                f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
-                "must document 英语 immediately left of 文字."
-            )
-        if "not the subject union" not in feed_source:
+        if not has_invariant(feed_source, "freestyle-overlay-round-units-not-subject-union"):
             errors.append(
                 f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
                 "overlay quiz must document round review palaces, not the subject union."
             )
-        if "客观" not in feed_source or "主观" not in feed_source or "混合插入" not in feed_source:
+        if not has_invariant(feed_source, "freestyle-overlay-objective-subjective-mix"):
             errors.append(
                 f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
                 "overlay quiz config must document 客观/主观 selection and 混合插入."
             )
-        if "Finishing one palace's ratings does not ask to clear overlay" not in feed_source:
+        if not has_invariant(feed_source, "freestyle-overlay-clear-on-settlement-page"):
             errors.append(
                 f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
                 "overlay clear must happen on the settlement page, not when one palace finishes scoring."
@@ -3131,7 +3191,7 @@ def check_freestyle_knowledge_entry_scope(errors: list[str]) -> None:
     feed_doc = REPO_ROOT / "docs" / "architecture" / "freestyle-immersive-feed.md"
     if feed_doc.exists():
         feed_source = feed_doc.read_text(encoding="utf-8", errors="ignore")
-        if "locking every" not in feed_source or "does not keep showing the full" not in feed_source:
+        if not has_invariant(feed_source, "freestyle-knowledge-page-locks-streams"):
             errors.append(
                 f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
                 "must document that knowledge-page review locks every stream to one palace."
@@ -3160,12 +3220,15 @@ def check_identity_keyed_progress(errors: list[str]) -> None:
         errors.append("node-bound quiz must write the shared question progress, not a private ledger.")
     if not quiz_flow.exists() or "writeQuizSessionState" not in quiz_flow.read_text(encoding="utf-8", errors="ignore"):
         errors.append("freestyle quiz cards must write the shared question progress.")
-    if not feed_doc.exists() or "keyed by `unit:{unit_id}`" not in feed_doc.read_text(encoding="utf-8", errors="ignore"):
+    if not feed_doc.exists() or not has_invariant(
+        feed_doc.read_text(encoding="utf-8", errors="ignore"),
+        "freestyle-unit-identity-keyed-ratings",
+    ):
         errors.append("freestyle architecture must document identity-keyed unit ratings.")
     evidence_text = evidence_doc.read_text(encoding="utf-8", errors="ignore") if evidence_doc.exists() else ""
-    if "private answer ledger" not in evidence_text:
+    if not has_invariant(evidence_text, "evidence-shared-question-progress"):
         errors.append("quiz evidence must document that entries share question progress.")
-    if "refresh does not clear" not in evidence_text.lower():
+    if not has_invariant(evidence_text, "evidence-refresh-keeps-done"):
         errors.append("quiz 已做 must survive refresh and clear only on an explicit choice.")
     sync = WEB_SRC / "modules" / "quiz" / "domain" / "quiz-entity" / "api" / "quizPracticeProgressSync.ts"
     sync_text = sync.read_text(encoding="utf-8", errors="ignore") if sync.exists() else ""
@@ -3335,7 +3398,7 @@ def check_freestyle_inline_edit_scope(errors: list[str]) -> None:
     feed_doc = REPO_ROOT / "docs" / "architecture" / "freestyle-immersive-feed.md"
     if feed_doc.exists():
         feed_source = feed_doc.read_text(encoding="utf-8", errors="ignore")
-        if "editScope" not in feed_source:
+        if not has_invariant(feed_source, "freestyle-edit-scope-configurable"):
             errors.append(
                 f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: must document configurable `editScope`."
             )
@@ -3535,14 +3598,10 @@ def check_freestyle_canvas_pan(errors: list[str]) -> None:
     feed_doc = REPO_ROOT / "docs" / "architecture" / "freestyle-immersive-feed.md"
     if feed_doc.exists():
         feed_source = feed_doc.read_text(encoding="utf-8", errors="ignore")
-        if "stays pannable" not in feed_source:
+        if not has_invariant(feed_source, "freestyle-review-map-stays-pannable"):
             errors.append(
-                f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: review maps must stay pannable."
-            )
-        if "mindmap-yield-parent-scroll" in feed_source:
-            errors.append(
-                f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: must not yield one-finger "
-                "map pan to the snap scroller."
+                f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: review maps must stay pannable "
+                "instead of yielding one-finger map pan to the snap scroller."
             )
 
 
@@ -3605,7 +3664,10 @@ def check_wheel_scroll_does_not_snap_back(errors: list[str]) -> None:
             errors.append(
                 f"{viewport.relative_to(REPO_ROOT).as_posix()}: edit-card nopan must not swallow wheel pan."
             )
-    if feed_doc.exists() and "partial notch" not in feed_doc.read_text(encoding="utf-8", errors="ignore"):
+    if feed_doc.exists() and not has_invariant(
+        feed_doc.read_text(encoding="utf-8", errors="ignore"),
+        "freestyle-wheel-no-snap-back",
+    ):
         errors.append(
             f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: document that wheel must not snap back."
         )
@@ -3698,7 +3760,7 @@ def check_freestyle_settled_retry_leaves(errors: list[str]) -> None:
             "a card on screen must not say it is still preparing a score."
         )
     doc_source = doc.read_text(encoding="utf-8", errors="ignore") if doc.exists() else ""
-    if "every live retry of that source" not in doc_source:
+    if not has_invariant(doc_source, "freestyle-settlement-drops-live-retries"):
         errors.append(
             f"{doc.relative_to(REPO_ROOT).as_posix()}: "
             "must document that a 结算 drops live retries of that source."
@@ -3730,7 +3792,7 @@ def check_freestyle_retry_starts_unrated(errors: list[str]) -> None:
             )
     if feed_doc.exists():
         feed_source = feed_doc.read_text(encoding="utf-8", errors="ignore")
-        if "starts with a blank rating" not in feed_source or "must not prefill the retry rating bar" not in feed_source:
+        if not has_invariant(feed_source, "freestyle-retry-starts-blank"):
             errors.append(
                 f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
                 "must document that a retry card starts with a blank rating."
@@ -3783,7 +3845,7 @@ def check_freestyle_rating_retap_clears(errors: list[str]) -> None:
     feed_doc = REPO_ROOT / "docs" / "architecture" / "freestyle-immersive-feed.md"
     if feed_doc.exists():
         feed_source = feed_doc.read_text(encoding="utf-8", errors="ignore")
-        if "currently selected rating again" not in feed_source:
+        if not has_invariant(feed_source, "freestyle-retap-clears-rating"):
             errors.append(
                 f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
                 "must document that tapping the selected rating again clears it."
@@ -3834,13 +3896,11 @@ def check_freestyle_passed_unit_reopen(errors: list[str]) -> None:
     feed_doc = REPO_ROOT / "docs" / "architecture" / "freestyle-immersive-feed.md"
     if feed_doc.exists():
         feed_source = feed_doc.read_text(encoding="utf-8", errors="ignore")
-        if (
-            "passed review unit cannot start another encounter" not in feed_source
-            or "只看不评" not in feed_source
-        ):
+        if not has_invariant(feed_source, "freestyle-passed-unit-amends-not-400"):
             errors.append(
                 f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
-                "must document that a passed-unit start must amend instead of 400."
+                "must document that a passed-unit start must amend instead of 400, "
+                "with 只看不评 offered on unfixable load failures."
             )
 
 
@@ -3874,7 +3934,7 @@ def check_freestyle_rating_last_write_wins(errors: list[str]) -> None:
     feed_doc = REPO_ROOT / "docs" / "architecture" / "freestyle-immersive-feed.md"
     if feed_doc.exists():
         feed_source = feed_doc.read_text(encoding="utf-8", errors="ignore")
-        if "latest rating" not in feed_source or "active unit review session required" not in feed_source:
+        if not has_invariant(feed_source, "freestyle-latest-rating-reopens-glance"):
             errors.append(
                 f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
                 "must document that the latest rating reopens a dead glance."
@@ -3912,7 +3972,7 @@ def check_freestyle_round_sheet_views(errors: list[str]) -> None:
         )
         return
     doc_source = doc.read_text(encoding="utf-8", errors="ignore")
-    if "按宫殿" not in doc_source or "按进度" not in doc_source:
+    if not has_invariant(doc_source, "freestyle-round-sheet-two-views"):
         errors.append(
             f"{doc.relative_to(REPO_ROOT).as_posix()}: "
             "本轮安排 must document palace and progress-rail views."
@@ -3944,12 +4004,12 @@ def check_freestyle_round_sheet_views(errors: list[str]) -> None:
             f"{target.relative_to(REPO_ROOT).as_posix()}: "
             "must define compress_completed for 结算已完成单元."
         )
-    if "结算已完成单元" not in doc_source or "compressed_ids" not in doc_source:
+    if not has_invariant(doc_source, "freestyle-partial-settlement-compress"):
         errors.append(
             f"{doc.relative_to(REPO_ROOT).as_posix()}: "
             "must document 结算已完成单元 compressing passed cards off the rail."
         )
-    if "小结算" not in doc_source or "partial_settlements" not in doc_source:
+    if not has_invariant(doc_source, "freestyle-partial-settlements-persisted"):
         errors.append(
             f"{doc.relative_to(REPO_ROOT).as_posix()}: "
             "must document 小结算 pages persisted as partial_settlements for 大结算."
@@ -4021,7 +4081,7 @@ def check_freestyle_progress_rail_jump(errors: list[str]) -> None:
             "a live progress-rail tick must call navigateToIndex."
         )
     doc_source = doc.read_text(encoding="utf-8", errors="ignore") if doc.exists() else ""
-    if "Clicking a progress-rail tick jumps" not in doc_source:
+    if not has_invariant(doc_source, "freestyle-progress-tick-jumps-feed"):
         errors.append(
             f"{doc.relative_to(REPO_ROOT).as_posix()}: "
             "must document that clicking a progress-rail tick jumps the feed."
@@ -4106,7 +4166,7 @@ def check_freestyle_queue_removal_rail(errors: list[str]) -> None:
             f"{round_plan.relative_to(REPO_ROOT).as_posix()}: "
             "applyCompletedIdsToRoundPlan must not overwrite status === 'excluded'."
         )
-    if "已移出队列" not in doc_source or "solid removal tick" not in doc_source:
+    if not has_invariant(doc_source, "freestyle-removal-solid-tick-survives-rebuild"):
         errors.append(
             f"{doc.relative_to(REPO_ROOT).as_posix()}: "
             "the rail must document a solid 已移出队列 tick that survives a silent rebuild."
@@ -4227,12 +4287,7 @@ def check_freestyle_viewing_playhead(errors: list[str]) -> None:
     feed_doc = REPO_ROOT / "docs" / "architecture" / "freestyle-immersive-feed.md"
     if feed_doc.exists():
         feed_source = feed_doc.read_text(encoding="utf-8", errors="ignore")
-        if (
-            "viewing playhead" not in feed_source
-            or "uncompletes that card" not in feed_source
-            or "this-round last rating" not in feed_source
-            or "right-side pager has 完成" not in feed_source
-        ):
+        if not has_invariant(feed_source, "freestyle-viewing-playhead"):
             errors.append(
                 f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
                 "must document the viewing playhead and rating-cancel un-light."
@@ -4288,12 +4343,12 @@ def check_freestyle_complete_slot_reachable(errors: list[str]) -> None:
     feed_doc = REPO_ROOT / "docs" / "architecture" / "freestyle-immersive-feed.md"
     if feed_doc.exists():
         feed_source = feed_doc.read_text(encoding="utf-8", errors="ignore")
-        if "closing slot" not in feed_source or "调整配置" not in feed_source:
+        if not has_invariant(feed_source, "freestyle-closing-slot-reachable"):
             errors.append(
                 f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
                 "must document that the last unit still opens the closing slot for 调整配置."
             )
-        if "结算" not in feed_source or "/rounds/start" not in feed_source:
+        if not has_invariant(feed_source, "freestyle-settlement-mints-via-rounds-start"):
             errors.append(
                 f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
                 "must document settlement 结算 minting the next round via /rounds/start."
@@ -4332,7 +4387,10 @@ def check_freestyle_complete_slot_reachable(errors: list[str]) -> None:
             f"{page.relative_to(REPO_ROOT).as_posix()}: "
             "取消结算 and 上一张 must leave the settlement slot via navigatePrevious."
         )
-    if feed_doc.exists() and "取消结算" not in feed_doc.read_text(encoding="utf-8", errors="ignore"):
+    if feed_doc.exists() and not has_invariant(
+        feed_doc.read_text(encoding="utf-8", errors="ignore"),
+        "freestyle-cancel-settlement-keeps-round",
+    ):
         errors.append(
             f"{feed_doc.relative_to(REPO_ROOT).as_posix()}: "
             "must document that 取消结算 leaves the slot and later dwell still counts."
@@ -4396,7 +4454,10 @@ def check_freestyle_config_overlap_choice(errors: list[str]) -> None:
                 f"{page.relative_to(REPO_ROOT).as_posix()}: "
                 "不保留 must mint the next round via startNextRound, not replan_remaining."
             )
-    if doc.exists() and "startNextRound" not in doc.read_text(encoding="utf-8", errors="ignore"):
+    if doc.exists() and not has_invariant(
+        doc.read_text(encoding="utf-8", errors="ignore"),
+        "freestyle-not-keep-starts-new-round",
+    ):
         errors.append(
             f"{doc.relative_to(REPO_ROOT).as_posix()}: "
             "must document that 不保留 on 保存配置并重排 starts a new round."
@@ -4761,12 +4822,12 @@ def check_palace_memory_lookup_binding_center(errors: list[str]) -> None:
             )
     if boundary.exists():
         boundary_source = boundary.read_text(encoding="utf-8", errors="ignore")
-        if "focusRequestNodeUid" not in boundary_source:
+        if not has_invariant(boundary_source, "quiz-lookup-centers-bound-node"):
             errors.append(
                 f"{boundary.relative_to(REPO_ROOT).as_posix()}: "
                 "must document bound-node mind-map centering."
             )
-        if "centerMemoryLookupEditorDocAtNode" in boundary_source:
+        if not has_invariant(boundary_source, "quiz-lookup-no-reroot-clip"):
             errors.append(
                 f"{boundary.relative_to(REPO_ROOT).as_posix()}: "
                 "must not document re-rooting or clipping the palace preview."
@@ -4857,24 +4918,21 @@ def check_quiz_answer_mode_primitive(errors: list[str]) -> None:
         )
     if boundary.exists():
         boundary_text = boundary.read_text(encoding="utf-8", errors="ignore")
-        if "quiz_answer_mode" not in boundary_text:
+        if not has_invariant(boundary_text, "quiz-answer-mode-ownership"):
             errors.append(
                 f"{boundary.relative_to(REPO_ROOT).as_posix()}: must document quiz answer-mode ownership."
             )
-        if "QuizQuestionIndexPager" not in boundary_text:
+        if not has_invariant(boundary_text, "quiz-index-pager-ownership"):
             errors.append(
                 f"{boundary.relative_to(REPO_ROOT).as_posix()}: "
                 "must document paginated question-index ownership."
             )
-        if "stem" not in boundary_text.lower() and "题干" not in boundary_text:
+        if not has_invariant(boundary_text, "quiz-subjective-stem-rewrite"):
             errors.append(
                 f"{boundary.relative_to(REPO_ROOT).as_posix()}: "
                 "must document multiple-choice subjective stem rewriting."
             )
-        if (
-            "first line of the analysis" not in boundary_text
-            and "解析第一行" not in boundary_text
-        ):
+        if not has_invariant(boundary_text, "quiz-converted-analysis-first-line"):
             errors.append(
                 f"{boundary.relative_to(REPO_ROOT).as_posix()}: "
                 "must document converted multiple-choice analysis answer line."
@@ -4978,7 +5036,7 @@ def check_quiz_font_scale_primitive(errors: list[str]) -> None:
             f"{body.relative_to(REPO_ROOT).as_posix()}: question body must scale with CSS zoom."
         )
     boundary_text = boundary.read_text(encoding="utf-8", errors="ignore") if boundary.exists() else ""
-    if "quiz_font_scale" not in boundary_text or "题目正文" not in boundary_text:
+    if not has_invariant(boundary_text, "quiz-shared-dialog-font-scale"):
         errors.append(
             f"{boundary.relative_to(REPO_ROOT).as_posix()}: "
             "must document the shared answer-dialog font scale."
@@ -5079,7 +5137,7 @@ def check_quiz_shuffle_order_persistence(errors: list[str]) -> None:
             "client preference contract must include quiz_shuffle_orders."
         )
     boundary_text = boundary.read_text(encoding="utf-8", errors="ignore") if boundary.exists() else ""
-    if "quiz_shuffle_orders" not in boundary_text:
+    if not has_invariant(boundary_text, "quiz-shared-shuffle-order"):
         errors.append(
             f"{boundary.relative_to(REPO_ROOT).as_posix()}: "
             "must document the shared 打乱题库 order."
@@ -5154,7 +5212,7 @@ def check_quiz_inline_edit(errors: list[str]) -> None:
 
     boundary = REPO_ROOT / "docs" / "architecture" / "quiz-frontend-boundary.md"
     boundary_text = boundary.read_text(encoding="utf-8", errors="ignore") if boundary.exists() else ""
-    if "就地编辑" not in boundary_text:
+    if not has_invariant(boundary_text, "quiz-inline-edit-in-window"):
         errors.append(
             f"{path_for_exception(boundary)}: must document in-place question editing in the 做题 window."
         )
@@ -5269,15 +5327,11 @@ def check_quiz_question_marks(errors: list[str]) -> None:
     boundary = REPO_ROOT / "docs" / "architecture" / "palace-quiz-boundary.md"
     if boundary.exists():
         boundary_source = boundary.read_text(encoding="utf-8", errors="ignore")
-        if "rose fill" not in boundary_source:
+        if not has_invariant(boundary_source, "palace-quiz-marked-index-rose"):
             errors.append(
                 f"{boundary.relative_to(REPO_ROOT).as_posix()}: "
-                "must document the marked question-number style."
-            )
-        if "Due questions use an amber index mark" in boundary_source:
-            errors.append(
-                f"{boundary.relative_to(REPO_ROOT).as_posix()}: "
-                "must not document the removed due-index mark."
+                "must document the marked question-number style, "
+                "not the removed due-index mark."
             )
 
 
@@ -5413,7 +5467,7 @@ def check_quiz_node_count_badges(errors: list[str]) -> None:
         )
     if boundary.exists():
         boundary_source = boundary.read_text(encoding="utf-8", errors="ignore")
-        if "do not shrink" not in boundary_source or "主观" not in boundary_source:
+        if not has_invariant(boundary_source, "palace-quiz-badge-counts-stable"):
             errors.append(
                 f"{boundary.relative_to(REPO_ROOT).as_posix()}: "
                 "must document stable objective/subjective corner badge counts."
@@ -5452,8 +5506,9 @@ def check_quiz_create_requires_node_binding(errors: list[str]) -> None:
                 f"{commands.relative_to(REPO_ROOT).as_posix()}: palace create paths must "
                 "call ensure_create_question_node_bindings."
             )
-    if boundary.exists() and "at least one" not in boundary.read_text(
-        encoding="utf-8", errors="ignore"
+    if boundary.exists() and not has_invariant(
+        boundary.read_text(encoding="utf-8", errors="ignore"),
+        "palace-quiz-create-requires-node-binding",
     ):
         errors.append(
             f"{boundary.relative_to(REPO_ROOT).as_posix()}: must document mandatory "
@@ -5507,8 +5562,9 @@ def check_quiz_bank_display_order(errors: list[str]) -> None:
             f"{frontend.as_posix() if frontend.exists() else frontend}: frontend bank "
             "order helper is required."
         )
-    if boundary.exists() and "multiple choice first" not in boundary.read_text(
-        encoding="utf-8", errors="ignore"
+    if boundary.exists() and not has_invariant(
+        boundary.read_text(encoding="utf-8", errors="ignore"),
+        "palace-quiz-bank-order-choice-first",
     ):
         errors.append(
             f"{boundary.relative_to(REPO_ROOT).as_posix()}: must document bank display "
@@ -6411,11 +6467,10 @@ def check_flip_card_shortcut_settings(errors: list[str]) -> None:
                 f"{feed_hook.relative_to(REPO_ROOT).as_posix()}: must page from the configured map (`{token}`)."
             )
     doc_source = doc.read_text(encoding="utf-8", errors="ignore") if doc.exists() else ""
-    for token in ("快捷键", "收卡"):
-        if token not in doc_source:
-            errors.append(
-                f"{doc.relative_to(REPO_ROOT).as_posix()}: must document the flip shortcut page and 收卡."
-            )
+    if not has_invariant(doc_source, "freestyle-flip-shortcut-page"):
+        errors.append(
+            f"{doc.relative_to(REPO_ROOT).as_posix()}: must document the flip shortcut page and 收卡."
+        )
 
 
 def check_quiz_shortcut_primitive(errors: list[str]) -> None:
@@ -6513,7 +6568,7 @@ def check_quiz_shortcut_primitive(errors: list[str]) -> None:
             "vertical feed paging must stay quiet while a quiz dialog owns the keyboard."
         )
     boundary_text = boundary.read_text(encoding="utf-8", errors="ignore") if boundary.exists() else ""
-    if "quiz_shortcuts" not in boundary_text or "ArrowUp" not in boundary_text:
+    if not has_invariant(boundary_text, "quiz-shortcut-arrowup-marks"):
         errors.append(
             f"{boundary.relative_to(REPO_ROOT).as_posix()}: "
             "must document shared quiz shortcuts and the ArrowUp mark toggle."
@@ -7431,6 +7486,7 @@ def main() -> int:
     check_palace_quiz_palace_boundary(errors)
     check_consumer_context_public_facades(errors)
     check_freestyle_queue_facade_surface(errors)
+    check_round_plan_mutation_boundary(errors)
     check_freestyle_scope_quiz_overlay(errors)
     check_round_wrong_units(errors)
     check_question_practice_has_no_lifecycle_gate(errors)

@@ -1,87 +1,11 @@
 # 随心沉浸式信息流
 
 
-<!-- 架构检查不变量索引（机器校验用，请勿删除；正文为中文）
-/overlay-quiz/drop-palaces
-/rounds/start
-Clicking a progress-rail tick jumps
-Finishing one palace's ratings does not ask to clear overlay
-QuizQuestionRoundRating
-active unit review session required
-closing slot
-compress_completed
-compressed_ids
-currently selected rating again
-does not keep showing the full
-editScope
-every live retry of that source
-forceExcludedIds
-forceStart
-immediately left of **文字**
-keyed by `unit:{unit_id}`
-latest rating
-list_round_unit_ratings
-list_trusted_due_units_for_queue
-locking every
-must not mint a new `round_id`
-must not prefill the retry rating
-must not prefill the retry rating bar
-navigateToIndex
-not the subject union
-overlapping identities
-palace
-partial notch
-partial_settlements
-passed review unit cannot start another encounter
-plan_version
-removed_review_palace_ids
-review_palace_ids
-review_unit_ids
-right-side pager has 完成
-scope_palaces
-solid removal tick
-startFreestyleRoundApi
-startNextRound
-starts with a blank rating
-stays pannable
-tail_pending
-this-round last rating
-uncompletes that card
-unit_no_questions
-viewing playhead
-主观
-取消结算
-只看不评
-客观
-小结算
-已移出队列
-按宫殿
-按进度
-混合插入
-清空做题进度
-确认结算
-结算
-结算已完成单元
-调整配置
-返回上一张
-退出
-backend-authoritative
-faint palace-color fill
-faint amber fill
-not only the HUD rail
-queue-construction fields
-does not move 
-orphan block
-retry occurrence has its own encounter
-leaves that occurrence in the viewport
-must not remount the map at the root
-one live retry
-must not mint a second copy
-must not cover the feed once cards exist
-does not move `current_card_id`
--->
-
 随心是公共学习投影的消费者，它不拥有宫殿复习排期。工具栏「做题」从本轮已排期的复习单元中取题——**不是学科并集**，也不是 `streams.quiz.specific_palace_ids`。默认情况下，每个单元贡献自身的节点区域，加上从宫殿根节点向下到其永久标记锚点的整条路径；「整个宫殿」是需主动开启的更宽范围。选择器变更后保留的已完成卡片和活跃重练，不会把已移除的宫殿加回题目池。学科目录查询永远不会扩大已排期集合。超出范围的答题进度会保持停泊，如果宫殿再次被选中则会恢复。叠加层 ensure 的版本冲突必须在加载题目 id 之前重试，因为它的快照可能早于刚刚保存的选择器范围。`FreestyleFeedConfig` 是沉浸式页面唯一的队列配置所有者；较旧的 `FreestyleConfig` 设置路径仅用于兼容，不得驱动队列构建。
+
+## 轮次命令边界
+
+评分、移动游标、离开卡片、结算压缩和到期重练投影经 `practice.domain.round_commands` 命令门面调用既有规则；事务和版本仍由应用层负责。其他轮次转换暂时保留原有领域入口，不能把这个阶段误称为完整状态机迁移。
 
 ## 舞台页眉与卡面顶边
 
@@ -100,16 +24,33 @@ does not move `current_card_id`
 ## 复习入口
 
 复习书架上的「立即复习」打开 `/palaces/<id>/review`，并复用随心信息流。该路由是知识点章节页面，不是 `/freestyle`，并且不得发布可跟随的实时学习路由。它的轮次工作区是 `p<id>`（列宽 20）。它不写入全局随心选择。该轮次仍通过把每个训练流锁定到该宫殿来施加瞬时的单宫殿范围。已保存的随心宫殿/学科选择不会让它继续显示完整信息流。内容/混合/队列设置会被借用，该锁定不会写回已存储的偏好，且队列加载前不存在单独的正规页面会话。编辑器中的「开始随心复习」仍然可以进入 `/freestyle?palaceId=<id>`，作为有意的随心启动。记忆阶段复习可以进入 `/freestyle?palaceIds=<id,id>`，并在一轮内把每个流精确锁定到这些宫殿；保存时仍写入已存储的随心选择，而不是该瞬时锁定。不存在独立的 `/review` 前端路由或完成页；未知的已停用 `/review...` 路径回退到 `/freestyle`。
+<!-- invariant: freestyle-knowledge-page-locks-streams -->
 
 ## 一个沉浸式工作区
 
 随性是唯一的沉浸式轮次。`/freestyle-2`（随心 2）已通过迁移 `0072_merge_secondary_freestyle_workspace` 合并进来：它活跃的轮次和信息流设置接管了主槽位，被挤出的主轮次保留为 `status='archived'`，绝不删除。任何过期的 `workspace=secondary` 请求都会归一化为主工作区，且 `/freestyle-2` 重定向到 `/freestyle`。重叠身份是 `unit:{unit_id}` / `quiz:{question_id}`。1–4 的单元评分以 `unit:{unit_id}` 为键，记录在轮次自己的卡片上。来自宫殿复习或随心轮次的评分只在该单元上存储一次，不会复制到任何其他轮次。一次点击永远不会移动 `cursor`。没有已存储评分的完成仍然不得凭空编造「记得」。完全处理完的轮次会在 `get_or_create` 上冻结，以便收尾结算槽位保持可达；剩余到期工作只有在学习者通过配置确认显式开始下一轮时才会推进（`「再来一轮」` → `/rounds/start`）。页面刷新、应用重启和 HUD 队列刷新绝不能铸造新的 `round_id`。溢出操作「更新队列」是独立的：它根据最新的到期投影重新规划本轮，保留已评分卡片，并且不会用另一台电脑的评分替换账本。溢出操作「同步进度」读取 `GET /freestyle/rounds/active`，并用该工作区轮次替换本地账本。它会丢弃仅存在于本地的评分，使手机草稿无法保留电脑端轮次没有的评分，并且不会铸造 `round_id`、追加卡片或调用 `/rounds/start`。过期恢复和信息流错误重试仍然保留已冻结的轮次，且不得丢弃服务器已知的完成记录。
+<!-- invariant: freestyle-unit-identity-keyed-ratings -->
+<!-- invariant: freestyle-refresh-no-new-round-id -->
 
 ## 轮次计划状态
 
 Practice 在 SQLite 中拥有后端权威的轮次计划（`freestyle_round_states`）。每个轮次都有一个稳定的 `round_id`、一个配置快照、一个宫殿范围签名，以及一个单调递增的 `plan_version`。计划记录原始卡片顺序和卡片版本、当前卡片、完成/排除状态，以及重练 `occurrence` 行（`occurrence_kind`、源卡片、`retry_attempt`、插入目标、状态）。队列响应还暴露 `candidate_count`、`scheduled_count`、`queue_limit` 和 `limit_reached`。宫殿的到期单元不会截断；`queue_length` 只限制纯做题轮次。
+<!-- invariant: freestyle-backend-authoritative -->
+<!-- invariant: freestyle-occurrence-kind -->
 
 服务器计划是重练顺序、当前卡片、完成状态和重练计数的唯一权威。PWA、桌面端以及同一设备的重启都会恢复该计划。浏览器 `localStorage` 只保存显示偏好和离线草稿——它不得决定复习顺序。未完成的轮次可以挺过学习日翻转（本地 03:00，见 `review-boundary.md`）、页面刷新、已保存配置的注入，以及设备切换。完全处理完的轮次在静默重建和 `get_or_create` 时保留其 `round_id` 和呈现顺序——它不得铸造或追加全新的到期身份，从而把收尾结算槽位关掉。下一个 `round_id` 只会在显式配置确认后由 `/rounds/start` 创建（结算页的 `forceStart`，即「再来一轮」/「开始下一轮」）。刷新、重启、结算后打开以及剩余到期检测都不得调用 `/rounds/start`。轮次中途或结算后按 F5 会保持同一个 `round_id`，恢复 `completed_ids`，并继续本地草稿/已提交的 `current_card_id`（结算时通过 `set_cursor`），而不是跳回第一张卡片或铸造全新队列。宫殿/学科范围变更会重新绑定同一个 `round_id`：重叠身份保留已完成/已排除/重练标记；只有新范围之外尚未开始的工作会被丢弃。刷新不得铸造新的 `round_id`，也不得从 HUD/信息流中丢弃已完成卡片，除非是学习者用「结算已完成单元」显式压缩掉的卡片。一次结算会丢弃源卡片以及该源卡片的每个活跃重练。源 id 位于 `compressedIds` 中的重练会离开进度条、卡面和滑动信息流；它不得留成一个学习者无法触及的亮起刻度。仅评分永远不会移除这些刻度：本轮已评分的重练在静默重建、「更新队列」和「重建本轮」过程中都会保留紧跟在源卡片之后的槽位（`replan_remaining` 会重新添加保留源的已完成 `occurrence`；`_collapse_retries` 只折叠*活跃*重复项，绝不取消已回答的项；即使 `encounter` 缓存丢失了条目，`_settle_source` 也会把 `occurrence` 自身的通过评分视为已回答）。当呈现列表不再列出某个已完成 `occurrence` 的卡片时，`cardsForServerPlan` 也会保留该卡片。只有结算（`compress_completed`）、被取消的 `occurrence`，或下一个学习日的重新打开，才会将其移除——因此滑回/改分仍能触达学习者刚刚评过分的卡片。已完成的源卡片保持在呈现顺序中，因此滑回/「上一张」可以在该压缩发生之前重新打开它们。丢失本地计划的窗口会采用工作区的活跃轮次，并且在该轮次存在期间不得铸造新的 `round_id`。配额未命中可能会压缩已存储快照，但实时会话保留学习者正在查看的计划。脑图仍在打开时，「做题」依然可用。卡片不得声称它仍在准备评分。对已完成单元重新评分，会从该次回忆尝试的原始基线进行修正；它不会叠加 SRS。身份包含轮次、源卡片、`occurrence` 和重练尝试。真实重练从当前受惩罚的排期开始，绝不替换先前的失败，并且只重放自己的操作。在浏览被放弃、完成或取消之后写入评分，会重新打开同一个尝试并应用最新评分；它不得返回 `active unit review session required`。一旦后续的真实尝试已被评分，较早的尝试即为只读：更正/撤销必须指向最近的尝试，而不是静默重写后续证据的基础。再次点击当前已选中的评分，会把该最新可编辑尝试清除回未评分；它不会抹除更早的真实重练。滑回/「上一张」到已完成（通过）的单元，必须在同一轮次中打开修正浏览。如果上一个学习会话仍为 `active`、包含已通过项且没有打开的 `encounter`，则启动会结束该会话并打开一个新会话。它不得返回 `passed review unit cannot start another encounter`。无法修复的随心单元加载失败不会弹出英文 API 文本；卡片提供 重试 / 跳过这张 / 重建本轮 / 只看不评。缓慢的会话启动不得替换已可见的脑图，也不得阻塞评分。卡片一出现在屏幕上，四个评分即可按压；分数立即上屏，随后执行保存。立即选中只是本地意图：已完成 id、通过计数、重练排期和到期清空反馈，只有在服务器确认后才更新。保存失败会保留已选按钮并给出明确的未保存警告，要求再点一次——它不得声称通过/完成、重新加载卡片或让学习者重读。快速翻卡和进度条跳转不得为只是被翻过的卡片打开浏览。当学习者评分时，或在其停留在某张卡片上之后，才打开浏览。返回卡片时会显示本轮已记录的评分，而不会重新开始准备。卡片的 `POST /review/units/{id}/sessions` 带有 45 秒传输超时（`SESSION_START_TIMEOUT_MS`），并被有意排除在变更队列之外（`persistence: false`），因为 UI 重新发出的是同一个 `encounter` id，而不是新的浏览。该预算高于服务器 10 秒的 SQLite `busy_timeout`，因此锁等待可以完成并被采用，而不是在 15 秒时中止并开始第二次写入。可见的失败只有一句话，外加一个隐藏的「复制给助手」；它不得让学习者重启应用。之后使用相同构建参数（`append_today_cards`）的到期列表重建会保留每张原始卡片，包括从今日到期集合中掉出的未开始剩余工作，并按 `entered_on` 等于本地日历日追加新出现的身份，以免重练副本聚成一堆孤立的 attempt-1 节点。当学习日推进时，重建会先重新接纳再次到期的单元（`_reopen_due_again`）：跨过午夜的轮次不能仅仅因为昨天已经结算过「记得」卡片，就让它们永远保持压缩，否则 1 天阶段会悄悄停止被复习。匹配依据是知识点身份，而不是卡片 id（修订号从 `…:r1` → `…:r2` 属于同一份工作），并且服务器会为计划自身的单元解析到期集合，而不是信任传入的候选——客户端从轮次账本重建这些候选，而该账本仍然恰好隐藏那些再次到期的卡片。从「保存配置并重排」保存信息流配置时，会先询问。保留继续这一轮：`replan_remaining` 保留已完成刻度，丢弃新传入集合之外未开始的工作，除非它仍有活跃重练，并且只重排尚未开始的工作。不保留会持久化该配置，并通过 `startNextRound`（`forceStart`）铸造下一轮，因此已完成、已排除、重练和叠加层已做都不会延续。关闭提醒会取消保存。宫殿选择器确认和其他信息流内配置写入仍然会在没有该提醒的情况下重新规划。结算页的「开始下一轮」已经是全新开始，不会再次询问。更改宫殿/学科范围（`replan_remaining`）会保留已完成刻度，丢弃新传入集合之外未开始的工作，除非它仍有活跃重练，把剩余工作重新标记为今天，并将活跃重练停泊在新剩余队列至多三张卡片之后（如果剩余更少，则紧接在已完成前缀之后）。复习单元已不再可打开的未开始卡片（`drop_vanished_unstarted`）会在 `get_or_create` 时被移除，而无需解析 `editor_doc`。当单元处于非活跃状态，或其宫殿已被删除或归档时，该单元不可打开，即使本轮仍有针对它的活跃重练。已完成刻度可以留在轮次历史中，但它的重练也会离开，因为打开其中任何一个都只会重绘一张死卡。已完成刻度、已排除卡片和做题卡片保留。仍然存在但今天不到期的单元保留。如果该丢弃使轮次变成完全处理完，则计划会被持久化并冻结；它不会追加新的到期卡片。队列构建只读取活跃的到期 `ReviewUnitState` 行（`list_trusted_due_units_for_queue`）和宫殿标题——它不会在关键路径上解析每个 `editor_doc`。打开单元时仍会对该宫殿进行对账。没有已存储轮次的冷启动可能返回一个 `study_window` 前缀（`tail_pending`），以便学习者可以开始；客户端随后会静默加载其余部分。该前缀是同一有序队列的前缀，不是重新洗牌。这是首屏绘制，绝不是投放排期：每张到期卡片已经在本轮计划和 HUD 分母中，尾部也不会被扣留到当天晚些时候。没有每日复习配额，没有积压释放，也没有每轮切片——见 `review-boundary.md` 中的「The due set is one whole」。当轮次已经存在时，首屏绘制来自已存储计划，并且一旦卡片存在，加载不得覆盖信息流。`忘记`评分不会移动 `current_card_id`；源卡片保持为当前项，直到 `leave_card`。`困难`是通过，遵循正常推进规则。
+<!-- invariant: freestyle-scope-change-overlapping-identities -->
+<!-- invariant: freestyle-settlement-drops-live-retries -->
+<!-- invariant: freestyle-forgot-keeps-current-card -->
+<!-- invariant: freestyle-retry-entered-on-no-orphans -->
+<!-- invariant: freestyle-latest-rating-reopens-glance -->
+<!-- invariant: freestyle-passed-unit-amends-not-400 -->
+<!-- invariant: freestyle-replan-remaining -->
+<!-- invariant: freestyle-append-today-cards -->
+<!-- invariant: freestyle-drop-vanished-unstarted -->
+<!-- invariant: freestyle-list-trusted-due-units -->
+<!-- invariant: freestyle-tail-pending-prefix -->
+<!-- invariant: freestyle-hydration-not-cover-feed -->
 
 乐观并发：写入携带 `expected_version` 和 `operation_id`。提交较低版本的过期设备会收到带有 `conflict: true` 的最新计划，且不得覆盖较新的进度。使用同一 `operation_id` 重复的终态写入会返回已接受的结果。
 
@@ -118,10 +59,24 @@ Practice 在 SQLite 中拥有后端权威的轮次计划（`freestyle_round_stat
 「永久移除」是「移除本队列」右侧的兄弟按钮（同样需要两次按压确认，不评分）。它调用 `POST /review/units/{unit_id}/remove-permanently`，设置 `review_unit_states.permanently_removed` 和 `active = false`。`resolve_unit_definitions` 会把该单元身份（锚点 + 类型）过滤掉，因此对账、队列和继承都不会再次安排它，即使其标记被删除后重新添加。随后该卡片会从本轮丢弃。所有单元都被移除的宫殿会读作 `scheduled`，而不是 `marking_required`。
 
 `palace_order` 只控制**队列构建**（先列完一个宫殿的卡片再列下一个，或交错排列）。「上一张」/「下一张」/手指翻页从不自动评分，也从不阻止跨越宫殿边界；未评分单元保持未完成，以便学习者可以向前跳过再回来。重练工作仍然不能让宫殿“清空”。遗留的 `isSequentialPalaceBlocked` 辅助函数不是导航锁存器。「忘记」评分会创建一个重练 `occurrence`，它在某个 `available_at` 时刻之前保持 **pending**（10 分钟，然后 1 小时，然后 3 小时；每个学习日至多重练三次）。在该时刻过去之前，它不会出现在进度条上；服务端会在学习者的 `cursor` 处发布它，因此其间评分的卡片就是交错内容。失败的重练会将其评分作为历史保留在进度条上，直到下一个 `available_at`；该次读取会以空白状态重新打开同一个 `occurrence`，并在当前卡片之后重新发布它（`fresh_due_ids` 告知客户端丢弃先前的评分）。首次通过会创建同类 pending `occurrence`，`kind: "step"`，用于其 20 分钟复查（首次通过时「轻松」会跳过它并预约三天后）。最终通过的重练会直接预约到明天：隔夜检查就是它的确认，因此不会在其上叠加当天的第二次复查。pending `occurrence` 不会被提供，也不会把其源卡片标记为完成；轮次载荷中的 `waiting` 报告还欠多少张以及最早就绪时间。信息流在有卡片剩余时显示一条细横幅，在没有可提供内容时显示等待面板；在 `next_ready_at` 的一次计划读取会发布卡片（手动「现在刷新」效果相同）。在该时刻之前，服务器无法释放卡片，因此横幅只显示倒计时，而不是提供一个不会产生任何变化的按压，面板按钮保持禁用；到 `next_ready_at` 时刷新变为可用。如果计划读取到达时服务器仍报告相同的等待（时钟偏差），它会在 30 秒后再次探测，而不是在屏幕上留下过期时间。**该发布是由评分持久化的，而不是由读取持久化的。** 提供的计划会在 `cursor` 处插入一个就绪 `occurrence`；磁盘上的行仍然写着 `pending`。因此，对该卡片的评分必须先将其插入再结算（`apply_rating` → `_insert_retry_inplace`）：把它当作未插入的 `occurrence` 结算，会将其标记为 `cancelled`，同时保留学习者的 1–4，并将其排除在 `presented_ids` 之外，于是下一次重建会删掉他们眼前的卡片，信息流滑到下一个单元。在真实轮次上测得（2026-10-25 晚间）：当晚评分的每个 step 都停在 `cancelled` 且评分被保留——即“重练卡评完就消失、还自动翻页”的报告。不再存在固定的三张卡片偏移：前端根本不插入重练副本。「忘记」评分只会把 `retryAvailableAt`（`occurrence` 的 `available_at`）盖到源卡片的轮次计划行上，角标对该时刻倒计时；卡片本身在计划读取发布该 `occurrence` 时出现。大约 3 张卡片后提供本地副本（并允许在 10 分钟前评分），就是“说十分钟、实际固定三张”的报告。视口停留在源卡片上——不自动前进——包括源卡片之后没有任何内容时也是如此，因此「下一张」/「定位」/结算不会死锁。结算评分也**不会**重建队列：评分响应被合并进本地账本（`adoptRoundVersion`），计划读取会发布到期的重练。每次点击都重建会替换学习者眼前的卡片列表——即被报告的闪烁、进度条重新计数和脑图重新挂载——并与评分写入竞争。重建只保留给到期读取、配置变更、显式「更新队列」和过期修订采用。轮次的卡片身份在内容编辑提升 `review_unit:<unit>:rN` 时保持稳定：信息流保留轮次 id，卡片视图按单元 + 尝试 + 轮次给挂载的脑图设键（修订号提升或同一尝试上的 `encounter` 续期都会保留学习者已翻开的枝干），服务器的尝试身份比较的是单元，而不是修订号。在下一次重建重新绑定它之前，用重建后的 id 评分，会把计划行移动到该 id 上（`canonical_rated_card`），而不是在未完成 id 旁边留下一个幽灵已完成 id。重练卡片本身失败，在 `leave` 之前不会移动该卡片。之后的到期列表重建会把新出现的身份追加为今天分段，且不得移动已插入的剩余重练。`leave_card` 确认会固定当前位于视口下方的卡片，不得拽回源卡片。源卡片留在原位，因此滑回是几何一致的。回看历史卡片不会移动已提交的 `cursor`，也不会插入重练。手指翻页只在滚动稳定后提交 `active`，因此手势中途的索引变化不会关闭一个 `encounter` 又打开另一个。信息流上方的鼠标滚轮或触控板每格翻一张卡片；触控板惯性会被合并，因此不会跳过队列。该滚轮不得原生滚动吸附滚动容器——强制吸附加上稳定固定会把未满一格拉回当前页，滚轮会感觉卡住。在复习脑图上的滚轮仍然平移画布。在仍能朝该方向移动的嵌套滚动器上的滚轮会滚动该滚动器。Ctrl/meta + 滚轮保持为缩放手势。复习脑图保持可平移（`mobileViewPolicy` 默认 `auto`）；画布上的单指拖拽平移树，不会让给吸附滚动器。右侧翻页器在 PWA 和桌面端都是同样的三个按钮：「上一张」、「下一张」和「完成」，位于右边缘的一列中，在卡片上垂直居中。PWA 不会把它移到评分坞上方的条带中。「上一张」/「下一张」始终翻卡片，包括评分范围为「宫殿」时；当轮次只有一个宫殿时，它们不得禁用自身。没有跳过宫殿的控件。
+<!-- invariant: freestyle-review-map-stays-pannable -->
+<!-- invariant: freestyle-wheel-no-snap-back -->
 
 当本轮中某个宫殿的每张复习单元卡片都被处理（包括重练；跳过/排除不算）时，当前卡片会显示章节横幅。当该宫殿在本轮之外没有剩余到期单元时，文案为 `《宫殿》今日安排已清`，否则为 `《宫殿》本轮已清，今日还剩 N`。队列的 `round_meta.palace_leftover_due` 是每个宫殿的剩余到期计数。该横幅不是吸附页；整个标签点击即关闭（`点一下关闭`）。其他顶部随心标签（昨日未完成轮次、通道已应用、保存错误）同样点击整个标签即关闭。音频在复习场景本地使用 `all_clear_ready`——绝不使用 `dispatchGlobalFeedback`。
 
 当进度条刻度对应的卡片仍然存在时，点击该刻度会让信息流跳到该卡片（在匹配的卡片 id 上调用 `navigateToIndex`）。卡片已离开信息流的刻度、HUD 计数以及空进度条，仍然会打开底部的“本轮安排”面板。页眉开关在「按宫殿」（按宫殿对稳定的计划条目分组）和「按进度」（同样的条目按进度条分段顺序排列，仍分为剩余和今天两个块）之间切换。两种视图都支持跳转、拖拽（桌面）或上移/下移（触屏）、批量排除/恢复以及重置轮次。工具栏的「结算已完成单元」会先打开一个「小结算」页面。该叠加层会盖住信息流翻页器，因此保留一个可见的「退出」用于取消而不压缩，并且页面可滚动，使「取消结算」和「确认结算」在较矮的 PWA 视口中仍可触及。在全部已评分的轮次上，右侧「完成」会跳过该页面并直接写入同样的结算。确认它（`compress_completed`）会从滑动信息流、「本轮安排」和 HUD 进度条中丢弃已结算分组（已通过的源，或已通过或已显式完成的重练；仍薄弱或空白的活跃重练会让整个分组留在本轮中，因此该重练在其等待到期时会回来），使分母缩小，并把该页面作为 `partial_settlements` 存储在轮次计划上。取消则让卡片留在信息流中。重练尚未被任何人回答的分组保留。这不是「排除」：已排除刻度仍留在进度条上；被压缩的 id（`compressed_ids`）则不会。未完成工作留在本轮。评分保持已提交；滑回不能在本轮重新打开已压缩卡片。静默重建/`append_today_cards` 不得把已压缩身份放回来，并且必须保留 `partial_settlements`。小结算不会询问叠加层已做。收尾的「大结算」包含每个已确认的小结算（计数和学科行），因为这些卡片已经离开信息流；轮次时钟时间不会重复累加。如果该压缩把信息流清空，收尾结算槽位仍然可达。配置是独立对话框。「保存配置并重排」会询问是否保留重叠的已完成/已排除/重练进度。「保留」继续本轮，只重排未开始的工作。「不保留」开始新轮次。HUD 行是 `当前位置/队列总长`（`position/total`）：分母是进度条，包括重练插入和已确认的「移除队列」。该移除会作为实心「已移出队列」刻度留在进度条上（与已评分卡片相同的填充宫殿色，不是淡刻度，也不是空隙）。`scheduledBase` 仍然不包含这些移除，仍是计划数学，而不是 HUD 分母。注入会把服务器 `excluded_ids` 与本地计划排除项合并，排除操作会在版本冲突时重试，因此 `cursor` 更新无法抹除它。「移除队列」之后的静默重建，包括与「完成」的 `cursor` 写入竞争的那种，都会保留本轮评分和实心移除刻度。注入在网络等待之后读取该账本，不会先发布草稿计划：否则轮次 id 变化会被看作评分被取消并抹掉账本。重建还会保留 await 之前捕获的账本，因此过期渲染或全 pending 草稿无法丢弃该移除或其他本轮评分。刚刚确认的移除会在该注入时再次盖章（`forceExcludedIds`）。被移除单元的较新修订仍是一个实心刻度，并在「完成」查找时被视为已处理。队列移除在「完成」查找时被视为已处理。进度条保持为一条：每个刻度显示宫殿色，剩余与今天由第一个 `entered_on == today` 的源之前的隔板分开。该隔板是明亮的那条，并在进度条有空间时带有「今天」字样；更早的每个刻度都画成弱化状态（`opacity-60`，屏幕上的卡片除外），因此结转的积压和今天的工作乍看即可分辨，而不是只在悬停时才能看出。一个单元同时只保留一个活跃重练；之后的薄弱评分不得铸造第二份副本。重练 `occurrence` 渲染为独立的琥珀色圆形节点，其数字是本轮的 `retry_attempt`。未完成重练节点使用淡琥珀色填充；已完成重练节点使用实心琥珀色填充。卡片上的重练徽标和「本轮安排」中的重练行也使用相同的未完成与已完成外观，而不仅是 HUD 进度条。`retryInserted` 会延长进度条，但不改变该分母。「本轮安排」使用同样的两个块，且不得把今天的卡片拖进剩余块。待处理刻度使用淡宫殿色填充，已完成刻度使用同一宫殿色的实心填充，使未完成与已完成乍看即可分辨。填充跟随本轮最后一次评分。滑回已评分单元会打开一个空的修正浏览，使学习者可以更改它，但 HUD 刻度和评分条会保留最后一次评分，直到他们更改或取消。空的修正浏览不等于未评分。查看播放头与该填充无关：屏幕上的卡片即使已评分也会变高，取消评分会让填充熄灭但不丢失播放头。右侧翻页器有「完成」，没有「定位」。当每张呈现的卡片都已评分时，按压就是真正的完成：它用与「结算已完成单元」相同的 `compress_completed` 账本写入来结算本轮所评内容（没有小结算确认页），因此这些单元会离开 HUD 进度条、「本轮安排」和滑动信息流，只剩收尾结算——翻页器随最后一张卡片消失，且不提供「取消结算」，因为已没有可返回的内容。等待中的「回顾」不会让按钮失效：该按压会打开收尾页而不是执行压缩（见下文），因此不存在屏幕上有卡片时「完成」被禁用的状态。未结束的轮次仍然查找队列顺序中第一个**未评分**的单元（谁最早看谁）。当视口已经位于未评分单元时再次按「完成」，会按队列顺序走到**下一个**未评分单元，并在末尾回绕，因此单个「完成」按钮会循环经过每个空白单元，而不是卡在第一个。已评分意味着该 `occurrence` 有本轮评分（忘记/困难/记得/轻松都算——进度条填充为实心）。一旦没有未评分内容，薄弱评分仍会打开结算——「完成」在该状态下不得禁用。已评分的重练永远不是目标；`leave_card` 会提升 `retry_attempt` 并清除该 `occurrence` 的评分，使下一次空白尝试可被查找。薄弱的源卡片已评分，因此「完成」不会重新打开它——空白重练才是要做的工作。仍欠着的当天「回顾」（`waiting`）永远不会禁用「完成」。当信息流中还有卡片时，按钮恰好只有两种结果：查找下一个未评分 `occurrence`，或打开收尾结算。当只剩等待中的回顾时，它会打开收尾页而不压缩（服务器仍持有这些分组），页面会说明还欠什么——「还有 N 张稍后回顾」——因此结算是知情选择，而不是不可达按钮。给重练评分不得把视口移到源卡片，也不得把脑图重新适配到宫殿根节点。它不会批量完成剩余工作。丢弃兄弟重练（重练通过会结算源卡片，因此同一单元较旧的尝试离开信息流）会按 id 重新固定视口下方的卡片：移除其上方条目会移动所有索引，让信息流看起来像自动前进了。清除重练自身的评分会让该卡片就地保持空白——只有结算、被取消的 `occurrence` 或下一个学习日才会移除它。
+<!-- invariant: freestyle-progress-tick-jumps-feed -->
+<!-- invariant: freestyle-round-sheet-two-views -->
+<!-- invariant: freestyle-partial-settlement-compress -->
+<!-- invariant: freestyle-partial-settlements-persisted -->
+<!-- invariant: freestyle-removal-solid-tick-survives-rebuild -->
+<!-- invariant: freestyle-not-keep-starts-new-round -->
+<!-- invariant: freestyle-hud-scheduled-base -->
+<!-- invariant: freestyle-entered-on-day-split -->
+<!-- invariant: freestyle-faint-palace-fill -->
+<!-- invariant: freestyle-faint-amber-fill -->
+<!-- invariant: freestyle-retry-node-not-only-hud -->
+<!-- invariant: freestyle-viewing-playhead -->
 
 ### unitProgressState 是唯一的评分内核
 
@@ -152,6 +107,7 @@ Practice 在 SQLite 中拥有后端权威的轮次计划（`freestyle_round_stat
 `streams.quiz` 独立于宫殿复习排期构建题目卡片。它使用相同的学科标签，然后是可选的显式宫殿范围、题型、掌握度桶、跨宫殿/单宫殿顺序，以及薄弱题优先。混合组合器使用稳定种子按 `ratio`、全局 `random` 或 `sequential` 策略合并两个流的结果。比例模式使用 `mix.ratios` 中的流权重；顺序模式先完成一个选中的流再进入下一个。组合器在所有流构建完成后按稳定卡片 ID 去重，因此重叠的显式范围不会把同一张卡片显示两次。候选不足会按实际排期计数报告：队列从不重复卡片，也不会静默扩大过滤器。
 
 净化会把已存储的 `training_mode: 'english'` 折叠为带英语学科过滤的 `memory_palace`，把定制的英语流到期/顺序字段复制到 memory_palace，并从 `mixed_modes` 中丢弃 `'english'`（必要时添加 `memory_palace`）。混合的宫殿+英语会变成一个覆盖所有学科的宫殿流。v1 本地配置仅为迁移保持可读。`quiz_only` 变为 `quiz`，仅宫殿配置变为 `memory_palace`，宫殿加题目内容变为 `mixed`。遗留 Anki 正/反面字段仍保留在源数据和兼容投影中，但被排除在新的随心流和队列之外。保存配置时，轮次计划为重叠身份（`unit:{unit_id}` / `quiz:{question_id}`）保留已完成、已排除和重练条目；只有未开始条目会针对新流重建。HUD 进度条根据轮次计划绘制，而不是根据实时到期子集，因此重启后即使 `/queue/build` 省略已评分卡片，这些刻度仍会显示。队列构建字段（`palace_order`、`unit_order`、到期策略、混合、种子、队列长度、做题抽取顺序）在保存时进行比较：变更会重排本轮中未开始的工作，使「多个宫殿轮流穿插」和「随机单元顺序」无需铸造新轮次即可生效。使用相同构建设置的静默内容重建不得重新洗牌。
+<!-- invariant: freestyle-queue-construction-fields -->
 
 ## 宫殿复习卡片
 
@@ -159,18 +115,28 @@ Practice 在 SQLite 中拥有后端权威的轮次计划（`freestyle_round_stat
 - 卡片身份携带稳定的 `unit_id` 以及 `unit_revision`。永久标记成员关系的变更可能丢弃已消失的单元。仅内容更新会保留排期，并在本轮重新绑定同一父单元；它不会铸造新的未完成卡片。
 - 卡片显示完整宫殿作为上下文，而冻结的 Reviews 单元成员关系定义评分范围。
 - 随心启动单单元 `freestyle_unit_review` 会话，并使用与正式复习相同的评分和撤销命令。再次点击已成功保存的选中评分会撤销，直到卡片回到未评分；它不得重复提交同一分数。保存失败的选中评分则会在下一次点击时重试保存。临时的「撤销」标签仍然撤销一步。清除评分还会在轮次计划中取消该卡片的完成状态，使 HUD 刻度回到待处理。
+  <!-- invariant: freestyle-retap-clears-rating -->
 - 随心始终只给当前复习单元评分；旧的宫殿范围偏好不得批量给兄弟单元评分或把未看过的章节标记为通过。独立的正式复习 `rate_palace_due_units` API 在此随心卡片流程之外仍然可用，具有按单元排期和批量撤销。做题卡片永远不会进入任一宫殿单元评分路径。
 - 成功保存的「忘记」会创建一个重练 `occurrence`（「困难」是通过：它预约更短间隔，而不是重新提供卡片）。服务器的 `apply_rating` 以 `available_at` 等待来预约它；读取时投影（`publish_ready_retries`）在该时刻过去后将其放入 `presented_ids`，位置在学习者已提交的 `cursor` 处——即**紧挨着他们当前所在卡片之后**的槽位，绝不是固定的三张卡片偏移，也绝不是在源卡片之后。前端将该已确认结果采用到信息流和轮次计划顺序中。未保存的本地点击绝不会插入重练工作。当当前卡片之后没有任何内容时，重练会追加在其后；`current_card_id` 不移动，因此翻页器/定位/结算不会在最后一张卡片上死锁。对已插入源卡片执行 `leave_card` 在位置上是一个无操作。已插入的重练不得让轮次冻结为完全处理完并丢弃已确认的重练。源卡片和重练实际上都已完成的轮次仍会冻结，静默重建仍不会把剩余到期内容追加到其上。确认固定的是实时视口卡片，绝不是刚刚离开的源卡片。没有每轮上限。一个单元同时只保留一个活跃重练；琥珀色节点数字是本轮的 `retry_attempt`（第几次）。每次新的失败 `encounter` 都会递增同一个槽位，包括父卡片新的薄弱评分所安排的全新浏览（`_occurrence_owns_score` 决定该槽位存储的 `encounter` 是否算作它自己的评分；父卡片的排期评分永远不会算作重练的评分）。之后的 `记得` / `轻松` 会一起结算源卡片和每个未完成 `occurrence`。刚评分的源卡片不会移动。`记得` / `轻松` / `困难` 都会结束当前 `encounter`；只有 `忘记` 会把它留在当天重练工作中。重练 `occurrence` 有自己的 `encounter`。重练卡片以空白评分开始。插入它的那次「忘记」属于父卡片：该评分降级父卡片并安排重练。它不得预填重练评分条；`retryGlanceOwnsRating` 要求存储的 `encounter_id` 与 `encounter` 条目匹配，因此先前尝试的 `encounter` 永远无法为重新安排的槽位作保。静默重建不得按 `unit_id` 把该浏览重新绑定到源卡片上；通过评分会让该 `occurrence` 留在视口中，而不是删掉学习者眼前的卡片。给该浏览评分会保留其 `encounter` 和揭示状态——不得在根节点重新挂载脑图。再次被评为「忘记」的重练会带着该评分留在进度条上，直到下一次等待过去；随后 `publish_ready_retries` 会以空白状态重新打开同一个 `occurrence`（评分和 `encounter` 清除，`retry_attempt + 1`，id 稳定），在当前卡片之后立即提供它，并将其列入 `fresh_due_ids`，以便客户端丢弃本地评分/`encounter`。它不得铸造第二份副本；当它已评分但未到期时，轮次会在 `waiting` 中报告该等待。如果重新打开时学习者正看着那张卡片，它会就地变空白，而不是移动。除非 `card_id + occurrence_id + encounter_id + unit_id` 指向同一张一致的卡片，否则评分会被拒绝。没有 `occurrence_id` 的重练卡片、来自另一单元的 `occurrence`，或绑定到另一单元的 `encounter`，都是不匹配——最后写入获胜永远不会适用于错误身份。活动卡片的评分条在其 `encounter` 打开期间保持可按。点击的分数会立即作为本地意图被选中；提交会等待有效的 `encounter`。只有成功响应才会更新已记录进度、重练排期和宫殿完成。失败的 POST 会保留选中意图，显示未保存，并允许再次点击重试；它不得声称轮次完成或宫殿清空。迟到的响应只更新该卡片的账本，且不得拽动视口。评分回调携带 `card_id + occurrence_id + encounter_id + plan_version`，并采用返回的 `plan_version`，使下一次评分不会成为过期冲突。静默重建按 id 保留当前 DOM 卡片，绝不按旧索引。默认情况下，随心在评分后停留在卡片上；显式的自动前进偏好可以在评分成功记录后移动它。队列重建会冻结当前页，使索引变动看起来不像下一张卡片。
+  <!-- invariant: freestyle-one-live-retry -->
+  <!-- invariant: freestyle-retry-own-encounter -->
+  <!-- invariant: freestyle-retry-starts-blank -->
+  <!-- invariant: freestyle-retry-stays-in-viewport -->
+  <!-- invariant: freestyle-retry-no-root-remount -->
+  <!-- invariant: freestyle-retry-no-second-copy -->
 - 随心宫殿流是 `due_only`。扩展/填充策略会净化为仅到期，且不发出填充卡片。正式复习仍可为非随心调用方使用 `allow_not_due`。
 - HUD 进度行是 `当前位置/队列总长`，包括重练插入。混合和纯做题轮次在每张卡片都已评分或确认时变为完成；收尾卡片只统计一次源，并显示结算概览（通过/重练/做题）、**本次随心**总专注秒数（已关闭且已评分 `encounter` 的 `effective_seconds` 之和），以及一个学科手风琴（第一个学科展开），其宫殿行显示宫殿/卡片计数和专注时间。底部 CTA **再来一轮**以 `nextRound` 模式打开配置；确认会调用 `startFreestyleRoundApi`（绝不是本地 `startNewRound`）并重建全新队列。轮次中途的「调整配置」留在 HUD 上，并且仍会在保留进度的情况下重新规划。从最后一个已处理单元执行「下一张」/滑动会打开该收尾槽位。队列索引停留在最后一个单元。最后一次「记得/简单」之后的静默重建不得铸造或追加剩余到期内容到信息流，否则收尾槽位会在学习者能打开之前消失。
+  <!-- invariant: freestyle-closing-slot-reachable -->
 - 队列重建会排除没有永久标记的宫殿。
 - 内容编辑会提升父复习单元的 `unit_revision`。随心就地采用实时修订：当前卡片保留，剩余卡片按 `unit_id` 重新绑定，已评分单元保留本轮评分。以过期修订启动随心会话，会在实时修订上打开新的 `encounter`，而不是抛出 `review unit changed`。较新修订不得在同一轮中显示为未完成工作；`completed_ids` 为空的新轮次可以在其保留排期到期时包含该修订单元。仅内容编辑永远不会降低其复习阶段。过期恢复（跳过/重建/打开配置）仅用于已消失的单元、不到期的非填充卡片（已在别处复习），或属于另一单元的 `encounter`。连续出现这些丢弃仍会触发断路器（连续三次，或约 2 秒内三次）。Practice 随心不得在并发编辑后的排期/修订漂移上硬性失败信息流。
 
 ## 永久标记
 
 随心内联编辑范围在「翻卡设置」中配置（`editScope`）。`unit`（默认）投影宫殿根 → 单元脊柱加上该单元的子树，并隐藏兄弟节点；`palace` 显示完整文档。`savePalaceEditor` 仍写入完整宫殿文档。进入编辑时，树的展开只到当前翻卡进度为止：当分支内有卡片被翻出（`revealMap` 中的 `placeholder` / `revealed`）时，该分支打开；学习者尚未到达的分支保持折叠，两种编辑范围皆如此。因此编辑视图是翻卡进度加上可编辑结构，绝不是把整个宫殿摊开。之后由宿主自身的折叠种子控制画布，手动展开/折叠手势仍会保持到下一次模式切换。编辑或删除卡片不得重新应用翻卡进度种子；这些写入使用与普通宫殿编辑器相同的折叠对账。在编辑中清空一张卡片的全部文本（Ctrl+A → Ctrl+X，或全部删除后提交）会删除该卡片并提升其子节点（可撤销），与宫殿编辑器中的「单独删除」完全一样——它绝不会恢复原文；单元锚点若存活则保持相同揭示状态。编辑保留相同的 `revealMap` / 翻卡进度，并重新居中先前的视口中心卡片（若该卡片已不在则为单元锚点）；它不会适配整棵树。在编辑 ↔ 复习之间切换会保留相同的 `revealMap` / 翻卡进度。翻卡进度属于已挂载卡片的本次访问，而不是存储：它绝不会写入 localStorage，也不会从实时存在恢复，并且新轮次（或重新挂载的卡片）会以所有分支折叠开始，因此由翻卡派生的编辑折叠也不能从较早访问继承。在空画布上双击/双触会切换编辑与复习。节点单击、节点双击和节点长按仍分别用于揭示/文本编辑/菜单。溢出菜单仍切换相同模式。编辑模式隐藏评分条、信息流翻页器和底部内边距，使它们不覆盖脑图。回车揭示跟随：在活动复习卡片上按回车会推进单元锚点，并且当该步骤翻出的卡片被裁切时，以最小距离平移，使其中被裁切最多的卡片完整进入视野。缩放保持不变。之后的回车会中断平移。鼠标点击不会移动相机。相机跟踪可在「翻卡设置」中配置（`enterRevealFollow`，默认开启）：关闭后回车仍翻同样的卡片，视口停留在学习者离开的位置。翻页控件激活时会释放键盘焦点（下一个单元可能仍在加载），因此回车归属于卡片并执行翻卡，而不是再次翻页。
+<!-- invariant: freestyle-edit-scope-configurable -->
 
 「翻卡设置」在揭示设置旁边有第二个独立页面（「快捷键」）。它编辑随心与正式复习/练习共用的一张翻卡快捷键映射：「翻卡」（Enter）揭示当前卡片/锚点，「收卡」（Backspace）折叠所有后代并把卡片带回揭示阶段规定的状态（两阶段中为待回忆提示，直接显示中为隐藏，因此「收卡」绝不会引入该模式不会显示的占位符）；上一帧的待处理翻卡会被丢弃，因此快速回车无法重新打开它。Shift+H 隐藏子卡片。W / A / S / D 是固定视图键，不属于该映射：按住它们会平移随心画布（按动画帧 600px/s，按键方向 = 相机方向，松开按键即停止，输入框/对话框/修饰键组合保留其字母），且任何翻卡动作都不得绑定到它们。「上一张」/「下一张」默认是 ↑ / ↓，即使焦点在吸附滚动器之外也会翻动随心信息流；PageUp / PageDown 和 ← / → 保持为固定翻页键，不能被翻卡动作捕获。空格不再是翻页键：它是学习者在卡片编辑器中输入的字符，因此空格键绝不能翻动信息流。当卡片编辑器打开时（`data-mindmap-editor-active`），即使光标丢失 DOM 焦点，所有翻页/翻卡/评分键都会暂停——这正是空格偶尔在编辑中途翻动卡片的原因。获得焦点的按钮或链接会自行保留 Enter 和 Backspace，输入框、对话框和录音状态会暂停脑图。位于对话框内部的界面会在自己的 hook 调用处重新选择加入（`allowOverlayTarget`），而每个页面级翻卡 hook 仍忽略该对话框内的按键。同一页面显示在「偏好」→「快捷键」中，因此两个入口都会立即编辑并保存同一组绑定。
+<!-- invariant: freestyle-flip-shortcut-page -->
 
 在编辑模式中，「永久标记」模式开关是一个专用工具栏切换（图钉图标加上「已标」计数），位于「文字」之后、⋯ 菜单之外；宫殿编辑器暴露相同的切换。永久标记在宫殿文档中编辑，每次完整切换都会立即作为普通文档写入保存。活动随心卡片绝不会发送 `mark_change`、`return_to_review` 或 `reconcile_units`，也绝不会为编辑或模式切换调用 `onUnitsReconciled` / `buildQueue`。排期对账只在被编辑卡片变为非活跃或卸载之后，作为同文档 `editor_leave` 发送一次；只有该离开对账可以刷新队列。显式「重建本轮」保持其现有行为。
 
@@ -217,14 +183,17 @@ Practice 只通过 `memory.public.get_palace_unit_projection` 接收拓扑。它
 ## 工具栏「做题」叠加层
 
 沉浸式脑图工具栏（仅随心）以图标**做题**开头，然后图标**英语**紧挨在**文字**左侧。画布放大/缩小按钮被省略；捏合和滚轮仍会持久化首选缩放。当信息流移动到下一个复习单元（或返回）时，该缩放会被记住，因此单元绝不会突然回到画布默认值。桌面和手机保持独立的缩放槽位（`mindmap_zoom` / `mindmap_zoom_phone`），因为这些值会通过客户端偏好跨设备同步：否则桌面端的 1.4 会把手机脑图停到屏幕外。手机槽位初始未设置，因此每个单元在手机上首次缩放之前都保持可读的适配。「做题」在当前卡片上打开 `widgets/freestyle-scope-quiz`。它**不会**改变 `training_mode`，也不会把信息流重建为做题卡片。
+<!-- invariant: freestyle-english-nav-beside-text -->
 
 题目成员关系有两个范围，都由下面的 pack 拥有。
 
 **本轮复习单元（默认）。** 范围是本轮已排期的复习单元（kind 为 `mindmap_branch` 的 `original_cards`）——不是学科并集，也不是 `streams.quiz.specific_palace_ids`。对每个单元，池包含其自身成员节点**以及从宫殿根向下到该单元 `anchor_uid` 的每个祖先**。永久标记常常位于二级节点上；其上方的知识点作为上下文被复习，因此它们绑定的题目也属于本轮。兄弟分支、未排期的嵌套单元以及宫殿其余部分不会进入。没有绑定记录的题目会被视为绑定到其宫殿根——每条单元路径都从那里开始——因此它会出现在每个已排期单元的池中。该规则实现在 `_unit_scope_node_uids` 和 `_question_in_unit_scope` 中。
+<!-- invariant: freestyle-overlay-round-units-not-subject-union -->
 
 **整个宫殿（主动开启）。** 本轮已排期宫殿中每个未删除的题目，即旧的宫殿范围行为。学习者在「出题范围」页面切换它。
 
 两个范围都不使用 `streams.quiz.question_type`。每个选中的题目都会被计数，包括已存储 `lifecycle_status` 为 `candidate`、`rejected`、`temporary` 或 `published` 的行。「客观」是除 `short_answer` 之外的每种类型；「主观」是 `short_answer`。配置只为活跃池中存在的分组显示复选框及其计数。至少保持一个存在的分组被选中。两者都选中时默认为「混合插入」；「先客观后主观」和「先主观后客观」是其他选择。「宫殿优先」对「题型优先」只在同时选中「一个宫殿刷完再换」和顺序题型顺序，且本轮有不止一个复习宫殿时出现。未选中的分组保留在 `kind_counts` 中，以便重新开启。掌握度桶、薄弱优先、题目到期日期和 `DEFAULT_QUIZ_CARD_LIMIT` 不适用于该叠加层。宫殿抽取顺序是 `streams.quiz.quiz_scope`。确认会发送所选范围（`round_units` 或 `whole_palace`）。首次打开会显示一个设置页——范围、抽取顺序、评分显示，「快捷键」折叠——然后设置 `overlay_quiz_setup_done`；之后的打开会跳过设置。配置仍可从对话框左上角进入。标记默认是 ArrowUp，每次按压切换一次。对话框打开时，ArrowUp 和 ArrowDown 不得翻动下方信息流。
+<!-- invariant: freestyle-overlay-objective-subjective-mix -->
 
 ### 做题范围恰好只有一个所有者
 
@@ -274,9 +243,12 @@ pack 在叠加层上返回 `scope_palaces`：每个已排期宫殿的标题、�
 标记/取消标记替代了先答题后评分。该切换在题目上写入 `marked`，不改变 `schedule_stage`、`schedule_due_on`、宫殿复习单元或当前索引。索引条上的已标记编号为玫瑰色。答题仍显示正确或错误以及存储的解析。已答的叠加层进度保持已答；新纳入的题目 id 作为未开始追加。
 
 持久进度作为 `overlay_quiz` 存在于轮次计划上（题目 id、索引、已完成 id、运行时状态、每题宫殿 id，以及 `parked` 超范围进度）。PWA 重载、应用重启和次日重新打开会从该计划恢复已答内容和当前索引。SPA 的 `quizSessionProgress` 是共享的题目已做。刷新会从 `quiz_practice_progress` 恢复它，且不会清除它。工具栏「做题」仍会在 ensure/hydrate 时从 `overlay_quiz` 重新播种任何缺失答案。开始新轮次（`「再来一轮」` → 配置确认 → `/rounds/start`）是显式清除：它让叠加层已做从空开始，并清除共享已做。更改学科或宫殿范围会把离开过滤器的已答题目停泊而不是删除；当宫殿重新回到范围内时它们会恢复。完成一个宫殿的评分不会询问是否清除叠加层已做；部分结算也不会询问。右侧「完成」控件仍会在打开收尾槽位之前查找未评分工作。收尾页是唯一的轮次结束界面：它恰好有两个操作，「清空做题进度」和「结算」。「结算」用已保存配置调用 `/rounds/start`，完成活动轮次并铸造下一轮，因此无论轮次状态如何（薄弱评分、待处理重练、未答单元）都能工作，不会走进死胡同。当新轮次没有卡片时，页面落在「今天的学习」而不是空舞台。页面会询问一次，是否为本轮实际涉及的每个复习宫殿清除叠加层已做，而不是已保存配置中仅仅选中的每个宫殿。「保留」保留已答记录，以便做题仍可复习；「清空」（两次按压）用这些宫殿 id 调用 `/overlay-quiz/drop-palaces`，并清除它们的 SPA 镜像。收尾页报告本轮获得了什么——已评分单元、已通过/新学/重练、今日清空的宫殿、宫殿进度——并把剩余内容放在一条弱化状态行上。它的「按学科看明细」和「下次复习」块折叠在两个操作下方，因此「结算」永远不会位于长列表之下，并且浮动信息流翻页器在此页面让位。
+<!-- invariant: freestyle-overlay-clear-on-settlement-page -->
+<!-- invariant: freestyle-settlement-mints-via-rounds-start -->
 
 结算时间是轮次范围的，能挺过重启或次日。它是花在进度条队列上的时间：看卡片、翻卡和回忆，包括约三分钟的离开。更长的缺席不会补算。即使页面焦点标志为 false，可见窗口也计入；桌面外壳报告自己的窗口焦点，因此真正切走可以在该宽限期后停止计时。空的轮次时钟不得抹掉队列的卡片时间。「本次随心」是单元停留时间加上做题加上查看宫殿。看卡片、翻动其节点和阅读背面都是单元停留；翻卡不会再次累加。「做题时间」只是做题叠加层，无论是从卡片角标还是工具栏打开。做题打开期间查看宫殿会计入轮次总计，但不计入做题时间。秒数作为 `learning_time` 存在于轮次计划上。轮次首次打开会复制自该轮次创建以来的停留分段，随后页面时钟只累加之后的秒数，使同一区间不会被重复计数。至少一小时的时长渲染为 `H:MM:SS`；更短的时间保持 `M:SS`。
 
 离开结算槽位会取消该次访问，但不会结束轮次。卡片的「返回上一张」返回上一张卡片。由「完成」结算的轮次没有剩余卡片，因此不会渲染该取消操作。学习时钟在每个结算界面暂停：收尾槽位和部分结算。离开这些界面后，之后的卡片停留和做题仍会累加到同一个 `learning_time`。
+<!-- invariant: freestyle-cancel-settlement-keeps-round -->
 
 摘要把「本轮累计」与「本轮今日」分开。后端在读取时按产品时区的日历边界投影今天的已记录区间并集，而不使用第二个持久化计数器。前端只添加未覆盖的待处理/进行中/当前区间，并在学习日翻转（本地 03:00）时刷新服务器日期窗口。没有带日期证据的历史标量时间留在轮次总计中，并明确标记为未归属；它不得被静默分配给今天。已存储的轮次区间历史不会截断到每次请求的上传批次限制。

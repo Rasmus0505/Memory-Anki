@@ -1,18 +1,6 @@
 # 宫殿测验边界
 
 
-<!-- 架构检查不变量索引（机器校验用，请勿删除；正文为中文）
-at least one
-do not shrink
-marked
-multiple choice first
-rose fill
-short_answer
-主观
-取消标记
-客观
--->
-
 宫殿测验负责题目生成、校验、分组、持久化和测验反馈。它可以引用宫殿标识和读取投影，但宫殿实现模块不是共享库。
 
 ## 依赖方向
@@ -37,12 +25,14 @@ quiz.application -> platform.application UnitOfWork
 ## 题库显示顺序
 
 宫殿测验的练习、管理、聚合列表、生成预览和节点绑定叠加层都按试卷顺序呈现题库：先选择题，再其他客观题类型，最后简答题。同一类型内，依次按 `sort_order`、`id` 保持稳定。随心测验的洗牌是独立的训练抽取，不使用该题库顺序。
+<!-- invariant: palace-quiz-bank-order-choice-first -->
 
 该排序位于 `quiz.application.question_contracts`，因此列表、生成草稿和前端题库视图共享同一条规则。
 
 ## 测验–脑图节点绑定（题库结合 / 双向关联）
 
 `quiz.application.node_binding` 将题目绑定到脑图节点 UID。一道题保留**单一所属宫殿**；每条边指向一个**目标**脑图宫殿 + `node_uid`（允许跨宫殿）。每个新的宫殿所属题目必须有**至少一个**绑定（提供了有效显式 `node_uids` 时使用它们，否则通过 `default-root-binding` 使用宫殿根 UID）；`palace_id=None` 的章节范围创建会跳过，直到分配了宫殿所有者。
+<!-- invariant: palace-quiz-create-requires-node-binding -->
 
 - 存储：`palace_quiz_question_node_bindings`
   - 边上的 `palace_id` = **目标**脑图宫殿（节点位于那里）
@@ -55,4 +45,6 @@ quiz.application -> platform.application UnitOfWork
 - 合并模式（AI 应用）：`replace_all`（清除**该目标宫殿的 AI 边**；保留手动边）和 `fill_unbound`。
 - 双向 UI：
   - 地图/复习 → `NodeBoundQuizDialog` 叠加层（所有者标签 本宫 / 来自·他宫）；每张卡片最多显示两个角标，表示已绑定题目的子树并集（包括跨所有者边）：**客观**（除 `short_answer` 外的所有类型，绿色）和**主观**（`short_answer`，天蓝色）。题目数为零的一侧省略。计数是完整总数，不会因完成某题而减少；会话进度保留在测验进度 UI 中。如果该客观或主观集合包含已标记的题目，该角标使用玫瑰色填充。点击角标只打开该侧的题目。学科复习书架宫殿卡片在卡片外复用同一个 `NodeCountBadgeCluster`。书架计数是绑定到该宫殿的去重未删除题目（当所有边仍指向活动节点时为根节点总数）。点击书架角标会打开该宫殿的测验页。Session 已做 与随心工具栏叠加层和宫殿测验练习共享。刷新不会清除它。它由宫殿测验的手动清除清除，或在结算页选择清除那些宫殿时清除。上一个/下一个仍保留已解决状态，方便学习者回看之前的答案。测验练习使用 标记 / 取消标记，而不是 忘记/困难/记得/轻松。标记会写入 `marked`，且不安排复习或自动前进。最后一次存储的 忘记 或 困难 评分（未通过，带到期日）会迁移为已标记。索引栏上已标记的题号使用玫瑰色填充。
+  <!-- invariant: palace-quiz-badge-counts-stable -->
+  <!-- invariant: palace-quiz-marked-index-rose -->
   - 测验 → 多边选择器 → `QuizKnowledgeDigressionDialog` 完整只读目标脑图 + 固定的**返回做题**（叠加层；尝试草稿保留在父级内存中；PWA 返回先关闭跳转）。

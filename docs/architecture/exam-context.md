@@ -49,7 +49,7 @@
 
 `config` 键 `study_milestones` 保存计划检查点的 JSON 列表（`date`、`title`、`category`、`detail`、`notify_days_before`、`enabled`、`done`）。`DEFAULT_MILESTONES` 在首次读取时一次性播种 2027 考研冲刺计划；每个字段都可编辑。里程碑从不移动到期日，也从不门控复习——它们回答“到现在本该完成什么”。状态在每次读取时推导：`done` / `overdue` / `due_soon`（在 `notify_days_before` 之内）/ `upcoming`。
 
-提醒仅在应用内。没有推送通道：service worker 只有一个 `notificationclick` 处理器，因此任何内容都无法到达已关闭的应用。
+里程碑提醒仅在应用内展示，目前不通过推送通道发送。复习提醒是独立功能，可以在启用并配置后通过 Bark 推送；不要把两者混为一谈。
 
 两个界面，刻意不同：
 

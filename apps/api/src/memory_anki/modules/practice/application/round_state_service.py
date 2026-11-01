@@ -28,19 +28,22 @@ from memory_anki.modules.practice.domain.overlay_quiz import (
     empty_overlay_quiz,
     normalize_overlay_quiz,
 )
-from memory_anki.modules.practice.domain.round_compress import compress_completed
+from memory_anki.modules.practice.domain.round_commands import (
+    ApplyRating,
+    CompressCompleted,
+    LeaveCard,
+    MoveCursor,
+    apply_command,
+)
 from memory_anki.modules.practice.domain.round_plan import (
-    apply_rating,
     assert_rating_identity,
     bedtime_card_ids,
     complete_card,
     exclude_card,
-    leave_card,
     normalize_plan,
     plan_from_cards,
     plan_is_fully_handled,
     restore_card,
-    set_cursor,
     set_encounter,
     skip_card,
 )
@@ -522,9 +525,9 @@ def apply_round_action(
     cards: list[dict[str, Any]] = raw_cards if isinstance(raw_cards, list) else []
     target_id = card_id or occurrence_id
     if name == "set_cursor":
-        plan = set_cursor(plan, card_id, commit=True)
+        plan, _ = apply_command(plan, MoveCursor(card_id))
     elif name == "leave_card":
-        plan = leave_card(plan, target_id)
+        plan, _ = apply_command(plan, LeaveCard(target_id))
     elif name == "skip":
         plan = skip_card(plan, card_id)
     elif name == "complete":
@@ -540,7 +543,7 @@ def apply_round_action(
         raw_settlement = fields.get("partial_settlement")
         settlement = raw_settlement if isinstance(raw_settlement, dict) else None
         before_compressed = set(str(item) for item in plan.get("compressed_ids") or [])
-        plan = compress_completed(plan, settlement)
+        plan, _ = apply_command(plan, CompressCompleted(settlement))
         newly_compressed = [
             str(item) for item in plan.get("compressed_ids") or []
             if str(item) not in before_compressed
@@ -598,18 +601,20 @@ def apply_round_rating(
         return _serve(session, row, conflict=True)
     if row.status != "active":
         raise ValueError("freestyle round is not active")
-    plan = apply_rating(
+    plan, _ = apply_command(
         _plan_of(row),
-        card_id=card_id,
-        rating=int(rating),
-        encounter_id=encounter_id,
-        occurrence_id=occurrence_id or "",
-        unit_id=unit_id or "",
-        round_id=row.round_id,
-        unit_revision=unit_revision,
-        available_at=available_at,
-        intraday_kind=intraday_kind,
-        intraday_exhausted=intraday_exhausted,
+        ApplyRating(
+            card_id=card_id,
+            rating=int(rating),
+            encounter_id=encounter_id,
+            occurrence_id=occurrence_id or "",
+            unit_id=unit_id or "",
+            round_id=row.round_id,
+            unit_revision=unit_revision,
+            available_at=available_at,
+            intraday_kind=intraday_kind,
+            intraday_exhausted=intraday_exhausted,
+        ),
     )
     changed = _apply_plan(row, plan, operation_id=op_id)
     if not changed:

@@ -13,11 +13,9 @@ from memory_anki.core.time import (
 from memory_anki.infrastructure.db._tables.misc import FreestyleRoundState
 from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitState
 from memory_anki.modules.practice.application.round_fresh_due import project_served_plan
+from memory_anki.modules.practice.domain.round_commands import PublishReadyRetries, apply_command
 from memory_anki.modules.practice.domain.round_plan import normalize_plan
-from memory_anki.modules.practice.domain.round_plan_intraday import (
-    plan_waiting,
-    publish_ready_retries,
-)
+from memory_anki.modules.practice.domain.round_plan_intraday import plan_waiting
 from memory_anki.modules.practice.domain.round_progress import project_round_progress
 from memory_anki.modules.practice.domain.workspace import normalize_workspace
 
@@ -148,7 +146,7 @@ def _serve(session: Any, row: FreestyleRoundState | None, **kwargs: Any) -> dict
     served_plan = project_served_plan(session, plan)
     # Same-day steps/retries appear on the rail only once their wait has passed.
     # This is a read-time projection; the persisted plan keeps them pending.
-    served_plan = publish_ready_retries(served_plan, now=utc_now_naive())
+    served_plan, _ = apply_command(served_plan, PublishReadyRetries(now=utc_now_naive()))
     _api_plan_instants(served_plan)
     waiting = plan_waiting(served_plan)
     waiting["next_ready_at"] = _api_instant(waiting.get("next_ready_at"))

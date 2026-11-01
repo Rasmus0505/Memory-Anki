@@ -13,8 +13,10 @@
 | practice | 随心信息流/队列 + 正式复习组合表面 |
 | produce | 脑图导入任务、AI 拆分、导入路由 |
 | session | 学习会话、进度、计时 |
-| english / english_reading | 英语轨道 |
-| settings / dashboard / search / backups / ai_learning | 支撑上下文 |
+| english | 英语轨道 |
+| settings / dashboard / search / backups | 支撑上下文 |
+
+`english_reading` 和 `ai_learning` 已退役；历史数据与归档文档保留，不是现行模块。
 
 ## 公共导入规则
 跨上下文代码只能导入公共条目（`modules.<id>.public` 或 `modules.<id>.api`）。

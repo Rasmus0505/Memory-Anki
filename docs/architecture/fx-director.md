@@ -22,7 +22,7 @@ caller ──cue('grade.commit', payload, { owner })──▶ director ──▶
 | `core/owner.ts` | owner 作用域播放。延迟步骤挂在 owner 上；`retireOwner` 取消全部待执行步骤。`useFxOwner` 把 owner 绑定到组件身份。 |
 | `core/anchors.ts` | 具名锚点（`data-fx-anchor`），供需要定位的反馈使用。不使用测试 id。 |
 | `core/domFlourish.ts` | `bumpElement` / `chargeElement` / `flashElement`。 |
-| `core/jelly.ts` | `jellyOn(el, 'pop' \| 'press' \| 'wobble')`：挂上 CSS 类，动画样式在 `apps/web/src/styles/jelly.css`，且只在 `prefers-reduced-motion: no-preference` 下生效。 |
+| `core/jelly.ts` | `jellyOn(el, 'pop' \| 'press' \| 'wobble')`：挂上 CSS 类，动画样式在 `apps/web/src/styles/motion.css`，且只在 `prefers-reduced-motion: no-preference` 下生效。 |
 | `core/microBubble.ts` | `showMicroBubble(anchor, { tone, parts, zone, placement })`：答题耗时、评分间隔、单元清盘等瞬态胶囊。挂 body（或原生全屏宿主）的固定顶层，`z-index: 10000` 高于 dialog 的 240/241/255；`pointer-events: none`，同 zone 新气泡让旧气泡 180ms 加速淡出。文案由纯函数生成并有单测。 |
 | `recipes/learning.ts` | 学习场景 cue：评分、翻卡落定、单元完成、撤销、移除、重试、进度四分之一、答对/答错、区域清空、翻页、轮次完成。 |
 | `recipes/map.ts` | 思维导图场景 cue（如 `audio.pops` 分层弹跳）。 |

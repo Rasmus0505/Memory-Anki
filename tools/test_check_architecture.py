@@ -97,6 +97,22 @@ def test_learning_progress_projection_forbids_database_writes(tmp_path: Path, mo
     assert errors == []
 
 
+def test_round_plan_mutation_boundary_rejects_direct_assignment(tmp_path: Path, monkeypatch) -> None:
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
+    caller = api_src / "modules" / "practice" / "application" / "caller.py"
+    write_file(caller, "plan['current_card_id'] = 'other'\n")
+    errors: list[str] = []
+    check_architecture.check_round_plan_mutation_boundary(errors)
+    assert any("round-plan keys" in error for error in errors)
+
+    write_file(caller, "current = plan['current_card_id']\n")
+    errors = []
+    check_architecture.check_round_plan_mutation_boundary(errors)
+    assert errors == []
+
+
 def test_freestyle_facade_requires_round_plan_public_surface(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -150,7 +166,33 @@ def test_freestyle_facade_requires_round_plan_public_surface(
     write_file(web_src / "app" / "shell" / "navSections.ts", "label: '随心'\n")
     write_file(
         tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
-        "backend-authoritative occurrence_kind scheduledBase retryInserted faint palace-color fill faint amber fill not only the HUD rail queue-construction fields must not mint a new `round_id` does not move `current_card_id` orphan block retry occurrence has its own encounter leaves that occurrence in the viewport must not remount the map at the root one live retry must not mint a second copy overlapping identities append_today_cards replan_remaining entered_on drop_vanished_unstarted list_trusted_due_units_for_queue tail_pending must not cover the feed once cards exist\n",
+        "<!-- invariant: freestyle-backend-authoritative -->\n"
+        "<!-- invariant: freestyle-occurrence-kind -->\n"
+        "<!-- invariant: freestyle-hud-scheduled-base -->\n"
+        "<!-- invariant: freestyle-faint-palace-fill -->\n"
+        "<!-- invariant: freestyle-faint-amber-fill -->\n"
+        "<!-- invariant: freestyle-retry-node-not-only-hud -->\n"
+        "<!-- invariant: freestyle-queue-construction-fields -->\n"
+        "<!-- invariant: freestyle-forgot-keeps-current-card -->\n"
+        "<!-- invariant: freestyle-retry-entered-on-no-orphans -->\n"
+        "<!-- invariant: freestyle-retry-own-encounter -->\n"
+        "<!-- invariant: freestyle-retry-stays-in-viewport -->\n"
+        "<!-- invariant: freestyle-retry-no-root-remount -->\n"
+        "<!-- invariant: freestyle-one-live-retry -->\n"
+        "<!-- invariant: freestyle-retry-no-second-copy -->\n"
+        "<!-- invariant: freestyle-append-today-cards -->\n"
+        "<!-- invariant: freestyle-replan-remaining -->\n"
+        "<!-- invariant: freestyle-entered-on-day-split -->\n"
+        "<!-- invariant: freestyle-drop-vanished-unstarted -->\n"
+        "<!-- invariant: freestyle-list-trusted-due-units -->\n"
+        "<!-- invariant: freestyle-tail-pending-prefix -->\n"
+        "<!-- invariant: freestyle-hydration-not-cover-feed -->\n"
+        "<!-- invariant: freestyle-refresh-no-new-round-id -->\n"
+        "<!-- invariant: freestyle-scope-change-overlapping-identities -->\n"
+        "<!-- invariant: freestyle-english-nav-beside-text -->\n"
+        "<!-- invariant: freestyle-overlay-round-units-not-subject-union -->\n"
+        "<!-- invariant: freestyle-overlay-objective-subjective-mix -->\n"
+        "<!-- invariant: freestyle-overlay-clear-on-settlement-page -->\n",
     )
     write_file(
         api_src / "modules" / "practice" / "application" / "round_state_service.py",
@@ -301,7 +343,7 @@ def test_freestyle_facade_rejects_missing_unstarted_reorder(
     assert any("append_today_cards" in error for error in errors)
     assert any("queue_construction_signature" in error for error in errors)
     assert any("shouldReorderUnstartedFreestylePlan" in error for error in errors)
-    assert any("queue-construction fields" in error for error in errors)
+    assert any("freestyle-queue-construction-fields" in error for error in errors)
 
 
 def test_freestyle_progress_rail_rejects_near_identical_pending_done(
@@ -391,7 +433,7 @@ def test_freestyle_facade_rejects_client_local_round_authority(
     errors: list[str] = []
     check_architecture.check_freestyle_queue_facade_surface(errors)
 
-    assert any("client-local" in error for error in errors)
+    assert any("freestyle-backend-authoritative" in error for error in errors)
     assert any("round-plan service is required" in error for error in errors)
 
 
@@ -481,7 +523,7 @@ def test_freestyle_retry_starts_unrated_accepts_blank_glance(tmp_path: Path, mon
     )
     write_file(
         tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
-        "A retry card starts with a blank rating. It must not prefill the retry rating bar.\n",
+        "<!-- invariant: freestyle-retry-starts-blank -->\n",
     )
 
     errors: list[str] = []
@@ -512,7 +554,7 @@ def test_freestyle_rating_retap_clears_accepts_clear_all(
     )
     write_file(
         tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
-        "Tapping the currently selected rating again undoes until the card is unrated.\n",
+        "<!-- invariant: freestyle-retap-clears-rating -->\n",
     )
 
     errors: list[str] = []
@@ -581,7 +623,7 @@ def test_freestyle_passed_unit_reopen_accepts_finish_helper(
     )
     write_file(
         tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
-        "must not return `passed review unit cannot start another encounter`. 只看不评.\n",
+        "<!-- invariant: freestyle-passed-unit-amends-not-400 -->\n",
     )
 
     errors: list[str] = []
@@ -628,7 +670,7 @@ def test_freestyle_rating_last_write_wins_accepts_reopen_helper(
     )
     write_file(
         tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
-        "applies the latest rating; it must not return `active unit review session required`.\n",
+        "<!-- invariant: freestyle-latest-rating-reopens-glance -->\n",
     )
 
     errors: list[str] = []
@@ -687,9 +729,9 @@ def test_freestyle_complete_slot_reachable_accepts_feed_slot_helpers(
     )
     write_file(
         tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
-        "open that closing slot so 调整配置 stays reachable.\n"
-        "settlement 结算 mints the next round via /rounds/start.\n"
-        "取消结算 leaves the slot and later dwell still counts.\n",
+        "<!-- invariant: freestyle-closing-slot-reachable -->\n"
+        "<!-- invariant: freestyle-settlement-mints-via-rounds-start -->\n"
+        "<!-- invariant: freestyle-cancel-settlement-keeps-round -->\n",
     )
     write_file(
         web_src
@@ -938,7 +980,7 @@ def _write_flip_shortcut_fixture(tmp_path: Path, model_source: str) -> None:
     )
     write_file(
         tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
-        "翻卡设置 快捷键 收卡\n",
+        "<!-- invariant: freestyle-flip-shortcut-page -->\n",
     )
 
 
@@ -1041,7 +1083,7 @@ def test_freestyle_inline_edit_expansion_requires_flip_progress_fold(
     )
     write_file(
         tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
-        "configured in 翻卡设置 (`editScope`).\n",
+        "<!-- invariant: freestyle-edit-scope-configurable -->\n",
     )
 
     errors: list[str] = []
@@ -1082,7 +1124,7 @@ def test_freestyle_inline_edit_scope_accepts_unit_or_palace(
     )
     write_file(
         tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
-        "configured in 翻卡设置 (`editScope`).\n",
+        "<!-- invariant: freestyle-edit-scope-configurable -->\n",
     )
 
     errors: list[str] = []
@@ -1299,7 +1341,7 @@ def test_freestyle_knowledge_entry_scope_accepts_stream_lock(
     )
     write_file(
         tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
-        "locking every training stream. A saved selection does not keep showing the full feed.\n",
+        "<!-- invariant: freestyle-knowledge-page-locks-streams -->\n",
     )
 
     errors: list[str] = []
@@ -4339,7 +4381,6 @@ def test_freestyle_scope_quiz_overlay_requires_inline_english_and_no_zoom_chrome
     assert any("zoom in/out buttons" in error for error in errors)
     assert any("ClipboardList icon" in error for error in errors)
     assert any("keep 英语 inline" in error for error in errors)
-    assert any("must not bury 英语" in error for error in errors)
     assert any("immediately left of 文字" in error for error in errors)
 
 
@@ -4422,7 +4463,7 @@ def test_freestyle_viewing_playhead_accepts_independent_tick(
     )
     write_file(
         tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
-        "The viewing playhead is independent. Clearing the rating also uncompletes that card in the round plan. Fill follows this-round last rating until the learner changes or cancels it. The right-side pager has 完成, not 定位.\n",
+        "<!-- invariant: freestyle-viewing-playhead -->\n",
     )
 
     errors: list[str] = []
@@ -4467,7 +4508,7 @@ def test_freestyle_complete_button_rejects_seek_only_wiring(
     )
     write_file(
         tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
-        "The viewing playhead is independent. Clearing the rating also uncompletes that card in the round plan. Fill follows this-round last rating until the learner changes or cancels it. The right-side pager has 完成, not 定位.\n",
+        "<!-- invariant: freestyle-viewing-playhead -->\n",
     )
 
     errors: list[str] = []
@@ -4513,9 +4554,9 @@ def test_freestyle_round_sheet_views_accept_header_toggle(
     )
     write_file(
         tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
-        "A header toggle switches 「按宫殿」 and 「按进度」.\n"
-        "结算已完成单元 compresses passed cards off compressed_ids.\n"
-        "小结算 pages are persisted as partial_settlements for 大结算.\n",
+        "<!-- invariant: freestyle-round-sheet-two-views -->\n"
+        "<!-- invariant: freestyle-partial-settlement-compress -->\n"
+        "<!-- invariant: freestyle-partial-settlements-persisted -->\n",
     )
     write_file(
         api_src / "modules" / "practice" / "domain" / "round_plan.py",
