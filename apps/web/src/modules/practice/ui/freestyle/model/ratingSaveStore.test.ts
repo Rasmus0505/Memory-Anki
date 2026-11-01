@@ -369,12 +369,29 @@ describe('RatingSaveStore', () => {
     expect(posts[0].payload).toMatchObject({ study_session_id: 'fresh-session', encounter_id: 'enc-1' })
   })
 
-  it('closes a background glance after the acknowledgement', async () => {
+  it('uses the server session and encounter identity for background close', async () => {
     const { store, posts, close } = harness()
     rate(store, 'card-1', 3, { closeAfterAck: true })
-    posts[0].reply.resolve({ item: item(3, 'op-1'), round: round() })
+    posts[0].reply.resolve({
+      item: {
+        ...item(3, 'op-1'),
+        study_session_id: 'server-session',
+        encounter_id: 'server-encounter',
+        unit: { id: 'unit-1', revision: 4 },
+        encounter: { ...item(3, 'op-1').encounter, id: 'server-encounter', round_id: 'server-round' },
+      },
+      round: round(),
+    })
     await flush()
-    expect(close).toHaveBeenCalledTimes(1)
+    expect(close).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'server-session',
+        encounterId: 'server-encounter',
+        unitRevision: 4,
+        roundId: 'server-round',
+      }),
+      expect.anything(),
+    )
   })
 
   it('runs a clear requested during the save once the save is acknowledged', async () => {

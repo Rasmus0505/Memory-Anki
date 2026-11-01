@@ -2406,6 +2406,52 @@ describe('FreestyleUnitReviewCardView', () => {
     ))
   })
 
+  it('keeps the session and encounter pair the server returned when a rating reopens the unit', async () => {
+    const card = buildCard('unit-reopened')
+    const staleSession = buildSession(card.unit_id!)
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(staleSession)
+    const reopenedEncounter = buildEncounter({
+      id: 'encounter-reopened',
+      selected_rating: 2,
+      passed: false,
+      retry_after_cards: 3,
+      effective_operation_id: 'rating-reopened',
+    })
+    apiMocks.rateFreestyleRoundUnitApi.mockResolvedValue({
+      item: {
+        ...ratingResult(staleSession, 2, 'rating-reopened'),
+        study_session_id: 'session-reopened',
+        encounter_id: reopenedEncounter.id,
+        encounter: reopenedEncounter,
+        unit: { ...staleSession.units[0], encounter: reopenedEncounter },
+      },
+      round: null,
+    })
+    const view = renderCard(card, {
+      encounter: queueEncounter({
+        encounterId: 'encounter-1',
+        status: 'open',
+        sessionId: staleSession.id,
+      }),
+    })
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    fireEvent.click(screen.getByTestId('freestyle-rating-button-2'))
+    await waitFor(() => expect(apiMocks.rateFreestyleRoundUnitApi).toHaveBeenCalledTimes(1))
+
+    // Leaving must close the glance the server rated, inside the session it
+    // really lives in. Keeping the stale glance id here made the close answer
+    // 400 "review encounter not found" and showed 没有保存成功 on the next card.
+    view.rerenderCard({ active: false })
+    await waitFor(() => expect(apiMocks.closeUnitReviewEncounterApi).toHaveBeenCalledWith(
+      'session-reopened',
+      card.unit_id,
+      'encounter-reopened',
+      expect.any(String),
+      'round-1',
+    ))
+  })
+
   it('loads a closed historical encounter without creating a new session', async () => {
     const card = buildCard('unit-history')
     const closedEncounter = buildEncounter({

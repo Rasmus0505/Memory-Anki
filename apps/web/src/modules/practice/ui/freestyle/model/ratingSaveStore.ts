@@ -71,6 +71,8 @@ export interface RatingTarget {
   unitId: string
   sessionId: string
   unitRevision: number
+  /** Canonical round id returned by the rating response, when available. */
+  roundId?: string
 }
 
 export interface RatingRequest {
@@ -757,6 +759,17 @@ export class RatingSaveStore {
     const round = verdict.round
     if (round) this.notePlanVersion(job.roundId, roundPlanVersionOf(round))
     const item = verdict.kind === 'saved' ? verdict.item : null
+    // A round rating can open the glance inside the same transaction when the
+    // card was scored before its delayed session load returned. Carry the
+    // server-issued session identity forward so leave-close can finish that
+    // exact encounter even after this card unmounts.
+    const effectiveTarget: RatingTarget = {
+      ...target,
+      encounterId: item?.encounter?.id || target.encounterId,
+      sessionId: item?.study_session_id || target.sessionId,
+      unitRevision: item?.unit?.revision ?? target.unitRevision,
+      roundId: item?.encounter?.round_id || target.roundId || job.roundId,
+    }
     const ackedRating = asRating(item?.rating) ?? job.rating
     const ackedOperationId = item?.operation_id || job.operationId
     const entry = this.entries.get(key)
@@ -774,13 +787,13 @@ export class RatingSaveStore {
         rating: ackedRating,
         failure: null,
         detail: null,
-        target,
+        target: effectiveTarget,
         ackedRating,
         ackedOperationId,
       })
     } else if (entry) {
       // Superseded by a newer tap: still the saved baseline until that one lands.
-      this.setEntry({ ...entry, ackedRating, ackedOperationId })
+      this.setEntry({ ...entry, target: effectiveTarget, ackedRating, ackedOperationId })
     }
     this.clearIntent(key, job)
     this.emit({
@@ -788,7 +801,7 @@ export class RatingSaveStore {
       roundId: job.roundId,
       cardId: job.cardId,
       job,
-      target,
+      target: effectiveTarget,
       item,
       round,
       replayed: verdict.kind === 'replayed',
@@ -796,7 +809,7 @@ export class RatingSaveStore {
     })
     const lane = this.lane(key)
     if (current && job.closeAfterAck && !lane.queued && !lane.undoAfter && this.deps.close) {
-      void this.deps.close(target, job).catch(() => undefined)
+      void this.deps.close(effectiveTarget, job).catch(() => undefined)
     }
   }
 

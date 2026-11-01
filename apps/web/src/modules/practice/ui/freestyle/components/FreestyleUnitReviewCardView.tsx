@@ -76,9 +76,19 @@ export {
 
 export const RATING_SAVE_FAILED_COPY = '这一次没有保存成功'
 
-async function abandonUnshownSession(value: UnitReviewSessionDto, unitId: string | null | undefined) {
+async function abandonUnshownSession(
+  value: UnitReviewSessionDto,
+  unitId: string | null | undefined,
+  roundId: string,
+  cardId: string,
+) {
   const encounter = value.units.find((item) => item.id === unitId)?.encounter
   if (!encounter || encounter.status !== 'open' || encounter.selected_rating != null) return
+  const entry = freestyleRatingSaves().getEntry(roundId, cardId)
+  const sameEncounter = entry?.target?.encounterId === encounter.id
+  // A delayed GET may still contain the pre-rating snapshot. Never cancel an
+  // encounter once its outbox has acknowledged (or is still sending) this card.
+  if (sameEncounter && (entry?.ackedRating != null || freestyleRatingSaves().isBusy(roundId, cardId))) return
   try {
     await cancelUnratedUnitReviewEncounterApi(value.id, unitId ?? '', encounter.id)
   } catch {
@@ -382,6 +392,32 @@ export function FreestyleUnitReviewCardView({
     const currentSession = sessionRef.current
     const currentUnit = unitRef.current
     const currentEncounter = currentUnit?.encounter
+    const stored = outbox.getEntry(ownerRoundId, ownerCardId)
+    const storedTarget = stored?.target
+    const fallbackTarget = stored?.ackedRating != null ? storedTarget : null
+    if (
+      (!currentSession || !currentUnit || !currentEncounter || currentEncounter.status !== 'open')
+      && fallbackTarget?.sessionId
+      && fallbackTarget.unitId === cardRef.current.unit_id
+    ) {
+      const closeOperation = stored?.ackedOperationId || operationId()
+      const promise = closeUnitReviewEncounterApi(
+        fallbackTarget.sessionId,
+        fallbackTarget.unitId,
+        fallbackTarget.encounterId,
+        closeOperation,
+        fallbackTarget.roundId || ownerRoundId,
+      ).catch((error) => {
+        onSaveFailed(error instanceof Error ? error.message : '评分已保存，但收尾没有完成')
+        return null
+      })
+      closeRequestRef.current = { encounterId: fallbackTarget.encounterId, promise }
+      return promise.finally(() => {
+        if (closeRequestRef.current?.encounterId === fallbackTarget.encounterId) {
+          closeRequestRef.current = null
+        }
+      })
+    }
     if (
       !currentSession
       || !currentUnit
@@ -396,7 +432,6 @@ export function FreestyleUnitReviewCardView({
 
     // An acknowledgement that landed after this card unmounted never reached the
     // local session; the outbox still knows the glance is rated.
-    const stored = outbox.getEntry(ownerRoundId, ownerCardId)
     const ratedInOutbox = stored?.ackedRating != null && stored.target?.encounterId === currentEncounter.id
     // Unrated leave must cancel the glance. Leaving the open encounter alive made
     // the later pass bill wall clock from first scroll-past (parallel palace rows).
@@ -562,7 +597,7 @@ export function FreestyleUnitReviewCardView({
               return
             }
             if (!activeRef.current || !mountedRef.current) {
-              await abandonUnshownSession(value, liveCard.unit_id)
+              await abandonUnshownSession(value, liveCard.unit_id, roundId, liveCard.id)
             }
             return
           }
@@ -715,7 +750,16 @@ export function FreestyleUnitReviewCardView({
     const currentUnit = unitRef.current
     const currentEncounter = currentUnit?.encounter
     if (item && currentSession && currentUnit && currentEncounter && currentUnit.id === target.unitId) {
-      const nextEncounter = adoptRatedEncounter(currentEncounter, item.encounter)
+      // A rating on a glance the server has already dropped (a content/topology
+      // edit invalidated its session) reopens the unit inside a fresh session
+      // with a new encounter. Keeping the stale glance id there would pair the
+      // new session with an encounter it never owned, and the leave-close then
+      // answers 400 "review encounter not found". The ack's pair is the only
+      // consistent one, so adopt it whole.
+      const sessionMoved = Boolean(item.study_session_id) && item.study_session_id !== currentSession.id
+      const nextEncounter = sessionMoved
+        ? item.encounter
+        : adoptRatedEncounter(currentEncounter, item.encounter)
       const nextUnit: ReviewUnitDto = {
         ...currentUnit,
         ...item.unit,
