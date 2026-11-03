@@ -341,6 +341,8 @@ export interface ClientPreferences {
   quiz_answer_mode?: Record<string, unknown> | null
   /** Shared answer-dialog question-body font size, as `{ percent: 70..180 }`. */
   quiz_font_scale?: Record<string, unknown> | null
+  /** Automatic multiple-choice option shuffling threshold and enabled state. */
+  quiz_option_shuffle?: Record<string, unknown> | null
   /** Shared do-question shortcuts for freestyle 做题 and node-bound quiz. */
   quiz_shortcuts?: Record<string, unknown> | null
   /** Floating-window size and position as viewport ratios, shared across devices. */

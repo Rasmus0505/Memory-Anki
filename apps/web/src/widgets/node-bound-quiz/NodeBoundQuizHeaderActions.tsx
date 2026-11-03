@@ -16,7 +16,13 @@ export function NodeBoundQuizHeaderActions({
   canShuffle,
   shuffling = false,
   onShuffle,
+  currentQuestion,
+  canShuffleOptions,
+  canRestoreOptions,
+  onShuffleOptions,
+  onRestoreOptions,
   onOpenClearProgress,
+  actionsDisabled = false,
 }: {
   /** The palace 复制导图/查看宫殿 read; null hides both. */
   palaceId: number | null
@@ -29,11 +35,23 @@ export function NodeBoundQuizHeaderActions({
   canShuffle: boolean
   shuffling?: boolean
   onShuffle: () => void
+  currentQuestion: PalaceQuizQuestion | null
+  canShuffleOptions: boolean
+  canRestoreOptions: boolean
+  onShuffleOptions: () => void
+  onRestoreOptions: () => void
   onOpenClearProgress: () => void
+  /** 快捷键 panel is open: keep the row in place, just stop the actions. */
+  actionsDisabled?: boolean
 }) {
   const { copying: copyingQuestions, copyQuestions } = useCopyQuizQuestionsText()
+  // The toolbar keeps one fixed set of slots: a control that stops applying is
+  // disabled, never removed. Adding/removing a button used to reflow the whole
+  // header into a second row and shove the question body down with it.
+  const optionShuffleAvailable = canRestoreOptions
+    || (currentQuestion?.question_type === 'multiple_choice' && canShuffleOptions)
   return (
-    <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+    <div className="flex shrink-0 flex-nowrap items-center justify-end gap-2">
       {palaceId != null ? (
         <>
           <Button
@@ -83,30 +101,41 @@ export function NodeBoundQuizHeaderActions({
           </Button>
         </>
       ) : null}
-      {canShuffle ? (
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          aria-label="打乱题库"
-          title="只打乱还没答的题，已答的题留在原位"
-          disabled={shuffling}
-          onClick={onShuffle}
-        >
-          {shuffling ? (
-            <LoaderCircle className="size-4 animate-spin" />
-          ) : (
-            <Shuffle className="size-4" />
-          )}
-          <span className="hidden sm:inline">打乱题库</span>
-        </Button>
-      ) : null}
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        aria-label={canRestoreOptions ? '恢复选项' : '打乱选项'}
+        title={canRestoreOptions ? '恢复当前题首次打乱前的顺序' : '只打乱当前题的选项'}
+        disabled={!optionShuffleAvailable || actionsDisabled}
+        onClick={canRestoreOptions ? onRestoreOptions : onShuffleOptions}
+      >
+        {canRestoreOptions ? <RotateCcw className="size-4" /> : <Shuffle className="size-4" />}
+        <span className="hidden sm:inline">{canRestoreOptions ? '恢复选项' : '打乱选项'}</span>
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        aria-label="打乱题库"
+        title="只打乱还没答的题，已答的题留在原位"
+        disabled={shuffling || !canShuffle || actionsDisabled}
+        onClick={onShuffle}
+      >
+        {shuffling ? (
+          <LoaderCircle className="size-4 animate-spin" />
+        ) : (
+          <Shuffle className="size-4" />
+        )}
+        <span className="hidden sm:inline">打乱题库</span>
+      </Button>
       <Button
         type="button"
         size="sm"
         variant="outline"
         aria-label="清除进度"
         title="清除当前题、指定宫殿或全部题的已答记录"
+        disabled={actionsDisabled}
         onClick={onOpenClearProgress}
       >
         <RotateCcw className="size-4" />

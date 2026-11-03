@@ -24,8 +24,17 @@ modules/practice/ui/review -> modules/quiz/public.ts
 节点绑定“关联题目”窗口的「打乱题库」顺序位于 `quizShuffleOrder` 中，并作为 `quiz_shuffle_orders` 客户端偏好持久化，而不仅仅存在浏览器存储中。该窗口每次打开都会根据打开者的 id 重建，因此顺序必须在其中存活；以 `palace:node` 为键（题目集作为第二键，localStorage 仅在偏好加载前作为镜像）正是避免一次打乱在另一个界面或另一台设备上又显得全新的关键。打开窗口从不打乱；只有按钮会，而且它只在未作答题目各自的槽位之间移动这些题目。
 <!-- invariant: quiz-shared-shuffle-order -->
 
+选择题选项的显示顺序也归 Quiz 实体的共享作答交互所有：`QuizQuestionInteraction` 继续用 option id 判分和提交，只在当前交互实例的临时展示状态中保存首次原序、当前显示顺序和是否已打乱，不写入答题进度。手动“打乱选项”只影响当前题，重复打乱不覆盖首次原序；“恢复选项”回到首次原序并重新显示原选项 id。打乱后题号前缀的位置保留固定宽度，选项文本不得因为前缀消失而横向跳动。自动规则由 `quiz_option_shuffle` 客户端偏好控制，默认开启且阈值为 5 秒；作答耗时严格小于阈值时只登记“下次见到这题时打乱”，绝不当场重排正在阅读的答案与解析，等到该题下一次被显示时才在首帧打乱。配置入口只在随心“做题配置”中提供，但偏好跨做题场景和设备共享。选项重排不得修改题目 payload、正确答案或选择 id 集合。
+<!-- invariant: quiz-shared-option-shuffle -->
+
+做题窗口的右上角操作条拥有固定数量的槽位：一个控件在当前题或当前状态下不适用时保持可见但禁用，不得从 DOM 中移除。`打乱选项 / 恢复选项` 共用同一个槽位，`打乱题库` 在题池不足两题时禁用。原因是一次打乱把“恢复选项”加进操作条会把整行挤成两行、把题目正文整体下推，观感上像整个窗口重排了一次。
+<!-- invariant: quiz-stable-action-bar -->
+
 做题快捷键位于 Quiz 实体中：`quizShortcuts`、`QuizShortcutSettingsSection` 和 `useQuizAnsweringShortcuts`，作为 `quiz_shortcuts` 客户端偏好持久化。随心“做题”在左上角“配置”面板中显示该区域。节点绑定“关联题目”从其左上角“快捷键”控件打开同一区域。两个对话框共享同一张映射。标记默认是 ArrowUp，每次按键切换一次；按键重复不得再次切换。题目导航、选项移动、数字与字母选择以及 Enter 提交保持可配置。ArrowUp 不同时作为上一选项的默认键。任一对话框打开时，ArrowUp 和 ArrowDown 不得翻动其下的随心信息流。宿主不得为这些操作保留第二个 keydown 监听器。删除默认是 Backspace，列在同一设置区域中，并打开现有的删除确认；它不会从已启用的文本字段中触发。答案揭示后，提交绑定在还有下一题时前进；按住时不重复。确认对话框（`ConfirmDialog`、`appConfirm`）接受 Enter 以确认。当 `[data-confirm-dialog="open"]` 对话框打开时，测验快捷键让路，以免 Enter 被抢走。
 <!-- invariant: quiz-shortcut-arrowup-marks -->
+
+`QuizQuestionAnswerSurface` 统一题干、字号与答题交互的呈现；入口仍各自拥有题目范围、轮次身份和保存。`Ctrl+Z` 默认清除当前题的作答与草稿，不清累计统计；输入框、快捷键录制和确认窗口优先处理自己的按键。重答后旧 AI 点评请求不能重新写回已清除的状态。
+<!-- invariant: quiz-shared-answer-surface -->
 
 作答对话框字号缩放位于 Quiz 实体中：`quizFontScale`、`useQuizDialogFontScale`、`QuizFontScaleBody`、`QuizFontScaleHint`，以及 `quiz_font_scale` 客户端偏好。节点绑定对话框和随心“做题”对话框共享同一个百分比（70–180，步长 10，默认 100）。Ctrl+滚轮向上放大，Ctrl+0 恢复 100%；该 hook 拥有这一手势（`passive: false`，因此浏览器不会缩放页面），并短暂显示百分比。宿主只把 `QuizFontScaleBody` 应用于题目正文（题干、选项、输入、解析）。头部、题号轨道、徽章和页脚保持默认大小。宿主不得附加自己的滚轮监听器或存储第二份缩放。
 <!-- invariant: quiz-shared-dialog-font-scale -->

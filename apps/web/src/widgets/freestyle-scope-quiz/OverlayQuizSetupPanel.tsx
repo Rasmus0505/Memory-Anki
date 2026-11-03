@@ -18,7 +18,12 @@ import type {
   FreestyleQuizScope,
   FreestyleRoundStatePayload,
 } from '@/shared/api/contracts'
-import { QuizShortcutSettingsSection } from '@/modules/quiz/public'
+import {
+  QuizShortcutSettingsSection,
+  useQuizOptionShuffleSettings,
+} from '@/modules/quiz/public'
+import { Input } from '@/shared/components/ui/input'
+import { Switch } from '@/shared/components/ui/switch'
 import { Button } from '@/shared/components/ui/button'
 import { cn } from '@/shared/lib/utils'
 
@@ -132,6 +137,8 @@ export function OverlayQuizSetupPanel({
   )
   const [kindCounts, setKindCounts] = useState({ objective: 0, subjective: 0 })
   const [countsReady, setCountsReady] = useState(false)
+  const { settings: optionShuffleSettings, updateSettings: updateOptionShuffleSettings } = useQuizOptionShuffleSettings()
+  const [thresholdDraft, setThresholdDraft] = useState(String(optionShuffleSettings.thresholdSeconds))
   const configRef = useRef(storedConfig)
   const planVersionRef = useRef(planVersion)
   configRef.current = storedConfig
@@ -320,6 +327,47 @@ export function OverlayQuizSetupPanel({
             ))}
           </div>
         ) : null}
+      </Section>
+
+      <Section title="选项顺序" hint="答题很快时自动打乱选择题选项。">
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/80 px-3.5 py-3">
+          <div>
+            <p className="text-sm font-semibold">自动打乱选项</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">少于 {optionShuffleSettings.thresholdSeconds} 秒时触发</p>
+          </div>
+          <Switch
+            checked={optionShuffleSettings.enabled}
+            aria-label="自动打乱选项"
+            onCheckedChange={(enabled) => updateOptionShuffleSettings({ ...optionShuffleSettings, enabled })}
+          />
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          <span className="shrink-0">阈值</span>
+          <Input
+            type="number"
+            min={0}
+            max={300}
+            step={0.5}
+            value={thresholdDraft}
+            aria-label="自动打乱阈值秒数"
+            onChange={(event) => setThresholdDraft(event.target.value)}
+            onBlur={() => {
+              const value = Number(thresholdDraft)
+              if (!thresholdDraft.trim() || !Number.isFinite(value)) {
+                setThresholdDraft(String(optionShuffleSettings.thresholdSeconds))
+                return
+              }
+              const next = Math.min(300, Math.max(0, value))
+              setThresholdDraft(String(next))
+              updateOptionShuffleSettings({ ...optionShuffleSettings, thresholdSeconds: next })
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') event.currentTarget.blur()
+            }}
+            className="w-24"
+          />
+          <span className="text-muted-foreground">秒</span>
+        </label>
       </Section>
 
       <Section title="题目分数" hint="有的题自己的知识点这轮没排到，上面的知识点已经打过分的怎么显示。">

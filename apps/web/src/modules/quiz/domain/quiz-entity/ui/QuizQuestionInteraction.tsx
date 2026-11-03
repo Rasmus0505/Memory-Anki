@@ -1,10 +1,11 @@
-import { useCallback, useLayoutEffect, useRef } from 'react'
+import { useCallback, useLayoutEffect, useRef, type RefObject } from 'react'
 import type { PalaceQuizQuestion, PalaceQuizQuestionDraft } from '@/shared/api/contracts'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
+import type { QuizOptionShuffleActions } from '../model/quizOptionShuffle'
+import { useQuizOptionShuffle } from './useQuizOptionShuffle'
 import { cn } from '@/shared/lib/utils'
-
 import {
   canSwitchQuizAnswerMode,
   isQuizChoiceAttemptClosed,
@@ -25,16 +26,13 @@ import {
 } from '@/modules/quiz/domain/quiz-entity/ui/answerDurationBubble'
 import { useQuizAnswerMode } from '@/modules/quiz/domain/quiz-entity/ui/useQuizAnswerMode'
 import { recordQuizAnswer } from '@/modules/quiz/domain/quiz-entity/model/quizComboStore'
-
 function normalizeText(value: string) {
   return value.trim().toLowerCase().replace(/\s+/g, '')
 }
-
 function answerMatches(input: string, answer: string, aliases: string[] = []) {
   const normalizedInput = normalizeText(input)
   return [answer, ...aliases].some((candidate) => normalizeText(candidate) === normalizedInput)
 }
-
 function moveItem(ids: string[], index: number, direction: -1 | 1) {
   const next = [...ids]
   const targetIndex = index + direction
@@ -43,13 +41,11 @@ function moveItem(ids: string[], index: number, direction: -1 | 1) {
   next.splice(targetIndex, 0, item)
   return next
 }
-
 function buildInitialOrderingIds(question: PalaceQuizQuestion | PalaceQuizQuestionDraft) {
   const ids = (question.answer_payload.items || []).map((item) => item.id)
   if (ids.length <= 2) return [...ids].reverse()
   return [ids[1], ids[0], ...ids.slice(2)]
 }
-
 function renderResolvedFeedback(correct: boolean | undefined, analysis: string, compact: boolean) {
   if (correct === undefined) return null
   return (
@@ -67,7 +63,6 @@ function renderResolvedFeedback(correct: boolean | undefined, analysis: string, 
     </div>
   )
 }
-
 export function QuizQuestionInteraction({
   question,
   state,
@@ -79,6 +74,8 @@ export function QuizQuestionInteraction({
   mark,
   getDurationMs,
   comboScopeKey,
+  optionShuffleActionsRef,
+  onOptionShuffleAvailabilityChange,
 }: {
   question: PalaceQuizQuestion | PalaceQuizQuestionDraft
   state: QuizRuntimeState | undefined
@@ -97,6 +94,8 @@ export function QuizQuestionInteraction({
   getDurationMs?: (questionId: number) => number | null
   /** Streak owner for the 连对 chip; answers still resolve without it. */
   comboScopeKey?: string | null
+  optionShuffleActionsRef?: RefObject<QuizOptionShuffleActions | null>
+  onOptionShuffleAvailabilityChange?: (canRestore: boolean) => void
 }) {
   const currentState = state || {}
   const questionId =
@@ -107,6 +106,14 @@ export function QuizQuestionInteraction({
   const previousDurationMs =
     'last_answer_duration_ms' in question ? question.last_answer_duration_ms : null
   const { mode, updateMode } = useQuizAnswerMode()
+  const { order: optionOrder, displayedOptions, markAutoShuffleForNextVisit } = useQuizOptionShuffle({
+    questionId,
+    questionType: question.question_type,
+    options: question.options || [],
+    getDurationMs,
+    actionsRef: optionShuffleActionsRef,
+    onAvailabilityChange: onOptionShuffleAvailabilityChange,
+  })
   const showDuration = useCallback(
     (anchor: Element | null, options?: AnswerDurationBubbleOptions) => {
       if (questionId == null) return
@@ -135,12 +142,10 @@ export function QuizQuestionInteraction({
       onToggle={mark.onToggle}
     />
   ) : null
-
   useLayoutEffect(() => {
     if (!captureShortcuts) return
     surfaceRef.current?.focus({ preventScroll: true })
   }, [captureShortcuts, restoreKey])
-
   function renderBody() {
     if (isQuizSubjectivePresentation(question.question_type, mode) && question.question_type === 'multiple_choice') {
       return (
@@ -158,7 +163,6 @@ export function QuizQuestionInteraction({
         />
       )
     }
-
   if (question.question_type === 'multiple_choice') {
     const correctOptionIds = (question.answer_payload.correct_option_ids || []).map(String)
     if (correctOptionIds.length > 1) {
@@ -183,12 +187,13 @@ export function QuizQuestionInteraction({
           selectedIds.every((item) => correctOptionIds.includes(item))
         onStateChange((current) => ({ ...current, resolved: true, correct }))
         onChoiceResolve?.(selectedIds, correct)
+        markAutoShuffleForNextVisit()
         return correct
       }
       return (
         <div className={cn('grid', compact ? 'gap-2' : 'gap-3')} data-quiz-question-interaction="multi-choice">
           {modeToggle}
-          {(question.options || []).map((option, index) => {
+          {displayedOptions.map((option, index) => {
             const selected = selectedIds.includes(option.id)
             const correct = correctOptionIds.includes(option.id)
             return (
@@ -196,6 +201,7 @@ export function QuizQuestionInteraction({
                 key={option.id}
                 type="button"
                 data-quiz-option-index={index}
+                data-quiz-option-id={option.id}
                 disabled={choiceAnswered}
                 onClick={() => toggle(option.id)}
                 className={cn(
@@ -208,7 +214,8 @@ export function QuizQuestionInteraction({
                   !choiceAnswered && !selected && 'border-border/70 bg-background/80 hover:border-primary/40 hover:bg-primary/5',
                 )}
               >
-                <span className="font-medium">{option.id}.</span> {option.text}
+                <span className="mr-1 inline-block w-[1.25rem] shrink-0 whitespace-pre font-medium">{optionOrder.shuffled ? '  ' : `${option.id}. `}</span>
+                {option.text}
                 {selected && !choiceAnswered ? <span className="ml-2 text-xs text-primary">已选</span> : null}
               </button>
             )
@@ -236,7 +243,7 @@ export function QuizQuestionInteraction({
             >
               <div className="text-sm font-medium">{currentState.correct ? '回答正确' : '回答错误'}</div>
               <div className={cn('text-sm text-muted-foreground', compact ? 'mt-1.5' : 'mt-2')}>
-                正确答案：{correctOptionIds.join('')}
+                正确答案：{optionOrder.shuffled ? (question.options || []).filter((option) => correctOptionIds.includes(option.id)).map((option) => option.text).join('、') : correctOptionIds.join('')}
               </div>
               <div className={cn('text-sm', compact ? 'mt-2' : 'mt-3')}>
                 解析：{question.analysis || '暂无解析'}
@@ -251,7 +258,7 @@ export function QuizQuestionInteraction({
     return (
       <div className={cn('grid', compact ? 'gap-2' : 'gap-3')} data-quiz-question-interaction="choice">
         {modeToggle}
-        {(question.options || []).map((option, index) => {
+        {displayedOptions.map((option, index) => {
           const selected = currentState.selectedOptionId === option.id
           const correct = option.id === correctOptionId
           return (
@@ -259,6 +266,7 @@ export function QuizQuestionInteraction({
               key={option.id}
               type="button"
               data-quiz-option-index={index}
+              data-quiz-option-id={option.id}
               disabled={choiceAnswered}
               onClick={(event) => {
                 if (choiceAnswered) return
@@ -269,6 +277,7 @@ export function QuizQuestionInteraction({
                   correct,
                 }))
                 onChoiceResolve?.(option.id, correct)
+                markAutoShuffleForNextVisit()
                 showDuration(event.currentTarget, answerFeedback(correct, 'left-top'))
               }}
               className={cn(
@@ -280,7 +289,8 @@ export function QuizQuestionInteraction({
                 !choiceAnswered && 'border-border/70 bg-background/80 hover:border-primary/40 hover:bg-primary/5',
               )}
             >
-              <span className="font-medium">{option.id}.</span> {option.text}
+              <span className="mr-1 inline-block w-[1.25rem] shrink-0 whitespace-pre font-medium">{optionOrder.shuffled ? '  ' : `${option.id}. `}</span>
+              {option.text}
             </button>
           )
         })}
@@ -295,7 +305,7 @@ export function QuizQuestionInteraction({
               {currentState.correct ? '回答正确' : '回答错误'}
             </div>
             <div className={cn('text-sm text-muted-foreground', compact ? 'mt-1.5' : 'mt-2')}>
-              正确答案：{correctOptionId || '暂无'}
+              正确答案：{optionOrder.shuffled ? (question.options || []).find((option) => option.id === correctOptionId)?.text || '暂无' : correctOptionId || '暂无'}
             </div>
             <div className={cn('text-sm', compact ? 'mt-2' : 'mt-3')}>
               解析：{question.analysis || '暂无解析'}
@@ -305,7 +315,6 @@ export function QuizQuestionInteraction({
       </div>
     )
   }
-
   if (question.question_type === 'true_false') {
     const correctAnswer = Boolean(question.answer_payload.correct_answer)
     const resolved = currentState.trueFalseAnswer !== undefined
@@ -350,7 +359,6 @@ export function QuizQuestionInteraction({
       </div>
     )
   }
-
   if (question.question_type === 'fill_blank') {
     const blankInputs = currentState.blankInputs || {}
     const submittedBlankIds = currentState.submittedBlankIds || []

@@ -11,6 +11,8 @@
  * 后恢复；不依赖 React 渲染的纯函数/集成测试照常工作。
  */
 import { configure } from '@testing-library/react'
+import { beforeEach } from 'vitest'
+import { resetQuizOptionAutoShufflePendingForTest } from '@/modules/quiz/domain/quiz-entity/model/quizOptionShuffle'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -19,6 +21,13 @@ import { configure } from '@testing-library/react'
 // the per-test budget (15s) as the real failure boundary instead. A genuine
 // never-rendered element still fails, just later.
 configure({ asyncUtilTimeout: 3000 })
+
+// 自动打乱只在“下一次见到这道题”时生效，所以它会按题目 id 跨组件挂载保留。
+// 测试之间共享同一份 sessionStorage，必须在每个用例前清空，否则前一个用例的
+// 快速作答会把后一个用例的选项顺序换掉。
+beforeEach(() => {
+  resetQuizOptionAutoShufflePendingForTest()
+})
 
 // jsdom 没有 ResizeObserver；radix 的 Slider/useSize 等组件在挂载时需要它。
 if (typeof globalThis.ResizeObserver === 'undefined') {

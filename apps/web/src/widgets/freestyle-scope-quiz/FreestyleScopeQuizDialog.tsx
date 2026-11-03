@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import type { QuizOptionShuffleActions } from '@/modules/quiz/domain/quiz-entity/model/quizOptionShuffle'
 import { LoaderCircle, Pencil, Settings2, Trash2 } from 'lucide-react'
 import { createOperationId } from '@/modules/practice/application/feedPersistence'
 import { freestylePalaceScopeSignature } from '@/modules/practice/domain/feedConfig'
@@ -35,10 +36,8 @@ import {
   QuizMutationWorkflowStrip,
   QuizQuestionEditForm,
   QuizQuestionIndexPager,
-  QuizFontScaleBody,
   QuizFontScaleHint,
-  QuizQuestionInteraction,
-  QuizQuestionStem,
+  QuizQuestionAnswerSurface,
   QuizQuestionVariantControl,
   useQuizAnswerMode,
   useQuizAnsweringShortcuts,
@@ -129,6 +128,15 @@ export function FreestyleScopeQuizDialog({
   const scopePalacesRef = useRef<FreestyleOverlayQuizState['scope_palaces']>(null)
   const [questions, setQuestions] = useState<PalaceQuizQuestion[]>([])
   const [index, setIndex] = useState(0)
+  // A round update arrives before its questions do. Jumping `index` first would
+  // render the new position against the old array for a frame, then swap again
+  // when the fetch lands — a visible double jump. Keep the cursor still until
+  // the question it points at actually exists.
+  const questionsRef = useRef<PalaceQuizQuestion[]>([])
+  const pendingIndexRef = useRef<number | null>(null)
+  useEffect(() => {
+    questionsRef.current = questions
+  }, [questions])
   const [questionStates, setQuestionStates] = useState<Record<number, QuizRuntimeState>>({})
   const readWrongPriority = () => getCachedClientPreference('freestyle_wrong_priority', false, (value): value is boolean => typeof value === 'boolean')
   const [prioritizeWrong, setPrioritizeWrong] = useState(readWrongPriority)
@@ -147,7 +155,9 @@ export function FreestyleScopeQuizDialog({
   // 「本轮最低」 chip opens the rating view; 「查看宫殿」 keeps the full map.
   const [ratingLookupOpen, setRatingLookupOpen] = useState(false)
   const [clearProgressOpen, setClearProgressOpen] = useState(false)
+  const [canRestoreOptions, setCanRestoreOptions] = useState(false)
   const questionInteractionRef = useRef<HTMLDivElement | null>(null)
+  const optionShuffleActionsRef = useRef<QuizOptionShuffleActions | null>(null)
   const answerScrollRef = useRef<HTMLDivElement | null>(null)
   const removedQuestionIdsRef = useRef(new Set<number>())
   const planVersionRef = useRef(planVersion)
@@ -200,8 +210,15 @@ export function FreestyleScopeQuizDialog({
       setQuestionStates(merged)
       questionStatesRef.current = merged
       const nextIndex = resolveOverlayResumeIndex(next, merged)
-      setIndex(nextIndex)
-      indexRef.current = nextIndex
+      const desiredId = next.question_ids[nextIndex]
+      if (desiredId == null || questionsRef.current.some((item) => item.id === desiredId)) {
+        setIndex(nextIndex)
+        indexRef.current = nextIndex
+        pendingIndexRef.current = null
+      } else {
+        // loadQuestions owns the jump: it lands the new array and cursor together.
+        pendingIndexRef.current = nextIndex
+      }
     }
     return next
   }, [onRoundSync])
@@ -209,17 +226,24 @@ export function FreestyleScopeQuizDialog({
   const loadQuestions = useCallback(async (session: FreestyleOverlayQuizState) => {
     const ids = session.question_ids.filter((id) => !removedQuestionIdsRef.current.has(id))
     if (ids.length === 0) {
+      questionsRef.current = []
       setQuestions([])
       return
     }
     const response = await getPalaceQuizQuestionsByIdsApi(ids)
     const byId = new Map((response.items || []).map((item) => [item.id, item]))
-    setQuestions(
-      ids
-        .map((id) => byId.get(id))
-        .filter((item): item is PalaceQuizQuestion => Boolean(item))
-        .filter((item) => !removedQuestionIdsRef.current.has(item.id)),
-    )
+    const loaded = ids
+      .map((id) => byId.get(id))
+      .filter((item): item is PalaceQuizQuestion => Boolean(item))
+      .filter((item) => !removedQuestionIdsRef.current.has(item.id))
+    questionsRef.current = loaded
+    setQuestions(loaded)
+    const pending = pendingIndexRef.current
+    if (pending != null) {
+      pendingIndexRef.current = null
+      setIndex(pending)
+      indexRef.current = pending
+    }
   }, [])
 
   const ensureSession = useCallback(async () => {
@@ -566,6 +590,13 @@ export function FreestyleScopeQuizDialog({
       void handleToggleMark(!current.marked)
     },
     onDeleteQuestion: openDeleteConfirm,
+    onResetAnswer: () => {
+      if (!current) return
+      orchestration.invalidateQuestion(current.id)
+      resetLocalAnswer(current.id)
+      dwell.restart(current.id)
+      setKeyboardOptionIndex(0)
+    },
   })
 
   const showConfig = !setupDone || configOpen
@@ -635,12 +666,18 @@ export function FreestyleScopeQuizDialog({
                   copyPalaceId={questionPalaceId ?? lookupPalaceId}
                   lookupPalaceId={lookupPalaceId}
                   questions={questions}
+                  currentQuestion={current}
                   copyingOutline={copyingOutline}
                   onCopyOutline={(palaceId) => void copyOutline(palaceId)}
                   onOpenPalace={() => setPalaceLookupOpen(true)}
                   canShuffle={!loading && questions.length > 1}
                   shuffling={shuffling}
                   onShuffle={() => void shuffleQuestions()}
+                  onShuffleOptions={() => optionShuffleActionsRef.current?.shuffle()}
+                  onRestoreOptions={() => optionShuffleActionsRef.current?.restore()}
+                  canShuffleOptions={!editingQuestion && current?.question_type === 'multiple_choice' && (current.options?.length ?? 0) > 1}
+                  canRestoreOptions={canRestoreOptions && !editingQuestion}
+                  actionsDisabled={editingQuestion}
                   onOpenClearProgress={() => setClearProgressOpen(true)}
                   prioritizeWrong={prioritizeWrong}
                   onPrioritizeWrongChange={(enabled) => {
@@ -719,6 +756,7 @@ export function FreestyleScopeQuizDialog({
                     done: Boolean(itemState?.resolved),
                     correct: itemState?.correct,
                     marked: Boolean(question?.marked),
+                    wrong: itemState?.resolved === true && itemState.correct === false,
                   }
                 }}
                 onSelect={(nextIndex) => {
@@ -845,26 +883,23 @@ export function FreestyleScopeQuizDialog({
                     onCancel={closeQuestionEditor}
                   />
                 ) : (
-                  <QuizFontScaleBody percent={fontScale.percent}>
-                    <div className="text-base font-semibold leading-7 text-foreground">
-                      <QuizQuestionStem question={current} />
-                    </div>
-                    <div ref={questionInteractionRef}>
-                      <QuizQuestionInteraction
-                        question={current}
-                        state={currentState}
-                        onStateChange={(updater) => updateLocalState(current.id, updater)}
-                        onChoiceResolve={handleChoiceResolve}
-                        onShortAnswerSubmit={() => orchestration.handleShortAnswerSubmit(current.id)}
-                        getDurationMs={dwell.elapsedMs}
-                        comboScopeKey={`freestyle-overlay:${roundId}`}
-                        mark={{
-                          marked: Boolean(current.marked),
-                          onToggle: (marked) => void handleToggleMark(marked),
-                        }}
-                      />
-                    </div>
-                  </QuizFontScaleBody>
+                  <QuizQuestionAnswerSurface
+                    question={current}
+                    optionShuffleActionsRef={optionShuffleActionsRef}
+                    onOptionShuffleAvailabilityChange={setCanRestoreOptions}
+                    state={currentState}
+                    fontScalePercent={fontScale.percent}
+                    interactionRef={questionInteractionRef}
+                    onStateChange={(updater) => updateLocalState(current.id, updater)}
+                    onChoiceResolve={handleChoiceResolve}
+                    onShortAnswerSubmit={() => orchestration.handleShortAnswerSubmit(current.id)}
+                    getDurationMs={dwell.elapsedMs}
+                    comboScopeKey={`freestyle-overlay:${roundId}`}
+                    mark={{
+                      marked: Boolean(current.marked),
+                      onToggle: (marked) => void handleToggleMark(marked),
+                    }}
+                  />
                 )}
               </>
             )}

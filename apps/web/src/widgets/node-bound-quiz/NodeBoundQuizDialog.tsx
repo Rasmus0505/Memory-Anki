@@ -17,11 +17,9 @@ import {
   QUIZ_ANSWERING_DIALOG_CLASS,
   QUIZ_ANSWERING_SCROLL_CLASS,
   QuizQuestionIndexPager,
-  QuizFontScaleBody,
   QuizFontScaleHint,
   QuizMutationWorkflowStrip,
-  QuizQuestionInteraction,
-  QuizQuestionStem,
+  QuizQuestionAnswerSurface,
   QuizQuestionVariantControl,
   QuizShortcutSettingsSection,
   useQuizAnswerMode,
@@ -39,6 +37,7 @@ import {
   saveQuizShuffleOrder,
   shuffleQuizQuestionsForPractice,
   type QuizRuntimeState,
+  type QuizOptionShuffleActions,
 } from '@/modules/quiz/public'
 import { ownerPalaceLabel } from '@/modules/quiz/ui/palace-quiz/model/quizNodeBindingAggregation'
 import { QuizQuestionRoundRating } from '@/widgets/quiz-round-rating'
@@ -129,6 +128,8 @@ export function NodeBoundQuizDialog({
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [clearProgressOpen, setClearProgressOpen] = useState(false)
   const questionInteractionRef = useRef<HTMLDivElement | null>(null)
+  const optionShuffleActionsRef = useRef<QuizOptionShuffleActions | null>(null)
+  const [canRestoreOptions, setCanRestoreOptions] = useState(false)
   const answerScrollRef = useRef<HTMLDivElement | null>(null)
 
   const questionIdsKey = questionIds.join(',')
@@ -424,12 +425,20 @@ export function NodeBoundQuizDialog({
    */
   const handleShuffleQuestions = useCallback(() => {
     const loaded = questionsRef.current
-    if (loaded.length < 2) return
+    if (loaded.length < 2) {
+      toast.info('这个窗口只有一道题，没有可打乱的顺序。')
+      return
+    }
     const answered = new Set(
       loaded
         .filter((question) => questionStates[question.id]?.resolved)
         .map((question) => question.id),
     )
+    const openCount = loaded.length - answered.size
+    if (openCount === 1) {
+      toast.info('只剩一道还没答的题，打乱后顺序不会变。')
+      return
+    }
     const next = shuffleQuizQuestionsForPractice(loaded, answered)
     questionsRef.current = next
     setQuestions(next)
@@ -548,6 +557,13 @@ export function NodeBoundQuizDialog({
       void handleToggleMark(!current.marked)
     },
     onDeleteQuestion: () => setDeleteConfirmOpen(true),
+    onResetAnswer: () => {
+      if (!current) return
+      orchestration.invalidateQuestion(current.id)
+      resetAnswers([current.id])
+      dwell.restart(current.id)
+      setKeyboardOptionIndex(0)
+    },
   })
 
   const singleQuestionLabel = !loading && questions.length === 1
@@ -588,7 +604,7 @@ export function NodeBoundQuizDialog({
         >
           <QuizFontScaleHint percent={fontScale.percent} visible={fontScale.hintVisible} />
           <DialogHeader>
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-nowrap items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-2">
                 <Button
                   type="button"
@@ -609,7 +625,13 @@ export function NodeBoundQuizDialog({
                 copyingOutline={copyingOutline}
                 onCopyOutline={(targetPalaceId) => void copyOutline(targetPalaceId)}
                 onOpenPalace={() => setPalaceLookupOpen(true)}
-                canShuffle={!shortcutsOpen && questions.length > 1}
+                canShuffle={questions.length > 1}
+                currentQuestion={current}
+                canShuffleOptions={current?.question_type === 'multiple_choice' && (current.options?.length ?? 0) > 1}
+                canRestoreOptions={canRestoreOptions}
+                actionsDisabled={shortcutsOpen}
+                onShuffleOptions={() => optionShuffleActionsRef.current?.shuffle()}
+                onRestoreOptions={() => optionShuffleActionsRef.current?.restore()}
                 onShuffle={handleShuffleQuestions}
                 onOpenClearProgress={() => setClearProgressOpen(true)}
               />
@@ -650,6 +672,7 @@ export function NodeBoundQuizDialog({
                     done: Boolean(itemState?.resolved),
                     correct: itemState?.correct,
                     marked: Boolean(question?.marked),
+                    wrong: itemState?.resolved === true && itemState.correct === false,
                   }
                 }}
                 onSelect={setIndex}
@@ -712,29 +735,26 @@ export function NodeBoundQuizDialog({
                     </Button>
                   </div>
                 </div>
-                <QuizFontScaleBody percent={fontScale.percent}>
-                  <div className="text-base font-semibold leading-7 text-foreground">
-                    <QuizQuestionStem question={current} />
-                  </div>
-                  <div ref={questionInteractionRef}>
-                    <QuizQuestionInteraction
-                      question={current}
-                      state={currentState}
-                      onStateChange={(updater) => updateLocalState(current.id, updater)}
-                      onChoiceResolve={handleChoiceResolve}
-                      onShortAnswerSubmit={() => {
-                        orchestration.handleShortAnswerSubmit(current.id)
-                        markCompleted(current.id)
-                      }}
-                      getDurationMs={dwell.elapsedMs}
-                      comboScopeKey={`node-bound:${palaceId ?? 'unknown'}:${nodeUid ?? 'all'}`}
-                      mark={{
-                        marked: Boolean(current.marked),
-                        onToggle: (marked) => void handleToggleMark(marked),
-                      }}
-                    />
-                  </div>
-                </QuizFontScaleBody>
+                <QuizQuestionAnswerSurface
+                  question={current}
+                  state={currentState}
+                  optionShuffleActionsRef={optionShuffleActionsRef}
+                  onOptionShuffleAvailabilityChange={setCanRestoreOptions}
+                  fontScalePercent={fontScale.percent}
+                  interactionRef={questionInteractionRef}
+                  onStateChange={(updater) => updateLocalState(current.id, updater)}
+                  onChoiceResolve={handleChoiceResolve}
+                  onShortAnswerSubmit={() => {
+                    orchestration.handleShortAnswerSubmit(current.id)
+                    markCompleted(current.id)
+                  }}
+                  getDurationMs={dwell.elapsedMs}
+                  comboScopeKey={`node-bound:${palaceId ?? 'unknown'}:${nodeUid ?? 'all'}`}
+                  mark={{
+                    marked: Boolean(current.marked),
+                    onToggle: (marked) => void handleToggleMark(marked),
+                  }}
+                />
               </>
             )}
             </div>
