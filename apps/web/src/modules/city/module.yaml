@@ -1,0 +1,29 @@
+{
+  "name": "city",
+  "owns": [
+    "global learning-city floating window",
+    "city event bridge and window persistence"
+  ],
+  "forbids": [
+    "private cross-module imports",
+    "writing learning or scheduling data",
+    "calling the progression API per card"
+  ],
+  "publicEntry": "src/modules/city/public.ts",
+  "workflows": [],
+  "ports": [],
+  "events": [
+    "memory-anki:mindmap-card-landed",
+    "memory-anki-global-feedback-request",
+    "round-completed",
+    "review-unit-favorite:changed"
+  ],
+  "dependencies": [],
+  "invariants": [
+    "the Three.js scene lives in the isolated public/city iframe, never in the React bundle",
+    "the city is a read-only visualization and never writes learning data"
+  ],
+  "requiredTests": [
+    "src/modules/city/model/cityEvents.test.ts"
+  ]
+}

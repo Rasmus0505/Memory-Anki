@@ -13,6 +13,8 @@ const STEP_MS = 35
 const MAX_SPREAD_MS = 140
 /** Bubbled from a card when its flip lands, for hosts that react to a landed card. */
 export const MINDMAP_CARD_LANDED_EVENT = 'memory-anki:mindmap-card-landed'
+/** Bubbled once per fold batch; detail.count is the number of cards folding back. */
+export const MINDMAP_CARD_FOLDED_EVENT = 'memory-anki:mindmap-card-folded'
 /** A fold is the card itself travelling back into its parent, not a faded copy. */
 const FOLD_MS = 320
 const FOLD_STAGGER_MS = 22
@@ -487,7 +489,15 @@ export function useMindMapRevealMotion(
     if (recentRevealGesture() && (snapRapid || willFold || (play && (plan.flips.length > 0 || plan.deals.length > 0)))) {
       layoutHold.current?.poke(root)
     }
-    if (willFold) cue('audio.pops', { role: 'fold', count: folds.length })
+    if (willFold) {
+      cue('audio.pops', { role: 'fold', count: folds.length })
+      document.dispatchEvent(
+        new CustomEvent(MINDMAP_CARD_FOLDED_EVENT, {
+          bubbles: true,
+          detail: { count: folds.length },
+        }),
+      )
+    }
     if (play && plan.flips.length > 0) {
       cue('audio.pops', { role: 'reveal', count: Math.min(plan.flips.length, MAX_ANIMATED_FLIPS) })
     }

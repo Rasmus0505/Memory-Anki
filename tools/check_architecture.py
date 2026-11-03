@@ -5635,6 +5635,73 @@ def check_ai_gateway_boundary(errors: list[str]) -> None:
             )
 
 
+def check_city_window_boundary(errors: list[str]) -> None:
+    """The learning city stays an isolated iframe asset; React never pulls Three.js in."""
+    module = WEB_ROOT / "src" / "modules" / "city"
+    required = (
+        "public.ts",
+        "module.yaml",
+        "ui/CityFloatingWindow.tsx",
+        "ui/useCityBridge.ts",
+        "model/cityEvents.test.ts",
+    )
+    for relative in required:
+        if not (module / relative).exists():
+            errors.append(
+                f"apps/web/src/modules/city/{relative}: city module surface is missing."
+            )
+
+    asset = WEB_ROOT / "public" / "city" / "index.html"
+    if not asset.exists():
+        errors.append("apps/web/public/city/index.html: embedded city asset is missing.")
+    for relative in ("vendor/three.module.js", "vendor/gsap.min.js"):
+        if not (asset.parent / relative).exists():
+            errors.append(
+                f"apps/web/public/city/{relative}: local city runtime asset is missing."
+            )
+
+    architecture_doc = REPO_ROOT / "docs" / "architecture" / "city.md"
+    if not architecture_doc.exists():
+        errors.append("docs/architecture/city.md: city architecture note is missing.")
+
+    context_map_path = REPO_ROOT / "docs" / "architecture" / "context-map.yaml"
+    context_map = context_map_path.read_text(encoding="utf-8", errors="ignore")
+    if '"city"' not in context_map or "src/modules/city/public.ts" not in context_map:
+        errors.append(
+            "docs/architecture/context-map.yaml: module city is not registered with its public entry."
+        )
+
+    desktop = (WEB_ROOT / "src" / "app" / "DesktopApp.tsx").read_text(
+        encoding="utf-8", errors="ignore"
+    )
+    if "@/modules/city/public" not in desktop:
+        errors.append(
+            "apps/web/src/app/DesktopApp.tsx: the global city window must be mounted from the city public facade."
+        )
+
+    fixture = (WEB_ROOT / "e2e" / "fixtures.ts").read_text(encoding="utf-8", errors="ignore")
+    if "memory-anki:city-disabled" not in fixture:
+        errors.append(
+            "apps/web/e2e/fixtures.ts: hermetic e2e must opt out of the floating city overlay."
+        )
+
+    sw = (WEB_ROOT / "public" / "sw.js").read_text(encoding="utf-8", errors="ignore")
+    if "url.pathname.startsWith('/city/')" not in sw:
+        errors.append(
+            "apps/web/public/sw.js: /city/ must bypass the SPA navigation fallback so the iframe loads its own HTML."
+        )
+
+    for path in WEB_SRC.rglob("*"):
+        if path.suffix not in {".ts", ".tsx"}:
+            continue
+        source = path.read_text(encoding="utf-8", errors="ignore")
+        if re.search(r"from ['\"](three|gsap)['\"]", source) or "WebGLRenderer" in source:
+            relative = path.relative_to(REPO_ROOT).as_posix()
+            errors.append(
+                f"{relative}: Three.js/GSAP must stay inside public/city; the React bundle may not import WebGL."
+            )
+
+
 def check_settings_module_boundaries(errors: list[str]) -> None:
     for path in iter_files(SETTINGS_MODULE, (".py",)):
         content = path.read_text(encoding="utf-8", errors="ignore")
@@ -7518,6 +7585,7 @@ def main() -> int:
     check_quiz_create_requires_node_binding(errors)
     check_quiz_bank_display_order(errors)
     check_settings_module_boundaries(errors)
+    check_city_window_boundary(errors)
     check_ai_gateway_boundary(errors)
     check_ai_runtime_port_boundaries(errors)
     check_ai_credential_tombstones(errors)
