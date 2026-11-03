@@ -16,8 +16,8 @@ Memory Anki 是一个自用的本地学习产品，核心是“记忆宫殿 + �
 
 | 能力域 | 说明 |
 |---|---|
-| 记忆宫殿 `palaces` | 宫殿、挂钩、分段、迷你宫殿、附件、版本快照、结构编辑。宫殿焦点练习已退役 |
-| 复习 `reviews` | 每个记忆单元独立排期：新卡采用二段定锚（当天 20 分钟复查 → 第 2 天隔夜检验），之后交给受控 FSRS（目标记忆率 90%，最长一年）；具体评分分支见 `docs/复习排期设计.md`。保留同日重试、提前复习不改期等产品规则；「睡前复习」追加今天已评分的复习单元，只记录不改排期。宫殿/分段/迷你宫殿多粒度复习、队列与进度。`stage_index` 只是间隔的兼容投影，界面显示真实间隔 |
+| 记忆宫殿 `palaces` | 宫殿、挂钩、分段、迷你宫殿、附件、版本快照、结构编辑。宫殿焦点练习已退役。根节点永久标记会生成「整宫」单元（整座宫殿一个复习单元） |
+| 复习 `reviews` | 每个记忆单元独立排期：新卡采用二段定锚（当天 20 分钟复查 → 第 2 天隔夜检验），之后交给受控 FSRS（目标记忆率 90%，基准最长 365 天，叠加 ±5% 抖动后实际最多约 383 天）；具体评分分支见 `docs/复习排期设计.md`。保留同日重试、提前复习不改期等产品规则；「睡前复习」追加今天已评分的复习单元，只记录不改排期。宫殿/分段/迷你宫殿多粒度复习、队列与进度。`stage_index` 只是间隔的兼容投影，界面显示真实间隔 |
 | 测验 `quiz` | 选择题、简答题、手动增删改查、答题与做题叠加层 |
 | 思维导图导入 `produce` | 手动 JSON、Markdown、整库导入导出；“文字转脑图”走 JSON 路径 |
 | 知识体系 `knowledge` | 学科、章节树、知识导入、章节与宫殿/题目联动 |
@@ -93,6 +93,7 @@ Memory Anki/
 │   ├── shared/                 跨应用静态数据
 │   └── desktop-timer/          Electron 桌面壳
 ├── tools/                      启动、停止、配置、自启、备份、迁移、架构检查、内容处理脚本
+├── docs/                      产品说明、排期文档、故障档案、门禁资产（索引见 docs/README.md）
 ├── local-config/               每台电脑自己的本地配置
 ├── runtime-data/               本地运行数据目录，原则上不提交用户数据
 ├── ralph/                      Ralph 自动化代理使用的 PRD 数据
@@ -279,9 +280,9 @@ apps/web/src/
 
 动效、声音与触感有统一门面，业务代码只声明「发生了什么」，不自行实现：
 
-- `shared/fx`：`cue()` / 配方 / owner 取消 / 声音、震动与 CSS 果冻动效。详见 `docs/architecture/fx-director.md`。
-- `shared/feedback/mindmap-audio`：程序化合成音数据源、`AudioContext` 生命周期、静音分区与场景音量门。详见 `docs/architecture/audio-soundscape.md`。
-- `shared/theme`：单一 `study` 主题包（翻页/翻开时长、`theme-color`）。详见 `docs/architecture/theme-packs.md`。
+- `shared/fx`：`cue()` / 配方 / owner 取消 / 声音、震动与 CSS 果冻动效（原 `docs/architecture/fx-director.md` 已随 2026-11-04 清理删除，契约以代码与检查脚本为准）。
+- `shared/feedback/mindmap-audio`：程序化合成音数据源、音色池、`AudioContext` 生命周期、静音分区与场景音量门。
+- `shared/theme`：单一 `study` 主题包（翻页/翻开时长、`theme-color`）。
 - 硬规则：业务组件不得直接实例化 WebGL / WebAudio，不做粒子或 canvas 特效；带延迟的步骤必须挂在 cue 的 `FxPlayback` owner 上。
 
 ### 5.7 统一质量入口
@@ -291,7 +292,7 @@ apps/web/src/
 - 快速检查：`python tools/quality_gate.py`
 - 完整交付：`python tools/quality_gate.py --full`
 - 启动器冒烟（改动运行时启动、打包、迁移、依赖、前端构建产物或启动脚本后）：`python tools/quality_gate.py --launchers`
-- 当前架构地图与迁移顺序：`docs/architecture/README.md`
+- 当前架构地图与迁移顺序：`docs/architecture/README.md`（2026-11-04 后只保留门禁消费的最小集；整体架构以本文档与各模块 `MODULE.md` 为准，文档索引见 `docs/README.md`）
 
 ## 6. 架构边界和修改原则
 
@@ -318,16 +319,18 @@ apps/web/src/
 - 页面逻辑优先放在 feature 内部 hook/model。
 - API contract 变化要同步 `shared/api/contracts`、生成类型和调用方测试。
 - 动效/声音/触感一律经 `@/shared/fx` 的 `cue()`；带延迟的步骤挂在 `FxPlayback` owner 上，不裸用 `setTimeout`。
-- E2E 必须封闭：`apps/web/e2e/*.spec.ts` 从 `./fixtures` 导入 `test`/`expect`，不得指向真实 `8012` 服务。详见 `docs/architecture/e2e-testing-guide.md`。
+- E2E 必须封闭：`apps/web/e2e/*.spec.ts` 从 `./fixtures` 导入 `test`/`expect`，不得指向真实 `8012` 服务。规则由 `tools/check_architecture.py` 的 `check_e2e_hermetic` 强制，`apps/web/e2e/fixtures.ts` 是唯一入口。
 
 架构规则来源：
 
 - `AGENTS.md`
 - `apps/api/pyproject.toml` 的 import-linter 配置
 - `tools/check_architecture.py`
-- 如果当前 checkout 中存在 `docs/architecture/`，架构性修改前必须阅读
+- `docs/README.md`：文档索引（现行 / 历史 / 门禁资产）
+- `docs/architecture/`：只保留 `tools/check_architecture.py` 直接消费的 10 份门禁资产；架构性修改前必须阅读其中的 README 与对应守卫文档
+- `apps/**/MODULE.md`：模块级职责与边界
 
-当前工作区里 `docs/architecture/*` 可能正在被删除或重构，遇到这种状态不要擅自恢复或覆盖，先按 git status 判断是否属于当前任务。
+2026-11-04 已删除其余 30 份旧架构说明，不要再从历史提交整批恢复。需要新增架构说明时，写进 `AI_PROJECT_CONTEXT.md` 或对应模块 `MODULE.md`；确需新增门禁守卫文档时，再放进 `docs/architecture/` 并同步检查脚本。
 
 ---
 
@@ -507,3 +510,5 @@ AI 相关功能分布较广：
 - 2026-10：反馈统一为 `shared/fx` 导演运行时（`cue()` → 配方 → 粒子/声音/触觉/DOM，owner 作用域取消、锚点注册、皮肤、稀有演出、`/lab/fx` 实验室）；移除 canvas-confetti。新增 `progression` 成长层（后端只读投影 + `/growth` 星图与印章册 + 随心 HUD/结算）。
   - 后续已移除（当前状态以上文表格与 `docs/architecture/` 为准）：粒子、皮肤、稀有演出、`/lab/fx`、前端成长界面（`/growth`、等级环、委托、印章演出）与主题外观解锁。
 - 2026-10-03：撤回随心模式 juiciness 前端（果冻翻卡舞台 `JellyMindmapStage`、`parentCharge`、配套动效/粒子改造）。`apps/web` 回到 `44ce4bb9`。不要把果冻舞台当作当前架构补回。
+- 2026-11-03：整宫标记（根节点永久标记生成 `unit_kind=palace` 单元）；做题错题快照与单元红/绿；选项打乱、打乱题库、`Ctrl+Z` 重新作答；反馈中心精简为试听 + 音色池 + 全局音量；复习单元收藏只完成后端字段/接口/投影，前端星标尚未接入。
+- 2026-11-04：文档清理——删除 40 份旧架构说明与旧交付物，只保留 `tools/check_architecture.py` 直接消费的 10 份门禁资产；新增 `docs/README.md` 文档索引与用户视角介绍；复习排期文档核对（±5% 抖动后真实上限约 383 天、睡前卡惰性清理、整宫单元、考试冲刺落在考前 1–8 天）。

@@ -27,8 +27,7 @@
 `variant_history_json` 中；`active_variant_id` 决定练习显示哪一个。
 `needs_mutation` 是学习者的待换题标记，与 `marked` 相互独立。
 肌肉记忆规则通过公共门面
-`memory_anki.modules.settings.api.read_quiz_mutation_settings` 读取其三个阈值。请参阅
-`docs/architecture/question-variants.md`。
+`memory_anki.modules.settings.api.read_quiz_mutation_settings` 读取其三个阈值。实现与回归见本模块的变体读写代码和 `apps/api/tests/test_question_variants.py`（原 `docs/architecture/question-variants.md` 已于 2026-11-04 删除）。
 
 ## 跨模块规则
 只导入 `memory_anki.modules.quiz.public`。绝不要导入另一个模块的 application/infrastructure/presentation。
