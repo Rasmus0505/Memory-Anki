@@ -182,6 +182,8 @@ export function FreestyleUnitReviewCardView({
   const [savedEditorState, setSavedEditorState] = useState<MindMapEditorState | null>(null)
   const [lastOperationId, setLastOperationId] = useState<string | null>(null)
   const [inlineEditing, setInlineEditing] = useState(false)
+  const [returnReconcilePending, setReturnReconcilePending] = useState(false)
+  const returnReconcilePendingRef = useRef(false)
   const [flipProgress, setFlipProgress] = useState<(FlipProgress & { key: string }) | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [loadErrorTitle, setLoadErrorTitle] = useState<string | null>(null)
@@ -194,6 +196,14 @@ export function FreestyleUnitReviewCardView({
   const [bedtimeBusy, setBedtimeBusy] = useState(false)
   const [bedtimeError, setBedtimeError] = useState<string | null>(null)
   const [loadAttempt, setLoadAttempt] = useState(0)
+  /**
+   * The left side of the rating interval belongs to this card appearance, not
+   * to the unit after the rating ACK updates its schedule.
+   */
+  const [ratingBaseline, setRatingBaseline] = useState<{
+    key: string
+    intervalDays: number
+  } | null>(null)
   /** Undo surfaces only right after a rate, then collapses to give the map the room. */
   const [undoVisible, setUndoVisible] = useState(false)
   const undoTimerRef = useRef<number | null>(null)
@@ -233,6 +243,10 @@ export function FreestyleUnitReviewCardView({
   const lastLoadErrorRef = useRef<unknown>(null)
   const loadGenerationRef = useRef(0)
   const loadAttemptRef = useRef(0)
+  const ratingBaselineRef = useRef<{
+    key: string
+    intervalDays: number
+  } | null>(null)
   const pendingGlanceRef = useRef<string | null>(null)
   const glanceTimerRef = useRef<number | null>(null)
   const encounterRef = useRef(encounter)
@@ -287,6 +301,30 @@ export function FreestyleUnitReviewCardView({
     card.unit_id && effectiveRevision != null
       ? `${card.id}:${card.unit_id}:${effectiveRevision}:${roundId}`
       : null
+
+  const captureRatingBaseline = useCallback((key: string | null, candidate: number | null | undefined) => {
+    if (key == null || ratingBaselineRef.current?.key === key) return
+    if (candidate == null || !Number.isFinite(candidate)) return
+    const next = { key, intervalDays: Math.max(0, Math.round(candidate)) }
+    ratingBaselineRef.current = next
+    setRatingBaseline(next)
+  }, [])
+
+  // A loaded, unrated encounter is the only trustworthy source for the left side
+  // of the interval arrow. A rated historical encounter may already contain the
+  // post-rating interval, so it must not seed a new baseline from that value.
+  useEffect(() => {
+    if (unit?.encounter?.status !== 'open' || unit.encounter.selected_rating != null) return
+    captureRatingBaseline(cardUnitKey, unit.interval_days)
+  }, [cardUnitKey, captureRatingBaseline, unit?.encounter?.selected_rating, unit?.encounter?.status, unit?.interval_days])
+
+  // Do not let a previous card's baseline flash while this card identity changes.
+  useEffect(() => {
+    if (ratingBaselineRef.current?.key === cardUnitKey) return
+    ratingBaselineRef.current = null
+    setRatingBaseline(null)
+  }, [cardUnitKey])
+
   // Read-only preview: the real map is drawn while the card slides in; the encounter
   // still opens only on activation. Limited to the active card and its neighbours.
   const exactPreview = useUnitPreview(active || nearViewport ? card.unit_id : null, effectiveRevision)
@@ -876,6 +914,13 @@ export function FreestyleUnitReviewCardView({
 
   function submitRating(rating: UnitRating) {
     const liveCard = cardRef.current
+    const currentUnit = unitRef.current
+    if (
+      currentUnit?.encounter?.status === 'open'
+      && currentUnit.encounter.selected_rating == null
+    ) {
+      captureRatingBaseline(cardUnitKey, currentUnit.interval_days)
+    }
     const target = ratingTarget()
     if (!target) {
       setActionError(`评分前没有拿到这张卡的复习记录（单元：${liveCard.unit_id || '无'}，卡片：${liveCard.id}，回合：${roundIdRef.current || '无'}）`)
@@ -893,6 +938,10 @@ export function FreestyleUnitReviewCardView({
   }
 
   function rate(rating: UnitRating) {
+    if (returnReconcilePendingRef.current) {
+      setActionError('正在更新复习单元，请稍候。')
+      return
+    }
     if (readOnly) {
       setActionError('历史记录为只读，不能评分。')
       return
@@ -975,8 +1024,8 @@ export function FreestyleUnitReviewCardView({
     ? null
     : asUnitRating(lastRating) ?? (encounter?.status === 'closed' ? null : asUnitRating(encounter?.selectedRating))
   const superseded = currentEncounter?.rating_editable === false
-  const canRateWithoutPlan = !readOnly && !superseded && !recapOnly && Boolean(card.unit_id)
-  const locked = readOnly || superseded
+  const canRateWithoutPlan = !readOnly && !superseded && !recapOnly && Boolean(card.unit_id) && !returnReconcilePending
+  const locked = readOnly || superseded || returnReconcilePending
   const titleText = stripMindMapHtml(
     card.palace_pass
       ? (card.palace_title || unit?.title || `宫殿 ${card.palace_id}`)
@@ -1075,8 +1124,21 @@ export function FreestyleUnitReviewCardView({
                 }
               : undefined}
             onSaveFailed={flipSource.live ? onSaveFailed : undefined}
+            onBeforeReturnReconcile={flipSource.live ? async () => {
+              await freestyleRatingSaves().whenRoundIdle(roundIdRef.current)
+            } : undefined}
+            onReturnReconcilePending={flipSource.live ? (pending) => {
+              returnReconcilePendingRef.current = pending
+              setReturnReconcilePending(pending)
+            } : undefined}
             onEditorStateSaved={flipSource.live ? setSavedEditorState : undefined}
-            onUnitsReconciled={flipSource.live ? onUnitsReconciled : undefined}
+            onUnitsReconciled={flipSource.live ? async () => {
+              // Queue ownership lives above the card. The parent rebuilds the
+              // round and supplies the next card/session; clearing this panel
+              // here unmounted the save acknowledgement and raced the next
+              // editor action against a transient review-only shell.
+              await onUnitsReconciled?.()
+            } : undefined}
             onRevealProgressChange={flipSource.live ? handleRevealProgressChange : undefined}
             belowToolbarSlot={identityRow}
             roundId={flipSource.live ? roundId : null}
@@ -1139,7 +1201,7 @@ export function FreestyleUnitReviewCardView({
           <FreestyleRatingBar
             ratingEffects={currentEncounter?.rating_effects ?? []}
             selectedRating={selectedRating}
-            currentIntervalDays={unit?.interval_days ?? null}
+            currentIntervalDays={ratingBaseline?.key === cardUnitKey ? ratingBaseline.intervalDays : null}
             pendingRating={pendingRating}
             pendingClear={pendingClear}
             failedRating={failedRating}

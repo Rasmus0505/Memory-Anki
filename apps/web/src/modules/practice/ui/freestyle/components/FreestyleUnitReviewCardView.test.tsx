@@ -234,7 +234,12 @@ function buildEncounter(overrides: Record<string, unknown> = {}) {
   }
 }
 
-function buildSession(unitId: string, revision = 3, encounter = buildEncounter()): UnitReviewSessionDto {
+function buildSession(
+  unitId: string,
+  revision = 3,
+  encounter = buildEncounter(),
+  intervalDays = 0,
+): UnitReviewSessionDto {
   return {
     id: `session:${unitId}`,
     palace_id: 1,
@@ -250,8 +255,8 @@ function buildSession(unitId: string, revision = 3, encounter = buildEncounter()
       node_uids: ['unit-node', 'unit-child'],
       revision,
       stage_index: 0,
-      interval_days: 0,
-      has_passed: false,
+      interval_days: intervalDays,
+      has_passed: intervalDays > 0,
       due_date: '2026-07-27',
       due: true,
       session_status: 'pending',
@@ -305,20 +310,33 @@ function undoResult(
   }
 }
 
-function ratingResult(session: UnitReviewSessionDto, rating: UnitRating, operationId: string) {
-  const effect = effects.find((item) => item.rating === rating)!
+function ratingResult(
+  session: UnitReviewSessionDto,
+  rating: UnitRating,
+  operationId: string,
+  intervalDays = session.units[0].interval_days,
+  ratingEffects = effects,
+) {
+  const effect = ratingEffects.find((item) => item.rating === rating)!
   const encounter = buildEncounter({
     selected_rating: rating,
     passed: effect.passed,
     retry_after_cards: effect.retry_after_cards,
     effective_operation_id: operationId,
+    rating_effects: ratingEffects,
   })
   return {
     operation_id: operationId,
     study_session_id: session.id,
     encounter_id: encounter.id,
     amended: false,
-    unit: { ...session.units[0], stage_index: effect.target_stage_index, encounter },
+    unit: {
+      ...session.units[0],
+      stage_index: effect.target_stage_index,
+      interval_days: intervalDays,
+      has_passed: intervalDays > 0,
+      encounter,
+    },
     passed: effect.passed,
     retry_after_cards: effect.retry_after_cards,
     rating,
@@ -1167,7 +1185,7 @@ describe('FreestyleUnitReviewCardView', () => {
     ).toBe(false)
   })
 
-  it('reconciles with editor_leave only after the edited card becomes inactive', async () => {
+  it('reconciles on return to review and avoids a duplicate leave reconcile', async () => {
     const card = buildCard('unit-leave-reconcile')
     apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!))
     const view = renderCard(card)
@@ -1189,28 +1207,15 @@ describe('FreestyleUnitReviewCardView', () => {
     }
     act(() => editMore?.moreActions?.find((item) => item.label === '返回学习')!.onClick())
     await waitFor(() => expect(capturedPanelProps?.displayMode).toBe('review'))
-    expect(persistMocks.persistPalaceEditor).toHaveBeenCalledTimes(1)
-
-    persistMocks.persistPalaceEditor.mockImplementationOnce(async (_palaceId, state) => ({
-      state,
-      unitReconcile: {
-        changed: true,
-        changes: [],
-        undo_token: 'leave-reconcile',
-      },
-    }))
-    view.rerenderCard({ active: false })
-
-    await waitFor(() => {
-      expect(persistMocks.persistPalaceEditor).toHaveBeenLastCalledWith(
-        1,
-        expect.objectContaining({ editor_doc: expect.any(Object) }),
-        expect.objectContaining({
-          reconcileUnits: true,
-          syncReason: 'editor_leave',
-        }),
-      )
+    await waitFor(() => expect(persistMocks.persistPalaceEditor).toHaveBeenCalledTimes(2))
+    expect(persistMocks.persistPalaceEditor.mock.calls[1][2]).toMatchObject({
+      reconcileUnits: true,
+      syncReason: 'return_to_review',
     })
+
+    view.rerenderCard({ active: false })
+    await act(async () => { await Promise.resolve() })
+    expect(persistMocks.persistPalaceEditor).toHaveBeenCalledTimes(2)
   })
 
   it('returns to review with local content while an immediate save is still in flight', async () => {
@@ -1258,6 +1263,11 @@ describe('FreestyleUnitReviewCardView', () => {
         unitReconcile: null,
       })
     })
+    await waitFor(() => expect(persistMocks.persistPalaceEditor).toHaveBeenCalledTimes(2))
+    expect(persistMocks.persistPalaceEditor.mock.calls[1][2]).toMatchObject({
+      reconcileUnits: true,
+      syncReason: 'return_to_review',
+    })
     await waitFor(() => expect(screen.getByTestId('freestyle-save-saved')).toBeTruthy())
     expect(screen.queryByTestId('freestyle-return-saving')).toBeNull()
     await waitFor(() => {
@@ -1267,7 +1277,7 @@ describe('FreestyleUnitReviewCardView', () => {
     })
   })
 
-  it('keeps review usable and offers retry when an immediate save fails', async () => {
+  it('keeps review usable and retries the save and reconcile after failure', async () => {
     const card = buildCard('unit-return-failure')
     apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!))
     const { onSaveFailed } = renderCard(card)
@@ -1294,6 +1304,7 @@ describe('FreestyleUnitReviewCardView', () => {
     await waitFor(() => expect(capturedPanelProps?.displayMode).toBe('review'))
     expect(screen.getByTestId('freestyle-save-error')).toBeTruthy()
     expect(screen.getByTestId('freestyle-rating-bar')).toBeTruthy()
+    expect(onSaveFailed).toHaveBeenCalledWith('保存宫殿失败，请重试')
     await waitFor(() => {
       expect(
         (capturedPanelProps?.unitScopeEditorState as MindMapEditorState).editor_doc,
@@ -1301,12 +1312,16 @@ describe('FreestyleUnitReviewCardView', () => {
     })
 
     act(() => screen.getByRole('button', { name: '重试' }).click())
-    await waitFor(() => expect(persistMocks.persistPalaceEditor).toHaveBeenCalledTimes(2))
-    await waitFor(() => expect(screen.getByTestId('freestyle-save-saved')).toBeTruthy())
+    await waitFor(() => expect(persistMocks.persistPalaceEditor).toHaveBeenCalledTimes(3))
+    expect(persistMocks.persistPalaceEditor.mock.calls[1][2]).toBeUndefined()
+    expect(persistMocks.persistPalaceEditor.mock.calls[2][2]).toMatchObject({
+      reconcileUnits: true,
+      syncReason: 'return_to_review',
+    })
     expect(capturedPanelProps?.displayMode).toBe('review')
   })
 
-  it('never rebuilds the freestyle queue while the edited card remains active', async () => {
+  it('rebuilds the freestyle queue after returning from an edited card', async () => {
     const card = buildCard('unit-deferred-rebuild')
     apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!))
     const view = renderCard(card)
@@ -1341,18 +1356,22 @@ describe('FreestyleUnitReviewCardView', () => {
     await waitFor(() => expect(persistMocks.persistPalaceEditor).toHaveBeenCalledTimes(1))
     leave()
     await waitFor(() => expect(capturedPanelProps?.displayMode).toBe('review'))
+    await waitFor(() => expect(onUnitsReconciled).toHaveBeenCalledTimes(1))
 
     enter()
     await waitFor(() => expect(capturedPanelProps?.displayMode).toBe('edit'))
     leave()
     await waitFor(() => expect(capturedPanelProps?.displayMode).toBe('review'))
-    await act(async () => {
-      await Promise.resolve()
+    await waitFor(() => expect(onUnitsReconciled).toHaveBeenCalledTimes(1))
+    expect(persistMocks.persistPalaceEditor.mock.calls.at(-1)?.[2]).toMatchObject({
+      reconcileUnits: true,
+      syncReason: 'return_to_review',
     })
-    expect(onUnitsReconciled).not.toHaveBeenCalled()
+    expect(onUnitsReconciled).toHaveBeenCalledTimes(1)
 
     view.rerenderCard({ active: false })
-    await waitFor(() => expect(onUnitsReconciled).toHaveBeenCalledTimes(1))
+    await act(async () => { await Promise.resolve() })
+    expect(onUnitsReconciled).toHaveBeenCalledTimes(1)
   })
 
   it('typing autosave does not force reconcile options', async () => {
@@ -1856,6 +1875,31 @@ describe('FreestyleUnitReviewCardView', () => {
       stage_action: 'keep',
     }
     expect(ratingEffectLabel(heldAtLearning)).toBe('今天再练')
+  })
+
+  it('keeps the original interval as the left side after the rating ACK changes the unit', async () => {
+    const card = buildCard('unit-fixed-interval')
+    const session = buildSession(card.unit_id!, 3, buildEncounter({
+      rating_effects: effects.map((effect) => ({
+        ...effect,
+        target_actual_interval_days: effect.rating === 3 ? 17 : effect.target_actual_interval_days,
+        target_interval_days: effect.rating === 3 ? 17 : effect.target_interval_days,
+        target_due_date: effect.rating === 3 ? '2026-08-13' : effect.target_due_date,
+      })),
+    }), 7)
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(session)
+    apiMocks.rateReviewUnitApi.mockImplementation(
+      (_sessionId, _unit, _encounterId, rating, operationId) =>
+        Promise.resolve(ratingResult(session, rating, operationId, 17, session.units[0].encounter!.rating_effects)),
+    )
+    renderCard(card)
+
+    await screen.findByTestId('flip-card-mind-map-panel')
+    expect(screen.getByRole('button', { name: /记得：7天 → 17天/ })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /记得：7天 → 17天/ }))
+    await waitFor(() => expect(screen.getByTestId('freestyle-rating-effect-line').textContent).toContain('已选记得 · 7天 → 17天'))
+    expect(screen.queryByText(/17天 → 17天/)).toBeNull()
+    expect(screen.getByRole('button', { name: /记得：7天 → 17天/ })).toBeTruthy()
   })
 
   it('stays on the card and atomically amends another rating', async () => {
@@ -2473,7 +2517,7 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(apiMocks.getUnitReviewSessionApi).toHaveBeenCalledWith(`session:${card.unit_id}`, historical.encounterId)
     expect(apiMocks.startFreestyleUnitReviewSessionApi).not.toHaveBeenCalled()
     expect(
-      (screen.getByRole('button', { name: /记得：首学 → 1天 · 7月28日/ }) as HTMLButtonElement).disabled,
+      (screen.getByTestId('freestyle-rating-button-3') as HTMLButtonElement).disabled,
     ).toBe(true)
   })
 
@@ -2486,8 +2530,8 @@ describe('FreestyleUnitReviewCardView', () => {
     })))
     renderCard(card, { readOnly: false, encounter: historical })
     await screen.findByText('已有后续练习，这次评分仅供回看；请到最近一次练习修改。')
-    expect((screen.getByRole('button', { name: /记得：首学 → 1天 · 7月28日/ }) as HTMLButtonElement).disabled).toBe(true)
-    fireEvent.click(screen.getByRole('button', { name: /记得：首学 → 1天 · 7月28日/ }))
+    expect((screen.getByTestId('freestyle-rating-button-3') as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(screen.getByTestId('freestyle-rating-button-3') )
     expect(apiMocks.rateReviewUnitApi).not.toHaveBeenCalled()
     expect(apiMocks.undoReviewUnitRatingApi).not.toHaveBeenCalled()
   })

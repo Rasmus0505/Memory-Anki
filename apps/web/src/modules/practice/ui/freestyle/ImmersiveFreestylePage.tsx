@@ -198,7 +198,6 @@ export default function ImmersiveFreestylePage({
     excludePlanCards,
     restorePlanCards,
     compressCompletedPlanCards,
-    buildQueue,
     pendingRestudyCardIds,
     planVersion,
     wrongUnitIds,
@@ -858,13 +857,10 @@ export default function ImmersiveFreestylePage({
     />
   ), [openHistory, openPlan, overflowSummary, reviewPalaceId, reviewReturnSubjectId, runQueueUpdate, syncComputerProgress])
 
-  const reconcileUnitsFor = useCallback((cardId: string) => {
-    void buildQueue(config, {
-      preserveCompleted: true,
-      silent: true,
-      preferCardId: cardId,
-    })
-  }, [buildQueue, config])
+  const reconcileUnitsFor = useCallback(async (_cardId: string) => {
+    const result = await updateReviewQueue()
+    if (result.status !== 'ok') throw new Error('复习安排更新失败，请重试')
+  }, [updateReviewQueue])
   const handlePlanJump = useCallback((cardId: string) => {
     setPlanOpen(false)
     jumpFromProgressRail(cardId)
@@ -1128,7 +1124,10 @@ export default function ImmersiveFreestylePage({
           onChoiceResolve={onChoiceResolve}
           onShortAnswerSubmit={onShortAnswerSubmit}
           onQuestionUpdated={updateFeedQuestion}
-          onAnswerReset={resetQuestionAnswer}
+          onAnswerReset={(questionId) => {
+            resetQuestionAnswer(questionId)
+            dwell.restart(questionId)
+          }}
           onShown={dwell.restart}
           getDurationMs={dwell.elapsedMs}
           onNavigateToIndex={navigateToIndex}

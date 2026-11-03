@@ -378,6 +378,17 @@ export class RatingSaveStore {
     return new Promise((resolve) => lane.idle.push(resolve))
   }
 
+  /** Wait for every score in the round before invalidating a shared palace session. */
+  async whenRoundIdle(roundId: string): Promise<void> {
+    while (true) {
+      const busyCards = [...this.entries.values()]
+        .filter((entry) => entry.roundId === roundId && this.isBusy(roundId, entry.cardId))
+        .map((entry) => entry.cardId)
+      if (busyCards.length === 0) return
+      await Promise.all(busyCards.map((cardId) => this.whenIdle(roundId, cardId)))
+    }
+  }
+
   notePlanVersion(roundId: string, version: number) {
     if (!roundId || !(version > 0)) return
     if (version > (this.planVersions.get(roundId) ?? 0)) this.planVersions.set(roundId, version)

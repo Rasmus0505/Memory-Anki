@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import {
-  type PalaceReviewUnitChangeHighlight,
-} from '@/modules/practice/ui/review/components/PalaceReviewUnitsPanel'
+import { type PalaceReviewUnitChangeHighlight } from '@/modules/practice/ui/review/components/PalaceReviewUnitsPanel'
 import { toast } from '@/shared/feedback/toast'
 import { ReviewLevelBar } from '@/modules/practice/ui/review/components/ReviewLevelBar'
 import { useRevealSession, type RevealState } from '@/modules/memory/public'
@@ -9,14 +7,12 @@ import { useFlipCardRevealSettings } from '@/modules/settings/public'
 import {
   FreestyleUnitReviewFlipDialogs,
   FreestyleUnitReviewStatusBanner,
-  type FreestyleEditorSaveState,
 } from './FreestyleUnitReviewFlipCanvas'
 import { buildReviewToolbarExtensions, useFreestyleUnitReviewNodeQuiz } from './freestyleUnitReviewFlipToolbar'
 import { useFreestyleTextToMindMap } from './useFreestyleTextToMindMap'
 import type {
   FreestyleReviewUnitCard,
   MindMapEditorState,
-  PalaceUnitReconcileResult,
 } from '@/shared/api/contracts'
 import type { MindMapSelection } from '@/modules/content/public'
 import type {
@@ -40,12 +36,8 @@ import {
   type EditorDoc,
 } from '@/shared/lib/mindmap-split-marks/splitMarks'
 import { computeRevealCollapsedNodeIdsFromParentMap } from '@/shared/ui/mindmap-canvas/mindMapCollapse'
-import {
-  FlipCardMindMapPanel,
-  persistPalaceEditor,
-  type PersistPalaceEditorOptions,
-  type PersistPalaceEditorResult,
-} from './freestyleBranchCardSupport'
+import { FlipCardMindMapPanel } from './freestyleBranchCardSupport'
+import { useFreestyleUnitReviewPersistence } from './useFreestyleUnitReviewPersistence'
 
 export function FreestyleUnitReviewFlipPanel({
   card,
@@ -65,6 +57,8 @@ export function FreestyleUnitReviewFlipPanel({
   onSaveFailed,
   onEditorStateSaved,
   onUnitsReconciled,
+  onBeforeReturnReconcile,
+  onReturnReconcilePending,
   onRevealProgressChange,
   onOpenScopeQuiz,
   belowToolbarSlot = null,
@@ -87,7 +81,9 @@ export function FreestyleUnitReviewFlipPanel({
   onUserZoomChange?: (zoom: number) => void
   onEditingChange?: (editing: boolean) => void
   onSaveFailed?: (message: string) => void
-  onUnitsReconciled?: () => void
+  onUnitsReconciled?: () => void | Promise<void>
+  onBeforeReturnReconcile?: () => Promise<void>
+  onReturnReconcilePending?: (pending: boolean) => void
   onRevealProgressChange?: (progress: { revealed: number; total: number }) => void
   onEditorStateSaved?: (state: MindMapEditorState) => void
   onOpenScopeQuiz?: () => void
@@ -149,67 +145,28 @@ export function FreestyleUnitReviewFlipPanel({
   }, [editEditorState, isEditMode, reveal.revealMap])
 
   const { signalReveal } = useFreestyleFlowFeedback()
-
-  // Header chip: this unit's membership only (not whole-palace node count).
-  useEffect(() => {
-    onRevealProgressChange?.(
-      countUnitFlipProgress(reveal.revealMap, flipTargetUids),
-    )
-  }, [flipTargetUids, onRevealProgressChange, reveal.revealMap])
-
-  /**
-   * Immediate confirmation for the flip itself — the highest-frequency action in
-   * freestyle, and the one that was completely silent while formal review has always
-   * played a tone per reveal.
-   *
-   * Counted off the whole reveal map rather than the unit-scoped header progress:
-   * the default flip mode is `free`, where any node in the palace is flippable, so a
-   * unit-scoped count would leave most flips silent and simply relocate the defect.
-   *
-   * The baseline is keyed by encounter so a fresh card's first report cannot sound as
-   * though the learner had just flipped something.
-   */
-  const revealedCount = useMemo(
-    () => Object.values(reveal.revealMap).filter((state) => state === 'revealed').length,
-    [reveal.revealMap],
-  )
+  useEffect(() => onRevealProgressChange?.(
+    countUnitFlipProgress(reveal.revealMap, flipTargetUids),
+  ), [flipTargetUids, onRevealProgressChange, reveal.revealMap])
+  const revealedCount = Object.values(reveal.revealMap).filter((state) => state === 'revealed').length
   const revealBaselineKey = `${card.id}:${unit.encounter?.id ?? 'none'}`
   const revealBaselineRef = useRef<{ key: string; revealed: number } | null>(null)
 
   useEffect(() => {
     const baseline = revealBaselineRef.current
     revealBaselineRef.current = { key: revealBaselineKey, revealed: revealedCount }
-    if (!active) return
-    if (baseline?.key !== revealBaselineKey) return
+    if (!active || baseline?.key !== revealBaselineKey) return
     if (revealedCount > baseline.revealed) signalReveal()
   }, [active, revealBaselineKey, revealedCount, signalReveal])
 
   const [modeSyncVersion, setModeSyncVersion] = useState(0)
   const [permanentMarkMode, setPermanentMarkMode] = useState(false)
-  const [savingEdit, setSavingEdit] = useState(false)
-  const [saveState, setSaveState] = useState<FreestyleEditorSaveState>('idle')
   const [quietStatus, setQuietStatus] = useState<string | null>(null)
   const quietStatusTimerRef = useRef<number | null>(null)
-  const saveStatusTimerRef = useRef<number | null>(null)
   const [reviewUnitsPanelOpen, setReviewUnitsPanelOpen] = useState(false)
   const [lastUndoToken, setLastUndoToken] = useState<string | null>(null)
   const [recentUnitChanges, setRecentUnitChanges] = useState<PalaceReviewUnitChangeHighlight[]>([])
-  const saveQueueRef = useRef<Promise<PersistPalaceEditorResult | null>>(Promise.resolve(null))
   const editBaselineRef = useRef(editorState)
-  const persistGenerationRef = useRef(0)
-  const pendingPersistRef = useRef<{
-    state: MindMapEditorState
-    persistOptions?: PersistPalaceEditorOptions
-    generation: number
-  } | null>(null)
-  const activePersistRef = useRef(false)
-  const lastSavedFingerprintRef = useRef(editorState.editor_fingerprint || '')
-  const lastPersistResultRef = useRef<PersistPalaceEditorResult | null>(null)
-  const lastFailedPersistRef = useRef<{
-    state: MindMapEditorState
-    persistOptions?: PersistPalaceEditorOptions
-  } | null>(null)
-  const editedSinceReconcileRef = useRef(false)
   const editRevealSnapshotRef = useRef<Record<string, RevealState> | null>(null)
   const lastRevealRecordKeyRef = useRef('')
   const revealApiRef = useRef(reveal)
@@ -232,7 +189,6 @@ export function FreestyleUnitReviewFlipPanel({
     setEditEditorState(editorState)
     editBaselineRef.current = editorState
     editEditorStateRef.current = editorState
-    lastSavedFingerprintRef.current = editorState.editor_fingerprint || ''
   }, [editorState])
 
   // Session reload (stale rebuild) refreshes the edit baseline only while learning.
@@ -240,7 +196,6 @@ export function FreestyleUnitReviewFlipPanel({
     if (isEditMode) return
     setEditEditorState(editorState)
     editBaselineRef.current = editorState
-    lastSavedFingerprintRef.current = editorState.editor_fingerprint || lastSavedFingerprintRef.current
   }, [editorState, isEditMode])
 
   useEffect(() => {
@@ -276,35 +231,17 @@ export function FreestyleUnitReviewFlipPanel({
       if (quietStatusTimerRef.current != null) {
         window.clearTimeout(quietStatusTimerRef.current)
       }
-      if (saveStatusTimerRef.current != null) {
-        window.clearTimeout(saveStatusTimerRef.current)
-      }
     }
   }, [])
-
-  const clearSaveStatusTimer = useCallback(() => {
-    if (saveStatusTimerRef.current != null) {
-      window.clearTimeout(saveStatusTimerRef.current)
-      saveStatusTimerRef.current = null
-    }
-  }, [])
-
-  const showSavedStatus = useCallback(() => {
-    clearSaveStatusTimer()
-    setSaveState('saved')
-    saveStatusTimerRef.current = window.setTimeout(() => {
-      saveStatusTimerRef.current = null
-      setSaveState((current) => current === 'saved' ? 'idle' : current)
-    }, 1_600)
-  }, [clearSaveStatusTimer])
 
   const notifyUnitReconcile = useCallback((
-    unitReconcile: PalaceUnitReconcileResult | null | undefined,
-  ) => {
-    if (unitReconcile?.changed) {
-      const token = unitReconcile.undo_token ?? unitReconcile.schedule_batch_id ?? null
+    unitReconcile: import('@/shared/api/contracts').PalaceUnitReconcileResult | null | undefined,
+    refreshQueue = false,
+  ): void | Promise<void> => {
+    if (unitReconcile?.changed || refreshQueue) {
+      const token = unitReconcile?.undo_token ?? unitReconcile?.schedule_batch_id ?? null
       if (token) setLastUndoToken(token)
-      if (Array.isArray(unitReconcile.changes) && unitReconcile.changes.length > 0) {
+      if (Array.isArray(unitReconcile?.changes) && unitReconcile.changes.length > 0) {
         setRecentUnitChanges(
           unitReconcile.changes.flatMap((item) => {
             const row = item as PalaceReviewUnitChangeHighlight & { unit_id?: string }
@@ -319,144 +256,52 @@ export function FreestyleUnitReviewFlipPanel({
         )
       }
       showQuietStatus('复习进度已更新')
-      onUnitsReconciled?.()
+      return onUnitsReconciled?.()
     }
   }, [onUnitsReconciled, showQuietStatus])
 
-  const persistEdit = useCallback(async (
-    state: MindMapEditorState,
-    options?: PersistPalaceEditorOptions,
-  ) => {
-    pendingPersistRef.current = {
-      state,
-      persistOptions: options && Object.keys(options).length > 0 ? options : undefined,
-      generation: persistGenerationRef.current,
-    }
-    clearSaveStatusTimer()
-    setSaveState('saving')
-    setSavingEdit(true)
-    const previous = saveQueueRef.current.catch(() => null)
-    const queued = previous.then(async () => {
-      let lastResult = lastPersistResultRef.current
-      activePersistRef.current = true
-      try {
-        while (pendingPersistRef.current) {
-          const job = pendingPersistRef.current
-          pendingPersistRef.current = null
-          const fingerprintHint = lastSavedFingerprintRef.current || job.state.editor_fingerprint
-          const payload = fingerprintHint
-            ? { ...job.state, editor_fingerprint: fingerprintHint }
-            : job.state
-          try {
-            const result = await persistPalaceEditor(
-              session.palace_id,
-              payload,
-              job.persistOptions,
-            )
-            const fingerprint = result.state.editor_fingerprint
-            if (fingerprint) lastSavedFingerprintRef.current = fingerprint
-            const adopted = {
-              ...job.state,
-              editor_fingerprint: fingerprint || job.state.editor_fingerprint,
-            }
-            const isLatest = persistGenerationRef.current === job.generation
-            if (isLatest) {
-              // Fingerprint-only acknowledgement: never replace the local document.
-              editBaselineRef.current = adopted
-              onEditorStateSaved?.(adopted)
-            }
-            if (job.persistOptions?.reconcileUnits || job.persistOptions?.syncReason) {
-              notifyUnitReconcile(result.unitReconcile)
-            }
-            lastResult = {
-              state: isLatest
-                ? adopted
-                : {
-                    ...editEditorStateRef.current,
-                    editor_fingerprint: fingerprint || editEditorStateRef.current.editor_fingerprint,
-                  },
-              unitReconcile: result.unitReconcile,
-            }
-            lastPersistResultRef.current = lastResult
-          } catch (error) {
-            const message = error instanceof Error ? error.message : '保存宫殿失败'
-            lastFailedPersistRef.current = {
-              state: job.state,
-              persistOptions: job.persistOptions,
-            }
-            onSaveFailed?.(message)
-            lastResult = null
-            lastPersistResultRef.current = null
-          }
-        }
-        return lastResult
-      } finally {
-        activePersistRef.current = false
-      }
-    })
-    saveQueueRef.current = queued
-    void queued.finally(() => {
-      if (saveQueueRef.current !== queued) return
-      setSavingEdit(false)
-      if (lastPersistResultRef.current) {
-        lastFailedPersistRef.current = null
-        showSavedStatus()
-      } else {
-        setSaveState('error')
-      }
-    })
-    return queued
-  }, [
-    clearSaveStatusTimer,
-    notifyUnitReconcile,
+  const handlePersistReconcile = useCallback((
+    result: import('./freestyleBranchCardSupport').PersistPalaceEditorResult,
+    refreshQueue = false,
+  ) => notifyUnitReconcile(result.unitReconcile, refreshQueue), [notifyUnitReconcile])
+
+  const persistence = useFreestyleUnitReviewPersistence({
+    palaceId: session.palace_id,
+    editorState,
+    editEditorStateRef,
+    displayModeRef,
     onEditorStateSaved,
     onSaveFailed,
-    session.palace_id,
-    showSavedStatus,
-  ])
-
-  const retrySave = useCallback(() => {
-    const failed = lastFailedPersistRef.current
-    if (!failed) return
-    void persistEdit(editEditorStateRef.current, failed.persistOptions)
-  }, [persistEdit])
-
-  /**
-   * The active card never reconciles or rebuilds the queue. The same document is
-   * reconciled only when this card leaves the editing session.
-   */
-  const flushEditorLeave = useCallback(() => {
-    return persistEdit(editEditorStateRef.current, {
-      reconcileUnits: true,
-      syncReason: 'editor_leave',
-    })
-  }, [persistEdit])
-
+    onReconcile: handlePersistReconcile,
+    onBeforeReturnReconcile,
+    onReturnReconcilePending,
+  })
+  const {
+    savingEdit, saveState, persistGenerationRef, editedSinceReconcileRef,
+    returnReconcileRef, leaveReconcileSentRef, persistEdit, reconcileReturn, retrySave,
+    flushEditorLeave, lastSavedFingerprintRef,
+  } = persistence
   const flushEditorLeaveRef = useRef(flushEditorLeave)
   flushEditorLeaveRef.current = flushEditorLeave
-  /** Avoid double editor_leave when card deactivates then unmounts. */
-  const leaveReconcileSentRef = useRef(false)
 
-  // Card deactivated after inline edits: flush with editor_leave + reconcile.
+  // Card deactivation and unmount are the idempotent fallback boundary.
   useEffect(() => {
     if (active) {
       leaveReconcileSentRef.current = false
-      editedSinceReconcileRef.current = false
       return
     }
+    if (returnReconcileRef.current) return
     if (!editedSinceReconcileRef.current) return
     if (leaveReconcileSentRef.current) return
     leaveReconcileSentRef.current = true
     void flushEditorLeaveRef.current()
-  }, [active])
+  }, [active, editedSinceReconcileRef, leaveReconcileSentRef, returnReconcileRef])
 
-  // Unmount after inline edits: same leave reconcile (no-op if deactivate already sent).
   useEffect(() => () => {
-    if (!editedSinceReconcileRef.current) return
-    if (leaveReconcileSentRef.current) return
+    if (!editedSinceReconcileRef.current || returnReconcileRef.current || leaveReconcileSentRef.current) return
     leaveReconcileSentRef.current = true
     void flushEditorLeaveRef.current()
-  }, [])
+  }, [editedSinceReconcileRef, leaveReconcileSentRef, returnReconcileRef])
 
   const restoreRevealSnapshot = useCallback((map: Record<string, RevealState> | null) => {
     if (!map) return
@@ -500,15 +345,19 @@ export function FreestyleUnitReviewFlipPanel({
     }
     editBaselineRef.current = localState
     onEditorStateSaved?.(localState)
+    displayModeRef.current = 'review'
     setDisplayMode('review')
     setModeSyncVersion((value) => value + 1)
+    reconcileReturn()
   }, [
     active,
     reviewOnly,
     flipTargetUids,
     isEditMode,
     onEditorStateSaved,
+    reconcileReturn,
     restoreRevealSnapshot,
+    lastSavedFingerprintRef,
   ])
 
   useEffect(() => {
@@ -528,7 +377,7 @@ export function FreestyleUnitReviewFlipPanel({
     editEditorStateRef.current = nextState
     editedSinceReconcileRef.current = true
     void persistEdit(nextState)
-  }, [persistEdit])
+  }, [editedSinceReconcileRef, persistEdit, persistGenerationRef])
 
   /**
    * Permanent-mark toggles update locally and save immediately as plain document
@@ -550,7 +399,7 @@ export function FreestyleUnitReviewFlipPanel({
     // Per-node feedback: the chip on the node already shows the mark; a toast per
     // toggle turned a marking pass into a stream of interruptions.
     showQuietStatus(result.marked ? '已标记' : '已取消标记')
-  }, [persistEdit, showQuietStatus])
+  }, [editedSinceReconcileRef, persistEdit, persistGenerationRef, showQuietStatus])
 
   const handleTogglePermanentMarkMode = useCallback(() => {
     setPermanentMarkMode((current) => {
