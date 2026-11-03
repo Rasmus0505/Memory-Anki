@@ -123,6 +123,28 @@ def test_queue_emits_only_due_review_units_with_stable_identity():
     assert "due_node_uids" not in result.cards[0]
 
 
+def test_root_only_quiz_broadcasts_in_follow_unit_mode():
+    units = [_unit("a", ("a",), unit_id="u-a"), _unit("b", ("b",), unit_id="u-b")]
+    root_quiz = QuizCandidate(32, 1, ("root",), 0.1, "unseen", {"id": 32}, root_uid="root")
+    result = _assemble(
+        units=units,
+        due_uids={"a", "b"},
+        quizzes=[root_quiz],
+        config={
+            "content": {"mindmap_branch": True, "anki_card": False, "quiz_question": True},
+            "mix_mode": "sequential_map_quiz",
+            "bound_quiz_placement": "follow_unit",
+            "queue_length": 20,
+        },
+    )
+    assert [card["id"] for card in result.cards] == [
+        "review_unit:u-a:r1",
+        "quiz_question:32:unit:u-a:r1",
+        "review_unit:u-b:r1",
+        "quiz_question:32:unit:u-b:r1",
+    ]
+
+
 def test_queue_schedules_every_due_palace_unit_without_truncating():
     result = _assemble(
         units=[
@@ -268,6 +290,37 @@ def test_sanitize_migrates_legacy_directions_and_removes_anki():
     })
     assert ids_win["streams"]["memory_palace"]["subject_ids"] == [3]
     assert ids_win["streams"]["memory_palace"]["subject_scope"] == "all"
+
+
+def test_root_only_quiz_is_broadcast_to_each_scheduled_unit_with_unique_card_ids():
+    units = [_unit("a", ("a",), unit_id="u-a"), _unit("b", ("b",), unit_id="u-b")]
+    root_quiz = QuizCandidate(
+        31,
+        1,
+        ("root",),
+        0.1,
+        "unseen",
+        {"id": 31, "palace_id": 1},
+        root_uid="root",
+    )
+    result = _assemble(
+        units=units,
+        due_uids={"a", "b"},
+        quizzes=[root_quiz],
+        config={
+            "content": {"mindmap_branch": False, "anki_card": False, "quiz_question": True},
+            "mix_mode": "quiz_only",
+            "bound_quiz_placement": "into_mix",
+            "queue_length": 20,
+        },
+    )
+
+    assert [card["id"] for card in result.cards] == [
+        "quiz_question:31:unit:u-a:r1",
+        "quiz_question:31:unit:u-b:r1",
+    ]
+    assert [card["unit_id"] for card in result.cards] == ["u-a", "u-b"]
+    assert [card["question"]["id"] for card in result.cards] == [31, 31]
 
 
 def test_bound_quiz_follows_owning_review_unit():

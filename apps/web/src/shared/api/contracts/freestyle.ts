@@ -299,6 +299,8 @@ export interface FreestyleQuizCard {
   segment_contexts?: FreestyleSegmentContext[]
   chapter_context?: FreestyleChapterContext | null
   group_key: string
+  unit_id?: string
+  unit_revision?: number
   source_card_id?: string
   occurrence_kind?: 'source' | 'retry'
   retry_attempt?: number

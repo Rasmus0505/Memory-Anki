@@ -370,7 +370,13 @@ def list_palace_unit_pass_states(session: Session, palace_id: int) -> list[dict[
     The mind-map uses this to colour a node card 复习 only when every unit under it has passed.
     """
     rows = (
-        session.query(ReviewUnitState.id, ReviewUnitState.node_uids_json, ReviewUnitState.has_passed)
+        session.query(
+            ReviewUnitState.id,
+            ReviewUnitState.anchor_uid,
+            ReviewUnitState.unit_kind,
+            ReviewUnitState.node_uids_json,
+            ReviewUnitState.has_passed,
+        )
         .filter(
             ReviewUnitState.palace_id == palace_id,
             ReviewUnitState.active.is_(True),
@@ -380,6 +386,8 @@ def list_palace_unit_pass_states(session: Session, palace_id: int) -> list[dict[
     return [
         {
             "unit_id": str(row.id),
+            "anchor_uid": str(row.anchor_uid or ""),
+            "unit_kind": str(row.unit_kind or ""),
             "node_uids": [uid for uid in json_load_list(row.node_uids_json) if uid],
             "passed": bool(row.has_passed),
         }

@@ -437,7 +437,13 @@ export function palaceQuizNodeBindingsCacheKey(palaceId: number) {
 /** Per-复习单元 node coverage and 已学 state, read-only. Feeds the mind-map node progress colour. */
 export function listPalaceUnitPassStatesApi(palaceId: number) {
   return request<{
-    items: Array<{ unit_id: string; node_uids: string[]; passed: boolean }>
+    items: Array<{
+      unit_id: string
+      anchor_uid: string
+      unit_kind: string
+      node_uids: string[]
+      passed: boolean
+    }>
     item_count: number
   }>(`/review/palaces/${palaceId}/unit-pass-states`)
 }

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from .feed_config import (
@@ -49,6 +49,9 @@ class QuizCandidate:
     mastery_label: str
     question: Mapping[str, Any]
     last_practiced_at: str | None = None
+    root_uid: str = ""
+    review_unit_id: str = ""
+    review_unit_revision: int = 0
 
     @property
     def is_priority_mastery(self) -> bool:
@@ -96,7 +99,13 @@ def attach_questions_to_units(
     units: Sequence[ReviewUnitCandidate],
     quizzes: Sequence[QuizCandidate],
 ) -> tuple[dict[str, list[QuizCandidate]], list[QuizCandidate]]:
-    """Bound questions follow a branch that contains the bound node; else palace pool."""
+    """Attach bound questions to review units without losing root-only scope.
+
+    A question whose only binding is the palace root describes the whole palace,
+    so it is deliberately broadcast to every unit scheduled for that palace.
+    Questions bound to concrete nodes retain the old single-owner behaviour;
+    questions with no binding remain in the independent quiz stream.
+    """
     unit_questions: dict[str, list[QuizCandidate]] = {unit_key(unit): [] for unit in units}
     palace_units: dict[int, list[ReviewUnitCandidate]] = {}
     for unit in units:
@@ -104,13 +113,28 @@ def attach_questions_to_units(
 
     unbound: list[QuizCandidate] = []
     for quiz in quizzes:
-        if not quiz.bound_node_uids:
+        bindings = {str(uid).strip() for uid in quiz.bound_node_uids if str(uid).strip()}
+        if not bindings:
             unbound.append(quiz)
             continue
+        candidates = palace_units.get(quiz.palace_id, [])
+        root_only = bool(quiz.root_uid) and bindings == {str(quiz.root_uid).strip()}
+        if root_only:
+            for unit in candidates:
+                key = unit_key(unit)
+                unit_questions[key].append(
+                    replace(
+                        quiz,
+                        review_unit_id=unit.unit_id,
+                        review_unit_revision=unit.revision,
+                    )
+                )
+            if not candidates:
+                unbound.append(quiz)
+            continue
         matched = False
-        for unit in palace_units.get(quiz.palace_id, []):
-            ratable = set(unit.node_uids)
-            if any(uid in ratable for uid in quiz.bound_node_uids):
+        for unit in candidates:
+            if any(uid in set(unit.node_uids) for uid in bindings):
                 unit_questions[unit_key(unit)].append(quiz)
                 matched = True
                 break
@@ -138,6 +162,11 @@ def review_unit_id_from_card_id(card_id: object) -> str:
 
 
 def quiz_key(quiz: QuizCandidate) -> str:
+    if quiz.review_unit_id:
+        return (
+            f"quiz_question:{quiz.question_id}:unit:{quiz.review_unit_id}"
+            f":r{quiz.review_unit_revision}"
+        )
     return f"quiz_question:{quiz.question_id}"
 
 
@@ -371,6 +400,8 @@ def quiz_card_payload(
         "type": "quiz_question",
         "content_type": "quiz_question",
         "question": dict(quiz.question),
+        "unit_id": quiz.review_unit_id,
+        "unit_revision": quiz.review_unit_revision,
         "palace_context": {
             "id": quiz.palace_id,
             "title": palace_title,
@@ -582,11 +613,24 @@ def assemble_queue(
         unit_questions, unbound = attach_questions_to_units(units, palace_quizzes)
         map_cards = palace_map_stream(units, phase)
         if bound_quiz_placement != BOUND_QUIZ_FOLLOW_UNIT:
+            # Root-only questions describe the whole palace. In every quiz
+            # placement mode they occur once per scheduled unit; other quiz
+            # bindings keep the independent quiz-stream identity.
+            expanded: list[QuizCandidate] = []
+            expanded_ids: set[int] = set()
+            for unit in units:
+                for quiz in unit_questions.get(unit_key(unit), ()):
+                    bindings = {str(uid).strip() for uid in quiz.bound_node_uids if str(uid).strip()}
+                    if bindings == {str(quiz.root_uid).strip()} and quiz.root_uid:
+                        expanded.append(quiz)
+                        expanded_ids.add(quiz.question_id)
+            quiz_pool = [quiz for quiz in palace_quizzes if quiz.question_id not in expanded_ids]
+            quiz_pool.extend(expanded)
             return (
                 map_cards,
                 {},
                 quiz_cards(
-                    sort_quiz_candidates(list(palace_quizzes), weak_priority=weak_priority),
+                    sort_quiz_candidates(quiz_pool, weak_priority=weak_priority),
                     phase,
                 ),
             )

@@ -134,6 +134,7 @@ def build_freestyle_queue(
     units_by_palace: dict[int, list[Any]] = {}
     due_by_palace: dict[int, set[str]] = {}
     nodes_by_palace: dict[int, dict[str, Any]] = {}
+    root_by_palace: dict[int, str] = {}
     topology_by_palace: dict[int, dict[tuple[str, str], int]] = {}
 
     def load_palace(palace_id: int) -> None:
@@ -143,6 +144,7 @@ def build_freestyle_queue(
             tree, definitions = resolve_unit_definitions(session, palace_id)
             nodes = tree.get("nodes") if isinstance(tree, dict) else None
             nodes_by_palace[palace_id] = nodes if isinstance(nodes, dict) else {}
+            root_by_palace[palace_id] = str(tree.get("root_uid") or "")
             # The document's depth-first unit order is the authority for
             # 按知识结构. A stored row can lag behind an edit that has not
             # reconciled yet, so the column alone cannot carry the promise.
@@ -152,6 +154,7 @@ def build_freestyle_queue(
             }
         except ValueError:
             nodes_by_palace[palace_id] = {}
+            root_by_palace[palace_id] = ""
             topology_by_palace[palace_id] = {}
 
     def nodes_for(palace_id: int) -> dict[str, Any]:
@@ -220,6 +223,7 @@ def build_freestyle_queue(
             palace_id = int(question.get("palace_id") or 0)
             if qid <= 0 or palace_id <= 0:
                 continue
+            load_palace(palace_id)
             if all_selected_ids and palace_id not in set(all_selected_ids):
                 continue
             quizzes.append(
@@ -227,6 +231,7 @@ def build_freestyle_queue(
                     question_id=qid,
                     palace_id=palace_id,
                     bound_node_uids=tuple(bound_map.get(qid) or ()),
+                    root_uid=root_by_palace.get(palace_id, ""),
                     mastery_score=0.0,
                     mastery_label="",
                     question=question,
@@ -297,8 +302,8 @@ def build_freestyle_queue(
         result = assemble_queue(
             config=stream_config(stream_name),
             palace_meta=stream_palace_meta(stream_name, scoped_ids),
-            units_by_palace=subset(units_by_palace, scoped_ids) if stream_name in {"memory_palace", "english"} else {},
-            due_by_palace=subset(due_by_palace, scoped_ids) if stream_name in {"memory_palace", "english"} else {},
+            units_by_palace=subset(units_by_palace, scoped_ids),
+            due_by_palace=subset(due_by_palace, scoped_ids),
             quizzes=quizzes if stream_name == "quiz" else [],
             completed_ids=completed_ids or [],
             hidden_ids=hidden_ids or [],
