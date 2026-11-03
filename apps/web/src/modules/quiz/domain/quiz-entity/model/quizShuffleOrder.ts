@@ -206,6 +206,12 @@ export function shuffleQuizQuestionsForPractice<T extends { id: number }>(
     pool[index] = pool[swap]
     pool[swap] = current
   }
+  // A permutation may coincide with the order already on screen (likely with
+  // only two or three open questions). Rotating once guarantees every click
+  // visibly changes something, so 打乱 never looks like it stopped working.
+  if (pool.length > 1 && pool.every((item, index) => item === result[targets[index]])) {
+    pool.push(pool.shift() as T)
+  }
   targets.forEach((slot, index) => {
     result[slot] = pool[index]
   })
