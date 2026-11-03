@@ -50,6 +50,14 @@ describe('splitMarks levels', () => {
     expect(deriveSplitMarkLevels).toBe(derivePermanentMarkLevels)
   })
 
+  it('labels a marked root as the whole-palace unit', () => {
+    const doc = sampleDoc()
+    const parentMap = buildEditorParentMap(doc)
+    const chips = buildSplitMarkStatusChips(['root'], parentMap, 'root')
+    expect(chips.root?.[0]?.text).toBe('整宫')
+    expect(chips.root?.[0]?.tone).toBe('info')
+  })
+
   it('builds L-label chips with level tones', () => {
     const doc = sampleDoc()
     const parentMap = buildEditorParentMap(doc)

@@ -117,7 +117,8 @@ export function buildEditorParentMap(
 
 /**
  * Derive mark levels from marked uids + parent map.
- * Level = 1 + number of marked ancestors (root is never a mark point).
+ * Level = 1 + number of marked ancestors. The root is represented separately
+ * as the whole-palace unit rather than an ordinary L-level mark.
  */
 export function derivePermanentMarkLevels(
   markedUids: Iterable<string>,
@@ -162,8 +163,12 @@ export function buildSplitMarkStatusChips(
   parentByUid: Map<string, string | null>,
   rootUid?: string | null,
 ): Record<string, Array<{ text: string; tone: SplitMarkChipTone; style: 'filled' }>> {
-  const levels = deriveSplitMarkLevels(markedUids, parentByUid, rootUid)
+  const marked = new Set(markedUids)
+  const levels = deriveSplitMarkLevels(marked, parentByUid, rootUid)
   const chips: Record<string, Array<{ text: string; tone: SplitMarkChipTone; style: 'filled' }>> = {}
+  if (rootUid && marked.has(rootUid) && parentByUid.has(rootUid)) {
+    chips[rootUid] = [{ text: '整宫', tone: 'info', style: 'filled' }]
+  }
   for (const [uid, level] of levels.entries()) {
     const color = colorForPermanentLevel(level)
     chips[uid] = [{ text: color.label, tone: chipToneForMarkLevel(level), style: 'filled' }]

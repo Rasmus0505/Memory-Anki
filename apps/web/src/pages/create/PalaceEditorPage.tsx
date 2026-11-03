@@ -48,9 +48,8 @@ import { usePalaceEditorQuizBindings } from './usePalaceEditorQuizBindings'
 import type { MindMapSelection } from '@/modules/content/public'
 import {
   buildEditorParentMap,
+  buildSplitMarkStatusChips,
   collectPermanentMarkUids,
-  colorForPermanentLevel,
-  derivePermanentMarkLevels,
   permanentMarkToggleLabel,
   togglePermanentMarkInDoc,
   type EditorDoc,
@@ -189,16 +188,7 @@ export default function PalaceEdit() {
         ? (doc.root.data as Record<string, unknown>)
         : {}
     const rootUid = String(rootData.uid || rootData.memoryAnkiId || 'root')
-    const levels = derivePermanentMarkLevels(marked, parentMap, rootUid)
-    const chips: Record<
-      string,
-      Array<{ text: string; tone: 'warning' | 'info' | 'success' | 'danger' | 'neutral'; style: 'filled' }>
-    > = {}
-    for (const [uid, level] of levels.entries()) {
-      const color = colorForPermanentLevel(level)
-      chips[uid] = [{ text: color.label, tone: level === 1 ? 'warning' : level === 2 ? 'info' : 'success', style: 'filled' }]
-    }
-    return chips
+    return buildSplitMarkStatusChips(marked, parentMap, rootUid)
   }, [page.editorState])
 
   const permanentMarkHighlights = useMemo(

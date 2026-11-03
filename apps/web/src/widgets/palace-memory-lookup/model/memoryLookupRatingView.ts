@@ -80,6 +80,7 @@ export function buildPermanentMarkRatingRows(
   doc: EditorDoc | string | null | undefined,
   unitIdByNode: Record<string, string>,
   ratings: Record<string, { rating: number; revision: number }>,
+  palaceUnit?: { unitId: string; anchorUid: string },
 ): PermanentMarkRatingRow[] {
   const resolved = coerceEditorDoc(doc)
   if (!resolved?.root) return []
@@ -87,7 +88,10 @@ export function buildPermanentMarkRatingRows(
   collectMarkedNodes(resolved.root, marked)
   return marked.map((node) => {
     const nodeUid = nodeUidOf(node)
-    const unitId = unitIdByNode[nodeUid] ?? null
+    const isRoot = node === resolved.root
+    const unitId = (isRoot && palaceUnit?.anchorUid === nodeUid ? palaceUnit.unitId : null)
+      ?? unitIdByNode[nodeUid]
+      ?? null
     const current = unitId ? ratings[unitId] : undefined
     return {
       nodeUid,
@@ -149,11 +153,17 @@ export function ratingMasteryByNode(
 
 /** Node uid → unit id, from the unit-pass-states response (one unit covers several nodes). */
 export function unitIdByNodeFromPassStates(
-  items: Array<{ unit_id: string; node_uids: string[] }>,
+  items: Array<{
+    unit_id: string
+    node_uids: string[]
+    anchor_uid?: string
+    unit_kind?: string
+  }>,
 ): Record<string, string> {
   const map: Record<string, string> = {}
   for (const item of items) {
     for (const uid of item.node_uids) map[uid] = item.unit_id
+    if (item.unit_kind === 'palace' && item.anchor_uid) map[item.anchor_uid] = item.unit_id
   }
   return map
 }

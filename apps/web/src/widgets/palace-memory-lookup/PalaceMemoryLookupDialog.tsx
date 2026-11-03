@@ -238,6 +238,13 @@ export function PalaceMemoryLookupDialog({
     [browsingEditorState, ratingMode],
   )
   const [ratingUnitByNode, setRatingUnitByNode] = useState<Record<string, string>>({})
+  const [passStatesForRating, setPassStatesForRating] = useState<Array<{
+    unit_id: string
+    anchor_uid: string
+    unit_kind: string
+    node_uids: string[]
+    passed: boolean
+  }>>([])
   const [ratingsByUnit, setRatingsByUnit] = useState<Record<string, PalaceUnitRatingDto>>({})
   const [ratingError, setRatingError] = useState('')
   const [ratingBusy, setRatingBusy] = useState(false)
@@ -245,12 +252,19 @@ export function PalaceMemoryLookupDialog({
   const ratingRequestRef = useRef(0)
   const ratingPanelRef = useRef<HTMLDivElement>(null)
   const ratingRows = useMemo<PermanentMarkRatingRow[]>(
-    () => (
-      ratingMode
-        ? buildPermanentMarkRatingRows(browsingEditorState?.editor_doc ?? null, ratingUnitByNode, ratingsByUnit)
-        : []
-    ),
-    [browsingEditorState, ratingMode, ratingUnitByNode, ratingsByUnit],
+    () => {
+      if (!ratingMode) return []
+      const doc = browsingEditorState?.editor_doc ?? null
+      const rootData = (doc as { root?: { data?: Record<string, unknown> } } | null)?.root?.data
+      const rootUid = String(rootData?.uid || rootData?.memoryAnkiId || '')
+      const palaceUnit = rootUid
+        ? passStatesForRating.find((item) => item.unit_kind === 'palace' && item.anchor_uid === rootUid)
+        : undefined
+      return buildPermanentMarkRatingRows(doc, ratingUnitByNode, ratingsByUnit, palaceUnit
+        ? { unitId: palaceUnit.unit_id, anchorUid: palaceUnit.anchor_uid }
+        : undefined)
+    },
+    [browsingEditorState, passStatesForRating, ratingMode, ratingUnitByNode, ratingsByUnit],
   )
   const ratingSelectedRow = useMemo(
     () => ratingRows.find((row) => row.nodeUid === ratingSelectedUid) ?? null,
@@ -284,6 +298,7 @@ export function PalaceMemoryLookupDialog({
         listPalaceUnitRatingsApi(palaceId),
       ])
       if (requestId !== ratingRequestRef.current) return
+      setPassStatesForRating(passStates.items)
       setRatingUnitByNode(unitIdByNodeFromPassStates(passStates.items))
       setRatingsByUnit(ratings)
       setRatingError('')
@@ -294,6 +309,7 @@ export function PalaceMemoryLookupDialog({
   }, [])
   useEffect(() => {
     if (!ratingMode || !open || selectedPalaceId == null) return
+    setPassStatesForRating([])
     setRatingUnitByNode({})
     setRatingsByUnit({})
     void refreshRatings(selectedPalaceId)

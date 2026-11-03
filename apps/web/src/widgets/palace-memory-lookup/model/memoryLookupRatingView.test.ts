@@ -109,6 +109,21 @@ describe('buildPermanentMarkRatingRows', () => {
     })
   })
 
+  it('maps a permanent root mark to its palace unit', () => {
+    const doc = {
+      root: { data: { uid: 'root', text: '整宫', permanentSplitMark: true }, children: [] },
+    }
+    const rows = buildPermanentMarkRatingRows(
+      doc,
+      {},
+      { palace: { rating: 3, revision: 4 } },
+      { unitId: 'palace', anchorUid: 'root' },
+    )
+    expect(rows).toEqual([{
+      nodeUid: 'root', text: '整宫', unitId: 'palace', rating: 3, revision: 4,
+    }])
+  })
+
   it('gives a node with no covering unit a null unit', () => {
     const rows = buildPermanentMarkRatingRows(sampleDoc(), {}, {})
     expect(rows.every((row) => row.unitId === null && row.rating === null)).toBe(true)

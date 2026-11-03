@@ -88,7 +88,10 @@ export function usePalaceUnitSummary(
     [permanentMarkUids, reviewUnits],
   )
   const unit = uid
-    ? (reviewUnits.units.find((item) => item.node_uids.includes(uid)) ?? null)
+    ? (reviewUnits.units.find((item) => (
+      item.node_uids.includes(uid)
+      || (item.unit_kind === 'palace' && item.anchor_uid === uid)
+    )) ?? null)
     : null
   return { uid, unit, onChipClick, clear }
 }
