@@ -532,6 +532,7 @@ export default function PalaceEdit() {
 
       {page.palace ? (
         <MindMapSplitLayout
+          resizable
           collapsed={sidePanelCollapsed}
           onCollapsedChange={setSidePanelCollapsed}
           hidden={page.mindMapFullscreen}

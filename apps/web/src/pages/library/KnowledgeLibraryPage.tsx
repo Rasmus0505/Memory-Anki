@@ -353,6 +353,7 @@ export default function Knowledge() {
       ) : null}
 
       <MindMapSplitLayout
+        resizable
         collapsed={sidePanelCollapsed}
         onCollapsedChange={setSidePanelCollapsed}
         hidden={mindMapFullscreen}

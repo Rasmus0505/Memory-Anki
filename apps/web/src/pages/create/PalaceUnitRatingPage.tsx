@@ -359,6 +359,7 @@ export default function PalaceUnitRatingPage() {
         </div>
       ) : (
         <MindMapSplitLayout
+          resizable
           collapsed={collapsed}
           onCollapsedChange={setCollapsed}
           collapseLabel="收起单元列表"

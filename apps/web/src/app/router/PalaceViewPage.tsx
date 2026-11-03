@@ -178,6 +178,7 @@ export default function PalaceView() {
 
       <MindMapSplitLayout
         side="end"
+        resizable
         collapsed={sidePanelCollapsed}
         onCollapsedChange={setSidePanelCollapsed}
         hidden={mindMapFullscreen}
