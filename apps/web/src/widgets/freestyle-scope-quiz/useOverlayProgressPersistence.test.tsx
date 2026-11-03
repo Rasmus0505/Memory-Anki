@@ -1,5 +1,6 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
+import type { FreestyleRoundStatePayload } from '@/shared/api/contracts'
 import { progressFreestyleOverlayQuizApi } from '@/modules/practice/ui/freestyle/api'
 import { useOverlayProgressPersistence } from './useOverlayProgressPersistence'
 
@@ -9,7 +10,7 @@ vi.mock('@/modules/practice/ui/freestyle/api', () => ({
 
 afterEach(() => vi.useRealTimers())
 
-it('retains a wrong answer when it is corrected before the debounce', async () => {
+it('retains a wrong priority event while persisting the corrected answer', async () => {
   vi.useFakeTimers()
   vi.mocked(progressFreestyleOverlayQuizApi).mockClear()
   const questionStatesRef = { current: {} }
@@ -33,4 +34,31 @@ it('retains a wrong answer when it is corrected before the debounce', async () =
     states: { 11: expect.objectContaining({ correct: true }) },
     auto_prioritize_wrong_palaces: true,
   }))
+})
+
+it('does not adopt a stale wrong response after reset', async () => {
+  vi.useFakeTimers()
+  let finishFirst: ((value: FreestyleRoundStatePayload) => void) | undefined
+  const api = vi.mocked(progressFreestyleOverlayQuizApi)
+  api.mockReset()
+  api.mockImplementationOnce(() => new Promise((resolve) => { finishFirst = resolve }))
+  api.mockResolvedValue({ version: 3 } as FreestyleRoundStatePayload)
+  const sync = vi.fn()
+  const { result } = renderHook(() => useOverlayProgressPersistence({
+    roundIdRef: { current: 'round-1' },
+    prioritizeWrongRef: { current: false },
+    planVersionRef: { current: 1 },
+    indexRef: { current: 0 },
+    questionStatesRef: { current: {} },
+    open: true,
+    onRoundSync: sync,
+    setOverlay: vi.fn(),
+  }))
+  act(() => result.current.persistProgress(0, { 11: { resolved: true, correct: false } }))
+  await act(async () => { await vi.advanceTimersByTimeAsync(320) })
+  act(() => result.current.persistProgress(0, {}))
+  await act(async () => { finishFirst?.({ version: 2 } as FreestyleRoundStatePayload); await Promise.resolve() })
+  expect(sync).not.toHaveBeenCalled()
+  await act(async () => { await vi.advanceTimersByTimeAsync(320) })
+  expect(api).toHaveBeenLastCalledWith('round-1', expect.objectContaining({ states: {}, expected_version: 2 }))
 })

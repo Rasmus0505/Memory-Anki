@@ -1,8 +1,7 @@
 import { useEffect } from 'react'
 import { RotateCcw } from 'lucide-react'
 import {
-  QuizQuestionInteraction,
-  QuizQuestionStem,
+  QuizQuestionAnswerSurface,
   QuizQuestionVariantControl,
   type QuizRuntimeState,
 } from '@/modules/quiz/domain/quiz-entity'
@@ -19,7 +18,7 @@ import type {
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { QuizComboChip } from './QuizComboChip'
-import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
+import { Card, CardContent, CardHeader } from '@/shared/components/ui/card'
 import { cn } from '@/shared/lib/utils'
 
 export function PreviewQuestionAnswerSummary({ question }: { question: PalaceQuizQuestionDraft }) {
@@ -191,9 +190,6 @@ export function QuizQuestionCard({
               compact={compact}
             />
           </div>
-          <CardTitle className={cn(compact ? 'text-sm leading-6' : 'text-base leading-7')}>
-            <QuizQuestionStem question={question} />
-          </CardTitle>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <QuizComboChip scopeKey={comboScopeKey ?? null} />
@@ -209,7 +205,7 @@ export function QuizQuestionCard({
         </div>
       </CardHeader>
       <CardContent className={cn(compact ? 'space-y-3 px-4 pb-4 pt-0' : 'space-y-4')}>
-        <QuizQuestionInteraction
+        <QuizQuestionAnswerSurface
           question={question}
           state={state}
           compact={compact}

@@ -387,10 +387,16 @@ export default function PalaceQuizPage() {
               current.map((item) => (item.id === question.id ? question : item)),
             )
           }
-          onAnswerReset={practice.handleResetQuestionState}
+          onAnswerReset={(questionId) => {
+            practice.handleResetQuestionState(questionId)
+            dwell.restart(questionId)
+          }}
           onShown={dwell.restart}
           getDurationMs={dwell.elapsedMs}
-          onReset={practice.handleResetQuestionState}
+          onReset={(questionId) => {
+            practice.handleResetQuestionState(questionId)
+            dwell.restart(questionId)
+          }}
           onResetVisibleAttempts={() => setResetAttemptsDialogOpen(true)}
           onEdit={handleOpenQuestionEditor}
           onScopeFeedback={handleScopeChange}

@@ -8,6 +8,7 @@ function Harness({
   onSelectOption,
   onNextQuestion = () => {},
   onDeleteQuestion,
+  onResetAnswer,
   choiceShortcutsActive = true,
   answerRevealed = false,
   hasNextQuestion = true,
@@ -16,6 +17,7 @@ function Harness({
   onSelectOption: (index: number) => void
   onNextQuestion?: () => void
   onDeleteQuestion?: () => void
+  onResetAnswer?: () => void
   choiceShortcutsActive?: boolean
   answerRevealed?: boolean
   hasNextQuestion?: boolean
@@ -37,6 +39,7 @@ function Harness({
     onSelectOption,
     onToggleMark,
     onDeleteQuestion,
+    onResetAnswer,
   })
   return (
     <div ref={interactionRootRef} data-quiz-shortcut-surface="" tabIndex={-1}>
@@ -109,6 +112,15 @@ describe('useQuizAnsweringShortcuts', () => {
     )
     fireEvent.keyDown(document.querySelector('textarea') as HTMLTextAreaElement, { key: 'Backspace', code: 'Backspace' })
     expect(onDeleteQuestion).toHaveBeenCalledTimes(1)
+  })
+
+  it('resets once with Ctrl+Z but preserves native undo while typing', () => {
+    const onResetAnswer = vi.fn()
+    render(<div><Harness onResetAnswer={onResetAnswer} onToggleMark={() => {}} onSelectOption={() => {}} /><textarea aria-label="草稿" /></div>)
+    fireEvent.keyDown(window, { key: 'z', code: 'KeyZ', ctrlKey: true })
+    fireEvent.keyDown(window, { key: 'z', code: 'KeyZ', ctrlKey: true, repeat: true })
+    fireEvent.keyDown(screen.getByLabelText('草稿'), { key: 'z', code: 'KeyZ', ctrlKey: true })
+    expect(onResetAnswer).toHaveBeenCalledTimes(1)
   })
 
   it('yields Enter while a confirmation dialog is open', () => {

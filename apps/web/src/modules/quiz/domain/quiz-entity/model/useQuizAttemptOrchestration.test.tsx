@@ -7,6 +7,7 @@ type AttemptResponse = { question: PalaceQuizQuestion; auto_marked?: boolean }
 
 const calls: string[] = []
 let settleAttempt: ((value: AttemptResponse) => void) | null = null
+let settleFeedback: ((value: never) => void) | null = null
 
 vi.mock('@/modules/quiz/domain/quiz-entity/api', () => ({
   recordPalaceQuizChoiceAttemptApi: () => {
@@ -15,7 +16,7 @@ vi.mock('@/modules/quiz/domain/quiz-entity/api', () => ({
       settleAttempt = resolve
     })
   },
-  requestPalaceShortAnswerFeedbackApi: () => Promise.resolve({}),
+  requestPalaceShortAnswerFeedbackApi: () => new Promise((resolve) => { settleFeedback = resolve }),
 }))
 
 vi.mock('@/modules/quiz/domain/quiz-entity/model/quizResultFeedback', () => ({
@@ -96,6 +97,27 @@ describe('useQuizAttemptOrchestration result feedback', () => {
     // The write settling must not replay the cue.
     expect(calls.filter((call) => call === 'result:sound')).toHaveLength(1)
     expect(adapter.applyUpdatedQuestion).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not restore AI feedback after the question is reset', async () => {
+    const adapter = {
+      readQuestionState: () => ({ shortAnswerText: '我的答案' }),
+      updateQuestionState: vi.fn(),
+      applyUpdatedQuestion: vi.fn(),
+    }
+    const { result } = renderHook(() => useQuizAttemptOrchestration({
+      adapter,
+      promptForAiOptions: async () => ({}),
+      shortAnswerEntrypointKey: 'test',
+      resultFeedbackMode: 'immediate',
+      emitFeedback: vi.fn(),
+    }))
+    let request: Promise<void>
+    await act(async () => { request = result.current.handleShortAnswerFeedback(question); await Promise.resolve() })
+    const beforeReset = adapter.updateQuestionState.mock.calls.length
+    act(() => result.current.invalidateQuestion(question.id))
+    await act(async () => { settleFeedback?.({} as never); await request })
+    expect(adapter.updateQuestionState).toHaveBeenCalledTimes(beforeReset)
   })
 
   it('stays silent when another surface owns the cue', async () => {

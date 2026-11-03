@@ -42,6 +42,7 @@ export function usePalaceQuizPractice({
 
   const handleResetQuestionState = (questionId: number) => {
     emitQuizFeedback('quiz_answer_reset', { label: '重做', audioScope: 'local' })
+    orchestration.invalidateQuestion(questionId)
     resetQuestionState(questionId)
   }
 

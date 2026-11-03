@@ -146,7 +146,18 @@ export function useOverlayProgressPersistence({
         completed_ids: completedIds,
         states,
       })
-      if (roundIdRef.current !== activeRoundId) return
+      if (roundIdRef.current !== activeRoundId) return null
+      if (generation !== progressGenerationRef.current) {
+        const version = round.plan_version ?? round.version
+        if (typeof version === 'number' && version > planVersionRef.current) planVersionRef.current = version
+        dirtyProgressRef.current = true
+        if (persistTimerRef.current != null) window.clearTimeout(persistTimerRef.current)
+        persistTimerRef.current = window.setTimeout(() => {
+          persistTimerRef.current = null
+          void writeProgressNowRef.current(indexRef.current, questionStatesRef.current)
+        }, PROGRESS_DEBOUNCE_MS)
+        return null
+      }
       if (!round.conflict) {
         for (const [id, sequence] of wrongQuestions) {
           if (pendingWrongRef.current.get(id) === sequence) pendingWrongRef.current.delete(id)
@@ -168,6 +179,9 @@ export function useOverlayProgressPersistence({
       // once against the version we just adopted instead of dropping the write.
       if (round.conflict && allowRetry) {
         dirtyProgressRef.current = true
+        if (generation !== progressGenerationRef.current) {
+          return writeProgressNowRef.current(indexRef.current, questionStatesRef.current, { retryOnConflict: false, announceOrder })
+        }
         return postProgress(false)
       }
       return round
@@ -192,7 +206,7 @@ export function useOverlayProgressPersistence({
       toast.error(message)
       return null
     }
-  }, [clearRetryTimer, onRoundSync, planVersionRef, prioritizeWrongRef, roundIdRef, scheduleNetworkRetry, setOverlay])
+  }, [clearRetryTimer, indexRef, onRoundSync, planVersionRef, prioritizeWrongRef, questionStatesRef, roundIdRef, scheduleNetworkRetry, setOverlay])
 
   writeProgressNowRef.current = writeProgressNow
 

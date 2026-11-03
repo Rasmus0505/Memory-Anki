@@ -1,3 +1,5 @@
+import { useEffect } from 'react'
+import { isKeyboardShortcutSuspended } from '@/shared/keyboard/keyboardTargets'
 import { Button } from '@/shared/components/ui/button'
 import { Badge } from '@/shared/components/ui/badge'
 import { Card, CardContent } from '@/shared/components/ui/card'
@@ -61,6 +63,24 @@ export function PalaceQuizPracticePanel({
   onViewKnowledge?: (question: PalaceQuizQuestion) => void
   comboScopeKey?: string | null
 }) {
+  useEffect(() => {
+    if (viewMode !== 'single' || !currentQuestion) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'z') return
+      if (event.altKey || event.shiftKey || event.repeat) return
+      const target = event.target
+      if (isKeyboardShortcutSuspended()) return
+      if (target instanceof HTMLElement) {
+        if (target.isContentEditable) return
+        if (target.closest('input, textarea, select')) return
+      }
+      event.preventDefault()
+      ;(onAnswerReset ?? onReset)(currentQuestion.id)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [currentQuestion, onAnswerReset, onReset, viewMode])
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">

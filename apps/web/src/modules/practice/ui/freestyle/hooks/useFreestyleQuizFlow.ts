@@ -367,7 +367,10 @@ export function useFreestyleQuizFlow({
     setProgress,
     setProgressAndPersist,
     updateQuestionState,
-    resetQuestionAnswer,
+    resetQuestionAnswer: (questionId: number) => {
+      orchestration.invalidateQuestion(questionId)
+      resetQuestionAnswer(questionId)
+    },
     handleChoiceResolve,
     handleShortAnswerSubmit,
     handleClearLocalProgress,

@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import { recordPalaceQuizChoiceAttemptApi, requestPalaceShortAnswerFeedbackApi } from '@/modules/quiz/domain/quiz-entity/api'
 import { isQuizChoiceAttemptClosed } from '@/modules/quiz/domain/quiz-entity/model/quizAnswerMode'
 import { withOptimisticQuizAttempt } from '@/modules/quiz/domain/quiz-entity/model/quizAttemptStats'
@@ -64,6 +64,10 @@ export function useQuizAttemptOrchestration({
    */
   applyQuestionUpdates?: boolean
 }) {
+  const feedbackGeneration = useRef(new Map<number, number>())
+  const invalidateQuestion = useCallback((questionId: number) => {
+    feedbackGeneration.current.set(questionId, (feedbackGeneration.current.get(questionId) ?? 0) + 1)
+  }, [])
   const handleChoiceSelect = useCallback(
     (question: PalaceQuizQuestion, optionId: string | string[], correctOverride?: boolean) => {
       const currentState = adapter.readQuestionState(question.id)
@@ -142,6 +146,9 @@ export function useQuizAttemptOrchestration({
         toast.error('请先填写你的答案。')
         return
       }
+      const generation = (feedbackGeneration.current.get(question.id) ?? 0) + 1
+      feedbackGeneration.current.set(question.id, generation)
+      const isCurrent = () => feedbackGeneration.current.get(question.id) === generation
       emitFeedback('quiz_generate_start', { label: 'AI点评', audioScope: 'global' })
       adapter.updateQuestionState(question.id, (current) => ({
         ...current,
@@ -153,6 +160,7 @@ export function useQuizAttemptOrchestration({
           entrypointKey: shortAnswerEntrypointKey,
           title: '简答题 AI 点评配置',
         })
+        if (!isCurrent()) return
         if (!aiOptions) {
           adapter.updateQuestionState(question.id, (current) => ({
             ...current,
@@ -162,6 +170,7 @@ export function useQuizAttemptOrchestration({
           return
         }
         const feedback = await requestPalaceShortAnswerFeedbackApi(question.id, userAnswer, aiOptions)
+        if (!isCurrent()) return
         adapter.updateQuestionState(question.id, (current) => ({
           ...current,
           shortAnswerFeedback: feedback,
@@ -169,6 +178,7 @@ export function useQuizAttemptOrchestration({
         }))
         emitFeedback('quiz_result_ai_feedback_ready', { label: 'AI完成', audioScope: 'global' })
       } catch (error) {
+        if (!isCurrent()) return
         adapter.updateQuestionState(question.id, (current) => ({
           ...current,
           shortAnswerFeedbackLoading: false,
@@ -181,6 +191,7 @@ export function useQuizAttemptOrchestration({
   )
 
   return {
+    invalidateQuestion,
     handleChoiceSelect,
     handleShortAnswerSubmit,
     handleShortAnswerFeedback,

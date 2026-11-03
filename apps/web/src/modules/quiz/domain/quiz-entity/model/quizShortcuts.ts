@@ -17,6 +17,7 @@ export type QuizShortcutActionId =
   | 'previous_question'
   | 'next_question'
   | 'delete_question'
+  | 'reset_answer'
   | 'previous_option'
   | 'next_option'
   | 'submit_choice'
@@ -82,6 +83,13 @@ export const QUIZ_SHORTCUT_ACTIONS: QuizShortcutActionDefinition[] = [
     label: '删除本题',
     description: '打开删除确认，不会直接删除。输入框里仍然是退格。',
     defaultBinding: bare('Backspace', 'backspace'),
+  },
+  {
+    id: 'reset_answer',
+    group: 'question',
+    label: '重新作答',
+    description: '清空当前题的作答和草稿，不影响累计统计；输入框内保留文字撤销。',
+    defaultBinding: { code: 'KeyZ', key: 'z', shift: false, ctrl: true, alt: false, meta: false },
   },
   {
     id: 'toggle_mark',
@@ -292,7 +300,7 @@ export function resolveQuizShortcutAction(
   const matched = QUIZ_SHORTCUT_ACTIONS.find((action) => isShortcutPressed(event, shortcuts[action.id]))
   if (!matched) return null
 
-  if (matched.id === 'toggle_mark' || matched.id === 'delete_question') {
+  if (matched.id === 'toggle_mark' || matched.id === 'delete_question' || matched.id === 'reset_answer') {
     return { id: matched.id, run: !context.repeat }
   }
 

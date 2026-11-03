@@ -316,6 +316,44 @@ describe('PalaceQuizPage core flows', () => {
     expect(screen.getAllByRole('button', { name: '标记' }).length).toBeGreaterThan(0)
   })
 
+  it('uses Ctrl+Z to retry only the current question and preserves native undo in answer inputs', async () => {
+    renderPage()
+    expect(await screen.findByText('细胞的控制中心是？')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'B. 细胞核' }))
+    expect(await screen.findByText('回答正确')).toBeTruthy()
+    const correctOption = screen.getByRole('button', { name: /^(B\. )?细胞核$/ })
+    expect(correctOption.className).toContain('border-success')
+
+    const retryEvent = new KeyboardEvent('keydown', {
+      key: 'z',
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    })
+    window.dispatchEvent(retryEvent)
+    expect(retryEvent.defaultPrevented).toBe(true)
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^(B\. )?细胞核$/ }).className).not.toContain('border-success')
+    })
+    expect(screen.queryByText('简述有丝分裂的意义。')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '下一题' }))
+    fireEvent.click(screen.getByRole('button', { name: '下一题' }))
+    const answerInput = await screen.findByPlaceholderText('先写下你的答案，再点击提交')
+    fireEvent.change(answerInput, { target: { value: '保留这段草稿' } })
+    const undoEvent = new KeyboardEvent('keydown', {
+      key: 'z',
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    })
+    answerInput.dispatchEvent(undoEvent)
+
+    expect(undoEvent.defaultPrevented).toBe(false)
+    expect((answerInput as HTMLTextAreaElement).value).toBe('保留这段草稿')
+  })
+
   it('supports filtering questions by palace scope in manage view', async () => {
     renderPage()
     fireEvent.click(await screen.findByRole('button', { name: '管理' }))

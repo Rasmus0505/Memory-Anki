@@ -111,6 +111,14 @@ export function FreestyleQuizCardView({
         return
       }
       const shortcuts = readQuizShortcuts()
+      if (!isQuizShortcutRecording() && isShortcutPressed(event, shortcuts.reset_answer) && onAnswerReset) {
+        event.preventDefault()
+        if (!event.repeat) {
+          onAnswerReset(card.question.id)
+          setKeyboardOptionIndex(0)
+        }
+        return
+      }
 
       if (isResolved) {
         if (!onRequestNext || event.repeat || !isShortcutPressed(event, shortcuts.submit_choice)) return
@@ -153,40 +161,16 @@ export function FreestyleQuizCardView({
       const optionIndex = match.id === 'submit_choice'
         ? (focusedOptionIndex(target) ?? keyboardOptionIndex)
         : match.optionIndex
-      const option = optionIndex == null ? undefined : card.question.options[optionIndex]
-      if (!option) return
       event.preventDefault()
       if (!match.run) return
       const correctIds = (card.question.answer_payload.correct_option_ids || []).map(String)
-      if (correctIds.length > 1) {
-        if (match.id.startsWith('select_option_')) {
-          onStateChange((current) => {
-            const picked = current.selectedOptionIds || []
-            return {
-              ...current,
-              selectedOptionIds: picked.includes(option.id)
-                ? picked.filter((item) => item !== option.id)
-                : [...picked, option.id].sort(),
-            }
-          })
-          return
-        }
-        const picked = state?.selectedOptionIds || []
-        if (picked.length === 0) return
-        const correct =
-          picked.length === correctIds.length && picked.every((item) => correctIds.includes(item))
-        onStateChange((current) => ({ ...current, resolved: true, correct }))
-        onChoiceResolve(picked, correct)
+      if (correctIds.length > 1 && !match.id.startsWith('select_option_')) {
+        cardRef.current?.querySelector<HTMLButtonElement>('[data-quiz-submit="true"]')?.click()
         return
       }
-      const correct = option.id === (card.question.answer_payload.correct_option_id || '')
-      onStateChange((current) => ({
-        ...current,
-        selectedOptionId: option.id,
-        resolved: true,
-        correct,
-      }))
-      onChoiceResolve(option.id, correct)
+      if (optionIndex == null) return
+      const optionButton = cardRef.current?.querySelector<HTMLButtonElement>(`[data-quiz-option-index="${optionIndex}"]`)
+      optionButton?.click()
     }
     window.addEventListener('keydown', handleKeyDown, true)
     return () => window.removeEventListener('keydown', handleKeyDown, true)
@@ -198,6 +182,7 @@ export function FreestyleQuizCardView({
     keyboardOptionIndex,
     onChoiceResolve,
     onRequestNext,
+    onAnswerReset,
     onStateChange,
     state,
   ])
@@ -274,6 +259,7 @@ export function FreestyleQuizCardView({
         </div>
         <div className="freestyle-quiz-interaction fs-quiz-options mt-6 text-paper-ink-soft [&_button]:bg-paper-card">
           <QuizQuestionInteraction
+            key={JSON.stringify([card.question.id, card.question.options])}
             question={card.question}
             state={state}
             compact

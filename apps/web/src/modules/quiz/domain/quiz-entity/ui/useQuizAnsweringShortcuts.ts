@@ -52,6 +52,7 @@ export function useQuizAnsweringShortcuts({
   onSelectOption,
   onToggleMark,
   onDeleteQuestion,
+  onResetAnswer,
 }: {
   enabled: boolean
   questionCount: number
@@ -68,6 +69,7 @@ export function useQuizAnsweringShortcuts({
   onSelectOption: (optionIndex: number) => void
   onToggleMark: () => void
   onDeleteQuestion?: () => void
+  onResetAnswer?: () => void
 }) {
   const [shortcuts, setShortcuts] = useState(readQuizShortcuts)
   const shortcutsRef = useRef(shortcuts)
@@ -87,6 +89,7 @@ export function useQuizAnsweringShortcuts({
     onSelectOption,
     onToggleMark,
     onDeleteQuestion,
+    onResetAnswer,
   })
   latestRef.current = {
     questionCount,
@@ -103,6 +106,7 @@ export function useQuizAnsweringShortcuts({
     onSelectOption,
     onToggleMark,
     onDeleteQuestion,
+    onResetAnswer,
   }
 
   useEffect(() => {
@@ -163,6 +167,10 @@ export function useQuizAnsweringShortcuts({
       }
       if (match.id === 'delete_question') {
         current.onDeleteQuestion?.()
+        return
+      }
+      if (match.id === 'reset_answer') {
+        current.onResetAnswer?.()
         return
       }
       if (match.id === 'previous_option' || match.id === 'next_option') {
