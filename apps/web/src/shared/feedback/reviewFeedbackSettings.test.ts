@@ -15,7 +15,7 @@ describe('reviewFeedbackSettings', () => {
 
   it('returns defaults when storage is empty', () => {
     expect(readReviewFeedbackSettings()).toEqual(DEFAULT_REVIEW_FEEDBACK_SETTINGS)
-    expect(DEFAULT_REVIEW_FEEDBACK_SETTINGS.schemaVersion).toBe(4)
+    expect(DEFAULT_REVIEW_FEEDBACK_SETTINGS.schemaVersion).toBe(5)
     expect(DEFAULT_REVIEW_FEEDBACK_SETTINGS.gameplayFx.screenShakeIntensity).toBe(100)
     expect(DEFAULT_REVIEW_FEEDBACK_SETTINGS.soundVoice).toBe('mixed')
   })

@@ -65,7 +65,7 @@ function noiseBurst(context: AudioContext, start: number, args: {
 }
 
 function playPhrase(context: AudioContext, start: number, volume: number, notes: ToneSpec[]) {
-  const voice = pickConcreteVoice(readReviewFeedbackSettings().soundVoice)
+  const voice = pickConcreteVoice(readReviewFeedbackSettings().soundVoices)
   const peaks = sequencePeaks(notes.map((note) => note.gain), volume)
   const destination = sharedAudioOutput(context)
   notes.forEach((note, index) => {

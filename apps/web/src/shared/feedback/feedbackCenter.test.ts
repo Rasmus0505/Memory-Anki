@@ -13,21 +13,27 @@ vi.mock('@/shared/feedback/mindmap-audio/webAudioFeedback', () => ({
   playWebAudioFireworkAccent: (...args: unknown[]) => mocks.playWebAudioFireworkAccent(...args),
 }))
 
-vi.mock('@/shared/feedback/reviewFeedbackSettings', () => ({
-  // Base volume max (2) x per-scene boost max (3).
-  REVIEW_FEEDBACK_EFFECTIVE_VOLUME_MAX: 6,
-  getReviewFeedbackEffectiveVolume: () => 1,
-  readReviewFeedbackSettings: () => ({
-    animationEnabled: true,
-    soundEnabled: true,
-    volume: 1,
-  }),
-  resolveFeedbackChannels: () => ({
-    learningSounds: true,
-    milestoneEffects: true,
-    completionEffects: true,
-  }),
-}))
+vi.mock('@/shared/feedback/reviewFeedbackSettings', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/shared/feedback/reviewFeedbackSettings')>()
+  return {
+    ...actual,
+    // Base volume max (2) x per-scene boost max (3).
+    REVIEW_FEEDBACK_EFFECTIVE_VOLUME_MAX: 6,
+    getReviewFeedbackEffectiveVolume: () => 1,
+    getSceneEffectiveVolume: () => 1,
+    readReviewFeedbackSettings: () => ({
+      ...actual.DEFAULT_REVIEW_FEEDBACK_SETTINGS,
+      animationEnabled: true,
+      soundEnabled: true,
+      volume: 1,
+    }),
+    resolveFeedbackChannels: () => ({
+      learningSounds: true,
+      milestoneEffects: true,
+      completionEffects: true,
+    }),
+  }
+})
 
 vi.mock('@/shared/feedback/globalFeedbackModel', () => ({
   dispatchGlobalFeedback: vi.fn(),

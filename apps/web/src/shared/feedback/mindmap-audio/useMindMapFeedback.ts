@@ -7,7 +7,7 @@ import {
   readReviewFeedbackSettings,
   type ReviewFeedbackSettings,
 } from '@/shared/feedback/reviewFeedbackSettings'
-import type { SoundVoiceId } from './soundVoices'
+import type { SoundVoiceId, SoundVoiceSelection } from './soundVoices'
 import {
   playWebAudioComboMilestone,
   playWebAudioFeedbackEvent,
@@ -22,7 +22,7 @@ interface MindMapFeedbackAudioController {
       origin?: MindMapFeedbackOrigin
       audioScope?: 'local' | 'global'
       volume?: number
-      voice?: SoundVoiceId
+      voice?: SoundVoiceId | SoundVoiceSelection
     },
   ) => void
   playComboMilestone: (milestoneStep: number, options?: { volume?: number }) => void
@@ -47,7 +47,7 @@ export function useMindMapFeedbackAudio(
         origin?: MindMapFeedbackOrigin
         audioScope?: 'local' | 'global'
         volume?: number
-        voice?: SoundVoiceId
+        voice?: SoundVoiceId | SoundVoiceSelection
       },
     ) => {
       const eventVolume = clampFeedbackVolume(options?.volume ?? feedbackVolume)
@@ -58,7 +58,7 @@ export function useMindMapFeedbackAudio(
         origin: options?.origin,
         audioScope: options?.audioScope,
         volume: eventVolume,
-        voice: options?.voice,
+        voice: options?.voice as SoundVoiceId | SoundVoiceSelection | undefined,
       })
     },
     [enabled, feedbackVolume],

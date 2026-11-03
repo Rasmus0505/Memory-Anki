@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { pickConcreteVoice, sanitizeSoundVoice } from './soundVoices'
+import { pickConcreteVoice, sanitizeSoundVoice, sanitizeSoundVoiceSelection } from './soundVoices'
 import { sequencePeaks } from './voiceSynth'
 
 describe('sound voices', () => {
@@ -18,6 +18,13 @@ describe('sound voices', () => {
     expect(pickConcreteVoice('mixed', random)).toBe('celesta')
     expect(pickConcreteVoice('wood', random)).toBe('wood')
     expect(random).toHaveBeenCalledTimes(3)
+  })
+
+  it('normalizes a selectable pool in stable order and keeps one voice', () => {
+    expect(sanitizeSoundVoiceSelection(['wood', 'crystal', 'wood'])).toEqual(['crystal', 'wood'])
+    expect(sanitizeSoundVoiceSelection([])).toEqual(['crystal', 'wood', 'celesta'])
+    expect(pickConcreteVoice(['wood'], () => 0.9)).toBe('wood')
+    expect(pickConcreteVoice(['crystal', 'celesta'], () => 0.5)).toBe('celesta')
   })
 
   it('lifts a quiet phrase without letting the volume slider stop mattering', () => {

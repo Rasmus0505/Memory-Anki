@@ -3,7 +3,13 @@ import {
   hasLoadedClientPreferences,
   saveClientPreference,
 } from '@/shared/preferences/clientPreferences'
-import { sanitizeSoundVoice, type SoundVoiceId } from '@/shared/feedback/mindmap-audio/soundVoices'
+import {
+  sanitizeSoundVoice,
+  sanitizeSoundVoiceSelection,
+  CONCRETE_SOUND_VOICES,
+  type SoundVoiceId,
+  type ConcreteSoundVoice,
+} from '@/shared/feedback/mindmap-audio/soundVoices'
 
 export type FeedbackPreset = 'focus' | 'balanced' | 'motivating'
 
@@ -93,11 +99,13 @@ export const DEFAULT_GAMEPLAY_FEEDBACK_FX: GameplayFeedbackFxSettings = {
  * the timer and break-guard configs that are their only consumers.
  */
 export interface ReviewFeedbackSettings {
-  schemaVersion: 4
+  schemaVersion: 5
   preset: FeedbackPreset
   soundEnabled: boolean
-  /** Which of the three audition voices plays. `mixed` draws once per phrase. */
+  /** Legacy single-voice selector kept for older callers. */
   soundVoice: SoundVoiceId
+  /** Canonical selected concrete voices; one voice is fixed, multiple are mixed equally. */
+  soundVoices: ConcreteSoundVoice[]
   /** Paper/wood interface sounds outside review scenes; still gated by `soundEnabled`. */
   uiSoundEnabled: boolean
   volume: number
@@ -187,10 +195,11 @@ const DEFAULT_SCENES: ReviewFeedbackScenesSettings = {
 }
 
 export const DEFAULT_REVIEW_FEEDBACK_SETTINGS: ReviewFeedbackSettings = {
-  schemaVersion: 4,
+  schemaVersion: 5,
   preset: 'balanced',
   soundEnabled: true,
   soundVoice: 'mixed',
+  soundVoices: [...CONCRETE_SOUND_VOICES],
   uiSoundEnabled: true,
   volume: 1.15,
   animationEnabled: true,
@@ -374,11 +383,19 @@ export function sanitizeReviewFeedbackSettings(value: unknown): ReviewFeedbackSe
     ),
   }
 
+  const soundVoices = 'soundVoices' in raw
+    ? sanitizeSoundVoiceSelection(raw.soundVoices)
+    : sanitizeSoundVoiceSelection(raw.soundVoice)
+  const soundVoice = soundVoices.length === CONCRETE_SOUND_VOICES.length
+    ? 'mixed'
+    : soundVoices[0] ?? sanitizeSoundVoice(raw.soundVoice)
+
   return {
-    schemaVersion: 4,
+    schemaVersion: 5,
     preset,
     soundEnabled,
-    soundVoice: sanitizeSoundVoice(raw.soundVoice),
+    soundVoice,
+    soundVoices,
     uiSoundEnabled: sanitizeBoolean(raw.uiSoundEnabled, DEFAULT_REVIEW_FEEDBACK_SETTINGS.uiSoundEnabled),
     volume: sanitizeNumber(raw.volume, DEFAULT_REVIEW_FEEDBACK_SETTINGS.volume, 0, REVIEW_FEEDBACK_VOLUME_MAX),
     animationEnabled,
@@ -468,8 +485,10 @@ export function applyFeedbackPreset(
 
   return {
     ...settings,
-    schemaVersion: 4,
+    schemaVersion: 5,
     preset,
+    soundVoices: settings.soundVoices,
+    soundVoice: settings.soundVoice,
     // Deliberately does not touch learningSounds/milestoneEffects/
     // completionEffectsEnabled: those are user overrides, and writing them here
     // is what let a preset click silently re-enable a channel the user closed.

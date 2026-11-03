@@ -1,165 +1,50 @@
 import * as React from 'react'
-import { Check, RotateCcw, Sparkles, Volume2 } from 'lucide-react'
+import { Check, RotateCcw, Volume2, VolumeX, Play } from 'lucide-react'
 import { ProfileLayout } from '@/modules/settings/ui/profile/ProfileLayout'
-import { emitReviewCelebration } from '@/shared/components/celebration'
-import { useMindMapFeedbackAudio } from '@/shared/feedback/mindmap-audio/useMindMapFeedback'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
+import { Checkbox } from '@/shared/components/ui/checkbox'
 import { Input } from '@/shared/components/ui/input'
 import { Switch } from '@/shared/components/ui/switch'
-import { SOUND_VOICE_OPTIONS, type SoundVoiceId } from '@/shared/feedback/mindmap-audio/soundVoices'
+import { useMindMapFeedbackAudio } from '@/shared/feedback/mindmap-audio/useMindMapFeedback'
+import {
+  CONCRETE_SOUND_VOICES,
+  SOUND_VOICE_OPTIONS,
+  type ConcreteSoundVoice,
+} from '@/shared/feedback/mindmap-audio/soundVoices'
 import {
   DEFAULT_REVIEW_FEEDBACK_SETTINGS,
   REVIEW_FEEDBACK_SETTINGS_UPDATED_EVENT,
   REVIEW_FEEDBACK_VOLUME_MAX,
-  applyFeedbackPreset,
-  getReviewFeedbackEffectiveVolume,
   readReviewFeedbackSettings,
-  resolveFeedbackChannels,
   writeReviewFeedbackSettings,
-  type FeedbackChannelOverride,
-  type FeedbackPreset,
-  type FeedbackSceneKey,
   type ReviewFeedbackSettings,
 } from '@/shared/feedback/reviewFeedbackSettings'
-import {
-  FEEDBACK_SCENE_DESCRIPTORS,
-  FeedbackSceneEditor,
-} from '@/modules/settings/ui/profile/components/FeedbackSceneEditor'
 import { cn } from '@/shared/lib/utils'
 import { useAutosaveDocument } from '@/shared/hooks/useAutosaveDocument'
 import { useUnsavedChangesGuard } from '@/shared/hooks/useUnsavedChangesGuard'
-
-const PRESET_OPTIONS: Array<{
-  value: FeedbackPreset
-  title: string
-  description: string
-}> = [
-  {
-    value: 'focus',
-    title: '专注',
-    description: '普通学习保持安静，只保留计时召回与最终完成。',
-  },
-  {
-    value: 'balanced',
-    title: '平衡',
-    description: '答题使用短促语义音，里程碑轻量呈现，完成时庆祝。',
-  },
-  {
-    value: 'motivating',
-    title: '激励',
-    description: '触发规则不变，提高里程碑与最终完成的表现强度。',
-  },
-]
 
 function cloneSettings(settings: ReviewFeedbackSettings) {
   return JSON.parse(JSON.stringify(settings)) as ReviewFeedbackSettings
 }
 
-function SettingRow({
-  title,
-  description,
-  checked,
-  onCheckedChange,
-}: {
-  title: string
-  description: string
-  checked: boolean
-  onCheckedChange: (checked: boolean) => void
-}) {
-  return (
-    <div className="flex items-start justify-between gap-4 border-b border-border/55 py-4 last:border-b-0">
-      <div>
-        <div className="text-sm font-semibold text-foreground">{title}</div>
-        <p className="mt-1 text-sm leading-5 text-muted-foreground">{description}</p>
-      </div>
-      <Switch checked={checked} onCheckedChange={onCheckedChange} aria-label={title} />
-    </div>
-  )
-}
-
-const CHANNEL_ROWS = [
-  {
-    field: 'learningSoundsEnabled',
-    resolvedKey: 'learningSounds',
-    title: '学习结果声音',
-    description: '控制答题和翻卡结果音，不影响计时召回。',
-  },
-  {
-    field: 'milestoneEffectsEnabled',
-    resolvedKey: 'milestoneEffects',
-    title: '阶段成就效果',
-    description: '控制连击与阶段里程碑，不改变进度状态本身。',
-  },
-  {
-    field: 'completionEffectsEnabled',
-    resolvedKey: 'completionEffects',
-    title: '最终完成效果',
-    description: '控制整次训练完成时的庆祝与总结强调。',
-  },
-] as const
-
-/** Tri-state row: `null` follows the preset, an explicit boolean overrides it. */
-function ChannelRow({
-  title,
-  description,
-  value,
-  resolved,
-  onChange,
-}: {
-  title: string
-  description: string
-  value: FeedbackChannelOverride
-  resolved: boolean
-  onChange: (next: FeedbackChannelOverride) => void
-}) {
-  return (
-    <div className="flex items-start justify-between gap-4 border-b border-border/55 py-4 last:border-b-0">
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-semibold text-foreground">{title}</span>
-          {value == null ? (
-            <span className="rounded-full bg-secondary px-2 py-0.5 text-[11px] text-muted-foreground">
-              跟随预设
-            </span>
-          ) : (
-            <button
-              type="button"
-              onClick={() => onChange(null)}
-              className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] text-primary hover:bg-primary/20"
-            >
-              已自定义 · 恢复跟随
-            </button>
-          )}
-        </div>
-        <p className="mt-1 text-sm leading-5 text-muted-foreground">{description}</p>
-      </div>
-      <Switch checked={resolved} onCheckedChange={(next) => onChange(next)} aria-label={title} />
-    </div>
-  )
+function selectionSummary(voices: readonly ConcreteSoundVoice[]) {
+  if (voices.length === CONCRETE_SOUND_VOICES.length) return '三种风格等概率混合'
+  if (voices.length === 1) return '单一风格'
+  return `${voices.length} 种风格等概率混合`
 }
 
 export default function ProfileFeedbackPage() {
-  const [savedSettings, setSavedSettings] = React.useState<ReviewFeedbackSettings>(() =>
-    readReviewFeedbackSettings(),
-  )
-  const [draftSettings, setDraftSettings] = React.useState<ReviewFeedbackSettings>(() =>
-    cloneSettings(readReviewFeedbackSettings()),
-  )
-  const effectiveVolume = getReviewFeedbackEffectiveVolume(draftSettings)
-  const audio = useMindMapFeedbackAudio(
-    draftSettings.soundEnabled,
-    effectiveVolume,
-  )
+  const initial = React.useMemo(() => readReviewFeedbackSettings(), [])
+  const [savedSettings, setSavedSettings] = React.useState<ReviewFeedbackSettings>(() => cloneSettings(initial))
+  const [draftSettings, setDraftSettings] = React.useState<ReviewFeedbackSettings>(() => cloneSettings(initial))
+  const audio = useMindMapFeedbackAudio(draftSettings.soundEnabled, draftSettings.volume)
   const isDirty = React.useMemo(
     () => JSON.stringify(savedSettings) !== JSON.stringify(draftSettings),
     [draftSettings, savedSettings],
   )
-  const resolvedChannels = React.useMemo(
-    () => resolveFeedbackChannels(draftSettings),
-    [draftSettings],
-  )
   const isDirtyRef = React.useRef(isDirty)
+
   React.useEffect(() => {
     isDirtyRef.current = isDirty
   }, [isDirty])
@@ -181,20 +66,38 @@ export default function ProfileFeedbackPage() {
     [],
   )
 
-  const selectVoice = React.useCallback(
-    (soundVoice: SoundVoiceId) => {
-      updateDraft((current) => ({ ...current, soundVoice }))
-      audio.playEvent('quiz_result_correct', { audioScope: 'global', voice: soundVoice })
+  const preview = React.useCallback(
+    (event: 'quiz_result_correct' | 'quiz_result_incorrect', voice?: ConcreteSoundVoice | readonly ConcreteSoundVoice[]) => {
+      audio.playEvent(event, { audioScope: 'global', voice: voice ?? draftSettings.soundVoices })
     },
-    [audio, updateDraft],
+    [audio, draftSettings.soundVoices],
   )
 
-  const selectPreset = React.useCallback(
-    (preset: FeedbackPreset) => {
-      updateDraft((current) => applyFeedbackPreset(current, preset))
+  const toggleVoice = React.useCallback(
+    (voice: ConcreteSoundVoice) => {
+      updateDraft((current) => {
+        const selected = current.soundVoices.includes(voice)
+        if (selected && current.soundVoices.length === 1) return current
+        const nextVoices = selected
+          ? current.soundVoices.filter((item) => item !== voice)
+          : CONCRETE_SOUND_VOICES.filter((item) => current.soundVoices.includes(item) || item === voice)
+        return {
+          ...current,
+          soundVoice: nextVoices.length === CONCRETE_SOUND_VOICES.length ? 'mixed' : nextVoices[0] ?? 'crystal',
+          soundVoices: nextVoices,
+        }
+      })
     },
     [updateDraft],
   )
+
+  const selectAllVoices = React.useCallback(() => {
+    updateDraft((current) => ({
+      ...current,
+      soundVoice: 'mixed',
+      soundVoices: [...CONCRETE_SOUND_VOICES],
+    }))
+  }, [updateDraft])
 
   const { status: autosaveStatus } = useAutosaveDocument({
     value: draftSettings,
@@ -203,316 +106,143 @@ export default function ProfileFeedbackPage() {
   useUnsavedChangesGuard(autosaveStatus === 'pending' || autosaveStatus === 'saving')
 
   const reset = React.useCallback(() => {
-    const next = applyFeedbackPreset(cloneSettings(DEFAULT_REVIEW_FEEDBACK_SETTINGS), 'balanced')
-    setDraftSettings(next)
+    setDraftSettings(cloneSettings(DEFAULT_REVIEW_FEEDBACK_SETTINGS))
   }, [])
-
-  const previewMilestone = React.useCallback(() => {
-    emitReviewCelebration({
-      kind: 'milestone',
-      milestoneStep: 1,
-      reducedMotion: draftSettings.reducedCelebrationMotion,
-      soundEnabled: draftSettings.soundEnabled,
-      volume: effectiveVolume,
-    })
-  }, [draftSettings, effectiveVolume])
-
-  const previewCompletion = React.useCallback(() => {
-    emitReviewCelebration({
-      kind: 'session_complete',
-      reducedMotion: draftSettings.reducedCelebrationMotion,
-      soundEnabled: draftSettings.soundEnabled,
-      volume: effectiveVolume,
-    })
-  }, [draftSettings, effectiveVolume])
 
   return (
     <ProfileLayout
       title="反馈中心"
-      description="统一管理学习声音、动态效果与桌面提醒。计时阶段和轮次细节请在“计时与休息”中设置。"
+      description="先试听，再选择你想听见的声音。所有学习音和界面音共用这套音色与音量。"
     >
-      <div className="space-y-6">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">反馈模式</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-              {PRESET_OPTIONS.map((option) => {
-                const active = draftSettings.preset === option.value
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    aria-pressed={active}
-                    onClick={() => selectPreset(option.value)}
-                    className={cn(
-                      'rounded-xl border p-4 text-left',
-                      active
-                        ? 'border-primary/55 bg-primary/7 ring-1 ring-primary/20'
-                        : 'border-border/70 bg-background hover:border-border',
-                    )}
-                  >
-                    <span className="flex items-center justify-between gap-3 text-sm font-semibold">
-                      {option.title}
-                      {active ? <Check className="size-4 text-primary" aria-hidden="true" /> : null}
-                    </span>
-                    <span className="mt-2 block text-sm leading-5 text-muted-foreground">
-                      {option.description}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">屏幕微震</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">评分时视口震动强度</span>
-              <span className="text-xs font-mono text-muted-foreground">{draftSettings.gameplayFx.screenShakeIntensity}%</span>
-            </div>
-            <Input
-              type="range"
-              min="0"
-              max="100"
-              step="5"
-              aria-label="屏幕微震强度"
-              value={draftSettings.gameplayFx.screenShakeIntensity}
-              onChange={(e) =>
-                updateDraft((cur) => ({
-                  ...cur,
-                  gameplayFx: { ...cur.gameplayFx, screenShakeIntensity: Number(e.target.value) },
-                }))
-              }
-            />
-          </CardContent>
-        </Card>
-
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(320px,0.7fr)]">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Volume2 className="size-4" />
-                通道总控
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <SettingRow
-                title="声音反馈"
-                description="只播放答题、里程碑、完成与计时等有明确语义的短音。"
-                checked={draftSettings.soundEnabled}
-                onCheckedChange={(soundEnabled) =>
-                  updateDraft((current) => ({ ...current, soundEnabled }))
-                }
-              />
-              <SettingRow
-                title="界面音效"
-                description="导航、按钮和保存都走当前音色，而且偏响。随心模式保留自己的声音设计。"
-                checked={draftSettings.uiSoundEnabled}
-                onCheckedChange={(uiSoundEnabled) =>
-                  updateDraft((current) => ({ ...current, uiSoundEnabled }))
-                }
-              />
-              <div className="border-b border-border/55 py-4">
-                <div className="text-sm font-semibold">音色</div>
-                <p className="mt-1 text-sm leading-5 text-muted-foreground">
-                  三套都在。点一下会用这套试听，保存后全应用生效。所有声音都偏响，音量滑条仍然有效。
+      <div className="space-y-6 pb-24">
+        <Card className="overflow-hidden border-primary/25 bg-gradient-to-br from-primary/[0.08] via-card to-card">
+          <CardHeader className="pb-4">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  {draftSettings.soundEnabled ? <Volume2 className="size-5 text-primary" /> : <VolumeX className="size-5 text-muted-foreground" />}
+                  先听一声
+                </CardTitle>
+                <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
+                  点击试听不会改变选择。勾选风格后，下一次完整反馈会从已选风格中等概率抽一种；同一段连弹不会中途换声。
                 </p>
-                <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {SOUND_VOICE_OPTIONS.map((option) => {
-                    const active = draftSettings.soundVoice === option.id
-                    return (
-                      <button
-                        key={option.id}
-                        type="button"
-                        aria-pressed={active}
-                        onClick={() => selectVoice(option.id)}
-                        className={cn(
-                          'rounded-xl border p-3 text-left',
-                          active
-                            ? 'border-primary/55 bg-primary/7 ring-1 ring-primary/20'
-                            : 'border-border/70 bg-background hover:border-border',
-                        )}
-                      >
-                        <span className="flex items-center justify-between gap-3 text-sm font-semibold">
-                          {option.title}
-                          {active ? <Check className="size-4 text-primary" aria-hidden="true" /> : null}
-                        </span>
-                        <span className="mt-1 block text-sm leading-5 text-muted-foreground">{option.description}</span>
-                      </button>
-                    )
-                  })}
-                </div>
               </div>
-              <div className="border-b border-border/55 py-4">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-semibold">基础音量</div>
-                    <p className="mt-1 text-sm text-muted-foreground">计时器仍可在自己的设置中微调事件音量。</p>
+              <Switch
+                checked={draftSettings.soundEnabled}
+                onCheckedChange={(soundEnabled) => updateDraft((current) => ({ ...current, soundEnabled }))}
+                aria-label="声音反馈"
+              />
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Button type="button" size="lg" onClick={() => preview('quiz_result_correct')} disabled={!draftSettings.soundEnabled}>
+                <Play className="mr-2 size-4 fill-current" />
+                试听答对
+              </Button>
+              <Button type="button" size="lg" variant="outline" onClick={() => preview('quiz_result_incorrect')} disabled={!draftSettings.soundEnabled}>
+                <Play className="mr-2 size-4" />
+                试听答错
+              </Button>
+            </div>
+            <div className="rounded-xl border border-border/70 bg-background/60 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-semibold">当前组合</div>
+                  <div className="mt-1 text-sm text-muted-foreground" aria-live="polite">
+                    {selectionSummary(draftSettings.soundVoices)}
                   </div>
-                  <span className="text-sm tabular-nums text-muted-foreground">
-                    {Math.round(draftSettings.volume * 100)}%
-                  </span>
                 </div>
+                <Button type="button" variant="ghost" size="sm" onClick={selectAllVoices} disabled={draftSettings.soundVoices.length === CONCRETE_SOUND_VOICES.length}>
+                  全部混合
+                </Button>
+              </div>
+              <div className="mt-4 flex items-center gap-3">
+                <span className="shrink-0 text-xs text-muted-foreground">全局音量</span>
                 <Input
                   type="range"
                   min="0"
                   max={String(REVIEW_FEEDBACK_VOLUME_MAX)}
                   step="0.05"
                   value={draftSettings.volume}
-                  aria-label="基础音量"
-                  onChange={(event) =>
-                    updateDraft((current) => ({ ...current, volume: Number(event.target.value) }))
-                  }
+                  aria-label="全局音量"
+                  onChange={(event) => updateDraft((current) => ({ ...current, volume: Number(event.target.value) }))}
                 />
+                <span className="w-12 text-right text-sm tabular-nums text-muted-foreground">
+                  {Math.round(draftSettings.volume * 100)}%
+                </span>
               </div>
-              <SettingRow
-                title="动态效果"
-                description="控制阶段成就与最终完成动画，不影响控件自身状态变化。"
-                checked={draftSettings.animationEnabled}
-                onCheckedChange={(animationEnabled) =>
-                  updateDraft((current) => ({ ...current, animationEnabled }))
-                }
-              />
-              <SettingRow
-                title="减少庆祝动态"
-                description="保留状态与文字，关闭弹跳与大幅移动。"
-                checked={draftSettings.reducedCelebrationMotion}
-                onCheckedChange={(reducedCelebrationMotion) =>
-                  updateDraft((current) => ({ ...current, reducedCelebrationMotion }))
-                }
-              />
-              <SettingRow
-                title="震动反馈"
-                description="评分、连击和完成时在手机上轻震。iOS 不支持网页震动。"
-                checked={draftSettings.hapticsEnabled}
-                onCheckedChange={(hapticsEnabled) =>
-                  updateDraft((current) => ({ ...current, hapticsEnabled }))
-                }
-              />
-              <SettingRow
-                title="惊喜彩蛋"
-                description="偶尔在连击时出现的额外鼓励文案。"
-                checked={draftSettings.surpriseEnabled}
-                onCheckedChange={(surpriseEnabled) =>
-                  updateDraft((current) => ({ ...current, surpriseEnabled }))
-                }
-              />
-            </CardContent>
-          </Card>
+            </div>
+          </CardContent>
+        </Card>
 
-          <Card className="h-fit">
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Sparkles className="size-4" />
-                语义预览
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="rounded-xl border border-border/65 p-4">
-                <div className="text-sm font-semibold">答题结果</div>
-                <p className="mt-1 text-sm text-muted-foreground">答对清晰鼓励；答错保持克制并引向解析。</p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Button type="button" size="sm" onClick={() => audio.playEvent('quiz_result_correct', { audioScope: 'global', voice: draftSettings.soundVoice })}>
-                    试听答对
-                  </Button>
-                  <Button type="button" size="sm" variant="outline" onClick={() => audio.playEvent('quiz_result_incorrect', { audioScope: 'global', voice: draftSettings.soundVoice })}>
-                    试听答错
+        <section aria-labelledby="sound-style-heading">
+          <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 id="sound-style-heading" className="text-base font-semibold">选择音色风格</h2>
+              <p className="mt-1 text-sm text-muted-foreground">可以只选一种，也可以同时选几种混合使用。</p>
+            </div>
+            <span className="text-xs text-muted-foreground">已选 {draftSettings.soundVoices.length} / {CONCRETE_SOUND_VOICES.length}</span>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-3">
+            {SOUND_VOICE_OPTIONS.map((option) => {
+              const checked = draftSettings.soundVoices.includes(option.id)
+              return (
+                <div
+                  key={option.id}
+                  className={cn(
+                    'rounded-2xl border p-4 transition-colors',
+                    checked ? 'border-primary/55 bg-primary/[0.06] ring-1 ring-primary/20' : 'border-border/70 bg-card hover:border-primary/35',
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <label className="flex min-w-0 cursor-pointer items-start gap-3">
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={() => toggleVoice(option.id)}
+                        aria-label={`选择${option.title}`}
+                        disabled={checked && draftSettings.soundVoices.length === 1}
+                        className="mt-0.5"
+                      />
+                      <span className="min-w-0">
+                        <span className="block text-sm font-semibold">{option.title}</span>
+                        <span className="mt-1 block text-xs font-medium text-primary">{option.character}</span>
+                      </span>
+                    </label>
+                    {checked ? <Check className="size-4 shrink-0 text-primary" aria-hidden="true" /> : null}
+                  </div>
+                  <p className="mt-4 min-h-10 text-sm leading-5 text-muted-foreground">{option.description}</p>
+                  <Button
+                    type="button"
+                    variant={checked ? 'secondary' : 'outline'}
+                    size="sm"
+                    className="mt-4 w-full"
+                    onClick={() => preview('quiz_result_correct', option.id)}
+                    disabled={!draftSettings.soundEnabled}
+                  >
+                    <Play className="mr-2 size-3.5" />
+                    试听这套
                   </Button>
                 </div>
-              </div>
-              <div className="rounded-xl border border-amber-500/25 bg-amber-500/6 p-4">
-                <div className="text-sm font-semibold text-amber-950 dark:text-amber-100">阶段成就</div>
-                <p className="mt-1 text-sm text-muted-foreground">金色只用于连击里程碑和阶段完成。</p>
-                <Button type="button" size="sm" variant="outline" className="mt-3" onClick={previewMilestone}>
-                  预览里程碑
-                </Button>
-              </div>
-              <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/6 p-4">
-                <div className="text-sm font-semibold text-emerald-950 dark:text-emerald-100">最终完成</div>
-                <p className="mt-1 text-sm text-muted-foreground">完整总结与庆祝只在整次训练完成时出现。</p>
-                <Button type="button" size="sm" variant="outline" className="mt-3" onClick={previewCompletion}>
-                  预览完成
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">分类通道</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <p className="pb-2 text-xs text-muted-foreground">
-              默认跟随上面的反馈模式。一旦你在这里明确开关，预设就不会再改动它。
-            </p>
-            {CHANNEL_ROWS.map((row) => (
-              <ChannelRow
-                key={row.field}
-                title={row.title}
-                description={row.description}
-                value={draftSettings[row.field]}
-                resolved={resolvedChannels[row.resolvedKey]}
-                onChange={(next) =>
-                  updateDraft((current) => ({ ...current, [row.field]: next }))
-                }
-              />
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">按场景微调</CardTitle>
-          </CardHeader>
-          <CardContent className="grid grid-cols-1 gap-3 pt-0 xl:grid-cols-2">
-            {FEEDBACK_SCENE_DESCRIPTORS.map((descriptor) => (
-              <FeedbackSceneEditor
-                key={descriptor.key}
-                descriptor={descriptor}
-                scene={draftSettings.scenes[descriptor.key as FeedbackSceneKey]}
-                baseVolume={draftSettings.volume}
-                onChange={(patch) =>
-                  updateDraft((current) => ({
-                    ...current,
-                    scenes: {
-                      ...current.scenes,
-                      [descriptor.key]: {
-                        ...current.scenes[descriptor.key as FeedbackSceneKey],
-                        ...patch,
-                      },
-                    },
-                  }))
-                }
-              />
-            ))}
-          </CardContent>
-        </Card>
+              )
+            })}
+          </div>
+        </section>
 
         <div className="sticky bottom-20 z-20 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/70 bg-background/95 p-3 shadow-lg backdrop-blur sm:bottom-4">
-          <div className="flex min-h-8 items-center gap-2">
-            <span className="text-sm text-muted-foreground" role="status" aria-live="polite">
-              {autosaveStatus === 'saving' || autosaveStatus === 'pending'
-                ? '正在保存…'
-                : autosaveStatus === 'error'
-                  ? '保存失败，请检查本机服务后重试'
-                  : autosaveStatus === 'saved'
-                    ? '已保存'
-                    : null}
-            </span>
-          </div>
-          <div className="flex gap-2">
-            <Button type="button" variant="outline" onClick={reset}>
-              <RotateCcw className="mr-2 size-4" />
-              恢复默认
-            </Button>
-          </div>
+          <span className="text-sm text-muted-foreground" role="status" aria-live="polite">
+            {autosaveStatus === 'saving' || autosaveStatus === 'pending'
+              ? '正在保存…'
+              : autosaveStatus === 'error'
+                ? '保存失败，请检查本机服务后重试'
+                : autosaveStatus === 'saved'
+                  ? '已保存'
+                  : null}
+          </span>
+          <Button type="button" variant="outline" onClick={reset}>
+            <RotateCcw className="mr-2 size-4" />
+            恢复默认
+          </Button>
         </div>
       </div>
     </ProfileLayout>

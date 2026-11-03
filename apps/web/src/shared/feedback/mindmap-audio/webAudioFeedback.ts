@@ -5,7 +5,7 @@ import {
 } from '@/shared/feedback/reviewFeedbackSettings'
 import type { MindMapFeedbackEvent, MindMapFeedbackOrigin } from '@/shared/feedback/feedbackEvents'
 import { buildLayeredPops, type PopRole } from './layeredPops'
-import { pickConcreteVoice, type SoundVoiceId } from './soundVoices'
+import { pickConcreteVoice, type SoundVoiceId, type SoundVoiceSelection } from './soundVoices'
 import { renderVoicedTone, sequencePeaks } from './voiceSynth'
 import {
   getComboMilestoneTone,
@@ -255,9 +255,10 @@ export function sharedAudioOutput(context: AudioContext) {
   }
 }
 
-function playToneSequence(tones: ToneSpec[], volume: number, voice?: SoundVoiceId) {
+function playToneSequence(tones: ToneSpec[], volume: number, voice?: SoundVoiceId | SoundVoiceSelection) {
   if (tones.length === 0 || volume <= 0) return
-  const concrete = pickConcreteVoice(voice ?? readReviewFeedbackSettings().soundVoice)
+  const settings = readReviewFeedbackSettings()
+  const concrete = pickConcreteVoice(voice ?? settings.soundVoices)
   const peaks = sequencePeaks(tones.map((tone) => tone.gain), volume)
   runWithSharedAudioContext((context) => {
     const destination = sharedAudioOutput(context)
@@ -281,7 +282,7 @@ export function playWebAudioFeedbackEvent(args: {
   origin?: MindMapFeedbackOrigin
   audioScope?: 'local' | 'global'
   volume?: number
-  voice?: SoundVoiceId
+  voice?: SoundVoiceId | SoundVoiceSelection
 }) {
   const { event, surprise = false, origin, audioScope, volume = 1, voice } = args
   const feedbackVolume = clampFeedbackVolume(volume)
@@ -368,7 +369,7 @@ function scheduleNoiseSwipe(
 export function playWebAudioPageTurn(args: { volume?: number; direction?: 'forward' | 'backward' }) {
   const feedbackVolume = clampFeedbackVolume(args.volume ?? 1)
   if (feedbackVolume <= 0) return
-  const voice = pickConcreteVoice(readReviewFeedbackSettings().soundVoice)
+  const voice = pickConcreteVoice(readReviewFeedbackSettings().soundVoices)
   const band = voice === 'wood' ? [720, 280] : voice === 'celesta' ? [1600, 640] : [3200, 1400]
   runWithSharedAudioContext((context) => {
     const now = sharedAudioStartTime(context)
