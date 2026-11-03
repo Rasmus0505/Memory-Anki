@@ -126,7 +126,7 @@ describe('FreestyleScopeQuizDialog 打乱题库', () => {
     expect(await screen.findByText('第 43 题干')).toBeTruthy()
   })
 
-  it('hides the button when the round holds a single question', async () => {
+  it('disables the button when the round holds a single question', async () => {
     ensureFreestyleOverlayQuizApiMock.mockResolvedValue({
       round_id: 'round-1',
       plan_version: 1,
@@ -140,6 +140,6 @@ describe('FreestyleScopeQuizDialog 打乱题库', () => {
     renderScopeQuizDialog()
 
     expect(await screen.findByText('第 41 题干')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: '打乱题库' })).toBeNull()
+    expect(screen.getByRole('button', { name: '打乱题库' }).hasAttribute('disabled')).toBe(true)
   })
 })

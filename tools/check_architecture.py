@@ -2444,7 +2444,7 @@ def check_round_wrong_units(errors: list[str]) -> None:
     service = API_SRC / "modules" / "practice" / "application" / "round_overlay_service.py"
     normalization = API_SRC / "modules" / "practice" / "domain" / "round_plan_normalization.py"
     for path, markers in (
-        (service, ("list_node_bindings_for_palaces", "list_unit_node_members", "wrong_unit_ids")),
+        (service, ("list_node_bindings_for_palaces", "list_unit_scheduling_nodes", "wrong_unit_ids")),
         (normalization, ("wrong_unit_ids",)),
     ):
         source = path.read_text(encoding="utf-8") if path.exists() else ""
@@ -3243,7 +3243,7 @@ def check_identity_keyed_progress(errors: list[str]) -> None:
 
 
 def check_freestyle_return_save_ux(errors: list[str]) -> None:
-    """Freestyle edits save immediately, return locally, and reconcile only on leave."""
+    """Protect local-first return, background reconciliation and retry boundaries."""
     panel = (
         WEB_SRC
         / "modules"
@@ -3268,15 +3268,23 @@ def check_freestyle_return_save_ux(errors: list[str]) -> None:
         )
         return
     source = panel.read_text(encoding="utf-8", errors="ignore")
+    persistence = panel.parent / "useFreestyleUnitReviewPersistence.ts"
+    if persistence.exists():
+        source += "\n" + persistence.read_text(encoding="utf-8", errors="ignore")
 
     required = (
         ("void persistEdit(nextState)", "complete edits must save immediately"),
         ("onEditorStateSaved?.(localState)", "return must adopt the local document first"),
         ("setDisplayMode('review')", "return must switch to review locally"),
-        ("syncReason: 'editor_leave'", "schedule reconcile must use editor_leave"),
+        ("syncReason: 'editor_leave'", "inactive/unmounted fallback must use editor_leave"),
+        ("syncReason: 'return_to_review'", "return must reconcile review units"),
+        ("reconcileUnits: true", "boundary save must request unit reconciliation"),
+        ("onUnitsReconciled?.()", "reconciliation must notify the review-unit refresh"),
+        ("lastFailedPersistRef.current", "failed reconciliation must retain retry intent"),
         ("if (!editedSinceReconcileRef.current) return", "inactive/no-edit cards must skip reconcile"),
         ("setSaveState('saving')", "saving status must be visible"),
         ("setSaveState('error')", "failed saves must expose retry state"),
+        ("retrySave", "retry must retry return reconciliation"),
     )
     for marker, message in required:
         if marker not in source:
@@ -3287,7 +3295,6 @@ def check_freestyle_return_save_ux(errors: list[str]) -> None:
     forbidden = (
         ("schedulePersist", "typing autosave must not use a debounce scheduler"),
         ("saveTimerRef", "typing autosave must not use a delayed save timer"),
-        ("syncReason: 'return_to_review'", "active-card return must not reconcile"),
         ("syncReason: 'mark_change'", "active-card mark exit must not reconcile"),
     )
     for marker, message in forbidden:
@@ -3316,11 +3323,34 @@ def check_freestyle_return_save_ux(errors: list[str]) -> None:
                     f"{panel.relative_to(REPO_ROOT).as_posix()}: a failed save must not force "
                     "return-to-review back into edit mode."
                 )
-            if "flushPersistWithReconcile" in return_source:
+            if "setDisplayMode('review')" not in return_source or "reconcileReturn()" not in return_source:
                 errors.append(
-                    f"{panel.relative_to(REPO_ROOT).as_posix()}: return-to-review must not wait "
-                    "for or trigger a reconcile save."
+                    f"{panel.relative_to(REPO_ROOT).as_posix()}: return must switch to review "
+                    "before starting isolated return reconciliation."
                 )
+            if re.search(r"\bawait\b", return_source):
+                errors.append(
+                    f"{panel.relative_to(REPO_ROOT).as_posix()}: local return must not await a save."
+                )
+
+    reconcile_start = source.find("reconcileReturn")
+    if reconcile_start < 0:
+        errors.append(
+            f"{panel.relative_to(REPO_ROOT).as_posix()}: return reconciliation helper is required."
+        )
+
+    edit_start = source.find("const handleEditorStateChange")
+    edit_end = source.find("}, [", edit_start)
+    if edit_start >= 0 and edit_end >= 0:
+        edit_source = source[edit_start:edit_end]
+        if "reconcileUnits: true" in edit_source or "syncReason:" in edit_source:
+            errors.append(
+                f"{panel.relative_to(REPO_ROOT).as_posix()}: edits must not reconcile."
+            )
+    if "retrySave" not in source or not re.search(r"retrySave[\s\S]{0,320}reconcileReturn\(\)", source):
+        errors.append(
+            f"{panel.relative_to(REPO_ROOT).as_posix()}: retry must retry return reconciliation."
+        )
 
     if not status.exists():
         errors.append(
@@ -4834,6 +4864,20 @@ def check_palace_memory_lookup_binding_center(errors: list[str]) -> None:
             )
 
 
+def check_quiz_option_shuffle_boundary(errors: list[str]) -> None:
+    """Option display order must not leak into persisted answer state."""
+    root = WEB_SRC / "modules" / "quiz" / "domain" / "quiz-entity"
+    runtime = root / "model" / "quizRuntime.ts"
+    interaction = root / "ui" / "QuizQuestionInteraction.tsx"
+    boundary = REPO_ROOT / "docs" / "architecture" / "quiz-frontend-boundary.md"
+    if runtime.exists() and re.search(r"choiceOption(?:OriginalOrder|Order|sShuffled)", runtime.read_text(encoding="utf-8")):
+        errors.append(f"{runtime.relative_to(REPO_ROOT).as_posix()}: option display order must not enter quiz progress.")
+    if not interaction.exists() or "useQuizOptionShuffle" not in interaction.read_text(encoding="utf-8"):
+        errors.append("Shared quiz interaction must own option shuffle.")
+    if not boundary.exists() or not has_invariant(boundary.read_text(encoding="utf-8"), "quiz-shared-option-shuffle"):
+        errors.append("Quiz frontend boundary must document option shuffle.")
+
+
 def check_quiz_answer_mode_primitive(errors: list[str]) -> None:
     """Choice/subjective recall rewriting belongs to the quiz entity."""
     model = (
@@ -4922,6 +4966,10 @@ def check_quiz_answer_mode_primitive(errors: list[str]) -> None:
             errors.append(
                 f"{boundary.relative_to(REPO_ROOT).as_posix()}: must document quiz answer-mode ownership."
             )
+        if not has_invariant(boundary_text, "quiz-shared-answer-surface"):
+            errors.append(
+                f"{boundary.relative_to(REPO_ROOT).as_posix()}: must document the shared quiz answer surface."
+            )
         if not has_invariant(boundary_text, "quiz-index-pager-ownership"):
             errors.append(
                 f"{boundary.relative_to(REPO_ROOT).as_posix()}: "
@@ -4958,10 +5006,10 @@ def check_quiz_answer_mode_primitive(errors: list[str]) -> None:
                 f"{host.relative_to(REPO_ROOT).as_posix()}: "
                 "must not inline the full question-number grid."
             )
-        if "QuizQuestionStem" not in host_source:
+        if "QuizQuestionAnswerSurface" not in host_source:
             errors.append(
                 f"{host.relative_to(REPO_ROOT).as_posix()}: "
-                "must render stems through QuizQuestionStem."
+                "must render the shared quiz answer surface."
             )
         if "isQuizChoiceAttemptClosed" not in host_source:
             errors.append(
@@ -5062,7 +5110,7 @@ def check_quiz_font_scale_primitive(errors: list[str]) -> None:
             errors.append(f"{host.relative_to(REPO_ROOT).as_posix()}: quiz overlay host is required.")
             continue
         host_source = host.read_text(encoding="utf-8", errors="ignore")
-        for token in ("useQuizDialogFontScale", "QuizFontScaleBody", "QuizFontScaleHint"):
+        for token in ("useQuizDialogFontScale", "QuizQuestionAnswerSurface", "QuizFontScaleHint"):
             if token not in host_source:
                 errors.append(
                     f"{host.relative_to(REPO_ROOT).as_posix()}: must use shared `{token}`."
@@ -5293,7 +5341,8 @@ def check_quiz_question_marks(errors: list[str]) -> None:
                 "must not keep the 4-level quiz rating."
             )
         offers_mark = "QuizQuestionMarkToggle" in host_source or (
-            "QuizQuestionInteraction" in host_source and "mark={" in host_source
+            ("QuizQuestionInteraction" in host_source or "QuizQuestionAnswerSurface" in host_source)
+            and "mark={" in host_source
         )
         if not offers_mark:
             errors.append(
@@ -7457,6 +7506,7 @@ def main() -> int:
     check_palace_quiz_application_facades(errors)
     check_palace_memory_lookup_binding_center(errors)
     check_quiz_answer_mode_primitive(errors)
+    check_quiz_option_shuffle_boundary(errors)
     check_quiz_font_scale_primitive(errors)
     check_quiz_shuffle_order_persistence(errors)
     check_window_layout_memory(errors)

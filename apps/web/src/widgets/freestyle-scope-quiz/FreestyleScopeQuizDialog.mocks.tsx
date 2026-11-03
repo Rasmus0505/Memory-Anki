@@ -61,6 +61,7 @@ vi.mock('@/modules/quiz/public', async (importOriginal) => {
       handleChoiceSelect: vi.fn(),
       handleShortAnswerSubmit: vi.fn(),
       handleShortAnswerFeedback: vi.fn(),
+      invalidateQuestion: vi.fn(),
     }),
   }
 })

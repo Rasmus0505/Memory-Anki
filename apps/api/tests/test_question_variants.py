@@ -228,6 +228,26 @@ class QuestionVariantRouteTests(RouterTestCase):
             assert response.json()["auto_marked"] is False
         assert response.json()["question"]["needs_mutation"] is False
 
+    def test_auto_mark_default_five_second_boundary(self):
+        imported = self.client.post(
+            "/api/v1/palace-quiz-question-variants/import",
+            json={"items": [self._import_item()]},
+        )
+        assert imported.status_code == 200
+        for duration in (5000, 5000, 5000):
+            response = self.client.post(
+                f"/api/v1/palace-quiz-questions/{self.question_id}/choice-attempts",
+                json={"selected_option_id": "B", "duration_ms": duration},
+            )
+            assert response.status_code == 200
+            assert response.json()["auto_marked"] is False
+        response = self.client.post(
+            f"/api/v1/palace-quiz-questions/{self.question_id}/choice-attempts",
+            json={"selected_option_id": "B", "duration_ms": 4999},
+        )
+        assert response.status_code == 200
+        assert response.json()["auto_marked"] is True
+
     def test_auto_mark_after_three_fast_correct_answers(self):
         imported = self.client.post(
             "/api/v1/palace-quiz-question-variants/import",

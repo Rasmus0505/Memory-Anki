@@ -64,7 +64,7 @@ describe('NodeBoundQuizDialog 打乱题库', () => {
     expect(await screen.findByText('简述细胞膜的主要成分。')).toBeTruthy()
   })
 
-  it('hides the button when there is only one question', async () => {
+  it('disables the button when there is only one question', async () => {
     getPalaceQuizQuestionsByIdsApiMock.mockResolvedValue({
       items: [sampleQuestion],
       item_count: 1,
@@ -74,6 +74,6 @@ describe('NodeBoundQuizDialog 打乱题库', () => {
     renderDialog({ questionIds: [42] })
 
     expect(await screen.findByText('下列哪一项是细胞膜的主要成分？')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: '打乱题库' })).toBeNull()
+    expect(screen.getByRole('button', { name: '打乱题库' }).hasAttribute('disabled')).toBe(true)
   })
 })

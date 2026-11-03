@@ -1168,10 +1168,17 @@ def test_freestyle_return_save_ux_requires_immediate_local_first_save(
     panel_source = """const handleToggleMode = () => {
   onEditorStateSaved?.(localState)
   setDisplayMode('review')
+  reconcileReturn()
 }
+const reconcileReturn = () => {
+  void persistEdit(localState, { reconcileUnits: true, syncReason: 'return_to_review' })
+}
+const retrySave = () => { reconcileReturn() }
 const handleEditorStateChange = () => {
   void persistEdit(nextState)
-}
+}, [])
+void persistEdit(editEditorStateRef.current, failed.persistOptions)
+onUnitsReconciled?.()
 void persistEdit(nextState)
 onEditorStateSaved?.(localState)
 setDisplayMode('review')
@@ -1179,6 +1186,7 @@ syncReason: 'editor_leave'
 if (!editedSinceReconcileRef.current) return
 setSaveState('saving')
 setSaveState('error')
+lastFailedPersistRef.current
 """
     status_source = """type SaveState = 'idle' | 'saving' | 'saved' | 'error'
 onRetry
@@ -1195,7 +1203,7 @@ onRetry
     assert errors == []
 
 
-def test_freestyle_return_save_ux_rejects_debounce_and_active_reconcile(
+def test_freestyle_return_save_ux_rejects_blocking_and_edit_reconcile(
     tmp_path: Path, monkeypatch
 ) -> None:
     panel_source = """const schedulePersist = () => {}
@@ -1220,8 +1228,7 @@ syncReason: 'mark_change'
     assert any("save immediately" in error for error in errors)
     assert any("switch to review locally" in error for error in errors)
     assert any("typing autosave must not use a debounce scheduler" in error for error in errors)
-    assert any("active-card return must not reconcile" in error for error in errors)
-    assert any("active-card mark exit must not reconcile" in error for error in errors)
+    assert any("return reconciliation helper is required" in error for error in errors)
     assert any("must not force" in error for error in errors)
     assert any("unified save-state type" in error for error in errors)
 
@@ -2453,6 +2460,39 @@ def test_quiz_shuffle_order_check_passes_on_the_repository() -> None:
     assert errors == []
 
 
+def test_quiz_option_shuffle_forbids_persisted_display_order(tmp_path: Path, monkeypatch) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    root = web_src / "modules" / "quiz" / "domain" / "quiz-entity"
+    write_file(root / "model" / "quizRuntime.ts", "choiceOptionOrder?: string[]")
+    write_file(root / "ui" / "QuizQuestionInteraction.tsx", "useQuizOptionShuffle")
+    write_file(tmp_path / "docs" / "architecture" / "quiz-frontend-boundary.md", "<!-- invariant: quiz-shared-option-shuffle -->")
+    errors: list[str] = []
+    check_architecture.check_quiz_option_shuffle_boundary(errors)
+    assert any("must not enter quiz progress" in error for error in errors)
+    write_file(root / "model" / "quizRuntime.ts", "selectedOptionId?: string")
+    errors.clear()
+    check_architecture.check_quiz_option_shuffle_boundary(errors)
+    assert errors == []
+
+
+def test_quiz_answer_dialogs_require_shared_surface(tmp_path: Path, monkeypatch) -> None:
+    web_src = tmp_path / "apps" / "web" / "src"
+    monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
+    host = web_src / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx"
+    write_file(web_src / "modules" / "quiz" / "domain" / "quiz-entity" / "model" / "quizAnswerMode.ts", "")
+    write_file(host, "QuizQuestionIndexPager isQuizChoiceAttemptClosed QuizQuestionStem")
+    errors: list[str] = []
+    check_architecture.check_quiz_answer_mode_primitive(errors)
+    assert any("shared quiz answer surface" in error for error in errors)
+    write_file(host, "QuizQuestionIndexPager isQuizChoiceAttemptClosed QuizQuestionAnswerSurface")
+    errors.clear()
+    check_architecture.check_quiz_answer_mode_primitive(errors)
+    assert not any("NodeBoundQuizDialog.tsx: must render the shared quiz answer surface" in error for error in errors)
+
+
 def test_quiz_answer_mode_primitive_must_live_in_quiz_entity(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -3378,7 +3418,7 @@ def test_wrong_units_require_round_membership_boundaries(tmp_path: Path, monkeyp
     errors: list[str] = []
     check_architecture.check_round_wrong_units(errors)
     assert any("list_node_bindings_for_palaces" in error for error in errors)
-    assert any("list_unit_node_members" in error for error in errors)
+    assert any("list_unit_scheduling_nodes" in error for error in errors)
     assert any("wrong_unit_ids" in error for error in errors)
 
 
