@@ -87,12 +87,22 @@ def _payload(
     }
 
 
-def _quiz_all_correct_unit_ids(session: Any, plan: dict[str, Any]) -> set[str]:
-    """Project in-scope overlay questions that are currently all correct by unit."""
+def _quiz_unit_question_outcomes(
+    session: Any, plan: dict[str, Any]
+) -> tuple[set[str], set[str]]:
+    """Project in-scope overlay answers onto review units.
+
+    Returns ``(all_correct_unit_ids, wrong_unit_ids)`` for the answers as they
+    stand right now. A unit is red only while it owns a question answered wrong
+    *now*, so correcting the question clears it; the plan's cumulative
+    ``wrong_unit_ids`` keeps only driving queue priority. Parked questions still
+    count as wrong when deciding red, but not when deciding 全对.
+    """
     overlay = normalize_overlay_quiz(plan.get("overlay_quiz"))
-    question_ids = set(overlay["question_ids"])
-    if not question_ids:
-        return set()
+    visible = {int(qid) for qid in overlay["question_ids"]}
+    scoped_ids = visible | {int(qid) for qid in overlay["parked"]["question_ids"]}
+    if not scoped_ids:
+        return set(), set()
     unit_palaces = {
         str(item.get("unit_id") or "").strip(): int(item.get("palace_id") or 0)
         for item in plan.get("original_cards") or []
@@ -102,7 +112,7 @@ def _quiz_all_correct_unit_ids(session: Any, plan: dict[str, Any]) -> set[str]:
     }
     unit_ids = set(unit_palaces)
     if not unit_ids:
-        return set()
+        return set(), set()
     members = list_unit_node_members(session, sorted(unit_ids))
     nodes_by_unit = {
         str(unit_id): {str(node_uid) for node_uid in node_uids}
@@ -118,7 +128,7 @@ def _quiz_all_correct_unit_ids(session: Any, plan: dict[str, Any]) -> set[str]:
         question_id = int(binding.get("question_id") or 0)
         target_palace_id = int(binding.get("palace_id") or 0)
         node_uid = str(binding.get("node_uid") or "")
-        if question_id not in question_ids or target_palace_id <= 0 or not node_uid:
+        if question_id not in scoped_ids or target_palace_id <= 0 or not node_uid:
             continue
         for unit_id, unit_palace_id in unit_palaces.items():
             if (
@@ -127,16 +137,28 @@ def _quiz_all_correct_unit_ids(session: Any, plan: dict[str, Any]) -> set[str]:
             ):
                 questions_by_unit.setdefault(unit_id, set()).add(question_id)
     states = {**overlay["parked"]["states"], **overlay["states"]}
-    return {
-        unit_id
-        for unit_id, scoped_questions in questions_by_unit.items()
-        if scoped_questions
-        and all(
+    all_correct: set[str] = set()
+    wrong: set[str] = set()
+    for unit_id, unit_questions in questions_by_unit.items():
+        visible_questions = unit_questions & visible
+        if visible_questions and all(
             states.get(str(question_id), {}).get("resolved") is True
             and states.get(str(question_id), {}).get("correct") is True
-            for question_id in scoped_questions
-        )
-    }
+            for question_id in visible_questions
+        ):
+            all_correct.add(unit_id)
+        if any(
+            states.get(str(question_id), {}).get("resolved") is True
+            and states.get(str(question_id), {}).get("correct") is False
+            for question_id in unit_questions
+        ):
+            wrong.add(unit_id)
+    return all_correct, wrong
+
+
+def _quiz_all_correct_unit_ids(session: Any, plan: dict[str, Any]) -> set[str]:
+    """Project in-scope overlay questions that are currently all correct by unit."""
+    return _quiz_unit_question_outcomes(session, plan)[0]
 
 
 def _unfinished_summary(session: Any, plan: dict[str, Any]) -> dict[str, Any]:
@@ -208,10 +230,12 @@ def _serve(session: Any, row: FreestyleRoundState | None, **kwargs: Any) -> dict
     served["plan"] = served_plan
     served["waiting"] = waiting
     served["summary"] = _unfinished_summary(session, served_plan)
+    all_correct_units, wrong_units = _quiz_unit_question_outcomes(session, served_plan)
     served["progress"] = project_round_progress(
         served_plan,
         plan_version=payload.get("plan_version"),
-        quiz_all_correct_unit_ids=_quiz_all_correct_unit_ids(session, served_plan),
+        quiz_all_correct_unit_ids=all_correct_units,
+        quiz_wrong_unit_ids=wrong_units,
     )
     progress_items = served["progress"].get("items", [])
     favorite_by_unit = list_unit_favorites(

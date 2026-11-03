@@ -87,8 +87,15 @@ def project_round_progress(
     *,
     plan_version: int | None = None,
     quiz_all_correct_unit_ids: set[str] | None = None,
+    quiz_wrong_unit_ids: set[str] | None = None,
 ) -> dict[str, Any]:
-    """Return the single progress read model for one round plan."""
+    """Return the single progress read model for one round plan.
+
+    ``quiz_wrong_unit_ids`` is the current-answer snapshot: a corrected question
+    stops painting its unit red even though the plan keeps the unit in its
+    cumulative ``wrong_unit_ids`` for queue priority. Callers that do not supply
+    it fall back to the plan's cumulative set.
+    """
     normalized = normalize_plan(plan)
     presented = list(normalized["presented_ids"])
     completed = set(normalized["completed_ids"])
@@ -107,7 +114,12 @@ def project_round_progress(
         if isinstance(item, Mapping)
         and item.get("status") in {OCCURRENCE_INSERTED, "completed"}
     }
-    wrong_units = set(normalized["wrong_unit_ids"])
+    priority_wrong_units = set(normalized["wrong_unit_ids"])
+    wrong_units = (
+        {_text(item) for item in quiz_wrong_unit_ids if _text(item)}
+        if quiz_wrong_unit_ids is not None
+        else priority_wrong_units
+    )
     correct_units = {
         _text(item) for item in (quiz_all_correct_unit_ids or set()) if _text(item)
     } - wrong_units

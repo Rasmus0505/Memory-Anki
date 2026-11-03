@@ -226,3 +226,45 @@ def test_waiting_retry_is_reported_but_not_servable():
     assert progress["retry_inserted"] == 0
     pending = _pending(plan, "a")
     assert all(item["card_id"] != pending["occurrence_id"] for item in progress["items"])
+
+
+def test_unit_red_follows_current_answers_not_the_priority_ledger(monkeypatch):
+    """改对之后红点消失，但队列的错题优先记录仍然保留。"""
+    from memory_anki.modules.practice.application import round_state_payload as service
+
+    plan = plan_from_cards([_card("a", unit_id="u1"), _card("b", unit_id="u2")])
+    # The cumulative ledger still hoists both units for queue priority.
+    plan["wrong_unit_ids"] = ["u1", "u2"]
+    plan["overlay_quiz"] = {
+        "question_ids": [11, 12],
+        "question_palace_ids": {"11": 1, "12": 1},
+        "states": {
+            "11": {"resolved": True, "correct": True},
+            "12": {"resolved": True, "correct": False},
+        },
+    }
+    monkeypatch.setattr(service, "list_unit_node_members", lambda session, unit_ids: {
+        "u1": ["n1"], "u2": ["n2"],
+    })
+    monkeypatch.setattr(service, "list_node_bindings_for_palaces", lambda session, palace_ids: [
+        {"palace_id": 1, "question_id": 11, "node_uid": "n1"},
+        {"palace_id": 1, "question_id": 12, "node_uid": "n2"},
+    ])
+
+    all_correct, wrong = service._quiz_unit_question_outcomes(None, plan)
+    assert all_correct == {"u1"}
+    assert wrong == {"u2"}
+
+    progress = project_round_progress(
+        plan,
+        quiz_all_correct_unit_ids=all_correct,
+        quiz_wrong_unit_ids=wrong,
+    )
+    flags = {
+        item["unit_id"]: (item["wrong"], item["quiz_all_correct"])
+        for item in progress["items"]
+    }
+    assert flags == {"u1": (False, True), "u2": (True, False)}
+    # The progress payload's red set is the snapshot, not the ledger.
+    assert progress["wrong_unit_ids"] == ["u2"]
+    assert plan["wrong_unit_ids"] == ["u1", "u2"]
