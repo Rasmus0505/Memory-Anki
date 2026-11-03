@@ -4,6 +4,7 @@ import {
   normalizeMindMapDocument,
   type MindMapDocumentInput,
 } from '@/modules/content/public'
+import { resolveQuizQuestionAttentionTone } from '@/modules/quiz/domain/quiz-entity/model/quizQuestionVisualState'
 
 export type BoundQuestionFacts = {
   questionType: string
@@ -131,9 +132,10 @@ function countBadge(
 ): NodeQuizCountBadge | null {
   if (count <= 0) return null
   const label = kind === 'objective' ? '客观' : '主观'
+  const tone = resolveQuizQuestionAttentionTone({ marked: hasMarked, wrong: hasWrong })
   return {
     text: String(count),
-    tone: hasWrong ? 'danger' : hasMarked ? 'rose' : kind === 'objective' ? 'success' : 'info',
+    tone: tone ?? (kind === 'objective' ? 'success' : 'info'),
     title: hasWrong
       ? `${label} ${count} 道，含本轮错题（含子树）`
       : hasMarked

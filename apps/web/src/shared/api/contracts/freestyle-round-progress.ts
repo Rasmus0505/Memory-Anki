@@ -33,6 +33,8 @@ export interface FreestyleRoundProgressItem {
   available_at: string | null
   servable: boolean
   wrong: boolean
+  quiz_all_correct?: boolean
+  unit_favorite?: boolean
 }
 
 export interface FreestyleRoundProgress {

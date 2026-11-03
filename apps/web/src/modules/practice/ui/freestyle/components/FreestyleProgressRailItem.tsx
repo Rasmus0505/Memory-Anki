@@ -205,17 +205,18 @@ export function ProgressRailItem({
               data-count-visible="true"
               data-tone={segment.tone}
             data-wrong={segment.wrong ? 'true' : undefined}
+            data-quiz-all-correct={segment.quizAllCorrect && !segment.wrong ? 'true' : undefined}
               data-viewing={viewing ? 'true' : 'false'}
               data-palace-id={palaceId}
               data-palace-done={segment.palaceDone ? 'true' : 'false'}
               data-cohort-boundary={segment.cohortBoundary ? 'true' : 'false'}
-              aria-label={hoverLabel}
+              aria-label={`${hoverLabel}${segment.wrong ? '，关联题有错' : segment.quizAllCorrect ? '，关联题全对' : ''}`}
               className={cn(
                 'progress-bar inline-flex shrink-0 items-center justify-center rounded-full font-semibold tabular-nums leading-none',
                 nodeEnterClass,
                 viewing ? 'size-5 text-[10px] ring-2 ring-stage-ink' : 'size-3.5 text-[9px]',
                 oneShotClass,
-                retryNodeToneClass(segment.tone, segment.isNew, segment.isQuiz, segment.wrong),
+                retryNodeToneClass(segment.tone, segment.isNew, segment.isQuiz, segment.wrong, segment.quizAllCorrect),
               )}
             >
               {retryAttemptGlyph(segment)}
@@ -232,7 +233,7 @@ export function ProgressRailItem({
         <TooltipTrigger asChild>
           <span
             {...slotData}
-            aria-label={hoverLabel}
+            aria-label={`${hoverLabel}${segment.wrong ? '，关联题有错' : segment.quizAllCorrect ? '，关联题全对' : ''}`}
             className={cn('flex h-full min-w-0 flex-1 items-end', gapClass, slotOpenClass, dimClass)}
           >
             <span
@@ -240,6 +241,7 @@ export function ProgressRailItem({
               data-count-visible="false"
               data-tone={segment.tone}
             data-wrong={segment.wrong ? 'true' : undefined}
+            data-quiz-all-correct={segment.quizAllCorrect && !segment.wrong ? 'true' : undefined}
               data-viewing={viewing ? 'true' : 'false'}
               data-palace-id={palaceId}
               data-palace-done={segment.palaceDone ? 'true' : 'false'}
@@ -249,7 +251,7 @@ export function ProgressRailItem({
                 nodeEnterClass,
                 progressSegmentShapeClass(segment.tone, viewing),
                 oneShotClass,
-                retryNodeToneClass(segment.tone, segment.isNew, segment.isQuiz, segment.wrong),
+                retryNodeToneClass(segment.tone, segment.isNew, segment.isQuiz, segment.wrong, segment.quizAllCorrect),
               )}
             />
           </span>
@@ -263,7 +265,7 @@ export function ProgressRailItem({
       <TooltipTrigger asChild>
         <span
           {...slotData}
-          aria-label={hoverLabel}
+          aria-label={`${hoverLabel}${segment.wrong ? '，关联题有错' : segment.quizAllCorrect ? '，关联题全对' : ''}`}
           className={cn(
             'progress-slot relative flex h-full items-end',
             compact ? 'min-w-0' : 'min-w-px',
@@ -299,6 +301,7 @@ export function ProgressRailItem({
             data-testid="freestyle-progress-segment" data-fx-anchor={viewing ? FX_ANCHORS.progressViewing : undefined}
             data-tone={segment.tone}
             data-wrong={segment.wrong ? 'true' : undefined}
+            data-quiz-all-correct={segment.quizAllCorrect && !segment.wrong ? 'true' : undefined}
             data-viewing={viewing ? 'true' : 'false'}
             data-palace-id={palaceId}
             data-palace-done={segment.palaceDone ? 'true' : 'false'}
@@ -307,7 +310,7 @@ export function ProgressRailItem({
               'progress-bar relative w-full overflow-hidden rounded-[1px]',
               progressSegmentShapeClass(segment.tone, viewing),
               // While the sweep runs the base stays faint; the overlay carries the solid fill.
-              progressSegmentAccentClass(segment.isNew, fillSweep ? 'pending' : segment.tone, segment.isQuiz, segment.wrong),
+              progressSegmentAccentClass(segment.isNew, fillSweep ? 'pending' : segment.tone, segment.isQuiz, segment.wrong, segment.quizAllCorrect),
               // Playhead 走「入场 -> 呼吸」两段，同时只挂一个。
               playheadClass,
               oneShotClass,
@@ -318,7 +321,7 @@ export function ProgressRailItem({
                 aria-hidden
                 className={cn(
                   'progress-fill-sweep absolute inset-0 rounded-[inherit]',
-                  progressSegmentAccentClass(segment.isNew, 'done', segment.isQuiz, segment.wrong),
+                  progressSegmentAccentClass(segment.isNew, 'done', segment.isQuiz, segment.wrong, segment.quizAllCorrect),
                 )}
               />
             ) : null}

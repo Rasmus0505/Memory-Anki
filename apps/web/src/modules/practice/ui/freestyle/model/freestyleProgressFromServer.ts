@@ -23,6 +23,8 @@ export function applyServerRoundProgress(
     return {
       ...segment,
       wrong: item.wrong,
+      quizAllCorrect: item.quiz_all_correct === true,
+      unitFavorite: item.unit_favorite === true,
       waitingRetry: item.waiting_retry,
       retryAttempt: item.retry_attempt || segment.retryAttempt,
       sourceCardId: item.source_card_id || segment.sourceCardId,

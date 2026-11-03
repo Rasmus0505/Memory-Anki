@@ -58,8 +58,11 @@ def test_overlay_wrong_ledger_and_prioritization(db_session, monkeypatch):
     monkeypatch.setattr(service, "list_node_bindings_for_palaces", lambda session, palace_ids: [
         {"question_id": 11, "node_uid": "node-4"},
     ])
-    monkeypatch.setattr(service, "list_unit_node_members", lambda session, unit_ids: {
-        "u4": ["node-4"],
+    monkeypatch.setattr(service, "list_unit_scheduling_nodes", lambda session, unit_ids: {
+        "u4": {"palace_id": 2, "anchor_uid": "u4", "node_uids": ["node-4"]},
+    })
+    monkeypatch.setattr(service, "list_palace_node_paths", lambda session, palace_ids: {
+        2: {"root_uid": "root-2", "parents": {}},
     })
 
     def progress(operation_id, version, states, prioritize=False):
@@ -117,8 +120,13 @@ def test_overlay_explicit_wrong_ids_survive_correct_state_and_filter_scope(
         {"question_id": 11, "node_uid": "node-3"},
         {"question_id": 999, "node_uid": "node-2"},
     ])
-    monkeypatch.setattr(service, "list_unit_node_members", lambda session, unit_ids: {
-        "u2": ["node-2"], "u3": ["node-3"],
+    monkeypatch.setattr(service, "list_unit_scheduling_nodes", lambda session, unit_ids: {
+        "u2": {"palace_id": 1, "anchor_uid": "u2", "node_uids": ["node-2"]},
+        "u3": {"palace_id": 2, "anchor_uid": "u3", "node_uids": ["node-3"]},
+    })
+    monkeypatch.setattr(service, "list_palace_node_paths", lambda session, palace_ids: {
+        1: {"root_uid": "root-1", "parents": {}},
+        2: {"root_uid": "root-2", "parents": {}},
     })
     router.session_dep = session_dep
     client = make_client(router)

@@ -186,6 +186,28 @@ describe('QuizQuestionIndexPager', () => {
     }
   })
 
+  it('lets wrong answers outrank a manual mark on the question number', () => {
+    render(
+      <QuizQuestionIndexPager
+        count={2}
+        currentIndex={1}
+        getItemState={(index) => ({
+          done: index === 1,
+          correct: index === 1 ? false : undefined,
+          marked: index === 1,
+          wrong: index === 1,
+        })}
+        onSelect={vi.fn()}
+      />,
+    )
+    const wrong = screen.getByRole('button', { name: '2' })
+    expect(wrong.getAttribute('data-marked')).toBe('true')
+    expect(wrong.getAttribute('data-wrong')).toBe('true')
+    expect(wrong.getAttribute('title')).toContain('已答·错')
+    expect(wrong.className).toContain('bg-destructive')
+    expect(wrong.className).not.toContain('bg-rose-600')
+  })
+
   it('paints marked question numbers rose, including the current one', () => {
     render(
       <QuizQuestionIndexPager

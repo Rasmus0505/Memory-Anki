@@ -679,7 +679,10 @@ describe('retryNodeLabel', () => {
     ).toBe('重练第 1 次')
   })
 
-  it('paints a wrong unit red until settlement', () => {
+  it('paints a wrong unit red and prioritizes it over all-correct green', () => {
+    expect(progressSegmentAccentClass(false, 'done', false, false, true)).toBe('bg-rate-good')
+    expect(progressSegmentAccentClass(false, 'done', false, true, true)).toBe('bg-rose-500')
+    expect(retryNodeToneClass('done', false, false, false, true)).toBe('bg-rate-good text-stage')
     expect(progressSegmentAccentClass(false, 'done', false, true)).toBe('bg-rose-500')
     expect(progressSegmentAccentClass(true, 'pending', false, true)).toBe('bg-rose-500/25')
     expect(retryNodeToneClass('done', false, false, true)).toBe('bg-rose-500 text-stage')

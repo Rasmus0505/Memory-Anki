@@ -251,8 +251,9 @@ def normalize_plan(plan: Mapping[str, Any] | None) -> Plan:
         "encounters": encounters,
         "bedtime_ratings": bedtime_ratings,
         "wrong_unit_ids": _unique(raw.get("wrong_unit_ids") or []),
-        # A question stays wrong for this round until 小结算 clears it. Unlike the
-        # live overlay state, a later correct retry must not erase the marker.
+        # wrong_question_ids 是当前答题范围的快照：题目改对后在下一次进度写入时
+        # 被移除，因此红点跟着当前答案走。wrong_unit_ids 只服务错题优先排序，
+        # 到小结算才清理——一次答错仍然值得把这个单元排到前面。
         "wrong_question_ids": _unique(raw.get("wrong_question_ids") or []),
         "today": _day(raw.get("today")),
         "overlay_quiz": normalize_overlay_quiz(raw.get("overlay_quiz") if isinstance(raw.get("overlay_quiz"), Mapping) else None),

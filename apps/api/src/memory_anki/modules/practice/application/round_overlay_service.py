@@ -7,9 +7,10 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from memory_anki.infrastructure.db._tables.misc import FreestyleRoundState
+from memory_anki.modules.content.public.queries import list_palace_node_paths
 from memory_anki.modules.memory.public.queries import (
     list_round_unit_ratings,
-    list_unit_node_members,
+    list_unit_scheduling_nodes,
 )
 from memory_anki.modules.practice.application.overlay_quiz_service import (
     build_overlay_question_pack,
@@ -242,20 +243,14 @@ def progress_overlay_quiz(
         states=states if isinstance(states, dict) else {},
     )
     overlay = plan["overlay_quiz"]
-    # Persist the round's wrong questions. A later correct retry must not erase
-    # this marker: it clears only at 小结算 (the settled units) or a new round,
-    # which is the same lifetime the progress rail's 错题 marker has.
-    answered_wrong = {
-        str(qid)
-        for source in (previous, overlay)
-        for qid, state in {**source["parked"]["states"], **source["states"]}.items()
-        if state.get("resolved") is True and state.get("correct") is False
-    }
-    known_wrong = set(plan["wrong_question_ids"])
-    for qid in sorted(answered_wrong):
-        if qid not in known_wrong:
-            plan["wrong_question_ids"].append(qid)
-            known_wrong.add(qid)
+    # Visible states are a complete snapshot: absence also means cleared.
+    # Parked questions remain untouched when the overlay scope changes.
+    visible = {str(qid) for qid in overlay["question_ids"]}
+    known_wrong = set(plan["wrong_question_ids"]) - visible
+    known_wrong.update(
+        str(qid) for qid in current_wrong_overlay_question_ids(overlay)
+    )
+    plan["wrong_question_ids"] = sorted(known_wrong)
     wrong = {
         qid for qid, state in overlay["states"].items()
         if state.get("resolved") is True and state.get("correct") is False
@@ -273,13 +268,32 @@ def progress_overlay_quiz(
             for qid in wrong if qid in overlay["question_palace_ids"]
         }
         bindings = list_node_bindings_for_palaces(session, palace_ids=sorted(palace_ids)) if palace_ids else []
-        nodes = {
-            str(binding.get("node_uid") or "") for binding in bindings
-            if str(binding.get("question_id") or "") in wrong
-        }
-        members = list_unit_node_members(session, review_unit_ids(plan)) if nodes else {}
-        for unit_id, unit_nodes in members.items():
-            if any(str(node) in nodes for node in unit_nodes) and unit_id not in marked:
+        bindings_by_question: dict[str, set[str]] = {}
+        for binding in bindings:
+            question_id = str(binding.get("question_id") or "")
+            node_uid = str(binding.get("node_uid") or "").strip()
+            if question_id in wrong and node_uid:
+                bindings_by_question.setdefault(question_id, set()).add(node_uid)
+        unit_rows = list_unit_scheduling_nodes(session, review_unit_ids(plan)) if bindings_by_question else {}
+        palace_paths = list_palace_node_paths(session, sorted(palace_ids)) if bindings_by_question else {}
+        for unit_id, unit in unit_rows.items():
+            unit_palace_id = int(unit.get("palace_id") or 0)
+            unit_nodes = {str(node) for node in unit.get("node_uids") or [] if str(node).strip()}
+            root_uid = str((palace_paths.get(unit_palace_id) or {}).get("root_uid") or "").strip()
+            owns_wrong = False
+            for question_id, bound_nodes in bindings_by_question.items():
+                question_palace_id = int(
+                    overlay["question_palace_ids"].get(question_id) or 0
+                )
+                if question_palace_id != unit_palace_id:
+                    continue
+                if root_uid and bound_nodes == {root_uid}:
+                    owns_wrong = True
+                    break
+                if bound_nodes & unit_nodes:
+                    owns_wrong = True
+                    break
+            if owns_wrong and unit_id not in marked:
                 plan["wrong_unit_ids"].append(unit_id)
                 marked.add(unit_id)
     # Turning the switch on must act on this round's existing wrong answers too,

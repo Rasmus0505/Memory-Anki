@@ -12,12 +12,15 @@ from memory_anki.core.time import (
 )
 from memory_anki.infrastructure.db._tables.misc import FreestyleRoundState
 from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitState
+from memory_anki.modules.memory.public.queries import list_unit_favorites, list_unit_node_members
 from memory_anki.modules.practice.application.round_fresh_due import project_served_plan
+from memory_anki.modules.practice.domain.overlay_quiz import normalize_overlay_quiz
 from memory_anki.modules.practice.domain.round_commands import PublishReadyRetries, apply_command
 from memory_anki.modules.practice.domain.round_plan import normalize_plan
 from memory_anki.modules.practice.domain.round_plan_intraday import plan_waiting
 from memory_anki.modules.practice.domain.round_progress import project_round_progress
 from memory_anki.modules.practice.domain.workspace import normalize_workspace
+from memory_anki.modules.quiz.public.queries import list_node_bindings_for_palaces
 
 _SUMMARY_CHUNK = 400
 
@@ -81,6 +84,58 @@ def _payload(
         "updated_at": to_api_datetime(row.updated_at) if row.updated_at else None,
         "conflict": conflict,
         "duplicate": duplicate,
+    }
+
+
+def _quiz_all_correct_unit_ids(session: Any, plan: dict[str, Any]) -> set[str]:
+    """Project in-scope overlay questions that are currently all correct by unit."""
+    overlay = normalize_overlay_quiz(plan.get("overlay_quiz"))
+    question_ids = set(overlay["question_ids"])
+    if not question_ids:
+        return set()
+    unit_palaces = {
+        str(item.get("unit_id") or "").strip(): int(item.get("palace_id") or 0)
+        for item in plan.get("original_cards") or []
+        if isinstance(item, dict)
+        and str(item.get("unit_id") or "").strip()
+        and int(item.get("palace_id") or 0) > 0
+    }
+    unit_ids = set(unit_palaces)
+    if not unit_ids:
+        return set()
+    members = list_unit_node_members(session, sorted(unit_ids))
+    nodes_by_unit = {
+        str(unit_id): {str(node_uid) for node_uid in node_uids}
+        for unit_id, node_uids in members.items()
+    }
+    # Bindings are keyed by their target palace, not necessarily the question's
+    # owning palace. Keep that target palace in the match so equal node UIDs in
+    # different palaces cannot leak a question into another unit.
+    palace_ids = sorted(set(unit_palaces.values()))
+    bindings = list_node_bindings_for_palaces(session, palace_ids=palace_ids)
+    questions_by_unit: dict[str, set[int]] = {}
+    for binding in bindings:
+        question_id = int(binding.get("question_id") or 0)
+        target_palace_id = int(binding.get("palace_id") or 0)
+        node_uid = str(binding.get("node_uid") or "")
+        if question_id not in question_ids or target_palace_id <= 0 or not node_uid:
+            continue
+        for unit_id, unit_palace_id in unit_palaces.items():
+            if (
+                unit_palace_id == target_palace_id
+                and node_uid in nodes_by_unit.get(unit_id, set())
+            ):
+                questions_by_unit.setdefault(unit_id, set()).add(question_id)
+    states = {**overlay["parked"]["states"], **overlay["states"]}
+    return {
+        unit_id
+        for unit_id, scoped_questions in questions_by_unit.items()
+        if scoped_questions
+        and all(
+            states.get(str(question_id), {}).get("resolved") is True
+            and states.get(str(question_id), {}).get("correct") is True
+            for question_id in scoped_questions
+        )
     }
 
 
@@ -154,8 +209,17 @@ def _serve(session: Any, row: FreestyleRoundState | None, **kwargs: Any) -> dict
     served["waiting"] = waiting
     served["summary"] = _unfinished_summary(session, served_plan)
     served["progress"] = project_round_progress(
-        served_plan, plan_version=payload.get("plan_version")
+        served_plan,
+        plan_version=payload.get("plan_version"),
+        quiz_all_correct_unit_ids=_quiz_all_correct_unit_ids(session, served_plan),
     )
+    progress_items = served["progress"].get("items", [])
+    favorite_by_unit = list_unit_favorites(
+        session,
+        {str(item.get("unit_id") or "") for item in progress_items},
+    )
+    for item in progress_items:
+        item["unit_favorite"] = favorite_by_unit.get(str(item.get("unit_id") or ""), False)
     return served
 
 

@@ -105,6 +105,14 @@ describe('applyServerRoundProgress', () => {
     expect(localOnly.waitingRetry).toBeUndefined()
   })
 
+  it('maps all-correct question state from the server', () => {
+    const applied = applyServerRoundProgress(localSummary(), serverProgress({
+      items: [item({ card_id: 'a', quiz_all_correct: true }), item({ card_id: 'b' })],
+    }))
+    expect(applied.segments[0].quizAllCorrect).toBe(true)
+    expect(applied.segments[1].quizAllCorrect).toBe(false)
+  })
+
   it('keeps the local fill so an unsaved tap does not flicker', () => {
     const applied = applyServerRoundProgress(
       localSummary(),

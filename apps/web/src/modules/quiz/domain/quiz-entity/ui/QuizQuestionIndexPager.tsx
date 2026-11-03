@@ -2,6 +2,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/shared/components/ui/button'
 import { MOBILE_SHEET_FULL_CLASS } from '@/shared/components/ui/mobile-sheet'
+import { resolveQuizQuestionAttentionTone } from '@/modules/quiz/domain/quiz-entity/model/quizQuestionVisualState'
 import { cn } from '@/shared/lib/utils'
 
 /**
@@ -76,7 +77,7 @@ export function QuizQuestionIndexPager({
   pageSize?: number
   /** Sit outside the scrolling answer body so width and position stay fixed. */
   pinned?: boolean
-  getItemState: (index: number) => { done: boolean; correct?: boolean; marked?: boolean }
+  getItemState: (index: number) => { done: boolean; correct?: boolean; marked?: boolean; wrong?: boolean }
   onSelect: (index: number) => void
 }) {
   const rowRef = useRef<HTMLDivElement>(null)
@@ -186,6 +187,8 @@ export function QuizQuestionIndexPager({
           const itemState = getItemState(itemIndex)
           const done = Boolean(itemState.done)
           const marked = Boolean(itemState.marked)
+          const wrong = Boolean(itemState.wrong) || (done && itemState.correct === false)
+          const attentionTone = resolveQuizQuestionAttentionTone({ marked, wrong })
           const active = itemIndex === currentIndex
           return (
             <button
@@ -194,20 +197,23 @@ export function QuizQuestionIndexPager({
               data-quiz-index-item=""
               aria-current={active ? 'true' : undefined}
               data-marked={marked ? 'true' : undefined}
-              title={`第 ${itemIndex + 1} 题${marked ? '（已标记）' : ''}${done ? (itemState.correct === false ? '（已答·错）' : '（已答）') : ''}`}
+              data-wrong={wrong ? 'true' : undefined}
+              title={`第 ${itemIndex + 1} 题${marked ? '（已标记）' : ''}${done ? (itemState.correct === false ? '（已答·错）' : '（已答）') : wrong ? '（本轮答错）' : ''}`}
               className={cn(
                 'flex size-7 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold tabular-nums transition-colors',
-                marked
+                attentionTone === 'danger'
                   ? active
-                    ? 'border-rose-700 bg-rose-600 text-white ring-2 ring-primary ring-offset-1'
-                    : 'border-rose-700 bg-rose-600 text-white shadow-sm'
-                  : active
-                    ? 'border-primary bg-primary text-primary-foreground'
-                    : done
-                      ? itemState.correct === false
-                        ? 'border-destructive/45 bg-destructive/10 text-destructive'
-                        : 'border-emerald-500/45 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-                      : 'border-border bg-background text-foreground hover:bg-muted',
+                    ? 'border-destructive bg-destructive text-destructive-foreground ring-2 ring-primary ring-offset-1'
+                    : 'border-destructive bg-destructive text-destructive-foreground shadow-sm'
+                  : attentionTone === 'rose'
+                    ? active
+                      ? 'border-rose-700 bg-rose-600 text-white ring-2 ring-primary ring-offset-1'
+                      : 'border-rose-700 bg-rose-600 text-white shadow-sm'
+                    : active
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : done
+                        ? 'border-emerald-500/45 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                        : 'border-border bg-background text-foreground hover:bg-muted',
               )}
               onClick={() => onSelect(itemIndex)}
             >

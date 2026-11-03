@@ -138,6 +138,77 @@ def test_a_retry_only_carries_a_score_from_its_own_encounter():
     assert retry_after["status"] == "done"
 
 
+def test_quiz_all_correct_flag_is_projected_without_overriding_wrong_red():
+    plan = plan_from_cards([_card("a", unit_id="u1"), _card("b", unit_id="u2")])
+    plan["wrong_unit_ids"] = ["u2"]
+
+    progress = project_round_progress(plan, quiz_all_correct_unit_ids={"u1", "u2"})
+
+    flags = {item["unit_id"]: item["quiz_all_correct"] for item in progress["items"]}
+    assert flags == {"u1": True, "u2": False}
+    assert all("all_correct" not in item for item in progress["items"])
+
+
+def test_quiz_all_correct_flag_is_false_without_an_in_scope_question():
+    plan = plan_from_cards([_card("a", unit_id="u1")])
+
+    progress = project_round_progress(plan)
+
+    assert progress["items"][0]["quiz_all_correct"] is False
+
+
+def test_application_projects_only_nonempty_in_scope_bound_questions(monkeypatch):
+    from memory_anki.modules.practice.application import round_state_payload as service
+
+    plan = plan_from_cards([
+        _card("a", unit_id="u1"), _card("b", unit_id="u2"), _card("c", unit_id="u3"),
+    ])
+    plan["overlay_quiz"] = {
+        "question_ids": [11, 12, 13],
+        "question_palace_ids": {"11": 1, "12": 1, "13": 1},
+        "states": {
+            "11": {"resolved": True, "correct": True},
+            "12": {"resolved": True, "correct": True},
+            "13": {"resolved": True, "correct": False},
+        },
+    }
+    monkeypatch.setattr(service, "list_unit_node_members", lambda session, unit_ids: {
+        "u1": ["n1"], "u2": ["n2"], "u3": ["n3"],
+    })
+    monkeypatch.setattr(service, "list_node_bindings_for_palaces", lambda session, palace_ids: [
+        {"palace_id": 1, "question_id": 11, "node_uid": "n1"},
+        {"palace_id": 1, "question_id": 12, "node_uid": "n1"},
+        {"palace_id": 1, "question_id": 13, "node_uid": "n2"},
+        {"palace_id": 1, "question_id": 14, "node_uid": "n1"},  # outside overlay scope
+    ])
+
+    assert service._quiz_all_correct_unit_ids(None, plan) == {"u1"}
+
+
+def test_application_all_correct_matches_target_palace_for_cross_palace_bindings(monkeypatch):
+    from memory_anki.modules.practice.application import round_state_payload as service
+
+    plan = plan_from_cards([_card("a", unit_id="u1", palace_id=1), _card("b", unit_id="u2", palace_id=2)])
+    plan["overlay_quiz"] = {
+        "question_ids": [11, 12],
+        "question_palace_ids": {"11": 1, "12": 1},
+        "states": {
+            "11": {"resolved": True, "correct": True},
+            "12": {"resolved": True, "correct": False},
+        },
+    }
+    monkeypatch.setattr(service, "list_unit_node_members", lambda session, unit_ids: {
+        "u1": ["same-node"], "u2": ["same-node"],
+    })
+    monkeypatch.setattr(service, "list_node_bindings_for_palaces", lambda session, palace_ids: [
+        # Question 11 is owned by palace 1 but targets palace 2.
+        {"palace_id": 2, "question_id": 11, "node_uid": "same-node"},
+        {"palace_id": 1, "question_id": 12, "node_uid": "same-node"},
+    ])
+
+    assert service._quiz_all_correct_unit_ids(None, plan) == {"u2"}
+
+
 def test_waiting_retry_is_reported_but_not_servable():
     plan = _rate(
         plan_from_cards([_card("a"), _card("b")]),

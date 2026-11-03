@@ -86,6 +86,7 @@ def project_round_progress(
     plan: Mapping[str, Any] | None,
     *,
     plan_version: int | None = None,
+    quiz_all_correct_unit_ids: set[str] | None = None,
 ) -> dict[str, Any]:
     """Return the single progress read model for one round plan."""
     normalized = normalize_plan(plan)
@@ -107,6 +108,9 @@ def project_round_progress(
         and item.get("status") in {OCCURRENCE_INSERTED, "completed"}
     }
     wrong_units = set(normalized["wrong_unit_ids"])
+    correct_units = {
+        _text(item) for item in (quiz_all_correct_unit_ids or set()) if _text(item)
+    } - wrong_units
     current = normalized["current_card_id"]
     base_ids = [item["card_id"] for item in normalized["original_cards"]]
     current_index = presented.index(current) if current in presented else -1
@@ -176,6 +180,7 @@ def project_round_progress(
                     live_sources=live_sources,
                 ),
                 "wrong": bool(unit_id and unit_id in wrong_units),
+                "quiz_all_correct": bool(unit_id and unit_id in correct_units),
             }
         )
 

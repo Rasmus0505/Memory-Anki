@@ -94,6 +94,20 @@ describe('quizNodeBindingAggregation', () => {
     expect(firstIncompleteQuestionIndex([1, 2], new Set([1, 2]))).toBe(0)
   })
 
+  it('lets wrong attention outrank a marked question on every ancestor', () => {
+    const bindings = [
+      { question_id: 1, node_uid: 'child-a', question_type: 'multiple_choice', marked: true },
+    ]
+    const subtree = buildSubtreeQuestionMap(doc, buildDirectBindingMap(bindings))
+    const badges = buildCountBadgeByNodeUid(subtree, buildBoundQuestionFacts(bindings), {
+      wrongQuestionIds: new Set([1]),
+    })
+    expect(badges.parent?.find((badge) => badge.kind === 'objective')).toMatchObject({
+      tone: 'danger',
+    })
+    expect(badges['child-a']?.[0].tone).toBe('danger')
+  })
+
   it('turns every ancestor carrying a wrong question danger, per question side', () => {
     const bindings = [
       { question_id: 1, node_uid: 'child-a', question_type: 'multiple_choice', marked: false },

@@ -11,6 +11,7 @@ import {
   writeQuizSessionState,
 } from '@/modules/quiz/domain/quiz-entity/model/quizSessionProgress'
 import type { QuizRuntimeState } from '@/modules/quiz/domain/quiz-entity/model/quizRuntime'
+import { isWrongQuizRuntimeState } from '@/modules/quiz/domain/quiz-entity/model/quizQuestionVisualState'
 import type { MindMapDocumentInput } from '@/modules/content/public'
 import { usePalaceParentQuestionTotal } from '@/modules/content/public'
 import type { QuizNodeBindingEdge } from '@/shared/api/contracts'
@@ -48,7 +49,23 @@ export function usePalaceQuizNodeBindings({
     () => readQuizSessionStates(),
   )
   const refreshGenerationRef = useRef(0)
-  const wrongQuestionIds = useFreestyleRoundWrongQuestions()
+  const roundWrongQuestionIds = useFreestyleRoundWrongQuestions()
+  /**
+   * The round response is authoritative across windows, while the shared quiz
+   * session gives this map immediate local evidence after any quiz entry point
+   * answers. Both surfaces must render the same attention state during the
+   * short interval before the round write is acknowledged.
+   */
+  const wrongQuestionIds = useMemo(() => {
+    const next = new Set(roundWrongQuestionIds)
+    for (const [rawId, state] of Object.entries(questionStates)) {
+      const questionId = Number(rawId)
+      if (Number.isInteger(questionId) && questionId > 0 && isWrongQuizRuntimeState(state)) {
+        next.add(questionId)
+      }
+    }
+    return next
+  }, [questionStates, roundWrongQuestionIds])
 
   useEffect(() => {
     const listener = () => {

@@ -54,9 +54,12 @@ def test_prioritize_hoists_bound_unit_and_not_its_palace_siblings(db_session, mo
     monkeypatch.setattr(service, "list_node_bindings_for_palaces", lambda session, palace_ids: [
         {"question_id": 11, "node_uid": "node-3"},
     ])
-    monkeypatch.setattr(service, "list_unit_node_members", lambda session, unit_ids: {
-        "u2": ["node-2"],
-        "u3": ["node-3"],
+    monkeypatch.setattr(service, "list_unit_scheduling_nodes", lambda session, unit_ids: {
+        "u2": {"palace_id": 1, "anchor_uid": "u2", "node_uids": ["node-2"]},
+        "u3": {"palace_id": 1, "anchor_uid": "u3", "node_uids": ["node-3"]},
+    })
+    monkeypatch.setattr(service, "list_palace_node_paths", lambda session, palace_ids: {
+        1: {"root_uid": "root-1", "parents": {}},
     })
 
     result = _progress(db_session, states={"11": {"resolved": True, "correct": False}})
@@ -88,8 +91,11 @@ def test_prioritize_reports_nothing_when_the_bound_unit_is_already_done(db_sessi
     monkeypatch.setattr(service, "list_node_bindings_for_palaces", lambda session, palace_ids: [
         {"question_id": 11, "node_uid": "node-2"},
     ])
-    monkeypatch.setattr(service, "list_unit_node_members", lambda session, unit_ids: {
-        "u2": ["node-2"],
+    monkeypatch.setattr(service, "list_unit_scheduling_nodes", lambda session, unit_ids: {
+        "u2": {"palace_id": 1, "anchor_uid": "u2", "node_uids": ["node-2"]},
+    })
+    monkeypatch.setattr(service, "list_palace_node_paths", lambda session, palace_ids: {
+        1: {"root_uid": "root-1", "parents": {}},
     })
 
     result = _progress(db_session, states={"11": {"resolved": True, "correct": False}})
@@ -99,8 +105,36 @@ def test_prioritize_reports_nothing_when_the_bound_unit_is_already_done(db_sessi
     assert result["wrong_priority"] == {"unit_count": 0, "palace_count": 0}
 
 
-def test_wrong_question_marker_survives_a_correct_retry(db_session, monkeypatch):
-    """错题红点保留到小结算：重答正确不抹掉本轮错题记录。"""
+def test_root_only_wrong_question_marks_every_scheduled_unit_in_that_palace(db_session, monkeypatch):
+    from memory_anki.modules.practice.application import round_overlay_service as service
+
+    cards = [
+        {"id": "current", "type": "mindmap_branch", "palace_id": 1, "unit_id": "u1"},
+        {"id": "other", "type": "mindmap_branch", "palace_id": 1, "unit_id": "u2"},
+        {"id": "different-palace", "type": "mindmap_branch", "palace_id": 2, "unit_id": "u3"},
+    ]
+    _seed(db_session, cards, {"question_ids": [11], "question_palace_ids": {"11": 1}})
+    monkeypatch.setattr(service, "_serve", lambda session, row, **kw: _payload(row, **kw))
+    monkeypatch.setattr(service, "list_node_bindings_for_palaces", lambda session, palace_ids: [
+        {"question_id": 11, "node_uid": "root-1"},
+    ])
+    monkeypatch.setattr(service, "list_unit_scheduling_nodes", lambda session, unit_ids: {
+        "u1": {"palace_id": 1, "anchor_uid": "u1", "node_uids": ["node-1"]},
+        "u2": {"palace_id": 1, "anchor_uid": "u2", "node_uids": ["node-2"]},
+        "u3": {"palace_id": 2, "anchor_uid": "u3", "node_uids": ["node-3"]},
+    })
+    monkeypatch.setattr(service, "list_palace_node_paths", lambda session, palace_ids: {
+        1: {"root_uid": "root-1", "parents": {}},
+        2: {"root_uid": "root-2", "parents": {}},
+    })
+
+    result = _progress(db_session, states={"11": {"resolved": True, "correct": False}})
+
+    assert result["plan"]["wrong_unit_ids"] == ["u1", "u2"]
+
+
+def test_wrong_question_marker_clears_after_correct_retry(db_session, monkeypatch):
+    """当前答案改正确时题目红点消失，单元错题优先记录仍保留。"""
     from memory_anki.modules.practice.application import round_overlay_service as service
 
     cards = [{"id": "a", "type": "mindmap_branch", "palace_id": 1, "unit_id": "u1"}]
@@ -109,7 +143,12 @@ def test_wrong_question_marker_survives_a_correct_retry(db_session, monkeypatch)
     monkeypatch.setattr(service, "list_node_bindings_for_palaces", lambda session, palace_ids: [
         {"question_id": 11, "node_uid": "node-1"},
     ])
-    monkeypatch.setattr(service, "list_unit_node_members", lambda session, unit_ids: {"u1": ["node-1"]})
+    monkeypatch.setattr(service, "list_unit_scheduling_nodes", lambda session, unit_ids: {
+        "u1": {"palace_id": 1, "anchor_uid": "u1", "node_uids": ["node-1"]},
+    })
+    monkeypatch.setattr(service, "list_palace_node_paths", lambda session, palace_ids: {
+        1: {"root_uid": "root-1", "parents": {}},
+    })
 
     wrong = _progress(db_session, states={"11": {"resolved": True, "correct": False}})
     assert wrong["plan"]["wrong_question_ids"] == ["11"]
@@ -121,7 +160,39 @@ def test_wrong_question_marker_survives_a_correct_retry(db_session, monkeypatch)
         expected_version=2,
         states={"11": {"resolved": True, "correct": True}},
     )
-    assert corrected["plan"]["wrong_question_ids"] == ["11"]
+    assert corrected["plan"]["wrong_question_ids"] == []
+
+
+def test_correcting_one_question_preserves_other_wrong_questions(db_session, monkeypatch):
+    from memory_anki.modules.practice.application import round_overlay_service as service
+
+    cards = [{"id": "a", "type": "mindmap_branch", "palace_id": 1, "unit_id": "u1"}]
+    _seed(
+        db_session,
+        cards,
+        {"question_ids": [11, 12], "question_palace_ids": {"11": 1, "12": 1}},
+    )
+    monkeypatch.setattr(service, "_serve", lambda session, row, **kw: _payload(row, **kw))
+
+    wrong = _progress(
+        db_session,
+        states={
+            "11": {"resolved": True, "correct": False},
+            "12": {"resolved": True, "correct": False},
+        },
+    )
+    corrected = service.progress_overlay_quiz(
+        db_session,
+        round_id="unit-scope",
+        operation_id="op-2",
+        expected_version=wrong["version"],
+        states={
+            "11": {"resolved": True, "correct": True},
+            "12": {"resolved": True, "correct": False},
+        },
+    )
+
+    assert corrected["plan"]["wrong_question_ids"] == ["12"]
 
 
 def test_small_settlement_clears_wrong_markers_for_settled_units(db_session, monkeypatch):

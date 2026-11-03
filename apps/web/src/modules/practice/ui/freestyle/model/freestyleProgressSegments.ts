@@ -49,8 +49,11 @@ export interface FreestyleProgressSegment {
   isQuiz?: boolean
   /** 睡前复习 tick: marked with a moon; its grade never reschedules. */
   bedtime?: boolean
-  /** A question bound to this unit was answered wrong this round. Red until settlement. */
+  /** A question bound to this unit is currently wrong. */
   wrong?: boolean
+  /** All bound questions in the current quiz scope are correct. */
+  quizAllCorrect?: boolean
+  unitFavorite?: boolean
 }
 
 /**
@@ -99,9 +102,10 @@ export function progressSegmentAccentClass(
   tone: FreestyleSegmentTone,
   isQuiz = false,
   isWrong = false,
+  quizAllCorrect = false,
 ): string {
   if (isWrong) return WRONG_ACCENT_CLASS[tone]
-  if (isQuiz) return QUIZ_ACCENT_CLASS[tone]
+  if (isQuiz || quizAllCorrect) return QUIZ_ACCENT_CLASS[tone]
   return RAIL_ACCENT_CLASS[isNew ? 'new' : 'review'][tone]
 }
 
@@ -115,8 +119,9 @@ export function retryNodeToneClass(
   isNew = false,
   isQuiz = false,
   isWrong = false,
+  quizAllCorrect = false,
 ): string {
-  const fill = progressSegmentAccentClass(isNew, tone === 'done' ? 'done' : 'pending', isQuiz, isWrong)
+  const fill = progressSegmentAccentClass(isNew, tone === 'done' ? 'done' : 'pending', isQuiz, isWrong, quizAllCorrect)
   return tone === 'done' ? `${fill} text-stage` : `${fill} text-stage-ink`
 }
 
