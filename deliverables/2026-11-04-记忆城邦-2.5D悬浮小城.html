@@ -1500,7 +1500,7 @@ function neighborRipple(site) {
   });
 }
 function flip() {
-  if (!state.ready || state.demo) return;
+  if (!state.ready) return;
   const now = performance.now();
   if (now - state.flipGuard < 55) return;
   state.flipGuard = now;
@@ -2227,4 +2227,63 @@ function toggleSound() {
   btn.classList.toggle('muted', state.muted);
   btn.innerHTML = state.muted ? '🔇 <span>静音</span>' : '🔊 <span>音效</span>';
   toast(state.muted ? '音效已关闭' : '音效已开启 · 翻卡会奏五声音阶', state.muted ? 'soft' : 'good');
+}
+/* ---------------- 初始繁荣城市 ---------------- */
+function buildInitialCity() {
+  buildInitialPlots();
+  paveAllRoads(-state.halfRoad, state.halfRoad, 0.05);
+
+  const prebuilt = [
+    { k: -1, l: 0, level: 3, lit: 0.55 },
+    { k: 0, l: -1, level: 4, lit: 0.5 },
+    { k: -1, l: -1, level: 2, lit: 0.35 },
+    { k: 1, l: 0, level: 3, lit: 0.45 },
+    { k: 0, l: 1, level: 2, lit: 0.4 },
+  ];
+  prebuilt.forEach((s, i) => {
+    const plot = findPlot(s.k, s.l);
+    if (!plot) return;
+    plot.used = true;
+    const b = makeBuilding(s.level);
+    b.group.position.set(plot.x, 0, plot.z);
+    city.add(b.group);
+    b.group.scale.setScalar(0.01);
+    gsap.to(b.group.scale, { x: 1, y: 1, z: 1, duration: 1.15, delay: 0.55 + i * 0.12, ease: 'elastic.out(1,0.6)' });
+    b.windows.forEach((w) => {
+      if (Math.random() < s.lit) {
+        w.userData.lit = true;
+        w.material.emissiveIntensity = rand(1.0, 1.7);
+      }
+    });
+    const unit = {
+      plot, group: b.group, status: 'built', building: b.group, height: b.height,
+      windows: b.windows, flips: 0, bricks: [], scaffold: null, crane: null,
+    };
+    state.units.push(unit);
+    state.buildings.push(unit);
+    state.allWindows.push(...b.windows);
+  });
+
+  const sitePlot = findPlot(0, 0);
+  if (sitePlot) createSite(sitePlot);
+
+  const marginTrees = [[-4.6, 4.6, 0.82], [4.6, 4.45, 0.7], [-4.55, -4.5, 0.76], [4.5, -4.5, 0.62]];
+  marginTrees.forEach(([x, z, s], i) => {
+    const tree = makeTree(s);
+    tree.position.set(x, 0, z);
+    tree.scale.setScalar(0.01);
+    city.add(tree);
+    registerTree(tree);
+    gsap.to(tree.scale, { x: s, y: s, z: s, duration: 1.0, delay: 1.0 + i * 0.12, ease: 'elastic.out(1,0.5)' });
+  });
+
+  setTimeout(() => { if (state.ready) { spawnCar(); spawnCar(); } }, 1250);
+  updateStats();
+  updateCombo();
+
+  setTimeout(() => {
+    log('欢迎回到城邦 · 5 栋建筑正在呼吸', '#a78bfa');
+    log('黄色塔吊已就位 · 按 Enter 开始翻卡', '#f4d06f');
+    log('2 辆小车已上路 · 世界进入永动', '#8fa8be');
+  }, 1000);
 }
