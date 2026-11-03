@@ -472,6 +472,7 @@ def unit_payload(
         "due_date": row.due_date.isoformat(),
         "due": row.due_date <= local_day(),
         "active": row.active,
+        "is_favorite": bool(row.is_favorite),
     }
 
 
@@ -542,6 +543,7 @@ def get_palace_unit_projection(
         _active_unit_key(item.anchor_uid, item.unit_kind): item for item in definitions
     }
     states = _states_in_topology_order(states, definitions)
+    favorite_states = [row for row in states if not row.permanently_removed]
     due = [row for row in states if row.due_date <= local_day()]
     next_due = min((row.due_date for row in states), default=None)
     return {
@@ -568,6 +570,9 @@ def get_palace_unit_projection(
             )
             for row in states
         ],
+        "active_unit_count": len(favorite_states),
+        "favorite_unit_count": sum(1 for row in favorite_states if row.is_favorite),
+        "all_active_units_favorite": bool(favorite_states) and all(row.is_favorite for row in favorite_states),
     }
 
 

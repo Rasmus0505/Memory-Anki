@@ -28,13 +28,14 @@ from memory_anki.modules.memory.api import (
     remove_unit_permanently,
     rerate_unit_rating,
     rerate_unit_ratings,
+    set_unit_favorite,
     start_freestyle_unit_review_session,
     start_unit_review_session,
     undo_content_schedule_batch,
     undo_unit_rating,
 )
 from memory_anki.platform.application import MutationIdentity, mutation_identity_from_headers
-from memory_anki.platform.persistence import SqlAlchemyMutationResponseStore
+from memory_anki.platform.persistence import SqlAlchemyMutationResponseStore, SqlAlchemyUnitOfWork
 
 router = APIRouter(tags=["review"])
 
@@ -55,6 +56,48 @@ def palace_units(palace_id: int, session: Session = Depends(session_dep)):
     try:
         return {"item": get_palace_unit_projection(session, palace_id, allow_reconcile=False)}
     except ValueError as exc:
+        raise _bad_request(exc) from exc
+
+
+@router.put("/review/units/{unit_id}/favorite")
+def set_review_unit_favorite(
+    unit_id: str,
+    data: dict,
+    request: Request,
+    session: Session = Depends(session_dep),
+):
+    payload = data if isinstance(data, dict) else {}
+    raw_favorite = payload.get("is_favorite")
+    if not isinstance(raw_favorite, bool):
+        raise HTTPException(status_code=422, detail="is_favorite must be a boolean")
+    mutation_identity = mutation_identity_from_headers(request.headers)
+    mutation_store = SqlAlchemyMutationResponseStore(session)
+    body_operation_id = str(payload.get("operation_id") or "").strip()
+    if mutation_identity is None and body_operation_id:
+        mutation_identity = MutationIdentity(operation_id=body_operation_id)
+    existing = mutation_store.get(mutation_identity)
+    if existing is not None:
+        item = existing.get("item") if isinstance(existing, dict) else None
+        if (
+            not isinstance(item, dict)
+            or item.get("id") != unit_id
+            or item.get("is_favorite") is not raw_favorite
+        ):
+            raise HTTPException(status_code=400, detail="operation_id belongs to another operation")
+        return existing
+    try:
+        item = set_unit_favorite(
+            session,
+            unit_id,
+            raw_favorite,
+            uow=SqlAlchemyUnitOfWork(session),
+            before_commit=lambda saved: mutation_store.save(
+                mutation_identity, {"item": saved}
+            ),
+        )
+        return {"item": item}
+    except ValueError as exc:
+        session.rollback()
         raise _bad_request(exc) from exc
 
 

@@ -49,6 +49,9 @@ _EMPTY_REVIEW: dict[str, Any] = {
     "mark_required": True,
     "permanent_mark_count": 0,
     "unit_count": 0,
+    "active_unit_count": 0,
+    "favorite_unit_count": 0,
+    "all_active_units_favorite": False,
     "due_unit_count": 0,
     "next_review_at": None,
     "has_due_review": False,
@@ -72,6 +75,8 @@ def _review_fields(review_projection: dict[str, Any]) -> dict[str, Any]:
     return {
         "review_status": review_projection.get("review_status") or "marking_required",
         "review_unit_count": int(review_projection.get("unit_count") or 0),
+        "favorite_review_unit_count": int(review_projection.get("favorite_unit_count") or 0),
+        "all_review_units_favorite": bool(review_projection.get("all_active_units_favorite")),
         "due_review_unit_count": int(review_projection.get("due_unit_count") or 0),
         "permanent_mark_count": int(review_projection.get("permanent_mark_count") or 0),
         "next_review_date": review_projection.get("next_review_date"),

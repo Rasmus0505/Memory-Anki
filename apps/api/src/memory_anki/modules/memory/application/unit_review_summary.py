@@ -68,6 +68,9 @@ def get_palace_review_summary(
             "mark_required": True,
             "permanent_mark_count": 0,
             "unit_count": 0,
+            "active_unit_count": 0,
+            "favorite_unit_count": 0,
+            "all_active_units_favorite": False,
             "due_unit_count": 0,
             "has_due_review": False,
             "next_review_at": None,
@@ -186,6 +189,9 @@ def project_palace_review_summaries(
                 "mark_required": True,
                 "permanent_mark_count": 0,
                 "unit_count": 0,
+                "active_unit_count": 0,
+                "favorite_unit_count": 0,
+                "all_active_units_favorite": False,
                 "due_unit_count": 0,
                 "next_review_date": None,
                 "review_status": "marking_required",
@@ -218,6 +224,9 @@ def _build_projection(
             "mark_required": not marked,
             "permanent_mark_count": 0,
             "unit_count": 0,
+            "active_unit_count": 0,
+            "favorite_unit_count": 0,
+            "all_active_units_favorite": False,
             "due_unit_count": 0,
             "next_review_date": None,
             "review_status": "scheduled" if marked else "marking_required",
@@ -232,12 +241,17 @@ def _build_projection(
     due = [row for row in states if row.due_date <= local_day()]
     next_due = min((row.due_date for row in states), default=None)
     next_review_date = next_due.isoformat() if next_due else None
+    favorite_states = [row for row in states if not row.permanently_removed]
+    favorite_count = sum(1 for row in favorite_states if row.is_favorite)
     return {
         "palace_id": palace_id,
         "title": palace.title or "",
         "mark_required": False,
         "permanent_mark_count": 0,
         "unit_count": len(states),
+        "active_unit_count": len(favorite_states),
+        "favorite_unit_count": favorite_count,
+        "all_active_units_favorite": bool(favorite_states) and favorite_count == len(favorite_states),
         "due_unit_count": len(due),
         "next_review_date": next_review_date,
         "review_status": "due" if due else "scheduled",

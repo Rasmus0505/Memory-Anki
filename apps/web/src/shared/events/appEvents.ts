@@ -5,6 +5,7 @@ export const APP_EVENT_NAMES = {
   clientPreferencesUpdated: 'memory-anki-client-preferences-updated',
   palaceCatalogInvalidated: 'palace-catalog:invalidated',
   palaceFavoriteChanged: 'palace-favorite:changed',
+  reviewUnitFavoriteChanged: 'review-unit-favorite:changed',
   reviewStateChanged: 'review-state:changed',
   themeUpdated: 'memory-anki-theme-updated',
 } as const
@@ -13,6 +14,7 @@ export interface AppEventMap {
   [APP_EVENT_NAMES.clientPreferencesUpdated]: Partial<ClientPreferences>
   [APP_EVENT_NAMES.palaceCatalogInvalidated]: undefined
   [APP_EVENT_NAMES.palaceFavoriteChanged]: { palaceId: number; isFavorite: boolean }
+  [APP_EVENT_NAMES.reviewUnitFavoriteChanged]: { palaceId: number; unitId: string; isFavorite: boolean }
   [APP_EVENT_NAMES.reviewStateChanged]: { roundRefresh?: boolean } | undefined
   [APP_EVENT_NAMES.themeUpdated]: ThemePreference
 }

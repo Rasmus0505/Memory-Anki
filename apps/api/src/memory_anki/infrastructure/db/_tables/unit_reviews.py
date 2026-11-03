@@ -34,6 +34,7 @@ class ReviewUnitState(Base):
     __table_args__ = (
         Index("ix_review_unit_states_due", "active", "due_date", "palace_id"),
         Index("ix_review_unit_states_palace", "palace_id", "active"),
+        Index("ix_review_unit_states_palace_favorite", "palace_id", "active", "is_favorite"),
         Index(
             "uq_review_unit_states_active_anchor",
             "palace_id",
@@ -99,6 +100,9 @@ class ReviewUnitState(Base):
     hard_penalized_on: Mapped[date | None] = mapped_column(Date, nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     permanently_removed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("0")
+    )
+    is_favorite: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=text("0")
     )
     created_at: Mapped[datetime] = mapped_column(

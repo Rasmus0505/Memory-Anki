@@ -2,6 +2,7 @@
 
 from .application.learning_progress_evidence import read_learning_progress_evidence
 from .application.subject_memory_ladder import get_subject_memory_ladder
+from .application.unit_favorites import list_unit_favorites, set_unit_favorite
 from .application.unit_ladder_progress import get_palace_ladder_progress
 from .application.unit_retention_read import (
     RetentionSummary,
@@ -110,6 +111,8 @@ __all__ = [
     "get_unit_review_session",
     "list_active_review_unit_ids",
     "list_due_review_unit_ids",
+    "list_unit_favorites",
+    "set_unit_favorite",
     "list_due_units",
     "list_palace_ids_without_units",
     "count_active_units_by_palace",

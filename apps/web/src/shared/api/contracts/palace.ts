@@ -31,6 +31,8 @@ export interface PalaceListItem {
   has_due_review: boolean
   review_status: 'marking_required' | 'due' | 'scheduled'
   review_unit_count: number
+  favorite_review_unit_count?: number
+  all_review_units_favorite?: boolean
   due_review_unit_count: number
   permanent_mark_count: number
   /** Mind-map style corner badges: subjective then objective. Omitted side means zero. */
@@ -115,6 +117,8 @@ export interface PalaceGroupedSummaryItem {
   has_due_review: boolean
   review_status: 'marking_required' | 'due' | 'scheduled'
   review_unit_count: number
+  favorite_review_unit_count?: number
+  all_review_units_favorite?: boolean
   due_review_unit_count: number
   permanent_mark_count: number
   next_review_date: string | null

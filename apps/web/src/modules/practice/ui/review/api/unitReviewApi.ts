@@ -50,6 +50,7 @@ export interface ReviewUnitDto {
   palace_title?: string
   anchor_uid: string
   unit_kind: string
+  is_favorite?: boolean
   title: string
   node_uids: string[]
   revision: number
@@ -140,6 +141,9 @@ export interface PalaceUnitProjectionDto {
   mark_required: boolean
   permanent_mark_count?: number
   unit_count: number
+  active_unit_count?: number
+  favorite_unit_count?: number
+  all_active_units_favorite?: boolean
   due_unit_count: number
   next_review_date: string | null
   review_status: string
@@ -150,6 +154,7 @@ export interface PalaceUnitProjectionDto {
       | 'palace_id'
       | 'anchor_uid'
       | 'unit_kind'
+      | 'is_favorite'
       | 'title'
       | 'node_uids'
       | 'revision'
@@ -223,6 +228,14 @@ export interface UndoContentScheduleBatchResultDto {
 
 export async function getPalaceReviewUnitsApi(palaceId: number) {
   const response = await request<{ item: PalaceUnitProjectionDto }>(`/review/palaces/${palaceId}/units`)
+  return response.item
+}
+
+export async function setUnitFavoriteApi(unitId: string, isFavorite: boolean) {
+  const response = await request<{ item: ReviewUnitDto }>(`/review/units/${encodeURIComponent(unitId)}/favorite`, {
+    method: 'PUT',
+    body: JSON.stringify({ is_favorite: isFavorite }),
+  })
   return response.item
 }
 
