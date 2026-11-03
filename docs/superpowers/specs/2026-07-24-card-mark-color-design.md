@@ -1,5 +1,7 @@
 # 卡片标记颜色（Card Mark Color）
 
+**状态：** 已实现（节点 `data.markColor`、`MarkColorFlyout`、`mark_color_labels` 偏好均存在）。
+
 ## 目标
 
 在宫殿编辑右键菜单（含多选）中，于「标记重点」下方提供「标记颜色」：整卡底色标记、调色板自定义、可保存为可重命名/删除的标签；仅编辑模式显示。

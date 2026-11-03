@@ -1,7 +1,7 @@
 # 分区作用域导航历史（前进/后退）
 
 **日期：** 2026-07-23  
-**状态：** 已批准（方案 A）  
+**状态：** 已实现（`shared/page-history/*`、`GlobalBackButton`）。当前主导航为 6 个分区（新增 `progress`），分区规则由 `shared/routing/routeManifest.ts` 派生；本文的「5 分区 / 镜像 navSections」是当时状态。  
 **范围：** 仅左上角 GlobalBackButton；五个主导航分区
 
 ## 问题

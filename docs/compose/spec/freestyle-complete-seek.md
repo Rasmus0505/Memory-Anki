@@ -1,6 +1,7 @@
 ---
 feature: freestyle-complete-seek
 status: delivered
+superseded_by: freestyle-unit-progress
 updated: 2026-09-23
 branch: perf/freestyle-load
 commits: 2656ddb7..working-tree
@@ -9,6 +10,8 @@ commits: 2656ddb7..working-tree
 # 随心完成按钮跳到最早未评分单元
 
 ## Report
+
+> 后续演进：完成定位的最终规则由 [freestyle-unit-progress](freestyle-unit-progress.md) 的 `unitProgressState` 内核接管；本文 S2 表中「全部已评、仅剩未完成源卡 → 该源卡」的回退已被「最早未评分，否则 null」取代。本文保留为当时的交付记录。
 
 **What was built**
 

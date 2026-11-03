@@ -4,6 +4,7 @@ status: delivered
 updated: 2026-09-23
 branch: perf/freestyle-load
 commits: 2656ddb7..working-tree
+note: 后续 2026-11-03 的进度条单元红/绿语义叠加在这套动画之上
 ---
 
 # 随心进度条全场景动画（重做）

@@ -4,6 +4,7 @@ status: delivered
 updated: 2026-09-23
 branch: main
 commits: 26fa2171..working-tree
+note: 2026-11-03 起进度条在此内核上增加单元红/绿（错题快照）；内核仍是唯一评分来源
 ---
 
 # 随心评分状态统一内核
