@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import PalaceEditPage from '@/pages/create/PalaceEditorPage'
 import * as palaceApi from '@/modules/content/domain/palace-entity/api'
@@ -285,11 +286,13 @@ describe('PalaceEditPage import apply guard', () => {
     })
 
     render(
-      <MemoryRouter initialEntries={['/palaces/101/edit']}>
-        <Routes>
-          <Route path="/palaces/:id/edit" element={<PalaceEditPage />} />
-        </Routes>
-      </MemoryRouter>,
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter initialEntries={['/palaces/101/edit']}>
+          <Routes>
+            <Route path="/palaces/:id/edit" element={<PalaceEditPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
     )
 
     await waitFor(() => {
@@ -421,11 +424,13 @@ describe('PalaceEditPage import apply guard', () => {
       } as never)
 
     render(
-      <MemoryRouter initialEntries={['/palaces/101/edit']}>
-        <Routes>
-          <Route path="/palaces/:id/edit" element={<PalaceEditPage />} />
-        </Routes>
-      </MemoryRouter>,
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter initialEntries={['/palaces/101/edit']}>
+          <Routes>
+            <Route path="/palaces/:id/edit" element={<PalaceEditPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
     )
 
     await waitFor(() => {

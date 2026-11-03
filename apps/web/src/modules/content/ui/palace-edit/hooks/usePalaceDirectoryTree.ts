@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { getPalacesGroupedApi } from '@/modules/content/domain/palace-entity/api'
 import { getSubjectsApi, getSubjectTreeApi } from '@/modules/content/domain/knowledge-entity/api'
-import { PALACE_CATALOG_INVALIDATED_EVENT } from '@/modules/content/domain/palace-entity/api/catalogQuery'
-import { onAppEvent } from '@/shared/events/appEvents'
+import { PALACE_CATALOG_GROUPED_QUERY_KEY } from '@/modules/content/domain/palace-entity/api/catalogQuery'
 import {
   buildPalaceDirectoryTree,
   type DirectorySubjectTree,
@@ -10,6 +10,40 @@ import {
 } from '../model/palaceDirectoryTree'
 
 const EMPTY_TREE: PalaceDirectoryTree = { subjects: [], ungrouped: [] }
+
+/**
+ * Shared cache key for 「学科 → 章节 → 宫殿」.
+ *
+ * It lives under the catalog query prefix on purpose: the app-level
+ * `PalaceCatalogQueryInvalidationBridge` already invalidates that prefix on
+ * `PALACE_CATALOG_INVALIDATED_EVENT`, so a binding/title change from any
+ * surface (knowledge page, drag here, unit reconcile) refreshes the directory
+ * without this hook keeping its own event listener.
+ */
+export const PALACE_DIRECTORY_TREE_QUERY_KEY = [
+  ...PALACE_CATALOG_GROUPED_QUERY_KEY,
+  'directory-tree',
+] as const
+
+/**
+ * Loads the three reads that together describe the tree. A chapter tree that
+ * fails to load degrades to an empty chapter list for that subject instead of
+ * hiding the whole directory.
+ */
+async function loadPalaceDirectoryTree(): Promise<PalaceDirectoryTree> {
+  const [subjects, grouped] = await Promise.all([
+    getSubjectsApi(),
+    // The boot snapshot predates any binding change made in this editor, so
+    // the directory always reads the live catalog.
+    getPalacesGroupedApi(undefined, { fresh: true }).catch(() => null),
+  ])
+  const settled = await Promise.all(
+    subjects.map((subject) => getSubjectTreeApi(subject.id)
+      .then((chapterTree) => ({ ...chapterTree, subject: chapterTree.subject ?? subject }))
+      .catch((): DirectorySubjectTree => ({ subject, chapters: [] }))),
+  )
+  return buildPalaceDirectoryTree({ subjects, chapterTrees: settled, grouped })
+}
 
 export interface UsePalaceDirectoryTreeResult {
   tree: PalaceDirectoryTree
@@ -24,56 +58,41 @@ export interface UsePalaceDirectoryTreeOptions {
 }
 
 /**
- * Loads the three reads that together describe 「学科 → 章节 → 宫殿」 and merges
- * them into one tree. A chapter tree that fails to load degrades to an empty
- * chapter list for that subject instead of hiding the whole directory.
+ * Reads the palace directory from the shared query cache.
+ *
+ * Opening another palace swaps the editor route, which mounts a *new* editor
+ * page instance — a hook with only local state therefore re-read the whole
+ * catalog and flashed 「正在加载目录…」 on every chapter switch. The query cache
+ * lets that new instance paint the directory it already has while the
+ * revalidation runs in the background (default `staleTime` is 0, so freshness
+ * is unchanged: every editor mount still re-reads the live catalog).
  */
 export function usePalaceDirectoryTree({
   enabled = true,
 }: UsePalaceDirectoryTreeOptions = {}): UsePalaceDirectoryTreeResult {
-  const [tree, setTree] = useState<PalaceDirectoryTree>(EMPTY_TREE)
-  const [loading, setLoading] = useState(enabled)
-  const [error, setError] = useState<string | null>(null)
-  const requestIdRef = useRef(0)
+  const query = useQuery({
+    queryKey: PALACE_DIRECTORY_TREE_QUERY_KEY,
+    queryFn: loadPalaceDirectoryTree,
+    enabled,
+  })
+  const { refetch } = query
 
-  const load = useCallback(async () => {
-    const requestId = requestIdRef.current + 1
-    requestIdRef.current = requestId
-    setLoading(true)
-    try {
-      const [subjects, grouped] = await Promise.all([
-        getSubjectsApi(),
-        // The boot snapshot predates any binding change made in this editor, so
-        // the directory always reads the live catalog.
-        getPalacesGroupedApi(undefined, { fresh: true }).catch(() => null),
-      ])
-      const settled = await Promise.all(
-        subjects.map((subject) => getSubjectTreeApi(subject.id)
-          .then((chapterTree) => ({ ...chapterTree, subject: chapterTree.subject ?? subject }))
-          .catch((): DirectorySubjectTree => ({ subject, chapters: [] }))),
-      )
-      if (requestIdRef.current !== requestId) return
-      setTree(buildPalaceDirectoryTree({ subjects, chapterTrees: settled, grouped }))
-      setError(null)
-    } catch (nextError) {
-      if (requestIdRef.current !== requestId) return
-      setError(nextError instanceof Error ? nextError.message : '加载宫殿目录失败。')
-    } finally {
-      if (requestIdRef.current === requestId) setLoading(false)
-    }
-  }, [])
+  const refresh = useCallback(async () => {
+    await refetch()
+  }, [refetch])
 
-  useEffect(() => {
-    if (!enabled) return
-    void load()
-  }, [enabled, load])
+  const error = query.error
+    ? query.error instanceof Error
+      ? query.error.message
+      : '加载宫殿目录失败。'
+    : null
 
-  // Palace bindings and titles change from other surfaces too (knowledge page,
-  // dragging here). The catalog event is the existing invalidation contract.
-  useEffect(() => {
-    if (!enabled) return
-    return onAppEvent(PALACE_CATALOG_INVALIDATED_EVENT, () => { void load() })
-  }, [enabled, load])
-
-  return { tree, loading, error, refresh: load }
+  return {
+    tree: query.data ?? EMPTY_TREE,
+    // `isPending` (not `isFetching`) is the initial-load signal: once the cache
+    // holds a tree, a background revalidation must not bring the spinner back.
+    loading: enabled && query.isPending,
+    error,
+    refresh,
+  }
 }

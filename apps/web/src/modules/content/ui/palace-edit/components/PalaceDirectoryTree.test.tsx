@@ -1,10 +1,12 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PalaceGroupedListResponse } from '@/shared/api/contracts'
 import { getPalacesGroupedApi } from '@/modules/content/domain/palace-entity/api'
 import { getSubjectsApi, getSubjectTreeApi } from '@/modules/content/domain/knowledge-entity/api'
 import { PalaceDirectoryTree, PalaceDirectoryTreeView } from './PalaceDirectoryTree'
+import { resetPalaceDirectoryViewState } from '../model/palaceDirectoryViewState'
 import type { PalaceDirectoryTree as PalaceDirectoryTreeModel } from '../model/palaceDirectoryTree'
 
 vi.mock('@/modules/content/domain/palace-entity/api', () => ({
@@ -75,23 +77,33 @@ function makeDataTransfer() {
   return dataTransfer
 }
 
-function renderTree(overrides: Partial<Parameters<typeof PalaceDirectoryTree>[0]> = {}) {
+function createQueryClient() {
+  return new QueryClient({ defaultOptions: { queries: { retry: false } } })
+}
+
+function renderTree(
+  overrides: Partial<Parameters<typeof PalaceDirectoryTree>[0]> = {},
+  queryClient = createQueryClient(),
+) {
   const onOpenPalace = vi.fn()
   const onBindPalace = vi.fn()
-  render(
-    <MemoryRouter>
-      <PalaceDirectoryTree
-        currentPalaceId={11}
-        onOpenPalace={onOpenPalace}
-        onBindPalace={onBindPalace}
-        {...overrides}
-      />
-    </MemoryRouter>,
+  const result = render(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter>
+        <PalaceDirectoryTree
+          currentPalaceId={11}
+          onOpenPalace={onOpenPalace}
+          onBindPalace={onBindPalace}
+          {...overrides}
+        />
+      </MemoryRouter>
+    </QueryClientProvider>,
   )
-  return { onOpenPalace, onBindPalace }
+  return { onOpenPalace, onBindPalace, ...result }
 }
 
 beforeEach(() => {
+  resetPalaceDirectoryViewState()
   vi.mocked(getSubjectsApi).mockResolvedValue(subjects as never)
   vi.mocked(getSubjectTreeApi).mockResolvedValue({
     subject: subjects[0],
@@ -139,19 +151,45 @@ describe('PalaceDirectoryTree', () => {
     expect(await screen.findByRole('button', { name: '未落地宫殿' })).toBeTruthy()
   })
 
-  it('binds a dragged palace onto a chapter row', async () => {
-    const { onBindPalace } = renderTree()
-    await screen.findByRole('button', { name: '第二节 汉代的学校教育制度' })
+  it('folds a leaf chapter with a single palace into that palace row', async () => {
+    const { onOpenPalace } = renderTree()
+    const row = await screen.findByRole('button', { name: '第二节 汉代的学校教育制度' })
 
-    const chapterLabel = await screen.findByRole('button', { name: '第二节 汉代' })
+    // No separate fold row: the chapter's only palace is the row itself.
+    expect(screen.queryByRole('button', { name: '第二节 汉代' })).toBeNull()
+
+    fireEvent.click(row)
+    expect(onOpenPalace).toHaveBeenCalledWith(11)
+  })
+
+  it('binds a dragged palace onto a single-palace chapter row', async () => {
+    const { onBindPalace } = renderTree()
     const palaceRow = await screen.findByRole('button', { name: '第二节 汉代的学校教育制度' })
     const dataTransfer = makeDataTransfer()
 
     fireEvent.dragStart(palaceRow, { dataTransfer })
-    fireEvent.dragOver(chapterLabel.parentElement as HTMLElement, { dataTransfer })
-    fireEvent.drop(chapterLabel.parentElement as HTMLElement, { dataTransfer })
+    fireEvent.dragOver(palaceRow.parentElement as HTMLElement, { dataTransfer })
+    fireEvent.drop(palaceRow.parentElement as HTMLElement, { dataTransfer })
 
     await waitFor(() => expect(onBindPalace).toHaveBeenCalledWith(11, 10, 1))
+  })
+
+  it('paints the already loaded directory when the editor remounts for another palace', async () => {
+    const queryClient = createQueryClient()
+    const first = renderTree({ currentPalaceId: 30 }, queryClient)
+    await screen.findByRole('button', { name: '未落地宫殿' })
+    const loadsBeforeRemount = vi.mocked(getSubjectsApi).mock.calls.length
+    first.unmount()
+
+    renderTree({ currentPalaceId: 11 }, queryClient)
+
+    // The cached tree is the first paint: no loading placeholder, no empty frame.
+    expect(screen.queryByText('正在加载目录…')).toBeNull()
+    expect(screen.getByRole('button', { name: '第二节 汉代的学校教育制度' })).toBeTruthy()
+    // Freshness is unchanged: the remount still revalidates in the background.
+    await waitFor(() =>
+      expect(vi.mocked(getSubjectsApi).mock.calls.length).toBe(loadsBeforeRemount + 1),
+    )
   })
 
   it('filters to palaces matching the search keyword and keeps ancestors', async () => {
@@ -218,5 +256,28 @@ describe('PalaceDirectoryTreeView', () => {
 
     fireEvent.click(row)
     expect(onSelectPalace).toHaveBeenCalledWith(11)
+  })
+
+  it('keeps folds across remounts that share a view state key', async () => {
+    const renderBrowseTree = () => render(
+      <MemoryRouter>
+        <PalaceDirectoryTreeView
+          tree={staticTree}
+          currentPalaceId={null}
+          onSelectPalace={() => {}}
+          viewStateKey="test-editor-directory"
+        />
+      </MemoryRouter>,
+    )
+
+    const first = renderBrowseTree()
+    // Nothing auto-expands without a current palace, so the branch starts folded.
+    expect(screen.queryByRole('button', { name: '汉代的学校' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '中国教育史' }))
+    expect(await screen.findByRole('button', { name: '汉代的学校' })).toBeTruthy()
+    first.unmount()
+
+    renderBrowseTree()
+    expect(screen.getByRole('button', { name: '汉代的学校' })).toBeTruthy()
   })
 })

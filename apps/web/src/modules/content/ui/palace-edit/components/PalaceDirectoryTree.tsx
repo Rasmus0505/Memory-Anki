@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type ReactNode,
+} from 'react'
 import { Link } from 'react-router-dom'
 import { ChevronRight, FileText, LoaderCircle, Plus, Search } from 'lucide-react'
 import { Input } from '@/shared/components/ui/input'
@@ -12,6 +21,12 @@ import {
   type DirectorySubjectNode,
   type PalaceDirectoryTree as PalaceDirectoryTreeModel,
 } from '../model/palaceDirectoryTree'
+import {
+  readDirectoryExpandedKeys,
+  readDirectoryScrollTop,
+  writeDirectoryExpandedKeys,
+  writeDirectoryScrollTop,
+} from '../model/palaceDirectoryViewState'
 
 const PALACE_DRAG_TYPE = 'application/x-memory-anki-palace'
 const INDENT_STEP = 14
@@ -30,6 +45,11 @@ export interface PalaceDirectoryTreeViewProps {
   searchPlaceholder?: string
   emptyState?: ReactNode
   className?: string
+  /**
+   * Keeps folds and scroll position across remounts that share this key (the
+   * editor remounts per palace). Omit to start folded every mount.
+   */
+  viewStateKey?: string
 }
 
 function readDraggedPalaceId(event: DragEvent) {
@@ -56,11 +76,31 @@ export function PalaceDirectoryTreeView({
   searchPlaceholder = '搜索宫殿',
   emptyState,
   className,
+  viewStateKey,
 }: PalaceDirectoryTreeViewProps) {
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
+  const [expanded, setExpanded] = useState<Set<string>>(() => (
+    viewStateKey ? new Set(readDirectoryExpandedKeys(viewStateKey) ?? []) : new Set()
+  ))
   const [keyword, setKeyword] = useState('')
   const [dragOverKey, setDragOverKey] = useState<string | null>(null)
   const activeRowRef = useRef<HTMLButtonElement | null>(null)
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!viewStateKey) return
+    writeDirectoryExpandedKeys(viewStateKey, expanded)
+  }, [expanded, viewStateKey])
+
+  // Restore before paint so the remounted panel never shows a top-of-list frame
+  // first; the reveal effect below then only scrolls when the active row is
+  // actually outside the restored viewport.
+  useLayoutEffect(() => {
+    if (!viewStateKey) return
+    const savedTop = readDirectoryScrollTop(viewStateKey)
+    const node = scrollContainerRef.current
+    if (savedTop == null || !node) return
+    node.scrollTop = savedTop
+  }, [viewStateKey])
 
   const filtered = useMemo(() => filterPalaceDirectoryTree(tree, keyword), [tree, keyword])
   // A search must reveal what it found: rows are folded by default, so keeping
@@ -121,16 +161,27 @@ export function PalaceDirectoryTreeView({
     onDrop: (event: DragEvent) => bindFromEvent(event, chapterId, subjectId),
   })
 
-  const renderPalace = (palace: DirectoryPalaceNode, depth: number) => {
+  /**
+   * `flattenedChapter` marks a leaf chapter rendered as its single palace: the
+   * row then also accepts drops so another palace can be rebound onto it.
+   */
+  const renderPalace = (
+    palace: DirectoryPalaceNode,
+    depth: number,
+    flattenedChapter?: DirectoryChapterNode,
+  ) => {
     const active = palace.id === currentPalaceId
-    return (
+    const dropKey = flattenedChapter ? `chapter:${flattenedChapter.id}` : null
+    const row = (
       <button
         key={`palace:${palace.id}`}
         type="button"
         ref={active ? activeRowRef : undefined}
         aria-current={active ? 'page' : undefined}
         aria-label={palace.title}
-        title={palace.title}
+        title={flattenedChapter && flattenedChapter.name !== palace.title
+          ? `${flattenedChapter.name} · ${palace.title}`
+          : palace.title}
         draggable={Boolean(onBindPalace)}
         onDragStart={onBindPalace
           ? (event) => {
@@ -152,9 +203,27 @@ export function PalaceDirectoryTreeView({
         <span className="truncate">{palace.title}</span>
       </button>
     )
+    if (!flattenedChapter || dropKey == null) return row
+    return (
+      <div
+        key={dropKey}
+        {...dropTargetProps(dropKey, flattenedChapter.id, flattenedChapter.subjectId)}
+        className={cn(
+          'rounded-md transition-colors',
+          dragOverKey === dropKey ? 'bg-primary/10 ring-1 ring-primary/50' : null,
+        )}
+      >
+        {row}
+      </div>
+    )
   }
 
   const renderChapter = (chapter: DirectoryChapterNode, depth: number) => {
+    // A leaf chapter with exactly one palace folds into that palace: the extra
+    // fold would only reveal a child with the same name.
+    if (chapter.children.length === 0 && chapter.palaces.length === 1) {
+      return renderPalace(chapter.palaces[0], depth, chapter)
+    }
     const key = `chapter:${chapter.id}`
     const isOpen = searching || expanded.has(key)
     return (
@@ -303,7 +372,14 @@ export function PalaceDirectoryTreeView({
           />
         </div>
       ) : null}
-      <div aria-label="宫殿目录" className="min-h-0 flex-1 overflow-y-auto">
+      <div
+        ref={scrollContainerRef}
+        aria-label="宫殿目录"
+        className="min-h-0 flex-1 overflow-y-auto"
+        onScroll={viewStateKey
+          ? (event) => { writeDirectoryScrollTop(viewStateKey, event.currentTarget.scrollTop) }
+          : undefined}
+      >
         {loading && !hasAnySubject && !hasRootUngrouped ? (
           <div className="flex items-center gap-2 px-1 py-3 text-[13px] text-muted-foreground">
             <LoaderCircle className="size-3.5 animate-spin" aria-hidden />
@@ -337,6 +413,13 @@ export interface PalaceDirectoryTreeProps {
   className?: string
 }
 
+/**
+ * Every palace editor instance shows the same directory, so they share one
+ * view-state key: switching to a palace in another chapter keeps the folders
+ * the user had open and the scroll position instead of resetting the panel.
+ */
+export const PALACE_EDITOR_DIRECTORY_VIEW_STATE_KEY = 'palace-editor-directory'
+
 /** Editor-side panel: loads the directory and binds it to the editor's actions. */
 export function PalaceDirectoryTree({
   currentPalaceId,
@@ -354,6 +437,7 @@ export function PalaceDirectoryTree({
       onSelectPalace={onOpenPalace}
       onBindPalace={onBindPalace}
       className={className}
+      viewStateKey={PALACE_EDITOR_DIRECTORY_VIEW_STATE_KEY}
     />
   )
 }

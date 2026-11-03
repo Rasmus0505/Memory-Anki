@@ -7,8 +7,10 @@ import {
   waitFor as testingLibraryWaitFor,
 } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { vi } from 'vitest'
 import PalaceEditPage from '@/pages/create/PalaceEditorPage'
+import { resetPalaceDirectoryViewState } from '@/modules/content/ui/palace-edit/model/palaceDirectoryViewState'
 import { ShellProvider } from '@/shared/components/layout/ShellContext'
 import * as appLogs from '@/shared/logs/model/appLogs'
 import * as knowledgeApi from '@/modules/content/domain/knowledge-entity/api'
@@ -395,46 +397,59 @@ export function getMindMapTexts() {
   }
 }
 
+/** The app mounts one QueryClientProvider at the root; mirror that here. */
+function queryClientProvider(children: React.ReactNode) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+}
+
 export function renderPalaceEditPage(initialEntry = '/palaces/101/edit') {
   return testingLibraryRender(
-    <MemoryRouter initialEntries={[initialEntry]}>
-      <Routes>
-        <Route path="/palaces/new" element={<PalaceEditPage />} />
-        <Route path="/palaces/:id/edit" element={<PalaceEditPage />} />
-        <Route path="/palaces/:id/units" element={<div>unit-rating-page</div>} />
-      </Routes>
-    </MemoryRouter>,
+    queryClientProvider(
+      <MemoryRouter initialEntries={[initialEntry]}>
+        <Routes>
+          <Route path="/palaces/new" element={<PalaceEditPage />} />
+          <Route path="/palaces/:id/edit" element={<PalaceEditPage />} />
+          <Route path="/palaces/:id/units" element={<div>unit-rating-page</div>} />
+        </Routes>
+      </MemoryRouter>,
+    ),
   )
 }
 
 export function renderPalaceEditPageWithShell(sidebarCollapsed: boolean) {
   return testingLibraryRender(
-    <ShellProvider value={{ sidebarCollapsed, setSidebarCollapsed: () => {} }}>
-      <MemoryRouter initialEntries={['/palaces/101/edit']}>
-        <Routes>
-          <Route path="/palaces/:id/edit" element={<PalaceEditPage />} />
-        </Routes>
-      </MemoryRouter>
-    </ShellProvider>,
+    queryClientProvider(
+      <ShellProvider value={{ sidebarCollapsed, setSidebarCollapsed: () => {} }}>
+        <MemoryRouter initialEntries={['/palaces/101/edit']}>
+          <Routes>
+            <Route path="/palaces/:id/edit" element={<PalaceEditPage />} />
+          </Routes>
+        </MemoryRouter>
+      </ShellProvider>,
+    ),
   )
 }
 
 export function renderPalaceEditPageStrict() {
   return testingLibraryRender(
-    <StrictMode>
-      <MemoryRouter initialEntries={['/palaces/new']}>
-        <Routes>
-          <Route path="/palaces/new" element={<PalaceEditPage />} />
-          <Route path="/palaces/:id/edit" element={<PalaceEditPage />} />
-        </Routes>
-      </MemoryRouter>
-    </StrictMode>,
+    queryClientProvider(
+      <StrictMode>
+        <MemoryRouter initialEntries={['/palaces/new']}>
+          <Routes>
+            <Route path="/palaces/new" element={<PalaceEditPage />} />
+            <Route path="/palaces/:id/edit" element={<PalaceEditPage />} />
+          </Routes>
+        </MemoryRouter>
+      </StrictMode>,
+    ),
   )
 }
 
 export function setupPalaceEditPageTestDefaults() {
   vi.restoreAllMocks()
   window.localStorage.clear()
+  resetPalaceDirectoryViewState()
   mindMapFrameMockState.nextMountId = 1
   vi.spyOn(window, 'confirm').mockReturnValue(true)
   vi.spyOn(knowledgeApi, 'getSubjectsApi').mockResolvedValue([{ id: 1, name: '测试学科', color: '#6366f1', sort_order: 0 }])

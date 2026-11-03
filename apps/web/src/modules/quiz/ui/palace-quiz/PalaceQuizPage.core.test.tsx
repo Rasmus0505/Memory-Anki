@@ -80,9 +80,7 @@ describe('PalaceQuizPage core flows', () => {
     expect(await screen.findByText('直接修改节点，改动会自动保存。')).toBeTruthy()
     const firstFocusNonce = Number(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-focus-nonce'))
 
-    // The left column is the 学科 › 章节 › 宫殿 directory now: a palace row only
-    // exists once its chapter is open.
-    fireEvent.click(await screen.findByRole('button', { name: '展开第四章' }))
+    // 第四章 只有一个宫殿，目录把它折叠成那一行宫殿本身（不再单独出现章节展开行）。
     const secondPalaceButton = await screen.findByRole('button', { name: '遗传学宫殿' })
     fireEvent.click(secondPalaceButton)
     await waitFor(() => {

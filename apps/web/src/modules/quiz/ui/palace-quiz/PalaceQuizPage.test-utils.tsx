@@ -1,4 +1,5 @@
 import { render } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Route, Routes, MemoryRouter } from 'react-router-dom'
 import { vi } from 'vitest'
 import PalaceQuizPage from '@/modules/quiz/ui/palace-quiz/PalaceQuizPage'
@@ -372,12 +373,16 @@ export function renderPage(
   initialEntry = '/palaces/1/quiz',
   routePath = '/palaces/:id/quiz',
 ) {
+  // 真实 AppProviders 在根部挂了 QueryClientProvider；宫殿目录查询需要它。
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
-    <MemoryRouter initialEntries={[initialEntry]}>
-      <Routes>
-        <Route path={routePath} element={<PalaceQuizPage />} />
-      </Routes>
-    </MemoryRouter>,
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={[initialEntry]}>
+        <Routes>
+          <Route path={routePath} element={<PalaceQuizPage />} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
   )
 }
 

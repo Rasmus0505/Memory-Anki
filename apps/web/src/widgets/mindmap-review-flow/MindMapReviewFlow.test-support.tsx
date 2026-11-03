@@ -1,5 +1,6 @@
 import * as React from "react";
 import { render } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { vi } from "vitest";
 // 预载懒加载的庆祝组件，让它们在断言前已可同步渲染，而不是等首次动态 import 完成。
@@ -254,7 +255,13 @@ export function getVisibleTextsFromLatestFrame() {
 }
 
 export function renderInRouter(node: React.ReactNode) {
-  return render(<MemoryRouter>{node}</MemoryRouter>);
+  // 真实 AppProviders 在根部挂了 QueryClientProvider；宫内目录查询需要它。
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter>{node}</MemoryRouter>
+    </QueryClientProvider>,
+  );
 }
 
 export function setupMindMapReviewFlowTest() {
