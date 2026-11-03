@@ -1,0 +1,515 @@
+{
+  "schemaVersion": 1,
+  "architecture": {
+    "backend": "modular-monolith",
+    "frontend": "app-pages-widgets-modules-shared",
+    "databaseSchemaChanges": true
+  },
+  "backend": {
+    "targetLayers": [
+      "domain",
+      "application",
+      "ports",
+      "infrastructure",
+      "presentation"
+    ],
+    "contexts": {
+      "backups": {
+        "status": "migrated",
+        "publicEntry": "memory_anki.modules.backups.api"
+      },
+      "content": {
+        "status": "migrated",
+        "publicEntry": "memory_anki.modules.content.api"
+      },
+      "dashboard": {
+        "status": "migrated"
+      },
+      "english": {
+        "status": "migrated",
+        "publicEntry": "memory_anki.modules.english.api"
+      },
+      "english_lookup": {
+        "status": "migrated"
+      },
+      "exam": {
+        "status": "migrated",
+        "publicEntry": "memory_anki.modules.exam.api"
+      },
+      "knowledge": {
+        "status": "migrated"
+      },
+      "memory": {
+        "status": "migrated",
+        "publicEntry": "memory_anki.modules.memory.api"
+      },
+      "mindmap": {
+        "status": "retired",
+        "replacedBy": [
+          "mindmap_document"
+        ]
+      },
+      "mindmap_document": {
+        "status": "migrated",
+        "publicEntry": "memory_anki.modules.mindmap_document.api"
+      },
+      "mindmap_learning": {
+        "status": "retired",
+        "replacedBy": [
+          "mindmap_document"
+        ]
+      },
+      "practice": {
+        "status": "migrated",
+        "publicEntry": "memory_anki.modules.practice.api"
+      },
+      "produce": {
+        "status": "migrated",
+        "publicEntry": "memory_anki.modules.produce.api"
+      },
+      "progression": {
+        "status": "migrated"
+      },
+      "quiz": {
+        "status": "migrated",
+        "publicEntry": "memory_anki.modules.quiz.api"
+      },
+      "reminders": {
+        "status": "migrated",
+        "publicEntry": "memory_anki.modules.reminders.api"
+      },
+      "search": {
+        "status": "migrated"
+      },
+      "session": {
+        "status": "migrated",
+        "publicEntry": "memory_anki.modules.session.api"
+      },
+      "settings": {
+        "status": "migrated",
+        "publicEntry": "memory_anki.modules.settings.api"
+      },
+      "freestyle": {
+        "status": "retired",
+        "replacedBy": [
+          "practice"
+        ]
+      },
+      "palaces": {
+        "status": "retired",
+        "replacedBy": [
+          "content"
+        ]
+      },
+      "palace_quiz": {
+        "status": "retired",
+        "replacedBy": [
+          "quiz"
+        ]
+      },
+      "reviews": {
+        "status": "retired",
+        "replacedBy": [
+          "memory"
+        ]
+      },
+      "sessions": {
+        "status": "retired",
+        "replacedBy": [
+          "session"
+        ]
+      }
+    },
+    "allowedCrossContextDependencies": {
+      "backups": [
+        "mindmap_document"
+      ],
+      "content": [
+        "backups",
+        "memory",
+        "mindmap_document",
+        "produce",
+        "quiz",
+        "session",
+        "settings"
+      ],
+      "dashboard": [
+        "content",
+        "english",
+        "memory",
+        "quiz",
+        "session"
+      ],
+      "english": [
+        "memory",
+        "session",
+        "settings"
+      ],
+      "english_lookup": [],
+      "exam": [
+        "memory"
+      ],
+      "knowledge": [
+        "backups",
+        "content",
+        "memory",
+        "mindmap_document"
+      ],
+      "memory": [
+        "content",
+        "mindmap_document",
+        "session"
+      ],
+      "practice": [
+        "content",
+        "english",
+        "exam",
+        "memory",
+        "mindmap_document",
+        "quiz",
+        "session"
+      ],
+      "produce": [
+        "backups",
+        "content"
+      ],
+      "progression": [
+        "exam"
+      ],
+      "quiz": [
+        "backups",
+        "content",
+        "mindmap_document",
+        "settings"
+      ],
+      "reminders": [
+        "memory"
+      ],
+      "search": [
+        "content"
+      ],
+      "session": [],
+      "settings": [
+        "backups",
+        "memory"
+      ],
+      "mindmap_document": []
+    },
+    "unitOfWorkManagedUseCases": [
+      "modules/knowledge/application/chapter_service.py",
+      "modules/knowledge/application/editor_state_service.py",
+      "modules/knowledge/application/subject_service.py",
+      "modules/content/application/attachment_service.py",
+      "modules/content/application/editor_state_service.py",
+      "modules/content/application/import_export_service.py",
+      "modules/content/application/knowledge_binding_service.py",
+      "modules/content/application/palace_service.py",
+      "modules/content/application/palace_template_service.py",
+      "modules/content/application/segment_management_service.py",
+      "modules/quiz/application/question_mutation_commands.py"
+    ]
+  },
+  "frontend": {
+    "targetLayers": [
+      "app",
+      "pages",
+      "widgets",
+      "modules",
+      "shared",
+      "platform"
+    ],
+    "allowedFeatureDependencies": {}
+  },
+  "runtime": {
+    "ports": {
+      "NavigationPort": {
+        "owner": "app/runtime",
+        "adapter": "platform/browser",
+        "capabilities": [
+          "push",
+          "replace",
+          "back"
+        ]
+      },
+      "OverlayCoordinator": {
+        "owner": "app/runtime",
+        "adapter": "app/composition",
+        "capabilities": [
+          "open",
+          "close",
+          "closeReason"
+        ]
+      },
+      "PresentationPort": {
+        "owner": "modules/mindmap/application",
+        "adapter": "platform/browser/browserPresentationPort.ts",
+        "capabilities": [
+          "fullscreen",
+          "viewportLock",
+          "escape",
+          "layoutSchedule"
+        ]
+      },
+      "SessionPort": {
+        "owner": "modules/session/application",
+        "adapter": "modules/session/infrastructure",
+        "capabilities": [
+          "identity",
+          "sessionKeyRegistry",
+          "versionedWrite",
+          "idempotentSave"
+        ]
+      },
+      "LiveStudyPresencePort": {
+        "owner": "modules/session/application",
+        "adapter": "modules/session/application/live_study_room.py",
+        "capabilities": [
+          "inProcessProjection",
+          "sseStream",
+          "commandPublish",
+          "controllerElection",
+          "opaqueViewEnvelope",
+          "controlLease",
+          "takeoverHydrate",
+          "disconnectGracePause",
+          "helloHydrate",
+          "followRetry",
+          "ratingMirror"
+        ]
+      },
+      "PersistencePort": {
+        "owner": "app/runtime",
+        "adapter": "platform/persistence",
+        "capabilities": [
+          "versionedLocal",
+          "versionedSession",
+          "offlineQueue",
+          "migration"
+        ]
+      },
+      "PwaRuntimePort": {
+        "owner": "app/runtime",
+        "adapter": "platform/pwa",
+        "capabilities": [
+          "release",
+          "serviceWorker",
+          "cacheReset",
+          "recovery"
+        ]
+      },
+      "ObservabilityPort": {
+        "owner": "app/runtime",
+        "adapter": "platform/observability",
+        "capabilities": [
+          "event",
+          "transition",
+          "request",
+          "errorContext"
+        ]
+      }
+    },
+    "forbiddenInBusinessPresentation": [
+      "window.history",
+      "window.location",
+      "requestFullscreen",
+      "exitFullscreen",
+      "localStorage",
+      "sessionStorage",
+      "fetch",
+      "navigator.serviceWorker"
+    ],
+    "useCases": {
+      "practice.completeRound": {
+        "owner": "practice",
+        "workflow": "FreestyleTrainingMachine",
+        "guard": "canCompleteRound",
+        "tests": [
+          "trainingRound.test.ts",
+          "freestyleTrainingMachine.test.ts"
+        ]
+      },
+      "practice.buildImmersiveQueue": {
+        "owner": "practice",
+        "facades": [
+          "content.api",
+          "memory.api",
+          "quiz.api"
+        ],
+        "endpoint": "POST /api/v1/freestyle/queue/build",
+        "tests": [
+          "test_freestyle_queue_builder.py",
+          "feedConfig.test.ts"
+        ]
+      },
+      "practice.scopeOverlayQuiz": {
+        "owner": "practice",
+        "facades": [
+          "content.api",
+          "memory.api",
+          "quiz.api"
+        ],
+        "endpoint": "POST /api/v1/freestyle/rounds/{round_id}/overlay-quiz/ensure",
+        "invariants": [
+          "default pool is the round's scheduled review units plus each unit's root-to-anchor path",
+          "a question without a binding record counts as bound to its palace root",
+          "whole palace is opt-in via overlay_question_range",
+          "removed and skipped palaces leave the pool"
+        ],
+        "tests": [
+          "test_overlay_quiz.py",
+          "test_overlay_quiz_config_scope.py"
+        ]
+      },
+      "practice.persistRoundPlan": {
+        "owner": "practice",
+        "facades": [
+          "memory.api"
+        ],
+        "endpoint": "POST /api/v1/freestyle/rounds/active",
+        "invariants": [
+          "SQLite freestyle_round_states is the authoritative retry order",
+          "expected_version rejects stale writers without overwrite",
+          "operation_id is idempotent",
+          "forget and hard append retry occurrences after leave with a 3-card gap"
+        ],
+        "tests": [
+          "test_freestyle_round_plan.py",
+          "test_freestyle_round_api.py"
+        ]
+      },
+      "practice.restoreRoundPlan": {
+        "owner": "practice",
+        "endpoint": "GET /api/v1/freestyle/rounds/{round_id}",
+        "invariants": [
+          "hydrate current card from the server plan, not queue head",
+          "rebind by unit_id when unit_revision changes"
+        ],
+        "tests": [
+          "test_freestyle_round_api.py"
+        ]
+      },
+      "mindmap.enterFullscreen": {
+        "owner": "mindmap",
+        "workflow": "MindMapPresentationMachine",
+        "port": "PresentationPort",
+        "tests": [
+          "mindMapPresentationMachine.test.ts",
+          "MindMapEditorSurface.test.tsx"
+        ]
+      },
+      "mindmap.exitFullscreen": {
+        "owner": "mindmap",
+        "workflow": "MindMapPresentationMachine",
+        "port": "PresentationPort",
+        "invariants": [
+          "does not navigate",
+          "does not close parent overlay"
+        ]
+      }
+    },
+    "events": {
+      "freestyle.round.completed": {
+        "owner": "practice",
+        "producer": "FreestyleTrainingMachine",
+        "consumers": [
+          "session"
+        ],
+        "precondition": "canCompleteRound"
+      },
+      "mindmap.presentation.entered": {
+        "owner": "mindmap",
+        "producer": "MindMapPresentationMachine",
+        "consumers": []
+      },
+      "mindmap.presentation.exited": {
+        "owner": "mindmap",
+        "producer": "MindMapPresentationMachine",
+        "consumers": [],
+        "forbiddenConsequences": [
+          "navigation.back",
+          "overlay.close"
+        ]
+      },
+      "session.liveProjection.updated": {
+        "owner": "session",
+        "port": "LiveStudyPresencePort",
+        "contract": "LiveStudyProjection",
+        "invariants": [
+          "projection is process memory only",
+          "session does not parse surface view payloads",
+          "only the controller client accumulates foreground seconds",
+          "operation_id is idempotent and client_id suppresses echo"
+        ],
+        "tests": [
+          "test_live_study_presence.py",
+          "liveStudyModel.test.ts",
+          "useFreestyleLiveMirror.test.tsx",
+          "LiveStudyPresenceProvider.test.tsx"
+        ]
+      },
+      "session.persistTimedRecord": {
+        "owner": "session",
+        "port": "SessionPort",
+        "contract": "StudySessionPayload",
+        "invariants": [
+          "session_key identifies one learning target across page scenes",
+          "effective_seconds comes only from foreground activity intervals",
+          "client_revision is monotonic and operation_id is idempotent",
+          "a timer session emits at most one terminal record",
+          "duration_edited is reserved for explicit history edits"
+        ],
+        "tests": [
+          "timedSessionRecordBuilder.test.ts",
+          "time-record-recovery.test.ts"
+        ]
+      }
+    },
+    "frontendModules": {
+      "backup": {
+        "publicEntry": "src/modules/backup/public.ts"
+      },
+      "content": {
+        "publicEntry": "src/modules/content/public.ts"
+      },
+      "dashboard": {
+        "publicEntry": "src/modules/dashboard/public.ts"
+      },
+      "exam": {
+        "publicEntry": "src/modules/exam/public.ts"
+      },
+      "english": {
+        "publicEntry": "src/modules/english/public.ts"
+      },
+      "english-lookup": {
+        "publicEntry": "src/modules/english-lookup/public.ts"
+      },
+      "memory": {
+        "publicEntry": "src/modules/memory/public.ts"
+      },
+      "mindmap": {
+        "publicEntry": "src/modules/mindmap/public.ts",
+        "workflow": "MindMapPresentationMachine"
+      },
+      "practice": {
+        "publicEntry": "src/modules/practice/public.ts",
+        "workflow": "FreestyleTrainingMachine"
+      },
+      "produce": {
+        "publicEntry": "src/modules/produce/public.ts"
+      },
+      "quiz": {
+        "publicEntry": "src/modules/quiz/public.ts"
+      },
+      "search": {
+        "publicEntry": "src/modules/search/public.ts"
+      },
+      "session": {
+        "publicEntry": "src/modules/session/public.ts",
+        "architectureDoc": "docs/architecture/live-study-presence.md"
+      },
+      "settings": {
+        "publicEntry": "src/modules/settings/public.ts"
+      }
+    }
+  }
+}

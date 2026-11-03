@@ -1,0 +1,199 @@
+# 思维导图架构
+
+## 一句话模型
+
+思维导图由“纯文档实体 → 通用画布 → 编辑器运行时 → 显式能力 → 业务宿主”组成。后端由“纯文档模块 → 宫殿/知识聚合保存 → 独立学习投影”组成。
+
+## 前端修改入口
+
+| 需求 | 修改位置 |
+|---|---|
+| 节点增删改、移动、子树遍历、搜索、审计 | `apps/web/src/modules/content/domain/mindmap-document-entity` |
+| React Flow 布局、拖拽、视口、通用节点外观 | `apps/web/src/shared/ui/mindmap-canvas` |
+| 编辑历史、快捷键、全屏、编辑器运行时 | `apps/web/src/modules/content/ui/mindmap-editor` |
+| 实体级加载、自动保存、陈旧请求隔离 | `apps/web/src/shared/hooks/useMindMapDocumentSession.ts` 与 `shared/lib/mindmapDocumentSessionModel.ts` |
+| 编辑写前本地草稿（每文档单槽覆盖，关页可恢复） | `apps/web/src/shared/persistence/mindmapEditorDraftStore.ts` |
+| 学习组 | `modules/content/ui/palace-edit` 提供业务状态，`pages/create/PalaceEditorPage` 组合编辑器与跨模块 UI |
+| 手动 JSON / 文本导入（“文字转脑图”） | `modules/produce/ui/mindmap-import`，服务端任务通过 produce public API 访问 |
+| 复习揭示、评分、掌握度 | `widgets/mindmap-review-flow` 宿主和 capability 输入 |
+| 知识体系导图 | `pages/library/KnowledgeLibraryPage` 宿主 |
+
+AI 拆分、AI 添卡、图片/PDF 导入与 OCR 链路已移除；下文相关段落只作历史记录，不要据此重建入口。
+
+## 大图导航（canvas 本地）
+
+- 通用画布支持分支折叠：节点右侧折叠按钮（单击展开/折叠本层；双击展开该节点下整棵子树）、工具栏「适应整树 / 适应当前分支 / 展开本支整树 / 展开全部 / 折叠深层」。「刷新脑图」仍会重建宿主并 fit；它在手机上也常驻（PWA 端没有别的恢复入口），工具栏在窄屏换行而不是把工具横向滚出视野。
+- 双击进编辑由卡片捕获阶段统一认领（`useCardEditGesture`），不依赖浏览器是否在黄底、富文本或 `user-select: none` 上发出 `dblclick`。第二次点击若被浏览器打到卡片外面、但仍落在该卡盒子里，窗口捕获监听补上进编辑，避免只剩右下角空白能点。折叠按钮、角标和工具栏不进编辑。黄底保留，光标落在双击处。英文可编辑卡的查词会让过双击窗口，只读复习查词仍立即发生。
+- 清空卡片 = 删除这张卡：编辑时把文字全选剪切（Ctrl+A → Ctrl+X）或删光后提交（点别处、Enter），等同于「单独删除这张卡」——这张卡走开，子卡上提，Ctrl+Z 可撤销。以前空文本被当成「取消编辑」，原文整段又回来，剪切看起来像没生效。判空以可见文字为准（剪切残留的黄底 `<span>` 不算内容，见 `isBlankMindMapText`）；根卡是宫殿框架不能清空，保留原文。提交路径：`NodeCard.commitEdit` → `onFinishEdit(id, '')` → `handleEditNode`；切换卡片的 `commitEditingDraft` 走同一语义。
+- 编辑会话打开时，全局学习快捷键必须让路：打开的 `contentEditable` 带 `data-mindmap-editor-active`，`isKeyboardShortcutSuspended` 与 `isFreestyleShortcutBlocked` 都读它。焦点被工具栏、React Flow 布局或卡片内边距抢走后，空格 / PageUp / PageDown / ↑↓ / Enter 都不能翻卡、翻页或评分——「偶尔触发」正是焦点已经不在编辑器里、但编辑会话还开着的那一刻。
+- 折叠状态不写回 editor_doc，仅 canvas 本地；节点数 >= 36 时默认折叠 depth>=1 的有子节点分支；practiceModeActive（复习/练习）强制全展开。
+- 视口 minZoom 降到 0.12 支持鸟瞰；中大图开启 React Flow onlyRenderVisibleElements。
+- 手机策略：`map` / `auto` 允许单指拖移；只有显式 `guided` 才把单指让给父级滚动。随心复习卡使用 `auto`：窄屏只读仍用更紧的 fit/zoom，但画布保持可拖；翻卡走 pager，不靠在图上单指滑动。
+- 鼠标滚轮平移（`panOnScroll`）必须记入受控相机。React Flow 会在 `move-start` 之前上报 viewport；preserve 模式不得把这次上报当成漂移丢掉，否则滚轮会弹回原位、滑不动。编辑卡上的 `nopan` / `nowheel` 只拦住拖拽，不得吃掉滚轮平移；滚轮仍按与空白处相同的距离挪整张图，松手即停，Ctrl 才缩放。
+- 用户缩放上报（`onUserZoomChange`）只看「手势期间相机确实变过 zoom」。Ctrl/双指滚轮的 `panOnScroll` 路径会再发一次已缩放相机的 move-start，而且 d3 的 end 可能晚于 280ms 的滚轮桥接计时器，end 里的相机还可能已被受控视口重新套回旧值；因此不能拿 end 的 zoom 与手势起点比较。手势期间记下最后一次上报的 zoom，end 时用它收口并上报（`userGestureZoomRef`）。程序化 fit/居中/缩放开始前清空手势状态，初始 fit 不得被当成用户偏好写回。
+- Enter reveal follow：随心复习按 Enter 翻出的卡若被画面裁切，画布只做最小平移，把这一步里裁切最多的那张完整推进视野并留边距，保持当前缩放，约 200ms，连按打断上一次动画跟上最新一步。鼠标点卡不挪视野。
+- 翻卡 / 收卡手感（方案 A 果冻弹跳，`shared/ui/mindmap-canvas/useMindMapRevealMotion.ts`）：待回忆卡按下即压扁（CSS `:active`，与翻卡覆盖层的起始姿态一致）；墨迹先行 40ms；翻卡起步即快（无 ease-in 空档），过边缘后弹簧回弹并落地压一下，回弹幅度取主题 `flipOvershootDeg` 的 40%。收卡时子卡本体被父卡吸回并缩小淡出 320ms，子卡之间错开 22ms、整批不超过 90ms，父卡在第一张到达时果冻 pop 一次。多卡翻开错开 35ms、整批不超过 140ms。
+- 右下角正文统计（`字数 · 字符数`，口径同 Obsidian 状态栏）由 `MindMapEditorSurface` 自己渲染（`MindMapTextStats.tsx` + 领域纯函数 `textMetrics.ts`）。整图数字按节点 uid 缓存，提交一次编辑只重算改过的卡；编辑中那张卡的「本卡 N 字」走 `mindMapEditingStatsStore` 的外部 store，按键仍然只写 `interactionRef`，不得为了让统计实时更新把逐键 setState 拉回编辑面。复习 / 练习 / 评分场景把这一行抬到评分条上方并挪到左下（评分条是全宽的，frame 又有 `isolation: isolate`，靠 z-index 压不过宿主评分条；右侧留给连击 chip 和翻页条）。
+- **不做** MiniMap、搜索跳转、大纲双栏（宿主可另组）。
+
+## 布局热路径与滚动合成（性能不变量）
+
+大图卡顿曾经有两个根因，功能测试都看不见，改坏也没有测试会红。两条都必须保留：
+
+- **`getNodeSize` 必须走 `nodeSizeMemo`。** 它是 `(role, label, minWidth, maxWidth)` 的纯函数，但一次布局里会被反复问同一张卡：`measureTree` 一次、`resolveOverlaps` 每对比较一次、`hasNodeOverlaps` / `stackNodesWithoutOverlap` 再一次。度量本身是正则加逐字符扫描，并不便宜；900 节点时单次布局实测约 15ms，等于一帧预算在 React Flow 碰 DOM 之前就没了。真实度量逻辑留在 `computeNodeSize`，公开入口 `getNodeSize` 只负责缓存。
+- **翻卡手势期间必须关掉节点 left/top 和边 `d` 的布局弹簧。** 弹簧在 `data-motion-settled` 之后给 `.react-flow__node` 的 left/top 和 `.react-flow__edge-path` 的 `d` 各 360ms。连点时卡片在 pointerdown 与 pointerup 之间被移走，点击要等动画结束才生效；`d` 的逐帧插值同时卡住主线程。揭示手势给视口加上 `data-reveal-motion`，这两条过渡关掉，翻牌本身仍走 WAAPI。回归守卫：`tools/check_architecture.py::check_mindmap_reveal_layout_hold`。
+- **含活导图的卡必须退出 `.fs-depth` 的滚动联动变换。** `styles/freestyle.css` 的深度堆叠用 `animation-timeline: view()` 在滚动时平移+缩放整个 `.fs-depth` 子树；导图在里面等于每一滚动帧重合成、重光栅化整棵画布（上千 DOM 节点加一层 SVG 连线）。因此 `:has(.memory-anki-mindmap-frame)` 的卡关闭 travel/veil/shadow 动画（原生全屏本来就是例外）。相邻卡仍按 `.fs-page` 的绘制顺序互相盖过，只去掉被覆盖卡的位移与压暗。
+
+回归守卫：`tools/check_architecture.py::check_mindmap_layout_hot_path`。
+
+## 画布就是这一页
+
+导图不是叠在另一张纸上的卡片。`memory-anki-mindmap-frame` 默认铺满宿主：无圆角、无投影、背景只用 `--memory-anki-mindmap-canvas`。标题、工具条、评分条浮在画布上，不得为它们在画布外留一条异色底（随心复习曾经用 `pb-[6.75rem]` 把评分条的位置留成米色纸；复习面板曾经用 `h-[64vh]` 把剩下的视口留成桌面）。对话框里的版本预览要卡片感时显式加 `is-inset`，页面宿主不要加。
+
+回归守卫：`tools/check_architecture.py::check_mindmap_surface_fill`。
+
+## 展示策略
+
+- `MindMapPresentationMachine` 明确区分 `nativeFullscreen` 与 `viewportFullscreen`，原生 Fullscreen API 被拒绝时只能进入 viewport 模式，不得继续上报为系统全屏。
+- `MindMapEditorSurface` 接受 `presentationStrategy`：桌面默认 `native-preferred`，已安装 PWA 默认 `viewport-only`。业务宿主只组合按钮和文案，不直接操作浏览器全屏、滚动锁或视口监听。
+- `PresentationPort` 继续拥有 Fullscreen API、`visualViewport`、页面滚动锁、Escape 和布局调度。viewport 模式使用稳定画布宿主覆盖应用外壳，并由 CSS safe-area inset 保护交互控件。
+- Electron 保留现有网页内沉浸与系统全屏入口；PWA 只暴露一个“全屏”入口，其产品语义是占满可用视觉视口，不承诺隐藏 iOS 系统状态栏或 Home Indicator。
+
+`MindMapEditorSurface` 不直接调用业务 API。业务页面通过 `MindMapPersistenceAdapter` 提供加载和保存，通过 `MindMapCapability[]` 提供装饰与动作。
+
+
+## 学习组统一边界
+
+- 学习组是宫殿局部范围的唯一业务概念，允许多个显式学习组包含同一节点；默认学习组仅投影未被任何显式学习组覆盖的节点。
+- `PalaceEditorPage` 负责进入选点状态；普通节点点击切换整棵子树，`MindMapEditorSurface` 只接收通用 `segmentRangeDraft` 装饰和工具栏内容，不感知宫殿业务。
+- 学习组训练统一使用 `/segments/{id}/practice` 与 `segment-checkpoint` 揭示模式。节点掌握度全局共享，揭示状态、完成状态和续练进度按 `palace_segment_id` 独立保存。
+- 题目通过 `segment_ids: number[]` 与学习组多对多关联；题目正文和答题统计只有一份，不为学习组复制题目。
+- 迷你宫殿功能、路由、API 和前端类型已经退役，不得重新创建对应模块或 mini practice 路由。
+
+## 后端修改入口
+
+| 需求 | 修改位置 |
+|---|---|
+| 文档规范化、旧格式兼容、序列化、指纹 | `modules/mindmap_document/api.py` |
+| 宫殿导图读写、危险删除、版本、Peg 同步 | `modules/content/application/editor_*` |
+| 知识导图读写、Chapter 同步 | `modules/knowledge/application/editor_*` |
+| 回忆事件、掌握度、人工标签 | 独立 `mindmap_learning` 模块已退役；掌握度在 `modules/quiz`，复习事实在 `modules/memory` |
+
+其他模块只能通过 `memory_anki.modules.mindmap_document.api` 使用纯文档能力，不得导入其内部文件。
+
+## 数据契约
+
+后端继续读取现有 `editor_doc`、`editor_config`、`editor_local_config` 数据库列。HTTP 响应同时提供 canonical `snapshot`：
+
+```text
+schemaVersion, document, editorPreferences, localPreferences, language, revision
+```
+
+前端优先读取 `snapshot`，旧字段仅作为兼容回退。保存接口接受旧字段，也接受 `{ snapshot, baseRevision }`。
+
+## 自动保存与关页耐久
+
+- **正式数据只有一份**：服务端对同一 `editor_doc` 就地覆盖；`PalaceVersion` 仍按约 5 分钟节流（最多 50 条），不为每次编辑增殖版本。
+- **编辑即写本地草稿**：`scheduleSave` 将最新快照写入 IndexedDB 草稿槽（key = `loadCacheKey:entityId`，同 key 覆盖），新草稿保留真实基线快照与指纹。恢复时只有草稿基线匹配服务端 revision 才允许自动回写；未知/不匹配基线进入显式冲突并阻止自动与强制保存。异步草稿读取和解决操作都核对 owner/operation。
+- **冲突解决**：`mindMapDocumentConflict` 保留本地、远端及可用基线；选择前必须把双方快照写入独立 IndexedDB 归档并等待事务完成。归档失败不覆盖。共享冲突对话框提供双方摘要、恢复文件下载和保守三方合并；无真实基线或结构/同节点冲突交由显式选择。
+- **HTTP 防抖约 800ms**，单飞保存；在飞期间的后续编辑更新 `pendingSnapshot`；当前保存成功后若仍有更新的 pending，**必须**再发一次（不依赖组件仍 mounted）。宫殿编辑器的自动保存使用轻量 ack，只返回服务端元数据和 revision，当前本地文档不因保存响应而重建。
+- **编辑滚动备份在响应后后台执行**，保存事务先提交并返回；备份失败只记录日志，不影响已成功的编辑保存。启动、周期和关机备份仍保留。
+- **关页**时 `visibilitychange` / `pagehide` 刷新草稿；若无在飞请求则立刻 flush。失败请求仍走既有 `mutationQueue`。
+
+## 节点正文（articleBody）
+
+- `data.articleBody` 是节点正文的受限富文本 JSON（段落、图片、公式、表格），属于用户持久内容，继续在导图节点上展示；字段名不改，旧数据不迁移。
+- `shared/ui/rich-document` 只负责通用安全渲染，不依赖业务模块。
+- 独立的“文章”视图、文章阅读游标 API 与文章文件导入导出已移除，相关代码和文档不再维护；已存数据保留。
+
+## 新增能力流程
+
+1. 在所属 feature/entity 中定义业务状态和 API 调用；跨 feature 的宿主组合放在 page/widget。
+2. 创建一个显式 capability，将业务状态转换为通用 visual 装饰或节点动作。
+3. 将 capability 加入宿主的能力数组。
+4. 不修改通用画布；只有新增通用渲染原语时才扩展 `MindMapNodeVisual`。
+5. 添加 capability 单测和宿主集成测试。
+
+## 禁止事项
+
+- 文档 entity 不依赖 React、React Flow 或业务 feature。
+- 通用画布不出现 palace、segment、mastery、review 等业务字段。
+- 编辑器运行时不直接访问宫殿、知识或复习 API。
+- 后端纯文档模块不依赖 ORM、FastAPI、备份或业务聚合。
+- 不重新创建旧 `shared/components/mindmap*` 或 `modules/mindmap/application/editor_state_*`。
+
+## Import preview port
+
+`modules/produce/ui/mindmap-import` owns import state and result presentation but receives mind-map preview rendering through `renderMindMapPreview`. Knowledge and Palace hosts provide `MindMapEditorSurface`; the import module does not import editor internals.
+
+## 浮层启动协调
+
+- 从 `DropdownMenu` 打开的 Dialog/Drawer 必须由共享 `useDropdownMenuActionCoordinator` 协调：菜单先受控关闭，浮层动作在关闭提交后执行。
+- 业务页面只声明动作语义 `opensOverlay: true`，不得使用 `setTimeout`、`queueMicrotask` 或页面级焦点补丁处理 Radix 菜单与浮层竞态。
+- 可最小化的业务入口浮层应使用稳定 `floatingId`；需要每次显式打开完整窗口时使用 `expandOnOpen`，避免持久化胶囊状态让入口看似失效。
+- 需要持续与背景内容交互的非模态工作台应设置 `dismissOnInteractOutside={false}`，只通过显式关闭按钮或 Escape 退出；焦点归还和背景点击不得改变业务 open 状态。
+- 手动调整过的浮层尺寸以视口比例写入 `window_layouts`。视口变化只按比例重算显示，不把暂时夹小的像素写回。查看宫殿同时记住位置比例、置顶和列表收起；通用浮层对话框记住宽高比例、置顶和收起，打开时仍重新居中；悬浮计时器记住尺寸和位置比例以及收起、隐藏；英语查词记住面板宽高比例和词典卡片高度。
+
+## 知识重点黄底标记
+
+> 历史说明：AI 转脑图导入链路已移除；下面第一条描述的是当时契约。当前仍保留的是黄底标记的存储、渲染与编辑。
+
+- AI 契约只使用简单 `source_tree`：`{"title":"...","children":[{"text":"...","children":[],"emphasis_marks?":[...]}]}`。禁止模型输出 `data`/`uid`/`richText`/`theme` 等编辑器字段；已有导图库仍持久化为 `editor_doc`，两套形状在 `build_editor_doc` 边界转换。
+- AI 转脑图可在节点上返回可选 `emphasis_marks: [{ kind: "highlight", text: "原文子串" }]`；用户在 AI 运行配置中填写“重点标记线索”（如带有下划线的文字），未填写时不强制识别。节点 `text` 保持纯文本，marks 必须是其子串。
+- 服务端将 marks / `rich_text_html` 归一为带 `data-emphasis="highlight"` 的黄底 HTML，写入 `data.text` 并置 `data.richText`。
+- 画布展示安全 HTML；编辑态选中文字可 toggle 黄色底色（再点取消）。产品语义是知识重点，不复刻教材下划线样式。
+
+## 图片与 PDF 导入边界
+
+> In-app image, PDF, and AI mind-map import were removed. Manual JSON import (“文字转脑图”) remains. `pdf_documents` and on-disk PDF files stay; the `pdf_library` module is gone. The notes below are historical.
+
+- 新图片任务统一使用 `image-batch`；一张和多张图片都先进入可排序、可删除的图片队列，再由用户显式开始识别。`image-single` 只用于兼容读取旧历史。
+- PDF 资料库是全局运行时资料，元数据保存于 `pdf_documents`，文件保存于 `%LOCALAPPDATA%\MemoryAnki\pdf_library` 或 `MEMORY_ANKI_HOME/pdf_library`。业务数据库只保存相对文件标识，不保存设备绝对路径。
+- PDF 导入只接受显式页码选择。任务创建时将选中页渲染为任务输入，并把原 PDF 复制为 `import_jobs/{operation_id}/source.pdf`；资料库文件后续删除不会破坏既有任务预览和复跑。
+- 所有新任务携带稳定 `owner_id/entity_key` 和唯一 `operation_id`。复跑创建新的 operation 并复制来源工件，不覆盖旧任务。
+- AI 结果先进入导入预览。覆盖当前导图、追加到选中节点和写入文本均由宿主显式确认；后台任务不得直接修改正式导图。
+
+## 历史归档：两阶段导入（全量识别 → 范围整理）
+
+> 该链路已移除（2026-11-04 标注），以下为历史记录。
+
+- PDF/多图/单图脑图导入统一走两阶段，不再保留「结构页 + 正文补全」或「视觉一次直出脑图」主路径。
+- **阶段 A（全文识别）**：用 VL 场景（`vision_batch_mindmap` / `vision_image_mindmap`）逐页识别上传页全部文字；提示词只要求完整识别，不做脑图。
+- **阶段 B（范围整理）**：用 `mindmap_ocr_formatter` 文本模型，按用户已选页范围与目标标题删除噪声/范围外内容，输出脑图 JSON。
+- OCR 按页保存到 `ocr/page-<页码>.txt`，成功页可在同一任务内恢复复用；跨任务时按 `pdf_document_id + page` 写入 `%MEMORY_ANKI_HOME%/pdf_ocr_cache`，后续任务命中后复制进工件并跳过模型调用。覆盖查询：`GET /pdf-library/{id}/ocr-coverage`。
+- 同时保存 `ocr_combined.txt`、`formatter_response.txt` 和 `final_tree.json`。
+- 任务保存并读取 `vision_ai_runtime` 与 `formatter_ai_runtime`；同一 `owner_id/operation_id` 贯穿识别、整理和预览阶段。
+- 识别结果只写入任务预览。用户点击“应用到宫殿”后才一次性保存正式导图；重整创建新的 operation，不覆盖历史任务。
+## 历史归档：AI 分卡 / AI 添卡边界
+
+> 该链路已移除（2026-11-04 标注），以下为历史记录。
+
+- 脑图编辑页通过 capability 提供统一的“AI 分卡”入口；工作台配置里选择任务类型：
+  - **分卡**（`split_mode=auto|parallel|hierarchy`）：原位替换无子节点的长内容卡。
+  - **添卡**（`split_mode=add_children`）：在父卡与一级子卡之间插入更少数量的中间分类，并把已有一级子节点整棵子树重挂（uid 不变）。
+- 根节点、只读模式和练习模式不开放右键入口；替换式分卡只处理无子节点的长内容卡片；添卡要求至少 2 个一级子节点，中间分类数必须严格少于子节点数。
+- 请求携带 `owner_id=palace:<id>`、唯一 `operation_id` 和 `split_mode`。服务端验证所属宫殿，前端只应用身份完全匹配的响应。
+- 分卡：服务端在父级 `children` 的原索引执行一次切片替换；新 UID 由 operation 和树路径确定生成。统一场景 `ai_split` 输出 `replacement_nodes`。
+- 添卡：服务端使用专用系统提示词（`add_children_prompt.py`，含骑士学院样例），**不得**经 `ai_split` composition/`render(ai_prompt_mindmap_ai_split_system)`（后者强制 `replacement_nodes`）。协议为 `new_children` + `child_assignments`；若模型误返回 `replacement_nodes`，服务端可尝试恢复分组。结果同样以 `replacement_nodes` 字段返回预览树；前端确认后「写入源父卡下」或「追加到选中卡之后」。
+- 用户「指定约 N 张」与字数启发式推断均为**软偏好**（只进 prompt 的 `max_children` / 数量说明），不因略多顶层而 400；用户在预览中自行删并后再应用。服务端替换式分卡仅在顶层超过安全上限（`AI_SPLIT_VALIDATION_MAX_TOP_LEVEL`，默认 12）或 depth/总数越界时拒绝。添卡中间层仍须严格少于一级子节点数。
+- 两种任务都先预览、后确认，后台不得直接修改正式导图；叶子/已有子节点尽量保留原句与原 uid，禁止总结删减。
+
+
+## 统一文档工作区与宫殿学科标签
+
+- 全站思维导图继续使用同一套 `MindMapEditorSurface`、`MindMapPageToolbar` 和 `useMindMapDocumentSession`。宫殿文档与学科文档是独立持久化文档，不得合并数据库内容。
+- 宫殿编辑页通过单工作区标签在宫殿文档和显式归属的学科文档之间切换，同一时刻只挂载一个可编辑画布。切换文档前必须提交当前文档待保存状态。
+- 学科文档在宫殿宿主中仍由 Knowledge API 读写；Palace 只注入章节关联 capability，并拥有宫殿—学科、宫殿—章节的一致性命令。
+- `PalaceKnowledgeOutlinePanel`、`PalaceChapterPanel` 和页面自行推导“第一个学科”的实现已经退役，不得重建。
+
+## Node identity and review units
+
+A palace document has one stable UID per node and stores permanent split marks. `mindmap_document.split_scheduling_units` is the only scheduling topology: water-pour isolation units plus one residual unit. It contains no scheduling state. Reviews reconciles those memberships into stable unit IDs and revisions. Active identity is `(anchor_uid, unit_kind)`, because the palace root can anchor both its residual unit and a root-mark unit.
+
+- Complete edit actions may save `editor_doc` immediately without reconciling schedule; editing must not block on unit arrangement. Freestyle uses a serialized latest-wins request chain and has no typing debounce.
+- Freestyle permanent mark / membership changes do not reconcile during active-card edits or mark toggles. Returning to review first adopts the local document and then reconciles asynchronously with `return_to_review`; `editor_leave` is the idempotent fallback after the edited card becomes inactive or unmounts. Other editor hosts may use finished-mark, idle, return-to-review, or explicit reconcile boundaries.
+- Content demotion (affected unit immediately due, one fixed-ladder step down) may batch to leave / idle / explicit reconcile — at most one demotion per unit per edit session.
+- Reconcile exposes unit-level before/after; content demotions form an undoable schedule batch (document content stays as saved). Manual adjust and undo demote-batch are Reviews write commands.
+- A permanent-mark change never restarts a unit. Removing the final mark deactivates unit rows but keeps their earned stage and due date; re-marking reactivates the original row (same unit id, same rating history) instead of starting at first-learning. A region that is still covered by active units mints a fresh row and inherits by node overlap. Retired rows are excluded from the inheritance vote once a live unit covers the same members, so stale schedules cannot drag a healthy unit down. Mark edits do not move a due date.
+
+Practice and Knowledge consume the Reviews projection and must not derive a second topology or node schedule.
