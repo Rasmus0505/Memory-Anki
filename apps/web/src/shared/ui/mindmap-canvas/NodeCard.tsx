@@ -12,6 +12,7 @@ import { Highlighter, Scissors } from 'lucide-react'
 import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import {
   hasHighlightMarkup,
+  hasMindMapRichMarkup,
   sanitizeMindMapRichHtml,
   serializeContentEditable,
   stripMindMapHtml,
@@ -55,7 +56,10 @@ function MindMapNodeCard({ data, id }: NodeProps) {
   ) as LayoutRole
   const isRoot = layoutRole === 'root'
   const rawNodeText = resolveNodeRawText(nodeData)
-  const isRichNode = Boolean(metadata.richText) || hasHighlightMarkup(rawNodeText)
+  const isRichNode =
+    Boolean(metadata.richText)
+    || hasHighlightMarkup(rawNodeText)
+    || hasMindMapRichMarkup(rawNodeText)
   const displayHtml = isRichNode ? sanitizeMindMapRichHtml(rawNodeText) : ''
   const plainLabel = stripMindMapHtml(nodeData.label) || nodeData.label || ''
   const [localEdit, setLocalEdit] = useState(false)
@@ -171,7 +175,9 @@ function MindMapNodeCard({ data, id }: NodeProps) {
       const selectAll = options?.selectAll ?? Boolean(nodeData.selectEditText)
       // Only seed DOM content when entering edit; later focus retries must not clobber typing.
       if (options?.seedContent && typeof options.value === 'string') {
-        if (hasHighlightMarkup(options.value)) {
+        // Rich nodes may contain block markup without a highlight span. Seed that
+        // markup as HTML; textContent would expose the literal `<div>` tags.
+        if (isRichNode || hasHighlightMarkup(options.value)) {
           input.innerHTML = sanitizeMindMapRichHtml(options.value)
         } else {
           input.textContent = options.value
@@ -183,7 +189,7 @@ function MindMapNodeCard({ data, id }: NodeProps) {
       })
       return document.activeElement === input
     },
-    [nodeData.selectEditText],
+    [isRichNode, nodeData.selectEditText],
   )
   const focusEditorCaretRef = useRef(focusEditorCaret)
   focusEditorCaretRef.current = focusEditorCaret

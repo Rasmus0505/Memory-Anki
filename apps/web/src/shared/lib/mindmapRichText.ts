@@ -37,6 +37,11 @@ export function hasHighlightMarkup(value: unknown): boolean {
   )
 }
 
+/** True when a value contains one of the editor's supported HTML tags. */
+export function hasMindMapRichMarkup(value: unknown): boolean {
+  return typeof value === 'string' && /<\s*\/?\s*(?:div|br|span|u|mark)\b/i.test(value)
+}
+
 export function sanitizeMindMapRichHtml(value: unknown): string {
   const raw = typeof value === 'string' ? value.trim() : ''
   if (!raw) return ''

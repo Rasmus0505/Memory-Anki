@@ -82,6 +82,27 @@ describe('NodeCard edit gesture', () => {
     expect(selection?.anchorOffset).toBe(2)
   })
 
+  it('seeds block rich text as markup instead of exposing HTML tags while editing', () => {
+    const richText = '<div>第一行</div><div>第二行</div>'
+    renderNodeCard({
+      label: '第一行第二行',
+      editing: true,
+      editText: richText,
+      metadata: {
+        depth: 1,
+        layoutRole: 'branch',
+        text: richText,
+      },
+    })
+
+    const editor = screen.getByRole('textbox', { name: '编辑节点文本' })
+    expect(editor.innerHTML).toContain('<div>第一行</div>')
+    expect(editor.innerHTML).toContain('<div>第二行</div>')
+    expect(editor.textContent).not.toContain('<div>')
+    expect(editor.textContent).toContain('第一行')
+    expect(editor.textContent).toContain('第二行')
+  })
+
   it('does not enter edit from the fold control or the corner badge', () => {
     const onStartEdit = vi.fn()
     const onExpandSubtree = vi.fn()

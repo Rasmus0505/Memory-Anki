@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   applyEmphasisMarksToHtml,
   hasHighlightMarkup,
+  hasMindMapRichMarkup,
   highlightEntireNodeText,
   sanitizeMindMapRichHtml,
   stripMindMapHtml,
@@ -16,6 +17,11 @@ describe('mindmapRichText', () => {
   it('detects highlight markup', () => {
     expect(hasHighlightMarkup(wrapHighlightHtml('重点'))).toBe(true)
     expect(hasHighlightMarkup('普通文字')).toBe(false)
+  })
+
+  it('detects supported rich-text tags even without metadata', () => {
+    expect(hasMindMapRichMarkup('<div>第一行</div>')).toBe(true)
+    expect(hasMindMapRichMarkup('2 < 3')).toBe(false)
   })
 
   it('applies emphasis marks as yellow highlight', () => {
