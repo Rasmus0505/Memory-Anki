@@ -8,14 +8,6 @@ import { test as base } from '@playwright/test'
 export const test = base.extend<{ hermeticApi: void }>({
   hermeticApi: [
     async ({ page }, use) => {
-      // The floating city is a visual overlay; specs opt out so it cannot intercept their targets.
-      await page.addInitScript(() => {
-        try {
-          window.localStorage.setItem('memory-anki:city-disabled', '1')
-        } catch {
-          // Storage can be unavailable in a fresh about:blank frame.
-        }
-      })
       await page.route('**/api/**', (route) =>
         route.fulfill({
           status: 503,

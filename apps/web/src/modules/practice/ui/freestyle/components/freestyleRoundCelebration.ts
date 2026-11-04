@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { APP_EVENT_NAMES, emitAppEvent } from '@/shared/events/appEvents'
 import { cue, retireOwner, useFxOwner } from '@/shared/fx'
 
 function easeOutCubic(t: number) {
@@ -59,7 +58,6 @@ export function useRoundCompleteCelebration(roundKey: string, reducedMotion: boo
     const timer = window.setTimeout(() => {
       firedFor.current = roundKey
       if (skippedRef.current) return
-      emitAppEvent(APP_EVENT_NAMES.roundCompleted)
       cue('round.complete', { quiet: reducedMotion }, { owner })
     }, 0)
     return () => window.clearTimeout(timer)

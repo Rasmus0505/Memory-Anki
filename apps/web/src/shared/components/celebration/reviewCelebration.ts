@@ -1,5 +1,4 @@
 import { cue } from '@/shared/fx'
-import { APP_EVENT_NAMES, emitAppEvent } from '@/shared/events/appEvents'
 import {
   triggerCelebration,
   type CelebrationScenario,
@@ -30,7 +29,6 @@ export function emitReviewCelebration(args: {
   const { kind, reducedMotion, milestoneStep = null, soundEnabled = false, volume = 1 } = args
 
   if (kind === 'all_clear_ready' || kind === 'session_complete') {
-    emitAppEvent(APP_EVENT_NAMES.roundCompleted)
     cue('round.complete', { quiet: reducedMotion })
     return
   }

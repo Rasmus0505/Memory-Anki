@@ -11,7 +11,7 @@ const require = createRequire(import.meta.url)
 const { files: boundaryExceptionFiles } = require('./boundary-exceptions.json')
 
 export default defineConfig([
-  globalIgnores(['dist', '**/.pytest_cache/**', 'public/city/vendor/**']),
+  globalIgnores(['dist', '**/.pytest_cache/**']),
   {
     settings: {
       // 顶层目录方向约束由 ESLint 把关；modules 之间必须走 public.ts 的细则

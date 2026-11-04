@@ -86,8 +86,7 @@ python tools/quality_gate.py --launchers
 
 - 业务代码不得直接实例化 WebGL / WebAudio；
 - `shared/fx` 不得 import 主题；
-- 音色默认值、主题注册、粒子/皮肤已移除；
-- 城邦是唯一 Three.js 表面，且必须在 iframe 内。
+- 音色默认值、主题注册、粒子/皮肤已移除。
 
 ### 2.5 文件规模
 

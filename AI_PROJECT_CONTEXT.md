@@ -23,11 +23,10 @@ Memory Anki 是一个自用的本地学习产品，核心是“记忆宫殿 + �
 | 知识体系 `knowledge` | 学科、章节树、知识导入、章节与宫殿/题目联动 |
 | 英语学习 `english` / `english_lookup` | 听力课程与看视频敲字幕；查词翻译。阅读、CEFR、句型、词汇页已删除 |
 | 随心模式 `freestyle` | 面向当天训练的沉浸刷卡流；唯一入口 `/freestyle`（原随心 2 已于 0072 迁移并入） |
-| 学习城邦 `city` | 右下角全局浮窗：固定 10×10 Three.js 城邦运行在 `public/city` 的隔离 iframe 内；真实翻卡/评分/做题/脑图编辑/轮次结束事件只读驱动，不写学习数据。见 `docs/architecture/city.md` |
 | 学习会话 `session` | 宫殿练习、分段、迷你宫殿、复习等会话进度 |
 | 仪表盘 `dashboard` | 今日复习、近期状态、新宫殿概览；不统计学习时长 |
 | 成长 `progression`（后端） | 经验、等级、委托、印章的只读投影（`GET /api/v1/progression/overview`）。前端不展示，无 `modules/progression`，`/growth` 旧地址转到 `/dashboard` |
-| 反馈导演 `shared/fx` | 统一反馈运行时：`cue()` → 配方 → 声音 / 震动 / CSS 果冻动效 / DOM 小动效，owner 作用域取消。无粒子、无 WebGL、无 FX Lab（学习城邦浮窗是独立隔离例外） |
+| 反馈导演 `shared/fx` | 统一反馈运行时：`cue()` → 配方 → 声音 / 震动 / CSS 果冻动效 / DOM 小动效，owner 作用域取消。无粒子、无 WebGL、无 FX Lab |
 | 主题包 `shared/theme` | 单一 `study` 主题（纸墨书房），只含翻页/翻开时长与 `theme-color`；不随成长解锁 |
 | PWA `pwa` | 通过 Tailscale 访问完整桌面端前端，默认进入 `/freestyle` |
 | 设置 `settings` | AI 模型注册、场景模型、提示词、复习参数、客户端偏好 |
@@ -236,7 +235,7 @@ apps/web/src/
 
 前端业务能力统一放在 `apps/web/src/modules/*`，当前模块包括：
 
-`backup`、`city`、`content`、`dashboard`、`english`、`english-lookup`、`exam`、`memory`、`mindmap`、`practice`、`produce`、`quiz`、`search`、`session`、`settings`。
+`backup`、`content`、`dashboard`、`english`、`english-lookup`、`exam`、`memory`、`mindmap`、`practice`、`produce`、`quiz`、`search`、`session`、`settings`。
 
 模块内部按 `domain`、`application`、`ui`、`api` 组织；模块之间通过 `public.ts`、共享端口或页面/组件组合通信。
 
@@ -284,7 +283,7 @@ apps/web/src/
 - `shared/fx`：`cue()` / 配方 / owner 取消 / 声音、震动与 CSS 果冻动效（原 `docs/architecture/fx-director.md` 已随 2026-11-04 清理删除，契约以代码与检查脚本为准）。
 - `shared/feedback/mindmap-audio`：程序化合成音数据源、音色池、`AudioContext` 生命周期、静音分区与场景音量门。
 - `shared/theme`：单一 `study` 主题包（翻页/翻开时长、`theme-color`）。
-- 硬规则：业务组件不得直接实例化 WebGL / WebAudio，不做粒子或 canvas 特效；带延迟的步骤必须挂在 cue 的 `FxPlayback` owner 上。唯一例外是学习城邦浮窗：Three.js 只允许位于 `apps/web/public/city` 的隔离 iframe，React 包不导入 three/gsap，窗口只做 postMessage 桥接。见 `docs/architecture/city.md`。
+- 硬规则：业务组件不得直接实例化 WebGL / WebAudio，不做粒子或 canvas 特效；带延迟的步骤必须挂在 cue 的 `FxPlayback` owner 上。
 
 ### 5.7 统一质量入口
 

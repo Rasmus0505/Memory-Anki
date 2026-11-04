@@ -8,11 +8,11 @@
 ## 系统形态
 
 ```text
-apps/web: app -> pages/widgets -> modules (15, 统一经 public.ts；内部目录形态不完全相同) -> shared/platform/pwa
+apps/web: app -> pages/widgets -> modules (14, 统一经 public.ts；内部目录形态不完全相同) -> shared/platform/pwa
 apps/api: presentation -> application/use cases -> domain + ports <- infrastructure
 ```
 
-前端运行时模块（`apps/web/src/modules/*`）：`backup city content dashboard exam english english-lookup memory mindmap practice produce quiz search session settings`。旧版 `features/` 与 `entities/` 层已完全迁移进 `modules/*`（实体包位于 `modules/<name>/domain/*-entity` 下）。层级方向由 ESLint（`eslint-plugin-boundaries` 配合 TypeScript resolver）强制；模块 `public.ts` 纪律由 `tools/check_architecture.py` 强制。
+前端运行时模块（`apps/web/src/modules/*`）：`backup content dashboard exam english english-lookup memory mindmap practice produce quiz search session settings`。旧版 `features/` 与 `entities/` 层已完全迁移进 `modules/*`（实体包位于 `modules/<name>/domain/*-entity` 下）。层级方向由 ESLint（`eslint-plugin-boundaries` 配合 TypeScript resolver）强制；模块 `public.ts` 纪律由 `tools/check_architecture.py` 强制。
 
 本仓库是供两台设备使用的本地优先 Windows 产品。SQLite、文件、备份、PWA 与桌面客户端共用同一个本地后端。跨设备行为必须是确定性的，因为运行时数据在 Git 之外同步。
 
@@ -31,7 +31,6 @@ apps/api: presentation -> application/use cases -> domain + ports <- infrastruct
 | 客户端偏好 | `modules/settings/domain/preferences-entity` | 设置/个人资料偏好端点 |
 | 路由元数据（导航/历史/回退） | `shared/routing/routeManifest.ts`（单一来源） | — |
 | 反馈运行时（cue → recipe → 声音、触感、CSS jelly、DOM flourish） | `shared/fx`。调用方只使用来自 `@/shared/fx` 的 `cue()`；不使用粒子或 WebGL 效果 | — |
-| 学习城邦（全局浮窗） | `modules/city`（React 窗口、事件桥、窗口偏好）+ `public/city`（隔离的同源 iframe 场景，Three.js/GSAP 本地化） | —；只读可视化，不写学习数据。见 [city.md](./city.md) |
 | 学习进度（`/progress`，层级 / 分布 / 题目覆盖） | `modules/dashboard` | `modules/dashboard`，通过 content/memory/quiz/english 的公共读取能力组合 |
 | 成长元数据（XP、等级、任务、印章；仅后端读取投影，无前端模块或页面） | —（无前端归属；UI 未使用 `growth_state`） | `modules/progression`（只读投影） |
 | 环境房间层（色调、颗粒、指针光） | `shared/ambient`（纯函数、无数据）；`app/shell/useAmbientTone` 向它提供 dashboard/exam 数据 | — |
@@ -50,7 +49,6 @@ apps/api: presentation -> application/use cases -> domain + ports <- infrastruct
 8. API 输入使用显式命令/查询模型；兼容信封被隔离并有移除计划。
 9. 宫殿聚焦练习已退役：运行时代码不得重建聚焦节点字段、路由、进度种类或 UI 动作。
 10. 诊断记录只保存白名单元数据：自动事件不得包含学习内容、自由文本、原始错误、完整 URL、业务 ID 或请求/响应体；旧版（v1）诊断历史在首次加载时删除而不迁移。见 [session-recorder-privacy.md](./session-recorder-privacy.md)。
-11. 学习城邦是唯一允许 Three.js/WebGL 的表面：它只存在于 `apps/web/public/city` 的隔离 iframe 内；React 包与 `shared/fx` 不得导入 three/gsap，反馈特效仍禁止 WebGL。见 [city.md](./city.md)。
 
 ## 目标依赖图
 

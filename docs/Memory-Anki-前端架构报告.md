@@ -10,7 +10,7 @@
 ```text
 app（壳/路由/Provider）
   → pages / widgets（页面组合）
-    → modules/*（15 个运行时模块，统一 public.ts）
+    → modules/*（14 个运行时模块，统一 public.ts）
       → shared / platform / pwa（基础设施）
 ```
 
@@ -56,8 +56,7 @@ modules/<name>/
 
 - `content/domain/mindmap-document-entity`：脑图文档纯规则；
 - `practice/application/workflows`：随心训练状态机；
-- `settings/domain/ai-runtime-entity`：AI 场景/模型选择；
-- `city/model`：学习事件到城邦指令的纯映射。
+- `settings/domain/ai-runtime-entity`：AI 场景/模型选择。
 
 ---
 
@@ -302,7 +301,7 @@ JSX `<Routes>` 表仍然手写，但由 `routeManifest.test.ts` 对账，防止�
 
 ---
 
-## 10. 反馈、主题与城邦
+## 10. 反馈与主题
 
 ### 10.1 `shared/fx`
 
@@ -315,15 +314,6 @@ JSX `<Routes>` 表仍然手写，但由 `routeManifest.test.ts` 对账，防止�
 
 - `shared/feedback/mindmap-audio`：程序化合成音色、音色池、AudioContext 生命周期、iOS 解锁、静音分区、场景音量门；
 - `shared/theme`：单一 `study` 主题包（翻页/翻开时长、theme-color），不随成长解锁。
-
-### 10.3 学习城邦
-
-- React 只负责浮窗（拖拽、缩放、位置持久化、静音、指标）；
-- Three.js/GSAP 只在同源 iframe `public/city/index.html` 内；
-- React 包不导入 three/gsap，首屏包体不增加；
-- 城邦只消费事件，不写学习数据；
-- 事件桥队列上限 30 条，iframe 就绪后 90ms 间隔回放；
-- E2E 统一设置 `memory-anki:city-disabled=1`，避免遮挡测试目标。
 
 ---
 

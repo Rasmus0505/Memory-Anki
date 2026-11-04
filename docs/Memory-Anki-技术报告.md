@@ -146,7 +146,7 @@ domain (纯规则)  ←  ports  ←  infrastructure (适配器)
 ```text
 app (壳/路由/Provider)
   → pages / widgets (页面组合)
-    → modules/* (15 个运行时模块，统一 public.ts)
+    → modules/* (14 个运行时模块，统一 public.ts)
       → shared / platform / pwa
 ```
 
@@ -188,9 +188,9 @@ app (壳/路由/Provider)
 
 ## 7. 前端模块地图
 
-`apps/web/src/modules` 下有 **15 个运行时模块**，每个都有 `public.ts`：
+`apps/web/src/modules` 下有 **14 个运行时模块**，每个都有 `public.ts`：
 
-`backup`、`city`、`content`、`dashboard`、`exam`、`english`、`english-lookup`、`memory`、`mindmap`、`practice`、`produce`、`quiz`、`search`、`session`、`settings`。
+`backup`、`content`、`dashboard`、`exam`、`english`、`english-lookup`、`memory`、`mindmap`、`practice`、`produce`、`quiz`、`search`、`session`、`settings`。
 
 其中几个关键归属：
 
@@ -204,7 +204,6 @@ app (壳/路由/Provider)
 | 题目作答与做题窗口 | `quiz` |
 | 路由元数据单一来源 | `shared/routing/routeManifest.ts` |
 | 反馈导演 | `shared/fx` |
-| 学习城邦 | `modules/city`（仅窗口；Three.js 在隔离 iframe） |
 
 ---
 
@@ -297,8 +296,7 @@ app (壳/路由/Provider)
 ### 9.7 反馈与可视化
 
 - `shared/fx`：`cue()` → 配方 → 声音 / 触感 / CSS 果冻 / DOM 小动效，按 owner 取消；
-- 禁止粒子、canvas 特效和业务代码直接 WebGL/WebAudio；
-- 学习城邦是唯一允许 Three.js 的表面，且必须在 `public/city` 的同源 iframe 内，React 包不导入 three/gsap。
+- 禁止粒子、canvas 特效和业务代码直接 WebGL/WebAudio。
 
 ---
 
@@ -421,6 +419,5 @@ python tools/quality_gate.py --launchers
 | 多端 presence | `docs/architecture/live-study-presence.md` |
 | 训练证据 | `docs/architecture/unified-training-evidence.md` |
 | 诊断隐私 | `docs/architecture/session-recorder-privacy.md` |
-| 城邦 | `docs/architecture/city.md` |
 | 排期实现 | `docs/复习排期设计.md` |
 | 门禁 | `tools/quality_gate.py`、`tools/check_architecture.py` |
