@@ -125,33 +125,6 @@ function renderShelfStatusSummary(item: PalaceSubjectShelfItem) {
   )
 }
 
-/**
- * The shelf is self-explanatory once you've used it; on a phone this paragraph
- * cost three lines above the shelves, so it starts folded away.
- */
-function ShelfHint() {
-  const [open, setOpen] = useState(false)
-  return (
-    <div className="rounded-2xl border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground sm:px-4 sm:py-3 sm:text-sm">
-      <button
-        type="button"
-        className="flex w-full items-center justify-between gap-2 sm:hidden"
-        aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
-      >
-        <span className="font-medium text-foreground">书架怎么用</span>
-        <ChevronRight
-          className={cn('size-4 shrink-0 transition-transform', open && 'rotate-90')}
-          aria-hidden
-        />
-      </button>
-      <p className={open ? 'mt-1.5 block leading-relaxed' : 'hidden sm:block'}>
-        一科一本书：点击封面进入该书宫殿列表。左上角后退只会在「知识」分区内按层级返回（书架 → 书内列表 → 宫殿），不会跨到英语或随心。
-      </p>
-    </div>
-  )
-}
-
 type ShelfViewSetter = (
   updater: PalaceShelfViewSettings | ((current: PalaceShelfViewSettings) => PalaceShelfViewSettings),
 ) => void
@@ -353,7 +326,6 @@ export default function PalaceShelfPage() {
     <PageContainer wide className="gap-4 sm:gap-8">
       <PageHeader
         title="学科书架"
-        description="一科一书：点击封面进入该学科的宫殿列表。常见科目如中国教育史、外国教育史、英语会各自成册。"
         hideDescriptionOnMobile
         actions={
           <div className="flex flex-wrap gap-2">
@@ -505,8 +477,7 @@ export default function PalaceShelfPage() {
           data-testid="shelf-expanded-hint"
         >
           <div className="text-muted-foreground">
-            当前是<strong className="mx-1 text-foreground">章节目录</strong>
-            视图，会直接铺开各学科下的宫殿。要看「一科一本书」的封面书架，请点右侧按钮。
+            当前是<strong className="mx-1 text-foreground">章节目录</strong>视图
           </div>
           <Button
             type="button"
@@ -517,9 +488,7 @@ export default function PalaceShelfPage() {
             回到书架封面
           </Button>
         </div>
-      ) : (
-        <ShelfHint />
-      )}
+      ) : null}
 
       {loadError ? (
         <ErrorState
@@ -659,7 +628,7 @@ export default function PalaceShelfPage() {
             <EmptyState
               variant="create"
               title="还没有学科书架"
-              description="先创建一个记忆宫殿；绑定章节后，它会自动出现在对应学科书架里。"
+              description="绑定章节后，宫殿会出现在对应书架里。"
               action={
                 <Link to="/palaces/new">
                   <Button variant="outline" size="sm">

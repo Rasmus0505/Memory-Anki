@@ -171,7 +171,6 @@ export default function PalaceView() {
           collapsible
           eyebrow="宫殿详情"
           title={palace.title}
-          description="这是只读脑图视图。难度与旧的 review mode 已从产品界面移除。"
           actions={<Badge variant="secondary">只读脑图</Badge>}
         />
       ) : null}

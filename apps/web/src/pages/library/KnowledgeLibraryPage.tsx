@@ -507,7 +507,6 @@ export default function Knowledge() {
                       <EmptyState
                         variant="link"
                         title="当前章节还没有关联任何宫殿"
-                        description="关联宫殿后，可以在此快速跳转复习。"
                       />
                     )}
                   </div>

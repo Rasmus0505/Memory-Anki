@@ -86,9 +86,6 @@ export function PalaceCreateSetup({ busy, onCreate }: PalaceCreateSetupProps) {
               </Button>
             </div>
           </div>
-          <div className="text-xs text-muted-foreground">
-            宫殿会绑定学科，并在编辑器中再落到具体章节。可先在学科思维导图里维护章节结构。
-          </div>
           <div className="relative"><Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索学科" className="pl-9" /></div>
           <div className="grid grid-cols-1 max-h-64 gap-2 overflow-y-auto sm:grid-cols-2">
             {loading ? <div className="text-sm text-muted-foreground">正在加载学科…</div> : filtered.map((subject) => {

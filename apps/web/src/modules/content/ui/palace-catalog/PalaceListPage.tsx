@@ -222,11 +222,6 @@ export default function PalaceList() {
     <PageContainer wide className="gap-8">
       <PageHeader
         title={currentSubjectTitle ? `${currentSubjectTitle}` : '记忆宫殿'}
-        description={
-          currentSubjectTitle
-            ? '本书内的宫殿按章节排列；返回书架可切换中国教育史、外国教育史、英语等学科。'
-            : '浏览全部宫殿，或从学科书架进入某一本书。'
-        }
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {selectedSubjectId || showUncategorizedOnly ? (

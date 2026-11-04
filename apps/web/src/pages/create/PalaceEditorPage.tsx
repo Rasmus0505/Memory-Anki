@@ -442,7 +442,6 @@ export default function PalaceEdit() {
         <PageHeader
           compact
           title="新建宫殿"
-          description="进入此页面不会创建数据。选择一种方式后，才会创建宫殿。"
         />
         <PalaceCreateSetup
           busy={page.isCreatingDraft}
