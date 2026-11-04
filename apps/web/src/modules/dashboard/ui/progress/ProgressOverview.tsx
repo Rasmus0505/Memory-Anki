@@ -31,7 +31,7 @@ export function ProgressOverview({ metrics, name, palaceCount }: {
       <div className="lp-overview-copy">
         <h2>{name === '全部学科' ? '让每一次复习，都有迹可循。' : name}</h2>
         <div className="lp-big-number">{number.format(metrics.memory_reviewed)}<span className="lp-number-total">/ {number.format(metrics.memory_total)}</span></div>
-        <p className="lp-subtitle">个记忆点已有复习记录。每一点积累，都是下一次想起的底气。</p>
+        <p className="lp-subtitle">个记忆点已有复习记录。</p>
         <ProgressBar metrics={metrics} />
         <div className="lp-legend">
           <span><i className="lp-dot lp-dot-green" />已复习 {number.format(metrics.memory_reviewed)}</span>

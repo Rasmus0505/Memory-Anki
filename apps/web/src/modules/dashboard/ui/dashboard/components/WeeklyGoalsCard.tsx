@@ -14,7 +14,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -151,7 +150,6 @@ export function WeeklyGoalsCard() {
         <DialogContent floatingId="dashboard-weekly-goals" capsuleLabel="编辑学习目标">
           <DialogHeader>
             <DialogTitle>编辑学习目标</DialogTitle>
-            <DialogDescription>目标会同步到客户端偏好，刷新或换设备后继续生效。</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 px-6 py-5">
             <div className="grid gap-2">

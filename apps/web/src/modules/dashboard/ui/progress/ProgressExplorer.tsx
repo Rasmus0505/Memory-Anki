@@ -36,7 +36,7 @@ export function ProgressExplorer({ rows, view, expanded, onToggle, selectedId, o
     groups.set(key, group)
   })
   const changePage = (next: number) => setPaging({ key: resultKey, page: Math.max(0, Math.min(pages - 1, next)) })
-  if (!rows.length) return <div className="lp-empty" role="status"><SearchX size={30} /><h3>这里暂时没有符合条件的内容</h3><p>试试切换筛选、缩短关键词，或回到上一级。没有记录不代表没有努力。</p></div>
+  if (!rows.length) return <div className="lp-empty" role="status"><SearchX size={30} /><h3>这里暂时没有符合条件的内容</h3><p>试试切换筛选或缩短关键词。</p></div>
   return <>
     {view === 'hierarchy' && <>
       <div className="lp-table-head" aria-hidden="true"><span>知识结构</span><span>复习覆盖</span><span>题目作答</span></div>

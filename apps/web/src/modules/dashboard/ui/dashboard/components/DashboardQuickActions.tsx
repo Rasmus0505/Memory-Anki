@@ -10,25 +10,23 @@ interface DashboardQuickActionsProps {
 export function DashboardQuickActions({ todayTodoTotal }: DashboardQuickActionsProps) {
   const quickActions: Array<{
     label: string
-    description: string
+    count?: number
     to: string
     icon: LucideIcon
   }> = [
     {
       label: '开始随心复习',
-      description: todayTodoTotal > 0 ? `${todayTodoTotal} 项待处理` : '进入随心模式',
+      count: todayTodoTotal > 0 ? todayTodoTotal : undefined,
       to: '/freestyle',
       icon: BookOpen,
     },
     {
       label: '新建宫殿',
-      description: '录入新的知识结构',
       to: '/palaces/new',
       icon: Plus,
     },
     {
       label: '做题练习',
-      description: '进入宫殿题库入口',
       to: '/palaces',
       icon: ClipboardList,
     },
@@ -57,7 +55,9 @@ export function DashboardQuickActions({ todayTodoTotal }: DashboardQuickActionsP
                 </span>
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-medium text-foreground">{action.label}</span>
-                  <span className="mt-0.5 block truncate text-xs text-muted-foreground">{action.description}</span>
+                  {action.count !== undefined ? (
+                    <span className="mt-0.5 block truncate text-xs text-muted-foreground">{action.count} 项待处理</span>
+                  ) : null}
                 </span>
               </Link>
             )

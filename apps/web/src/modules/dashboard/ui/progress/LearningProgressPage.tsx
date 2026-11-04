@@ -61,7 +61,7 @@ export function LearningProgressPage() {
   const updated = result.data?.generated_at ? new Date(result.data.generated_at) : null
   return <div className="learning-progress" data-testid="learning-progress">
     <header className="lp-header">
-      <div><div className="lp-eyebrow">LEARNING ATLAS / 学习全景</div><h1>进度</h1><p>看见知识的轮廓，也看见每一步积累。</p></div>
+      <div><div className="lp-eyebrow">LEARNING ATLAS / 学习全景</div><h1>进度</h1></div>
       <div className="lp-header-actions"><span className="lp-subtitle">不赶路，记住走过的路。</span><button className="lp-button" onClick={() => void result.refetch()} disabled={result.isFetching} aria-label="刷新进度"><RefreshCw size={13} />{result.isFetching ? '更新中' : '刷新'}</button></div>
     </header>
     {result.isError && <div className="lp-error" role="alert">{result.data ? '更新暂未成功，仍在显示上次快照。' : '暂时无法读取学习进度，请确认本地服务已启动。'} <button className="underline underline-offset-4" onClick={() => void result.refetch()}>重新加载</button></div>}
@@ -69,7 +69,7 @@ export function LearningProgressPage() {
     {result.data && metrics && <>
       <ProgressOverview metrics={metrics} name={name} palaceCount={palaceCount} />
       <MilestonePanel />
-      {result.data.roots.length === 0 ? <section className="lp-panel lp-empty"><BookOpen size={36} /><h2>你的学习全景，从第一座宫殿开始</h2><p>建立知识结构后，这里会逐层呈现记忆点和题目进度。现在不需要填满它，先从一个小单元开始。</p><Link className="lp-button lp-button-primary" to="/palaces">前往知识书架<ChevronRight size={14} /></Link></section> : <div className="lp-workspace">
+      {result.data.roots.length === 0 ? <section className="lp-panel lp-empty"><BookOpen size={36} /><h2>你的学习全景，从第一座宫殿开始</h2><p>建立知识结构后，这里会呈现记忆点和题目进度。</p><Link className="lp-button lp-button-primary" to="/palaces">前往知识书架<ChevronRight size={14} /></Link></section> : <div className="lp-workspace">
         <section className="lp-panel" aria-label="知识进度浏览器">
           <div className="lp-explorer-header">
             <div className="lp-section-heading"><h2>知识版图</h2><div className="lp-view-switch" role="group" aria-label="进度视图">{VIEWS.map(({ id, label, icon: Icon }) => <button key={id} aria-pressed={view === id} onClick={() => updateParam('view', id)}><Icon size={13} />{label}</button>)}</div></div>
