@@ -40,7 +40,7 @@ describe('PalaceQuizPage core flows', () => {
     fireEvent.click(screen.getByRole('button', { name: '查看记忆宫殿' }))
 
     expect(
-      await screen.findByText('做题时可直接查看和修改宫殿内容，关闭后继续当前题目。改动会自动保存。'),
+      await screen.findByText('改动会自动保存。'),
     ).toBeTruthy()
     await waitFor(() => {
       expect(getPalacesGroupedApiMock).toHaveBeenCalled()
@@ -109,7 +109,7 @@ describe('PalaceQuizPage core flows', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '查看记忆宫殿' }))
 
-    expect(await screen.findByText('做题时可直接查看和修改宫殿内容，关闭后继续当前题目。改动会自动保存。')).toBeTruthy()
+    expect(await screen.findByText('改动会自动保存。')).toBeTruthy()
     await waitFor(() => {
       expect(listQuestionNodeBindingsApiMock).toHaveBeenCalledWith(11)
       expect(screen.getByTestId('memory-lookup-mindmap').getAttribute('data-doc-root-uid')).toBe(
@@ -273,7 +273,7 @@ describe('PalaceQuizPage core flows', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /大宫殿/ }))
     fireEvent.click(screen.getByRole('button', { name: '清空当前范围进度' }))
-    expect(await screen.findByText('只会清空当前筛选范围内题目的累计答对、答错和作答次数，不会删除题目。')).toBeTruthy()
+    expect(await screen.findByText('只清空筛选范围内的答对、答错和作答次数，不删除题目。')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '清空进度' }))
 
     await waitFor(() => {

@@ -198,8 +198,8 @@ export function PalaceQuizManagePanel({
               title={questions.length === 0 ? '题库里还没有题目' : '当前范围没有题目'}
               description={
                 questions.length === 0
-                  ? '可以先在右侧手动新增一道题。'
-                  : '切换到全部题目，或为这个学习组单独新增题目。'
+                  ? '可以先手动新增一道题。'
+                  : '切换到全部题目，或单独新增题目。'
               }
               action={
                 questions.length === 0 ? (

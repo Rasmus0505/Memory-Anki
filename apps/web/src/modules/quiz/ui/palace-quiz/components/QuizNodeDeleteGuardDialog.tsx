@@ -201,8 +201,7 @@ export function QuizNodeDeleteGuardDialog({
         <DialogHeader>
           <DialogTitle>这些卡片上还挂着题目</DialogTitle>
           <DialogDescription>
-            即将删除的卡片绑定了 {questionCount} 道题（共 {edges.length} 条绑定）。
-            默认转到最近的上层卡片；可改选其他卡片，或选「解除绑定（不转移）」。
+            {questionCount} 道题、{edges.length} 条绑定；默认转到最近的上层卡片。
           </DialogDescription>
         </DialogHeader>
 

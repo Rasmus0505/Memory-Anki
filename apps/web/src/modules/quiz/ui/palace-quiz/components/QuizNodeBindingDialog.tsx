@@ -4,7 +4,6 @@ import { Button } from '@/shared/components/ui/button'
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -29,9 +28,6 @@ export function QuizNodeBindingDialog({
       <DialogContent className="max-h-[85vh] max-w-2xl overflow-hidden sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>题库结合</DialogTitle>
-          <DialogDescription>
-            把题库题目绑定到思维导图知识点卡片。在列表里逐条查看、搜索并手改绑定。
-          </DialogDescription>
         </DialogHeader>
         <div className="max-h-[55vh] space-y-4 overflow-y-auto pr-1">
           {palaceId ? (

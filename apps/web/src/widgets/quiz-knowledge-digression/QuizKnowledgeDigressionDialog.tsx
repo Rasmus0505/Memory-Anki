@@ -164,7 +164,6 @@ export function QuizKnowledgeEdgePicker({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogTitle>选择知识点</DialogTitle>
-        <DialogDescription>该题绑定了多个节点，请选择要打开的导图位置。</DialogDescription>
         <div className="mt-3 max-h-[50vh] space-y-2 overflow-y-auto">
           {edges.map((edge) => {
             const key = `${edge.palace_id ?? edge.target_palace_id}:${edge.node_uid}:${edge.question_id}`

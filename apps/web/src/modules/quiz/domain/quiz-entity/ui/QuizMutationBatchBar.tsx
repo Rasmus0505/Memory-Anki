@@ -236,7 +236,7 @@ export function QuizMutationBatchBar({
           <DialogHeader>
             <DialogTitle>待换题 Prompt 预览</DialogTitle>
             <DialogDescription>
-              已按当前范围筛选「待换题」，并拼接每道题绑定的导图节点、路径、备注与子节点上下文。
+              已拼接每道题绑定的导图节点、路径与上下文。
             </DialogDescription>
           </DialogHeader>
           <Textarea
@@ -266,7 +266,7 @@ export function QuizMutationBatchBar({
           <DialogHeader>
             <DialogTitle>导入 AI 替换题 JSON</DialogTitle>
             <DialogDescription>
-              先解析预览；格式错误、题目不存在或版本已变化的条目会跳过，其余正常入库。
+              格式错误或版本已变化的条目会跳过，其余入库。
             </DialogDescription>
           </DialogHeader>
           <Textarea

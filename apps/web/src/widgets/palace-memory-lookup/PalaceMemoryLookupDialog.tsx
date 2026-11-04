@@ -974,7 +974,7 @@ export function PalaceMemoryLookupDialog({
             <div className="min-w-0 space-y-1">
               <DialogTitle className="text-base">查看记忆宫殿</DialogTitle>
               <DialogDescription className="text-xs">
-                做题时可直接查看和修改宫殿内容，关闭后继续当前题目。改动会自动保存。
+                改动会自动保存。
               </DialogDescription>
             </div>
             <div className="flex shrink-0 items-center gap-1" data-memory-lookup-control="true">

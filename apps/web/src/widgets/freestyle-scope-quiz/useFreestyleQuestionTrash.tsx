@@ -154,7 +154,7 @@ export function useFreestyleQuestionTrash({
       open={deleteConfirmOpen}
       onOpenChange={setDeleteConfirmOpen}
       title="移入回收站"
-      description="题目将从做题队列和统计中移除，作答记录保留，可在设置页回收站恢复。"
+      description="作答记录保留，可在设置页回收站恢复。"
       tone="danger"
       confirmText="移入回收站"
       onConfirm={() => void handleDeleteCurrent()}

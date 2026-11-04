@@ -124,7 +124,7 @@ export function QuizProgressClearDialog({
         <DialogHeader>
           <DialogTitle>清除做题进度</DialogTitle>
           <DialogDescription>
-            选择范围。题目保留，作答次数也不变。
+            题目保留，作答次数不变。
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3 text-sm">
@@ -138,10 +138,7 @@ export function QuizProgressClearDialog({
               disabled={!questionReady}
               onChange={() => setScope('question')}
             />
-            <span>
-              <span className="font-medium">当前题</span>
-              <span className="mt-0.5 block text-xs text-muted-foreground">只清除正在看的这道题。</span>
-            </span>
+            <span className="font-medium">当前题</span>
           </label>
           <label className="flex items-start gap-2">
             <input
@@ -154,7 +151,6 @@ export function QuizProgressClearDialog({
             />
             <span className="min-w-0 flex-1">
               <span className="font-medium">指定宫殿</span>
-              <span className="mt-0.5 block text-xs text-muted-foreground">清除所选宫殿里的已答记录。</span>
               {scope === 'palace' ? (
                 <select
                   aria-label="指定宫殿"
@@ -179,10 +175,7 @@ export function QuizProgressClearDialog({
               checked={scope === 'all'}
               onChange={() => setScope('all')}
             />
-            <span>
-              <span className="font-medium">全部题</span>
-              <span className="mt-0.5 block text-xs text-muted-foreground">清除所有题目的已答记录。</span>
-            </span>
+            <span className="font-medium">全部题</span>
           </label>
         </div>
         <DialogFooter>

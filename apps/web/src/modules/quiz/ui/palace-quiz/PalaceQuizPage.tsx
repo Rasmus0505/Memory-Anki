@@ -291,7 +291,7 @@ export default function PalaceQuizPage() {
         open={resetAttemptsDialogOpen}
         onOpenChange={setResetAttemptsDialogOpen}
         title="清空当前范围进度"
-        description="只会清空当前筛选范围内题目的累计答对、答错和作答次数，不会删除题目。"
+        description="只清空筛选范围内的答对、答错和作答次数，不删除题目。"
         tone="danger"
         confirmText={resetAttemptsLoading ? '清空中...' : '清空进度'}
         onConfirm={() => void handleResetVisibleAttempts()}
@@ -322,7 +322,6 @@ export default function PalaceQuizPage() {
       <PageHeader
         eyebrow="宫殿做题"
         title={palace?.title ? `${palace.title} · 配套习题` : '宫殿配套习题'}
-        description="这里做宫殿题库练习，也可以手动管理题目。选择题即时判题并累计统计，简答题提交后显示参考答案与解析。"
         actions={
           <>
             <Button
