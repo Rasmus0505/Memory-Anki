@@ -134,7 +134,6 @@ export default function ProfileSettingsPage({
   return (
     <ProfileLayout
       title="复习与偏好"
-      description="管理显示偏好、快捷键和本机运行时维护。"
     >
 
       <div className="flex gap-1 border-b">
@@ -184,8 +183,7 @@ export default function ProfileSettingsPage({
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                答对时同时满足三个条件，且这道题还没有被标记为「待换题」，才会自动标记。
-                这条规则只负责提醒，不改变复习排期。
+                只负责提醒，不改变复习排期。
               </p>
               <div className="grid gap-3 sm:grid-cols-3">
                 <label className="space-y-1.5 text-sm">
@@ -273,7 +271,7 @@ export default function ProfileSettingsPage({
               <CardTitle className="text-base">数据库位置</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <p className="text-sm text-muted-foreground">数据库与附件使用本机目录保存。修改后请重启应用。</p>
+              <p className="text-sm text-muted-foreground">修改后请重启应用。</p>
               <div className="flex gap-2">
                 <Input value={appHome} onChange={(event) => setAppHome(event.target.value)} placeholder="例如 F:\\memory anki data" />
                 <Button type="button" onClick={() => void handleSaveAppHome()} loading={savingAppHome} loadingText="保存中">

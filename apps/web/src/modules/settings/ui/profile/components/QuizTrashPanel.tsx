@@ -122,7 +122,7 @@ export function QuizTrashPanel() {
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            从做题页删除的题目会先进入这里。恢复后题目回到原位置，作答记录和复习进度都保留。
+            恢复后回到原位置，作答记录和复习进度都保留。
           </p>
           {loading ? (
             <div className="py-6 text-sm text-muted-foreground">正在读取回收站…</div>
@@ -130,7 +130,6 @@ export function QuizTrashPanel() {
             <EmptyState
               variant="list"
               title="回收站是空的"
-              description="删除的题目会先进入这里，可恢复或永久删除。"
             />
           ) : (
             <>

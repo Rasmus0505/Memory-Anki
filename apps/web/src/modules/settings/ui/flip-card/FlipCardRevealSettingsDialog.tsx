@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Keyboard, SlidersHorizontal } from 'lucide-react'
-import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
+import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog'
 import { ToggleGroup, ToggleGroupItem } from '@/shared/components/ui/toggle-group'
 import { Button } from '@/shared/components/ui/button'
 import { Switch } from '@/shared/components/ui/switch'
@@ -102,11 +102,6 @@ export function FlipCardRevealSettingsDialog({
       >
         <DialogHeader>
           <DialogTitle>翻卡设置</DialogTitle>
-          <DialogDescription>
-            {page === 'shortcuts'
-              ? '配置翻卡、收卡、批量翻卡和随心页翻页键。'
-              : '点击揭示、Enter 翻卡、双击空白画布进入编辑，以及评分后是否翻页。'}
-          </DialogDescription>
         </DialogHeader>
 
         <div className="flex gap-1 border-b px-5" role="tablist" aria-label="翻卡设置页面">
@@ -148,7 +143,7 @@ export function FlipCardRevealSettingsDialog({
                 ]}
               />
             </SettingRow>
-            <SettingRow label="揭示方式" hint="两阶段先出待回忆占位符，收卡也回待回忆；直接显示一次出内容，收卡整张收起">
+            <SettingRow label="揭示方式" hint="两阶段先出待回忆占位符；直接显示一次出内容">
               <BinaryToggle<RevealStage>
                 value={value.stage}
                 onChange={(stage) => onChange({ ...value, stage })}
@@ -163,7 +158,7 @@ export function FlipCardRevealSettingsDialog({
 
           <section className="space-y-3 border-t border-border/60 pt-3">
             {freestyleFlipMode ? (
-              <SettingRow label="可翻范围" hint="随心模式可翻整座宫殿">
+              <SettingRow label="可翻范围">
                 <BinaryToggle<FreestyleFlipMode>
                   value={freestyleFlipMode.value}
                   onChange={freestyleFlipMode.onChange}
@@ -178,7 +173,7 @@ export function FlipCardRevealSettingsDialog({
             {freestyleFlipMode ? (
               <SettingRow
                 label="Enter 翻卡镜头追踪"
-                hint="翻出的卡片自动移入视野；关闭后视角保持不动"
+                hint="翻出的卡片自动移入视野"
               >
                 <Switch
                   checked={value.enterRevealFollow !== false}
@@ -190,7 +185,7 @@ export function FlipCardRevealSettingsDialog({
             {freestyleFlipMode ? (
               <SettingRow
                 label="评分后自动翻页"
-                hint="评分保存后自动翻到最早还没评分的单元，留一点撤销时间；关闭则手动翻"
+                hint="自动翻到最早未评分的单元"
               >
                 <Switch
                   checked={value.autoAdvanceOnRate === true}
@@ -199,7 +194,7 @@ export function FlipCardRevealSettingsDialog({
                 />
               </SettingRow>
             ) : null}
-            <SettingRow label="进入编辑" hint="双击空白画布时的编辑范围">
+            <SettingRow label="进入编辑">
               <BinaryToggle<FlipCardEditScope>
                 value={value.editScope === 'palace' ? 'palace' : 'unit'}
                 onChange={(editScope) => onChange({ ...value, editScope })}

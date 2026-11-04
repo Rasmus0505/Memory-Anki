@@ -37,7 +37,6 @@ export function AiWorkspaceQualityTab() {
         <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
           <div>
             <div className="font-medium">AI 质量与稳定性</div>
-            <div className="text-sm text-muted-foreground">成功率、结构输出、延迟、用量与错误统计。</div>
           </div>
           <div className="flex items-center gap-2">
             <select

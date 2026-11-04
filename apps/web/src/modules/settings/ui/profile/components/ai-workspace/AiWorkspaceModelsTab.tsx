@@ -182,9 +182,6 @@ export function AiWorkspaceModelsTab({
         <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="font-medium">模型目录</div>
-            <p className="text-sm text-muted-foreground">
-              新增和编辑操作在对话框中完成，避免筛选列表被长表单打断。
-            </p>
           </div>
           <Button type="button" onClick={openNewModel}>
             <Plus className="mr-2 size-4" />

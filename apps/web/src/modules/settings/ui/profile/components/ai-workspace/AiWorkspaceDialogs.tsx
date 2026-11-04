@@ -12,7 +12,6 @@ import {
   Dialog,
   DialogClose,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -64,11 +63,6 @@ export function AiWorkspaceDialogs({
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>模型影响分析</DialogTitle>
-            <DialogDescription>
-              {impactModel
-                ? `正在查看 ${impactModel.display_name} 的绑定影响。`
-                : "查看模型在当前系统中的使用范围。"}
-            </DialogDescription>
             <DialogClose onClick={() => onImpactOpenChange(false)} />
           </DialogHeader>
           {impactLoading ? (
@@ -172,9 +166,6 @@ export function AiWorkspaceDialogs({
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>{connectionTitle}</DialogTitle>
-            <DialogDescription>
-              使用当前配置对目标 Provider / 模型发起一次轻量探测请求。
-            </DialogDescription>
             <DialogClose onClick={() => onConnectionOpenChange(false)} />
           </DialogHeader>
           {connectionLoading ? (
@@ -220,9 +211,6 @@ export function AiWorkspaceDialogs({
         <DialogContent className="h-[min(88vh,920px)] max-w-[min(92vw,1100px)] overflow-hidden">
           <DialogHeader>
             <DialogTitle>AI 调用详情</DialogTitle>
-            <DialogDescription>
-              查看请求、响应、错误和输入工件等完整上下文。
-            </DialogDescription>
             <DialogClose onClick={() => onLogDetailOpenChange(false)} />
           </DialogHeader>
           {logDetailLoading ? (

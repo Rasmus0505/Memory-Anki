@@ -39,7 +39,7 @@ export default function ProfileAiPage() {
   }
 
   return (
-    <ProfileLayout title="AI 管理" description="统一管理接入、模型、场景提示词与运行观测。">
+    <ProfileLayout title="AI 管理">
       <div className="space-y-6">
         <div className="flex flex-wrap gap-1 rounded-xl bg-muted p-1">
           {AI_TABS.map(({ key, label }) => (

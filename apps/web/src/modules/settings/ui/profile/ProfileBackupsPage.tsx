@@ -177,7 +177,6 @@ export default function ProfileBackupsPage() {
   return (
     <ProfileLayout
       title="数据与备份"
-      description="数据库快照、设备迁移和宫殿导入导出都在这里。会清空本机数据的操作单独放在危险区。"
     >
       <Tabs value={tab} onValueChange={(value) => setTab(normalizeTab(value))} className="space-y-4">
         <TabsList className="h-auto flex-wrap rounded-lg border border-border/70 bg-background/90 p-1">
@@ -243,7 +242,7 @@ export default function ProfileBackupsPage() {
                 <EmptyState
                   variant="list"
                   title={backups.length === 0 ? '当前还没有可用备份' : '没有符合条件的备份'}
-                  description="系统会在关键操作后自动创建备份，你也可以手动触发备份。"
+                  description="关键操作后会自动备份，也可手动触发。"
                 />
               ) : (
                 visibleBackups.map((backup) => {
@@ -330,7 +329,7 @@ export default function ProfileBackupsPage() {
             </CardHeader>
             <CardContent>
               <p className="mb-3 text-sm text-muted-foreground">
-                向当前库追加导入宫殿，不会清空现有数据。整包替换请到危险区。
+                追加导入，不会清空现有数据。
               </p>
               <form onSubmit={handleImport} className="space-y-4">
                 <div className="space-y-2">
@@ -381,7 +380,7 @@ export default function ProfileBackupsPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                以下操作会不可逆地改写本机数据。导出与常规导入在「迁移与导入导出」，不在这里。
+                以下操作会不可逆地改写本机数据。
               </p>
 
               <div className="rounded-lg border border-destructive/40 bg-background/70 p-4">

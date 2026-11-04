@@ -150,11 +150,11 @@ export function AiRunConfigDialogView({
                         <span>{entry.label || scenario?.label || entry.scenarioKey}</span>
                         {pathRoleBadge(entry.pathRole)}
                       </div>
-                      <div className="text-xs text-muted-foreground">
-                        {entry.description
-                          || scenario?.description
-                          || '本次请求会直接使用这份配置。'}
-                      </div>
+                      {entry.description || scenario?.description ? (
+                        <div className="text-xs text-muted-foreground">
+                          {entry.description || scenario?.description}
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
 
@@ -451,13 +451,12 @@ export function AiRunConfigDialogView({
                   <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
                     <span>{entry.label || scenario?.label || entry.scenarioKey}</span>
                     {pathRoleBadge(entry.pathRole)}
-                    <span className="text-xs font-normal text-muted-foreground">点击展开配置</span>
                   </div>
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    {entry.description
-                      || scenario?.description
-                      || '本次请求会直接使用这份配置。'}
-                  </div>
+                  {entry.description || scenario?.description ? (
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {entry.description || scenario?.description}
+                    </div>
+                  ) : null}
                 </summary>
                 {panelBody}
               </details>

@@ -39,12 +39,12 @@ const CONTENT_OPTIONS: Array<{
   {
     value: 'detailed',
     title: '具体数字',
-    description: '锁屏直接显示「今天 128 张到期，昨天复习了 210 张」。',
+    description: '锁屏显示到期与已复习的张数。',
   },
   {
     value: 'vague',
     title: '模糊文案',
-    description: '只说「今天的复习到点了」，点开 App 才看到数字。',
+    description: '锁屏只说该复习了。',
   },
 ]
 
@@ -229,7 +229,7 @@ export default function ProfileRemindersPage() {
 
   if (loading) {
     return (
-      <ProfileLayout title="复习提醒" description="到点把今天要复习的数量推到手机上。">
+      <ProfileLayout title="复习提醒">
         <Card>
           <CardContent className="py-10 text-sm text-muted-foreground">正在读取提醒设置…</CardContent>
         </Card>
@@ -239,7 +239,7 @@ export default function ProfileRemindersPage() {
 
   if (!draft) {
     return (
-      <ProfileLayout title="复习提醒" description="到点把今天要复习的数量推到手机上。">
+      <ProfileLayout title="复习提醒">
         <Card>
           <CardContent className="py-10 text-sm text-muted-foreground">
             提醒设置暂时读不到，刷新页面再试一次。
@@ -255,7 +255,6 @@ export default function ProfileRemindersPage() {
   return (
     <ProfileLayout
       title="复习提醒"
-      description="通过 Bark 把提醒推到 iPhone。时间与频率随时可改，改完立即生效。"
     >
       <div className="space-y-6">
         <Card>
@@ -265,7 +264,7 @@ export default function ProfileRemindersPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
-            <Row title="启用提醒" description="关闭后不会发出任何通知，设置保留。">
+            <Row title="启用提醒">
               <Switch
                 aria-label="启用提醒"
                 checked={draft.enabled}
@@ -279,8 +278,8 @@ export default function ProfileRemindersPage() {
               title="Bark 推送地址"
               description={
                 draft.bark_configured
-                  ? `已配置：${draft.bark_key_masked}。粘贴新的地址或 Key 可替换。`
-                  : '在 iPhone 的 Bark App 首页复制那条 api.day.app 地址，整条粘进来即可。'
+                  ? undefined
+                  : '在 iPhone 的 Bark App 首页复制那条 api.day.app 地址，整条粘进来。'
               }
             >
               <div className="flex flex-col items-end gap-2">
@@ -330,7 +329,7 @@ export default function ProfileRemindersPage() {
             </Row>
             <Row
               title="通知图标"
-              description="通知左侧的小图标。图标是手机自己下载的，所以填本机的 Tailscale 地址就行；Tailscale 关着或电脑关机时会退回 Bark 默认图标。留空则一直用默认图标。"
+              description="填本机 Tailscale 地址；留空用 Bark 默认图标。"
             >
               <Input
                 aria-label="通知图标地址"
@@ -358,7 +357,7 @@ export default function ProfileRemindersPage() {
           <CardContent className="pt-0">
             <Row
               title="早上概览"
-              description="今天到期多少、昨天复习了多少。电脑关机错过后，12:00 前开机仍会补发。"
+              description="错过后 12:00 前开机补发。"
             >
               <Input
                 aria-label="早上概览时间"
@@ -381,7 +380,7 @@ export default function ProfileRemindersPage() {
             </Row>
             <Row
               title="晚上催促"
-              description="只有当今天一张都没复习时才发；学过了就不打扰。23:00 前开机仍会补发。"
+              description="只在今天还没复习时发；23:00 前开机补发。"
             >
               <Input
                 aria-label="晚上催促时间"
@@ -402,7 +401,7 @@ export default function ProfileRemindersPage() {
               />
               <PreviewButton kind="evening" onPreview={runPreview} busy={busy} />
             </Row>
-            <Row title="到期阈值" description="到期少于这个数的那天不发早上那条。0 表示不限制。">
+            <Row title="到期阈值" description="少于这个数不发早上概览；0 不限制。">
               <Input
                 aria-label="到期阈值"
                 type="number"
@@ -428,7 +427,6 @@ export default function ProfileRemindersPage() {
           <CardContent className="pt-0">
             <Row
               title="停下来就叫你"
-              description="评分、编辑脑图、或者只是点屏幕都算动作；停下来超过设定时长后才提醒，之后按间隔重复，直到你重新动手。"
             >
               <Switch
                 aria-label="启用闲置拉回"
@@ -440,7 +438,7 @@ export default function ProfileRemindersPage() {
               />
               <PreviewButton kind="idle" onPreview={runPreview} busy={busy} />
             </Row>
-            <Row title="多久算停下" description="最后一次评分 / 保存脑图之后过多久开始提醒。">
+            <Row title="多久算停下">
               <Input
                 aria-label="闲置阈值分钟"
                 type="number"
@@ -458,7 +456,7 @@ export default function ProfileRemindersPage() {
               />
               <span className="text-sm text-muted-foreground">分钟</span>
             </Row>
-            <Row title="升级间隔" description="没回来就按这个间隔继续提醒。">
+            <Row title="升级间隔">
               <Input
                 aria-label="闲置重复间隔分钟"
                 type="number"
@@ -476,7 +474,7 @@ export default function ProfileRemindersPage() {
               />
               <span className="text-sm text-muted-foreground">分钟</span>
             </Row>
-            <Row title="最多提醒几次" description="0 表示直到你回来为止，不设上限。">
+            <Row title="最多提醒几次" description="0 表示不设上限。">
               <Input
                 aria-label="闲置最多提醒次数"
                 type="number"
@@ -496,7 +494,7 @@ export default function ProfileRemindersPage() {
             </Row>
             <Row
               title="只在今天动过之后盯防"
-              description="关掉后，今天一次都没打开也会开始计时（会和早上/晚上概览重复）。"
+              description="关掉后，今天没打开也会开始计时。"
             >
               <Switch
                 aria-label="只在今天动过之后盯防"
@@ -519,7 +517,7 @@ export default function ProfileRemindersPage() {
           <CardContent className="pt-0">
             <Row
               title="有新卡片放出来就叫你"
-              description="10 分钟台阶到点、跨天复活的单元进入队列时提醒；你自己导入或新建产生的不算。"
+              description="只算台阶到点和跨天复活；自己导入或新建的不算。"
             >
               <Switch
                 aria-label="启用到期就绪"
@@ -531,7 +529,7 @@ export default function ProfileRemindersPage() {
               />
               <PreviewButton kind="ready" onPreview={runPreview} busy={busy} />
             </Row>
-            <Row title="攒够多少张才提醒" description="太少就没必要打断你。">
+            <Row title="攒够多少张才提醒">
               <Input
                 aria-label="到期就绪最少张数"
                 type="number"
@@ -549,7 +547,7 @@ export default function ProfileRemindersPage() {
               />
               <span className="text-sm text-muted-foreground">张</span>
             </Row>
-            <Row title="两条之间至少隔" description="防止台阶一颗一颗到点时连环推送。">
+            <Row title="两条之间至少隔">
               <Input
                 aria-label="到期就绪最小间隔分钟"
                 type="number"
@@ -579,7 +577,6 @@ export default function ProfileRemindersPage() {
           <CardContent className="pt-0">
             <Row
               title="每个整点报一次进度"
-              description="先说你已经完成的：今天累计多少张、这一小时多少张、连续第几天。"
             >
               <Switch
                 aria-label="启用整点小结"
@@ -601,7 +598,7 @@ export default function ProfileRemindersPage() {
           <CardContent className="pt-0">
             <Row
               title="免打扰时段"
-              description="这段时间内任何通知都不发。0:00–8:00 属于前一天的学习日，默认就安静。"
+              description="这段时间内不发通知；0:00–8:00 默认安静。"
             >
               <select
                 aria-label="免打扰开始小时"
@@ -639,7 +636,7 @@ export default function ProfileRemindersPage() {
             </Row>
             <Row
               title="每天最多几条"
-              description="到了上限就静默到第二天。0 表示不限制。"
+              description="到上限静默到第二天；0 不限制。"
             >
               <Input
                 aria-label="每日条数上限"
@@ -664,7 +661,6 @@ export default function ProfileRemindersPage() {
             >
               按当前设置，今天最多还会收到 <strong>{budget.estimate}</strong> 条
               {budget.cappedBy ? `（已被每日上限 ${budget.cappedBy} 条截住）` : ''}。
-              上限不是吓唬你：闲置每 5 分钟一次，一个上午就能刷出一百条。
             </div>
           </CardContent>
         </Card>
@@ -728,8 +724,7 @@ export default function ProfileRemindersPage() {
                 : '还没有发送过'}
             </div>
             <div className="rounded-lg bg-muted/40 px-3 py-2 leading-6">
-              提醒由电脑上的 Memory Anki 服务发出：电脑关机或服务没启动时不会推送，重新开机后只有早上/晚上两条会补发。
-              高频提醒错过就错过——补一条「你一小时没操作了」没有意义。
+              提醒由电脑上的 Memory Anki 服务发出：关机或服务没启动时不会推送，重新开机后只有早上/晚上两条会补发。
             </div>
           </CardContent>
         </Card>

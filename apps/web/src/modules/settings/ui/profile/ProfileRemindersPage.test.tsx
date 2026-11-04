@@ -161,6 +161,6 @@ describe('ProfileRemindersPage', () => {
     vi.spyOn(remindersApi, 'getReminderSettingsApi').mockResolvedValue(settingsPayload())
     renderPage()
 
-    expect(await screen.findByText(/电脑关机或服务没启动时不会推送/)).toBeTruthy()
+    expect(await screen.findByText(/关机或服务没启动时不会推送/)).toBeTruthy()
   })
 })

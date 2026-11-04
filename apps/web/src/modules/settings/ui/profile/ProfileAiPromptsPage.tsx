@@ -362,7 +362,7 @@ export function ProfileAiPromptsPage({
     return (
       <ProfileLayout
         title="AI 提示词"
-        description="这里可以编辑 AI 提示词。保存会创建候选版本，只有评测通过并发布后才会作用于后续请求。"
+        description="保存会创建候选版本，评测通过并发布后才生效。"
       >
         {content}
       </ProfileLayout>

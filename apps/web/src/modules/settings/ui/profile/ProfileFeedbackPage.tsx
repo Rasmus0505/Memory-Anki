@@ -112,7 +112,6 @@ export default function ProfileFeedbackPage() {
   return (
     <ProfileLayout
       title="反馈中心"
-      description="先试听，再选择你想听见的声音。所有学习音和界面音共用这套音色与音量。"
     >
       <div className="space-y-6 pb-24">
         <Card className="overflow-hidden border-primary/25 bg-gradient-to-br from-primary/[0.08] via-card to-card">
@@ -124,7 +123,7 @@ export default function ProfileFeedbackPage() {
                   先听一声
                 </CardTitle>
                 <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-                  点击试听不会改变选择。勾选风格后，下一次完整反馈会从已选风格中等概率抽一种；同一段连弹不会中途换声。
+                  勾选的风格会随机轮换，同一段连弹不中途换声。
                 </p>
               </div>
               <Switch
@@ -180,7 +179,6 @@ export default function ProfileFeedbackPage() {
           <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
             <div>
               <h2 id="sound-style-heading" className="text-base font-semibold">选择音色风格</h2>
-              <p className="mt-1 text-sm text-muted-foreground">可以只选一种，也可以同时选几种混合使用。</p>
             </div>
             <span className="text-xs text-muted-foreground">已选 {draftSettings.soundVoices.length} / {CONCRETE_SOUND_VOICES.length}</span>
           </div>
