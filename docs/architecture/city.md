@@ -5,7 +5,7 @@
 
 ## 形态
 
-- **React 只负责窗口**：拖拽、缩放、最大化、收起、关闭/重开、位置与尺寸持久化、静音、镜头环绕、重置视角、演示按钮、实时指标。窗口默认关闭，右下角一个「记忆城邦」启动胶囊；首次打开后 iframe 保持挂载，关闭窗口不会丢失城邦状态。
+- **React 只负责窗口**：拖拽、缩放、最大化、收起、关闭/重开、位置与尺寸持久化、静音、镜头环绕、重置视角、重置城邦（清空为只留悬浮岛）、演示按钮、实时指标。窗口默认关闭，右下角一个「记忆城邦」启动胶囊；首次打开后 iframe 保持挂载，关闭/收起时暂停渲染但保留城邦状态。
 - **Three.js 只在同源 iframe 中运行**：`public/city/index.html?embed=1`。React 包不导入 `three`/`gsap`，首屏包体不增加；iframe 在首次打开时才加载。
 - **紧凑固定城邦**：10×10 悬浮岛，2 条主干道 + 2 条支路，主塔 / 阶梯公寓 / 低层斜顶屋 / 右侧摩天轮公园 / 一处塔吊工地。场景内无扩岛，积累通过楼层生长、细节叠加、空中连廊、屋顶花园与钟塔/天文台呈现。
 - **离线资源**：`public/city/vendor/` 本地化 Three.js 与 GSAP；嵌入模式优先本地，缺失时才回退 CDN。
@@ -22,8 +22,15 @@
 | 编辑脑图 | 同上事件的 `node_create/node_delete/node_move/text_commit/save_success` | `pin/structure/detail`，700ms 节流 |
 | 标重点 | `review-unit-favorite:changed` 且 `isFavorite` | 选中建筑金色重点屋顶 + 旋转星芒 |
 | 一轮结束 | 应用事件 `round-completed`（`reviewCelebration` 与随心轮次完成处发出） | 庆祝和弦、光环与热气球 |
+| 收卡/折叠 | `memory-anki:mindmap-card-folded`（detail.count = 本批折叠节点数） | 翻卡计数按节点数回退；撤掉最近构件与阈值细节、脚手架回落、反向果冻/收缩环/邻里点头/下行回声 |
 
 所有事件通过 `postMessage` 进入 iframe；iframe 以 `stats` / `notice` / `audio` / `ready` 回传。队列上限 30 条，iframe 就绪后以 90ms 间隔回放最近事件。
+
+## 性能预算
+
+- 嵌入态渲染 30fps、DPR 上限 1.25、阴影贴图 1024 且按 0.18s 降频更新；窗户与道路虚线使用 InstancedMesh，场景绘制调用约为旧实现的一半。
+- 窗口关闭/收起时 React 发送 `active=false`，iframe 停止渲染；重新打开后恢复。
+- 城邦重置只保留悬浮岛、云影与漂浮石，并恢复 14 个可钉地块；重置后可由学习事件从头重建。
 
 ## 数据与持久化
 

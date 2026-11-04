@@ -53,6 +53,8 @@ type CityOutgoingMessage =
   | { type: 'reset'; payload?: undefined }
   | { type: 'demo'; payload?: undefined }
   | { type: 'retract'; payload: { count: number } }
+  | { type: 'active'; payload: { on: boolean } }
+  | { type: 'reset-city'; payload?: undefined }
 
 const CITY_SOURCE = 'memory-anki-city'
 const HOST_SOURCE = 'memory-anki-host'

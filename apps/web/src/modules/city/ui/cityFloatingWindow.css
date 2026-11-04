@@ -10,8 +10,8 @@
 
 .city-launcher {
   position: fixed;
-  right: 18px;
-  bottom: 18px;
+  left: 16px;
+  bottom: 56px;
   z-index: 55;
   display: inline-flex;
   align-items: center;
@@ -329,8 +329,8 @@
   }
 
   .city-launcher {
-    right: 12px;
-    bottom: 12px;
+    left: 12px;
+    bottom: 56px;
   }
 }
 

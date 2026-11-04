@@ -14,6 +14,7 @@ import {
   Minimize2,
   Orbit,
   Play,
+  RefreshCw,
   RotateCcw,
   Volume2,
   VolumeX,
@@ -211,6 +212,11 @@ function CityWindowImpl() {
     send({ type: 'orbit', payload: { on: orbit } })
   }, [muted, orbit, ready, send])
 
+  useEffect(() => {
+    if (!ready) return
+    send({ type: 'active', payload: { on: open && !collapsed } })
+  }, [collapsed, open, ready, send])
+
   const openWindow = useCallback(() => {
     setHasOpened(true)
     setOpen(true)
@@ -233,6 +239,11 @@ function CityWindowImpl() {
   }, [orbit, send])
 
   const resetCamera = useCallback(() => send({ type: 'reset' }), [send])
+  const resetCity = useCallback(() => {
+    const confirmed = window.confirm('重置城邦会清空当前所有建筑，只保留悬浮岛。继续吗？')
+    if (!confirmed) return
+    send({ type: 'reset-city' })
+  }, [send])
   const runDemo = useCallback(() => send({ type: 'demo' }), [send])
 
   const toggleCollapse = useCallback(() => setCollapsed((current) => !current), [])
@@ -413,6 +424,15 @@ function CityWindowImpl() {
               aria-label="重置城邦视角"
             >
               <RotateCcw size={14} />
+            </button>
+            <button
+              type="button"
+              className="city-window__btn"
+              onClick={resetCity}
+              title="重置城邦（清空建筑，只留悬浮岛）"
+              aria-label="重置城邦"
+            >
+              <RefreshCw size={14} />
             </button>
             <button
               type="button"
