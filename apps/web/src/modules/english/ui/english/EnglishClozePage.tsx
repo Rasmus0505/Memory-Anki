@@ -129,7 +129,7 @@ export default function EnglishClozePage() {
     <EnglishZoneLayout
       zone="cloze"
       title="完形阅读"
-      description="答案已经填好。浅蓝是先标出的难词，琥珀是你自己标的。点一下切换，再点取消。"
+      description="浅蓝是难词，琥珀是你标的；点一下切换，再点取消。"
     >
       <div className="flex flex-col gap-4" data-testid="english-cloze-page">
         <div className="flex flex-wrap items-center gap-2">
@@ -192,10 +192,9 @@ export default function EnglishClozePage() {
           </button>
         </div>
 
-        <p className="text-sm text-muted-foreground">
-          {lookupMode ? '现在点词会打开词典。再点「查词中」回到标生词。' : '点词标生词。划选几个词也可以用查词。'}
-          {yearVocab.length ? ` 这一年 ${yearVocab.length} 个生词。` : ''}
-        </p>
+        {yearVocab.length ? (
+          <p className="text-sm text-muted-foreground">这一年 {yearVocab.length} 个生词。</p>
+        ) : null}
 
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
         {!error && corpus && corpus.years.length === 0 ? (

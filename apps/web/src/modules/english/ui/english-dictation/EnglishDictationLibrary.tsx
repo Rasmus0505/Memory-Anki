@@ -547,7 +547,6 @@ function ImportCourseDialog({ open, onClose, onImported }: ImportCourseDialogPro
             slot="chinese"
             icon={<Captions className="size-5" />}
             label="中文字幕"
-            hint="按时间轴自动对齐到英文句子"
             accept=".srt,.vtt,.ass,.ssa,text/plain"
             file={chineseFile}
             onPick={setChineseFile}
@@ -616,7 +615,7 @@ function FileDrop({
   slot: FileSlot
   icon: ReactNode
   label: string
-  hint: string
+  hint?: string
   accept: string
   file: File | null
   onPick: (file: File | null) => void
@@ -649,9 +648,9 @@ function FileDrop({
           <span className="ed-drop__file">
             {file.name} · {formatFileSize(file.size)}
           </span>
-        ) : (
+        ) : hint ? (
           <span className="ed-drop__hint">{hint}</span>
-        )}
+        ) : null}
       </div>
       <div className="ed-drop__actions">
         <label htmlFor={inputId} className="ed-mini-button">

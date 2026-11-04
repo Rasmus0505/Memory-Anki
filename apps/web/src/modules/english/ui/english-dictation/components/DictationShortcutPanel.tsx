@@ -348,9 +348,6 @@ export function DictationShortcutPanel({
                 onChange={(event) => patchMask({ opacity: Number(event.target.value) })}
               />
             </label>
-            <p className="ed-field-note">
-              播放时会自动改用实色遮挡以保持帧率；暂停时恢复模糊。
-            </p>
             <div className="ed-panel-actions">
               <button type="button" className="ed-mini-button" onClick={onResetMask}>
                 重置位置
@@ -372,7 +369,6 @@ export function DictationShortcutPanel({
                 setDraft((previous) => ({ ...previous, sound: { ...previous.sound, enabled } }))
               }
               label="按键与判定反馈音"
-              hint="正确轻响、错误低音、完成提示音"
             />
             <label className="ed-field ed-field--range">
               <span>
@@ -398,7 +394,7 @@ export function DictationShortcutPanel({
                 setDraft((previous) => ({ ...previous, flow: { ...previous.flow, autoAdvanceOnPass } }))
               }
               label="完成后自动下一句"
-              hint="仅单句模式生效；默认关闭，让译文先留在屏幕上"
+              hint="仅单句模式生效"
             />
             <Toggle
               checked={draft.replay.autoReplayOnPass}
@@ -417,13 +413,12 @@ export function DictationShortcutPanel({
                 }))
               }
               label="单句循环"
-              hint="仅单句模式生效；播放到句尾后立即重播同一句"
+              hint="仅单句模式生效"
             />
           </section>
         </div>
 
         <footer className="ed-shortcut-panel__foot">
-          <span className="ed-panel-note">设置会保存在本机，并同步到你的客户端偏好。</span>
           <div className="ed-panel-actions">
             <button type="button" className="ed-cta" onClick={onClose}>
               取消
