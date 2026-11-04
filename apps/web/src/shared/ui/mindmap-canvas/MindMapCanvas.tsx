@@ -149,10 +149,6 @@ export interface MindMapCanvasProps {
    * editor page reopened later does not inherit last visit's expanded depth.
    */
   collapseResetKey?: string | number | null
-  /** Spine / unit-root ids that cannot be deleted, given siblings, or dragged out. */
-  lockedStructureNodeIds?: readonly string[]
-  /** Locked ids that may still receive a child (the scoped unit root). */
-  allowAddChildNodeIds?: readonly string[]
   /** Scene switches fit the current graph instead of re-centering the previous card. */
   sceneTransitionFit?: boolean
   /** Host fallback card when the previous center node is missing after a scene switch. */

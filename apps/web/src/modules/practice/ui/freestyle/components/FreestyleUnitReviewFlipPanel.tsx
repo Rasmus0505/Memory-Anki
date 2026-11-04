@@ -103,6 +103,16 @@ export function FreestyleUnitReviewFlipPanel({
   const editEditorStateRef = useRef(editorState)
   const displayModeRef = useRef<'review' | 'edit'>('review')
   const isEditMode = displayMode === 'edit'
+  // 当前专线 only narrows the projection. A structure edit on a spine card asks
+  // for the whole palace so the created/removed card stays on screen; the
+  // override lasts for this edit session, not the stored setting.
+  const [fullPalaceEdit, setFullPalaceEdit] = useState(false)
+  const scopedEdit = isEditMode
+    && flipCardRevealSettings.settings.editScope !== 'palace'
+    && !fullPalaceEdit
+  useEffect(() => {
+    setFullPalaceEdit(false)
+  }, [isEditMode, unit.anchor_uid, flipCardRevealSettings.settings.editScope])
   // A 进入编辑 tap received while this panel is still a read-only preview.
   const pendingEditRef = useRef(false)
   editEditorStateRef.current = editEditorState
@@ -477,8 +487,14 @@ export function FreestyleUnitReviewFlipPanel({
         }
         unitScopeEditorState={editorState}
         activeUnitNodeUids={flipTargetUids}
-        scopeBranchUid={isEditMode && flipCardRevealSettings.settings.editScope !== 'palace' ? (unit.anchor_uid || null) : null}
-        forceExpanded={isEditMode && flipCardRevealSettings.settings.editScope !== 'palace'}
+        scopeBranchUid={scopedEdit ? (unit.anchor_uid || null) : null}
+        // The escape widens to the whole palace, so keep it unfolded: the card
+        // the learner just created or removed must be on screen.
+        forceExpanded={isEditMode && (flipCardRevealSettings.settings.editScope !== 'palace' || fullPalaceEdit)}
+        onRequestFullScope={isEditMode ? () => {
+          if (!fullPalaceEdit) showQuietStatus('已展开整座宫殿')
+          setFullPalaceEdit(true)
+        } : undefined}
         revealCollapsedNodeIds={editRevealCollapsedNodeIds}
         countBadgeByNodeUid={quizNodeBindings.countBadgeByNodeUid}
         nodeProgressByNodeUid={quizNodeBindings.nodeProgressByNodeUid}

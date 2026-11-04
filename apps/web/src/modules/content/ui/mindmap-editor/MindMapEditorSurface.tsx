@@ -111,6 +111,7 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   selectionToolbarPreferPosition = 'auto',
   frameOverlay = null,
   onEditorStateChange,
+  onRequestFullScope,
   confirmDeleteNodes,
   onNodeActive,
   onNodeClick,
@@ -139,6 +140,9 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   const onNodeContextMenuRef = useRef(onNodeContextMenu)
   const onCreateSegmentFromSelectionRef = useRef(onCreateSegmentFromSelection)
   const onSegmentRangeDraftChangeRef = useRef(onSegmentRangeDraftChange)
+  // Set for the synchronous span of one menu action that lands outside the
+  // scoped branch. The edit layer reads it once, before the host re-projects.
+  const scopeEscapeRef = useRef(false)
   onNodeActiveRef.current = onNodeActive
   onReadyRef.current = onReady
   onUiClearedChangeRef.current = onUiClearedChange
@@ -535,7 +539,6 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
     handleEditNode: commitEditedNodeText,
     handleRelocateNodes,
     handleExtractSelection,
-    handleReorderSibling,
     handleMoveUp,
     handleMoveDown,
     canMoveNodeUp,
@@ -551,7 +554,101 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
     undoEditorDoc,
     confirmDeleteNodes,
     branchScope,
+    canEscapeScope: Boolean(onRequestFullScope),
+    isScopeEscaping: () => scopeEscapeRef.current,
   })
+  // The scoped projection only hides sibling branches; it must not shorten the
+  // menu. A structure row on a spine card asks the host to show the whole
+  // palace, then runs, so the card it creates or removes stays visible.
+  const runOutsideScope = useCallback(
+    (escapes: boolean, run: () => void) => {
+      if (!escapes || !onRequestFullScope) {
+        run()
+        return
+      }
+      onRequestFullScope()
+      scopeEscapeRef.current = true
+      try {
+        run()
+      } finally {
+        scopeEscapeRef.current = false
+      }
+    },
+    [onRequestFullScope],
+  )
+  const addChildOutsideScope = useCallback(
+    (nodeId: string) => runOutsideScope(
+      Boolean(branchScope) && !branchScope!.subtreeUids.has(nodeId),
+      () => handleAddChild(nodeId),
+    ),
+    [branchScope, handleAddChild, runOutsideScope],
+  )
+  const addChildWithoutFocusOutsideScope = useCallback(
+    (nodeId: string) => runOutsideScope(
+      Boolean(branchScope) && !branchScope!.subtreeUids.has(nodeId),
+      () => handleAddChildWithoutFocus(nodeId),
+    ),
+    [branchScope, handleAddChildWithoutFocus, runOutsideScope],
+  )
+  const insertChildLayerOutsideScope = useCallback(
+    (nodeId: string) => runOutsideScope(
+      Boolean(branchScope) && !branchScope!.subtreeUids.has(nodeId),
+      () => handleInsertChildLayer(nodeId),
+    ),
+    [branchScope, handleInsertChildLayer, runOutsideScope],
+  )
+  const escapesStructure = useCallback(
+    (nodeId: string) => Boolean(branchScope)
+      && (!branchScope!.subtreeUids.has(nodeId) || nodeId === branchScope!.branchUid),
+    [branchScope],
+  )
+  const addSiblingOutsideScope = useCallback(
+    (nodeId: string) => runOutsideScope(escapesStructure(nodeId), () => handleAddSibling(nodeId)),
+    [escapesStructure, handleAddSibling, runOutsideScope],
+  )
+  const deleteNodeOutsideScope = useCallback(
+    (nodeId: string) => runOutsideScope(escapesStructure(nodeId), () => handleDeleteNode(nodeId)),
+    [escapesStructure, handleDeleteNode, runOutsideScope],
+  )
+  const deleteNodesOutsideScope = useCallback(
+    (nodeIds: string[]) => runOutsideScope(
+      nodeIds.some((nodeId) => escapesStructure(nodeId)),
+      () => handleDeleteNodes(nodeIds),
+    ),
+    [escapesStructure, handleDeleteNodes, runOutsideScope],
+  )
+  const deleteNodeOnlyOutsideScope = useCallback(
+    (nodeId: string) => runOutsideScope(escapesStructure(nodeId), () => handleDeleteNodeOnly(nodeId)),
+    [escapesStructure, handleDeleteNodeOnly, runOutsideScope],
+  )
+  const deleteNodesOnlyOutsideScope = useCallback(
+    (nodeIds: string[]) => runOutsideScope(
+      nodeIds.some((nodeId) => escapesStructure(nodeId)),
+      () => handleDeleteNodesOnly(nodeIds),
+    ),
+    [escapesStructure, handleDeleteNodesOnly, runOutsideScope],
+  )
+  const moveUpOutsideScope = useCallback(
+    (nodeId: string) => runOutsideScope(escapesStructure(nodeId), () => handleMoveUp(nodeId)),
+    [escapesStructure, handleMoveUp, runOutsideScope],
+  )
+  const moveDownOutsideScope = useCallback(
+    (nodeId: string) => runOutsideScope(escapesStructure(nodeId), () => handleMoveDown(nodeId)),
+    [escapesStructure, handleMoveDown, runOutsideScope],
+  )
+  const relocateOutsideScope = useCallback(
+    (sourceIds: string[], targetId: string, mode: 'before' | 'inside' | 'after') => runOutsideScope(
+      sourceIds.some((nodeId) => escapesStructure(nodeId)) || escapesStructure(targetId),
+      () => handleRelocateNodes(sourceIds, targetId, mode),
+    ),
+    [escapesStructure, handleRelocateNodes, runOutsideScope],
+  )
+  const reorderSiblingOutsideScope = useCallback(
+    (sourceId: string, targetId: string, position: 'before' | 'after') => (
+      relocateOutsideScope([sourceId], targetId, position)
+    ),
+    [relocateOutsideScope],
+  )
   const handleEditNode = useCallback(
     (nodeId: string, text: string) => {
       commitEditedNodeText(nodeId, text, interactionRef.current)
@@ -569,22 +666,22 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
         graphNodes: graphData.nodes,
         undoEditorDoc,
         redoEditorDoc,
-        handleAddChildWithoutFocus,
-        handleAddSibling,
+        handleAddChildWithoutFocus: addChildWithoutFocusOutsideScope,
+        handleAddSibling: addSiblingOutsideScope,
         beginEditingNode,
         selectNode: (nodeId) => selectNode(nodeId),
-        handleDeleteNodes,
+        handleDeleteNodes: deleteNodesOutsideScope,
         pendingKeyboardFocusNodeIdRef,
       })(event)
     },
     [
+      addChildWithoutFocusOutsideScope,
+      addSiblingOutsideScope,
+      deleteNodesOutsideScope,
       beginEditingNode,
       canEdit,
       editingNodeId,
       graphData.nodes,
-      handleAddChildWithoutFocus,
-      handleAddSibling,
-      handleDeleteNodes,
       redoEditorDoc,
       selectNode,
       selectedNodeId,
@@ -641,8 +738,6 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
         readonly={!canEdit} practiceModeActive={practiceModeActive} forceExpanded={forceExpanded}
         revealCollapsedNodeIds={revealCollapsedNodeIds}
         collapseResetKey={collapseResetKey}
-        lockedStructureNodeIds={branchScope?.pathUids}
-        allowAddChildNodeIds={branchScope ? [branchScope.branchUid] : undefined}
         sceneTransitionFit={initialViewPolicy === 'reset'}
         sceneTransitionFallbackNodeId={sceneTransitionFallbackNodeId}
         initialFocusNodeId={initialFocusNodeUid}
@@ -666,10 +761,10 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
         onStatusChipClick={onStatusChipClick}
         buildNodeActions={buildNodeActions} buildSelectionToolbarActions={buildSelectionToolbarActions}
         selectionToolbarPreferPosition={selectionToolbarPreferPosition}
-        onAddChild={handleAddChild} onInsertChildLayer={handleInsertChildLayer}
-        onAddSibling={handleAddSibling}
-        onDelete={handleDeleteNode} onDeleteNodes={handleDeleteNodes}
-        onDeleteNodeOnly={handleDeleteNodeOnly} onDeleteNodesOnly={handleDeleteNodesOnly}
+        onAddChild={addChildOutsideScope} onInsertChildLayer={insertChildLayerOutsideScope}
+        onAddSibling={addSiblingOutsideScope}
+        onDelete={deleteNodeOutsideScope} onDeleteNodes={deleteNodesOutsideScope}
+        onDeleteNodeOnly={deleteNodeOnlyOutsideScope} onDeleteNodesOnly={deleteNodesOnlyOutsideScope}
         onHighlightNodes={handleHighlightNodes} onMarkColorNodes={handleMarkColorNodes}
         onToggleQuestionCards={handleToggleQuestionCards} onEdit={handleEditNode}
         canUndo={canUndo} canRedo={canRedo}
@@ -677,9 +772,9 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
         // renders two permanently disabled buttons in the flip-card toolbar.
         onUndo={canEdit ? undoEditorDoc : undefined}
         onRedo={canEdit ? redoEditorDoc : undefined}
-        onRelocate={handleRelocateNodes} onExtractSelection={handleExtractSelection}
-        onReorderSibling={handleReorderSibling}
-        onMoveUp={handleMoveUp} onMoveDown={handleMoveDown}
+        onRelocate={relocateOutsideScope} onExtractSelection={handleExtractSelection}
+        onReorderSibling={reorderSiblingOutsideScope}
+        onMoveUp={moveUpOutsideScope} onMoveDown={moveDownOutsideScope}
         canMoveUp={canMoveNodeUp} canMoveDown={canMoveNodeDown}
         onToggleSystemFullscreen={handleSystemFullscreenToggle}
         onToggleWebpageFullscreen={handleWebpageFullscreenToggle}

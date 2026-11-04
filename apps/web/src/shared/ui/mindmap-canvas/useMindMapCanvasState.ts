@@ -200,8 +200,6 @@ export function useMindMapCanvasState(
     forceExpanded = false,
     revealCollapsedNodeIds = null,
     collapseResetKey = null,
-    lockedStructureNodeIds,
-    allowAddChildNodeIds,
     sceneTransitionFit = false,
     sceneTransitionFallbackNodeId = null,
     initialFocusNodeId = null,
@@ -224,22 +222,12 @@ export function useMindMapCanvasState(
 
   const measuredNodeSizesRef = useRef<Map<string, NodeSize>>(new Map())
   const [markColorFlyout, setMarkColorFlyout] = useState<MarkColorFlyoutState | null>(null)
-  const lockedStructureUidSet = useMemo(
-    () => new Set((lockedStructureNodeIds ?? []).filter(Boolean)),
-    [lockedStructureNodeIds],
+  // Menu shape is node-role only (root vs. everything else). Scope locks live in
+  // the edit layer, which widens the view instead of hiding the menu rows.
+  const isRootNode = useCallback(
+    (nodeId: string) => graphData.nodes.find((node) => node.id === nodeId)?.parentId == null,
+    [graphData.nodes],
   )
-  const allowAddChildUidSet = useMemo(
-    () => new Set((allowAddChildNodeIds ?? []).filter(Boolean)),
-    [allowAddChildNodeIds],
-  )
-  const isLockedStructureNode = useCallback((nodeId: string) => {
-    if (graphData.nodes.find((node) => node.id === nodeId)?.parentId == null) return true
-    return lockedStructureUidSet.has(nodeId)
-  }, [graphData.nodes, lockedStructureUidSet])
-  const canAddChildToNode = useCallback((nodeId: string) => {
-    if (!lockedStructureUidSet.has(nodeId)) return true
-    return allowAddChildUidSet.has(nodeId)
-  }, [allowAddChildUidSet, lockedStructureUidSet])
   // A host-provided first camera target must be visible when the first layout
   // runs, or the initial center has nothing to land on and the branch stays
   // folded. Keep its ancestors open in every fold seed below.
@@ -801,8 +789,7 @@ export function useMindMapCanvasState(
         return node?.metadata?.memoryAnkiQuestionCard === true
       },
       onStartEdit: handleStartEdit,
-      isRootNode: isLockedStructureNode,
-      canAddChild: canAddChildToNode,
+      isRootNode,
       getSubtreeSize: (nodeId) => {
         const childrenByParent = new Map<string, string[]>()
         for (const node of graphData.nodes) {
@@ -847,8 +834,7 @@ export function useMindMapCanvasState(
       onMoveDown,
       onMoveUp,
       readonly,
-      isLockedStructureNode,
-      canAddChildToNode,
+      isRootNode,
     ],
   )
   const edgeActions = useMemo(

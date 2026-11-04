@@ -1057,3 +1057,78 @@ describe('MindMapCanvas recovery', () => {
     })
   })
 })
+
+describe('MindMapEditorSurface scoped edit menu', () => {
+  let widthSpy: ReturnType<typeof vi.spyOn>
+  let heightSpy: ReturnType<typeof vi.spyOn>
+  let originalRequestAnimationFrame: typeof window.requestAnimationFrame
+
+  beforeEach(() => {
+    originalRequestAnimationFrame = window.requestAnimationFrame
+    window.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+      callback(0)
+      return 1
+    })
+    widthSpy = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(800)
+    heightSpy = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600)
+    reactFlowMockState.getViewport.mockImplementation(() => ({ ...reactFlowMockState.viewport }))
+    reactFlowMockState.setViewport.mockImplementation((viewport: { x: number; y: number; zoom: number }) => {
+      reactFlowMockState.viewport = { ...viewport }
+      return Promise.resolve(true)
+    })
+  })
+
+  afterEach(() => {
+    window.requestAnimationFrame = originalRequestAnimationFrame
+    widthSpy.mockRestore()
+    heightSpy.mockRestore()
+  })
+
+  const scopedDoc: MindMapEditorState = {
+    editor_doc: {
+      root: {
+        data: { text: '宫殿', uid: 'scope-root' },
+        children: [{
+          data: { text: '骨架', uid: 'scope-spine' },
+          children: [{ data: { text: '锚点', uid: 'scope-anchor' }, children: [] }],
+        }],
+      },
+    },
+    editor_config: {},
+    editor_local_config: {},
+    lang: 'zh',
+  }
+
+  function ScopedSurface({ onRequestFullScope }: { onRequestFullScope: () => void }) {
+    const [state, setState] = useState(scopedDoc)
+    return (
+      <MindMapEditorSurface
+        editorState={state}
+        onEditorStateChange={setState}
+        scopeBranchUid="scope-anchor"
+        forceExpanded
+        onRequestFullScope={onRequestFullScope}
+      />
+    )
+  }
+
+  it('keeps structure rows on a spine card and widens the view before the edit', async () => {
+    const onRequestFullScope = vi.fn()
+    render(<ScopedSurface onRequestFullScope={onRequestFullScope} />)
+
+    fireEvent.contextMenu(await screen.findByRole('button', { name: '骨架' }), {
+      clientX: 120,
+      clientY: 160,
+    })
+
+    expect(screen.getByRole('button', { name: '添加子知识点 (Tab)' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '添加同级知识点 (Shift+Enter)' })).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: '单独删除（保留子级）' }))
+
+    await waitFor(() => expect(onRequestFullScope).toHaveBeenCalled())
+    // Spine card goes away; its child is promoted and survives.
+    await waitFor(() => expect(screen.queryByRole('button', { name: '骨架' })).toBeNull())
+    expect(screen.getByRole('button', { name: '锚点' })).toBeTruthy()
+  })
+})

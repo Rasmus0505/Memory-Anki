@@ -49,6 +49,12 @@ export interface MindMapEditorSurfaceProps {
   collapseResetKey?: string | number | null
   /** Keep palace-root → branch spine + subtree in the canvas; persist still uses the full doc. */
   scopeBranchUid?: string | null
+  /**
+   * A structure action landed outside the scoped branch (a spine card). The host
+   * widens the projection so the card that appears or disappears stays visible;
+   * the menu itself never shrinks.
+   */
+  onRequestFullScope?: () => void
   /** Host English interaction mode: clickable words + long-press selection (no flip). */
   englishInteractionActive?: boolean
   onEnglishWordClick?: (word: string, event: import('react').MouseEvent<HTMLElement>) => void

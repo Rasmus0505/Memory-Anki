@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useRef } from 'react'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import {
   canAddMindMapBranchChild,
@@ -57,6 +57,13 @@ export function useMindMapEditorDocActions(deps: {
    */
   confirmDeleteNodes?: (removedNodeUids: readonly string[]) => Promise<boolean>
   branchScope?: MindMapBranchScope | null
+  /**
+   * True for the span of one menu action that escapes the scoped branch. The
+   * surface asks the host to widen the view first, so the change stays visible.
+   */
+  isScopeEscaping?: () => boolean
+  /** Host can widen the view, so structure rows stay enabled outside the scope. */
+  canEscapeScope?: boolean
 }) {
   const {
     canEdit,
@@ -69,11 +76,16 @@ export function useMindMapEditorDocActions(deps: {
     undoEditorDoc,
     confirmDeleteNodes,
     branchScope = null,
+    isScopeEscaping,
+    canEscapeScope = false,
   } = deps
+  const isScopeEscapingRef = useRef(isScopeEscaping)
+  isScopeEscapingRef.current = isScopeEscaping
+  const bypassesScope = useCallback(() => Boolean(isScopeEscapingRef.current?.()), [])
 
   const handleAddChild = useCallback(
     (nodeId: string) => {
-      if (!canAddMindMapBranchChild(branchScope, nodeId)) return
+      if (!bypassesScope() && !canAddMindMapBranchChild(branchScope, nodeId)) return
       const baseEditorDoc = getCurrentEditorDoc()
       const result = addEditorDocChildWithResult(baseEditorDoc, nodeId)
       if (!result.nodeUid || !stageEditorDoc(result.editorDoc)) return
@@ -95,7 +107,7 @@ export function useMindMapEditorDocActions(deps: {
 
   const handleAddChildWithoutFocus = useCallback(
     (nodeId: string) => {
-      if (!canAddMindMapBranchChild(branchScope, nodeId)) return
+      if (!bypassesScope() && !canAddMindMapBranchChild(branchScope, nodeId)) return
       const result = addEditorDocChildWithResult(getCurrentEditorDoc(), nodeId)
       if (!result.nodeUid || !commitEditorDoc(result.editorDoc)) return
       replaceInteraction(selectedInteraction(nodeId))
@@ -111,7 +123,7 @@ export function useMindMapEditorDocActions(deps: {
    */
   const handleInsertChildLayer = useCallback(
     (nodeId: string) => {
-      if (!canAddMindMapBranchChild(branchScope, nodeId)) return
+      if (!bypassesScope() && !canAddMindMapBranchChild(branchScope, nodeId)) return
       const baseEditorDoc = getCurrentEditorDoc()
       const result = insertEditorDocChildLayerWithResult(baseEditorDoc, nodeId)
       if (!result.nodeUid || !stageEditorDoc(result.editorDoc)) return
@@ -133,7 +145,7 @@ export function useMindMapEditorDocActions(deps: {
 
   const handleAddSibling = useCallback(
     (nodeId: string) => {
-      if (!canMutateMindMapBranchStructure(branchScope, nodeId)) return
+      if (!bypassesScope() && !canMutateMindMapBranchStructure(branchScope, nodeId)) return
       const baseEditorDoc = getCurrentEditorDoc()
       const result = addEditorDocSiblingWithResult(baseEditorDoc, nodeId)
       if (!result.nodeUid || !stageEditorDoc(result.editorDoc)) return
@@ -155,7 +167,7 @@ export function useMindMapEditorDocActions(deps: {
 
   const handleDeleteNode = useCallback(
     async (nodeId: string) => {
-      if (!canMutateMindMapBranchStructure(branchScope, nodeId)) return
+      if (!bypassesScope() && !canMutateMindMapBranchStructure(branchScope, nodeId)) return
       const currentEditorDoc = getCurrentEditorDoc()
       const removedCount = countEditorDocSubtree(currentEditorDoc, nodeId)
       if (removedCount === 0) return
@@ -181,7 +193,7 @@ export function useMindMapEditorDocActions(deps: {
 
   const handleDeleteNodes = useCallback(
     async (nodeIds: readonly string[]) => {
-      const unique = [...new Set(nodeIds.filter((uid) => canMutateMindMapBranchStructure(branchScope, uid)))]
+      const unique = [...new Set(nodeIds.filter((uid) => bypassesScope() || canMutateMindMapBranchStructure(branchScope, uid)))]
       if (unique.length === 0) return
       if (unique.length === 1) {
         await handleDeleteNode(unique[0]!)
@@ -295,7 +307,7 @@ export function useMindMapEditorDocActions(deps: {
 
   const handleDeleteNodeOnly = useCallback(
     async (nodeId: string) => {
-      if (!canMutateMindMapBranchStructure(branchScope, nodeId)) return
+      if (!bypassesScope() && !canMutateMindMapBranchStructure(branchScope, nodeId)) return
       // Children are promoted, so only this one card's uid goes away.
       if (confirmDeleteNodes && !(await confirmDeleteNodes([nodeId]))) return
       const currentEditorDoc = getCurrentEditorDoc()
@@ -317,7 +329,7 @@ export function useMindMapEditorDocActions(deps: {
 
   const handleDeleteNodesOnly = useCallback(
     async (nodeIds: readonly string[]) => {
-      const unique = [...new Set(nodeIds.filter((uid) => canMutateMindMapBranchStructure(branchScope, uid)))]
+      const unique = [...new Set(nodeIds.filter((uid) => bypassesScope() || canMutateMindMapBranchStructure(branchScope, uid)))]
       if (unique.length === 0) return
       if (unique.length === 1) {
         await handleDeleteNodeOnly(unique[0]!)
@@ -401,7 +413,7 @@ export function useMindMapEditorDocActions(deps: {
 
   const handleRelocateNodes = useCallback(
     (sourceIds: string[], targetId: string, mode: 'before' | 'inside' | 'after') => {
-      if (!canRelocateMindMapBranchNodes(branchScope, sourceIds, targetId, mode)) return
+      if (!bypassesScope() && !canRelocateMindMapBranchNodes(branchScope, sourceIds, targetId, mode)) return
       const nextEditorDoc = relocateEditorDocNodes(
         getCurrentEditorDoc(),
         sourceIds,
@@ -457,7 +469,7 @@ export function useMindMapEditorDocActions(deps: {
 
   const handleMoveUp = useCallback(
     (nodeId: string) => {
-      if (!canMutateMindMapBranchStructure(branchScope, nodeId)) return false
+      if (!bypassesScope() && !canMutateMindMapBranchStructure(branchScope, nodeId)) return false
       return commitEditorDoc(moveEditorDocNode(getCurrentEditorDoc(), nodeId, 'up'))
     },
     [branchScope, commitEditorDoc, getCurrentEditorDoc],
@@ -465,26 +477,30 @@ export function useMindMapEditorDocActions(deps: {
 
   const handleMoveDown = useCallback(
     (nodeId: string) => {
-      if (!canMutateMindMapBranchStructure(branchScope, nodeId)) return false
+      if (!bypassesScope() && !canMutateMindMapBranchStructure(branchScope, nodeId)) return false
       return commitEditorDoc(moveEditorDocNode(getCurrentEditorDoc(), nodeId, 'down'))
     },
     [branchScope, commitEditorDoc, getCurrentEditorDoc],
   )
 
-  const canMoveNodeUp = useCallback(
-    (nodeId: string) => (
-      canMutateMindMapBranchStructure(branchScope, nodeId)
-      && canMoveEditorDocNode(getCurrentEditorDoc(), nodeId, 'up')
+  // Scope-escaped actions widen the view before they run, so ordering stays
+  // available on spine cards whenever the host can widen.
+  const canReorderNode = useCallback(
+    (nodeId: string, direction: 'up' | 'down') => (
+      (canEscapeScope || canMutateMindMapBranchStructure(branchScope, nodeId))
+      && canMoveEditorDocNode(getCurrentEditorDoc(), nodeId, direction)
     ),
-    [branchScope, getCurrentEditorDoc],
+    [branchScope, canEscapeScope, getCurrentEditorDoc],
+  )
+
+  const canMoveNodeUp = useCallback(
+    (nodeId: string) => canReorderNode(nodeId, 'up'),
+    [canReorderNode],
   )
 
   const canMoveNodeDown = useCallback(
-    (nodeId: string) => (
-      canMutateMindMapBranchStructure(branchScope, nodeId)
-      && canMoveEditorDocNode(getCurrentEditorDoc(), nodeId, 'down')
-    ),
-    [branchScope, getCurrentEditorDoc],
+    (nodeId: string) => canReorderNode(nodeId, 'down'),
+    [canReorderNode],
   )
 
   return {

@@ -61,6 +61,7 @@ type FlipCardSurfaceExtensions = Pick<
   | 'confirmDeleteNodes'
   | 'focusRequestNodeUid'
   | 'focusRequestNonce'
+  | 'onRequestFullScope'
   | 'revealFollowNodeIds'
   | 'revealFollowNonce'
   | 'feedbackFxSignal'
@@ -214,6 +215,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
   confirmDeleteNodes,
   focusRequestNodeUid,
   focusRequestNonce,
+  onRequestFullScope,
   revealFollowNodeIds,
   revealFollowNonce,
   feedbackFxSignal,
@@ -563,6 +565,7 @@ export const FlipCardMindMapPanel = forwardRef<MindMapEditorSurfaceHandle, FlipC
         revealCollapsedNodeIds={isEditMode ? revealCollapsedNodeIds : null}
         collapseResetKey={collapseResetKey}
         scopeBranchUid={isEditMode ? scopeBranchUid : null}
+        onRequestFullScope={isEditMode ? onRequestFullScope : undefined}
         englishInteractionActive={englishModeActive}
         onEnglishWordClick={englishModeActive ? handleEnglishWordClick : undefined}
         textSelectionModeActive={!isEditMode && textModeActive}
