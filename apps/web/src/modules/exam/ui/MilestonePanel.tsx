@@ -136,7 +136,7 @@ export function MilestonePanel() {
           )}
         </div>
         <p className="lp-subtitle ms-intro">
-          里程碑只提醒「该完成什么」，不会改动任何复习间隔。冲刺开关只做一件事：不让任何一次复习排到考试之后——本该排到考后的卡会提前到考前最后一周，并且按单元错开，不会都堆在考前一天。
+          里程碑不改复习间隔；冲刺模式把排到考后的卡提前到考前最后一周。
         </p>
 
         <div className="ms-sprint">

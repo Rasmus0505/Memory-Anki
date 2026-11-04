@@ -34,7 +34,6 @@ export function ExamWarRoomView({ overview, subjects, onChanged, loadDoc }: Exam
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">考试作战室</h1>
-          <p className="mt-1 text-sm text-muted-foreground">全学科掌握度、记忆保留与星级重点，一屏看全局</p>
         </div>
         <Button asChild size="sm">
           <Link to="/freestyle">按考试优先开始复习</Link>
@@ -47,7 +46,7 @@ export function ExamWarRoomView({ overview, subjects, onChanged, loadDoc }: Exam
         <Panel title="记忆保留曲线" description="绿色为实际通过率，虚线为从今天起不复习时的预测保留">
           <ExamRetentionChart retention={overview.retention} daysLeft={overview.days_left} />
         </Panel>
-        <Panel title="各科进度" description="当前掌握 → 考前预测">
+        <Panel title="各科进度">
           <ul className="flex flex-col gap-3">
             {overview.subjects.map((subject) => (
               <li key={subject.id} className="flex flex-col gap-1 text-sm">
@@ -77,7 +76,7 @@ export function ExamWarRoomView({ overview, subjects, onChanged, loadDoc }: Exam
       </Panel>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Panel title="星级分布" description="每一档的单元数和掌握率">
+        <Panel title="星级分布">
           <ExamStarDistribution overview={overview} />
         </Panel>
         <Panel title="最该补的地方" description="按 星级 × 遗忘程度 × 学科占比 排序">
@@ -85,7 +84,7 @@ export function ExamWarRoomView({ overview, subjects, onChanged, loadDoc }: Exam
         </Panel>
       </div>
 
-      <Panel title="导图抽查" description="随机抽节点：回忆它下面的全部子项；路径追问：给出叶子节点，选出它属于哪一支。只练不评分，不影响复习排期">
+      <Panel title="导图抽查" description="只练不评分，不影响复习排期">
         <ExamRecallDrill palaces={overview.palaces.filter((row) => row.unit_count > 0)} loadDoc={loadDoc} />
       </Panel>
 
