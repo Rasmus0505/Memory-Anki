@@ -31,34 +31,33 @@ type StreamConfig = FreestyleFeedConfig['streams']['memory_palace'] | FreestyleF
 const MODE_OPTIONS: Array<{
   value: UiMode
   label: string
-  description: string
   icon: typeof Brain
 }> = [
-  { value: 'memory_palace', label: '记忆宫殿', description: '翻节点回忆结构和关系', icon: Brain },
-  { value: 'quiz', label: '刷题', description: '只做题，不出现宫殿卡', icon: ListChecks },
-  { value: 'mixed', label: '混合模式', description: '组合记忆宫殿和刷题', icon: Blend },
+  { value: 'memory_palace', label: '记忆宫殿', icon: Brain },
+  { value: 'quiz', label: '刷题', icon: ListChecks },
+  { value: 'mixed', label: '混合模式', icon: Blend },
 ]
 
-const PALACE_ORDER_OPTIONS: Array<{ value: FreestylePalaceOrder; label: string; hint: string }> = [
-  { value: 'finish_palace_then_next', label: '一个刷完再换', hint: '把一座宫殿的到期单元刷完，再进入下一座。' },
-  { value: 'interleave_palaces', label: '多宫殿轮流', hint: '在几座宫殿之间来回穿插，同一宫殿不会连续出现。' },
-  { value: 'exam_priority', label: '考试优先', hint: '高星、易忘的宫殿先出现。' },
+const PALACE_ORDER_OPTIONS: Array<{ value: FreestylePalaceOrder; label: string }> = [
+  { value: 'finish_palace_then_next', label: '一个刷完再换' },
+  { value: 'interleave_palaces', label: '多宫殿轮流' },
+  { value: 'exam_priority', label: '考试优先' },
 ]
 
-const UNIT_ORDER_OPTIONS: Array<{ value: FreestyleUnitOrder; label: string; hint: string }> = [
-  { value: 'structured', label: '按知识结构', hint: '宫殿内的单元按原本的结构顺序出现。' },
-  { value: 'random', label: '随机打乱', hint: '宫殿内的单元打乱顺序，同一种子结果一致。' },
+const UNIT_ORDER_OPTIONS: Array<{ value: FreestyleUnitOrder; label: string }> = [
+  { value: 'structured', label: '按知识结构' },
+  { value: 'random', label: '随机打乱' },
 ]
 
-const QUIZ_ORDER_OPTIONS: Array<{ value: FreestyleQuizOrder; label: string; hint: string }> = [
-  { value: 'new_first', label: '优先新学，后复习', hint: '没做过的题先出，做过的题接在后面。' },
-  { value: 'random', label: '随机', hint: '所有题目打乱顺序，不区分新旧。' },
+const QUIZ_ORDER_OPTIONS: Array<{ value: FreestyleQuizOrder; label: string }> = [
+  { value: 'new_first', label: '优先新学，后复习' },
+  { value: 'random', label: '随机' },
 ]
 
-const MIX_STRATEGY_OPTIONS: Array<{ value: FreestyleFeedConfig['mix']['strategy']; label: string; hint: string }> = [
-  { value: 'ratio', label: '按比例穿插', hint: '两类内容按下面的比例交替出现。' },
-  { value: 'random', label: '全局随机', hint: '两类内容完全打乱，比例不生效。' },
-  { value: 'sequential', label: '分段完成', hint: '先完成一类，再进入另一类。' },
+const MIX_STRATEGY_OPTIONS: Array<{ value: FreestyleFeedConfig['mix']['strategy']; label: string }> = [
+  { value: 'ratio', label: '按比例穿插' },
+  { value: 'random', label: '全局随机' },
+  { value: 'sequential', label: '分段完成' },
 ]
 
 export const STREAM_LABELS: Record<StreamKey, string> = {
@@ -103,7 +102,7 @@ function OptionCards<T extends string>({
   onChange,
 }: {
   label: string
-  options: Array<{ value: T; label: string; hint: string }>
+  options: Array<{ value: T; label: string }>
   value: T
   onChange: (value: T) => void
 }) {
@@ -124,7 +123,6 @@ function OptionCards<T extends string>({
             onClick={() => onChange(option.value)}
           >
             <span className={cn('block text-sm font-semibold', selected && 'text-primary')}>{option.label}</span>
-            <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">{option.hint}</span>
           </button>
         )
       })}
@@ -380,14 +378,11 @@ export function FreestyleTrainingConfigForm({
   const renderPalaceStream = () => {
     const value = config.streams.memory_palace
     return (
-      <Section title="记忆宫殿怎么刷" description="只生成结构复习单元，不生成 Anki 正反面卡。">
+      <Section title="记忆宫殿怎么刷">
         <div className="space-y-3">
+          {renderScopeArea('memory_palace')}
           <div className="space-y-1.5">
-            <div className="text-xs font-medium text-muted-foreground">范围</div>
-            {renderScopeArea('memory_palace')}
-          </div>
-          <div className="space-y-1.5">
-            <div className="text-xs font-medium text-muted-foreground">范围内有多座宫殿时</div>
+            <div className="text-xs font-medium text-muted-foreground">多座宫殿时</div>
             <OptionCards
               label="多个宫殿时"
               options={PALACE_ORDER_OPTIONS}
@@ -412,12 +407,9 @@ export function FreestyleTrainingConfigForm({
   const renderQuizStream = () => {
     const value = config.streams.quiz
     return (
-      <Section title="刷题怎么出" description="本流只出现题目，不会出现宫殿评分卡。">
+      <Section title="刷题怎么出">
         <div className="space-y-3">
-          <div className="space-y-1.5">
-            <div className="text-xs font-medium text-muted-foreground">题目范围（可跨所有学科和宫殿）</div>
-            {renderScopeArea('quiz')}
-          </div>
+          {renderScopeArea('quiz')}
           <div className="space-y-1.5">
             <div className="text-xs font-medium text-muted-foreground">出题顺序</div>
             <OptionCards
@@ -435,7 +427,7 @@ export function FreestyleTrainingConfigForm({
   return (
     <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">
       <div className="space-y-4">
-        <Section title="训练方向" description="先决定这一轮主要做什么。">
+        <Section title="训练方向">
           <div role="radiogroup" aria-label="训练方向" className="grid grid-cols-1 gap-2">
             {MODE_OPTIONS.filter((option) => FREESTYLE_UI_TRAINING_MODES.includes(option.value)).map((option) => {
               const Icon = option.icon
@@ -443,7 +435,7 @@ export function FreestyleTrainingConfigForm({
               return (
                 <button key={option.value} type="button" role="radio" aria-checked={selected} className={cn('flex min-h-14 items-center gap-3 rounded-xl border px-3.5 py-2.5 text-left transition-colors', selected ? 'border-primary bg-primary/10' : 'border-border/60 bg-background/80 hover:bg-muted/60')} onClick={() => changeMode(option.value)}>
                   <Icon className={cn('size-5 shrink-0', selected ? 'text-primary' : 'text-muted-foreground')} />
-                  <span className="min-w-0"><span className="block text-sm font-semibold">{option.label}</span><span className="mt-0.5 block text-xs leading-5 text-muted-foreground">{option.description}</span></span>
+                  <span>{option.label}</span>
                 </button>
               )
             })}
@@ -458,7 +450,7 @@ export function FreestyleTrainingConfigForm({
                   </label>
                 ))}
               </div>
-              <Field label="组合策略" hint={MIX_STRATEGY_OPTIONS.find((item) => item.value === config.mix.strategy)?.hint}>
+              <Field label="组合策略">
                 <select className={FIELD_CLASS} value={config.mix.strategy} onChange={(event) => set({ mix: { ...config.mix, strategy: event.target.value as FreestyleFeedConfig['mix']['strategy'] } })}>
                   {MIX_STRATEGY_OPTIONS.map((item) => (
                     <option key={item.value} value={item.value}>{item.label}</option>
@@ -468,7 +460,7 @@ export function FreestyleTrainingConfigForm({
               {config.mix.strategy === 'ratio' ? (
                 <div className="grid grid-cols-2 gap-3">
                   {activeStreams.map((stream) => (
-                    <Field key={stream} label={`${STREAM_LABELS[stream]}比例`} hint="数字越大，出现越多。">
+                    <Field key={stream} label={`${STREAM_LABELS[stream]}比例`}>
                       <Input type="number" min={1} max={10} value={config.mix.ratios[stream]} onChange={(event) => set({ mix: { ...config.mix, ratios: { ...config.mix.ratios, [stream]: Number(event.target.value) } } })} />
                     </Field>
                   ))}
@@ -478,16 +470,14 @@ export function FreestyleTrainingConfigForm({
           ) : null}
         </Section>
 
-        <Section title="固定顺序" description="先学没学过的单元，再复习到期单元；宫殿内按你选择的顺序出现（按知识结构就是从脑图最上面往下，逾期不会插队）。这一规则不可调整。" />
-
         <details className="rounded-xl border border-border/60 bg-card/40 p-4">
           <summary className="cursor-pointer text-sm font-semibold">高级设置</summary>
           <div className="mt-3 grid grid-cols-1 gap-3">
-            <Field label="随机种子" hint="相同种子会得到相同的随机顺序。">
+            <Field label="随机种子">
               <Input type="number" min={1} value={config.seed} onChange={(event) => set({ seed: Number(event.target.value) })} />
             </Field>
             {activeStreams.includes('quiz') && activeStreams.includes('memory_palace') ? (
-              <Field label="绑定题目位置" hint="宫殿节点上绑定的题目，放在哪里出现。">
+              <Field label="绑定题目位置">
                 <select className={FIELD_CLASS} value={config.bound_quiz_placement} onChange={(event) => set({ bound_quiz_placement: event.target.value as FreestyleFeedConfig['bound_quiz_placement'] })}>
                   <option value="into_mix">计入混合比例</option>
                   <option value="follow_unit">跟随所属单元</option>

@@ -193,11 +193,7 @@ export function FreestyleEmptyState({
         tone="warm"
         icon={<Moon className="size-9" strokeWidth={1.8} />}
         title={mode === 'today' ? '今天暂时没有可训练内容' : freeTitle}
-        description={
-          mode === 'today'
-            ? '到期复习、需练习和可补足题卡都暂时为空。'
-            : freeDescription
-        }
+        description={mode === 'today' ? undefined : freeDescription}
         action={
           <div>
             <div className="flex flex-wrap justify-center gap-2">

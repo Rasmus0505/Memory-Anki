@@ -17,7 +17,6 @@ import {
   Dialog,
   DialogClose,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@/shared/components/ui/dialog'
@@ -98,7 +97,7 @@ function SummaryStrip({ summary }: { summary: FreestyleHistorySummary }) {
 
 function AttemptList({ items }: { items: FreestyleQuizAttemptRecord[] }) {
   if (items.length === 0) {
-    return <EmptyState title="还没有做题记录" description="完成题卡后，这里会保存可回看的作答历史。" />
+    return <EmptyState title="还没有做题记录" />
   }
   return (
     <div className="space-y-2">
@@ -185,7 +184,6 @@ export function FreestyleHistoryDialog({
               <History className="size-4" />
               随心历史
             </DialogTitle>
-            <DialogDescription>做题记录。</DialogDescription>
           </div>
           <DialogClose onClick={() => onOpenChange(false)} />
         </DialogHeader>

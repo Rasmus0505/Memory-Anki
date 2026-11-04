@@ -46,7 +46,7 @@ function OptionButton({
 }: {
   selected: boolean
   label: string
-  hint: string
+  hint?: string
   onClick: () => void
 }) {
   return (
@@ -58,26 +58,21 @@ function OptionButton({
       onClick={onClick}
     >
       <span className="block text-sm font-semibold">{label}</span>
-      <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">{hint}</span>
+      {hint ? <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">{hint}</span> : null}
     </button>
   )
 }
 
 function Section({
   title,
-  hint,
   children,
 }: {
   title: string
-  hint?: string
   children: ReactNode
 }) {
   return (
     <section className="space-y-2.5 border-b border-border/50 pb-4 last:border-b-0 last:pb-0">
-      <div>
-        <h3 className="text-sm font-semibold">{title}</h3>
-        {hint ? <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p> : null}
-      </div>
+      <h3 className="text-sm font-semibold">{title}</h3>
       {children}
     </section>
   )
@@ -247,7 +242,7 @@ export function OverlayQuizSetupPanel({
 
   return (
     <div className="space-y-4">
-      <Section title="出题范围" hint="先决定这次从哪些题里出。">
+      <Section title="出题范围">
         <div role="radiogroup" aria-label="出题范围" className="grid gap-2 sm:grid-cols-2">
           {(['round_units', 'whole_palace'] as const).map((range) => (
             <OptionButton
@@ -263,13 +258,13 @@ export function OverlayQuizSetupPanel({
         <OverlayQuizScopeList scopePalaces={scopePalaces} onSetSkipped={setPalacesSkipped} />
       </Section>
 
-      <Section title="出题顺序" hint="宫殿怎么换、题型怎么排。">
+      <Section title="出题顺序">
         <div role="radiogroup" aria-label="宫殿间顺序" className="grid gap-2 sm:grid-cols-2">
           {([
-            ['cross_palace_random', '跨宫殿乱序', '每道题可能来自不同宫殿'],
-            ['single_palace_random', '一个宫殿刷完再换', '先刷完一座宫殿的题再换下一座'],
-          ] as const).map(([value, label, hint]) => (
-            <OptionButton key={value} selected={draftScope === value} label={label} hint={hint} onClick={() => setDraftScope(value)} />
+            ['cross_palace_random', '跨宫殿乱序'],
+            ['single_palace_random', '一个宫殿刷完再换'],
+          ] as const).map(([value, label]) => (
+            <OptionButton key={value} selected={draftScope === value} label={label} onClick={() => setDraftScope(value)} />
           ))}
         </div>
         <div className="space-y-2">
@@ -309,27 +304,27 @@ export function OverlayQuizSetupPanel({
         {showTypeOrder ? (
           <div role="radiogroup" aria-label="题型顺序" className="grid gap-2">
             {([
-              ['interleave', '混合插入', '客观题和主观题交错出现'],
-              ['objective_then_subjective', '先客观后主观', '先刷完客观题，再刷主观题'],
-              ['subjective_then_objective', '先主观后客观', '先刷完主观题，再刷客观题'],
-            ] as const).map(([value, label, hint]) => (
-              <OptionButton key={value} selected={draftTypeOrder === value} label={label} hint={hint} onClick={() => setDraftTypeOrder(value)} />
+              ['interleave', '混合插入'],
+              ['objective_then_subjective', '先客观后主观'],
+              ['subjective_then_objective', '先主观后客观'],
+            ] as const).map(([value, label]) => (
+              <OptionButton key={value} selected={draftTypeOrder === value} label={label} onClick={() => setDraftTypeOrder(value)} />
             ))}
           </div>
         ) : null}
         {showNesting ? (
           <div role="radiogroup" aria-label="宫殿和题型谁优先" className="grid gap-2">
             {([
-              ['palace_then_type', '这座宫殿两类都刷完再换', '一座宫殿里先按题型刷完，再换下一座'],
-              ['type_then_palace', '先刷完所有宫殿的一类', '先把所有宫殿的一类题刷完，再刷另一类'],
-            ] as const).map(([value, label, hint]) => (
-              <OptionButton key={value} selected={draftNesting === value} label={label} hint={hint} onClick={() => setDraftNesting(value)} />
+              ['palace_then_type', '这座宫殿两类都刷完再换'],
+              ['type_then_palace', '先刷完所有宫殿的一类'],
+            ] as const).map(([value, label]) => (
+              <OptionButton key={value} selected={draftNesting === value} label={label} onClick={() => setDraftNesting(value)} />
             ))}
           </div>
         ) : null}
       </Section>
 
-      <Section title="选项顺序" hint="答题很快时自动打乱选择题选项。">
+      <Section title="选项顺序">
         <div className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/80 px-3.5 py-3">
           <div>
             <p className="text-sm font-semibold">自动打乱选项</p>
@@ -370,7 +365,7 @@ export function OverlayQuizSetupPanel({
         </label>
       </Section>
 
-      <Section title="题目分数" hint="有的题自己的知识点这轮没排到，上面的知识点已经打过分的怎么显示。">
+      <Section title="题目分数">
         <div role="radiogroup" aria-label="空白题怎么显示分数" className="grid gap-2 sm:grid-cols-2">
           <OptionButton
             selected={draftInherit === 'lowest_reviewed'}
