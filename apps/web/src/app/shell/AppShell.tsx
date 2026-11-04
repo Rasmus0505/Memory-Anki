@@ -259,7 +259,6 @@ function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
           </div>
           <div className={cn('min-w-0', collapsed ? 'hidden' : 'hidden lg:block')}>
             <div className="truncate text-sm font-semibold tracking-tight">Memory Anki</div>
-            <div className="mt-0.5 text-[11px] text-muted-foreground">沉浸知识工作室</div>
             <SidebarClock />
             <div className="mt-2">
               <RuntimeChannelBadge runtimeInfo={runtimeInfo} />
@@ -401,10 +400,7 @@ function MobileMoreSheet({ open, onOpenChange }: { open: boolean; onOpenChange: 
               <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary-strong">
                 <Settings className="size-4" aria-hidden />
               </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-medium">设置</span>
-                <span className="block truncate text-xs text-muted-foreground">偏好、数据与备份</span>
-              </span>
+              <span className="min-w-0 flex-1 text-sm font-medium">设置</span>
               <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
             </NavLink>
           </SheetClose>

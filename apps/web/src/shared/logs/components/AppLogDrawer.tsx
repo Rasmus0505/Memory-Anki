@@ -202,7 +202,6 @@ export function AppLogDrawer({ open, onOpenChange }: AppLogDrawerProps) {
             <EmptyState
               variant="search"
               title="暂时还没有日志记录"
-              description="系统运行日志会在这里实时显示。"
             />
           ) : (
             <div className="space-y-3">
