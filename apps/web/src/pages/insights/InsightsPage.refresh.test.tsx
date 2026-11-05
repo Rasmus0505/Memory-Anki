@@ -24,7 +24,7 @@ describe('DashboardPage refresh behavior', () => {
 
     await waitFor(() => expect(getDashboardApi).toHaveBeenCalledTimes(1))
     expect(getDashboardApi).toHaveBeenCalledWith()
-    expect(await screen.findByText('仪表盘')).toBeTruthy()
+    expect(await screen.findByText('洞察')).toBeTruthy()
   })
 
   it('does not refresh on window focus', async () => {

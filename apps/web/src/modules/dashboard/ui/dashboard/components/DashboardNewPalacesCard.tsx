@@ -101,16 +101,9 @@ export function DashboardNewPalacesCard({ data, className }: DashboardNewPalaces
               </Link>
             ))
           ) : (
-            <div className="m-auto text-center text-sm text-muted-foreground">
-              今天还没有新增记忆宫殿。
-              <div className="mt-3">
-                <Button asChild variant="outline" size="sm">
-                  <Link to="/palaces/new">
-                    <Sparkles data-icon="inline-start" />
-                    创建一个
-                  </Link>
-                </Button>
-              </div>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Sparkles className="size-4 shrink-0 text-ink-faint" aria-hidden />
+              今天还没有新增记忆宫殿
             </div>
           )}
         </div>

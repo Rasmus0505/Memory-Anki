@@ -6,10 +6,10 @@ import { ExamStarBadge } from '../ExamStarBadge'
 
 function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="ma-lit flex flex-col gap-0.5 rounded-2xl bg-card p-4 shadow-sm ring-1 ring-border/60">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      <RollingNumber value={value} className="text-2xl font-semibold tabular-nums tracking-tight" />
-      {hint ? <span className="text-xs text-muted-foreground">{hint}</span> : null}
+    <div className="ma-lit flex flex-col gap-1 rounded-xl border border-border/80 bg-card p-4 shadow-card">
+      <span className="truncate text-xs font-medium text-muted-foreground">{label}</span>
+      <RollingNumber value={value} className="text-[26px] font-semibold leading-tight tabular-nums tracking-tight" />
+      {hint ? <span className="truncate text-xs text-ink-faint" title={hint}>{hint}</span> : null}
     </div>
   )
 }

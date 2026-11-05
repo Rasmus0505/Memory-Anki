@@ -17,7 +17,7 @@ describe('AppRoutes dashboard fallback', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByRole('heading', { name: '仪表盘' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: '洞察' })).toBeTruthy()
     expect(screen.getByText('正在加载学习概览...')).toBeTruthy()
     expect(screen.queryByText('正在加载页面…')).toBeNull()
   })

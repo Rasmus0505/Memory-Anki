@@ -47,8 +47,8 @@ function PaneSwitch<T extends string>({ panes, value, onChange, label }: {
           aria-pressed={value === pane.value}
           onClick={() => onChange(pane.value)}
           className={cn(
-            'rounded-md px-2.5 py-1 text-sm font-medium text-muted-foreground transition-all max-sm:flex-1',
-            value === pane.value && 'bg-background text-foreground shadow',
+            'rounded-md px-2.5 py-1 text-sm font-medium text-muted-foreground transition-[color,background-color,box-shadow] duration-200 max-sm:flex-1',
+            value === pane.value && 'bg-card text-foreground shadow-[0_0_0_1px_var(--color-border),0_1px_3px_rgb(0_0_0/0.08)]',
           )}
         >
           {pane.label}
@@ -71,7 +71,7 @@ export default function Dashboard() {
     return (
       <div className="flex flex-col gap-4">
         <ErrorState
-          title="仪表盘加载失败"
+          title="洞察加载失败"
           description={loadError}
           action={
             <Button type="button" variant="outline" size="sm" onClick={() => void loadDashboard().catch(() => undefined)}>
@@ -88,16 +88,15 @@ export default function Dashboard() {
   }
 
   const examPlaceholder = (
-    <section className="flex shrink-0 items-center justify-center rounded-3xl bg-card p-4 text-sm text-muted-foreground shadow-sm ring-1 ring-border/60">
+    <section className="flex shrink-0 items-center justify-center rounded-xl border border-border/80 bg-card p-4 text-sm text-muted-foreground shadow-card">
       {examError ? `考试概览加载失败：${examError}` : '正在加载考试概览…'}
     </section>
   )
 
   return (
     <PageContainer wide className="dashboard-fit gap-3">
-      <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1.5 sm:gap-y-2">
-        {/* 窄屏左上角浮着全局返回按钮、右上角是录制浮标：标题独占一行并让出两侧。 */}
-        <h1 className="basis-full pl-22 pr-12 text-xl font-semibold leading-7 tracking-tight sm:text-2xl sm:leading-9 lg:basis-auto lg:p-0">仪表盘</h1>
+      <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 px-1 pt-1">
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-[28px] sm:leading-9">洞察</h1>
         <div className="w-full sm:ml-auto sm:w-auto">
           <PaneSwitch<OverviewPane> panes={OVERVIEW_PANES} value={overviewPane} onChange={setOverviewPane} label="概览分区" />
         </div>
@@ -107,7 +106,8 @@ export default function Dashboard() {
         <ExamTodayBlock overview={examOverview} primary className="shrink-0" />
       ) : examPlaceholder}
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.1fr)]">
+      {/* lg: exam on the left; activity and new palaces share the right column. */}
+      <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-1 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
         <div className={paneClass(overviewPane === 'exam')}>
           {examOverview ? (
             <>
@@ -117,13 +117,18 @@ export default function Dashboard() {
           ) : null}
         </div>
 
-        <div className={paneClass(overviewPane === 'activity')}>
-          {examOverview ? <ExamRecentBlock overview={examOverview} className="shrink-0" /> : null}
-          <StudyHeatmap className="shrink-0" />
-        </div>
+        <div className="contents lg:flex lg:min-h-0 lg:flex-col lg:gap-3 lg:overflow-y-auto">
+          <div className={cn(paneClass(overviewPane === 'activity'), 'lg:overflow-visible')}>
+            {examOverview ? <ExamRecentBlock overview={examOverview} className="shrink-0" /> : null}
+            <StudyHeatmap className="shrink-0" />
+          </div>
 
-        <div className={paneClass(overviewPane === 'palaces')}>
-          <DashboardNewPalacesCard data={data} className="min-h-45 flex-1" />
+          <div className={cn(paneClass(overviewPane === 'palaces'), 'lg:flex-1 lg:overflow-visible')}>
+            <DashboardNewPalacesCard
+              data={data}
+              className={data.today_new_palace_count > 0 ? 'min-h-45 flex-1' : 'shrink-0'}
+            />
+          </div>
         </div>
       </div>
     </PageContainer>

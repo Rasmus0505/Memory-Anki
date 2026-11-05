@@ -14,9 +14,9 @@ interface ExamDigestBlockProps {
 
 function Block({ question, children, action, className }: { question: string; children: ReactNode; action?: ReactNode; className?: string }) {
   return (
-    <section className={cn('flex min-h-0 flex-col gap-2 rounded-3xl bg-card p-4 shadow-sm ring-1 ring-border/60', className)}>
+    <section className={cn('flex min-h-0 flex-col gap-3 rounded-xl border border-border/80 bg-card p-4 shadow-card', className)}>
       <header className="flex shrink-0 items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-muted-foreground">{question}</h2>
+        <h2 className="text-sm font-medium text-muted-foreground">{question}</h2>
         {action}
       </header>
       {children}
@@ -40,7 +40,7 @@ export function ExamTodayBlock({ overview, className, primary = false }: ExamDig
       className={cn(primary && 'p-5', className)}
       action={
         primary ? (
-          <Button asChild size="lg">
+          <Button asChild size="lg" title="在随心配置里选「考试优先」，会按这个顺序出卡">
             <Link to="/freestyle">开始今日复习</Link>
           </Button>
         ) : (
@@ -50,19 +50,22 @@ export function ExamTodayBlock({ overview, className, primary = false }: ExamDig
         )
       }
     >
-      <p className={cn('font-semibold tabular-nums', primary ? 'text-4xl' : 'text-3xl')}>
-        {overview.totals.due_today}
-        <span className="ml-1.5 text-sm font-normal text-muted-foreground">个单元到期</span>
-      </p>
-      <ul className="flex flex-col gap-1 text-sm">
-        {topToday.map((row) => (
-          <li key={row.id} className="flex items-center gap-2">
-            <ExamStarBadge stars={row.stars} className="w-12 shrink-0" />
-            <Link to={`/palaces/${row.id}`} className="min-w-0 flex-1 truncate hover:underline">{row.title}</Link>
-          </li>
-        ))}
-      </ul>
-      <p className="text-[11px] text-muted-foreground">在随心配置里选「考试优先」，会按这个顺序出卡。</p>
+      <div className={cn('flex flex-col gap-3', primary && 'sm:flex-row sm:items-center sm:gap-8')}>
+        <p className={cn('shrink-0 font-semibold leading-none tracking-tight tabular-nums', primary ? 'text-5xl' : 'text-3xl')}>
+          {overview.totals.due_today}
+          <span className="ml-1.5 text-sm font-normal tracking-normal text-muted-foreground">个单元到期</span>
+        </p>
+        {topToday.length > 0 ? (
+          <ul className={cn('flex min-w-0 flex-1 flex-col gap-1 text-sm', primary && 'sm:border-l sm:border-border/70 sm:pl-6')}>
+            {topToday.map((row) => (
+              <li key={row.id} className="flex items-center gap-2">
+                <ExamStarBadge stars={row.stars} className="w-12 shrink-0" />
+                <Link to={`/palaces/${row.id}`} className="min-w-0 flex-1 truncate rounded-sm transition-colors hover:text-primary">{row.title}</Link>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
     </Block>
   )
 }
@@ -70,7 +73,7 @@ export function ExamTodayBlock({ overview, className, primary = false }: ExamDig
 export function ExamCountdownBlock({ overview, className }: ExamDigestBlockProps) {
   const { totals } = overview
   return (
-    <Block question="离考试还差多少" className={className} action={<Link to="/exam" className="text-xs text-primary hover:underline">作战室 →</Link>}>
+    <Block question="离考试还差多少" className={className} action={<Link to="/exam" className="rounded-md px-1.5 py-0.5 text-xs font-medium text-primary transition-colors hover:bg-primary-soft">作战室 →</Link>}>
       <p className="text-sm text-muted-foreground">{formatDaysLeft(overview.days_left)}</p>
       <div className="flex flex-wrap items-baseline gap-x-2 tabular-nums">
         <span className="text-3xl font-semibold">{formatPercent(totals.mastery_ratio)}</span>
@@ -101,7 +104,7 @@ export function ExamRecentBlock({ overview, className }: ExamDigestBlockProps) {
           { value: `${recentDays}/7`, label: '近 7 天学习' },
           { value: formatPercent(passRate), label: '近 7 天通过率' },
         ].map((item) => (
-          <div key={item.label} className="min-w-0 rounded-2xl bg-muted/50 px-1 py-2">
+          <div key={item.label} className="min-w-0 rounded-lg bg-muted/60 px-1 py-2.5">
             <div className="text-xl font-semibold tabular-nums">{item.value}</div>
             <div className="truncate text-[11px] text-muted-foreground">{item.label}</div>
           </div>

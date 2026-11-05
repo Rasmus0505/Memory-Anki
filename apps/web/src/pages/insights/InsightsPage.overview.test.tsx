@@ -27,12 +27,12 @@ describe("DashboardPage overview", () => {
 
     renderDashboardPage();
 
-    expect(await screen.findByText("仪表盘加载失败")).toBeTruthy();
+    expect(await screen.findByText("洞察加载失败")).toBeTruthy();
     expect(screen.getByText("请求超过 20 秒未响应：GET /api/v1/dashboard")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "重新加载" }));
 
-    expect(await screen.findByText("仪表盘")).toBeTruthy();
+    expect(await screen.findByText("洞察")).toBeTruthy();
     expect(getDashboardApi).toHaveBeenCalledTimes(2);
   });
 
@@ -193,6 +193,6 @@ describe("DashboardPage overview", () => {
 
     renderDashboardPage();
 
-    expect(await screen.findByText("今天还没有新增记忆宫殿。")).toBeTruthy();
+    expect(await screen.findByText("今天还没有新增记忆宫殿")).toBeTruthy();
   });
 });

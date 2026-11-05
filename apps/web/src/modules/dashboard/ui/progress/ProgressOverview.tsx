@@ -29,7 +29,7 @@ export function ProgressOverview({ metrics, name, palaceCount }: {
   return <section className="lp-overview" aria-label="当前范围学习概览">
     <div className="lp-overview-main">
       <div className="lp-overview-copy">
-        <h2>{name === '全部学科' ? '让每一次复习，都有迹可循。' : name}</h2>
+        <h2>{name === '全部学科' ? '已复习的记忆点' : name}</h2>
         <div className="lp-big-number">{number.format(metrics.memory_reviewed)}<span className="lp-number-total">/ {number.format(metrics.memory_total)}</span></div>
         <p className="lp-subtitle">个记忆点已有复习记录。</p>
         <ProgressBar metrics={metrics} />

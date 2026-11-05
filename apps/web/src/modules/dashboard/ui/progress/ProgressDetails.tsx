@@ -16,9 +16,8 @@ export function ProgressDetails({ node, ancestors, metrics, onScope, notes }: {
   return <aside className="lp-aside" aria-label="进度详情">
     <section className="lp-panel lp-detail" aria-live="polite" aria-atomic="true">
       <div className="lp-detail-icon">{node ? <BookOpen size={20} /> : <Compass size={20} />}</div>
-      <div className="lp-eyebrow">{node ? 'IN FOCUS / 当前选中' : 'YOUR NEXT STEP / 下一步'}</div>
-      <h2>{node?.name ?? '从全景，走向每一个细节'}</h2>
-      <p className="lp-detail-description">{node ? `${ancestors.map((part) => part.name).join(' / ')}${ancestors.length ? ' / ' : ''}${KIND_LABELS[node.kind] ?? '内容'}` : '展开知识结构，或点选一个记忆点。你可以在这里查看它的复习记录和题目覆盖。'}</p>
+      <h2>{node?.name ?? '全部学科'}</h2>
+      <p className="lp-detail-description">{node ? `${ancestors.map((part) => part.name).join(' / ')}${ancestors.length ? ' / ' : ''}${KIND_LABELS[node.kind] ?? '内容'}` : '点左侧任意一行，这里显示它的复习记录和题目覆盖。'}</p>
       <ProgressBar metrics={current} />
       <dl>
         <div><dt>有复习记录</dt><dd>{current.memory_reviewed} / {current.memory_total}</dd></div>

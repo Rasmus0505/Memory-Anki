@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import type { ExamOverview, MindMapDoc, SubjectSummary } from '@/shared/api/contracts'
+import { Settings2 } from 'lucide-react'
+import { PageHeader } from '@/shared/components/layout/PageHeader'
 import { Button } from '@/shared/components/ui/button'
 import { formatPercent } from '../../model/examFormat'
 import { ExamKnowledgeMap } from './ExamKnowledgeMap'
@@ -9,12 +11,12 @@ import { ExamRetentionChart } from './ExamRetentionChart'
 import { ExamSettingsCard } from './ExamSettingsCard'
 import { ExamHeadline, ExamStarDistribution, ExamWeakList } from './ExamSummaryPanels'
 
-function Panel({ title, description, children, className = '' }: { title: string; description?: string; children: ReactNode; className?: string }) {
+function Panel({ title, description, children, className = '', id }: { title: string; description?: string; children: ReactNode; className?: string; id?: string }) {
   return (
-    <section className={`flex flex-col gap-3 rounded-3xl bg-card p-5 shadow-sm ring-1 ring-border/60 ${className}`}>
+    <section id={id} className={`flex flex-col gap-4 rounded-xl border border-border/80 bg-card p-5 shadow-card ${className}`}>
       <header>
-        <h2 className="text-base font-semibold">{title}</h2>
-        {description ? <p className="mt-0.5 text-xs text-muted-foreground">{description}</p> : null}
+        <h2 className="text-[15px] font-semibold tracking-tight">{title}</h2>
+        {description ? <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{description}</p> : null}
       </header>
       {children}
     </section>
@@ -30,19 +32,27 @@ interface ExamWarRoomViewProps {
 
 export function ExamWarRoomView({ overview, subjects, onChanged, loadDoc }: ExamWarRoomViewProps) {
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">考试作战室</h1>
-        </div>
-        <Button asChild size="sm">
-          <Link to="/freestyle">按考试优先开始复习</Link>
-        </Button>
-      </div>
+    <div className="flex flex-col gap-4 sm:gap-6">
+      <PageHeader
+        title="考试作战室"
+        actions={
+          <>
+            <Button asChild size="sm" variant="outline">
+              <a href="#exam-settings">
+                <Settings2 />
+                考试设置
+              </a>
+            </Button>
+            <Button asChild size="sm">
+              <Link to="/freestyle">按考试优先开始复习</Link>
+            </Button>
+          </>
+        }
+      />
 
       <ExamHeadline overview={overview} />
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+      <div className="grid gap-4 sm:gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <Panel title="记忆保留曲线" description="绿色为实际通过率，虚线为从今天起不复习时的预测保留">
           <ExamRetentionChart retention={overview.retention} daysLeft={overview.days_left} />
         </Panel>
@@ -75,7 +85,7 @@ export function ExamWarRoomView({ overview, subjects, onChanged, loadDoc }: Exam
         <ExamKnowledgeMap overview={overview} onChanged={onChanged} />
       </Panel>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2">
         <Panel title="星级分布">
           <ExamStarDistribution overview={overview} />
         </Panel>
@@ -88,7 +98,7 @@ export function ExamWarRoomView({ overview, subjects, onChanged, loadDoc }: Exam
         <ExamRecallDrill palaces={overview.palaces.filter((row) => row.unit_count > 0)} loadDoc={loadDoc} />
       </Panel>
 
-      <Panel title="考试设置">
+      <Panel title="考试设置" className="scroll-mt-6" id="exam-settings">
         <ExamSettingsCard overview={overview} subjects={subjects} onSaved={onChanged} />
       </Panel>
     </div>
