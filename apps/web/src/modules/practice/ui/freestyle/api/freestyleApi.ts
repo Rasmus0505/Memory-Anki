@@ -1,5 +1,6 @@
 import { retryWhileBusy } from '@/shared/api/busyRetry'
 import { request } from '@/shared/api/http'
+import { APP_EVENT_NAMES, emitAppEvent } from '@/shared/events/appEvents'
 import { parseFreestyleOverview } from './freestyleOverviewParse'
 import type {
   CreateFreestyleQuizAttemptPayload,
@@ -357,7 +358,10 @@ export function rateFreestyleRoundUnitApi(
       persistence: false,
       timeoutMs: FREESTYLE_RATING_TRANSPORT_TIMEOUT_MS,
     },
-  )
+  ).then((response) => {
+    emitAppEvent(APP_EVENT_NAMES.unitRated, { unitId: payload.unit_id, rating: payload.rating })
+    return response
+  })
 }
 
 /** A 未保存 rating shared through the server: the grade and the request that failed to save. */

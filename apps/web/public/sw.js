@@ -341,6 +341,8 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return
   const url = new URL(request.url)
   if (!isSameOrigin(url)) return
+  // The city is an isolated iframe asset. It must reach its own HTML instead of the app shell.
+  if (url.pathname.startsWith('/city/')) return
   // Never buffer the live study SSE body through startFetch().arrayBuffer().
   if (isLiveStudyStream(url)) return
   if (request.mode === 'navigate') { event.respondWith(navigationFallback(request)); return }

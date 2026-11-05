@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<!-- Match the host's scheme; otherwise a dark host paints this frame an opaque light canvas. -->
+<meta name="color-scheme" content="light dark">
+<title>城市地平线</title>
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:transparent}
+canvas{display:block;width:100%;height:100%}
+</style>
+<script src="./vendor/gsap.min.js"></script>
+</head>
+<body>
+<script type="module">
+// 今天这座岛：一宫一楼、一卡一窗。只读可视化，由宿主 postMessage 驱动。
+import * as THREE from './vendor/three.module.js';
+
+const HOST = 'memory-anki-host', SELF = 'memory-anki-city-horizon';
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const tween = (target, vars) => gsap.to(target, reduced ? { ...vars, duration: 0, delay: 0 } : vars);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+renderer.shadowMap.enabled = true;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, .1, 60);
+// Zoom to the tallest house: a quiet morning shows big houses, a busy day fits them all.
+const view = { half: .7 };
+function aim() {
+  const look = view.half - .22;
+  camera.position.set(0, look + 1.6, 10); camera.lookAt(0, look, 0);
+}
+function fit() {
+  const w = innerWidth, h = innerHeight, asp = w / Math.max(h, 1), HALF = view.half;
+  Object.assign(camera, { left: -HALF * asp, right: HALF * asp, top: HALF, bottom: -HALF });
+  aim(); camera.updateProjectionMatrix(); renderer.setSize(w, h, false); draw();
+}
+function zoomTo(floors) {
+  const half = Math.max(.7, (floors * .3 * 1.15 + .45) / 2);
+  tween(view, { half, duration: .8, ease: 'power2.out', onUpdate: fit });
+}
+addEventListener('resize', fit);
+
+scene.add(new THREE.HemisphereLight(0xfff1dc, 0x9fb3c9, 1.5));
+const sun = new THREE.DirectionalLight(0xfff0d6, 2.1);
+sun.position.set(5, 8, 6); sun.castShadow = true; sun.shadow.mapSize.set(1024, 512);
+Object.assign(sun.shadow.camera, { left: -20, right: 20, top: 4, bottom: -4 });
+scene.add(sun);
+
+const mats = {};
+const mat = (c, o = {}) => mats[c + JSON.stringify(o)] ??= new THREE.MeshStandardMaterial({ color: c, roughness: .85, ...o });
+const ground = new THREE.Mesh(new THREE.BoxGeometry(80, .4, 3), mat(0xa7d08a));
+ground.position.y = -.2; ground.receiveShadow = true; scene.add(ground);
+
+const WIN = [
+  mat(0x6b7486),                                                         // 未评
+  mat(0x8a8f9c),                                                         // 忘记：暗
+  mat(0xe6b86a, { emissive: 0x7a4a10, emissiveIntensity: .5 }),          // 困难：微亮
+  mat(0xffd98a, { emissive: 0xffb347, emissiveIntensity: 1.2 }),         // 记得：亮
+  mat(0xfff4c2, { emissive: 0xffd36b, emissiveIntensity: 2.2 }),         // 轻松：最亮
+];
+const FLASH = mat(0xffffff, { emissive: 0xfff1b8, emissiveIntensity: 3 });
+const GOLD = mat(0xf2c14e, { metalness: .6, roughness: .3, emissive: 0x6b4a00, flatShading: true });
+const FH = .3, SP = 1.05;
+const G = {
+  floor: new THREE.BoxGeometry(.6, FH, .6),
+  win: new THREE.BoxGeometry(.1, .12, .02),
+  pole: new THREE.CylinderGeometry(.012, .012, 1, 5),
+  roof: (() => { const g = new THREE.ConeGeometry(.48, .32, 4); g.rotateY(Math.PI / 4); return g; })(),
+};
+const WALLS = [0xf4ead8, 0xf2b8a2, 0x9fd1c4, 0xf6d38b, 0xb9cbe8, 0xe9a3b8, 0xfff3e2, 0xc8dca0];
+const houses = new Map();
+let order = [], focusId = null, lastId = null;
+
+function blendRoof(hex) {
+  const c = new THREE.Color(hex || '#6c7a89');
+  return c.lerp(new THREE.Color(0xb38b6d), .35).getHex();
+}
+function makeHouse(id) {
+  const h = { id, g: new THREE.Group(), floors: [], wins: [], lights: [], roof: null, sign: null, flag: null, extras: 0, gold: false };
+  h.wall = WALLS[Math.abs(id) % WALLS.length];
+  h.g.rotation.y = -.6; h.g.scale.setScalar(.01);
+  h.roof = new THREE.Mesh(G.roof, mat(0x8a6b55, { flatShading: true }));
+  h.roof.castShadow = true; h.g.add(h.roof);
+  scene.add(h.g); houses.set(id, h); h.s = 1;
+  return h;
+}
+function addFloor(h, animate) {
+  const f = new THREE.Group();
+  f.position.y = h.floors.length * FH + FH / 2;
+  const body = new THREE.Mesh(G.floor, mat(h.wall)); body.castShadow = body.receiveShadow = true; f.add(body);
+  for (const [side, x] of [[0, -.13], [0, .13], [1, -.13], [1, .13]]) {
+    const w = new THREE.Mesh(G.win, WIN[0]);
+    if (side === 0) w.position.set(x, .02, .31); else { w.position.set(.31, .02, x); w.rotation.y = Math.PI / 2; }
+    f.add(w); h.wins.push(w); h.lights.push(0);
+  }
+  h.g.add(f); h.floors.push(f);
+  if (animate) { f.scale.set(.3, .01, .3); tween(f.scale, { x: 1, y: 1, z: 1, duration: .7, ease: 'elastic.out(1,.5)' }); }
+}
+function placeRoof(h, animate) {
+  const y = h.floors.length * FH + .16;
+  if (animate) tween(h.roof.position, { y, duration: .6, ease: 'back.out(2)' }); else h.roof.position.y = y;
+}
+function setLight(h, i, level, pop) {
+  if (h.lights[i] === level) return;
+  const brighter = level > h.lights[i];
+  h.lights[i] = level; h.wins[i].material = WIN[level];
+  if (pop && brighter) gsap.fromTo(h.wins[i].scale, { x: 2, y: 2 }, { x: 1, y: 1, duration: reduced ? 0 : .5, ease: 'back.out(3)' });
+}
+function setSign(h, on) {
+  if (on && !h.sign) {
+    h.sign = new THREE.Mesh(new THREE.BoxGeometry(.15, .09, .02), mat(0xe8813a, { emissive: 0x6b2a00 }));
+    h.sign.position.set(.2, .07, .38); h.sign.scale.setScalar(.01); h.g.add(h.sign);
+    tween(h.sign.scale, { x: 1, y: 1, z: 1, duration: .4, ease: 'back.out(3)' });
+  } else if (!on && h.sign) {
+    const s = h.sign; h.sign = null;
+    tween(s.scale, { x: .01, y: .01, z: .01, duration: .3, onComplete: () => h.g.remove(s) });
+  }
+}
+function setFlag(h, on) {
+  if (on && !h.flag) {
+    h.flag = new THREE.Group();
+    const p = new THREE.Mesh(G.pole, mat(0x3f4a5a)); p.scale.y = .32; p.position.y = .28; h.flag.add(p);
+    const cloth = new THREE.Mesh(new THREE.PlaneGeometry(.15, .09), mat(0xe8813a, { side: THREE.DoubleSide }));
+    cloth.position.set(.075, .39, 0); h.flag.add(cloth); h.flag.userData.cloth = cloth;
+    h.roof.add(h.flag);
+  } else if (!on && h.flag) { h.roof.remove(h.flag); h.flag = null; }
+}
+const squash = h => !reduced && gsap.fromTo(h.g.scale, { x: 1.14, y: .84, z: 1.14 }, { x: h.s, y: h.s, z: h.s, duration: .6, ease: 'elastic.out(1.1,.4)' });
+// 快照：宿主给出每栋楼的完整计划，这里只做差异动画
+function applySnapshot({ houses: plan = [], focusId: f = null }) {
+  focusId = f;
+  const seen = new Set();
+  for (const p of plan) {
+    seen.add(p.id);
+    const h = houses.get(p.id) ?? makeHouse(p.id);
+    const fresh = h.floors.length === 0;
+    const need = Math.max(1, Math.ceil(p.lights.length / 4));
+    while (h.floors.length < need) addFloor(h, !fresh);
+    placeRoof(h, !fresh);
+    p.lights.forEach((level, i) => setLight(h, i, level, !fresh));
+    h.roof.material = p.gold ? GOLD : mat(blendRoof(p.roofColor), { flatShading: true });
+    setSign(h, Boolean(p.repair));
+    setFlag(h, p.id === focusId);
+  }
+  for (const [id, h] of houses) {
+    if (seen.has(id)) continue;
+    houses.delete(id);
+    tween(h.g.scale, { x: .01, y: .01, z: .01, duration: .3, onComplete: () => scene.remove(h.g) });
+  }
+  order = plan.map(p => p.id);
+  zoomTo(Math.max(1, ...order.map(id => houses.get(id).floors.length)));
+  layout();
+}
+function layout() {
+  const fi = order.indexOf(focusId);
+  const center = fi >= 0 ? fi : (order.length - 1) / 2;
+  order.forEach((id, i) => {
+    const h = houses.get(id);
+    h.s = id === focusId ? 1.15 : 1;
+    tween(h.g.position, { x: (i - center) * SP, duration: .8, ease: 'power2.out' });
+    tween(h.g.scale, { x: h.s, y: h.s, z: h.s, duration: .6, ease: 'back.out(2)' });
+  });
+  draw();
+}
+const target = id => houses.get(id) ?? houses.get(focusId) ?? houses.get(lastId) ?? houses.get(order.at(-1));
+
+// 实时事件：先给即时反馈，随后快照会把状态校正为准
+function onFlip() {
+  const h = target(lastId); if (!h) return;
+  const i = h.lights.findIndex(l => l === 0);
+  const w = h.wins[i >= 0 ? i : h.wins.length - 1]; if (!w) return;
+  const old = w.material; w.material = FLASH; setTimeout(() => { w.material = old; draw(); }, 260);
+}
+function onRated({ palaceId, rating }) {
+  const h = target(palaceId); if (!h) return;
+  lastId = h.id;
+  if (rating >= 2) {
+    let i = h.lights.findIndex(l => l === 0);
+    if (i < 0) { addFloor(h, true); placeRoof(h, true); i = h.lights.length - 4; }
+    setLight(h, i, Math.min(4, rating), true);
+    squash(h);
+  } else setSign(h, true);
+}
+function onQuiz({ correct }) {
+  const h = target(lastId); const x = h ? h.g.position.x + .55 : 0;
+  if (correct) {
+    const t = new THREE.Group();
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(.03, .045, .2, 6), mat(0x8a5a44)); trunk.position.y = .1; t.add(trunk);
+    const leaf = new THREE.Mesh(new THREE.IcosahedronGeometry(.15, 0), mat(0x7cbf6c, { flatShading: true })); leaf.position.y = .3; leaf.castShadow = true; t.add(leaf);
+    t.position.set(x, 0, .55); t.scale.setScalar(.01); scene.add(t); trees.push(t);
+    tween(t.scale, { x: 1, y: 1, z: 1, duration: .7, ease: 'elastic.out(1,.45)' });
+    if (trees.length > 30) { const old = trees.shift(); scene.remove(old); }
+  } else {
+    const c = new THREE.Mesh(new THREE.IcosahedronGeometry(.22, 1), mat(0xaab3c2, { flatShading: true, transparent: true, opacity: .9 }));
+    c.scale.set(1.6, .8, 1); c.position.set(x - 1.2, 1.9, 0); scene.add(c);
+    tween(c.position, { x: x + 1.2, duration: 2.4, ease: 'none', onComplete: () => scene.remove(c) });
+  }
+}
+const trees = [];
+function onNode() {
+  const h = target(lastId); if (!h || !h.floors.length) return;
+  const k = h.extras++, f = h.floors[k % h.floors.length];
+  if (k >= h.floors.length * 2) return squash(h);
+  const b = new THREE.Group();
+  b.add(new THREE.Mesh(new THREE.BoxGeometry(.28, .025, .1), mat(0xfff3e2)));
+  const rail = new THREE.Mesh(new THREE.BoxGeometry(.28, .06, .01), mat(0x6c9a5a)); rail.position.set(0, .035, .05); b.add(rail);
+  if (Math.floor(k / h.floors.length) % 2) { b.position.set(.35, -.11, 0); b.rotation.y = Math.PI / 2; } else b.position.set(0, -.11, .35);
+  b.scale.setScalar(.01); f.add(b);
+  tween(b.scale, { x: 1, y: 1, z: 1, duration: .5, ease: 'back.out(3)' });
+}
+function onCelebrate() {
+  order.forEach((id, n) => {
+    const h = houses.get(id);
+    setTimeout(() => {
+      squash(h);
+      h.wins.forEach((w, k) => h.lights[k] && !reduced && gsap.fromTo(w.scale, { x: 1.8, y: 1.8 }, { x: 1, y: 1, duration: .5, delay: k * .02 }));
+    }, reduced ? 0 : n * 120);
+  });
+}
+// 消息与渲染：不可见时停帧；30fps 上限
+const post = (type, payload) => { try { parent.postMessage({ source: SELF, type, payload }, location.origin); } catch { /* host gone */ } };
+addEventListener('message', (e) => {
+  if (e.origin !== location.origin || e.source !== parent) return;
+  const d = e.data; if (!d || d.source !== HOST) return;
+  const handlers = { snapshot: applySnapshot, flip: onFlip, rated: onRated, quiz: onQuiz, node: onNode, celebrate: onCelebrate, active: p => setActive(p.on) };
+  handlers[d.type]?.(d.payload ?? {});
+  draw();
+});
+let hostActive = true, active = true, raf = 0, last = 0;
+function setActive(on) { hostActive = on; sync(); }
+function sync() { active = hostActive && !document.hidden; if (active && !raf) raf = requestAnimationFrame(loop); }
+function draw() { renderer.render(scene, camera); }
+const clock = new THREE.Clock();
+function loop(now) {
+  raf = 0;
+  if (!active) return;
+  raf = requestAnimationFrame(loop);
+  if (now - last < 33) return;
+  last = now;
+  const t = clock.getElapsedTime();
+  const f = houses.get(focusId)?.flag?.userData.cloth;
+  if (f && !reduced) f.rotation.y = Math.sin(t * 4) * .4;
+  draw();
+}
+document.addEventListener('visibilitychange', sync);
+fit();
+raf = requestAnimationFrame(loop);
+post('ready');
+</script>
+</body>
+</html>

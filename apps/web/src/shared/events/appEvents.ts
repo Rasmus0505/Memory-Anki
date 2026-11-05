@@ -7,6 +7,8 @@ export const APP_EVENT_NAMES = {
   palaceFavoriteChanged: 'palace-favorite:changed',
   reviewUnitFavoriteChanged: 'review-unit-favorite:changed',
   reviewStateChanged: 'review-state:changed',
+  roundCompleted: 'round-completed',
+  unitRated: 'review-unit:rated',
   themeUpdated: 'memory-anki-theme-updated',
 } as const
 
@@ -16,6 +18,9 @@ export interface AppEventMap {
   [APP_EVENT_NAMES.palaceFavoriteChanged]: { palaceId: number; isFavorite: boolean }
   [APP_EVENT_NAMES.reviewUnitFavoriteChanged]: { palaceId: number; unitId: string; isFavorite: boolean }
   [APP_EVENT_NAMES.reviewStateChanged]: { roundRefresh?: boolean } | undefined
+  [APP_EVENT_NAMES.roundCompleted]: undefined
+  /** A rating the server accepted. palaceId is absent when the response does not carry it. */
+  [APP_EVENT_NAMES.unitRated]: { unitId: string; palaceId?: number; rating: number }
   [APP_EVENT_NAMES.themeUpdated]: ThemePreference
 }
 

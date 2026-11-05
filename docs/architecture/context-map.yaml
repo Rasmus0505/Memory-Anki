@@ -468,6 +468,10 @@
       "backup": {
         "publicEntry": "src/modules/backup/public.ts"
       },
+      "city": {
+        "publicEntry": "src/modules/city/public.ts",
+        "architectureDoc": "docs/architecture/city.md"
+      },
       "content": {
         "publicEntry": "src/modules/content/public.ts"
       },

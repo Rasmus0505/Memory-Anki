@@ -414,6 +414,9 @@ export async function ratePalaceDueUnitsApi(
   )
   emitAppEvent(APP_EVENT_NAMES.palaceCatalogInvalidated)
   emitAppEvent(APP_EVENT_NAMES.reviewStateChanged)
+  for (const unitId of response.item.rated_unit_ids) {
+    emitAppEvent(APP_EVENT_NAMES.unitRated, { unitId, palaceId: response.item.palace_id, rating: payload.rating })
+  }
   return response.item
 }
 
@@ -441,6 +444,7 @@ export async function rateReviewUnitApi(
   )
   emitAppEvent(APP_EVENT_NAMES.palaceCatalogInvalidated)
   emitAppEvent(APP_EVENT_NAMES.reviewStateChanged)
+  emitAppEvent(APP_EVENT_NAMES.unitRated, { unitId: unit.id, palaceId: response.item.unit?.palace_id, rating })
   return response.item
 }
 

@@ -5635,6 +5635,35 @@ def check_ai_gateway_boundary(errors: list[str]) -> None:
             )
 
 
+def check_city_horizon_boundary(errors: list[str]) -> None:
+    """The learning city stays an isolated iframe asset; React never pulls Three.js in."""
+    asset = WEB_ROOT / "public" / "city"
+    for relative in ("horizon.html", "vendor/three.module.js", "vendor/gsap.min.js"):
+        if not (asset / relative).exists():
+            errors.append(f"apps/web/public/city/{relative}: city asset is missing.")
+    if not (REPO_ROOT / "docs" / "architecture" / "city.md").exists():
+        errors.append("docs/architecture/city.md: city architecture note is missing.")
+
+    fixture = (WEB_ROOT / "e2e" / "fixtures.ts").read_text(encoding="utf-8", errors="ignore")
+    if "memory-anki:city-disabled" not in fixture:
+        errors.append("apps/web/e2e/fixtures.ts: hermetic e2e must opt out of the city strip.")
+    sw = (WEB_ROOT / "public" / "sw.js").read_text(encoding="utf-8", errors="ignore")
+    if "url.pathname.startsWith('/city/')" not in sw:
+        errors.append(
+            "apps/web/public/sw.js: /city/ must bypass the SPA navigation fallback so the iframe loads its own HTML."
+        )
+
+    for path in WEB_SRC.rglob("*"):
+        if path.suffix not in {".ts", ".tsx"}:
+            continue
+        source = path.read_text(encoding="utf-8", errors="ignore")
+        if re.search(r"from ['\"](three|gsap)['\"]", source) or "WebGLRenderer" in source:
+            relative = path.relative_to(REPO_ROOT).as_posix()
+            errors.append(
+                f"{relative}: Three.js/GSAP must stay inside public/city; the React bundle may not import WebGL."
+            )
+
+
 def check_settings_module_boundaries(errors: list[str]) -> None:
     for path in iter_files(SETTINGS_MODULE, (".py",)):
         content = path.read_text(encoding="utf-8", errors="ignore")
@@ -7519,6 +7548,7 @@ def main() -> int:
     check_quiz_bank_display_order(errors)
     check_settings_module_boundaries(errors)
     check_ai_gateway_boundary(errors)
+    check_city_horizon_boundary(errors)
     check_ai_runtime_port_boundaries(errors)
     check_ai_credential_tombstones(errors)
     check_prompt_catalog_boundaries(errors)

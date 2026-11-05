@@ -10,6 +10,7 @@ import {
 import { NavLink, useLocation } from 'react-router-dom'
 import type { RuntimeInfo } from '@/shared/api/contracts'
 import { getRuntimeInfoApi } from '@/modules/settings/public'
+import { CityHorizon } from '@/modules/city/public'
 import {
   preloadDashboardPage,
   preloadFreestylePage,
@@ -598,6 +599,7 @@ function ShellFrame({ children }: PropsWithChildren) {
             {children}
           </div>
         </main>
+        <CityHorizon visible={mindMapHost} pathname={pathname} />
         <MobileBottomNav layoutMode={layoutMode} />
         <AppLogDrawer open={logDrawerOpen} onOpenChange={setLogDrawerOpen} />
         <SessionRecorderHost />
