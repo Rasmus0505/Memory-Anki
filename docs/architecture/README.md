@@ -34,7 +34,7 @@ apps/api: presentation -> application/use cases -> domain + ports <- infrastruct
 | 学习城市地平线（学习场景底部一条） | `modules/city`（宿主组件、今日岛计划）+ `public/city/horizon.html`（隔离 iframe，Three.js/GSAP 本地化） | `GET /dashboard/city-today`（只读）。见 [city.md](./city.md) |
 | 学习进度（`/progress`，层级 / 分布 / 题目覆盖） | `modules/dashboard` | `modules/dashboard`，通过 content/memory/quiz/english 的公共读取能力组合 |
 | 成长元数据（XP、等级、任务、印章；仅后端读取投影，无前端模块或页面） | —（无前端归属；UI 未使用 `growth_state`） | `modules/progression`（只读投影） |
-| 环境房间层（色调、颗粒、指针光） | `shared/ambient`（纯函数、无数据）；`app/shell/useAmbientTone` 向它提供 dashboard/exam 数据 | — |
+| 考期边缘呼吸、卡片悬浮上浮 | `shared/ambient`（纯函数、无数据）；`app/shell/useAmbientTone` 向它提供 exam 数据。只剩考前两周的屏幕边缘呼吸；窗光、时段色调、纸张颗粒已移除 | — |
 | 界面声音 | `shared/feedback/uiSounds`（委托监听器，由 `uiSoundEnabled` + `soundEnabled` 控制；在 `.freestyle-stage` 内静音）；合成音色位于 `shared/feedback/mindmap-audio` | — |
 | 诊断简报（左上角「录制」） | `shared/debug/session-recorder` 订阅 `shared/api/requestOutcome`；`shared/api` 不得反向导入 recorder。自动采集只保存白名单元数据（固定动作/页面类别、HTTP 方法、有限状态码、失败类别、有界数量），不保存题目、答案、脑图标题或正文、原始错误、完整 URL、业务 ID、请求/响应体；用户手写说明单独保留。见 [session-recorder-privacy.md](./session-recorder-privacy.md) | — |
 

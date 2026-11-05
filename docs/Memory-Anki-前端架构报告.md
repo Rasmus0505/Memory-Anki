@@ -315,6 +315,20 @@ JSX `<Routes>` 表仍然手写，但由 `routeManifest.test.ts` 对账，防止�
 - `shared/feedback/mindmap-audio`：程序化合成音色、音色池、AudioContext 生命周期、iOS 解锁、静音分区、场景音量门；
 - `shared/theme`：单一 `study` 主题包（翻页/翻开时长、theme-color），不随成长解锁。
 
+### 10.3 视觉令牌
+
+- 唯一来源：`src/styles/foundation.css` 的 `@theme`（浅色）与 `.dark`（深色）。组件只用令牌类（`bg-card`、`text-muted-foreground`、`shadow-card`…），不写字面色值。
+- 基调：冷石板灰（色相 228）中性色 + 靛紫主色（色相 236–240）。三层明暗：页面 `background` < 容器 `card` < 浮层 `popover`；深色模式下三层都是灰，靠 1px 上沿高光和阴影区分。
+- 语义色：成功 / 警告 / 危险 / 信息各有 `*-soft`（低饱和底）与 `*-strong`（高对比字），徽章与提示条用这对组合；评分四色 `rate-again/hard/good/easy` 不跟主色走。
+- 字体：Latin 用系统无衬线（Apple 系统字体 / Segoe UI），中文 PingFang SC → 内置 Noto Sans SC → 微软雅黑。数字列、计时、进度用 `tabular-nums`。
+- 圆角：6 / 8 / 10 / 14 / 20px（`rounded-sm` … `rounded-2xl`），按钮 8–10px，卡片 14px，对话框 20px。
+- 阴影：一层贴边接触影 + 一层大半径弥散影；`shadow-glow` 只给主按钮悬浮。
+- 交互：按钮悬浮上浮 1px、按下 `scale(0.97)`、键盘聚焦 2px 主色环；过渡统一 `cubic-bezier(0.16, 1, 0.3, 1)`，约 0.2s。全局聚焦环放在 `@layer base`，组件自带的 `focus-visible:*` 可以覆盖它。
+- 固定保留的含义色：警告/困难的琥珀、考试三星的金框、脑图荧光笔黄、学科自定义色、永久标记分级色、城市待修牌橙色。重新调色时不要把它们并进主色。
+- 已移除：窗光、时段色调、纸张颗粒、跟随鼠标的暖光、卡片 3D 倾斜、进度条循环光泽。考前两周的屏幕边缘呼吸保留。
+- 页面层级：常规 `PageHeader` 不套卡片，标题直接在页面底色上；只有 `compact` 版（脑图页）保留卡片外框。视图切换统一用 `ToggleGroup`（单选，`role="radio"`），布局选项只放图标、名字在 `aria-label` / `title`。
+- 调试工具：录制、日志抽屉、版本号都在 `SessionRecorderMenu`（`shared/debug/session-recorder`）里，壳层用 `ShellToolsMenu` 把日志和版本挂进去。桌面在侧栏底部，手机在顶栏右侧，沉浸页由 `SessionRecorderHost floating` 浮在右上角。菜单的触发器和内容都带 `data-session-recorder`，不会被当成「上一次点击」。
+
 ---
 
 ## 11. PWA、Electron 与多端
