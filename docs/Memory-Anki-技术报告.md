@@ -296,7 +296,7 @@ app (壳/路由/Provider)
 ### 9.7 反馈与可视化
 
 - `shared/fx`：`cue()` → 配方 → 声音 / 触感 / CSS 果冻 / DOM 小动效，按 owner 取消；
-- 禁止粒子、canvas 特效和业务代码直接 WebGL/WebAudio。
+- 禁止粒子、canvas 特效（学习城市地平线的隔离 iframe 除外，见 `docs/architecture/city.md`）和业务代码直接 WebGL/WebAudio。
 
 ---
 

@@ -84,7 +84,7 @@ python tools/quality_gate.py --launchers
 
 ### 2.4 反馈与可视化
 
-- 业务代码不得直接实例化 WebGL / WebAudio；
+- 业务代码不得直接实例化 WebGL / WebAudio（学习城市地平线只在 `public/city` 隔离 iframe 内，由 `check_city_horizon_boundary` 把关）；
 - `shared/fx` 不得 import 主题；
 - 音色默认值、主题注册、粒子/皮肤已移除。
 

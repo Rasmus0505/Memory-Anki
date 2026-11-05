@@ -308,7 +308,7 @@ JSX `<Routes>` 表仍然手写，但由 `routeManifest.test.ts` 对账，防止�
 - 业务代码只调用 `cue()`，声明「发生了什么」；
 - 配方决定声音、触感、CSS 果冻、DOM 小动效；
 - 延迟步骤挂在 `FxPlayback` owner 上，owner 退役即取消；
-- 禁止粒子、canvas 特效、业务代码直接 WebGL/WebAudio。
+- 禁止粒子、canvas 特效（学习城市地平线的隔离 iframe 除外，见 `docs/architecture/city.md`）、业务代码直接 WebGL/WebAudio。
 
 ### 10.2 音频与主题
 
