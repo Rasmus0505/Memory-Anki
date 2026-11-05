@@ -244,7 +244,7 @@ describe('PalaceShelfPage', () => {
     const title = await screen.findByText('未分类')
     fireEvent.click(title.closest('button') as HTMLButtonElement)
     expect(navigate).toHaveBeenCalledWith('/palaces/list?uncategorized=true')
-    expect(screen.getByText('当前没有紧急复习')).toBeTruthy()
+    expect(screen.getByText('没有到期的复习')).toBeTruthy()
   })
 
   it('passes search text to both shelf apis', async () => {
@@ -264,8 +264,8 @@ describe('PalaceShelfPage', () => {
 
     await screen.findByText('中国近代史')
     expect(screen.getByTestId('shelf-grid').dataset.layoutMode).toBe('double')
-    fireEvent.click(screen.getByRole('button', { name: '单列' }))
-    fireEvent.click(screen.getByRole('button', { name: '紧凑' }))
+    fireEvent.click(screen.getByRole('radio', { name: '单列' }))
+    fireEvent.click(screen.getByRole('radio', { name: '紧凑' }))
 
     expect(screen.getByTestId('shelf-grid').dataset.layoutMode).toBe('single')
     expect(screen.getByTestId('shelf-grid').dataset.densityMode).toBe('compact')
@@ -277,7 +277,7 @@ describe('PalaceShelfPage', () => {
 
     await screen.findByText('中国近代史')
     expect(getPalacesGroupedApi).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: '章节目录' }))
+    fireEvent.click(screen.getByRole('radio', { name: '章节目录' }))
     await screen.findByText('中国教育史宫殿')
 
     expect(getPalacesGroupedApi).toHaveBeenCalledTimes(1)
@@ -288,7 +288,7 @@ describe('PalaceShelfPage', () => {
     expect(screen.getByLabelText(/更多操作/)).toBeTruthy()
     fireEvent.click(screen.getAllByRole('button', { name: '开始标记' })[0])
     expect(navigate).toHaveBeenCalledWith('/palaces/101/edit?mode=permanent-mark')
-    fireEvent.click(screen.getByRole('button', { name: '知识点流' }))
+    fireEvent.click(screen.getByRole('radio', { name: '知识点流' }))
 
     expect(screen.getByTestId('list-layout-root').dataset.layoutMode).toBe('flow')
     expect(window.localStorage.getItem(PALACE_SHELF_VIEW_SETTINGS_KEY)).toBeNull()
@@ -299,7 +299,7 @@ describe('PalaceShelfPage', () => {
     renderShelfPage()
 
     await screen.findByText('中国近代史')
-    fireEvent.click(screen.getByRole('button', { name: '章节目录' }))
+    fireEvent.click(screen.getByRole('radio', { name: '章节目录' }))
     await screen.findByText('中国教育史宫殿')
 
     window.dispatchEvent(new CustomEvent('palace-catalog:invalidated'))
@@ -314,7 +314,7 @@ describe('PalaceShelfPage', () => {
     renderShelfPage()
 
     await screen.findByText('中国近代史')
-    fireEvent.click(screen.getByRole('button', { name: '章节目录' }))
+    fireEvent.click(screen.getByRole('radio', { name: '章节目录' }))
     await screen.findByText('中国教育史宫殿')
 
     fireEvent.click(screen.getByLabelText(/更多操作/))

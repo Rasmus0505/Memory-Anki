@@ -332,8 +332,8 @@ describe('PalaceListPage', () => {
     await screen.findByText('第四节 收回教育权运动与教会教育的变革')
     expect(screen.getByTestId('list-layout-root').dataset.layoutMode).toBe('chapter-double')
 
-    fireEvent.click(screen.getByRole('button', { name: '章节知识点双列' }))
-    fireEvent.click(screen.getByRole('button', { name: '紧凑' }))
+    fireEvent.click(screen.getByRole('radio', { name: '章节知识点双列' }))
+    fireEvent.click(screen.getByRole('radio', { name: '紧凑' }))
 
     expect(screen.getByTestId('list-layout-root').dataset.layoutMode).toBe('chapter-card-grid')
     expect(screen.getByTestId('list-layout-root').dataset.densityMode).toBe('compact')

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { BookOpen, CalendarClock, ChevronDown, ChevronRight, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
+import { CalendarClock, ChevronDown, ChevronRight, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { PalaceReviewUnitsPanel } from '@/modules/practice/public'
 import type { PalaceListViewSettings } from '@/modules/settings/public'
@@ -9,12 +9,11 @@ import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { cn } from '@/shared/lib/utils'
 import { NodeCountBadgeCluster, withRatioBadge } from '@/shared/ui/mindmap-canvas/NodeCountBadge'
-import { NEUTRAL_SHARE_FILL, shareFillBackground, shareRatio } from '@/shared/ui/share-fill/shareFill'
+import { shareRatio } from '@/shared/ui/share-fill/shareFill'
 import {
   formatCreatedAt,
   getPalaceCardClass,
   getPalaceCardContentClass,
-  getPalaceIconClass,
 } from '@/modules/content/ui/palace-catalog/components/palace-list/utils'
 import { PalaceFavoriteButton } from '@/modules/content/ui/palace-favorite'
 
@@ -139,71 +138,40 @@ export function PalaceListCard({
   const questionCount = palace.quiz_question_total ?? 0
   const chapterTotal = chapterQuestionTotal ?? 0
   const quizCountBadges = withRatioBadge(palace.quiz_count_badges ?? [], questionCount, chapterTotal)
-  const progressBackground = shareFillBackground(shareRatio(questionCount, chapterTotal), NEUTRAL_SHARE_FILL)
+  const share = shareRatio(questionCount, chapterTotal)
+  const reason = whyNotToday(palace)
 
   return (
     <div className="pb-3 pr-3">
       <Card
-        className={cn('relative overflow-visible', getPalaceCardClass(viewSettings.densityMode))}
-        style={progressBackground ? { backgroundImage: progressBackground } : undefined}
+        className={cn('group/palace relative overflow-visible', getPalaceCardClass(viewSettings.densityMode))}
       >
-      {/* Phones: icon + text on the first row, action buttons on a second row so the title keeps its width. */}
+      {/* One row on desktop: title on the left, the review action and tools on the right.
+          Phones wrap the actions under the title so it keeps the full width. */}
       <CardContent
         className={cn(
-          'grid grid-cols-[auto_minmax(0,1fr)] items-start sm:grid-cols-[auto_minmax(0,1fr)_auto]',
+          'flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4',
           getPalaceCardContentClass(viewSettings.densityMode),
         )}
       >
-        <div
-          className={cn(
-            'row-span-2 flex shrink-0 items-center justify-center bg-secondary sm:row-span-1',
-            getPalaceIconClass(viewSettings.densityMode),
-          )}
-        >
-          <BookOpen className="size-5 text-muted-foreground" />
-        </div>
-
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0 flex-1 space-y-2">
-              <div className="flex min-w-0 items-center gap-2">
-                <Link
-                  to={`/palaces/${palace.id}/edit`}
-                  className="min-w-0 truncate font-semibold transition-colors hover:text-primary"
-                >
-                  {renderHighlightedText(palaceTitle, searchQuery)}
-                </Link>
-                <PalaceFavoriteButton palaceId={palace.id} className="-my-1 size-9 sm:size-7" iconClassName="size-4 sm:size-3.5" />
-                {hasReviewStatus ? <ReviewActionButton
-                  label={
-                    unitReviewStatus === 'marking_required'
-                      ? '开始标记'
-                      : unitReviewStatus === 'due'
-                        ? '立即复习'
-                        : formatReviewDate(palace.next_review_date)
-                  }
-                  className={cn(
-                    'h-8 min-w-21 max-w-39 shrink-0 px-2.5 text-[11px] sm:px-3 sm:text-xs',
-                    unitReviewStatus === 'marking_required'
-                      ? 'border-violet-500/60 bg-violet-500/15 text-violet-700 hover:bg-violet-500/25 dark:text-violet-300'
-                      : unitReviewStatus === 'due'
-                        ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-                        : 'border border-border bg-muted text-muted-foreground',
-                  )}
-                  disabled={unitReviewStatus === 'scheduled'}
-                  onClick={() => onPalaceReview(palace)}
-                /> : null}
-              </div>
-            </div>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <Link
+              to={`/palaces/${palace.id}/edit`}
+              className="min-w-0 truncate font-medium leading-snug transition-colors hover:text-primary"
+              title={`${palaceTitle} · 创建于 ${formatCreatedAt(palace.created_at)}`}
+            >
+              {renderHighlightedText(palaceTitle, searchQuery)}
+            </Link>
+            <PalaceFavoriteButton palaceId={palace.id} className="-my-1 size-9 shrink-0 sm:size-7" iconClassName="size-4 sm:size-3.5" />
           </div>
 
-          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-            <span>{formatCreatedAt(palace.created_at)}</span>
-            <span>{palace.review_unit_count} 个复习单元</span>
-            {palace.review_unit_count > 0 ? (
-              <span>{palace.due_review_unit_count} 个到期</span>
-            ) : null}
-            {whyNotToday(palace) ? <span>{whyNotToday(palace)}</span> : null}
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+            <span className="tabular-nums">
+              {palace.review_unit_count} 个复习单元
+              {palace.review_unit_count > 0 ? ` · ${palace.due_review_unit_count} 个到期` : ''}
+            </span>
+            {reason ? <span className="text-ink-faint">{reason}</span> : null}
             {showExpandButton ? (
               <button
                 type="button"
@@ -221,19 +189,37 @@ export function PalaceListCard({
           </div>
 
           {expanded && palace.description ? (
-            <p className="mt-2 line-clamp-1 text-sm text-muted-foreground">
+            <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">
               {renderHighlightedText(palace.description.slice(0, 150), searchQuery)}
             </p>
           ) : null}
-
         </div>
 
-        <div className="col-start-2 row-start-2 flex items-center justify-end gap-1 sm:col-start-auto sm:row-start-auto sm:justify-start">
+        <div className="flex shrink-0 items-center justify-end gap-1">
+          {hasReviewStatus ? <ReviewActionButton
+            label={
+              unitReviewStatus === 'marking_required'
+                ? '开始标记'
+                : unitReviewStatus === 'due'
+                  ? '立即复习'
+                  : formatReviewDate(palace.next_review_date)
+            }
+            className={cn(
+              'mr-1 h-8 shrink-0 rounded-lg border px-3 text-xs font-medium transition-colors',
+              unitReviewStatus === 'marking_required'
+                ? 'border-violet-500/30 bg-violet-500/10 text-violet-700 hover:bg-violet-500/20 dark:text-violet-300'
+                : unitReviewStatus === 'due'
+                  ? 'border-transparent bg-primary text-primary-foreground shadow-soft hover:bg-primary/90'
+                  : 'border-border bg-muted/60 tabular-nums text-muted-foreground',
+            )}
+            disabled={unitReviewStatus === 'scheduled'}
+            onClick={() => onPalaceReview(palace)}
+          /> : null}
           <Link to={`/palaces/${palace.id}/quiz`}>
             <Button
               variant="ghost"
               size="sm"
-              className="min-h-11 sm:h-8 sm:min-h-8"
+              className="min-h-11 text-muted-foreground hover:text-foreground sm:h-8 sm:min-h-8"
             >
               做题
             </Button>
@@ -242,7 +228,7 @@ export function PalaceListCard({
             <Button
               variant="ghost"
               size="icon"
-              className="min-h-11 min-w-11 sm:size-8 sm:min-h-8 sm:min-w-8"
+              className="min-h-11 min-w-11 text-muted-foreground hover:text-foreground sm:size-8 sm:min-h-8 sm:min-w-8"
               aria-label={`编辑宫殿 ${palace.resolved_title || palace.title}`}
             >
               <Pencil className="size-4" />
@@ -252,28 +238,28 @@ export function PalaceListCard({
             <Button
               variant="ghost"
               size="icon"
-              className="min-h-11 min-w-11 sm:size-8 sm:min-h-8 sm:min-w-8"
+              className="min-h-11 min-w-11 text-muted-foreground hover:text-foreground sm:size-8 sm:min-h-8 sm:min-w-8"
               aria-label={`更多操作 ${palace.resolved_title || palace.title}`}
               onClick={() => setMenuOpen((current) => !current)}
             >
               <MoreHorizontal className="size-4" />
             </Button>
             {menuOpen ? (
-              <div className="absolute right-0 top-9 z-40 min-w-33 rounded-xl border border-border/70 bg-background p-1 shadow-lg">
+              <div className="absolute right-0 top-9 z-40 min-w-36 rounded-[10px] border bg-popover p-1 shadow-popover animate-in fade-in-0 zoom-in-95">
                 <button
                   type="button"
-                  className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-muted"
+                  className="flex min-h-11 w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors hover:bg-accent sm:min-h-8"
                   onClick={() => {
                     setMenuOpen(false)
                     setProgressOpen(true)
                   }}
                 >
-                  <CalendarClock className="size-4" />
+                  <CalendarClock className="size-4 text-muted-foreground" />
                   复习进度
                 </button>
                 <button
                   type="button"
-                  className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-destructive transition-colors hover:bg-destructive/10"
+                  className="flex min-h-11 w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm text-destructive transition-colors hover:bg-destructive/10 sm:min-h-8"
                   onClick={() => {
                     setMenuOpen(false)
                     onDelete(palace.id, palace.title)
@@ -287,6 +273,12 @@ export function PalaceListCard({
           </div>
         </div>
       </CardContent>
+      {/* Share of the chapter's questions: a hairline along the bottom edge. */}
+      {share > 0 ? (
+        <div className="pointer-events-none absolute inset-x-4 bottom-0 h-0.5 overflow-hidden rounded-full" aria-hidden>
+          <div className="h-full rounded-full bg-muted-foreground/30" style={{ width: `${Math.round(share * 100)}%` }} />
+        </div>
+      ) : null}
       {progressOpen ? (
         <PalaceReviewUnitsPanel
           open

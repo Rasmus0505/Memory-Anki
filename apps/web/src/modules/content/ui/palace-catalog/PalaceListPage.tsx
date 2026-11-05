@@ -219,7 +219,7 @@ export default function PalaceList() {
   }
 
   return (
-    <PageContainer wide className="gap-8">
+    <PageContainer wide>
       <PageHeader
         title={currentSubjectTitle ? `${currentSubjectTitle}` : '记忆宫殿'}
         actions={
@@ -240,7 +240,6 @@ export default function PalaceList() {
             </Link>
           </div>
         }
-        compact
       />
 
       {subjectKey != null && (

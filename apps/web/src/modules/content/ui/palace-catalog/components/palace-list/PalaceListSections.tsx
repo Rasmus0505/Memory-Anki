@@ -10,7 +10,7 @@ import type {
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { EmptyState } from '@/shared/components/state-placeholders'
-import { NEUTRAL_SHARE_FILL, shareFillBackground, shareRatio } from '@/shared/ui/share-fill/shareFill'
+import { shareRatio } from '@/shared/ui/share-fill/shareFill'
 import type { PalaceListViewSettings } from '@/modules/settings/public'
 import {
   getChapterCardClass,
@@ -69,9 +69,9 @@ export function PalaceListSections<TPalace extends PalaceGroupedItem | PalaceGro
         groupedData.subjects.map((subject) => (
           <div key={subject.subject?.id ?? 'ungrouped'}>
             {subject.subject ? (
-              <h2 className="mb-2 text-lg font-semibold text-foreground">
+              <h2 className="mb-3 flex items-center gap-2 text-base font-semibold tracking-tight text-foreground">
                 <span
-                  className="mr-2 inline-block h-3 w-3 rounded-full"
+                  className="inline-block size-2.5 rounded-full"
                   style={{ backgroundColor: subject.subject.color }}
                 />
                 {subject.subject.name}
@@ -85,7 +85,7 @@ export function PalaceListSections<TPalace extends PalaceGroupedItem | PalaceGro
                 // parent is not on this shelf) is measured against the whole subject.
                 const parentId = group.source_chapter?.parent_id
                 const parentTotal = (parentId != null ? chapterTotalsOf(subject).get(parentId) : undefined) ?? subject.question_total ?? null
-                const chapterFill = shareFillBackground(shareRatio(group.question_total, parentTotal), NEUTRAL_SHARE_FILL)
+                const chapterShare = shareRatio(group.question_total, parentTotal)
                 return (
                   <div
                     key={chapterId ?? 'no-chapter'}
@@ -93,14 +93,12 @@ export function PalaceListSections<TPalace extends PalaceGroupedItem | PalaceGro
                     className={`${getChapterCardClass(viewSettings.layoutMode, viewSettings.densityMode)} [content-visibility:auto] [contain-intrinsic-size:auto_240px]`}
                   >
                     {group.source_chapter ? (
-                      // The header row is the chapter's bar: its own background fills by the chapter's share of its parent.
-                      <div
-                        className="mb-1 ml-2 mr-2 flex items-center justify-between gap-2 rounded-lg px-2 py-1"
-                        style={chapterFill ? { backgroundImage: chapterFill } : undefined}
-                      >
+                      // Chapter header; the hairline under it is the chapter's share of its parent.
+                      <div className="mb-2 mr-3 flex flex-col gap-1.5 px-1">
+                      <div className="flex items-center justify-between gap-2">
                         <button
                           type="button"
-                          className="flex min-w-0 items-center gap-1 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+                          className="flex min-w-0 items-center gap-1 rounded-md text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
                           onClick={() => chapterId != null && onToggleChapter(chapterId)}
                         >
                           {isCollapsed ? (
@@ -118,6 +116,12 @@ export function PalaceListSections<TPalace extends PalaceGroupedItem | PalaceGro
                             {group.question_total ?? 0}/{parentTotal}
                           </span>
                         ) : null}
+                      </div>
+                      {chapterShare > 0 ? (
+                        <div className="h-0.5 overflow-hidden rounded-full bg-border/60" aria-hidden>
+                          <div className="h-full rounded-full bg-muted-foreground/35" style={{ width: `${Math.round(chapterShare * 100)}%` }} />
+                        </div>
+                      ) : null}
                       </div>
                     ) : null}
                     {!isCollapsed ? (

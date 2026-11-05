@@ -1,5 +1,5 @@
 import { ExamStarPicker, useExamOverview } from '@/modules/exam/public'
-import { BookOpen, ChevronRight, FolderTree, LayoutGrid, LibraryBig, List, Plus, Rows3, Search, WrapText, X } from 'lucide-react'
+import { BookOpen, ChevronRight, FolderTree, LayoutGrid, LibraryBig, List, Plus, RotateCcw, Rows3, Search, WrapText, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useRouteResidency } from '@/shared/routing/RouteResidency'
@@ -24,7 +24,7 @@ import {
   PALACE_CATALOG_INVALIDATED_EVENT,
 } from '@/modules/content/domain/palace-entity/api'
 import { isStudyTextLibraryPending, peekGroupedPalaces, peekSubjectShelf } from '@/shared/study-text/studyTextLibrary'
-import { Badge } from '@/shared/components/ui/badge'
+import { ToggleGroup, ToggleGroupItem } from '@/shared/components/ui/toggle-group'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
@@ -63,10 +63,10 @@ const shelfDensityOptions: Array<{ value: PalaceShelfDensityMode; label: string 
 
 function statusBadge(item: PalaceSubjectShelfItem) {
   if ((item.due_now_count ?? 0) > 0) {
-    return <span className="inline-block h-3 w-3 rounded-full bg-destructive" title="当前可立即复习" />
+    return <span className="mt-1 inline-block size-2 shrink-0 rounded-full bg-destructive" title="当前可立即复习" />
   }
   if ((item.due_later_today_count ?? 0) > 0) {
-    return <span className="inline-block h-3 w-3 rounded-full bg-warning" title="今天稍后可复习" />
+    return <span className="mt-1 inline-block size-2 shrink-0 rounded-full bg-warning" title="今天稍后可复习" />
   }
 
   return null
@@ -79,9 +79,9 @@ function getShelfGridClass(layoutMode: PalaceShelfLayoutMode) {
 }
 
 function getShelfCardContentClass(densityMode: PalaceShelfDensityMode) {
-  if (densityMode === 'comfortable') return 'min-h-62 p-7 pl-11'
-  if (densityMode === 'compact') return 'min-h-47 p-4 pl-8'
-  return 'min-h-55 p-6 pl-10'
+  if (densityMode === 'comfortable') return 'p-6 pl-8'
+  if (densityMode === 'compact') return 'p-3.5 pl-5'
+  return 'p-5 pl-7'
 }
 
 function getShelfMetaSpacingClass(densityMode: PalaceShelfDensityMode) {
@@ -90,16 +90,10 @@ function getShelfMetaSpacingClass(densityMode: PalaceShelfDensityMode) {
   return 'space-y-4'
 }
 
-function getShelfStatCardClass(densityMode: PalaceShelfDensityMode) {
-  if (densityMode === 'comfortable') return 'px-4 py-4'
-  if (densityMode === 'compact') return 'px-3 py-2'
-  return 'px-4 py-3'
-}
-
 function getShelfTitleClass(densityMode: PalaceShelfDensityMode) {
-  if (densityMode === 'comfortable') return 'text-xl'
-  if (densityMode === 'compact') return 'text-base'
-  return 'text-lg'
+  if (densityMode === 'comfortable') return 'text-lg'
+  if (densityMode === 'compact') return 'text-[15px]'
+  return 'text-base'
 }
 
 function renderShelfStatusSummary(item: PalaceSubjectShelfItem) {
@@ -110,7 +104,7 @@ function renderShelfStatusSummary(item: PalaceSubjectShelfItem) {
   const hasAny = entries.some((entry) => entry.count > 0)
 
   if (!hasAny) {
-    return <span className="text-muted-foreground">当前没有紧急复习</span>
+    return <span className="text-xs text-muted-foreground">没有到期的复习</span>
   }
 
   return (
@@ -269,7 +263,6 @@ export default function PalaceShelfPage() {
     void fetchData().catch(() => undefined)
   }, [becameActiveAt, fetchData, isActive])
 
-  const categorizedCount = useMemo(() => items.filter((item) => item.subject).length, [items])
   const allPalaces = useMemo(
     () => flattenGroupedPalaces(groupedData ?? createEmptyPalaceGroupedListResponse()),
     [groupedData],
@@ -323,7 +316,7 @@ export default function PalaceShelfPage() {
   )
 
   return (
-    <PageContainer wide className="gap-4 sm:gap-8">
+    <PageContainer wide>
       <PageHeader
         title="学科书架"
         hideDescriptionOnMobile
@@ -345,150 +338,104 @@ export default function PalaceShelfPage() {
         }
       />
 
-      <Card>
-        <CardContent className="p-3 sm:p-4">
-          <div className="flex items-center gap-2 sm:flex-wrap sm:items-end sm:gap-3">
-            <div className="relative min-w-0 flex-1 sm:min-w-45">
-              <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="搜索学科或宫殿..."
-                value={search}
-                onChange={(event) =>
-                  setSearchParams((params) => {
-                    if (event.target.value) params.set('search', event.target.value)
-                    else params.delete('search')
-                    return params
-                  })
-                }
-                className="pl-9 pr-9"
-              />
-              {search ? (
-                <button
-                  type="button"
-                  aria-label="清除搜索"
-                  title="清除搜索"
-                  onClick={() => setSearchParams({})}
-                  className="absolute right-1.5 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
-                >
-                  <X className="size-4" />
-                </button>
-              ) : null}
-            </div>
-            <ShelfViewSheet settings={viewSettings} onChange={setViewSettings} />
-            <div
-              className="hidden flex-wrap items-center gap-2 sm:flex"
-              data-testid="shelf-view-toolbar"
-              data-display-mode={viewSettings.displayMode}
+      <div className="flex items-center gap-2">
+        <div className="relative min-w-0 flex-1 sm:max-w-sm">
+          <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="搜索学科或宫殿..."
+            value={search}
+            onChange={(event) =>
+              setSearchParams((params) => {
+                if (event.target.value) params.set('search', event.target.value)
+                else params.delete('search')
+                return params
+              })
+            }
+            className="pl-9 pr-9"
+          />
+          {search ? (
+            <button
+              type="button"
+              aria-label="清除搜索"
+              title="清除搜索"
+              onClick={() => setSearchParams({})}
+              className="absolute right-1.5 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
             >
-              <div
-                className="flex flex-wrap items-center gap-1 rounded-xl border border-border/70 bg-background/80 p-1"
-                role="group"
-                aria-label="书架显示模式"
-              >
-                <Button
-                  type="button"
-                  variant={viewSettings.displayMode === 'shelf' ? 'secondary' : 'ghost'}
-                  size="sm"
-                  className="min-h-11 sm:h-8 sm:min-h-8"
-                  data-testid="shelf-mode-covers"
-                  onClick={() => setViewSettings((current) => ({ ...current, displayMode: 'shelf' }))}
-                >
-                  书架封面
-                </Button>
-                <Button
-                  type="button"
-                  variant={viewSettings.displayMode === 'expanded' ? 'secondary' : 'ghost'}
-                  size="sm"
-                  className="min-h-11 sm:h-8 sm:min-h-8"
-                  data-testid="shelf-mode-expanded"
-                  onClick={() => setViewSettings((current) => ({ ...current, displayMode: 'expanded' }))}
-                >
-                  章节目录
-                </Button>
-              </div>
-              <div className="flex flex-wrap items-center gap-1 rounded-xl border border-border/70 bg-background/80 p-1">
-                {(viewSettings.displayMode === 'expanded' ? expandedLayoutOptions : shelfLayoutOptions).map((option) => {
-                  const Icon = option.icon
-                  const isActive =
-                    viewSettings.displayMode === 'expanded'
-                      ? viewSettings.expandedLayoutMode === option.value
-                      : viewSettings.layoutMode === option.value
-                  return (
-                    <Button
-                      key={option.value}
-                      type="button"
-                      variant={isActive ? 'secondary' : 'ghost'}
-                      size="sm"
-                      className="min-h-11 sm:h-8 sm:min-h-8"
-                      onClick={() =>
-                        setViewSettings((current) =>
-                          current.displayMode === 'expanded'
-                            ? { ...current, expandedLayoutMode: option.value as PalaceListLayoutMode }
-                            : { ...current, layoutMode: option.value as PalaceShelfLayoutMode },
-                        )
-                      }
-                    >
-                      <Icon className="size-4" />
-                      {option.label}
-                    </Button>
-                  )
-                })}
-              </div>
-              <div className="flex flex-wrap items-center gap-1 rounded-xl border border-border/70 bg-background/80 p-1">
-                {shelfDensityOptions.map((option) => (
-                  <Button
-                    key={option.value}
-                    type="button"
-                    variant={viewSettings.densityMode === option.value ? 'secondary' : 'ghost'}
-                    size="sm"
-                    className="min-h-11 sm:h-8 sm:min-h-8"
-                    onClick={() => setViewSettings((current) => ({ ...current, densityMode: option.value }))}
-                  >
-                    {option.label}
-                  </Button>
-                ))}
-              </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => setViewSettings(DEFAULT_PALACE_SHELF_VIEW_SETTINGS)}
-              >
-                恢复默认
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground sm:text-sm">
-        <Badge variant="secondary">{categorizedCount} 个学科书架</Badge>
-        <Badge variant="outline">{items.find((item) => item.subject == null) ? '含未分类' : '全部已分类'}</Badge>
-        {/* Phones keep the live view summary in the 视图 sheet; repeating two
-            badges plus the mode badge here only pushed the shelves down. */}
-        <Badge variant="outline" className="max-sm:hidden">
-          {viewSettings.displayMode === 'shelf' ? '封面模式' : '目录模式'}
-        </Badge>
-      </div>
-
-      {viewSettings.displayMode === 'expanded' ? (
+              <X className="size-4" />
+            </button>
+          ) : null}
+        </div>
+        <ShelfViewSheet settings={viewSettings} onChange={setViewSettings} />
+        {/* Desktop: covers/contents, layout icons, density, reset — one row of segments. */}
         <div
-          className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-info/25 bg-info/5 px-4 py-3 text-sm"
-          data-testid="shelf-expanded-hint"
+          className="ml-auto hidden items-center gap-2 sm:flex"
+          data-testid="shelf-view-toolbar"
+          data-display-mode={viewSettings.displayMode}
         >
-          <div className="text-muted-foreground">
-            当前是<strong className="mx-1 text-foreground">章节目录</strong>视图
-          </div>
+          <ToggleGroup
+            type="single"
+            value={viewSettings.displayMode}
+            onValueChange={(value) => {
+              if (value) setViewSettings((current) => ({ ...current, displayMode: value as PalaceShelfViewSettings['displayMode'] }))
+            }}
+            aria-label="书架显示模式"
+          >
+            <ToggleGroupItem value="shelf" data-testid="shelf-mode-covers" aria-label="书架封面" className="text-xs">
+              封面
+            </ToggleGroupItem>
+            <ToggleGroupItem value="expanded" data-testid="shelf-mode-expanded" aria-label="章节目录" className="text-xs">
+              目录
+            </ToggleGroupItem>
+          </ToggleGroup>
+          <ToggleGroup
+            type="single"
+            value={viewSettings.displayMode === 'expanded' ? viewSettings.expandedLayoutMode : viewSettings.layoutMode}
+            onValueChange={(value) => {
+              if (!value) return
+              setViewSettings((current) =>
+                current.displayMode === 'expanded'
+                  ? { ...current, expandedLayoutMode: value as PalaceListLayoutMode }
+                  : { ...current, layoutMode: value as PalaceShelfLayoutMode },
+              )
+            }}
+            aria-label="布局"
+          >
+            {(viewSettings.displayMode === 'expanded' ? expandedLayoutOptions : shelfLayoutOptions).map((option) => {
+              const Icon = option.icon
+              return (
+                <ToggleGroupItem key={option.value} value={option.value} aria-label={option.label} title={option.label} className="px-2">
+                  <Icon className="size-4" />
+                </ToggleGroupItem>
+              )
+            })}
+          </ToggleGroup>
+          <ToggleGroup
+            type="single"
+            value={viewSettings.densityMode}
+            onValueChange={(value) => {
+              if (value) setViewSettings((current) => ({ ...current, densityMode: value as PalaceShelfDensityMode }))
+            }}
+            aria-label="密度"
+          >
+            {shelfDensityOptions.map((option) => (
+              <ToggleGroupItem key={option.value} value={option.value} className="text-xs">
+                {option.label}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
           <Button
             type="button"
-            size="sm"
-            className="shrink-0 rounded-xl"
-            onClick={() => setViewSettings((current) => ({ ...current, displayMode: 'shelf' }))}
+            variant="ghost"
+            size="icon"
+            aria-label="恢复默认"
+            title="恢复默认视图"
+            className="text-muted-foreground"
+            onClick={() => setViewSettings(DEFAULT_PALACE_SHELF_VIEW_SETTINGS)}
           >
-            回到书架封面
+            <RotateCcw />
           </Button>
         </div>
-      ) : null}
+      </div>
 
       {loadError ? (
         <ErrorState
@@ -529,7 +476,7 @@ export default function PalaceShelfPage() {
         )
       ) : items.length > 0 ? (
         <div
-          className={cn('ma-stagger grid gap-5', getShelfGridClass(viewSettings.layoutMode))}
+          className={cn('ma-stagger grid gap-4', getShelfGridClass(viewSettings.layoutMode))}
           data-testid="shelf-grid"
           data-layout-mode={viewSettings.layoutMode}
           data-density-mode={viewSettings.densityMode}
@@ -547,72 +494,48 @@ export default function PalaceShelfPage() {
                     isUncategorized ? '/palaces/list?uncategorized=true' : `/palaces/list?subjectId=${item.subject?.id}`,
                   )
                 }
-                className="text-left"
+                className="group rounded-xl text-left"
                 data-testid="subject-book-card"
               >
-                <Card className="group relative h-full overflow-hidden border-border/70 bg-card/90 hover:shadow-lg">
-                  {/* Book spine + cover wash */}
+                <Card className="group relative h-full overflow-hidden border-border/80 shadow-soft transition-[box-shadow,border-color,translate] duration-200 group-hover:-translate-y-0.5 group-hover:border-foreground/15 group-hover:shadow-lift">
+                  {/* Book spine in the subject colour */}
                   <div
-                    className="absolute inset-y-0 left-0 w-4 rounded-l-xl opacity-95 shadow-inner"
-                    style={{
-                      background: `linear-gradient(180deg, ${color} 0%, color-mix(in srgb, ${color} 72%, #0f172a) 100%)`,
-                    }}
-                  />
-                  <div
-                    className="pointer-events-none absolute inset-0 opacity-[0.12]"
-                    style={{
-                      background: `linear-gradient(135deg, ${color} 0%, transparent 55%)`,
-                    }}
+                    className="absolute inset-y-0 left-0 w-1.5"
+                    style={{ background: color }}
+                    aria-hidden
                   />
                   <CardContent className={cn('relative flex h-full flex-col justify-between', getShelfCardContentClass(viewSettings.densityMode))}>
                     <div className={getShelfMetaSpacingClass(viewSettings.densityMode)}>
-                      <SubjectMemoryLadder
-                        subjectKey={item.subject?.id ?? 'unassigned'}
-                        variant="thumb"
-                      />
                       <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-center gap-3">
+                        <div className="flex min-w-0 items-center gap-3">
                           <div
-                            className="relative flex size-14 shrink-0 items-center justify-center rounded-md border border-white/20 text-white shadow-md"
+                            className="flex size-10 shrink-0 items-center justify-center rounded-lg"
                             style={{
-                              background: `linear-gradient(160deg, ${color} 0%, color-mix(in srgb, ${color} 55%, #111827) 100%)`,
+                              background: `color-mix(in srgb, ${color} 14%, transparent)`,
+                              color,
                             }}
                             aria-hidden
                           >
-                            {isUncategorized ? <LibraryBig className="size-6" /> : <BookOpen className="size-6" />}
-                            <span className="absolute inset-y-1 left-1 w-0.5 rounded-full bg-white/25" />
+                            {isUncategorized ? <LibraryBig className="size-5" /> : <BookOpen className="size-5" />}
                           </div>
-                          <div>
-                            <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
-                              {isUncategorized ? 'Unfiled' : 'Subject book'}
-                            </div>
-                            <div className={cn('font-semibold text-foreground', getShelfTitleClass(viewSettings.densityMode))}>{title}</div>
-                            <div className="mt-1 text-xs text-muted-foreground">
-                              {isUncategorized ? '尚未归入学科的宫殿' : '点击封面进入本书的宫殿'}
+                          <div className="min-w-0">
+                            <div className={cn('truncate font-semibold tracking-tight text-foreground', getShelfTitleClass(viewSettings.densityMode))}>{title}</div>
+                            <div className="mt-0.5 text-xs tabular-nums text-muted-foreground">
+                              {item.palace_count} 座宫殿 · {item.chapter_count} 个章节
                             </div>
                           </div>
                         </div>
                         {statusBadge(item)}
                       </div>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className={cn('rounded-lg border border-border/70 bg-background/70', getShelfStatCardClass(viewSettings.densityMode))}>
-                          <div className="text-xs text-muted-foreground">宫殿数量</div>
-                          <div className="mt-1 text-xl font-semibold">{item.palace_count}</div>
-                        </div>
-                        <div className={cn('rounded-lg border border-border/70 bg-background/70', getShelfStatCardClass(viewSettings.densityMode))}>
-                          <div className="text-xs text-muted-foreground">章节数量</div>
-                          <div className="mt-1 text-xl font-semibold">{item.chapter_count}</div>
-                        </div>
-                      </div>
+                      <SubjectMemoryLadder
+                        subjectKey={item.subject?.id ?? 'unassigned'}
+                        variant="thumb"
+                      />
                     </div>
 
-                    <div className="mt-6 flex items-center justify-between gap-3 text-sm">
+                    <div className="mt-4 flex items-center justify-between gap-3 border-t border-border/60 pt-3 text-sm">
                       {renderShelfStatusSummary(item)}
-                      <span className="inline-flex items-center font-medium text-foreground">
-                        打开书架
-                        <ChevronRight className="ml-1 size-4 transition-transform group-hover:translate-x-1" />
-                      </span>
+                      <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground" aria-hidden />
                     </div>
                   </CardContent>
                 </Card>

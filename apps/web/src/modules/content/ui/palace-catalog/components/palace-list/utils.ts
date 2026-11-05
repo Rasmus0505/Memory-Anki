@@ -47,21 +47,14 @@ export function getChapterCardClass(
 }
 
 export function getPalaceCardClass(densityMode: PalaceListDensityMode) {
-  if (densityMode === 'comfortable') return 'transition-shadow hover:shadow-md'
-  if (densityMode === 'compact') return 'transition-shadow hover:shadow-sm'
-  return 'transition-shadow hover:shadow-md'
+  const lift = 'shadow-soft transition-[box-shadow,border-color,translate] duration-200 hover:-translate-y-px hover:border-foreground/15 hover:shadow-lift'
+  return densityMode === 'compact' ? cn(lift, 'rounded-lg') : lift
 }
 
 export function getPalaceCardContentClass(densityMode: PalaceListDensityMode) {
-  if (densityMode === 'comfortable') return 'gap-4 p-5'
-  if (densityMode === 'compact') return 'gap-2 p-3'
-  return 'gap-3 p-4'
-}
-
-export function getPalaceIconClass(densityMode: PalaceListDensityMode) {
-  if (densityMode === 'comfortable') return 'h-11 w-11 rounded-xl'
-  if (densityMode === 'compact') return 'h-9 w-9 rounded-lg'
-  return 'h-10 w-10 rounded-lg'
+  if (densityMode === 'comfortable') return 'px-5 py-4'
+  if (densityMode === 'compact') return 'px-3 py-2'
+  return 'px-4 py-3'
 }
 
 export function formatCreatedAt(value: string | null): string {
