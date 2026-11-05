@@ -3,8 +3,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import PalaceListPage from '@/modules/content/ui/palace-catalog/PalaceListPage'
-import { PALACE_LIST_VIEW_SETTINGS_KEY, PALACE_SHELF_VIEW_SETTINGS_KEY } from '@/modules/settings/public'
 import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
+import { resetPalaceDirectoryViewState } from '@/modules/content/ui/palace-edit/model/palaceDirectoryViewState'
 import { buildPalaceCatalogGroupedQueryKey } from '@/modules/content/ui/palace-catalog/model/palaceCatalog'
 
 const navigate = vi.fn()
@@ -12,7 +12,7 @@ const searchParams = new URLSearchParams()
 const setSearchParams = vi.fn()
 
 vi.mock('react-router-dom', () => ({
-  Link: ({ children, to }: { children: React.ReactNode; to: string }) => <a href={to}>{children}</a>,
+  Link: ({ children, to, ...rest }: { children: React.ReactNode; to: string } & Record<string, unknown>) => <a href={to} {...rest}>{children}</a>,
   useNavigate: () => navigate,
   useSearchParams: () => [searchParams, setSearchParams],
 }))
@@ -200,6 +200,7 @@ describe('PalaceListPage', () => {
     searchParams.delete('uncategorized')
     window.localStorage.clear()
     resetClientPreferenceCacheForTest()
+    resetPalaceDirectoryViewState()
     getPalacesGroupedApi
       .mockResolvedValueOnce({
         groups: [],
@@ -252,7 +253,9 @@ describe('PalaceListPage', () => {
     expect(screen.queryByText('第 1 部分')).toBeNull()
     expect(screen.queryByText(/预计 1分 40秒/)).toBeNull()
     expect(screen.getByRole('button', { name: '立即复习' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: '做题' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: /做题/ })).toBeTruthy()
+    // Inside one subject the tree starts at its chapters: no subject row.
+    expect(screen.queryByRole('button', { name: /展开中国近代史|收起中国近代史/ })).toBeNull()
   })
 
   it('filters the chapter list by the selected interval band instead of listing palaces in the ladder', async () => {
@@ -326,36 +329,26 @@ describe('PalaceListPage', () => {
     expect(navigate).toHaveBeenCalledWith('/palaces/1/edit?mode=permanent-mark')
   })
 
-  it('defaults to chapter-double and keeps local view settings after switching', async () => {
+  it('opens with every chapter unfolded and can fold them all back', async () => {
+    getPalacesGroupedApi.mockReset()
+    getPalacesGroupedApi.mockResolvedValue({
+      groups: [],
+      ungrouped: [],
+      subjects: [{
+        subject: { id: 1, name: '中国近代史', color: '#6366f1' },
+        chapter_groups: [{
+          source_chapter: { id: 2, name: '第四节', subject_id: 1, parent_id: null },
+          palaces: [duePalace, { ...reviewedPalace, id: 99, title: '另一座宫殿', resolved_title: '另一座宫殿' }],
+        }],
+        ungrouped_palaces: [],
+      }],
+    })
     renderPalaceListPage()
 
-    await screen.findByText('第四节 收回教育权运动与教会教育的变革')
-    expect(screen.getByTestId('list-layout-root').dataset.layoutMode).toBe('chapter-double')
-
-    fireEvent.click(screen.getByRole('radio', { name: '章节知识点双列' }))
-    fireEvent.click(screen.getByRole('radio', { name: '紧凑' }))
-
-    expect(screen.getByTestId('list-layout-root').dataset.layoutMode).toBe('chapter-card-grid')
-    expect(screen.getByTestId('list-layout-root').dataset.densityMode).toBe('compact')
-    expect(window.localStorage.getItem(PALACE_LIST_VIEW_SETTINGS_KEY)).toBeNull()
-  })
-
-  it('reuses the shelf chapter layout instead of a separate list preference', async () => {
-    window.localStorage.setItem(
-      PALACE_SHELF_VIEW_SETTINGS_KEY,
-      JSON.stringify({
-        displayMode: 'shelf',
-        layoutMode: 'double',
-        expandedLayoutMode: 'flow',
-        densityMode: 'comfortable',
-      }),
-    )
-
-    renderPalaceListPage()
-
-    await screen.findByText('第四节 收回教育权运动与教会教育的变革')
-    expect(screen.getByTestId('list-layout-root').dataset.layoutMode).toBe('flow')
-    expect(screen.getByTestId('list-layout-root').dataset.densityMode).toBe('comfortable')
+    expect(await screen.findByRole('button', { name: '另一座宫殿' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '全部收起' }))
+    expect(screen.queryByRole('button', { name: '另一座宫殿' })).toBeNull()
+    expect(screen.getByRole('button', { name: '展开第四节' })).toBeTruthy()
   })
 
   it('clears search without dropping current subject context', async () => {

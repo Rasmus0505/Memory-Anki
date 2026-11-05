@@ -11,6 +11,7 @@ import {
 import { Link } from 'react-router-dom'
 import { ChevronRight, FileText, LoaderCircle, Plus, Search } from 'lucide-react'
 import { Input } from '@/shared/components/ui/input'
+import { SplitPanelToggle } from '@/shared/components/layout/MindMapSplitLayout'
 import { cn } from '@/shared/lib/utils'
 import { usePalaceDirectoryTree } from '../hooks/usePalaceDirectoryTree'
 import {
@@ -29,8 +30,14 @@ import {
 } from '../model/palaceDirectoryViewState'
 
 const PALACE_DRAG_TYPE = 'application/x-memory-anki-palace'
-const INDENT_STEP = 14
-const BASE_INDENT = 6
+
+/** `sidebar`: compact panel beside a canvas. `page`: a full-page catalog list. */
+export type PalaceDirectoryTreeSize = 'sidebar' | 'page'
+
+const ROW_METRICS: Record<PalaceDirectoryTreeSize, { indent: number; base: number; text: string; row: string; leaf: string; chevron: string }> = {
+  sidebar: { indent: 14, base: 6, text: 'text-[13px]', row: 'py-1', leaf: 'size-3.5', chevron: 'size-5' },
+  page: { indent: 20, base: 4, text: 'text-sm', row: 'py-2', leaf: 'size-4', chevron: 'size-7' },
+}
 
 export interface PalaceDirectoryTreeViewProps {
   tree: PalaceDirectoryTreeModel
@@ -50,6 +57,44 @@ export interface PalaceDirectoryTreeViewProps {
    * editor remounts per palace). Omit to start folded every mount.
    */
   viewStateKey?: string
+  size?: PalaceDirectoryTreeSize
+  /** Drive the filter from outside (the page owns its search box). */
+  keyword?: string
+  /** Render a single subject's chapters at the root, without the subject row. */
+  hideSubjectRows?: boolean
+  /** Folds open on first mount when no remembered state exists. */
+  defaultExpandedKeys?: ReadonlyArray<string>
+  /** Changing this value folds every row (a 「全部收起」 button). */
+  collapseSignal?: number
+  /** Open every fold, e.g. while the host shows filtered search results. */
+  expandAll?: boolean
+  /** Trailing content on a row: counts, status chips, row actions. */
+  renderPalaceMeta?: (palace: DirectoryPalaceNode) => ReactNode
+  renderChapterMeta?: (chapter: DirectoryChapterNode) => ReactNode
+  renderSubjectMeta?: (subject: DirectorySubjectNode) => ReactNode
+  /** Trailing content on a 「未分类」 bucket row, keyed `root:ungrouped` or `subject:<id>:ungrouped`. */
+  renderBucketMeta?: (bucketKey: string) => ReactNode
+  /** Mark this text inside chapter and palace names (the host's search term). */
+  highlight?: string
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function Highlighted({ text, query }: { text: string; query?: string }) {
+  const needle = query?.trim()
+  if (!needle) return <>{text}</>
+  const lower = needle.toLocaleLowerCase()
+  return (
+    <>
+      {text.split(new RegExp(`(${escapeRegExp(needle)})`, 'gi')).map((part, index) => (
+        part.toLocaleLowerCase() === lower
+          ? <mark key={index} className="rounded-sm bg-warning/25 px-0.5 text-inherit">{part}</mark>
+          : part ? <span key={index}>{part}</span> : null
+      ))}
+    </>
+  )
 }
 
 function readDraggedPalaceId(event: DragEvent) {
@@ -77,11 +122,26 @@ export function PalaceDirectoryTreeView({
   emptyState,
   className,
   viewStateKey,
+  size = 'sidebar',
+  keyword: controlledKeyword,
+  hideSubjectRows = false,
+  defaultExpandedKeys,
+  collapseSignal,
+  expandAll = false,
+  renderPalaceMeta,
+  renderChapterMeta,
+  renderSubjectMeta,
+  renderBucketMeta,
+  highlight,
 }: PalaceDirectoryTreeViewProps) {
-  const [expanded, setExpanded] = useState<Set<string>>(() => (
-    viewStateKey ? new Set(readDirectoryExpandedKeys(viewStateKey) ?? []) : new Set()
-  ))
-  const [keyword, setKeyword] = useState('')
+  const metrics = ROW_METRICS[size]
+  const pageList = size === 'page'
+  const [expanded, setExpanded] = useState<Set<string>>(() => {
+    const remembered = viewStateKey ? readDirectoryExpandedKeys(viewStateKey) : undefined
+    return new Set(remembered ?? defaultExpandedKeys ?? [])
+  })
+  const [ownKeyword, setKeyword] = useState('')
+  const keyword = controlledKeyword ?? ownKeyword
   const [dragOverKey, setDragOverKey] = useState<string | null>(null)
   const activeRowRef = useRef<HTMLButtonElement | null>(null)
   const scrollContainerRef = useRef<HTMLDivElement | null>(null)
@@ -103,10 +163,17 @@ export function PalaceDirectoryTreeView({
   }, [viewStateKey])
 
   const filtered = useMemo(() => filterPalaceDirectoryTree(tree, keyword), [tree, keyword])
+
+  const lastCollapseSignal = useRef(collapseSignal)
+  useEffect(() => {
+    if (collapseSignal === lastCollapseSignal.current) return
+    lastCollapseSignal.current = collapseSignal
+    setExpanded(new Set())
+  }, [collapseSignal])
   // A search must reveal what it found: rows are folded by default, so keeping
   // the manual fold state here would hide every match behind a collapsed
   // subject/chapter and look like an empty result.
-  const searching = keyword.trim().length > 0
+  const searching = expandAll || keyword.trim().length > 0
 
   const toggle = useCallback((key: string) => {
     setExpanded((current) => {
@@ -192,18 +259,33 @@ export function PalaceDirectoryTreeView({
           : undefined}
         onClick={() => onSelectPalace(palace.id)}
         className={cn(
-          'group flex w-full items-center gap-1.5 rounded-md py-1 pr-1.5 text-left text-[13px] transition-colors',
+          'group flex items-center gap-1.5 rounded-md pr-1.5 text-left transition-colors',
+          metrics.row,
+          metrics.text,
+          renderPalaceMeta ? 'min-w-0 flex-1' : 'w-full',
           active
             ? 'bg-primary/10 font-medium text-foreground'
-            : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+            : renderPalaceMeta
+              ? 'text-foreground/90 hover:text-foreground'
+              : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
         )}
-        style={{ paddingLeft: BASE_INDENT + depth * INDENT_STEP + 20 }}
+        style={{ paddingLeft: metrics.base + depth * metrics.indent + (pageList ? 28 : 20) }}
       >
-        <FileText className="size-3.5 shrink-0 opacity-60" aria-hidden />
-        <span className="truncate">{palace.title}</span>
+        <FileText className={cn(metrics.leaf, 'shrink-0 opacity-60')} aria-hidden />
+        <span className="truncate"><Highlighted text={palace.title} query={highlight} /></span>
       </button>
     )
-    if (!flattenedChapter || dropKey == null) return row
+    const rowWithMeta = renderPalaceMeta ? (
+      <div
+        key={`palace-row:${palace.id}`}
+        data-palace-row={palace.id}
+        className="group/row flex min-w-0 items-center gap-2 rounded-md pr-2 transition-colors hover:bg-accent/70"
+      >
+        {row}
+        <div className="flex shrink-0 items-center gap-1.5">{renderPalaceMeta(palace)}</div>
+      </div>
+    ) : row
+    if (!flattenedChapter || dropKey == null) return rowWithMeta
     return (
       <div
         key={dropKey}
@@ -213,7 +295,7 @@ export function PalaceDirectoryTreeView({
           dragOverKey === dropKey ? 'bg-primary/10 ring-1 ring-primary/50' : null,
         )}
       >
-        {row}
+        {rowWithMeta}
       </div>
     )
   }
@@ -231,8 +313,9 @@ export function PalaceDirectoryTreeView({
         <div
           {...dropTargetProps(key, chapter.id, chapter.subjectId)}
           className={cn(
-            'flex items-center rounded-md transition-colors',
-            dragOverKey === key ? 'bg-primary/10 ring-1 ring-primary/50' : 'hover:bg-muted/60',
+            'group/row flex items-center rounded-md transition-colors',
+            dragOverKey === key ? 'bg-primary/10 ring-1 ring-primary/50' : pageList ? 'hover:bg-accent/70' : 'hover:bg-muted/60',
+            renderChapterMeta && 'gap-2 pr-2',
           )}
         >
           <button
@@ -240,18 +323,19 @@ export function PalaceDirectoryTreeView({
             onClick={() => toggle(key)}
             aria-expanded={isOpen}
             aria-label={`${isOpen ? '收起' : '展开'}${chapter.name}`}
-            className="flex size-5 shrink-0 items-center justify-center text-muted-foreground"
-            style={{ marginLeft: BASE_INDENT + depth * INDENT_STEP }}
+            className={cn('flex shrink-0 items-center justify-center rounded-md text-muted-foreground', metrics.chevron)}
+            style={{ marginLeft: metrics.base + depth * metrics.indent }}
           >
             <ChevronRight className={cn('size-3.5 transition-transform', isOpen && 'rotate-90')} aria-hidden />
           </button>
           <button
             type="button"
             onClick={() => toggle(key)}
-            className="min-w-0 flex-1 truncate py-1 pr-1.5 text-left text-[13px] text-foreground/85"
+            className={cn('min-w-0 flex-1 truncate pr-1.5 text-left text-foreground/85', metrics.row, metrics.text)}
           >
-            {chapter.name}
+            <Highlighted text={chapter.name} query={highlight} />
           </button>
+          {renderChapterMeta ? <div className="flex shrink-0 items-center gap-1.5">{renderChapterMeta(chapter)}</div> : null}
         </div>
         {isOpen ? (
           <div className="min-w-0">
@@ -272,50 +356,66 @@ export function PalaceDirectoryTreeView({
     const isOpen = searching || expanded.has(key)
     return (
       <div key={key} className="min-w-0">
-        <div className="flex items-center rounded-md transition-colors hover:bg-muted/60">
+        <div className={cn('group/row flex items-center rounded-md transition-colors', pageList ? 'hover:bg-accent/70' : 'hover:bg-muted/60', renderBucketMeta && 'gap-2 pr-2')}>
           <button
             type="button"
             onClick={() => toggle(key)}
             aria-expanded={isOpen}
             aria-label={`${isOpen ? '收起' : '展开'}${label}`}
-            className="flex size-5 shrink-0 items-center justify-center text-muted-foreground"
-            style={{ marginLeft: BASE_INDENT + depth * INDENT_STEP }}
+            className={cn('flex shrink-0 items-center justify-center rounded-md text-muted-foreground', metrics.chevron)}
+            style={{ marginLeft: metrics.base + depth * metrics.indent }}
           >
             <ChevronRight className={cn('size-3.5 transition-transform', isOpen && 'rotate-90')} aria-hidden />
           </button>
           <button
             type="button"
             onClick={() => toggle(key)}
-            className="min-w-0 flex-1 truncate py-1 pr-1.5 text-left text-[13px] text-muted-foreground"
+            className={cn('min-w-0 flex-1 truncate pr-1.5 text-left text-muted-foreground', metrics.row, metrics.text)}
           >
             {label}
           </button>
+          {renderBucketMeta ? <div className="flex shrink-0 items-center gap-1.5">{renderBucketMeta(key)}</div> : null}
         </div>
         {isOpen ? palaces.map((palace) => renderPalace(palace, depth + 1)) : null}
       </div>
     )
   }
 
+  const renderSubjectChildren = (subject: DirectorySubjectNode, depth: number) => (
+    <div className="min-w-0">
+      {subject.chapters.map((chapter) => renderChapter(chapter, depth))}
+      {subject.ungrouped.length
+        ? renderUngroupedBucket(
+          `subject:${subject.id}:ungrouped`,
+          '未分类',
+          subject.ungrouped,
+          depth,
+        )
+        : null}
+    </div>
+  )
+
   const renderSubject = (subject: DirectorySubjectNode, depth: number) => {
+    if (hideSubjectRows) return <div key={`subject:${subject.id}`}>{renderSubjectChildren(subject, depth)}</div>
     const key = `subject:${subject.id}`
     const isOpen = searching || expanded.has(key)
     return (
-      <div key={key} className="min-w-0">
-        <div className="flex items-center rounded-md transition-colors hover:bg-muted/60">
+      <div key={key} className={cn('min-w-0', pageList && 'border-b border-border/60 py-1 last:border-b-0')}>
+        <div className={cn('group/row flex items-center rounded-md transition-colors', pageList ? 'hover:bg-accent/70' : 'hover:bg-muted/60', renderSubjectMeta && 'gap-2 pr-2')}>
           <button
             type="button"
             onClick={() => toggle(key)}
             aria-expanded={isOpen}
             aria-label={`${isOpen ? '收起' : '展开'}${subject.name}`}
-            className="flex size-5 shrink-0 items-center justify-center text-muted-foreground"
-            style={{ marginLeft: BASE_INDENT + depth * INDENT_STEP }}
+            className={cn('flex shrink-0 items-center justify-center rounded-md text-muted-foreground', metrics.chevron)}
+            style={{ marginLeft: metrics.base + depth * metrics.indent }}
           >
             <ChevronRight className={cn('size-3.5 transition-transform', isOpen && 'rotate-90')} aria-hidden />
           </button>
           <button
             type="button"
             onClick={() => toggle(key)}
-            className="flex min-w-0 flex-1 items-center gap-1.5 py-1 pr-1.5 text-left text-[13px] font-medium text-foreground"
+            className={cn('flex min-w-0 flex-1 items-center gap-1.5 pr-1.5 text-left font-medium text-foreground', metrics.row, metrics.text, pageList && 'py-2.5 text-[15px]')}
           >
             <span
               className="size-2 shrink-0 rounded-full"
@@ -324,20 +424,9 @@ export function PalaceDirectoryTreeView({
             />
             <span className="truncate">{subject.name}</span>
           </button>
+          {renderSubjectMeta ? <div className="flex shrink-0 items-center gap-1.5">{renderSubjectMeta(subject)}</div> : null}
         </div>
-        {isOpen ? (
-          <div className="min-w-0">
-            {subject.chapters.map((chapter) => renderChapter(chapter, depth + 1))}
-            {subject.ungrouped.length
-              ? renderUngroupedBucket(
-                `subject:${subject.id}:ungrouped`,
-                '未分类',
-                subject.ungrouped,
-                depth + 1,
-              )
-              : null}
-          </div>
-        ) : null}
+        {isOpen ? renderSubjectChildren(subject, depth + 1) : null}
       </div>
     )
   }
@@ -346,18 +435,19 @@ export function PalaceDirectoryTreeView({
   const hasRootUngrouped = filtered.ungrouped.length > 0
 
   return (
-    <div className={cn('flex h-full min-h-0 w-full flex-col gap-2 p-3', className)}>
+    <div className={cn('flex w-full flex-col gap-2', pageList ? 'p-1' : 'h-full min-h-0 p-3', className)}>
       {showHeader ? (
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-medium tracking-wide text-muted-foreground">记忆宫殿</span>
+        <div className="flex h-7 items-center gap-0.5">
+          <span className="mr-auto pl-1 text-xs font-medium tracking-wide text-muted-foreground">记忆宫殿</span>
           <Link
             to="/palaces/new"
             aria-label="新建宫殿"
             title="新建宫殿"
-            className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
-            <Plus className="size-3.5" aria-hidden />
+            <Plus className="size-4" aria-hidden />
           </Link>
+          <SplitPanelToggle />
         </div>
       ) : null}
       {showSearch ? (
@@ -375,7 +465,7 @@ export function PalaceDirectoryTreeView({
       <div
         ref={scrollContainerRef}
         aria-label="宫殿目录"
-        className="min-h-0 flex-1 overflow-y-auto"
+        className={pageList ? 'min-w-0' : 'min-h-0 flex-1 overflow-y-auto'}
         onScroll={viewStateKey
           ? (event) => { writeDirectoryScrollTop(viewStateKey, event.currentTarget.scrollTop) }
           : undefined}

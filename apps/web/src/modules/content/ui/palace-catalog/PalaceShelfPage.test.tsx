@@ -3,8 +3,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import PalaceShelfPage from '@/modules/content/ui/palace-catalog/PalaceShelfPage'
-import { PALACE_SHELF_VIEW_SETTINGS_KEY } from '@/modules/settings/public'
 import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
+import { resetPalaceDirectoryViewState } from '@/modules/content/ui/palace-edit/model/palaceDirectoryViewState'
 
 const navigate = vi.fn()
 const searchParams = new URLSearchParams()
@@ -13,7 +13,7 @@ const getPalaceSubjectShelfApi = vi.fn()
 const getPalacesGroupedApi = vi.fn()
 
 vi.mock('react-router-dom', () => ({
-  Link: ({ children, to }: { children: React.ReactNode; to: string }) => <a href={to}>{children}</a>,
+  Link: ({ children, to, ...rest }: { children: React.ReactNode; to: string } & Record<string, unknown>) => <a href={to} {...rest}>{children}</a>,
   useNavigate: () => navigate,
   useSearchParams: () => [searchParams, setSearchParams],
 }))
@@ -211,97 +211,80 @@ describe('PalaceShelfPage', () => {
     searchParams.delete('search')
     window.localStorage.clear()
     resetClientPreferenceCacheForTest()
+    resetPalaceDirectoryViewState()
   })
 
-  it('renders subject shelf cards and navigates by subject id', async () => {
+  it('lists subjects as tree rows with their due counts and the way into the subject', async () => {
     renderShelfPage()
 
-    const title = await screen.findByText('中国近代史')
-    expect(getPalacesGroupedApi).not.toHaveBeenCalled()
-    fireEvent.click(title.closest('button') as HTMLButtonElement)
-    expect(navigate).toHaveBeenCalledWith('/palaces/list?subjectId=1')
-    expect(screen.getByText('立即复习')).toBeTruthy()
+    expect(await screen.findByText('中国近代史')).toBeTruthy()
+    expect(screen.getByTestId('shelf-tree')).toBeTruthy()
+    expect(screen.getByText('3 座宫殿')).toBeTruthy()
+    expect(screen.getByTitle('1 个现在可以复习')).toBeTruthy()
+    expect(screen.getByRole('link', { name: '打开 中国近代史 书架' }).getAttribute('href')).toBe('/palaces/list?subjectId=1')
+    // Folded by default: palaces show once their subject is opened.
+    expect(screen.queryByText('中国教育史宫殿')).toBeNull()
   })
 
-  it('renders uncategorized shelf and navigates to uncategorized list', async () => {
-    getPalaceSubjectShelfApi.mockResolvedValue({
-      items: [
-        buildShelfItem({
-          subject: null,
-          palace_count: 2,
-          chapter_count: 0,
-          review_status: 'idle',
-          has_due_review: false,
-          has_due_later_today: false,
-          due_now_count: 0,
-          due_later_today_count: 0,
-        }),
-      ],
+  it('opens a subject to show its chapters and palaces, and a palace opens its editor', async () => {
+    renderShelfPage()
+
+    fireEvent.click(await screen.findByRole('button', { name: '展开中国近代史' }))
+    // A chapter holding a single palace is shown as that palace's row.
+    expect(screen.queryByRole('button', { name: '展开第一章' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '中国教育史宫殿' }))
+    expect(navigate).toHaveBeenCalledWith('/palaces/101/edit')
+  })
+
+  it('starts marking from the palace row and keeps 做题 and the row menu beside it', async () => {
+    renderShelfPage()
+
+    fireEvent.click(await screen.findByRole('button', { name: '展开中国近代史' }))
+    fireEvent.click(screen.getByRole('button', { name: '开始标记' }))
+    expect(navigate).toHaveBeenCalledWith('/palaces/101/edit?mode=permanent-mark')
+    expect(screen.getByRole('link', { name: /做题/ }).getAttribute('href')).toBe('/palaces/101/quiz')
+
+    fireEvent.keyDown(screen.getByRole('button', { name: /更多操作/ }), { key: 'Enter' })
+    expect(await screen.findByRole('menuitem', { name: '删除' })).toBeTruthy()
+  })
+
+  it('keeps uncategorized palaces in their own bucket with a way into the list', async () => {
+    getPalacesGroupedApi.mockResolvedValue({
+      groups: [],
+      ungrouped: [],
+      subjects: [{
+        subject: null,
+        chapter_groups: [],
+        ungrouped_palaces: [{ ...buildGroupedResponse().subjects[0].chapter_groups[0].palaces[0], id: 202, title: '散页', resolved_title: '散页' }],
+      }],
     })
+    getPalaceSubjectShelfApi.mockResolvedValue({ items: [buildShelfItem({ subject: null })] })
 
     renderShelfPage()
 
-    const title = await screen.findByText('未分类')
-    fireEvent.click(title.closest('button') as HTMLButtonElement)
-    expect(navigate).toHaveBeenCalledWith('/palaces/list?uncategorized=true')
-    expect(screen.getByText('没有到期的复习')).toBeTruthy()
+    expect(await screen.findByText('未分类')).toBeTruthy()
+    expect(screen.getByRole('link', { name: '打开 未分类 书架' }).getAttribute('href')).toBe('/palaces/list?uncategorized=true')
   })
 
-  it('passes search text to both shelf apis', async () => {
-    getPalaceSubjectShelfApi.mockResolvedValue({ items: [] })
-    getPalacesGroupedApi.mockResolvedValue({ groups: [], ungrouped: [], subjects: [] })
-
+  it('passes search text to both shelf apis and opens every fold for the results', async () => {
+    searchParams.set('search', '教育')
     renderShelfPage()
+
+    expect(await screen.findByRole('button', { name: '中国教育史宫殿' })).toBeTruthy()
+    expect(getPalaceSubjectShelfApi).toHaveBeenCalledWith({ search: '教育' })
+    expect(getPalacesGroupedApi).toHaveBeenCalledWith({ search: '教育' })
+    const marks = screen.getAllByText('教育').filter((node) => node.tagName === 'MARK')
+    expect(marks.length).toBeGreaterThan(0)
 
     fireEvent.change(screen.getByPlaceholderText('搜索学科或宫殿...'), { target: { value: '历史' } })
-    await waitFor(() => {
-      expect(setSearchParams).toHaveBeenCalled()
-    })
+    await waitFor(() => expect(setSearchParams).toHaveBeenCalled())
   })
 
-  it('uses double layout by default and applies custom shelf view settings', async () => {
+  it('refreshes shelf and palace data when the catalog is invalidated', async () => {
     renderShelfPage()
 
     await screen.findByText('中国近代史')
-    expect(screen.getByTestId('shelf-grid').dataset.layoutMode).toBe('double')
-    fireEvent.click(screen.getByRole('radio', { name: '单列' }))
-    fireEvent.click(screen.getByRole('radio', { name: '紧凑' }))
-
-    expect(screen.getByTestId('shelf-grid').dataset.layoutMode).toBe('single')
-    expect(screen.getByTestId('shelf-grid').dataset.densityMode).toBe('compact')
-    expect(window.localStorage.getItem(PALACE_SHELF_VIEW_SETTINGS_KEY)).toBeNull()
-  })
-
-  it('switches to expanded mode and applies expanded layout settings', async () => {
-    renderShelfPage()
-
-    await screen.findByText('中国近代史')
-    expect(getPalacesGroupedApi).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('radio', { name: '章节目录' }))
-    await screen.findByText('中国教育史宫殿')
-
-    expect(getPalacesGroupedApi).toHaveBeenCalledTimes(1)
-    expect(screen.getByTestId('list-layout-root').dataset.layoutMode).toBe('chapter-double')
-    expect(screen.getAllByRole('button', { name: '开始标记' }).length).toBeGreaterThan(0)
-    expect(screen.getAllByRole('button', { name: '做题' }).length).toBeGreaterThan(0)
-    expect(screen.getByLabelText(/编辑宫殿/)).toBeTruthy()
-    expect(screen.getByLabelText(/更多操作/)).toBeTruthy()
-    fireEvent.click(screen.getAllByRole('button', { name: '开始标记' })[0])
-    expect(navigate).toHaveBeenCalledWith('/palaces/101/edit?mode=permanent-mark')
-    fireEvent.click(screen.getByRole('radio', { name: '知识点流' }))
-
-    expect(screen.getByTestId('list-layout-root').dataset.layoutMode).toBe('flow')
-    expect(window.localStorage.getItem(PALACE_SHELF_VIEW_SETTINGS_KEY)).toBeNull()
-  })
-
-
-  it('refreshes shelf and expanded palace data when the catalog is invalidated', async () => {
-    renderShelfPage()
-
-    await screen.findByText('中国近代史')
-    fireEvent.click(screen.getByRole('radio', { name: '章节目录' }))
-    await screen.findByText('中国教育史宫殿')
-
+    await waitFor(() => expect(getPalacesGroupedApi).toHaveBeenCalledTimes(1))
     window.dispatchEvent(new CustomEvent('palace-catalog:invalidated'))
 
     await waitFor(() => {
@@ -310,14 +293,12 @@ describe('PalaceShelfPage', () => {
     })
   })
 
-  it('reveals delete inside the overflow menu in expanded mode', async () => {
+  it('folds everything back with 全部收起', async () => {
     renderShelfPage()
 
-    await screen.findByText('中国近代史')
-    fireEvent.click(screen.getByRole('radio', { name: '章节目录' }))
-    await screen.findByText('中国教育史宫殿')
-
-    fireEvent.click(screen.getByLabelText(/更多操作/))
-    expect(screen.getByRole('button', { name: '删除' })).toBeTruthy()
+    fireEvent.click(await screen.findByRole('button', { name: '展开中国近代史' }))
+    expect(screen.getByRole('button', { name: '中国教育史宫殿' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '全部收起' }))
+    expect(screen.queryByRole('button', { name: '中国教育史宫殿' })).toBeNull()
   })
 })

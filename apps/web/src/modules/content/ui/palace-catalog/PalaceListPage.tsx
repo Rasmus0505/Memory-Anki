@@ -1,32 +1,17 @@
-import { ChevronLeft, Plus } from 'lucide-react'
+import { ChevronLeft, ChevronsDownUp, Plus, Search, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useRouteResidency } from '@/shared/routing/RouteResidency'
-import {
-  PalaceListCard,
-} from '@/modules/content/ui/palace-catalog/components/palace-list/PalaceListCard'
-import {
-  PalaceListSections,
-} from '@/modules/content/ui/palace-catalog/components/palace-list/PalaceListSections'
-import {
-  PalaceListToolbar,
-} from '@/modules/content/ui/palace-catalog/components/palace-list/PalaceListToolbar'
-import {
-  PALACE_SHELF_VIEW_SETTINGS_KEY,
-  DEFAULT_PALACE_SHELF_VIEW_SETTINGS,
-  type PalaceListViewSettings,
-  type PalaceShelfViewSettings,
-  isPalaceShelfViewSettings,
-} from '@/modules/settings/public'
-import type {
-  PalaceGroupedItem,
-} from '@/shared/api/contracts'
+import { PalaceCatalogTree } from '@/modules/content/ui/palace-catalog/components/PalaceCatalogTree'
 import {
   getPalacesGroupedApi,
   PALACE_CATALOG_INVALIDATED_EVENT,
 } from '@/modules/content/domain/palace-entity/api'
 import { Button } from '@/shared/components/ui/button'
+import { Card } from '@/shared/components/ui/card'
+import { EmptyState } from '@/shared/components/state-placeholders'
+import { Input } from '@/shared/components/ui/input'
 import { PageHeader } from '@/shared/components/layout/PageHeader'
 import { PageContainer } from '@/shared/components/layout/PageLayout'
 import {
@@ -36,7 +21,6 @@ import {
   type SubjectMemoryLadderKey,
 } from '@/modules/practice/public'
 import { ErrorState } from '@/shared/components/state-placeholders'
-import { useLocalStorageState } from '@/shared/lib/localStorage'
 import { onAppEvent } from '@/shared/events/appEvents'
 import { PalaceListSkeleton } from './components/PalaceListSkeleton'
 import { usePalaceListCardActions } from '@/modules/content/ui/palace-catalog/components/palace-list/usePalaceListCardActions'
@@ -61,38 +45,7 @@ export default function PalaceList() {
   const search = searchParams.get('search') || ''
   const selectedSubjectId = searchParams.get('subjectId')
   const showUncategorizedOnly = searchParams.get('uncategorized') === 'true'
-  const [collapsedChapters, setCollapsedChapters] = useState<Set<number>>(new Set())
-  // 书内宫殿卡片和书架「章节目录」共用同一份布局/密度，避免进书后换成另一套前端。
-  const [shelfViewSettings, setShelfViewSettings] = useLocalStorageState<PalaceShelfViewSettings>(
-    PALACE_SHELF_VIEW_SETTINGS_KEY,
-    DEFAULT_PALACE_SHELF_VIEW_SETTINGS,
-    isPalaceShelfViewSettings,
-    'palace_shelf_view_settings',
-  )
-  const viewSettings = useMemo<PalaceListViewSettings>(
-    () => ({
-      layoutMode: shelfViewSettings.expandedLayoutMode,
-      densityMode: shelfViewSettings.densityMode,
-    }),
-    [shelfViewSettings.densityMode, shelfViewSettings.expandedLayoutMode],
-  )
-  const setViewSettings = useCallback(
-    (updater: PalaceListViewSettings | ((current: PalaceListViewSettings) => PalaceListViewSettings)) => {
-      setShelfViewSettings((current) => {
-        const listCurrent: PalaceListViewSettings = {
-          layoutMode: current.expandedLayoutMode,
-          densityMode: current.densityMode,
-        }
-        const next = typeof updater === 'function' ? updater(listCurrent) : updater
-        return {
-          ...current,
-          expandedLayoutMode: next.layoutMode,
-          densityMode: next.densityMode,
-        }
-      })
-    },
-    [setShelfViewSettings],
-  )
+  const [collapseSignal, setCollapseSignal] = useState(0)
   const catalogScope = useMemo(
     () => ({ selectedSubjectId, showUncategorizedOnly }),
     [selectedSubjectId, showUncategorizedOnly],
@@ -154,7 +107,10 @@ export default function PalaceList() {
     () => (stagePalaceIds ? filterGroupedPalacesByPalaceIds(groupedData, stagePalaceIds) : groupedData),
     [groupedData, stagePalaceIds],
   )
-  const allPalaces = useMemo(() => flattenGroupedPalaces(visibleGroupedData), [visibleGroupedData])
+  const hasVisiblePalaces = useMemo(
+    () => flattenGroupedPalaces(visibleGroupedData).length > 0,
+    [visibleGroupedData],
+  )
 
   const currentSubjectTitle = useMemo(() => {
     return getPalaceCatalogScopeTitle(groupedData, {
@@ -183,22 +139,6 @@ export default function PalaceList() {
     navigate,
     subjectId: selectedSubjectId,
   })
-
-  const renderPalaceCard = useCallback(
-    (palace: PalaceGroupedItem, parentQuestionTotal?: number | null) => (
-      <PalaceListCard
-        key={palace.id}
-        palace={palace}
-        chapterQuestionTotal={parentQuestionTotal}
-        viewSettings={viewSettings}
-        searchQuery={search}
-        defaultExpanded
-        onPalaceReview={cardActions.onPalaceReview}
-        onDelete={cardActions.onDelete}
-      />
-    ),
-    [cardActions, search, viewSettings],
-  )
 
   if (isInitialLoading) {
     return <PalaceListSkeleton />
@@ -251,24 +191,51 @@ export default function PalaceList() {
         />
       )}
 
-      <PalaceListToolbar
-        search={search}
-        viewSettings={viewSettings}
-        onSearchChange={(value) =>
-          setSearchParams((params) => {
-            if (value) params.set('search', value)
-            else params.delete('search')
-            return params
-          })
-        }
-        onClearSearch={() =>
-          setSearchParams((params) => {
-            params.delete('search')
-            return params
-          })
-        }
-        onViewSettingsChange={setViewSettings}
-      />
+      <div className="flex items-center gap-2">
+        <div className="relative min-w-0 flex-1 sm:max-w-sm">
+          <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="搜索标题..."
+            value={search}
+            onChange={(event) =>
+              setSearchParams((params) => {
+                if (event.target.value) params.set('search', event.target.value)
+                else params.delete('search')
+                return params
+              })
+            }
+            className="pl-9 pr-9"
+          />
+          {search ? (
+            <button
+              type="button"
+              aria-label="清除搜索"
+              title="清除搜索"
+              onClick={() =>
+                setSearchParams((params) => {
+                  params.delete('search')
+                  return params
+                })
+              }
+              className="absolute right-1.5 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <X className="size-4" />
+            </button>
+          ) : null}
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="ml-auto text-muted-foreground"
+          aria-label="全部收起"
+          title="全部收起"
+          disabled={Boolean(search) || Boolean(activeStage)}
+          onClick={() => setCollapseSignal((value) => value + 1)}
+        >
+          <ChevronsDownUp />
+        </Button>
+      </div>
 
       {loadError ? (
         <ErrorState
@@ -307,45 +274,57 @@ export default function PalaceList() {
               </Button>
             </div>
           ) : null}
-          <PalaceListSections
-            groupedData={visibleGroupedData}
-            hasPalaces={allPalaces.length > 0}
-            viewSettings={viewSettings}
-            collapsedChapters={collapsedChapters}
-            onToggleChapter={(chapterId) =>
-              setCollapsedChapters((current) => {
-                const next = new Set(current)
-                if (next.has(chapterId)) next.delete(chapterId)
-                else next.add(chapterId)
-                return next
-              })
-            }
-            renderPalaceCard={renderPalaceCard}
-            emptyTitle={
-              activeStage
-                ? (search ? '这一段间隔里没有匹配的宫殿' : `「${stageLabel(activeStage.interval_days)}」间隔段没有宫殿`)
-                : search
-                  ? '没有匹配的记忆宫殿'
-                  : '这个书架还没有宫殿'
-            }
-            emptyDescription={
-              activeStage
-                ? (search
-                    ? '换一个关键词，或查看全部宫殿。'
-                    : '这一段间隔暂时没有宫殿；换一段，或查看全部宫殿。')
-                : search
-                  ? '换一个关键词，或清除搜索后查看全部宫殿。'
-                  : '新建一个宫殿，或回到学科书架选择其他分类。'
-            }
-            emptyActionLabel="新建宫殿"
-            emptyAction={
-              activeStage ? (
-                <Button type="button" variant="outline" size="sm" onClick={() => setStageFilter(null)}>
-                  查看全部宫殿
-                </Button>
-              ) : undefined
-            }
-          />
+          {hasVisiblePalaces ? (
+            <Card className="p-1" data-testid="list-tree">
+              <PalaceCatalogTree
+                grouped={visibleGroupedData}
+                onPalaceReview={cardActions.onPalaceReview}
+                onDelete={cardActions.onDelete}
+                expandAll={Boolean(search) || Boolean(activeStage)}
+                highlight={search}
+                hideSubjectRows
+                defaultExpanded
+                collapseSignal={collapseSignal}
+                viewStateKey={`palace-list-tree:${selectedSubjectId ?? (showUncategorizedOnly ? 'uncategorized' : 'all')}`}
+              />
+            </Card>
+          ) : (
+            <Card>
+              <EmptyState
+                variant="create"
+                title={
+                  activeStage
+                    ? (search ? '这一段间隔里没有匹配的宫殿' : `「${stageLabel(activeStage.interval_days)}」间隔段没有宫殿`)
+                    : search
+                      ? '没有匹配的记忆宫殿'
+                      : '这个书架还没有宫殿'
+                }
+                description={
+                  activeStage
+                    ? (search
+                        ? '换一个关键词，或查看全部宫殿。'
+                        : '这一段间隔暂时没有宫殿；换一段，或查看全部宫殿。')
+                    : search
+                      ? '换一个关键词，或清除搜索后查看全部宫殿。'
+                      : '新建一个宫殿，或回到学科书架选择其他分类。'
+                }
+                action={
+                  activeStage ? (
+                    <Button type="button" variant="outline" size="sm" onClick={() => setStageFilter(null)}>
+                      查看全部宫殿
+                    </Button>
+                  ) : (
+                    <Button asChild variant="outline" size="sm">
+                      <Link to="/palaces/new">
+                        <Plus />
+                        新建宫殿
+                      </Link>
+                    </Button>
+                  )
+                }
+              />
+            </Card>
+          )}
         </>
       )}
 
