@@ -24,7 +24,7 @@ import { resolveAppLayoutMode, type AppLayoutMode } from '@/app/router/routeLayo
 import { prefetchDashboardApi } from '@/modules/dashboard/public'
 import { ensureStudyTextLibrary } from '@/shared/study-text/studyTextLibrary'
 import { markBoot } from '@/shared/lib/bootTiming'
-import { ShellProvider, useShellContext } from '@/shared/components/layout/ShellContext'
+import { ShellProvider } from '@/shared/components/layout/ShellContext'
 import { useClientPreferenceBootstrap } from '@/app/providers/useClientPreferenceBootstrap'
 import { DropdownMenuItem, DropdownMenuLabel } from '@/shared/components/ui/dropdown-menu'
 import {
@@ -179,6 +179,8 @@ function NavSectionLink({
       )}
       onMouseEnter={() => warmNavSection(section)}
       onFocus={() => warmNavSection(section)}
+      aria-label={collapsed ? label : undefined}
+      title={collapsed ? label : undefined}
     >
       <Icon className="size-4" />
       {!collapsed ? <span className="max-w-full truncate">{label}</span> : null}
@@ -210,11 +212,18 @@ function NavSectionLink({
   )
 }
 
-function SidebarContent({ runtimeInfo, onOpenLogs }: { runtimeInfo: RuntimeInfo | null; onOpenLogs: () => void }) {
+function SidebarContent({
+  runtimeInfo,
+  onOpenLogs,
+  collapsed,
+  onToggleCollapsed,
+}: {
+  runtimeInfo: RuntimeInfo | null
+  onOpenLogs: () => void
+  collapsed: boolean
+  onToggleCollapsed: () => void
+}) {
   const { pathname } = useLocation()
-  const shell = useShellContext()
-  const collapsed = shell?.sidebarCollapsed ?? false
-  const setCollapsed = shell?.setSidebarCollapsed
   // Labels show only on the full lg column; the md rail and the collapsed column are icon stacks.
   const wide = !collapsed
 
@@ -318,17 +327,15 @@ function SidebarContent({ runtimeInfo, onOpenLogs }: { runtimeInfo: RuntimeInfo 
           align="end"
           triggerClassName="text-muted-foreground hover:text-foreground"
         />
-        {setCollapsed ? (
-          <button
-            type="button"
-            onClick={() => setCollapsed(!collapsed)}
-            className="hidden size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground lg:inline-flex"
-            aria-label={collapsed ? '展开导航' : '收起导航'}
-            title={collapsed ? '展开导航' : '收起导航'}
-          >
-            {collapsed ? <PanelLeftOpen className="size-4" /> : <PanelLeftClose className="size-4" />}
-          </button>
-        ) : null}
+        <button
+          type="button"
+          onClick={onToggleCollapsed}
+          className="hidden size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground lg:inline-flex"
+          aria-label={collapsed ? '展开导航' : '收起导航'}
+          title={collapsed ? '展开导航' : '收起导航'}
+        >
+          {collapsed ? <PanelLeftOpen className="size-4" /> : <PanelLeftClose className="size-4" />}
+        </button>
       </div>
     </>
   )
@@ -498,6 +505,10 @@ function ShellFrame({ children }: PropsWithChildren) {
   const immersiveFeed = layoutMode === 'immersive'
   const mindMapHost = layoutMode !== 'standard'
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  // Pages with their own directory (mind-map hosts, freestyle) keep the nav as an
+  // icon rail so nav + directory read as one sidebar, like an editor's activity
+  // bar beside its explorer. Expanding it there is a per-visit choice.
+  const [hostNavExpanded, setHostNavExpanded] = useState(false)
   const [runtimeInfo, setRuntimeInfo] = useState<RuntimeInfo | null>(null)
   const [logDrawerOpen, setLogDrawerOpen] = useState(false)
   const contentRef = useRef<HTMLDivElement>(null)
@@ -541,7 +552,12 @@ function ShellFrame({ children }: PropsWithChildren) {
     }
   }, [])
 
-  const sidebarState = sidebarCollapsed ? 'collapsed' : 'expanded'
+  const navCollapsed = mindMapHost ? !hostNavExpanded : sidebarCollapsed
+  const sidebarState = navCollapsed ? 'collapsed' : 'expanded'
+  const toggleNav = () => {
+    if (mindMapHost) setHostNavExpanded((expanded) => !expanded)
+    else setSidebarCollapsed(!sidebarCollapsed)
+  }
 
   return (
     <ShellProvider value={{ sidebarCollapsed, setSidebarCollapsed }}>
@@ -556,7 +572,12 @@ function ShellFrame({ children }: PropsWithChildren) {
             sidebarWidthClass[sidebarState],
           )}
         >
-          <SidebarContent runtimeInfo={runtimeInfo} onOpenLogs={() => setLogDrawerOpen(true)} />
+          <SidebarContent
+            runtimeInfo={runtimeInfo}
+            onOpenLogs={() => setLogDrawerOpen(true)}
+            collapsed={navCollapsed}
+            onToggleCollapsed={toggleNav}
+          />
         </aside>
 
         <main

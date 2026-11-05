@@ -315,9 +315,10 @@ describe('AppShell', () => {
 
     await waitFor(() => expect(getRuntimeInfoApi).toHaveBeenCalled())
     const expectedLabels = ['随心', '知识', '英语', '创建', '洞察']
+    // On /freestyle the nav is an icon rail: labels live in the accessible name.
     const navLabels = screen
       .getAllByRole('link')
-      .map((link) => link.textContent?.trim() || '')
+      .map((link) => link.getAttribute('aria-label') || link.textContent?.trim() || '')
       .filter((label) => expectedLabels.includes(label))
 
     expect(navLabels.slice(0, 5)).toEqual(expectedLabels)
@@ -569,7 +570,9 @@ describe('AppShell', () => {
     expect(main?.className).toContain('flex-1')
     expect(main?.className).toContain('min-h-0')
     expect(main?.className).not.toContain('overflow-hidden')
-    expect(main?.className).toContain('lg:pl-(--spacing-shell-sidebar)')
+    // Pages with their own directory open with the nav as an icon rail.
+    expect(main?.className).toContain('lg:pl-(--spacing-shell-sidebar-collapsed)')
+    expect(screen.getByRole('button', { name: '展开导航' })).toBeTruthy()
     expect(inner?.className).toContain('flex-1')
     expect(inner?.className).toContain('min-h-0')
     expect(inner?.className).toContain('p-0')
@@ -584,8 +587,13 @@ describe('AppShell', () => {
       </MemoryRouter>,
     )
     expect(document.querySelector('aside')?.className).toContain('rounded-none')
-    expect(document.querySelector('main')?.className).toContain('lg:pl-(--spacing-shell-sidebar)')
+    expect(document.querySelector('main')?.className).toContain('lg:pl-(--spacing-shell-sidebar-collapsed)')
     expect(contentContainer(document.querySelector('main'))?.className).toContain('p-0')
+
+    // The rail can still be opened to the full column on these pages.
+    fireEvent.click(screen.getByRole('button', { name: '展开导航' }))
+    expect(document.querySelector('main')?.className).toContain('lg:pl-(--spacing-shell-sidebar)')
+    expect(screen.getByRole('button', { name: '收起导航' })).toBeTruthy()
   })
 
   it('keeps floating chrome on non-mind-map pages', async () => {

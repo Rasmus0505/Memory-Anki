@@ -559,9 +559,10 @@ export default function PalaceEdit() {
           <section className="flex min-h-0 flex-1 flex-col">
             <Card
               className={cn(
-                'flex min-h-0 flex-1 flex-col border-border/70 bg-card/92',
+                // The canvas is the page: no card frame beside the directory.
+                'flex min-h-0 flex-1 flex-col rounded-none border-0 bg-transparent shadow-none',
                 page.mindMapFullscreen &&
-                  'fixed inset-0 z-[90] min-h-0 rounded-none bg-card/96 shadow-2xl',
+                  'fixed inset-0 z-[90] min-h-0 bg-card shadow-2xl',
               )}
             >
               <CardContent

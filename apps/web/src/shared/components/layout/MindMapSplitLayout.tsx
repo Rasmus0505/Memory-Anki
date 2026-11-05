@@ -1,9 +1,13 @@
 import {
+  createContext,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
   useCallback,
+  useContext,
   useEffect,
+  useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react'
@@ -17,11 +21,52 @@ import { cn } from '@/shared/lib/utils'
 
 export type MindMapSplitSide = 'start' | 'end'
 /**
- * Where the collapse rail is rendered. `below-lg` keeps the rail on narrow
- * viewports only, so a host whose collapse control lives elsewhere (the app
- * sidebar) does not reserve a whole column for a second button.
+ * There is no rail column any more: the collapse button lives in the panel's
+ * title row and a collapsed panel leaves only a small edge tab. `never` means
+ * the host renders its own toggle elsewhere, so the layout draws neither.
+ * `always` / `below-lg` are kept for existing callers and behave the same.
  */
 export type MindMapSplitRailMode = 'always' | 'below-lg' | 'never'
+/** `page`: card surface beside the canvas. `inset`: inherit (panels inside a dialog). */
+export type MindMapSplitSurface = 'page' | 'inset'
+
+interface SplitPanelContextValue {
+  collapsed: boolean
+  side: MindMapSplitSide
+  toggle: () => void
+  label: string
+  /** A header toggle announces itself so the layout drops its corner fallback. */
+  registerHeaderToggle: () => () => void
+}
+
+const SplitPanelContext = createContext<SplitPanelContextValue | null>(null)
+
+/**
+ * The panel's own collapse button, meant for its title row (beside the panel
+ * name). Outside a split layout it renders nothing, so shared panels such as
+ * the palace directory can always include it.
+ */
+export function SplitPanelToggle({ className }: { className?: string }) {
+  const context = useContext(SplitPanelContext)
+  const register = context?.registerHeaderToggle
+  useLayoutEffect(() => register?.(), [register])
+  if (!context) return null
+  const Icon = context.side === 'start' ? PanelLeftClose : PanelRightClose
+  return (
+    <button
+      type="button"
+      onClick={context.toggle}
+      className={cn(
+        'inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground',
+        className,
+      )}
+      aria-label={context.label}
+      title={context.label}
+    >
+      <Icon className="size-4" />
+    </button>
+  )
+}
 
 export interface MindMapSplitLayoutProps {
   side?: MindMapSplitSide
@@ -38,6 +83,7 @@ export interface MindMapSplitLayoutProps {
   railMode?: MindMapSplitRailMode
   /** Let the divider be dragged (or arrow-keyed) to resize the side panel. */
   resizable?: boolean
+  surface?: MindMapSplitSurface
 }
 
 const DEFAULT_SIDE_WIDTH = 280
@@ -77,7 +123,8 @@ function writeStoredSideWidth(width: number) {
 
 /**
  * Mind-map host split: the canvas always keeps remaining space.
- * Adjacent chrome collapses to a thin rail, matching the app nav sidebar.
+ * The panel collapses to nothing but an edge tab; its collapse button sits in
+ * the panel's own title row (`SplitPanelToggle`).
  * Below `md` the open panel overlays the canvas instead of stacking above it.
  */
 export function MindMapSplitLayout({
@@ -93,10 +140,24 @@ export function MindMapSplitLayout({
   expandLabel,
   railMode = 'always',
   resizable = false,
+  surface = 'page',
 }: MindMapSplitLayoutProps) {
   const isStart = side === 'start'
   const resolvedCollapseLabel = collapseLabel ?? (isStart ? '收起侧栏' : '收起右侧栏')
   const resolvedExpandLabel = expandLabel ?? (isStart ? '展开侧栏' : '展开右侧栏')
+
+  const [headerToggleCount, setHeaderToggleCount] = useState(0)
+  const registerHeaderToggle = useCallback(() => {
+    setHeaderToggleCount((count) => count + 1)
+    return () => setHeaderToggleCount((count) => count - 1)
+  }, [])
+  const splitContext = useMemo<SplitPanelContextValue>(() => ({
+    collapsed,
+    side,
+    toggle: () => onCollapsedChange(!collapsed),
+    label: collapsed ? resolvedExpandLabel : resolvedCollapseLabel,
+    registerHeaderToggle,
+  }), [collapsed, onCollapsedChange, registerHeaderToggle, resolvedCollapseLabel, resolvedExpandLabel, side])
 
   const containerRef = useRef<HTMLDivElement>(null)
   const [storedSideWidth, setStoredSideWidthState] = useState(readStoredSideWidth)
@@ -179,53 +240,70 @@ export function MindMapSplitLayout({
 
   const OpenIcon = isStart ? PanelLeftOpen : PanelRightOpen
   const CloseIcon = isStart ? PanelLeftClose : PanelRightClose
+  const label = collapsed ? resolvedExpandLabel : resolvedCollapseLabel
+  const hostOwnsToggle = railMode === 'never'
 
-  const toggle = (
+  // Collapsed: a small tab on the canvas edge, vertically centred so it never
+  // lands on the canvas toolbar (top) or the rating dock (bottom).
+  const edgeTab = collapsed && !hostOwnsToggle ? (
     <button
       type="button"
-      onClick={() => onCollapsedChange(!collapsed)}
-      className="inline-flex size-9 items-center justify-center rounded-md border border-border/70 bg-background/80 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-      aria-label={collapsed ? resolvedExpandLabel : resolvedCollapseLabel}
-      title={collapsed ? resolvedExpandLabel : resolvedCollapseLabel}
+      onClick={() => onCollapsedChange(false)}
+      className={cn(
+        'absolute top-1/2 z-20 flex h-12 w-5 -translate-y-1/2 items-center justify-center border border-border/80 bg-card text-muted-foreground shadow-soft transition-[width,color,background-color] duration-200 hover:w-7 hover:bg-accent hover:text-foreground',
+        isStart ? 'left-0 rounded-r-lg border-l-0' : 'right-0 rounded-l-lg border-r-0',
+      )}
+      aria-label={label}
+      title={label}
     >
-      {collapsed ? <OpenIcon className="size-4" /> : <CloseIcon className="size-4" />}
+      <OpenIcon className="size-3.5" />
     </button>
-  )
+  ) : null
+
+  // Fallback for panels without a title row of their own.
+  const cornerToggle = !collapsed && !hostOwnsToggle && headerToggleCount === 0 ? (
+    <button
+      type="button"
+      onClick={() => onCollapsedChange(true)}
+      className={cn(
+        'absolute top-2 z-10 inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground',
+        isStart ? 'right-2' : 'left-2',
+      )}
+      aria-label={label}
+      title={label}
+    >
+      <CloseIcon className="size-4" />
+    </button>
+  ) : null
 
   const aside = (
     <aside
       style={resizable && !collapsed ? { width: `min(${sideWidth}px, 85vw)` } : undefined}
       className={cn(
-        'min-h-0 overflow-hidden',
+        'relative min-h-0 overflow-hidden',
         resizing ? null : 'transition-[width] duration-300',
         collapsed
           ? 'pointer-events-none w-0'
           : cn(
               'w-[min(280px,85vw)] shrink-0',
-              'max-md:absolute max-md:inset-y-0 max-md:z-20 max-md:bg-card max-md:shadow-soft',
+              // Page chrome shares the nav's surface so nav + panel read as one sidebar.
+              surface === 'page' && 'bg-card',
+              // The resize handle already draws the divider line.
+              !resizable && (isStart ? 'border-r' : 'border-l'),
+              'max-md:absolute max-md:inset-y-0 max-md:z-20 max-md:bg-card max-md:shadow-floating',
               isStart ? 'max-md:left-0 max-md:border-r' : 'max-md:right-0 max-md:border-l',
               sideClassName,
             ),
       )}
       aria-hidden={collapsed}
+      // A folded panel is clipped, not removed: inert keeps Tab out of it.
+      inert={collapsed}
     >
       <div className="flex h-full min-h-0 w-full flex-col overflow-y-auto">
         {sidePanel}
       </div>
+      {cornerToggle}
     </aside>
-  )
-
-  const rail = (
-    <div
-      className={cn(
-        'flex w-10 shrink-0 flex-col items-center border-border/80 py-2',
-        isStart ? 'border-r' : 'border-l',
-        railMode === 'below-lg' && 'lg:hidden',
-        railMode === 'never' && 'hidden',
-      )}
-    >
-      {toggle}
-    </div>
   )
 
   // The hit area straddles the divider with negative margins, so it is easy to
@@ -263,6 +341,7 @@ export function MindMapSplitLayout({
   )
 
   return (
+    <SplitPanelContext.Provider value={splitContext}>
     <div ref={containerRef} className={cn('relative flex min-h-0 min-w-0 flex-1', className)}>
       {!collapsed ? (
         <div
@@ -274,7 +353,6 @@ export function MindMapSplitLayout({
       {isStart ? (
         <>
           {aside}
-          {rail}
           {resizeHandle}
           {main}
         </>
@@ -282,10 +360,11 @@ export function MindMapSplitLayout({
         <>
           {main}
           {resizeHandle}
-          {rail}
           {aside}
         </>
       )}
+      {edgeTab}
     </div>
+    </SplitPanelContext.Provider>
   )
 }

@@ -54,7 +54,7 @@ import { CLIENT_PREFERENCES_UPDATED_EVENT } from '@/shared/preferences/clientPre
 import { onAppEvent } from '@/shared/events/appEvents'
 import { flushWindowLayoutRemotePersist } from '@/shared/preferences/windowLayoutMemory'
 import { cn } from '@/shared/lib/utils'
-import { MindMapSplitLayout } from '@/shared/components/layout/MindMapSplitLayout'
+import { MindMapSplitLayout, SplitPanelToggle } from '@/shared/components/layout/MindMapSplitLayout'
 import {
   buildEditorState,
   createEmptyGroupedData,
@@ -1022,10 +1022,12 @@ export function PalaceMemoryLookupDialog({
             collapseLabel="收起宫殿列表"
             expandLabel="展开宫殿列表"
             sideClassName="w-[min(260px,85vw)]"
+            surface="inset"
             sidePanel={(
               <div className="flex h-full min-h-0 flex-col">
-                <div className="border-b border-border/70 p-3">
-                  {renderSearchInput()}
+                <div className="flex items-center gap-1.5 border-b border-border/70 p-3">
+                  <div className="min-w-0 flex-1">{renderSearchInput()}</div>
+                  <SplitPanelToggle />
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto p-2">
                   {submittedSearch ? renderPalaceList() : (

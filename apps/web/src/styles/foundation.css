@@ -103,7 +103,7 @@
   /* App shell geometry: md rail, lg sidebar and its collapsed rail, the floating inset, and the content gutter. */
   --spacing-shell-rail: 5.5rem;
   --spacing-shell-sidebar: 14.75rem;
-  --spacing-shell-sidebar-collapsed: 4.75rem;
+  --spacing-shell-sidebar-collapsed: 3.5rem;
   --spacing-shell-inset: 0.75rem;
   --spacing-shell-gutter: 1rem;
   --spacing-shell-bottom-nav: 4.5rem;

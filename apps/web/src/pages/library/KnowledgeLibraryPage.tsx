@@ -5,7 +5,7 @@ import { toast } from '@/shared/feedback/toast'
 import type { MindMapEditorState } from '@/shared/api/contracts'
 import type { ImportApplyContext } from '@/shared/api/contracts/imports'
 import { PageHeader } from '@/shared/components/layout/PageHeader'
-import { MindMapSplitLayout } from '@/shared/components/layout/MindMapSplitLayout'
+import { MindMapSplitLayout, SplitPanelToggle } from '@/shared/components/layout/MindMapSplitLayout'
 import { EmptyState } from '@/shared/components/state-placeholders'
 import {
   MindMapEditorSurface,
@@ -360,15 +360,14 @@ export default function Knowledge() {
         collapseLabel="收起学科栏"
         expandLabel="展开学科栏"
         sidePanel={(
-        <Card className="min-h-0 h-full border-border/70 bg-card/92">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <FolderTree className="size-4" />
-              学科
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="ma-stagger space-y-2">
+        <div className="flex min-h-0 flex-col">
+          <div className="flex h-11 shrink-0 items-center gap-1 border-b border-border/70 px-3">
+            <FolderTree className="size-4 text-muted-foreground" />
+            <span className="mr-auto pl-1 text-xs font-medium tracking-wide text-muted-foreground">学科</span>
+            <SplitPanelToggle />
+          </div>
+          <div className="flex flex-col">
+            <div className="ma-stagger flex flex-col gap-0.5 p-2">
               {subjects.map((subject) => (
                 <button
                   key={subject.id}
@@ -378,22 +377,20 @@ export default function Knowledge() {
                     setSelectedNodes([])
                     setChapterDetail(null)
                   }}
-                  className={`flex w-full items-center justify-between rounded-lg border px-3 py-3 text-left transition-colors ${
+                  aria-current={selectedSubjectId === subject.id ? 'true' : undefined}
+                  className={`flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors ${
                     selectedSubjectId === subject.id
-                      ? 'border-primary/40 bg-primary/8 text-foreground'
-                      : 'border-border/70 bg-background/70 text-muted-foreground hover:text-foreground'
+                      ? 'bg-primary-soft font-medium text-primary-strong'
+                      : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                   }`}
                 >
-                  <span className="flex items-center gap-3">
-                    <span className="h-3 w-3 rounded-full" style={{ backgroundColor: subject.color || '#6366f1' }} />
-                    <span className="font-medium">{subject.name}</span>
-                  </span>
-                  {selectedSubjectId === subject.id ? <Badge variant="secondary">当前</Badge> : null}
+                  <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: subject.color || '#6366f1' }} />
+                  <span className="truncate">{subject.name}</span>
                 </button>
               ))}
             </div>
 
-            <div className="space-y-2 rounded-lg border border-dashed border-border/80 bg-background/50 p-3">
+            <div className="flex flex-col gap-2 border-t border-border/70 px-4 py-4">
               <Label htmlFor="new-subject">新增学科</Label>
               <Input
                 id="new-subject"
@@ -407,8 +404,8 @@ export default function Knowledge() {
               </Button>
             </div>
 
-            <div className="space-y-3 rounded-lg border border-border/70 bg-background/60 p-3">
-              <div className="text-sm font-semibold">当前学科</div>
+            <div className="flex flex-col gap-3 border-t border-border/70 px-4 py-4">
+              <div className="text-xs font-medium text-muted-foreground">当前学科</div>
               <div className="space-y-2">
                 <Label htmlFor="subject-name">名称</Label>
                 <Input
@@ -440,8 +437,8 @@ export default function Knowledge() {
               </div>
             </div>
 
-            <div className="space-y-4 rounded-lg border border-border/70 bg-background/60 p-3">
-              <div className="text-sm font-semibold">当前章节</div>
+            <div className="flex flex-col gap-4 border-t border-border/70 px-4 py-4">
+              <div className="text-xs font-medium text-muted-foreground">当前章节</div>
               {chapterDetail ? (
                 <>
                   <div>
@@ -460,7 +457,7 @@ export default function Knowledge() {
                       </Button>
                     </div>
                   </div>
-                  <div className="rounded-lg bg-background/70 p-3 text-sm text-muted-foreground whitespace-pre-wrap">
+                  <div className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
                     {chapterDetail.chapter.notes || '该章节暂时没有备注。'}
                   </div>
                   <div className="space-y-2">
@@ -480,7 +477,7 @@ export default function Knowledge() {
                           <Link
                             key={palace.id}
                             to={`/palaces/${palace.id}`}
-                            className="flex items-center justify-between rounded-lg border border-border/70 bg-background/70 px-3 py-3 text-sm transition-colors hover:text-foreground [content-visibility:auto] [contain-intrinsic-size:auto_48px]"
+                            className="-mx-2 flex items-center justify-between gap-2 rounded-md px-2 py-2 text-sm transition-colors hover:bg-accent [content-visibility:auto] [contain-intrinsic-size:auto_40px]"
                           >
                             <span>{palace.title}</span>
                             <span className="flex flex-wrap items-center justify-end gap-2">
@@ -512,28 +509,25 @@ export default function Knowledge() {
                   </div>
                 </>
               ) : (
-                <div className="rounded-lg border border-dashed border-border/80 px-3 py-6 text-sm text-muted-foreground">
-                  选中一个章节节点后，这里会显示章节信息。
-                </div>
+                <p className="text-sm text-muted-foreground">选中一个章节节点后，这里会显示章节信息。</p>
               )}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
         )}
       >
+        {/* The canvas is the page: no card frame around it, just a title strip. */}
         <Card
           className={cn(
-            'flex min-h-0 flex-1 flex-col border-border/70 bg-card/92',
-            mindMapFullscreen && 'fixed inset-0 z-[90] min-h-0 rounded-none bg-card/96 shadow-2xl',
+            'flex min-h-0 flex-1 flex-col rounded-none border-0 bg-transparent shadow-none',
+            mindMapFullscreen && 'fixed inset-0 z-[90] min-h-0 bg-card shadow-2xl',
           )}
         >
-          <CardHeader className="flex flex-row items-center justify-between gap-3 p-2">
-            <div>
-              <CardTitle className="text-base">{activeSubject?.name ?? '选择一个学科'}</CardTitle>
-            </div>
+          <CardHeader className="flex h-11 shrink-0 flex-row items-center justify-between gap-3 space-y-0 px-4 py-0">
+            <CardTitle className="truncate text-sm">{activeSubject?.name ?? '选择一个学科'}</CardTitle>
             {selectedChapterId ? <Badge variant="secondary">章节 #{selectedChapterId}</Badge> : null}
           </CardHeader>
-          <CardContent className={cn('flex min-h-0 flex-1 flex-col p-1 pt-0', mindMapFullscreen && 'h-full')}>
+          <CardContent className={cn('flex min-h-0 flex-1 flex-col p-0', mindMapFullscreen && 'h-full')}>
             {isSubjectEditorReady && editorState ? (
               <div className="flex h-full min-h-0 flex-col gap-2">
                 <MindMapPageToolbar

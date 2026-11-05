@@ -283,7 +283,7 @@ describe('KnowledgePage mind map host refresh behavior', () => {
       expect((screen.getByLabelText('名称') as HTMLInputElement).value).toBe('教育心理学')
     })
     expect(screen.getByRole('button', { name: /教育心理学/ })).toBeTruthy()
-    expect(screen.getByRole('button', { name: /教育心理学/ }).textContent).toContain('当前')
+    expect(screen.getByRole('button', { name: /教育心理学/ }).getAttribute('aria-current')).toBe('true')
   })
 
   it('keeps the same host instance when saving subject info and stays on soft sync', async () => {

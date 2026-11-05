@@ -24,7 +24,7 @@ import {
 import { studyDayStart, toIsoDate } from '@/modules/practice/ui/review/model/scheduleLimits'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent } from '@/shared/components/ui/card'
-import { MindMapSplitLayout } from '@/shared/components/layout/MindMapSplitLayout'
+import { MindMapSplitLayout, SplitPanelToggle } from '@/shared/components/layout/MindMapSplitLayout'
 import { cn } from '@/shared/lib/utils'
 
 function operationId() {
@@ -286,11 +286,12 @@ export default function PalaceUnitRatingPage() {
 
   const unitsPanel = (
     <aside className="flex h-full min-h-0 flex-col" data-testid="unit-rating-list">
-      <div className="flex items-center justify-between px-3 pt-3 text-xs text-muted-foreground">
-        <span>复习单元</span>
-        <span>
+      <div className="flex h-11 shrink-0 items-center gap-1 border-b border-border/70 px-3 text-xs text-muted-foreground">
+        <span className="font-medium tracking-wide">复习单元</span>
+        <span className="ml-auto tabular-nums">
           {units.length} 个 · 今日到期 {projection?.due_unit_count ?? 0}
         </span>
+        <SplitPanelToggle />
       </div>
       <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
         {units.map((unit) => {
@@ -303,15 +304,15 @@ export default function PalaceUnitRatingPage() {
               data-active={active ? 'true' : undefined}
               onClick={() => setSelectedId(unit.id)}
               className={cn(
-                'flex w-full flex-col items-start gap-0.5 rounded-lg border px-2.5 py-2 text-left transition-colors',
+                'flex w-full flex-col items-start gap-0.5 rounded-md px-2.5 py-2 text-left transition-colors',
                 active
-                  ? 'border-primary/60 bg-primary/10'
-                  : 'border-transparent hover:border-border/70 hover:bg-muted/50',
+                  ? 'bg-primary-soft text-primary-strong'
+                  : 'hover:bg-accent',
               )}
             >
               <span className="w-full truncate text-sm font-medium">{unit.title}</span>
               <span className="flex w-full items-center justify-between text-[11px] text-muted-foreground">
-                <span className={unit.due ? 'font-medium text-amber-500' : undefined}>
+                <span className={unit.due ? 'font-medium text-warning-strong' : undefined}>
                   {unit.due ? '今天到期' : intervalBadgeLabel(unit.interval_days)}
                 </span>
                 <span>{dateLabel(unit.due_date)}</span>
@@ -368,7 +369,7 @@ export default function PalaceUnitRatingPage() {
         >
           <section
             data-testid="unit-rating-sheet"
-            className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[1.4rem] border border-border/70 bg-card/92"
+            className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
           >
             <div className="relative min-h-0 flex-1">
               {editorState ? (

@@ -5,7 +5,7 @@ import { useQuizLauncher } from '@/widgets/quiz-launcher'
 import { usePalaceQuizNodeBindings } from '@/modules/quiz/public'
 import { buildAttachmentUrl, getPalaceEditorApi, savePalaceEditorApi } from '@/modules/content/public'
 import { PageHeader } from '@/shared/components/layout/PageHeader'
-import { MindMapSplitLayout } from '@/shared/components/layout/MindMapSplitLayout'
+import { MindMapSplitLayout, SplitPanelToggle } from '@/shared/components/layout/MindMapSplitLayout'
 import { LoadingState } from '@/shared/components/state-placeholders'
 import {
   MindMapEditorSurface,
@@ -13,7 +13,7 @@ import {
   type MindMapEditorSurfaceHandle,
 } from '@/modules/content/public'
 import { Badge } from '@/shared/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
+import { Card, CardContent } from '@/shared/components/ui/card'
 import { useMindMapDocumentSession } from '@/shared/hooks/useMindMapDocumentSession'
 import { MindMapDocumentConflictDialog } from '@/shared/components/mindmap-document-conflict'
 import { cn } from '@/shared/lib/utils'
@@ -184,71 +184,62 @@ export default function PalaceView() {
         collapseLabel="收起宫殿信息"
         expandLabel="展开宫殿信息"
         sidePanel={(
-          <div className="space-y-3 p-0.5">
-            <Card className="border-border/70 bg-card/92">
-              <CardHeader>
-                <CardTitle className="text-base">概要</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-sm text-muted-foreground">
-                <div className="rounded-lg bg-background/70 p-3 whitespace-pre-wrap">
-                  {palace.description || '当前宫殿没有补充描述。'}
-                </div>
-              </CardContent>
-            </Card>
+          <div className="flex flex-col">
+            <div className="flex h-11 shrink-0 items-center gap-1 border-b border-border/70 px-2">
+              <SplitPanelToggle />
+              <span className="pl-1 text-xs font-medium tracking-wide text-muted-foreground">宫殿信息</span>
+            </div>
+            <section className="flex flex-col gap-2 border-b border-border/70 px-4 py-4">
+              <h3 className="text-xs font-medium text-muted-foreground">概要</h3>
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground/90">
+                {palace.description || <span className="text-muted-foreground">当前宫殿没有补充描述。</span>}
+              </p>
+            </section>
 
-            <Card className="border-border/70 bg-card/92">
-              <CardHeader>
-                <CardTitle className="text-base">关联章节</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                {palace.chapters.length > 0 ? (
-                  palace.chapters.map((chapter) => (
-                    <div key={chapter.id} className="rounded-lg border border-border/70 bg-background/70 px-3 py-3">
+            <section className="flex flex-col gap-2 border-b border-border/70 px-4 py-4">
+              <h3 className="text-xs font-medium text-muted-foreground">关联章节</h3>
+              {palace.chapters.length > 0 ? (
+                <ul className="flex flex-col gap-1 text-sm">
+                  {palace.chapters.map((chapter) => (
+                    <li key={chapter.id} className="rounded-md px-2 py-1.5 -mx-2">
                       <div className="font-medium">{chapter.name}</div>
-                      <div className="text-muted-foreground">{chapter.subject?.name || '未分类学科'}</div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="rounded-lg border border-dashed border-border/80 px-3 py-4 text-muted-foreground">
-                    该宫殿还没有关联章节。
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                      <div className="text-xs text-muted-foreground">{chapter.subject?.name || '未分类学科'}</div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">该宫殿还没有关联章节。</p>
+              )}
+            </section>
 
-            <Card className="border-border/70 bg-card/92">
-              <CardHeader>
-                <CardTitle className="text-base">附件</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                {palace.attachments.length > 0 ? (
-                  palace.attachments.map((attachment) => (
-                    <a
-                      key={attachment.id}
-                      href={buildAttachmentUrl(attachment.id)}
-                      target="_blank"
-                      className="block rounded-lg border border-border/70 bg-background/70 px-3 py-3 transition-colors hover:text-foreground"
-                    >
-                      <span className="inline-flex items-center gap-2">
-                        <FileText className="size-4" />
-                        {attachment.original_name}
-                      </span>
-                    </a>
-                  ))
-                ) : (
-                  <div className="rounded-lg border border-dashed border-border/80 px-3 py-4 text-muted-foreground">
-                    没有附件。
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <section className="flex flex-col gap-2 px-4 py-4">
+              <h3 className="text-xs font-medium text-muted-foreground">附件</h3>
+              {palace.attachments.length > 0 ? (
+                <ul className="flex flex-col gap-0.5 text-sm">
+                  {palace.attachments.map((attachment) => (
+                    <li key={attachment.id}>
+                      <a
+                        href={buildAttachmentUrl(attachment.id)}
+                        target="_blank"
+                        className="-mx-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-foreground/90 transition-colors hover:bg-accent hover:text-foreground"
+                      >
+                        <FileText className="size-4 shrink-0 text-muted-foreground" />
+                        <span className="truncate">{attachment.original_name}</span>
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">没有附件。</p>
+              )}
+            </section>
           </div>
         )}
       >
         <Card
           className={cn(
-            'flex min-h-0 flex-1 flex-col border-border/70 bg-card/92',
-            mindMapFullscreen && 'fixed inset-0 z-[90] min-h-0 rounded-none bg-card/96 shadow-2xl',
+            'flex min-h-0 flex-1 flex-col rounded-none border-0 bg-transparent shadow-none',
+            mindMapFullscreen && 'fixed inset-0 z-[90] min-h-0 bg-card shadow-2xl',
           )}
         >
           <CardContent className={cn('flex min-h-0 flex-1 flex-col p-0', mindMapFullscreen && 'h-full')}>

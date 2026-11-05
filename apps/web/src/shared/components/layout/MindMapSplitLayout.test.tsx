@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { useState } from 'react'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { MindMapSplitLayout } from './MindMapSplitLayout'
+import { MindMapSplitLayout, SplitPanelToggle } from './MindMapSplitLayout'
 
 function Harness({
   side = 'start' as const,
@@ -35,7 +35,7 @@ beforeEach(() => {
 })
 
 describe('MindMapSplitLayout', () => {
-  it('keeps the mind map beside the side panel and can collapse the panel to a rail', () => {
+  it('keeps the mind map beside the side panel and can collapse the panel', () => {
     render(<Harness />)
 
     expect(screen.getByText('绑定面板')).toBeTruthy()
@@ -54,11 +54,42 @@ describe('MindMapSplitLayout', () => {
     expect(screen.getByRole('button', { name: '展开右侧栏' })).toBeTruthy()
   })
 
-  it('can keep the rail for narrow viewports only when the host owns the toggle', () => {
-    render(<Harness railMode="below-lg" />)
+  it('reserves no column for the toggle: it sits inside the panel, and a collapsed panel leaves only an edge tab', () => {
+    const { container } = render(<Harness />)
+    const layout = container.firstElementChild as HTMLElement
+    // aside + canvas only; the phone backdrop (md:hidden) and the absolute tab take no column.
+    const columns = Array.from(layout.children).filter((child) => !child.classList.contains('md:hidden') && !child.classList.contains('absolute'))
+    expect(columns.map((child) => child.tagName)).toEqual(['ASIDE', 'SECTION'])
+    expect(screen.getByRole('button', { name: '收起侧栏' }).closest('aside')).toBeTruthy()
 
-    const toggle = screen.getByRole('button', { name: '收起侧栏' })
-    expect(toggle.parentElement?.className).toContain('lg:hidden')
+    fireEvent.click(screen.getByRole('button', { name: '收起侧栏' }))
+    const tab = screen.getByRole('button', { name: '展开侧栏' })
+    expect(tab.closest('aside')).toBeNull()
+    expect(tab.className).toContain('absolute')
+  })
+
+  it('puts the toggle in the panel title row when the panel renders SplitPanelToggle', () => {
+    function WithHeader() {
+      const [collapsed, setCollapsed] = useState(false)
+      return (
+        <MindMapSplitLayout
+          collapsed={collapsed}
+          onCollapsedChange={setCollapsed}
+          sidePanel={<div data-testid="title-row"><span>目录</span><SplitPanelToggle /></div>}
+        >
+          <div>脑图画布</div>
+        </MindMapSplitLayout>
+      )
+    }
+    render(<WithHeader />)
+    const toggles = screen.getAllByRole('button', { name: '收起侧栏' })
+    expect(toggles).toHaveLength(1)
+    expect(screen.getByTestId('title-row').contains(toggles[0])).toBe(true)
+  })
+
+  it('draws no toggle at all when the host owns it', () => {
+    render(<Harness railMode="never" />)
+    expect(screen.queryByRole('button', { name: '收起侧栏' })).toBeNull()
   })
 
   it('resizes the side panel by dragging the divider and remembers the width', () => {
