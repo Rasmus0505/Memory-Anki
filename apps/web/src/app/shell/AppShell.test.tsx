@@ -130,9 +130,10 @@ describe('AppShell', () => {
       </MemoryRouter>,
     )
 
-    await waitFor(() => {
-      expect(screen.getAllByText(/Stable abcdef12/).length).toBeGreaterThan(0)
-    })
+    await waitFor(() => expect(getRuntimeInfoApi).toHaveBeenCalled())
+    const tools = document.querySelector('aside button[aria-label="录制"]') as HTMLElement
+    fireEvent.keyDown(tools, { key: 'Enter' })
+    expect(await screen.findByText('Stable abcdef12')).toBeTruthy()
   })
 
   it('keeps sidebar clock ticks from rerendering navigation subscriptions', () => {
@@ -176,8 +177,10 @@ describe('AppShell', () => {
       </MemoryRouter>,
     )
 
-    const buttons = await screen.findAllByLabelText('打开日志侧边栏')
-    fireEvent.click(buttons[0]!)
+    await waitFor(() => expect(getRuntimeInfoApi).toHaveBeenCalled())
+    const tools = document.querySelector('aside button[aria-label="录制"]') as HTMLElement
+    fireEvent.keyDown(tools, { key: 'Enter' })
+    fireEvent.click(await screen.findByRole('menuitem', { name: '打开日志侧边栏' }))
 
     expect(await screen.findByText('调用与错误日志')).toBeTruthy()
   })
@@ -200,7 +203,7 @@ describe('AppShell', () => {
       </MemoryRouter>,
     )
 
-    await screen.findAllByText(/Stable abcdef12/)
+    await waitFor(() => expect(getRuntimeInfoApi).toHaveBeenCalled())
 
     const englishLink = screen.getAllByRole('link', { name: '英语' })[0]
     const libraryLink = screen.getAllByRole('link', { name: '知识' })[0]
@@ -216,7 +219,7 @@ describe('AppShell', () => {
       </MemoryRouter>,
     )
 
-    await screen.findAllByText(/Stable abcdef12/)
+    await waitFor(() => expect(getRuntimeInfoApi).toHaveBeenCalled())
     const courseEnglishLink = screen.getAllByRole('link', { name: '英语' })[0]
     expect(courseEnglishLink.className).toContain('bg-primary')
     expect(screen.getAllByRole('link', { name: '知识' })[0].className).not.toContain('bg-primary')
@@ -310,7 +313,7 @@ describe('AppShell', () => {
       </MemoryRouter>,
     )
 
-    await screen.findAllByText(/Stable abcdef12/)
+    await waitFor(() => expect(getRuntimeInfoApi).toHaveBeenCalled())
     const expectedLabels = ['随心', '知识', '英语', '创建', '洞察']
     const navLabels = screen
       .getAllByRole('link')
@@ -345,7 +348,7 @@ describe('AppShell', () => {
       </MemoryRouter>,
     )
 
-    await screen.findAllByText(/Stable abcdef12/)
+    await waitFor(() => expect(getRuntimeInfoApi).toHaveBeenCalled())
 
     const creationLink = screen.getAllByRole('link', { name: '创建' })[0]
     expect(creationLink.className).toContain('bg-primary')
@@ -369,7 +372,7 @@ describe('AppShell', () => {
       </MemoryRouter>,
     )
 
-    await screen.findAllByText(/Stable abcdef12/)
+    await waitFor(() => expect(getRuntimeInfoApi).toHaveBeenCalled())
     fireEvent.mouseEnter(screen.getAllByRole('link', { name: '知识' })[0]!)
 
     expect(prefetchPalaceSubjectShelfApi).not.toHaveBeenCalled()
@@ -397,7 +400,7 @@ describe('AppShell', () => {
       </MemoryRouter>,
     )
 
-    await screen.findAllByText(/Stable abcdef12/)
+    await waitFor(() => expect(getRuntimeInfoApi).toHaveBeenCalled())
     await waitFor(() => {
       expect(prefetchPalaceSubjectShelfApi).not.toHaveBeenCalled()
       expect(prefetchPalacesGroupedSummaryApi).not.toHaveBeenCalled()
@@ -425,7 +428,7 @@ describe('AppShell', () => {
       </MemoryRouter>,
     )
 
-    await screen.findAllByText(/Stable abcdef12/)
+    await waitFor(() => expect(getRuntimeInfoApi).toHaveBeenCalled())
     expect(screen.getByText('/palaces/30/edit?miniPalaceId=5&miniPalaceMode=edit#mindmap')).toBeTruthy()
 
     // While still in 创建, the sidebar link points at the section root for a
@@ -479,7 +482,7 @@ describe('AppShell', () => {
       </MemoryRouter>,
     )
 
-    await screen.findAllByText(/Stable abcdef12/)
+    await waitFor(() => expect(getRuntimeInfoApi).toHaveBeenCalled())
     fireEvent.click(screen.getAllByRole('link', { name: '创建' })[0]!)
     await waitFor(() => {
       expect(screen.getByText('/palaces/new')).toBeTruthy()
@@ -514,7 +517,7 @@ describe('AppShell', () => {
       </MemoryRouter>,
     )
 
-    await screen.findAllByText(/Stable abcdef12/)
+    await waitFor(() => expect(getRuntimeInfoApi).toHaveBeenCalled())
     expect(screen.queryByRole('button', { name: '去做题' })).toBeNull()
   })
 
@@ -535,14 +538,11 @@ describe('AppShell', () => {
       </MemoryRouter>,
     )
     expect(screen.queryByRole('button', { name: '停止' })).toBeNull()
-    const aside = document.querySelector('aside')
-    const anchor = aside?.querySelector('[data-session-recorder-anchor="true"]')
-    expect(anchor).toBeTruthy()
-    expect(aside?.firstElementChild?.contains(anchor ?? null)).toBe(true)
-    const launch = screen.getByRole('button', { name: '录制' })
-    expect(launch.closest('[data-session-recorder-hud="true"]')?.className).toContain('z-[20000]')
+    // Lives in the sidebar footer, not as a floating layer, on standard pages.
+    expect(document.querySelector('aside button[aria-label="录制"]')).toBeTruthy()
+    expect(document.querySelector('[data-session-recorder-hud="true"]')).toBeNull()
     act(() => startSessionRecording())
-    expect(screen.getByRole('button', { name: '录制' })).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: '录制' }).length).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: '停止' })).toBeNull()
   })
 

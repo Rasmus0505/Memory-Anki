@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { Button } from '@/shared/components/ui/button'
@@ -13,6 +13,8 @@ type GlobalBackButtonProps = {
   placement?: GlobalBackButtonPlacement
   /** 侧栏收起时纵向排列图标 */
   compact?: boolean
+  /** mobile only: right side of the sticky top bar (the shell puts its tools menu here). */
+  trailing?: ReactNode
 }
 
 /** Immersive feed owns its own top chrome; floating back/forward would cover the card. */
@@ -28,6 +30,7 @@ export function isMindMapHostPath(pathname: string) {
 export function GlobalBackButton({
   placement = 'sidebar',
   compact = false,
+  trailing,
 }: GlobalBackButtonProps) {
   const { pathname } = useLocation()
   const {
@@ -71,7 +74,7 @@ export function GlobalBackButton({
   const controls = (
     <div
       className={cn(
-        'pointer-events-auto flex rounded-xl border border-border/70 bg-background/85 p-0.5 shadow-sm backdrop-blur-xl',
+        'pointer-events-auto flex rounded-lg border border-border/70 bg-background/70 p-0.5',
         placement === 'mobile' ? 'flex-row items-center gap-0.5' : compact ? 'flex-col gap-0.5' : 'flex-col gap-0.5 lg:flex-row lg:items-center',
       )}
       data-testid="section-history-controls"
@@ -81,7 +84,7 @@ export function GlobalBackButton({
         type="button"
         variant="ghost"
         size="icon"
-        className={cn('size-8', !canGoBack && 'opacity-45')}
+        className={cn('size-7 text-muted-foreground hover:text-foreground', !canGoBack && 'opacity-40')}
         aria-label="后退"
         title={backTitle}
         disabled={!canGoBack}
@@ -93,7 +96,7 @@ export function GlobalBackButton({
         type="button"
         variant="ghost"
         size="icon"
-        className={cn('size-8', !canGoForward && 'opacity-45')}
+        className={cn('size-7 text-muted-foreground hover:text-foreground', !canGoForward && 'opacity-40')}
         aria-label="前进"
         title={forwardTitle}
         disabled={!canGoForward}
@@ -107,8 +110,9 @@ export function GlobalBackButton({
   if (placement === 'mobile') {
     // In-flow sticky top bar on phones: it reserves its own height, so page headers never sit under the controls.
     return (
-      <div className="sticky top-0 z-40 flex shrink-0 items-center border-b border-border/60 bg-background/95 px-2 pb-1.5 pt-[calc(env(safe-area-inset-top,0px)+0.5rem)] backdrop-blur-md md:hidden">
+      <div className="sticky top-0 z-40 flex shrink-0 items-center justify-between gap-2 border-b border-border/60 bg-background/90 px-3 pb-1.5 pt-[calc(env(safe-area-inset-top,0px)+0.375rem)] backdrop-blur-md md:hidden">
         {controls}
+        {trailing}
       </div>
     )
   }

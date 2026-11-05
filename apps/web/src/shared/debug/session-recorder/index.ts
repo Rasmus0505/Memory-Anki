@@ -6,9 +6,9 @@ export {
   formatSessionRecorderReport,
 } from './sessionRecorderFormat'
 export {
-  SESSION_RECORDER_ANCHOR_ATTR,
   SESSION_RECORDER_LAYER_ZCLASS,
   SessionRecorderHost,
+  SessionRecorderMenu,
 } from './SessionRecorderHost'
 export {
   closeSessionRecorderDialog,

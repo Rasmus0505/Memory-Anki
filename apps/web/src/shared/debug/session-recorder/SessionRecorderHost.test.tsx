@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { SESSION_RECORDER_ANCHOR_ATTR, SESSION_RECORDER_LAYER_ZCLASS, SessionRecorderHost } from './SessionRecorderHost'
+import { SESSION_RECORDER_LAYER_ZCLASS, SessionRecorderHost, SessionRecorderMenu } from './SessionRecorderHost'
 import {
   openSessionRecorderDialog,
   resetSessionRecorderForTest,
@@ -50,13 +50,15 @@ describe('SessionRecorderHost', () => {
       <MemoryRouter>
         <div data-recorder-current="true" data-recorder-context="quiz" data-recorder-count="2" />
         <button type="button">第一题按钮</button>
+        <SessionRecorderMenu />
         <SessionRecorderHost />
       </MemoryRouter>,
     )
     fireEvent.click(screen.getByRole('button', { name: '第一题按钮' }))
     document.querySelector('[data-recorder-current="true"]')?.setAttribute('data-recorder-count', '9')
 
-    fireEvent.click(screen.getByRole('button', { name: '复制上一次点击的位置' }))
+    fireEvent.keyDown(screen.getByRole('button', { name: '录制' }), { key: 'Enter' })
+    fireEvent.click(await screen.findByRole('menuitem', { name: '复制上一次点击的位置' }))
 
     await waitFor(() => {
       expect(navigator.clipboard.writeText).toHaveBeenCalled()
@@ -67,10 +69,10 @@ describe('SessionRecorderHost', () => {
     expect(copied).not.toContain('quiz（9 项）')
   })
 
-  it('keeps the floating button as 录制 and never shows stop', () => {
+  it('keeps the menu trigger as 录制 and never shows stop', () => {
     render(
       <MemoryRouter>
-        <SessionRecorderHost />
+        <SessionRecorderMenu />
       </MemoryRouter>,
     )
     expect(screen.getByRole('button', { name: '录制' })).toBeTruthy()
@@ -80,61 +82,22 @@ describe('SessionRecorderHost', () => {
     expect(screen.queryByRole('button', { name: '停止' })).toBeNull()
   })
 
-  it('keeps the recorder above dialogs, follows the sidebar anchor, and can be dragged', () => {
-    const anchor = document.createElement('div')
-    anchor.setAttribute(SESSION_RECORDER_ANCHOR_ATTR, 'true')
-    document.body.appendChild(anchor)
-    vi.spyOn(anchor, 'getBoundingClientRect').mockReturnValue({
-      x: 28,
-      y: 18,
-      left: 28,
-      top: 18,
-      right: 64,
-      bottom: 54,
-      width: 36,
-      height: 36,
-      toJSON() {
-        return {}
-      },
-    })
-
-    render(
+  it('floats the menu above dialogs only when the host has no chrome to sit in', () => {
+    const { rerender } = render(
       <MemoryRouter>
         <SessionRecorderHost />
       </MemoryRouter>,
     )
+    expect(document.querySelector('[data-session-recorder-hud="true"]')).toBeNull()
 
+    rerender(
+      <MemoryRouter>
+        <SessionRecorderHost floating />
+      </MemoryRouter>,
+    )
     const hud = document.querySelector('[data-session-recorder-hud="true"]') as HTMLElement
     expect(hud.className).toContain(SESSION_RECORDER_LAYER_ZCLASS)
-    expect(hud.style.left).toBe('28px')
-    expect(hud.style.top).toBe('18px')
-
-    act(() => startSessionRecording())
-    const pointerDown = new MouseEvent('pointerdown', { bubbles: true, clientX: 40, clientY: 30 })
-    const pointerMove = new MouseEvent('pointermove', { bubbles: true, clientX: 120, clientY: 90 })
-    expect(pointerDown.clientX).toBe(40)
-    expect(pointerMove.clientX).toBe(120)
-    act(() => {
-      hud.dispatchEvent(pointerDown)
-      window.dispatchEvent(pointerMove)
-      window.dispatchEvent(new MouseEvent('pointerup', { bubbles: true }))
-    })
-
-    expect(hud.style.left).toBe('108px')
-    expect(hud.style.top).toBe('78px')
-    anchor.remove()
-  })
-
-  it('falls back to the top-right corner of the phone top bar when the sidebar anchor is hidden (PWA)', () => {
-    render(
-      <MemoryRouter>
-        <SessionRecorderHost />
-      </MemoryRouter>,
-    )
-
-    const hud = document.querySelector('[data-session-recorder-hud="true"]') as HTMLElement
-    // Right-aligned to the viewport with an 8px inset; jsdom reports offsetWidth 0, so the expected x uses the live width.
-    expect(hud.style.left).toBe(`${window.innerWidth - hud.offsetWidth - 8}px`)
-    expect(hud.style.top).toBe('8px')
+    expect(hud.className).toContain('md:hidden')
+    expect(hud.querySelector('button[aria-label="录制"]')).toBeTruthy()
   })
 })

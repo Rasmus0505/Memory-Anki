@@ -26,8 +26,7 @@ import { ensureStudyTextLibrary } from '@/shared/study-text/studyTextLibrary'
 import { markBoot } from '@/shared/lib/bootTiming'
 import { ShellProvider, useShellContext } from '@/shared/components/layout/ShellContext'
 import { useClientPreferenceBootstrap } from '@/app/providers/useClientPreferenceBootstrap'
-import { Badge } from '@/shared/components/ui/badge'
-import { Button } from '@/shared/components/ui/button'
+import { DropdownMenuItem, DropdownMenuLabel } from '@/shared/components/ui/dropdown-menu'
 import {
   Sheet,
   SheetClose,
@@ -37,7 +36,7 @@ import {
   SheetTitle,
 } from '@/shared/components/ui/sheet'
 import { AppLogDrawer } from '@/shared/logs/components/AppLogDrawer'
-import { SESSION_RECORDER_ANCHOR_ATTR, SessionRecorderHost } from '@/shared/debug/session-recorder'
+import { SessionRecorderHost, SessionRecorderMenu } from '@/shared/debug/session-recorder'
 import { useRunningTaskCountBySection, type BackgroundTaskSection } from '@/shared/background-tasks/backgroundTaskRegistry'
 import { BackgroundTaskBar } from '@/shared/background-tasks/BackgroundTaskBar'
 import { cn } from '@/shared/lib/utils'
@@ -55,15 +54,12 @@ import {
   warmNavSection,
 } from '@/app/shell/navSectionMemory'
 
-const sidebarDateFormatter = new Intl.DateTimeFormat('zh-CN', {
-  month: '2-digit',
-  day: '2-digit',
+const sidebarClockFormatter = new Intl.DateTimeFormat('zh-CN', {
+  month: 'numeric',
+  day: 'numeric',
   weekday: 'short',
-})
-const sidebarTimeFormatter = new Intl.DateTimeFormat('zh-CN', {
   hour: '2-digit',
   minute: '2-digit',
-  second: '2-digit',
   hour12: false,
 })
 
@@ -99,33 +95,11 @@ function scheduleIdleWarmup(callback: () => void) {
   return () => window.clearTimeout(timeout)
 }
 
-function RuntimeChannelBadge({
-  runtimeInfo,
-  compact = false,
-}: {
-  runtimeInfo: RuntimeInfo | null
-  compact?: boolean
-}) {
+function runtimeVersionLabel(runtimeInfo: RuntimeInfo | null) {
   if (!runtimeInfo) return null
-  const isStable = runtimeInfo.channel === 'stable'
-  const label = isStable ? 'Stable' : 'Dev'
+  const label = runtimeInfo.channel === 'stable' ? 'Stable' : 'Dev'
   const commitText = runtimeInfo.short_commit ?? runtimeInfo.commit?.slice(0, 8) ?? null
-  return (
-    <Badge
-      variant="outline"
-      className={cn(
-        'border font-mono tracking-[0.08em]',
-        isStable
-          ? 'border-success/30 bg-success/5 text-success'
-          : 'border-info/30 bg-info/5 text-info',
-        compact ? 'px-2 py-0 text-[10px]' : 'px-2.5 py-0.5 text-[11px]',
-      )}
-      aria-label={`当前版本 ${label}${commitText ? ` ${commitText}` : ''}`}
-    >
-      {label}
-      {commitText ? ` ${commitText}` : ''}
-    </Badge>
-  )
+  return commitText ? `${label} ${commitText}` : label
 }
 
 const SidebarClock = memo(function SidebarClock() {
@@ -136,13 +110,41 @@ const SidebarClock = memo(function SidebarClock() {
     return () => window.clearInterval(timer)
   }, [])
 
-  return (
-    <>
-      <div className="mt-1 text-xs text-muted-foreground">{sidebarDateFormatter.format(now)}</div>
-      <div className="text-xs font-medium text-foreground/80">{sidebarTimeFormatter.format(now)}</div>
-    </>
-  )
+  return <div className="truncate text-xs tabular-nums text-muted-foreground">{sidebarClockFormatter.format(now)}</div>
 })
+
+/** Diagnostics live behind one button: recorder copies, the log drawer, and the running version. */
+function ShellToolsMenu({
+  runtimeInfo,
+  onOpenLogs,
+  side = 'top',
+  align = 'start',
+  triggerClassName,
+}: {
+  runtimeInfo: RuntimeInfo | null
+  onOpenLogs: () => void
+  side?: 'top' | 'bottom' | 'right'
+  align?: 'start' | 'end'
+  triggerClassName?: string
+}) {
+  const version = runtimeVersionLabel(runtimeInfo)
+  return (
+    <SessionRecorderMenu side={side} align={align} triggerClassName={triggerClassName}>
+      <DropdownMenuItem aria-label="打开日志侧边栏" onSelect={onOpenLogs}>
+        <ClipboardList />
+        调用与错误日志
+      </DropdownMenuItem>
+      {version ? (
+        <DropdownMenuLabel
+          className="font-mono text-[11px] font-normal tracking-wide text-muted-foreground"
+          aria-label={`当前版本 ${version}`}
+        >
+          {version}
+        </DropdownMenuLabel>
+      ) : null}
+    </SessionRecorderMenu>
+  )
+}
 
 function NavSectionLink({
   section,
@@ -164,16 +166,16 @@ function NavSectionLink({
       to={target}
       end={to === '/'}
       className={cn(
-        'group relative flex items-center rounded-xl font-medium transition-[background-color,color,box-shadow] duration-200',
+        'group relative flex items-center rounded-lg font-medium transition-[background-color,color] duration-200',
         isActive
-          ? 'ma-nav-active bg-primary-soft text-primary-strong shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--color-primary)_18%,transparent)]'
+          ? 'ma-nav-active bg-primary-soft text-primary-strong'
           : cn(
-              'hover:bg-secondary/80 hover:text-foreground',
+              'hover:bg-accent hover:text-foreground',
               section.secondary ? 'text-ink-faint' : 'text-muted-foreground',
             ),
         collapsed
           ? 'justify-center px-2.5 py-2.5 text-sm'
-          : 'flex-col justify-center gap-1 px-1 py-2.5 text-[11px] lg:flex-row lg:justify-start lg:gap-3 lg:px-3.5 lg:py-3 lg:text-sm',
+          : 'flex-col justify-center gap-1 px-1 py-2.5 text-[11px] lg:h-9 lg:flex-row lg:justify-start lg:gap-2.5 lg:px-3 lg:py-0 lg:text-sm',
       )}
       onMouseEnter={() => warmNavSection(section)}
       onFocus={() => warmNavSection(section)}
@@ -208,10 +210,13 @@ function NavSectionLink({
   )
 }
 
-function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
+function SidebarContent({ runtimeInfo, onOpenLogs }: { runtimeInfo: RuntimeInfo | null; onOpenLogs: () => void }) {
   const { pathname } = useLocation()
   const shell = useShellContext()
   const collapsed = shell?.sidebarCollapsed ?? false
+  const setCollapsed = shell?.setSidebarCollapsed
+  // Labels show only on the full lg column; the md rail and the collapsed column are icon stacks.
+  const wide = !collapsed
 
   useRememberNavSectionVisit()
 
@@ -250,28 +255,25 @@ function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
 
   return (
     <>
-      <div className={cn('border-b border-border/70', collapsed ? 'px-2 py-3' : 'px-2 py-3 lg:px-5 lg:py-5')}>
+      <div className={cn('flex flex-col gap-3 px-2 pt-3', wide && 'lg:px-3 lg:pt-4')}>
         <NavLink
           to="/freestyle"
-          className={cn('flex items-center justify-center', !collapsed && 'lg:justify-start lg:gap-3')}
+          className={cn('flex items-center justify-center rounded-lg', wide && 'lg:justify-start lg:gap-2.5 lg:px-1')}
         >
-          <div className="flex size-10 items-center justify-center rounded-lg bg-primary text-base font-semibold text-primary-foreground shadow-sm">
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground shadow-[inset_0_1px_0_color-mix(in_srgb,white_20%,transparent),0_1px_2px_rgb(0_0_0/0.15)]">
             记
           </div>
-          <div className={cn('min-w-0', collapsed ? 'hidden' : 'hidden lg:block')}>
-            <div className="truncate text-sm font-semibold tracking-tight">Memory Anki</div>
+          <div className={cn('min-w-0', wide ? 'hidden lg:block' : 'hidden')}>
+            <div className="truncate text-sm font-semibold leading-tight tracking-tight">Memory Anki</div>
             <SidebarClock />
-            <div className="mt-2">
-              <RuntimeChannelBadge runtimeInfo={runtimeInfo} />
-            </div>
           </div>
         </NavLink>
-        <div className={cn('mt-2 justify-center', collapsed ? 'flex' : 'hidden')}>
-          <RuntimeChannelBadge runtimeInfo={runtimeInfo} compact />
+        <div className={cn('flex justify-center', wide && 'lg:justify-start')}>
+          <GlobalBackButton placement="sidebar" compact={collapsed} />
         </div>
       </div>
 
-      <nav className={cn('flex flex-1 flex-col gap-1', collapsed ? 'px-2 py-3' : 'px-2 py-3 lg:px-3 lg:py-4')}>
+      <nav className={cn('flex flex-1 flex-col gap-0.5 px-2 py-3', wide && 'lg:px-3')}>
         {navSections.map((section) => (
           <NavSectionLink
             key={section.to}
@@ -282,7 +284,12 @@ function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
         ))}
       </nav>
 
-      <div className={cn('border-t border-border/70', collapsed ? 'px-2 py-2' : 'px-2 py-2 lg:px-3 lg:py-3')}>
+      <div
+        className={cn(
+          'flex flex-col items-center gap-1 border-t border-border/70 px-2 py-2',
+          wide && 'lg:flex-row lg:px-3',
+        )}
+      >
         <NavLink
           to="/profile"
           onPointerEnter={() => void preloadProfilePage()}
@@ -290,20 +297,38 @@ function SidebarContent({ runtimeInfo }: { runtimeInfo: RuntimeInfo | null }) {
           className={({ isActive }) =>
             cn(
               'flex items-center rounded-lg font-medium transition-colors',
-              collapsed
-                ? 'justify-center px-0 py-2 text-sm'
-                : 'flex-col justify-center gap-1 px-1 py-2 text-[11px] lg:flex-row lg:justify-start lg:gap-2.5 lg:px-2.5 lg:text-sm',
+              wide
+                ? 'w-full flex-col justify-center gap-1 px-1 py-2 text-[11px] lg:h-9 lg:flex-1 lg:flex-row lg:justify-start lg:gap-2.5 lg:px-3 lg:py-0 lg:text-sm'
+                : 'size-9 justify-center text-sm',
               isActive
-                ? 'bg-primary/10 text-primary'
-                : 'text-muted-foreground hover:bg-secondary/70 hover:text-foreground',
+                ? 'bg-primary-soft text-primary-strong'
+                : 'text-muted-foreground hover:bg-accent hover:text-foreground',
             )
           }
           aria-label="设置"
           title="设置"
         >
           <Settings className="size-4 shrink-0" />
-          {!collapsed ? <span className="truncate">设置</span> : null}
+          {wide ? <span className="truncate">设置</span> : null}
         </NavLink>
+        <ShellToolsMenu
+          runtimeInfo={runtimeInfo}
+          onOpenLogs={onOpenLogs}
+          side="right"
+          align="end"
+          triggerClassName="text-muted-foreground hover:text-foreground"
+        />
+        {setCollapsed ? (
+          <button
+            type="button"
+            onClick={() => setCollapsed(!collapsed)}
+            className="hidden size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground lg:inline-flex"
+            aria-label={collapsed ? '展开导航' : '收起导航'}
+            title={collapsed ? '展开导航' : '收起导航'}
+          >
+            {collapsed ? <PanelLeftOpen className="size-4" /> : <PanelLeftClose className="size-4" />}
+          </button>
+        ) : null}
       </div>
     </>
   )
@@ -531,46 +556,7 @@ function ShellFrame({ children }: PropsWithChildren) {
             sidebarWidthClass[sidebarState],
           )}
         >
-          <div className={cn('flex justify-center px-3 pt-3', !sidebarCollapsed && 'lg:justify-start')}>
-            <div
-              {...{ [SESSION_RECORDER_ANCHOR_ATTR]: 'true' }}
-              className="size-9 shrink-0"
-              aria-hidden
-            />
-          </div>
-          <div
-            className={cn(
-              'flex flex-col items-center gap-2 px-3 pt-2 pb-1',
-              !sidebarCollapsed && 'lg:flex-row lg:justify-between lg:pb-0',
-            )}
-          >
-            <GlobalBackButton placement="sidebar" compact={sidebarCollapsed} />
-            <div className={cn('flex items-center gap-2 flex-col', !sidebarCollapsed && 'lg:flex-row')}>
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                onClick={() => setLogDrawerOpen(true)}
-                aria-label="打开日志侧边栏"
-                title="打开日志侧边栏"
-              >
-                <ClipboardList data-icon="inline-start" />
-              </Button>
-              <button
-                type="button"
-                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-                className="hidden size-9 items-center justify-center rounded-md border border-border/70 bg-background/80 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground lg:inline-flex"
-                aria-label={sidebarCollapsed ? '展开导航' : '收起导航'}
-              >
-                {sidebarCollapsed ? (
-                  <PanelLeftOpen className="size-4" />
-                ) : (
-                  <PanelLeftClose className="size-4" />
-                )}
-              </button>
-            </div>
-          </div>
-          <SidebarContent runtimeInfo={runtimeInfo} />
+          <SidebarContent runtimeInfo={runtimeInfo} onOpenLogs={() => setLogDrawerOpen(true)} />
         </aside>
 
         <main
@@ -583,7 +569,18 @@ function ShellFrame({ children }: PropsWithChildren) {
             contentOffsetClass[mindMapHost ? 'flush' : 'inset'][sidebarState],
           )}
         >
-          <GlobalBackButton placement="mobile" />
+          <GlobalBackButton
+            placement="mobile"
+            trailing={(
+              <ShellToolsMenu
+                runtimeInfo={runtimeInfo}
+                onOpenLogs={() => setLogDrawerOpen(true)}
+                side="bottom"
+                align="end"
+                triggerClassName="text-muted-foreground"
+              />
+            )}
+          />
           <div
             ref={contentRef}
             className={cn(
@@ -602,7 +599,7 @@ function ShellFrame({ children }: PropsWithChildren) {
         <CityHorizon visible={mindMapHost} pathname={pathname} />
         <MobileBottomNav layoutMode={layoutMode} />
         <AppLogDrawer open={logDrawerOpen} onOpenChange={setLogDrawerOpen} />
-        <SessionRecorderHost />
+        <SessionRecorderHost floating={immersiveFeed} />
         <GlobalCommandPalette />
       </div>
     </ShellProvider>

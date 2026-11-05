@@ -30,7 +30,7 @@ export function PageHeader({
 
   if (collapsible && collapsed) {
     return (
-      <div className="flex h-9 shrink-0 items-center gap-2 rounded-lg border border-border/70 bg-card/90 px-2 shadow-card">
+      <div className="flex h-9 shrink-0 items-center gap-2 rounded-xl border border-border/70 bg-card px-2 shadow-soft">
         <button
           type="button"
           onClick={() => setCollapsed(false)}
@@ -45,58 +45,49 @@ export function PageHeader({
     )
   }
 
+  // Standard pages: the title sits on the page ground; only the compact
+  // mind-map header keeps a card, because it floats over a canvas.
   return (
     <div
       className={cn(
-        'flex flex-col rounded-lg border border-border/70 bg-card/90 shadow-card lg:flex-row lg:justify-between',
-        compact ? 'gap-2 px-4 py-3 sm:px-5' : 'gap-4 px-5 py-5 sm:px-6 lg:items-end',
+        // Title and actions share one row and wrap only when the actions do not fit.
+        'flex flex-wrap items-center justify-between gap-x-4',
+        compact
+          ? 'gap-y-2 rounded-xl border border-border/70 bg-card px-4 py-2.5 shadow-soft sm:px-5'
+          : 'gap-y-3 px-1 pt-1',
       )}
     >
-      <div className={cn('min-w-0', compact ? 'space-y-1' : 'space-y-2')}>
+      <div className="min-w-0 space-y-1">
         {eyebrow ? (
-          <div
-            className={cn(
-              'font-semibold uppercase tracking-[0.24em] text-muted-foreground',
-              compact ? 'text-[10px]' : 'text-[11px]',
-            )}
-          >
-            {eyebrow}
-          </div>
+          <div className="text-xs font-medium text-muted-foreground">{eyebrow}</div>
         ) : null}
-        <div>
-          <h1
-            className={cn(
-              'break-words font-semibold tracking-tight',
-              compact ? 'text-xl sm:text-2xl' : 'text-2xl sm:text-3xl',
-            )}
-          >
-            {title}
-          </h1>
-          {description && !compact ? (
-            <p
-              className={cn(
-                'mt-2 max-w-3xl text-sm text-muted-foreground sm:text-[15px]',
-                hideDescriptionOnMobile && 'max-sm:hidden',
-              )}
-            >
-              {description}
-            </p>
-          ) : null}
-        </div>
-      </div>
-      {actions || collapsible ? (
-        <div
+        <h1
           className={cn(
-            'flex max-w-full flex-wrap items-center gap-2 lg:justify-end',
-            compact ? 'self-start lg:self-center' : '',
+            'break-words font-semibold tracking-tight',
+            compact ? 'text-lg sm:text-xl' : 'text-2xl sm:text-[28px] sm:leading-9',
           )}
         >
+          {title}
+        </h1>
+        {description && !compact ? (
+          <p
+            className={cn(
+              'max-w-2xl text-sm leading-relaxed text-muted-foreground',
+              hideDescriptionOnMobile && 'max-sm:hidden',
+            )}
+          >
+            {description}
+          </p>
+        ) : null}
+      </div>
+      {actions || collapsible ? (
+        <div className="flex max-w-full shrink-0 flex-wrap items-center gap-2">
           {actions}
           {collapsible ? (
             <button
               type="button"
               onClick={() => setCollapsed(true)}
-              className="inline-flex size-9 items-center justify-center rounded-md border border-border/70 bg-background/80 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              className="inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               aria-label="收起标题"
               title="收起标题"
             >
