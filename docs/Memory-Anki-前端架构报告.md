@@ -326,7 +326,11 @@ JSX `<Routes>` 表仍然手写，但由 `routeManifest.test.ts` 对账，防止�
 - 交互：按钮悬浮上浮 1px、按下 `scale(0.97)`、键盘聚焦 2px 主色环；过渡统一 `cubic-bezier(0.16, 1, 0.3, 1)`，约 0.2s。全局聚焦环放在 `@layer base`，组件自带的 `focus-visible:*` 可以覆盖它。
 - 固定保留的含义色：警告/困难的琥珀、考试三星的金框、脑图荧光笔黄、学科自定义色、永久标记分级色、城市待修牌橙色。重新调色时不要把它们并进主色。
 - 已移除：窗光、时段色调、纸张颗粒、跟随鼠标的暖光、卡片 3D 倾斜、进度条循环光泽。考前两周的屏幕边缘呼吸保留。
+- 字号下限：要读的字不小于 11px；画在固定小圆里的计数徽标、折叠钮、进度刻度例外。
 - 页面层级：常规 `PageHeader` 不套卡片，标题直接在页面底色上；只有 `compact` 版（脑图页）保留卡片外框。视图切换统一用 `ToggleGroup`（单选，`role="radio"`），布局选项只放图标、名字在 `aria-label` / `title`。
+- 侧栏结构：`MindMapSplitLayout` 不再渲染「只放一个按钮的 rail 列」。面板标题行放 `SplitPanelToggle`（通过 context 拿到收起状态，并向布局登记，布局就不再画角落兜底按钮）；收起后只剩画布边缘一个竖向小标签；`railMode="never"` 表示宿主自己画开关。收起的面板加 `inert`，Tab 不会进到看不见的按钮里。`surface="inset"` 给对话框里的分栏用，不铺 card 底色。
+- 导航 + 目录：mind-map host（含随心）默认把主导航收成 3.5rem 图标栏（`hostNavExpanded` 只在这次访问里有效），让导航和页面目录读成一条侧栏；图标栏里的导航链接带 `aria-label` / `title`。
+- 书架树：`PalaceCatalogTree`（`modules/content/ui/palace-catalog`）把 `/palaces/grouped` 转成 `PalaceDirectoryTree` 的树（`buildPalaceCatalogTree`，宫殿留在 grouped 接口归的章节里，按 `parent_id` 嵌套），再用 `PalaceDirectoryTreeView` 的 `size="page"` 渲染，行尾内容走 `renderSubjectMeta / renderChapterMeta / renderPalaceMeta / renderBucketMeta`。书架页和学科页共用这一棵树，原来的卡片、布局/密度设置和视图抽屉已删除。
 - 调试工具：录制、日志抽屉、版本号都在 `SessionRecorderMenu`（`shared/debug/session-recorder`）里，壳层用 `ShellToolsMenu` 把日志和版本挂进去。桌面在侧栏底部，手机在顶栏右侧，沉浸页由 `SessionRecorderHost floating` 浮在右上角。菜单的触发器和内容都带 `data-session-recorder`，不会被当成「上一次点击」。
 
 ---
