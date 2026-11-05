@@ -1,89 +1,30 @@
-/* Components: paper-room atmosphere, tactile controls, exam chips, celebration overlays, review and feedback surfaces, paper panels. */
+/* Components: exam-proximity edge, tactile controls, exam chips, celebration overlays, review and feedback surfaces, paper panels. */
 
 /*
- * Paper-room atmosphere. The shell root is `isolate`, so the back layer
- * (z-index -1) sits above the page ground but under every card, and the
- * front wash stays below portaled dialogs (z-50 on body).
+ * Exam proximity: within two weeks of the exam the screen edge breathes a faint
+ * ember. The window light, time-of-day tint and paper grain that used to live
+ * here are gone; the page ground stays a flat neutral.
  */
 .ma-ambient {
   position: fixed;
   inset: 0;
-  pointer-events: none;
-  overflow: hidden;
-}
-
-.ma-ambient--back {
-  z-index: -1;
-}
-
-.ma-ambient--front {
   z-index: 45;
+  pointer-events: none;
 }
 
-.ma-ambient__window {
-  position: absolute;
-  inset: -20% -10% auto -10%;
-  height: 90%;
-  /* Each theme pack sets --ma-window-hue; the second lobe sits 10° warmer. */
-  background:
-    radial-gradient(60% 55% at 72% 0%, hsl(var(--ma-window-hue, 40) 100% 70% / calc(var(--ma-ambient-light, 0.05) * 2.2)), transparent 70%),
-    radial-gradient(45% 40% at 18% 8%, hsl(calc(var(--ma-window-hue, 40) - 10) 100% 72% / var(--ma-ambient-light, 0.05)), transparent 72%);
-  transition: background 1.2s var(--ease-in-out-soft);
-}
-
-.ma-ambient__tint {
-  position: absolute;
-  inset: 0;
-  background: var(--ma-ambient-tint, transparent);
-  mix-blend-mode: multiply;
-  transition: background 4s linear;
-}
-
-.dark .ma-ambient__tint {
-  mix-blend-mode: soft-light;
-}
-
-.ma-ambient__grain {
-  position: absolute;
-  inset: 0;
-  opacity: 0.05;
-  mix-blend-mode: multiply;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.45 0 0 0 0 0.32 0 0 0 0 0.18 0 0 0 1.4 -0.2'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-size: 180px 180px;
-}
-
-.dark .ma-ambient__grain {
-  opacity: 0.07;
-  mix-blend-mode: screen;
-}
-
-.ma-ambient__vignette {
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(120% 100% at 50% 40%, transparent 62%, hsl(28 40% 30% / 0.07) 100%);
-}
-
-.dark .ma-ambient__vignette {
-  background: radial-gradient(120% 100% at 50% 40%, transparent 58%, hsl(24 30% 4% / 0.35) 100%);
-}
-
-/* Exam within two weeks: the vignette edge breathes a faint ember. */
-.ma-ambient--front[data-exam-pulse='on'] .ma-ambient__vignette {
+.ma-ambient[data-exam-pulse='on'] {
   animation: ma-exam-breath var(--ma-exam-pulse, 5s) ease-in-out infinite;
 }
 
 @keyframes ma-exam-breath {
-  0%, 100% { opacity: 1; }
-  50% {
-    opacity: 1;
-    box-shadow: inset 0 0 120px hsl(12 80% 55% / 0.07);
-  }
+  0%, 100% { box-shadow: inset 0 0 80px hsl(354 70% 55% / 0.02); }
+  50% { box-shadow: inset 0 0 120px hsl(354 70% 55% / 0.08); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ma-ambient--front[data-exam-pulse='on'] .ma-ambient__vignette {
+  .ma-ambient[data-exam-pulse='on'] {
     animation: none;
-    box-shadow: inset 0 0 120px hsl(12 80% 55% / 0.05);
+    box-shadow: inset 0 0 120px hsl(354 70% 55% / 0.05);
   }
 }
 
@@ -94,61 +35,33 @@
 }
 
 /*
- * Global tactile layer: pointer sheen, card tilt, spring controls, list stagger.
+ * Global tactile layer: hover lift, spring controls, list stagger.
  * Lives in `components` so page utilities can still override any of it.
+ * data-lit / data-pressed are set by shared/ambient/pointerLight.
  */
-@property --lit {
-  syntax: '<number>';
-  inherits: false;
-  initial-value: 0;
-}
-
 @layer components {
-  /* Warm lamp sheen that follows the pointer across a paper surface (no rim). */
+  /* Surfaces that react to the pointer keep a flat face; only their depth changes. */
   .ma-lit {
-    background-image: radial-gradient(
-      420px circle at var(--lx, 50%) var(--ly, 0%),
-      hsl(40 100% 78% / calc(var(--lit) * 0.16)),
-      transparent 62%
-    );
-    transition: --lit 420ms var(--ease-out-expo);
+    transition: box-shadow var(--duration-base) var(--ease-out-expo), border-color var(--duration-fast) ease;
   }
 
-  .ma-lit[data-lit] {
-    --lit: 1;
-  }
-
-  .ma-lit[data-pressed] {
-    --lit: 1.7;
-    transition-duration: 90ms;
-  }
-
-  .dark .ma-lit {
-    background-image: radial-gradient(
-      420px circle at var(--lx, 50%) var(--ly, 0%),
-      hsl(36 90% 62% / calc(var(--lit) * 0.1)),
-      transparent 62%
-    );
-  }
-
-  /* Cards lean away under the pointer, springing flat on leave. */
+  /* Cards rise a hair under the pointer and settle on press. */
   .ma-tilt {
-    transform: perspective(900px) rotateX(calc(var(--ty, 0) * -2.6deg)) rotateY(calc(var(--tx, 0) * 3.4deg));
     transition:
-      transform 520ms var(--ease-spring-soft),
-      translate 420ms var(--ease-spring),
-      scale 260ms var(--ease-spring),
-      box-shadow 320ms var(--ease-out-expo),
-      --lit 420ms var(--ease-out-expo);
-    will-change: transform;
+      translate 220ms var(--ease-out-expo),
+      scale 160ms var(--ease-out-expo),
+      box-shadow 260ms var(--ease-out-expo),
+      border-color 160ms ease;
   }
 
   .ma-tilt[data-lit] {
-    transition-duration: 140ms, 420ms, 260ms, 320ms, 420ms;
-    box-shadow: 0 18px 40px -18px hsl(24 60% 22% / 0.32), 0 2px 6px hsl(24 50% 20% / 0.08);
+    translate: 0 -2px;
+    box-shadow: var(--shadow-lift);
+    border-color: color-mix(in oklab, var(--color-primary) 22%, var(--color-border));
   }
 
   .ma-tilt[data-pressed] {
+    translate: 0 0;
     scale: 0.985;
   }
 
@@ -158,7 +71,7 @@
   }
 
   .ma-switch[data-state='checked'] {
-    box-shadow: inset 0 1px 2px hsl(24 70% 20% / 0.25), 0 0 0 3px hsl(28 90% 55% / 0.12);
+    box-shadow: inset 0 1px 2px hsl(240 50% 20% / 0.25), 0 0 0 3px color-mix(in oklab, var(--color-primary) 14%, transparent);
   }
 
   .ma-switch-thumb {
@@ -166,7 +79,7 @@
       translate 420ms var(--ease-spring),
       scale 160ms var(--ease-spring),
       box-shadow 240ms ease;
-    box-shadow: 0 1px 2px hsl(24 50% 15% / 0.3), inset 0 -1px 0 hsl(24 40% 30% / 0.12);
+    box-shadow: 0 1px 2px hsl(228 22% 15% / 0.3), inset 0 -1px 0 hsl(228 22% 30% / 0.12);
   }
 
   .ma-switch:active:not(:disabled) .ma-switch-thumb {
@@ -212,20 +125,6 @@
     position: relative;
     transition: transform 760ms var(--ease-spring-soft);
   }
-
-  .ma-progress-fill::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(100deg, transparent 30%, hsl(44 100% 90% / 0.55) 50%, transparent 70%);
-    background-size: 220% 100%;
-    animation: ma-progress-sheen 2.8s ease-in-out infinite;
-  }
-}
-
-@keyframes ma-progress-sheen {
-  from { background-position: 160% 0; }
-  to { background-position: -60% 0; }
 }
 
 @keyframes ma-bar-grow {
@@ -247,8 +146,11 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ma-tilt {
-    transform: none;
+  .ma-tilt,
+  .ma-tilt[data-lit],
+  .ma-tilt[data-pressed] {
+    translate: none;
+    scale: none;
     transition: none;
   }
   .ma-stagger > *,
@@ -259,9 +161,6 @@
   }
   .ma-switch-thumb {
     transition-duration: 1ms;
-  }
-  .ma-progress-fill::after {
-    animation: none;
   }
 }
 
@@ -289,7 +188,7 @@
   color: var(--exam-star-muted);
 }
 
-/* 3-star key units: warm-gold gradient ring drawn outside the card surface. */
+/* 3-star key units: gold gradient ring drawn outside the card surface. */
 .exam-key-card {
   position: relative;
   isolation: isolate;
@@ -419,7 +318,7 @@
   pointer-events: none;
   overflow: hidden;
   background:
-    radial-gradient(circle at 50% 35%, rgba(251, 191, 36, 0.12), transparent 28%),
+    radial-gradient(circle at 50% 35%, rgba(129, 140, 248, 0.12), transparent 28%),
     radial-gradient(circle at 50% 65%, rgba(236, 72, 153, 0.08), transparent 34%);
 }
 
@@ -447,7 +346,7 @@
   box-shadow:
     0 0 0 1px rgba(255,255,255,0.42),
     0 24px 60px rgba(15, 23, 42, 0.16);
-  filter: drop-shadow(0 0 20px var(--combo-burst-glow, rgba(245, 158, 11, 0.45)));
+  filter: drop-shadow(0 0 20px var(--combo-burst-glow, rgba(99, 102, 241, 0.45)));
 }
 
 .memory-anki-combo-burst-kicker {
@@ -455,7 +354,7 @@
   font-weight: 800;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: #9a3412;
+  color: #3730a3;
   opacity: 0.82;
 }
 
@@ -472,7 +371,7 @@
   font-size: 15px;
   font-weight: 600;
   letter-spacing: 0.04em;
-  color: #7c2d12;
+  color: #312e81;
   opacity: 0.92;
 }
 
@@ -493,7 +392,7 @@
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at 50% 20%, rgba(251, 191, 36, 0.18), transparent 30%),
+    radial-gradient(circle at 50% 20%, rgba(129, 140, 248, 0.18), transparent 30%),
     linear-gradient(180deg, rgba(15, 23, 42, 0.08), rgba(15, 23, 42, 0.02));
 }
 
@@ -508,7 +407,7 @@
   background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(12px);
   box-shadow:
-    0 0 0 1px rgba(245, 158, 11, 0.12),
+    0 0 0 1px rgba(99, 102, 241, 0.12),
     0 24px 60px rgba(15, 23, 42, 0.14);
 }
 
@@ -519,8 +418,8 @@
   width: 64px;
   height: 64px;
   border-radius: 9999px;
-  background: linear-gradient(135deg, #fbbf24, #f59e0b);
-  box-shadow: 0 8px 24px rgba(245, 158, 11, 0.35);
+  background: linear-gradient(135deg, #818cf8, #6366f1);
+  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.35);
 }
 
 .memory-anki-completion-title {
@@ -565,22 +464,22 @@
 }
 
 .memory-anki-review-progress-warmup {
-  background: linear-gradient(90deg, #fbbf24, #f59e0b);
+  background: linear-gradient(90deg, #818cf8, #6366f1);
 }
 
 .memory-anki-review-progress-surge {
-  background: linear-gradient(90deg, #f59e0b, #10b981);
+  background: linear-gradient(90deg, #6366f1, #10b981);
 }
 
 .memory-anki-review-progress-all-clear {
-  background: linear-gradient(90deg, #f59e0b, #10b981, #0f766e);
+  background: linear-gradient(90deg, #6366f1, #10b981, #0f766e);
 }
 
 .memory-anki-review-combo-badge {
-  border-color: rgba(245, 158, 11, 0.22);
-  background: linear-gradient(135deg, rgba(255, 247, 237, 0.96), rgba(254, 243, 199, 0.9));
-  color: #9a3412;
-  box-shadow: 0 10px 24px rgba(245, 158, 11, 0.12);
+  border-color: rgba(99, 102, 241, 0.22);
+  background: linear-gradient(135deg, rgba(238, 242, 255, 0.96), rgba(224, 231, 255, 0.9));
+  color: #3730a3;
+  box-shadow: 0 10px 24px rgba(99, 102, 241, 0.12);
 }
 
 .memory-anki-review-combo-badge-pop {
@@ -588,7 +487,7 @@
 }
 
 .memory-anki-review-complete-ready {
-  box-shadow: 0 10px 30px rgba(245, 158, 11, 0.28);
+  box-shadow: 0 10px 30px rgba(99, 102, 241, 0.28);
 }
 
 .memory-anki-review-completion-banner {
@@ -606,7 +505,7 @@
 
 .memory-anki-review-card-flash-category_expand::after,
 .memory-anki-review-card-flash-next_level_expand::after {
-  box-shadow: inset 0 0 0 2px rgba(245, 158, 11, 0.22), inset 0 0 48px rgba(251, 191, 36, 0.12);
+  box-shadow: inset 0 0 0 2px rgba(99, 102, 241, 0.22), inset 0 0 48px rgba(129, 140, 248, 0.12);
 }
 
 .memory-anki-review-card-flash-card_reveal::after {
@@ -614,12 +513,12 @@
 }
 
 .memory-anki-review-card-flash-branch_clear::after {
-  box-shadow: inset 0 0 0 2px rgba(245, 158, 11, 0.22), inset 0 0 64px rgba(16, 185, 129, 0.18);
+  box-shadow: inset 0 0 0 2px rgba(99, 102, 241, 0.22), inset 0 0 64px rgba(16, 185, 129, 0.18);
 }
 
 .memory-anki-review-card-flash-all_clear_ready::after,
 .memory-anki-review-card-flash-session_complete::after {
-  box-shadow: inset 0 0 0 3px rgba(245, 158, 11, 0.32), inset 0 0 80px rgba(251, 191, 36, 0.24);
+  box-shadow: inset 0 0 0 3px rgba(99, 102, 241, 0.32), inset 0 0 80px rgba(129, 140, 248, 0.24);
 }
 
 .memory-anki-review-card-flash-session_reset::after {
@@ -690,8 +589,8 @@
 
 .memory-anki-feedback-screen-celebration {
   background:
-    radial-gradient(circle at 50% 22%, rgba(251, 191, 36, 0.15), transparent 28%),
-    linear-gradient(180deg, rgba(253, 224, 71, 0.08), transparent 44%);
+    radial-gradient(circle at 50% 22%, rgba(129, 140, 248, 0.15), transparent 28%),
+    linear-gradient(180deg, rgba(165, 180, 252, 0.08), transparent 44%);
 }
 
 .memory-anki-feedback-burst {
@@ -784,7 +683,7 @@
 .memory-anki-feedback-burst-reward .memory-anki-feedback-core {
   box-shadow:
     0 0 0 1px rgba(250, 204, 21, 0.18),
-    0 0 30px rgba(245, 158, 11, 0.16);
+    0 0 30px rgba(99, 102, 241, 0.16);
 }
 
 .memory-anki-feedback-burst-danger .memory-anki-feedback-ring,
@@ -873,8 +772,8 @@
 
 .memory-anki-reactflow-edge-selected path,
 .memory-anki-reactflow-edge-selected .react-flow__edge-path {
-  stroke: #3f766d !important;
-  filter: drop-shadow(0 0 8px rgba(20, 184, 166, 0.18));
+  stroke: #5458d6 !important;
+  filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.18));
   animation: memory-anki-reactflow-edge-pulse 360ms ease-out;
 }
 
@@ -913,7 +812,7 @@
     inset 0 0 0 2px color-mix(in oklab, var(--color-rate-good) 38%, transparent);
 }
 
-/* 忘记/困难 is information, not a loss: a warm neutral note, never a red alarm. */
+/* 忘记/困难 is information, not a loss: a neutral note, never a red alarm. */
 .memory-anki-freestyle-breath-note {
   box-shadow:
     inset 0 0 0 2px color-mix(in oklab, var(--color-stage-muted) 30%, transparent);
@@ -937,7 +836,7 @@
   }
 }
 
-/* 纸面卡片：暖色层次 + 上沿高光。 */
+/* 纸面卡片：浅色纸面孤岛，深色模式下也保持浅色。 */
 .fs-paper-card {
   /* Light island: shared token-based components render on paper even in dark mode. */
   color-scheme: light;
@@ -947,49 +846,44 @@
   --color-background: var(--color-paper-card);
   --color-popover: var(--color-paper-card);
   --color-popover-foreground: var(--color-paper-ink);
-  --color-muted: hsl(36 36% 92%);
+  --color-muted: hsl(228 18% 95%);
   --color-muted-foreground: var(--color-paper-muted);
-  --color-secondary: hsl(36 36% 92%);
+  --color-secondary: hsl(228 16% 94%);
   --color-secondary-foreground: var(--color-paper-ink-soft);
-  --color-accent: hsl(36 78% 90%);
+  --color-accent: hsl(228 18% 93.5%);
   --color-accent-foreground: var(--color-paper-ink);
   --color-border: var(--color-paper-line);
   --color-input: var(--color-paper-line-strong);
-  --color-primary: hsl(28 80% 51%);
+  --color-primary: hsl(238 62% 56%);
   --color-primary-foreground: hsl(0 0% 100%);
-  --color-primary-soft: hsl(33 90% 92%);
-  --color-primary-strong: hsl(24 78% 40%);
-  --color-ring: hsl(28 80% 51%);
-  --color-success: hsl(104 46% 38%);
-  --color-destructive: hsl(8 70% 52%);
-  --color-warning: hsl(34 90% 44%);
-  --color-rate-again: hsl(8 70% 54%);
-  --color-rate-hard: hsl(34 90% 46%);
-  --color-rate-good: hsl(104 46% 38%);
-  --color-rate-easy: hsl(190 60% 36%);
-  background:
-    linear-gradient(180deg, hsl(43 100% 100% / 0.9), hsl(43 100% 100% / 0) 26%),
-    var(--color-paper-card);
+  --color-primary-soft: hsl(236 80% 96%);
+  --color-primary-strong: hsl(240 52% 42%);
+  --color-ring: hsl(238 62% 56%);
+  --color-success: hsl(158 58% 34%);
+  --color-destructive: hsl(354 62% 50%);
+  --color-warning: hsl(32 88% 44%);
+  --color-rate-again: hsl(354 62% 52%);
+  --color-rate-hard: hsl(32 88% 46%);
+  --color-rate-good: hsl(158 56% 36%);
+  --color-rate-easy: hsl(204 72% 42%);
+  background: var(--color-paper-card);
   color: var(--color-paper-ink);
   border: 1px solid var(--color-paper-line);
   box-shadow:
-    inset 0 1px 0 hsl(43 100% 100% / 0.95),
-    0 1px 2px hsl(24 50% 20% / 0.18),
-    0 22px 50px -18px rgb(0 0 0 / 0.6);
+    inset 0 1px 0 hsl(0 0% 100%),
+    0 1px 2px hsl(228 30% 8% / 0.2),
+    0 24px 52px -20px rgb(0 0 0 / 0.6);
 }
 
 .memory-anki-warm-panel {
-  border: 1px solid color-mix(in srgb, var(--color-border) 78%, white);
-  background: linear-gradient(180deg, rgba(255,255,255,0.88), rgba(255,250,242,0.96));
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
   box-shadow: var(--shadow-card);
 }
 
 .dark .memory-anki-warm-panel {
-  border-color: color-mix(in srgb, var(--color-border) 88%, rgba(251, 191, 36, 0.18));
-  background:
-    radial-gradient(circle at top right, rgba(251, 191, 36, 0.08), transparent 38%),
-    linear-gradient(180deg, rgba(39, 32, 27, 0.96), rgba(29, 24, 21, 0.98));
+  background: color-mix(in oklab, var(--color-card) 92%, var(--color-background));
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.035),
+    inset 0 1px 0 hsl(228 40% 96% / 0.04),
     var(--shadow-card);
 }

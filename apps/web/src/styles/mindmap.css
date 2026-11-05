@@ -75,7 +75,7 @@
   cursor: pointer;
   border-radius: 3px;
   color: inherit;
-  text-decoration: underline dotted 1.5px hsl(28 60% 50% / 0.55);
+  text-decoration: underline dotted 1.5px hsl(236 51% 50% / 0.55);
   text-underline-offset: 0.24em;
   transition: background-color 150ms ease, box-shadow 150ms ease, text-decoration-color 200ms ease;
   animation: mindmap-reading-word-in 350ms ease both;
@@ -84,8 +84,8 @@
 .mindmap-reading-word:hover,
 .mindmap-reading-word:focus-visible {
   outline: none;
-  background-color: hsl(33 90% 88% / 0.8);
-  box-shadow: 0 0 0 2px hsl(33 90% 88% / 0.8);
+  background-color: hsl(236 63% 88% / 0.8);
+  box-shadow: 0 0 0 2px hsl(236 63% 88% / 0.8);
   text-decoration-color: var(--color-primary);
 }
 
@@ -102,14 +102,14 @@
   background: repeating-linear-gradient(
     to bottom,
     transparent 0 calc(1lh - 1px),
-    hsl(28 70% 55% / 0.2) calc(1lh - 1px) 1lh
+    hsl(236 60% 55% / 0.2) calc(1lh - 1px) 1lh
   );
   animation: mindmap-rules-in 300ms ease both;
 }
 
 [data-text-mode='true'] .mindmap-node-text::selection,
 [data-text-mode='true'] .mindmap-node-text *::selection {
-  background: hsl(28 90% 60% / 0.3);
+  background: hsl(236 76% 60% / 0.3);
 }
 
 @keyframes mindmap-rules-in {
@@ -209,7 +209,7 @@
   font-weight: 600;
   letter-spacing: 0.02em;
   line-height: 1.2;
-  box-shadow: 0 1px 2px hsl(24 40% 20% / 0.08);
+  box-shadow: 0 1px 2px hsl(228 22% 20% / 0.08);
 }
 
 .memory-anki-mindmap-scene-label::before {
@@ -236,7 +236,7 @@
 }
 
 .memory-anki-mindmap-scene-edit::before {
-  background: linear-gradient(90deg, hsl(36 94% 62%), var(--color-primary) 55%, hsl(16 76% 56%));
+  background: linear-gradient(90deg, hsl(228 60% 70%), var(--color-primary) 55%, hsl(262 60% 62%));
 }
 
 .memory-anki-mindmap-scene-edit .memory-anki-mindmap-scene-label {
@@ -260,7 +260,7 @@
 }
 
 .memory-anki-mindmap-scene-review::before {
-  background: linear-gradient(90deg, hsl(318 28% 52%), hsl(350 40% 58%) 55%, hsl(28 80% 56%));
+  background: linear-gradient(90deg, hsl(318 28% 52%), hsl(340 40% 58%));
 }
 
 .memory-anki-mindmap-scene-review .memory-anki-mindmap-scene-label {
@@ -357,12 +357,12 @@
   }
 }
 
-/* —— 节点卡片：奶油纸片 + 暖阴影 —— */
+/* —— 节点卡片：白色纸片 + 轻阴影 —— */
 .mindmap-node-card {
   box-shadow:
-    0 1px 0 hsl(43 100% 100% / 0.9) inset,
-    0 1px 2px hsl(24 40% 22% / 0.07),
-    0 6px 16px -8px hsl(24 50% 26% / 0.16);
+    0 1px 0 hsl(0 0% 100% / 0.9) inset,
+    0 1px 2px hsl(228 22% 22% / 0.07),
+    0 6px 16px -8px hsl(228 22% 26% / 0.16);
   position: relative;
   top: 0;
   /* `top` springs the card. A transform would rasterize the glyphs. */
@@ -376,16 +376,16 @@
 
 .mindmap-node-card--root {
   background:
-    radial-gradient(120% 140% at 0% 0%, hsl(38 100% 90% / 0.9), transparent 60%),
-    linear-gradient(160deg, hsl(40 100% 97%), hsl(34 78% 92%));
+    radial-gradient(120% 140% at 0% 0%, hsl(236 80% 96% / 0.9), transparent 60%),
+    linear-gradient(160deg, hsl(0 0% 100%), hsl(236 60% 96%));
   box-shadow:
-    0 1px 0 hsl(43 100% 100% / 0.95) inset,
-    0 2px 4px hsl(24 50% 22% / 0.08),
-    0 14px 30px -12px hsl(28 70% 36% / 0.32);
+    0 1px 0 hsl(0 0% 100% / 0.95) inset,
+    0 2px 4px hsl(228 22% 22% / 0.08),
+    0 14px 30px -12px hsl(236 50% 36% / 0.24);
   font-weight: 650;
 }
 
-/* Selection: amber ring + soft halo, box-shadow only (no layout change). */
+/* Selection: primary ring + soft halo, box-shadow only (no layout change). */
 .mindmap-node-card--selected {
   box-shadow:
     0 0 0 2px var(--color-primary),
@@ -397,15 +397,15 @@
   .mindmap-node-shell:hover > .mindmap-node-card:not(.mindmap-node-card--selected):not(.mindmap-node-card--editing) {
     top: -1px;
     box-shadow:
-      0 1px 0 hsl(43 100% 100% / 0.9) inset,
+      0 1px 0 hsl(0 0% 100% / 0.9) inset,
       var(--shadow-lift);
   }
 }
 
 .mindmap-node-shell:active > .mindmap-node-card:not(.mindmap-node-card--editing) {
   box-shadow:
-    0 1px 0 hsl(43 100% 100% / 0.9) inset,
-    0 1px 2px hsl(24 40% 22% / 0.16);
+    0 1px 0 hsl(0 0% 100% / 0.9) inset,
+    0 1px 2px hsl(228 22% 22% / 0.16);
 }
 
 /* Press before the flip: a concealed card squishes under the finger, and the flip's cover starts from the same pose. */
@@ -421,7 +421,7 @@
  * is box-shadow only (no layout).
  */
 .mindmap-node-card.mindmap-node-card--editing {
-  background: hsl(40 100% 97.5%);
+  background: hsl(236 70% 98%);
   border-color: var(--color-primary);
   box-shadow:
     0 0 0 1px var(--color-primary),
@@ -437,7 +437,7 @@
 
 .mindmap-node-editor::selection,
 .mindmap-node-editor *::selection {
-  background: hsl(28 90% 60% / 0.3);
+  background: hsl(236 76% 60% / 0.3);
 }
 
 @keyframes mindmap-editor-glow {
@@ -445,7 +445,7 @@
     box-shadow:
       0 0 0 0 var(--color-primary),
       0 0 0 0 transparent,
-      0 6px 16px -8px hsl(24 50% 26% / 0.16);
+      0 6px 16px -8px hsl(228 22% 26% / 0.16);
   }
 }
 
@@ -471,14 +471,14 @@
   to { background-position: -120% 0; }
 }
 
-/* —— 待回忆：暖琥珀纸背（斜纹 + 内虚线框），翻牌时同一张纸翻走 —— */
+/* —— 待回忆：淡靛纸背（斜纹 + 内虚线框），翻牌时同一张纸翻走 —— */
 .mindmap-node-card--concealed,
 .mindmap-flip-cover {
   background:
-    repeating-linear-gradient(135deg, hsl(32 90% 60% / 0.10) 0 6px, transparent 6px 12px),
-    radial-gradient(120% 140% at 0% 0%, hsl(40 100% 94%), transparent 60%),
-    linear-gradient(160deg, hsl(38 92% 90%), hsl(30 80% 82%));
-  border-color: hsl(30 70% 62% / 0.7);
+    repeating-linear-gradient(135deg, hsl(236 70% 60% / 0.07) 0 6px, transparent 6px 12px),
+    radial-gradient(120% 140% at 0% 0%, hsl(236 80% 97%), transparent 60%),
+    linear-gradient(160deg, hsl(236 70% 94%), hsl(236 52% 88%));
+  border-color: hsl(236 50% 70% / 0.6);
 }
 
 .mindmap-node-card--concealed::after,
@@ -486,14 +486,14 @@
   content: '';
   position: absolute;
   inset: 3px;
-  border: 1px dashed hsl(28 70% 48% / 0.38);
+  border: 1px dashed hsl(236 50% 52% / 0.3);
   border-radius: 11px;
   pointer-events: none;
 }
 
 .mindmap-node-card--concealed .mindmap-node-concealed,
 .mindmap-flip-cover .mindmap-node-concealed {
-  background-image: linear-gradient(100deg, hsl(26 60% 38% / 0.55) 30%, hsl(38 100% 56%) 50%, hsl(26 60% 38% / 0.55) 70%);
+  background-image: linear-gradient(100deg, hsl(236 51% 38% / 0.55) 30%, hsl(236 85% 56%) 50%, hsl(236 51% 38% / 0.55) 70%);
 }
 
 /* Flip FX layers are injected by useMindMapRevealMotion and removed when done. */
@@ -504,7 +504,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid hsl(30 70% 62% / 0.7);
+  border: 1px solid hsl(236 50% 70% / 0.6);
   border-radius: inherit;
   font-size: 12px;
   pointer-events: none;
@@ -516,14 +516,14 @@
   inset: 0;
   z-index: 6;
   border-radius: inherit;
-  background: linear-gradient(105deg, transparent 30%, hsl(45 100% 92% / 0.85) 48%, hsl(38 100% 70% / 0.35) 54%, transparent 68%);
+  background: linear-gradient(105deg, transparent 30%, hsl(236 70% 92% / 0.85) 48%, hsl(236 85% 70% / 0.35) 54%, transparent 68%);
   background-size: 260% 100%;
   mix-blend-mode: screen;
   pointer-events: none;
 }
 
 
-/* Long-press pending: warm amber ring that breathes outward. */
+/* Long-press pending: a primary ring that breathes outward. */
 .mindmap-node-longpress-ring {
   border: 2px solid color-mix(in oklab, var(--color-primary) 85%, transparent);
   box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-primary) 40%, transparent);
@@ -653,7 +653,7 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   backdrop-filter: blur(6px);
-  box-shadow: 0 1px 2px hsl(24 40% 20% / 0.06);
+  box-shadow: 0 1px 2px hsl(228 22% 20% / 0.06);
 }
 
 .memory-anki-mindmap-text-stats-sep {

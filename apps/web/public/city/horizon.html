@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<!-- Match the host's scheme; otherwise a dark host paints this frame an opaque light canvas. -->
+<!-- Fallback when the host can't be read; the script below pins the host's actual scheme. -->
 <meta name="color-scheme" content="light dark">
 <title>城市地平线</title>
 <style>
@@ -11,6 +11,16 @@ html,body{margin:0;height:100%;overflow:hidden;background:transparent}
 canvas{display:block;width:100%;height:100%}
 </style>
 <script src="./vendor/gsap.min.js"></script>
+<script>
+// Follow the host's chosen theme, not the OS: a scheme mismatch makes the browser
+// paint an opaque backdrop under this transparent frame.
+try {
+  const root = parent.document.documentElement;
+  const sync = () => { document.documentElement.style.colorScheme = root.classList.contains('dark') ? 'dark' : 'light'; };
+  sync();
+  new MutationObserver(sync).observe(root, { attributes: true, attributeFilter: ['class'] });
+} catch (e) {}
+</script>
 </head>
 <body>
 <script type="module">
@@ -46,8 +56,8 @@ function zoomTo(floors) {
 }
 addEventListener('resize', fit);
 
-scene.add(new THREE.HemisphereLight(0xfff1dc, 0x9fb3c9, 1.5));
-const sun = new THREE.DirectionalLight(0xfff0d6, 2.1);
+scene.add(new THREE.HemisphereLight(0xf4f6ff, 0x9fb3c9, 1.5));
+const sun = new THREE.DirectionalLight(0xf6f4ff, 2.1);
 sun.position.set(5, 8, 6); sun.castShadow = true; sun.shadow.mapSize.set(1024, 512);
 Object.assign(sun.shadow.camera, { left: -20, right: 20, top: 4, bottom: -4 });
 scene.add(sun);
@@ -73,19 +83,19 @@ const G = {
   pole: new THREE.CylinderGeometry(.012, .012, 1, 5),
   roof: (() => { const g = new THREE.ConeGeometry(.48, .32, 4); g.rotateY(Math.PI / 4); return g; })(),
 };
-const WALLS = [0xf4ead8, 0xf2b8a2, 0x9fd1c4, 0xf6d38b, 0xb9cbe8, 0xe9a3b8, 0xfff3e2, 0xc8dca0];
+const WALLS = [0xe6e9f2, 0xc9cff5, 0x9fd1c4, 0xf0d9a8, 0xb9cbe8, 0xe3b4c8, 0xf5f6fa, 0xc8dca0];
 const houses = new Map();
 let order = [], focusId = null, lastId = null;
 
 function blendRoof(hex) {
   const c = new THREE.Color(hex || '#6c7a89');
-  return c.lerp(new THREE.Color(0xb38b6d), .35).getHex();
+  return c.lerp(new THREE.Color(0x7c8599), .35).getHex();
 }
 function makeHouse(id) {
   const h = { id, g: new THREE.Group(), floors: [], wins: [], lights: [], roof: null, sign: null, flag: null, extras: 0, gold: false };
   h.wall = WALLS[Math.abs(id) % WALLS.length];
   h.g.rotation.y = -.6; h.g.scale.setScalar(.01);
-  h.roof = new THREE.Mesh(G.roof, mat(0x8a6b55, { flatShading: true }));
+  h.roof = new THREE.Mesh(G.roof, mat(0x6b7286, { flatShading: true }));
   h.roof.castShadow = true; h.g.add(h.roof);
   scene.add(h.g); houses.set(id, h); h.s = 1;
   return h;
@@ -126,7 +136,7 @@ function setFlag(h, on) {
   if (on && !h.flag) {
     h.flag = new THREE.Group();
     const p = new THREE.Mesh(G.pole, mat(0x3f4a5a)); p.scale.y = .32; p.position.y = .28; h.flag.add(p);
-    const cloth = new THREE.Mesh(new THREE.PlaneGeometry(.15, .09), mat(0xe8813a, { side: THREE.DoubleSide }));
+    const cloth = new THREE.Mesh(new THREE.PlaneGeometry(.15, .09), mat(0x6366f1, { side: THREE.DoubleSide }));
     cloth.position.set(.075, .39, 0); h.flag.add(cloth); h.flag.userData.cloth = cloth;
     h.roof.add(h.flag);
   } else if (!on && h.flag) { h.roof.remove(h.flag); h.flag = null; }

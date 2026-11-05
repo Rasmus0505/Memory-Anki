@@ -6,8 +6,8 @@ describe('study theme', () => {
     expect(themeMotion()).toEqual({ pageTurnMs: 380, flipMs: 560, flipOvershootDeg: 13 })
   })
 
-  it('answers the warm paper theme color for each scheme', () => {
-    expect(themeColorFor('light')).toBe('#fbf6ef')
-    expect(themeColorFor('dark')).toBe('#181411')
+  it('answers the slate theme color for each scheme', () => {
+    expect(themeColorFor('light')).toBe('#f8f9fb')
+    expect(themeColorFor('dark')).toBe('#101114')
   })
 })

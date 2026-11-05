@@ -1,78 +1,78 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  /* Latin glyphs come from Nunito; CJK falls through to bundled Noto Sans SC (unicode-range slices). */
-  --font-sans: "Nunito Variable", "Noto Sans SC Variable", "PingFang SC", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif;
+  /* System sans for Latin; CJK falls through to PingFang on Apple and the bundled Noto Sans SC elsewhere. */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", "PingFang SC", "Noto Sans SC Variable", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, "Cascadia Code", "SFMono-Regular", "Menlo", "Consolas", "Liberation Mono", monospace;
 
-  /* Warm light: cream ground, amber primary, grass success, coral weak. */
-  --color-background: hsl(38 56% 96%);
-  --color-foreground: hsl(24 26% 14%);
-  --color-card: hsl(43 100% 99%);
-  --color-card-foreground: hsl(24 26% 14%);
-  --color-popover: hsl(43 100% 99%);
-  --color-popover-foreground: hsl(24 26% 14%);
-  --color-primary: hsl(28 80% 51%);
+  /* Cool slate light: three surfaces (page < card < popover), indigo primary, low-chroma status tints. */
+  --color-background: hsl(228 20% 97.5%);
+  --color-foreground: hsl(228 22% 12%);
+  --color-card: hsl(0 0% 100%);
+  --color-card-foreground: hsl(228 22% 12%);
+  --color-popover: hsl(0 0% 100%);
+  --color-popover-foreground: hsl(228 22% 12%);
+  --color-primary: hsl(238 62% 56%);
   --color-primary-foreground: hsl(0 0% 100%);
-  --color-primary-soft: hsl(33 90% 92%);
-  --color-primary-strong: hsl(24 78% 40%);
-  --color-secondary: hsl(36 36% 92%);
-  --color-secondary-foreground: hsl(24 22% 20%);
-  --color-muted: hsl(36 30% 93%);
-  --color-muted-foreground: hsl(26 12% 40%);
-  --color-accent: hsl(36 78% 90%);
-  --color-accent-foreground: hsl(24 26% 18%);
-  --color-destructive: hsl(8 76% 60%);
+  --color-primary-soft: hsl(236 80% 96%);
+  --color-primary-strong: hsl(240 52% 42%);
+  --color-secondary: hsl(228 16% 94%);
+  --color-secondary-foreground: hsl(228 18% 22%);
+  --color-muted: hsl(228 16% 95%);
+  --color-muted-foreground: hsl(228 9% 42%);
+  --color-accent: hsl(228 18% 93.5%);
+  --color-accent-foreground: hsl(228 22% 14%);
+  --color-destructive: hsl(354 64% 52%);
   --color-destructive-foreground: hsl(0 0% 100%);
-  --color-success: hsl(104 44% 46%);
+  --color-success: hsl(158 58% 36%);
   --color-success-foreground: hsl(0 0% 100%);
-  --color-warning: hsl(38 92% 52%);
-  --color-warning-foreground: hsl(28 50% 10%);
-  --color-error: hsl(8 76% 60%);
+  --color-warning: hsl(36 90% 50%);
+  --color-warning-foreground: hsl(30 60% 10%);
+  --color-error: hsl(354 64% 52%);
   --color-error-foreground: hsl(0 0% 100%);
-  --color-info: hsl(198 58% 46%);
+  --color-info: hsl(204 74% 44%);
   --color-info-foreground: hsl(0 0% 100%);
-  --color-memory-strong: hsl(104 44% 42%);
-  --color-memory-medium: hsl(38 92% 52%);
-  --color-memory-weak: hsl(8 76% 60%);
-  --color-border: hsl(34 30% 86%);
-  --color-input: hsl(34 26% 82%);
-  --color-ring: hsl(28 80% 51%);
-  --color-radius: 0.75rem;
+  --color-memory-strong: hsl(158 58% 36%);
+  --color-memory-medium: hsl(36 90% 50%);
+  --color-memory-weak: hsl(354 64% 56%);
+  --color-border: hsl(228 16% 90%);
+  --color-input: hsl(228 14% 85%);
+  --color-ring: hsl(238 62% 56%);
+  --color-radius: 0.625rem;
 
   /* Rating tones shared by every review surface. */
-  --color-rate-again: hsl(8 76% 60%);
-  --color-rate-hard: hsl(38 92% 52%);
-  --color-rate-good: hsl(104 44% 46%);
-  --color-rate-easy: hsl(190 56% 44%);
+  --color-rate-again: hsl(354 64% 54%);
+  --color-rate-hard: hsl(34 88% 50%);
+  --color-rate-good: hsl(158 56% 38%);
+  --color-rate-easy: hsl(204 72% 46%);
 
   /* Status semantics: each tone has a soft tint for fills and a strong ink for text on it. */
-  --color-success-soft: hsl(104 40% 90%);
-  --color-success-strong: hsl(104 46% 30%);
-  --color-warning-soft: hsl(40 96% 90%);
-  --color-warning-strong: hsl(32 88% 34%);
-  --color-danger-soft: hsl(8 80% 93%);
-  --color-danger-strong: hsl(8 66% 42%);
-  --color-info-soft: hsl(198 60% 92%);
-  --color-info-strong: hsl(200 62% 32%);
+  --color-success-soft: hsl(152 52% 94%);
+  --color-success-strong: hsl(160 64% 24%);
+  --color-warning-soft: hsl(42 92% 93%);
+  --color-warning-strong: hsl(28 80% 32%);
+  --color-danger-soft: hsl(354 80% 96%);
+  --color-danger-strong: hsl(354 60% 40%);
+  --color-info-soft: hsl(204 80% 95%);
+  --color-info-strong: hsl(206 70% 30%);
 
   /* Memory strength ramp, weakest to strongest, plus states that are not yet rated. */
-  --color-memory-new: hsl(198 58% 46%);
-  --color-memory-untrained: hsl(30 10% 62%);
+  --color-memory-new: hsl(204 74% 46%);
+  --color-memory-untrained: hsl(228 8% 64%);
 
   /* Subject hues, cycled by subject index so one subject keeps one colour across screens. */
-  --color-subject-1: hsl(28 80% 51%);
-  --color-subject-2: hsl(198 58% 46%);
-  --color-subject-3: hsl(104 44% 46%);
-  --color-subject-4: hsl(280 36% 52%);
-  --color-subject-5: hsl(340 56% 56%);
-  --color-subject-6: hsl(46 80% 48%);
+  --color-subject-1: hsl(238 62% 58%);
+  --color-subject-2: hsl(204 72% 46%);
+  --color-subject-3: hsl(158 56% 38%);
+  --color-subject-4: hsl(272 48% 56%);
+  --color-subject-5: hsl(340 58% 54%);
+  --color-subject-6: hsl(38 84% 48%);
 
   /* Surface and ink roles for cards, wells, and text hierarchy. */
-  --color-surface-raised: hsl(40 60% 98%);
-  --color-surface-sunken: hsl(38 40% 93%);
+  --color-surface-raised: hsl(0 0% 100%);
+  --color-surface-sunken: hsl(228 18% 95%);
   --color-ink-muted: var(--color-muted-foreground);
-  --color-ink-faint: hsl(26 10% 58%);
+  --color-ink-faint: hsl(228 8% 60%);
 
   /* Immersive stage expressed as surface variants so overlays and pages share one vocabulary. */
   --color-surface-stage: var(--color-stage);
@@ -80,25 +80,25 @@
   --color-ink-stage: var(--color-stage-ink);
   --color-ink-stage-muted: var(--color-stage-muted);
 
-  /* Freestyle immersive stage: warm charcoal "reading lamp" surface, theme independent. */
-  --color-stage: hsl(24 16% 8%);
-  --color-stage-raised: hsl(24 14% 12%);
-  --color-stage-overlay: hsl(24 16% 10% / 0.86);
-  --color-stage-line: hsl(34 30% 80% / 0.12);
-  --color-stage-line-strong: hsl(34 40% 80% / 0.22);
-  --color-stage-ink: hsl(38 40% 93%);
-  --color-stage-muted: hsl(32 14% 64%);
-  --color-stage-faint: hsl(30 10% 44%);
-  --color-stage-glow: hsl(32 94% 60%);
+  /* Freestyle immersive stage: cool graphite, theme independent. */
+  --color-stage: hsl(228 14% 7.5%);
+  --color-stage-raised: hsl(228 12% 11.5%);
+  --color-stage-overlay: hsl(228 14% 9.5% / 0.88);
+  --color-stage-line: hsl(228 30% 86% / 0.1);
+  --color-stage-line-strong: hsl(228 30% 86% / 0.18);
+  --color-stage-ink: hsl(228 20% 94%);
+  --color-stage-muted: hsl(228 9% 64%);
+  --color-stage-faint: hsl(228 7% 44%);
+  --color-stage-glow: hsl(236 84% 70%);
 
   /* Paper surface for mind maps and card content; stays light in dark mode. */
-  --color-paper: hsl(38 56% 96%);
-  --color-paper-card: hsl(43 100% 99%);
-  --color-paper-line: hsl(34 28% 84%);
-  --color-paper-line-strong: hsl(30 22% 70%);
-  --color-paper-ink: hsl(24 28% 14%);
-  --color-paper-ink-soft: hsl(24 16% 30%);
-  --color-paper-muted: hsl(28 12% 46%);
+  --color-paper: hsl(228 22% 97%);
+  --color-paper-card: hsl(0 0% 100%);
+  --color-paper-line: hsl(228 16% 88%);
+  --color-paper-line-strong: hsl(228 12% 74%);
+  --color-paper-ink: hsl(228 24% 13%);
+  --color-paper-ink-soft: hsl(228 14% 30%);
+  --color-paper-muted: hsl(228 8% 46%);
 
   /* App shell geometry: md rail, lg sidebar and its collapsed rail, the floating inset, and the content gutter. */
   --spacing-shell-rail: 5.5rem;
@@ -111,18 +111,20 @@
   --spacing-shell-main-sidebar: calc(var(--spacing-shell-inset) + var(--spacing-shell-sidebar) + var(--spacing-shell-gutter));
   --spacing-shell-main-collapsed: calc(var(--spacing-shell-inset) + var(--spacing-shell-sidebar-collapsed) + var(--spacing-shell-gutter));
 
+  /* 6 / 8 / 10 / 14 / 20 px. */
   --radius-sm: calc(var(--color-radius) - 4px);
   --radius-md: calc(var(--color-radius) - 2px);
   --radius-lg: var(--color-radius);
   --radius-xl: calc(var(--color-radius) + 4px);
   --radius-2xl: calc(var(--color-radius) + 10px);
 
-  --shadow-soft: 0 1px 2px hsl(24 40% 20% / 0.05);
-  --shadow-card: 0 1px 2px hsl(24 40% 20% / 0.06), 0 10px 28px -6px hsl(24 50% 24% / 0.10);
-  --shadow-popover: 0 20px 48px -10px hsl(24 50% 18% / 0.20), 0 2px 6px hsl(24 40% 20% / 0.06);
-  --shadow-floating: 0 28px 80px -12px hsl(24 50% 16% / 0.24);
-  --shadow-lift: 0 2px 4px hsl(24 40% 20% / 0.06), 0 18px 40px -12px hsl(24 60% 26% / 0.22);
-  --shadow-glow: 0 0 0 1px hsl(28 80% 51% / 0.35), 0 8px 30px -6px hsl(28 90% 52% / 0.45);
+  /* Layered diffuse shadows: a tight contact line plus a wide, faint ambient blur. */
+  --shadow-soft: 0 1px 2px hsl(228 30% 12% / 0.05);
+  --shadow-card: 0 1px 2px hsl(228 30% 12% / 0.04), 0 4px 12px -2px hsl(228 30% 12% / 0.05), 0 16px 32px -12px hsl(228 30% 12% / 0.06);
+  --shadow-popover: 0 0 0 1px hsl(228 30% 12% / 0.04), 0 4px 8px -2px hsl(228 30% 12% / 0.06), 0 20px 44px -12px hsl(228 30% 12% / 0.16);
+  --shadow-floating: 0 0 0 1px hsl(228 30% 12% / 0.04), 0 28px 72px -16px hsl(228 30% 12% / 0.24);
+  --shadow-lift: 0 1px 2px hsl(228 30% 12% / 0.05), 0 8px 18px -6px hsl(228 30% 12% / 0.09), 0 22px 40px -16px hsl(228 30% 12% / 0.14);
+  --shadow-glow: 0 0 0 1px hsl(238 62% 56% / 0.3), 0 6px 20px -6px hsl(238 70% 56% / 0.42);
 
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-out-back: cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -146,85 +148,85 @@
 
 :root {
   --memory-anki-mindmap-canvas: var(--color-paper);
-  --memory-anki-mindmap-dot: hsl(28 30% 30% / 0.12);
+  --memory-anki-mindmap-dot: hsl(228 20% 30% / 0.12);
 }
 
 .dark {
   --memory-anki-mindmap-canvas: var(--color-paper);
-  --memory-anki-mindmap-dot: hsl(28 30% 30% / 0.12);
-  --color-background: hsl(24 16% 8%);
-  --color-foreground: hsl(38 32% 92%);
-  --color-card: hsl(24 14% 11.5%);
-  --color-card-foreground: hsl(38 32% 92%);
-  --color-popover: hsl(24 14% 13%);
-  --color-popover-foreground: hsl(38 32% 92%);
-  --color-primary: hsl(32 92% 60%);
-  --color-primary-foreground: hsl(24 50% 9%);
-  --color-primary-soft: hsl(30 50% 18%);
-  --color-primary-strong: hsl(34 96% 70%);
-  --color-secondary: hsl(24 10% 17%);
-  --color-secondary-foreground: hsl(38 24% 88%);
-  --color-muted: hsl(24 10% 15%);
-  --color-muted-foreground: hsl(32 12% 62%);
-  --color-accent: hsl(28 30% 19%);
-  --color-accent-foreground: hsl(38 24% 88%);
-  --color-destructive: hsl(8 74% 62%);
+  --memory-anki-mindmap-dot: hsl(228 20% 30% / 0.12);
+  --color-background: hsl(228 12% 7%);
+  --color-foreground: hsl(228 20% 93%);
+  --color-card: hsl(228 11% 10%);
+  --color-card-foreground: hsl(228 20% 93%);
+  --color-popover: hsl(228 11% 12.5%);
+  --color-popover-foreground: hsl(228 20% 93%);
+  --color-primary: hsl(236 70% 64%);
+  --color-primary-foreground: hsl(0 0% 100%);
+  --color-primary-soft: hsl(236 34% 18%);
+  --color-primary-strong: hsl(234 90% 80%);
+  --color-secondary: hsl(228 10% 15%);
+  --color-secondary-foreground: hsl(228 16% 88%);
+  --color-muted: hsl(228 10% 13%);
+  --color-muted-foreground: hsl(228 9% 62%);
+  --color-accent: hsl(228 10% 16%);
+  --color-accent-foreground: hsl(228 16% 92%);
+  --color-destructive: hsl(354 70% 60%);
   --color-destructive-foreground: hsl(0 0% 100%);
-  --color-success: hsl(104 42% 54%);
-  --color-success-foreground: hsl(104 40% 8%);
-  --color-warning: hsl(38 92% 58%);
-  --color-warning-foreground: hsl(30 40% 8%);
-  --color-error: hsl(8 74% 62%);
+  --color-success: hsl(156 50% 50%);
+  --color-success-foreground: hsl(160 50% 8%);
+  --color-warning: hsl(38 90% 58%);
+  --color-warning-foreground: hsl(30 50% 8%);
+  --color-error: hsl(354 70% 60%);
   --color-error-foreground: hsl(0 0% 100%);
-  --color-info: hsl(194 60% 58%);
-  --color-info-foreground: hsl(200 40% 8%);
-  --color-memory-strong: hsl(104 42% 54%);
-  --color-memory-medium: hsl(38 92% 58%);
-  --color-memory-weak: hsl(8 74% 64%);
-  --color-border: hsl(28 12% 21%);
-  --color-input: hsl(28 12% 24%);
-  --color-ring: hsl(32 92% 60%);
+  --color-info: hsl(204 76% 60%);
+  --color-info-foreground: hsl(206 50% 8%);
+  --color-memory-strong: hsl(156 50% 50%);
+  --color-memory-medium: hsl(38 90% 58%);
+  --color-memory-weak: hsl(354 72% 64%);
+  --color-border: hsl(228 10% 17%);
+  --color-input: hsl(228 10% 21%);
+  --color-ring: hsl(236 70% 64%);
 
-  --color-rate-again: hsl(8 78% 64%);
-  --color-rate-hard: hsl(38 94% 60%);
-  --color-rate-good: hsl(104 46% 56%);
-  --color-rate-easy: hsl(190 60% 56%);
+  --color-rate-again: hsl(354 72% 64%);
+  --color-rate-hard: hsl(38 90% 60%);
+  --color-rate-good: hsl(156 50% 52%);
+  --color-rate-easy: hsl(204 76% 62%);
 
-  --color-success-soft: hsl(104 30% 18%);
-  --color-success-strong: hsl(104 50% 70%);
-  --color-warning-soft: hsl(38 50% 17%);
-  --color-warning-strong: hsl(38 96% 68%);
-  --color-danger-soft: hsl(8 40% 19%);
-  --color-danger-strong: hsl(8 80% 74%);
-  --color-info-soft: hsl(198 40% 17%);
-  --color-info-strong: hsl(194 70% 70%);
+  --color-success-soft: hsl(158 30% 14%);
+  --color-success-strong: hsl(154 56% 66%);
+  --color-warning-soft: hsl(36 40% 14%);
+  --color-warning-strong: hsl(40 92% 68%);
+  --color-danger-soft: hsl(354 34% 16%);
+  --color-danger-strong: hsl(354 84% 76%);
+  --color-info-soft: hsl(206 36% 15%);
+  --color-info-strong: hsl(202 84% 74%);
 
-  --color-memory-new: hsl(194 60% 60%);
-  --color-memory-untrained: hsl(30 8% 46%);
+  --color-memory-new: hsl(204 76% 62%);
+  --color-memory-untrained: hsl(228 7% 44%);
 
-  --color-subject-1: hsl(32 92% 62%);
-  --color-subject-2: hsl(194 62% 60%);
-  --color-subject-3: hsl(104 46% 58%);
-  --color-subject-4: hsl(280 40% 66%);
-  --color-subject-5: hsl(340 60% 68%);
-  --color-subject-6: hsl(46 84% 62%);
+  --color-subject-1: hsl(236 74% 70%);
+  --color-subject-2: hsl(204 76% 62%);
+  --color-subject-3: hsl(156 50% 54%);
+  --color-subject-4: hsl(272 56% 70%);
+  --color-subject-5: hsl(340 66% 68%);
+  --color-subject-6: hsl(40 86% 60%);
 
-  --color-surface-raised: hsl(24 14% 14%);
-  --color-surface-sunken: hsl(24 16% 6.5%);
-  --color-ink-faint: hsl(30 10% 46%);
+  --color-surface-raised: hsl(228 11% 12.5%);
+  --color-surface-sunken: hsl(228 13% 5.5%);
+  --color-ink-faint: hsl(228 7% 46%);
 
+  /* Dark surfaces separate by a 1px top highlight as much as by shadow. */
   --shadow-soft: 0 1px 2px rgb(0 0 0 / 0.4);
-  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.45), 0 10px 28px -6px rgb(0 0 0 / 0.5);
-  --shadow-popover: 0 20px 48px -10px rgb(0 0 0 / 0.65), 0 0 0 1px hsl(34 30% 80% / 0.06);
-  --shadow-floating: 0 28px 80px -12px rgb(0 0 0 / 0.7);
-  --shadow-lift: 0 2px 4px rgb(0 0 0 / 0.4), 0 18px 40px -12px rgb(0 0 0 / 0.6);
-  --shadow-glow: 0 0 0 1px hsl(32 92% 60% / 0.4), 0 8px 30px -6px hsl(32 92% 56% / 0.5);
+  --shadow-card: inset 0 1px 0 hsl(228 40% 96% / 0.035), 0 1px 2px rgb(0 0 0 / 0.4), 0 12px 28px -10px rgb(0 0 0 / 0.5);
+  --shadow-popover: inset 0 1px 0 hsl(228 40% 96% / 0.05), 0 0 0 1px hsl(228 30% 90% / 0.06), 0 22px 48px -12px rgb(0 0 0 / 0.7);
+  --shadow-floating: inset 0 1px 0 hsl(228 40% 96% / 0.05), 0 0 0 1px hsl(228 30% 90% / 0.06), 0 32px 80px -16px rgb(0 0 0 / 0.75);
+  --shadow-lift: inset 0 1px 0 hsl(228 40% 96% / 0.05), 0 2px 4px rgb(0 0 0 / 0.4), 0 20px 40px -14px rgb(0 0 0 / 0.65);
+  --shadow-glow: 0 0 0 1px hsl(236 70% 64% / 0.4), 0 8px 28px -6px hsl(236 80% 60% / 0.5);
 }
 
 .dark body {
   background:
-    radial-gradient(120% 60% at 0% 0%, hsl(30 90% 50% / 0.08), transparent 55%),
-    radial-gradient(90% 50% at 100% 100%, hsl(12 80% 50% / 0.05), transparent 60%),
+    radial-gradient(80% 50% at 50% -10%, hsl(236 60% 50% / 0.07), transparent 60%),
     var(--color-background);
   background-attachment: fixed;
 }
@@ -233,7 +235,7 @@
   border-color: var(--color-paper-line);
   background: var(--memory-anki-mindmap-canvas);
   box-shadow:
-    inset 0 1px 0 hsl(43 100% 100% / 0.8),
+    inset 0 1px 0 hsl(0 0% 100% / 0.8),
     0 18px 44px -10px rgb(0 0 0 / 0.5);
 }
 
@@ -246,20 +248,30 @@ html {
 body {
   margin: 0;
   font-family: var(--font-sans);
-  background:
-    radial-gradient(110% 55% at 0% 0%, hsl(36 100% 88% / 0.55), transparent 60%),
-    radial-gradient(80% 50% at 100% 0%, hsl(18 100% 90% / 0.35), transparent 60%),
-    var(--color-background);
-  background-attachment: fixed;
+  background: var(--color-background);
   color: var(--color-foreground);
-  -webkit-font-smoothing: auto;
-  -moz-osx-font-smoothing: auto;
-  text-rendering: auto;
-  font-feature-settings: "tnum" 0, "cv11" 1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4 {
+  letter-spacing: -0.012em;
+  text-wrap: balance;
+}
+
+/* Figures that sit in columns or tick over must not jitter in width. */
+table,
+time,
+progress,
+[role='progressbar'],
+[role='timer'],
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
 }
 
 ::selection {
-  background: hsl(33 95% 72% / 0.45);
+  background: hsl(236 80% 66% / 0.26);
   color: inherit;
 }
 
@@ -298,8 +310,8 @@ body {
   border-radius: 1rem;
   background: var(--memory-anki-mindmap-canvas);
   box-shadow:
-    inset 0 1px 0 hsl(43 100% 100% / 0.9),
-    0 18px 44px -12px hsl(24 50% 24% / 0.16);
+    inset 0 1px 0 hsl(0 0% 100% / 0.9),
+    var(--shadow-card);
 }
 
 
@@ -315,7 +327,7 @@ body {
 select {
   cursor: pointer;
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23737a8c' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 10px center;
   padding-right: 32px;
@@ -337,7 +349,7 @@ input[type="range"]::-webkit-slider-thumb {
   border-radius: 50%;
   background: var(--color-primary);
   border: 2px solid white;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  box-shadow: 0 0 0 1px hsl(228 30% 12% / 0.08), 0 2px 6px hsl(228 30% 12% / 0.2);
   cursor: pointer;
   transition: transform 0.1s ease;
 }
@@ -382,23 +394,42 @@ summary,
 [role="switch"],
 [role="tab"] {
   transition:
-    transform 0.14s var(--memory-anki-feedback-ease),
-    border-color 0.18s ease,
-    background-color 0.18s ease,
-    color 0.18s ease;
+    transform 0.2s var(--memory-anki-feedback-ease),
+    translate 0.2s var(--memory-anki-feedback-ease),
+    scale 0.2s var(--memory-anki-feedback-ease),
+    box-shadow 0.2s var(--memory-anki-feedback-ease),
+    border-color 0.2s var(--memory-anki-feedback-ease),
+    background-color 0.2s var(--memory-anki-feedback-ease),
+    color 0.2s var(--memory-anki-feedback-ease);
   transform-origin: center;
 }
 
 button:active:not([disabled]),
 [role="button"]:active {
-  transform: translateY(1px) scale(0.985);
+  transform: scale(0.97);
+  transition-duration: 80ms;
+}
+
+/* One focus ring for keyboard users everywhere: 2px ring hugging the control.
+   In the base layer so a component's own focus-visible utilities still win. */
+@layer base {
+  :where(button, a[href], summary, [role="button"], [role="link"], [role="tab"], [role="switch"], [role="menuitem"], [role="option"]):focus-visible {
+    outline: 2px solid color-mix(in oklab, var(--color-ring) 70%, transparent);
+    outline-offset: 2px;
+  }
 }
 
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible,
 [contenteditable="true"]:focus-visible {
-  box-shadow:
-    0 0 0 1px rgba(59, 130, 246, 0.22),
-    0 0 0 3px rgba(56, 189, 248, 0.1);
+  border-color: color-mix(in oklab, var(--color-ring) 60%, var(--color-input));
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-ring) 18%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button:active:not([disabled]),
+  [role="button"]:active {
+    transform: none;
+  }
 }

@@ -72,7 +72,7 @@
   transform-origin: var(--radix-popper-transform-origin, center);
 }
 
-/* Skeleton: warm shimmer sweep instead of a flat pulse. */
+/* Skeleton: a faint light sweep instead of a flat pulse. */
 @keyframes ma-shimmer {
   from { background-position: 180% 0; }
   to { background-position: -80% 0; }
@@ -83,8 +83,7 @@
   background-image: linear-gradient(
     100deg,
     transparent 20%,
-    hsl(38 100% 97% / 0.75) 42%,
-    hsl(36 100% 92% / 0.55) 50%,
+    hsl(0 0% 100% / 0.7) 46%,
     transparent 70%
   );
   background-size: 220% 100%;
@@ -95,8 +94,7 @@
   background-image: linear-gradient(
     100deg,
     transparent 20%,
-    hsl(32 40% 30% / 0.35) 45%,
-    hsl(32 60% 40% / 0.18) 52%,
+    hsl(228 30% 90% / 0.05) 48%,
     transparent 72%
   );
 }
@@ -109,9 +107,9 @@
   }
 }
 
-/* Toasts: warm cards with a spring entrance. */
+/* Toasts: popover-tier cards with a spring entrance. */
 [data-sonner-toaster] [data-sonner-toast] {
-  border-radius: 1rem;
+  border-radius: var(--radius-xl);
   border-color: var(--color-border);
   background: var(--color-popover);
   color: var(--color-popover-foreground);
@@ -138,7 +136,7 @@
   width: 3px;
   height: 56%;
   border-radius: 999px;
-  background: linear-gradient(180deg, var(--color-primary), var(--color-warning));
+  background: var(--color-primary);
   transform: translateY(-50%);
   animation: ma-nav-bar-in 360ms var(--ease-spring) both;
 }
@@ -151,13 +149,16 @@
 /* Tactile press for any control that opts in. */
 .ma-pressable {
   transition:
-    transform var(--duration-fast) var(--ease-spring),
+    transform var(--duration-fast) var(--ease-out-expo),
+    translate var(--duration-base) var(--ease-out-expo),
     box-shadow var(--duration-base) var(--ease-out-expo),
-    background-color var(--duration-fast) ease;
+    background-color var(--duration-fast) ease,
+    border-color var(--duration-fast) ease,
+    color var(--duration-fast) ease;
 }
 
 .ma-pressable:active:not(:disabled) {
-  transform: scale(0.96);
+  transform: scale(0.97);
   transition-duration: var(--duration-instant);
 }
 
@@ -171,8 +172,10 @@
     animation-duration: 1ms !important;
     animation-iteration-count: 1 !important;
   }
-  .ma-pressable:active:not(:disabled) {
+  .ma-pressable:active:not(:disabled),
+  .ma-pressable:hover:not(:disabled) {
     transform: none;
+    translate: none;
   }
 }
 
@@ -227,7 +230,7 @@
   max-height: none !important;
   border-radius: 0 !important;
   border: none !important;
-  background: #f8fafc !important;
+  background: var(--memory-anki-mindmap-canvas) !important;
   overflow: hidden !important;
   overscroll-behavior: contain !important;
 }

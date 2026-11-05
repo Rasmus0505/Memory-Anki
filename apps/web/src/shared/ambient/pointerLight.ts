@@ -31,54 +31,29 @@ function litTarget(target: EventTarget | null) {
   return element
 }
 
-function apply(element: HTMLElement, clientX: number, clientY: number) {
-  const point = resolveLightPoint(element.getBoundingClientRect(), clientX, clientY)
-  element.style.setProperty('--lx', `${point.x.toFixed(1)}px`)
-  element.style.setProperty('--ly', `${point.y.toFixed(1)}px`)
-  element.style.setProperty('--tx', point.nx.toFixed(3))
-  element.style.setProperty('--ty', point.ny.toFixed(3))
-}
-
 function release(element: HTMLElement | null) {
   if (!element) return
   element.removeAttribute('data-lit')
   element.removeAttribute('data-pressed')
-  element.style.setProperty('--tx', '0')
-  element.style.setProperty('--ty', '0')
 }
 
 /**
- * Desktop: a warm sheen follows the mouse over `.ma-lit` surfaces and `.ma-tilt`
- * cards lean towards it. Touch: the sheen blooms at the press point and the
- * surface sinks slightly towards it until release.
+ * Marks the `.ma-lit` / `.ma-tilt` surface under the pointer: `data-lit` while the
+ * mouse is over it (hover lift), `data-pressed` while a finger holds it (press sink).
  */
 export function installPointerLight() {
   if (typeof document === 'undefined') return () => undefined
   if (prefersReducedMotion()) return () => undefined
   let hovered: HTMLElement | null = null
   let pressed: HTMLElement | null = null
-  let pending: { element: HTMLElement; x: number; y: number } | null = null
-  let frame = 0
-
-  const flush = () => {
-    frame = 0
-    if (pending) apply(pending.element, pending.x, pending.y)
-    pending = null
-  }
-  const schedule = (element: HTMLElement, x: number, y: number) => {
-    pending = { element, x, y }
-    if (!frame) frame = window.requestAnimationFrame(flush)
-  }
 
   const onMove = (event: PointerEvent) => {
     if (event.pointerType !== 'mouse') return
     const element = litTarget(event.target)
-    if (element !== hovered) {
-      release(hovered)
-      hovered = element
-      hovered?.setAttribute('data-lit', '')
-    }
-    if (element) schedule(element, event.clientX, event.clientY)
+    if (element === hovered) return
+    release(hovered)
+    hovered = element
+    hovered?.setAttribute('data-lit', '')
   }
   const onDown = (event: PointerEvent) => {
     if (event.pointerType === 'mouse') return
@@ -86,7 +61,6 @@ export function installPointerLight() {
     if (!element) return
     release(pressed)
     pressed = element
-    apply(element, event.clientX, event.clientY)
     element.setAttribute('data-lit', '')
     element.setAttribute('data-pressed', '')
   }
@@ -105,7 +79,6 @@ export function installPointerLight() {
   document.addEventListener('pointercancel', onUp, { passive: true })
   document.documentElement.addEventListener('pointerleave', onLeaveWindow)
   return () => {
-    if (frame) window.cancelAnimationFrame(frame)
     release(hovered)
     release(pressed)
     document.removeEventListener('pointermove', onMove)
