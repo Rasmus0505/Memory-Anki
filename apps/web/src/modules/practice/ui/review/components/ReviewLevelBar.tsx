@@ -196,7 +196,7 @@ export function ReviewLevelBar({
             className={cn(!adjustable && 'opacity-80', wrongThisRound && '[&_[data-slot=slider-range]]:bg-red-500 [&_[data-slot=slider-track]]:bg-red-500/30 [&_[role=slider]]:border-red-500')}
           />
           {compact ? null : (
-            <div className="flex items-center justify-between text-[10px] leading-3 text-muted-foreground">
+            <div className="flex items-center justify-between text-[11px] leading-3 text-muted-foreground">
               <span>首学</span>
               <span>{dueDate ? dateLabel(dueDate) : '未排期'}</span>
               <span>365天以上</span>

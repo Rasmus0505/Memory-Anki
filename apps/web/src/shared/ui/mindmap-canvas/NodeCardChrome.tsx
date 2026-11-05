@@ -39,7 +39,7 @@ export function NodeCardStatusChrome({
         >
           {visual.statusChips.map((chip, index) => {
             const chipClassName = [
-              'max-w-[5.5rem] truncate rounded-full border px-1.5 py-0 text-[10px] font-medium leading-4 shadow-sm',
+              'max-w-[5.5rem] truncate rounded-full border px-1.5 py-0 text-[11px] font-medium leading-4 shadow-sm',
               statusChipClassName(chip.tone, chip.style),
             ].join(' ')
             if (!onStatusChipClick) {

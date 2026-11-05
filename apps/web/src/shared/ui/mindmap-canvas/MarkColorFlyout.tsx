@@ -151,7 +151,7 @@ export function MarkColorFlyout({
 
       {settings.labels.length > 0 ? (
         <div className="mb-2 space-y-1">
-          <div className="px-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+          <div className="px-0.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             已保存标签
           </div>
           {settings.labels.map((label) => {
@@ -214,7 +214,7 @@ export function MarkColorFlyout({
       ) : null}
 
       <div className="mb-2">
-        <div className="mb-1 px-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+        <div className="mb-1 px-0.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
           预设
         </div>
         <div className="grid grid-cols-7 gap-1.5">
@@ -238,7 +238,7 @@ export function MarkColorFlyout({
       </div>
 
       <div className="mb-2 rounded-lg border bg-secondary/40 p-2">
-        <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+        <div className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
           自定义
         </div>
         <div className="flex items-center gap-2">

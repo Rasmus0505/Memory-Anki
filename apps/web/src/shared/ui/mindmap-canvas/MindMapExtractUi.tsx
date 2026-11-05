@@ -28,7 +28,7 @@ export function ExtractDropPlaceholders({
         <span
           aria-hidden="true"
           data-drop-placeholder-label="before"
-          className="pointer-events-none absolute left-1/2 top-[-1.35rem] z-40 -translate-x-1/2 whitespace-nowrap rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm"
+          className="pointer-events-none absolute left-1/2 top-[-1.35rem] z-40 -translate-x-1/2 whitespace-nowrap rounded-full bg-primary px-2 py-0.5 text-[11px] font-semibold text-white shadow-sm"
         >
           {MODE_LABEL.before}
         </span>
@@ -47,7 +47,7 @@ export function ExtractDropPlaceholders({
         <span
           aria-hidden="true"
           data-drop-placeholder-label="after"
-          className="pointer-events-none absolute bottom-[-1.35rem] left-1/2 z-40 -translate-x-1/2 whitespace-nowrap rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm"
+          className="pointer-events-none absolute bottom-[-1.35rem] left-1/2 z-40 -translate-x-1/2 whitespace-nowrap rounded-full bg-primary px-2 py-0.5 text-[11px] font-semibold text-white shadow-sm"
         >
           {MODE_LABEL.after}
         </span>
@@ -65,7 +65,7 @@ export function ExtractDropPlaceholders({
       <span
         aria-hidden="true"
         data-drop-placeholder-label="inside"
-        className="pointer-events-none absolute left-1/2 top-1/2 z-40 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-full bg-success px-2 py-0.5 text-[10px] font-semibold text-white shadow-sm"
+        className="pointer-events-none absolute left-1/2 top-1/2 z-40 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-full bg-success px-2 py-0.5 text-[11px] font-semibold text-white shadow-sm"
       >
         {MODE_LABEL.inside}
       </span>
@@ -92,7 +92,7 @@ export function ExtractGhostPortal({
       className="pointer-events-none fixed z-[10000] max-w-[14rem] -translate-x-1/2 -translate-y-[110%] rounded-xl border-2 border-dashed border-primary bg-primary-soft/95 px-3 py-2 text-xs font-medium text-primary-strong shadow-xl"
       style={{ left: ghost.x, top: ghost.y - 8 }}
     >
-      <div className="mb-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary/90">
+      <div className="mb-0.5 text-[11px] font-semibold uppercase tracking-wide text-primary/90">
         新卡片
       </div>
       {ghost.text}

@@ -49,7 +49,7 @@ export function FreestyleUnitReviewIdentityRow({
           <span
             data-testid="freestyle-fill-badge"
             title="补充练习：记得/轻松只记下，不改下次到期日"
-            className="inline-flex h-5 shrink-0 items-center rounded-full border border-info-strong/30 bg-info-soft px-1.5 text-[10px] font-semibold text-info-strong sm:h-6 sm:px-2 sm:text-[11px]"
+            className="inline-flex h-5 shrink-0 items-center rounded-full border border-info-strong/30 bg-info-soft px-1.5 text-[11px] font-semibold text-info-strong sm:h-6 sm:px-2 sm:text-[11px]"
           >
             补充
           </span>
@@ -63,7 +63,7 @@ export function FreestyleUnitReviewIdentityRow({
             data-fx-anchor={FX_ANCHORS.flipBadge}
             data-tone={flipTone}
             className={cn(
-              'inline-flex h-5 shrink-0 items-center rounded-full border px-1.5 font-mono text-[10px] font-semibold tabular-nums tracking-tight transition-colors duration-300 sm:h-6 sm:px-2 sm:text-[11px]',
+              'inline-flex h-5 shrink-0 items-center rounded-full border px-1.5 font-mono text-[11px] font-semibold tabular-nums tracking-tight transition-colors duration-300 sm:h-6 sm:px-2 sm:text-[11px]',
               flipProgressToneClass(flipTone),
             )}
           >

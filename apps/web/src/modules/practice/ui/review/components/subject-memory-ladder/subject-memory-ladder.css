@@ -168,7 +168,7 @@
 .sml-step-label {
   max-width: 100%;
   overflow: hidden;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 15px;
   color: var(--sml-muted);
   text-align: center;
@@ -221,7 +221,7 @@
     letter-spacing: -.03em;
   }
   .sml-bar { width: min(72%, 20px); }
-  .sml-hint { font-size: 10px; }
+  .sml-hint { font-size: 11px; }
 }
 @container (max-width: 300px) {
   .sml-step-label { font-size: 8px; letter-spacing: -.05em; }

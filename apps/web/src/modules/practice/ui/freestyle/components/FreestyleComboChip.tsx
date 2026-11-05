@@ -46,7 +46,7 @@ export function FreestyleComboChip({ reducedMotion = false }: { reducedMotion?: 
               {combo}
             </span>
           </span>
-          <span className="text-[10px] font-semibold opacity-80">连击</span>
+          <span className="text-[11px] font-semibold opacity-80">连击</span>
           {milestone && animate ? (
             <span
               key={`ring-${nonce}`}

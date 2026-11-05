@@ -241,7 +241,7 @@ export function QuizQuestionVersionSheet({
                         {isOriginal ? '🏛️ 原始真题' : `🧬 AI 变体 · ${card.version_id}`}
                       </Badge>
                       {isOriginal ? (
-                        <Badge variant="outline" className="text-[10px]">
+                        <Badge variant="outline" className="text-[11px]">
                           真题保真
                         </Badge>
                       ) : (
@@ -250,7 +250,7 @@ export function QuizQuestionVersionSheet({
                         </span>
                       )}
                       {active ? (
-                        <Badge variant="secondary" className="text-[10px]">
+                        <Badge variant="secondary" className="text-[11px]">
                           ✅ 当前使用中
                         </Badge>
                       ) : null}

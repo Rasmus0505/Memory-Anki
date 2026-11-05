@@ -60,14 +60,14 @@ export interface AiRunConfigDialogViewProps {
 function pathRoleBadge(pathRole?: MultiScenarioEntry['pathRole']) {
   if (pathRole === 'primary') {
     return (
-      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
         主路径 · 几乎总会用
       </span>
     )
   }
   if (pathRole === 'fallback') {
     return (
-      <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+      <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
         回退路径 · 仅 OCR/重整
       </span>
     )
@@ -319,7 +319,7 @@ export function AiRunConfigDialogView({
                                   <span className="block font-medium">
                                     {block.label}
                                     {recommendedKeys.has(block.key) ? (
-                                      <span className="ml-2 text-[10px] font-normal text-primary">推荐</span>
+                                      <span className="ml-2 text-[11px] font-normal text-primary">推荐</span>
                                     ) : null}
                                   </span>
                                   <span className="text-xs text-muted-foreground">{block.description}</span>

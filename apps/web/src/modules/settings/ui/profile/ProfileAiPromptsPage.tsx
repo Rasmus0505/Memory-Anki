@@ -235,7 +235,7 @@ export function ProfileAiPromptsPage({
                                   <span className="block font-medium">
                                     {block.label}
                                     {recommended.has(block.key) ? (
-                                      <Badge variant="secondary" className="ml-2 align-middle text-[10px]">推荐</Badge>
+                                      <Badge variant="secondary" className="ml-2 align-middle text-[11px]">推荐</Badge>
                                     ) : null}
                                   </span>
                                   <span className="text-xs text-muted-foreground">{block.description}</span>

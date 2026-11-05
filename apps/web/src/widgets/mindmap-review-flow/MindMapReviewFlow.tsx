@@ -209,7 +209,7 @@ export function MindMapReviewFlow({
                 </span>
               ) : null}
               {review.flow.redNodeCount > 0 ? (
-                <Badge variant="outline" className="h-6 px-1.5 text-[10px]">
+                <Badge variant="outline" className="h-6 px-1.5 text-[11px]">
                   红{review.flow.redNodeCount}
                 </Badge>
               ) : null}

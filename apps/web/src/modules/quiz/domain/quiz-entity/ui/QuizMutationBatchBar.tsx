@@ -89,7 +89,7 @@ function ImportPreview({
             </div>
             <Badge
               variant={ok ? 'secondary' : 'destructive'}
-              className="shrink-0 text-[10px]"
+              className="shrink-0 text-[11px]"
             >
               {ok ? '✅ 可导入' : `⚠️ ${row.reason || '跳过'}`}
             </Badge>

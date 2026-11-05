@@ -309,7 +309,7 @@ export function FreestyleRatingBar({
             <button
               type="button"
               data-testid="freestyle-copy-for-assistant"
-              className="text-[10px] text-stage-faint underline underline-offset-2 hover:text-stage-muted"
+              className="text-[11px] text-stage-faint underline underline-offset-2 hover:text-stage-muted"
               onClick={() => void navigator.clipboard?.writeText(assistantCopy)}
             >
               复制给助手
@@ -367,7 +367,7 @@ export function FreestyleRatingBar({
               data-testid="freestyle-remove-tray-toggle"
               aria-expanded={removeTrayOpen}
               aria-controls="freestyle-remove-tray"
-              className="inline-flex h-6 items-center gap-1 rounded-full px-2 text-[10px] font-medium text-stage-faint hover:bg-stage-line hover:text-stage-ink"
+              className="inline-flex h-6 items-center gap-1 rounded-full px-2 text-[11px] font-medium text-stage-faint hover:bg-stage-line hover:text-stage-ink"
               onClick={() => setRemoveTrayOpen((open) => !open)}
             >
               <MoreHorizontal className="size-3.5" aria-hidden />

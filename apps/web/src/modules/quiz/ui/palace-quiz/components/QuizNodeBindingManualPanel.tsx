@@ -306,7 +306,7 @@ export function QuizNodeBindingManualPanel({
                     <span className="font-mono text-xs">Q{edge.question_id}</span>
                     <span className="mx-1 text-muted-foreground">→</span>
                     <span className="text-xs">{nodeText}</span>
-                    <span className="ml-2 rounded bg-muted px-1 text-[10px] uppercase text-muted-foreground">
+                    <span className="ml-2 rounded bg-muted px-1 text-[11px] uppercase text-muted-foreground">
                       {edge.source || 'ai'}
                     </span>
                   </div>

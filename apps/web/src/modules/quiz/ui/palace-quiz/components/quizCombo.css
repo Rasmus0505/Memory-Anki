@@ -39,7 +39,7 @@
 
 .quiz-combo-label {
   color: color-mix(in srgb, var(--color-foreground) 68%, transparent);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
 }
 

@@ -212,8 +212,8 @@ export interface MindMapPageToolbarProps {
   clearUiAction?: MindMapToolbarToggleAction | null
 }
 
-/** Square icon-button footprint under sm, normal labelled button from sm up. */
-const COMPACT_TOGGLE_CLASS = 'max-sm:size-8 max-sm:gap-0 max-sm:px-0'
+/** Square icon button below xl so the row fits beside the canvas tools; labelled from xl up. */
+const COMPACT_TOGGLE_CLASS = 'max-xl:size-9 max-xl:gap-0 max-xl:px-0 max-sm:size-8'
 
 function resolveSegmentTargetLabel(control: MindMapToolbarSegmentControl) {
   if (!control.active) return '学习组'
@@ -238,8 +238,10 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
     taskControl || searchControl || focusAction || fitAction || ratingAction || moreActions.length > 0,
   )
 
+  // Embedded: this group is the one that yields width (its search box shrinks),
+  // so the canvas tools after it stay on the row instead of scrolling off.
   return (
-    <div className={cn(embedded ? 'flex min-w-0 shrink-0 flex-wrap items-center gap-1.5 sm:flex-nowrap sm:gap-2' : 'rounded-2xl border border-border/70 bg-background/90 p-3', !embedded && (compact ? 'space-y-2.5' : 'space-y-3'), className)}>
+    <div className={cn(embedded ? 'flex min-w-0 flex-1 flex-wrap items-center gap-1.5 sm:flex-nowrap sm:gap-2' : 'rounded-2xl border border-border/70 bg-background/90 p-3', !embedded && (compact ? 'space-y-2.5' : 'space-y-3'), className)}>
       {/* Phones wrap the embedded flip-card strip instead of hiding scrollable
           tools; from sm up it stays one line beside the canvas tools. */}
       <div className={cn('flex min-w-0 items-center gap-1.5 sm:gap-2', embedded ? 'flex-wrap sm:flex-nowrap' : 'flex-wrap')}>
@@ -283,7 +285,8 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
               >
                 <Search aria-hidden />
               </Button>
-              <div className="relative hidden min-w-55 flex-1 sm:block sm:max-w-sm">
+              {/* Shrinks first so the canvas tools beside it never scroll off the row. */}
+              <div className="relative hidden min-w-36 flex-1 sm:block sm:max-w-sm">
                 <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   value={searchControl.value}
@@ -298,7 +301,7 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
               </div>
             </>
           ) : (
-            <div className="relative min-w-0 flex-1 basis-full sm:basis-auto sm:min-w-55 sm:max-w-sm">
+            <div className="relative min-w-0 flex-1 basis-full sm:basis-auto sm:min-w-36 sm:max-w-sm">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 value={searchControl.value}
@@ -361,8 +364,9 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
             onClick={textAction.onClick}
             className={COMPACT_TOGGLE_CLASS}
           >
-            <TextSelect className="sm:hidden" aria-hidden />
-            <span className="max-sm:hidden">{textAction.label}</span>
+            {/* Icon until the row is wide enough for words; the name stays in title/aria-label. */}
+            <TextSelect className="xl:hidden" aria-hidden />
+            <span className="hidden xl:inline">{textAction.label}</span>
           </Button>
         ) : null}
         {permanentMarkAction ? (
@@ -377,7 +381,7 @@ export function MindMapPageToolbar(props: MindMapPageToolbarProps) {
             className={COMPACT_TOGGLE_CLASS}
           >
             <MapPin className="size-4" aria-hidden />
-            <span className="max-sm:hidden">{permanentMarkAction.label}</span>
+            <span className="hidden xl:inline">{permanentMarkAction.label}</span>
           </Button>
         ) : null}
         {!modern ? legacyActions.map((action) => <Button key={action.label} type="button" variant="outline" disabled={action.disabled} onClick={action.onClick}>{action.label}</Button>) : null}
