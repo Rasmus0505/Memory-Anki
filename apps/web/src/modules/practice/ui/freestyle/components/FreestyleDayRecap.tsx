@@ -13,11 +13,15 @@ export function FreestyleDayRecap({ yesterday, onDismiss }: FreestyleDayRecapPro
   return (
     <section
       aria-label="昨日回顾"
-      className="flex flex-col gap-3 rounded-2xl border border-stage-line bg-stage-raised p-4 text-stage-ink"
+      className="flex flex-col gap-2.5 rounded-2xl border border-stage-line bg-stage-raised/70 px-5 py-4 text-stage-ink"
     >
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-medium">昨天的回顾</h3>
-        <button type="button" onClick={onDismiss} className="text-xs text-stage-muted">
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="-mr-2 rounded-md px-2 py-1 text-xs text-stage-muted transition-colors hover:bg-stage-line hover:text-stage-ink"
+        >
           知道了
         </button>
       </div>

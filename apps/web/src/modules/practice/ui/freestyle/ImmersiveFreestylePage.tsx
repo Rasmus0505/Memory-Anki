@@ -1165,12 +1165,12 @@ export default function ImmersiveFreestylePage({
             data-keyboard-shortcuts-suspended="true"
             className="absolute inset-0 z-[60] flex flex-col justify-center overflow-y-auto overscroll-contain bg-stage/95 px-3 py-6 backdrop-blur-sm"
           >
-            <div className="mx-auto flex w-full max-w-md flex-col gap-3">
+            <div className="mx-auto flex w-full max-w-lg flex-col gap-3">
               {/* A title anchors the gate: without it the two cards floated
                   mid-screen over an empty stage with nothing saying what this is. */}
-              <div className="flex items-baseline justify-between gap-2 px-1">
-                <h2 className="text-sm font-semibold tracking-tight text-ink-stage">今天的学习</h2>
-                <span className="text-[11px] text-ink-stage-muted">
+              <div className="flex items-baseline justify-between gap-2 px-1 pb-1">
+                <h2 className="text-xl font-semibold tracking-tight text-ink-stage">今天的学习</h2>
+                <span className="text-xs tabular-nums text-ink-stage-muted">
                   {startOverviewDateFormatter.format(new Date())}
                 </span>
               </div>
