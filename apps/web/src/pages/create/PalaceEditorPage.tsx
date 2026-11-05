@@ -438,23 +438,20 @@ export default function PalaceEdit() {
 
   if (!page.palaceId) {
     return (
-      <div className="space-y-4">
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 sm:gap-6">
         <PageHeader
-          compact
           title="新建宫殿"
+          actions={
+            <Button variant="outline" size="sm" onClick={() => setTemplateDialogOpen(true)}>
+              <LayoutTemplate />
+              从模板创建
+            </Button>
+          }
         />
         <PalaceCreateSetup
           busy={page.isCreatingDraft}
           onCreate={page.handleCreateBlankPalace}
         />
-        <Card>
-          <CardContent className="flex flex-wrap gap-3 p-6">
-            <Button variant="outline" onClick={() => setTemplateDialogOpen(true)}>
-              <LayoutTemplate className="mr-2 size-4" />
-              从模板创建
-            </Button>
-          </CardContent>
-        </Card>
         <PalaceTemplateDialog
           open={templateDialogOpen}
           onOpenChange={setTemplateDialogOpen}

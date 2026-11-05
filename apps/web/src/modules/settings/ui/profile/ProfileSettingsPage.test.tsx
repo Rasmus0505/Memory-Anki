@@ -64,7 +64,7 @@ describe('ProfileSettingsPage', () => {
         <ProfileSettingsPage shortcutsSettings={<div>快捷键设置</div>} />
       </MemoryRouter>,
     )
-    fireEvent.click(await screen.findByRole('button', { name: '本机运行时' }))
+    fireEvent.click(await screen.findByRole('tab', { name: '本机运行时' }))
     expect(screen.getByText('PWA 更新')).toBeTruthy()
     expect(screen.getByRole('link', { name: '打开迁移与导入导出' }).getAttribute('href')).toBe(
       '/profile/backups?tab=transfer',

@@ -19,7 +19,7 @@ describe('usePalaceEditPage draft creation', () => {
 
     renderPalaceEditPageStrict()
 
-    expect(await screen.findByText('创建宫殿')).toBeTruthy()
+    expect(await screen.findByLabelText('宫殿名')).toBeTruthy()
     expect(createPalaceApi).not.toHaveBeenCalled()
     expect(screen.getByRole('link', { name: '管理学科思维导图' }).getAttribute('href')).toBe('/knowledge')
     expect(

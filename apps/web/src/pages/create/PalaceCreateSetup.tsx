@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ExternalLink, LoaderCircle, Plus, Search } from 'lucide-react'
+import { Check, ExternalLink, LoaderCircle, Plus, Search } from 'lucide-react'
 import { createSubjectApi, getSubjectsApi, type SubjectSummary } from '@/modules/content/public'
 import { toast } from '@/shared/feedback/toast'
-import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
+import { Card, CardContent } from '@/shared/components/ui/card'
 import { Input } from '@/shared/components/ui/input'
 import { Label } from '@/shared/components/ui/label'
+import { cn } from '@/shared/lib/utils'
 
 interface PalaceCreateSetupProps {
   busy: boolean
@@ -65,48 +65,59 @@ export function PalaceCreateSetup({ busy, onCreate }: PalaceCreateSetupProps) {
   }
 
   return (
-    <Card className="border-border/70 bg-card/92">
-      <CardHeader><CardTitle>创建宫殿</CardTitle></CardHeader>
-      <CardContent className="space-y-5">
-        <div className="space-y-2">
+    <Card>
+      <CardContent className="flex flex-col gap-6 p-5 sm:p-6">
+        <div className="flex flex-col gap-2">
           <Label htmlFor="new-palace-title">宫殿名</Label>
-          <Input id="new-palace-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="例如：教育心理学核心理论" autoFocus />
+          <Input id="new-palace-title" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="例如：教育心理学核心理论" autoFocus className="h-10 text-[15px]" />
           <div className="text-xs text-muted-foreground">首次关联主章节后名称会跟随主章节；手动改名后转为手动名称。</div>
         </div>
-        <div className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <Label>所属学科（可多选）</Label>
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="secondary">已选 {selectedIds.length}</Badge>
-              <Button asChild type="button" size="sm" variant="outline">
-                <Link to="/knowledge">
-                  <ExternalLink className="mr-1.5 size-3.5" />
-                  管理学科思维导图
-                </Link>
-              </Button>
-            </div>
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <Label>
+              所属学科
+              <span className="ml-1.5 font-normal tabular-nums text-muted-foreground">已选 {selectedIds.length}</span>
+            </Label>
+            <Button asChild type="button" size="sm" variant="ghost" className="-mr-2 text-muted-foreground">
+              <Link to="/knowledge">
+                <ExternalLink className="size-3.5" />
+                管理学科思维导图
+              </Link>
+            </Button>
           </div>
           <div className="relative"><Search className="absolute left-3 top-2.5 size-4 text-muted-foreground" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索学科" className="pl-9" /></div>
-          <div className="grid grid-cols-1 max-h-64 gap-2 overflow-y-auto sm:grid-cols-2">
+          <div className="grid max-h-72 grid-cols-1 gap-1.5 overflow-y-auto pr-1 sm:grid-cols-2">
             {loading ? <div className="text-sm text-muted-foreground">正在加载学科…</div> : filtered.map((subject) => {
               const selected = selectedIds.includes(subject.id)
               return (
                 <div
                   key={subject.id}
-                  className={`flex items-center gap-2 rounded-lg border px-2 py-2 ${selected ? 'border-primary/50 bg-primary/10' : 'border-border/70 bg-background/60'}`}
+                  className={cn(
+                    'group/subject flex items-center gap-1 rounded-lg border pr-1 transition-[background-color,border-color] duration-200',
+                    selected ? 'border-primary/40 bg-primary-soft' : 'border-border/80 hover:border-foreground/20 hover:bg-accent/60',
+                  )}
                 >
                   <button
                     type="button"
                     data-testid={`select-subject-${subject.id}`}
                     onClick={() => toggleSubject(subject.id)}
-                    className="flex min-w-0 flex-1 items-center gap-3 px-1 py-1 text-left"
+                    className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm"
                     aria-pressed={selected}
                   >
-                    <input type="checkbox" checked={selected} readOnly tabIndex={-1} aria-hidden="true" />
-                    <span className="size-3 shrink-0 rounded-full" style={{ backgroundColor: subject.color || '#6366f1' }} />
-                    <span className="truncate font-medium">{subject.name}</span>
+                    <span
+                      className={cn(
+                        'flex size-4 shrink-0 items-center justify-center rounded-[5px] border transition-colors',
+                        selected ? 'border-primary bg-primary text-primary-foreground' : 'border-input bg-card',
+                      )}
+                      aria-hidden
+                    >
+                      {selected ? <Check className="size-3" strokeWidth={3} /> : null}
+                    </span>
+                    <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: subject.color || '#6366f1' }} />
+                    <span className={cn('truncate', selected && 'font-medium')}>{subject.name}</span>
                   </button>
-                  <Button asChild type="button" size="sm" variant="ghost" className="shrink-0 px-2">
+                  {/* Secondary action: quiet until the row is hovered or focused. */}
+                  <Button asChild type="button" size="sm" variant="ghost" className="h-7 shrink-0 px-2 text-xs text-muted-foreground opacity-100 sm:opacity-0 sm:group-hover/subject:opacity-100 sm:focus-visible:opacity-100">
                     <Link
                       to={`/knowledge?subjectId=${subject.id}`}
                       aria-label={`编辑学科思维导图 ${subject.name}`}
@@ -119,15 +130,15 @@ export function PalaceCreateSetup({ busy, onCreate }: PalaceCreateSetupProps) {
               )
             })}
           </div>
-          <div className="flex gap-2 rounded-lg border border-dashed border-border/80 p-3">
+          <div className="flex gap-2">
             <Input value={newSubjectName} onChange={(event) => setNewSubjectName(event.target.value)} placeholder="即时新建学科" onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void createSubject() } }} />
             <Button type="button" variant="outline" disabled={!newSubjectName.trim() || creatingSubject} onClick={() => void createSubject()}>
-              {creatingSubject ? <LoaderCircle className="mr-2 size-4 animate-spin" /> : <Plus className="mr-2 size-4" />}新建并选择
+              {creatingSubject ? <LoaderCircle className="animate-spin" /> : <Plus />}新建并选择
             </Button>
           </div>
         </div>
-        <Button className="w-full" disabled={busy || !title.trim() || selectedIds.length === 0} onClick={submit}>
-          {busy ? <LoaderCircle className="mr-2 size-4 animate-spin" /> : null}创建并进入编辑器
+        <Button size="lg" className="w-full" disabled={busy || !title.trim() || selectedIds.length === 0} onClick={submit}>
+          {busy ? <LoaderCircle className="animate-spin" /> : null}创建并进入编辑器
         </Button>
       </CardContent>
     </Card>

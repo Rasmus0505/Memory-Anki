@@ -12,13 +12,13 @@ interface ProfileLayoutProps {
 export function ProfileLayout({ title, description, children }: ProfileLayoutProps) {
   return (
     <PageContainer>
-      <PageHeader title={title} description={description} compact />
+      <PageHeader title={title} description={description} />
 
-      <div className="grid gap-6 lg:grid-cols-[240px_minmax(0,1fr)] lg:items-start">
-        <aside className="lg:sticky lg:top-5">
+      <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-[200px_minmax(0,1fr)] lg:items-start">
+        <aside className="min-w-0 lg:sticky lg:top-6">
           <ProfileNav />
         </aside>
-        <main className="min-w-0">{children}</main>
+        <main className="flex min-w-0 flex-col gap-4 sm:gap-6">{children}</main>
       </div>
     </PageContainer>
   )

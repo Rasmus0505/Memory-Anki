@@ -136,7 +136,7 @@ export default function ProfileSettingsPage({
       title="复习与偏好"
     >
 
-      <div className="flex gap-1 border-b">
+      <div className="inline-flex h-9 items-center self-start rounded-lg bg-muted p-1 shadow-[inset_0_0_0_1px_var(--color-border)]" role="tablist" aria-label="复习与偏好分区">
         {[
           { key: 'config', label: '复习与调度', icon: Settings },
           { key: 'shortcuts', label: '快捷键', icon: Keyboard },
@@ -144,11 +144,14 @@ export default function ProfileSettingsPage({
         ].map(({ key, label, icon: Icon }) => (
           <button
             key={key}
+            type="button"
+            role="tab"
+            aria-selected={tab === key}
             onClick={() => setTab(key as 'config' | 'shortcuts' | 'runtime')}
-            className={`-mb-px flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+            className={`flex h-7 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-[color,background-color,box-shadow] duration-200 ${
               tab === key
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'
+                ? 'bg-card text-foreground shadow-[0_0_0_1px_var(--color-border),0_1px_3px_rgb(0_0_0/0.08)]'
+                : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             <Icon className="size-4" />
