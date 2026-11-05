@@ -490,7 +490,7 @@ const DialogContent = forwardRef<
     (resolvedLayout !== 'unstyled' || floatingEnabled) && 'relative flex flex-col overflow-hidden',
     resolvedLayout === 'unstyled' && !floatingEnabled && 'z-[241]',
     resolvedLayout === 'centered' &&
-      'max-h-[92vh] w-full max-w-3xl rounded-lg border bg-background shadow-floating',
+      'max-h-[92vh] w-full max-w-3xl rounded-2xl border bg-popover shadow-floating',
     floatingLayout.pinned && 'ring-2 ring-primary/30',
     'data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
     'data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95',
@@ -504,7 +504,7 @@ const DialogContent = forwardRef<
         {modal ? (
           <DialogPrimitive.Overlay
             className={cn(
-              'fixed inset-0 z-[240] bg-black/45',
+              'fixed inset-0 z-[240] bg-[hsl(228_30%_6%/0.5)] backdrop-blur-[2px]',
               'data-[state=open]:animate-in data-[state=open]:fade-in-0',
               'data-[state=closed]:animate-out data-[state=closed]:fade-out-0',
             )}
@@ -667,7 +667,7 @@ const DialogContent = forwardRef<
       {modal ? (
         <DialogPrimitive.Overlay
           className={cn(
-            'fixed inset-0 z-[240] bg-black/45',
+            'fixed inset-0 z-[240] bg-[hsl(228_30%_6%/0.5)] backdrop-blur-[2px]',
             'data-[state=open]:animate-in data-[state=open]:fade-in-0',
             'data-[state=closed]:animate-out data-[state=closed]:fade-out-0',
           )}

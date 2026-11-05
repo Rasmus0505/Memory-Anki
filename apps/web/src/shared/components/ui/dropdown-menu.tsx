@@ -62,7 +62,7 @@ const DropdownMenuContent = React.forwardRef<
         className={cn(
           // Above mind-map CSS fullscreen host (z-index 230) so webpage-fullscreen
           // overflow menus stay interactive and visible over the fixed frame.
-          'z-[250] min-w-[8rem] overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md',
+          'z-[250] min-w-[8rem] overflow-hidden rounded-[10px] border bg-popover p-1 text-popover-foreground shadow-popover',
           'data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
           'data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95',
           className,
@@ -84,7 +84,7 @@ const DropdownMenuItem = React.forwardRef<
     <DropdownMenuPrimitive.Item
       ref={ref}
       className={cn(
-        'relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none transition-colors',
+        'relative flex cursor-pointer select-none items-center rounded-md px-2 py-1.5 text-sm outline-none transition-colors',
         'focus:bg-accent focus:text-accent-foreground',
         'data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
         inset && 'pl-8',
