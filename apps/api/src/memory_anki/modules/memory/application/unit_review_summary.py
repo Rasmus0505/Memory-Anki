@@ -331,8 +331,32 @@ def count_rating_days(session: Session, *, start: datetime, end: datetime) -> li
     return [(row[0], 1) for row in rows]
 
 
+def list_live_unit_ratings(
+    session: Session, *, start: datetime, end: datetime
+) -> list[tuple[int, str, int, datetime]]:
+    """(palace_id, unit_id, rating, created_at) for live ratings in [start, end), oldest first."""
+    rows = (
+        session.query(
+            ReviewUnitRatingOperation.palace_id,
+            ReviewUnitRatingOperation.unit_id,
+            ReviewUnitRatingOperation.rating,
+            ReviewUnitRatingOperation.created_at,
+        )
+        .filter(
+            ReviewUnitRatingOperation.created_at >= start,
+            ReviewUnitRatingOperation.created_at < end,
+            ReviewUnitRatingOperation.undone_at.is_(None),
+            ReviewUnitRatingOperation.replaced_at.is_(None),
+        )
+        .order_by(ReviewUnitRatingOperation.created_at.asc())
+        .all()
+    )
+    return [(int(p), str(u), int(r), c) for p, u, r, c in rows]
+
+
 __all__ = [
     "count_rating_days",
+    "list_live_unit_ratings",
     "count_unit_review_ratings",    "get_palace_review_summary",
     "get_review_queue_summary",
     "get_unit_review_weekly_stats",

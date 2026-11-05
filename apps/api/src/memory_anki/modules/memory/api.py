@@ -55,6 +55,7 @@ from .application.unit_review_service import (
 )
 from .application.unit_review_summary import (
     count_rating_days,
+    list_live_unit_ratings,
     count_unit_review_ratings,
     get_palace_review_summary,
     get_review_queue_summary,
@@ -103,6 +104,7 @@ __all__ = [
     "get_palace_review_summary",
     "get_review_queue_summary",
     "count_rating_days",
+    "list_live_unit_ratings",
     "RetentionSummary",
     "summarize_due_retention",
     "count_unit_review_ratings",

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from memory_anki.core.runtime_paths import get_app_home
 from memory_anki.infrastructure.db.deps import session_dep
+from memory_anki.modules.dashboard.application.city_today import build_city_today_payload
 from memory_anki.modules.dashboard.application.heatmap_service import build_heatmap_payload
 from memory_anki.modules.dashboard.application.learning_progress import (
     LearningProgressResponse,
@@ -125,6 +126,11 @@ def api_dashboard_heatmap(
     session: Session = Depends(session_dep),
 ):
     return build_heatmap_payload(session, days)
+
+
+@router.get("/dashboard/city-today")
+def api_dashboard_city_today(session: Session = Depends(session_dep)):
+    return build_city_today_payload(session)
 
 
 @router.get("/dashboard/weekly-report")
