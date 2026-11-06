@@ -64,6 +64,11 @@ describe('quizShortcuts', () => {
       optionIndex: 1,
       run: true,
     })
+    expect(resolveQuizShortcutAction(keydown('1', 'Numpad1'), DEFAULT_QUIZ_SHORTCUTS, context())).toMatchObject({
+      id: 'select_option_1',
+      optionIndex: 0,
+      run: true,
+    })
     expect(resolveQuizShortcutAction(keydown('d', 'KeyD'), DEFAULT_QUIZ_SHORTCUTS, context())?.id)
       .toBe('select_option_d')
     expect(resolveQuizShortcutAction(keydown('Enter', 'Enter'), DEFAULT_QUIZ_SHORTCUTS, context())?.id)

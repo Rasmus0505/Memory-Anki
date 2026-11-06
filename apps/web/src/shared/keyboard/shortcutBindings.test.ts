@@ -40,6 +40,40 @@ describe('shortcutBindings', () => {
     )
   })
 
+  it('reads numpad digits as the top-row digits', () => {
+    const digit = { code: 'Digit1', key: '1', shift: false, ctrl: false, alt: false, meta: false }
+    expect(isShortcutPressed(new KeyboardEvent('keydown', { key: '1', code: 'Numpad1' }), digit)).toBe(true)
+    // NumLock off reports End, but the physical key is still numpad 1.
+    expect(isShortcutPressed(new KeyboardEvent('keydown', { key: 'End', code: 'Numpad1' }), digit)).toBe(true)
+    expect(isShortcutPressed(new KeyboardEvent('keydown', { key: '2', code: 'Numpad2' }), digit)).toBe(false)
+
+    const enter = { code: 'Enter', key: 'enter', shift: false, ctrl: false, alt: false, meta: false }
+    expect(isShortcutPressed(new KeyboardEvent('keydown', { key: 'Enter', code: 'NumpadEnter' }), enter)).toBe(true)
+
+    const captured = captureShortcutFromKeyboardEvent(
+      new KeyboardEvent('keydown', { key: '1', code: 'Numpad1' }),
+      {},
+      { allowBareDigits: true },
+    )
+    expect(captured.value?.code).toBe('Digit1')
+    expect(getShortcutLabel(captured.value)).toBe('1')
+
+    const capturedEnter = captureShortcutFromKeyboardEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', code: 'NumpadEnter' }),
+    )
+    expect(capturedEnter.value?.code).toBe('Enter')
+    expect(
+      normalizeShortcutBindingValue({
+        code: 'Numpad2',
+        key: '2',
+        shift: false,
+        ctrl: false,
+        alt: false,
+        meta: false,
+      })?.code,
+    ).toBe('Digit2')
+  })
+
   it('builds stable signatures with modifiers in canonical order', () => {
     expect(
       getShortcutSignature({

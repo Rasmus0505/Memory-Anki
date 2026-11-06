@@ -148,6 +148,19 @@ describe('useQuizAnsweringShortcuts', () => {
     expect(onSelectOption).not.toHaveBeenCalled()
   })
 
+  it('answers with the numpad digits too', () => {
+    const onSelectOption = vi.fn()
+    render(<Harness onToggleMark={() => {}} onSelectOption={onSelectOption} />)
+    const option = screen.getByRole('button', { name: 'A' })
+    const clicked = vi.fn()
+    option.addEventListener('click', clicked)
+
+    fireEvent.keyDown(window, { key: '1', code: 'Numpad1' })
+
+    expect(clicked).toHaveBeenCalledTimes(1)
+    expect(onSelectOption).not.toHaveBeenCalled()
+  })
+
   it('does not answer while typing', () => {
     const onSelectOption = vi.fn()
     render(

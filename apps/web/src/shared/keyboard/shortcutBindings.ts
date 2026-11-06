@@ -90,6 +90,20 @@ function normalizeShortcutCodeValue(value: unknown) {
   return String(value || '').trim()
 }
 
+const NUMPAD_DIGIT_CODE = /^Numpad(\d)$/
+
+/**
+ * The numpad's 1–9 are the same shortcut as the top-row digits: keyboards send
+ * `Numpad1` for the right-hand key even when NumLock is off (it then reports
+ * `key: 'End'`), so match by code and fold it into `Digit1`. The numpad Enter
+ * folds into `Enter` for the same reason.
+ */
+function canonicalizeNumpadCode(code: string) {
+  if (code === 'NumpadEnter') return 'Enter'
+  const match = NUMPAD_DIGIT_CODE.exec(code)
+  return match ? `Digit${match[1]}` : code
+}
+
 function isPrintableShortcutKey(key: string) {
   return key.length === 1
 }
@@ -149,7 +163,9 @@ export function normalizeShortcutBindingValue(value: unknown): ShortcutBinding |
   if (!value || typeof value !== 'object') return null
   const raw = value as Partial<ShortcutBinding>
   const key = normalizeShortcutKeyValue(raw.key)
-  const code = normalizeShortcutCodeValue(raw.code) || inferShortcutCodeFromKey(key)
+  const code = canonicalizeNumpadCode(
+    normalizeShortcutCodeValue(raw.code) || inferShortcutCodeFromKey(key),
+  )
   if (!key && !code) return null
   return {
     code,
@@ -256,7 +272,7 @@ export function getShortcutLabel(bindingValue: unknown) {
 export function isShortcutPressed(event: KeyboardEvent, shortcutValue: unknown) {
   const binding = normalizeShortcutBindingValue(shortcutValue)
   if (!binding) return false
-  const eventCode = normalizeShortcutCodeValue(event.code)
+  const eventCode = canonicalizeNumpadCode(normalizeShortcutCodeValue(event.code))
   const eventKey = normalizeShortcutKeyValue(event.key)
   // Synthetic/assistive keydowns may carry no `code`; fall back to `key` then,
   // so Enter still flips instead of silently missing the binding.
@@ -279,7 +295,9 @@ export function captureShortcutFromKeyboardEvent(
 ) {
   const resolvedMessages = { ...DEFAULT_CAPTURE_MESSAGES, ...messages }
   const key = normalizeShortcutKeyValue(event.key)
-  const code = normalizeShortcutCodeValue(event.code) || inferShortcutCodeFromKey(key)
+  const code = canonicalizeNumpadCode(
+    normalizeShortcutCodeValue(event.code) || inferShortcutCodeFromKey(key),
+  )
   const hasModifier = Boolean(event.shiftKey || event.ctrlKey || event.altKey || event.metaKey)
 
   if (MODIFIER_ONLY_KEYS.has(key)) {
