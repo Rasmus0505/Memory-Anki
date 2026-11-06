@@ -712,7 +712,12 @@ def test_retry_insert_does_not_borrow_today_segment():
     assert plan["presented_ids"][3:] == ["c1", "c2", "c3"]
 
 
-def test_replan_remaining_parks_retries_near_new_queue_start():
+def test_replan_remaining_parks_retries_right_after_the_current_card():
+    """The live retry keeps the slot apply_rating published it to.
+
+    It sits one swipe after the card the learner is on, not in a block after
+    the completed prefix: 更新队列 must not move it ahead of the viewport.
+    """
     yesterday = "2026-09-17"
     today = "2026-09-18"
     plan = plan_from_cards(
@@ -722,6 +727,7 @@ def test_replan_remaining_parks_retries_near_new_queue_start():
     plan = complete_card(plan, "b")
     plan = leave_card(_rate(plan, "a", 1, "enc-a"), "a")
     retry_a = plan["occurrences"][0]["occurrence_id"]
+    assert plan["current_card_id"] == "a"
     rebound = replan_remaining(
         plan,
         [
@@ -733,8 +739,37 @@ def test_replan_remaining_parks_retries_near_new_queue_start():
         today=today,
     )
     presented = rebound["presented_ids"]
-    assert presented == ["a", "b", retry_a, "n1", "n2", "n3", "n4"]
+    assert presented == ["a", retry_a, "b", "n1", "n2", "n3", "n4"]
     assert "c" not in [item["card_id"] for item in rebound["original_cards"]]
+
+
+def test_replan_parks_a_retry_after_the_card_being_viewed():
+    """A retry follows the viewport card the learner actually moved on to.
+
+    Same-day 保存配置 / 更新队列: the learner rated "a" 忘记, swiped to "c",
+    and then a replan runs. The retry must land directly after "c" — not after
+    its earlier source "a", and not at the old completed-prefix split.
+    """
+    today = "2026-09-18"
+    cards = [
+        _card("a", unit_id="unit-a"),
+        _card("b", unit_id="unit-b"),
+        _card("c", unit_id="unit-c"),
+        _card("d", unit_id="unit-d"),
+    ]
+    plan = _rate(plan_from_cards(cards, today=today), "a", 1, "enc-a")
+    retry_a = _inserted(plan, "a")["occurrence_id"]
+    plan = set_cursor(plan, "c")
+    rebound = replan_remaining(
+        plan,
+        [*cards, _card("n1", unit_id="unit-n1")],
+        today=today,
+    )
+    assert rebound["presented_ids"] == ["a", "b", "c", retry_a, "d", "n1"]
+    retry = next(
+        item for item in rebound["occurrences"] if item["occurrence_id"] == retry_a
+    )
+    assert retry["insert_target_index"] == 3
 
 
 def test_multi_day_append_keeps_two_cohorts():
@@ -935,6 +970,78 @@ def test_drop_vanished_unstarted_keeps_retry_whose_unit_is_still_live():
     assert dropped["occurrences"][0]["source_card_id"] == "weak"
     assert dropped["occurrences"][0]["occurrence_id"] in dropped["presented_ids"]
     assert "other" not in dropped["presented_ids"]
+
+
+def test_drop_vanished_unstarted_rekeys_a_retired_mark_to_its_successor_in_place():
+    """Removing a permanent mark merges the region into a live unit.
+
+    The card must stay in its slot and continue that content, not be dropped
+    (which used to let the feed jump to an unrelated unit/palace).
+    """
+    cards = [
+        _card("review_unit:b1:r1", unit_id="b1"),
+        _card("review_unit:other:r1", unit_id="other"),
+    ]
+    plan = plan_from_cards(cards)
+    plan["current_card_id"] = "review_unit:b1:r1"
+
+    rekeyed = drop_vanished_unstarted(
+        plan,
+        {"residual", "other"},
+        successors={"b1": "residual"},
+    )
+    assert [
+        (item["card_id"], item["unit_id"]) for item in rekeyed["original_cards"]
+    ] == [
+        ("review_unit:b1:r1", "residual"),
+        ("review_unit:other:r1", "other"),
+    ]
+    assert rekeyed["current_card_id"] == "review_unit:b1:r1"
+    assert rekeyed["presented_ids"] == ["review_unit:b1:r1", "review_unit:other:r1"]
+
+    # The rebuilt queue carries the merged unit's own card id. Merging by unit
+    # identity rewrites the slot in place instead of appending it at the end.
+    rebuilt = append_today_cards(
+        rekeyed,
+        [
+            _card("review_unit:residual:r1", unit_id="residual"),
+            _card("review_unit:other:r1", unit_id="other"),
+        ],
+        today="2026-11-05",
+    )
+    assert [item["card_id"] for item in rebuilt["original_cards"]] == [
+        "review_unit:residual:r1",
+        "review_unit:other:r1",
+    ]
+    assert rebuilt["presented_ids"] == [
+        "review_unit:residual:r1",
+        "review_unit:other:r1",
+    ]
+    assert rebuilt["current_card_id"] == "review_unit:residual:r1"
+
+
+def test_two_marks_merging_into_one_unit_keep_a_single_card():
+    cards = [
+        _card("review_unit:b1:r1", unit_id="b1"),
+        _card("review_unit:b2:r1", unit_id="b2"),
+        _card("review_unit:other:r1", unit_id="other"),
+    ]
+    plan = plan_from_cards(cards)
+    plan["current_card_id"] = "review_unit:b2:r1"
+
+    rekeyed = drop_vanished_unstarted(
+        plan,
+        {"residual", "other"},
+        successors={"b1": "residual", "b2": "residual"},
+    )
+    assert [
+        (item["card_id"], item["unit_id"]) for item in rekeyed["original_cards"]
+    ] == [
+        ("review_unit:b2:r1", "residual"),
+        ("review_unit:other:r1", "other"),
+    ]
+    assert rekeyed["current_card_id"] == "review_unit:b2:r1"
+    assert rekeyed["presented_ids"] == ["review_unit:b2:r1", "review_unit:other:r1"]
 
 
 def test_drop_undue_unstarted_keeps_due_quiz_completed_and_open():

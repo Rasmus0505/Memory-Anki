@@ -69,6 +69,7 @@ from .application.unit_scheduler import (
     VALID_RATINGS,
     normalize_rating,
 )
+from .application.unit_successors import resolve_unit_successors
 
 
 def domain_error_detail(exc: Exception) -> str | dict:
@@ -137,6 +138,7 @@ __all__ = [
     "reconcile_palace_units",
     "repair_absurd_due_dates",
     "resolve_unit_definitions",
+    "resolve_unit_successors",
     "project_palace_review_summaries",
     "read_palace_due_signals",
     "start_freestyle_unit_review_session",

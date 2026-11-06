@@ -76,6 +76,8 @@ def repair_retries_parked_before_source(plan: Plan) -> None:
 def drop_vanished_unstarted(
     plan: Mapping[str, Any],
     live_unit_ids: set[str],
+    *,
+    successors: Mapping[str, str] | None = None,
 ) -> Plan:
     """Drop cards whose review unit can no longer be opened.
 
@@ -86,11 +88,64 @@ def drop_vanished_unstarted(
     cards, and excluded cards stay in the round history, but a retry of a
     vanished unit does not: opening it is the same dead wall. A vanished
     current card moves to the next unfinished card.
+
+    ``successors`` maps a retired unit to the live unit that now owns its
+    content: removing a permanent mark folds that region into its parent or
+    residual unit. Such a card is re-pointed at the successor **in place**
+    instead of being dropped, so the learner keeps reviewing the same content
+    (the card id is rebound to the rebuilt card by unit identity later). When
+    several retired cards fold into one successor, only the current card (or
+    the earliest presented one) keeps the slot; the duplicates are dropped
+    because the merged unit is a single card.
     """
     next_plan = normalize_plan(plan)
     live = {_text(item) for item in live_unit_ids if _text(item)}
+    successor_by_unit = {
+        _text(old): _text(new)
+        for old, new in (successors or {}).items()
+        if _text(old) and _text(new) and _text(new) in live
+    }
     completed = set(next_plan["completed_ids"])
     excluded = set(next_plan["excluded_ids"])
+    current_id = _text(next_plan.get("current_card_id"))
+    presented_order = {
+        _text(card_id): index
+        for index, card_id in enumerate(next_plan["presented_ids"])
+    }
+
+    # Pick the one card that keeps the merged unit's slot. The learner's
+    # current card wins; otherwise an opened card; otherwise the earliest on
+    # the rail. The others are duplicates of the same live unit.
+    claims: dict[str, list[dict[str, Any]]] = {}
+    for item in next_plan["original_cards"]:
+        unit_id = _text(item.get("unit_id"))
+        card_id = item["card_id"]
+        if not unit_id or unit_id in live:
+            continue
+        if card_id in completed or card_id in excluded:
+            continue
+        successor = successor_by_unit.get(unit_id)
+        if successor:
+            claims.setdefault(successor, []).append(item)
+    rekeyed: dict[str, str] = {}
+    for successor, items in claims.items():
+        keeper = next(
+            (item for item in items if item["card_id"] == current_id),
+            None,
+        )
+        if keeper is None:
+            opened = [
+                item
+                for item in items
+                if item["card_id"] in next_plan["encounters"]
+            ]
+            pool = opened or items
+            keeper = min(
+                pool,
+                key=lambda item: presented_order.get(item["card_id"], 10**9),
+            )
+        rekeyed[successor] = keeper["card_id"]
+
     kept: list[dict[str, Any]] = []
     dropped: set[str] = set()
     unopenable_sources: set[str] = set()
@@ -98,23 +153,32 @@ def drop_vanished_unstarted(
         unit_id = _text(item.get("unit_id"))
         card_id = item["card_id"]
         vanished = bool(unit_id) and unit_id not in live
-        if vanished:
-            unopenable_sources.add(card_id)
         protected = (
             not unit_id
             or card_id in completed
             or card_id in excluded
         )
-        if vanished and not protected:
-            dropped.add(card_id)
-            continue
+        if vanished:
+            successor = successor_by_unit.get(unit_id)
+            if successor and rekeyed.get(successor) == card_id:
+                item["unit_id"] = successor
+                kept.append(item)
+                continue
+            unopenable_sources.add(card_id)
+            if not protected:
+                dropped.add(card_id)
+                continue
         kept.append(item)
     kept_occurrences = [
         occ
         for occ in next_plan["occurrences"]
         if _text(occ.get("source_card_id")) not in unopenable_sources
     ]
-    if not dropped and kept_occurrences == list(next_plan["occurrences"]):
+    if (
+        not dropped
+        and not rekeyed
+        and kept_occurrences == list(next_plan["occurrences"])
+    ):
         return next_plan
     next_plan["original_cards"] = kept
     next_plan["occurrences"] = kept_occurrences
@@ -402,12 +466,23 @@ def replan_remaining(
             continue
         occ["status"] = OCCURRENCE_INSERTED
         retry_ids.append(occ_id)
-    presented = prefix + retry_ids + suffix
+    # A live retry belongs immediately after the card the learner is looking
+    # at — the same slot apply_rating publishes it to, never a block after the
+    # completed prefix and never after its own source. Parking it at the split
+    # made 更新队列 / 配置保存 move a just-booked retry several cards ahead of
+    # the viewport, so the next swipe never reached it.
+    base = prefix + suffix
+    current_id = _text(next_plan.get("current_card_id"))
+    # A current card that is itself a retry is not in ``base``: keep the block
+    # where it was, right after the handled prefix, so that card does not move
+    # under the learner.
+    anchor = base.index(current_id) + 1 if current_id and current_id in base else len(prefix)
+    presented = [*base[:anchor], *retry_ids, *base[anchor:]]
     next_plan["presented_ids"] = presented
     for offset, occ_id in enumerate(retry_ids):
         occ = _find_occurrence(next_plan, occ_id)
         if occ is not None:
-            occ["insert_target_index"] = len(prefix) + offset
+            occ["insert_target_index"] = anchor + offset
     known = _known_presented_ids(next_plan)
     next_plan["presented_ids"] = [item for item in next_plan["presented_ids"] if item in known]
     _repair_current(next_plan)

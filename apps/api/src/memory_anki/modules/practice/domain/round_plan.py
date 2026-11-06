@@ -415,10 +415,11 @@ def removed_review_palace_ids(plan: Mapping[str, Any] | None) -> set[int]:
     round is excluded. A palace with even one card still in the queue is still
     being reviewed, so its questions stay in 做题.
 
-    Only ``excluded_ids`` counts. Completed cards do NOT remove a palace: the
-    product decision is that a palace you have finished reviewing keeps its
-    questions available for extra practice. Compressed (小结算) cards are also
-    not removals — those were passed, then cleared from the feed.
+    Only ``excluded_ids`` counts. Completed cards do NOT remove a palace: a
+    palace you have finished rating stays on the rail and keeps its questions
+    until the round is settled. Compressed (小结算) cards are not removals
+    either — they leave through ``settled_review_palace_ids``, which 做题 also
+    honours.
 
     Used by 做题 scope: a palace whose cards were all removed must not
     contribute questions.
@@ -440,6 +441,51 @@ def removed_review_palace_ids(plan: Mapping[str, Any] | None) -> set[int]:
     }
 
 
+def settled_review_palace_ids(plan: Mapping[str, Any] | None) -> set[int]:
+    """Palaces the round has fully settled out with 结算已完成 (小结算).
+
+    A palace counts as settled only when **every** review card it had in this
+    round is compressed. Compressed cards leave the feed and the progress rail,
+    so the palace is no longer part of what the learner is reviewing today: its
+    questions must leave 做题 with it. 移除本队列 is a different exit and stays
+    in ``removed_review_palace_ids``; completed-but-not-settled palaces keep
+    their questions (they are still on the rail).
+    """
+    normalized = normalize_plan(plan)
+    compressed = set(normalized["compressed_ids"])
+    if not compressed:
+        return set()
+    by_palace: dict[int, list[str]] = {}
+    for card in normalized["original_cards"]:
+        if card.get("kind") != "mindmap_branch":
+            continue
+        palace_id = card.get("palace_id")
+        if not palace_id:
+            continue
+        by_palace.setdefault(int(palace_id), []).append(card["card_id"])
+    return {
+        palace_id
+        for palace_id, card_ids in by_palace.items()
+        if card_ids and all(card_id in compressed for card_id in card_ids)
+    }
+
+
+def live_review_palace_ids(plan: Mapping[str, Any] | None) -> list[int]:
+    """Palaces still on the round's progress rail, in plan order.
+
+    ``review_palace_ids`` is every palace the round ever scheduled; this is the
+    subset that still has a card in play. A palace whose every card was settled
+    with 结算已完成 is gone from the rail, so 做题 must not keep serving its
+    questions.
+    """
+    settled = settled_review_palace_ids(plan)
+    return [
+        palace_id
+        for palace_id in review_palace_ids(plan)
+        if palace_id not in settled
+    ]
+
+
 def review_unit_ids(plan: Mapping[str, Any] | None) -> list[str]:
     """Review-unit ids this round scheduled, in plan order (deduped).
 
@@ -452,6 +498,34 @@ def review_unit_ids(plan: Mapping[str, Any] | None) -> list[str]:
     seen: set[str] = set()
     for card in normalized["original_cards"]:
         if card.get("kind") != "mindmap_branch":
+            continue
+        unit_id = _text(card.get("unit_id"))
+        if not unit_id or unit_id in seen:
+            continue
+        seen.add(unit_id)
+        ordered.append(unit_id)
+    return ordered
+
+
+def live_review_unit_ids(plan: Mapping[str, Any] | None) -> list[str]:
+    """Units still in play on the round's progress rail, in plan order.
+
+    A settled (compressed) card no longer reviews its unit, so questions bound
+    only to that unit must leave 做题 together with the card. Excluded cards
+    keep their unit here: 移除本队列 acts at palace granularity (see
+    ``removed_review_palace_ids``), so a partially removed palace keeps its
+    questions and the 做题 report can still count them.
+    """
+    normalized = normalize_plan(plan)
+    settled = set(normalized["compressed_ids"])
+    if not settled:
+        return review_unit_ids(normalized)
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for card in normalized["original_cards"]:
+        if card.get("kind") != "mindmap_branch":
+            continue
+        if card["card_id"] in settled:
             continue
         unit_id = _text(card.get("unit_id"))
         if not unit_id or unit_id in seen:

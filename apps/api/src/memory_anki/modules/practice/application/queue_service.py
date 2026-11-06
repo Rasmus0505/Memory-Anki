@@ -125,6 +125,17 @@ def build_freestyle_queue(
         today,
         all_selected_ids or None,
     )
+    # 新学 / 复习 narrows what the round may serve. A unit is NEW until it has
+    # ever passed; every card, count and question below reads this list, so the
+    # 做题 pool follows the same rule instead of drifting from the feed.
+    learn_scope = set(config.get("learn_scope") or ("new", "review"))
+    show_new = "new" in learn_scope
+    show_review = "review" in learn_scope
+    if not (show_new and show_review):
+        due_rows = [
+            row for row in due_rows
+            if (not row.get("has_passed")) is show_new
+        ]
     # Due today but booked for a later instant (a first-pass re-check or a failed
     # grade's expanding wait). They are not in the queue; the round must know
     # they exist so it doesn't claim the day is finished.

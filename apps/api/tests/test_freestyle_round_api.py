@@ -579,6 +579,98 @@ def test_get_or_create_drops_vanished_unstarted_and_keeps_live_quiz(
     assert "review_unit:inactive:r1" not in again["plan"]["presented_ids"]
 
 
+def _region_state(
+    palace_id: int,
+    unit_id: str,
+    *,
+    anchor_uid: str,
+    node_uids: list[str],
+    active: bool = True,
+    unit_kind: str = "mark",
+) -> ReviewUnitState:
+    return ReviewUnitState(
+        id=unit_id,
+        palace_id=palace_id,
+        anchor_uid=anchor_uid,
+        unit_kind=unit_kind,
+        node_uids_json=json.dumps(node_uids),
+        membership_hash=f"membership-{unit_id}",
+        content_hash=f"content-{unit_id}",
+        revision=1,
+        stage_index=0,
+        has_passed=False,
+        due_date=local_day(),
+        active=active,
+    )
+
+
+def test_get_or_create_repoints_a_retired_mark_card_at_its_successor(
+    session_factory, make_client
+):
+    """Unmarking B1 folds B1 into the residual unit. The learner's current card
+    must follow that content in the same slot instead of jumping elsewhere."""
+    session = session_factory()
+    palace = Palace(title="Merge palace", editor_doc="{}", archived=False)
+    session.add(palace)
+    session.flush()
+    session.add(
+        _region_state(
+            palace.id,
+            "residual-unit",
+            anchor_uid="palace-root",
+            node_uids=["b1", "b2"],
+            unit_kind="residual",
+        )
+    )
+    session.add(
+        _region_state(
+            palace.id,
+            "b1-unit",
+            anchor_uid="b1",
+            node_uids=["b1"],
+            active=False,
+        )
+    )
+    session.commit()
+    palace_id = palace.id
+    session.close()
+
+    client = _client(make_client)
+    retired = _unit_card("review_unit:b1-unit:r1", "b1-unit", palace_id)
+    quiz = {
+        "id": "quiz-keep",
+        "type": "quiz_question",
+        "label": "quiz",
+        "palace_id": palace_id,
+        "palace_title": "Palace",
+    }
+    created = _create(
+        client,
+        operation_id="op-merge-create",
+        cards=[retired, quiz],
+        round_id="round-merge",
+    )
+    assert created["current_card_id"] == "review_unit:b1-unit:r1"
+
+    residual = _unit_card("review_unit:residual-unit:r1", "residual-unit", palace_id)
+    again = _create(
+        client,
+        operation_id="op-merge-update",
+        cards=[residual, quiz],
+        round_id="round-ignored",
+    )
+    assert again["round_id"] == "round-merge"
+    # Same slot: the retired card was re-pointed at the residual, then the
+    # rebuilt queue rebound it to the residual unit's own card id.
+    assert again["current_card_id"] == "review_unit:residual-unit:r1"
+    assert [item["card_id"] for item in again["plan"]["original_cards"]] == [
+        "review_unit:residual-unit:r1",
+        "quiz-keep",
+    ]
+    assert again["plan"]["presented_ids"][0] == "review_unit:residual-unit:r1"
+    assert "review_unit:b1-unit:r1" not in again["plan"]["presented_ids"]
+
+
 def test_get_or_create_drops_active_units_of_a_deleted_palace(
     session_factory, make_client
 ):

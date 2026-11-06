@@ -44,9 +44,9 @@ from memory_anki.modules.practice.domain.overlay_quiz_shuffle import (
 from memory_anki.modules.practice.domain.round_plan import (
     _is_unfinished,
     _sync_index,
+    live_review_palace_ids,
+    live_review_unit_ids,
     removed_review_palace_ids,
-    review_palace_ids,
-    review_unit_ids,
     waiting_review_unit_ids,
 )
 from memory_anki.modules.quiz.public.queries import list_node_bindings_for_palaces
@@ -112,8 +112,8 @@ def read_round_question_badge(
     stored = _json_load_object(row.config_json)
     return classify_round_question_badges(
         session,
-        palace_ids=review_palace_ids(plan),
-        unit_ids=review_unit_ids(plan),
+        palace_ids=live_review_palace_ids(plan),
+        unit_ids=live_review_unit_ids(plan),
         waiting_unit_ids=waiting_review_unit_ids(plan),
         round_ratings=list_round_unit_ratings(session, row.round_id),
         rating_inherit=_rating_inherit_mode(stored, None),
@@ -149,14 +149,16 @@ def _overlay_pack(
         # The round's own review set is the outer 做题 boundary: the saved config
         # must not widen it. `unit_ids` narrows the default range to the scheduled
         # units and their root paths (see overlay_quiz_service docstring).
-        palace_ids=review_palace_ids(plan),
+        # After 结算已完成 the settled cards are gone from the rail, so their
+        # palaces and units leave 做题 too — the pool follows what is still left.
+        palace_ids=live_review_palace_ids(plan),
         # ...minus palaces whose every card the learner took out with 移除本队列.
         # Their questions leave with them. A palace with one card still queued
         # is unaffected.
         removed_palace_ids=sorted(removed_review_palace_ids(plan)),
         # ...and palaces the learner deleted from 做题. Review cards are untouched.
         skipped_palace_ids=skipped,
-        unit_ids=review_unit_ids(plan),
+        unit_ids=live_review_unit_ids(plan),
         waiting_unit_ids=waiting_review_unit_ids(plan),
         # From the encounter table, not the plan's cached copy: the cache omits
         # most `rating` values (see list_round_unit_ratings).
@@ -274,7 +276,7 @@ def progress_overlay_quiz(
             node_uid = str(binding.get("node_uid") or "").strip()
             if question_id in wrong and node_uid:
                 bindings_by_question.setdefault(question_id, set()).add(node_uid)
-        unit_rows = list_unit_scheduling_nodes(session, review_unit_ids(plan)) if bindings_by_question else {}
+        unit_rows = list_unit_scheduling_nodes(session, live_review_unit_ids(plan)) if bindings_by_question else {}
         palace_paths = list_palace_node_paths(session, sorted(palace_ids)) if bindings_by_question else {}
         for unit_id, unit in unit_rows.items():
             unit_palace_id = int(unit.get("palace_id") or 0)

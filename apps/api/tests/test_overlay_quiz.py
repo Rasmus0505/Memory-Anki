@@ -1990,3 +1990,104 @@ def test_overlay_question_range_defaults_to_round_units_and_stays_out_of_queue_s
     assert queue_construction_signature({"overlay_question_range": "whole_palace"}) == (
         queue_construction_signature({"overlay_question_range": "round_units"})
     )
+
+
+def test_settled_cards_leave_the_quiz_scope() -> None:
+    """结算已完成 (compress) takes the palace and its unit off the rail.
+
+    ``completed_ids`` alone must not: a rated card is still drawn on the rail
+    until the learner settles it. Only compression removes it.
+    """
+    plan = plan_from_cards(
+        [
+            {"id": "a", "type": "mindmap_branch", "palace_id": 10, "unit_id": "u1"},
+            {"id": "b", "type": "mindmap_branch", "palace_id": 20, "unit_id": "u2"},
+        ]
+    )
+    completed = complete_card(plan, "a")
+    assert round_plan.settled_review_palace_ids(completed) == set()
+    assert round_plan.live_review_palace_ids(completed) == [10, 20]
+    assert round_plan.live_review_unit_ids(completed) == ["u1", "u2"]
+
+    settled = compress_completed(completed, None)
+    assert round_plan.settled_review_palace_ids(settled) == {10}
+    assert round_plan.live_review_palace_ids(settled) == [20]
+    assert round_plan.live_review_unit_ids(settled) == ["u2"]
+
+
+def _seed_plain_palace(db_session, title: str):
+    """One root-bound question in its own palace."""
+    root_uid = f"root-{title}"
+    editor = json.dumps({"root": _mind_node(root_uid, title)})
+    palace = Palace(title=title, editor_doc=editor)
+    db_session.add(palace)
+    db_session.flush()
+    question = PalaceQuizQuestion(palace_id=palace.id, stem=title)
+    db_session.add(question)
+    db_session.flush()
+    db_session.add(
+        PalaceQuizQuestionNodeBinding(
+            question_id=question.id, palace_id=palace.id, node_uid=root_uid
+        )
+    )
+    db_session.commit()
+    return palace, question
+
+
+def test_settled_palace_questions_leave_the_pool(db_session) -> None:
+    """做题 follows the rail: a settled palace's questions are gone.
+
+    The old behaviour kept them for extra practice, so a round with 8 palaces
+    still advertised hundreds of questions after 结算; the learner could no
+    longer reach those palaces on the progress rail.
+    """
+    kept, q_kept = _seed_plain_palace(db_session, "还在复习")
+    gone, _q_gone = _seed_plain_palace(db_session, "已结算")
+    plan = plan_from_cards(
+        [
+            {"id": "a", "type": "mindmap_branch", "palace_id": kept.id, "unit_id": "u-kept"},
+            {"id": "b", "type": "mindmap_branch", "palace_id": gone.id, "unit_id": "u-gone"},
+        ]
+    )
+    settled_plan = compress_completed(complete_card(plan, "b"), None)
+    pack = build_overlay_question_pack(
+        db_session,
+        {
+            "training_mode": "memory_palace",
+            "overlay_question_range": "whole_palace",
+            "streams": {"quiz": {"question_type": "all"}},
+        },
+        palace_ids=round_plan.live_review_palace_ids(settled_plan),
+        unit_ids=round_plan.live_review_unit_ids(settled_plan),
+    )
+    assert pack["question_ids"] == [q_kept.id]
+    # The settled palace is not even listed: it is no longer part of the round.
+    rows = {row["palace_id"]: row for row in pack["scope_palaces"]["palaces"]}
+    assert set(rows) == {kept.id}
+
+
+def test_settled_unit_questions_leave_the_pool(db_session) -> None:
+    """In 本轮复习单元 range, settling one unit drops only that unit's region."""
+    palace, questions = _seed_unit_scope_palace(db_session)
+    plan = plan_from_cards(
+        [
+            {"id": "a", "type": "mindmap_branch", "palace_id": palace.id, "unit_id": "unit-mark-a"},
+            {"id": "b", "type": "mindmap_branch", "palace_id": palace.id, "unit_id": "unit-mark-b"},
+        ]
+    )
+    settled_plan = compress_completed(complete_card(plan, "b"), None)
+    pack = build_overlay_question_pack(
+        db_session,
+        {"training_mode": "memory_palace"},
+        palace_ids=round_plan.live_review_palace_ids(settled_plan),
+        unit_ids=round_plan.live_review_unit_ids(settled_plan),
+    )
+    # Same set as before mark-b was scheduled: root path of mark-a plus root fallback.
+    assert set(pack["question_ids"]) == {
+        questions["root"].id,
+        questions["section_a"].id,
+        questions["mark_a"].id,
+        questions["unbound"].id,
+    }
+    assert questions["mark_b"].id not in pack["question_ids"]
+    assert questions["section_b"].id not in pack["question_ids"]

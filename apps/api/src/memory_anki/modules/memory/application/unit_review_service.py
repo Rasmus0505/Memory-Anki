@@ -1008,16 +1008,18 @@ def _active_successor_state(
     session: Session,
     retired: ReviewUnitState,
 ) -> ReviewUnitState | None:
-    return (
-        session.query(ReviewUnitState)
-        .filter_by(
-            palace_id=retired.palace_id,
-            anchor_uid=retired.anchor_uid,
-            unit_kind=retired.unit_kind,
-            active=True,
-        )
-        .first()
-    )
+    """The live unit that now owns this retired row's content.
+
+    Same identity is not enough. Unmarking B1 retires B1 and folds its nodes
+    into the root residual, so a stale card opening B1 must follow node
+    ownership, not only the anchor.
+    """
+    from .unit_successors import resolve_unit_successors
+
+    successor_id = resolve_unit_successors(session, [retired.id]).get(str(retired.id))
+    if not successor_id:
+        return None
+    return session.get(ReviewUnitState, successor_id)
 
 
 def start_freestyle_unit_review_session(

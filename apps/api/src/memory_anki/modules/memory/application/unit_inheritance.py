@@ -12,6 +12,7 @@ decisions live in small pure helpers so the reconcile loop stays readable.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any
@@ -39,6 +40,9 @@ class InheritanceSource:
     # Fixed early-ladder position. Carried with the schedule so a split or a
     # restored mark does not replay a review the learner already did.
     early_step: int | None = None
+    # Any FSRS checkpoint at all. A row that was rated (even 忘记) has one; a
+    # row that only exists because a mark was drawn does not.
+    fsrs_last_review: datetime | None = None
 
     @classmethod
     def from_row(cls, row: ReviewUnitState) -> InheritanceSource:
@@ -47,7 +51,7 @@ class InheritanceSource:
             node_uids=frozenset(_json_load_list(row.node_uids_json)), active=row.active,
             stage_index=row.stage_index, due_date=row.due_date,
             has_passed=row.has_passed, last_passed_at=row.last_passed_at,
-            early_step=row.early_step,
+            early_step=row.early_step, fsrs_last_review=row.fsrs_last_review,
         )
 
 
@@ -173,6 +177,35 @@ def same_identity_sources(
     ]
 
 
+def has_learning_evidence(row: Any) -> bool:
+    """True when the learner has actually rated this unit at some point.
+
+    A row exists as soon as a permanent mark is drawn, so existence is not
+    evidence: an untouched row sits at stage 0, due today, with no pass and no
+    FSRS checkpoint. Letting such a row vote in a merge lets one never-studied
+    remainder pull a studied palace back to 首学 (reported on a whole-palace
+    mark). Rows that were rated and failed still count — they carry an FSRS
+    checkpoint and must keep pulling the merged unit earlier.
+    """
+    return bool(
+        getattr(row, "has_passed", False)
+        or getattr(row, "last_passed_at", None) is not None
+        or getattr(row, "fsrs_last_review", None) is not None
+        or getattr(row, "early_step", None) is not None
+        or int(getattr(row, "stage_index", 0) or 0) > 0
+    )
+
+
+def evidence_sources(sources: Sequence[Any]) -> list[Any]:
+    """Rows allowed to vote on the merged schedule.
+
+    Never-studied rows abstain. When nothing has been studied every row is
+    returned, so an all-new merge still lands at first learning.
+    """
+    evidence = [row for row in sources if has_learning_evidence(row)]
+    return evidence or list(sources)
+
+
 def inheritance_vote(
     sources: list[InheritanceSource],
     *,
@@ -183,17 +216,22 @@ def inheritance_vote(
 
     Lowest-with-earliest is the conservative merge rule: a region inherits the
     weakest of its contributing units so no part of it silently skips work.
-    ``has_passed`` requires every source to have passed.
+    ``has_passed`` requires every voting source to have passed.
+
+    Never-studied rows do not vote on the level (they have earned nothing and
+    would otherwise reset the merge to 首学), but their due date still counts:
+    new content in the merged unit should still be seen when it falls due.
     """
     if not sources:
         return default_stage, default_due, False
     # Bad evidence must fail before writes, never silently rebook studied content.
     for row in sources:
         assert_schedulable_due(row.due_date, today=default_due)
+    voters = evidence_sources(sources)
     return (
-        min(row.stage_index for row in sources),
+        min(int(row.stage_index) for row in voters),
         min(row.due_date for row in sources),
-        all(row.has_passed for row in sources),
+        all(bool(row.has_passed) for row in voters),
     )
 
 
@@ -206,7 +244,10 @@ def inherited_early_step(sources: list[InheritanceSource]) -> int | None:
     """
     if not sources:
         return None
-    weakest = min(sources, key=lambda row: (row.stage_index, row.due_date))
+    weakest = min(
+        evidence_sources(sources),
+        key=lambda row: (int(row.stage_index), row.due_date),
+    )
     return weakest.early_step
 
 
@@ -233,7 +274,9 @@ def find_resurrectable(
 
 
 __all__ = [
+    "evidence_sources",
     "find_resurrectable",
+    "has_learning_evidence",
     "inheritance_candidates",
     "inheritance_vote",
     "inherited_early_step",

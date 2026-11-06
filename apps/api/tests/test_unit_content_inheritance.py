@@ -182,3 +182,84 @@ def test_corrupt_membership_is_rejected_instead_of_resetting_progress(db_session
     with pytest.raises(ValueError):
         reconcile_palace_units(db_session, palace.id)
     assert_schedule(original, 6, 60)
+
+
+def _leave_unstudied(row):
+    """A marked region that was never rated: no stage, pass or FSRS checkpoint."""
+    row.stage_index = 0
+    row.due_date = local_day()
+    row.has_passed = False
+    row.last_passed_at = None
+    row.fsrs_last_review = None
+    row.early_step = None
+
+
+def _whole_palace_row(session, palace):
+    return (
+        session.query(ReviewUnitState)
+        .filter_by(palace_id=palace.id, anchor_uid="root", unit_kind="palace", active=True)
+        .one()
+    )
+
+
+def test_unstudied_region_does_not_reset_a_whole_palace_merge(db_session):
+    """One never-studied remainder must not drag studied segments back to 首学.
+
+    Reported flow: remove every permanent mark, then mark the palace root as
+    整宫. The merged unit used to inherit stage 0 from the untouched residue,
+    showing the whole palace as first learning again.
+    """
+    palace = seed(db_session, document(node("a", mark=True), node("b", mark=True)))
+    active = rows(db_session, palace)
+    schedule(active[("a", "mark")], 5, 30)
+    _leave_unstudied(active[("b", "mark")])
+    db_session.flush()
+
+    # Single edit pass: both child marks removed, root marked.
+    palace.editor_doc = document(node("a"), node("b"), mark=True)
+    db_session.flush()
+    reconcile_palace_units(db_session, palace.id)
+    db_session.flush()
+
+    root = _whole_palace_row(db_session, palace)
+    assert root.stage_index == 5, "the studied segment's level must survive the merge"
+    assert root.has_passed is True
+    # The untouched region still makes the merged unit due, so its content is
+    # reviewed instead of being silently skipped.
+    assert root.due_date == local_day()
+
+
+def test_unstudied_region_does_not_reset_a_two_step_whole_palace_merge(db_session):
+    palace = seed(db_session, document(node("a", mark=True), node("b", mark=True)))
+    active = rows(db_session, palace)
+    schedule(active[("a", "mark")], 4, 20)
+    _leave_unstudied(active[("b", "mark")])
+    db_session.flush()
+
+    palace.editor_doc = document(node("a"), node("b"))
+    db_session.flush()
+    reconcile_palace_units(db_session, palace.id)
+    db_session.flush()
+
+    palace.editor_doc = document(node("a"), node("b"), mark=True)
+    db_session.flush()
+    reconcile_palace_units(db_session, palace.id)
+    db_session.flush()
+
+    root = _whole_palace_row(db_session, palace)
+    assert (root.stage_index, root.has_passed) == (4, True)
+
+
+def test_merge_of_only_unstudied_units_still_starts_at_first_learning(db_session):
+    palace = seed(db_session, document(node("a", mark=True), node("b", mark=True)))
+    for row in rows(db_session, palace).values():
+        _leave_unstudied(row)
+    db_session.flush()
+
+    palace.editor_doc = document(node("a"), node("b"), mark=True)
+    db_session.flush()
+    reconcile_palace_units(db_session, palace.id)
+    db_session.flush()
+
+    root = _whole_palace_row(db_session, palace)
+    assert (root.stage_index, root.has_passed) == (0, False)

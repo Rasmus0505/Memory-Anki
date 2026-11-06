@@ -13,7 +13,6 @@ from memory_anki.infrastructure.db._tables.misc import (
     FreestyleRoundState,
 )
 from memory_anki.modules.memory.api import (
-    list_active_review_unit_ids,
     list_due_review_unit_ids,
     list_unit_node_members,
     rate_palace_due_units,
@@ -49,8 +48,6 @@ from memory_anki.modules.practice.domain.round_plan import (
 )
 from memory_anki.modules.practice.domain.round_rebind import (
     append_today_cards,
-    drop_undue_unstarted,
-    drop_vanished_unstarted,
     replan_remaining,
 )
 from memory_anki.modules.practice.domain.round_uncomplete import uncomplete_card
@@ -58,6 +55,12 @@ from memory_anki.modules.practice.domain.workspace import normalize_workspace
 from memory_anki.modules.quiz.public.queries import list_node_bindings_for_palaces
 
 from .round_commit import commit_operation
+from .round_plan_cleanup import (
+    plan_card_units,
+    plan_unit_ids,
+    without_undue_units,
+    without_vanished_units,
+)
 from .round_read_lookups import (
     latest_active_round,
     operation_already_applied,
@@ -265,27 +268,6 @@ def read_workspace_active_round(
     return _serve(session, row) if row is not None else None
 
 
-def _plan_unit_ids(plan: dict[str, Any]) -> list[str]:
-    cards = [item for item in plan.get("original_cards") or [] if isinstance(item, dict)]
-    return [_text(item.get("unit_id")) for item in cards if _text(item.get("unit_id"))]
-
-
-def _without_vanished_units(session: Session, plan: dict[str, Any]) -> dict[str, Any]:
-    unit_ids = _plan_unit_ids(plan)
-    if not unit_ids:
-        return plan
-    return drop_vanished_unstarted(plan, list_active_review_unit_ids(session, unit_ids))
-
-
-def _without_undue_units(session: Session, plan: dict[str, Any]) -> dict[str, Any]:
-    """Drop unstarted cards the opener refuses because they are not due today."""
-    unit_ids = _plan_unit_ids(plan)
-    if not unit_ids:
-        return plan
-    due_ids = list_due_review_unit_ids(session, unit_ids, today=local_day())
-    return drop_undue_unstarted(plan, due_ids)
-
-
 def get_or_create_active_round(
     session: Session,
     *,
@@ -317,8 +299,14 @@ def get_or_create_active_round(
         persist_config = reorder or scope_changed or replan
         before_plan = _plan_of(row)
         before_ids = [item["card_id"] for item in before_plan.get("original_cards") or []]
+        before_units = plan_card_units(before_plan)
         before_presented = list(before_plan.get("presented_ids") or [])
-        next_plan = _without_undue_units(session, _without_vanished_units(session, _plan_of(row)))
+        # without_vanished_units applies drop_vanished_unstarted with successor
+        # rekeying, so a retired mark's card follows its content in place.
+        next_plan = without_undue_units(session, without_vanished_units(session, _plan_of(row)))
+        # A card re-pointed at a successor unit is a real change even though the
+        # card id list is unchanged; without this it would never be persisted.
+        rebound = plan_card_units(next_plan) != before_units
         dropped = [item["card_id"] for item in next_plan.get("original_cards") or []] != before_ids
         today = _local_today()
         plan_day = str(next_plan.get("today") or "")[:10]
@@ -330,7 +318,7 @@ def get_or_create_active_round(
         # again — so the server supplies its own due set for this plan's units
         # instead of trusting the incoming list.
         due_again = (
-            list_due_review_unit_ids(session, _plan_unit_ids(next_plan), today=local_day())
+            list_due_review_unit_ids(session, plan_unit_ids(next_plan), today=local_day())
             if day_advanced
             else set()
         )
@@ -358,14 +346,21 @@ def get_or_create_active_round(
             next_plan = normalize_plan(next_plan)
         # A client may resend a card whose palace was deleted. Drop it again
         # after append/replan so it cannot come back as a live retry or a new row.
-        next_plan = _without_undue_units(session, _without_vanished_units(session, next_plan))
+        next_plan = without_undue_units(session, without_vanished_units(session, next_plan))
         dropped = [item["card_id"] for item in next_plan.get("original_cards") or []] != before_ids
         presented_changed = list(next_plan.get("presented_ids") or []) != before_presented
         handled_changed = before_handled != (
             tuple(next_plan.get("completed_ids") or []),
             tuple(next_plan.get("compressed_ids") or []),
         )
-        if cards or persist_config or dropped or presented_changed or handled_changed:
+        if (
+            cards
+            or persist_config
+            or dropped
+            or rebound
+            or presented_changed
+            or handled_changed
+        ):
             changed = _apply_plan(
                 row,
                 next_plan,

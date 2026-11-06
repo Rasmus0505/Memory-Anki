@@ -31,6 +31,13 @@ DEFAULT_NEW_PLACEMENT = NEW_PLACEMENT_NEW_FIRST
 REVIEW_NEW_RATIO_VALUES = {1, 2, 4}
 DEFAULT_REVIEW_NEW_RATIO = 4
 
+# Which review units the round may serve. A unit is NEW until it has ever
+# passed; REVIEW is every unit that has. Both selected is the full pool.
+LEARN_SCOPE_NEW = "new"
+LEARN_SCOPE_REVIEW = "review"
+LEARN_SCOPES = (LEARN_SCOPE_NEW, LEARN_SCOPE_REVIEW)
+DEFAULT_LEARN_SCOPE = [LEARN_SCOPE_NEW, LEARN_SCOPE_REVIEW]
+
 MIX_MODE_MINDMAP_ONLY = "mindmap_only"
 MIX_MODE_QUIZ_ONLY = "quiz_only"
 MIX_MODE_SEQUENTIAL_MAP_QUIZ = "sequential_map_quiz"
@@ -459,6 +466,16 @@ def _sanitize_mixed_modes(value: Any, fallback: list[str]) -> list[str]:
     return list(fallback)
 
 
+def _as_learn_scope(value: Any) -> list[str]:
+    """新学 / 复习 selection. Empty or unknown falls back to the full pool."""
+    if isinstance(value, list):
+        chosen = {str(item or "").strip() for item in value}
+        result = [scope for scope in LEARN_SCOPES if scope in chosen]
+        if result:
+            return result
+    return list(DEFAULT_LEARN_SCOPE)
+
+
 def _as_quiz_mastery_buckets(value: Any) -> list[str]:
     if isinstance(value, list):
         result: list[str] = []
@@ -652,6 +669,7 @@ def sanitize_feed_config(raw: Any) -> dict[str, Any]:
         "overlay_rating_inherit": _as_overlay_rating_inherit(data.get("overlay_rating_inherit")),
         "new_placement": _as_new_placement(data.get("new_placement")),
         "review_new_ratio": _as_review_new_ratio(data.get("review_new_ratio")),
+        "learn_scope": _as_learn_scope(data.get("learn_scope")),
     }
 
 
@@ -674,6 +692,8 @@ def queue_construction_signature(raw: Any) -> str:
             "unit_order": memory["unit_order"],
             "quiz_scope": quiz["quiz_scope"],
             "quiz_order": quiz["order"],
+            # 新学 / 复习 is a different card set, not a reorder.
+            "learn_scope": config["learn_scope"],
             # overlay_question_range is deliberately absent: it narrows the 做题
             # pool only. Rebuilding the review card queue when the learner
             # switches 本轮单元 / 整个宫殿 would reorder work they did not change.
@@ -692,8 +712,12 @@ __all__ = [
     "BOUND_QUIZ_PLACEMENTS",
     "BOUND_QUIZ_STREAM",
     "DEFAULT_ANKI_WEIGHT",
+    "DEFAULT_LEARN_SCOPE",
     "DEFAULT_NEW_PLACEMENT",
     "DEFAULT_REVIEW_NEW_RATIO",
+    "LEARN_SCOPES",
+    "LEARN_SCOPE_NEW",
+    "LEARN_SCOPE_REVIEW",
     "NEW_PLACEMENT_NEW_FIRST",
     "NEW_PLACEMENT_RATIO",
     "NEW_PLACEMENT_REVIEW_FIRST",
