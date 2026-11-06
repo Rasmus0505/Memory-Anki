@@ -242,8 +242,6 @@ BASELINE_OVERSIZED_FILES = {
     # architecture review so the quality gate remains focused on new violations.
     "apps/web/src/shared/components/ui/dialog.tsx",
     "apps/web/src/modules/practice/ui/freestyle/model/freestyleProgressSegments.test.ts",
-    # Split lands with the freestyle 单独编辑 commit right after this one.
-    "apps/web/src/pages/create/PalaceEditorPage.tsx",
     "apps/api/src/memory_anki/modules/memory/application/unit_review_service.py",
     # Session write validation grew with revision/operation race protection;
     # keep the existing service boundary tracked while the next extraction is

@@ -11,6 +11,7 @@ describe('FreestylePalaceJoinDialog', () => {
         busy={false}
         onCancel={() => undefined}
         onJoin={onJoin}
+        onEdit={() => undefined}
       />,
     )
     expect(screen.getByRole('heading', { name: '加入本轮' })).toBeTruthy()
@@ -26,6 +27,7 @@ describe('FreestylePalaceJoinDialog', () => {
         busy={false}
         onCancel={() => undefined}
         onJoin={() => undefined}
+        onEdit={() => undefined}
       />,
     )
     expect(screen.getByRole('button', { name: '标记并加入' })).toBeTruthy()
@@ -36,15 +38,31 @@ describe('FreestylePalaceJoinDialog', () => {
     const onJoin = vi.fn()
     render(
       <FreestylePalaceJoinDialog
-        state={{ kind: 'not_due', title: '第二节 蔡元培的教育思想与实践', nextReviewDate: '2026-11-07' }}
+        state={{ kind: 'not_due', palaceId: 42, title: '第二节 蔡元培的教育思想与实践', nextReviewDate: '2026-11-07' }}
         busy={false}
         onCancel={() => undefined}
         onJoin={onJoin}
+        onEdit={() => undefined}
       />,
     )
     expect(screen.getByText(/11月7日/)).toBeTruthy()
     expect(screen.queryByRole('button', { name: '加入本轮' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: '知道了' }))
     expect(onJoin).not.toHaveBeenCalled()
+  })
+
+  it('offers 单独编辑 without joining the round', () => {
+    const onEdit = vi.fn()
+    render(
+      <FreestylePalaceJoinDialog
+        state={{ kind: 'not_due', palaceId: 42, title: '第一节 汉代教育', nextReviewDate: null }}
+        busy={false}
+        onCancel={() => undefined}
+        onJoin={() => undefined}
+        onEdit={onEdit}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: '单独编辑' }))
+    expect(onEdit).toHaveBeenCalledWith(42)
   })
 })

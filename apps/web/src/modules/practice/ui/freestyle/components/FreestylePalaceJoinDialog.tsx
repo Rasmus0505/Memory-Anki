@@ -23,11 +23,14 @@ export function FreestylePalaceJoinDialog({
   busy,
   onCancel,
   onJoin,
+  onEdit,
 }: {
   state: FreestylePalaceJoinState
   busy: boolean
   onCancel: () => void
   onJoin: () => void
+  /** Open the palace editor without joining the round. */
+  onEdit: (palaceId: number) => void
 }) {
   const joinable = state.kind === 'join' || state.kind === 'unmarked'
   return (
@@ -56,6 +59,15 @@ export function FreestylePalaceJoinDialog({
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
+          <Button
+            type="button"
+            variant="ghost"
+            className="mr-auto"
+            onClick={() => onEdit(state.palaceId)}
+            disabled={busy}
+          >
+            单独编辑
+          </Button>
           {joinable ? (
             <>
               <Button type="button" variant="outline" onClick={onCancel} disabled={busy}>

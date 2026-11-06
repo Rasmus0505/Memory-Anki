@@ -48,6 +48,7 @@ export interface SubjectMenuTarget {
 
 /** Verbs a host can hide when they do not apply (a dialog row cannot "open" itself). */
 export type PalaceMenuVerb =
+  | 'edit'
   | 'progress'
   | 'quiz'
   | 'freestyle'
@@ -60,6 +61,8 @@ export type PalaceMenuVerb =
 export interface PalaceMenuCallOptions {
   /** Replace the default 「打开」 (editor page opens in place, freestyle jumps the feed). */
   open?: MenuAction
+  /** 单独编辑: only hosts that can open an editor beside themselves pass this. */
+  edit?: MenuAction
   /** Replace the default 「复习进度」 (the catalog opens its in-place panel). */
   progress?: MenuAction
   /** Inline rename supplied by a tree row; omitted, the menu asks with a prompt. */
@@ -229,6 +232,7 @@ export function usePalaceMenuActions(options: PalaceMenuActionsOptions = {}) {
     const isFavorite = call.isFavorite ?? palace.isFavorite
     return buildPalaceMenu({
       open: call.open ?? { onSelect: () => navigate(openPath(palace.id)) },
+      edit: omit.has('edit') ? undefined : call.edit,
       progress: omit.has('progress')
         ? undefined
         : call.progress ?? { onSelect: () => navigate(`/palaces/${palace.id}/units`) },

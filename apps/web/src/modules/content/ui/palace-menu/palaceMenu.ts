@@ -7,6 +7,7 @@ import {
   ListChecks,
   Network,
   Pencil,
+  PencilLine,
   Plus,
   Star,
   StarOff,
@@ -25,6 +26,8 @@ export interface MenuAction {
 export interface PalaceMenuParts {
   /** Opening the palace somewhere (editor, freestyle card, lookup). */
   open?: MenuAction
+  /** 单独编辑: open the palace editor without changing the current surface. */
+  edit?: MenuAction
   progress?: MenuAction
   quiz?: MenuAction
   freestyle?: MenuAction
@@ -33,7 +36,6 @@ export interface PalaceMenuParts {
   move?: MenuAction
   favorite?: { isFavorite: boolean; onSelect: () => void }
   copyLink?: MenuAction
-  /** Host-specific verbs (复习进度面板, 导出…), shown above the destructive item. */
   remove?: MenuAction
 }
 
@@ -62,6 +64,7 @@ export function buildPalaceMenu(parts: PalaceMenuParts): RowMenuEntry[] {
   return composeMenu(
     [
       entry(parts.open, '打开', FolderTree),
+      entry(parts.edit, '单独编辑', PencilLine),
       entry(parts.progress, '复习进度', ListChecks),
       entry(parts.quiz, '做题', FileQuestion),
       entry(parts.freestyle, '开始随心复习', Brain),

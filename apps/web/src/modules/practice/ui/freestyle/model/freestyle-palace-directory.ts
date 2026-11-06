@@ -30,8 +30,8 @@ export function resolvePalaceDirectoryClick(input: {
 export type FreestylePalaceJoinState =
   | { kind: 'join'; palaceId: number; title: string }
   | { kind: 'unmarked'; palaceId: number; title: string }
-  | { kind: 'not_due'; title: string; nextReviewDate: string | null }
-  | { kind: 'no_units'; title: string }
+  | { kind: 'not_due'; palaceId: number; title: string; nextReviewDate: string | null }
+  | { kind: 'no_units'; palaceId: number; title: string }
 
 export interface PalaceJumpTarget {
   cardId: string

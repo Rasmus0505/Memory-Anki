@@ -26,6 +26,8 @@ export interface FreestylePalaceDirectoryPanelProps {
   collapsed: boolean
   onCollapsedChange: (collapsed: boolean) => void
   onSelectPalace: (palaceId: number) => void
+  /** 单独编辑: open the palace editor with a way back to this round. */
+  onEditPalace?: (palaceId: number) => void
   /** Fullscreen feed hides the directory instead of squeezing it. */
   hidden?: boolean
   children: ReactNode
@@ -42,6 +44,7 @@ export function FreestylePalaceDirectoryPanel({
   collapsed,
   onCollapsedChange,
   onSelectPalace,
+  onEditPalace,
   hidden = false,
   children,
 }: FreestylePalaceDirectoryPanelProps) {
@@ -80,6 +83,9 @@ export function FreestylePalaceDirectoryPanel({
           onSelectPalace={select}
           palaceMenu={(palace, { beginRename }) => rowMenus.palaceMenu(palace, {
             open: { onSelect: () => select(palace.id) },
+            edit: onEditPalace
+              ? { onSelect: () => onEditPalace(palace.id) }
+              : undefined,
             rename: { onSelect: beginRename },
             omit: ['freestyle'],
           })}

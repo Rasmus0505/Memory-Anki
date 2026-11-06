@@ -126,10 +126,11 @@ export function useFreestylePalaceDirectoryActions({
         if (projection.mark_required) {
           setPalaceJoin({ kind: 'unmarked', palaceId, title })
         } else if (projection.unit_count === 0) {
-          setPalaceJoin({ kind: 'no_units', title })
+          setPalaceJoin({ kind: 'no_units', palaceId, title })
         } else if (projection.due_unit_count === 0) {
           setPalaceJoin({
             kind: 'not_due',
+            palaceId,
             title,
             nextReviewDate: projection.next_review_date,
           })
@@ -146,6 +147,12 @@ export function useFreestylePalaceDirectoryActions({
   }, [currentPalaceId, jumpToPalaceIfScheduled, navigate, reviewPalaceId])
 
   const cancelPalaceJoin = useCallback(() => setPalaceJoin(null), [])
+
+  /** 单独编辑: leave the round intact and open the palace on the editor page. */
+  const editPalace = useCallback((palaceId: number) => {
+    setPalaceJoin(null)
+    navigate(`/palaces/${palaceId}/edit?from=freestyle`)
+  }, [navigate])
 
   const confirmPalaceJoin = useCallback(() => {
     if (!palaceJoin || (palaceJoin.kind !== 'join' && palaceJoin.kind !== 'unmarked')) return
@@ -189,5 +196,6 @@ export function useFreestylePalaceDirectoryActions({
     openPalaceFromDirectory,
     confirmPalaceJoin,
     cancelPalaceJoin,
+    editPalace,
   }
 }

@@ -802,6 +802,7 @@ export default function ImmersiveFreestylePage({
     openPalaceFromDirectory,
     confirmPalaceJoin,
     cancelPalaceJoin,
+    editPalace,
   } = useFreestylePalaceDirectoryActions({
     currentPalaceId,
     reviewPalaceId,
@@ -1031,6 +1032,7 @@ export default function ImmersiveFreestylePage({
         collapsed={directoryCollapsed}
         onCollapsedChange={setDirectoryCollapsed}
         onSelectPalace={openPalaceFromDirectory}
+        onEditPalace={editPalace}
         hidden={freestyleFullscreen}
       >
       <div
@@ -1291,6 +1293,7 @@ export default function ImmersiveFreestylePage({
             busy={palaceJoinBusy}
             onCancel={cancelPalaceJoin}
             onJoin={confirmPalaceJoin}
+            onEdit={editPalace}
           />
         ) : null}
       </div>

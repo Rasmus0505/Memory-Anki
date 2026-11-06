@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { AlertCircle, CheckCircle2, LayoutTemplate, LoaderCircle, PencilLine } from 'lucide-react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { LayoutTemplate, LoaderCircle } from 'lucide-react'
 import { PageHeader } from '@/shared/components/layout/PageHeader'
 import { MindMapDocumentConflictDialog } from '@/shared/components/mindmap-document-conflict'
 import { MindMapSplitLayout } from '@/shared/components/layout/MindMapSplitLayout'
@@ -20,6 +20,9 @@ import {
   updatePalaceKnowledgeBindingApi,
 } from '@/modules/content/public'
 import { PalaceTemplateDialog } from '@/modules/content/public'
+import { FreestyleReturnButton } from './components/FreestyleReturnButton'
+import { PALACE_EDITOR_DIRECTORY_COLLAPSED_STORAGE_KEY, isNarrowViewport } from './model/palaceEditorPage'
+import { SaveStatusBadge } from './components/SaveStatusBadge'
 import { PalaceVersionDialog } from './PalaceVersionDialog'
 import { usePalaceMindMapFileTransfer } from '@/modules/content/public'
 import { MindMapImportDrawer, readClipboardTextForMindMapImport, useMindMapImport } from '@/modules/produce/public'
@@ -57,58 +60,13 @@ import {
   type EditorDoc,
 } from '@/shared/lib/mindmap-split-marks/splitMarks'
 
-const PALACE_EDITOR_DIRECTORY_COLLAPSED_STORAGE_KEY = 'memory_anki.palace_editor_directory_collapsed'
-
-function isNarrowViewport() {
-  return typeof window !== 'undefined'
-    && Boolean(window.matchMedia?.('(max-width: 767px)').matches)
-}
-
-function SaveStatusBadge({
-  status,
-  error,
-}: {
-  status: 'saved' | 'saving' | 'unsaved' | 'error'
-  error?: string | null
-}) {
-  if (status === 'saving') {
-    return (
-      <Badge variant="info" title="正在保存编辑内容">
-        <LoaderCircle className="size-3 animate-spin" />
-        保存中
-      </Badge>
-    )
-  }
-
-  if (status === 'unsaved') {
-    return (
-      <Badge variant="warning" title="内容已修改，系统会自动保存">
-        <PencilLine className="size-3" />
-        未保存
-      </Badge>
-    )
-  }
-
-  if (status === 'error') {
-    return (
-      <Badge variant="destructive" title={error || '自动保存失败，请稍后重试。'}>
-        <AlertCircle className="size-3" />
-        保存失败
-      </Badge>
-    )
-  }
-
-  return (
-    <Badge variant="success" title="最近的编辑内容已保存">
-      <CheckCircle2 className="size-3" />
-      已保存
-    </Badge>
-  )
-}
-
 export default function PalaceEdit() {
   const { isActive, becameActiveAt } = useRouteResidency()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  // Entered from the freestyle directory's 「单独编辑」: keep the directory folds
+  // and offer a way back to the round instead of leaving the learner there.
+  const fromFreestyle = searchParams.get('from') === 'freestyle'
   const page = usePalaceEditPage()
   const { openQuizLauncher } = useQuizLauncher()
   const mindMapFrameRef = useRef<MindMapEditorSurfaceHandle | null>(null)
@@ -514,6 +472,7 @@ export default function PalaceEdit() {
           compact
           collapsible
           title={page.palace?.title || '宫殿编辑器'}
+          leading={fromFreestyle ? <FreestyleReturnButton /> : undefined}
           actions={
             <>
               {page.palace ? (
@@ -587,6 +546,7 @@ export default function PalaceEdit() {
               <div className="min-h-0 flex-1">
                 <PalaceDirectoryTree
                   currentPalaceId={page.palaceId}
+                  viewStateKey={fromFreestyle ? 'freestyle-directory' : undefined}
                   onOpenPalace={(palaceId) => { void page.openPalace(palaceId) }}
                   onBindPalace={handleBindPalace}
                   palaceMenu={(palace, { beginRename }) => rowMenus.palaceMenu(palace, {

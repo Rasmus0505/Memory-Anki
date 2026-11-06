@@ -6,6 +6,8 @@ interface PageHeaderProps {
   eyebrow?: string
   title: string
   description?: string
+  /** Rendered before the title, e.g. a 「返回随心」 button. */
+  leading?: ReactNode
   actions?: ReactNode
   compact?: boolean
   /** Collapse the title bar to a thin rail so a mind map can fill the page. */
@@ -21,6 +23,7 @@ export function PageHeader({
   eyebrow,
   title,
   description,
+  leading,
   actions,
   compact = false,
   collapsible = false,
@@ -57,28 +60,31 @@ export function PageHeader({
           : 'gap-y-3 px-1 pt-1',
       )}
     >
-      <div className="min-w-0 space-y-1">
-        {eyebrow ? (
-          <div className="text-xs font-medium text-muted-foreground">{eyebrow}</div>
-        ) : null}
-        <h1
-          className={cn(
-            'break-words font-semibold tracking-tight',
-            compact ? 'text-lg sm:text-xl' : 'text-2xl sm:text-[28px] sm:leading-9',
-          )}
-        >
-          {title}
-        </h1>
-        {description && !compact ? (
-          <p
+      <div className="flex min-w-0 items-center gap-2">
+        {leading}
+        <div className="min-w-0 space-y-1">
+          {eyebrow ? (
+            <div className="text-xs font-medium text-muted-foreground">{eyebrow}</div>
+          ) : null}
+          <h1
             className={cn(
-              'max-w-2xl text-sm leading-relaxed text-muted-foreground',
-              hideDescriptionOnMobile && 'max-sm:hidden',
+              'break-words font-semibold tracking-tight',
+              compact ? 'text-lg sm:text-xl' : 'text-2xl sm:text-[28px] sm:leading-9',
             )}
           >
-            {description}
-          </p>
-        ) : null}
+            {title}
+          </h1>
+          {description && !compact ? (
+            <p
+              className={cn(
+                'max-w-2xl text-sm leading-relaxed text-muted-foreground',
+                hideDescriptionOnMobile && 'max-sm:hidden',
+              )}
+            >
+              {description}
+            </p>
+          ) : null}
+        </div>
       </div>
       {actions || collapsible ? (
         <div className="flex max-w-full shrink-0 flex-wrap items-center gap-2">

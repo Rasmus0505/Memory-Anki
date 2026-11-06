@@ -650,6 +650,8 @@ export interface PalaceDirectoryTreeProps {
   onRenameChapter?: (chapterId: number, nextName: string) => void | Promise<void>
   onRenameSubject?: (subjectId: number, nextName: string) => void | Promise<void>
   className?: string
+  /** Share folds with the surface that launched this editor (e.g. 随心目录). */
+  viewStateKey?: string
 }
 
 /**
@@ -672,6 +674,7 @@ export function PalaceDirectoryTree({
   onRenameChapter,
   onRenameSubject,
   className,
+  viewStateKey = PALACE_EDITOR_DIRECTORY_VIEW_STATE_KEY,
 }: PalaceDirectoryTreeProps) {
   const { tree, loading, error } = usePalaceDirectoryTree()
   return (
@@ -690,7 +693,7 @@ export function PalaceDirectoryTree({
       onRenameChapter={onRenameChapter}
       onRenameSubject={onRenameSubject}
       className={className}
-      viewStateKey={PALACE_EDITOR_DIRECTORY_VIEW_STATE_KEY}
+      viewStateKey={viewStateKey}
     />
   )
 }
