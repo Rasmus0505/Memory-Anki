@@ -29,12 +29,27 @@ export function InlineRenameInput({
   const [value, setValue] = useState(defaultValue)
   const inputRef = useRef<HTMLInputElement>(null)
   const settledRef = useRef(false)
+  const blurTimerRef = useRef<number | null>(null)
 
   useEffect(() => {
-    const input = inputRef.current
-    if (!input) return
-    input.focus()
-    input.select()
+    // The rename usually starts from a context menu, and closing that menu
+    // moves focus to <body> a tick or two after this input mounts. Focus now,
+    // then reclaim it a few times until the menu has fully unmounted.
+    let cancelled = false
+    const focus = () => {
+      if (cancelled) return
+      const input = inputRef.current
+      if (!input || document.activeElement === input) return
+      input.focus()
+      input.select()
+    }
+    focus()
+    const timers = [50, 150, 300].map((delay) => window.setTimeout(focus, delay))
+    return () => {
+      cancelled = true
+      for (const timer of timers) window.clearTimeout(timer)
+      if (blurTimerRef.current) window.clearTimeout(blurTimerRef.current)
+    }
   }, [])
 
   const settle = (action: 'commit' | 'cancel') => {
@@ -68,7 +83,14 @@ export function InlineRenameInput({
       aria-label={ariaLabel}
       onChange={(event) => setValue(event.target.value)}
       onKeyDown={handleKeyDown}
-      onBlur={() => settle('commit')}
+      onBlur={() => {
+        // Closing the menu can blur the input for a tick before focus is
+        // reclaimed; only a blur that *stays* away commits the rename.
+        if (blurTimerRef.current) window.clearTimeout(blurTimerRef.current)
+        blurTimerRef.current = window.setTimeout(() => {
+          if (document.activeElement !== inputRef.current) settle('commit')
+        }, 180)
+      }}
       onClick={(event) => event.stopPropagation()}
       onDoubleClick={(event) => event.stopPropagation()}
       className={cn(
