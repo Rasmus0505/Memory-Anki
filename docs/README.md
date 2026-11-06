@@ -17,6 +17,7 @@
 | 要改代码、查架构边界 | `AI_PROJECT_CONTEXT.md`（仓库根目录）→ 本文“架构文档”一节 |
 | 查历史故障和防复发措施 | [incidents/README.md](incidents/README.md) |
 | 把 PDF 题目录进题库 | [quiz-pdf-reconciliation-prompt.md](quiz-pdf-reconciliation-prompt.md) |
+| 题库里有重复题、想再清一遍 | [题库去重.md](题库去重.md) |
 
 ## 文档地图
 
@@ -33,6 +34,7 @@
 | [learning-loop-mvp.md](learning-loop-mvp.md) | 学习闭环验收基线 | 规则仍有效；范围声明是当时口径 | 2026-11-04 |
 | [learning-loop-mvp-validation.md](learning-loop-mvp-validation.md) | 验证快照 | 历史（数字不代表当前测试状态） | 2026-11-04 |
 | [quiz-pdf-reconciliation-prompt.md](quiz-pdf-reconciliation-prompt.md) | PDF 题目录入流程 | 现行 | 2026-11-04 |
+| [题库去重.md](题库去重.md) | 题库语义去重流水线与口径 | 现行 | 2026-11-06 |
 | [incidents/](incidents/README.md) | 故障档案，一个主题一个文件 | 历史记录，持续追加 | 2026-11-04 |
 | [compose/spec/](compose/spec/) | 随心功能 spec 与交付记录 | 历史（均已交付） | 2026-11-04 |
 | [superpowers/specs/](superpowers/specs/) | 早期设计稿 | 历史（已实现或已被取代） | 2026-11-04 |
