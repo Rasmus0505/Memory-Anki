@@ -948,8 +948,11 @@ def test_quality_gate_exposes_real_launcher_smoke_option():
     assert "_electron_pids" in launcher_smoke
 
 
-def test_agent_rules_require_launcher_smoke_for_runtime_changes():
-    rules = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+def test_runtime_change_docs_require_launcher_smoke():
+    """AGENTS.md is the user's collaboration note, not the quality-gate contract."""
+    architecture = (ROOT / "docs" / "architecture" / "README.md").read_text(encoding="utf-8")
+    context = (ROOT / "AI_PROJECT_CONTEXT.md").read_text(encoding="utf-8")
 
-    assert "python tools/quality_gate.py --launchers" in rules
-    assert "start-all.bat" in rules
+    assert "python tools/quality_gate.py --launchers" in architecture
+    assert "start-all.bat" in architecture
+    assert "--launchers" in context

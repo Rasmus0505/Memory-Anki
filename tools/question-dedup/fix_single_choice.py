@@ -13,9 +13,10 @@ import shutil
 import sqlite3
 import sys
 from datetime import datetime
+from _local_db import resolve_db_path
 
 sys.stdout.reconfigure(encoding="utf-8")
-DB = os.environ.get("MEMORY_ANKI_DB", r"C:\MemoryAnki\memory anki data\学习数据\memory_palace.db")
+DB = str(resolve_db_path())
 
 # id -> (正确答案, 依据)
 FIXES = {

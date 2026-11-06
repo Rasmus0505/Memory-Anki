@@ -4557,30 +4557,25 @@ def test_freestyle_complete_button_rejects_seek_only_wiring(
     assert any("settle the round or seek the earliest unrated unit" in error for error in errors)
 
 
-def test_freestyle_round_sheet_views_reject_palace_only(
+def test_freestyle_settlement_docs_reject_missing_contract(
     tmp_path: Path, monkeypatch
 ) -> None:
-    web_src = tmp_path / "apps" / "web" / "src"
+    api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
     monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
-    monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
-    write_file(
-        web_src / "modules" / "practice" / "ui" / "freestyle" / "components" / "FreestyleRoundSheet.tsx",
-        "export function FreestyleRoundSheet() { return null }\n",
-    )
+    monkeypatch.setattr(check_architecture, "API_SRC", api_src)
     write_file(
         tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
-        "The sheet groups entries by palace.\n",
+        "结算说明缺失。\n",
     )
 
     errors: list[str] = []
-    check_architecture.check_freestyle_round_sheet_views(errors)
+    check_architecture.check_freestyle_settlement_docs(errors)
 
-    assert any("progress-rail order" in error for error in errors)
-    assert any("palace and progress-rail views" in error for error in errors)
     assert any("结算已完成单元" in error for error in errors)
+    assert any("compress_completed" in error for error in errors)
 
 
-def test_freestyle_round_sheet_views_accept_header_toggle(
+def test_freestyle_settlement_docs_accept_dialog_contract(
     tmp_path: Path, monkeypatch
 ) -> None:
     web_src = tmp_path / "apps" / "web" / "src"
@@ -4589,12 +4584,7 @@ def test_freestyle_round_sheet_views_accept_header_toggle(
     monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
     monkeypatch.setattr(check_architecture, "API_SRC", api_src)
     write_file(
-        web_src / "modules" / "practice" / "ui" / "freestyle" / "components" / "FreestyleRoundSheet.tsx",
-        "按宫殿\n按进度\nbuildFreestyleProgressSummary\n结算已完成单元\n",
-    )
-    write_file(
         tmp_path / "docs" / "architecture" / "freestyle-immersive-feed.md",
-        "<!-- invariant: freestyle-round-sheet-two-views -->\n"
         "<!-- invariant: freestyle-partial-settlement-compress -->\n"
         "<!-- invariant: freestyle-partial-settlements-persisted -->\n",
     )
@@ -4604,7 +4594,9 @@ def test_freestyle_round_sheet_views_accept_header_toggle(
     )
     write_file(
         api_src / "modules" / "practice" / "domain" / "round_compress.py",
-        "def compress_completed():\n    plan['compressed_ids'] = []\n    plan['partial_settlements'] = []\n",
+        "def compress_completed():\n"
+        "    plan['compressed_ids'] = []\n"
+        "    plan['partial_settlements'] = []\n",
     )
     write_file(
         web_src / "modules" / "practice" / "ui" / "freestyle" / "components" / "FreestyleRoundCompleteCard.tsx",
@@ -4612,15 +4604,16 @@ def test_freestyle_round_sheet_views_accept_header_toggle(
     )
     write_file(
         web_src / "modules" / "practice" / "ui" / "freestyle" / "ImmersiveFreestylePage.tsx",
-        "FreestylePartialSettlement\nFreestyleFeedPager\nonCancelSettlement={navigatePrevious}\n",
+        "FreestylePartialSettlement\nFreestyleFeedPager\n"
+        "onCancelSettlement={navigatePrevious}\n",
     )
     write_file(
         web_src / "modules" / "practice" / "ui" / "freestyle" / "FreestylePartialSettlement.tsx",
-        "freestyle-partial-settlement-exit\n退出\n",
+        'data-testid="freestyle-partial-settlement"\nonExit\n',
     )
 
     errors: list[str] = []
-    check_architecture.check_freestyle_round_sheet_views(errors)
+    check_architecture.check_freestyle_settlement_docs(errors)
 
     assert errors == []
 

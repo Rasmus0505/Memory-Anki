@@ -22,10 +22,11 @@ from datetime import datetime
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import normalize
+from _local_db import resolve_db_path
 
 sys.stdout.reconfigure(encoding="utf-8")
 HERE = os.environ.get("DEDUP_WORK") or os.path.dirname(os.path.abspath(__file__))
-DB = os.environ.get("MEMORY_ANKI_DB", r"C:\MemoryAnki\memory anki data\学习数据\memory_palace.db")
+DB = str(resolve_db_path())
 PREFIX = re.compile(r"^【[^】]*】")
 
 EXPLICIT = [

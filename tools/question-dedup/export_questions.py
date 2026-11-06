@@ -4,9 +4,10 @@ import json
 import os
 import sqlite3
 import sys
+from _local_db import resolve_db_path
 
 sys.stdout.reconfigure(encoding="utf-8")
-DB = os.environ.get("MEMORY_ANKI_DB", r"C:\MemoryAnki\memory anki data\学习数据\memory_palace.db")
+DB = str(resolve_db_path())
 OUT = os.path.join(os.environ.get("DEDUP_WORK") or os.path.dirname(os.path.abspath(__file__)), "questions.jsonl")
 
 con = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)

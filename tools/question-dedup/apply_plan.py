@@ -16,10 +16,11 @@ import sqlite3
 import sys
 from collections import Counter, defaultdict
 from datetime import datetime
+from _local_db import resolve_db_path
 
 sys.stdout.reconfigure(encoding="utf-8")
 HERE = os.environ.get("DEDUP_WORK") or os.path.dirname(os.path.abspath(__file__))
-DB = os.environ.get("MEMORY_ANKI_DB", r"C:\MemoryAnki\memory anki data\学习数据\memory_palace.db")
+DB = str(resolve_db_path())
 AUTO = os.path.join(HERE, "auto_groups.json")
 VERD = os.path.join(HERE, "verdicts")
 PLAN_OUT = os.path.join(HERE, "plan.json")

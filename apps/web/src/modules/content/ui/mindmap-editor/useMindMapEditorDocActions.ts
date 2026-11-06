@@ -102,7 +102,7 @@ export function useMindMapEditorDocActions(deps: {
       })
       onNodeActive?.(selection)
     },
-    [branchScope, getCurrentEditorDoc, onNodeActive, replaceInteraction, stageEditorDoc],
+    [bypassesScope, branchScope, getCurrentEditorDoc, onNodeActive, replaceInteraction, stageEditorDoc],
   )
 
   const handleAddChildWithoutFocus = useCallback(
@@ -113,7 +113,7 @@ export function useMindMapEditorDocActions(deps: {
       replaceInteraction(selectedInteraction(nodeId))
       onNodeActive?.(buildSelectionFromDoc(result.editorDoc, nodeId))
     },
-    [branchScope, commitEditorDoc, getCurrentEditorDoc, onNodeActive, replaceInteraction],
+    [bypassesScope, branchScope, commitEditorDoc, getCurrentEditorDoc, onNodeActive, replaceInteraction],
   )
 
   /**
@@ -140,7 +140,7 @@ export function useMindMapEditorDocActions(deps: {
       })
       onNodeActive?.(selection)
     },
-    [branchScope, getCurrentEditorDoc, onNodeActive, replaceInteraction, stageEditorDoc],
+    [bypassesScope, branchScope, getCurrentEditorDoc, onNodeActive, replaceInteraction, stageEditorDoc],
   )
 
   const handleAddSibling = useCallback(
@@ -162,7 +162,7 @@ export function useMindMapEditorDocActions(deps: {
       })
       onNodeActive?.(selection)
     },
-    [branchScope, getCurrentEditorDoc, onNodeActive, replaceInteraction, stageEditorDoc],
+    [bypassesScope, branchScope, getCurrentEditorDoc, onNodeActive, replaceInteraction, stageEditorDoc],
   )
 
   const handleDeleteNode = useCallback(
@@ -188,7 +188,7 @@ export function useMindMapEditorDocActions(deps: {
         { duration: UNDO_TOAST_DURATION_MS, action: { label: '撤销', onClick: undoEditorDoc } },
       )
     },
-    [branchScope, commitEditorDoc, confirmDeleteNodes, getCurrentEditorDoc, onNodeActive, replaceInteraction, undoEditorDoc],
+    [bypassesScope, branchScope, commitEditorDoc, confirmDeleteNodes, getCurrentEditorDoc, onNodeActive, replaceInteraction, undoEditorDoc],
   )
 
   const handleDeleteNodes = useCallback(
@@ -221,7 +221,7 @@ export function useMindMapEditorDocActions(deps: {
         action: { label: '撤销', onClick: undoEditorDoc },
       })
     },
-    [branchScope, commitEditorDoc, confirmDeleteNodes, getCurrentEditorDoc, handleDeleteNode, onNodeActive, replaceInteraction, undoEditorDoc],
+    [bypassesScope, branchScope, commitEditorDoc, confirmDeleteNodes, getCurrentEditorDoc, handleDeleteNode, onNodeActive, replaceInteraction, undoEditorDoc],
   )
 
   const handleHighlightNodes = useCallback(
@@ -324,7 +324,7 @@ export function useMindMapEditorDocActions(deps: {
         action: { label: '撤销', onClick: undoEditorDoc },
       })
     },
-    [branchScope, commitEditorDoc, confirmDeleteNodes, getCurrentEditorDoc, onNodeActive, replaceInteraction, undoEditorDoc],
+    [bypassesScope, branchScope, commitEditorDoc, confirmDeleteNodes, getCurrentEditorDoc, onNodeActive, replaceInteraction, undoEditorDoc],
   )
 
   const handleDeleteNodesOnly = useCallback(
@@ -351,7 +351,7 @@ export function useMindMapEditorDocActions(deps: {
         action: { label: '撤销', onClick: undoEditorDoc },
       })
     },
-    [branchScope, commitEditorDoc, confirmDeleteNodes, getCurrentEditorDoc, handleDeleteNodeOnly, onNodeActive, replaceInteraction, undoEditorDoc],
+    [bypassesScope, branchScope, commitEditorDoc, confirmDeleteNodes, getCurrentEditorDoc, handleDeleteNodeOnly, onNodeActive, replaceInteraction, undoEditorDoc],
   )
 
   const handleEditNode = useCallback(
@@ -425,7 +425,7 @@ export function useMindMapEditorDocActions(deps: {
       replaceInteraction(selectedInteraction(primaryId, sourceIds))
       onNodeActive?.(buildSelectionFromDoc(nextEditorDoc, primaryId))
     },
-    [branchScope, commitEditorDoc, getCurrentEditorDoc, onNodeActive, replaceInteraction],
+    [bypassesScope, branchScope, commitEditorDoc, getCurrentEditorDoc, onNodeActive, replaceInteraction],
   )
 
   const handleExtractSelection = useCallback(
@@ -472,7 +472,7 @@ export function useMindMapEditorDocActions(deps: {
       if (!bypassesScope() && !canMutateMindMapBranchStructure(branchScope, nodeId)) return false
       return commitEditorDoc(moveEditorDocNode(getCurrentEditorDoc(), nodeId, 'up'))
     },
-    [branchScope, commitEditorDoc, getCurrentEditorDoc],
+    [bypassesScope, branchScope, commitEditorDoc, getCurrentEditorDoc],
   )
 
   const handleMoveDown = useCallback(
@@ -480,7 +480,7 @@ export function useMindMapEditorDocActions(deps: {
       if (!bypassesScope() && !canMutateMindMapBranchStructure(branchScope, nodeId)) return false
       return commitEditorDoc(moveEditorDocNode(getCurrentEditorDoc(), nodeId, 'down'))
     },
-    [branchScope, commitEditorDoc, getCurrentEditorDoc],
+    [bypassesScope, branchScope, commitEditorDoc, getCurrentEditorDoc],
   )
 
   // Scope-escaped actions widen the view before they run, so ordering stays

@@ -139,10 +139,11 @@ graph LR
 - 拆分 `shared/ui/mindmap-canvas` 的超大文件（`layout.ts`、`useMindMapCanvasState.ts`；`NodeCard.tsx` 749 行，未超过 750 行门禁）。
 - 从 `NodeBoundQuizDialog` 与 `FreestyleScopeQuizDialog` 中提取共享的题目元信息行（统计 / 类型 / 变体控件 / 评分 / 标记）；在题目变体工作流之后，两者暂时超过 750 行门禁。
 - 拆分 `shared/components/ui/dialog.tsx` 以及随心模型测试装置 `freestyleProgressSegments.test.ts` / `roundCompletion.test.ts`；在拆分之前登记为临时质量门禁例外。
-- 拆分本轮轮次计划与评分工作撑大的三个随心文件：`FreestyleRoundSheet.tsx`（拆成弹层子组件）、`freestyleProgressSegments.ts`（模型与摘要分离）、`ratingSaveStore.ts`（类型/纯函数与 store 分离）。目前登记为临时门禁例外；下一次随心重构应删掉这三条例外。
+- 拆分本轮轮次计划与评分工作撑大的两个随心文件：`freestyleProgressSegments.ts`（模型与摘要分离）、`ratingSaveStore.ts`（类型/纯函数与 store 分离）。目前登记为临时门禁例外；下一次随心重构应删掉这两条例外（`FreestyleRoundSheet.tsx` 已随弹层移除，其例外与守卫已删除）。
+- 拆分后续功能提交撑大的四个文件：`NodeBoundQuizDialog.test.tsx`（测试装置按主题拆文件）、`PalaceEditorPage.tsx`（宫殿编辑宿主）、`useFreestyleFeedNavigation.ts`（滚动/翻页状态机）、`MindMapEditorSurface.tsx`（画布宿主）。它们已在 `BASELINE_OVERSIZED_FILES` 登记，拆完后必须删掉对应条目。
 - 可选：重命名导航区键 `'knowledge'`→`'create'`、`'review'`→`'insights'`（需要 pageHistoryStore 键迁移）。
 
-已完成并因此不再列出：`PalaceEditorPage.tsx`（当前 738 行）、`GlobalTimerProvider*` / `TimerAutomationDialog` / `useTimedSession*` 会话宿主，以及 `PalaceQuizGenerationPanel.tsx`（已删除）。`PalaceMindMapWorkspace.tsx`（728 行）与 `PalaceChapterBindingDialog.tsx` 随宫殿编辑器的目录树重写一并删除：编辑器左栏现在是 `modules/content/ui/palace-edit/components/PalaceDirectoryTree.tsx`（学科 → 章节 → 宫殿，点击就地切换宫殿，把宫殿拖到章节上即可重新绑定），`PalaceMetaPanel` / `PalaceAttachmentPanel` / `usePalaceMetaController` 随绑定表单一起移除。
+已完成并因此不再列出：`GlobalTimerProvider*` / `TimerAutomationDialog` / `useTimedSession*` 会话宿主，以及 `PalaceQuizGenerationPanel.tsx`（已删除）。`PalaceMindMapWorkspace.tsx`（728 行）与 `PalaceChapterBindingDialog.tsx` 随宫殿编辑器的目录树重写一并删除：编辑器左栏现在是 `modules/content/ui/palace-edit/components/PalaceDirectoryTree.tsx`（学科 → 章节 → 宫殿，点击就地切换宫殿，把宫殿拖到章节上即可重新绑定），`PalaceMetaPanel` / `PalaceAttachmentPanel` / `usePalaceMetaController` 随绑定表单一起移除。
 
 ## 刻意保留的手写代码
 

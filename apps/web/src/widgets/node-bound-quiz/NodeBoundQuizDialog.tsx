@@ -417,7 +417,7 @@ export function NodeBoundQuizDialog({
     clearQuizSessionProgress()
     setQuestionStates({})
     toast.success('已清除全部题目的做题进度。')
-  }, [dropLocalAnswers, index, palaceId])
+  }, [dropLocalAnswers, palaceId])
 
   /**
    * 打乱题库: shuffle only the questions still open, keep answered slots, and
