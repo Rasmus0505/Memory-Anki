@@ -302,6 +302,48 @@ def save_palace_editor_state(
     return result
 
 
+def mark_palace_root_permanent(
+    session: Session,
+    palace: Palace,
+    *,
+    uow: UnitOfWork | None = None,
+) -> dict[str, Any]:
+    """Mark the palace root as one permanent scheduling unit.
+
+    The review queue can never serve an unmarked palace, so 「加入本轮」 from the
+    freestyle directory needs a way to create the unit it is about to schedule.
+    Repeating the call is a no-op for the document; the reconcile still runs so a
+    lagging projection heals.
+    """
+    state = get_palace_editor_state(palace)
+    doc = state.get("editor_doc")
+    if not isinstance(doc, dict):
+        raise ValueError("这座宫殿还没有内容，无法生成复习单元")
+    root = doc.get("root")
+    if not isinstance(root, dict):
+        raise ValueError("这座宫殿还没有内容，无法生成复习单元")
+    children = root.get("children")
+    if not isinstance(children, list) or not children:
+        raise ValueError("这座宫殿还没有内容，无法生成复习单元")
+    data = root.get("data")
+    data = data if isinstance(data, dict) else {}
+    data["permanentSplitMark"] = True
+    root["data"] = data
+    doc["root"] = root
+    payload = {
+        "editor_doc": doc,
+        "editor_config": state.get("editor_config"),
+        "editor_local_config": state.get("editor_local_config"),
+        "lang": state.get("lang"),
+        "expected_editor_fingerprint": state.get(EDITOR_FINGERPRINT_KEY),
+        "editor_source": "palace_mark_root",
+        "sync_reason": "mark_change",
+        "reconcile_units": True,
+        "response_mode": "ack",
+    }
+    return save_palace_editor_state(session, palace, payload, uow=uow)
+
+
 def sync_palace_editor_root(palace: Palace) -> None:
     payload = sync_editor_root_payload(
         palace.editor_doc, root_text=palace.title, root_kind="palace"
@@ -313,6 +355,7 @@ def sync_palace_editor_root(palace: Palace) -> None:
 __all__ = [
     "EditorStateConflictError",
     "get_palace_editor_state",
+    "mark_palace_root_permanent",
     "save_palace_editor_state",
     "sync_palace_editor_root",
 ]

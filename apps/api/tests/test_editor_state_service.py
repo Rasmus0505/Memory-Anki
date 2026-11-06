@@ -1,3 +1,4 @@
+import json
 import unittest
 from unittest.mock import patch
 
@@ -697,6 +698,84 @@ class PalaceVersionSignatureQueryTests(RouterTestCase):
             with patch.object(backup_palace_versions, "build_version_signature_from_palace") as signature:
                 self.assertFalse(backup_palace_versions.should_create_editor_snapshot(session, palace))
             signature.assert_not_called()
+
+
+class MarkPalaceRootTests(RouterTestCase):
+    def _palace_with_content(self, session, *, children: list | None = None) -> Palace:
+        palace = Palace(
+            title="黄炎培的职业教育思想",
+            description="",
+            editor_doc=json.dumps(
+                {
+                    "root": {
+                        "data": {"uid": "palace-root", "text": "黄炎培的职业教育思想"},
+                        "children": (
+                            [{"data": {"uid": "branch", "text": "职业教育的探索"}, "children": []}]
+                            if children is None
+                            else children
+                        ),
+                    }
+                }
+            ),
+        )
+        session.add(palace)
+        session.commit()
+        return palace
+
+    def test_mark_root_creates_exactly_one_palace_unit(self):
+        from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitState
+        from memory_anki.modules.content.application.editor_state_service import (
+            mark_palace_root_permanent,
+        )
+        from memory_anki.modules.memory.public.queries import get_palace_unit_projection
+
+        with self.SessionLocal() as session:
+            palace = self._palace_with_content(session)
+            palace_id = palace.id
+            mark_palace_root_permanent(session, palace)
+            session.expire_all()
+
+            rows = (
+                session.query(ReviewUnitState)
+                .filter(ReviewUnitState.palace_id == palace_id, ReviewUnitState.active.is_(True))
+                .all()
+            )
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0].unit_kind, "palace")
+            projection = get_palace_unit_projection(session, palace_id)
+            self.assertFalse(projection["mark_required"])
+            self.assertEqual(projection["unit_count"], 1)
+
+    def test_mark_root_is_idempotent(self):
+        from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitState
+        from memory_anki.modules.content.application.editor_state_service import (
+            mark_palace_root_permanent,
+        )
+
+        with self.SessionLocal() as session:
+            palace = self._palace_with_content(session)
+            palace_id = palace.id
+            mark_palace_root_permanent(session, palace)
+            session.expire_all()
+            mark_palace_root_permanent(session, session.get(Palace, palace_id))
+            session.expire_all()
+
+            rows = (
+                session.query(ReviewUnitState)
+                .filter(ReviewUnitState.palace_id == palace_id, ReviewUnitState.active.is_(True))
+                .all()
+            )
+            self.assertEqual(len(rows), 1)
+
+    def test_mark_root_rejects_a_palace_without_content(self):
+        from memory_anki.modules.content.application.editor_state_service import (
+            mark_palace_root_permanent,
+        )
+
+        with self.SessionLocal() as session:
+            palace = self._palace_with_content(session, children=[])
+            with self.assertRaises(ValueError):
+                mark_palace_root_permanent(session, palace)
 
 
 if __name__ == "__main__":

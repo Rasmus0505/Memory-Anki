@@ -208,7 +208,9 @@ def _create_row(
         scope_key=_text(scope_key)[:256],
         status="active",
         version=1,
-        config_json=_json_dump(config or {}),
+        # Store the same sanitized shape the update path writes, so hydration
+        # never has to distinguish "created from raw client config" rounds.
+        config_json=_json_dump(sanitize_feed_config(config or {})),
         plan_json=_json_dump(plan),
         current_card_id=plan.get("current_card_id"),
         last_operation_id=operation_id,
@@ -297,6 +299,11 @@ def get_or_create_active_round(
         )
         scope_changed = _text(row.scope_key) != key[:256]
         persist_config = reorder or scope_changed or replan
+        # Any other settings change (today: 加入本轮's extra_palace_ids) still
+        # becomes the round's stored config. Without this, the next hydration
+        # resurrects the old selection and silently drops the addition. It must
+        # not replan the queue: extras append, they do not reorder existing work.
+        write_config = persist_config or sanitize_feed_config(previous_config) != next_config
         before_plan = _plan_of(row)
         before_ids = [item["card_id"] for item in before_plan.get("original_cards") or []]
         before_units = plan_card_units(before_plan)
@@ -365,7 +372,7 @@ def get_or_create_active_round(
                 row,
                 next_plan,
                 operation_id=op_id,
-                config=next_config if persist_config else None,
+                config=next_config if write_config else None,
                 scope_key=key if scope_changed else None,
             )
             if changed:

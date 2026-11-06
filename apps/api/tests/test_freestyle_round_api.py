@@ -860,3 +860,36 @@ def test_served_wait_instants_carry_a_utc_offset(session_factory, make_client):
     occurrence = body["plan"]["occurrences"][0]
     assert occurrence["status"] == "pending"
     assert occurrence["available_at"].endswith("+00:00")
+
+
+def test_active_round_persists_extra_palaces_without_reordering(make_client):
+    """加入本轮 only widens the set; the next hydration must not drop it."""
+    client = _client(make_client)
+    base = {
+        "training_mode": "memory_palace",
+        "streams": {"memory_palace": {"specific_palace_ids": [1]}},
+    }
+    created = _create(client, operation_id="op-extra-1", cards=_cards("a", "b"), config=base)
+    assert created["config"]["streams"]["memory_palace"]["extra_palace_ids"] == []
+
+    joined = {
+        "training_mode": "memory_palace",
+        "streams": {
+            "memory_palace": {
+                "specific_palace_ids": [1],
+                "extra_palace_ids": [2],
+            }
+        },
+    }
+    added = _create(
+        client,
+        operation_id="op-extra-2",
+        cards=_cards("a", "b", "c"),
+        config=joined,
+    )
+    assert added["config"]["streams"]["memory_palace"]["extra_palace_ids"] == [2]
+    # Adding a palace appends its cards; the existing order is not rebuilt.
+    assert added["plan"]["presented_ids"] == ["a", "b", "c"]
+
+    fetched = client.get(f"/api/v1/freestyle/rounds/{created['round_id']}").json()
+    assert fetched["config"]["streams"]["memory_palace"]["extra_palace_ids"] == [2]

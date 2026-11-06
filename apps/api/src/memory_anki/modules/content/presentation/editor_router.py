@@ -8,6 +8,7 @@ from memory_anki.infrastructure.db.deps import session_dep
 from memory_anki.modules.content.application.editor_state_service import (
     EditorStateConflictError,
     get_palace_editor_state,
+    mark_palace_root_permanent,
 )
 from memory_anki.modules.content.application.palace_serializer import (
     palace_editor_meta_json,
@@ -59,6 +60,35 @@ def api_get_editor(palace_id: int, s: Session = Depends(session_dep)):
         "palace": palace_meta,
         **editor_state,
     }
+
+
+@router.post("/palaces/{palace_id}/mark-root")
+def api_mark_palace_root(palace_id: int, s: Session = Depends(session_dep)):
+    """One-click 「标记根节点」 for a palace joined from the freestyle directory.
+
+    Idempotent: re-marking an already marked root only re-runs the reconcile.
+    """
+    palace = get_palace(s, palace_id)
+    if not palace:
+        raise_not_found()
+    try:
+        state = mark_palace_root_permanent(s, palace, uow=SqlAlchemyUnitOfWork(s))
+    except EditorStateConflictError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "mindmap_conflict",
+                "message": str(exc),
+                "remoteSnapshot": exc.current_snapshot,
+            },
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    from memory_anki.modules.memory.public.queries import get_palace_unit_projection
+
+    palace_meta = palace_editor_meta_json(palace, s)
+    review = get_palace_unit_projection(s, palace_id, allow_reconcile=False)
+    return {"palace": palace_meta, **state, "review": review}
 
 
 @router.put("/palaces/{palace_id}/editor")

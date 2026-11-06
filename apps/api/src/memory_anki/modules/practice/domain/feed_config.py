@@ -360,6 +360,9 @@ def _stream_scope(value: Any, *, ids: list[int], subject_scope: str) -> dict[str
         resolved_scope = "all"
     return {
         "specific_palace_ids": _as_positive_ids(raw.get("specific_palace_ids", ids)),
+        # Palaces the learner added to the round from the left directory. They
+        # widen the selection instead of replacing it, and persist across rounds.
+        "extra_palace_ids": _as_positive_ids(raw.get("extra_palace_ids", [])),
         "subject_scope": resolved_scope,
         "subject_ids": subject_ids,
     }

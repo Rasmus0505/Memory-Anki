@@ -330,6 +330,20 @@ class TestPalaceEditor:
     def test_get_editor_missing(self, client):
         assert_missing(client.get("/api/v1/palaces/99999/editor"))
 
+    def test_mark_root_returns_the_single_palace_unit(self, client, palace_id):
+        response = client.post(f"/api/v1/palaces/{palace_id}/mark-root")
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["review"]["mark_required"] is False
+        assert body["review"]["unit_count"] == 1
+        # The editor ack shape keeps the endpoint reusable by other callers.
+        assert EDITOR_FINGERPRINT_KEY in body
+        assert body["palace"]["id"] == palace_id
+
+    def test_mark_root_missing(self, client):
+        assert_missing(client.post("/api/v1/palaces/99999/mark-root"))
+
     def test_put_editor_saves_doc(self, client, palace_id):
         response = client.put(
             f"/api/v1/palaces/{palace_id}/editor",

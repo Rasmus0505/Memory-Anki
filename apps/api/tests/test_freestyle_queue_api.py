@@ -806,3 +806,61 @@ def test_exam_priority_serves_high_star_palaces_first_and_tags_stars(session_fac
     assert exam_cards[0]["palace_id"] == high
     assert {card["palace_id"]: card["exam_stars"] for card in exam_cards} == {low: 1, high: 3}
     assert build("finish_palace_then_next")[0]["palace_id"] == low
+
+
+def test_queue_build_extra_palace_widens_the_selection(session_factory, make_client):
+    session = session_factory()
+    selected = _due_palace(session, "selected", 1)
+    added = _due_palace(session, "added", 1)
+    session.close()
+    freestyle_router.session_dep = session_dep
+    client = make_client(freestyle_router)
+
+    response = client.post(
+        "/api/v1/freestyle/queue/build",
+        json={
+            "operation_id": "op-extra-palace",
+            "config": {
+                "training_mode": "memory_palace",
+                "streams": {
+                    "memory_palace": {
+                        "specific_palace_ids": [selected],
+                        "extra_palace_ids": [added],
+                    }
+                },
+            },
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    cards = response.json()["cards"]
+    assert {card["palace_id"] for card in cards} == {selected, added}
+
+
+def test_queue_build_extra_palace_never_narrows_all_palaces(session_factory, make_client):
+    session = session_factory()
+    first = _due_palace(session, "first", 1)
+    second = _due_palace(session, "second", 1)
+    session.close()
+    freestyle_router.session_dep = session_dep
+    client = make_client(freestyle_router)
+
+    response = client.post(
+        "/api/v1/freestyle/queue/build",
+        json={
+            "operation_id": "op-extra-all",
+            "config": {
+                "training_mode": "memory_palace",
+                "streams": {
+                    "memory_palace": {
+                        "specific_palace_ids": [],
+                        "extra_palace_ids": [second],
+                    }
+                },
+            },
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    cards = response.json()["cards"]
+    assert {card["palace_id"] for card in cards} == {first, second}

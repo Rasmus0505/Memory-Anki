@@ -92,16 +92,34 @@ def build_freestyle_queue(
             if str(value).strip().lstrip("-").isdigit() and int(value) > 0
         ]
         specific_ids = [int(value) for value in raw.get("specific_palace_ids") or []]
+        # 目录「加入本轮」: additive on top of the subject/palace selection.
+        # Only the palace and quiz streams read them; english keeps its own scope.
+        extra_ids = (
+            [
+                int(value)
+                for value in raw.get("extra_palace_ids") or []
+                if str(value).strip().lstrip("-").isdigit() and int(value) > 0
+            ]
+            if stream_name in {"memory_palace", "quiz"}
+            else []
+        )
         if requested_subject_ids:
-            # Non-empty specific_palace_ids is an explicit subset (or extra list).
+            # Non-empty specific_palace_ids is an explicit subset; extras widen it below.
             if specific_ids:
-                return specific_ids, "all"
-            return list_active_palace_ids_by_subject_ids(session, requested_subject_ids), "all"
-        subject_palaces = list_active_palace_ids_by_subject_scope(session, subject_scope)
-        if subject_scope != "all":
-            # Legacy subject presets are broad inclusion scopes; explicit IDs are additive.
-            specific_ids = list(dict.fromkeys([*subject_palaces, *specific_ids]))
-        return specific_ids, subject_scope
+                selected, resolved_scope = specific_ids, "all"
+            else:
+                selected = list_active_palace_ids_by_subject_ids(session, requested_subject_ids)
+                resolved_scope = "all"
+        else:
+            subject_palaces = list_active_palace_ids_by_subject_scope(session, subject_scope)
+            if subject_scope != "all":
+                # Legacy subject presets are broad inclusion scopes; explicit IDs are additive.
+                specific_ids = list(dict.fromkeys([*subject_palaces, *specific_ids]))
+            selected, resolved_scope = specific_ids, subject_scope
+        if extra_ids and selected:
+            # An empty selection means every active palace, which already covers extras.
+            selected = list(dict.fromkeys([*selected, *extra_ids]))
+        return selected, resolved_scope
 
     stream_ids: dict[str, list[int]] = {}
     stream_subjects: dict[str, str] = {}
