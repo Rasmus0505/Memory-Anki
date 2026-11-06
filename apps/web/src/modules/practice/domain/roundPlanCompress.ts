@@ -43,12 +43,25 @@ function sourceHasUnansweredRetry(
   completedIds: Iterable<string>,
   encounters: Record<string, FreestyleUnitEncounterState>,
 ) {
-  return Object.values(plan.cardsById).some((entry) => {
-    if (entry.occurrenceKind !== 'retry') return false
-    if ((entry.sourceCardId || entry.cardId) !== sourceId) return false
-    if (entry.status === 'excluded') return false
-    return !retryAnswered(entry, plan, completedIds, encounters)
-  })
+  const source = plan.cardsById[sourceId]
+  const retries = Object.values(plan.cardsById).filter(
+    (entry) => entry.occurrenceKind === 'retry'
+      && (entry.sourceCardId || entry.cardId) === sourceId,
+  )
+  // 忘记/困难 books the next 重练 before its card is inserted. Until that card
+  // exists, the source itself carries `status: 'retry'` and the newest attempt
+  // count; without this check 结算 would settle a unit that still owes a retry.
+  if (source?.status === 'retry') {
+    const latestInsertedAttempt = retries.reduce(
+      (latest, entry) => Math.max(latest, entry.retryAttempt),
+      0,
+    )
+    if (retries.length === 0 || source.attemptCount > latestInsertedAttempt) return true
+  }
+  return retries.some((entry) => (
+    entry.status !== 'excluded'
+    && !retryAnswered(entry, plan, completedIds, encounters)
+  ))
 }
 
 function groupMembers(plan: FreestyleRoundPlanState, sourceId: string): string[] {

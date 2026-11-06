@@ -536,6 +536,34 @@ describe('round plan reducer', () => {
     })).toEqual([])
   })
 
+  it('keeps a source whose retry is booked but not inserted yet', () => {
+    const first = createRoundPlan('round-1', [card('a', 1), card('b', 1)], config)
+    const stamped = updateRoundPlanCard(first, 'a', {
+      status: 'retry',
+      lastRating: 1,
+      retryAfterCards: 3,
+      attemptCount: 1,
+    })
+    // Even if the source sits in completedIds, the booked retry is still owed.
+    expect(compressibleRoundPlanIds(stamped, { completedIds: ['a'] })).toEqual([])
+  })
+
+  it('settles after the booked retry card has been inserted and answered', () => {
+    const cards = [card('a', 1), card('b', 1)]
+    const retry = createRetryOccurrence(cards[0], 'round-1', 1, 3)
+    const withRetry = createRoundPlan('round-1', [...cards, retry], config)
+    const stamped = updateRoundPlanCard(
+      updateRoundPlanCard(withRetry, 'a', {
+        status: 'retry',
+        lastRating: 1,
+        attemptCount: 1,
+      }),
+      retry.id,
+      { status: 'completed', occurrenceKind: 'retry', sourceCardId: 'a', retryAttempt: 1, lastRating: 3 },
+    )
+    expect(compressibleRoundPlanIds(stamped, { completedIds: [] })).toEqual(['a', retry.id])
+  })
+
   it('compresses a passed retry together with its weak source', () => {
     const cards = [card('a', 1), card('b', 1)]
     const retry = createRetryOccurrence(cards[0], 'round-1', 1, 3)
