@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import { LoaderCircle, Trash2 } from 'lucide-react'
+import { FilePlus2, LoaderCircle, Trash2 } from 'lucide-react'
+import { RowContextMenu } from '@/shared/ui/row-context-menu/RowContextMenu'
+import { composeMenu, menuItem } from '@/shared/ui/row-context-menu/compose'
 import {
   deletePalaceTemplateApi,
   instantiatePalaceTemplateApi,
@@ -47,6 +49,9 @@ export function PalaceTemplateDialog({
   const [usingTemplateId, setUsingTemplateId] = useState<number | null>(null)
   const [deletingTemplateId, setDeletingTemplateId] = useState<number | null>(null)
   const [error, setError] = useState('')
+  // Menus inside a modal must portal into the dialog itself: the app disables
+  // pointer events outside an open modal, so a body-portaled menu is unclickable.
+  const [menuHost, setMenuHost] = useState<HTMLDivElement | null>(null)
 
   const loadTemplates = useCallback(async () => {
     setLoading(true)
@@ -103,7 +108,10 @@ export function PalaceTemplateDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="h-[min(78vh,760px)] max-w-2xl overflow-hidden rounded-lg border-border/70 bg-background/98 p-0">
+      <DialogContent
+        ref={setMenuHost}
+        className="h-[min(78vh,760px)] max-w-2xl overflow-hidden rounded-lg border-border/70 bg-background/98 p-0"
+      >
         <DialogHeader>
           <div>
             <DialogTitle>从模板创建宫殿</DialogTitle>
@@ -138,9 +146,21 @@ export function PalaceTemplateDialog({
             ) : (
               <div className="space-y-3">
                 {templates.map((template) => (
-                  <div
+                  <RowContextMenu
                     key={template.id}
-                    className="flex flex-col gap-3 rounded-lg border border-border/70 bg-card/90 px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
+                    container={menuHost}
+                    items={composeMenu(
+                      [menuItem('使用模板', FilePlus2, () => void handleUseTemplate(template), {
+                        disabled: usingTemplateId != null || deletingTemplateId != null,
+                      })],
+                      [menuItem('删除模板', Trash2, () => void handleDeleteTemplate(template), {
+                        danger: true,
+                        disabled: usingTemplateId != null || deletingTemplateId != null,
+                      })],
+                    )}
+                  >
+                  <div
+                    className="flex flex-col gap-3 rounded-lg border border-border/70 bg-card/90 px-4 py-4 data-[state=open]:border-primary/50 sm:flex-row sm:items-center sm:justify-between"
                   >
                     <div className="min-w-0 space-y-1">
                       <div className="truncate text-sm font-medium text-foreground">
@@ -185,6 +205,7 @@ export function PalaceTemplateDialog({
                       </Button>
                     </div>
                   </div>
+                  </RowContextMenu>
                 ))}
               </div>
             )}

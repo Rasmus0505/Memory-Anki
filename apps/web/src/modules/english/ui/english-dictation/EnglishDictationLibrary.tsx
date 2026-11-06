@@ -9,6 +9,7 @@ import {
   FileText,
   Film,
   LoaderCircle,
+  Play,
   Plus,
   Search,
   Sparkles,
@@ -17,6 +18,8 @@ import {
   X,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { RowContextMenu } from '@/shared/ui/row-context-menu/RowContextMenu'
+import { composeMenu, menuItem } from '@/shared/ui/row-context-menu/compose'
 import type { EnglishCourseSummary, EnglishWorkspaceResponse } from '@/shared/api/contracts'
 import {
   deleteEnglishCourseApi,
@@ -361,7 +364,16 @@ function CourseCard({
 }) {
   const progress = courseProgress(course)
   return (
-    <article className="ed-course-card" style={{ animationDelay: `${Math.min(index, 10) * 45}ms` }}>
+    <RowContextMenu
+      items={composeMenu(
+        [menuItem('打开课程', Play, onOpen)],
+        [menuItem('删除课程', Trash2, onDelete, { danger: true, disabled: deleting })],
+      )}
+    >
+    <article
+      className="ed-course-card data-[state=open]:ring-1 data-[state=open]:ring-primary/40"
+      style={{ animationDelay: `${Math.min(index, 10) * 45}ms` }}
+    >
       <button type="button" className="ed-course-card__main" onClick={onOpen}>
         <div className="ed-course-card__art" aria-hidden>
           <Clapperboard className="size-7" />
@@ -402,6 +414,7 @@ function CourseCard({
         </button>
       </div>
     </article>
+    </RowContextMenu>
   )
 }
 

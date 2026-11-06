@@ -21,6 +21,7 @@ import { getPalaceEditorApi, getPalacesGroupedApi } from '@/modules/content/publ
 import {
   PalaceDirectoryTreeView,
   usePalaceDirectoryTree,
+  usePalaceMenuActions,
 } from '@/modules/content/public'
 import { usePalaceQuizNodeBindings } from '@/modules/quiz/public'
 import type {
@@ -181,6 +182,7 @@ export function PalaceMemoryLookupDialog({
   // Browsing with no query shows the same 学科 › 章节 › 宫殿 tree as the editor;
   // typing switches the left column to the node-text search results.
   const directory = usePalaceDirectoryTree({ enabled: open })
+  const rowMenus = usePalaceMenuActions()
   const selectedPalace = palaces.find((palace) => palace.id === selectedPalaceId) ?? null
   // Paint only the document of the selected palace. Without this, switching to
   // another question's palace mounted the previous palace for a frame, fitted
@@ -1041,6 +1043,21 @@ export function PalaceMemoryLookupDialog({
                       showSearch={false}
                       emptyState="没有找到记忆宫殿。"
                       className="p-1"
+                      palaceMenu={(palace, { beginRename }) => rowMenus.palaceMenu(palace, {
+                        open: { onSelect: () => setSelectedPalaceId(palace.id) },
+                        rename: { onSelect: beginRename },
+                      })}
+                      chapterMenu={(chapter, { beginRename }) => rowMenus.chapterMenu(
+                        { id: chapter.id, name: chapter.name, subjectId: chapter.subjectId },
+                        { rename: { onSelect: beginRename } },
+                      )}
+                      subjectMenu={(subject, { beginRename }) => rowMenus.subjectMenu(
+                        { id: subject.id, name: subject.name },
+                        { rename: { onSelect: beginRename } },
+                      )}
+                      onRenamePalace={rowMenus.renamePalaceTo}
+                      onRenameChapter={rowMenus.renameChapterTo}
+                      onRenameSubject={rowMenus.renameSubjectTo}
                     />
                   )}
                 </div>
@@ -1066,6 +1083,7 @@ export function PalaceMemoryLookupDialog({
             </div>
           </MindMapSplitLayout>
         </div>
+        {rowMenus.moveDialog}
         {(
           [
             ['n', '从上边调整记忆宫殿查看大小'],

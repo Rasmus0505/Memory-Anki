@@ -1131,4 +1131,28 @@ describe('MindMapEditorSurface scoped edit menu', () => {
     await waitFor(() => expect(screen.queryByRole('button', { name: '骨架' })).toBeNull())
     expect(screen.getByRole('button', { name: '锚点' })).toBeTruthy()
   })
+
+  it('offers insert-child-layer on the palace root and groups the first level', async () => {
+    function RootSurface() {
+      const [state, setState] = useState(scopedDoc)
+      return <MindMapEditorSurface editorState={state} onEditorStateChange={setState} />
+    }
+    render(<RootSurface />)
+
+    fireEvent.contextMenu(await screen.findByRole('button', { name: '宫殿' }), {
+      clientX: 120,
+      clientY: 160,
+    })
+
+    expect(screen.getByRole('button', { name: '添加子知识点 (Tab)' })).toBeTruthy()
+    // The palace frame has no parent, so it offers no sibling row.
+    expect(screen.queryByRole('button', { name: '添加同级知识点 (Shift+Enter)' })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '插入子知识点（原内容降一级）' }))
+
+    // One new card opens for naming; the old first level is still there to become its child.
+    const draft = await screen.findByRole('textbox', { name: '编辑节点文本' })
+    expect(draft.textContent).toBe('新知识点')
+    expect(screen.getByRole('button', { name: '骨架' })).toBeTruthy()
+  })
 })

@@ -1,5 +1,7 @@
 import { useEffect } from 'react'
-import { RotateCcw } from 'lucide-react'
+import { Copy, Flag, Pencil, RotateCcw } from 'lucide-react'
+import { RowContextMenu } from '@/shared/ui/row-context-menu/RowContextMenu'
+import { composeMenu, menuItem } from '@/shared/ui/row-context-menu/compose'
 import {
   QuizQuestionAnswerSurface,
   QuizQuestionVariantControl,
@@ -161,7 +163,21 @@ export function QuizQuestionCard({
   }, [question.id, onShown])
 
   return (
-    <Card className="border-border/70 bg-card/92">
+    <RowContextMenu
+      items={composeMenu(
+        [menuItem('编辑题目', Pencil, () => onEdit(question))],
+        [
+          menuItem('再做一次', RotateCcw, () => onReset(question.id)),
+          onToggleMark
+            ? menuItem(question.marked ? '取消标记' : '标记题目', Flag, () => onToggleMark(question, !question.marked))
+            : null,
+          menuItem('复制题干', Copy, () => {
+            void navigator.clipboard?.writeText(question.stem).catch(() => undefined)
+          }),
+        ],
+      )}
+    >
+    <Card className="border-border/70 bg-card/92 data-[state=open]:ring-1 data-[state=open]:ring-primary/40">
       <CardHeader
         className={cn(
           'flex flex-row items-start justify-between gap-3',
@@ -233,5 +249,6 @@ export function QuizQuestionCard({
         </div>
       </CardContent>
     </Card>
+    </RowContextMenu>
   )
 }

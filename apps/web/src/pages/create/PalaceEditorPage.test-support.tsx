@@ -11,7 +11,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { vi } from 'vitest'
 import PalaceEditPage from '@/pages/create/PalaceEditorPage'
 import { resetPalaceDirectoryViewState } from '@/modules/content/ui/palace-edit/model/palaceDirectoryViewState'
-import { ShellProvider } from '@/shared/components/layout/ShellContext'
 import * as appLogs from '@/shared/logs/model/appLogs'
 import * as knowledgeApi from '@/modules/content/domain/knowledge-entity/api'
 import * as palaceApi from '@/modules/content/domain/palace-entity/api'
@@ -413,20 +412,6 @@ export function renderPalaceEditPage(initialEntry = '/palaces/101/edit') {
           <Route path="/palaces/:id/units" element={<div>unit-rating-page</div>} />
         </Routes>
       </MemoryRouter>,
-    ),
-  )
-}
-
-export function renderPalaceEditPageWithShell(sidebarCollapsed: boolean) {
-  return testingLibraryRender(
-    queryClientProvider(
-      <ShellProvider value={{ sidebarCollapsed, setSidebarCollapsed: () => {} }}>
-        <MemoryRouter initialEntries={['/palaces/101/edit']}>
-          <Routes>
-            <Route path="/palaces/:id/edit" element={<PalaceEditPage />} />
-          </Routes>
-        </MemoryRouter>
-      </ShellProvider>,
     ),
   )
 }

@@ -61,6 +61,12 @@ AI 拆分、AI 添卡、图片/PDF 导入与 OCR 链路已移除；下文相关�
 
 `MindMapEditorSurface` 不直接调用业务 API。业务页面通过 `MindMapPersistenceAdapter` 提供加载和保存，通过 `MindMapCapability[]` 提供装饰与动作。
 
+## 节点右键菜单按节点角色给行
+
+- 根节点是宫殿标题（`palace-root`），没有父节点，所以不出「添加同级」「上移/下移」「单独删除」「删除整条分支」这些需要兄弟关系的行；「设置为题目卡」也不给标题。它保留加子级、编辑文字、标记重点、标记颜色。
+- 「插入子知识点（原内容降一级）」对根也给：在宫殿标题与原一级知识点之间插一层，是给平铺的一级分编/分章的正常操作。缩进范围（`branchScope`）只收窄画面，不缩短菜单；脊柱卡上的结构操作先把视图临时扩到整宫再执行。
+- 多选时不提供插层、加同级、上移/下移和单独删除；根节点被排除在删除与题目卡目标之外。
+
 
 ## 学习组统一边界
 
@@ -195,5 +201,6 @@ A palace document has one stable UID per node and stores permanent split marks. 
 - Content demotion (affected unit immediately due, one fixed-ladder step down) may batch to leave / idle / explicit reconcile — at most one demotion per unit per edit session.
 - Reconcile exposes unit-level before/after; content demotions form an undoable schedule batch (document content stays as saved). Manual adjust and undo demote-batch are Reviews write commands.
 - A permanent-mark change never restarts a unit. Removing the final mark deactivates unit rows but keeps their earned stage and due date; re-marking reactivates the original row (same unit id, same rating history) instead of starting at first-learning. A region that is still covered by active units mints a fresh row and inherits by node overlap. Retired rows are excluded from the inheritance vote once a live unit covers the same members, so stale schedules cannot drag a healthy unit down. Mark edits do not move a due date.
+- A retired row's content follows into its live successor (`resolve_unit_successors`, anchored on node ownership): a freestyle round card is re-pointed at that successor in the same slot instead of being dropped, and a stale glance resolves the same way. A never-studied row (no pass, no FSRS checkpoint, stage 0) abstains from the inheritance vote on level and pass state, so one untouched remainder cannot reset a studied merge to first learning; its due date still participates, keeping the new content reviewable now.
 
 Practice and Knowledge consume the Reviews projection and must not derive a second topology or node schedule.

@@ -1,14 +1,19 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { ExamOverview, ExamPalaceRow } from '@/shared/api/contracts'
+import { usePalaceMenuActions } from '@/modules/content/public'
+import { RowContextMenu } from '@/shared/ui/row-context-menu/RowContextMenu'
 import { buildKnowledgeMap, formatPercent, masteryColor, nodeMastery, type ChapterNode } from '../../model/examFormat'
 import { ExamStarPicker } from '../ExamStarPicker'
 
-function PalaceTile({ palace, onChanged }: { palace: ExamPalaceRow; onChanged: () => void }) {
+type PalaceMenus = ReturnType<typeof usePalaceMenuActions>
+
+function PalaceTile({ palace, onChanged, menus }: { palace: ExamPalaceRow; onChanged: () => void; menus: PalaceMenus }) {
   const learned = palace.learned_count > 0
   return (
+    <RowContextMenu items={menus.palaceMenu(palace)}>
     <div
-      className={`exam-mastery-tile flex min-w-[9rem] flex-col gap-1 rounded-xl border border-border/60 p-2.5 text-xs shadow-sm ${palace.stars === 3 ? 'exam-key-card' : ''}`}
+      className={`exam-mastery-tile flex min-w-[9rem] flex-col gap-1 rounded-xl border border-border/60 p-2.5 text-xs shadow-sm data-[state=open]:ring-1 data-[state=open]:ring-primary/40 ${palace.stars === 3 ? 'exam-key-card' : ''}`}
       style={{ background: masteryColor(palace.mastery_ratio, learned) }}
     >
       <Link to={`/palaces/${palace.id}`} className="line-clamp-2 font-medium text-foreground hover:underline">
@@ -26,10 +31,11 @@ function PalaceTile({ palace, onChanged }: { palace: ExamPalaceRow; onChanged: (
         onSaved={onChanged}
       />
     </div>
+    </RowContextMenu>
   )
 }
 
-function ChapterBlock({ node, depth, onChanged }: { node: ChapterNode; depth: number; onChanged: () => void }) {
+function ChapterBlock({ node, depth, onChanged, menus }: { node: ChapterNode; depth: number; onChanged: () => void; menus: PalaceMenus }) {
   const mastery = nodeMastery(node)
   return (
     <section className={depth ? 'ml-3 border-l border-border/60 pl-3' : ''}>
@@ -55,18 +61,19 @@ function ChapterBlock({ node, depth, onChanged }: { node: ChapterNode; depth: nu
       {node.palaces.length ? (
         <div className="flex flex-wrap gap-2 pb-2">
           {node.palaces.map((palace) => (
-            <PalaceTile key={palace.id} palace={palace} onChanged={onChanged} />
+            <PalaceTile key={palace.id} palace={palace} onChanged={onChanged} menus={menus} />
           ))}
         </div>
       ) : null}
       {node.children.map((child) => (
-        <ChapterBlock key={child.chapter.id} node={child} depth={depth + 1} onChanged={onChanged} />
+        <ChapterBlock key={child.chapter.id} node={child} depth={depth + 1} onChanged={onChanged} menus={menus} />
       ))}
     </section>
   )
 }
 
 export function ExamKnowledgeMap({ overview, onChanged }: { overview: ExamOverview; onChanged: () => void }) {
+  const menus = usePalaceMenuActions({ onChanged: () => onChanged() })
   const subjects = overview.subjects
   const [activeId, setActiveId] = useState<number | null>(null)
   const subjectId = activeId ?? subjects[0]?.id ?? null
@@ -94,19 +101,20 @@ export function ExamKnowledgeMap({ overview, onChanged }: { overview: ExamOvervi
       </div>
       <div role="tabpanel" className="flex flex-col gap-1">
         {roots.map((node) => (
-          <ChapterBlock key={node.chapter.id} node={node} depth={0} onChanged={onChanged} />
+          <ChapterBlock key={node.chapter.id} node={node} depth={0} onChanged={onChanged} menus={menus} />
         ))}
         {loose.length ? (
           <section>
             <h4 className="py-1.5 text-sm font-medium text-muted-foreground">未归入章节</h4>
             <div className="flex flex-wrap gap-2">
               {loose.map((palace) => (
-                <PalaceTile key={palace.id} palace={palace} onChanged={onChanged} />
+                <PalaceTile key={palace.id} palace={palace} onChanged={onChanged} menus={menus} />
               ))}
             </div>
           </section>
         ) : null}
       </div>
+      {menus.moveDialog}
     </div>
   )
 }

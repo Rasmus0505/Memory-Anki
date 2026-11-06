@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import { RotateCcw, Trash2 } from 'lucide-react'
+import { Eye, RotateCcw, Trash2 } from 'lucide-react'
+import { RowContextMenu } from '@/shared/ui/row-context-menu/RowContextMenu'
+import { composeMenu, menuItem } from '@/shared/ui/row-context-menu/compose'
 import {
   PreviewQuestionAnswerSummary,
   QuizQuestionStem,
@@ -135,9 +137,18 @@ export function QuizTrashPanel() {
             <>
               <div className="text-xs text-muted-foreground">共 {total} 道题</div>
               {items.map((item) => (
-                <div
+                <RowContextMenu
                   key={item.id}
-                  className="rounded-lg border border-border/70 bg-background/70 px-4 py-4 text-sm"
+                  items={composeMenu(
+                    [menuItem('预览', Eye, () => setPreview(item))],
+                    [menuItem('恢复题目', RotateCcw, () => void handleRestore(item), {
+                      disabled: item.palace_deleted,
+                    })],
+                    [menuItem('永久删除', Trash2, () => void handlePermanentDelete(item), { danger: true })],
+                  )}
+                >
+                <div
+                  className="rounded-lg border border-border/70 bg-background/70 px-4 py-4 text-sm data-[state=open]:border-primary/50"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
@@ -187,6 +198,7 @@ export function QuizTrashPanel() {
                     </div>
                   </div>
                 </div>
+                </RowContextMenu>
               ))}
             </>
           )}

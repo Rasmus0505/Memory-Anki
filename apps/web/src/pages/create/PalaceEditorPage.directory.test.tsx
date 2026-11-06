@@ -3,7 +3,7 @@ import * as knowledgeApi from '@/modules/content/domain/knowledge-entity/api'
 import * as palaceApi from '@/modules/content/domain/palace-entity/api'
 import type { PalaceGroupedListResponse } from '@/shared/api/contracts'
 import {
-  fireEvent, renderPalaceEditPage, renderPalaceEditPageWithShell, screen,
+  fireEvent, renderPalaceEditPage, screen,
   setupPalaceEditPageTestDefaults, waitFor,
 } from './PalaceEditorPage.test-support'
 
@@ -121,11 +121,18 @@ describe('Palace editor directory tree', () => {
     expect(screen.queryByRole('button', { name: /移除学科/ })).toBeNull()
   })
 
-  it('folds together with the app navigation so one button clears the left side', async () => {
-    renderPalaceEditPageWithShell(true)
+  it('collapses from its own rail instead of riding the app navigation', async () => {
+    renderPalaceEditPage()
 
     const heading = await screen.findByText('记忆宫殿')
-    expect(heading.closest('aside')?.getAttribute('aria-hidden')).toBe('true')
+    const aside = heading.closest('aside')
+    expect(aside?.getAttribute('aria-hidden')).toBe('false')
+
+    fireEvent.click(screen.getByRole('button', { name: '收起宫殿目录' }))
+    expect(aside?.getAttribute('aria-hidden')).toBe('true')
+
+    fireEvent.click(screen.getByRole('button', { name: '展开宫殿目录' }))
+    expect(aside?.getAttribute('aria-hidden')).toBe('false')
   })
 
   it('opens another palace in place without leaving the editor route', async () => {

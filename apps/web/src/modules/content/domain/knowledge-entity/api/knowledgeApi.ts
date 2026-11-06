@@ -135,6 +135,38 @@ export function getSubjectTreeApi(id: number) {
   return request<SubjectTree>(`/subjects/${id}/tree`)
 }
 
+export interface ChapterMutationPayload {
+  name?: string
+  notes?: string
+  sort_order?: number
+  parent_id?: number | null
+}
+
+export function createChapterApi(subjectId: number, data: ChapterMutationPayload & { name: string }) {
+  return request<ChapterSummary>(`/subjects/${subjectId}/chapters`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+    persistence: {
+      resourceKey: `subject:${subjectId}:chapter:create:${data.name}`,
+      description: '创建章节',
+      replayMode: 'manual',
+    },
+  })
+}
+
+export function updateChapterApi(id: number, data: ChapterMutationPayload) {
+  return request<ChapterSummary>(`/chapters/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+    persistence: {
+      resourceKey: `chapter:${id}:meta`,
+      coalesceKey: `chapter:${id}:meta`,
+      description: '保存章节信息',
+      replayMode: 'auto',
+    },
+  })
+}
+
 export function getChapterApi(id: number) {
   return request<ChapterDetailResponse>(`/chapters/${id}`)
 }

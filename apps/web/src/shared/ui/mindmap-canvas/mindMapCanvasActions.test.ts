@@ -193,18 +193,34 @@ describe('mind map node context actions', () => {
     expect(onInsertChildLayer).toHaveBeenCalledWith('child')
   })
 
-  it('hides insert-child-layer on the root and for multi-select', () => {
+  it('offers insert-child-layer on the root but hides it for multi-select', () => {
     const onInsertChildLayer = vi.fn()
 
     const rootActions = buildActions({ onInsertChildLayer, isRootNode: () => true })
-    expect(rootActions.some((action) => action.label.startsWith('插入子知识点'))).toBe(false)
+    expect(rootActions.map((action) => action.label)).toEqual([
+      '添加子知识点 (Tab)',
+      '插入子知识点（原内容降一级）',
+      '编辑文字 (Enter / F2)',
+      '标记重点',
+    ])
+    rootActions.find((action) => action.label === '插入子知识点（原内容降一级）')?.onClick()
+    expect(onInsertChildLayer).toHaveBeenCalledWith('child')
 
     const multiActions = buildActions({
       ctxMenu: { x: 12, y: 18, nodeId: 'child-a', targetNodeIds: ['child-a', 'child-b'] },
       onInsertChildLayer,
     })
     expect(multiActions.some((action) => action.label.startsWith('插入子知识点'))).toBe(false)
-    expect(onInsertChildLayer).not.toHaveBeenCalled()
+  })
+
+  it('hides insert-child-layer on the root when add-child is locked', () => {
+    const actions = buildActions({
+      onInsertChildLayer: vi.fn(),
+      isRootNode: () => true,
+      canAddChild: () => false,
+    })
+
+    expect(actions.some((action) => action.label.startsWith('插入子知识点'))).toBe(false)
   })
 
   it('excludes root from multi-select delete targets', () => {

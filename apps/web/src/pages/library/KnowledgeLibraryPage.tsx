@@ -39,9 +39,11 @@ import {
   type SubjectSummary,
   updateSubjectApi,
 } from '@/modules/content/public'
-import { readMindMapEditorState } from '@/modules/content/public'
+import { readMindMapEditorState, usePalaceMenuActions } from '@/modules/content/public'
 import { APP_EVENT_NAMES, onAppEvent } from '@/shared/events/appEvents'
 import { detectClientSource } from '@/shared/lib/clientSource'
+import { RowContextMenu } from '@/shared/ui/row-context-menu/RowContextMenu'
+import { InlineRenameInput } from '@/shared/ui/inline-rename/InlineRenameInput'
 
 type ChapterDetail = ChapterDetailResponse
 
@@ -65,6 +67,8 @@ export default function Knowledge() {
   const [subjectName, setSubjectName] = useState('')
   const [subjectColor, setSubjectColor] = useState('#6366f1')
   const [newSubjectName, setNewSubjectName] = useState('')
+  /** Right-click 「重命名」 turns the sidebar row into an input (Obsidian style). */
+  const [renamingSubjectId, setRenamingSubjectId] = useState<number | null>(null)
   const [selectedNodes, setSelectedNodes] = useState<MindMapSelection[]>([])
   const [chapterDetail, setChapterDetail] = useState<ChapterDetail | null>(null)
   const [mindMapFullscreen, setMindMapFullscreen] = useState(false)
@@ -240,6 +244,10 @@ export default function Knowledge() {
     setSelectedSubjectId(items[0]?.id ?? null)
   }
 
+  const rowMenus = usePalaceMenuActions({
+    onChanged: () => refreshSubjects(),
+  })
+
   const handleCreateSubject = async () => {
     const name = newSubjectName.trim()
     if (!name) return
@@ -368,26 +376,56 @@ export default function Knowledge() {
           </div>
           <div className="flex flex-col">
             <div className="ma-stagger flex flex-col gap-0.5 p-2">
-              {subjects.map((subject) => (
-                <button
-                  key={subject.id}
-                  type="button"
-                  onClick={() => {
-                    setSelectedSubjectId(subject.id)
-                    setSelectedNodes([])
-                    setChapterDetail(null)
-                  }}
-                  aria-current={selectedSubjectId === subject.id ? 'true' : undefined}
-                  className={`flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors ${
-                    selectedSubjectId === subject.id
-                      ? 'bg-primary-soft font-medium text-primary-strong'
-                      : 'text-muted-foreground hover:bg-accent hover:text-foreground'
-                  }`}
-                >
-                  <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: subject.color || '#6366f1' }} />
-                  <span className="truncate">{subject.name}</span>
-                </button>
-              ))}
+              {subjects.map((subject) => {
+                const selected = selectedSubjectId === subject.id
+                const select = () => {
+                  setSelectedSubjectId(subject.id)
+                  setSelectedNodes([])
+                  setChapterDetail(null)
+                }
+                if (renamingSubjectId === subject.id) {
+                  return (
+                    <div
+                      key={subject.id}
+                      className="flex w-full items-center gap-2.5 rounded-md bg-accent px-2.5 py-1.5 text-sm"
+                    >
+                      <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: subject.color || '#6366f1' }} />
+                      <InlineRenameInput
+                        defaultValue={subject.name}
+                        ariaLabel={`重命名 ${subject.name}`}
+                        onCommit={(next) => {
+                          setRenamingSubjectId(null)
+                          void rowMenus.renameSubjectTo(subject.id, next)
+                        }}
+                        onCancel={() => setRenamingSubjectId(null)}
+                      />
+                    </div>
+                  )
+                }
+                return (
+                  <RowContextMenu
+                    key={subject.id}
+                    items={rowMenus.subjectMenu(
+                      { id: subject.id, name: subject.name },
+                      { rename: { onSelect: () => setRenamingSubjectId(subject.id) } },
+                    )}
+                  >
+                    <button
+                      type="button"
+                      onClick={select}
+                      aria-current={selected ? 'true' : undefined}
+                      className={`flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors data-[state=open]:bg-accent ${
+                        selected
+                          ? 'bg-primary-soft font-medium text-primary-strong'
+                          : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                      }`}
+                    >
+                      <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: subject.color || '#6366f1' }} />
+                      <span className="truncate">{subject.name}</span>
+                    </button>
+                  </RowContextMenu>
+                )
+              })}
             </div>
 
             <div className="flex flex-col gap-2 border-t border-border/70 px-4 py-4">
@@ -474,10 +512,13 @@ export default function Knowledge() {
                     {selectedPalaces.length > 0 ? (
                       <div className="ma-stagger space-y-2">
                         {selectedPalaces.map((palace) => (
-                          <Link
+                          <RowContextMenu
                             key={palace.id}
+                            items={rowMenus.palaceMenu(palace)}
+                          >
+                          <Link
                             to={`/palaces/${palace.id}`}
-                            className="-mx-2 flex items-center justify-between gap-2 rounded-md px-2 py-2 text-sm transition-colors hover:bg-accent [content-visibility:auto] [contain-intrinsic-size:auto_40px]"
+                            className="-mx-2 flex items-center justify-between gap-2 rounded-md px-2 py-2 text-sm transition-colors hover:bg-accent data-[state=open]:bg-accent [content-visibility:auto] [contain-intrinsic-size:auto_40px]"
                           >
                             <span>{palace.title}</span>
                             <span className="flex flex-wrap items-center justify-end gap-2">
@@ -498,6 +539,7 @@ export default function Knowledge() {
                               <span className="text-xs text-muted-foreground">查看宫殿</span>
                             </span>
                           </Link>
+                          </RowContextMenu>
                         ))}
                       </div>
                     ) : (
@@ -605,6 +647,7 @@ export default function Knowledge() {
           </CardContent>
         </Card>
       </MindMapSplitLayout>
+      {rowMenus.moveDialog}
     </div>
   )
 }

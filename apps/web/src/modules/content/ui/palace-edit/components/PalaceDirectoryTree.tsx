@@ -13,6 +13,8 @@ import { ChevronRight, FileText, LoaderCircle, Plus, Search } from 'lucide-react
 import { Input } from '@/shared/components/ui/input'
 import { SplitPanelToggle } from '@/shared/components/layout/MindMapSplitLayout'
 import { cn } from '@/shared/lib/utils'
+import { InlineRenameInput } from '@/shared/ui/inline-rename/InlineRenameInput'
+import { RowContextMenu, type RowMenuEntry } from '@/shared/ui/row-context-menu/RowContextMenu'
 import { usePalaceDirectoryTree } from '../hooks/usePalaceDirectoryTree'
 import {
   expansionKeysForPalace,
@@ -39,6 +41,13 @@ const ROW_METRICS: Record<PalaceDirectoryTreeSize, { indent: number; base: numbe
   page: { indent: 20, base: 4, text: 'text-sm', row: 'py-2', leaf: 'size-4', chevron: 'size-7' },
 }
 
+export interface RowMenuHelpers {
+  /** Turns this row into an input so the host's 「重命名」 runs inline. */
+  beginRename: () => void
+}
+
+export type RowMenuBuilder<T> = (row: T, helpers: RowMenuHelpers) => RowMenuEntry[] | null
+
 export interface PalaceDirectoryTreeViewProps {
   tree: PalaceDirectoryTreeModel
   currentPalaceId: number | null
@@ -47,6 +56,16 @@ export interface PalaceDirectoryTreeViewProps {
   onSelectPalace: (palaceId: number) => void
   /** Enables drag-to-rebind; without it rows are select-only. */
   onBindPalace?: (palaceId: number, chapterId: number | null, subjectId: number | null) => void
+  /** Right-click / long-press menu for a palace row. */
+  palaceMenu?: RowMenuBuilder<DirectoryPalaceNode>
+  chapterMenu?: RowMenuBuilder<DirectoryChapterNode>
+  subjectMenu?: RowMenuBuilder<DirectorySubjectNode>
+  /** 「未分类」 bucket rows only carry host verbs (new palace, open shelf…). */
+  bucketMenu?: (bucketKey: string) => RowMenuEntry[] | null
+  /** Inline rename handlers; the row turns into an input while renaming. */
+  onRenamePalace?: (palaceId: number, nextTitle: string) => void | Promise<void>
+  onRenameChapter?: (chapterId: number, nextName: string) => void | Promise<void>
+  onRenameSubject?: (subjectId: number, nextName: string) => void | Promise<void>
   showHeader?: boolean
   showSearch?: boolean
   searchPlaceholder?: string
@@ -116,6 +135,13 @@ export function PalaceDirectoryTreeView({
   error = null,
   onSelectPalace,
   onBindPalace,
+  palaceMenu,
+  chapterMenu,
+  subjectMenu,
+  bucketMenu,
+  onRenamePalace,
+  onRenameChapter,
+  onRenameSubject,
   showHeader = true,
   showSearch = true,
   searchPlaceholder = '搜索宫殿',
@@ -143,8 +169,24 @@ export function PalaceDirectoryTreeView({
   const [ownKeyword, setKeyword] = useState('')
   const keyword = controlledKeyword ?? ownKeyword
   const [dragOverKey, setDragOverKey] = useState<string | null>(null)
+  const [renamingKey, setRenamingKey] = useState<string | null>(null)
   const activeRowRef = useRef<HTMLButtonElement | null>(null)
   const scrollContainerRef = useRef<HTMLDivElement | null>(null)
+
+  /**
+   * Inline rename: the row itself becomes an input. The menu entry that starts
+   * it is owned by the host, which hands back this `beginRename` through the
+   * row-menu builder — so 「重命名」 keeps one implementation for every list.
+   */
+  const beginRename = useCallback((key: string) => setRenamingKey(key), [])
+  const commitRename = useCallback((
+    handler: ((id: number, next: string) => void | Promise<void>) | undefined,
+    id: number,
+  ) => (next: string) => {
+    setRenamingKey(null)
+    if (handler) void handler(id, next)
+  }, [])
+  const cancelRename = useCallback(() => setRenamingKey(null), [])
 
   useEffect(() => {
     if (!viewStateKey) return
@@ -239,9 +281,12 @@ export function PalaceDirectoryTreeView({
   ) => {
     const active = palace.id === currentPalaceId
     const dropKey = flattenedChapter ? `chapter:${flattenedChapter.id}` : null
-    const row = (
+    const rowKey = `palace:${palace.id}`
+    const rowIndent = { paddingLeft: metrics.base + depth * metrics.indent + (pageList ? 28 : 20) }
+    const renaming = renamingKey === rowKey && Boolean(onRenamePalace)
+    const palaceButton = (
       <button
-        key={`palace:${palace.id}`}
+        key={rowKey}
         type="button"
         ref={active ? activeRowRef : undefined}
         aria-current={active ? 'page' : undefined}
@@ -249,7 +294,7 @@ export function PalaceDirectoryTreeView({
         title={flattenedChapter && flattenedChapter.name !== palace.title
           ? `${flattenedChapter.name} · ${palace.title}`
           : palace.title}
-        draggable={Boolean(onBindPalace)}
+        draggable={Boolean(onBindPalace) && !renaming}
         onDragStart={onBindPalace
           ? (event) => {
             event.dataTransfer.setData(PALACE_DRAG_TYPE, String(palace.id))
@@ -268,12 +313,31 @@ export function PalaceDirectoryTreeView({
             : renderPalaceMeta
               ? 'text-foreground/90 hover:text-foreground'
               : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+          'data-[state=open]:bg-accent data-[state=open]:text-foreground',
         )}
-        style={{ paddingLeft: metrics.base + depth * metrics.indent + (pageList ? 28 : 20) }}
+        style={rowIndent}
       >
         <FileText className={cn(metrics.leaf, 'shrink-0 opacity-60')} aria-hidden />
         <span className="truncate"><Highlighted text={palace.title} query={highlight} /></span>
       </button>
+    )
+    const palaceMenuItems = palaceMenu?.(palace, { beginRename: () => beginRename(rowKey) }) ?? null
+    const row = renaming ? (
+      <div
+        key={rowKey}
+        className={cn('flex min-w-0 items-center gap-1.5 rounded-md', metrics.row, metrics.text, 'w-full')}
+        style={rowIndent}
+      >
+        <FileText className={cn(metrics.leaf, 'shrink-0 opacity-60')} aria-hidden />
+        <InlineRenameInput
+          defaultValue={palace.title}
+          ariaLabel={`重命名 ${palace.title}`}
+          onCommit={commitRename(onRenamePalace, palace.id)}
+          onCancel={cancelRename}
+        />
+      </div>
+    ) : (
+      <RowContextMenu key={rowKey} items={palaceMenuItems}>{palaceButton}</RowContextMenu>
     )
     const rowWithMeta = renderPalaceMeta ? (
       <div
@@ -308,6 +372,22 @@ export function PalaceDirectoryTreeView({
     }
     const key = `chapter:${chapter.id}`
     const isOpen = searching || expanded.has(key)
+    const renaming = renamingKey === key && Boolean(onRenameChapter)
+    const chapterLabel = (
+      <button
+        type="button"
+        onClick={() => toggle(key)}
+        className={cn(
+          'min-w-0 flex-1 truncate pr-1.5 text-left text-foreground/85',
+          metrics.row,
+          metrics.text,
+          'data-[state=open]:text-foreground',
+        )}
+      >
+        <Highlighted text={chapter.name} query={highlight} />
+      </button>
+    )
+    const chapterMenuItems = chapterMenu?.(chapter, { beginRename: () => beginRename(key) }) ?? null
     return (
       <div key={key} className="min-w-0">
         <div
@@ -328,13 +408,17 @@ export function PalaceDirectoryTreeView({
           >
             <ChevronRight className={cn('size-3.5 transition-transform', isOpen && 'rotate-90')} aria-hidden />
           </button>
-          <button
-            type="button"
-            onClick={() => toggle(key)}
-            className={cn('min-w-0 flex-1 truncate pr-1.5 text-left text-foreground/85', metrics.row, metrics.text)}
-          >
-            <Highlighted text={chapter.name} query={highlight} />
-          </button>
+          {renaming ? (
+            <InlineRenameInput
+              defaultValue={chapter.name}
+              ariaLabel={`重命名 ${chapter.name}`}
+              className={cn(metrics.text, metrics.row)}
+              onCommit={commitRename(onRenameChapter, chapter.id)}
+              onCancel={cancelRename}
+            />
+          ) : (
+            <RowContextMenu items={chapterMenuItems}>{chapterLabel}</RowContextMenu>
+          )}
           {renderChapterMeta ? <div className="flex shrink-0 items-center gap-1.5">{renderChapterMeta(chapter)}</div> : null}
         </div>
         {isOpen ? (
@@ -354,6 +438,21 @@ export function PalaceDirectoryTreeView({
     depth: number,
   ) => {
     const isOpen = searching || expanded.has(key)
+    const bucketLabel = (
+      <button
+        type="button"
+        onClick={() => toggle(key)}
+        className={cn(
+          'min-w-0 flex-1 truncate pr-1.5 text-left text-muted-foreground',
+          metrics.row,
+          metrics.text,
+          'data-[state=open]:text-foreground',
+        )}
+      >
+        {label}
+      </button>
+    )
+    const bucketMenuItems = bucketMenu?.(key) ?? null
     return (
       <div key={key} className="min-w-0">
         <div className={cn('group/row flex items-center rounded-md transition-colors', pageList ? 'hover:bg-accent/70' : 'hover:bg-muted/60', renderBucketMeta && 'gap-2 pr-2')}>
@@ -367,13 +466,7 @@ export function PalaceDirectoryTreeView({
           >
             <ChevronRight className={cn('size-3.5 transition-transform', isOpen && 'rotate-90')} aria-hidden />
           </button>
-          <button
-            type="button"
-            onClick={() => toggle(key)}
-            className={cn('min-w-0 flex-1 truncate pr-1.5 text-left text-muted-foreground', metrics.row, metrics.text)}
-          >
-            {label}
-          </button>
+          <RowContextMenu items={bucketMenuItems}>{bucketLabel}</RowContextMenu>
           {renderBucketMeta ? <div className="flex shrink-0 items-center gap-1.5">{renderBucketMeta(key)}</div> : null}
         </div>
         {isOpen ? palaces.map((palace) => renderPalace(palace, depth + 1)) : null}
@@ -399,6 +492,28 @@ export function PalaceDirectoryTreeView({
     if (hideSubjectRows) return <div key={`subject:${subject.id}`}>{renderSubjectChildren(subject, depth)}</div>
     const key = `subject:${subject.id}`
     const isOpen = searching || expanded.has(key)
+    const renaming = renamingKey === key && Boolean(onRenameSubject)
+    const subjectLabel = (
+      <button
+        type="button"
+        onClick={() => toggle(key)}
+        className={cn(
+          'flex min-w-0 flex-1 items-center gap-1.5 pr-1.5 text-left font-medium text-foreground',
+          metrics.row,
+          metrics.text,
+          pageList && 'py-2.5 text-[15px]',
+          'data-[state=open]:text-foreground',
+        )}
+      >
+        <span
+          className="size-2 shrink-0 rounded-full"
+          style={{ backgroundColor: subject.color }}
+          aria-hidden
+        />
+        <span className="truncate"><Highlighted text={subject.name} query={highlight} /></span>
+      </button>
+    )
+    const subjectMenuItems = subjectMenu?.(subject, { beginRename: () => beginRename(key) }) ?? null
     return (
       <div key={key} className={cn('min-w-0', pageList && 'border-b border-border/60 py-1 last:border-b-0')}>
         <div className={cn('group/row flex items-center rounded-md transition-colors', pageList ? 'hover:bg-accent/70' : 'hover:bg-muted/60', renderSubjectMeta && 'gap-2 pr-2')}>
@@ -412,18 +527,19 @@ export function PalaceDirectoryTreeView({
           >
             <ChevronRight className={cn('size-3.5 transition-transform', isOpen && 'rotate-90')} aria-hidden />
           </button>
-          <button
-            type="button"
-            onClick={() => toggle(key)}
-            className={cn('flex min-w-0 flex-1 items-center gap-1.5 pr-1.5 text-left font-medium text-foreground', metrics.row, metrics.text, pageList && 'py-2.5 text-[15px]')}
-          >
-            <span
-              className="size-2 shrink-0 rounded-full"
-              style={{ backgroundColor: subject.color }}
-              aria-hidden
-            />
-            <span className="truncate">{subject.name}</span>
-          </button>
+          {renaming ? (
+            <div className={cn('flex min-w-0 flex-1 items-center gap-1.5', metrics.text, metrics.row)}>
+              <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: subject.color }} aria-hidden />
+              <InlineRenameInput
+                defaultValue={subject.name}
+                ariaLabel={`重命名 ${subject.name}`}
+                onCommit={commitRename(onRenameSubject, subject.id)}
+                onCancel={cancelRename}
+              />
+            </div>
+          ) : (
+            <RowContextMenu items={subjectMenuItems}>{subjectLabel}</RowContextMenu>
+          )}
           {renderSubjectMeta ? <div className="flex shrink-0 items-center gap-1.5">{renderSubjectMeta(subject)}</div> : null}
         </div>
         {isOpen ? renderSubjectChildren(subject, depth + 1) : null}
@@ -500,6 +616,13 @@ export interface PalaceDirectoryTreeProps {
   onOpenPalace: (palaceId: number) => void
   /** Resolve a drop: `chapterId === null` means the 「未分类」 bucket. */
   onBindPalace: (palaceId: number, chapterId: number | null, subjectId: number | null) => void
+  palaceMenu?: RowMenuBuilder<DirectoryPalaceNode>
+  chapterMenu?: RowMenuBuilder<DirectoryChapterNode>
+  subjectMenu?: RowMenuBuilder<DirectorySubjectNode>
+  bucketMenu?: (bucketKey: string) => RowMenuEntry[] | null
+  onRenamePalace?: (palaceId: number, nextTitle: string) => void | Promise<void>
+  onRenameChapter?: (chapterId: number, nextName: string) => void | Promise<void>
+  onRenameSubject?: (subjectId: number, nextName: string) => void | Promise<void>
   className?: string
 }
 
@@ -515,6 +638,13 @@ export function PalaceDirectoryTree({
   currentPalaceId,
   onOpenPalace,
   onBindPalace,
+  palaceMenu,
+  chapterMenu,
+  subjectMenu,
+  bucketMenu,
+  onRenamePalace,
+  onRenameChapter,
+  onRenameSubject,
   className,
 }: PalaceDirectoryTreeProps) {
   const { tree, loading, error } = usePalaceDirectoryTree()
@@ -526,6 +656,13 @@ export function PalaceDirectoryTree({
       error={error}
       onSelectPalace={onOpenPalace}
       onBindPalace={onBindPalace}
+      palaceMenu={palaceMenu}
+      chapterMenu={chapterMenu}
+      subjectMenu={subjectMenu}
+      bucketMenu={bucketMenu}
+      onRenamePalace={onRenamePalace}
+      onRenameChapter={onRenameChapter}
+      onRenameSubject={onRenameSubject}
       className={className}
       viewStateKey={PALACE_EDITOR_DIRECTORY_VIEW_STATE_KEY}
     />

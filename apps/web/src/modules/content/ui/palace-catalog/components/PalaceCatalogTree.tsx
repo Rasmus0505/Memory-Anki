@@ -12,9 +12,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/shared/components/ui/dropdown-menu'
+import { Plus } from 'lucide-react'
 import { cn } from '@/shared/lib/utils'
+import { menuItem } from '@/shared/ui/row-context-menu/compose'
 import { PalaceDirectoryTreeView } from '@/modules/content/ui/palace-edit/components/PalaceDirectoryTree'
 import { PalaceFavoriteButton } from '@/modules/content/ui/palace-favorite'
+import { usePalaceMenuActions } from '@/modules/content/ui/palace-menu/usePalaceMenuActions'
 import { allExpansionKeys, buildPalaceCatalogTree, chapterPalaceIds } from '../model/palaceCatalogTree'
 
 function formatReviewDate(value?: string | null) {
@@ -98,6 +101,7 @@ export function PalaceCatalogTree({
   highlight,
 }: PalaceCatalogTreeProps) {
   const navigate = useNavigate()
+  const rowMenus = usePalaceMenuActions()
   const { tree, palacesById } = useMemo(() => buildPalaceCatalogTree(grouped), [grouped])
   const [progressPalaceId, setProgressPalaceId] = useState<number | null>(null)
   // Only the first tree decides the initial folds.
@@ -121,6 +125,30 @@ export function PalaceCatalogTree({
         emptyState={emptyState}
         highlight={highlight}
         onSelectPalace={(palaceId) => navigate(`/palaces/${palaceId}/edit`)}
+        palaceMenu={(palace, { beginRename }) => rowMenus.palaceMenu(palace, {
+          rename: { onSelect: beginRename },
+          isFavorite: palacesById.get(palace.id)?.is_favorite,
+          extra: [
+            menuItem('复习进度面板', CalendarClock, () => setProgressPalaceId(palace.id)),
+          ],
+        })}
+        chapterMenu={(chapter, { beginRename }) => rowMenus.chapterMenu(
+          { id: chapter.id, name: chapter.name, subjectId: chapter.subjectId },
+          { rename: { onSelect: beginRename } },
+        )}
+        subjectMenu={(subject, { beginRename }) => rowMenus.subjectMenu(
+          { id: subject.id, name: subject.name },
+          { rename: { onSelect: beginRename } },
+        )}
+        bucketMenu={(bucketKey) => {
+          const match = /^subject:(\d+):ungrouped$/.exec(bucketKey)
+          if (!match) return null
+          const subjectId = Number(match[1])
+          return [menuItem('在此学科新建宫殿', Plus, () => { void rowMenus.createPalaceIn(subjectId, null) })]
+        }}
+        onRenamePalace={rowMenus.renamePalaceTo}
+        onRenameChapter={rowMenus.renameChapterTo}
+        onRenameSubject={rowMenus.renameSubjectTo}
         renderBucketMeta={(bucketKey) => (bucketKey === 'root:ungrouped' && !hideSubjectRows ? (
           <Button asChild size="icon" variant="ghost" className={cn('size-7 text-muted-foreground', HOVER_REVEAL)}>
             <Link to="/palaces/list?uncategorized=true" aria-label="打开 未分类 书架" title="打开未分类的宫殿列表">
@@ -248,6 +276,7 @@ export function PalaceCatalogTree({
       {progressPalaceId != null ? (
         <PalaceReviewUnitsPanel open palaceId={progressPalaceId} onClose={() => setProgressPalaceId(null)} />
       ) : null}
+      {rowMenus.moveDialog}
     </>
   )
 }

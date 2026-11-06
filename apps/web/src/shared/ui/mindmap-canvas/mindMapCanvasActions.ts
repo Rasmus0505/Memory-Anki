@@ -133,9 +133,9 @@ export function buildNodeActions({
           },
         } satisfies ContextMenuAction]
       : []),
-    // Root (palace frame / scoped unit root) is not a knowledge point: wrapping it
-    // would push every top-level branch a level deeper for no content reason.
-    ...(!multiTarget && !isRoot && allowAddChild && onInsertChildLayer
+    // Root keeps this row: inserting one layer under the palace frame is exactly
+    // how a flat first level gets grouped (e.g. 编 → 章).
+    ...(!multiTarget && allowAddChild && onInsertChildLayer
       ? [{
           label: '插入子知识点（原内容降一级）',
           icon: BetweenHorizontalStart,

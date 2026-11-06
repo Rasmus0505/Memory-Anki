@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import { CheckCircle2, FileText, LoaderCircle, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { CheckCircle2, CheckSquare, Copy, FileText, LoaderCircle, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { RowContextMenu } from '@/shared/ui/row-context-menu/RowContextMenu'
+import { composeMenu, menuItem } from '@/shared/ui/row-context-menu/compose'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
@@ -212,14 +214,37 @@ export function PalaceQuizManagePanel({
             />
           ) : (
             <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
-              {filteredQuestions.map((question, index) => (
-                <div
+              {filteredQuestions.map((question, index) => {
+                const selected = selectedQuestionIds.includes(question.id)
+                const deleting = manageBulkDeleting || manageDeletingId === question.id
+                return (
+                <RowContextMenu
                   key={question.id}
+                  items={composeMenu(
+                    [menuItem('编辑题目', Pencil, () => onEditQuestion(question), {
+                      disabled: !canManuallyEditQuestion(question.question_type),
+                    })],
+                    [menuItem(
+                      selected ? '取消选择' : '选择题目',
+                      CheckSquare,
+                      () => onToggleQuestionSelection(question.id, !selected),
+                    )],
+                    [menuItem('复制题干', Copy, () => {
+                      void navigator.clipboard?.writeText(question.stem).catch(() => undefined)
+                    })],
+                    [menuItem('删除题目', Trash2, () => void onDeleteQuestion(question.id), {
+                      danger: true,
+                      disabled: deleting,
+                    })],
+                  )}
+                >
+                <div
                   className={cn(
-                    'rounded-xl border px-3 py-3',
+                    'rounded-xl border px-3 py-3 transition-shadow',
                     editingQuestionId === question.id
                       ? 'border-primary/40 bg-primary/5'
                       : 'border-border/70 bg-background/70',
+                    'data-[state=open]:border-primary/50 data-[state=open]:ring-1 data-[state=open]:ring-primary/30',
                   )}
                 >
                   <div className="flex flex-wrap items-start justify-between gap-2">
@@ -294,7 +319,9 @@ export function PalaceQuizManagePanel({
                     </div>
                   </div>
                 </div>
-              ))}
+                </RowContextMenu>
+                )
+              })}
             </div>
           )}
         </CardContent>

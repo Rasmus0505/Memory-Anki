@@ -24,8 +24,10 @@ import { PalaceVersionDialog } from './PalaceVersionDialog'
 import { usePalaceMindMapFileTransfer } from '@/modules/content/public'
 import { MindMapImportDrawer, readClipboardTextForMindMapImport, useMindMapImport } from '@/modules/produce/public'
 import { usePalaceEditPage } from '@/modules/content/public'
+import { usePalaceMenuActions } from '@/modules/content/public'
+import type { ChapterTarget } from '@/modules/content/public'
 import { PalaceCreateSetup } from './PalaceCreateSetup'
-import { useShellContext } from '@/shared/components/layout/ShellContext'
+import { isStoredBoolean, useLocalStorageState } from '@/shared/lib/localStorage'
 import { useQuizLauncher } from '@/widgets/quiz-launcher'
 import { PalaceMemoryLookupDialog } from '@/widgets/palace-memory-lookup'
 import { useRouteResidency } from '@/shared/routing/RouteResidency'
@@ -54,6 +56,13 @@ import {
   togglePermanentMarkInDoc,
   type EditorDoc,
 } from '@/shared/lib/mindmap-split-marks/splitMarks'
+
+const PALACE_EDITOR_DIRECTORY_COLLAPSED_STORAGE_KEY = 'memory_anki.palace_editor_directory_collapsed'
+
+function isNarrowViewport() {
+  return typeof window !== 'undefined'
+    && Boolean(window.matchMedia?.('(max-width: 767px)').matches)
+}
 
 function SaveStatusBadge({
   status,
@@ -110,20 +119,14 @@ export default function PalaceEdit() {
   const [templateSaving, setTemplateSaving] = useState(false)
   const [permanentMarkMode, setPermanentMarkMode] = useState(false)
   const [reviewUnitsPanelOpen, setReviewUnitsPanelOpen] = useState(false)
-  // One collapse control lives on the app sidebar; the editor's directory panel
-  // follows the same state so a single click clears both. Tests render the page
-  // without a shell provider, so keep a local fallback with identical semantics.
-  const shell = useShellContext()
-  const isNarrowViewport = () => (
-    typeof window !== 'undefined' && Boolean(window.matchMedia?.('(max-width: 767px)').matches)
+  // The directory has its own collapse rail. It must not ride the app nav's
+  // state: hiding the nav is a navigation choice, not a choice to lose the
+  // catalog. The first visit on a phone starts folded; the choice sticks.
+  const [sidePanelCollapsed, setSidePanelCollapsed] = useLocalStorageState(
+    PALACE_EDITOR_DIRECTORY_COLLAPSED_STORAGE_KEY,
+    isNarrowViewport(),
+    isStoredBoolean,
   )
-  const [localSidePanelCollapsed, setLocalSidePanelCollapsed] = useState(isNarrowViewport)
-  const sidePanelCollapsed = shell ? shell.sidebarCollapsed : localSidePanelCollapsed
-  const setSidePanelCollapsed = shell ? shell.setSidebarCollapsed : setLocalSidePanelCollapsed
-  useEffect(() => {
-    if (shell || !isNarrowViewport()) return
-    setLocalSidePanelCollapsed(true)
-  }, [shell])
 
   // Re-read on every residency activation: keep-alive can remount search without
   // remounting this component, so a bare [] would miss later ?mode=permanent-mark.
@@ -302,6 +305,41 @@ export default function PalaceEdit() {
       invalidatePalaceCatalogCache()
     }
   }, [page])
+
+  /**
+   * 目录里的右键/长按菜单。移动当前宫殿会重载文稿，所以先 flush 再确认丢弃；
+   * 其余动作交给共享 hook（改名、收藏、删除、复制链接、新建）。
+   */
+  const rowMenus = usePalaceMenuActions({
+    onChanged: (id) => {
+      if (id === page.palaceId) void page.reload()
+    },
+    onDeleted: (id) => {
+      if (id === page.palaceId) navigate('/palaces')
+    },
+    beforeMove: async (palaceId: number, _target: ChapterTarget) => {
+      if (palaceId !== page.palaceId) return true
+      const current = page.readCurrentDocumentState()
+      if (current?.pendingConflict) {
+        toast.warning('请先解决当前宫殿的文档冲突，再移动宫殿。')
+        return false
+      }
+      if (current && (current.dirty || page.saveStatus === 'saving')) {
+        try {
+          await page.flushSaveWithReconcile('editor_leave', { reconcileUnits: true })
+        } catch {
+          // 下面会再次检查脏标记并让用户确认。
+        }
+        if (page.readCurrentDocumentState()?.dirty) {
+          return appConfirm(
+            '当前宫殿还有未保存的修改，移动后可能丢失。仍要移动吗？',
+            { title: '移动宫殿', tone: 'danger' },
+          )
+        }
+      }
+      return true
+    },
+  })
 
   const recallModeActive = page.editorMode === 'recall'
   const showTemplateCreateAction = useMemo(() => {
@@ -532,7 +570,7 @@ export default function PalaceEdit() {
           collapsed={sidePanelCollapsed}
           onCollapsedChange={setSidePanelCollapsed}
           hidden={page.mindMapFullscreen}
-          railMode={shell ? 'below-lg' : 'always'}
+          railMode="always"
           collapseLabel="收起宫殿目录"
           expandLabel="展开宫殿目录"
           sidePanel={(
@@ -551,7 +589,23 @@ export default function PalaceEdit() {
                   currentPalaceId={page.palaceId}
                   onOpenPalace={(palaceId) => { void page.openPalace(palaceId) }}
                   onBindPalace={handleBindPalace}
+                  palaceMenu={(palace, { beginRename }) => rowMenus.palaceMenu(palace, {
+                    open: { onSelect: () => { void page.openPalace(palace.id) } },
+                    rename: { onSelect: beginRename },
+                  })}
+                  chapterMenu={(chapter, { beginRename }) => rowMenus.chapterMenu(
+                    { id: chapter.id, name: chapter.name, subjectId: chapter.subjectId },
+                    { rename: { onSelect: beginRename } },
+                  )}
+                  subjectMenu={(subject, { beginRename }) => rowMenus.subjectMenu(
+                    { id: subject.id, name: subject.name },
+                    { rename: { onSelect: beginRename } },
+                  )}
+                  onRenamePalace={rowMenus.renamePalaceTo}
+                  onRenameChapter={rowMenus.renameChapterTo}
+                  onRenameSubject={rowMenus.renameSubjectTo}
                 />
+                {rowMenus.moveDialog}
               </div>
             </div>
           )}
