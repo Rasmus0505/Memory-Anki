@@ -1,0 +1,726 @@
+[
+  {
+    "expected": {
+      "bound_quiz_placement": "into_mix",
+      "content": {
+        "anki_card": false,
+        "mindmap_branch": true,
+        "quiz_question": true
+      },
+      "learn_scope": [
+        "new",
+        "review"
+      ],
+      "mix": {
+        "ratios": {
+          "english": 1,
+          "memory_palace": 2,
+          "quiz": 1
+        },
+        "strategy": "ratio"
+      },
+      "mix_mode": "ratio",
+      "mix_ratio": {
+        "mindmap": 2,
+        "quiz": 1
+      },
+      "mixed_modes": [
+        "memory_palace",
+        "quiz"
+      ],
+      "new_placement": "new_first",
+      "overlay_question_kinds": [
+        "objective",
+        "subjective"
+      ],
+      "overlay_question_range": "round_units",
+      "overlay_quiz_setup_done": false,
+      "overlay_rating_inherit": "lowest_reviewed",
+      "overlay_type_order": "interleave",
+      "overlay_type_palace_nesting": "palace_then_type",
+      "palace_order": "finish_palace_then_next",
+      "question_type": "all",
+      "quiz_mastery_buckets": [
+        "unseen",
+        "weak",
+        "reinforce"
+      ],
+      "quiz_order": "new_first",
+      "quiz_scope": "cross_palace_random",
+      "review_new_ratio": 4,
+      "seed": 17,
+      "specific_palace_ids": [],
+      "streams": {
+        "english": {
+          "extra_palace_ids": [],
+          "palace_order": "finish_palace_then_next",
+          "specific_palace_ids": [],
+          "subject_ids": [],
+          "subject_scope": "english",
+          "unit_order": "structured"
+        },
+        "memory_palace": {
+          "extra_palace_ids": [],
+          "palace_order": "finish_palace_then_next",
+          "specific_palace_ids": [],
+          "subject_ids": [],
+          "subject_scope": "all",
+          "unit_order": "structured"
+        },
+        "quiz": {
+          "extra_palace_ids": [],
+          "mastery_buckets": [
+            "unseen",
+            "weak",
+            "reinforce"
+          ],
+          "order": "new_first",
+          "overlay_question_range": "round_units",
+          "question_type": "all",
+          "quiz_scope": "cross_palace_random",
+          "specific_palace_ids": [],
+          "subject_ids": [],
+          "subject_scope": "all",
+          "weak_priority": true
+        }
+      },
+      "subject_ids": [],
+      "subject_scope": "all",
+      "training_mode": "mixed",
+      "unit_order": "structured",
+      "weak_quiz_priority": true,
+      "weights": {
+        "anki_card": 0,
+        "mindmap_branch": 2,
+        "quiz_question": 1
+      }
+    },
+    "input": {},
+    "name": "empty"
+  },
+  {
+    "expected": {
+      "bound_quiz_placement": "into_mix",
+      "content": {
+        "anki_card": false,
+        "mindmap_branch": true,
+        "quiz_question": false
+      },
+      "learn_scope": [
+        "new",
+        "review"
+      ],
+      "mix": {
+        "ratios": {
+          "english": 1,
+          "memory_palace": 2,
+          "quiz": 1
+        },
+        "strategy": "ratio"
+      },
+      "mix_mode": "mindmap_only",
+      "mix_ratio": {
+        "mindmap": 2,
+        "quiz": 1
+      },
+      "mixed_modes": [
+        "memory_palace"
+      ],
+      "new_placement": "new_first",
+      "overlay_question_kinds": [
+        "objective",
+        "subjective"
+      ],
+      "overlay_question_range": "round_units",
+      "overlay_quiz_setup_done": false,
+      "overlay_rating_inherit": "lowest_reviewed",
+      "overlay_type_order": "interleave",
+      "overlay_type_palace_nesting": "palace_then_type",
+      "palace_order": "interleave_palaces",
+      "question_type": "all",
+      "quiz_mastery_buckets": [
+        "unseen",
+        "weak",
+        "reinforce"
+      ],
+      "quiz_order": "new_first",
+      "quiz_scope": "cross_palace_random",
+      "review_new_ratio": 4,
+      "seed": 17,
+      "specific_palace_ids": [
+        5,
+        7
+      ],
+      "streams": {
+        "english": {
+          "extra_palace_ids": [],
+          "palace_order": "interleave_palaces",
+          "specific_palace_ids": [
+            5,
+            7
+          ],
+          "subject_ids": [],
+          "subject_scope": "english",
+          "unit_order": "structured"
+        },
+        "memory_palace": {
+          "extra_palace_ids": [],
+          "palace_order": "interleave_palaces",
+          "specific_palace_ids": [
+            5,
+            7
+          ],
+          "subject_ids": [],
+          "subject_scope": "english",
+          "unit_order": "structured"
+        },
+        "quiz": {
+          "extra_palace_ids": [],
+          "mastery_buckets": [
+            "unseen",
+            "weak",
+            "reinforce"
+          ],
+          "order": "new_first",
+          "overlay_question_range": "round_units",
+          "question_type": "all",
+          "quiz_scope": "cross_palace_random",
+          "specific_palace_ids": [
+            5,
+            7
+          ],
+          "subject_ids": [],
+          "subject_scope": "english",
+          "weak_priority": true
+        }
+      },
+      "subject_ids": [],
+      "subject_scope": "english",
+      "training_mode": "memory_palace",
+      "unit_order": "structured",
+      "weak_quiz_priority": true,
+      "weights": {
+        "anki_card": 0,
+        "mindmap_branch": 2,
+        "quiz_question": 0
+      }
+    },
+    "input": {
+      "content": {
+        "mindmap_branch": true,
+        "quiz_question": false
+      },
+      "mix_mode": "mindmap_only",
+      "palace_order": "interleave_palaces",
+      "specific_palace_ids": [
+        5,
+        5,
+        -1,
+        "7"
+      ],
+      "subject_scope": "english",
+      "unit_order": "random"
+    },
+    "name": "legacy-flat-english"
+  },
+  {
+    "expected": {
+      "bound_quiz_placement": "into_mix",
+      "content": {
+        "anki_card": false,
+        "mindmap_branch": true,
+        "quiz_question": false
+      },
+      "learn_scope": [
+        "new",
+        "review"
+      ],
+      "mix": {
+        "ratios": {
+          "english": 1,
+          "memory_palace": 2,
+          "quiz": 1
+        },
+        "strategy": "ratio"
+      },
+      "mix_mode": "mindmap_only",
+      "mix_ratio": {
+        "mindmap": 2,
+        "quiz": 1
+      },
+      "mixed_modes": [
+        "memory_palace"
+      ],
+      "new_placement": "new_first",
+      "overlay_question_kinds": [
+        "objective",
+        "subjective"
+      ],
+      "overlay_question_range": "round_units",
+      "overlay_quiz_setup_done": false,
+      "overlay_rating_inherit": "lowest_reviewed",
+      "overlay_type_order": "interleave",
+      "overlay_type_palace_nesting": "palace_then_type",
+      "palace_order": "finish_palace_then_next",
+      "question_type": "all",
+      "quiz_mastery_buckets": [
+        "unseen",
+        "weak",
+        "reinforce"
+      ],
+      "quiz_order": "new_first",
+      "quiz_scope": "cross_palace_random",
+      "review_new_ratio": 4,
+      "seed": 17,
+      "specific_palace_ids": [
+        3,
+        1
+      ],
+      "streams": {
+        "english": {
+          "extra_palace_ids": [],
+          "palace_order": "finish_palace_then_next",
+          "specific_palace_ids": [],
+          "subject_ids": [],
+          "subject_scope": "english",
+          "unit_order": "structured"
+        },
+        "memory_palace": {
+          "extra_palace_ids": [],
+          "palace_order": "finish_palace_then_next",
+          "specific_palace_ids": [
+            3,
+            1
+          ],
+          "subject_ids": [
+            2
+          ],
+          "subject_scope": "all",
+          "unit_order": "structured"
+        },
+        "quiz": {
+          "extra_palace_ids": [],
+          "mastery_buckets": [
+            "unseen",
+            "weak",
+            "reinforce"
+          ],
+          "order": "new_first",
+          "overlay_question_range": "round_units",
+          "question_type": "all",
+          "quiz_scope": "cross_palace_random",
+          "specific_palace_ids": [],
+          "subject_ids": [],
+          "subject_scope": "all",
+          "weak_priority": true
+        }
+      },
+      "subject_ids": [
+        2
+      ],
+      "subject_scope": "all",
+      "training_mode": "memory_palace",
+      "unit_order": "structured",
+      "weak_quiz_priority": true,
+      "weights": {
+        "anki_card": 0,
+        "mindmap_branch": 2,
+        "quiz_question": 0
+      }
+    },
+    "input": {
+      "streams": {
+        "memory_palace": {
+          "specific_palace_ids": [
+            3,
+            1,
+            3,
+            -1
+          ],
+          "subject_ids": [
+            2,
+            2
+          ],
+          "subject_scope": "english"
+        }
+      },
+      "training_mode": "memory_palace"
+    },
+    "name": "streams-subject-ids-win"
+  },
+  {
+    "expected": {
+      "bound_quiz_placement": "into_mix",
+      "content": {
+        "anki_card": false,
+        "mindmap_branch": true,
+        "quiz_question": false
+      },
+      "learn_scope": [
+        "new",
+        "review"
+      ],
+      "mix": {
+        "ratios": {
+          "english": 1,
+          "memory_palace": 2,
+          "quiz": 1
+        },
+        "strategy": "ratio"
+      },
+      "mix_mode": "mindmap_only",
+      "mix_ratio": {
+        "mindmap": 2,
+        "quiz": 1
+      },
+      "mixed_modes": [
+        "memory_palace"
+      ],
+      "new_placement": "new_first",
+      "overlay_question_kinds": [
+        "objective",
+        "subjective"
+      ],
+      "overlay_question_range": "round_units",
+      "overlay_quiz_setup_done": false,
+      "overlay_rating_inherit": "lowest_reviewed",
+      "overlay_type_order": "interleave",
+      "overlay_type_palace_nesting": "palace_then_type",
+      "palace_order": "finish_palace_then_next",
+      "question_type": "multiple_choice",
+      "quiz_mastery_buckets": [
+        "unseen",
+        "weak",
+        "reinforce"
+      ],
+      "quiz_order": "random",
+      "quiz_scope": "single_palace_random",
+      "review_new_ratio": 4,
+      "seed": 17,
+      "specific_palace_ids": [
+        9
+      ],
+      "streams": {
+        "english": {
+          "extra_palace_ids": [],
+          "palace_order": "finish_palace_then_next",
+          "specific_palace_ids": [],
+          "subject_ids": [],
+          "subject_scope": "english",
+          "unit_order": "structured"
+        },
+        "memory_palace": {
+          "extra_palace_ids": [
+            7
+          ],
+          "palace_order": "finish_palace_then_next",
+          "specific_palace_ids": [
+            9
+          ],
+          "subject_ids": [],
+          "subject_scope": "all",
+          "unit_order": "structured"
+        },
+        "quiz": {
+          "extra_palace_ids": [
+            7
+          ],
+          "mastery_buckets": [
+            "unseen",
+            "weak",
+            "reinforce"
+          ],
+          "order": "random",
+          "overlay_question_range": "round_units",
+          "question_type": "multiple_choice",
+          "quiz_scope": "single_palace_random",
+          "specific_palace_ids": [
+            9
+          ],
+          "subject_ids": [],
+          "subject_scope": "all",
+          "weak_priority": true
+        }
+      },
+      "subject_ids": [],
+      "subject_scope": "all",
+      "training_mode": "memory_palace",
+      "unit_order": "structured",
+      "weak_quiz_priority": true,
+      "weights": {
+        "anki_card": 0,
+        "mindmap_branch": 2,
+        "quiz_question": 0
+      }
+    },
+    "input": {
+      "streams": {
+        "memory_palace": {
+          "extra_palace_ids": [
+            7,
+            7,
+            -2
+          ],
+          "specific_palace_ids": [
+            9
+          ],
+          "subject_scope": "all"
+        },
+        "quiz": {
+          "extra_palace_ids": [
+            7
+          ],
+          "order": "random",
+          "question_type": "multiple_choice",
+          "quiz_scope": "single_palace_random",
+          "specific_palace_ids": [
+            9
+          ]
+        }
+      },
+      "training_mode": "memory_palace"
+    },
+    "name": "extras-widen-both-streams"
+  },
+  {
+    "expected": {
+      "bound_quiz_placement": "into_mix",
+      "content": {
+        "anki_card": false,
+        "mindmap_branch": true,
+        "quiz_question": true
+      },
+      "learn_scope": [
+        "new"
+      ],
+      "mix": {
+        "ratios": {
+          "english": 1,
+          "memory_palace": 3,
+          "quiz": 2
+        },
+        "strategy": "ratio"
+      },
+      "mix_mode": "ratio",
+      "mix_ratio": {
+        "mindmap": 3,
+        "quiz": 2
+      },
+      "mixed_modes": [
+        "quiz",
+        "memory_palace"
+      ],
+      "new_placement": "new_first",
+      "overlay_question_kinds": [
+        "objective",
+        "subjective"
+      ],
+      "overlay_question_range": "round_units",
+      "overlay_quiz_setup_done": false,
+      "overlay_rating_inherit": "lowest_reviewed",
+      "overlay_type_order": "interleave",
+      "overlay_type_palace_nesting": "palace_then_type",
+      "palace_order": "finish_palace_then_next",
+      "question_type": "all",
+      "quiz_mastery_buckets": [
+        "weak",
+        "unseen"
+      ],
+      "quiz_order": "new_first",
+      "quiz_scope": "cross_palace_random",
+      "review_new_ratio": 2,
+      "seed": 99,
+      "specific_palace_ids": [],
+      "streams": {
+        "english": {
+          "extra_palace_ids": [],
+          "palace_order": "finish_palace_then_next",
+          "specific_palace_ids": [],
+          "subject_ids": [],
+          "subject_scope": "english",
+          "unit_order": "structured"
+        },
+        "memory_palace": {
+          "extra_palace_ids": [],
+          "palace_order": "finish_palace_then_next",
+          "specific_palace_ids": [],
+          "subject_ids": [],
+          "subject_scope": "all",
+          "unit_order": "structured"
+        },
+        "quiz": {
+          "extra_palace_ids": [],
+          "mastery_buckets": [
+            "weak",
+            "unseen"
+          ],
+          "order": "new_first",
+          "overlay_question_range": "round_units",
+          "question_type": "all",
+          "quiz_scope": "cross_palace_random",
+          "specific_palace_ids": [],
+          "subject_ids": [],
+          "subject_scope": "all",
+          "weak_priority": true
+        }
+      },
+      "subject_ids": [],
+      "subject_scope": "all",
+      "training_mode": "mixed",
+      "unit_order": "structured",
+      "weak_quiz_priority": true,
+      "weights": {
+        "anki_card": 0,
+        "mindmap_branch": 3,
+        "quiz_question": 2
+      }
+    },
+    "input": {
+      "learn_scope": [
+        "new"
+      ],
+      "mix": {
+        "ratios": {
+          "memory_palace": 3,
+          "quiz": 2
+        },
+        "strategy": "ratio"
+      },
+      "mixed_modes": [
+        "quiz",
+        "memory_palace"
+      ],
+      "quiz_mastery_buckets": [
+        "weak",
+        "unseen"
+      ],
+      "review_new_ratio": 2,
+      "seed": 99,
+      "training_mode": "mixed"
+    },
+    "name": "mixed-modes-and-mix"
+  },
+  {
+    "expected": {
+      "bound_quiz_placement": "into_mix",
+      "content": {
+        "anki_card": false,
+        "mindmap_branch": true,
+        "quiz_question": true
+      },
+      "learn_scope": [
+        "new",
+        "review"
+      ],
+      "mix": {
+        "ratios": {
+          "english": 1,
+          "memory_palace": 2,
+          "quiz": 1
+        },
+        "strategy": "ratio"
+      },
+      "mix_mode": "ratio",
+      "mix_ratio": {
+        "mindmap": 2,
+        "quiz": 1
+      },
+      "mixed_modes": [
+        "memory_palace",
+        "quiz"
+      ],
+      "new_placement": "new_first",
+      "overlay_question_kinds": [
+        "objective",
+        "subjective"
+      ],
+      "overlay_question_range": "round_units",
+      "overlay_quiz_setup_done": false,
+      "overlay_rating_inherit": "lowest_reviewed",
+      "overlay_type_order": "interleave",
+      "overlay_type_palace_nesting": "palace_then_type",
+      "palace_order": "finish_palace_then_next",
+      "question_type": "short_answer",
+      "quiz_mastery_buckets": [
+        "unseen",
+        "weak",
+        "reinforce"
+      ],
+      "quiz_order": "new_first",
+      "quiz_scope": "cross_palace_random",
+      "review_new_ratio": 4,
+      "seed": 17,
+      "specific_palace_ids": [
+        4,
+        2
+      ],
+      "streams": {
+        "english": {
+          "extra_palace_ids": [],
+          "palace_order": "finish_palace_then_next",
+          "specific_palace_ids": [],
+          "subject_ids": [],
+          "subject_scope": "english",
+          "unit_order": "structured"
+        },
+        "memory_palace": {
+          "extra_palace_ids": [],
+          "palace_order": "finish_palace_then_next",
+          "specific_palace_ids": [
+            4,
+            2
+          ],
+          "subject_ids": [],
+          "subject_scope": "non_english",
+          "unit_order": "structured"
+        },
+        "quiz": {
+          "extra_palace_ids": [],
+          "mastery_buckets": [
+            "unseen",
+            "weak",
+            "reinforce"
+          ],
+          "order": "new_first",
+          "overlay_question_range": "round_units",
+          "question_type": "short_answer",
+          "quiz_scope": "cross_palace_random",
+          "specific_palace_ids": [
+            4,
+            2
+          ],
+          "subject_ids": [],
+          "subject_scope": "non_english",
+          "weak_priority": false
+        }
+      },
+      "subject_ids": [],
+      "subject_scope": "all",
+      "training_mode": "mixed",
+      "unit_order": "structured",
+      "weak_quiz_priority": false,
+      "weights": {
+        "anki_card": 0,
+        "mindmap_branch": 2,
+        "quiz_question": 1
+      }
+    },
+    "input": {
+      "mindmap_enabled": true,
+      "mix_mode": "ratio",
+      "mix_ratio": {
+        "mindmap": 2,
+        "quiz": 1
+      },
+      "question_type": "short_answer",
+      "quiz_enabled": true,
+      "specific_palace_ids": [
+        4,
+        2
+      ],
+      "subject_scope": "non_english",
+      "weak_quiz_priority": false
+    },
+    "name": "legacy-v1"
+  }
+]
