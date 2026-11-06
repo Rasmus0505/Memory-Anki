@@ -14,7 +14,9 @@ import {
   markPalaceRootApi,
 } from '@/modules/practice/ui/review/api/unitReviewApi'
 import {
+  completedSourceCardIdsForPalace,
   findPalaceJumpTarget,
+  palaceHasPlanCards,
   resolvePalaceDirectoryClick,
   type FreestylePalaceJoinState,
 } from '@/modules/practice/ui/freestyle/model/freestyle-palace-directory'
@@ -38,6 +40,8 @@ export interface FreestylePalaceDirectoryActionsOptions {
     updater: (current: FreestyleFeedConfig) => FreestyleFeedConfig,
     options?: { silent?: boolean; preferCardId?: string | null },
   ) => void
+  /** Un-complete a palace's scored cards and rebuild, so they can be rated again. */
+  reopenPalaceCards: (palaceId: number) => Promise<string[]>
 }
 
 /**
@@ -57,6 +61,7 @@ export function useFreestylePalaceDirectoryActions({
   currentCardId,
   jumpFromProgressRail,
   setConfigAndPersist,
+  reopenPalaceCards,
 }: FreestylePalaceDirectoryActionsOptions) {
   const navigate = useNavigate()
   const [palaceJoin, setPalaceJoin] = useState<FreestylePalaceJoinState | null>(null)
@@ -86,7 +91,7 @@ export function useFreestylePalaceDirectoryActions({
     return true
   }, [cards, completedIds, encounters, jumpFromProgressRail, roundPlan])
 
-  const addPalaceToRound = useCallback((palaceId: number) => {
+  const addPalaceToRound = useCallback((palaceId: number, widening = true) => {
     clearPendingPalaceJump()
     pendingPalaceJumpRef.current = palaceId
     palaceJumpTimerRef.current = window.setTimeout(() => {
@@ -95,13 +100,22 @@ export function useFreestylePalaceDirectoryActions({
       pendingPalaceJumpRef.current = null
       toast.info('还没排进来：可能不在「新学 / 复习」范围，或队列仍在更新')
     }, PENDING_JUMP_TIMEOUT_MS)
+    if (!widening) {
+      // Already in this round but fully scored: put its cards back for re-rating.
+      void reopenPalaceCards(palaceId)
+        .then((ids) => {
+          if (!ids.length) toast.info('这座宫殿本轮没有可重新评分的卡')
+        })
+        .catch(() => toast.error('重新评分失败，请稍后再试。'))
+      return
+    }
     // Silent: the learner is mid-review, so the queue rebuild must not blank
     // the card they are reading. The jump lands once the new card exists.
     setConfigAndPersist((current) => addExtraPalace(current, palaceId), {
       silent: true,
       preferCardId: currentCardId,
     })
-  }, [clearPendingPalaceJump, currentCardId, setConfigAndPersist])
+  }, [clearPendingPalaceJump, currentCardId, reopenPalaceCards, setConfigAndPersist])
 
   /**
    * A directory click never rewrites the round's scope. It either moves to the
@@ -119,6 +133,21 @@ export function useFreestylePalaceDirectoryActions({
       return
     }
     if (jumpToPalaceIfScheduled(palaceId)) return
+    // The queue filters completed cards, so a palace already in this round can
+    // look "not in the round" when every card of it is scored. Ask the plan and
+    // offer 重新评分 instead of a pointless 加入本轮.
+    const completed = completedSourceCardIdsForPalace(
+      roundPlan,
+      palaceId,
+      new Set(completedIds.map(String)),
+    )
+    if (palaceHasPlanCards(roundPlan, palaceId) && completed.length > 0) {
+      const title = Object.values(roundPlan?.cardsById ?? {})
+        .find((entry) => entry.palaceId === palaceId && entry.occurrenceKind !== 'retry')
+        ?.palaceTitle || '这座宫殿'
+      setPalaceJoin({ kind: 'scored', palaceId, title, cardCount: completed.length })
+      return
+    }
     setPalaceJoinBusy(true)
     getPalaceReviewUnitsApi(palaceId)
       .then((projection) => {
@@ -144,7 +173,7 @@ export function useFreestylePalaceDirectoryActions({
           : '读不到这座宫殿的复习进度，请稍后再试。',
       ))
       .finally(() => setPalaceJoinBusy(false))
-  }, [currentPalaceId, jumpToPalaceIfScheduled, navigate, reviewPalaceId])
+  }, [completedIds, currentPalaceId, jumpToPalaceIfScheduled, navigate, reviewPalaceId, roundPlan])
 
   const cancelPalaceJoin = useCallback(() => setPalaceJoin(null), [])
 
@@ -155,7 +184,13 @@ export function useFreestylePalaceDirectoryActions({
   }, [navigate])
 
   const confirmPalaceJoin = useCallback(() => {
-    if (!palaceJoin || (palaceJoin.kind !== 'join' && palaceJoin.kind !== 'unmarked')) return
+    if (!palaceJoin) return
+    if (palaceJoin.kind === 'scored') {
+      setPalaceJoin(null)
+      addPalaceToRound(palaceJoin.palaceId, false)
+      return
+    }
+    if (palaceJoin.kind !== 'join' && palaceJoin.kind !== 'unmarked') return
     const state = palaceJoin
     setPalaceJoinBusy(true)
     const proceed = state.kind === 'unmarked'

@@ -83,6 +83,7 @@ import {
   removeUnansweredRetryOccurrences,
   restoreExplicitlySelectedCards,
   sourceCardId,
+  cardPalaceId,
   cardUnitId,
   reviewUnitIdFromCardId,
   emitFreestylePeerRound,
@@ -2357,6 +2358,72 @@ export function useImmersiveQueue(
     )
   }, [applyCurrentIndex, persistQueueState])
 
+  /**
+   * 重新评分: put a palace's already-scored source cards back into this round.
+   *
+   * The queue excludes completed cards, so a palace that was fully rated has
+   * no live card to jump to. Un-completing is the same command as tapping a
+   * rating off: the server drops the encounter and cancels the retries that
+   * only existed because of that rating, and the card is served fresh.
+   */
+  const reopenPalaceCards = useCallback(async (palaceId: number): Promise<string[]> => {
+    const current = queueStateRef.current
+    const completed = new Set(current.completedIds.map(String))
+    const ids = new Set<string>()
+    for (const [cardId, entry] of Object.entries(current.roundPlan?.cardsById ?? {})) {
+      if (entry.palaceId !== palaceId || entry.occurrenceKind === 'retry') continue
+      if (completed.has(cardId) || entry.status === 'completed') ids.add(cardId)
+    }
+    for (const card of cardsRef.current) {
+      if (cardPalaceId(card) === palaceId && completed.has(card.id)) ids.add(card.id)
+    }
+    if (!ids.size) return []
+
+    let next = current
+    for (const cardId of ids) next = markIncomplete(next, cardId)
+    persistQueueState({
+      ...next,
+      roundPlan: next.roundPlan
+        ? syncCompletedIdsToRoundPlan(next.roundPlan, next.completedIds)
+        : null,
+    })
+
+    const roundId = current.roundId
+    for (const cardId of ids) {
+      if (queueStateRef.current.roundId !== roundId) return [...ids]
+      try {
+        const round = await saveRoundAction(roundId, {
+          operation_id: createOperationId(),
+          expected_version: serverPlanVersionRef.current,
+          action: 'uncomplete',
+          card_id: cardId,
+        })
+        serverPlanVersionRef.current = serverPlanVersion(round)
+        setPlanVersion(serverPlanVersion(round))
+        const serverCompleted = Array.isArray(round.plan?.completed_ids)
+          ? round.plan.completed_ids.map(String)
+          : queueStateRef.current.completedIds
+        persistQueueState({
+          ...queueStateRef.current,
+          completedIds: serverCompleted,
+          roundPlan: queueStateRef.current.roundPlan
+            ? syncCompletedIdsToRoundPlan(queueStateRef.current.roundPlan, serverCompleted)
+            : null,
+        })
+      } catch {
+        // The local un-complete remains the draft; the next build retries.
+      }
+    }
+    notifyPeerRound()
+    void buildQueue(configRef.current, {
+      preserveCompleted: true,
+      completedIds: queueStateRef.current.completedIds,
+      silent: true,
+      preferCardId: queueStateRef.current.currentCardId,
+    })
+    return [...ids]
+  }, [buildQueue, notifyPeerRound, persistQueueState, saveRoundAction])
+
   const reorderPlan = useCallback((orderIds: string[]) => {
     const currentPlan = queueStateRef.current.roundPlan
     if (!currentPlan) return
@@ -3354,6 +3421,7 @@ export function useImmersiveQueue(
     excludePlanCards,
     restorePlanCards,
     compressCompletedPlanCards,
+    reopenPalaceCards,
     buildQueue,
     pendingRestudyCardIds,
     planVersion,

@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
+import type { FreestyleRoundPlanState } from '@/modules/practice/domain/roundPlan'
 import type { FreestyleCard } from '@/shared/api/contracts'
 import {
+  completedSourceCardIdsForPalace,
   findPalaceJumpTarget,
+  palaceHasPlanCards,
   resolvePalaceDirectoryClick,
 } from './freestyle-palace-directory'
 
@@ -62,5 +65,60 @@ describe('palace jump target', () => {
 
   it('returns null when the palace has no card in this round', () => {
     expect(findPalaceJumpTarget(cards, 3, new Set())).toBeNull()
+  })
+})
+
+describe('round-plan membership', () => {
+  const plan = {
+    roundId: 'r',
+    configSignature: '',
+    createdAt: 0,
+    candidateCount: 0,
+    scheduledCount: 0,
+    limitReached: false,
+    orderIds: ['a', 'b'],
+    cardsById: {
+      a: {
+        cardId: 'a',
+        sourceCardId: 'a',
+        occurrenceKind: 'source',
+        retryAttempt: 0,
+        palaceId: 1,
+        palaceTitle: 'P1',
+        label: 'a',
+        kind: 'mindmap_branch',
+        status: 'completed',
+        lastRating: 3,
+        retryAfterCards: 0,
+        attemptCount: 1,
+        updatedAt: 0,
+      },
+      b: {
+        cardId: 'b',
+        sourceCardId: 'b',
+        occurrenceKind: 'source',
+        retryAttempt: 0,
+        palaceId: 2,
+        palaceTitle: 'P2',
+        label: 'b',
+        kind: 'mindmap_branch',
+        status: 'pending',
+        lastRating: null,
+        retryAfterCards: 0,
+        attemptCount: 0,
+        updatedAt: 0,
+      },
+    },
+  } as FreestyleRoundPlanState
+
+  it('finds scored source cards even when the queue filtered them out', () => {
+    expect(completedSourceCardIdsForPalace(plan, 1, new Set(['a']))).toEqual(['a'])
+    expect(completedSourceCardIdsForPalace(plan, 2, new Set(['a']))).toEqual([])
+  })
+
+  it('knows a palace is in the round without a live card', () => {
+    expect(palaceHasPlanCards(plan, 1)).toBe(true)
+    expect(palaceHasPlanCards(plan, 3)).toBe(false)
+    expect(palaceHasPlanCards(null, 1)).toBe(false)
   })
 })

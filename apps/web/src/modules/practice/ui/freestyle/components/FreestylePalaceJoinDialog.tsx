@@ -24,6 +24,7 @@ export function FreestylePalaceJoinDialog({
   onCancel,
   onJoin,
   onEdit,
+  onReopen,
 }: {
   state: FreestylePalaceJoinState
   busy: boolean
@@ -31,8 +32,11 @@ export function FreestylePalaceJoinDialog({
   onJoin: () => void
   /** Open the palace editor without joining the round. */
   onEdit: (palaceId: number) => void
+  /** Put an already-scored palace's cards back into this round for re-rating. */
+  onReopen: (palaceId: number) => void
 }) {
   const joinable = state.kind === 'join' || state.kind === 'unmarked'
+  const reopenable = state.kind === 'scored'
   return (
     <Dialog open onOpenChange={(next) => { if (!next) onCancel() }}>
       <DialogContent data-testid="freestyle-palace-join-dialog" className="max-w-sm">
@@ -44,7 +48,9 @@ export function FreestylePalaceJoinDialog({
                 ? '还没标记'
                 : state.kind === 'not_due'
                   ? '今天不用复习'
-                  : '没有复习单元'}
+                  : state.kind === 'scored'
+                    ? '本轮已评完'
+                    : '没有复习单元'}
           </DialogTitle>
           <DialogDescription>
             {state.kind === 'join' ? (
@@ -53,6 +59,8 @@ export function FreestylePalaceJoinDialog({
               <>标记会把整座宫殿作为一个复习单元，并加入本轮。</>
             ) : state.kind === 'not_due' ? (
               <>「{state.title}」下次复习 {formatReviewDate(state.nextReviewDate)}。</>
+            ) : state.kind === 'scored' ? (
+              <>「{state.title}」本轮的 {state.cardCount} 张卡都已评分。重新评分会把它们放回队列，可以再次打分。</>
             ) : (
               <>「{state.title}」没有可用的复习单元。</>
             )}
@@ -75,6 +83,19 @@ export function FreestylePalaceJoinDialog({
               </Button>
               <Button type="button" onClick={onJoin} disabled={busy}>
                 {state.kind === 'unmarked' ? '标记并加入' : '加入本轮'}
+              </Button>
+            </>
+          ) : reopenable ? (
+            <>
+              <Button type="button" variant="outline" onClick={onCancel} disabled={busy}>
+                知道了
+              </Button>
+              <Button
+                type="button"
+                onClick={() => onReopen(state.palaceId)}
+                disabled={busy}
+              >
+                重新评分
               </Button>
             </>
           ) : (

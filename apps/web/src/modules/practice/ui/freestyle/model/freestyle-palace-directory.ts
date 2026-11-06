@@ -1,4 +1,5 @@
 import { cardPalaceId } from '@/modules/practice/domain/queueState'
+import type { FreestyleRoundPlanState } from '@/modules/practice/domain/roundPlan'
 import type { FreestyleCard } from '@/shared/api/contracts'
 
 /**
@@ -32,6 +33,39 @@ export type FreestylePalaceJoinState =
   | { kind: 'unmarked'; palaceId: number; title: string }
   | { kind: 'not_due'; palaceId: number; title: string; nextReviewDate: string | null }
   | { kind: 'no_units'; palaceId: number; title: string }
+  /** Already in this round, but every card of it has this-round score. */
+  | { kind: 'scored'; palaceId: number; title: string; cardCount: number }
+
+/**
+ * Source cards of this palace that already carry a this-round score. A palace
+ * whose live queue cards are gone can still be in the round plan — the queue
+ * filters completed cards, so the directory must ask the plan, not `cards`.
+ */
+export function completedSourceCardIdsForPalace(
+  plan: FreestyleRoundPlanState | null,
+  palaceId: number,
+  completedIds: ReadonlySet<string>,
+): string[] {
+  if (!plan) return []
+  const ids: string[] = []
+  for (const [cardId, entry] of Object.entries(plan.cardsById)) {
+    if (entry.palaceId !== palaceId) continue
+    if (entry.occurrenceKind === 'retry') continue
+    if (completedIds.has(cardId) || entry.status === 'completed') ids.push(cardId)
+  }
+  return ids
+}
+
+/** Any source card of this palace known to the round plan, scored or not. */
+export function palaceHasPlanCards(
+  plan: FreestyleRoundPlanState | null,
+  palaceId: number,
+): boolean {
+  if (!plan) return false
+  return Object.values(plan.cardsById).some(
+    (entry) => entry.palaceId === palaceId && entry.occurrenceKind !== 'retry',
+  )
+}
 
 export interface PalaceJumpTarget {
   cardId: string

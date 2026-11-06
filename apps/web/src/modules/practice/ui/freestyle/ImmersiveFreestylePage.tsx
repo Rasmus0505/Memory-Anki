@@ -213,6 +213,7 @@ export default function ImmersiveFreestylePage({
     resetStaleRecovery,
     excludePlanCards,
     compressCompletedPlanCards,
+    reopenPalaceCards,
     pendingRestudyCardIds,
     planVersion,
     wrongUnitIds,
@@ -813,6 +814,7 @@ export default function ImmersiveFreestylePage({
     currentCardId: currentCard?.id ?? null,
     jumpFromProgressRail,
     setConfigAndPersist,
+    reopenPalaceCards,
   })
   const openHistory = useCallback(() => setHistoryOpen(true), [])
   const location = useLocation()
@@ -1294,6 +1296,7 @@ export default function ImmersiveFreestylePage({
             onCancel={cancelPalaceJoin}
             onJoin={confirmPalaceJoin}
             onEdit={editPalace}
+            onReopen={confirmPalaceJoin}
           />
         ) : null}
       </div>

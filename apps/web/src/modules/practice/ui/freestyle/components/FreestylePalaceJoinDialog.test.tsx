@@ -12,6 +12,7 @@ describe('FreestylePalaceJoinDialog', () => {
         onCancel={() => undefined}
         onJoin={onJoin}
         onEdit={() => undefined}
+        onReopen={() => undefined}
       />,
     )
     expect(screen.getByRole('heading', { name: '加入本轮' })).toBeTruthy()
@@ -28,6 +29,7 @@ describe('FreestylePalaceJoinDialog', () => {
         onCancel={() => undefined}
         onJoin={() => undefined}
         onEdit={() => undefined}
+        onReopen={() => undefined}
       />,
     )
     expect(screen.getByRole('button', { name: '标记并加入' })).toBeTruthy()
@@ -43,6 +45,7 @@ describe('FreestylePalaceJoinDialog', () => {
         onCancel={() => undefined}
         onJoin={onJoin}
         onEdit={() => undefined}
+        onReopen={() => undefined}
       />,
     )
     expect(screen.getByText(/11月7日/)).toBeTruthy()
@@ -60,9 +63,27 @@ describe('FreestylePalaceJoinDialog', () => {
         onCancel={() => undefined}
         onJoin={() => undefined}
         onEdit={onEdit}
+        onReopen={() => undefined}
       />,
     )
     fireEvent.click(screen.getByRole('button', { name: '单独编辑' }))
     expect(onEdit).toHaveBeenCalledWith(42)
+  })
+
+  it('offers 重新评分 for a palace whose round cards are all scored', () => {
+    const onReopen = vi.fn()
+    render(
+      <FreestylePalaceJoinDialog
+        state={{ kind: 'scored', palaceId: 149, title: '第一节 国民政府时期的教育', cardCount: 1 }}
+        busy={false}
+        onCancel={() => undefined}
+        onJoin={() => undefined}
+        onEdit={() => undefined}
+        onReopen={onReopen}
+      />,
+    )
+    expect(screen.getByText(/都已评分/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '重新评分' }))
+    expect(onReopen).toHaveBeenCalledWith(149)
   })
 })
