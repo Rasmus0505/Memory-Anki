@@ -82,7 +82,9 @@ describe('GlobalCommandPalette', () => {
 
     openPalette()
 
-    expect(await screen.findByText('操作')).toBeTruthy()
+    // The palette surface is a lazy chunk; under a loaded CI worker it can take
+    // longer than the 1s Testing Library default before the dialog appears.
+    expect(await screen.findByText('操作', {}, { timeout: 5_000 })).toBeTruthy()
     expect(screen.getByText('页面')).toBeTruthy()
     expect(screen.getByText('开始随心复习')).toBeTruthy()
     expect(screen.queryByText('打开随心 2')).toBeNull()

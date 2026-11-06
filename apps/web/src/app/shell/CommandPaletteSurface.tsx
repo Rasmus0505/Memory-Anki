@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import {
   BookOpen,
-  ClipboardCopy,
   FileText,
   FolderTree,
   History,
@@ -12,6 +11,7 @@ import {
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { usePalaceMenuActions } from '@/modules/content/public'
+import { buildQuestionMenu } from '@/shared/ui/row-context-menu/questionMenu'
 import { RowContextMenu } from '@/shared/ui/row-context-menu/RowContextMenu'
 import { composeMenu, menuItem } from '@/shared/ui/row-context-menu/compose'
 import {
@@ -235,9 +235,7 @@ export default function CommandPaletteSurface({
                       runAndClose(() => navigate(hit.palace_id ? `/palaces/${hit.palace_id}/quiz` : '/knowledge'))
                     }),
                   ],
-                  [menuItem('复制题干', ClipboardCopy, () => {
-                    void navigator.clipboard?.writeText(hit.snippet).catch(() => undefined)
-                  })],
+                  buildQuestionMenu({ copyStem: { stem: hit.snippet } }),
                 )}
               >
                 <CommandItem

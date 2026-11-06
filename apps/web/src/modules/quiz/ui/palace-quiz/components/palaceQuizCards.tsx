@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
-import { Copy, Flag, Pencil, RotateCcw } from 'lucide-react'
+import { RotateCcw } from 'lucide-react'
 import { RowContextMenu } from '@/shared/ui/row-context-menu/RowContextMenu'
-import { composeMenu, menuItem } from '@/shared/ui/row-context-menu/compose'
+import { buildQuestionMenu } from '@/shared/ui/row-context-menu/questionMenu'
 import {
   QuizQuestionAnswerSurface,
   QuizQuestionVariantControl,
@@ -164,18 +164,17 @@ export function QuizQuestionCard({
 
   return (
     <RowContextMenu
-      items={composeMenu(
-        [menuItem('编辑题目', Pencil, () => onEdit(question))],
-        [
-          menuItem('再做一次', RotateCcw, () => onReset(question.id)),
-          onToggleMark
-            ? menuItem(question.marked ? '取消标记' : '标记题目', Flag, () => onToggleMark(question, !question.marked))
-            : null,
-          menuItem('复制题干', Copy, () => {
-            void navigator.clipboard?.writeText(question.stem).catch(() => undefined)
-          }),
-        ],
-      )}
+      items={buildQuestionMenu({
+        edit: { onSelect: () => onEdit(question) },
+        redo: { onSelect: () => onReset(question.id) },
+        mark: onToggleMark
+          ? {
+            marked: question.marked,
+            onSelect: () => onToggleMark(question, !question.marked),
+          }
+          : undefined,
+        copyStem: { stem: question.stem },
+      })}
     >
     <Card className="border-border/70 bg-card/92 data-[state=open]:ring-1 data-[state=open]:ring-primary/40">
       <CardHeader

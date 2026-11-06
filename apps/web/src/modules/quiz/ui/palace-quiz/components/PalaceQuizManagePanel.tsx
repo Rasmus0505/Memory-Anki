@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import { CheckCircle2, CheckSquare, Copy, FileText, LoaderCircle, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { CheckCircle2, FileText, LoaderCircle, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { RowContextMenu } from '@/shared/ui/row-context-menu/RowContextMenu'
-import { composeMenu, menuItem } from '@/shared/ui/row-context-menu/compose'
+import { buildQuestionMenu } from '@/shared/ui/row-context-menu/questionMenu'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
@@ -220,23 +220,21 @@ export function PalaceQuizManagePanel({
                 return (
                 <RowContextMenu
                   key={question.id}
-                  items={composeMenu(
-                    [menuItem('编辑题目', Pencil, () => onEditQuestion(question), {
+                  items={buildQuestionMenu({
+                    edit: {
+                      onSelect: () => onEditQuestion(question),
                       disabled: !canManuallyEditQuestion(question.question_type),
-                    })],
-                    [menuItem(
-                      selected ? '取消选择' : '选择题目',
-                      CheckSquare,
-                      () => onToggleQuestionSelection(question.id, !selected),
-                    )],
-                    [menuItem('复制题干', Copy, () => {
-                      void navigator.clipboard?.writeText(question.stem).catch(() => undefined)
-                    })],
-                    [menuItem('删除题目', Trash2, () => void onDeleteQuestion(question.id), {
-                      danger: true,
+                    },
+                    select: {
+                      selected,
+                      onSelect: () => onToggleQuestionSelection(question.id, !selected),
+                    },
+                    copyStem: { stem: question.stem },
+                    remove: {
+                      onSelect: () => void onDeleteQuestion(question.id),
                       disabled: deleting,
-                    })],
-                  )}
+                    },
+                  })}
                 >
                 <div
                   className={cn(
