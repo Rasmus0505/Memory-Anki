@@ -2,7 +2,7 @@
 
 > 前端模块：`apps/web/src/modules/city`。隔离场景：`apps/web/public/city/horizon.html`。
 > 后端读模型：`GET /api/v1/dashboard/city-today`（`modules/dashboard/application/city_today.py`）。
-> 原型：`deliverables/city-prototype/`（`palace.html` 是本形态的样张，`index.html` 是全屏城的玩法样张）。
+> 原型：在 `3d-11.6` 工作树的 `deliverables/city-prototype/`（`palace.html` 是本形态的样张，`index.html` 是全屏城的玩法样张）；原型不随 main 提交。
 
 ## 形态
 
