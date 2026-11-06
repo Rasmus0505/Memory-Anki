@@ -355,6 +355,14 @@ export function NodeBoundQuizDialog({
 
   const currentState = current ? questionStates[current.id] ?? {} : {}
   const answeredCount = questions.filter((item) => questionStates[item.id]?.resolved).length
+  // 导出错题 follows the red dots: a question retried correctly is not wrong.
+  const wrongQuestions = useMemo(
+    () => questions.filter((question) => {
+      const state = questionStates[question.id]
+      return state?.resolved === true && state.correct === false
+    }),
+    [questionStates, questions],
+  )
 
   const dropLocalAnswers = useCallback((ids: readonly number[]) => {
     const dropped = new Set(ids)
@@ -392,14 +400,6 @@ export function NodeBoundQuizDialog({
 
   const handleClearChoice = useCallback((choice: QuizProgressClearChoice) => {
     const loaded = questionsRef.current
-    if (choice.scope === 'question') {
-      const question = loaded[index]
-      if (!question) return
-      removeQuizSessionQuestions([question.id])
-      dropLocalAnswers([question.id])
-      toast.success('已清除当前题的做题进度。')
-      return
-    }
     if (choice.scope === 'palace') {
       const targetPalaceId = choice.palaceId
       if (!targetPalaceId) return
@@ -622,6 +622,7 @@ export function NodeBoundQuizDialog({
               <NodeBoundQuizHeaderActions
                 palaceId={palaceId}
                 questions={questions}
+                wrongQuestions={wrongQuestions}
                 copyingOutline={copyingOutline}
                 onCopyOutline={(targetPalaceId) => void copyOutline(targetPalaceId)}
                 onOpenPalace={() => setPalaceLookupOpen(true)}
@@ -784,7 +785,6 @@ export function NodeBoundQuizDialog({
       <QuizProgressClearDialog
         open={clearProgressOpen}
         onOpenChange={setClearProgressOpen}
-        questionReady={current != null}
         defaultPalaceId={palaceId}
         onConfirm={handleClearChoice}
       />

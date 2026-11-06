@@ -6,6 +6,7 @@ import {
 } from '@/modules/practice/ui/freestyle/api'
 import {
   deletePalaceQuizQuestionApi,
+  getPalaceQuizQuestionsApi,
   getPalaceQuizQuestionsByIdsApi,
   listQuestionNodeBindingsApi,
 } from '@/modules/quiz/domain/quiz-entity/api'
@@ -31,6 +32,7 @@ vi.mock('@/modules/practice/ui/freestyle/api', () => ({
 
 vi.mock('@/modules/quiz/domain/quiz-entity/api', () => ({
   getPalaceQuizQuestionsByIdsApi: vi.fn(),
+  getPalaceQuizQuestionsApi: vi.fn(async () => ({ items: [] })),
   listQuestionNodeBindingsApi: vi.fn(),
   deletePalaceQuizQuestionApi: vi.fn(async () => ({ ok: true })),
   setPalaceQuizQuestionMarkedApi: vi.fn(async (id: number, marked: boolean) => ({
@@ -92,6 +94,7 @@ vi.mock('@/widgets/palace-memory-lookup', async (importOriginal) => {
 export const ensureFreestyleOverlayQuizApiMock = vi.mocked(ensureFreestyleOverlayQuizApi)
 export const progressFreestyleOverlayQuizApiMock = vi.mocked(progressFreestyleOverlayQuizApi)
 export const getPalaceQuizQuestionsByIdsApiMock = vi.mocked(getPalaceQuizQuestionsByIdsApi)
+export const getPalaceQuizQuestionsApiMock = vi.mocked(getPalaceQuizQuestionsApi)
 export const listQuestionNodeBindingsApiMock = vi.mocked(listQuestionNodeBindingsApi)
 export const deletePalaceQuizQuestionApiMock = vi.mocked(deletePalaceQuizQuestionApi)
 export const getPalaceEditorApiMock = vi.mocked(getPalaceEditorApi)

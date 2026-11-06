@@ -8,7 +8,7 @@ import {
   listQuestionNodeBindingsApiMock,
   progressFreestyleOverlayQuizApiMock,
 } from './FreestyleScopeQuizDialog.mocks'
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearQuizSessionProgress, readQuizSessionState } from '@/modules/quiz/public'
 import { FreestyleScopeQuizDialog } from './FreestyleScopeQuizDialog'
@@ -268,7 +268,14 @@ describe('FreestyleScopeQuizDialog', () => {
 
     renderScopeQuizDialog()
 
-    fireEvent.click(await screen.findByRole('button', { name: '复制导图' }))
+    const [more] = await screen.findAllByRole('button', { name: '更多操作' })
+    await act(async () => {
+      fireEvent.keyDown(more, { key: ' ' })
+    })
+    const copyOutline = await screen.findByRole('menuitem', { name: '复制导图' })
+    await act(async () => {
+      fireEvent.click(copyOutline)
+    })
 
     await waitFor(() => {
       expect(getPalaceEditorApiMock).toHaveBeenCalledWith(7)
@@ -496,27 +503,13 @@ describe('FreestyleScopeQuizDialog', () => {
     expect(lookup.compareDocumentPosition(clear) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 
     fireEvent.click(clear)
-    fireEvent.click(screen.getByRole('radio', { name: '当前题' }))
-    fireEvent.click(screen.getByRole('button', { name: '清除' }))
-
-    expect(screen.getByText(/已答 1 \/ 3/)).toBeTruthy()
-    expect(readQuizSessionState(11)).toEqual({})
-    expect(readQuizSessionState(12).resolved).toBe(true)
-    await waitFor(() => {
-      expect(progressFreestyleOverlayQuizApiMock).toHaveBeenCalledWith(
-        'round-1',
-        expect.objectContaining({
-          completed_ids: [12],
-          states: { 12: expect.objectContaining({ resolved: true }) },
-        }),
-      )
-    })
-
-    fireEvent.click(screen.getByRole('button', { name: '清除进度' }))
-    fireEvent.click(screen.getByRole('radio', { name: '全部题' }))
+    expect(screen.getByRole('radio', { name: '当前宫殿' })).toBeTruthy()
+    expect(screen.getByRole('radio', { name: '全部宫殿' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('radio', { name: '全部宫殿' }))
     fireEvent.click(screen.getByRole('button', { name: '清除' }))
 
     expect(screen.getByText(/已答 0 \/ 3/)).toBeTruthy()
+    expect(readQuizSessionState(11)).toEqual({})
     expect(readQuizSessionState(12)).toEqual({})
     await waitFor(() => {
       expect(progressFreestyleOverlayQuizApiMock).toHaveBeenCalledWith(

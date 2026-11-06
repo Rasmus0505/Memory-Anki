@@ -351,6 +351,15 @@ export function FreestyleScopeQuizDialog({
   /** Only 选择题 / 简答题 have editable content; other kinds stay read-only. */
   const canEditCurrent = current != null && canManuallyEditQuestion(current.question_type)
   const answeredCount = questions.filter((item) => questionStates[item.id]?.resolved).length
+  // 导出错题 follows the red dots on the pager: a question that was retried
+  // correctly is no longer wrong.
+  const wrongQuestions = useMemo(
+    () => questions.filter((question) => {
+      const state = questionStates[question.id]
+      return state?.resolved === true && state.correct === false
+    }),
+    [questionStates, questions],
+  )
   // Weakest 1–4 this round. 「本轮尚未复习」 only when the bar still has the
   // point open. A finished or never-scheduled point hides the badge.
   const currentRating = overlayQuestionRating(overlay?.question_node_ratings, current?.id)
@@ -361,7 +370,6 @@ export function FreestyleScopeQuizDialog({
   const handleClearChoice = useOverlayQuizClear({
     overlay,
     questions,
-    current,
     questionStates,
     index,
     setQuestionStates,
@@ -666,6 +674,7 @@ export function FreestyleScopeQuizDialog({
                   copyPalaceId={questionPalaceId ?? lookupPalaceId}
                   lookupPalaceId={lookupPalaceId}
                   questions={questions}
+                  wrongQuestions={wrongQuestions}
                   currentQuestion={current}
                   copyingOutline={copyingOutline}
                   onCopyOutline={(palaceId) => void copyOutline(palaceId)}
@@ -924,7 +933,6 @@ export function FreestyleScopeQuizDialog({
       <QuizProgressClearDialog
         open={clearProgressOpen}
         onOpenChange={setClearProgressOpen}
-        questionReady={current != null}
         defaultPalaceId={lookupPalaceId}
         onConfirm={handleClearChoice}
       />

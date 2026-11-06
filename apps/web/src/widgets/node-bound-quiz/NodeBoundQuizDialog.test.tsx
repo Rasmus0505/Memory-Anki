@@ -32,6 +32,14 @@ describe('NodeBoundQuizDialog', () => {
     saveQuizAnswerMode('choice')
   })
 
+  async function openHeaderMore() {
+    const more = await screen.findByRole('button', { name: '更多操作' })
+    // Space opens the Radix menu: the quiz shortcut layer owns Arrow/Enter.
+    await act(async () => {
+      fireEvent.keyDown(more, { key: ' ' })
+    })
+  }
+
   it('opens multiple-choice questions before short-answer questions', async () => {
     getPalaceQuizQuestionsByIdsApiMock.mockResolvedValue({
       items: [shortAnswerQuestion, sampleQuestion],
@@ -147,7 +155,7 @@ describe('NodeBoundQuizDialog', () => {
     expect(screen.getByText('下列哪一项是细胞膜的主要成分？')).toBeTruthy()
   })
 
-  it('hides the palace lookup button when no palace is available', () => {
+  it('hides the palace lookup button when no palace is available', async () => {
     render(
       <NodeBoundQuizDialog
         open
@@ -160,7 +168,8 @@ describe('NodeBoundQuizDialog', () => {
     )
 
     expect(screen.queryByRole('button', { name: '查看宫殿' })).toBeNull()
-    expect(screen.queryByRole('button', { name: '复制导图' })).toBeNull()
+    await openHeaderMore()
+    expect(screen.queryByRole('menuitem', { name: '复制导图' })).toBeNull()
   })
 
   it('copies the palace mind map as a plain-text outline for an AI chat', async () => {
@@ -179,7 +188,11 @@ describe('NodeBoundQuizDialog', () => {
     )
 
     await screen.findByText('下列哪一项是细胞膜的主要成分？')
-    fireEvent.click(screen.getByRole('button', { name: '复制导图' }))
+    await openHeaderMore()
+    const copyOutline = await screen.findByRole('menuitem', { name: '复制导图' })
+    await act(async () => {
+      fireEvent.click(copyOutline)
+    })
 
     await vi.waitFor(() => {
       expect(getPalaceEditorApiMock).toHaveBeenCalledWith(1)
@@ -213,13 +226,54 @@ describe('NodeBoundQuizDialog', () => {
     )
 
     await screen.findByText('下列哪一项是细胞膜的主要成分？')
-    const copyButton = screen.getByRole('button', { name: '复制导图' })
-    fireEvent.click(copyButton)
+    await openHeaderMore()
+    const copyButton = await screen.findByRole('menuitem', { name: '复制导图' })
+    await act(async () => {
+      fireEvent.click(copyButton)
+    })
 
     await vi.waitFor(() => {
       expect(toastMock.toast.error).toHaveBeenCalledWith('剪贴板被拒绝。')
     })
-    expect((copyButton as HTMLButtonElement).disabled).toBe(false)
+    await openHeaderMore()
+    expect((await screen.findByRole('menuitem', { name: '复制导图' })).getAttribute('aria-disabled'))
+      .not.toBe('true')
+  })
+
+  it('exports the wrong questions with the complete palace', async () => {
+    writeQuizSessionState(42, { resolved: true, correct: false, selectedOptionId: 'B' }, 1)
+    writeQuizSessionState(43, { resolved: true, correct: true, selectedOptionId: 'A' }, 1)
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.assign(navigator, { clipboard: { writeText } })
+    render(
+      <NodeBoundQuizDialog
+        open
+        onOpenChange={() => {}}
+        palaceId={1}
+        nodeUid="node-1"
+        questionIds={[42, 43]}
+        onQuestionCompleted={() => {}}
+      />,
+    )
+
+    await screen.findByText('已答 2 / 2')
+    const trigger = screen.getByRole('button', { name: '导出错题' })
+    expect(trigger.hasAttribute('disabled')).toBe(false)
+    await act(async () => {
+      fireEvent.keyDown(trigger, { key: ' ' })
+    })
+    const item = await screen.findByRole('menuitem', { name: /另附涉及宫殿/ })
+    await act(async () => {
+      fireEvent.click(item)
+    })
+
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
+    const copied = writeText.mock.calls[0]?.[0] as string
+    expect(copied).toContain('本轮错题（1 道）')
+    expect(copied).toContain('下列哪一项是细胞膜的主要成分？（本轮答错）')
+    expect(copied).toContain('宫殿：第一节新教育运动')
+    expect(copied).toContain('全部题目（2 道）')
+    expect(copied).toContain('第二道关联题目')
   })
 
   it('puts 清除进度 to the right of 查看宫殿 and clears the current answers', async () => {
@@ -242,9 +296,8 @@ describe('NodeBoundQuizDialog', () => {
     expect(lookup.compareDocumentPosition(clear) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 
     fireEvent.click(clear)
-    expect(screen.getByRole('radio', { name: '当前题' })).toBeTruthy()
-    expect(screen.getByRole('radio', { name: '指定宫殿' })).toBeTruthy()
-    expect(screen.getByRole('radio', { name: '全部题' })).toBeTruthy()
+    expect(screen.getByRole('radio', { name: '当前宫殿' })).toBeTruthy()
+    expect(screen.getByRole('radio', { name: '全部宫殿' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
     expect(screen.getByText('已答 2 / 2')).toBeTruthy()
     expect(readQuizSessionState(42).resolved).toBe(true)
@@ -252,16 +305,8 @@ describe('NodeBoundQuizDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: '清除进度' }))
     fireEvent.click(screen.getByRole('button', { name: '清除' }))
 
-    expect(screen.getByText('已答 1 / 2')).toBeTruthy()
-    expect(readQuizSessionState(42)).toEqual({})
-    expect(readQuizSessionState(43).resolved).toBe(true)
-
-    fireEvent.click(screen.getByRole('button', { name: '清除进度' }))
-    fireEvent.click(screen.getByRole('radio', { name: '指定宫殿' }))
-    expect((screen.getByRole('combobox', { name: '指定宫殿' }) as HTMLSelectElement).value).toBe('1')
-    fireEvent.click(screen.getByRole('button', { name: '清除' }))
-
     expect(screen.getByText('已答 0 / 2')).toBeTruthy()
+    expect(readQuizSessionState(42)).toEqual({})
     expect(readQuizSessionState(43)).toEqual({})
     expect(screen.getByText('16/29')).toBeTruthy()
   })

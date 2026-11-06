@@ -1,15 +1,26 @@
-import { BookOpen, Copy, FileText, LoaderCircle, RotateCcw, Shuffle } from 'lucide-react'
+import { BookOpen, FileText, LoaderCircle, MoreHorizontal, RotateCcw, Shuffle } from 'lucide-react'
 import { useCopyQuizQuestionsText } from '@/modules/quiz/public'
 import type { PalaceQuizQuestion } from '@/shared/api/contracts'
 import { Button } from '@/shared/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/shared/components/ui/dropdown-menu'
+import { QuizWrongExportMenu } from '@/widgets/quiz-wrong-export'
 
 /**
  * Right-side actions of the 关联题目 window. Kept out of the dialog so the
  * answering chrome stays below the architecture file-size limit.
+ *
+ * 复制导图 and 打乱选项 fold into 更多 so 导出错题 fits without pushing the
+ * question body down.
  */
 export function NodeBoundQuizHeaderActions({
   palaceId,
   questions,
+  wrongQuestions,
   copyingOutline,
   onCopyOutline,
   onOpenPalace,
@@ -28,6 +39,8 @@ export function NodeBoundQuizHeaderActions({
   palaceId: number | null
   /** 复制题目 copies every question loaded in this window. */
   questions: readonly PalaceQuizQuestion[]
+  /** Questions answered wrong in this window; 导出错题 reads these. */
+  wrongQuestions: readonly PalaceQuizQuestion[]
   copyingOutline: boolean
   onCopyOutline: (palaceId: number) => void
   onOpenPalace: () => void
@@ -54,22 +67,6 @@ export function NodeBoundQuizHeaderActions({
     <div className="flex shrink-0 flex-nowrap items-center justify-end gap-2">
       {palaceId != null ? (
         <>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            aria-label="复制导图"
-            title="复制导图的文字层级，可粘贴给 AI 作为作答背景"
-            disabled={copyingOutline}
-            onClick={() => onCopyOutline(palaceId)}
-          >
-            {copyingOutline ? (
-              <LoaderCircle className="size-4 animate-spin" />
-            ) : (
-              <Copy className="size-4" />
-            )}
-            <span className="hidden sm:inline">复制导图</span>
-          </Button>
           {questions.length > 0 ? (
             <Button
               type="button"
@@ -101,18 +98,7 @@ export function NodeBoundQuizHeaderActions({
           </Button>
         </>
       ) : null}
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        aria-label={canRestoreOptions ? '恢复选项' : '打乱选项'}
-        title={canRestoreOptions ? '恢复当前题首次打乱前的顺序' : '只打乱当前题的选项'}
-        disabled={!optionShuffleAvailable || actionsDisabled}
-        onClick={canRestoreOptions ? onRestoreOptions : onShuffleOptions}
-      >
-        {canRestoreOptions ? <RotateCcw className="size-4" /> : <Shuffle className="size-4" />}
-        <span className="hidden sm:inline">{canRestoreOptions ? '恢复选项' : '打乱选项'}</span>
-      </Button>
+      <QuizWrongExportMenu wrongQuestions={wrongQuestions} />
       <Button
         type="button"
         size="sm"
@@ -134,13 +120,33 @@ export function NodeBoundQuizHeaderActions({
         size="sm"
         variant="outline"
         aria-label="清除进度"
-        title="清除当前题、指定宫殿或全部题的已答记录"
+        title="清除当前宫殿或全部宫殿的已答记录"
         disabled={actionsDisabled}
         onClick={onOpenClearProgress}
       >
         <RotateCcw className="size-4" />
         清除进度
       </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button type="button" size="sm" variant="outline" aria-label="更多操作" title="更多操作">
+            <MoreHorizontal className="size-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {palaceId != null ? (
+            <DropdownMenuItem disabled={copyingOutline} onSelect={() => onCopyOutline(palaceId)}>
+              复制导图
+            </DropdownMenuItem>
+          ) : null}
+          <DropdownMenuItem
+            disabled={!optionShuffleAvailable || actionsDisabled}
+            onSelect={canRestoreOptions ? onRestoreOptions : onShuffleOptions}
+          >
+            {canRestoreOptions ? '恢复选项' : '打乱选项'}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   )
 }

@@ -32,6 +32,7 @@ vi.mock('@/modules/practice/ui/freestyle/api', () => ({
 
 vi.mock('@/modules/quiz/domain/quiz-entity/api', () => ({
   getPalaceQuizQuestionsByIdsApi: vi.fn(async () => ({ items: [], item_count: 0 })),
+  getPalaceQuizQuestionsApi: vi.fn(async () => ({ items: [] })),
   listQuestionNodeBindingsApi: vi.fn(async () => ({ items: [], item_count: 0 })),
   deletePalaceQuizQuestionApi: vi.fn(async () => ({ ok: true })),
   setPalaceQuizQuestionMarkedApi: vi.fn(async (id: number, marked: boolean) => ({

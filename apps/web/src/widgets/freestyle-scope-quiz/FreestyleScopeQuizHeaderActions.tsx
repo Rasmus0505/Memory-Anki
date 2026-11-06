@@ -1,4 +1,4 @@
-import { ArrowUpToLine, BookOpen, Copy, FileText, LoaderCircle, MoreHorizontal, RotateCcw, Shuffle } from 'lucide-react'
+import { ArrowUpToLine, BookOpen, FileText, LoaderCircle, MoreHorizontal, RotateCcw, Shuffle } from 'lucide-react'
 import { useCopyQuizQuestionsText } from '@/modules/quiz/public'
 import type { PalaceQuizQuestion } from '@/shared/api/contracts'
 import { Button } from '@/shared/components/ui/button'
@@ -8,19 +8,21 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/shared/components/ui/dropdown-menu'
+import { QuizWrongExportMenu } from '@/widgets/quiz-wrong-export'
 
 /**
  * Right-side actions of the 做题 overlay header. Kept out of the dialog so the
  * answering chrome stays below the architecture file-size limit.
  *
- * Phones keep only 查看宫殿 in the header; the other four secondary actions sit
- * behind one 更多 button so the header stays a single row and the question body
- * gets the height back. From `sm` up every action renders inline as before.
+ * The row stays one line by keeping only the actions used mid-answer inline.
+ * 复制导图 and 打乱选项 sit behind 更多 on desktop; phones fold every secondary
+ * action there, so the question body keeps the height.
  */
 export function FreestyleScopeQuizHeaderActions({
   copyPalaceId,
   lookupPalaceId,
   questions,
+  wrongQuestions,
   currentQuestion,
   copyingOutline,
   onCopyOutline,
@@ -43,6 +45,8 @@ export function FreestyleScopeQuizHeaderActions({
   lookupPalaceId: number | null
   /** 复制题目 copies every question loaded in this window. */
   questions: readonly PalaceQuizQuestion[]
+  /** Questions answered wrong so far this round; 导出错题 reads these. */
+  wrongQuestions: readonly PalaceQuizQuestion[]
   currentQuestion: PalaceQuizQuestion | null
   copyingOutline: boolean
   onCopyOutline: (palaceId: number) => void
@@ -72,13 +76,7 @@ export function FreestyleScopeQuizHeaderActions({
     || (canShuffleCurrentOptions && canShuffleOptions)
   const optionShuffleDisabled = !optionShuffleAvailable || actionsDisabled
   const optionShuffleLabel = canRestoreOptions ? '恢复选项' : '打乱选项'
-  const optionShuffleTitle = canRestoreOptions
-    ? '恢复当前题首次打乱前的顺序'
-    : '只打乱当前题的选项'
   const handleOptionShuffle = canRestoreOptions ? onRestoreOptions : onShuffleOptions
-  const optionShuffleIcon = canRestoreOptions
-    ? <RotateCcw className="size-4" />
-    : <Shuffle className="size-4" />
 
   return (
     <div className="flex min-w-0 items-center justify-end gap-2">
@@ -103,21 +101,9 @@ export function FreestyleScopeQuizHeaderActions({
         </Button>
       ) : null}
 
+      <QuizWrongExportMenu wrongQuestions={wrongQuestions} />
+
       <div className="hidden flex-nowrap items-center justify-end gap-2 sm:flex">
-        {hasOutline ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            aria-label="复制导图"
-            title="复制导图的文字层级，可粘贴给 AI 作为作答背景"
-            disabled={copyingOutline}
-            onClick={() => onCopyOutline(copyPalaceId)}
-          >
-            {copyingOutline ? <LoaderCircle className="size-4 animate-spin" /> : <Copy className="size-4" />}
-            <span>复制导图</span>
-          </Button>
-        ) : null}
         {hasQuestions ? (
           <Button
             type="button"
@@ -136,18 +122,6 @@ export function FreestyleScopeQuizHeaderActions({
           type="button"
           size="sm"
           variant="outline"
-          aria-label={optionShuffleLabel}
-          title={optionShuffleTitle}
-          disabled={optionShuffleDisabled}
-          onClick={handleOptionShuffle}
-        >
-          {optionShuffleIcon}
-          <span>{optionShuffleLabel}</span>
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
           aria-label="打乱题库"
           title="只打乱还没答的题，已答的题留在原位"
           disabled={shuffling || !canShuffle || actionsDisabled}
@@ -161,13 +135,30 @@ export function FreestyleScopeQuizHeaderActions({
           size="sm"
           variant="outline"
           aria-label="清除进度"
-          title="清除当前题、指定宫殿或全部题的已答记录"
+          title="清除当前宫殿或全部宫殿的已答记录"
           disabled={actionsDisabled}
           onClick={onOpenClearProgress}
         >
           <RotateCcw className="size-4" />
           <span>清除进度</span>
         </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button type="button" size="sm" variant="outline" aria-label="更多操作" title="更多操作">
+              <MoreHorizontal className="size-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {hasOutline ? (
+              <DropdownMenuItem disabled={copyingOutline} onSelect={() => onCopyOutline(copyPalaceId)}>
+                复制导图
+              </DropdownMenuItem>
+            ) : null}
+            <DropdownMenuItem disabled={optionShuffleDisabled} onSelect={handleOptionShuffle}>
+              {optionShuffleLabel}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <div className="sm:hidden">

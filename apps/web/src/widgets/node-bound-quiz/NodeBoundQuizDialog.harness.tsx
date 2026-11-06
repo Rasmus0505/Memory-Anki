@@ -42,7 +42,7 @@ vi.mock('@/modules/quiz/domain/quiz-entity/api', () => ({
 }))
 
 vi.mock('@/shared/feedback/toast', () => ({
-  toast: { error: vi.fn(), success: vi.fn() },
+  toast: { error: vi.fn(), success: vi.fn(), info: vi.fn(), warning: vi.fn() },
 }))
 
 /** This-round ratings as the backend would return them for the sample questions. */
