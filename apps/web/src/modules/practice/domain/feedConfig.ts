@@ -104,6 +104,7 @@ export const DEFAULT_FREESTYLE_FEED_CONFIG: FreestyleFeedConfig = {
   streams: {
     memory_palace: {
       specific_palace_ids: [],
+      extra_palace_ids: [],
       subject_scope: 'all',
       subject_ids: [],
       palace_order: 'finish_palace_then_next',
@@ -111,6 +112,7 @@ export const DEFAULT_FREESTYLE_FEED_CONFIG: FreestyleFeedConfig = {
     },
     quiz: {
       specific_palace_ids: [],
+      extra_palace_ids: [],
       subject_scope: 'all',
       subject_ids: [],
       question_type: 'all',
@@ -122,6 +124,7 @@ export const DEFAULT_FREESTYLE_FEED_CONFIG: FreestyleFeedConfig = {
     },
     english: {
       specific_palace_ids: [],
+      extra_palace_ids: [],
       subject_scope: 'english',
       subject_ids: [],
       palace_order: 'finish_palace_then_next',
@@ -286,8 +289,56 @@ function streamScope(
   const subjectIds = asIdList(raw.subject_ids ?? fallback.subject_ids)
   return {
     specific_palace_ids: asIdList(raw.specific_palace_ids ?? fallback.specific_palace_ids),
+    extra_palace_ids: asIdList(raw.extra_palace_ids ?? fallback.extra_palace_ids ?? []),
     subject_scope: subjectIds.length ? 'all' : asSubjectScope(raw.subject_scope ?? fallback.subject_scope),
     subject_ids: subjectIds,
+  }
+}
+
+/**
+ * Add one palace to the round's scope without replacing the selection.
+ *
+ * The palace stream drives the cards; the quiz stream follows the same palace
+ * set so bound questions for the new unit are fetched. English keeps its own
+ * scope and is deliberately untouched.
+ */
+export function addExtraPalace(
+  config: FreestyleFeedConfig,
+  palaceId: number,
+): FreestyleFeedConfig {
+  if (!Number.isInteger(palaceId) || palaceId <= 0) return config
+  const merge = <T extends FreestyleStreamScope>(stream: T): T => ({
+    ...stream,
+    extra_palace_ids: [...new Set([...(stream.extra_palace_ids ?? []), palaceId])].sort((a, b) => a - b),
+  })
+  return {
+    ...config,
+    streams: {
+      ...config.streams,
+      memory_palace: merge(config.streams.memory_palace),
+      quiz: merge(config.streams.quiz),
+    },
+  }
+}
+
+/**
+ * Drop every directory-added palace. The learner asked for the stored selection
+ * to be the whole scope again, so both palace streams must go back together —
+ * clearing only memory would keep the quiz stream pulling the old palace.
+ */
+export function clearExtraPalaces(config: FreestyleFeedConfig): FreestyleFeedConfig {
+  const clear = <T extends FreestyleStreamScope>(stream: T): T => ({
+    ...stream,
+    extra_palace_ids: [],
+  })
+  return {
+    ...config,
+    streams: {
+      ...config.streams,
+      memory_palace: clear(config.streams.memory_palace),
+      quiz: clear(config.streams.quiz),
+      english: clear(config.streams.english),
+    },
   }
 }
 

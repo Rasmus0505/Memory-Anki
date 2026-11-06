@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_FREESTYLE_FEED_CONFIG } from '@/modules/practice/domain/feedConfig'
+import {
+  DEFAULT_FREESTYLE_FEED_CONFIG,
+  addExtraPalace,
+  clearExtraPalaces,
+} from '@/modules/practice/domain/feedConfig'
 import {
   applyFreestyleEntryScope,
   applyFreestyleEntryScopeUnlessSaved,
@@ -118,6 +122,54 @@ describe('freestyle entry palace scope', () => {
     expect(shouldUseFreestyleSelectionScope(current, current, 42, null)).toBe(false)
     expect(shouldUseFreestyleSelectionScope(current, { subject_scope: 'all', specific_palace_ids: [42, 43] }, 42, null)).toBe(true)
     expect(shouldUseFreestyleSelectionScope(current, current, 42, 42)).toBe(true)
+  })
+
+  it('keeps palaces added from the directory when an entry hint narrows the round', () => {
+    const config = addExtraPalace(DEFAULT_FREESTYLE_FEED_CONFIG, 42)
+    const scoped = applyFreestyleEntryScope(config, 7)
+    expect(scoped.streams.memory_palace.specific_palace_ids).toEqual([7])
+    expect(scoped.streams.memory_palace.extra_palace_ids).toEqual([42])
+    expect(scoped.streams.quiz.extra_palace_ids).toEqual([42])
+  })
+
+  it('persists directory additions next to the stored selection', () => {
+    const stored = {
+      ...DEFAULT_FREESTYLE_FEED_CONFIG,
+      specific_palace_ids: [7, 8],
+      streams: {
+        ...DEFAULT_FREESTYLE_FEED_CONFIG.streams,
+        memory_palace: {
+          ...DEFAULT_FREESTYLE_FEED_CONFIG.streams.memory_palace,
+          specific_palace_ids: [7, 8],
+        },
+      },
+    }
+    const session = addExtraPalace(applyFreestyleEntryScope(stored, 7), 42)
+    const persisted = persistFreestyleConfigWithoutEntryLock(session, stored)
+    expect(persisted.streams.memory_palace.specific_palace_ids).toEqual([7, 8])
+    expect(persisted.streams.memory_palace.extra_palace_ids).toEqual([42])
+  })
+
+  it('lets a cleared directory addition survive the entry lock', () => {
+    const stored = addExtraPalace(
+      {
+        ...DEFAULT_FREESTYLE_FEED_CONFIG,
+        specific_palace_ids: [7, 8],
+        streams: {
+          ...DEFAULT_FREESTYLE_FEED_CONFIG.streams,
+          memory_palace: {
+            ...DEFAULT_FREESTYLE_FEED_CONFIG.streams.memory_palace,
+            specific_palace_ids: [7, 8],
+          },
+        },
+      },
+      42,
+    )
+    const session = clearExtraPalaces(applyFreestyleEntryScope(stored, 7))
+    const persisted = persistFreestyleConfigWithoutEntryLock(session, stored)
+    expect(persisted.streams.memory_palace.extra_palace_ids).toEqual([])
+    expect(persisted.streams.quiz.extra_palace_ids).toEqual([])
+    expect(persisted.streams.memory_palace.specific_palace_ids).toEqual([7, 8])
   })
 
   it('unlocks an entry palace when stream subject chips change', () => {

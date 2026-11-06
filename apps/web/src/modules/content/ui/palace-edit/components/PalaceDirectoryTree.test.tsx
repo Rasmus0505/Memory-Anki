@@ -214,6 +214,67 @@ describe('PalaceDirectoryTree', () => {
       await screen.findByRole('button', { name: '第二节 汉代的学校教育制度' }),
     ).toBeTruthy()
   })
+
+  it('dots the round\'s other palaces while the card on screen keeps the filled row', async () => {
+    const { container } = render(
+      <MemoryRouter>
+        <PalaceDirectoryTreeView
+          tree={roundTree}
+          currentPalaceId={11}
+          queuedPalaceIds={new Set([11, 12])}
+          onSelectPalace={() => {}}
+          showHeader={false}
+          showSearch={false}
+        />
+      </MemoryRouter>,
+    )
+
+    const currentRow = await screen.findByRole('button', { name: '汉代的学校' })
+    const otherRow = screen.getByRole('button', { name: '太学' })
+
+    expect(otherRow.getAttribute('data-round-queued')).toBe('true')
+    expect(otherRow.querySelector('[data-round-dot="palace"]')).toBeTruthy()
+    expect(currentRow.getAttribute('aria-current')).toBe('page')
+    expect(currentRow.querySelector('[data-round-dot]')).toBeNull()
+    // The chapter and subject keep a fainter dot so a folded branch still shows it.
+    expect(container.querySelectorAll('[data-round-dot="ancestor"]').length).toBe(2)
+  })
+
+  it('reveals only the first palace when the host keeps the feed moving', async () => {
+    const { rerender } = render(
+      <MemoryRouter>
+        <PalaceDirectoryTreeView
+          tree={roundTree}
+          currentPalaceId={11}
+          queuedPalaceIds={new Set([11, 21])}
+          revealCurrent={false}
+          onSelectPalace={() => {}}
+          showHeader={false}
+          showSearch={false}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('button', { name: '汉代的学校' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '国子监' })).toBeNull()
+
+    rerender(
+      <MemoryRouter>
+        <PalaceDirectoryTreeView
+          tree={roundTree}
+          currentPalaceId={21}
+          queuedPalaceIds={new Set([11, 21])}
+          revealCurrent={false}
+          onSelectPalace={() => {}}
+          showHeader={false}
+          showSearch={false}
+        />
+      </MemoryRouter>,
+    )
+
+    // Another card in another chapter must not fold or unfold the directory.
+    expect(screen.queryByRole('button', { name: '国子监' })).toBeNull()
+  })
 })
 
 const staticTree: PalaceDirectoryTreeModel = {
@@ -225,6 +286,31 @@ const staticTree: PalaceDirectoryTreeModel = {
           kind: 'chapter', id: 10, name: '第二节 汉代', subjectId: 1, sortOrder: 0, children: [],
           palaces: [
             { kind: 'palace', id: 11, title: '汉代的学校', chapterId: 10, subjectId: 1, sortOrder: 0 },
+          ],
+        },
+      ],
+    },
+  ],
+  ungrouped: [],
+}
+
+const roundTree: PalaceDirectoryTreeModel = {
+  subjects: [
+    {
+      kind: 'subject', id: 1, name: '中国教育史', color: '#6366f1', sortOrder: 0, ungrouped: [],
+      chapters: [
+        {
+          kind: 'chapter', id: 10, name: '第二节 汉代', subjectId: 1, sortOrder: 0, children: [],
+          palaces: [
+            { kind: 'palace', id: 11, title: '汉代的学校', chapterId: 10, subjectId: 1, sortOrder: 0 },
+            { kind: 'palace', id: 12, title: '太学', chapterId: 10, subjectId: 1, sortOrder: 1 },
+          ],
+        },
+        {
+          kind: 'chapter', id: 20, name: '第三节 唐代', subjectId: 1, sortOrder: 1, children: [],
+          palaces: [
+            { kind: 'palace', id: 21, title: '国子监', chapterId: 20, subjectId: 1, sortOrder: 0 },
+            { kind: 'palace', id: 22, title: '弘文馆', chapterId: 20, subjectId: 1, sortOrder: 1 },
           ],
         },
       ],

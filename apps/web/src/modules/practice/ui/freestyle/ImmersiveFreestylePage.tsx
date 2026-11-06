@@ -30,6 +30,8 @@ import { FreestyleWaitingBanner } from '@/modules/practice/ui/freestyle/componen
 import { FreestylePageDialogs } from '@/modules/practice/ui/freestyle/FreestylePageDialogs'
 import { FreestyleCardArea } from '@/modules/practice/ui/freestyle/FreestyleCardArea'
 import { FreestylePalaceDirectoryPanel } from '@/modules/practice/ui/freestyle/components/FreestylePalaceDirectoryPanel'
+import { FreestylePalaceJoinDialog } from '@/modules/practice/ui/freestyle/components/FreestylePalaceJoinDialog'
+import { useFreestylePalaceDirectoryActions } from '@/modules/practice/ui/freestyle/hooks/useFreestylePalaceDirectoryActions'
 import { FreestyleNewUnitsBanner } from '@/modules/practice/ui/freestyle/components/FreestyleNewUnitsBanner'
 import { FreestyleBedtimeButton } from '@/modules/practice/ui/freestyle/components/FreestyleBedtimeButton'
 import { getFreestyleBedtimeCandidatesApi } from '@/modules/practice/ui/freestyle/api'
@@ -81,6 +83,7 @@ import { useFreestyleChromeTheme } from '@/modules/practice/ui/freestyle/hooks/u
 import { useFreestyleWakeLock } from '@/modules/practice/ui/freestyle/hooks/useFreestyleWakeLock'
 import { useAiRunConfigDialog, useFlipCardRevealSettings } from '@/modules/settings/public'
 import {
+  cardPalaceId,
   FREESTYLE_WORKSPACE_PRIMARY,
   isPalaceReviewWorkspace,
   palaceReviewWorkspaceId,
@@ -303,25 +306,21 @@ export default function ImmersiveFreestylePage({
     cue('page.turn', {})
   }, [signalPageTurn])
   const currentCard = cards[currentIndex] ?? null
-  const currentPalaceId = currentCard?.type === 'mindmap_branch'
-    ? currentCard.palace_id
-    : currentCard?.palace_context?.id ?? null
+  const currentPalaceId = cardPalaceId(currentCard)
   /**
-   * Directory clicks are palace entry, not a card jump: a palace review stays
-   * in review, and 随心 narrows this session to the chosen palace (the same
-   * transient entry scope a shelf launch uses). The saved selection is not
-   * rewritten by that hint.
+   * Palaces that still own a card in this round, which is exactly what the
+   * progress rail can reach. The directory marks them so the round's reach is
+   * visible without opening every chapter; settled and removed cards are
+   * already gone from `cards`.
    */
-  const openPalaceFromDirectory = useCallback((palaceId: number) => {
-    if (palaceId === currentPalaceId) return
-    if (reviewPalaceId != null) {
-      navigate(`/palaces/${palaceId}/review`)
-      return
+  const queuedPalaceIds = useMemo(() => {
+    const ids = new Set<number>()
+    for (const card of cards) {
+      const palaceId = cardPalaceId(card)
+      if (palaceId != null) ids.add(palaceId)
     }
-    // Replace: the hint is transient (the page drops it once the config saves),
-    // so walking the directory must not fill the back stack with each palace.
-    navigate(`/freestyle?palaceId=${palaceId}`, { replace: true })
-  }, [currentPalaceId, navigate, reviewPalaceId])
+    return ids
+  }, [cards])
   /**
    * Everything the feed presents has a this-round score. That is not yet 本轮
    * 完成 when the server still owes same-day 重练 (`waiting`): those cards are
@@ -797,6 +796,23 @@ export default function ImmersiveFreestylePage({
     requestRoundPreview(cards, index, direction)
     navigateToIndex(index)
   }, [cards, currentIndex, navigateToIndex])
+  const {
+    palaceJoin,
+    palaceJoinBusy,
+    openPalaceFromDirectory,
+    confirmPalaceJoin,
+    cancelPalaceJoin,
+  } = useFreestylePalaceDirectoryActions({
+    currentPalaceId,
+    reviewPalaceId,
+    cards,
+    completedIds: queueState.completedIds,
+    encounters: queueState.unitEncountersByCardId,
+    roundPlan,
+    currentCardId: currentCard?.id ?? null,
+    jumpFromProgressRail,
+    setConfigAndPersist,
+  })
   const openHistory = useCallback(() => setHistoryOpen(true), [])
   const location = useLocation()
   const seenEditorVisitRef = useRef(0)
@@ -1011,6 +1027,7 @@ export default function ImmersiveFreestylePage({
     <TooltipProvider>
       <FreestylePalaceDirectoryPanel
         currentPalaceId={currentPalaceId}
+        queuedPalaceIds={queuedPalaceIds}
         collapsed={directoryCollapsed}
         onCollapsedChange={setDirectoryCollapsed}
         onSelectPalace={openPalaceFromDirectory}
@@ -1268,6 +1285,14 @@ export default function ImmersiveFreestylePage({
           onConfirm={() => { void confirmBedtimeReview() }}
           onCancel={() => setBedtimeOpen(false)}
         />
+        {palaceJoin ? (
+          <FreestylePalaceJoinDialog
+            state={palaceJoin}
+            busy={palaceJoinBusy}
+            onCancel={cancelPalaceJoin}
+            onJoin={confirmPalaceJoin}
+          />
+        ) : null}
       </div>
       </FreestylePalaceDirectoryPanel>
     </TooltipProvider>

@@ -44,7 +44,11 @@ function palace(id: number, title: string) {
   }
 }
 
-function renderPanel(collapsed = false, hidden = false) {
+function renderPanel(
+  collapsed = false,
+  hidden = false,
+  queuedPalaceIds?: ReadonlySet<number>,
+) {
   const onSelectPalace = vi.fn()
   const onCollapsedChange = vi.fn()
   const view = render(
@@ -52,6 +56,7 @@ function renderPanel(collapsed = false, hidden = false) {
       <MemoryRouter>
         <FreestylePalaceDirectoryPanel
           currentPalaceId={11}
+          queuedPalaceIds={queuedPalaceIds}
           collapsed={collapsed}
           onCollapsedChange={onCollapsedChange}
           onSelectPalace={onSelectPalace}
@@ -94,6 +99,17 @@ describe('FreestylePalaceDirectoryPanel', () => {
 
     expect(onSelectPalace).toHaveBeenCalledWith(12)
     expect(screen.getByTestId('freestyle-stage')).toBeTruthy()
+  })
+
+  it('marks every palace the current round still holds', async () => {
+    renderPanel(false, false, new Set([11, 12]))
+
+    const currentRow = await screen.findByRole('button', { name: '已打开的宫殿' })
+    const otherRow = screen.getByRole('button', { name: '另一座宫殿' })
+
+    expect(currentRow.getAttribute('aria-current')).toBe('page')
+    expect(otherRow.getAttribute('data-round-queued')).toBe('true')
+    expect(otherRow.querySelector('[data-round-dot="palace"]')).toBeTruthy()
   })
 
   it('owns its collapse rail instead of the app navigation', async () => {

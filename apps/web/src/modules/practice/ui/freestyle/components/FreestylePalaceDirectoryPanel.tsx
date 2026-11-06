@@ -19,8 +19,10 @@ function isNarrowViewport() {
 }
 
 export interface FreestylePalaceDirectoryPanelProps {
-  /** Palace of the card on screen, highlighted in the tree. */
+  /** Palace of the card on screen; keeps the filled row. */
   currentPalaceId: number | null
+  /** Every palace still in this round's queue, marked with a dot in the tree. */
+  queuedPalaceIds?: ReadonlySet<number>
   collapsed: boolean
   onCollapsedChange: (collapsed: boolean) => void
   onSelectPalace: (palaceId: number) => void
@@ -36,6 +38,7 @@ export interface FreestylePalaceDirectoryPanelProps {
  */
 export function FreestylePalaceDirectoryPanel({
   currentPalaceId,
+  queuedPalaceIds,
   collapsed,
   onCollapsedChange,
   onSelectPalace,
@@ -68,6 +71,10 @@ export function FreestylePalaceDirectoryPanel({
         <PalaceDirectoryTreeView
           tree={tree}
           currentPalaceId={currentPalaceId}
+          // A feed keeps moving; only the first card's palace is revealed, the
+          // rest of the round stays marked by dots instead of yanking the list.
+          revealCurrent={false}
+          queuedPalaceIds={queuedPalaceIds}
           loading={loading}
           error={error}
           onSelectPalace={select}

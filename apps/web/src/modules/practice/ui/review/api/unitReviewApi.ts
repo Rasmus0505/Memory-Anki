@@ -239,6 +239,20 @@ export async function setUnitFavoriteApi(unitId: string, isFavorite: boolean) {
   return response.item
 }
 
+/**
+ * 「开始标记」 one-click path: mark the palace root as one scheduling unit.
+ * Idempotent. Returns the palace projection after reconcile.
+ */
+export async function markPalaceRootApi(palaceId: number) {
+  const response = await request<{ review: PalaceUnitProjectionDto }>(
+    `/palaces/${palaceId}/mark-root`,
+    { method: 'POST' },
+  )
+  emitAppEvent(APP_EVENT_NAMES.palaceCatalogInvalidated)
+  emitAppEvent(APP_EVENT_NAMES.reviewStateChanged)
+  return response.review
+}
+
 export async function reconcilePalaceUnitsApi(palaceId: number) {
   const response = await request<{ item: ReconcilePalaceUnitsResultDto }>(
     `/review/palaces/${palaceId}/units/reconcile`,

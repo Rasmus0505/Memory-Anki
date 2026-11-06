@@ -31,10 +31,17 @@ import {
   writeDirectoryScrollTop,
 } from '../model/palaceDirectoryViewState'
 
-const PALACE_DRAG_TYPE = 'application/x-memory-anki-palace'
 
 /** `sidebar`: compact panel beside a canvas. `page`: a full-page catalog list. */
 export type PalaceDirectoryTreeSize = 'sidebar' | 'page'
+
+import {
+  PALACE_DRAG_TYPE,
+  Highlighted,
+  QueueDot,
+  collectQueueMarks,
+  readDraggedPalaceId,
+} from './palaceDirectoryTreeChrome'
 
 const ROW_METRICS: Record<PalaceDirectoryTreeSize, { indent: number; base: number; text: string; row: string; leaf: string; chevron: string }> = {
   sidebar: { indent: 14, base: 6, text: 'text-[13px]', row: 'py-1', leaf: 'size-3.5', chevron: 'size-5' },
@@ -95,33 +102,20 @@ export interface PalaceDirectoryTreeViewProps {
   renderBucketMeta?: (bucketKey: string) => ReactNode
   /** Mark this text inside chapter and palace names (the host's search term). */
   highlight?: string
+  /**
+   * Palaces that still have cards in the host's round (随心). They get a small
+   * dot, and their ancestors a fainter one, so a folded chapter still shows
+   * that this round reaches into it. The palace on screen keeps the filled row.
+   */
+  queuedPalaceIds?: ReadonlySet<number>
+  /**
+   * Expand and scroll to the current palace whenever it changes. True for
+   * editors and catalogs; the freestyle feed turns it off so paging cards does
+   * not keep yanking the directory, and only reveals its first palace.
+   */
+  revealCurrent?: boolean
 }
 
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-function Highlighted({ text, query }: { text: string; query?: string }) {
-  const needle = query?.trim()
-  if (!needle) return <>{text}</>
-  const lower = needle.toLocaleLowerCase()
-  return (
-    <>
-      {text.split(new RegExp(`(${escapeRegExp(needle)})`, 'gi')).map((part, index) => (
-        part.toLocaleLowerCase() === lower
-          ? <mark key={index} className="rounded-sm bg-warning/25 px-0.5 text-inherit">{part}</mark>
-          : part ? <span key={index}>{part}</span> : null
-      ))}
-    </>
-  )
-}
-
-function readDraggedPalaceId(event: DragEvent) {
-  const raw = event.dataTransfer.getData(PALACE_DRAG_TYPE)
-    || event.dataTransfer.getData('text/plain')
-  const palaceId = Number(raw)
-  return Number.isFinite(palaceId) && palaceId > 0 ? palaceId : null
-}
 
 /**
  * Pure tree rendering for 「学科 → 章节 → 宫殿」. Data loading and the host's
@@ -159,6 +153,8 @@ export function PalaceDirectoryTreeView({
   renderSubjectMeta,
   renderBucketMeta,
   highlight,
+  queuedPalaceIds,
+  revealCurrent = true,
 }: PalaceDirectoryTreeViewProps) {
   const metrics = ROW_METRICS[size]
   const pageList = size === 'page'
@@ -226,24 +222,40 @@ export function PalaceDirectoryTreeView({
     })
   }, [])
 
+  // Which rows this round reaches into, computed against the full tree so the
+  // marks do not blink while a search narrows what is rendered.
+  const queueMarks = useMemo(() => collectQueueMarks(tree, queuedPalaceIds), [tree, queuedPalaceIds])
+
   // Opening a palace from anywhere (including the tree itself) reveals its path.
+  // A feed host that turns `revealCurrent` off reveals only its first palace:
+  // after that the dots keep the round legible without the list moving.
+  const revealedPalaceRef = useRef<number | null>(null)
+  const pendingScrollRef = useRef(false)
   useEffect(() => {
     if (currentPalaceId == null) return
+    if (!revealCurrent && revealedPalaceRef.current != null) return
+    // The first render can arrive before the directory loads; only a palace the
+    // loaded tree actually contains counts as revealed.
     const keys = expansionKeysForPalace(tree, currentPalaceId)
     if (!keys.length) return
+    revealedPalaceRef.current = currentPalaceId
+    pendingScrollRef.current = true
     setExpanded((current) => {
       if (keys.every((key) => current.has(key))) return current
       const next = new Set(current)
       for (const key of keys) next.add(key)
       return next
     })
-  }, [tree, currentPalaceId])
+  }, [tree, currentPalaceId, revealCurrent])
 
   useEffect(() => {
     // jsdom (component tests) has no scrollIntoView.
+    if (!revealCurrent && !pendingScrollRef.current) return
     const row = activeRowRef.current
-    if (typeof row?.scrollIntoView === 'function') row.scrollIntoView({ block: 'nearest' })
-  }, [currentPalaceId, expanded, filtered])
+    if (!row) return
+    if (typeof row.scrollIntoView === 'function') row.scrollIntoView({ block: 'nearest' })
+    pendingScrollRef.current = false
+  }, [currentPalaceId, expanded, filtered, revealCurrent])
 
   const bindFromEvent = useCallback((
     event: DragEvent,
@@ -280,6 +292,7 @@ export function PalaceDirectoryTreeView({
     flattenedChapter?: DirectoryChapterNode,
   ) => {
     const active = palace.id === currentPalaceId
+    const queued = queueMarks.palaces.has(palace.id)
     const dropKey = flattenedChapter ? `chapter:${flattenedChapter.id}` : null
     const rowKey = `palace:${palace.id}`
     const rowIndent = { paddingLeft: metrics.base + depth * metrics.indent + (pageList ? 28 : 20) }
@@ -309,16 +322,20 @@ export function PalaceDirectoryTreeView({
           metrics.text,
           renderPalaceMeta ? 'min-w-0 flex-1' : 'w-full',
           active
-            ? 'bg-primary/10 font-medium text-foreground'
-            : renderPalaceMeta
-              ? 'text-foreground/90 hover:text-foreground'
-              : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+            ? 'bg-primary/15 font-medium text-foreground ring-1 ring-inset ring-primary/30'
+            : queued
+              ? 'text-foreground'
+              : renderPalaceMeta
+                ? 'text-foreground/90 hover:text-foreground'
+                : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
           'data-[state=open]:bg-accent data-[state=open]:text-foreground',
         )}
         style={rowIndent}
+        data-round-queued={queued ? 'true' : undefined}
       >
         <FileText className={cn(metrics.leaf, 'shrink-0 opacity-60')} aria-hidden />
         <span className="truncate"><Highlighted text={palace.title} query={highlight} /></span>
+        {queued && !active ? <QueueDot label="本轮队列里有这座宫殿" /> : null}
       </button>
     )
     const palaceMenuItems = palaceMenu?.(palace, { beginRename: () => beginRename(rowKey) }) ?? null
@@ -419,6 +436,9 @@ export function PalaceDirectoryTreeView({
           ) : (
             <RowContextMenu items={chapterMenuItems}>{chapterLabel}</RowContextMenu>
           )}
+          {queueMarks.chapters.has(chapter.id)
+            ? <QueueDot faint label="这一章有本轮队列中的宫殿" />
+            : null}
           {renderChapterMeta ? <div className="flex shrink-0 items-center gap-1.5">{renderChapterMeta(chapter)}</div> : null}
         </div>
         {isOpen ? (
@@ -467,6 +487,9 @@ export function PalaceDirectoryTreeView({
             <ChevronRight className={cn('size-3.5 transition-transform', isOpen && 'rotate-90')} aria-hidden />
           </button>
           <RowContextMenu items={bucketMenuItems}>{bucketLabel}</RowContextMenu>
+          {queueMarks.buckets.has(key)
+            ? <QueueDot faint label="这一栏有本轮队列中的宫殿" />
+            : null}
           {renderBucketMeta ? <div className="flex shrink-0 items-center gap-1.5">{renderBucketMeta(key)}</div> : null}
         </div>
         {isOpen ? palaces.map((palace) => renderPalace(palace, depth + 1)) : null}
@@ -540,6 +563,9 @@ export function PalaceDirectoryTreeView({
           ) : (
             <RowContextMenu items={subjectMenuItems}>{subjectLabel}</RowContextMenu>
           )}
+          {queueMarks.subjects.has(subject.id)
+            ? <QueueDot faint label="这个学科有本轮队列中的宫殿" />
+            : null}
           {renderSubjectMeta ? <div className="flex shrink-0 items-center gap-1.5">{renderSubjectMeta(subject)}</div> : null}
         </div>
         {isOpen ? renderSubjectChildren(subject, depth + 1) : null}

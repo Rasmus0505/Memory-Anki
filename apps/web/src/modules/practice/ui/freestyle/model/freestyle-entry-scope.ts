@@ -8,6 +8,7 @@ function copyStreamScope<T extends FreestyleStreamScope>(target: T, source: Free
   return {
     ...target,
     specific_palace_ids: [...source.specific_palace_ids],
+    extra_palace_ids: [...(source.extra_palace_ids ?? [])],
     subject_scope: source.subject_scope,
     subject_ids: [...source.subject_ids],
   }
@@ -18,8 +19,11 @@ function lockStreamScope<T extends FreestyleStreamScope>(
   palaceIds: readonly number[],
   subjectScope: T['subject_scope'],
 ): T {
+  // The entry hint narrows the selection; palaces the learner explicitly added
+  // to the round stay added, otherwise browsing would silently drop them too.
   return copyStreamScope(target, {
     specific_palace_ids: [...palaceIds],
+    extra_palace_ids: [...(target.extra_palace_ids ?? [])],
     subject_scope: subjectScope,
     subject_ids: [],
   })
@@ -130,10 +134,31 @@ export function persistFreestyleConfigWithoutEntryLock(
     subject_ids: [...stored.subject_ids],
     streams: {
       ...sessionConfig.streams,
-      memory_palace: copyStreamScope(sessionConfig.streams.memory_palace, stored.streams.memory_palace),
-      quiz: copyStreamScope(sessionConfig.streams.quiz, stored.streams.quiz),
-      english: copyStreamScope(sessionConfig.streams.english, stored.streams.english),
+      memory_palace: copyScopeForPersist(
+        sessionConfig.streams.memory_palace,
+        stored.streams.memory_palace,
+      ),
+      quiz: copyScopeForPersist(sessionConfig.streams.quiz, stored.streams.quiz),
+      english: copyScopeForPersist(sessionConfig.streams.english, stored.streams.english),
     },
+  }
+}
+
+/**
+ * Persist under an entry lock: the palace/subject selection comes from the
+ * stored config, but directory additions stay exactly as the session has them.
+ * Merging the two would resurrect extras the learner just cleared.
+ */
+function copyScopeForPersist<T extends FreestyleStreamScope>(
+  session: T,
+  stored: FreestyleStreamScope,
+): T {
+  return {
+    ...session,
+    specific_palace_ids: [...stored.specific_palace_ids],
+    extra_palace_ids: [...(session.extra_palace_ids ?? [])],
+    subject_scope: stored.subject_scope,
+    subject_ids: [...stored.subject_ids],
   }
 }
 

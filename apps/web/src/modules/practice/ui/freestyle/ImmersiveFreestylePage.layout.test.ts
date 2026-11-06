@@ -191,6 +191,16 @@ describe('ImmersiveFreestylePage layout', () => {
     expect(source).toContain('expandLabel="展开宫殿目录"')
   })
 
+  it('delegates a directory click to the read-only navigation hook', () => {
+    // A click must not mint an entry scope: that rebuilt the round around one
+    // palace and silently dropped every other palace from the queue. The four
+    // branches and the append-only join live in the hook, not in this page.
+    expect(source).not.toContain('navigate(`/freestyle?palaceId=')
+    expect(source).toContain('useFreestylePalaceDirectoryActions')
+    expect(source).toContain('<FreestylePalaceJoinDialog')
+    expect(source).toContain('onSelectPalace={openPalaceFromDirectory}')
+  })
+
   it('places 睡前复习 above the right-side pager and confirms before appending', () => {
     expect(source).toContain('FreestyleBedtimeButton')
     expect(source).toContain('topSlot={')

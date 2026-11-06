@@ -1,6 +1,9 @@
 import type { ReactNode } from 'react'
 import { RotateCcw } from 'lucide-react'
-import { sanitizeFreestyleFeedConfig } from '@/modules/practice/domain/feedConfig'
+import {
+  clearExtraPalaces,
+  sanitizeFreestyleFeedConfig,
+} from '@/modules/practice/domain/feedConfig'
 import type {
   FreestyleFeedConfig,
   FreestyleLearnScope,
@@ -108,6 +111,7 @@ export function summarizeRoundConfig(
   const palace = config.streams.memory_palace
   const selectedCount = palace.specific_palace_ids.length
   const totalCount = allFreestylePalaceIdsFromSubjects(subjects).length
+  const extraCount = palace.extra_palace_ids?.length ?? 0
   const scope = config.learn_scope.map((item) => (item === 'new' ? '新学' : '复习'))
   return [
     { label: '学什么', value: scope.join(' + ') },
@@ -115,6 +119,7 @@ export function summarizeRoundConfig(
       label: '宫殿',
       value: [
         selectedCount ? `已选 ${selectedCount} 座` : `全部 ${totalCount} 座`,
+        extraCount ? `额外加入 ${extraCount} 座` : '',
         labelOf(palace.palace_order, PALACE_ORDER_OPTIONS),
         labelOf(palace.unit_order, UNIT_ORDER_OPTIONS),
       ].filter(Boolean).join(' · '),
@@ -135,6 +140,7 @@ export function FreestyleTrainingConfigForm({
 }) {
   const palace = config.streams.memory_palace
   const selectedIds = palace.specific_palace_ids
+  const extraCount = palace.extra_palace_ids?.length ?? 0
   const allIds = allFreestylePalaceIdsFromSubjects(scopeSubjects)
   const dueIds = duePalaceIdsFromSubjects(scopeSubjects)
 
@@ -155,7 +161,16 @@ export function FreestyleTrainingConfigForm({
       ids,
       scopeSubjects,
     )
-    updatePalaceStream(normalized)
+    // Choosing palaces explicitly retires the ad-hoc additions; the picker is
+    // now the whole selection. Both palace streams must drop them, or quiz
+    // keeps pulling the old palace.
+    onChange(clearExtraPalaces(sanitizeFreestyleFeedConfig({
+      ...config,
+      streams: {
+        ...config.streams,
+        memory_palace: { ...palace, ...normalized },
+      },
+    })))
   }
 
   const togglePalace = (ids: number[], checked: boolean) => {
@@ -243,6 +258,7 @@ export function FreestyleTrainingConfigForm({
         action={(
           <span className="text-xs tabular-nums text-muted-foreground">
             {selectedIds.length ? `已选 ${selectedIds.length} 座` : `全部 ${allIds.length} 座`}
+            {extraCount ? ` · 额外 ${extraCount} 座` : ''}
           </span>
         )}
       >
@@ -273,6 +289,16 @@ export function FreestyleTrainingConfigForm({
           >
             <RotateCcw className="size-3.5" />重置
           </Button>
+          {extraCount ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => onChange(clearExtraPalaces(config))}
+            >
+              <RotateCcw className="size-3.5" />清除额外加入
+            </Button>
+          ) : null}
         </div>
         <div className="max-h-[min(50dvh,30rem)] overflow-y-auto overscroll-contain pr-1">
           <FreestylePalaceScopeTree
