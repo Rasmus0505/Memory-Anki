@@ -35,6 +35,7 @@ export interface ChapterDetailResponse {
     id: number
     title: string
     archived: boolean
+    is_favorite?: boolean
     review_status: 'marking_required' | 'due' | 'scheduled'
     review_unit_count: number
     due_review_unit_count: number

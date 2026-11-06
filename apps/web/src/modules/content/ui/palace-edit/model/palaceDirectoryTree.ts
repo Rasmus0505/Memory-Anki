@@ -39,6 +39,8 @@ export interface DirectoryPalaceNode {
   chapterId: number | null
   subjectId: number | null
   sortOrder: number
+  /** Known so the row menu can say 收藏 vs 取消收藏. */
+  isFavorite?: boolean
 }
 
 export interface DirectoryChapterNode {
@@ -177,6 +179,7 @@ function toPalaceNode(
     chapterId,
     subjectId,
     sortOrder: palace.group_sort_order ?? 0,
+    isFavorite: palace.is_favorite,
   }
 }
 

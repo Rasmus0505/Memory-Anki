@@ -128,9 +128,8 @@ export function PalaceCatalogTree({
         palaceMenu={(palace, { beginRename }) => rowMenus.palaceMenu(palace, {
           rename: { onSelect: beginRename },
           isFavorite: palacesById.get(palace.id)?.is_favorite,
-          extra: [
-            menuItem('复习进度面板', CalendarClock, () => setProgressPalaceId(palace.id)),
-          ],
+          // Same in-place panel as the row's ••• menu; the default verb navigates.
+          progress: { onSelect: () => setProgressPalaceId(palace.id) },
         })}
         chapterMenu={(chapter, { beginRename }) => rowMenus.chapterMenu(
           { id: chapter.id, name: chapter.name, subjectId: chapter.subjectId },

@@ -64,6 +64,7 @@ def _palace_out(p: Palace, session: Session | None = None) -> dict:
         "title": p.title,
         "pegs": [{"id": pg.id, "name": pg.name, "content": pg.content} for pg in p.pegs],
         "archived": bool(p.archived),
+        "is_favorite": bool(getattr(p, "is_favorite", False)),
         "review_status": review_status,
         "review_unit_count": review_unit_count,
         "due_review_unit_count": due_review_unit_count,

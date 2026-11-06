@@ -514,7 +514,7 @@ export default function Knowledge() {
                         {selectedPalaces.map((palace) => (
                           <RowContextMenu
                             key={palace.id}
-                            items={rowMenus.palaceMenu(palace)}
+                            items={rowMenus.palaceMenu(palace, { isFavorite: palace.is_favorite })}
                           >
                           <Link
                             to={`/palaces/${palace.id}`}

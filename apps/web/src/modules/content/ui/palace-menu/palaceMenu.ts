@@ -13,7 +13,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import type { RowMenuEntry } from '@/shared/ui/row-context-menu/RowContextMenu'
-import { composeMenu, menuItem, type MenuSection } from '@/shared/ui/row-context-menu/compose'
+import { composeMenu, menuItem } from '@/shared/ui/row-context-menu/compose'
 
 /** One slot of a menu: the verb, its handler, and whether it can run now. */
 export interface MenuAction {
@@ -34,7 +34,6 @@ export interface PalaceMenuParts {
   favorite?: { isFavorite: boolean; onSelect: () => void }
   copyLink?: MenuAction
   /** Host-specific verbs (复习进度面板, 导出…), shown above the destructive item. */
-  extra?: MenuSection
   remove?: MenuAction
 }
 
@@ -42,8 +41,6 @@ export interface ChapterMenuParts {
   createPalace?: MenuAction
   freestyle?: MenuAction
   rename?: MenuAction
-  moveChapters?: MenuAction
-  extra?: MenuSection
   remove?: MenuAction
 }
 
@@ -52,7 +49,6 @@ export interface SubjectMenuParts {
   openKnowledge?: MenuAction
   createPalace?: MenuAction
   rename?: MenuAction
-  extra?: MenuSection
   remove?: MenuAction
 }
 
@@ -82,7 +78,6 @@ export function buildPalaceMenu(parts: PalaceMenuParts): RowMenuEntry[] {
         : null,
       entry(parts.copyLink, '复制链接', ClipboardCopy),
     ],
-    parts.extra,
     parts.remove
       ? menuItem(parts.remove.label ?? '删除宫殿', Trash2, parts.remove.onSelect, {
         danger: true,
@@ -100,9 +95,7 @@ export function buildChapterMenu(parts: ChapterMenuParts): RowMenuEntry[] {
     ],
     [
       entry(parts.rename, '重命名', Pencil),
-      entry(parts.moveChapters, '调整章节层级…', FolderInput),
     ],
-    parts.extra,
     parts.remove
       ? menuItem(parts.remove.label ?? '删除章节', Trash2, parts.remove.onSelect, {
         danger: true,
@@ -120,7 +113,6 @@ export function buildSubjectMenu(parts: SubjectMenuParts): RowMenuEntry[] {
       entry(parts.createPalace, '在此学科新建宫殿', Plus),
     ],
     [entry(parts.rename, '重命名', Pencil)],
-    parts.extra,
     parts.remove
       ? menuItem(parts.remove.label ?? '删除学科', Trash2, parts.remove.onSelect, {
         danger: true,

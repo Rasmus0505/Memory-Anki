@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import { toast } from '@/shared/feedback/toast'
 import { appConfirm, appPrompt } from '@/shared/components/ui/native-dialog'
 import type { RowMenuEntry } from '@/shared/ui/row-context-menu/RowContextMenu'
-import type { MenuSection } from '@/shared/ui/row-context-menu/compose'
 import { generateLocalId } from '@/shared/lib/ids'
 import {
   createPalaceApi,
@@ -61,23 +60,22 @@ export type PalaceMenuVerb =
 export interface PalaceMenuCallOptions {
   /** Replace the default 「打开」 (editor page opens in place, freestyle jumps the feed). */
   open?: MenuAction
+  /** Replace the default 「复习进度」 (the catalog opens its in-place panel). */
+  progress?: MenuAction
   /** Inline rename supplied by a tree row; omitted, the menu asks with a prompt. */
   rename?: MenuAction
   /** Host verbs, drawn above the destructive item. */
-  extra?: MenuSection
   isFavorite?: boolean
   omit?: PalaceMenuVerb[]
 }
 
 export interface ChapterMenuCallOptions {
   rename?: MenuAction
-  extra?: MenuSection
   omit?: Array<'createPalace' | 'freestyle' | 'rename' | 'remove'>
 }
 
 export interface SubjectMenuCallOptions {
   rename?: MenuAction
-  extra?: MenuSection
   omit?: Array<'openShelf' | 'openKnowledge' | 'createPalace' | 'rename' | 'remove'>
 }
 
@@ -226,12 +224,14 @@ export function usePalaceMenuActions(options: PalaceMenuActionsOptions = {}) {
     call: PalaceMenuCallOptions = {},
   ): RowMenuEntry[] => {
     const omit = new Set(call.omit ?? [])
-    const isFavorite = call.isFavorite ?? palace.isFavorite ?? false
+    // Only offer 收藏 when the host actually knows the state. Showing 「收藏」 for
+    // an already-favorited palace makes the item unable to unfavorite it.
+    const isFavorite = call.isFavorite ?? palace.isFavorite
     return buildPalaceMenu({
       open: call.open ?? { onSelect: () => navigate(openPath(palace.id)) },
       progress: omit.has('progress')
         ? undefined
-        : { onSelect: () => navigate(`/palaces/${palace.id}/units`) },
+        : call.progress ?? { onSelect: () => navigate(`/palaces/${palace.id}/units`) },
       quiz: omit.has('quiz')
         ? undefined
         : { onSelect: () => navigate(`/palaces/${palace.id}/quiz`) },
@@ -244,13 +244,12 @@ export function usePalaceMenuActions(options: PalaceMenuActionsOptions = {}) {
       move: omit.has('move')
         ? undefined
         : { onSelect: () => void openMoveDialog(palace) },
-      favorite: omit.has('favorite')
+      favorite: omit.has('favorite') || isFavorite === undefined
         ? undefined
         : { isFavorite, onSelect: () => void toggleFavorite(palace, isFavorite) },
       copyLink: omit.has('copyLink')
         ? undefined
         : { onSelect: () => void copyLink(palace.id) },
-      extra: call.extra,
       remove: omit.has('remove')
         ? undefined
         : { onSelect: () => void removePalace(palace) },
@@ -355,7 +354,6 @@ export function usePalaceMenuActions(options: PalaceMenuActionsOptions = {}) {
       rename: omit.has('rename')
         ? undefined
         : call.rename ?? { onSelect: () => void renameChapterWithPrompt(chapter) },
-      extra: call.extra,
       remove: omit.has('remove')
         ? undefined
         : { onSelect: () => void removeChapter(chapter) },
@@ -423,7 +421,6 @@ export function usePalaceMenuActions(options: PalaceMenuActionsOptions = {}) {
       rename: omit.has('rename')
         ? undefined
         : call.rename ?? { onSelect: () => void renameSubjectWithPrompt(subject) },
-      extra: call.extra,
       remove: omit.has('remove')
         ? undefined
         : { onSelect: () => void removeSubject(subject) },

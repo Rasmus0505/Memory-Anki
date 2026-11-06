@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import {
   BookOpen,
+  ClipboardCopy,
   FileText,
   FolderTree,
   History,
@@ -9,6 +11,9 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { usePalaceMenuActions } from '@/modules/content/public'
+import { RowContextMenu } from '@/shared/ui/row-context-menu/RowContextMenu'
+import { composeMenu, menuItem } from '@/shared/ui/row-context-menu/compose'
 import {
   getShortcutLabel,
   MEMORY_ANKI_SHORTCUT_ACTIONS,
@@ -63,6 +68,9 @@ export default function CommandPaletteSurface({
   actions,
 }: CommandPaletteSurfaceProps) {
   const navigate = useNavigate()
+  const rowMenus = usePalaceMenuActions()
+  // A body-portaled menu is unclickable inside this modal; render it in the dialog.
+  const [menuHost, setMenuHost] = useState<HTMLDivElement | null>(null)
 
   const runAndClose = (run: () => void) => {
     run()
@@ -70,7 +78,7 @@ export default function CommandPaletteSurface({
   }
 
   return (
-    <CommandDialog open={open} onOpenChange={onOpenChange}>
+    <CommandDialog open={open} onOpenChange={onOpenChange} contentRef={setMenuHost}>
       <CommandInput
         value={query}
         onValueChange={onQueryChange}
@@ -156,19 +164,28 @@ export default function CommandPaletteSurface({
         {results && results.palaces.length > 0 ? (
           <CommandGroup heading="宫殿">
             {results.palaces.map((hit) => (
-              <CommandItem
+              <RowContextMenu
                 key={`palace-${hit.id}`}
-                value={`palace-${hit.id}-${query}`}
-                onSelect={() => runAndClose(() => navigate(`/palaces/${hit.id}`))}
+                container={menuHost}
+                items={rowMenus.palaceMenu(hit, {
+                  // A search hit is transient: navigation and read-only verbs only.
+                  omit: ['rename', 'move', 'remove'],
+                  open: { onSelect: () => runAndClose(() => navigate(`/palaces/${hit.id}`)) },
+                })}
               >
-                <BookOpen className="size-4" />
-                <span className="truncate">{hit.title}</span>
-                {hit.snippet ? (
-                  <span className="min-w-0 truncate text-xs text-muted-foreground">
-                    {hit.snippet}
-                  </span>
-                ) : null}
-              </CommandItem>
+                <CommandItem
+                  value={`palace-${hit.id}-${query}`}
+                  onSelect={() => runAndClose(() => navigate(`/palaces/${hit.id}`))}
+                >
+                  <BookOpen className="size-4" />
+                  <span className="truncate">{hit.title}</span>
+                  {hit.snippet ? (
+                    <span className="min-w-0 truncate text-xs text-muted-foreground">
+                      {hit.snippet}
+                    </span>
+                  ) : null}
+                </CommandItem>
+              </RowContextMenu>
             ))}
           </CommandGroup>
         ) : null}
@@ -176,17 +193,28 @@ export default function CommandPaletteSurface({
         {results && results.pegs.length > 0 ? (
           <CommandGroup heading="记忆桩">
             {results.pegs.map((hit) => (
-              <CommandItem
+              <RowContextMenu
                 key={`peg-${hit.id}`}
-                value={`peg-${hit.id}-${query}`}
-                onSelect={() => runAndClose(() => navigate(`/palaces/${hit.palace_id}/edit`))}
+                container={menuHost}
+                items={rowMenus.palaceMenu(
+                  { id: hit.palace_id, title: hit.palace_title },
+                  {
+                    omit: ['rename', 'move', 'remove'],
+                    open: { onSelect: () => runAndClose(() => navigate(`/palaces/${hit.palace_id}/edit`)) },
+                  },
+                )}
               >
-                <MapPin className="size-4" />
-                <span className="truncate">{hit.name}</span>
-                <span className="min-w-0 truncate text-xs text-muted-foreground">
-                  {hit.snippet || hit.palace_title}
-                </span>
-              </CommandItem>
+                <CommandItem
+                  value={`peg-${hit.id}-${query}`}
+                  onSelect={() => runAndClose(() => navigate(`/palaces/${hit.palace_id}/edit`))}
+                >
+                  <MapPin className="size-4" />
+                  <span className="truncate">{hit.name}</span>
+                  <span className="min-w-0 truncate text-xs text-muted-foreground">
+                    {hit.snippet || hit.palace_title}
+                  </span>
+                </CommandItem>
+              </RowContextMenu>
             ))}
           </CommandGroup>
         ) : null}
@@ -194,19 +222,37 @@ export default function CommandPaletteSurface({
         {results && results.questions.length > 0 ? (
           <CommandGroup heading="题目">
             {results.questions.map((hit) => (
-              <CommandItem
+              <RowContextMenu
                 key={`question-${hit.id}`}
-                value={`question-${hit.id}-${query}`}
-                onSelect={() =>
-                  runAndClose(() => navigate(hit.palace_id ? `/palaces/${hit.palace_id}/quiz` : '/knowledge'))
-                }
+                container={menuHost}
+                items={composeMenu(
+                  [
+                    menuItem('打开所属宫殿', BookOpen, () => {
+                      if (!hit.palace_id) return
+                      runAndClose(() => navigate(`/palaces/${hit.palace_id}/edit`))
+                    }, { disabled: !hit.palace_id }),
+                    menuItem('开始做题', ListChecks, () => {
+                      runAndClose(() => navigate(hit.palace_id ? `/palaces/${hit.palace_id}/quiz` : '/knowledge'))
+                    }),
+                  ],
+                  [menuItem('复制题干', ClipboardCopy, () => {
+                    void navigator.clipboard?.writeText(hit.snippet).catch(() => undefined)
+                  })],
+                )}
               >
-                <ListChecks className="size-4" />
-                <span className="min-w-0 truncate">{hit.snippet}</span>
-                {hit.palace_title ? (
-                  <span className="truncate text-xs text-muted-foreground">{hit.palace_title}</span>
-                ) : null}
-              </CommandItem>
+                <CommandItem
+                  value={`question-${hit.id}-${query}`}
+                  onSelect={() =>
+                    runAndClose(() => navigate(hit.palace_id ? `/palaces/${hit.palace_id}/quiz` : '/knowledge'))
+                  }
+                >
+                  <ListChecks className="size-4" />
+                  <span className="min-w-0 truncate">{hit.snippet}</span>
+                  {hit.palace_title ? (
+                    <span className="truncate text-xs text-muted-foreground">{hit.palace_title}</span>
+                  ) : null}
+                </CommandItem>
+              </RowContextMenu>
             ))}
           </CommandGroup>
         ) : null}
@@ -214,17 +260,24 @@ export default function CommandPaletteSurface({
         {results && results.chapters.length > 0 ? (
           <CommandGroup heading="章节">
             {results.chapters.map((hit) => (
-              <CommandItem
+              <RowContextMenu
                 key={`chapter-${hit.id}`}
-                value={`chapter-${hit.id}-${query}`}
-                onSelect={() => runAndClose(() => navigate('/knowledge'))}
+                container={menuHost}
+                items={composeMenu([
+                  menuItem('打开知识库', FolderTree, () => runAndClose(() => navigate('/knowledge'))),
+                ])}
               >
-                <FolderTree className="size-4" />
-                <span className="truncate">{hit.name}</span>
-                {hit.subject_name ? (
-                  <span className="truncate text-xs text-muted-foreground">{hit.subject_name}</span>
-                ) : null}
-              </CommandItem>
+                <CommandItem
+                  value={`chapter-${hit.id}-${query}`}
+                  onSelect={() => runAndClose(() => navigate('/knowledge'))}
+                >
+                  <FolderTree className="size-4" />
+                  <span className="truncate">{hit.name}</span>
+                  {hit.subject_name ? (
+                    <span className="truncate text-xs text-muted-foreground">{hit.subject_name}</span>
+                  ) : null}
+                </CommandItem>
+              </RowContextMenu>
             ))}
           </CommandGroup>
         ) : null}

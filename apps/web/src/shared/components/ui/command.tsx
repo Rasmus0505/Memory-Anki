@@ -20,11 +20,14 @@ interface CommandDialogProps {
   children?: React.ReactNode
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** Host for right-click menus: a body portal is unclickable inside this modal. */
+  contentRef?: React.Ref<HTMLDivElement>
 }
 
-const CommandDialog = ({ children, ...props }: CommandDialogProps) => (
+const CommandDialog = ({ children, contentRef, ...props }: CommandDialogProps) => (
   <Dialog {...props}>
     <DialogContent
+      ref={contentRef}
       accessibleTitle="命令面板"
       accessibleDescription="搜索操作、页面和学习内容。"
       className="overflow-hidden p-0 shadow-floating"
