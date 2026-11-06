@@ -17,6 +17,10 @@ import {
   queueWorkIdentity,
   type QueuePlanUpdateCard,
 } from '@/modules/practice/ui/freestyle/model/queuePlanUpdate'
+import {
+  findSuccessorCardByContent,
+  type CardContentTarget,
+} from '@/modules/practice/ui/freestyle/model/freestyleCardSuccessor'
 import type { FreestyleRoundProgress } from '@/shared/api/contracts/freestyle'
 import { deviceLocalCursor } from '@/modules/practice/domain/deviceLocalCursor'
 import { replaceFreestyleOverlayWrongState } from '@/modules/practice/application/freestyleRoundWrongState'
@@ -762,6 +766,12 @@ export function useImmersiveQueue(
         preserveCompleted?: boolean
         silent?: boolean
         preferCardId?: string | null
+        /**
+         * Content of the card under the viewport. When its unit was retired by
+         * a permanent-mark edit, the rebuilt card that now owns the same nodes
+         * keeps the viewport instead of the old index landing elsewhere.
+         */
+        preferCardContent?: CardContentTarget | null
         reason?: string
         studyWindow?: boolean
         openAtEarliestUnrated?: boolean
@@ -780,6 +790,8 @@ export function useImmersiveQueue(
         silent?: boolean
         /** Prefer keeping this card under the viewport after rebuild. */
         preferCardId?: string | null
+        /** Successor-by-content fallback when the preferred unit was retired. */
+        preferCardContent?: CardContentTarget | null
         /**
          * Cold open only. Land on the same card the right-side 完成 button
          * would open, instead of a stale cursor or card 0.
@@ -993,6 +1005,7 @@ export function useImmersiveQueue(
         if (silent) setQueueFrozen(true)
         let serverCurrentId: string | null = null
         let draftResumeCardId: string | null = queueStateRef.current.currentCardId
+        let preferContentCardId: string | null = null
         try {
           let round = await getOrCreateFreestyleRoundApi({
             operation_id: createOperationId(),
@@ -1030,10 +1043,21 @@ export function useImmersiveQueue(
           nextCards = cardsForServerPlan(builtCards, round.plan, adoptedRoundId)
           incomingMeta.scheduled_count = nextCards.length
           serverCurrentId = nextUnfinishedCardId(round.plan, nextCards)
+          // A permanent-mark edit retires the viewed unit and merges its nodes
+          // into another unit. Follow the content so the viewport keeps the
+          // same material instead of landing on whatever moved into its index.
+          const preferredByContent =
+            options?.preferCardContent
+            && options.preferCardId
+            && !nextCards.some((card) => card.id === options.preferCardId)
+              ? findSuccessorCardByContent(nextCards, options.preferCardContent)
+              : null
+          preferContentCardId = preferredByContent?.id ?? null
+          const preferCardIdOption = preferContentCardId ?? options?.preferCardId
           // Capture the pre-hydrate draft cursor before server fields overwrite it.
           draftResumeCardId = queueStateRef.current.currentCardId
           const resumeCardId = resolveResumePreferCardId({
-            preferCardId: options?.preferCardId,
+            preferCardId: preferCardIdOption,
             silent,
             draftCardId: draftResumeCardId,
             serverCurrentId,
@@ -1107,7 +1131,7 @@ export function useImmersiveQueue(
           ? (nextCards[openFeedIndex]?.id ?? null)
           : null
         const preferCardId = openCardId ?? resolveResumePreferCardId({
-          preferCardId: options?.preferCardId,
+          preferCardId: preferContentCardId ?? options?.preferCardId,
           silent,
           draftCardId: draftResumeCardId ?? queueStateRef.current.currentCardId,
           serverCurrentId,
@@ -1585,6 +1609,13 @@ export function useImmersiveQueue(
     )
     const beforeCard = beforeCards[beforeIndex] ?? null
     const beforeId = beforeCard?.id ?? queueStateRef.current.currentCardId ?? null
+    const beforeContent = beforeCard
+      ? {
+          palaceId: 'palace_id' in beforeCard ? beforeCard.palace_id : null,
+          anchorUid: 'anchor_uid' in beforeCard ? beforeCard.anchor_uid : '',
+          nodeUids: 'node_uids' in beforeCard ? beforeCard.node_uids : [],
+        }
+      : null
     const beforeOutcome = queueBuildOutcomeRef.current
     try {
       staleCardKeysRef.current.clear()
@@ -1595,6 +1626,7 @@ export function useImmersiveQueue(
         replan: true,
         silent: true,
         preferCardId: beforeId,
+        preferCardContent: beforeContent,
       })
       const outcome = queueBuildOutcomeRef.current
       if (!outcome || outcome === beforeOutcome || outcome.status === 'error') {
@@ -1602,8 +1634,15 @@ export function useImmersiveQueue(
       }
       const afterCards = cardsRef.current
       const beforeIdentity = queueWorkIdentity(beforeCard as QueuePlanUpdateCard | null)
+      // A retired unit's content continues under another unit id; that is not
+      // "the current card disappeared", so keep the copy honest.
+      const contentSuccessorId = beforeContent
+        ? findSuccessorCardByContent(afterCards, beforeContent)?.id ?? null
+        : null
       const stillThere = !beforeId || afterCards.some((card) => (
-        card.id === beforeId || (beforeIdentity !== '' && queueWorkIdentity(card) === beforeIdentity)
+        card.id === beforeId
+        || card.id === contentSuccessorId
+        || (beforeIdentity !== '' && queueWorkIdentity(card) === beforeIdentity)
       ))
       const visibleAfter = afterCards.filter((card) => card.type !== 'review_hint')
       return {

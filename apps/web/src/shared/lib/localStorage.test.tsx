@@ -1,6 +1,6 @@
 import { renderHook, act } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { useLocalStorageState } from '@/shared/lib/localStorage'
+import { isStoredBoolean, useLocalStorageState } from '@/shared/lib/localStorage'
 import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
 import { updateClientPreferencesApi } from '@/modules/settings/public'
 
@@ -54,6 +54,22 @@ describe('useLocalStorageState', () => {
     )
 
     expect(result.current[0]).toEqual({ layoutMode: 'wide' })
+    expect(mockUpdateClientPreferencesApi).not.toHaveBeenCalled()
+  })
+
+  it('reads and writes a device-local flag that has no backend preference key', () => {
+    window.localStorage.setItem('panel_collapsed', 'true')
+
+    const { result } = renderHook(() =>
+      useLocalStorageState('panel_collapsed', false, isStoredBoolean),
+    )
+    expect(result.current[0]).toBe(true)
+
+    act(() => {
+      result.current[1](false)
+    })
+    expect(result.current[0]).toBe(false)
+    expect(window.localStorage.getItem('panel_collapsed')).toBe('false')
     expect(mockUpdateClientPreferencesApi).not.toHaveBeenCalled()
   })
 

@@ -3,43 +3,26 @@ import type { useImmersiveQueue } from '@/modules/practice/ui/freestyle/hooks/us
 import { FreestyleHistoryDialog } from '@/modules/practice/ui/freestyle/components/FreestyleHistoryDialog'
 import { FreestyleRoundConfigDialog } from '@/modules/practice/ui/freestyle/components/FreestyleRoundConfigDialog'
 import { FreestyleScopeQuizDialog } from '@/modules/practice/ui/freestyle/components/FreestyleDialogsHost'
-import { FreestyleRoundSheet } from '@/modules/practice/ui/freestyle/components/FreestyleRoundSheet'
 import { overlayRoundReviewPalaceIds } from '@/modules/practice/ui/freestyle/model/overlayQuizRange'
 import { readFreestyleFeedConfig } from '@/modules/practice/public'
 import type { FreestyleWorkspaceId, PalaceReviewWorkspaceId } from '@/modules/practice/public'
 
-type SheetProps = ComponentProps<typeof FreestyleRoundSheet>
 type ConfigProps = ComponentProps<typeof FreestyleRoundConfigDialog>
 type ScopeQuizProps = ComponentProps<typeof FreestyleScopeQuizDialog>
 type HistoryProps = ComponentProps<typeof FreestyleHistoryDialog>
 type ImmersiveQueue = ReturnType<typeof useImmersiveQueue>
 
 export function FreestylePageDialogs({
-  planOpen,
-  onPlanOpenChange,
-  cards,
-  currentIndex,
   queueState,
   roundPlan,
-  subjectByPalaceId,
-  favoritePalaceIds,
-  serverProgress,
-  loading,
-  onJumpPlanCard,
-  onExcludePlanCards,
-  onRestorePlanCards,
-  onCompressCompleted,
-  onReorderPlan,
-  onRateCard,
-  onRateCards,
-  onRemoveCard,
-  onOpenConfigFromPlan,
   configOpen,
   onConfigOpenChange,
   config,
   configIntent,
   onSaveConfig,
   reviewPalaceId,
+  settlementCount,
+  onSettleCompleted,
   scopeQuizOpen,
   onScopeQuizOpenChange,
   planVersion,
@@ -51,31 +34,17 @@ export function FreestylePageDialogs({
   onHistoryOpenChange,
   currentCard,
 }: {
-  planOpen: boolean
-  onPlanOpenChange: SheetProps['onOpenChange']
-  cards: SheetProps['cards']
-  currentIndex: number
-  queueState: SheetProps['queueState']
-  roundPlan: SheetProps['roundPlan']
-  subjectByPalaceId: SheetProps['subjectByPalaceId']
-  favoritePalaceIds: SheetProps['favoritePalaceIds']
-  serverProgress: SheetProps['serverProgress']
-  loading: boolean
-  onJumpPlanCard: SheetProps['onJump']
-  onExcludePlanCards: SheetProps['onExclude']
-  onRestorePlanCards: SheetProps['onRestore']
-  onCompressCompleted: SheetProps['onCompressCompleted']
-  onReorderPlan: SheetProps['onReorder']
-  onRateCard: SheetProps['onRateCard']
-  onRateCards: SheetProps['onRateCards']
-  onRemoveCard: SheetProps['onRemoveCard']
-  onOpenConfigFromPlan: SheetProps['onOpenConfig']
+  queueState: Pick<ImmersiveQueue['queueState'], 'roundId'>
+  roundPlan: ImmersiveQueue['roundPlan']
   configOpen: boolean
   onConfigOpenChange: ConfigProps['onOpenChange']
   config: ConfigProps['config']
   configIntent: ConfigProps['mode']
   onSaveConfig: ConfigProps['onSaveConfig']
   reviewPalaceId: number | null
+  /** Cards already rated and ready to settle out of this round. */
+  settlementCount: number
+  onSettleCompleted: () => void
   scopeQuizOpen: boolean
   onScopeQuizOpenChange: ScopeQuizProps['onOpenChange']
   planVersion: ScopeQuizProps['planVersion']
@@ -89,28 +58,6 @@ export function FreestylePageDialogs({
 }) {
   return (
     <>
-      <FreestyleRoundSheet
-        open={planOpen}
-        cards={cards}
-        currentIndex={currentIndex}
-        queueState={queueState}
-        roundPlan={roundPlan}
-        subjectByPalaceId={subjectByPalaceId}
-        favoritePalaceIds={favoritePalaceIds}
-        wrongUnitIds={wrongUnitIds}
-        serverProgress={serverProgress}
-        onOpenChange={onPlanOpenChange}
-        onJump={onJumpPlanCard}
-        onExclude={onExcludePlanCards}
-        onRestore={onRestorePlanCards}
-        onCompressCompleted={onCompressCompleted}
-        onReorder={onReorderPlan}
-        onRateCard={onRateCard}
-        onRateCards={onRateCards}
-        onRemoveCard={onRemoveCard}
-        onOpenConfig={onOpenConfigFromPlan}
-        loading={loading}
-      />
       <FreestyleRoundConfigDialog
         open={configOpen}
         config={config}
@@ -118,6 +65,8 @@ export function FreestylePageDialogs({
         onOpenChange={onConfigOpenChange}
         onSaveConfig={onSaveConfig}
         scopeLocked={reviewPalaceId != null}
+        settlementCount={settlementCount}
+        onSettleCompleted={onSettleCompleted}
       />
       <FreestyleScopeQuizDialog
         open={scopeQuizOpen}

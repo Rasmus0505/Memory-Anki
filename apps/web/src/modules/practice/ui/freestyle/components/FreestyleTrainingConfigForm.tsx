@@ -1,42 +1,24 @@
 import type { ReactNode } from 'react'
-import { Brain, Blend, ListChecks } from 'lucide-react'
-import {
-  FREESTYLE_UI_TRAINING_MODES,
-  FREESTYLE_UI_TRAINING_STREAMS,
-  sanitizeFreestyleFeedConfig,
-} from '@/modules/practice/domain/feedConfig'
+import { RotateCcw } from 'lucide-react'
+import { sanitizeFreestyleFeedConfig } from '@/modules/practice/domain/feedConfig'
 import type {
   FreestyleFeedConfig,
+  FreestyleLearnScope,
   FreestylePalaceOrder,
-  FreestyleQuizOrder,
-  FreestyleTrainingMode,
   FreestyleUnitOrder,
 } from '@/shared/api/contracts'
 import {
   allFreestylePalaceIdsFromSubjects,
-  filterSubjectsForStream,
-  namedFreestyleSubjectIds,
+  normalizeFreestylePalaceSelection,
+  toggleFreestylePalaceGroup,
   type FreestylePalaceScopeSubject,
 } from '@/modules/practice/ui/freestyle/model/freestyle-palace-scope'
+import {
+  duePalaceIdsFromSubjects,
+  FreestylePalaceScopeTree,
+} from './FreestylePalaceScopeTree'
 import { Button } from '@/shared/components/ui/button'
-import { Input } from '@/shared/components/ui/input'
 import { cn } from '@/shared/lib/utils'
-
-const FIELD_CLASS = 'h-10 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm'
-
-export type StreamKey = 'memory_palace' | 'quiz'
-type UiMode = Exclude<FreestyleTrainingMode, 'english'>
-type StreamConfig = FreestyleFeedConfig['streams']['memory_palace'] | FreestyleFeedConfig['streams']['quiz']
-
-const MODE_OPTIONS: Array<{
-  value: UiMode
-  label: string
-  icon: typeof Brain
-}> = [
-  { value: 'memory_palace', label: '记忆宫殿', icon: Brain },
-  { value: 'quiz', label: '刷题', icon: ListChecks },
-  { value: 'mixed', label: '混合模式', icon: Blend },
-]
 
 const PALACE_ORDER_OPTIONS: Array<{ value: FreestylePalaceOrder; label: string }> = [
   { value: 'finish_palace_then_next', label: '一个刷完再换' },
@@ -49,49 +31,37 @@ const UNIT_ORDER_OPTIONS: Array<{ value: FreestyleUnitOrder; label: string }> = 
   { value: 'random', label: '随机打乱' },
 ]
 
-const QUIZ_ORDER_OPTIONS: Array<{ value: FreestyleQuizOrder; label: string }> = [
-  { value: 'new_first', label: '优先新学，后复习' },
-  { value: 'random', label: '随机' },
+const LEARN_SCOPE_OPTIONS: Array<{ value: FreestyleLearnScope; label: string }> = [
+  { value: 'new', label: '新学' },
+  { value: 'review', label: '复习' },
 ]
 
-const MIX_STRATEGY_OPTIONS: Array<{ value: FreestyleFeedConfig['mix']['strategy']; label: string }> = [
-  { value: 'ratio', label: '按比例穿插' },
-  { value: 'random', label: '全局随机' },
-  { value: 'sequential', label: '分段完成' },
-]
-
-export const STREAM_LABELS: Record<StreamKey, string> = {
+export const STREAM_LABELS = {
   memory_palace: '记忆宫殿',
   quiz: '刷题',
+} as const
+
+function labelOf(value: string, options: ReadonlyArray<{ value: string; label: string }>) {
+  return options.find((item) => item.value === value)?.label ?? ''
 }
 
 function Section({
   title,
-  description,
+  action,
   children,
 }: {
   title: string
-  description?: string
+  action?: ReactNode
   children?: ReactNode
 }) {
   return (
-    <section className="space-y-3 rounded-xl border border-border/60 bg-card/40 p-4">
-      <div>
+    <section className="space-y-2 rounded-xl border border-border/60 bg-card/40 p-3.5">
+      <div className="flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-        {description ? <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p> : null}
+        {action}
       </div>
       {children}
     </section>
-  )
-}
-
-function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
-  return (
-    <label className="grid gap-1.5 text-sm">
-      <span className="font-medium">{label}</span>
-      {children}
-      {hint ? <span className="text-xs leading-5 text-muted-foreground">{hint}</span> : null}
-    </label>
   )
 }
 
@@ -102,12 +72,12 @@ function OptionCards<T extends string>({
   onChange,
 }: {
   label: string
-  options: Array<{ value: T; label: string }>
+  options: ReadonlyArray<{ value: T; label: string }>
   value: T
   onChange: (value: T) => void
 }) {
   return (
-    <div role="radiogroup" aria-label={label} className="grid gap-2">
+    <div role="radiogroup" aria-label={label} className="grid gap-1.5">
       {options.map((option) => {
         const selected = option.value === value
         return (
@@ -117,12 +87,12 @@ function OptionCards<T extends string>({
             role="radio"
             aria-checked={selected}
             className={cn(
-              'rounded-xl border px-3.5 py-2.5 text-left transition-colors',
-              selected ? 'border-primary bg-primary/10' : 'border-border/60 bg-background/80 hover:bg-muted/60',
+              'rounded-lg border px-3 py-2 text-left text-sm font-medium transition-colors',
+              selected ? 'border-primary bg-primary/10 text-primary' : 'border-border/60 bg-background/80 hover:bg-muted/60',
             )}
             onClick={() => onChange(option.value)}
           >
-            <span className={cn('block text-sm font-semibold', selected && 'text-primary')}>{option.label}</span>
+            {option.label}
           </button>
         )
       })}
@@ -130,369 +100,189 @@ function OptionCards<T extends string>({
   )
 }
 
-function updateStream(config: FreestyleFeedConfig, stream: StreamKey, patch: Record<string, unknown>) {
-  return sanitizeFreestyleFeedConfig({
-    ...config,
-    streams: {
-      ...config.streams,
-      [stream]: { ...config.streams[stream], ...patch },
-    },
-  })
-}
-
-export function visibleTrainingMode(config: FreestyleFeedConfig): UiMode {
-  return config.training_mode === 'english' ? 'memory_palace' : config.training_mode
-}
-
-export function activeStreamsOf(config: FreestyleFeedConfig, mode: UiMode): StreamKey[] {
-  if (mode !== 'mixed') return [mode]
-  return config.mixed_modes.filter((item): item is StreamKey => item === 'memory_palace' || item === 'quiz')
-}
-
-function selectedSubjectIdsOf(stream: StreamConfig, subjects: FreestylePalaceScopeSubject[]) {
-  if (stream.subject_ids.length) return stream.subject_ids
-  if (stream.subject_scope === 'english') {
-    return namedFreestyleSubjectIds(subjects.filter((subject) => subject.title.trim() === '英语'))
-  }
-  if (stream.subject_scope === 'non_english') {
-    return namedFreestyleSubjectIds(subjects.filter((subject) => subject.title.trim() !== '英语'))
-  }
-  return []
-}
-
-function subjectFilterLabel(stream: StreamConfig, subjects: FreestylePalaceScopeSubject[]) {
-  const filtered = filterSubjectsForStream(subjects, stream)
-  if (!stream.subject_ids.length && stream.subject_scope === 'all') return '全部学科'
-  if (!filtered.length) return stream.subject_scope === 'english' ? '英语' : '已选学科'
-  return filtered.map((subject) => subject.title).join('、')
-}
-
-function streamPalaceCount(stream: StreamConfig, subjects: FreestylePalaceScopeSubject[]) {
-  if (stream.specific_palace_ids.length) return stream.specific_palace_ids.length
-  return allFreestylePalaceIdsFromSubjects(filterSubjectsForStream(subjects, stream)).length
-}
-
-function labelOf(value: string, options: ReadonlyArray<{ value: string; label: string }>) {
-  return options.find((item) => item.value === value)?.label ?? ''
-}
-
-export interface RoundConfigSummaryRow {
-  label: string
-  value: string
-}
-
-/** Plain-language readout of what the current draft will produce, shown above the form. */
+/** Plain-language readout of what the saved config will produce. */
 export function summarizeRoundConfig(
   config: FreestyleFeedConfig,
   subjects: FreestylePalaceScopeSubject[],
-): RoundConfigSummaryRow[] {
-  const mode = visibleTrainingMode(config)
-  const streams = activeStreamsOf(config, mode)
-  const rows: RoundConfigSummaryRow[] = [
+): Array<{ label: string; value: string }> {
+  const palace = config.streams.memory_palace
+  const selectedCount = palace.specific_palace_ids.length
+  const totalCount = allFreestylePalaceIdsFromSubjects(subjects).length
+  const scope = config.learn_scope.map((item) => (item === 'new' ? '新学' : '复习'))
+  return [
+    { label: '学什么', value: scope.join(' + ') },
     {
-      label: '内容',
-      value: mode === 'mixed'
-        ? `${streams.map((stream) => STREAM_LABELS[stream]).join(' + ')}（${labelOf(config.mix.strategy, MIX_STRATEGY_OPTIONS)}）`
-        : STREAM_LABELS[streams[0]],
+      label: '宫殿',
+      value: [
+        selectedCount ? `已选 ${selectedCount} 座` : `全部 ${totalCount} 座`,
+        labelOf(palace.palace_order, PALACE_ORDER_OPTIONS),
+        labelOf(palace.unit_order, UNIT_ORDER_OPTIONS),
+      ].filter(Boolean).join(' · '),
     },
   ]
-  if (streams.includes('memory_palace')) {
-    const palace = config.streams.memory_palace
-    rows.push({
-      label: '宫殿',
-      value: `${subjectFilterLabel(palace, subjects)} · ${streamPalaceCount(palace, subjects)} 座，${labelOf(palace.palace_order, PALACE_ORDER_OPTIONS)}，单元${labelOf(palace.unit_order, UNIT_ORDER_OPTIONS)}`,
-    })
-  }
-  if (streams.includes('quiz')) {
-    const quiz = config.streams.quiz
-    rows.push({
-      label: '题目',
-      value: `本轮宫殿中 ${quiz.specific_palace_ids.length || streamPalaceCount(config.streams.memory_palace, subjects)} 座，${labelOf(quiz.order, QUIZ_ORDER_OPTIONS)}`,
-    })
-  }
-  if (streams.includes('memory_palace')) {
-    const palace = config.streams.memory_palace
-    const unitOrderText = palace.unit_order === 'random' ? '随机打乱顺序' : '按知识结构顺序'
-    rows.push({
-      label: '复习顺序',
-      value: `先学没学过的单元，再复习到期单元；宫殿内${unitOrderText}出现`,
-    })
-  }
-  return rows
-}
-
-function SubjectChips({
-  subjects,
-  selectedIds,
-  onChange,
-}: {
-  subjects: FreestylePalaceScopeSubject[]
-  selectedIds: number[]
-  onChange: (ids: number[]) => void
-}) {
-  const namedSubjects = subjects.filter((subject): subject is FreestylePalaceScopeSubject & { id: number } => subject.id != null)
-  const allSelected = selectedIds.length === 0
-  const toggle = (id: number) => {
-    if (allSelected) {
-      onChange([id])
-      return
-    }
-    const next = selectedIds.includes(id)
-      ? selectedIds.filter((item) => item !== id)
-      : [...selectedIds, id]
-    onChange(next.length === 0 ? [] : next)
-  }
-  return (
-    <div className="flex flex-wrap gap-2" role="group" aria-label="学科">
-      <button
-        type="button"
-        className={cn(
-          'min-h-11 rounded-full border px-4 text-sm font-medium transition-colors',
-          allSelected ? 'border-primary bg-primary/10 text-primary' : 'border-border/60 bg-background/80 hover:bg-muted/60',
-        )}
-        aria-pressed={allSelected}
-        onClick={() => onChange([])}
-      >
-        全选
-      </button>
-      {namedSubjects.map((subject) => {
-        const selected = allSelected || selectedIds.includes(subject.id)
-        return (
-          <button
-            key={subject.key}
-            type="button"
-            className={cn(
-              'min-h-11 rounded-full border px-4 text-sm font-medium transition-colors',
-              selected ? 'border-primary bg-primary/10 text-primary' : 'border-border/60 bg-background/80 hover:bg-muted/60',
-            )}
-            aria-pressed={selected}
-            onClick={() => toggle(subject.id)}
-          >
-            {subject.title}
-          </button>
-        )
-      })}
-      {!namedSubjects.length ? (
-        <span className="self-center text-xs text-muted-foreground">暂无学科</span>
-      ) : null}
-    </div>
-  )
 }
 
 export function FreestyleTrainingConfigForm({
   config,
   scopeSubjects,
   onChange,
-  onOpenPalacePicker,
   scopeLocked = false,
 }: {
   config: FreestyleFeedConfig
   scopeSubjects: FreestylePalaceScopeSubject[]
   onChange: (config: FreestyleFeedConfig) => void
-  onOpenPalacePicker: (stream: StreamKey) => void
   scopeLocked?: boolean
 }) {
-  const selectedMode = visibleTrainingMode(config)
-  const activeStreams = activeStreamsOf(config, selectedMode)
-  const set = (patch: Partial<FreestyleFeedConfig>) => onChange(sanitizeFreestyleFeedConfig({ ...config, ...patch }))
-  const changeMode = (mode: UiMode) => {
-    if (mode === 'mixed') {
-      const next = config.mixed_modes.filter((item): item is StreamKey =>
-        item === 'memory_palace' || item === 'quiz',
-      )
-      set({ training_mode: mode, mixed_modes: next.length >= 2 ? next : ['memory_palace', 'quiz'] })
-      return
-    }
-    set({ training_mode: mode, mixed_modes: [mode] })
-  }
-  const toggleMixedStream = (stream: StreamKey, checked: boolean) => {
-    const current = config.mixed_modes.filter((item): item is StreamKey =>
-      item === 'memory_palace' || item === 'quiz',
-    )
-    const next = checked
-      ? [...new Set([...current, stream])]
-      : current.filter((item) => item !== stream)
-    if (next.length === 0) {
-      set({ training_mode: 'memory_palace', mixed_modes: ['memory_palace'] })
-      return
-    }
-    if (next.length === 1) {
-      set({ training_mode: next[0], mixed_modes: next })
-      return
-    }
-    set({ training_mode: 'mixed', mixed_modes: next })
-  }
-  // Subjects define the round's palaces, so picking them resets both streams to the same palaces.
-  const applySubjects = (subjectIds: number[]) => {
-    const patch = { subject_ids: subjectIds, subject_scope: 'all' as const, specific_palace_ids: [] as number[] }
+  const palace = config.streams.memory_palace
+  const selectedIds = palace.specific_palace_ids
+  const allIds = allFreestylePalaceIdsFromSubjects(scopeSubjects)
+  const dueIds = duePalaceIdsFromSubjects(scopeSubjects)
+
+  const updatePalaceStream = (patch: Record<string, unknown>) => {
     onChange(sanitizeFreestyleFeedConfig({
       ...config,
       streams: {
         ...config.streams,
-        memory_palace: { ...config.streams.memory_palace, ...patch },
-        quiz: { ...config.streams.quiz, ...patch },
+        memory_palace: { ...palace, ...patch },
       },
     }))
   }
 
-  // Quiz draws only from the round's palaces, so its scope is a narrowing of the memory palace scope.
-  const roundPalaceCount = streamPalaceCount(config.streams.memory_palace, scopeSubjects)
+  /** Palace ids are normalized once: a full selection stays an explicit list. */
+  const applyPalaceIds = (ids: number[]) => {
+    const normalized = normalizeFreestylePalaceSelection(
+      { specific_palace_ids: [], subject_scope: 'all', subject_ids: [] },
+      ids,
+      scopeSubjects,
+    )
+    updatePalaceStream(normalized)
+  }
 
-  const renderScopeArea = (stream: StreamKey) => {
-    if (scopeLocked) {
-      return <div className="rounded-xl border border-border/60 bg-background/80 px-3.5 py-3 text-sm">只复习当前宫殿</div>
-    }
-    const value = config.streams[stream]
-    const isQuiz = stream === 'quiz'
-    const countText = value.specific_palace_ids.length
-      ? `已选 ${value.specific_palace_ids.length} 座`
-      : `共 ${isQuiz ? roundPalaceCount : streamPalaceCount(value, scopeSubjects)} 座`
+  const togglePalace = (ids: number[], checked: boolean) => {
+    applyPalaceIds(toggleFreestylePalaceGroup(selectedIds, ids, checked))
+  }
+
+  // At least one pool stays on: an empty 新学+复习 would be an empty round.
+  const toggleLearnScope = (scope: FreestyleLearnScope) => {
+    const active = config.learn_scope.includes(scope)
+    if (active && config.learn_scope.length <= 1) return
+    const next = active
+      ? config.learn_scope.filter((item) => item !== scope)
+      : (['new', 'review'] as const).filter((item) => item === scope || config.learn_scope.includes(item))
+    onChange(sanitizeFreestyleFeedConfig({ ...config, learn_scope: [...next] }))
+  }
+
+  if (scopeLocked) {
     return (
-      <div className="space-y-3">
-        {isQuiz ? null : (
-          <div className="space-y-1.5">
-            <div className="text-xs font-medium text-muted-foreground">学科</div>
-            <SubjectChips
-              subjects={scopeSubjects}
-              selectedIds={selectedSubjectIdsOf(value, scopeSubjects)}
-              onChange={applySubjects}
-            />
-          </div>
-        )}
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/80 px-3.5 py-3">
-          <div className="min-w-0">
-            <div className="text-sm font-medium">宫殿</div>
-            <div className="mt-1 text-xs leading-5 text-muted-foreground">
-              {isQuiz ? `只能从本轮的 ${roundPalaceCount} 座宫殿中选 · ` : null}
-              {countText}
-            </div>
-          </div>
-          <Button type="button" size="sm" variant="outline" onClick={() => onOpenPalacePicker(stream)}>
-            <ListChecks className="size-3.5" />选择宫殿
-          </Button>
-        </div>
+      <div className="rounded-xl border border-border/60 bg-background/80 px-3.5 py-3 text-sm">
+        只复习当前宫殿
       </div>
-    )
-  }
-
-  const renderPalaceStream = () => {
-    const value = config.streams.memory_palace
-    return (
-      <Section title="记忆宫殿怎么刷">
-        <div className="space-y-3">
-          {renderScopeArea('memory_palace')}
-          <div className="space-y-1.5">
-            <div className="text-xs font-medium text-muted-foreground">多座宫殿时</div>
-            <OptionCards
-              label="多个宫殿时"
-              options={PALACE_ORDER_OPTIONS}
-              value={value.palace_order}
-              onChange={(next) => onChange(updateStream(config, 'memory_palace', { palace_order: next }))}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <div className="text-xs font-medium text-muted-foreground">宫殿内单元的出现顺序</div>
-            <OptionCards
-              label="宫殿内单元顺序"
-              options={UNIT_ORDER_OPTIONS}
-              value={value.unit_order}
-              onChange={(next) => onChange(updateStream(config, 'memory_palace', { unit_order: next }))}
-            />
-          </div>
-        </div>
-      </Section>
-    )
-  }
-
-  const renderQuizStream = () => {
-    const value = config.streams.quiz
-    return (
-      <Section title="刷题怎么出">
-        <div className="space-y-3">
-          {renderScopeArea('quiz')}
-          <div className="space-y-1.5">
-            <div className="text-xs font-medium text-muted-foreground">出题顺序</div>
-            <OptionCards
-              label="刷题出题顺序"
-              options={QUIZ_ORDER_OPTIONS}
-              value={value.order}
-              onChange={(next) => onChange(updateStream(config, 'quiz', { order: next }))}
-            />
-          </div>
-        </div>
-      </Section>
     )
   }
 
   return (
-    <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">
-      <div className="space-y-4">
-        <Section title="训练方向">
-          <div role="radiogroup" aria-label="训练方向" className="grid grid-cols-1 gap-2">
-            {MODE_OPTIONS.filter((option) => FREESTYLE_UI_TRAINING_MODES.includes(option.value)).map((option) => {
-              const Icon = option.icon
-              const selected = selectedMode === option.value
+    <div className="grid items-start gap-3 md:grid-cols-[minmax(0,16rem)_minmax(0,1fr)]">
+      <div className="space-y-3">
+        <Section title="学什么">
+          <div role="group" aria-label="学什么" className="grid grid-cols-2 gap-1.5">
+            {LEARN_SCOPE_OPTIONS.map((option) => {
+              const checked = config.learn_scope.includes(option.value)
               return (
-                <button key={option.value} type="button" role="radio" aria-checked={selected} className={cn('flex min-h-14 items-center gap-3 rounded-xl border px-3.5 py-2.5 text-left transition-colors', selected ? 'border-primary bg-primary/10' : 'border-border/60 bg-background/80 hover:bg-muted/60')} onClick={() => changeMode(option.value)}>
-                  <Icon className={cn('size-5 shrink-0', selected ? 'text-primary' : 'text-muted-foreground')} />
-                  <span>{option.label}</span>
+                <button
+                  key={option.value}
+                  type="button"
+                  role="checkbox"
+                  aria-checked={checked}
+                  aria-label={option.label}
+                  className={cn(
+                    'flex min-h-11 items-center gap-2 rounded-lg border px-3 text-sm font-semibold transition-colors',
+                    checked
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-border/60 bg-background/80 text-muted-foreground hover:bg-muted/60',
+                  )}
+                  onClick={() => toggleLearnScope(option.value)}
+                >
+                  <span
+                    aria-hidden
+                    className={cn(
+                      'inline-flex size-4 items-center justify-center rounded border',
+                      checked ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/50',
+                    )}
+                  >
+                    {checked ? '✓' : ''}
+                  </span>
+                  {option.label}
                 </button>
               )
             })}
           </div>
-          {selectedMode === 'mixed' ? (
-            <div className="space-y-3 border-t border-border/60 pt-3">
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {FREESTYLE_UI_TRAINING_STREAMS.map((stream) => (
-                  <label key={stream} className={cn('flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2.5 text-sm', config.mixed_modes.includes(stream) ? 'border-primary/50 bg-primary/8' : 'border-border/60 bg-background/80')}>
-                    <input type="checkbox" className="size-4 accent-primary" checked={config.mixed_modes.includes(stream)} aria-label={STREAM_LABELS[stream]} onChange={(event) => toggleMixedStream(stream, event.target.checked)} />
-                    <span>{STREAM_LABELS[stream]}</span>
-                  </label>
-                ))}
-              </div>
-              <Field label="组合策略">
-                <select className={FIELD_CLASS} value={config.mix.strategy} onChange={(event) => set({ mix: { ...config.mix, strategy: event.target.value as FreestyleFeedConfig['mix']['strategy'] } })}>
-                  {MIX_STRATEGY_OPTIONS.map((item) => (
-                    <option key={item.value} value={item.value}>{item.label}</option>
-                  ))}
-                </select>
-              </Field>
-              {config.mix.strategy === 'ratio' ? (
-                <div className="grid grid-cols-2 gap-3">
-                  {activeStreams.map((stream) => (
-                    <Field key={stream} label={`${STREAM_LABELS[stream]}比例`}>
-                      <Input type="number" min={1} max={10} value={config.mix.ratios[stream]} onChange={(event) => set({ mix: { ...config.mix, ratios: { ...config.mix.ratios, [stream]: Number(event.target.value) } } })} />
-                    </Field>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
+          <p className="text-xs leading-5 text-muted-foreground">新学＝一次都没通过过的单元。</p>
         </Section>
 
-        <details className="rounded-xl border border-border/60 bg-card/40 p-4">
-          <summary className="cursor-pointer text-sm font-semibold">高级设置</summary>
-          <div className="mt-3 grid grid-cols-1 gap-3">
-            <Field label="随机种子">
-              <Input type="number" min={1} value={config.seed} onChange={(event) => set({ seed: Number(event.target.value) })} />
-            </Field>
-            {activeStreams.includes('quiz') && activeStreams.includes('memory_palace') ? (
-              <Field label="绑定题目位置">
-                <select className={FIELD_CLASS} value={config.bound_quiz_placement} onChange={(event) => set({ bound_quiz_placement: event.target.value as FreestyleFeedConfig['bound_quiz_placement'] })}>
-                  <option value="into_mix">计入混合比例</option>
-                  <option value="follow_unit">跟随所属单元</option>
-                  <option value="quiz_stream">进入题目流</option>
-                </select>
-              </Field>
-            ) : null}
-          </div>
-        </details>
+        <Section title="多座宫殿时">
+          <OptionCards
+            label="多个宫殿时"
+            options={PALACE_ORDER_OPTIONS}
+            value={palace.palace_order}
+            onChange={(next) => updatePalaceStream({ palace_order: next })}
+          />
+        </Section>
+
+        <Section title="宫殿内顺序">
+          <OptionCards
+            label="宫殿内单元顺序"
+            options={UNIT_ORDER_OPTIONS}
+            value={palace.unit_order}
+            onChange={(next) => updatePalaceStream({ unit_order: next })}
+          />
+        </Section>
       </div>
 
-      <div className="space-y-4">
-        {activeStreams.includes('memory_palace') ? renderPalaceStream() : null}
-        {activeStreams.includes('quiz') ? renderQuizStream() : null}
-      </div>
+      <Section
+        title="宫殿"
+        action={(
+          <span className="text-xs tabular-nums text-muted-foreground">
+            {selectedIds.length ? `已选 ${selectedIds.length} 座` : `全部 ${allIds.length} 座`}
+          </span>
+        )}
+      >
+        <div className="flex flex-wrap gap-1.5">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            aria-pressed={allIds.length > 0 && allIds.every((id) => selectedIds.includes(id))}
+            onClick={() => applyPalaceIds(allIds)}
+          >
+            全选
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={!dueIds.length}
+            onClick={() => applyPalaceIds(dueIds)}
+          >
+            只选到期
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={() => applyPalaceIds([])}
+          >
+            <RotateCcw className="size-3.5" />重置
+          </Button>
+        </div>
+        <div className="max-h-[min(50dvh,30rem)] overflow-y-auto overscroll-contain pr-1">
+          <FreestylePalaceScopeTree
+            subjects={scopeSubjects}
+            selectedIds={selectedIds}
+            onToggle={togglePalace}
+            defaultExpanded={false}
+          />
+        </div>
+      </Section>
     </div>
   )
 }

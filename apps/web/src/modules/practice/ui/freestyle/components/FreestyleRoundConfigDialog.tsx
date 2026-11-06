@@ -1,13 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Save, SlidersHorizontal } from 'lucide-react'
+import { Archive, Save, SlidersHorizontal } from 'lucide-react'
 import { getPalacesGroupedApi, getSubjectTreeApi } from '@/modules/content/public'
 import { sanitizeFreestyleFeedConfig } from '@/modules/practice/domain/feedConfig'
 import {
-  allFreestylePalaceIdsFromSubjects,
   buildFreestylePalaceScopeSubjects,
-  filterSubjectsForStream,
-  normalizeFreestylePalaceSelection,
-  restrictFreestyleSubjectsToPalaces,
   type FreestylePalaceScopeSubject,
 } from '@/modules/practice/ui/freestyle/model/freestyle-palace-scope'
 import {
@@ -15,8 +11,7 @@ import {
   overlapProgressPromptCopy,
   type FreestyleConfigSaveChoice,
 } from '@/modules/practice/ui/freestyle/model/overlapProgressChoice'
-import { FreestylePalacePickerDialog } from './FreestylePalacePickerDialog'
-import { FreestyleTrainingConfigForm, summarizeRoundConfig, type StreamKey } from './FreestyleTrainingConfigForm'
+import { FreestyleTrainingConfigForm, summarizeRoundConfig } from './FreestyleTrainingConfigForm'
 import type { FreestyleFeedConfig } from '@/shared/api/contracts'
 import { Button } from '@/shared/components/ui/button'
 import {
@@ -41,6 +36,8 @@ export function FreestyleRoundConfigDialog({
   onSaveConfig,
   mode = 'replan',
   scopeLocked = false,
+  settlementCount = 0,
+  onSettleCompleted,
 }: {
   open: boolean
   config: FreestyleFeedConfig
@@ -50,17 +47,16 @@ export function FreestyleRoundConfigDialog({
   mode?: 'replan' | 'nextRound'
   /** Single-palace review cannot widen the round to other palaces. */
   scopeLocked?: boolean
+  /** Cards already rated and ready to settle out of this round. */
+  settlementCount?: number
+  onSettleCompleted?: () => void
 }) {
   const [draft, setDraft] = useState(() => sanitizeFreestyleFeedConfig(config))
   const [pendingSave, setPendingSave] = useState<FreestyleFeedConfig | null>(null)
   const [scopeSubjects, setScopeSubjects] = useState<FreestylePalaceScopeSubject[]>([])
-  const [pickerStream, setPickerStream] = useState<StreamKey | null>(null)
 
   useEffect(() => {
-    if (!open) {
-      setPickerStream(null)
-      setPendingSave(null)
-    }
+    if (!open) setPendingSave(null)
   }, [open])
 
   useEffect(() => {
@@ -100,15 +96,23 @@ export function FreestyleRoundConfigDialog({
     return () => { active = false }
   }, [open])
 
+  // 随心 is the memory-palace feed. 刷题 lives in the 做题 window, so a save
+  // never carries a quiz or mixed stream no matter what an old config said.
+  const palaceOnly = (value: FreestyleFeedConfig) => sanitizeFreestyleFeedConfig({
+    ...value,
+    training_mode: 'memory_palace',
+    mixed_modes: ['memory_palace'],
+  })
+
   const commitSave = (choice?: FreestyleConfigSaveChoice) => {
-    const next = pendingSave ?? sanitizeFreestyleFeedConfig(draft)
+    const next = palaceOnly(pendingSave ?? draft)
     onSaveConfig(next, choice)
     setPendingSave(null)
     onOpenChange(false)
   }
 
   const requestSave = () => {
-    const next = sanitizeFreestyleFeedConfig(draft)
+    const next = palaceOnly(draft)
     if (mode === 'nextRound') {
       commitSave()
       return
@@ -120,25 +124,6 @@ export function FreestyleRoundConfigDialog({
     setPendingSave(null)
   }
 
-  // The round's palaces: what the memory palace stream covers. Quiz only picks from these.
-  const memoryStream = draft.streams.memory_palace
-  const roundPalaceIds = memoryStream.specific_palace_ids.length
-    ? memoryStream.specific_palace_ids
-    : allFreestylePalaceIdsFromSubjects(filterSubjectsForStream(scopeSubjects, memoryStream))
-  const roundSubjects = restrictFreestyleSubjectsToPalaces(scopeSubjects, roundPalaceIds)
-  const pickerSubjects = pickerStream === 'quiz'
-    ? roundSubjects
-    : filterSubjectsForStream(scopeSubjects, memoryStream)
-  const pickerStreamConfig = pickerStream ? draft.streams[pickerStream] : null
-  const pickerValue = (() => {
-    if (!pickerStreamConfig) return []
-    if (pickerStreamConfig.specific_palace_ids.length) return pickerStreamConfig.specific_palace_ids
-    if (pickerStream === 'quiz') return roundPalaceIds
-    if (pickerStreamConfig.subject_ids.length || pickerStreamConfig.subject_scope !== 'all') {
-      return allFreestylePalaceIdsFromSubjects(pickerSubjects)
-    }
-    return []
-  })()
   const summaryRows = summarizeRoundConfig(draft, scopeSubjects)
 
   return (
@@ -180,13 +165,24 @@ export function FreestyleRoundConfigDialog({
             <FreestyleTrainingConfigForm
               config={draft}
               scopeSubjects={scopeSubjects}
-              onOpenPalacePicker={setPickerStream}
               onChange={setDraft}
               scopeLocked={scopeLocked}
             />
           </div>
 
           <DialogFooter className="shrink-0 flex-col-reverse gap-2 sm:flex-row">
+            {onSettleCompleted ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full sm:mr-auto sm:w-auto"
+                disabled={settlementCount === 0}
+                onClick={onSettleCompleted}
+              >
+                <Archive className="size-4" />
+                {settlementCount ? `结算已完成 ${settlementCount}` : '没有可结算的'}
+              </Button>
+            ) : null}
             <Button
               type="button"
               variant="outline"
@@ -240,30 +236,6 @@ export function FreestyleRoundConfigDialog({
           </DialogContent>
         </Dialog>
       ) : null}
-      <FreestylePalacePickerDialog
-        open={pickerStream != null}
-        subjects={pickerSubjects}
-        value={pickerValue}
-        onOpenChange={(next) => { if (!next) setPickerStream(null) }}
-        onConfirm={(ids) => {
-          if (!pickerStream || !pickerStreamConfig) return
-          const normalized = normalizeFreestylePalaceSelection(pickerStreamConfig, ids, pickerSubjects)
-          const palaceIds = normalized.specific_palace_ids
-          // Changing the round's palaces resets quiz to the same palaces; quiz can then narrow inside them.
-          const streams = pickerStream === 'memory_palace'
-            ? {
-                ...draft.streams,
-                memory_palace: { ...memoryStream, specific_palace_ids: palaceIds },
-                quiz: { ...draft.streams.quiz, specific_palace_ids: palaceIds },
-              }
-            : {
-                ...draft.streams,
-                quiz: { ...pickerStreamConfig, specific_palace_ids: palaceIds },
-              }
-          setDraft(sanitizeFreestyleFeedConfig({ ...draft, streams }))
-          setPickerStream(null)
-        }}
-      />
     </>
   )
 }

@@ -62,6 +62,7 @@ export function useFreestyleFeedNavigation({
   cards,
   currentIndex,
   roundComplete,
+  pendingReviewCount = 0,
   goToIndex,
   flushDeferredRestudy,
   pendingRestudyCardIds,
@@ -79,6 +80,8 @@ export function useFreestyleFeedNavigation({
   cards: ImmersiveQueue['cards']
   currentIndex: number
   roundComplete: boolean
+  /** Same-day 重练 the server still owes: the closing slot is then a waiting page. */
+  pendingReviewCount?: number
   goToIndex: ImmersiveQueue['goToIndex']
   flushDeferredRestudy: ImmersiveQueue['flushDeferredRestudy']
   pendingRestudyCardIds: ImmersiveQueue['pendingRestudyCardIds']
@@ -714,8 +717,14 @@ export function useFreestyleFeedNavigation({
     [cards, queueState.completedIds, queueState.hiddenIds, queueState.unitEncountersByCardId, roundPlan],
   )
   const { seekIndex: completeSeekIndex, canComplete: canCompleteRound, title: completeTitle } = useMemo(
-    () => resolveFreestyleCompleteAction({ roundComplete, cardCount: cards.length, visualIndex, unscoredIndices }),
-    [cards.length, roundComplete, unscoredIndices, visualIndex],
+    () => resolveFreestyleCompleteAction({
+      roundComplete,
+      cardCount: cards.length,
+      visualIndex,
+      unscoredIndices,
+      pendingReviewCount,
+    }),
+    [cards.length, pendingReviewCount, roundComplete, unscoredIndices, visualIndex],
   )
   const handleCompleteRound = useCallback(() => {
     if (completeSeekIndex == null) return

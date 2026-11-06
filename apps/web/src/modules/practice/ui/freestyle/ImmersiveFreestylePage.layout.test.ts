@@ -20,6 +20,7 @@ const source = [
   'FreestyleEdgeHint.tsx',
   'FreestyleBottomActions.tsx',
   'components/FreestyleFeedPager.tsx',
+  'components/FreestylePalaceDirectoryPanel.tsx',
   'components/FreestyleBedtimeButton.tsx',
   'hooks/useFreestyleFeedNavigation.ts',
   'components/FreestyleHudChrome.tsx',
@@ -57,14 +58,13 @@ describe('ImmersiveFreestylePage layout', () => {
   it('settles the rated units when 完成 is a genuine completion, not a seek', () => {
     const handler = source.slice(
       source.indexOf('const handlePagerComplete'),
-      source.indexOf('const openConfigFromPlan'),
+      source.indexOf('const settleAndGoOn'),
     )
     // Open round keeps the seek; a fully scored round settles instead. A
-    // same-day 回顾 still owed opens the closing page without compressing:
+    // same-day 重练 still owed opens the closing slot without compressing:
     // 完成 must never dead-end the learner.
-    expect(handler).toContain('if (roundComplete)')
+    expect(handler).toContain('if (roundComplete && pendingReviewCount === 0)')
     expect(handler).toContain('settleCompletedUnits()')
-    expect(handler).toContain('waiting && waiting.count > 0')
     expect(handler).toContain('handleCompleteRound()')
     const settle = source.slice(
       source.indexOf('const settleCompletedUnits'),
@@ -76,15 +76,18 @@ describe('ImmersiveFreestylePage layout', () => {
     expect(settle).not.toContain('setPartialSettlement(snapshot)')
   })
 
-  it('does not let a waiting 回顾 disable the round ending', () => {
-    const completion = source.slice(
-      source.indexOf('const roundComplete = isFreestyleRoundComplete'),
-      source.indexOf('const {', source.indexOf('const roundComplete = isFreestyleRoundComplete')),
-    )
-    expect(completion).toContain('isFreestyleRoundComplete')
-    expect(completion).not.toContain('waiting')
-    // What is still owed is named on the closing page instead of blocking it.
-    expect(source).toContain('pendingReviewCount')
+  it('never calls the round finished while 重练 is still owed today', () => {
+    // Locally every presented card is scored, but the server holds same-day
+    // re-checks that are not due yet: the closing slot must not celebrate.
+    expect(source).toContain('const pendingReviewCount = waiting?.count ?? 0')
+    expect(source).toContain('pendingReviewCount={waiting?.count ?? 0}')
+    // The closing slot keeps both pages: waiting while owed, trophy when clear.
+    const closing = read('FreestyleClosingSlot.tsx')
+    expect(closing).toContain('pendingReviewCount > 0 ? (')
+    expect(closing).toContain('<FreestyleRoundWaiting')
+    expect(closing).toContain('<FreestyleRoundSettlement')
+    // 完成 must still never dead-end: the slot stays the seek target.
+    expect(source).toContain('handleCompleteRound()')
     expect(source).toContain('nextReviewAt')
   })
 
@@ -93,10 +96,17 @@ describe('ImmersiveFreestylePage layout', () => {
     expect(source).toContain('canCancelSettlement={cards.length > 0}')
   })
 
-  it('keeps a visible 退出 on 小结算 because the overlay covers the pager', () => {
-    expect(source).toContain('data-testid="freestyle-partial-settlement-exit"')
-    expect(source).toContain('退出')
+  it('asks before settling 小结算 and can be cancelled', () => {
+    // The 小结算 is a Dialog, not an overlay page: it covers the pager, so the
+    // only way out is its own 取消 / Esc, wired back to the page state.
+    expect(source).toContain('data-testid="freestyle-partial-settlement"')
+    expect(source).toContain('onExit={dismissPartialSettlement}')
+    expect(source).toContain('onConfirmPartial={confirmPartialSettlement}')
     expect(source).toContain('setPartialSettlement(null)')
+    const dialog = read('FreestylePartialSettlement.tsx')
+    expect(dialog).toContain('<Dialog open')
+    expect(dialog).toContain('onClick={onExit}>取消</Button>')
+    expect(dialog).toContain('结算这 {snapshot.cardCount} 张')
   })
 
   it('cancels settlement by leaving the slot', () => {
@@ -117,7 +127,7 @@ describe('ImmersiveFreestylePage layout', () => {
   it('settles then starts the next round instead of offering 再来一轮', () => {
     const settle = source.slice(
       source.indexOf('const settleAndGoOn'),
-      source.indexOf('const openConfigFromPlan'),
+      source.indexOf('const handleConfigOpenChange'),
     )
     // 结算 is the next round: /rounds/start completes the active round, so the
     // old queue cannot survive it and no compress write has to race that build.
@@ -151,16 +161,34 @@ describe('ImmersiveFreestylePage layout', () => {
     expect(source).toContain('data-completed={done ? \'true\' : \'false\'}')
   })
 
-  it('rates 本轮安排 rows in the background without moving the feed', () => {
-    const handler = source.slice(
-      source.indexOf('const handlePlanRateCard'),
-      source.indexOf('const handleCompressCompleted'),
+  it('opens 随心配置 from the rail instead of a separate 本轮安排 list', () => {
+    // The plan sheet is gone: the HUD/rail header replans in the config page,
+    // and a rail tick on a card that left the plan falls back to that same page.
+    const openPlan = source.slice(
+      source.indexOf('const openPlan'),
+      source.indexOf('const jumpFromProgressRail'),
     )
-    expect(handler).toContain('rateCards(')
-    expect(handler).not.toContain('navigateToIndex')
-    expect(handler).not.toContain('jumpFromProgressRail')
-    expect(source).not.toContain('sheetRatingRequest')
-    expect(source).toContain('onRateCards={handlePlanRateCards}')
+    expect(openPlan).toContain("setConfigIntent('replan')")
+    expect(openPlan).toContain('setConfigOpen(true)')
+    expect(source).not.toContain('planOpen')
+    expect(source).not.toContain('onRateCards=')
+    // Rail jumps still move the feed and prewarm the target preview.
+    const rail = source.slice(
+      source.indexOf('const jumpFromProgressRail'),
+      source.indexOf('const openHistory'),
+    )
+    expect(rail).toContain('requestRoundPreview(cards, index, direction)')
+    expect(rail).toContain('navigateToIndex(index)')
+    expect(rail).toContain("setConfigIntent('replan')")
+  })
+
+  it('puts the palace directory left of the feed with a collapse switch of its own', () => {
+    expect(source).toContain('<FreestylePalaceDirectoryPanel')
+    expect(source).toContain('onSelectPalace={openPalaceFromDirectory}')
+    expect(source).toContain('hidden={freestyleFullscreen}')
+    // The panel's rail, not the app nav's, owns collapsed/expanded.
+    expect(source).toContain('collapseLabel="收起宫殿目录"')
+    expect(source).toContain('expandLabel="展开宫殿目录"')
   })
 
   it('places 睡前复习 above the right-side pager and confirms before appending', () => {

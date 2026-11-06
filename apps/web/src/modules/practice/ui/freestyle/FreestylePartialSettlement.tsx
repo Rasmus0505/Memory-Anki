@@ -1,56 +1,89 @@
-import { FreestyleRoundCompleteCard } from '@/modules/practice/ui/freestyle/components/FreestyleRoundCompleteCard'
 import type { FreestylePartialSettlementSnapshot } from '@/modules/practice/domain/partialSettlement'
+import { Button } from '@/shared/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/shared/components/ui/dialog'
 
+/**
+ * 结算已完成 confirmation. A 小结算 is a ledger write, not a ceremony: the
+ * learner already rated these units in the feed, so this only says what is
+ * about to leave the round — no closing animation, no second review surface.
+ */
 export function FreestylePartialSettlement({
   snapshot,
-  roundId,
   onExit,
   onConfirmPartial,
 }: {
   snapshot: FreestylePartialSettlementSnapshot
-  roundId: string
+  roundId?: string
   onExit: () => void
   onConfirmPartial: (snapshot: FreestylePartialSettlementSnapshot) => void
 }) {
+  const subjectCount = snapshot.bySubject.length
+  const palaceCount = snapshot.bySubject.reduce((sum, subject) => sum + subject.palaceCount, 0)
+  const units = [
+    snapshot.newCount ? `新学 ${snapshot.newCount}` : '',
+    snapshot.reviewCount ? `复习 ${snapshot.reviewCount}` : '',
+  ].filter(Boolean)
+  const outcomes = [
+    snapshot.passedCount ? `通过 ${snapshot.passedCount}` : '',
+    snapshot.retryCount ? `重练 ${snapshot.retryCount}` : '',
+    snapshot.quizCount ? `题 ${snapshot.quizCount}` : '',
+  ].filter(Boolean)
+
   return (
-    <div
-      data-testid="freestyle-partial-settlement"
-      data-keyboard-shortcuts-suspended="true"
-      className="absolute inset-0 z-[70] flex flex-col bg-stage/95 backdrop-blur-sm"
-    >
-      <div className="flex shrink-0 items-center justify-end px-3 pt-[max(0.75rem,env(safe-area-inset-top,0px))]">
-        <button
-          type="button"
-          data-testid="freestyle-partial-settlement-exit"
-          className="ma-pressable rounded-full border border-stage-line-strong bg-stage-raised/90 px-4 py-2 text-sm font-medium text-stage-ink shadow-lg"
-          onClick={onExit}
-        >
-          退出
-        </button>
-      </div>
-      <div className="mx-auto min-h-0 w-full max-w-2xl flex-1 overflow-y-auto overscroll-contain px-3 pb-[max(1rem,env(safe-area-inset-bottom,0px))]">
-        <FreestyleRoundCompleteCard
-          variant="partial"
-          completion={{
-            ratedCount: snapshot.ratedCount,
-            passedCount: snapshot.passedCount,
-            retriedCount: snapshot.retryCount,
-            retryCount: snapshot.retryCount,
-            remainingCandidates: 0,
-            quizCount: snapshot.quizCount,
-            newCount: snapshot.newCount,
-            reviewCount: snapshot.reviewCount,
-            involvedUnitCount: snapshot.ratedCount,
-            totalUnits: snapshot.bySubject.reduce((sum, subject) => sum + subject.totalUnits, 0),
-            bySubject: snapshot.bySubject,
-          }}
-          roundKey={`${roundId}:${snapshot.id}`}
-          quizPalaceCount={0}
-          onClearQuizProgress={async () => undefined}
-          onCancelSettlement={onExit}
-          onConfirmPartial={() => onConfirmPartial(snapshot)}
-        />
-      </div>
-    </div>
+    <Dialog open onOpenChange={(next) => { if (!next) onExit() }}>
+      <DialogContent
+        data-testid="freestyle-partial-settlement"
+        className="max-w-md"
+      >
+        <DialogHeader>
+          <DialogTitle>结算已完成</DialogTitle>
+          <DialogDescription>
+            {snapshot.cardCount} 张 · {subjectCount} 个学科 · {palaceCount} 座宫殿
+          </DialogDescription>
+        </DialogHeader>
+
+        <dl className="space-y-2 text-sm">
+          {units.length ? (
+            <div className="flex items-baseline justify-between gap-3">
+              <dt className="text-muted-foreground">内容</dt>
+              <dd className="tabular-nums">{units.join(' · ')}</dd>
+            </div>
+          ) : null}
+          {outcomes.length ? (
+            <div className="flex items-baseline justify-between gap-3">
+              <dt className="text-muted-foreground">结果</dt>
+              <dd className="tabular-nums">{outcomes.join(' · ')}</dd>
+            </div>
+          ) : null}
+        </dl>
+
+        {snapshot.bySubject.length ? (
+          <ul className="max-h-56 space-y-1 overflow-y-auto rounded-lg border border-border/60 p-2 text-sm">
+            {snapshot.bySubject.map((subject) => (
+              <li key={subject.subjectId ?? subject.subjectName} className="flex items-baseline justify-between gap-3 px-1">
+                <span className="min-w-0 flex-1 truncate">{subject.subjectName}</span>
+                <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                  {subject.palaceCount} 座 · {subject.cardCount} 张
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onExit}>取消</Button>
+          <Button type="button" onClick={() => onConfirmPartial(snapshot)}>
+            结算这 {snapshot.cardCount} 张
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

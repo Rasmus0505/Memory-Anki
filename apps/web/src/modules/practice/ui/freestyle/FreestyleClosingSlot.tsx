@@ -1,5 +1,6 @@
 import type { ComponentProps } from 'react'
 import { FreestyleRoundSettlement, type FreestyleSettlementMeta } from '@/modules/practice/ui/freestyle/components/FreestyleRoundSettlement'
+import { FreestyleRoundWaiting } from '@/modules/practice/ui/freestyle/components/FreestyleRoundWaiting'
 
 export function FreestyleClosingSlot({
   roundId,
@@ -24,7 +25,11 @@ export function FreestyleClosingSlot({
   canCancelSettlement?: boolean
   dueTomorrowCount: number | null
   settlementMeta: FreestyleSettlementMeta
-  /** Same-day 回顾 still owed. Named on the page so 结算 is an informed choice. */
+  /**
+   * Same-day 重练 the server still owes today. While any exist this page is a
+   * waiting page, never a completion: the round is not over until they are
+   * served or the learner explicitly ends the day.
+   */
   pendingReviewCount?: number
   nextReviewAt?: string | null
 }) {
@@ -34,19 +39,27 @@ export function FreestyleClosingSlot({
         data-testid="freestyle-round-complete-scroll"
         className="fs-depth min-h-0 flex-1 overflow-y-auto overscroll-contain pt-[calc(env(safe-area-inset-top,0px)+4.75rem)]"
       >
-        <FreestyleRoundSettlement
-          completion={completion}
-          roundKey={roundId}
-          quizPalaceCount={quizPalaceCount}
-          onClearQuizProgress={onClearQuizProgress}
-          onSettle={onSettle}
-          onCancelSettlement={onCancelSettlement}
-          showCancel={canCancelSettlement}
-          dueTomorrowCount={dueTomorrowCount}
-          pendingReviewCount={pendingReviewCount}
-          nextReviewAt={nextReviewAt}
-          {...settlementMeta}
-        />
+        {pendingReviewCount > 0 ? (
+          <FreestyleRoundWaiting
+            count={pendingReviewCount}
+            readyAt={nextReviewAt}
+            ratedCount={completion.ratedCount}
+            onBack={onCancelSettlement}
+            onStop={onSettle}
+          />
+        ) : (
+          <FreestyleRoundSettlement
+            completion={completion}
+            roundKey={roundId}
+            quizPalaceCount={quizPalaceCount}
+            onClearQuizProgress={onClearQuizProgress}
+            onSettle={onSettle}
+            onCancelSettlement={onCancelSettlement}
+            showCancel={canCancelSettlement}
+            dueTomorrowCount={dueTomorrowCount}
+            {...settlementMeta}
+          />
+        )}
       </div>
     </div>
   )

@@ -552,7 +552,7 @@ export function FreestyleProgressRail({
               type="button"
               data-testid="freestyle-progress-hud"
               className="pointer-events-auto max-w-[9rem] truncate rounded-full px-1.5 py-0.5 text-left text-xs font-semibold tabular-nums text-stage-ink transition-colors hover:text-stage-glow"
-              aria-label={daySpan > 1 ? `${hudText}，这一轮跨了 ${daySpan} 天，打开本轮安排` : `${hudText}，打开本轮安排`}
+              aria-label={daySpan > 1 ? `${hudText}，这一轮跨了 ${daySpan} 天，打开配置` : `${hudText}，打开配置`}
               onClick={onOpenPlan}
             >
               {hudText}

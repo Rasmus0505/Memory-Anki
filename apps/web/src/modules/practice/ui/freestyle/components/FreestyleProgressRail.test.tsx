@@ -154,7 +154,7 @@ describe('FreestyleProgressRail', () => {
   it('speaks the counts the decorative rail cannot', () => {
     renderRail()
 
-    const label = '本轮进度 3/4。点击查看本轮安排'
+    const label = '本轮进度 3/4。点击打开配置'
     const rail = screen.getByTestId('freestyle-progress-rail')
     expect(rail.getAttribute('aria-label')).toBe(label)
     expect(rail.getAttribute('title')).toBeNull()
@@ -181,7 +181,7 @@ describe('FreestyleProgressRail', () => {
       }),
     })
 
-    const label = '本轮进度 3/4。点击查看本轮安排'
+    const label = '本轮进度 3/4。点击打开配置'
     expect(screen.getByTestId('freestyle-progress-hud').textContent).toBe('3/4')
     expect(screen.getByTestId('freestyle-progress-rail').getAttribute('aria-label')).toBe(label)
     expect(screen.getByTestId('freestyle-progress-rail').getAttribute('title')).toBeNull()
@@ -589,7 +589,7 @@ describe('FreestyleProgressRail', () => {
 
     expect(screen.queryAllByTestId('freestyle-progress-segment')).toHaveLength(0)
     expect(screen.getByTestId('freestyle-progress-rail').getAttribute('aria-label'))
-      .toBe('本轮暂无安排。点击查看本轮安排')
+      .toBe('本轮暂无安排。点击打开配置')
     expect(screen.getByTestId('freestyle-progress-rail').getAttribute('title')).toBeNull()
   })
 

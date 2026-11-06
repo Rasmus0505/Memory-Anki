@@ -43,8 +43,8 @@ export function FreestyleHudOverflow({
       <button
         type="button"
         className={cn(hudActionClass, 'text-stage-muted')}
-        title="本轮安排"
-        aria-label="本轮安排"
+        title="随心配置"
+        aria-label="随心配置"
         onClick={onOpenPlan}
       >
         <ListChecks className="size-3.5" />

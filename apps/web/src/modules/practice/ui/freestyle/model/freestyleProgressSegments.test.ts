@@ -219,7 +219,7 @@ describe('buildFreestyleProgressSummary', () => {
     expect(summary.scheduledBase).toBe(2)
     expect(summary.retryInserted).toBe(1)
     expect(progressHudText(summary)).toBe('3/3')
-    expect(progressRailLabel(summary)).toBe('本轮进度 3/3。点击查看本轮安排')
+    expect(progressRailLabel(summary)).toBe('本轮进度 3/3。点击打开配置')
   })
 
   it('shows the faint amber retry node in the gap as soon as the rating stamps the plan', () => {
@@ -759,7 +759,7 @@ describe('progressRailLabel', () => {
     const withRetry = updateRoundPlanCard(plan(cards), 'two', { status: 'retry' })
     const summary = buildFreestyleProgressSummary(cards, withRetry, ['one'], [], 'three')
 
-    expect(progressRailLabel(summary)).toBe('本轮进度 3/3。点击查看本轮安排')
+    expect(progressRailLabel(summary)).toBe('本轮进度 3/3。点击打开配置')
     expect(progressRailLabel(summary, true)).toBe('本轮进度 3/3。点击分段跳转到对应卡片')
     expect(progressHudText(summary)).toBe('3/3')
   })
@@ -768,19 +768,19 @@ describe('progressRailLabel', () => {
     const cards = [card('one'), card('two')]
     const summary = buildFreestyleProgressSummary(cards, plan(cards), [], [], 'one')
 
-    expect(progressRailLabel(summary)).toBe('本轮进度 1/2。点击查看本轮安排')
+    expect(progressRailLabel(summary)).toBe('本轮进度 1/2。点击打开配置')
   })
 
   it('never claims completion when there is no current card', () => {
     const cards = [card('one'), card('two')]
     const summary = buildFreestyleProgressSummary(cards, plan(cards), [], [], null)
 
-    expect(progressRailLabel(summary)).toBe('本轮共 2 张。点击查看本轮安排')
+    expect(progressRailLabel(summary)).toBe('本轮共 2 张。点击打开配置')
   })
 
   it('states the empty round plainly', () => {
     expect(progressRailLabel(buildFreestyleProgressSummary([], null, [], [], null)))
-      .toBe('本轮暂无安排。点击查看本轮安排')
+      .toBe('本轮暂无安排。点击打开配置')
   })
 })
 

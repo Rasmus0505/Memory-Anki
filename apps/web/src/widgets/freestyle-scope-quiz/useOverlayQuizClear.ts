@@ -10,7 +10,7 @@ import type { QuizProgressClearChoice } from '@/widgets/quiz-progress-clear/Quiz
 import type { FreestyleOverlayQuizState, PalaceQuizQuestion } from '@/shared/api/contracts'
 
 /**
- * 清除进度 for the 做题 overlay: current question, one palace, or everything.
+ * 清除进度 for the 做题 overlay: this palace, or everything.
  *
  * Extracted from `FreestyleScopeQuizDialog` because it is a self-contained
  * decision plus three side effects (SPA session mirror, overlay state map, and
@@ -20,7 +20,6 @@ import type { FreestyleOverlayQuizState, PalaceQuizQuestion } from '@/shared/api
 export function useOverlayQuizClear({
   overlay,
   questions,
-  current,
   questionStates,
   index,
   setQuestionStates,
@@ -28,7 +27,6 @@ export function useOverlayQuizClear({
 }: {
   overlay: FreestyleOverlayQuizState | null
   questions: PalaceQuizQuestion[]
-  current: PalaceQuizQuestion | null
   questionStates: Record<number, QuizRuntimeState>
   index: number
   setQuestionStates: (next: Record<number, QuizRuntimeState>) => void
@@ -44,15 +42,6 @@ export function useOverlayQuizClear({
     const publish = (nextStates: Record<number, QuizRuntimeState>) => {
       setQuestionStates(nextStates)
       persistProgress(index, nextStates)
-    }
-    if (choice.scope === 'question') {
-      if (!current) return
-      removeQuizSessionQuestions([current.id])
-      const nextStates = { ...questionStates }
-      delete nextStates[current.id]
-      publish(nextStates)
-      toast.success('已清除当前题的做题进度。')
-      return
     }
     if (choice.scope === 'palace') {
       const targetPalaceId = choice.palaceId
@@ -71,5 +60,5 @@ export function useOverlayQuizClear({
     clearQuizSessionProgress()
     publish({})
     toast.success('已清除全部题目的做题进度。')
-  }, [current, index, overlay, persistProgress, questionStates, questions, setQuestionStates])
+  }, [index, overlay, persistProgress, questionStates, questions, setQuestionStates])
 }

@@ -9,20 +9,28 @@ import { onAppEvent } from '@/shared/events/appEvents'
 
 type PreferenceKey = keyof ClientPreferences
 
+/** Validator for panel/flag states stored as a bare JSON boolean. */
+export function isStoredBoolean(value: unknown): value is boolean {
+  return typeof value === 'boolean'
+}
+
 function readLocalStorageValue<T>(
   key: string,
   fallback: T,
   isValid: (value: unknown) => value is T,
   preferenceKey?: PreferenceKey,
 ): T {
-  if (!preferenceKey) return fallback
-  const cached = getClientPreferenceCacheStatus(preferenceKey, isValid)
-  if (cached.value) {
-    return cached.value
+  if (preferenceKey) {
+    const cached = getClientPreferenceCacheStatus(preferenceKey, isValid)
+    if (cached.value) {
+      return cached.value
+    }
+    if (cached.hasEntry) {
+      return fallback
+    }
   }
-  if (cached.hasEntry) {
-    return fallback
-  }
+  // A plain key (no backend preference) still persists through the setter
+  // below; reading must mirror that write or a reload forgets the choice.
   if (typeof window === 'undefined') return fallback
   try {
     const raw = window.localStorage.getItem(key)

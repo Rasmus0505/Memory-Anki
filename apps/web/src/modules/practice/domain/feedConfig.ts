@@ -1,6 +1,7 @@
 import type {
   FreestyleBoundQuizPlacement,
   FreestyleFeedConfig,
+  FreestyleLearnScope,
   FreestyleReviewNewRatio,
   FreestyleMixMode,
   FreestyleMixRatio,
@@ -93,9 +94,13 @@ export const DEFAULT_QUIZ_MASTERY_BUCKETS: FreestyleQuizMasteryBucket[] = [
   'reinforce',
 ]
 
+/** Both pools. The UI keeps at least one selected. */
+export const DEFAULT_FREESTYLE_LEARN_SCOPE: FreestyleLearnScope[] = ['new', 'review']
+
 export const DEFAULT_FREESTYLE_FEED_CONFIG: FreestyleFeedConfig = {
   training_mode: 'mixed',
   mixed_modes: ['memory_palace', 'quiz'],
+  learn_scope: [...DEFAULT_FREESTYLE_LEARN_SCOPE],
   streams: {
     memory_palace: {
       specific_palace_ids: [],
@@ -219,6 +224,16 @@ function asReviewNewRatio(value: unknown): FreestyleReviewNewRatio {
   return FREESTYLE_REVIEW_NEW_RATIOS.includes(number as FreestyleReviewNewRatio)
     ? (number as FreestyleReviewNewRatio)
     : DEFAULT_FREESTYLE_FEED_CONFIG.review_new_ratio
+}
+
+/** 新学 / 复习 pool. Empty or unknown falls back to both. */
+function asLearnScope(value: unknown): FreestyleLearnScope[] {
+  if (Array.isArray(value)) {
+    const chosen = new Set(value.map((item) => String(item)))
+    const result = (['new', 'review'] as const).filter((scope) => chosen.has(scope))
+    if (result.length) return [...result]
+  }
+  return [...DEFAULT_FREESTYLE_LEARN_SCOPE]
 }
 
 function asBoundPlacement(value: unknown): FreestyleBoundQuizPlacement {
@@ -436,6 +451,7 @@ export function queueConstructionSignature(value: unknown): string {
     mixed_modes: config.mixed_modes,
     mix: config.mix,
     seed: config.seed,
+    learn_scope: config.learn_scope,
     palace_order: config.streams.memory_palace.palace_order,
     unit_order: config.streams.memory_palace.unit_order,
     quiz_scope: config.streams.quiz.quiz_scope,
@@ -614,6 +630,7 @@ export function sanitizeFreestyleFeedConfig(value: unknown): FreestyleFeedConfig
     seed: asInt(raw.seed, 17, 1, 2_147_483_647),
     new_placement: DEFAULT_FREESTYLE_FEED_CONFIG.new_placement,
     review_new_ratio: asReviewNewRatio(raw.review_new_ratio),
+    learn_scope: asLearnScope(raw.learn_scope),
     content: {
       mindmap_branch: hasMemory || hasEnglish,
       anki_card: false,

@@ -24,6 +24,9 @@ export type FreestyleNewPlacement = 'new_first' | 'review_first' | 'ratio'
 /** Review cards per new card when new_placement is ratio. */
 export type FreestyleReviewNewRatio = 1 | 2 | 4
 
+/** Which review units a round may serve: never-passed 新学, or already-passed 复习. */
+export type FreestyleLearnScope = 'new' | 'review'
+
 /** How palace-side cards and quiz cards are ordered relative to each other. */
 export type FreestyleMixMode =
   | 'mindmap_only'
@@ -141,6 +144,8 @@ export interface FreestyleFeedConfig {
   new_placement: FreestyleNewPlacement
   /** Review cards per new card; only read when new_placement is ratio. */
   review_new_ratio: FreestyleReviewNewRatio
+  /** 新学 / 复习 pool. Empty never reaches the queue; both means everything due. */
+  learn_scope: FreestyleLearnScope[]
 
   /**
    * Compatibility projection for v1 local preferences and callers during the

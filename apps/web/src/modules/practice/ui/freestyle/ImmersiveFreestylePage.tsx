@@ -29,6 +29,7 @@ import { FreestyleHud } from '@/modules/practice/ui/freestyle/FreestyleHud'
 import { FreestyleWaitingBanner } from '@/modules/practice/ui/freestyle/components/FreestyleWaitingBanner'
 import { FreestylePageDialogs } from '@/modules/practice/ui/freestyle/FreestylePageDialogs'
 import { FreestyleCardArea } from '@/modules/practice/ui/freestyle/FreestyleCardArea'
+import { FreestylePalaceDirectoryPanel } from '@/modules/practice/ui/freestyle/components/FreestylePalaceDirectoryPanel'
 import { FreestyleNewUnitsBanner } from '@/modules/practice/ui/freestyle/components/FreestyleNewUnitsBanner'
 import { FreestyleBedtimeButton } from '@/modules/practice/ui/freestyle/components/FreestyleBedtimeButton'
 import { getFreestyleBedtimeCandidatesApi } from '@/modules/practice/ui/freestyle/api'
@@ -99,10 +100,17 @@ import {
   waitForPalaceEditorLeave,
 } from '@/shared/events/palaceEditorLeaveGate'
 import { cn } from '@/shared/lib/utils'
+import { isStoredBoolean, useLocalStorageState } from '@/shared/lib/localStorage'
 import { useExamOverview } from '@/modules/exam/public'
 import { useRouteResidency } from '@/shared/routing/RouteResidency'
 
 const FREESTYLE_STALE_TOAST_ID = 'freestyle-stale-card'
+const FREESTYLE_DIRECTORY_COLLAPSED_STORAGE_KEY = 'memory_anki.freestyle_directory_collapsed'
+
+function isNarrowViewport() {
+  return typeof window !== 'undefined'
+    && Boolean(window.matchMedia?.('(max-width: 767px)').matches)
+}
 
 const startOverviewDateFormatter = new Intl.DateTimeFormat('zh-CN', {
   month: 'long',
@@ -143,7 +151,6 @@ export default function ImmersiveFreestylePage({
   const queueRef = useRef<FreestyleCard[]>([])
   const acknowledgedCardIdsRef = useRef<Set<string>>(new Set())
   const flipCardRevealSettings = useFlipCardRevealSettings()
-  const [planOpen, setPlanOpen] = useState(false)
   const [partialSettlement, setPartialSettlement] = useState<FreestylePartialSettlementSnapshot | null>(null)
   const [startOverviewOpen, setStartOverviewOpen] = useState(true)
   const [dayRecapOpen, setDayRecapOpen] = useState(() => isDayRecapPending(window.localStorage, new Date()))
@@ -162,6 +169,13 @@ export default function ImmersiveFreestylePage({
   const [bedtimeBusy, setBedtimeBusy] = useState(false)
   const { flipMode, mindmapZoom, updateFlipMode, updateMindmapZoom } = useFreestyleDisplayPrefs()
   const { freestyleFullscreen, toggleFreestyleFullscreen } = useFreestyleFullscreen()
+  // Its own switch, not the app nav's: collapsing the sidebar must not take the
+  // directory with it, and closing the directory must not hide the nav.
+  const [directoryCollapsed, setDirectoryCollapsed] = useLocalStorageState(
+    FREESTYLE_DIRECTORY_COLLAPSED_STORAGE_KEY,
+    isNarrowViewport(),
+    isStoredBoolean,
+  )
   const subjectByPalaceId = useFreestyleSubjectMap()
   const favoritePalaceIds = usePalaceFavoriteIds()
 
@@ -194,9 +208,7 @@ export default function ImmersiveFreestylePage({
     staleCircuitOpen,
     staleRecoveryCardId,
     resetStaleRecovery,
-    reorderPlan,
     excludePlanCards,
-    restorePlanCards,
     compressCompletedPlanCards,
     pendingRestudyCardIds,
     planVersion,
@@ -295,11 +307,29 @@ export default function ImmersiveFreestylePage({
     ? currentCard.palace_id
     : currentCard?.palace_context?.id ?? null
   /**
-   * Everything the feed presents has a this-round score. A same-day 回顾 still
-   * owed (`waiting`) is not a reason to refuse the ending: the pager must never
-   * dead-end. The closing page names what is still owed, and 结算 ends the round
-   * by minting the next one, exactly like a round that had nothing pending.
+   * Directory clicks are palace entry, not a card jump: a palace review stays
+   * in review, and 随心 narrows this session to the chosen palace (the same
+   * transient entry scope a shelf launch uses). The saved selection is not
+   * rewritten by that hint.
    */
+  const openPalaceFromDirectory = useCallback((palaceId: number) => {
+    if (palaceId === currentPalaceId) return
+    if (reviewPalaceId != null) {
+      navigate(`/palaces/${palaceId}/review`)
+      return
+    }
+    // Replace: the hint is transient (the page drops it once the config saves),
+    // so walking the directory must not fill the back stack with each palace.
+    navigate(`/freestyle?palaceId=${palaceId}`, { replace: true })
+  }, [currentPalaceId, navigate, reviewPalaceId])
+  /**
+   * Everything the feed presents has a this-round score. That is not yet 本轮
+   * 完成 when the server still owes same-day 重练 (`waiting`): those cards are
+   * unfinished learning, merely not due. The closing slot stays reachable (完成
+   * must never dead-end) but renders a waiting page instead of the trophy, and
+   * the round only celebrates once `waiting` is empty.
+   */
+  const pendingReviewCount = waiting?.count ?? 0
   const roundComplete = isFreestyleRoundComplete(
     cards,
     queueState.unitEncountersByCardId,
@@ -330,6 +360,7 @@ export default function ImmersiveFreestylePage({
     cards,
     currentIndex,
     roundComplete,
+    pendingReviewCount,
     goToIndex,
     flushDeferredRestudy,
     pendingRestudyCardIds,
@@ -606,9 +637,9 @@ export default function ImmersiveFreestylePage({
       .map((entry) => entry.cardId),
   ), [roundPlan])
   // Every rating acknowledgement reaches the round ledger here, whether or not
-  // its card is mounted; 本轮安排 rates through the same per-card outbox.
+  // its card is mounted. The feed is the only rating surface, so the outbox is
+  // keyed by the card on screen.
   const {
-    rateCards,
     failedCount: unsavedRatingCount,
     retryUnsaved: retryUnsavedRatings,
   } = useFreestyleRatingOutbox({
@@ -750,11 +781,16 @@ export default function ImmersiveFreestylePage({
   const overflowSummary = cards.length === 0
     ? `本轮 0 张 · 候选 ${roundMeta.candidate_count}`
     : `导图 ${mindmapCount} · 题 ${quizCount}${resolvedQuiz > 0 ? ` · 已答 ${resolvedQuiz}` : ''} · 候选 ${roundMeta.candidate_count}`
-  const openPlan = useCallback(() => setPlanOpen(true), [])
+  /** HUD and rail header open 随心配置 directly; the plan list no longer exists. */
+  const openPlan = useCallback(() => {
+    setConfigIntent('replan')
+    setConfigOpen(true)
+  }, [])
   const jumpFromProgressRail = useCallback((cardId: string) => {
     const index = cards.findIndex((card) => card.id === cardId)
     if (index < 0) {
-      setPlanOpen(true)
+      setConfigIntent('replan')
+      setConfigOpen(true)
       return
     }
     const direction: -1 | 0 | 1 = index > currentIndex ? 1 : index < currentIndex ? -1 : 0
@@ -861,18 +897,6 @@ export default function ImmersiveFreestylePage({
     const result = await updateReviewQueue()
     if (result.status !== 'ok') throw new Error('复习安排更新失败，请重试')
   }, [updateReviewQueue])
-  const handlePlanJump = useCallback((cardId: string) => {
-    setPlanOpen(false)
-    jumpFromProgressRail(cardId)
-  }, [jumpFromProgressRail])
-  // 本轮安排 rates in the background and never moves the feed (single row or 多选 评分).
-  const handlePlanRateCard = useCallback((cardId: string, rating: UnitRating) => {
-    rateCards([cardId], rating, { toggle: true })
-  }, [rateCards])
-  const handlePlanRateCards = useCallback(
-    (cardIds: string[], rating: UnitRating) => rateCards(cardIds, rating),
-    [rateCards],
-  )
   // One snapshot builder serves both entry points: 结算已完成单元 previews it on
   // the 小结算 page, and 完成 on a genuinely finished round settles it straight
   // away (see handlePagerComplete).
@@ -898,9 +922,10 @@ export default function ImmersiveFreestylePage({
       }).length,
     })
   }, [answeredQuestionIds, cards, queueState.completedIds, queueState.unitEncountersByCardId, roundPlan, subjectByPalaceId])
-  const handleCompressCompleted = useCallback(() => {
+  /** Config page 结算已完成: show the summary dialog, then compress on confirm. */
+  const openSettlementFromConfig = useCallback(() => {
     const snapshot = buildCompletedSettlement()
-    setPlanOpen(false)
+    setConfigOpen(false)
     if (snapshot) setPartialSettlement(snapshot)
   }, [buildCompletedSettlement])
   /**
@@ -919,23 +944,21 @@ export default function ImmersiveFreestylePage({
   /**
    * Right-side 完成. While the round is open it keeps the seek behaviour; once
    * every presented unit is scored it is a real completion, so it settles the
-   * rated units and leaves only the closing settlement (nothing to page back to).
-   * A same-day 回顾 still waiting is opened, not compressed: the server still
-   * holds those groups, and the closing page tells the learner what is owed.
+   * rated units and leaves only the closing slot (nothing to page back to).
+   * Same-day 重练 still owed keeps the slot as a waiting page: nothing is
+   * compressed, because those groups are still owed today.
    */
   const handlePagerComplete = useCallback(() => {
-    if (roundComplete) {
-      if (!(waiting && waiting.count > 0) && settleCompletedUnits()) return
-      handleCompleteRound()
-      return
+    if (roundComplete && pendingReviewCount === 0) {
+      if (settleCompletedUnits()) return
     }
     handleCompleteRound()
-  }, [handleCompleteRound, roundComplete, settleCompletedUnits, waiting])
+  }, [handleCompleteRound, pendingReviewCount, roundComplete, settleCompletedUnits])
   /**
-   * 结算 on the closing page: end this round and open the next one. Nothing
-   * here waits on a compress or a quiz choice, so a round with weak scores or
-   * pending retries can always be closed instead of dead-ending. When the new
-   * round has nothing to show, the page lands on 今天的学习.
+   * 「今天到此为止」on the waiting page / 结算 on the closing page: end this round
+   * and open the next one. Nothing here waits on a compress or a quiz choice, so
+   * a round can always be closed instead of dead-ending. When the new round has
+   * nothing to show, the page lands on 今天的学习.
    */
   const pendingNextRoundRef = useRef(false)
   const settleAndGoOn = useCallback(() => {
@@ -957,11 +980,6 @@ export default function ImmersiveFreestylePage({
     pendingNextRoundRef.current = false
     setStartOverviewOpen(true)
   }, [cards.length, loading])
-  const openConfigFromPlan = useCallback(() => {
-    setPlanOpen(false)
-    setConfigIntent('replan')
-    setConfigOpen(true)
-  }, [])
   const handleConfigOpenChange = useCallback((open: boolean) => {
     setConfigOpen(open)
     if (!open) setConfigIntent('replan')
@@ -991,6 +1009,13 @@ export default function ImmersiveFreestylePage({
 
   return (
     <TooltipProvider>
+      <FreestylePalaceDirectoryPanel
+        currentPalaceId={currentPalaceId}
+        collapsed={directoryCollapsed}
+        onCollapsedChange={setDirectoryCollapsed}
+        onSelectPalace={openPalaceFromDirectory}
+        hidden={freestyleFullscreen}
+      >
       <div
         className={cn(
           // Warm charcoal field; the only glow sits low behind the rating dock.
@@ -1003,25 +1028,14 @@ export default function ImmersiveFreestylePage({
         tabIndex={-1}
       >
         <FreestylePageDialogs
-          planOpen={planOpen}
-          onPlanOpenChange={setPlanOpen}
-          cards={cards}
-          currentIndex={currentIndex}
           queueState={queueState}
           roundPlan={roundPlan}
-          subjectByPalaceId={subjectByPalaceId}
-          favoritePalaceIds={favoritePalaceIds}
-          serverProgress={roundProgress?.roundId === queueState.roundId ? roundProgress.progress : null}
-          loading={loading}
-          onJumpPlanCard={handlePlanJump}
-          onExcludePlanCards={excludePlanCards}
-          onRestorePlanCards={restorePlanCards}
-          onCompressCompleted={handleCompressCompleted}
-          onReorderPlan={reorderPlan}
-          onRateCard={handlePlanRateCard}
-          onRateCards={handlePlanRateCards}
-          onRemoveCard={removeCardFromQueue}
-          onOpenConfigFromPlan={openConfigFromPlan}
+          settlementCount={compressibleRoundPlanIds(roundPlan, {
+            completedIds: queueState.completedIds,
+            encounters: queueState.unitEncountersByCardId,
+            liveCardIds: cards.map((card) => card.id),
+          }).length}
+          onSettleCompleted={openSettlementFromConfig}
           configOpen={configOpen}
           onConfigOpenChange={handleConfigOpenChange}
           config={config}
@@ -1255,6 +1269,7 @@ export default function ImmersiveFreestylePage({
           onCancel={() => setBedtimeOpen(false)}
         />
       </div>
+      </FreestylePalaceDirectoryPanel>
     </TooltipProvider>
   )
 }

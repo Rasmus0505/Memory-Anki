@@ -839,10 +839,10 @@ export function progressHudText(summary: FreestyleProgressSummary): string {
  * an empty rail still open 本轮安排, so that action stays in the empty label.
  */
 export function progressRailLabel(summary: FreestyleProgressSummary, canJump = false): string {
-  if (summary.total === 0) return '本轮暂无安排。点击查看本轮安排'
+  if (summary.total === 0) return '本轮暂无安排。点击打开配置'
   const position = summary.position > 0
     ? `本轮进度 ${summary.position}/${summary.total}`
     : `本轮共 ${summary.total} 张`
-  const action = canJump ? '点击分段跳转到对应卡片' : '点击查看本轮安排'
+  const action = canJump ? '点击分段跳转到对应卡片' : '点击打开配置'
   return `${position}。${action}`
 }

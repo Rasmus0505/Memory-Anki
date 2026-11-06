@@ -412,9 +412,10 @@ test('完成 on a fully scored round settles the rated units and clears the queu
   await expect.poll(() => routes.starts.length).toBe(1)
 })
 
-test('完成 never dead-ends while a 20 分钟回顾 is still owed', async ({ page }) => {
-  // The state the learner reported: every presented card scored, but two same-day
-  // re-checks are still booked for later. The button used to disable itself here.
+test('a round with 重练 still owed is a wait, not a finish', async ({ page }) => {
+  // Every presented card is scored, but two same-day re-checks are booked for
+  // later. Calling that 本轮完成 asked the learner to settle work they still
+  // owed today; the closing slot must say it is a wait instead.
   const routes = await installRoutes(page, {
     completedCount: UNITS.length - 1,
     rateable: true,
@@ -434,9 +435,25 @@ test('完成 never dead-ends while a 20 分钟回顾 is still owed', async ({ pa
   await expect(complete).toBeEnabled()
   await complete.click()
 
-  // It opens the closing page instead of compressing groups the server still
-  // holds, and names what is still owed so 结算 is an informed choice.
-  await expect(page.getByTestId('freestyle-round-complete')).toBeVisible()
-  await expect(page.getByTestId('freestyle-round-pending-reviews')).toContainText('还有 2 张稍后回顾')
+  // A waiting page, not the trophy: nothing is compressed, because the server
+  // still owes those groups today.
+  await expect(page.getByTestId('freestyle-round-waiting')).toContainText('还有 2 张重练')
+  await expect(page.getByTestId('freestyle-round-complete')).toHaveCount(0)
   expect(routes.actions).not.toContain('compress_completed')
+  // Land on the waiting page before pressing anything on it.
+  await expect.poll(() => readVisualIndex(page)).toBe(UNITS.length)
+
+  // 回去等它们 returns to the feed and keeps the round open: the waiting page
+  // stays in the feed as a page, the pager is what the learner is looking at.
+  await page.getByTestId('freestyle-round-waiting-back').click()
+  await expect.poll(() => readVisualIndex(page)).toBe(UNITS.length - 1)
+  expect(routes.actions).not.toContain('compress_completed')
+
+  // Reopening lands on the waiting page again (nothing is scored left, but the
+  // day is not done), where 今天到此为止 is the explicit ending.
+  await page.reload()
+  await startFromOverview(page)
+  await expect(page.getByTestId('freestyle-round-waiting')).toBeVisible()
+  await page.getByTestId('freestyle-round-waiting-stop').click()
+  await expect.poll(() => routes.starts.length).toBe(1)
 })
