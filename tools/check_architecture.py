@@ -242,13 +242,8 @@ BASELINE_OVERSIZED_FILES = {
     # architecture review so the quality gate remains focused on new violations.
     "apps/web/src/shared/components/ui/dialog.tsx",
     "apps/web/src/modules/practice/ui/freestyle/model/freestyleProgressSegments.test.ts",
-    # These four crossed the limit in feature commits after the last split pass.
-    # They are registered so the gate can stay green while the extractions land;
-    # remove each entry as soon as its file is split (the gate enforces this).
-    "apps/web/src/widgets/node-bound-quiz/NodeBoundQuizDialog.test.tsx",
+    # Split lands with the freestyle 单独编辑 commit right after this one.
     "apps/web/src/pages/create/PalaceEditorPage.tsx",
-    "apps/web/src/modules/practice/ui/freestyle/hooks/useFreestyleFeedNavigation.ts",
-    "apps/web/src/modules/content/ui/mindmap-editor/MindMapEditorSurface.tsx",
     "apps/api/src/memory_anki/modules/memory/application/unit_review_service.py",
     # Session write validation grew with revision/operation race protection;
     # keep the existing service boundary tracked while the next extraction is

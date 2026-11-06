@@ -19,7 +19,7 @@ import {
   previousViewTarget,
   viewHistoryAfterMove,
 } from '@/modules/practice/ui/freestyle/model/feedViewHistory'
-import type { useImmersiveQueue } from '@/modules/practice/ui/freestyle/hooks/useImmersiveQueue'
+import { slotIndexOfKey, type ImmersiveQueue } from '@/modules/practice/ui/freestyle/model/freestyleFeedNavigationTypes'
 import {
   clampFreestyleFeedIndex,
   findUnscoredCompleteSeekIndices,
@@ -44,13 +44,6 @@ import { useFreestyleEdgeRubberBand } from '@/modules/practice/ui/freestyle/hook
 import { useFreestyleWheelPaging } from '@/modules/practice/ui/freestyle/hooks/useFreestyleWheelPaging'
 import { prefersReducedMotion } from '@/shared/lib/prefersReducedMotion'
 import { recordSessionRecorderView } from '@/shared/debug/session-recorder'
-
-function slotIndexOfKey(key: string, cardIds: readonly string[]) {
-  if (key.startsWith('slot:')) return Number(key.slice(5))
-  return cardIds.indexOf(key)
-}
-
-type ImmersiveQueue = ReturnType<typeof useImmersiveQueue>
 
 /**
  * Snap-scroll paging for the immersive feed: the visual index (what is under the

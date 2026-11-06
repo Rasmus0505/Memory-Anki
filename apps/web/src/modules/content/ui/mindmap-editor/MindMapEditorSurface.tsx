@@ -14,7 +14,6 @@ import {
   mindMapSceneChromeClassName,
   mindMapSceneChromeLabel,
 } from '@/shared/ui/mindmap-canvas'
-import type { ContextMenuAction } from '@/shared/ui/mindmap-canvas/NodeContextMenu'
 import { WidgetErrorBoundary } from '@/shared/components/widget-error-boundary'
 import { collectMindMapBranchScope } from '@/modules/content/domain/mindmap-document-entity'
 import {
@@ -34,6 +33,9 @@ import { MindMapTextStats, useMindMapTextStats } from './MindMapTextStats'
 import { MindMapEditingStatsStore } from './mindMapEditingStatsStore'
 import { useMindMapEditorDocActions } from './useMindMapEditorDocActions'
 import { useMindMapFullscreen } from './useMindMapFullscreen'
+import { useMindMapFullscreenToggles } from './hooks/useMindMapFullscreenToggles'
+import { useMindMapScopeEscapeActions } from './hooks/useMindMapScopeEscapeActions'
+import { buildMindMapNodeActions } from './model/mindMapNodeActions'
 import { useMindMapSurfaceViewCommands } from './useMindMapSurfaceViewCommands'
 import { createMindMapCapabilities } from './capabilities'
 import { useMindMapGraphOptionsSignature } from './useMindMapGraphOptionsSignature'
@@ -47,15 +49,12 @@ import {
   selectedInteraction,
   type MindMapInteractionState,
 } from './mindMapEditorSurfaceKeyboard'
-const EMPTY_SEGMENTS: NonNullable<MindMapEditorSurfaceProps['segments']> = []
-const EMPTY_UIDS: string[] = []
-const EMPTY_MASTERY_BY_UID: NonNullable<MindMapEditorSurfaceProps['masteryByNodeUid']> = {}
-const EMPTY_SEGMENT_RANGE_DRAFT: NonNullable<MindMapEditorSurfaceProps['segmentRangeDraft']> = {
-  active: false,
-  targetSegmentId: null,
-  selectedNodeUids: [],
-  overriddenConflictNodeUids: [],
-}
+import {
+  EMPTY_MASTERY_BY_UID,
+  EMPTY_SEGMENT_RANGE_DRAFT,
+  EMPTY_SEGMENTS,
+  EMPTY_UIDS,
+} from './model/mindMapSurfaceDefaults'
 export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindMapEditorSurfaceProps>(function MindMapEditorSurface({
   editorState,
   capabilities: providedCapabilities,
@@ -480,17 +479,14 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
   )
 
   const buildNodeActions = useCallback(
-    (nodeId: string): ContextMenuAction[] => {
-      const selection = buildSelectionFromDoc(normalizedEditorState.editor_doc, nodeId)
-      const context = {
-        nodeId,
-        selection,
-        isRoot: graphData.nodes.find((node) => node.id === nodeId)?.parentId == null,
-        readonly,
-        practiceModeActive,
-      }
-      return capabilities.flatMap((capability) => capability.getNodeActions?.(context) ?? [])
-    },
+    (nodeId: string) => buildMindMapNodeActions({
+      nodeId,
+      editorDoc: normalizedEditorState.editor_doc,
+      nodes: graphData.nodes,
+      capabilities,
+      readonly,
+      practiceModeActive,
+    }),
     [capabilities, graphData.nodes, normalizedEditorState.editor_doc, practiceModeActive, readonly],
   )
 
@@ -557,98 +553,35 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
     canEscapeScope: Boolean(onRequestFullScope),
     isScopeEscaping: () => scopeEscapeRef.current,
   })
-  // The scoped projection only hides sibling branches; it must not shorten the
-  // menu. A structure row on a spine card asks the host to show the whole
-  // palace, then runs, so the card it creates or removes stays visible.
-  const runOutsideScope = useCallback(
-    (escapes: boolean, run: () => void) => {
-      if (!escapes || !onRequestFullScope) {
-        run()
-        return
-      }
-      onRequestFullScope()
-      scopeEscapeRef.current = true
-      try {
-        run()
-      } finally {
-        scopeEscapeRef.current = false
-      }
-    },
-    [onRequestFullScope],
-  )
-  const addChildOutsideScope = useCallback(
-    (nodeId: string) => runOutsideScope(
-      Boolean(branchScope) && !branchScope!.subtreeUids.has(nodeId),
-      () => handleAddChild(nodeId),
-    ),
-    [branchScope, handleAddChild, runOutsideScope],
-  )
-  const addChildWithoutFocusOutsideScope = useCallback(
-    (nodeId: string) => runOutsideScope(
-      Boolean(branchScope) && !branchScope!.subtreeUids.has(nodeId),
-      () => handleAddChildWithoutFocus(nodeId),
-    ),
-    [branchScope, handleAddChildWithoutFocus, runOutsideScope],
-  )
-  const insertChildLayerOutsideScope = useCallback(
-    (nodeId: string) => runOutsideScope(
-      Boolean(branchScope) && !branchScope!.subtreeUids.has(nodeId),
-      () => handleInsertChildLayer(nodeId),
-    ),
-    [branchScope, handleInsertChildLayer, runOutsideScope],
-  )
-  const escapesStructure = useCallback(
-    (nodeId: string) => Boolean(branchScope)
-      && (!branchScope!.subtreeUids.has(nodeId) || nodeId === branchScope!.branchUid),
-    [branchScope],
-  )
-  const addSiblingOutsideScope = useCallback(
-    (nodeId: string) => runOutsideScope(escapesStructure(nodeId), () => handleAddSibling(nodeId)),
-    [escapesStructure, handleAddSibling, runOutsideScope],
-  )
-  const deleteNodeOutsideScope = useCallback(
-    (nodeId: string) => runOutsideScope(escapesStructure(nodeId), () => handleDeleteNode(nodeId)),
-    [escapesStructure, handleDeleteNode, runOutsideScope],
-  )
-  const deleteNodesOutsideScope = useCallback(
-    (nodeIds: string[]) => runOutsideScope(
-      nodeIds.some((nodeId) => escapesStructure(nodeId)),
-      () => handleDeleteNodes(nodeIds),
-    ),
-    [escapesStructure, handleDeleteNodes, runOutsideScope],
-  )
-  const deleteNodeOnlyOutsideScope = useCallback(
-    (nodeId: string) => runOutsideScope(escapesStructure(nodeId), () => handleDeleteNodeOnly(nodeId)),
-    [escapesStructure, handleDeleteNodeOnly, runOutsideScope],
-  )
-  const deleteNodesOnlyOutsideScope = useCallback(
-    (nodeIds: string[]) => runOutsideScope(
-      nodeIds.some((nodeId) => escapesStructure(nodeId)),
-      () => handleDeleteNodesOnly(nodeIds),
-    ),
-    [escapesStructure, handleDeleteNodesOnly, runOutsideScope],
-  )
-  const moveUpOutsideScope = useCallback(
-    (nodeId: string) => runOutsideScope(escapesStructure(nodeId), () => handleMoveUp(nodeId)),
-    [escapesStructure, handleMoveUp, runOutsideScope],
-  )
-  const moveDownOutsideScope = useCallback(
-    (nodeId: string) => runOutsideScope(escapesStructure(nodeId), () => handleMoveDown(nodeId)),
-    [escapesStructure, handleMoveDown, runOutsideScope],
-  )
-  const relocateOutsideScope = useCallback(
-    (sourceIds: string[], targetId: string, mode: 'before' | 'inside' | 'after') => runOutsideScope(
-      sourceIds.some((nodeId) => escapesStructure(nodeId)) || escapesStructure(targetId),
-      () => handleRelocateNodes(sourceIds, targetId, mode),
-    ),
-    [escapesStructure, handleRelocateNodes, runOutsideScope],
-  )
-  const reorderSiblingOutsideScope = useCallback(
-    (sourceId: string, targetId: string, position: 'before' | 'after') => (
-      relocateOutsideScope([sourceId], targetId, position)
-    ),
-    [relocateOutsideScope],
-  )
+  const {
+    addChildOutsideScope,
+    addChildWithoutFocusOutsideScope,
+    insertChildLayerOutsideScope,
+    addSiblingOutsideScope,
+    deleteNodeOutsideScope,
+    deleteNodesOutsideScope,
+    deleteNodeOnlyOutsideScope,
+    deleteNodesOnlyOutsideScope,
+    moveUpOutsideScope,
+    moveDownOutsideScope,
+    relocateOutsideScope,
+    reorderSiblingOutsideScope,
+  } = useMindMapScopeEscapeActions({
+    branchScope,
+    onRequestFullScope,
+    scopeEscapeRef,
+    handleAddChild,
+    handleAddChildWithoutFocus,
+    handleInsertChildLayer,
+    handleAddSibling,
+    handleDeleteNode,
+    handleDeleteNodes,
+    handleDeleteNodeOnly,
+    handleDeleteNodesOnly,
+    handleMoveUp,
+    handleMoveDown,
+    handleRelocateNodes,
+  })
   const handleEditNode = useCallback(
     (nodeId: string, text: string) => {
       commitEditedNodeText(nodeId, text, interactionRef.current)
@@ -697,37 +630,15 @@ export const MindMapEditorSurface = forwardRef<MindMapEditorSurfaceHandle, MindM
     [beginEditingNode, cancelEditing],
   )
 
-  const handleSystemFullscreenToggle = useCallback(() => {
-    const handled = capabilities.some((capability) => capability.handleFocusToggle?.())
-    if (handled) return
-    if (delegateFullscreenToHost) {
-      onFullscreenToggle?.()
-      return
-    }
-    // Desktop: Fullscreen API (system fullscreen). Host immersive layout stays separate.
-    toggleNativeFullscreen()
-  }, [capabilities, delegateFullscreenToHost, onFullscreenToggle, toggleNativeFullscreen])
-  const handleWebpageFullscreenToggle = useCallback(() => {
-    const handled = capabilities.some((capability) => capability.handleFocusToggle?.())
-    if (handled) return
-    if (delegateFullscreenToHost) {
-      onFullscreenToggle?.()
-      return
-    }
-    // Viewport CSS lock inside the browser window so the OS window can still be dragged.
-    if (presentationStrategy === 'viewport-only') {
-      toggleCanvasFullscreen()
-      return
-    }
-    toggleViewportFullscreen()
-  }, [
+  const { handleSystemFullscreenToggle, handleWebpageFullscreenToggle } = useMindMapFullscreenToggles({
     capabilities,
     delegateFullscreenToHost,
     onFullscreenToggle,
+    toggleNativeFullscreen,
     presentationStrategy,
     toggleCanvasFullscreen,
     toggleViewportFullscreen,
-  ])
+  })
   const canvas = (
     <WidgetErrorBoundary label="思维导图">
       <MindMapCanvas

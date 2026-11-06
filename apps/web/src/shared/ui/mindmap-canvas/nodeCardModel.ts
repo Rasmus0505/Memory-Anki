@@ -86,7 +86,8 @@ export function consumeCardDoubleClick(nodeId: string, now = Date.now()): boolea
 export function resetCardDoubleClickTracking() {
   lastCardClickAt.clear()
 }
-export const LONG_PRESS_DELAY_MS = 550
+/** Same hold as the row right-click menus (Radix context menu uses 700ms). */
+export const LONG_PRESS_DELAY_MS = 700
 export const LONG_PRESS_MOVE_TOLERANCE_PX = 18
 export const SYNTHETIC_CONTEXT_MENU_WINDOW_MS = 1_000
 /** Ignore blur right after entering edit (layout/toolbar teardown can steal focus). */
