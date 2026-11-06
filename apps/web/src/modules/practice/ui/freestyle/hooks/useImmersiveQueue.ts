@@ -2366,23 +2366,35 @@ export function useImmersiveQueue(
    * rating off: the server drops the encounter and cancels the retries that
    * only existed because of that rating, and the card is served fresh.
    */
-  const reopenPalaceCards = useCallback(async (palaceId: number): Promise<string[]> => {
+  const reopenPalaceCards = useCallback(async (
+    palaceId: number,
+    explicitCardIds?: string[],
+  ): Promise<string[]> => {
     const current = queueStateRef.current
     const completed = new Set(current.completedIds.map(String))
-    const ids = new Set<string>()
-    for (const [cardId, entry] of Object.entries(current.roundPlan?.cardsById ?? {})) {
-      if (entry.palaceId !== palaceId || entry.occurrenceKind === 'retry') continue
-      if (completed.has(cardId) || entry.status === 'completed') ids.add(cardId)
-    }
-    for (const card of cardsRef.current) {
-      if (cardPalaceId(card) === palaceId && completed.has(card.id)) ids.add(card.id)
+    const ids = new Set<string>(
+      (explicitCardIds ?? []).map((id) => String(id || '').trim()).filter(Boolean),
+    )
+    if (!ids.size) {
+      for (const [cardId, entry] of Object.entries(current.roundPlan?.cardsById ?? {})) {
+        if (entry.palaceId !== palaceId || entry.occurrenceKind === 'retry') continue
+        if (completed.has(cardId) || entry.status === 'completed') ids.add(cardId)
+      }
+      for (const card of cardsRef.current) {
+        if (cardPalaceId(card) === palaceId && completed.has(card.id)) ids.add(card.id)
+      }
     }
     if (!ids.size) return []
 
     let next = current
     for (const cardId of ids) next = markIncomplete(next, cardId)
+    // The server command drops the encounter too; clear the local copy so the
+    // reopened card is not immediately considered scored by the jump/rating UI.
+    const encounters = { ...next.unitEncountersByCardId }
+    for (const cardId of ids) delete encounters[cardId]
     persistQueueState({
       ...next,
+      unitEncountersByCardId: encounters,
       roundPlan: next.roundPlan
         ? syncCompletedIdsToRoundPlan(next.roundPlan, next.completedIds)
         : null,

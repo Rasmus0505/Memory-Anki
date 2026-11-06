@@ -34,7 +34,7 @@ export type FreestylePalaceJoinState =
   | { kind: 'not_due'; palaceId: number; title: string; nextReviewDate: string | null }
   | { kind: 'no_units'; palaceId: number; title: string }
   /** Already in this round, but every card of it has this-round score. */
-  | { kind: 'scored'; palaceId: number; title: string; cardCount: number }
+  | { kind: 'scored'; palaceId: number; title: string; cardIds: string[] }
 
 /**
  * Source cards of this palace that already carry a this-round score. A palace
@@ -54,6 +54,25 @@ export function completedSourceCardIdsForPalace(
     if (completedIds.has(cardId) || entry.status === 'completed') ids.push(cardId)
   }
   return ids
+}
+
+/**
+ * Scored source cards from the server round payload. Used when the local plan
+ * was built from a completed-filtered queue and no longer carries them.
+ */
+export function scoredSourceCardsFromServerPlan(
+  plan: {
+    original_cards?: ReadonlyArray<{ palace_id?: number; card_id?: string }>
+    completed_ids?: readonly string[]
+  } | null,
+  palaceId: number,
+): string[] {
+  if (!plan) return []
+  const completed = new Set((plan.completed_ids ?? []).map(String))
+  return (plan.original_cards ?? [])
+    .filter((card) => Number(card.palace_id) === palaceId)
+    .map((card) => String(card.card_id || ''))
+    .filter((cardId) => cardId && completed.has(cardId))
 }
 
 /** Any source card of this palace known to the round plan, scored or not. */

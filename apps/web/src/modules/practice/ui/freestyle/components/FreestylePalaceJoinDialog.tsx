@@ -60,7 +60,7 @@ export function FreestylePalaceJoinDialog({
             ) : state.kind === 'not_due' ? (
               <>「{state.title}」下次复习 {formatReviewDate(state.nextReviewDate)}。</>
             ) : state.kind === 'scored' ? (
-              <>「{state.title}」本轮的 {state.cardCount} 张卡都已评分。重新评分会把它们放回队列，可以再次打分。</>
+              <>「{state.title}」本轮的 {state.cardIds.length} 张卡都已评分。重新评分会把它们放回队列，可以再次打分。</>
             ) : (
               <>「{state.title}」没有可用的复习单元。</>
             )}

@@ -811,6 +811,7 @@ export default function ImmersiveFreestylePage({
     completedIds: queueState.completedIds,
     encounters: queueState.unitEncountersByCardId,
     roundPlan,
+    roundId: queueState.roundId || null,
     currentCardId: currentCard?.id ?? null,
     jumpFromProgressRail,
     setConfigAndPersist,

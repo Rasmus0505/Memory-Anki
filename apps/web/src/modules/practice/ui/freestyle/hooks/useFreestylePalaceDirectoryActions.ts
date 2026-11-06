@@ -18,8 +18,10 @@ import {
   findPalaceJumpTarget,
   palaceHasPlanCards,
   resolvePalaceDirectoryClick,
+  scoredSourceCardsFromServerPlan,
   type FreestylePalaceJoinState,
 } from '@/modules/practice/ui/freestyle/model/freestyle-palace-directory'
+import { getFreestyleRoundApi } from '@/modules/practice/ui/freestyle/api'
 import type { FreestyleCard } from '@/shared/api/contracts'
 
 /** How long a just-added palace may take to appear before we explain the wait. */
@@ -35,13 +37,15 @@ export interface FreestylePalaceDirectoryActionsOptions {
   encounters: Record<string, FreestyleUnitEncounterState>
   roundPlan: FreestyleRoundPlanState | null
   currentCardId: string | null
+  /** Active round id; lets the click read the server plan when the local one is filtered. */
+  roundId: string | null
   jumpFromProgressRail: (cardId: string) => void
   setConfigAndPersist: (
     updater: (current: FreestyleFeedConfig) => FreestyleFeedConfig,
     options?: { silent?: boolean; preferCardId?: string | null },
   ) => void
   /** Un-complete a palace's scored cards and rebuild, so they can be rated again. */
-  reopenPalaceCards: (palaceId: number) => Promise<string[]>
+  reopenPalaceCards: (palaceId: number, cardIds?: string[]) => Promise<string[]>
 }
 
 /**
@@ -59,6 +63,7 @@ export function useFreestylePalaceDirectoryActions({
   encounters,
   roundPlan,
   currentCardId,
+  roundId,
   jumpFromProgressRail,
   setConfigAndPersist,
   reopenPalaceCards,
@@ -91,7 +96,7 @@ export function useFreestylePalaceDirectoryActions({
     return true
   }, [cards, completedIds, encounters, jumpFromProgressRail, roundPlan])
 
-  const addPalaceToRound = useCallback((palaceId: number, widening = true) => {
+  const addPalaceToRound = useCallback((palaceId: number, widening = true, cardIds?: string[]) => {
     clearPendingPalaceJump()
     pendingPalaceJumpRef.current = palaceId
     palaceJumpTimerRef.current = window.setTimeout(() => {
@@ -102,7 +107,7 @@ export function useFreestylePalaceDirectoryActions({
     }, PENDING_JUMP_TIMEOUT_MS)
     if (!widening) {
       // Already in this round but fully scored: put its cards back for re-rating.
-      void reopenPalaceCards(palaceId)
+      void reopenPalaceCards(palaceId, cardIds)
         .then((ids) => {
           if (!ids.length) toast.info('这座宫殿本轮没有可重新评分的卡')
         })
@@ -136,44 +141,76 @@ export function useFreestylePalaceDirectoryActions({
     // The queue filters completed cards, so a palace already in this round can
     // look "not in the round" when every card of it is scored. Ask the plan and
     // offer 重新评分 instead of a pointless 加入本轮.
-    const completed = completedSourceCardIdsForPalace(
+    const localCompleted = completedSourceCardIdsForPalace(
       roundPlan,
       palaceId,
       new Set(completedIds.map(String)),
     )
-    if (palaceHasPlanCards(roundPlan, palaceId) && completed.length > 0) {
+    if (palaceHasPlanCards(roundPlan, palaceId) && localCompleted.length > 0) {
       const title = Object.values(roundPlan?.cardsById ?? {})
         .find((entry) => entry.palaceId === palaceId && entry.occurrenceKind !== 'retry')
         ?.palaceTitle || '这座宫殿'
-      setPalaceJoin({ kind: 'scored', palaceId, title, cardCount: completed.length })
+      setPalaceJoin({ kind: 'scored', palaceId, title, cardIds: localCompleted })
+      return
+    }
+    const openFromProjection = () => {
+      setPalaceJoinBusy(true)
+      getPalaceReviewUnitsApi(palaceId)
+        .then((projection) => {
+          const title = projection.title || '这座宫殿'
+          if (projection.mark_required) {
+            setPalaceJoin({ kind: 'unmarked', palaceId, title })
+          } else if (projection.unit_count === 0) {
+            setPalaceJoin({ kind: 'no_units', palaceId, title })
+          } else if (projection.due_unit_count === 0) {
+            setPalaceJoin({
+              kind: 'not_due',
+              palaceId,
+              title,
+              nextReviewDate: projection.next_review_date,
+            })
+          } else {
+            setPalaceJoin({ kind: 'join', palaceId, title })
+          }
+        })
+        .catch((cause) => toast.error(
+          cause instanceof Error && cause.message
+            ? cause.message
+            : '读不到这座宫殿的复习进度，请稍后再试。',
+        ))
+        .finally(() => setPalaceJoinBusy(false))
+    }
+    // A normal queue build filters completed cards out of the local plan. The
+    // server round payload still knows them, so ask it before offering a join.
+    if (!roundId) {
+      openFromProjection()
       return
     }
     setPalaceJoinBusy(true)
-    getPalaceReviewUnitsApi(palaceId)
-      .then((projection) => {
-        const title = projection.title || '这座宫殿'
-        if (projection.mark_required) {
-          setPalaceJoin({ kind: 'unmarked', palaceId, title })
-        } else if (projection.unit_count === 0) {
-          setPalaceJoin({ kind: 'no_units', palaceId, title })
-        } else if (projection.due_unit_count === 0) {
-          setPalaceJoin({
-            kind: 'not_due',
-            palaceId,
-            title,
-            nextReviewDate: projection.next_review_date,
-          })
-        } else {
-          setPalaceJoin({ kind: 'join', palaceId, title })
+    getFreestyleRoundApi(roundId)
+      .then((round) => {
+        const scored = scoredSourceCardsFromServerPlan(round.plan, palaceId)
+        if (!scored.length) {
+          openFromProjection()
+          return
         }
+        const planCard = round.plan?.original_cards?.find(
+          (card) => Number(card.palace_id) === palaceId,
+        )
+        const title = String(planCard?.palace_title || planCard?.label || '这座宫殿')
+        setPalaceJoin({ kind: 'scored', palaceId, title, cardIds: scored })
       })
-      .catch((cause) => toast.error(
-        cause instanceof Error && cause.message
-          ? cause.message
-          : '读不到这座宫殿的复习进度，请稍后再试。',
-      ))
+      .catch(() => openFromProjection())
       .finally(() => setPalaceJoinBusy(false))
-  }, [completedIds, currentPalaceId, jumpToPalaceIfScheduled, navigate, reviewPalaceId, roundPlan])
+  }, [
+    completedIds,
+    currentPalaceId,
+    jumpToPalaceIfScheduled,
+    navigate,
+    reviewPalaceId,
+    roundId,
+    roundPlan,
+  ])
 
   const cancelPalaceJoin = useCallback(() => setPalaceJoin(null), [])
 
@@ -187,7 +224,7 @@ export function useFreestylePalaceDirectoryActions({
     if (!palaceJoin) return
     if (palaceJoin.kind === 'scored') {
       setPalaceJoin(null)
-      addPalaceToRound(palaceJoin.palaceId, false)
+      addPalaceToRound(palaceJoin.palaceId, false, palaceJoin.cardIds)
       return
     }
     if (palaceJoin.kind !== 'join' && palaceJoin.kind !== 'unmarked') return

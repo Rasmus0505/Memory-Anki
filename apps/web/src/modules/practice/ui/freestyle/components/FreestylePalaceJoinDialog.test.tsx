@@ -74,7 +74,12 @@ describe('FreestylePalaceJoinDialog', () => {
     const onReopen = vi.fn()
     render(
       <FreestylePalaceJoinDialog
-        state={{ kind: 'scored', palaceId: 149, title: '第一节 国民政府时期的教育', cardCount: 1 }}
+        state={{
+          kind: 'scored',
+          palaceId: 149,
+          title: '第一节 国民政府时期的教育',
+          cardIds: ['review_unit:unit-149:r1'],
+        }}
         busy={false}
         onCancel={() => undefined}
         onJoin={() => undefined}
