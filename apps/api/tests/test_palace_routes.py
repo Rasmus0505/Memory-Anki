@@ -344,6 +344,13 @@ class TestPalaceEditor:
     def test_mark_root_missing(self, client):
         assert_missing(client.post("/api/v1/palaces/99999/mark-root"))
 
+    def test_mark_root_rejects_an_archived_palace(self, client, session_factory, palace_id):
+        with session_factory() as session:
+            session.get(Palace, palace_id).archived = True
+            session.commit()
+
+        assert_missing(client.post(f"/api/v1/palaces/{palace_id}/mark-root"))
+
     def test_put_editor_saves_doc(self, client, palace_id):
         response = client.put(
             f"/api/v1/palaces/{palace_id}/editor",

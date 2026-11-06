@@ -893,3 +893,55 @@ def test_active_round_persists_extra_palaces_without_reordering(make_client):
 
     fetched = client.get(f"/api/v1/freestyle/rounds/{created['round_id']}").json()
     assert fetched["config"]["streams"]["memory_palace"]["extra_palace_ids"] == [2]
+
+
+def _palace_card(card_id: str, palace_id: int) -> dict:
+    card = _cards(card_id)[0]
+    card["palace_id"] = palace_id
+    return card
+
+
+def test_fully_handled_round_appends_an_explicitly_joined_palace(make_client):
+    """A closed round must not be reopened by a rebuild — only by 加入本轮."""
+    client = _client(make_client)
+    base = {
+        "training_mode": "memory_palace",
+        "streams": {"memory_palace": {"specific_palace_ids": [1]}},
+    }
+    created = _create(
+        client,
+        operation_id="op-join-first",
+        cards=[_palace_card("a", 1)],
+        config=base,
+    )
+    completed = client.post(
+        f"/api/v1/freestyle/rounds/{created['round_id']}/actions",
+        json={
+            "operation_id": "op-join-complete",
+            "expected_version": created["version"],
+            "action": "complete",
+            "card_id": "a",
+        },
+    )
+    assert completed.status_code == 200, completed.text
+
+    joined = {
+        "training_mode": "memory_palace",
+        "streams": {
+            "memory_palace": {
+                "specific_palace_ids": [1],
+                "extra_palace_ids": [2],
+            }
+        },
+    }
+    reopened = _create(
+        client,
+        operation_id="op-join-second",
+        cards=[_palace_card("a", 1), _palace_card("b", 2)],
+        config=joined,
+    )
+
+    assert reopened["round_id"] == created["round_id"]
+    assert reopened["plan"]["completed_ids"] == ["a"]
+    assert reopened["plan"]["presented_ids"] == ["a", "b"]
+    assert reopened["config"]["streams"]["memory_palace"]["extra_palace_ids"] == [2]

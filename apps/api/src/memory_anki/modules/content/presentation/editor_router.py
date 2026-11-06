@@ -69,7 +69,9 @@ def api_mark_palace_root(palace_id: int, s: Session = Depends(session_dep)):
     Idempotent: re-marking an already marked root only re-runs the reconcile.
     """
     palace = get_palace(s, palace_id)
-    if not palace:
+    # Archived palaces are not in the directory; a stale click must not try to
+    # reconcile them (reconcile itself raises "palace not found" as a 400).
+    if not palace or palace.archived:
         raise_not_found()
     try:
         state = mark_palace_root_permanent(s, palace, uow=SqlAlchemyUnitOfWork(s))

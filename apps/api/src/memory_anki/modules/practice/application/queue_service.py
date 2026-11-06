@@ -118,6 +118,8 @@ def build_freestyle_queue(
             selected, resolved_scope = specific_ids, subject_scope
         if extra_ids and selected:
             # An empty selection means every active palace, which already covers extras.
+            # Explicit adds bypass subject filters on purpose: the learner clicked that
+            # palace. Do not run extras through subject_scope here.
             selected = list(dict.fromkeys([*selected, *extra_ids]))
         return selected, resolved_scope
 

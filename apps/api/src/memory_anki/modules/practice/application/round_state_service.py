@@ -65,6 +65,7 @@ from .round_read_lookups import (
     latest_active_round,
     operation_already_applied,
 )
+from .round_state_extras import added_extra_palace_ids, extra_cards, local_today
 from .round_state_payload import (
     _fingerprint,
     _json_dump,
@@ -93,10 +94,6 @@ _ACTIONS = {
 def _text(value: Any) -> str:
     return str(value or "").strip()
 
-
-
-def _local_today() -> str:
-    return local_day().isoformat()
 
 
 def _require_operation_id(operation_id: str | None) -> str:
@@ -199,7 +196,7 @@ def _create_row(
     overlay_quiz: dict[str, Any] | None = None,
 ) -> FreestyleRoundState:
     slot = normalize_workspace(workspace)
-    plan = normalize_plan(plan_from_cards(cards, today=_local_today()))
+    plan = normalize_plan(plan_from_cards(cards, today=local_today()))
     plan["overlay_quiz"] = normalize_overlay_quiz(overlay_quiz)
     now = utc_now_naive()
     row = FreestyleRoundState(
@@ -299,6 +296,7 @@ def get_or_create_active_round(
         )
         scope_changed = _text(row.scope_key) != key[:256]
         persist_config = reorder or scope_changed or replan
+        added_extra_ids = added_extra_palace_ids(previous_config, next_config)
         # Any other settings change (today: 加入本轮's extra_palace_ids) still
         # becomes the round's stored config. Without this, the next hydration
         # resurrects the old selection and silently drops the addition. It must
@@ -315,7 +313,7 @@ def get_or_create_active_round(
         # card id list is unchanged; without this it would never be persisted.
         rebound = plan_card_units(next_plan) != before_units
         dropped = [item["card_id"] for item in next_plan.get("original_cards") or []] != before_ids
-        today = _local_today()
+        today = local_today()
         plan_day = str(next_plan.get("today") or "")[:10]
         same_day = plan_day in {"", today}
         day_advanced = bool(plan_day and plan_day < today)
@@ -336,7 +334,11 @@ def get_or_create_active_round(
         # Fully handled rounds freeze on get_or_create: silent post-complete
         # rebuilds must not mint or append leftover due into the live feed, or
         # the closing settlement slot disappears. /rounds/start advances.
-        if plan_is_fully_handled(next_plan) and not persist_config and same_day:
+        # An explicit 「加入本轮」 is the one exception: append only that palace's
+        # cards, never the rest of the incoming (possibly leftover) queue.
+        cards_for_extras = extra_cards(cards, added_extra_ids)
+        reopen_for_extras = plan_is_fully_handled(next_plan) and bool(cards_for_extras)
+        if plan_is_fully_handled(next_plan) and not persist_config and same_day and not reopen_for_extras:
             if _apply_plan(row, next_plan, operation_id=op_id):
                 if not _commit_operation(session, row, op_id):
                     return _serve(session, row, conflict=True)
@@ -346,9 +348,10 @@ def get_or_create_active_round(
                 next_plan, cards, today=today, due_unit_ids=sorted(due_again)
             )
             next_plan = normalize_plan(next_plan)
-        elif cards or due_again:
+        elif cards or due_again or reopen_for_extras:
+            incoming = cards_for_extras if reopen_for_extras else cards
             next_plan = append_today_cards(
-                next_plan, cards, today=today, due_unit_ids=sorted(due_again)
+                next_plan, incoming, today=today, due_unit_ids=sorted(due_again)
             )
             next_plan = normalize_plan(next_plan)
         # A client may resend a card whose palace was deleted. Drop it again
@@ -565,7 +568,7 @@ def apply_round_action(
             explicit_unit_ids=explicit_unit_ids,
         )
     elif name == "bind_cards":
-        plan = append_today_cards(plan, cards, today=_local_today())
+        plan = append_today_cards(plan, cards, today=local_today())
         plan = normalize_plan(plan)
     elif name == "set_encounter":
         plan = set_encounter(plan, card_id, encounter_id)

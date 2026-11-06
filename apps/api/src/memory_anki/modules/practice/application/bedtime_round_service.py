@@ -13,10 +13,10 @@ from sqlalchemy.orm import Session
 
 from ..domain.round_plan import append_bedtime_cards, apply_bedtime_rating
 from .bedtime_review import collect_bedtime_cards
+from .round_state_extras import local_today
 from .round_state_service import (
     _apply_plan,
     _commit_operation,
-    _local_today,
     _operation_seen,
     _plan_of,
     _require_operation_id,
@@ -63,7 +63,7 @@ def append_bedtime_review(
         raise ValueError("freestyle round is not active")
     plan = _plan_of(row)
     cards = collect_bedtime_cards(session, plan, workspace=row.workspace)
-    next_plan, added = append_bedtime_cards(plan, cards, today=_local_today())
+    next_plan, added = append_bedtime_cards(plan, cards, today=local_today())
     if not added:
         row.last_operation_id = op_id
         return {"round": _serve(session, row), "cards": [], "added_card_ids": []}
@@ -109,7 +109,7 @@ def rate_bedtime_card(
         _plan_of(row),
         card_id=card_id,
         rating=int(rating),
-        today=_local_today(),
+        today=local_today(),
     )
     changed = _apply_plan(row, plan, operation_id=op_id)
     if not changed:
