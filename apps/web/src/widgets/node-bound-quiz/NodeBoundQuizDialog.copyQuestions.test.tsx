@@ -32,7 +32,8 @@ describe('NodeBoundQuizDialog 复制题目', () => {
     )
 
     await screen.findByText('下列哪一项是细胞膜的主要成分？')
-    fireEvent.click(screen.getByRole('button', { name: '复制题目' }))
+    fireEvent.keyDown(screen.getByRole('button', { name: '复制题目' }), { key: ' ' })
+    fireEvent.click(await screen.findByRole('menuitem', { name: '导出全部题' }))
 
     await vi.waitFor(() => expect(writeText).toHaveBeenCalled())
     expect(writeText.mock.calls.at(-1)?.[0]).toBe([
@@ -52,6 +53,6 @@ describe('NodeBoundQuizDialog 复制题目', () => {
       '   答案：A. 磷脂',
       '   解析：细胞膜主要由磷脂双分子层构成。',
     ].join('\n'))
-    expect(toastMock.toast.success).toHaveBeenCalledWith('已复制 2 道题，含选项、答案与解析。')
+    expect(toastMock.toast.success).toHaveBeenCalledWith('已复制 2 道题。')
   })
 })

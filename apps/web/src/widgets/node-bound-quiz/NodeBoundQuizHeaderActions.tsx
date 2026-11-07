@@ -1,5 +1,5 @@
-import { BookOpen, FileText, LoaderCircle, MoreHorizontal, RotateCcw, Shuffle } from 'lucide-react'
-import { useCopyQuizQuestionsText } from '@/modules/quiz/public'
+import { BookOpen, LoaderCircle, MoreHorizontal, RotateCcw, Shuffle } from 'lucide-react'
+import type { QuizRuntimeState } from '@/modules/quiz/public'
 import type { PalaceQuizQuestion } from '@/shared/api/contracts'
 import { Button } from '@/shared/components/ui/button'
 import {
@@ -8,7 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/shared/components/ui/dropdown-menu'
-import { QuizWrongExportMenu } from '@/widgets/quiz-wrong-export'
+import { QuizCopyQuestionsMenu } from '@/widgets/quiz-wrong-export/QuizCopyQuestionsMenu'
 
 /**
  * Right-side actions of the 关联题目 window. Kept out of the dialog so the
@@ -21,6 +21,7 @@ export function NodeBoundQuizHeaderActions({
   palaceId,
   questions,
   wrongQuestions,
+  questionStates,
   copyingOutline,
   onCopyOutline,
   onOpenPalace,
@@ -41,6 +42,7 @@ export function NodeBoundQuizHeaderActions({
   questions: readonly PalaceQuizQuestion[]
   /** Questions answered wrong in this window; 导出错题 reads these. */
   wrongQuestions: readonly PalaceQuizQuestion[]
+  questionStates: Readonly<Record<number, QuizRuntimeState>>
   copyingOutline: boolean
   onCopyOutline: (palaceId: number) => void
   onOpenPalace: () => void
@@ -57,7 +59,6 @@ export function NodeBoundQuizHeaderActions({
   /** 快捷键 panel is open: keep the row in place, just stop the actions. */
   actionsDisabled?: boolean
 }) {
-  const { copying: copyingQuestions, copyQuestions } = useCopyQuizQuestionsText()
   // The toolbar keeps one fixed set of slots: a control that stops applying is
   // disabled, never removed. Adding/removing a button used to reflow the whole
   // header into a second row and shove the question body down with it.
@@ -67,24 +68,7 @@ export function NodeBoundQuizHeaderActions({
     <div className="flex shrink-0 flex-nowrap items-center justify-end gap-2">
       {palaceId != null ? (
         <>
-          {questions.length > 0 ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              aria-label="复制题目"
-              title="复制本窗口全部题目的题干、选项、答案与解析"
-              disabled={copyingQuestions}
-              onClick={() => void copyQuestions(questions)}
-            >
-              {copyingQuestions ? (
-                <LoaderCircle className="size-4 animate-spin" />
-              ) : (
-                <FileText className="size-4" />
-              )}
-              <span className="hidden sm:inline">复制题目</span>
-            </Button>
-          ) : null}
+          <QuizCopyQuestionsMenu questions={questions} currentQuestion={currentQuestion} wrongQuestions={wrongQuestions} questionStates={questionStates} fallbackPalaceId={palaceId} />
           <Button
             type="button"
             size="sm"
@@ -98,7 +82,6 @@ export function NodeBoundQuizHeaderActions({
           </Button>
         </>
       ) : null}
-      <QuizWrongExportMenu wrongQuestions={wrongQuestions} />
       <Button
         type="button"
         size="sm"

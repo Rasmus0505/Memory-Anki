@@ -62,7 +62,8 @@ describe('FreestyleScopeQuizDialog 复制题目', () => {
 
     renderScopeQuizDialog()
 
-    fireEvent.click(await screen.findByRole('button', { name: '复制题目' }))
+    fireEvent.keyDown(await screen.findByRole('button', { name: '复制题目' }), { key: ' ' })
+    fireEvent.click(await screen.findByRole('menuitem', { name: '导出本题' }))
 
     await waitFor(() => expect(writeText).toHaveBeenCalled())
     expect(writeText.mock.calls.at(-1)?.[0]).toBe([

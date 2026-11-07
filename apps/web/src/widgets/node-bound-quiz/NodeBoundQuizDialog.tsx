@@ -623,6 +623,7 @@ export function NodeBoundQuizDialog({
                 palaceId={palaceId}
                 questions={questions}
                 wrongQuestions={wrongQuestions}
+                questionStates={questionStates}
                 copyingOutline={copyingOutline}
                 onCopyOutline={(targetPalaceId) => void copyOutline(targetPalaceId)}
                 onOpenPalace={() => setPalaceLookupOpen(true)}

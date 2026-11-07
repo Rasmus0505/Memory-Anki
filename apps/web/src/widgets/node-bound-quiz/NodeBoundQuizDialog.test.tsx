@@ -255,12 +255,12 @@ describe('NodeBoundQuizDialog', () => {
     )
 
     await screen.findByText('已答 2 / 2')
-    const trigger = screen.getByRole('button', { name: '导出错题' })
+    const trigger = screen.getByRole('button', { name: '复制题目' })
     expect(trigger.hasAttribute('disabled')).toBe(false)
     await act(async () => {
       fireEvent.keyDown(trigger, { key: ' ' })
     })
-    const item = await screen.findByRole('menuitem', { name: /另附涉及宫殿/ })
+    const item = await screen.findByRole('menuitem', { name: '错题 + 完整宫殿' })
     await act(async () => {
       fireEvent.click(item)
     })

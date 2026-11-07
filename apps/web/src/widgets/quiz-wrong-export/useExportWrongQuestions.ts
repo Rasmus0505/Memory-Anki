@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import { getPalaceEditorApi } from '@/modules/content/public'
-import { getPalaceQuizQuestionsApi } from '@/modules/quiz/public'
+import { getPalaceQuizQuestionsApi, type QuizRuntimeState } from '@/modules/quiz/public'
 import type { PalaceQuizQuestion } from '@/shared/api/contracts'
 import { toast } from '@/shared/feedback/toast'
 import { buildMindMapOutlineText } from '@/shared/lib/mindMapOutlineText'
@@ -53,6 +53,7 @@ export function useExportWrongQuestions() {
   const exportWrongQuestions = useCallback(async (
     wrongQuestions: readonly PalaceQuizQuestion[],
     mode: WrongQuestionsExportMode,
+    questionStates?: Readonly<Record<number, QuizRuntimeState>>,
   ) => {
     if (wrongQuestions.length === 0) {
       toast.info('本轮还没有答错的题。')
@@ -72,7 +73,7 @@ export function useExportWrongQuestions() {
       if (mode === 'with-palaces') {
         const { palaces, missing } = await loadPalaceSections(wrongQuestions)
         missingPalaces = missing
-        text = buildWrongQuestionsWithPalacesText({ wrongQuestions, palaces })
+        text = buildWrongQuestionsWithPalacesText({ wrongQuestions, palaces, questionStates })
       }
       if (requestRef.current !== requestId) return
       await navigator.clipboard.writeText(text)

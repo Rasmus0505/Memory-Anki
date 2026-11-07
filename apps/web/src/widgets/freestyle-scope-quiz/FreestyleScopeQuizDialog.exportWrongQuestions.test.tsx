@@ -87,7 +87,7 @@ describe('FreestyleScopeQuizDialog 导出错题', () => {
 
   async function openExportMenu() {
     renderScopeQuizDialog()
-    const trigger = await screen.findByRole('button', { name: '导出错题' })
+    const trigger = await screen.findByRole('button', { name: '复制题目' })
     // The round's answers arrive after the first render; wait until the export
     // is actually enabled. Space opens the menu because the quiz shortcut layer
     // already owns Arrow/Enter while a question is on screen.
@@ -102,13 +102,11 @@ describe('FreestyleScopeQuizDialog 导出错题', () => {
     Object.assign(navigator, { clipboard: { writeText } })
     await openExportMenu()
 
-    const item = await screen.findByRole('menuitem', { name: /只复制当前答错/ })
+    const item = await screen.findByRole('menuitem', { name: '导出全部错题' })
     await act(async () => { fireEvent.click(item) })
 
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
     expect(writeText.mock.calls[0]?.[0]).toBe([
-      '本轮错题（1 道）',
-      '',
       ...questionBlock(11, 1),
     ].join('\n'))
     expect(getPalaceEditorApiMock).not.toHaveBeenCalled()
@@ -119,7 +117,7 @@ describe('FreestyleScopeQuizDialog 导出错题', () => {
     Object.assign(navigator, { clipboard: { writeText } })
     await openExportMenu()
 
-    const item = await screen.findByRole('menuitem', { name: /另附涉及宫殿/ })
+    const item = await screen.findByRole('menuitem', { name: '错题 + 完整宫殿' })
     await act(async () => { fireEvent.click(item) })
 
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1))
@@ -172,7 +170,9 @@ describe('FreestyleScopeQuizDialog 导出错题', () => {
 
     renderScopeQuizDialog()
 
-    const trigger = await screen.findByRole('button', { name: '导出错题' })
-    expect(trigger.hasAttribute('disabled')).toBe(true)
+    const trigger = await screen.findByRole('button', { name: '复制题目' })
+    await waitFor(() => expect(trigger.hasAttribute('disabled')).toBe(false))
+    fireEvent.keyDown(trigger, { key: ' ' })
+    expect((await screen.findByRole('menuitem', { name: '导出全部错题' })).getAttribute('data-disabled')).not.toBeNull()
   })
 })

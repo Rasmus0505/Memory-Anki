@@ -1,4 +1,5 @@
-import { buildQuizQuestionCopyBlock } from '@/modules/quiz/public'
+import { buildQuizQuestionCopyBlock, type QuizRuntimeState } from '@/modules/quiz/public'
+import { formatQuizAnswerInfo } from './quizAnswerCopyText'
 import type { PalaceQuizQuestion } from '@/shared/api/contracts'
 
 /**
@@ -39,12 +40,18 @@ export function buildWrongQuestionsText(wrongQuestions: readonly PalaceQuizQuest
 export function buildWrongQuestionsWithPalacesText({
   wrongQuestions,
   palaces,
+  questionStates,
 }: {
   wrongQuestions: readonly PalaceQuizQuestion[]
   palaces: readonly PalaceExportSection[]
+  questionStates?: Readonly<Record<number, QuizRuntimeState>>
 }) {
   const wrongIds = new Set(wrongQuestions.map((question) => question.id))
-  const sections = [buildWrongQuestionsText(wrongQuestions)]
+  const sections = [questionStates
+    ? [`本轮错题（${wrongQuestions.length} 道）`, ...wrongQuestions.map((question, index) => (
+      `${buildQuizQuestionCopyBlock(question, index)}\n${formatQuizAnswerInfo(question, questionStates[question.id])}`
+    ))].join('\n\n')
+    : buildWrongQuestionsText(wrongQuestions)]
 
   for (const palace of palaces) {
     const lines = [`宫殿：${palaceTitle(palace)}`]
@@ -53,7 +60,10 @@ export function buildWrongQuestionsWithPalacesText({
     if (palace.questions.length > 0) {
       lines.push('', `全部题目（${palace.questions.length} 道）`)
       for (const [index, question] of palace.questions.entries()) {
-        lines.push('', markWrongBlock(question, index, wrongIds))
+        const block = markWrongBlock(question, index, wrongIds)
+        lines.push('', questionStates && questionStates[question.id]
+          ? `${block}\n${formatQuizAnswerInfo(question, questionStates[question.id])}`
+          : block)
       }
     }
     sections.push(lines.join('\n'))

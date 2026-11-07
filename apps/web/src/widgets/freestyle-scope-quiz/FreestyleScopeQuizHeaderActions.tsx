@@ -1,5 +1,6 @@
-import { ArrowUpToLine, BookOpen, FileText, LoaderCircle, MoreHorizontal, RotateCcw, Shuffle } from 'lucide-react'
-import { useCopyQuizQuestionsText } from '@/modules/quiz/public'
+import { ArrowUpToLine, BookOpen, LoaderCircle, MoreHorizontal, RotateCcw, Shuffle } from 'lucide-react'
+import type { QuizRuntimeState } from '@/modules/quiz/public'
+import { QuizCopyQuestionsMenu } from '@/widgets/quiz-wrong-export/QuizCopyQuestionsMenu'
 import type { PalaceQuizQuestion } from '@/shared/api/contracts'
 import { Button } from '@/shared/components/ui/button'
 import {
@@ -8,7 +9,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/shared/components/ui/dropdown-menu'
-import { QuizWrongExportMenu } from '@/widgets/quiz-wrong-export'
 
 /**
  * Right-side actions of the 做题 overlay header. Kept out of the dialog so the
@@ -23,6 +23,7 @@ export function FreestyleScopeQuizHeaderActions({
   lookupPalaceId,
   questions,
   wrongQuestions,
+  questionStates,
   currentQuestion,
   copyingOutline,
   onCopyOutline,
@@ -47,6 +48,7 @@ export function FreestyleScopeQuizHeaderActions({
   questions: readonly PalaceQuizQuestion[]
   /** Questions answered wrong so far this round; 导出错题 reads these. */
   wrongQuestions: readonly PalaceQuizQuestion[]
+  questionStates: Readonly<Record<number, QuizRuntimeState>>
   currentQuestion: PalaceQuizQuestion | null
   copyingOutline: boolean
   onCopyOutline: (palaceId: number) => void
@@ -65,7 +67,6 @@ export function FreestyleScopeQuizHeaderActions({
   /** 做题配置 / 快捷键 panel is open: keep the row, just stop the actions. */
   actionsDisabled?: boolean
 }) {
-  const { copying: copyingQuestions, copyQuestions } = useCopyQuizQuestionsText()
   const hasOutline = copyPalaceId != null
   const hasQuestions = questions.length > 0
   const canShuffleCurrentOptions = currentQuestion?.question_type === 'multiple_choice'
@@ -101,23 +102,9 @@ export function FreestyleScopeQuizHeaderActions({
         </Button>
       ) : null}
 
-      <QuizWrongExportMenu wrongQuestions={wrongQuestions} />
+      {hasQuestions ? <QuizCopyQuestionsMenu questions={questions} currentQuestion={currentQuestion} wrongQuestions={wrongQuestions} questionStates={questionStates} fallbackPalaceId={copyPalaceId} /> : null}
 
       <div className="hidden flex-nowrap items-center justify-end gap-2 sm:flex">
-        {hasQuestions ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            aria-label="复制题目"
-            title="复制本窗口全部题目的题干、选项、答案与解析"
-            disabled={copyingQuestions}
-            onClick={() => void copyQuestions(questions)}
-          >
-            {copyingQuestions ? <LoaderCircle className="size-4 animate-spin" /> : <FileText className="size-4" />}
-            <span>复制题目</span>
-          </Button>
-        ) : null}
         <Button
           type="button"
           size="sm"
@@ -172,11 +159,6 @@ export function FreestyleScopeQuizHeaderActions({
             {hasOutline ? (
               <DropdownMenuItem disabled={copyingOutline} onSelect={() => onCopyOutline(copyPalaceId)}>
                 复制导图
-              </DropdownMenuItem>
-            ) : null}
-            {hasQuestions ? (
-              <DropdownMenuItem disabled={copyingQuestions} onSelect={() => void copyQuestions(questions)}>
-                复制题目
               </DropdownMenuItem>
             ) : null}
             <DropdownMenuItem disabled={optionShuffleDisabled} onSelect={handleOptionShuffle}>

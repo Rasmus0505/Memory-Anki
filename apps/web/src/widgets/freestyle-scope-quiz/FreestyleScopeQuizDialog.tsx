@@ -675,6 +675,7 @@ export function FreestyleScopeQuizDialog({
                   lookupPalaceId={lookupPalaceId}
                   questions={questions}
                   wrongQuestions={wrongQuestions}
+                  questionStates={questionStates}
                   currentQuestion={current}
                   copyingOutline={copyingOutline}
                   onCopyOutline={(palaceId) => void copyOutline(palaceId)}

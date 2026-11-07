@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import { copyMindMapToClipboard, exportMindMapToFile } from '@/modules/content/public'
+import { exportMindMapToFile } from '@/modules/content/public'
 import { usePalaceQuizNodeBindings } from '@/modules/quiz/public'
 import type { FreestyleReviewUnitCard, MindMapEditorState } from '@/shared/api/contracts'
 import { toast } from '@/shared/feedback/toast'
@@ -147,6 +147,7 @@ export function useFreestyleUnitReviewMoreActions({
   handleToggleMode,
   setReviewUnitsPanelOpen,
   onTextToMindMap,
+  onCopyMindMap,
 }: {
   card: FreestyleReviewUnitCard
   sessionTitle: string
@@ -155,6 +156,7 @@ export function useFreestyleUnitReviewMoreActions({
   handleToggleMode: () => void
   setReviewUnitsPanelOpen: (open: boolean) => void
   onTextToMindMap: () => void
+  onCopyMindMap: () => void
 }) {
   return useMemo(() => {
     const actions: Array<{
@@ -177,11 +179,8 @@ export function useFreestyleUnitReviewMoreActions({
     const palaceTitle = card.palace_title || sessionTitle || `宫殿 ${card.palace_id}`
     actions.push({
       label: '复制导图',
-      onClick: () => {
-        void copyMindMapToClipboard(editorState, palaceTitle)
-          .then(() => toast.success('脑图已复制到剪切板'))
-          .catch((error: unknown) => toast.error(error instanceof Error ? error.message : '复制脑图失败。'))
-      },
+      onClick: onCopyMindMap,
+      opensOverlay: true,
       separatorBefore: true,
     })
     actions.push({
@@ -209,6 +208,7 @@ export function useFreestyleUnitReviewMoreActions({
     handleToggleMode,
     isEditMode,
     onTextToMindMap,
+    onCopyMindMap,
     sessionTitle,
     setReviewUnitsPanelOpen,
   ])
