@@ -9,6 +9,7 @@
 |---|---|
 | 第一次了解产品 | [Memory-Anki-用户视角介绍.md](Memory-Anki-用户视角介绍.md) |
 | 想看界面怎么排、手机怎么变 | [Memory-Anki-前端布局-用户视角.md](Memory-Anki-前端布局-用户视角.md) |
+| 想改颜色、字体、间距、组件样式 | [../DESIGN.md](../DESIGN.md)（视觉系统）→ [../PRODUCT.md](../PRODUCT.md)（产品事实） |
 | 想知道哪些列表能右键、各能做什么 | [列表右键菜单.md](列表右键菜单.md) |
 | 想了解技术全貌 | [Memory-Anki-技术报告.md](Memory-Anki-技术报告.md) |
 | 要看前端怎么组织、状态放哪 | [Memory-Anki-前端架构报告.md](Memory-Anki-前端架构报告.md) |
@@ -26,6 +27,12 @@
 |---|---|---|---|
 | [Memory-Anki-用户视角介绍.md](Memory-Anki-用户视角介绍.md) | 产品说明（给人看） | 现行 | 2026-11-05 |
 | [Memory-Anki-前端布局-用户视角.md](Memory-Anki-前端布局-用户视角.md) | 前端布局说明（用户语言） | 现行 | 2026-11-05 |
+| [../DESIGN.md](../DESIGN.md) | 视觉系统：纸与灯、颜色/字体/间距/组件规则 | 现行 | 2026-11-08 |
+| [../PRODUCT.md](../PRODUCT.md) | 产品事实：使用者、场景、约束、模式分配 | 现行 | 2026-11-08 |
+| [design/impeccable-runbook.md](design/impeccable-runbook.md) | impeccable 24 命令运行记录与产物索引 | 现行 | 2026-11-08 |
+| [design/audits/](design/audits/2026-11-08-shelf-insights.md) | 技术审查（书架 / 洞察） | 快照 | 2026-11-08 |
+| [design/critiques/](design/critiques/2026-11-08-freestyle-start.md) | 设计评审（随心开始页） | 快照 | 2026-11-08 |
+| [design/surfaces/](design/surfaces/round-settlement.md) | 结算页设计简报 | 现行 | 2026-11-08 |
 | [列表右键菜单.md](列表右键菜单.md) | 列表右键 / 长按菜单与接入方式 | 现行 | 2026-11-06 |
 | [Memory-Anki-技术报告.md](Memory-Anki-技术报告.md) | 技术总览报告 | 现行 | 2026-11-04 |
 | [Memory-Anki-前端架构报告.md](Memory-Anki-前端架构报告.md) | 前端架构专项报告 | 现行 | 2026-11-05 |
