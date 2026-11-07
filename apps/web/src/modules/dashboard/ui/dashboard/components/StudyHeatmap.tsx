@@ -5,6 +5,7 @@ import type {
   WeeklyReport,
 } from '@/shared/api/contracts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/shared/components/ui/card'
+import { LedgerRow } from '@/shared/components/ui/ledger'
 import { cn } from '@/shared/lib/utils'
 import { getDashboardHeatmapApi, getWeeklyReportApi } from '../api'
 
@@ -27,10 +28,12 @@ function getLeadingEmptyCells(items: HeatmapDayItem[]) {
 function intensityClass(item: HeatmapDayItem) {
   if (!item.active) return 'bg-muted'
   const minutes = item.review_count * 5
-  if (minutes >= 90) return 'bg-emerald-600'
-  if (minutes >= 45) return 'bg-emerald-500'
-  if (minutes >= 15) return 'bg-emerald-400'
-  return 'bg-emerald-200'
+  // Dark theme sits in a dim room: the top band comes down a step so the
+  // heatmap stays a background texture instead of the brightest thing on screen.
+  if (minutes >= 90) return 'bg-success dark:bg-success/80'
+  if (minutes >= 45) return 'bg-success/80 dark:bg-success/65'
+  if (minutes >= 15) return 'bg-success/55 dark:bg-success/45'
+  return 'bg-success/30 dark:bg-success/25'
 }
 
 export function StudyHeatmap({ className }: { className?: string }) {
@@ -141,12 +144,9 @@ export function StudyHeatmap({ className }: { className?: string }) {
             ) : null}
           </div>
           {!reportLoading && hasActivity ? (
-            <div className="grid grid-cols-2 gap-1.5">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1">
               {metrics.map((metric) => (
-                <div key={metric.label} className="flex min-w-0 items-baseline justify-between gap-1.5 rounded-lg border bg-secondary/35 px-2 py-1">
-                  <span className="min-w-0 truncate text-[11px] text-muted-foreground">{metric.label}</span>
-                  <span className="shrink-0 text-[13px] font-semibold tabular-nums">{metric.value}</span>
-                </div>
+                <LedgerRow key={metric.label} size="sm" label={metric.label} value={metric.value} className="border-b border-border/50" />
               ))}
             </div>
           ) : null}
