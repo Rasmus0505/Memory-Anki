@@ -4,6 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "packageManager": "npm@11.11.0",
+  "overrides": {
+    "@radix-ui/react-dismissable-layer": "1.2.1"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
