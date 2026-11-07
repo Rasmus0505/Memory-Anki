@@ -166,16 +166,16 @@ function NavSectionLink({
       to={target}
       end={to === '/'}
       className={cn(
-        'group relative flex items-center rounded-lg font-medium transition-[background-color,color] duration-200',
+        'group relative flex items-center rounded-md font-medium transition-[background-color,color,box-shadow] duration-200',
         isActive
-          ? 'ma-nav-active bg-primary-soft text-primary-strong'
+          ? 'ma-nav-current'
           : cn(
               'hover:bg-accent hover:text-foreground',
               section.secondary ? 'text-ink-faint' : 'text-muted-foreground',
             ),
         collapsed
-          ? 'justify-center px-2.5 py-2.5 text-sm'
-          : 'flex-col justify-center gap-1 px-1 py-2.5 text-[11px] lg:h-9 lg:flex-row lg:justify-start lg:gap-2.5 lg:px-3 lg:py-0 lg:text-sm',
+          ? 'justify-center px-2.5 py-3 text-sm'
+          : 'flex-col justify-center gap-1 px-1 py-2.5 text-[11px] lg:h-10 lg:flex-row lg:justify-start lg:gap-3 lg:px-3 lg:py-0 lg:text-[14px]',
       )}
       onMouseEnter={() => warmNavSection(section)}
       onFocus={() => warmNavSection(section)}
@@ -190,7 +190,7 @@ function NavSectionLink({
             'inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold tabular-nums',
             collapsed ? 'absolute right-1 top-1' : 'absolute right-1 top-1 lg:static lg:ml-auto',
             isActive
-              ? 'bg-primary/15 text-primary'
+              ? 'bg-primary-foreground/20 text-primary-foreground'
               : 'bg-info text-info-foreground',
           )}
           title={`${runningCount} 个后台任务进行中`}
@@ -264,16 +264,16 @@ function SidebarContent({
 
   return (
     <>
-      <div className={cn('flex flex-col gap-3 px-2 pt-3', wide && 'lg:px-3 lg:pt-4')}>
+      <div className={cn('flex flex-col gap-4 px-2 pb-1 pt-4', wide && 'lg:px-5 lg:pt-6')}>
         <NavLink
           to="/freestyle"
-          className={cn('flex items-center justify-center rounded-lg', wide && 'lg:justify-start lg:gap-2.5 lg:px-1')}
+          className={cn('flex items-center justify-center rounded-md', wide && 'lg:justify-start lg:gap-3')}
         >
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-sm font-semibold text-primary-foreground shadow-[inset_0_1px_0_color-mix(in_srgb,white_20%,transparent),0_1px_2px_rgb(0_0_0/0.15)]">
+          <div className="ma-display flex size-9 shrink-0 items-center justify-center rounded-[4px] bg-mark text-[17px] font-semibold text-primary-foreground shadow-[inset_0_1px_0_rgb(255_255_255/0.18),0_1px_2px_rgb(0_0_0/0.18)]">
             记
           </div>
           <div className={cn('min-w-0', wide ? 'hidden lg:block' : 'hidden')}>
-            <div className="truncate text-sm font-semibold leading-tight tracking-tight">Memory Anki</div>
+            <div className="ma-display truncate text-[17px] font-semibold leading-tight">Memory Anki</div>
             <SidebarClock />
           </div>
         </NavLink>
@@ -282,7 +282,7 @@ function SidebarContent({
         </div>
       </div>
 
-      <nav className={cn('flex flex-1 flex-col gap-0.5 px-2 py-3', wide && 'lg:px-3')}>
+      <nav className={cn('flex flex-1 flex-col gap-1 px-2 py-4', wide && 'lg:px-3')}>
         {navSections.map((section) => (
           <NavSectionLink
             key={section.to}
@@ -310,7 +310,7 @@ function SidebarContent({
                 ? 'w-full flex-col justify-center gap-1 px-1 py-2 text-[11px] lg:h-9 lg:flex-1 lg:flex-row lg:justify-start lg:gap-2.5 lg:px-3 lg:py-0 lg:text-sm'
                 : 'size-9 justify-center text-sm',
               isActive
-                ? 'bg-primary-soft text-primary-strong'
+                ? 'ma-nav-current'
                 : 'text-muted-foreground hover:bg-accent hover:text-foreground',
             )
           }
@@ -565,10 +565,10 @@ function ShellFrame({ children }: PropsWithChildren) {
         {!immersiveFeed ? <AmbientLayer tone={ambientTone} /> : null}
         <aside
           className={cn(
-            'memory-anki-warm-panel fixed z-20 hidden flex-col overflow-hidden border-border/80 bg-card transition-all duration-300 md:flex',
+            'memory-anki-warm-panel fixed z-20 hidden flex-col overflow-hidden border-border bg-card transition-all duration-300 md:flex',
             mindMapHost
               ? 'inset-y-0 left-0 rounded-none border-y-0 border-l-0 border-r shadow-none'
-              : 'inset-y-3 left-3 rounded-2xl border shadow-soft',
+              : 'inset-y-0 left-0 rounded-none border-y-0 border-l-0 border-r shadow-none',
             sidebarWidthClass[sidebarState],
           )}
         >

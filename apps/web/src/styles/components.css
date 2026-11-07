@@ -71,7 +71,7 @@
   }
 
   .ma-switch[data-state='checked'] {
-    box-shadow: inset 0 1px 2px hsl(240 50% 20% / 0.25), 0 0 0 3px color-mix(in oklab, var(--color-primary) 14%, transparent);
+    box-shadow: inset 0 1px 2px hsl(168 50% 20% / 0.25), 0 0 0 3px color-mix(in oklab, var(--color-primary) 14%, transparent);
   }
 
   .ma-switch-thumb {
@@ -79,7 +79,7 @@
       translate 420ms var(--ease-spring),
       scale 160ms var(--ease-spring),
       box-shadow 240ms ease;
-    box-shadow: 0 1px 2px hsl(228 22% 15% / 0.3), inset 0 -1px 0 hsl(228 22% 30% / 0.12);
+    box-shadow: 0 1px 2px hsl(40 22% 15% / 0.3), inset 0 -1px 0 hsl(40 22% 30% / 0.12);
   }
 
   .ma-switch:active:not(:disabled) .ma-switch-thumb {
@@ -846,19 +846,19 @@
   --color-background: var(--color-paper-card);
   --color-popover: var(--color-paper-card);
   --color-popover-foreground: var(--color-paper-ink);
-  --color-muted: hsl(228 18% 95%);
+  --color-muted: hsl(40 18% 95%);
   --color-muted-foreground: var(--color-paper-muted);
-  --color-secondary: hsl(228 16% 94%);
+  --color-secondary: hsl(40 16% 94%);
   --color-secondary-foreground: var(--color-paper-ink-soft);
-  --color-accent: hsl(228 18% 93.5%);
+  --color-accent: hsl(40 18% 93.5%);
   --color-accent-foreground: var(--color-paper-ink);
   --color-border: var(--color-paper-line);
   --color-input: var(--color-paper-line-strong);
-  --color-primary: hsl(238 62% 56%);
+  --color-primary: hsl(168 62% 56%);
   --color-primary-foreground: hsl(0 0% 100%);
-  --color-primary-soft: hsl(236 80% 96%);
-  --color-primary-strong: hsl(240 52% 42%);
-  --color-ring: hsl(238 62% 56%);
+  --color-primary-soft: hsl(168 80% 96%);
+  --color-primary-strong: hsl(168 52% 42%);
+  --color-ring: hsl(168 62% 56%);
   --color-success: hsl(158 58% 34%);
   --color-destructive: hsl(354 62% 50%);
   --color-warning: hsl(32 88% 44%);
@@ -871,7 +871,7 @@
   border: 1px solid var(--color-paper-line);
   box-shadow:
     inset 0 1px 0 hsl(0 0% 100%),
-    0 1px 2px hsl(228 30% 8% / 0.2),
+    0 1px 2px hsl(40 30% 8% / 0.2),
     0 24px 52px -20px rgb(0 0 0 / 0.6);
 }
 
@@ -884,6 +884,6 @@
 .dark .memory-anki-warm-panel {
   background: color-mix(in oklab, var(--color-card) 92%, var(--color-background));
   box-shadow:
-    inset 0 1px 0 hsl(228 40% 96% / 0.04),
+    inset 0 1px 0 hsl(40 40% 96% / 0.04),
     var(--shadow-card);
 }

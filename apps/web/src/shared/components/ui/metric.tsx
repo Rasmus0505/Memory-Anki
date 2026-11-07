@@ -38,7 +38,7 @@ export function Metric({ label, value, hint, tone = 'default', surface = 'page',
     <div className={cn('flex min-w-0 flex-col gap-1', className)}>
       <span
         className={cn(
-          'text-2xl font-semibold tabular-nums leading-none',
+          'ma-figure text-2xl font-semibold tabular-nums leading-none',
           stage ? stageValueTone[tone] : pageValueTone[tone],
         )}
       >

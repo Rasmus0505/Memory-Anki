@@ -118,30 +118,12 @@
 }
 
 /* Navigation active states. */
-@keyframes ma-nav-bar-in {
-  from { transform: translateY(-50%) scaleY(0); opacity: 0; }
-}
-
 @keyframes ma-tab-icon-pop {
   0% { transform: scale(0.8) translateY(2px); }
   60% { transform: scale(1.14) translateY(-1px); }
   100% { transform: scale(1) translateY(0); }
 }
 
-.ma-nav-active::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 50%;
-  width: 3px;
-  height: 56%;
-  border-radius: 999px;
-  background: var(--color-primary);
-  transform: translateY(-50%);
-  animation: ma-nav-bar-in 360ms var(--ease-spring) both;
-}
-
-.ma-nav-active > svg,
 .ma-tab-active > svg {
   animation: ma-tab-icon-pop 420ms var(--ease-spring) both;
 }
@@ -166,8 +148,7 @@
   .animate-in,
   .animate-out,
   .ma-skeleton,
-  .ma-nav-active::before,
-  .ma-nav-active > svg,
+  .ma-tab-active > svg,
   .ma-tab-active > svg {
     animation-duration: 1ms !important;
     animation-iteration-count: 1 !important;

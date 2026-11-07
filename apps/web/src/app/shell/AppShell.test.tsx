@@ -207,8 +207,8 @@ describe('AppShell', () => {
 
     const englishLink = screen.getAllByRole('link', { name: '英语' })[0]
     const libraryLink = screen.getAllByRole('link', { name: '知识' })[0]
-    expect(englishLink.className).toContain('bg-primary')
-    expect(libraryLink.className).not.toContain('bg-primary')
+    expect(englishLink.className).toContain('ma-nav-current')
+    expect(libraryLink.className).not.toContain('ma-nav-current')
     unmount()
 
     render(
@@ -221,8 +221,8 @@ describe('AppShell', () => {
 
     await waitFor(() => expect(getRuntimeInfoApi).toHaveBeenCalled())
     const courseEnglishLink = screen.getAllByRole('link', { name: '英语' })[0]
-    expect(courseEnglishLink.className).toContain('bg-primary')
-    expect(screen.getAllByRole('link', { name: '知识' })[0].className).not.toContain('bg-primary')
+    expect(courseEnglishLink.className).toContain('ma-nav-current')
+    expect(screen.getAllByRole('link', { name: '知识' })[0].className).not.toContain('ma-nav-current')
   })
 
   it('hides mobile bottom navigation on immersive freestyle', async () => {
@@ -324,7 +324,7 @@ describe('AppShell', () => {
     expect(navLabels.slice(0, 5)).toEqual(expectedLabels)
     expect(screen.queryByRole('link', { name: '随心 2' })).toBeNull()
     const freestyleLink = screen.getAllByRole('link', { name: '随心' })[0]
-    expect(freestyleLink.className).toContain('bg-primary')
+    expect(freestyleLink.className).toContain('ma-nav-current')
 
     preloadFreestylePage.mockClear()
     fireEvent.mouseEnter(freestyleLink)
@@ -352,7 +352,7 @@ describe('AppShell', () => {
     await waitFor(() => expect(getRuntimeInfoApi).toHaveBeenCalled())
 
     const creationLink = screen.getAllByRole('link', { name: '创建' })[0]
-    expect(creationLink.className).toContain('bg-primary')
+    expect(creationLink.className).toContain('ma-nav-current')
   })
 
   it('warms knowledge library targets on hover', async () => {
@@ -596,7 +596,7 @@ describe('AppShell', () => {
     expect(screen.getByRole('button', { name: '收起导航' })).toBeTruthy()
   })
 
-  it('keeps floating chrome on non-mind-map pages', async () => {
+  it('keeps the fixed spine on non-mind-map pages', async () => {
     getRuntimeInfoApi.mockResolvedValue(null)
 
     render(
@@ -610,8 +610,8 @@ describe('AppShell', () => {
     const aside = document.querySelector('aside')
     const main = document.querySelector('main')
     const inner = contentContainer(main)
-    expect(aside?.className).toContain('inset-y-3')
-    expect(aside?.className).toContain('rounded-2xl')
+    expect(aside?.className).toContain('inset-y-0')
+    expect(aside?.className).toContain('border-r')
     expect(main?.className).toContain('lg:pl-(--spacing-shell-main-sidebar)')
     expect(inner?.className).toContain('max-w-[1600px]')
     expect(inner?.className).toContain('lg:px-7')
@@ -638,7 +638,7 @@ describe('AppShell', () => {
         </AppShell>
       </MemoryRouter>,
     )
-    expect(document.querySelector('aside')?.className).toContain('inset-y-3')
+    expect(document.querySelector('aside')?.className).toContain('inset-y-0')
     expect(contentContainer(document.querySelector('main'))?.className).toContain('max-w-[1600px]')
   })
 })

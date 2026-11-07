@@ -57,7 +57,7 @@ export function PageHeader({
         'flex flex-wrap items-center justify-between gap-x-4',
         compact
           ? 'gap-y-2 rounded-xl border border-border/70 bg-card px-4 py-2.5 shadow-soft sm:px-5'
-          : 'gap-y-3 px-1 pt-1',
+          : 'gap-y-3 border-b border-border/70 px-1 pb-3 pt-1',
       )}
     >
       <div className="flex min-w-0 items-center gap-2">
@@ -68,8 +68,8 @@ export function PageHeader({
           ) : null}
           <h1
             className={cn(
-              'break-words font-semibold tracking-tight',
-              compact ? 'text-lg sm:text-xl' : 'text-2xl sm:text-[28px] sm:leading-9',
+              'break-words font-semibold',
+              compact ? 'text-lg tracking-tight sm:text-xl' : 'text-[26px] leading-tight sm:text-[32px] sm:leading-[1.15]',
             )}
           >
             {title}
