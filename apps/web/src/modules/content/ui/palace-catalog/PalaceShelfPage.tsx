@@ -114,7 +114,7 @@ export default function PalaceShelfPage() {
     })
 
   return (
-    <PageContainer>
+    <PageContainer wide>
       <PageHeader
         title="学科书架"
         actions={
@@ -139,6 +139,7 @@ export default function PalaceShelfPage() {
         <div className="relative min-w-0 flex-1 sm:max-w-sm">
           <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
+            aria-label="搜索学科或宫殿"
             placeholder="搜索学科或宫殿..."
             value={search}
             onChange={(event) => setSearch(event.target.value)}
@@ -158,15 +159,16 @@ export default function PalaceShelfPage() {
         </div>
         <Button
           type="button"
-          variant="ghost"
-          size="icon"
-          className="ml-auto text-muted-foreground"
+          variant="outline"
+          size="sm"
+          className="ml-auto h-9 gap-1.5 px-3 text-muted-foreground"
           aria-label="全部收起"
           title="全部收起"
           disabled={Boolean(search)}
           onClick={() => setCollapseSignal((value) => value + 1)}
         >
           <ChevronsDownUp />
+          <span className="max-sm:hidden">全部收起</span>
         </Button>
       </div>
 
@@ -205,8 +207,17 @@ export default function PalaceShelfPage() {
         <Card>
           <EmptyState
             variant="create"
-            title={search ? '没有匹配的学科或宫殿' : '还没有学科书架'}
-            description={search ? '换一个关键词试试。' : '绑定章节后，宫殿会出现在对应学科下。'}
+            title={search ? '没有匹配的学科或宫殿' : '先从一本书开始'}
+            description={search ? '换一个关键词试试。' : (
+              <div className="space-y-1.5">
+                <p>把一个章节建成宫殿：导图就是复习单元，之后每天回来翻卡。</p>
+                <ol className="mx-auto max-w-xs space-y-1 text-left text-[13px]">
+                  <li><span className="ma-figure mr-1.5 text-ink-faint">01</span>新建宫殿，绑定一个章节</li>
+                  <li><span className="ma-figure mr-1.5 text-ink-faint">02</span>在导图里写下知识节点</li>
+                  <li><span className="ma-figure mr-1.5 text-ink-faint">03</span>回到随心，开始第一次翻卡</li>
+                </ol>
+              </div>
+            )}
             action={
               <Button asChild variant="outline" size="sm">
                 <Link to="/palaces/new">

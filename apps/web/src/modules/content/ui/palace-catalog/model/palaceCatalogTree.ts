@@ -6,7 +6,7 @@ import type {
   PalaceDirectoryTree,
 } from '@/modules/content/ui/palace-edit/model/palaceDirectoryTree'
 
-const DEFAULT_SUBJECT_COLOR = '#6366f1'
+const DEFAULT_SUBJECT_COLOR = '#2f6b63'
 
 function toPalaceNode(
   palace: PalaceGroupedItem,

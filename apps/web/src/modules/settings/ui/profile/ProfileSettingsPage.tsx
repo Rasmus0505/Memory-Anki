@@ -167,9 +167,9 @@ export default function ProfileSettingsPage({
           <ThemeSettingsCard />
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">宫殿复习排期</CardTitle>
+              <CardTitle className="text-[17px] tracking-[0.01em]">宫殿复习排期</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2 text-sm text-muted-foreground">
+            <CardContent className="max-w-[68ch] space-y-3 text-sm leading-7 text-muted-foreground text-pretty">
               <p>
                 每个记忆单元按自己的记忆状态单独排期（FSRS），目标记忆率 90%，最长间隔一年。
                 界面显示的是每个单元的真实间隔。
@@ -182,7 +182,7 @@ export default function ProfileSettingsPage({
           </Card>
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">待换题自动检测</CardTitle>
+              <CardTitle className="text-[17px] tracking-[0.01em]">待换题自动检测</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-sm text-muted-foreground">

@@ -159,7 +159,7 @@ export function PalaceCatalogTree({
           const summary = subjectSummaries?.get(subject.id)
           return (
             <>
-              <span className="hidden text-xs tabular-nums text-muted-foreground sm:inline">
+              <span className="ma-figure hidden text-[13px] tabular-nums text-muted-foreground sm:inline">
                 {summary ? `${summary.palace_count} 座宫殿` : null}
               </span>
               <DueCount count={summary?.due_now_count ?? 0} />
@@ -181,7 +181,7 @@ export function PalaceCatalogTree({
           const ids = chapterPalaceIds(chapter)
           return (
             <>
-              <span className="hidden text-xs tabular-nums text-ink-faint sm:inline">{ids.length}</span>
+              <span className="ma-figure hidden text-[13px] tabular-nums text-ink-faint sm:inline">{ids.length}</span>
               <DueCount count={dueOf(ids)} />
             </>
           )
@@ -227,7 +227,7 @@ export function PalaceCatalogTree({
                 className={cn(
                   'ma-pressable inline-flex h-7 min-w-[4.5rem] shrink-0 items-center justify-center rounded-md border px-2.5 text-xs font-medium tabular-nums',
                   status === 'marking_required'
-                    ? 'border-violet-500/30 bg-violet-500/10 text-violet-700 hover:bg-violet-500/20 dark:text-violet-300'
+                    ?  'border-mark/25 bg-mark-soft text-mark hover:bg-mark/10'
                     : status === 'due'
                       ? 'border-transparent bg-primary text-primary-foreground shadow-soft hover:bg-primary/90'
                       : 'border-transparent bg-transparent text-ink-faint',

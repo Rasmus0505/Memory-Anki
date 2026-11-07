@@ -90,7 +90,9 @@ export function ExamRetentionChart({ retention, daysLeft }: { retention: ExamOve
           过去 30 天实际通过率
         </span>
         <span className="inline-flex items-center gap-1.5">
-          <span className="h-0.5 w-4 rounded border-t-2 border-dashed border-primary" aria-hidden="true" />
+          <svg width="16" height="3" viewBox="0 0 16 3" aria-hidden="true">
+            <line x1="0" y1="1.5" x2="16" y2="1.5" stroke="var(--color-primary)" strokeWidth="1.5" strokeDasharray="3 2" />
+          </svg>
           从今天起不复习的预测保留
         </span>
         <span>虚线 90% 为复习目标线</span>

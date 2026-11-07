@@ -95,15 +95,24 @@ export default function Dashboard() {
 
   return (
     <PageContainer wide className="dashboard-fit gap-3">
-      <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 px-1 pt-1">
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-[28px] sm:leading-9">洞察</h1>
+      <div className="flex shrink-0 flex-wrap items-end gap-x-4 gap-y-2 px-1 pt-1">
+        <div className="min-w-0">
+          <h1 className="text-[26px] font-semibold leading-tight sm:text-[32px] sm:leading-[1.15]">洞察</h1>
+          <p className="ma-figure text-[12px] text-muted-foreground">
+            {new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' }).format(new Date())}
+          </p>
+        </div>
         <div className="w-full sm:ml-auto sm:w-auto">
           <PaneSwitch<OverviewPane> panes={OVERVIEW_PANES} value={overviewPane} onChange={setOverviewPane} label="概览分区" />
         </div>
       </div>
 
       {examOverview ? (
-        <ExamTodayBlock overview={examOverview} primary className="shrink-0" />
+        <ExamTodayBlock
+          overview={examOverview}
+          primary
+          className="shrink-0 rounded-none border-0 border-b border-border bg-transparent px-0 pb-5 pt-0 shadow-none"
+        />
       ) : examPlaceholder}
 
       {/* lg: exam on the left; activity and new palaces share the right column. */}

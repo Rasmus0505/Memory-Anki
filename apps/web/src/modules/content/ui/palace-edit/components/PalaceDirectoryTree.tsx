@@ -524,12 +524,12 @@ export function PalaceDirectoryTreeView({
           'flex min-w-0 flex-1 items-center gap-1.5 pr-1.5 text-left font-medium text-foreground',
           metrics.row,
           metrics.text,
-          pageList && 'py-2.5 text-[15px]',
+          pageList && 'ma-display py-3 text-[17px]',
           'data-[state=open]:text-foreground',
         )}
       >
         <span
-          className="size-2 shrink-0 rounded-full"
+          className="size-2 shrink-0 rounded-[2px]"
           style={{ backgroundColor: subject.color }}
           aria-hidden
         />

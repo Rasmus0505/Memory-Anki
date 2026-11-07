@@ -46,7 +46,7 @@ export function PalaceCreateSetup({ busy, onCreate }: PalaceCreateSetupProps) {
     if (!name || creatingSubject) return
     setCreatingSubject(true)
     try {
-      const subject = await createSubjectApi({ name, color: '#6366f1' })
+      const subject = await createSubjectApi({ name, color: '#2f6b63' })
       setSubjects((current) => [...current, subject].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.name.localeCompare(b.name) || a.id - b.id))
       setSelectedIds((current) => current.includes(subject.id) ? current : [...current, subject.id])
       setNewSubjectName('')
@@ -113,7 +113,7 @@ export function PalaceCreateSetup({ busy, onCreate }: PalaceCreateSetupProps) {
                     >
                       {selected ? <Check className="size-3" strokeWidth={3} /> : null}
                     </span>
-                    <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: subject.color || '#6366f1' }} />
+                    <span className="size-2.5 shrink-0 rounded-[2px]" style={{ backgroundColor: subject.color || '#2f6b63' }} />
                     <span className={cn('truncate', selected && 'font-medium')}>{subject.name}</span>
                   </button>
                   {/* Secondary action: quiet until the row is hovered or focused. */}

@@ -122,7 +122,7 @@ describe('PalaceCatalogTree rows', () => {
   it('uses a distinct start-marking action when no permanent mark exists', () => {
     const onPalaceReview = renderTree(groupedWith([buildPalace({ review_status: 'marking_required' })]))
     const button = screen.getByRole('button', { name: '开始标记' })
-    expect(button.className).toContain('border-violet-500')
+    expect(button.className).toContain('border-mark/25')
     fireEvent.click(button)
     expect(onPalaceReview).toHaveBeenCalledTimes(1)
   })

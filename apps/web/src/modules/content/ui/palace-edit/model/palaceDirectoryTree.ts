@@ -76,7 +76,7 @@ export interface BuildPalaceDirectoryTreeInput {
   grouped: PalaceGroupedListResponse | null | undefined
 }
 
-const DEFAULT_SUBJECT_COLOR = '#6366f1'
+const DEFAULT_SUBJECT_COLOR = '#2f6b63'
 
 function compareText(left: string, right: string) {
   return left.localeCompare(right, 'zh-Hans-CN')

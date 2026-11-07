@@ -2,13 +2,14 @@ import { Link } from 'react-router-dom'
 import type { ExamOverview, ExamPalaceRow } from '@/shared/api/contracts'
 import { formatDaysLeft, formatPercent } from '../../model/examFormat'
 import { RollingNumber } from '@/shared/components/ui/rolling-number'
+import { cn } from '@/shared/lib/utils'
 import { ExamStarBadge } from '../ExamStarBadge'
 
-function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
+function Stat({ label, value, hint, className }: { label: string; value: string; hint?: string; className?: string }) {
   return (
-    <div className="ma-lit flex flex-col gap-1 rounded-xl border border-border/80 bg-card p-4 shadow-card">
-      <span className="truncate text-xs font-medium text-muted-foreground">{label}</span>
-      <RollingNumber value={value} className="text-[26px] font-semibold leading-tight tabular-nums tracking-tight" />
+    <div className={cn('ma-lit flex min-w-0 flex-col gap-1 px-5 py-4', className)}>
+      <span className="truncate text-[11px] font-medium tracking-[0.06em] text-muted-foreground">{label}</span>
+      <RollingNumber value={value} className="ma-figure text-[28px] font-semibold leading-tight tracking-normal tabular-nums" />
       {hint ? <span className="truncate text-xs text-ink-faint" title={hint}>{hint}</span> : null}
     </div>
   )
@@ -17,23 +18,27 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
 export function ExamHeadline({ overview }: { overview: ExamOverview }) {
   const { totals, days_left: daysLeft, settings } = overview
   return (
-    <div className="ma-stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div className="ma-stagger grid grid-cols-2 overflow-hidden rounded-xl border border-border bg-card shadow-card lg:grid-cols-4">
       <Stat
+        className="max-lg:border-b max-lg:border-border"
         label={settings.exam_name || '考试倒计时'}
         value={daysLeft == null ? '—' : daysLeft >= 0 ? `${daysLeft} 天` : '已结束'}
         hint={settings.exam_date ? `${settings.exam_date} · ${formatDaysLeft(daysLeft)}` : '在下方设置考试日期'}
       />
       <Stat
+        className="border-l border-border max-lg:border-b"
         label="当前掌握率"
         value={formatPercent(totals.mastery_ratio)}
         hint={`已学 ${totals.learned_count}/${totals.unit_count} 单元`}
       />
       <Stat
+        className="max-lg:border-b max-lg:border-border lg:border-l"
         label="考前预测掌握率"
         value={formatPercent(totals.predicted_ratio)}
         hint={`若从今天起停学：${formatPercent(totals.predicted_if_idle_ratio)}`}
       />
       <Stat
+        className="border-l border-border"
         label="每日新学进度"
         value={`${totals.pace_per_day}/天`}
         hint={daysLeft && daysLeft > 0 ? `学完需要 ${totals.needed_per_day}/天` : `累计学习 ${totals.study_days} 天`}
@@ -73,13 +78,21 @@ export function ExamWeakList({ rows, emptyText = '暂时没有明显薄弱的宫
   if (!rows.length) return <p className="text-sm text-muted-foreground">{emptyText}</p>
   return (
     <ol className="flex flex-col divide-y divide-border/60">
-      {rows.map((row) => (
+      {rows.map((row, index) => (
         <li key={row.id} className="flex items-center gap-3 py-2 text-sm">
+          <span className="ma-figure w-5 shrink-0 text-right text-[13px] text-ink-faint" aria-hidden>
+            {String(index + 1).padStart(2, '0')}
+          </span>
           <ExamStarBadge stars={row.stars} className="w-12 shrink-0" />
           <Link to={`/palaces/${row.id}`} className="min-w-0 flex-1 truncate hover:underline">
             {row.title}
           </Link>
-          <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+          <span
+            className={cn(
+              'shrink-0 text-xs tabular-nums',
+              row.learned_count > 0 && row.recall != null && row.recall < 0.3 ? 'font-medium text-mark' : 'text-muted-foreground',
+            )}
+          >
             记住 {formatPercent(row.recall)} · {row.learned_count}/{row.unit_count}
           </span>
         </li>

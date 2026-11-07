@@ -65,7 +65,7 @@ export default function Knowledge() {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : null
   })
   const [subjectName, setSubjectName] = useState('')
-  const [subjectColor, setSubjectColor] = useState('#6366f1')
+  const [subjectColor, setSubjectColor] = useState('#2f6b63')
   const [newSubjectName, setNewSubjectName] = useState('')
   /** Right-click 「重命名」 turns the sidebar row into an input (Obsidian style). */
   const [renamingSubjectId, setRenamingSubjectId] = useState<number | null>(null)
@@ -213,7 +213,7 @@ export default function Knowledge() {
   useEffect(() => {
     if (!activeSubject) return
     setSubjectName(activeSubject.name)
-    setSubjectColor(activeSubject.color || '#6366f1')
+    setSubjectColor(activeSubject.color || '#2f6b63')
   }, [activeSubject])
 
   useEffect(() => {
@@ -251,7 +251,7 @@ export default function Knowledge() {
   const handleCreateSubject = async () => {
     const name = newSubjectName.trim()
     if (!name) return
-    const subject = await createSubjectApi({ name, color: '#6366f1' })
+    const subject = await createSubjectApi({ name, color: '#2f6b63' })
     setNewSubjectName('')
     await refreshSubjects(subject.id)
   }
@@ -389,7 +389,7 @@ export default function Knowledge() {
                       key={subject.id}
                       className="flex w-full items-center gap-2.5 rounded-md bg-accent px-2.5 py-1.5 text-sm"
                     >
-                      <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: subject.color || '#6366f1' }} />
+                      <span className="size-2.5 shrink-0 rounded-[2px]" style={{ backgroundColor: subject.color || '#2f6b63' }} />
                       <InlineRenameInput
                         defaultValue={subject.name}
                         ariaLabel={`重命名 ${subject.name}`}
@@ -420,7 +420,7 @@ export default function Knowledge() {
                           : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                       }`}
                     >
-                      <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: subject.color || '#6366f1' }} />
+                      <span className="size-2.5 shrink-0 rounded-[2px]" style={{ backgroundColor: subject.color || '#2f6b63' }} />
                       <span className="truncate">{subject.name}</span>
                     </button>
                   </RowContextMenu>

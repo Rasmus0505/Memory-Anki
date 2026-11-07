@@ -26,13 +26,13 @@ export interface HorizonHousePlan {
 /** Windows per house before cards share a window; keeps tall palaces under the strip height. */
 export const MAX_WINDOWS = 24
 const WINDOWS_PER_FLOOR = 4
-/** Subjects that still carry the creation default get a roof color by subject instead. */
-const DEFAULT_SUBJECT_COLOR = '#6366f1'
+/** Subjects that still carry a creation default get a roof color by subject instead. The indigo entry is the pre-2026-11 default still stored on older subjects. */
+const DEFAULT_SUBJECT_COLORS = new Set(['#2f6b63', '#6366f1'])
 const ROOF_PALETTE = ['#d9634c', '#4f86a8', '#6c9a5a', '#e39b3d', '#8c6bb1', '#3f5f7a']
 
 function roofColorOf(subject: CityTodayPalace['subject']): string | null {
   if (!subject) return null
-  if (subject.color && subject.color.toLowerCase() !== DEFAULT_SUBJECT_COLOR) return subject.color
+  if (subject.color && !DEFAULT_SUBJECT_COLORS.has(subject.color.toLowerCase())) return subject.color
   return ROOF_PALETTE[Math.abs(subject.id) % ROOF_PALETTE.length]
 }
 

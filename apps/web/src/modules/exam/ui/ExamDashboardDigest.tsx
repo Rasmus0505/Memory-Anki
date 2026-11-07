@@ -2,6 +2,8 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import type { ExamOverview } from '@/shared/api/contracts'
 import { Button } from '@/shared/components/ui/button'
+import { Ledger, LedgerRow } from '@/shared/components/ui/ledger'
+import { RollingNumber } from '@/shared/components/ui/rolling-number'
 import { cn } from '@/shared/lib/utils'
 import { formatDaysLeft, formatPercent } from '../model/examFormat'
 import { ExamStarBadge } from './ExamStarBadge'
@@ -14,9 +16,9 @@ interface ExamDigestBlockProps {
 
 function Block({ question, children, action, className }: { question: string; children: ReactNode; action?: ReactNode; className?: string }) {
   return (
-    <section className={cn('flex min-h-0 flex-col gap-3 rounded-xl border border-border/80 bg-card p-4 shadow-card', className)}>
+    <section className={cn('flex min-h-0 flex-col gap-3 rounded-xl border border-border bg-card p-4 shadow-card', className)}>
       <header className="flex shrink-0 items-center justify-between gap-2">
-        <h2 className="text-sm font-medium text-muted-foreground">{question}</h2>
+        <h2 className="text-[13px] font-medium tracking-[0.02em] text-muted-foreground">{question}</h2>
         {action}
       </header>
       {children}
@@ -51,8 +53,8 @@ export function ExamTodayBlock({ overview, className, primary = false }: ExamDig
       }
     >
       <div className={cn('flex flex-col gap-3', primary && 'sm:flex-row sm:items-center sm:gap-8')}>
-        <p className={cn('shrink-0 font-semibold leading-none tracking-tight tabular-nums', primary ? 'text-5xl' : 'text-3xl')}>
-          {overview.totals.due_today}
+        <p className={cn('ma-figure shrink-0 font-semibold leading-none tabular-nums', primary ? 'text-5xl sm:text-[56px]' : 'text-3xl')}>
+          <RollingNumber value={overview.totals.due_today} />
           <span className="ml-1.5 text-sm font-normal tracking-normal text-muted-foreground">个单元到期</span>
         </p>
         {topToday.length > 0 ? (
@@ -76,7 +78,7 @@ export function ExamCountdownBlock({ overview, className }: ExamDigestBlockProps
     <Block question="离考试还差多少" className={className} action={<Link to="/exam" className="rounded-md px-1.5 py-0.5 text-xs font-medium text-primary transition-colors hover:bg-primary-soft">作战室 →</Link>}>
       <p className="text-sm text-muted-foreground">{formatDaysLeft(overview.days_left)}</p>
       <div className="flex flex-wrap items-baseline gap-x-2 tabular-nums">
-        <span className="text-3xl font-semibold">{formatPercent(totals.mastery_ratio)}</span>
+        <span className="ma-figure text-[32px] font-semibold">{formatPercent(totals.mastery_ratio)}</span>
         <span className="text-sm text-muted-foreground">→ 考前预测 {formatPercent(totals.predicted_ratio)}</span>
       </div>
       <div className="relative h-2 shrink-0 overflow-hidden rounded-full bg-muted" aria-hidden="true">
@@ -98,18 +100,15 @@ export function ExamRecentBlock({ overview, className }: ExamDigestBlockProps) {
   const passRate = weekPassRate(overview)
   return (
     <Block question="最近学得怎么样" className={className}>
-      <div className="grid grid-cols-3 gap-1.5 text-center">
+      <Ledger>
         {[
           { value: String(totals.study_days), label: '累计学习天数' },
           { value: `${recentDays}/7`, label: '近 7 天学习' },
           { value: formatPercent(passRate), label: '近 7 天通过率' },
         ].map((item) => (
-          <div key={item.label} className="min-w-0 rounded-lg bg-muted/60 px-1 py-2.5">
-            <div className="text-xl font-semibold tabular-nums">{item.value}</div>
-            <div className="truncate text-[11px] text-muted-foreground">{item.label}</div>
-          </div>
+          <LedgerRow key={item.label} label={item.label} value={item.value} />
         ))}
-      </div>
+      </Ledger>
       <p className="text-xs text-muted-foreground">今天已评分 {totals.reviewed_today} 次</p>
     </Block>
   )

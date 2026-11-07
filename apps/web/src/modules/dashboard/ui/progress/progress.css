@@ -21,7 +21,7 @@
 .learning-progress :is(button, a, select, input):focus-visible { outline: 2px solid color-mix(in oklab, var(--lp-accent) 70%, transparent); outline-offset: 2px; }
 .lp-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 24px; }
 .lp-eyebrow { font-size: 10px; font-weight: 800; letter-spacing: .18em; color: var(--lp-green); text-transform: uppercase; }
-.lp-header h1 { font-size: 28px; line-height: 36px; letter-spacing: -.012em; font-weight: 600; margin: 0; }
+.lp-header h1 { font-family: var(--font-display); font-size: 32px; line-height: 1.2; letter-spacing: .01em; font-weight: 600; margin: 0; }
 .lp-header p, .lp-subtitle { font-size: 13px; color: var(--color-muted-foreground); line-height: 1.7; }
 .lp-header-actions { display: flex; align-items: center; gap: 12px; }
 .lp-button { display: inline-flex; justify-content: center; align-items: center; gap: 7px; height: 32px; border: 1px solid var(--color-input); background: var(--color-card); border-radius: 8px; padding: 0 12px; font-size: 12px; font-weight: 500; text-decoration: none; white-space: nowrap; box-shadow: 0 1px 2px rgb(0 0 0 / .05); transition: background-color .2s var(--ease-out-expo), border-color .2s var(--ease-out-expo), translate .2s var(--ease-out-expo), box-shadow .2s var(--ease-out-expo); }
@@ -31,10 +31,10 @@
 .lp-button-primary:hover { background: color-mix(in oklab, var(--lp-accent) 92%, black); border-color: transparent; box-shadow: var(--shadow-glow); }
 .lp-icon-button { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; flex-shrink: 0; }
 .lp-icon-button:hover { background: var(--color-accent); color: var(--color-foreground); }
-.lp-overview { border: 1px solid color-mix(in oklab, var(--color-border) 80%, transparent); border-radius: 14px; overflow: hidden; background: var(--color-card); margin-bottom: 24px; box-shadow: var(--shadow-card); }
+.lp-overview { border: 1px solid var(--color-border); border-radius: 12px; overflow: hidden; background: var(--color-card); margin-bottom: 24px; box-shadow: var(--shadow-card); }
 .lp-overview-main { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 28px; align-items: center; padding: 28px 32px; }
 .lp-overview h2 { font-weight: 500; font-size: 13px; color: var(--color-muted-foreground); margin-bottom: 10px; }
-.lp-big-number { font-size: clamp(38px, 4vw, 52px); line-height: 1.1; font-weight: 600; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.lp-big-number { font-family: var(--font-display); font-size: clamp(44px, 4.4vw, 62px); line-height: 1; font-weight: 600; letter-spacing: -.01em; font-variant-numeric: tabular-nums lining-nums; }
 .lp-number-total { font-size: 20px; color: var(--color-muted-foreground); font-weight: 500; margin-left: 10px; letter-spacing: -.02em; }
 .lp-overview-copy { max-width: 580px; }
 .lp-overview-copy > .lp-subtitle { margin: 10px 0 18px; }
@@ -53,7 +53,7 @@
 .lp-ring-track { stroke: var(--lp-faint); }
 .lp-ring-fill { stroke: var(--lp-green); }
 .lp-ring-label { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
-.lp-ring-label strong { font-size: 28px; font-weight: 600; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.lp-ring-label strong { font-family: var(--font-display); font-size: 30px; font-weight: 600; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
 .lp-ring-label small { font-size: 11px; color: var(--color-muted-foreground); }
 .lp-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--lp-line); }
 .lp-stat { padding: 20px 30px; display: flex; gap: 13px; align-items: center; }
@@ -61,10 +61,10 @@
 .lp-stat-icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; color: var(--lp-green); background: var(--lp-green-soft); flex-shrink: 0; }
 .lp-stat-icon.amber { color: var(--lp-amber); background: color-mix(in srgb, var(--lp-amber) 10%, var(--color-card)); }
 .lp-stat-label { color: var(--color-muted-foreground); font-size: 12px; }
-.lp-stat-value { font-size: 22px; font-weight: 600; line-height: 1.45; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+.lp-stat-value { font-family: var(--font-display); font-size: 24px; font-weight: 600; line-height: 1.45; letter-spacing: 0; font-variant-numeric: tabular-nums; }
 .lp-stat-value small { font-size: 12px; font-weight: 500; color: var(--color-muted-foreground); margin-left: 5px; }
 .lp-workspace { display: grid; grid-template-columns: minmax(0, 1fr) 276px; gap: 22px; align-items: start; }
-.lp-panel { min-width: 0; background: var(--color-card); border: 1px solid color-mix(in oklab, var(--color-border) 80%, transparent); border-radius: 14px; overflow: hidden; box-shadow: var(--shadow-card); }
+.lp-panel { min-width: 0; background: var(--color-card); border: 1px solid var(--color-border); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow-card); }
 .lp-explorer-header { padding: 22px 22px 16px; }
 .lp-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .lp-section-heading h2 { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }

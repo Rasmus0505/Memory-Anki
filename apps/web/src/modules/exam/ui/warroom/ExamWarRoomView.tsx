@@ -62,7 +62,7 @@ export function ExamWarRoomView({ overview, subjects, onChanged, loadDoc }: Exam
               <li key={subject.id} className="flex flex-col gap-1 text-sm">
                 <div className="flex items-center justify-between gap-2">
                   <span className="inline-flex items-center gap-2">
-                    <span className="h-2.5 w-2.5 rounded-full" style={{ background: subject.color }} aria-hidden="true" />
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-[2px]" style={{ background: subject.color }} aria-hidden="true" />
                     {subject.name}
                     {subject.exam_share != null ? <span className="text-xs text-muted-foreground">占 {subject.exam_share}%</span> : null}
                   </span>
@@ -71,8 +71,14 @@ export function ExamWarRoomView({ overview, subjects, onChanged, loadDoc }: Exam
                   </span>
                 </div>
                 <div className="relative h-2 overflow-hidden rounded-full bg-muted" aria-hidden="true">
-                  <div className="absolute inset-y-0 left-0 rounded-full bg-primary/30" style={{ width: `${subject.predicted_ratio * 100}%` }} />
-                  <div className="absolute inset-y-0 left-0 rounded-full bg-success" style={{ width: `${subject.mastery_ratio * 100}%` }} />
+                  <div
+                    className="absolute inset-y-0 left-0 rounded-full"
+                    style={{ width: `${subject.predicted_ratio * 100}%`, background: `color-mix(in oklab, ${subject.color || 'var(--color-primary)'} 24%, transparent)` }}
+                  />
+                  <div
+                    className="absolute inset-y-0 left-0 rounded-full"
+                    style={{ width: `${subject.mastery_ratio * 100}%`, background: subject.color || 'var(--color-success)' }}
+                  />
                 </div>
               </li>
             ))}

@@ -56,7 +56,8 @@ function zoomTo(floors) {
 }
 addEventListener('resize', fit);
 
-scene.add(new THREE.HemisphereLight(0xf4f6ff, 0x9fb3c9, 1.5));
+const hemi = new THREE.HemisphereLight(0xf4f6ff, 0x9fb3c9, 1.5);
+scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xf6f4ff, 2.1);
 sun.position.set(5, 8, 6); sun.castShadow = true; sun.shadow.mapSize.set(1024, 512);
 Object.assign(sun.shadow.camera, { left: -20, right: 20, top: 4, bottom: -4 });
@@ -64,8 +65,22 @@ scene.add(sun);
 
 const mats = {};
 const mat = (c, o = {}) => mats[c + JSON.stringify(o)] ??= new THREE.MeshStandardMaterial({ color: c, roughness: .85, ...o });
-const ground = new THREE.Mesh(new THREE.BoxGeometry(80, .4, 3), mat(0xa7d08a));
+const ground = new THREE.Mesh(new THREE.BoxGeometry(80, .4, 3), mat(0x9db183));
 ground.position.y = -.2; ground.receiveShadow = true; scene.add(ground);
+
+// 白天是书桌上的小模型，夜里换成同一座城的黄昏：曝光降下来，窗灯才亮得出来。
+const isNight = () => document.documentElement.style.colorScheme === 'dark';
+function applyLight() {
+  const night = isNight();
+  renderer.toneMappingExposure = night ? 0.62 : 1;
+  hemi.intensity = night ? 0.7 : 1.5;
+  sun.intensity = night ? 0.55 : 2.1;
+  sun.color.setHex(night ? 0xcfdcf2 : 0xf6f4ff);
+  ground.material.color.setHex(night ? 0x4a5a44 : 0x9db183);
+  draw();
+}
+applyLight();
+new MutationObserver(applyLight).observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style'] });
 
 const WIN = [
   mat(0x6b7486),                                                         // 未评
