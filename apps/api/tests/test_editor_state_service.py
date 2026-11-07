@@ -780,3 +780,75 @@ class MarkPalaceRootTests(RouterTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PalaceEditorBindingRehomeTests(RouterTestCase):
+    """Deleting a card must move its questions to the root, not orphan them."""
+
+    def _doc(self, *, with_child: bool) -> dict:
+        root_data = {"uid": "root", "text": "细胞", "memoryAnkiRootKind": "palace"}
+        children = (
+            [{"data": {"uid": "node-a", "text": "线粒体"}, "children": []}]
+            if with_child
+            else []
+        )
+        return {"root": {"data": root_data, "children": children}}
+
+    def test_removing_a_card_moves_its_question_to_root(self):
+        from memory_anki.infrastructure.db._tables.palaces import (
+            PalaceQuizQuestion,
+            PalaceQuizQuestionNodeBinding,
+        )
+        from memory_anki.modules.quiz.application.node_binding import (
+            REMOVED_NODE_ROOT_REASON,
+        )
+
+        with self.SessionLocal() as session:
+            palace = Palace(title="细胞", description="")
+            session.add(palace)
+            session.flush()
+            save_palace_editor_state(
+                session,
+                palace,
+                {"editor_doc": self._doc(with_child=True), "editor_source": "palace_edit"},
+            )
+            question = PalaceQuizQuestion(
+                palace_id=palace.id,
+                question_type="multiple_choice",
+                stem="线粒体的功能是？",
+                options_json='[{"id":"A","text":"供能"},{"id":"B","text":"储水"}]',
+                answer_payload_json='{"correct_option_id":"A"}',
+                analysis="解析",
+                lifecycle_status="published",
+            )
+            session.add(question)
+            session.flush()
+            session.add(
+                PalaceQuizQuestionNodeBinding(
+                    palace_id=palace.id,
+                    question_id=question.id,
+                    node_uid="node-a",
+                    reason="手动绑定",
+                    source="manual",
+                )
+            )
+            session.commit()
+
+            save_palace_editor_state(
+                session,
+                palace,
+                {
+                    "editor_doc": self._doc(with_child=False),
+                    "editor_source": "palace_edit_autosave",
+                },
+            )
+
+            rows = (
+                session.query(PalaceQuizQuestionNodeBinding)
+                .filter(PalaceQuizQuestionNodeBinding.question_id == question.id)
+                .all()
+            )
+            self.assertEqual(
+                [(row.node_uid, row.reason) for row in rows],
+                [("root", REMOVED_NODE_ROOT_REASON)],
+            )

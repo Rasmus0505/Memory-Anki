@@ -9,6 +9,7 @@ from .application.freestyle_projection import (
 )
 from .application.learning_loop import build_mastery_profile, record_attempt_event
 from .application.learning_progress_evidence import read_learning_progress_quiz
+from .application.node_binding import rehome_orphaned_question_bindings
 from .application.palace_count_badges import (
     project_palace_question_sets,
     project_palace_quiz_count_badges,
@@ -30,6 +31,7 @@ __all__ = [
     "project_palace_quiz_count_badges",
     "question_is_due",
     "record_attempt_event",
+    "rehome_orphaned_question_bindings",
     "serialize_question",
     "sort_questions_for_bank_display",
     "set_question_marked",

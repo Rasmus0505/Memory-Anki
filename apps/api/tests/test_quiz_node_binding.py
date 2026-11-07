@@ -13,11 +13,13 @@ from memory_anki.infrastructure.db._tables.palaces import (
 )
 from memory_anki.modules.quiz.application.node_binding import (
     DEFAULT_ROOT_BINDING_REASON,
+    REMOVED_NODE_ROOT_REASON,
     auto_bind_palace_questions_by_text,
     compact_mindmap_with_uids,
     list_palace_node_bindings,
     list_question_node_bindings,
     mutate_quiz_node_bindings,
+    rehome_orphaned_question_bindings,
     search_mindmap_nodes,
 )
 from memory_anki.modules.quiz.application.question_contracts import PalaceQuizValidationError
@@ -269,3 +271,132 @@ def test_create_question_rejects_unknown_node_uids(db_session) -> None:
             },
             commit=True,
         )
+
+
+def _add_binding(
+    session,
+    *,
+    palace_id: int,
+    question_id: int,
+    node_uid: str,
+) -> PalaceQuizQuestionNodeBinding:
+    row = PalaceQuizQuestionNodeBinding(
+        palace_id=palace_id,
+        question_id=question_id,
+        node_uid=node_uid,
+        reason="手动绑定",
+        source="manual",
+    )
+    session.add(row)
+    session.flush()
+    return row
+
+
+def test_deleted_child_binding_falls_back_to_root(db_session) -> None:
+    palace = _add_palace(db_session, title="细胞", nodes=[("n-child", "线粒体")])
+    question = _add_question(db_session, palace_id=int(palace.id), stem="线粒体功能")
+    _add_binding(
+        db_session,
+        palace_id=int(palace.id),
+        question_id=int(question.id),
+        node_uid="n-child",
+    )
+    db_session.commit()
+
+    result = rehome_orphaned_question_bindings(
+        db_session,
+        palace_id=int(palace.id),
+        editor_doc=_mindmap_doc(),
+    )
+    db_session.commit()
+
+    assert result == {"rehomed": 1, "dropped": 0}
+    bindings = list_question_node_bindings(db_session, int(question.id))
+    assert [(item["node_uid"], item["reason"]) for item in bindings] == [
+        ("root", REMOVED_NODE_ROOT_REASON)
+    ]
+
+
+def test_stale_edge_is_dropped_when_question_still_bound(db_session) -> None:
+    palace = _add_palace(db_session, title="细胞", nodes=[("n-child", "线粒体"), ("n-live", "叶绿体")])
+    question = _add_question(db_session, palace_id=int(palace.id), stem="细胞器")
+    _add_binding(
+        db_session,
+        palace_id=int(palace.id),
+        question_id=int(question.id),
+        node_uid="n-child",
+    )
+    _add_binding(
+        db_session,
+        palace_id=int(palace.id),
+        question_id=int(question.id),
+        node_uid="n-live",
+    )
+    db_session.commit()
+
+    result = rehome_orphaned_question_bindings(
+        db_session,
+        palace_id=int(palace.id),
+        editor_doc={
+            "root": {
+                "data": {"uid": "root", "text": "根"},
+                "children": [{"data": {"uid": "n-live", "text": "叶绿体"}, "children": []}],
+            }
+        },
+    )
+    db_session.commit()
+
+    assert result == {"rehomed": 0, "dropped": 1}
+    bindings = list_question_node_bindings(db_session, int(question.id))
+    assert [item["node_uid"] for item in bindings] == ["n-live"]
+
+
+def test_multiple_stale_edges_collapse_to_one_root_edge(db_session) -> None:
+    palace = _add_palace(
+        db_session,
+        title="细胞",
+        nodes=[("n-a", "线粒体"), ("n-b", "叶绿体")],
+    )
+    question = _add_question(db_session, palace_id=int(palace.id), stem="细胞器")
+    for uid in ("n-a", "n-b"):
+        _add_binding(
+            db_session,
+            palace_id=int(palace.id),
+            question_id=int(question.id),
+            node_uid=uid,
+        )
+    db_session.commit()
+
+    result = rehome_orphaned_question_bindings(
+        db_session,
+        palace_id=int(palace.id),
+        editor_doc=_mindmap_doc(),
+    )
+    db_session.commit()
+
+    assert result == {"rehomed": 1, "dropped": 1}
+    bindings = list_question_node_bindings(db_session, int(question.id))
+    assert [item["node_uid"] for item in bindings] == ["root"]
+
+
+def test_rehome_leaves_document_without_nodes_untouched(db_session) -> None:
+    palace = _add_palace(db_session, title="细胞", nodes=[("n-child", "线粒体")])
+    question = _add_question(db_session, palace_id=int(palace.id), stem="线粒体功能")
+    _add_binding(
+        db_session,
+        palace_id=int(palace.id),
+        question_id=int(question.id),
+        node_uid="n-child",
+    )
+    db_session.commit()
+
+    result = rehome_orphaned_question_bindings(
+        db_session,
+        palace_id=int(palace.id),
+        editor_doc={},
+    )
+    db_session.commit()
+
+    assert result == {"rehomed": 0, "dropped": 0}
+    bindings = list_question_node_bindings(db_session, int(question.id))
+    assert [item["node_uid"] for item in bindings] == ["n-child"]

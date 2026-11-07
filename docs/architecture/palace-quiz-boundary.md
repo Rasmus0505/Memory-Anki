@@ -36,7 +36,7 @@ quiz.application -> platform.application UnitOfWork
 
 - 存储：`palace_quiz_question_node_bindings`
   - 边上的 `palace_id` = **目标**脑图宫殿（节点位于那里）
-  - 唯一约束：`(question_id, palace_id, node_uid)`，这样两个宫殿上的相同字符串 uid 不会冲突
+  - 唯一约束：`(question_id, node_uid)`；一道题只属于一座宫殿，同一题不会重复挂同一个节点
   - `source` = `ai` | `manual`
 - 反向列表：`GET /palaces/{id}/quiz-node-bindings` 返回**目标**为该宫殿的每条边，包括外部所有者题目，并带有 `question_owner_palace_id` / 标题 / `is_cross_palace`。
 - 逐题列表：`GET /palace-quiz-questions/{id}/node-bindings`，用于测验 → 知识点跳转。
@@ -48,3 +48,14 @@ quiz.application -> platform.application UnitOfWork
   <!-- invariant: palace-quiz-badge-counts-stable -->
   <!-- invariant: palace-quiz-marked-index-rose -->
   - 测验 → 多边选择器 → `QuizKnowledgeDigressionDialog` 完整只读目标脑图 + 固定的**返回做题**（叠加层；尝试草稿保留在父级内存中；PWA 返回先关闭跳转）。
+
+## 删卡后的绑定回收
+
+删掉一张卡片不能把题目一起带走。保存宫殿导图时（`save_palace_editor_state` 的 `editor_doc` 分支）在**同一事务**里调用 `quiz.public.commands.rehome_orphaned_question_bindings`：
+
+- 边指向的 `node_uid` 已不在新导图中，但该题还有别的有效边 → 只删悬空边，不重复挂根节点；
+- 该题没有任何有效边 → 把其中一条边改到宫殿根节点，`reason = 节点删除后归到根节点`；
+- 新导图没有任何节点 → 原样保留，等下一次有效保存再判。
+
+这覆盖正式编辑器、随心编辑、剪空删卡、版本恢复和导入应用等所有走保存接口的路径。离线修复用 `tools/repair_orphaned_quiz_bindings.py`（默认只审计，`--apply` 先整库备份）；审计报告在 `deliverables/题目绑定丢失审计-2026-11-07.md`。
+<!-- invariant: palace-quiz-deleted-node-rehomes-to-root -->

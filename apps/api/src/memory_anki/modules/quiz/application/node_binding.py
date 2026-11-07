@@ -29,6 +29,7 @@ MergeMode = Literal["replace_all", "fill_unbound"]
 
 DEFAULT_ROOT_BINDING_REASON = "default-root-binding"
 DEFAULT_ROOT_BINDING_SOURCE = "manual"
+REMOVED_NODE_ROOT_REASON = "节点删除后归到根节点"
 
 
 def same_palace_binding_palace_id(
@@ -192,6 +193,77 @@ def ensure_create_question_node_bindings(
         created += 1
     session.flush()
     return created
+
+
+def rehome_orphaned_question_bindings(
+    session: Session,
+    *,
+    palace_id: int,
+    editor_doc: Any,
+) -> dict[str, int]:
+    """Keep every question attached to a node that still exists.
+
+    Deleting a card must not orphan its questions: an edge whose ``node_uid`` is
+    gone from the document is moved to the palace root when the question has no
+    other live binding, and dropped when the question is still bound elsewhere
+    (a second root edge would only double-count it).
+
+    A document with no nodes at all is left untouched — there is nowhere safe to
+    point, and the caller may be hydrating a blank palace. Does not commit;
+    callers own the transaction boundary.
+    """
+    descendants, _labels = collect_node_descendants(editor_doc)
+    live_uids = {str(uid).strip() for uid in descendants if str(uid).strip()}
+    if not live_uids:
+        return {"rehomed": 0, "dropped": 0}
+    root_uid = resolve_palace_root_node_uid(editor_doc)
+
+    rows = (
+        session.query(PalaceQuizQuestionNodeBinding)
+        .join(
+            PalaceQuizQuestion,
+            PalaceQuizQuestion.id == PalaceQuizQuestionNodeBinding.question_id,
+        )
+        .filter(
+            PalaceQuizQuestionNodeBinding.palace_id == palace_id,
+            PalaceQuizQuestion.deleted_at.is_(None),
+        )
+        .all()
+    )
+    live_questions = {
+        int(row.question_id)
+        for row in rows
+        if str(row.node_uid or "").strip() in live_uids
+    }
+    orphan_rows_by_question: dict[int, list[PalaceQuizQuestionNodeBinding]] = {}
+    for row in rows:
+        if str(row.node_uid or "").strip() in live_uids:
+            continue
+        orphan_rows_by_question.setdefault(int(row.question_id), []).append(row)
+
+    now = utc_now_naive()
+    rehomed = 0
+    dropped = 0
+    for question_id, orphan_rows in orphan_rows_by_question.items():
+        if question_id in live_questions or not root_uid:
+            session.query(PalaceQuizQuestionNodeBinding).filter(
+                PalaceQuizQuestionNodeBinding.id.in_([row.id for row in orphan_rows])
+            ).delete(synchronize_session=False)
+            dropped += len(orphan_rows)
+            continue
+        kept = orphan_rows[0]
+        kept.node_uid = root_uid
+        kept.reason = REMOVED_NODE_ROOT_REASON
+        kept.updated_at = now
+        rehomed += 1
+        extra = orphan_rows[1:]
+        if extra:
+            session.query(PalaceQuizQuestionNodeBinding).filter(
+                PalaceQuizQuestionNodeBinding.id.in_([row.id for row in extra])
+            ).delete(synchronize_session=False)
+            dropped += len(extra)
+    session.flush()
+    return {"rehomed": rehomed, "dropped": dropped}
 
 
 def compact_mindmap_with_uids(editor_doc: Any, *, max_nodes: int = MAX_NODES_FOR_PROMPT) -> list[dict[str, Any]]:
@@ -651,6 +723,7 @@ __all__ = [
     "list_palace_node_bindings",
     "list_question_node_bindings",
     "mutate_quiz_node_bindings",
+    "rehome_orphaned_question_bindings",
     "resolve_palace_root_node_uid",
     "search_mindmap_nodes",
 ]
