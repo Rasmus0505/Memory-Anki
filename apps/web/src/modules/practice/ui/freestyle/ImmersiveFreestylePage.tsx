@@ -152,10 +152,44 @@ export default function ImmersiveFreestylePage({
   useFreestyleChromeTheme(isActive)
   const reducedMotion = usePrefersReducedMotion()
   const queueRef = useRef<FreestyleCard[]>([])
+  const startOverlayRef = useRef<HTMLDivElement>(null)
   const acknowledgedCardIdsRef = useRef<Set<string>>(new Set())
   const flipCardRevealSettings = useFlipCardRevealSettings()
   const [partialSettlement, setPartialSettlement] = useState<FreestylePartialSettlementSnapshot | null>(null)
   const [startOverviewOpen, setStartOverviewOpen] = useState(true)
+
+  // The start gate covers the stage: keep keyboard focus inside it and put the
+  // learner on the primary action, instead of letting Tab wander into hidden controls.
+  useEffect(() => {
+    if (!startOverviewOpen) return
+    const root = startOverlayRef.current
+    if (!root) return
+    const focusables = () =>
+      Array.from(
+        root.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((element) => element.offsetParent !== null)
+    const startButton = root.querySelector<HTMLElement>('[data-testid="freestyle-start-button"]')
+    ;(startButton ?? focusables()[0])?.focus()
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return
+      const list = focusables()
+      if (!list.length) return
+      const first = list[0]
+      const last = list[list.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+    root.addEventListener('keydown', onKeyDown)
+    return () => root.removeEventListener('keydown', onKeyDown)
+  }, [startOverviewOpen])
+
   const [dayRecapOpen, setDayRecapOpen] = useState(() => isDayRecapPending(window.localStorage, new Date()))
   const [configOpen, setConfigOpen] = useState(false)
   /** Settlement 「再来一轮」 opens config in nextRound mode; HUD uses replan. */
@@ -1197,16 +1231,20 @@ export default function ImmersiveFreestylePage({
         ) : null}
         {startOverviewOpen && !partialSettlement ? (
           <div
+            ref={startOverlayRef}
             data-testid="freestyle-start-overview"
             data-keyboard-shortcuts-suspended="true"
+            role="dialog"
+            aria-modal="true"
+            aria-label="今天的学习"
             className="absolute inset-0 z-[60] flex flex-col justify-center overflow-y-auto overscroll-contain bg-stage/95 px-3 py-6 backdrop-blur-sm"
           >
-            <div className="mx-auto flex w-full max-w-lg flex-col gap-3">
+            <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">
               {/* A title anchors the gate: without it the two cards floated
                   mid-screen over an empty stage with nothing saying what this is. */}
               <div className="flex items-baseline justify-between gap-2 px-1 pb-1">
-                <h2 className="text-xl font-semibold tracking-tight text-ink-stage">今天的学习</h2>
-                <span className="text-xs tabular-nums text-ink-stage-muted">
+                <h2 className="ma-display text-2xl font-semibold text-ink-stage">今天的学习</h2>
+                <span className="ma-figure text-xs tabular-nums text-ink-stage-muted">
                   {startOverviewDateFormatter.format(new Date())}
                 </span>
               </div>

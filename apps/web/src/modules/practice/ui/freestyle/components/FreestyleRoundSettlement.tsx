@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
-import { ChevronDown, Sparkles, Trophy } from 'lucide-react'
+import { Check, ChevronDown, Sparkles, Trophy } from 'lucide-react'
 import type { FreestyleOverviewResponse } from '@/shared/api/contracts'
 import type { FreestyleRoundCompletion } from '@/modules/practice/ui/freestyle/model/roundCompletion'
 import type { FreestyleSaveOutcome } from '@/modules/practice/ui/freestyle/model/freestyleSettlementModel'
@@ -90,6 +90,9 @@ function TrophyRing({
           <Trophy className="size-6 sm:size-7" strokeWidth={2.2} />
         </div>
       </div>
+      <div className="fs-stamp absolute -bottom-0.5 right-0 flex size-7 items-center justify-center rounded-full bg-mark text-primary-foreground shadow-soft">
+        <Check className="size-4" strokeWidth={2.8} aria-hidden />
+      </div>
     </div>
   )
 }
@@ -110,7 +113,7 @@ function StatTile({
   const shown = useCountUp(value, { delayMs: 220 + index * 90, disabled: reducedMotion })
   return (
     <Rise index={index + 2} className="rounded-2xl border border-stage-line bg-stage-raised/70 px-2 py-2.5 text-center">
-      <div className={cn('text-xl font-bold tabular-nums sm:text-2xl', toneClass)}>{shown}</div>
+      <div className={cn('ma-figure text-[26px] font-semibold leading-none tabular-nums sm:text-[30px]', toneClass)}>{shown}</div>
       <div className="mt-0.5 text-[11px] text-stage-muted">{label}</div>
     </Rise>
   )
@@ -268,22 +271,20 @@ export function FreestyleRoundSettlement({
           </button>
         ) : null}
 
-        <Rise index={0} className="text-center">
+        <Rise index={0} className="relative text-center">
+          <button
+            type="button"
+            data-testid="freestyle-round-skip-show"
+            className="absolute right-0 top-0 text-[11px] font-medium text-stage-muted underline-offset-2 hover:underline"
+            onClick={() => skipRoundCelebration(roundKey)}
+          >
+            跳过
+          </button>
           <TrophyRing ratio={roundRatio} reducedMotion={reducedMotion} gradientId="fs-ring-gradient-round" />
-          <div className="mt-3 flex items-center justify-center gap-3">
-            <div className="text-xs font-semibold tracking-[0.18em] text-stage-glow">本轮完成</div>
-            <button
-              type="button"
-              data-testid="freestyle-round-skip-show"
-              className="text-[11px] font-medium text-stage-muted underline-offset-2 hover:underline"
-              onClick={() => skipRoundCelebration(roundKey)}
-            >
-              跳过
-            </button>
-          </div>
-          <h2 className="mt-1 text-3xl font-semibold leading-tight sm:text-4xl">
-            <span className="tabular-nums">{ratedShown}</span>
-            <span className="ml-1 text-lg font-medium text-stage-muted sm:text-xl">个单元</span>
+          <div className="mt-2 text-xs text-stage-muted">本轮完成</div>
+          <h2 className="fs-ink-reveal mt-1 flex items-baseline justify-center gap-2 leading-none">
+            <span className="ma-figure text-[64px] font-semibold tabular-nums sm:text-[76px]">{ratedShown}</span>
+            <span className="text-base font-medium text-stage-muted">个单元</span>
           </h2>
           <p data-testid="freestyle-round-summary" className="mt-1.5 text-sm text-stage-muted">
             新学 {completion.newCount} · 复习 {completion.reviewCount} · {palaceTotal} 个宫殿 · {completion.involvedUnitCount} 个单元

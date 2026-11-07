@@ -1,3 +1,4 @@
+import '@/styles/english-dictation.css'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -165,7 +166,6 @@ export function EnglishDictationLibrary() {
 
         <header className="ed-library__hero">
           <div className="ed-library__hero-copy">
-            <span className="ed-panel-eyebrow">ENGLISH · SPELLING THEATRE</span>
             <h1>听写剧场</h1>
             <p>
               上传视频与英文字幕，一句一句把台词拼出来。中文字幕可选，全键盘操作，鼠标可以完全不碰。
@@ -216,17 +216,13 @@ export function EnglishDictationLibrary() {
           </section>
         )}
 
-        <section className="ed-library__stats" aria-label="学习统计">
-          <Stat label="课程" value={workspace?.stats.total_courses ?? courses.length} />
-          <Stat label="未完成" value={workspace?.stats.unfinished_courses ?? 0} />
-          <Stat label="已完成" value={workspace?.stats.completed_courses ?? 0} />
-        </section>
-
         <section className="ed-library__shelf">
           <div className="ed-library__shelf-head">
             <div>
-              <span className="ed-panel-eyebrow">YOUR SHELF</span>
               <h2>片库</h2>
+              <p className="ed-library__shelf-meta">
+                共 {workspace?.stats.total_courses ?? courses.length} 门 · 未完成 {workspace?.stats.unfinished_courses ?? 0} · 已完成 {workspace?.stats.completed_courses ?? 0}
+              </p>
             </div>
             <div className="ed-library__tools">
               <label className="ed-search">
@@ -295,15 +291,6 @@ export function EnglishDictationLibrary() {
   )
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="ed-stat">
-      <strong>{value}</strong>
-      <span>{label}</span>
-    </div>
-  )
-}
-
 function ContinueCard({
   course,
   onContinue,
@@ -318,7 +305,6 @@ function ContinueCard({
     <section className="ed-continue" data-testid="english-continue-card">
       <div className="ed-continue__backdrop" aria-hidden />
       <div className="ed-continue__body">
-        <span className="ed-panel-eyebrow">CONTINUE</span>
         <h2>{course.title}</h2>
         <p>
           {course.completedSentenceCount > 0

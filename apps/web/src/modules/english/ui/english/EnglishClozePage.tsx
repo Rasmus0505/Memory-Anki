@@ -1,3 +1,4 @@
+import '@/styles/english-dictation.css'
 import { useEffect, useMemo, useState, type MouseEvent } from 'react'
 import { BookOpen, Copy, Search } from 'lucide-react'
 import { cn } from '@/shared/lib/utils'

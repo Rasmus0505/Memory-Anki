@@ -38,13 +38,44 @@
   animation: fs-trophy-pop 0.9s var(--ease-out-back) 0.55s both;
 }
 
+/* Overdrive: the result soaks into the page like ink, instead of fading in. */
+@property --fs-ink-r {
+  syntax: '<percentage>';
+  inherits: false;
+  initial-value: 120%;
+}
+
+@keyframes fs-ink-soak {
+  from { --fs-ink-r: 0%; }
+  to { --fs-ink-r: 120%; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .fs-ink-reveal {
+    -webkit-mask-image: radial-gradient(circle at 50% 55%, #000 0%, #000 var(--fs-ink-r), transparent calc(var(--fs-ink-r) + 10%));
+    mask-image: radial-gradient(circle at 50% 55%, #000 0%, #000 var(--fs-ink-r), transparent calc(var(--fs-ink-r) + 10%));
+    animation: fs-ink-soak 1.15s var(--ease-out-expo) 0.15s both;
+  }
+}
+
+/* The completion seal presses in after the number lands. */
+@keyframes fs-stamp-in {
+  0% { opacity: 0; transform: scale(1.6) rotate(-14deg); }
+  70% { opacity: 1; transform: scale(0.94) rotate(3deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0); }
+}
+
+.fs-stamp {
+  animation: fs-stamp-in 0.62s var(--ease-spring) 1.05s both;
+}
+
 @keyframes fs-halo-breathe {
   0%, 100% { opacity: 0.55; transform: scale(0.94); }
   50% { opacity: 1; transform: scale(1.06); }
 }
 
 .fs-halo {
-  background: radial-gradient(circle, hsl(236 85% 58% / 0.34), hsl(236 85% 58% / 0) 68%);
+  background: radial-gradient(circle, hsl(38 85% 58% / 0.34), hsl(38 85% 58% / 0) 68%);
   animation: fs-halo-breathe 3.2s ease-in-out 1.2s infinite;
 }
 
@@ -54,7 +85,7 @@
   inset: -40% -20% auto;
   height: 70%;
   pointer-events: none;
-  background: radial-gradient(60% 60% at 50% 40%, hsl(236 85% 56% / 0.18), transparent 70%);
+  background: radial-gradient(60% 60% at 50% 40%, hsl(38 85% 56% / 0.18), transparent 70%);
 }
 
 @keyframes fs-cta-shine {
@@ -68,7 +99,7 @@
   inset: 0 auto 0 0;
   width: 36%;
   pointer-events: none;
-  background: linear-gradient(90deg, transparent, hsl(236 70% 96% / 0.5), transparent);
+  background: linear-gradient(90deg, transparent, hsl(38 70% 96% / 0.5), transparent);
   animation: fs-cta-shine 3.4s var(--ease-in-out-soft) 1.6s infinite;
 }
 
@@ -108,7 +139,7 @@
 
 .fs-quiz-options [data-quiz-option-index]:hover:not(:disabled) {
   transform: translate3d(0, -1px, 0);
-  box-shadow: 0 6px 18px -10px hsl(228 22% 24% / 0.35);
+  box-shadow: 0 6px 18px -10px hsl(40 22% 24% / 0.35);
 }
 
 .fs-quiz-options [data-quiz-option-index]:active:not(:disabled) {
@@ -133,7 +164,7 @@
 /* Graphite field; one faint indigo pool sits low behind the rating dock so the eye stays on the card. */
 .freestyle-stage {
   background:
-    radial-gradient(90% 38% at 50% 104%, hsl(236 76% 56% / 0.08), transparent 70%),
+    radial-gradient(90% 38% at 50% 104%, hsl(38 76% 56% / 0.08), transparent 70%),
     var(--color-stage);
 }
 
@@ -141,9 +172,9 @@
    backdrop-filter re-blurs the strip under each one on every map repaint. Phones
    were already opaque and smooth; desktop kept the blur and dropped frames. */
 .freestyle-stage-glass {
-  background: hsl(228 8.8% 9% / 0.96);
+  background: hsl(40 8.8% 9% / 0.96);
   box-shadow:
-    inset 0 1px 0 hsl(236 42% 90% / 0.06),
+    inset 0 1px 0 hsl(38 42% 90% / 0.06),
     0 14px 36px -10px rgb(0 0 0 / 0.55);
 }
 
@@ -153,11 +184,11 @@
    re-blurs that strip on every flip frame and was the freestyle frame drop. */
 .freestyle-rating-dock {
   background:
-    linear-gradient(180deg, hsl(236 51% 60% / 0.07), transparent 38%),
-    hsl(228 8.8% 9% / 0.96);
+    linear-gradient(180deg, hsl(38 51% 60% / 0.07), transparent 38%),
+    hsl(40 8.8% 9% / 0.96);
   box-shadow:
-    inset 0 1px 0 hsl(236 49% 88% / 0.08),
-    0 -1px 0 hsl(236 80% 60% / 0.06),
+    inset 0 1px 0 hsl(38 49% 88% / 0.08),
+    0 -1px 0 hsl(38 80% 60% / 0.06),
     0 18px 44px -12px rgb(0 0 0 / 0.6);
 }
 
@@ -168,13 +199,13 @@
   color: var(--color-stage-ink);
   border-color: color-mix(in oklab, var(--tone) 34%, transparent);
   background:
-    linear-gradient(180deg, hsl(236 56% 96% / 0.10), transparent 46%),
+    linear-gradient(180deg, hsl(38 56% 96% / 0.10), transparent 46%),
     radial-gradient(120% 90% at 50% 0%, color-mix(in oklab, var(--tone) 22%, transparent), transparent 70%),
     color-mix(in oklab, var(--tone) 10%, var(--color-stage-raised));
   box-shadow:
-    inset 0 1px 0 hsl(236 56% 94% / 0.16),
-    inset 0 calc(var(--cap-depth) * -1) 0 color-mix(in oklab, var(--tone) 30%, hsl(228 16% 6%)),
-    0 2px 0 hsl(228 16% 3% / 0.6),
+    inset 0 1px 0 hsl(38 56% 94% / 0.16),
+    inset 0 calc(var(--cap-depth) * -1) 0 color-mix(in oklab, var(--tone) 30%, hsl(40 16% 6%)),
+    0 2px 0 hsl(40 16% 3% / 0.6),
     0 8px 16px -8px rgb(0 0 0 / 0.6);
   padding-bottom: calc(0.375rem + var(--cap-depth));
   transition:
@@ -195,9 +226,9 @@
     transform: translateY(-1px);
     border-color: color-mix(in oklab, var(--tone) 56%, transparent);
     box-shadow:
-      inset 0 1px 0 hsl(236 56% 94% / 0.2),
-      inset 0 calc(var(--cap-depth) * -1) 0 color-mix(in oklab, var(--tone) 40%, hsl(228 16% 6%)),
-      0 2px 0 hsl(228 16% 3% / 0.6),
+      inset 0 1px 0 hsl(38 56% 94% / 0.2),
+      inset 0 calc(var(--cap-depth) * -1) 0 color-mix(in oklab, var(--tone) 40%, hsl(40 16% 6%)),
+      0 2px 0 hsl(40 16% 3% / 0.6),
       0 12px 24px -10px color-mix(in oklab, var(--tone) 75%, transparent);
   }
 }
@@ -206,9 +237,9 @@
 .freestyle-rate-button:active:not(:disabled) {
   transform: translateY(3px);
   box-shadow:
-    inset 0 1px 0 hsl(236 56% 94% / 0.1),
-    inset 0 -1px 0 color-mix(in oklab, var(--tone) 30%, hsl(228 16% 6%)),
-    0 0 0 hsl(228 16% 3% / 0.6),
+    inset 0 1px 0 hsl(38 56% 94% / 0.1),
+    inset 0 -1px 0 color-mix(in oklab, var(--tone) 30%, hsl(40 16% 6%)),
+    0 0 0 hsl(40 16% 3% / 0.6),
     0 3px 8px -6px rgb(0 0 0 / 0.6);
   transition-duration: 60ms;
 }
@@ -217,12 +248,12 @@
   transform: translateY(2px);
   border-color: color-mix(in oklab, var(--tone) 85%, white 10%);
   background:
-    linear-gradient(180deg, hsl(236 56% 96% / 0.14), transparent 50%),
+    linear-gradient(180deg, hsl(38 56% 96% / 0.14), transparent 50%),
     radial-gradient(120% 100% at 50% 0%, color-mix(in oklab, var(--tone) 50%, transparent), transparent 75%),
     color-mix(in oklab, var(--tone) 28%, var(--color-stage-raised));
   box-shadow:
-    inset 0 1px 0 hsl(236 56% 96% / 0.22),
-    inset 0 -2px 0 color-mix(in oklab, var(--tone) 55%, hsl(228 16% 6%)),
+    inset 0 1px 0 hsl(38 56% 96% / 0.22),
+    inset 0 -2px 0 color-mix(in oklab, var(--tone) 55%, hsl(40 16% 6%)),
     0 0 0 3px color-mix(in oklab, var(--tone) 26%, transparent),
     0 10px 26px -8px color-mix(in oklab, var(--tone) 80%, transparent);
 }
@@ -348,14 +379,14 @@
 }
 
 /* Heat climbs indigo → violet → magenta → rose: still hotter as the streak grows, on the app's own hues. */
-.freestyle-combo-heat-0 { --heat: hsl(228 30% 72%); }
+.freestyle-combo-heat-0 { --heat: hsl(40 30% 72%); }
 .freestyle-combo-heat-1 { --heat: var(--color-stage-glow); }
 .freestyle-combo-heat-2 { --heat: hsl(262 80% 70%); }
 .freestyle-combo-heat-3 { --heat: hsl(300 66% 66%); }
 .freestyle-combo-heat-4 {
   --heat: hsl(340 84% 66%);
   background:
-    linear-gradient(120deg, hsl(236 84% 66% / 0.3), hsl(300 66% 66% / 0.28), hsl(340 84% 66% / 0.3)),
+    linear-gradient(120deg, hsl(38 84% 66% / 0.3), hsl(300 66% 66% / 0.28), hsl(340 84% 66% / 0.3)),
     var(--color-stage-overlay);
   background-size: 200% 100%;
   animation: freestyle-combo-blaze 2.4s linear infinite;
@@ -367,6 +398,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .fs-stamp { animation: none; }
   .freestyle-rate-button,
   .freestyle-rate-button:active:not(:disabled),
   .freestyle-rate-button:hover:not(:disabled) {
@@ -414,7 +446,7 @@
   inset: 0;
   z-index: 60;
   border-radius: inherit;
-  background: hsl(228 16% 3%);
+  background: hsl(40 16% 3%);
 }
 
 .fs-depth::before {
@@ -552,7 +584,7 @@
   font-size: 0.75rem;
   font-weight: 600;
   pointer-events: none;
-  box-shadow: 0 14px 36px -10px rgb(0 0 0 / 0.6), inset 0 1px 0 hsl(236 49% 92% / 0.08);
+  box-shadow: 0 14px 36px -10px rgb(0 0 0 / 0.6), inset 0 1px 0 hsl(38 49% 92% / 0.08);
   transform: translate3d(-50%, 0, 0);
   animation: fs-edge-hint-in 420ms var(--ease-spring) both;
 }
