@@ -783,7 +783,7 @@ if __name__ == "__main__":
 
 
 class PalaceEditorBindingRehomeTests(RouterTestCase):
-    """Deleting a card must move its questions to the root, not orphan them."""
+    """Deleting a card must keep its questions bound to a surviving node."""
 
     def _doc(self, *, with_child: bool) -> dict:
         root_data = {"uid": "root", "text": "细胞", "memoryAnkiRootKind": "palace"}
@@ -851,4 +851,82 @@ class PalaceEditorBindingRehomeTests(RouterTestCase):
             self.assertEqual(
                 [(row.node_uid, row.reason) for row in rows],
                 [("root", REMOVED_NODE_ROOT_REASON)],
+            )
+
+    def test_removing_a_card_rehomes_its_question_to_nearest_surviving_parent(self):
+        from memory_anki.infrastructure.db._tables.palaces import (
+            PalaceQuizQuestion,
+            PalaceQuizQuestionNodeBinding,
+        )
+        from memory_anki.modules.quiz.application.node_binding import (
+            REMOVED_NODE_ANCESTOR_REASON,
+        )
+
+        before_doc = {
+            "root": {
+                "data": {"uid": "root", "text": "细胞", "memoryAnkiRootKind": "palace"},
+                "children": [
+                    {
+                        "data": {"uid": "node-parent", "text": "细胞器"},
+                        "children": [
+                            {"data": {"uid": "node-child", "text": "线粒体"}, "children": []}
+                        ],
+                    }
+                ],
+            }
+        }
+        after_doc = {
+            "root": {
+                "data": {"uid": "root", "text": "细胞", "memoryAnkiRootKind": "palace"},
+                "children": [
+                    {"data": {"uid": "node-parent", "text": "细胞器"}, "children": []}
+                ],
+            }
+        }
+
+        with self.SessionLocal() as session:
+            palace = Palace(title="细胞", description="")
+            session.add(palace)
+            session.flush()
+            save_palace_editor_state(
+                session,
+                palace,
+                {"editor_doc": before_doc, "editor_source": "palace_edit"},
+            )
+            question = PalaceQuizQuestion(
+                palace_id=palace.id,
+                question_type="multiple_choice",
+                stem="线粒体的功能是？",
+                options_json='[{"id":"A","text":"供能"},{"id":"B","text":"储水"}]',
+                answer_payload_json='{"correct_option_id":"A"}',
+                analysis="解析",
+                lifecycle_status="published",
+            )
+            session.add(question)
+            session.flush()
+            session.add(
+                PalaceQuizQuestionNodeBinding(
+                    palace_id=palace.id,
+                    question_id=question.id,
+                    node_uid="node-child",
+                    reason="手动绑定",
+                    source="manual",
+                )
+            )
+            session.commit()
+
+            save_palace_editor_state(
+                session,
+                palace,
+                {"editor_doc": after_doc, "editor_source": "palace_edit_autosave"},
+            )
+
+            rows = (
+                session.query(PalaceQuizQuestionNodeBinding)
+                .filter(PalaceQuizQuestionNodeBinding.question_id == question.id)
+                .all()
+            )
+            self.assertEqual(
+                [(row.node_uid, row.reason) for row in rows],
+                [("node-parent", REMOVED_NODE_ANCESTOR_REASON)],
             )

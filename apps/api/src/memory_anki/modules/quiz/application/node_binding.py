@@ -30,6 +30,7 @@ MergeMode = Literal["replace_all", "fill_unbound"]
 DEFAULT_ROOT_BINDING_REASON = "default-root-binding"
 DEFAULT_ROOT_BINDING_SOURCE = "manual"
 REMOVED_NODE_ROOT_REASON = "节点删除后归到根节点"
+REMOVED_NODE_ANCESTOR_REASON = "节点删除后归到最近父级节点"
 
 
 def same_palace_binding_palace_id(
@@ -200,13 +201,14 @@ def rehome_orphaned_question_bindings(
     *,
     palace_id: int,
     editor_doc: Any,
+    previous_editor_doc: Any = None,
 ) -> dict[str, int]:
     """Keep every question attached to a node that still exists.
 
     Deleting a card must not orphan its questions: an edge whose ``node_uid`` is
-    gone from the document is moved to the palace root when the question has no
-    other live binding, and dropped when the question is still bound elsewhere
-    (a second root edge would only double-count it).
+    gone from the document is moved to the nearest surviving ancestor when the
+    question has no other live binding, and dropped when the question is still
+    bound elsewhere (a second edge would only double-count it).
 
     A document with no nodes at all is left untouched — there is nowhere safe to
     point, and the caller may be hydrating a blank palace. Does not commit;
@@ -216,7 +218,22 @@ def rehome_orphaned_question_bindings(
     live_uids = {str(uid).strip() for uid in descendants if str(uid).strip()}
     if not live_uids:
         return {"rehomed": 0, "dropped": 0}
-    root_uid = resolve_palace_root_node_uid(editor_doc)
+    root_uid, _live_nodes = build_document_tree(editor_doc)
+    if not root_uid or root_uid not in live_uids:
+        root_uid = resolve_palace_root_node_uid(editor_doc)
+    _previous_root_uid, previous_nodes = build_document_tree(previous_editor_doc)
+
+    def nearest_live_parent_uid(removed_uid: str) -> str | None:
+        node = previous_nodes.get(removed_uid)
+        parent_uid = node.get("parent_uid") if node else None
+        visited: set[str] = set()
+        while parent_uid and parent_uid not in visited:
+            visited.add(parent_uid)
+            if parent_uid in live_uids:
+                return parent_uid
+            parent = previous_nodes.get(parent_uid)
+            parent_uid = parent.get("parent_uid") if parent else None
+        return root_uid
 
     rows = (
         session.query(PalaceQuizQuestionNodeBinding)
@@ -252,8 +269,13 @@ def rehome_orphaned_question_bindings(
             dropped += len(orphan_rows)
             continue
         kept = orphan_rows[0]
-        kept.node_uid = root_uid
-        kept.reason = REMOVED_NODE_ROOT_REASON
+        target_uid = nearest_live_parent_uid(str(kept.node_uid or "").strip())
+        kept.node_uid = target_uid or root_uid
+        kept.reason = (
+            REMOVED_NODE_ANCESTOR_REASON
+            if target_uid and target_uid != root_uid
+            else REMOVED_NODE_ROOT_REASON
+        )
         kept.updated_at = now
         rehomed += 1
         extra = orphan_rows[1:]
@@ -715,6 +737,8 @@ from .node_binding_ops import (  # noqa: E402
 __all__ = [
     "DEFAULT_ROOT_BINDING_REASON",
     "DEFAULT_ROOT_BINDING_SOURCE",
+    "REMOVED_NODE_ANCESTOR_REASON",
+    "REMOVED_NODE_ROOT_REASON",
     "apply_quiz_node_binding_preview",
     "auto_bind_palace_questions_by_text",
     "compact_mindmap_with_uids",

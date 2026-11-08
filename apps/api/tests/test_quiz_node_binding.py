@@ -13,6 +13,7 @@ from memory_anki.infrastructure.db._tables.palaces import (
 )
 from memory_anki.modules.quiz.application.node_binding import (
     DEFAULT_ROOT_BINDING_REASON,
+    REMOVED_NODE_ANCESTOR_REASON,
     REMOVED_NODE_ROOT_REASON,
     auto_bind_palace_questions_by_text,
     compact_mindmap_with_uids,
@@ -292,7 +293,61 @@ def _add_binding(
     return row
 
 
-def test_deleted_child_binding_falls_back_to_root(db_session) -> None:
+def test_deleted_child_binding_moves_to_nearest_surviving_parent(db_session) -> None:
+    previous_doc = {
+        "root": {
+            "data": {"uid": "root", "text": "根"},
+            "children": [
+                {
+                    "data": {"uid": "n-grandparent", "text": "细胞"},
+                    "children": [
+                        {
+                            "data": {"uid": "n-parent", "text": "细胞器"},
+                            "children": [
+                                {"data": {"uid": "n-child", "text": "线粒体"}, "children": []}
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+    }
+    palace = _add_palace(db_session, title="细胞", nodes=[])
+    question = _add_question(db_session, palace_id=int(palace.id), stem="线粒体功能")
+    _add_binding(
+        db_session,
+        palace_id=int(palace.id),
+        question_id=int(question.id),
+        node_uid="n-child",
+    )
+    db_session.commit()
+
+    result = rehome_orphaned_question_bindings(
+        db_session,
+        palace_id=int(palace.id),
+        editor_doc={
+            "root": {
+                "data": {"uid": "root", "text": "根"},
+                "children": [
+                    {
+                        "data": {"uid": "n-grandparent", "text": "细胞"},
+                        "children": [],
+                    }
+                ],
+            }
+        },
+        previous_editor_doc=previous_doc,
+    )
+    db_session.commit()
+
+    assert result == {"rehomed": 1, "dropped": 0}
+    bindings = list_question_node_bindings(db_session, int(question.id))
+    assert [(item["node_uid"], item["reason"]) for item in bindings] == [
+        ("n-grandparent", REMOVED_NODE_ANCESTOR_REASON)
+    ]
+
+
+def test_deleted_top_level_child_binding_falls_back_to_root(db_session) -> None:
     palace = _add_palace(db_session, title="细胞", nodes=[("n-child", "线粒体")])
     question = _add_question(db_session, palace_id=int(palace.id), stem="线粒体功能")
     _add_binding(
@@ -307,6 +362,7 @@ def test_deleted_child_binding_falls_back_to_root(db_session) -> None:
         db_session,
         palace_id=int(palace.id),
         editor_doc=_mindmap_doc(),
+        previous_editor_doc=palace.editor_doc,
     )
     db_session.commit()
 

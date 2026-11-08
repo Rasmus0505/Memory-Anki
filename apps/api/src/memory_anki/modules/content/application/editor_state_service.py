@@ -271,12 +271,17 @@ def save_palace_editor_state(
         palace.editor_doc = serialize_editor_payload(doc)
         saved_editor_doc = doc
         # A card that just went away must not take its questions with it: move
-        # orphaned bindings to the palace root inside the same transaction.
+        # orphaned bindings to the nearest surviving ancestor in the same transaction.
         from memory_anki.modules.quiz.public.commands import (
             rehome_orphaned_question_bindings,
         )
 
-        rehome_orphaned_question_bindings(session, palace_id=palace.id, editor_doc=doc)
+        rehome_orphaned_question_bindings(
+            session,
+            palace_id=palace.id,
+            editor_doc=doc,
+            previous_editor_doc=previous_doc,
+        )
     else:
         should_reconcile = False
     if config_input is not None:
