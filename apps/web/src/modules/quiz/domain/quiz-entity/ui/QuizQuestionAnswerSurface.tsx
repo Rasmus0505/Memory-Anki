@@ -20,7 +20,7 @@ type QuizQuestionMark = {
  * The host owns scope, navigation, persistence and any metadata/actions. This
  * component owns only the visual order that must stay identical: scaled stem,
  * answer interaction and optional mark control. Keeping that boundary lets
- * palace practice, freestyle and node-bound windows use the same answering
+ * palace practice, freestyle and direct question-set windows use the same answering
  * evidence without sharing their queue or management state.
  */
 export function QuizQuestionAnswerSurface({

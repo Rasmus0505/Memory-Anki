@@ -343,7 +343,7 @@ export interface ClientPreferences {
   quiz_font_scale?: Record<string, unknown> | null
   /** Automatic multiple-choice option shuffling threshold and enabled state. */
   quiz_option_shuffle?: Record<string, unknown> | null
-  /** Shared do-question shortcuts for freestyle 做题 and node-bound quiz. */
+  /** Shared do-question shortcuts for every answering window. */
   quiz_shortcuts?: Record<string, unknown> | null
   /** Floating-window size and position as viewport ratios, shared across devices. */
   window_layouts?: Record<string, unknown> | null
