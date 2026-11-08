@@ -33,6 +33,8 @@ interface Harness {
   flingTo: (index: number) => void
   /** A progress-rail jump: straight to an arbitrary page. */
   jumpTo: (index: number) => void
+  /** A scroll nobody gestured: a rating reflow / native snap moved the scroller. */
+  nativeScrollTo: (index: number) => void
   visualIndex: number
   currentIndex: number
 }
@@ -80,6 +82,15 @@ function mount(cards: FreestyleCard[]) {
       navigateNext: nav.navigateNext,
       navigatePrevious: nav.navigatePrevious,
       flingTo: (index: number) => {
+        // The learner's gesture: wheel/touch intent, then the scroll it causes.
+        document.querySelector('[data-testid="feed-scroller"]')?.dispatchEvent(
+          new WheelEvent('wheel', { bubbles: true, deltaY: 0 }),
+        )
+        nav.handleScroll({
+          currentTarget: { clientHeight: PAGE, scrollTop: index * PAGE },
+        } as never)
+      },
+      nativeScrollTo: (index: number) => {
         nav.handleScroll({
           currentTarget: { clientHeight: PAGE, scrollTop: index * PAGE },
         } as never)
@@ -88,7 +99,7 @@ function mount(cards: FreestyleCard[]) {
       visualIndex: nav.visualIndex,
       currentIndex,
     }
-    return null
+    return <div data-testid="feed-scroller" ref={nav.scrollRef} />
   }
   render(<Probe />)
   return captured
@@ -157,6 +168,19 @@ describe('上一张 after a multi-page fling', () => {
     // 上一张 must go to the page above (a), never back down to d.
     act(() => harness.current?.navigatePrevious())
     expect(harness.current?.currentIndex).toBe(0)
+  })
+
+  it('does not turn the page when a rating reflow moves the scroller without a gesture', () => {
+    const harness = mount([card('a'), card('b'), card('c')])
+
+    // A rating ack can reflow the feed and snap it one page forward. Nobody
+    // touched the screen: the committed card must stay, not follow the drift.
+    act(() => harness.current?.nativeScrollTo(1))
+    act(() => {
+      vi.advanceTimersByTime(200)
+    })
+    expect(harness.current?.currentIndex).toBe(0)
+    expect(harness.current?.visualIndex).toBe(0)
   })
 
   it('steps back one page at a time after a long fling', () => {

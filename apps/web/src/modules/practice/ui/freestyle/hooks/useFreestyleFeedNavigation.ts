@@ -42,6 +42,9 @@ import {
 } from '@/modules/practice/ui/freestyle/model/freestyleScrollChannel'
 import { useFreestyleEdgeRubberBand } from '@/modules/practice/ui/freestyle/hooks/useFreestyleEdgeRubberBand'
 import { useFreestyleWheelPaging } from '@/modules/practice/ui/freestyle/hooks/useFreestyleWheelPaging'
+import { useFreestyleFeedScrollGeometry } from '@/modules/practice/ui/freestyle/hooks/useFreestyleFeedScrollGeometry'
+import { useFreestyleFeedScrollIntent } from '@/modules/practice/ui/freestyle/hooks/useFreestyleFeedScrollIntent'
+import { useFreestyleFeedScrollSettle } from '@/modules/practice/ui/freestyle/hooks/useFreestyleFeedScrollSettle'
 import { prefersReducedMotion } from '@/shared/lib/prefersReducedMotion'
 import { recordSessionRecorderView } from '@/shared/debug/session-recorder'
 
@@ -105,9 +108,6 @@ export function useFreestyleFeedNavigation({
   const indexChangeFromScrollRef = useRef(false)
   /** True while the user is actively dragging/wheeling the feed. */
   const userScrollingRef = useRef(false)
-  /** Re-arms the settle timer when a gesture lands inside a programmatic window. */
-  const rescheduleSettleRef = useRef<(() => void) | null>(null)
-  const scrollIdleTimerRef = useRef<number | null>(null)
   /** Touch/pen pointers currently down. A settle during the drag announces the wrong card. */
   const touchPointersRef = useRef(0)
   const pageHeightRef = useRef(0)
@@ -122,6 +122,18 @@ export function useFreestyleFeedNavigation({
   visualIndexRef.current = visualIndex
   roundCompleteRef.current = roundComplete
   const viewingCompleteSlot = isFreestyleCompleteSlot(visualIndex, cards.length, roundComplete)
+
+  useFreestyleFeedScrollGeometry({
+    scrollRef,
+    pageHeightRef,
+    attachKey: `${loading}:${cards.length}`,
+  })
+
+  const { has: hasUserScrollIntent } = useFreestyleFeedScrollIntent({
+    scrollRef,
+    touchPointersRef,
+    attachKey: `${loading}:${cards.length}`,
+  })
 
   const refreshCanGoPrevious = useCallback(
     (index = currentIndex, list = cards) => {
@@ -208,7 +220,10 @@ export function useFreestyleFeedNavigation({
       cancelScrollAnimationRef.current?.()
       cancelScrollAnimationRef.current = null
       const pageHeight = node.clientHeight
-      const targetTop = index * pageHeight
+      // One pixel inside the page: an exact page boundary is also the next page's
+      // snap start, and a mandatory snap may resolve that tie onto the neighbour.
+      // Landing at 1px keeps this page unambiguously nearest after a reflow.
+      const targetTop = index * pageHeight + (index > 0 ? 1 : 0)
       programmaticScrollRef.current = true
       const release = (delayMs: number) => {
         window.setTimeout(() => {
@@ -411,87 +426,23 @@ export function useFreestyleFeedNavigation({
   // Window-level paging so 上一张/下一张 also work when focus is not in the scroller.
   const feedShortcuts = useFreestyleFeedKeyboard({ navigateNext, navigatePrevious })
 
-  /**
-   * After finger/wheel inertia ends: apply deferred restudy placement, then pin
-   * the card still under the viewport by id. Never advances past that card.
-   */
-  const flushScrollSettled = useCallback(() => {
-    userScrollingRef.current = false
-    // A gesture that began inside the 50ms programmatic window must not be
-    // swallowed: re-check once that flag has been released.
-    if (programmaticScrollRef.current) {
-      rescheduleSettleRef.current?.()
-      return
-    }
-    const visual = visualIndexRef.current
-    const listLength = queueRef.current.length
-    if (isFreestyleCompleteSlot(visual, listLength, roundCompleteRef.current)) {
-      const pinned = listLength
-      visualIndexRef.current = pinned
-      setVisualIndex(pinned)
-      markSettled(pinned, true)
-      const completeNode = scrollRef.current
-      const completePageHeight = pageHeightRef.current || completeNode?.clientHeight || 0
-      if (!completeNode || !completePageHeight) return
-      const completeTop = pinned * completePageHeight
-      if (Math.abs(completeNode.scrollTop - completeTop) > 2) {
-        scrollToIndex(pinned, 'auto')
-      }
-      return
-    }
-    if (visual !== currentIndexRef.current) {
-      navigateToIndex(visual, { scroll: false, reorderRestudy: false })
-    }
-    const pinned = flushDeferredRestudy()
-    setVisualIndex(pinned)
-    visualIndexRef.current = pinned
-    markSettled(pinned, true)
-    const node = scrollRef.current
-    const pageHeight = pageHeightRef.current || node?.clientHeight || 0
-    if (!node || !pageHeight) return
-    const expectedTop = pinned * pageHeight
-    if (Math.abs(node.scrollTop - expectedTop) > 2) {
-      scrollToIndex(pinned, 'auto')
-    }
-  }, [flushDeferredRestudy, markSettled, navigateToIndex, queueRef, scrollToIndex])
-
-  useEffect(() => {
-    const node = scrollRef.current
-    if (!node) return
-    const updatePageHeight = () => {
-      pageHeightRef.current = node.clientHeight
-      // The depth stack's pinned counter-translate must equal exactly one page.
-      node.style.setProperty('--fs-page-h', `${node.clientHeight}px`)
-    }
-    updatePageHeight()
-    const observer = new ResizeObserver(updatePageHeight)
-    observer.observe(node)
-    window.visualViewport?.addEventListener('resize', updatePageHeight)
-    return () => {
-      observer.disconnect()
-      window.visualViewport?.removeEventListener('resize', updatePageHeight)
-    }
-  }, [loading, cards.length])
-
-  const settleWhileTouchingRef = useRef<() => void>(() => {})
-  const scheduleScrollSettle = useCallback(() => {
-    if (scrollIdleTimerRef.current != null) {
-      window.clearTimeout(scrollIdleTimerRef.current)
-    }
-    // One trailing settle for both `scroll` and `scrollend`. iOS can fire
-    // `scrollend` before snap finishes; flushing there announces the wrong card
-    // and the real landing is then swallowed by the page-turn rate limit.
-    scrollIdleTimerRef.current = window.setTimeout(() => {
-      scrollIdleTimerRef.current = null
-      if (touchPointersRef.current > 0) {
-        settleWhileTouchingRef.current()
-        return
-      }
-      flushScrollSettled()
-    }, 90)
-  }, [flushScrollSettled])
-  settleWhileTouchingRef.current = scheduleScrollSettle
-  rescheduleSettleRef.current = scheduleScrollSettle
+  const { scheduleScrollSettle } = useFreestyleFeedScrollSettle({
+    scrollRef,
+    queueRef,
+    programmaticScrollRef,
+    touchPointersRef,
+    userScrollingRef,
+    visualIndexRef,
+    currentIndexRef,
+    roundCompleteRef,
+    pageHeightRef,
+    hasUserScrollIntent,
+    flushDeferredRestudy,
+    markSettled,
+    navigateToIndex,
+    scrollToIndex,
+    setVisualIndex,
+  })
 
   useFreestyleWheelPaging(scrollRef, `${loading}:${cards.length}`, navigateNext, navigatePrevious)
 
@@ -530,14 +481,6 @@ export function useFreestyleFeedNavigation({
       window.removeEventListener('blur', onBlur)
     }
   }, [scheduleScrollSettle, cards.length, loading])
-
-  useEffect(() => {
-    return () => {
-      if (scrollIdleTimerRef.current != null) {
-        window.clearTimeout(scrollIdleTimerRef.current)
-      }
-    }
-  }, [])
 
   /**
    * Cold open can land on the closing settlement slot, which is not a queue
@@ -645,12 +588,25 @@ export function useFreestyleFeedNavigation({
     (event: UIEvent<HTMLDivElement>) => {
       const element = event.currentTarget
       const pageHeight = pageHeightRef.current || element.clientHeight
+      const intent = hasUserScrollIntent()
       // Published for programmatic flights too, so the rail follows keyboard paging.
-      if (pageHeight && cards.length > 0) {
+      // A reflow/snap drift is not a page the learner moved to — keep the rail put.
+      if (pageHeight && cards.length > 0 && (programmaticScrollRef.current || intent)) {
         scrollChannel.publish(scrollFrameFromPosition(element.scrollTop / pageHeight, cardIdsRef.current, false))
       }
-      if (programmaticScrollRef.current) return
+      if (programmaticScrollRef.current) {
+        // Re-check once the programmatic window releases: a scroll that lands
+        // inside it (layout snap, fast gesture) must still get its settle.
+        scheduleScrollSettle()
+        return
+      }
       if (!pageHeight || cards.length === 0) return
+      if (!intent) {
+        // A reflow / native snap moved the page, not the learner. Let the
+        // settle put the committed card back under the viewport; never turn it.
+        scheduleScrollSettle()
+        return
+      }
       userScrollingRef.current = true
       const nextIndex = Math.max(
         0,
@@ -666,7 +622,7 @@ export function useFreestyleFeedNavigation({
       }
       scheduleScrollSettle()
     },
-    [cards.length, roundComplete, scheduleScrollSettle, scrollChannel],
+    [cards.length, hasUserScrollIntent, roundComplete, scheduleScrollSettle, scrollChannel],
   )
 
   const handleKeyDown = useCallback(
