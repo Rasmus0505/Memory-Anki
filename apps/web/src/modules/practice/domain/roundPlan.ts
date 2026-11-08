@@ -87,7 +87,12 @@ function shouldReorderUnstartedFreestylePlan(
 function lockedPlanIds(cardsById: Record<string, FreestyleRoundPlanCard>) {
   const locked = new Set<string>()
   Object.values(cardsById).forEach((item) => {
-    if (item.status === 'completed' || item.status === 'excluded' || item.status === 'retry') {
+    if (
+      item.status === 'completed'
+      || item.status === 'excluded'
+      || item.status === 'retry'
+      || item.lastRating != null
+    ) {
       locked.add(item.cardId)
     }
     if (item.occurrenceKind === 'retry' || item.status === 'retry') {
@@ -145,7 +150,7 @@ export function createRoundPlan(
   now = Date.now(),
 ): FreestyleRoundPlanState {
   // Never inherit another round's completed/retry ledger into this plan — that
-  // left phantom 待重练 rows in 本轮安排 and blocked locate/settlement.
+  // left phantom 待重练 rows in 随心列表 and blocked locate/settlement.
   const prior = previous?.roundId === roundId ? previous : null
   const compressed = new Set(prior?.compressedIds ?? [])
   const nextById: Record<string, FreestyleRoundPlanCard> = {}
@@ -192,7 +197,7 @@ export function createRoundPlan(
     if (compressed.has(id)) return
     if (item.status === 'excluded' || item.status === 'completed' || item.status === 'retry') {
       if (item.occurrenceKind === 'retry') {
-        // retry:{roundId}:... from another round must not haunt 本轮安排.
+        // retry:{roundId}:... from another round must not haunt 随心列表.
         if (id.startsWith('retry:') && !id.startsWith(`retry:${roundId}:`)) return
         const source = item.sourceCardId || item.cardId
         if (nextById[id] || retrySourceKept.has(source)) return
@@ -293,11 +298,12 @@ export function applyRoundPlanOrder(cards: FreestyleCard[], plan: FreestyleRound
 }
 
 export function reorderRoundPlan(plan: FreestyleRoundPlanState, orderIds: string[]) {
+  // One lock rule for every consumer: completed / excluded / retry rows keep
+  // their slot, and so does the source of a live retry. A source that still
+  // owes a 重练 must stay where the retry will be published after it.
+  const locked = lockedPlanIds(plan.cardsById)
   const known = new Set(Object.keys(plan.cardsById))
-  const movable = plan.orderIds.filter((id) => {
-    const status = plan.cardsById[id]?.status
-    return known.has(id) && status !== 'completed' && status !== 'excluded'
-  })
+  const movable = plan.orderIds.filter((id) => known.has(id) && !locked.has(id))
   const requested = asStringList(orderIds).filter(
     (id) => known.has(id) && movable.includes(id),
   )
@@ -306,8 +312,7 @@ export function reorderRoundPlan(plan: FreestyleRoundPlanState, orderIds: string
   })
   let cursor = 0
   const next = plan.orderIds.map((id) => {
-    const status = plan.cardsById[id]?.status
-    if (status === 'completed' || status === 'excluded') return id
+    if (locked.has(id)) return id
     const replacement = requested[cursor]
     cursor += 1
     return replacement ?? id

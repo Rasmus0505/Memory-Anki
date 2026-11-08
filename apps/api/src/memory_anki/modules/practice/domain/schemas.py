@@ -67,6 +67,7 @@ class FreestyleRoundActionRequest(BaseModel):
     expected_version: int
     action: str
     card_id: str = ""
+    order_ids: list[str] = Field(default_factory=list, max_length=2000)
     occurrence_id: str = ""
     encounter_id: str = ""
     cards: list[dict[str, Any]] = Field(default_factory=list)

@@ -199,6 +199,9 @@ def test_small_settlement_clears_wrong_markers_for_settled_units(db_session, mon
     """小结算同时清掉节点角标与进度条的错误标记，未结算单元保持。"""
     import json
 
+    from memory_anki.modules.practice.application import (
+        round_settlement as settlement,
+    )
     from memory_anki.modules.practice.application import round_state_service as service
     from memory_anki.modules.practice.domain.round_plan import plan_from_cards
 
@@ -227,8 +230,10 @@ def test_small_settlement_clears_wrong_markers_for_settled_units(db_session, mon
         current_card_id="a",
     ))
     db_session.commit()
-    monkeypatch.setattr(service, "list_unit_node_members", lambda session, unit_ids: {"u1": ["node-1"]})
-    monkeypatch.setattr(service, "list_node_bindings_for_palaces", lambda session, palace_ids: [
+    # 小结算的错题清理已从 round_state_service 抽到 round_settlement；
+    # 补丁要打在实际调用依赖的模块上。
+    monkeypatch.setattr(settlement, "list_unit_node_members", lambda session, unit_ids: {"u1": ["node-1"]})
+    monkeypatch.setattr(settlement, "list_node_bindings_for_palaces", lambda session, palace_ids: [
         {"question_id": 11, "node_uid": "node-1"},
     ])
 

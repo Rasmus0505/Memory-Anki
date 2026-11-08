@@ -345,10 +345,12 @@ export interface FreestyleRoundActionRequest {
     | 'uncomplete'
     | 'exclude'
     | 'restore'
+    | 'reorder'
     | 'compress_completed'
     | 'bind_cards'
     | 'set_encounter'
   card_id?: string
+  order_ids?: string[]
   occurrence_id?: string
   encounter_id?: string
   cards?: FreestyleCard[]

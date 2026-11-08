@@ -19,6 +19,10 @@ from .round_plan_normalization import (  # noqa: F401 - compatibility re-exports
     plan_from_cards,
     snapshot_cards,
 )
+from .round_plan_queue import (  # noqa: F401 - facade re-exports
+    reorder_unscored_cards,
+    restore_card,
+)
 from .round_plan_values import (  # noqa: F401 - re-exported for sibling rules
     _append_unique,
     _day,
@@ -320,16 +324,6 @@ def exclude_card(plan: Mapping[str, Any], card_id: str) -> Plan:
     current = _text(next_plan.get("current_card_id"))
     if current == target or current in drop_ids:
         next_plan["current_card_id"] = next_unfinished_id(next_plan, after_id=target)
-    _sync_index(next_plan)
-    return next_plan
-
-
-def restore_card(plan: Mapping[str, Any], card_id: str) -> Plan:
-    next_plan = normalize_plan(plan)
-    target = _text(card_id)
-    if not target:
-        raise ValueError("card_id is required")
-    next_plan["excluded_ids"] = [item for item in next_plan["excluded_ids"] if item != target]
     _sync_index(next_plan)
     return next_plan
 

@@ -330,6 +330,7 @@ def api_freestyle_round_action(
             occurrence_id=data.occurrence_id,
             encounter_id=data.encounter_id,
             cards=list(data.cards or []),
+            order_ids=list(data.order_ids or []),
             partial_settlement=data.partial_settlement,
         )
     except ValueError as exc:

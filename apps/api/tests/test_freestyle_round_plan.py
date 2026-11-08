@@ -21,6 +21,8 @@ from memory_anki.modules.practice.domain.round_plan import (
     occurrence_id_for,
     plan_from_cards,
     plan_is_fully_handled,
+    reorder_unscored_cards,
+    restore_card,
     set_cursor,
 )
 from memory_anki.modules.practice.domain.round_plan_intraday import (
@@ -91,6 +93,49 @@ def _inserted(plan, source_card_id: str) -> dict:
     ]
     assert matches, f"expected inserted occurrence for {source_card_id}"
     return matches[-1]
+
+
+def test_reorder_only_moves_unscored_cards_and_preserves_cursor_and_ledgers():
+    plan = plan_from_cards([_card(key) for key in ["a", "done", "b", "hidden", "c", "weak"]])
+    plan = complete_card(plan, "done")
+    plan = exclude_card(plan, "hidden")
+    plan["encounters"]["weak"] = {"rating": 1, "status": "failed", "encounter_id": "e"}
+    plan = set_cursor(plan, "b")
+
+    reordered = reorder_unscored_cards(plan, ["unknown", "c", "done", "c", "b", "hidden"])
+
+    assert reordered["presented_ids"] == ["c", "done", "b", "hidden", "a", "weak"]
+    assert reordered["current_card_id"] == "b"
+    assert reordered["current_index"] == 2
+    assert reordered["completed_ids"] == plan["completed_ids"]
+    assert reordered["excluded_ids"] == plan["excluded_ids"]
+    assert reordered["encounters"] == plan["encounters"]
+    assert plan["presented_ids"] == ["a", "done", "b", "hidden", "c", "weak"]
+    assert append_today_cards(reordered, [_card(key) for key in ["a", "b", "c"]], today="")["presented_ids"] == reordered["presented_ids"]
+
+
+def test_reorder_locks_live_retry_and_its_source_without_an_encounter_cache():
+    plan = _rate(plan_from_cards([_card("a", unit_id="ua"), _card("b"), _card("c")]), "a", 1, "enc")
+    retry_id = plan["occurrences"][0]["occurrence_id"]
+    plan["encounters"] = {}
+
+    reordered = reorder_unscored_cards(plan, ["c", retry_id, "b", "a"])
+
+    assert reordered["presented_ids"] == ["a", retry_id, "c", "b"]
+    assert reordered["occurrences"] == plan["occurrences"]
+
+
+def test_restore_resolves_rebound_revision_and_does_not_touch_ratings_or_cursor():
+    plan = plan_from_cards([_card("review_unit:ua:r2", unit_id="ua", revision=2), _card("b")])
+    plan = exclude_card(plan, "review_unit:ua:r2")
+    cursor = plan["current_card_id"]
+    restored = restore_card(plan, "review_unit:ua:r1")
+
+    assert restored["excluded_ids"] == []
+    assert restored["completed_ids"] == []
+    assert restored["encounters"] == {}
+    assert restored["current_card_id"] == cursor
+    assert restore_card(restored, "review_unit:ua:r1") == restored
 
 
 def test_forget_inserts_a_retry_and_hard_settles_as_a_pass():

@@ -54,6 +54,71 @@ def _create(
     return response.json()
 
 
+def test_manual_reorder_conflict_retry_persists_latest_order_and_is_idempotent(make_client):
+    client = _client(make_client)
+    created = _create(client, operation_id="create-order", cards=_cards("a", "b", "c"))
+    url = f"/api/v1/freestyle/rounds/{created['round_id']}/actions"
+    first_body = {"operation_id": "order-1", "expected_version": created["version"],
+                  "action": "reorder", "order_ids": ["c", "a", "b"]}
+    first = client.post(url, json=first_body)
+    assert first.status_code == 200, first.text
+    assert first.json()["plan"]["presented_ids"] == ["c", "a", "b"]
+    assert first.json()["current_card_id"] == "a"
+    second_body = {"operation_id": "order-2", "expected_version": created["version"],
+                   "action": "reorder", "order_ids": ["b", "c", "a"]}
+    conflict = client.post(url, json=second_body).json()
+    assert conflict["conflict"] is True
+    assert conflict["plan"]["presented_ids"] == ["c", "a", "b"]
+    second_body["expected_version"] = conflict["version"]
+    second = client.post(url, json=second_body).json()
+    assert second["conflict"] is False
+    assert second["plan"]["presented_ids"] == ["b", "c", "a"]
+    replay = client.post(url, json=first_body).json()
+    assert replay["duplicate"] is True
+    assert replay["plan"]["presented_ids"] == ["b", "c", "a"]
+    fetched = client.get(f"/api/v1/freestyle/rounds/{created['round_id']}").json()
+    assert fetched["plan"]["presented_ids"] == ["b", "c", "a"]
+    hydrated = _create(client, operation_id="hydrate-order", cards=_cards("a", "b", "c"))
+    assert hydrated["plan"]["presented_ids"] == ["b", "c", "a"]
+    assert hydrated["plan"]["completed_ids"] == []
+    assert hydrated["plan"]["encounters"] == {}
+
+
+def test_restore_after_exclude_conflict_survives_round_hydration(make_client):
+    client = _client(make_client)
+    created = _create(client, operation_id="create-restore", cards=_cards("a", "b", "c"))
+    url = f"/api/v1/freestyle/rounds/{created['round_id']}/actions"
+    excluded = client.post(url, json={"operation_id": "exclude-b", "expected_version": created["version"],
+                                      "action": "exclude", "card_id": "b"}).json()
+    restore_body = {"operation_id": "restore-b", "expected_version": created["version"],
+                    "action": "restore", "card_id": "b"}
+    conflict = client.post(url, json=restore_body).json()
+    assert conflict["conflict"] is True
+    assert conflict["plan"]["excluded_ids"] == ["b"]
+    restore_body["expected_version"] = excluded["version"]
+    restored = client.post(url, json=restore_body).json()
+    assert restored["conflict"] is False
+    assert restored["plan"]["excluded_ids"] == []
+    assert restored["plan"]["completed_ids"] == []
+    assert restored["current_card_id"] == "a"
+    assert client.post(url, json=restore_body).json()["duplicate"] is True
+    hydrated = _create(client, operation_id="hydrate-restore", cards=_cards("a", "b", "c"))
+    assert hydrated["plan"]["excluded_ids"] == []
+    assert hydrated["plan"]["presented_ids"] == ["a", "b", "c"]
+    assert hydrated["plan"]["encounters"] == {}
+
+
+def test_reorder_rejects_oversized_payload(make_client):
+    client = _client(make_client)
+    created = _create(client, operation_id="create-limit", cards=_cards("a", "b"))
+    response = client.post(f"/api/v1/freestyle/rounds/{created['round_id']}/actions", json={
+        "operation_id": "oversized-order", "expected_version": created["version"],
+        "action": "reorder", "order_ids": ["a"] * 2001,
+    })
+    assert response.status_code == 422
+    assert client.get(f"/api/v1/freestyle/rounds/{created['round_id']}").json()["version"] == created["version"]
+
+
 def test_active_round_reorders_unstarted_when_palace_order_changes(make_client):
     client = _client(make_client)
     sequential = {
