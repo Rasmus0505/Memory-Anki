@@ -26,6 +26,12 @@ def unit_interval_days(row: ReviewUnitState) -> int:
         return max(0, (row.due_date - reviewed_on).days)
     if row.stage_index > 0:
         return INTERVAL_DAYS[clamp_stage(row.stage_index)]
+    # A merged or inherited row can know when it was last passed without a
+    # stored FSRS checkpoint. Its stage bucket is 0 only because the booking is
+    # today; the earned gap is still the distance from that pass, and reading it
+    # as first learning would report a reset that did not happen.
+    if row.has_passed and row.last_passed_at is not None:
+        return max(0, (row.due_date - study_day_of(row.last_passed_at)).days)
     return 0
 
 

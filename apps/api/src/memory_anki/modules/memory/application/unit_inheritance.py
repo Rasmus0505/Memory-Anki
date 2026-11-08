@@ -19,9 +19,10 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from memory_anki.core.time import study_day_of
 from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitState
 
-from .unit_scheduler import assert_schedulable_due
+from .unit_scheduler import INTERVAL_DAYS, assert_schedulable_due, clamp_stage
 
 
 @dataclass(frozen=True)
@@ -43,6 +44,18 @@ class InheritanceSource:
     # Any FSRS checkpoint at all. A row that was rated (even 忘记) has one; a
     # row that only exists because a mark was drawn does not.
     fsrs_last_review: datetime | None = None
+    # The full memory checkpoint travels with a merge. ``stage_index`` is only
+    # a display bucket of the booked due date, so a unit pulled forward (due
+    # today, stage 0) still remembers how well it was known; copying the bucket
+    # without this state would restart it at first learning.
+    fsrs_stability: float | None = None
+    fsrs_difficulty: float | None = None
+    fsrs_state: int | None = None
+    fsrs_step: int | None = None
+    fsrs_due_at: datetime | None = None
+    fsrs_scheduler_version: str | None = None
+    lapse_original_interval_days: int | None = None
+    lapse_started_on: date | None = None
 
     @classmethod
     def from_row(cls, row: ReviewUnitState) -> InheritanceSource:
@@ -52,6 +65,14 @@ class InheritanceSource:
             stage_index=row.stage_index, due_date=row.due_date,
             has_passed=row.has_passed, last_passed_at=row.last_passed_at,
             early_step=row.early_step, fsrs_last_review=row.fsrs_last_review,
+            fsrs_stability=row.fsrs_stability,
+            fsrs_difficulty=row.fsrs_difficulty,
+            fsrs_state=row.fsrs_state,
+            fsrs_step=row.fsrs_step,
+            fsrs_due_at=row.fsrs_due_at,
+            fsrs_scheduler_version=row.fsrs_scheduler_version,
+            lapse_original_interval_days=row.lapse_original_interval_days,
+            lapse_started_on=row.lapse_started_on,
         )
 
 
@@ -235,6 +256,57 @@ def inheritance_vote(
     )
 
 
+def has_fsrs_checkpoint(row: Any) -> bool:
+    """True when the row holds an actual FSRS memory state, not just a bucket."""
+    return bool(
+        getattr(row, "fsrs_stability", None) is not None
+        or getattr(row, "fsrs_last_review", None) is not None
+    )
+
+
+def _booked_interval_days(row: InheritanceSource) -> int:
+    """The gap the row was actually booked at, regardless of its display bucket."""
+    if row.fsrs_last_review is not None:
+        return max(0, (row.due_date - study_day_of(row.fsrs_last_review)).days)
+    if row.stage_index > 0:
+        return INTERVAL_DAYS[clamp_stage(row.stage_index)]
+    return 0
+
+
+def inheritance_memory_source(
+    sources: Sequence[InheritanceSource],
+    candidates: Sequence[InheritanceSource],
+    members: set[str],
+) -> InheritanceSource | None:
+    """The contributing unit whose FSRS checkpoint a merged unit should carry.
+
+    ``inheritance_vote`` only moves the level/due/pass projection, and
+    ``stage_index`` is a display bucket of the booked due date: a unit pulled
+    forward to today reads as stage 0 even though it was learned for weeks. If a
+    merge copied only that bucket, the merged unit would look brand new on its
+    next rating. The memory checkpoint is real evidence, so it is carried over
+    here.
+
+    The current owners (``sources``) speak first; when none of them has a
+    checkpoint -- e.g. an overlay unit created while the studied marks were
+    temporarily off -- the region's own prior incarnations are consulted. The
+    weakest checkpoint wins, matching the conservative merge rule.
+    """
+    region = set(members)
+    pools = (
+        list(sources),
+        [row for row in candidates if _members(row) & region],
+    )
+    for pool in pools:
+        checkpointed = [row for row in evidence_sources(pool) if has_fsrs_checkpoint(row)]
+        if checkpointed:
+            return min(
+                checkpointed,
+                key=lambda row: (_booked_interval_days(row), row.due_date, row.id),
+            )
+    return None
+
+
 def inherited_early_step(sources: list[InheritanceSource]) -> int | None:
     """The fixed-ladder counter of the weakest contributing unit.
 
@@ -276,8 +348,10 @@ def find_resurrectable(
 __all__ = [
     "evidence_sources",
     "find_resurrectable",
+    "has_fsrs_checkpoint",
     "has_learning_evidence",
     "inheritance_candidates",
+    "inheritance_memory_source",
     "inheritance_vote",
     "inherited_early_step",
     "overlapping_sources",

@@ -1,7 +1,7 @@
 """Content edits and new branches carry entry-time schedule evidence, never penalties."""
 
 import json
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 
 import pytest
 
@@ -9,6 +9,9 @@ from memory_anki.core.time import local_day
 from memory_anki.infrastructure.db._tables.palaces import Palace
 from memory_anki.infrastructure.db._tables.unit_reviews import ReviewUnitState
 from memory_anki.modules.memory.api import reconcile_palace_units
+from memory_anki.modules.memory.application.unit_schedule_projection import (
+    unit_interval_days,
+)
 
 
 def node(uid, *children, mark=False):
@@ -211,7 +214,14 @@ def test_unstudied_region_does_not_reset_a_whole_palace_merge(db_session):
     """
     palace = seed(db_session, document(node("a", mark=True), node("b", mark=True)))
     active = rows(db_session, palace)
+    today = local_day()
     schedule(active[("a", "mark")], 5, 30)
+    _store_checkpoint(
+        active[("a", "mark")],
+        stability=14.0,
+        reviewed_on=today - timedelta(days=14),
+        due=today + timedelta(days=30),
+    )
     _leave_unstudied(active[("b", "mark")])
     db_session.flush()
 
@@ -227,6 +237,42 @@ def test_unstudied_region_does_not_reset_a_whole_palace_merge(db_session):
     # The untouched region still makes the merged unit due, so its content is
     # reviewed instead of being silently skipped.
     assert root.due_date == local_day()
+
+
+def test_merge_never_books_a_unit_before_its_last_review(db_session):
+    """A stale leftover due date must not become the merged unit's booking.
+
+    Reported flow: a whole-palace mark inherited the due date of a never-studied
+    fragment (booked weeks before the memory checkpoint was last reviewed). The
+    gap then read as zero, the panel showed 首学, and the next 记得 jumped far out
+    instead of continuing from the interval the learner had earned.
+    """
+    palace = seed(db_session, document(node("a", mark=True), node("b", mark=True)))
+    active = rows(db_session, palace)
+    today = local_day()
+    studied = active[("a", "mark")]
+    schedule(studied, 4, 30)
+    _store_checkpoint(
+        studied,
+        stability=20.0,
+        reviewed_on=today - timedelta(days=20),
+        due=today + timedelta(days=30),
+    )
+    leftover = active[("b", "mark")]
+    _leave_unstudied(leftover)
+    leftover.due_date = today - timedelta(days=40)
+    db_session.flush()
+
+    palace.editor_doc = document(node("a"), node("b"), mark=True)
+    db_session.flush()
+    reconcile_palace_units(db_session, palace.id)
+    db_session.flush()
+
+    root = _whole_palace_row(db_session, palace)
+    assert root.due_date == today, "new content still comes due now, never 'before' the review"
+    assert root.fsrs_last_review == datetime.combine(today - timedelta(days=20), time(4))
+    assert unit_interval_days(root) == 20
+    assert root.fsrs_due_at == datetime.combine(today, time(4))
 
 
 def test_unstudied_region_does_not_reset_a_two_step_whole_palace_merge(db_session):
@@ -263,3 +309,99 @@ def test_merge_of_only_unstudied_units_still_starts_at_first_learning(db_session
 
     root = _whole_palace_row(db_session, palace)
     assert (root.stage_index, root.has_passed) == (0, False)
+    assert root.fsrs_stability is None
+    assert root.fsrs_last_review is None
+
+
+def _store_checkpoint(row, *, stability, reviewed_on, due):
+    row.fsrs_stability = stability
+    row.fsrs_difficulty = 5.0
+    row.fsrs_state = 2
+    row.fsrs_step = None
+    row.fsrs_due_at = datetime.combine(due, time(4))
+    row.fsrs_last_review = datetime.combine(reviewed_on, time(4))
+    row.fsrs_scheduler_version = "test"
+
+
+def test_merge_carries_the_weakest_memory_checkpoint(db_session):
+    """Four marked branches consolidated into one whole-palace unit.
+
+    Reported flow: three branches had been pulled forward to today (stage bucket
+    0, still passed, FSRS checkpoint intact) while one was still booked 40 days
+    out. The merge used to inherit only the buckets, land on 0 and read as
+    first learning again.
+    """
+    palace = seed(db_session, document(
+        node("a", mark=True), node("b", mark=True),
+        node("c", mark=True), node("d", mark=True),
+    ))
+    today = local_day()
+    active = rows(db_session, palace)
+    for uid, stability, days_ago in (("a", 17.0, 17), ("b", 14.0, 14), ("c", 21.0, 21)):
+        row = active[(uid, "mark")]
+        row.stage_index = 0
+        row.due_date = today
+        row.has_passed = True
+        row.last_passed_at = datetime.combine(today - timedelta(days=days_ago), time(4))
+        row.early_step = 1
+        _store_checkpoint(
+            row,
+            stability=stability,
+            reviewed_on=today - timedelta(days=days_ago),
+            due=today,
+        )
+    d = active[("d", "mark")]
+    schedule(d, 7, 40)
+    _store_checkpoint(
+        d,
+        stability=45.0,
+        reviewed_on=today - timedelta(days=40),
+        due=today + timedelta(days=40),
+    )
+    db_session.flush()
+
+    palace.editor_doc = document(node("a"), node("b"), node("c"), node("d"), mark=True)
+    db_session.flush()
+    reconcile_palace_units(db_session, palace.id)
+    db_session.flush()
+
+    root = _whole_palace_row(db_session, palace)
+    assert root.has_passed is True
+    # The weakest earned checkpoint (b: 14 days) travels with the merge.
+    assert root.fsrs_stability == 14.0
+    assert root.fsrs_last_review == datetime.combine(today - timedelta(days=14), time(4))
+    assert unit_interval_days(root) == 14
+
+
+def test_reconcile_heals_a_merge_that_lost_its_memory_checkpoint(db_session):
+    """A merge made before checkpoints were carried heals on the next reconcile."""
+    palace = seed(db_session, document(node("a", mark=True), node("b"), mark=True))
+    today = local_day()
+    a = rows(db_session, palace)[("a", "mark")]
+    schedule(a, 5, 30)
+    _store_checkpoint(
+        a,
+        stability=30.0,
+        reviewed_on=today - timedelta(days=30),
+        due=today + timedelta(days=30),
+    )
+    db_session.flush()
+
+    palace.editor_doc = document(node("a"), node("b"), mark=True)
+    db_session.flush()
+    reconcile_palace_units(db_session, palace.id)
+    db_session.flush()
+    root = _whole_palace_row(db_session, palace)
+    assert root.fsrs_stability == 30.0
+
+    # Simulate a row that was merged while only the legacy bucket was inherited.
+    for field in (
+        "fsrs_stability", "fsrs_difficulty", "fsrs_state", "fsrs_step",
+        "fsrs_due_at", "fsrs_last_review", "fsrs_scheduler_version",
+    ):
+        setattr(root, field, None)
+    db_session.flush()
+    reconcile_palace_units(db_session, palace.id)
+    db_session.flush()
+    assert root.fsrs_stability == 30.0
+    assert unit_interval_days(root) == 30

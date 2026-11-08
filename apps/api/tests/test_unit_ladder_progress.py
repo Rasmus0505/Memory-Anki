@@ -129,6 +129,18 @@ def test_interval_days_is_the_booked_gap(db_session):
     assert unit_interval_days(state) == 0
 
 
+def test_interval_days_reads_the_last_pass_when_no_checkpoint_survived(db_session):
+    """A merged row without FSRS state must not report first learning."""
+    state = _seed_review_unit(db_session, title="合并后记忆宫殿")
+    today = local_day()
+    state.stage_index = 0
+    state.due_date = today
+    state.has_passed = True
+    state.last_passed_at = datetime.combine(today - timedelta(days=17), time(4))
+    state.fsrs_last_review = None
+    assert unit_interval_days(state) == 17
+
+
 def test_ladder_progress_reports_due_horizon(db_session):
     state = _seed_review_unit(db_session, title="到期分布宫殿")
     payload = get_palace_ladder_progress(db_session, state.palace_id, unit_id=state.id)

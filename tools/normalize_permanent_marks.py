@@ -6,7 +6,9 @@
 
 做法：对两学科的全部活跃宫殿，清除所有后代节点上的 permanentSplitMark，
 再给根节点打上 permanentSplitMark，然后走正常的 editor save 流程
-（版本快照 + 树同步 + 复习单元 reconcile）。
+（版本快照 + 树同步 + 复习单元 reconcile）。合并不会重置已学进度：
+reconcile 会带走贡献单元里最弱的一份 FSRS 记忆状态，展示档位为 0
+（到期日被提前过）也不会把整宫读成「首学」。
 
 用法：
     python tools/normalize_permanent_marks.py            # 只审计，不写库

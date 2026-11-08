@@ -13,11 +13,12 @@ from __future__ import annotations
 
 import json
 import uuid
+from datetime import datetime, time
 from typing import Any
 
 from sqlalchemy.orm import Session
 
-from memory_anki.core.time import local_day, utc_now_naive
+from memory_anki.core.time import local_day, study_day_of, utc_now_naive
 from memory_anki.infrastructure.db._tables.misc import StudySession
 from memory_anki.infrastructure.db._tables.unit_reviews import (
     ReviewUnitEncounter,
@@ -26,7 +27,9 @@ from memory_anki.infrastructure.db._tables.unit_reviews import (
 
 from .unit_inheritance import (
     find_resurrectable,
+    has_fsrs_checkpoint,
     inheritance_candidates,
+    inheritance_memory_source,
     inheritance_vote,
     inherited_early_step,
     region_is_live,
@@ -85,6 +88,47 @@ def _invalidate_active_sessions(session: Session, palace_id: int) -> int:
             )
         )
     return len(rows)
+
+
+def _apply_memory_state(
+    target: ReviewUnitState,
+    source: Any,
+    *,
+    replace_existing: bool = False,
+) -> bool:
+    """Copy the frozen contributor checkpoint selected for this topology.
+
+    A topology change must adopt the checkpoint chosen from entry-time sources,
+    even when the target row previously carried a stronger state: the resulting
+    schedule is the conservative contributor projection. Content-only edits, on
+    the other hand, only heal a missing checkpoint and never replace memory.
+    """
+    if source is None or not has_fsrs_checkpoint(source):
+        return False
+    if has_fsrs_checkpoint(target) and not replace_existing:
+        return False
+    target.fsrs_stability = source.fsrs_stability
+    target.fsrs_difficulty = source.fsrs_difficulty
+    target.fsrs_state = source.fsrs_state
+    target.fsrs_step = source.fsrs_step
+    target.fsrs_last_review = source.fsrs_last_review
+    target.fsrs_scheduler_version = source.fsrs_scheduler_version
+    target.lapse_original_interval_days = source.lapse_original_interval_days
+    target.lapse_started_on = source.lapse_started_on
+    # Due is projected from the merged topology's booked due date; retaining the
+    # source's card timestamp would split the FSRS state from that projection.
+    target.fsrs_due_at = datetime.combine(target.due_date, time(4))
+    if target.fsrs_last_review is not None:
+        reviewed_on = study_day_of(target.fsrs_last_review)
+        if target.due_date < reviewed_on:
+            # A merge can inherit a never-studied fragment's stale due date while
+            # the memory checkpoint comes from a different unit. A booking before
+            # the last review is not a schedule at all: the panel reads the gap
+            # as zero and paints a studied unit as 首学. New content still arrives
+            # now -- clamped to today, never "before" the review it inherits.
+            target.due_date = max(local_day(), reviewed_on)
+            target.fsrs_due_at = datetime.combine(target.due_date, time(4))
+    return True
 
 
 def reconcile_palace_units(session: Session, palace_id: int) -> dict[str, Any]:
@@ -159,15 +203,17 @@ def reconcile_palace_units(session: Session, palace_id: int) -> dict[str, Any]:
             else None
         )
         inherited_step = inherited_early_step(sources)
+        memory_source = inheritance_memory_source(sources, candidates, members)
         inheritance_plans.append((
             definition, current, live_region, inherited_stage, inherited_due,
-            inherited_passed, inherited_last_passed, inherited_step,
+            inherited_passed, inherited_last_passed, inherited_step, memory_source,
         ))
 
     # Resolve and validate every source before touching any persisted unit.
     for index, plan in enumerate(inheritance_plans):
         (definition, current, live_region, inherited_stage, inherited_due,
-         inherited_passed, inherited_last_passed, inherited_step) = plan
+         inherited_passed, inherited_last_passed, inherited_step,
+         memory_source) = plan
         if current is None:
             # No active unit owns this identity. Either the region is still
             # represented by other active units (a resized unit, a split) and
@@ -200,6 +246,7 @@ def reconcile_palace_units(session: Session, palace_id: int) -> dict[str, Any]:
                 resurrect.membership_hash = definition.membership_hash
                 resurrect.content_hash = definition.content_hash
                 resurrect.topology_order = index
+                _apply_memory_state(resurrect, memory_source, replace_existing=True)
                 current = resurrect
                 used_ids.add(current.id)
                 changed = True
@@ -231,6 +278,7 @@ def reconcile_palace_units(session: Session, palace_id: int) -> dict[str, Any]:
                 topology_order=index,
                 active=True,
             )
+            _apply_memory_state(current, memory_source)
             session.add(current)
             changed = True
             after = _schedule_snapshot_from_row(current)
@@ -267,6 +315,13 @@ def reconcile_palace_units(session: Session, palace_id: int) -> dict[str, Any]:
             current.content_hash = definition.content_hash
             current.topology_order = index
             current.active = True
+            # Membership changes must use the weakest frozen contributor;
+            # content-only edits may only heal an absent checkpoint.
+            _apply_memory_state(
+                current,
+                memory_source,
+                replace_existing=membership_changed,
+            )
             if action is not None:
                 after = _schedule_snapshot_from_row(current)
                 entry = _change_entry(
