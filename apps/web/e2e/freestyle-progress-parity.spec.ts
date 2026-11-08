@@ -8,7 +8,7 @@ import type {
  * Position and progress invariants for the immersive feed.
  *
  * These are the symptoms the learner reports: "the card changed under my finger",
- * "the rail and the round sheet disagree about how much is left". Every /api call
+ * "the rail and the round count disagree about how much is left". Every /api call
  * is answered locally, so nothing reaches the live study service.
  */
 
@@ -155,6 +155,11 @@ async function installRoutes(page: Page) {
   let round: FreestyleRoundStatePayload | null = null
   const builds: string[] = []
 
+  // 这是已载入学习偏好的正常评分场景，不把偏好 503 引发的 1.5 秒冷启动
+  // 补建混入「评分不能重建」的观测窗口。
+  await page.route('**/api/v1/profile/client-preferences', (route) =>
+    route.fulfill({ json: { items: {} } }),
+  )
   await page.route('**/api/v1/freestyle/overview**', (route: Route) =>
     route.fulfill({
       contentType: 'application/json',
@@ -276,8 +281,14 @@ test('rating a card keeps it in the viewport and does not rebuild the queue', as
   const buildsBefore = routes.builds.length
   const indexBefore = await visualIndex(page)
 
-  await page.getByTestId('freestyle-rating-button-3').click()
+  const remember = page.getByTestId('freestyle-rating-button-3')
+  await remember.click()
   await expect.poll(() => rated.length).toBe(1)
+  // 按钮点亮是乐观状态；评分效果行只在保存回执落地后出现。
+  await expect(remember).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByTestId('freestyle-rating-effect-line')).toContainText('已选记得')
+  await expect(page.getByTestId('freestyle-rating-saving-line')).toHaveCount(0)
+  await expect(page.getByTestId('freestyle-rating-unsaved-line')).toHaveCount(0)
 
   // 记得 is a pass: the learner stays on the card they just graded until they
   // press 下一张, and no rebuild replaced the queue underneath them.
@@ -285,22 +296,33 @@ test('rating a card keeps it in the viewport and does not rebuild the queue', as
   expect(routes.builds.length).toBe(buildsBefore)
 })
 
-test('the round sheet and the rail agree on how many cards the round has', async ({ page }) => {
+test('the round count matches the rail and opens configuration', async ({ page }) => {
   await installRoutes(page)
   await page.goto('/freestyle')
   await startFromOverview(page)
   await expect(page.getByTestId('freestyle-rating-bar')).toBeVisible()
 
-  // The rail's own label is the learner-facing "1/2"; it must agree with the
-  // sheet rather than counting a different pool.
+  // 数字、读屏名称、可跳转分段必须来自同一轮的实际卡片，而非宫殿总量。
   const rail = page.getByTestId('freestyle-progress-rail')
+  const hud = page.getByTestId('freestyle-progress-hud')
+  const slots = rail.locator('[data-rail-slot]')
   await expect(rail).toBeVisible()
-  await expect(rail).toHaveAttribute('aria-label', /本轮进度 \d+\/2/)
+  await expect(slots).toHaveCount(UNITS.length)
+  for (const [index, card] of cards().entries()) {
+    await expect(slots.nth(index)).toHaveAttribute('data-rail-slot', card.id)
+  }
+  await expect(rail).toHaveAttribute('aria-label', /本轮进度 1\/2。点击分段跳转到对应卡片/)
+  await expect(hud).toHaveText(/^1\/2(?:跨了 \d+ 天)?$/)
 
-  await page.getByTestId('freestyle-progress-hud').click()
-  const sheet = page.getByTestId('freestyle-round-sheet')
-  await expect(sheet).toBeVisible()
-  // The sheet counts the same pool the rail does: two scheduled cards for this
-  // round, not the palace total and not the pre-filter candidate count.
-  await expect(sheet).toContainText(`本轮 ${UNITS.length} 张`)
+  // 本轮列表已移除；点数字直接打开配置，关闭后仍显示同一张卡和本轮计数。
+  await expect(hud).toHaveAccessibleName(/打开配置$/)
+  await hud.click()
+  const config = page.getByRole('dialog', { name: '随心配置', exact: true })
+  await expect(config).toBeVisible()
+  await expect(config.getByRole('button', { name: '保存配置并重排', exact: true })).toBeVisible()
+  await config.getByRole('button', { name: '关闭', exact: true }).click()
+  await expect(config).toBeHidden()
+  await expect(hud).toHaveText(/^1\/2(?:跨了 \d+ 天)?$/)
+  await expect(page.getByRole('heading', { name: `单元 ${UNITS[0]}`, exact: true })).toBeVisible()
+  await expect(slots).toHaveCount(UNITS.length)
 })

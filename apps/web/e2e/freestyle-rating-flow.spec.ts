@@ -1,3 +1,4 @@
+import type { FreestyleRoundPlanPayload } from '../src/shared/api/contracts'
 import { expect, test, type Page, type Route } from './fixtures'
 
 /**
@@ -153,6 +154,10 @@ function ratingItem(body: RateBody) {
 }
 
 async function installCardRoutes(page: Page) {
+  // 正常评分场景先载入偏好，避免离线偏好的迟到冷启动打断重试后的翻页。
+  await page.route('**/api/v1/profile/client-preferences', (route) =>
+    route.fulfill({ json: { items: {} } }),
+  )
   await page.route('**/api/v1/freestyle/overview**', async (route) => {
     await route.fulfill({
       contentType: 'application/json',
@@ -228,16 +233,31 @@ function holdRatings(page: Page) {
                 version: 2,
                 round_id: body.round_id,
                 conflict: false,
-                completed_ids: body.rating >= 3 ? ['review_unit:e2e-rate:r1'] : [],
                 plan: {
-                  version: 2,
-                  cards: [{
+                  original_cards: [{
                     card_id: 'review_unit:e2e-rate:r1',
-                    status: body.rating >= 3 ? 'completed' : 'retry',
-                    last_rating: body.rating,
-                    retry_after_cards: body.rating >= 3 ? 0 : 3,
+                    unit_id: body.unit_id,
+                    unit_revision: body.unit_revision,
+                    kind: 'mindmap_branch',
+                    palace_id: 1,
+                    palace_title: '评分流宫殿',
+                    label: '当前复习单元',
                   }],
-                },
+                  presented_ids: ['review_unit:e2e-rate:r1'],
+                  current_card_id: 'review_unit:e2e-rate:r1',
+                  current_index: 0,
+                  completed_ids: body.rating >= 2 ? ['review_unit:e2e-rate:r1'] : [],
+                  excluded_ids: [],
+                  occurrences: [],
+                  encounters: {
+                    'review_unit:e2e-rate:r1': {
+                      encounter_id: body.encounter_id,
+                      status: 'open',
+                      unit_revision: body.unit_revision,
+                      rating: body.rating,
+                    },
+                  },
+                } satisfies FreestyleRoundPlanPayload,
               },
             }
             : { detail: 'network down' }
@@ -262,7 +282,7 @@ test('lights a grade at once while saving, queues the next tap, then opens a ski
   const remember = page.getByTestId('freestyle-rating-button-3')
   const easy = page.getByTestId('freestyle-rating-button-4')
   await expect(remember).toBeEnabled()
-  await remember.evaluate((button: HTMLButtonElement) => button.click())
+  await remember.click()
   await expect.poll(() => held.length).toBe(1)
   // local-first：点下去立刻亮起，同时只显示安静的“保存中”，不声称已经保存。
   await expect(remember).toHaveAttribute('aria-pressed', 'true')
@@ -284,11 +304,13 @@ test('lights a grade at once while saving, queues the next tap, then opens a ski
   held[1].release()
   await expect(easy).toHaveAttribute('aria-pressed', 'true')
   await expect(remember).toHaveAttribute('aria-pressed', 'false')
+  await expect(page.getByTestId('freestyle-rating-effect-line')).toContainText('已选轻松')
+  await expect(page.getByTestId('freestyle-rating-saving-line')).toHaveCount(0)
 
   const next = page.getByRole('button', { name: '下一张' })
   const settlement = page.getByTestId('freestyle-round-complete')
   await expect(next).toBeEnabled()
-  await next.evaluate((button: HTMLButtonElement) => button.click())
+  await next.click()
   // 结算页只留结算与跳过；宫殿清零文案在卡外横幅，不在这张卡里。
   await expect(settlement.getByText('本轮完成')).toBeVisible()
   await expect(settlement.getByRole('button', { name: '结算' })).toBeVisible()
@@ -304,7 +326,7 @@ test('keeps a failing save 保存中 through its quiet retries, then reports 未
 
   const remember = page.getByTestId('freestyle-rating-button-3')
   await expect(remember).toBeEnabled()
-  await remember.evaluate((button: HTMLButtonElement) => button.click())
+  await remember.click()
   await expect.poll(() => held.length).toBe(1)
   // 点下去立刻亮起；还没保存成功时只显示保存中。
   await expect(remember).toHaveAttribute('aria-pressed', 'true')
@@ -335,15 +357,18 @@ test('keeps a failing save 保存中 through its quiet retries, then reports 未
   await expect(page.getByText(/今日到期已清/)).not.toBeVisible()
 
   // Retapping is a save retry, not undo, and must await a successful response.
-  await remember.evaluate((button: HTMLButtonElement) => button.click())
+  await remember.click()
   await expect.poll(() => held.length).toBe(4)
   expect(held[3].body.rating).toBe(3)
   expect(held[3].body.operation_id).toBe(held[0].body.operation_id)
   await expect(settlement).not.toBeVisible()
   held[3].release()
+  await expect(page.getByTestId('freestyle-rating-effect-line')).toContainText('已选记得')
+  await expect(page.getByTestId('freestyle-rating-saving-line')).toHaveCount(0)
+  await expect(page.getByTestId('freestyle-rating-unsaved-line')).toHaveCount(0)
   const next = page.getByRole('button', { name: '下一张' })
   await expect(next).toBeEnabled()
-  await next.evaluate((button: HTMLButtonElement) => button.click())
+  await next.click()
   await expect(settlement.getByText('本轮完成')).toBeVisible()
 })
 

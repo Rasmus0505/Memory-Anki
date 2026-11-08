@@ -1,6 +1,7 @@
 import { expect, test, type Page, type Route } from './fixtures'
 import type {
   FreestyleRoundActionRequest,
+  FreestyleRoundPlanPayload,
   FreestyleRoundStatePayload,
 } from '../src/shared/api/contracts/freestyle'
 
@@ -114,7 +115,7 @@ function sessionItem(unitId: string) {
   }
 }
 
-function roundPlan() {
+function roundPlan(): FreestyleRoundPlanPayload {
   return {
     original_cards: [
       {
@@ -329,7 +330,7 @@ async function startFromOverview(page: Page) {
 function activeRetry(page: Page) {
   return page.getByTestId('freestyle-feed-scroller').evaluate((el) => {
     const top = el.getBoundingClientRect().top
-    const pages = [...el.querySelectorAll(':scope > .fs-page')]
+    const pages = Array.from(el.querySelectorAll(':scope > .fs-page'))
     const active = pages.find((node) => Math.abs(node.getBoundingClientRect().top - top) < 4)
     return Boolean(active?.querySelector('[data-testid="freestyle-retry-corner-badge"]'))
   })
@@ -342,7 +343,7 @@ async function openRetryCard(page: Page) {
   await page.waitForTimeout(2000)
   for (let step = 0; step < 3; step += 1) {
     if (await activeRetry(page)) break
-    await page.getByRole('button', { name: '下一张' }).evaluate((button: HTMLButtonElement) => button.click())
+    await page.getByRole('button', { name: '下一张' }).click()
     await page.waitForTimeout(700)
   }
   await expect.poll(() => activeRetry(page)).toBe(true)
@@ -353,7 +354,7 @@ for (const rating of [
   { value: 1, label: '忘记' },
   { value: 3, label: '记得' },
 ] as const) {
-  test(`keeps the 重练 card under the viewport after rating ${rating.label}`, async ({ page }) => {
+  test(`keeps the 重练 card under the viewport after rating ${rating.label}`, async ({ page }, testInfo) => {
     await installRoutes(page)
     await page.goto('/freestyle')
     await startFromOverview(page)
@@ -362,13 +363,20 @@ for (const rating of [
 
     const button = page.getByTestId(`freestyle-rating-button-${rating.value}`)
     await expect(button).toBeEnabled()
-    await button.evaluate((element: HTMLButtonElement) => element.click())
+    await button.click()
     await expect(button).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByTestId('freestyle-rating-effect-line')).toContainText(`已选${rating.label}`)
+    await expect(page.getByTestId('freestyle-rating-saving-line')).toHaveCount(0)
+    await expect(page.getByTestId('freestyle-rating-unsaved-line')).toHaveCount(0)
 
     // The just-scored 重练 stays this round's history under the viewport.
     await expect(page.getByText(/↻重练第 1 次/)).toBeVisible()
     expect(await readVisualIndex(page)).toBe(retryIndex)
     await expect(page.getByTestId('freestyle-rating-bar')).toBeVisible()
+    await testInfo.attach('评分后重练卡保持原位', {
+      body: await page.screenshot(),
+      contentType: 'image/png',
+    })
   })
 }
 
@@ -381,9 +389,11 @@ test('a reflow after the rating ack does not turn the page onto the next unit', 
   const retryIndex = await readVisualIndex(page)
   const cursorsBefore = routes.actions.filter((action) => action.action === 'set_cursor').length
   const remember = page.getByTestId('freestyle-rating-button-3')
-  await remember.evaluate((element: HTMLButtonElement) => element.click())
+  await remember.click()
   await expect(remember).toHaveAttribute('aria-pressed', 'true')
-  await page.waitForTimeout(1200)
+  await expect(page.getByTestId('freestyle-rating-effect-line')).toContainText('已选记得')
+  await expect(page.getByTestId('freestyle-rating-saving-line')).toHaveCount(0)
+  await expect(page.getByTestId('freestyle-rating-unsaved-line')).toHaveCount(0)
   // A rating ack re-renders the feed; a reflow / native snap can move the
   // scroller by a page with nobody touching the screen. That must not become a
   // page turn — the committed card is still the 重练 the learner just scored.
