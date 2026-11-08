@@ -3,7 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import unittest
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -11,7 +11,7 @@ from unittest.mock import patch
 from sqlalchemy import create_engine, event
 from sqlalchemy.pool import StaticPool
 
-from memory_anki.core.time import local_calendar_day_bounds_as_utc_naive
+from memory_anki.core.time import local_calendar_day_bounds_as_utc_naive, local_day
 from memory_anki.infrastructure.db import maintenance as db_maintenance
 from memory_anki.infrastructure.db._tables._base import (
     DB_MAX_OVERFLOW,
@@ -208,8 +208,11 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
             finally:
                 connection.close()
 
-    def test_weekly_report_uses_few_selects(self):
-        today = datetime.now().date()
+    @patch.dict("os.environ", {"MEMORY_ANKI_LOCAL_TZ": "+08:00", "MEMORY_ANKI_DAY_START_HOUR": "3"})
+    @patch("memory_anki.core.time.utc_now", return_value=datetime(2026, 11, 8, 16, 30, tzinfo=UTC))
+    def test_weekly_report_uses_few_selects(self, _clock):
+        # 北京周一 00:30 仍是周日学习日；夹具不能用操作系统的自然日划周。
+        today = local_day()
         monday = today - timedelta(days=today.weekday())
         week_start = local_calendar_day_bounds_as_utc_naive(monday - timedelta(days=7))[0]
         with self.SessionLocal() as session:
@@ -234,6 +237,8 @@ class DatabasePerformanceOptimizationTests(RouterTestCase):
             finally:
                 event.remove(self.engine, "before_cursor_execute", record_select)
 
+        self.assertEqual(payload["week_start"], "2026-10-26")
+        self.assertEqual(payload["week_end"], "2026-11-01")
         self.assertEqual(payload["review_count"], 0)
         self.assertEqual(payload["new_palace_count"], 1)
         self.assertLessEqual(len(statements), 3)
