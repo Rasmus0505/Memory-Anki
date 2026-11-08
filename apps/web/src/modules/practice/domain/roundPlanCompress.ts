@@ -48,6 +48,10 @@ function sourceHasUnansweredRetry(
     (entry) => entry.occurrenceKind === 'retry'
       && (entry.sourceCardId || entry.cardId) === sourceId,
   )
+  // A booked-but-not-yet-served 重练 is owed work just like an inserted one.
+  // The server blocks this group and will refuse to settle it; offering it for
+  // 结算 locally would compress the card the server keeps live (incident 0007).
+  if (source?.retryAvailableAt) return true
   // 忘记/困难 books the next 重练 before its card is inserted. Until that card
   // exists, the source itself carries `status: 'retry'` and the newest attempt
   // count; without this check 结算 would settle a unit that still owes a retry.
@@ -149,6 +153,39 @@ export function compressRoundPlanCards(
     cardsById,
     orderIds,
     compressedIds: [...compressed],
+    scheduledCount: orderIds.filter((id) => cardsById[id]?.occurrenceKind !== 'retry').length,
+  }
+}
+
+/**
+ * Adopt the server's compressed set exactly.
+ *
+ * `compressRoundPlanCards` only ever adds: it is safe for an optimistic local
+ * 结算, but it must not be used to absorb the server's echo. The server refuses
+ * to settle a group that still owes a 重练, so an echo narrower than the local
+ * request means those cards are still live. Unioning the echo would keep them
+ * invisible locally while 做题 (server-owned) still serves them.
+ *
+ * Cards removed here cannot be restored in this pure function; the following
+ * queue rebuild rehydrates them from the server plan.
+ */
+export function replaceCompressedIds(
+  plan: FreestyleRoundPlanState | null,
+  cardIds: readonly string[],
+): FreestyleRoundPlanState | null {
+  if (!plan) return plan
+  const ids = [...new Set(cardIds.map((id) => String(id || '').trim()).filter(Boolean))]
+  const compressed = new Set(ids)
+  const cardsById = { ...plan.cardsById }
+  ids.forEach((id) => {
+    delete cardsById[id]
+  })
+  const orderIds = plan.orderIds.filter((id) => !compressed.has(id))
+  return {
+    ...plan,
+    cardsById,
+    orderIds,
+    compressedIds: ids,
     scheduledCount: orderIds.filter((id) => cardsById[id]?.occurrenceKind !== 'retry').length,
   }
 }

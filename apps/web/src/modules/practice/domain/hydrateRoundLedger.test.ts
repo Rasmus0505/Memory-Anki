@@ -5,6 +5,7 @@ import { DEFAULT_FREESTYLE_FEED_CONFIG } from './feedConfig'
 import { coalesceHydrationLedger, commitHydratedRoundLedger } from './hydrateRoundLedger'
 import { createRetryOccurrence } from './queueState'
 import { createRoundPlan, updateRoundPlanCard } from './roundPlan'
+import { replaceCompressedIds } from './roundPlanCompress'
 import { findEarliestUnscoredIndex } from './unitProgressState'
 import type { FreestyleReviewUnitCard } from '@/shared/api/contracts'
 
@@ -279,6 +280,62 @@ describe('commitHydratedRoundLedger', () => {
     expect(result.completedIds).not.toContain('done')
     expect(result.plan.compressedIds ?? []).not.toContain('done')
     expect(result.encounters.done?.selectedRating ?? null).toBeNull()
+  })
+
+  it('restores a card whose local settlement the server refused', () => {
+    const cards = [branch('settled'), branch('refused')]
+    let localPlan = createRoundPlan('round-1', cards, DEFAULT_FREESTYLE_FEED_CONFIG)
+    localPlan = updateRoundPlanCard(localPlan, 'settled', { status: 'completed', lastRating: 3 })
+    localPlan = updateRoundPlanCard(localPlan, 'refused', { status: 'completed', lastRating: 3 })
+    localPlan = replaceCompressedIds(localPlan, ['settled', 'refused'])!
+    const result = commitHydratedRoundLedger({
+      localPlan,
+      localCompletedIds: ['settled', 'refused'],
+      localHiddenIds: [],
+      localEncounters: {
+        settled: encounter('settled', 3),
+        refused: encounter('refused', 3),
+      },
+      adoptedRoundId: 'round-1',
+      cards,
+      config: DEFAULT_FREESTYLE_FEED_CONFIG,
+      meta: { candidate_count: 2, scheduled_count: 2, limit_reached: false },
+      // `refused` still owes a 重练 on the server, so it did not settle.
+      serverPlan: serverPlan({
+        presented_ids: ['settled', 'refused'],
+        completed_ids: ['settled', 'refused'],
+        compressed_ids: ['settled'],
+      }),
+    })
+    expect(result.plan.compressedIds).toEqual(['settled'])
+    const refused = result.plan.cardsById.refused
+    expect(refused).toBeTruthy()
+    expect(refused?.cardId).toBe('refused')
+    expect(result.plan.orderIds).toContain('refused')
+  })
+
+  it('keeps an in-flight local settlement until its echo lands', () => {
+    const cards = [branch('settled'), branch('pending')]
+    let localPlan = createRoundPlan('round-1', cards, DEFAULT_FREESTYLE_FEED_CONFIG)
+    localPlan = replaceCompressedIds(localPlan, ['settled', 'pending'])!
+    const result = commitHydratedRoundLedger({
+      localPlan,
+      localCompletedIds: ['settled', 'pending'],
+      localHiddenIds: [],
+      localEncounters: {},
+      adoptedRoundId: 'round-1',
+      cards,
+      config: DEFAULT_FREESTYLE_FEED_CONFIG,
+      meta: { candidate_count: 2, scheduled_count: 2, limit_reached: false },
+      serverPlan: serverPlan({
+        presented_ids: ['settled', 'pending'],
+        completed_ids: ['settled', 'pending'],
+        compressed_ids: ['settled'],
+      }),
+      forceCompressedIds: ['pending'],
+    })
+    expect(result.plan.compressedIds).toEqual(['settled', 'pending'])
+    expect(result.plan.cardsById.pending).toBeUndefined()
   })
 
   it('keeps a same-day score the server snapshot has not received yet', () => {

@@ -98,7 +98,12 @@ export function applyServerCohorts(
     .filter((id) => Boolean(cardsById[id]))
   const extra = plan.orderIds.filter((id) => !presented.includes(id) && Boolean(cardsById[id]))
   const orderIds = presented.length ? [...presented, ...extra] : plan.orderIds.filter((id) => !compressedIds.includes(id))
-  const nextCompressed = compressedIds.length ? [...new Set([...(plan.compressedIds ?? []), ...compressedIds])] : plan.compressedIds
+  // The server's compressed list is complete, not incremental: a card the
+  // server did not settle is still live. Keep local-only ids only when the
+  // payload carries no list at all (older servers / partial payloads).
+  const nextCompressed = Array.isArray(server.compressed_ids)
+    ? compressedIds
+    : plan.compressedIds
   return {
     ...plan,
     cardsById,

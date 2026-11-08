@@ -20,6 +20,7 @@ import {
   compressRoundPlanCards,
   compressibleRoundPlanIds,
   expandSettledIds,
+  replaceCompressedIds,
   settledIdSet,
 } from './roundPlanCompress'
 import {
@@ -406,6 +407,23 @@ describe('round plan reducer', () => {
     expect(sanitizeRoundPlan({ roundId: 'round-1', orderIds: ['a'], cardsById: {} })?.orderIds).toEqual([])
   })
 
+  it('keeps completed and already-rated entries in place when reordering', () => {
+    const first = createRoundPlan('round-1', [card('a', 1), card('b', 1), card('c', 2), card('d', 2)], config)
+    const withLockedRows = updateRoundPlanCard(first, 'a', { status: 'completed', lastRating: 3 })
+    const rated = updateRoundPlanCard(withLockedRows, 'b', { lastRating: 2 })
+    const reordered = reorderRoundPlan(rated, ['d', 'c', 'b', 'a'])
+    expect(reordered.orderIds).toEqual(['a', 'b', 'd', 'c'])
+  })
+
+  it('keeps a source that still owes a 重练 in place', () => {
+    const first = createRoundPlan('round-1', [card('a', 1), card('b', 1), card('c', 2)], config)
+    // The retry will be published after this source, so moving the source would
+    // move the slot the server books the retry into.
+    const waiting = updateRoundPlanCard(first, 'a', { status: 'retry' })
+    const reordered = reorderRoundPlan(waiting, ['c', 'b', 'a'])
+    expect(reordered.orderIds).toEqual(['a', 'c', 'b'])
+  })
+
   it('removes persisted stale entries before the next queue build', () => {
     const plan = sanitizeRoundPlan({
       roundId: 'round-1',
@@ -511,6 +529,20 @@ describe('round plan reducer', () => {
     expect(revived.compressedIds).toEqual(['a'])
   })
 
+  it('adopts the server compressed set exactly instead of unioning a refused settlement', () => {
+    const cards = [card('a', 1), card('b', 1)]
+    const first = createRoundPlan('round-1', cards, config)
+    const optimistic = compressRoundPlanCards(first, ['a', 'b'])
+    expect(optimistic?.compressedIds).toEqual(['a', 'b'])
+    // The server refused b (its group still owes a 重练). The local plan must
+    // drop b back to live; unioning would keep it off the rail while 做题
+    // still serves its questions.
+    const echoed = replaceCompressedIds(optimistic, ['a'])
+    expect(echoed?.compressedIds).toEqual(['a'])
+    expect(echoed?.cardsById.a).toBeUndefined()
+    expect(echoed?.orderIds).not.toContain('a')
+  })
+
   it('does not compress a weak-rated source that still has a live retry', () => {
     const cards = [card('a', 1), card('b', 1)]
     const retry = createRetryOccurrence(cards[0], 'round-1', 1, 3)
@@ -546,6 +578,18 @@ describe('round plan reducer', () => {
     })
     // Even if the source sits in completedIds, the booked retry is still owed.
     expect(compressibleRoundPlanIds(stamped, { completedIds: ['a'] })).toEqual([])
+  })
+
+  it('keeps a source whose retry wait is still booked, even before the card exists', () => {
+    const first = createRoundPlan('round-1', [card('a', 1), card('b', 1)], config)
+    const waiting = updateRoundPlanCard(first, 'a', {
+      status: 'completed',
+      lastRating: 3,
+      retryAvailableAt: '2026-11-07T10:00:00+00:00',
+    })
+    // The server refuses this group until the booked 重练 is answered. Offering
+    // it for 结算 locally would compress a card the server keeps live (0007).
+    expect(compressibleRoundPlanIds(waiting, { completedIds: ['a'] })).toEqual([])
   })
 
   it('settles after the booked retry card has been inserted and answered', () => {

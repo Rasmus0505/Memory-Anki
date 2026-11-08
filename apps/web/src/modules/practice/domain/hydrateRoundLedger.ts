@@ -410,6 +410,24 @@ export function commitHydratedRoundLedger(input: {
   const serverExcluded = Array.isArray(serverPlan?.excluded_ids)
     ? serverPlan.excluded_ids.map(String)
     : []
+  /**
+   * The server's compressed set is the whole truth for settled cards. A local
+   * 结算 that the server refused (the group still owes a 重练) must not keep
+   * its cards off the rail: 做题 would still serve them. Keep only ids the
+   * server reports, plus the in-flight set the caller just sent.
+   */
+  const serverCompressed = Array.isArray(serverPlan?.compressed_ids)
+    ? serverPlan.compressed_ids.map(String)
+    : null
+  const forceSet = new Set(forceCompressedIds)
+  const createPrior = localPlan && serverCompressed
+    ? {
+        ...localPlan,
+        compressedIds: (localPlan.compressedIds ?? []).filter(
+          (id) => serverCompressed.includes(id) || forceSet.has(id),
+        ),
+      }
+    : localPlan
   const hydratedPlan = applyServerExcludedIds(
     applyServerRatingsToRoundPlan(
       applyServerCohorts(
@@ -419,7 +437,7 @@ export function commitHydratedRoundLedger(input: {
             input.cards,
             input.config,
             input.meta,
-            localPlan,
+            createPrior,
           ),
           serverCompleted,
         ),
@@ -447,14 +465,12 @@ export function commitHydratedRoundLedger(input: {
       ? createRoundPlan(input.adoptedRoundId, input.cards, input.config, input.meta, null)
       : null)
   const forced = excludeRoundPlanCards(planForForce, forceExcludedIds, input.cards) ?? planForForce
-  const serverCompressed = Array.isArray(serverPlan?.compressed_ids)
-    ? serverPlan.compressed_ids.map(String)
-    : []
-  const compressedIds = [...new Set([
-    ...(forced?.compressedIds ?? []),
-    ...serverCompressed,
-    ...forceCompressedIds.filter((id) => !stripped.reopenedIds.has(id) && !restored.has(id)),
-  ])]
+  const forceAllowed = forceCompressedIds.filter(
+    (id) => !stripped.reopenedIds.has(id) && !restored.has(id),
+  )
+  const compressedIds = serverCompressed
+    ? [...new Set([...serverCompressed, ...forceAllowed])]
+    : [...new Set([...(forced?.compressedIds ?? []), ...forceAllowed])]
   const compressed = compressRoundPlanCards(forced, compressedIds) ?? forced
   return {
     ...retained,

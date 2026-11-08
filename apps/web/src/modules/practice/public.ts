@@ -149,6 +149,7 @@ export {
   compressRoundPlanCards,
   compressibleRoundPlanIds,
   expandSettledIds,
+  replaceCompressedIds,
   settledIdSet,
 } from './domain/roundPlanCompress'
 // Immersive feed page is lazy so shell-level imports of this barrel do not load the whole freestyle graph.
