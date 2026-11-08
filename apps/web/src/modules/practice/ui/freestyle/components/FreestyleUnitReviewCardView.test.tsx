@@ -930,6 +930,18 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(onOpenScopeQuiz).toHaveBeenCalledTimes(1)
   })
 
+  it('keeps 做题 above the loading placeholder when no preview exists', () => {
+    const onOpenScopeQuiz = vi.fn()
+    apiMocks.startFreestyleUnitReviewSessionApi.mockReturnValue(new Promise(() => undefined))
+    renderCard(buildCard('unit-quiz-without-preview'), { onOpenScopeQuiz })
+
+    const quiz = screen.getByTestId('freestyle-quiz-while-opening')
+    const placeholder = screen.getByTestId('freestyle-unit-skeleton')
+    expect(quiz.compareDocumentPosition(placeholder) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    fireEvent.click(quiz)
+    expect(onOpenScopeQuiz).toHaveBeenCalledTimes(1)
+  })
+
   it('opens edit mode only as far as the current flip progress', async () => {
     const card = buildCard('unit-edit-follows-flip')
     apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!))

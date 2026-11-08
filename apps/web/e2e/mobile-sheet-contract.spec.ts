@@ -1,33 +1,23 @@
-import { expect, test } from './fixtures'
+import { expect, test, type Page } from './fixtures'
 
-/**
- * The phone contract for answering/sheet surfaces, measured in a real viewport.
- *
- * Every regression here so far had the same shape: a dialog looked right in the
- * CSS and wrong on the phone — its top edge under the notch, its primary action
- * below the home indicator, or so much chrome that the content the learner came
- * for got a sliver of the screen. Numbers, not ratios: the assertions below are
- * the ones a screen reader user and a thumb both depend on.
- *
- * Hermetic: the fixture answers every /api call with 503, and this spec only
- * measures chrome that renders before any answer arrives.
- */
-
+/** 手机弹窗必须实际打开再测量；不能因没找到弹窗而跳过。所有 API 均密封。 */
 const PHONES = [
   { width: 375, height: 812 },
   { width: 390, height: 844 },
 ]
 
-/** The header must clear the notch; iOS reports 0 in a plain browser. */
-const MIN_TOP_INSET = 8
+async function leaveFailedOverview(page: Page) {
+  await expect(page.getByText('概览暂时读取失败，仍可直接开始学习。')).toBeVisible()
+  await page.getByRole('button', { name: '直接开始学习', exact: true }).click()
+  await expect(page.getByTestId('freestyle-start-overview')).toHaveCount(0)
+}
 
 for (const viewport of PHONES) {
-  test(`phone sheets keep their header and content reachable at ${viewport.width}x${viewport.height}`, async ({ page }) => {
+  test(`phone configuration keeps its header and actions reachable at ${viewport.width}x${viewport.height}`, async ({ page }) => {
     await page.setViewportSize(viewport)
     await page.goto('/freestyle')
+    await leaveFailedOverview(page)
 
-    // The stage header is the app's existing phone chrome; it must still own the
-    // top band and leave the feed the rest of the screen.
     const stageHeader = page.getByTestId('freestyle-stage-header')
     await expect(stageHeader).toBeVisible()
     const header = await stageHeader.boundingBox()
@@ -35,37 +25,74 @@ for (const viewport of PHONES) {
     expect(header!.y).toBeGreaterThanOrEqual(0)
     expect(header!.height).toBeLessThanOrEqual(viewport.height * 0.2)
 
-    // Any phone sheet that is on screen must obey the same rules. Listed by test
-    // id so a new surface has to be added deliberately rather than drift in.
-    for (const testId of ['freestyle-round-sheet']) {
-      const sheet = page.getByTestId(testId)
-      if ((await sheet.count()) === 0) continue
-      const box = await sheet.boundingBox()
-      expect(box).not.toBeNull()
-      expect(box!.y).toBeGreaterThanOrEqual(0)
-      expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height + 1)
-    }
+    await page.getByRole('button', { name: '随心配置', exact: true }).click()
+    const sheet = page.getByRole('dialog', { name: '随心配置', exact: true })
+    await expect(sheet).toBeVisible()
+    const box = await sheet.boundingBox()
+    expect(box).not.toBeNull()
+    expect(box!.y).toBeGreaterThanOrEqual(0)
+    expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height + 1)
+    const save = sheet.getByRole('button', { name: '保存配置并重排', exact: true })
+    await expect(save).toBeVisible()
+    const saveBox = await save.boundingBox()
+    expect(saveBox!.y + saveBox!.height).toBeLessThanOrEqual(viewport.height + 1)
+    await sheet.getByRole('button', { name: '关闭', exact: true }).click()
+    await expect(sheet).toBeHidden()
   })
 }
 
-test('the answering sheet leaves most of the phone to the question', async ({ page }) => {
+test('quiz window leaves most of the phone to scrollable content while the card opens', async ({ page }, testInfo) => {
   const viewport = { width: 375, height: 812 }
   await page.setViewportSize(viewport)
+  await page.route('**/api/v1/freestyle/queue/build', async (route) => {
+    const request = route.request().postDataJSON()
+    const cards = [{
+      id: 'review_unit:e2e-sheet:r1',
+      type: 'mindmap_branch',
+      content_type: 'mindmap_branch',
+      palace_id: 1,
+      palace_title: '手机弹窗宫殿',
+      anchor_uid: 'unit',
+      context_path: [{ uid: 'root', text: '手机弹窗宫殿' }],
+      node_uids: ['unit'],
+      node_count: 1,
+      unit_id: 'e2e-sheet',
+      unit_revision: 1,
+    }]
+    await route.fulfill({
+      json: {
+        operation_id: request.operation_id,
+        round_id: request.round_id,
+        config: request.config,
+        cards,
+        phase_stats: { candidate_count: 1, scheduled_count: 1, queue_limit: 20 },
+        round_meta: { candidate_count: 1, scheduled_count: 1, queue_limit: 20, limit_reached: false },
+        counts: { mindmap_branch: 1, anki_card: 0, quiz_question: 0, total: 1 },
+      },
+    })
+  })
+  // 做题窗口独立于卡片会话，不能等会话打开才出现入口。
+  await page.route('**/api/v1/review/units/e2e-sheet/sessions', () => new Promise(() => undefined))
   await page.goto('/freestyle')
-
-  // A sheet opened by a global shortcut renders without any API; only its
-  // geometry is under test here.
-  const sheet = page.locator('[data-mobile-sheet="full"]').first()
-  if ((await sheet.count()) === 0) test.skip(true, 'no mobile sheet mounted on this route')
-
+  await leaveFailedOverview(page)
+  await page.getByTestId('freestyle-quiz-while-opening').click()
+  const sheet = page.getByTestId('freestyle-scope-quiz-dialog')
+  await expect(sheet).toBeVisible()
   const box = await sheet.boundingBox()
   expect(box).not.toBeNull()
-  expect(box!.y).toBeGreaterThanOrEqual(MIN_TOP_INSET - 1)
-  expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height + 1)
+  expect(box!.y).toBeGreaterThanOrEqual(7)
+  expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height - 7)
 
-  const header = sheet.locator('[data-mobile-sheet-header]').first()
-  if ((await header.count()) > 0) {
-    const headerBox = await header.boundingBox()
-    expect(headerBox!.height).toBeLessThanOrEqual(viewport.height * 0.25)
-  }
+  // 初次进入显示做题配置；这里测窗口及滚动内容区，不冒充真实题干验证。
+  const content = sheet.locator('div.overflow-y-auto').first()
+  await expect(content).toBeVisible()
+  const contentBox = await content.boundingBox()
+  expect(contentBox!.height).toBeGreaterThanOrEqual(viewport.height * 2 / 3)
+  expect(contentBox!.y).toBeGreaterThanOrEqual(box!.y)
+  expect(contentBox!.y + contentBox!.height).toBeLessThanOrEqual(box!.y + box!.height + 1)
+  await testInfo.attach('手机做题窗口保留主要内容区', {
+    body: await page.screenshot(), contentType: 'image/png',
+  })
+  await sheet.getByRole('button', { name: '关闭弹窗', exact: true }).click()
+  await expect(sheet).toBeHidden()
 })

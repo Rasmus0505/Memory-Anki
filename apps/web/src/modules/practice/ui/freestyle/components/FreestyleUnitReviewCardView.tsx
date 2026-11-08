@@ -1129,6 +1129,18 @@ export function FreestyleUnitReviewCardView({
           />
         ) : null}
         {flipSource ? null : identityRow}
+        {active && !flipSource && onOpenScopeQuiz ? (
+          <div className="flex shrink-0 justify-end px-3 pt-2">
+            <button
+              type="button"
+              data-testid="freestyle-quiz-while-opening"
+              className="ma-pressable rounded-full border border-stage-line bg-stage-overlay px-3 py-1 text-xs font-medium text-stage-ink"
+              onClick={onOpenScopeQuiz}
+            >
+              做题
+            </button>
+          </div>
+        ) : null}
         {flipSource ? (
           <div
             data-testid="freestyle-unit-review-map-shell"
@@ -1228,19 +1240,6 @@ export function FreestyleUnitReviewCardView({
             }}
           />
         )}
-
-        {active && !flipSource && onOpenScopeQuiz ? (
-          <div className="flex justify-end px-3 pt-2">
-            <button
-              type="button"
-              data-testid="freestyle-quiz-while-opening"
-              className="ma-pressable rounded-full border border-stage-line bg-stage-overlay px-3 py-1 text-xs font-medium text-stage-ink"
-              onClick={onOpenScopeQuiz}
-            >
-              做题
-            </button>
-          </div>
-        ) : null}
 
         {active && !inlineEditing && !recapOnly && card.bedtime ? (
           <FreestyleBedtimeRatingBar
