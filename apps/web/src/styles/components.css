@@ -269,7 +269,7 @@
   }
 }
 
-/* Freestyle feed: star corner badge on every card, inset gold frame on 3-star key units. */
+/* Freestyle feed: star corner badge on every card; map cards keep the signal without a second frame. */
 .exam-feed-corner {
   position: absolute;
   top: 0.35rem;
@@ -296,13 +296,17 @@
   inset: 0.25rem;
   z-index: 24;
   border-radius: 1.25rem;
-  padding: 2px;
+  padding: 1px;
   pointer-events: none;
   background: linear-gradient(135deg, var(--exam-gold-a), var(--exam-gold-b) 50%, var(--exam-gold-a));
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
   opacity: 0.85;
+}
+
+[data-exam-stars='3'][data-card-kind='mindmap']::after {
+  content: none;
 }
 
 /* === COMBO MILESTONE BURST (情感化视觉：连击里程碑庆祝) === */

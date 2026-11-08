@@ -100,4 +100,71 @@ describe('SessionRecorderHost', () => {
     expect(hud.className).toContain('md:hidden')
     expect(hud.querySelector('button[aria-label="录制"]')).toBeTruthy()
   })
+
+  it('moves the floating recorder and remembers its position', () => {
+    class PointerEventMock extends MouseEvent {
+      readonly pointerId: number
+      constructor(type: string, init: MouseEventInit & { pointerId?: number } = {}) {
+        super(type, init)
+        this.pointerId = init.pointerId ?? 0
+      }
+    }
+    Object.defineProperty(window, 'PointerEvent', { configurable: true, value: PointerEventMock })
+    render(
+      <MemoryRouter>
+        <SessionRecorderHost floating />
+      </MemoryRouter>,
+    )
+    const hud = document.querySelector('[data-session-recorder-hud="true"]') as HTMLDivElement
+    localStorage.removeItem('memory-anki.session-recorder.floating-position.v1')
+    Object.defineProperty(hud, 'offsetWidth', { configurable: true, value: 36 })
+    Object.defineProperty(hud, 'offsetHeight', { configurable: true, value: 36 })
+    Object.defineProperty(hud, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({ left: 331, top: 8, right: 367, bottom: 44, width: 36, height: 36, x: 331, y: 8, toJSON: () => ({}) }),
+    })
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 375 })
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 812 })
+    const capture = vi.fn()
+    Object.defineProperty(hud.querySelector('button'), 'setPointerCapture', { configurable: true, value: capture })
+
+    const dispatchPointer = (type: string, clientX: number, clientY: number) => {
+      hud.dispatchEvent(new PointerEventMock(type, { bubbles: true, button: 0, clientX, clientY, pointerId: 7 }))
+    }
+    act(() => {
+      dispatchPointer('pointerdown', 350, 24)
+      dispatchPointer('pointermove', 160, 140)
+      dispatchPointer('pointerup', 7, 7)
+    })
+
+    expect(capture).toHaveBeenCalledWith(7)
+    expect(hud.style.left).toBe('141px')
+    expect(hud.style.top).toBe('124px')
+    expect(JSON.parse(localStorage.getItem('memory-anki.session-recorder.floating-position.v1') || '{}'))
+      .toEqual({ left: 141, top: 124 })
+    const trigger = hud.querySelector('button') as HTMLButtonElement
+    fireEvent.click(trigger)
+    expect(screen.queryByRole('menu')).toBeNull()
+
+    act(() => {
+      dispatchPointer('pointerdown', 159, 142)
+      dispatchPointer('pointerup', 159, 142)
+    })
+    fireEvent.click(trigger)
+    expect(screen.getByRole('menu')).toBeTruthy()
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
+
+    act(() => {
+      dispatchPointer('pointerdown', 350, 24)
+      dispatchPointer('pointermove', 2000, 2000)
+      dispatchPointer('pointerup', 2000, 2000)
+    })
+    expect(hud.style.left).toBe('331px')
+    expect(hud.style.top).toBe('768px')
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 320 })
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 500 })
+    fireEvent(window, new Event('resize'))
+    expect(hud.style.left).toBe('276px')
+    expect(hud.style.top).toBe('456px')
+  })
 })

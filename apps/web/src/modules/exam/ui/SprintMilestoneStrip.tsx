@@ -49,7 +49,7 @@ export function SprintMilestoneStrip({
             className={`pointer-events-auto flex w-full min-w-0 items-center gap-1.5 rounded-full py-0.5 text-left text-[11px] leading-4 text-stage-muted transition-colors hover:text-stage-ink ${className}`}
           >
             {overview?.settings.exam_date ? (
-              <span className="shrink-0 font-semibold text-stage-glow">
+              <span data-milestone-countdown className="shrink-0 font-semibold text-stage-glow">
                 {formatDaysLeft(overview.days_left)}
               </span>
             ) : null}
