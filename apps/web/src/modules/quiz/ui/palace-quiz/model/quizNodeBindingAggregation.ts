@@ -86,9 +86,11 @@ export function buildSubtreeQuestionMap(
 ): Map<string, Set<number>> {
   const doc = normalizeMindMapDocument(editorDoc)
   const result = new Map<string, Set<number>>()
+  const visited = new Set<string>()
 
   const walk = (node: MindMapDocNode, indexPath: number[]): Set<number> => {
     const uid = getMindMapNodeUid(node, indexPath.join('-') || 'root')
+    visited.add(uid)
     const combined = new Set<number>(direct.get(uid) ?? [])
     const children = Array.isArray(node.children) ? node.children : []
     children.forEach((child, childIndex) => {
@@ -98,7 +100,15 @@ export function buildSubtreeQuestionMap(
     return combined
   }
 
-  walk(doc.root as MindMapDocNode, [])
+  const rootSet = walk(doc.root as MindMapDocNode, [])
+  // A binding can outlive its node for a moment (the delete guard writes the
+  // re-home, then the document save lands). Counting only uid matches would make
+  // those questions vanish from every badge — including the root. Fold every
+  // orphaned edge into the root so the palace total never loses a live question.
+  for (const [uid, questionIds] of direct) {
+    if (visited.has(uid)) continue
+    for (const questionId of questionIds) rootSet.add(questionId)
+  }
   return result
 }
 

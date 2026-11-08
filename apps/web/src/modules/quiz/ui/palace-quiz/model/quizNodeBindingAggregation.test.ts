@@ -178,6 +178,17 @@ describe('quizNodeBindingAggregation', () => {
     )).toBe('本宫')
   })
 
+  it('keeps a binding whose node was deleted under the root count', () => {
+    const direct = buildDirectBindingMap([
+      { question_id: 1, node_uid: 'child-a' },
+      { question_id: 2, node_uid: 'deleted-card' },
+    ])
+    const subtree = buildSubtreeQuestionMap(doc, direct)
+
+    expect([...subtree.get('root')!].sort((a, b) => a - b)).toEqual([1, 2])
+    expect(subtree.get('deleted-card')).toBeUndefined()
+  })
+
   it('counts full subtree from complete palace doc, not only revealed children', () => {
     const fullDoc = {
       root: {
