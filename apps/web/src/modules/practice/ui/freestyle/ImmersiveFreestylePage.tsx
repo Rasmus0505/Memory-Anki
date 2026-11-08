@@ -513,7 +513,6 @@ export default function ImmersiveFreestylePage({
   const {
     progress,
     updateQuestionState,
-    answeredQuestionIds,
   } = useFreestyleQuizFlow({
     mode: 'free',
     queueRef,
@@ -739,24 +738,12 @@ export default function ImmersiveFreestylePage({
         scheduledCount: roundMeta.scheduled_count || roundPlan?.scheduledCount,
         roundPlan,
         subjectByPalaceId,
-        quizCount: new Set([
-          ...cards.flatMap((card) => (
-            isQuizCard(card) && (
-              queueState.completedIds.includes(card.id)
-              || answeredQuestionIds.has(card.question.id)
-            )
-              ? [card.question.id]
-              : []
-          )),
-          ...answeredQuestionIds,
-        ]).size,
       },
     ),
       roundPlan?.partialSettlements,
       cards.map((card) => card.id),
     ),
     [
-      answeredQuestionIds,
       cards,
       queueState.completedIds,
       queueState.unitEncountersByCardId,
@@ -768,14 +755,10 @@ export default function ImmersiveFreestylePage({
   )
 
   const mindmapCount = cards.filter(isMindMapBranchCard).length
-  const quizCount = cards.filter(isQuizCard).length
-  const resolvedQuiz = cards.filter(
-    (card) => isQuizCard(card) && answeredQuestionIds.has(card.question.id),
-  ).length
 
   const overflowSummary = cards.length === 0
     ? `本轮 0 张 · 候选 ${roundMeta.candidate_count}`
-    : `导图 ${mindmapCount} · 题 ${quizCount}${resolvedQuiz > 0 ? ` · 已答 ${resolvedQuiz}` : ''} · 候选 ${roundMeta.candidate_count}`
+    : `导图 ${mindmapCount} · 候选 ${roundMeta.candidate_count}`
   /** HUD and rail header open 随心配置 directly; the plan list no longer exists. */
   const openPlan = useCallback(() => {
     setConfigIntent('replan')
@@ -956,12 +939,8 @@ export default function ImmersiveFreestylePage({
       completedIds: queueState.completedIds,
       roundPlan,
       subjectByPalaceId,
-      quizCount: ids.filter((id) => {
-        const card = cards.find((item) => item.id === id)
-        return Boolean(card && isQuizCard(card) && answeredQuestionIds.has(card.question.id))
-      }).length,
     })
-  }, [answeredQuestionIds, cards, queueState.completedIds, queueState.unitEncountersByCardId, roundPlan, subjectByPalaceId])
+  }, [cards, queueState.completedIds, queueState.unitEncountersByCardId, roundPlan, subjectByPalaceId])
   /** Config page 结算已完成: show the summary dialog, then compress on confirm. */
   const openSettlementFromConfig = useCallback(() => {
     const snapshot = buildCompletedSettlement()

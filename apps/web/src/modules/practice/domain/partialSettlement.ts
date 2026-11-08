@@ -28,7 +28,8 @@ export interface FreestylePartialSettlementSnapshot {
   newCount: number
   reviewCount: number
   retryCount: number
-  quizCount: number
+  /** Historical snapshots only: 做题 no longer lives in the feed, so new ones omit it. */
+  quizCount?: number
   bySubject: FreestylePartialSettlementSubject[]
 }
 
@@ -87,6 +88,7 @@ export function parsePartialSettlement(value: unknown): FreestylePartialSettleme
       : []
   const ids = [...new Set(cardIds.map((item) => asString(item)).filter(Boolean))]
   if (!id || !ids.length) return null
+  const legacyQuizCount = asCount(raw.quizCount ?? raw.quiz_count)
   return {
     id,
     cardIds: ids,
@@ -96,7 +98,7 @@ export function parsePartialSettlement(value: unknown): FreestylePartialSettleme
     newCount: asCount(raw.newCount ?? raw.new_count),
     reviewCount: asCount(raw.reviewCount ?? raw.review_count),
     retryCount: asCount(raw.retryCount ?? raw.retry_count),
-    quizCount: asCount(raw.quizCount ?? raw.quiz_count),
+    ...(legacyQuizCount > 0 ? { quizCount: legacyQuizCount } : {}),
     bySubject: asSubjects(raw.bySubject ?? raw.by_subject),
   }
 }
@@ -137,7 +139,6 @@ export function toServerPartialSettlement(snapshot: FreestylePartialSettlementSn
     new_count: snapshot.newCount,
     review_count: snapshot.reviewCount,
     retry_count: snapshot.retryCount,
-    quiz_count: snapshot.quizCount,
     by_subject: snapshot.bySubject.map((subject) => ({
       subject_id: subject.subjectId,
       subject_name: subject.subjectName,

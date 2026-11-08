@@ -40,8 +40,6 @@ export interface FreestyleRoundCompletion {
   retryCount: number
   /** Candidates the round limit left out (0 when the round is all due). */
   remainingCandidates: number
-  /** Quiz cards handled in the feed plus overlay 做题. */
-  quizCount: number
   /** Rated units that had never passed before this round. */
   newCount: number
   /** Rated units that had passed before this round. */
@@ -143,7 +141,6 @@ export function buildFreestyleRoundCompletion(
   options?: {
     completedIds?: Iterable<string>
     scheduledCount?: number
-    quizCount?: number
     roundPlan?: FreestyleRoundPlanState | null
     subjectByPalaceId?: ReadonlyMap<number, { id: number; name: string }>
   },
@@ -280,7 +277,6 @@ export function buildFreestyleRoundCompletion(
     retriedCount,
     retryCount: retriedCount,
     remainingCandidates: Math.max(0, candidateCount - scheduledCount),
-    quizCount: Math.max(0, Math.round(Number(options?.quizCount) || 0)),
     newCount,
     reviewCount,
     involvedUnitCount: sources.size,
@@ -623,7 +619,6 @@ export function buildPartialSettlementSnapshot(input: {
   completedIds?: Iterable<string>
   roundPlan?: FreestyleRoundPlanState | null
   subjectByPalaceId?: ReadonlyMap<number, { id: number; name: string }>
-  quizCount?: number
 }): FreestylePartialSettlementSnapshot | null {
   const cardIds = [...new Set(input.cardIds.map((id) => String(id || '').trim()).filter(Boolean))]
   const id = input.id.trim()
@@ -638,7 +633,6 @@ export function buildPartialSettlementSnapshot(input: {
       completedIds: input.completedIds,
       roundPlan: input.roundPlan,
       subjectByPalaceId: input.subjectByPalaceId,
-      quizCount: input.quizCount,
     },
   )
   return {
@@ -650,7 +644,6 @@ export function buildPartialSettlementSnapshot(input: {
     newCount: completion.newCount,
     reviewCount: completion.reviewCount,
     retryCount: completion.retryCount,
-    quizCount: completion.quizCount,
     bySubject: completion.bySubject.flatMap((subject) => {
       const palaces = subject.palaces.filter((palace) => palace.cardCount > 0)
       if (!palaces.length) return []

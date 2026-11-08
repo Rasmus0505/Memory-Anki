@@ -5,7 +5,7 @@ import type { RowMenuEntry } from './RowContextMenu'
 /**
  * Every place that lists a question builds its right-click menu here.
  *
- * The verbs are the same product language whether the row lives in 做题卡片,
+ * The verbs are the same product language whether the row lives in 做题窗口,
  * 题库管理 or 全局搜索; a host hides the ones it cannot support instead of
  * growing a second menu with a different order. Sections keep the app's common
  * shape: edit → work on this question → copy → destructive.

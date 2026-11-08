@@ -200,7 +200,7 @@ export function FreestyleRoundCompleteCard({
           </h2>
         </Rise>
 
-        <div className="mt-5 grid grid-cols-3 gap-2 sm:gap-3">
+        <div className="mt-5 grid grid-cols-2 gap-2 sm:gap-3">
           <StatTile value={completion.passedCount} label="已通过" toneClass="text-rate-good" index={0} reducedMotion={reducedMotion} />
           <StatTile
             value={completion.retryCount}
@@ -209,7 +209,6 @@ export function FreestyleRoundCompleteCard({
             index={1}
             reducedMotion={reducedMotion}
           />
-          <StatTile value={completion.quizCount} label="做题卡片" toneClass="text-stage-ink" index={2} reducedMotion={reducedMotion} />
         </div>
         <p className="mt-2 text-center text-[11px] leading-5 text-stage-muted">
           已评分含通过与重练；“经历过重练”表示本轮曾需重练，不代表仍有待办。
@@ -241,7 +240,6 @@ export function FreestyleRoundCompleteCard({
                     <div className="mt-1 text-xs leading-5 text-stage-muted">
                       已评分 {item.ratedCount} · 已通过 {item.passedCount}
                       {item.retryCount ? ` · 重练 ${item.retryCount}` : ''}
-                      {item.quizCount ? ` · 题目 ${item.quizCount}` : ''}
                     </div>
                     {item.bySubject.length ? (
                       <div className="mt-1 text-xs leading-5 text-stage-muted">

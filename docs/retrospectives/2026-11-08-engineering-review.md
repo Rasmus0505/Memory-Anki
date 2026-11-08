@@ -66,16 +66,18 @@ Tailwind 色阶（多数是红/琥珀/紫的语义色）。**建议**加一条�
 
 ### 1.5 做题卡移除后的聚合残留
 
-**现象**：信息流不再渲染做题卡，但 `ImmersiveFreestylePage` 仍保留
-`useFreestyleQuizFlow`、`answeredQuestionIds`、`quizCount`、`resolvedQuiz`，
-结算页仍显示“做题卡片”指标。
+**现象**：信息流不再渲染做题卡，但 `ImmersiveFreestylePage` 仍计算
+`answeredQuestionIds`、`quizCount`、`resolvedQuiz`，结算页仍显示“做题卡片”指标，
+溢出菜单还写着“题 0”。
 
 **根因**：功能在卡片层移除，聚合层没有同步。卡片被 `withoutQuizCards` 过滤后，
 这些计数恒为 0。
 
-**现状**：本次没有改结算指标的含义——那是一个产品决定（改成做题窗口的已答数，
-还是删掉该指标）。**建议**把题目进度收敛成一个 `RoundQuestionProgress` 投影，
-由做题窗口写入，结算、进度条、目录都读它；不要再从信息流卡片反推。本条尚未实施。
+**处理**：产品决定删掉该指标。结算页的“做题卡片”三格改为两格（已通过 / 经历过
+重练）；小结算与历史记录里的“题目 N”不再显示；溢出菜单只保留导图数与候选数；
+`FreestyleRoundCompletion` 不再产出 `quizCount`。历史快照里的 `quiz_count` 仍可
+读取，但新快照不再写入。题目进度若将来要进结算，应做成由做题窗口写入的
+`RoundQuestionProgress` 投影，而不是从信息流卡片反推。
 
 ## 2. 架构评估
 
@@ -211,7 +213,6 @@ Tailwind 色阶（多数是红/琥珀/紫的语义色）。**建议**加一条�
 
 ## 8. 还没做的
 
-- 结算页“做题卡片”指标的含义（见 1.5）。
 - `QueueEditIntent` 状态机与跨设备排序/恢复用例（见 5、6）。
 - `queue_order_cases.json` 前后端黄金样例（见 2.2）。
 - 颜色字面量门禁（见 1.4）。

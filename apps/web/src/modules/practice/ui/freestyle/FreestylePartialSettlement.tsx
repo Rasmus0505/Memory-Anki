@@ -33,7 +33,6 @@ export function FreestylePartialSettlement({
   const outcomes = [
     snapshot.passedCount ? `通过 ${snapshot.passedCount}` : '',
     snapshot.retryCount ? `重练 ${snapshot.retryCount}` : '',
-    snapshot.quizCount ? `题 ${snapshot.quizCount}` : '',
   ].filter(Boolean)
 
   return (

@@ -9,7 +9,6 @@ const completion: FreestyleRoundCompletion = {
   retriedCount: 9,
   retryCount: 9,
   remainingCandidates: 0,
-  quizCount: 0,
   newCount: 5,
   reviewCount: 31,
   involvedUnitCount: 36,

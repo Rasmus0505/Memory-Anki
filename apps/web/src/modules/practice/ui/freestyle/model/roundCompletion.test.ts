@@ -261,7 +261,6 @@ describe('buildFreestyleRoundCompletion', () => {
         newCount: 0,
         reviewCount: 1,
         retryCount: 0,
-        quizCount: 0,
         bySubject: [],
       }],
       ['still'],
