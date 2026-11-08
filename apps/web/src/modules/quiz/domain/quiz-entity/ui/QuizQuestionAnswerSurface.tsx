@@ -1,5 +1,4 @@
 import type { RefObject, ReactNode } from 'react'
-import type { QuizOptionShuffleActions } from '../model/quizOptionShuffle'
 import type { PalaceQuizQuestion, PalaceQuizQuestionDraft } from '@/shared/api/contracts'
 import { QuizQuestionInteraction } from './QuizQuestionInteraction'
 import { QuizQuestionStem } from './QuizQuestionStem'
@@ -40,8 +39,6 @@ export function QuizQuestionAnswerSurface({
   after,
   captureShortcuts = true,
   className,
-  optionShuffleActionsRef,
-  onOptionShuffleAvailabilityChange,
 }: {
   question: QuizQuestion
   state: QuizRuntimeState | undefined
@@ -58,8 +55,6 @@ export function QuizQuestionAnswerSurface({
   after?: ReactNode
   captureShortcuts?: boolean
   className?: string
-  optionShuffleActionsRef?: RefObject<QuizOptionShuffleActions | null>
-  onOptionShuffleAvailabilityChange?: (canRestore: boolean) => void
 }) {
   return (
     <div className={cn('space-y-3', className)} data-quiz-question-answer-surface="">
@@ -81,8 +76,6 @@ export function QuizQuestionAnswerSurface({
             getDurationMs={getDurationMs}
             comboScopeKey={comboScopeKey}
             mark={mark}
-            optionShuffleActionsRef={optionShuffleActionsRef}
-            onOptionShuffleAvailabilityChange={onOptionShuffleAvailabilityChange}
           />
         </div>
       </QuizFontScaleBody>

@@ -115,7 +115,7 @@ describe('QuizQuestionInteraction', () => {
     rerenderWithLatestState()
 
     expect(screen.getByText('回答正确')).toBeTruthy()
-    expect(screen.getByText('正确答案：ABD')).toBeTruthy()
+    expect(screen.getByText('正确答案：细胞膜、细胞核、核糖体')).toBeTruthy()
   })
 
   it('supports fill_blank questions and validates all blanks together', () => {

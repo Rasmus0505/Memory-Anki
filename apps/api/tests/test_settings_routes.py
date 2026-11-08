@@ -156,7 +156,8 @@ class TestClientPreferences:
         ] == {"percent": 130}
 
     def test_quiz_option_shuffle_roundtrip(self, client):
-        value = {"enabled": False, "thresholdSeconds": 2.5}
+        # 选项打乱只在作答后立即换序，旧的 thresholdSeconds 已移除。
+        value = {"enabled": False}
         response = client.put(
             "/api/v1/profile/client-preferences", json={"quiz_option_shuffle": value}
         )

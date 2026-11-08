@@ -152,6 +152,7 @@ export function ShortAnswerBlock({
   onStateChange,
   onShortAnswerSubmit,
   onSubmitted,
+  optionOrder,
 }: {
   question: PalaceQuizQuestion | PalaceQuizQuestionDraft
   state: QuizRuntimeState | undefined
@@ -163,6 +164,7 @@ export function ShortAnswerBlock({
   onStateChange: (updater: (current: QuizRuntimeState) => QuizRuntimeState) => void
   onShortAnswerSubmit?: () => void
   onSubmitted?: (anchor: Element | null) => void
+  optionOrder?: readonly string[]
 }) {
   const rootRef = useRef<HTMLDivElement | null>(null)
   const currentState = state || {}
@@ -190,8 +192,14 @@ export function ShortAnswerBlock({
     [onShortAnswerSubmit, onStateChange, onSubmitted],
   )
 
-  const revealOptions =
-    question.question_type === 'multiple_choice' ? mcqRevealOptions(question) : []
+  const revealOptions = question.question_type === 'multiple_choice'
+    ? (() => {
+        const revealed = mcqRevealOptions(question)
+        if (!optionOrder?.length) return revealed
+        const byId = new Map(revealed.map((option) => [option.id, option]))
+        return optionOrder.map((id) => byId.get(id)).filter((option): option is (typeof revealed)[number] => Boolean(option))
+      })()
+    : []
   const subjectiveRewrite =
     question.question_type === 'multiple_choice'
       ? rewriteMcqForSubjective({

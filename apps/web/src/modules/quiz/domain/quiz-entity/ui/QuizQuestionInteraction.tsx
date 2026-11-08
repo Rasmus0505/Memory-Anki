@@ -1,9 +1,8 @@
-import { useCallback, useLayoutEffect, useRef, type RefObject } from 'react'
+import { useCallback, useLayoutEffect, useRef } from 'react'
 import type { PalaceQuizQuestion, PalaceQuizQuestionDraft } from '@/shared/api/contracts'
 import { Badge } from '@/shared/components/ui/badge'
 import { Button } from '@/shared/components/ui/button'
 import { Input } from '@/shared/components/ui/input'
-import type { QuizOptionShuffleActions } from '../model/quizOptionShuffle'
 import { useQuizOptionShuffle } from './useQuizOptionShuffle'
 import { cn } from '@/shared/lib/utils'
 import {
@@ -74,8 +73,6 @@ export function QuizQuestionInteraction({
   mark,
   getDurationMs,
   comboScopeKey,
-  optionShuffleActionsRef,
-  onOptionShuffleAvailabilityChange,
 }: {
   question: PalaceQuizQuestion | PalaceQuizQuestionDraft
   state: QuizRuntimeState | undefined
@@ -94,8 +91,6 @@ export function QuizQuestionInteraction({
   getDurationMs?: (questionId: number) => number | null
   /** Streak owner for the 连对 chip; answers still resolve without it. */
   comboScopeKey?: string | null
-  optionShuffleActionsRef?: RefObject<QuizOptionShuffleActions | null>
-  onOptionShuffleAvailabilityChange?: (canRestore: boolean) => void
 }) {
   const currentState = state || {}
   const questionId =
@@ -106,14 +101,15 @@ export function QuizQuestionInteraction({
   const previousDurationMs =
     'last_answer_duration_ms' in question ? question.last_answer_duration_ms : null
   const { mode, updateMode } = useQuizAnswerMode()
-  const { order: optionOrder, displayedOptions, markAutoShuffleForNextVisit } = useQuizOptionShuffle({
+  const { order: optionOrder, displayedOptions, shuffleNow } = useQuizOptionShuffle({
     questionId,
     questionType: question.question_type,
     options: question.options || [],
-    getDurationMs,
-    actionsRef: optionShuffleActionsRef,
-    onAvailabilityChange: onOptionShuffleAvailabilityChange,
   })
+  const handleShortAnswerSubmit = useCallback(() => {
+    onShortAnswerSubmit?.()
+    if (question.question_type === 'multiple_choice') shuffleNow()
+  }, [onShortAnswerSubmit, question.question_type, shuffleNow])
   const showDuration = useCallback(
     (anchor: Element | null, options?: AnswerDurationBubbleOptions) => {
       if (questionId == null) return
@@ -158,8 +154,9 @@ export function QuizQuestionInteraction({
           modeToggle={modeToggle}
           extraAction={markControl}
           onStateChange={onStateChange}
-          onShortAnswerSubmit={onShortAnswerSubmit}
+          onShortAnswerSubmit={handleShortAnswerSubmit}
           onSubmitted={showDuration}
+          optionOrder={optionOrder.currentOrder}
         />
       )
     }
@@ -180,14 +177,14 @@ export function QuizQuestionInteraction({
           }
         })
       }
-      const submit = () => {
-        if (choiceAnswered || selectedIds.length === 0) return false
+      const submit = (): boolean | null => {
+        if (choiceAnswered || selectedIds.length === 0) return null
         const correct =
           selectedIds.length === correctOptionIds.length &&
           selectedIds.every((item) => correctOptionIds.includes(item))
         onStateChange((current) => ({ ...current, resolved: true, correct }))
         onChoiceResolve?.(selectedIds, correct)
-        markAutoShuffleForNextVisit()
+        shuffleNow()
         return correct
       }
       return (
@@ -228,7 +225,7 @@ export function QuizQuestionInteraction({
               data-quiz-submit="true"
               onClick={(event) => {
                 const correct = submit()
-                if (correct === false) return
+                if (correct == null) return
                 showDuration(event.currentTarget, answerFeedback(correct, 'above'))
               }}
             >
@@ -277,7 +274,7 @@ export function QuizQuestionInteraction({
                   correct,
                 }))
                 onChoiceResolve?.(option.id, correct)
-                markAutoShuffleForNextVisit()
+                shuffleNow()
                 showDuration(event.currentTarget, answerFeedback(correct, 'left-top'))
               }}
               className={cn(
@@ -727,7 +724,7 @@ export function QuizQuestionInteraction({
       modeToggle={null}
       extraAction={markControl}
       onStateChange={onStateChange}
-      onShortAnswerSubmit={onShortAnswerSubmit}
+      onShortAnswerSubmit={handleShortAnswerSubmit}
       onSubmitted={showDuration}
     />
     )
