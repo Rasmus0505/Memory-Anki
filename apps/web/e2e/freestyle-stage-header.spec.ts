@@ -4,8 +4,8 @@ import { expect, test, type Page } from './fixtures'
  * Layout contract for the immersive stage header.
  *
  * The header is one in-flow band: a progress hairline, palace + round count +
- * actions, and a single truncated milestone line. The card sheet starts at the
- * header's bottom edge (nothing floats over it), and inside the sheet the map
+ * actions, plus an inline truncated milestone on wider screens (hidden on phones).
+ * The card sheet starts at the header's bottom edge (nothing floats over it), and inside the sheet the map
  * toolbar owns the top edge with the unit title row beneath it.
  *
  * Hermetic: every /api call is answered here; the fixture 503s the rest.
@@ -178,10 +178,20 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 1440, height: 900 
     expect(header!.height).toBeLessThanOrEqual(100)
     expect(Math.abs((header!.y + header!.height) - feed!.y)).toBeLessThanOrEqual(2)
 
-    // The one-line milestone never wraps into a block.
-    const milestone = await page.getByTestId('freestyle-milestone-line').boundingBox()
-    expect(milestone).not.toBeNull()
-    expect(milestone!.height).toBeLessThanOrEqual(24)
+    // 手机把横向空间留给宫殿和本轮进度；宽屏保留单行里程碑，不能压住卡片。
+    const milestone = page.getByTestId('freestyle-milestone-line')
+    await expect(milestone).toHaveCount(1)
+    await expect(milestone).toContainText('中国教育史完成')
+    if (viewport.width < 640) {
+      await expect(milestone).toBeHidden()
+      await expect(page.getByTestId('freestyle-progress-hud')).toBeVisible()
+    } else {
+      await expect(milestone).toBeVisible()
+      const box = await milestone.boundingBox()
+      expect(box).not.toBeNull()
+      expect(box!.height).toBeLessThanOrEqual(24)
+      expect(box!.y + box!.height).toBeLessThanOrEqual(feed!.y)
+    }
 
     // Inside the sheet: map toolbar first, unit title row under it.
     const toolbar = await page.getByRole('button', { name: '适应整树' }).boundingBox()

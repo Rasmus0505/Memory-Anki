@@ -47,12 +47,15 @@ test('redirects the retired /freestyle-2 bookmark to 随心', async ({ page }) =
   await expect(page.getByRole('link', { name: '随心 2', exact: true })).toHaveCount(0)
 })
 
-test('command palette opens 随心', async ({ page }) => {
+test('command palette opens 随心 even when insights are offline', async ({ page }) => {
   await page.goto('/dashboard')
-  await page.getByRole('heading', { name: '仪表盘' }).waitFor()
+  // 未 mock 的 API 固定返回 503；洞察显示错误态，但全局命令面板仍须可用。
+  await expect(page.getByRole('heading', { name: '洞察加载失败', exact: true })).toBeVisible()
   await page.locator('body').click()
   await page.keyboard.press('Control+k')
-  await page.getByRole('dialog', { name: '命令面板' }).waitFor()
-  await page.getByText('开始随心复习').click()
+  const palette = page.getByRole('dialog', { name: '命令面板' })
+  await expect(palette).toBeVisible()
+  await palette.getByText('开始随心复习', { exact: true }).click()
   await expect(page).toHaveURL(/\/freestyle(\?|$)/)
+  await expect(palette).toBeHidden()
 })

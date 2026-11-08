@@ -50,9 +50,11 @@ for (const viewport of viewports) {
     })
 
     await page.goto('/freestyle')
-    // 现在进入随心先看到开始概览；概览读取失败时也要先离开这一层。
-    const start = page.getByRole('button', { name: /^(开始学习|直接开始学习)$/ })
-    await start.click()
+    // 这是会话加载中的评分栏布局测试。等概览失败态稳定后再点击，
+    // 避免把加载态切换中的按钮点击当成评分栏布局故障。
+    await expect(page.getByText('概览暂时读取失败，仍可直接开始学习。')).toBeVisible()
+    await page.getByRole('button', { name: '直接开始学习', exact: true }).click()
+    await expect(page.getByTestId('freestyle-start-overview')).toHaveCount(0)
 
     const ratingBar = page.getByTestId('freestyle-rating-bar')
     await expect(ratingBar).toBeVisible()

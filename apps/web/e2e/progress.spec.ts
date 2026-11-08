@@ -1,4 +1,3 @@
-import { resolve } from 'node:path'
 import { test, expect, type Page } from './fixtures'
 import { emptyProgressFixture, progressFixture } from './progressFixture'
 
@@ -69,7 +68,8 @@ test('search and filters change rows without changing scope totals', async ({ pa
 test('empty progress gives a knowledge entry and offline progress can retry', async ({ page }) => {
   await mockProgress(page, emptyProgressFixture)
   await page.goto('/progress')
-  await expect(page.getByRole('heading', { name: '你的学习全景，从第一座宫殿开始' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '还没有宫殿', exact: true })).toBeVisible()
+  await expect(page.getByRole('img', { name: '复习覆盖率 暂无记忆点', exact: true })).toBeVisible()
   await expect(page.getByRole('link', { name: '前往知识书架' })).toHaveAttribute('href', '/palaces')
   await page.unroute('**/api/v1/dashboard/learning-progress')
   await page.reload()
@@ -92,7 +92,7 @@ test('dark matrix fixture retains readable progress states', async ({ page }, te
   if (testInfo.project.name === 'desktop-chromium') {
     await page.evaluate(() => document.fonts.ready)
     await page.evaluate(() => window.scrollTo(0, 0))
-    await page.screenshot({ path: resolve(process.cwd(), '../../deliverables/progress-matrix-dark.png'), fullPage: false, animations: 'disabled' })
+    await page.screenshot({ path: testInfo.outputPath('progress-matrix-dark.png'), fullPage: false, animations: 'disabled' })
   }
 })
 
@@ -108,6 +108,6 @@ test('fixture screenshots show desktop and mobile progress without horizontal ov
     await page.evaluate(() => document.fonts.ready)
     const device = testInfo.project.name === 'desktop-chromium' ? 'desktop' : 'mobile'
     await page.evaluate(() => window.scrollTo(0, 0))
-    await page.screenshot({ path: resolve(process.cwd(), '../../deliverables', `progress-${device}.png`), fullPage: device === 'mobile', animations: 'disabled' })
+    await page.screenshot({ path: testInfo.outputPath(`progress-${device}.png`), fullPage: device === 'mobile', animations: 'disabled' })
   }
 })
