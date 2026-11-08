@@ -41,6 +41,8 @@ export interface DirectoryPalaceNode {
   sortOrder: number
   /** Known so the row menu can say 收藏 vs 取消收藏. */
   isFavorite?: boolean
+  /** This palace's share (0–1) of its chapter's questions; absent when the catalog has no totals. */
+  questionShare?: number
 }
 
 export interface DirectoryChapterNode {
@@ -51,6 +53,8 @@ export interface DirectoryChapterNode {
   sortOrder: number
   children: DirectoryChapterNode[]
   palaces: DirectoryPalaceNode[]
+  /** This chapter's share (0–1) of its subject's questions; absent when the catalog has no totals. */
+  questionShare?: number
 }
 
 export interface DirectorySubjectNode {
@@ -62,6 +66,8 @@ export interface DirectorySubjectNode {
   chapters: DirectoryChapterNode[]
   /** Palaces of this subject that have no resolvable primary chapter. */
   ungrouped: DirectoryPalaceNode[]
+  /** This subject's share (0–1) of the shelf's questions; absent when the catalog has no totals. */
+  questionShare?: number
 }
 
 export interface PalaceDirectoryTree {

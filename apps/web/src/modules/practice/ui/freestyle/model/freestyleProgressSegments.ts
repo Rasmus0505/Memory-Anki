@@ -140,7 +140,7 @@ function isQuizTick(
   return card?.type === 'quiz_question' || entry?.kind === 'quiz_question'
 }
 
-/** Card badge / 本轮安排 row chrome for a retry occurrence. */
+/** Card badge / 随心列表 row chrome for a retry occurrence. */
 export function retryChromeClass(done: boolean): string {
   return done
     ? 'border-rate-good/40 bg-rate-good/12 text-rate-good'
@@ -148,7 +148,7 @@ export function retryChromeClass(done: boolean): string {
 }
 
 /**
- * 本轮安排 row status pill for source rows. The only status colour map for plan rows: palace
+ * 随心列表 row status pill for source rows. The only status colour map for plan rows: palace
  * colour is never used here. Retry rows use `retryChromeClass` directly, so the amber lives in one place.
  */
 export function planStatusChromeClass(status: FreestyleRoundPlanCardStatus): string {
@@ -836,7 +836,7 @@ export function progressHudText(summary: FreestyleProgressSummary): string {
 
 /**
  * Spoken name for the rail. Segment clicks jump when `canJump`; the count and
- * an empty rail still open 本轮安排, so that action stays in the empty label.
+ * an empty rail still open 随心配置, so that action stays in the empty label.
  */
 export function progressRailLabel(summary: FreestyleProgressSummary, canJump = false): string {
   if (summary.total === 0) return '本轮暂无安排。点击打开配置'

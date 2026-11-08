@@ -8,6 +8,7 @@ import { getSubjectsApi, getSubjectTreeApi } from '@/modules/content/domain/know
 import { PalaceDirectoryTree, PalaceDirectoryTreeView } from './PalaceDirectoryTree'
 import { resetPalaceDirectoryViewState } from '../model/palaceDirectoryViewState'
 import type { PalaceDirectoryTree as PalaceDirectoryTreeModel } from '../model/palaceDirectoryTree'
+import type { RoundPalaceStatus } from './palaceDirectoryTreeChrome'
 
 vi.mock('@/modules/content/domain/palace-entity/api', () => ({
   getPalacesGroupedApi: vi.fn(),
@@ -57,6 +58,10 @@ function groupedResponse(): PalaceGroupedListResponse {
       },
     ],
   } as unknown as PalaceGroupedListResponse
+}
+
+function roundStatuses(...entries: Array<[number, RoundPalaceStatus]>): ReadonlyMap<number, RoundPalaceStatus> {
+  return new Map(entries)
 }
 
 function makeDataTransfer() {
@@ -221,7 +226,7 @@ describe('PalaceDirectoryTree', () => {
         <PalaceDirectoryTreeView
           tree={roundTree}
           currentPalaceId={11}
-          queuedPalaceIds={new Set([11, 12])}
+          queuedPalaces={roundStatuses([11, 'unrated'], [12, 'retry'])}
           onSelectPalace={() => {}}
           showHeader={false}
           showSearch={false}
@@ -233,12 +238,37 @@ describe('PalaceDirectoryTree', () => {
     const otherRow = screen.getByRole('button', { name: '太学' })
 
     expect(otherRow.getAttribute('data-round-queued')).toBe('true')
-    expect(otherRow.querySelector('[data-round-dot="palace"]')).toBeTruthy()
+    expect(otherRow.querySelector('[data-round-dot="palace"]')?.getAttribute('data-round-status')).toBe('retry')
     expect(currentRow.getAttribute('aria-current')).toBe('page')
+    expect(currentRow.getAttribute('data-round-status')).toBe('unrated')
     expect(currentRow.querySelector('[data-round-dot]')).toBeNull()
-    // The chapter and subject keep a fainter dot so a folded branch still shows it.
-    expect(container.querySelectorAll('[data-round-dot="ancestor"]').length).toBe(2)
+    // The chapter and subject keep a fainter dot, carrying the least-advanced
+    // status below them: 11 is still unrated, so blue wins over 12's retry amber.
+    const ancestors = container.querySelectorAll('[data-round-dot="ancestor"]')
+    expect(ancestors.length).toBe(2)
+    ancestors.forEach((dot) => expect(dot.getAttribute('data-round-status')).toBe('unrated'))
   })
+
+  it('colours a branch green only once every palace under it is rated', async () => {
+    const { container } = render(
+      <MemoryRouter>
+        <PalaceDirectoryTreeView
+          tree={roundTree}
+          currentPalaceId={11}
+          queuedPalaces={roundStatuses([11, 'done'], [12, 'done'])}
+          onSelectPalace={() => {}}
+          showHeader={false}
+          showSearch={false}
+        />
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('button', { name: '汉代的学校' })
+    const ancestors = container.querySelectorAll('[data-round-dot="ancestor"]')
+    expect(ancestors.length).toBe(2)
+    ancestors.forEach((dot) => expect(dot.getAttribute('data-round-status')).toBe('done'))
+  })
+
 
   it('reveals only the first palace when the host keeps the feed moving', async () => {
     const { rerender } = render(
@@ -246,7 +276,7 @@ describe('PalaceDirectoryTree', () => {
         <PalaceDirectoryTreeView
           tree={roundTree}
           currentPalaceId={11}
-          queuedPalaceIds={new Set([11, 21])}
+          queuedPalaces={roundStatuses([11, 'unrated'], [21, 'done'])}
           revealCurrent={false}
           onSelectPalace={() => {}}
           showHeader={false}
@@ -263,7 +293,7 @@ describe('PalaceDirectoryTree', () => {
         <PalaceDirectoryTreeView
           tree={roundTree}
           currentPalaceId={21}
-          queuedPalaceIds={new Set([11, 21])}
+          queuedPalaces={roundStatuses([11, 'unrated'], [21, 'done'])}
           revealCurrent={false}
           onSelectPalace={() => {}}
           showHeader={false}

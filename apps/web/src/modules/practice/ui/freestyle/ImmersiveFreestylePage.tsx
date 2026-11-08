@@ -31,7 +31,9 @@ import { FreestylePageDialogs } from '@/modules/practice/ui/freestyle/FreestyleP
 import { FreestyleCardArea } from '@/modules/practice/ui/freestyle/FreestyleCardArea'
 import { FreestylePalaceDirectoryPanel } from '@/modules/practice/ui/freestyle/components/FreestylePalaceDirectoryPanel'
 import { FreestylePalaceJoinDialog } from '@/modules/practice/ui/freestyle/components/FreestylePalaceJoinDialog'
+import type { FreestyleQueuePanelProps } from '@/modules/practice/ui/freestyle/components/FreestyleQueuePanel'
 import { useFreestylePalaceDirectoryActions } from '@/modules/practice/ui/freestyle/hooks/useFreestylePalaceDirectoryActions'
+import { roundPalaceStatuses } from '@/modules/practice/ui/freestyle/model/freestyle-palace-directory'
 import { FreestyleNewUnitsBanner } from '@/modules/practice/ui/freestyle/components/FreestyleNewUnitsBanner'
 import { FreestyleBedtimeButton } from '@/modules/practice/ui/freestyle/components/FreestyleBedtimeButton'
 import { getFreestyleBedtimeCandidatesApi } from '@/modules/practice/ui/freestyle/api'
@@ -58,7 +60,6 @@ import { cue } from '@/shared/fx'
 import { useImmersiveQueue } from '@/modules/practice/ui/freestyle/hooks/useImmersiveQueue'
 import { usePrefersReducedMotion } from '@/modules/practice/ui/freestyle/hooks/usePrefersReducedMotion'
 import { useFreestyleQuizFlow } from '@/modules/practice/ui/freestyle/hooks/useFreestyleQuizFlow'
-import { useQuizDwellMs } from '@/modules/quiz/public'
 import { useFreestyleFeedNavigation } from '@/modules/practice/ui/freestyle/hooks/useFreestyleFeedNavigation'
 import { useFreestyleLiveSync } from '@/modules/practice/ui/freestyle/hooks/useFreestyleLiveSync'
 import { usePalaceClearanceWatch } from '@/modules/practice/ui/freestyle/hooks/usePalaceClearanceWatch'
@@ -153,42 +154,62 @@ export default function ImmersiveFreestylePage({
   const reducedMotion = usePrefersReducedMotion()
   const queueRef = useRef<FreestyleCard[]>([])
   const startOverlayRef = useRef<HTMLDivElement>(null)
-  const acknowledgedCardIdsRef = useRef<Set<string>>(new Set())
+  const startFocusReturnRef = useRef<HTMLElement | null>(null)
   const flipCardRevealSettings = useFlipCardRevealSettings()
   const [partialSettlement, setPartialSettlement] = useState<FreestylePartialSettlementSnapshot | null>(null)
   const [startOverviewOpen, setStartOverviewOpen] = useState(true)
 
-  // The start gate covers the stage: keep keyboard focus inside it and put the
-  // learner on the primary action, instead of letting Tab wander into hidden controls.
   useEffect(() => {
-    if (!startOverviewOpen) return
+    if (!isActive || !startOverviewOpen || partialSettlement) return
     const root = startOverlayRef.current
     if (!root) return
-    const focusables = () =>
-      Array.from(
-        root.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-        ),
-      ).filter((element) => element.offsetParent !== null)
-    const startButton = root.querySelector<HTMLElement>('[data-testid="freestyle-start-button"]')
-    ;(startButton ?? focusables()[0])?.focus()
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Tab') return
+    const activeElement = document.activeElement
+    startFocusReturnRef.current = activeElement instanceof HTMLElement
+      && activeElement !== document.body
+      && activeElement !== document.documentElement
+      ? activeElement
+      : document.querySelector<HTMLElement>('[data-testid="freestyle-feed-scroller"]')
+    const focusables = () => Array.from(
+      root.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    ).filter((element) => element.offsetParent !== null)
+    const anotherModalOwnsFocus = () => Array.from(
+      document.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]'),
+    ).some((dialog) => dialog !== root && dialog.offsetParent !== null)
+    const focusStart = () => {
+      if (!isActive || !startOverviewOpen || !root.isConnected || anotherModalOwnsFocus()) return
+      const startButton = root.querySelector<HTMLElement>('[data-testid="freestyle-start-button"]')
+      ;(startButton ?? focusables()[0])?.focus()
+    }
+    const frame = window.requestAnimationFrame(focusStart)
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (!isActive || !startOverviewOpen || anotherModalOwnsFocus() || event.key !== 'Tab') return
       const list = focusables()
       if (!list.length) return
       const first = list[0]
       const last = list[list.length - 1]
-      if (event.shiftKey && document.activeElement === first) {
+      if (event.shiftKey && (document.activeElement === first || !root.contains(document.activeElement))) {
         event.preventDefault()
         last.focus()
-      } else if (!event.shiftKey && document.activeElement === last) {
+      } else if (!event.shiftKey && (document.activeElement === last || !root.contains(document.activeElement))) {
         event.preventDefault()
         first.focus()
       }
     }
     root.addEventListener('keydown', onKeyDown)
-    return () => root.removeEventListener('keydown', onKeyDown)
-  }, [startOverviewOpen])
+    return () => {
+      window.cancelAnimationFrame(frame)
+      root.removeEventListener('keydown', onKeyDown)
+    }
+  }, [isActive, partialSettlement, startOverviewOpen])
+
+  useEffect(() => {
+    if (startOverviewOpen || !isActive) return
+    const returnTarget = startFocusReturnRef.current
+    if (returnTarget?.isConnected) returnTarget.focus({ preventScroll: true })
+    startFocusReturnRef.current = null
+  }, [isActive, startOverviewOpen])
 
   const [dayRecapOpen, setDayRecapOpen] = useState(() => isDayRecapPending(window.localStorage, new Date()))
   const [configOpen, setConfigOpen] = useState(false)
@@ -245,7 +266,9 @@ export default function ImmersiveFreestylePage({
     staleCircuitOpen,
     staleRecoveryCardId,
     resetStaleRecovery,
+    reorderPlan,
     excludePlanCards,
+    restorePlanCards,
     compressCompletedPlanCards,
     reopenPalaceCards,
     pendingRestudyCardIds,
@@ -342,20 +365,6 @@ export default function ImmersiveFreestylePage({
   }, [signalPageTurn])
   const currentCard = cards[currentIndex] ?? null
   const currentPalaceId = cardPalaceId(currentCard)
-  /**
-   * Palaces that still own a card in this round, which is exactly what the
-   * progress rail can reach. The directory marks them so the round's reach is
-   * visible without opening every chapter; settled and removed cards are
-   * already gone from `cards`.
-   */
-  const queuedPalaceIds = useMemo(() => {
-    const ids = new Set<number>()
-    for (const card of cards) {
-      const palaceId = cardPalaceId(card)
-      if (palaceId != null) ids.add(palaceId)
-    }
-    return ids
-  }, [cards])
   /**
    * Everything the feed presents has a this-round score. That is not yet 本轮
    * 完成 when the server still owes same-day 重练 (`waiting`): those cards are
@@ -489,7 +498,6 @@ export default function ImmersiveFreestylePage({
     }
   }, [])
 
-  const dwell = useQuizDwellMs()
   const updateFeedQuestion = useCallback(
     (question: FreestyleQuizCard['question']) => {
       setCards((current) =>
@@ -505,9 +513,6 @@ export default function ImmersiveFreestylePage({
   const {
     progress,
     updateQuestionState,
-    resetQuestionAnswer,
-    handleChoiceResolve,
-    handleShortAnswerSubmit,
     answeredQuestionIds,
   } = useFreestyleQuizFlow({
     mode: 'free',
@@ -517,16 +522,7 @@ export default function ImmersiveFreestylePage({
     // Avoid restoring prior choice states that disable options on reappearance.
     freshAttemptStates: true,
     updateFeedQuestion,
-    getDurationMs: dwell.elapsedMs,
   })
-
-  // New round / reshuffle clears completed bookkeeping; reset local ack set too.
-  // Intentionally omit completedIds: mid-round membership must not rebuild the ack set
-  // (settlement may still be in flight after a local ack).
-  useEffect(() => {
-    acknowledgedCardIdsRef.current = new Set(queueState.completedIds)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only reset on new round
-  }, [queueState.roundId])
 
   useFreestyleLiveSync({
     fullPath,
@@ -554,17 +550,6 @@ export default function ImmersiveFreestylePage({
     resetFreestyleCombo()
   }, [])
 
-  const acknowledgeQuizCard = useCallback(
-    (card: FreestyleQuizCard) => {
-      if (acknowledgedCardIdsRef.current.has(card.id)) return
-      acknowledgedCardIdsRef.current.add(card.id)
-      // Keep the card in the feed so analysis stays visible and swipe-back works.
-      // User advances manually (swipe / 下一题) — never auto-jump after answer.
-      acknowledgeCard(card.id)
-    },
-    [acknowledgeCard],
-  )
-
   const handleBranchComplete = useCallback(
     (
       cardId: string,
@@ -590,10 +575,8 @@ export default function ImmersiveFreestylePage({
   )
 
   /**
-   * A settled (saved) rating hands a page turn to the auto-advance timer when
-   * 翻卡设置 has 评分后自动翻页 on. The turn only fires while that card is still
-   * under the viewport, and the undo window lets a mistap be corrected before
-   * the feed moves.
+   * A settled rating from the visible card may hand a page turn to the
+   * auto-advance timer. Background queue ratings must never move the viewport.
    */
   const handleRatingSettled = useCallback(
     (
@@ -602,12 +585,13 @@ export default function ImmersiveFreestylePage({
       _rating: UnitRating,
       _meta?: { occurrenceId?: string; encounterId?: string; planVersion?: number },
     ) => {
-      // 忘记/困难 keeps the learner on the source card: its retry is booked for
-      // later (10 分钟 → 1 小时 → 3 小时), so there is no next card to turn to.
+      if (cardId !== viewingCardId) return
+      // 忘记 keeps the learner on the source card: its retry is booked later,
+      // so there is no next card to turn to.
       if (passed) scheduleAutoAdvance(cardId)
       else cancelAutoAdvance()
     },
-    [cancelAutoAdvance, scheduleAutoAdvance],
+    [cancelAutoAdvance, scheduleAutoAdvance, viewingCardId],
   )
 
   const handleStaleDrop = useCallback(
@@ -670,10 +654,10 @@ export default function ImmersiveFreestylePage({
       .filter((entry) => entry.status === 'excluded')
       .map((entry) => entry.cardId),
   ), [roundPlan])
-  // Every rating acknowledgement reaches the round ledger here, whether or not
-  // its card is mounted. The feed is the only rating surface, so the outbox is
-  // keyed by the card on screen.
+  // Card and queue-panel ratings share this ledger, including acknowledgements
+  // for cards that are not mounted. Queue ratings never advance the visible card.
   const {
+    rateCards: rateQueueCards,
     failedCount: unsavedRatingCount,
     retryUnsaved: retryUnsavedRatings,
   } = useFreestyleRatingOutbox({
@@ -691,39 +675,6 @@ export default function ImmersiveFreestylePage({
     cardSaveFailed: handleCardSaveFailed,
     staleDrop: handleStaleDrop,
   })
-
-  const onChoiceResolve = useCallback(
-    (card: FreestyleQuizCard, optionId: string, isCorrect: boolean) => {
-      handleChoiceResolve(card, optionId, isCorrect)
-      acknowledgeQuizCard(card)
-    },
-    [acknowledgeQuizCard, handleChoiceResolve],
-  )
-
-  const onShortAnswerSubmit = useCallback(
-    (card: FreestyleQuizCard) => {
-      handleShortAnswerSubmit(card)
-      acknowledgeQuizCard(card)
-    },
-    [acknowledgeQuizCard, handleShortAnswerSubmit],
-  )
-
-  // Non-choice types (true/false, fill, match, …) resolve only via onStateChange.
-  useEffect(() => {
-    const card = cards[currentIndex]
-    if (!card || !isQuizCard(card)) return
-    if (acknowledgedCardIdsRef.current.has(card.id)) return
-    const state = progress.questionStates[card.question.id]
-    if (!state?.resolved) return
-    // Multiple-choice / short-answer already handled in their explicit handlers.
-    if (
-      card.question.question_type === 'multiple_choice' ||
-      card.question.question_type === 'short_answer'
-    ) {
-      return
-    }
-    acknowledgeQuizCard(card)
-  }, [acknowledgeQuizCard, cards, currentIndex, progress.questionStates])
 
   // A grade the outbox has not acknowledged is not a score yet: the rail must
   // not fill for it, even if a plan echo elsewhere already spells it out.
@@ -763,6 +714,16 @@ export default function ImmersiveFreestylePage({
       roundProgress?.roundId === queueState.roundId ? roundProgress.progress : null,
     ),
     [localProgressSummary, queueState.roundId, roundProgress],
+  )
+
+  /**
+   * Palaces that still own a tick on the progress rail, each with how far it has
+   * got: 还没评分 / 有待重练 / 已评分完. The directory dots read the same segments the
+   * rail draws, so the round's reach and its remaining work stay one story.
+   */
+  const queuedPalaces = useMemo(
+    () => roundPalaceStatuses(progressSummary.segments),
+    [progressSummary],
   )
 
   const { data: examOverview } = useExamOverview()
@@ -923,6 +884,31 @@ export default function ImmersiveFreestylePage({
     (cardId: string) => excludePlanCards([cardId]),
     [excludePlanCards],
   )
+  const queuePanelProps = useMemo<FreestyleQueuePanelProps>(() => ({
+    cards,
+    roundPlan,
+    completedIds: queueState.completedIds,
+    hiddenIds: queueState.hiddenIds,
+    encounters: queueState.unitEncountersByCardId,
+    currentCardId: currentCard?.id ?? null,
+    ratingSaveEntries,
+    onExclude: excludePlanCards,
+    onRestore: restorePlanCards,
+    onReorder: reorderPlan,
+    onRateCards: rateQueueCards,
+  }), [
+    cards,
+    currentCard?.id,
+    excludePlanCards,
+    queueState.completedIds,
+    queueState.hiddenIds,
+    queueState.unitEncountersByCardId,
+    rateQueueCards,
+    ratingSaveEntries,
+    reorderPlan,
+    restorePlanCards,
+    roundPlan,
+  ])
   const removeCardPermanently = useCallback(async (cardId: string, unitId: string) => {
     try {
       await removeReviewUnitPermanentlyApi(unitId)
@@ -985,7 +971,7 @@ export default function ImmersiveFreestylePage({
   /**
    * Settle what this round already rated. Same ledger write as 结算已完成单元
    * (`compress_completed`) minus the confirmation page, so the progress rail,
-   * 本轮安排 and the swipe feed all lose those units.
+   * 随心列表 and the swipe feed all lose those units.
    */
   const settleCompletedUnits = useCallback(() => {
     const snapshot = buildCompletedSettlement()
@@ -1065,11 +1051,12 @@ export default function ImmersiveFreestylePage({
     <TooltipProvider>
       <FreestylePalaceDirectoryPanel
         currentPalaceId={currentPalaceId}
-        queuedPalaceIds={queuedPalaceIds}
+        queuedPalaces={queuedPalaces}
         collapsed={directoryCollapsed}
         onCollapsedChange={setDirectoryCollapsed}
         onSelectPalace={openPalaceFromDirectory}
         onEditPalace={editPalace}
+        queuePanel={queuePanelProps}
         hidden={freestyleFullscreen}
       >
       <div
@@ -1173,8 +1160,6 @@ export default function ImmersiveFreestylePage({
           roundPlan={roundPlan}
           planVersion={planVersion}
           wrongUnitIds={wrongUnitIds}
-          answeredQuestionIds={answeredQuestionIds}
-          questionStates={progress.questionStates}
           onToggleFullscreen={toggleFreestyleFullscreen}
           onFlipModeChange={updateFlipMode}
           onMindmapZoomChange={updateMindmapZoom}
@@ -1186,20 +1171,11 @@ export default function ImmersiveFreestylePage({
           onRebuildRound={reshuffleQueue}
           onRevisionAdopted={adoptLiveUnitRevision}
           onCardSaveFailed={handleCardSaveFailed}
+          onCardHandled={acknowledgeCard}
           onEditingChange={setInlineEditing}
           onReconcileUnits={reconcileUnitsFor}
           onOpenScopeQuiz={openScopeQuiz}
           onBedtimeRate={rateBedtimeCard}
-          onQuestionStateChange={updateQuestionState}
-          onChoiceResolve={onChoiceResolve}
-          onShortAnswerSubmit={onShortAnswerSubmit}
-          onQuestionUpdated={updateFeedQuestion}
-          onAnswerReset={(questionId) => {
-            resetQuestionAnswer(questionId)
-            dwell.restart(questionId)
-          }}
-          onShown={dwell.restart}
-          getDurationMs={dwell.elapsedMs}
           onNavigateToIndex={navigateToIndex}
           roundCompletion={roundCompletion}
           dueTomorrowCount={dueTomorrowCount}
@@ -1237,6 +1213,24 @@ export default function ImmersiveFreestylePage({
             role="dialog"
             aria-modal="true"
             aria-label="今天的学习"
+            onKeyDown={(event) => {
+              if (!isActive || event.key !== 'Tab') return
+              const root = startOverlayRef.current
+              if (!root) return
+              const items = Array.from(root.querySelectorAll<HTMLElement>(
+                'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+              )).filter((element) => element.offsetParent !== null)
+              if (!items.length) return
+              const first = items[0]
+              const last = items[items.length - 1]
+              if (event.shiftKey && (document.activeElement === first || !root.contains(document.activeElement))) {
+                event.preventDefault()
+                last.focus()
+              } else if (!event.shiftKey && (document.activeElement === last || !root.contains(document.activeElement))) {
+                event.preventDefault()
+                first.focus()
+              }
+            }}
             className="absolute inset-0 z-[60] flex flex-col justify-center overflow-y-auto overscroll-contain bg-stage/95 px-3 py-6 backdrop-blur-sm"
           >
             <div className="mx-auto flex w-full max-w-3xl flex-col gap-3">

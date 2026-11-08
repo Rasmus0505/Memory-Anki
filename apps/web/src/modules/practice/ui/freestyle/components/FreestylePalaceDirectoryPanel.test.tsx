@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getPalacesGroupedApi } from '@/modules/content/domain/palace-entity/api'
 import { getSubjectsApi, getSubjectTreeApi } from '@/modules/content/domain/knowledge-entity/api'
 import { resetPalaceDirectoryViewState } from '@/modules/content/ui/palace-edit/model/palaceDirectoryViewState'
+import type { RoundPalaceStatus } from '@/modules/content/ui/palace-edit/components/palaceDirectoryTreeChrome'
 import { FreestylePalaceDirectoryPanel } from './FreestylePalaceDirectoryPanel'
 
 vi.mock('@/modules/content/domain/palace-entity/api', () => ({
@@ -47,7 +48,7 @@ function palace(id: number, title: string) {
 function renderPanel(
   collapsed = false,
   hidden = false,
-  queuedPalaceIds?: ReadonlySet<number>,
+  queuedPalaces?: ReadonlyMap<number, RoundPalaceStatus>,
 ) {
   const onSelectPalace = vi.fn()
   const onCollapsedChange = vi.fn()
@@ -56,7 +57,7 @@ function renderPanel(
       <MemoryRouter>
         <FreestylePalaceDirectoryPanel
           currentPalaceId={11}
-          queuedPalaceIds={queuedPalaceIds}
+          queuedPalaces={queuedPalaces}
           collapsed={collapsed}
           onCollapsedChange={onCollapsedChange}
           onSelectPalace={onSelectPalace}
@@ -102,14 +103,14 @@ describe('FreestylePalaceDirectoryPanel', () => {
   })
 
   it('marks every palace the current round still holds', async () => {
-    renderPanel(false, false, new Set([11, 12]))
+    renderPanel(false, false, new Map<number, RoundPalaceStatus>([[11, 'done'], [12, 'unrated']]))
 
     const currentRow = await screen.findByRole('button', { name: '已打开的宫殿' })
     const otherRow = screen.getByRole('button', { name: '另一座宫殿' })
 
     expect(currentRow.getAttribute('aria-current')).toBe('page')
     expect(otherRow.getAttribute('data-round-queued')).toBe('true')
-    expect(otherRow.querySelector('[data-round-dot="palace"]')).toBeTruthy()
+    expect(otherRow.querySelector('[data-round-dot="palace"]')?.getAttribute('data-round-status')).toBe('unrated')
   })
 
   it('owns its collapse rail instead of the app navigation', async () => {
@@ -117,6 +118,9 @@ describe('FreestylePalaceDirectoryPanel', () => {
 
     const heading = await screen.findByText('记忆宫殿')
     expect(heading.closest('aside')?.getAttribute('aria-hidden')).toBe('false')
+    expect(screen.getByRole('tab', { name: '目录' })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: '随心列表' })).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: '收起宫殿目录' })).toHaveLength(1)
 
     fireEvent.click(screen.getByRole('button', { name: '收起宫殿目录' }))
     expect(onCollapsedChange).toHaveBeenCalledWith(true)
@@ -137,6 +141,35 @@ describe('FreestylePalaceDirectoryPanel', () => {
     )
     expect(screen.getByText('记忆宫殿').closest('aside')?.getAttribute('aria-hidden')).toBe('true')
     expect(screen.getByTestId('freestyle-stage')).toBeTruthy()
+  })
+
+  it('keeps queue filters across tabs and suspends shortcuts only in the open queue', () => {
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter>
+          <FreestylePalaceDirectoryPanel
+            currentPalaceId={11}
+            collapsed={false}
+            onCollapsedChange={vi.fn()}
+            onSelectPalace={vi.fn()}
+            queuePanel={{
+              cards: [], roundPlan: null, completedIds: [], hiddenIds: [], encounters: {},
+              currentCardId: null, ratingSaveEntries: {}, onExclude: vi.fn(), onRestore: vi.fn(),
+              onReorder: vi.fn(), onRateCards: () => ({ queued: 0, unchanged: 0, skipped: 0 }),
+            }}
+          >stage</FreestylePalaceDirectoryPanel>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    const panel = screen.getByTestId('freestyle-queue-panel')
+    expect(panel.getAttribute('data-keyboard-shortcuts-suspended')).toBeNull()
+    fireEvent.click(screen.getByRole('tab', { name: '随心列表' }))
+    fireEvent.change(screen.getByRole('searchbox', { name: '筛选本轮队列' }), { target: { value: '书院' } })
+    expect(panel.getAttribute('data-keyboard-shortcuts-suspended')).toBe('true')
+    fireEvent.click(screen.getByRole('tab', { name: '目录' }))
+    expect(panel.getAttribute('data-keyboard-shortcuts-suspended')).toBeNull()
+    fireEvent.click(screen.getByRole('tab', { name: '随心列表' }))
+    expect((screen.getByRole('searchbox', { name: '筛选本轮队列' }) as HTMLInputElement).value).toBe('书院')
   })
 
   it('steps aside in fullscreen instead of squeezing the stage', () => {

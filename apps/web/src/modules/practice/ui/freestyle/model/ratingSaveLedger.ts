@@ -9,7 +9,7 @@ import {
  * Applies rating-outbox events to the round ledger (queue encounters, round
  * plan, completion). Framework-free; the page wires the handlers. This is the
  * only place an acknowledged rating changes progress, so it works the same
- * whether the card is on screen, scrolled away, or never mounted (本轮安排).
+ * whether the card is on screen, scrolled away, or never mounted (随心列表).
  */
 export interface RatingLedgerHandlers {
   /** Current round. Events of any other round only touch the outbox entry. */
@@ -91,7 +91,7 @@ export function applyRatingSaveEvent(event: RatingSaveEvent, handlers: RatingLed
         })
       }
       const settled = asRating(next.selectedRating)
-      if (event.current && settled != null) {
+      if (event.current && settled != null && !event.job.suppressAutoAdvance) {
         handlers.ratingSettled?.(event.cardId, next.passed === true, settled, {
           occurrenceId: event.job.occurrenceId || event.cardId,
           encounterId: event.target.encounterId,

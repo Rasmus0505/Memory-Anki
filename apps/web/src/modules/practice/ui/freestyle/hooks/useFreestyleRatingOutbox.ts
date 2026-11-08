@@ -34,7 +34,7 @@ export interface BackgroundRatingResult {
 /**
  * Page-level owner of the rating outbox:
  * - applies every acknowledgement to the round ledger (single owner, card mounted or not);
- * - rates cards from 本轮安排 without moving the feed;
+ * - rates cards from 随心列表 without moving the feed;
  * - exposes the 未保存 count for the HUD.
  */
 export function useFreestyleRatingOutbox(input: {
@@ -139,6 +139,8 @@ export function useFreestyleRatingOutbox(input: {
         !roundId
         || !card
         || !isMindMapBranchCard(card)
+        || card.bedtime
+        || card.palace_pass
         || !card.unit_id
         || card.unit_revision == null
         || current.excludedIds.has(cardId)
@@ -176,6 +178,7 @@ export function useFreestyleRatingOutbox(input: {
         prepare: target ? null : () => prepareRatingTarget(card, encounter, roundId),
         // Only the card under the viewport keeps its glance open; it closes on leave.
         closeAfterAck: cardId !== current.viewingCardId,
+        suppressAutoAdvance: true,
       })
       result.queued += 1
     }

@@ -139,6 +139,8 @@ describe('useFreestyleRatingOutbox', () => {
     expect(handlers.ensureUnitEncounter).toHaveBeenCalledWith('c', 2, true)
     await waitFor(() => expect(handlers.branchComplete).toHaveBeenCalledTimes(3))
     expect(handlers.adoptRound).toHaveBeenCalled()
+    // Queue ratings include the visible card but never schedule a page turn.
+    expect(handlers.ratingSettled).not.toHaveBeenCalled()
   })
 
   it('rates a row in the background without touching the viewport', async () => {

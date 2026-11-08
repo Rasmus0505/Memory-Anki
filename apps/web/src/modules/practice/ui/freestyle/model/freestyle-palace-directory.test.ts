@@ -6,6 +6,7 @@ import {
   findPalaceJumpTarget,
   palaceHasPlanCards,
   resolvePalaceDirectoryClick,
+  roundPalaceStatuses,
 } from './freestyle-palace-directory'
 
 function card(id: string, palaceId: number): FreestyleCard {
@@ -120,5 +121,41 @@ describe('round-plan membership', () => {
     expect(palaceHasPlanCards(plan, 1)).toBe(true)
     expect(palaceHasPlanCards(plan, 3)).toBe(false)
     expect(palaceHasPlanCards(null, 1)).toBe(false)
+  })
+})
+
+describe('round palace statuses', () => {
+  const segment = (palaceId: number | null, tone: 'done' | 'retry' | 'current' | 'pending') => ({
+    cardId: `c-${palaceId}-${tone}`,
+    tone,
+    palaceId,
+    palaceDone: false,
+  })
+
+  it('reads an unfilled tick as unrated work and a retry circle as 待重练', () => {
+    const statuses = roundPalaceStatuses([
+      segment(1, 'pending'),
+      segment(2, 'retry'),
+      segment(3, 'done'),
+    ])
+
+    expect(statuses.get(1)).toBe('unrated')
+    expect(statuses.get(2)).toBe('retry')
+    expect(statuses.get(3)).toBe('done')
+  })
+
+  it('a palace never claims to be further than its least-advanced tick', () => {
+    const statuses = roundPalaceStatuses([
+      segment(1, 'done'),
+      segment(1, 'retry'),
+      segment(1, 'pending'),
+    ])
+
+    expect(statuses.get(1)).toBe('unrated')
+    expect(roundPalaceStatuses([segment(1, 'done'), segment(1, 'retry')]).get(1)).toBe('retry')
+  })
+
+  it('drops the hint row, which belongs to no palace', () => {
+    expect(roundPalaceStatuses([segment(null, 'pending')]).size).toBe(0)
   })
 })

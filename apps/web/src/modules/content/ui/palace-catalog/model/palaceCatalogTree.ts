@@ -5,14 +5,22 @@ import type {
   DirectorySubjectNode,
   PalaceDirectoryTree,
 } from '@/modules/content/ui/palace-edit/model/palaceDirectoryTree'
+import { shareRatio } from '@/shared/ui/share-fill/shareFill'
 
 const DEFAULT_SUBJECT_COLOR = '#2f6b63'
+
+/** Part ÷ whole as a share, or null when either side is unknown (no bar to draw). */
+function shareOf(part: number | null | undefined, whole: number | null | undefined): number | null {
+  if (part == null || whole == null || whole <= 0) return null
+  return shareRatio(part, whole)
+}
 
 function toPalaceNode(
   palace: PalaceGroupedItem,
   order: number,
   chapterId: number | null,
   subjectId: number | null,
+  questionShare?: number | null,
 ): DirectoryPalaceNode {
   return {
     kind: 'palace',
@@ -21,6 +29,7 @@ function toPalaceNode(
     chapterId,
     subjectId,
     sortOrder: order,
+    ...(questionShare != null ? { questionShare } : {}),
   }
 }
 
@@ -49,13 +58,32 @@ export function buildPalaceCatalogTree(grouped: PalaceGroupedListResponse | null
     return true
   }
 
+  // Question totals arrive on the grouped payload: one per subject and one per
+  // chapter (distinct questions across that group's palaces). A row's bar is
+  // its share of the level above it, so gather the denominators up front.
+  const subjectQuestionTotals = new Map<number, number>()
+  const chapterQuestionTotals = new Map<number, number>()
+  for (const subjectGroup of grouped.subjects ?? []) {
+    const subjectId = subjectGroup.subject?.id
+    if (subjectId == null) continue
+    if (subjectGroup.question_total != null) subjectQuestionTotals.set(subjectId, subjectGroup.question_total)
+    for (const group of subjectGroup.chapter_groups ?? []) {
+      const chapterId = group.source_chapter?.id
+      if (chapterId != null && group.question_total != null) chapterQuestionTotals.set(chapterId, group.question_total)
+    }
+  }
+  const shelfQuestionTotal = [...subjectQuestionTotals.values()].reduce((sum, value) => sum + value, 0)
+
   ;(grouped.subjects ?? []).forEach((subjectGroup, subjectOrder) => {
     const subjectId = subjectGroup.subject?.id ?? null
+    const subjectTotal = subjectId != null ? subjectQuestionTotals.get(subjectId) : undefined
     const chapterIndex = new Map<number, DirectoryChapterNode>()
     const chapterNodes: DirectoryChapterNode[] = []
     ;(subjectGroup.chapter_groups ?? []).forEach((group, groupOrder) => {
       const chapter = group.source_chapter
       if (!chapter || typeof chapter.id !== 'number') return
+      const chapterTotal = chapterQuestionTotals.get(chapter.id)
+      const chapterShare = shareOf(chapterTotal, subjectTotal)
       const node: DirectoryChapterNode = {
         kind: 'chapter',
         id: chapter.id,
@@ -64,9 +92,18 @@ export function buildPalaceCatalogTree(grouped: PalaceGroupedListResponse | null
         sortOrder: groupOrder,
         children: [],
         palaces: [],
+        ...(chapterShare != null ? { questionShare: chapterShare } : {}),
       }
       ;(group.palaces ?? []).forEach((palace, palaceOrder) => {
-        if (take(palace)) node.palaces.push(toPalaceNode(palace, palaceOrder, chapter.id, subjectId))
+        if (take(palace)) {
+          node.palaces.push(toPalaceNode(
+            palace,
+            palaceOrder,
+            chapter.id,
+            subjectId,
+            shareOf(palace.quiz_question_total, chapterTotal ?? subjectTotal),
+          ))
+        }
       })
       chapterIndex.set(chapter.id, node)
       chapterNodes.push(node)
@@ -80,7 +117,15 @@ export function buildPalaceCatalogTree(grouped: PalaceGroupedListResponse | null
     }
     const ungrouped: DirectoryPalaceNode[] = []
     ;(subjectGroup.ungrouped_palaces ?? []).forEach((palace, palaceOrder) => {
-      if (take(palace)) ungrouped.push(toPalaceNode(palace, palaceOrder, null, subjectId))
+      if (take(palace)) {
+        ungrouped.push(toPalaceNode(
+          palace,
+          palaceOrder,
+          null,
+          subjectId,
+          shareOf(palace.quiz_question_total, subjectTotal),
+        ))
+      }
     })
 
     if (subjectId == null) {
@@ -93,6 +138,7 @@ export function buildPalaceCatalogTree(grouped: PalaceGroupedListResponse | null
       rootUngrouped.push(...ungrouped)
       return
     }
+    const subjectShare = shareOf(subjectTotal, shelfQuestionTotal)
     subjects.push({
       kind: 'subject',
       id: subjectId,
@@ -101,6 +147,7 @@ export function buildPalaceCatalogTree(grouped: PalaceGroupedListResponse | null
       sortOrder: subjectOrder,
       chapters: roots,
       ungrouped,
+      ...(subjectShare != null ? { questionShare: subjectShare } : {}),
     })
   })
 

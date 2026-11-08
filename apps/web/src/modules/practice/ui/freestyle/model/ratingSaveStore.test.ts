@@ -142,6 +142,21 @@ describe('classifyRatingResponse', () => {
 })
 
 describe('RatingSaveStore', () => {
+  it('retries hydrated failures in the background without auto-advance', async () => {
+    const { store, posts, events } = harness()
+    store.hydrateIntents('round-1', [{
+      card_id: 'card-1', operation_id: 'restored-op', rating: 3, failure: 'network',
+      payload: { encounter_id: 'enc-1', study_session_id: 'session-1', unit_id: 'unit-1', unit_revision: 3 },
+    }], () => null)
+    expect(store.retryFailed('round-1')).toBe(1)
+    expect(posts[0].payload.operation_id).toBe('restored-op')
+    posts[0].reply.resolve({ item: item(3, 'restored-op'), round: round() })
+    await flush()
+    expect(events.find((event) => event.type === 'acked')).toMatchObject({
+      job: { suppressAutoAdvance: true }, current: true,
+    })
+  })
+
   it('goes saving → saved only on acknowledgement', async () => {
     const { store, posts, events } = harness()
     expect(rate(store).status).toBe('saving')

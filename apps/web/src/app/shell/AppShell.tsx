@@ -617,7 +617,7 @@ function ShellFrame({ children }: PropsWithChildren) {
             {children}
           </div>
         </main>
-        <CityHorizon visible={mindMapHost} pathname={pathname} />
+        <CityHorizon visible={mindMapHost && !immersiveFeed} pathname={pathname} />
         <MobileBottomNav layoutMode={layoutMode} />
         <AppLogDrawer open={logDrawerOpen} onOpenChange={setLogDrawerOpen} />
         <SessionRecorderHost floating={immersiveFeed} />

@@ -182,8 +182,11 @@ describe('ImmersiveFreestylePage layout', () => {
     expect(rail).toContain("setConfigIntent('replan')")
   })
 
-  it('puts the palace directory left of the feed with a collapse switch of its own', () => {
+  it('puts directory and queue tabs in the left panel without shrinking the map', () => {
     expect(source).toContain('<FreestylePalaceDirectoryPanel')
+    expect(source).toContain('queuePanel={queuePanelProps}')
+    expect(read('components/FreestylePalaceDirectoryPanel.tsx')).toContain('随心列表')
+    expect(read('components/FreestylePalaceDirectoryPanel.tsx')).toContain('role="tabpanel"')
     expect(source).toContain('onSelectPalace={openPalaceFromDirectory}')
     expect(source).toContain('hidden={freestyleFullscreen}')
     // The panel's rail, not the app nav's, owns collapsed/expanded.

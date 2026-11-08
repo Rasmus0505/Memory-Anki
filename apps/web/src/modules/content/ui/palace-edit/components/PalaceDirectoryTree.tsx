@@ -41,6 +41,8 @@ import {
   QueueDot,
   collectQueueMarks,
   readDraggedPalaceId,
+  roundStatusLabel,
+  type RoundPalaceStatus,
 } from './palaceDirectoryTreeChrome'
 
 const ROW_METRICS: Record<PalaceDirectoryTreeSize, { indent: number; base: number; text: string; row: string; leaf: string; chevron: string }> = {
@@ -74,6 +76,7 @@ export interface PalaceDirectoryTreeViewProps {
   onRenameChapter?: (chapterId: number, nextName: string) => void | Promise<void>
   onRenameSubject?: (subjectId: number, nextName: string) => void | Promise<void>
   showHeader?: boolean
+  showCollapseToggle?: boolean
   showSearch?: boolean
   searchPlaceholder?: string
   emptyState?: ReactNode
@@ -103,11 +106,13 @@ export interface PalaceDirectoryTreeViewProps {
   /** Mark this text inside chapter and palace names (the host's search term). */
   highlight?: string
   /**
-   * Palaces that still have cards in the host's round (随心). They get a small
-   * dot, and their ancestors a fainter one, so a folded chapter still shows
-   * that this round reaches into it. The palace on screen keeps the filled row.
+   * Palaces that still have cards in the host's round (随心), each with how far
+   * it has got: 还没评分 / 有待重练 / 已评分完. They get a small dot in that colour,
+   * and their ancestors a fainter one carrying the least-advanced status below
+   * them, so a folded chapter still shows what is left. The palace on screen
+   * keeps the filled row.
    */
-  queuedPalaceIds?: ReadonlySet<number>
+  queuedPalaces?: ReadonlyMap<number, RoundPalaceStatus>
   /**
    * Expand and scroll to the current palace whenever it changes. True for
    * editors and catalogs; the freestyle feed turns it off so paging cards does
@@ -137,6 +142,7 @@ export function PalaceDirectoryTreeView({
   onRenameChapter,
   onRenameSubject,
   showHeader = true,
+  showCollapseToggle = true,
   showSearch = true,
   searchPlaceholder = '搜索宫殿',
   emptyState,
@@ -153,7 +159,7 @@ export function PalaceDirectoryTreeView({
   renderSubjectMeta,
   renderBucketMeta,
   highlight,
-  queuedPalaceIds,
+  queuedPalaces,
   revealCurrent = true,
 }: PalaceDirectoryTreeViewProps) {
   const metrics = ROW_METRICS[size]
@@ -224,7 +230,7 @@ export function PalaceDirectoryTreeView({
 
   // Which rows this round reaches into, computed against the full tree so the
   // marks do not blink while a search narrows what is rendered.
-  const queueMarks = useMemo(() => collectQueueMarks(tree, queuedPalaceIds), [tree, queuedPalaceIds])
+  const queueMarks = useMemo(() => collectQueueMarks(tree, queuedPalaces), [tree, queuedPalaces])
 
   // Opening a palace from anywhere (including the tree itself) reveals its path.
   // A feed host that turns `revealCurrent` off reveals only its first palace:
@@ -283,6 +289,30 @@ export function PalaceDirectoryTreeView({
   })
 
   /**
+   * A row's question share: a hairline along the bottom edge with the number at
+   * its right end, aligned under the row's label. Rows without totals draw
+   * nothing, so the editor's directory stays plain.
+   */
+  const questionShareLine = (share: number | undefined, depth: number) => {
+    if (share == null) return null
+    const percent = Math.round(Math.min(1, Math.max(0, share)) * 100)
+    return (
+      <div
+        className="flex items-center gap-2 pb-1 pr-2"
+        style={{ paddingLeft: metrics.base + depth * metrics.indent + (pageList ? 28 : 20) }}
+        role="img"
+        aria-label={`题目占比 ${percent}%`}
+        data-question-share={percent}
+      >
+        <span className="block h-0.5 min-w-0 flex-1 overflow-hidden rounded-full bg-border/60" aria-hidden="true">
+          <span className="block h-full rounded-full bg-muted-foreground/35" style={{ width: `${percent}%` }} />
+        </span>
+        <span className="shrink-0 text-[10px] font-medium leading-none tabular-nums text-muted-foreground">{percent}%</span>
+      </div>
+    )
+  }
+
+  /**
    * `flattenedChapter` marks a leaf chapter rendered as its single palace: the
    * row then also accepts drops so another palace can be rebound onto it.
    */
@@ -292,7 +322,8 @@ export function PalaceDirectoryTreeView({
     flattenedChapter?: DirectoryChapterNode,
   ) => {
     const active = palace.id === currentPalaceId
-    const queued = queueMarks.palaces.has(palace.id)
+    const roundStatus = queueMarks.palaces.get(palace.id)
+    const queued = roundStatus != null
     const dropKey = flattenedChapter ? `chapter:${flattenedChapter.id}` : null
     const rowKey = `palace:${palace.id}`
     const rowIndent = { paddingLeft: metrics.base + depth * metrics.indent + (pageList ? 28 : 20) }
@@ -332,10 +363,13 @@ export function PalaceDirectoryTreeView({
         )}
         style={rowIndent}
         data-round-queued={queued ? 'true' : undefined}
+        data-round-status={roundStatus}
       >
         <FileText className={cn(metrics.leaf, 'shrink-0 opacity-60')} aria-hidden />
         <span className="truncate"><Highlighted text={palace.title} query={highlight} /></span>
-        {queued && !active ? <QueueDot label="本轮队列里有这座宫殿" /> : null}
+        {roundStatus && !active
+          ? <QueueDot status={roundStatus} label={roundStatusLabel(roundStatus, 'palace')} />
+          : null}
       </button>
     )
     const palaceMenuItems = palaceMenu?.(palace, { beginRename: () => beginRename(rowKey) }) ?? null
@@ -360,10 +394,13 @@ export function PalaceDirectoryTreeView({
       <div
         key={`palace-row:${palace.id}`}
         data-palace-row={palace.id}
-        className="group/row flex min-w-0 items-center gap-2 rounded-md pr-2 transition-colors hover:bg-accent/70"
+        className="group/row min-w-0 rounded-md transition-colors hover:bg-accent/70"
       >
-        {row}
-        <div className="flex shrink-0 items-center gap-1.5">{renderPalaceMeta(palace)}</div>
+        <div className="flex min-w-0 items-center gap-2 pr-2">
+          {row}
+          <div className="flex shrink-0 items-center gap-1.5">{renderPalaceMeta(palace)}</div>
+        </div>
+        {questionShareLine(flattenedChapter?.questionShare ?? palace.questionShare, depth)}
       </div>
     ) : row
     if (!flattenedChapter || dropKey == null) return rowWithMeta
@@ -390,6 +427,7 @@ export function PalaceDirectoryTreeView({
     const key = `chapter:${chapter.id}`
     const isOpen = searching || expanded.has(key)
     const renaming = renamingKey === key && Boolean(onRenameChapter)
+    const chapterStatus = queueMarks.chapters.get(chapter.id)
     const chapterLabel = (
       <button
         type="button"
@@ -436,11 +474,12 @@ export function PalaceDirectoryTreeView({
           ) : (
             <RowContextMenu items={chapterMenuItems}>{chapterLabel}</RowContextMenu>
           )}
-          {queueMarks.chapters.has(chapter.id)
-            ? <QueueDot faint label="这一章有本轮队列中的宫殿" />
+          {chapterStatus
+            ? <QueueDot faint status={chapterStatus} label={roundStatusLabel(chapterStatus, 'chapter')} />
             : null}
           {renderChapterMeta ? <div className="flex shrink-0 items-center gap-1.5">{renderChapterMeta(chapter)}</div> : null}
         </div>
+        {questionShareLine(chapter.questionShare, depth)}
         {isOpen ? (
           <div className="min-w-0">
             {chapter.children.map((child) => renderChapter(child, depth + 1))}
@@ -458,6 +497,7 @@ export function PalaceDirectoryTreeView({
     depth: number,
   ) => {
     const isOpen = searching || expanded.has(key)
+    const bucketStatus = queueMarks.buckets.get(key)
     const bucketLabel = (
       <button
         type="button"
@@ -487,8 +527,8 @@ export function PalaceDirectoryTreeView({
             <ChevronRight className={cn('size-3.5 transition-transform', isOpen && 'rotate-90')} aria-hidden />
           </button>
           <RowContextMenu items={bucketMenuItems}>{bucketLabel}</RowContextMenu>
-          {queueMarks.buckets.has(key)
-            ? <QueueDot faint label="这一栏有本轮队列中的宫殿" />
+          {bucketStatus
+            ? <QueueDot faint status={bucketStatus} label={roundStatusLabel(bucketStatus, 'bucket')} />
             : null}
           {renderBucketMeta ? <div className="flex shrink-0 items-center gap-1.5">{renderBucketMeta(key)}</div> : null}
         </div>
@@ -516,6 +556,7 @@ export function PalaceDirectoryTreeView({
     const key = `subject:${subject.id}`
     const isOpen = searching || expanded.has(key)
     const renaming = renamingKey === key && Boolean(onRenameSubject)
+    const subjectStatus = queueMarks.subjects.get(subject.id)
     const subjectLabel = (
       <button
         type="button"
@@ -563,11 +604,12 @@ export function PalaceDirectoryTreeView({
           ) : (
             <RowContextMenu items={subjectMenuItems}>{subjectLabel}</RowContextMenu>
           )}
-          {queueMarks.subjects.has(subject.id)
-            ? <QueueDot faint label="这个学科有本轮队列中的宫殿" />
+          {subjectStatus
+            ? <QueueDot faint status={subjectStatus} label={roundStatusLabel(subjectStatus, 'subject')} />
             : null}
           {renderSubjectMeta ? <div className="flex shrink-0 items-center gap-1.5">{renderSubjectMeta(subject)}</div> : null}
         </div>
+        {questionShareLine(subject.questionShare, depth)}
         {isOpen ? renderSubjectChildren(subject, depth + 1) : null}
       </div>
     )
@@ -589,7 +631,7 @@ export function PalaceDirectoryTreeView({
           >
             <Plus className="size-4" aria-hidden />
           </Link>
-          <SplitPanelToggle />
+          {showCollapseToggle ? <SplitPanelToggle /> : null}
         </div>
       ) : null}
       {showSearch ? (

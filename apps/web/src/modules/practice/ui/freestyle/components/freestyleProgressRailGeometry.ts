@@ -25,7 +25,7 @@ export function measureRailSlots(rail: HTMLElement): Map<string, SlotRect> {
   return map
 }
 
-/** Padding beside a tick still belongs to that tick; a wide miss opens 本轮安排. */
+/** Padding beside a tick still belongs to that tick; a wide miss opens 随心配置. */
 const RAIL_JUMP_SLACK_PX = 12
 
 export function cardIdAtRailPointer(

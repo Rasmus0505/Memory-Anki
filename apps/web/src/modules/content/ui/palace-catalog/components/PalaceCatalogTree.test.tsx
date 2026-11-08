@@ -95,7 +95,46 @@ beforeEach(() => {
   resetPalaceDirectoryViewState()
 })
 
+function groupedWithQuestionTotals() {
+  return {
+    groups: [],
+    ungrouped: [],
+    subjects: [{
+      subject,
+      chapter_groups: [
+        {
+          source_chapter: chapterOne,
+          palaces: [buildPalace({ id: 6, title: '官学', resolved_title: '官学', quiz_question_total: 5 })],
+          question_total: 8,
+        },
+        { source_chapter: sectionOne, palaces: [buildPalace({ id: 7, title: '西周', resolved_title: '西周', quiz_question_total: 3 })], question_total: 3 },
+      ],
+      ungrouped_palaces: [],
+      question_total: 10,
+    }],
+  } as PalaceGroupedListResponse
+}
+
 describe('buildPalaceCatalogTree', () => {
+  it('gives each row its share of the level above it', () => {
+    const { tree } = buildPalaceCatalogTree(groupedWithQuestionTotals())
+    const subjectNode = tree.subjects[0]
+    const chapterNode = subjectNode.chapters[0]
+    const sectionNode = chapterNode.children[0]
+    expect(subjectNode.questionShare).toBeCloseTo(1)
+    expect(chapterNode.questionShare).toBeCloseTo(0.8)
+    expect(sectionNode.questionShare).toBeCloseTo(0.3)
+    expect(chapterNode.palaces[0].questionShare).toBeCloseTo(0.625)
+    expect(sectionNode.palaces[0].questionShare).toBeCloseTo(1)
+  })
+
+  it('draws no share when the catalog has no question totals', () => {
+    const { tree } = buildPalaceCatalogTree(groupedWith([buildPalace()]))
+    expect(tree.subjects[0].questionShare).toBeUndefined()
+    expect(tree.subjects[0].chapters[0].questionShare).toBeUndefined()
+    expect(tree.subjects[0].chapters[0].children[0].palaces[0].questionShare).toBeUndefined()
+  })
+
   it('nests chapters by parent and lists each palace once', () => {
     const palace = buildPalace({ id: 5 })
     const { tree, palacesById } = buildPalaceCatalogTree({
@@ -148,6 +187,16 @@ describe('PalaceCatalogTree rows', () => {
       has_due_review: true,
     } as unknown as PalaceGroupedItem]))
     expect(screen.queryByRole('button', { name: /复习|标记/ })).toBeNull()
+  })
+
+  it('draws a question-share line with its percentage on subject, chapter and palace rows', () => {
+    renderTree(groupedWithQuestionTotals())
+    expect(screen.getAllByLabelText('题目占比 100%')).toHaveLength(1)
+    expect(screen.getByLabelText('题目占比 80%')).toBeTruthy()
+    expect(screen.getByLabelText('题目占比 63%')).toBeTruthy()
+    // The leaf chapter folds into its single palace row, so the row carries the chapter's 3/10, not 3/3.
+    expect(screen.getByLabelText('题目占比 30%')).toBeTruthy()
+    expect(screen.getByText('80%')).toBeTruthy()
   })
 
   it('keeps 做题 one click away and progress/delete in the row menu', () => {

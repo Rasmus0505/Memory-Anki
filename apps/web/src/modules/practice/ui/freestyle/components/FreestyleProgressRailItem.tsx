@@ -274,18 +274,18 @@ export function ProgressRailItem({
             dimClass,
           )}
         >
-          {segment.bedtime || palaceFavorite ? (
+          {segment.bedtime || (palaceFavorite && palaceStaggerIndex === 0) ? (
             <span
               aria-hidden
               data-testid="freestyle-progress-marker"
               className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-center gap-0.5"
             >
-              {palaceFavorite ? (
+              {palaceFavorite && palaceStaggerIndex === 0 ? (
                 <Star
                   data-testid="freestyle-progress-favorite"
                   className={cn(
-                    'shrink-0 fill-current text-warning',
-                    segment.bedtime ? 'size-2' : 'size-2.5',
+                    'shrink-0 fill-current text-warning/85',
+                    segment.bedtime ? 'size-1.5' : 'size-2',
                   )}
                   strokeWidth={2.2}
                 />

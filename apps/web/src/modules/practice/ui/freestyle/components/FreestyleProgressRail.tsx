@@ -536,11 +536,10 @@ export function FreestyleProgressRail({
         ))}
       </div>
 
-      {/* Row 1: where am I, how far through the round, and the two actions. The
-          old 40px pill floated over the card; here it is one band in flow, so the
-          sheet below never has anything on top of it. pr-11 on phones keeps the
-          actions out of the session-recorder lane in the top-right corner (a
-          fixed 36px widget, 8px from the edge). */}
+      {/* One band: where am I, how far through the round, the next milestone and
+          the two actions. The milestone used to own a second row; folding it in
+          here gives the sheet 20px of height back on every card. pr-11 on phones
+          keeps the actions out of the session-recorder lane in the top-right. */}
       <div className="flex items-center justify-between gap-2 px-2.5 pr-11 pt-1 sm:px-3 sm:pr-3">
         <div className="flex min-w-0 flex-1 items-center gap-1.5">
           {workspaceSwitcher}
@@ -561,19 +560,15 @@ export function FreestyleProgressRail({
               ) : null}
             </button>
           ) : null}
+          {milestoneSlot ? (
+            <div className="hidden min-w-0 max-w-[11rem] sm:block">{milestoneSlot}</div>
+          ) : null}
           {overflow ? (
             <div className="pointer-events-auto flex items-center gap-0.5">{overflow}</div>
           ) : null}
         </div>
       </div>
 
-      {/* Row 2: one line only. The countdown used to wrap into three lines and
-          float over the card's title row; here it truncates in place. */}
-      {milestoneSlot ? (
-        <div className="min-w-0 px-2.5 pb-1 pr-11 pt-0.5 sm:px-3 sm:pr-3">{milestoneSlot}</div>
-      ) : (
-        <div className="pb-1" />
-      )}
     </div>
   )
 }

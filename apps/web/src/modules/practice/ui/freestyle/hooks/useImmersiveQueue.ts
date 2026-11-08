@@ -57,6 +57,7 @@ import {
   compressRoundPlanCards,
   compressibleRoundPlanIds,
   expandSettledIds,
+  replaceCompressedIds,
   settledIdSet,
   excludeRoundPlanCards,
   mergeRetainedHiddenIds,
@@ -220,6 +221,15 @@ function waitForQueueBuildRetry(signal: AbortSignal) {
     }, QUEUE_BUILD_RETRY_DELAY_MS)
     signal.addEventListener('abort', handleAbort, { once: true })
   })
+}
+
+/**
+ * 做题 lives in the toolbar window now. Old rounds can still carry inline
+ * `quiz_question` rows; drop them before they reach the feed state so the page
+ * count, pager, and settlement all see the same memory-only queue.
+ */
+function withoutQuizCards(cards: FreestyleCard[]) {
+  return cards.filter((card) => card.type !== 'quiz_question')
 }
 
 function cardsWithoutHidden(cards: FreestyleCard[], hiddenIds: readonly string[]) {
@@ -551,9 +561,82 @@ export function useImmersiveQueue(
   }, [saveRoundAction])
   const cursorCommitTimerRef = useRef<number | null>(null)
   const pendingCursorRef = useRef<string | null>(null)
-  /** Restores in flight. A stale server exclude list must not hide these again. */
+  /** Restores in this round. Even a pre-restore read arriving after its ACK is stale. */
   const pendingReleaseIdsRef = useRef(new Set<string>())
+  const releaseVersionRef = useRef(new Map<string, number>())
+  const pendingOrderRef = useRef<{ roundId: string; orderIds: string[] } | null>(null)
+  const queueActionTailRef = useRef<Promise<unknown>>(Promise.resolve())
   const [planVersion, setPlanVersion] = useState(0)
+
+  // All queue edits share a lane: retrying an earlier edit must never overtake
+  // a later drag or a restore of the same card. Read the version when sending,
+  // not when the learner first clicked, and retain one id across conflict retries.
+  const saveQueueAction = useCallback((
+    roundId: string,
+    body: Omit<Parameters<typeof applyFreestyleRoundActionApi>[1], 'expected_version'>,
+  ) => {
+    const send = async () => {
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        if (!mountedRef.current || queueStateRef.current.roundId !== roundId) return null
+        const round = await saveRoundAction(roundId, {
+          ...body,
+          expected_version: serverPlanVersionRef.current,
+        })
+        if (queueStateRef.current.roundId !== roundId) return null
+        const version = Math.max(serverPlanVersionRef.current, serverPlanVersion(round))
+        serverPlanVersionRef.current = version
+        setPlanVersion(version)
+        if (!round.conflict) return round
+      }
+      throw new Error('队列修改尚未保存，请重试')
+    }
+    const pending = queueActionTailRef.current.then(send)
+    queueActionTailRef.current = pending.catch(() => {})
+    return pending
+  }, [saveRoundAction])
+
+  const planWithQueueEdits = useCallback((
+    plan: FreestyleRoundStatePayload['plan'],
+    roundId: string,
+    version: number,
+  ): FreestyleRoundStatePayload['plan'] => {
+    if (queueStateRef.current.roundId !== roundId) return plan
+    const released = pendingReleaseIdsRef.current
+    // A later explicit removal from another device may supersede our restore.
+    // Equal/older snapshots still need protection after the restore ACK.
+    for (const id of plan.excluded_ids) {
+      const restoredAt = releaseVersionRef.current.get(id)
+      if (restoredAt != null && version > restoredAt) {
+        released.delete(id)
+        releaseVersionRef.current.delete(id)
+      }
+    }
+    const pending = pendingOrderRef.current
+    let presented = plan.presented_ids
+    if (pending?.roundId === roundId) {
+      const locked = new Set([
+        ...plan.completed_ids, ...plan.excluded_ids, ...plan.compressed_ids,
+        ...Object.keys(plan.bedtime_ratings ?? {}),
+        ...Object.entries(plan.encounters).filter(([, encounter]) => encounter.rating != null).map(([id]) => id),
+        ...plan.original_cards.filter((card) => card.bedtime || card.palace_pass).map((card) => card.card_id),
+        ...plan.occurrences.flatMap((occurrence) => [occurrence.occurrence_id,
+          ...(['pending', 'inserted'].includes(occurrence.status) ? [occurrence.source_card_id] : []),
+        ]),
+      ])
+      const movable = new Set(presented.filter((id) => !locked.has(id)))
+      const requested = [
+        ...pending.orderIds.filter((id) => movable.has(id)),
+        ...presented.filter((id) => movable.has(id) && !pending.orderIds.includes(id)),
+      ]
+      let cursor = 0
+      presented = presented.map((id) => movable.has(id) ? requested[cursor++] : id)
+    }
+    return {
+      ...plan,
+      presented_ids: presented,
+      excluded_ids: plan.excluded_ids.filter((id) => !released.has(id)),
+    }
+  }, [])
   const [wrongUnitIds, setWrongUnitIds] = useState<string[]>([])
   const [queueFrozen, setQueueFrozen] = useState(false)
   /**
@@ -612,6 +695,11 @@ export function useImmersiveQueue(
 
   const persistQueueState = useCallback((next: FreestyleSkipState) => {
     localQueueMutationRef.current += 1
+    if (next.roundId !== queueStateRef.current.roundId) {
+      pendingReleaseIdsRef.current.clear()
+      releaseVersionRef.current.clear()
+      pendingOrderRef.current = null
+    }
     const sanitized = saveQueueState(next, slot)
     // A quota miss may store a plan-less snapshot. The live session must keep
     // the plan, or the sheet says 0 while the rail still has the cards.
@@ -1002,7 +1090,7 @@ export function useImmersiveQueue(
         const builtCards = nextCards
         // Do not persist this ordering plan. A mismatched round id would publish
         // an all-pending ledger, and the post-await retain would treat those scores as cancelled.
-        nextCards = applyRoundPlanOrder(builtCards, queueStateRef.current.roundPlan)
+        nextCards = withoutQuizCards(applyRoundPlanOrder(builtCards, queueStateRef.current.roundPlan))
         if (silent) setQueueFrozen(true)
         let serverCurrentId: string | null = null
         let draftResumeCardId: string | null = queueStateRef.current.currentCardId
@@ -1032,6 +1120,11 @@ export function useImmersiveQueue(
             })
             if (operationIdRef.current !== operationId) return
           }
+          if (
+            round.round_id === queueStateRef.current.roundId
+            && serverPlanVersion(round) < serverPlanVersionRef.current
+          ) return
+          round = { ...round, plan: planWithQueueEdits(round.plan, round.round_id, serverPlanVersion(round)) }
           setWrongUnitIds(round.plan.wrong_unit_ids ?? [])
           const version = serverPlanVersion(round)
           serverPlanVersionRef.current = version
@@ -1041,7 +1134,7 @@ export function useImmersiveQueue(
             roundSummarySeqRef.current += 1
             setRoundSummary({ roundId: adoptedRoundId, summary: round.summary, seq: roundSummarySeqRef.current })
           }
-          nextCards = cardsForServerPlan(builtCards, round.plan, adoptedRoundId)
+          nextCards = withoutQuizCards(cardsForServerPlan(builtCards, round.plan, adoptedRoundId))
           incomingMeta.scheduled_count = nextCards.length
           serverCurrentId = nextUnfinishedCardId(round.plan, nextCards)
           // A permanent-mark edit retires the viewed unit and merges its nodes
@@ -1109,13 +1202,13 @@ export function useImmersiveQueue(
         }
         // Plan hydration is done — only now the presented feed may carry the
         // yellow boundary hint (kept out of every server round-plan write).
-        nextCards = cardsWithoutCompressed(
+        nextCards = withoutQuizCards(cardsWithoutCompressed(
           cardsWithoutHidden(
             insertReviewHintCards(nextCards),
             queueStateRef.current.hiddenIds,
           ),
           queueStateRef.current.roundPlan?.compressedIds,
-        )
+        ))
         // Stay on the card the user is viewing (or the just-settled unit). Manual
         // swipe / 下一题 is the only way to advance — no restudy auto-jump.
         // Cold start prefers the local draft cursor when it still exists in-feed,
@@ -1216,7 +1309,7 @@ export function useImmersiveQueue(
         })
       }
     },
-    [applyCurrentIndex, commitRoundCursor, notifyPeerRound, persistQueueState, slot, syncPendingRestudyIds],
+    [applyCurrentIndex, commitRoundCursor, notifyPeerRound, persistQueueState, planWithQueueEdits, slot, syncPendingRestudyIds],
   )
   buildQueueRef.current = buildQueue
 
@@ -1452,10 +1545,10 @@ export function useImmersiveQueue(
         serverPlan: remotePlan,
         adoptServerLedger: true,
       })
-      const nextCards = cardsWithoutCompressed(
+      const nextCards = withoutQuizCards(cardsWithoutCompressed(
         cardsWithoutHidden(insertReviewHintCards(plannedCards), retained.hiddenIds),
         retained.plan?.compressedIds,
-      )
+      ))
       const landingId = nextUnfinishedCardId(remotePlan, nextCards)
       const remaining = nextCards.length > 0
         ? unscoredFeedCount(nextCards, {
@@ -1810,7 +1903,7 @@ export function useImmersiveQueue(
         const plan = stampRestudyPlan(
           currentPlan,
           // The yellow boundary hint is not work: it must never enter the plan
-          // order that the rail and 本轮安排 read.
+          // order that the rail and 随心列表 read.
           stripReviewHintCards(cardsRef.current),
           queueStateRef.current.roundId,
           configRef.current,
@@ -2029,7 +2122,7 @@ export function useImmersiveQueue(
       if (clearedLogicalIds.length === 0) {
         // Ratings only: the local ledger plus the ack's adopted plan is the
         // whole update. A background rebuild here reshuffled the feed and the
-        // rail for 本轮安排 ratings too.
+        // rail for 随心列表 ratings too.
         return
       }
       const roundId = queueStateRef.current.roundId
@@ -2447,6 +2540,20 @@ export function useImmersiveQueue(
     persistQueueState({ ...queueStateRef.current, roundPlan: nextPlan })
     cardsRef.current = nextCards
     setCards(nextCards)
+    const roundId = currentPlan.roundId
+    const intent = { roundId, orderIds: nextPlan.orderIds }
+    pendingOrderRef.current = intent
+    void saveQueueAction(roundId, {
+      operation_id: createOperationId(),
+      action: 'reorder',
+      order_ids: nextPlan.orderIds,
+    }).then((round) => {
+      if (!round || queueStateRef.current.roundId !== roundId) return
+      if (pendingOrderRef.current === intent) pendingOrderRef.current = null
+      notifyPeerRound()
+    }).catch(() => {
+      // Keep the latest local order while offline; hydration must not erase it.
+    })
     const resolvedIndex = currentCardId
       ? nextCards.findIndex((card) => card.id === currentCardId)
       : -1
@@ -2454,12 +2561,15 @@ export function useImmersiveQueue(
       resolvedIndex >= 0 ? resolvedIndex : Math.min(currentIndexRef.current, Math.max(0, nextCards.length - 1)),
       nextCards,
     )
-  }, [applyCurrentIndex, persistQueueState])
+  }, [applyCurrentIndex, notifyPeerRound, persistQueueState, saveQueueAction])
 
   const excludePlanCards = useCallback((cardIds: string[]) => {
     const ids = cardIds.map((id) => String(id || '').trim()).filter(Boolean)
     if (!ids.length) return
-    ids.forEach((id) => pendingReleaseIdsRef.current.delete(id))
+    ids.forEach((id) => {
+      pendingReleaseIdsRef.current.delete(id)
+      releaseVersionRef.current.delete(id)
+    })
     const previousPlan = queueStateRef.current.roundPlan
     const nextPlan = excludeRoundPlanCards(previousPlan, ids, cardsRef.current)
     const excludedIds = new Set(ids)
@@ -2487,29 +2597,21 @@ export function useImmersiveQueue(
     const roundId = nextState.roundId
     void (async () => {
       let echoedExcluded: string[] | null = null
-      for (const cardId of excludedIds) {
-        for (let attempt = 0; attempt < 3; attempt += 1) {
-          const round = await saveRoundAction(roundId, {
-            operation_id: createOperationId(),
-            expected_version: serverPlanVersionRef.current,
-            action: 'exclude',
-            card_id: cardId,
-          })
-          if (queueStateRef.current.roundId !== roundId) return
-          const version = serverPlanVersion(round)
-          if (version > 0) {
-            serverPlanVersionRef.current = version
-            setPlanVersion(version)
-          }
-          if (Array.isArray(round.plan?.excluded_ids)) {
-            echoedExcluded = round.plan.excluded_ids.map(String)
-          }
-          if (!round.conflict) break
-        }
+      const rounds = await Promise.all([...excludedIds].map((cardId) => saveQueueAction(roundId, {
+        operation_id: createOperationId(),
+        action: 'exclude',
+        card_id: cardId,
+      })))
+      for (const round of rounds) {
+        if (Array.isArray(round?.plan?.excluded_ids)) echoedExcluded = round.plan.excluded_ids.map(String)
       }
       if (queueStateRef.current.roundId !== roundId) return
       const current = queueStateRef.current
-      const stamped = excludeRoundPlanCards(current.roundPlan, ids, cardsRef.current)
+      const stamped = excludeRoundPlanCards(
+        current.roundPlan,
+        ids.filter((id) => !pendingReleaseIdsRef.current.has(id)),
+        cardsRef.current,
+      )
       const hiddenIds = mergeRetainedHiddenIds(
         current.hiddenIds,
         stamped,
@@ -2539,12 +2641,15 @@ export function useImmersiveQueue(
       reason: 'plan_exclude',
       forceExcludedIds: [...excludedIds],
     })
-  }, [applyCurrentIndex, buildQueue, notifyPeerRound, persistQueueState, saveRoundAction])
+  }, [applyCurrentIndex, buildQueue, notifyPeerRound, persistQueueState, saveQueueAction])
 
   const restorePlanCards = useCallback((cardIds: string[]) => {
     const ids = cardIds.map((id) => String(id || '').trim()).filter(Boolean)
     if (!ids.length) return
-    ids.forEach((id) => pendingReleaseIdsRef.current.add(id))
+    ids.forEach((id) => {
+      pendingReleaseIdsRef.current.add(id)
+      releaseVersionRef.current.delete(id)
+    })
     let nextPlan: FreestyleRoundPlanState | null = queueStateRef.current.roundPlan
     ids.forEach((id) => {
       if (nextPlan) nextPlan = updateRoundPlanCard(nextPlan, id, { status: 'pending' })
@@ -2552,38 +2657,34 @@ export function useImmersiveQueue(
     const nextState = restoreCards({ ...queueStateRef.current, roundPlan: nextPlan }, ids)
     persistQueueState(nextState)
     const roundId = nextState.roundId
-    void (async () => {
-      for (const cardId of ids) {
-        for (let attempt = 0; attempt < 3; attempt += 1) {
-          const round = await saveRoundAction(roundId, {
-            operation_id: createOperationId(),
-            expected_version: serverPlanVersionRef.current,
-            action: 'restore',
-            card_id: cardId,
-          })
-          if (queueStateRef.current.roundId !== roundId) return
-          const version = serverPlanVersion(round)
-          if (version > 0) {
-            serverPlanVersionRef.current = version
-            setPlanVersion(version)
-          }
-          if (!round.conflict) {
-            pendingReleaseIdsRef.current.delete(cardId)
-            break
-          }
+    void Promise.all(ids.map((cardId) => saveQueueAction(roundId, {
+      operation_id: createOperationId(),
+      action: 'restore',
+      card_id: cardId,
+    }))).then((rounds) => {
+      if (queueStateRef.current.roundId !== roundId || rounds.some((round) => !round)) return
+      rounds.forEach((round, index) => {
+        if (round && pendingReleaseIdsRef.current.has(ids[index])) {
+          releaseVersionRef.current.set(ids[index], serverPlanVersion(round))
         }
-      }
+      })
       notifyPeerRound()
-    })().catch(() => {
+    }).catch(() => {
       // Local restore remains the offline draft.
+    }).finally(() => {
+      if (queueStateRef.current.roundId !== roundId) return
+      // Build after the restore ACK: an earlier projection can omit the hidden
+      // card entirely, and clearing hiddenIds alone cannot materialize its body.
+      void buildQueue(configRef.current, {
+        preserveCompleted: true,
+        hiddenIds: queueStateRef.current.hiddenIds,
+        completedIds: queueStateRef.current.completedIds,
+        silent: true,
+        preferCardId: queueStateRef.current.currentCardId,
+        reason: 'plan_restore',
+      })
     })
-    void buildQueue(configRef.current, {
-      preserveCompleted: true,
-      hiddenIds: nextState.hiddenIds,
-      completedIds: nextState.completedIds,
-      reason: 'plan_restore',
-    })
-  }, [buildQueue, notifyPeerRound, persistQueueState, saveRoundAction])
+  }, [buildQueue, notifyPeerRound, persistQueueState, saveQueueAction])
 
   const compressCompletedPlanCards = useCallback((snapshot?: FreestylePartialSettlementSnapshot) => {
     const current = queueStateRef.current
@@ -2614,6 +2715,8 @@ export function useImmersiveQueue(
     const landedIndex = landedId ? filtered.findIndex((card) => card.id === landedId) : -1
     applyCurrentIndex(landedIndex >= 0 ? landedIndex : 0, filtered)
     const roundId = current.roundId
+    /** What the server actually settled, or null when no echo landed. */
+    let confirmed: string[] | null = null
     void (async () => {
       for (let attempt = 0; attempt < 3; attempt += 1) {
         const round = await saveRoundAction(roundId, {
@@ -2632,7 +2735,11 @@ export function useImmersiveQueue(
           const echoed = Array.isArray(round.plan?.compressed_ids)
             ? round.plan.compressed_ids.map(String)
             : ids
-          const echoedPlan = compressRoundPlanCards(queueStateRef.current.roundPlan, echoed)
+          confirmed = echoed
+          // Adopt the echo exactly. The server refuses a group that still owes
+          // a 重练, so a narrower echo means those cards are still live: union
+          // would hide them on the rail while 做题 keeps serving them.
+          const echoedPlan = replaceCompressedIds(queueStateRef.current.roundPlan, echoed)
           persistQueueState({
             ...queueStateRef.current,
             roundPlan: echoedPlan
@@ -2648,8 +2755,26 @@ export function useImmersiveQueue(
           break
         }
       }
+      if (queueStateRef.current.roundId !== roundId) return
+      const settled = confirmed ?? []
+      const echoedAll = confirmed != null
+        && confirmed.length === ids.length
+        && ids.every((id) => confirmed.includes(id))
+      if (!echoedAll) {
+        // No echo, or the server settled less than this client dropped. Rebuild
+        // against the server's set so the rail and 做题 show the same cards.
+        void buildQueue(configRef.current, {
+          preserveCompleted: true,
+          hiddenIds: queueStateRef.current.hiddenIds,
+          completedIds: queueStateRef.current.completedIds,
+          silent: true,
+          preferCardId: cardsRef.current[currentIndexRef.current]?.id ?? null,
+          reason: 'plan_compress_reconcile',
+          forceCompressedIds: settled,
+        })
+      }
     })().catch(() => {
-      // Local compress remains the offline draft.
+      // Local compress remains the offline draft; the next live rebuild retries.
     })
     void buildQueue(configRef.current, {
       preserveCompleted: true,
@@ -2821,6 +2946,8 @@ export function useImmersiveQueue(
     serverPlanVersionRef.current = version
     setPlanVersion(version)
     const serverPlan = round?.plan
+      ? planWithQueueEdits(round.plan, round.round_id || queueStateRef.current.roundId, version)
+      : undefined
     const localPlan = queueStateRef.current.roundPlan
     if (!serverPlan || !localPlan) return
     const known = new Set(Object.keys(localPlan.cardsById))
@@ -2873,7 +3000,7 @@ export function useImmersiveQueue(
     }
     if (!orderChanged && ratedPlan === localPlan && completedIds.length === localCompleted.length) return
     persistQueueState({ ...queueStateRef.current, completedIds, roundPlan: orderedPlan })
-  }, [applyCurrentIndex, persistQueueState])
+  }, [applyCurrentIndex, persistQueueState, planWithQueueEdits])
 
   /**
    * 睡前复习: append today's newly rated cards to the end of the current queue.
@@ -2990,6 +3117,9 @@ export function useImmersiveQueue(
 
   const hydrateFromServerRound = useCallback(async (advanceIfCompleted: boolean) => {
     const roundId = queueStateRef.current.roundId
+    /** A cold-open read can resolve after the learner already turned or scored.
+     *  Its "open at the earliest unrated card" must never steal their viewport. */
+    const capturedMutation = localQueueMutationRef.current
     const capturedLedger = {
       plan: queueStateRef.current.roundPlan,
       completedIds: [...queueStateRef.current.completedIds],
@@ -3017,7 +3147,9 @@ export function useImmersiveQueue(
           workspace: slot,
         })
       }
-      if (!round?.plan) return
+      if (!round?.plan || queueStateRef.current.roundId !== roundId) return
+      if (round.round_id === roundId && serverPlanVersion(round) < serverPlanVersionRef.current) return
+      round = { ...round, plan: planWithQueueEdits(round.plan, round.round_id || roundId, serverPlanVersion(round)) }
       const adoptedRoundId = round.round_id || roundId
       setRoundWaiting(round.waiting ?? null)
       serverPlanVersionRef.current = serverPlanVersion(round)
@@ -3057,10 +3189,10 @@ export function useImmersiveQueue(
         },
         serverPlan: round.plan,
       })
-      const nextCards = cardsWithoutCompressed(
+      const nextCards = withoutQuizCards(cardsWithoutCompressed(
         cardsWithoutHidden(insertReviewHintCards(plannedCards), retained.hiddenIds),
         retained.plan?.compressedIds,
-      )
+      ))
       persistQueueState({
         ...queueStateRef.current,
         roundId: adoptedRoundId,
@@ -3084,7 +3216,8 @@ export function useImmersiveQueue(
       }
       const currentId = nextCards[currentIndexRef.current]?.id
       const handled = new Set([...retained.completedIds, ...retained.hiddenIds])
-      if (feedWasEmpty && nextCards.length > 0) {
+      const learnerMoved = localQueueMutationRef.current !== capturedMutation
+      if (feedWasEmpty && nextCards.length > 0 && !learnerMoved) {
         setLoading(false)
         const openFeedIndex = resolveFreestyleOpenFeedIndex(
           nextCards,
@@ -3099,7 +3232,7 @@ export function useImmersiveQueue(
         } else {
           setStartupVisualIndex(openFeedIndex)
         }
-      } else if (advanceIfCompleted && currentId && handled.has(currentId)) {
+      } else if (advanceIfCompleted && !learnerMoved && currentId && handled.has(currentId)) {
         const nextId = nextUnfinishedCardId(round.plan, nextCards)
         const idx = nextId ? nextCards.findIndex((card) => card.id === nextId) : -1
         if (idx >= 0) applyCurrentIndex(idx, nextCards)
@@ -3107,7 +3240,7 @@ export function useImmersiveQueue(
     } catch {
       // Offline: keep the local draft.
     }
-  }, [applyCurrentIndex, commitRoundCursor, persistQueueState, slot])
+  }, [applyCurrentIndex, commitRoundCursor, persistQueueState, planWithQueueEdits, slot])
 
   /**
    * Hydrate a peer's round without touching the active-round or action APIs.
@@ -3138,7 +3271,7 @@ export function useImmersiveQueue(
       encounters: queueStateRef.current.unitEncountersByCardId,
     }
     const promise = (async () => {
-      const round = await getFreestyleRoundApi(roundId, { signal: controller.signal })
+      let round = await getFreestyleRoundApi(roundId, { signal: controller.signal })
       if (!mountedRef.current || controller.signal.aborted || slotRef.current !== slot) return
       const remoteVersion = serverPlanVersion(round)
       const localRoundId = queueStateRef.current.roundId
@@ -3171,7 +3304,9 @@ export function useImmersiveQueue(
         localQueueMutationRef.current !== capturedMutation
         || operationIdRef.current !== capturedOperation
         || (capturedRoundId && queueStateRef.current.roundId !== capturedRoundId)
+        || (localRoundId === roundId && remoteVersion < serverPlanVersionRef.current)
       ) return
+      round = { ...round, plan: planWithQueueEdits(round.plan, roundId, remoteVersion) }
 
       const responseCards = response.cards || []
       const localCards = stripReviewHintCards(cardsRef.current)
@@ -3228,10 +3363,10 @@ export function useImmersiveQueue(
         },
         serverPlan: round.plan,
       })
-      const nextCards = cardsWithoutCompressed(
+      const nextCards = withoutQuizCards(cardsWithoutCompressed(
         cardsWithoutHidden(insertReviewHintCards(plannedCards), retained.hiddenIds),
         retained.plan?.compressedIds,
-      )
+      ))
       const previousCardId = cardsRef.current[currentIndexRef.current]?.id
       const remoteCardId = String(round.current_card_id || '').trim()
       const nextCurrentId = deviceLocalCursor(
@@ -3277,7 +3412,7 @@ export function useImmersiveQueue(
       if (liveHydrationRef.current === entry) liveHydrationRef.current = null
     })
     return promise
-  }, [applyCurrentIndex, persistQueueState, slot])
+  }, [applyCurrentIndex, persistQueueState, planWithQueueEdits, slot])
 
   useEffect(() => {
     let cancelled = false

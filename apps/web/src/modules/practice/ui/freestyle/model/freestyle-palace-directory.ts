@@ -1,6 +1,30 @@
 import { cardPalaceId } from '@/modules/practice/domain/queueState'
 import type { FreestyleRoundPlanState } from '@/modules/practice/domain/roundPlan'
+import { lowerRoundStatus, type RoundPalaceStatus } from '@/modules/content/public'
+import type { FreestyleProgressSegment } from '@/modules/practice/ui/freestyle/model/freestyleProgressSegments'
 import type { FreestyleCard } from '@/shared/api/contracts'
+
+/**
+ * How far each palace has got in this round, read off the progress rail's own
+ * ticks: an unfilled tick is still unrated work, a retry circle is 待重练, and a
+ * palace whose ticks are all filled is done. A palace never claims to be further
+ * than its least-advanced tick, so the directory's dots cannot disagree with
+ * the rail the learner is paging through.
+ */
+export function roundPalaceStatuses(
+  segments: readonly FreestyleProgressSegment[],
+): Map<number, RoundPalaceStatus> {
+  const statuses = new Map<number, RoundPalaceStatus>()
+  for (const segment of segments) {
+    if (segment.palaceId == null) continue
+    const status: RoundPalaceStatus = segment.tone === 'done'
+      ? 'done'
+      : segment.tone === 'retry' ? 'retry' : 'unrated'
+    const current = statuses.get(segment.palaceId)
+    statuses.set(segment.palaceId, current ? lowerRoundStatus(current, status) : status)
+  }
+  return statuses
+}
 
 /**
  * What a click on the left directory's palace row means.

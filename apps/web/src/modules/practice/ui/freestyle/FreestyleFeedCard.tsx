@@ -1,18 +1,16 @@
 import { type ComponentProps, type CSSProperties } from 'react'
 import { FreestyleRatingReaction } from '@/modules/practice/ui/freestyle/components/FreestyleRatingReaction'
 import { FreestyleUnitReviewCardView } from '@/modules/practice/ui/freestyle/components/FreestyleUnitReviewCardView'
-import { FreestyleQuizCardView } from '@/modules/practice/ui/freestyle/components/FreestyleQuizCardView'
 import { FreestyleReviewHintCardView } from '@/modules/practice/ui/freestyle/components/FreestyleReviewHintCardView'
 import { FreestyleRetryCornerBadge } from '@/modules/practice/ui/freestyle/FreestyleRetryCornerBadge'
 import { StaleUnitReviewCard } from '@/modules/practice/ui/freestyle/StaleUnitReviewCard'
 import { examStarsOf } from '@/modules/practice/ui/freestyle/freestylePageHelpers'
 import { cardAmbientHsl } from '@/modules/practice/ui/freestyle/model/freestyleProgressSegments'
-import { isMindMapBranchCard, isQuizCard } from '@/modules/practice/ui/freestyle/model/freestyle-cards'
-import { isReviewHintCard, type FreestyleCard, type FreestyleQuizCard } from '@/shared/api/contracts'
+import { isMindMapBranchCard } from '@/modules/practice/ui/freestyle/model/freestyle-cards'
+import { isReviewHintCard, type FreestyleCard } from '@/shared/api/contracts'
 import { ExamStarBadge } from '@/modules/exam/public'
 
 type UnitProps = ComponentProps<typeof FreestyleUnitReviewCardView>
-type QuizProps = ComponentProps<typeof FreestyleQuizCardView>
 
 export function FreestyleFeedCard({
   card,
@@ -30,8 +28,6 @@ export function FreestyleFeedCard({
   encounter,
   planEntry,
   completed,
-  questionState,
-  answeredBefore,
   wrongThisRound = false,
   onFlipModeChange,
   onMindmapZoomChange,
@@ -46,15 +42,9 @@ export function FreestyleFeedCard({
   onSaveFailed,
   onEditingChange,
   onUnitsReconciled,
+  onCardHandled,
   onOpenScopeQuiz,
   onBedtimeRate,
-  onQuestionStateChange,
-  onChoiceResolve,
-  onShortAnswerSubmit,
-  onQuestionUpdated,
-  onAnswerReset,
-  onShown,
-  getDurationMs,
   onNavigateToIndex,
 }: {
   card: FreestyleCard
@@ -77,8 +67,6 @@ export function FreestyleFeedCard({
     lastRating?: UnitProps['lastRating']
   } | undefined
   completed: boolean
-  questionState: QuizProps['state']
-  answeredBefore: boolean
   wrongThisRound?: boolean
   onFlipModeChange: UnitProps['onFreestyleFlipModeChange']
   onMindmapZoomChange: UnitProps['onUserZoomChange']
@@ -93,15 +81,9 @@ export function FreestyleFeedCard({
   onSaveFailed: UnitProps['onSaveFailed']
   onEditingChange: UnitProps['onEditingChange']
   onUnitsReconciled: UnitProps['onUnitsReconciled']
+  onCardHandled: UnitProps['onCardHandled']
   onOpenScopeQuiz: UnitProps['onOpenScopeQuiz']
   onBedtimeRate: UnitProps['onBedtimeRate']
-  onQuestionStateChange: (questionId: number, updater: Parameters<QuizProps['onStateChange']>[0]) => void
-  onChoiceResolve: (card: FreestyleQuizCard, optionId: string | string[], isCorrect: boolean) => void
-  onShortAnswerSubmit: (card: FreestyleQuizCard) => void
-  onQuestionUpdated?: QuizProps['onQuestionUpdated']
-  onAnswerReset?: QuizProps['onAnswerReset']
-  onShown?: QuizProps['onShown']
-  getDurationMs?: QuizProps['getDurationMs']
   onNavigateToIndex: (index: number) => void
 }) {
   const active = isActive && index === currentIndex && index === visualIndex && !settlementVisible
@@ -118,6 +100,7 @@ export function FreestyleFeedCard({
         <div
           className="relative flex min-h-0 flex-1 flex-col"
           data-exam-stars={examStarsOf(card) ?? undefined}
+          data-card-kind={isMindMapBranchCard(card) ? 'mindmap' : undefined}
         >
           {examStarsOf(card) ? (
             <span className="exam-feed-corner" aria-hidden={examStarsOf(card) === 1}>
@@ -153,6 +136,8 @@ export function FreestyleFeedCard({
                   onSaveFailed={onSaveFailed}
                   onEditingChange={index === currentIndex ? onEditingChange : undefined}
                   onUnitsReconciled={onUnitsReconciled}
+                  onCardHandled={onCardHandled}
+                  completed={completed}
                   onOpenScopeQuiz={onOpenScopeQuiz}
                   onBedtimeRate={onBedtimeRate}
                 />
@@ -162,25 +147,6 @@ export function FreestyleFeedCard({
                   onStaleDrop={onStaleDrop}
                 />
               )
-          ) : isQuizCard(card) ? (
-            <FreestyleQuizCardView
-              card={card}
-              active={active}
-              state={questionState}
-              answeredBefore={answeredBefore}
-              onStateChange={(updater) => onQuestionStateChange(card.question.id, updater)}
-              onChoiceResolve={(optionId, isCorrect) => onChoiceResolve(card, optionId, isCorrect)}
-              onShortAnswerSubmit={() => {
-                onShortAnswerSubmit(card)
-              }}
-              onQuestionUpdated={onQuestionUpdated}
-              onAnswerReset={onAnswerReset}
-              onShown={onShown}
-              getDurationMs={getDurationMs}
-              onRequestNext={() => {
-                onNavigateToIndex(index + 1)
-              }}
-            />
           ) : isReviewHintCard(card) ? (
             <FreestyleReviewHintCardView
               card={card}

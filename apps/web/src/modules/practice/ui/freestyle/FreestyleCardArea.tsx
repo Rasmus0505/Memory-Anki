@@ -7,10 +7,7 @@ import { FreestyleWaitingState } from '@/modules/practice/ui/freestyle/component
 import type { FreestyleSettlementMeta } from '@/modules/practice/ui/freestyle/components/FreestyleRoundSettlement'
 import { overlayRoundReviewPalaceIds } from '@/modules/practice/ui/freestyle/model/overlayQuizRange'
 import { isOccurrenceScored } from '@/modules/practice/domain/unitProgressState'
-import {
-  freestyleFeedCardKey,
-  isQuizCard,
-} from '@/modules/practice/ui/freestyle/model/freestyle-cards'
+import { freestyleFeedCardKey } from '@/modules/practice/ui/freestyle/model/freestyle-cards'
 import type { FreestyleCard } from '@/shared/api/contracts'
 import { toast } from '@/shared/feedback/toast'
 
@@ -42,8 +39,6 @@ export function FreestyleCardArea({
   roundPlan,
   planVersion,
   wrongUnitIds,
-  answeredQuestionIds,
-  questionStates,
   onToggleFullscreen,
   onFlipModeChange,
   onMindmapZoomChange,
@@ -55,17 +50,11 @@ export function FreestyleCardArea({
   onRebuildRound,
   onRevisionAdopted,
   onCardSaveFailed,
+  onCardHandled,
   onEditingChange,
   onReconcileUnits,
   onOpenScopeQuiz,
   onBedtimeRate,
-  onQuestionStateChange,
-  onChoiceResolve,
-  onShortAnswerSubmit,
-  onQuestionUpdated,
-  onAnswerReset,
-  onShown,
-  getDurationMs,
   onNavigateToIndex,
   roundCompletion,
   dueTomorrowCount,
@@ -98,8 +87,6 @@ export function FreestyleCardArea({
   roundPlan: Queue['roundPlan']
   planVersion: Queue['planVersion']
   wrongUnitIds: readonly string[]
-  answeredQuestionIds: ReadonlySet<number>
-  questionStates: Record<number, FeedProps['questionState']>
   onToggleFullscreen: FeedProps['onToggleFullscreen']
   onFlipModeChange: FeedProps['onFlipModeChange']
   onMindmapZoomChange: FeedProps['onMindmapZoomChange']
@@ -111,17 +98,11 @@ export function FreestyleCardArea({
   onRebuildRound: FeedProps['onRebuildRound']
   onRevisionAdopted: FeedProps['onRevisionAdopted']
   onCardSaveFailed: (message: string, cardId: string) => void
+  onCardHandled: FeedProps['onCardHandled']
   onEditingChange: FeedProps['onEditingChange']
   onReconcileUnits: (cardId: string) => void
   onOpenScopeQuiz: FeedProps['onOpenScopeQuiz']
   onBedtimeRate: FeedProps['onBedtimeRate']
-  onQuestionStateChange: FeedProps['onQuestionStateChange']
-  onChoiceResolve: FeedProps['onChoiceResolve']
-  onShortAnswerSubmit: FeedProps['onShortAnswerSubmit']
-  onQuestionUpdated?: FeedProps['onQuestionUpdated']
-  onAnswerReset?: FeedProps['onAnswerReset']
-  onShown?: FeedProps['onShown']
-  getDurationMs?: FeedProps['getDurationMs']
   onNavigateToIndex: FeedProps['onNavigateToIndex']
   roundCompletion: ClosingProps['completion']
   dueTomorrowCount: number | null
@@ -141,6 +122,7 @@ export function FreestyleCardArea({
       // overflow-anchor-none: reordering cards for「下个宫殿」must not let the
       // browser keep the old card glued to the viewport (looks like no jump).
       data-testid="freestyle-feed-scroller"
+      tabIndex={-1}
       className="min-h-0 flex-1 snap-y snap-mandatory overflow-y-auto overflow-x-hidden overscroll-y-none [overflow-anchor:none] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
       onScroll={onScroll}
     >
@@ -180,8 +162,6 @@ export function FreestyleCardArea({
                 encounters: queueState.unitEncountersByCardId,
                 roundPlan,
               })}
-              questionState={isQuizCard(card) ? questionStates[card.question.id] : undefined}
-              answeredBefore={isQuizCard(card) && answeredQuestionIds.has(card.question.id)}
               wrongThisRound={card.type === 'mindmap_branch' && !!card.unit_id && wrongUnitIds.includes(card.unit_id)}
               onFlipModeChange={onFlipModeChange}
               onMindmapZoomChange={onMindmapZoomChange}
@@ -196,15 +176,9 @@ export function FreestyleCardArea({
               onSaveFailed={(message) => onCardSaveFailed(message, card.id)}
               onEditingChange={onEditingChange}
               onUnitsReconciled={() => onReconcileUnits(card.id)}
+              onCardHandled={onCardHandled}
               onOpenScopeQuiz={onOpenScopeQuiz}
               onBedtimeRate={onBedtimeRate}
-              onQuestionStateChange={onQuestionStateChange}
-              onChoiceResolve={onChoiceResolve}
-              onShortAnswerSubmit={onShortAnswerSubmit}
-              onQuestionUpdated={onQuestionUpdated}
-              onAnswerReset={onAnswerReset}
-              onShown={onShown}
-              getDurationMs={getDurationMs}
               onNavigateToIndex={onNavigateToIndex}
             />
           )

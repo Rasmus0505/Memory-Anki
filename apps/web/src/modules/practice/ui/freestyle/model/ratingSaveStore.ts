@@ -88,6 +88,8 @@ export interface RatingRequest {
   prepare?: (() => Promise<RatingTarget>) | null
   /** Close the glance after the acknowledgement (background rating of a card not on screen). */
   closeAfterAck?: boolean
+  /** Keep this acknowledgement from moving the visible feed card. */
+  suppressAutoAdvance?: boolean
 }
 
 export interface RatingJob extends RatingRequest {
@@ -903,6 +905,8 @@ export class RatingSaveStore {
         target,
         prepare: target ? null : prepareFor(item.card_id),
         closeAfterAck: false,
+        // Restored failures are background retries, never a fresh navigation gesture.
+        suppressAutoAdvance: true,
       })
       if (item.confirmed !== false) this.serverIntents.add(key)
       this.setEntry({
