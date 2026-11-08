@@ -51,6 +51,7 @@ __pycache__/
 # ===== Logs & temp scratch files =====
 /logs/
 /tmp/
+/tmp-preview/
 *.log
 *.out.log
 *.err.log
@@ -83,6 +84,7 @@ _DEBUG_FALLBACK.json
 /.reasonix/
 /.codegraph/
 /.playwright-mcp/
+/.impeccable/
 /skills-lock.json
 
 # ===== Local study source PDFs (synced via Baidu disk, not part of app code) =====

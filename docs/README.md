@@ -1,6 +1,6 @@
 # Memory Anki 文档
 
-> 文档入口。最后核对：2026-11-06。
+> 文档入口。最后核对：2026-11-07。
 > 现行文档描述“代码现在真正在做什么”；历史文档只保留当时的结论，不作为当前规则。
 
 ## 先看哪一篇
@@ -18,8 +18,11 @@
 | 只想弄懂评分和间隔 | [复习排期-用户视角.md](复习排期-用户视角.md) |
 | 要改代码、查架构边界 | `AI_PROJECT_CONTEXT.md`（仓库根目录）→ 本文“架构文档”一节 |
 | 查历史故障和防复发措施 | [incidents/README.md](incidents/README.md) |
+| 想看一次完整工程复盘 | [retrospectives/2026-11-08-engineering-review.md](retrospectives/2026-11-08-engineering-review.md) |
 | 把 PDF 题目录进题库 | [quiz-pdf-reconciliation-prompt.md](quiz-pdf-reconciliation-prompt.md) |
 | 题库里有重复题、想再清一遍 | [题库去重.md](题库去重.md) |
+| 题库或脑图里有乱码、框线、页码残渣 | [题库文本乱码修复.md](题库文本乱码修复.md) |
+| 想让 AI 全面体检宫殿与题库 | [记忆宫殿与题库全面体检提示词.md](记忆宫殿与题库全面体检提示词.md) |
 
 ## 文档地图
 
@@ -29,9 +32,10 @@
 | [Memory-Anki-前端布局-用户视角.md](Memory-Anki-前端布局-用户视角.md) | 前端布局说明（用户语言） | 现行 | 2026-11-05 |
 | [../DESIGN.md](../DESIGN.md) | 视觉系统：纸与灯、颜色/字体/间距/组件规则 | 现行 | 2026-11-08 |
 | [../PRODUCT.md](../PRODUCT.md) | 产品事实：使用者、场景、约束、模式分配 | 现行 | 2026-11-08 |
-| [design/impeccable-runbook.md](design/impeccable-runbook.md) | impeccable 24 命令运行记录与产物索引 | 现行 | 2026-11-08 |
+| [design/impeccable-runbook.md](design/impeccable-runbook.md) | impeccable 24 命令（全站）运行记录 | 现行 | 2026-11-08 |
+| [design/impeccable-runbook-freestyle-mindmap.md](design/impeccable-runbook-freestyle-mindmap.md) | impeccable 24 命令（随心 + 脑图）运行记录 | 现行 | 2026-11-08 |
 | [design/audits/](design/audits/2026-11-08-shelf-insights.md) | 技术审查（书架 / 洞察） | 快照 | 2026-11-08 |
-| [design/critiques/](design/critiques/2026-11-08-freestyle-start.md) | 设计评审（随心开始页） | 快照 | 2026-11-08 |
+| [design/critiques/](design/critiques/2026-11-08-freestyle-start.md) | 设计评审（随心开始页 / 复习卡） | 快照 | 2026-11-08 |
 | [design/surfaces/](design/surfaces/round-settlement.md) | 结算页设计简报 | 现行 | 2026-11-08 |
 | [列表右键菜单.md](列表右键菜单.md) | 列表右键 / 长按菜单与接入方式 | 现行 | 2026-11-06 |
 | [Memory-Anki-技术报告.md](Memory-Anki-技术报告.md) | 技术总览报告 | 现行 | 2026-11-04 |
@@ -44,7 +48,11 @@
 | [learning-loop-mvp-validation.md](learning-loop-mvp-validation.md) | 验证快照 | 历史（数字不代表当前测试状态） | 2026-11-04 |
 | [quiz-pdf-reconciliation-prompt.md](quiz-pdf-reconciliation-prompt.md) | PDF 题目录入流程 | 现行 | 2026-11-04 |
 | [题库去重.md](题库去重.md) | 题库语义去重流水线与口径 | 现行 | 2026-11-06 |
+| [题库文本乱码修复.md](题库文本乱码修复.md) | 题库/脑图乱码的识别与修复流水线 | 现行 | 2026-11-07 |
+| [题库精简按考点.md](题库精简按考点.md) | 按考点留题的精简口径 | 现行 | 2026-11-07 |
+| [记忆宫殿与题库全面体检提示词.md](记忆宫殿与题库全面体检提示词.md) | 交给 AI 的全量体检提示词 | 现行 | 2026-11-07 |
 | [incidents/](incidents/README.md) | 故障档案，一个主题一个文件 | 历史记录，持续追加 | 2026-11-04 |
+| [retrospectives/](retrospectives/2026-11-08-engineering-review.md) | 工程复盘：反复问题、架构、冗余、关联变更与并行冲突 | 快照 | 2026-11-08 |
 | [compose/spec/](compose/spec/) | 随心功能 spec 与交付记录 | 历史（均已交付） | 2026-11-04 |
 | [superpowers/specs/](superpowers/specs/) | 早期设计稿 | 历史（已实现或已被取代） | 2026-11-04 |
 | [architecture/](architecture/README.md) | 架构门禁资产与守卫文档 | 现行（最小集） | 2026-11-04 |
