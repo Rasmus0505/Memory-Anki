@@ -68,9 +68,13 @@ export function useFreestyleFeedScrollSettle(deps: FeedScrollSettleDeps) {
     const visual = visualIndexRef.current
     const listLength = queueRef.current.length
     if (!hasUserScrollIntent()) {
-      // No finger/wheel moved this page: a reflow or native snap did. Put the
-      // committed card back instead of turning the drift into a page turn.
-      const committed = Math.max(0, Math.min(currentIndexRef.current, Math.max(0, listLength - 1)))
+      // No finger/wheel moved this page: restore the committed view, not a new
+      // cursor. The waiting/settlement slot has no queue cursor of its own;
+      // currentIndex still names the last card even after an explicit open.
+      // handleScroll does not adopt native drift into visualIndex without intent.
+      const committed = isFreestyleCompleteSlot(visual, listLength, roundCompleteRef.current)
+        ? listLength
+        : Math.max(0, Math.min(currentIndexRef.current, Math.max(0, listLength - 1)))
       visualIndexRef.current = committed
       setVisualIndex(committed)
       const node = scrollRef.current

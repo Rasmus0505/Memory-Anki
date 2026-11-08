@@ -24,11 +24,10 @@ const EFFECTS = [
 const UNITS = ['e2e-a', 'e2e-b', 'e2e-c', 'e2e-d']
 const ROUND_ID = 'round-e2e-seek'
 
-const NEXT_READY_AT = '2026-10-25T12:13:32.633397'
-
 function queueBody(
   request: { operation_id: string; round_id?: string; config: unknown },
   waiting = 0,
+  nextReadyAt: string | null = null,
 ) {
   return {
     operation_id: request.operation_id,
@@ -53,7 +52,7 @@ function queueBody(
       scheduled_count: UNITS.length,
       queue_limit: 20,
       limit_reached: false,
-      ...(waiting > 0 ? { waiting_count: waiting, next_ready_at: NEXT_READY_AT } : {}),
+      ...(waiting > 0 ? { waiting_count: waiting, next_ready_at: nextReadyAt } : {}),
     },
     counts: { mindmap_branch: UNITS.length, anki_card: 0, quiz_question: 0, total: UNITS.length },
   }
@@ -123,6 +122,12 @@ async function installRoutes(
   const actions: string[] = []
   const clearRequests: unknown[] = []
   const starts: string[] = []
+  // 场景是「尚未到点」，不能用过去的固定日期触发后台轮次探测。
+  const nextReadyAt = new Date(Date.now() + 20 * 60_000).toISOString()
+  // 偏好加载成功后再走正常冷启动；不让 503 的延迟补建插入评分与返回操作。
+  await page.route('**/api/v1/profile/client-preferences', (route) =>
+    route.fulfill({ json: { items: {} } }),
+  )
   const reply = (route: Route, body: unknown, status = 200) => route.fulfill({
     status, contentType: 'application/json', body: JSON.stringify(body),
   })
@@ -175,7 +180,7 @@ async function installRoutes(
         }
       }
       if (options.waiting) {
-        persisted.waiting = { count: options.waiting, next_ready_at: NEXT_READY_AT }
+        persisted.waiting = { count: options.waiting, next_ready_at: nextReadyAt }
       }
       activeRoundIds.push(persisted.round_id)
       return reply(route, persisted)
@@ -239,7 +244,7 @@ async function installRoutes(
     }
     await route.fulfill({
       contentType: 'application/json',
-      body: JSON.stringify(queueBody(request, options.waiting ?? 0)),
+      body: JSON.stringify(queueBody(request, options.waiting ?? 0, nextReadyAt))
     })
   })
   await page.route('**/api/v1/review/units/*/sessions', async (route: Route) => {
@@ -370,6 +375,22 @@ test('完成 walks the unscored cards one by one and wraps', async ({ page }) =>
   await expect.poll(() => readVisualIndex(page)).toBe(0)
 })
 
+test('partial settlement omits quiz-card counts and preserves the review summary', async ({ page }, testInfo) => {
+  await installRoutes(page, { completedCount: UNITS.length - 1 })
+  await page.goto('/freestyle')
+  await startFromOverview(page)
+  await page.getByRole('button', { name: '随心配置', exact: true }).click()
+  await page.getByRole('button', { name: /^结算已完成/ }).click()
+  const summary = page.getByRole('dialog', { name: '结算已完成', exact: true })
+  await expect(summary).toBeVisible()
+  await expect(summary.getByText('复习 3', { exact: true })).toBeVisible()
+  await expect(summary.getByText('通过 3', { exact: true })).toBeVisible()
+  await expect(summary.getByText(/做题卡片|题\s*\d+/)).toHaveCount(0)
+  await testInfo.attach('小结算不再展示做题数量', {
+    body: await page.screenshot(), contentType: 'image/png',
+  })
+})
+
 test('完成 on a fully scored round settles the rated units and clears the queue', async ({ page }) => {
   const routes = await installRoutes(page, {
     completedCount: UNITS.length - 1,
@@ -386,8 +407,11 @@ test('完成 on a fully scored round settles the rated units and clears the queu
   // Rate the last unit: every presented card is now scored.
   const remember = page.getByTestId('freestyle-rating-button-3')
   await expect(remember).toBeEnabled()
-  await remember.evaluate((button: HTMLButtonElement) => button.click())
+  await remember.click()
   await expect(remember).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByTestId('freestyle-rating-effect-line')).toContainText('已选记得')
+  await expect(page.getByTestId('freestyle-rating-saving-line')).toHaveCount(0)
+  await expect(page.getByTestId('freestyle-rating-unsaved-line')).toHaveCount(0)
 
   // Pressing 完成 here is a real completion, so it settles the rated units
   // instead of only scrolling to the summary.
@@ -428,8 +452,11 @@ test('a round with 重练 still owed is a wait, not a finish', async ({ page }) 
   await expect.poll(() => readVisualIndex(page)).toBe(UNITS.length - 1)
   const remember = page.getByTestId('freestyle-rating-button-3')
   await expect(remember).toBeEnabled()
-  await remember.evaluate((button: HTMLButtonElement) => button.click())
+  await remember.click()
   await expect(remember).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByTestId('freestyle-rating-effect-line')).toContainText('已选记得')
+  await expect(page.getByTestId('freestyle-rating-saving-line')).toHaveCount(0)
+  await expect(page.getByTestId('freestyle-rating-unsaved-line')).toHaveCount(0)
 
   const complete = page.getByTestId('freestyle-feed-pager').getByRole('button', { name: '完成' })
   await expect(complete).toBeEnabled()
