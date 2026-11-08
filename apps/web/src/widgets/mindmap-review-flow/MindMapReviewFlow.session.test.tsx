@@ -1,6 +1,7 @@
 import * as React from "react";
-import { fireEvent, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { retireOwner } from "@/shared/fx";
 import {
   editorState,
   renderInRouter,
@@ -9,6 +10,10 @@ import {
 import { MindMapReviewFlow } from "@/widgets/mindmap-review-flow";
 
 describe("MindMapReviewFlow session", () => {
+  afterEach(() => {
+    retireOwner('fx:global');
+  });
+
   beforeEach(() => {
     vi.useRealTimers();
     setupMindMapReviewFlowTest();
@@ -40,8 +45,9 @@ describe("MindMapReviewFlow session", () => {
     fireEvent.click(completeButton);
 
     await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
-    resolveComplete();
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await act(async () => {
+      resolveComplete();
+    });
     expect(onComplete).toHaveBeenCalledTimes(1);
   });
 

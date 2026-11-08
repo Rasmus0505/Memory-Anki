@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { type PalaceReviewUnitChangeHighlight } from '@/modules/practice/ui/review/components/PalaceReviewUnitsPanel'
 import { toast } from '@/shared/feedback/toast'
-import { ReviewLevelBar } from '@/modules/practice/ui/review/components/ReviewLevelBar'
+import {
+  ReviewLevelBar,
+  type ReviewLevelTargetPreview,
+} from '@/modules/practice/ui/review/components/ReviewLevelBar'
+import type { AdjustUnitScheduleResultDto } from '@/modules/practice/ui/review/api/unitReviewApi'
 import { useRevealSession, type RevealState } from '@/modules/memory/public'
 import { useFlipCardRevealSettings } from '@/modules/settings/public'
 import {
@@ -57,6 +61,8 @@ export function FreestyleUnitReviewFlipPanel({
   onSaveFailed,
   onEditorStateSaved,
   onUnitsReconciled,
+  onLevelTargetChange,
+  onScheduleAdjusted,
   onBeforeReturnReconcile,
   onReturnReconcilePending,
   onRevealProgressChange,
@@ -82,6 +88,10 @@ export function FreestyleUnitReviewFlipPanel({
   onEditingChange?: (editing: boolean) => void
   onSaveFailed?: (message: string) => void
   onUnitsReconciled?: () => void | Promise<void>
+  /** Live level draft from the toolbar bar, forwarded to the rating dock. */
+  onLevelTargetChange?: (target: ReviewLevelTargetPreview | null) => void
+  /** The toolbar bar booked a new level: the card is handled for this round. */
+  onScheduleAdjusted?: (result: AdjustUnitScheduleResultDto) => void
   onBeforeReturnReconcile?: () => Promise<void>
   onReturnReconcilePending?: (pending: boolean) => void
   onRevealProgressChange?: (progress: { revealed: number; total: number }) => void
@@ -438,7 +448,6 @@ export function FreestyleUnitReviewFlipPanel({
     setNodeQuizOpen,
     nodeQuizNodeUid,
     nodeQuizQuestionIds,
-    nodeQuizInitialIndex,
     handleOpenNodeQuiz,
     handleQuestionDeleted,
   } = useFreestyleUnitReviewNodeQuiz({
@@ -543,7 +552,11 @@ export function FreestyleUnitReviewFlipPanel({
               dueDate={unit.due_date}
               due={unit.due}
               adjustable
-              onScheduleAdjusted={() => onUnitsReconciled?.()}
+              onTargetChange={onLevelTargetChange}
+              onScheduleAdjusted={(result) => {
+                if (onScheduleAdjusted) onScheduleAdjusted(result)
+                else void onUnitsReconciled?.()
+              }}
             />
           ) : null
         }
@@ -557,7 +570,7 @@ export function FreestyleUnitReviewFlipPanel({
         sceneTransitionFallbackNodeId={unit.anchor_uid || null}
         belowToolbarSlot={belowToolbarSlot}
         className="min-h-0 flex-1"
-        surfaceClassName="h-full min-h-0"
+        surfaceClassName="h-full min-h-0 freestyle-review-map-surface"
       />
       <FreestyleUnitReviewFlipDialogs
         nodeQuizOpen={nodeQuizOpen}
@@ -565,7 +578,6 @@ export function FreestyleUnitReviewFlipPanel({
         palaceId={session.palace_id}
         nodeQuizNodeUid={nodeQuizNodeUid}
         nodeQuizQuestionIds={nodeQuizQuestionIds}
-        nodeQuizInitialIndex={nodeQuizInitialIndex}
         questionStates={quizNodeBindings.questionStates}
         updateQuestionState={quizNodeBindings.updateQuestionState}
         markQuestionCompleted={quizNodeBindings.markQuestionCompleted}

@@ -246,9 +246,8 @@ BASELINE_OVERSIZED_FILES = {
     # Session write validation grew with revision/operation race protection;
     # keep the existing service boundary tracked while the next extraction is
     # scheduled.
-    # The 待换题 variant control grew both answering overlays past the limit;
-    # extract the shared question meta row next.
-    "apps/web/src/widgets/node-bound-quiz/NodeBoundQuizDialog.tsx",
+    # The 待换题 variant control grew the shared answering window past the
+    # limit; extract the shared question meta row next.
     "apps/web/src/widgets/freestyle-scope-quiz/FreestyleScopeQuizDialog.tsx",
 }
 
@@ -1924,6 +1923,7 @@ ROUND_COMMAND_DOMAIN_FILES = (
     "round_plan_fail.py",
     "round_plan_intraday.py",
     "round_plan_normalization.py",
+    "round_plan_queue.py",
     "round_plan_values.py",
     "round_compress.py",
     "round_rebind.py",
@@ -2654,45 +2654,22 @@ def check_freestyle_scope_quiz_overlay(errors: list[str]) -> None:
                     f"overlay quiz must honour `{marker}` so a palace whose cards "
                     "were all 移除本队列 stops contributing questions."
                 )
-    # Both answering windows show the same this-round rating through one shared
-    # component. 关联题目 used to show nothing at all, which is what the learner
-    # reported; a private copy in either window would let the two drift.
-    # Both answering windows show the same this-round rating. 关联题目 used to
-    # show nothing at all, which is what the learner reported; a second
-    # derivation in either window would let 「本轮最低 N」 drift apart.
-    #
-    # 做题 already holds the round's ratings from the overlay payload, so it
-    # renders the badge directly. 关联题目 has no round payload, so it goes
-    # through the container that fetches them.
-    for rel, marker in (
-        (
-            "widgets/freestyle-scope-quiz/FreestyleScopeQuizDialog.tsx",
-            "QuizQuestionRoundRatingBadge",
-        ),
-        (
-            "widgets/node-bound-quiz/NodeBoundQuizDialog.tsx",
-            "QuizQuestionRoundRating",
-        ),
-    ):
-        host = WEB_SRC / Path(rel)
-        if not host.exists():
-            errors.append(f"{rel}: quiz overlay host is required.")
-            continue
-        host_source = host.read_text(encoding="utf-8", errors="ignore")
-        if marker not in host_source:
-            errors.append(
-                f"{rel}: must render `{marker}` so the question shows its bound "
-                "knowledge point's this-round rating."
-            )
-    # 关联题目 must read the score through the shared container, never derive one.
-    node_bound_rating = WEB_SRC / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx"
-    if node_bound_rating.exists():
-        nb_source = node_bound_rating.read_text(encoding="utf-8", errors="ignore")
-        if "QuizQuestionRoundRating" not in nb_source:
-            errors.append(
-                "widgets/node-bound-quiz/NodeBoundQuizDialog.tsx: must show the "
-                "round rating through `QuizQuestionRoundRating`."
-            )
+    # One answering window now serves both the 随心 round and a direct question
+    # set. The round badge reads the overlay payload; the direct set fetches the
+    # same score through the shared container, so the two cannot drift.
+    rating_host = WEB_SRC / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx"
+    rating_host_source = (
+        rating_host.read_text(encoding="utf-8", errors="ignore") if rating_host.exists() else ""
+    )
+    if not rating_host.exists():
+        errors.append("widgets/freestyle-scope-quiz/FreestyleScopeQuizDialog.tsx: quiz overlay host is required.")
+    else:
+        for marker in ("QuizQuestionRoundRatingBadge", "QuizQuestionRoundRating"):
+            if marker not in rating_host_source:
+                errors.append(
+                    "widgets/freestyle-scope-quiz/FreestyleScopeQuizDialog.tsx: must render "
+                    f"`{marker}` so the question shows its bound knowledge point's this-round rating."
+                )
     rating_container = (
         WEB_SRC / "widgets" / "quiz-round-rating" / "QuizQuestionRoundRating.tsx"
     )
@@ -3196,7 +3173,7 @@ def check_freestyle_knowledge_entry_scope(errors: list[str]) -> None:
 
 def check_identity_keyed_progress(errors: list[str]) -> None:
     """A unit rating and a question answer belong to the entity, not the entry."""
-    dialog = WEB_SRC / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx"
+    direct_source = WEB_SRC / "widgets" / "freestyle-scope-quiz" / "useDirectQuestionSetQuiz.ts"
     quiz_flow = (
         WEB_SRC
         / "modules"
@@ -3212,8 +3189,8 @@ def check_identity_keyed_progress(errors: list[str]) -> None:
     identity_text = identity_values.read_text(encoding="utf-8", errors="ignore") if identity_values.exists() else ""
     if 'f"unit:{unit_id}"' not in identity_text:
         errors.append("round rating must be keyed by the stable unit identity.")
-    if not dialog.exists() or "writeQuizSessionState" not in dialog.read_text(encoding="utf-8", errors="ignore"):
-        errors.append("node-bound quiz must write the shared question progress, not a private ledger.")
+    if not direct_source.exists() or "writeQuizSessionState" not in direct_source.read_text(encoding="utf-8", errors="ignore"):
+        errors.append("direct question-set quiz must write the shared question progress, not a private ledger.")
     if not quiz_flow.exists() or "writeQuizSessionState" not in quiz_flow.read_text(encoding="utf-8", errors="ignore"):
         errors.append("freestyle quiz cards must write the shared question progress.")
     if not feed_doc.exists() or not has_invariant(
@@ -4956,7 +4933,6 @@ def check_quiz_answer_mode_primitive(errors: list[str]) -> None:
             )
     for rel in (
         Path("widgets") / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx",
-        Path("widgets") / "node-bound-quiz" / "NodeBoundQuizDialog.tsx",
     ):
         host = WEB_SRC / rel
         if not host.exists():
@@ -4985,23 +4961,6 @@ def check_quiz_answer_mode_primitive(errors: list[str]) -> None:
                 f"{host.relative_to(REPO_ROOT).as_posix()}: "
                 "choice shortcuts must stay open until an option is selected, via isQuizChoiceAttemptClosed."
             )
-    freestyle_card = (
-        WEB_SRC
-        / "modules"
-        / "practice"
-        / "ui"
-        / "freestyle"
-        / "components"
-        / "FreestyleQuizCardView.tsx"
-    )
-    if freestyle_card.exists() and "isQuizChoiceAttemptClosed" not in freestyle_card.read_text(
-        encoding="utf-8",
-        errors="ignore",
-    ):
-        errors.append(
-            f"{freestyle_card.relative_to(REPO_ROOT).as_posix()}: "
-            "choice shortcuts must stay open until an option is selected, via isQuizChoiceAttemptClosed."
-        )
 
 
 def check_quiz_font_scale_primitive(errors: list[str]) -> None:
@@ -5072,7 +5031,6 @@ def check_quiz_font_scale_primitive(errors: list[str]) -> None:
         )
     for rel in (
         Path("widgets") / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx",
-        Path("widgets") / "node-bound-quiz" / "NodeBoundQuizDialog.tsx",
     ):
         host = WEB_SRC / rel
         if not host.exists():
@@ -5296,7 +5254,6 @@ def check_quiz_question_marks(errors: list[str]) -> None:
         )
     hosts = (
         WEB_SRC / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx",
-        WEB_SRC / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx",
         WEB_SRC / "modules" / "quiz" / "ui" / "palace-quiz" / "components" / "palaceQuizCards.tsx",
     )
     for host in hosts:
@@ -6568,24 +6525,16 @@ def check_quiz_shortcut_primitive(errors: list[str]) -> None:
         )
     if not section.exists() or "快捷键" not in section.read_text(encoding="utf-8", errors="ignore"):
         errors.append(f"{section.relative_to(REPO_ROOT).as_posix()}: quiz shortcut settings section is required.")
-    node_bound = (WEB_SRC / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx").read_text(
-        encoding="utf-8",
-        errors="ignore",
-    ) if (WEB_SRC / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx").exists() else ""
     for rel, token in (
         ("widgets/freestyle-scope-quiz/FreestyleScopeQuizDialog.tsx", "useQuizAnsweringShortcuts"),
-        ("widgets/node-bound-quiz/NodeBoundQuizDialog.tsx", "QuizShortcutSettingsSection"),
         ("widgets/freestyle-scope-quiz/OverlayQuizSetupPanel.tsx", "QuizShortcutSettingsSection"),
     ):
         path = WEB_SRC / Path(rel)
         source = path.read_text(encoding="utf-8", errors="ignore") if path.exists() else ""
         if token not in source:
             errors.append(f"{rel}: must use `{token}`.")
-    if "useQuizAnsweringShortcuts" not in node_bound:
-        errors.append("widgets/node-bound-quiz/NodeBoundQuizDialog.tsx: must use `useQuizAnsweringShortcuts`.")
     for rel in (
         "widgets/freestyle-scope-quiz/FreestyleScopeQuizDialog.tsx",
-        "widgets/node-bound-quiz/NodeBoundQuizDialog.tsx",
     ):
         path = WEB_SRC / Path(rel)
         source = path.read_text(encoding="utf-8", errors="ignore") if path.exists() else ""

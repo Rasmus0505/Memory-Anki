@@ -137,7 +137,7 @@ graph LR
 
 - 通过把相关 API 下沉到模块公共入口之后，解决 `modules→widgets` 边界例外（practice/quiz 导入 `mindmap-review-flow` / `palace-memory-lookup` API）。
 - 拆分 `shared/ui/mindmap-canvas` 的超大文件（`layout.ts`、`useMindMapCanvasState.ts`；`NodeCard.tsx` 749 行，未超过 750 行门禁）。
-- 从 `NodeBoundQuizDialog` 与 `FreestyleScopeQuizDialog` 中提取共享的题目元信息行（统计 / 类型 / 变体控件 / 评分 / 标记）；在题目变体工作流之后，两者暂时超过 750 行门禁。
+- 从共享做题窗口 `FreestyleScopeQuizDialog` 中提取题目元信息行（统计 / 类型 / 变体控件 / 评分 / 标记）；在题目变体工作流之后，它暂时超过 750 行门禁。直接题目集模式已并入同一窗口，旧的 `NodeBoundQuizDialog` 已删除。
 - 拆分 `shared/components/ui/dialog.tsx` 以及随心模型测试装置 `freestyleProgressSegments.test.ts` / `roundCompletion.test.ts`；在拆分之前登记为临时质量门禁例外。
 - 拆分本轮轮次计划与评分工作撑大的两个随心文件：`freestyleProgressSegments.ts`（模型与摘要分离）、`ratingSaveStore.ts`（类型/纯函数与 store 分离）。目前登记为临时门禁例外；下一次随心重构应删掉这两条例外（`FreestyleRoundSheet.tsx` 已随弹层移除，其例外与守卫已删除）。
 - 已完成：`NodeBoundQuizDialog.test.tsx`（移入回收站用例拆文件）、`PalaceEditorPage.tsx`（抽出 `SaveStatusBadge`）、`useFreestyleFeedNavigation.ts`（槽位解析与类型抽出）、`MindMapEditorSurface.tsx`（全屏开关、范围越界动作、节点动作分别抽出）。四个基线条目均已删除。

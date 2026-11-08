@@ -12,11 +12,11 @@ import type {
   PalaceUnitReconcileResult,
 } from '@/shared/api/contracts'
 import { FlipCardMindMapPanel } from '@/widgets/mindmap-review-flow'
-import { NodeBoundQuizDialog } from '@/widgets/node-bound-quiz'
+import { FreestyleScopeQuizDialog } from '@/widgets/freestyle-scope-quiz'
 import { stripMindMapHtml } from '@/shared/lib/mindmapRichText'
 import { appConfirm } from '@/shared/components/ui/native-dialog'
 
-export { FlipCardMindMapPanel, NodeBoundQuizDialog }
+export { FlipCardMindMapPanel, FreestyleScopeQuizDialog }
 
 export function plainContextLabel(
   contextPath: FreestyleMindMapBranchCard['context_path'] | undefined,

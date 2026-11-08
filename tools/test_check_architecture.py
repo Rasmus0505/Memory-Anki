@@ -1281,7 +1281,7 @@ def test_identity_keyed_progress_rejects_private_ledgers(
         "def progress_identity():\n    return ''\n",
     )
     write_file(
-        web_src / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx",
+        web_src / "widgets" / "freestyle-scope-quiz" / "useDirectQuestionSetQuiz.ts",
         "const questionStates = {}\n",
     )
     write_file(
@@ -2481,7 +2481,7 @@ def test_quiz_answer_dialogs_require_shared_surface(tmp_path: Path, monkeypatch)
     web_src = tmp_path / "apps" / "web" / "src"
     monkeypatch.setattr(check_architecture, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(check_architecture, "WEB_SRC", web_src)
-    host = web_src / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx"
+    host = web_src / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx"
     write_file(web_src / "modules" / "quiz" / "domain" / "quiz-entity" / "model" / "quizAnswerMode.ts", "")
     write_file(host, "QuizQuestionIndexPager isQuizChoiceAttemptClosed QuizQuestionStem")
     errors: list[str] = []
@@ -2490,7 +2490,7 @@ def test_quiz_answer_dialogs_require_shared_surface(tmp_path: Path, monkeypatch)
     write_file(host, "QuizQuestionIndexPager isQuizChoiceAttemptClosed QuizQuestionAnswerSurface")
     errors.clear()
     check_architecture.check_quiz_answer_mode_primitive(errors)
-    assert not any("NodeBoundQuizDialog.tsx: must render the shared quiz answer surface" in error for error in errors)
+    assert not any("FreestyleScopeQuizDialog.tsx: must render the shared quiz answer surface" in error for error in errors)
 
 
 def test_quiz_answer_mode_primitive_must_live_in_quiz_entity(
@@ -2568,10 +2568,6 @@ def test_quiz_answer_mode_primitive_requires_stem_rewrite_and_index_pager(
         web_src / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx",
         "export function FreestyleScopeQuizDialog() { return 'flex size-7 items-center justify-center rounded-full' }\n",
     )
-    write_file(
-        web_src / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx",
-        "export function NodeBoundQuizDialog() { return 'flex size-7 items-center justify-center rounded-full' }\n",
-    )
 
     errors: list[str] = []
     check_architecture.check_quiz_answer_mode_primitive(errors)
@@ -2622,10 +2618,6 @@ def test_quiz_answer_mode_primitive_forbids_marked_options_on_converted_mcq(
         web_src / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx",
         "export function FreestyleScopeQuizDialog() { return 'QuizQuestionIndexPager QuizQuestionStem' }\n",
     )
-    write_file(
-        web_src / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx",
-        "export function NodeBoundQuizDialog() { return 'QuizQuestionIndexPager QuizQuestionStem' }\n",
-    )
 
     errors: list[str] = []
     check_architecture.check_quiz_answer_mode_primitive(errors)
@@ -2653,10 +2645,6 @@ def test_quiz_question_marks_reject_the_removed_rating_schedule(
     write_file(
         web_src / "modules" / "quiz" / "domain" / "quiz-entity" / "ui" / "QuizQuestionMarkToggle.tsx",
         "export function QuizQuestionMarkToggle() { return '标记' }\n",
-    )
-    write_file(
-        web_src / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx",
-        "export function NodeBoundQuizDialog() { return 'QuizQuestionRatingBar' }\n",
     )
     write_file(
         web_src / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx",
@@ -3520,10 +3508,6 @@ def test_overlay_quiz_never_resolves_subjects_into_palaces(tmp_path: Path, monke
         "QuizQuestionRoundRatingBadge\n",
     )
     write_file(
-        web_src / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx",
-        "QuizQuestionRoundRating\n",
-    )
-    write_file(
         web_src / "widgets" / "quiz-round-rating" / "QuizQuestionRoundRating.tsx",
         "export function QuizQuestionRoundRating() { return null }\n"
         "useRoundQuestionRatings\n",
@@ -3557,10 +3541,6 @@ def test_overlay_quiz_must_not_reapply_the_feed_config(tmp_path: Path, monkeypat
         web_src / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx",
         "const scopePalaces = overlay?.scope_palaces ?? null\n"
         "QuizQuestionRoundRatingBadge\n",
-    )
-    write_file(
-        web_src / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx",
-        "QuizQuestionRoundRating\n",
     )
     write_file(
         web_src / "widgets" / "quiz-round-rating" / "QuizQuestionRoundRating.tsx",
@@ -3598,10 +3578,6 @@ def test_round_ratings_must_come_from_the_encounter_table(tmp_path: Path, monkey
         web_src / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx",
         "const scopePalaces = overlay?.scope_palaces ?? null\n"
         "QuizQuestionRoundRatingBadge\n",
-    )
-    write_file(
-        web_src / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx",
-        "QuizQuestionRoundRating\n",
     )
     write_file(
         web_src / "widgets" / "quiz-round-rating" / "QuizQuestionRoundRating.tsx",
@@ -3686,10 +3662,6 @@ def test_removed_palace_must_take_its_questions_with_it(tmp_path: Path, monkeypa
         web_src / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx",
         "const scopePalaces = overlay?.scope_palaces ?? null\n"
         "QuizQuestionRoundRatingBadge\n",
-    )
-    write_file(
-        web_src / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx",
-        "QuizQuestionRoundRating\n",
     )
     write_file(
         web_src / "widgets" / "quiz-round-rating" / "QuizQuestionRoundRating.tsx",
@@ -3835,10 +3807,6 @@ def test_overlay_scope_report_guard_accepts_the_owned_shape(tmp_path: Path, monk
         "QuizQuestionRoundRatingBadge\n",
     )
     write_file(
-        web_src / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx",
-        "QuizQuestionRoundRating\n",
-    )
-    write_file(
         web_src / "widgets" / "quiz-round-rating" / "QuizQuestionRoundRating.tsx",
         "export function QuizQuestionRoundRating() { return null }\n"
         "useRoundQuestionRatings\n",
@@ -3916,10 +3884,6 @@ def test_lost_round_write_race_must_not_escape_as_stale_data(tmp_path: Path, mon
         web_src / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx",
         "const scopePalaces = overlay?.scope_palaces ?? null\n"
         "QuizQuestionRoundRatingBadge\n",
-    )
-    write_file(
-        web_src / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx",
-        "QuizQuestionRoundRating\n",
     )
     write_file(
         web_src / "widgets" / "quiz-round-rating" / "QuizQuestionRoundRating.tsx",
@@ -4013,10 +3977,6 @@ def test_lost_race_guard_accepts_the_owned_shape(tmp_path: Path, monkeypatch) ->
         "QuizQuestionRoundRatingBadge\n",
     )
     write_file(
-        web_src / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx",
-        "QuizQuestionRoundRating\n",
-    )
-    write_file(
         web_src / "widgets" / "quiz-round-rating" / "QuizQuestionRoundRating.tsx",
         "export function QuizQuestionRoundRating() { return null }\n"
         "useRoundQuestionRatings\n",
@@ -4037,12 +3997,13 @@ def test_lost_race_guard_accepts_the_owned_shape(tmp_path: Path, monkeypatch) ->
     assert errors == []
 
 
-def test_both_quiz_windows_must_share_one_rating_badge(tmp_path: Path, monkeypatch) -> None:
-    """关联题目 and 做题 must show the this-round rating through one component.
+def test_single_quiz_window_must_share_one_rating_badge(tmp_path: Path, monkeypatch) -> None:
+    """The one answering window must show the this-round rating through one component.
 
-    The learner reported 「没看见题目对应的评分」 in 关联题目 — a *different* window
-    from the 做题 overlay, so badging only one left the other blank. A private
-    copy in either window would let 「本轮最低 N」 drift apart again.
+    The learner reported 「没看见题目对应的评分」 when 关联题目 was a *different*
+    window from the 做题 overlay, so badging only one left the other blank. The
+    two windows are now one, and a private copy would let 「本轮最低 N」 drift
+    apart again.
     """
     api_src = tmp_path / "apps" / "api" / "src" / "memory_anki"
     web_src = tmp_path / "apps" / "web" / "src"
@@ -4092,13 +4053,10 @@ def test_both_quiz_windows_must_share_one_rating_badge(tmp_path: Path, monkeypat
         "def _commit_operation(session, row, op):\n"
         "    return commit_operation(session, row, op)\n",
     )
-    # Neither window renders the shared badge, and 关联题目 derives its own.
+    # The one answering window renders the scope but neither the shared badge
+    # nor the shared container.
     write_file(
         web_src / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx",
-        "const scopePalaces = overlay?.scope_palaces ?? null\n",
-    )
-    write_file(
-        web_src / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx",
         "const scopePalaces = overlay?.scope_palaces ?? null\n",
     )
     write_file(
@@ -4166,10 +4124,6 @@ def test_reading_round_ratings_must_not_write_the_round(tmp_path: Path, monkeypa
     )
     write_file(
         web_src / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx",
-        "QuizQuestionRoundRating\n",
-    )
-    write_file(
-        web_src / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx",
         "QuizQuestionRoundRating\n",
     )
     write_file(
@@ -4247,10 +4201,6 @@ def test_palace_clearance_must_not_ship_a_second_answer(tmp_path: Path, monkeypa
         web_src / "widgets" / "freestyle-scope-quiz" / "FreestyleScopeQuizDialog.tsx",
         "const scopePalaces = overlay?.scope_palaces ?? null\n"
         "QuizQuestionRoundRatingBadge\n",
-    )
-    write_file(
-        web_src / "widgets" / "node-bound-quiz" / "NodeBoundQuizDialog.tsx",
-        "QuizQuestionRoundRating\n",
     )
     write_file(
         web_src / "widgets" / "quiz-round-rating" / "QuizQuestionRoundRating.tsx",

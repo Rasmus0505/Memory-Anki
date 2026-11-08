@@ -4,7 +4,7 @@ import {
   type PalaceReviewUnitChangeHighlight,
 } from '@/modules/practice/ui/review/components/PalaceReviewUnitsPanel'
 import type { QuizRuntimeState } from '@/modules/quiz/public'
-import { NodeBoundQuizDialog } from './freestyleBranchCardSupport'
+import { FreestyleScopeQuizDialog } from './freestyleBranchCardSupport'
 
 export type FreestyleEditorSaveState = 'idle' | 'saving' | 'saved' | 'error'
 
@@ -83,7 +83,6 @@ export function FreestyleUnitReviewFlipDialogs({
   palaceId,
   nodeQuizNodeUid,
   nodeQuizQuestionIds,
-  nodeQuizInitialIndex,
   questionStates,
   updateQuestionState,
   markQuestionCompleted,
@@ -100,7 +99,6 @@ export function FreestyleUnitReviewFlipDialogs({
   palaceId: number
   nodeQuizNodeUid: string | null
   nodeQuizQuestionIds: number[]
-  nodeQuizInitialIndex: number
   questionStates: Record<number, QuizRuntimeState>
   updateQuestionState: (questionId: number, next: QuizRuntimeState) => void
   markQuestionCompleted: (questionId: number) => void
@@ -115,18 +113,20 @@ export function FreestyleUnitReviewFlipDialogs({
 }) {
   return (
     <>
-      <NodeBoundQuizDialog
+      <FreestyleScopeQuizDialog
+        source="questions"
         open={nodeQuizOpen}
         onOpenChange={setNodeQuizOpen}
-        palaceId={palaceId}
-        nodeUid={nodeQuizNodeUid}
-        questionIds={nodeQuizQuestionIds}
-        initialIndex={nodeQuizInitialIndex}
-        initialQuestionStates={questionStates}
-        onQuestionStateChange={updateQuestionState}
-        onQuestionCompleted={markQuestionCompleted}
-        onQuestionDeleted={onQuestionDeleted}
-        roundId={roundId}
+        questionSet={{
+          palaceId,
+          nodeUid: nodeQuizNodeUid,
+          questionIds: nodeQuizQuestionIds,
+          initialQuestionStates: questionStates,
+          onQuestionStateChange: updateQuestionState,
+          onQuestionCompleted: markQuestionCompleted,
+          onQuestionDeleted,
+          roundId,
+        }}
       />
       <PalaceReviewUnitsPanel
         open={reviewUnitsPanelOpen}

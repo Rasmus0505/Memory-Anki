@@ -38,6 +38,10 @@ export interface FreestyleQuestionTrashOptions {
   planVersionRef: RefObject<number>
   storedConfigRef: RefObject<FreestyleFeedConfig>
   onRoundSync: (round: FreestyleRoundStatePayload) => void
+  /** Direct question set: let the opener drop the id from its queue. */
+  onQuestionDeleted?: (questionId: number) => void
+  /** Direct question set: close the window when nothing is left to answer. */
+  onLastQuestionDeleted?: () => void
   setOverlay: Dispatch<SetStateAction<FreestyleOverlayQuizState | null>>
   removedQuestionIdsRef: RefObject<Set<number>>
 }
@@ -57,6 +61,8 @@ export function useFreestyleQuestionTrash({
   planVersionRef,
   storedConfigRef,
   onRoundSync,
+  onQuestionDeleted,
+  onLastQuestionDeleted,
   setOverlay,
   removedQuestionIdsRef,
 }: FreestyleQuestionTrashOptions) {
@@ -133,11 +139,15 @@ export function useFreestyleQuestionTrash({
     writeQuizSessionState(removedId, {})
     persistProgress(nextIndex, nextStates)
     toast.success('题目已移入回收站。')
+    onQuestionDeleted?.(removedId)
+    if (nextQuestions.length === 0) onLastQuestionDeleted?.()
     void syncOverlayQuestionIds()
   }, [
     current,
     index,
     indexRef,
+    onLastQuestionDeleted,
+    onQuestionDeleted,
     persistProgress,
     questionStates,
     questionStatesRef,

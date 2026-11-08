@@ -15,8 +15,8 @@ import {
  * answering chrome stays below the architecture file-size limit.
  *
  * The row stays one line by keeping only the actions used mid-answer inline.
- * 复制导图 and 打乱选项 sit behind 更多 on desktop; phones fold every secondary
- * action there, so the question body keeps the height.
+ * 复制导图 sits behind 更多 on desktop; phones fold every secondary action
+ * there, so the question body keeps the height.
  */
 export function FreestyleScopeQuizHeaderActions({
   copyPalaceId,
@@ -31,13 +31,10 @@ export function FreestyleScopeQuizHeaderActions({
   canShuffle,
   shuffling,
   onShuffle,
-  onShuffleOptions,
-  onRestoreOptions,
-  canShuffleOptions,
-  canRestoreOptions,
   onOpenClearProgress,
   prioritizeWrong,
   onPrioritizeWrongChange,
+  roundActionsAvailable = true,
   actionsDisabled = false,
 }: {
   /** Palace whose mind map 复制导图 reads; usually the current question's palace. */
@@ -57,52 +54,47 @@ export function FreestyleScopeQuizHeaderActions({
   canShuffle: boolean
   shuffling: boolean
   onShuffle: () => void
-  onShuffleOptions: () => void
-  onRestoreOptions: () => void
-  canShuffleOptions: boolean
-  canRestoreOptions: boolean
   onOpenClearProgress: () => void
-  prioritizeWrong: boolean
-  onPrioritizeWrongChange: (enabled: boolean) => void
-  /** 做题配置 / 快捷键 panel is open: keep the row, just stop the actions. */
+  /** Round-only: a direct question set has no 随心 round to reorder. */
+  prioritizeWrong?: boolean
+  onPrioritizeWrongChange?: (enabled: boolean) => void
+  roundActionsAvailable?: boolean
+  /** 做题配置 panel is open: keep the row, just stop the actions. */
   actionsDisabled?: boolean
 }) {
   const hasOutline = copyPalaceId != null
-  const hasQuestions = questions.length > 0
-  const canShuffleCurrentOptions = currentQuestion?.question_type === 'multiple_choice'
-    && (currentQuestion.options?.length ?? 0) > 1
-  // One slot, two states: 打乱选项 / 恢复选项 share a button so turning an
-  // order into "restorable" never adds a control and reflows the header.
-  const optionShuffleAvailable = canRestoreOptions
-    || (canShuffleCurrentOptions && canShuffleOptions)
-  const optionShuffleDisabled = !optionShuffleAvailable || actionsDisabled
-  const optionShuffleLabel = canRestoreOptions ? '恢复选项' : '打乱选项'
-  const handleOptionShuffle = canRestoreOptions ? onRestoreOptions : onShuffleOptions
 
   return (
     <div className="flex min-w-0 items-center justify-end gap-2">
-      <Button type="button" size="sm" variant={prioritizeWrong ? 'default' : 'outline'}
-        aria-label="错题优先" aria-pressed={prioritizeWrong}
-        title="答错后只把这道题对应的复习单元排到前面，同一宫殿的其他单元不动"
-        onClick={() => onPrioritizeWrongChange(!prioritizeWrong)}>
+      <Button
+        type="button"
+        size="sm"
+        variant={roundActionsAvailable && prioritizeWrong ? 'default' : 'outline'}
+        aria-label="错题优先"
+        aria-pressed={roundActionsAvailable ? prioritizeWrong : false}
+        title={roundActionsAvailable
+          ? '答错后只把这道题对应的复习单元排到前面，同一宫殿的其他单元不动'
+          : '仅随心轮次可用'}
+        disabled={!roundActionsAvailable || actionsDisabled}
+        onClick={() => onPrioritizeWrongChange?.(!prioritizeWrong)}
+      >
         <ArrowUpToLine className="size-4" />
         <span className="hidden sm:inline">错题优先</span>
       </Button>
-      {lookupPalaceId != null ? (
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          aria-label="查看宫殿"
-          title="查看宫殿和思维导图"
-          onClick={onOpenPalace}
-        >
-          <BookOpen className="size-4" />
-          查看宫殿
-        </Button>
-      ) : null}
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        aria-label="查看宫殿"
+        title={lookupPalaceId != null ? "查看宫殿和思维导图" : "当前题目没有所属宫殿"}
+        disabled={lookupPalaceId == null || actionsDisabled}
+        onClick={onOpenPalace}
+      >
+        <BookOpen className="size-4" />
+        查看宫殿
+      </Button>
 
-      {hasQuestions ? <QuizCopyQuestionsMenu questions={questions} currentQuestion={currentQuestion} wrongQuestions={wrongQuestions} questionStates={questionStates} fallbackPalaceId={copyPalaceId} /> : null}
+      <QuizCopyQuestionsMenu questions={questions} currentQuestion={currentQuestion} wrongQuestions={wrongQuestions} questionStates={questionStates} fallbackPalaceId={copyPalaceId} actionsDisabled={actionsDisabled} />
 
       <div className="hidden flex-nowrap items-center justify-end gap-2 sm:flex">
         <Button
@@ -136,13 +128,11 @@ export function FreestyleScopeQuizHeaderActions({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            {hasOutline ? (
-              <DropdownMenuItem disabled={copyingOutline} onSelect={() => onCopyOutline(copyPalaceId)}>
-                复制导图
-              </DropdownMenuItem>
-            ) : null}
-            <DropdownMenuItem disabled={optionShuffleDisabled} onSelect={handleOptionShuffle}>
-              {optionShuffleLabel}
+            <DropdownMenuItem
+              disabled={copyingOutline || actionsDisabled || !hasOutline}
+              onSelect={() => { if (copyPalaceId != null) onCopyOutline(copyPalaceId) }}
+            >
+              复制导图
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -156,13 +146,11 @@ export function FreestyleScopeQuizHeaderActions({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            {hasOutline ? (
-              <DropdownMenuItem disabled={copyingOutline} onSelect={() => onCopyOutline(copyPalaceId)}>
-                复制导图
-              </DropdownMenuItem>
-            ) : null}
-            <DropdownMenuItem disabled={optionShuffleDisabled} onSelect={handleOptionShuffle}>
-              {optionShuffleLabel}
+            <DropdownMenuItem
+              disabled={copyingOutline || actionsDisabled || !hasOutline}
+              onSelect={() => { if (copyPalaceId != null) onCopyOutline(copyPalaceId) }}
+            >
+              复制导图
             </DropdownMenuItem>
             <DropdownMenuItem disabled={shuffling || !canShuffle || actionsDisabled} onSelect={onShuffle}>
               打乱题库

@@ -50,7 +50,7 @@ export function useFreestylePalaceSkip({
     try {
       let round = await send(planVersionRef.current)
       if (round.conflict) round = await send(round.plan_version ?? round.version)
-      if (round.conflict) throw new Error('本轮安排正在更新，请重试。')
+      if (round.conflict) throw new Error('本轮队列正在更新，请重试。')
       const next = adoptRound(round)
       if (next) await loadQuestions(next)
       toast.success(`已从本轮做题移除「${palaceTitle || '该宫殿'}」的 ${palaceQuestions.length} 题`)

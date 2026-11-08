@@ -49,7 +49,7 @@ export function useOverlayQuizShuffle({
       let round = await request(planVersionRef.current)
       // A conflict is only a snapshot: retry once against the version we saw.
       if (round.conflict) round = await request(round.plan_version ?? round.version)
-      if (round.conflict) throw new Error('本轮安排正在更新，请重试打乱。')
+      if (round.conflict) throw new Error('本轮队列正在更新，请重试打乱。')
       const next = adoptRound(round)
       if (next) await loadQuestions(next)
       toast.success(

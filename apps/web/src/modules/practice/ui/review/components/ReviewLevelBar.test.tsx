@@ -145,4 +145,49 @@ describe('ReviewLevelBar', () => {
     expect(screen.queryByText('调整复习等级')).toBeNull()
     expect(adjust).not.toHaveBeenCalled()
   })
+
+  it('draws ten level stops and jumps straight to one', async () => {
+    renderBar({ stageIndex: 2, intervalDays: 3 })
+
+    expect(screen.getByTestId('review-level-stops').children).toHaveLength(10)
+    expect(screen.getByTestId('review-level-bar').getAttribute('data-adjustable')).toBe('true')
+    expect(screen.getByTestId('review-level-stop-7').tagName).toBe('BUTTON')
+    fireEvent.click(screen.getByTestId('review-level-stop-7'))
+    expect(await screen.findByText(/等级 8 · 120–239天/)).toBeTruthy()
+
+    fireEvent.click(screen.getByTestId('review-level-apply'))
+    await waitFor(() => expect(adjust).toHaveBeenCalledTimes(1))
+    expect(adjust.mock.calls[0][1]).toMatchObject({ stage_index: 7, has_passed: true })
+  })
+
+  it('streams the dragged tier and clears it when the draft closes', async () => {
+    const onTargetChange = vi.fn()
+    renderBar({ stageIndex: 2, intervalDays: 3, onTargetChange })
+    const slider = screen.getByRole('slider', { name: '复习等级' })
+    slider.focus()
+    fireEvent.keyDown(slider, { key: 'ArrowRight' })
+    fireEvent.keyUp(slider, { key: 'ArrowRight' })
+
+    await waitFor(() =>
+      expect(onTargetChange).toHaveBeenCalledWith({
+        level: 3,
+        intervalDays: 7,
+        dueDate: expect.any(String),
+      }),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    await waitFor(() => expect(onTargetChange).toHaveBeenLastCalledWith(null))
+  })
+
+  it('shows the booked level after applying without waiting for a refetch', async () => {
+    renderBar({ stageIndex: 2, intervalDays: 3 })
+
+    fireEvent.click(screen.getByTestId('review-level-stop-5'))
+    await screen.findByText('调整复习等级')
+    fireEvent.click(screen.getByTestId('review-level-apply'))
+
+    await waitFor(() => expect(screen.getByTestId('review-level-current').textContent).toBe('等级 6 · 30–59天'))
+    expect(screen.getByTestId('review-level-bar').textContent).toContain('间隔 30天')
+  })
 })

@@ -7,7 +7,7 @@ import {
   type QuizNodeDeleteGuardRequest,
 } from '@/modules/quiz/public'
 import { usePalaceQuizNodeBindings } from '@/modules/quiz/public'
-import { NodeBoundQuizDialog } from '@/widgets/node-bound-quiz'
+import { FreestyleScopeQuizDialog } from '@/widgets/freestyle-scope-quiz'
 import type { PalaceQuizQuestion, QuizNodeBindingEdge } from '@/shared/api/contracts'
 import { toast } from '@/shared/feedback/toast'
 
@@ -28,8 +28,6 @@ export function usePalaceEditorQuizBindings({
   const [nodeQuizOpen, setNodeQuizOpen] = useState(false)
   const [nodeQuizNodeUid, setNodeQuizNodeUid] = useState<string | null>(null)
   const [nodeQuizQuestionIds, setNodeQuizQuestionIds] = useState<number[]>([])
-
-  const [nodeQuizInitialIndex, setNodeQuizInitialIndex] = useState(0)
 
   const [deleteGuardRequest, setDeleteGuardRequest] =
     useState<QuizNodeDeleteGuardRequest | null>(null)
@@ -52,7 +50,6 @@ export function usePalaceEditorQuizBindings({
     }
     setNodeQuizNodeUid(nodeUid)
     setNodeQuizQuestionIds(ids)
-    setNodeQuizInitialIndex(quizNodeBindings.getInitialQuestionIndex(ids))
     setNodeQuizOpen(true)
   }
 
@@ -116,19 +113,21 @@ export function usePalaceEditorQuizBindings({
         questionById={guardQuestionById}
         onResolve={(proceed) => deleteGuardResolveRef.current?.(proceed)}
       />
-      <NodeBoundQuizDialog
+      <FreestyleScopeQuizDialog
+        source="questions"
         open={nodeQuizOpen}
         onOpenChange={setNodeQuizOpen}
-        palaceId={palaceId ?? null}
-        nodeUid={nodeQuizNodeUid}
-        questionIds={nodeQuizQuestionIds}
-        initialIndex={nodeQuizInitialIndex}
-        initialQuestionStates={quizNodeBindings.questionStates}
-        onQuestionStateChange={quizNodeBindings.updateQuestionState}
-        onQuestionCompleted={quizNodeBindings.markQuestionCompleted}
-        onQuestionDeleted={(questionId) => {
-          setNodeQuizQuestionIds((ids) => ids.filter((id) => id !== questionId))
-          void quizNodeBindings.refresh()
+        questionSet={{
+          palaceId: palaceId ?? null,
+          nodeUid: nodeQuizNodeUid,
+          questionIds: nodeQuizQuestionIds,
+          initialQuestionStates: quizNodeBindings.questionStates,
+          onQuestionStateChange: quizNodeBindings.updateQuestionState,
+          onQuestionCompleted: quizNodeBindings.markQuestionCompleted,
+          onQuestionDeleted: (questionId) => {
+            setNodeQuizQuestionIds((ids) => ids.filter((id) => id !== questionId))
+            void quizNodeBindings.refresh()
+          },
         }}
       />
     </>

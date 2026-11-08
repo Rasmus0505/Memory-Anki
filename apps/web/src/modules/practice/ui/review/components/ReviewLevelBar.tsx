@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LoaderCircle } from 'lucide-react'
 import {
   adjustUnitScheduleApi,
@@ -48,6 +48,13 @@ function levelDays(level: number) {
   return INTERVAL_BAND_BOUNDS[level]
 }
 
+/** The level the thumb is aiming at, while the learner is still dragging. */
+export type ReviewLevelTargetPreview = {
+  level: number
+  intervalDays: number
+  dueDate: string
+}
+
 export type ReviewLevelBarProps = {
   unitId: string
   /** Display projection of the unit's earned interval band. */
@@ -60,6 +67,11 @@ export type ReviewLevelBarProps = {
   adjustable?: boolean
   compact?: boolean
   className?: string
+  /**
+   * Live target while the thumb moves or a precise date is typed; `null` when
+   * no draft is open. The rating bar uses this to preview the real gap.
+   */
+  onTargetChange?: (target: ReviewLevelTargetPreview | null) => void
   onScheduleAdjusted?: (result: AdjustUnitScheduleResultDto) => void
 }
 
@@ -81,15 +93,22 @@ export function ReviewLevelBar({
   adjustable = false,
   compact = false,
   className,
+  onTargetChange,
   onScheduleAdjusted,
 }: ReviewLevelBarProps) {
-  const current = clampLevel(stageIndex)
   const [draft, setDraft] = useState<number | null>(null)
   const [confirmOpen, setConfirmOpen] = useState(false)
-  const [customDate, setCustomDate] = useState<string>(() => levelTargetDate(current))
+  const [customDate, setCustomDate] = useState<string>(() => levelTargetDate(clampLevel(stageIndex)))
   const [useCustomDate, setUseCustomDate] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /** What this bar just booked, until the parent's projection catches up. */
+  const [applied, setApplied] = useState<{
+    unitId: string
+    stageIndex: number
+    intervalDays: number
+    dueDate: string
+  } | null>(null)
 
   const maxDate = useMemo(() => schedulableDueMax(), [])
   const minDate = useMemo(() => toIsoDate(studyDayStart()), [])
@@ -99,11 +118,35 @@ export function ReviewLevelBar({
     setConfirmOpen(false)
     setError(null)
     setUseCustomDate(false)
+    setApplied(null)
   }, [unitId])
+
+  const shown = applied?.unitId === unitId ? applied : null
+  const current = clampLevel(shown?.stageIndex ?? stageIndex)
+  const shownIntervalDays = shown?.intervalDays ?? intervalDays
+  const shownDueDate = shown?.dueDate ?? dueDate
 
   const target = draft == null ? current : clampLevel(draft)
   const targetDate = useCustomDate ? customDate : levelTargetDate(target)
   const targetDays = useCustomDate ? (intervalDaysUntil(customDate) ?? 0) : levelDays(target)
+
+  // Live preview for the rating bar: the draft is the learner's real target,
+  // not a guess. Emitting from an effect keeps every draft writer (drag,
+  // keyboard, quick chip, precise date) on one path.
+  const targetChangeRef = useRef(onTargetChange)
+  targetChangeRef.current = onTargetChange
+  useEffect(() => {
+    if (draft == null) {
+      targetChangeRef.current?.(null)
+      return
+    }
+    targetChangeRef.current?.({
+      level: target,
+      intervalDays: Math.max(0, Math.round(targetDays)),
+      dueDate: targetDate,
+    })
+  }, [draft, target, targetDate, targetDays])
+  useEffect(() => () => targetChangeRef.current?.(null), [])
 
   const openConfirm = useCallback(
     (level: number) => {
@@ -143,6 +186,13 @@ export function ReviewLevelBar({
             stage_index: target,
             has_passed: target > 0,
           })
+      const after = result?.after
+      setApplied({
+        unitId,
+        stageIndex: after?.stage_index ?? target,
+        intervalDays: after?.interval_days ?? Math.max(0, Math.round(targetDays)),
+        dueDate: after?.due_date ?? targetDate,
+      })
       onScheduleAdjusted?.(result)
       setConfirmOpen(false)
       setDraft(null)
@@ -151,10 +201,65 @@ export function ReviewLevelBar({
     } finally {
       setBusy(false)
     }
-  }, [busy, customDate, onScheduleAdjusted, target, unitId, useCustomDate])
+  }, [busy, customDate, onScheduleAdjusted, target, targetDate, targetDays, unitId, useCustomDate])
 
   const currentLabel = intervalBandLabel(current)
   const targetLabel = intervalBandLabel(target)
+  const previewing = draft != null && target !== current
+  const shownDue = shown ? shown.dueDate === minDate : due
+
+  const stops = (
+    <div className="pointer-events-none absolute inset-0" data-testid="review-level-stops">
+      {Array.from({ length: LEVELS }, (_, index) => {
+        const earned = index <= current
+        const isCurrent = index === current
+        const isTarget = draft != null && clampLevel(draft) === index && index !== current
+        const dot = (
+          <span
+            aria-hidden="true"
+            data-earned={earned ? 'true' : undefined}
+            data-current={isCurrent ? 'true' : undefined}
+            data-target={isTarget ? 'true' : undefined}
+            className={cn(
+              'block size-1.5 rounded-full border transition-colors',
+              earned ? 'border-primary bg-primary' : 'border-border bg-background',
+              isCurrent && 'size-2 border-primary bg-background ring-2 ring-primary/30',
+              isTarget && 'border-primary bg-primary/40',
+              wrongThisRound && isCurrent && 'border-red-500 bg-red-500 ring-red-500/25',
+            )}
+          />
+        )
+        const style = { left: `${(index / LAST_LEVEL) * 100}%` }
+        if (!adjustable || busy || confirmOpen) {
+          return (
+            <span
+              key={index}
+              data-testid={`review-level-stop-${index}`}
+              className="absolute top-1/2 flex size-4 -translate-x-1/2 -translate-y-1/2 items-center justify-center"
+              style={style}
+            >
+              {dot}
+            </span>
+          )
+        }
+        return (
+          <button
+            key={index}
+            type="button"
+            tabIndex={-1}
+            data-testid={`review-level-stop-${index}`}
+            aria-label={`调到${intervalBandLabel(index)}`}
+            title={`等级 ${index + 1} · ${intervalBandLabel(index)}`}
+            className="pointer-events-auto absolute top-1/2 flex size-4 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full"
+            style={style}
+            onClick={() => openConfirm(index)}
+          >
+            {dot}
+          </button>
+        )
+      })}
+    </div>
+  )
 
   return (
     <Popover
@@ -179,8 +284,15 @@ export function ReviewLevelBar({
             <span className="truncate text-foreground" data-testid="review-level-current">
               等级 {current + 1} · {currentLabel}
             </span>
-            <span className="shrink-0 tabular-nums text-muted-foreground">
-              {due ? '今天到期' : `间隔 ${Math.max(0, Math.round(intervalDays))}天`}
+            <span
+              className="shrink-0 tabular-nums text-muted-foreground"
+              data-preview={previewing ? 'true' : undefined}
+            >
+              {previewing
+                ? `→ ${dateLabel(targetDate)}`
+                : shownDue
+                  ? '今天到期'
+                  : `间隔 ${Math.max(0, Math.round(shownIntervalDays))}天`}
             </span>
           </div>
           <Slider
@@ -193,12 +305,15 @@ export function ReviewLevelBar({
             disabled={!adjustable || busy}
             onValueChange={(value) => setDraft(clampLevel(value[0]))}
             onValueCommit={(value) => openConfirm(value[0])}
-            className={cn(!adjustable && 'opacity-80', wrongThisRound && '[&_[data-slot=slider-range]]:bg-red-500 [&_[data-slot=slider-track]]:bg-red-500/30 [&_[role=slider]]:border-red-500')}
+            stops={stops}
+            className={cn(!adjustable && 'opacity-80', wrongThisRound && '[&_[data-slot=slider-range]]:bg-red-500 [&_[data-slot=slider-track]]:bg-red-500/20 [&_[role=slider]]:border-red-500')}
           />
           {compact ? null : (
             <div className="flex items-center justify-between text-[11px] leading-3 text-muted-foreground">
               <span>首学</span>
-              <span>{dueDate ? dateLabel(dueDate) : '未排期'}</span>
+              <span data-preview={previewing ? 'true' : undefined}>
+                {previewing ? dateLabel(targetDate) : shownDueDate ? dateLabel(shownDueDate) : '未排期'}
+              </span>
               <span>365天以上</span>
             </div>
           )}

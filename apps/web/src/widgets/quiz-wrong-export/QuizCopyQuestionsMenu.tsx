@@ -10,12 +10,13 @@ import { toast } from '@/shared/feedback/toast'
 import { buildMindMapOutlineText } from '@/shared/lib/mindMapOutlineText'
 import { useExportWrongQuestions } from './useExportWrongQuestions'
 
-export function QuizCopyQuestionsMenu({ questions, currentQuestion, wrongQuestions, questionStates, fallbackPalaceId }: {
+export function QuizCopyQuestionsMenu({ questions, currentQuestion, wrongQuestions, questionStates, fallbackPalaceId, actionsDisabled = false }: {
   questions: readonly PalaceQuizQuestion[]
   currentQuestion: PalaceQuizQuestion | null
   wrongQuestions: readonly PalaceQuizQuestion[]
   questionStates: Readonly<Record<number, QuizRuntimeState>>
   fallbackPalaceId: number | null
+  actionsDisabled?: boolean
 }) {
   const [includeOutline, setIncludeOutline] = useState(false)
   const [includeAnswerInfo, setIncludeAnswerInfo] = useState(false)
@@ -56,16 +57,16 @@ export function QuizCopyQuestionsMenu({ questions, currentQuestion, wrongQuestio
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button type="button" size="sm" variant="outline" aria-label="复制题目" disabled={copying || exporting != null || !currentQuestion}>
+        <Button type="button" size="sm" variant="outline" aria-label="复制题目" disabled={actionsDisabled || copying || exporting != null || !currentQuestion}>
           {copying || exporting != null ? <LoaderCircle className="size-4 animate-spin" /> : <FileText className="size-4" />}
           <span className="hidden sm:inline">复制题目</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem disabled={!currentQuestion} onSelect={() => { if (currentQuestion) void copy([currentQuestion]) }}>导出本题</DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => void copy(questions)}>导出全部题</DropdownMenuItem>
-        <DropdownMenuItem disabled={!wrongQuestions.length} onSelect={() => void copy(wrongQuestions)}>导出全部错题</DropdownMenuItem>
-        <DropdownMenuItem disabled={!wrongQuestions.length} onSelect={() => void exportWrongQuestions(wrongQuestions, 'with-palaces', includeAnswerInfo ? questionStates : undefined)}>错题 + 完整宫殿</DropdownMenuItem>
+        <DropdownMenuItem disabled={actionsDisabled || !currentQuestion} onSelect={() => { if (currentQuestion) void copy([currentQuestion]) }}>导出本题</DropdownMenuItem>
+        <DropdownMenuItem disabled={actionsDisabled || !questions.length} onSelect={() => void copy(questions)}>导出全部题</DropdownMenuItem>
+        <DropdownMenuItem disabled={actionsDisabled || !wrongQuestions.length} onSelect={() => void copy(wrongQuestions)}>导出全部错题</DropdownMenuItem>
+        <DropdownMenuItem disabled={actionsDisabled || !wrongQuestions.length} onSelect={() => void exportWrongQuestions(wrongQuestions, 'with-palaces', includeAnswerInfo ? questionStates : undefined)}>错题 + 完整宫殿</DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem role="menuitemcheckbox" aria-checked={includeOutline} onSelect={(event) => { event.preventDefault(); setIncludeOutline((value) => !value) }}>
           <span aria-hidden="true" className="mr-2 w-4">{includeOutline ? '✓' : ''}</span>附带导图

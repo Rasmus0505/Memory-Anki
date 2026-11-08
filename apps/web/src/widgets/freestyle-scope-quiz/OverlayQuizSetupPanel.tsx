@@ -18,11 +18,7 @@ import type {
   FreestyleQuizScope,
   FreestyleRoundStatePayload,
 } from '@/shared/api/contracts'
-import {
-  QuizShortcutSettingsSection,
-  useQuizOptionShuffleSettings,
-} from '@/modules/quiz/public'
-import { Input } from '@/shared/components/ui/input'
+import { QuizShortcutSettingsSection, useQuizOptionShuffleSettings } from '@/modules/quiz/public'
 import { Switch } from '@/shared/components/ui/switch'
 import { Button } from '@/shared/components/ui/button'
 import { cn } from '@/shared/lib/utils'
@@ -81,15 +77,17 @@ function Section({
 function SetupSaveButton({
   setupDone,
   countsReady,
+  directMode,
   onClick,
 }: {
   setupDone: boolean
   countsReady: boolean
+  directMode: boolean
   onClick: () => void
 }) {
   return (
     <Button type="button" className="w-full" disabled={!countsReady} onClick={onClick}>
-      {setupDone ? '保存并继续' : '开始做题'}
+      {directMode ? '完成配置' : setupDone ? '保存并继续' : '开始做题'}
     </Button>
   )
 }
@@ -108,6 +106,9 @@ export function OverlayQuizSetupPanel({
   palaceCount,
   onRoundSync,
   onConfirm,
+  directMode = false,
+  directQuestionCount = 0,
+  onClose,
 }: {
   roundId: string
   planVersion: number
@@ -119,6 +120,9 @@ export function OverlayQuizSetupPanel({
   palaceCount: number
   onRoundSync: (round: FreestyleRoundStatePayload) => void
   onConfirm: (choice: OverlayQuizSetupChoice) => void
+  directMode?: boolean
+  directQuestionCount?: number
+  onClose?: () => void
 }) {
   const [draftRange, setDraftRange] = useState<FreestyleOverlayQuestionRange>(
     storedConfig.streams.quiz.overlay_question_range,
@@ -133,7 +137,6 @@ export function OverlayQuizSetupPanel({
   const [kindCounts, setKindCounts] = useState({ objective: 0, subjective: 0 })
   const [countsReady, setCountsReady] = useState(false)
   const { settings: optionShuffleSettings, updateSettings: updateOptionShuffleSettings } = useQuizOptionShuffleSettings()
-  const [thresholdDraft, setThresholdDraft] = useState(String(optionShuffleSettings.thresholdSeconds))
   const configRef = useRef(storedConfig)
   const planVersionRef = useRef(planVersion)
   configRef.current = storedConfig
@@ -242,145 +245,116 @@ export function OverlayQuizSetupPanel({
 
   return (
     <div className="space-y-4">
-      <Section title="出题范围">
-        <div role="radiogroup" aria-label="出题范围" className="grid gap-2 sm:grid-cols-2">
-          {(['round_units', 'whole_palace'] as const).map((range) => (
-            <OptionButton
-              key={range}
-              selected={draftRange === range}
-              label={OVERLAY_QUESTION_RANGE_LABELS[range]}
-              hint={overlayQuestionRangeHint(range)}
-              onClick={() => setDraftRange(range)}
-            />
-          ))}
-        </div>
-        <OverlayQuizScopeSummary scopePalaces={scopePalaces} range={draftRange} />
-        <OverlayQuizScopeList scopePalaces={scopePalaces} onSetSkipped={setPalacesSkipped} />
-      </Section>
-
-      <Section title="出题顺序">
-        <div role="radiogroup" aria-label="宫殿间顺序" className="grid gap-2 sm:grid-cols-2">
-          {([
-            ['cross_palace_random', '跨宫殿乱序'],
-            ['single_palace_random', '一个宫殿刷完再换'],
-          ] as const).map(([value, label]) => (
-            <OptionButton key={value} selected={draftScope === value} label={label} onClick={() => setDraftScope(value)} />
-          ))}
-        </div>
-        <div className="space-y-2">
-          <p className="text-xs font-medium text-muted-foreground">当前出哪些题</p>
-          {availableKinds.length ? (
-            <div role="group" aria-label="题型" className="grid gap-2 sm:grid-cols-2">
-              {availableKinds.map((kind) => {
-                const checked = effectiveKinds.includes(kind)
-                const label = kind === 'subjective' ? '主观' : '客观'
-                return (
-                  <label
-                    key={kind}
-                    className={cn(
-                      'flex cursor-pointer items-center gap-3 rounded-xl border px-3.5 py-2.5 text-sm',
-                      checked ? 'border-primary bg-primary/10' : 'border-border/60 bg-background/80',
-                    )}
-                  >
-                    <input
-                      type="checkbox"
-                      className="size-4 accent-primary"
-                      checked={checked}
-                      aria-label={`${label}（${kindCounts[kind] ?? 0}）`}
-                      onChange={() => toggleKind(kind)}
-                    />
-                    <span className="font-semibold">{label}</span>
-                    <span className="text-xs text-muted-foreground">{kindCounts[kind] ?? 0} 题</span>
-                  </label>
-                )
-              })}
+      {directMode ? (
+        <Section title="出题范围">
+          <p className="rounded-xl border border-border/60 bg-background/80 px-3.5 py-3 text-sm">
+            {directQuestionCount > 0
+              ? `当前卡片关联的 ${directQuestionCount} 道题`
+              : '当前没有关联题目'}
+          </p>
+        </Section>
+      ) : (
+        <>
+          <Section title="出题范围">
+            <div role="radiogroup" aria-label="出题范围" className="grid gap-2 sm:grid-cols-2">
+              {(['round_units', 'whole_palace'] as const).map((range) => (
+                <OptionButton
+                  key={range}
+                  selected={draftRange === range}
+                  label={OVERLAY_QUESTION_RANGE_LABELS[range]}
+                  hint={overlayQuestionRangeHint(range)}
+                  onClick={() => setDraftRange(range)}
+                />
+              ))}
             </div>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              {countsReady ? '当前没有客观题或主观题' : '正在统计当前题目…'}
-            </p>
-          )}
-        </div>
-        {showTypeOrder ? (
-          <div role="radiogroup" aria-label="题型顺序" className="grid gap-2">
-            {([
-              ['interleave', '混合插入'],
-              ['objective_then_subjective', '先客观后主观'],
-              ['subjective_then_objective', '先主观后客观'],
-            ] as const).map(([value, label]) => (
-              <OptionButton key={value} selected={draftTypeOrder === value} label={label} onClick={() => setDraftTypeOrder(value)} />
-            ))}
-          </div>
-        ) : null}
-        {showNesting ? (
-          <div role="radiogroup" aria-label="宫殿和题型谁优先" className="grid gap-2">
-            {([
-              ['palace_then_type', '这座宫殿两类都刷完再换'],
-              ['type_then_palace', '先刷完所有宫殿的一类'],
-            ] as const).map(([value, label]) => (
-              <OptionButton key={value} selected={draftNesting === value} label={label} onClick={() => setDraftNesting(value)} />
-            ))}
-          </div>
-        ) : null}
-      </Section>
+            <OverlayQuizScopeSummary scopePalaces={scopePalaces} range={draftRange} />
+            <OverlayQuizScopeList scopePalaces={scopePalaces} onSetSkipped={setPalacesSkipped} />
+          </Section>
 
-      <Section title="选项顺序">
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/80 px-3.5 py-3">
-          <div>
-            <p className="text-sm font-semibold">自动打乱选项</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">少于 {optionShuffleSettings.thresholdSeconds} 秒时触发</p>
-          </div>
-          <Switch
-            checked={optionShuffleSettings.enabled}
-            aria-label="自动打乱选项"
-            onCheckedChange={(enabled) => updateOptionShuffleSettings({ ...optionShuffleSettings, enabled })}
-          />
-        </div>
-        <label className="flex items-center gap-2 text-sm">
-          <span className="shrink-0">阈值</span>
-          <Input
-            type="number"
-            min={0}
-            max={300}
-            step={0.5}
-            value={thresholdDraft}
-            aria-label="自动打乱阈值秒数"
-            onChange={(event) => setThresholdDraft(event.target.value)}
-            onBlur={() => {
-              const value = Number(thresholdDraft)
-              if (!thresholdDraft.trim() || !Number.isFinite(value)) {
-                setThresholdDraft(String(optionShuffleSettings.thresholdSeconds))
-                return
-              }
-              const next = Math.min(300, Math.max(0, value))
-              setThresholdDraft(String(next))
-              updateOptionShuffleSettings({ ...optionShuffleSettings, thresholdSeconds: next })
-            }}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') event.currentTarget.blur()
-            }}
-            className="w-24"
-          />
-          <span className="text-muted-foreground">秒</span>
-        </label>
-      </Section>
+          <Section title="出题顺序">
+            <div role="radiogroup" aria-label="宫殿间顺序" className="grid gap-2 sm:grid-cols-2">
+              {([
+                ['cross_palace_random', '跨宫殿乱序'],
+                ['single_palace_random', '一个宫殿刷完再换'],
+              ] as const).map(([value, label]) => (
+                <OptionButton key={value} selected={draftScope === value} label={label} onClick={() => setDraftScope(value)} />
+              ))}
+            </div>
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">当前出哪些题</p>
+              {availableKinds.length ? (
+                <div role="group" aria-label="题型" className="grid gap-2 sm:grid-cols-2">
+                  {availableKinds.map((kind) => {
+                    const checked = effectiveKinds.includes(kind)
+                    const label = kind === 'subjective' ? '主观' : '客观'
+                    return (
+                      <label
+                        key={kind}
+                        className={cn(
+                          'flex cursor-pointer items-center gap-3 rounded-xl border px-3.5 py-2.5 text-sm',
+                          checked ? 'border-primary bg-primary/10' : 'border-border/60 bg-background/80',
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          className="size-4 accent-primary"
+                          checked={checked}
+                          aria-label={`${label}（${kindCounts[kind] ?? 0}）`}
+                          onChange={() => toggleKind(kind)}
+                        />
+                        <span className="font-semibold">{label}</span>
+                        <span className="text-xs text-muted-foreground">{kindCounts[kind] ?? 0} 题</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  {countsReady ? '当前没有客观题或主观题' : '正在统计当前题目…'}
+                </p>
+              )}
+            </div>
+            {showTypeOrder ? (
+              <div role="radiogroup" aria-label="题型顺序" className="grid gap-2">
+                {([
+                  ['interleave', '混合插入'],
+                  ['objective_then_subjective', '先客观后主观'],
+                  ['subjective_then_objective', '先主观后客观'],
+                ] as const).map(([value, label]) => (
+                  <OptionButton key={value} selected={draftTypeOrder === value} label={label} onClick={() => setDraftTypeOrder(value)} />
+                ))}
+              </div>
+            ) : null}
+            {showNesting ? (
+              <div role="radiogroup" aria-label="宫殿和题型谁优先" className="grid gap-2">
+                {([
+                  ['palace_then_type', '这座宫殿两类都刷完再换'],
+                  ['type_then_palace', '先刷完所有宫殿的一类'],
+                ] as const).map(([value, label]) => (
+                  <OptionButton key={value} selected={draftNesting === value} label={label} onClick={() => setDraftNesting(value)} />
+                ))}
+              </div>
+            ) : null}
+          </Section>
 
-      <Section title="题目分数">
-        <div role="radiogroup" aria-label="空白题怎么显示分数" className="grid gap-2 sm:grid-cols-2">
-          <OptionButton
-            selected={draftInherit === 'lowest_reviewed'}
-            label="跟着已复习的最低分"
-            hint="自己有分就用自己的；进度条没刷到的仍显示「本轮尚未复习」。"
-            onClick={() => setDraftInherit('lowest_reviewed')}
-          />
-          <OptionButton
-            selected={draftInherit === 'blank'}
-            label="保持空白"
-            hint="自己没分就不标。"
-            onClick={() => setDraftInherit('blank')}
-          />
-        </div>
-      </Section>
+          <Section title="题目分数">
+            <div role="radiogroup" aria-label="空白题怎么显示分数" className="grid gap-2 sm:grid-cols-2">
+              <OptionButton
+                selected={draftInherit === 'lowest_reviewed'}
+                label="跟着已复习的最低分"
+                hint="自己有分就用自己的；进度条没刷到的仍显示「本轮尚未复习」。"
+                onClick={() => setDraftInherit('lowest_reviewed')}
+              />
+              <OptionButton
+                selected={draftInherit === 'blank'}
+                label="保持空白"
+                hint="自己没分就不标。"
+                onClick={() => setDraftInherit('blank')}
+              />
+            </div>
+          </Section>
+        </>
+      )}
 
       <details className="rounded-xl border border-border/60 bg-background/80 px-3.5 py-3">
         <summary className="cursor-pointer text-sm font-semibold">快捷键</summary>
@@ -389,8 +363,24 @@ export function OverlayQuizSetupPanel({
         </div>
       </details>
 
+      <Section title="选项顺序">
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/80 px-3.5 py-3">
+          <p className="text-sm font-semibold">自动打乱选项</p>
+          <Switch
+            checked={optionShuffleSettings.enabled}
+            aria-label="自动打乱选项"
+            onCheckedChange={(enabled) => updateOptionShuffleSettings({ ...optionShuffleSettings, enabled })}
+          />
+        </div>
+      </Section>
+
       <div className="sticky bottom-0 z-10 border-t border-border/50 bg-background/95 py-3 backdrop-blur">
-        <SetupSaveButton setupDone={setupDone} countsReady={countsReady} onClick={save} />
+        <SetupSaveButton
+          setupDone={setupDone}
+          countsReady={directMode || countsReady}
+          directMode={directMode}
+          onClick={directMode ? (onClose ?? (() => undefined)) : save}
+        />
       </div>
     </div>
   )

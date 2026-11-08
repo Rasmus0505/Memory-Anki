@@ -3,7 +3,7 @@ import { FlipCardMindMapPanel } from "./FlipCardMindMapPanel";
 import { useMindMapReviewFlowController } from "./useMindMapReviewFlowController";
 import type { MindMapReviewFlowProps } from "@/modules/practice/public";
 import { usePalaceQuizNodeBindings } from "@/modules/quiz/public";
-import { NodeBoundQuizDialog } from "@/widgets/node-bound-quiz";
+import { FreestyleScopeQuizDialog } from "@/widgets/freestyle-scope-quiz";
 import { ComboMilestoneBurst, CompletionCelebration } from "@/shared/components/celebration";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
@@ -49,7 +49,6 @@ export function MindMapReviewFlow({
   const [nodeQuizOpen, setNodeQuizOpen] = React.useState(false);
   const [nodeQuizNodeUid, setNodeQuizNodeUid] = React.useState<string | null>(null);
   const [nodeQuizQuestionIds, setNodeQuizQuestionIds] = React.useState<number[]>([]);
-  const [nodeQuizInitialIndex, setNodeQuizInitialIndex] = React.useState(0);
   // Badge counts must use the full palace mindmap (not the flip-reveal visible
   // subtree). Otherwise parent badges grow as children are revealed.
   // Full palace doc for badges (editEditorState). Never use flip-reveal visible
@@ -67,7 +66,6 @@ export function MindMapReviewFlow({
     enabled: Boolean(props.palaceId),
   });
   const getOpenQuestionIds = quizNodeBindings.getOpenQuestionIds;
-  const getInitialQuestionIndex = quizNodeBindings.getInitialQuestionIndex;
   const handleOpenNodeQuiz = React.useCallback(
     (nodeUid: string, kind?: "objective" | "subjective") => {
       const ids = getOpenQuestionIds(nodeUid, kind);
@@ -83,10 +81,9 @@ export function MindMapReviewFlow({
       }
       setNodeQuizNodeUid(nodeUid);
       setNodeQuizQuestionIds(ids);
-      setNodeQuizInitialIndex(getInitialQuestionIndex(ids));
       setNodeQuizOpen(true);
     },
-    [getInitialQuestionIndex, getOpenQuestionIds],
+    [getOpenQuestionIds],
   );
 
   const flipPanel = (
@@ -400,19 +397,21 @@ export function MindMapReviewFlow({
       </div>
       )}
 
-      <NodeBoundQuizDialog
+      <FreestyleScopeQuizDialog
+        source="questions"
         open={nodeQuizOpen}
         onOpenChange={setNodeQuizOpen}
-        palaceId={props.palaceId}
-        nodeUid={nodeQuizNodeUid}
-        questionIds={nodeQuizQuestionIds}
-        initialIndex={nodeQuizInitialIndex}
-        initialQuestionStates={quizNodeBindings.questionStates}
-        onQuestionStateChange={quizNodeBindings.updateQuestionState}
-        onQuestionCompleted={quizNodeBindings.markQuestionCompleted}
-        onQuestionDeleted={(questionId) => {
-          setNodeQuizQuestionIds((ids) => ids.filter((id) => id !== questionId));
-          void quizNodeBindings.refresh();
+        questionSet={{
+          palaceId: props.palaceId,
+          nodeUid: nodeQuizNodeUid,
+          questionIds: nodeQuizQuestionIds,
+          initialQuestionStates: quizNodeBindings.questionStates,
+          onQuestionStateChange: quizNodeBindings.updateQuestionState,
+          onQuestionCompleted: quizNodeBindings.markQuestionCompleted,
+          onQuestionDeleted: (questionId) => {
+            setNodeQuizQuestionIds((ids) => ids.filter((id) => id !== questionId));
+            void quizNodeBindings.refresh();
+          },
         }}
       />
 
