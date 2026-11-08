@@ -1,4 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  acknowledgeReorder,
+  acknowledgeRestore,
+  beginReorder,
+  beginRestore,
+  dropRestores,
+  emptyQueueEditState,
+  isRestoring,
+  overlayQueueEdits,
+  queueEditsForRound,
+  restoringIds,
+  type QueueEditState,
+} from '@/modules/practice/domain/queueEditOverlay'
 import { useLocation } from 'react-router-dom'
 import {
   appendFreestyleBedtimeApi,
@@ -561,10 +574,16 @@ export function useImmersiveQueue(
   }, [saveRoundAction])
   const cursorCommitTimerRef = useRef<number | null>(null)
   const pendingCursorRef = useRef<string | null>(null)
-  /** Restores in this round. Even a pre-restore read arriving after its ACK is stale. */
-  const pendingReleaseIdsRef = useRef(new Set<string>())
-  const releaseVersionRef = useRef(new Map<string, number>())
-  const pendingOrderRef = useRef<{ roundId: string; orderIds: string[] } | null>(null)
+  /**
+   * 移出后恢复 / 排序 that a server read may not show yet. One state, one set of
+   * lifetime rules (`domain/queueEditOverlay.ts`), shared with the backend's
+   * reorder lock through `queue_order_cases.json`.
+   */
+  const queueEditsRef = useRef<QueueEditState>(emptyQueueEditState())
+  const editsFor = useCallback((roundId: string) => {
+    queueEditsRef.current = queueEditsForRound(queueEditsRef.current, roundId)
+    return queueEditsRef.current
+  }, [])
   const queueActionTailRef = useRef<Promise<unknown>>(Promise.resolve())
   const [planVersion, setPlanVersion] = useState(0)
 
@@ -601,42 +620,10 @@ export function useImmersiveQueue(
     version: number,
   ): FreestyleRoundStatePayload['plan'] => {
     if (queueStateRef.current.roundId !== roundId) return plan
-    const released = pendingReleaseIdsRef.current
-    // A later explicit removal from another device may supersede our restore.
-    // Equal/older snapshots still need protection after the restore ACK.
-    for (const id of plan.excluded_ids) {
-      const restoredAt = releaseVersionRef.current.get(id)
-      if (restoredAt != null && version > restoredAt) {
-        released.delete(id)
-        releaseVersionRef.current.delete(id)
-      }
-    }
-    const pending = pendingOrderRef.current
-    let presented = plan.presented_ids
-    if (pending?.roundId === roundId) {
-      const locked = new Set([
-        ...plan.completed_ids, ...plan.excluded_ids, ...plan.compressed_ids,
-        ...Object.keys(plan.bedtime_ratings ?? {}),
-        ...Object.entries(plan.encounters).filter(([, encounter]) => encounter.rating != null).map(([id]) => id),
-        ...plan.original_cards.filter((card) => card.bedtime || card.palace_pass).map((card) => card.card_id),
-        ...plan.occurrences.flatMap((occurrence) => [occurrence.occurrence_id,
-          ...(['pending', 'inserted'].includes(occurrence.status) ? [occurrence.source_card_id] : []),
-        ]),
-      ])
-      const movable = new Set(presented.filter((id) => !locked.has(id)))
-      const requested = [
-        ...pending.orderIds.filter((id) => movable.has(id)),
-        ...presented.filter((id) => movable.has(id) && !pending.orderIds.includes(id)),
-      ]
-      let cursor = 0
-      presented = presented.map((id) => movable.has(id) ? requested[cursor++] : id)
-    }
-    return {
-      ...plan,
-      presented_ids: presented,
-      excluded_ids: plan.excluded_ids.filter((id) => !released.has(id)),
-    }
-  }, [])
+    const result = overlayQueueEdits(editsFor(roundId), plan, roundId, version)
+    queueEditsRef.current = result.state
+    return result.plan
+  }, [editsFor])
   const [wrongUnitIds, setWrongUnitIds] = useState<string[]>([])
   const [queueFrozen, setQueueFrozen] = useState(false)
   /**
@@ -696,9 +683,7 @@ export function useImmersiveQueue(
   const persistQueueState = useCallback((next: FreestyleSkipState) => {
     localQueueMutationRef.current += 1
     if (next.roundId !== queueStateRef.current.roundId) {
-      pendingReleaseIdsRef.current.clear()
-      releaseVersionRef.current.clear()
-      pendingOrderRef.current = null
+      queueEditsRef.current = emptyQueueEditState(next.roundId)
     }
     const sanitized = saveQueueState(next, slot)
     // A quota miss may store a plan-less snapshot. The live session must keep
@@ -1160,7 +1145,7 @@ export function useImmersiveQueue(
           })
           // After the await: a cancel that already cleared lastRating must not be restored.
           // A stale render or a wiped draft must not drop the removal or the other scores.
-          const releasedIds = [...pendingReleaseIdsRef.current]
+          const releasedIds = restoringIds(queueEditsRef.current, adoptedRoundId)
           const localLedger = coalesceHydrationLedger(
             capturedLedger,
             {
@@ -2541,15 +2526,16 @@ export function useImmersiveQueue(
     cardsRef.current = nextCards
     setCards(nextCards)
     const roundId = currentPlan.roundId
-    const intent = { roundId, orderIds: nextPlan.orderIds }
-    pendingOrderRef.current = intent
+    const savedOrderIds = nextPlan.orderIds
+    const operationId = createOperationId()
+    queueEditsRef.current = beginReorder(editsFor(roundId), savedOrderIds, operationId)
     void saveQueueAction(roundId, {
-      operation_id: createOperationId(),
+      operation_id: operationId,
       action: 'reorder',
-      order_ids: nextPlan.orderIds,
+      order_ids: savedOrderIds,
     }).then((round) => {
       if (!round || queueStateRef.current.roundId !== roundId) return
-      if (pendingOrderRef.current === intent) pendingOrderRef.current = null
+      queueEditsRef.current = acknowledgeReorder(editsFor(roundId), operationId)
       notifyPeerRound()
     }).catch(() => {
       // Keep the latest local order while offline; hydration must not erase it.
@@ -2561,15 +2547,12 @@ export function useImmersiveQueue(
       resolvedIndex >= 0 ? resolvedIndex : Math.min(currentIndexRef.current, Math.max(0, nextCards.length - 1)),
       nextCards,
     )
-  }, [applyCurrentIndex, notifyPeerRound, persistQueueState, saveQueueAction])
+  }, [applyCurrentIndex, editsFor, notifyPeerRound, persistQueueState, saveQueueAction])
 
   const excludePlanCards = useCallback((cardIds: string[]) => {
     const ids = cardIds.map((id) => String(id || '').trim()).filter(Boolean)
     if (!ids.length) return
-    ids.forEach((id) => {
-      pendingReleaseIdsRef.current.delete(id)
-      releaseVersionRef.current.delete(id)
-    })
+    queueEditsRef.current = dropRestores(editsFor(queueStateRef.current.roundId), ids)
     const previousPlan = queueStateRef.current.roundPlan
     const nextPlan = excludeRoundPlanCards(previousPlan, ids, cardsRef.current)
     const excludedIds = new Set(ids)
@@ -2609,14 +2592,14 @@ export function useImmersiveQueue(
       const current = queueStateRef.current
       const stamped = excludeRoundPlanCards(
         current.roundPlan,
-        ids.filter((id) => !pendingReleaseIdsRef.current.has(id)),
+        ids.filter((id) => !isRestoring(queueEditsRef.current, id)),
         cardsRef.current,
       )
       const hiddenIds = mergeRetainedHiddenIds(
         current.hiddenIds,
         stamped,
         echoedExcluded,
-        [...pendingReleaseIdsRef.current],
+        restoringIds(queueEditsRef.current, roundId),
       )
       persistQueueState({ ...queueStateRef.current, roundPlan: stamped, hiddenIds })
       const stillViewing = cardsRef.current[currentIndexRef.current]?.id ?? null
@@ -2641,35 +2624,34 @@ export function useImmersiveQueue(
       reason: 'plan_exclude',
       forceExcludedIds: [...excludedIds],
     })
-  }, [applyCurrentIndex, buildQueue, notifyPeerRound, persistQueueState, saveQueueAction])
+  }, [applyCurrentIndex, buildQueue, editsFor, notifyPeerRound, persistQueueState, saveQueueAction])
 
   const restorePlanCards = useCallback((cardIds: string[]) => {
     const ids = cardIds.map((id) => String(id || '').trim()).filter(Boolean)
     if (!ids.length) return
-    ids.forEach((id) => {
-      pendingReleaseIdsRef.current.add(id)
-      releaseVersionRef.current.delete(id)
-    })
+    const roundId = queueStateRef.current.roundId
+    const restores = ids.map((cardId) => ({ cardId, operationId: createOperationId() }))
+    for (const { cardId, operationId } of restores) {
+      queueEditsRef.current = beginRestore(editsFor(roundId), cardId, operationId)
+    }
     let nextPlan: FreestyleRoundPlanState | null = queueStateRef.current.roundPlan
     ids.forEach((id) => {
       if (nextPlan) nextPlan = updateRoundPlanCard(nextPlan, id, { status: 'pending' })
     })
     const nextState = restoreCards({ ...queueStateRef.current, roundPlan: nextPlan }, ids)
     persistQueueState(nextState)
-    const roundId = nextState.roundId
-    void Promise.all(ids.map((cardId) => saveQueueAction(roundId, {
-      operation_id: createOperationId(),
+    void Promise.all(restores.map(({ cardId, operationId }) => saveQueueAction(roundId, {
+      operation_id: operationId,
       action: 'restore',
       card_id: cardId,
-    }))).then((rounds) => {
-      if (queueStateRef.current.roundId !== roundId || rounds.some((round) => !round)) return
-      rounds.forEach((round, index) => {
-        if (round && pendingReleaseIdsRef.current.has(ids[index])) {
-          releaseVersionRef.current.set(ids[index], serverPlanVersion(round))
-        }
-      })
+    }).then((round) => {
+      if (!round || queueStateRef.current.roundId !== roundId) return
+      // 单卡成功就确认，不能等整批结束：下一张等待或失败时，这张的 ACK 已有效。
+      queueEditsRef.current = acknowledgeRestore(
+        editsFor(roundId), cardId, operationId, serverPlanVersion(round),
+      )
       notifyPeerRound()
-    }).catch(() => {
+    }))).catch(() => {
       // Local restore remains the offline draft.
     }).finally(() => {
       if (queueStateRef.current.roundId !== roundId) return
@@ -2684,7 +2666,7 @@ export function useImmersiveQueue(
         reason: 'plan_restore',
       })
     })
-  }, [buildQueue, notifyPeerRound, persistQueueState, saveQueueAction])
+  }, [buildQueue, editsFor, notifyPeerRound, persistQueueState, saveQueueAction])
 
   const compressCompletedPlanCards = useCallback((snapshot?: FreestylePartialSettlementSnapshot) => {
     const current = queueStateRef.current
@@ -3161,7 +3143,7 @@ export function useImmersiveQueue(
         round.plan,
         adoptedRoundId,
       )
-      const releasedIds = [...pendingReleaseIdsRef.current]
+      const releasedIds = restoringIds(queueEditsRef.current, adoptedRoundId)
       const localLedger = coalesceHydrationLedger(
         capturedLedger,
         {
@@ -3334,7 +3316,7 @@ export function useImmersiveQueue(
         || slotRef.current !== slot
       ) return
 
-      const releasedIds = [...pendingReleaseIdsRef.current]
+      const releasedIds = restoringIds(queueEditsRef.current, adoptedRoundId)
       const localLedger = coalesceHydrationLedger(
         capturedLedger,
         {

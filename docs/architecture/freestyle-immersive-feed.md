@@ -72,6 +72,10 @@ Practice 在 SQLite 中拥有后端权威的轮次计划（`freestyle_round_stat
 
 乐观并发：写入携带 `expected_version` 和 `operation_id`。提交较低版本的过期设备会收到带有 `conflict: true` 的最新计划，且不得覆盖较新的进度。使用同一 `operation_id` 重复的终态写入会返回已接受的结果。
 
+队列的恢复与排序意图由纯模块 `queueEditOverlay.ts` 维护，Hook 只保留一个 `QueueEditState`，按 `roundId` 隔离。ACK 必须匹配发送时的 `operation_id`，不能用顺序内容或卡片 ID 判断是否为同一次操作：A→B→A 排序、恢复→移出→恢复都可能内容相同而请求不同。批量恢复逐卡确认，不能等整批完成，也不能因另一张失败而让成功项永久处于待确认状态。未确认恢复保护本地意图；确认后，同版本及更旧快照仍受保护，严格更新的移出才获胜。换轮时清空意图；构建、冷启动与同步的账本入口只读取目标轮次的恢复标记。
+
+覆盖服务端快照时先解除待恢复卡片的移出状态，再按服务器锁规则排序，否则“恢复后拖动”仍会被旧移出锁固定在原槽位。`apps/api/tests/fixtures/queue_order_cases.json` 提供 14 组共享输入/期望，由后端 `test_queue_order_parity.py` 与前端 `queueEditOverlay.test.ts` 共同验证；真实 Hook 的异步测试另覆盖旧 ACK、换轮、冲突重试和批量部分成功。该覆盖不是物理多设备联调：发送仍共用 Hook 串行通道，未返回的旧轮请求会让新轮等待传输终态。
+
 前端 reducer 应用乐观补丁并从服务器注入状态。重建会让已完成、已排除、重练和过期条目在计划中保持可见；在过期重建后回归的卡片会按稳定的 `unit_id` 重新绑定到最新的 `unit_revision`，同时评分和重练计数保持不变。如果当前卡片缺失或已完成，则服务器计划中的下一张未完成卡片成为当前卡片。拖拽仍然不会写入复习排期。确认「移除本队列」会像「记得」或「轻松」一样结束本轮对该单元的排期：进度条填满、宫殿可以清空，且该单元不算未完成。它不写入 1–4 评分，也不改变阶段、间隔或到期日期。后续轮次可以在该单元仍到期时再次安排它。恢复会把卡片放回本轮。
 
 「永久移除」是「移除本队列」右侧的兄弟按钮（同样需要两次按压确认，不评分）。它调用 `POST /review/units/{unit_id}/remove-permanently`，设置 `review_unit_states.permanently_removed` 和 `active = false`。`resolve_unit_definitions` 会把该单元身份（锚点 + 类型）过滤掉，因此对账、队列和继承都不会再次安排它，即使其标记被删除后重新添加。随后该卡片会从本轮丢弃。所有单元都被移除的宫殿会读作 `scheduled`，而不是 `marking_required`。

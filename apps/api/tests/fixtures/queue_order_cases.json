@@ -1,0 +1,150 @@
+[
+  {
+    "name": "all four encounter ratings lock their slots",
+    "plan": {
+      "original_cards": [{"card_id": "a"}, {"card_id": "one"}, {"card_id": "two"}, {"card_id": "three"}, {"card_id": "four"}, {"card_id": "b"}],
+      "presented_ids": ["a", "one", "two", "three", "four", "b"],
+      "encounters": {
+        "one": {"encounter_id": "e1", "status": "failed", "rating": 1},
+        "two": {"encounter_id": "e2", "status": "passed", "rating": 2},
+        "three": {"encounter_id": "e3", "status": "passed", "rating": 3},
+        "four": {"encounter_id": "e4", "status": "passed", "rating": 4}
+      }
+    },
+    "order_ids": ["four", "three", "two", "one", "b", "a"],
+    "expected_presented_ids": ["b", "one", "two", "three", "four", "a"]
+  },
+  {
+    "name": "compressed rows absent from a normalized snapshot cannot reappear",
+    "plan": {
+      "original_cards": [{"card_id": "a"}, {"card_id": "settled"}, {"card_id": "b"}],
+      "presented_ids": ["a", "b"],
+      "compressed_ids": ["settled"]
+    },
+    "order_ids": ["settled", "b", "a"],
+    "expected_presented_ids": ["b", "a"]
+  },
+  {
+    "name": "blank and whitespace-wrapped request ids are normalized",
+    "plan": {
+      "original_cards": [{"card_id": "a"}, {"card_id": "b"}, {"card_id": "c"}],
+      "presented_ids": ["a", "b", "c"]
+    },
+    "order_ids": ["", " ", " c ", "c", " b "],
+    "expected_presented_ids": ["c", "b", "a"]
+  },
+  {
+    "name": "plain unscored rows follow the requested order",
+    "plan": {
+      "original_cards": [{"card_id": "a"}, {"card_id": "b"}, {"card_id": "c"}],
+      "presented_ids": ["a", "b", "c"]
+    },
+    "order_ids": ["c", "a", "b"],
+    "expected_presented_ids": ["c", "a", "b"]
+  },
+  {
+    "name": "completed and excluded rows keep their slot",
+    "plan": {
+      "original_cards": [{"card_id": "a"}, {"card_id": "done"}, {"card_id": "b"}, {"card_id": "hidden"}, {"card_id": "c"}],
+      "presented_ids": ["a", "done", "b", "hidden", "c"],
+      "completed_ids": ["done"],
+      "excluded_ids": ["hidden"]
+    },
+    "order_ids": ["c", "b", "a"],
+    "expected_presented_ids": ["c", "done", "b", "hidden", "a"]
+  },
+  {
+    "name": "a row with a this-round rating is locked even without completion",
+    "plan": {
+      "original_cards": [{"card_id": "a"}, {"card_id": "weak"}, {"card_id": "b"}],
+      "presented_ids": ["a", "weak", "b"],
+      "encounters": {"weak": {"encounter_id": "e1", "status": "failed", "rating": 1}}
+    },
+    "order_ids": ["weak", "b", "a"],
+    "expected_presented_ids": ["b", "weak", "a"]
+  },
+  {
+    "name": "an open encounter without a rating does not lock the row",
+    "plan": {
+      "original_cards": [{"card_id": "a"}, {"card_id": "open"}, {"card_id": "b"}],
+      "presented_ids": ["a", "open", "b"],
+      "encounters": {"open": {"encounter_id": "e2", "status": "open"}}
+    },
+    "order_ids": ["b", "open", "a"],
+    "expected_presented_ids": ["b", "open", "a"]
+  },
+  {
+    "name": "bedtime and whole-palace passes stay where they were appended",
+    "plan": {
+      "original_cards": [{"card_id": "a"}, {"card_id": "night", "bedtime": true}, {"card_id": "b"}, {"card_id": "pass", "palace_pass": true}],
+      "presented_ids": ["a", "night", "b", "pass"]
+    },
+    "order_ids": ["pass", "b", "night", "a"],
+    "expected_presented_ids": ["b", "night", "a", "pass"]
+  },
+  {
+    "name": "a plan-only bedtime grade locks its row",
+    "plan": {
+      "original_cards": [{"card_id": "a"}, {"card_id": "graded"}, {"card_id": "b"}],
+      "presented_ids": ["a", "graded", "b"],
+      "bedtime_ratings": {"graded": {"rating": 3, "rated_on": "2026-11-08"}}
+    },
+    "order_ids": ["b", "graded", "a"],
+    "expected_presented_ids": ["b", "graded", "a"]
+  },
+  {
+    "name": "a source that still owes a booked retry keeps its slot",
+    "plan": {
+      "original_cards": [{"card_id": "a", "unit_id": "ua"}, {"card_id": "b"}, {"card_id": "c"}],
+      "presented_ids": ["a", "b", "c"],
+      "occurrences": [
+        {"occurrence_id": "retry:r:ua:1", "source_card_id": "a", "source_unit_id": "ua", "retry_attempt": 1, "status": "pending"}
+      ]
+    },
+    "order_ids": ["c", "b", "a"],
+    "expected_presented_ids": ["a", "c", "b"]
+  },
+  {
+    "name": "an inserted retry and its source are both locked",
+    "plan": {
+      "original_cards": [{"card_id": "a", "unit_id": "ua"}, {"card_id": "b"}, {"card_id": "c"}],
+      "presented_ids": ["a", "b", "retry:r:ua:1", "c"],
+      "occurrences": [
+        {"occurrence_id": "retry:r:ua:1", "source_card_id": "a", "source_unit_id": "ua", "retry_attempt": 1, "status": "inserted"}
+      ]
+    },
+    "order_ids": ["retry:r:ua:1", "c", "a", "b"],
+    "expected_presented_ids": ["a", "c", "retry:r:ua:1", "b"]
+  },
+  {
+    "name": "a finished retry no longer locks its source",
+    "plan": {
+      "original_cards": [{"card_id": "a", "unit_id": "ua"}, {"card_id": "b"}],
+      "presented_ids": ["a", "b"],
+      "occurrences": [
+        {"occurrence_id": "retry:r:ua:1", "source_card_id": "a", "source_unit_id": "ua", "retry_attempt": 1, "status": "cancelled"}
+      ]
+    },
+    "order_ids": ["b", "a"],
+    "expected_presented_ids": ["b", "a"]
+  },
+  {
+    "name": "unknown, duplicate and locked ids in the request are ignored; omitted rows follow in place order",
+    "plan": {
+      "original_cards": [{"card_id": "a"}, {"card_id": "done"}, {"card_id": "b"}, {"card_id": "c"}, {"card_id": "d"}],
+      "presented_ids": ["a", "done", "b", "c", "d"],
+      "completed_ids": ["done"]
+    },
+    "order_ids": ["ghost", "c", "done", "c", "a"],
+    "expected_presented_ids": ["c", "done", "a", "b", "d"]
+  },
+  {
+    "name": "a presented id that is not an original card never moves",
+    "plan": {
+      "original_cards": [{"card_id": "a"}, {"card_id": "b"}],
+      "presented_ids": ["a", "stray", "b"]
+    },
+    "order_ids": ["stray", "b", "a"],
+    "expected_presented_ids": ["b", "stray", "a"]
+  }
+]
