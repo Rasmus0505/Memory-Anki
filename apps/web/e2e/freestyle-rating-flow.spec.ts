@@ -356,6 +356,15 @@ test('keeps a failing save 保存中 through its quiet retries, then reports 未
   await expect(settlement).not.toBeVisible()
   await expect(page.getByText(/今日到期已清/)).not.toBeVisible()
 
+  // 错误仍须可见，但不能覆盖底部重试按钮；不等提示消失、不绕过真实点击。
+  const failureToast = page.locator('[data-sonner-toast]').filter({ hasText: '这一次没有保存成功' })
+  await expect(failureToast).toBeVisible()
+  const toastBox = await failureToast.boundingBox()
+  const ratingBox = await remember.boundingBox()
+  expect(toastBox).not.toBeNull()
+  expect(ratingBox).not.toBeNull()
+  expect(toastBox!.y + toastBox!.height).toBeLessThanOrEqual(ratingBox!.y)
+
   // Retapping is a save retry, not undo, and must await a successful response.
   await remember.click()
   await expect.poll(() => held.length).toBe(4)

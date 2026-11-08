@@ -632,13 +632,15 @@ export default function ImmersiveFreestylePage({
     const index = view.cards.findIndex((card) => card.id === cardId)
     if (index < 0 || index === view.currentIndex) {
       setSaveError(message)
-      toast.error(message)
+      // 失败后要原位重点评分；底部提示会挡住手机评分栏。
+      toast.error(message, { position: 'top-center' })
       return
     }
     // The learner already moved on: tell them which unit failed and let them
     // jump back; never navigate for them.
     toast.error(`第 ${index + 1} 个单元没有保存成功`, {
       id: `freestyle-rating-failed:${cardId}`,
+      position: 'top-center',
       action: {
         label: '回到这张',
         onClick: () => {

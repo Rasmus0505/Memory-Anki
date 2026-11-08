@@ -84,6 +84,8 @@ Practice 在 SQLite 中拥有后端权威的轮次计划（`freestyle_round_stat
 <!-- invariant: freestyle-review-map-stays-pannable -->
 <!-- invariant: freestyle-wheel-no-snap-back -->
 
+评分保存失败的全局提示放在顶部，当前卡和后台卡都不占用底部评分栏；失败提示、卡内未保存状态及重试操作同时可见，不要求先关提示才能重试。
+
 非手势滚动只重钉已承诺的视图，不写游标。已主动进入等待/结算槽位时，`visualIndex` 指向收尾页，`currentIndex` 仍指向最后一张真实卡；重钉必须保留前者，不能把它钳回普通卡。否则 WebKit 再吸附到收尾页后，画面与内部位置分离，“回去等它们”会多退一张。原生漂移本身不会修改 `visualIndex`；收尾槽位已消失时才回落到有效卡片。
 
 当本轮中某个宫殿的每张复习单元卡片都被处理（包括重练；跳过/排除不算）时，当前卡片会显示章节横幅。当该宫殿在本轮之外没有剩余到期单元时，文案为 `《宫殿》今日安排已清`，否则为 `《宫殿》本轮已清，今日还剩 N`。队列的 `round_meta.palace_leftover_due` 是每个宫殿的剩余到期计数。该横幅不是吸附页；整个标签点击即关闭（`点一下关闭`）。其他顶部随心标签（昨日未完成轮次、通道已应用、保存错误）同样点击整个标签即关闭。音频在复习场景本地使用 `all_clear_ready`——绝不使用 `dispatchGlobalFeedback`。
