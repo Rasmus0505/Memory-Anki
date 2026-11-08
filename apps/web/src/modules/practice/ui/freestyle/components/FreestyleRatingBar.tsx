@@ -29,6 +29,12 @@ export type FreestyleRatingTone = 'again' | 'hard' | 'good' | 'easy'
 
 type RemoveIntent = 'round' | 'permanent'
 
+function scheduleDateLabel(value: string | null | undefined) {
+  if (!value) return '未排期'
+  const [year, month, day] = value.split('-').map(Number)
+  return year && month && day ? `${month}月${day}日` : value
+}
+
 export const FREESTYLE_RATINGS: Array<{
   value: UnitRating
   label: string
@@ -44,6 +50,8 @@ export function FreestyleRatingBar({
   ratingEffects,
   selectedRating,
   currentIntervalDays = null,
+  levelPreview = null,
+  manuallyAdjusted = null,
   recordedRating = null,
   busy,
   pendingRating = null,
@@ -73,6 +81,14 @@ export function FreestyleRatingBar({
   selectedRating: UnitRating | null
   /** The unit's booked gap, so a button reads "7天 → 17天". Null hides the arrow. */
   currentIntervalDays?: number | null
+  /**
+   * Live tier target while the learner drags the memory bar. The button's
+   * left-hand gap follows it, so the consequence reads against the real
+   * schedule the learner is choosing.
+   */
+  levelPreview?: { level: number; intervalDays: number; dueDate: string } | null
+  /** The tier was set by hand: this occurrence is already scored for the round. */
+  manuallyAdjusted?: { level: number; intervalDays: number | null; dueDate: string | null } | null
   /** This-round last rating while the amend glance is still empty. */
   recordedRating?: UnitRating | null
   /** Disables only 移除本队列 and the scope tabs. A pending save never freezes the ratings. */
@@ -144,6 +160,9 @@ export function FreestyleRatingBar({
   const removeColumns = (onRemoveFromQueue ? 1 : 0) + (onRemovePermanently ? 1 : 0)
   const selectedEffect = ratingEffects.find((effect) => effect.rating === shownRating)
   const palaceMode = ratingScope === 'palace'
+  // A dragged tier is the schedule the buttons should predict against.
+  const baselineDays = levelPreview ? levelPreview.intervalDays : currentIntervalDays
+  const manuallyHandled = manuallyAdjusted != null
 
   const ratingBarRef = useRef<HTMLElement | null>(null)
 
@@ -161,7 +180,7 @@ export function FreestyleRatingBar({
         requestRemove('round')
         return
       }
-      if (locked) return
+      if (locked || manuallyHandled) return
       const rating = getFreestyleRatingShortcut(event.key)
       if (rating == null) return
       event.preventDefault()
@@ -175,7 +194,7 @@ export function FreestyleRatingBar({
           rating,
           durationMs,
           effect: ratingEffects.find((value) => value.rating === rating) ?? null,
-          currentIntervalDays,
+          currentIntervalDays: baselineDays,
           palaceMode,
           palaceDueCount,
           hintMode,
@@ -186,12 +205,13 @@ export function FreestyleRatingBar({
     window.addEventListener('keydown', handleKeyDown, true)
     return () => window.removeEventListener('keydown', handleKeyDown, true)
   }, [
+    baselineDays,
     busy,
-    currentIntervalDays,
     disarmRemove,
     getRatingDurationMs,
     hintMode,
     locked,
+    manuallyHandled,
     onRate,
     onRemoveFromQueue,
     palaceDueCount,
@@ -275,6 +295,19 @@ export function FreestyleRatingBar({
             <LoaderCircle className="size-3 shrink-0 animate-spin" aria-hidden />
             <span>保存中…</span>
           </div>
+        ) : manuallyAdjusted ? (
+          <div
+            data-testid="freestyle-rating-manual-line"
+            role="status"
+            className="mb-1.5 flex items-center gap-1.5 rounded-lg bg-stage-line px-2.5 py-1 text-[11px] font-medium text-stage-ink sm:text-xs"
+          >
+            <span className="min-w-0 truncate">
+              已评分{manuallyAdjusted.dueDate ? ` · 下次 ${scheduleDateLabel(manuallyAdjusted.dueDate)}` : ''}
+            </span>
+            {manuallyAdjusted.intervalDays != null ? (
+              <span className="shrink-0 text-stage-faint">间隔 {manuallyAdjusted.intervalDays}天</span>
+            ) : null}
+          </div>
         ) : selectedEffect ? (
           <div
             data-testid="freestyle-rating-effect-line"
@@ -283,7 +316,7 @@ export function FreestyleRatingBar({
             <span className="min-w-0 truncate">
               {palaceMode
                 ? palaceRatingEffectLine(selectedEffect.label, palaceDueCount)
-                : `已选${selectedEffect.label} · ${ratingEffectLabel(selectedEffect, currentIntervalDays)}`}
+                : `已选${selectedEffect.label} · ${ratingEffectLabel(selectedEffect, baselineDays)}`}
             </span>
             {locked ? (
               <span className="shrink-0 text-stage-faint">已锁定</span>
@@ -455,23 +488,27 @@ export function FreestyleRatingBar({
             const fallbackHint = hintMode
               ? '继续'
               : earlyHint ?? (reviewReady ? '计划不可用' : '这张还不能评分')
-            const hint = effect
-              ? palaceMode && palaceKind
-                ? palaceRatingEffectLine(effect.label, palaceDueCount)
-                : ratingEffectLabel(effect, currentIntervalDays)
-              : fallbackHint
+            const hint = manuallyHandled
+              ? '已评分'
+              : effect
+                ? palaceMode && palaceKind
+                  ? palaceRatingEffectLine(effect.label, palaceDueCount)
+                  : ratingEffectLabel(effect, baselineDays)
+                : fallbackHint
             /**
              * Where this tap books the card: the pending action on one line,
              * the date under it. Stacked rather than truncated — a quarter-width
              * phone button cannot fit "3天后复习 · 10月30日" on one line, and the
              * date is the half the learner actually checks.
              */
-            const preview: RatingEffectLines = effect
-              ? palaceMode && palaceKind
-                ? { primary: palaceRatingPreviewLabel(palaceDueCount, palaceKind), secondary: null }
-                : ratingEffectLines(effect, currentIntervalDays)
-              : { primary: fallbackHint, secondary: null }
-            const selected = shownRating === item.value
+            const preview: RatingEffectLines = manuallyHandled
+              ? { primary: '已评分', secondary: null }
+              : effect
+                ? palaceMode && palaceKind
+                  ? { primary: palaceRatingPreviewLabel(palaceDueCount, palaceKind), secondary: null }
+                  : ratingEffectLines(effect, baselineDays)
+                : { primary: fallbackHint, secondary: null }
+            const selected = !manuallyHandled && shownRating === item.value
             const pending = pendingRating === item.value
             const failed = failedRating === item.value
             return (
@@ -479,19 +516,22 @@ export function FreestyleRatingBar({
                 data-testid={`freestyle-rating-button-${item.value}`}
                 key={item.value}
                 type="button"
-                disabled={locked || (!hasEncounter && !canRateWithoutPlan)}
+                disabled={manuallyHandled || locked || (!hasEncounter && !canRateWithoutPlan)}
                 aria-pressed={selected}
                 aria-busy={pending || undefined}
                 data-pending={pending ? 'true' : undefined}
                 data-failed={failed ? 'true' : undefined}
+                data-handled={manuallyHandled ? 'true' : undefined}
                 aria-label={
-                  failed
-                    ? `${item.label}：未保存。再点一次重试`
-                    : selected && !locked && !showingRecorded
-                    ? `${item.label}：${hint}。再点取消评分`
-                    : selected && showingRecorded
-                      ? `${item.label}：${hint}。上次评分`
-                      : `${item.label}：${hint}`
+                  manuallyHandled
+                    ? `${item.label}：已评分`
+                    : failed
+                      ? `${item.label}：未保存。再点一次重试`
+                      : selected && !locked && !showingRecorded
+                        ? `${item.label}：${hint}。再点取消评分`
+                        : selected && showingRecorded
+                          ? `${item.label}：${hint}。上次评分`
+                          : `${item.label}：${hint}`
                 }
                 title={actionError || hint}
                 data-tone={item.tone}
@@ -512,7 +552,7 @@ export function FreestyleRatingBar({
                       rating: item.value,
                       durationMs: getRatingDurationMs?.() ?? null,
                       effect,
-                      currentIntervalDays,
+                      currentIntervalDays: baselineDays,
                       palaceMode,
                       palaceDueCount,
                       hintMode,

@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import type { ReactNode } from 'react'
+import type { ReactElement, ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { MindMapSelection } from '@/modules/content/public'
 import type {
@@ -105,13 +105,15 @@ vi.mock('@/shared/feedback/toast', () => ({
   },
 }))
 
-vi.mock('@/widgets/node-bound-quiz', () => ({
-  NodeBoundQuizDialog: (props: Record<string, unknown>) =>
-    props.open ? (
-      <div data-testid="node-bound-quiz-dialog">
-        {String(props.nodeUid)}:{Array.isArray(props.questionIds) ? props.questionIds.join(',') : ''}
+vi.mock('@/widgets/freestyle-scope-quiz', () => ({
+  FreestyleScopeQuizDialog: (props: Record<string, unknown>) => {
+    const set = props.questionSet as { nodeUid?: string; questionIds?: number[] } | undefined
+    return props.open ? (
+      <div data-testid="scope-quiz-dialog">
+        {String(set?.nodeUid)}:{Array.isArray(set?.questionIds) ? set.questionIds.join(',') : ''}
       </div>
-    ) : null,
+    ) : null
+  },
 }))
 
 vi.mock('@/widgets/mindmap-review-flow', () => ({
@@ -381,6 +383,7 @@ function renderCard(
     onRevisionAdopted: vi.fn(),
     onSaveFailed: vi.fn(),
     onUnitsReconciled: vi.fn(),
+    onCardHandled: vi.fn(),
     onRatingSettled: options.onRatingSettled ?? vi.fn(),
     onRatingScopeChange: vi.fn(),
     onRoundSync: vi.fn(),
@@ -407,6 +410,7 @@ function renderCard(
     onRevisionAdopted: callbacks.onRevisionAdopted,
     onSaveFailed: callbacks.onSaveFailed,
     onUnitsReconciled: callbacks.onUnitsReconciled,
+    onCardHandled: callbacks.onCardHandled,
     onRatingScopeChange: callbacks.onRatingScopeChange,
     onOpenScopeQuiz: callbacks.onOpenScopeQuiz,
   }
@@ -595,6 +599,10 @@ describe('FreestyleUnitReviewCardView', () => {
       { allowNotDue: false, cardId: card.id, occurrenceId: '', retryAttempt: 0 },
     )
     expect(capturedPanelProps?.activeUnitNodeUids).toEqual(['unit-node', 'unit-child'])
+    const sheet = screen.getByRole('region', { name: '永久标记复习单元' }).firstElementChild
+    expect(sheet?.className).toContain('rounded-[0.9rem]')
+    expect(sheet?.className).not.toContain('shadow-')
+    expect(capturedPanelProps?.surfaceClassName).toContain('freestyle-review-map-surface')
     // auto (the FlipCard default): phone still uses the tight camera, but the map stays pannable.
     expect(capturedPanelProps?.mobileViewPolicy).toBeUndefined()
     expect(capturedPanelProps?.countBadgeByNodeUid).toEqual(quizBindingMocks.countBadgeByNodeUid)
@@ -761,7 +769,7 @@ describe('FreestyleUnitReviewCardView', () => {
     const onCountBadgeClick = capturedPanelProps?.onCountBadgeClick as (nodeUid: string) => void
     act(() => onCountBadgeClick('unit-node'))
     expect(quizBindingMocks.getOpenQuestionIds).toHaveBeenCalledWith('unit-node', undefined)
-    const dialog = await screen.findByTestId('node-bound-quiz-dialog')
+    const dialog = await screen.findByTestId('scope-quiz-dialog')
     expect(dialog.textContent).toBe('unit-node:101,102')
   })
 
@@ -2822,6 +2830,39 @@ describe('FreestyleUnitReviewCardView', () => {
     expect(onSaveFailed).not.toHaveBeenCalled()
     expect(onBranchComplete).toHaveBeenCalledWith(card.id, expect.objectContaining({ restudy: false, rating: 3 }))
   })
+
+  it('counts a hand-set memory tier as scored and shows 已评分 in the dock', async () => {
+    const card = buildCard('unit-manual-tier')
+    apiMocks.startFreestyleUnitReviewSessionApi.mockResolvedValue(buildSession(card.unit_id!))
+    const view = renderCard(card)
+
+    await waitFor(() => expect(apiMocks.startFreestyleUnitReviewSessionApi).toHaveBeenCalled())
+    await waitFor(
+      () => expect(screen.getByTestId('freestyle-unit-review-map-shell').getAttribute('data-preview')).toBeNull(),
+      { timeout: 4000 },
+    )
+    const toolbar = capturedPanelProps?.toolbarCenterContent as
+      | ReactElement<{
+          onScheduleAdjusted?: (result: {
+            after: { stage_index: number; interval_days: number; due_date: string }
+          }) => void
+        }>
+      | null
+    const onScheduleAdjusted = toolbar?.props?.onScheduleAdjusted
+    expect(typeof onScheduleAdjusted).toBe('function')
+
+    act(() =>
+      onScheduleAdjusted?.({
+        after: { stage_index: 6, interval_days: 60, due_date: '2027-01-07' },
+      }),
+    )
+
+    await waitFor(() => expect(screen.getByTestId('freestyle-rating-manual-line')).toBeTruthy())
+    expect(screen.getByTestId('freestyle-rating-manual-line').textContent).toContain('已评分')
+    expect((screen.getByTestId('freestyle-rating-button-3') as HTMLButtonElement).disabled).toBe(true)
+    // The page owns the round ledger; the card must ask it to score this occurrence.
+    expect(view.onCardHandled).toHaveBeenCalledWith(card.id)
+  })
 })
 
 describe('进入编辑 while the glance is still opening', () => {
@@ -2908,4 +2949,5 @@ describe('睡前复习 card', () => {
     expect(actions.some((item) => item.label === '进入编辑')).toBe(false)
     expect(capturedPanelProps?.onPaneDoubleClick).toBeUndefined()
   })
+
 })

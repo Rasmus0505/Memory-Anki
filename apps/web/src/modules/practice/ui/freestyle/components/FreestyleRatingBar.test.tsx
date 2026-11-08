@@ -467,4 +467,35 @@ describe('永久移除', () => {
     expect(screen.queryByTestId('freestyle-rating-button-remove-permanent')).toBeNull()
     expect(screen.getByTestId('freestyle-rating-button-remove')).toBeTruthy()
   })
+
+  it('predicts every grade against the tier the learner is dragging to', () => {
+    renderBar({
+      currentIntervalDays: 3,
+      levelPreview: { level: 5, intervalDays: 30, dueDate: '2026-08-27' },
+    })
+
+    // The left-hand gap follows the draft tier, not the booked 3-day gap.
+    expect(screen.getByTestId('freestyle-rating-preview-3').textContent).toBe('30天 → 1天')
+    expect(screen.getByTestId('freestyle-rating-preview-1').textContent).toBe('30天 → 今天')
+    expect(screen.getByRole('button', { name: '记得：30天 → 1天 · 7月28日' })).toBeTruthy()
+  })
+
+  it('marks a hand-set tier as 已评分 and refuses a second grade', () => {
+    const { onRate } = renderBar({
+      manuallyAdjusted: { level: 5, intervalDays: 30, dueDate: '2026-08-27' },
+    })
+
+    const line = screen.getByTestId('freestyle-rating-manual-line')
+    expect(line.textContent).toContain('已评分')
+    expect(line.textContent).toContain('8月27日')
+    expect(line.textContent).toContain('间隔 30天')
+
+    const good = screen.getByTestId('freestyle-rating-button-3') as HTMLButtonElement
+    expect(good.textContent).toBe('记得已评分')
+    expect(good.disabled).toBe(true)
+    expect(good.getAttribute('aria-label')).toBe('记得：已评分')
+
+    fireEvent.keyDown(window, { key: '3' })
+    expect(onRate).not.toHaveBeenCalled()
+  })
 })

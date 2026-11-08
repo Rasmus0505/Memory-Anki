@@ -26,6 +26,7 @@ import {
   useRatingSaveEvents,
 } from '@/modules/practice/ui/freestyle/hooks/useFreestyleRatingSaves'
 import type { PalaceRatingTarget } from '@/modules/practice/ui/freestyle/model/freestylePalaceRating'
+import type { ReviewLevelTargetPreview } from '@/modules/practice/ui/review/components/ReviewLevelBar'
 import type {
   FreestyleReviewUnitCard,
   MindMapEditorState,
@@ -112,6 +113,8 @@ export function FreestyleUnitReviewCardView({
   onRevisionAdopted,
   onSaveFailed,
   onUnitsReconciled,
+  onCardHandled,
+  completed = false,
   onEditingChange,
   fullscreen = false,
   onToggleFullscreen = () => undefined,
@@ -160,6 +163,13 @@ export function FreestyleUnitReviewCardView({
   onSaveFailed: (message: string) => void
   /** Silent freestyle queue rebuild after mark/leave unit reconcile changes. */
   onUnitsReconciled?: () => void
+  /**
+   * Mark this occurrence handled for the round without inventing a 1–4 grade.
+   * Used when the learner moves the memory tier by hand.
+   */
+  onCardHandled?: (cardId: string) => void
+  /** The round ledger already counts this occurrence as scored. */
+  completed?: boolean
   onEditingChange?: (editing: boolean) => void
   /** Fullscreen is owned by ImmersiveFreestylePage so rating/navigation stay visible. */
   fullscreen?: boolean
@@ -301,6 +311,23 @@ export function FreestyleUnitReviewCardView({
     card.unit_id && effectiveRevision != null
       ? `${card.id}:${card.unit_id}:${effectiveRevision}:${roundId}`
       : null
+
+  // The level bar lives in the map toolbar while the rating dock lives at the
+  // bottom of the card. These two pieces carry the drag preview and the booked
+  // result between them, so the buttons describe the same schedule as the bar.
+  const [levelTarget, setLevelTarget] = useState<
+    (ReviewLevelTargetPreview & { key: string }) | null
+  >(null)
+  const [manualAdjust, setManualAdjust] = useState<{
+    key: string
+    level: number
+    intervalDays: number | null
+    dueDate: string | null
+  } | null>(null)
+  useEffect(() => {
+    setLevelTarget(null)
+    setManualAdjust(null)
+  }, [cardUnitKey])
 
   const captureRatingBaseline = useCallback((key: string | null, candidate: number | null | undefined) => {
     if (key == null || ratingBaselineRef.current?.key === key) return
@@ -1023,6 +1050,18 @@ export function FreestyleUnitReviewCardView({
   const recordedRating = appearanceRating != null || previousClosed
     ? null
     : asUnitRating(lastRating) ?? (encounter?.status === 'closed' ? null : asUnitRating(encounter?.selectedRating))
+  const levelPreview = levelTarget?.key === cardUnitKey ? levelTarget : null
+  // A hand-set tier is this round's score. The local result renders at once;
+  // the round ledger (completed) keeps it after a remount or a queue rebuild.
+  const manualHandled = manualAdjust?.key === cardUnitKey
+    ? manualAdjust
+    : completed && selectedRating == null && recordedRating == null
+      ? {
+          level: unit?.stage_index ?? 0,
+          intervalDays: unit?.interval_days ?? null,
+          dueDate: unit?.due_date ?? null,
+        }
+      : null
   const superseded = currentEncounter?.rating_editable === false
   const canRateWithoutPlan = !readOnly && !superseded && !recapOnly && Boolean(card.unit_id) && !returnReconcilePending
   const locked = readOnly || superseded || returnReconcilePending
@@ -1042,7 +1081,7 @@ export function FreestyleUnitReviewCardView({
     : null
 
   const unitTypeHue = card.is_new === true ? 'var(--color-memory-new)' : 'var(--color-memory-medium)'
-  const unitScored = encounter?.selectedRating != null
+  const unitScored = encounter?.selectedRating != null || manualHandled != null
 
   // The sheet reads toolbar → title → map. A live map owns the top edge, so the
   // title row is handed to the panel and drawn under the toolbar; the loading
@@ -1061,11 +1100,11 @@ export function FreestyleUnitReviewCardView({
   )
 
   return (
-    <section ref={sectionRef} className="flex h-full min-h-0 flex-col" aria-label="永久标记复习单元">
+    <section ref={sectionRef} className="flex h-full min-h-0 flex-col p-1.5 sm:p-2.5" aria-label="永久标记复习单元">
       {/* One sheet. The map toolbar owns its top edge, the unit title row sits under
           the toolbar, and the rating dock floats over the bottom. A second paper
           sheet must not show under the map. */}
-      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[1.4rem] border border-stage-line-strong bg-[var(--memory-anki-mindmap-canvas)] shadow-[inset_0_1px_0_color-mix(in_srgb,white_90%,transparent),0_24px_60px_-18px_color-mix(in_srgb,black_65%,transparent)] sm:rounded-3xl">
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[0.9rem] border border-stage-line/70 bg-[var(--memory-anki-mindmap-canvas)] sm:rounded-xl">
         {/* Type channel: blue for a first study, amber for a review. Completion is opacity: rated = solid, not rated = faint. */}
         <span
           aria-hidden
@@ -1139,6 +1178,22 @@ export function FreestyleUnitReviewCardView({
               // editor action against a transient review-only shell.
               await onUnitsReconciled?.()
             } : undefined}
+            onLevelTargetChange={flipSource.live ? (target) => {
+              setLevelTarget(target ? { key: cardUnitKey ?? '', ...target } : null)
+            } : undefined}
+            onScheduleAdjusted={flipSource.live ? (result) => {
+              const after = result?.after
+              setManualAdjust({
+                key: cardUnitKey ?? '',
+                level: after?.stage_index ?? 0,
+                intervalDays: after?.interval_days ?? null,
+                dueDate: after?.due_date ?? null,
+              })
+              setLevelTarget(null)
+              // Moving the tier by hand is this round's score for the card:
+              // fill the rail and settlement without inventing a 1–4 grade.
+              onCardHandled?.(card.id)
+            } : undefined}
             onRevealProgressChange={flipSource.live ? handleRevealProgressChange : undefined}
             belowToolbarSlot={identityRow}
             roundId={flipSource.live ? roundId : null}
@@ -1202,6 +1257,8 @@ export function FreestyleUnitReviewCardView({
             ratingEffects={currentEncounter?.rating_effects ?? []}
             selectedRating={selectedRating}
             currentIntervalDays={ratingBaseline?.key === cardUnitKey ? ratingBaseline.intervalDays : null}
+            levelPreview={levelPreview}
+            manuallyAdjusted={manualHandled}
             pendingRating={pendingRating}
             pendingClear={pendingClear}
             failedRating={failedRating}
