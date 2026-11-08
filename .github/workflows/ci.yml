@@ -33,7 +33,7 @@ jobs:
         shell: pwsh
         run: |
           python tools/check_architecture.py
-          python -m pytest tools/test_check_architecture.py -q
+          python -m pytest tools/test_check_architecture.py tools/test_color_literal_ratchet.py -q
 
       - name: Static analysis
         working-directory: apps/api

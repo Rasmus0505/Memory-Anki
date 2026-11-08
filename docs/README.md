@@ -1,6 +1,6 @@
 # Memory Anki 文档
 
-> 文档入口。最后核对：2026-11-07。
+> 文档入口。最后核对：2026-11-09（本次更新颜色门禁与复盘入口）。
 > 现行文档描述“代码现在真正在做什么”；历史文档只保留当时的结论，不作为当前规则。
 
 ## 先看哪一篇
@@ -52,10 +52,11 @@
 | [题库精简按考点.md](题库精简按考点.md) | 按考点留题的精简口径 | 现行 | 2026-11-07 |
 | [记忆宫殿与题库全面体检提示词.md](记忆宫殿与题库全面体检提示词.md) | 交给 AI 的全量体检提示词 | 现行 | 2026-11-07 |
 | [incidents/](incidents/README.md) | 故障档案，一个主题一个文件 | 历史记录，持续追加 | 2026-11-04 |
-| [retrospectives/](retrospectives/2026-11-08-engineering-review.md) | 工程复盘：反复问题、架构、冗余、关联变更与并行冲突 | 快照 | 2026-11-08 |
+| [retrospectives/](retrospectives/2026-11-08-engineering-review.md) | 工程复盘：反复问题、架构、冗余、关联变更与并行冲突 | 快照（含续查） | 2026-11-09 |
 | [compose/spec/](compose/spec/) | 随心功能 spec 与交付记录 | 历史（均已交付） | 2026-11-04 |
 | [superpowers/specs/](superpowers/specs/) | 早期设计稿 | 历史（已实现或已被取代） | 2026-11-04 |
-| [architecture/](architecture/README.md) | 架构门禁资产与守卫文档 | 现行（最小集） | 2026-11-04 |
+| [architecture/](architecture/README.md) | 架构门禁资产与守卫文档 | 现行 | 2026-11-09 |
+| [architecture/color-literal-ratchet.md](architecture/color-literal-ratchet.md) | 颜色字面量数量门禁与覆盖边界 | 现行 | 2026-11-09 |
 | `resume-assets/`、`resume-*.pdf` | 个人简历材料 | 非产品文档 | — |
 
 ## 架构文档
@@ -66,7 +67,9 @@
 - `architecture/mindmap.md`、`freestyle-immersive-feed.md`、`quiz-frontend-boundary.md`、`palace-quiz-boundary.md`
 - `architecture/live-study-presence.md`、`session-recorder-privacy.md`、`unified-training-evidence.md`
 
-这 10 份是**门禁资产**，不是完整的架构百科：删除、改名或改坏其中的守卫字符串，会直接让 `python tools/check_architecture.py` 失败。
+这些是**门禁资产**，不是完整的架构百科：删除、改名或改坏其中的守卫标记，会直接让 `python tools/check_architecture.py` 失败。
+
+2026-11-09 新增 `architecture/color-literal-baseline.json` 作为颜色数量基线；规则和局限见 [颜色字面量只减不增](architecture/color-literal-ratchet.md)。
 
 其余架构信息以以下位置为准，不再恢复旧的长文档：
 
@@ -82,6 +85,6 @@
 1. **现行文档**改动正文时，同时更新开头的“最后核对”日期。
 2. **历史文档**不改写当时的结论；如果被新规则取代，在开头加“已被取代”说明并链接新文档。
 3. 新增长期文档时，登记到本索引的文档地图。
-4. `docs/architecture/` 的 10 份文件是门禁资产；改完先跑 `python tools/check_architecture.py`。
+4. `docs/architecture/` 包含门禁资产；改完先跑 `python tools/check_architecture.py`。
 5. 文档一律使用简体中文；代码标识符、字段名和命令保留原文。
 6. 本索引不记录临时交付物；一次性报告放 `deliverables/`，不要混进 `docs/`。

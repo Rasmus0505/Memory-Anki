@@ -108,6 +108,7 @@ graph LR
 - 训练证据边界：`docs/architecture/unified-training-evidence.md`
 - 单一架构账本：`docs/architecture/context-map.yaml`
 - 临时文件级例外：`docs/architecture/boundary-exceptions.json`
+- 颜色字面量只减不增：[规则与覆盖边界](color-literal-ratchet.md)，数量基线 `color-literal-baseline.json`
 - 复习排期（20 分钟复查 → 第 2 天隔夜，之后受控 FSRS；三条护栏；睡前复习只记本轮）：`docs/复习排期设计.md`
 - 退役阶梯与 FSRS 的只读历史对比：`python tools/review_fsrs_shadow.py`
 - 密封 Playwright E2E 规则、AI 运行时、反馈、主题、读取模型、考试、备份、术语等其余说明：`AI_PROJECT_CONTEXT.md` 与对应模块 `MODULE.md`（旧单篇架构文档已于 2026-11-04 删除）。

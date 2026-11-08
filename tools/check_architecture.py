@@ -46,6 +46,7 @@ BOUNDARY_EXCEPTIONS_PATH = (
     REPO_ROOT / "docs" / "architecture" / "boundary-exceptions.json"
 )
 CONTEXT_MAP_PATH = REPO_ROOT / "docs" / "architecture" / "context-map.yaml"
+COLOR_LITERAL_BASELINE_PATH = REPO_ROOT / "docs" / "architecture" / "color-literal-baseline.json"
 PALACE_QUIZ_APPLICATION = API_SRC / "modules" / "quiz" / "application"
 SETTINGS_MODULE = API_SRC / "modules" / "settings"
 WEB_LAYER_DIRS = ("app", "pages", "widgets", "modules", "shared", "platform", "pwa", "styles", "test")
@@ -720,6 +721,78 @@ def check_oversized_baseline_is_current(errors: list[str]) -> None:
             errors.append(
                 f"{relative_posix}: listed in BASELINE_OVERSIZED_FILES but is now "
                 f"{line_count} lines (limit {limit}); remove the stale entry."
+            )
+
+
+# Raw colour literals outside the design tokens. `foundation.css` defines the
+# tokens, so it is the one file allowed to spell colours out.
+COLOR_LITERAL_PATTERNS = (
+    re.compile(r"(?<![\w&/-])#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b"),
+    re.compile(r"\b(?:hsla?|rgba?|oklch|oklab)\(\s*[\d.]"),
+    re.compile(
+        r"\b(?:bg|text|border|ring|fill|stroke|from|to|via|outline|shadow|decoration|accent|caret|divide)-"
+        r"(?:red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|"
+        r"fuchsia|pink|rose|slate|gray|zinc|neutral|stone)-\d{2,3}\b"
+    ),
+)
+COLOR_TOKEN_SOURCE = "apps/web/src/styles/foundation.css"
+
+
+def count_color_literals(text: str) -> int:
+    return sum(len(pattern.findall(text)) for pattern in COLOR_LITERAL_PATTERNS)
+
+
+def scan_color_literals() -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for path in iter_files(WEB_SRC, (".ts", ".tsx", ".css")):
+        relative = path.relative_to(REPO_ROOT).as_posix()
+        if relative == COLOR_TOKEN_SOURCE or ".test." in relative or "/test/" in relative:
+            continue
+        count = count_color_literals(path.read_text(encoding="utf-8", errors="ignore"))
+        if count:
+            counts[relative] = count
+    return counts
+
+
+def check_color_literal_ratchet(errors: list[str]) -> None:
+    """Colours come from tokens; the remaining raw literals may only go down.
+
+    "收回靛蓝" shipped as one commit while an indigo stop was still inlined in
+    `mindmap.css`: nothing could see a raw colour that bypassed the palette. The
+    baseline records what is left per file. A file above its number, or a new
+    file with any raw colour, fails. A file below its number also fails until
+    the baseline is lowered, so the ratchet cannot quietly loosen again.
+    """
+    if not COLOR_LITERAL_BASELINE_PATH.exists():
+        errors.append(
+            f"{COLOR_LITERAL_BASELINE_PATH.relative_to(REPO_ROOT).as_posix()}: colour literal baseline is required."
+        )
+        return
+    try:
+        baseline = json.loads(COLOR_LITERAL_BASELINE_PATH.read_text(encoding="utf-8"))
+        if not isinstance(baseline, dict) or any(
+            not isinstance(relative, str) or not relative.strip()
+            or type(count) is not int or count <= 0
+            for relative, count in baseline.items()
+        ):
+            raise ValueError("expected a path-to-positive-integer object")
+    except (OSError, ValueError) as exc:
+        errors.append(f"{COLOR_LITERAL_BASELINE_PATH.name}: invalid colour literal baseline: {exc}")
+        return
+    counts = scan_color_literals()
+    for relative, count in sorted(counts.items()):
+        allowed = int(baseline.get(relative, 0))
+        if count > allowed:
+            errors.append(
+                f"{relative}: {count} raw colour literals (baseline {allowed}); use a design token "
+                f"from {COLOR_TOKEN_SOURCE} instead of hex / hsl() / rgb() / Tailwind palette classes."
+            )
+    for relative, allowed in sorted(baseline.items()):
+        count = counts.get(relative, 0)
+        if count < int(allowed):
+            errors.append(
+                f"{relative}: now {count} raw colour literals, baseline says {allowed}; lower the entry in "
+                f"{COLOR_LITERAL_BASELINE_PATH.relative_to(REPO_ROOT).as_posix()} (delete it at 0)."
             )
 
 
@@ -7426,6 +7499,7 @@ def main() -> int:
     check_unified_training_evidence(errors)
     check_file_sizes(errors)
     check_oversized_baseline_is_current(errors)
+    check_color_literal_ratchet(errors)
     check_eslint_boundary_exceptions(errors)
     check_router_residency(errors)
     check_shared_local_storage_facade(errors)

@@ -40,7 +40,7 @@ def _backend_steps(*, full: bool) -> list[QualityStep]:
         QualityStep("architecture", _python("tools/check_architecture.py"), REPO_ROOT),
         QualityStep(
             "architecture tests",
-            _python("-m", "pytest", "tools/test_check_architecture.py", "-q"),
+            _python("-m", "pytest", "tools/test_check_architecture.py", "tools/test_color_literal_ratchet.py", "-q"),
             REPO_ROOT,
         ),
         QualityStep(
