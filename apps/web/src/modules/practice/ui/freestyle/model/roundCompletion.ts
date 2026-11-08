@@ -659,7 +659,6 @@ export function buildPartialSettlementSnapshot(input: {
 
 /**
  * Headline counts on 大结算 must include cards that already left the feed.
- * The answered-quiz set stays as-is so 做题 is not added twice.
  * A snapshot whose cards are still in the feed is listed, not folded.
  */
 export function foldPartialSettlementsIntoCompletion(

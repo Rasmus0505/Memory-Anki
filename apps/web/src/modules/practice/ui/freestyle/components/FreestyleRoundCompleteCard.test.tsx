@@ -25,6 +25,13 @@ const completion: FreestyleRoundCompletion = {
 }
 
 describe('FreestyleRoundCompleteCard', () => {
+  it.each(['partial', 'study'] as const)('omits the retired quiz-card metric in %s settlement', (variant) => {
+    render(<FreestyleRoundCompleteCard variant={variant} completion={completion} roundKey={`no-quiz-${variant}`} quizPalaceCount={2} onClearQuizProgress={vi.fn()} onCancelSettlement={vi.fn()} />)
+    expect(screen.getByText('已通过')).toBeTruthy()
+    expect(screen.getByText('经历过重练')).toBeTruthy()
+    expect(screen.queryByText('做题卡片')).toBeNull()
+  })
+
   it('allows finishing with unrated or weak work without declaring it passed', () => {
     const finish = vi.fn()
     const resume = vi.fn()
