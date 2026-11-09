@@ -9,7 +9,7 @@ import { useFreestyleFeedNavigation } from './useFreestyleFeedNavigation'
 
 type QueueState = ReturnType<typeof useImmersiveQueue>['queueState']
 
-function card(id: string): FreestyleCard {
+function card(id: string, overrides: Partial<FreestyleCard> = {}): FreestyleCard {
   return {
     id,
     type: 'mindmap_branch',
@@ -22,6 +22,7 @@ function card(id: string): FreestyleCard {
     node_count: 1,
     unit_id: `${id}-unit`,
     unit_revision: 1,
+    ...overrides,
   } as unknown as FreestyleCard
 }
 
@@ -158,5 +159,26 @@ describe('useFreestyleFeedNavigation complete cycle', () => {
 
     // Only 'a' is outstanding and the viewport starts on it → nothing left to seek.
     expect(captured.current?.canCompleteRound).toBe(false)
+  })
+
+  // 2026-11-09：✔ 先回最早重练，再是最早未评分。
+  it('seeks the blank 重练 before earlier unscored cards', () => {
+    const retry = card('retry:round-1:c:1', {
+      source_card_id: 'c',
+      occurrence_kind: 'retry',
+      retry_attempt: 1,
+    } as Partial<FreestyleCard>)
+    const { captured } = mount({
+      cards: [card('a'), card('b'), retry],
+      completedIds: ['c'],
+    })
+
+    expect(captured.current?.completeTitle).toBe('定位到最早的重练')
+    act(() => captured.current?.handleCompleteRound())
+    expect(captured.current?.goToLog).toEqual([2])
+
+    // The next press leaves the 重练 and walks the remaining unscored cards.
+    act(() => captured.current?.handleCompleteRound())
+    expect(captured.current?.goToLog).toEqual([2, 0])
   })
 })

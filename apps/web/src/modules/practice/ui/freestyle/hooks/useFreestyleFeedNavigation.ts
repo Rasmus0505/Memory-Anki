@@ -25,6 +25,8 @@ import {
   findUnscoredCompleteSeekIndices,
   freestyleFeedSlotCount,
   isFreestyleCompleteSlot,
+  isLiveRetryCard,
+  prioritizeRetrySeekIndices,
 } from '@/modules/practice/ui/freestyle/model/roundCompletion'
 import { resolveFreestyleCompleteAction } from '@/modules/practice/ui/freestyle/model/feedCompletion'
 import {
@@ -665,15 +667,25 @@ export function useFreestyleFeedNavigation({
     ),
     [cards, queueState.completedIds, queueState.hiddenIds, queueState.unitEncountersByCardId, roundPlan],
   )
+  /** 完成 walks blank 重练 first, then the remaining unscored cards. */
+  const completeSeekIndices = useMemo(
+    () => prioritizeRetrySeekIndices(unscoredIndices, cards, roundPlan),
+    [cards, roundPlan, unscoredIndices],
+  )
+  const retrySeekIndices = useMemo(
+    () => completeSeekIndices.filter((index) => isLiveRetryCard(cards[index], roundPlan)),
+    [cards, completeSeekIndices, roundPlan],
+  )
   const { seekIndex: completeSeekIndex, canComplete: canCompleteRound, title: completeTitle } = useMemo(
     () => resolveFreestyleCompleteAction({
       roundComplete,
       cardCount: cards.length,
       visualIndex,
-      unscoredIndices,
+      seekIndices: completeSeekIndices,
+      retryIndices: retrySeekIndices,
       pendingReviewCount,
     }),
-    [cards.length, pendingReviewCount, roundComplete, unscoredIndices, visualIndex],
+    [cards.length, completeSeekIndices, pendingReviewCount, retrySeekIndices, roundComplete, visualIndex],
   )
   const handleCompleteRound = useCallback(() => {
     if (completeSeekIndex == null) return
@@ -696,7 +708,7 @@ export function useFreestyleFeedNavigation({
     canCompleteRound,
     completeTitle,
     handleCompleteRound,
-    /** Queue-order indexes still waiting for a this-round score (完成 / 自动翻页 target). */
+    /** Queue-order indexes still waiting for a this-round score (自动翻页 target). */
     unscoredIndices,
     scrollChannel,
     edgeHint,

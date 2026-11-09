@@ -17,10 +17,12 @@ import {
 } from '@/modules/practice/ui/freestyle/model/freestyleUnitPreviewCache'
 import {
   buildFreestyleRoundCompletion,
-  buildPartialSettlementSnapshot,
-  foldPartialSettlementsIntoCompletion,
   isFreestyleRoundComplete,
 } from '@/modules/practice/ui/freestyle/model/roundCompletion'
+import {
+  buildPartialSettlementSnapshot,
+  foldPartialSettlementsIntoCompletion,
+} from '@/modules/practice/ui/freestyle/model/roundSettlement'
 import type { FreestylePartialSettlementSnapshot } from '@/modules/practice/domain/partialSettlement'
 import { compressibleRoundPlanIds, createOperationId } from '@/modules/practice/public'
 import type { FreestyleConfigSaveChoice } from '@/modules/practice/ui/freestyle/model/overlapProgressChoice'

@@ -3,7 +3,6 @@ import type { FreestyleUnitEncounterState } from '@/modules/practice/public'
 import type { FreestyleCard } from '@/shared/api/contracts'
 import {
   buildFreestyleRoundCompletion,
-  foldPartialSettlementsIntoCompletion,
   clampFreestyleFeedIndex,
   findEarliestCompleteSeekIndex,
   findUnscoredCompleteSeekIndices,
@@ -14,6 +13,7 @@ import {
   resolveFreestyleCompleteSeek,
   resolveFreestyleOpenFeedIndex,
 } from './roundCompletion'
+import { foldPartialSettlementsIntoCompletion } from './roundSettlement'
 
 function card(
   id: string,

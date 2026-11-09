@@ -9,7 +9,6 @@ import {
   type FreestyleUnitEncounterState,
 } from '@/modules/practice/public'
 import { isOccurrencePassed, isOccurrenceScored } from '@/modules/practice/domain/unitProgressState'
-import type { FreestylePartialSettlementSnapshot, FreestylePartialSettlementSubject } from '@/modules/practice/domain/partialSettlement'
 import type { FreestyleCard } from '@/shared/api/contracts'
 import { isReviewHintId } from '@/shared/api/contracts'
 
@@ -97,7 +96,7 @@ function isHandled(
    * Only a source card may close through its family; a retry card answers for
    * itself — its own score, its own completed plan entry.
    */
-  const retryCard = isLiveRetry(card, roundPlan)
+  const retryCard = isLiveRetryCard(card, roundPlan)
   const entry = roundPlan?.cardsById[card.id]
     ?? (retryCard ? undefined : roundPlan?.cardsById[sourceId])
   if (entry?.status === 'excluded') return true
@@ -399,10 +398,11 @@ function sharesFamily(left: ReadonlySet<string>, right: ReadonlySet<string>) {
   return false
 }
 
-function isLiveRetry(
-  card: FreestyleCard,
-  roundPlan: FreestyleRoundPlanState | null,
+export function isLiveRetryCard(
+  card: FreestyleCard | null | undefined,
+  roundPlan: FreestyleRoundPlanState | null = null,
 ) {
+  if (!card) return false
   if (isRetryOccurrence(card)) return true
   if (String(card.id || '').startsWith('retry:')) return true
   return roundPlan?.cardsById[card.id]?.occurrenceKind === 'retry'
@@ -432,7 +432,7 @@ function hasUnfinishedFamilyRetry(
   const keys = familyKeys(card, roundPlan)
   const origin = cards.findIndex((item) => item === card || item.id === card.id)
   return cards.some((candidate, index) => {
-    if (index <= origin || !isLiveRetry(candidate, roundPlan)) return false
+    if (index <= origin || !isLiveRetryCard(candidate, roundPlan)) return false
     if (!sharesFamily(keys, familyKeys(candidate, roundPlan))) return false
     return !isPassedOccurrence(candidate, encountersByCardId, completed, roundPlan)
   })
@@ -467,10 +467,32 @@ export function findEarliestUnhandledIndex(
 }
 
 /**
- * Right-side 完成 while the round is still open: queue-order first unscored
- * card (谁最早看谁). A scored 重练 is never the target — the next blank
- * attempt is, once leave clears its score. A source closed by a passed 重练 is
- * never the target either: its grade can no longer be written.
+ * 完成 walk order: blank 重练 first, then the remaining unscored cards.
+ * Queue order is kept inside each group. A 重练 is the unit the learner just
+ * missed, so the button returns to it before taking up new material; only when
+ * no blank 重练 is left does it fall back to the earliest unscored card.
+ */
+export function prioritizeRetrySeekIndices(
+  indices: readonly number[],
+  cards: ReadonlyArray<FreestyleCard>,
+  roundPlan: FreestyleRoundPlanState | null = null,
+): number[] {
+  if (indices.length < 2) return [...indices]
+  const retries: number[] = []
+  const rest: number[] = []
+  for (const index of indices) {
+    if (isLiveRetryCard(cards[index], roundPlan)) retries.push(index)
+    else rest.push(index)
+  }
+  return retries.length ? [...retries, ...rest] : [...indices]
+}
+
+/**
+ * Right-side 完成 while the round is still open: the earliest blank 重练 if
+ * any, otherwise the queue-order first unscored card. A scored 重练 is never
+ * the target — the next blank attempt is, once leave clears its score. A source
+ * closed by a passed 重练 is never the target either: its grade can no longer
+ * be written.
  */
 export function findEarliestCompleteSeekIndex(
   cards: ReadonlyArray<FreestyleCard>,
@@ -479,12 +501,16 @@ export function findEarliestCompleteSeekIndex(
   roundPlan: FreestyleRoundPlanState | null = null,
   hiddenIds: Iterable<string> = [],
 ): number | null {
-  return findUnscoredCompleteSeekIndices(
+  return prioritizeRetrySeekIndices(
+    findUnscoredCompleteSeekIndices(
+      cards,
+      encountersByCardId,
+      completedIds,
+      roundPlan,
+      hiddenIds,
+    ),
     cards,
-    encountersByCardId,
-    completedIds,
     roundPlan,
-    hiddenIds,
   )[0] ?? null
 }
 
@@ -531,12 +557,14 @@ export function resolveFreestyleOpenFeedIndex(
 
 /**
  * Right-side 完成: open the settlement slot once every presented card is
- * scored. While the round is open, the first click seeks the earliest
- * unscored card (谁最早看谁). Another click while already on an unscored
- * card seeks the next one, then wraps. Null means there is nowhere else
- * to go (only one unscored card and the viewport is already on it, already
- * on the settlement slot, or the feed is empty). A weak score is scored.
- * 移除本队列 is not an unscored target.
+ * scored. While the round is open, blank 重练 come first: unless the viewport
+ * is already on one, the click lands on the earliest blank 重练, so the unit
+ * just missed is worked again before new material. With no blank 重练 left, it
+ * seeks the earliest unscored card (谁最早看谁); another click while already on
+ * an unscored card seeks the next one, then wraps. Null means there is nowhere
+ * else to go (already on the only awaiting card, already on the settlement
+ * slot, or the feed is empty). A weak score is scored. 移除本队列 is not a
+ * target.
  */
 export function resolveFreestyleCompleteSeek(options: {
   roundComplete: boolean
@@ -545,6 +573,8 @@ export function resolveFreestyleCompleteSeek(options: {
   visualIndex: number
   /** Queue-order unscored indexes. Omit to seek only the earliest. */
   unscoredIndices?: readonly number[]
+  /** Subset of the unscored indexes that are blank 重练, in queue order. */
+  retryIndices?: readonly number[]
 }): number | null {
   const {
     roundComplete,
@@ -552,6 +582,7 @@ export function resolveFreestyleCompleteSeek(options: {
     earliestUnhandledIndex,
     visualIndex,
     unscoredIndices,
+    retryIndices,
   } = options
   if (cardCount <= 0) return null
   if (roundComplete) {
@@ -562,6 +593,10 @@ export function resolveFreestyleCompleteSeek(options: {
     earliestUnhandledIndex == null ? [] : [earliestUnhandledIndex]
   )).filter((index) => index >= 0 && index < cardCount)
   if (pending.length === 0) return null
+  const retries = (retryIndices ?? []).filter((index) => pending.includes(index))
+  // Always return to the earliest blank 重练 unless it is already under the
+  // viewport; the unscored walk below only starts once no 重练 is left.
+  if (retries.length > 0 && !retries.includes(visualIndex)) return retries[0]
   const at = pending.indexOf(visualIndex)
   if (at < 0) return pending[0]
   if (pending.length === 1) return null
@@ -611,125 +646,3 @@ export function freestyleCanPageNext(
   return hasPendingRestudyOnCurrent
 }
 
-export function buildPartialSettlementSnapshot(input: {
-  id: string
-  cardIds: readonly string[]
-  cards: FreestyleCard[]
-  encountersByCardId: Record<string, FreestyleUnitEncounterState>
-  completedIds?: Iterable<string>
-  roundPlan?: FreestyleRoundPlanState | null
-  subjectByPalaceId?: ReadonlyMap<number, { id: number; name: string }>
-}): FreestylePartialSettlementSnapshot | null {
-  const cardIds = [...new Set(input.cardIds.map((id) => String(id || '').trim()).filter(Boolean))]
-  const id = input.id.trim()
-  if (!id || !cardIds.length) return null
-  const selected = new Set(cardIds)
-  const batch = input.cards.filter((card) => selected.has(card.id))
-  const completion = buildFreestyleRoundCompletion(
-    batch,
-    input.encountersByCardId,
-    batch.length,
-    {
-      completedIds: input.completedIds,
-      roundPlan: input.roundPlan,
-      subjectByPalaceId: input.subjectByPalaceId,
-    },
-  )
-  return {
-    id,
-    cardIds,
-    cardCount: cardIds.length,
-    ratedCount: completion.ratedCount,
-    passedCount: completion.passedCount,
-    newCount: completion.newCount,
-    reviewCount: completion.reviewCount,
-    retryCount: completion.retryCount,
-    bySubject: completion.bySubject.flatMap((subject) => {
-      const palaces = subject.palaces.filter((palace) => palace.cardCount > 0)
-      if (!palaces.length) return []
-      return [{
-        ...subject,
-        palaceCount: palaces.length,
-        cardCount: palaces.reduce((sum, palace) => sum + palace.cardCount, 0),
-        palaces,
-      }]
-    }),
-  }
-}
-
-/**
- * Headline counts on 大结算 must include cards that already left the feed.
- * A snapshot whose cards are still in the feed is listed, not folded.
- */
-export function foldPartialSettlementsIntoCompletion(
-  completion: FreestyleRoundCompletion,
-  snapshots: readonly FreestylePartialSettlementSnapshot[] | undefined,
-  liveCardIds: Iterable<string> = [],
-): FreestyleRoundCompletion {
-  const live = new Set(Array.from(liveCardIds, (id) => String(id || '').trim()))
-  const settled = (snapshots ?? []).filter((item) => item.cardIds.every((id) => !live.has(id)))
-  if (!settled.length) return completion
-  const ratedCount = completion.ratedCount + settled.reduce((sum, item) => sum + item.ratedCount, 0)
-  const passedCount = completion.passedCount + settled.reduce((sum, item) => sum + item.passedCount, 0)
-  const retryCount = completion.retryCount + settled.reduce((sum, item) => sum + item.retryCount, 0)
-  const bySubject = mergeRoundSubjects(completion.bySubject, settled.flatMap((item) => item.bySubject))
-  return {
-    ...completion,
-    ratedCount,
-    passedCount,
-    newCount: completion.newCount + settled.reduce((sum, item) => sum + item.newCount, 0),
-    reviewCount: completion.reviewCount + settled.reduce((sum, item) => sum + item.reviewCount, 0),
-    retriedCount: completion.retriedCount + settled.reduce((sum, item) => sum + item.retryCount, 0),
-    retryCount,
-    involvedUnitCount: completion.involvedUnitCount + settled.reduce((sum, item) => sum + item.ratedCount, 0),
-    totalUnits: bySubject.reduce((sum, subject) => sum + subject.totalUnits, 0),
-    bySubject,
-  }
-}
-
-function mergeRoundSubjects(
-  live: readonly FreestyleRoundSubjectStat[],
-  settled: readonly FreestylePartialSettlementSubject[],
-): FreestyleRoundSubjectStat[] {
-  const subjects = new Map<string, {
-    subjectId: number | null
-    subjectName: string
-    palaces: Map<number, FreestyleRoundSubjectPalaceStat>
-  }>()
-  const add = (subject: FreestyleRoundSubjectStat | FreestylePartialSettlementSubject) => {
-    const key = subject.subjectId == null ? `name:${subject.subjectName}` : `id:${subject.subjectId}`
-    let bucket = subjects.get(key)
-    if (!bucket) {
-      bucket = { subjectId: subject.subjectId, subjectName: subject.subjectName, palaces: new Map() }
-      subjects.set(key, bucket)
-    }
-    for (const palace of subject.palaces) {
-      const current = bucket.palaces.get(palace.palaceId)
-      if (!current) {
-        bucket.palaces.set(palace.palaceId, { ...palace })
-        continue
-      }
-      current.cardCount += palace.cardCount
-      current.totalUnits = Math.max(current.totalUnits, palace.totalUnits)
-    }
-  }
-  live.forEach(add)
-  settled.forEach(add)
-  return Array.from(subjects.values()).map((subject) => {
-    const palaces = Array.from(subject.palaces.values()).sort((left, right) => (
-      right.cardCount - left.cardCount
-      || left.palaceTitle.localeCompare(right.palaceTitle, 'zh')
-    ))
-    return {
-      subjectId: subject.subjectId,
-      subjectName: subject.subjectName,
-      palaceCount: palaces.length,
-      cardCount: palaces.reduce((sum, palace) => sum + palace.cardCount, 0),
-      totalUnits: palaces.reduce((sum, palace) => sum + palace.totalUnits, 0),
-      palaces,
-    }
-  }).sort((left, right) => (
-    right.cardCount - left.cardCount
-    || left.subjectName.localeCompare(right.subjectName, 'zh')
-  ))
-}

@@ -11,7 +11,7 @@ commits: 2656ddb7..working-tree
 
 ## Report
 
-> 后续演进：完成定位的最终规则由 [freestyle-unit-progress](freestyle-unit-progress.md) 的 `unitProgressState` 内核接管；本文 S2 表中「全部已评、仅剩未完成源卡 → 该源卡」的回退已被「最早未评分，否则 null」取代。本文保留为当时的交付记录。
+> 后续演进：完成定位的最终规则由 [freestyle-unit-progress](freestyle-unit-progress.md) 的 `unitProgressState` 内核接管；本文 S2 表中「全部已评、仅剩未完成源卡 → 该源卡」的回退已被「最早未评分，否则 null」取代。2026-11-09 再改：空白重练优先于最早未评分（见 unit-progress 的当日更新）。本文保留为当时的交付记录。
 
 **What was built**
 

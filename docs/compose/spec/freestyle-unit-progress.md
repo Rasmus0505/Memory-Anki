@@ -1,10 +1,10 @@
 ---
 feature: freestyle-unit-progress
 status: delivered
-updated: 2026-09-23
+updated: 2026-11-09
 branch: main
 commits: 26fa2171..working-tree
-note: 2026-11-03 起进度条在此内核上增加单元红/绿（错题快照）；内核仍是唯一评分来源
+note: 2026-11-03 起进度条在此内核上增加单元红/绿（错题快照）；内核仍是唯一评分来源。2026-11-09 完成按钮改为空白重练优先，再最早未评分。
 ---
 
 # 随心评分状态统一内核
@@ -14,6 +14,8 @@ note: 2026-11-03 起进度条在此内核上增加单元红/绿（错题快照�
 **What was built**
 
 落地唯一评分内核 `apps/web/src/modules/practice/domain/unitProgressState.ts`：occurrence 级本轮分（`occurrenceScore` / `isOccurrenceScored` / `isOccurrencePassed` / `findEarliestUnscoredIndex`），**禁止** source↔重练 `lastRating` 继承。产品语义按你的选择：完成 = 队列序最早**未评分**（谁最早看谁）；进度条 = **已评分就填实心**（含忘记/困难）；重练再评后 leave 递增 `retry_attempt` 并**清空该 occurrence 评分**，下一跳空白可再 seek。完成 seek、进度条填色、宫殿清空、轮次完成、`getFreestyleRated/Passed` 包装全部改读内核。后端 `apply_rating` 不再把 重练 glance 写到 source；`applyServerRatingsToRoundPlan` 在 `ownsGlance` 时不回落 source。架构门禁 `check_freestyle_unit_progress_kernel` 与契约测试锁死语义，避免再分叉。
+
+**2026-11-09 更新（完成按钮排序）**：✔ 不再一律取最早未评分。只要队列里还有**空白重练**，完成先落到队列序最早的那张重练，走完所有重练后才轮到最早未评分。排序与判定在 `roundCompletion.ts` 的 `prioritizeRetrySeekIndices` / `isLiveRetryCard`；`/freestyle` 冷启动的打开位置（`resolveFreestyleOpenFeedIndex`）与按钮一致。评分内核、进度条、轮次完成、自动翻页规则不变。结算辅助（`buildPartialSettlementSnapshot` / `foldPartialSettlementsIntoCompletion`）同时拆到 `roundSettlement.ts`，让 `roundCompletion.ts` 回到架构行数门禁以内。
 
 **Verification**
 
@@ -49,7 +51,7 @@ note: 2026-11-03 起进度条在此内核上增加单元红/绿（错题快照�
 
 产品偏好（已确认）：
 
-1. **完成**：按队列顺序，**谁最早未评分看谁**（唯一排序标准，不再多级优先）。
+1. **完成**：按队列顺序，**谁最早未评分看谁**（唯一排序标准，不再多级优先）。**2026-11-09 改**：空白重练优先，再最早未评分。
 2. **进度条**：**已评分就填实心**（忘记/困难/记得/轻松一视同仁）。
 3. **范围**：前后端一起对齐。
 
@@ -85,18 +87,20 @@ isPassed(cardId): boolean
 |---|---|
 | 进度条实心 | `isScored` |
 | 进度条空心 | `!isScored` |
-| 完成 seek | **队列序**上第一个 `!isScored && !excluded` 的 card |
+| 完成 seek | **空白重练优先**：有未评分重练时取队列序最早的那张；没有时才取队列序第一个 `!isScored && !excluded` 的 card |
 | 轮次完成 | 每个 unit family 至少有一个 `isPassed` occurrence（或 completedIds），且无 excluded 未完 |
 | 宫殿清空 | 同 family `isPassed`，pending restudy 未插入时算未完 |
 
 完成按钮：
 
 1. `roundComplete` → 结算槽（现行为）
-2. 否则 → 队列序第一个 `!isScored`（含跳着做的、含空白新一跳重练）
-3. 无未评但轮次未完（全是弱评、下一跳还没插入）→ **null，按钮禁用**；leave 插入空白重练后按钮恢复
-4. 已在目标上 → null
+2. 否则 → **队列序最早的空白重练**（`!isScored` 的重练 occurrence），不管当前视口停在哪张未评分卡
+3. 没有空白重练 → 队列序第一个 `!isScored`（含跳着做的）
+4. 已在最早的空白重练上 → 下一张空白重练；没有则轮到最早未评分
+5. 无未评但轮次未完（全是弱评、下一跳还没插入）→ **null，按钮禁用**；leave 插入空白重练后按钮恢复
+6. 已在唯一目标上 → null
 
-文案：未完成时「定位到最早还没评分的单元」。
+文案：目标是重练时「定位到最早的重练」/「定位到下一张重练」；否则「定位到最早还没评分的单元」/「定位到下一张还没评分的单元」。自动翻页仍按队列序取最早未评分，不套用重练优先。
 
 ### 2.3 进度条
 
@@ -120,7 +124,7 @@ isPassed(cardId): boolean
 ### 2.5 兼容迁移
 
 - `getFreestyleRatedCardIds` / `findEarliestUnratedIndex` / `getFreestylePassedCardIds` 保留导出名，内部改调 2.1，避免一轮改穿全部调用方。
-- `findEarliestCompleteSeekIndex` = 队列序第一个未评（删掉 family 回退层）。
+- `findEarliestCompleteSeekIndex` = 队列序最早的空白重练，否则队列序第一个未评（删掉 family 回退层）。排序由 `prioritizeRetrySeekIndices` 提供，重练判定由 `isLiveRetryCard` 提供。
 - `freestylePalaceClearance` 的 `isHandled` 改为 `isScored/isPassed` + pendingRestudy。
 
 **测试契约（锁语义，防再分叉）：**
@@ -130,6 +134,8 @@ isPassed(cardId): boolean
 3. 同一 retry attempt++ 重排后：score 清空，完成可再次落到它
 4. 空 amend（encounter 空、completedIds 有）：`isScored` 且进度条实心
 5. 进度条 fill 与 `isScored` 对同一 fixture 逐卡相等（契约测试）
+6. 空白重练与更早的未评分源卡同时存在：完成 → 重练；走完所有重练后才轮到未评分
+7. 已评分的重练不在目标列表里：完成仍只找 `!isScored` 的卡
 
 ## [S3] Out of Scope
 
