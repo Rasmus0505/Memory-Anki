@@ -710,7 +710,7 @@ export function FreestyleScopeQuizDialog(props: FreestyleScopeQuizDialogProps) {
       ? '加载中…'
       : questions.length > 0
         ? [
-            // The pager row owns 「第 n / m 题」 once there is more than one question.
+            // The pager row owns the progress counter once there is more than one question.
             answeredCount > 0 ? `已答 ${answeredCount}` : null,
             currentPalaceTitle || null,
           ]
@@ -720,7 +720,7 @@ export function FreestyleScopeQuizDialog(props: FreestyleScopeQuizDialogProps) {
           ? '当前没有关联题目'
           : scopeSummary
   const singleQuestionLabel = !showConfig && !loading && questions.length === 1
-    ? `第 ${index + 1} / ${questions.length} 题`
+    ? `已完成 ${answeredCount} / ${questions.length} 题`
     : null
 
   return (

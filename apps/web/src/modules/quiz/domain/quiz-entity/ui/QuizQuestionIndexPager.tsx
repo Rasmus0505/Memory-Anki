@@ -46,10 +46,10 @@ export function quizIndexPageCapacity(
 export function quizIndexPagerLabel(
   pageIndex: number,
   pageCount: number,
-  currentIndex: number,
+  doneCount: number,
   count: number,
 ) {
-  const progress = `第 ${currentIndex + 1} / ${count} 题`
+  const progress = `已完成 ${doneCount} / ${count} 题`
   if (pageCount <= 1) return progress
   return `第 ${pageIndex + 1}/${pageCount} 页 · ${progress}`
 }
@@ -88,6 +88,13 @@ export function QuizQuestionIndexPager({
       ? explicitPageSize
       : measuredPageSize ?? QUIZ_QUESTION_INDEX_PAGE_SIZE
   const safeCount = Math.max(0, count)
+  const doneCount = useMemo(() => {
+    let done = 0
+    for (let index = 0; index < safeCount; index += 1) {
+      if (getItemState(index)?.done) done += 1
+    }
+    return done
+  }, [safeCount, getItemState])
   const pageCount = Math.max(1, Math.ceil(safeCount / pageSize))
   const derivedPage = Math.min(pageCount - 1, quizIndexPage(currentIndex, pageSize))
   const [page, setPage] = useState(derivedPage)
@@ -132,7 +139,7 @@ export function QuizQuestionIndexPager({
   if (safeCount <= 1) return null
 
   const showPagerControls = safeCount > pageSize
-  const label = quizIndexPagerLabel(page, pageCount, currentIndex, safeCount)
+  const label = quizIndexPagerLabel(page, pageCount, doneCount, safeCount)
 
   return (
     <div

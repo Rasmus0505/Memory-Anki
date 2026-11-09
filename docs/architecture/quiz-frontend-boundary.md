@@ -18,7 +18,7 @@ modules/practice/ui/review -> modules/quiz/public.ts
 <!-- invariant: quiz-subjective-stem-rewrite -->
 <!-- invariant: quiz-converted-analysis-first-line -->
 
-做题窗口（`widgets/freestyle-scope-quiz`）通过 `QuizQuestionIndexPager` 对顶部题号轨道分页。一页是一行实测宽度：胶囊尺寸保持固定（`size-7`），由 `quizIndexPageCapacity` 决定能容纳多少；未测量时的回退值是 20。行标签为 `第 {page}/{pages} 页 · 第 {current}/{count} 题`（没有起止范围）。当该分页器可见时，宿主会把“已答”和宫殿上下文保留在对话框描述中，且不得在那里重复当前题目计数器。宿主不得内联渲染完整的圆形按钮网格。轨道固定在滚动作答主体之外（`pinned`、`data-quiz-index-rail`），并忽略子胶囊宽度抖动，因此揭示答案不会重新打乱可见题号。叠加层面板使用 `QUIZ_ANSWERING_DIALOG_CLASS`，使浮动窗口保持稳定高度，答案在内部滚动，而不是让面板重新居中。
+做题窗口（`widgets/freestyle-scope-quiz`）通过 `QuizQuestionIndexPager` 对顶部题号轨道分页。一页是一行实测宽度：胶囊尺寸保持固定（`size-7`），由 `quizIndexPageCapacity` 决定能容纳多少；未测量时的回退值是 20。行标签为 `第 {page}/{pages} 页 · 已完成 {done}/{count} 题`（进度按全卷已答数统计，不是当前题号；没有起止范围）。当该分页器可见时，宿主会把“已答”和宫殿上下文保留在对话框描述中，且不得在那里重复进度计数器。宿主不得内联渲染完整的圆形按钮网格。轨道固定在滚动作答主体之外（`pinned`、`data-quiz-index-rail`），并忽略子胶囊宽度抖动，因此揭示答案不会重新打乱可见题号。叠加层面板使用 `QUIZ_ANSWERING_DIALOG_CLASS`，使浮动窗口保持稳定高度，答案在内部滚动，而不是让面板重新居中。
 <!-- invariant: quiz-index-pager-ownership -->
 
 直接题目集模式（角标 / 脑图复习 / 随心单元卡）的「打乱题库」顺序位于 `quizShuffleOrder` 中，并作为 `quiz_shuffle_orders` 客户端偏好持久化，而不仅仅存在浏览器存储中。该窗口每次打开都会根据打开者的 id 重建，因此顺序必须在其中存活；以 `palace:node` 为键（题目集作为第二键，localStorage 仅在偏好加载前作为镜像）正是避免一次打乱在另一个界面或另一台设备上又显得全新的关键。打开窗口从不打乱；只有按钮会，而且它只在未作答题目各自的槽位之间移动这些题目。

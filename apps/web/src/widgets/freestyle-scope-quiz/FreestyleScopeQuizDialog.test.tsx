@@ -392,7 +392,7 @@ describe('FreestyleScopeQuizDialog', () => {
     expect(await screen.findByRole('button', { name: '1' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '20' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: '21' })).toBeNull()
-    expect(screen.getByText('第 1/2 页 · 第 1 / 21 题')).toBeTruthy()
+    expect(screen.getByText('第 1/2 页 · 已完成 0 / 21 题')).toBeTruthy()
     // The palace is named, not shown as a bare id: 「宫殿 7」 was unreadable
     // mid-session and disagreed with the name on the card and in the scope list.
     expect(screen.getByText('第一节英国近代教育')).toBeTruthy()
@@ -448,7 +448,7 @@ describe('FreestyleScopeQuizDialog', () => {
 
     renderScopeQuizDialog()
 
-    expect(await screen.findByText(/第 3 \/ 3 题/)).toBeTruthy()
+    expect(await screen.findByText(/已完成 2 \/ 3 题/)).toBeTruthy()
     expect(screen.getByText(/已答 2 \/ 3/)).toBeTruthy()
   })
 

@@ -125,7 +125,7 @@ describe('FreestyleScopeQuizDialog direct question set', () => {
     renderDirect({ questionIds: [101, 102] })
 
     expect(await screen.findByText('第二道关联题目')).toBeTruthy()
-    expect(screen.getByText('第 2 / 2 题')).toBeTruthy()
+    expect(screen.getByText('已完成 1 / 2 题')).toBeTruthy()
     expect(screen.getByText('已答 1')).toBeTruthy()
   })
 
