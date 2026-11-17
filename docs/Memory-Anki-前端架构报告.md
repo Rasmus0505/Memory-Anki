@@ -167,7 +167,7 @@ JSX `<Routes>` 表仍然手写，但由 `routeManifest.test.ts` 对账，防止�
 | IndexedDB `mutationQueue` | 未确认的写请求 | 跨刷新/重启 |
 | IndexedDB 草稿槽 | 脑图编辑草稿（每文档单槽覆盖） | 跨刷新/关页 |
 | IndexedDB `versionedCacheStore` | 带版本的缓存 | 按版本淘汰 |
-| `localStorage` | 客户端偏好、窗口布局、随心显示偏好、城市窗口状态 | 设备本地 |
+| `localStorage` | 客户端偏好、窗口布局、随心显示偏好 | 设备本地 |
 | 服务端 SQLite | 学习账本、排期、轮次计划、题目进度 | 权威 |
 
 硬规则：
@@ -308,7 +308,7 @@ JSX `<Routes>` 表仍然手写，但由 `routeManifest.test.ts` 对账，防止�
 - 业务代码只调用 `cue()`，声明「发生了什么」；
 - 配方决定声音、触感、CSS 果冻、DOM 小动效；
 - 延迟步骤挂在 `FxPlayback` owner 上，owner 退役即取消；
-- 禁止粒子、canvas 特效（学习城市地平线的隔离 iframe 除外，见 `docs/architecture/city.md`）、业务代码直接 WebGL/WebAudio。
+- 禁止粒子、canvas 特效、业务代码直接 WebGL/WebAudio。
 
 ### 10.2 音频与主题
 
@@ -324,7 +324,7 @@ JSX `<Routes>` 表仍然手写，但由 `routeManifest.test.ts` 对账，防止�
 - 圆角：6 / 8 / 10 / 14 / 20px（`rounded-sm` … `rounded-2xl`），按钮 8–10px，卡片 14px，对话框 20px。
 - 阴影：一层贴边接触影 + 一层大半径弥散影；`shadow-glow` 只给主按钮悬浮。
 - 交互：按钮悬浮上浮 1px、按下 `scale(0.97)`、键盘聚焦 2px 主色环；过渡统一 `cubic-bezier(0.16, 1, 0.3, 1)`，约 0.2s。全局聚焦环放在 `@layer base`，组件自带的 `focus-visible:*` 可以覆盖它。
-- 固定保留的含义色：警告/困难的琥珀、考试三星的金框、脑图荧光笔黄、学科自定义色、永久标记分级色、城市待修牌橙色。重新调色时不要把它们并进主色。
+- 固定保留的含义色：警告/困难的琥珀、考试三星的金框、脑图荧光笔黄、学科自定义色、永久标记分级色。重新调色时不要把它们并进主色。
 - 已移除：窗光、时段色调、纸张颗粒、跟随鼠标的暖光、卡片 3D 倾斜、进度条循环光泽。考前两周的屏幕边缘呼吸保留。
 - 字号下限：要读的字不小于 11px；画在固定小圆里的计数徽标、折叠钮、进度刻度例外。
 - 页面层级：常规 `PageHeader` 不套卡片，标题直接在页面底色上；只有 `compact` 版（脑图页）保留卡片外框。视图切换统一用 `ToggleGroup`（单选，`role="radio"`），布局选项只放图标、名字在 `aria-label` / `title`。

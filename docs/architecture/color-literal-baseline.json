@@ -1,5 +1,4 @@
 {
-  "apps/web/src/modules/city/model/horizonModel.ts": 8,
   "apps/web/src/modules/content/domain/mindmap-document-entity/model/document.ts": 1,
   "apps/web/src/modules/content/ui/mindmap-editor/documentGraphProjection.ts": 2,
   "apps/web/src/modules/content/ui/mindmap-editor/useMindMapSurfaceViewCommands.ts": 1,

@@ -2,12 +2,6 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppShell } from '@/app/shell/AppShell'
-
-vi.mock('@/modules/city/public', () => ({
-  CityHorizon: ({ visible }: { visible: boolean }) => (
-    <div data-testid="city-horizon" data-visible={String(visible)} />
-  ),
-}))
 import { resetNavSectionHistoryForTest } from '@/app/shell/navSectionMemory'
 import {
   resetSessionRecorderForTest,
@@ -583,7 +577,6 @@ describe('AppShell', () => {
     expect(inner?.className).toContain('min-h-0')
     expect(inner?.className).toContain('p-0')
     expect(inner?.className).not.toContain('max-w-[1600px]')
-    expect(screen.getByTestId('city-horizon').getAttribute('data-visible')).toBe('false')
     unmount()
 
     render(
@@ -594,7 +587,6 @@ describe('AppShell', () => {
       </MemoryRouter>,
     )
     expect(document.querySelector('aside')?.className).toContain('rounded-none')
-    expect(screen.getByTestId('city-horizon').getAttribute('data-visible')).toBe('true')
     expect(document.querySelector('main')?.className).toContain('lg:pl-(--spacing-shell-sidebar-collapsed)')
     expect(contentContainer(document.querySelector('main'))?.className).toContain('p-0')
 
