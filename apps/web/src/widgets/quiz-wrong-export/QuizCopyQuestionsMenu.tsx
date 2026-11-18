@@ -59,7 +59,7 @@ export function QuizCopyQuestionsMenu({ questions, currentQuestion, wrongQuestio
       <DropdownMenuTrigger asChild>
         <Button type="button" size="sm" variant="outline" aria-label="复制题目" disabled={actionsDisabled || copying || exporting != null || !currentQuestion}>
           {copying || exporting != null ? <LoaderCircle className="size-4 animate-spin" /> : <FileText className="size-4" />}
-          <span className="hidden sm:inline">复制题目</span>
+          <span className="hidden min-[480px]:inline">复制题目</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">

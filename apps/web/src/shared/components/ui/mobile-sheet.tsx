@@ -24,13 +24,18 @@ import { cn } from '@/shared/lib/utils'
  * source text, so a value built by interpolation silently produces no rule.
  */
 
-/** Full-height phone sheet: the whole visual viewport between the safe areas. */
+/**
+ * Full-height phone sheet: the whole visual viewport between the safe areas.
+ * Each edge keeps max(safe-area, .5rem) — the same clearance the phone dialog
+ * shell pads (dialog.tsx centered wrapper), so the two can never disagree on
+ * a zero-inset Android PWA. The width mirrors the shell's horizontal rule.
+ */
 export const MOBILE_SHEET_FULL_CLASS =
-  'h-[calc(100dvh-2*max(env(safe-area-inset-top,0px),env(safe-area-inset-bottom,0px),0.5rem))] max-h-[calc(100dvh-2*max(env(safe-area-inset-top,0px),env(safe-area-inset-bottom,0px),0.5rem))] w-[min(58rem,calc(100vw-1rem))] max-w-none p-0 sm:h-[min(86vh,100dvh-2rem)] sm:max-h-[min(92vh,100dvh-1rem)]'
+  'h-[calc(100dvh-max(env(safe-area-inset-top,0px),0.5rem)-max(env(safe-area-inset-bottom,0px),0.5rem))] max-h-[calc(100dvh-max(env(safe-area-inset-top,0px),0.5rem)-max(env(safe-area-inset-bottom,0px),0.5rem))] w-[min(58rem,calc(100vw-2*max(env(safe-area-inset-left,0px),env(safe-area-inset-right,0px),0.5rem)))] max-w-none p-0 sm:h-[min(86vh,100dvh-2rem)] sm:max-h-[min(92vh,100dvh-1rem)]'
 
 /** Bottom sheet: grows to 85% of the viewport and scrolls internally. */
 export const MOBILE_SHEET_BOTTOM_CLASS =
-  'max-h-[min(85dvh,calc(100dvh-max(env(safe-area-inset-top,0px),0.5rem)))] w-full max-w-none p-0'
+  'max-h-[min(85dvh,calc(100dvh-max(env(safe-area-inset-top,0px),0.5rem)-max(env(safe-area-inset-bottom,0px),0.5rem)))] w-full max-w-none p-0'
 
 /** Header edge clears the notch; `max(safe-area, .5rem)` also covers devices reporting zero. */
 export const MOBILE_SHEET_HEADER_CLASS =

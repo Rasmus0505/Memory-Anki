@@ -168,7 +168,7 @@ export function QuizQuestionIndexPager({
             onClick={() => setPage((value) => Math.max(0, value - 1))}
           >
             <ChevronLeft className="size-4" />
-            上一页
+            <span className="hidden min-[420px]:inline">上一页</span>
           </Button>
         ) : null}
         <span className="min-w-0 flex-1 truncate text-center text-xs tabular-nums text-muted-foreground">
@@ -184,7 +184,7 @@ export function QuizQuestionIndexPager({
             disabled={page >= pageCount - 1}
             onClick={() => setPage((value) => Math.min(pageCount - 1, value + 1))}
           >
-            下一页
+            <span className="hidden min-[420px]:inline">下一页</span>
             <ChevronRight className="size-4" />
           </Button>
         ) : null}

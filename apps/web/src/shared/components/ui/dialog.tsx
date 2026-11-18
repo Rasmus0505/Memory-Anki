@@ -633,8 +633,8 @@ const DialogContent = forwardRef<
       {showCloseButton ? (
         <DialogPrimitive.Close
           className={cn(
-            'absolute top-4 rounded-md p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground',
-            floatingEnabled ? 'right-24 z-20' : 'right-4',
+            'absolute rounded-md p-2 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground',
+            floatingEnabled ? 'right-24 top-4 z-20' : 'right-4 top-4',
           )}
           aria-label="关闭弹窗"
           data-dialog-window-control="true"
@@ -674,7 +674,14 @@ const DialogContent = forwardRef<
         />
       ) : null}
       {resolvedLayout === 'centered' && !floatingEnabled ? (
-        <div className="fixed inset-0 z-[241] flex items-center justify-center p-4 pointer-events-none">
+        // Phone shell padding must mirror the sheet primitives' rule
+        // (mobile-sheet.tsx): each edge pads by max(safe-area, .5rem). Panels
+        // sized by MOBILE_SHEET_FULL_CLASS assume exactly that clearance —
+        // a plain p-4 leaves them 16px taller than the box on zero-inset
+        // Android PWAs, and items-center then clips both ends (the footer
+        // first). Writing each side out in full: Tailwind extracts
+        // candidates from source text, interpolation produces no rule.
+        <div className="pointer-events-none fixed inset-0 z-[241] flex items-center justify-center pb-[max(env(safe-area-inset-bottom,0px),0.5rem)] pl-[max(env(safe-area-inset-left,0px),0.5rem)] pr-[max(env(safe-area-inset-right,0px),0.5rem)] pt-[max(env(safe-area-inset-top,0px),0.5rem)]">
           {content}
         </div>
       ) : (
@@ -700,6 +707,10 @@ function DialogHeader({ children }: PropsWithChildren) {
   return (
     <div
       className={cn(
+        // pr-24 keeps the header row clear of the absolute close button. The
+        // centered phone shell (below) already pads past the notch, so the
+        // header itself must NOT add safe-area padding again — double-counting
+        // it used to burn ~2 notch heights of blank space above the toolbar.
         'flex items-start justify-between gap-3 border-b px-5 py-3 pr-24',
         beginDrag ? 'cursor-move' : '',
       )}

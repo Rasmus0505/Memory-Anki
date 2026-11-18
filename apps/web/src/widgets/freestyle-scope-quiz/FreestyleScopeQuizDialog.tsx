@@ -750,7 +750,7 @@ export function FreestyleScopeQuizDialog(props: FreestyleScopeQuizDialogProps) {
                   onClick={() => setConfigOpen((value) => !value)}
                 >
                   <Settings2 className="size-4" />
-                  <span className="hidden sm:inline">配置</span>
+                  <span className="hidden min-[480px]:inline">配置</span>
                 </Button>
                 {/* Phone: the title is redundant with the sheet and costs a header slot. */}
                 <DialogTitle className="sr-only text-base sm:not-sr-only">做题</DialogTitle>

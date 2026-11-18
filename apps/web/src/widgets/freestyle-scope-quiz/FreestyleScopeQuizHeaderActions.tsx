@@ -79,7 +79,7 @@ export function FreestyleScopeQuizHeaderActions({
         onClick={() => onPrioritizeWrongChange?.(!prioritizeWrong)}
       >
         <ArrowUpToLine className="size-4" />
-        <span className="hidden sm:inline">错题优先</span>
+        <span className="hidden min-[480px]:inline">错题优先</span>
       </Button>
       <Button
         type="button"

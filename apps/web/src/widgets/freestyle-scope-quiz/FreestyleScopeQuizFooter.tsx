@@ -26,17 +26,20 @@ export function FreestyleScopeQuizFooter({
   // throw the draft away with no way back, so they wait for 保存 or 取消编辑.
   const lockedTitle = navigationLocked ? '先保存或取消编辑再换题' : undefined
   return (
+    // The centered phone shell already pads past the home-indicator area, so
+    // the footer keeps a plain padding — counting the safe area twice used to
+    // stack a second blank band under the buttons and squeeze the answers.
     <div className="flex shrink-0 items-center justify-between gap-2 border-t px-4 py-3">
-      <span className="min-w-0 truncate text-xs tabular-nums text-muted-foreground">
+      <span className="min-w-0 flex-1 truncate text-xs tabular-nums text-muted-foreground">
         {questionCount > 1
           ? `已答 ${answeredCount} / ${questionCount} · ${scopeLabel}`
           : currentState.resolved
             ? '已作答'
             : '待作答'}
       </span>
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex shrink-0 items-center gap-1.5">
         {currentState.resolved && index < questionCount - 1 && !navigationLocked ? (
-          <span className="shrink-0 text-xs text-muted-foreground">Enter 下一题</span>
+          <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">Enter 下一题</span>
         ) : null}
         {questionCount > 1 ? (
           <>
@@ -50,7 +53,7 @@ export function FreestyleScopeQuizFooter({
               onClick={() => goToIndex(Math.max(0, index - 1))}
             >
               <ChevronLeft className="size-4" />
-              上一题
+              <span className="hidden sm:inline">上一题</span>
             </Button>
             <Button
               type="button"
