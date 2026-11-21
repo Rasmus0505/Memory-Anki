@@ -1,5 +1,7 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { QUIZ_ANSWER_MODE_STORAGE_KEY } from '@/modules/quiz/domain/quiz-entity/model/quizAnswerModeSettings'
+import { resetClientPreferenceCacheForTest } from '@/shared/preferences/clientPreferences'
 import {
   baseQuestions,
   batchDeletePalaceQuizQuestionsApiMock,
@@ -19,12 +21,20 @@ import {
 describe('PalaceQuizPage core flows', () => {
   beforeEach(setupPalaceQuizPageTest)
 
+  async function startPractice(questionText?: string) {
+    if (questionText) {
+      fireEvent.click(await screen.findByRole('button', { name: new RegExp(questionText) }))
+    } else {
+      fireEvent.click(await screen.findByRole('button', { name: '开始做题' }))
+    }
+  }
+
   it('renders the route and switches between practice and manage', async () => {
     renderPage()
 
     expect(await screen.findByText('细胞生物学宫殿 · 配套习题')).toBeTruthy()
     expect(screen.getByRole('button', { name: '查看记忆宫殿' })).toBeTruthy()
-    expect(screen.getByText('多图生成')).toBeTruthy()
+    expect(screen.getByText('3 道关联题目')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: '管理' }))
     expect(await screen.findByText('题库列表')).toBeTruthy()
@@ -209,36 +219,43 @@ describe('PalaceQuizPage core flows', () => {
     expect(screen.getByTestId('memory-node-child-1')).toBeTruthy()
   })
 
-  it('judges multiple-choice questions immediately, refreshes stats, and supports retry', async () => {
+  it('judges multiple-choice questions immediately and records one attempt', async () => {
+    window.localStorage.setItem(QUIZ_ANSWER_MODE_STORAGE_KEY, JSON.stringify({ mcqMode: 'choice' }))
+    resetClientPreferenceCacheForTest()
     renderPage()
     expect(await screen.findByText('细胞的控制中心是？')).toBeTruthy()
+    await startPractice('细胞的控制中心是？')
 
-    fireEvent.click(screen.getByRole('button', { name: 'B. 细胞核' }))
-    expect(dispatchGlobalFeedbackMock).toHaveBeenCalledWith(
-      'quiz_answer_select',
-      expect.objectContaining({ label: 'B', audioScope: 'local' }),
-    )
+    fireEvent.click(await screen.findByRole('button', { name: /^(B\. )?细胞核$/ }))
     expect(await screen.findByText('回答正确')).toBeTruthy()
     await waitFor(() => {
-      expect(screen.getByText('答对 3 次 / 答错 1 次')).toBeTruthy()
+      expect(screen.getByText('已完成 1 / 3 题')).toBeTruthy()
     })
+    // The shared window owns the once-per-answer cue pair: result, then reveal.
+    expect(dispatchGlobalFeedbackMock).toHaveBeenCalledWith(
+      'quiz_result_correct',
+      expect.objectContaining({ audioScope: 'local' }),
+    )
+    expect(dispatchGlobalFeedbackMock).toHaveBeenCalledWith(
+      'quiz_result_reveal',
+      expect.objectContaining({ audioScope: 'local' }),
+    )
     await waitFor(() => {
-      expect(dispatchGlobalFeedbackMock).toHaveBeenCalledWith(
-        'quiz_result_correct',
-        expect.objectContaining({ audioScope: 'local' }),
-      )
+      expect(recordPalaceQuizChoiceAttemptApiMock).toHaveBeenCalledTimes(1)
     })
+    expect(recordPalaceQuizChoiceAttemptApiMock).toHaveBeenCalledWith(
+      11,
+      'B',
+      expect.objectContaining({ updateMutationStats: true }),
+    )
     expect(emitReviewCelebrationMock).not.toHaveBeenCalledWith(
       expect.objectContaining({ kind: 'quiz_correct' }),
-    )
-    fireEvent.click(screen.getByRole('button', { name: /再做一次/ }))
-    expect(dispatchGlobalFeedbackMock).toHaveBeenCalledWith(
-      'quiz_answer_reset',
-      expect.objectContaining({ label: '重做', audioScope: 'local' }),
     )
   })
 
   it('emits incorrect quiz feedback without result confetti', async () => {
+    window.localStorage.setItem(QUIZ_ANSWER_MODE_STORAGE_KEY, JSON.stringify({ mcqMode: 'choice' }))
+    resetClientPreferenceCacheForTest()
     recordPalaceQuizChoiceAttemptApiMock.mockResolvedValueOnce({
       question: {
         ...baseQuestions[0],
@@ -252,8 +269,9 @@ describe('PalaceQuizPage core flows', () => {
 
     renderPage()
     expect(await screen.findByText('细胞的控制中心是？')).toBeTruthy()
+    await startPractice('细胞的控制中心是？')
 
-    fireEvent.click(screen.getByRole('button', { name: 'A. 细胞膜' }))
+    fireEvent.click(await screen.findByRole('button', { name: /^(A\. )?细胞膜$/ }))
 
     expect(await screen.findByText('回答错误')).toBeTruthy()
     await waitFor(() => {
@@ -262,6 +280,10 @@ describe('PalaceQuizPage core flows', () => {
         expect.objectContaining({ audioScope: 'local' }),
       )
     })
+    expect(dispatchGlobalFeedbackMock).toHaveBeenCalledWith(
+      'quiz_result_reveal',
+      expect.objectContaining({ label: '答案', audioScope: 'local' }),
+    )
     expect(emitReviewCelebrationMock).not.toHaveBeenCalledWith(
       expect.objectContaining({ kind: 'quiz_correct' }),
     )
@@ -284,29 +306,22 @@ describe('PalaceQuizPage core flows', () => {
     })
   })
 
-  it('practices multiple-choice questions before short-answer questions', async () => {
-    getPalaceQuizQuestionsApiMock.mockResolvedValue({
-      items: [baseQuestions[1], baseQuestions[2], baseQuestions[0]],
-    })
+  it('opens the shared answer window at the question selected from the browsable list', async () => {
     renderPage()
 
-    expect(await screen.findByText('细胞的控制中心是？')).toBeTruthy()
-    expect(screen.getByText('选择题')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: '下一题' }))
+    fireEvent.click(await screen.findByRole('button', { name: /细胞核的主要作用是什么/ }))
+
     expect(await screen.findByText('细胞核的主要作用是什么？')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: '下一题' }))
-    expect(await screen.findByText('简述有丝分裂的意义。')).toBeTruthy()
-    expect(screen.getByText('简答题')).toBeTruthy()
+    expect(screen.getByText('已完成 0 / 3 题')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '做题配置' })).toBeTruthy()
   })
 
-  it('reveals short-answer reference content after submit', async () => {
-    window.localStorage.setItem('memory_anki_palace_quiz_view_mode', 'list')
+  it('opens short-answer questions in the shared window and reveals reference content', async () => {
     renderPage()
+    fireEvent.click(await screen.findByRole('button', { name: /简述有丝分裂的意义/ }))
 
-    expect(await screen.findByText('简述有丝分裂的意义。')).toBeTruthy()
-    fireEvent.change(screen.getByPlaceholderText('先写下你的答案，再点击提交'), {
-      target: { value: '能让细胞分裂。' },
-    })
+    const answerInput = await screen.findByPlaceholderText('先写下你的答案，再点击提交')
+    fireEvent.change(answerInput, { target: { value: '能让细胞分裂。' } })
     fireEvent.click(screen.getByRole('button', { name: '提交答案' }))
 
     expect(await screen.findByText('参考答案')).toBeTruthy()
@@ -315,12 +330,19 @@ describe('PalaceQuizPage core flows', () => {
   })
 
   it('uses Ctrl+Z to retry only the current question and preserves native undo in answer inputs', async () => {
+    window.localStorage.setItem(QUIZ_ANSWER_MODE_STORAGE_KEY, JSON.stringify({ mcqMode: 'choice' }))
+    resetClientPreferenceCacheForTest()
     renderPage()
     expect(await screen.findByText('细胞的控制中心是？')).toBeTruthy()
+    await startPractice('细胞的控制中心是？')
 
-    fireEvent.click(screen.getByRole('button', { name: 'B. 细胞核' }))
+    fireEvent.click(await screen.findByRole('button', { name: /^(B\. )?细胞核$/ }))
     expect(await screen.findByText('回答正确')).toBeTruthy()
-    const correctOption = screen.getByRole('button', { name: /^(B\. )?细胞核$/ })
+    // Scope every query to the shared window: the palace list behind it is
+    // aria-hidden, and its rows are not navigation targets while the window owns
+    // the keyboard.
+    const dialog = screen.getByTestId('freestyle-scope-quiz-dialog')
+    const correctOption = within(dialog).getByRole('button', { name: /^(B\. )?细胞核$/ })
     expect(correctOption.className).toContain('border-success')
 
     const retryEvent = new KeyboardEvent('keydown', {
@@ -332,13 +354,13 @@ describe('PalaceQuizPage core flows', () => {
     window.dispatchEvent(retryEvent)
     expect(retryEvent.defaultPrevented).toBe(true)
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /^(B\. )?细胞核$/ }).className).not.toContain('border-success')
+      expect(within(dialog).getByRole('button', { name: /^(B\. )?细胞核$/ }).className).not.toContain('border-success')
     })
-    expect(screen.queryByText('简述有丝分裂的意义。')).toBeNull()
 
-    fireEvent.click(screen.getByRole('button', { name: '下一题' }))
-    fireEvent.click(screen.getByRole('button', { name: '下一题' }))
-    const answerInput = await screen.findByPlaceholderText('先写下你的答案，再点击提交')
+    // Walk the window itself until the short-answer question is on screen.
+    fireEvent.click(within(dialog).getByRole('button', { name: '下一题' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: '下一题' }))
+    const answerInput = await within(dialog).findByPlaceholderText('先写下你的答案，再点击提交')
     fireEvent.change(answerInput, { target: { value: '保留这段草稿' } })
     const undoEvent = new KeyboardEvent('keydown', {
       key: 'z',

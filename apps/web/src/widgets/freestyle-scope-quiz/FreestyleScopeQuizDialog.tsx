@@ -93,7 +93,9 @@ export interface FreestyleScopeQuizQuestionSet {
   palaceId: number | null
   nodeUid?: string | null
   questionIds: readonly number[]
+  initialQuestionId?: number
   initialQuestionStates?: Record<number, QuizRuntimeState>
+  onQuestionNavigate?: (questionId: number) => void
   onQuestionStateChange?: (questionId: number, next: QuizRuntimeState) => void
   onQuestionCompleted?: (questionId: number) => void
   onQuestionDeleted?: (questionId: number) => void
@@ -199,9 +201,20 @@ export function FreestyleScopeQuizDialog(props: FreestyleScopeQuizDialogProps) {
     palaceId: directPalaceId,
     nodeUid: directNodeUid,
     questionIds: questionSet?.questionIds ?? [],
+    initialQuestionId: questionSet?.initialQuestionId,
     initialQuestionStates: questionSet?.initialQuestionStates,
     onQuestionStateChange: questionSet?.onQuestionStateChange,
   })
+  const directQuestionIdRef = useRef<number | null>(null)
+  const directNavigateCallbackRef = useRef(questionSet?.onQuestionNavigate)
+  directNavigateCallbackRef.current = questionSet?.onQuestionNavigate
+  useEffect(() => {
+    if (!isDirect || !open) return
+    const questionId = direct.questions[direct.index]?.id ?? null
+    if (questionId == null || questionId === directQuestionIdRef.current) return
+    directQuestionIdRef.current = questionId
+    directNavigateCallbackRef.current?.(questionId)
+  }, [direct.index, direct.questions, isDirect, open])
   const questions = isDirect ? direct.questions : roundQuestions
   const setQuestions = isDirect ? direct.setQuestions : setRoundQuestions
   const index = isDirect ? direct.index : roundIndex
@@ -676,7 +689,11 @@ export function FreestyleScopeQuizDialog(props: FreestyleScopeQuizDialogProps) {
     setKeyboardOptionIndex,
     interactionRootRef: questionInteractionRef,
     onPreviousQuestion: () => goToIndex(Math.max(0, index - 1)),
-    onNextQuestion: () => goToIndex(Math.min(Math.max(questions.length - 1, 0), index + 1)),
+    onNextQuestion: () => {
+      const nextIndex = Math.min(Math.max(questions.length - 1, 0), index + 1)
+      goToIndex(nextIndex)
+      if (isDirect) direct.setIndex(nextIndex)
+    },
     // Visible option buttons own selection, feedback and immediate shuffling.
     onSelectOption: noop,
     onToggleMark: () => {

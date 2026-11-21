@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState, type ComponentType } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { BookOpen } from 'lucide-react'
-import { useAiRunConfigDialog } from '@/modules/settings/public'
 import { PalaceQuizManagePanel } from '@/modules/quiz/ui/palace-quiz/components/PalaceQuizManagePanel'
 import {
   PalaceMemoryLookupDialog,
@@ -16,15 +15,9 @@ import {
   listQuestionNodeBindingsApi,
   resetPalaceQuizQuestionAttemptsApi,
 } from '@/modules/quiz/domain/quiz-entity/api'
-import {
-  beginQuizQuestionMarkRequest,
-  commitQuizQuestionMark,
-  isCurrentQuizQuestionMarkRequest,
-  useQuizDwellMs,
-} from '@/modules/quiz/domain/quiz-entity'
+import { useQuizSessionProgress } from '@/modules/quiz/domain/quiz-entity'
 import type { PalaceQuizQuestion, QuizNodeBindingEdge } from '@/shared/api/contracts'
 import { usePalaceQuizManagement } from '@/modules/quiz/ui/palace-quiz/hooks/usePalaceQuizManagement'
-import { usePalaceQuizPractice } from '@/modules/quiz/ui/palace-quiz/hooks/usePalaceQuizPractice'
 import { usePalaceQuizQuestionBrowser } from '@/modules/quiz/ui/palace-quiz/hooks/usePalaceQuizQuestionBrowser'
 import { usePalaceQuizResources } from '@/modules/quiz/ui/palace-quiz/hooks/usePalaceQuizResources'
 import { readInitialTab, type PalaceQuizTabKey } from '@/modules/quiz/ui/palace-quiz/model/palaceQuizPage'
@@ -37,78 +30,78 @@ import { dispatchGlobalFeedback } from '@/shared/feedback/globalFeedbackModel'
 import { toast } from '@/shared/feedback/toast'
 import { useLiveStudySurfaceMirror } from '@/modules/session/public'
 import {
-  applyPalaceQuizLiveView,
   decodePalaceQuizLiveView,
   palaceQuizSameInteraction,
   type PalaceQuizLiveView,
 } from '@/modules/quiz/ui/palace-quiz/model/palaceQuizLiveView'
 
-export default function PalaceQuizPage() {
+export interface PalaceQuizAnswerWindowProps {
+  open: boolean
+  onClose: () => void
+  palaceId: number
+  questionIds: readonly number[]
+  initialQuestionId?: number
+  onQuestionNavigate: (questionId: number) => void
+  onQuestionDeleted: (questionId: number) => void
+}
+
+const ignoreRemoteView = () => {}
+
+export default function PalaceQuizPage({ AnswerWindow }: { AnswerWindow?: ComponentType<PalaceQuizAnswerWindowProps> }) {
   const { isActive, fullPath } = useRouteResidency()
   const { id } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
+  const [answerLaunch, setAnswerLaunch] = useState<{ questionId?: number } | null>(null)
   const parsedPalaceId = id ? Number(id) : null
   const palaceId =
     parsedPalaceId != null && Number.isFinite(parsedPalaceId) && parsedPalaceId > 0
       ? parsedPalaceId
       : null
-  const [activeTab, setActiveTab] = useState<PalaceQuizTabKey>(() => readInitialTab(searchParams))
-  const [memoryLookupOpen, setMemoryLookupOpen] = useState(false)
+  const activeTab = readInitialTab(searchParams)
+  const setActiveTab = (tab: PalaceQuizTabKey) => {
+    setAnswerLaunch(null)
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current)
+      next.set('tab', tab)
+      return next
+    }, { replace: true })
+  }
   const [resetAttemptsDialogOpen, setResetAttemptsDialogOpen] = useState(false)
   const [resetAttemptsLoading, setResetAttemptsLoading] = useState(false)
+  const [search, setSearch] = useState('')
+  const [memoryLookupOpen, setMemoryLookupOpen] = useState(false)
   const [knowledgePickerOpen, setKnowledgePickerOpen] = useState(false)
   const [knowledgePickerEdges, setKnowledgePickerEdges] = useState<QuizNodeBindingEdge[]>([])
   const [knowledgeDigressionOpen, setKnowledgeDigressionOpen] = useState(false)
-  const [knowledgeDigressionEdge, setKnowledgeDigressionEdge] = useState<QuizNodeBindingEdge | null>(
-    null,
-  )
-  const { promptForAiOptions, aiRunConfigDialog } = useAiRunConfigDialog()
+  const [knowledgeDigressionEdge, setKnowledgeDigressionEdge] = useState<QuizNodeBindingEdge | null>(null)
   const { palace, questions, loading, error, setQuestions, refreshQuestions } =
     usePalaceQuizResources(palaceId)
   const miniPalaces = palace?.segments || []
 
+  const browser = usePalaceQuizQuestionBrowser({
+    questions,
+    segmentIds: miniPalaces.map((item) => item.id),
+  })
+  const quizSession = useQuizSessionProgress()
+  const practiceQuestions = browser.filteredQuestions
+  const selectQuestion = useCallback(browser.navigateToQuestion, [browser.navigateToQuestion])
+  const launchAnswers = useCallback((questionId?: number) => {
+    setAnswerLaunch({ questionId })
+  }, [])
   const emitQuizFeedback = (
     event: Parameters<typeof dispatchGlobalFeedback>[0],
     options?: Parameters<typeof dispatchGlobalFeedback>[1],
   ) => {
     dispatchGlobalFeedback(event, options)
   }
-
-  const browser = usePalaceQuizQuestionBrowser({
-    questions,
-    segmentIds: miniPalaces.map((item) => item.id),
-  })
-  const dwell = useQuizDwellMs()
-  const practice = usePalaceQuizPractice({
-    palaceId,
-    setQuestions,
-    promptForAiOptions,
-    emitQuizFeedback,
-    getDurationMs: dwell.elapsedMs,
-  })
   const management = usePalaceQuizManagement({
     palaceId,
     questions,
     visibleQuestionIds: browser.visibleQuestionIds,
     refreshQuestions,
-    removeQuestionStates: practice.removeQuestionStates,
+    removeQuestionStates: quizSession.removeQuestionStates,
     emitQuizFeedback,
   })
-  useEffect(() => {
-    const nextTab = readInitialTab(searchParams)
-    setActiveTab((current) => (current === nextTab ? current : nextTab))
-  }, [searchParams])
-
-  useEffect(() => {
-    const currentTab = searchParams.get('tab')
-    if (currentTab === activeTab) return
-    setSearchParams((current) => {
-      const next = new URLSearchParams(current)
-      next.set('tab', activeTab)
-      return next
-    }, { replace: true })
-  }, [activeTab, searchParams, setSearchParams])
-
   const { focusNodeUids: lookupFocusNodeUids, palaceIdOverride: lookupPalaceIdOverride, pending: lookupFocusPending } =
     useQuestionLookupFocus(browser.currentQuestion, true, palaceId)
 
@@ -117,52 +110,28 @@ export default function PalaceQuizPage() {
   const quizLiveView = useMemo<PalaceQuizLiveView>(() => ({
     palaceId,
     tab: activeTab,
-    viewMode: browser.viewMode,
+    viewMode: 'single',
     questionId: browser.currentQuestion?.id ?? null,
     questionIndex: browser.currentQuestionIndex,
     questionState: browser.currentQuestion
       ? {
           questionId: browser.currentQuestion.id,
-          state: practice.questionStates[browser.currentQuestion.id] || {},
+          state: quizSession.questionStates[browser.currentQuestion.id] || {},
         }
       : null,
   }), [
     activeTab,
     browser.currentQuestion,
     browser.currentQuestionIndex,
-    browser.viewMode,
     palaceId,
-    practice.questionStates,
-  ])
-  const applyQuizLiveView = useCallback((remote: PalaceQuizLiveView) => {
-    const questionIds = browser.filteredQuestions.map((question) => question.id)
-    const next = applyPalaceQuizLiveView(
-      {
-        tab: activeTab,
-        viewMode: browser.viewMode,
-        questionIndex: browser.currentQuestionIndex,
-        questionStates: practice.questionStates,
-      },
-      remote,
-      questionIds,
-    )
-    if (!next.ready) return false
-    setActiveTab(next.tab)
-    browser.setViewMode(next.viewMode)
-    browser.setCurrentQuestionIndex(next.questionIndex)
-    practice.setQuestionStates(next.questionStates)
-    return true
-  }, [
-    activeTab,
-    browser,
-    practice,
+    quizSession.questionStates,
   ])
   useLiveStudySurfaceMirror({
     surface: 'palace_quiz',
     route: fullPath,
     view: quizLiveView,
     decode: decodePalaceQuizLiveView,
-    apply: applyQuizLiveView,
+    apply: ignoreRemoteView,
     sameInteraction: palaceQuizSameInteraction,
     isActive,
     publishWhen: browser.filteredQuestions.length > 0,
@@ -181,54 +150,8 @@ export default function PalaceQuizPage() {
     browser.setQuestionScope(scope)
   }
 
-  const handleViewModeChange = (viewMode: typeof browser.viewMode, label: string) => {
-    emitQuizFeedback('quiz_nav_view_switch', { label, audioScope: 'global' })
-    browser.setViewMode(viewMode)
-  }
-
-  const handleQuestionNavigate = (direction: 'prev' | 'next') => {
-    emitQuizFeedback(
-      direction === 'prev' ? 'quiz_nav_question_prev' : 'quiz_nav_question_next',
-      { label: direction === 'prev' ? '上一题' : '下一题', audioScope: 'local' },
-    )
-    browser.setCurrentQuestionIndex((current) =>
-      direction === 'prev'
-        ? Math.max(current - 1, 0)
-        : Math.min(current + 1, browser.filteredQuestions.length - 1),
-    )
-  }
-
-  const handleToggleMark = async (question: (typeof questions)[number], marked: boolean) => {
-    const questionId = question.id
-    const previousMarked = Boolean(question.marked)
-    const token = beginQuizQuestionMarkRequest(questionId)
-    const stillCurrent = () => isCurrentQuizQuestionMarkRequest(questionId, token)
-    try {
-      await commitQuizQuestionMark({
-        questionId,
-        marked,
-        previousMarked,
-        token,
-        stillCurrent,
-        apply: (nextMarked, saved) => {
-          setQuestions((current) => current.map((item) => {
-            if (item.id !== questionId) return item
-            if (saved && saved.id === item.id) return { ...item, ...saved, marked: nextMarked }
-            return { ...item, marked: nextMarked }
-          }))
-        },
-      })
-    } catch (error) {
-      if (!stillCurrent()) return
-      toast.error(error instanceof Error ? error.message : '保存标记失败。')
-    }
-  }
-
-  const handleOpenQuestionEditor = (question: (typeof questions)[number]) => {
-    const opened = management.handleEditQuestion(question)
-    if (opened) {
-      setActiveTab('manage')
-    }
+  const handleOpenQuestionEditor = (question: PalaceQuizQuestion) => {
+    if (management.handleEditQuestion(question) && activeTab !== 'manage') setActiveTab('manage')
   }
 
   const openKnowledgeEdge = (edge: QuizNodeBindingEdge) => {
@@ -237,31 +160,27 @@ export default function PalaceQuizPage() {
   }
 
   const handleViewKnowledge = async (question: PalaceQuizQuestion) => {
+    selectQuestion(question.id)
     try {
-      const response = await listQuestionNodeBindingsApi(question.id)
-      const edges = response.items || []
-      if (edges.length === 0) {
-        toast.message('该题还没有绑定知识点节点。可在宫殿编辑「题库结合」或手改绑定中关联。')
-        return
+      const { items: edges } = await listQuestionNodeBindingsApi(question.id)
+      if (!edges?.length) toast.message('该题还没有绑定知识点。')
+      else if (edges.length === 1) openKnowledgeEdge(edges[0])
+      else {
+        setKnowledgePickerEdges(edges)
+        setKnowledgePickerOpen(true)
       }
-      if (edges.length === 1) {
-        openKnowledgeEdge(edges[0])
-        return
-      }
-      setKnowledgePickerEdges(edges)
-      setKnowledgePickerOpen(true)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '加载知识点绑定失败。')
     }
   }
 
   const handleResetVisibleAttempts = async () => {
-    const questionIds = browser.filteredQuestions.map((question) => question.id)
-    if (questionIds.length === 0) return
+    const questionIds = browser.visibleQuestionIds
+    if (questionIds.length === 0 || resetAttemptsLoading) return
     setResetAttemptsLoading(true)
     try {
       const result = await resetPalaceQuizQuestionAttemptsApi(questionIds)
-      practice.removeQuestionStates(questionIds)
+      quizSession.removeQuestionStates(questionIds)
       await refreshQuestions()
       toast.success(`已清空 ${result.reset_count} 道题的做题进度。`)
       emitQuizFeedback('quiz_answer_reset', { label: '清空进度', audioScope: 'global' })
@@ -286,7 +205,22 @@ export default function PalaceQuizPage() {
     <div
       className="space-y-5"
     >
-      {aiRunConfigDialog}
+      {AnswerWindow && answerLaunch && isActive && activeTab === 'practice' && !loading && browser.visibleQuestionIds.length > 0 ? (
+        <AnswerWindow
+          open
+          onClose={() => {
+            setAnswerLaunch(null)
+            void refreshQuestions().catch(() => toast.error('刷新题库失败。'))
+          }}
+          palaceId={palaceId}
+          questionIds={browser.visibleQuestionIds}
+          initialQuestionId={answerLaunch.questionId}
+          onQuestionNavigate={selectQuestion}
+          onQuestionDeleted={(questionId) => {
+            setQuestions((current) => current.filter((question) => question.id !== questionId))
+          }}
+        />
+      ) : null}
       <ConfirmDialog
         open={resetAttemptsDialogOpen}
         onOpenChange={setResetAttemptsDialogOpen}
@@ -320,7 +254,6 @@ export default function PalaceQuizPage() {
         edge={knowledgeDigressionEdge}
       />
       <PageHeader
-        eyebrow="宫殿做题"
         title={palace?.title ? `${palace.title} · 配套习题` : '宫殿配套习题'}
         actions={
           <>
@@ -370,42 +303,16 @@ export default function PalaceQuizPage() {
         <PalaceQuizPracticePanel
           questions={questions}
           miniPalaces={miniPalaces}
+          onStartPractice={launchAnswers}
           questionScope={browser.questionScope}
           rootQuestionCount={browser.rootQuestionCount}
-          viewMode={browser.viewMode}
-          filteredQuestions={browser.filteredQuestions}
-          currentQuestion={browser.currentQuestion}
-          currentQuestionIndex={browser.currentQuestionIndex}
-          questionStates={practice.questionStates}
-          onChoiceSelect={practice.handleChoiceSelect}
-          onStateChange={practice.updateQuestionState}
-          onShortAnswerSubmit={practice.handleShortAnswerSubmit}
-          onToggleMark={(question, marked) => void handleToggleMark(question, marked)}
-          onQuestionUpdated={(question) =>
-            setQuestions((current) =>
-              current.map((item) => (item.id === question.id ? question : item)),
-            )
-          }
-          onAnswerReset={(questionId) => {
-            practice.handleResetQuestionState(questionId)
-            dwell.restart(questionId)
-          }}
-          onShown={dwell.restart}
-          getDurationMs={dwell.elapsedMs}
-          onReset={(questionId) => {
-            practice.handleResetQuestionState(questionId)
-            dwell.restart(questionId)
-          }}
-          onResetVisibleAttempts={() => setResetAttemptsDialogOpen(true)}
-          onEdit={handleOpenQuestionEditor}
+          filteredQuestions={practiceQuestions}
+          search={search}
+          onSearchChange={setSearch}
+          onViewKnowledge={(question) => void handleViewKnowledge(question)}
           onScopeFeedback={handleScopeChange}
-          onViewFeedback={handleViewModeChange}
-          onNavigateFeedback={handleQuestionNavigate}
           resetAttemptsLoading={resetAttemptsLoading}
-          onViewKnowledge={(question) => {
-            void handleViewKnowledge(question)
-          }}
-          comboScopeKey={`palace-quiz:${palaceId}`}
+          onResetVisibleAttempts={() => setResetAttemptsDialogOpen(true)}
         />
       ) : null}
 
@@ -440,7 +347,7 @@ export default function PalaceQuizPage() {
             )
           }
           onImported={(items) => {
-            practice.removeQuestionStates(items.map((item) => item.id))
+            quizSession.removeQuestionStates(items.map((item) => item.id))
             void refreshQuestions()
           }}
         />

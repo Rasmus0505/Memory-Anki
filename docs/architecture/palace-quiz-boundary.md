@@ -49,6 +49,10 @@ quiz.application -> platform.application UnitOfWork
   <!-- invariant: palace-quiz-marked-index-rose -->
   - 测验 → 多边选择器 → `QuizKnowledgeDigressionDialog` 完整只读目标脑图 + 固定的**返回做题**（叠加层；尝试草稿保留在父级内存中；PWA 返回先关闭跳转）。
 
+## 宫殿题库页的做题列表
+
+宫殿页的练习标签不是第二套做题器。列表里的「开始做题」和每一行题干都通过 `AnswerWindow` 打开同一个共享窗口（`source="questions"`），并把被点题目的 id 作为 `initialQuestionId`，所以窗口的第一屏就是那道题。题目集来自当前范围筛选后的 `questionIds`；搜索只缩小列表显示，不改变窗口里的题目集，也不写轮次。关闭窗口回到列表时保留搜索词与范围筛选，并刷新题库数据。判题、即时反馈、重做（Ctrl+Z）、题目导航和「已做」账本都留在共享窗口/`quizSessionProgress` 里，页面不得再实现第二份。
+
 ## 删卡后的绑定回收
 
 删掉一张卡片不能把题目一起带走。保存宫殿导图时（`save_palace_editor_state` 的 `editor_doc` 分支）在**同一事务**里调用 `quiz.public.commands.rehome_orphaned_question_bindings`：

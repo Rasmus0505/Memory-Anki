@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { PalaceQuizQuestion } from '@/shared/api/contracts'
-import type { PalaceQuizScopeKey, PalaceQuizViewMode } from '@/modules/quiz/ui/palace-quiz/model/palaceQuizPage'
-import { QUIZ_VIEW_MODE_STORAGE_KEY, readPersistedViewMode } from '@/modules/quiz/ui/palace-quiz/model/palaceQuizPage'
+import type { PalaceQuizScopeKey } from '@/modules/quiz/ui/palace-quiz/model/palaceQuizPage'
 import { sortPalaceQuizQuestions } from '@/modules/quiz/ui/palace-quiz/model/questionBankOrder'
 
 export function usePalaceQuizQuestionBrowser({
@@ -11,7 +10,6 @@ export function usePalaceQuizQuestionBrowser({
   questions: PalaceQuizQuestion[]
   segmentIds: number[]
 }) {
-  const [viewMode, setViewMode] = useState<PalaceQuizViewMode>(readPersistedViewMode)
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const [questionScope, setQuestionScope] = useState<PalaceQuizScopeKey>('all')
 
@@ -34,16 +32,15 @@ export function usePalaceQuizQuestionBrowser({
     [filteredQuestions],
   )
   const currentQuestion = filteredQuestions[currentQuestionIndex] || null
+
+  const navigateToQuestion = useCallback((questionId: number) => {
+    const index = visibleQuestionIds.indexOf(questionId)
+    if (index >= 0) setCurrentQuestionIndex(index)
+  }, [setCurrentQuestionIndex, visibleQuestionIds])
   const rootQuestionCount = useMemo(
     () => questions.filter((question) => !(question.segment_ids?.length)).length,
     [questions],
   )
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem(QUIZ_VIEW_MODE_STORAGE_KEY, viewMode)
-    }
-  }, [viewMode])
 
   useEffect(() => {
     setCurrentQuestionIndex((current) => {
@@ -61,8 +58,6 @@ export function usePalaceQuizQuestionBrowser({
   }, [segmentIds, questionScope])
 
   return {
-    viewMode,
-    setViewMode,
     currentQuestionIndex,
     setCurrentQuestionIndex,
     questionScope,
@@ -70,6 +65,7 @@ export function usePalaceQuizQuestionBrowser({
     filteredQuestions,
     visibleQuestionIds,
     currentQuestion,
+    navigateToQuestion,
     rootQuestionCount,
   }
 }

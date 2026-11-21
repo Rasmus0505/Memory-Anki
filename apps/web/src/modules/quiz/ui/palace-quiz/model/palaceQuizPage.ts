@@ -39,8 +39,6 @@ export interface PalaceQuizPageMeta {
   }>
 }
 
-export const QUIZ_VIEW_MODE_STORAGE_KEY = 'memory_anki_palace_quiz_view_mode'
-
 const QUESTION_SOURCE_LABELS: Record<string, string> = {
   image_batch: '多图生成',
   image_single: '单图生成',
@@ -58,11 +56,6 @@ const QUESTION_TYPE_LABELS = {
   ordering: '排序题',
   categorization: '归类题',
 } satisfies Record<PalaceQuizQuestionType, string>
-
-export function readPersistedViewMode(): PalaceQuizViewMode {
-  if (typeof window === 'undefined') return 'single'
-  return window.localStorage.getItem(QUIZ_VIEW_MODE_STORAGE_KEY) === 'list' ? 'list' : 'single'
-}
 
 export function readInitialTab(searchParams: URLSearchParams): PalaceQuizTabKey {
   const requested = searchParams.get('tab')

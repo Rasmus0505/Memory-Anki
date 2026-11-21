@@ -87,7 +87,7 @@ describe('remaining live-study surfaces', () => {
     const applied = applyPalaceQuizLiveView(
       {
         tab: 'manage',
-        viewMode: 'list',
+        viewMode: 'single',
         questionIndex: 0,
         questionStates: {},
       },

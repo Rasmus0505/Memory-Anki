@@ -2,12 +2,15 @@ import { render } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Route, Routes, MemoryRouter } from 'react-router-dom'
 import { vi } from 'vitest'
-import PalaceQuizPage from '@/modules/quiz/ui/palace-quiz/PalaceQuizPage'
+import PalaceQuizPage, { type PalaceQuizAnswerWindowProps } from '@/modules/quiz/ui/palace-quiz/PalaceQuizPage'
+import { reloadQuizPracticeProgressFromStorage } from '@/modules/quiz/domain/quiz-entity/model/quizSessionProgress'
+import { FreestyleScopeQuizDialog } from '@/widgets/freestyle-scope-quiz'
 
 export const getPalaceApiMock = vi.fn()
 export const getPalacesGroupedApiMock = vi.fn()
 export const getPalaceEditorApiMock = vi.fn()
 export const getPalaceQuizQuestionsApiMock = vi.fn()
+export const getPalaceQuizQuestionsByIdsApiMock = vi.fn()
 export const batchCreateChapterQuizQuestionsApiMock = vi.fn()
 export const batchCreatePalaceQuizQuestionsApiMock = vi.fn()
 export const batchDeletePalaceQuizQuestionsApiMock = vi.fn()
@@ -100,6 +103,7 @@ vi.mock('@/modules/settings/domain/ai-runtime-entity', () => ({
 
 vi.mock('@/modules/quiz/domain/quiz-entity/api', () => ({
   getPalaceQuizQuestionsApi: (...args: unknown[]) => getPalaceQuizQuestionsApiMock(...args),
+  getPalaceQuizQuestionsByIdsApi: (...args: unknown[]) => getPalaceQuizQuestionsByIdsApiMock(...args),
   createPalaceQuizQuestionApi: vi.fn(),
   batchCreateChapterQuizQuestionsApi: (...args: unknown[]) =>
     batchCreateChapterQuizQuestionsApiMock(...args),
@@ -369,17 +373,32 @@ export const baseQuestions = [
   },
 ]
 
+const TestAnswerWindow = (props: PalaceQuizAnswerWindowProps) => (
+  <FreestyleScopeQuizDialog
+    source="questions"
+    open={props.open}
+    onOpenChange={(open) => { if (!open) props.onClose() }}
+    questionSet={{
+      palaceId: props.palaceId,
+      questionIds: props.questionIds,
+      initialQuestionId: props.initialQuestionId,
+      onQuestionNavigate: props.onQuestionNavigate,
+      onQuestionDeleted: props.onQuestionDeleted,
+    }}
+  />
+)
+
 export function renderPage(
   initialEntry = '/palaces/1/quiz',
   routePath = '/palaces/:id/quiz',
 ) {
-  // 真实 AppProviders 在根部挂了 QueryClientProvider；宫殿目录查询需要它。
+  // 真实 AppProviders 在根部挂了 QueryClientProvider；宫殿目录查询需要它.
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter initialEntries={[initialEntry]}>
         <Routes>
-          <Route path={routePath} element={<PalaceQuizPage />} />
+          <Route path={routePath} element={<PalaceQuizPage AnswerWindow={TestAnswerWindow} />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -390,12 +409,18 @@ export function setupPalaceQuizPageTest() {
   vi.clearAllMocks()
   vi.stubGlobal('confirm', vi.fn(() => true))
   window.localStorage.clear()
+  // The shared 做题 ledger also lives in module memory; clearing storage alone
+  // would leak the previous test's answered questions into the next one.
+  reloadQuizPracticeProgressFromStorage()
   getPalaceApiMock.mockResolvedValue(palaceResponse)
   getPalacesGroupedApiMock.mockResolvedValue(palaceLookupGroupedResponse)
   getPalaceEditorApiMock.mockImplementation(async (palaceId: number) =>
     buildPalaceEditorResponse(palaceId),
   )
   getPalaceQuizQuestionsApiMock.mockResolvedValue({ items: baseQuestions })
+  getPalaceQuizQuestionsByIdsApiMock.mockImplementation(async (ids: number[]) => ({
+    items: baseQuestions.filter((question) => ids.includes(question.id)),
+  }))
   listQuestionNodeBindingsApiMock.mockResolvedValue({ items: [], item_count: 0, question_id: 0 })
   batchCreateChapterQuizQuestionsApiMock.mockResolvedValue({ items: [] })
   batchCreatePalaceQuizQuestionsApiMock.mockResolvedValue({ items: [] })

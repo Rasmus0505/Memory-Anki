@@ -38,6 +38,7 @@ export function useDirectQuestionSetQuiz({
   palaceId,
   nodeUid,
   questionIds,
+  initialQuestionId,
   initialQuestionStates,
   onQuestionStateChange,
   onQuestionStateChangeRef,
@@ -47,6 +48,7 @@ export function useDirectQuestionSetQuiz({
   palaceId: number | null
   nodeUid?: string | null
   questionIds: readonly number[]
+  initialQuestionId?: number
   initialQuestionStates?: Record<number, QuizRuntimeState>
   onQuestionStateChange?: (questionId: number, next: QuizRuntimeState) => void
   /** Same callback behind a ref so loading is not restarted by a new identity. */
@@ -168,12 +170,12 @@ export function useDirectQuestionSetQuiz({
             .filter((question) => restored[question.id]?.resolved)
             .map((question) => question.id),
         )
-        setIndex(
-          firstIncompleteQuestionIndex(
-            ordered.map((question) => question.id),
-            completedIds,
-          ),
-        )
+        const preferredIndex = initialQuestionId == null
+          ? -1
+          : ordered.findIndex((question) => question.id === initialQuestionId)
+        setIndex(preferredIndex >= 0
+          ? preferredIndex
+          : firstIncompleteQuestionIndex(ordered.map((question) => question.id), completedIds))
         setQuestionStates(restored)
       })
       .catch((error) => {

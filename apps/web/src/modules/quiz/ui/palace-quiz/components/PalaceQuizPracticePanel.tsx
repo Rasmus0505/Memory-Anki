@@ -1,107 +1,50 @@
-import { useEffect } from 'react'
-import { isKeyboardShortcutSuspended } from '@/shared/keyboard/keyboardTargets'
-import { Button } from '@/shared/components/ui/button'
+import { useMemo } from 'react'
+import { Search } from 'lucide-react'
 import { Badge } from '@/shared/components/ui/badge'
+import { Button } from '@/shared/components/ui/button'
 import { Card, CardContent } from '@/shared/components/ui/card'
-import { QuizQuestionCard } from '@/modules/quiz/ui/palace-quiz/components/palaceQuizCards'
-import type { QuizRuntimeState } from '@/modules/quiz/domain/quiz-entity'
 import type { PalaceSegmentSummary, PalaceQuizQuestion } from '@/shared/api/contracts'
-import type { PalaceQuizScopeKey, PalaceQuizViewMode } from '@/modules/quiz/ui/palace-quiz/model/palaceQuizPage'
+import type { PalaceQuizScopeKey } from '@/modules/quiz/ui/palace-quiz/model/palaceQuizPage'
+
+function filterQuestionText(question: PalaceQuizQuestion, keyword: string): boolean {
+  return [question.stem, question.analysis, question.source_meta?.extra_prompt]
+    .some((value) => value?.toLocaleLowerCase().includes(keyword))
+}
 
 export function PalaceQuizPracticePanel({
   questions,
+  onStartPractice,
   miniPalaces,
   questionScope,
   rootQuestionCount,
-  viewMode,
   filteredQuestions,
-  currentQuestion,
-  currentQuestionIndex,
-  questionStates,
-  onChoiceSelect,
-  onStateChange,
-  onShortAnswerSubmit,
-  onToggleMark,
-  onQuestionUpdated,
-  onAnswerReset,
-  onShown,
-  getDurationMs,
-  onReset,
-  onResetVisibleAttempts,
-  onEdit,
-  onScopeFeedback,
-  onViewFeedback,
-  onNavigateFeedback,
-  resetAttemptsLoading,
+  search,
+  onSearchChange,
   onViewKnowledge,
-  comboScopeKey = null,
+  onScopeFeedback,
+  resetAttemptsLoading,
+  onResetVisibleAttempts,
 }: {
   questions: PalaceQuizQuestion[]
   miniPalaces: PalaceSegmentSummary[]
+  onStartPractice: (questionId?: number) => void
   questionScope: PalaceQuizScopeKey
   rootQuestionCount: number
-  viewMode: PalaceQuizViewMode
   filteredQuestions: PalaceQuizQuestion[]
-  currentQuestion: PalaceQuizQuestion | null
-  currentQuestionIndex: number
-  questionStates: Record<number, QuizRuntimeState>
-  onChoiceSelect: (question: PalaceQuizQuestion, optionId: string) => void
-  onStateChange: (questionId: number, updater: (current: QuizRuntimeState) => QuizRuntimeState) => void
-  onShortAnswerSubmit: (questionId: number) => void
-  onToggleMark?: (question: PalaceQuizQuestion, marked: boolean) => void
-  onQuestionUpdated?: (question: PalaceQuizQuestion) => void
-  onAnswerReset?: (questionId: number) => void
-  onShown?: (questionId: number) => void
-  getDurationMs?: (questionId: number) => number | null
-  onReset: (questionId: number) => void
-  onResetVisibleAttempts: () => void
-  onEdit: (question: PalaceQuizQuestion) => void
+  search: string
+  onSearchChange: (value: string) => void
+  onViewKnowledge: (question: PalaceQuizQuestion) => void
   onScopeFeedback: (scope: PalaceQuizScopeKey, label: string) => void
-  onViewFeedback: (viewMode: PalaceQuizViewMode, label: string) => void
-  onNavigateFeedback: (direction: 'prev' | 'next') => void
   resetAttemptsLoading: boolean
-  onViewKnowledge?: (question: PalaceQuizQuestion) => void
-  comboScopeKey?: string | null
+  onResetVisibleAttempts: () => void
 }) {
-  useEffect(() => {
-    if (viewMode !== 'single' || !currentQuestion) return
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'z') return
-      if (event.altKey || event.shiftKey || event.repeat) return
-      const target = event.target
-      if (isKeyboardShortcutSuspended()) return
-      if (target instanceof HTMLElement) {
-        if (target.isContentEditable) return
-        if (target.closest('input, textarea, select')) return
-      }
-      event.preventDefault()
-      ;(onAnswerReset ?? onReset)(currentQuestion.id)
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [currentQuestion, onAnswerReset, onReset, viewMode])
+  const visibleQuestions = useMemo(() => {
+    const keyword = search.trim().toLocaleLowerCase()
+    return keyword ? filteredQuestions.filter((question) => filterQuestionText(question, keyword)) : filteredQuestions
+  }, [filteredQuestions, search])
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          type="button"
-          variant={viewMode === 'single' ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => onViewFeedback('single', '逐题模式')}
-        >
-          逐题模式
-        </Button>
-        <Button
-          type="button"
-          variant={viewMode === 'list' ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => onViewFeedback('list', '整页列表')}
-        >
-          整页列表
-        </Button>
-      </div>
-
       <div className="flex flex-wrap items-center gap-2">
         <Button
           type="button"
@@ -118,9 +61,7 @@ export function PalaceQuizPracticePanel({
           onClick={() => onScopeFeedback('palace', '大宫殿')}
         >
           大宫殿
-          <Badge variant="secondary" className="ml-2">
-            {rootQuestionCount}
-          </Badge>
+          <Badge variant="secondary" className="ml-2">{rootQuestionCount}</Badge>
         </Button>
         {miniPalaces.map((miniPalace) => (
           <Button
@@ -147,102 +88,48 @@ export function PalaceQuizPracticePanel({
         </Button>
       </div>
 
-      {filteredQuestions.length === 0 ? (
+      <label className="relative block max-w-lg">
+        <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <input
+          type="search"
+          value={search}
+          onChange={(event) => onSearchChange(event.currentTarget.value)}
+          placeholder="搜索题目"
+          aria-label="搜索题目"
+          className="h-10 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+        />
+      </label>
+
+      {visibleQuestions.length === 0 ? (
         <Card className="border-border/70 bg-card/92">
           <CardContent className="flex min-h-55 items-center justify-center text-sm text-muted-foreground">
             {questions.length === 0
               ? '这个宫殿还没有题目，先去“管理”手动新增。'
-              : '当前范围下还没有题目。'}
+              : search.trim() ? '没有匹配的题目。' : '当前范围下还没有题目。'}
           </CardContent>
         </Card>
-      ) : viewMode === 'single' && currentQuestion ? (
-        <div
-          className="space-y-4"
-          data-recorder-current="true"
-          data-recorder-context="quiz"
-          data-recorder-count={filteredQuestions.length}
-        >
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/70 bg-card/90 px-4 py-3 text-sm">
-            <div>
-              第 {currentQuestionIndex + 1} / {filteredQuestions.length} 题
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {onViewKnowledge ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => onViewKnowledge(currentQuestion)}
-                >
+      ) : (
+        <>
+          <section className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-border/70 bg-card/90 px-4 py-4">
+            <h2 className="font-medium">{visibleQuestions.length} 道关联题目</h2>
+            <Button type="button" onClick={() => onStartPractice(visibleQuestions[0]?.id)}>
+              开始做题
+            </Button>
+          </section>
+          <ol className="space-y-2">
+            {visibleQuestions.map((question) => (
+              <li key={question.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/70 bg-card/90 px-4 py-3">
+                <Button type="button" variant="ghost" className="min-h-10 grow justify-start whitespace-normal text-left" onClick={() => onStartPractice(question.id)}>
+                  <span className="mr-2 text-xs text-muted-foreground">{question.question_type === 'multiple_choice' ? '选择题' : question.question_type === 'short_answer' ? '简答题' : '题目'}</span>
+                  {question.stem}
+                </Button>
+                <Button type="button" size="sm" variant="outline" onClick={() => onViewKnowledge(question)}>
                   查看知识点
                 </Button>
-              ) : null}
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={currentQuestionIndex <= 0}
-                onClick={() => onNavigateFeedback('prev')}
-              >
-                上一题
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={currentQuestionIndex >= filteredQuestions.length - 1}
-                onClick={() => onNavigateFeedback('next')}
-              >
-                下一题
-              </Button>
-            </div>
-          </div>
-          <QuizQuestionCard
-            question={currentQuestion}
-            state={questionStates[currentQuestion.id]}
-            onChoiceSelect={onChoiceSelect}
-            onStateChange={onStateChange}
-            onShortAnswerSubmit={onShortAnswerSubmit}
-            onReset={onReset}
-            onEdit={onEdit}
-            onToggleMark={onToggleMark}
-            onQuestionUpdated={onQuestionUpdated}
-            onAnswerReset={onAnswerReset}
-            onShown={onShown}
-            getDurationMs={getDurationMs}
-            comboScopeKey={comboScopeKey}
-          />
-        </div>
-      ) : (
-        <div className="grid gap-4">
-          {filteredQuestions.map((question) => (
-            <div key={question.id} className="space-y-2">
-              {onViewKnowledge ? (
-                <div className="flex justify-end">
-                  <Button type="button" size="sm" variant="outline" onClick={() => onViewKnowledge(question)}>
-                    查看知识点
-                  </Button>
-                </div>
-              ) : null}
-              <QuizQuestionCard
-                question={question}
-                state={questionStates[question.id]}
-                compact
-                onChoiceSelect={onChoiceSelect}
-                onStateChange={onStateChange}
-                onShortAnswerSubmit={onShortAnswerSubmit}
-                onReset={onReset}
-                onEdit={onEdit}
-                onToggleMark={onToggleMark}
-                onQuestionUpdated={onQuestionUpdated}
-                onAnswerReset={onAnswerReset}
-                onShown={onShown}
-                getDurationMs={getDurationMs}
-                comboScopeKey={null}
-              />
-            </div>
-          ))}
-        </div>
+              </li>
+            ))}
+          </ol>
+        </>
       )}
     </div>
   )

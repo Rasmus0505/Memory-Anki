@@ -1,27 +1,13 @@
-import { useEffect } from 'react'
-import { RotateCcw } from 'lucide-react'
-import { RowContextMenu } from '@/shared/ui/row-context-menu/RowContextMenu'
-import { buildQuestionMenu } from '@/shared/ui/row-context-menu/questionMenu'
-import {
-  QuizQuestionAnswerSurface,
-  QuizQuestionVariantControl,
-  type QuizRuntimeState,
-} from '@/modules/quiz/domain/quiz-entity'
-import {
-  getQuestionOwnershipLabel,
-  getQuestionSourceLabel,
-  getQuestionTypeLabel,
-} from '@/modules/quiz/ui/palace-quiz/model/palaceQuizPage'
 import type {
   PalaceQuizQuestion,
   PalaceQuizQuestionDraft,
   PalaceQuizSourceMeta,
 } from '@/shared/api/contracts'
 import { Badge } from '@/shared/components/ui/badge'
-import { Button } from '@/shared/components/ui/button'
-import { QuizComboChip } from './QuizComboChip'
-import { Card, CardContent, CardHeader } from '@/shared/components/ui/card'
 import { cn } from '@/shared/lib/utils'
+import { Button } from '@/shared/components/ui/button'
+import { getQuestionSourceLabel } from '@/modules/quiz/ui/palace-quiz/model/palaceQuizPage'
+import { Card, CardContent } from '@/shared/components/ui/card'
 
 export function PreviewQuestionAnswerSummary({ question }: { question: PalaceQuizQuestionDraft }) {
   if (question.question_type === 'multiple_choice') {
@@ -118,136 +104,5 @@ export function QuestionSourceBadge({
         {sourceMeta.ai_call_log_id ? <div>AI日志 {sourceMeta.ai_call_log_id}</div> : null}
       </div>
     </details>
-  )
-}
-
-interface QuizQuestionCardProps {
-  question: PalaceQuizQuestion
-  state: QuizRuntimeState | undefined
-  compact?: boolean
-  onChoiceSelect: (question: PalaceQuizQuestion, optionId: string | string[]) => void
-  onStateChange: (
-    questionId: number,
-    updater: (current: QuizRuntimeState) => QuizRuntimeState,
-  ) => void
-  onShortAnswerSubmit: (questionId: number) => void
-  onReset: (questionId: number) => void
-  onEdit: (question: PalaceQuizQuestion) => void
-  onToggleMark?: (question: PalaceQuizQuestion, marked: boolean) => void
-  onQuestionUpdated?: (question: PalaceQuizQuestion) => void
-  onAnswerReset?: (questionId: number) => void
-  onShown?: (questionId: number) => void
-  getDurationMs?: (questionId: number) => number | null
-  /** Streak owner for the 连对 chip (one palace bank); null hides it. */
-  comboScopeKey?: string | null
-}
-
-export function QuizQuestionCard({
-  question,
-  state,
-  compact = false,
-  onChoiceSelect,
-  onStateChange,
-  onShortAnswerSubmit,
-  onReset,
-  onEdit,
-  onToggleMark,
-  onQuestionUpdated,
-  onAnswerReset,
-  onShown,
-  getDurationMs,
-  comboScopeKey = null,
-}: QuizQuestionCardProps) {
-  useEffect(() => {
-    onShown?.(question.id)
-  }, [question.id, onShown])
-
-  return (
-    <RowContextMenu
-      items={buildQuestionMenu({
-        edit: { onSelect: () => onEdit(question) },
-        redo: { onSelect: () => onReset(question.id) },
-        mark: onToggleMark
-          ? {
-            marked: question.marked,
-            onSelect: () => onToggleMark(question, !question.marked),
-          }
-          : undefined,
-        copyStem: { stem: question.stem },
-      })}
-    >
-    <Card className="border-border/70 bg-card/92 data-[state=open]:ring-1 data-[state=open]:ring-primary/40">
-      <CardHeader
-        className={cn(
-          'flex flex-row items-start justify-between gap-3',
-          compact ? 'px-4 py-4' : '',
-        )}
-      >
-        <div className={cn(compact ? 'space-y-1.5' : 'space-y-2')}>
-          <div className={cn('flex flex-wrap items-center', compact ? 'gap-1.5' : 'gap-2')}>
-            <Badge variant="outline">{getQuestionTypeLabel(question.question_type)}</Badge>
-            {question.marked ? (
-              <Badge className="border-rose-600 bg-rose-600 text-white">已标记</Badge>
-            ) : null}
-            <Badge variant={!(question.segment_ids?.length) ? 'secondary' : 'outline'}>
-              {getQuestionOwnershipLabel(question)}
-            </Badge>
-            <QuestionSourceBadge sourceMeta={question.source_meta} compact={compact} />
-            {question.question_type === 'multiple_choice' ? (
-              <span className={cn('text-muted-foreground', compact ? 'text-[11px]' : 'text-xs')}>
-                答对 {question.correct_count} 次 / 答错 {question.incorrect_count} 次
-              </span>
-            ) : null}
-            <QuizQuestionVariantControl
-              question={question}
-              onQuestionUpdated={onQuestionUpdated}
-              onAnswerReset={onAnswerReset}
-              compact={compact}
-            />
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <QuizComboChip scopeKey={comboScopeKey ?? null} />
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className={compact ? 'h-8 px-2.5' : ''}
-            onClick={() => onEdit(question)}
-          >
-            编辑
-          </Button>
-        </div>
-      </CardHeader>
-      <CardContent className={cn(compact ? 'space-y-3 px-4 pb-4 pt-0' : 'space-y-4')}>
-        <QuizQuestionAnswerSurface
-          question={question}
-          state={state}
-          compact={compact}
-          captureShortcuts={!compact}
-          onStateChange={(updater) => onStateChange(question.id, updater)}
-          onChoiceResolve={(optionId) => onChoiceSelect(question, optionId)}
-          onShortAnswerSubmit={() => onShortAnswerSubmit(question.id)}
-          getDurationMs={getDurationMs}
-          comboScopeKey={comboScopeKey}
-          mark={
-            onToggleMark
-              ? {
-                  marked: Boolean(question.marked),
-                  onToggle: (marked) => onToggleMark(question, marked),
-                }
-              : undefined
-          }
-        />
-
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={() => onReset(question.id)}>
-            <RotateCcw className="size-4" />
-            再做一次
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-    </RowContextMenu>
   )
 }
