@@ -1,3 +1,5 @@
+"""Read-only feed contract for older PWA clients, not the active queue builder."""
+
 from __future__ import annotations
 
 from typing import Any

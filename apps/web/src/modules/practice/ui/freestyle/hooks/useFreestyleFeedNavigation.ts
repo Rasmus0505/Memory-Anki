@@ -61,6 +61,9 @@ export function useFreestyleFeedNavigation({
   currentIndex,
   roundComplete,
   pendingReviewCount = 0,
+  serverSeekIds,
+  serverRetrySeekIds,
+  serverProgressItems,
   goToIndex,
   flushDeferredRestudy,
   pendingRestudyCardIds,
@@ -80,6 +83,10 @@ export function useFreestyleFeedNavigation({
   roundComplete: boolean
   /** Same-day 重练 the server still owes: the closing slot is then a waiting page. */
   pendingReviewCount?: number
+  /** Server-owned seek order; absent for older round payloads. */
+  serverSeekIds?: readonly string[] | null
+  serverRetrySeekIds?: readonly string[]
+  serverProgressItems?: ReadonlyArray<{ card_id: string; scored: boolean; servable: boolean }>
   goToIndex: ImmersiveQueue['goToIndex']
   flushDeferredRestudy: ImmersiveQueue['flushDeferredRestudy']
   pendingRestudyCardIds: ImmersiveQueue['pendingRestudyCardIds']
@@ -664,18 +671,22 @@ export function useFreestyleFeedNavigation({
       queueState.completedIds,
       roundPlan,
       queueState.hiddenIds,
+      serverSeekIds,
+      serverProgressItems,
     ),
-    [cards, queueState.completedIds, queueState.hiddenIds, queueState.unitEncountersByCardId, roundPlan],
+    [cards, queueState.completedIds, queueState.hiddenIds, queueState.unitEncountersByCardId, roundPlan, serverProgressItems, serverSeekIds],
   )
   /** 完成 walks blank 重练 first, then the remaining unscored cards. */
   const completeSeekIndices = useMemo(
-    () => prioritizeRetrySeekIndices(unscoredIndices, cards, roundPlan),
-    [cards, roundPlan, unscoredIndices],
+    () => serverSeekIds != null ? unscoredIndices : prioritizeRetrySeekIndices(unscoredIndices, cards, roundPlan),
+    [cards, roundPlan, serverSeekIds, unscoredIndices],
   )
-  const retrySeekIndices = useMemo(
-    () => completeSeekIndices.filter((index) => isLiveRetryCard(cards[index], roundPlan)),
-    [cards, completeSeekIndices, roundPlan],
-  )
+  const retrySeekIndices = useMemo(() => {
+    const retryIds = serverRetrySeekIds == null ? null : new Set(serverRetrySeekIds)
+    return completeSeekIndices.filter((index) => retryIds
+      ? retryIds.has(cards[index].id)
+      : isLiveRetryCard(cards[index], roundPlan))
+  }, [cards, completeSeekIndices, roundPlan, serverRetrySeekIds])
   const { seekIndex: completeSeekIndex, canComplete: canCompleteRound, title: completeTitle } = useMemo(
     () => resolveFreestyleCompleteAction({
       roundComplete,

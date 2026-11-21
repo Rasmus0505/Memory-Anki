@@ -530,6 +530,37 @@ export function useImmersiveQueue(
   // The server's progress projection, tagged with the round it describes so a
   // previous round's counts can never leak onto a new one.
   const [roundProgress, setRoundProgress] = useState<{ roundId: string; progress: FreestyleRoundProgress } | null>(null)
+  const roundProgressRef = useRef<{ roundId: string; progress: FreestyleRoundProgress } | null>(null)
+  const adoptRoundProjection = useCallback((
+    round: {
+      round_id?: string
+      progress?: FreestyleRoundProgress
+      waiting?: { count: number; next_ready_at: string | null }
+    } | null | undefined,
+    allowRoundSwitch = false,
+  ) => {
+    if (!round?.round_id) return
+    const activeRoundId = queueStateRef.current.roundId
+    if (!allowRoundSwitch && activeRoundId && round.round_id !== activeRoundId) return
+    if (!round.progress) {
+      if (allowRoundSwitch && round.round_id !== activeRoundId) {
+        roundProgressRef.current = null
+        setRoundProgress(null)
+      }
+      return
+    }
+    const previous = roundProgressRef.current
+    const incomingVersion = Number(round.progress.plan_version) || 0
+    if (round.round_id === activeRoundId && incomingVersion < serverPlanVersionRef.current) return
+    const previousVersion = previous?.roundId === round.round_id
+      ? Number(previous.progress.plan_version) || 0
+      : 0
+    if (previous?.roundId === round.round_id && incomingVersion < previousVersion) return
+    const next = { roundId: round.round_id, progress: round.progress }
+    roundProgressRef.current = next
+    setRoundProgress(next)
+    setRoundWaiting(round.waiting ?? null)
+  }, [])
   const lastFailedSaveRef = useRef<{ roundId: string; body: Parameters<typeof applyFreestyleRoundActionApi>[1] } | null>(null)
   const saveRoundAction = useCallback((
     roundId: string,
@@ -542,6 +573,7 @@ export function useImmersiveQueue(
       setRoundSave({ roundId, outcome, seq: roundSaveSeqRef.current })
     }
     return applyFreestyleRoundActionApi(roundId, body).then((round) => {
+      if (queueStateRef.current.roundId === roundId) adoptRoundProjection(round)
       lastFailedSaveRef.current = null
       record(judgeFreestyleSaveOutcome({
         beforeVersion,
@@ -566,7 +598,7 @@ export function useImmersiveQueue(
       }))
       throw error
     })
-  }, [])
+  }, [adoptRoundProjection])
   const retryRoundSave = useCallback(() => {
     const failed = lastFailedSaveRef.current
     if (!failed) return Promise.resolve(null)
@@ -1110,6 +1142,7 @@ export function useImmersiveQueue(
             && serverPlanVersion(round) < serverPlanVersionRef.current
           ) return
           round = { ...round, plan: planWithQueueEdits(round.plan, round.round_id, serverPlanVersion(round)) }
+          adoptRoundProjection(round, true)
           setWrongUnitIds(round.plan.wrong_unit_ids ?? [])
           const version = serverPlanVersion(round)
           serverPlanVersionRef.current = version
@@ -1198,12 +1231,21 @@ export function useImmersiveQueue(
         // swipe / 下一题 is the only way to advance — no restudy auto-jump.
         // Cold start prefers the local draft cursor when it still exists in-feed,
         // unless this rebuild is the open itself: then match the 完成 button.
+        const projection = roundProgressRef.current
+        const openProgress = projection?.roundId === queueStateRef.current.roundId
+          && projection.progress.plan_version === serverPlanVersionRef.current
+          ? projection.progress
+          : null
         const openFeedIndex = options?.openAtEarliestUnrated && nextCards.length > 0
           ? resolveFreestyleOpenFeedIndex(
             nextCards,
             queueStateRef.current.unitEncountersByCardId,
             queueStateRef.current.completedIds,
             queueStateRef.current.roundPlan,
+            queueStateRef.current.hiddenIds,
+            openProgress?.seek_ids,
+            openProgress?.items,
+            openProgress?.round_complete,
           )
           : null
         const openCardId = openFeedIndex != null && openFeedIndex < nextCards.length
@@ -1294,7 +1336,7 @@ export function useImmersiveQueue(
         })
       }
     },
-    [applyCurrentIndex, commitRoundCursor, notifyPeerRound, persistQueueState, planWithQueueEdits, slot, syncPendingRestudyIds],
+    [adoptRoundProjection, applyCurrentIndex, commitRoundCursor, notifyPeerRound, persistQueueState, planWithQueueEdits, slot, syncPendingRestudyIds],
   )
   buildQueueRef.current = buildQueue
 
@@ -1513,6 +1555,9 @@ export function useImmersiveQueue(
       setWrongUnitIds(remotePlan.wrong_unit_ids ?? [])
       const plannedCards = cardsForServerPlan(merged, remotePlan, adoptedRoundId)
       const remoteVersion = serverPlanVersion(round)
+      if (adoptedRoundId === queueStateRef.current.roundId && remoteVersion < serverPlanVersionRef.current) {
+        return { status: 'stale' }
+      }
       const retained = commitHydratedRoundLedger({
         localPlan: null,
         localCompletedIds: [],
@@ -1553,6 +1598,7 @@ export function useImmersiveQueue(
       ) {
         return { status: 'stale' }
       }
+      adoptRoundProjection(round, true)
       serverPlanVersionRef.current = remoteVersion
       setPlanVersion(remoteVersion)
       persistQueueState({
@@ -2224,7 +2270,7 @@ export function useImmersiveQueue(
     }).then((round) => {
       if (queueStateRef.current.roundId !== roundId) return
       if (round.conflict) return
-      setRoundWaiting(round.waiting ?? null)
+      if (serverPlanVersion(round) < serverPlanVersionRef.current) return
       serverPlanVersionRef.current = serverPlanVersion(round)
       setPlanVersion(serverPlanVersion(round))
       notifyPeerRound()
@@ -2903,11 +2949,10 @@ export function useImmersiveQueue(
     waiting?: { count: number; next_ready_at: string | null }
   } | null | undefined, options?: { announceOrder?: boolean }) => {
     if (round?.round_id && round.round_id !== queueStateRef.current.roundId) return
+    const version = serverPlanVersion(round)
+    if (round?.round_id === queueStateRef.current.roundId && version < serverPlanVersionRef.current) return
     if (round) {
-      setRoundWaiting(round.waiting ?? null)
-      if (round.progress && round.round_id) {
-        setRoundProgress({ roundId: round.round_id, progress: round.progress })
-      }
+      adoptRoundProjection(round)
       // The server is the only writer of the round's wrong-question set. A
       // payload that omits the field (a rating echo, for example) must not clear
       // what the learner has already answered wrong.
@@ -2921,8 +2966,6 @@ export function useImmersiveQueue(
         })
       }
     }
-    const version = serverPlanVersion(round)
-    if (version < serverPlanVersionRef.current) return
     if (round?.plan) setWrongUnitIds(round.plan.wrong_unit_ids ?? [])
     if (version === serverPlanVersionRef.current) return
     serverPlanVersionRef.current = version
@@ -2995,6 +3038,8 @@ export function useImmersiveQueue(
       operation_id: createOperationId(),
       expected_version: serverPlanVersionRef.current,
     })
+    if (queueStateRef.current.roundId !== roundId) return []
+    adoptRoundProjection(payload.round)
     const added = payload.added_card_ids
     if (!added.length) {
       serverPlanVersionRef.current = serverPlanVersion(payload.round)
@@ -3076,6 +3121,8 @@ export function useImmersiveQueue(
         card_id: cardId,
         rating,
       })
+      if (queueStateRef.current.roundId !== roundId) return payload.round
+      adoptRoundProjection(payload.round)
       serverPlanVersionRef.current = serverPlanVersion(payload.round)
       setPlanVersion(serverPlanVersion(payload.round))
       const localPlan = queueStateRef.current.roundPlan
@@ -3133,7 +3180,8 @@ export function useImmersiveQueue(
       if (round.round_id === roundId && serverPlanVersion(round) < serverPlanVersionRef.current) return
       round = { ...round, plan: planWithQueueEdits(round.plan, round.round_id || roundId, serverPlanVersion(round)) }
       const adoptedRoundId = round.round_id || roundId
-      setRoundWaiting(round.waiting ?? null)
+      if (serverPlanVersion(round) < serverPlanVersionRef.current) return
+      adoptRoundProjection(round, adoptedRoundId !== roundId)
       serverPlanVersionRef.current = serverPlanVersion(round)
       setPlanVersion(serverPlanVersion(round))
       // The yellow hint never enters createRoundPlan — plan math stays on the
@@ -3201,13 +3249,22 @@ export function useImmersiveQueue(
       const learnerMoved = localQueueMutationRef.current !== capturedMutation
       if (feedWasEmpty && nextCards.length > 0 && !learnerMoved) {
         setLoading(false)
+        const progress = roundProgressRef.current
+        const openProgress = progress?.roundId === adoptedRoundId
+          && progress.progress.plan_version === serverPlanVersionRef.current
+          ? progress.progress
+          : null
         const openFeedIndex = resolveFreestyleOpenFeedIndex(
           nextCards,
           retained.encounters,
           retained.completedIds,
           retained.plan,
+          retained.hiddenIds,
+          openProgress?.seek_ids,
+          openProgress?.items,
+          openProgress?.round_complete,
         )
-        if (openFeedIndex < nextCards.length) {
+        if (openFeedIndex != null && openFeedIndex < nextCards.length) {
           applyCurrentIndex(openFeedIndex, nextCards)
           commitRoundCursor(nextCards[openFeedIndex]?.id)
           setStartupVisualIndex(null)
@@ -3359,6 +3416,7 @@ export function useImmersiveQueue(
         : 0
       configRef.current = remoteConfig
       setConfig(remoteConfig)
+      adoptRoundProjection(round, true)
       serverPlanVersionRef.current = remoteVersion
       setPlanVersion(remoteVersion)
       persistQueueState({

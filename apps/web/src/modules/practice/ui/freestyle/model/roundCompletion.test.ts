@@ -614,6 +614,31 @@ describe('findEarliestCompleteSeekIndex', () => {
 })
 
 describe('resolveFreestyleOpenFeedIndex', () => {
+  it('opens the first available server target in server order', () => {
+    expect(resolveFreestyleOpenFeedIndex(
+      [card('first'), card('hidden'), card('scored'), card('waiting'), card('last')],
+      {}, [], null, ['hidden'],
+      ['missing', 'hidden', 'scored', 'waiting', 'last', 'first'],
+      [
+        { card_id: 'scored', scored: true, servable: true },
+        { card_id: 'waiting', scored: false, servable: false },
+      ],
+      false,
+    )).toBe(4)
+  })
+
+  it('does not open settlement when the remaining work has not loaded', () => {
+    expect(resolveFreestyleOpenFeedIndex(
+      [card('visible')], {}, [], null, [], ['not-loaded'], [], false,
+    )).toBeNull()
+  })
+
+  it('opens the closing slot when the server has no currently selectable work', () => {
+    expect(resolveFreestyleOpenFeedIndex(
+      [card('visible')], {}, [], null, [], [], [], true,
+    )).toBe(1)
+  })
+
   it('opens on the earliest unscored card, not the first card', () => {
     expect(resolveFreestyleOpenFeedIndex(
       [card('one'), card('two'), card('three')],

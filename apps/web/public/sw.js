@@ -30,8 +30,8 @@ const AUXILIARY_PRECACHE_URLS = [
 // 构建时由 releaseArtifactsPlugin 注入本次发布的入口链路资产（JS/CSS），
 // 使离线冷启动不依赖运行时缓存。未注入（dev/测试）时保持为空数组。
 const PRECACHE_RELEASE_ASSETS = '__MEMORY_ANKI_PRECACHE_ASSETS__'
-// 离线可回退的只读 API 白名单；除 freestyle feed 外暂不扩展，
-// 避免 SRS 调度数据离线陈旧误导复习决策。
+// 仅为旧版 PWA 保留随心 Feed 的离线回退；确认旧版不再使用后与后端一起移除。
+// 不缓存现行学习队列，避免过期排期误导复习决策。
 const OFFLINE_API_ALLOWLIST = ['/api/v1/freestyle/feed']
 // 导航响应只回写这两个入口路径，避免 APP_CACHE 积累任意页面路径。
 const NAVIGATION_CACHE_PATHS = ['/', '/freestyle']

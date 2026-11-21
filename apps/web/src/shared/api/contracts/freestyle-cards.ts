@@ -164,12 +164,6 @@ export function isReviewHintId(id: string | null | undefined): boolean {
   return String(id || '').trim() === FREESTYLE_REVIEW_HINT_ID
 }
 
-export interface FreestyleFeedResponse {
-  cards: FreestyleCard[]
-  counts: Record<string, number>
-  generated_at: string
-}
-
 export interface FreestyleRoundOriginalCard {
   card_id: string
   unit_id: string

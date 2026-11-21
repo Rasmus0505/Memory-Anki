@@ -71,6 +71,8 @@ def test_progress_items_follow_presented_order_and_start_at_the_first_card():
     assert progress["position"] == 1
     assert progress["done_count"] == 0
     assert progress["next_unfinished_id"] == "a"
+    assert progress["seek_ids"] == ["a", "b"]
+    assert progress["retry_seek_ids"] == []
     assert progress["fully_handled"] is False
 
 
@@ -224,6 +226,8 @@ def test_waiting_retry_is_reported_but_not_servable():
     assert progress["waiting"]["count"] == 1
     assert progress["waiting"]["next_ready_at"] is not None
     assert progress["retry_inserted"] == 0
+    assert progress["seek_ids"] == ["b"]
+    assert progress["retry_seek_ids"] == []
     pending = _pending(plan, "a")
     assert all(item["card_id"] != pending["occurrence_id"] for item in progress["items"])
 

@@ -79,8 +79,10 @@ describe('ImmersiveFreestylePage layout', () => {
   it('never calls the round finished while 重练 is still owed today', () => {
     // Locally every presented card is scored, but the server holds same-day
     // re-checks that are not due yet: the closing slot must not celebrate.
-    expect(source).toContain('const pendingReviewCount = waiting?.count ?? 0')
-    expect(source).toContain('pendingReviewCount={waiting?.count ?? 0}')
+    expect(source).toContain('const roundWaiting = serverRoundProgress?.waiting ?? waiting')
+    expect(source).toContain('waiting={roundWaiting}')
+    const cardArea = read('FreestyleCardArea.tsx')
+    expect(cardArea).toContain('pendingReviewCount={waiting?.count ?? 0}')
     // The closing slot keeps both pages: waiting while owed, trophy when clear.
     const closing = read('FreestyleClosingSlot.tsx')
     expect(closing).toContain('pendingReviewCount > 0 ? (')
@@ -88,7 +90,7 @@ describe('ImmersiveFreestylePage layout', () => {
     expect(closing).toContain('<FreestyleRoundSettlement')
     // 完成 must still never dead-end: the slot stays the seek target.
     expect(source).toContain('handleCompleteRound()')
-    expect(source).toContain('nextReviewAt')
+    expect(cardArea).toContain('nextReviewAt={waiting?.next_ready_at ?? null}')
   })
 
   it('keeps the pager only while the feed still has cards to page', () => {

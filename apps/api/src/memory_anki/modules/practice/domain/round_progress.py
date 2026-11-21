@@ -112,7 +112,7 @@ def project_round_progress(
         _text(item.get("source_card_id"))
         for item in normalized["occurrences"]
         if isinstance(item, Mapping)
-        and item.get("status") in {OCCURRENCE_INSERTED, "completed"}
+        and item.get("status") in {OCCURRENCE_PENDING, OCCURRENCE_INSERTED, "completed"}
     }
     priority_wrong_units = set(normalized["wrong_unit_ids"])
     wrong_units = (
@@ -206,6 +206,25 @@ def project_round_progress(
     )
     done_count = sum(1 for item in items if item["status"] == STATUS_DONE)
     retry_items = [item for item in items if item["occurrence_kind"] in {"retry", "step"}]
+    # One server-owned eligibility rule feeds the finish control, cold-open seek,
+    # and settlement. Waiting retries are not selectable; weak ratings count as
+    # scored, while a live blank retry remains an explicit target.
+    seek_items = [
+        item for item in items
+        if item["status"] == STATUS_PENDING
+        and not item["scored"]
+        and item["servable"]
+        and not item["is_quiz"]
+    ]
+    retry_seek_ids = [
+        item["card_id"] for item in seek_items
+        if item["occurrence_kind"] in {"retry", "step"}
+    ]
+    retry_seek_set = set(retry_seek_ids)
+    seek_ids = retry_seek_ids + [
+        item["card_id"] for item in seek_items
+        if item["card_id"] not in retry_seek_set
+    ]
     waiting_meta = plan_waiting(normalized)
 
     return {
@@ -220,6 +239,9 @@ def project_round_progress(
         "retry_count": len(retry_items),
         "retry_inserted": sum(1 for item in retry_items if item["tone"] == "retry"),
         "passed_count": sum(1 for item in items if item["own_rating"] in {2, 3, 4}),
+        "seek_ids": seek_ids,
+        "retry_seek_ids": retry_seek_ids,
+        "round_complete": not seek_ids and bool(items or compressed),
         "next_unfinished_id": next_unfinished_id(normalized),
         "fully_handled": plan_is_fully_handled(normalized),
         "waiting": {

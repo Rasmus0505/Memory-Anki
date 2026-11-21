@@ -245,6 +245,7 @@ export default function ImmersiveFreestylePage({
     queueState,
     roundMeta,
     roundPlan,
+    roundProgress,
     waiting,
     cards,
     setCards,
@@ -276,7 +277,6 @@ export default function ImmersiveFreestylePage({
     pendingRestudyCardIds,
     planVersion,
     wrongUnitIds,
-    roundProgress,
     adoptRoundVersion,
     appendBedtimeReview,
     rateBedtimeCard,
@@ -374,13 +374,19 @@ export default function ImmersiveFreestylePage({
    * must never dead-end) but renders a waiting page instead of the trophy, and
    * the round only celebrates once `waiting` is empty.
    */
-  const pendingReviewCount = waiting?.count ?? 0
+  const serverRoundProgress = roundProgress?.roundId === queueState.roundId
+    && roundProgress.progress.plan_version === planVersion
+    ? roundProgress.progress
+    : null
+  const roundWaiting = serverRoundProgress?.waiting ?? waiting
+  const pendingReviewCount = roundWaiting?.count ?? 0
   const roundComplete = isFreestyleRoundComplete(
     cards,
     queueState.unitEncountersByCardId,
     queueState.completedIds,
     roundPlan,
     queueState.hiddenIds,
+    serverRoundProgress?.round_complete,
   )
   const {
     scrollRef,
@@ -406,6 +412,9 @@ export default function ImmersiveFreestylePage({
     currentIndex,
     roundComplete,
     pendingReviewCount,
+    serverSeekIds: serverRoundProgress?.seek_ids,
+    serverRetrySeekIds: serverRoundProgress?.retry_seek_ids,
+    serverProgressItems: serverRoundProgress?.items,
     goToIndex,
     flushDeferredRestudy,
     pendingRestudyCardIds,
@@ -714,9 +723,9 @@ export default function ImmersiveFreestylePage({
   const progressSummary = useMemo(
     () => applyServerRoundProgress(
       localProgressSummary,
-      roundProgress?.roundId === queueState.roundId ? roundProgress.progress : null,
+      serverRoundProgress,
     ),
-    [localProgressSummary, queueState.roundId, roundProgress],
+    [localProgressSummary, serverRoundProgress],
   )
 
   /**
@@ -928,23 +937,27 @@ export default function ImmersiveFreestylePage({
   // the 小结算 page, and 完成 on a genuinely finished round settles it straight
   // away (see handlePagerComplete).
   const reloadOverview = freestyleOverview.reload
+  const settlementIds = useMemo(() => {
+    const liveIds = new Set(cards.map((card) => card.id))
+    return serverRoundProgress?.compressible_ids?.filter((id) => liveIds.has(id))
+      ?? compressibleRoundPlanIds(roundPlan, {
+        completedIds: queueState.completedIds,
+        encounters: queueState.unitEncountersByCardId,
+        liveCardIds: [...liveIds],
+      })
+  }, [cards, queueState.completedIds, queueState.unitEncountersByCardId, roundPlan, serverRoundProgress])
   const buildCompletedSettlement = useCallback(() => {
-    const ids = compressibleRoundPlanIds(roundPlan, {
-      completedIds: queueState.completedIds,
-      encounters: queueState.unitEncountersByCardId,
-      liveCardIds: cards.map((card) => card.id),
-    })
-    if (!ids.length) return null
+    if (!settlementIds.length) return null
     return buildPartialSettlementSnapshot({
       id: createOperationId(),
-      cardIds: ids,
+      cardIds: settlementIds,
       cards,
       encountersByCardId: queueState.unitEncountersByCardId,
       completedIds: queueState.completedIds,
       roundPlan,
       subjectByPalaceId,
     })
-  }, [cards, queueState.completedIds, queueState.unitEncountersByCardId, roundPlan, subjectByPalaceId])
+  }, [cards, queueState.completedIds, queueState.unitEncountersByCardId, roundPlan, settlementIds, subjectByPalaceId])
   /** Config page 结算已完成: show the summary dialog, then compress on confirm. */
   const openSettlementFromConfig = useCallback(() => {
     const snapshot = buildCompletedSettlement()
@@ -1056,11 +1069,7 @@ export default function ImmersiveFreestylePage({
         <FreestylePageDialogs
           queueState={queueState}
           roundPlan={roundPlan}
-          settlementCount={compressibleRoundPlanIds(roundPlan, {
-            completedIds: queueState.completedIds,
-            encounters: queueState.unitEncountersByCardId,
-            liveCardIds: cards.map((card) => card.id),
-          }).length}
+          settlementCount={settlementIds.length}
           onSettleCompleted={openSettlementFromConfig}
           configOpen={configOpen}
           onConfigOpenChange={handleConfigOpenChange}
@@ -1129,7 +1138,7 @@ export default function ImmersiveFreestylePage({
           isActive={isActive}
           settlementVisible={settlementVisible}
           roundComplete={roundComplete}
-          waiting={waiting}
+          waiting={roundWaiting}
           loading={loading}
           error={error}
           config={config}

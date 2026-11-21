@@ -301,7 +301,9 @@ export function isFreestyleRoundComplete(
   completedIds: Iterable<string> = [],
   roundPlan: FreestyleRoundPlanState | null = null,
   hiddenIds: Iterable<string> = [],
+  serverRoundComplete?: boolean,
 ): boolean {
+  if (serverRoundComplete != null) return serverRoundComplete
   if (cards.length === 0) {
     // Mid-round compress can empty the feed after every remaining card passed.
     return Boolean(roundPlan?.compressedIds?.length)
@@ -525,7 +527,22 @@ export function findUnscoredCompleteSeekIndices(
   completedIds: Iterable<string> = [],
   roundPlan: FreestyleRoundPlanState | null = null,
   hiddenIds: Iterable<string> = [],
+  serverSeekIds?: readonly string[] | null,
+  serverProgressItems?: ReadonlyArray<{ card_id: string; scored: boolean; servable: boolean }>,
 ): number[] {
+  if (serverSeekIds != null) {
+    const indexById = new Map(cards.map((card, index) => [String(card.id), index]))
+    const hidden = new Set(Array.from(hiddenIds, String))
+    const itemById = new Map((serverProgressItems ?? []).map((item) => [item.card_id, item]))
+    return serverSeekIds.flatMap((id) => {
+      const index = indexById.get(String(id))
+      const card = index == null ? null : cards[index]
+      const item = itemById.get(String(id))
+      if (!card || hidden.has(String(card.id)) || isReviewHintId(card.id)) return []
+      if (card.type === 'quiz_question' || (item && (!item.servable || item.scored))) return []
+      return [index]
+    })
+  }
   const completed = new Set(Array.from(completedIds, String))
   return unscoredOccurrenceIndices({
     cards,
@@ -549,10 +566,27 @@ export function resolveFreestyleOpenFeedIndex(
   encountersByCardId: Record<string, FreestyleUnitEncounterState>,
   completedIds: Iterable<string> = [],
   roundPlan: FreestyleRoundPlanState | null = null,
-): number {
-  if (cards.length === 0) return 0
-  const seek = findEarliestCompleteSeekIndex(cards, encountersByCardId, completedIds, roundPlan)
-  return seek == null ? cards.length : seek
+  hiddenIds: Iterable<string> = [],
+  serverSeekIds?: readonly string[] | null,
+  serverProgressItems?: ReadonlyArray<{ card_id: string; scored: boolean; servable: boolean }>,
+  serverRoundComplete?: boolean,
+): number | null {
+  if (cards.length === 0) return null
+  if (serverRoundComplete === true) return cards.length
+  const indices = findUnscoredCompleteSeekIndices(
+    cards,
+    encountersByCardId,
+    completedIds,
+    roundPlan,
+    hiddenIds,
+    serverSeekIds,
+    serverProgressItems,
+  )
+  const seek = (serverSeekIds != null ? indices : prioritizeRetrySeekIndices(indices, cards, roundPlan))[0]
+  if (seek != null) return seek
+  // A paginated feed can be missing the server's remaining work.
+  if (serverRoundComplete === false || serverSeekIds?.length) return null
+  return cards.length
 }
 
 /**

@@ -50,6 +50,11 @@ export interface FreestyleRoundProgress {
   retry_inserted: number
   passed_count: number
   next_unfinished_id: string | null
+  /** Currently displayed unscored work, with blank retries first. */
+  seek_ids?: string[]
+  /** Retry/step subset of seek_ids, for action copy and state. */
+  retry_seek_ids?: string[]
+  round_complete?: boolean
   fully_handled: boolean
   waiting: { count: number; next_ready_at: string | null }
   compressible_ids: string[]

@@ -47,6 +47,9 @@ function mount(options: {
   completedIds?: string[]
   hiddenIds?: string[]
   roundPlan?: unknown
+  serverSeekIds?: string[]
+  serverRetrySeekIds?: string[]
+  pendingReviewCount?: number
 }) {
   const captured: { current: Harness | null } = { current: null }
   function Probe() {
@@ -77,6 +80,9 @@ function mount(options: {
       cards,
       currentIndex,
       roundComplete,
+      serverSeekIds: options.serverSeekIds,
+      serverRetrySeekIds: options.serverRetrySeekIds,
+      pendingReviewCount: options.pendingReviewCount,
       goToIndex,
       flushDeferredRestudy: () => currentIndex,
       pendingRestudyCardIds: [],
@@ -105,6 +111,31 @@ function mount(options: {
 }
 
 describe('useFreestyleFeedNavigation complete cycle', () => {
+  it('uses the server retry order even when cards arrive in a different order', () => {
+    const { captured } = mount({
+      cards: [card('a'), card('first-retry'), card('second-retry')],
+      serverSeekIds: ['absent', 'second-retry', 'first-retry', 'a'],
+      serverRetrySeekIds: ['absent', 'second-retry', 'first-retry'],
+      pendingReviewCount: 1,
+    })
+    expect(captured.current?.completeTitle).toBe('定位到最早的重练')
+    act(() => captured.current?.handleCompleteRound())
+    act(() => captured.current?.handleCompleteRound())
+    expect(captured.current?.goToLog).toEqual([2, 1])
+  })
+
+  it('labels the closing slot as waiting when a review is still owed', () => {
+    const { captured } = mount({
+      cards: [card('a')],
+      completedIds: ['a'],
+      serverSeekIds: [],
+      pendingReviewCount: 1,
+    })
+    expect(captured.current?.completeTitle).toBe('去看还没到点的重练')
+    act(() => captured.current?.handleCompleteRound())
+    expect(captured.current?.visualIndex).toBe(1)
+    expect(captured.current?.goToLog).toEqual([])
+  })
   it('walks unscored cards one by one and wraps', () => {
     const { captured } = mount({ cards: [card('a'), card('b'), card('c')] })
 

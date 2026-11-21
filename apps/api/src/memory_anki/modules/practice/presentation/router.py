@@ -70,7 +70,8 @@ from memory_anki.modules.practice.domain.schemas import (
 router = APIRouter(tags=["freestyle"])
 
 
-@router.get("/freestyle/feed")
+# Installed PWA versions may still request this feed, including via their offline cache.
+@router.get("/freestyle/feed", deprecated=True)
 def api_freestyle_feed(
     range_: str = Query(FREESTYLE_RANGE_ALL, alias="range"),
     palace_ids: str | None = Query(None),

@@ -118,6 +118,10 @@ class FreestyleRouteTests(RouterTestCase):
         self.palace_id = palace.id
         self.practice_palace_id = practice_palace.id
 
+    def test_legacy_feed_remains_available_but_is_deprecated_in_openapi(self):
+        operation = self.app.openapi()["paths"]["/api/v1/freestyle/feed"]["get"]
+        self.assertTrue(operation["deprecated"])
+
     def test_feed_aggregates_quiz_and_learning_action_cards(self):
         response = self.client.get("/api/v1/freestyle/feed")
 

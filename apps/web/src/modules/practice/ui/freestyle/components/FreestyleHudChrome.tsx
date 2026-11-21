@@ -14,7 +14,7 @@ const FREESTYLE_SECTION_LINKS = [
   { to: '/palaces', label: '知识' },
   { to: '/english', label: '英语' },
   { to: '/palaces/new', label: '创建' },
-  { to: '/dashboard', label: '洞察' },
+  { to: '/dashboard', label: '进度' },
 ] as const
 
 const hudActionClass =

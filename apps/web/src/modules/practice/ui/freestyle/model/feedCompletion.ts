@@ -14,7 +14,7 @@ export function resolveFreestyleCompleteAction(args: {
   cardCount: number
   visualIndex: number
   seekIndices: readonly number[]
-  /** Subset of `seekIndices` that are 重练 occurrences, for the tooltip only. */
+  /** Subset of `seekIndices` that are 重练 occurrences. */
   retryIndices?: readonly number[]
   pendingReviewCount?: number
 }): { seekIndex: number | null; canComplete: boolean; title: string } {
@@ -29,14 +29,12 @@ export function resolveFreestyleCompleteAction(args: {
   const onSeekCard = args.seekIndices.includes(args.visualIndex)
   const onRetryCard = (args.retryIndices ?? []).includes(args.visualIndex)
   const targetIsRetry = seekIndex != null && (args.retryIndices ?? []).includes(seekIndex)
-  const title = (args.pendingReviewCount ?? 0) > 0
-    ? '去看还没到点的重练'
-    : args.roundComplete
-      ? '进入本轮结算'
-      : targetIsRetry
-        ? (onRetryCard ? '定位到下一张重练' : '定位到最早的重练')
-        : onSeekCard && args.seekIndices.length > 1
-          ? '定位到下一张还没评分的单元'
-          : '定位到最早还没评分的单元'
+  const title = args.roundComplete
+    ? ((args.pendingReviewCount ?? 0) > 0 ? '去看还没到点的重练' : '进入本轮结算')
+    : targetIsRetry
+      ? (onRetryCard ? '定位到下一张重练' : '定位到最早的重练')
+      : onSeekCard && args.seekIndices.length > 1
+        ? '定位到下一张还没评分的单元'
+        : '定位到最早还没评分的单元'
   return { seekIndex, canComplete: seekIndex != null, title }
 }
