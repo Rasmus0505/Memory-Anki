@@ -42,6 +42,12 @@ def test_app_import_prepares_static_attachment_directory(tmp_path):
     assert str(app_home) in result.stdout
 
 
+def test_app_openapi_does_not_expose_retired_growth_overview():
+    from memory_anki.app.main import app
+
+    assert "/api/v1/progression/overview" not in app.openapi()["paths"]
+
+
 def test_web_routes_cache_entrypoints_and_versioned_assets_separately():
     app = FastAPI()
     install_web_cache_headers(app)

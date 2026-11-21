@@ -55,7 +55,6 @@ from memory_anki.modules.memory.application.unit_reconcile_scheduler import (
 from memory_anki.modules.memory.presentation import router as review_router
 from memory_anki.modules.practice.presentation import router as freestyle_router
 from memory_anki.modules.produce.presentation import import_router
-from memory_anki.modules.progression.presentation import router as progression_router
 from memory_anki.modules.quiz.presentation import router as palace_quiz_router
 from memory_anki.modules.reminders.application.reminder_loop import (
     start_reminder_loop,
@@ -245,7 +244,6 @@ app.include_router(english_lookup_router, prefix="/api/v1")
 app.include_router(freestyle_router.router, prefix="/api/v1")
 app.include_router(dashboard_router.router, prefix="/api/v1")
 app.include_router(exam_router.router, prefix="/api/v1")
-app.include_router(progression_router.router, prefix="/api/v1")
 app.include_router(reminders_router.router, prefix="/api/v1")
 app.include_router(search_router.router, prefix="/api/v1")
 
