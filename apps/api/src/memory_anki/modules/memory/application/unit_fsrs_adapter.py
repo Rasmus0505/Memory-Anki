@@ -381,10 +381,6 @@ def build_unit_scheduler(
     )
 
 
-# The old shadow report imports this name; it is the same production scheduler.
-build_shadow_scheduler = build_unit_scheduler
-
-
 def should_apply_fsrs(
     rating: int,
     *,
@@ -482,7 +478,7 @@ def rate_unit_with_fsrs(
     raw_due_date: date | None = None
     raw_interval_days = 0
     if use_fsrs:
-        reviewed, _ = (scheduler or build_shadow_scheduler()).review_card(
+        reviewed, _ = (scheduler or build_unit_scheduler()).review_card(
             card_from_state(current),
             FSRS_RATINGS[normalized],
             review_datetime=_aware(rated_at),
@@ -614,7 +610,7 @@ def replay_history(
     are for a live rating, so the result is the same state the learner would
     have built up had FSRS been the scheduler all along.
     """
-    active_scheduler = scheduler or build_shadow_scheduler()
+    active_scheduler = scheduler or build_unit_scheduler()
     state = FsrsUnitState.empty()
     due_date: date | None = None
     has_passed = False
@@ -781,7 +777,6 @@ __all__ = [
     "SCHEDULER_VERSION",
     "Scheduler",
     "anchor_interval_days",
-    "build_shadow_scheduler",
     "build_unit_scheduler",
     "card_from_state",
     "hard_band_days",

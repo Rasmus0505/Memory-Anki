@@ -1,4 +1,4 @@
-"""FSRS shadow adapter: product rules must survive the algorithm swap."""
+"""Production FSRS adapter: preserve product scheduling rules."""
 
 from datetime import UTC, date, datetime, timedelta
 
@@ -7,13 +7,13 @@ from fsrs import State
 from memory_anki.core.exam_horizon import resolve_sprint_horizon
 from memory_anki.modules.memory.application.unit_fsrs_adapter import (
     FsrsUnitState,
-    build_shadow_scheduler,
+    build_unit_scheduler,
     rate_unit_with_fsrs,
 )
 
 TODAY = date(2026, 10, 24)
 RATED_AT = datetime(2026, 10, 24, 1, 0, tzinfo=UTC)  # 09:00 Beijing
-SCHEDULER = build_shadow_scheduler()
+SCHEDULER = build_unit_scheduler()
 
 
 def _mature_state(*, stability: float = 10.0) -> FsrsUnitState:
