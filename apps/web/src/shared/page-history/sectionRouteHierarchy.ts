@@ -29,10 +29,9 @@
  *           └─ /palaces/:id/quiz
  *
  *  进度 progress
- *    /progress
- *
- *  洞察 review
- *    /dashboard
+ *    /dashboard  今日学案
+ *      ├─ /progress  学习进度
+ *      └─ /exam      考试作战室
  */
 import {
   getNavigationSectionRoot,
@@ -46,7 +45,6 @@ const SECTION_LABELS: Record<NavigationSectionKey, string> = {
   palaces: '知识',
   english: '英语',
   knowledge: '创建',
-  review: '洞察',
   progress: '进度',
 }
 
@@ -143,10 +141,7 @@ export function resolveSectionHierarchicalParent(fullPath: string): string | nul
   }
 
   // ── 进度 ──────────────────────────────────────────────
-  if (section === 'progress') return root
-
-  // ── 洞察 ──────────────────────────────────────────────
-  if (section === 'review') {
+  if (section === 'progress') {
     if (pathname === '/' || pathname === '/dashboard') return null
     return root
   }
@@ -208,8 +203,9 @@ export function describeNavigationPath(fullPath: string): string {
   if (/^\/palaces\/\d+\/quiz$/.test(pathname)) return '宫殿测验'
   if (/^\/palaces\/\d+\/review$/.test(pathname)) return '宫殿复习'
   if (/^\/palaces\/\d+$/.test(pathname)) return '宫殿详情'
-  if (pathname === '/progress') return '进度'
-  if (pathname === '/dashboard' || pathname === '/') return '洞察首页'
+  if (pathname === '/progress') return '学习进度'
+  if (pathname === '/exam') return '考试作战室'
+  if (pathname === '/dashboard' || pathname === '/') return '今日学案'
   return pathname
 }
 

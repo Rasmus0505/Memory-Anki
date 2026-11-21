@@ -2,6 +2,7 @@ import { Suspense } from 'react'
 import { Navigate, Route, Routes, useLocation, type Location } from 'react-router-dom'
 import { RouteErrorBoundary } from '@/app/providers/RouteErrorBoundary'
 import { InsightsPageLoading } from '@/pages/insights/InsightsPageLoading'
+import { ProgressWorkspaceLayout } from '@/pages/progress/ProgressWorkspaceLayout'
 import { LoadingState } from '@/shared/components/state-placeholders'
 import { lazyWithRetry } from '@/shared/lib/lazyWithRetry'
 import { readLastPageHistoryWorkspacePath } from '@/shared/page-history/pageHistoryStore'
@@ -103,9 +104,11 @@ function AppRouteTable({ location }: { location: Location }) {
       <RouteErrorBoundary resetKey={fallbackPathname}>
         <Routes location={location}>
           <Route path="/" element={<StartupRedirect />} />
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/progress" element={<ProgressPage />} />
-          <Route path="/exam" element={<ExamPage />} />
+          <Route element={<ProgressWorkspaceLayout />}>
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/progress" element={<ProgressPage />} />
+            <Route path="/exam" element={<ExamPage />} />
+          </Route>
           {/* Retired growth page: old bookmarks and remembered insight URLs land on the insight hub. */}
           <Route path="/growth" element={<Navigate to="/dashboard" replace />} />
           <Route path="/freestyle" element={<FreestylePage />} />

@@ -11,7 +11,7 @@ describe('InsightsPageLoading', () => {
       </MemoryRouter>,
     )
 
-    expect(screen.getByRole('heading', { name: '洞察' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: '今日学案' })).toBeTruthy()
     expect(screen.getByText('正在加载学习概览...')).toBeTruthy()
   })
 })

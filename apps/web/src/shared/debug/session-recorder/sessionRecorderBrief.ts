@@ -26,7 +26,6 @@ const SECTION_LABEL: Record<NavSectionKey, string> = {
   palaces: '知识',
   english: '英语',
   knowledge: '创建',
-  review: '洞察',
   progress: '进度',
 }
 

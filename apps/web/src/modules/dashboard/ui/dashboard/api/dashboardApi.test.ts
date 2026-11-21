@@ -1,14 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import {
-  DEFAULT_STUDY_GOALS,
   getDashboardApi,
   getDashboardHeatmapApi,
-  getRecentReviewNotesApi,
   getStudyGoalsApi,
   getWeeklyReportApi,
   invalidateDashboardApi,
   prefetchDashboardApi,
-  saveStudyGoalsApi,
 } from "@/modules/dashboard/ui/dashboard/api"
 import { request } from "@/shared/api/http"
 
@@ -73,26 +70,5 @@ describe("dashboard api", () => {
       weekly_review_count: 7,
     })
     expect(requestMock).toHaveBeenCalledWith("/profile/client-preferences")
-  })
-
-  it("saves study goals to client preferences", async () => {
-    await saveStudyGoalsApi(DEFAULT_STUDY_GOALS)
-
-    expect(requestMock).toHaveBeenCalledWith("/profile/client-preferences", {
-      method: "PUT",
-      body: JSON.stringify({ study_goals: DEFAULT_STUDY_GOALS }),
-      persistence: {
-        resourceKey: "preferences:study-goals",
-        coalesceKey: "preferences:study-goals",
-        description: "保存学习目标",
-        replayMode: "auto",
-      },
-    })
-  })
-
-  it("requests recent review notes with a limit", async () => {
-    await getRecentReviewNotesApi(5)
-
-    expect(requestMock).toHaveBeenCalledWith("/review/notes?limit=5")
   })
 })

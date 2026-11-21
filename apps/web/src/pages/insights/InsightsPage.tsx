@@ -71,7 +71,7 @@ export default function Dashboard() {
     return (
       <div className="flex flex-col gap-4">
         <ErrorState
-          title="洞察加载失败"
+          title="今日学案加载失败"
           description={loadError}
           action={
             <Button type="button" variant="outline" size="sm" onClick={() => void loadDashboard().catch(() => undefined)}>
@@ -97,7 +97,7 @@ export default function Dashboard() {
     <PageContainer wide className="dashboard-fit gap-3">
       <div className="flex shrink-0 flex-wrap items-end gap-x-4 gap-y-2 px-1 pt-1">
         <div className="min-w-0">
-          <h1 className="text-[26px] font-semibold leading-tight sm:text-[32px] sm:leading-[1.15]">洞察</h1>
+          <h1 className="text-[26px] font-semibold leading-tight sm:text-[32px] sm:leading-[1.15]">今日学案</h1>
           <p className="ma-figure text-[12px] text-muted-foreground">
             {new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' }).format(new Date())}
           </p>

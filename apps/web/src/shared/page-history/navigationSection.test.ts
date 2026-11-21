@@ -20,10 +20,12 @@ describe('resolveNavigationSection', () => {
     expect(resolveNavigationSection('/palaces/42/quiz')).toBe('knowledge')
   })
 
-  it('maps english and review/insight hubs', () => {
+  it('maps progress workspace destinations to one section', () => {
     expect(resolveNavigationSection('/english')).toBe('english')
     expect(resolveNavigationSection('/english/listening')).toBe('english')
-    expect(resolveNavigationSection('/dashboard')).toBe('review')
+    expect(resolveNavigationSection('/dashboard')).toBe('progress')
+    expect(resolveNavigationSection('/progress')).toBe('progress')
+    expect(resolveNavigationSection('/exam')).toBe('progress')
     expect(resolveNavigationSection('/freestyle')).toBe('freestyle')
     expect(resolveNavigationSection('/review')).toBeNull()
   })

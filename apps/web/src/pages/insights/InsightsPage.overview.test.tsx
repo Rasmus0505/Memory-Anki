@@ -27,12 +27,12 @@ describe("DashboardPage overview", () => {
 
     renderDashboardPage();
 
-    expect(await screen.findByText("洞察加载失败")).toBeTruthy();
+    expect(await screen.findByText("今日学案加载失败")).toBeTruthy();
     expect(screen.getByText("请求超过 20 秒未响应：GET /api/v1/dashboard")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "重新加载" }));
 
-    expect(await screen.findByText("洞察")).toBeTruthy();
+    expect(await screen.findByText("今日学案")).toBeTruthy();
     expect(getDashboardApi).toHaveBeenCalledTimes(2);
   });
 

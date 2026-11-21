@@ -58,15 +58,15 @@ describe('routeManifest ⇄ appRoutes JSX 对账', () => {
 
 describe('routeManifest 行为快照（与统一前的四处实现对拍）', () => {
   it.each([
-    ['/', 'review', 'dashboard', 'route:/'],
-    ['/dashboard', 'review', 'dashboard', 'dashboard'],
+    ['/', 'progress', 'dashboard', 'route:/'],
+    ['/dashboard', 'progress', 'dashboard', 'dashboard'],
     ['/progress', 'progress', 'progress', 'progress'],
+    ['/exam', 'progress', 'dashboard', 'exam:war-room'],
     ['/freestyle', 'freestyle', 'freestyle', 'freestyle'],
     ['/freestyle-2', 'freestyle', 'freestyle', 'freestyle'],
     ['/palaces', 'palaces', 'palaces', 'palace:shelf'],
     ['/palaces/list', 'palaces', 'palaces', 'palace:list'],
     ['/palaces/new', 'knowledge', 'palaces', 'palace:new'],
-    ['/exam', 'review', 'dashboard', 'exam:war-room'],
     ['/knowledge', 'palaces', 'knowledge', 'knowledge:workspace'],
     ['/knowledge/chapter/9', 'palaces', 'knowledge', 'route:/knowledge/chapter/9'],
     ['/english', 'english', 'english', 'english:hub'],
@@ -87,7 +87,10 @@ describe('routeManifest 行为快照（与统一前的四处实现对拍）', ()
     expect(resolveHistoryKey(pathname)).toBe(key)
   })
 
-  it('preserves progress deep links and falls back to progress for unknown descendants', () => {
+  it('routes every progress workspace page into one section', () => {
+    expect(resolveNavSection('/dashboard')).toBe('progress')
+    expect(resolveNavSection('/progress')).toBe('progress')
+    expect(resolveNavSection('/exam')).toBe('progress')
     expect(resolveRouteFallbackTarget('/progress')).toBe('/progress')
     expect(resolveRouteFallbackTarget('/progress/')).toBe('/progress')
     expect(resolveRouteFallbackTarget('/progress/unknown')).toBe('/progress')

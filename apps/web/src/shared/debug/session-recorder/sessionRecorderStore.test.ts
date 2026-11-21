@@ -57,7 +57,7 @@ describe('session recorder store', () => {
     expect(state.history).toHaveLength(1)
     const routes = state.history[0]?.routes ?? []
     expect(routes).toContain('知识')
-    expect(routes).toContain('洞察')
+    expect(routes).toContain('进度')
     expect(routes.every((route) => !route.startsWith('/'))).toBe(true)
     expect(state.history[0]?.reportText).toContain('请根据以下操作记录排查错误。')
     expect(state.history[0]?.reportText).not.toContain('/dashboard')

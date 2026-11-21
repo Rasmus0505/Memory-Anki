@@ -61,7 +61,7 @@ export function LearningProgressPage() {
   const updated = result.data?.generated_at ? new Date(result.data.generated_at) : null
   return <div className="learning-progress" data-testid="learning-progress">
     <header className="lp-header">
-      <h1>进度</h1>
+      <h1>学习进度</h1>
       <div className="lp-header-actions"><button className="lp-button" onClick={() => void result.refetch()} disabled={result.isFetching} aria-label="刷新进度"><RefreshCw size={13} />{result.isFetching ? '更新中' : '刷新'}</button></div>
     </header>
     {result.isError && <div className="lp-error" role="alert">{result.data ? '更新暂未成功，仍在显示上次快照。' : '暂时无法读取学习进度，请确认本地服务已启动。'} <button className="underline underline-offset-4" onClick={() => void result.refetch()}>重新加载</button></div>}

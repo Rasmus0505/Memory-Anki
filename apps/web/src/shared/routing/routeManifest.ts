@@ -11,7 +11,7 @@
  * appRoutes.manifest.test 与本文件对账。
  *
  * 两套分区键空间刻意不同：
- * - NavSectionKey：侧栏/底栏 7 个导航分区（'knowledge' 是“创建”分区的
+ * - NavSectionKey：侧栏/底栏 5 个导航分区（'knowledge' 是“创建”分区的
  *   历史遗留键名，与 /knowledge 路由无关；重命名列为后续任务）。
  * - PageHistorySectionKey：页面历史的 10 键空间（见 page-history 模块）。
  */
@@ -22,7 +22,6 @@ export type NavSectionKey =
   | 'palaces'
   | 'english'
   | 'knowledge'
-  | 'review'
   | 'progress'
 
 export interface ExactRouteEntry {
@@ -53,10 +52,10 @@ export interface PrefixRule {
 }
 
 export const EXACT_ROUTES: ExactRouteEntry[] = [
-  { path: '/', nav: 'review', history: 'dashboard' },
-  { path: '/dashboard', nav: 'review', history: 'dashboard', historyKey: 'dashboard' },
-  { path: '/progress', nav: 'progress', history: 'progress', historyKey: 'progress' },
-  { path: '/exam', nav: 'review', history: 'dashboard', historyKey: 'exam:war-room', commandLabel: '考试作战室' },
+  { path: '/', nav: 'progress', history: 'dashboard' },
+  { path: '/dashboard', nav: 'progress', history: 'dashboard', historyKey: 'dashboard', commandLabel: '今日学案' },
+  { path: '/progress', nav: 'progress', history: 'progress', historyKey: 'progress', commandLabel: '学习进度' },
+  { path: '/exam', nav: 'progress', history: 'dashboard', historyKey: 'exam:war-room', commandLabel: '考试作战室' },
   { path: '/freestyle', nav: 'freestyle', history: 'freestyle', historyKey: 'freestyle' },
   // Retired 随心 2 bookmark: redirects to /freestyle, so it resolves to the same section.
   { path: '/freestyle-2', nav: 'freestyle', history: 'freestyle', historyKey: 'freestyle' },
@@ -149,8 +148,7 @@ export const NAV_SECTION_ROOTS: Record<NavSectionKey, string> = {
   palaces: '/palaces',
   english: '/english/listening',
   knowledge: '/palaces/new',
-  review: '/dashboard',
-  progress: '/progress',
+  progress: '/dashboard',
 }
 
 /** 命令面板"页面"组的可发现页面清单（manifest 驱动）。 */

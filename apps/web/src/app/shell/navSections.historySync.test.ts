@@ -35,13 +35,15 @@ describe('navSections ↔ navigationSection sync', () => {
     }
   })
 
-  it('exposes progress separately from the insight section', () => {
-    expect(navSections.find((section) => section.to === '/progress')).toMatchObject({
+  it('groups progress, today plan, and exam routes in one section', () => {
+    expect(navSections.find((section) => section.to === '/dashboard')).toMatchObject({
       key: 'progress', label: '进度', rememberLastVisited: true,
     })
-    expect(navSections.filter((section) => section.matches('/progress')).map((section) => section.key))
-      .toEqual(['progress'])
-    expect(resolveNavigationSection('/dashboard')).toBe('review')
+    for (const pathname of ['/dashboard', '/progress', '/exam']) {
+      expect(navSections.filter((section) => section.matches(pathname)).map((section) => section.key))
+        .toEqual(['progress'])
+      expect(resolveNavigationSection(pathname)).toBe('progress')
+    }
     expect(resolveNavigationSection('/growth')).toBeNull()
   })
 

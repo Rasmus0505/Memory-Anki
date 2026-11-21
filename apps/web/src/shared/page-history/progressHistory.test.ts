@@ -30,33 +30,33 @@ describe('progress navigation history', () => {
     resetPageHistoryStoreForTest()
   })
 
-  it('treats a refresh/deep link as an independent section root', () => {
-    const path = '/progress?subjectId=3'
-    const section = resolveNavigationSection('/progress')
-    const state = createSectionNavigationHistoryState({ key: 'refresh', fullPath: path }, section)
+  it('treats the today plan as the progress section root', () => {
+    const section = resolveNavigationSection('/dashboard')
+    const state = createSectionNavigationHistoryState(
+      { key: 'refresh', fullPath: '/dashboard' }, section,
+    )
     expect(section).toBe('progress')
     expect(getNavigationSectionLabel('progress')).toBe('进度')
-    expect(describeNavigationPath(path)).toBe('进度')
-    expect(getActiveSectionRootPath(state)).toBe('/progress')
-    expect(resolveSectionHierarchicalParent(path)).toBeNull()
+    expect(describeNavigationPath('/dashboard')).toBe('今日学案')
+    expect(getActiveSectionRootPath(state)).toBe('/dashboard')
+    expect(resolveSectionHierarchicalParent('/dashboard')).toBeNull()
     expect(canSectionNavigateBack(state)).toBe(false)
     expect(peekSectionBackTarget(state)).toBeNull()
   })
 
-  it('keeps insight history separate when entering progress', () => {
-    const initial = createSectionNavigationHistoryState(
-      { key: 'exam', fullPath: '/exam' }, 'review',
-    )
-    const state = applySectionNavigationTransition(
-      initial, { key: 'progress', fullPath: '/progress' }, 'progress', 'PUSH',
-    )
-    expect(state.stacks.review).toEqual(initial.stacks.review)
-    expect(state.stacks.progress?.entries.map((entry) => entry.fullPath)).toEqual(['/progress'])
-    expect(peekSectionBackTarget(state)).toBeNull()
+  it('groups study progress and exam beneath today plan', () => {
+    expect(resolveSectionHierarchicalParent('/progress?scope=quiz')).toBe('/dashboard')
+    expect(resolveSectionHierarchicalParent('/exam')).toBe('/dashboard')
+    expect(getSectionHierarchyChain('/progress?scope=quiz')).toEqual([
+      '/dashboard', '/progress?scope=quiz',
+    ])
+    expect(getSectionHierarchyChain('/exam')).toEqual(['/dashboard', '/exam'])
   })
 
   it('provides an in-section parent for an unknown deep descendant', () => {
-    expect(resolveSectionHierarchicalParent('/progress/unknown')).toBe('/progress')
-    expect(getSectionHierarchyChain('/progress/unknown')).toEqual(['/progress', '/progress/unknown'])
+    expect(resolveSectionHierarchicalParent('/progress/unknown')).toBe('/dashboard')
+    expect(getSectionHierarchyChain('/progress/unknown')).toEqual([
+      '/dashboard', '/progress/unknown',
+    ])
   })
 })

@@ -30,7 +30,6 @@ import {
   Sheet,
   SheetClose,
   SheetContent,
-  SheetDescription,
   SheetHeader,
   SheetTitle,
 } from '@/shared/components/ui/sheet'
@@ -41,8 +40,6 @@ import { BackgroundTaskBar } from '@/shared/background-tasks/BackgroundTaskBar'
 import { cn } from '@/shared/lib/utils'
 import { GlobalCommandPalette } from '@/app/shell/GlobalCommandPalette'
 import { useRouteDepthTransition } from '@/app/shell/useRouteDepthTransition'
-import { useAmbientTone } from '@/app/shell/useAmbientTone'
-import { AmbientLayer } from '@/shared/ambient/AmbientLayer'
 import { installUiSounds, playUiSound } from '@/shared/feedback/uiSounds'
 import { installPointerLight } from '@/shared/ambient/pointerLight'
 import { GlobalBackButton } from '@/app/shell/GlobalBackButton'
@@ -170,7 +167,7 @@ function NavSectionLink({
           ? 'ma-nav-current'
           : cn(
               'hover:bg-accent hover:text-foreground',
-              section.secondary ? 'text-ink-faint' : 'text-muted-foreground',
+              'text-muted-foreground',
             ),
         collapsed
           ? 'justify-center px-2.5 py-3 text-sm'
@@ -389,19 +386,14 @@ function MobileMoreSheet({ open, onOpenChange }: { open: boolean; onOpenChange: 
         side="bottom"
         className="rounded-t-3xl p-0 pb-[max(env(safe-area-inset-bottom),1rem)]"
         aria-label="更多入口"
+        aria-describedby={undefined}
       >
         <SheetHeader className="border-b border-border/70 px-5 pb-3 pr-14 pt-5">
           <SheetTitle>更多</SheetTitle>
-          <SheetDescription>创建、洞察与设置都从这里进入。</SheetDescription>
         </SheetHeader>
         <nav className="flex flex-col gap-1 px-3 py-3" aria-label="更多入口列表">
           {mobileOverflowSections.map((section) => {
             const Icon = section.icon
-            const description = section.key === 'knowledge'
-              ? '新建宫殿、知识树与编辑'
-              : section.key === 'review'
-                ? '考试倒计时、薄弱点与学习动态'
-                : ''
             return (
               <SheetClose asChild key={section.key}>
                 <NavLink
@@ -412,12 +404,7 @@ function MobileMoreSheet({ open, onOpenChange }: { open: boolean; onOpenChange: 
                   <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary-soft text-primary-strong">
                     <Icon className="size-4" aria-hidden />
                   </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-medium">{section.label}</span>
-                    {description ? (
-                      <span className="block truncate text-xs text-muted-foreground">{description}</span>
-                    ) : null}
-                  </span>
+                  <span className="min-w-0 flex-1 text-sm font-medium">{section.label}</span>
                   <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
                 </NavLink>
               </SheetClose>
@@ -531,8 +518,6 @@ function ShellFrame({ children }: PropsWithChildren) {
       if (!immersiveRef.current) playUiSound('paper')
     },
   })
-  const ambientTone = useAmbientTone(!immersiveFeed)
-
   useEffect(() => {
     let cancelled = false
     void getRuntimeInfoApi()
@@ -561,7 +546,6 @@ function ShellFrame({ children }: PropsWithChildren) {
   return (
     <ShellProvider value={{ sidebarCollapsed, setSidebarCollapsed }}>
       <div ref={rootRef} className={cn('isolate', mindMapHost ? 'flex h-dvh flex-col bg-background' : 'min-h-screen bg-background')}>
-        {!immersiveFeed ? <AmbientLayer tone={ambientTone} /> : null}
         <aside
           className={cn(
             'memory-anki-warm-panel fixed z-20 hidden flex-col overflow-hidden border-border bg-card transition-all duration-300 md:flex',

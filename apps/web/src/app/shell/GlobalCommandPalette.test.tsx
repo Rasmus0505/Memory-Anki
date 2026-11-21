@@ -92,9 +92,10 @@ describe('GlobalCommandPalette', () => {
     expect(screen.getByText('新建宫殿')).toBeTruthy()
     expect(screen.getByText('搜索宫殿')).toBeTruthy()
 
-    for (const label of ['随心', '知识', '英语', '创建', '进度', '洞察']) {
+    for (const label of ['随心', '知识', '英语', '创建', '进度']) {
       expect(screen.getAllByText(label).length).toBeGreaterThan(0)
     }
+    expect(screen.queryByText('洞察')).toBeNull()
 
     expect(screen.getByText('Ctrl+N')).toBeTruthy()
     expect(screen.getByText('/')).toBeTruthy()
@@ -103,7 +104,7 @@ describe('GlobalCommandPalette', () => {
     expect(screen.queryByText('Dashboard')).toBeNull()
   })
 
-  it('offers one progress entry and navigates to its independent page', async () => {
+  it('offers one progress entry and opens its workspace root', async () => {
     renderPalette()
     openPalette()
 
@@ -111,7 +112,7 @@ describe('GlobalCommandPalette', () => {
     expect(progress).toHaveLength(1)
     fireEvent.click(progress[0])
     await waitFor(() => {
-      expect(screen.getByTestId('location').textContent).toBe('/progress')
+      expect(screen.getByTestId('location').textContent).toBe('/dashboard')
     })
   })
 

@@ -252,19 +252,18 @@ describe('AppShell', () => {
 
     const mobileNav = screen.getByRole('navigation', { name: '移动端主导航' })
     expect(mobileNav.className).toContain('md:hidden')
-    // Four study destinations plus 更多: seven equal tabs were too narrow on a phone.
+    // Four study destinations plus 更多 keep the phone targets comfortably tappable.
     expect(mobileNav.querySelectorAll('a')).toHaveLength(4)
-    expect(mobileNav.querySelector('a[href="/progress"]')).toBeTruthy()
+    expect(mobileNav.querySelector('a[href="/dashboard"]')?.textContent).toBe('进度')
     expect(mobileNav.querySelector('a[href="/palaces"]')?.className).toContain('bg-primary')
     expect(mobileNav.querySelector('a[href="/freestyle"]')).toBeTruthy()
     expect(mobileNav.querySelector('a[href="/freestyle-2"]')).toBeNull()
     expect(mobileNav.querySelector('a[href="/english/listening"]')).toBeTruthy()
-    expect(mobileNav.querySelector('a[href="/dashboard"]')).toBeNull()
+    expect(mobileNav.querySelector('a[href="/progress"]')).toBeNull()
 
-    // Everything else stays one tap away behind 更多.
     fireEvent.click(screen.getByTestId('mobile-nav-more'))
     const moreNav = screen.getByRole('navigation', { name: '更多入口列表' })
-    expect(moreNav.querySelector('a[href="/dashboard"]')?.textContent).toContain('洞察')
+    expect(moreNav.querySelector('a[href="/dashboard"]')).toBeNull()
     expect(moreNav.querySelector('a[href="/palaces/new"]')?.textContent).toContain('创建')
     expect(moreNav.querySelector('a[href="/profile"]')?.textContent).toContain('设置')
   })
@@ -314,7 +313,7 @@ describe('AppShell', () => {
     )
 
     await waitFor(() => expect(getRuntimeInfoApi).toHaveBeenCalled())
-    const expectedLabels = ['随心', '知识', '英语', '创建', '洞察']
+    const expectedLabels = ['随心', '知识', '英语', '创建', '进度']
     // On /freestyle the nav is an icon rail: labels live in the accessible name.
     const navLabels = screen
       .getAllByRole('link')
