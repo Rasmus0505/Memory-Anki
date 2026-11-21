@@ -247,6 +247,15 @@ python tools/verify_backup.py <备份目录>
 
 恢复本身是显式操作，不会自动用旧备份覆盖当前库。
 
+### 7.4 本机数据库交接
+
+实验性交接层（`core/database_placement.py` + `tools/database_handoff.py`）**默认停用**，运行时不再导入它：
+
+- 数据库路径始终是 `APP_HOME/学习数据/memory_palace.db`，不会因本机存在交接标记或本机库而改道；
+- 启动、Alembic、旧目录迁移、备份和恢复保持普通行为；
+- `database_handoff.py` 对每条命令（包括 `status`）直接返回 2，不解析参数、不创建设备编号、不写文件；
+- 原因与重新启用的前置条件见 [architecture/database-handoff-disabled.md](architecture/database-handoff-disabled.md)。
+
 ---
 
 ## 8. 日志与诊断

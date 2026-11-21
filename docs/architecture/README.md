@@ -102,6 +102,7 @@ graph LR
 - 随心沉浸式信息流：`docs/architecture/freestyle-immersive-feed.md`
 - 测验前端边界：`docs/architecture/quiz-frontend-boundary.md`
 - 宫殿测验边界：`docs/architecture/palace-quiz-boundary.md`
+- 本机数据库交接（实验性，默认停用）：`docs/architecture/database-handoff-disabled.md`
 - 实时学习在场（PWA/桌面镜像）：`docs/architecture/live-study-presence.md`
 - 诊断记录隐私边界：`docs/architecture/session-recorder-privacy.md`
 - 训练证据边界：`docs/architecture/unified-training-evidence.md`

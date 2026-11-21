@@ -35,6 +35,13 @@ def default_app_home() -> Path:
     return Path.home() / ".memory-anki"
 
 
+def default_device_storage() -> Path:
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    return (_expand_path(local_app_data) if local_app_data else Path.home()) / (
+        APP_HOME_DIR_NAME if local_app_data else ".memory-anki"
+    )
+
+
 def resolve_app_home() -> AppHomeResolution:
     configured = os.environ.get(APP_HOME_ENV)
     if configured and configured.strip():
@@ -68,8 +75,15 @@ def database_file_path(app_home: Path) -> Path:
     return Path(app_home) / STORAGE_ROOT_LEARNING / DATABASE_FILE_NAME
 
 
+def resolve_database_file(app_home: Path) -> Path:
+    # Always the database under the requested home. The experimental local
+    # placement/handoff layer never rewrites this: a maintenance tool or test
+    # that passes another ``app_home`` must not land on the active local DB.
+    return database_file_path(app_home)
+
+
 def resolve_existing_database_file(app_home: Path) -> Path:
-    preferred = database_file_path(app_home)
+    preferred = resolve_database_file(app_home)
     if preferred.exists():
         return preferred
     legacy = Path(app_home) / "data" / DATABASE_FILE_NAME
@@ -88,7 +102,9 @@ __all__ = [
     "STORAGE_ROOT_LEARNING",
     "database_file_path",
     "default_app_home",
+    "default_device_storage",
     "get_app_home",
     "resolve_app_home",
+    "resolve_database_file",
     "resolve_existing_database_file",
 ]

@@ -323,18 +323,20 @@ def _running_service_uses_configured_home() -> bool:
     if not isinstance(payload, dict):
         return False
     running_home = str(payload.get("app_home") or "").strip()
-    if not running_home:
+    running_database = str(payload.get("database_path") or "").strip()
+    if not running_home or not running_database:
         return False
     try:
         from memory_anki.core.local_config import load_local_runtime_config
+        from memory_anki.core.runtime_paths import resolve_database_file
 
         configured_home = load_local_runtime_config(write_device_id=False).local_app_home
+        return (
+            Path(running_home).resolve() == configured_home.resolve()
+            and Path(running_database).resolve() == resolve_database_file(configured_home).resolve()
+        )
     except Exception:
         return False
-    try:
-        return Path(running_home).resolve() == Path(configured_home).resolve()
-    except OSError:
-        return Path(running_home) == Path(configured_home)
 
 
 def _shared_service_healthy() -> bool:
